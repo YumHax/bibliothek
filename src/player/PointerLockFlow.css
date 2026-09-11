@@ -1,0 +1,5 @@
+/* Controller mode: the mouse is ignored, so its cursor must not float over the room. */
+body.input-gamepad,
+body.input-gamepad * {
+  cursor: none !important;
+}

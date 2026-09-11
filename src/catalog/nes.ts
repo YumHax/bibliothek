@@ -1,0 +1,173 @@
+import type { Game } from './types';
+
+/** Seed data for the proof of concept. Will move to a persisted collection later. */
+export const NES_GAMES: Game[] = [
+  {
+    id: 'nes-super-mario-bros', title: 'Super Mario Bros.', platform: 'nes',
+    releaseDate: '1985-09-13', developer: 'Nintendo R&D4', publisher: 'Nintendo', genre: 'Platformer', region: 'World',
+    description: 'Mario and Luigi race through the Mushroom Kingdom to rescue Princess Toadstool from Bowser.',
+    externalIds: { libretroName: 'Super Mario Bros. (World)' },
+  },
+  {
+    id: 'nes-legend-of-zelda', title: 'The Legend of Zelda', platform: 'nes',
+    releaseDate: '1986-02-21', developer: 'Nintendo R&D4', publisher: 'Nintendo', genre: 'Action-adventure', region: 'USA',
+    description: 'Link explores Hyrule to gather the eight fragments of the Triforce of Wisdom and defeat Ganon.',
+    externalIds: { libretroName: 'Legend of Zelda, The (USA)' },
+  },
+  {
+    id: 'nes-metroid', title: 'Metroid', platform: 'nes',
+    releaseDate: '1986-08-06', developer: 'Nintendo R&D1', publisher: 'Nintendo', genre: 'Action-adventure', region: 'USA',
+    description: 'Samus Aran infiltrates planet Zebes to stop the Space Pirates from weaponising the Metroids.',
+    externalIds: { libretroName: 'Metroid (USA)' },
+  },
+  {
+    id: 'nes-mega-man-2', title: 'Mega Man 2', platform: 'nes',
+    releaseDate: '1988-12-24', developer: 'Capcom', publisher: 'Capcom', genre: 'Action platformer', region: 'USA',
+    description: 'Mega Man faces eight new Robot Masters built by Dr. Wily.',
+    externalIds: { libretroName: 'Mega Man 2 (USA)' },
+  },
+  {
+    id: 'nes-castlevania', title: 'Castlevania', platform: 'nes',
+    releaseDate: '1986-09-26', developer: 'Konami', publisher: 'Konami', genre: 'Platformer', region: 'USA',
+    description: "Simon Belmont storms Dracula's castle armed with the Vampire Killer whip.",
+    externalIds: { libretroName: 'Castlevania (USA)' },
+  },
+  {
+    id: 'nes-contra', title: 'Contra', platform: 'nes',
+    releaseDate: '1988-02-09', developer: 'Konami', publisher: 'Konami', genre: 'Run and gun', region: 'USA',
+    description: 'Bill and Lance take on the Red Falcon organisation in this two-player run and gun.',
+    externalIds: { libretroName: 'Contra (USA)' },
+  },
+  {
+    id: 'nes-kirbys-adventure', title: "Kirby's Adventure", platform: 'nes',
+    releaseDate: '1993-03-23', developer: 'HAL Laboratory', publisher: 'Nintendo', genre: 'Platformer', region: 'USA',
+    description: 'Kirby sets out to repair the Star Rod and bring dreams back to Dream Land.',
+    externalIds: { libretroName: "Kirby's Adventure (USA)" },
+  },
+  {
+    id: 'nes-super-mario-bros-3', title: 'Super Mario Bros. 3', platform: 'nes',
+    releaseDate: '1988-10-23', developer: 'Nintendo EAD', publisher: 'Nintendo', genre: 'Platformer', region: 'USA',
+    description: 'Mario travels through eight themed worlds with new power-ups such as the Super Leaf.',
+    externalIds: { libretroName: 'Super Mario Bros. 3 (USA)' },
+  },
+  {
+    id: 'nes-punch-out', title: 'Punch-Out!!', platform: 'nes',
+    releaseDate: '1987-09-18', developer: 'Nintendo R&D3', publisher: 'Nintendo', genre: 'Sports', region: 'USA',
+    description: 'Little Mac climbs the boxing circuits by learning each opponent’s tells.',
+    externalIds: { libretroName: 'Punch-Out!! (USA)' },
+  },
+  {
+    id: 'nes-duck-hunt', title: 'Duck Hunt', platform: 'nes',
+    releaseDate: '1984-04-21', developer: 'Nintendo R&D1', publisher: 'Nintendo', genre: 'Light gun shooter', region: 'World',
+    description: 'Shoot ducks with the NES Zapper while your dog laughs at every miss.',
+    externalIds: { libretroName: 'Duck Hunt (World)' },
+  },
+  {
+    id: 'nes-kid-icarus', title: 'Kid Icarus', platform: 'nes',
+    releaseDate: '1986-12-19', developer: 'Nintendo R&D1 / TOSE', publisher: 'Nintendo', genre: 'Action platformer', region: 'USA, Europe',
+    description: 'Pit escapes the Underworld to recover the Three Sacred Treasures and defeat Medusa.',
+    externalIds: { libretroName: 'Kid Icarus (USA, Europe)' },
+  },
+  {
+    id: 'nes-ninja-gaiden', title: 'Ninja Gaiden', platform: 'nes',
+    releaseDate: '1988-12-09', developer: 'Tecmo', publisher: 'Tecmo', genre: 'Action platformer', region: 'USA',
+    description: 'Ryu Hayabusa travels to America to avenge his father, told through cinematic cutscenes.',
+    externalIds: { libretroName: 'Ninja Gaiden (USA)' },
+  },
+  {
+    id: 'nes-mega-man', title: 'Mega Man', platform: 'nes',
+    releaseDate: '1987-12-17', developer: 'Capcom', publisher: 'Capcom', genre: 'Action platformer', region: 'USA',
+    description: 'Mega Man takes on six Robot Masters gone rogue under the control of Dr. Wily.',
+    externalIds: { libretroName: 'Mega Man (USA)' },
+  },
+  {
+    id: 'nes-mega-man-3', title: 'Mega Man 3', platform: 'nes',
+    releaseDate: '1990-09-28', developer: 'Capcom', publisher: 'Capcom', genre: 'Action platformer', region: 'USA',
+    description: 'Mega Man gains the slide and his robot dog Rush while hunting Dr. Wily across eight mining worlds.',
+    externalIds: { libretroName: 'Mega Man 3 (USA)' },
+  },
+  {
+    id: 'nes-castlevania-3', title: "Castlevania III: Dracula's Curse", platform: 'nes',
+    releaseDate: '1989-12-22', developer: 'Konami', publisher: 'Konami', genre: 'Platformer', region: 'USA',
+    description: 'Trevor Belmont recruits Sypha, Grant and Alucard on branching paths to Dracula.',
+    externalIds: { libretroName: "Castlevania III - Dracula's Curse (USA)" },
+  },
+  {
+    id: 'nes-super-mario-bros-2', title: 'Super Mario Bros. 2', platform: 'nes',
+    releaseDate: '1988-10-09', developer: 'Nintendo R&D4', publisher: 'Nintendo', genre: 'Platformer', region: 'USA',
+    description: 'Mario, Luigi, Toad and Peach pluck vegetables and free the dream world of Subcon from Wart.',
+    externalIds: { libretroName: 'Super Mario Bros. 2 (USA)' },
+  },
+  {
+    id: 'nes-zelda-2', title: 'Zelda II: The Adventure of Link', platform: 'nes',
+    releaseDate: '1988-12-01', developer: 'Nintendo R&D4', publisher: 'Nintendo', genre: 'Action RPG', region: 'USA',
+    description: 'Link crosses Hyrule in side-scrolling combat to place six crystals and wake the sleeping Zelda.',
+    externalIds: { libretroName: 'Zelda II - The Adventure of Link (USA)' },
+  },
+  {
+    id: 'nes-dr-mario', title: 'Dr. Mario', platform: 'nes',
+    releaseDate: '1990-07-27', developer: 'Nintendo R&D1', publisher: 'Nintendo', genre: 'Puzzle', region: 'Japan, USA',
+    description: 'Drop two-colour capsules into the bottle to wipe out viruses four in a row.',
+    externalIds: { libretroName: 'Dr. Mario (Japan, USA)' },
+  },
+  {
+    id: 'nes-tetris', title: 'Tetris', platform: 'nes',
+    releaseDate: '1989', developer: 'Nintendo R&D1', publisher: 'Nintendo', genre: 'Puzzle', region: 'USA',
+    description: "Nintendo's take on the falling-block classic, the version played in the Classic Tetris World Championship.",
+    externalIds: { libretroName: 'Tetris (USA)' },
+  },
+  {
+    id: 'nes-ducktales', title: 'DuckTales', platform: 'nes',
+    releaseDate: '1989-09-14', developer: 'Capcom', publisher: 'Capcom', genre: 'Platformer', region: 'USA',
+    description: 'Scrooge McDuck pogo-jumps on his cane across five treasure-filled stages, from the Amazon to the Moon.',
+    externalIds: { libretroName: 'DuckTales (USA)' },
+  },
+  {
+    id: 'nes-chip-n-dale', title: "Chip 'n Dale: Rescue Rangers", platform: 'nes',
+    releaseDate: '1990-06-08', developer: 'Capcom', publisher: 'Capcom', genre: 'Platformer', region: 'USA',
+    description: 'The two chipmunks throw crates at Fat Cat’s henchmen in a two-player co-op platformer.',
+    externalIds: { libretroName: "Chip 'n Dale - Rescue Rangers (USA)" },
+  },
+  {
+    id: 'nes-tmnt', title: 'Teenage Mutant Ninja Turtles', platform: 'nes',
+    releaseDate: '1989-05-12', developer: 'Konami', publisher: 'Ultra Games', genre: 'Action platformer', region: 'USA',
+    description: 'Swap between the four turtles to rescue April and Splinter, infamous for its underwater dam level.',
+    externalIds: { libretroName: 'Teenage Mutant Ninja Turtles (USA)' },
+  },
+  {
+    id: 'nes-double-dragon', title: 'Double Dragon', platform: 'nes',
+    releaseDate: '1988', developer: 'Technos Japan', publisher: 'Tradewest', genre: "Beat 'em up", region: 'USA',
+    description: 'Billy Lee fights through the Black Warriors gang to rescue Marian, learning new moves as he goes.',
+    externalIds: { libretroName: 'Double Dragon (USA)' },
+  },
+  {
+    id: 'nes-final-fantasy', title: 'Final Fantasy', platform: 'nes',
+    releaseDate: '1990-07-12', developer: 'Square', publisher: 'Nintendo', genre: 'RPG', region: 'USA',
+    description: 'Four Light Warriors carry darkened crystals across a world ruled by the Four Fiends. The game that saved Square.',
+    externalIds: { libretroName: 'Final Fantasy (USA)' },
+  },
+  {
+    id: 'nes-dragon-warrior', title: 'Dragon Warrior', platform: 'nes',
+    releaseDate: '1989-08-27', developer: 'Chunsoft', publisher: 'Nintendo', genre: 'RPG', region: 'USA',
+    description: 'The descendant of Erdrick sets out alone to defeat the Dragonlord. The Western release of Dragon Quest.',
+    externalIds: { libretroName: 'Dragon Warrior (USA)' },
+  },
+  {
+    id: 'nes-river-city-ransom', title: 'River City Ransom', platform: 'nes',
+    releaseDate: '1990', developer: 'Technos Japan', publisher: 'American Technos', genre: "Beat 'em up", region: 'USA',
+    description: 'Alex and Ryan brawl across River City, buying books and sushi to learn moves and boost stats.',
+    externalIds: { libretroName: 'River City Ransom (USA)' },
+  },
+  {
+    id: 'nes-battletoads', title: 'Battletoads', platform: 'nes',
+    releaseDate: '1991', developer: 'Rare', publisher: 'Tradewest', genre: "Beat 'em up", region: 'USA',
+    description: 'Rash and Zitz rescue Pimple and Princess Angelica from the Dark Queen. Notorious for the Turbo Tunnel.',
+    externalIds: { libretroName: 'Battletoads (USA)' },
+  },
+  {
+    id: 'nes-crystalis', title: 'Crystalis', platform: 'nes',
+    releaseDate: '1990-07-13', developer: 'SNK', publisher: 'SNK', genre: 'Action RPG', region: 'USA',
+    description: 'A hero wakes from cryosleep a century after the apocalypse and gathers four elemental swords.',
+    externalIds: { libretroName: 'Crystalis (USA)' },
+  },
+];

@@ -1,0 +1,169 @@
+import * as THREE from 'three';
+import type { Updatable } from '@/core/Engine';
+import type { CssLayer } from '@/core/CssLayer';
+import type { Interactable, LabelPlacement } from '@/interaction/Interactable';
+import type { PlayerState, SessionActions } from '@/game/SessionActions';
+import type { VideoInfo } from '@/video/VideoProvider';
+import { CrtSpeaker } from '@/audio/CrtSpeaker';
+import type { Furniture } from './Furniture';
+import { boxMesh } from './meshUtils';
+import { VideoSurface, type ScreenState, type ScreenStateListener, type VideoScreen } from './screen';
+
+/** Height of the built-in cabinet the CRT sits on when nothing else carries it (see `mountOn`). */
+const OWN_CABINET_HEIGHT = 0.55;
+/** Screen glow: bluish light thrown into the room while a video plays. */
+const GLOW_COLOR = 0xa9c7ff;
+const GLOW_PLAYING = 3;
+const GLOW_MESSAGE = 0.7;
+/** A CRT's little speaker never gets as loud as the projector's sound system. */
+const SPEAKER_GAIN = 0.8;
+
+/**
+ * A CRT television on a cabinet. The picture is a `VideoSurface` (cut-out over a YouTube
+ * iframe) set into the front of the body; the volume follows the `listener` (the camera).
+ * A soft point light in front of the glass flickers while playing so the room reads as "TV on",
+ * and a `CrtSpeaker` bed (hum, hiss, crackle) makes the sound read as "old TV".
+ */
+export class Television extends THREE.Group implements Furniture, Updatable, Interactable, VideoScreen {
+  readonly hitboxes: THREE.Object3D[];
+  readonly screenName = 'TV';
+
+  private readonly screenWidth = 0.56;
+  /** The CRT set itself (body, screen, glow); lifted to whatever it stands on. */
+  private readonly crt = new THREE.Group();
+  private readonly cabinet: THREE.Mesh;
+  private readonly surface: VideoSurface;
+  private readonly glow: THREE.PointLight;
+  private readonly speaker = new CrtSpeaker();
+  private glowTime = 0;
+  private readonly bodyMaterial: THREE.MeshStandardMaterial;
+
+  constructor(cssLayer: CssLayer, listener?: THREE.Object3D) {
+    super();
+    this.name = 'Television';
+
+    this.cabinet = boxMesh(0.9, OWN_CABINET_HEIGHT, 0.45, new THREE.MeshStandardMaterial({ color: 0x3b2a1e, roughness: 0.7 }), {
+      y: OWN_CABINET_HEIGHT / 2,
+    });
+
+    this.surface = new VideoSurface(cssLayer, {
+      width: this.screenWidth,
+      listener,
+      idle: 'glass',
+      volume: { referenceDistance: 1.5, rolloff: 1.5, maxDistance: 12, rearGain: 0.5 }, // the armchair sits just inside the reference: full volume when seated
+      gain: SPEAKER_GAIN,
+    });
+    this.surface.onStateChange((state) => this.speaker.setOn(state === 'playing'));
+
+    // CRT body, slightly deeper than the screen. Local y = 0 is the underside of the set.
+    const bodyW = this.screenWidth + 0.14;
+    const bodyH = this.surface.height + 0.14;
+    const bodyD = 0.45;
+    this.bodyMaterial = new THREE.MeshStandardMaterial({ color: 0x2a2a2e, roughness: 0.55 });
+    const body = boxMesh(bodyW, bodyH, bodyD, this.bodyMaterial, { y: bodyH / 2, z: -0.02 });
+    this.hitboxes = [body];
+
+    // Picture on the front face of the body, facing +z.
+    this.surface.position.set(0, body.position.y, body.position.z + bodyD / 2 + 0.002);
+
+    // No shadows: a shadow-casting point light costs six passes and the glow is meant to be soft.
+    this.glow = new THREE.PointLight(GLOW_COLOR, 0, 3.5, 2);
+    this.glow.position.copy(this.surface.position).add(new THREE.Vector3(0, 0, 0.35));
+
+    this.crt.position.y = OWN_CABINET_HEIGHT;
+    this.crt.add(body, this.surface, this.glow);
+    this.add(this.cabinet, this.crt);
+  }
+
+  get state(): ScreenState {
+    return this.surface.state;
+  }
+
+  get isPlaying(): boolean {
+    return this.surface.isPlaying;
+  }
+
+  /** Bounding box for collisions (local space). */
+  get footprint(): THREE.Box3 {
+    return new THREE.Box3(new THREE.Vector3(-0.45, 0, -0.25), new THREE.Vector3(0.45, 1.2, 0.25));
+  }
+
+  /**
+   * Stands the set on something else (e.g. a console stand) whose top is `height` above the TV's
+   * origin: the built-in cabinet disappears and the CRT moves to that height.
+   */
+  mountOn(height: number): void {
+    this.cabinet.visible = false;
+    this.crt.position.y = height;
+  }
+
+  /** Called whenever the TV changes state (off / searching / playing / error). Returns an unsubscribe function. */
+  onStateChange(listener: ScreenStateListener): () => void {
+    return this.surface.onStateChange(listener);
+  }
+
+  // --- Interactable -------------------------------------------------------------------------
+
+  setHovered(hovered: boolean): void {
+    this.bodyMaterial.emissive.setHex(hovered ? 0x1a1a1a : 0x000000);
+  }
+
+  label(player: PlayerState): string | null {
+    if (player.held) return `Play ${player.held.game.title} on the TV`;
+    return this.isPlaying ? 'Click to turn the TV off' : 'TV';
+  }
+
+  labelPlacement(): LabelPlacement {
+    return this.isPlaying ? 'edge' : 'crosshair';
+  }
+
+  activate(session: SessionActions): void {
+    const box = session.held;
+    if (box) {
+      session.putBack();
+      void session.playOn(this, box);
+    } else if (this.state === 'playing' || this.state === 'error') {
+      session.stopScreen(this);
+    }
+  }
+
+  // --- VideoScreen ----------------------------------------------------------------------------
+
+  searching(title: string): void {
+    this.surface.searching(title);
+  }
+
+  play(video: VideoInfo, startSeconds: number): void {
+    this.surface.play(video, startSeconds);
+  }
+
+  fail(message: string): void {
+    this.surface.fail(message);
+  }
+
+  stop(): void {
+    this.surface.stop();
+  }
+
+  update(dt: number): void {
+    this.updateGlow(dt);
+    this.surface.update();
+    this.speaker.setLoudness(this.surface.loudness);
+    this.speaker.update(dt);
+  }
+
+  /** Screen light: a gentle flicker while playing, a steady dim glow while the glass shows a message. */
+  private updateGlow(dt: number): void {
+    let target = 0;
+    if (this.state === 'playing') {
+      this.glowTime += dt;
+      const t = this.glowTime;
+      const flicker = 0.5 * Math.sin(t * 11.3) + 0.3 * Math.sin(t * 6.1) + 0.2 * Math.sin(t * 1.7);
+      target = GLOW_PLAYING * (0.85 + 0.15 * flicker);
+    } else if (this.state !== 'off') {
+      target = GLOW_MESSAGE;
+    }
+    // Ease so switching the set on or off does not pop.
+    this.glow.intensity += (target - this.glow.intensity) * Math.min(1, dt * 6);
+  }
+}

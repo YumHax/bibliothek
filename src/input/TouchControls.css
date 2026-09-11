@@ -1,0 +1,87 @@
+/* The 3D view is the touch surface: no scroll, no pinch-zoom, no long-press callout or selection. */
+#app canvas {
+  touch-action: none;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* Everything here must stack above the canvas (z-index 1) and the regular HUD (2). */
+.touch-stick,
+.touch-bar,
+.touch-badge {
+  z-index: 3;
+}
+
+/* Floating joystick, spawned where the finger lands on the left half of the screen. */
+.touch-stick {
+  position: fixed;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  background: rgba(20, 20, 28, 0.35);
+  pointer-events: none;
+  box-sizing: border-box;
+}
+.touch-stick__knob {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 44%;
+  height: 44%;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.78);
+  box-shadow: 0 0 6px rgba(0, 0, 0, 0.6);
+  will-change: transform;
+}
+.touch-stick--sprint .touch-stick__knob {
+  background: rgba(255, 220, 130, 0.9);
+}
+
+/* On-screen action buttons, top centre, clear of the joystick and look zones. */
+.touch-bar {
+  position: fixed;
+  top: calc(env(safe-area-inset-top, 0px) + 0.5rem);
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.4rem;
+  max-width: calc(100vw - 2rem);
+  padding: 0;
+  margin: 0;
+}
+.touch-bar__btn {
+  min-width: 3.4rem;
+  min-height: 2.6rem;
+  padding: 0.35rem 0.75rem;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  background: rgba(20, 20, 28, 0.78);
+  color: #ece9e2;
+  font: inherit;
+  font-size: 0.85rem;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.touch-bar__btn:active,
+.touch-bar__btn.is-pressed {
+  background: rgba(255, 255, 255, 0.22);
+}
+
+/* Shown under the crosshair while a long press rotates the carried box. */
+.touch-badge {
+  position: fixed;
+  left: 50%;
+  top: calc(50% + 3.2rem);
+  transform: translateX(-50%);
+  padding: 0.25rem 0.6rem;
+  border-radius: 6px;
+  background: rgba(20, 20, 28, 0.75);
+  color: #ece9e2;
+  font-size: 0.8rem;
+  pointer-events: none;
+}

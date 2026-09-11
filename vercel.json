@@ -1,0 +1,15 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "vite",
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist",
+  "functions": {
+    "api/**/*.ts": { "memory": 1024, "maxDuration": 20 }
+  },
+  "rewrites": [
+    { "source": "/api/youtube/search", "destination": "/api/youtube/search" },
+    { "source": "/api/art/:path*", "destination": "/api/art/[...path]" },
+    { "source": "/api/libretro/index/:repo", "destination": "/api/libretro/index/[repo]" },
+    { "source": "/((?!api/|assets/).*)", "destination": "/index.html" }
+  ]
+}

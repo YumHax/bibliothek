@@ -1,0 +1,15 @@
+/* The cat's name and coat, one row inside the collection editor's extras strip. */
+.cat-settings {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin: 0;
+}
+.cat-settings__field {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.cat-settings__field span { opacity: 0.7; }
+.cat-settings input[type='text'] { width: 9rem; }

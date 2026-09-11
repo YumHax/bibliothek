@@ -1,0 +1,118 @@
+/* Full-screen collection editor. Sits above the canvas (z-index 1) and the start overlay (z-index 2). */
+.collection-editor {
+  position: fixed;
+  inset: 0;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1.5rem clamp(1rem, 4vw, 3rem);
+  box-sizing: border-box;
+  background: rgba(8, 8, 12, 0.86);
+  backdrop-filter: blur(6px);
+  color: #ece9e2;
+  font-size: 0.92rem;
+  overflow: hidden;
+}
+
+.collection-editor button,
+.collection-editor select,
+.collection-editor input {
+  font: inherit;
+  color: inherit;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 6px;
+  padding: 0.35rem 0.7rem;
+}
+.collection-editor button { cursor: pointer; }
+.collection-editor button:hover:not(:disabled) { background: rgba(255, 255, 255, 0.16); }
+.collection-editor button:disabled { opacity: 0.45; cursor: default; }
+.collection-editor select option { background: #15151d; }
+.collection-editor input:focus,
+.collection-editor select:focus { outline: 2px solid rgba(255, 255, 255, 0.35); outline-offset: 1px; }
+
+.collection-editor__header {
+  display: flex;
+  align-items: baseline;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+.collection-editor__header h2 { margin: 0; font-size: 1.5rem; letter-spacing: 0.06em; }
+.collection-editor__count { opacity: 0.65; }
+.collection-editor__actions { margin-left: auto; display: flex; gap: 0.5rem; flex-wrap: wrap; }
+
+.collection-editor__status {
+  min-height: 1.2em;
+  font-size: 0.85rem;
+  opacity: 0.8;
+}
+.collection-editor__status--error { color: #ff8a80; opacity: 1; }
+
+.collection-editor__body {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(18rem, 2fr) minmax(18rem, 3fr);
+  gap: 1.5rem;
+}
+@media (max-width: 800px) {
+  .collection-editor__body { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
+}
+
+.collection-editor__pane {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  background: rgba(20, 20, 28, 0.85);
+  padding: 1rem 1.25rem;
+}
+.collection-editor__pane h3 { margin: 0 0 0.75rem; font-size: 1rem; opacity: 0.85; }
+.collection-editor__scroll { flex: 1; min-height: 0; overflow-y: auto; padding-right: 0.25rem; }
+
+.collection-editor__search { display: flex; gap: 0.5rem; margin-bottom: 0.75rem; }
+.collection-editor__search input { flex: 1; min-width: 0; }
+
+.collection-editor__group { margin-bottom: 1rem; }
+.collection-editor__group-title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0 0 0.35rem;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  opacity: 0.7;
+}
+.collection-editor__swatch { width: 0.7em; height: 0.7em; border-radius: 2px; border: 1px solid rgba(255, 255, 255, 0.3); }
+
+.collection-editor__row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.35rem 0.4rem;
+  border-radius: 6px;
+}
+.collection-editor__row:hover { background: rgba(255, 255, 255, 0.05); }
+.collection-editor__title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.collection-editor__meta { font-size: 0.78rem; opacity: 0.55; white-space: nowrap; }
+.collection-editor__row select { padding: 0.2rem 0.4rem; font-size: 0.82rem; }
+.collection-editor__row button { padding: 0.2rem 0.55rem; font-size: 0.82rem; }
+
+.collection-editor__badge {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 0.1em 0.45em;
+  border-radius: 999px;
+  border: 1px solid currentColor;
+  opacity: 0.85;
+}
+.collection-editor__badge--owned { color: #9be59b; }
+.collection-editor__badge--wishlist { color: #ffd580; }
+.collection-editor__badge--lent { color: #8fc7ff; }
+
+.collection-editor__empty { opacity: 0.55; font-style: italic; padding: 0.5rem 0.4rem; }
+.collection-editor__hint { font-size: 0.8rem; opacity: 0.55; margin: 0.5rem 0 0; }

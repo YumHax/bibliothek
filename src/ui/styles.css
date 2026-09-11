@@ -1,0 +1,131 @@
+:root {
+  color-scheme: dark;
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+
+html, body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: #0b0b10;
+}
+
+#app { position: fixed; inset: 0; }
+
+/* Author `display` rules would otherwise beat the UA stylesheet for [hidden]. */
+[hidden] { display: none !important; }
+#app canvas { display: block; position: absolute; inset: 0; z-index: 1; }
+/* CSS3D layer sits behind the canvas; cut-out meshes reveal it. */
+.css-layer { position: absolute !important; inset: 0; z-index: 0; pointer-events: none; }
+.css-layer iframe { pointer-events: none; }
+/* HUD and menus must stack above the canvas (its z-index would otherwise cover them). */
+.overlay, .crosshair, .hint, .hover-label, .game-panel { z-index: 2; }
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgba(8, 8, 12, 0.72);
+  backdrop-filter: blur(4px);
+  cursor: pointer;
+  user-select: none;
+}
+
+.overlay__card {
+  text-align: center;
+  color: #ece9e2;
+  padding: 2rem 3rem;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  background: rgba(20, 20, 28, 0.85);
+}
+.overlay__card h1 { margin: 0 0 0.25rem; font-size: 2rem; letter-spacing: 0.08em; }
+.overlay__card p { margin: 0 0 1.25rem; opacity: 0.8; }
+.overlay__card ul { list-style: none; padding: 0; margin: 0; text-align: left; font-size: 0.9rem; opacity: 0.85; }
+.overlay__card li { margin: 0.35rem 0; }
+kbd {
+  display: inline-block;
+  min-width: 1.2em;
+  padding: 0.1em 0.4em;
+  margin-right: 0.15em;
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  background: rgba(255, 255, 255, 0.08);
+  font-family: inherit;
+  font-size: 0.85em;
+  text-align: center;
+}
+
+.crosshair {
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  width: 8px;
+  height: 8px;
+  margin: -4px 0 0 -4px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(0, 0, 0, 0.6);
+  box-shadow: 0 0 4px rgba(0, 0, 0, 0.9);
+  pointer-events: none;
+}
+
+.hint {
+  position: fixed;
+  left: 50%;
+  bottom: 2rem;
+  transform: translateX(-50%);
+  padding: 0.5rem 0.9rem;
+  border-radius: 8px;
+  background: rgba(20, 20, 28, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: #ece9e2;
+  font-size: 0.9rem;
+  pointer-events: none;
+}
+
+.hover-label {
+  position: fixed;
+  left: 50%;
+  top: calc(50% + 1.5rem);
+  transform: translateX(-50%);
+  padding: 0.3rem 0.7rem;
+  border-radius: 6px;
+  background: rgba(20, 20, 28, 0.75);
+  color: #ece9e2;
+  font-size: 0.85rem;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+/* Looking at a playing screen: keep the caption out of the picture. */
+.hover-label--edge {
+  top: 1.5rem;
+  opacity: 0.85;
+}
+
+.game-panel {
+  position: fixed;
+  top: 50%;
+  right: 3rem;
+  transform: translateY(-50%);
+  width: min(22rem, 40vw);
+  padding: 1.5rem 1.75rem;
+  border-radius: 12px;
+  background: rgba(20, 20, 28, 0.88);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #ece9e2;
+  pointer-events: none;
+  animation: panel-in 220ms ease-out;
+}
+@keyframes panel-in {
+  from { opacity: 0; transform: translateY(-50%) translateX(1rem); }
+  to   { opacity: 1; transform: translateY(-50%); }
+}
+.game-panel h2 { margin: 0 0 1rem; font-size: 1.4rem; line-height: 1.2; }
+.game-panel dl { display: grid; grid-template-columns: auto 1fr; gap: 0.35rem 1rem; margin: 0; font-size: 0.9rem; }
+.game-panel dt { opacity: 0.6; }
+.game-panel dd { margin: 0; }
+.game-panel p { margin: 1rem 0 0; font-size: 0.9rem; line-height: 1.45; opacity: 0.9; }
+.game-panel footer { margin-top: 1.25rem; font-size: 0.75rem; opacity: 0.6; }
