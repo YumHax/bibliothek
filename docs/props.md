@@ -4,11 +4,13 @@ Read this to add or change something visible in the room. The recipe is in the `
 
 ## Three tiers
 
-1. **Decor** (no wiring): plants, rug, picture frames, floor lamps, side tables. Listed in `ROOM_PLAN.decor`
-   (`src/world/roomPlan.ts`) as `{ kind, at, options }`; kinds registered in `src/world/props/decor.ts`.
-2. **Wired props** (need a callback or another object): door (doorways), windows (the shared Sky, skylight), posters
-   and consoles (follow the collection), wall clock (DayNight), pendant (Room light), screens, seats. Their spots are still
-   plan entries (`ROOM_PLAN.tv`, `.windows`, `.posters`...); `layout.ts` builds them in numbered steps.
+1. **Decor** (no wiring): plants, rug, picture frames, floor lamps, side tables. Listed in a plan's `decor`
+   (`ROOM_PLAN` in `src/world/roomPlan.ts`, `<KIND>_PLAN` in `src/world/<kind>/<kind>Plan.ts`) as `{ kind, at, options }`;
+   kinds registered in `src/world/props/decor.ts`.
+2. **Wired props** (need a callback or another object, or exist once): door (doorways), windows (the shared Sky, skylight),
+   posters and consoles (follow the collection), wall clock (DayNight), pendant / flush lamp (Room light), screens, seats,
+   and a room's one-off furniture (bed, bathtub, kitchen run...). Their spots are still plan entries (`ROOM_PLAN.tv`,
+   `.windows`, `BEDROOM_PLAN.bed`...); the room's builder (`layout.ts`, `furnish<Kind>.ts`) places them.
 3. **Classes** (`src/world/props/*.ts`, `src/world/Seat.ts`, ...): geometry only. A class never knows where it stands.
 
 ## Placement (`src/world/Placement.ts`)
@@ -34,7 +36,10 @@ Read this to add or change something visible in the room. The recipe is in the `
 - Holding a subscription, audio or timer: implement `dispose()`; the zone calls it on unload (geometry is freed for you).
 - Wall-hung classes have their back at local z = 0 and face +z; floor classes have their base at local y = 0.
 - Material constants at module level are shared across instances; per-instance state (emissive toggles) must be own materials.
-- Nothing decorative casts shadows unless it matters; point-light `shadow.camera.far` at room scale (see gotchas).
+- Nothing decorative casts shadows unless it matters; point-light `shadow.camera.far` at room scale (see gotchas). A prop
+  with a shadow-casting light implements `OccupancyAware` (`setOccupied`) like `ShelfLamp`: per-frame shadow updates only
+  in the player's zone, `IDLE_SHADOW_INTERVAL` refreshes elsewhere.
+- Something the crosshair must not see through (a wall, a partition) lists its meshes in `occluders`.
 
 ## Existing kinds and their options
 
@@ -48,11 +53,17 @@ Read this to add or change something visible in the room. The recipe is in the `
 
 Wired classes: `Seat` (+ `Cushion` via `mountCushion`), `Television(cssLayer, listener)`, `Projector(cssLayer, { pictureWidth, listener })`,
 `RoomWindow(outdoors, { width, height, drivesClock, sunlight, onCurtainsChange })`, `Poster(width, height, painter)` with
-`Poster.bibliothek()` / `Poster.platform()`, `WallClock(dayNight)`, `PendantLamp({ onSwitch })`, `Door(doorway, { collisions })`,
-`ConsoleStand` + `Console(slotWidth, onSelectPlatform)` (one style per platform in `consoleStyles.ts`).
+`Poster.bibliothek()` / `Poster.platform()`, `WallClock(dayNight)`, `PendantLamp({ onSwitch })`, `FlushLamp({ onSwitch, on })`,
+`Door(doorway, { collisions, leafColor })` (hung by `furnishShell`), `ConsoleStand` + `Console(slotWidth, onSelectPlatform)` (one style per
+platform in `consoleStyles.ts`). Placed by the room builders without wiring: `ShutDoor({ style })` (a door that never opens),
+`HallConsole({ width, mirror })`, `CoatRack({ shoeRack })`, and each room's own furniture classes.
 
 ## Room shell
 
-`DEFAULT_ROOM` 6 x 6 x 2.8 m with `FRONT_DOOR` on the back wall at x -1.5 (0.83 x 2.04). `Room` cuts the doorways out of the
-walls, baseboard and wall colliders; the layout hangs a `Door` in each, opening onto the `Hallway` behind it. Shelving fills the
-back wall from `ROOM_PLAN.shelving.backWallMinX` then the right wall, skipping the projector picture.
+`Room(options)` builds floor, ceiling, four walls cut by the `doorways`, baseboard, wall colliders with gaps at the doorways,
+an invisible shadow caster outside each `opaqueWalls` wall (keeps the lamps in), the hemisphere ambient (on only while
+`setOccupied(true)`) and the shadow-casting ceiling lamp. `furnishShell(zone, sky, options, { leafColor })` places it,
+follows the sky and hangs a `Door` in each doorway with `door !== false` (`hinge` picks the side). The collection room is
+`DEFAULT_ROOM` 6 x 6 x 2.8 m with `FRONT_DOOR` on the back wall at x -1.5 (`DOOR_LEAF` 0.83 x 2.04), the hallway zone behind it;
+shelving fills the back wall from `ROOM_PLAN.shelving.backWallMinX` then the right wall, skipping the projector picture. The
+other rooms' shells are in their plan files; the flat's map is in `worldPlan.ts`.

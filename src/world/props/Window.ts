@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import type { Updatable } from '@/core/Engine';
 import type { Interactable } from '@/interaction/Interactable';
 import type { SessionActions } from '@/game/SessionActions';
+import { IDLE_SHADOW_INTERVAL, type OccupancyAware } from '../Furniture';
 import { invisibleHitbox } from '../meshUtils';
 import { Prop, part } from './Prop';
 import { Curtains } from './Curtains';
@@ -61,12 +62,15 @@ const HEM_CLEARANCE = 0.015;
  * Clicking the window draws or opens its curtains; drawn curtains shut the sun out (the spot fades
  * with them) and report their openness through `onCurtainsChange` so the room's skylight follows.
  */
-export class RoomWindow extends Prop implements Updatable, Interactable {
+export class RoomWindow extends Prop implements Updatable, Interactable, OccupancyAware {
   readonly options: Required<Omit<WindowOptions, 'onCurtainsChange'>> & Pick<WindowOptions, 'onCurtainsChange'>;
   /** Local y of the floor (the bottom of the kick rail). */
   readonly floorY: number;
   private readonly unsubscribe: () => void;
   readonly hitboxes: THREE.Object3D[];
+  /** The sun's shadow map is re-rendered every frame only in the player's room; now and then elsewhere (see `update`). */
+  private occupied = false;
+  private shadowTimer = Math.random() * IDLE_SHADOW_INTERVAL;
 
   /** The sun/moon spot; null when `sunlight` is off. */
   private readonly light: THREE.SpotLight | null = null;
@@ -163,7 +167,15 @@ export class RoomWindow extends Prop implements Updatable, Interactable {
     return this.curtains?.currentOpenness ?? 1;
   }
 
-  /** Ticks the shared clock and the life outside (only when this window `drivesClock`) and eases the curtains. */
+  setOccupied(occupied: boolean): void {
+    this.occupied = occupied;
+    if (this.sky) this.apply(this.sky);
+  }
+
+  /**
+   * Ticks the shared clock and the life outside (only when this window `drivesClock`), eases the
+   * curtains, and refreshes the sun's shadow map now and then when the player is in another room.
+   */
   update(dt: number): void {
     if (this.options.drivesClock) {
       this.dayNight.update(dt);
@@ -173,6 +185,11 @@ export class RoomWindow extends Prop implements Updatable, Interactable {
       if (this.sky) this.apply(this.sky);
       this.options.onCurtainsChange?.(this.curtains.currentOpenness);
     }
+    if (this.occupied || !this.light || this.light.intensity <= 0) return;
+    this.shadowTimer += dt;
+    if (this.shadowTimer < IDLE_SHADOW_INTERVAL) return;
+    this.shadowTimer = 0;
+    this.light.shadow.needsUpdate = true;
   }
 
   // --- Interactable -------------------------------------------------------------------------
@@ -223,8 +240,9 @@ export class RoomWindow extends Prop implements Updatable, Interactable {
     // Drawn curtains shut the sun out; the light fades with the panels.
     this.light.intensity = this.lightDir.z < 0 ? sky.lightIntensity * this.curtainOpenness : 0;
     // A dark light still gets its shadow map rendered every frame unless told otherwise: skip the
-    // pass while the sun is behind this wall (or the curtains drawn). Toggling `castShadow` instead
-    // would recompile every material, so the light stays a shadow caster and only stops updating.
-    this.light.shadow.autoUpdate = this.light.intensity > 0;
+    // pass while the sun is behind this wall (or the curtains drawn), and while the player is in
+    // another room (`update` refreshes it now and then). Toggling `castShadow` instead would
+    // recompile every material, so the light stays a shadow caster and only stops updating.
+    this.light.shadow.autoUpdate = this.occupied && this.light.intensity > 0;
   }
 }

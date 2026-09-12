@@ -36,6 +36,9 @@ export const fragmentShader = /* glsl */ `
   uniform sampler2D sky;
   uniform vec3 center;
   uniform float radius;
+  uniform vec4 nearWall; // x0, x1, y0, y1 of the building's own wall standing in the view (see Outdoors.NearWall)
+  uniform float nearWallZ;
+  uniform float nearWallStorey;
   uniform vec3 zenith;
   uniform vec3 horizon;
   uniform float nightness;
@@ -138,6 +141,39 @@ export const fragmentShader = /* glsl */ `
     vec4 g = lightTexel(c + SCENE_TEXEL);
     return mix(mix(a, b, f.x), mix(e, g, f.x), f.y);
   }
+  // Hash of a window of the near wall (storey, bay) to a curfew, like the painted windows'.
+  float wallCurfew(float storey, float bay) {
+    return fract(sin(storey * 12.9898 + bay * 78.233) * 43758.5453);
+  }
+  // The near wall where the eye ray meets it at p: rendered plaster in daylight, a string course
+  // at every floor, a cornice under the roof, and on the floors below the flat's two windows per
+  // storey, their glass mirroring the sky and lit at night like the city's.
+  vec3 nearWallColor(vec3 p, vec3 mirrored) {
+    float h = p.y - nearWall.z;
+    float storey = floor(h / nearWallStorey);
+    float f = h - storey * nearWallStorey;
+    vec3 albedo = vec3(0.56, 0.48, 0.39);
+    albedo *= 1.0 - 0.22 * step(f, 0.14);
+    albedo *= 1.0 - 0.3 * step(nearWall.w - p.y, 0.35);
+    // Two bays of windows, on the storeys below the flat's (the flat's own kitchen wall is blind here).
+    float faceW = nearWall.y - nearWall.x;
+    float cell = faceW * 0.5;
+    float u = p.x - nearWall.x;
+    float bay = floor(u / cell);
+    float du = abs(u - bay * cell - cell * 0.5);
+    float below = step(p.y, -0.01); // world y 0 is the flat's floor
+    float frame = step(du, 0.45) * step(0.9, f) * step(f, 2.3) * below;
+    float glass = step(du, 0.39) * step(0.96, f) * step(f, 2.24) * below;
+    float cf = wallCurfew(storey, bay);
+    float on = step(1.0 - litAlpha, fract(cf * 7.0)) * step(cf, wakefulness) * glass;
+    // Daylight on the wall: the sky, and the sun where it reaches this face (its normal is +z).
+    float sun = max(sunDir.z, 0.0) * sunVisibility;
+    vec3 day = albedo * sceneTint * (0.5 + 0.55 * sun);
+    day = mix(day, albedo * 1.35 * sceneTint, frame - glass);
+    vec3 color = mix(day, albedo * NIGHT, nightness);
+    color = mix(color, mix(vec3(0.02, 0.03, 0.04), mirrored, 0.6 * (1.0 - nightness)), glass);
+    return color + WARM * 0.75 * on;
+  }
   // The moon: a pale disc with a bite taken out of it (the crescent) and a faint halo.
   vec3 drawMoon(vec3 color, vec3 d) {
     float angle = angleBetween(d, moonDir);
@@ -179,6 +215,16 @@ export const fragmentShader = /* glsl */ `
     base = mix(base, airColor * cov, haze);
     // The lights that are on (see lightTexel); only the air in between dims them.
     base += (WARM * li.r + COOL * li.g) * (1.0 - 0.6 * haze) * cov;
+    // The building's own wall outside some windows (the kitchen wing): a rectangle facing +z that
+    // the ray may cross on its way out, metres away, in front of everything painted and moving.
+    float wt = (nearWallZ - cameraPosition.z) / min(d.z, -1e-5);
+    vec3 wp = cameraPosition + wt * d;
+    float onWall = step(d.z, -1e-5) * step(0.0, wt) * step(nearWall.x, wp.x) * step(wp.x, nearWall.y) * step(nearWall.z, wp.y) * step(wp.y, nearWall.w);
+    if (onWall > 0.5) {
+      base = nearWallColor(wp, mirrored);
+      cov = 1.0;
+      sceneDist = wt;
+    }
     // Moving things, far to near: each a textured rectangle, skipped where the scenery stands in front of it.
     for (int i = 0; i < SPRITES; i++) {
       vec4 rc = spriteRect[i];

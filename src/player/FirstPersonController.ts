@@ -27,6 +27,8 @@ export interface FirstPersonOptions {
 
 /** Keep the camera off the exact poles so the yaw stays well defined. */
 const MAX_PITCH = Math.PI / 2 - 0.01;
+/** Height of the lower collision probe (see `blockedAt`): what a knee bumps into. */
+const KNEE_HEIGHT = 0.35;
 
 /**
  * First-person look + WASD/ZQSD movement with simple sphere-vs-AABB collision (the room's walls
@@ -315,8 +317,16 @@ export class FirstPersonController implements Updatable {
     this.camera.position[axis] = this.candidate[axis];
   }
 
+  /**
+   * The body is a sphere tested at two heights: the knees, so low furniture (a bed, a bath, a side
+   * table) blocks the way, and the waist, so a shelf's overhang or a worktop does not need a
+   * collider down to the floor.
+   */
   private blockedAt(position: THREE.Vector3): boolean {
-    this.probe.set(position.x, this.eyeHeight * 0.6, position.z);
-    return this.collisions.intersectsSphere(this.probe, this.bodyRadius);
+    for (const y of [KNEE_HEIGHT, this.eyeHeight * 0.6]) {
+      this.probe.set(position.x, y, position.z);
+      if (this.collisions.intersectsSphere(this.probe, this.bodyRadius)) return true;
+    }
+    return false;
   }
 }

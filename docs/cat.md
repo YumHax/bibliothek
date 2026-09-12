@@ -27,7 +27,7 @@ Read this only when changing the cat's look, behaviour or belongings.
 
 ## Hooks into the rest of the room
 
-- `Seat` exposes `approachPoint` / `restingSpot` / `lapSpot`; `RoomWindow` exposes `lookoutSpot` / `sunSpotOnFloor`.
+- `Seat` exposes `approachPoint` / `restingSpot` (on top of the mounted cushion, probed at `mountCushion`) / `lapSpot`; `RoomWindow` exposes `lookoutSpot` / `sunSpotOnFloor`.
 - The Session reaches it through the `CatLike` part: `C` calls it, `sit()` / `stand()` report the seat.
 - It watches the TV through a tiny adapter built in `furnishCat` (`isPlaying`, `watchingSpot`, `screenPoint`).
 

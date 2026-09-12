@@ -1,6 +1,6 @@
 import type { Updatable } from '@/core/Engine';
 import { DayNight } from './props/DayNight';
-import { Outdoors } from './props/outdoors/Outdoors';
+import { Outdoors, type NearWall } from './props/outdoors/Outdoors';
 
 export interface SkyOptions {
   /** Initial time of day (hours). Default 8, a sunny morning. */
@@ -9,6 +9,8 @@ export interface SkyOptions {
   dayLength?: number;
   /** World yaw of the wall the sun's azimuth is expressed against (see `Outdoors.primaryRotationY`). */
   sunRotationY: number;
+  /** A wall of the building itself standing in the view of some windows (see `Outdoors.nearWall`). */
+  nearWall?: NearWall;
 }
 
 /**
@@ -22,7 +24,7 @@ export class Sky implements Updatable {
 
   constructor(options: SkyOptions) {
     this.dayNight = new DayNight({ hours: options.hours, dayLength: options.dayLength });
-    this.outdoors = new Outdoors(this.dayNight, { primaryRotationY: options.sunRotationY });
+    this.outdoors = new Outdoors(this.dayNight, { primaryRotationY: options.sunRotationY, nearWall: options.nearWall });
   }
 
   update(dt: number): void {

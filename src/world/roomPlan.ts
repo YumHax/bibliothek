@@ -13,11 +13,17 @@ import type { SortMode } from './shelving/sort';
  * To move or add decoration edit `decor`; to add a kind of decoration see `props/decor.ts`.
  */
 
-/** The flat's front door: back wall, in the shelf-free stretch left of the bookcases, a standard 83 cm leaf. */
-export const FRONT_DOOR: Doorway = { wall: 'back', along: -1.5, width: 0.83, height: 2.04 };
+/** Every door of the flat is the same standard leaf. */
+export const DOOR_LEAF = { width: 0.83, height: 2.04 };
 
-/** The room shell everything else is laid out in: 6 x 6 m, 2.8 m under the ceiling, one door. */
-export const DEFAULT_ROOM: RoomOptions = { width: 6, depth: 6, height: 2.8, doorways: [FRONT_DOOR] };
+/** The door to the hallway: back wall, in the shelf-free stretch left of the bookcases; this room hangs the leaf. */
+export const FRONT_DOOR: Doorway = { wall: 'back', along: -1.5, ...DOOR_LEAF, to: 'hallway' };
+
+/**
+ * The room shell everything else is laid out in: 6 x 6 m, 2.8 m under the ceiling, one door. The
+ * back wall (hallway behind) and the right wall have no window and keep the light in.
+ */
+export const DEFAULT_ROOM: RoomOptions = { width: 6, depth: 6, height: 2.8, doorways: [FRONT_DOOR], opaqueWalls: ['back', 'right'] };
 
 export interface WindowPlan {
   wall: Wall;

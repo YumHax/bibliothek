@@ -17,7 +17,8 @@ npm run build       # typecheck + production bundle
   typecheck + build and describe what to check. No test framework either: typecheck + build is the check.
 - Strict TypeScript (`noUnusedLocals`, `noUnusedParameters`). Path alias `@/` -> `src/`. One concern per file; a new
   concept gets its own folder under `src/`. No logic in `index.html`; `src/main.ts` is wiring only.
-- Positions and decoration are data in `src/world/roomPlan.ts` (`ROOM_PLAN`); classes never hard-code where they stand.
+- Positions and decoration are data in `src/world/roomPlan.ts` (`ROOM_PLAN`) and `src/world/<kind>/<kind>Plan.ts` for the
+  other rooms; classes never hard-code where they stand.
 - Units are metres, real-world scale (NES box 0.127 x 0.178 x 0.025, eye height 1.7).
 - Keyboard input uses physical `KeyboardEvent.code` (WASD == ZQSD on AZERTY). Never `event.key`.
 - Public, key-less data sources only (the user does not want to request API keys).
@@ -35,10 +36,10 @@ npm run build       # typecheck + production bundle
 | The view outside the windows | `docs/outdoors.md` |
 | The cat | `docs/cat.md` |
 
-Layer order, outermost first: `worldPlan.ts` + `roomPlan.ts` (data) -> `layout.ts` (zone builders, the only wiring) -> zones
-(`src/world/zone/`: a room loads and unloads as one; positions are zone-local) -> furniture classes in `src/world/**` -> engine
-(`core`, `player`, `input`, `interaction`) -> rules (`src/game/Session`). Content work stays in the first two layers; the
-engine is never touched for content.
+Layer order, outermost first: `worldPlan.ts` + the plan files (data) -> `layout.ts` + `src/world/<kind>/furnish<Kind>.ts`
+(zone builders, the only wiring) -> zones (`src/world/zone/`: a room loads and unloads as one; positions are zone-local) ->
+furniture classes in `src/world/**` -> engine (`core`, `player`, `input`, `interaction`) -> rules (`src/game/Session`).
+Content work stays in the first two layers; the engine is never touched for content.
 
 ## Gotchas already hit
 
@@ -49,3 +50,8 @@ engine is never touched for content.
 - Point-light shadow bias is in units of the shadow camera's `far` (default 500 m); keep `shadow.camera.far` at room scale.
 - `GameBox` material order is BoxGeometry's `[+x, -x, +y, -y, +z front, -z back]`; on +x the front edge is on the texture's left.
 - The clock is ticked once by `Sky` in `main.ts`; never set `drivesClock` on a `RoomWindow` or the day runs twice as fast.
+- Frame cost is per pixel (every fragment samples every shadow map) and Firefox does not throttle `requestAnimationFrame`
+  on GPU load: the `Engine` gates rendering on a GPU fence and caps the pixel ratio. Measure with `?stats` + `bibliothek.bisect()`.
+- `outdoors/shader.ts` is a template literal: a backtick in a GLSL comment ends it (typecheck fails with `',' expected`).
+- Lights ignore wall planes: a room's lamp shines into the next room unless the wall is in `RoomOptions.opaqueWalls`; a
+  `HemisphereLight` lights the whole scene, so only the occupied `Room` runs its ambient (`setOccupied`, wired in `main.ts`).

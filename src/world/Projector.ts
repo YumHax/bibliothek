@@ -6,6 +6,7 @@ import type { PlayerState, SessionActions } from '@/game/SessionActions';
 import type { VideoInfo } from '@/video/VideoProvider';
 import type { Furniture } from './Furniture';
 import { boxMesh } from './meshUtils';
+import type { SoundOcclusion } from './acoustics/SoundOcclusion';
 import { VideoSurface, type ScreenState, type ScreenStateListener, type VideoScreen } from './screen';
 
 export interface ProjectorOptions {
@@ -13,6 +14,8 @@ export interface ProjectorOptions {
   pictureWidth?: number;
   /** Object whose distance to the picture drives the volume (the camera). */
   listener?: THREE.Object3D;
+  /** Walls between the listener and the picture damp the volume (see `SoundOcclusion`). */
+  occlusion?: SoundOcclusion;
 }
 
 /** Light thrown by the lens: cool white, brightest while a video plays. */
@@ -79,6 +82,7 @@ export class Projector extends THREE.Group implements Furniture, Updatable, Inte
     this.surface = new VideoSurface(cssLayer, {
       width: options.pictureWidth ?? 2.2,
       listener: options.listener,
+      occlusion: options.occlusion,
       idle: 'nothing',
       message: { background: '#000000', ink: '#e8ecf5' },
       volume: { referenceDistance: 2.5, rolloff: 1.2, maxDistance: 14, rearGain: 0.6 },

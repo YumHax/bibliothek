@@ -1,4 +1,6 @@
 import * as THREE from 'three';
+import type { Updatable } from '@/core/Engine';
+import { IDLE_SHADOW_INTERVAL, type OccupancyAware } from '../Furniture';
 import { cylinderMesh, invisibleHitbox } from '../meshUtils';
 import { SwitchableLamp } from './SwitchableLamp';
 
@@ -29,14 +31,17 @@ const HOVER_GLOW = 0.35;
  * bottom row. Local origin is the ceiling attachment point; the bookcase is `throwDistance`
  * away along local -z. Overhead, so it never collides (empty footprint, see `Prop`). Clicking
  * the can switches it. Owned by `Shelving`, one per bookcase, kept across rebuilds so a
- * switched-off spot stays off.
+ * switched-off spot stays off. Its shadow map is re-rendered every frame only while the player is
+ * in the room (`setOccupied`), a couple of times a second otherwise.
  */
-export class ShelfLamp extends SwitchableLamp {
+export class ShelfLamp extends SwitchableLamp implements Updatable, OccupancyAware {
   readonly options: Required<ShelfLampOptions>;
   readonly light: THREE.SpotLight;
   readonly hitboxes: THREE.Object3D[];
   private readonly metal: THREE.MeshStandardMaterial;
   private readonly lens: THREE.MeshStandardMaterial;
+  private occupied = false;
+  private shadowTimer = Math.random() * IDLE_SHADOW_INTERVAL;
 
   constructor(options: ShelfLampOptions) {
     super('shelf spot');
@@ -83,9 +88,31 @@ export class ShelfLamp extends SwitchableLamp {
     this.setOn(this.options.on);
   }
 
+  setOccupied(occupied: boolean): void {
+    this.occupied = occupied;
+    this.syncShadow();
+  }
+
+  /** Unoccupied and lit: refresh the shadow map now and then instead of every frame. */
+  update(dt: number): void {
+    if (this.occupied || this.light.intensity <= 0) return;
+    this.shadowTimer += dt;
+    if (this.shadowTimer < IDLE_SHADOW_INTERVAL) return;
+    this.shadowTimer = 0;
+    this.light.shadow.needsUpdate = true;
+  }
+
   protected render(on: boolean, hovered: boolean): void {
     this.light.intensity = on ? this.options.intensity : 0;
     this.lens.emissiveIntensity = on ? LENS_GLOW : 0;
     this.metal.emissiveIntensity = hovered ? HOVER_GLOW : 0;
+    this.syncShadow();
+  }
+
+  /** Per-frame shadow updates only while lit and in the player's room; a switched-off spot renders no map at all. */
+  private syncShadow(): void {
+    const lit = this.light.intensity > 0;
+    this.light.shadow.autoUpdate = lit && this.occupied;
+    if (lit) this.light.shadow.needsUpdate = true;
   }
 }

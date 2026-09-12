@@ -16,8 +16,25 @@ export interface LayerRenderer {
 }
 
 /**
+ * Retina screens are rendered at 1.5x, not 2x: the frame's cost is per pixel (every fragment
+ * samples every shadow map), and 2x is 78% more pixels than 1.5x for a difference the eye barely sees.
+ */
+const MAX_PIXEL_RATIO = 1.5;
+/**
+ * A fence still pending after this long is not a slow frame, it is a browser that does not report
+ * sync status (a hidden tab, an odd driver): the frame is rendered anyway, and after a few of those
+ * in a row the pacing switches itself off rather than hold the loop at four frames a second.
+ */
+const FENCE_TIMEOUT_MS = 250;
+const FENCE_TIMEOUTS_TO_GIVE_UP = 3;
+
+/**
  * Owns the renderer, scene, camera and the main loop.
  * Everything else (player, world, UI) plugs into it instead of touching three.js globals.
+ * The loop never lets the GPU fall behind: a frame is only rendered once the previous one has
+ * finished on the GPU (a fence is polled; meanwhile the updatables still tick). Chrome throttles
+ * requestAnimationFrame that way on its own, Firefox does not: it keeps taking frames at the display
+ * rate, its GPU process drowns in queued work, drops most of them and the whole browser stutters.
  */
 export class Engine {
   readonly renderer: THREE.WebGLRenderer;
@@ -27,12 +44,17 @@ export class Engine {
   private readonly clock = new THREE.Clock();
   private readonly updatables = new Set<Updatable>();
   private readonly layers: LayerRenderer[] = [];
+  /** Signals when the GPU has finished the last frame rendered; null when nothing is pending. */
+  private fence: WebGLSync | null = null;
+  private fenceSince = 0;
+  private fenceTimeouts = 0;
+  private pacing = true;
 
   constructor(container: HTMLElement) {
     // alpha:true lets cut-out materials expose DOM layers sitting behind the canvas.
     this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: 'high-performance' });
     this.renderer.setClearColor(0x0b0b10, 1);
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, MAX_PIXEL_RATIO));
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -73,9 +95,35 @@ export class Engine {
     // Clamp dt so a backgrounded tab does not teleport the player when it comes back.
     const dt = Math.min(this.clock.getDelta(), 0.1);
     for (const u of this.updatables) u.update(dt);
+    if (!this.gpuIdle()) return;
     this.renderer.render(this.scene, this.camera);
     for (const layer of this.layers) layer.render(this.camera);
+    if (!this.pacing) return;
+    const gl = this.gl;
+    this.fence = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
+    this.fenceSince = performance.now();
+    gl.flush();
   };
+
+  /** three.js renders through WebGL 2 only, which is where fences live. */
+  private get gl(): WebGL2RenderingContext {
+    return this.renderer.getContext() as WebGL2RenderingContext;
+  }
+
+  /** True once the GPU has finished the previous frame (or nothing is pending); the fence is consumed. */
+  private gpuIdle(): boolean {
+    if (!this.fence) return true;
+    const gl = this.gl;
+    const pending = gl.getSyncParameter(this.fence, gl.SYNC_STATUS) === gl.UNSIGNALED;
+    if (pending && performance.now() - this.fenceSince < FENCE_TIMEOUT_MS) return false;
+    if (pending && ++this.fenceTimeouts >= FENCE_TIMEOUTS_TO_GIVE_UP) {
+      this.pacing = false;
+      console.warn('[engine] GPU fences do not report here; frame pacing switched off');
+    } else if (!pending) this.fenceTimeouts = 0;
+    gl.deleteSync(this.fence);
+    this.fence = null;
+    return true;
+  }
 
   private onResize = (): void => {
     this.camera.aspect = window.innerWidth / window.innerHeight;

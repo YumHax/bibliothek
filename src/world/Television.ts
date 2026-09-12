@@ -7,6 +7,7 @@ import type { VideoInfo } from '@/video/VideoProvider';
 import { CrtSpeaker } from '@/audio/CrtSpeaker';
 import type { Furniture } from './Furniture';
 import { boxMesh } from './meshUtils';
+import type { SoundOcclusion } from './acoustics/SoundOcclusion';
 import { VideoSurface, type ScreenState, type ScreenStateListener, type VideoScreen } from './screen';
 
 /** Height of the built-in cabinet the CRT sits on when nothing else carries it (see `mountOn`). */
@@ -17,6 +18,13 @@ const GLOW_PLAYING = 3;
 const GLOW_MESSAGE = 0.7;
 /** A CRT's little speaker never gets as loud as the projector's sound system. */
 const SPEAKER_GAIN = 0.8;
+
+export interface TelevisionOptions {
+  /** Object whose distance and facing drive the volume (the camera). */
+  listener?: THREE.Object3D;
+  /** Walls between the listener and the screen damp the volume (see `SoundOcclusion`). */
+  occlusion?: SoundOcclusion;
+}
 
 /**
  * A CRT television on a cabinet. The picture is a `VideoSurface` (cut-out over a YouTube
@@ -38,7 +46,7 @@ export class Television extends THREE.Group implements Furniture, Updatable, Int
   private glowTime = 0;
   private readonly bodyMaterial: THREE.MeshStandardMaterial;
 
-  constructor(cssLayer: CssLayer, listener?: THREE.Object3D) {
+  constructor(cssLayer: CssLayer, { listener, occlusion }: TelevisionOptions = {}) {
     super();
     this.name = 'Television';
 
@@ -49,6 +57,7 @@ export class Television extends THREE.Group implements Furniture, Updatable, Int
     this.surface = new VideoSurface(cssLayer, {
       width: this.screenWidth,
       listener,
+      occlusion,
       idle: 'glass',
       volume: { referenceDistance: 1.5, rolloff: 1.5, maxDistance: 12, rearGain: 0.5 }, // the armchair sits just inside the reference: full volume when seated
       gain: SPEAKER_GAIN,

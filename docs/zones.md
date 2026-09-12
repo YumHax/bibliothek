@@ -28,8 +28,48 @@ player cannot see must be *out of the scene*, not just behind a wall.
 - **`Sky`** (`src/world/Sky.ts`): the one `DayNight` clock + `Outdoors` panorama, created in `main.ts` and ticked by the
   engine, shared by every window in every zone. Windows no longer drive the clock.
 - **`WORLD_PLAN`** (`src/world/worldPlan.ts`): the list of zones (`id`, `kind`, `origin`, `extent`, `neighbours`,
-  `persistent`) and the start zone. `ZONE_BUILDERS[kind]` in `layout.ts` builds each kind from its own plan file
-  (`ROOM_PLAN` for `collectionRoom`) with the shared `BuildContext` (css layer, collection, covers, sky, callbacks).
+  `persistent`) and the start zone, with a map of the flat in its header comment. `ZONE_BUILDERS[kind]` in `layout.ts`
+  builds each kind from its own plan file (`ROOM_PLAN` for `collectionRoom`, `src/world/<kind>/<kind>Plan.ts` +
+  `furnish<Kind>.ts` for the hallway, bathroom, bedroom and kitchen) with the shared `BuildContext` (css layer,
+  collection, covers, sky, callbacks). Every builder returns at least a `ZoneHandle` (`{ room }`).
+- **`furnishShell()`** (`src/world/shell.ts`): what every room zone starts with: the `Room` at the origin, its lighting
+  following the sky, and a `Door` in each doorway the zone owns.
+
+## The flat
+
+Five zones: the collection room (`living`, persistent), the `hallway` behind its back-wall door, and off the corridor the
+`bathroom` and `bedroom` (back wall) and the `kitchen` (left end). The flat's front door at the corridor's right end is a
+`ShutDoor` prop: the outside is not built. Neighbours are what is seen through a zone's doorways: the collection room keeps
+the hallway and the two rooms whose doors face its own active; every room keeps the hallway and the collection room; sibling
+rooms (coplanar doors) are not neighbours, so at most four zones are active at once.
+
+## How two zones share a doorway
+
+- Both shells cut the same opening (`doorways` in each `RoomOptions`, same world spot, same size); the zone origins keep
+  `WALL_GAP` (0.06 m) between the two wall planes so they do not z-fight, and the `Door`'s lining bridges the gap.
+- Exactly one side hangs the leaf: the other marks its doorway `door: false`. `hinge: 'right'` mirrors the leaf; it swings
+  away from the hanging room and ends nearly flat against the far wall on the hinge side, so pick the side with the longer
+  wall. Too narrow a room (the bathroom) hangs its own door so it opens into the corridor. Both sides name the zone across
+  the opening in `to`: that is the portal the view is culled through.
+- Light does not stop at a wall plane: a room's lamps would pour through it. `RoomOptions.opaqueWalls` lays an invisible
+  shadow caster just outside each listed wall (cut by its doorways); list every wall without a window.
+- A `HemisphereLight` lights the whole scene, so `Room` keeps its sky ambient off until `setOccupied(true)`. `main.ts`
+  calls `Zone.setOccupied()` on `onZoneChange`, which reaches every `OccupancyAware` item of the zone: the room, its
+  shelf lamps and its windows re-render their shadow maps every frame only while occupied (a point light's shadow is six
+  passes), and refresh them twice a second, out of phase, otherwise. Each lamp's shadow reaches 1.5x its own floor
+  diagonal, no further. `?stats` in the URL logs fps, draw calls and the light count every 2 s.
+- Shadow maps do not know about walls: a lamp renders every caster in range, the collection room's shelving included,
+  even from behind a wall. So each zone has its own shadow layer (`Zone.shadowLayer`, set on everything placed in it),
+  every shell and every door is also on `SHARED_SHADOW_LAYER` (`furnishShell`), and every shadow-casting light placed in
+  a zone renders those two layers only (`Zone.adopt`). A lamp's shadow pass costs its own room, not the flat.
+- Neither does the camera: three.js culls by frustum, not by walls, so from the corridor the whole flat behind its walls
+  was drawn. `PortalCuller` (an `Updatable` in `main.ts`) walks the `Doorway.to` portals from the player's zone: a zone
+  is drawn only if reached through open doors whose openings are in view (`Zone.setDrawn`). Undrawn zones keep their
+  lights (removing a light recompiles every shader) and their doors (both rooms see a door); only their meshes hide.
+  Measured in the corridor with the doors shut: 36 draw calls instead of 950.
+- `World.prime()` (called once in `main.ts`) activates every zone, compiles every shader and uploads every texture before
+  the first frame, so no doorway triggers a compile. The flat's rooms are all `persistent`: they go dormant (out of the
+  scene) but are never rebuilt.
 
 ## Rules for zone content
 
@@ -42,19 +82,18 @@ player cannot see must be *out of the scene*, not just behind a wall.
 - `persistent: true` for the collection room: its shelving is live-bound to the collection and the cat lives there.
 - The cat's world is its zone (`zone.floorBounds`); it never follows the player out.
 
-## What is not done yet (for the first real second zone)
+## What is not done yet
 
-1. **Portals.** Two adjacent zones must agree on the opening: the doorway in the living room's back wall (`FRONT_DOOR`,
-   x -1.5) and a matching opening in the next zone's shell, and their `origin`s must line the openings up. Today the
-   `Hallway` behind the door is a prop of the living room (built by `Door`); the natural first step is to turn it into
-   a `hallway` zone kind with its own plan, mark `living` <-> `hallway` as neighbours, and remove the hallway from `Door`.
-2. **Bounds through walls.** Zone bounds are the room's extent; the wall thickness and the doorway belong to nobody. The
-   hysteresis covers the threshold, but two rooms sharing a wall should overlap their bounds by the wall thickness.
-3. **The outside.** The painted `Outdoors` panorama is a 40 m sphere seen through glass; walking outside means an outdoor
-   zone with real geometry (or a much larger painted world) and a different lighting rig (no room hemisphere/lamp). Treat it
-   as a zone kind with its own builder and keep `Sky` as the source of time and sun direction.
-4. **Session parts.** `shelving` in the Session is the home zone's; a second room with shelves would need the Session to
+1. **Bounds through walls.** Zone bounds are the room's extent; the `WALL_GAP` and the doorway belong to nobody. The
+   hysteresis (0.4 m) covers the threshold.
+2. **The outside.** The painted `Outdoors` panorama is a 40 m sphere seen through glass; walking outside (the flat's
+   front door) means an outdoor zone with real geometry (or a much larger painted world) and a different lighting rig (no
+   room hemisphere/lamp). Treat it as a zone kind with its own builder and keep `Sky` as the source of time and sun direction.
+3. **Session parts.** `shelving` in the Session is the home zone's; a second room with shelves would need the Session to
    ask the current zone. Search / random pick assume the home shelving.
-5. **Audio.** `CrtSpeaker` and `CatVoice` fade by distance already; a deactivated zone stops ticking them, which is what
+4. **Audio.** `CrtSpeaker` and `CatVoice` fade by distance already; a deactivated zone stops ticking them, which is what
    we want. Check that a playing TV in a deactivated zone is stopped (`Session.stopScreen`) on `onZoneChange`.
-6. **Spawn / return.** The player spawns at (0, 1.5) in the living room; a save of the current zone + position is not implemented.
+5. **Spawn / return.** The player spawns at (0, 1.5) in the living room; a save of the current zone + position is not implemented.
+6. **Open doors and dormant zones.** A door left open onto a zone that is not a neighbour of the current one shows an
+   empty opening (the kitchen seen at a grazing angle from the bedroom, say). Adding the zone to `neighbours` costs its
+   lamp's shadow pass every frame.

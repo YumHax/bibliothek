@@ -4,6 +4,7 @@ import { CssLayer } from '@/core/CssLayer';
 import type { VideoInfo } from '@/video/VideoProvider';
 import { YouTubePlayer } from '@/video/YouTubePlayer';
 import { proximityVolume, type ProximityVolumeOptions } from '@/video/proximityVolume';
+import type { SoundOcclusion } from '../acoustics/SoundOcclusion';
 import { createCanvas, toTexture, FONT } from '@/covers/generated/canvasUtils';
 import type { ScreenState, ScreenStateListener } from './VideoScreen';
 
@@ -16,6 +17,8 @@ export interface VideoSurfaceOptions {
   width: number;
   /** Object whose distance and facing drive the volume (the camera). Omit for a fixed volume. */
   listener?: THREE.Object3D;
+  /** Counts the walls between the listener and the picture; each damps the volume. Omit to hear through walls. */
+  occlusion?: SoundOcclusion;
   volume?: ProximityVolumeOptions;
   /** Ceiling of the video volume, 0..1: a small television speaker is quieter than a projector's sound system. */
   gain?: number;
@@ -49,6 +52,7 @@ export class VideoSurface extends THREE.Object3D {
   private readonly volume: ProximityVolumeOptions;
   private readonly gain: number;
   private readonly listener?: THREE.Object3D;
+  private readonly occlusion?: SoundOcclusion;
   private _loudness = 0;
   private readonly stateListeners = new Set<ScreenStateListener>();
   private readonly worldPos = new THREE.Vector3();
@@ -66,6 +70,7 @@ export class VideoSurface extends THREE.Object3D {
     this.width = options.width;
     this.height = (options.width * SURFACE_PX_H) / SURFACE_PX_W;
     this.listener = options.listener;
+    this.occlusion = options.occlusion;
     this.volume = options.volume ?? {};
     this.gain = Math.min(1, Math.max(0, options.gain ?? 1));
     this.idle = options.idle ?? 'glass';
@@ -147,13 +152,14 @@ export class VideoSurface extends THREE.Object3D {
     for (const listener of this.stateListeners) listener(next);
   }
 
-  /** Volume from the listener's distance to the picture and from whether they face it or turn away. */
+  /** Volume from the listener's distance to the picture, whether they face it or turn away, and the walls in between. */
   private updateVolume(): void {
     if (!this.listener || this._state !== 'playing') return;
     this.listener.getWorldPosition(this.listenerPos);
     this.listener.getWorldDirection(this.listenerForward);
     this.toScreen.subVectors(this.worldPos, this.listenerPos);
     const distance = this.toScreen.length();
+    const walls = this.occlusion?.wallsBetween(this.listenerPos, this.worldPos) ?? 0;
     // Horizontal facing only: looking up or down should not change the loudness.
     this.listenerForward.y = 0;
     this.toScreen.y = 0;
@@ -161,7 +167,7 @@ export class VideoSurface extends THREE.Object3D {
       this.listenerForward.lengthSq() && this.toScreen.lengthSq()
         ? this.listenerForward.normalize().dot(this.toScreen.normalize())
         : 1;
-    const volume = proximityVolume(distance, { ...this.volume, facing }) * this.gain;
+    const volume = proximityVolume(distance, { ...this.volume, facing, walls }) * this.gain;
     this._loudness = volume / 100;
     this.player.setVolume(volume);
   }

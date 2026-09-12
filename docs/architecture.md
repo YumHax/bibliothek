@@ -8,8 +8,8 @@ Walls as seen from the spawn: back = -z (shelves, door), front = +z, left = -x (
 
 | Layer | Files | Role |
 | --- | --- | --- |
-| Plan (data) | `src/world/worldPlan.ts`, `src/world/roomPlan.ts` | `WORLD_PLAN`: the zones and how they connect; `ROOM_PLAN`: every position in the collection room. No three.js at runtime. |
-| Layout | `src/world/layout.ts` | `ZONE_BUILDERS` / `furnishRoom()` read the plans and build a zone; the only place that wires props together. |
+| Plan (data) | `src/world/worldPlan.ts`, `src/world/roomPlan.ts`, `src/world/<kind>/<kind>Plan.ts` | `WORLD_PLAN`: the zones and how they connect; `ROOM_PLAN`: every position in the collection room; one plan per other room (hallway, bathroom, bedroom, kitchen). No three.js at runtime. |
+| Layout | `src/world/layout.ts`, `src/world/shell.ts`, `src/world/<kind>/furnish<Kind>.ts` | `ZONE_BUILDERS` / `furnishRoom()` and the per-room builders read the plans and build a zone; the only places that wire props together. `furnishShell()` is the common start (Room + sky + doors). |
 | Zones | `src/world/zone/`, `src/world/World.ts`, `src/world/Sky.ts` | `Zone` (load/unload unit, zone-local coordinates), `ZoneManager` (current + neighbours active), `Sky` (the one clock + outdoors). See docs/zones.md. |
 | Furniture | `src/world/**`, `src/world/props/**` | Classes: `Furniture` (+ `Interactable`, `Updatable`). Know nothing about the plan or the session's rules. |
 | Engine | `src/core/`, `src/player/`, `src/input/`, `src/interaction/` | Loop, input, collisions, raycast. Never touched for content. |
@@ -20,8 +20,9 @@ Walls as seen from the spawn: back = -z (shelves, door), front = +z, left = -x (
 
 ```
 src/main.ts             construction only: engine, providers, collection, world, player, input devices, interaction, UI, session
-src/core/               Engine (renderer, loop, Updatable registry, LayerRenderer hook), Input (held keys + onPress, virtual keys/axes),
-                        Collider (CollisionWorld: AABB set, add/remove), CssLayer
+src/core/               Engine (renderer at pixel ratio <= 1.5, loop gated by a GPU fence so a slow frame throttles the loop instead of
+                        drowning Firefox's GPU process, Updatable registry, LayerRenderer hook), Input (held keys + onPress, virtual keys/axes),
+                        Collider (CollisionWorld: AABB set, add/remove), CssLayer, PerfLog (`?stats`: fps, draw calls, lights per 2 s)
 src/player/             FirstPersonController (yaw/pitch, sliding collisions against CollisionWorld only, sit/stand, crouch Shift, sprint double-tap
                         forward), PointerLockFlow (start card <-> lock; modes pointer | gamepad | touch)
 src/input/              Gamepad (standard mapping -> virtual keys + synthetic mouse), TouchControls, SyntheticMouse, deviceDetect
@@ -29,17 +30,27 @@ src/game/               Session (rules + click/key routing), SessionParts (struc
                         (what an Interactable may ask), Highlighter (emissive pulse), playerPose
 src/interaction/        Interactable (hitboxes + label + activate), Interactor (crosshair raycast -> owner), Inspector (carry/rotate/return/open)
 src/world/              World (scene + CollisionWorld + live interactables + zones: addZone/zone), Sky (DayNight + Outdoors, ticked once), worldPlan (WORLD_PLAN,
-                        SUN_ROTATION_Y), roomPlan (ROOM_PLAN), Placement (floor/ceiling/corner/wall -> position+yaw), layout (BuildContext, furnishRoom,
-                        ZONE_BUILDERS), Room (a Furniture: walls cut by doorways, colliders, setDaylight/setSkylight/setLampOn), Furniture (footprint,
-                        colliders, dispose?), Seat, GameBox, Television, Projector, Shelf, meshUtils (boxMesh, cylinderMesh, invisibleHitbox), Parquet
-src/world/zone/         Zone (group at origin, place()/placeAt()/remove(), scoped collisions, empty/dormant/active, build/activate/deactivate/unload),
-                        ZoneManager (Updatable: player position -> current zone, neighbours active, unload after 30 s)
-src/world/screen/       VideoScreen (interface the Session drives), VideoSurface (message glass or CSS3D iframe cut-out, proximity volume)
+                        WALL_GAP, SUN_ROTATION_Y), roomPlan (ROOM_PLAN, DOOR_LEAF), Placement (floor/ceiling/corner/wall -> position+yaw), layout (BuildContext,
+                        ZoneHandle, roomOf, furnishRoom, ZONE_BUILDERS), shell (furnishShell: Room + sky + owned doors), Room (a Furniture: walls cut by doorways,
+                        opaque-wall shadow casters, colliders, setDaylight/setSkylight/setLampOn/setOccupied), Furniture (footprint, colliders, dispose?), Seat,
+                        GameBox, Television, Projector, Shelf, meshUtils (boxMesh, cylinderMesh, invisibleHitbox), Parquet
+src/world/hallway/      hallwayPlan (HALLWAY_ROOM, HALLWAY_PLAN) + furnishHallway: the corridor (console, coats, entrance door, runner)
+src/world/bathroom/     bathroomPlan + furnishBathroom
+src/world/bedroom/      bedroomPlan + furnishBedroom
+src/world/kitchen/      kitchenPlan + furnishKitchen
+src/world/zone/         Zone (group at origin, place()/placeAt()/remove(), scoped collisions, empty/dormant/active, build/activate/deactivate/unload,
+                        own shadow layer, portals, setOccupied/setDrawn), ZoneManager (Updatable: player position -> current zone, neighbours
+                        active, unload after 30 s unless persistent), PortalCuller (Updatable: draws only zones seen through open doorways)
+src/world/screen/       VideoScreen (interface the Session drives), VideoSurface (message glass or CSS3D iframe cut-out, proximity volume
+                        damped per wall in between)
+src/world/acoustics/    SoundOcclusion (walls between the listener and a screen: a ray against the world's occluders, i.e. every loaded
+                        room's walls and the door leaves; `proximityVolume` keeps `wallGain` of the volume per wall)
 src/world/shelving/     Shelving (bookcases sized from the collection, live rebuild, sort modes, one ShelfLamp per bookcase), plan, slots, sort
 src/world/box/          BoxShell, Cartridge, Manual, LentTag, LidMotion, shellLayout, slabs
 src/world/props/        Prop (base: empty footprint), decor (DECOR_KINDS registry + placeDecor), wallMount, SwitchableLamp (base of PendantLamp,
-                        FloorLamp, ShelfLamp), Door, Hallway, Window (+Curtains), DayNight, Poster, PictureFrame, WallClock, Rug, ConsoleStand,
-                        Console (+consoleStyles), Plant, SideTable, Cushion. See docs/props.md.
+                        FlushLamp, FloorLamp, ShelfLamp), Door (hinged either side, swings out of the hanging room), ShutDoor (decorative), Window
+                        (+Curtains), DayNight, Poster, PictureFrame, WallClock, Rug, ConsoleStand, Console (+consoleStyles), Plant, SideTable, Cushion,
+                        HallConsole, CoatRack, and the bathroom / bedroom / kitchen furniture. See docs/props.md.
 src/world/props/outdoors/ The painted 360° view outside every window. See docs/outdoors.md.
 src/world/cat/          The cat: model, brain, nav, bowls, bed, scratcher, toy, settings. See docs/cat.md.
 src/audio/              audioContext (one lazy AudioContext), CrtSpeaker (old TV speaker bed following the video's loudness), CatVoice
@@ -54,17 +65,26 @@ api/                    Vercel functions wrapping the server handlers; vercel.js
 
 ## Key patterns
 
-- **Plan -> layout -> classes.** Positions live in `ROOM_PLAN` (zone-local); `furnishRoom` places things; classes build geometry.
-  Never hard-code a coordinate in a class or in `main.ts`.
+- **Plan -> layout -> classes.** Positions live in the plans (`ROOM_PLAN`, `<kind>Plan.ts`; zone-local); the builders
+  (`furnishRoom`, `furnish<Kind>`) place things; classes build geometry. Never hard-code a coordinate in a class or in `main.ts`.
 - **Everything lives in a `Zone`.** `zone.place(item, position, yaw)` / `placeAt(item, placement)` parents the item to the
   zone, records `footprint` + `colliders` as world AABBs and, while the zone is active, collides, ticks (`Updatable`) and is
   clickable (`Interactable`). `remove()` undoes it. The `ZoneManager` activates the player's zone and its neighbours only.
 - **Collision is the `CollisionWorld` alone**: wall slabs (gaps at doorways), every furniture `footprint` and `colliders`,
-  plus anything that moves (the door leaf swaps its own Box3 through `zone.collisions`, the zone's scoped view). A player
+  plus anything that moves (the door leaf swaps its own Box3 through `zone.collisions`, the zone's scoped view). The player
+  is a 0.3 m sphere tested at knee (0.35 m) and waist height, so a footprint only needs its real height. A player
   already inside a collider is let out. The player holds the world set; furniture and the cat hold the `Collisions` interface.
   `Prop` has an empty footprint: decoration never blocks; give real furniture a real `footprint`.
 - **Clickables implement `Interactable`**: `hitboxes` (use `invisibleHitbox` for thin/many parts), `label(player)`,
-  `activate(session: SessionActions)`. The `Interactor` maps ray hits back to the owner; nobody else sees meshes.
+  `activate(session: SessionActions)`. The `Interactor` maps ray hits back to the owner; nobody else sees meshes. The ray
+  stops at the nearest `Furniture.occluders` mesh (a `Room`'s walls, plumbed like interactables through `World.occluders`),
+  so nothing is clickable through a wall.
+- **Per-frame cost follows the player's zone.** `Zone.setOccupied()` (called by `main.ts` on zone change, and on
+  `place()`) reaches every `OccupancyAware` item: a `Room` runs its scene-wide ambient only while occupied, and `Room`,
+  `ShelfLamp` and `RoomWindow` re-render their shadow maps every frame only while occupied (every
+  `IDLE_SHADOW_INTERVAL` otherwise, out of phase). Anything that adds a shadow-casting light should do the same. A zone's
+  lights only shadow the zone's own layer plus shells and doors, and `PortalCuller` hides the meshes of zones not seen
+  through an open doorway (see docs/zones.md). Draw calls are the budget: Firefox pays each one far more than Chrome.
 - **Keys**: held via `input.isDown/axis`, presses via `input.onPress`; physical `KeyboardEvent.code` only. Gamepad and touch
   press virtual key codes on `Input` and dispatch synthetic mouse events, so `Session.bindInput` is the single router.
 - **Optional features** reach the `Session` through structural interfaces in `SessionParts.ts`; main passes the concrete object.

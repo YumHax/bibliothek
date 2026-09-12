@@ -20,6 +20,8 @@ export class Seat extends THREE.Group implements Furniture, Interactable {
   private readonly backCentreY: number;
   private readonly backCentreZ: number;
   private readonly backRecline: number;
+  /** Where a cat lies (seat-local): on the bare seat until `mountCushion` puts it on top of the cushion. */
+  private readonly restPoint: THREE.Vector3;
 
   constructor() {
     super();
@@ -40,6 +42,7 @@ export class Seat extends THREE.Group implements Furniture, Interactable {
     const back = boxMesh(width, 0.6, 0.14, this.fabric, { y: seatTop + 0.3, z: -depth / 2 + 0.07 });
     back.rotation.x = -0.12; // slight recline
     this.backCentreY = seatTop + 0.3;
+    this.restPoint = new THREE.Vector3(0, seatTop + 0.02, 0.1);
     this.backCentreZ = -depth / 2 + 0.07;
     this.backRecline = -0.12;
     // A darker welt along the front edge of the seat cushion breaks up the block of fabric.
@@ -78,6 +81,15 @@ export class Seat extends THREE.Group implements Furniture, Interactable {
     const y = this.seatTop - bounds.min.y;
     cushion.position.set(0, y, this.backFaceZ(y + bounds.max.y) - bounds.min.z + clearance);
     this.add(cushion);
+
+    // The cat lies on the cushion, not in it: probe its top surface straight down over its middle
+    // (a leaning cushion's top slopes and is highest at the back, so the bounds alone would not do).
+    this.updateMatrixWorld(true);
+    const centreZ = cushion.position.z + (bounds.min.z + bounds.max.z) / 2;
+    const ray = new THREE.Raycaster(this.localToWorld(new THREE.Vector3(0, y + bounds.max.y + 0.5, centreZ)), new THREE.Vector3(0, -1, 0).transformDirection(this.matrixWorld));
+    const hit = ray.intersectObject(cushion, true)[0];
+    const top = hit ? this.worldToLocal(hit.point.clone()).y : y + bounds.max.y;
+    this.restPoint.set(0, top + 0.02, centreZ);
   }
 
   /** Local z of the backrest's inner (front) face at height `y`, following its recline. */
@@ -101,9 +113,9 @@ export class Seat extends THREE.Group implements Furniture, Interactable {
     return this.localToWorld(out.set(0, 0, 0.75));
   }
 
-  /** World point on the seat cushion for a cat lying on it (body centre at floor level of the cushion). */
+  /** World point for a cat lying here: on top of the mounted cushion (its paws at the cushion's surface), or on the bare seat. */
   restingSpot(out: THREE.Vector3): THREE.Vector3 {
-    return this.localToWorld(out.set(0, 0.47, 0.1));
+    return this.localToWorld(out.copy(this.restPoint));
   }
 
   /** World point on the lap of someone seated here. */

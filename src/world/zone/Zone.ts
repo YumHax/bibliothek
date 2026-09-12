@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { isUpdatable, type Updatable } from '@/core/Engine';
 import type { ColliderSet, Collisions, CollisionWorld } from '@/core/Collider';
 import { isInteractable, type Interactable } from '@/interaction/Interactable';
-import type { Furniture } from '../Furniture';
+import { isOccupancyAware, type Furniture } from '../Furniture';
 import type { GameBox } from '../GameBox';
 import { resolvePlacement, type Placement } from '../Placement';
 import type { RoomOptions } from '../Room';
@@ -37,10 +37,34 @@ export interface ZoneHost {
   removeUpdatable(u: Updatable): void;
   interactableAdded(item: Interactable): void;
   interactableRemoved(item: Interactable): void;
+  occluderAdded(object: THREE.Object3D): void;
+  occluderRemoved(object: THREE.Object3D): void;
 }
 
 /** Builds a zone's content into it (a room shell, furniture...) and returns whatever the caller wants to keep. */
 export type ZoneBuilder = (zone: Zone) => unknown;
+
+/**
+ * Shadow maps do not know about walls: a light renders every caster in range, the room next door
+ * included. So every zone's shadow-casting lights render two layers only: their own zone's
+ * (`Zone.shadowLayer`, set on everything placed in it) and this shared one, which holds what keeps
+ * light in its room: the room shells (their opaque-wall casters) and the doors (`shareShadowCaster`).
+ * Zones take layers from `FIRST_ZONE_SHADOW_LAYER` up; three.js has 32 (layer 0 is the camera's).
+ */
+export const SHARED_SHADOW_LAYER = 1;
+export const FIRST_ZONE_SHADOW_LAYER = 2;
+
+/** Puts `root` and everything under it on `SHARED_SHADOW_LAYER` (it keeps its other layers). */
+export function shareShadowCaster(root: THREE.Object3D): void {
+  root.traverse((obj) => obj.layers.enable(SHARED_SHADOW_LAYER));
+}
+
+/** A doorway into another zone: `bounds` is the opening (world space); `door` the leaf hung in it by this side, if any. */
+export interface Portal {
+  to: string;
+  bounds: THREE.Box3;
+  door?: { readonly openness: number };
+}
 
 /**
  * A zone's view of the collision world: boxes added here only reach the world while the zone is
@@ -94,8 +118,14 @@ export class Zone implements ShelvingHost {
   readonly collisions: ColliderSet & Collisions;
   /** What the builder returned (the caller who registered the builder knows its type); null until built. */
   handle: unknown = null;
+  /** The doorways out of this zone, registered by its builder; the `PortalCuller` looks through them. */
+  readonly portals: Portal[] = [];
 
   private state: ZoneState = 'empty';
+  private occupied = false;
+  private drawn = true;
+  /** Meshes `setDrawn(false)` hid, to show again; only those that were visible, so a prop's own hiding is respected. */
+  private hiddenMeshes: THREE.Mesh[] = [];
   private readonly items = new Map<Furniture, THREE.Box3[]>();
   /** Interactables that are not placed furniture themselves (the boxes on the shelves). */
   private readonly looseInteractables = new Set<Interactable>();
@@ -106,6 +136,8 @@ export class Zone implements ShelvingHost {
     readonly spec: ZoneSpec,
     private readonly host: ZoneHost,
     private readonly builder: ZoneBuilder,
+    /** The layer this zone's content casts shadows on, for this zone's lights only (see `SHARED_SHADOW_LAYER`). */
+    readonly shadowLayer: number,
   ) {
     this.id = spec.id;
     this.group.name = `Zone:${spec.id}`;
@@ -166,8 +198,61 @@ export class Zone implements ShelvingHost {
     item.updateWorldMatrix(true, false);
     const boxes = [item.footprint, ...(item.colliders ?? [])].map((box) => box.clone().applyMatrix4(item.matrixWorld));
     this.items.set(item, boxes);
+    this.adopt(item);
+    if (!this.drawn && !item.seenFromNextDoor) this.hide(item);
     if (this.state === 'active') this.plug(item, boxes);
+    if (isOccupancyAware(item)) item.setOccupied(this.occupied);
     return item;
+  }
+
+  /** Whether the player is in this zone; forwarded to every placed `OccupancyAware` item (`main.ts` calls it on zone change). */
+  setOccupied(occupied: boolean): void {
+    this.occupied = occupied;
+    for (const item of this.items.keys()) if (isOccupancyAware(item)) item.setOccupied(occupied);
+  }
+
+  /** A doorway out of this zone (the builder registers one per doorway leading to another zone). */
+  addPortal(portal: Portal): void {
+    this.portals.push(portal);
+  }
+
+  /**
+   * Whether the zone is drawn this frame (the `PortalCuller` decides: the player's zone, and those
+   * seen through an open doorway in view). An undrawn zone keeps its lights (taking them out would
+   * recompile every shader) and its doors (both rooms see a door); only its meshes are hidden, so
+   * they cost no draw call, no shadow pass and no raycast.
+   */
+  setDrawn(drawn: boolean): void {
+    if (drawn === this.drawn) return;
+    this.drawn = drawn;
+    if (drawn) {
+      for (const mesh of this.hiddenMeshes) mesh.visible = true;
+      this.hiddenMeshes = [];
+      return;
+    }
+    for (const item of this.items.keys()) if (!item.seenFromNextDoor) this.hide(item);
+    for (const box of this.looseInteractables) this.hide(box as unknown as THREE.Object3D);
+  }
+
+  private hide(root: THREE.Object3D): void {
+    root.traverse((obj) => {
+      const mesh = obj as THREE.Mesh;
+      if (!mesh.isMesh || !mesh.visible) return;
+      mesh.visible = false;
+      this.hiddenMeshes.push(mesh);
+    });
+  }
+
+  /** Content casts shadows on this zone's layer; the zone's own shadow-casting lights render that layer and the shared one, nothing else. */
+  private adopt(root: THREE.Object3D): void {
+    root.traverse((obj) => {
+      obj.layers.enable(this.shadowLayer);
+      const light = obj as THREE.Light & { shadow?: THREE.LightShadow };
+      if (light.isLight && light.castShadow && light.shadow) {
+        light.shadow.camera.layers.set(SHARED_SHADOW_LAYER);
+        light.shadow.camera.layers.enable(this.shadowLayer);
+      }
+    });
   }
 
   /** `place()` at a plan `Placement` (floor / ceiling / corner / wall, see `Placement.ts`), relative to the zone. */
@@ -193,6 +278,8 @@ export class Zone implements ShelvingHost {
     }
     for (const box of added) {
       this.looseInteractables.add(box);
+      this.adopt(box);
+      if (!this.drawn) this.hide(box);
       if (this.state === 'active') this.host.interactableAdded(box);
     }
   }
@@ -247,6 +334,9 @@ export class Zone implements ShelvingHost {
     this.group.clear();
     this.items.clear();
     this.looseInteractables.clear();
+    this.portals.length = 0;
+    this.hiddenMeshes = [];
+    this.drawn = true;
     this.scoped.clear();
     this.handle = null;
     this.state = 'empty';
@@ -254,12 +344,14 @@ export class Zone implements ShelvingHost {
 
   private plug(item: Furniture, boxes: THREE.Box3[]): void {
     for (const box of boxes) this.host.collisions.add(box);
+    for (const object of item.occluders ?? []) this.host.occluderAdded(object);
     if (isUpdatable(item)) this.host.addUpdatable(item);
     if (isInteractable(item)) this.host.interactableAdded(item);
   }
 
   private unplug(item: Furniture, boxes: THREE.Box3[]): void {
     for (const box of boxes) this.host.collisions.remove(box);
+    for (const object of item.occluders ?? []) this.host.occluderRemoved(object);
     if (isUpdatable(item)) this.host.removeUpdatable(item);
     if (isInteractable(item)) this.host.interactableRemoved(item);
   }

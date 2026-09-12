@@ -6,7 +6,6 @@ import type { SessionActions } from '@/game/SessionActions';
 import { LidMotion } from '../box/LidMotion';
 import type { Doorway } from '../Room';
 import { cylinderMesh, invisibleHitbox } from '../meshUtils';
-import { Hallway } from './Hallway';
 import { Prop, part, matte } from './Prop';
 
 export interface DoorOptions {
@@ -14,7 +13,7 @@ export interface DoorOptions {
   leafColor?: number;
   /**
    * Where the leaf's collider lives: shut, it fills the opening; open, it stands against the
-   * hallway wall. Without it the leaf stops nobody (the hallway's own colliders still do).
+   * wall of the room it swung into. Without it the leaf stops nobody.
    */
   collisions?: Collisions;
 }
@@ -28,37 +27,42 @@ const FRAME_DEPTH = 0.12;
 const LINING = 0.03;
 const LEAF_THICKNESS = 0.04;
 /**
- * The leaf swings out into the hallway when open, in this long: almost flat against the corridor
- * wall (a door pushed right back), so it never bars the way to the kitchen end.
+ * The leaf swings away from the room that hangs it when open, in this long: almost flat against
+ * the wall of the room it opens into (a door pushed right back), so it never bars a corridor.
  */
 const OPEN_ANGLE = THREE.MathUtils.degToRad(165);
 const SWING_SECONDS = 1.4;
 /** The leaf's collider swaps from the shut position to the open one as it swings past this openness. */
 const BLOCKER_SWAP = 0.5;
 const HANDLE_Y = 1.03;
-// `HALLWAY_SETBACK` (the gap between the wall plane and the hallway) must stay within `FRAME_DEPTH` so the lining covers it.
+// The gap between two zones' wall planes (see `worldPlan.ts`) must stay within `FRAME_DEPTH` so the lining covers it.
 
 const PAINT = matte(0xf6f3ee, 0.7);
 const OAK = matte(0x8b6a44, 0.55);
 const BRASS = new THREE.MeshStandardMaterial({ color: 0xc9a75b, metalness: 0.85, roughness: 0.3, emissive: 0xc9a75b, emissiveIntensity: 0 });
 
 /**
- * The flat's front door, hung in a `Doorway` cut through the wall (`Room` makes the hole; this
- * fills it): architrave and jambs, a painted panelled leaf on brass hinges with a lever handle
- * on both sides, an oak threshold and a doormat inside. Behind it, the flat's `Hallway`: the
- * corridor to the other rooms and the front door, lit only while this door is open.
- * Clicking the door swings it open into the hallway or shuts it, and the player may walk through:
- * the hallway's walls and furniture are this door's `colliders`, and the leaf itself is a collider
- * kept where it stands (`DoorOptions.collisions`). The cat never follows: its world ends at the room bounds.
+ * An interior door, hung in a `Doorway` cut through the wall (`Room` makes the hole; this fills
+ * it): architrave and jambs, a painted panelled leaf on brass hinges with a lever handle on both
+ * sides, an oak threshold and a doormat on the hanging room's side. The lining runs through the
+ * wall and bridges the gap to the next zone's shell, whose matching doorway is on the other side.
+ * Clicking the door swings it open away from the room that hangs it, or shuts it; the player
+ * walks through, and the leaf itself is a collider kept where it stands (`DoorOptions.collisions`).
+ * The cat never follows: its world ends at its zone's bounds.
  * Local frame as `wallMount(wall, along, 0)`: origin on the floor at the middle of the opening,
- * +z into the room.
+ * +z into the room that hangs it.
  */
 export class Door extends Prop implements Updatable, Interactable {
   readonly hitboxes: THREE.Object3D[];
+  /** The leaf: the crosshair ray stops at it and it counts as a wall for sound while shut (open, it lies against the wall). */
+  readonly occluders: THREE.Object3D[] = [];
+  /** Both rooms see the door, whichever of them is drawn. */
+  readonly seenFromNextDoor = true;
 
   private readonly motion = new LidMotion(OPEN_ANGLE, SWING_SECONDS);
   private readonly pivot = new THREE.Group();
-  private readonly hallway: Hallway;
+  /** +1 hinged on the left (pivot at -x, leaf towards +x), -1 on the right: the leaf is mirrored and turns the other way. */
+  private readonly side: 1 | -1;
   private readonly brass: THREE.MeshStandardMaterial;
   private readonly collisions?: Collisions;
   /** The leaf's colliders in world space, shut and open; laid out on the first tick, once the door is placed. */
@@ -68,20 +72,19 @@ export class Door extends Prop implements Updatable, Interactable {
   private blocker: THREE.Box3 | null = null;
 
   constructor(
-    readonly doorway: Pick<Doorway, 'width' | 'height'>,
+    readonly doorway: Pick<Doorway, 'width' | 'height' | 'hinge'>,
     options: DoorOptions = {},
   ) {
     super();
     this.name = 'Door';
     const { width, height } = doorway;
+    this.side = doorway.hinge === 'right' ? -1 : 1;
     this.brass = BRASS.clone();
     this.collisions = options.collisions;
     const leafPaint = matte(options.leafColor ?? 0x1f3538, 0.5);
 
     this.buildFrame(width, height);
     this.buildLeaf(width, height, leafPaint);
-    this.hallway = new Hallway({ width, height, trim: ARCHITRAVE });
-    this.add(this.hallway);
 
     // The doormat, just inside.
     const mat = part(this, width * 0.8, 0.012, 0.42, matte(0x4a4038, 1), { y: 0.006, z: 0.3 });
@@ -93,13 +96,13 @@ export class Door extends Prop implements Updatable, Interactable {
     this.render();
   }
 
-  /** The hallway's walls and furniture (the leaf's own collider moves with it, see `DoorOptions.collisions`). */
-  get colliders(): THREE.Box3[] {
-    return this.hallway.colliders.map((box) => box.translate(this.hallway.position));
-  }
-
   get isOpen(): boolean {
     return this.motion.isOpen;
+  }
+
+  /** 0 shut to 1 fully open, through the swing: anything above 0 lets the eye through. */
+  get openness(): number {
+    return this.motion.openness;
   }
 
   open(): void {
@@ -148,7 +151,7 @@ export class Door extends Prop implements Updatable, Interactable {
     this.shutBlocker.set(new THREE.Vector3(-width / 2, 0, -FRAME_DEPTH), new THREE.Vector3(width / 2, height, ARCHITRAVE_DEPTH));
     // The open leaf runs from the hinge along its swung direction (see `render`), thick as it is.
     const hinge = this.pivot.position;
-    const tip = hinge.clone().add(new THREE.Vector3(Math.cos(OPEN_ANGLE), 0, -Math.sin(OPEN_ANGLE)).multiplyScalar(leafWidth(width)));
+    const tip = hinge.clone().add(new THREE.Vector3(this.side * Math.cos(OPEN_ANGLE), 0, -Math.sin(OPEN_ANGLE)).multiplyScalar(leafWidth(width)));
     this.openBlocker.setFromPoints([hinge, tip]).expandByScalar(LEAF_THICKNESS);
     this.openBlocker.min.y = 0;
     this.openBlocker.max.y = height;
@@ -160,9 +163,9 @@ export class Door extends Prop implements Updatable, Interactable {
   // --- Geometry -----------------------------------------------------------------------------
 
   private render(): void {
-    // Hinged on the left; a positive turn about +y swings the free edge towards -z, out into the hallway.
-    this.pivot.rotation.y = this.motion.angle;
-    this.hallway.setOpenness(this.motion.openness);
+    // Hinged on the left, a positive turn about +y swings the free edge towards -z, out of the
+    // hanging room; the mirrored right-hung leaf turns the other way to swing to the same side.
+    this.pivot.rotation.y = this.side * this.motion.angle;
   }
 
   /** Architrave on the room side, jambs and head lining the opening through the wall, an oak threshold. */
@@ -187,12 +190,15 @@ export class Door extends Prop implements Updatable, Interactable {
     const lining = LINING;
     const leafW = leafWidth(width);
     const leafH = height - lining - 0.012;
-    // The pivot sits at the hinge edge, slightly behind the wall plane so the leaf lies inside the frame.
-    this.pivot.position.set(-width / 2 + lining + 0.003, 0.008, -0.045);
+    // The pivot sits at the hinge edge, slightly behind the wall plane so the leaf lies inside the
+    // frame. A right-hung leaf is the left-hung one mirrored across the opening's middle.
+    this.pivot.position.set(this.side * (-width / 2 + lining + 0.003), 0.008, -0.045);
+    this.pivot.scale.x = this.side;
     this.add(this.pivot);
 
     const leaf = part(this.pivot, leafW, leafH, LEAF_THICKNESS, paint, { x: leafW / 2, y: leafH / 2 });
     leaf.receiveShadow = true;
+    this.occluders.push(leaf);
     // Two raised panels on each face, a lock rail between them.
     const raised = matte(new THREE.Color(paint.color).multiplyScalar(0.9).getHex(), 0.5);
     const panelW = leafW - 0.24;

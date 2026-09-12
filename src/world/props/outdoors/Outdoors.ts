@@ -11,6 +11,19 @@ import { Life } from './Life';
 import { fragmentShader, vertexShader } from './shader';
 import { wakefulnessAt } from './wakefulness';
 
+/**
+ * A wall of the building itself, close outside some windows, facing +z (world): the pane shader
+ * renders it in true perspective before the painted scenery, which sits 40 m out and could not
+ * show something a few metres away. `x` and `y` are the world extents of the rectangle, `z` its plane;
+ * `storey` the height of a floor of the building, counted up from the wall's bottom (the street).
+ */
+export interface NearWall {
+  z: number;
+  x: [number, number];
+  y: [number, number];
+  storey: number;
+}
+
 export interface OutdoorsOptions {
   /**
    * `rotationY` of the primary window's mount. `DayNight` expresses the sun's azimuth against that
@@ -25,6 +38,8 @@ export interface OutdoorsOptions {
   sceneryDistance?: number;
   /** Centre of the scenery sphere (the room's middle). Default (0, 1.2, 0). */
   center?: THREE.Vector3;
+  /** A wall of the building standing in the view of some windows (see `NearWall`). Default none. */
+  nearWall?: NearWall;
 }
 
 /** How much the moon's shadow disc is offset from the moon (yaw, pitch), for the crescent. */
@@ -50,7 +65,8 @@ const MOON_SHADOW_OFFSET = { yaw: -0.024, pitch: 0.012 };
  * insomniacs). So the cycle costs the GPU a few extra instructions per pane pixel and the CPU
  * nothing. The only thing that moves is `Life`: cars and pedestrians as sprites the shader draws
  * over the scenery, advanced by `update()` (called by the window that drives the clock), sparser
- * as the city sleeps.
+ * as the city sleeps. One thing is not painted but rendered analytically per pixel: the `nearWall`,
+ * a wall of the building itself a few metres outside some windows (the flat's kitchen wing).
  */
 export class Outdoors {
   /** Pane material: samples the view along the ray from the camera through the pane. */
@@ -77,6 +93,7 @@ export class Outdoors {
     const { scene, lights, curfew } = sheet.finish();
     const sky = paintSkyDetail(random);
     this.life = new Life(random);
+    const { nearWall } = options;
 
     this.material = new THREE.ShaderMaterial({
       uniforms: {
@@ -93,6 +110,10 @@ export class Outdoors {
         lightsOn: { value: 0.03 },
         center: { value: options.center ?? new THREE.Vector3(0, 1.2, 0) },
         radius: { value: options.sceneryDistance ?? 40 },
+        /** The near wall's x0, x1, y0, y1 (an empty y range when there is none), its plane and its storey height. */
+        nearWall: { value: nearWall ? new THREE.Vector4(nearWall.x[0], nearWall.x[1], nearWall.y[0], nearWall.y[1]) : new THREE.Vector4(0, 0, 1, 0) },
+        nearWallZ: { value: nearWall?.z ?? 0 },
+        nearWallStorey: { value: nearWall?.storey ?? 3 },
         zenith: { value: new THREE.Color() },
         horizon: { value: new THREE.Color() },
         /** 0 by day .. 1 at night: how far the scenery has gone dark. */

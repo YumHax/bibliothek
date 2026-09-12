@@ -19,6 +19,17 @@ what is seen through the windows.
   `Car` (one box-model painter for parked cars and the sprite atlas: `CarBrush` = projection + fills), `SkyDetail` (stars +
   clouds equirect), `shader.ts` (GLSL), `paint.ts` (colour helpers).
 
+## The near wall (not painted)
+
+The panorama sits 40 m out, so it cannot show the building itself. The one piece of it in view, the kitchen wing's wall
+facing +z outside the collection room's left windows, is `Outdoors.nearWall` (`KITCHEN_WING` in `worldPlan.ts`: flush
+with the rearmost left window's back jamb, from the glass plane to the kitchen's far side plus `OUTER_WALL`, street to
+roof; anything short of the jamb lets a sliver of street show between frame and wall): a rectangle the pane shader intersects
+the eye ray with before the scenery (`nearWallColor`), in true perspective. Procedural plaster, a string course per
+storey (`storey` = the street drop over `STOREYS_BELOW` floors, so the flat's floor is a storey line), a cornice, and
+two bays of windows per storey below the flat's, lit at night by the same curfew rules as the painted ones. Rays
+starting behind the plane (the kitchen's own window) never hit it. Move or resize the kitchen and the wall follows.
+
 ## Night
 
 - `wakefulnessAt(hours)`: 1 by day and evening, ~0.1 between 2 h and 4 h. Lights are on or off, never dimmed.
