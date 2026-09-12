@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { Updatable } from '@/core/Engine';
-import type { CollisionWorld } from '@/core/Collider';
+import type { Collisions } from '@/core/Collider';
 import type { Interactable } from '@/interaction/Interactable';
 import type { SessionActions } from '@/game/SessionActions';
 import type { Furniture } from '../Furniture';
@@ -13,7 +13,7 @@ import type { WindowLookout } from './spots';
 
 export interface CatOptions {
   settings: CatSettings;
-  collisions: CollisionWorld;
+  collisions: Collisions;
   /** Room interior, XZ. */
   bounds: THREE.Box2;
   player: CatPlayerView;
@@ -34,7 +34,7 @@ export interface CatOptions {
 /**
  * The cat: a procedural body (`CatBody`) driven by a behaviour (`CatBrain`) that walks it around
  * the room (`CatNav` + `CatMotion`). Furniture with an empty footprint (it never blocks the
- * player), clickable (a click is a stroke), ticked by the engine through `world.place()`.
+ * player), clickable (a click is a stroke), ticked by the engine through `zone.place()`.
  * Local +z is the cat's forward; the origin sits on the floor under its body.
  */
 export class Cat extends THREE.Group implements Furniture, Interactable, Updatable {

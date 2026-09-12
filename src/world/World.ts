@@ -1,99 +1,66 @@
-import * as THREE from 'three';
-import { isUpdatable, type Engine } from '@/core/Engine';
-import type { BoxArtLoader } from '@/covers/BoxArtLoader';
-import type { GameSource } from '@/collection/GameSource';
-import { isInteractable, type Interactable } from '@/interaction/Interactable';
+import type * as THREE from 'three';
+import type { Engine, Updatable } from '@/core/Engine';
+import type { Interactable } from '@/interaction/Interactable';
 import { CollisionWorld } from '@/core/Collider';
-import { Room } from './Room';
-import { DEFAULT_ROOM } from './roomPlan';
-import type { GameBox } from './GameBox';
-import type { Furniture } from './Furniture';
-import { Shelving, type ShelvingHost, type ShelvingOptions } from './shelving/Shelving';
+import { Zone, type ZoneBuilder, type ZoneHost, type ZoneSpec } from './zone/Zone';
 
 export interface WorldEvents {
-  /** Something clickable appeared after start-up (e.g. a box on rebuilt shelving). */
+  /** Something clickable appeared after start-up (a box on rebuilt shelving, a zone that loaded). */
   onInteractableAdded?(item: Interactable): void;
   onInteractableRemoved?(item: Interactable): void;
 }
 
-/** Assembles the collector room: the room shell, its furniture and the displayed games. */
-export class World implements ShelvingHost {
-  readonly room: Room;
+/**
+ * The whole 3D world: one scene, one collision world, one list of clickables, and the zones that
+ * put content into them. Content itself is built per zone (`addZone` + a builder from `layout.ts`)
+ * and streamed by the `ZoneManager`; the World only keeps the registries the engine-side objects
+ * (player, interactor) read.
+ */
+export class World implements ZoneHost {
   readonly collisions = new CollisionWorld();
-  /** Everything the crosshair can target, in placement order. Live: see `events`. */
+  /** Everything the crosshair can target right now. Live: see `events`. */
   readonly interactables: Interactable[] = [];
   readonly events: WorldEvents = {};
+  readonly zones: Zone[] = [];
 
-  private readonly footprints = new Map<Furniture, THREE.Box3>();
-  private _shelving: Shelving | null = null;
-
-  constructor(
-    private readonly engine: Engine,
-    private readonly covers: BoxArtLoader,
-  ) {
-    this.room = new Room(DEFAULT_ROOM);
-    engine.scene.add(this.room);
-  }
+  constructor(private readonly engine: Engine) {}
 
   get scene(): THREE.Scene {
     return this.engine.scene;
   }
 
-  /** The bookcases and their boxes; available once `addShelving` ran (layout does it). */
-  get shelving(): Shelving {
-    if (!this._shelving) throw new Error('[world] shelving not installed yet');
-    return this._shelving;
+  /** Declares a zone; nothing is built until it is activated (or `build()` is called). */
+  addZone(spec: ZoneSpec, build: ZoneBuilder): Zone {
+    if (this.zones.some((z) => z.id === spec.id)) throw new Error(`[world] duplicate zone ${spec.id}`);
+    const zone = new Zone(spec, this, build);
+    this.zones.push(zone);
+    return zone;
   }
 
-  /** Builds shelving sized to the collection and keeps it in sync with the source. */
-  addShelving(games: GameSource, options: Omit<ShelvingOptions, 'room'> = {}): Shelving {
-    this._shelving?.dispose();
-    this._shelving = new Shelving(this, this.covers, games, { room: this.room.options, ...options });
-    return this._shelving;
+  /** A declared zone by id. */
+  zone(id: string): Zone {
+    const zone = this.zones.find((z) => z.id === id);
+    if (!zone) throw new Error(`[world] unknown zone ${id}`);
+    return zone;
   }
 
-  /**
-   * Puts a piece of furniture in the room: adds it to the scene, registers its footprint as a
-   * collider, ticks it every frame if it is Updatable and makes it clickable if it is Interactable.
-   */
-  place<T extends Furniture>(item: T, position: THREE.Vector3, rotationY = 0): T {
-    item.position.copy(position);
-    item.rotation.y = rotationY;
-    this.engine.scene.add(item);
-    item.updateWorldMatrix(true, false);
-    const footprint = item.footprint.applyMatrix4(item.matrixWorld);
-    this.footprints.set(item, footprint);
-    this.collisions.add(footprint);
-    if (isUpdatable(item)) this.engine.addUpdatable(item);
-    if (isInteractable(item)) this.addInteractable(item);
-    return item;
+  // --- ZoneHost -------------------------------------------------------------------------------------
+
+  addUpdatable(u: Updatable): void {
+    this.engine.addUpdatable(u);
   }
 
-  /** Undoes `place()`: scene, collider, per-frame tick and clickability. Safe to call twice. */
-  remove(item: Furniture): void {
-    this.engine.scene.remove(item);
-    const footprint = this.footprints.get(item);
-    if (footprint) {
-      this.collisions.remove(footprint);
-      this.footprints.delete(item);
-    }
-    if (isUpdatable(item)) this.engine.removeUpdatable(item);
-    if (isInteractable(item)) this.removeInteractable(item);
+  removeUpdatable(u: Updatable): void {
+    this.engine.removeUpdatable(u);
   }
 
-  /** ShelvingHost: boxes are interactables that come and go with rebuilds. */
-  boxesChanged(added: readonly GameBox[], removed: readonly GameBox[]): void {
-    for (const box of removed) this.removeInteractable(box);
-    for (const box of added) this.addInteractable(box);
-  }
-
-  private addInteractable(item: Interactable): void {
+  interactableAdded(item: Interactable): void {
     if (this.interactables.includes(item)) return;
     this.interactables.push(item);
     this.events.onInteractableAdded?.(item);
   }
 
-  private removeInteractable(item: Interactable): void {
+  interactableRemoved(item: Interactable): void {
     const i = this.interactables.indexOf(item);
     if (i === -1) return;
     this.interactables.splice(i, 1);

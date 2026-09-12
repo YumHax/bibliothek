@@ -1,70 +1,129 @@
 import * as THREE from 'three';
 import type { CssLayer } from '@/core/CssLayer';
 import type { GameSource } from '@/collection/GameSource';
+import type { BoxArtLoader } from '@/covers/BoxArtLoader';
 import type { PlatformId } from '@/catalog/types';
-import type { World } from './World';
+import { getPlatform } from '@/catalog/platforms';
+import type { Zone } from './zone/Zone';
+import type { Sky } from './Sky';
+import { Room } from './Room';
 import { Television } from './Television';
 import { Projector } from './Projector';
 import { Seat } from './Seat';
-import { furnishProps, type PropsHandle, Cushion, SideTable, FloorLamp } from './props';
+import { Shelving } from './shelving/Shelving';
+import { ROOM_PLAN } from './roomPlan';
+import type { ZoneKind } from './worldPlan';
+import { RoomWindow } from './props/Window';
+import { Poster } from './props/Poster';
+import { ConsoleStand } from './props/ConsoleStand';
+import { Console, type PlatformSelectHandler } from './props/Console';
+import { PendantLamp } from './props/PendantLamp';
+import { WallClock } from './props/WallClock';
+import { Door } from './props/Door';
+import { Cushion } from './props/Cushion';
+import { placeDecor } from './props/decor';
 
-export interface LayoutOptions {
+/** The shared services every zone builder may draw on; `main.ts` assembles it once. */
+export interface BuildContext {
   cssLayer: CssLayer;
-  /** Object whose distance to the TV drives the volume (the camera). */
+  /** Object whose distance to a screen drives its volume (the camera). */
   listener: THREE.Object3D;
-  /** The collection; the shelving and the console stand follow it live. */
+  /** The collection; the shelving, the consoles and the posters follow it live. */
   games: GameSource;
+  covers: BoxArtLoader;
+  /** The one sky: clock + view outside the windows. */
+  sky: Sky;
   /** Clicking a console on the TV stand reports its platform. */
-  onSelectPlatform?: (id: PlatformId) => void;
+  onSelectPlatform?: PlatformSelectHandler;
 }
 
-/** Width of the projector picture on the right wall and the height of its centre (metres). */
-const PICTURE_WIDTH = 2.2;
-const PICTURE_CENTRE_Y = 1.45;
-/** Bare wall kept on each side of the picture. */
-const PICTURE_MARGIN = 0.1;
-
-/**
- * The default room: shelving along the back wall (spilling onto the right wall when the
- * collection needs it) with the front door in the shelf-free stretch at its left end, TV on a console stand against the left wall with its screen facing +x,
- * an armchair 1.6 m in front of it with a side table and a floor lamp, windows with day/night on the
- * front and left walls, posters and a rug. Every lamp (the two floor lamps, the pendant) is a switch:
- * click it to turn it on or off.
- * A ceiling projector throws onto the right wall, opposite the TV, with a second armchair facing
- * it; the right-wall shelving skips that stretch of wall. The left third of the room stays shelf-free.
- */
-/** What the layout placed that other features (the cat) need to know about. */
-export interface RoomHandle extends PropsHandle {
+/** What the collection room built that other features (the cat, the session) need to know about. */
+export interface RoomHandle {
+  room: Room;
+  shelving: Shelving;
   tv: Television;
   seats: Seat[];
+  /** The loft windows (the cat looks out of them and naps in their sun patch). */
+  windows: RoomWindow[];
 }
 
-export function furnishRoom(world: World, { cssLayer, listener, games, onSelectPlatform }: LayoutOptions): RoomHandle {
-  const { width, height } = world.room.options;
-  const pictureHalf = PICTURE_WIDTH / 2 + PICTURE_MARGIN;
-  world.addShelving(games, {
-    backWallMinX: -width / 2 + width / 3,
-    sort: 'platform',
-    rightWallKeepClear: { minZ: -pictureHalf, maxZ: pictureHalf },
+/**
+ * Builds the collection room into its zone from `ROOM_PLAN`: shell, shelving, screens and seats, the
+ * door, the windows, posters, the console stand, the clock, the pendant, then every `decor` entry.
+ * Everything goes through `zone.place()` (zone-local coordinates) so it collides, ticks and is
+ * clickable as its class says. Lights are switched by clicking them; playing a video never touches them.
+ */
+export function furnishRoom(zone: Zone, { cssLayer, listener, games, covers, sky, onSelectPlatform }: BuildContext): RoomHandle {
+  const plan = ROOM_PLAN;
+  const { width } = plan.room;
+
+  // 0. The shell: floor, walls (cut by the doorways), ceiling, base lighting following the sky.
+  const room = zone.place(new Room(plan.room), new THREE.Vector3());
+  zone.onUnload(sky.dayNight.onChange((state) => room.setDaylight(state.daylight, state.ambient)));
+
+  // 1. Shelving sized to the collection; the right wall keeps clear of the projector picture.
+  const pictureHalf = plan.projectorPicture.width / 2 + plan.projectorPicture.margin;
+  const shelving = new Shelving(zone, covers, games, { room: plan.room, ...plan.shelving, rightWallKeepClear: { minZ: -pictureHalf, maxZ: pictureHalf } });
+  zone.onUnload(() => shelving.dispose());
+
+  // 2. Screens and seats.
+  const tv = zone.placeAt(new Television(cssLayer, listener), plan.tv);
+  const projector = zone.placeAt(new Projector(cssLayer, { pictureWidth: plan.projectorPicture.width, listener }), plan.projector);
+  projector.aimAt(projector.worldToLocal(zone.toWorld(new THREE.Vector3(width / 2 - 0.005, plan.projectorPicture.centreY, 0))));
+  const seats = plan.seats.map(({ at, cushion }) => {
+    const seat = new Seat();
+    seat.mountCushion(new Cushion(cushion));
+    return zone.placeAt(seat, at);
   });
-  const tv = world.place(new Television(cssLayer, listener), new THREE.Vector3(-width / 2 + 0.3, 0, 0), Math.PI / 2);
-  const tvSeat = new Seat();
-  tvSeat.mountCushion(new Cushion({ color: 0x8fa383, tilt: 0.25 }));
-  world.place(tvSeat, new THREE.Vector3(-width / 2 + 1.9, 0, 0), -Math.PI / 2);
-  // Side table by the right armrest, floor lamp by the left one.
-  world.place(new SideTable(), new THREE.Vector3(-width / 2 + 1.9, 0, 0.72));
-  world.place(new FloorLamp(), new THREE.Vector3(-width / 2 + 1.9, 0, -0.76));
 
-  // Projector: hung from the ceiling a metre left of centre, throwing +x onto the right wall.
-  const projector = world.place(new Projector(cssLayer, { pictureWidth: PICTURE_WIDTH, listener }), new THREE.Vector3(-1, height, 0), Math.PI / 2);
-  projector.aimAt(projector.worldToLocal(new THREE.Vector3(width / 2 - 0.005, PICTURE_CENTRE_Y, 0)));
-  const projectorSeat = new Seat();
-  projectorSeat.mountCushion(new Cushion({ color: 0xc8785a, tilt: 0.2 }));
-  world.place(projectorSeat, new THREE.Vector3(0.5, 0, 0), Math.PI / 2);
-  world.place(new FloorLamp({ intensity: 5 }), new THREE.Vector3(0.5, 0, -0.76));
+  // 3. The door, hung in each doorway the room shell left open. The leaf moves its own collider through the zone's scoped set.
+  for (const doorway of plan.room.doorways ?? []) {
+    zone.placeAt(new Door(doorway, { collisions: zone.collisions }), { wall: doorway.wall, along: doorway.along, y: 0 });
+  }
 
+  // 4. Windows. Every window throws the sun (one shadow map each) while the sun is on its side; all
+  //    panes show the sky's `Outdoors`. Clicking a window draws its curtains; the skylight follows how many are open.
+  const { size: windowSize, list: windowPlans } = plan.windows;
+  const mountY = RoomWindow.mountY(windowSize.height);
+  const windows: RoomWindow[] = [];
+  const onCurtainsChange = (): void => room.setSkylight(windows.reduce((sum, w) => sum + w.curtainOpenness, 0) / windows.length);
+  for (const w of windowPlans) {
+    windows.push(zone.placeAt(new RoomWindow(sky.outdoors, { ...windowSize, onCurtainsChange }), { wall: w.wall, along: w.along, y: mountY }));
+  }
+
+  // 5. Console stand under the TV with one console per platform, and the two posters; both follow the collection.
+  const stand = zone.place(new ConsoleStand(), tv.position.clone(), tv.rotation.y);
+  tv.mountOn(stand.topHeight);
+  const consoles = stand.slotAnchors().map((anchor) => zone.place(new Console(stand.slotWidth, onSelectPlatform), zone.toLocal(stand.localToWorld(anchor)), tv.rotation.y));
+  const { width: pw, height: ph } = plan.posters.size;
   const platformsOf = (): PlatformId[] => [...new Set(games.games.map((g) => g.platform))];
-  const props = furnishProps(world, { tv, platforms: platformsOf(), gameCount: games.games.length, onSelectPlatform });
-  games.subscribe(() => props.setPlatforms(platformsOf()));
-  return { ...props, tv, seats: [tvSeat, projectorSeat] };
+  const collectionPoster = zone.placeAt(new Poster(pw, ph, Poster.bibliothek(games.games.length, platformsOf().map(getPlatform))), plan.posters.collection);
+  const first = platformsOf()[0];
+  const platformPoster = first ? zone.placeAt(new Poster(pw, ph, Poster.platform(getPlatform(first))), plan.posters.platform) : null;
+  const refresh = (): void => {
+    const ids = platformsOf();
+    if (ids.length > consoles.length) console.warn(`[layout] ${ids.length - consoles.length} console(s) do not fit on the stand`);
+    consoles.forEach((slot, i) => slot.setPlatform(i < ids.length ? getPlatform(ids[i]!) : null));
+    collectionPoster.repaint(Poster.bibliothek(games.games.length, ids.map(getPlatform)));
+    if (platformPoster && ids[0]) platformPoster.repaint(Poster.platform(getPlatform(ids[0])));
+  };
+  refresh();
+  zone.onUnload(games.subscribe(refresh));
+
+  // 6. Wall clock over the door (reads the room's time; click = toggle night) and the pendant fixture
+  //    around the room's ceiling light (click = switch it).
+  const door = plan.room.doorways?.[0];
+  const clockAt = door ? { wall: door.wall, along: door.along, y: door.height + plan.clock.aboveDoor } : plan.clock.fallback;
+  zone.placeAt(new WallClock(sky.dayNight), clockAt);
+  zone.placeAt(new PendantLamp({ onSwitch: (on) => room.setLampOn(on) }), plan.pendant);
+
+  // 7. Decoration: plants, rug, pictures, lamps, tables, straight from the plan.
+  placeDecor(zone, plan.decor);
+
+  return { room, shelving, tv, seats, windows };
 }
+
+/** One builder per zone kind of `WORLD_PLAN`; `main.ts` binds them to the `BuildContext`. */
+export const ZONE_BUILDERS: { [K in ZoneKind]: (zone: Zone, ctx: BuildContext) => unknown } = {
+  collectionRoom: furnishRoom,
+};

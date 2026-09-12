@@ -23,15 +23,14 @@ export interface FirstPersonOptions {
   doubleTapMs?: number;
   /** Radius of the player's collision sphere (metres). */
   bodyRadius?: number;
-  /** XZ bounds the player may not leave (the room interior). */
-  bounds?: THREE.Box2;
 }
 
 /** Keep the camera off the exact poles so the yaw stays well defined. */
 const MAX_PITCH = Math.PI / 2 - 0.01;
 
 /**
- * First-person look + WASD/ZQSD movement with simple sphere-vs-AABB collision.
+ * First-person look + WASD/ZQSD movement with simple sphere-vs-AABB collision (the room's walls
+ * are colliders too, with the doorways left open, so the player may walk out into the hallway).
  * Movement is resolved per axis so the player slides along obstacles instead of sticking.
  * Sprint: double-tap forward (Minecraft creative style), kept while forward stays held, or hold the
  * virtual `SPRINT_CODE` (gamepad / touch). Crouch: hold Shift; the eye eases down to `crouchHeight`.
@@ -55,7 +54,6 @@ export class FirstPersonController implements Updatable {
   private readonly crouchMultiplier: number;
   private readonly doubleTapMs: number;
   private readonly bodyRadius: number;
-  private readonly bounds?: THREE.Box2;
 
   /** When false, mouse-look and movement are frozen (e.g. while inspecting a game). */
   private _movementEnabled = true;
@@ -75,6 +73,7 @@ export class FirstPersonController implements Updatable {
   private readonly right = new THREE.Vector3();
   private readonly candidate = new THREE.Vector3();
   private readonly target = new THREE.Vector3();
+  private readonly probe = new THREE.Vector3();
   private readonly lookEuler = new THREE.Euler(0, 0, 0, 'YXZ');
   private readonly lookDir = new THREE.Vector3();
 
@@ -92,7 +91,6 @@ export class FirstPersonController implements Updatable {
     this.crouchMultiplier = options.crouchMultiplier ?? 0.5;
     this.doubleTapMs = options.doubleTapMs ?? 300;
     this.bodyRadius = options.bodyRadius ?? 0.3;
-    this.bounds = options.bounds;
     this.height = this.eyeHeight;
     // Only genuine key presses count: virtual presses (a gamepad stick engaging, a touch joystick)
     // are not taps, those devices hold `SPRINT_CODE` instead.
@@ -308,26 +306,17 @@ export class FirstPersonController implements Updatable {
     this.candidate.copy(this.camera.position);
     this.candidate[axis] += delta;
 
-    if (this.bounds) {
-      this.candidate.x = THREE.MathUtils.clamp(
-        this.candidate.x,
-        this.bounds.min.x + this.bodyRadius,
-        this.bounds.max.x - this.bodyRadius,
-      );
-      this.candidate.z = THREE.MathUtils.clamp(
-        this.candidate.z,
-        this.bounds.min.y + this.bodyRadius,
-        this.bounds.max.y - this.bodyRadius,
-      );
-    }
-
-    // Test collision at waist height so the shelf's overhang does not matter.
-    const probe = this.candidate.clone();
-    probe.y = this.eyeHeight * 0.6;
-    if (this.collisions.intersectsSphere(probe, this.bodyRadius)) {
+    // Test collision at waist height so the shelf's overhang does not matter. A player already
+    // inside a collider (a door shut on them) is let through, so they can never be stuck.
+    if (this.blockedAt(this.candidate) && !this.blockedAt(this.camera.position)) {
       this.velocity[axis] = 0;
       return;
     }
     this.camera.position[axis] = this.candidate[axis];
+  }
+
+  private blockedAt(position: THREE.Vector3): boolean {
+    this.probe.set(position.x, this.eyeHeight * 0.6, position.z);
+    return this.collisions.intersectsSphere(this.probe, this.bodyRadius);
   }
 }

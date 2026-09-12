@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import type { CollisionWorld } from '@/core/Collider';
+import type { Collisions } from '@/core/Collider';
 
 /** Grid cell size (metres). */
 const CELL = 0.15;
@@ -38,7 +38,7 @@ export class CatNav {
   private readonly tmp = new THREE.Vector3();
 
   constructor(
-    private readonly collisions: CollisionWorld,
+    private readonly collisions: Collisions,
     bounds: THREE.Box2,
   ) {
     this.minX = bounds.min.x + WALL_MARGIN;

@@ -3,7 +3,7 @@ import type { Furniture } from '../Furniture';
 import { boxMesh, type MeshPosition } from '../meshUtils';
 
 /**
- * Base class for decoration. Props go through `World.place()` like any furniture so they are
+ * Base class for decoration. Props go through `Zone.place()` like any furniture so they are
  * ticked when Updatable and made clickable when Interactable, but they must never block the
  * player: the footprint is an *empty* Box3. `Box3.applyMatrix4` leaves an empty box empty and
  * `Box3.intersectsSphere` clamps against [+∞, -∞], giving an infinite distance, so the collider

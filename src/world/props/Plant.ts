@@ -122,7 +122,7 @@ export class Plant extends Prop implements Updatable {
     this.scale.setScalar(this.options.scale);
   }
 
-  /** Local space: `World.place()` transforms it by the plant's matrix, scale included. */
+  /** Local space: `Zone.place()` transforms it by the plant's matrix, scale included. */
   override get footprint(): THREE.Box3 {
     if (!this.options.collides || this.options.kind === 'hanging') return new THREE.Box3();
     const r = this.potRadius;

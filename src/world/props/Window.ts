@@ -65,6 +65,7 @@ export class RoomWindow extends Prop implements Updatable, Interactable {
   readonly options: Required<Omit<WindowOptions, 'onCurtainsChange'>> & Pick<WindowOptions, 'onCurtainsChange'>;
   /** Local y of the floor (the bottom of the kick rail). */
   readonly floorY: number;
+  private readonly unsubscribe: () => void;
   readonly hitboxes: THREE.Object3D[];
 
   /** The sun/moon spot; null when `sunlight` is off. */
@@ -145,7 +146,12 @@ export class RoomWindow extends Prop implements Updatable, Interactable {
       this.add(this.light, this.light.target);
     }
 
-    this.dayNight.onChange((sky) => this.apply(sky));
+    this.unsubscribe = this.dayNight.onChange((sky) => this.apply(sky));
+  }
+
+  /** Stops following the clock (the zone unloading it calls this). */
+  dispose(): void {
+    this.unsubscribe();
   }
 
   get dayNight(): DayNight {

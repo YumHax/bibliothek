@@ -32,6 +32,8 @@ const SKY_HUE_WEIGHT = 0.7;
 const LAMP_INTENSITY = 22;
 /** Emissive of the ceiling standing in for the lamp's bounce off the walls, with the lamp on. */
 const CEILING_BOUNCE = 0.3;
+/** Thickness of the wall colliders, laid just outside each wall plane so nothing inside the room touches them. */
+const WALL_COLLIDER = 0.05;
 
 /**
  * Floor, ceiling, four walls and the base lighting rig.
@@ -95,10 +97,36 @@ export class Room extends THREE.Group {
     this.ceilingMat.emissiveIntensity = lampOn ? CEILING_BOUNCE : 0.08 * daylight * skylightOpen;
   }
 
-  /** XZ interior bounds used to keep the player inside. */
+  /** XZ interior bounds: where the cat lives and what its navigation grid covers. */
   get bounds(): THREE.Box2 {
     const { width, depth } = this.options;
     return new THREE.Box2(new THREE.Vector2(-width / 2, -depth / 2), new THREE.Vector2(width / 2, depth / 2));
+  }
+
+  /** A `Furniture` so a zone can `place()` it like anything else; the walls collide through `colliders`. */
+  get footprint(): THREE.Box3 {
+    return new THREE.Box3();
+  }
+
+  /**
+   * What keeps the player in the room: one floor-to-ceiling slab per stretch of wall between the
+   * doorways, just outside the wall plane (local space, room centred on its origin; the zone that
+   * places it moves them to world space). The doorways are the only way out.
+   */
+  get colliders(): THREE.Box3[] {
+    const { width, depth, height } = this.options;
+    const doorways = this.options.doorways ?? [];
+    const t = WALL_COLLIDER;
+    const boxes: THREE.Box3[] = [];
+    const wall = (name: Wall, length: number, slab: (from: number, to: number) => THREE.Box3): void => {
+      const gaps = doorways.filter((d) => d.wall === name).map((d) => ({ centre: d.along, width: d.width }));
+      for (const seg of trimSegments(length, gaps)) boxes.push(slab(seg.centre - seg.length / 2, seg.centre + seg.length / 2));
+    };
+    wall('back', width, (a, b) => new THREE.Box3(new THREE.Vector3(a, 0, -depth / 2 - t), new THREE.Vector3(b, height, -depth / 2)));
+    wall('front', width, (a, b) => new THREE.Box3(new THREE.Vector3(a, 0, depth / 2), new THREE.Vector3(b, height, depth / 2 + t)));
+    wall('left', depth, (a, b) => new THREE.Box3(new THREE.Vector3(-width / 2 - t, 0, a), new THREE.Vector3(-width / 2, height, b)));
+    wall('right', depth, (a, b) => new THREE.Box3(new THREE.Vector3(width / 2, 0, a), new THREE.Vector3(width / 2 + t, height, b)));
+    return boxes;
   }
 
   private buildSurfaces(): void {

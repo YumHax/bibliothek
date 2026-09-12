@@ -23,6 +23,14 @@ const WALL_T = 0.05;
 const SKIRTING = 0.1;
 const LIGHT_INTENSITY = 2.2;
 const HANDLE_Y = 1.03;
+/** Across the corridor: the console against the far wall, the coat hooks and shoe rack on ours, both by the entrance. */
+const CONSOLE_X = 1.9;
+const ENTRANCE_X = 1.75;
+/** How far the coat corner (hooks, coats, shoe rack) and the console stand off their walls: what is left between them is the way to the front door. */
+const COAT_DEPTH = 0.25;
+const CONSOLE_DEPTH = 0.26;
+/** Thickness of the wall colliders, laid behind each wall face. */
+const WALL_COLLIDER = 0.3;
 /** Every door of the flat is the same standard leaf. */
 const LEAF = { width: 0.83, height: 2.04, thickness: 0.016, trim: 0.07, trimDepth: 0.022 };
 
@@ -43,8 +51,9 @@ type DoorStyle = 'panelled' | 'glazed' | 'entrance';
  * warm painted walls and white skirting. Across it the bedroom and bathroom doors, the glazed
  * kitchen door at the left end, the flat's front door with its mat at the right end; a console
  * with a mirror and the mail, coat hooks and a shoe rack by the entrance, a runner down the
- * middle and a flush ceiling light. Nothing here is clickable; only its light is driven, by how
- * far the door is open (it has no shadows, so it must not leak through the closed leaf).
+ * middle and a flush ceiling light. The player may walk in: `colliders` are its walls, the console
+ * and the coat corner. Nothing here is clickable; only its light is driven, by how far the door is
+ * open (it has no shadows, so it must not leak through the closed leaf).
  * Local frame as `Door`: origin on the floor at the middle of our opening, +z into the room; the
  * corridor lies at negative z, starting `HALLWAY_SETBACK` behind the wall plane.
  */
@@ -67,6 +76,19 @@ export class Hallway extends THREE.Group {
     this.traverse((obj) => {
       if ((obj as THREE.Mesh).isMesh) obj.castShadow = false;
     });
+  }
+
+  /** What nobody walks through, in the hallway's own frame: the far and end walls, the console, the coat corner. */
+  get colliders(): THREE.Box3[] {
+    const slab = (x0: number, z0: number, x1: number, z1: number): THREE.Box3 => new THREE.Box3(new THREE.Vector3(x0, 0, z0), new THREE.Vector3(x1, HEIGHT, z1));
+    const t = WALL_COLLIDER;
+    return [
+      slab(-LEFT - t, -DEPTH - t, RIGHT + t, -DEPTH),
+      slab(-LEFT - t, -DEPTH, -LEFT, 0),
+      slab(RIGHT, -DEPTH, RIGHT + t, 0),
+      slab(CONSOLE_X - 0.45, -DEPTH, CONSOLE_X + 0.45, -DEPTH + CONSOLE_DEPTH),
+      slab(ENTRANCE_X - 0.35, -COAT_DEPTH, ENTRANCE_X + 0.35, 0),
+    ];
   }
 
   /** `openness` 0 (door shut) to 1: switches the corridor light and its fixture's glow. */
@@ -200,9 +222,9 @@ export class Hallway extends THREE.Group {
   // --- Furniture ----------------------------------------------------------------------------
 
   private buildFurniture(): void {
-    this.buildConsole(1.9);
-    this.buildCoatHooks(1.75);
-    this.buildShoeRack(1.75);
+    this.buildConsole(CONSOLE_X);
+    this.buildCoatHooks(ENTRANCE_X);
+    this.buildShoeRack(ENTRANCE_X);
 
     // A framed picture on our wall, left of the door, and the light switch to its right.
     const picture = new PictureFrame({ motif: 'abstract', seed: 4, width: 0.42, height: 0.32 });
@@ -215,11 +237,11 @@ export class Hallway extends THREE.Group {
 
   /** A narrow walnut console against the far wall: the mail, a bowl for the keys, a small plant; a mirror above. */
   private buildConsole(x: number): void {
-    const z = -DEPTH + 0.16;
+    const z = -DEPTH + 0.13;
     const topY = 0.82;
-    part(this, 0.9, 0.03, 0.3, WALNUT, { x, y: topY - 0.015, z });
+    part(this, 0.9, 0.03, 0.24, WALNUT, { x, y: topY - 0.015, z });
     for (const dx of [-0.4, 0.4])
-      for (const dz of [-0.11, 0.11]) this.add(cylinderMesh(0.014, topY - 0.03, WALNUT, { x: x + dx, y: (topY - 0.03) / 2, z: z + dz }, { radiusBottom: 0.01, segments: 8 }));
+      for (const dz of [-0.08, 0.08]) this.add(cylinderMesh(0.014, topY - 0.03, WALNUT, { x: x + dx, y: (topY - 0.03) / 2, z: z + dz }, { radiusBottom: 0.01, segments: 8 }));
     // A bowl with the keys in it, a small pile of letters, a plant at the end.
     const bowl = cylinderMesh(0.09, 0.05, matte(0x2f3a44, 0.4), { x: x - 0.2, y: topY + 0.025, z }, { radiusBottom: 0.055, segments: 18 });
     this.add(bowl);
@@ -262,14 +284,14 @@ export class Hallway extends THREE.Group {
 
   /** Two wire shelves of shoes under the coats. */
   private buildShoeRack(x: number): void {
-    const depth = 0.28;
+    const depth = 0.22;
     const z = -(depth / 2 + 0.02);
     for (const y of [0.12, 0.3]) part(this, 0.7, 0.012, depth, STEEL, { x, y, z });
-    for (const dx of [-0.33, 0.33]) for (const dz of [-0.12, 0.12]) this.add(cylinderMesh(0.006, 0.31, STEEL, { x: x + dx, y: 0.155, z: z + dz }, { segments: 6 }));
+    for (const dx of [-0.33, 0.33]) for (const dz of [-0.09, 0.09]) this.add(cylinderMesh(0.006, 0.31, STEEL, { x: x + dx, y: 0.155, z: z + dz }, { segments: 6 }));
     // Pairs: white trainers and black shoes below, brown boots on top.
     const shoe = (sx: number, sy: number, colour: number, h: number, dx: number): void => {
       const material = matte(colour, 0.7);
-      for (const side of [-0.06, 0.06]) part(this, 0.1, h, 0.26, material, { x: sx + dx + side, y: sy + h / 2, z });
+      for (const side of [-0.06, 0.06]) part(this, 0.1, h, 0.22, material, { x: sx + dx + side, y: sy + h / 2, z });
     };
     shoe(x, 0.126, 0xf0eee8, 0.08, -0.2);
     shoe(x, 0.126, 0x2a2a2a, 0.07, 0.18);

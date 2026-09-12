@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { Updatable } from '@/core/Engine';
-import type { CollisionWorld } from '@/core/Collider';
+import type { Collisions } from '@/core/Collider';
 import type { Furniture } from '@/world/Furniture';
 import { createCanvas, toTexture } from '@/covers/generated/canvasUtils';
 import type { CatToyLike } from './types';
@@ -9,7 +9,7 @@ import type { CatToyLike } from './types';
  * A small two-tone ball the cat bats around: it rolls with friction, bounces off the room walls
  * (`bounds`) and off the furniture colliders, and always sits on the floor (y = radius). The
  * ball is moved in its parent's space, which is the scene, so the parent must not be rotated or
- * offset (place it with `world.place()`). Origin at the ball's centre. Empty footprint: the
+ * offset (place it with `zone.place()`). Origin at the ball's centre. Empty footprint: the
  * player kicks through it, the cat walks up to it.
  */
 
@@ -17,7 +17,7 @@ export interface CatToyOptions {
   /** Room floor rectangle the ball stays inside: `x` -> world x, `y` -> world z. */
   bounds: THREE.Box2;
   /** Furniture and walls the ball bounces off. */
-  collisions: CollisionWorld;
+  collisions: Collisions;
   radius?: number;
   /** The two stripe colours. */
   colors?: [number, number];
@@ -39,7 +39,7 @@ export class CatToy extends THREE.Group implements Furniture, Updatable, CatToyL
   readonly radius: number;
 
   private readonly bounds: THREE.Box2;
-  private readonly collisions: CollisionWorld;
+  private readonly collisions: Collisions;
   private readonly velocity = new THREE.Vector3();
   private readonly ball: THREE.Mesh;
 

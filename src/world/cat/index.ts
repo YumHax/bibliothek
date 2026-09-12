@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import type { World } from '../World';
+import type { Zone } from '../zone/Zone';
 import type { Seat } from '../Seat';
 import type { Television } from '../Television';
 import type { RoomWindow } from '../props/Window';
@@ -37,25 +37,25 @@ export interface CatFurnishOptions {
 /**
  * Moves the cat in: its corner at the back of the shelf-free left third (bowls on a mat between the
  * fig and the front door, its bed round the corner under the left wall's back window), a scratching
- * post by the front wall, a ball on the rug, and the cat itself asleep in its bed. Everything goes through `world.place()`; call it after the rest of the
- * furniture so the cat's occupancy grid sees the room as it stands.
+ * post by the front wall, a ball on the rug, and the cat itself asleep in its bed. Everything goes through `zone.place()` (zone-local
+ * coordinates); call it after the rest of the furniture so the cat's occupancy grid sees the room as it stands. The cat's world is its zone.
  */
-export function furnishCat(world: World, options: CatFurnishOptions): Cat {
-  const { width, depth } = world.room.options;
+export function furnishCat(zone: Zone, options: CatFurnishOptions): Cat {
+  const { width, depth } = zone.spec.extent;
   const back = -depth / 2;
   const front = depth / 2;
   const left = -width / 2;
 
   // The corner: food and water side by side on one mat between the fig and the door; the bed round
   // the corner against the left wall, in the back window's sun.
-  const bowl = world.place(new FoodBowl({ mat: true }), new THREE.Vector3(left + 0.78, 0, back + 0.45));
-  const water = world.place(new WaterBowl(), new THREE.Vector3(left + 0.93, 0, back + 0.45));
-  const bed = world.place(new CatBed(), new THREE.Vector3(left + 0.45, 0, back + 1.15));
+  const bowl = zone.place(new FoodBowl({ mat: true }), new THREE.Vector3(left + 0.78, 0, back + 0.45));
+  const water = zone.place(new WaterBowl(), new THREE.Vector3(left + 0.93, 0, back + 0.45));
+  const bed = zone.place(new CatBed(), new THREE.Vector3(left + 0.45, 0, back + 1.15));
   // Scratching post against the front wall, the cat works it from the room side.
-  const scratcher = world.place(new Scratcher(), new THREE.Vector3(left + 1.4, 0, front - 0.45), Math.PI);
+  const scratcher = zone.place(new Scratcher(), new THREE.Vector3(left + 1.4, 0, front - 0.45), Math.PI);
   // A ball left on the rug in front of the TV.
-  const toy = world.place(
-    new CatToy({ bounds: world.room.bounds, collisions: world.collisions }),
+  const toy = zone.place(
+    new CatToy({ bounds: zone.floorBounds, collisions: zone.collisions }),
     new THREE.Vector3(left + 1.3, 0, 0.8),
   );
 
@@ -67,8 +67,8 @@ export function furnishCat(world: World, options: CatFurnishOptions): Cat {
   const body = new CatModel(options.settings.settings.coat);
   const cat = new Cat(body, {
     settings: options.settings.settings,
-    collisions: world.collisions,
-    bounds: world.room.bounds,
+    collisions: zone.collisions,
+    bounds: zone.floorBounds,
     player: options.player,
     clock: options.clock,
     seats: options.seats,
@@ -87,7 +87,7 @@ export function furnishCat(world: World, options: CatFurnishOptions): Cat {
   });
   options.settings.subscribe((s) => cat.applySettings(s));
 
-  const start = bed.restingSpot(new THREE.Vector3()).setY(0);
-  world.place(cat, start, Math.PI / 2);
+  const start = zone.toLocal(bed.restingSpot(new THREE.Vector3())).setY(0);
+  zone.place(cat, start, Math.PI / 2);
   return cat;
 }

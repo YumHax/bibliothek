@@ -14,56 +14,23 @@ starting halfway through. Click elsewhere or press E to put the game back.
 
 ## Structure
 
-```
-src/
-  main.ts                 wiring only: builds engine, world, player, UI
-  core/
-    Engine.ts             renderer, scene, camera, main loop (Updatable registry, extra layers)
-    CssLayer.ts           CSS3D layer behind the canvas + cut-out material (embeds DOM in 3D)
-    Input.ts              keyboard state by physical key code
-    Collider.ts           AABB collision world
-  player/
-    FirstPersonController.ts  pointer-lock look + movement + sliding collisions
-  interaction/
-    Interactor.ts         crosshair raycast, hover highlight, selection
-    Inspector.ts          carry a box in hand, right-drag to rotate, return to shelf
-    Hoverable.ts          interface for objects that highlight under the crosshair
-  world/
-    World.ts              assembles the room: shell, shelves, TV, lights, colliders
-    Room.ts               floor / walls / ceiling / base lighting
-    Shelf.ts              bookcase geometry + box layout algorithm
-    GameBox.ts            one physical box, six textured faces
-    Television.ts         CRT on a cabinet; screen is a YouTube iframe in the CSS layer
-  catalog/
-    types.ts              Game / Platform / BoxDimensions
-    platforms.ts          per-platform physical box size, colours, provider ids
-    nes.ts                seed collection (12 NES games)
-  covers/
-    CoverArtProvider.ts   provider interface (front/back/spine/snap/title URLs) + chain resolver
-    LibretroCoverProvider.ts  key-less public art (libretro-thumbnails: front, snaps, titles)
-    BoxArtLoader.ts       loads real faces, generates the missing ones, caches per game
-    PlaceholderCover.ts   canvas texture with the title when no front art is found
-    generated/            procedural spine and back cover (dominant colour + screenshot + metadata)
-  video/
-    VideoProvider.ts      interface: find a longplay for a game
-    YouTubeSearchProvider.ts  calls /api/youtube/search, picks the best long video, caches in localStorage
-  ui/
-    Overlay.ts, GamePanel.ts, styles.css  start card, crosshair, hover label, details panel
-server/
-  youtubeSearch.ts        scrapes YouTube's public results page (videoId, title, duration), no API key
-  youtubeSearchPlugin.ts  Vite dev middleware exposing GET /api/youtube/search?q=
-```
+Positions and decoration are data (`src/world/roomPlan.ts`), `src/world/layout.ts` builds the room from them, classes under
+`src/world/` draw things, `src/game/Session.ts` holds the rules. The full folder map is in [docs/architecture.md](docs/architecture.md);
+the outdoors and the cat have their own notes in `docs/`.
 
 ## Adding things
 
+- **Decoration or furniture**: one line in `ROOM_PLAN.decor` (see [docs/props.md](docs/props.md)); a new kind of prop is a class
+  plus one line in `src/world/props/decor.ts`.
 - **A game**: append to the platform's array in `src/catalog/` with its No-Intro `libretroName`.
-- **A platform**: add an entry in `platforms.ts` (box size + libretro repo name) and a `PlatformId`.
+- **A platform**: add a `PlatformId`, an entry in `platforms.ts` (box size + libretro repo name) and a console style.
 - **A cover source**: implement `CoverArtProvider` and add it to the `CoverArtResolver` chain in `main.ts`.
   Providers are tried in order per face; the first URL wins and generated art fills the gaps.
-  ScreenScraper (`box-texture`, real spines) or MobyGames (back/spine scans) need accounts and a proxy.
-- **Video in production**: `server/youtubeSearch.ts` only runs inside the Vite dev server. Deploy the same
-  function as a serverless endpoint and point `YouTubeSearchProvider` at it.
-- **Furniture / rooms**: new classes in `src/world/`, registered with `World` and its collision world.
+- **A key or click behaviour**: `src/game/Session.ts` routes every key and click; optional features plug in through `SessionParts.ts`.
+- **Another room or the outside**: a zone (`src/world/zone/`, plan in `src/world/worldPlan.ts`); zones load around the player and unload
+  behind them, see [docs/zones.md](docs/zones.md).
+
+Working with Claude Code: the recipes above are skills (`add-decor`, `add-games`, `add-interaction`, `add-room`) under `.claude/skills/`.
 
 ## Loading strategy
 

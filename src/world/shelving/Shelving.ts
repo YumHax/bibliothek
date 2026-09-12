@@ -13,7 +13,8 @@ import { nextSortMode, rowGroupKey, sortGames, type SortMode } from './sort';
 
 /** What the shelving needs from the World: a way in and out of the scene for its furniture. */
 export interface ShelvingHost {
-  readonly scene: THREE.Scene;
+  /** Where shelves and their ghosts are parented (the zone's group). */
+  readonly scene: THREE.Object3D;
   place<T extends Furniture>(item: T, position: THREE.Vector3, rotationY?: number): T;
   remove(item: Furniture): void;
   /** Boxes that entered / left the room, so the host can update its interactables. */

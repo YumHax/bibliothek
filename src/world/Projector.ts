@@ -122,7 +122,7 @@ export class Projector extends THREE.Group implements Furniture, Updatable, Inte
   /**
    * Puts the picture's centre at `centre` (projector-local coordinates), facing back towards the
    * lens along local -z, and rebuilds the light frustum from the lens to the picture's corners.
-   * Call after `world.place()`: `projector.aimAt(projector.worldToLocal(wallPoint))`.
+   * Call after `zone.place()`: `projector.aimAt(projector.worldToLocal(wallPoint))`.
    */
   aimAt(centre: THREE.Vector3): void {
     this.surface.position.copy(centre);
