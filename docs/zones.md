@@ -39,7 +39,9 @@ player cannot see must be *out of the scene*, not just behind a wall.
 
 Five zones: the collection room (`living`, persistent), the `hallway` behind its back-wall door, and off the corridor the
 `bathroom` and `bedroom` (back wall) and the `kitchen` (left end). The flat's front door at the corridor's right end is a
-`ShutDoor` prop: the outside is not built. Neighbours are what is seen through a zone's doorways: the collection room keeps
+`TravelDoor`: the outside is not built, clicking it teleports (fade, `Travel.go`) to the `arcade` (x 40) or the `market`
+(x 80), two windowless, doorless halls with no neighbours, not persistent (rebuilt on return: the market's stock is fetched
+again, cached per day). Each carries a `travel: { label, arrival, yaw }` in `WORLD_PLAN`; their exit doors travel back. Neighbours are what is seen through a zone's doorways: the collection room keeps
 the hallway and the two rooms whose doors face its own active; every room keeps the hallway and the collection room; sibling
 rooms (coplanar doors) are not neighbours, so at most four zones are active at once.
 
@@ -89,6 +91,7 @@ rooms (coplanar doors) are not neighbours, so at most four zones are active at o
 2. **The outside.** The painted `Outdoors` panorama is a 40 m sphere seen through glass; walking outside (the flat's
    front door) means an outdoor zone with real geometry (or a much larger painted world) and a different lighting rig (no
    room hemisphere/lamp). Treat it as a zone kind with its own builder and keep `Sky` as the source of time and sun direction.
+   Until then the front door teleports (see docs/economy.md).
 3. **Session parts.** `shelving` in the Session is the home zone's; a second room with shelves would need the Session to
    ask the current zone. Search / random pick assume the home shelving.
 4. **Audio.** `CrtSpeaker` and `CatVoice` fade by distance already; a deactivated zone stops ticking them, which is what

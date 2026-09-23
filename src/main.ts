@@ -1,4 +1,5 @@
 import type * as THREE from 'three';
+import { Vector3 } from 'three';
 import { Engine } from '@/core/Engine';
 import { Input } from '@/core/Input';
 import { CssLayer } from '@/core/CssLayer';
@@ -18,6 +19,10 @@ import { Toast } from '@/ui/Toast';
 import { SearchBar } from '@/ui/SearchBar';
 import { CollectionEditor } from '@/ui/CollectionEditor';
 import { CatSettingsForm } from '@/ui/CatSettings';
+import { CataloguePanel } from '@/ui/CataloguePanel';
+import { TravelMenu } from '@/ui/TravelMenu';
+import { WalletHud } from '@/ui/WalletHud';
+import { Fader } from '@/ui/Fader';
 import { Interactor } from '@/interaction/Interactor';
 import { Inspector } from '@/interaction/Inspector';
 import { Session } from '@/game/Session';
@@ -30,18 +35,29 @@ import { LibretroCoverProvider } from '@/covers/LibretroCoverProvider';
 import { BoxArtLoader } from '@/covers/BoxArtLoader';
 import { YouTubeSearchProvider } from '@/video/YouTubeSearchProvider';
 import { GamepadInput, TouchControls, SyntheticMouse } from '@/input';
+import { ArcadeScores, Fame, MarketStock, STARTING_COINS, Wallet } from '@/economy';
+import { Travel, type TravelStop } from '@/world/travel';
 
 const container = document.getElementById('app');
 if (!container) throw new Error('#app container not found');
 
 // --- Engine and data sources ------------------------------------------------------------------
+const params = new URLSearchParams(location.search);
+/** `?debug`: the built-in seed collection and the editor's "add a game" pane, instead of earning every game. */
+const debug = params.has('debug');
 const engine = new Engine(container);
 const input = new Input();
 const cssLayer = new CssLayer(container);
 engine.addLayer(cssLayer);
 
-// The collection: built-in seed, then whatever the user changed (persisted in localStorage).
-const collection = new CollectionStore(SEED_GAMES);
+// The collection starts empty: games are bought at the market with coins won at the arcade. Whatever
+// the player owns is persisted in localStorage; an exported collection can still be imported (Tab).
+const collection = new CollectionStore(debug ? SEED_GAMES : []);
+const wallet = new Wallet(STARTING_COINS);
+const scores = new ArcadeScores();
+const index = new LibretroIndex();
+const fame = new Fame();
+const market = new MarketStock(index, collection, fame);
 
 // Box art: chain of providers, first URL per face wins; missing faces are generated. Add IGDB/ScreenScraper here later.
 // Art goes through `/api/art` (disk cache in dev, serverless function in production).
@@ -62,6 +78,9 @@ const context: BuildContext = {
   covers,
   sky,
   onSelectPlatform: (id) => session.focusPlatform(id),
+  input,
+  market,
+  scores,
 };
 for (const plan of WORLD_PLAN.zones) world.addZone(plan, (zone) => ZONE_BUILDERS[plan.kind](zone, context));
 const home = world.zone(WORLD_PLAN.start).activate() as RoomHandle; // built by ZONE_BUILDERS.collectionRoom
@@ -82,7 +101,7 @@ zones.events.onZoneChange = (zone, previous) => {
 };
 // Of the active zones, only draw the player's and those seen through an open doorway in view.
 engine.addUpdatable(new PortalCuller(world.zones, zones, engine.camera));
-if (new URLSearchParams(location.search).has('stats')) {
+if (params.has('stats')) {
   const perf = startPerfLog(engine, {
     drawCurrentZoneOnly: () => world.zones.forEach((zone) => zone !== zones.current && zone.setDrawn(false)),
     drawAllZones: () => world.zones.forEach((zone) => zone.isActive && zone.setDrawn(true)),
@@ -114,8 +133,23 @@ const lockFlow = new PointerLockFlow(player, overlay, engine.renderer.domElement
 const panel = new GamePanel(container);
 const toast = new Toast(container);
 const search = new SearchBar(container);
-const editor = new CollectionEditor(container, collection, new LibretroIndex());
+const editor = new CollectionEditor(container, collection, index, { canAdd: debug });
 editor.addPanel('Cat', new CatSettingsForm(catSettings).element);
+const catalogue = new CataloguePanel(container, collection, index, wallet, fame);
+const walletHud = new WalletHud(container, wallet);
+player.controls.addEventListener('lock', () => walletHud.setVisible(true));
+player.controls.addEventListener('unlock', () => walletHud.setVisible(false));
+
+// Going out: the front door (and the arcade's and market's exits) teleport between the zones that
+// declare a `travel` arrival spot in WORLD_PLAN, behind a fade; the ZoneManager loads the destination.
+const stops: TravelStop[] = WORLD_PLAN.zones.flatMap((plan) => {
+  if (!plan.travel) return [];
+  const zone = world.zone(plan.id);
+  const [x, z] = plan.travel.arrival;
+  return [{ id: plan.id, label: plan.travel.label, position: zone.toWorld(new Vector3(x, 0, z)), yaw: plan.travel.yaw }];
+});
+const travel = new Travel(stops, player, new Fader(container), () => zones.current.id);
+const travelMenu = new TravelMenu(container, input);
 
 const inspector = new Inspector(engine.camera, engine.scene);
 engine.addUpdatable(inspector);
@@ -147,6 +181,12 @@ const session = new Session({
   collectionEditor: editor,
   cat,
   enterRoom: () => void lockFlow.enter(),
+  wallet,
+  collection,
+  scores,
+  travel,
+  travelMenu,
+  catalogue,
 });
 session.bindInput(input);
 

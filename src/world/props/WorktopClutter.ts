@@ -124,3 +124,71 @@ export class ChoppingBoard extends Prop {
     }
   }
 }
+
+export interface StorageJarsOptions {
+  /** Contents colours, one jar each, left to right (default pasta, rice, coffee beans). */
+  contents?: number[];
+}
+
+/** A row of glass storage jars with wooden lids, each two-thirds full of something dry, standing along local x. */
+export class StorageJars extends Prop {
+  constructor(options: StorageJarsOptions = {}) {
+    super();
+    this.name = 'StorageJars';
+    const contents = options.contents ?? [0xe0b96a, 0xf1eadb, 0x3a2418];
+    const glass = new THREE.MeshStandardMaterial({ color: 0xe8f0f2, roughness: 0.05, metalness: 0.1, transparent: true, opacity: 0.35, side: THREE.DoubleSide });
+    const lid = matte(0xb98a58, 0.6);
+    const r = 0.045;
+    const pitch = r * 2 + 0.02;
+    contents.forEach((colour, i) => {
+      const x = (i - (contents.length - 1) / 2) * pitch;
+      const h = 0.16 + (i % 2) * 0.03;
+      const filling = cylinderMesh(r - 0.004, h * 0.66, matte(colour, 0.9), { x, y: (h * 0.66) / 2 + 0.004 }, { segments: 18 });
+      filling.castShadow = false;
+      this.add(filling);
+      const jar = new THREE.Mesh(new THREE.CylinderGeometry(r, r, h, 20, 1, true), glass);
+      jar.position.set(x, h / 2, 0);
+      jar.castShadow = false;
+      jar.receiveShadow = true;
+      this.add(jar);
+      this.add(cylinderMesh(r + 0.003, 0.018, lid, { x, y: h + 0.009 }, { segments: 20 }));
+    });
+  }
+}
+
+/** A steel wire dish rack beside a sink: three plates standing in it, two mugs upside down at its end. */
+export class DishRack extends Prop {
+  constructor() {
+    super();
+    this.name = 'DishRack';
+    const w = 0.36;
+    const d = 0.26;
+    const rail = 0.005;
+    // Two long rails, three cross rails, four short feet.
+    for (const dz of [-d / 2 + rail, d / 2 - rail]) part(this, w, rail, rail, STEEL, { y: 0.02, z: dz }).castShadow = false;
+    for (const dx of [-w / 2 + rail, 0, w / 2 - rail]) part(this, rail, rail, d, STEEL, { x: dx, y: 0.02 }).castShadow = false;
+    for (const dx of [-w / 2 + 0.02, w / 2 - 0.02]) for (const dz of [-d / 2 + 0.02, d / 2 - 0.02]) part(this, rail, 0.02, rail, STEEL, { x: dx, y: 0.01, z: dz }).castShadow = false;
+    // Plates on edge, leaning back a little, their axis along x.
+    for (let i = 0; i < 3; i++) {
+      const plate = cylinderMesh(0.105, 0.006, CERAMIC, { x: -w / 2 + 0.06 + i * 0.045, y: 0.115, z: 0.01 }, { segments: 28 });
+      plate.rotation.z = Math.PI / 2;
+      plate.rotation.x = -0.15;
+      this.add(plate);
+      // A short upright prong either side holds each plate.
+      for (const dz of [-0.03, 0.05]) part(this, rail, 0.07, rail, STEEL, { x: -w / 2 + 0.06 + i * 0.045, y: 0.055, z: dz }).castShadow = false;
+    }
+    // Two mugs upside down at the free end.
+    for (const [dx, dz, colour] of [
+      [w / 2 - 0.06, -0.05, 0x8fa383],
+      [w / 2 - 0.06, 0.06, 0xc8785a],
+    ] as const) {
+      const mug = cylinderMesh(0.038, 0.085, matte(colour, 0.4), { x: dx, y: 0.0225 + 0.0425, z: dz }, { radiusBottom: 0.035, segments: 18 });
+      this.add(mug);
+      const handle = new THREE.Mesh(new THREE.TorusGeometry(0.024, 0.005, 8, 14, Math.PI), matte(colour, 0.4));
+      handle.position.set(dx + 0.036, 0.065, dz);
+      handle.rotation.z = -Math.PI / 2;
+      handle.castShadow = true;
+      this.add(handle);
+    }
+  }
+}

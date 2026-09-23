@@ -37,6 +37,8 @@ export const BATHROOM_PLAN = {
   leafColor: 0xf1ede6,
   /** The fixture of the room's ceiling light. */
   light: { ceiling: [0, 0] } as Placement,
+  /** Its switch inside the door, on the wall left of the architrave (x -0.9..-0.485), above the tiles' cap rail. */
+  lightSwitch: { wall: 'front', along: -0.68, y: 1.4 } as Placement,
 
   /** White metro tiles up to 1.2 m round the room, a sage top row and cap rail; they stop at the door's architrave. */
   wainscot: { height: 1.2, accent: 0x9db3a6 } as TiledWainscotOptions,
@@ -64,5 +66,7 @@ export const BATHROOM_PLAN = {
       at: { wall: 'left', along: TOILET_ALONG + 0.12, y: CISTERN_TOP, offset: WAINSCOT_THICKNESS + CISTERN_DEPTH / 2 },
       options: { kind: 'small', pot: 'ceramic', seed: 31, collides: false, scale: 0.9 },
     },
+    // The scale on the floor under the towels, in the front-right corner, out of the strip inside the door (x -0.5..0.5).
+    { kind: 'bathroomScale', at: { floor: [0.65, 0.95], rotationY: Math.PI } },
   ] as DecorEntry[],
 };

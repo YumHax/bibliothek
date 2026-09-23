@@ -3,6 +3,13 @@ export type PlatformId = 'nes' | 'snes' | 'gb' | 'megadrive' | 'n64' | 'ps1';
 /** Where a game stands in the collection: on the shelf, wanted, or out of the house. */
 export type GameStatus = 'owned' | 'wishlist' | 'lent';
 
+/**
+ * Physical state of a second-hand copy: `complete` (box, manual, cartridge), `noManual` (the
+ * booklet is gone), `worn` (a tired box, no manual). Absent means complete. Set by the market;
+ * the shop only sells complete copies.
+ */
+export type BoxCondition = 'complete' | 'noManual' | 'worn';
+
 /** Physical box size in metres (width, height, depth) — drives the 3D geometry. */
 export interface BoxDimensions {
   width: number;
@@ -36,6 +43,8 @@ export interface Game {
   status?: GameStatus;
   /** ISO 8601 timestamp of when the game entered the collection. */
   addedAt?: string;
+  /** State of the copy when it was bought second-hand (see `BoxCondition`); absent = complete. */
+  condition?: BoxCondition;
   /**
    * Identifiers used by cover-art providers. Each provider reads the key it cares about;
    * a missing key means the provider falls back to a title-based guess or a placeholder.

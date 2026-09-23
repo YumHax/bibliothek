@@ -59,6 +59,8 @@
 @media (max-width: 800px) {
   .collection-editor__body { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
 }
+/* Without the "add" pane the list takes the whole width. */
+.collection-editor--no-add .collection-editor__body { grid-template-columns: 1fr; }
 
 .collection-editor__pane {
   display: flex;

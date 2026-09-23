@@ -8,6 +8,7 @@
   },
   "rewrites": [
     { "source": "/api/youtube/search", "destination": "/api/youtube/search" },
+    { "source": "/api/fame", "destination": "/api/fame" },
     { "source": "/api/art/:path*", "destination": "/api/art/[...path]" },
     { "source": "/api/libretro/index/:repo", "destination": "/api/libretro/index/[repo]" },
     { "source": "/((?!api/|assets/).*)", "destination": "/index.html" }

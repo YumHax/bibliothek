@@ -38,8 +38,14 @@ export interface SeatPlan {
 export const ROOM_PLAN = {
   room: DEFAULT_ROOM,
 
-  /** Bookcases fill the back wall from this x (the left third stays shelf-free for the door and the cat), then the right wall. */
-  shelving: { backWallMinX: -1, sort: 'platform' as SortMode },
+  /**
+   * Bookcases fill the back wall from this x (the left third stays shelf-free for the door and the cat), then the right
+   * wall. One stands empty from the start: the collection begins with nothing in it and the room must still read as a collection room.
+   */
+  shelving: { backWallMinX: -1, sort: 'platform' as SortMode, minBookcases: 1 },
+
+  /** The light switch by the door, on its hinge side (the leaf swings out into the hallway, the latch side is where the bookcases start). */
+  lightSwitch: { wall: 'back', along: -2.05, y: 1.1 } as Placement,
 
   /** The projector picture on the right wall: width and centre height; shelving keeps `margin` of bare wall each side. */
   projectorPicture: { width: 2.2, centreY: 1.45, margin: 0.1 },
@@ -88,6 +94,18 @@ export const ROOM_PLAN = {
     { kind: 'floorLamp', at: { floor: [0.5, -0.76] }, options: { intensity: 5 } },
     // Rug between the TV and its armchair, long side along the wall.
     { kind: 'rug', at: { floor: [-1.55, 0], rotationY: Math.PI / 2 }, options: { width: 2.4, depth: 1.8 } },
+    // Hi-fi speakers either side of the TV stand (1.4 m wide), facing into the room like the screen.
+    { kind: 'speaker', at: { floor: [-2.72, -0.92], rotationY: Math.PI / 2 } },
+    { kind: 'speaker', at: { floor: [-2.72, 0.92], rotationY: Math.PI / 2 } },
+    // The projector corner: a rug between the projector armchair (front edge at x 0.8) and the sideboard,
+    // two floor cushions thrown on it for whoever does not get the chair, and the sideboard under the picture.
+    { kind: 'rug', at: { floor: [1.7, 0] }, options: { width: 1.5, depth: 1.7, field: 0x3e4a5c, border: 0xc9b98a, motif: 0x6e7b8c } },
+    { kind: 'cushion', at: { floor: [1.45, 0.55], rotationY: 0.4 }, options: { width: 0.55, depth: 0.55, thickness: 0.13, color: 0xc9a552 } },
+    { kind: 'cushion', at: { floor: [1.75, -0.5], rotationY: -0.7 }, options: { width: 0.55, depth: 0.55, thickness: 0.13, color: 0x8fa383 } },
+    // Sideboard under the projector picture (whose bottom edge is at y 0.63), in the stretch the shelving keeps clear.
+    { kind: 'sideboard', at: { wall: 'right', along: 0, y: 0 } },
+    // Smoke detector on the ceiling over the door side of the room, clear of the pendant and the hung plants.
+    { kind: 'smokeDetector', at: { ceiling: [-2.2, 1.0] } },
     // Floor plants: fig in the back-left corner, yucca in the front-left one, monstera beside the TV.
     { kind: 'plant', at: { corner: 'back-left', inset: 0.45 }, options: { kind: 'fig', pot: 'ceramic', seed: 3 } },
     { kind: 'plant', at: { corner: 'front-left', inset: 0.45 }, options: { kind: 'yucca', pot: 'terracotta', seed: 5 } },

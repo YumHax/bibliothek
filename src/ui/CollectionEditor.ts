@@ -1,6 +1,6 @@
 import type { Game, GameStatus, PlatformId } from '@/catalog/types';
 import { PLATFORM_LIST, PLATFORMS, getPlatform } from '@/catalog/platforms';
-import { slugify } from '@/catalog/nointro';
+import { gameIdFor } from '@/catalog/nointro';
 import type { CollectionStore } from '@/collection/CollectionStore';
 import type { IndexMatch, LibretroIndex } from '@/collection/LibretroIndex';
 import { escapeHtml } from './html';
@@ -9,10 +9,18 @@ import './CollectionEditor.css';
 const STATUSES: GameStatus[] = ['owned', 'wishlist', 'lent'];
 const SEARCH_DEBOUNCE_MS = 250;
 
+export interface CollectionEditorOptions {
+  /**
+   * Whether games can be added straight from the index (and the list reset to the built-in one).
+   * Off in the game proper: games are bought at the market. On with `?debug` in the URL.
+   */
+  canAdd?: boolean;
+}
+
 /**
  * Full-screen overlay to manage the collection: browse by platform, change statuses, remove games,
- * add new ones from the libretro-thumbnails index, export/import JSON. Plain DOM; binds no global keys —
- * the Session decides which key toggles it.
+ * export/import JSON and, when `canAdd` is on, add new ones from the libretro-thumbnails index.
+ * Plain DOM; binds no global keys — the Session decides which key toggles it.
  */
 export class CollectionEditor {
   private readonly root: HTMLElement;
@@ -32,10 +40,12 @@ export class CollectionEditor {
     container: HTMLElement,
     private readonly store: CollectionStore,
     private readonly index: LibretroIndex,
+    { canAdd = false }: CollectionEditorOptions = {},
   ) {
     this.root = document.createElement('section');
     this.root.className = 'collection-editor';
     this.root.hidden = true;
+    this.root.classList.toggle('collection-editor--no-add', !canAdd);
     this.root.innerHTML = `
       <header class="collection-editor__header">
         <h2>Collection</h2>
@@ -43,14 +53,14 @@ export class CollectionEditor {
         <div class="collection-editor__actions">
           <button type="button" data-action="export">Export JSON</button>
           <button type="button" data-action="import">Import JSON</button>
-          <button type="button" data-action="reset">Reset to built-in list</button>
+          ${canAdd ? '<button type="button" data-action="reset">Reset to built-in list</button>' : ''}
           <button type="button" data-action="close">Close</button>
         </div>
       </header>
       <div class="collection-editor__status"></div>
       <div class="collection-editor__extras" hidden></div>
       <div class="collection-editor__body">
-        <div class="collection-editor__pane">
+        <div class="collection-editor__pane" ${canAdd ? '' : 'hidden'}>
           <h3>Add a game</h3>
           <div class="collection-editor__search">
             <input type="search" placeholder="Search box art by title…" autocomplete="off" spellcheck="false" />
@@ -170,7 +180,7 @@ export class CollectionEditor {
 
   private renderCollection(): void {
     const games = this.store.games;
-    this.countEl.textContent = `${games.length} game${games.length === 1 ? '' : 's'}${this.store.isPersisted ? '' : ' (built-in list)'}`;
+    this.countEl.textContent = `${games.length} game${games.length === 1 ? '' : 's'}${this.store.isPersisted || !games.length ? '' : ' (built-in list)'}`;
 
     const groups = new Map<PlatformId, Game[]>();
     for (const g of games) {
@@ -180,7 +190,9 @@ export class CollectionEditor {
     }
 
     if (games.length === 0) {
-      this.listEl.innerHTML = '<p class="collection-editor__empty">No games yet. Search on the left to add some.</p>';
+      this.listEl.innerHTML = this.root.classList.contains('collection-editor--no-add')
+        ? '<p class="collection-editor__empty">No games yet. Go out through the front door: the market sells them, the arcade pays for them.</p>'
+        : '<p class="collection-editor__empty">No games yet. Search on the left to add some.</p>';
       return;
     }
     this.listEl.innerHTML = PLATFORM_LIST
@@ -321,11 +333,6 @@ export class CollectionEditor {
     this.statusEl.textContent = message;
     this.statusEl.classList.toggle('collection-editor__status--error', isError);
   }
-}
-
-/** Stable id for a game added from the index: `<platform>-<slug of the No-Intro name>`. */
-function gameIdFor(platform: PlatformId, libretroName: string): string {
-  return `${platform}-${slugify(libretroName)}`;
 }
 
 function hexColor(color: number): string {

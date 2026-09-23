@@ -50,17 +50,39 @@ Read this to add or change something visible in the room. The recipe is in the `
 | `pictureFrame` | `motif: mountains/sunset/abstract`, `seed`, `width`, `height`, `frameColor`, `frameWidth`, `matWidth` | wall placement |
 | `floorLamp` | `poleHeight`, `intensity`, `on` | clickable switch, own PointLight |
 | `sideTable` | `radius`, `height`, `wood`, `mug` | collides |
+| `garland` | `style: bulbs/bunting`, `length`, `height`, `sag`, `spacing`, `colors`, `seed` | a slack string from the origin along local +x; `floor` placement + `height`; no light, bulbs only glow |
+| `crate` | `style: wood/cardboard`, `width`, `height`, `depth`, `stack`, `seed`, `label` | a pile of stock; collides |
+| `flyer` | `style: paper/cloth`, `title`, `lines`, `width`, `height`, `paper`, `ink`, `accent`, `tilt`, `seed` | wall placement; paper is pinned and askew, cloth is a banner |
+| `chalkboard` | `lines`, `width`, `height`, `wood`, `slate`, `seed` | pavement A-board, same words both faces; collides |
+| `industrialPendant` | `drop`, `color`, `intensity`, `on`, `onSwitch` | `ceiling` placement; clickable, own shadow-less PointLight; a builder chains a row through `onSwitch` (the market) |
+| `neonSign` | `text`, `color`, `width`, `height`, `intensity`, `flicker`, `font`, `seed` | wall placement; glass-tube lettering on a black panel, own coloured PointLight (`intensity: 0` for none), stutters now and then |
+| `neonTube` | `length`, `color`, `radius`, `intensity`, `standoff` | wall placement; a straight tube along local x on brackets (cove light along a wall top); glows, lights only with `intensity` |
+| `cushion` | `width`, `depth`, `thickness`, `color`, `tilt` | a floor cushion (the same class a `Seat` mounts); never collides |
+| `speaker` | `height`, `wood` | slim hi-fi floor-stander, baffle facing local +z; collides |
+| `sideboard` | `width`, `depth`, `height`, `wood`, `turntable`, `records` | low cabinet, turntable + record pile on top; `wall` placement with `y: 0`; collides |
+| `smokeDetector` | `period` | `ceiling` placement; white puck, LED blinks red every `period` s (Updatable) |
+| `umbrellaStand` | `color`, `umbrellas` | open tube with furled umbrellas; collides |
+| `leaningMirror` | `width`, `height`, `frameColor`, `lean` | full-length mirror leaning on a wall; `wall` placement with `y: 0`; collides over its wedge |
+| `pedalBin` | `radius`, `height` | steel bin, pedal facing local +z; collides |
+| `bathroomScale` | `color` | flat glass scale on the floor, display facing local +z; never collides |
 
 Wired classes: `Seat` (+ `Cushion` via `mountCushion`), `Television(cssLayer, listener)`, `Projector(cssLayer, { pictureWidth, listener })`,
 `RoomWindow(outdoors, { width, height, drivesClock, sunlight, onCurtainsChange })`, `Poster(width, height, painter)` with
 `Poster.bibliothek()` / `Poster.platform()`, `WallClock(dayNight)`, `PendantLamp({ onSwitch })`, `FlushLamp({ onSwitch, on })`,
+`WallSwitch({ lamp })` (a rocker by the door that toggles the room's pendant / flush lamp; every room plan has a `lightSwitch` spot),
 `Door(doorway, { collisions, leafColor })` (hung by `furnishShell`), `ConsoleStand` + `Console(slotWidth, onSelectPlatform)` (one style per
 platform in `consoleStyles.ts`). Placed by the room builders without wiring: `ShutDoor({ style })` (a door that never opens),
-`HallConsole({ width, mirror })`, `CoatRack({ shoeRack })`, and each room's own furniture classes.
+`HallConsole({ width, mirror })`, `CoatRack({ shoeRack })`, the arcade's `Pinball` / `ClawMachine` / `ChangeMachine` (animated, a
+line on click, `standAt` + `focus` for a `Vendor` playing them) and each room's own furniture classes. People: `Vendor({ viewer, lines, seed,
+label, focus })` stands still and talks (a stallholder, an attendant, someone at a machine), `Shopper({ viewer, spots, aisle })` wanders. Two wrap the whole shell and are
+placed at the zone's origin with `zone.place(x, new THREE.Vector3())`: `TiledWainscot(room, options)` (metro tiles, or bricks with
+`tileWidth/tileHeight/bevel: false/variance/roughness`) and the market's `HallRoof(room, options)` (trusses + roof light, `setDaylight` wired to `sky.dayNight`).
 
 ## Room shell
 
 `Room(options)` builds floor, ceiling, four walls cut by the `doorways`, baseboard, wall colliders with gaps at the doorways,
+(`options.finish` picks the surfaces: `floor: 'parquet' | 'concrete' | 'carpet'` (`Parquet.ts`, `Concrete.ts`, the arcade's neon-confetti `Carpet.ts`),
+`walls` / `ceiling` / `trim` colours, `moulding: false` for a hall),
 an invisible shadow caster outside each `opaqueWalls` wall (keeps the lamps in), the hemisphere ambient (on only while
 `setOccupied(true)`) and the shadow-casting ceiling lamp. `furnishShell(zone, sky, options, { leafColor })` places it,
 follows the sky and hangs a `Door` in each doorway with `door !== false` (`hinge` picks the side). The collection room is

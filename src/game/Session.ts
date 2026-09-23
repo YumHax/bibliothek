@@ -6,8 +6,9 @@ import { randomStartSeconds } from '@/video/randomStart';
 import type { GameBox } from '@/world/GameBox';
 import type { Seat } from '@/world/Seat';
 import type { VideoScreen } from '@/world/screen';
-import type { SessionActions } from './SessionActions';
-import type { SessionParts } from './SessionParts';
+import { PLAY_COST, TICKETS_PER_COIN, ticketsFor } from '@/economy/pricing';
+import type { ArcadeCabinetLike, ForSaleLike, SessionActions } from './SessionActions';
+import type { ModalLike, SessionParts } from './SessionParts';
 import type { SortMode } from '@/world/shelving/sort';
 import { distanceTo, faceBox, standInFrontOf } from './playerPose';
 
@@ -38,17 +39,21 @@ interface FocusedBox {
 /**
  * Game rules: what happens when the player clicks something, presses a key or leaves the room.
  * Interactables call back into it through `SessionActions`; it owns nothing in the scene itself.
- * Optional features (search, random pick, sorting, night mode, box opening, collection editor)
- * are routed here too and silently skipped when their part is not wired in (see `SessionParts`).
+ * Optional features (search, random pick, sorting, night mode, box opening, collection editor,
+ * the economy: travel, arcade, market) are routed here too and silently skipped when their part
+ * is not wired in (see `SessionParts`).
  */
 export class Session implements SessionActions {
   private focus: FocusedBox | null = null;
-  private editorOpen = false;
+  /** The full-screen DOM panel that owns the keyboard and mouse right now, if any. */
+  private activeModal: ModalLike | null = null;
   /** The screen last asked to play; only one plays at a time so two longplays never talk over each other. */
   private activeScreen: VideoScreen | null = null;
+  /** The cabinet the player stands at, from the coin going in until they walk away. */
+  private arcade: ArcadeCabinetLike | null = null;
 
   constructor(private readonly parts: SessionParts) {
-    const { interactor, inspector, player, search, collectionEditor } = parts;
+    const { interactor, inspector, player, search, collectionEditor, catalogue, travelMenu } = parts;
     interactor.ignore = (item) => item === inspector.current; // the carried box must not block the ray
     interactor.events.onHoverChange = (item) => this.onHover(item);
     interactor.events.onSelect = (item) => item.activate(this);
@@ -56,17 +61,28 @@ export class Session implements SessionActions {
     player.controls.addEventListener('unlock', () => {
       if (inspector.isActive) this.putBack();
       this.stand();
-      // Esc under pointer lock is eaten by the browser and unlocks instead: treat it as "close search".
+      // Esc under pointer lock is eaten by the browser and unlocks instead: treat it as "close search / stay here".
       search?.close();
+      if (travelMenu?.isOpen) {
+        travelMenu.close();
+        this.setFrozen(false);
+      }
     });
     if (search) {
       search.events.onSelect = (game) => {
-        this.setSearchFrozen(false);
+        this.setFrozen(false);
         this.locate(game, 'search');
       };
-      search.events.onCancel = () => this.setSearchFrozen(false);
+      search.events.onCancel = () => this.setFrozen(false);
     }
-    if (collectionEditor) collectionEditor.onOpenChange = (open) => this.syncEditor(open);
+    if (travelMenu) {
+      travelMenu.events.onPick = (id) => {
+        this.setFrozen(false);
+        void this.parts.travel?.go(id);
+      };
+      travelMenu.events.onCancel = () => this.setFrozen(false);
+    }
+    for (const modal of [collectionEditor, catalogue]) if (modal) modal.onOpenChange = (open) => this.syncModal(modal, open);
   }
 
   get held(): GameBox | null {
@@ -77,9 +93,9 @@ export class Session implements SessionActions {
     return this.parts.player.isSeated;
   }
 
-  /** True while a DOM overlay (search bar, collection editor) owns the keyboard. */
+  /** True while a DOM overlay (search bar, collection editor, catalogue) owns the keyboard. */
   get modalOpen(): boolean {
-    return this.editorOpen || (this.parts.search?.isOpen ?? false);
+    return this.activeModal !== null || (this.parts.search?.isOpen ?? false);
   }
 
   /** Routes clicks and key presses to the rules. Call once. */
@@ -95,14 +111,22 @@ export class Session implements SessionActions {
       // Tab works everywhere (start card, room, inside the editor) so it can close what it opened.
       if (code === 'Tab' && this.parts.collectionEditor) {
         e.preventDefault();
-        this.toggleEditor();
+        this.toggleModal(this.parts.collectionEditor);
         return;
       }
-      if (code === 'Escape' && this.editorOpen) {
-        this.toggleEditor();
+      if (code === 'Escape' && this.activeModal) {
+        this.activeModal.close();
         return;
       }
       if (this.modalOpen || !player.isLocked) return; // the search bar reads its own keys
+      if (this.parts.travelMenu?.isOpen) return; // the menu reads its digits itself
+
+      // At a cabinet every key is the game's, except E to walk away and, on the end card, fire to replay.
+      if (this.arcade) {
+        if (code === 'KeyE') this.leaveArcade();
+        else if (!this.arcade.isPlaying && (code === 'Space' || code === 'Enter' || code === 'NumpadEnter')) this.playArcade(this.arcade);
+        return;
+      }
 
       switch (code) {
         case 'Slash':
@@ -180,6 +204,10 @@ export class Session implements SessionActions {
   }
 
   stand(): void {
+    if (this.arcade) {
+      this.leaveArcade();
+      return;
+    }
     if (!this.parts.player.isSeated) return;
     this.parts.player.stand();
     this.parts.cat?.setPlayerSeat?.(null);
@@ -212,6 +240,107 @@ export class Session implements SessionActions {
     this.parts.overlay.showHint(message);
   }
 
+  // --- Going out: the front door, the arcade, the market -----------------------------------------
+
+  /** A travel door was clicked: put everything down and offer the destinations (digits pick, Esc stays). */
+  travel(): void {
+    const { travel, travelMenu } = this.parts;
+    if (!travel || !travelMenu) {
+      this.notify('The door is locked');
+      return;
+    }
+    const choices = travel.choices();
+    if (!choices.length) return;
+    this.putBack();
+    this.stand();
+    this.setFrozen(true);
+    travelMenu.open(choices);
+  }
+
+  /**
+   * A cabinet was clicked: pay a coin and stand at the controls; at the one being played, walk away
+   * mid-game or, once its end card shows, pay again and go straight into another play.
+   */
+  playArcade(cabinet: ArcadeCabinetLike): void {
+    const replay = this.arcade === cabinet;
+    if (replay && cabinet.isPlaying) {
+      this.leaveArcade();
+      return;
+    }
+    if (this.arcade && !replay) return;
+    const { wallet, player } = this.parts;
+    if (!wallet) return;
+    // Broke, and not even a coin's worth of tickets: the house stands the play, so the loop never dead-ends.
+    const onTheHouse = wallet.coins === 0 && wallet.tickets < TICKETS_PER_COIN;
+    if (onTheHouse) this.notify('Out of coins? This play is on the house. Win some tickets!', 3000);
+    else if (!wallet.spend(PLAY_COST)) {
+      this.notify(`Insert coin: a play costs ${PLAY_COST} coin${PLAY_COST > 1 ? 's' : ''} and you have ${wallet.coins}.\nSell tickets at the prize counter, or come back richer.`, 3500);
+      return;
+    }
+    if (!replay) {
+      this.putBack();
+      this.stand();
+      const { position, yaw } = cabinet.eyePose();
+      player.sit(position, yaw); // parks the camera and freezes walking, like an armchair
+      player.lookAt(cabinet.screenCentre());
+      this.arcade = cabinet;
+    }
+    cabinet.start((score) => this.onArcadeOver(cabinet, score));
+    this.hint(`${cabinet.game.hint} · E to walk away`);
+  }
+
+  redeemTickets(): void {
+    const { wallet } = this.parts;
+    if (!wallet) return;
+    if (wallet.tickets < TICKETS_PER_COIN) {
+      this.notify(wallet.tickets ? `Only ${wallet.tickets} ticket${wallet.tickets > 1 ? 's' : ''}: ${TICKETS_PER_COIN} make a coin` : 'No tickets to exchange. Play a cabinet!');
+      return;
+    }
+    const before = wallet.tickets;
+    const coins = wallet.redeemTickets(TICKETS_PER_COIN);
+    this.notify(`${before - wallet.tickets} tickets exchanged for ${coins} coin${coins > 1 ? 's' : ''}`);
+  }
+
+  buy(item: ForSaleLike): void {
+    const { wallet, collection } = this.parts;
+    if (!wallet || !collection) return;
+    const { game, price } = item.item;
+    if (collection.has(game.id)) {
+      this.notify(`You already own ${game.title}`);
+      return;
+    }
+    if (!wallet.spend(price)) {
+      this.notify(`${game.title} costs ${price} coins and you have ${wallet.coins}`);
+      return;
+    }
+    collection.add({ ...game, status: 'owned', addedAt: new Date().toISOString() });
+    item.sold();
+    this.notify(`Bought ${game.title} for ${price} coin${price > 1 ? 's' : ''}. It is on your shelves at home.`, 3000);
+  }
+
+  openCatalogue(): void {
+    const { catalogue } = this.parts;
+    if (!catalogue) return;
+    this.putBack();
+    if (!catalogue.isOpen) this.toggleModal(catalogue);
+  }
+
+  private onArcadeOver(cabinet: ArcadeCabinetLike, score: number): void {
+    const { wallet, scores } = this.parts;
+    const tickets = ticketsFor(score);
+    wallet?.addTickets(tickets);
+    const best = scores?.submit(cabinet.game.id, score) ?? false;
+    this.notify(`${score} points: ${tickets} ticket${tickets === 1 ? '' : 's'} in your pocket${best ? ' — new best!' : ''}\nSpace or click plays again, E walks away`, 5000);
+  }
+
+  private leaveArcade(): void {
+    const cabinet = this.arcade;
+    if (!cabinet) return;
+    this.arcade = null;
+    cabinet.abort();
+    this.parts.player.stand();
+  }
+
   // --- Console stand ----------------------------------------------------------------------------
 
   /** Clicking a console: name the platform, count its games and point at the first box. */
@@ -238,14 +367,14 @@ export class Session implements SessionActions {
       return;
     }
     search.open(games);
-    this.setSearchFrozen(true);
+    this.setFrozen(true);
   }
 
-  /** While typing, WASD must not walk and the crosshair must not pick; the pointer lock stays engaged. */
-  private setSearchFrozen(frozen: boolean): void {
+  /** While typing (search) or choosing (travel menu), WASD must not walk and the crosshair must not pick; the pointer lock stays engaged. */
+  private setFrozen(frozen: boolean): void {
     const { player, interactor } = this.parts;
     player.movementEnabled = !frozen;
-    interactor.enabled = !frozen && !this.editorOpen;
+    interactor.enabled = !frozen && !this.activeModal;
   }
 
   /** Highlights the game's box, turns the player towards it and arms Enter to pick it up. */
@@ -349,26 +478,28 @@ export class Session implements SessionActions {
     this.parts.inspector.toggleOpen();
   }
 
-  // --- Collection editor --------------------------------------------------------------------------
+  // --- Modals: collection editor, mail-order catalogue -----------------------------------------------
 
-  private toggleEditor(): void {
-    const editor = this.parts.collectionEditor;
-    if (!editor) return;
-    editor.toggle();
-    this.syncEditor(editor.isOpen);
+  private toggleModal(modal: ModalLike): void {
+    modal.toggle();
+    this.syncModal(modal, modal.isOpen);
   }
 
-  /** Editor open: release the mouse and mute the room. Editor closed: re-enter through the lock flow. */
-  private syncEditor(open: boolean): void {
-    if (open === this.editorOpen) return;
-    this.editorOpen = open;
-    const { player, interactor, overlay, search, enterRoom } = this.parts;
+  /** A modal opened: release the mouse and mute the room (any other modal closes). Closed: re-enter through the lock flow. */
+  private syncModal(modal: ModalLike, open: boolean): void {
     if (open) {
+      if (this.activeModal === modal) return;
+      if (this.activeModal) this.activeModal.close();
+      this.activeModal = modal;
+      const { player, interactor, overlay, search } = this.parts;
       search?.close();
-      overlay.setModal(true); // keeps the start card hidden behind the editor when the lock drops
+      overlay.setModal(true); // keeps the start card hidden behind the panel when the lock drops
       interactor.enabled = false;
       player.unlock();
     } else {
+      if (this.activeModal !== modal) return;
+      this.activeModal = null;
+      const { interactor, overlay, enterRoom } = this.parts;
       interactor.enabled = true;
       enterRoom?.();
       overlay.setModal(false);

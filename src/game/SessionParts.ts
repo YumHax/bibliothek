@@ -7,6 +7,7 @@ import type { Toast } from '@/ui/Toast';
 import type { SearchBar } from '@/ui/SearchBar';
 import type { VideoProvider } from '@/video/VideoProvider';
 import type { GameSource } from '@/collection/GameSource';
+import type { Game } from '@/catalog/types';
 import type { GameBox } from '@/world/GameBox';
 import type { Seat } from '@/world/Seat';
 import type { SortMode } from '@/world/shelving/sort';
@@ -32,11 +33,13 @@ export interface DayNightLike {
 }
 
 /**
- * DOM overlay that edits the collection. `onOpenChange` is assigned by the session so that
- * closing the editor from its own UI (close button, Esc) also re-enters the room.
+ * A full-screen DOM panel that takes the keyboard and the mouse (the collection editor, the
+ * mail-order catalogue). `onOpenChange` is assigned by the session so that closing the panel from
+ * its own UI (close button, Esc) also re-enters the room.
  */
-export interface CollectionEditorLike {
+export interface ModalLike {
   toggle(): unknown;
+  close(): unknown;
   readonly isOpen: boolean;
   onOpenChange?: (open: boolean) => void;
 }
@@ -47,6 +50,40 @@ export interface CatLike {
   /** The player calls it: it comes, ignores the call, or is asleep. */
   call(): 'coming' | 'ignored' | 'asleep';
   setPlayerSeat?(seat: Seat | null): void;
+}
+
+/** The player's money: coins to spend, tickets to redeem. */
+export interface WalletLike {
+  readonly coins: number;
+  readonly tickets: number;
+  spend(coins: number): boolean;
+  addTickets(tickets: number): void;
+  redeemTickets(ticketsPerCoin: number): number;
+}
+
+/** The collection as something that can be bought into. */
+export interface CollectionLike {
+  has(id: string): boolean;
+  add(game: Game): void;
+}
+
+/** Best arcade scores; `submit` says whether the score is a new best. */
+export interface ScoresLike {
+  submit(gameId: string, score: number): boolean;
+}
+
+/** The teleport: where one can go from here, and going there. */
+export interface TravelLike {
+  choices(): { id: string; label: string }[];
+  go(id: string): Promise<void>;
+}
+
+/** The "Where to?" panel a door opens. */
+export interface TravelMenuLike {
+  open(choices: { id: string; label: string }[]): void;
+  close(): void;
+  readonly isOpen: boolean;
+  readonly events: { onPick?: (id: string) => void; onCancel?: () => void };
 }
 
 export interface SessionParts {
@@ -64,8 +101,16 @@ export interface SessionParts {
   gameSource?: GameSource;
   shelving?: ShelvingLike;
   dayNight?: DayNightLike;
-  collectionEditor?: CollectionEditorLike;
+  collectionEditor?: ModalLike;
   cat?: CatLike;
   /** Re-enters the room after a modal (the collection editor) released the pointer lock: `() => void lockFlow.enter()`. */
   enterRoom?: () => void;
+
+  // --- the economy: going out, playing, buying ---------------------------------------------------
+  wallet?: WalletLike;
+  collection?: CollectionLike;
+  scores?: ScoresLike;
+  travel?: TravelLike;
+  travelMenu?: TravelMenuLike;
+  catalogue?: ModalLike;
 }

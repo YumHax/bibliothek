@@ -3,6 +3,7 @@ import type { Zone } from '../zone/Zone';
 import type { BuildContext, ZoneHandle } from '../layout';
 import { furnishShell } from '../shell';
 import { FlushLamp } from '../props/FlushLamp';
+import { WallSwitch } from '../props/WallSwitch';
 import { TiledWainscot } from '../props/TiledWainscot';
 import { Bathtub } from '../props/Bathtub';
 import { FrostedWindow } from '../props/FrostedWindow';
@@ -22,7 +23,8 @@ import { BATHROOM_PLAN } from './bathroomPlan';
 export function furnishBathroom(zone: Zone, { sky }: BuildContext): ZoneHandle {
   const plan = BATHROOM_PLAN;
   const room = furnishShell(zone, sky, plan.room, { leafColor: plan.leafColor });
-  zone.placeAt(new FlushLamp({ onSwitch: (on) => room.setLampOn(on) }), plan.light);
+  const light = zone.placeAt(new FlushLamp({ onSwitch: (on) => room.setLampOn(on) }), plan.light);
+  zone.placeAt(new WallSwitch({ lamp: light }), plan.lightSwitch);
   // The wainscot wraps the whole shell, so it stands at the room's origin like the Room does.
   zone.place(new TiledWainscot(plan.room, plan.wainscot), new THREE.Vector3());
 

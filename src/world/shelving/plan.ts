@@ -39,6 +39,8 @@ export interface PlanInput<T> {
   groupKey(item: T): string;
   spec: BookcaseSpec;
   maxBookcases: number;
+  /** Bookcases to stand even with nothing to put in them (an empty collection still gets its shelves). Default 0. */
+  minBookcases?: number;
 }
 
 /**
@@ -46,7 +48,7 @@ export interface PlanInput<T> {
  * Each row is at least as tall as its tallest box; the spare height of a bookcase is
  * shared equally between its rows so every bookcase ends up the same height.
  */
-export function planShelving<T>({ items, dimensions, groupKey, spec, maxBookcases }: PlanInput<T>): ShelvingPlan<T> {
+export function planShelving<T>({ items, dimensions, groupKey, spec, maxBookcases, minBookcases = 0 }: PlanInput<T>): ShelvingPlan<T> {
   const innerWidth = spec.width - 2 * spec.boardThickness;
   const rows: PlannedRow<T>[] = [];
 
@@ -79,6 +81,8 @@ export function planShelving<T>({ items, dimensions, groupKey, spec, maxBookcase
     }
     bookcases.push({ rows: chunk, rowHeights: distributeHeights(chunk, spec.rows, usable) });
   }
+  // Empty bookcases up to the minimum: equal rows, nothing on them.
+  while (bookcases.length < Math.min(minBookcases, maxBookcases)) bookcases.push({ rows: [], rowHeights: distributeHeights([], spec.rows, usable) });
   return { bookcases, leftover };
 }
 

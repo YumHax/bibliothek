@@ -19,6 +19,8 @@ const HOVER_POP_OUT = 0.02;
 const OPEN_ANGLE = (160 * Math.PI) / 180;
 const OPEN_SECONDS = 0.4;
 const WISHLIST_OPACITY = 0.35;
+/** A worn second-hand box: its printed faces are dulled to this tint instead of pure white. */
+const WORN_TINT = 0xb8afa2;
 /** Index of the invisible hit-volume material in `material`, after the seven shell materials. */
 const HITBOX_INDEX = SHELL_MATERIAL_ORDER.length;
 
@@ -50,6 +52,8 @@ export class GameBox extends THREE.Mesh<THREE.BoxGeometry, THREE.Material[]> imp
   private status: GameStatus = 'owned';
   private lentTag: LentTag | null = null;
   private anisotropy = 1;
+  /** A `worn` copy keeps a dulled cover (see `BoxCondition`). */
+  private readonly worn: boolean;
 
   constructor(game: Game, art: BoxArtLoader) {
     const platform = getPlatform(game.platform);
@@ -80,6 +84,9 @@ export class GameBox extends THREE.Mesh<THREE.BoxGeometry, THREE.Material[]> imp
     this.cartridge = new Cartridge(this.layout.cartridge);
     this.manual = new Manual(this.layout.manual);
     this.add(this.shell, this.cartridge, this.manual);
+    // Second-hand copies: no booklet when the condition says so, a dulled box when it is worn.
+    this.worn = game.condition === 'worn';
+    if (game.condition === 'noManual' || this.worn) this.manual.visible = false;
 
     // Progressive: generated faces first, the real cover when it arrives (nearest boxes first).
     void art.load(game, { onUpdate: (set) => this.applyArt(set), anchor: this }).then((set) => this.applyArt(set));
@@ -202,7 +209,7 @@ export class GameBox extends THREE.Mesh<THREE.BoxGeometry, THREE.Material[]> imp
       const previous = mat.map;
       if (previous === tex) return;
       mat.map = tex;
-      mat.color.setHex(0xffffff);
+      mat.color.setHex(this.worn ? WORN_TINT : 0xffffff);
       mat.needsUpdate = true;
       previous?.dispose();
     };

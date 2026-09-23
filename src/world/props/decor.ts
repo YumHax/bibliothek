@@ -6,6 +6,21 @@ import { Rug, type RugOptions } from './Rug';
 import { PictureFrame, type PictureFrameOptions } from './PictureFrame';
 import { FloorLamp, type FloorLampOptions } from './FloorLamp';
 import { SideTable, type SideTableOptions } from './SideTable';
+import { Garland, type GarlandOptions } from './Garland';
+import { Crate, type CrateOptions } from './Crate';
+import { Flyer, type FlyerOptions } from './Flyer';
+import { Chalkboard, type ChalkboardOptions } from './Chalkboard';
+import { IndustrialPendant, type IndustrialPendantOptions } from './IndustrialPendant';
+import { NeonSign, type NeonSignOptions } from './NeonSign';
+import { NeonTube, type NeonTubeOptions } from './NeonTube';
+import { Cushion, type CushionOptions } from './Cushion';
+import { Speaker, type SpeakerOptions } from './Speaker';
+import { Sideboard, type SideboardOptions } from './Sideboard';
+import { SmokeDetector, type SmokeDetectorOptions } from './SmokeDetector';
+import { UmbrellaStand, type UmbrellaStandOptions } from './UmbrellaStand';
+import { LeaningMirror, type LeaningMirrorOptions } from './LeaningMirror';
+import { PedalBin, type PedalBinOptions } from './PedalBin';
+import { BathroomScale, type BathroomScaleOptions } from './BathroomScale';
 
 /**
  * Decoration the room plan can list by name. Each kind builds a `Furniture` from its options;
@@ -20,6 +35,21 @@ export const DECOR_KINDS = {
   pictureFrame: (o: PictureFrameOptions = {}) => new PictureFrame(o),
   floorLamp: (o: FloorLampOptions = {}) => new FloorLamp(o),
   sideTable: (o: SideTableOptions = {}) => new SideTable(o),
+  garland: (o: GarlandOptions = {}) => new Garland(o),
+  crate: (o: CrateOptions = {}) => new Crate(o),
+  flyer: (o: FlyerOptions = {}) => new Flyer(o),
+  chalkboard: (o: ChalkboardOptions = {}) => new Chalkboard(o),
+  industrialPendant: (o: IndustrialPendantOptions = {}) => new IndustrialPendant(o),
+  neonSign: (o: NeonSignOptions = {}) => new NeonSign(o),
+  neonTube: (o: NeonTubeOptions = {}) => new NeonTube(o),
+  cushion: (o: CushionOptions = {}) => new Cushion(o),
+  speaker: (o: SpeakerOptions = {}) => new Speaker(o),
+  sideboard: (o: SideboardOptions = {}) => new Sideboard(o),
+  smokeDetector: (o: SmokeDetectorOptions = {}) => new SmokeDetector(o),
+  umbrellaStand: (o: UmbrellaStandOptions = {}) => new UmbrellaStand(o),
+  leaningMirror: (o: LeaningMirrorOptions = {}) => new LeaningMirror(o),
+  pedalBin: (o: PedalBinOptions = {}) => new PedalBin(o),
+  bathroomScale: (o: BathroomScaleOptions = {}) => new BathroomScale(o),
 };
 
 export type DecorKind = keyof typeof DECOR_KINDS;

@@ -1,0 +1,9 @@
+/* Teleport curtain: above everything in the 3D view and the HUD, below the modals (z-index 3). */
+.fader {
+  position: fixed;
+  inset: 0;
+  z-index: 3;
+  background: #000;
+  pointer-events: none;
+  transition: opacity 350ms ease;
+}

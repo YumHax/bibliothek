@@ -1,0 +1,38 @@
+/* Coins and tickets, top left. Above the canvas (z-index 1). */
+.wallet-hud {
+  position: fixed;
+  top: 1rem;
+  left: 1rem;
+  z-index: 2;
+  display: flex;
+  gap: 0.9rem;
+  padding: 0.4rem 0.8rem;
+  border-radius: 999px;
+  background: rgba(20, 20, 28, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: #ece9e2;
+  font-size: 0.95rem;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+  user-select: none;
+}
+.wallet-hud__item { display: inline-flex; align-items: center; gap: 0.4rem; }
+.wallet-hud__coin,
+.wallet-hud__ticket { display: inline-block; width: 0.85em; height: 0.85em; }
+.wallet-hud__coin {
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, #ffe7a0, #d4a52a 60%, #9a731a);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.35);
+}
+.wallet-hud__ticket {
+  width: 1.1em;
+  height: 0.7em;
+  border-radius: 2px;
+  background: repeating-linear-gradient(90deg, #ff8a80 0 0.15em, #e8524a 0.15em 0.3em);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.35);
+}
+.wallet-hud--pulse { animation: wallet-pulse 400ms ease-out; }
+@keyframes wallet-pulse {
+  from { transform: scale(1.12); }
+  to   { transform: scale(1); }
+}

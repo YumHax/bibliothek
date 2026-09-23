@@ -29,6 +29,8 @@ export interface ShelvingOptions {
   rightWallKeepClear?: ZRange;
   sort?: SortMode;
   bookcase?: Partial<Pick<BookcaseSpec, 'height' | 'depth' | 'gap' | 'headroom' | 'boardThickness'>>;
+  /** Bookcases that stand even when the collection is empty or small, waiting to be filled. Default 0. */
+  minBookcases?: number;
 }
 
 /** Horizontal distance from a bookcase face to its ceiling spot (m). */
@@ -64,6 +66,7 @@ export class Shelving {
   private readonly homeOf = new Map<GameBox, Shelf>();
   private ghosts: Shelf[] = [];
   private readonly unsubscribe: () => void;
+  private readonly minBookcases: number;
 
   constructor(
     private readonly host: ShelvingHost,
@@ -72,6 +75,7 @@ export class Shelving {
     options: ShelvingOptions,
   ) {
     this.mode = options.sort ?? 'platform';
+    this.minBookcases = options.minBookcases ?? 0;
     this.ceiling = options.room.height;
     const partial = { ...DEFAULT_SPEC, ...options.bookcase };
     const { slots, width } = computeSlots(options.room, partial, options.backWallMinX ?? -options.room.width / 6, options.rightWallKeepClear);
@@ -138,6 +142,7 @@ export class Shelving {
       groupKey: (box) => rowGroupKey(box.game, this.mode),
       spec,
       maxBookcases: this.slots.length,
+      minBookcases: this.minBookcases,
     });
     if (plan.leftover.length) console.warn(`[shelving] ${plan.leftover.length} game(s) do not fit in the room`);
 

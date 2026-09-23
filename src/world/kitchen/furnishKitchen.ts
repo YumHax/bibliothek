@@ -2,6 +2,7 @@ import type { Zone } from '../zone/Zone';
 import type { BuildContext, ZoneHandle } from '../layout';
 import { furnishShell } from '../shell';
 import { PendantLamp } from '../props/PendantLamp';
+import { WallSwitch } from '../props/WallSwitch';
 import { RoomWindow } from '../props/Window';
 import { WallClock } from '../props/WallClock';
 import { KitchenRun } from '../props/KitchenRun';
@@ -9,7 +10,7 @@ import { WallCabinets } from '../props/WallCabinets';
 import { Fridge } from '../props/Fridge';
 import { KitchenTable } from '../props/KitchenTable';
 import { Chair } from '../props/Chair';
-import { Kettle, Toaster, FruitBowl, ChoppingBoard } from '../props/WorktopClutter';
+import { Kettle, Toaster, FruitBowl, ChoppingBoard, StorageJars, DishRack } from '../props/WorktopClutter';
 import { placeDecor } from '../props/decor';
 import { KITCHEN_PLAN } from './kitchenPlan';
 
@@ -24,7 +25,8 @@ export function furnishKitchen(zone: Zone, { sky }: BuildContext): ZoneHandle {
 
   // 0. Shell and ceiling light.
   const room = furnishShell(zone, sky, plan.room);
-  zone.placeAt(new PendantLamp({ onSwitch: (on) => room.setLampOn(on) }), plan.pendant);
+  const pendant = zone.placeAt(new PendantLamp({ onSwitch: (on) => room.setLampOn(on) }), plan.pendant);
+  zone.placeAt(new WallSwitch({ lamp: pendant }), plan.lightSwitch);
 
   // 1. The fitted kitchen: base runs, wall cupboards with the extractor, the fridge past the end of the run.
   for (const run of plan.runs) zone.placeAt(new KitchenRun(run.options), run.at);
@@ -46,6 +48,8 @@ export function furnishKitchen(zone: Zone, { sky }: BuildContext): ZoneHandle {
   zone.placeAt(new Toaster(), plan.toaster);
   zone.placeAt(new ChoppingBoard(), plan.choppingBoard);
   zone.placeAt(new FruitBowl(), plan.fruitBowl);
+  zone.placeAt(new StorageJars(), plan.storageJars);
+  zone.placeAt(new DishRack(), plan.dishRack);
 
   // 5. The clock (reads the room's time) and the decoration: runner, plants, the print over the table.
   zone.placeAt(new WallClock(sky.dayNight), plan.clock);

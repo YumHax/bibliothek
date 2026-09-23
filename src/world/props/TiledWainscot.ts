@@ -10,10 +10,21 @@ export interface TiledWainscotOptions {
   walls?: Wall[];
   /** How far the tiles stop short of each doorway's edge (the door's architrave). Default 0.07. */
   doorClearance?: number;
+  /** Other openings to leave untiled, besides the room's doorways: a shut door lying on the wall (its leaf plus architrave), a fitted counter. */
+  openings?: { wall: Wall; along: number; width: number }[];
   /** Tile, grout and accent (top row and cap rail) colours. */
   tile?: number;
   grout?: number;
   accent?: number;
+  /** Size of one tile. Default metro 0.2 x 0.1; a brick is about 0.22 x 0.07. */
+  tileWidth?: number;
+  tileHeight?: number;
+  /** Bevelled edges on every tile (glazed tiles have them, bricks do not). Default true. */
+  bevel?: boolean;
+  /** How much one tile's shade may differ from the next (0 = all the same). Default 0.008; bricks want about 0.03. */
+  variance?: number;
+  /** Roughness of the tiled face: glazed 0.25 (default), fired brick about 0.85. */
+  roughness?: number;
 }
 
 /** Metro tiles, laid in a running bond, and the canvas resolution they are painted at. */
@@ -42,14 +53,19 @@ export class TiledWainscot extends Prop {
     const walls = options.walls ?? ['back', 'front', 'left', 'right'];
     const clearance = options.doorClearance ?? 0.07;
     const colours = { tile: options.tile ?? 0xf6f5f0, grout: options.grout ?? 0xcfd0cc, accent: options.accent ?? 0x9db3a6 };
+    const style: TileStyle = { w: options.tileWidth ?? TILE_W, h: options.tileHeight ?? TILE_H, bevel: options.bevel ?? true, variance: options.variance ?? 0.008 };
+    const roughness = options.roughness ?? 0.25;
     const capPaint = matte(colours.accent, 0.35);
     const doorways = room.doorways ?? [];
 
     for (const wall of walls) {
       const along = wall === 'back' || wall === 'front';
       const length = along ? room.width : room.depth;
-      const gaps = doorways.filter((d) => d.wall === wall).map((d) => ({ centre: wallLocalX(wall, d.along), width: d.width + 2 * clearance }));
-      const map = paintTiles(length, height, colours);
+      const gaps = [
+        ...doorways.filter((d) => d.wall === wall).map((d) => ({ centre: wallLocalX(wall, d.along), width: d.width + 2 * clearance })),
+        ...(options.openings ?? []).filter((o) => o.wall === wall).map((o) => ({ centre: wallLocalX(wall, o.along), width: o.width })),
+      ];
+      const map = paintTiles(length, height, colours, style);
       // One group per wall, turned like the Room's wall planes: local +x runs along the wall, +z into the room.
       const face = new THREE.Group();
       const { position, rotationY } = wallFrame(room, wall);
@@ -59,7 +75,7 @@ export class TiledWainscot extends Prop {
 
       for (const seg of segmentsBetween(length, gaps)) {
         // The tiles of this stretch are the matching window of the wall's canvas.
-        const tiles = new THREE.MeshStandardMaterial({ map: map.clone(), roughness: 0.25 });
+        const tiles = new THREE.MeshStandardMaterial({ map: map.clone(), roughness });
         tiles.map!.repeat.set(seg.length / length, 1);
         tiles.map!.offset.set((seg.centre - seg.length / 2 + length / 2) / length, 0);
         tiles.map!.needsUpdate = true;
@@ -110,8 +126,16 @@ function segmentsBetween(length: number, gaps: { centre: number; width: number }
   return segments;
 }
 
-/** Bevelled metro tiles over grout, offset half a tile every other row; the top row in the accent colour. */
-function paintTiles(lengthM: number, heightM: number, colours: { tile: number; grout: number; accent: number }): THREE.CanvasTexture {
+/** Size of one tile, whether its edges are bevelled, how much its shade may vary from its neighbours'. */
+interface TileStyle {
+  w: number;
+  h: number;
+  bevel: boolean;
+  variance: number;
+}
+
+/** Tiles (or bricks) over grout, offset half a tile every other row; the top row in the accent colour. */
+function paintTiles(lengthM: number, heightM: number, colours: { tile: number; grout: number; accent: number }, style: TileStyle): THREE.CanvasTexture {
   const W = Math.round(lengthM * PX_PER_M);
   const H = Math.round(heightM * PX_PER_M);
   const [canvas, ctx] = createCanvas(W, H);
@@ -119,8 +143,8 @@ function paintTiles(lengthM: number, heightM: number, colours: { tile: number; g
   ctx.fillStyle = hex(colours.grout);
   ctx.fillRect(0, 0, W, H);
 
-  const tw = TILE_W * PX_PER_M;
-  const th = TILE_H * PX_PER_M;
+  const tw = style.w * PX_PER_M;
+  const th = style.h * PX_PER_M;
   const rows = Math.ceil(H / th);
   for (let row = 0; row < rows; row++) {
     // Canvas y runs down while the wall's v runs up: row 0 is the top row, the accent one.
@@ -128,9 +152,10 @@ function paintTiles(lengthM: number, heightM: number, colours: { tile: number; g
     const base = new THREE.Color(row === 0 ? colours.accent : colours.tile);
     const shift = row % 2 ? tw / 2 : 0;
     for (let x = -shift; x < W; x += tw) {
-      const shade = 0.97 + (((row * 31 + Math.round(x)) * 2654435761) % 7) * 0.008;
+      const shade = 1 + ((((row * 31 + Math.round(x)) * 2654435761) % 7) - 3) * style.variance;
       ctx.fillStyle = `#${base.clone().multiplyScalar(shade).getHexString()}`;
       ctx.fillRect(x + GROUT_PX / 2, y + GROUT_PX / 2, tw - GROUT_PX, th - GROUT_PX);
+      if (!style.bevel) continue;
       // The bevel: light along the top and left edges, shadow along the bottom and right.
       ctx.fillStyle = 'rgba(255,255,255,0.45)';
       ctx.fillRect(x + GROUT_PX / 2, y + GROUT_PX / 2, tw - GROUT_PX, 3);

@@ -13,7 +13,8 @@ Read `docs/zones.md` first (model, the flat's map, how two zones share a doorway
 
 1. **Folder** `src/world/<kind>/` with two files:
    - `<kind>Plan.ts`, data only, zone-local coordinates (the zone's origin is the centre of its floor). Export
-     `<KIND>_ROOM: RoomOptions` (`width`, `depth`, `height`, `doorways`, `opaqueWalls`) and `<KIND>_PLAN` (the room, the
+     `<KIND>_ROOM: RoomOptions` (`width`, `depth`, `height`, `doorways`, `opaqueWalls`, and `finish` when it is not a room of
+     the flat: `floor: 'concrete' | 'carpet'`, wall / ceiling / trim colours, `moulding: false`; see the market, the arcade) and `<KIND>_PLAN` (the room, the
      spots of its wired props, a `decor` list of `DecorEntry`). Doorways use `...DOOR_LEAF` from `roomPlan.ts`.
    - `furnish<Kind>.ts`: `export function furnish<Kind>(zone: Zone, { sky }: BuildContext): ZoneHandle`. Start with
      `const room = furnishShell(zone, sky, plan.room, { leafColor })` (Room + sky + the doors this zone hangs), place a
@@ -43,3 +44,10 @@ Read `docs/zones.md` first (model, the flat's map, how two zones share a doorway
 
 Outside, a balcony, a stairwell: same steps, but the builder places its own shell (no `Room`: no hemisphere lamp rig).
 Keep the `Sky` as the single source of time and sun direction; see the open points in `docs/zones.md`.
+
+## Not walkable to? (a teleport destination like the arcade or the market)
+
+Skip step 2 (no shared doorway): `doorways` empty, every wall in `opaqueWalls`, `neighbours: []`, no `persistent`. Add
+`travel: { label, arrival: [x, z], yaw }` to the `WORLD_PLAN` entry (arrival zone-local, yaw 0 looks down -z) and place
+a `TravelDoor({ style, label })` on a wall as the way back; the travel menu lists every `travel` zone automatically.
+Put the zone far from the flat along +x (40, 80...) so nothing overlaps. See `src/world/arcade/` and `docs/economy.md`.

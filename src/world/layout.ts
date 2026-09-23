@@ -1,5 +1,8 @@
 import * as THREE from 'three';
 import type { CssLayer } from '@/core/CssLayer';
+import type { Input } from '@/core/Input';
+import type { MarketStock } from '@/economy/MarketStock';
+import type { ArcadeScores } from '@/economy/ArcadeScores';
 import type { GameSource } from '@/collection/GameSource';
 import type { BoxArtLoader } from '@/covers/BoxArtLoader';
 import type { PlatformId } from '@/catalog/types';
@@ -19,11 +22,14 @@ import { furnishHallway } from './hallway/furnishHallway';
 import { furnishBathroom } from './bathroom/furnishBathroom';
 import { furnishBedroom } from './bedroom/furnishBedroom';
 import { furnishKitchen } from './kitchen/furnishKitchen';
+import { furnishArcade } from './arcade/furnishArcade';
+import { furnishMarket } from './market/furnishMarket';
 import { RoomWindow } from './props/Window';
 import { Poster } from './props/Poster';
 import { ConsoleStand } from './props/ConsoleStand';
 import { Console, type PlatformSelectHandler } from './props/Console';
 import { PendantLamp } from './props/PendantLamp';
+import { WallSwitch } from './props/WallSwitch';
 import { WallClock } from './props/WallClock';
 import { Cushion } from './props/Cushion';
 import { placeDecor } from './props/decor';
@@ -42,6 +48,12 @@ export interface BuildContext {
   sky: Sky;
   /** Clicking a console on the TV stand reports its platform. */
   onSelectPlatform?: PlatformSelectHandler;
+  /** The keys, read directly by the arcade cabinets while a game runs. */
+  input: Input;
+  /** What the flea market has on its stalls today. */
+  market: MarketStock;
+  /** Best arcade scores, shown on the cabinets' attract screens. */
+  scores: ArcadeScores;
 }
 
 /** What every zone builder returns at least: its `Room`. */
@@ -121,7 +133,9 @@ export function furnishRoom(zone: Zone, { cssLayer, listener, acoustics, games, 
   const door = plan.room.doorways?.[0];
   const clockAt = door ? { wall: door.wall, along: door.along, y: door.height + plan.clock.aboveDoor } : plan.clock.fallback;
   zone.placeAt(new WallClock(sky.dayNight), clockAt);
-  zone.placeAt(new PendantLamp({ onSwitch: (on) => room.setLampOn(on) }), plan.pendant);
+  const pendant = zone.placeAt(new PendantLamp({ onSwitch: (on) => room.setLampOn(on) }), plan.pendant);
+  // The switch by the door drives the same lamp, so either works.
+  zone.placeAt(new WallSwitch({ lamp: pendant }), plan.lightSwitch);
 
   // 6. Decoration: plants, rug, pictures, lamps, tables, straight from the plan.
   placeDecor(zone, plan.decor);
@@ -140,4 +154,6 @@ export const ZONE_BUILDERS: { [K in ZoneKind]: (zone: Zone, ctx: BuildContext) =
   bathroom: furnishBathroom,
   bedroom: furnishBedroom,
   kitchen: furnishKitchen,
+  arcade: furnishArcade,
+  market: furnishMarket,
 };

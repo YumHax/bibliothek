@@ -24,12 +24,16 @@ export const BEDROOM_ROOM: RoomOptions = {
   // No windows: every wall keeps the light in (the hallway and the bathroom are behind the front and left walls).
   opaqueWalls: ['front', 'back', 'left', 'right'],
   doorways: [{ wall: 'front', along: -1.1, ...DOOR_LEAF, door: false, to: 'hallway' }],
+  // Its own paint: a dusty blue-grey, calmer than the flat's off-white.
+  finish: { walls: 0xc3ced5 },
 };
 
 export const BEDROOM_PLAN = {
   room: BEDROOM_ROOM,
   /** The fixture of the room's ceiling light (the `Room` puts its point light at the centre of the ceiling). */
   pendant: { ceiling: [0, 0] } as Placement,
+  /** Its switch inside the door, on the short stretch of front wall between the opening and the left corner (x -1.7..-1.515). */
+  lightSwitch: { wall: 'front', along: -1.6, y: 1.1 } as Placement,
 
   /**
    * The double bed, head to the back wall, right of centre: between its left side (x -0.4) and
@@ -57,5 +61,7 @@ export const BEDROOM_PLAN = {
     { kind: 'pictureFrame', at: { wall: 'front', along: 0.6, y: 1.55 }, options: { motif: 'sunset', seed: 12, width: 0.42, height: 0.32 } },
     // A fig in the back-left corner, behind the left nightstand.
     { kind: 'plant', at: { corner: 'back-left', inset: 0.38 }, options: { kind: 'fig', pot: 'terracotta', seed: 21, scale: 0.9 } },
+    // A full-length mirror leaning on the bare right wall beside the bed, between the right nightstand (z -1.8..-1.4) and the chair.
+    { kind: 'leaningMirror', at: { wall: 'right', along: -0.5, y: 0 } },
   ] as DecorEntry[],
 };

@@ -2,10 +2,12 @@ import type { ZoneSpec } from './zone/Zone';
 import type { NearWall } from './props/outdoors/Outdoors';
 import { EYE_HEIGHT as STREET_TO_EYE } from './props/outdoors/Sheet';
 import { DEFAULT_ROOM, ROOM_PLAN } from './roomPlan';
-import { HALLWAY_ROOM } from './hallway/hallwayPlan';
+import { HALLWAY_PLAN, HALLWAY_ROOM } from './hallway/hallwayPlan';
 import { BATHROOM_ROOM } from './bathroom/bathroomPlan';
 import { BEDROOM_ROOM } from './bedroom/bedroomPlan';
 import { KITCHEN_ROOM } from './kitchen/kitchenPlan';
+import { ARCADE_PLAN, ARCADE_ROOM } from './arcade/arcadePlan';
+import { MARKET_PLAN, MARKET_ROOM } from './market/marketPlan';
 
 /*
  * THE WORLD PLAN: the zones (rooms, corridors, the street one day) and how they connect. Each zone
@@ -26,6 +28,9 @@ import { KITCHEN_ROOM } from './kitchen/kitchenPlan';
  *
  * Two zones sharing a doorway keep `WALL_GAP` between their wall planes (coplanar walls would
  * z-fight); the `Door`'s lining bridges it. Both shells cut the same opening; one hangs the leaf.
+ *
+ * Elsewhere, reached by teleport from the front door (`travel`): the arcade at x 40 and the flea
+ * market at x 80, each a windowless hall of its own (`src/world/arcade/`, `src/world/market/`).
  *
  * Outside: Front Street runs past the front wall (+z), Park Street past the left wall (-x); the
  * right side (+x) is the neighbours' and the landing, the back (-z) a courtyard nothing paints.
@@ -68,10 +73,22 @@ export const KITCHEN_WING: NearWall = {
 };
 
 /** What a zone is; one builder per kind in `layout.ts`. */
-export type ZoneKind = 'collectionRoom' | 'hallway' | 'bathroom' | 'bedroom' | 'kitchen';
+export type ZoneKind = 'collectionRoom' | 'hallway' | 'bathroom' | 'bedroom' | 'kitchen' | 'arcade' | 'market';
+
+/**
+ * A zone the player is teleported to (and from) through a `TravelDoor`, instead of walking: the
+ * hallway (the flat's front door), the arcade, the market. `arrival` is the zone-local floor spot
+ * the player is set down on, `yaw` the way they face there. The travel menu lists every such zone but the current one.
+ */
+export interface TravelPlan {
+  label: string;
+  arrival: [x: number, z: number];
+  yaw: number;
+}
 
 export interface ZonePlan extends ZoneSpec {
   kind: ZoneKind;
+  travel?: TravelPlan;
 }
 
 /**
@@ -105,6 +122,7 @@ export const WORLD_PLAN = {
       extent: HALLWAY_ROOM,
       neighbours: ['living', 'bathroom', 'bedroom', 'kitchen'],
       persistent: true,
+      travel: { label: 'Home', arrival: HALLWAY_PLAN.arrival.at, yaw: HALLWAY_PLAN.arrival.yaw },
     },
     {
       id: 'bathroom',
@@ -129,6 +147,24 @@ export const WORLD_PLAN = {
       extent: KITCHEN_ROOM,
       neighbours: ['hallway', 'living'],
       persistent: true,
+    },
+    // Out of the flat, reached by teleport only (see `travel`): far enough along +x never to touch
+    // the flat, no neighbours (nothing is seen through a door), not persistent (rebuilt on return).
+    {
+      id: 'arcade',
+      kind: 'arcade',
+      origin: [40, 0, 0],
+      extent: ARCADE_ROOM,
+      neighbours: [],
+      travel: { label: 'Arcade', arrival: ARCADE_PLAN.arrival.at, yaw: ARCADE_PLAN.arrival.yaw },
+    },
+    {
+      id: 'market',
+      kind: 'market',
+      origin: [80, 0, 0],
+      extent: MARKET_ROOM,
+      neighbours: [],
+      travel: { label: 'Flea market', arrival: MARKET_PLAN.arrival.at, yaw: MARKET_PLAN.arrival.yaw },
     },
   ] as ZonePlan[],
 };

@@ -3,6 +3,8 @@ import type { Updatable } from '@/core/Engine';
 import { IDLE_SHADOW_INTERVAL, type OccupancyAware } from './Furniture';
 import { boxMesh } from './meshUtils';
 import { parquetMaterial } from './Parquet';
+import { concreteMaterial } from './Concrete';
+import { carpetMaterial } from './Carpet';
 
 /** Walls as seen from the default spawn: back = -z (shelves), front = +z, left = -x (TV), right = +x. */
 export type Wall = 'front' | 'back' | 'left' | 'right';
@@ -43,6 +45,22 @@ export interface RoomOptions {
    * that room's lamps do not pour in. Leave out walls with windows: the caster would shut their sun out.
    */
   opaqueWalls?: Wall[];
+  /** Surfaces: the flat's parquet and white paint unless told otherwise (a hall, a shop). */
+  finish?: RoomFinish;
+}
+
+/** How a room's shell is finished; every field defaults to the flat's look. */
+export interface RoomFinish {
+  /** `parquet`: oak strips (default); `concrete`: a poured slab with joints and stains; `carpet`: an arcade's black neon-confetti carpet. */
+  floor?: 'parquet' | 'concrete' | 'carpet';
+  /** Paint colour of the walls (default off-white). */
+  walls?: number;
+  /** Colour of the ceiling (default white). */
+  ceiling?: number;
+  /** Colour of the baseboard (default a pale grey). */
+  trim?: number;
+  /** Crown moulding along the ceiling (default true; a hall has none). */
+  moulding?: boolean;
 }
 
 /** Hemisphere sky colour in full daylight (warm, lamp-like) and at night (cool, moonlit), when no sky hue is given. */
@@ -191,7 +209,8 @@ export class Room extends THREE.Group implements Updatable, OccupancyAware {
   private buildSurfaces(): void {
     const { width, depth, height } = this.options;
 
-    const floorMat = parquetMaterial(width, depth);
+    const finish = this.options.finish ?? {};
+    const floorMat = finish.floor === 'concrete' ? concreteMaterial(width, depth) : finish.floor === 'carpet' ? carpetMaterial(width, depth) : parquetMaterial(width, depth);
     const floor = new THREE.Mesh(new THREE.PlaneGeometry(width, depth), floorMat);
     floor.rotation.x = -Math.PI / 2;
     floor.receiveShadow = true;
@@ -199,7 +218,7 @@ export class Room extends THREE.Group implements Updatable, OccupancyAware {
 
     // The ceiling only sees the lamp at grazing angles and the hemisphere's ground tint, so a
     // touch of emissive stands in for the light the white walls would bounce back up onto it.
-    const ceilingMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1, emissive: 0xfff8f0, emissiveIntensity: CEILING_BOUNCE });
+    const ceilingMat = new THREE.MeshStandardMaterial({ color: finish.ceiling ?? 0xffffff, roughness: 1, emissive: 0xfff8f0, emissiveIntensity: CEILING_BOUNCE });
     this.ceilingMat = ceilingMat;
     const ceiling = new THREE.Mesh(new THREE.PlaneGeometry(width, depth), ceilingMat);
     ceiling.rotation.x = Math.PI / 2;
@@ -208,7 +227,7 @@ export class Room extends THREE.Group implements Updatable, OccupancyAware {
 
     // Walls, each with the doorways cut out of it. Every wall's plane has its local +x running
     // along the wall; the doorway's world coordinate is turned into that local x by `wallLocalX`.
-    const wallMat = new THREE.MeshStandardMaterial({ color: 0xf3f0ea, roughness: 0.9, side: THREE.DoubleSide });
+    const wallMat = new THREE.MeshStandardMaterial({ color: finish.walls ?? 0xf3f0ea, roughness: 0.9, side: THREE.DoubleSide });
     const doorways = this.options.doorways ?? [];
     const wall = (name: Wall, length: number): THREE.Mesh => {
       const holes = doorways.filter((d) => d.wall === name).map((d) => ({ x: wallLocalX(name, d.along), width: d.width, height: d.height }));
@@ -251,7 +270,7 @@ export class Room extends THREE.Group implements Updatable, OccupancyAware {
     }
 
     // Baseboard trim helps read the floor/wall edge in first person; it stops at the doorways.
-    const trimMat = new THREE.MeshStandardMaterial({ color: 0xe4e0d8, roughness: 0.7 });
+    const trimMat = new THREE.MeshStandardMaterial({ color: finish.trim ?? 0xe4e0d8, roughness: 0.7 });
     const trimH = 0.08;
     const trimD = 0.02;
     const y = trimH / 2;
@@ -268,6 +287,7 @@ export class Room extends THREE.Group implements Updatable, OccupancyAware {
     trim('right', depth, (z) => ({ x: width / 2 - trimD / 2, z }));
 
     // Crown moulding where the walls meet the ceiling: a finished room, not a box.
+    if (finish.moulding === false) return;
     const coveMat = new THREE.MeshStandardMaterial({ color: 0xfbf9f5, roughness: 0.8 });
     const cove = 0.07;
     const cy = height - cove / 2;

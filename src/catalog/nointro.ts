@@ -39,3 +39,8 @@ export function slugify(text: string): string {
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '');
 }
+
+/** Stable id of a game known by its libretro-thumbnails name: `<platform>-<slug of the No-Intro name>`. */
+export function gameIdFor(platform: string, libretroName: string): string {
+  return `${platform}-${slugify(libretroName)}`;
+}

@@ -24,6 +24,8 @@ export const KITCHEN_ROOM: RoomOptions = {
   // The hallway and the bathroom are behind the right wall; the front wall faces the collection room's outside. Left and back face outside (windows go there).
   opaqueWalls: ['right', 'front'],
   doorways: [{ wall: 'right', along: 0.69, ...DOOR_LEAF, door: false, to: 'hallway' }],
+  // Its own paint: a warm cream behind the sage cabinets.
+  finish: { walls: 0xf1e6cf },
 };
 
 /** Height of the worktop (what `KitchenRun` builds); things on the counter are placed at it. */
@@ -42,6 +44,8 @@ export const KITCHEN_PLAN = {
 
   /** The fixture of the room's ceiling light, mid-room. */
   pendant: { ceiling: [0, 0] } as Placement,
+  /** Its switch inside the door, on the latch side of the opening (z 1.1..1.3; the leaf swings the other way). */
+  lightSwitch: { wall: 'right', along: 1.2, y: 1.1 } as Placement,
 
   /**
    * Base cabinets, units left to right as seen from the room. The back run spans the whole wall
@@ -117,6 +121,9 @@ export const KITCHEN_PLAN = {
   toaster: { wall: 'back', along: -0.35, y: WORKTOP, offset: 0.27 } as Placement,
   choppingBoard: { wall: 'back', along: -0.8, y: WORKTOP, offset: 0.33 } as Placement,
   fruitBowl: { wall: 'back', along: -1.3, y: WORKTOP, offset: 0.3 } as Placement,
+  /** Storage jars back against the splashback behind the board; the dish rack on the sink run's drawers, left of the sink. */
+  storageJars: { wall: 'back', along: -0.7, y: WORKTOP, offset: 0.1 } as Placement,
+  dishRack: { wall: 'left', along: -0.52, y: WORKTOP, offset: 0.3 } as Placement,
 
   /** The clock on the front wall, right of the table, where it is seen from the cooker. */
   clock: { wall: 'front', along: 1.05, y: 1.95 } as Placement,
@@ -129,5 +136,7 @@ export const KITCHEN_PLAN = {
     { kind: 'plant', at: { wall: 'left', along: 0.35, y: WORKTOP, offset: 0.3 }, options: { kind: 'small', pot: 'ceramic', seed: 27, collides: false } },
     // A framed print over the table.
     { kind: 'pictureFrame', at: { wall: 'front', along: -0.15, y: 1.5 }, options: { motif: 'sunset', seed: 6, width: 0.5, height: 0.38 } },
+    // The pedal bin by the front wall right of the table's far chair (x 0.25..0.65), a metre clear of the door's hinge.
+    { kind: 'pedalBin', at: { floor: [0.95, 1.1] } },
   ] as DecorEntry[],
 };

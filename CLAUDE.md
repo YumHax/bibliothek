@@ -1,7 +1,9 @@
 # Bibliothek
 
 First-person 3D video game collection room. three.js + Vite + TypeScript, no framework. The player walks a real-scale
-room, picks boxes off the shelves, reads them, plays longplays on the TV or projector; a cat lives there.
+room, picks boxes off the shelves, reads them, plays longplays on the TV or projector; a cat lives there. Games are
+earned: the front door teleports to an arcade (mini-games pay tickets, swapped for coins) and a flea market that sells
+games; `?debug` restores the seed collection and the editor's add pane.
 
 ## Commands
 
@@ -32,6 +34,7 @@ npm run build       # typecheck + production bundle
 | Add games or a platform | skill `add-games` |
 | New key, click behaviour, feature, HUD element | skill `add-interaction` |
 | A new room, corridor, the outside (zones, loading/unloading) | skill `add-room` (+ `docs/zones.md`) |
+| Money, prices, arcade cabinets and their games, market stalls, going out (teleport) | `docs/economy.md` |
 | Anything else: folder map, layers, key patterns, data sources | `docs/architecture.md` |
 | The view outside the windows | `docs/outdoors.md` |
 | The cat | `docs/cat.md` |

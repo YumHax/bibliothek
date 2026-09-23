@@ -3,9 +3,10 @@ import { fileURLToPath, URL } from 'node:url';
 import { youtubeSearchApi } from './server/youtubeSearchPlugin';
 import { artCacheApi } from './server/artCachePlugin';
 import { libretroIndexApi } from './server/libretroIndexPlugin';
+import { fameApi } from './server/famePlugin';
 
 export default defineConfig({
-  plugins: [youtubeSearchApi(), artCacheApi(), libretroIndexApi()],
+  plugins: [youtubeSearchApi(), artCacheApi(), libretroIndexApi(), fameApi()],
   resolve: {
     alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) },
   },

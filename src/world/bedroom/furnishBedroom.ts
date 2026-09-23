@@ -2,6 +2,7 @@ import type { Zone } from '../zone/Zone';
 import type { BuildContext, ZoneHandle } from '../layout';
 import { furnishShell } from '../shell';
 import { PendantLamp } from '../props/PendantLamp';
+import { WallSwitch } from '../props/WallSwitch';
 import { Bed } from '../props/Bed';
 import { Nightstand } from '../props/Nightstand';
 import { BedsideLamp } from '../props/BedsideLamp';
@@ -19,7 +20,8 @@ import { BEDROOM_PLAN } from './bedroomPlan';
 export function furnishBedroom(zone: Zone, { sky }: BuildContext): ZoneHandle {
   const plan = BEDROOM_PLAN;
   const room = furnishShell(zone, sky, plan.room);
-  zone.placeAt(new PendantLamp({ onSwitch: (on) => room.setLampOn(on) }), plan.pendant);
+  const pendant = zone.placeAt(new PendantLamp({ onSwitch: (on) => room.setLampOn(on) }), plan.pendant);
+  zone.placeAt(new WallSwitch({ lamp: pendant }), plan.lightSwitch);
 
   // The bed and, either side, a nightstand with its lamp standing on the top.
   zone.placeAt(new Bed(), plan.bed);
