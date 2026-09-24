@@ -4,6 +4,7 @@ import type { Furniture } from '../Furniture';
 import { boxMesh, cylinderMesh } from '../meshUtils';
 import { matte } from '../props/Prop';
 import { Crate } from '../props/Crate';
+import { wood as woodMaterial } from '@/world/materials/finishes';
 
 export interface MarketStallOptions {
   /** Text on the sign hung from the awning (a platform's name). */
@@ -47,7 +48,7 @@ const SIGN_FONT_PX = 84;
 const SIGN_PAD_PX = 50;
 const SIGN_MIN_PX = 620;
 
-const WOOD = matte(0x8b6a44, 0.6);
+const WOOD = woodMaterial(0x8b6a44, 0.6);
 const IRON = matte(0x2a2623, 0.6);
 const CARD = matte(0xd9c9a8, 0.85);
 

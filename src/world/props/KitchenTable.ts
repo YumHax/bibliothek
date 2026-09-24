@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import type { Furniture } from '../Furniture';
 import { cylinderMesh } from '../meshUtils';
 import { part, matte } from './Prop';
+import { wood as woodMaterial } from '@/world/materials/finishes';
 
 export interface KitchenTableOptions {
   /** Top size; `width` runs along local x. Default 0.85 x 0.7. */
@@ -38,7 +39,7 @@ export class KitchenTable extends THREE.Group implements Furniture {
     const depth = options.depth ?? 0.7;
     const height = options.height ?? 0.75;
     this.topHeight = height;
-    const wood = matte(options.wood ?? 0xc9a577, 0.55);
+    const wood = woodMaterial(options.wood ?? 0xc9a577, 0.55);
     const paint = matte(options.paint ?? 0xefe9dd, 0.6);
 
     part(this, width, TOP_THICKNESS, depth, wood, { y: height - TOP_THICKNESS / 2 });

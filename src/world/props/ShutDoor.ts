@@ -30,6 +30,8 @@ const FROSTED = new THREE.MeshStandardMaterial({ color: 0xeef2ec, roughness: 0.6
  * Wall-hung: origin on the floor at the middle of the leaf, +z facing into the room.
  */
 export class ShutDoor extends Prop {
+  /** Flat against its wall like the working doors: no blob on the floor. */
+  readonly contactShadow = false;
   constructor(options: ShutDoorOptions = {}) {
     super();
     this.name = 'ShutDoor';

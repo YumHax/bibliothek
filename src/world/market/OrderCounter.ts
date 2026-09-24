@@ -5,12 +5,13 @@ import { createCanvas, toTexture } from '@/covers/generated/canvasUtils';
 import type { Furniture } from '../Furniture';
 import { boxMesh, invisibleHitbox } from '../meshUtils';
 import { matte } from '../props/Prop';
+import { wood as woodMaterial } from '@/world/materials/finishes';
 
 const WIDTH = 1.6;
 const DEPTH = 0.7;
 const HEIGHT = 1.05;
 
-const OAK = matte(0x8b6a44, 0.55);
+const OAK = woodMaterial(0x8b6a44, 0.55);
 const DARK = matte(0x4a3524, 0.6);
 
 /**

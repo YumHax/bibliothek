@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import type { Furniture } from '../Furniture';
-import { part, matte } from './Prop';
+import { part } from './Prop';
+import { wood as woodMaterial } from '@/world/materials/finishes';
+import { fabric } from '@/world/materials/finishes';
 
 export interface BedOptions {
   /** Width of the frame across the room (a double is 1.6). */
@@ -30,11 +32,11 @@ const PILLOW_W = 0.62;
 const PILLOW_D = 0.42;
 const PILLOW_H = 0.13;
 
-const OAK = matte(0x9c7a52, 0.55);
-const SLATS = matte(0x7d6141, 0.7);
-const TICKING = matte(0xf2eee6, 0.9);
-const LINEN = matte(0xfaf7f0, 0.95);
-const FELT = matte(0x5a4a3e, 1);
+const OAK = woodMaterial(0x9c7a52, 0.55);
+const SLATS = woodMaterial(0x7d6141, 0.7);
+const TICKING = fabric({ color: 0xf2eee6, roughness: 0.9 });
+const LINEN = fabric({ color: 0xfaf7f0, roughness: 0.95 });
+const FELT = fabric({ color: 0x5a4a3e, roughness: 1 });
 
 /**
  * A double bed with its head against a wall: oak platform frame on short legs, a plain
@@ -51,8 +53,8 @@ export class Bed extends THREE.Group implements Furniture {
     this.name = 'Bed';
     const width = options.width ?? 1.6;
     const length = options.length ?? 2.0;
-    const duvet = matte(options.duvet ?? 0x6c7f93, 0.95);
-    const throwCloth = matte(options.throw ?? 0xc48a4a, 0.95);
+    const duvet = fabric({ color: options.duvet ?? 0x6c7f93, roughness: 0.95 });
+    const throwCloth = fabric({ color: options.throw ?? 0xc48a4a, roughness: 0.95 });
     const slippers = options.slippers ?? 'left';
 
     // Frame: a platform on four stubby legs, the headboard standing on the floor against the wall.

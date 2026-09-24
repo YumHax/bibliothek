@@ -88,8 +88,8 @@ export class Outdoors {
     paintSkyline(sheet, random);
     paintBackdrops(sheet, random);
     paintPark(sheet, random);
-    paintFrontBlock(sheet, random);
-    paintStreet(sheet, random);
+    const shops = paintFrontBlock(sheet, random);
+    paintStreet(sheet, random, shops);
     const { scene, lights, curfew } = sheet.finish();
     const sky = paintSkyDetail(random);
     this.life = new Life(random);

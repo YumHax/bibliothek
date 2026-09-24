@@ -41,9 +41,10 @@ Five zones: the collection room (`living`, persistent), the `hallway` behind its
 `bathroom` and `bedroom` (back wall) and the `kitchen` (left end). The flat's front door at the corridor's right end is a
 `TravelDoor`: the outside is not built, clicking it teleports (fade, `Travel.go`) to the `arcade` (x 40) or the `market`
 (x 80), two windowless, doorless halls with no neighbours, not persistent (rebuilt on return: the market's stock is fetched
-again, cached per day). Each carries a `travel: { label, arrival, yaw }` in `WORLD_PLAN`; their exit doors travel back. Neighbours are what is seen through a zone's doorways: the collection room keeps
-the hallway and the two rooms whose doors face its own active; every room keeps the hallway and the collection room; sibling
-rooms (coplanar doors) are not neighbours, so at most four zones are active at once.
+again, cached per day). Each carries a `travel: { label, arrival, yaw }` in `WORLD_PLAN`; their exit doors travel back. In the flat every room neighbours every other
+(`FLAT` in `worldPlan.ts`), so the five rooms are always active together: a zone coming or going changes the scene's light
+count, which recompiles every shader program (a freeze of seconds at a doorway). The `PortalCuller` still draws only what
+is seen, and idle rooms refresh their shadow maps twice a second, so an active room out of sight costs little.
 
 ## How two zones share a doorway
 
@@ -97,6 +98,6 @@ rooms (coplanar doors) are not neighbours, so at most four zones are active at o
 4. **Audio.** `CrtSpeaker` and `CatVoice` fade by distance already; a deactivated zone stops ticking them, which is what
    we want. Check that a playing TV in a deactivated zone is stopped (`Session.stopScreen`) on `onZoneChange`.
 5. **Spawn / return.** The player spawns at (0, 1.5) in the living room; a save of the current zone + position is not implemented.
-6. **Open doors and dormant zones.** A door left open onto a zone that is not a neighbour of the current one shows an
-   empty opening (the kitchen seen at a grazing angle from the bedroom, say). Adding the zone to `neighbours` costs its
-   lamp's shadow pass every frame.
+6. **Light count.** Lights change shader programs: any zone reachable on foot must be active whenever its neighbours
+   are (a new room of the flat joins `FLAT`), and a light is never added, removed or given `castShadow` at runtime:
+   dim it to 0 instead. `World.prime()` compiles every material with the flat's lights, at start-up.

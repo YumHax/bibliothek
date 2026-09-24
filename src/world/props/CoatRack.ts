@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import type { Furniture } from '../Furniture';
 import { cylinderMesh } from '../meshUtils';
 import { part, matte } from './Prop';
+import { wood as woodMaterial } from '@/world/materials/finishes';
 
 export interface CoatRackOptions {
   /** Two wire shelves of shoes under the coats. Default true. */
@@ -13,7 +14,7 @@ const BOARD_Y = 1.7;
 /** How far the coats and the shoe rack reach into the room. */
 const DEPTH = 0.25;
 
-const WALNUT = matte(0x5e412b, 0.5);
+const WALNUT = woodMaterial(0x5e412b, 0.5);
 const BRASS = new THREE.MeshStandardMaterial({ color: 0xc9a75b, metalness: 0.85, roughness: 0.3 });
 const STEEL = new THREE.MeshStandardMaterial({ color: 0xb9bcc0, metalness: 0.6, roughness: 0.35 });
 

@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import type { Furniture } from '../Furniture';
 import { part, matte } from './Prop';
+import { wood as woodMaterial } from '@/world/materials/finishes';
 
 export interface NightstandOptions {
   /** Cover colours of the books stacked on the open shelf, bottom first. */
@@ -18,8 +19,8 @@ const DRAWER_H = 0.14;
 /** How far the stand stays off the wall (the skirting board is behind it). */
 const OFF_WALL = 0.02;
 
-const OAK = matte(0x9c7a52, 0.55);
-const DARK_OAK = matte(0x7d6141, 0.65);
+const OAK = woodMaterial(0x9c7a52, 0.55);
+const DARK_OAK = woodMaterial(0x7d6141, 0.65);
 const BRASS = new THREE.MeshStandardMaterial({ color: 0xc9a75b, metalness: 0.85, roughness: 0.3 });
 const PAGES = matte(0xf0e9d8, 0.9);
 

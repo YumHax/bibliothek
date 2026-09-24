@@ -49,6 +49,11 @@ export class Overlay {
     container.appendChild(this.hint);
   }
 
+  /** Adds a row to the start card, under the controls (e.g. the graphics setting). */
+  addCardSection(element: HTMLElement): void {
+    this.card.querySelector('.overlay__card')?.appendChild(element);
+  }
+
   /** Hide the start card and show the crosshair (or the reverse). */
   setPlaying(playing: boolean): void {
     this.playing = playing;

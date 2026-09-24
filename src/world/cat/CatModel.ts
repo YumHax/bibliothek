@@ -2,6 +2,9 @@ import * as THREE from 'three';
 import { invisibleHitbox } from '../meshUtils';
 import { CoatTextures, COAT_PALETTES } from './coats';
 import type { CatBody, CatPose, CoatKind } from './types';
+import { QUALITY } from '@/graphics/quality';
+import { fabric } from '@/world/materials/finishes';
+import { CatFur } from './CatFur';
 
 /*
  * The procedural cat body: primitives on a small rig of pivots, posed by a table of joint angles
@@ -315,6 +318,8 @@ export class CatModel extends THREE.Group implements CatBody {
   private readonly noseMaterial: THREE.MeshStandardMaterial;
   private readonly eyeMaterial: THREE.MeshStandardMaterial;
   private readonly furMaterials: THREE.MeshStandardMaterial[];
+  /** Shell fur over the torso, head, thighs and tail (`QUALITY.fur`). */
+  private readonly fur = QUALITY.fur ? new CatFur() : null;
 
   private currentPose: CatPose = 'stand';
   private target: JointAngles = STAND;
@@ -348,11 +353,13 @@ export class CatModel extends THREE.Group implements CatBody {
     this.name = 'Cat';
     const palette = COAT_PALETTES[coat];
     this.textures = new CoatTextures(coat);
-    this.bodyMaterial = new THREE.MeshStandardMaterial({ map: this.textures.body, roughness: 0.95 });
-    this.tailMaterial = new THREE.MeshStandardMaterial({ map: this.textures.tail, roughness: 0.95 });
-    this.furMaterial = new THREE.MeshStandardMaterial({ color: palette.base, roughness: 0.95 });
-    this.muzzleMaterial = new THREE.MeshStandardMaterial({ color: palette.muzzle, roughness: 0.95 });
-    this.pawMaterial = new THREE.MeshStandardMaterial({ color: palette.paws, roughness: 0.95 });
+    // Fur has the sheen of cloth at a grazing angle (high quality: a physical material).
+    const sheenTint = 0xb8b0a4;
+    this.bodyMaterial = fabric({ map: this.textures.body, roughness: 0.95, sheenTint });
+    this.tailMaterial = fabric({ map: this.textures.tail, roughness: 0.95, sheenTint });
+    this.furMaterial = fabric({ color: palette.base, roughness: 0.95, sheenTint });
+    this.muzzleMaterial = fabric({ color: palette.muzzle, roughness: 0.95, sheenTint });
+    this.pawMaterial = fabric({ color: palette.paws, roughness: 0.95, sheenTint });
     this.earInnerMaterial = new THREE.MeshStandardMaterial({ color: palette.earInner, roughness: 0.8 });
     this.noseMaterial = new THREE.MeshStandardMaterial({ color: palette.nose, roughness: 0.4 });
     this.eyeMaterial = new THREE.MeshStandardMaterial({ map: this.textures.eye, roughness: 0.15, metalness: 0.1 });
@@ -381,6 +388,8 @@ export class CatModel extends THREE.Group implements CatBody {
     const belly = capsuleZ(BELLY.r, BELLY.len, this.bodyMaterial);
     belly.position.z = BELLY.z;
     this.torso.add(chest, belly);
+    this.fur?.grow(chest);
+    this.fur?.grow(belly);
     this.root.add(this.torso);
   }
 
@@ -391,6 +400,7 @@ export class CatModel extends THREE.Group implements CatBody {
     neck.position.set(0, HEAD_OFFSET.y * 0.45, HEAD_OFFSET.z * 0.45);
     neck.rotation.x = -Math.atan2(HEAD_OFFSET.z, HEAD_OFFSET.y);
     this.neckPivot.add(neck);
+    this.fur?.grow(neck);
 
     this.head.position.set(HEAD_OFFSET.x, HEAD_OFFSET.y, HEAD_OFFSET.z);
     this.head.rotation.order = 'YXZ';
@@ -398,6 +408,7 @@ export class CatModel extends THREE.Group implements CatBody {
 
     const skull = shadowed(new THREE.Mesh(new THREE.SphereGeometry(SKULL_R, 20, 14), this.furMaterial));
     skull.scale.set(1, 0.92, 1.02);
+    this.fur?.grow(skull);
     const muzzle = shadowed(new THREE.Mesh(new THREE.SphereGeometry(0.022, 14, 10), this.muzzleMaterial));
     muzzle.position.set(0, -0.012, 0.036);
     muzzle.scale.set(1.25, 0.8, 1);
@@ -460,6 +471,7 @@ export class CatModel extends THREE.Group implements CatBody {
       hip.position.set(x, y, z);
       const thigh = shadowed(new THREE.Mesh(new THREE.CapsuleGeometry(0.018, UPPER_LEN - 0.02, 4, 12), this.furMaterial));
       thigh.position.y = -UPPER_LEN / 2;
+      this.fur?.grow(thigh);
       const knee = new THREE.Group();
       knee.position.y = -UPPER_LEN;
       const shank = shadowed(new THREE.Mesh(new THREE.CapsuleGeometry(0.014, LOWER_LEN - 0.02, 4, 12), this.furMaterial));
@@ -483,6 +495,7 @@ export class CatModel extends THREE.Group implements CatBody {
       const radius = 0.013 - i * 0.0009;
       const segment = capsuleZ(radius, TAIL_SEG_LEN - radius, this.tailMaterial, true);
       segment.position.z = -TAIL_SEG_LEN / 2;
+      this.fur?.grow(segment);
       pivot.add(segment);
       parent.add(pivot);
       this.tail.push(pivot);
@@ -528,10 +541,12 @@ export class CatModel extends THREE.Group implements CatBody {
     this.pawMaterial.color.set(palette.paws);
     this.earInnerMaterial.color.set(palette.earInner);
     this.noseMaterial.color.set(palette.nose);
+    this.fur?.sync();
   }
 
   setHovered(hovered: boolean): void {
     for (const material of this.furMaterials) material.emissive.setHex(hovered ? HOVER_EMISSIVE : 0x000000);
+    this.fur?.sync();
   }
 
   update(dt: number): void {

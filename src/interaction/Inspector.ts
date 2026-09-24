@@ -51,6 +51,11 @@ export class Inspector implements Updatable {
     return this.box;
   }
 
+  /** Distance from the eye to the box while it is in (or on its way to) the hand, else null: what the view focuses on. */
+  get focusDistance(): number | null {
+    return this.phase === 'toHand' || this.phase === 'inHand' ? this.handOffset.length() : null;
+  }
+
   /** True while the carried box is open (or opening). */
   get isOpen(): boolean {
     return this.box?.isOpen ?? false;

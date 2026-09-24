@@ -7,6 +7,7 @@ import { LidMotion } from '../box/LidMotion';
 import type { Doorway } from '../Room';
 import { cylinderMesh, invisibleHitbox } from '../meshUtils';
 import { Prop, part, matte } from './Prop';
+import { scuffed, wood as woodMaterial } from '@/world/materials/finishes';
 
 export interface DoorOptions {
   /** Colour of the painted leaf. Default a deep slate green. */
@@ -37,8 +38,8 @@ const BLOCKER_SWAP = 0.5;
 const HANDLE_Y = 1.03;
 // The gap between two zones' wall planes (see `worldPlan.ts`) must stay within `FRAME_DEPTH` so the lining covers it.
 
-const PAINT = matte(0xf6f3ee, 0.7);
-const OAK = matte(0x8b6a44, 0.55);
+const PAINT = scuffed(matte(0xf6f3ee, 0.7));
+const OAK = woodMaterial(0x8b6a44, 0.55);
 const BRASS = new THREE.MeshStandardMaterial({ color: 0xc9a75b, metalness: 0.85, roughness: 0.3, emissive: 0xc9a75b, emissiveIntensity: 0 });
 
 /**
@@ -53,6 +54,8 @@ const BRASS = new THREE.MeshStandardMaterial({ color: 0xc9a75b, metalness: 0.85,
  * +z into the room that hangs it.
  */
 export class Door extends Prop implements Updatable, Interactable {
+  /** The leaf swings: a blob laid under it once would stay behind. */
+  readonly contactShadow = false;
   readonly hitboxes: THREE.Object3D[];
   /** The leaf: the crosshair ray stops at it and it counts as a wall for sound while shut (open, it lies against the wall). */
   readonly occluders: THREE.Object3D[] = [];

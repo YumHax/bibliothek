@@ -4,6 +4,7 @@ import type { Collisions } from '@/core/Collider';
 import type { Furniture } from '@/world/Furniture';
 import { createCanvas, toTexture } from '@/covers/generated/canvasUtils';
 import type { CatToyLike } from './types';
+import { blobShadow } from '../zone/ContactShadows';
 
 /**
  * A small two-tone ball the cat bats around: it rolls with friction, bounces off the room walls
@@ -36,6 +37,8 @@ const scratchAxis = new THREE.Vector3();
 const scratchSpin = new THREE.Quaternion();
 
 export class CatToy extends THREE.Group implements Furniture, Updatable, CatToyLike {
+  /** It rolls: it carries its own blob instead. */
+  readonly contactShadow = false;
   readonly radius: number;
 
   private readonly bounds: THREE.Box2;
@@ -55,6 +58,12 @@ export class CatToy extends THREE.Group implements Furniture, Updatable, CatToyL
     this.ball = new THREE.Mesh(new THREE.SphereGeometry(this.radius, 28, 20), skin);
     this.ball.castShadow = true;
     this.ball.receiveShadow = true;
+    // A small contact shadow under the ball (the group sits at the ball's centre; the ball spins, not the group).
+    const blob = blobShadow(this.radius * 2.6, this.radius * 2.6, 0.8);
+    if (blob) {
+      blob.position.y -= this.radius;
+      this.add(blob);
+    }
     // A little bell peeking through the top pole.
     const bell = new THREE.Mesh(
       new THREE.SphereGeometry(this.radius * 0.28, 12, 8),

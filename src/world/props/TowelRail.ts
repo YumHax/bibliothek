@@ -1,6 +1,7 @@
 import { cylinderMesh } from '../meshUtils';
 import { Prop, part, matte } from './Prop';
 import { CHROME } from './bathroomMaterials';
+import { fabric } from '@/world/materials/finishes';
 
 export interface TowelRailOptions {
   /** Length of the rail. Default 0.36. */
@@ -44,7 +45,7 @@ export class TowelRail extends Prop {
     colors.forEach((colour, i) => {
       const x = -width / 2 + 0.02 + slot * (i + 0.5);
       const w = slot - 0.03;
-      const cloth = matte(colour, 0.95);
+      const cloth = fabric({ color: colour, roughness: 0.95 });
       const fold = cylinderMesh(0.024, w, cloth, { x, y: 0.004, z: REACH }, { segments: 12 });
       fold.rotation.z = Math.PI / 2;
       this.add(fold);

@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import type { Furniture } from '../Furniture';
 import { cylinderMesh } from '../meshUtils';
 import { part, matte } from './Prop';
+import { wood as woodMaterial } from '@/world/materials/finishes';
 
 export interface ChairOptions {
   /** Wood colour. Default the pale beech of `KitchenTable`. */
@@ -26,7 +27,7 @@ export class Chair extends THREE.Group implements Furniture {
   constructor(options: ChairOptions = {}) {
     super();
     this.name = 'Chair';
-    const wood = matte(options.wood ?? 0xc9a577, 0.55);
+    const wood = woodMaterial(options.wood ?? 0xc9a577, 0.55);
     const half = SEAT / 2;
 
     part(this, SEAT, 0.035, SEAT, wood, { y: SEAT_HEIGHT - 0.0175 });

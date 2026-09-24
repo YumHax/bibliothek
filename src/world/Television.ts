@@ -9,6 +9,9 @@ import type { Furniture } from './Furniture';
 import { boxMesh } from './meshUtils';
 import type { SoundOcclusion } from './acoustics/SoundOcclusion';
 import { VideoSurface, type ScreenState, type ScreenStateListener, type VideoScreen } from './screen';
+import { CrtGlass } from './screen/CrtGlass';
+import { QUALITY } from '@/graphics/quality';
+import { wood as woodMaterial } from '@/world/materials/finishes';
 
 /** Height of the built-in cabinet the CRT sits on when nothing else carries it (see `mountOn`). */
 const OWN_CABINET_HEIGHT = 0.55;
@@ -16,6 +19,14 @@ const OWN_CABINET_HEIGHT = 0.55;
 const GLOW_COLOR = 0xa9c7ff;
 const GLOW_PLAYING = 3;
 const GLOW_MESSAGE = 0.7;
+/** The same glow as a soft panel the size of the picture (`QUALITY.areaLights`), per unit of point-light glow. */
+const PANEL_PER_GLOW = 1.4;
+/**
+ * The picture's light is not one colour: without access to the video's pixels (a cross-origin
+ * iframe), the glow drifts between the hues a longplay is made of, a new one every few seconds.
+ */
+const GLOW_HUES = [0xa9c7ff, 0xd8e4ff, 0x9fd1b8, 0xffd9b0, 0xb8a9ff, 0xcfe8ff];
+const HUE_SECONDS = 3.2;
 /** A CRT's little speaker never gets as loud as the projector's sound system. */
 const SPEAKER_GAIN = 0.8;
 
@@ -42,6 +53,13 @@ export class Television extends THREE.Group implements Furniture, Updatable, Int
   private readonly cabinet: THREE.Mesh;
   private readonly surface: VideoSurface;
   private readonly glow: THREE.PointLight;
+  /** The picture as a soft area light (high quality); the point glow then only stands in for its falloff. */
+  private readonly panel: THREE.RectAreaLight | null = null;
+  private readonly glass: CrtGlass;
+  private readonly hueFrom = new THREE.Color(GLOW_HUES[0]);
+  private readonly hueTo = new THREE.Color(GLOW_HUES[1]);
+  private hueTimer = 0;
+  private hueIndex = 1;
   private readonly speaker = new CrtSpeaker();
   private glowTime = 0;
   private readonly bodyMaterial: THREE.MeshStandardMaterial;
@@ -50,7 +68,7 @@ export class Television extends THREE.Group implements Furniture, Updatable, Int
     super();
     this.name = 'Television';
 
-    this.cabinet = boxMesh(0.9, OWN_CABINET_HEIGHT, 0.45, new THREE.MeshStandardMaterial({ color: 0x3b2a1e, roughness: 0.7 }), {
+    this.cabinet = boxMesh(0.9, OWN_CABINET_HEIGHT, 0.45, woodMaterial(0x3b2a1e, 0.7), {
       y: OWN_CABINET_HEIGHT / 2,
     });
 
@@ -62,7 +80,10 @@ export class Television extends THREE.Group implements Furniture, Updatable, Int
       volume: { referenceDistance: 1.5, rolloff: 1.5, maxDistance: 12, rearGain: 0.5 }, // the armchair sits just inside the reference: full volume when seated
       gain: SPEAKER_GAIN,
     });
-    this.surface.onStateChange((state) => this.speaker.setOn(state === 'playing'));
+    this.surface.onStateChange((state) => {
+      this.speaker.setOn(state === 'playing');
+      this.glass.setPlaying(state === 'playing');
+    });
 
     // CRT body, slightly deeper than the screen. Local y = 0 is the underside of the set.
     const bodyW = this.screenWidth + 0.14;
@@ -72,15 +93,23 @@ export class Television extends THREE.Group implements Furniture, Updatable, Int
     const body = boxMesh(bodyW, bodyH, bodyD, this.bodyMaterial, { y: bodyH / 2, z: -0.02 });
     this.hitboxes = [body];
 
-    // Picture on the front face of the body, facing +z.
+    // Picture on the front face of the body, facing +z, the tube's glass just in front of it.
     this.surface.position.set(0, body.position.y, body.position.z + bodyD / 2 + 0.002);
+    this.glass = new CrtGlass(this.screenWidth, this.surface.height);
+    this.glass.position.copy(this.surface.position).add(new THREE.Vector3(0, 0, 0.0015));
 
     // No shadows: a shadow-casting point light costs six passes and the glow is meant to be soft.
     this.glow = new THREE.PointLight(GLOW_COLOR, 0, 3.5, 2);
     this.glow.position.copy(this.surface.position).add(new THREE.Vector3(0, 0, 0.35));
 
     this.crt.position.y = OWN_CABINET_HEIGHT;
-    this.crt.add(body, this.surface, this.glow);
+    this.crt.add(body, this.surface, this.glass, this.glow);
+    if (QUALITY.areaLights) {
+      this.panel = new THREE.RectAreaLight(GLOW_COLOR, 0, this.screenWidth, this.surface.height);
+      this.panel.position.copy(this.surface.position).add(new THREE.Vector3(0, 0, 0.01));
+      this.panel.rotation.y = Math.PI; // lights look down their -z: turned to face the room
+      this.crt.add(this.panel);
+    }
     this.add(this.cabinet, this.crt);
   }
 
@@ -174,5 +203,23 @@ export class Television extends THREE.Group implements Furniture, Updatable, Int
     }
     // Ease so switching the set on or off does not pop.
     this.glow.intensity += (target - this.glow.intensity) * Math.min(1, dt * 6);
+
+    // The hue drifts from one to the next while playing; a message glows the plain bluish white.
+    if (this.state === 'playing') {
+      this.hueTimer += dt;
+      if (this.hueTimer >= HUE_SECONDS) {
+        this.hueTimer = 0;
+        this.hueFrom.copy(this.hueTo);
+        this.hueIndex = (this.hueIndex + 1 + Math.floor(Math.random() * (GLOW_HUES.length - 1))) % GLOW_HUES.length;
+        this.hueTo.set(GLOW_HUES[this.hueIndex]!);
+      }
+      this.glow.color.lerpColors(this.hueFrom, this.hueTo, THREE.MathUtils.smoothstep(this.hueTimer / HUE_SECONDS, 0, 0.6));
+    } else {
+      this.glow.color.set(GLOW_COLOR);
+    }
+    if (this.panel) {
+      this.panel.color.copy(this.glow.color);
+      this.panel.intensity = this.glow.intensity * PANEL_PER_GLOW;
+    }
   }
 }

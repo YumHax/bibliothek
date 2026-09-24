@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { Prop } from './Prop';
+import { fabric as fabricMaterial } from '@/world/materials/finishes';
 
 export interface CushionOptions {
   width?: number;
@@ -32,7 +33,7 @@ export class Cushion extends Prop {
     this.options = { width: 0.4, depth: 0.4, thickness: 0.1, color: 0xc9a552, tilt: 0, ...options };
     const { width, depth, thickness, color, tilt } = this.options;
 
-    const fabric = new THREE.MeshStandardMaterial({ color, roughness: 1 });
+    const fabric = fabricMaterial({ color, roughness: 1 });
     const mesh = new THREE.Mesh(cushionGeometry(width, thickness, depth), fabric);
     mesh.position.y = thickness / 2;
     mesh.castShadow = true;

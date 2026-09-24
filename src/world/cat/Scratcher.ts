@@ -4,6 +4,7 @@ import type { Furniture } from '@/world/Furniture';
 import { boxMesh, cylinderMesh } from '@/world/meshUtils';
 import { createCanvas, toTexture } from '@/covers/generated/canvasUtils';
 import type { ScratcherLike } from './types';
+import { wood as woodMaterial } from '@/world/materials/finishes';
 
 /**
  * A sisal scratching post: square wooden base, rope-wrapped post (a canvas texture of stacked
@@ -51,7 +52,7 @@ export class Scratcher extends THREE.Group implements Furniture, Updatable, Scra
     this.name = 'Scratcher';
     this.options = { wood: 0x8a6a48, carpet: 0x6f6a63, pompom: 0xc94f6a, ...options };
 
-    const wood = new THREE.MeshStandardMaterial({ color: this.options.wood, roughness: 0.65 });
+    const wood = woodMaterial(this.options.wood, 0.65);
     this.add(boxMesh(BASE.width, BASE.height, BASE.width, wood, { y: BASE.height / 2 }));
 
     this.upper.position.y = BASE.height;

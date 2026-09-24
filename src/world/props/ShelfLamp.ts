@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { QUALITY } from '@/graphics/quality';
 import type { Updatable } from '@/core/Engine';
 import { IDLE_SHADOW_INTERVAL, type OccupancyAware } from '../Furniture';
 import { cylinderMesh, invisibleHitbox } from '../meshUtils';
@@ -74,7 +75,7 @@ export class ShelfLamp extends SwitchableLamp implements Updatable, OccupancyAwa
     this.light.position.copy(pivot).addScaledVector(direction, CAN_LENGTH);
     this.light.target.position.copy(aim);
     this.light.castShadow = true;
-    this.light.shadow.mapSize.set(1024, 1024);
+    this.light.shadow.mapSize.setScalar(QUALITY.shadowMapSize);
     this.light.shadow.camera.near = 0.2;
     this.light.shadow.camera.far = 6;
     this.light.shadow.bias = -0.0002;

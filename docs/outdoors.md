@@ -14,10 +14,24 @@ what is seen through the windows.
   colour, haze and glass at once; `lit(path, kind, strength, curfew)` / `glow` add night lights. `finish()` packs the scene
   texture (premultiplied day colours), the lights DataTexture (R warm, G cool, B glass, A depth via `encodeDepth`) and the
   curfew R8 texture (nearest, no mips: one byte per light = the wakefulness below which it goes out, 0 = burns all night).
-- Painters, far to near: `Skyline` (towers), `Facades` (buildings, shops, windows, roofs; backdrops behind the park and over the
-  street), `Park` (lawn, paths, pond, bandstand, hedge), `Street` (pavement, road, markings, lamps, parked cars, trees), `Tree`,
-  `Car` (one box-model painter for parked cars and the sprite atlas: `CarBrush` = projection + fills), `SkyDetail` (stars +
-  clouds equirect), `shader.ts` (GLSL), `paint.ts` (colour helpers).
+- Painters, far to near: `Skyline` (towers), `Facades` (buildings: a random `Architecture` per building (brick, render or
+  dressed stone; window surrounds, shutters, flower boxes, balconies, quoins, roofs with chimneys); backdrops behind the park
+  and over the street), `Park` (lawn, paths, pond, bandstand, hedge, and the trees, benches, lamps, picnics placed on it),
+  `Street` (pavement, road, markings, wear, and the things standing on the pavements, sorted far to near), `Tree` (forms:
+  round, oval, poplar, conifer, willow), `Car` (one box-model painter for parked cars and the sprite atlas: `CarBrush` =
+  projection + fills), `SkyDetail` (equirect masks: R stars, G clouds, B cloud-underside shade), `shader.ts` (GLSL),
+  `paint.ts` (colour helpers).
+- Helpers: `FacadeFrame` (a facade's drawing frame in metres along / up / out from the wall; `strip()` follows the
+  panorama curve of long horizontals), `Shopfront` (shop types, fascia lettering, displays, awnings, bracket signs;
+  `RETRO_GAMES` sits across the street at `RETRO_AZIMUTH`), `StreetFurniture` (lamps, benches, bins, bikes, bus shelter,
+  advertising column, traffic lights, terraces...), `ParkFeatures` (flower beds, playground, picnics, fountain, ducks, boat),
+  `Solid` (upright boxes, posts and ground shadows at a world point, painting only the faces turned to the eye).
+- `paintFrontBlock` returns the `Storefront`s it painted; `paintStreet` stands their displays (terraces, crates, buckets,
+  boards) on the pavement, since anything standing on the pavement must be painted after it. It keeps trees away from
+  terraces and the retro games shop.
+- Walls go down to 1.5 m below the street so no sky shows under a facade; the pavement covers the overlap.
+- `Sheet.sign()` draws neon or lightbox lettering straight onto the light canvas. It is anti-aliased, so it carries no
+  curfew and burns all night.
 
 ## The near wall (not painted)
 

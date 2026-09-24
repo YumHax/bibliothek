@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import type { GameBox } from './GameBox';
 import { boxMesh } from './meshUtils';
+import { QUALITY } from '@/graphics/quality';
+import { wood as woodMaterial } from '@/world/materials/finishes';
 
 export interface ShelfOptions {
   width: number;
@@ -15,7 +17,15 @@ export interface ShelfOptions {
   gap?: number;
 }
 
-const WOOD = new THREE.MeshStandardMaterial({ color: 0x6b4a2b, roughness: 0.6 });
+const WOOD = woodMaterial(0x6b4a2b, 0.6);
+/** Mid-span sag of a loaded board 0.8 m long (metres); it grows with the square of the span, up to `MAX_SAG`. */
+const SAG_AT_80CM = 0.0022;
+const MAX_SAG = 0.005;
+/** How untidily the boxes stand: yaw and roll (radians), and how far one may be pushed back or pulled out. */
+const BOX_YAW = THREE.MathUtils.degToRad(1.4);
+const BOX_ROLL = THREE.MathUtils.degToRad(0.7);
+const BOX_PUSH = 0.014;
+const BOX_PULL = 0.008;
 
 /**
  * A bookcase whose rows can each have their own height. Boxes stand upright with the cover
@@ -27,6 +37,8 @@ export class Shelf extends THREE.Group {
   /** Top face of each board, top row first. */
   private readonly boardTops: number[] = [];
   private readonly boards: THREE.Mesh[] = [];
+  /** Mid-span sag of each row's board, top row first (0 without `QUALITY.detailedMaterials`). */
+  private readonly rowSags: number[] = [];
 
   constructor(options: ShelfOptions) {
     super();
@@ -61,8 +73,12 @@ export class Shelf extends THREE.Group {
     for (const box of boxes) {
       const { width: bw, height: bh, depth: bd } = box.dimensions;
       const carried = box.parent !== null && !(box.parent instanceof Shelf);
-      box.restPosition.set(cursorX + bw / 2, top + bh / 2, -depth / 2 + bd / 2 + 0.03);
-      box.restQuaternion.identity();
+      // Real shelves are not tidy: each box a touch askew, some pushed back or pulled out, all
+      // following the board's sag. Seeded by the game, so a box always stands the same way.
+      const x = cursorX + bw / 2;
+      const [yaw, roll, push] = untidiness(box.game.id);
+      box.restPosition.set(x, top + bh / 2 - this.sagAt(row, x), -depth / 2 + bd / 2 + 0.03 + push);
+      box.restQuaternion.setFromEuler(new THREE.Euler(0, yaw, roll));
       if (!carried) {
         this.add(box);
         box.position.copy(box.restPosition);
@@ -84,6 +100,14 @@ export class Shelf extends THREE.Group {
     this.boards.length = 0;
   }
 
+  /** How far row `row`'s board has sagged at local `x`. */
+  private sagAt(row: number, x: number): number {
+    const sag = this.rowSags[row] ?? 0;
+    const half = this.options.width / 2 - this.options.boardThickness;
+    const t = THREE.MathUtils.clamp(x / half, -1, 1);
+    return sag * (1 - t * t);
+  }
+
   private build(): void {
     const { width, depth, rowHeights, boardThickness } = this.options;
     const h = this.height;
@@ -94,17 +118,56 @@ export class Shelf extends THREE.Group {
       boxMesh(width, h, boardThickness / 2, WOOD, { y: h / 2, z: -depth / 2 + boardThickness / 4 }),
     );
 
-    // Boards from the floor up; the top board closes the bookcase.
+    // Boards from the floor up; the top board closes the bookcase. The bottom one rests on the
+    // plinth; the others bow a little under the boxes (the top one carries nothing).
     let y = boardThickness / 2;
     const tops: number[] = [];
+    const sags: number[] = [];
+    const span = width - 2 * boardThickness;
+    const sag = QUALITY.detailedMaterials ? Math.min(MAX_SAG, SAG_AT_80CM * (span / 0.8) ** 2) : 0;
     for (let i = rowHeights.length - 1; i >= -1; i--) {
-      this.boards.push(boxMesh(width - 2 * boardThickness, boardThickness, depth, WOOD, { y }));
+      const bottom = i === rowHeights.length - 1;
+      const loaded = i >= 0 && !bottom ? sag : 0;
+      const board = boxMesh(span, boardThickness, depth, WOOD, { y });
+      if (loaded > 0) bow(board.geometry, span, loaded);
+      this.boards.push(board);
       if (i >= 0) {
         tops.push(y + boardThickness / 2);
+        sags.push(loaded);
         y += boardThickness + rowHeights[i];
       }
     }
     this.boardTops.push(...tops.reverse()); // top row first
+    this.rowSags.push(...sags.reverse());
     this.add(...this.boards);
   }
+}
+
+/** Bends a board's geometry down in a parabola along x: `sag` at mid-span, none at the ends. */
+function bow(geometry: THREE.BufferGeometry, span: number, sag: number): void {
+  const position = geometry.getAttribute('position');
+  for (let i = 0; i < position.count; i++) {
+    const t = THREE.MathUtils.clamp((2 * position.getX(i)) / span, -1, 1);
+    position.setY(i, position.getY(i) - sag * (1 - t * t));
+  }
+  position.needsUpdate = true;
+  geometry.computeBoundingBox();
+  geometry.computeBoundingSphere();
+}
+
+/** Yaw, roll and depth offset of a box on the shelf, from its game id (the same every time). */
+function untidiness(id: string): [yaw: number, roll: number, push: number] {
+  let hash = 2166136261;
+  for (let i = 0; i < id.length; i++) hash = Math.imul(hash ^ id.charCodeAt(i), 16777619);
+  const next = (): number => {
+    hash = Math.imul(hash ^ (hash >>> 15), 2246822507);
+    hash = Math.imul(hash ^ (hash >>> 13), 3266489909);
+    return ((hash ^= hash >>> 16) >>> 0) / 4294967296;
+  };
+  if (!QUALITY.detailedMaterials) return [0, 0, 0];
+  const yaw = (next() * 2 - 1) * BOX_YAW;
+  const roll = next() < 0.3 ? (next() * 2 - 1) * BOX_ROLL : 0;
+  const r = next();
+  const push = r < 0.18 ? -next() * BOX_PUSH : r > 0.9 ? next() * BOX_PULL : 0;
+  return [yaw, roll, push];
 }

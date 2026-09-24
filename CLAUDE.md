@@ -38,6 +38,7 @@ npm run build       # typecheck + production bundle
 | Anything else: folder map, layers, key patterns, data sources | `docs/architecture.md` |
 | The view outside the windows | `docs/outdoors.md` |
 | The cat | `docs/cat.md` |
+| Post-processing, quality levels, looks, material helpers (wood, fabric, plaster), reflections | `docs/graphics.md` |
 
 Layer order, outermost first: `worldPlan.ts` + the plan files (data) -> `layout.ts` + `src/world/<kind>/furnish<Kind>.ts`
 (zone builders, the only wiring) -> zones (`src/world/zone/`: a room loads and unloads as one; positions are zone-local) ->
@@ -56,5 +57,6 @@ Content work stays in the first two layers; the engine is never touched for cont
 - Frame cost is per pixel (every fragment samples every shadow map) and Firefox does not throttle `requestAnimationFrame`
   on GPU load: the `Engine` gates rendering on a GPU fence and caps the pixel ratio. Measure with `?stats` + `bibliothek.bisect()`.
 - `outdoors/shader.ts` is a template literal: a backtick in a GLSL comment ends it (typecheck fails with `',' expected`).
+- The canvas's alpha is the video cut-out: every post pass and additive effect must keep it (see `docs/graphics.md`).
 - Lights ignore wall planes: a room's lamp shines into the next room unless the wall is in `RoomOptions.opaqueWalls`; a
   `HemisphereLight` lights the whole scene, so only the occupied `Room` runs its ambient (`setOccupied`, wired in `main.ts`).

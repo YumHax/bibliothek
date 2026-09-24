@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { cylinderMesh } from '../meshUtils';
 import { Prop, part, matte } from './Prop';
+import { wood as woodMaterial } from '@/world/materials/finishes';
 
 /*
  * The small things that live on a kitchen worktop. Each is a `Prop` (never collides) standing on
@@ -100,7 +101,7 @@ export class ChoppingBoard extends Prop {
   constructor() {
     super();
     this.name = 'ChoppingBoard';
-    const wood = matte(0xb98a58, 0.6);
+    const wood = woodMaterial(0xb98a58, 0.6);
     const board = part(this, 0.38, 0.02, 0.26, wood, { y: 0.01 });
     board.rotation.y = 0.12;
     this.add(cylinderMesh(0.012, 0.022, matte(0x2a2a2a, 0.8), { x: 0.165, y: 0.01, z: -0.1 }, { segments: 10 })); // the hanging hole's grommet

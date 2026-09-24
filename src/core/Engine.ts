@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { QUALITY } from '@/graphics/quality';
 
 /** Anything that needs a per-frame tick registers itself with the engine. */
 export interface Updatable {
@@ -9,6 +10,17 @@ export function isUpdatable(obj: object): obj is Updatable {
   return typeof (obj as Partial<Updatable>).update === 'function';
 }
 
+/**
+ * Draws the frame in place of a plain `renderer.render` (the HDR post-processing chain,
+ * `graphics/PostFx`); `setSize` follows the canvas's drawing-buffer size.
+ */
+export interface FramePipeline {
+  render(scene: THREE.Scene, camera: THREE.Camera): void;
+  /** Compiles every material of `scene` for the target the scene is rendered into (not the canvas). */
+  compile(scene: THREE.Scene, camera: THREE.Camera): void;
+  setSize(): void;
+}
+
 /** Extra renderer drawn after the WebGL frame with the same camera (e.g. a CSS3D layer). */
 export interface LayerRenderer {
   render(camera: THREE.Camera): void;
@@ -16,10 +28,11 @@ export interface LayerRenderer {
 }
 
 /**
- * Retina screens are rendered at 1.5x, not 2x: the frame's cost is per pixel (every fragment
+ * Retina screens are rendered at 1.5x at most, not 2x: the frame's cost is per pixel (every fragment
  * samples every shadow map), and 2x is 78% more pixels than 1.5x for a difference the eye barely sees.
+ * The graphics quality lowers it further (`QUALITY.maxPixelRatio`).
  */
-const MAX_PIXEL_RATIO = 1.5;
+const MAX_PIXEL_RATIO = QUALITY.maxPixelRatio;
 /**
  * A fence still pending after this long is not a slow frame, it is a browser that does not report
  * sync status (a hidden tab, an odd driver): the frame is rendered anyway, and after a few of those
@@ -44,6 +57,7 @@ export class Engine {
   private readonly clock = new THREE.Clock();
   private readonly updatables = new Set<Updatable>();
   private readonly layers: LayerRenderer[] = [];
+  private pipeline: FramePipeline | null = null;
   /** Signals when the GPU has finished the last frame rendered; null when nothing is pending. */
   private fence: WebGLSync | null = null;
   private fenceSince = 0;
@@ -51,8 +65,9 @@ export class Engine {
   private pacing = true;
 
   constructor(container: HTMLElement) {
-    // alpha:true lets cut-out materials expose DOM layers sitting behind the canvas.
-    this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: 'high-performance' });
+    // alpha:true lets cut-out materials expose DOM layers sitting behind the canvas. With the
+    // post-processing chain the frame is antialiased in its own multisampled target instead.
+    this.renderer = new THREE.WebGLRenderer({ antialias: !QUALITY.postFx, alpha: true, powerPreference: 'high-performance' });
     this.renderer.setClearColor(0x0b0b10, 1);
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, MAX_PIXEL_RATIO));
     this.renderer.setSize(window.innerWidth, window.innerHeight);
@@ -82,6 +97,27 @@ export class Engine {
     this.layers.push(layer);
   }
 
+  /** Renders every frame through `pipeline` instead of straight to the canvas. */
+  setPipeline(pipeline: FramePipeline): void {
+    this.pipeline = pipeline;
+    pipeline.setSize();
+  }
+
+  /** Renders one frame now, through the pipeline when there is one (priming the shaders the loop will use). */
+  renderFrame(): void {
+    if (this.pipeline) this.pipeline.render(this.scene, this.camera);
+    else this.renderer.render(this.scene, this.camera);
+  }
+
+  /**
+   * Compiles the shader program of every material in the scene, in view or not, hidden or not,
+   * with the scene's current lights: the variants the loop will ask for (off-screen ones with a pipeline).
+   */
+  compileScene(): void {
+    if (this.pipeline) this.pipeline.compile(this.scene, this.camera);
+    else this.renderer.compile(this.scene, this.camera);
+  }
+
   start(): void {
     this.clock.start();
     this.renderer.setAnimationLoop(this.tick);
@@ -96,7 +132,7 @@ export class Engine {
     const dt = Math.min(this.clock.getDelta(), 0.1);
     for (const u of this.updatables) u.update(dt);
     if (!this.gpuIdle()) return;
-    this.renderer.render(this.scene, this.camera);
+    this.renderFrame();
     for (const layer of this.layers) layer.render(this.camera);
     if (!this.pacing) return;
     const gl = this.gl;
@@ -129,6 +165,7 @@ export class Engine {
     this.camera.aspect = window.innerWidth / window.innerHeight;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(window.innerWidth, window.innerHeight);
+    this.pipeline?.setSize();
     for (const layer of this.layers) layer.setSize(window.innerWidth, window.innerHeight);
   };
 }

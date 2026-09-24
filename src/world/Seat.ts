@@ -3,6 +3,8 @@ import type { Interactable } from '@/interaction/Interactable';
 import type { PlayerState, SessionActions } from '@/game/SessionActions';
 import type { Furniture } from './Furniture';
 import { boxMesh, invisibleHitbox } from './meshUtils';
+import { wood as woodMaterial } from '@/world/materials/finishes';
+import { fabric as fabricMaterial } from '@/world/materials/finishes';
 
 /** Eye height above the floor when sitting (seat cushion at ~0.45 m plus torso). */
 const SEATED_EYE_HEIGHT = 1.2;
@@ -14,7 +16,7 @@ const SEATED_EYE_HEIGHT = 1.2;
 export class Seat extends THREE.Group implements Furniture, Interactable {
   readonly hitboxes: THREE.Object3D[];
 
-  private readonly fabric = new THREE.MeshStandardMaterial({ color: 0x8a7a68, roughness: 0.95 });
+  private readonly fabric = fabricMaterial({ color: 0x8a7a68, roughness: 0.95 });
   private readonly forward = new THREE.Vector3();
   private readonly seatTop: number;
   private readonly backCentreY: number;
@@ -34,7 +36,7 @@ export class Seat extends THREE.Group implements Furniture, Interactable {
     const armW = 0.1;
     const armH = seatTop + 0.25;
     const innerW = width - 2 * armW;
-    const wood = new THREE.MeshStandardMaterial({ color: 0x4a3524, roughness: 0.6 });
+    const wood = woodMaterial(0x4a3524, 0.6);
     const piping = new THREE.MeshStandardMaterial({ color: 0x6e5f4f, roughness: 0.9 });
 
     const base = boxMesh(innerW, seatTop - 0.12, depth, this.fabric, { y: (seatTop - 0.12) / 2 + 0.06 });

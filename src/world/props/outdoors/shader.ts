@@ -189,7 +189,9 @@ export const fragmentShader = /* glsl */ `
     vec3 skyDetail = texture2D(sky, equirect(d)).rgb;
     vec3 skyColor = horizonGlow(skyGradient(d), d);
     skyColor = mix(skyColor, vec3(1.0), skyDetail.r * starAlpha);
-    skyColor = mix(skyColor, cloudTint, skyDetail.g * cloudAlpha);
+    // Clouds, their undersides in a bluish shade.
+    vec3 cloudColor = cloudTint * mix(vec3(1.0), vec3(0.66, 0.7, 0.8), skyDetail.b);
+    skyColor = mix(skyColor, cloudColor, min(skyDetail.g, 1.0) * cloudAlpha);
     skyColor = drawMoon(drawSun(skyColor, d), d);
 
     // Scenery on a sphere around the room: where the eye ray leaves it, seen from its centre.

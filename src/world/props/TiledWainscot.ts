@@ -46,6 +46,8 @@ const CAP_D = 0.032;
  * canvas so the tiles start square at every corner. Decoration: never collides.
  */
 export class TiledWainscot extends Prop {
+  /** Wraps the whole shell. */
+  readonly contactShadow = false;
   constructor(room: RoomOptions, options: TiledWainscotOptions = {}) {
     super();
     this.name = 'TiledWainscot';

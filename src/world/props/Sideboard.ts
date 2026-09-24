@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import type { Furniture } from '../Furniture';
 import { cylinderMesh } from '../meshUtils';
 import { part, matte } from './Prop';
+import { wood as woodMaterial } from '@/world/materials/finishes';
 
 export interface SideboardOptions {
   /** Length along the wall. Default 1.6. */
@@ -45,8 +46,8 @@ export class Sideboard extends THREE.Group implements Furniture {
     const width = options.width ?? 1.6;
     const depth = options.depth ?? 0.4;
     const height = options.height ?? 0.5;
-    const wood = matte(options.wood ?? 0xb98f63, 0.55);
-    const darkWood = matte(new THREE.Color(options.wood ?? 0xb98f63).multiplyScalar(0.72).getHex(), 0.6);
+    const wood = woodMaterial(options.wood ?? 0xb98f63, 0.55);
+    const darkWood = woodMaterial(new THREE.Color(options.wood ?? 0xb98f63).multiplyScalar(0.72).getHex(), 0.6);
     this.topHeight = height;
     const z = OFF_WALL + depth / 2;
     const bodyH = height - LEG_H;

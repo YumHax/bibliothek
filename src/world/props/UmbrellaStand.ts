@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import type { Furniture } from '../Furniture';
 import { cylinderMesh } from '../meshUtils';
 import { matte } from './Prop';
+import { wood as woodMaterial } from '@/world/materials/finishes';
 
 export interface UmbrellaStandOptions {
   /** Colour of the stand. Default a dark green enamel. */
@@ -13,7 +14,7 @@ export interface UmbrellaStandOptions {
 const RADIUS = 0.11;
 const HEIGHT = 0.5;
 const STEEL = new THREE.MeshStandardMaterial({ color: 0xb9bcc0, metalness: 0.6, roughness: 0.35 });
-const WOOD = matte(0x6b4a2b, 0.6);
+const WOOD = woodMaterial(0x6b4a2b, 0.6);
 
 /**
  * An umbrella stand by a front door: an open enamel tube with two or three furled umbrellas

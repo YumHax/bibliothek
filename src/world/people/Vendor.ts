@@ -6,6 +6,7 @@ import type { Furniture } from '../Furniture';
 import { PersonModel } from './PersonModel';
 import { randomLook, type PersonLook } from './looks';
 import type { Pose } from './poses';
+import { blobShadow } from '../zone/ContactShadows';
 
 export interface VendorOptions {
   /** Whose gaze to meet: the camera. */
@@ -36,6 +37,8 @@ const STANCES: Pose[] = ['stand', 'crossed', 'hips', 'pockets', 'crossed'];
  * standing person is not walked through), but never moves.
  */
 export class Vendor extends THREE.Group implements Furniture, Interactable, Updatable {
+  /** They shift about: they carry their own blob instead. */
+  readonly contactShadow = false;
   readonly hitboxes: THREE.Object3D[];
   private readonly model: PersonModel;
   private readonly viewer: THREE.Object3D;
@@ -60,6 +63,8 @@ export class Vendor extends THREE.Group implements Furniture, Interactable, Upda
     this.nextLine = this.lines.length ? seed % this.lines.length : 0;
     this.model = new PersonModel(options.look ?? randomLook(seed, 'vendor'));
     this.add(this.model);
+    const blob = blobShadow(0.55, 0.5);
+    if (blob) this.add(blob);
     this.hitboxes = [this.model.hitbox];
     this.pickGlance();
     this.model.setPose(STANCES[seed % STANCES.length]!);

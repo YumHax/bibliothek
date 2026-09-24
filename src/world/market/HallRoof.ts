@@ -31,6 +31,8 @@ const GLAZING_BAR = new THREE.MeshStandardMaterial({ color: 0x4a4846, roughness:
  * casts no shadows (the room's lamp hangs below it). Decoration: never collides.
  */
 export class HallRoof extends Prop {
+  /** Wraps the whole shell. */
+  readonly contactShadow = false;
   private readonly glass: THREE.MeshStandardMaterial | null = null;
 
   constructor(room: RoomOptions, options: HallRoofOptions = {}) {

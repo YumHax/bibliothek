@@ -120,5 +120,10 @@ export const ROOM_PLAN = {
     { kind: 'pictureFrame', at: { wall: 'left', along: -0.5, y: 1.8 }, options: { motif: 'mountains', seed: 1 } },
     { kind: 'pictureFrame', at: { wall: 'left', along: 0, y: 1.8 }, options: { motif: 'sunset', seed: 2 } },
     { kind: 'pictureFrame', at: { wall: 'left', along: 0.5, y: 1.8 }, options: { motif: 'abstract', seed: 3 } },
+    // Sockets: behind the TV stand (the set and the console plugged in, cables into the back of the
+    // stand), by the sideboard (the turntable), and a free one under the light switch.
+    { kind: 'wallSocket', at: { wall: 'left', along: 0.3, y: 0 }, options: { cables: [[0.25, 0.45, 0.15], [0.12, 0.3, 0.12]] } },
+    { kind: 'wallSocket', at: { wall: 'right', along: 0.75, y: 0 }, options: { gangs: 1, cables: [[-0.3, 0.5, 0.05]] } },
+    { kind: 'wallSocket', at: { wall: 'back', along: -2.05, y: 0 }, options: { gangs: 1 } },
   ] as DecorEntry[],
 };

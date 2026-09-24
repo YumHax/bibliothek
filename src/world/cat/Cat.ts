@@ -10,6 +10,7 @@ import { CatNav } from './CatNav';
 import { CatMotion } from './CatMotion';
 import { CatBrain, type CatScreen } from './CatBrain';
 import type { WindowLookout } from './spots';
+import { blobShadow } from '../zone/ContactShadows';
 
 export interface CatOptions {
   settings: CatSettings;
@@ -38,6 +39,9 @@ export interface CatOptions {
  * Local +z is the cat's forward; the origin sits on the floor under its body.
  */
 export class Cat extends THREE.Group implements Furniture, Interactable, Updatable {
+  /** It walks: it carries its own blob instead (see the constructor). */
+  readonly contactShadow = false;
+  private readonly blob: THREE.Mesh | null;
   readonly hitboxes: THREE.Object3D[];
   readonly settings: CatSettings;
 
@@ -62,6 +66,9 @@ export class Cat extends THREE.Group implements Furniture, Interactable, Updatab
     body.position.set(0, 0, 0);
     body.setCoat(this.settings.coat);
     this.add(body);
+    // Its own contact shadow, following it (hidden mid-hop: it would float under a flying cat).
+    this.blob = blobShadow(0.34, 0.34);
+    if (this.blob) this.add(this.blob);
 
     this.nav = new CatNav(options.collisions, options.bounds);
     this.motion = new CatMotion(this, body, this.nav);
@@ -150,6 +157,7 @@ export class Cat extends THREE.Group implements Furniture, Interactable, Updatab
     this.brain.update(dt);
     this.motion.update(dt);
     this.body.update(dt);
+    if (this.blob) this.blob.visible = !this.motion.hopping;
     if (this.voice) {
       this.player.getEyePosition(this.eye);
       this.getWorldPosition(this.here);

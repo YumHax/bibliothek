@@ -31,7 +31,8 @@ Read `docs/zones.md` first (model, the flat's map, how two zones share a doorway
    the room next door.
 4. **Kind**: add the name to `ZoneKind` in `src/world/worldPlan.ts` and the builder to `ZONE_BUILDERS` in `layout.ts`.
 5. **World plan**: add the zone to `WORLD_PLAN.zones`: `{ id, kind, origin: [x, 0, z], extent: <KIND>_ROOM, neighbours }`, and
-   add its id to the `neighbours` of every zone that sees into it through a doorway (both ways). Origin arithmetic: two
+   for a room of the flat add its id to `FLAT` and give it `neighbours: flatBut('<id>')` (the flat is always active as a
+   whole, or the light count changes at doorways and every shader recompiles). Origin arithmetic: two
    zones sharing a wall keep `WALL_GAP` (0.06) between their wall planes; a room of depth D behind a wall at world z = Z has
    `origin z = Z - WALL_GAP - D / 2`. Check the map in `worldPlan.ts` for overlaps.
 6. `persistent: true` for a room of the flat (kept in memory, never rebuilt: a rebuild is a hitch in a doorway). Leave it

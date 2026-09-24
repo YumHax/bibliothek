@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { QUALITY } from '@/graphics/quality';
 import type { Updatable } from '@/core/Engine';
 import type { Interactable } from '@/interaction/Interactable';
 import type { SessionActions } from '@/game/SessionActions';
@@ -6,6 +7,7 @@ import { IDLE_SHADOW_INTERVAL, type OccupancyAware } from '../Furniture';
 import { invisibleHitbox } from '../meshUtils';
 import { Prop, part } from './Prop';
 import { Curtains } from './Curtains';
+import { SunShaft } from './SunShaft';
 import type { DayNight, SkyState } from './DayNight';
 import type { Outdoors } from './outdoors/Outdoors';
 
@@ -43,6 +45,8 @@ const MASK_REACH = 3;
 /** Distance of the sun/moon spot from the window and its half-angle: the cone just covers the opening. */
 const LIGHT_DISTANCE = 9;
 const LIGHT_HALF_ANGLE = THREE.MathUtils.degToRad(9.5);
+/** Soft light of the sky through the glass (a rect area light, `QUALITY.areaLights`): its brightness in full daylight. */
+const SKY_PANEL_INTENSITY = 1.6;
 /** The curtain hem hangs this far above the floor. */
 const HEM_CLEARANCE = 0.015;
 
@@ -75,6 +79,10 @@ export class RoomWindow extends Prop implements Updatable, Interactable, Occupan
   /** The sun/moon spot; null when `sunlight` is off. */
   private readonly light: THREE.SpotLight | null = null;
   private readonly curtains: Curtains | null = null;
+  /** The beam of sun and its dust (`QUALITY.lightShafts`). */
+  private readonly shaft: SunShaft | null = null;
+  /** The sky's soft light pouring through the whole opening (`QUALITY.areaLights`). */
+  private readonly skyPanel: THREE.RectAreaLight | null = null;
   private readonly steel: THREE.MeshStandardMaterial;
   private sky: SkyState | null = null;
   private readonly worldQuaternion = new THREE.Quaternion();
@@ -116,6 +124,14 @@ export class RoomWindow extends Prop implements Updatable, Interactable, Occupan
     for (let i = 1; i < columns; i++) part(this, MULLION, h, 0.04, steel, { x: -w / 2 + (w * i) / columns, z: 0.02 });
     for (let j = 1; j < rows; j++) part(this, w, MULLION, 0.04, steel, { y: -h / 2 + (h * j) / rows, z: 0.02 });
 
+    if (QUALITY.areaLights) {
+      // Lights look down their local -z: turned round, it faces into the room.
+      this.skyPanel = new THREE.RectAreaLight(0xffffff, 0, w, h);
+      this.skyPanel.position.z = 0.02;
+      this.skyPanel.rotation.y = Math.PI;
+      this.add(this.skyPanel);
+    }
+
     if (this.options.curtains) {
       this.curtains = new Curtains({ width: w, height: h, frame: RAIL, hemY: this.floorY + HEM_CLEARANCE });
       this.add(this.curtains);
@@ -141,13 +157,18 @@ export class RoomWindow extends Prop implements Updatable, Interactable, Occupan
       // Sun / moon: a narrow spot with no distance falloff, aimed at the centre of the glass.
       this.light = new THREE.SpotLight(0xffffff, 0, 0, LIGHT_HALF_ANGLE, 0.35, 0);
       this.light.castShadow = true;
-      this.light.shadow.mapSize.set(1024, 1024);
+      this.light.shadow.mapSize.setScalar(QUALITY.shadowMapSize);
       this.light.shadow.camera.near = LIGHT_DISTANCE - 2;
       this.light.shadow.camera.far = LIGHT_DISTANCE + 12;
       this.light.shadow.bias = -0.0003;
       this.light.shadow.normalBias = 0.02;
       this.light.target.position.set(0, 0, 0);
       this.add(this.light, this.light.target);
+
+      if (QUALITY.lightShafts) {
+        this.shaft = new SunShaft({ width: w, height: h, columns, rows, floorY: this.floorY });
+        this.add(this.shaft);
+      }
     }
 
     this.unsubscribe = this.dayNight.onChange((sky) => this.apply(sky));
@@ -185,6 +206,7 @@ export class RoomWindow extends Prop implements Updatable, Interactable, Occupan
       if (this.sky) this.apply(this.sky);
       this.options.onCurtainsChange?.(this.curtains.currentOpenness);
     }
+    this.shaft?.update(dt);
     if (this.occupied || !this.light || this.light.intensity <= 0) return;
     this.shadowTimer += dt;
     if (this.shadowTimer < IDLE_SHADOW_INTERVAL) return;
@@ -230,6 +252,10 @@ export class RoomWindow extends Prop implements Updatable, Interactable, Occupan
 
   private apply(sky: SkyState): void {
     this.sky = sky;
+    if (this.skyPanel) {
+      this.skyPanel.color.copy(sky.ambient);
+      this.skyPanel.intensity = SKY_PANEL_INTENSITY * sky.daylight * THREE.MathUtils.lerp(0.15, 1, this.curtainOpenness);
+    }
     if (!this.light) return;
     // The panorama's light direction, brought into this window's frame (outward is local -z).
     // Behind the wall: no light. The first call runs before `place()`, the per-frame ones after.
@@ -244,5 +270,6 @@ export class RoomWindow extends Prop implements Updatable, Interactable, Occupan
     // another room (`update` refreshes it now and then). Toggling `castShadow` instead would
     // recompile every material, so the light stays a shadow caster and only stops updating.
     this.light.shadow.autoUpdate = this.occupied && this.light.intensity > 0;
+    this.shaft?.setSun(this.lightDir, sky.lightColor, sky.night ? 0 : this.light.intensity);
   }
 }

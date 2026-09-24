@@ -21,6 +21,7 @@ import { UmbrellaStand, type UmbrellaStandOptions } from './UmbrellaStand';
 import { LeaningMirror, type LeaningMirrorOptions } from './LeaningMirror';
 import { PedalBin, type PedalBinOptions } from './PedalBin';
 import { BathroomScale, type BathroomScaleOptions } from './BathroomScale';
+import { WallSocket, type WallSocketOptions } from './WallSocket';
 
 /**
  * Decoration the room plan can list by name. Each kind builds a `Furniture` from its options;
@@ -50,6 +51,7 @@ export const DECOR_KINDS = {
   leaningMirror: (o: LeaningMirrorOptions = {}) => new LeaningMirror(o),
   pedalBin: (o: PedalBinOptions = {}) => new PedalBin(o),
   bathroomScale: (o: BathroomScaleOptions = {}) => new BathroomScale(o),
+  wallSocket: (o: WallSocketOptions = {}) => new WallSocket(o),
 };
 
 export type DecorKind = keyof typeof DECOR_KINDS;

@@ -1,77 +1,70 @@
 import * as THREE from 'three';
 import { invisibleHitbox } from '../meshUtils';
-import { matte } from '../props/Prop';
-import { paintTorso } from './clothTexture';
+import {
+  FOREARM_L,
+  handGeometries,
+  HEAD_Y,
+  HIP_Y,
+  limb,
+  NECK_PIVOT,
+  REFERENCE_HEIGHT,
+  SHIN_L,
+  SHOULDER_X,
+  SHOULDER_Y,
+  THIGH_L,
+  TORSO_PIVOT_Y,
+  TORSO_BOTTOM,
+  TORSO_TOP,
+  trunkGeometry,
+  trunkSection,
+  UPPER_ARM_L,
+  WAIST_Y,
+} from './body';
+import { paintCloth, paintTorso } from './clothTexture';
+import { BLINK_ANGLE, buildEyes, type Eye } from './eyes';
+import { paintFace } from './faceTexture';
+import { at, capsuleBetween, limbGeometry, Parts, roundedBox } from './geometry';
+import { addHair, hairMaterial } from './hair';
+import { addEars, addGlasses, addHat, headGeometry, type FaceShape } from './head';
 import type { PersonLook } from './looks';
 import { POSES, type ArmAngles, type Pose } from './poses';
+import { addShoe } from './shoes';
 
 /*
- * A person built from primitives at real scale, in the stylised-but-proportioned register of a
- * good avatar system rather than a stick figure:
+ * A person at real scale, modelled rather than assembled from primitives:
  *
  *   PersonModel (floor origin, faces +z)
  *   ├ hitbox
  *   └ root                     scaled to `look.height`; bobs and sways
- *     ├ hip pivots (2)         thigh, hip cap, knee pivot (knee cap, shin, ankle pivot, shoe)
+ *     ├ hip pivots (2)         thigh, knee pivot (shin, ankle pivot: shoe)
  *     └ torso                  pivot at the waist; twists and leans
- *       ├ body                 a lathe with shoulders, chest, waist and hips, wearing the one
+ *       ├ trunk                one sculpted surface (seat, waist, chest, shoulders) wearing the
  *       │                      painted texture (trousers, belt, top, apron); breathes
  *       ├ neck, collar, hood, bag
- *       ├ shoulder pivots (2)  deltoid, upper arm, elbow pivot (elbow, forearm, hand)
- *       └ head                 skull (egg-shaped sphere) with hair, hat, beard; eyes that blink,
- *                              brows, nose, mouth, ears, glasses; turns to `gaze()`
+ *       ├ shoulder pivots (2)  upper arm, elbow pivot (forearm, hand with fingers and thumb)
+ *       └ neck pivot           nods and turns to `gaze()`
+ *         └ head               sculpted skull and face wearing the painted skin; hair, beard,
+ *                              ears, hat, glasses; eyes that follow the gaze and blink
  *
- * `update(dt)` animates: a gait with bending knees and swinging arms when `setSpeed()` is above
- * zero; breathing, a slow shift of weight and idle glances when standing; the arms easing into
- * whatever `setPose()` asked for; blinking; the head settling on the gaze target.
+ * Every bone's pieces are merged into one mesh per material (`Parts`). `update(dt)` animates: a
+ * gait with bending knees and swinging arms when `setSpeed()` is above zero; breathing, a slow
+ * shift of weight and idle glances when standing; the arms easing into whatever `setPose()` asked
+ * for; the eyes leading the head onto the gaze target and darting about when idle; blinking.
  */
 
-const REFERENCE_HEIGHT = 1.72;
-const HIP_Y = 0.9;
-const THIGH_L = 0.42;
-const SHIN_L = 0.4;
-/** Torso pivot (the waist) and the span of the body lathe. */
-const TORSO_PIVOT_Y = 0.95;
-const TORSO_BOTTOM = 0.79;
-const TORSO_TOP = 1.445;
-const WAIST_Y = 0.97;
-const SHOULDER_Y = 1.4;
-/** Shoulder pivot from the centre line, times the build. */
-const SHOULDER_X = 0.19;
-const UPPER_ARM_L = 0.3;
-const FOREARM_L = 0.27;
-const HEAD_Y = 1.61;
-/** Half-sizes of the head: a 0.1 sphere scaled to an egg. */
-const HEAD_R = 0.1;
-const SKULL_SCALE = new THREE.Vector3(0.86, 1.08, 0.94);
-const HEAD_W = HEAD_R * SKULL_SCALE.x;
-const HEAD_H = HEAD_R * SKULL_SCALE.y;
-/** Elliptical section of the body lathe: wider than deep. */
-const BODY_SX = 1.1;
-const BODY_SZ = 0.78;
-/** Radius of the body along its height (world y), before the elliptical scale. */
-const BODY_PROFILE: Array<[y: number, r: number]> = [
-  [TORSO_BOTTOM, 0.001],
-  [0.8, 0.1],
-  [0.85, 0.14],
-  [0.9, 0.145],
-  [0.97, 0.132],
-  [1.05, 0.13],
-  [1.15, 0.142],
-  [1.27, 0.152],
-  [1.36, 0.152],
-  [1.4, 0.14],
-  [1.425, 0.1],
-  [1.44, 0.05],
-  [TORSO_TOP, 0.001],
-];
 /** One step every this many metres walked. */
 const STRIDE = 0.68;
 const MAX_YAW = 1.15;
 const MAX_PITCH = 0.55;
-/** How fast the head settles on a new target and the arms on a new pose, per second. */
+/** How far the eyes turn in their sockets beyond the head. */
+const EYE_YAW = 0.38;
+const EYE_PITCH = 0.25;
+/** How fast the head settles on a new target, the eyes on theirs, the arms on a new pose, per second. */
 const GAZE_RATE = 5;
+const EYE_RATE = 22;
 const POSE_RATE = 4;
+/** The eyes above the neck pivot, in the head's frame: gaze angles are measured from there. */
+const EYES_ABOVE_PIVOT = HEAD_Y + 0.014 - NECK_PIVOT.y;
 
 interface Arm {
   shoulder: THREE.Group;
@@ -92,10 +85,9 @@ export class PersonModel extends THREE.Group {
 
   private readonly root = new THREE.Group();
   private readonly torso = new THREE.Group();
-  private readonly body: THREE.Mesh;
-  private readonly bodyScale = new THREE.Vector3();
+  private readonly trunk: THREE.Mesh;
   private readonly head = new THREE.Group();
-  private readonly eyes = new THREE.Group();
+  private readonly eyes: [Eye, Eye];
   private readonly legs: [Leg, Leg];
   private readonly arms: [Arm, Arm];
   private pose: Pose = 'stand';
@@ -107,6 +99,10 @@ export class PersonModel extends THREE.Group {
   private target: THREE.Vector3 | null = null;
   private yaw = 0;
   private pitch = 0;
+  private eyeYaw = 0;
+  private eyePitch = 0;
+  private saccadeIn = 0;
+  private readonly saccade = new THREE.Vector2();
   private readonly scratch = new THREE.Vector3();
 
   constructor(look: PersonLook) {
@@ -115,40 +111,45 @@ export class PersonModel extends THREE.Group {
     const build = look.build;
     // Limb girth follows the build a little, never as much as the trunk.
     const girth = 0.7 + 0.3 * build;
-    const skin = matte(look.skin, 0.55);
-    const hair = matte(look.hair, 0.85);
-    const sleeve = matte(look.topColor, 0.9);
-    const trousers = matte(look.trousers, 0.9);
+    const skin = new THREE.MeshStandardMaterial({ color: look.skin, roughness: 0.6 });
+    const pattern = look.top === 'stripes' ? 'stripes' : look.top === 'flannel' ? 'check' : 'plain';
+    const sleeve = new THREE.MeshStandardMaterial({ map: paintCloth(look.topColor, look.topAccent, pattern), roughness: 0.9 });
+    const trousers = new THREE.MeshStandardMaterial({ map: paintCloth(look.trousers, look.trousers, 'plain'), roughness: 0.92 });
 
     this.legs = [this.leg(-1, look, girth, skin, trousers), this.leg(1, look, girth, skin, trousers)];
     this.root.add(this.legs[0].hip, this.legs[1].hip);
 
     this.torso.position.y = TORSO_PIVOT_Y;
-    this.body = bodyLathe(look, build);
-    this.bodyScale.copy(this.body.scale);
-    this.torso.add(this.body);
-    const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.05, 0.13, 14), skin);
-    neck.position.y = HEAD_Y - 0.1 - TORSO_PIVOT_Y;
-    neck.castShadow = true;
-    this.torso.add(neck);
-    this.torso.add(...neckwear(look, build));
-    const bag = bagOf(look, build);
-    if (bag) this.torso.add(bag);
+    const waistV = (WAIST_Y - TORSO_BOTTOM) / (TORSO_TOP - TORSO_BOTTOM);
+    this.trunk = new THREE.Mesh(trunkGeometry(look), new THREE.MeshStandardMaterial({ map: paintTorso(look, waistV), roughness: 0.9 }));
+    this.trunk.castShadow = true;
+    this.trunk.receiveShadow = true;
+    this.torso.add(this.trunk);
+    const torsoParts = new Parts();
+    // The neck, from inside the shoulders up into the skull.
+    torsoParts.add(
+      limbGeometry(0.15, [[0, 0.052], [0.5, 0.053], [1, 0.06]], { top: 1, bottom: 0 }),
+      skin,
+      at(NECK_PIVOT.x, NECK_PIVOT.y + 0.05 - TORSO_PIVOT_Y, NECK_PIVOT.z, [0, 0, 0], [1, 1, 0.88]),
+    );
+    neckwear(torsoParts, look, build, sleeve);
+    bag(torsoParts, look);
+    this.torso.add(...torsoParts.meshes());
 
     this.arms = [this.arm(-1, look, build, girth, skin, sleeve), this.arm(1, look, build, girth, skin, sleeve)];
     this.torso.add(this.arms[0].shoulder, this.arms[1].shoulder);
 
-    this.head.position.y = HEAD_Y - TORSO_PIVOT_Y;
+    this.head.position.set(NECK_PIVOT.x, NECK_PIVOT.y - TORSO_PIVOT_Y, NECK_PIVOT.z);
     this.head.rotation.order = 'YXZ';
-    this.buildHead(look, skin, hair);
+    this.eyes = this.buildHead(look, skin);
     this.torso.add(this.head);
     this.root.add(this.torso);
     this.add(this.root);
 
     const scale = look.height / REFERENCE_HEIGHT;
     this.root.scale.setScalar(scale);
-    this.eyeHeight = (HEAD_Y + 0.012) * scale;
-    const top = HEAD_Y + HEAD_H + 0.03;
+    this.eyeHeight = (HEAD_Y + 0.014) * scale;
+    const top = HEAD_Y + 0.14;
     this.hitbox = invisibleHitbox(0.6, top, 0.45, { y: top / 2 });
     this.hitbox.scale.setScalar(scale);
     this.add(this.hitbox);
@@ -192,7 +193,7 @@ export class PersonModel extends THREE.Group {
       } else {
         leg.hip.rotation.x += (0 - leg.hip.rotation.x) * ease;
         leg.knee.rotation.x += (0.04 - leg.knee.rotation.x) * ease;
-        leg.ankle.rotation.x += (0 - leg.ankle.rotation.x) * ease;
+        leg.ankle.rotation.x += (-0.04 - leg.ankle.rotation.x) * ease;
       }
     }
 
@@ -229,66 +230,89 @@ export class PersonModel extends THREE.Group {
       this.torso.rotation.y += (Math.sin(t * 0.23) * 0.04 - this.torso.rotation.y) * ease;
       this.torso.rotation.x += (0 - this.torso.rotation.x) * ease;
     }
+    // Breathing lifts and fills the chest a little.
     const breath = Math.sin(t * 1.6) * 0.012;
-    this.body.scale.set(this.bodyScale.x * (1 + breath * 0.5), 1 + breath, this.bodyScale.z * (1 + breath * 0.8));
-
-    // Blink: every few seconds the lids drop for a tenth of a second.
-    this.blinkIn -= dt;
-    if (this.blinkIn <= 0) {
-      this.blinkIn = 2 + Math.random() * 4;
-      this.blink = 0.22;
-    }
-    if (this.blink > 0) {
-      this.blink -= dt;
-      const closed = Math.sin((Math.max(0, this.blink) / 0.22) * Math.PI);
-      this.eyes.scale.y = 1 - closed * 0.92;
-    } else this.eyes.scale.y = 1;
+    this.trunk.scale.set(1 + breath * 0.4, 1 + breath * 0.5, 1 + breath * 0.9);
 
     // Head: towards the target, or ahead with a wandering glance.
     let yaw = Math.sin(t * 0.31) * 0.25;
     let pitch = Math.sin(t * 0.47) * 0.06;
+    let eyeYaw = 0;
+    let eyePitch = 0;
     if (this.target) {
       const local = this.head.worldToLocal(this.scratch.copy(this.target));
       // `worldToLocal` includes the head's current turn: undo it to get the target in the neck's frame.
       local.applyEuler(this.head.rotation);
-      yaw = THREE.MathUtils.clamp(Math.atan2(local.x, local.z), -MAX_YAW, MAX_YAW);
-      pitch = THREE.MathUtils.clamp(-Math.atan2(local.y, Math.hypot(local.x, local.z)), -MAX_PITCH, MAX_PITCH);
+      local.y -= EYES_ABOVE_PIVOT;
+      const rawYaw = Math.atan2(local.x, local.z);
+      const rawPitch = -Math.atan2(local.y, Math.hypot(local.x, local.z));
+      yaw = THREE.MathUtils.clamp(rawYaw, -MAX_YAW, MAX_YAW);
+      pitch = THREE.MathUtils.clamp(rawPitch, -MAX_PITCH, MAX_PITCH);
+      // The eyes get there first and make up what the neck cannot.
+      eyeYaw = THREE.MathUtils.clamp(rawYaw - this.yaw, -EYE_YAW, EYE_YAW);
+      eyePitch = THREE.MathUtils.clamp(rawPitch - this.pitch, -EYE_PITCH, EYE_PITCH);
+    } else {
+      this.saccadeIn -= dt;
+      if (this.saccadeIn <= 0) {
+        this.saccadeIn = 0.6 + Math.random() * 2.2;
+        this.saccade.set((Math.random() - 0.5) * 0.4, (Math.random() - 0.5) * 0.16);
+      }
+      eyeYaw = this.saccade.x;
+      eyePitch = this.saccade.y;
     }
     const gazeEase = Math.min(1, dt * GAZE_RATE);
     this.yaw += (yaw - this.yaw) * gazeEase;
     this.pitch += (pitch - this.pitch) * gazeEase;
     this.head.rotation.set(this.pitch, this.yaw, 0, 'YXZ');
+    const eyeEase = Math.min(1, dt * EYE_RATE);
+    this.eyeYaw += (eyeYaw - this.eyeYaw) * eyeEase;
+    this.eyePitch += (eyePitch - this.eyePitch) * eyeEase;
+
+    // Blink every few seconds, the upper lids dropping for a fifth of a second; they also follow the eyes down.
+    this.blinkIn -= dt;
+    if (this.blinkIn <= 0) {
+      this.blinkIn = 2 + Math.random() * 4;
+      this.blink = 0.2;
+    }
+    let closed = 0;
+    if (this.blink > 0) {
+      this.blink -= dt;
+      closed = Math.sin((Math.max(0, this.blink) / 0.2) * Math.PI);
+    }
+    for (const eye of this.eyes) {
+      eye.ball.rotation.set(this.eyePitch, this.eyeYaw, 0, 'YXZ');
+      eye.upperLid.rotation.x = Math.max(0, this.eyePitch) * 0.5 + closed * BLINK_ANGLE;
+    }
   }
 
   private leg(side: -1 | 1, look: PersonLook, girth: number, skin: THREE.Material, trousers: THREE.Material): Leg {
     const hip = new THREE.Group();
     hip.position.set(side * 0.09 * look.build, HIP_Y, 0);
-    const legCloth = look.shorts ? skin : trousers;
-    hip.add(shadowed(new THREE.Mesh(new THREE.SphereGeometry(0.075 * girth, 14, 10), trousers)));
-    const thigh = shadowed(new THREE.Mesh(new THREE.CylinderGeometry(0.074 * girth, 0.062 * girth, THIGH_L, 16), legCloth));
-    thigh.position.y = -THIGH_L / 2;
-    hip.add(thigh);
+    const thigh = new Parts();
     if (look.shorts) {
-      const shorts = shadowed(new THREE.Mesh(new THREE.CylinderGeometry(0.082 * girth, 0.078 * girth, 0.22, 16), trousers));
-      shorts.position.y = -0.1;
-      hip.add(shorts);
+      thigh.add(limb('thigh', THIGH_L, girth), skin);
+      thigh.add(limbGeometry(0.24, [[0, 0.08 * girth], [0.6, 0.083 * girth], [1, 0.082 * girth]], { top: 1, bottom: 0.1 }), trousers);
+    } else {
+      thigh.add(limb('thigh', THIGH_L, girth, 0.006), trousers);
     }
+    hip.add(...thigh.meshes());
 
     const knee = new THREE.Group();
     knee.position.y = -THIGH_L;
-    knee.add(shadowed(new THREE.Mesh(new THREE.SphereGeometry(0.062 * girth, 12, 8), legCloth)));
-    const shin = shadowed(new THREE.Mesh(new THREE.CylinderGeometry(0.06 * girth, 0.046 * girth, SHIN_L, 16), legCloth));
-    shin.position.y = -SHIN_L / 2;
-    knee.add(shin);
+    const shin = new Parts();
     if (look.shorts) {
-      const sock = new THREE.Mesh(new THREE.CylinderGeometry(0.05 * girth, 0.048 * girth, 0.07, 14), matte(0xf0ede6, 0.95));
-      sock.position.y = -SHIN_L + 0.035;
-      knee.add(sock);
+      shin.add(limb('shin', SHIN_L, girth), skin);
+      shin.add(limbGeometry(0.08, [[0, 0.041 * girth], [1, 0.043 * girth]], { top: 0.3, bottom: 0.3 }), new THREE.MeshStandardMaterial({ color: 0xf0ede6, roughness: 0.95 }), at(0, -SHIN_L + 0.085, 0));
+    } else {
+      shin.add(limb('trouserShin', SHIN_L, girth, -0.002, { top: 1, bottom: 0.25 }), trousers);
     }
+    knee.add(...shin.meshes());
 
     const ankle = new THREE.Group();
     ankle.position.y = -SHIN_L;
-    ankle.add(shoe(look, girth));
+    const shoe = new Parts();
+    addShoe(shoe, look, girth);
+    ankle.add(...shoe.meshes());
     knee.add(ankle);
     hip.add(knee);
     return { hip, knee, ankle };
@@ -297,341 +321,113 @@ export class PersonModel extends THREE.Group {
   private arm(side: -1 | 1, look: PersonLook, build: number, girth: number, skin: THREE.Material, sleeve: THREE.Material): Arm {
     const shoulder = new THREE.Group();
     shoulder.position.set(side * SHOULDER_X * build, SHOULDER_Y - TORSO_PIVOT_Y, 0);
-    const deltoid = shadowed(new THREE.Mesh(new THREE.SphereGeometry(0.058 * girth, 14, 10), sleeve));
-    deltoid.position.y = -0.005;
-    shoulder.add(deltoid);
+    const upper = new Parts();
     if (look.longSleeves) {
-      const upper = shadowed(new THREE.Mesh(new THREE.CylinderGeometry(0.048 * girth, 0.041 * girth, UPPER_ARM_L, 14), sleeve));
-      upper.position.y = -UPPER_ARM_L / 2;
-      shoulder.add(upper);
+      upper.add(limb('upperArm', UPPER_ARM_L, girth, 0.008), sleeve);
     } else {
-      // A short sleeve, then bare arm to the elbow.
-      const cuff = 0.42 * UPPER_ARM_L;
-      const sleeveMesh = shadowed(new THREE.Mesh(new THREE.CylinderGeometry(0.052 * girth, 0.05 * girth, cuff, 14), sleeve));
-      sleeveMesh.position.y = -cuff / 2;
-      const bare = shadowed(new THREE.Mesh(new THREE.CylinderGeometry(0.044 * girth, 0.039 * girth, UPPER_ARM_L, 14), skin));
-      bare.position.y = -UPPER_ARM_L / 2;
-      shoulder.add(sleeveMesh, bare);
+      // A short sleeve flaring a little to its hem, bare arm below.
+      upper.add(limbGeometry(0.14, [[0, 0.056 * girth], [1, 0.057 * girth + 0.004]], { top: 1, bottom: 0.08, radial: 18 }), sleeve);
+      upper.add(limb('upperArm', UPPER_ARM_L, girth), skin);
     }
+    shoulder.add(...upper.meshes());
 
     const elbow = new THREE.Group();
     elbow.position.y = -UPPER_ARM_L;
-    const lower = look.longSleeves ? sleeve : skin;
-    elbow.add(shadowed(new THREE.Mesh(new THREE.SphereGeometry(0.04 * girth, 12, 8), lower)));
-    const forearm = shadowed(new THREE.Mesh(new THREE.CylinderGeometry(0.039 * girth, 0.032 * girth, FOREARM_L, 14), lower));
-    forearm.position.y = -FOREARM_L / 2;
-    elbow.add(forearm);
-    const hand = new THREE.Mesh(new THREE.SphereGeometry(0.042, 12, 10), skin);
-    hand.scale.set(0.5, 1.15, 0.8);
-    hand.position.y = -FOREARM_L - 0.03;
-    hand.castShadow = true;
-    elbow.add(hand);
+    const lower = new Parts();
+    if (look.longSleeves) lower.add(limb('forearm', FOREARM_L - 0.01, girth, 0.007, { top: 1, bottom: 0.15 }), sleeve);
+    else lower.add(limb('forearm', FOREARM_L, girth), skin);
+    // The wrist showing below a long sleeve's cuff.
+    if (look.longSleeves) lower.add(limbGeometry(0.04, [[0, 0.028 * girth], [1, 0.026 * girth]], { top: 0, bottom: 0.8 }), skin, at(0, -FOREARM_L + 0.04, 0));
+    for (const g of handGeometries(side, 0.95 + 0.1 * build)) lower.add(g, skin, at(0, -FOREARM_L + 0.004, 0));
+    elbow.add(...lower.meshes());
     shoulder.add(elbow);
     const rest = side < 0 ? POSES.stand.left : POSES.stand.right;
     return { shoulder, elbow, current: { ...rest } };
   }
 
-  private buildHead(look: PersonLook, skin: THREE.Material, hair: THREE.Material): void {
-    const head = this.head;
-    // Everything hugging the skull shares its egg scale.
+  /** The head in the neck pivot's frame, raised to the skull's centre; returns the eyes. */
+  private buildHead(look: PersonLook, skin: THREE.Material): [Eye, Eye] {
+    const shape: FaceShape = { jaw: look.jaw, nose: look.nose };
     const skull = new THREE.Group();
-    skull.scale.copy(SKULL_SCALE);
-    const face = shadowed(new THREE.Mesh(new THREE.SphereGeometry(HEAD_R, 28, 20), skin));
+    skull.position.set(-NECK_PIVOT.x, HEAD_Y - NECK_PIVOT.y, -NECK_PIVOT.z);
+    const face = new THREE.Mesh(headGeometry(shape), new THREE.MeshStandardMaterial({ map: paintFace(look), roughness: 0.58 }));
+    face.castShadow = true;
+    face.receiveShadow = true;
     skull.add(face);
-    skull.add(hairOf(look, hair));
-    if (look.hat) skull.add(hatOf(look));
-    if (look.beard) skull.add(beardOf(look));
-    head.add(skull);
 
-    // Ears, nose, brows, mouth: on the unscaled head, placed on the egg's surface.
-    for (const side of [-1, 1] as const) {
-      const ear = new THREE.Mesh(new THREE.SphereGeometry(0.017, 10, 8), skin);
-      ear.scale.set(0.45, 1.1, 0.8);
-      ear.position.set(side * (HEAD_W - 0.002), 0.005, -0.008);
-      head.add(ear);
-      const brow = new THREE.Mesh(new THREE.BoxGeometry(0.032, 0.0055 * look.brows, 0.006), hair);
-      brow.position.set(side * 0.034, 0.038, 0.083);
-      brow.rotation.z = side * 0.12;
-      head.add(brow);
-    }
-    const nose = new THREE.Mesh(new THREE.SphereGeometry(0.012, 10, 8), skin);
-    nose.scale.set(0.8, 1.3, 1);
-    nose.position.set(0, -0.012, 0.09);
-    head.add(nose);
-    const lips = matte(new THREE.Color(look.skin).lerp(new THREE.Color(0x5a2a2a), 0.55), 0.6);
-    if (look.smile) {
-      const arc = 1.9;
-      const mouth = new THREE.Mesh(new THREE.TorusGeometry(0.016, 0.0022, 6, 14, arc), lips);
-      mouth.position.set(0, -0.04, 0.085);
-      mouth.rotation.set(0.3, 0, Math.PI * 1.5 - arc / 2, 'XYZ');
-      head.add(mouth);
-    } else {
-      const mouth = new THREE.Mesh(new THREE.BoxGeometry(0.024, 0.0028, 0.003), lips);
-      mouth.position.set(0, -0.05, 0.084);
-      head.add(mouth);
-    }
-    if (look.beard === 'full') {
-      const moustache = new THREE.Mesh(new THREE.SphereGeometry(0.01, 10, 6), hair);
-      moustache.scale.set(3.2, 0.7, 0.7);
-      moustache.position.set(0, -0.03, 0.089);
-      head.add(moustache);
-    }
+    const parts = new Parts();
+    const earInner = new THREE.MeshStandardMaterial({ color: new THREE.Color(look.skin).multiplyScalar(0.72), roughness: 0.7 });
+    addEars(parts, look, shape, skin, earInner);
+    addHair(parts, look, shape, hairMaterial(look));
+    addHat(parts, look);
+    if (look.glasses !== undefined) addGlasses(parts, look.glasses, shape);
+    skull.add(...parts.meshes());
 
-    // Eyes: white, iris, pupil; the group's y scale is the blink.
-    const white = new THREE.MeshStandardMaterial({ color: 0xf4f1ec, roughness: 0.25 });
-    const iris = new THREE.MeshStandardMaterial({ color: look.eyes, roughness: 0.3 });
-    const pupil = new THREE.MeshStandardMaterial({ color: 0x0b0a0a, roughness: 0.3 });
-    for (const side of [-1, 1] as const) {
-      const eye = new THREE.Group();
-      eye.position.set(side * 0.033, 0.012, 0.081);
-      const ball = new THREE.Mesh(new THREE.SphereGeometry(0.0125, 14, 10), white);
-      ball.scale.set(1, 0.85, 0.5);
-      const irisMesh = new THREE.Mesh(new THREE.SphereGeometry(0.0068, 12, 8), iris);
-      irisMesh.scale.z = 0.5;
-      irisMesh.position.z = 0.0055;
-      const pupilMesh = new THREE.Mesh(new THREE.SphereGeometry(0.0035, 10, 6), pupil);
-      pupilMesh.scale.z = 0.5;
-      pupilMesh.position.z = 0.0085;
-      eye.add(ball, irisMesh, pupilMesh);
-      this.eyes.add(eye);
-    }
-    // The blink squashes the eyes about their own centre line.
-    this.eyes.position.y = 0.012;
-    for (const eye of this.eyes.children) eye.position.y = 0;
-    head.add(this.eyes);
-
-    if (look.glasses !== undefined) head.add(glasses(look.glasses));
+    const eyes = buildEyes(look, shape);
+    for (const eye of eyes) skull.add(eye.group);
+    this.head.add(skull);
+    return eyes;
   }
-}
-
-/** The trunk: a lathe of `BODY_PROFILE`, seam at the back, squeezed to an ellipse, wearing the painted texture. */
-function bodyLathe(look: PersonLook, build: number): THREE.Mesh {
-  const rows = 40;
-  const points: THREE.Vector2[] = [];
-  for (let j = 0; j <= rows; j++) {
-    const y = THREE.MathUtils.lerp(TORSO_BOTTOM, TORSO_TOP, j / rows);
-    points.push(new THREE.Vector2(profileRadius(y), y - TORSO_PIVOT_Y));
-  }
-  const geometry = new THREE.LatheGeometry(points, 32, Math.PI, Math.PI * 2);
-  const waistV = (WAIST_Y - TORSO_BOTTOM) / (TORSO_TOP - TORSO_BOTTOM);
-  const material = new THREE.MeshStandardMaterial({ map: paintTorso(look, waistV), roughness: 0.9 });
-  const mesh = shadowed(new THREE.Mesh(geometry, material));
-  mesh.scale.set(BODY_SX * build, 1, BODY_SZ * build);
-  return mesh;
-}
-
-function profileRadius(y: number): number {
-  for (let i = 1; i < BODY_PROFILE.length; i++) {
-    const [y0, r0] = BODY_PROFILE[i - 1]!;
-    const [y1, r1] = BODY_PROFILE[i]!;
-    if (y <= y1) return THREE.MathUtils.lerp(r0, r1, (y - y0) / (y1 - y0));
-  }
-  return BODY_PROFILE[BODY_PROFILE.length - 1]![1];
 }
 
 /** A shirt collar, the shirt's collar under a jacket, or a hood bunched at the back of the neck. */
-function neckwear(look: PersonLook, build: number): THREE.Object3D[] {
-  const out: THREE.Object3D[] = [];
+function neckwear(parts: Parts, look: PersonLook, build: number, sleeve: THREE.Material): void {
   const neckBase = TORSO_TOP - TORSO_PIVOT_Y;
   if (look.top === 'shirt' || look.top === 'jacket') {
     const color = look.top === 'jacket' ? look.topAccent : look.topColor;
-    const collar = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.078, 0.035, 20, 1, true), matte(color, 0.9));
-    (collar.material as THREE.Material).side = THREE.DoubleSide;
-    collar.position.y = neckBase + 0.005;
-    out.push(collar);
+    const collar = new THREE.MeshStandardMaterial({ color, roughness: 0.9, side: THREE.DoubleSide });
+    parts.add(new THREE.CylinderGeometry(0.058, 0.074, 0.04, 24, 1, true), collar, at(NECK_PIVOT.x, neckBase + 0.004, NECK_PIVOT.z + 0.004));
   }
   if (look.top === 'hoodie') {
-    const hood = shadowed(new THREE.Mesh(new THREE.SphereGeometry(0.1, 20, 12, Math.PI, Math.PI, Math.PI * 0.3, Math.PI * 0.5), matte(look.topColor, 0.95)));
-    (hood.material as THREE.Material).side = THREE.DoubleSide;
-    hood.scale.set(1.15 * build, 0.75, 1);
-    hood.position.set(0, neckBase - 0.02, -0.04);
-    out.push(hood);
+    const hood = new THREE.SphereGeometry(0.1, 22, 12, Math.PI, Math.PI, Math.PI * 0.3, Math.PI * 0.5);
+    parts.add(hood, sleeve, at(0, neckBase - 0.02, -0.045, [0, 0, 0], [1.15 * build, 0.75, 1]));
+  }
+}
+
+/** A tote hanging from the left shoulder or a backpack, in the bag colour. */
+function bag(parts: Parts, look: PersonLook): void {
+  if (!look.bag) return;
+  const cloth = new THREE.MeshStandardMaterial({ color: look.bagColor ?? 0x6b4a2a, roughness: 0.95 });
+  const shoulderX = SHOULDER_X * look.build;
+  if (look.bag === 'tote') {
+    const hip = trunkSection(WAIST_Y, look);
+    const x = -(Math.max(shoulderX + 0.06, hip.halfWidth + 0.05));
+    const y = WAIST_Y - TORSO_PIVOT_Y + 0.02;
+    parts.add(roundedBox(0.05, 0.34, 0.3, 4, 4), cloth, at(x, y, 0.02, [0, 0.08, 0.04]));
+    // The straps, from the bag's top corners over the shoulder.
+    const shoulder = new THREE.Vector3(-shoulderX * 0.75, SHOULDER_Y - TORSO_PIVOT_Y + 0.045, 0);
+    for (const z of [-0.09, 0.11]) {
+      parts.add(capsuleBetween(new THREE.Vector3(x + 0.01, y + 0.16, z), shoulder.clone().setZ(z * 0.3), 0.007, 5), cloth);
+    }
+    return;
+  }
+  const depth = trunkSection(1.2, look).back;
+  parts.add(roundedBox(0.26 * look.build, 0.38, 0.12, 4, 4), cloth, at(0, 0.27, -(depth + 0.06)));
+  parts.add(roundedBox(0.22 * look.build, 0.15, 0.025, 4, 3), new THREE.MeshStandardMaterial({ color: look.bagColor ?? 0x6b4a2a, roughness: 0.85 }), at(0, 0.37, -(depth + 0.125)));
+  // Each strap follows the trunk: up the back, over the shoulder, down the chest to the armpit.
+  for (const side of [-1, 1] as const) {
+    const points = strapPath(look, side * 0.085 * look.build);
+    for (let i = 1; i < points.length; i++) parts.add(capsuleBetween(points[i - 1]!, points[i]!, 0.008, 5), cloth);
+  }
+}
+
+/** Points just off the trunk's surface at `x`, from the back at chest height over the shoulder to the front at the armpit (torso frame). */
+function strapPath(look: PersonLook, x: number): THREE.Vector3[] {
+  const off = 0.008;
+  const surface = (y: number, sx: number, front: boolean): number => {
+    const s = trunkSection(y, look);
+    const u = Math.min(0.98, Math.abs(sx) / s.halfWidth);
+    return (front ? 1 : -1) * ((front ? s.front : s.back) * Math.pow(1 - u ** 2.4, 1 / 2.4) + off);
+  };
+  // The top of the shoulder over `x`: where the trunk narrows to it.
+  let top = TORSO_TOP;
+  while (top > SHOULDER_Y && trunkSection(top, look).halfWidth < Math.abs(x) + 0.01) top -= 0.005;
+  const out: THREE.Vector3[] = [];
+  for (const y of [1.18, 1.28, 1.36, top - 0.02]) out.push(new THREE.Vector3(x, y - TORSO_PIVOT_Y, surface(y, x, false)));
+  out.push(new THREE.Vector3(x, top + off - TORSO_PIVOT_Y, 0));
+  for (const [y, spread] of [[top - 0.02, 0], [1.36, 0.005], [1.28, 0.015], [1.2, 0.03]] as const) {
+    const sx = x + Math.sign(x) * spread;
+    out.push(new THREE.Vector3(sx, y - TORSO_PIVOT_Y, surface(y, sx, true)));
   }
   return out;
-}
-
-/** A tote on the left shoulder or a backpack, in the bag colour. */
-function bagOf(look: PersonLook, build: number): THREE.Object3D | null {
-  if (!look.bag) return null;
-  const cloth = matte(look.bagColor ?? 0x6b4a2a, 0.95);
-  const g = new THREE.Group();
-  const shoulderX = SHOULDER_X * build;
-  if (look.bag === 'tote') {
-    const x = -(shoulderX + 0.09);
-    const bag = shadowed(new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.34, 0.3), cloth));
-    bag.position.set(x, WAIST_Y - TORSO_PIVOT_Y + 0.02, 0.02);
-    bag.rotation.y = 0.08;
-    g.add(bag);
-    for (const z of [-0.1, 0.1]) {
-      const strap = new THREE.Mesh(new THREE.BoxGeometry(0.006, 0.34, 0.022), cloth);
-      strap.position.set((x - shoulderX) / 2 - 0.01, SHOULDER_Y - TORSO_PIVOT_Y + 0.05 - 0.12, z);
-      strap.rotation.z = -0.3;
-      g.add(strap);
-    }
-    return g;
-  }
-  const depth = 0.152 * BODY_SZ * build;
-  const pack = shadowed(new THREE.Mesh(new THREE.BoxGeometry(0.26 * build, 0.34, 0.12), cloth));
-  pack.position.set(0, 0.25, -(depth + 0.06));
-  const flap = new THREE.Mesh(new THREE.BoxGeometry(0.22 * build, 0.15, 0.02), matte(look.bagColor ?? 0x6b4a2a, 0.9));
-  flap.position.set(0, 0.34, -(depth + 0.125));
-  g.add(pack, flap);
-  for (const side of [-1, 1] as const) {
-    const over = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.007, 0.26), cloth);
-    over.position.set(side * 0.08 * build, SHOULDER_Y - TORSO_PIVOT_Y + 0.062, -0.03);
-    const front = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.3, 0.007), cloth);
-    front.position.set(side * 0.08 * build, 0.32, depth - 0.006);
-    g.add(over, front);
-  }
-  return g;
-}
-
-function shoe(look: PersonLook, girth: number): THREE.Group {
-  const g = new THREE.Group();
-  const upper = matte(look.shoeColor, look.shoes === 'boot' ? 0.45 : 0.65);
-  const soleColor = look.shoes === 'sneaker' ? 0xe8e4dc : 0x24201c;
-  const sole = shadowed(new THREE.Mesh(new THREE.BoxGeometry(0.09 * girth, 0.025, 0.24), matte(soleColor, 0.8)));
-  sole.position.set(0, -0.08 + 0.0125, 0.035);
-  g.add(sole);
-  const toe = shadowed(new THREE.Mesh(new THREE.CapsuleGeometry(0.04 * girth, 0.13, 4, 12), upper));
-  toe.rotation.x = Math.PI / 2;
-  toe.scale.y = look.shoes === 'loafer' ? 0.55 : 0.72;
-  toe.position.set(0, -0.08 + 0.025 + 0.026, 0.035);
-  g.add(toe);
-  if (look.shoes === 'boot') {
-    const shaft = shadowed(new THREE.Mesh(new THREE.CylinderGeometry(0.05 * girth, 0.052 * girth, 0.13, 14), upper));
-    shaft.position.set(0, -0.015, -0.005);
-    g.add(shaft);
-  } else if (look.shoes === 'sneaker') {
-    // Laces: a lighter patch on the instep.
-    const laces = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.004, 0.06), matte(0xf2efe8, 0.9));
-    laces.position.set(0, -0.005, 0.06);
-    laces.rotation.x = 0.5;
-    g.add(laces);
-  }
-  return g;
-}
-
-/**
- * Hair, in the skull's frame: a dome over the top and back tilted so the hairline sits on the
- * forehead and the nape goes lower, plus what the style adds (fringe, long back, bun, ponytail).
- */
-function hairOf(look: PersonLook, hair: THREE.Material): THREE.Group {
-  const g = new THREE.Group();
-  const style = look.hairStyle;
-  if (style === 'bald') {
-    // Hair at the sides and back only.
-    const ring = new THREE.Mesh(new THREE.SphereGeometry(HEAD_R + 0.003, 24, 10, Math.PI, Math.PI, Math.PI * 0.3, Math.PI * 0.28), matte(look.hair, 1));
-    g.add(ring);
-    return g;
-  }
-  const tilted = new THREE.Group();
-  let margin = 0.008;
-  let theta = 0.442;
-  let tilt = -0.487;
-  if (style === 'buzz') {
-    margin = 0.003;
-    theta = 0.46;
-    tilt = -0.45;
-  } else if (style === 'curly') {
-    margin = 0.026;
-    theta = 0.46;
-    tilt = -0.3;
-  }
-  const dome = shadowed(new THREE.Mesh(new THREE.SphereGeometry(HEAD_R + margin, 24, 14, 0, Math.PI * 2, 0, Math.PI * theta), style === 'buzz' || style === 'curly' ? matte(look.hair, 1) : hair));
-  tilted.add(dome);
-  tilted.rotation.x = tilt;
-  g.add(tilted);
-
-  if ((style === 'short' && look.brows > 1) || style === 'long') {
-    // A fringe down to just above the brows.
-    const fringe = new THREE.Mesh(new THREE.SphereGeometry(HEAD_R + 0.01, 20, 6, Math.PI * 0.22, Math.PI * 0.56, Math.PI * 0.2, Math.PI * 0.18), hair);
-    g.add(fringe);
-  }
-  if (style === 'long') {
-    // The back falls to the shoulders; the skull frame's scale is undone so the curtain stays round.
-    const curtain = shadowed(new THREE.Mesh(new THREE.CylinderGeometry(0.093, 0.1, 0.17, 20, 1, true, Math.PI / 2, Math.PI), hair));
-    (curtain.material as THREE.Material).side = THREE.DoubleSide;
-    curtain.scale.set(0.92 / SKULL_SCALE.x, 1 / SKULL_SCALE.y, 1 / SKULL_SCALE.z);
-    curtain.position.set(0, -0.085 / SKULL_SCALE.y, -0.01);
-    g.add(curtain);
-  }
-  if (style === 'bun' && !look.hat) {
-    const bun = shadowed(new THREE.Mesh(new THREE.SphereGeometry(0.038, 14, 10), hair));
-    bun.position.set(0, 0.07, -0.075);
-    bun.scale.set(1 / SKULL_SCALE.x, 1 / SKULL_SCALE.y, 1 / SKULL_SCALE.z);
-    g.add(bun);
-  }
-  if (style === 'ponytail') {
-    const tail = shadowed(new THREE.Mesh(new THREE.CapsuleGeometry(0.024, 0.13, 4, 10), hair));
-    tail.scale.set(1 / SKULL_SCALE.x, 1 / SKULL_SCALE.y, 1 / SKULL_SCALE.z);
-    tail.position.set(0, -0.03, -0.11);
-    tail.rotation.x = 0.35;
-    g.add(tail);
-  }
-  return g;
-}
-
-/** A peaked cap or a beanie with a folded brim, in the skull's frame, over the hair. */
-function hatOf(look: PersonLook): THREE.Group {
-  const g = new THREE.Group();
-  const cloth = matte(look.hatColor ?? 0x2f2f33, 0.9);
-  if (look.hat === 'cap') {
-    const r = HEAD_R + 0.018;
-    const crown = shadowed(new THREE.Mesh(new THREE.SphereGeometry(r, 24, 12, 0, Math.PI * 2, 0, Math.PI * 0.44), cloth));
-    const peak = shadowed(new THREE.Mesh(new THREE.CylinderGeometry(0.105, 0.105, 0.006, 20, 1, false, -Math.PI / 2, Math.PI), cloth));
-    peak.position.set(0, 0.05, 0.04);
-    peak.rotation.x = 0.12;
-    const button = new THREE.Mesh(new THREE.SphereGeometry(0.008, 8, 6), cloth);
-    button.position.y = r;
-    g.add(crown, peak, button);
-    g.rotation.x = -0.26;
-    return g;
-  }
-  const r = HEAD_R + 0.014;
-  const theta = Math.PI * 0.45;
-  const dome = shadowed(new THREE.Mesh(new THREE.SphereGeometry(r, 24, 12, 0, Math.PI * 2, 0, theta), cloth));
-  const brim = shadowed(new THREE.Mesh(new THREE.TorusGeometry(r * Math.sin(theta), 0.012, 8, 28), cloth));
-  brim.position.y = r * Math.cos(theta);
-  brim.rotation.x = Math.PI / 2;
-  g.add(dome, brim);
-  g.rotation.x = -0.2;
-  return g;
-}
-
-/** Chin and jaw, and the cheeks: hair-coloured skin of the front half, see-through for stubble. */
-function beardOf(look: PersonLook): THREE.Group {
-  const g = new THREE.Group();
-  const material = new THREE.MeshStandardMaterial({ color: look.hair, roughness: 1, transparent: look.beard === 'stubble', opacity: look.beard === 'stubble' ? 0.45 : 1 });
-  const r = HEAD_R + (look.beard === 'full' ? 0.006 : 0.002);
-  const chin = new THREE.Mesh(new THREE.SphereGeometry(r, 24, 8, 0, Math.PI, Math.PI * 0.68, Math.PI * 0.27), material);
-  g.add(chin);
-  for (const phiStart of [0, Math.PI * 0.72]) {
-    const cheek = new THREE.Mesh(new THREE.SphereGeometry(r, 10, 6, phiStart, Math.PI * 0.28, Math.PI * 0.5, Math.PI * 0.19), material);
-    g.add(cheek);
-  }
-  return g;
-}
-
-function glasses(color: number): THREE.Group {
-  const g = new THREE.Group();
-  const frame = matte(color, 0.4);
-  for (const side of [-1, 1] as const) {
-    const rim = new THREE.Mesh(new THREE.TorusGeometry(0.017, 0.002, 6, 18), frame);
-    rim.position.set(side * 0.033, 0.012, 0.09);
-    const temple = new THREE.Mesh(new THREE.BoxGeometry(0.003, 0.003, 0.1), frame);
-    temple.position.set(side * 0.067, 0.014, 0.0425);
-    temple.rotation.y = side * 2.8;
-    g.add(rim, temple);
-  }
-  const bridge = new THREE.Mesh(new THREE.BoxGeometry(0.018, 0.003, 0.003), frame);
-  bridge.position.set(0, 0.014, 0.091);
-  g.add(bridge);
-  return g;
-}
-
-function shadowed<T extends THREE.Mesh>(mesh: T): T {
-  mesh.castShadow = true;
-  mesh.receiveShadow = true;
-  return mesh;
 }

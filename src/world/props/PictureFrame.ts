@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { createCanvas, toTexture, seededRandom } from '@/covers/generated/canvasUtils';
 import { Prop, part, matte } from './Prop';
+import { wood as woodMaterial } from '@/world/materials/finishes';
 
 /** `sunset`: soft gradient over a sea line; `mountains`: layered pastel-blue ridges; `abstract`: pastel shapes on cream. */
 export type PictureMotif = 'sunset' | 'mountains' | 'abstract';
@@ -39,7 +40,7 @@ export class PictureFrame extends Prop {
     this.name = `PictureFrame:${this.options.motif}`;
     const { width, height, frameWidth, frameColor } = this.options;
 
-    const wood = matte(frameColor, 0.5);
+    const wood = woodMaterial(frameColor, 0.5);
     // Four bars, the horizontal ones spanning the full width, sitting proud of the wall.
     const zBar = FRAME_DEPTH / 2;
     part(this, width, frameWidth, FRAME_DEPTH, wood, { y: height / 2 - frameWidth / 2, z: zBar });

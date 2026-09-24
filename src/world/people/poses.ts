@@ -33,8 +33,8 @@ export const POSES: Record<Pose, PoseAngles> = {
   },
   // Hands on the hips, elbows out.
   hips: {
-    left: { ux: 0.15, uz: -0.5, lx: 0.05, ly: 0, lz: 1.15 },
-    right: { ux: 0.15, uz: 0.5, lx: 0.05, ly: 0, lz: -1.15 },
+    left: { ux: 0.05, uz: -0.6, lx: -0.1, ly: 0, lz: 1.3 },
+    right: { ux: 0.05, uz: 0.6, lx: -0.1, ly: 0, lz: -1.3 },
   },
   // Right hand at the chin, left arm across the belly holding the elbow.
   think: {

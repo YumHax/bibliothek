@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { createCanvas, toTexture } from '@/covers/generated/canvasUtils';
 import { part } from './Prop';
+import { fabric } from '@/world/materials/finishes';
 
 export interface CurtainsOptions {
   /** Size of the opening the curtains flank, in metres. */
@@ -151,5 +152,5 @@ function pleatedFabric(): THREE.MeshStandardMaterial {
 
   const map = toTexture(canvas);
   const bump = new THREE.CanvasTexture(canvas);
-  return new THREE.MeshStandardMaterial({ map, bumpMap: bump, bumpScale: 0.01, roughness: 1 });
+  return fabric({ map, bumpMap: bump, bumpScale: 0.01, roughness: 1, sheenTint: 0x9a968e });
 }

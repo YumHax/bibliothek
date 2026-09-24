@@ -21,7 +21,7 @@ export const MARKET_ROOM: RoomOptions = {
   depth: 8,
   height: 3.4,
   opaqueWalls: ['front', 'back', 'left', 'right'],
-  finish: { floor: 'concrete', walls: 0xd9d0bf, ceiling: 0xb3aea6, trim: 0x6a655e, moulding: false },
+  finish: { floor: 'concrete', walls: 0xd9d0bf, ceiling: 0xb3aea6, trim: 0x6a655e, moulding: false, reflective: 0.35 },
 };
 
 /** Distance of each stall row from the aisle's centre line (z = 0). */

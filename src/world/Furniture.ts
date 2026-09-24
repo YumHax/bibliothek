@@ -9,6 +9,11 @@ export interface Furniture extends THREE.Object3D {
   readonly colliders?: readonly THREE.Box3[];
   /** Meshes the crosshair ray cannot see through (a room's walls): anything clickable behind the nearest one is out of reach. */
   readonly occluders?: readonly THREE.Object3D[];
+  /**
+   * False: no contact shadow is laid under it when placed (see `zone/ContactShadows`); anything
+   * that moves says so and carries its own `blobShadow()`, and so does what is not furniture on the floor.
+   */
+  readonly contactShadow?: boolean;
   /** Stays drawn when its zone is culled from view: a door, which the room on the other side sees too. */
   readonly seenFromNextDoor?: boolean;
   /**

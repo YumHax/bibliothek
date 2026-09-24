@@ -3,6 +3,7 @@ import { createCanvas, seededRandom, toTexture, FONT } from '@/covers/generated/
 import type { Furniture } from '../Furniture';
 import { boxMesh } from '../meshUtils';
 import { matte } from './Prop';
+import { wood as woodMaterial } from '@/world/materials/finishes';
 
 /** `wood`: a slatted fruit crate; `cardboard`: a taped-up moving box with a marker scrawl. */
 export type CrateStyle = 'wood' | 'cardboard';
@@ -62,7 +63,7 @@ export class Crate extends THREE.Group implements Furniture {
 function woodCrate(w: number, h: number, d: number, random: () => number): THREE.Group {
   const g = new THREE.Group();
   const tint = new THREE.Color().setHSL(0.09 + (random() - 0.5) * 0.02, 0.35 + (random() - 0.5) * 0.1, 0.55 + (random() - 0.5) * 0.12);
-  const wood = matte(tint, 0.85);
+  const wood = woodMaterial(tint, 0.85);
   const post = 0.03;
   for (const sx of [-1, 1]) for (const sz of [-1, 1]) g.add(boxMesh(post, h, post, wood, { x: sx * (w / 2 - post / 2), y: h / 2, z: sz * (d / 2 - post / 2) }));
   g.add(boxMesh(w - 2 * post, 0.015, d - 2 * post, wood, { y: 0.03 }));

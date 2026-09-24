@@ -8,6 +8,7 @@ import { resolvePlacement, type Placement } from '../Placement';
 import type { RoomOptions } from '../Room';
 import type { ShelvingHost } from '../shelving/Shelving';
 import { disposeTree } from '../props/Prop';
+import { ContactShadows } from './ContactShadows';
 
 /**
  * `empty`: nothing built (costs nothing). `dormant`: built and kept in memory but out of the scene,
@@ -131,6 +132,8 @@ export class Zone implements ShelvingHost {
   private readonly looseInteractables = new Set<Interactable>();
   private readonly disposers: Array<() => void> = [];
   private readonly scoped: ScopedCollisions;
+  /** The soft shadows where the furniture stands on the floor, one instanced mesh for the zone. */
+  private readonly contactShadows: ContactShadows;
 
   constructor(
     readonly spec: ZoneSpec,
@@ -148,6 +151,7 @@ export class Zone implements ShelvingHost {
     this.bounds = new THREE.Box3(new THREE.Vector3(-width / 2, 0, -depth / 2), new THREE.Vector3(width / 2, height, depth / 2)).applyMatrix4(this.group.matrixWorld);
     this.scoped = new ScopedCollisions(host.collisions);
     this.collisions = this.scoped;
+    this.contactShadows = new ContactShadows(this.group);
   }
 
   /** ShelvingHost: shelves are parented to the zone, not the scene. */
@@ -199,6 +203,7 @@ export class Zone implements ShelvingHost {
     const boxes = [item.footprint, ...(item.colliders ?? [])].map((box) => box.clone().applyMatrix4(item.matrixWorld));
     this.items.set(item, boxes);
     this.adopt(item);
+    this.contactShadows.add(item);
     if (!this.drawn && !item.seenFromNextDoor) this.hide(item);
     if (this.state === 'active') this.plug(item, boxes);
     if (isOccupancyAware(item)) item.setOccupied(this.occupied);
@@ -230,6 +235,7 @@ export class Zone implements ShelvingHost {
       this.hiddenMeshes = [];
       return;
     }
+    this.hide(this.contactShadows.mesh);
     for (const item of this.items.keys()) if (!item.seenFromNextDoor) this.hide(item);
     for (const box of this.looseInteractables) this.hide(box as unknown as THREE.Object3D);
   }
@@ -267,6 +273,7 @@ export class Zone implements ShelvingHost {
     if (!boxes) return;
     if (this.state === 'active') this.unplug(item, boxes);
     this.items.delete(item);
+    this.contactShadows.remove(item);
     this.group.remove(item);
   }
 
@@ -332,6 +339,8 @@ export class Zone implements ShelvingHost {
     for (const item of this.items.keys()) item.dispose?.();
     disposeTree(this.group);
     this.group.clear();
+    this.contactShadows.clear();
+    this.group.add(this.contactShadows.mesh);
     this.items.clear();
     this.looseInteractables.clear();
     this.portals.length = 0;

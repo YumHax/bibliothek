@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { createCanvas, toTexture } from '@/covers/generated/canvasUtils';
 import { Prop } from './Prop';
+import { fabric } from '@/world/materials/finishes';
 
 export interface RugOptions {
   width?: number;
@@ -26,8 +27,8 @@ export class Rug extends Prop {
     this.options = { width: 2.4, depth: 1.8, field: 0x6b2f2f, border: 0xd9c9a3, motif: 0x8a3d3d, ...options };
     const { width, depth } = this.options;
 
-    const top = new THREE.MeshStandardMaterial({ map: this.paint(), roughness: 1 });
-    const edge = new THREE.MeshStandardMaterial({ color: new THREE.Color(this.options.field).multiplyScalar(0.7), roughness: 1 });
+    const top = fabric({ map: this.paint(), roughness: 1, sheenTint: 0x8a8580 });
+    const edge = fabric({ color: new THREE.Color(this.options.field).multiplyScalar(0.7), roughness: 1 });
     // BoxGeometry material order: +x, -x, +y (top), -y, +z, -z.
     const slab = new THREE.Mesh(new THREE.BoxGeometry(width, THICKNESS, depth), [edge, edge, top, edge, edge, edge]);
     slab.position.y = THICKNESS / 2;

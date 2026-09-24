@@ -23,6 +23,8 @@ src/main.ts             construction only: engine, providers, collection, world,
 src/core/               Engine (renderer at pixel ratio <= 1.5, loop gated by a GPU fence so a slow frame throttles the loop instead of
                         drowning Firefox's GPU process, Updatable registry, LayerRenderer hook), Input (held keys + onPress, virtual keys/axes),
                         Collider (CollisionWorld: AABB set, add/remove), CssLayer, PerfLog (`?stats`: fps, draw calls, lights per 2 s)
+src/graphics/           quality (QUALITY: low / medium / high, `?quality=`), PostFx (HDR target, SSAO, depth of field, bloom, light meter,
+                        tone map + grade), grade (Look per zone), Environment (PMREM reflections), Haze (fog per look); see docs/graphics.md
 src/player/             FirstPersonController (yaw/pitch, sliding collisions against CollisionWorld only, sit/stand, crouch Shift, sprint double-tap
                         forward), PointerLockFlow (start card <-> lock; modes pointer | gamepad | touch)
 src/input/              Gamepad (standard mapping -> virtual keys + synthetic mouse), TouchControls, SyntheticMouse, deviceDetect
@@ -44,13 +46,19 @@ src/world/arcade/       arcadePlan + furnishArcade, ArcadeCabinet (canvas screen
                         (ArcadeGame contract, Breakout, Invaders, registry). See docs/economy.md
 src/world/market/       marketPlan + furnishMarket, MarketStall (trestle table under a striped awning, `anchors()` for the boxes), ForSaleBox
                         (GameBox + price tag, owns the click), OrderCounter (opens the catalogue), HallRoof (iron trusses + roof light following the sky)
-src/world/people/       PersonModel (jointed rig at real scale: lathe torso wearing one painted canvas, knees/elbows, egg head with
-                        blinking eyes, brows, nose, mouth, ears, hair styles, hats, beard, glasses, bags; gait, breathing, head gaze, arm
-                        poses), looks (seeded looks by role: `randomLook(seed, 'vendor' | 'shopper')`), clothTexture (the torso canvas:
-                        trousers + belt, tee/stripes/flannel/hoodie/jacket/shirt, apron), poses (arm angles: stand, crossed, hips, think,
-                        pockets), Vendor (stands behind a stall, changes stance, meets the player's eye, clickable for a line), Shopper
-                        (walks the aisle between `BrowseSpot`s, browses hand-at-chin, lingers; no collider). Placed by `furnishMarket`
-                        from `MARKET_PLAN.crowd`; the camera (`BuildContext.listener`) is the viewer.
+src/world/people/       PersonModel (the rig at real scale: hips/knees/ankles, waist, shoulders/elbows, neck; gait, breathing, arm
+                        poses, head + eye gaze, blinking; each bone's pieces merged per material by `geometry.Parts`), body
+                        (proportions, the trunk as superellipse rings following `TRUNK` for build and figure, tapered limbs,
+                        hands with fingers), head (`headRadius(d)`: the skull and face sculpted radially, so hair and paint can
+                        ask where the skin is; ears, hats, glasses), eyes (balls that turn, lids that blink), hair (shells over
+                        the skin that feather at the hairline, long hair, bun, ponytail, full beard), shoes, faceTexture (the
+                        head's canvas: flush, shade, stubble, brows, lips) and clothTexture (the trunk's canvas: trousers,
+                        tee/stripes/flannel/hoodie/jacket/shirt, apron, weave; `paintCloth` for sleeves and legs), looks (seeded
+                        looks by role: `randomLook(seed, 'vendor' | 'shopper')`), poses (arm angles: stand, crossed, hips,
+                        think, pockets), Vendor (stands behind a stall, changes stance, meets the player's eye, clickable for a
+                        line), Shopper (walks the aisle between `BrowseSpot`s, browses hand-at-chin, lingers; no collider).
+                        Placed by `furnishMarket` / `furnishArcade` from their plans; the camera (`BuildContext.listener`) is
+                        the viewer.
 src/world/travel/       TravelDoor (a ShutDoor that asks the Session to travel), Travel (fade, teleport to a zone's `travel.arrival`)
 src/world/zone/         Zone (group at origin, place()/placeAt()/remove(), scoped collisions, empty/dormant/active, build/activate/deactivate/unload,
                         own shadow layer, portals, setOccupied/setDrawn), ZoneManager (Updatable: player position -> current zone, neighbours
@@ -61,6 +69,8 @@ src/world/acoustics/    SoundOcclusion (walls between the listener and a screen:
                         room's walls and the door leaves; `proximityVolume` keeps `wallGain` of the volume per wall)
 src/world/shelving/     Shelving (bookcases sized from the collection, `minBookcases` standing empty from the start, live rebuild, sort modes, one
                         ShelfLamp per bookcase), plan, slots, sort
+src/world/materials/    shaderPatch (onBeforeCompile helpers), finishes (wood, fabric, plastic, scuffed), surfaces (walls, floor and
+                        ceiling edges, floor wear), GlossyFloor
 src/world/box/          BoxShell, Cartridge, Manual, LentTag, LidMotion, shellLayout, slabs
 src/world/props/        Prop (base: empty footprint), decor (DECOR_KINDS registry + placeDecor), wallMount, SwitchableLamp (base of PendantLamp,
                         FlushLamp, FloorLamp, ShelfLamp), Door (hinged either side, swings out of the hanging room), ShutDoor (decorative), Window

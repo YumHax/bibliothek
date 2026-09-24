@@ -65,6 +65,19 @@ export function azimuthOf(x: number, z: number): number {
   return Math.atan2(x, z);
 }
 
+/** Texture point of the world point (x, z) at `height` above the street. */
+export function worldPoint(x: number, z: number, height: number): [number, number] {
+  return [azimuthX(azimuthOf(x, z)), heightY(height, Math.hypot(x, z))];
+}
+
+/** A Path2D through `points`, closed. */
+export function outline(points: readonly (readonly [number, number])[]): Path2D {
+  const p = new Path2D();
+  points.forEach(([x, y], i) => (i === 0 ? p.moveTo(x, y) : p.lineTo(x, y)));
+  p.closePath();
+  return p;
+}
+
 /** Byte value the depth channel holds for a thing `distance` metres away (see `DEPTH_SCALE`). */
 export function encodeDepth(distance: number): number {
   return Math.round(THREE.MathUtils.clamp(1 - Math.exp(-distance / DEPTH_SCALE), 0, 1) * 255);
@@ -178,6 +191,25 @@ export class Sheet {
     g.addColorStop(1, 'rgba(255,0,0,0)');
     ctx.fillStyle = g;
     ctx.fillRect(-rx, -rx, rx * 2, rx * 2);
+    ctx.restore();
+  }
+
+  /**
+   * Neon or back-lit lettering centred on (x, y): `size` px tall, squeezed across by `squeeze` for a
+   * facade seen at an angle (negative to mirror it: see the shop fascias). Anti-aliased, so it carries no curfew: a sign lit this way burns all night.
+   */
+  sign(text: string, x: number, y: number, size: number, squeeze: number, font: string, kind: 'warm' | 'cool', strength: number): void {
+    const ctx = this.light;
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.translate(x, y);
+    ctx.scale(squeeze, 1);
+    ctx.font = `${Math.round(size * 10) / 10}px ${font}`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    const v = Math.round(THREE.MathUtils.clamp(strength, 0, 1) * 255);
+    ctx.fillStyle = kind === 'warm' ? `rgb(${v},0,0)` : `rgb(0,${v},0)`;
+    ctx.fillText(text, 0, 0);
     ctx.restore();
   }
 

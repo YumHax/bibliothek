@@ -26,8 +26,8 @@ export class CssLayer implements LayerRenderer {
     this.renderer.setSize(width, height);
   }
 
-  /** Material that makes a mesh transparent to the DOM layer while still occluding 3D behind it. */
+  /** Material that makes a mesh transparent to the DOM layer while still occluding 3D behind it. No fog: haze would tint the hole. */
   static createCutoutMaterial(): THREE.Material {
-    return new THREE.MeshBasicMaterial({ color: 0x000000, opacity: 0, blending: THREE.NoBlending, toneMapped: false });
+    return new THREE.MeshBasicMaterial({ color: 0x000000, opacity: 0, blending: THREE.NoBlending, toneMapped: false, fog: false });
   }
 }

@@ -1,3 +1,4 @@
+import type { LookName } from '@/graphics/grade';
 import type { ZoneSpec } from './zone/Zone';
 import type { NearWall } from './props/outdoors/Outdoors';
 import { EYE_HEIGHT as STREET_TO_EYE } from './props/outdoors/Sheet';
@@ -89,6 +90,8 @@ export interface TravelPlan {
 export interface ZonePlan extends ZoneSpec {
   kind: ZoneKind;
   travel?: TravelPlan;
+  /** Colour grade and haze while the player is here (`graphics/grade.ts`); default `home`. */
+  look?: LookName;
 }
 
 /**
@@ -98,12 +101,19 @@ export interface ZonePlan extends ZoneSpec {
 export const SUN_ROTATION_Y = Math.PI;
 
 /**
- * Neighbours are what is seen through a zone's doorways: from the collection room, the hallway
- * and (through the corridor) the two rooms whose doors face its own; from any room, the hallway
- * and the collection room. Sibling rooms are not each other's neighbours (their doors are coplanar).
+ * Neighbours are what stays active around a zone. In the flat every room is every other room's
+ * neighbour (`FLAT`), so the flat's active set, and with it the scene's light count, never changes
+ * at a doorway: a zone coming or going adds or removes lights, and a different light count
+ * recompiles every shader program in the scene (seconds of freeze with the graphics materials).
+ * The `PortalCuller` still draws only what is seen through open doors, and a room's shadow maps
+ * only follow while it is occupied, so an active room out of sight costs little.
  * Every room of the flat is `persistent`: small enough to keep, and rebuilding one on the way back
  * (geometry, painted textures) is a hitch in a doorway. Leave it off for something big, like the street.
  */
+const FLAT = ['living', 'hallway', 'bathroom', 'bedroom', 'kitchen'] as const;
+/** The rest of the flat, seen from `id`. */
+const flatBut = (id: (typeof FLAT)[number]): string[] => FLAT.filter((other) => other !== id);
+
 export const WORLD_PLAN = {
   start: 'living',
   zones: [
@@ -112,7 +122,7 @@ export const WORLD_PLAN = {
       kind: 'collectionRoom',
       origin: [0, 0, 0],
       extent: DEFAULT_ROOM,
-      neighbours: ['hallway', 'bathroom', 'bedroom'],
+      neighbours: flatBut('living'),
       persistent: true,
     },
     {
@@ -120,7 +130,7 @@ export const WORLD_PLAN = {
       kind: 'hallway',
       origin: [-1, 0, -3 - WALL_GAP - HALLWAY_ROOM.depth / 2],
       extent: HALLWAY_ROOM,
-      neighbours: ['living', 'bathroom', 'bedroom', 'kitchen'],
+      neighbours: flatBut('hallway'),
       persistent: true,
       travel: { label: 'Home', arrival: HALLWAY_PLAN.arrival.at, yaw: HALLWAY_PLAN.arrival.yaw },
     },
@@ -129,7 +139,7 @@ export const WORLD_PLAN = {
       kind: 'bathroom',
       origin: [-2.1, 0, -5.62],
       extent: BATHROOM_ROOM,
-      neighbours: ['hallway', 'living'],
+      neighbours: flatBut('bathroom'),
       persistent: true,
     },
     {
@@ -137,7 +147,7 @@ export const WORLD_PLAN = {
       kind: 'bedroom',
       origin: [0.6, 0, -6.22],
       extent: BEDROOM_ROOM,
-      neighbours: ['hallway', 'living'],
+      neighbours: flatBut('bedroom'),
       persistent: true,
     },
     {
@@ -145,7 +155,7 @@ export const WORLD_PLAN = {
       kind: 'kitchen',
       origin: KITCHEN_ORIGIN,
       extent: KITCHEN_ROOM,
-      neighbours: ['hallway', 'living'],
+      neighbours: flatBut('kitchen'),
       persistent: true,
     },
     // Out of the flat, reached by teleport only (see `travel`): far enough along +x never to touch
@@ -157,6 +167,7 @@ export const WORLD_PLAN = {
       extent: ARCADE_ROOM,
       neighbours: [],
       travel: { label: 'Arcade', arrival: ARCADE_PLAN.arrival.at, yaw: ARCADE_PLAN.arrival.yaw },
+      look: 'arcade',
     },
     {
       id: 'market',
@@ -165,6 +176,7 @@ export const WORLD_PLAN = {
       extent: MARKET_ROOM,
       neighbours: [],
       travel: { label: 'Flea market', arrival: MARKET_PLAN.arrival.at, yaw: MARKET_PLAN.arrival.yaw },
+      look: 'market',
     },
   ] as ZonePlan[],
 };

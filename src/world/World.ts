@@ -35,14 +35,15 @@ export class World implements ZoneHost {
   }
 
   /**
-   * Builds every zone and renders the whole world once, up front: shader programs (main and
-   * shadow passes) get compiled and textures uploaded now, at start-up, instead of the first time
-   * the player looks through a doorway. Call it before the `ZoneManager` takes over: it leaves
-   * every zone active, the manager then keeps only the current one and its neighbours.
+   * Compiles and uploads everything the active zones hold, up front: shader programs (every
+   * material, in view or not) get compiled and textures uploaded now, at start-up, instead of the
+   * first time the player looks through a doorway. Call it once the `ZoneManager` has activated
+   * the start zone and its neighbours: programs depend on the scene's light count, so what is
+   * compiled must be the lights the loop will render with (zones out of the flat, reached by
+   * teleport, compile behind the fade).
    */
   prime(): void {
-    for (const zone of this.zones) zone.activate();
-    const { renderer, scene, camera } = this.engine;
+    const { renderer, scene } = this.engine;
     scene.traverse((obj) => {
       const material = (obj as Partial<THREE.Mesh>).material;
       for (const m of Array.isArray(material) ? material : material ? [material] : []) {
@@ -50,8 +51,9 @@ export class World implements ZoneHost {
         for (const texture of [textured.map, textured.emissiveMap, textured.normalMap, textured.roughnessMap]) if (texture) renderer.initTexture(texture);
       }
     });
-    renderer.compile(scene, camera);
-    renderer.render(scene, camera);
+    this.engine.compileScene();
+    // One real frame: the shadow passes and the post-processing passes compile too.
+    this.engine.renderFrame();
   }
 
   /** Declares a zone; nothing is built until it is activated (or `build()` is called). */

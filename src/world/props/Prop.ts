@@ -27,9 +27,14 @@ export function matte(color: THREE.ColorRepresentation, roughness = 0.6): THREE.
   return new THREE.MeshStandardMaterial({ color, roughness });
 }
 
-/** Frees the geometries and materials of `root` and its descendants (textures included). */
+/**
+ * Frees the geometries and materials of `root` and its descendants (textures included). Objects
+ * flagged `userData.sharedResources` (geometry and material shared across zones, like the contact
+ * shadows) keep theirs: freeing them would make every other user re-upload and recompile.
+ */
 export function disposeTree(root: THREE.Object3D): void {
   root.traverse((obj) => {
+    if (obj.userData.sharedResources) return;
     const mesh = obj as Partial<THREE.Mesh>;
     mesh.geometry?.dispose();
     const materials = Array.isArray(mesh.material) ? mesh.material : mesh.material ? [mesh.material] : [];

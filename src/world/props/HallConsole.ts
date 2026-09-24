@@ -3,6 +3,8 @@ import type { Furniture } from '../Furniture';
 import { cylinderMesh } from '../meshUtils';
 import { Plant } from './Plant';
 import { part, matte } from './Prop';
+import { wood as woodMaterial } from '@/world/materials/finishes';
+import { mirrorGlass } from './MirrorGlass';
 
 export interface HallConsoleOptions {
   /** Length along the wall. Default 0.9. */
@@ -19,7 +21,7 @@ const MIRROR_W = 0.55;
 const MIRROR_H = 0.75;
 const MIRROR_Y = 1.55;
 
-const WALNUT = matte(0x5e412b, 0.5);
+const WALNUT = woodMaterial(0x5e412b, 0.5);
 const BRASS = new THREE.MeshStandardMaterial({ color: 0xc9a75b, metalness: 0.85, roughness: 0.3 });
 const GLASS = new THREE.MeshStandardMaterial({ color: 0xb8c4cc, roughness: 0.08, metalness: 0.2 });
 
@@ -55,6 +57,9 @@ export class HallConsole extends THREE.Group implements Furniture {
     if (options.mirror ?? true) {
       part(this, MIRROR_W, MIRROR_H, 0.02, WALNUT, { y: MIRROR_Y, z: 0.01 });
       part(this, MIRROR_W - 0.06, MIRROR_H - 0.06, 0.008, GLASS, { y: MIRROR_Y, z: 0.012 });
+      const silver = mirrorGlass(MIRROR_W - 0.06, MIRROR_H - 0.06);
+      silver.position.set(0, MIRROR_Y, 0.0165);
+      this.add(silver);
     }
 
     this.footprint = new THREE.Box3(new THREE.Vector3(-width / 2, 0, 0), new THREE.Vector3(width / 2, TOP_Y, OFF_WALL + DEPTH));

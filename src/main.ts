@@ -10,7 +10,8 @@ import { Sky } from '@/world/Sky';
 import { SoundOcclusion } from '@/world/acoustics/SoundOcclusion';
 import { ZoneManager, PortalCuller } from '@/world/zone';
 import { KITCHEN_WING, SUN_ROTATION_Y, WORLD_PLAN } from '@/world/worldPlan';
-import { ZONE_BUILDERS, type BuildContext, type RoomHandle } from '@/world/layout';
+import { ZONE_BUILDERS, type BuildContext, type RoomHandle, type ZoneHandle } from '@/world/layout';
+import { setupGraphics } from '@/graphics';
 import { startPerfLog } from '@/core/PerfLog';
 import { furnishCat, CatSettingsStore } from '@/world/cat';
 import { Overlay } from '@/ui/Overlay';
@@ -23,6 +24,7 @@ import { CataloguePanel } from '@/ui/CataloguePanel';
 import { TravelMenu } from '@/ui/TravelMenu';
 import { WalletHud } from '@/ui/WalletHud';
 import { Fader } from '@/ui/Fader';
+import { QualityPicker } from '@/ui/QualityPicker';
 import { Interactor } from '@/interaction/Interactor';
 import { Inspector } from '@/interaction/Inspector';
 import { Session } from '@/game/Session';
@@ -70,6 +72,13 @@ const videos = new YouTubeSearchProvider();
 const sky = new Sky({ sunRotationY: SUN_ROTATION_Y, nearWall: KITCHEN_WING });
 engine.addUpdatable(sky);
 const world = new World(engine);
+// Post-processing, reflections and haze (see docs/graphics.md), set up before anything compiles; the
+// grade and the air follow the player's zone. The callbacks are only read once the loop runs.
+const graphics = setupGraphics(engine, {
+  focus: () => inspector.focusDistance,
+  lightLevel: () => (zones.current.handle as ZoneHandle | null)?.room.lightLevel ?? 1,
+});
+const lookOf = (id: string) => WORLD_PLAN.zones.find((plan) => plan.id === id)?.look;
 const context: BuildContext = {
   cssLayer,
   listener: engine.camera,
@@ -88,16 +97,16 @@ const home = world.zone(WORLD_PLAN.start).activate() as RoomHandle; // built by 
 const player = new FirstPersonController(engine.camera, engine.renderer.domElement, input, world.collisions);
 player.setPosition(0, 1.5);
 engine.addUpdatable(player);
-// Every zone is built, compiled and drawn once now, so crossing a doorway later costs nothing.
-world.prime();
 // Streams zones around the player: current + neighbours active, the rest dormant (and unloaded unless persistent).
 // Only the zone the player stands in runs its sky ambient and re-renders its shadow maps every frame (see `OccupancyAware`).
 const zones = new ZoneManager(world.zones, engine.camera, { start: WORLD_PLAN.start });
 engine.addUpdatable(zones);
 zones.current.setOccupied(true);
+graphics.setLook(lookOf(zones.current.id), true);
 zones.events.onZoneChange = (zone, previous) => {
   previous.setOccupied(false);
   zone.setOccupied(true);
+  graphics.setLook(lookOf(zone.id));
 };
 // Of the active zones, only draw the player's and those seen through an open doorway in view.
 engine.addUpdatable(new PortalCuller(world.zones, zones, engine.camera));
@@ -118,18 +127,22 @@ if (params.has('stats')) {
     },
   });
   // Console handle for profiling: `bibliothek.bisect()` runs the F9 bisection, `bibliothek.player.setPosition(x, z)` teleports.
-  Object.assign(globalThis, { bibliothek: { engine, world, player, zones, bisect: perf.bisect } });
+  Object.assign(globalThis, { bibliothek: { engine, world, player, zones, graphics, bisect: perf.bisect } });
 }
 
 // The cat: name and coat persist next to the collection; it needs the player (to watch and flee) and the clock (to nap).
 const catSettings = new CatSettingsStore();
 const cat = furnishCat(world.zone(WORLD_PLAN.start), { settings: catSettings, player, clock: sky.dayNight, seats: home.seats, windows: home.windows, tv: home.tv });
+// The whole flat is active (every room neighbours the others) and furnished: compiled and drawn once
+// now, so crossing a doorway costs nothing.
+world.prime();
 // Covers nearest to the player download first.
 setInterval(() => covers.setPriorityOrigin(engine.camera.position), 1000);
 
 // --- Interaction and UI -----------------------------------------------------------------------
 const overlay = new Overlay(container, input, () => void lockFlow.enter());
 const lockFlow = new PointerLockFlow(player, overlay, engine.renderer.domElement, input);
+overlay.addCardSection(new QualityPicker().element);
 const panel = new GamePanel(container);
 const toast = new Toast(container);
 const search = new SearchBar(container);

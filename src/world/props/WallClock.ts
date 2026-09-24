@@ -5,6 +5,7 @@ import { createCanvas, toTexture, FONT } from '@/covers/generated/canvasUtils';
 import { invisibleHitbox } from '../meshUtils';
 import { Prop, matte } from './Prop';
 import type { DayNight } from './DayNight';
+import { wood as woodMaterial } from '@/world/materials/finishes';
 
 export interface WallClockOptions {
   /** Outer diameter of the case. Default 0.32 m. */
@@ -45,7 +46,7 @@ export class WallClock extends Prop implements Interactable {
     const faceZ = CASE_DEPTH;
 
     // Case: a shallow cylinder proud of the wall, axis along z.
-    const wood = matte(options.caseColor ?? 0x3a2c22, 0.55);
+    const wood = woodMaterial(options.caseColor ?? 0x3a2c22, 0.55);
     const body = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius, CASE_DEPTH, SEGMENTS), wood);
     body.rotation.x = Math.PI / 2;
     body.position.z = CASE_DEPTH / 2;

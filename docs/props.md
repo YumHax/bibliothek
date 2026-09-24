@@ -65,6 +65,7 @@ Read this to add or change something visible in the room. The recipe is in the `
 | `leaningMirror` | `width`, `height`, `frameColor`, `lean` | full-length mirror leaning on a wall; `wall` placement with `y: 0`; collides over its wedge |
 | `pedalBin` | `radius`, `height` | steel bin, pedal facing local +z; collides |
 | `bathroomScale` | `color` | flat glass scale on the floor, display facing local +z; never collides |
+| `wallSocket` | `height`, `gangs: 1/2`, `cables: [x, y, z][]`, `cableColor` | `wall` placement with `y: 0`; each cable runs from its plug down to the floor and on to a wall-local device point |
 
 Wired classes: `Seat` (+ `Cushion` via `mountCushion`), `Television(cssLayer, listener)`, `Projector(cssLayer, { pictureWidth, listener })`,
 `RoomWindow(outdoors, { width, height, drivesClock, sunlight, onCurtainsChange })`, `Poster(width, height, painter)` with

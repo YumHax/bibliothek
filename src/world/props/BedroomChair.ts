@@ -1,7 +1,9 @@
 import * as THREE from 'three';
 import type { Furniture } from '../Furniture';
 import { cylinderMesh } from '../meshUtils';
-import { part, matte } from './Prop';
+import { part } from './Prop';
+import { wood as woodMaterial } from '@/world/materials/finishes';
+import { fabric } from '@/world/materials/finishes';
 
 export interface BedroomChairOptions {
   /** Colour of the shirt thrown over the back; `null` for a bare chair. */
@@ -15,7 +17,7 @@ const SEAT_Y = 0.45;
 const BACK_Y = 0.9;
 const LEG_R = 0.018;
 
-const BEECH = matte(0xc9a97a, 0.6);
+const BEECH = woodMaterial(0xc9a97a, 0.6);
 
 /**
  * A plain wooden bedroom chair, the kind clothes end up on: four turned legs, a seat, two back
@@ -49,14 +51,14 @@ export class BedroomChair extends THREE.Group implements Furniture {
 
     if (shirt !== null) {
       // The shirt hangs over the top rail: a body folded in two down the back, sleeves dangling.
-      const cloth = matte(shirt, 0.95);
+      const cloth = fabric({ color: shirt, roughness: 0.95 });
       const drape = part(this, 0.36, 0.42, 0.05, cloth, { y: BACK_Y - 0.2, z: -legInset - 0.07 });
       drape.rotation.x = 0.1;
       part(this, 0.34, 0.16, 0.04, cloth, { y: BACK_Y - 0.09, z: -legInset + 0.02 });
       for (const dx of [-0.2, 0.2]) part(this, 0.07, 0.3, 0.04, cloth, { x: dx, y: BACK_Y - 0.28, z: -legInset - 0.06 }).castShadow = false;
     }
     if (jeans !== null) {
-      const denim = matte(jeans, 1);
+      const denim = fabric({ color: jeans, roughness: 1 });
       const fold = part(this, 0.3, 0.05, 0.24, denim, { y: SEAT_Y + 0.025, z: 0.02 });
       fold.rotation.y = -0.2;
       part(this, 0.24, 0.03, 0.2, denim, { y: SEAT_Y + 0.065, z: 0.03 }).castShadow = false;

@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import type { Furniture } from '../Furniture';
 import { cylinderMesh } from '../meshUtils';
 import { part, matte } from './Prop';
+import { wood as woodMaterial } from '@/world/materials/finishes';
 
 export interface DresserOptions {
   /** Length along the wall. Default 0.9. */
@@ -18,8 +19,8 @@ const DRAWER_GAP = 0.012;
 /** How far the dresser stands off the wall. */
 const OFF_WALL = 0.015;
 
-const WALNUT = matte(0x5e412b, 0.5);
-const DARK_WALNUT = matte(0x4a3221, 0.55);
+const WALNUT = woodMaterial(0x5e412b, 0.5);
+const DARK_WALNUT = woodMaterial(0x4a3221, 0.55);
 const BRASS = new THREE.MeshStandardMaterial({ color: 0xc9a75b, metalness: 0.85, roughness: 0.3 });
 const GLASS = new THREE.MeshStandardMaterial({ color: 0xcfe0e6, roughness: 0.1, metalness: 0.1, transparent: true, opacity: 0.7 });
 const PAGES = matte(0xf0e9d8, 0.9);

@@ -1,10 +1,14 @@
 import * as THREE from 'three';
+import { QUALITY } from '@/graphics/quality';
 import type { Updatable } from '@/core/Engine';
 import { IDLE_SHADOW_INTERVAL, type OccupancyAware } from './Furniture';
 import { boxMesh } from './meshUtils';
 import { parquetMaterial } from './Parquet';
 import { concreteMaterial } from './Concrete';
 import { carpetMaterial } from './Carpet';
+import { edgeOcclusion, floorWearMap, wallMaterial } from './materials/surfaces';
+import { glossyFloor } from './materials/GlossyFloor';
+import { scuffed } from './materials/finishes';
 
 /** Walls as seen from the default spawn: back = -z (shelves), front = +z, left = -x (TV), right = +x. */
 export type Wall = 'front' | 'back' | 'left' | 'right';
@@ -61,6 +65,11 @@ export interface RoomFinish {
   trim?: number;
   /** Crown moulding along the ceiling (default true; a hall has none). */
   moulding?: boolean;
+  /**
+   * A polished floor that mirrors the room at a grazing angle, 0..1 (default none). Only drawn
+   * with `QUALITY.reflections` (a second render of the room while the floor is in view).
+   */
+  reflective?: number;
 }
 
 /** Hemisphere sky colour in full daylight (warm, lamp-like) and at night (cool, moonlit), when no sky hue is given. */
@@ -72,6 +81,8 @@ const SKY_HUE_WEIGHT = 0.7;
 const LAMP_INTENSITY = 22;
 const REFERENCE_AREA = 36;
 const MIN_LAMP_SHARE = 0.15;
+/** Ground colour of the hemisphere ambient per floor: the light the floor bounces back up takes its colour. */
+const FLOOR_BOUNCE: Record<NonNullable<RoomFinish['floor']>, number> = { parquet: 0x7a6450, concrete: 0x6e6b66, carpet: 0x2c2436 };
 /** Emissive of the ceiling standing in for the lamp's bounce off the walls, with the lamp on. */
 const CEILING_BOUNCE = 0.3;
 /** Thickness of the wall colliders, laid just outside each wall plane so nothing inside the room touches them. */
@@ -91,6 +102,8 @@ const LAMP_SHADOW_BIAS_M = 0.005;
  * the occupied room's lamp re-renders its shadow map every frame; `main.ts` flips it on zone change.
  */
 export class Room extends THREE.Group implements Updatable, OccupancyAware {
+  /** The shell: its floor is where contact shadows fall, not something standing on it. */
+  readonly contactShadow = false;
   readonly options: RoomOptions;
 
   private walls!: THREE.Mesh[];
@@ -155,6 +168,15 @@ export class Room extends THREE.Group implements Updatable, OccupancyAware {
     this.ceilingLamp.shadow.needsUpdate = true;
   }
 
+  /**
+   * How lit the room is, 0 (night, lamp off) .. 1 (lamp on or full sun): what the reflections and
+   * the haze of the player's room follow (see `graphics/`).
+   */
+  get lightLevel(): number {
+    const skylight = THREE.MathUtils.lerp(0.12, 0.85, this.daylight) * THREE.MathUtils.lerp(0.3, 1, this.skylightOpen);
+    return THREE.MathUtils.clamp(skylight / 0.85 + (this.lampOn ? 0.65 : 0), 0, 1);
+  }
+
   private applyLighting(): void {
     const { daylight, lampOn, skylightOpen, occupied } = this;
     this.hemisphere.color.lerpColors(NIGHT_SKY, DAY_SKY, daylight);
@@ -167,6 +189,24 @@ export class Room extends THREE.Group implements Updatable, OccupancyAware {
     this.ceilingLamp.intensity = lampOn ? this.lampIntensity : 0;
     // The ceiling's fake bounce is the lamp's; with it off only a little daylight reaches up there.
     this.ceilingMat.emissiveIntensity = lampOn ? CEILING_BOUNCE : 0.08 * daylight * skylightOpen;
+  }
+
+  /** Zone-local floor spots (x, z) just inside each doorway: where the walking lanes lead. */
+  private doorSpots(): THREE.Vector2[] {
+    const { width, depth } = this.options;
+    return (this.options.doorways ?? []).map((d) => {
+      const inset = 0.4;
+      switch (d.wall) {
+        case 'back':
+          return new THREE.Vector2(d.along, -depth / 2 + inset);
+        case 'front':
+          return new THREE.Vector2(d.along, depth / 2 - inset);
+        case 'left':
+          return new THREE.Vector2(-width / 2 + inset, d.along);
+        case 'right':
+          return new THREE.Vector2(width / 2 - inset, d.along);
+      }
+    });
   }
 
   /** XZ interior bounds: where the cat lives and what its navigation grid covers. */
@@ -211,14 +251,25 @@ export class Room extends THREE.Group implements Updatable, OccupancyAware {
 
     const finish = this.options.finish ?? {};
     const floorMat = finish.floor === 'concrete' ? concreteMaterial(width, depth) : finish.floor === 'carpet' ? carpetMaterial(width, depth) : parquetMaterial(width, depth);
+    // Where the floor meets the walls it darkens; the varnish or the slab is dulled along the walking lanes.
+    edgeOcclusion(floorMat, new THREE.Vector2(width / 2, depth / 2), 0.3, 0.22);
+    if (finish.floor !== 'carpet') {
+      const wear = floorWearMap(width, depth, this.doorSpots(), Math.round(width * 1000 + depth * 10));
+      if (wear) {
+        floorMat.roughnessMap = wear;
+        floorMat.roughness = Math.min(1, floorMat.roughness * 1.3);
+      }
+    }
     const floor = new THREE.Mesh(new THREE.PlaneGeometry(width, depth), floorMat);
     floor.rotation.x = -Math.PI / 2;
     floor.receiveShadow = true;
     this.add(floor);
+    if (finish.reflective && QUALITY.reflections) this.add(glossyFloor(width, depth, finish.reflective));
 
     // The ceiling only sees the lamp at grazing angles and the hemisphere's ground tint, so a
     // touch of emissive stands in for the light the white walls would bounce back up onto it.
     const ceilingMat = new THREE.MeshStandardMaterial({ color: finish.ceiling ?? 0xffffff, roughness: 1, emissive: 0xfff8f0, emissiveIntensity: CEILING_BOUNCE });
+    edgeOcclusion(ceilingMat, new THREE.Vector2(width / 2, depth / 2), 0.2, 0.3);
     this.ceilingMat = ceilingMat;
     const ceiling = new THREE.Mesh(new THREE.PlaneGeometry(width, depth), ceilingMat);
     ceiling.rotation.x = Math.PI / 2;
@@ -227,11 +278,12 @@ export class Room extends THREE.Group implements Updatable, OccupancyAware {
 
     // Walls, each with the doorways cut out of it. Every wall's plane has its local +x running
     // along the wall; the doorway's world coordinate is turned into that local x by `wallLocalX`.
-    const wallMat = new THREE.MeshStandardMaterial({ color: finish.walls ?? 0xf3f0ea, roughness: 0.9, side: THREE.DoubleSide });
+    // One material per wall: each has its own corners and its own ghosts of frames (see `wallMaterial`).
     const doorways = this.options.doorways ?? [];
     const wall = (name: Wall, length: number): THREE.Mesh => {
       const holes = doorways.filter((d) => d.wall === name).map((d) => ({ x: wallLocalX(name, d.along), width: d.width, height: d.height }));
-      const mesh = new THREE.Mesh(wallGeometry(length, height, holes), wallMat);
+      const seed = Math.round(width * 7919 + depth * 104729) + name.length * 31 + name.charCodeAt(0);
+      const mesh = new THREE.Mesh(wallGeometry(length, height, holes), wallMaterial(finish.walls ?? 0xf3f0ea, { length, height, seed }));
       mesh.receiveShadow = true;
       return mesh;
     };
@@ -270,7 +322,7 @@ export class Room extends THREE.Group implements Updatable, OccupancyAware {
     }
 
     // Baseboard trim helps read the floor/wall edge in first person; it stops at the doorways.
-    const trimMat = new THREE.MeshStandardMaterial({ color: finish.trim ?? 0xe4e0d8, roughness: 0.7 });
+    const trimMat = scuffed(new THREE.MeshStandardMaterial({ color: finish.trim ?? 0xe4e0d8, roughness: 0.7 }));
     const trimH = 0.08;
     const trimD = 0.02;
     const y = trimH / 2;
@@ -301,13 +353,13 @@ export class Room extends THREE.Group implements Updatable, OccupancyAware {
 
   private buildLights(): void {
     const { width, depth, height } = this.options;
-    this.hemisphere = new THREE.HemisphereLight(DAY_SKY, 0x7a6450, 0.95);
+    this.hemisphere = new THREE.HemisphereLight(DAY_SKY, FLOOR_BOUNCE[this.options.finish?.floor ?? 'parquet'], 0.95);
     this.add(this.hemisphere);
 
     const ceilingLamp = new THREE.PointLight(0xffe9c9, this.lampIntensity, 0, 2);
     ceilingLamp.position.set(0, height - 0.2, 0);
     ceilingLamp.castShadow = true;
-    ceilingLamp.shadow.mapSize.set(1024, 1024);
+    ceilingLamp.shadow.mapSize.setScalar(QUALITY.shadowMapSize);
     // Point-light shadow depth is linear over [near, far]; the default far of 500 m makes any bias
     // huge (-0.002 was about 1 m, so low objects cast nothing). Bound it to the room (its farthest
     // floor corner, with room to spare through an open door): beyond `far` the light is dark, and
@@ -347,7 +399,14 @@ interface Hole {
  * touching the outer edge confuses the triangulation into overlapping triangles that z-fight.
  */
 function wallGeometry(length: number, height: number, holes: Hole[]): THREE.BufferGeometry {
-  if (!holes.length) return new THREE.PlaneGeometry(length, height);
+  if (!holes.length) {
+    // uvs in metres, like the ShapeGeometry below (its uvs are its coordinates): the plaster tiles alike on every wall.
+    const plane = new THREE.PlaneGeometry(length, height);
+    const position = plane.getAttribute('position');
+    const uv = plane.getAttribute('uv');
+    for (let i = 0; i < uv.count; i++) uv.setXY(i, position.getX(i), position.getY(i));
+    return plane;
+  }
   const bottom = -height / 2;
   const shape = new THREE.Shape();
   shape.moveTo(-length / 2, bottom);

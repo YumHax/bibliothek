@@ -4,6 +4,7 @@ import type { Furniture } from '../Furniture';
 import { PersonModel } from './PersonModel';
 import { randomLook, type PersonLook } from './looks';
 import type { Pose } from './poses';
+import { blobShadow } from '../zone/ContactShadows';
 
 /** A place to stand and browse: a spot on the floor (zone-local) and the way to face there, in radians about y (0 = facing +z). */
 export interface BrowseSpot {
@@ -44,6 +45,8 @@ const LINGER_POSES: Pose[] = ['pockets', 'crossed', 'hips', 'stand'];
  * collides: a moving collider is more trouble than a body the player walks through.
  */
 export class Shopper extends THREE.Group implements Furniture, Updatable {
+  /** They walk: they carry their own blob instead. */
+  readonly contactShadow = false;
   private readonly model: PersonModel;
   private readonly viewer: THREE.Object3D;
   private readonly spots: readonly BrowseSpot[];
@@ -66,6 +69,8 @@ export class Shopper extends THREE.Group implements Furniture, Updatable {
     const seed = options.seed ?? 1;
     this.model = new PersonModel(options.look ?? randomLook(seed + 100, 'shopper'));
     this.add(this.model);
+    const blob = blobShadow(0.55, 0.5);
+    if (blob) this.add(blob);
     // Everyone starts somewhere different along the aisle, already walking.
     this.state = { kind: 'linger', left: 0.5 + (seed % 5) };
   }

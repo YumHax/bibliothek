@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { createCanvas, seededRandom, toTexture } from '@/covers/generated/canvasUtils';
+import { fabric } from '@/world/materials/finishes';
 
 /** Metres of floor covered by one tile of the texture; the confetti is drawn wrapped, so it tiles seamlessly. */
 const TILE_M = 3;
@@ -120,5 +121,5 @@ export function carpetMaterial(floorWidth: number, floorDepth: number): THREE.Me
   const map = toTexture(canvas, 8);
   map.wrapS = map.wrapT = THREE.RepeatWrapping;
   map.repeat.set(floorWidth / TILE_M, floorDepth / TILE_M);
-  return new THREE.MeshStandardMaterial({ map, emissiveMap: map, emissive: 0xffffff, emissiveIntensity: GLOW, roughness: 1, metalness: 0 });
+  return fabric({ map, emissiveMap: map, emissive: 0xffffff, emissiveIntensity: GLOW, roughness: 1, metalness: 0, sheenTint: 0x4a4458 });
 }

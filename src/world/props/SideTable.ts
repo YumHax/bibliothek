@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import type { Furniture } from '../Furniture';
 import { matte } from './Prop';
+import { wood as woodMaterial } from '@/world/materials/finishes';
 
 export interface SideTableOptions {
   /** Radius of the round top. */
@@ -55,8 +56,8 @@ export class SideTable extends THREE.Group implements Furniture {
 
   private buildTable(): void {
     const { radius, height, wood } = this.options;
-    const oak = matte(wood, 0.55);
-    const darkOak = matte(new THREE.Color(wood).multiplyScalar(0.8).getHex(), 0.6);
+    const oak = woodMaterial(wood, 0.55);
+    const darkOak = woodMaterial(new THREE.Color(wood).multiplyScalar(0.8).getHex(), 0.6);
 
     const top = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius * 0.97, TOP_THICKNESS, SEGMENTS), oak);
     top.position.y = height - TOP_THICKNESS / 2;

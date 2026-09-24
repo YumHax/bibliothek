@@ -14,6 +14,7 @@ import { LidMotion } from './box/LidMotion';
 import { Manual } from './box/Manual';
 import { computeShellLayout, type ShellLayout } from './box/shellLayout';
 import { slabSize } from './box/slabs';
+import { plastic } from './materials/finishes';
 
 const HOVER_POP_OUT = 0.02;
 const OPEN_ANGLE = (160 * Math.PI) / 180;
@@ -60,13 +61,14 @@ export class GameBox extends THREE.Mesh<THREE.BoxGeometry, THREE.Material[]> imp
     const { width, height, depth } = platform.boxDimensions;
     const accent = new THREE.Color(platform.accentColor);
 
-    const side = () => new THREE.MeshStandardMaterial({ color: 0x0d0d0f, roughness: 0.7 });
+    // The shell is printed card under a clear plastic sleeve: a clearcoat over the print (high quality).
+    const side = () => plastic({ color: 0x0d0d0f, roughness: 0.7 }, 0.5);
     const faces: ShellMaterials = {
       right: side(),
       left: side(),
       top: side(),
       bottom: side(),
-      front: new THREE.MeshStandardMaterial({ map: art.placeholder(game), roughness: 0.45 }),
+      front: plastic({ map: art.placeholder(game), roughness: 0.5 }, 0.7),
       back: side(),
       interior: new THREE.MeshStandardMaterial({ color: interiorColor(accent), roughness: 0.95 }),
     };

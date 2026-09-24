@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import type { Furniture } from '../Furniture';
 import { cylinderMesh } from '../meshUtils';
 import { part, matte } from './Prop';
+import { wood as woodMaterial } from '@/world/materials/finishes';
 
 export interface SpeakerOptions {
   /** Height of the cabinet. Default 0.85 (a slim floor-stander). */
@@ -31,7 +32,7 @@ export class Speaker extends THREE.Group implements Furniture {
     super();
     this.name = 'Speaker';
     const height = options.height ?? 0.85;
-    const wood = matte(options.wood ?? 0x5a3f2a, 0.5);
+    const wood = woodMaterial(options.wood ?? 0x5a3f2a, 0.5);
     const bodyH = height - PLINTH;
 
     part(this, WIDTH + 0.02, PLINTH, DEPTH + 0.02, BAFFLE, { y: PLINTH / 2 });

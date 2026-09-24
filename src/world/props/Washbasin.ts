@@ -3,6 +3,8 @@ import type { Furniture } from '../Furniture';
 import { cylinderMesh } from '../meshUtils';
 import { part, matte } from './Prop';
 import { CERAMIC, CHROME, CLEAR_GLASS } from './bathroomMaterials';
+import { wood as woodMaterial } from '@/world/materials/finishes';
+import { mirrorGlass } from './MirrorGlass';
 
 export interface WashbasinOptions {
   /** Length of the cabinet along the wall. Default 0.6. */
@@ -23,7 +25,7 @@ const MIRROR_Y = 1.6;
 const SHELF_W = 0.3;
 const SHELF_Y = 1.35;
 
-const OAK = matte(0xc9ad86, 0.55);
+const OAK = woodMaterial(0xc9ad86, 0.55);
 const DARK = matte(0x2e2c2a, 0.7);
 const MIRROR = new THREE.MeshStandardMaterial({ color: 0xb8c4cc, roughness: 0.08, metalness: 0.2 });
 
@@ -107,6 +109,9 @@ export class Washbasin extends THREE.Group implements Furniture {
     part(this, MIRROR_W, MIRROR_H, 0.02, CERAMIC, { y: MIRROR_Y, z: 0.01 });
     const glass = part(this, MIRROR_W - 0.05, MIRROR_H - 0.05, 0.006, MIRROR, { y: MIRROR_Y, z: 0.022 });
     glass.castShadow = false;
+    const silver = mirrorGlass(MIRROR_W - 0.05, MIRROR_H - 0.05);
+    silver.position.set(0, MIRROR_Y, 0.0255);
+    this.add(silver);
   }
 
   /** A glass shelf on two chrome brackets, with a jar and three bottles on it. */

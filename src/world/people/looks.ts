@@ -9,6 +9,8 @@ import { seededRandom } from '@/covers/generated/canvasUtils';
 export type HairStyle = 'short' | 'buzz' | 'long' | 'bun' | 'ponytail' | 'curly' | 'bald';
 export type TopKind = 'tee' | 'stripes' | 'flannel' | 'hoodie' | 'jacket' | 'shirt';
 export type ShoeKind = 'sneaker' | 'boot' | 'loafer';
+/** The body's lines: straight, or a narrower waist with fuller hips and bust. */
+export type Figure = 'straight' | 'curvy';
 
 export interface PersonLook {
   skin: number;
@@ -24,6 +26,12 @@ export interface PersonLook {
   glasses?: number;
   /** A smile or a straight mouth. */
   smile: boolean;
+  /** Width of the jaw, 0.85 (narrow, pointed chin) to 1.15 (square). */
+  jaw: number;
+  /** Size of the nose, 0.8 to 1.25. */
+  nose: number;
+  /** A dusting of freckles over the nose and cheeks. */
+  freckles: boolean;
 
   top: TopKind;
   topColor: number;
@@ -44,6 +52,7 @@ export interface PersonLook {
   height: number;
   /** Width of the body, 0.85 (slight) to 1.2 (broad). */
   build: number;
+  figure: Figure;
 }
 
 const SKINS = [0xf3d6c1, 0xe8b894, 0xd9a279, 0xc68e6a, 0x9c6a4a, 0x7a4f36, 0x6b4630, 0x4a2f22];
@@ -56,7 +65,10 @@ const SHOE_COLORS = [0x2a2622, 0x4a3a2a, 0xe8e6e0, 0x1a1a1a, 0x8f3b3b, 0x3b5b8f]
 const HATS = [0x8f3b3b, 0x2f2f33, 0x3b5b8f, 0xd8a33a, 0x4f7a4a, 0x1a1a1a];
 const APRONS = [0x3a3a3a, 0x5a3a2a, 0x2a4a3a, 0x6b2f2a, 0x2a3a5a];
 const BAGS = [0xd8cdb4, 0x2f2f33, 0x6b4a2a, 0x8f3b3b, 0x3b5b8f];
-const HAIR_STYLES: HairStyle[] = ['short', 'short', 'short', 'buzz', 'long', 'bun', 'ponytail', 'curly', 'bald'];
+const HAIR_STYLES: Record<Figure, HairStyle[]> = {
+  straight: ['short', 'short', 'short', 'short', 'buzz', 'buzz', 'curly', 'bald', 'long', 'ponytail'],
+  curvy: ['long', 'long', 'long', 'bun', 'bun', 'ponytail', 'ponytail', 'curly', 'short', 'buzz'],
+};
 const TOP_KINDS: TopKind[] = ['tee', 'tee', 'stripes', 'flannel', 'hoodie', 'jacket', 'shirt'];
 
 /**
@@ -68,9 +80,10 @@ export function randomLook(seed: number, role: 'vendor' | 'shopper' = 'shopper')
   const pick = <T>(list: readonly T[]): T => list[Math.floor(random() * list.length)]!;
   const chance = (p: number): boolean => random() < p;
 
+  const figure: Figure = chance(0.45) ? 'curvy' : 'straight';
   const skin = pick(SKINS);
   const hair = pick(HAIRS);
-  const hairStyle = pick(HAIR_STYLES);
+  const hairStyle = pick(HAIR_STYLES[figure]);
   const hatRoll = random();
   const top = pick(TOP_KINDS);
   const topColor = pick(TOPS);
@@ -88,9 +101,12 @@ export function randomLook(seed: number, role: 'vendor' | 'shopper' = 'shopper')
     hatColor: pick(HATS),
     eyes: pick(EYES),
     brows: 0.6 + random() * 0.9,
-    beard: chance(0.28) ? (chance(0.5) ? 'stubble' : 'full') : undefined,
+    beard: figure === 'straight' && hairStyle !== 'long' && chance(0.4) ? (chance(0.5) ? 'stubble' : 'full') : undefined,
     glasses: chance(0.25) ? (chance(0.6) ? 0x1e1c1a : 0x6b4a2a) : undefined,
     smile: chance(0.55),
+    jaw: figure === 'curvy' ? 0.85 + random() * 0.15 : 0.95 + random() * 0.2,
+    nose: 0.8 + random() * 0.45,
+    freckles: skin >= 0xd9a279 && chance(0.25),
 
     top,
     topColor,
@@ -104,7 +120,8 @@ export function randomLook(seed: number, role: 'vendor' | 'shopper' = 'shopper')
     bag: role === 'shopper' && bagRoll < 0.5 ? (bagRoll < 0.3 ? 'tote' : 'backpack') : undefined,
     bagColor: pick(BAGS),
 
-    height: 1.56 + random() * 0.32,
-    build: 0.85 + random() * 0.35,
+    height: figure === 'curvy' ? 1.56 + random() * 0.2 : 1.66 + random() * 0.24,
+    build: figure === 'curvy' ? 0.85 + random() * 0.25 : 0.92 + random() * 0.28,
+    figure,
   };
 }
