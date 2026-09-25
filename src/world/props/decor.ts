@@ -22,6 +22,23 @@ import { LeaningMirror, type LeaningMirrorOptions } from './LeaningMirror';
 import { PedalBin, type PedalBinOptions } from './PedalBin';
 import { BathroomScale, type BathroomScaleOptions } from './BathroomScale';
 import { WallSocket, type WallSocketOptions } from './WallSocket';
+import { MirrorPillar, type MirrorPillarOptions } from './MirrorPillar';
+import { MirrorBall, type MirrorBallOptions } from './MirrorBall';
+import { HangingBanner, type HangingBannerOptions } from './HangingBanner';
+import { Duct, type DuctOptions } from './Duct';
+import { CarpetBorder, type CarpetBorderOptions } from './CarpetBorder';
+import { DrapedTowel, type DrapedTowelOptions } from './DrapedTowel';
+import { WallShelf, type WallShelfOptions } from './WallShelf';
+import { SpiceRack, type SpiceRackOptions } from './SpiceRack';
+import { WallCalendar, type WallCalendarOptions } from './WallCalendar';
+import { Noticeboard, type NoticeboardOptions } from './Noticeboard';
+import { WallSconce, type WallSconceOptions } from './WallSconce';
+import { Intercom, type IntercomOptions } from './Intercom';
+import { FuseBox, type FuseBoxOptions } from './FuseBox';
+import { ShoeRack, type ShoeRackOptions } from './ShoeRack';
+import { Doormat, type DoormatOptions } from './Doormat';
+import { KilimRug, type KilimRugOptions } from './KilimRug';
+import { Radiator, type RadiatorOptions } from './Radiator';
 
 /**
  * Decoration the room plan can list by name. Each kind builds a `Furniture` from its options;
@@ -52,6 +69,23 @@ export const DECOR_KINDS = {
   pedalBin: (o: PedalBinOptions = {}) => new PedalBin(o),
   bathroomScale: (o: BathroomScaleOptions = {}) => new BathroomScale(o),
   wallSocket: (o: WallSocketOptions = {}) => new WallSocket(o),
+  mirrorPillar: (o: MirrorPillarOptions = {}) => new MirrorPillar(o),
+  mirrorBall: (o: MirrorBallOptions = {}) => new MirrorBall(o),
+  hangingBanner: (o: HangingBannerOptions = {}) => new HangingBanner(o),
+  duct: (o: DuctOptions = {}) => new Duct(o),
+  carpetBorder: (o: CarpetBorderOptions = { width: 4, depth: 4 }) => new CarpetBorder(o),
+  drapedTowel: (o: DrapedTowelOptions = {}) => new DrapedTowel(o),
+  wallShelf: (o: WallShelfOptions = {}) => new WallShelf(o),
+  spiceRack: (o: SpiceRackOptions = {}) => new SpiceRack(o),
+  wallCalendar: (o: WallCalendarOptions = {}) => new WallCalendar(o),
+  noticeboard: (o: NoticeboardOptions = {}) => new Noticeboard(o),
+  wallSconce: (o: WallSconceOptions = {}) => new WallSconce(o),
+  intercom: (o: IntercomOptions = {}) => new Intercom(o),
+  fuseBox: (o: FuseBoxOptions = {}) => new FuseBox(o),
+  shoeRack: (o: ShoeRackOptions = {}) => new ShoeRack(o),
+  doormat: (o: DoormatOptions = {}) => new Doormat(o),
+  kilimRug: (o: KilimRugOptions = {}) => new KilimRug(o),
+  radiator: (o: RadiatorOptions = {}) => new Radiator(o),
 };
 
 export type DecorKind = keyof typeof DECOR_KINDS;

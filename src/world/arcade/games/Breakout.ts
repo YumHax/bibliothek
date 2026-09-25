@@ -169,6 +169,23 @@ export class Breakout extends BaseGame {
     }
   }
 
+  /** Under the lowest ball coming down, off by an error that a lesser player carries longer. */
+  autopilot(skill: number): ArcadeControls {
+    const falling = this.balls.filter((b) => b.vy > 0);
+    const ball = (falling.length ? falling : this.balls).reduce<Ball | null>((low, b) => (!low || b.y > low.y ? b : low), null);
+    this.pilotTimer -= 1 / 60;
+    if (this.pilotTimer <= 0) {
+      this.pilotTimer = 0.4 + Math.random() * 0.6;
+      this.pilotError = (Math.random() - 0.5) * this.paddleW * (1.4 - skill);
+    }
+    const target = (ball ? ball.x : SCREEN_W / 2) + this.pilotError;
+    const diff = target - this.paddleX;
+    return { left: diff < -4, right: diff > 4, up: false, down: false, fire: false, firePressed: false };
+  }
+
+  private pilotTimer = 0;
+  private pilotError = 0;
+
   private stepBall(ball: Ball, dt: number): void {
     ball.x += ball.vx * dt;
     ball.y += ball.vy * dt;
@@ -185,6 +202,7 @@ export class Breakout extends BaseGame {
       ball.vx = Math.cos(angle) * speed;
       ball.vy = Math.sin(angle) * speed;
       ball.y = PADDLE_Y - PADDLE_H / 2 - BALL_R;
+      this.sound('blip');
       return;
     }
 
@@ -218,7 +236,7 @@ export class Breakout extends BaseGame {
   /** A ball leaving the paddle near enough vertical to come straight back. */
   private newBall(): Ball {
     const speed = this.ballSpeed();
-    const angle = -Math.PI / 2 + (Math.random() - 0.5) * 0.7;
+    const angle = -Math.PI / 2 + (this.rand() - 0.5) * 0.7;
     return { x: this.paddleX, y: PADDLE_Y - PADDLE_H / 2 - BALL_R - 1, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed };
   }
 
@@ -239,7 +257,7 @@ export class Breakout extends BaseGame {
     for (let r = 0; r < rows; r++) for (let c = 0; c < COLS; c++) this.bricks.push({ x: left + c * BRICK_W, y: BRICK_TOP + r * BRICK_H, row: r, alive: true, clock: false });
     for (let n = 0; n < clocks; n++) {
       const plain = this.bricks.filter((b) => !b.clock);
-      const pick = plain[Math.floor(Math.random() * plain.length)];
+      const pick = plain[Math.floor(this.rand() * plain.length)];
       if (pick) pick.clock = true;
     }
   }

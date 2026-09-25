@@ -39,12 +39,27 @@ player cannot see must be *out of the scene*, not just behind a wall.
 
 Five zones: the collection room (`living`, persistent), the `hallway` behind its back-wall door, and off the corridor the
 `bathroom` and `bedroom` (back wall) and the `kitchen` (left end). The flat's front door at the corridor's right end is a
-`TravelDoor`: the outside is not built, clicking it teleports (fade, `Travel.go`) to the `arcade` (x 40) or the `market`
-(x 80), two windowless, doorless halls with no neighbours, not persistent (rebuilt on return: the market's stock is fetched
-again, cached per day). Each carries a `travel: { label, arrival, yaw }` in `WORLD_PLAN`; their exit doors travel back. In the flat every room neighbours every other
+`TravelDoor` (`to: 'street'`): clicking it teleports (fade, `Travel.go`) down to the `street` (x 140, see "The street"),
+whose doors lead to the `arcade` (x 40) and the `market` (x 80), two windowless, doorless halls with no neighbours, not
+persistent (rebuilt on return: the market's stock is fetched again, cached per day). Each carries a
+`travel: { label, arrival, yaw }` in `WORLD_PLAN`; their exit doors travel back to the street. In the flat every room neighbours every other
 (`FLAT` in `worldPlan.ts`), so the five rooms are always active together: a zone coming or going changes the scene's light
 count, which recompiles every shader program (a freeze of seconds at a doorway). The `PortalCuller` still draws only what
 is seen, and idle rooms refresh their shadow maps twice a second, so an active room out of sight costs little.
+The cat belongs to the collection room's zone but walks the whole flat (its nav grid spans every room, see `docs/cat.md`);
+it is `seenFromNextDoor` so culling its zone never hides it in the corridor.
+
+## The balcony (open air in the flat)
+
+`src/world/balcony/`: a zone of the flat (in `FLAT`, persistent) with no `Room`, through a glazed door where the
+collection room's right-hand front window was (`BALCONY_DOORWAY` in `roomPlan.ts`, `door: false`; the balcony hangs the
+`BalconyDoor`, which opens into the room). Its portal is registered with a door that is always open (`{ openness: 1 }`):
+the glass is clear, so each side sees the other shut. `BalconySlab` (slab, railing = the colliders), `BuildingFront` (the
+building's own front round the door, world-planned in `BALCONY_PLAN.front`: plaster, our windows painted as glass over
+the real panes, the neighbours' windows lit at night by curfew, the door cut out), `OpenAir` (the panes' shader on a
+45 m BackSide sphere drawn after everything opaque so the depth test culls it, a shadow-casting sun spot aimed at the
+balcony that is 0 when the sun is behind the building, a hemisphere on only while occupied). The builder returns
+`{ lightLevel }` instead of a room (`ZoneHandle.lightLevel`, read by the graphics in `main.ts`). The cat may walk out.
 
 ## How two zones share a doorway
 
@@ -85,14 +100,30 @@ is seen, and idle rooms refresh their shadow maps twice a second, so an active r
 - `persistent: true` for the collection room: its shelving is live-bound to the collection and the cat lives there.
 - The cat's world is its zone (`zone.floorBounds`); it never follows the player out.
 
+## The street (`src/world/street/`)
+
+Front Street outside the building, a zone without a `Room` (the map is in `streetPlan.ts`): 24 m between building lines,
+walkable from the park's hedge to where the cross street turns out of sight (invisible walls, `StreetBounds`). Reached by
+travel only: `TravelPlan.arrivals` (keyed by the zone left) sets the player down in front of the door they came out of;
+its `StreetDoor`s travel straight on (`SessionActions.travel(to)`, no menu; a `TravelDoor` without `to` still opens it).
+- **Rig instead of a shell** (`StreetLighting`): a shadow-casting `DirectionalLight` from `sky.outdoors.lightDirection`,
+  shadow camera a square around the player snapped to texels; a `HemisphereLight` only while occupied; it overrides
+  the scene's `Haze` fog every frame with the weather's (`streetAir`), and returns `lightLevel` in its handle (what
+  `main.ts` reads when there is no `room`). `SkyDome` (radius 90, inside the camera's 100 m far plane) draws the sky.
+- **Cost**: every building face is one mesh with a canvas atlas (`Buildings`: `paintFacade`, night windows on a
+  quarter-size emissive atlas re-uploaded at most every 6 s, curfews as the painted view); lamps, trees, cars are
+  instanced; four point lights move to the lamps nearest the player (never added or removed). People are the costly
+  part (~33 draw calls each): two passers-by, no shadow, not drawn beyond 38 m; the busker.
+- Extras: `Newsstand` (THE GAMING WEEKLY, `ui/NewsPanel` through `openPanel`, tips from `market.peekToday()`),
+  `Busker` (`audio/BuskerTune`, tips via `SessionActions.pay`, 3 a day), `GarageSale` (one day in three, 2 to 4 of
+  today's stock as bin-priced `ForSaleBox`es once the stock is drawn, else a sign pointing to the market).
+
 ## What is not done yet
 
 1. **Bounds through walls.** Zone bounds are the room's extent; the `WALL_GAP` and the doorway belong to nobody. The
    hysteresis (0.4 m) covers the threshold.
-2. **The outside.** The painted `Outdoors` panorama is a 40 m sphere seen through glass; walking outside (the flat's
-   front door) means an outdoor zone with real geometry (or a much larger painted world) and a different lighting rig (no
-   room hemisphere/lamp). Treat it as a zone kind with its own builder and keep `Sky` as the source of time and sun direction.
-   Until then the front door teleports (see docs/economy.md).
+2. **Stairs.** The street is reached by travel; the building has no walkable stairwell, and the street does not match
+   the windows' painted view metre for metre (same layout and sun, its own shops).
 3. **Session parts.** `shelving` in the Session is the home zone's; a second room with shelves would need the Session to
    ask the current zone. Search / random pick assume the home shelving.
 4. **Audio.** `CrtSpeaker` and `CatVoice` fade by distance already; a deactivated zone stops ticking them, which is what

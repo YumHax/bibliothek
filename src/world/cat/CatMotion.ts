@@ -15,6 +15,9 @@ const ARRIVE = 0.08;
 const HOP_CLEARANCE = 0.22;
 /** Without progress for this long the walk is re-planned once, then given up. */
 const STUCK_S = 1.5;
+/** How far ahead along the leg, and how often, the walk checks that nothing moved into its way (a door swung shut). */
+const LOOKAHEAD = 0.2;
+const LOOK_EVERY_S = 0.2;
 
 type Mode = 'idle' | 'walk' | 'hop';
 
@@ -35,6 +38,9 @@ export class CatMotion {
   private replanned = false;
   /** True after the last walk or hop ended at its goal (false when the walk was abandoned). */
   private _reached = true;
+  /** True when the last walk was abandoned because something now stands in the way. */
+  private _blocked = false;
+  private lookIn = 0;
 
   private readonly hopFrom = new THREE.Vector3();
   private readonly hopEnd = new THREE.Vector3();
@@ -57,6 +63,11 @@ export class CatMotion {
 
   get walking(): boolean {
     return this.mode === 'walk';
+  }
+
+  /** The last walk stopped short: a door was shut across its path (the grid is refreshed for the next plan). */
+  get blocked(): boolean {
+    return this._blocked;
   }
 
   get hopping(): boolean {
@@ -82,17 +93,22 @@ export class CatMotion {
     this.stuckFor = 0;
     this.replanned = false;
     this._reached = false;
+    this._blocked = false;
+    this.lookIn = 0;
     this.cat.position.y = 0;
     return true;
   }
 
-  /** Parabolic hop from where the cat is to `target` (any height), landing after `duration` s. */
-  hopTo(target: THREE.Vector3, duration = 0.5): void {
+  /**
+   * Parabolic hop from where the cat is to `target` (any height), landing after `duration` s;
+   * `apex` is the world height of something in between to clear (a tub's rim).
+   */
+  hopTo(target: THREE.Vector3, duration = 0.5, apex = -Infinity): void {
     this.hopFrom.copy(this.cat.position);
     this.hopEnd.copy(target);
     this.hopT = 0;
     this.hopDuration = Math.max(0.15, duration);
-    this.hopHeight = Math.max(this.hopFrom.y, this.hopEnd.y) + HOP_CLEARANCE;
+    this.hopHeight = Math.max(this.hopFrom.y, this.hopEnd.y, apex) + HOP_CLEARANCE;
     this.mode = 'hop';
     this.faceYaw = null;
     this._reached = false;
@@ -151,6 +167,20 @@ export class CatMotion {
       dz = waypoint.z - position.z;
       distance = Math.hypot(dx, dz);
       this.lastDistance = Infinity;
+    }
+
+    // Something moved into the leg since it was planned (a door shut in the cat's face): stop there.
+    this.lookIn -= dt;
+    if (this.lookIn <= 0) {
+      this.lookIn = LOOK_EVERY_S;
+      const ahead = Math.min(LOOKAHEAD, distance);
+      this.tmp.set(position.x + (dx / distance) * ahead, 0, position.z + (dz / distance) * ahead);
+      if (this.nav.blockedNow(this.tmp)) {
+        this.nav.invalidate();
+        this._blocked = true;
+        this.arrive(false);
+        return;
+      }
     }
 
     // Turn towards the leg; walk slower while the turn is still wide (a cat turns first).

@@ -7,6 +7,7 @@ import { IDLE_SHADOW_INTERVAL, type OccupancyAware } from '../Furniture';
 import { invisibleHitbox } from '../meshUtils';
 import { Prop, part } from './Prop';
 import { Curtains } from './Curtains';
+import { RollerBlind } from './RollerBlind';
 import { SunShaft } from './SunShaft';
 import type { DayNight, SkyState } from './DayNight';
 import type { Outdoors } from './outdoors/Outdoors';
@@ -28,6 +29,11 @@ export interface WindowOptions {
   sunlight?: boolean;
   /** Curtain rod with two floor-length fabric panels flanking the opening (see `Curtains`). Default true. */
   curtains?: boolean;
+  /**
+   * A roller blind over the glass instead of the curtains (see `RollerBlind`): it hangs no lower
+   * than the opening, for a window over a sink or a worktop. Default false; wins over `curtains`.
+   */
+  blind?: boolean;
   /** Called while the curtains move with how open they are (1 open, 0 drawn): the room dims its skylight from it. */
   onCurtainsChange?: (openness: number) => void;
 }
@@ -78,7 +84,7 @@ export class RoomWindow extends Prop implements Updatable, Interactable, Occupan
 
   /** The sun/moon spot; null when `sunlight` is off. */
   private readonly light: THREE.SpotLight | null = null;
-  private readonly curtains: Curtains | null = null;
+  private readonly curtains: Curtains | RollerBlind | null = null;
   /** The beam of sun and its dust (`QUALITY.lightShafts`). */
   private readonly shaft: SunShaft | null = null;
   /** The sky's soft light pouring through the whole opening (`QUALITY.areaLights`). */
@@ -99,7 +105,7 @@ export class RoomWindow extends Prop implements Updatable, Interactable, Occupan
   ) {
     super();
     this.name = 'Window';
-    this.options = { width: 1.2, height: 2.4, drivesClock: false, sunlight: true, curtains: true, ...options };
+    this.options = { width: 1.2, height: 2.4, drivesClock: false, sunlight: true, curtains: true, blind: false, ...options };
     const { width: w, height: h } = this.options;
     this.floorY = -h / 2 - KICK;
 
@@ -132,7 +138,10 @@ export class RoomWindow extends Prop implements Updatable, Interactable, Occupan
       this.add(this.skyPanel);
     }
 
-    if (this.options.curtains) {
+    if (this.options.blind) {
+      this.curtains = new RollerBlind({ width: w, height: h, frame: RAIL });
+      this.add(this.curtains);
+    } else if (this.options.curtains) {
       this.curtains = new Curtains({ width: w, height: h, frame: RAIL, hemY: this.floorY + HEM_CLEARANCE });
       this.add(this.curtains);
     }
@@ -222,6 +231,7 @@ export class RoomWindow extends Prop implements Updatable, Interactable, Occupan
 
   label(): string | null {
     if (!this.curtains) return null;
+    if (this.curtains instanceof RollerBlind) return this.curtains.isDrawn ? 'Click to raise the blind' : 'Click to lower the blind';
     return this.curtains.isDrawn ? 'Click to open the curtains' : 'Click to draw the curtains';
   }
 

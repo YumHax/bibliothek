@@ -12,7 +12,8 @@ import { CatBed } from './CatBed';
 import { Scratcher } from './Scratcher';
 import { CatToy } from './CatToy';
 import type { CatSettingsStore } from './catSettings';
-import type { CatClock, CatPlayerView } from './types';
+import type { CatClock, CatPlayerView, WaterBowlLike } from './types';
+import type { CatPerch } from './spots';
 
 export { Cat } from './Cat';
 export { CatModel } from './CatModel';
@@ -32,6 +33,8 @@ export interface CatFurnishOptions {
   seats: Seat[];
   windows: RoomWindow[];
   tv: Television;
+  /** The rest of the flat: its rooms (world XZ), spots to visit there, places to nap and more water (see `CatOptions`). */
+  flat?: { rooms: THREE.Box2[]; visits: THREE.Vector3[]; perches: CatPerch[]; waters?: WaterBowlLike[] };
 }
 
 /**
@@ -84,6 +87,10 @@ export function furnishCat(zone: Zone, options: CatFurnishOptions): Cat {
       screenPoint: (out) => tv.getWorldPosition(out).setY(0.9),
     },
     voice: new CatVoice(),
+    roam: options.flat?.rooms,
+    visits: options.flat?.visits,
+    perches: options.flat?.perches,
+    waters: options.flat?.waters,
   });
   options.settings.subscribe((s) => cat.applySettings(s));
 

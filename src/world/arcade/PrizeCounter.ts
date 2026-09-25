@@ -7,10 +7,14 @@ import { boxMesh, cylinderMesh, invisibleHitbox } from '../meshUtils';
 import { matte } from '../props/Prop';
 import { drawText } from './games/ArcadeGame';
 import { wood as woodMaterial } from '@/world/materials/finishes';
+import type { PrizeKind } from '@/economy/Prizes';
+import { prizeModel } from '../prizes/prizeModel';
 
 export interface PrizeCounterOptions {
   /** Tickets one coin is worth, written on the sign. */
   ticketsPerCoin: number;
+  /** What the glass case shows: the prizes on sale, left to right. */
+  prizes?: readonly { kind: PrizeKind; color: number }[];
   /** Gap between the counter's back and the wall the sign hangs on (room for an attendant behind). Default 0.02. */
   wallBehind?: number;
 }
@@ -25,15 +29,16 @@ const TOP = matte(0x8b6a44, 0.5);
 const GLASS = new THREE.MeshStandardMaterial({ color: 0xbfd8e6, roughness: 0.1, transparent: true, opacity: 0.35 });
 
 /**
- * The arcade's prize counter: a glass-fronted desk with a lit sign giving the rate. Clicking it
- * turns the player's tickets into coins (`SessionActions.redeemTickets`). Local +z faces the room.
+ * The arcade's prize counter: a glass-fronted desk showing the prizes on two glass shelves, a lit
+ * sign giving the rate. Clicking it opens the counter's panel (`SessionActions.openPrizeCounter`):
+ * prizes for tickets, tickets for coins. Local +z faces the room.
  */
 export class PrizeCounter extends THREE.Group implements Furniture, Interactable {
   readonly hitboxes: THREE.Object3D[];
   private readonly sign: THREE.MeshBasicMaterial;
   private readonly rate: number;
 
-  constructor({ ticketsPerCoin, wallBehind = 0.02 }: PrizeCounterOptions) {
+  constructor({ ticketsPerCoin, wallBehind = 0.02, prizes = [] }: PrizeCounterOptions) {
     super();
     this.name = 'PrizeCounter';
     this.rate = ticketsPerCoin;
@@ -45,15 +50,18 @@ export class PrizeCounter extends THREE.Group implements Furniture, Interactable
     this.add(glass);
     this.add(boxMesh(WIDTH, 0.12, DEPTH * 0.45, WOOD, { y: 0.06, z: DEPTH * 0.28 }));
     this.add(boxMesh(WIDTH + 0.04, 0.04, DEPTH + 0.04, TOP, { y: HEIGHT - 0.02 }));
-    // A few prizes in the case: plush-like blobs and a stack of small boxes.
-    const plush = [0xff8a80, 0x7ee787, 0x63b3ff, 0xffd23a];
-    plush.forEach((color, i) => {
-      const blob = new THREE.Mesh(new THREE.SphereGeometry(0.07, 12, 10), matte(color, 0.9));
-      blob.position.set(-0.5 + i * 0.33, 0.12 + 0.07, DEPTH * 0.28);
-      blob.castShadow = true;
-      this.add(blob);
+    // The prizes in the case, on two glass shelves, facing the hall.
+    const perRow = Math.ceil(prizes.length / 2);
+    prizes.forEach((prize, i) => {
+      const row = i < perRow ? 0 : 1;
+      const col = row === 0 ? i : i - perRow;
+      const count = row === 0 ? perRow : prizes.length - perRow;
+      const model = prizeModel(prize.kind, prize.color);
+      model.scale.setScalar(1.4);
+      model.position.set(-WIDTH / 2 + 0.12 + ((WIDTH - 0.24) * (col + 0.5)) / count, 0.12 + row * 0.36, DEPTH * 0.28);
+      this.add(model);
     });
-    this.add(boxMesh(0.16, 0.12, 0.1, matte(0xf1ede6, 0.7), { x: 0.45, y: 0.12 + 0.06 + 0.2, z: DEPTH * 0.28 }));
+    this.add(boxMesh(WIDTH - 0.1, 0.006, DEPTH * 0.4, GLASS, { y: 0.12 + 0.35, z: DEPTH * 0.28 }));
     // A bowl of coins on the top.
     const bowl = cylinderMesh(0.09, 0.04, matte(0x2a2a30, 0.4), { x: 0.5, y: HEIGHT + 0.02, z: 0.05 }, { radiusBottom: 0.06, segments: 20 });
     const coins = cylinderMesh(0.08, 0.01, new THREE.MeshStandardMaterial({ color: 0xd4a52a, metalness: 0.8, roughness: 0.3 }), { x: 0.5, y: HEIGHT + 0.04, z: 0.05 }, { segments: 20 });
@@ -81,11 +89,11 @@ export class PrizeCounter extends THREE.Group implements Furniture, Interactable
   }
 
   label(): string {
-    return `Prize counter — click to exchange your tickets (${this.rate} tickets = 1 coin)`;
+    return `Prize counter — click for prizes, or tickets for coins (${this.rate} tickets = 1 coin)`;
   }
 
   activate(session: SessionActions): void {
-    session.redeemTickets();
+    session.openPrizeCounter();
   }
 
   private paintSign(): THREE.CanvasTexture {

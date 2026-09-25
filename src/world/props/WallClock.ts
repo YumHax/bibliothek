@@ -6,6 +6,7 @@ import { invisibleHitbox } from '../meshUtils';
 import { Prop, matte } from './Prop';
 import type { DayNight } from './DayNight';
 import { wood as woodMaterial } from '@/world/materials/finishes';
+import { playAlarm } from '@/audio/alarm';
 
 export interface WallClockOptions {
   /** Outer diameter of the case. Default 0.32 m. */
@@ -19,11 +20,16 @@ const DIAL_PX = 512;
 const DIAL_COLOR = '#f2ecdf';
 const INK = '#1c1a17';
 const SEGMENTS = 48;
+/** A second click within this long of the first sets (or cancels) the alarm. */
+const DOUBLE_CLICK_MS = 2000;
+/** The alarm goes off this many in-game hours after it is set. */
+const ALARM_IN_HOURS = 1;
 
 /**
  * A round wall clock that keeps the room's time: its hands follow the `DayNight` cycle (a whole
  * day in ten minutes, so the minute hand visibly sweeps). Hovering it reads the time; clicking it
- * jumps to night or back to the afternoon, like the N key.
+ * says the time, and a second click within two seconds sets an alarm an in-game hour later (or
+ * cancels the one set), which beeps when the clock gets there (wherever the player is by then).
  * Local origin is the centre of the clock, on the wall; local +z faces into the room (`wallMount()`).
  */
 export class WallClock extends Prop implements Interactable {
@@ -33,9 +39,14 @@ export class WallClock extends Prop implements Interactable {
   private readonly minuteHand = new THREE.Group();
   private readonly bezel: THREE.MeshStandardMaterial;
   private hours = 0;
+  /** In-game hours until the alarm rings, and the time it was set for; null when none is set. */
+  private alarm: { left: number; at: number } | null = null;
+  private lastClickAt = -Infinity;
+  /** Who set the alarm: told when it rings. */
+  private session: SessionActions | null = null;
 
   constructor(
-    private readonly dayNight: DayNight,
+    dayNight: DayNight,
     options: WallClockOptions = {},
   ) {
     super();
@@ -95,6 +106,7 @@ export class WallClock extends Prop implements Interactable {
 
   /** Turns the hands to `hours` (0 ≤ hours < 24, fractional). */
   setTime(hours: number): void {
+    this.tickAlarm(hours);
     this.hours = hours;
     // Clockwise as seen from the room = negative rotation about local +z.
     this.hourHand.rotation.z = -((hours % 12) / 12) * Math.PI * 2;
@@ -108,12 +120,40 @@ export class WallClock extends Prop implements Interactable {
   }
 
   label(): string {
-    return `${formatTime(this.hours)} — click to ${this.dayNight.isNight ? 'bring the day back' : 'skip to night'}`;
+    const alarm = this.alarm ? ` · alarm ${formatTime(this.alarm.at)}` : '';
+    return `${formatTime(this.hours)}${alarm} — click to check the time`;
   }
 
   activate(session: SessionActions): void {
-    this.dayNight.toggleNight();
-    session.hint(this.dayNight.isNight ? 'Night' : 'Day');
+    this.session = session;
+    const now = performance.now();
+    const again = now - this.lastClickAt < DOUBLE_CLICK_MS;
+    this.lastClickAt = again ? -Infinity : now;
+    if (!again) {
+      const next = this.alarm ? `cancel the ${formatTime(this.alarm.at)} alarm` : `set an alarm for ${formatTime(this.hours + ALARM_IN_HOURS)}`;
+      session.hint(`It's ${formatTime(this.hours)} · click again to ${next}`);
+      return;
+    }
+    if (this.alarm) {
+      this.alarm = null;
+      session.hint('Alarm off');
+      return;
+    }
+    this.alarm = { left: ALARM_IN_HOURS, at: (this.hours + ALARM_IN_HOURS) % 24 };
+    session.hint(`Alarm set for ${formatTime(this.alarm.at)}`);
+  }
+
+  /** Counts the clock's forward run down to the alarm; a jump back (the N key's afternoon) is not time passing. */
+  private tickAlarm(hours: number): void {
+    if (!this.alarm) return;
+    const step = (((hours - this.hours) % 24) + 24) % 24;
+    if (step >= 12) return;
+    this.alarm.left -= step;
+    if (this.alarm.left > 0) return;
+    const at = this.alarm.at;
+    this.alarm = null;
+    playAlarm();
+    this.session?.hint(`The alarm rings: ${formatTime(at)}`);
   }
 }
 

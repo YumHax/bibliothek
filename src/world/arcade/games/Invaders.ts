@@ -79,6 +79,7 @@ export class Invaders extends BaseGame {
   protected begin(): void {
     this.shipX = SCREEN_W / 2;
     this.wave = 1;
+    this.fireTimer = 0;
     this.shots = [];
     this.saucer = null;
     this.saucerTimer = 2.5;
@@ -93,6 +94,7 @@ export class Invaders extends BaseGame {
     if (controls.fire && this.fireTimer <= 0 && this.shots.length < MAX_SHOTS) {
       this.fireTimer = FIRE_INTERVAL;
       this.shots.push({ x: this.shipX, y: SHIP_Y - SHIP_H });
+      this.sound('shoot');
     }
 
     const alive = this.aliens.filter((a) => a.alive);
@@ -138,6 +140,25 @@ export class Invaders extends BaseGame {
     this.drawStage(ctx, `WAVE ${this.wave}`);
   }
 
+  /** Fire held; under a diver first, then the saucer, else the nearest column of the fleet. */
+  autopilot(skill: number): ArcadeControls {
+    const alive = this.aliens.filter((a) => a.alive);
+    const divers = alive.filter((a) => a.dive).sort((a, b) => b.dive!.y - a.dive!.y);
+    let target: number;
+    if (divers[0] && Math.random() < skill + 0.2) target = this.alienPos(divers[0]).x + ALIEN_W / 2;
+    else if (this.saucer && this.saucer.x > 0 && skill > 0.5) target = this.saucer.x + 30;
+    else {
+      const nearest = alive.reduce<Alien | null>((best, a) => {
+        const d = Math.abs(this.alienPos(a).x + ALIEN_W / 2 - this.shipX);
+        return !best || d < Math.abs(this.alienPos(best).x + ALIEN_W / 2 - this.shipX) ? a : best;
+      }, null);
+      target = nearest ? this.alienPos(nearest).x + ALIEN_W / 2 : SCREEN_W / 2;
+    }
+    const diff = target - this.shipX;
+    const dead = 3 + (1 - skill) * 10;
+    return { left: diff < -dead, right: diff > dead, up: false, down: false, fire: Math.random() < 0.6 + skill * 0.4, firePressed: false };
+  }
+
   private marchFleet(dt: number, alive: Alien[]): void {
     const formation = alive.filter((a) => !a.dive);
     const interval = Math.max(0.05, 0.35 * Math.pow(0.85, this.wave - 1) * (formation.length / (COLS * MAX_ROWS)) + 0.04);
@@ -164,9 +185,9 @@ export class Invaders extends BaseGame {
   private updateDivers(dt: number, alive: Alien[]): void {
     this.diveTimer -= dt;
     if (this.diveTimer <= 0 && alive.length > 2) {
-      this.diveTimer = (DIVE_EVERY / (1 + (this.wave - 1) * 0.15)) * (0.7 + Math.random() * 0.6);
+      this.diveTimer = (DIVE_EVERY / (1 + (this.wave - 1) * 0.15)) * (0.7 + this.rand() * 0.6);
       const candidates = alive.filter((a) => !a.dive);
-      const diver = candidates[Math.floor(Math.random() * candidates.length)];
+      const diver = candidates[Math.floor(this.rand() * candidates.length)];
       if (diver) {
         const { x, y } = this.alienPos(diver);
         diver.dive = { x, y, t: 0 };

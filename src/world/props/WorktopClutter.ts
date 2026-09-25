@@ -6,59 +6,15 @@ import { wood as woodMaterial } from '@/world/materials/finishes';
 /*
  * The small things that live on a kitchen worktop. Each is a `Prop` (never collides) standing on
  * its base at local y = 0 and facing +z, so a `wall` placement at the worktop height with an
- * `offset` off the wall puts it on the counter, turned towards the room.
+ * `offset` off the wall puts it on the counter, turned towards the room. The kettle and the
+ * toaster work, so they have their own files (`Kettle.ts`, `Toaster.ts`).
  */
 
 const STEEL = new THREE.MeshStandardMaterial({ color: 0xc4c7cb, metalness: 0.7, roughness: 0.35 });
 const BLACK = matte(0x1e1f22, 0.6);
 const CERAMIC = new THREE.MeshStandardMaterial({ color: 0xf2eee6, roughness: 0.35, side: THREE.DoubleSide });
-
-/** A brushed-steel jug kettle on its base: spout to the right, handle to the left, a little blue window on the side. */
-export class Kettle extends Prop {
-  constructor() {
-    super();
-    this.name = 'Kettle';
-    const base = cylinderMesh(0.085, 0.015, BLACK, { y: 0.0075 }, { segments: 24 });
-    this.add(base);
-    this.add(cylinderMesh(0.075, 0.19, STEEL, { y: 0.015 + 0.095 }, { radiusBottom: 0.08, segments: 24 }));
-    this.add(cylinderMesh(0.055, 0.02, BLACK, { y: 0.215 }, { radiusBottom: 0.07, segments: 20 }));
-    this.add(cylinderMesh(0.012, 0.02, BLACK, { y: 0.235 }, { segments: 10 }));
-    // The spout leans out of the top right; the handle is a loop on the left.
-    const spout = cylinderMesh(0.011, 0.13, STEEL, { x: 0.095, y: 0.17 }, { radiusBottom: 0.016, segments: 10 });
-    spout.rotation.z = -0.55;
-    this.add(spout);
-    const handle = new THREE.Mesh(new THREE.TorusGeometry(0.06, 0.009, 8, 18, Math.PI), BLACK);
-    handle.position.set(-0.078, 0.13, 0);
-    handle.rotation.z = Math.PI / 2;
-    handle.castShadow = true;
-    this.add(handle);
-    part(this, 0.012, 0.09, 0.02, new THREE.MeshStandardMaterial({ color: 0x9ecbe8, roughness: 0.2, transparent: true, opacity: 0.8 }), { x: 0, y: 0.1, z: 0.075 }).castShadow = false;
-  }
-}
-
-/** A two-slot steel toaster, a slice of toast left standing in one slot, the lever and browning dial on its front. */
-export class Toaster extends Prop {
-  constructor() {
-    super();
-    this.name = 'Toaster';
-    const w = 0.27;
-    const h = 0.17;
-    const d = 0.16;
-    const feet = 0.01; // the body stands this far up on four rubber feet
-    part(this, w, h, d, STEEL, { y: feet + h / 2 });
-    part(this, w - 0.02, 0.01, d - 0.02, BLACK, { y: feet + h + 0.005 }).castShadow = false;
-    for (const dz of [-0.03, 0.03]) part(this, 0.15, 0.004, 0.022, matte(0x0b0b0d, 0.9), { y: feet + h + 0.011, z: dz }).castShadow = false;
-    // Toast: a browned slice up out of the back slot.
-    part(this, 0.11, 0.1, 0.012, matte(0xc48a4a, 0.9), { y: feet + h + 0.03, z: -0.03 });
-    // Front: the lever on a slot and a dial.
-    part(this, 0.008, 0.06, 0.004, matte(0x0b0b0d, 0.9), { x: w / 2 - 0.035, y: feet + h * 0.6, z: d / 2 + 0.002 }).castShadow = false;
-    part(this, 0.03, 0.012, 0.016, BLACK, { x: w / 2 - 0.035, y: feet + h * 0.74, z: d / 2 + 0.01 });
-    const dial = cylinderMesh(0.014, 0.012, BLACK, { x: w / 2 - 0.035, y: feet + h * 0.28, z: d / 2 + 0.006 }, { segments: 14 });
-    dial.rotation.x = Math.PI / 2;
-    this.add(dial);
-    for (const dz of [-0.05, 0.05]) for (const dx of [-0.1, 0.1]) this.add(cylinderMesh(0.01, feet, BLACK, { x: dx, y: feet / 2, z: dz }, { segments: 8 }));
-  }
-}
+const GLASS = new THREE.MeshStandardMaterial({ color: 0xe8f0f2, roughness: 0.05, metalness: 0.1, transparent: true, opacity: 0.35, side: THREE.DoubleSide });
+const WATER = new THREE.MeshStandardMaterial({ color: 0xcfd8dc, roughness: 0.02, metalness: 0.2, transparent: true, opacity: 0.25 });
 
 export interface FruitBowlOptions {
   /** Colour of the bowl. Default a glazed cream. */
@@ -157,7 +113,11 @@ export class StorageJars extends Prop {
   }
 }
 
-/** A steel wire dish rack beside a sink: three plates standing in it, two mugs upside down at its end. */
+/**
+ * A steel wire dish rack beside a sink, just used: dinner and side plates standing in it, a bowl on
+ * edge, two mugs upside down at its end, a wet drip tray under it, and past the end a cutlery pot
+ * and a glass drying upside down.
+ */
 export class DishRack extends Prop {
   constructor() {
     super();
@@ -191,5 +151,41 @@ export class DishRack extends Prop {
       handle.castShadow = true;
       this.add(handle);
     }
+    // Two side plates behind the dinner plates, and a bowl on edge beside them.
+    for (let i = 0; i < 2; i++) {
+      const plate = cylinderMesh(0.08, 0.006, matte(i ? 0xdfe6ec : 0xf2eee6, 0.3), { x: -w / 2 + 0.2 + i * 0.035, y: 0.09, z: 0.02 }, { segments: 24 });
+      plate.rotation.z = Math.PI / 2;
+      plate.rotation.x = -0.12;
+      this.add(plate);
+    }
+    const bowl = new THREE.Mesh(new THREE.SphereGeometry(0.07, 18, 8, 0, Math.PI * 2, 0, Math.PI / 2), matte(0x5d7fa6, 0.3));
+    bowl.material.side = THREE.DoubleSide;
+    bowl.position.set(-w / 2 + 0.03, 0.09, -0.07);
+    bowl.rotation.z = Math.PI / 2 - 0.25;
+    bowl.castShadow = true;
+    this.add(bowl);
+    // A white drip tray under it all, still wet: a glossy film of water on it.
+    part(this, w + 0.04, 0.008, d + 0.03, matte(0xeeeeea, 0.4), { y: 0.004 }).castShadow = false;
+    const film = part(this, w, 0.001, d, WATER, { y: 0.0085 });
+    film.castShadow = false;
+    // At the end, off the tray: a steel cutlery pot with handles poking out, a glass drying upside down.
+    const pot = cylinderMesh(0.035, 0.11, STEEL, { x: w / 2 + 0.05, y: 0.055, z: -0.04 }, { segments: 16 });
+    this.add(pot);
+    const handles: [number, number, number, number][] = [
+      [-0.012, -0.01, 0.2, 0x2a2a2a],
+      [0.01, 0.008, -0.15, 0x2a2a2a],
+      [0.0, 0.015, 0.1, 0xc4c7cb],
+      [0.014, -0.012, -0.25, 0xc4c7cb],
+      [-0.01, 0.012, 0.3, 0x8b5a2b],
+    ];
+    for (const [dx, dz, tilt, colour] of handles) {
+      const stick = part(this, 0.012, 0.09, 0.004, matte(colour, 0.4), { x: w / 2 + 0.05 + dx, y: 0.14, z: -0.04 + dz });
+      stick.rotation.z = tilt;
+      stick.castShadow = false;
+    }
+    const glass = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.034, 0.1, 18, 1, true), GLASS);
+    glass.position.set(w / 2 + 0.05, 0.05, 0.06);
+    this.add(glass);
+    this.add(cylinderMesh(0.03, 0.004, GLASS, { x: w / 2 + 0.05, y: 0.098, z: 0.06 }, { segments: 18 }));
   }
 }

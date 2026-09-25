@@ -13,6 +13,18 @@ export const CERAMIC = matte(0xf4f4f0, 0.25);
 export const CHROME = new THREE.MeshStandardMaterial({ color: 0xd8dde0, metalness: 0.9, roughness: 0.2 });
 /** White plastic of seats and lids: a touch less glossy than the ceramic. */
 export const WHITE_PLASTIC = matte(0xf7f7f4, 0.4);
+/**
+ * Standing water (a filled tub, the WC's bowl): a pale, glossy, half-see-through sheet. Plain alpha
+ * blending, no transmission pass: cheap, and the canvas alpha stays 1 over the opaque room behind it.
+ */
+export const STILL_WATER = new THREE.MeshStandardMaterial({
+  color: 0xa9c8cc,
+  roughness: 0.03,
+  metalness: 0.15,
+  transparent: true,
+  opacity: 0.6,
+  depthWrite: false,
+});
 /** Clear glass of shower screens and shelves: see-through, never a shadow caster. */
 export const CLEAR_GLASS = new THREE.MeshStandardMaterial({
   color: 0xdff0f0,

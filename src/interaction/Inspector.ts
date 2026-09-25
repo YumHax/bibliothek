@@ -7,14 +7,19 @@ export interface InspectorEvents {
   onLookEnabledChange?(enabled: boolean): void;
 }
 
-type Phase = 'idle' | 'toHand' | 'inHand' | 'toShelf';
+type Phase = 'idle' | 'toHand' | 'inHand' | 'toShelf' | 'stowing';
+
+/** Where a bought box goes in camera space (down out of view, into the bag), and how long it takes. */
+const STOW_OFFSET = new THREE.Vector3(0.05, -0.55, -0.3);
+const STOW_SECONDS = 0.35;
 
 /**
  * Pulls a GameBox off its shelf and carries it in front of the camera, low and to the left
  * so the crosshair stays free for other interactions (e.g. the TV). The player can keep
  * walking and looking around; holding the right mouse button rotates the box instead.
  * `toggleOpen()` swings the lid open to show the cartridge and manual; the box slides to the
- * right while open so the whole spread stays in view. `release()` sends it back to its rest pose.
+ * right while open so the whole spread stays in view. `release()` sends it back to its rest pose;
+ * `stow()` (a box just bought) drops it down out of view and lets go of it for good.
  */
 export class Inspector implements Updatable {
   /** Hand pose in camera space (metres): x right, y up, z forward is negative. */
@@ -25,6 +30,8 @@ export class Inspector implements Updatable {
   private phase: Phase = 'idle';
   private box: GameBox | null = null;
   private originalParent: THREE.Object3D | null = null;
+  private onStowed: (() => void) | null = null;
+  private stowTime = 0;
   private rotating = false;
   private readonly userRotation = new THREE.Quaternion();
   private readonly euler = new THREE.Euler(0, 0, 0, 'YXZ');
@@ -86,12 +93,34 @@ export class Inspector implements Updatable {
     }
   }
 
+  /**
+   * The carried box is the player's now: it goes down into the bag, out of view, and is taken out
+   * of the scene; `onStowed` then runs (whoever owned it disposes of it). At once when nothing is in hand.
+   */
+  stow(onStowed: () => void): void {
+    if (!this.box || (this.phase !== 'inHand' && this.phase !== 'toHand')) {
+      onStowed();
+      return;
+    }
+    this.box.close();
+    this.setRotating(false);
+    this.phase = 'stowing';
+    this.stowTime = 0;
+    this.onStowed = onStowed;
+  }
+
   update(dt: number): void {
     if (!this.box || this.phase === 'idle') return;
     const box = this.box;
     box.tick(dt);
 
-    if (this.phase === 'toShelf') {
+    if (this.phase === 'stowing') {
+      this.stowTime += dt;
+      this.camera.getWorldPosition(this.targetPos);
+      this.camera.getWorldQuaternion(this.tmpQuat);
+      this.targetPos.add(this.tmpOffset.copy(STOW_OFFSET).applyQuaternion(this.tmpQuat));
+      this.targetQuat.copy(this.tmpQuat);
+    } else if (this.phase === 'toShelf') {
       const parent = this.originalParent!;
       parent.updateWorldMatrix(true, false);
       this.targetPos.copy(box.restPosition).applyMatrix4(parent.matrixWorld);
@@ -116,6 +145,17 @@ export class Inspector implements Updatable {
     const settled = box.position.distanceToSquared(this.targetPos) < 1e-6 && box.quaternion.angleTo(this.targetQuat) < 0.005;
     if (this.phase === 'toHand' && settled) this.phase = 'inHand';
     if (this.phase === 'toShelf' && settled) this.finishReturn();
+    if (this.phase === 'stowing' && this.stowTime >= STOW_SECONDS) this.finishStow();
+  }
+
+  private finishStow(): void {
+    const done = this.onStowed;
+    this.box?.removeFromParent();
+    this.phase = 'idle';
+    this.box = null;
+    this.originalParent = null;
+    this.onStowed = null;
+    done?.();
   }
 
   private finishReturn(): void {

@@ -18,6 +18,8 @@ export interface TouchButton {
 export const DEFAULT_TOUCH_BUTTONS: TouchButton[] = [
   { label: 'Put back', code: 'KeyE', title: 'Put the game back / stand up' },
   { label: 'Open', code: 'KeyO', title: 'Open the box' },
+  { label: 'Buy', code: 'KeyB', title: 'Buy the market copy in hand' },
+  { label: 'Haggle', code: 'KeyH', title: 'Make the stallholder an offer' },
   { label: 'Search', code: 'Slash', title: 'Search the collection' },
   { label: 'Games', code: 'Tab', title: 'Collection' },
   { label: 'Menu', code: 'Escape', title: 'Back to the start screen' },

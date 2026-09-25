@@ -6,6 +6,7 @@ import { boxMesh } from './meshUtils';
 import { parquetMaterial } from './Parquet';
 import { concreteMaterial } from './Concrete';
 import { carpetMaterial } from './Carpet';
+import { tiledFloorMaterial, type FloorTiles } from './TiledFloor';
 import { edgeOcclusion, floorWearMap, wallMaterial } from './materials/surfaces';
 import { glossyFloor } from './materials/GlossyFloor';
 import { scuffed } from './materials/finishes';
@@ -55,8 +56,13 @@ export interface RoomOptions {
 
 /** How a room's shell is finished; every field defaults to the flat's look. */
 export interface RoomFinish {
-  /** `parquet`: oak strips (default); `concrete`: a poured slab with joints and stains; `carpet`: an arcade's black neon-confetti carpet. */
-  floor?: 'parquet' | 'concrete' | 'carpet';
+  /**
+   * `parquet`: oak strips (default); `concrete`: a poured slab with joints and stains; `carpet`: an arcade's black
+   * neon-confetti carpet; `tiles`: ceramic tiles as `floorTiles` describes them (a bathroom, a kitchen).
+   */
+  floor?: 'parquet' | 'concrete' | 'carpet' | 'tiles';
+  /** Pattern, size and colours of a `tiles` floor (`TiledFloor.ts`). */
+  floorTiles?: FloorTiles;
   /** Paint colour of the walls (default off-white). */
   walls?: number;
   /** Colour of the ceiling (default white). */
@@ -82,7 +88,7 @@ const LAMP_INTENSITY = 22;
 const REFERENCE_AREA = 36;
 const MIN_LAMP_SHARE = 0.15;
 /** Ground colour of the hemisphere ambient per floor: the light the floor bounces back up takes its colour. */
-const FLOOR_BOUNCE: Record<NonNullable<RoomFinish['floor']>, number> = { parquet: 0x7a6450, concrete: 0x6e6b66, carpet: 0x2c2436 };
+const FLOOR_BOUNCE: Record<NonNullable<RoomFinish['floor']>, number> = { parquet: 0x7a6450, concrete: 0x6e6b66, carpet: 0x2c2436, tiles: 0x8a8984 };
 /** Emissive of the ceiling standing in for the lamp's bounce off the walls, with the lamp on. */
 const CEILING_BOUNCE = 0.3;
 /** Thickness of the wall colliders, laid just outside each wall plane so nothing inside the room touches them. */
@@ -250,7 +256,14 @@ export class Room extends THREE.Group implements Updatable, OccupancyAware {
     const { width, depth, height } = this.options;
 
     const finish = this.options.finish ?? {};
-    const floorMat = finish.floor === 'concrete' ? concreteMaterial(width, depth) : finish.floor === 'carpet' ? carpetMaterial(width, depth) : parquetMaterial(width, depth);
+    const floorMat =
+      finish.floor === 'concrete'
+        ? concreteMaterial(width, depth)
+        : finish.floor === 'carpet'
+          ? carpetMaterial(width, depth)
+          : finish.floor === 'tiles'
+            ? tiledFloorMaterial(width, depth, finish.floorTiles)
+            : parquetMaterial(width, depth);
     // Where the floor meets the walls it darkens; the varnish or the slab is dulled along the walking lanes.
     edgeOcclusion(floorMat, new THREE.Vector2(width / 2, depth / 2), 0.3, 0.22);
     if (finish.floor !== 'carpet') {

@@ -11,11 +11,20 @@ const WIDTH = 1.6;
 const DEPTH = 0.7;
 const HEIGHT = 1.05;
 
+/** Default distance from the counter's origin to the wall behind it: the desk backs onto the wall. */
+const WALL_BEHIND = DEPTH / 2 + 0.03;
+
+export interface OrderCounterOptions {
+  /** Distance from the origin back to the wall the sign hangs on; more than the desk's half depth leaves room for a clerk. */
+  wallBehind?: number;
+}
+
 const OAK = woodMaterial(0x8b6a44, 0.55);
 const DARK = matte(0x4a3524, 0.6);
 
 /**
- * The market's mail-order counter: a desk with a thick catalogue on it and a sign behind. Clicking
+ * The market's mail-order counter: a desk with a thick catalogue on it and a sign on the wall behind
+ * (`wallBehind` away, room for the clerk in between). Clicking
  * it opens the catalogue (`SessionActions.openCatalogue`), where any game can be bought new at the
  * shop price. Local +z faces the aisle. Collides.
  */
@@ -23,9 +32,10 @@ export class OrderCounter extends THREE.Group implements Furniture, Interactable
   readonly hitboxes: THREE.Object3D[];
   private readonly book: THREE.MeshStandardMaterial;
 
-  constructor() {
+  constructor(options: OrderCounterOptions = {}) {
     super();
     this.name = 'OrderCounter';
+    const wallBehind = options.wallBehind ?? WALL_BEHIND;
     this.add(boxMesh(WIDTH, HEIGHT - 0.04, DEPTH * 0.8, DARK, { y: (HEIGHT - 0.04) / 2, z: -DEPTH * 0.1 }));
     this.add(boxMesh(WIDTH + 0.06, 0.04, DEPTH, OAK, { y: HEIGHT - 0.02 }));
     // Panelling on the front.
@@ -39,9 +49,9 @@ export class OrderCounter extends THREE.Group implements Furniture, Interactable
     book.receiveShadow = true;
     this.add(book);
     this.add(boxMesh(0.14, 0.01, 0.01, matte(0x1b1b1b, 0.4), { x: 0.35, y: HEIGHT + 0.005, z: 0.1 }));
-    // Sign behind the counter.
+    // Sign on the wall behind the counter.
     const sign = new THREE.Mesh(new THREE.PlaneGeometry(1.1, 0.28), new THREE.MeshStandardMaterial({ map: this.paintSign(), roughness: 0.8 }));
-    sign.position.set(0, 1.7, -DEPTH / 2 + 0.03);
+    sign.position.set(0, 1.75, -wallBehind + 0.01);
     sign.castShadow = true;
     this.add(sign);
     this.traverse((obj) => {

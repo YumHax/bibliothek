@@ -79,8 +79,8 @@ export class ArrowRush extends BaseGame {
     this.spawnTimer -= dt;
     if (this.spawnTimer <= 0) {
       this.spawnTimer = Math.max(MIN_GAP, START_GAP - GAP_PER_LEVEL * (level - 1));
-      let lane = LANES[Math.floor(Math.random() * LANES.length)]!;
-      if (lane === this.lastLane) lane = LANES[(LANES.indexOf(lane) + 1 + Math.floor(Math.random() * 3)) % LANES.length]!;
+      let lane = LANES[Math.floor(this.rand() * LANES.length)]!;
+      if (lane === this.lastLane) lane = LANES[(LANES.indexOf(lane) + 1 + Math.floor(this.rand() * 3)) % LANES.length]!;
       this.lastLane = lane;
       this.spawned += 1;
       this.arrows.push({ lane, y: PLAY_TOP - ARROW, gold: this.spawned % (GOLD_EVERY + level - 1) === 0 });
@@ -155,6 +155,20 @@ export class ArrowRush extends BaseGame {
       }
       drawText(ctx, GLYPH[a.lane], x, a.y + 1, 12, '#0d0a1a');
     }
+  }
+
+  /** Presses a lane as its arrow reaches the line (a lesser player a little off, now and then not at all); one frame down, one up. */
+  autopilot(skill: number): ArcadeControls {
+    const out = { left: false, right: false, up: false, down: false, fire: false, firePressed: false };
+    for (const lane of LANES) {
+      if (this.held[lane]) continue; // let go first, so the next press registers
+      const arrow = this.arrows.find((a) => a.lane === lane && Math.abs(a.y - TARGET_Y) <= GOOD_WINDOW);
+      if (!arrow) continue;
+      const off = arrow.y - TARGET_Y;
+      const aim = (1 - skill) * GOOD_WINDOW * 0.9;
+      if (off >= -aim && Math.random() < 0.35 + skill * 0.5) out[lane] = true;
+    }
+    return out;
   }
 
   private get level(): number {

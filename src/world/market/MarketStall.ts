@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { createCanvas, toTexture, seededRandom } from '@/covers/generated/canvasUtils';
-import type { Furniture } from '../Furniture';
+import type { DisplaySlot, StallLike } from './stallTypes';
 import { boxMesh, cylinderMesh } from '../meshUtils';
 import { matte } from '../props/Prop';
 import { Crate } from '../props/Crate';
@@ -22,15 +22,25 @@ export interface MarketStallOptions {
   seed?: number;
 }
 
+export type { DisplaySlot } from './stallTypes';
+
+const DEFAULT_WIDTH = 1.6;
 const DEPTH = 0.65;
 const TOP_HEIGHT = 0.78;
 const TOP_THICKNESS = 0.03;
 /** Gap between two boxes on display. */
 const BOX_GAP = 0.05;
+/** Room kept free at either end of the table. */
+const END_MARGIN = 0.08;
 const CRATE_DEPTH = 0.2;
+const CRATE_H = 0.22;
 const CRATE_Z = -DEPTH / 2 + 0.12;
 /** The plane the boxes lean against. */
 const CRATE_FRONT = CRATE_Z + CRATE_DEPTH / 2;
+/** Centre line of the row of boxes lying flat, clear of the leaning row's tags and of the table's front edge. */
+const FLAT_Z = 0.15;
+/** How far a lying box may be turned off square. */
+const FLAT_YAW = 0.07;
 /** The awning: poles this far outside the table's edges, the back pair taller so the canopy sheds towards the aisle, the canopy overhanging all round. */
 const POLE_R = 0.02;
 const POLE_OUT = 0.08;
@@ -55,21 +65,38 @@ const CARD = matte(0xd9c9a8, 0.85);
 /**
  * A flea-market stall: a trestle table under a checked cloth hanging down the front, a row of
  * crates at the back for boxes to lean on, and over it all a striped awning on four poles with a
- * scalloped valance the sign hangs from; boxes of stock wait under the table. `anchors()` says where
- * the boxes go (stall-local, on the top, leaning on the crates). Local +z faces the aisle. Collides
- * (the table and the poles).
+ * scalloped valance the sign hangs from; boxes of stock wait under the table. `layout()` says where
+ * the boxes go (stall-local): a row leaning on the crates, then a second row lying face up in front
+ * of it. Local +z faces the aisle. Collides (the table and the poles).
  */
-export class MarketStall extends THREE.Group implements Furniture {
+export class MarketStall extends THREE.Group implements StallLike {
   readonly width: number;
   readonly topHeight = TOP_HEIGHT;
+  /** Behind the table, clear of the awning's back poles. */
+  readonly vendorAt: [number, number] = [0, -0.75];
+  /** The top of the aisle-side left pole. */
+  readonly pennantAt: THREE.Vector3;
+  private readonly seed: number;
+
+  /** Boxes `boxWidth` wide that fit in one row of a table `width` long. */
+  static perRow(boxWidth: number, width = DEFAULT_WIDTH): number {
+    return Math.max(0, Math.floor((width - 2 * END_MARGIN + BOX_GAP) / (boxWidth + BOX_GAP)));
+  }
+
+  /** Boxes `boxWidth` wide a stall shows at most: both rows full. */
+  static capacity(boxWidth: number, width = DEFAULT_WIDTH): number {
+    return 2 * MarketStall.perRow(boxWidth, width);
+  }
 
   constructor(options: MarketStallOptions) {
     super();
     this.name = 'MarketStall';
-    this.width = options.width ?? 1.6;
+    this.width = options.width ?? DEFAULT_WIDTH;
+    this.seed = options.seed ?? 1;
+    this.pennantAt = new THREE.Vector3(-this.width / 2 - POLE_OUT, options.awning === false ? 1.75 : FRONT_POLE_H, options.awning === false ? -DEPTH / 2 + 0.05 : DEPTH / 2 + POLE_OUT);
     const clothColor = new THREE.Color(options.cloth ?? 0x6b2f2a);
     const w = this.width;
-    const random = seededRandom((options.seed ?? 1) * 48271);
+    const random = seededRandom(this.seed * 48271);
 
     // Trestles: two A-frames, simplified to slanted legs under a beam.
     for (const x of [-w / 2 + 0.18, w / 2 - 0.18]) {
@@ -90,9 +117,8 @@ export class MarketStall extends THREE.Group implements Furniture {
     flap.castShadow = false;
     this.add(clothTop, flap);
     // Crates at the back the boxes lean against.
-    const crateH = 0.22;
     for (let x = -w / 2 + 0.2; x <= w / 2 - 0.2; x += 0.4) {
-      this.add(boxMesh(0.36, crateH, CRATE_DEPTH, CARD, { x, y: TOP_HEIGHT + 0.01 + crateH / 2, z: CRATE_Z }));
+      this.add(boxMesh(0.36, CRATE_H, CRATE_DEPTH, CARD, { x, y: TOP_HEIGHT + 0.01 + CRATE_H / 2, z: CRATE_Z }));
     }
 
     if (options.clutter !== false) {
@@ -134,27 +160,32 @@ export class MarketStall extends THREE.Group implements Furniture {
     return new THREE.Box3(new THREE.Vector3(-hx, 0, -hz), new THREE.Vector3(hx, TOP_HEIGHT + 0.3, hz));
   }
 
+  capacityFor(boxWidth: number): number {
+    return MarketStall.capacity(boxWidth, this.width);
+  }
+
   /**
-   * Stall-local points for `widths.length` boxes standing in a row on the top, centred, where the
-   * crates' front meets the cloth (a `ForSaleBox` leans back from there onto the crate). Boxes that
-   * do not fit are left out (fewer anchors than widths).
+   * Where `count` boxes `boxWidth` wide go (one stall holds one platform, so one size), stall-local.
+   * The leaning row fills first, centre outwards (the first box, the showpiece, stands in the
+   * middle), then the lying row, centred. Never more than `capacity()` slots: the stock is drawn to fit.
    */
-  anchors(widths: readonly number[]): THREE.Vector3[] {
-    const usable = this.width - 0.16;
-    const fitting: number[] = [];
-    let total = 0;
-    for (const bw of widths) {
-      if (total + bw + (fitting.length ? BOX_GAP : 0) > usable) break;
-      total += bw + (fitting.length ? BOX_GAP : 0);
-      fitting.push(bw);
-    }
-    const points: THREE.Vector3[] = [];
-    let x = -total / 2;
-    for (const bw of fitting) {
-      points.push(new THREE.Vector3(x + bw / 2, TOP_HEIGHT + 0.012, CRATE_FRONT));
-      x += bw + BOX_GAP;
-    }
-    return points;
+  layout(boxWidth: number, count: number): DisplaySlot[] {
+    const perRow = MarketStall.perRow(boxWidth, this.width);
+    const lean = Math.min(count, perRow);
+    const flat = Math.min(count - lean, perRow);
+    const row = (n: number): number[] => Array.from({ length: n }, (_, i) => (i - (n - 1) / 2) * (boxWidth + BOX_GAP));
+    // Centre outwards: middle first, then alternately left and right.
+    const leanXs = row(lean).sort((a, b) => Math.abs(a) - Math.abs(b) || a - b);
+    const random = seededRandom(this.seed * 7919);
+    return [
+      ...leanXs.map((x) => ({ position: new THREE.Vector3(x, TOP_HEIGHT + 0.012, CRATE_FRONT), pose: 'lean' as const, yaw: 0 })),
+      ...row(flat).map((x) => ({ position: new THREE.Vector3(x, TOP_HEIGHT + 0.012, FLAT_Z), pose: 'flat' as const, yaw: (random() - 0.5) * 2 * FLAT_YAW })),
+    ];
+  }
+
+  /** A spot on top of the crates at the back (stall-local), for something small to stand on: the radio. */
+  crateTop(x: number): THREE.Vector3 {
+    return new THREE.Vector3(x, TOP_HEIGHT + 0.01 + CRATE_H, CRATE_Z);
   }
 
   /** Four poles, rails between their tops, a sloping striped canopy and a scalloped valance along the aisle edge. */

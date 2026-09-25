@@ -8,15 +8,19 @@ interface TowerStyle {
   kind: 'glass' | 'stone' | 'dark';
 }
 
+/**
+ * Tower claddings. Curtain walls mirror the sky only in part: tinted glass keeps its own colour, and
+ * a tower mirroring it fully would melt into the sky behind it, leaving its grid floating.
+ */
 const STYLES: readonly TowerStyle[] = [
-  { color: '#5f7f9c', glass: 0.62, kind: 'glass' },
-  { color: '#4b6a86', glass: 0.7, kind: 'glass' },
-  { color: '#7d94a9', glass: 0.55, kind: 'glass' },
-  { color: '#a9a297', glass: 0.08, kind: 'stone' },
-  { color: '#8e9198', glass: 0.12, kind: 'stone' },
-  { color: '#b7ab99', glass: 0.08, kind: 'stone' },
-  { color: '#3d4753', glass: 0.35, kind: 'dark' },
-  { color: '#2f3844', glass: 0.4, kind: 'dark' },
+  { color: '#4f6f8c', glass: 0.3, kind: 'glass' },
+  { color: '#3f5c78', glass: 0.34, kind: 'glass' },
+  { color: '#6a8298', glass: 0.26, kind: 'glass' },
+  { color: '#a9a297', glass: 0.06, kind: 'stone' },
+  { color: '#8e9198', glass: 0.08, kind: 'stone' },
+  { color: '#b7ab99', glass: 0.06, kind: 'stone' },
+  { color: '#3d4753', glass: 0.2, kind: 'dark' },
+  { color: '#2f3844', glass: 0.24, kind: 'dark' },
 ];
 
 type Crown = 'flat' | 'setback' | 'spire' | 'slant' | 'lit';
@@ -157,4 +161,15 @@ function paintTower(sheet: Sheet, random: Rng, t: Tower): void {
       sheet.litRect(x0, crownTop + 1, width, Math.max(1.5, floorPx * 0.8), random() < 0.5 ? 'cool' : 'warm', 0.9);
     }
   });
+  // Aviation warning lights on the tallest, red dots that burn all night at the top corners (and the mast tip).
+  if (t.height > 150) {
+    const y = t.crown === 'spire' ? heightY(t.height * 1.2, d) : heightY(t.crown === 'setback' ? t.height * 1.16 : t.height, d);
+    const dot = Math.max(1, sizePx(1.5, d));
+    const xs = t.crown === 'spire' ? [x0 + width / 2] : [x0 + width * 0.08, x0 + width * 0.92];
+    for (const x of xs) {
+      sheet.color.fillStyle = '#c0302a';
+      sheet.color.fillRect(x - dot / 2, y - dot, dot, dot);
+      sheet.litRect(x - dot / 2, y - dot, dot, dot, 'warm', 1, 0, true);
+    }
+  }
 }

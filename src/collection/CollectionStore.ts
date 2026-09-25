@@ -41,6 +41,12 @@ export class CollectionStore implements GameSource {
     return this.list.some((g) => g.id === id);
   }
 
+  /** True when a copy is the player's (owned or lent out); a wishlist entry is not. */
+  owns(id: string): boolean {
+    const game = this.find(id);
+    return game !== undefined && game.status !== 'wishlist';
+  }
+
   find(id: string): Game | undefined {
     return this.list.find((g) => g.id === id);
   }

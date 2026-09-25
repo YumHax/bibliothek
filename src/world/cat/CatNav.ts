@@ -19,7 +19,10 @@ const SQRT2 = Math.SQRT2;
 /**
  * Walking without walking through furniture: a coarse occupancy grid over the room, refreshed
  * lazily from the collision world, A* between cells (8 neighbours, no corner cutting) and
- * string-pulling to turn the cell chain into a few straight legs.
+ * string-pulling to turn the cell chain into a few straight legs. Given `areas` (the rooms of the
+ * flat), the grid spans all of them and only their cells are probed: the walls between them are
+ * colliders, so the cat goes from room to room through the doorways, and a shut door (its leaf is a
+ * collider too) keeps it in.
  */
 export class CatNav {
   private readonly minX: number;
@@ -36,10 +39,14 @@ export class CatNav {
   private readonly closed: Uint8Array;
   private readonly probe = new THREE.Vector3();
   private readonly tmp = new THREE.Vector3();
+  private readonly tmp2d = new THREE.Vector2();
+  /** 1 where a cell lies inside one of the `areas` (all cells without areas). */
+  private readonly inside: Uint8Array;
 
   constructor(
     private readonly collisions: Collisions,
     bounds: THREE.Box2,
+    areas?: readonly THREE.Box2[],
   ) {
     this.minX = bounds.min.x + WALL_MARGIN;
     this.minZ = bounds.min.y + WALL_MARGIN;
@@ -51,6 +58,14 @@ export class CatNav {
     this.fCost = new Float32Array(n);
     this.parent = new Int32Array(n);
     this.closed = new Uint8Array(n);
+    this.inside = new Uint8Array(n).fill(1);
+    if (areas?.length) {
+      for (let cell = 0; cell < n; cell++) {
+        this.cellCentre(cell, this.tmp);
+        this.tmp2d.set(this.tmp.x, this.tmp.z);
+        this.inside[cell] = areas.some((a) => a.containsPoint(this.tmp2d)) ? 1 : 0;
+      }
+    }
   }
 
   /** Ages the grid; it is recomputed on the next plan once older than ~10 s. */
@@ -78,16 +93,18 @@ export class CatNav {
   }
 
   /**
-   * A random free floor point, within `radius` of `near` when given (anywhere otherwise).
-   * Null when a few dozen tries found nothing.
+   * A random free floor point, within `radius` of `near` when given, else inside `within` (a room)
+   * or anywhere on the grid. Null when a few dozen tries found nothing.
    */
-  randomFreePoint(out: THREE.Vector3, near?: THREE.Vector3, radius = 1): THREE.Vector3 | null {
+  randomFreePoint(out: THREE.Vector3, near?: THREE.Vector3, radius = 1, within?: THREE.Box2): THREE.Vector3 | null {
     this.refresh();
     for (let i = 0; i < 40; i++) {
       if (near) {
         const angle = Math.random() * Math.PI * 2;
         const r = radius * Math.sqrt(Math.random());
         out.set(near.x + Math.cos(angle) * r, 0, near.z + Math.sin(angle) * r);
+      } else if (within) {
+        out.set(THREE.MathUtils.lerp(within.min.x, within.max.x, Math.random()), 0, THREE.MathUtils.lerp(within.min.y, within.max.y, Math.random()));
       } else {
         out.set(this.minX + Math.random() * this.cols * CELL, 0, this.minZ + Math.random() * this.rows * CELL);
       }
@@ -114,6 +131,16 @@ export class CatNav {
     return path;
   }
 
+  /**
+   * True when `point` is inside a collider right now, whatever the grid last said: something moved
+   * into the way since (a door swung shut). Only a point on a planned leg is meaningful: those lie
+   * in free cells, clear of everything that stood still, so a hit can only be what moved.
+   */
+  blockedNow(point: THREE.Vector3): boolean {
+    this.probe.set(point.x, PROBE_Y, point.z);
+    return this.collisions.intersectsSphere(this.probe, 0.01);
+  }
+
   /** True when the straight floor segment from `a` to `b` crosses no blocked cell. */
   segmentFree(a: THREE.Vector3, b: THREE.Vector3): boolean {
     const dx = b.x - a.x;
@@ -136,8 +163,13 @@ export class CatNav {
     this.age = 0;
     for (let row = 0; row < this.rows; row++) {
       for (let col = 0; col < this.cols; col++) {
+        const cell = row * this.cols + col;
+        if (!this.inside[cell]) {
+          this.blocked[cell] = 1;
+          continue;
+        }
         this.probe.set(this.minX + (col + 0.5) * CELL, PROBE_Y, this.minZ + (row + 0.5) * CELL);
-        this.blocked[row * this.cols + col] = this.collisions.intersectsSphere(this.probe, PROBE_RADIUS) ? 1 : 0;
+        this.blocked[cell] = this.collisions.intersectsSphere(this.probe, PROBE_RADIUS) ? 1 : 0;
       }
     }
   }

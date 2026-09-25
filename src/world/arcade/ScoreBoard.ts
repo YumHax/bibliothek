@@ -4,43 +4,44 @@ import { createCanvas } from '@/covers/generated/canvasUtils';
 import { boxMesh } from '../meshUtils';
 import { matte, Prop } from '../props/Prop';
 import { drawText } from './games/ArcadeGame';
+import type { ScoreTable } from './scoreTable';
 
 export interface ScoreBoardOptions {
-  /** The cabinets' games, in the order they are listed. */
+  /** The hall's games, in the order they are listed. */
   games: readonly { id: string; title: string }[];
-  /** Where the best scores come from; read again every second, repainted when one moves. */
-  scores: { bestOf(gameId: string): number };
-  /** What a score pays, for the tickets column. */
-  ticketsFor: (score: number) => number;
-  /** The rate, written at the bottom. */
-  pointsPerTicket: number;
+  /** The tables; the board repaints when one changes. */
+  scores: ScoreTable;
   width?: number;
   height?: number;
 }
 
-const PX_PER_M = 800;
-/** How often the bests are read again. */
-const POLL_SECONDS = 1;
+const PX_PER_M = 700;
+/** Games per page (a 2 x 2 grid), and how long a page shows. */
+const PER_PAGE = 4;
+const PAGE_SECONDS = 8;
 const FRAME = matte(0x0d0c12, 0.4);
+const MEDALS = ['#ffd23a', '#d8dce6', '#e0995a', '#9a96c0', '#9a96c0'];
 
 /**
- * The hall of fame: a backlit board listing the best score on every cabinet and the tickets it
- * paid, the way an arcade pins its records up by the counter. Follows the scores live (a new
- * best appears within the second). Wall-hung: origin at the centre, on the wall, +z into the
- * room. Decoration: never collides.
+ * The hall of fame: a backlit LED board with the top five of every machine in the hall, initials
+ * and scores, four games a page, turning every few seconds. The player's own entries stand out in
+ * green. Follows the tables live (`ScoreTable.subscribe`). Wall-hung: origin at the centre, on the
+ * wall, +z into the room. Decoration: never collides.
  */
 export class ScoreBoard extends Prop implements Updatable {
   private readonly canvas: HTMLCanvasElement;
   private readonly ctx: CanvasRenderingContext2D;
   private readonly texture: THREE.CanvasTexture;
   private readonly options: Required<ScoreBoardOptions>;
-  private shown = '';
-  private pollClock = 0;
+  private readonly unsubscribe: () => void;
+  private page = 0;
+  private pageClock = 0;
+  private dirty = true;
 
   constructor(options: ScoreBoardOptions) {
     super();
     this.name = 'ScoreBoard';
-    this.options = { width: 1.1, height: 0.75, ...options };
+    this.options = { width: 1.5, height: 1.0, ...options };
     const { width, height } = this.options;
 
     const frame = boxMesh(width + 0.08, height + 0.08, 0.05, FRAME, { z: 0.025 });
@@ -54,22 +55,31 @@ export class ScoreBoard extends Prop implements Updatable {
     const face = new THREE.Mesh(new THREE.PlaneGeometry(width, height), new THREE.MeshBasicMaterial({ map: this.texture, toneMapped: false, color: 0xd0d0d0 }));
     face.position.z = 0.052;
     this.add(face);
+    this.unsubscribe = options.scores.subscribe(() => (this.dirty = true));
     this.repaint();
+  }
+
+  private get pages(): number {
+    return Math.max(1, Math.ceil(this.options.games.length / PER_PAGE));
   }
 
   update(dt: number): void {
-    this.pollClock += dt;
-    if (this.pollClock < POLL_SECONDS) return;
-    this.pollClock = 0;
-    this.repaint();
+    this.pageClock += dt;
+    if (this.pageClock >= PAGE_SECONDS && this.pages > 1) {
+      this.pageClock = 0;
+      this.page = (this.page + 1) % this.pages;
+      this.dirty = true;
+    }
+    if (this.dirty) this.repaint();
   }
 
-  /** Repaints only when a best has moved since the last time. */
+  dispose(): void {
+    this.unsubscribe();
+  }
+
   private repaint(): void {
+    this.dirty = false;
     const { games, scores } = this.options;
-    const key = games.map((g) => scores.bestOf(g.id)).join(',');
-    if (key === this.shown) return;
-    this.shown = key;
     const ctx = this.ctx;
     const W = this.canvas.width;
     const H = this.canvas.height;
@@ -80,20 +90,31 @@ export class ScoreBoard extends Prop implements Updatable {
     for (let y = 4; y < H; y += 8) for (let x = 4; x < W; x += 8) ctx.fillRect(x, y, 2, 2);
     ctx.strokeStyle = '#ffd23a';
     ctx.lineWidth = 6;
-    ctx.strokeRect(14, 14, W - 28, H - 28);
-    drawText(ctx, 'HALL OF FAME', W / 2, H * 0.14, Math.round(H * 0.085), '#ffd23a');
-    ctx.fillStyle = '#3a4a8a';
-    ctx.fillRect(W * 0.08, H * 0.22, W * 0.84, 3);
-    const rowH = (H * 0.58) / Math.max(1, games.length);
-    const size = Math.round(Math.min(rowH * 0.42, H * 0.06));
-    games.forEach((game, i) => {
-      const y = H * 0.26 + rowH * (i + 0.5);
-      const best = scores.bestOf(game.id);
-      drawText(ctx, game.title, W * 0.09, y, size, '#c9c4ff', 'left');
-      drawText(ctx, best > 0 ? best.toLocaleString('en-US') : '- - -', W * 0.72, y, size, best > 0 ? '#ffffff' : '#5a5a7a', 'right');
-      if (best > 0) drawText(ctx, `${this.options.ticketsFor(best)} TIX`, W * 0.91, y, Math.round(size * 0.7), '#7ee787', 'right');
+    ctx.strokeRect(12, 12, W - 24, H - 24);
+    drawText(ctx, 'HALL OF FAME', W / 2, H * 0.08, Math.round(H * 0.065), '#ffd23a');
+    if (this.pages > 1) drawText(ctx, `${this.page + 1} / ${this.pages}`, W - 40, H * 0.08, Math.round(H * 0.03), '#5a6aa0', 'right');
+
+    const shown = games.slice(this.page * PER_PAGE, this.page * PER_PAGE + PER_PAGE);
+    const cellW = (W - 60) / 2;
+    const cellH = (H * 0.8) / 2;
+    shown.forEach((game, i) => {
+      const x0 = 30 + (i % 2) * cellW;
+      const y0 = H * 0.15 + Math.floor(i / 2) * cellH;
+      ctx.fillStyle = 'rgba(58,74,138,0.25)';
+      ctx.fillRect(x0 + 8, y0 + 4, cellW - 16, cellH - 12);
+      drawText(ctx, game.title, x0 + cellW / 2, y0 + cellH * 0.11, Math.round(cellH * 0.09), '#c9c4ff');
+      const table = scores.table(game.id);
+      const rowH = (cellH * 0.78) / 5;
+      const size = Math.round(rowH * 0.5);
+      table.forEach((entry, rank) => {
+        const y = y0 + cellH * 0.24 + rowH * (rank + 0.5);
+        const colour = entry.you ? '#7ee787' : '#ffffff';
+        drawText(ctx, `${rank + 1}`, x0 + 30, y, size, MEDALS[rank]!, 'left');
+        drawText(ctx, entry.name, x0 + 70, y, size, colour, 'left');
+        drawText(ctx, entry.score.toLocaleString('en-US'), x0 + cellW - 30, y, size, colour, 'right');
+      });
     });
-    drawText(ctx, `${this.options.pointsPerTicket} PTS = 1 TICKET · BEAT THE BOARD`, W / 2, H * 0.91, Math.round(H * 0.04), '#ff8a80');
+    drawText(ctx, 'BEAT THE BOARD · YOUR SCORES IN GREEN', W / 2, H * 0.96, Math.round(H * 0.028), '#ff8a80');
     this.texture.needsUpdate = true;
   }
 }

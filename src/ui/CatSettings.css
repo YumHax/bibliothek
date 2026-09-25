@@ -1,4 +1,4 @@
-/* The cat's name and coat, one row inside the collection editor's extras strip. */
+/* The cat's name and coat, one row of the Settings screen. */
 .cat-settings {
   display: flex;
   align-items: center;

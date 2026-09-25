@@ -65,6 +65,7 @@ export class Stacker extends BaseGame {
     this.row = 0;
     this.tower = 0;
     this.lastLanded = null;
+    this.settle = 0;
     this.startRow();
   }
 
@@ -80,8 +81,23 @@ export class Stacker extends BaseGame {
       const width = widthFor(this.row);
       this.position += this.direction;
       if (this.position <= 0 || this.position + width >= COLS) this.direction *= -1;
+      this.sound('ticket', 0.7 + this.row * 0.04);
     }
     if (controls.firePressed) this.drop();
+  }
+
+  /** Drops when the block sits square on the row below; a lesser player now and then goes a step early or late. */
+  autopilot(skill: number): ArcadeControls {
+    const idle = { left: false, right: false, up: false, down: false, fire: false, firePressed: false };
+    if (this.settle > 0 || !this.live) return idle;
+    const width = widthFor(this.row);
+    const block = this.mask(this.position, width);
+    const below = this.row === 0 ? (1 << COLS) - 1 : this.rows[this.row - 1]!;
+    const square = (block & below) === block;
+    const overlapping = (block & below) !== 0;
+    // Waiting costs seconds: a good player takes the first square pass, a lesser one sometimes a sloppy one.
+    const drop = square ? Math.random() < 0.25 + skill * 0.5 : overlapping && Math.random() < (1 - skill) * 0.05;
+    return { ...idle, fire: drop, firePressed: drop };
   }
 
   protected paint(ctx: CanvasRenderingContext2D): void {
@@ -138,7 +154,7 @@ export class Stacker extends BaseGame {
 
   private startRow(): void {
     const width = widthFor(this.row);
-    this.direction = Math.random() < 0.5 ? 1 : -1;
+    this.direction = this.rand() < 0.5 ? 1 : -1;
     this.position = this.direction > 0 ? 0 : COLS - width;
     this.moveTimer = 1 / this.speed();
   }
@@ -151,6 +167,7 @@ export class Stacker extends BaseGame {
     const cut = block & ~below;
     const x = BOARD_X + (this.position + width / 2) * CELL;
     const y = this.rowY(this.row);
+    this.sound('drop');
     if (!kept) {
       this.lastLanded = { row: this.row, kept: 0, cut: block };
       this.settle = SETTLE; // keeps the missed block on screen under the end card

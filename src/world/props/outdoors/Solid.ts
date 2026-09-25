@@ -61,13 +61,12 @@ export function paintPost(sheet: Sheet, x: number, z: number, h0: number, h1: nu
   sheet.rect(cx - w / 2, yt, w, yb - yt, color);
 }
 
-/** A soft shadow on the ground around (x, z), `rx` metres along x and `rz` along z. */
+/** A soft shadow on the ground around (x, z), `rx` metres along x and `rz` along z (see `Sheet.shadow`). */
 export function paintGroundShadow(sheet: Sheet, x: number, z: number, rx: number, rz: number, strength = 0.3): void {
   const pts: [number, number][] = [];
   for (let i = 0; i < 20; i++) {
     const t = (i / 20) * Math.PI * 2;
     pts.push(worldPoint(x + Math.cos(t) * rx, z + Math.sin(t) * rz, 0));
   }
-  sheet.color.fillStyle = `rgba(10,14,20,${strength})`;
-  sheet.color.fill(outline(pts));
+  sheet.shadow(outline(pts), Math.min(1, strength * 1.6));
 }

@@ -35,6 +35,8 @@ export interface TelevisionOptions {
   listener?: THREE.Object3D;
   /** Walls between the listener and the screen damp the volume (see `SoundOcclusion`). */
   occlusion?: SoundOcclusion;
+  /** Width of the picture (m). Default 0.56, a 27" set; a portable is about 0.3. */
+  screenWidth?: number;
 }
 
 /**
@@ -47,7 +49,9 @@ export class Television extends THREE.Group implements Furniture, Updatable, Int
   readonly hitboxes: THREE.Object3D[];
   readonly screenName = 'TV';
 
-  private readonly screenWidth = 0.56;
+  private readonly screenWidth: number;
+  /** Size of the set, for the collider. */
+  private readonly bodySize: THREE.Vector3;
   /** The CRT set itself (body, screen, glow); lifted to whatever it stands on. */
   private readonly crt = new THREE.Group();
   private readonly cabinet: THREE.Mesh;
@@ -63,10 +67,14 @@ export class Television extends THREE.Group implements Furniture, Updatable, Int
   private readonly speaker = new CrtSpeaker();
   private glowTime = 0;
   private readonly bodyMaterial: THREE.MeshStandardMaterial;
+  private readonly glowScale: number;
 
-  constructor(cssLayer: CssLayer, { listener, occlusion }: TelevisionOptions = {}) {
+  constructor(cssLayer: CssLayer, { listener, occlusion, screenWidth = 0.56 }: TelevisionOptions = {}) {
     super();
     this.name = 'Television';
+    this.screenWidth = screenWidth;
+    /** A smaller tube is shallower and throws less light. */
+    const scale = screenWidth / 0.56;
 
     this.cabinet = boxMesh(0.9, OWN_CABINET_HEIGHT, 0.45, woodMaterial(0x3b2a1e, 0.7), {
       y: OWN_CABINET_HEIGHT / 2,
@@ -86,9 +94,10 @@ export class Television extends THREE.Group implements Furniture, Updatable, Int
     });
 
     // CRT body, slightly deeper than the screen. Local y = 0 is the underside of the set.
-    const bodyW = this.screenWidth + 0.14;
-    const bodyH = this.surface.height + 0.14;
-    const bodyD = 0.45;
+    const bodyW = this.screenWidth + 0.14 * scale;
+    const bodyH = this.surface.height + 0.14 * scale;
+    const bodyD = 0.45 * Math.sqrt(scale);
+    this.bodySize = new THREE.Vector3(bodyW, bodyH, bodyD);
     this.bodyMaterial = new THREE.MeshStandardMaterial({ color: 0x2a2a2e, roughness: 0.55 });
     const body = boxMesh(bodyW, bodyH, bodyD, this.bodyMaterial, { y: bodyH / 2, z: -0.02 });
     this.hitboxes = [body];
@@ -100,6 +109,7 @@ export class Television extends THREE.Group implements Furniture, Updatable, Int
 
     // No shadows: a shadow-casting point light costs six passes and the glow is meant to be soft.
     this.glow = new THREE.PointLight(GLOW_COLOR, 0, 3.5, 2);
+    this.glowScale = scale;
     this.glow.position.copy(this.surface.position).add(new THREE.Vector3(0, 0, 0.35));
 
     this.crt.position.y = OWN_CABINET_HEIGHT;
@@ -121,9 +131,11 @@ export class Television extends THREE.Group implements Furniture, Updatable, Int
     return this.surface.isPlaying;
   }
 
-  /** Bounding box for collisions (local space). */
+  /** Bounding box for collisions (local space): the built-in cabinet and the set on it, or the set alone once mounted. */
   get footprint(): THREE.Box3 {
-    return new THREE.Box3(new THREE.Vector3(-0.45, 0, -0.25), new THREE.Vector3(0.45, 1.2, 0.25));
+    const half = Math.max(0.45, this.bodySize.x / 2);
+    const top = this.crt.position.y + this.bodySize.y;
+    return new THREE.Box3(new THREE.Vector3(-half, 0, -0.25), new THREE.Vector3(half, top, 0.25));
   }
 
   /**
@@ -197,9 +209,9 @@ export class Television extends THREE.Group implements Furniture, Updatable, Int
       this.glowTime += dt;
       const t = this.glowTime;
       const flicker = 0.5 * Math.sin(t * 11.3) + 0.3 * Math.sin(t * 6.1) + 0.2 * Math.sin(t * 1.7);
-      target = GLOW_PLAYING * (0.85 + 0.15 * flicker);
+      target = GLOW_PLAYING * this.glowScale * (0.85 + 0.15 * flicker);
     } else if (this.state !== 'off') {
-      target = GLOW_MESSAGE;
+      target = GLOW_MESSAGE * this.glowScale;
     }
     // Ease so switching the set on or off does not pop.
     this.glow.intensity += (target - this.glow.intensity) * Math.min(1, dt * 6);

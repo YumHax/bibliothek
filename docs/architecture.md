@@ -29,23 +29,43 @@ src/player/             FirstPersonController (yaw/pitch, sliding collisions aga
                         forward), PointerLockFlow (start card <-> lock; modes pointer | gamepad | touch)
 src/input/              Gamepad (standard mapping -> virtual keys + synthetic mouse), TouchControls, SyntheticMouse, deviceDetect
 src/game/               Session (rules + click/key routing), SessionParts (structural interfaces of optional features), SessionActions
-                        (what an Interactable may ask), Highlighter (emissive pulse), playerPose
+                        (what an Interactable may ask), Highlighter (emissive pulse), playerPose, Sleep (fade, wind the clock to 7:00, fade back)
 src/interaction/        Interactable (hitboxes + label + activate), Interactor (crosshair raycast -> owner), Inspector (carry/rotate/return/open)
-src/world/              World (scene + CollisionWorld + live interactables + zones: addZone/zone), Sky (DayNight + Outdoors, ticked once), worldPlan (WORLD_PLAN,
+src/world/              World (scene + CollisionWorld + live interactables + zones: addZone/zone), Sky (DayNight + Weather + Outdoors, ticked once), worldPlan (WORLD_PLAN,
                         WALL_GAP, SUN_ROTATION_Y), roomPlan (ROOM_PLAN, DOOR_LEAF), Placement (floor/ceiling/corner/wall -> position+yaw), layout (BuildContext,
                         ZoneHandle, roomOf, furnishRoom, ZONE_BUILDERS), shell (furnishShell: Room + sky + owned doors), Room (a Furniture: walls cut by doorways,
                         opaque-wall shadow casters, colliders, setDaylight/setSkylight/setLampOn/setOccupied), Furniture (footprint, colliders, dispose?), Seat,
                         GameBox, Television, Projector, Shelf, meshUtils (boxMesh, cylinderMesh, invisibleHitbox), Parquet
-src/world/hallway/      hallwayPlan (HALLWAY_ROOM, HALLWAY_PLAN) + furnishHallway: the corridor (console, coats, entrance door, runner)
-src/world/bathroom/     bathroomPlan + furnishBathroom
-src/world/bedroom/      bedroomPlan + furnishBedroom
-src/world/kitchen/      kitchenPlan + furnishKitchen
-src/world/arcade/       arcadePlan + furnishArcade, ArcadeCabinet (canvas screen, attract / playing / over, printed side art), PrizeCounter
-                        (`wallBehind` for an attendant), ScoreBoard (hall of fame following `ArcadeScores`), Pinball / ClawMachine /
-                        ChangeMachine (decorative, animated, a line on click; `standAt` / `focus` for the person playing them), games/
-                        (ArcadeGame contract, Breakout, Invaders, registry). See docs/economy.md
-src/world/market/       marketPlan + furnishMarket, MarketStall (trestle table under a striped awning, `anchors()` for the boxes), ForSaleBox
-                        (GameBox + price tag, owns the click), OrderCounter (opens the catalogue), HallRoof (iron trusses + roof light following the sky)
+src/world/hallway/      hallwayPlan (HALLWAY_ROOM, HALLWAY_PLAN) + furnishHallway: the corridor (console + mirror, keys the front door asks
+                        for, coats, shoe rack, noticeboard, sconces, entrance door, runner / bought kilim), Homecoming (keys back in the bowl,
+                        the mail on the mat when the player comes home), mail (which flyers a day brings)
+src/world/bathroom/     bathroomPlan + furnishBathroom (running tap, flush, bath that fills and drains, mirror cabinet, hex-tiled floor)
+src/world/bedroom/      bedroomPlan + furnishBedroom (bed made or slept-in by the hour, sliding drawers, reading corner, night light)
+src/world/kitchen/      kitchenPlan + furnishKitchen (cabinets, oven and fridge that open, kettle, toaster, radio, roller blind, calendar)
+src/world/strays/       StrayGames (a few owned games lent off the shelves each day to spots round the flat), StrayBox (one of them, lying
+                        cover-up: picking it up hands over its shelf box)
+src/world/arcade/       arcadePlan (+ TICKET_GAMES / DEMO_CABINETS, the crowd's nav graph) + furnishArcade. The machines, each an
+                        `ArcadeMachineLike` (SessionActions) and a `Station` (someone stands at it; a regular can `occupy` it):
+                        ArcadeCabinet (CRT glass via crtScreen; attract loop with demo and best-run replay, playing / initials / over
+                        / demo, fixed-step game, moving controls, TicketStrip, jingle, medal lamps, instruction card, glow pool, wear,
+                        out-of-order days, a second stick for two players, a CabinetAttachment: LightGun, DancePad), Pinball (+
+                        pinball/PinballSim, the 2D sim), AlleyRoller (the ball alley), ClawMachine (steer, drop, win a plush),
+                        TicketMachine (what the newer physical machines share) with HoopShot (the basketball cage) and TicketWheel
+                        (luck, a progressive jackpot). replay/ (Replay: the recorder and player, REPLAY_STEP; ReplayStore),
+                        InitialsEntry (the three-letter screen), scoreTable (structural ScoreTable / TodaysChallenge / MedalBook),
+                        MedalRow, InstructionCard, GlowPool, PrizeCounter (the prizes in its case; `wallBehind` for an attendant),
+                        ScoreBoard (the top fives, paged), ChallengeBoard, LeagueBoard, ChangeMachine (works some days), Jukebox,
+                        ArcadeCrowd (regulars coming and going by the hour and signing the board, the kid watching and taking player
+                        two), ArcadeAmbience (murmur following the crowd + hum), payoutSim (the cabinet games on autopilot, for
+                        `PAYOUT`), games/ (ArcadeGame contract with `takeSounds` / `autopilot` / `gun` / `demoable` / `setOpponent`,
+                        BaseGame with its seeded `rand()`, Breakout, Invaders, Stacker, ArrowRush, Snake, Comets, Duel, StepBeat,
+                        NeonSheriff, LexiPunk (its game in a web page, `RemoteScreen`), registry). See docs/economy.md
+src/world/prizes/       prizeModel (a small model per PrizeKind), PrizeShelf (the bedroom's shelf of prizes, following the PrizeStore), the
+                        prizes that live at home, hidden until won (ownedPrize): ArcadePoster, MoodLamp (bedroom), FeatherWand (calls the cat)
+src/world/market/       marketPlan + furnishMarket, MarketStall (trestle table under a striped awning, `layout()`: a leaning row + a lying row),
+                        ForSaleBox (GameBox + price tag, owns the click: hands the box over for inspection), BargainBin, OrderCounter (opens
+                        the catalogue), BuyBackDesk (opens the sell panel), TransistorRadio, CrowdSound, stallTalk (stallholders' lines
+                        from their table), HallRoof (iron trusses + roof light following the sky). See docs/economy.md
 src/world/people/       PersonModel (the rig at real scale: hips/knees/ankles, waist, shoulders/elbows, neck; gait, breathing, arm
                         poses, head + eye gaze, blinking; each bone's pieces merged per material by `geometry.Parts`), body
                         (proportions, the trunk as superellipse rings following `TRUNK` for build and figure, tapered limbs,
@@ -55,20 +75,30 @@ src/world/people/       PersonModel (the rig at real scale: hips/knees/ankles, w
                         head's canvas: flush, shade, stubble, brows, lips) and clothTexture (the trunk's canvas: trousers,
                         tee/stripes/flannel/hoodie/jacket/shirt, apron, weave; `paintCloth` for sleeves and legs), looks (seeded
                         looks by role: `randomLook(seed, 'vendor' | 'shopper')`), poses (arm angles: stand, crossed, hips,
-                        think, pockets), Vendor (stands behind a stall, changes stance, meets the player's eye, clickable for a
-                        line), Shopper (walks the aisle between `BrowseSpot`s, browses hand-at-chin, lingers; no collider).
+                        think, pockets, play, cheer), Vendor (stands behind a stall, changes stance, meets the player's eye, clickable for a
+                        line), Shopper (walks the aisle between `BrowseSpot`s, browses hand-at-chin, lingers; no collider), Walker
+                        (walks a path it is given, stands in a pose looking at a point, says a word in a SpeechBubble; the arcade's
+                        people, directed by `ArcadeCrowd`).
                         Placed by `furnishMarket` / `furnishArcade` from their plans; the camera (`BuildContext.listener`) is
                         the viewer.
-src/world/travel/       TravelDoor (a ShutDoor that asks the Session to travel), Travel (fade, teleport to a zone's `travel.arrival`)
+src/world/street/       streetPlan (Front Street's map and every spot) + furnishStreet: an outdoor zone without a Room. StreetLighting
+                        (sun, sky ambient, fog), SkyDome, StreetGround, Buildings (+ facadePainter: the facade atlas, night windows),
+                        StreetLamps, StreetTrees, StreetCars (+ carModel; parked and driving), StreetFurniture, StreetDoor, StreetBounds,
+                        Newsstand (+ gamingWeekly), Busker, GarageSale, StreetCrowd, Precipitation, StreetSound. See docs/zones.md
+src/world/travel/       TravelDoor (a ShutDoor that asks the Session to travel, straight to `to` or via the menu), Travel (fade, teleport to
+                        a zone's `travel.arrival`, or its `arrivals[zone left]`)
 src/world/zone/         Zone (group at origin, place()/placeAt()/remove(), scoped collisions, empty/dormant/active, build/activate/deactivate/unload,
                         own shadow layer, portals, setOccupied/setDrawn), ZoneManager (Updatable: player position -> current zone, neighbours
-                        active, unload after 30 s unless persistent), PortalCuller (Updatable: draws only zones seen through open doorways)
+                        active, unload after 30 s unless persistent), PortalCuller (Updatable: draws only zones seen through open doorways),
+                        attach (placeWith / placeLeaves: furniture posed in a placed host's space; floorPointsToWorld)
 src/world/screen/       VideoScreen (interface the Session drives), VideoSurface (message glass or CSS3D iframe cut-out, proximity volume
                         damped per wall in between)
 src/world/acoustics/    SoundOcclusion (walls between the listener and a screen: a ray against the world's occluders, i.e. every loaded
-                        room's walls and the door leaves; `proximityVolume` keeps `wallGain` of the volume per wall)
+                        room's walls and the door leaves; `proximityVolume` keeps `wallGain` of the volume per wall), PointSound (a
+                        room's own sound: distance + walls -> an `AmbientVoice`'s level)
 src/world/shelving/     Shelving (bookcases sized from the collection, `minBookcases` standing empty from the start, live rebuild, sort modes, one
-                        ShelfLamp per bookcase), plan, slots, sort
+                        ShelfLamp per bookcase unless `lamps: false`, explicit `layout` + buyable `capacity`, what does not fit -> `overflow`),
+                        ShelvingGroup (the collection room's and the bedroom's shelvings as one for the Session), plan, slots, sort
 src/world/materials/    shaderPatch (onBeforeCompile helpers), finishes (wood, fabric, plastic, scuffed), surfaces (walls, floor and
                         ceiling edges, floor wear), GlossyFloor
 src/world/box/          BoxShell, Cartridge, Manual, LentTag, LidMotion, shellLayout, slabs
@@ -76,19 +106,36 @@ src/world/props/        Prop (base: empty footprint), decor (DECOR_KINDS registr
                         FlushLamp, FloorLamp, ShelfLamp), Door (hinged either side, swings out of the hanging room), ShutDoor (decorative), Window
                         (+Curtains), DayNight, Poster, PictureFrame, WallClock, WallSwitch (toggles a room's SwitchableLamp), Rug, ConsoleStand,
                         Console (+consoleStyles), Plant, SideTable, Cushion, Speaker, Sideboard, SmokeDetector, HallConsole, CoatRack, UmbrellaStand,
-                        LeaningMirror, PedalBin, BathroomScale, and the bathroom / bedroom / kitchen furniture. See docs/props.md.
+                        LeaningMirror, PedalBin, BathroomScale, SwingLeaf (a door that opens on a click: fridge, wardrobe, cupboards),
+                        Parcel (bought games waiting in the hallway), BookcaseKit (buys the bedroom's bookcase), and the bathroom /
+                        bedroom (Bed: get into it) / kitchen furniture. See docs/props.md.
 src/world/props/outdoors/ The painted 360° view outside every window. See docs/outdoors.md.
+src/world/weather/      Weather (spells of clear/cloudy/rain/snow in game hours, seeded by the date; wet and snowy ground). See docs/outdoors.md.
 src/world/cat/          The cat: model, brain, nav, bowls, bed, scratcher, toy, settings. See docs/cat.md.
 src/economy/            Wallet (coins + tickets, localStorage), pricing (every tunable number, deterministic prices), MarketStock (the day's
-                        stalls from the libretro index, seeded by date), ArcadeScores (best per game)
-src/audio/              audioContext (one lazy AudioContext), CrtSpeaker (old TV speaker bed following the video's loudness), CatVoice
+                        stalls and bargain bin, seeded by the market day), StockItem (a copy: price settling, haggle), MarketCalendar
+                        (in-game days), MarketLedger (haggles, games sold to the market), haggle, ArcadeScores (the player's bests,
+                        the top-five tables and initials, the regulars' entries), rivals (the tables' starting names), ArcadeDaily (the
+                        day's challenge, whether the change machine works, the cabinet out of order), ArcadeMedals, ArcadeLeague (the
+                        weekly league and the streak), Jackpot (the wheel's pot), PayoutStats (`?payout`), Prizes (the prize catalogue + PrizeStore, `bibliothek.prizes.v1`),
+                        HomeUpgrades (furniture bought for the flat: the bedroom's bookcases and the `homeGoods` one-offs, localStorage
+                        `bibliothek.home.v1`), homeGoods (HOME_GOODS: what the market's household stall sells; slots in the flat's plans)
+src/audio/              audioContext (one lazy AudioContext; `startedAudioContext` for sounds nobody clicked for, `unlockAudioOnFirstGesture`),
+                        ChipSpeaker (an arcade machine's chip sounds, level and pan following the camera), CrtSpeaker (old TV speaker bed following the video's loudness), CatVoice,
+                        CrowdMurmur (the market hall's chatter), RadioTune (a generated pop station), JukeboxTune (the arcade jukebox's
+                        four generated stations), coins (a sale's clink),
+                        ambient (AmbientVoice: FridgeHum, ClockTick, TapDrip), water (tap, flush, bath), kitchenSounds (kettle, toaster),
+                        flatSounds (neighbours, stairwell, radiator ticks), alarm (the wall clock's beep), StreetAmbience (the street heard through the windows)
 src/catalog/            types (Game, Platform, GameStatus), platforms (6: sizes, accent, libretro repo), seed data per platform -> SEED_GAMES
-src/collection/         GameSource interface, CollectionStore (seed + localStorage `bibliothek.collection.v1`, import/export), LibretroIndex
+src/collection/         GameSource interface, CollectionStore (seed + localStorage `bibliothek.collection.v1`, import/export), LibretroIndex,
+                        Deliveries (games bought while out wait in the hallway's parcel; `shelved` = the collection less the parcel,
+                        `bibliothek.deliveries.v1`), GameList (a GameSource somebody fills: the shelving overflow)
 src/covers/             CoverArtProvider chain, LibretroCoverProvider (via /api/art), BoxArtLoader (generated first, real art nearest-first), generated/
 src/video/              VideoProvider, YouTubeSearchProvider (/api/youtube/search, localStorage cache), YouTubePlayer, proximityVolume, randomStart
-src/ui/                 Overlay, GamePanel, Toast, SearchBar, CollectionEditor (Tab; `addPanel()` hosts extra forms; `canAdd` only with ?debug),
-                        CataloguePanel (mail order, a modal like the editor), TravelMenu ("Where to?", digits / click), WalletHud, Fader,
-                        controls (key hints), styles.css
+src/ui/                 Overlay (title / pause menu: Settings via `addSetting()`, Controls by `group`), menu/ (menu.css: `.ui-btn`, `.ui-card`; nav), GamePanel, Toast, SearchBar, CollectionEditor (Tab; `canAdd` only with ?debug),
+                        CataloguePanel (mail order, a modal like the editor), SellPanel (the WE BUY desk), PrizePanel (the arcade's prize counter, the mystery game), ArcadeScreenPanel (LexiPunk's
+                        big frame, its score by postMessage), PayoutOverlay (`?payout`), TravelMenu ("Where to?", digits / click), WalletHud, Fader,
+                        controls (key hints, grouped for the Controls tabs), styles.css (`--ui-*` tokens: colours, radius, fonts)
 server/                 pure `(ApiRequest) => ApiResponse` handlers: youtubeSearch/longplaySearch, artCache/artStore/imageProcessing, libretroIndex; Vite plugins
 api/                    Vercel functions wrapping the server handlers; vercel.json rewrites
 ```

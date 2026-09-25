@@ -7,8 +7,9 @@ import { createCanvas } from '@/covers/generated/canvasUtils';
  * band is drawn analytically and nothing is ever seen below it.
  */
 export const SCENE_WIDTH = 4096;
-export const SCENE_HEIGHT = 1024;
-export const ELEVATION_MIN = THREE.MathUtils.degToRad(-62);
+export const SCENE_HEIGHT = 1344;
+/** Down to the pavement under the window: nothing but the building's own foot is steeper than this. */
+export const ELEVATION_MIN = THREE.MathUtils.degToRad(-80);
 export const ELEVATION_MAX = THREE.MathUtils.degToRad(40);
 /** Height of the eye above the street, in metres: the flat is on a sixth floor. */
 export const EYE_HEIGHT = 18;
@@ -21,6 +22,18 @@ export const PX_PER_RAD = SCENE_WIDTH / (Math.PI * 2);
 export const DEPTH_SCALE = 160;
 
 export type Rng = () => number;
+/** What lights up at night: tungsten (warm), fluorescent and screens (cool), or a whiter mix of both. */
+export type LightKind = 'warm' | 'cool' | 'neutral';
+
+/**
+ * How a surface takes the weather, 0..1 each: `wet` how much it mirrors the sky once rain has
+ * puddled on it (asphalt most), `snow` how much snow settles on it (flat ground, roofs).
+ */
+export interface Surface {
+  wet?: number;
+  snow?: number;
+}
+
 export type Fill = string | CanvasGradient;
 
 /**
@@ -96,7 +109,16 @@ export function encodeDepth(distance: number): number {
  *    order hashed from the same value. Lights are on or off, never dimmed, so a light and its curfew are
  *    rasterised onto exactly the same texels, without anti-aliasing on either canvas (`lit()`), and the
  *    shader switches each texel before filtering. A texel that carries light but no stamp (a lamp's `glow`)
- *    reads 0: it burns all night.
+ *    reads 0: it burns all night. A light whose curfew byte is 7 mod 8 is animated by the shader: a cool
+ *    one flickers like a television, a warm one blinks like a beacon (see `lit()`'s `animated`);
+ *  - `ground`: R the cast shadows (drawn straight under what casts them, so they never point the wrong
+ *    way; the shader fades them with the sun), G how wet a surface gets, B how much snow it catches;
+ *  - `fx`: what moves or changes in the painted scenery itself. R how far a texel sways in the wind (texels
+ *    at full wind x 16: tree crowns, more towards the top), G its sway phase (7 bits) plus 128 on the
+ *    swaying thing itself (without it, the margin around a crown the crown may sway into), B the
+ *    curfew of a roller shutter that comes down over a shop front when the shop shuts (0 = none).
+ *    Nearest-sampled like the lights. A light whose curfew byte is 6 mod 8 is a fairy light (`fairy()`):
+ *    it twinkles in the colour painted under it.
  * Things are painted far to near (painter's algorithm). A thing announces its distance and glassiness with
  * `begin()`, then every silhouette it fills with `rect()` / `path()` lands on the first three canvases at once,
  * so it hides what stood behind it on every channel; details that stay inside a silhouette go to
@@ -107,7 +129,11 @@ export class Sheet {
   readonly light: CanvasRenderingContext2D;
   readonly haze: CanvasRenderingContext2D;
   readonly curfew: CanvasRenderingContext2D;
+  readonly ground: CanvasRenderingContext2D;
+  readonly fx: CanvasRenderingContext2D;
   private hazeStyle = '#000000';
+  private fxStyle: string | CanvasGradient = '#000000';
+  private groundStyle = '#000000';
   private glassByte = 0;
 
   constructor() {
@@ -115,21 +141,74 @@ export class Sheet {
     [, this.light] = createCanvas(SCENE_WIDTH, SCENE_HEIGHT);
     [, this.haze] = createCanvas(SCENE_WIDTH, SCENE_HEIGHT);
     [, this.curfew] = createCanvas(SCENE_WIDTH, SCENE_HEIGHT);
-    for (const ctx of [this.light, this.haze, this.curfew]) {
+    [, this.ground] = createCanvas(SCENE_WIDTH, SCENE_HEIGHT);
+    [, this.fx] = createCanvas(SCENE_WIDTH, SCENE_HEIGHT);
+    for (const ctx of [this.light, this.haze, this.curfew, this.ground, this.fx]) {
       ctx.fillStyle = '#000000';
       ctx.fillRect(0, 0, SCENE_WIDTH, SCENE_HEIGHT);
     }
   }
 
   private get all(): CanvasRenderingContext2D[] {
-    return [this.color, this.light, this.haze, this.curfew];
+    return [this.color, this.light, this.haze, this.curfew, this.ground, this.fx];
   }
 
-  /** The next silhouettes belong to a thing `distance` metres away whose surface mirrors the sky by `glass` (0..1). */
-  begin(distance: number, glass = 0): void {
+  /**
+   * The next silhouettes belong to a thing `distance` metres away whose surface mirrors the sky by
+   * `glass` (0..1) and takes the weather as `surface` says (see `Surface`; default neither).
+   */
+  begin(distance: number, glass = 0, surface: Surface = {}): void {
     const h = encodeDepth(distance);
     this.hazeStyle = `rgb(${h},${h},${h})`;
     this.glassByte = Math.round(THREE.MathUtils.clamp(glass, 0, 1) * 255);
+    this.groundStyle = `rgb(0,${byte(surface.wet ?? 0)},${byte(surface.snow ?? 0)})`;
+    this.fxStyle = '#000000';
+  }
+
+  /**
+   * The next silhouettes (until the next `begin()`) sway in the wind: not at all at texture row
+   * `bottom` (the foot of the trunk), up to `amplitude` texels at full wind at row `top` (the top of
+   * the crown), all together on their own `phase` (0..1). See `swayMargin()` for the edges.
+   */
+  swaying(top: number, bottom: number, amplitude: number, phase: number): void {
+    this.fxStyle = this.swayGradient(top, bottom, amplitude, phase, true);
+  }
+
+  /**
+   * The margin around a swaying shape (`p`, a little larger than it) that it may sway into: the
+   * shader moves the shape there, and leaves whatever else is there alone. Keeps the swaying shapes
+   * already painted under it.
+   */
+  swayMargin(p: Path2D, top: number, bottom: number, amplitude: number, phase: number): void {
+    const ctx = this.fx;
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighten';
+    ctx.fillStyle = this.swayGradient(top, bottom, amplitude, phase, false);
+    ctx.fill(p);
+    ctx.restore();
+  }
+
+  private swayGradient(top: number, bottom: number, amplitude: number, phase: number, core: boolean): CanvasGradient {
+    const r = Math.round(THREE.MathUtils.clamp(amplitude, 0, 15.9) * 16);
+    const g = (Math.floor(THREE.MathUtils.euclideanModulo(phase, 1) * 127) & 127) + (core ? 128 : 0);
+    const gradient = this.fx.createLinearGradient(0, bottom, 0, Math.min(top, bottom - 1));
+    gradient.addColorStop(0, `rgb(0,${g},0)`);
+    gradient.addColorStop(1, `rgb(${r},${g},0)`);
+    return gradient;
+  }
+
+  /**
+   * A roller shutter over `p` (a shop front), down while the city's wakefulness is below `curfew`:
+   * the shop's closing time, and in the morning until it opens. Stamp it after the shop's own
+   * silhouettes; anything painted over it later (an awning, a tree) hides it again.
+   */
+  shutter(p: Path2D, curfew: number): void {
+    const ctx = this.fx;
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighten';
+    ctx.fillStyle = `rgb(0,0,${Math.max(1, byte(curfew))})`;
+    ctx.fill(p);
+    ctx.restore();
   }
 
   /** Fills a silhouette rectangle with `fill`, stamping the current distance and glassiness. */
@@ -140,6 +219,10 @@ export class Sheet {
     this.haze.fillRect(x, y, w, h);
     this.light.fillStyle = `rgb(0,0,${this.glassByte})`;
     this.light.fillRect(x, y, w, h);
+    this.ground.fillStyle = this.groundStyle;
+    this.ground.fillRect(x, y, w, h);
+    this.fx.fillStyle = this.fxStyle;
+    this.fx.fillRect(x, y, w, h);
   }
 
   /** Fills a silhouette path with `fill`, stamping the current distance and glassiness. */
@@ -150,16 +233,45 @@ export class Sheet {
     this.haze.fill(p);
     this.light.fillStyle = `rgb(0,0,${this.glassByte})`;
     this.light.fill(p);
+    this.ground.fillStyle = this.groundStyle;
+    this.ground.fill(p);
+    this.fx.fillStyle = this.fxStyle;
+    this.fx.fill(p);
+  }
+
+  /**
+   * A shadow cast on whatever is already painted under `p`, `strength` 0..1 (or a gradient built by
+   * `shadowFill`). Shadows sit straight under what casts them and the shader shows them only as
+   * strongly as the sun shines, so they never point the wrong way nor survive an overcast sky.
+   */
+  shadow(p: Path2D, strength: number | CanvasGradient): void {
+    const ctx = this.ground;
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighten';
+    ctx.fillStyle = typeof strength === 'number' ? shadowStyle(strength) : strength;
+    ctx.fill(p);
+    ctx.restore();
+  }
+
+  /** A radial gradient for `shadow()`: `strength` at the centre fading to none at radius `r`. */
+  shadowFill(x: number, y: number, r: number, strength: number): CanvasGradient {
+    const g = this.ground.createRadialGradient(x, y, 0, x, y, r);
+    g.addColorStop(0, shadowStyle(strength));
+    g.addColorStop(0.65, shadowStyle(strength * 0.7));
+    g.addColorStop(1, 'rgb(0,0,0)');
+    return g;
   }
 
   /**
    * A surface that lights up at night (a window, a shop front, a lamp head); `strength` 0..1.
    * `curfew` 0..1 is the wakefulness below which it goes out again: 0 (default) burns all night, 1
-   * goes out as soon as the evening turns; see `wakefulnessAt` for what the hours mean.
+   * goes out as soon as the evening turns; see `wakefulnessAt` for what the hours mean. `animated`
+   * makes the shader move it: a cool light flickers like a television, a warm one blinks like an
+   * aviation beacon.
    */
-  lit(shape: Polygon, kind: 'warm' | 'cool', strength = 1, curfew = 0): void {
+  lit(shape: Polygon, kind: LightKind, strength = 1, curfew = 0, animated = false): void {
     this.light.fillStyle = this.lightStyle(kind, strength);
-    this.curfew.fillStyle = curfewStyle(curfew);
+    this.curfew.fillStyle = curfewStyle(curfew, animated);
     // Texel by texel, whole texels only, on both canvases at once: the light and its curfew must
     // cover exactly the same texels, and a canvas fill would anti-alias each edge differently.
     for (const [x, y, w] of texelRuns(shape.corners)) {
@@ -168,18 +280,54 @@ export class Sheet {
     }
   }
 
-  /** `lit()` for an axis-aligned rectangle (the thousands of tower windows). */
-  litRect(x: number, y: number, w: number, h: number, kind: 'warm' | 'cool', strength = 1, curfew = 0): void {
-    this.lit(new Polygon([[x, y], [x + w, y], [x + w, y + h], [x, y + h]]), kind, strength, curfew);
+  /**
+   * A fairy light (a bulb of a string of lights): lit at night in the colour painted under it (paint
+   * the bulb first), twinkling on its own; `curfew` as for `lit()`.
+   */
+  fairy(shape: Polygon, strength = 1, curfew = 0): void {
+    this.light.fillStyle = this.lightStyle('warm', strength);
+    this.curfew.fillStyle = curfewStyle(curfew, 'fairy');
+    for (const [x, y, w] of texelRuns(shape.corners)) {
+      this.light.fillRect(x, y, w, 1);
+      this.curfew.fillRect(x, y, w, 1);
+    }
   }
 
-  private lightStyle(kind: 'warm' | 'cool', strength: number): string {
-    const v = Math.round(THREE.MathUtils.clamp(strength, 0, 1) * 255);
+  /** `lit()` for an axis-aligned rectangle (the thousands of tower windows). */
+  litRect(x: number, y: number, w: number, h: number, kind: LightKind, strength = 1, curfew = 0, animated = false): void {
+    this.lit(new Polygon([[x, y], [x + w, y], [x + w, y + h], [x, y + h]]), kind, strength, curfew, animated);
+  }
+
+  /**
+   * Dims the light already lit under `p` to `strength` of full, without touching its curfew: the
+   * goods standing in a lit shop window, a figure against a lit room. Stay inside the lit shape.
+   */
+  dim(p: Path2D, kind: LightKind, strength: number): void {
+    this.light.fillStyle = this.lightStyle(kind, strength);
+    this.light.fill(p);
+  }
+
+  private lightStyle(kind: LightKind, strength: number): string {
+    const v = byte(strength);
+    if (kind === 'neutral') return `rgb(${Math.round(v * 0.7)},${Math.round(v * 0.55)},${this.glassByte})`;
     return kind === 'warm' ? `rgb(${v},0,${this.glassByte})` : `rgb(0,${v},${this.glassByte})`;
   }
 
-  /** A soft pool of warm light centred on (x, y), an ellipse of radii (rx, ry), added over whatever is there. */
-  glow(x: number, y: number, rx: number, ry: number, strength: number): void {
+  /**
+   * A soft pool of warm light centred on (x, y), an ellipse of radii (rx, ry), added over whatever is
+   * there. With a `curfew` (a shop's light spilling on the pavement) it goes out with that light; the
+   * ellipse's rim carries no light, so its hard-edged curfew stamp never shows.
+   */
+  glow(x: number, y: number, rx: number, ry: number, strength: number, curfew?: number): void {
+    if (curfew !== undefined) {
+      const c = this.curfew;
+      c.save();
+      c.fillStyle = curfewStyle(curfew, false);
+      c.beginPath();
+      c.ellipse(x, y, rx, Math.max(ry, 0.5), 0, 0, Math.PI * 2);
+      c.fill();
+      c.restore();
+    }
     const ctx = this.light;
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
@@ -230,7 +378,7 @@ export class Sheet {
   }
 
   /** Packs the canvases into the three scenery textures the pane shader samples. */
-  finish(): { scene: THREE.CanvasTexture; lights: THREE.DataTexture; curfew: THREE.DataTexture } {
+  finish(): { scene: THREE.CanvasTexture; lights: THREE.DataTexture; curfew: THREE.DataTexture; ground: THREE.CanvasTexture; fx: THREE.DataTexture } {
     // Day colours, premultiplied by coverage so that mip levels blend cleanly into the sky.
     const scene = new THREE.CanvasTexture(this.color.canvas);
     scene.colorSpace = THREE.SRGBColorSpace;
@@ -283,12 +431,46 @@ export class Sheet {
     curfew.wrapS = THREE.RepeatWrapping;
     curfew.wrapT = THREE.ClampToEdgeWrapping;
     curfew.needsUpdate = true;
-    return { scene, lights, curfew };
+
+    // Shadows and the weather masks: soft, filtered and mipmapped like the day colours.
+    const ground = new THREE.CanvasTexture(this.ground.canvas);
+    ground.colorSpace = THREE.NoColorSpace;
+    ground.wrapS = THREE.RepeatWrapping;
+    ground.wrapT = THREE.ClampToEdgeWrapping;
+
+    // Sway and shutters, flipped like the lights; nearest: a blend of two trees' phases is neither.
+    const fxSrc = this.fx.getImageData(0, 0, SCENE_WIDTH, SCENE_HEIGHT).data;
+    const fxBytes = new Uint8Array(fxSrc.length);
+    for (let y = 0; y < SCENE_HEIGHT; y++) fxBytes.set(fxSrc.subarray((SCENE_HEIGHT - 1 - y) * rowBytes, (SCENE_HEIGHT - y) * rowBytes), y * rowBytes);
+    const fx = new THREE.DataTexture(fxBytes, SCENE_WIDTH, SCENE_HEIGHT, THREE.RGBAFormat, THREE.UnsignedByteType);
+    fx.colorSpace = THREE.NoColorSpace;
+    fx.generateMipmaps = false;
+    fx.minFilter = THREE.NearestFilter;
+    fx.magFilter = THREE.NearestFilter;
+    fx.wrapS = THREE.RepeatWrapping;
+    fx.wrapT = THREE.ClampToEdgeWrapping;
+    fx.needsUpdate = true;
+    return { scene, lights, curfew, ground, fx };
   }
 }
 
-function curfewStyle(curfew: number): string {
-  const v = Math.round(THREE.MathUtils.clamp(curfew, 0, 1) * 255);
+function byte(v: number): number {
+  return Math.round(THREE.MathUtils.clamp(v, 0, 1) * 255);
+}
+
+function shadowStyle(strength: number): string {
+  return `rgb(${byte(strength)},0,0)`;
+}
+
+/**
+ * The curfew byte of a light. Animated lights (televisions, beacons) are those whose byte is 7
+ * mod 8, fairy lights 6 mod 8, so every other light steers clear of those residues.
+ */
+function curfewStyle(curfew: number, animated: boolean | 'fairy'): string {
+  let v = byte(curfew);
+  if (animated === 'fairy') v = Math.min(254, (v & ~7) | 6);
+  else if (animated) v = Math.min(255, (v & ~7) | 7);
+  else if (v % 8 >= 6) v -= (v % 8) - 5;
   return `rgb(${v},${v},${v})`;
 }
 

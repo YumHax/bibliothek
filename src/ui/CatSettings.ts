@@ -12,8 +12,8 @@ const COAT_LABELS: Record<CatSettings['coat'], string> = {
 };
 
 /**
- * A one-line form for the cat: its name and coat. Hosted by the collection editor (see
- * `CollectionEditor.addPanel`), writes straight into the `CatSettingsStore`.
+ * A one-line form for the cat: its name and coat. A section of the Settings screen (see
+ * `Overlay.addSetting`), writes straight into the `CatSettingsStore`.
  */
 export class CatSettingsForm {
   readonly element: HTMLElement;

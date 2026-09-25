@@ -15,9 +15,10 @@ const SKINS = ['#f1c9a5', '#d9a071', '#8d5a3b', '#f7d9c0', '#5b3a25'];
 
 /**
  * A lamp post: a cast-iron post on a fluted base, a lantern at the top that glows warm at night,
- * and the pool of light it casts on the ground `reach` metres around.
+ * the pool of light it casts on the ground `reach` metres around and, when a facade stands `wall`
+ * metres behind it, the wash of light up that wall.
  */
-export function paintLamp(sheet: Sheet, x: number, z: number, height: number, reach: number): void {
+export function paintLamp(sheet: Sheet, x: number, z: number, height: number, reach: number, wall = 0): void {
   const d = Math.hypot(x, z);
   const cx = azimuthX(azimuthOf(x, z));
   const baseY = heightY(0, d);
@@ -29,8 +30,14 @@ export function paintLamp(sheet: Sheet, x: number, z: number, height: number, re
   const rx = sizePx(reach, d);
   sheet.begin(d);
   sheet.wrapped(cx - rx, cx + rx, () => {
-    sheet.glow(cx, baseY, rx, rx * groundSquash(d), 0.5);
-    sheet.glow(cx, headY, rx * 0.4, rx * 0.4, 0.3);
+    if (wall > 0) {
+      const dw = d + wall;
+      sheet.glow(cx, heightY(height * 0.6, dw), sizePx(3.2, dw), sizePx(4.5, dw), 0.1);
+    }
+    sheet.glow(cx, baseY, rx, rx * groundSquash(d), 0.32);
+    // A small halo round the lantern, the air lit only close to the glass.
+    const halo = Math.max(1.5, sizePx(0.9, d));
+    sheet.glow(cx, headY, halo, halo, 0.35);
     sheet.rect(cx - postW / 2, headY, postW, baseY - headY, IRON);
     sheet.rect(cx - footW / 2, heightY(1.1, d), footW, baseY - heightY(1.1, d), IRON);
     if (lanternH >= 4) {
@@ -382,6 +389,60 @@ export function paintMoped(sheet: Sheet, random: Rng, f: Footprint): void {
   paintBox(sheet, f, 0.55, 0.3, 0.6, 0.72, '#1c1c1e', 0, -0.2);
   paintBox(sheet, f, 0.12, 0.25, 0.3, 1.05, color, 0.1, 0.55);
   paintBox(sheet, f, 0.06, 0.6, 1.05, 1.08, '#2a2a2c', 0, 0.55);
+}
+
+/** A newspaper kiosk (newsstand): a green box with a shallow roof, the day's papers and magazines pegged round its hatch. */
+export function paintNewsstand(sheet: Sheet, random: Rng, f: Footprint): void {
+  const L = 3;
+  const W = 2;
+  paintGroundShadow(sheet, f.x, f.z, 1.9, 1.3, 0.25);
+  paintBox(sheet, f, L, W, 0, 2.5, '#2f4a3a');
+  const d = Math.hypot(f.x, f.z);
+  const P = (u: number, h: number): [number, number] => footPoint(f, u, -W / 2, h);
+  // The open hatch on the street side, the vendor's light behind it, magazines round it.
+  const hatch = new Polygon([P(-1, 1), P(1, 1), P(1, 2), P(-1, 2)]);
+  sheet.begin(d);
+  sheet.path(hatch, '#3a3228');
+  sheet.lit(hatch, 'warm', 0.7, between(random, 0.6, 0.8));
+  const ctx = sheet.color;
+  for (let u = -1.4; u < 1.35; u += 0.22) {
+    for (const [h0, h1] of [[0.3, 0.62], [0.66, 0.98], [2.05, 2.35]] as const) {
+      if (h0 > 1 && h0 < 2 && Math.abs(u) < 1) continue;
+      ctx.fillStyle = pick(random, ['#e8e2d2', '#d94f3a', '#3b6fb3', '#f0c94a', '#1c1c1e', '#8c4f9e']);
+      ctx.fill(outline([P(u, h0), P(u + 0.18, h0), P(u + 0.18, h1), P(u, h1)]));
+    }
+  }
+  paintBox(sheet, f, L + 0.5, W + 0.5, 2.5, 2.65, '#23392e');
+  paintBox(sheet, f, 1.4, 0.8, 2.65, 2.95, '#23392e');
+}
+
+/** A stone planter along `along`, a clipped shrub or a spill of flowers in it. */
+export function paintPlanter(sheet: Sheet, random: Rng, f: Footprint): void {
+  paintGroundShadow(sheet, f.x, f.z, 0.8, 0.45, 0.2);
+  paintBox(sheet, f, 1.2, 0.6, 0, 0.5, pick(random, ['#b8b0a0', '#8a8680', '#6a5a4a']));
+  const d = Math.hypot(f.x, f.z);
+  const [cx, cy] = worldPoint(f.x, f.z, 0.75);
+  const r = sizePx(0.55, d);
+  const ctx = sheet.color;
+  const bush = new Path2D();
+  bush.ellipse(cx, cy, r, r * 0.6, 0, 0, Math.PI * 2);
+  sheet.begin(d, 0, { snow: 0.6 });
+  sheet.path(bush, pick(random, ['#3f6b33', '#4d7a3a', '#2f5a30']));
+  if (random() < 0.5) {
+    ctx.fillStyle = pick(random, ['#e0567a', '#f0f0e8', '#f09a3a', '#b04ac0']);
+    for (let i = 0; i < 12; i++) ctx.fillRect(cx + between(random, -r, r) * 0.8, cy + between(random, -r, r) * 0.45, Math.max(1, r * 0.15), Math.max(1, r * 0.15));
+  }
+}
+
+/** A hire e-scooter left on its stand: a slim deck, a stem and bars in the operator's colour. */
+export function paintScooter(sheet: Sheet, random: Rng, x: number, z: number): void {
+  const color = pick(random, ['#2fb86a', '#e84a3a', '#1c1c1e', '#3b6fb3']);
+  const lean = between(random, -0.5, 0.5);
+  const f: Footprint = { x, z, along: [Math.cos(lean), Math.sin(lean)] };
+  paintGroundShadow(sheet, x, z, 0.6, 0.25, 0.15);
+  paintBox(sheet, f, 1.05, 0.18, 0.08, 0.16, '#2a2a2c');
+  paintBox(sheet, f, 0.06, 0.06, 0.16, 1.1, color, 0, 0.48);
+  paintBox(sheet, f, 0.06, 0.5, 1.1, 1.14, '#2a2a2c', 0, 0.48);
 }
 
 /** The iron grille over a street tree's pit. */

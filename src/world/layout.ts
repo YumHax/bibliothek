@@ -3,7 +3,15 @@ import type { CssLayer } from '@/core/CssLayer';
 import type { Input } from '@/core/Input';
 import type { MarketStock } from '@/economy/MarketStock';
 import type { ArcadeScores } from '@/economy/ArcadeScores';
+import type { ArcadeDaily } from '@/economy/ArcadeDaily';
+import type { PrizeStore } from '@/economy/Prizes';
+import type { ArcadeMedals } from '@/economy/ArcadeMedals';
+import type { ArcadeLeague } from '@/economy/ArcadeLeague';
+import type { RemoteScreen } from './arcade/games';
 import type { GameSource } from '@/collection/GameSource';
+import type { GameList } from '@/collection/GameList';
+import type { ParcelContents } from './props/Parcel';
+import type { HomeUpgrades } from '@/economy/HomeUpgrades';
 import type { BoxArtLoader } from '@/covers/BoxArtLoader';
 import type { PlatformId } from '@/catalog/types';
 import { getPlatform } from '@/catalog/platforms';
@@ -22,10 +30,13 @@ import { furnishHallway } from './hallway/furnishHallway';
 import { furnishBathroom } from './bathroom/furnishBathroom';
 import { furnishBedroom } from './bedroom/furnishBedroom';
 import { furnishKitchen } from './kitchen/furnishKitchen';
+import { furnishBalcony } from './balcony/furnishBalcony';
 import { furnishArcade } from './arcade/furnishArcade';
-import { furnishMarket } from './market/furnishMarket';
+import { furnishMarket, type MarketHallServices } from './market/furnishMarket';
+import { furnishStreet } from './street/furnishStreet';
 import { RoomWindow } from './props/Window';
 import { Poster } from './props/Poster';
+import { FeatherWand } from './prizes/FeatherWand';
 import { ConsoleStand } from './props/ConsoleStand';
 import { Console, type PlatformSelectHandler } from './props/Console';
 import { PendantLamp } from './props/PendantLamp';
@@ -33,6 +44,14 @@ import { WallSwitch } from './props/WallSwitch';
 import { WallClock } from './props/WallClock';
 import { Cushion } from './props/Cushion';
 import { placeDecor } from './props/decor';
+import { LavaLamp } from './props/LavaLamp';
+import { tickRadiators } from './acoustics/radiatorTicks';
+import type { StrayGames } from './strays/StrayGames';
+import type { CatPerch } from './cat/spots';
+import type { WaterBowlLike } from './cat/types';
+import { placeWith } from './zone/attach';
+import { PointSound } from './acoustics/PointSound';
+import { ClockTick } from '@/audio/ambient';
 
 /** The shared services every zone builder may draw on; `main.ts` assembles it once. */
 export interface BuildContext {
@@ -41,8 +60,18 @@ export interface BuildContext {
   listener: THREE.Object3D;
   /** Counts the walls between the listener and a screen, so a longplay is muffled from the next room. */
   acoustics: SoundOcclusion;
-  /** The collection; the shelving, the consoles and the posters follow it live. */
+  /** The collection; the consoles and the posters follow it live. */
   games: GameSource;
+  /** What the shelves show: the collection less what still waits in the parcel (`Deliveries.shelved`); `games` when absent. */
+  shelved?: GameSource;
+  /** The parcel in the hallway: games bought while out, waiting to be unpacked. */
+  deliveries?: ParcelContents;
+  /** Where the collection room's shelving writes the games it has no room for; the bedroom's bought bookcases show them. */
+  overflow?: GameList;
+  /** Furniture bought for the flat (the bedroom's bookcases, the market's home goods). */
+  upgrades?: HomeUpgrades;
+  /** The games left lying about the flat (the kitchen table, a nightstand); the shelves read `shelved` through it. */
+  strays?: StrayGames;
   covers: BoxArtLoader;
   /** The one sky: clock + view outside the windows. */
   sky: Sky;
@@ -52,13 +81,37 @@ export interface BuildContext {
   input: Input;
   /** What the flea market has on its stalls today. */
   market: MarketStock;
-  /** Best arcade scores, shown on the cabinets' attract screens. */
+  /** The player's coins: the market's price tags read as affordable or not. */
+  wallet: { readonly coins: number; readonly tickets: number; subscribe(cb: () => void): () => void };
+  /** The arcade's hall of fame: the cabinets' attract screens, the board, the initials. */
   scores: ArcadeScores;
+  /** The arcade's day: the challenge, whether the change machine works. */
+  arcadeDaily?: ArcadeDaily;
+  /** The prizes taken home from the arcade (the bedroom's prize shelf shows them). */
+  prizes?: PrizeStore;
+  /** The medals per arcade machine: lamps on the cabinets, the next one on their attract screens. */
+  arcadeMedals?: ArcadeMedals;
+  /** The arcade's weekly league and the player's streak (the league board). */
+  arcadeLeague?: ArcadeLeague;
+  /** The big frame a web-page cabinet game (LexiPunk) is played in. */
+  arcadeScreen?: RemoteScreen;
+  /** Calls the cat over (the feather wand won at the arcade), and says how that went. */
+  callCat?: () => string;
+  /** The flea market's own services: the panels its hall opens (notice board, job lot), how the market knows the player. */
+  marketHall?: MarketHallServices;
 }
 
-/** What every zone builder returns at least: its `Room`. */
+/** What every zone builder returns: its `Room`, or for a zone without one (the street) how lit it is. */
 export interface ZoneHandle {
-  room: Room;
+  room?: Room;
+  /** How lit the zone is, 0 dark .. 1 full day (reflections and haze follow it); a `Room` says it itself. */
+  lightLevel?: () => number;
+  /** Floor points (world) the cat comes to have a look at when it wanders out of the collection room. */
+  catVisits?: THREE.Vector3[];
+  /** Places in the room the cat naps on (a radiator's cradle, the dry bath); see `CatPerch`. */
+  catPerches?: CatPerch[];
+  /** Water bowls of the cat's put down in the room. */
+  catWaters?: WaterBowlLike[];
 }
 
 /** What the collection room built that other features (the cat, the session) need to know about. */
@@ -76,7 +129,7 @@ export interface RoomHandle extends ZoneHandle {
  * Everything goes through `zone.place()` (zone-local coordinates) so it collides, ticks and is
  * clickable as its class says. Lights are switched by clicking them; playing a video never touches them.
  */
-export function furnishRoom(zone: Zone, { cssLayer, listener, acoustics, games, covers, sky, onSelectPlatform }: BuildContext): RoomHandle {
+export function furnishRoom(zone: Zone, { cssLayer, listener, acoustics, games, shelved, overflow, covers, sky, onSelectPlatform, upgrades, prizes, callCat }: BuildContext): RoomHandle {
   const plan = ROOM_PLAN;
   const { width } = plan.room;
 
@@ -86,7 +139,8 @@ export function furnishRoom(zone: Zone, { cssLayer, listener, acoustics, games, 
 
   // 1. Shelving sized to the collection; the right wall keeps clear of the projector picture.
   const pictureHalf = plan.projectorPicture.width / 2 + plan.projectorPicture.margin;
-  const shelving = new Shelving(zone, covers, games, { room: plan.room, ...plan.shelving, rightWallKeepClear: { minZ: -pictureHalf, maxZ: pictureHalf } });
+  //    What does not fit goes to `overflow`, for the bedroom's bookcases.
+  const shelving = new Shelving(zone, covers, shelved ?? games, { room: plan.room, ...plan.shelving, rightWallKeepClear: { minZ: -pictureHalf, maxZ: pictureHalf }, overflow });
   zone.onUnload(() => shelving.dispose());
 
   // 2. Screens and seats.
@@ -132,15 +186,31 @@ export function furnishRoom(zone: Zone, { cssLayer, listener, acoustics, games, 
   //    around the room's ceiling light (click = switch it).
   const door = plan.room.doorways?.[0];
   const clockAt = door ? { wall: door.wall, along: door.along, y: door.height + plan.clock.aboveDoor } : plan.clock.fallback;
-  zone.placeAt(new WallClock(sky.dayNight), clockAt);
+  const clock = zone.placeAt(new WallClock(sky.dayNight), clockAt);
+  placeWith(zone, clock, new PointSound(new ClockTick(), { listener, occlusion: acoustics, volume: { maxDistance: 5 } }), new THREE.Vector3(0, 0, 0.03));
   const pendant = zone.placeAt(new PendantLamp({ onSwitch: (on) => room.setLampOn(on) }), plan.pendant);
   // The switch by the door drives the same lamp, so either works.
   zone.placeAt(new WallSwitch({ lamp: pendant }), plan.lightSwitch);
 
-  // 6. Decoration: plants, rug, pictures, lamps, tables, straight from the plan.
-  placeDecor(zone, plan.decor);
+  // 6. Decoration: plants, rug, pictures, lamps, tables, straight from the plan; the radiator ticks
+  //    (and the cat naps in its cradle).
+  const radiators = tickRadiators(zone, placeDecor(zone, plan.decor), { listener, occlusion: acoustics });
 
-  return { room, shelving, tv, seats, windows };
+  // 7. Home goods bought at the market: the lava lamp on the side table. No light of its own, so it may come and go.
+  if (upgrades) {
+    const lamp = zone.placeAt(new LavaLamp(), plan.homeGoods.lamp.at);
+    lamp.position.y += plan.homeGoods.lamp.y;
+    const refresh = (): void => {
+      lamp.visible = upgrades.count('lamp') > 0;
+    };
+    refresh();
+    zone.onUnload(upgrades.subscribe(refresh));
+  }
+
+  // 8. The arcade's feather wand, once won: on the projector rug, waved for the cat.
+  if (prizes) zone.placeAt(new FeatherWand({ prizes, ...(callCat ? { callCat } : {}) }), plan.featherWand);
+
+  return { room, shelving, tv, seats, windows, catPerches: radiators };
 }
 
 /**
@@ -154,6 +224,8 @@ export const ZONE_BUILDERS: { [K in ZoneKind]: (zone: Zone, ctx: BuildContext) =
   bathroom: furnishBathroom,
   bedroom: furnishBedroom,
   kitchen: furnishKitchen,
+  balcony: furnishBalcony,
   arcade: furnishArcade,
   market: furnishMarket,
+  street: furnishStreet,
 };

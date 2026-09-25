@@ -7,8 +7,10 @@ import { HALLWAY_PLAN, HALLWAY_ROOM } from './hallway/hallwayPlan';
 import { BATHROOM_ROOM } from './bathroom/bathroomPlan';
 import { BEDROOM_ROOM } from './bedroom/bedroomPlan';
 import { KITCHEN_ROOM } from './kitchen/kitchenPlan';
+import { BALCONY_ROOM } from './balcony/balconyPlan';
 import { ARCADE_PLAN, ARCADE_ROOM } from './arcade/arcadePlan';
 import { MARKET_PLAN, MARKET_ROOM } from './market/marketPlan';
+import { STREET_EXTENT, STREET_PLAN } from './street/streetPlan';
 
 /*
  * THE WORLD PLAN: the zones (rooms, corridors, the street one day) and how they connect. Each zone
@@ -30,8 +32,10 @@ import { MARKET_PLAN, MARKET_ROOM } from './market/marketPlan';
  * Two zones sharing a doorway keep `WALL_GAP` between their wall planes (coplanar walls would
  * z-fight); the `Door`'s lining bridges it. Both shells cut the same opening; one hangs the leaf.
  *
- * Elsewhere, reached by teleport from the front door (`travel`): the arcade at x 40 and the flea
- * market at x 80, each a windowless hall of its own (`src/world/arcade/`, `src/world/market/`).
+ * Elsewhere, reached by teleport (`travel`): the street at x 140 (the front door leads down to
+ * it; its doors lead home, into the arcade and into the retro games shop), the arcade at x 40 and
+ * the flea market at x 80, each a windowless hall of its own (`src/world/arcade/`, `src/world/market/`),
+ * whose exits lead back to the street.
  *
  * Outside: Front Street runs past the front wall (+z), Park Street past the left wall (-x); the
  * right side (+x) is the neighbours' and the landing, the back (-z) a courtyard nothing paints.
@@ -74,7 +78,7 @@ export const KITCHEN_WING: NearWall = {
 };
 
 /** What a zone is; one builder per kind in `layout.ts`. */
-export type ZoneKind = 'collectionRoom' | 'hallway' | 'bathroom' | 'bedroom' | 'kitchen' | 'arcade' | 'market';
+export type ZoneKind = 'collectionRoom' | 'hallway' | 'bathroom' | 'bedroom' | 'kitchen' | 'balcony' | 'arcade' | 'market' | 'street';
 
 /**
  * A zone the player is teleported to (and from) through a `TravelDoor`, instead of walking: the
@@ -85,6 +89,8 @@ export interface TravelPlan {
   label: string;
   arrival: [x: number, z: number];
   yaw: number;
+  /** Other arrival spots by the zone the player comes from (the street: in front of the door they came out of). */
+  arrivals?: Record<string, { at: readonly [x: number, z: number]; yaw: number }>;
 }
 
 export interface ZonePlan extends ZoneSpec {
@@ -110,7 +116,7 @@ export const SUN_ROTATION_Y = Math.PI;
  * Every room of the flat is `persistent`: small enough to keep, and rebuilding one on the way back
  * (geometry, painted textures) is a hitch in a doorway. Leave it off for something big, like the street.
  */
-const FLAT = ['living', 'hallway', 'bathroom', 'bedroom', 'kitchen'] as const;
+export const FLAT = ['living', 'hallway', 'bathroom', 'bedroom', 'kitchen', 'balcony'] as const;
 /** The rest of the flat, seen from `id`. */
 const flatBut = (id: (typeof FLAT)[number]): string[] => FLAT.filter((other) => other !== id);
 
@@ -158,6 +164,15 @@ export const WORLD_PLAN = {
       neighbours: flatBut('kitchen'),
       persistent: true,
     },
+    {
+      // The open-air balcony on the collection room's front wall (Front Street), through the glazed door at x 2.
+      id: 'balcony',
+      kind: 'balcony',
+      origin: [2, 0, 3 + WALL_GAP + BALCONY_ROOM.depth / 2],
+      extent: BALCONY_ROOM,
+      neighbours: flatBut('balcony'),
+      persistent: true,
+    },
     // Out of the flat, reached by teleport only (see `travel`): far enough along +x never to touch
     // the flat, no neighbours (nothing is seen through a door), not persistent (rebuilt on return).
     {
@@ -177,6 +192,22 @@ export const WORLD_PLAN = {
       neighbours: [],
       travel: { label: 'Flea market', arrival: MARKET_PLAN.arrival.at, yaw: MARKET_PLAN.arrival.yaw },
       look: 'market',
+    },
+    // Front Street, outside the building (src/world/street/): reached by the flat's front door and
+    // the arcade's and market's exits, all by travel; its doors lead back to them. Not persistent.
+    {
+      id: 'street',
+      kind: 'street',
+      origin: [140, 0, 0],
+      extent: STREET_EXTENT,
+      neighbours: [],
+      travel: {
+        label: 'Street',
+        arrival: STREET_PLAN.arrivals.hallway.at,
+        yaw: STREET_PLAN.arrivals.hallway.yaw,
+        arrivals: STREET_PLAN.arrivals,
+      },
+      look: 'street',
     },
   ] as ZonePlan[],
 };

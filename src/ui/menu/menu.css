@@ -1,0 +1,146 @@
+/*
+ * Shared menu building blocks, read from the tokens in `styles.css`: `.ui-card` (a panel),
+ * `.ui-btn` (every menu button), and the title / pause menu itself (`.menu`, one `.menu__screen` shown at a time).
+ */
+
+.ui-card {
+  color: var(--ui-text);
+  background: var(--ui-panel);
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius);
+  box-shadow: var(--ui-shadow);
+}
+
+.ui-btn {
+  font: inherit;
+  color: inherit;
+  padding: 0.45em 1em;
+  border-radius: var(--ui-radius-sm);
+  border: 1px solid var(--ui-border);
+  background: var(--ui-fill);
+  cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease, transform 120ms var(--ui-ease);
+}
+.ui-btn:hover:not(:disabled) { background: var(--ui-fill-hover); }
+.ui-btn:active:not(:disabled) { transform: scale(0.98); }
+.ui-btn:disabled { opacity: 0.45; cursor: default; }
+.ui-btn[aria-pressed='true'],
+.ui-btn[aria-selected='true'] { background: var(--ui-fill-hover); border-color: var(--ui-border-strong); }
+.ui-btn--primary {
+  color: #1a1408;
+  font-weight: 600;
+  background: var(--ui-accent);
+  border-color: transparent;
+}
+.ui-btn--primary:hover:not(:disabled) { background: #e6b93c; }
+.ui-btn:focus-visible,
+.menu input:focus-visible,
+.menu select:focus-visible { outline: 2px solid var(--ui-accent); outline-offset: 2px; }
+
+/* --- title / pause menu --------------------------------------------------------------------- */
+
+.menu {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: max(1rem, env(safe-area-inset-top)) max(1rem, env(safe-area-inset-right)) max(1rem, env(safe-area-inset-bottom)) max(1rem, env(safe-area-inset-left));
+  box-sizing: border-box;
+  background: var(--ui-backdrop);
+  backdrop-filter: blur(4px);
+  cursor: pointer;
+  user-select: none;
+  animation: menu-fade 200ms ease-out;
+}
+@keyframes menu-fade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.menu__card {
+  width: min(30rem, 100%);
+  max-height: 100%;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  padding: 2rem 2.25rem;
+  cursor: default;
+  overflow: hidden;
+  animation: menu-rise 240ms var(--ui-ease);
+}
+/* The Controls screen needs the room for its long lines. */
+.menu__card--wide { width: min(44rem, 100%); }
+@keyframes menu-rise {
+  from { opacity: 0; transform: translateY(0.75rem) scale(0.985); }
+  to   { opacity: 1; transform: none; }
+}
+
+.menu__screen { display: flex; flex-direction: column; min-height: 0; animation: menu-screen 180ms var(--ui-ease); }
+@keyframes menu-screen {
+  from { opacity: 0; transform: translateX(0.5rem); }
+  to   { opacity: 1; transform: none; }
+}
+
+.menu__kicker {
+  margin: 0 0 0.35rem;
+  font-size: 0.75rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--ui-accent);
+  text-align: center;
+}
+.menu h1 {
+  margin: 0;
+  font-family: var(--ui-font-display);
+  font-weight: 400;
+  font-size: clamp(2rem, 7vw, 2.75rem);
+  letter-spacing: 0.04em;
+  text-align: center;
+  line-height: 1.1;
+}
+.menu__tagline { margin: 0.5rem 0 1.5rem; text-align: center; color: var(--ui-text-dim); }
+
+.menu__buttons { display: flex; flex-direction: column; gap: 0.5rem; }
+.menu__buttons .ui-btn { padding: 0.7em 1em; font-size: 1rem; text-align: left; display: flex; justify-content: space-between; align-items: center; }
+.menu__buttons .ui-btn--primary { text-align: center; justify-content: center; font-size: 1.05rem; }
+.menu__buttons kbd { opacity: 0.7; }
+
+.menu__essentials { list-style: none; padding: 0; margin: 1.5rem 0 0; font-size: 0.85rem; color: var(--ui-text-dim); }
+.menu__essentials li { margin: 0.35rem 0; }
+.menu__foot { margin: 1.25rem 0 0; font-size: 0.78rem; text-align: center; color: var(--ui-text-dim); }
+
+/* A sub-screen's header: back button on the left, title centred. */
+.menu__header { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 0.75rem; margin-bottom: 1.25rem; }
+.menu__header h2 { margin: 0; font-family: var(--ui-font-display); font-weight: 400; font-size: 1.35rem; letter-spacing: 0.04em; text-align: center; }
+.menu__header::after { content: ''; width: 4.5rem; } /* balances the back button so the title stays centred */
+.menu__back { width: 4.5rem; padding: 0.35em 0.6em; font-size: 0.85rem; }
+
+.menu__body { overflow-y: auto; min-height: 0; margin: 0 -0.5rem; padding: 0 0.5rem; }
+
+.menu__section { padding: 0.9rem 0; border-top: 1px solid var(--ui-border); }
+.menu__section:first-child { border-top: none; padding-top: 0; }
+.menu__section h3 { margin: 0 0 0.6rem; font-size: 0.8rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ui-text-dim); font-weight: 600; }
+.menu__section input,
+.menu__section select {
+  font: inherit;
+  color: inherit;
+  background: var(--ui-fill);
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius-sm);
+  padding: 0.35rem 0.6rem;
+}
+.menu__section select option { background: var(--ui-panel-solid); }
+.menu__note { margin: 0.5rem 0 0; font-size: 0.78rem; color: var(--ui-text-dim); }
+
+.menu__tabs { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-bottom: 1rem; }
+.menu__tabs .ui-btn { padding: 0.35em 0.8em; font-size: 0.85rem; }
+.menu__controls { list-style: none; padding: 0; margin: 0; font-size: 0.9rem; line-height: 1.45; }
+.menu__controls li { padding: 0.45rem 0; border-top: 1px solid var(--ui-border); }
+.menu__controls li:first-child { border-top: none; }
+
+@media (max-width: 480px) {
+  .menu__card { padding: 1.5rem 1.25rem; }
+  .menu__buttons .ui-btn { min-height: 44px; }
+}
+
+.quality-picker { display: flex; gap: 0.4rem; flex-wrap: wrap; }

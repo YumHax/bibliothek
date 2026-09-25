@@ -64,3 +64,22 @@
 }
 .catalogue__row button { padding: 0.2rem 0.55rem; font-size: 0.82rem; min-width: 4.5rem; }
 .catalogue__empty { opacity: 0.55; font-style: italic; padding: 0.5rem 0.4rem; }
+.catalogue__cover {
+  width: 2.2rem;
+  height: 2.2rem;
+  object-fit: contain;
+  flex: none;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.05);
+}
+.catalogue__cover--missing { visibility: hidden; }
+/* A button asking to be clicked again to confirm (a used copy ordered). */
+.catalogue .sell__armed { background: rgba(200, 68, 58, 0.45); border-color: rgba(255, 138, 128, 0.6); }
+.catalogue__stall {
+  font-size: 0.75rem;
+  white-space: nowrap;
+  padding: 0.1rem 0.45rem;
+  border-radius: 999px;
+  background: rgba(212, 165, 42, 0.18);
+  color: #f1d48a;
+}

@@ -1,6 +1,7 @@
 import { Sheet, type Rng, azimuthOf, azimuthX, groundSquash, heightY, outline, sizePx, worldPoint } from './Sheet';
 import { between, integer, pick } from './paint';
 import { paintBox, paintGroundShadow, paintPost } from './Solid';
+import { currentSeason } from './season';
 
 /**
  * The things that make the park lived in, each at a ground point in metres from the eye: flower
@@ -28,6 +29,8 @@ export function paintFlowerBed(sheet: Sheet, random: Rng, x: number, z: number, 
   sheet.begin(d);
   sheet.path(groundEllipse(x, z, radius + 0.3, radius + 0.3), '#e0dccf');
   sheet.path(groundEllipse(x, z, radius, radius), '#5a4030');
+  // Dug over and empty in winter.
+  if (currentSeason().name === 'winter') return;
   const ctx = sheet.color;
   const colors = [pick(random, BLOOMS), pick(random, BLOOMS), pick(random, BLOOMS)];
   const dot = Math.max(1, sizePx(0.18, d));

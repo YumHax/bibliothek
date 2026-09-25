@@ -3,7 +3,7 @@ import type { Seat } from '../Seat';
 import type { CatBedLike, CatBody, CatClock, CatPlayerView, CatToyLike, CatVoiceLike, FoodBowlLike, ScratcherLike, WaterBowlLike } from './types';
 import type { CatNav } from './CatNav';
 import { CatMotion, RUB_SPEED, TROT_SPEED, WALK_SPEED } from './CatMotion';
-import { isElevated, pickRestingSpot, pickWeighted, type RestingSpot, type WindowLookout } from './spots';
+import { isElevated, pickRestingSpot, pickWeighted, type CatPerch, type RestingSpot, type WindowLookout } from './spots';
 
 /** The screen the cat may watch (the TV): whether it is on, where to sit, and optionally what to look at. */
 export interface CatScreen {
@@ -25,12 +25,18 @@ export interface CatBrainContext {
   seats: readonly Seat[];
   bowl: FoodBowlLike;
   water?: WaterBowlLike;
+  /** More water elsewhere in the flat (the kitchen's): the cat drinks at whichever is nearest and reachable. */
+  waters?: readonly WaterBowlLike[];
   bed?: CatBedLike;
   scratcher?: ScratcherLike;
   toy?: CatToyLike;
   windows?: readonly WindowLookout[];
   tv?: CatScreen;
   voice?: CatVoiceLike;
+  /** Floor points in the flat's other rooms the cat goes to have a look at, when the doors let it. */
+  visits?: readonly THREE.Vector3[];
+  /** Places to nap elsewhere in the flat (the bedroom's bed). */
+  perches?: readonly CatPerch[];
 }
 
 export type CatState =
@@ -75,6 +81,7 @@ type Activity =
   | 'drink'
   | 'groom'
   | 'wander'
+  | 'explore'
   | 'window'
   | 'scratch'
   | 'rugScratch'
@@ -101,6 +108,8 @@ const PET_WINDOW_S = 10;
 const PETS_BEFORE_ANNOYED = 4;
 const ANNOYED_S = 30;
 const LAP_AFTER_S = 20;
+/** After finding the way to another room shut, the cat does not try again for this long. */
+const EXPLORE_RETRY_S = 45;
 
 const HEAD_HEIGHT = 0.9;
 
@@ -121,6 +130,8 @@ export class CatBrain {
   /** The resting spot chosen for the current lie-down; `perch` while actually up there. */
   private spot: RestingSpot | null = null;
   private perch: RestingSpot | null = null;
+  /** The water bowl it went to drink from. */
+  private drinkingFrom: WaterBowlLike | null = null;
 
   private readonly goal = new THREE.Vector3();
   private readonly facing = new THREE.Vector3();
@@ -141,6 +152,7 @@ export class CatBrain {
   private groomIn = Infinity;
   private begCooldown = 0;
   private lapCooldown = 0;
+  private exploreCooldown = 0;
   private annoyedFor = 0;
   private startleCooldown = 3;
   private attendFor = 0;
@@ -169,6 +181,7 @@ export class CatBrain {
     this.groomIn -= dt;
     this.begCooldown -= dt;
     this.lapCooldown -= dt;
+    this.exploreCooldown -= dt;
     this.annoyedFor -= dt;
     this.startleCooldown -= dt;
     this.attendFor -= dt;
@@ -426,8 +439,12 @@ export class CatBrain {
           this.enter('idle');
           break;
         }
+        if (this.spot.available && !this.spot.available()) {
+          this.enter('idle');
+          break;
+        }
         this.perch = this.spot;
-        this.hop(this.spot.position, 'lie', 0.5);
+        this.hop(this.spot.position, 'lie', this.spot.hopApex !== undefined ? 0.65 : 0.5, this.spot.hopApex);
         break;
       case 'mountLap': {
         if (!this.playerSeat || !motion.reached) {
@@ -484,8 +501,8 @@ export class CatBrain {
         break;
       case 'drink':
         body.setPose('drink');
-        if (this.ctx.water) {
-          this.ctx.water.getWorldPosition(this.tmp);
+        if (this.drinkingFrom) {
+          this.drinkingFrom.getWorldPosition(this.tmp);
           this.setFacing(this.tmp);
           this.faceIfAny();
         }
@@ -602,6 +619,12 @@ export class CatBrain {
   private tick(dt: number): void {
     const { motion, voice } = this.ctx;
     this.timer -= dt;
+    // A perch that stopped being one under the cat (the bath being run): out at once, grumbling.
+    if (this.perch?.available && this.state !== 'hop' && !this.perch.available()) {
+      voice?.meow('grumble');
+      this.startActivity('wander');
+      return;
+    }
     switch (this.state) {
       case 'idle':
         if (this.hunger > 0.7 && this.ctx.bowl.level <= 0 && this.playerDistance < 2 && chance(0.08 * dt)) voice?.meow('demand');
@@ -614,7 +637,8 @@ export class CatBrain {
       case 'walk':
       case 'flee':
         if (!motion.busy) {
-          if (!motion.reached && (this.next === 'mount' || this.next === 'mountLap')) this.enter('idle');
+          // A door shut in its face, or a hop target never reached: think again.
+          if (motion.blocked || (!motion.reached && (this.next === 'mount' || this.next === 'mountLap'))) this.enter('idle');
           else this.enter(this.next);
         }
         break;
@@ -656,7 +680,7 @@ export class CatBrain {
       case 'drink':
         this.subTimer -= dt;
         if (this.subTimer <= 0) {
-          this.ctx.water?.sip();
+          this.drinkingFrom?.sip();
           this.subTimer = rand(0.7, 1);
         }
         if (this.timer <= 0) {
@@ -798,9 +822,10 @@ export class CatBrain {
       { activity: 'sleep', weight: drive * drive * 14 + (this.perch ? 1 : 0) },
       { activity: 'eat', weight: hungry && bowl.level > 0 ? this.hunger * 5 : 0 },
       { activity: 'beg', weight: hungry && bowl.level <= 0 && this.begCooldown <= 0 ? this.hunger * 3 : 0 },
-      { activity: 'drink', weight: water && this.thirst > 0.5 ? this.thirst * 2 : 0 },
+      { activity: 'drink', weight: (water || this.ctx.waters?.length) && this.thirst > 0.5 ? this.thirst * 2 : 0 },
       { activity: 'groom', weight: this.groomIn <= 0 ? 3 : 0.3 },
       { activity: 'wander', weight: 0.6 + active },
+      { activity: 'explore', weight: this.ctx.visits?.length && this.exploreCooldown <= 0 ? 0.25 + 0.5 * active : 0 },
       { activity: 'window', weight: windows?.length ? (night ? 0.2 : 0.5 + active) : 0 },
       { activity: 'scratch', weight: scratcher ? 0.3 + 0.5 * active : 0 },
       { activity: 'rugScratch', weight: rug ? 0.15 + 0.2 * active : 0 },
@@ -818,10 +843,10 @@ export class CatBrain {
     this.pending = activity;
     const staysPut = activity === 'groom' || (activity === 'sleep' && this.perch !== null);
     if (this.perch && !staysPut) {
-      const approach = this.perch.approach;
+      const { approach, hopApex } = this.perch;
       this.perch = null;
       this.spot = null;
-      this.hop(approach, 'begin', 0.45);
+      this.hop(approach, 'begin', hopApex !== undefined ? 0.6 : 0.45, hopApex);
       return;
     }
     this.beginActivity(activity);
@@ -848,6 +873,7 @@ export class CatBrain {
           bed: this.ctx.bed,
           windows,
           rugPoint: tv ? tv.watchingSpot(new THREE.Vector3()) : undefined,
+          perches: this.ctx.perches,
           from: cat.position,
           night: this.ctx.clock.state.night,
         });
@@ -866,17 +892,43 @@ export class CatBrain {
       case 'beg':
         this.goTo(bowl.feedingSpot(this.goal), 'beg');
         return;
-      case 'drink':
-        if (!water) break;
-        this.goTo(water.drinkingSpot(this.goal), 'drink');
-        return;
+      case 'drink': {
+        // The nearest bowl first; one behind a shut door is skipped for the next.
+        const bowls = [water, ...(this.ctx.waters ?? [])].filter((b): b is WaterBowlLike => b !== undefined);
+        const distance = (b: WaterBowlLike) => b.drinkingSpot(this.tmp).distanceToSquared(cat.position);
+        bowls.sort((a, b) => distance(a) - distance(b));
+        for (const bowl of bowls) {
+          if (!nav.isFree(bowl.drinkingSpot(this.goal)) || !this.ctx.motion.walkTo(this.goal, WALK_SPEED)) continue;
+          this.drinkingFrom = bowl;
+          this.next = 'drink';
+          this.enter('walk');
+          return;
+        }
+        break;
+      }
       case 'groom':
         this.enter('groom');
         return;
       case 'wander':
-        if (!nav.randomFreePoint(this.goal)) break;
+        // Its own room: a cat that wandered off elsewhere drifts back home.
+        if (!nav.randomFreePoint(this.goal, undefined, undefined, this.ctx.bounds)) break;
         this.goTo(this.goal, 'lookAround');
         return;
+      case 'explore': {
+        // Another room of the flat, if the doors on the way are open: a look round, then back to its day.
+        const visits = this.ctx.visits;
+        if (!visits?.length) break;
+        this.goal.copy(visits[Math.floor(Math.random() * visits.length)]!);
+        this.goal.x += THREE.MathUtils.randFloatSpread(0.5);
+        this.goal.z += THREE.MathUtils.randFloatSpread(0.5);
+        if (this.ctx.motion.walkTo(this.goal, WALK_SPEED)) {
+          this.next = 'lookAround';
+          this.enter('walk');
+          return;
+        }
+        this.exploreCooldown = EXPLORE_RETRY_S;
+        break;
+      }
       case 'window': {
         if (!windows?.length) break;
         const window = windows[Math.floor(Math.random() * windows.length)];
@@ -992,8 +1044,8 @@ export class CatBrain {
     }
   }
 
-  private hop(target: THREE.Vector3, next: CatState, duration: number): void {
-    this.ctx.motion.hopTo(target, duration);
+  private hop(target: THREE.Vector3, next: CatState, duration: number, apex?: number): void {
+    this.ctx.motion.hopTo(target, duration, apex);
     this.next = next;
     this.enter('hop');
   }
@@ -1054,7 +1106,8 @@ export class CatBrain {
   private pointAwayFromPlayer(out: THREE.Vector3, minDistance: number): boolean {
     let bestDistance = -1;
     for (let i = 0; i < 12; i++) {
-      if (!this.ctx.nav.randomFreePoint(this.tmp)) continue;
+      // Near where it is: the grid spans the whole flat, and a point behind a shut door is no escape.
+      if (!this.ctx.nav.randomFreePoint(this.tmp, this.ctx.cat.position, 3.5)) continue;
       const d = Math.hypot(this.tmp.x - this.eye.x, this.tmp.z - this.eye.z);
       if (d > bestDistance) {
         bestDistance = d;

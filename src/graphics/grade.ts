@@ -28,7 +28,7 @@ export interface Look {
   haze: { color: THREE.ColorRepresentation; density: number };
 }
 
-export type LookName = 'home' | 'arcade' | 'market';
+export type LookName = 'home' | 'arcade' | 'market' | 'street';
 
 export const NEUTRAL_LOOK: Look = {
   exposure: 0,
@@ -83,5 +83,19 @@ export const LOOKS: Record<LookName, Look> = {
     grain: 0.022,
     bloom: 0.25,
     haze: { color: 0xb9b4aa, density: 0.01 },
+  },
+  // Outdoors: natural, a touch of contrast and bloom for the lamps and neon at night. The haze
+  // is only the starting point: the street's lighting drives the fog from the weather (`StreetLighting`).
+  street: {
+    exposure: 0,
+    contrast: 1.04,
+    saturation: 1.02,
+    temperature: 0,
+    shadows: 0x04060a,
+    highlights: 0xfffaf2,
+    vignette: 0.16,
+    grain: 0.016,
+    bloom: 0.34,
+    haze: { color: 0x9aa4b0, density: 0.0065 },
   },
 };

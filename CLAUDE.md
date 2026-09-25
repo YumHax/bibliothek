@@ -2,7 +2,7 @@
 
 First-person 3D video game collection room. three.js + Vite + TypeScript, no framework. The player walks a real-scale
 room, picks boxes off the shelves, reads them, plays longplays on the TV or projector; a cat lives there. Games are
-earned: the front door teleports to an arcade (mini-games pay tickets, swapped for coins) and a flea market that sells
+earned: the front door teleports to an arcade (mini-games pay tickets, swapped for prizes or coins) and a flea market that sells
 games; `?debug` restores the seed collection and the editor's add pane.
 
 ## Commands

@@ -9,6 +9,8 @@ export interface DresserOptions {
   width?: number;
   /** Drawers, top to bottom. Default 3. */
   drawers?: number;
+  /** The tray with the perfume and the dish on the top. Default true; off to make room for a TV. */
+  tray?: boolean;
 }
 
 const DEPTH = 0.45;
@@ -35,6 +37,8 @@ export class Dresser extends THREE.Group implements Furniture {
   readonly footprint: THREE.Box3;
   /** Height of the top surface. */
   readonly topHeight = HEIGHT;
+  /** Local z of the middle of the top, front to back: where something standing on it is centred. */
+  readonly topCentreZ = OFF_WALL + DEPTH / 2;
 
   constructor(options: DresserOptions = {}) {
     super();
@@ -65,19 +69,21 @@ export class Dresser extends THREE.Group implements Furniture {
       }
     }
 
-    this.dressTop(width, z);
+    this.dressTop(width, z, options.tray ?? true);
     this.footprint = new THREE.Box3(new THREE.Vector3(-width / 2 - 0.015, 0, 0), new THREE.Vector3(width / 2 + 0.015, HEIGHT, OFF_WALL + DEPTH + 0.01));
   }
 
   /** What lives on the top: a tray holding a perfume bottle and a dish, and two books at the other end. */
-  private dressTop(width: number, z: number): void {
+  private dressTop(width: number, z: number, withTray: boolean): void {
     const y = HEIGHT;
-    const trayX = -width * 0.22;
-    const tray = part(this, 0.3, 0.012, 0.2, DARK_WALNUT, { x: trayX, y: y + 0.006, z });
-    tray.castShadow = false;
-    const bottle = cylinderMesh(0.028, 0.09, GLASS, { x: trayX - 0.07, y: y + 0.012 + 0.045, z: z - 0.03 }, { segments: 14 });
-    this.add(bottle, cylinderMesh(0.012, 0.03, BRASS, { x: trayX - 0.07, y: y + 0.012 + 0.105, z: z - 0.03 }, { segments: 10 }));
-    this.add(cylinderMesh(0.055, 0.02, matte(0xe9e2d6, 0.4), { x: trayX + 0.07, y: y + 0.012 + 0.01, z: z + 0.03 }, { radiusBottom: 0.04, segments: 18 }));
+    if (withTray) {
+      const trayX = -width * 0.22;
+      const tray = part(this, 0.3, 0.012, 0.2, DARK_WALNUT, { x: trayX, y: y + 0.006, z });
+      tray.castShadow = false;
+      const bottle = cylinderMesh(0.028, 0.09, GLASS, { x: trayX - 0.07, y: y + 0.012 + 0.045, z: z - 0.03 }, { segments: 14 });
+      this.add(bottle, cylinderMesh(0.012, 0.03, BRASS, { x: trayX - 0.07, y: y + 0.012 + 0.105, z: z - 0.03 }, { segments: 10 }));
+      this.add(cylinderMesh(0.055, 0.02, matte(0xe9e2d6, 0.4), { x: trayX + 0.07, y: y + 0.012 + 0.01, z: z + 0.03 }, { radiusBottom: 0.04, segments: 18 }));
+    }
 
     // Two hardbacks lying flat at the other end, the top one turned a little.
     const bookX = width * 0.28;

@@ -1,0 +1,4 @@
+/* The WE BUY desk: the catalogue's layout (CataloguePanel.css), a sell button that asks twice. */
+.sell .catalogue__row button { min-width: 6rem; }
+.sell .sell__armed { background: rgba(200, 68, 58, 0.45); border-color: rgba(255, 138, 128, 0.6); }
+.sell .sell__armed:hover:not(:disabled) { background: rgba(200, 68, 58, 0.6); }

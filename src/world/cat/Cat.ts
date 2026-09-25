@@ -9,7 +9,7 @@ import type { CatBedLike, CatBody, CatClock, CatPlayerView, CatSettings, CatToyL
 import { CatNav } from './CatNav';
 import { CatMotion } from './CatMotion';
 import { CatBrain, type CatScreen } from './CatBrain';
-import type { WindowLookout } from './spots';
+import type { CatPerch, WindowLookout } from './spots';
 import { blobShadow } from '../zone/ContactShadows';
 
 export interface CatOptions {
@@ -22,6 +22,8 @@ export interface CatOptions {
   seats: Seat[];
   bowl: FoodBowlLike;
   water?: WaterBowlLike;
+  /** Water bowls elsewhere in the flat (the kitchen's). */
+  waters?: WaterBowlLike[];
   bed?: CatBedLike;
   scratcher?: ScratcherLike;
   toy?: CatToyLike;
@@ -30,6 +32,12 @@ export interface CatOptions {
   /** The TV: `watchingSpot` is a floor point on the rug in front of it. */
   tv?: CatScreen;
   voice?: CatVoiceLike;
+  /** The flat's rooms (world XZ, each grown to reach over its doorways): the cat walks all of them when the doors are open. */
+  roam?: THREE.Box2[];
+  /** Floor points in the other rooms it goes to look at. */
+  visits?: THREE.Vector3[];
+  /** Places to nap elsewhere in the flat (the bedroom's bed, the empty bath, a radiator's cradle). */
+  perches?: CatPerch[];
 }
 
 /**
@@ -41,6 +49,11 @@ export interface CatOptions {
 export class Cat extends THREE.Group implements Furniture, Interactable, Updatable {
   /** It walks: it carries its own blob instead (see the constructor). */
   readonly contactShadow = false;
+  /**
+   * It walks out of its zone into the rest of the flat: drawn even when the collection room is
+   * culled from view (a few draw calls, frustum-culled like anything else).
+   */
+  readonly seenFromNextDoor = true;
   private readonly blob: THREE.Mesh | null;
   readonly hitboxes: THREE.Object3D[];
   readonly settings: CatSettings;
@@ -70,7 +83,9 @@ export class Cat extends THREE.Group implements Furniture, Interactable, Updatab
     this.blob = blobShadow(0.34, 0.34);
     if (this.blob) this.add(this.blob);
 
-    this.nav = new CatNav(options.collisions, options.bounds);
+    const roam = options.roam?.length ? options.roam : null;
+    const navBounds = roam ? roam.reduce((all, room) => all.union(room), new THREE.Box2().makeEmpty()) : options.bounds;
+    this.nav = new CatNav(options.collisions, navBounds, roam ?? undefined);
     this.motion = new CatMotion(this, body, this.nav);
     this.brain = new CatBrain({
       cat: this,
@@ -83,12 +98,15 @@ export class Cat extends THREE.Group implements Furniture, Interactable, Updatab
       seats: options.seats,
       bowl: options.bowl,
       water: options.water,
+      waters: options.waters,
       bed: options.bed,
       scratcher: options.scratcher,
       toy: options.toy,
       windows: options.windows,
       tv: options.tv,
       voice: options.voice,
+      visits: options.visits,
+      perches: options.perches,
     });
   }
 

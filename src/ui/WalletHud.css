@@ -8,9 +8,9 @@
   gap: 0.9rem;
   padding: 0.4rem 0.8rem;
   border-radius: 999px;
-  background: rgba(20, 20, 28, 0.8);
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  color: #ece9e2;
+  background: var(--ui-panel);
+  border: 1px solid var(--ui-border);
+  color: var(--ui-text);
   font-size: 0.95rem;
   font-variant-numeric: tabular-nums;
   pointer-events: none;

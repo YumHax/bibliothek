@@ -1,3 +1,5 @@
+import type { SfxEvent } from '@/audio/ChipSpeaker';
+
 /** What the cabinet reads from the player's keys each frame; `firePressed` is true on the frame the button went down. */
 export interface ArcadeControls {
   left: boolean;
@@ -6,12 +8,16 @@ export interface ArcadeControls {
   down: boolean;
   fire: boolean;
   firePressed: boolean;
+  /** Where a light gun points on the screen (logical pixels), null when it points off the glass; absent on cabinets without one. */
+  aim?: { x: number; y: number } | null;
 }
 
 /** What a play starts with: the score to beat and the payout rate, so the game can show both live. */
 export interface RunContext {
   best: number;
   pointsPerTicket: number;
+  /** Seeds every random draw that shapes the board, so a play replays exactly from its seed and inputs; default a random one. */
+  seed?: number;
 }
 
 /** Logical screen of every cabinet game, in pixels (4:3); the cabinet scales it onto the glass. */
@@ -35,7 +41,28 @@ export interface ArcadeGame {
   reset(run: RunContext): void;
   update(dt: number, controls: ArcadeControls): void;
   draw(ctx: CanvasRenderingContext2D): void;
+  /** The sounds the game asked for since the last call (the cabinet's speaker plays them). */
+  takeSounds(): SfxEvent[];
+  /**
+   * What a regular's hands would do this frame: the game playing itself, well but not perfectly
+   * (`skill` 0..1), for a cabinet someone else is on. Pure: reads the board, never changes it.
+   */
+  autopilot(skill: number): ArcadeControls;
+  /** A light-gun game: the cabinet fills `controls.aim` from where the player looks, and a click on the glass fires. */
+  readonly gun?: boolean;
+  /**
+   * False for a game that cannot play itself (it runs elsewhere, like LexiPunk in its frame): no
+   * demo on the attract screen, no replay, no regular takes it. Default true.
+   */
+  readonly demoable?: boolean;
+  /** A two-player game: who holds the second stick ('CPU' when nobody does) and how well they play (0..1). */
+  setOpponent?(name: string, skill: number): void;
+  /** What the second player's hands are doing this frame (the cabinet's second stick follows it). */
+  opponentControls?(): ArcadeControls;
 }
+
+/** No keys down. */
+export const NO_CONTROLS: Readonly<ArcadeControls> = { left: false, right: false, up: false, down: false, fire: false, firePressed: false };
 
 export const PIXEL_FONT = '"Press Start 2P", "Courier New", monospace';
 

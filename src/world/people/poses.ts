@@ -7,7 +7,7 @@
  * bend (x) and then swing across (y).
  */
 
-export type Pose = 'stand' | 'crossed' | 'hips' | 'think' | 'pockets';
+export type Pose = 'stand' | 'crossed' | 'hips' | 'think' | 'pockets' | 'play' | 'cheer';
 
 export interface ArmAngles {
   ux: number;
@@ -45,5 +45,15 @@ export const POSES: Record<Pose, PoseAngles> = {
   pockets: {
     left: { ux: 0.1, uz: -0.02, lx: -0.5, ly: 0, lz: 0.35 },
     right: { ux: 0.1, uz: 0.02, lx: -0.5, ly: 0, lz: -0.35 },
+  },
+  // Both hands forward at waist height, on a control panel: a joystick, a flipper button.
+  play: {
+    left: { ux: -0.55, uz: -0.05, lx: -0.95, ly: 0.35, lz: 0 },
+    right: { ux: -0.55, uz: 0.05, lx: -0.95, ly: -0.35, lz: 0 },
+  },
+  // Both arms up over the head, a little out: a win.
+  cheer: {
+    left: { ux: -2.6, uz: -0.35, lx: -0.3, ly: 0, lz: 0 },
+    right: { ux: -2.6, uz: 0.35, lx: -0.3, ly: 0, lz: 0 },
   },
 };

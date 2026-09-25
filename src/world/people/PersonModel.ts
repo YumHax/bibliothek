@@ -104,6 +104,10 @@ export class PersonModel extends THREE.Group {
   private saccadeIn = 0;
   private readonly saccade = new THREE.Vector2();
   private readonly scratch = new THREE.Vector3();
+  /** World points the hands are on (a joystick, a flipper button), per arm; null: the pose decides. */
+  private readonly reachTargets: [THREE.Vector3 | null, THREE.Vector3 | null] = [null, null];
+  /** How far the upper body leans forward while standing (radians). */
+  private leanAngle = 0;
 
   constructor(look: PersonLook) {
     super();
@@ -165,6 +169,29 @@ export class PersonModel extends THREE.Group {
     this.pose = pose;
   }
 
+  /**
+   * Puts the hands on two world points (the controls of a machine) while standing: each arm is
+   * solved to reach its point, the elbows falling out and down; a point out of reach gets a
+   * straight arm towards it. Whichever point is on a hand's side goes to that hand. Null: back to the pose.
+   */
+  reach(points: readonly [THREE.Vector3, THREE.Vector3] | null): void {
+    if (!points) {
+      this.reachTargets[0] = this.reachTargets[1] = null;
+      return;
+    }
+    const [a, b] = points;
+    const aLocal = this.worldToLocal(this.scratch.copy(a)).x;
+    const bLocal = this.worldToLocal(this.scratch.copy(b)).x;
+    const [low, high] = aLocal <= bLocal ? [a, b] : [b, a];
+    (this.reachTargets[0] ??= new THREE.Vector3()).copy(low);
+    (this.reachTargets[1] ??= new THREE.Vector3()).copy(high);
+  }
+
+  /** Leans the upper body forward by `angle` radians while standing (over a pinball, a control panel). */
+  lean(angle: number): void {
+    this.leanAngle = angle;
+  }
+
   /** World point the head turns towards, or null to look ahead (with idle glances). */
   gaze(target: THREE.Vector3 | null): void {
     if (!target) {
@@ -200,7 +227,8 @@ export class PersonModel extends THREE.Group {
     // Arms: ease into the pose, then add the gait's swing (or a faint idle sway) on top.
     const pose = POSES[walking ? 'stand' : this.pose];
     for (const [i, arm] of this.arms.entries()) {
-      const target = i ? pose.right : pose.left;
+      const reach = walking ? null : this.reachTargets[i];
+      const target = reach ? solveArm(arm, i ? 1 : -1, reach) : i ? pose.right : pose.left;
       const p = this.phase + i * Math.PI;
       const swing = walking ? Math.sin(p) * 0.38 : Math.sin(t * 0.7 + i) * 0.02;
       const bend = walking ? Math.max(0, -Math.sin(p)) * 0.35 : 0;
@@ -228,7 +256,7 @@ export class PersonModel extends THREE.Group {
       this.root.position.x += (Math.sin(t * 0.35) * 0.012 - this.root.position.x) * ease;
       this.root.rotation.z += (Math.sin(t * 0.35) * 0.018 - this.root.rotation.z) * ease;
       this.torso.rotation.y += (Math.sin(t * 0.23) * 0.04 - this.torso.rotation.y) * ease;
-      this.torso.rotation.x += (0 - this.torso.rotation.x) * ease;
+      this.torso.rotation.x += (this.leanAngle - this.torso.rotation.x) * ease;
     }
     // Breathing lifts and fills the chest a little.
     const breath = Math.sin(t * 1.6) * 0.012;
@@ -382,6 +410,45 @@ function neckwear(parts: Parts, look: PersonLook, build: number, sleeve: THREE.M
     const hood = new THREE.SphereGeometry(0.1, 22, 12, Math.PI, Math.PI, Math.PI * 0.3, Math.PI * 0.5);
     parts.add(hood, sleeve, at(0, neckBase - 0.02, -0.045, [0, 0, 0], [1.15 * build, 0.75, 1]));
   }
+}
+
+const IK_TARGET = new THREE.Vector3();
+const IK_DIR = new THREE.Vector3();
+const IK_POLE = new THREE.Vector3();
+const IK_UPPER = new THREE.Vector3();
+const IK_FORE = new THREE.Vector3();
+const IK_TURN = new THREE.Quaternion();
+const IK_EULER = new THREE.Euler();
+
+/**
+ * The joint angles that put an arm's hand on `world`: two bones (upper arm, forearm) solved by the
+ * law of cosines in the plane of shoulder, hand and a pole out, down and behind (where elbows go),
+ * then turned into the rig's angles: the shoulder's swing (x) and spread (z) from the upper arm's
+ * direction, the elbow's bend (x) and turn (y) from the forearm's in the upper arm's frame.
+ * Out of reach, the arm points straight at it.
+ */
+function solveArm(arm: Arm, side: -1 | 1, world: THREE.Vector3): ArmAngles {
+  const parent = arm.shoulder.parent!;
+  parent.updateWorldMatrix(true, false);
+  const t = parent.worldToLocal(IK_TARGET.copy(world)).sub(arm.shoulder.position);
+  const l1 = UPPER_ARM_L;
+  const l2 = FOREARM_L;
+  const d = THREE.MathUtils.clamp(t.length(), Math.abs(l1 - l2) + 0.01, l1 + l2 - 0.002);
+  const dir = IK_DIR.copy(t).normalize();
+  const a = Math.acos(THREE.MathUtils.clamp((l1 * l1 + d * d - l2 * l2) / (2 * l1 * d), -1, 1));
+  const pole = IK_POLE.set(side * 0.8, -1, -0.5);
+  pole.addScaledVector(dir, -pole.dot(dir)).normalize();
+  const upper = IK_UPPER.copy(dir).multiplyScalar(Math.cos(a)).addScaledVector(pole, Math.sin(a));
+  // Forearm: from the elbow to the hand's point.
+  const fore = IK_FORE.copy(dir).multiplyScalar(d).addScaledVector(upper, -l1).normalize();
+  // The upper arm hangs along -y: rotated by (ux, 0, uz) in YXZ order it points (sin uz, -cos uz cos ux, -cos uz sin ux).
+  const uz = Math.asin(THREE.MathUtils.clamp(upper.x, -1, 1));
+  const ux = Math.atan2(-upper.z, -upper.y);
+  fore.applyQuaternion(IK_TURN.setFromEuler(IK_EULER.set(ux, 0, uz, 'YXZ')).invert());
+  // The forearm hangs along -y from the elbow: (lx, ly, 0) in YXZ order points (-sin lx sin ly, -cos lx, -sin lx cos ly).
+  const lx = -Math.acos(THREE.MathUtils.clamp(-fore.y, -1, 1));
+  const ly = -Math.sin(lx) > 1e-4 ? Math.atan2(fore.x, fore.z) : 0;
+  return { ux, uz, lx, ly, lz: 0 };
 }
 
 /** A tote hanging from the left shoulder or a backpack, in the bag colour. */

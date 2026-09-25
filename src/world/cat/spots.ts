@@ -13,7 +13,23 @@ export interface WindowLookout {
   getWorldPosition(out: THREE.Vector3): THREE.Vector3;
 }
 
-export type RestingSpotKind = 'bed' | 'seat' | 'rug' | 'sun' | 'floor';
+export type RestingSpotKind = 'bed' | 'seat' | 'perch' | 'rug' | 'sun' | 'floor';
+
+/**
+ * Somewhere elsewhere in the flat the cat naps on (the bed in the bedroom; `Bed` fits), up off the
+ * floor or on it (a warm patch in front of a radiator: `restingSpot` then lies on the floor).
+ */
+export interface CatPerch {
+  restingSpot(out: THREE.Vector3): THREE.Vector3;
+  /** The floor point it hops up from. */
+  approachPoint(out: THREE.Vector3): THREE.Vector3;
+  /** World height of what the hop must clear on the way (a bathtub's rim); by default only the two ends count. */
+  readonly hopApex?: number;
+  /** False while the spot cannot be slept in (the tub being filled, the basin's tap running): not offered, and a cat there gets out. */
+  available?(): boolean;
+  /** How much the cat likes it, by night or by day; default 3 at night, 1 by day. */
+  catWeight?(night: boolean): number;
+}
 
 /** Somewhere the cat lies down. Elevated spots (seats, the bed) are reached by a hop from `approach`. */
 export interface RestingSpot {
@@ -26,6 +42,9 @@ export interface RestingSpot {
   facing: THREE.Vector3 | null;
   /** The armchair, when the spot is one: the cat leaves it when the player sits there. */
   seat: Seat | null;
+  /** A perch's `hopApex` and `available`, carried along while the cat goes there and lies on it. */
+  hopApex?: number;
+  available?: () => boolean;
 }
 
 /** A spot is elevated when the cat must hop to reach it. */
@@ -41,6 +60,8 @@ export interface RestingSpotSources {
   playerSeat: Seat | null;
   bed?: CatBedLike;
   windows?: readonly WindowLookout[];
+  /** Other places to nap, up off the floor, reached through the flat's doorways when they are open. */
+  perches?: readonly CatPerch[];
   /** A floor point on the rug (the TV watching spot), if there is a rug. */
   rugPoint?: THREE.Vector3;
   /** Where the cat is now (a lazy cat may just drop on the floor nearby). */
@@ -66,6 +87,19 @@ export function pickRestingSpot(sources: RestingSpotSources): RestingSpot | null
     const toCentre = centre.clone().sub(approach).setY(0);
     if (toCentre.lengthSq() > 1e-4) approach.addScaledVector(toCentre.normalize(), 0.3);
     candidates.push({ spot: { kind: 'bed', position, approach, facing: centre.clone(), seat: null }, weight: sources.night ? 6 : 2.5 });
+  }
+
+  for (const perch of sources.perches ?? []) {
+    if (perch.available && !perch.available()) continue;
+    const position = perch.restingSpot(new THREE.Vector3());
+    const approach = perch.approachPoint(new THREE.Vector3());
+    if (!sources.nav.isFree(approach)) continue;
+    // On the floor (in front of a radiator) the spot itself must be free too: it walks there and lies down.
+    if (position.y <= 0.05 && !sources.nav.isFree(position)) continue;
+    const available = perch.available ? () => perch.available!() : undefined;
+    // The people's bed is a treat at night; by day the cat has its own.
+    const weight = perch.catWeight?.(sources.night) ?? (sources.night ? 3 : 1);
+    candidates.push({ spot: { kind: 'perch', position, approach, facing: null, seat: null, hopApex: perch.hopApex, available }, weight });
   }
 
   for (const seat of sources.seats) {

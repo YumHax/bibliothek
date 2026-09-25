@@ -6,7 +6,7 @@ anything whose cost depends on the quality level.
 ## Quality levels (`graphics/quality.ts`)
 
 `QUALITY` is resolved once at start: `?quality=low|medium|high`, else the player's choice (`localStorage`
-`bibliothek.quality`, set by the start card's picker, `ui/QualityPicker.ts`), else detected (touch -> low,
+`bibliothek.quality`, set in the menu's Settings screen, `ui/QualityPicker.ts`), else detected (touch -> low,
 Firefox -> medium, else high). Materials and passes are built from it, so changing it reloads the page.
 
 | | low | medium | high |

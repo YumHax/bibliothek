@@ -8,6 +8,11 @@ import { Door } from './props/Door';
 export interface ShellOptions {
   /** Colour of the painted leaves of the doors this zone hangs. Default the `Door`'s slate green. */
   leafColor?: number;
+  /**
+   * A room with no window on the outside (the arcade): its ambient holds this daylight (0..1)
+   * instead of following the sky, so it looks the same at noon and at midnight.
+   */
+  fixedDaylight?: number;
 }
 
 /** Half-depth of a portal box through the wall: covers the gap between the two shells and a step either side. */
@@ -22,10 +27,11 @@ const PORTAL_HALF_DEPTH = 0.15;
  * light out of the next, whichever room's lamp is rendering. Returns the room so the builder can
  * wire its lamp switch.
  */
-export function furnishShell(zone: Zone, sky: Sky, options: RoomOptions, { leafColor }: ShellOptions = {}): Room {
+export function furnishShell(zone: Zone, sky: Sky, options: RoomOptions, { leafColor, fixedDaylight }: ShellOptions = {}): Room {
   const room = zone.place(new Room(options), new THREE.Vector3());
   shareShadowCaster(room);
-  zone.onUnload(sky.dayNight.onChange((state) => room.setDaylight(state.daylight, state.ambient)));
+  if (fixedDaylight !== undefined) room.setDaylight(fixedDaylight);
+  else zone.onUnload(sky.dayNight.onChange((state) => room.setDaylight(state.daylight, state.ambient)));
   for (const doorway of options.doorways ?? []) {
     let door: Door | undefined;
     if (doorway.door !== false) {

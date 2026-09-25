@@ -4,6 +4,7 @@ import type { DecorEntry } from '../props/decor';
 import { WAINSCOT_THICKNESS, type TiledWainscotOptions } from '../props/TiledWainscot';
 import { DOOR_LEAF } from '../roomPlan';
 import { CISTERN_DEPTH, CISTERN_TOP } from '../props/Toilet';
+import type { MirrorCabinetOptions } from '../props/MirrorCabinet';
 
 /*
  * THE BATHROOM PLAN, zone-local coordinates (origin at the centre of its floor). Walls as named
@@ -15,7 +16,8 @@ import { CISTERN_DEPTH, CISTERN_TOP } from '../props/Toilet';
  * right, leaving a 0.73 m gangway between them down to the bath mat. Everything hung below
  * the tiles stands off the wall by their thickness. The strip inside the door
  * (x -0.5..0.5, z 0.6..1.2) stays clear: the basket is in the front-left corner, the towels hang
- * on the front wall right of the door.
+ * on the front wall right of the door. Over the basin a mirror cabinet (its door swings towards
+ * the tub, clear of the bottle shelf); a towel thrown over the tub's front rim, right of the screen.
  */
 
 export const BATHROOM_ROOM: RoomOptions = {
@@ -26,7 +28,14 @@ export const BATHROOM_ROOM: RoomOptions = {
   opaqueWalls: ['front', 'left', 'right'],
   // Too narrow for a leaf to swing in: this room hangs the door and it opens out into the corridor.
   doorways: [{ wall: 'front', along: 0, ...DOOR_LEAF, to: 'hallway' }],
+  // A small white hexagon mosaic, grey grout: the bathroom's own floor, not the flat's parquet.
+  finish: { floor: 'tiles', floorTiles: { pattern: 'hex', size: 0.09, tile: 0xf1f0eb, grout: 0xb8bab5, variance: 0.02 } },
 };
+
+/** The tub's outer size (the `Bathtub` default): the towel on its rim is placed from it. */
+const TUB = { length: 1.7, width: 0.75, height: 0.55 };
+/** Thickness of the tub's front panel, the edge the towel hangs over. */
+const TUB_RIM = 0.06;
 
 /** Local `along` of the WC on the left wall; the plant on its cistern is placed relative to it. */
 const TOILET_ALONG = 0.05;
@@ -43,19 +52,30 @@ export const BATHROOM_PLAN = {
   /** White metro tiles up to 1.2 m round the room, a sage top row and cap rail; they stop at the door's architrave. */
   wainscot: { height: 1.2, accent: 0x9db3a6 } as TiledWainscotOptions,
 
-  /** The tub along the back wall, 5 cm short of each side wall; tap, riser and screen at its left end. */
+  /** The tub along the back wall, 5 cm short of each side wall; tap, riser and screen at its left end (x -0.85..-0.05 on the rim). */
   bathtub: { wall: 'back', along: 0, y: 0, offset: WAINSCOT_THICKNESS } as Placement,
+  bathtubSize: TUB,
   /** A small frosted window high above the tub, clear of the shower riser (at x -0.55). */
   window: { wall: 'back', along: 0.35, y: 2.0 } as Placement,
 
   /** The basin on the right wall, its bottle shelf on the door side; the WC facing it on the left wall. */
   washbasin: { wall: 'right', along: 0.05, y: 0, offset: WAINSCOT_THICKNESS } as Placement,
   toilet: { wall: 'left', along: TOILET_ALONG, y: 0, offset: WAINSCOT_THICKNESS } as Placement,
+  /**
+   * The mirror cabinet over the basin, where a plain mirror would hang: bottom at 1.3 (over the tiles' cap rail), 0.5 wide,
+   * so its side stays 10 cm off the bottle shelf (local x from 0.35). Hinged on the tub side (local -x): opened, the door
+   * stands out towards the tub, never over the shelf.
+   */
+  mirrorCabinet: { wall: 'right', along: 0.05, y: 1.3 } as Placement,
+  mirrorCabinetOptions: { width: 0.5, height: 0.62, hinge: 'left' } as MirrorCabinetOptions,
 
   /** Towels by the door, on the front wall right of the architrave (x 0.485..0.9), the rail just under the tiles' cap. */
   towelRail: { wall: 'front', along: 0.69, y: 1.12, offset: WAINSCOT_THICKNESS } as Placement,
   /** The laundry basket in the corner inside the door, clear of the doormat. */
   laundryBasket: { corner: 'front-left', inset: 0.24 } as Placement,
+
+  /** Where the cat comes to look: the bath mat. */
+  catVisits: [[0.12, -0.2]] as [number, number][],
 
   decor: [
     // A plain cotton bath mat between the WC and the basin, in front of the tub.
@@ -66,7 +86,16 @@ export const BATHROOM_PLAN = {
       at: { wall: 'left', along: TOILET_ALONG + 0.12, y: CISTERN_TOP, offset: WAINSCOT_THICKNESS + CISTERN_DEPTH / 2 },
       options: { kind: 'small', pot: 'ceramic', seed: 31, collides: false, scale: 0.9 },
     },
+    // A towel thrown over the tub's front rim, right of the screen and clear of the basin (x from 0.46).
+    {
+      kind: 'drapedTowel',
+      at: { wall: 'back', along: 0.3, y: TUB.height, offset: WAINSCOT_THICKNESS + TUB.width - TUB_RIM / 2 },
+      options: { edge: TUB_RIM, drop: 0.34, inner: 0.2, color: 0xd9c3a0 },
+    },
     // The scale on the floor under the towels, in the front-right corner, out of the strip inside the door (x -0.5..0.5).
     { kind: 'bathroomScale', at: { floor: [0.65, 0.95], rotationY: Math.PI } },
+    // A chrome towel radiator on the tiles of the right wall between the bottle shelf (z up to 0.7, but 1.35 m up) and
+    // the towels by the door (z from 1.07); it starts 0.35 m up, so the scale slides under its pipes' side.
+    { kind: 'radiator', at: { wall: 'right', along: 0.75, y: 0, offset: WAINSCOT_THICKNESS }, options: { style: 'towel' } },
   ] as DecorEntry[],
 };

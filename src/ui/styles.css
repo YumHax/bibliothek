@@ -1,6 +1,30 @@
+/* Headings only; the body text stays on the system font. Falls back cleanly offline. */
+@import url('https://fonts.googleapis.com/css2?family=Bungee&display=swap');
+
+/*
+ * UI tokens: every HUD element, menu and panel reads its colours and shapes from here, so the look
+ * changes in one place. Shared building blocks (`.ui-btn`, `.ui-card`) live in `menu/menu.css`.
+ */
 :root {
   color-scheme: dark;
   font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --ui-font-display: 'Bungee', system-ui, sans-serif;
+  --ui-text: #ece9e2;
+  --ui-text-dim: rgba(236, 233, 226, 0.65);
+  --ui-panel: rgba(20, 20, 28, 0.88);
+  --ui-panel-solid: #15151d;
+  --ui-backdrop: rgba(8, 8, 12, 0.72);
+  --ui-border: rgba(255, 255, 255, 0.14);
+  --ui-border-strong: rgba(255, 255, 255, 0.35);
+  --ui-fill: rgba(255, 255, 255, 0.07);
+  --ui-fill-hover: rgba(255, 255, 255, 0.15);
+  --ui-accent: #d4a52a;
+  --ui-accent-soft: rgba(212, 165, 42, 0.14);
+  --ui-danger: #e06a5a;
+  --ui-radius: 12px;
+  --ui-radius-sm: 6px;
+  --ui-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
+  --ui-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 html, body {
@@ -21,41 +45,10 @@ html, body {
 /* HUD and menus must stack above the canvas (its z-index would otherwise cover them). */
 .overlay, .crosshair, .hint, .hover-label, .game-panel { z-index: 2; }
 
-.overlay {
-  position: fixed;
-  inset: 0;
-  display: grid;
-  place-items: center;
-  background: rgba(8, 8, 12, 0.72);
-  backdrop-filter: blur(4px);
-  cursor: pointer;
-  user-select: none;
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 1ms !important; transition-duration: 1ms !important; }
 }
 
-.overlay__card {
-  text-align: center;
-  color: #ece9e2;
-  padding: 2rem 3rem;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 12px;
-  background: rgba(20, 20, 28, 0.85);
-}
-.overlay__card h1 { margin: 0 0 0.25rem; font-size: 2rem; letter-spacing: 0.08em; }
-.overlay__card p { margin: 0 0 1.25rem; opacity: 0.8; }
-.overlay__card ul { list-style: none; padding: 0; margin: 0; text-align: left; font-size: 0.9rem; opacity: 0.85; }
-.overlay__card li { margin: 0.35rem 0; }
-.quality-picker { display: flex; gap: 0.4rem; align-items: center; justify-content: center; margin-top: 1.25rem; font-size: 0.85rem; cursor: default; }
-.quality-picker span { opacity: 0.7; margin-right: 0.3rem; }
-.quality-picker button {
-  font: inherit;
-  color: inherit;
-  padding: 0.25em 0.8em;
-  border-radius: 6px;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  background: rgba(255, 255, 255, 0.05);
-  cursor: pointer;
-}
-.quality-picker button[aria-pressed='true'] { background: rgba(255, 255, 255, 0.2); border-color: rgba(255, 255, 255, 0.45); }
 kbd {
   display: inline-block;
   min-width: 1.2em;
@@ -90,9 +83,9 @@ kbd {
   transform: translateX(-50%);
   padding: 0.5rem 0.9rem;
   border-radius: 8px;
-  background: rgba(20, 20, 28, 0.85);
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  color: #ece9e2;
+  background: var(--ui-panel);
+  border: 1px solid var(--ui-border);
+  color: var(--ui-text);
   font-size: 0.9rem;
   pointer-events: none;
 }
@@ -105,7 +98,7 @@ kbd {
   padding: 0.3rem 0.7rem;
   border-radius: 6px;
   background: rgba(20, 20, 28, 0.75);
-  color: #ece9e2;
+  color: var(--ui-text);
   font-size: 0.85rem;
   white-space: nowrap;
   pointer-events: none;
@@ -125,9 +118,9 @@ kbd {
   width: min(22rem, 40vw);
   padding: 1.5rem 1.75rem;
   border-radius: 12px;
-  background: rgba(20, 20, 28, 0.88);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  color: #ece9e2;
+  background: var(--ui-panel);
+  border: 1px solid var(--ui-border);
+  color: var(--ui-text);
   pointer-events: none;
   animation: panel-in 220ms ease-out;
 }
@@ -141,3 +134,4 @@ kbd {
 .game-panel dd { margin: 0; }
 .game-panel p { margin: 1rem 0 0; font-size: 0.9rem; line-height: 1.45; opacity: 0.9; }
 .game-panel footer { margin-top: 1.25rem; font-size: 0.75rem; opacity: 0.6; }
+.game-panel .game-panel__note { padding: 0.5rem 0.7rem; border-left: 3px solid var(--ui-accent); background: var(--ui-accent-soft); opacity: 1; }

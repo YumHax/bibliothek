@@ -59,6 +59,14 @@ export class Wallet {
     this.commit();
   }
 
+  /** Takes `tickets` out (a prize); false (and nothing taken) when the wallet is short. */
+  spendTickets(tickets: number): boolean {
+    if (tickets < 0 || this.state.tickets < tickets) return false;
+    this.state = { ...this.state, tickets: this.state.tickets - tickets };
+    this.commit();
+    return true;
+  }
+
   /** Turns every ticket into coins at `ticketsPerCoin`; the remainder stays. Returns the coins gained. */
   redeemTickets(ticketsPerCoin: number): number {
     const coins = Math.floor(this.state.tickets / ticketsPerCoin);

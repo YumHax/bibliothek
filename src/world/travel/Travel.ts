@@ -7,6 +7,8 @@ export interface TravelStop extends TravelChoice {
   position: THREE.Vector3;
   /** Camera yaw on arrival (radians about +y; 0 looks down -z). */
   yaw: number;
+  /** Other arrival spots by the zone the player comes from (the street: in front of the door they came out of). */
+  from?: Readonly<Record<string, { position: THREE.Vector3; yaw: number }>>;
 }
 
 export interface Traveller {
@@ -50,9 +52,10 @@ export class Travel {
     if (!stop || this.busy) return;
     this.busy = true;
     try {
+      const spot = stop.from?.[this.here()] ?? stop;
       await this.curtain.out();
-      this.player.setPosition(stop.position.x, stop.position.z);
-      this.player.setLook(stop.yaw, 0);
+      this.player.setPosition(spot.position.x, spot.position.z);
+      this.player.setLook(spot.yaw, 0);
       // Two frames: one for the ZoneManager to switch zones (and build the destination), one to draw it.
       await nextFrame();
       await nextFrame();

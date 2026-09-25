@@ -6,12 +6,25 @@ import { FacadeFrame } from './FacadeFrame';
 export type ShopDisplay = 'terrace' | 'crates' | 'buckets' | 'board' | 'none';
 
 /** A shop on Front Street, as `paintStreet` needs it: the azimuth range of its front and what stands outside. */
+/** A box of goods on a display shelf, in scenery texture pixels. */
+export interface GoodsRect {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
 export interface Storefront {
   a0: number;
   a1: number;
   display: ShopDisplay;
   /** The retro games shop: nothing may stand in front of it. */
   landmark: boolean;
+  /** The colour of its light and the wakefulness at which it shuts (its curfew), for the light it spills outside. */
+  light: 'warm' | 'cool';
+  closing: number;
+  /** The boxes on its display shelves (the retro games shop's show the day's market stock, see `Outdoors.showShopStock`). */
+  goods: GoodsRect[];
 }
 
 interface ShopType {
@@ -83,13 +96,14 @@ export function paintShopfronts(f: FacadeFrame, random: Rng, wall: string, landm
       continue;
     }
     const type = landmark ?? pick(random, SHOPS);
-    paintShop(f, random, type, s0, s1, Math.max(1, Math.round((units * (s1 - s0)) / w)));
-    out.push({ a0: f.at(s0), a1: f.at(s1), display: type.display, landmark: type === landmark });
+    const { closing, goods } = paintShop(f, random, type, s0, s1, Math.max(1, Math.round((units * (s1 - s0)) / w)));
+    out.push({ a0: f.at(s0), a1: f.at(s1), display: type.display, landmark: type === landmark, light: type.light, closing, goods });
   }
   return out;
 }
 
-function paintShop(f: FacadeFrame, random: Rng, type: ShopType, s0: number, s1: number, units: number): void {
+/** One shop from `s0` to `s1` along the facade; returns its curfew (when it shuts, see `wakefulnessAt`) and the goods in its windows. */
+function paintShop(f: FacadeFrame, random: Rng, type: ShopType, s0: number, s1: number, units: number): { closing: number; goods: GoodsRect[] } {
   const { sheet, d } = f;
   const ctx = sheet.color;
   // Shops shut around eleven (the late ones at one or two): see `wakefulnessAt`.
@@ -97,6 +111,7 @@ function paintShop(f: FacadeFrame, random: Rng, type: ShopType, s0: number, s1: 
   sheet.path(f.quad(s0 + 0.1, s1 - 0.1, 0, 3.6), type.front);
   f.detail(f.quad(s0 + 0.1, s1 - 0.1, 0, 0.55), shade(type.front, 0.7));
   const unit = (s1 - s0) / units;
+  const goods: GoodsRect[] = [];
   const doorAt = integer(random, 0, units - 1);
   for (let i = 0; i < units; i++) {
     let g0 = s0 + i * unit + 0.35;
@@ -107,7 +122,7 @@ function paintShop(f: FacadeFrame, random: Rng, type: ShopType, s0: number, s1: 
       sheet.path(door, GLASS);
       sheet.begin(d, 0.05);
       f.detail(f.quad(g0 + 0.08, g0 + 0.97, 0.9, 1.0), shade(type.front, 1.4));
-      sheet.lit(door, type.light, 0.8, closing);
+      sheet.lit(door, type.light, 0.45, closing);
       g0 += 1.3;
     }
     if (g1 - g0 < 0.4) continue;
@@ -115,7 +130,7 @@ function paintShop(f: FacadeFrame, random: Rng, type: ShopType, s0: number, s1: 
     sheet.begin(d, 0.28);
     sheet.path(glass, GLASS);
     sheet.begin(d, 0.05);
-    paintGoods(f, random, type, g0, g1, closing);
+    goods.push(...paintGoods(f, random, type, g0, g1, closing));
     f.detail(glass, f.vertical(0.6, 2.95, [[0, 'rgba(210,225,240,0.32)'], [0.5, 'rgba(160,180,200,0.1)'], [1, 'rgba(0,0,0,0.12)']]));
     // A diagonal sheen across the pane.
     const [xa, ya] = f.P(g0 + (g1 - g0) * 0.2, 2.95);
@@ -156,13 +171,17 @@ function paintShop(f: FacadeFrame, random: Rng, type: ShopType, s0: number, s1: 
     else if (random() < 0.5) sheet.lit(fascia, type.light, 0.35, closing);
   }
 
+  // The roller shutter comes down over the front when the shop shuts, and stays down until it opens.
+  sheet.shutter(f.quad(s0 + 0.1, s1 - 0.1, 0, 3.0), closing);
   if (type.awning && random() < 0.8) paintAwning(f, type.awning, s0 + 0.1, s1 - 0.1);
   if (type.bracket) paintBracketSign(f, type.bracket, random() < 0.5 ? s0 + 0.5 : s1 - 0.5);
+  return { closing, goods };
 }
 
 /** Shelves of goods behind the glass: loaves, books, fruit, bottles, game boxes, all as little blocks of colour. */
-function paintGoods(f: FacadeFrame, random: Rng, type: ShopType, g0: number, g1: number, closing: number): void {
-  if (!f.fine) return;
+function paintGoods(f: FacadeFrame, random: Rng, type: ShopType, g0: number, g1: number, closing: number): GoodsRect[] {
+  const goods: GoodsRect[] = [];
+  if (!f.fine) return goods;
   const ctx = f.sheet.color;
   const { y: pxY } = f.pxPerMetre;
   for (const shelf of [0.95, 1.55, 2.15]) {
@@ -175,14 +194,22 @@ function paintGoods(f: FacadeFrame, random: Rng, type: ShopType, g0: number, g1:
       const [x1] = f.P(s + gw, shelf);
       ctx.fillStyle = pick(random, type.goods);
       ctx.globalAlpha = 0.85;
-      ctx.fillRect(x, y, Math.max(1, x1 - x), gh * pxY);
+      const rect = { x, y, w: Math.max(1, x1 - x), h: gh * pxY };
+      ctx.fillRect(rect.x, rect.y, rect.w, rect.h);
+      goods.push(rect);
       s += gw + between(random, 0.02, 0.12);
     }
   }
   ctx.globalAlpha = 1;
-  // Lit from inside: the glass bright, the goods in front of the light dimmer.
-  f.sheet.lit(f.quad(g0, g1, 0.6, 2.95), type.light, 1, closing);
-  for (const shelf of [0.95, 1.55, 2.15]) f.sheet.lit(f.quad(g0 + 0.1, g1 - 0.1, shelf - 0.05, shelf + 0.3), type.light, 0.5, closing);
+  // Lit from inside, softly: the back of the display glows and the goods stand dark against it.
+  f.sheet.lit(f.quad(g0, g1, 0.6, 2.95), type.light, type.light === 'cool' ? 0.38 : 0.5, closing);
+  for (const shelf of [0.95, 1.55, 2.15]) f.sheet.dim(f.quad(g0 + 0.05, g1 - 0.05, shelf - 0.05, shelf), type.light, 0.1);
+  for (const g of goods) {
+    const p = new Path2D();
+    p.rect(g.x, g.y, g.w, g.h);
+    f.sheet.dim(p, type.light, 0.2);
+  }
+  return goods;
 }
 
 /** A striped awning sloping out over the pavement, its scalloped valance at the front. */

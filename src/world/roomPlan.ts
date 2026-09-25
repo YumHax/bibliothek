@@ -3,6 +3,7 @@ import type { Placement } from './Placement';
 import type { DecorEntry } from './props/decor';
 import type { CushionOptions } from './props/Cushion';
 import type { SortMode } from './shelving/sort';
+import { BALCONY_DOOR } from './balcony/balconyPlan';
 
 /*
  * THE ROOM PLAN: every position in the collection room, as data, in zone-local coordinates (the room
@@ -19,11 +20,14 @@ export const DOOR_LEAF = { width: 0.83, height: 2.04 };
 /** The door to the hallway: back wall, in the shelf-free stretch left of the bookcases; this room hangs the leaf. */
 export const FRONT_DOOR: Doorway = { wall: 'back', along: -1.5, ...DOOR_LEAF, to: 'hallway' };
 
+/** The glazed door onto the balcony: front wall, where the right-hand loft window was; the balcony hangs it (it opens in). */
+export const BALCONY_DOORWAY: Doorway = { wall: 'front', along: 2.0, ...BALCONY_DOOR, door: false, to: 'balcony' };
+
 /**
  * The room shell everything else is laid out in: 6 x 6 m, 2.8 m under the ceiling, one door. The
  * back wall (hallway behind) and the right wall have no window and keep the light in.
  */
-export const DEFAULT_ROOM: RoomOptions = { width: 6, depth: 6, height: 2.8, doorways: [FRONT_DOOR], opaqueWalls: ['back', 'right'] };
+export const DEFAULT_ROOM: RoomOptions = { width: 6, depth: 6, height: 2.8, doorways: [FRONT_DOOR, BALCONY_DOORWAY], opaqueWalls: ['back', 'right'] };
 
 export interface WindowPlan {
   wall: Wall;
@@ -66,7 +70,6 @@ export const ROOM_PLAN = {
     size: { width: 1.2, height: 2.4 },
     list: [
       { wall: 'front', along: 0.3 },
-      { wall: 'front', along: 2.0 },
       { wall: 'left', along: -1.8 },
       { wall: 'left', along: 1.8 },
     ] as WindowPlan[],
@@ -84,6 +87,16 @@ export const ROOM_PLAN = {
 
   /** The pendant fixture of the room's ceiling light. */
   pendant: { ceiling: [0, 0] } as Placement,
+
+  /**
+   * Where the market's home goods for this room go once bought (`economy/homeGoods.ts`); nothing shows there before.
+   * The lava lamp on the TV armchair's side table (top at 0.5 m), on its free side past the mug and the magazines:
+   * on the sideboard it would stand in front of the projector picture (whose bottom edge is at 0.63 m).
+   */
+  homeGoods: { lamp: { at: { floor: [-0.98, 0.62] } as Placement, y: 0.5 } },
+
+  /** The feather wand won at the arcade (a prize that lives at home): lying on the projector rug, between the cushions and the sideboard. */
+  featherWand: { floor: [2.05, 0.3], rotationY: 0.5 } as Placement,
 
   /** Everything else: plants, rug, pictures, lamps, tables. One line each; see `props/decor.ts` for the kinds. */
   decor: [
@@ -110,12 +123,14 @@ export const ROOM_PLAN = {
     { kind: 'plant', at: { corner: 'back-left', inset: 0.45 }, options: { kind: 'fig', pot: 'ceramic', seed: 3 } },
     { kind: 'plant', at: { corner: 'front-left', inset: 0.45 }, options: { kind: 'yucca', pot: 'terracotta', seed: 5 } },
     { kind: 'plant', at: { floor: [-2.5, -1.3] }, options: { kind: 'monstera', pot: 'ceramic', seed: 11 } },
-    // Trailing plants hung from the ceiling: front-right corner and over the rug.
-    { kind: 'plant', at: { corner: 'front-right', inset: 0.5, hung: true }, options: { kind: 'hanging', seed: 13, scale: 0.8 } },
+    // Trailing plants hung from the ceiling: by the front wall between the radiator and the first window (the front-right
+    // corner is the balcony door's swing now), and over the rug.
+    { kind: 'plant', at: { ceiling: [-0.6, 2.3] }, options: { kind: 'hanging', seed: 13, scale: 0.8 } },
     { kind: 'plant', at: { ceiling: [-1.1, 0.95] }, options: { kind: 'hanging', seed: 17, scale: 0.75 } },
-    // Small pots at the foot of the first front window and the back left window, just inside the curtains' travel.
+    // Small pots at the foot of the first front window and the front left window, just inside the curtains' travel
+    // (the back left window's foot is the cat's bed and the monstera's pot).
     { kind: 'plant', at: { wall: 'front', along: -0.13, y: 0, offset: 0.32 }, options: { kind: 'small', pot: 'ceramic', seed: 8, collides: false } },
-    { kind: 'plant', at: { wall: 'left', along: -1.44, y: 0, offset: 0.32 }, options: { kind: 'small', pot: 'ceramic', seed: 9, collides: false } },
+    { kind: 'plant', at: { wall: 'left', along: 1.4, y: 0, offset: 0.32 }, options: { kind: 'small', pot: 'ceramic', seed: 9, collides: false } },
     // Three small framed pictures on the left wall above the TV, between its two windows.
     { kind: 'pictureFrame', at: { wall: 'left', along: -0.5, y: 1.8 }, options: { motif: 'mountains', seed: 1 } },
     { kind: 'pictureFrame', at: { wall: 'left', along: 0, y: 1.8 }, options: { motif: 'sunset', seed: 2 } },
@@ -125,5 +140,8 @@ export const ROOM_PLAN = {
     { kind: 'wallSocket', at: { wall: 'left', along: 0.3, y: 0 }, options: { cables: [[0.25, 0.45, 0.15], [0.12, 0.3, 0.12]] } },
     { kind: 'wallSocket', at: { wall: 'right', along: 0.75, y: 0 }, options: { gangs: 1, cables: [[-0.3, 0.5, 0.05]] } },
     { kind: 'wallSocket', at: { wall: 'back', along: -2.05, y: 0 }, options: { gangs: 1 } },
+    // A column radiator on the front wall under the posters, between the scratching post (x -1.79..-1.41) and the first
+    // window's curtains (from x -0.6), a fleece cradle hooked over it for the cat.
+    { kind: 'radiator', at: { wall: 'front', along: -1.0, y: 0 }, options: { width: 0.6, catCradle: true } },
   ] as DecorEntry[],
 };

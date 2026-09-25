@@ -237,7 +237,26 @@ export class Zone implements ShelvingHost {
     }
     this.hide(this.contactShadows.mesh);
     for (const item of this.items.keys()) if (!item.seenFromNextDoor) this.hide(item);
-    for (const box of this.looseInteractables) this.hide(box as unknown as THREE.Object3D);
+    // A box in the player's hand has left the zone's group for the scene: it stays in view.
+    for (const box of this.looseInteractables) if (this.holds(box as unknown as THREE.Object3D)) this.hide(box as unknown as THREE.Object3D);
+  }
+
+  /** Shows again what culling hid under `root`: a shelf box taken in hand while its zone was out of view (a stray game, `world/strays`). */
+  unhide(root: THREE.Object3D): void {
+    this.hiddenMeshes = this.hiddenMeshes.filter((mesh) => {
+      let obj: THREE.Object3D | null = mesh;
+      while (obj && obj !== root) obj = obj.parent;
+      if (!obj) return true;
+      mesh.visible = true;
+      return false;
+    });
+  }
+
+  /** Whether `obj` is (still) inside this zone's group. */
+  private holds(obj: THREE.Object3D): boolean {
+    let node: THREE.Object3D | null = obj.parent;
+    while (node && node !== this.group) node = node.parent;
+    return node === this.group;
   }
 
   private hide(root: THREE.Object3D): void {

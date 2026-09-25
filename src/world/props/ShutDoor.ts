@@ -10,6 +10,8 @@ export interface ShutDoorOptions {
   /** Size of the leaf; the architrave is added round it. Default the flat's standard 0.83 x 2.04 leaf. */
   width?: number;
   height?: number;
+  /** The `entrance` style's plain mat on the floor in front of it. Default true; false when the room lays its own. */
+  mat?: boolean;
 }
 
 const THICKNESS = 0.016;
@@ -79,8 +81,7 @@ export class ShutDoor extends Prop {
         peephole.rotation.x = Math.PI / 2;
         this.add(peephole);
         part(this, 0.04, 0.1, 0.006, BRASS, { x: width / 2 - 0.09, y: HANDLE_Y - 0.13, z: face + 0.003 });
-        const mat = part(this, 0.65, 0.012, 0.4, matte(0x5a4a3a, 1), { y: 0.006, z: 0.26 });
-        mat.castShadow = false;
+        if (options.mat ?? true) part(this, 0.65, 0.012, 0.4, matte(0x5a4a3a, 1), { y: 0.006, z: 0.26 });
       }
     }
 

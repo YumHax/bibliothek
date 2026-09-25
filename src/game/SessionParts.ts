@@ -7,10 +7,12 @@ import type { Toast } from '@/ui/Toast';
 import type { SearchBar } from '@/ui/SearchBar';
 import type { VideoProvider } from '@/video/VideoProvider';
 import type { GameSource } from '@/collection/GameSource';
-import type { Game } from '@/catalog/types';
+import type { Game, PlatformId } from '@/catalog/types';
 import type { GameBox } from '@/world/GameBox';
 import type { Seat } from '@/world/Seat';
 import type { SortMode } from '@/world/shelving/sort';
+import type { StockItem } from '@/economy/StockItem';
+import type { Negotiation } from '@/economy/haggle';
 import type { Highlighter } from './Highlighter';
 
 /*
@@ -52,24 +54,108 @@ export interface CatLike {
   setPlayerSeat?(seat: Seat | null): void;
 }
 
+/** Sleeping until morning in bed; `isAsleep` while the view is dark. */
+export interface SleepLike {
+  readonly isAsleep: boolean;
+  untilMorning(): Promise<void>;
+}
+
 /** The player's money: coins to spend, tickets to redeem. */
 export interface WalletLike {
   readonly coins: number;
   readonly tickets: number;
   spend(coins: number): boolean;
   addTickets(tickets: number): void;
-  redeemTickets(ticketsPerCoin: number): number;
+  earnCoins(coins: number): void;
 }
 
 /** The collection as something that can be bought into. */
 export interface CollectionLike {
   has(id: string): boolean;
+  /** Owned or lent out: a wishlist entry is not a copy. */
+  owns(id: string): boolean;
   add(game: Game): void;
+  /** Takes a game out (a purchase handed back, a game swapped away). */
+  remove?(id: string): void;
+  /** Changes a copy in place (an ordinary printing swapped for a first print). */
+  update?(id: string, patch: Partial<Omit<Game, 'id'>>): void;
+  find?(id: string): Game | undefined;
 }
 
-/** Best arcade scores; `submit` says whether the score is a new best. */
-export interface ScoresLike {
-  submit(gameId: string, score: number): boolean;
+/** The flea market's rules for a copy in hand (see `MarketStock`). */
+export interface MarketLike {
+  readonly day: number;
+  /** A haggle over `item`, or the stallholder's reason for not haggling. */
+  negotiate(item: StockItem): Negotiation | { line: string };
+  settle(item: StockItem, negotiation: Negotiation, insults: number): void;
+  holdDeposit(item: StockItem): number;
+  hold(item: StockItem, deposit: number): void;
+  /** `item` changed hands: holds, orders and loyalty are brought up to date. */
+  sold(item: StockItem): void;
+  /** A fake found out; false when it is none, or already found out. */
+  expose(item: StockItem): boolean;
+  /** A game swapped away goes out on its stall from tomorrow. */
+  consign(game: Game): void;
+}
+
+/** How the market knows the player: reputation (the glass case), loyalty per stall. */
+export interface StandingLike {
+  readonly mayHandleGlass: boolean;
+  readonly reputation: { name: string; points: number };
+  loyaltyName(platform: PlatformId): string;
+  record(deed: 'swap'): void;
+  undo?(deed: 'buy', platform: PlatformId): void;
+}
+
+/** The haggle panel: an exchange of offers over the copy in hand. */
+export interface HagglePanelLike extends ModalLike {
+  start(options: {
+    item: StockItem;
+    negotiation: Negotiation;
+    /** "the NES stall": who the player is haggling with. */
+    stall: string;
+    /** The panel closed: how many insulting offers were made, and how it ended ('none': no offer made, nothing to settle). */
+    onClose: (result: { insults: number; outcome: 'deal' | 'walk' | 'stopped' | 'none' }) => void;
+  }): void;
+}
+
+/** The swap panel: pick a game from the collection to part-exchange for the copy in hand. */
+export interface TradePanelLike extends ModalLike {
+  start(options: {
+    item: StockItem;
+    stall: string;
+    /** Makes the swap (`value`: what `mine` counts for); returns why it failed, or null once done. */
+    onSwap: (mine: Game, value: number) => string | null;
+  }): void;
+}
+
+/** The prizes taken home (the claw's plush goes straight in). */
+export interface PrizesLike {
+  add(id: string): void;
+}
+
+/** The medals per arcade machine: what a score earns that was not earned before (paid once). */
+export interface MedalsLike {
+  award(gameId: string, score: number): readonly { tier: string; reward: number }[];
+}
+
+/** The weekly league and the streak: every ticket play counts, the first of a day pays the streak; a finished week is announced once. */
+export interface LeagueLike {
+  record(tickets: number): { days: number; bonus: number };
+  takeWeekResult(): { rank: number; tickets: number; won: boolean } | null;
+}
+
+/** The balance table (`?payout`): each real play's score, tickets and time. */
+export interface PayoutStatsLike {
+  record(gameId: string, score: number, tickets: number, seconds: number): void;
+}
+
+/** What changes at the arcade day by day: the challenge, the change machine. */
+export interface ArcadeDailyLike {
+  challenge(): { gameId: string; target: number; reward: number; done: boolean };
+  claimChallenge(): boolean;
+  readonly changeMachineWorks: boolean;
+  claimChange(): number;
 }
 
 /** The teleport: where one can go from here, and going there. */
@@ -103,14 +189,32 @@ export interface SessionParts {
   dayNight?: DayNightLike;
   collectionEditor?: ModalLike;
   cat?: CatLike;
+  /** A night's sleep from the bed (fade, clock to the next morning, fade back): `game/Sleep`. */
+  sleep?: SleepLike;
   /** Re-enters the room after a modal (the collection editor) released the pointer lock: `() => void lockFlow.enter()`. */
   enterRoom?: () => void;
 
   // --- the economy: going out, playing, buying ---------------------------------------------------
   wallet?: WalletLike;
   collection?: CollectionLike;
-  scores?: ScoresLike;
+  prizes?: PrizesLike;
+  arcadeDaily?: ArcadeDailyLike;
+  /** The prize counter's panel (prizes for tickets, tickets for coins). */
+  prizeCounter?: ModalLike;
+  /** The big frame a web-page cabinet game plays in (LexiPunk): a modal the cabinet opens. */
+  arcadeScreen?: ModalLike;
+  medals?: MedalsLike;
+  league?: LeagueLike;
+  payoutStats?: PayoutStatsLike;
   travel?: TravelLike;
   travelMenu?: TravelMenuLike;
   catalogue?: ModalLike;
+  market?: MarketLike;
+  /** The WE BUY desk's panel. */
+  sellDesk?: ModalLike;
+  standing?: StandingLike;
+  haggle?: HagglePanelLike;
+  trade?: TradePanelLike;
+  /** Whether a game bought now finds room on the shelves at home: a warning line, or null when it does. */
+  shelfRoom?: () => string | null;
 }

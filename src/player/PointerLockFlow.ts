@@ -23,8 +23,9 @@ const MOUSE_BUTTON_EVENTS = ['mousedown', 'mouseup', 'click', 'dblclick', 'conte
  * Entering and leaving the room, in three modes:
  * - `pointer`: start card → pointer lock (with retry) → crosshair, and back on Esc. Clicking the
  *   canvas after Esc re-enters without going through the card.
- * - `gamepad`: any gamepad button on the card enters a *virtual* lock (pointer lock needs a user
- *   gesture, which a gamepad press is not). The mouse is ignored and its cursor hidden;
+ * - `gamepad`: a gamepad button on the card enters a *virtual* lock (pointer lock needs a user
+ *   gesture, which a gamepad press is not), except the presses the menu uses to navigate
+ *   (`Overlay.wasHandled`). The mouse is ignored and its cursor hidden;
  *   Start or Esc returns to the card. Start while pointer-locked releases the mouse like Esc.
  * - `touch`: on coarse-pointer devices the card's tap enters a virtual lock too; `TouchControls`
  *   provides look / move / tap, and its Menu button (Esc) returns to the card.
@@ -119,6 +120,8 @@ export class PointerLockFlow {
   }
 
   private onPress(code: string): void {
+    // A D-pad move or a pick in the menu is not a request to enter the room.
+    if (this.overlay.wasHandled(code)) return;
     if (code === 'GamepadStart') {
       if (this.player.isLocked) this.exit();
       else void this.enter('gamepad');

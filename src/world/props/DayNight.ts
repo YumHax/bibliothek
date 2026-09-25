@@ -1,5 +1,7 @@
 import * as THREE from 'three';
 import type { Updatable } from '@/core/Engine';
+import type { WeatherState } from '@/world/weather/Weather';
+import { type Place, type SolarDay, localPlace, solarDay, sunHeightOf } from './solar';
 
 /** Everything the sky and the room lighting need to know about the current time of day. */
 export interface SkyState {
@@ -41,6 +43,19 @@ export interface SkyState {
   lightIntensity: number;
   /** True between sunset and sunrise. */
   night: boolean;
+  /** The weather (see `Weather`), 0..1 each: cloud over the sky, rain and snow falling, the ground wet or white. */
+  cloudCover: number;
+  rain: number;
+  snow: number;
+  wetness: number;
+  snowCover: number;
+  /** How hard the wind blows (gusts included), how thick the fog or dawn mist is, 0..1 each. */
+  wind: number;
+  fog: number;
+  /** A lightning flash's brightness right now; `strikes` counts them, `strikeDistance` (m) is the last one's. */
+  lightning: number;
+  strikes: number;
+  strikeDistance: number;
 }
 
 export interface DayNightOptions {
@@ -48,6 +63,10 @@ export interface DayNightOptions {
   hours?: number;
   /** Real seconds one full 24 h cycle takes; 0 freezes the clock. Default 600 (ten minutes). */
   dayLength?: number;
+  /** Where the sun is computed for (default the browser time zone's city, see `localPlace`). */
+  place?: Place;
+  /** The calendar day whose sunrise and sunset the clock follows. Default today. */
+  date?: Date;
 }
 
 export type SkyListener = (state: SkyState) => void;
@@ -55,11 +74,11 @@ export type SkyListener = (state: SkyState) => void;
 /** The default: a whole day in ten minutes. */
 export const DEFAULT_DAY_LENGTH_S = 600;
 const DEFAULT_HOURS = 8;
-/** A long summer day: 14 h of sun, 10 h of night. */
-const SUNRISE_HOUR = 6;
-const SUNSET_HOUR = 20;
-const DAY_HOURS = SUNSET_HOUR - SUNRISE_HOUR;
-const NOON_HOUR = (SUNRISE_HOUR + SUNSET_HOUR) / 2;
+/**
+ * The sun elevation that counts as a full `sunHeight` of 1: a high summer sun in Europe. A winter
+ * noon peaks lower (about 0.3 in Berlin in December), still well into `daylight`'s full range.
+ */
+const FULL_SUN_ELEVATION = THREE.MathUtils.degToRad(60);
 
 /** Sky gradient keyed by sun height: night, dusk, sunset, golden hour, day. */
 const SKY_STOPS: { at: number; zenith: number; horizon: number }[] = [
@@ -89,6 +108,17 @@ const SUN_MIN_LIGHT_ELEVATION = THREE.MathUtils.degToRad(3);
 const SUN_SET_ELEVATION = THREE.MathUtils.degToRad(-4);
 const DAY_HOUR = 14;
 const NIGHT_HOUR = 23;
+/** Largest jump `advanceTo` makes at once: under 12 h, so a jump across midnight reads as a day passing. */
+const ADVANCE_STEP_H = 6;
+/** An overcast sky's grey, by day and by night (zenith, horizon). */
+const OVERCAST_DAY = { zenith: new THREE.Color(0x8a95a2), horizon: new THREE.Color(0xb4bac0) };
+const OVERCAST_NIGHT = { zenith: new THREE.Color(0x12151c), horizon: new THREE.Color(0x2a2a30) };
+const GREY = new THREE.Color(0xdde2e8);
+/** The grey of fog by day and by night, and the blue-white of a lightning flash (in the room, on the sky). */
+const FOG_DAY = new THREE.Color(0xc4c8cc);
+const FOG_NIGHT = new THREE.Color(0x2c2c30);
+const FLASH = new THREE.Color(0xe8eeff);
+const FLASH_SKY = new THREE.Color(0xb8c4ee);
 
 const scratchA = new THREE.Color();
 const scratchB = new THREE.Color();
@@ -106,17 +136,12 @@ function sampleStops(sunHeight: number, key: 'zenith' | 'horizon', out: THREE.Co
   return out.setHex(SKY_STOPS[SKY_STOPS.length - 1][key]);
 }
 
-/** Sun height for a time of day: a half sine over the day, another (negative) over the night. */
-function sunHeightAt(hours: number): number {
-  const sinceSunrise = ((hours - SUNRISE_HOUR) % 24 + 24) % 24;
-  if (sinceSunrise < DAY_HOURS) return Math.sin((Math.PI * sinceSunrise) / DAY_HOURS);
-  return -Math.sin((Math.PI * (sinceSunrise - DAY_HOURS)) / (24 - DAY_HOURS));
-}
 
 /**
  * The clock of the room: a time of day, the sky colours and sun/moon that go with it.
  * It runs on its own, a whole day in `dayLength` seconds (ten minutes by default), with a slow
- * sunset and sunrise. Ticked by whoever owns it (the primary window); listeners (window panes,
+ * sunset and sunrise at the real times of today's date at the player's latitude (`solar.ts`):
+ * long summer evenings, short winter days with a low noon sun. Ticked by whoever owns it (the primary window); listeners (window panes,
  * room lighting) are told on every change.
  */
 export class DayNight implements Updatable {
@@ -140,13 +165,27 @@ export class DayNight implements Updatable {
     lightColor: new THREE.Color(),
     lightIntensity: 0,
     night: false,
+    cloudCover: 0,
+    rain: 0,
+    snow: 0,
+    wetness: 0,
+    snowCover: 0,
+    wind: 0,
+    fog: 0,
+    lightning: 0,
+    strikes: 0,
+    strikeDistance: 1000,
   };
+  private weather: WeatherState | null = null;
 
   private hours: number;
+  /** Today's sun: sunrise, noon, sunset and the elevation through the day. */
+  readonly sun: SolarDay;
   private readonly listeners = new Set<SkyListener>();
 
-  constructor({ hours = DEFAULT_HOURS, dayLength = DEFAULT_DAY_LENGTH_S }: DayNightOptions = {}) {
+  constructor({ hours = DEFAULT_HOURS, dayLength = DEFAULT_DAY_LENGTH_S, place, date = new Date() }: DayNightOptions = {}) {
     this.dayLength = dayLength;
+    this.sun = solarDay(date, place ?? localPlace(undefined, date));
     this.hours = ((hours % 24) + 24) % 24;
     this.compute();
   }
@@ -162,9 +201,30 @@ export class DayNight implements Updatable {
     this.notify();
   }
 
+  /**
+   * Winds the clock *forward* to the next `hours` (tomorrow's if already past), in steps of at most
+   * `ADVANCE_STEP_H` so listeners that count days (the market calendar) see midnight go by, as a
+   * night's sleep would. `setTime` jumps straight there and never counts a day.
+   */
+  advanceTo(hours: number): void {
+    let left = ((hours - this.hours) % 24 + 24) % 24;
+    while (left > 0) {
+      const step = Math.min(ADVANCE_STEP_H, left);
+      this.setTime(this.hours + step);
+      left -= step;
+    }
+  }
+
   /** Night falls (23:00) if it is day, otherwise the afternoon sun comes back (14:00). */
   toggleNight(): void {
     this.setTime(this.state.night ? DAY_HOUR : NIGHT_HOUR);
+  }
+
+  /** The weather the sky follows from now on: cloud greys it and dims the sun (see `Weather`). */
+  setWeather(weather: WeatherState): void {
+    this.weather = weather;
+    this.compute();
+    this.notify();
   }
 
   /** Subscribes to sky changes; called right away with the current state. Returns an unsubscribe function. */
@@ -175,8 +235,9 @@ export class DayNight implements Updatable {
   }
 
   update(dt: number): void {
-    if (!this.dayLength) return;
-    this.hours = (this.hours + (dt * 24) / this.dayLength) % 24;
+    // A frozen clock still follows the weather (gusts, lightning), which lives on the real clock.
+    if (!this.dayLength && !this.weather) return;
+    if (this.dayLength) this.hours = (this.hours + (dt * 24) / this.dayLength) % 24;
     this.compute();
     this.notify();
   }
@@ -189,7 +250,7 @@ export class DayNight implements Updatable {
     const s = this.state;
     const h = this.hours;
     s.hours = h;
-    s.sunHeight = sunHeightAt(h);
+    s.sunHeight = sunHeightOf(this.sun, h, FULL_SUN_ELEVATION);
     s.daylight = THREE.MathUtils.smoothstep(s.sunHeight, -0.12, 0.3);
     s.night = s.sunHeight < 0;
     sampleStops(s.sunHeight, 'zenith', s.zenith);
@@ -209,7 +270,8 @@ export class DayNight implements Updatable {
     const up = THREE.MathUtils.clamp(s.sunHeight, 0, 1);
     const sinking = THREE.MathUtils.smoothstep(s.sunHeight, -0.08, 0.06);
     s.sunElevation = THREE.MathUtils.lerp(SUN_SET_ELEVATION, SUN_MIN_LIGHT_ELEVATION, sinking) + up * SUN_MAX_ELEVATION;
-    s.sunAzimuth = THREE.MathUtils.clamp((h - NOON_HOUR) / (DAY_HOURS / 2), -1, 1) * SUN_MAX_AZIMUTH;
+    const fromNoon = ((h - this.sun.noon + 36) % 24) - 12;
+    s.sunAzimuth = THREE.MathUtils.clamp(fromNoon / Math.max(1, this.sun.dayHours / 2), -1, 1) * SUN_MAX_AZIMUTH;
     // The moon rises as the sun sets and climbs through the night.
     const nightUp = THREE.MathUtils.clamp(-s.sunHeight, 0, 1);
     s.moonElevation = THREE.MathUtils.degToRad(8) + nightUp * THREE.MathUtils.degToRad(40);
@@ -228,6 +290,51 @@ export class DayNight implements Updatable {
       s.lightAzimuth = s.moonAzimuth;
       s.lightColor.copy(MOON);
       s.lightIntensity = MOON_MAX_INTENSITY * THREE.MathUtils.smoothstep(-s.sunHeight, 0, 0.2);
+    }
+    this.applyWeather();
+  }
+
+  /** Cloud greys the sky, smothers the sunset, and turns the sun's beams into a soft grey daylight. */
+  private applyWeather(): void {
+    const s = this.state;
+    const w = this.weather;
+    s.cloudCover = w?.cloudCover ?? 0;
+    s.rain = w?.rain ?? 0;
+    s.snow = w?.snow ?? 0;
+    s.wetness = w?.wetness ?? 0;
+    s.snowCover = w?.snowCover ?? 0;
+    s.wind = w?.wind ?? 0;
+    s.fog = w?.fog ?? 0;
+    s.lightning = w?.lightning ?? 0;
+    s.strikes = w?.strikes ?? 0;
+    s.strikeDistance = w?.strikeDistance ?? 1000;
+    if (!w) return;
+    const grey = Math.pow(s.cloudCover, 1.3) * 0.85;
+    const dark = 1 - 0.3 * Math.max(s.rain, s.snow * 0.6);
+    const dayness = THREE.MathUtils.smoothstep(s.sunHeight, -0.15, 0.15);
+    scratchA.lerpColors(OVERCAST_NIGHT.zenith, OVERCAST_DAY.zenith, dayness).multiplyScalar(dark);
+    scratchB.lerpColors(OVERCAST_NIGHT.horizon, OVERCAST_DAY.horizon, dayness).multiplyScalar(dark);
+    s.zenith.lerp(scratchA, grey);
+    s.horizon.lerp(scratchB, grey);
+    s.horizonGlow *= 1 - 0.8 * s.cloudCover;
+    s.daylight *= 1 - 0.25 * s.cloudCover * dark;
+    s.ambient.lerp(GREY, 0.5 * grey);
+    s.lightIntensity *= 1 - 0.8 * Math.pow(s.cloudCover, 1.5);
+    // Fog washes the sky towards its own grey and softens the sun further.
+    if (s.fog > 0.01) {
+      scratchA.lerpColors(FOG_NIGHT, FOG_DAY, dayness);
+      s.horizon.lerp(scratchA, 0.8 * s.fog);
+      s.zenith.lerp(scratchA, 0.45 * s.fog);
+      s.horizonGlow *= 1 - 0.7 * s.fog;
+      s.lightIntensity *= 1 - 0.6 * s.fog;
+      s.ambient.lerp(GREY, 0.4 * s.fog);
+    }
+    // A lightning flash lights the whole sky and, through the windows, the room.
+    if (s.lightning > 0.01) {
+      s.daylight = Math.min(1, s.daylight + 0.7 * s.lightning);
+      s.ambient.lerp(FLASH, s.lightning);
+      s.zenith.lerp(FLASH_SKY, 0.6 * s.lightning);
+      s.horizon.lerp(FLASH_SKY, 0.75 * s.lightning);
     }
   }
 }

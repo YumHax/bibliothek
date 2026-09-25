@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import type { Game } from '@/catalog/types';
 import type { BoxArtLoader } from '@/covers/BoxArtLoader';
 import type { GameSource } from '@/collection/GameSource';
+import { GameList } from '@/collection/GameList';
 import type { RoomOptions } from '../Room';
 import type { Furniture } from '../Furniture';
 import { GameBox } from '../GameBox';
@@ -31,6 +32,17 @@ export interface ShelvingOptions {
   bookcase?: Partial<Pick<BookcaseSpec, 'height' | 'depth' | 'gap' | 'headroom' | 'boardThickness'>>;
   /** Bookcases that stand even when the collection is empty or small, waiting to be filled. Default 0. */
   minBookcases?: number;
+  /**
+   * Where the bookcases stand, instead of the collection room's back-wall-then-right-wall run
+   * (`backWallMinX`, `rightWallKeepClear` are then ignored): positions, yaws and the width of every bookcase.
+   */
+  layout?: { slots: Slot[]; width: number };
+  /** How many of the slots may be used (bought bookcases, say); all of them by default. `setCapacity` changes it. */
+  capacity?: number;
+  /** One ceiling spot per bookcase. Default true; off where a new light would recompile every shader mid-game. */
+  lamps?: boolean;
+  /** Where the games that do not fit are written (another Shelving's source); a fresh list by default. */
+  overflow?: GameList;
 }
 
 /** Horizontal distance from a bookcase face to its ceiling spot (m). */
@@ -48,7 +60,8 @@ const DEFAULT_SPEC: Omit<BookcaseSpec, 'width' | 'rows'> = {
  * Owns every bookcase in the room. Sizes the shelving to the collection (as many bookcases as
  * the rows need, along the back wall then the right wall), sorts the boxes, and rebuilds when
  * the GameSource changes — reusing the GameBox of every game that is still there so its art
- * is not fetched twice.
+ * is not fetched twice. What does not fit goes to `overflow`, which another Shelving (elsewhere in
+ * the flat) can display.
  */
 export class Shelving {
   private mode: SortMode;
@@ -66,7 +79,11 @@ export class Shelving {
   private readonly homeOf = new Map<GameBox, Shelf>();
   private ghosts: Shelf[] = [];
   private readonly unsubscribe: () => void;
-  private readonly minBookcases: number;
+  private minBookcases: number;
+  private capacity: number;
+  private readonly lamps: boolean;
+  /** The games that did not fit, in shelf order; another Shelving can take them as its source. */
+  readonly overflow: GameList;
 
   constructor(
     private readonly host: ShelvingHost,
@@ -76,10 +93,13 @@ export class Shelving {
   ) {
     this.mode = options.sort ?? 'platform';
     this.minBookcases = options.minBookcases ?? 0;
+    this.lamps = options.lamps ?? true;
+    this.overflow = options.overflow ?? new GameList();
     this.ceiling = options.room.height;
     const partial = { ...DEFAULT_SPEC, ...options.bookcase };
-    const { slots, width } = computeSlots(options.room, partial, options.backWallMinX ?? -options.room.width / 6, options.rightWallKeepClear);
+    const { slots, width } = options.layout ?? computeSlots(options.room, partial, options.backWallMinX ?? -options.room.width / 6, options.rightWallKeepClear);
     this.slots = slots;
+    this.capacity = Math.min(options.capacity ?? slots.length, slots.length);
     this.spec = { ...partial, width };
     this.unsubscribe = source.subscribe(() => this.rebuild());
     this.rebuild();
@@ -106,6 +126,15 @@ export class Shelving {
   setSort(mode: SortMode): void {
     if (mode === this.mode) return;
     this.mode = mode;
+    this.rebuild();
+  }
+
+  /** Uses `bookcases` of the slots, every one of them standing even while empty (a bookcase just bought). */
+  setCapacity(bookcases: number): void {
+    const capacity = Math.max(0, Math.min(bookcases, this.slots.length));
+    if (capacity === this.capacity && this.minBookcases === capacity) return;
+    this.capacity = capacity;
+    this.minBookcases = capacity;
     this.rebuild();
   }
 
@@ -141,10 +170,9 @@ export class Shelving {
       dimensions: (box) => box.dimensions,
       groupKey: (box) => rowGroupKey(box.game, this.mode),
       spec,
-      maxBookcases: this.slots.length,
+      maxBookcases: this.capacity,
       minBookcases: this.minBookcases,
     });
-    if (plan.leftover.length) console.warn(`[shelving] ${plan.leftover.length} game(s) do not fit in the room`);
 
     plan.bookcases.forEach((planned, i) => {
       const slot = this.slots[i];
@@ -155,7 +183,7 @@ export class Shelving {
       );
       this.shelves.push(shelf);
       // Its spot hangs from the ceiling `SPOT_THROW` m in front of the bookcase, looking back at it (local -z).
-      this.placedLamps.push(this.host.place(this.lampFor(i), slot.position.clone().addScaledVector(slot.facing, SPOT_THROW).setY(this.ceiling), slot.rotationY));
+      if (this.lamps) this.placedLamps.push(this.host.place(this.lampFor(i), slot.position.clone().addScaledVector(slot.facing, SPOT_THROW).setY(this.ceiling), slot.rotationY));
       planned.rows.forEach((row, r) => {
         shelf.placeRow(r, row.items);
         for (const box of row.items) {
@@ -177,6 +205,9 @@ export class Shelving {
     const added = this.ordered.filter((b) => !previouslyShown.has(b));
     const removed = [...previouslyShown].filter((b) => !shown.has(b));
     this.host.boxesChanged(added, removed);
+    // Last, once this shelving is consistent: whoever shows the overflow rebuilds on this.
+    const leftover = new Set(plan.leftover);
+    this.overflow.set(games.filter((_, i) => leftover.has(boxes[i]!)));
   }
 
   /**

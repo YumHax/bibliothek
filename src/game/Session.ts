@@ -5,10 +5,13 @@ import { getPlatform } from '@/catalog/platforms';
 import { randomStartSeconds } from '@/video/randomStart';
 import type { GameBox } from '@/world/GameBox';
 import type { Seat } from '@/world/Seat';
+import type { PaymentLike, SeatLike, UpgradeOfferLike } from './SessionActions';
 import type { VideoScreen } from '@/world/screen';
-import { PLAY_COST, TICKETS_PER_COIN, ticketsFor } from '@/economy/pricing';
-import type { ArcadeCabinetLike, ForSaleLike, SessionActions } from './SessionActions';
+import { PLAY_COST, playIsFree, ticketsFor } from '@/economy/pricing';
+import { getPrize } from '@/economy/Prizes';
+import type { ArcadeMachineLike, ArcadeResult, ForSaleLike, SessionActions } from './SessionActions';
 import type { ModalLike, SessionParts } from './SessionParts';
+import { MarketCounter } from './MarketCounter';
 import type { SortMode } from '@/world/shelving/sort';
 import { distanceTo, faceBox, standInFrontOf } from './playerPose';
 
@@ -49,17 +52,27 @@ export class Session implements SessionActions {
   private activeModal: ModalLike | null = null;
   /** The screen last asked to play; only one plays at a time so two longplays never talk over each other. */
   private activeScreen: VideoScreen | null = null;
-  /** The cabinet the player stands at, from the coin going in until they walk away. */
-  private arcade: ArcadeCabinetLike | null = null;
+  /** The arcade machine the player stands at, from the coin going in until they walk away. */
+  private arcade: ArcadeMachineLike | null = null;
+  /** When the play at `arcade` started (ms), for the balance table. */
+  private arcadeStarted = 0;
+  /** Machines whose controls the HUD has spelled out once (after that, the card on the machine does). */
+  private readonly arcadeHinted = new Set<string>();
+  /** The flea market's rules for the copy in hand (buy, haggle, hold, swap, hand back). */
+  private readonly counter: MarketCounter;
+  /** The seat last sat in through `sit()`; only meaningful while the player is seated. */
+  private seat: SeatLike | null = null;
 
   constructor(private readonly parts: SessionParts) {
+    this.counter = new MarketCounter({ parts, notify: (text, ms) => this.notify(text, ms), showModal: (modal) => this.showModalHolding(modal) });
     const { interactor, inspector, player, search, collectionEditor, catalogue, travelMenu } = parts;
     interactor.ignore = (item) => item === inspector.current; // the carried box must not block the ray
     interactor.events.onHoverChange = (item) => this.onHover(item);
     interactor.events.onSelect = (item) => item.activate(this);
     inspector.events.onLookEnabledChange = (enabled) => (player.controls.enabled = enabled);
     player.controls.addEventListener('unlock', () => {
-      if (inspector.isActive) this.putBack();
+      // A haggle or a swap panel takes the mouse with the copy still in hand.
+      if (inspector.isActive && !this.holdingThroughModal()) this.putBack();
       this.stand();
       // Esc under pointer lock is eaten by the browser and unlocks instead: treat it as "close search / stay here".
       search?.close();
@@ -82,11 +95,15 @@ export class Session implements SessionActions {
       };
       travelMenu.events.onCancel = () => this.setFrozen(false);
     }
-    for (const modal of [collectionEditor, catalogue]) if (modal) modal.onOpenChange = (open) => this.syncModal(modal, open);
+    for (const modal of [collectionEditor, catalogue, parts.prizeCounter, parts.sellDesk, parts.haggle, parts.trade, parts.arcadeScreen]) if (modal) modal.onOpenChange = (open) => this.syncModal(modal, open);
   }
 
   get held(): GameBox | null {
     return this.parts.inspector.current;
+  }
+
+  get seatedIn(): SeatLike | null {
+    return this.parts.player.isSeated && !this.arcade ? this.seat : null;
   }
 
   get seated(): boolean {
@@ -120,6 +137,7 @@ export class Session implements SessionActions {
       }
       if (this.modalOpen || !player.isLocked) return; // the search bar reads its own keys
       if (this.parts.travelMenu?.isOpen) return; // the menu reads its digits itself
+      if (this.parts.sleep?.isAsleep) return; // nothing to do in the dark but wait for morning
 
       // At a cabinet every key is the game's, except E to walk away and, on the end card, fire to replay.
       if (this.arcade) {
@@ -127,6 +145,9 @@ export class Session implements SessionActions {
         else if (!this.arcade.isPlaying && (code === 'Space' || code === 'Enter' || code === 'NumpadEnter')) this.playArcade(this.arcade);
         return;
       }
+
+      // A market copy in hand (or one just bought): B, H, R, X, U are the stall's keys.
+      if (this.counter.onKey(code)) return;
 
       switch (code) {
         case 'Slash':
@@ -185,6 +206,7 @@ export class Session implements SessionActions {
   // --- SessionActions ---------------------------------------------------------------------------
 
   pickUp(box: GameBox): void {
+    this.counter.end(true);
     this.parts.highlighter?.clear();
     this.focus = null;
     this.parts.inspector.inspect(box);
@@ -192,14 +214,17 @@ export class Session implements SessionActions {
   }
 
   putBack(): void {
+    this.counter.end(true);
     this.parts.inspector.release();
     this.parts.panel.hide();
   }
 
-  sit(seat: Seat): void {
+  sit(seat: SeatLike): void {
     const { position, yaw } = seat.eyePose();
     this.parts.player.sit(position, yaw);
-    this.parts.cat?.setPlayerSeat?.(seat);
+    this.seat = seat;
+    // The cat only knows the armchairs (it comes to the lap there); in bed the player is simply not in one.
+    this.parts.cat?.setPlayerSeat?.(isArmchair(seat) ? seat : null);
     this.hint('Move or press E to stand up');
   }
 
@@ -211,6 +236,22 @@ export class Session implements SessionActions {
     if (!this.parts.player.isSeated) return;
     this.parts.player.stand();
     this.parts.cat?.setPlayerSeat?.(null);
+  }
+
+  /** In bed: put down what is in hand, fade to black, wake at 7:00 still lying there. */
+  sleep(): void {
+    const { sleep } = this.parts;
+    if (!sleep) {
+      this.hint('Not sleepy');
+      return;
+    }
+    if (sleep.isAsleep) return;
+    this.putBack();
+    this.setFrozen(true);
+    void sleep.untilMorning().then(() => {
+      this.setFrozen(false);
+      this.notify('Good morning!\nMove or press E to get up', 3000);
+    });
   }
 
   async playOn(screen: VideoScreen, box: GameBox): Promise<void> {
@@ -242,9 +283,15 @@ export class Session implements SessionActions {
 
   // --- Going out: the front door, the arcade, the market -----------------------------------------
 
-  /** A travel door was clicked: put everything down and offer the destinations (digits pick, Esc stays). */
-  travel(): void {
+  /** A travel door was clicked: put everything down and go to `to` (the street's doors), or offer the destinations (digits pick, Esc stays). */
+  travel(to?: string): void {
     const { travel, travelMenu } = this.parts;
+    if (to && travel) {
+      this.putBack();
+      this.stand();
+      void travel.go(to);
+      return;
+    }
     if (!travel || !travelMenu) {
       this.notify('The door is locked');
       return;
@@ -258,20 +305,20 @@ export class Session implements SessionActions {
   }
 
   /**
-   * A cabinet was clicked: pay a coin and stand at the controls; at the one being played, walk away
-   * mid-game or, once its end card shows, pay again and go straight into another play.
+   * An arcade machine was clicked: pay a coin and stand at the controls; at the one being played,
+   * walk away mid-game or, once its end card shows, pay again and go straight into another play.
    */
-  playArcade(cabinet: ArcadeCabinetLike): void {
-    const replay = this.arcade === cabinet;
-    if (replay && cabinet.isPlaying) {
+  playArcade(machine: ArcadeMachineLike): void {
+    const replay = this.arcade === machine;
+    if (replay && machine.isPlaying) {
       this.leaveArcade();
       return;
     }
     if (this.arcade && !replay) return;
     const { wallet, player } = this.parts;
     if (!wallet) return;
-    // Broke, and not even a coin's worth of tickets: the house stands the play, so the loop never dead-ends.
-    const onTheHouse = wallet.coins === 0 && wallet.tickets < TICKETS_PER_COIN;
+    // Broke, and not even a coin's worth of tickets: the house stands a ticket machine's play, so the loop never dead-ends.
+    const onTheHouse = machine.freeWhenBroke && playIsFree(wallet);
     if (onTheHouse) this.notify('Out of coins? This play is on the house. Win some tickets!', 3000);
     else if (!wallet.spend(PLAY_COST)) {
       this.notify(`Insert coin: a play costs ${PLAY_COST} coin${PLAY_COST > 1 ? 's' : ''} and you have ${wallet.coins}.\nSell tickets at the prize counter, or come back richer.`, 3500);
@@ -280,64 +327,158 @@ export class Session implements SessionActions {
     if (!replay) {
       this.putBack();
       this.stand();
-      const { position, yaw } = cabinet.eyePose();
+      const { position, yaw } = machine.eyePose();
       player.sit(position, yaw); // parks the camera and freezes walking, like an armchair
-      player.lookAt(cabinet.screenCentre());
-      this.arcade = cabinet;
+      player.lookAt(machine.screenCentre());
+      this.arcade = machine;
     }
-    cabinet.start((score) => this.onArcadeOver(cabinet, score));
-    this.hint(`${cabinet.game.hint} · E to walk away`);
+    this.arcadeStarted = performance.now();
+    machine.start((result) => this.onArcadeOver(machine, result));
+    const first = !this.arcadeHinted.has(machine.game.id);
+    this.arcadeHinted.add(machine.game.id);
+    this.hint(first ? `${machine.game.hint} · E to walk away` : 'E to walk away');
   }
 
-  redeemTickets(): void {
-    const { wallet } = this.parts;
-    if (!wallet) return;
-    if (wallet.tickets < TICKETS_PER_COIN) {
-      this.notify(wallet.tickets ? `Only ${wallet.tickets} ticket${wallet.tickets > 1 ? 's' : ''}: ${TICKETS_PER_COIN} make a coin` : 'No tickets to exchange. Play a cabinet!');
-      return;
-    }
-    const before = wallet.tickets;
-    const coins = wallet.redeemTickets(TICKETS_PER_COIN);
-    this.notify(`${before - wallet.tickets} tickets exchanged for ${coins} coin${coins > 1 ? 's' : ''}`);
+  openPrizeCounter(): void {
+    const { prizeCounter } = this.parts;
+    if (!prizeCounter) return;
+    this.putBack();
+    if (!prizeCounter.isOpen) this.toggleModal(prizeCounter);
   }
 
-  buy(item: ForSaleLike): void {
-    const { wallet, collection } = this.parts;
-    if (!wallet || !collection) return;
-    const { game, price } = item.item;
-    if (collection.has(game.id)) {
-      this.notify(`You already own ${game.title}`);
+  collectChange(): void {
+    const { arcadeDaily, wallet } = this.parts;
+    if (!arcadeDaily || !wallet) return;
+    if (!arcadeDaily.changeMachineWorks) {
+      this.hint('OUT OF ORDER. Tickets turn into coins at the prize counter.');
       return;
     }
-    if (!wallet.spend(price)) {
-      this.notify(`${game.title} costs ${price} coins and you have ${wallet.coins}`);
+    const coins = arcadeDaily.claimChange();
+    if (!coins) {
+      this.hint('It works today, for once. It has nothing left in it, though.');
       return;
     }
-    collection.add({ ...game, status: 'owned', addedAt: new Date().toISOString() });
-    item.sold();
-    this.notify(`Bought ${game.title} for ${price} coin${price > 1 ? 's' : ''}. It is on your shelves at home.`, 3000);
+    wallet.earnCoins(coins);
+    this.notify(`The change machine coughs up ${coins} coin${coins > 1 ? 's' : ''}. Lucky day.`, 3000);
+  }
+
+  /**
+   * A market copy was clicked: hand it over for a closer look (turn it, open it: a missing manual
+   * shows), with its price and state in the panel. Buying takes a second, deliberate key (B), so a
+   * stray click never spends anything. Clicking one while holding another puts the held one back.
+   */
+  inspectForSale(item: ForSaleLike): void {
+    if (this.parts.inspector.isActive) {
+      this.putBack();
+      return;
+    }
+    if (!this.counter.mayHandle(item)) return;
+    this.pickUp(item.box);
+    this.counter.begin(item);
   }
 
   openCatalogue(): void {
-    const { catalogue } = this.parts;
-    if (!catalogue) return;
-    this.putBack();
-    if (!catalogue.isOpen) this.toggleModal(catalogue);
+    this.openModal(this.parts.catalogue);
   }
 
-  private onArcadeOver(cabinet: ArcadeCabinetLike, score: number): void {
-    const { wallet, scores } = this.parts;
-    const tickets = ticketsFor(score);
-    wallet?.addTickets(tickets);
-    const best = scores?.submit(cabinet.game.id, score) ?? false;
-    this.notify(`${score} points: ${tickets} ticket${tickets === 1 ? '' : 's'} in your pocket${best ? ' — new best!' : ''}\nSpace or click plays again, E walks away`, 5000);
+  openSellDesk(): void {
+    this.openModal(this.parts.sellDesk);
+  }
+
+  openPanel(panel: ModalLike): void {
+    panel.onOpenChange ??= (open) => this.syncModal(panel, open);
+    this.openModal(panel);
+  }
+
+  /** A market panel (haggle, swap) over the copy in hand: the box stays in hand while the mouse is released. */
+  private showModalHolding(modal: ModalLike): void {
+    if (!modal.isOpen) this.toggleModal(modal);
+  }
+
+  /** True while the open panel is one that works on the copy in hand. */
+  private holdingThroughModal(): boolean {
+    const modal = this.activeModal;
+    return !!modal && (modal === this.parts.haggle || modal === this.parts.trade);
+  }
+
+  private openModal(modal: ModalLike | undefined): void {
+    if (!modal) return;
+    this.putBack();
+    if (!modal.isOpen) this.toggleModal(modal);
+  }
+
+  buyUpgrade(offer: UpgradeOfferLike): void {
+    const { wallet } = this.parts;
+    if (!wallet) return;
+    if (!wallet.spend(offer.price)) {
+      this.notify(`${offer.title} costs ${offer.price} coins and you have ${wallet.coins}.\nWin some at the arcade.`, 3000);
+      return;
+    }
+    offer.bought();
+    this.notify(`${offer.title} bought for ${offer.price} coins`, 3000);
+  }
+
+  pay(payment: PaymentLike): void {
+    const { wallet } = this.parts;
+    if (!wallet) return;
+    if (!wallet.spend(payment.price)) {
+      this.notify(`Your pockets are empty: ${wallet.coins} coin${wallet.coins === 1 ? '' : 's'}.`, 2500);
+      return;
+    }
+    this.notify(payment.paid(), 3000);
+  }
+
+  /**
+   * A play ended: pay its tickets (or hand over its prize), today's challenge bonus if it met the
+   * target, any medal it earned, the streak's bonus on the day's first play; count it all in the
+   * weekly league, and announce a finished week (a won one brings the pennant home).
+   */
+  private onArcadeOver(machine: ArcadeMachineLike, result: ArcadeResult): void {
+    const { wallet, prizes, arcadeDaily, medals, league, payoutStats } = this.parts;
+    const lines: string[] = [];
+    if (result.prize) {
+      prizes?.add(result.prize);
+      lines.push(`You won the ${getPrize(result.prize)?.name ?? 'prize'}! It is on the prize shelf at home.`);
+    } else if (machine.freeWhenBroke) {
+      const tickets = ticketsFor(machine.game.id, result.score);
+      let paid = tickets;
+      lines.push(machine.luck ? `The wheel pays ${tickets} ticket${tickets === 1 ? '' : 's'}!` : `${result.score.toLocaleString('en-US')} points: ${tickets} ticket${tickets === 1 ? '' : 's'} in your pocket${result.best ? ' — new best!' : ''}`);
+      const challenge = arcadeDaily?.challenge();
+      if (challenge && !challenge.done && challenge.gameId === machine.game.id && result.score >= challenge.target && arcadeDaily?.claimChallenge()) {
+        paid += challenge.reward;
+        lines.push(`Daily challenge beaten: +${challenge.reward} tickets!`);
+      }
+      for (const medal of machine.luck ? [] : (medals?.award(machine.game.id, result.score) ?? [])) {
+        paid += medal.reward;
+        lines.push(`${medal.tier[0]!.toUpperCase()}${medal.tier.slice(1)} medal on ${machine.game.title}: +${medal.reward} tickets!`);
+      }
+      const streak = league?.record(paid);
+      if (streak?.bonus) {
+        paid += streak.bonus;
+        lines.push(`Day ${streak.days} in a row: +${streak.bonus} tickets!`);
+      }
+      wallet?.addTickets(paid);
+      payoutStats?.record(machine.game.id, result.score, tickets, (performance.now() - this.arcadeStarted) / 1000);
+      const week = league?.takeWeekResult();
+      if (week?.won) {
+        prizes?.add('pennant');
+        lines.push(`You won last week's league with ${week.tickets} tickets! The pennant is on the prize shelf at home.`);
+      } else if (week) {
+        lines.push(`Last week's league: you came ${ordinalOf(week.rank + 1)} with ${week.tickets} tickets.`);
+      }
+    } else {
+      lines.push('Nothing this time.');
+    }
+    // A score that makes the table goes to the initials screen first (the machine is still being played).
+    lines.push(machine.isPlaying ? 'Sign the hall of fame: up / down picks a letter, fire moves on' : 'Space or click plays again, E walks away');
+    this.notify(lines.join('\n'), 5000);
   }
 
   private leaveArcade(): void {
-    const cabinet = this.arcade;
-    if (!cabinet) return;
+    const machine = this.arcade;
+    if (!machine) return;
     this.arcade = null;
-    cabinet.abort();
+    machine.abort();
     this.parts.player.stand();
   }
 
@@ -528,4 +669,16 @@ export class Session implements SessionActions {
   private onHover(item: Interactable | null): void {
     this.parts.overlay.setHoverLabel(item?.label(this) ?? null, item?.labelPlacement?.() ?? 'crosshair');
   }
+}
+
+/** An armchair (a `Seat`: the cat knows its lap) rather than any other place to sit, such as the bed. */
+function isArmchair(seat: SeatLike): seat is Seat {
+  return typeof (seat as Partial<Seat>).lapSpot === 'function';
+}
+
+/** 1st, 2nd, 3rd, 4th… */
+function ordinalOf(n: number): string {
+  const tens = n % 100;
+  const suffix = tens >= 11 && tens <= 13 ? 'th' : (['th', 'st', 'nd', 'rd'][n % 10] ?? 'th');
+  return `${n}${suffix}`;
 }

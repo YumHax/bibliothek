@@ -10,7 +10,7 @@
   box-sizing: border-box;
   background: rgba(8, 8, 12, 0.86);
   backdrop-filter: blur(6px);
-  color: #ece9e2;
+  color: var(--ui-text);
   font-size: 0.92rem;
   overflow: hidden;
 }
@@ -21,14 +21,14 @@
   font: inherit;
   color: inherit;
   background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.18);
+  border: 1px solid var(--ui-border);
   border-radius: 6px;
   padding: 0.35rem 0.7rem;
 }
 .collection-editor button { cursor: pointer; }
 .collection-editor button:hover:not(:disabled) { background: rgba(255, 255, 255, 0.16); }
 .collection-editor button:disabled { opacity: 0.45; cursor: default; }
-.collection-editor select option { background: #15151d; }
+.collection-editor select option { background: var(--ui-panel-solid); }
 .collection-editor input:focus,
 .collection-editor select:focus { outline: 2px solid rgba(255, 255, 255, 0.35); outline-offset: 1px; }
 
@@ -66,9 +66,9 @@
   display: flex;
   flex-direction: column;
   min-height: 0;
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  border: 1px solid var(--ui-border);
   border-radius: 12px;
-  background: rgba(20, 20, 28, 0.85);
+  background: var(--ui-panel);
   padding: 1rem 1.25rem;
 }
 .collection-editor__pane h3 { margin: 0 0 0.75rem; font-size: 1rem; opacity: 0.85; }

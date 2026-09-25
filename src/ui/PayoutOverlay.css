@@ -1,0 +1,21 @@
+/* `?payout`: the arcade balance table, top right, above the canvas. */
+.payout-overlay {
+  position: fixed;
+  top: 0.75rem;
+  right: 0.75rem;
+  z-index: 2;
+  max-width: 22rem;
+  padding: 0.5rem 0.7rem;
+  border-radius: 8px;
+  background: rgba(10, 8, 16, 0.82);
+  color: #ece9e2;
+  font: 12px/1.35 ui-monospace, Menlo, monospace;
+  pointer-events: none;
+}
+.payout-overlay header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.3rem; }
+.payout-overlay button { pointer-events: auto; font: inherit; color: inherit; background: rgba(255, 255, 255, 0.1); border: 1px solid rgba(255, 255, 255, 0.25); border-radius: 4px; cursor: pointer; }
+.payout-overlay table { border-collapse: collapse; width: 100%; }
+.payout-overlay th, .payout-overlay td { padding: 0.1rem 0.35rem; text-align: right; }
+.payout-overlay th:first-child, .payout-overlay td:first-child { text-align: left; }
+.payout-overlay th { opacity: 0.6; font-weight: normal; }
+.payout-overlay p { margin: 0.35rem 0 0; opacity: 0.55; font-size: 11px; }

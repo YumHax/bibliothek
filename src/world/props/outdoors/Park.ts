@@ -4,6 +4,8 @@ import { CORNER, PARK_EDGE, PARK_FAR, PARK_FROM, PARK_TO, frontage, parkLine } f
 import { paintGroundBand } from './Street';
 import { paintBench, paintBin, paintLamp } from './StreetFurniture';
 import { CONIFER_STYLE, TREE_STYLES, type TreeForm, WILLOW_STYLE, paintTree } from './Tree';
+import { seasonalLawn } from './season';
+import { holidayParkItems } from './Holiday';
 import { groundEllipse, paintDucks, paintFlowerBed, paintFountain, paintLilyPads, paintPicnic, paintPlayground, paintRowingBoat } from './ParkFeatures';
 
 const LAWN_NEAR = '#5f8c45';
@@ -19,6 +21,8 @@ const SAND = '#c9bda0';
 
 /** The pond: an ellipse on the lawn, metres from the eye. */
 const POND = { x: -115, z: -25, rx: 40, rz: 26 };
+/** The fountain in the middle of the pond (`Life` animates its plume). */
+export const FOUNTAIN = { x: POND.x, z: POND.z };
 /** Gravel paths across the lawn, as polylines from the park gates (the walkers of `Life` follow them). */
 export const PATHS: [number, number][][] = [
   [[-PARK_EDGE, -10], [-70, -30], [-110, -72], [-160, -62], [-210, -20], [-PARK_FAR, 0]],
@@ -76,7 +80,7 @@ function paintPath(sheet: Sheet, line: [number, number][], width: number): void 
       p.moveTo(corners[0][0], corners[0][1]);
       for (const [x, y] of corners.slice(1)) p.lineTo(x, y);
       p.closePath();
-      sheet.begin(Math.hypot((x0 + x1) / 2, (z0 + z1) / 2));
+      sheet.begin(Math.hypot((x0 + x1) / 2, (z0 + z1) / 2), 0, { wet: 0.45, snow: 1 });
       sheet.path(p, fill);
     }
   }
@@ -173,7 +177,7 @@ function paintHedge(sheet: Sheet, random: Rng): void {
       }
       p.closePath();
       const d = frontage((a0 + a1) / 2);
-      sheet.begin(d);
+      sheet.begin(d, 0, { snow: 0.6 });
       // Clipped box: sunlit top fading into the shade under the leaves.
       const g = ctx.createLinearGradient(0, heightY(1.4, d), 0, heightY(0, d));
       g.addColorStop(0, HEDGE_TOP);
@@ -264,14 +268,14 @@ export function paintPark(sheet: Sheet, random: Rng): void {
   const edges = [PARK_EDGE, 31, 36, 43, 52, 64, 80, 100, 125, 155, 195, PARK_FAR];
   for (let i = 0; i < edges.length - 1; i++) {
     // Each band shades from its near colour into its far one, so the lawn has no seams.
-    const near = mixHex(LAWN_NEAR, LAWN_FAR, i / (edges.length - 1));
-    const far = mixHex(LAWN_NEAR, LAWN_FAR, (i + 1) / (edges.length - 1));
+    const near = seasonalLawn(mixHex(LAWN_NEAR, LAWN_FAR, i / (edges.length - 1)));
+    const far = seasonalLawn(mixHex(LAWN_NEAR, LAWN_FAR, (i + 1) / (edges.length - 1)));
     paintGroundBand(sheet, (a) => parkLine(a, edges[i + 1]), (a) => parkLine(a, edges[i]), (a) => {
       const g = sheet.color.createLinearGradient(0, heightY(0, parkLine(a, edges[i + 1])), 0, heightY(0, parkLine(a, edges[i])));
       g.addColorStop(0, far);
       g.addColorStop(1, near);
       return g;
-    }, PARK_FROM, PARK_TO);
+    }, PARK_FROM, PARK_TO, 0, { wet: 0.1, snow: 1 });
   }
   paintGrass(sheet, random);
   for (const path of PATHS) paintPath(sheet, path, 3);
@@ -322,6 +326,7 @@ export function paintPark(sheet: Sheet, random: Rng): void {
       if (i % 3 === 0) add(bx + dir[0] * 1.6, bz + dir[1] * 1.6, () => paintBin(sheet, bx + dir[0] * 1.6, bz + dir[1] * 1.6));
     }
   });
+  for (const [x, z, draw] of holidayParkItems(sheet)) add(x, z, draw);
   items.sort((p, q) => q.d - p.d);
   for (const item of items) item.draw();
 

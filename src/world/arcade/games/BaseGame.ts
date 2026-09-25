@@ -1,4 +1,6 @@
+import type { Sfx, SfxEvent } from '@/audio/ChipSpeaker';
 import { type ArcadeControls, type ArcadeGame, type RunContext, SCREEN_H, SCREEN_W, drawText } from './ArcadeGame';
+import { seededRandom } from '@/covers/generated/canvasUtils';
 import { Fx } from './Fx';
 
 /** The HUD strip across the top; the playfield starts at `PLAY_TOP`. */
@@ -40,9 +42,25 @@ export abstract class BaseGame implements ArcadeGame {
   private comboTimer = 0;
   private bestBeaten = false;
   private bestBanner = 0;
+  private sounds: SfxEvent[] = [];
+  private rng: () => number = Math.random;
 
   /** `timeLimit` in seconds, or null for a play that only ends by the game's own rules. */
   protected constructor(private readonly timeLimit: number | null) {}
+
+  takeSounds(): SfxEvent[] {
+    const sounds = this.sounds;
+    this.sounds = [];
+    return sounds;
+  }
+
+  abstract autopilot(skill: number): ArcadeControls;
+
+  /** Queues a sound for the cabinet's speaker; the same sound twice in a frame plays once. */
+  protected sound(sfx: Sfx, pitch = 1): void {
+    if (this.sounds.some((s) => s.sfx === sfx)) return;
+    if (this.sounds.length < 6) this.sounds.push({ sfx, pitch });
+  }
 
   reset(run: RunContext): void {
     this.score = 0;
@@ -58,8 +76,11 @@ export abstract class BaseGame implements ArcadeGame {
     this.endReason = '';
     this.bestBeaten = false;
     this.bestBanner = 0;
+    this.sounds = [];
+    this.rng = seededRandom(run.seed ?? Math.floor(Math.random() * 0x100000000));
     this.fx.clear();
     this.begin();
+    this.sound('ready');
   }
 
   update(dt: number, controls: ArcadeControls): void {
@@ -67,7 +88,9 @@ export abstract class BaseGame implements ArcadeGame {
     this.fx.update(dt);
     this.bestBanner = Math.max(0, this.bestBanner - dt);
     if (this.intro > 0) {
+      const wasReady = this.intro >= INTRO_SECONDS * 0.35;
       this.intro -= dt;
+      if (wasReady && this.intro < INTRO_SECONDS * 0.35) this.sound('go');
       return;
     }
     if (this.outro > 0) {
@@ -100,6 +123,15 @@ export abstract class BaseGame implements ArcadeGame {
     if (this.outro > 0 || this.over) this.drawOutro(ctx);
   }
 
+  /**
+   * The run's random numbers, seeded by `reset`: every draw that shapes the board (a spawn, a
+   * serve, a pick) goes through it, never `Math.random`, so a play replays exactly from its seed
+   * and inputs. Autopilots and screen shake may use `Math.random`: they never change the board.
+   */
+  protected rand(): number {
+    return this.rng();
+  }
+
   /** Whether the rules are running (not in the countdown or the end card). */
   protected get live(): boolean {
     return this.intro <= 0 && this.outro <= 0 && !this.over;
@@ -114,10 +146,12 @@ export abstract class BaseGame implements ArcadeGame {
     const gained = points * this.combo;
     this.score += gained;
     if (x !== undefined && y !== undefined) this.fx.pop(`+${gained}`, x, y, color ?? COMBO_COLORS[this.combo] ?? '#fff2a8', this.combo >= 3 ? 10 : 8);
+    this.sound('score', 1 + (this.combo - 1) * 0.12);
     if (!this.bestBeaten && this.best > 0 && this.score > this.best) {
       this.bestBeaten = true;
       this.bestBanner = BEST_BANNER_SECONDS;
       this.fx.flash('#7ee787', 0.12);
+      this.sound('best');
     }
     return gained;
   }
@@ -130,6 +164,7 @@ export abstract class BaseGame implements ArcadeGame {
     this.combo = combo;
     this.fx.pop(`${caption} +${points}`, x, y, '#ffe066', 10);
     this.fx.flash('#ffe066', 0.1);
+    this.sound('bonus');
   }
 
   /** One more step on the multiplier, kept for `hold` seconds since the last step. */
@@ -140,7 +175,10 @@ export abstract class BaseGame implements ArcadeGame {
   }
 
   protected breakCombo(): void {
-    if (this.combo > 1) this.fx.pop('COMBO LOST', SCREEN_W / 2, PLAY_TOP + 30, '#ff8a80', 8);
+    if (this.combo > 1) {
+      this.fx.pop('COMBO LOST', SCREEN_W / 2, PLAY_TOP + 30, '#ff8a80', 8);
+      this.sound('lose');
+    }
     this.combo = 1;
     this.comboTimer = 0;
   }
@@ -150,6 +188,7 @@ export abstract class BaseGame implements ArcadeGame {
     if (!Number.isFinite(this.timeLeft)) return;
     this.timeLeft = Math.max(0, this.timeLeft + seconds);
     this.fx.pop(`${seconds > 0 ? '+' : ''}${seconds}s`, x, y, seconds > 0 ? '#7ee787' : '#ff8a80', 10);
+    this.sound(seconds > 0 ? 'time' : 'penalty');
   }
 
   /** The stage the game is at (WALL 3, WAVE 2, LEVEL 4...), dim at the top of the playfield. */
@@ -163,6 +202,12 @@ export abstract class BaseGame implements ArcadeGame {
     this.outro = OUTRO_SECONDS;
     this.endReason = reason;
     this.fx.shake(2, 0.2);
+    this.sound('over');
+  }
+
+  /** Whether the READY / GO countdown is still on (an autopilot waits it out). */
+  protected get counting(): boolean {
+    return this.intro > 0;
   }
 
   private get tickets(): number {
