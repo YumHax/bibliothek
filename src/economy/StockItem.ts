@@ -6,9 +6,9 @@ import type { BoxCondition, Edition, Game } from '@/catalog/types';
  * player sold at the WE BUY desk, the bargain bin (flat price, worn), a copy the player ordered at
  * the counter, one a stallholder kept aside for a loyal customer, a famous game from an estate
  * sale, or a first print of a game the player owns in an ordinary printing (an upgrade: buying it
- * swaps their copy for it).
+ * swaps their copy for it), or a grail (`grails.ts`: a rarity on its day, at a price of its own).
  */
-export type StockSource = 'stall' | 'showpiece' | 'wanted' | 'consigned' | 'bin' | 'ordered' | 'keptAside' | 'estate' | 'upgrade';
+export type StockSource = 'stall' | 'showpiece' | 'wanted' | 'consigned' | 'bin' | 'ordered' | 'keptAside' | 'estate' | 'upgrade' | 'grail';
 
 /** What a copy is, beyond its game and condition. */
 export interface StockTraits {
@@ -17,6 +17,8 @@ export interface StockTraits {
   repro?: boolean;
   /** A well-known game hiding in the bargain bin. */
   gem?: boolean;
+  /** On sale (a stall's clearance): the list price is already this share of the usual one. */
+  sale?: number;
 }
 
 /**
@@ -31,6 +33,8 @@ export class StockItem {
   readonly edition: Edition;
   readonly repro: boolean;
   readonly gem: boolean;
+  /** The share of the usual price a sale asks (1: not on sale). */
+  readonly sale: number;
   private listPrice: number;
   private isPriced: boolean;
   private factor = 1;
@@ -54,6 +58,7 @@ export class StockItem {
     this.edition = traits.edition ?? 'standard';
     this.repro = traits.repro ?? false;
     this.gem = traits.gem ?? false;
+    this.sale = traits.sale ?? 1;
     // A real copy, whatever the source entry was (a wishlist entry would draw as a ghost box).
     this.game = { ...game, condition, status: 'owned', edition: this.edition === 'standard' ? undefined : this.edition, repro: this.repro || undefined };
     this.listPrice = price.list;
@@ -80,6 +85,11 @@ export class StockItem {
   /** The price before any haggle. */
   get tagPrice(): number {
     return this.listPrice;
+  }
+
+  /** On sale: the price it would have been (struck through on the tag), else undefined. */
+  get beforeSale(): number | undefined {
+    return this.sale < 1 ? Math.round(this.listPrice / this.sale) : undefined;
   }
 
   get priced(): boolean {

@@ -1,17 +1,15 @@
 import * as THREE from 'three';
-import type { Updatable } from '@/core/Engine';
-import type { Input } from '@/core/Input';
-import type { Interactable, LabelPlacement } from '@/interaction/Interactable';
-import type { ArcadeMachineLike, ArcadeResult, SessionActions } from '@/game/SessionActions';
+import type { ArcadeResult } from '@/game/SessionActions';
 import { ChipSpeaker } from '@/audio/ChipSpeaker';
 import { createCanvas, toTexture } from '@/covers/generated/canvasUtils';
-import type { Furniture } from '../Furniture';
-import { boxMesh, cylinderMesh, invisibleHitbox } from '../meshUtils';
-import { matte } from '../props/Prop';
-import { type ArcadeControls, drawText } from './games/ArcadeGame';
-import { InitialsEntry, ordinal } from './InitialsEntry';
+import { boxMesh, cylinderMesh, eyePoseAt, invisibleHitbox } from '../meshUtils';
+import { markShared, matte } from '../props/Prop';
+import { type ArcadeControls, NO_CONTROLS, drawText } from './games/ArcadeGame';
+import { ordinal } from './InitialsEntry';
 import { TicketStrip } from './TicketStrip';
-import { TAKEN_LINE, type Occupant, type Station, type StationEvents } from './Station';
+import { TicketMachine, type TicketMachineWiring } from './TicketMachine';
+import type { MachineRunOptions } from './MachineRun';
+import { CHROME, type MachineDisplay, displayScreen, outOfOrderNote, paintMarquee } from './machineParts';
 import type { ScoreTable } from './scoreTable';
 
 export interface AlleyRollerOptions {
@@ -21,15 +19,9 @@ export interface AlleyRollerOptions {
   title?: string;
 }
 
-export interface AlleyWiring {
-  input: Input;
-  scores: ScoreTable;
-  nextPlayCost: () => number;
-  pointsPerTicket: number;
-  listener: THREE.Object3D;
-}
+/** The alley keeps a table: its backboard shows the top score. */
+export type AlleyWiring = TicketMachineWiring & { scores: ScoreTable };
 
-type AlleyState = 'attract' | 'playing' | 'initials' | 'over' | 'demo';
 type BallPhase = 'aim' | 'roll' | 'fly' | 'sink' | 'back';
 
 const WIDTH = 0.8;
@@ -68,41 +60,30 @@ const POWER_PERIOD = 1.1;
 const STAND_Z = 1.45;
 /** Where a regular's feet go: close enough to reach the ball in hand, bending over the lane's end. */
 const PERSON_Z = 1.3;
-const COUNT_UP_SECONDS = 1.2;
-const REGULAR_PAUSE = 3;
 
-const LEFT_KEYS = ['KeyA', 'ArrowLeft'];
-const RIGHT_KEYS = ['KeyD', 'ArrowRight'];
-const UP_KEYS = ['KeyW', 'ArrowUp'];
-const DOWN_KEYS = ['KeyS', 'ArrowDown'];
-const FIRE_KEYS = ['Space', 'Enter', 'NumpadEnter'];
-
-const WOOD = matte(0xb7874f, 0.55);
-const BLACK = matte(0x131318, 0.6);
-const CHROME = new THREE.MeshStandardMaterial({ color: 0xc4c7cc, metalness: 0.75, roughness: 0.25 });
-const BALL_MAT = matte(0xf2e6c8, 0.35);
+const WOOD = markShared(matte(0xb7874f, 0.55));
+const BLACK = markShared(matte(0x131318, 0.6));
+const BALL_MAT = markShared(matte(0xf2e6c8, 0.35));
 
 /**
  * The ticket alley every funfair has: roll a wooden ball up an inclined lane, over the hump and
  * into the rings (10 to 50, 100 in the corner pockets). Nine balls a play. A / D move the ball in
  * hand across the lane; hold Space and the power meter on the backboard swings up and down, let
- * go to roll at that strength (too soft and it rolls back: nothing). Paid for like a cabinet
- * (`playArcade`), pays tickets from a slot at the front, asks for initials on the backboard for a
- * score that makes the table; a regular can take it (`occupy`). Origin on the floor under the
- * middle of the lane; +z is the player's end. Collides.
+ * go to roll at that strength (too soft and it rolls back: nothing). A `TicketMachine`: paid for
+ * like a cabinet (`playArcade`), pays tickets from a slot at the front, asks for initials on the
+ * backboard for a score that makes the table; a regular can take it (`occupy`). Origin on the
+ * floor under the middle of the lane; +z is the player's end. Collides.
  */
-export class AlleyRoller extends THREE.Group implements Furniture, Interactable, Updatable, ArcadeMachineLike, Station {
+export class AlleyRoller extends TicketMachine {
   readonly hitboxes: THREE.Object3D[];
   readonly standAt = new THREE.Vector3(0, 0, PERSON_Z);
   readonly lean = 0.35;
   readonly focus = new THREE.Vector3(0, 1.15, -0.8);
-  readonly stationEvents: StationEvents = {};
-  readonly freeWhenBroke = true;
   readonly game: { readonly id: string; readonly title: string; readonly hint: string };
+  protected readonly speaker: ChipSpeaker;
+  protected readonly strip: TicketStrip;
 
-  private readonly wiring: AlleyWiring;
-  private state: AlleyState = 'attract';
-  private who: Occupant = null;
+  private readonly scores: ScoreTable;
   private phase: BallPhase = 'aim';
   private phaseClock = 0;
   private aimU = 0;
@@ -110,36 +91,26 @@ export class AlleyRoller extends THREE.Group implements Furniture, Interactable,
   private chargeClock = 0;
   private power = 0;
   private ballsLeft = BALLS;
-  private score = 0;
+  private points = 0;
   private lastPoints: number | null = null;
   private flightFrom = new THREE.Vector3();
   private flightTo = new THREE.Vector3();
   private landing: { u: number; v: number; points: number } = { u: 0, v: 0, points: 0 };
   private rollSeconds = 1;
-  private overClock = 0;
-  private demoPause = 0;
   private demoTarget = { u: 0, power: 0.4, holdFor: 0.5 };
   private demoClock = 0;
-  private entry: InitialsEntry | null = null;
-  private last: ArcadeResult = { score: 0, best: false };
-  private lastRank: number | null = null;
-  private onOver: ((result: ArcadeResult) => void) | null = null;
-  private lastFire = false;
-  private clock = 0;
   private readonly ball: THREE.Mesh;
   private readonly trough: THREE.Mesh[] = [];
-  private readonly display: { canvas: HTMLCanvasElement; ctx: CanvasRenderingContext2D; texture: THREE.CanvasTexture };
+  private readonly display: MachineDisplay;
   private readonly marquee: THREE.MeshBasicMaterial;
-  private readonly strip: TicketStrip;
-  private readonly speaker: ChipSpeaker;
   private readonly title: string;
   private readonly hands: [THREE.Vector3, THREE.Vector3] = [new THREE.Vector3(), new THREE.Vector3()];
   private displayClock = 0;
 
   constructor(options: AlleyRollerOptions, wiring: AlleyWiring) {
-    super();
+    super(wiring);
     this.name = 'AlleyRoller';
-    this.wiring = wiring;
+    this.scores = wiring.scores;
     this.title = options.title ?? 'ALLEY ROLL';
     this.game = { id: 'alley', title: this.title, hint: 'A / D aim · hold Space, let go at the power you want' };
     const paint = matte(options.color ?? 0xb8202a, 0.5);
@@ -177,17 +148,18 @@ export class AlleyRoller extends THREE.Group implements Furniture, Interactable,
     this.add(boxMesh(BOARD_W, BOARD_BACK.y - 0.2, 0.04, BLACK, { y: (BOARD_BACK.y - 0.2) / 2 + 0.2, z: BOARD_BACK.z - 0.03 }));
     // The backboard: marquee, the score display, and a mesh screen in front of the rings.
     this.add(boxMesh(WIDTH, BACK_H - BOARD_BACK.y, 0.06, paint, { y: BOARD_BACK.y + (BACK_H - BOARD_BACK.y) / 2, z: BACK_Z }));
-    this.marquee = new THREE.MeshBasicMaterial({ map: paintMarquee(this.title), toneMapped: false, color: 0xdddddd });
+    const marqueeMap = paintMarquee(this.title, { height: 128, stops: ['#ffd23a', '#ff7a33'], ink: '#3a0f10', size: 52, textY: 70, decorate: notches });
+    this.marquee = new THREE.MeshBasicMaterial({ map: marqueeMap, toneMapped: false, color: 0xdddddd });
     const marquee = new THREE.Mesh(new THREE.PlaneGeometry(WIDTH - 0.06, 0.2), this.marquee);
     marquee.position.set(0, BACK_H - 0.14, BACK_Z + 0.032);
     this.add(marquee);
-    const [canvas, ctx] = createCanvas(320, 200);
-    const texture = new THREE.CanvasTexture(canvas);
-    texture.colorSpace = THREE.SRGBColorSpace;
-    this.display = { canvas, ctx, texture };
-    const screen = new THREE.Mesh(new THREE.PlaneGeometry(0.56, 0.35), new THREE.MeshBasicMaterial({ map: texture, toneMapped: false }));
+    this.display = displayScreen([320, 200], [0.56, 0.35]);
+    const screen = this.display.mesh;
     screen.position.set(0, BACK_H - 0.47, BACK_Z + 0.032);
     this.add(screen);
+    this.note = outOfOrderNote();
+    this.note.position.set(0.02, -0.02, 0.004);
+    screen.add(this.note);
     // The net over the rings starts above the ball's flight, so the player sees the board under it.
     const NET_Y = 1.45;
     const net = new THREE.Mesh(new THREE.PlaneGeometry(WIDTH - 0.2, BACK_H - NET_Y), new THREE.MeshBasicMaterial({ map: paintNet(), transparent: true, depthWrite: false, side: THREE.DoubleSide }));
@@ -225,57 +197,6 @@ export class AlleyRoller extends THREE.Group implements Furniture, Interactable,
     return new THREE.Box3(new THREE.Vector3(-WIDTH / 2, 0, BACK_Z - 0.03), new THREE.Vector3(WIDTH / 2, BACK_H, LANE_NEAR.z + 0.18));
   }
 
-  get isPlaying(): boolean {
-    return this.state === 'playing' || this.state === 'initials';
-  }
-
-  get occupant(): Occupant {
-    return this.who;
-  }
-
-  start(onOver: (result: ArcadeResult) => void): void {
-    this.onOver = onOver;
-    this.state = 'playing';
-    this.newGame();
-    this.speaker.level = 1;
-    this.speaker.play('coin');
-    this.strip.tear();
-    this.lastFire = true;
-    if (this.who !== 'player') {
-      this.who = 'player';
-      this.stationEvents.onPlayerStart?.();
-    }
-  }
-
-  abort(): void {
-    if (this.state === 'initials' && this.entry) this.sign(this.entry.value);
-    this.onOver = null;
-    this.entry = null;
-    this.state = 'attract';
-    this.who = null;
-    this.strip.tear();
-    this.ballsLeft = BALLS;
-    this.resetBall();
-    this.stationEvents.onPlayerLeave?.();
-  }
-
-  occupy(): boolean {
-    if (this.who) return false;
-    this.who = 'regular';
-    this.state = 'demo';
-    this.speaker.level = 0.45;
-    this.newGame();
-    return true;
-  }
-
-  release(): void {
-    if (this.who !== 'regular') return;
-    this.who = null;
-    this.state = 'attract';
-    this.ballsLeft = BALLS;
-    this.resetBall();
-  }
-
   /** The left hand on the rail, the right on the ball in hand while aiming (else resting on the lane's end). */
   handsAt(): readonly [THREE.Vector3, THREE.Vector3] {
     this.localToWorld(this.hands[0].set(-(WIDTH / 2 - 0.1), LANE_NEAR.y + 0.13, LANE_NEAR.z + 0.04));
@@ -285,77 +206,31 @@ export class AlleyRoller extends THREE.Group implements Furniture, Interactable,
   }
 
   eyePose(): { position: THREE.Vector3; yaw: number } {
-    const position = this.localToWorld(new THREE.Vector3(0, 1.5, STAND_Z - 0.05));
-    const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(this.getWorldQuaternion(new THREE.Quaternion()));
-    return { position, yaw: Math.atan2(-forward.x, -forward.z) };
-  }
-
-  screenCentre(): THREE.Vector3 {
-    return this.localToWorld(this.focus.clone());
+    return eyePoseAt(this, new THREE.Vector3(0, 1.5, STAND_Z - 0.05));
   }
 
   setHovered(hovered: boolean): void {
     this.marquee.color.setHex(hovered ? 0xffffff : 0xdddddd);
   }
 
-  label(): string {
-    if (this.who === 'regular') return TAKEN_LINE;
-    if (this.state === 'playing') return 'Press E or click to walk away (the play is lost)';
-    if (this.state === 'initials') return 'Sign the hall of fame · E to walk away';
-    if (this.state === 'over') return `Space or click to play again (${this.priceText()}) · E to walk away`;
-    return `${this.title} — click to insert a coin (${this.priceText()}, nine balls)`;
+  protected get score(): number {
+    return this.points;
   }
 
-  labelPlacement(): LabelPlacement {
-    return this.state === 'attract' || this.who === 'regular' ? 'crosshair' : 'edge';
+  protected attractLabel(price: string): string {
+    return `${this.title} — click to insert a coin (${price}, nine balls)`;
   }
 
-  activate(session: SessionActions): void {
-    if (this.who === 'regular') session.hint(TAKEN_LINE);
-    else session.playArcade(this);
+  /** The Space (or click) that started the play counts only once it has been let go. */
+  protected runOptions(): Pick<MachineRunOptions, 'fireAfterRelease'> {
+    return { fireAfterRelease: true };
   }
 
-  update(dt: number): void {
-    this.clock += dt;
-    this.speaker.follow();
-    this.strip.update(dt);
-    switch (this.state) {
-      case 'playing':
-        this.play(dt, this.readControls());
-        if (this.ballsLeft === 0 && this.phase === 'aim') this.finish();
-        break;
-      case 'demo':
-        if (this.ballsLeft === 0 && this.phase === 'aim') {
-          if (this.demoPause === 0) this.stationEvents.onRegularResult?.(this.score);
-          this.demoPause += dt;
-          if (this.demoPause > REGULAR_PAUSE) {
-            this.demoPause = 0;
-            this.speaker.play('coin');
-            this.newGame();
-          }
-        } else this.play(dt, this.demoControls(dt));
-        break;
-      case 'initials': {
-        const sfx = this.entry?.update(dt, this.readControls());
-        if (sfx) this.speaker.play(sfx);
-        if (this.entry?.done) {
-          this.sign(this.entry.value);
-          this.entry = null;
-          this.state = 'over';
-          this.overClock = 0;
-        }
-        break;
-      }
-      case 'over': {
-        this.overClock += dt;
-        const tickets = Math.floor(this.last.score / this.wiring.pointsPerTicket);
-        const shown = Math.floor(tickets * Math.min(1, this.overClock / COUNT_UP_SECONDS));
-        this.strip.setTickets(shown);
-        break;
-      }
-      case 'attract':
-        break;
-    }
+  protected finished(result: ArcadeResult): void {
+    this.speaker.play(result.best ? 'best' : 'over');
+  }
+
+  protected paint(dt: number): void {
     this.displayClock += dt;
     if (this.state !== 'attract' || this.displayClock > 0.25) {
       this.displayClock = 0;
@@ -363,21 +238,23 @@ export class AlleyRoller extends THREE.Group implements Furniture, Interactable,
     }
   }
 
-  dispose(): void {
-    this.speaker.dispose();
-  }
-
   // --- The roll ---------------------------------------------------------------------------------
 
-  private newGame(): void {
-    this.score = 0;
+  protected newGame(): void {
+    this.points = 0;
     this.ballsLeft = BALLS;
     this.lastPoints = null;
     this.resetBall();
   }
 
-  /** One frame of the play: aim and power with the ball in hand, then the ball's roll, flight and sinking. */
-  private play(dt: number, controls: ArcadeControls): void {
+  /** One frame of the play; over once the last ball is back and none is in hand. */
+  protected play(dt: number, controls: ArcadeControls): boolean {
+    this.advance(dt, controls);
+    return this.ballsLeft === 0 && this.phase === 'aim';
+  }
+
+  /** Aim and power with the ball in hand, then the ball's roll, flight and sinking. */
+  private advance(dt: number, controls: ArcadeControls): void {
     this.phaseClock += dt;
     switch (this.phase) {
       case 'aim': {
@@ -437,7 +314,7 @@ export class AlleyRoller extends THREE.Group implements Furniture, Interactable,
         this.ball.position.y = this.flightTo.y - t * BALL_R * 2.2;
         if (t >= 1) {
           const points = this.landing.points;
-          this.score += points;
+          this.points += points;
           this.lastPoints = points;
           this.speaker.play(points >= POCKET_POINTS ? 'bonus' : points >= 40 ? 'score' : 'blip', 1 + points / 200);
           this.nextBall();
@@ -517,8 +394,8 @@ export class AlleyRoller extends THREE.Group implements Furniture, Interactable,
   }
 
   /** A regular: aims at the rings (or, feeling lucky, a pocket), holds for about the right power. */
-  private demoControls(dt: number): ArcadeControls {
-    const out: ArcadeControls = { left: false, right: false, up: false, down: false, fire: false, firePressed: false };
+  protected demoControls(dt: number): ArcadeControls {
+    const out: ArcadeControls = { ...NO_CONTROLS };
     if (this.phase !== 'aim') return out;
     if (!this.charging && this.phaseClock === 0) {
       const pocket = Math.random() < 0.2 ? POCKETS[Math.floor(Math.random() * 2)]! : null;
@@ -540,47 +417,6 @@ export class AlleyRoller extends THREE.Group implements Furniture, Interactable,
     return out;
   }
 
-  private finish(): void {
-    const { scores } = this.wiring;
-    const score = this.score;
-    this.last = { score, best: score > 0 && score > scores.bestOf(this.game.id) };
-    this.lastRank = null;
-    if (scores.qualifies(this.game.id, score)) {
-      const rank = Math.max(0, scores.table(this.game.id).findIndex((e) => score > e.score));
-      this.entry = new InitialsEntry(scores.initials, rank, score);
-      this.state = 'initials';
-    } else {
-      this.sign(scores.initials);
-      this.state = 'over';
-      this.overClock = 0;
-    }
-    this.speaker.play(this.last.best ? 'best' : 'over');
-    const handler = this.onOver;
-    this.onOver = null;
-    handler?.(this.last);
-    this.stationEvents.onPlayerResult?.(this.last);
-  }
-
-  private sign(initials: string): void {
-    this.lastRank = this.wiring.scores.submit(this.game.id, this.last.score, initials).rank;
-  }
-
-  /** The keys; the Space (or click) that started the play counts only once it has been let go. */
-  private readControls(): ArcadeControls {
-    const { input } = this.wiring;
-    let fire = input.isDown(...FIRE_KEYS);
-    if (this.lastFire) {
-      if (!fire) this.lastFire = false;
-      fire = false;
-    }
-    return { left: input.isDown(...LEFT_KEYS), right: input.isDown(...RIGHT_KEYS), up: input.isDown(...UP_KEYS), down: input.isDown(...DOWN_KEYS), fire, firePressed: false };
-  }
-
-  private priceText(): string {
-    const cost = this.wiring.nextPlayCost();
-    return cost === 0 ? 'free play' : `${cost} coin${cost > 1 ? 's' : ''}`;
-  }
-
   /** The backboard's display: the score and balls left, the power meter while charging, the initials or the end card. */
   private paintDisplay(): void {
     const { ctx, canvas, texture } = this.display;
@@ -598,7 +434,7 @@ export class AlleyRoller extends THREE.Group implements Furniture, Interactable,
     }
     const blink = Math.floor(this.clock * 3) % 2 === 0;
     if (this.state === 'attract') {
-      const top = this.wiring.scores.topOf(this.game.id);
+      const top = this.scores.topOf(this.game.id);
       drawText(ctx, this.title, W / 2, 40, 22, '#ffe680');
       drawText(ctx, `HI ${top.name} ${top.score}`, W / 2, 80, 14, top.you ? '#7ee787' : '#c9c4ff');
       drawText(ctx, `9 BALLS · ${this.wiring.pointsPerTicket} PTS = 1 TICKET`, W / 2, 112, 10, '#9a96c0');
@@ -607,8 +443,7 @@ export class AlleyRoller extends THREE.Group implements Furniture, Interactable,
       return;
     }
     if (this.state === 'over') {
-      const tickets = Math.floor(this.last.score / this.wiring.pointsPerTicket);
-      const shown = Math.floor(tickets * Math.min(1, this.overClock / COUNT_UP_SECONDS));
+      const shown = Math.floor(this.ticketsOf(this.last.score) * this.countUp);
       drawText(ctx, `SCORE ${this.last.score}`, W / 2, 36, 18, '#fff2a8');
       drawText(ctx, `${shown} TICKETS`, W / 2, 80, 24, '#ffd23a');
       const note = this.lastRank !== null ? `${ordinal(this.lastRank + 1)} ON THE BOARD!` : this.last.best ? 'NEW BEST!' : '';
@@ -617,7 +452,7 @@ export class AlleyRoller extends THREE.Group implements Furniture, Interactable,
       texture.needsUpdate = true;
       return;
     }
-    drawText(ctx, `${this.score}`, W / 2, 50, 40, '#ff8a3a');
+    drawText(ctx, `${this.points}`, W / 2, 50, 40, '#ff8a3a');
     drawText(ctx, `BALLS ${this.ballsLeft}`, 20, 100, 12, '#c9c4ff', 'left');
     if (this.lastPoints !== null && this.phase === 'aim') drawText(ctx, this.lastPoints > 0 ? `+${this.lastPoints}` : 'MISS', W - 20, 100, 14, this.lastPoints >= 100 ? '#ffd23a' : this.lastPoints > 0 ? '#7ee787' : '#ff8a80', 'right');
     // The power meter.
@@ -680,17 +515,10 @@ function paintBoard(): THREE.Texture {
   return toTexture(canvas, 4);
 }
 
-function paintMarquee(title: string): THREE.Texture {
-  const [canvas, ctx] = createCanvas(512, 128);
-  const g = ctx.createLinearGradient(0, 0, 512, 0);
-  g.addColorStop(0, '#ffd23a');
-  g.addColorStop(1, '#ff7a33');
-  ctx.fillStyle = g;
-  ctx.fillRect(0, 0, 512, 128);
+/** The marquee's top edge: dark notches, like a fairground booth's. */
+function notches(ctx: CanvasRenderingContext2D, width: number): void {
   ctx.fillStyle = 'rgba(0,0,0,0.25)';
-  for (let x = 0; x < 512; x += 32) ctx.fillRect(x, 0, 16, 10);
-  drawText(ctx, title, 256, 70, 52, '#3a0f10');
-  return toTexture(canvas, 4);
+  for (let x = 0; x < width; x += 32) ctx.fillRect(x, 0, 16, 10);
 }
 
 /** A see-through wire mesh in front of the rings (it keeps the balls in). */
@@ -707,8 +535,7 @@ function paintNet(): THREE.Texture {
     ctx.lineTo(i, 256);
     ctx.stroke();
   }
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.colorSpace = THREE.SRGBColorSpace;
+  const texture = toTexture(canvas);
   texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
   texture.repeat.set(2, 3);
   return texture;

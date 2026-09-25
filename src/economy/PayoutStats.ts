@@ -1,4 +1,6 @@
-export const PAYOUT_STATS_KEY = 'bibliothek.payoutStats.v1';
+import { KEYS, PersistedStore, safeStorage } from '@/persistence';
+
+export const PAYOUT_STATS_KEY = KEYS.payoutStats;
 
 /** What the player's plays on one machine added up to. */
 export interface MachineStats {
@@ -25,19 +27,18 @@ export interface PayoutRow extends MachineStats {
 export class PayoutStats {
   private state: Record<string, MachineStats>;
   private readonly listeners = new Set<() => void>();
+  private readonly store: PersistedStore<Record<string, MachineStats>>;
 
-  constructor(private readonly storage: Storage | null = safeLocalStorage()) {
-    this.state = this.load();
+  constructor(storage: Storage | null = safeStorage()) {
+    // Version 1: totals per machine id.
+    this.store = new PersistedStore<Record<string, MachineStats>>({ key: PAYOUT_STATS_KEY, version: 1, storage, defaults: () => ({}), read: readStats });
+    this.state = this.store.load();
   }
 
   record(gameId: string, score: number, tickets: number, seconds: number): void {
     const s = this.state[gameId] ?? { plays: 0, score: 0, tickets: 0, seconds: 0 };
     this.state = { ...this.state, [gameId]: { plays: s.plays + 1, score: s.score + score, tickets: s.tickets + tickets, seconds: s.seconds + Math.max(0, seconds) } };
-    try {
-      this.storage?.setItem(PAYOUT_STATS_KEY, JSON.stringify(this.state));
-    } catch {
-      /* stats are a convenience */
-    }
+    this.store.save(this.state);
     for (const cb of this.listeners) cb();
   }
 
@@ -56,11 +57,7 @@ export class PayoutStats {
 
   clear(): void {
     this.state = {};
-    try {
-      this.storage?.removeItem(PAYOUT_STATS_KEY);
-    } catch {
-      /* ignore */
-    }
+    this.store.remove();
     for (const cb of this.listeners) cb();
   }
 
@@ -68,26 +65,17 @@ export class PayoutStats {
     this.listeners.add(cb);
     return () => this.listeners.delete(cb);
   }
-
-  private load(): Record<string, MachineStats> {
-    try {
-      const parsed = JSON.parse(this.storage?.getItem(PAYOUT_STATS_KEY) ?? 'null') as Record<string, Partial<MachineStats>> | null;
-      const out: Record<string, MachineStats> = {};
-      if (!parsed || typeof parsed !== 'object') return out;
-      for (const [id, s] of Object.entries(parsed)) {
-        if (typeof s?.plays === 'number') out[id] = { plays: s.plays, score: s.score ?? 0, tickets: s.tickets ?? 0, seconds: s.seconds ?? 0 };
-      }
-      return out;
-    } catch {
-      return {};
-    }
-  }
 }
 
-function safeLocalStorage(): Storage | null {
-  try {
-    return typeof localStorage === 'undefined' ? null : localStorage;
-  } catch {
-    return null;
+function readStats(data: unknown): Record<string, MachineStats> | null {
+  if (typeof data !== 'object' || data === null) return null;
+  const out: Record<string, MachineStats> = {};
+  for (const [id, s] of Object.entries(data as Record<string, Partial<MachineStats> | null>)) {
+    if (typeof s?.plays === 'number') out[id] = { plays: s.plays, score: num(s.score), tickets: num(s.tickets), seconds: num(s.seconds) };
   }
+  return out;
+}
+
+function num(value: unknown): number {
+  return typeof value === 'number' && Number.isFinite(value) ? value : 0;
 }

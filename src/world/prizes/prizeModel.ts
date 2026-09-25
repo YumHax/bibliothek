@@ -142,7 +142,7 @@ export function prizeModel(kind: PrizeKind, color: number): THREE.Group {
       const gold = new THREE.MeshStandardMaterial({ color, metalness: 0.9, roughness: 0.25 });
       g.add(boxMesh(0.07, 0.03, 0.07, DARK, { y: 0.015 }));
       const plate = new THREE.Mesh(new THREE.PlaneGeometry(0.05, 0.016), new THREE.MeshBasicMaterial({ map: plateTexture() }));
-      plate.position.set(0, 0.015, 0.0355);
+      plate.position.set(0, 0.015, 0.0365);
       g.add(plate, cylinderMesh(0.008, 0.06, gold, { y: 0.06 }, { segments: 10 }));
       g.add(cylinderMesh(0.035, 0.07, gold, { y: 0.125 }, { radiusBottom: 0.012, segments: 16 }));
       for (const sx of [-1, 1]) {

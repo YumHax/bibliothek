@@ -1,68 +1,54 @@
-/* The market's mail-order catalogue: a full-screen modal like the collection editor. */
+/* The market's mail-order catalogue: a full-screen modal like the collection editor (`.ui-modal--sheet`). */
 .catalogue {
-  position: fixed;
-  inset: 0;
-  z-index: 3;
-  display: flex;
-  flex-direction: column;
   gap: 0.75rem;
   padding: 1.5rem clamp(1rem, 6vw, 6rem);
-  box-sizing: border-box;
-  background: rgba(12, 10, 8, 0.9);
-  backdrop-filter: blur(6px);
-  color: #ece9e2;
-  font-size: 0.92rem;
-  overflow: hidden;
 }
-.catalogue button,
+/* Buttons are `.ui-btn`; the fields get the same surface. */
 .catalogue select,
 .catalogue input {
   font: inherit;
   color: inherit;
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  border-radius: 6px;
+  background: var(--ui-fill);
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius-sm);
   padding: 0.35rem 0.7rem;
 }
-.catalogue button { cursor: pointer; }
-.catalogue button:hover:not(:disabled) { background: rgba(255, 255, 255, 0.16); }
-.catalogue button:disabled { opacity: 0.45; cursor: default; }
-.catalogue select option { background: #15151d; }
-.catalogue input:focus,
-.catalogue select:focus { outline: 2px solid rgba(255, 255, 255, 0.35); outline-offset: 1px; }
+.catalogue .ui-btn { padding: 0.35rem 0.7rem; }
+.catalogue select option { background: var(--ui-panel-solid); }
+.catalogue input:focus-visible,
+.catalogue select:focus-visible { outline: 2px solid var(--ui-accent); outline-offset: 1px; }
 
 .catalogue__header { display: flex; align-items: baseline; gap: 1rem; flex-wrap: wrap; }
-.catalogue__header h2 { margin: 0; font-size: 1.5rem; letter-spacing: 0.06em; }
-.catalogue__wallet { opacity: 0.7; }
+.catalogue__header h2 { margin: 0; font-family: var(--ui-font-display); font-weight: 400; font-size: 1.5rem; letter-spacing: 0.06em; }
+.catalogue__wallet { color: var(--ui-text-dim); }
 .catalogue__actions { margin-left: auto; }
-.catalogue__blurb { margin: 0; opacity: 0.65; font-size: 0.85rem; }
+.catalogue__blurb { margin: 0; color: var(--ui-text-dim); font-size: 0.85rem; }
 .catalogue__search { display: flex; gap: 0.5rem; }
 .catalogue__search input { flex: 1; min-width: 0; }
 .catalogue__status { min-height: 1.2em; font-size: 0.85rem; opacity: 0.8; }
-.catalogue__status--error { color: #ff8a80; opacity: 1; }
+.catalogue__status--error { color: var(--ui-danger); opacity: 1; }
 .catalogue__scroll {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 12px;
-  background: rgba(20, 20, 28, 0.85);
   padding: 0.5rem 0.75rem;
 }
-.catalogue__row { display: flex; align-items: center; gap: 0.6rem; padding: 0.35rem 0.4rem; border-radius: 6px; }
-.catalogue__row:hover { background: rgba(255, 255, 255, 0.05); }
+.catalogue__row { display: flex; align-items: center; gap: 0.6rem; padding: 0.35rem 0.4rem; border-radius: var(--ui-radius-sm); }
+.catalogue__row:hover,
+.catalogue__row:focus-within { background: var(--ui-fill); }
 .catalogue__title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .catalogue__meta { font-size: 0.78rem; opacity: 0.55; white-space: nowrap; }
 .catalogue__price--pending { opacity: 0.55; }
+.catalogue__was { opacity: 0.6; font-size: 0.85em; }
 .catalogue__price { display: inline-flex; align-items: center; gap: 0.3rem; min-width: 3.5rem; justify-content: flex-end; font-variant-numeric: tabular-nums; }
 .catalogue__coin {
   display: inline-block;
   width: 0.8em;
   height: 0.8em;
   border-radius: 50%;
-  background: radial-gradient(circle at 35% 35%, #ffe7a0, #d4a52a 60%, #9a731a);
+  background: radial-gradient(circle at 35% 35%, #ffe7a0, var(--ui-accent) 60%, #9a731a);
 }
-.catalogue__row button { padding: 0.2rem 0.55rem; font-size: 0.82rem; min-width: 4.5rem; }
+.catalogue__row .ui-btn { padding: 0.2rem 0.55rem; font-size: 0.82rem; min-width: 4.5rem; }
 .catalogue__empty { opacity: 0.55; font-style: italic; padding: 0.5rem 0.4rem; }
 .catalogue__cover {
   width: 2.2rem;
@@ -70,16 +56,16 @@
   object-fit: contain;
   flex: none;
   border-radius: 3px;
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--ui-fill);
 }
 .catalogue__cover--missing { visibility: hidden; }
 /* A button asking to be clicked again to confirm (a used copy ordered). */
-.catalogue .sell__armed { background: rgba(200, 68, 58, 0.45); border-color: rgba(255, 138, 128, 0.6); }
+.catalogue .sell__armed { background: rgba(200, 68, 58, 0.45); border-color: var(--ui-danger); }
 .catalogue__stall {
   font-size: 0.75rem;
   white-space: nowrap;
   padding: 0.1rem 0.45rem;
   border-radius: 999px;
-  background: rgba(212, 165, 42, 0.18);
-  color: #f1d48a;
+  background: var(--ui-accent-soft);
+  color: var(--ui-accent);
 }

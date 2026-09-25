@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { markShared } from '../props/Prop';
 import { createCanvas } from '@/covers/generated/canvasUtils';
 
 /** How bright the pool is at level 1 (additive, so small numbers go a long way on a dark carpet). */
@@ -45,7 +46,7 @@ function radialTexture(): THREE.CanvasTexture {
   g.addColorStop(1, 'rgba(255,255,255,0)');
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, 128, 128);
-  texture = new THREE.CanvasTexture(canvas);
+  texture = markShared(new THREE.CanvasTexture(canvas));
   texture.colorSpace = THREE.SRGBColorSpace;
   return texture;
 }

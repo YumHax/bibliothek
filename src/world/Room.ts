@@ -10,6 +10,8 @@ import { tiledFloorMaterial, type FloorTiles } from './TiledFloor';
 import { edgeOcclusion, floorWearMap, wallMaterial } from './materials/surfaces';
 import { glossyFloor } from './materials/GlossyFloor';
 import { scuffed } from './materials/finishes';
+import type { DrawnAware } from './zone/Zone';
+import type { ZoneId } from './zoneIds';
 
 /** Walls as seen from the default spawn: back = -z (shelves), front = +z, left = -x (TV), right = +x. */
 export type Wall = 'front' | 'back' | 'left' | 'right';
@@ -35,7 +37,7 @@ export interface Doorway {
    */
   hinge?: 'left' | 'right';
   /** Id of the zone on the other side: the opening becomes a portal the view is culled through. */
-  to?: string;
+  to?: ZoneId;
 }
 
 export interface RoomOptions {
@@ -97,6 +99,8 @@ const WALL_COLLIDER = 0.05;
 const OPAQUE_OFFSET = 0.02;
 /** The ceiling lamp's shadow bias in metres (its `shadow.bias` is expressed in units of the shadow camera's `far`). */
 const LAMP_SHADOW_BIAS_M = 0.005;
+/** The ceiling lamp's range (`PointLight.distance`) in multiples of the room's farthest corner from it (see `buildLights`). */
+const LAMP_RANGE = 2.5;
 
 /**
  * Floor, ceiling, four walls and the base lighting rig.
@@ -107,7 +111,7 @@ const LAMP_SHADOW_BIAS_M = 0.005;
  * ambient (a scene-wide `HemisphereLight`, they would stack) only runs in the occupied room, and only
  * the occupied room's lamp re-renders its shadow map every frame; `main.ts` flips it on zone change.
  */
-export class Room extends THREE.Group implements Updatable, OccupancyAware {
+export class Room extends THREE.Group implements Updatable, OccupancyAware, DrawnAware {
   /** The shell: its floor is where contact shadows fall, not something standing on it. */
   readonly contactShadow = false;
   readonly options: RoomOptions;
@@ -122,6 +126,8 @@ export class Room extends THREE.Group implements Updatable, OccupancyAware {
   private lampOn = true;
   private skylightOpen = 1;
   private occupied = false;
+  /** Whether the zone's meshes are drawn: while they are hidden a refresh would render an empty map (see `setZoneDrawn`). */
+  private zoneDrawn = true;
   /** Starts at a random phase so several idle rooms do not all refresh their shadows on the same frame. */
   private shadowTimer = Math.random() * IDLE_SHADOW_INTERVAL;
 
@@ -165,9 +171,15 @@ export class Room extends THREE.Group implements Updatable, OccupancyAware {
     this.applyLighting();
   }
 
+  /** Culled from view: the idle refresh waits (the room is hidden, its map would come out empty, the walls with it), and runs at once when drawn again. */
+  setZoneDrawn(drawn: boolean): void {
+    this.zoneDrawn = drawn;
+    if (drawn) this.ceilingLamp.shadow.needsUpdate = true;
+  }
+
   /** Unoccupied: refresh the lamp's shadow map now and then instead of every frame. */
   update(dt: number): void {
-    if (this.occupied) return;
+    if (this.occupied || !this.zoneDrawn) return;
     this.shadowTimer += dt;
     if (this.shadowTimer < IDLE_SHADOW_INTERVAL) return;
     this.shadowTimer = 0;
@@ -346,10 +358,11 @@ export class Room extends THREE.Group implements Updatable, OccupancyAware {
         this.add(boxMesh(across ? seg.length : trimD, trimH, across ? trimD : seg.length, trimMat, { y, ...at(seg.centre) }));
       }
     };
+    // The side runs stop at the back and front runs: overlapping in the corners, their tops would z-fight.
     trim('back', width, (x) => ({ x, z: -depth / 2 + trimD / 2 }));
     trim('front', width, (x) => ({ x, z: depth / 2 - trimD / 2 }));
-    trim('left', depth, (z) => ({ x: -width / 2 + trimD / 2, z }));
-    trim('right', depth, (z) => ({ x: width / 2 - trimD / 2, z }));
+    trim('left', depth - 2 * trimD, (z) => ({ x: -width / 2 + trimD / 2, z }));
+    trim('right', depth - 2 * trimD, (z) => ({ x: width / 2 - trimD / 2, z }));
 
     // Crown moulding where the walls meet the ceiling: a finished room, not a box.
     if (finish.moulding === false) return;
@@ -359,8 +372,9 @@ export class Room extends THREE.Group implements Updatable, OccupancyAware {
     this.add(
       boxMesh(width, cove, cove, coveMat, { y: cy, z: -depth / 2 + cove / 2 }),
       boxMesh(width, cove, cove, coveMat, { y: cy, z: depth / 2 - cove / 2 }),
-      boxMesh(cove, cove, depth, coveMat, { x: -width / 2 + cove / 2, y: cy }),
-      boxMesh(cove, cove, depth, coveMat, { x: width / 2 - cove / 2, y: cy }),
+      // Like the baseboard, the side runs stop at the others instead of overlapping them in the corners.
+      boxMesh(cove, cove, depth - 2 * cove, coveMat, { x: -width / 2 + cove / 2, y: cy }),
+      boxMesh(cove, cove, depth - 2 * cove, coveMat, { x: width / 2 - cove / 2, y: cy }),
     );
   }
 
@@ -369,15 +383,22 @@ export class Room extends THREE.Group implements Updatable, OccupancyAware {
     this.hemisphere = new THREE.HemisphereLight(DAY_SKY, FLOOR_BOUNCE[this.options.finish?.floor ?? 'parquet'], 0.95);
     this.add(this.hemisphere);
 
-    const ceilingLamp = new THREE.PointLight(0xffe9c9, this.lampIntensity, 0, 2);
+    // Farthest point of the room from the lamp (a floor corner).
+    const reach = Math.hypot(width / 2, depth / 2, height - 0.2);
+    // A finite range: beyond `distance` a fragment skips this light, cube-shadow lookup included (with
+    // distance 0 every fragment of the flat paid for it). three's window is (1 - (d/distance)^4)^2:
+    // at LAMP_RANGE x reach it costs the farthest corner under 5 % and the rest of the room nothing visible.
+    const range = LAMP_RANGE * reach;
+    const ceilingLamp = new THREE.PointLight(0xffe9c9, this.lampIntensity, range, 2);
     ceilingLamp.position.set(0, height - 0.2, 0);
     ceilingLamp.castShadow = true;
     ceilingLamp.shadow.mapSize.setScalar(QUALITY.shadowMapSize);
     // Point-light shadow depth is linear over [near, far]; the default far of 500 m makes any bias
-    // huge (-0.002 was about 1 m, so low objects cast nothing). Bound it to the room (its farthest
-    // floor corner, with room to spare through an open door): beyond `far` the light is dark, and
-    // the shadow pass only renders what is within it, so a lamp never renders the whole flat.
-    const far = 1.5 * Math.hypot(width / 2, depth / 2, height - 0.2);
+    // huge (-0.002 was about 1 m, so low objects cast nothing). Bound it to the lamp's range: three
+    // leaves a fragment beyond `far` unshadowed (it would shine through the walls), and the range
+    // ends the light there; the shadow pass only renders what is within it (the zone's own layer and
+    // the shells), so a lamp never renders the whole flat.
+    const far = range;
     ceilingLamp.shadow.camera.far = far;
     ceilingLamp.shadow.camera.updateProjectionMatrix();
     ceilingLamp.shadow.bias = -LAMP_SHADOW_BIAS_M / far;

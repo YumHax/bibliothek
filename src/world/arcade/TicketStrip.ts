@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { createCanvas } from '@/covers/generated/canvasUtils';
 import { boxMesh } from '../meshUtils';
-import { matte } from '../props/Prop';
+import { markShared, matte } from '../props/Prop';
 import { drawText } from './games/ArcadeGame';
 
 /** One ticket's length along the strip, metres. */
@@ -23,7 +23,7 @@ function art(): THREE.CanvasTexture {
   drawText(ctx, 'TICKET', 32, 20, 10, '#8a3a10');
   ctx.fillStyle = 'rgba(80,30,0,0.8)';
   for (let x = 0; x < 64; x += 4) ctx.fillRect(x, 0, 2, 1.5);
-  ticketArt = new THREE.CanvasTexture(canvas);
+  ticketArt = markShared(new THREE.CanvasTexture(canvas));
   ticketArt.colorSpace = THREE.SRGBColorSpace;
   ticketArt.wrapT = THREE.RepeatWrapping;
   return ticketArt;

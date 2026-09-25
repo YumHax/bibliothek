@@ -1,11 +1,14 @@
-import type { Game, PlatformId } from '@/catalog/types';
+import type { BoxCondition, Edition, Game, PlatformId } from '@/catalog/types';
+import { PLATFORMS } from '@/catalog/platforms';
+import { canonicalGameId } from '@/catalog';
+import { readGame } from '@/catalog/validate';
+import { KEYS, PersistedStore, safeStorage } from '@/persistence';
+import { CARD_MEMORY_DAYS, CONSIGNMENT_DAYS } from './pricing';
+import type { StockSource } from './StockItem';
 
-export const LEDGER_STORAGE_KEY = 'bibliothek.market.v1';
+export const LEDGER_STORAGE_KEY = KEYS.market;
 
-/** A game sold at the WE BUY desk goes on its platform's stall the next day, and stays this many days. */
-export const CONSIGNMENT_DAYS = 3;
-/** Notice-board cards dealt with are remembered this many market days (longer than any card stays up). */
-const CARD_MEMORY_DAYS = 7;
+export { CONSIGNMENT_DAYS } from './pricing';
 
 /** A second-hand copy ordered at the mail-order counter: on its stall from `day`, deposit paid, the price agreed. */
 export interface MarketOrder {
@@ -14,6 +17,24 @@ export interface MarketOrder {
   day: number;
   deposit: number;
   price: number;
+}
+
+/** The copy a hold is on, as it was on the stall: the day's stock puts it back whatever the draw gives. */
+export interface HeldCopy {
+  game: Game;
+  condition: BoxCondition;
+  source: StockSource;
+  /** Its list price (before any haggle) when the hold was paid. */
+  list: number;
+  edition?: Edition;
+  repro?: boolean;
+  gem?: boolean;
+}
+
+/** A hold: the deposit paid, and the copy (absent for holds saved before copies were kept). */
+export interface Hold {
+  deposit: number;
+  copy?: HeldCopy;
 }
 
 /** What the market remembers of one market day; forgotten when the next one starts. */
@@ -25,8 +46,8 @@ interface Today {
   mood: Partial<Record<PlatformId, number>>;
   /** Copies other shoppers bought, gone from the stalls for the day. */
   rivalSold: string[];
-  /** Copies held for the player: the deposit paid per game id. */
-  holds: Record<string, number>;
+  /** Copies held for the player, per game id. */
+  holds: Record<string, Hold>;
   /** Reproductions the player found out while still on the stall. */
   caught: string[];
   /** A coffee was had. */
@@ -53,12 +74,22 @@ interface LedgerFile {
  */
 export class MarketLedger {
   private state: LedgerFile;
+  private readonly store: PersistedStore<LedgerFile>;
 
   constructor(
-    private readonly storage: Storage | null = safeLocalStorage(),
-    private readonly key = LEDGER_STORAGE_KEY,
+    storage: Storage | null = safeStorage(),
+    key: string = LEDGER_STORAGE_KEY,
   ) {
-    this.state = this.load() ?? { today: emptyDay(0), consigned: [], orders: [], cards: {} };
+    // Version 2: a hold keeps its copy. Version 1 held deposits only (and its first form only the day's haggles, at the top level).
+    this.store = new PersistedStore<LedgerFile>({
+      key,
+      version: 2,
+      storage,
+      defaults: () => ({ today: emptyDay(0), consigned: [], orders: [], cards: {} }),
+      read: readLedger,
+      migrate: { 1: fromVersion1 },
+    });
+    this.state = this.store.load();
   }
 
   /** The factor agreed on `id` today, or undefined when not haggled yet. */
@@ -90,11 +121,17 @@ export class MarketLedger {
 
   /** The deposit on a copy held for the player today, or undefined. */
   holdOf(day: number, id: string): number | undefined {
-    return this.on(day)?.holds[id];
+    return this.on(day)?.holds[id]?.deposit;
   }
 
-  hold(day: number, id: string, deposit: number): void {
-    this.edit(day, (t) => ({ ...t, holds: { ...t.holds, [id]: deposit } }));
+  /** The copies held today whose copy is known (every hold paid since copies were kept). */
+  heldCopies(day: number): (HeldCopy & { deposit: number })[] {
+    return Object.values(this.on(day)?.holds ?? {}).flatMap((h) => (h.copy ? [{ ...h.copy, deposit: h.deposit }] : []));
+  }
+
+  /** A deposit was paid on `id` today; `copy` is the copy as it stands on the stall (so the day's stock can always put it back). */
+  hold(day: number, id: string, deposit: number, copy?: HeldCopy): void {
+    this.edit(day, (t) => ({ ...t, holds: { ...t.holds, [id]: copy ? { deposit, copy } : { deposit } } }));
   }
 
   /** The copy was bought (or handed back): its hold is spent. */
@@ -178,25 +215,7 @@ export class MarketLedger {
   }
 
   private save(): void {
-    try {
-      this.storage?.setItem(this.key, JSON.stringify(this.state));
-    } catch (err) {
-      console.warn('[market] could not persist the ledger', err);
-    }
-  }
-
-  private load(): LedgerFile | null {
-    const text = this.storage?.getItem(this.key);
-    if (!text) return null;
-    try {
-      const file = JSON.parse(text) as Partial<LedgerFile> & { day?: number; haggles?: Record<string, number> };
-      if (!Array.isArray(file.consigned)) return null;
-      // v1 kept only the day's haggles, at the top level.
-      const today = file.today ?? { ...emptyDay(file.day ?? 0), haggles: file.haggles ?? {} };
-      return { today: { ...emptyDay(today.day), ...today }, consigned: file.consigned, orders: Array.isArray(file.orders) ? file.orders : [], cards: file.cards ?? {} };
-    } catch {
-      return null;
-    }
+    this.store.save(this.state);
   }
 }
 
@@ -204,10 +223,69 @@ function emptyDay(day: number): Today {
   return { day, haggles: {}, mood: {}, rivalSold: [], holds: {}, caught: [], coffee: false, lot: false };
 }
 
-function safeLocalStorage(): Storage | null {
-  try {
-    return typeof localStorage === 'undefined' ? null : localStorage;
-  } catch {
-    return null;
-  }
+/** Version 1 -> 2: a hold was its deposit; the first form of the file kept only the day's haggles at the top level. */
+function fromVersion1(data: unknown): unknown {
+  if (typeof data !== 'object' || data === null) return data;
+  const file = data as { today?: unknown; day?: unknown; haggles?: unknown };
+  const today = (typeof file.today === 'object' && file.today !== null ? file.today : { day: file.day, haggles: file.haggles }) as { holds?: unknown };
+  const holds = Object.fromEntries(Object.entries(record(today.holds)).map(([id, deposit]) => [id, { deposit }]));
+  return { ...data, today: { ...today, holds } };
+}
+
+/** The ledger as saved, every part checked (what cannot be read is dropped part by part), old seed ids mapped. */
+function readLedger(data: unknown): LedgerFile | null {
+  if (typeof data !== 'object' || data === null) return null;
+  const file = data as Partial<Record<keyof LedgerFile, unknown>>;
+  const t = record(file.today);
+  const id = canonicalGameId;
+  const today: Today = {
+    day: typeof t.day === 'number' ? t.day : 0,
+    haggles: Object.fromEntries(Object.entries(record(t.haggles)).filter(([, f]) => typeof f === 'number').map(([k, f]) => [id(k), f as number])),
+    mood: Object.fromEntries(Object.entries(record(t.mood)).filter(([p, n]) => p in PLATFORMS && typeof n === 'number')),
+    rivalSold: strings(t.rivalSold).map(id),
+    holds: Object.fromEntries(Object.entries(record(t.holds)).flatMap(([k, h]) => {
+      const hold = readHold(h);
+      return hold ? [[id(k), hold]] : [];
+    })),
+    caught: strings(t.caught).map(id),
+    coffee: t.coffee === true,
+    lot: t.lot === true,
+  };
+  const consigned = (Array.isArray(file.consigned) ? file.consigned : []).flatMap((c: { game?: unknown; day?: unknown }) => {
+    const game = readGame(c?.game);
+    return game && typeof c.day === 'number' ? [{ game, day: c.day }] : [];
+  });
+  const orders = (Array.isArray(file.orders) ? file.orders : []).flatMap((o: Partial<Record<keyof MarketOrder, unknown>>) => {
+    const game = readGame(o?.game);
+    return game && typeof o.day === 'number' && typeof o.deposit === 'number' && typeof o.price === 'number'
+      ? [{ game, day: o.day, deposit: o.deposit, price: o.price }]
+      : [];
+  });
+  // A card id names its game last ("w:12:<game id>").
+  const cards = Object.fromEntries(Object.entries(record(file.cards)).filter(([, d]) => typeof d === 'number').map(([k, d]) => {
+    const [kind, day, ...game] = k.split(':');
+    return [game.length ? `${kind}:${day}:${id(game.join(':'))}` : k, d as number];
+  }));
+  return { today, consigned, orders, cards };
+}
+
+function readHold(value: unknown): Hold | null {
+  const h = record(value);
+  if (typeof h.deposit !== 'number') return null;
+  const c = record(h.copy);
+  const game = readGame(c.game);
+  if (!game || typeof c.list !== 'number' || typeof c.source !== 'string' || typeof c.condition !== 'string') return { deposit: h.deposit };
+  const copy: HeldCopy = { game, condition: c.condition as BoxCondition, source: c.source as StockSource, list: c.list };
+  if (typeof c.edition === 'string') copy.edition = c.edition as Edition;
+  if (c.repro === true) copy.repro = true;
+  if (c.gem === true) copy.gem = true;
+  return { deposit: h.deposit, copy };
+}
+
+function record(value: unknown): Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
+}
+
+function strings(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((v): v is string => typeof v === 'string') : [];
 }

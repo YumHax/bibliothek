@@ -1,6 +1,7 @@
 import './TouchControls.css';
 import type { Input } from '@/core/Input';
 import { SPRINT_CODE, type FirstPersonController } from '@/player/FirstPersonController';
+import { TOUCH_ACTIONS, primaryCode } from './actions';
 import type { SyntheticMouse } from './SyntheticMouse';
 import { isTouchDevice, watchForTouch } from './deviceDetect';
 
@@ -12,18 +13,10 @@ export interface TouchButton {
 }
 
 /**
- * Default action bar. Sitting has no key (tap the armchair); `KeyE` both puts a box back and
- * stands up, which is why it is labelled for both.
+ * Default action bar: the action table's `touch` entries (`input/actions`), in slot order. Sitting has
+ * no key (tap the armchair); `KeyE` both puts a box back and stands up, which is why it is labelled for both.
  */
-export const DEFAULT_TOUCH_BUTTONS: TouchButton[] = [
-  { label: 'Put back', code: 'KeyE', title: 'Put the game back / stand up' },
-  { label: 'Open', code: 'KeyO', title: 'Open the box' },
-  { label: 'Buy', code: 'KeyB', title: 'Buy the market copy in hand' },
-  { label: 'Haggle', code: 'KeyH', title: 'Make the stallholder an offer' },
-  { label: 'Search', code: 'Slash', title: 'Search the collection' },
-  { label: 'Games', code: 'Tab', title: 'Collection' },
-  { label: 'Menu', code: 'Escape', title: 'Back to the start screen' },
-];
+export const DEFAULT_TOUCH_BUTTONS: TouchButton[] = TOUCH_ACTIONS.map((button) => ({ ...button }));
 
 export interface TouchControlsOptions {
   buttons?: TouchButton[];
@@ -61,7 +54,7 @@ interface LookPointer {
   timer: number;
 }
 
-const MOVE = { up: 'KeyW', down: 'KeyS', left: 'KeyA', right: 'KeyD' } as const;
+const MOVE = { up: primaryCode('forward'), down: primaryCode('back'), left: primaryCode('left'), right: primaryCode('right') } as const;
 const STICK_DEAD_ZONE = 0.12;
 
 /**
@@ -79,6 +72,9 @@ export class TouchControls {
   private stick: StickPointer | null = null;
   private look: LookPointer | null = null;
   private readonly opts: Required<TouchControlsOptions>;
+  /** Settings > Look: a multiplier of `lookSensitivity`, and pushing up looks down. */
+  private lookScale = 1;
+  private invertY = false;
 
   private readonly stickEl: HTMLDivElement;
   private readonly knobEl: HTMLDivElement;
@@ -128,6 +124,12 @@ export class TouchControls {
 
     if (isTouchDevice()) this.activate();
     else watchForTouch(() => this.activate());
+  }
+
+  /** Settings > Look: `sensitivity` multiplies the configured `lookSensitivity`. */
+  setLook(options: { sensitivity: number; invertY: boolean }): void {
+    this.lookScale = options.sensitivity;
+    this.invertY = options.invertY;
   }
 
   private activate(): void {
@@ -292,8 +294,8 @@ export class TouchControls {
     }
     if (!look.moved) return;
     if (this.player.lookEnabled) {
-      const s = this.opts.lookSensitivity;
-      this.player.applyLook(dx * s, dy * s);
+      const s = this.opts.lookSensitivity * this.lookScale;
+      this.player.applyLook(dx * s, dy * s * (this.invertY ? -1 : 1));
     } else {
       this.mouse.move(dx, dy); // rotating the held box: Inspector consumes mouse-like deltas
     }

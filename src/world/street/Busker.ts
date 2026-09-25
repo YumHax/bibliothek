@@ -8,6 +8,8 @@ import { createCanvas, toTexture } from '@/covers/generated/canvasUtils';
 import type { Furniture } from '../Furniture';
 import type { DayNight } from '../props/DayNight';
 import { Walker } from '../people/Walker';
+import { KEYS as SAVE_KEYS } from '@/persistence';
+import { DailyTally } from './DailyTally';
 
 export interface BuskerOptions {
   /** The ears (the camera): the tune's level and side follow it. */
@@ -21,21 +23,17 @@ export interface BuskerOptions {
   seed?: number;
 }
 
-const STORE_KEY = 'bibliothek.busker.v1';
 const LINES = [
   'This one is from a game you never finished.',
   'Requests? I only know the overworld themes.',
   'The kiosk says the market had a good week.',
   'I learnt this on a cartridge with a dead save battery.',
 ];
+/** Tips given today, saved so the daily limit holds across reloads. */
+const tips = new DailyTally(SAVE_KEYS.busker, 'tips');
 const THANKS = ['Cheers! This one is for you.', 'Thank you kindly!', 'You are a legend.'];
 /** Where the keyboard's keys are, in the busker's frame (the stand faces them, +z is towards the passers-by). */
 const KEYS = { y: 0.93, z: 0.42, spread: 0.17 };
-
-function today(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
-}
 
 /**
  * A street musician by the bus shelter: a person (`people/Walker`, standing, hands on a little
@@ -181,20 +179,11 @@ export class Busker extends THREE.Group implements Furniture, Updatable, Interac
   }
 
   private tipsToday(): number {
-    try {
-      const saved = JSON.parse(localStorage.getItem(STORE_KEY) ?? 'null') as { day: string; tips: number } | null;
-      return saved && saved.day === today() ? saved.tips : 0;
-    } catch {
-      return 0;
-    }
+    return tips.today();
   }
 
   private recordTip(): void {
-    try {
-      localStorage.setItem(STORE_KEY, JSON.stringify({ day: today(), tips: this.tipsToday() + 1 }));
-    } catch {
-      // Private mode: the limit only holds for this visit.
-    }
+    tips.add();
   }
 }
 

@@ -2,10 +2,13 @@ import type { Game } from '@/catalog/types';
 import { getPlatform } from '@/catalog/platforms';
 import type { CollectionStore } from '@/collection/CollectionStore';
 import type { Fame } from '@/economy/Fame';
+import type { Transactions } from '@/economy/Transactions';
 import type { Wallet } from '@/economy/Wallet';
 import { buyBackPrice, describeCondition } from '@/economy/pricing';
 import { playCoins } from '@/audio/coins';
 import { escapeHtml } from './html';
+import { ModalPanel } from './ModalPanel';
+import { rememberFocus } from './rememberFocus';
 import './CataloguePanel.css';
 import './SellPanel.css';
 
@@ -15,8 +18,8 @@ const CONFIRM_MS = 4000;
 export interface SellPanelOptions {
   /** Front cover image for a game (a thumbnail per row). */
   coverUrl?: (game: Game) => string | undefined;
-  /** How the market knows the player: its reputation adds to the offers, and each sale counts towards it. */
-  standing?: { readonly buyBackBonus: number; record(deed: 'sell'): void };
+  /** How the market knows the player: its reputation adds to the offers (each sale counts towards it: `Transactions.sellToDesk`). */
+  standing?: { readonly buyBackBonus: number };
 }
 
 /**
@@ -28,8 +31,7 @@ export interface SellPanelOptions {
  * cannot be sold. Offers depend on fame like every price: a row can be sold once its lookup landed.
  * A full-screen DOM modal like the catalogue (the Session opens and closes it).
  */
-export class SellPanel {
-  private readonly root: HTMLElement;
+export class SellPanel extends ModalPanel {
   private readonly walletEl: HTMLElement;
   private readonly statusEl: HTMLElement;
   private readonly listEl: HTMLElement;
@@ -37,41 +39,30 @@ export class SellPanel {
   /** The row armed by a first click, and until when. */
   private armed: { id: string; until: number } | null = null;
 
-  /** Assigned by the Session so closing from the panel's own UI re-enters the room. */
-  onOpenChange?: (open: boolean) => void;
-
   constructor(
     container: HTMLElement,
     private readonly store: CollectionStore,
     private readonly wallet: Wallet,
     private readonly fame: Fame,
-    private readonly market: { consign(game: Game): void },
+    private readonly tx: Transactions,
     private readonly options: SellPanelOptions = {},
   ) {
-    this.root = document.createElement('section');
-    this.root.className = 'catalogue sell';
-    this.root.hidden = true;
+    super(container, { className: 'ui-modal--sheet catalogue sell', label: 'We buy' });
     this.root.innerHTML = `
       <header class="catalogue__header">
         <h2>We buy</h2>
         <span class="catalogue__wallet"></span>
-        <div class="catalogue__actions"><button type="button" data-action="close">Close</button></div>
+        <div class="catalogue__actions"><button type="button" class="ui-btn" data-action="close" aria-label="Close">Close</button></div>
       </header>
       <p class="catalogue__blurb">Cash on the spot for your games, a fraction of what they sell for. Whatever you sell goes out on the stalls tomorrow, if you want it back.</p>
-      <div class="catalogue__search"><input type="search" placeholder="Filter your collection…" autocomplete="off" spellcheck="false" /></div>
+      <div class="catalogue__search"><input type="search" placeholder="Filter your collection…" autocomplete="off" spellcheck="false" data-autofocus /></div>
       <div class="catalogue__status"></div>
-      <div class="catalogue__scroll" data-role="list"></div>`;
-    container.appendChild(this.root);
+      <div class="catalogue__scroll ui-card" data-role="list"></div>`;
     this.walletEl = this.root.querySelector('.catalogue__wallet')!;
     this.statusEl = this.root.querySelector('.catalogue__status')!;
     this.listEl = this.root.querySelector('[data-role="list"]')!;
     this.filterInput = this.root.querySelector('input[type="search"]')!;
 
-    for (const type of ['keydown', 'keyup'] as const) {
-      this.root.addEventListener(type, (e) => {
-        if (e.code !== 'Escape') e.stopPropagation();
-      });
-    }
     this.root.addEventListener('click', (e) => {
       const button = (e.target as HTMLElement).closest<HTMLButtonElement>('button[data-action]');
       if (!button) return;
@@ -89,30 +80,13 @@ export class SellPanel {
     this.renderWallet();
   }
 
-  get isOpen(): boolean {
-    return !this.root.hidden;
-  }
-
-  open(): void {
-    if (this.isOpen) return;
-    if (document.pointerLockElement) document.exitPointerLock();
-    this.root.hidden = false;
+  protected onOpened(): void {
     this.armed = null;
     this.render();
-    this.filterInput.focus();
-    this.onOpenChange?.(true);
   }
 
-  close(): void {
-    if (!this.isOpen) return;
-    this.root.hidden = true;
+  protected onClosed(): void {
     this.setStatus('');
-    this.onOpenChange?.(false);
-  }
-
-  toggle(): void {
-    if (this.isOpen) this.close();
-    else this.open();
   }
 
   private renderWallet(): void {
@@ -129,7 +103,9 @@ export class SellPanel {
       this.listEl.innerHTML = `<p class="catalogue__empty">${query ? 'Nothing by that name in your collection.' : 'Nothing to sell: your collection is empty.'}</p>`;
       return;
     }
+    const restoreFocus = rememberFocus(this.listEl);
     this.listEl.innerHTML = games.map((game) => this.rowHtml(game)).join('');
+    restoreFocus();
     for (const game of games) {
       if (this.fame.peek(game) !== undefined) continue;
       void this.fame.lookup(game).then(() => {
@@ -158,14 +134,16 @@ export class SellPanel {
     const [label, enabled] = game.status === 'lent' ? ['Lent out', false] : !known ? ['Pricing…', false] : armed ? [`Sure? +${offer}`, true] : ['Sell', true];
     return `
       <span class="catalogue__price${known ? '' : ' catalogue__price--pending'}">${offer} <span class="catalogue__coin"></span></span>
-      <button type="button" class="${armed ? 'sell__armed' : ''}" data-action="sell" data-id="${escapeHtml(game.id)}" ${enabled ? '' : 'disabled'}>${escapeHtml(label)}</button>`;
+      <button type="button" class="ui-btn${armed ? ' sell__armed' : ''}" data-action="sell" data-id="${escapeHtml(game.id)}" ${enabled ? '' : 'disabled'}>${escapeHtml(label)}</button>`;
   }
 
   private refreshRow(id: string): void {
     const game = this.store.find(id);
     const row = [...this.listEl.querySelectorAll<HTMLElement>('.catalogue__row')].find((el) => el.dataset.id === id);
     if (!game || !row) return;
+    const restoreFocus = rememberFocus(this.listEl);
     row.outerHTML = this.rowHtml(game);
+    restoreFocus();
   }
 
   private isArmed(id: string): boolean {
@@ -192,10 +170,7 @@ export class SellPanel {
     }
     this.armed = null;
     const offer = buyBackPrice(game, this.fame.peek(game), this.options.standing?.buyBackBonus ?? 0);
-    this.market.consign({ ...game, status: 'owned', addedAt: undefined });
-    this.wallet.earnCoins(offer);
-    this.store.remove(id);
-    this.options.standing?.record('sell');
+    if (!this.tx.sellToDesk(game, offer).ok) return;
     playCoins(4);
     const fake = game.repro ? ' “A reproduction, I’m afraid: that’s all it’s worth.”' : '';
     this.setStatus(`Sold "${game.title}" for ${offer} coins.${fake} It goes out on the ${getPlatform(game.platform).shortName} stall tomorrow.`);

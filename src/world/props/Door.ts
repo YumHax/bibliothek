@@ -6,7 +6,7 @@ import type { SessionActions } from '@/game/SessionActions';
 import { LidMotion } from '../box/LidMotion';
 import type { Doorway } from '../Room';
 import { cylinderMesh, invisibleHitbox } from '../meshUtils';
-import { Prop, part, matte } from './Prop';
+import { Prop, part, matte, markShared } from './Prop';
 import { scuffed, wood as woodMaterial } from '@/world/materials/finishes';
 
 export interface DoorOptions {
@@ -17,11 +17,16 @@ export interface DoorOptions {
    * wall of the room it swung into. Without it the leaf stops nobody.
    */
   collisions?: Collisions;
+  /** Its plain doormat just inside. Default true; false where the room lays its own (the flat's front door). */
+  mat?: boolean;
 }
 
-/** Face width of the architrave (the moulding framing the opening) and how far it stands proud of the wall. */
+/**
+ * Face width of the architrave (the moulding framing the opening) and how far it stands proud of
+ * the wall: a little more than the room's baseboard (0.02, `Room`), which runs under its feet.
+ */
 const ARCHITRAVE = 0.07;
-const ARCHITRAVE_DEPTH = 0.018;
+const ARCHITRAVE_DEPTH = 0.022;
 /** Depth of the door frame through the wall: the jambs and the leaf sit inside it. */
 const FRAME_DEPTH = 0.12;
 /** Width of the jambs lining the opening; the leaf hangs between them. */
@@ -39,8 +44,8 @@ const HANDLE_Y = 1.03;
 // The gap between two zones' wall planes (see `worldPlan.ts`) must stay within `FRAME_DEPTH` so the lining covers it.
 
 const PAINT = scuffed(matte(0xf6f3ee, 0.7));
-const OAK = woodMaterial(0x8b6a44, 0.55);
-const BRASS = new THREE.MeshStandardMaterial({ color: 0xc9a75b, metalness: 0.85, roughness: 0.3, emissive: 0xc9a75b, emissiveIntensity: 0 });
+const OAK = markShared(woodMaterial(0x8b6a44, 0.55));
+const BRASS = markShared(new THREE.MeshStandardMaterial({ color: 0xc9a75b, metalness: 0.85, roughness: 0.3, emissive: 0xc9a75b, emissiveIntensity: 0 }));
 
 /**
  * An interior door, hung in a `Doorway` cut through the wall (`Room` makes the hole; this fills
@@ -90,8 +95,10 @@ export class Door extends Prop implements Updatable, Interactable {
     this.buildLeaf(width, height, leafPaint);
 
     // The doormat, just inside.
-    const mat = part(this, width * 0.8, 0.012, 0.42, matte(0x4a4038, 1), { y: 0.006, z: 0.3 });
-    mat.castShadow = false;
+    if (options.mat !== false) {
+      const mat = part(this, width * 0.8, 0.012, 0.42, matte(0x4a4038, 1), { y: 0.006, z: 0.3 });
+      mat.castShadow = false;
+    }
 
     const hitbox = invisibleHitbox(width, height, 0.3, { y: height / 2, z: 0.02 });
     this.add(hitbox);
@@ -114,6 +121,19 @@ export class Door extends Prop implements Updatable, Interactable {
 
   close(): void {
     this.motion.close();
+  }
+
+  /**
+   * Hangs `object` on the leaf's face towards the room that hangs the door (+z), `along` metres
+   * from the hinge edge and `y` up from the floor, so it swings with the leaf (a note, a wreath);
+   * `far`: on the other face instead (the front door's landing side), turned to face out there.
+   */
+  attachToLeaf(object: THREE.Object3D, along: number, y: number, far = false): void {
+    object.position.set(along, y, (far ? -1 : 1) * (LEAF_THICKNESS / 2 + 0.002));
+    if (far) object.rotation.y += Math.PI;
+    // A right-hung leaf is a mirrored left-hung one: unmirror what is hung on it.
+    object.scale.x *= this.side;
+    this.pivot.add(object);
   }
 
   update(dt: number): void {
@@ -184,8 +204,8 @@ export class Door extends Prop implements Updatable, Interactable {
     part(this, lining, height, FRAME_DEPTH, PAINT, { x: -width / 2 + lining / 2, y: height / 2, z });
     part(this, lining, height, FRAME_DEPTH, PAINT, { x: width / 2 - lining / 2, y: height / 2, z });
     part(this, width, lining, FRAME_DEPTH, PAINT, { y: height - lining / 2, z });
-    // Threshold strip.
-    part(this, width, 0.012, FRAME_DEPTH, OAK, { y: 0.006, z });
+    // Threshold strip, between the jambs (under them, its faces would z-fight with theirs).
+    part(this, width - 2 * lining, 0.012, FRAME_DEPTH, OAK, { y: 0.006, z });
   }
 
   /** The leaf on its hinge pivot: painted panels, brass hinges and a lever handle on each side. */

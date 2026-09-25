@@ -1,8 +1,11 @@
-export const CALENDAR_STORAGE_KEY = 'bibliothek.calendar.v1';
+import { KEYS, PersistedStore, safeStorage } from '@/persistence';
+import { dayKey, fromUtcDayKey } from './calendar';
+
+export const CALENDAR_STORAGE_KEY = KEYS.calendar;
 
 interface CalendarFile {
   day: number;
-  /** The real date (YYYY-MM-DD) the count was last saved on. */
+  /** The real local date (YYYY-MM-DD, `dayKey`) the count was last saved on; version 1 saved the UTC date. */
   date: string;
 }
 
@@ -21,14 +24,27 @@ export class MarketCalendar {
   private state: CalendarFile;
   private lastHours: number | null = null;
   private readonly listeners = new Set<(day: number) => void>();
+  private readonly store: PersistedStore<CalendarFile | null>;
 
   constructor(
     clock: ClockLike,
-    private readonly storage: Storage | null = safeLocalStorage(),
-    private readonly key = CALENDAR_STORAGE_KEY,
-    private readonly today: () => string = () => new Date().toISOString().slice(0, 10),
+    storage: Storage | null = safeStorage(),
+    key: string = CALENDAR_STORAGE_KEY,
+    private readonly today: () => string = () => dayKey(),
   ) {
-    const saved = this.load();
+    // Version 2: local dates. Version 1 saved the UTC date: today's UTC date reads as today (no extra market day).
+    this.store = new PersistedStore<CalendarFile | null>({
+      key,
+      version: 2,
+      storage,
+      defaults: () => null,
+      read: readCalendar,
+      migrate: { 1: (data) => {
+        const file = readCalendar(data);
+        return file ? { ...file, date: fromUtcDayKey(file.date) } : data;
+      } },
+    });
+    const saved = this.store.load();
     const date = this.today();
     this.state = saved ? { day: saved.day + (saved.date === date ? 0 : 1), date } : { day: 1, date };
     this.save();
@@ -57,30 +73,12 @@ export class MarketCalendar {
   }
 
   private save(): void {
-    try {
-      this.storage?.setItem(this.key, JSON.stringify(this.state));
-    } catch (err) {
-      console.warn('[calendar] could not persist', err);
-    }
-  }
-
-  private load(): CalendarFile | null {
-    const text = this.storage?.getItem(this.key);
-    if (!text) return null;
-    try {
-      const file = JSON.parse(text) as Partial<CalendarFile>;
-      if (typeof file.day !== 'number' || typeof file.date !== 'string') return null;
-      return { day: Math.max(1, Math.floor(file.day)), date: file.date };
-    } catch {
-      return null;
-    }
+    this.store.save(this.state);
   }
 }
 
-function safeLocalStorage(): Storage | null {
-  try {
-    return typeof localStorage === 'undefined' ? null : localStorage;
-  } catch {
-    return null;
-  }
+function readCalendar(data: unknown): CalendarFile | null {
+  const file = data as Partial<CalendarFile> | null;
+  if (typeof file !== 'object' || file === null || typeof file.day !== 'number' || typeof file.date !== 'string') return null;
+  return { day: Math.max(1, Math.floor(file.day)), date: file.date };
 }

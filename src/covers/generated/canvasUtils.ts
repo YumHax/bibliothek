@@ -1,18 +1,8 @@
-import * as THREE from 'three';
+import type * as THREE from 'three';
+import { hashString, seededRandom } from '@/graphics/canvas';
 
-export function createCanvas(width: number, height: number): [HTMLCanvasElement, CanvasRenderingContext2D] {
-  const canvas = document.createElement('canvas');
-  canvas.width = width;
-  canvas.height = height;
-  return [canvas, canvas.getContext('2d')!];
-}
-
-export function toTexture(canvas: HTMLCanvasElement, anisotropy = 1): THREE.CanvasTexture {
-  const tex = new THREE.CanvasTexture(canvas);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  tex.anisotropy = anisotropy;
-  return tex;
-}
+// The generic helpers live in `graphics/canvas`; re-exported so every drawing module keeps importing from here.
+export { createCanvas, hashString, seededRandom, toTexture } from '@/graphics/canvas';
 
 /** Word-wraps `text` and returns the lines that fit; the last line is ellipsised if `maxLines` is hit. */
 export function wrapLines(ctx: CanvasRenderingContext2D, text: string, maxWidth: number, maxLines = Infinity): string[] {
@@ -126,25 +116,6 @@ export function imageSourceOf(texture: THREE.Texture | null | undefined): Canvas
   if (image instanceof HTMLCanvasElement) return image;
   if (typeof ImageBitmap !== 'undefined' && image instanceof ImageBitmap) return image;
   return null;
-}
-
-/** FNV-1a: a stable 32-bit hash so procedural details (barcodes, serials) are the same on every load. */
-export function hashString(text: string): number {
-  let h = 0x811c9dc5;
-  for (let i = 0; i < text.length; i++) {
-    h ^= text.charCodeAt(i);
-    h = Math.imul(h, 0x01000193) >>> 0;
-  }
-  return h >>> 0;
-}
-
-/** Tiny deterministic PRNG in [0, 1). */
-export function seededRandom(seed: number): () => number {
-  let state = seed >>> 0 || 1;
-  return () => {
-    state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
-    return state / 0x100000000;
-  };
 }
 
 /** A fake EAN-style barcode on a white patch: guard bars, pseudo-random modules and 13 digits derived from `seed`. */

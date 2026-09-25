@@ -4,6 +4,7 @@ import type { Sky } from './Sky';
 import { Room, type Doorway, type RoomOptions } from './Room';
 import { resolvePlacement } from './Placement';
 import { Door } from './props/Door';
+import { followDaylight } from './build/follow';
 
 export interface ShellOptions {
   /** Colour of the painted leaves of the doors this zone hangs. Default the `Door`'s slate green. */
@@ -31,7 +32,7 @@ export function furnishShell(zone: Zone, sky: Sky, options: RoomOptions, { leafC
   const room = zone.place(new Room(options), new THREE.Vector3());
   shareShadowCaster(room);
   if (fixedDaylight !== undefined) room.setDaylight(fixedDaylight);
-  else zone.onUnload(sky.dayNight.onChange((state) => room.setDaylight(state.daylight, state.ambient)));
+  else followDaylight(zone, sky, room);
   for (const doorway of options.doorways ?? []) {
     let door: Door | undefined;
     if (doorway.door !== false) {

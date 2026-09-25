@@ -77,7 +77,8 @@ const SUNK = -0.003;
 
 export function hairMaterial(look: PersonLook): THREE.MeshStandardMaterial {
   const map = strandTexture(look.hair, look.hairStyle === 'curly', look.hair * 7 + 3);
-  return new THREE.MeshStandardMaterial({ map, bumpMap: map, bumpScale: 1.5, roughness: 0.55, side: THREE.DoubleSide });
+  // Where a shell tapers to the skin (hairline, fringe, beard edge) it lies within a hair of it: the offset keeps it in front instead of z-fighting.
+  return new THREE.MeshStandardMaterial({ map, bumpMap: map, bumpScale: 1.5, roughness: 0.55, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2 });
 }
 
 /** The hair and beard for `look`, added to the head's parts. */

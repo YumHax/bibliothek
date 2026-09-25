@@ -1,5 +1,5 @@
 import { seededRandom } from '@/covers/generated/canvasUtils';
-import { GROUND_FLOOR, STOREY, type FacadeSpec, type ShopKind, type ShopSpec } from './streetPlan';
+import { GROUND_FLOOR, STOREY, type FacadeSpec, type FlatFront, type ShopKind, type ShopSpec } from './streetPlan';
 
 /** A light painted on the night map: a rect (night-map pixels), its colour, when it comes on at dusk and when it goes out. */
 export interface NightLight {
@@ -12,6 +12,30 @@ export interface NightLight {
   litAt: number;
   /** Wakefulness below which it is off (0 = burns all night), as the painted view's curfews. */
   curfew: number;
+}
+
+/**
+ * What the painter leaves for the 3D relief (`relief/`) to build in front of the painted wall, in
+ * facade metres (s along from the left end, y up from the pavement): the awnings (no longer
+ * painted), the balcony rows (slab and rail, no longer painted), the window sills, the display
+ * windows and doors of the shops (glass for the interiors, surrounds), the shopfronts (shutters,
+ * glow), the wall's and trim's colours.
+ */
+export interface FacadeFeatures {
+  wall: string;
+  trim: string;
+  awnings: { s0: number; s1: number; colors: [string, string] }[];
+  balconies: { s0: number; s1: number; y: number }[];
+  sills: { s0: number; s1: number; y: number }[];
+  windows: { s0: number; s1: number; y0: number; y1: number; kind: ShopKind; light: string; palette: readonly string[] }[];
+  doors: { s: number; width: number; height: number; color: string; shop: boolean }[];
+  shopfronts: { s0: number; s1: number; kind: ShopKind; light: string; awning: boolean }[];
+}
+
+/** One painted facade: its night lights and what stands out of it. */
+export interface PaintedFacade {
+  lights: NightLight[];
+  features: FacadeFeatures;
 }
 
 /** Where a facade sits in the atlases: its top-left corner (colour-atlas pixels) and its scale. */
@@ -54,7 +78,7 @@ const HOME_LIGHTS = ['#ffcf8a', '#ffd9a0', '#ffc070', '#fff0d0'];
 const TV_LIGHT = '#9ab8ff';
 
 /** How each kind of shop looks: joinery, fascia, lettering, awning, what fills the window, its light and when it shuts. */
-interface ShopLook {
+export interface ShopLook {
   name: string;
   front: string;
   fascia: string;
@@ -67,7 +91,7 @@ interface ShopLook {
   neon?: string;
 }
 
-const SHOPS: Record<Exclude<ShopKind, 'shut'>, ShopLook> = {
+export const SHOPS: Record<Exclude<ShopKind, 'shut'>, ShopLook> = {
   cafe: { name: 'CAFÉ', front: '#2f4a3a', fascia: '#2f4a3a', letters: '#e9dcb5', awning: ['#2f5a44', '#efe6d2'], goods: ['#6a4a32', '#d9c9a8', '#3a2a22'], light: '#ffd49a', late: false },
   bakery: { name: 'BOULANGERIE', front: '#6b4a2a', fascia: '#5a3a22', letters: '#f1d890', awning: ['#b8862f', '#f3ead6'], goods: ['#d9a05a', '#b8763a', '#e8c890', '#8a5a2a'], light: '#ffd49a', late: false },
   pharmacy: { name: 'PHARMACIE', front: '#d8d8d2', fascia: '#2f7a4a', letters: '#f4f4ee', awning: null, goods: ['#f0f0f0', '#6fb0d0', '#e0e8e0', '#8fc0a0'], light: '#e8f4ff', late: false, neon: '#4dff8a' },
@@ -112,11 +136,13 @@ function styleFor(random: () => number): Style {
  * shutter for a shop that has shut, a residential door. `goods` colours the retro games shop's
  * display (the day's market stock), when known.
  */
-export function paintFacade(ctx: CanvasRenderingContext2D, spec: FacadeSpec, width: number, slot: AtlasSlot, goods: readonly string[] | null): NightLight[] {
+export function paintFacade(ctx: CanvasRenderingContext2D, spec: FacadeSpec, width: number, slot: AtlasSlot, goods: readonly string[] | null): PaintedFacade {
   const random = seededRandom(spec.seed * 7919);
   const style = styleFor(random);
   const height = facadeHeight(spec.storeys);
   const p = new Brush(ctx, slot, height);
+  p.features.wall = style.wall;
+  p.features.trim = style.trim;
 
   // The wall, and its texture.
   p.rect(0, 0, width, height, style.wall);
@@ -150,6 +176,8 @@ export function paintFacade(ctx: CanvasRenderingContext2D, spec: FacadeSpec, wid
     const floorY = GROUND_FLOOR + (storey - 1) * STOREY;
     // A string course at each floor.
     p.rect(0, floorY - 0.06, width, floorY + 0.1, shade(style.trim, 0.96));
+    // Our flat's floor: its own windows where they really are (painted after the loop).
+    if (spec.flat && storey === spec.storeys - 1) continue;
     const balconyRow = style.balconies && (storey === 1 || storey === spec.storeys - 1);
     for (let b = 0; b < bays; b++) {
       const cx = (b + 0.5) * bay;
@@ -167,10 +195,9 @@ export function paintFacade(ctx: CanvasRenderingContext2D, spec: FacadeSpec, wid
         }
       }
       if (balconyRow) {
-        // A wrought-iron rail across the bay over a stone slab.
-        p.rect(cx - bay * 0.42, y0 - 0.12, cx + bay * 0.42, y0, shade(style.trim, 0.85));
-        p.rect(cx - bay * 0.42, y0 + 0.91, cx + bay * 0.42, y0 + 0.95, '#23262a');
-        for (let s = cx - bay * 0.42; s <= cx + bay * 0.42; s += 0.12) p.rect(s, y0, s + 0.02, y0 + 0.95, '#23262a');
+        // A wrought-iron balcony across the bay over a stone slab: built in 3D (`relief/FacadeRelief`), a shadow painted under it.
+        p.rect(cx - bay * 0.42, y0 - 0.3, cx + bay * 0.42, y0 - 0.12, 'rgba(0,0,0,0.12)');
+        p.features.balconies.push({ s0: cx - bay * 0.42, s1: cx + bay * 0.42, y: y0 });
       } else if (random() < style.flowers) {
         p.rect(s0 - 0.05, y0 - 0.02, s1 + 0.05, y0 + 0.2, '#6a4a32');
         for (let i = 0; i < 6; i++) p.rect(s0 + (i / 6) * winW, y0 + 0.15, s0 + ((i + 0.8) / 6) * winW, y0 + 0.32, pick(random, FLOWERS));
@@ -183,18 +210,56 @@ export function paintFacade(ctx: CanvasRenderingContext2D, spec: FacadeSpec, wid
     }
   }
 
+  if (spec.flat) paintFlat(p, style, spec.flat);
+
   // The ground floor: a plinth, then shops, a door.
   p.rect(0, 0, width, GROUND_FLOOR, shade(style.wall, 0.86));
   p.rect(0, 0, width, 0.35, shade(style.wall, 0.62));
   p.rect(0, GROUND_FLOOR - 0.12, width, GROUND_FLOOR, style.trim);
   for (const shop of spec.shops) paintShop(p, random, shop, goods);
   if (spec.door !== undefined) paintEntrance(p, spec.door);
-  return p.lights;
+  return { lights: p.lights, features: p.features };
+}
+
+/**
+ * Our flat's floor: the collection room's front window and the balcony's glazed door, at their
+ * real places and heights (the balcony itself is built in 3D). Their light is home's: warm, on from
+ * early dusk until very late.
+ */
+function paintFlat(p: Brush, style: Style, flat: FlatFront): void {
+  const y = flat.floorY;
+  for (const w of flat.windows) {
+    const s0 = w.at - w.width / 2;
+    const s1 = w.at + w.width / 2;
+    paintTallGlass(p, style, s0, y + w.bottom, s1, y + w.top);
+    p.light(s0 + 0.05, y + w.bottom + 0.05, s1 - 0.05, y + w.top - 0.05, '#ffcf8a', 0.05, 0.03);
+  }
+  const { at, door } = flat.balcony;
+  const s0 = at - door.width / 2;
+  const s1 = at + door.width / 2;
+  paintTallGlass(p, style, s0, y, s1, y + door.height);
+  p.light(s0 + 0.05, y + 0.05, s1 - 0.05, y + door.height - 0.05, '#ffd9a0', 0.05, 0.03);
+}
+
+/** A tall pane (a French window, a glazed door): reveal, glass, sky reflection, frame and bars, a head over it. */
+function paintTallGlass(p: Brush, style: Style, s0: number, y0: number, s1: number, y1: number): void {
+  p.rect(s0 - 0.08, y0 - 0.04, s1 + 0.08, y1 + 0.06, 'rgba(0,0,0,0.32)');
+  p.rect(s0, y0, s1, y1, GLASS);
+  p.rect(s0, y1 - (y1 - y0) * 0.3, s1, y1, 'rgba(160,185,210,0.22)');
+  const bar = Math.max(0.035, 1.5 / p.slot.k);
+  p.rect(s0, y0, s1, y0 + bar, style.frame);
+  p.rect(s0, y1 - bar, s1, y1, style.frame);
+  p.rect(s0, y0, s0 + bar, y1, style.frame);
+  p.rect(s1 - bar, y0, s1, y1, style.frame);
+  p.rect((s0 + s1) / 2 - bar / 2, y0, (s0 + s1) / 2 + bar / 2, y1, style.frame);
+  for (const f of [0.33, 0.66]) p.rect(s0, y0 + (y1 - y0) * f, s1, y0 + (y1 - y0) * f + bar, style.frame);
+  p.rect(s0 - 0.12, y1 + 0.02, s1 + 0.12, y1 + 0.18, style.trim);
 }
 
 /** Paints in facade metres (s along from the left, y up from the street) into the atlas, and collects the night lights. */
 class Brush {
   readonly lights: NightLight[] = [];
+  readonly features: FacadeFeatures = { wall: '#888888', trim: '#dddddd', awnings: [], balconies: [], sills: [], windows: [], doors: [], shopfronts: [] };
 
   constructor(
     readonly ctx: CanvasRenderingContext2D,
@@ -252,8 +317,9 @@ function paintWindow(p: Brush, style: Style, random: () => number, s0: number, y
   p.rect(s1 - bar, y0, s1, y1, style.frame);
   p.rect(mid - bar / 2, y0, mid + bar / 2, y1, style.frame);
   p.rect(s0, y0 + (y1 - y0) * 0.62, s1, y0 + (y1 - y0) * 0.62 + bar, style.frame);
-  // Sill and head.
+  // Sill and head (the sill also stands out in 3D on the near facades).
   p.rect(s0 - 0.1, y0 - 0.08, s1 + 0.1, y0, style.trim);
+  p.features.sills.push({ s0: s0 - 0.1, s1: s1 + 0.1, y: y0 });
   if (style.window === 'lintel') p.rect(s0 - 0.12, y1 + 0.02, s1 + 0.12, y1 + 0.2, style.trim);
   if (style.window === 'arched') {
     // A keystoned head: a band and a stepped key over it.
@@ -274,6 +340,8 @@ function paintShop(p: Brush, random: () => number, shop: ShopSpec, goods: readon
       const y = 0.8 + random() * 1.5;
       p.rect(a, y, a + 0.5 + random() * 1.2, y + 0.3 + random() * 0.5, pick(random, ['#d9383a', '#3b6fb3', '#f0c94a', '#222222']));
     }
+    paintFlyPosters(p, random, s0, s1);
+    paintGraffiti(p, random, s0, s1);
     return;
   }
   const look = SHOPS[shop.kind];
@@ -281,15 +349,20 @@ function paintShop(p: Brush, random: () => number, shop: ShopSpec, goods: readon
   // Joinery, fascia board and its lettering.
   p.rect(s0, 0, s1, 3.6, look.front);
   p.rect(s0, 3.05, s1, 3.75, look.fascia);
-  if (look.name) {
-    const size = Math.min(0.5, (width * 0.9) / (look.name.length * 0.62));
-    p.text(look.name, (s0 + s1) / 2, 3.4, size, look.letters);
+  // Its own name when the plan gives one ('CAFÉ LUMIÈRE'), else its trade's.
+  const name = shop.name ?? look.name;
+  if (name) {
+    const size = Math.min(0.5, (width * 0.9) / (name.length * 0.62));
+    p.text(name, (s0 + s1) / 2, 3.4, size, look.letters);
     if (look.neon) p.light(s0 + width * 0.15, 3.15, s1 - width * 0.15, 3.65, look.neon, 0.02, 0);
   }
   // The door (where the plan says, else somewhere along), display windows either side of it.
   const door = shop.door ?? s0 + 0.9 + random() * Math.max(0, width - 1.8);
   const closing = look.late ? 0.15 + random() * 0.15 : 0.55 + random() * 0.3;
   const palette = shop.kind === 'retro' && goods && goods.length ? goods : look.goods;
+  p.features.shopfronts.push({ s0, s1, kind: shop.kind, light: look.light, awning: !!look.awning });
+  p.features.doors.push({ s: door, width: 1.2, height: 2.7, color: shade(look.front, 0.7), shop: true });
+  p.features.windows.push({ s0: door - 0.5, s1: door + 0.5, y0: 0.15, y1: 2.55, kind: shop.kind, light: look.light, palette });
   p.rect(door - 0.6, 0.05, door + 0.6, 2.7, shade(look.front, 0.7));
   p.rect(door - 0.5, 0.15, door + 0.5, 2.55, GLASS);
   p.rect(door - 0.5, 1.9, door + 0.5, 2.55, 'rgba(170,190,210,0.2)');
@@ -302,6 +375,7 @@ function paintShop(p: Brush, random: () => number, shop: ShopSpec, goods: readon
       const g0 = a + i * unit + 0.05;
       const g1 = a + (i + 1) * unit - 0.05;
       p.rect(g0, 0.55, g1, 2.95, GLASS);
+      p.features.windows.push({ s0: g0, s1: g1, y0: 0.55, y1: 2.95, kind: shop.kind, light: look.light, palette });
       // The display: shelves of goods.
       for (let shelf = 0; shelf < 3; shelf++) {
         const y = 0.7 + shelf * 0.62;
@@ -316,11 +390,10 @@ function paintShop(p: Brush, random: () => number, shop: ShopSpec, goods: readon
       p.rect(g1 - 0.03, 0.55, g1 + 0.08, 2.95, shade(look.front, 0.8));
     }
   }
-  // An awning over the windows (painted: a striped band).
+  // An awning over the windows: built in 3D (`relief/FacadeRelief`); its shade on the wall is painted.
   if (look.awning) {
-    const [a, b] = look.awning;
-    for (let s = s0 + 0.1, i = 0; s < s1 - 0.1; s += 0.35, i++) p.rect(s, 2.75, Math.min(s + 0.35, s1 - 0.1), 3.0, i % 2 ? b : a);
-    p.rect(s0 + 0.1, 2.7, s1 - 0.1, 2.75, 'rgba(0,0,0,0.3)');
+    p.features.awnings.push({ s0: s0 + 0.1, s1: s1 - 0.1, colors: look.awning });
+    p.rect(s0 + 0.1, 2.55, s1 - 0.1, 3.0, 'rgba(0,0,0,0.14)');
   }
   // The arcade: its windows glow with the cabinets' screens, day and night.
   if (shop.kind === 'arcade') {
@@ -335,6 +408,7 @@ function paintShop(p: Brush, random: () => number, shop: ShopSpec, goods: readon
 
 /** A tall wooden double door under a fanlight, in a stone surround, a brass plate over it. */
 function paintEntrance(p: Brush, at: number): void {
+  p.features.doors.push({ s: at, width: 1.4, height: 2.7, color: '#d8ccb8', shop: false });
   p.rect(at - 0.95, 0, at + 0.95, 3.5, '#e6dccb');
   p.rect(at - 0.7, 0.05, at + 0.7, 2.7, '#4a2e22');
   p.rect(at - 0.02, 0.05, at + 0.02, 2.7, '#2e1c14');
@@ -348,4 +422,41 @@ function paintEntrance(p: Brush, at: number): void {
   p.light(at - 0.66, 2.78, at + 0.66, 3.26, '#ffd9a0', 0.1, 0);
   p.rect(at - 0.1, 3.35, at + 0.1, 3.45, '#c9a75b');
   p.text('12', at, 3.1, 0.3, '#f0e6c8');
+}
+
+/** Fly-posters pasted over a shut shop's shutter: gig bills and a games fair, torn at the corners. */
+function paintFlyPosters(p: Brush, random: () => number, s0: number, s1: number): void {
+  const papers = ['#f0e8d0', '#f6d23a', '#e8e8e8', '#ff6a3a', '#9ad0e8'];
+  const count = 2 + Math.floor(random() * 3);
+  for (let i = 0; i < count; i++) {
+    const w = 0.5 + random() * 0.3;
+    const h = w * 1.4;
+    const a = s0 + 0.2 + random() * Math.max(0, s1 - s0 - w - 0.4);
+    const y = 1.0 + random() * 1.2;
+    p.rect(a, y, a + w, y + h, pick(random, papers));
+    p.rect(a + 0.05, y + h * 0.72, a + w - 0.05, y + h * 0.9, pick(random, ['#1a1a22', '#8a2a2a', '#2a3f8a']));
+    for (let l = 0; l < 4; l++) p.rect(a + 0.07, y + h * (0.2 + l * 0.11), a + w * (0.5 + random() * 0.4), y + h * (0.2 + l * 0.11) + 0.025, 'rgba(0,0,0,0.5)');
+    // A torn corner.
+    p.rect(a + w - 0.12, y, a + w, y + 0.1, '#8a8c8e');
+  }
+}
+
+/** A spray-painted tag: a few fat looping strokes with a dark outline. */
+function paintGraffiti(p: Brush, random: () => number, s0: number, s1: number): void {
+  const { ctx, slot } = p;
+  const colors = ['#e83a8a', '#3ae8c8', '#f0e03a', '#8a4af0'];
+  const x0 = s0 + 0.3 + random() * Math.max(0.1, (s1 - s0) * 0.4);
+  const y0 = 0.5 + random() * 0.4;
+  const len = Math.min(2.4, (s1 - s0) * 0.6);
+  const points: [number, number][] = [];
+  for (let i = 0; i <= 8; i++) points.push([x0 + (i / 8) * len, y0 + 0.2 + Math.sin(i * 1.7 + random() * 2) * 0.22]);
+  for (const [width, color] of [[0.12, '#141418'], [0.07, pick(random, colors)]] as const) {
+    ctx.strokeStyle = color;
+    ctx.lineWidth = Math.max(1, width * slot.k);
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.beginPath();
+    points.forEach(([s, y], i) => (i ? ctx.lineTo(p.x(s), p.y(y)) : ctx.moveTo(p.x(s), p.y(y))));
+    ctx.stroke();
+  }
 }

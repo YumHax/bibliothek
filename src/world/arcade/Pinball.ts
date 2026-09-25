@@ -1,18 +1,21 @@
 import * as THREE from 'three';
 import type { Updatable } from '@/core/Engine';
-import type { Input } from '@/core/Input';
 import type { Interactable, LabelPlacement } from '@/interaction/Interactable';
 import type { ArcadeMachineLike, ArcadeResult, SessionActions } from '@/game/SessionActions';
+import { actionKeyLabel } from '@/ui/keys';
 import { ChipSpeaker, type Sfx } from '@/audio/ChipSpeaker';
-import { createCanvas, seededRandom } from '@/covers/generated/canvasUtils';
+import { createCanvas, seededRandom, toTexture } from '@/covers/generated/canvasUtils';
 import type { Furniture } from '../Furniture';
-import { boxMesh, cylinderMesh, invisibleHitbox } from '../meshUtils';
-import { matte } from '../props/Prop';
-import { type ArcadeControls, drawText } from './games/ArcadeGame';
-import { InitialsEntry, ordinal } from './InitialsEntry';
+import { boxMesh, cylinderMesh, eyePoseAt, invisibleHitbox } from '../meshUtils';
+import { markShared, matte } from '../props/Prop';
+import { drawText } from './games/ArcadeGame';
+import { ordinal } from './InitialsEntry';
 import { BALL_R, type PinballEvent, PinballSim } from './pinball/PinballSim';
-import { TAKEN_LINE, type Occupant, type Station, type StationEvents } from './Station';
+import type { Occupant, Station, StationEvents } from './Station';
 import type { ScoreTable } from './scoreTable';
+import type { TicketMachineWiring } from './TicketMachine';
+import { MachineRun, type MachineState } from './MachineRun';
+import { CHROME, type MachineDisplay, displayScreen, outOfOrderNote } from './machineParts';
 
 export interface PinballOptions {
   /** The table's name, on the backglass. Default METEOR ALLEY. */
@@ -24,16 +27,8 @@ export interface PinballOptions {
   seed?: number;
 }
 
-export interface PinballWiring {
-  input: Input;
-  scores: ScoreTable;
-  /** What the next play costs right now (0: on the house). */
-  nextPlayCost: () => number;
-  pointsPerTicket: number;
-  listener: THREE.Object3D;
-}
-
-type PinballState = 'attract' | 'playing' | 'initials' | 'over' | 'demo';
+/** The pinball keeps a table: its backglass shows the top score. */
+export type PinballWiring = TicketMachineWiring & { scores: ScoreTable };
 
 const BODY_W = 0.56;
 const BODY_L = 1.3;
@@ -58,18 +53,11 @@ const HAND_OUT = 0.03;
 const FIELD_PX = 256;
 /** The backglass repaints this often while nobody plays (the game repaints it every frame). */
 const IDLE_FPS = 4;
-const COUNT_UP_SECONDS = 1.2;
 const REGULAR_SKILL = 0.7;
+const REGULAR_PAUSE = 3;
 
-const LEFT_KEYS = ['KeyA', 'ArrowLeft'];
-const RIGHT_KEYS = ['KeyD', 'ArrowRight'];
-const UP_KEYS = ['KeyW', 'ArrowUp'];
-const DOWN_KEYS = ['KeyS', 'ArrowDown'];
-const LAUNCH_KEYS = ['Space', 'Enter', 'NumpadEnter'];
-
-const CHROME = new THREE.MeshStandardMaterial({ color: 0xc4c7cc, metalness: 0.75, roughness: 0.25 });
-const STEEL_BALL = new THREE.MeshStandardMaterial({ color: 0xe8ecf0, metalness: 1, roughness: 0.12 });
-const BLACK = matte(0x111116, 0.5);
+const STEEL_BALL = markShared(new THREE.MeshStandardMaterial({ color: 0xe8ecf0, metalness: 1, roughness: 0.12 }));
+const BLACK = markShared(matte(0x111116, 0.5));
 
 const SOUNDS: Partial<Record<PinballEvent, Sfx>> = {
   bumper: 'bumper',
@@ -90,9 +78,9 @@ const SOUNDS: Partial<Record<PinballEvent, Sfx>> = {
  * lanes, a target bank) drawn on the sloping playfield under glass, with a real steel ball and
  * flippers moving over it, the plunger pulling back as Space is held, the pop bumpers flashing
  * when hit and the backglass showing the score, the ball in play and the multiplier. A paid play
- * works like a cabinet's (`playArcade`): A / D flip, Space launches; the result pays tickets and a
- * score good enough asks for initials on the backglass. A regular can take it (`occupy`) and play
- * it themselves. Origin on the floor under the middle of the cabinet, +z towards the player's end. Collides.
+ * works like a cabinet's (`playArcade`, through its `MachineRun`): A / D flip, Space launches; the
+ * result pays tickets and a score good enough asks for initials on the backglass. A regular can
+ * take it (`occupy`) and play it themselves; some days it is out of order. Origin on the floor under the middle of the cabinet, +z towards the player's end. Collides.
  */
 export class Pinball extends THREE.Group implements Furniture, Interactable, Updatable, ArcadeMachineLike, Station {
   readonly hitboxes: THREE.Object3D[];
@@ -106,8 +94,7 @@ export class Pinball extends THREE.Group implements Furniture, Interactable, Upd
 
   private readonly sim = new PinballSim(FIELD_L / FIELD_W);
   private readonly wiring: PinballWiring;
-  private state: PinballState = 'attract';
-  private who: Occupant = null;
+  private readonly run: MachineRun;
   private readonly deck: THREE.Group;
   private readonly hands: [THREE.Vector3, THREE.Vector3] = [new THREE.Vector3(), new THREE.Vector3()];
   private readonly ball: THREE.Mesh;
@@ -115,22 +102,13 @@ export class Pinball extends THREE.Group implements Furniture, Interactable, Upd
   private readonly plunger: THREE.Group;
   private readonly inserts: THREE.MeshStandardMaterial[] = [];
   private readonly bumperCaps: THREE.MeshStandardMaterial[] = [];
-  private readonly backglass: THREE.MeshBasicMaterial;
-  private readonly glassCanvas: HTMLCanvasElement;
-  private readonly glassCtx: CanvasRenderingContext2D;
-  private readonly glassTexture: THREE.CanvasTexture;
+  private readonly backglass: MachineDisplay;
   private readonly speaker: ChipSpeaker;
   private readonly title: string;
   private readonly accent: string;
   private clock = 0;
   private displayClock = 0;
-  private overClock = 0;
-  private demoPause = 0;
   private demoHold = 0;
-  private entry: InitialsEntry | null = null;
-  private last: ArcadeResult = { score: 0, best: false };
-  private lastRank: number | null = null;
-  private onOver: ((result: ArcadeResult) => void) | null = null;
   private bestBeaten = false;
   private readonly local = new THREE.Vector3();
 
@@ -248,15 +226,14 @@ export class Pinball extends THREE.Group implements Furniture, Interactable, Upd
     // The backbox standing on the back end, its lit backglass facing the player.
     const backTop = FRONT_TOP + RISE;
     this.add(boxMesh(BODY_W, BACKBOX_H, BACKBOX_D, paint, { y: backTop + BACKBOX_H / 2, z: -BODY_L / 2 + BACKBOX_D / 2 }));
-    this.glassCanvas = createCanvas(448, 512)[0];
-    this.glassCtx = this.glassCanvas.getContext('2d')!;
-    this.glassTexture = new THREE.CanvasTexture(this.glassCanvas);
-    this.glassTexture.colorSpace = THREE.SRGBColorSpace;
-    this.glassTexture.anisotropy = 4;
-    this.backglass = new THREE.MeshBasicMaterial({ map: this.glassTexture, toneMapped: false, color: 0xcccccc });
-    const backglass = new THREE.Mesh(new THREE.PlaneGeometry(BODY_W - 0.06, BACKBOX_H - 0.08), this.backglass);
+    this.backglass = displayScreen([448, 512], [BODY_W - 0.06, BACKBOX_H - 0.08], { anisotropy: 4, color: 0xcccccc });
+    const backglass = this.backglass.mesh;
     backglass.position.set(0, backTop + BACKBOX_H / 2, -BODY_L / 2 + BACKBOX_D + 0.002);
     this.add(backglass);
+    // Out of order: a note over the score display.
+    const note = outOfOrderNote();
+    note.position.set(0.02, -0.06, 0.004);
+    backglass.add(note);
 
     const hitbox = invisibleHitbox(BODY_W + 0.06, backTop + BACKBOX_H, BODY_L + 0.2, { y: (backTop + BACKBOX_H) / 2, z: 0.05 });
     this.hitboxes = [hitbox];
@@ -266,6 +243,17 @@ export class Pinball extends THREE.Group implements Furniture, Interactable, Upd
       if (mesh.isMesh && mesh !== this.ball) mesh.receiveShadow = true;
     });
     this.speaker = new ChipSpeaker(backglass, wiring.listener);
+    this.run = new MachineRun({
+      game: this.game,
+      input: wiring.input,
+      speaker: this.speaker,
+      stationEvents: this.stationEvents,
+      nextPlayCost: wiring.nextPlayCost,
+      pointsPerTicket: wiring.pointsPerTicket,
+      scores: wiring.scores,
+      note,
+      ...(wiring.outOfOrder ? { outOfOrder: wiring.outOfOrder } : {}),
+    });
     this.placeMovingParts();
     this.paintBackglass();
   }
@@ -275,51 +263,37 @@ export class Pinball extends THREE.Group implements Furniture, Interactable, Upd
   }
 
   get isPlaying(): boolean {
-    return this.state === 'playing' || this.state === 'initials';
+    return this.run.isPlaying;
   }
 
   get occupant(): Occupant {
-    return this.who;
+    return this.run.occupant;
+  }
+
+  get outOfOrder(): boolean {
+    return this.run.outOfOrder;
   }
 
   start(onOver: (result: ArcadeResult) => void): void {
+    this.run.start(onOver);
     this.sim.reset();
-    this.onOver = onOver;
-    this.state = 'playing';
     this.bestBeaten = false;
-    this.speaker.level = 1;
-    this.speaker.play('coin');
-    if (this.who !== 'player') {
-      this.who = 'player';
-      this.stationEvents.onPlayerStart?.();
-    }
   }
 
   abort(): void {
-    if (this.state === 'initials' && this.entry) this.sign(this.entry.value);
-    this.onOver = null;
-    this.entry = null;
-    this.state = 'attract';
-    this.who = null;
+    this.run.abort();
     this.sim.over = true;
-    this.stationEvents.onPlayerLeave?.();
     this.paintBackglass();
   }
 
   occupy(): boolean {
-    if (this.who) return false;
-    this.who = 'regular';
-    this.state = 'demo';
-    this.speaker.level = 0.45;
+    if (!this.run.occupy()) return false;
     this.sim.reset();
     return true;
   }
 
   release(): void {
-    if (this.who !== 'regular') return;
-    this.who = null;
-    this.state = 'attract';
-    this.sim.over = true;
+    if (this.run.release()) this.sim.over = true;
   }
 
   /** A hand on each flipper button, pushed in while that flipper is up. */
@@ -333,9 +307,7 @@ export class Pinball extends THREE.Group implements Furniture, Interactable, Upd
   }
 
   eyePose(): { position: THREE.Vector3; yaw: number } {
-    const position = this.localToWorld(EYE.clone());
-    const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(this.getWorldQuaternion(new THREE.Quaternion()));
-    return { position, yaw: Math.atan2(-forward.x, -forward.z) };
+    return eyePoseAt(this, EYE);
   }
 
   /** The middle of the lower playfield, where the eyes go while playing. */
@@ -346,24 +318,19 @@ export class Pinball extends THREE.Group implements Furniture, Interactable, Upd
   // --- Interactable ---------------------------------------------------------------------------
 
   setHovered(hovered: boolean): void {
-    this.backglass.color.setHex(hovered ? 0xffffff : 0xcccccc);
+    this.backglass.material.color.setHex(hovered ? 0xffffff : 0xcccccc);
   }
 
   label(): string {
-    if (this.who === 'regular') return TAKEN_LINE;
-    if (this.state === 'playing') return 'Press E or click to walk away (the game is lost)';
-    if (this.state === 'initials') return 'Sign the hall of fame · E to walk away';
-    if (this.state === 'over') return `Space or click to play again (${this.priceText()}) · E to walk away`;
-    return `Pinball · ${this.title} — click to insert a coin (${this.priceText()})`;
+    return this.run.label({ attract: `Pinball · ${this.title} — click to insert a coin (${this.run.priceText()})`, playing: `Press ${actionKeyLabel('walkAway')} or click to walk away (the game is lost)` });
   }
 
   labelPlacement(): LabelPlacement {
-    return this.state === 'attract' || this.who === 'regular' ? 'crosshair' : 'edge';
+    return this.run.labelPlacement();
   }
 
   activate(session: SessionActions): void {
-    if (this.who === 'regular') session.hint(TAKEN_LINE);
-    else session.playArcade(this);
+    this.run.activate(session, this);
   }
 
   // --- Updatable ------------------------------------------------------------------------------
@@ -371,38 +338,28 @@ export class Pinball extends THREE.Group implements Furniture, Interactable, Upd
   update(dt: number): void {
     this.clock += dt;
     this.speaker.follow();
+    this.run.update(dt);
     switch (this.state) {
       case 'playing': {
-        const { input } = this.wiring;
-        this.sim.update(dt, { left: input.isDown(...LEFT_KEYS), right: input.isDown(...RIGHT_KEYS), launch: input.isDown(...LAUNCH_KEYS) });
+        const controls = this.run.readControls();
+        this.sim.update(dt, { left: controls.left, right: controls.right, launch: controls.fire });
         this.playEvents();
-        if (!this.bestBeaten && this.sim.score > this.wiring.scores.bestOf(this.game.id) && this.wiring.scores.bestOf(this.game.id) > 0) {
+        const best = this.wiring.scores.bestOf(this.game.id);
+        if (!this.bestBeaten && this.sim.score > best && best > 0) {
           this.bestBeaten = true;
           this.speaker.play('best');
         }
-        if (this.sim.over) this.finish();
+        if (this.sim.over) this.run.finish(this.sim.score);
         break;
       }
-      case 'initials': {
-        const sfx = this.entry?.update(dt, this.readControls());
-        if (sfx) this.speaker.play(sfx);
-        if (this.entry?.done) {
-          this.sign(this.entry.value);
-          this.entry = null;
-          this.state = 'over';
-          this.overClock = 0;
-        }
-        break;
-      }
-      case 'over':
-        this.overClock += dt;
-        this.sim.update(dt, { left: false, right: false, launch: false });
-        break;
       case 'demo':
         this.updateDemo(dt);
         break;
+      case 'over':
       case 'attract':
         this.sim.update(dt, { left: false, right: false, launch: false });
+        break;
+      case 'initials':
         break;
     }
     this.placeMovingParts();
@@ -419,15 +376,14 @@ export class Pinball extends THREE.Group implements Furniture, Interactable, Upd
     this.speaker.dispose();
   }
 
+  private get state(): MachineState {
+    return this.run.state;
+  }
+
   private updateDemo(dt: number): void {
     if (this.sim.over) {
-      if (this.demoPause === 0) this.stationEvents.onRegularResult?.(this.sim.score);
-      this.demoPause += dt;
-      if (this.demoPause > 3) {
-        this.demoPause = 0;
-        this.speaker.play('coin');
-        this.sim.reset();
-      }
+      this.run.regularResult(this.sim.score);
+      if (this.run.regularPause(dt, REGULAR_PAUSE)) this.sim.reset();
       this.sim.update(dt, { left: false, right: false, launch: false });
       return;
     }
@@ -447,41 +403,6 @@ export class Pinball extends THREE.Group implements Furniture, Interactable, Upd
       const sfx = SOUNDS[event];
       if (sfx) this.speaker.play(sfx);
     }
-  }
-
-  private finish(): void {
-    const { scores } = this.wiring;
-    const score = this.sim.score;
-    this.last = { score, best: score > 0 && score > scores.bestOf(this.game.id) };
-    this.lastRank = null;
-    if (scores.qualifies(this.game.id, score)) {
-      const rank = Math.max(0, scores.table(this.game.id).findIndex((e) => score > e.score));
-      this.entry = new InitialsEntry(scores.initials, rank, score);
-      this.state = 'initials';
-    } else {
-      this.sign(scores.initials);
-      this.state = 'over';
-      this.overClock = 0;
-    }
-    const handler = this.onOver;
-    this.onOver = null;
-    handler?.(this.last);
-    this.stationEvents.onPlayerResult?.(this.last);
-  }
-
-  private sign(initials: string): void {
-    this.lastRank = this.wiring.scores.submit(this.game.id, this.last.score, initials).rank;
-  }
-
-  private readControls(): ArcadeControls {
-    const { input } = this.wiring;
-    const fire = input.isDown(...LAUNCH_KEYS);
-    return { left: input.isDown(...LEFT_KEYS), right: input.isDown(...RIGHT_KEYS), up: input.isDown(...UP_KEYS), down: input.isDown(...DOWN_KEYS), fire, firePressed: false };
-  }
-
-  private priceText(): string {
-    const cost = this.wiring.nextPlayCost();
-    return cost === 0 ? 'free play' : `${cost} coin${cost > 1 ? 's' : ''}`;
   }
 
   /** A point of the table (sim units) in the deck's frame, on the playfield's surface. */
@@ -514,9 +435,9 @@ export class Pinball extends THREE.Group implements Furniture, Interactable, Upd
 
   /** Title art at the top, the score display below (or the initials, or the end card), the ball in play at the bottom. */
   private paintBackglass(): void {
-    const ctx = this.glassCtx;
-    const W = this.glassCanvas.width;
-    const H = this.glassCanvas.height;
+    const { ctx, canvas, texture } = this.backglass;
+    const W = canvas.width;
+    const H = canvas.height;
     const sky = ctx.createLinearGradient(0, 0, 0, H);
     sky.addColorStop(0, '#120a24');
     sky.addColorStop(1, '#2a1140');
@@ -541,8 +462,9 @@ export class Pinball extends THREE.Group implements Furniture, Interactable, Upd
     }
     drawText(ctx, this.title, W / 2, H * 0.3, 36, '#ffe680');
 
-    if (this.state === 'initials' && this.entry) {
-      this.entry.draw(ctx, W / 2, H * 0.66, 1.5);
+    const { entry, last, lastRank } = this.run;
+    if (this.state === 'initials' && entry) {
+      entry.draw(ctx, W / 2, H * 0.66, 1.5);
     } else {
       ctx.fillStyle = 'rgba(0,0,0,0.6)';
       ctx.fillRect(30, H * 0.5, W - 60, 120);
@@ -553,16 +475,14 @@ export class Pinball extends THREE.Group implements Furniture, Interactable, Upd
       const live = this.state === 'playing' || this.state === 'demo';
       drawText(ctx, live && this.sim.multiplier > 1 ? `x${this.sim.multiplier}` : 'PLAYER 1', 60, H * 0.5 + 24, 12, '#c9c4ff', 'left');
       drawText(ctx, `HI ${top.name} ${format(top.score)}`, W - 60, H * 0.5 + 24, 12, '#c9c4ff', 'right');
-      const score = this.state === 'attract' ? 0 : this.state === 'over' ? this.last.score : this.sim.score;
+      const score = this.state === 'attract' ? 0 : this.state === 'over' ? last.score : this.sim.score;
       drawText(ctx, format(score), W / 2, H * 0.5 + 76, 34, '#ff8a3a');
       const blink = Math.floor(this.clock * 3) % 2 === 0;
       if (this.state === 'over') {
-        const tickets = Math.floor(this.last.score / this.wiring.pointsPerTicket);
-        const shown = Math.floor(tickets * Math.min(1, this.overClock / COUNT_UP_SECONDS));
-        drawText(ctx, `${shown} TICKETS`, W / 2, H * 0.8, 22, '#ffd23a');
-        const note = this.lastRank !== null ? `${ordinal(this.lastRank + 1)} ON THE BOARD!` : this.last.best ? 'NEW BEST!' : 'GAME OVER';
+        drawText(ctx, `${this.run.shownTickets} TICKETS`, W / 2, H * 0.8, 22, '#ffd23a');
+        const note = lastRank !== null ? `${ordinal(lastRank + 1)} ON THE BOARD!` : last.best ? 'NEW BEST!' : 'GAME OVER';
         drawText(ctx, note, W / 2, H * 0.87, 16, blink ? '#7ee787' : '#ffffff');
-        drawText(ctx, `SPACE: AGAIN (${this.priceText().toUpperCase()})`, W / 2, H * 0.94, 12, '#ffd6a0');
+        drawText(ctx, `SPACE: AGAIN (${this.run.priceText().toUpperCase()})`, W / 2, H * 0.94, 12, '#ffd6a0');
       } else if (this.state === 'attract') {
         drawText(ctx, 'GAME OVER', W / 2, H * 0.82, 20, '#ff4a4a');
         if (blink) drawText(ctx, 'INSERT COIN', W / 2, H * 0.9, 16, '#ffd6a0');
@@ -573,7 +493,7 @@ export class Pinball extends THREE.Group implements Furniture, Interactable, Upd
         drawText(ctx, `BALL ${this.sim.ballNumber}   ${hint}`, W / 2, H * 0.84, 14, '#ffd6a0');
       }
     }
-    this.glassTexture.needsUpdate = true;
+    texture.needsUpdate = true;
   }
 
   /** The playfield: the table's art, then the sim's own walls, lanes, slingshots, targets and bumper rings over it. */
@@ -631,10 +551,7 @@ export class Pinball extends THREE.Group implements Furniture, Interactable, Upd
       ctx.stroke();
     }
     drawText(ctx, this.title, 0.45 * W, 0.47 * W, 16, '#ffe680');
-    const texture = new THREE.CanvasTexture(canvas);
-    texture.colorSpace = THREE.SRGBColorSpace;
-    texture.anisotropy = 8;
-    return texture;
+    return toTexture(canvas, 8);
   }
 }
 

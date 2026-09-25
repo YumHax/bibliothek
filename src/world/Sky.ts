@@ -2,7 +2,7 @@ import type { Updatable } from '@/core/Engine';
 import { DayNight } from './props/DayNight';
 import { localPlace } from './props/solar';
 import { Outdoors, type NearWall } from './props/outdoors/Outdoors';
-import { type Holiday, type Season, seasonOf } from './props/outdoors/season';
+import { type Festivity, type Holiday, type Season, festivitiesOf, holidayOf, seasonOf, useFestivities } from './props/outdoors/season';
 import { Weather, type WeatherKind } from './weather/Weather';
 
 export interface SkyOptions {
@@ -18,6 +18,8 @@ export interface SkyOptions {
   season?: Season;
   /** The holiday the view is dressed for (`?holiday=`); default the real calendar's, null for none. */
   holiday?: Holiday | null;
+  /** New Year's streamers whatever the date (`?holiday=newyear`, see `parseNewYear`). */
+  newYear?: boolean;
   /** Holds the weather to one kind (`?weather=`); default it changes on its own. */
   weather?: WeatherKind;
   /** Latitude the sunrise and sunset are computed for (`?lat=`); default the time zone's city (see `localPlace`). */
@@ -33,9 +35,14 @@ export class Sky implements Updatable {
   readonly dayNight: DayNight;
   readonly weather: Weather;
   readonly outdoors: Outdoors;
+  /** What the rooms and the street are dressed for today (the tree, the pumpkins, the streamers); plan entries gated by `holiday` read it. */
+  readonly festivities: readonly Festivity[];
 
   constructor(options: SkyOptions) {
     const season = options.season ?? seasonOf(new Date());
+    // Set before any zone is built: the decor's holiday gates read it (`currentFestivities`).
+    this.festivities = festivitiesOf(options.holiday === undefined ? holidayOf(new Date()) : options.holiday, new Date(), options.newYear);
+    useFestivities(this.festivities);
     this.dayNight = new DayNight({ hours: options.hours, dayLength: options.dayLength, place: localPlace(options.latitude) });
     this.weather = new Weather(season.name);
     if (options.weather) {

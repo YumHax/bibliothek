@@ -44,6 +44,7 @@ export class WallClock extends Prop implements Interactable {
   private lastClickAt = -Infinity;
   /** Who set the alarm: told when it rings. */
   private session: SessionActions | null = null;
+  private readonly unsubscribe: () => void;
 
   constructor(
     dayNight: DayNight,
@@ -101,7 +102,12 @@ export class WallClock extends Prop implements Interactable {
     this.add(hitbox);
     this.hitboxes = [hitbox];
 
-    dayNight.onChange((sky) => this.setTime(sky.hours));
+    this.unsubscribe = dayNight.onChange((sky) => this.setTime(sky.hours));
+  }
+
+  /** `Furniture.dispose`: the zone unloads, the clock stops following the sky. */
+  dispose(): void {
+    this.unsubscribe();
   }
 
   /** Turns the hands to `hours` (0 ≤ hours < 24, fractional). */

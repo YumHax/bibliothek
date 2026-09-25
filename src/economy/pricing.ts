@@ -1,5 +1,8 @@
 import type { BoxCondition, Edition, Game, PlatformId } from '@/catalog/types';
 import type { Views } from './Fame';
+import { hash01 } from './seeded';
+
+export { hash01 } from './seeded';
 
 /*
  * THE ECONOMY'S NUMBERS, all in one place. Coins buy games and arcade plays; the cabinets pay in
@@ -67,6 +70,9 @@ export const CHANGE_MACHINE = { minCoins: 1, maxCoins: 3, workingOdds: 0.25 };
 
 /** The daily challenge's reward range in tickets (the day picks one in it). */
 export const CHALLENGE_REWARD = { min: 50, max: 90 };
+
+/** How often a day has an arcade machine out of order. */
+export const OUT_OF_ORDER_ODDS = 0.35;
 
 /**
  * Shop price of an ordinary game per platform, before the fame factor. Calibrated against the
@@ -153,6 +159,15 @@ export const BUDGET_LABEL: Record<PlatformId, string> = {
   ps1: 'Greatest Hits',
 };
 
+/**
+ * What each stall shows a day: `perPlatform` ordinary copies (drawn in the range; a theme may add
+ * some), `bin` copies in the bargain bin, `wantedOdds` that a wishlisted game turns up on its stall,
+ * `showpieceFirstPrint` that the showpiece is a first print.
+ */
+export const MARKET_STOCK = { perPlatform: { min: 2, max: 8 }, bin: 8, wantedOdds: 0.4, showpieceFirstPrint: 0.3 } as const;
+/** How second-hand copies turn up: one in ten worn, a fifth without the manual, the rest complete. */
+export const CONDITION_ODDS = { worn: 0.1, noManual: 0.2 } as const;
+
 /** Share of a stall's ordinary finds that are Japanese imports, and their price against a western copy's. */
 export const IMPORT = { odds: 0.07, price: 0.7 };
 /** Chance a market day that one stall has a first print of a game the player owns in an ordinary printing. */
@@ -170,6 +185,11 @@ export const BIN_GEM_ODDS = 0.15;
 /** Holding a copy for the day: a share of its price, paid now, counted towards the price. */
 export const HOLD_DEPOSIT = 0.1;
 
+/** A game sold at the WE BUY desk goes on its platform's stall the next day, and stays this many market days. */
+export const CONSIGNMENT_DAYS = 3;
+/** Notice-board cards (and which were dealt with) are kept this many market days: longer than any card stays up. */
+export const CARD_MEMORY_DAYS = 7;
+
 /** A second-hand copy ordered at the mail-order counter: deposit share, the days it takes, and its price (a share of the shop price, complete). */
 export const MARKET_ORDER = { deposit: 0.2, days: 2, share: 0.72 };
 
@@ -181,8 +201,11 @@ export const TRADE_SHARE = 0.42;
 
 /** The notice board: collectors pay this share of a game's shop price (drawn in the range), for this many market days. */
 export const WANTED_AD = { perDay: 3, share: [0.62, 0.8] as [number, number], days: 3 };
-/** Private sellers' cards: this many a day, at this share of the shop price, delivered to the parcel. */
-export const FOR_SALE_AD = { perDay: 2, share: [0.45, 0.6] as [number, number] };
+/**
+ * Private sellers' cards: this many a day, at this share of the shop price, delivered to the parcel;
+ * `completeOdds` of them complete (the rest without the manual, at `noManualFactor` of the price).
+ */
+export const FOR_SALE_AD = { perDay: 2, share: [0.45, 0.6] as [number, number], completeOdds: 0.6, noManualFactor: 0.8 };
 
 /** A coffee from the cart. */
 export const COFFEE_PRICE = 2;
@@ -277,15 +300,6 @@ export function describeCondition(condition: BoxCondition | undefined): string {
   }
 }
 
-/** Deterministic [0, 1) from a string (FNV-1a, folded). */
-export function hash01(text: string): number {
-  let h = 0x811c9dc5;
-  for (let i = 0; i < text.length; i++) {
-    h ^= text.charCodeAt(i);
-    h = Math.imul(h, 0x01000193);
-  }
-  return ((h >>> 0) % 100000) / 100000;
-}
 
 /**
  * A bookcase kit for the bedroom, for the games the collection room has no room left for (about
@@ -310,6 +324,13 @@ export const STREAK = { perDay: 10, maxDays: 7 } as const;
  * (tickets); first place on Sunday night takes the league pennant home.
  */
 export const LEAGUE = { rivalWeek: { min: 250, max: 1400 }, rivals: 5 } as const;
+
+/**
+ * The Saturday tournament: `entry` coins to sign the sheet (once a Saturday), then three rounds on
+ * the day's cabinet, each a normal paid play that must beat the opponent's score. `reward[n]` is
+ * the tickets for going out after winning n rounds (3: the champion, who also takes the cup home).
+ */
+export const TOURNAMENT = { entry: 3, reward: [0, 40, 120, 300], prize: 'saturdayCup' } as const;
 
 /**
  * The ticket wheel: what each slice pays and how wide it is (weights, so the slices are drawn to
@@ -339,3 +360,80 @@ export const JACKPOT = { start: 250, perSpin: 3 } as const;
 
 /** A random game for the collection from the prize counter: the dearest thing on the list. */
 export const MYSTERY_GAME_TICKETS = 900;
+
+/** The prize counter's list, in tickets, by prize id (`Prizes.ts` has what each one is). */
+export const PRIZE_TICKETS = {
+  keyring: 30,
+  ball: 40,
+  yoyo: 50,
+  duck: 60,
+  catToy: 80,
+  poster: 120,
+  bear: 150,
+  cat: 150,
+  rocket: 250,
+  moodLamp: 300,
+  lavaLamp: 350,
+  trophy: 400,
+  miniCabinet: 600,
+  mysteryGame: MYSTERY_GAME_TICKETS,
+} as const;
+
+/** The household stall's one-off pieces for the flat, in coins (the bookcase is `BOOKCASE_PRICE`; `homeGoods.ts` has the list). */
+export const HOME_GOOD_PRICES = { rug: 120, lamp: 90, poster: 60, crt: 300 } as const;
+
+// --- The market's calendar of events: grails, the monthly big market, sales (see `marketEvents.ts`) ---
+
+/**
+ * The grails (`grails.ts`): one comes to the market every `every` market days from day `offset`
+ * (an in-game day is ten minutes, so a little over an hour apart), talked about `rumourDays`
+ * days before. A haggle over one never goes under `floor` of its tag.
+ */
+export const GRAIL = { every: 8, offset: 5, rumourDays: 3, floor: 0.92 } as const;
+
+/**
+ * The Grande Brocante: once a market "month" (`month` days, from day `offset`; it falls on the week
+ * round's last day), the hall fills up: `extraCopies` more per stall, the bin `bin.size` times as
+ * deep at `bin.price` of its price, `gems` more gems in it, `crowd` times the shoppers, and every
+ * stall `priceFactor` of its usual prices (with a haggle, still above what the WE BUY desk pays).
+ * Announced `announceDays` days before.
+ */
+export const BROCANTE = { month: 28, offset: 13, extraCopies: 4, bin: { size: 2.5, price: 0.8 }, gems: 1, crowd: 1.8, priceFactor: 0.95, announceDays: 3 } as const;
+
+/**
+ * Sale days. The mail-order counter takes `catalogue.factor` off new copies every `catalogue.every`
+ * market days (from `catalogue.offset`). Some days (`clearance.odds`) one stall clears out: its
+ * copies go at `clearance.factor` of their price, no haggling (a haggle on top would go under the
+ * WE BUY desk's offer). Neither touches the bargain bin, orders or copies held.
+ */
+export const SALES = {
+  catalogue: { every: 6, offset: 3, factor: 0.8 },
+  clearance: { odds: 0.2, factor: 0.65 },
+} as const;
+
+// --- The collector's book: milestones (see `milestoneList.ts`) ---
+
+/**
+ * What each milestone of the collector's book pays once claimed there (coins, or arcade tickets);
+ * a milestone missing here pays nothing but its place in the book (or the thing it brings home).
+ */
+export const MILESTONE_REWARD: Readonly<Record<string, { coins?: number; tickets?: number }>> = {
+  'games-10': { coins: 15 },
+  'games-25': { coins: 30 },
+  'games-50': { coins: 60 },
+  'games-100': { coins: 150 },
+  'games-250': { coins: 400 },
+  'platform-10': { tickets: 150 },
+  'platform-25': { coins: 120 },
+  'platforms-5': { coins: 40 },
+  'set-1': { tickets: 100 },
+  'sets-3': { coins: 100 },
+  'medal-1': { tickets: 30 },
+  'medals-10': { tickets: 150 },
+  'deal-1': { coins: 10 },
+  'sale-1': { coins: 10 },
+  'league-1': { tickets: 200 },
+  'value-1000': { coins: 50 },
+  'value-5000': { coins: 200 },
+  'grail-1': { coins: 100 },
+};

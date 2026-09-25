@@ -186,6 +186,7 @@ export class DishRack extends Prop {
     const glass = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.034, 0.1, 18, 1, true), GLASS);
     glass.position.set(w / 2 + 0.05, 0.05, 0.06);
     this.add(glass);
-    this.add(cylinderMesh(0.03, 0.004, GLASS, { x: w / 2 + 0.05, y: 0.098, z: 0.06 }, { segments: 18 }));
+    // Its base, a little inside the wall so the two glass surfaces do not coincide.
+    this.add(cylinderMesh(0.0285, 0.004, GLASS, { x: w / 2 + 0.05, y: 0.098, z: 0.06 }, { segments: 18 }));
   }
 }

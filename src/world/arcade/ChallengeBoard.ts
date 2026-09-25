@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import type { Updatable } from '@/core/Engine';
 import { createCanvas } from '@/covers/generated/canvasUtils';
 import { boxMesh } from '../meshUtils';
-import { matte, Prop } from '../props/Prop';
+import { markShared, matte, Prop } from '../props/Prop';
 import { drawText } from './games/ArcadeGame';
 import type { TodaysChallenge } from './scoreTable';
 
@@ -17,7 +17,7 @@ export interface ChallengeBoardOptions {
 
 const PX_PER_M = 700;
 const POLL_SECONDS = 1;
-const FRAME = matte(0x1a1208, 0.5);
+const FRAME = markShared(matte(0x1a1208, 0.5));
 
 /**
  * TODAY'S CHALLENGE: a lit sign by the way in with the day's game, the score to reach and the

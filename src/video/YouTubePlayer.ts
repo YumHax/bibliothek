@@ -1,3 +1,5 @@
+import { channelVolume } from '@/audio/audioContext';
+
 const YOUTUBE_ORIGIN = 'https://www.youtube.com';
 
 /**
@@ -51,9 +53,9 @@ export class YouTubePlayer {
     this.element.src = 'about:blank';
   }
 
-  /** 0–100. Ignored until the player is ready; only sent when the rounded value changes. */
+  /** 0–100, scaled by the mixer's screens channel. Ignored until the player is ready; only sent when the rounded value changes. */
   setVolume(volume: number): void {
-    const v = Math.round(Math.min(100, Math.max(0, volume)));
+    const v = Math.round(Math.min(100, Math.max(0, volume * channelVolume('screens'))));
     if (!this.ready || v === this.sentVolume) return;
     this.sentVolume = v;
     this.post({ event: 'command', func: 'setVolume', args: [v] });

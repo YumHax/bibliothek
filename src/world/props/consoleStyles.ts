@@ -105,7 +105,7 @@ const SHAPES: Record<string, Shape> = {
     part(g, w, 0.044, d * 0.5, grey, { y: 0.067, z: -d * 0.25 });
     part(g, w * 0.62, 0.044, d * 0.5, dark, { x: -w * 0.19, y: 0.067, z: d * 0.25 });
     part(g, w * 0.38, 0.044, d * 0.5, grey, { x: w * 0.31, y: 0.067, z: d * 0.25 });
-    part(g, w * 0.62, 0.004, 0.004, red, { x: -w * 0.19, y: 0.087, z: d * 0.5 - 0.002 }); // red pinstripe
+    part(g, w * 0.62 - 0.004, 0.004, 0.004, red, { x: -w * 0.19, y: 0.085, z: d * 0.5 - 0.001 }); // red pinstripe, 1 mm proud of the dark panel
     part(g, 0.022, 0.006, 0.012, red, { x: w * 0.22, y: 0.092, z: d * 0.3 }); // power
     part(g, 0.022, 0.006, 0.012, dark, { x: w * 0.36, y: 0.092, z: d * 0.3 }); // reset
     pad(v, { color: 0xb3b3ae, buttons: [[0.02, 0.008, 0xb01c1c], [0.038, 0.008, 0xb01c1c]] });

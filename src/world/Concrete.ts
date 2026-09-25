@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { createCanvas, seededRandom, toTexture } from '@/covers/generated/canvasUtils';
+import { paintOnce } from './materials/paintedTiles';
 
 /** Metres of floor covered by one tile of the texture: two slabs each way, so the joints tile seamlessly. */
 const TILE_M = 4;
@@ -13,9 +14,20 @@ const PX_PER_M = TILE_PX / TILE_M;
  * A poured concrete slab for a hall or a shop: mottled grey, faint trowel arcs, saw-cut joints
  * every `SLAB_M`, a few dark stains and hairline cracks, tiled over the floor. Returns a standard
  * material with a colour and a bump map so the joints and the cracks catch the light. Painted once
- * per call; the flat's rooms keep their parquet (`Parquet.ts`).
+ * for the page (`paintOnce`); the flat's rooms keep their parquet (`Parquet.ts`).
  */
 export function concreteMaterial(floorWidth: number, floorDepth: number): THREE.MeshStandardMaterial {
+  const [map, bumpMap] = paintOnce('concrete', paintConcrete);
+  for (const t of [map, bumpMap]) {
+    t.repeat.set(floorWidth / TILE_M, floorDepth / TILE_M);
+    // Joints line up with the room's centre: half a tile's offset puts a slab edge on the origin.
+    t.offset.set(0.5 - floorWidth / TILE_M / 2, 0.5 - floorDepth / TILE_M / 2);
+  }
+  return new THREE.MeshStandardMaterial({ map, bumpMap, bumpScale: 0.4, roughness: 0.92, metalness: 0 });
+}
+
+/** The colour and bump tiles, repeat-wrapped. */
+function paintConcrete(): [THREE.Texture, THREE.Texture] {
   const [colorCanvas, color] = createCanvas(TILE_PX, TILE_PX);
   const [bumpCanvas, bump] = createCanvas(TILE_PX, TILE_PX);
   const random = seededRandom(0x5c0c8e7e);
@@ -115,11 +127,6 @@ export function concreteMaterial(floorWidth: number, floorDepth: number): THREE.
   // The bump map is data, not colour: no sRGB decoding.
   const bumpMap = new THREE.CanvasTexture(bumpCanvas);
   bumpMap.anisotropy = 4;
-  for (const t of [map, bumpMap]) {
-    t.wrapS = t.wrapT = THREE.RepeatWrapping;
-    t.repeat.set(floorWidth / TILE_M, floorDepth / TILE_M);
-    // Joints line up with the room's centre: half a tile's offset puts a slab edge on the origin.
-    t.offset.set(0.5 - floorWidth / TILE_M / 2, 0.5 - floorDepth / TILE_M / 2);
-  }
-  return new THREE.MeshStandardMaterial({ map, bumpMap, bumpScale: 0.4, roughness: 0.92, metalness: 0 });
+  for (const t of [map, bumpMap]) t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  return [map, bumpMap];
 }

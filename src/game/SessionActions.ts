@@ -2,6 +2,7 @@ import type * as THREE from 'three';
 import type { GameBox } from '@/world/GameBox';
 import type { VideoScreen } from '@/world/screen';
 import type { StockItem } from '@/economy/StockItem';
+import type { ZoneId } from '@/world/zoneIds';
 import type { ModalLike } from './SessionParts';
 
 /** What the player is doing right now; interactables read it to phrase labels and choose actions. */
@@ -93,7 +94,7 @@ export interface SessionActions extends PlayerState {
   stopScreen(screen: VideoScreen): void;
   hint(message: string): void;
   /** A door that leads elsewhere was clicked: teleport to `to`, or offer the destinations when it names none. */
-  travel(to?: string): void;
+  travel(to?: ZoneId): void;
   /** Insert a coin and play (or walk away from the machine being played). */
   playArcade(machine: ArcadeMachineLike): void;
   /** Open the prize counter: prizes for tickets, tickets for coins. */

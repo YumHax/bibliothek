@@ -4,13 +4,15 @@ import { SEED_GAMES } from '@/catalog';
 import { gameIdFor } from '@/catalog/nointro';
 import type { IndexEntry, LibretroIndex } from '@/collection/LibretroIndex';
 import type { Fame } from './Fame';
-import type { MarketLedger } from './MarketLedger';
+import type { HeldCopy, MarketLedger } from './MarketLedger';
 import type { MarketStanding } from './MarketStanding';
 import { Negotiation } from './haggle';
 import { appliesTo, themeOf, type MarketDayTheme } from './marketDays';
+import { eventsOn, marketNews, type MarketEvents, type MarketNews } from './marketEvents';
+import { grailGame, isGrail } from './grails';
 import {
-  BARGAIN_PRICE, BIN_GEM_ODDS, EDITION_ODDS, HOLD_DEPOSIT, IMPORT, JOB_LOT, LOYALTY, MARKET_DISCOUNT, MARKET_ORDER, REPRO_CAUGHT, REPRO_ODDS,
-  REPUTATION, UPGRADE_ODDS, marketPrice, shopPrice,
+  BARGAIN_PRICE, BIN_GEM_ODDS, CONDITION_ODDS, EDITION_ODDS, HOLD_DEPOSIT, IMPORT, JOB_LOT, LOYALTY, MARKET_DISCOUNT, MARKET_ORDER, MARKET_STOCK,
+  REPRO_CAUGHT, REPRO_ODDS, REPUTATION, UPGRADE_ODDS, marketPrice, shopPrice,
 } from './pricing';
 import { StockItem, type StockSource, type StockTraits } from './StockItem';
 import { seeded } from './seeded';
@@ -32,11 +34,11 @@ export interface MarketStockDeps {
 }
 
 export interface MarketStockOptions {
-  /** Ordinary copies offered per platform each day, drawn in this range (a stall may be sparse or heaped). Default 2 to 8. */
+  /** Ordinary copies offered per platform each day, drawn in this range (a stall may be sparse or heaped). Default `MARKET_STOCK.perPlatform`. */
   perPlatform?: { min: number; max: number };
-  /** Copies in the bargain bin each day. Default 8. */
+  /** Copies in the bargain bin each day. Default `MARKET_STOCK.bin`. */
   bin?: number;
-  /** Chance a day that one wishlisted game turns up on its platform's stall. Default 0.4. */
+  /** Chance a day that one wishlisted game turns up on its platform's stall. Default `MARKET_STOCK.wantedOdds`. */
   wantedOdds?: number;
 }
 
@@ -85,9 +87,9 @@ export class MarketStock {
   private readonly pools = new Map<PlatformId, Promise<readonly IndexEntry[]>>();
 
   constructor(private readonly deps: MarketStockDeps, options: MarketStockOptions = {}) {
-    this.perPlatform = options.perPlatform ?? { min: 2, max: 8 };
-    this.binSize = options.bin ?? 8;
-    this.wantedOdds = options.wantedOdds ?? 0.4;
+    this.perPlatform = options.perPlatform ?? MARKET_STOCK.perPlatform;
+    this.binSize = options.bin ?? MARKET_STOCK.bin;
+    this.wantedOdds = options.wantedOdds ?? MARKET_STOCK.wantedOdds;
   }
 
   /** How many copies each stall (and the bin) can show; set by the market's builder before the first draw. */
@@ -103,6 +105,16 @@ export class MarketStock {
   /** What kind of day it is. */
   get theme(): MarketDayTheme {
     return themeOf(this.day);
+  }
+
+  /** What is on today: the grail, the Grande Brocante, the sales (`marketEvents`). */
+  get events(): MarketEvents {
+    return eventsOn(this.day);
+  }
+
+  /** What people are saying about the days ahead (grail rumours, the next Brocante, sales), for the stalls, the papers and the flyers. */
+  news(): MarketNews[] {
+    return marketNews(this.day, (id) => this.deps.collection.owns(id));
   }
 
   /** The bargain bin's price today. */
@@ -129,6 +141,7 @@ export class MarketStock {
     if (!item.priced) return { line: 'Hang on, I’m still working out what it’s worth.' };
     if (item.source === 'bin') return { line: `It's the bargain bin, friend. ${this.binPrice} coins, that's the deal.` };
     if (item.source === 'ordered') return { line: `That's your order: ${item.price} coins, as agreed.` };
+    if (item.sale < 1) return { line: `It's a clearance, friend: ${item.price} coins, already slashed. No haggling.` };
     const { ledger, standing } = this.deps;
     const agreed = ledger.haggleOf(this.day, item.game.id);
     if (agreed !== undefined) return { line: agreed < 1 ? `We already shook on ${item.price} coins.` : `I said ${item.price}. My last word.` };
@@ -156,9 +169,9 @@ export class MarketStock {
     return Math.max(1, Math.round(item.price * HOLD_DEPOSIT));
   }
 
-  /** The deposit on `item` is paid: other shoppers leave it alone today. */
+  /** The deposit on `item` is paid: other shoppers leave it alone today, and the copy stays on its stall all day whatever happens. */
   hold(item: StockItem, deposit: number): void {
-    this.deps.ledger.hold(this.day, item.game.id, deposit);
+    this.deps.ledger.hold(this.day, item.game.id, deposit, heldCopyOf(item));
     item.setDeposit(deposit);
   }
 
@@ -246,7 +259,8 @@ export class MarketStock {
     let pool = this.pools.get(platform);
     if (!pool) {
       pool = this.deps.index.load(platform).then((entries) => {
-        const releases = entries.filter((e) => !NOT_A_RELEASE.test(e.name) && WESTERN_REGION.test(e.name));
+        // A grail never turns up in an ordinary crate (nor in a lot, nor on a private seller's card): only on its day.
+        const releases = entries.filter((e) => !NOT_A_RELEASE.test(e.name) && WESTERN_REGION.test(e.name) && !isGrail(gameIdFor(platform, e.name)));
         return releases.length ? releases : entries;
       });
       pool.catch(() => this.pools.delete(platform));
@@ -286,39 +300,62 @@ export class MarketStock {
     return this.cache;
   }
 
+  /**
+   * Today's stock. Every draw has a seed of its own (`${day}:<platform>:<slot>`), so nothing moves
+   * another: a platform's index failing to load, a copy bought, a game on the wishlist, a platform
+   * added. Held copies are put back as they were paid for, in their place when the draw gives
+   * them again, else after the rest (room is kept for them).
+   */
   private async draw(day: number): Promise<StockItem[]> {
-    const rng = seeded(`${day}:market`);
+    const rngOf = (slot: string) => seeded(`${day}:${slot}`);
     const theme = themeOf(day);
-    const baseDiscount = MARKET_DISCOUNT.min + rng() * (MARKET_DISCOUNT.max - MARKET_DISCOUNT.min);
+    const baseDiscount = MARKET_DISCOUNT.min + rngOf('discount')() * (MARKET_DISCOUNT.max - MARKET_DISCOUNT.min);
     const { collection, ledger, standing } = this.deps;
     const owns = (id: string) => collection.owns(id);
     const consigned = ledger.consignedOn(day);
     const ordered = ledger.orders.filter((o) => o.day <= day);
+    const held = ledger.heldCopies(day);
     const wishlist = collection.games.filter((g) => g.status === 'wishlist');
     const items: StockItem[] = [];
-    const binPool: { entry: IndexEntry; platform: PlatformId }[] = [];
-    const famous = (platform: PlatformId) => SEED_GAMES.filter((g) => g.platform === platform && g.externalIds?.libretroName)
-      .map((g) => ({ ...g, id: gameIdFor(platform, g.externalIds!.libretroName!) }))
-      .filter((g) => !owns(g.id));
+    const binCandidates: { entry: IndexEntry; platform: PlatformId }[] = [];
     // Now and then a first print of a game the player owns in an ordinary printing: a reason to look at their own games again.
     const upgradable = collection.games.filter((g) => g.status === 'owned' && (g.edition ?? 'standard') !== 'firstPrint' && !g.repro);
-    const upgradeRoll = rng();
-    const upgradePick = upgradeRoll < UPGRADE_ODDS ? upgradable[Math.floor(rng() * upgradable.length)] : undefined;
+    const upgradeRng = rngOf('upgrade');
+    const upgradeRoll = upgradeRng();
+    const upgradeAt = upgradeRng();
+    const upgradePick = upgradeRoll < UPGRADE_ODDS ? upgradable[Math.floor(upgradeAt * upgradable.length)] : undefined;
+    // The day's events: a grail on its stall, a stall clearing out (its ordinary copies cheaper, no haggling).
+    const { grail, clearance } = eventsOn(day);
 
     for (const platform of PLATFORM_LIST) {
-      let pool: readonly IndexEntry[];
-      try {
-        pool = await this.releases(platform.id);
-      } catch (err) {
+      const p = platform.id;
+      // No index (offline): no ordinary finds, but the orders, the holds, the showpieces and what the player sold still stand.
+      const pool = await this.releases(p).catch((err: unknown) => {
         console.warn(`[market] no index for ${platform.shortName}`, err);
-        continue;
-      }
-      const discount = baseDiscount * (appliesTo(theme.priceFactor, platform.id) ? theme.priceFactor!.factor : 1);
-      const room = this.capacity(platform.id);
+        return [] as readonly IndexEntry[];
+      });
+      const discount = baseDiscount * (appliesTo(theme.priceFactor, p) ? theme.priceFactor!.factor : 1);
+      const sale = clearance?.platform === p ? clearance.factor : undefined;
+      const room = this.capacity(p);
       const stall: StockItem[] = [];
       const taken = new Set<string>();
+      const heldHere = held.filter((h) => h.game.platform === p);
+      const unplacedHolds = () => heldHere.filter((h) => !taken.has(h.game.id)).length;
+      const putHeld = (hold: HeldCopy & { deposit: number }): StockItem => {
+        taken.add(hold.game.id);
+        const onSale = sale !== undefined && hold.source === 'stall' ? sale : undefined;
+        const item = new StockItem(hold.game, hold.condition, hold.source, { list: hold.list, final: true }, { edition: hold.edition, repro: hold.repro, gem: hold.gem, sale: onSale });
+        const agreed = ledger.haggleOf(day, hold.game.id);
+        if (agreed !== undefined) item.setHaggle(agreed);
+        item.setDeposit(hold.deposit);
+        stall.push(item);
+        return item;
+      };
       const offer = (game: Game, condition: BoxCondition, source: StockSource, traits: StockTraits = {}, factor = 1): StockItem | null => {
-        if (stall.length >= room || taken.has(game.id) || (owns(game.id) && source !== 'upgrade')) return null;
+        if (taken.has(game.id)) return null;
+        const hold = heldHere.find((h) => h.game.id === game.id);
+        if (hold) return putHeld(hold);
+        if (stall.length + unplacedHolds() >= room || (owns(game.id) && source !== 'upgrade')) return null;
         taken.add(game.id);
         const item = this.priced(game, condition, source, discount * factor, traits);
         stall.push(item);
@@ -326,55 +363,76 @@ export class MarketStock {
       };
 
       // What the player ordered comes first: it is theirs, deposit paid, at the agreed price.
-      for (const order of ordered.filter((o) => o.game.platform === platform.id)) {
-        if (stall.length >= room || owns(order.game.id)) continue;
+      for (const order of ordered.filter((o) => o.game.platform === p)) {
+        if (stall.length >= room || owns(order.game.id) || taken.has(order.game.id)) continue;
         taken.add(order.game.id);
         const item = new StockItem(order.game, 'complete', 'ordered', { list: order.price, final: true });
         item.setDeposit(order.deposit);
         stall.push(item);
       }
-      // The showpiece: a title everyone knows, complete, front and centre (under the id the index gives it, so owning either copy counts).
-      const showpieces = famous(platform.id);
-      if (showpieces.length) offer(showpieces[Math.floor(rng() * showpieces.length)]!, 'complete', 'showpiece', { edition: rng() < 0.3 ? 'firstPrint' : 'standard' });
-      // An estate sale: another famous game on every stall.
-      if (theme.estate && showpieces.length > 1) offer(showpieces[Math.floor(rng() * showpieces.length)]!, 'complete', 'estate');
-      // A trusted player gets first pick: one more from the estate, before the crowd.
-      if (theme.estate && standing.reputation.level >= REPUTATION.earlyAccessLevel && showpieces.length > 2) {
-        offer(showpieces[Math.floor(rng() * showpieces.length)]!, 'complete', 'estate');
+      // The grail, on its day: front and centre, at its own price (the day's discount does not touch it).
+      if (grail?.platform === p) {
+        const game = grailGame(grail);
+        const hold = heldHere.find((h) => h.game.id === game.id);
+        if (hold) putHeld(hold);
+        else if (!owns(game.id) && !taken.has(game.id) && stall.length + unplacedHolds() < room) {
+          taken.add(game.id);
+          const item = new StockItem(game, 'complete', 'grail', { list: grail.price, final: true });
+          const agreed = ledger.haggleOf(day, game.id);
+          if (agreed !== undefined) item.setHaggle(agreed);
+          stall.push(item);
+        }
       }
-      if (upgradePick?.platform === platform.id) offer(upgradePick, 'complete', 'upgrade', { edition: 'firstPrint' });
+      // The showpiece: a title everyone knows, complete, front and centre (under the id the index gives it, so owning either
+      // copy counts). The day shuffles the platform's famous games; the first the player does not own is the showpiece.
+      const showRng = rngOf(`${p}:showpiece`);
+      const shuffled = shuffle([...famous(p)], showRng);
+      const firstPrint = showRng() < MARKET_STOCK.showpieceFirstPrint;
+      const unowned = shuffled.filter((g) => !owns(g.id));
+      if (unowned[0]) offer(unowned[0], 'complete', 'showpiece', { edition: firstPrint ? 'firstPrint' : 'standard' });
+      // An estate sale: another famous game on every stall; a trusted player gets first pick of one more, before the crowd.
+      if (theme.estate && unowned[1]) offer(unowned[1], 'complete', 'estate');
+      if (theme.estate && standing.reputation.level >= REPUTATION.earlyAccessLevel && unowned[2]) offer(unowned[2], 'complete', 'estate');
+      if (upgradePick?.platform === p) offer(upgradePick, 'complete', 'upgrade', { edition: 'firstPrint' });
       // A friend of the stall gets a copy kept aside: something off the wishlist, else another classic.
-      const loyalty = standing.loyalty(platform.id);
-      const wanted = wishlist.filter((g) => g.platform === platform.id);
-      const keptRoll = rng();
+      const loyalty = standing.loyalty(p);
+      const wanted = wishlist.filter((g) => g.platform === p);
+      const keptRoll = rngOf(`${p}:keptAside`)();
       if (loyalty >= 2) {
-        const pick = wanted[Math.floor(keptRoll * wanted.length)] ?? showpieces[Math.floor(keptRoll * showpieces.length)];
+        const pick = wanted[Math.floor(keptRoll * wanted.length)] ?? unowned[Math.floor(keptRoll * unowned.length)];
         if (pick) offer(pick, 'complete', 'keptAside');
       }
       // Word got round of what the player is after (more readily for a regular).
-      const wantedRoll = rng();
-      const wantedPick = wanted[Math.floor(rng() * wanted.length)];
+      const wantedRng = rngOf(`${p}:wanted`);
+      const wantedRoll = wantedRng();
+      const wantedPick = wanted[Math.floor(wantedRng() * wanted.length)];
+      const wantedCondition = drawCondition(wantedRng());
       const odds = this.wantedOdds * (loyalty >= 1 ? LOYALTY.wantedOddsBoost : 1);
-      if (wantedPick && wantedRoll < odds) offer(wantedPick, drawCondition(rng()), 'wanted');
+      if (wantedPick && wantedRoll < odds) offer(wantedPick, wantedCondition, 'wanted');
       // What the player sold, in the state they sold it.
-      for (const game of consigned.filter((g) => g.platform === platform.id)) {
+      for (const game of consigned.filter((g) => g.platform === p)) {
         offer(game, game.condition ?? 'complete', 'consigned', { edition: game.edition, repro: game.repro });
       }
       // Then the day's finds: now and then a first print, a budget re-release, a fake, a Japanese import (cheaper: the text is Japanese).
       const { min, max } = this.perPlatform;
-      const extra = appliesTo(theme.extraCopies, platform.id) ? theme.extraCopies!.count : 0;
-      const count = min + Math.floor(rng() * (max - min + 1)) + extra;
-      const imports = await this.imports(platform.id).catch(() => [] as readonly IndexEntry[]);
-      for (const found of pickDistinct(pool, count, rng)) {
-        const imported = imports.length > 0 && rng() < IMPORT.odds;
-        const entry = imported ? imports[Math.floor(rng() * imports.length)]! : found;
-        const condition = drawCondition(rng());
-        const edition = drawEdition(rng(), theme.firstPrintBoost ?? 1);
-        const repro = condition !== 'worn' && rng() < REPRO_ODDS;
-        offer(gameFrom(entry, platform.id), condition, 'stall', { edition, repro }, imported ? IMPORT.price : 1);
-      }
+      const extra = appliesTo(theme.extraCopies, p) ? theme.extraCopies!.count : 0;
+      const count = min + Math.floor(rngOf(`${p}:count`)() * (max - min + 1)) + extra;
+      const imports = await this.imports(p).catch(() => [] as readonly IndexEntry[]);
+      pickDistinct(pool, count, rngOf(`${p}:finds`)).forEach((found, i) => {
+        const r = rngOf(`${p}:find:${i}`);
+        const [importRoll, importAt, conditionRoll, editionRoll, reproRoll] = [r(), r(), r(), r(), r()];
+        const imported = imports.length > 0 && importRoll < IMPORT.odds;
+        const entry = imported ? imports[Math.floor(importAt * imports.length)]! : found;
+        const condition = drawCondition(conditionRoll);
+        const edition = drawEdition(editionRoll, theme.firstPrintBoost ?? 1);
+        const repro = condition !== 'worn' && reproRoll < REPRO_ODDS;
+        offer(gameFrom(entry, p), condition, 'stall', { edition, repro, sale }, (imported ? IMPORT.price : 1) * (sale ?? 1));
+      });
+      // The copies held for the player that the draw did not give again: paid for, so on the stall all the same.
+      for (const hold of heldHere) if (!taken.has(hold.game.id)) putHeld(hold);
       items.push(...stall);
-      for (const entry of pickDistinct(pool, 3, rng)) binPool.push({ entry, platform: platform.id });
+      // A deeper bin (a bin day, the Brocante) needs more to choose from.
+      for (const entry of pickDistinct(pool, Math.ceil(3 * (theme.bin?.size ?? 1)), rngOf(`${p}:bin`))) binCandidates.push({ entry, platform: p });
     }
 
     // The bargain bin: worn copies of anything, one price, and on a lucky day a gem among them.
@@ -382,16 +440,16 @@ export class MarketStock {
     const binRoom = Math.min(Math.round(this.binSize * (theme.bin?.size ?? 1)), this.binCapacity);
     const inStock = new Set(items.map((item) => item.game.id));
     const bin: StockItem[] = [];
-    const gems = (rng() < BIN_GEM_ODDS ? 1 : 0) + (theme.estate?.gems ?? 0);
+    const gems = (rngOf('gems')() < BIN_GEM_ODDS ? 1 : 0) + (theme.estate?.gems ?? 0) + (theme.gems ?? 0);
     for (let i = 0; i < gems && bin.length < binRoom; i++) {
-      const platform = PLATFORM_LIST[Math.floor(rng() * PLATFORM_LIST.length)]!.id;
-      const choices = famous(platform).filter((g) => !inStock.has(g.id));
-      const gem = choices[Math.floor(rng() * choices.length)];
+      const r = rngOf(`gem:${i}`);
+      const platform = PLATFORM_LIST[Math.floor(r() * PLATFORM_LIST.length)]!.id;
+      const gem = shuffle([...famous(platform)], r).find((g) => !inStock.has(g.id) && !owns(g.id));
       if (!gem) continue;
       inStock.add(gem.id);
       bin.push(new StockItem(gem, 'worn', 'bin', { list: binPrice, final: true }, { gem: true }));
     }
-    for (const { entry, platform } of pickDistinct(binPool, binRoom, rng)) {
+    for (const { entry, platform } of shuffle(binCandidates, rngOf('bin'))) {
       if (bin.length >= binRoom) break;
       const game = gameFrom(entry, platform);
       if (inStock.has(game.id) || owns(game.id)) continue;
@@ -399,9 +457,9 @@ export class MarketStock {
       bin.push(new StockItem(game, 'worn', 'bin', { list: binPrice, final: true }));
     }
     // The gems hide among the rest, not on top.
-    items.push(...shuffle(bin, rng));
+    items.push(...shuffle(bin, rngOf('binOrder')));
 
-    // Held copies keep their deposit; fakes found out keep their knock-down price.
+    // Held copies keep their deposit (those held before copies were kept, when the draw gave them again); fakes found out keep their knock-down price.
     for (const item of items) {
       const deposit = ledger.holdOf(day, item.game.id);
       if (deposit !== undefined) item.setDeposit(deposit);
@@ -410,23 +468,20 @@ export class MarketStock {
     return items;
   }
 
-  /** A crate of a few games from anywhere, at a share of what they would fetch one by one. */
+  /** A crate of a few games from anywhere, at a share of what they would fetch one by one. Each pick has a seed of its own. */
   private async drawLot(day: number): Promise<JobLot> {
     const rng = seeded(`${day}:lot`);
     const size = JOB_LOT.min + Math.floor(rng() * (JOB_LOT.max - JOB_LOT.min + 1));
     const games: Game[] = [];
     for (let i = 0; i < size * 3 && games.length < size; i++) {
-      const platform = PLATFORM_LIST[Math.floor(rng() * PLATFORM_LIST.length)]!.id;
-      let pool: readonly IndexEntry[];
-      try {
-        pool = await this.releases(platform);
-      } catch {
-        continue;
-      }
-      const entry = pool[Math.floor(rng() * pool.length)];
+      const r = seeded(`${day}:lot:${i}`);
+      const [platformRoll, entryRoll, conditionRoll] = [r(), r(), r()];
+      const platform = PLATFORM_LIST[Math.floor(platformRoll * PLATFORM_LIST.length)]!.id;
+      const pool = await this.releases(platform).catch(() => [] as readonly IndexEntry[]);
+      const entry = pool[Math.floor(entryRoll * pool.length)];
       if (!entry) continue;
       const game = gameFrom(entry, platform);
-      const condition = drawCondition(rng());
+      const condition = drawCondition(conditionRoll);
       if (games.some((g) => g.id === game.id) || this.deps.collection.owns(game.id)) continue;
       games.push({ ...game, condition: condition === 'complete' ? undefined : condition });
     }
@@ -449,6 +504,24 @@ export class MarketStock {
   }
 }
 
+/** The built-in list's games on `platform` that the index knows (their ids are the index's: see `SEED_GAMES`). */
+function famous(platform: PlatformId): Game[] {
+  return SEED_GAMES.filter((g) => g.platform === platform && g.externalIds?.libretroName && !isGrail(g.id));
+}
+
+/** What the ledger keeps of a held copy: enough to put it back on its stall as it was. */
+function heldCopyOf(item: StockItem): HeldCopy {
+  return {
+    game: item.game,
+    condition: item.condition,
+    source: item.source,
+    list: item.tagPrice,
+    ...(item.edition !== 'standard' ? { edition: item.edition } : {}),
+    ...(item.repro ? { repro: true } : {}),
+    ...(item.gem ? { gem: true } : {}),
+  };
+}
+
 function gameFrom(entry: IndexEntry, platform: PlatformId): Game {
   return {
     id: gameIdFor(platform, entry.name),
@@ -460,9 +533,9 @@ function gameFrom(entry: IndexEntry, platform: PlatformId): Game {
   };
 }
 
-/** Most copies are complete; a fifth lack the manual; one in ten has seen better days. */
+/** Most copies are complete; some lack the manual; a few have seen better days (`CONDITION_ODDS`). */
 function drawCondition(u: number): BoxCondition {
-  return u < 0.1 ? 'worn' : u < 0.3 ? 'noManual' : 'complete';
+  return u < CONDITION_ODDS.worn ? 'worn' : u < CONDITION_ODDS.worn + CONDITION_ODDS.noManual ? 'noManual' : 'complete';
 }
 
 /** Now and then a first print (more on a collectors' fair), more often a budget re-release. */

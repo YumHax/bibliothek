@@ -67,7 +67,6 @@ export class StepBeat extends BaseGame {
   private fever = 0;
   private bpm = START_BPM;
   private lastLane: Lane | null = null;
-  private held: Record<Lane, boolean> = { left: false, down: false, up: false, right: false };
   private flashLane: Partial<Record<Lane, number>> = {};
   private beatPulse = 0;
 
@@ -93,7 +92,6 @@ export class StepBeat extends BaseGame {
     this.fever = 0;
     this.bpm = START_BPM;
     this.lastLane = null;
-    this.held = { left: false, down: false, up: false, right: false };
     this.flashLane = {};
     this.beatPulse = 0;
   }
@@ -121,10 +119,7 @@ export class StepBeat extends BaseGame {
     }
 
     for (const lane of LANES) {
-      const down = controls[lane];
-      const pressed = down && !this.held[lane];
-      this.held[lane] = down;
-      if (!pressed) continue;
+      if (!this.keys.pressed(controls, lane)) continue;
       this.flashLane[lane] = 0.12;
       let nearest: Note | null = null;
       for (const n of this.notes) if (n.lanes.includes(lane) && !n.hit.includes(lane) && (!nearest || Math.abs(n.at - this.songTime) < Math.abs(nearest.at - this.songTime))) nearest = n;
@@ -184,7 +179,7 @@ export class StepBeat extends BaseGame {
   autopilot(skill: number): ArcadeControls {
     const out = { ...NO_CONTROLS };
     for (const lane of LANES) {
-      if (this.held[lane]) continue;
+      if (this.keys.isHeld(lane)) continue;
       const note = this.notes.find((n) => n.lanes.includes(lane) && !n.hit.includes(lane) && Math.abs(n.at - this.songTime) < 0.1);
       if (!note) continue;
       const off = this.songTime - note.at;

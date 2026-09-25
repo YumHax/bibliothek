@@ -4,7 +4,7 @@ import type { CssLayer } from '@/core/CssLayer';
 import type { Interactable, LabelPlacement } from '@/interaction/Interactable';
 import type { PlayerState, SessionActions } from '@/game/SessionActions';
 import type { VideoInfo } from '@/video/VideoProvider';
-import type { Furniture } from './Furniture';
+import type { ActivityAware, Furniture } from './Furniture';
 import { boxMesh } from './meshUtils';
 import type { SoundOcclusion } from './acoustics/SoundOcclusion';
 import { VideoSurface, type ScreenState, type ScreenStateListener, type VideoScreen } from './screen';
@@ -33,7 +33,7 @@ const CONE_OPACITY = 0.05;
  * placed by `aimAt()` at the wall, so the beam (a spot light and a translucent frustum) follows
  * wherever the projector is placed. Clicking the unit or the lit wall behaves like the TV.
  */
-export class Projector extends THREE.Group implements Furniture, Updatable, Interactable, VideoScreen {
+export class Projector extends THREE.Group implements Furniture, Updatable, Interactable, VideoScreen, ActivityAware {
   readonly hitboxes: THREE.Object3D[];
   readonly screenName = 'projector';
 
@@ -209,6 +209,16 @@ export class Projector extends THREE.Group implements Furniture, Updatable, Inte
 
   stop(): void {
     this.surface.stop();
+  }
+
+  /** Dormant zone: the picture lets its video go, and comes back with the zone (see `VideoSurface.setZoneActive`). */
+  setZoneActive(active: boolean): void {
+    this.surface.setZoneActive(active);
+  }
+
+  /** Zone unload: the iframe leaves the page. */
+  dispose(): void {
+    this.surface.dispose();
   }
 
   update(dt: number): void {

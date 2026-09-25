@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { createCanvas, seededRandom, toTexture } from '@/covers/generated/canvasUtils';
+import { paintOnce } from './materials/paintedTiles';
 
 /** Metres of floor covered by one tile of the texture (must be a multiple of `PLANK_LENGTH`). */
 const TILE_M = 2.4;
@@ -21,9 +22,16 @@ interface Plank {
 /**
  * Oak strip flooring, generated once: staggered planks with their own tint, grain lines and a
  * bevelled gap, tiled seamlessly over the floor. Returns a standard material with a colour and a
- * bump map so the plank edges catch the light.
+ * bump map so the plank edges catch the light. Painted once for the page (`paintOnce`).
  */
 export function parquetMaterial(floorWidth: number, floorDepth: number): THREE.MeshStandardMaterial {
+  const [map, bumpMap] = paintOnce('parquet', paintParquet);
+  for (const tex of [map, bumpMap]) tex.repeat.set(floorWidth / TILE_M, floorDepth / TILE_M);
+  return new THREE.MeshStandardMaterial({ map, bumpMap, bumpScale: 0.6, roughness: 0.55, metalness: 0 });
+}
+
+/** The colour and bump tiles, repeat-wrapped. */
+function paintParquet(): [THREE.Texture, THREE.Texture] {
   const [colorCanvas, color] = createCanvas(TILE_PX, TILE_PX);
   const [bumpCanvas, bump] = createCanvas(TILE_PX, TILE_PX);
   const random = seededRandom(0x9a7452);
@@ -49,12 +57,8 @@ export function parquetMaterial(floorWidth: number, floorDepth: number): THREE.M
   const map = toTexture(colorCanvas, 8);
   const bumpMap = new THREE.CanvasTexture(bumpCanvas);
   bumpMap.anisotropy = 8;
-  for (const tex of [map, bumpMap]) {
-    tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-    tex.repeat.set(floorWidth / TILE_M, floorDepth / TILE_M);
-  }
-
-  return new THREE.MeshStandardMaterial({ map, bumpMap, bumpScale: 0.6, roughness: 0.55, metalness: 0 });
+  for (const tex of [map, bumpMap]) tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  return [map, bumpMap];
 }
 
 function drawPlank(color: CanvasRenderingContext2D, bump: CanvasRenderingContext2D, random: () => number, p: Plank): void {

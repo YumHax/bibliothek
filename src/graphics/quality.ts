@@ -1,4 +1,5 @@
 import { isTouchDevice } from '@/input/deviceDetect';
+import { KEYS, safeStorage } from '@/persistence';
 
 /**
  * How much the GPU is asked to do. `low` is the plain forward render the game shipped with;
@@ -112,7 +113,7 @@ const PRESETS: Record<QualityLevel, Omit<QualitySettings, 'level'>> = {
   },
 };
 
-const STORAGE_KEY = 'bibliothek.quality';
+const STORAGE_KEY = KEYS.quality;
 
 function isLevel(value: unknown): value is QualityLevel {
   return typeof value === 'string' && (QUALITY_LEVELS as readonly string[]).includes(value);
@@ -120,7 +121,7 @@ function isLevel(value: unknown): value is QualityLevel {
 
 function stored(): QualityLevel | null {
   try {
-    const value = localStorage.getItem(STORAGE_KEY);
+    const value = safeStorage()?.getItem(STORAGE_KEY) ?? null;
     return isLevel(value) ? value : null;
   } catch {
     return null;
@@ -131,7 +132,7 @@ function stored(): QualityLevel | null {
  * The default when nothing was chosen: phones and tablets get `low`, Firefox `medium` (it pays
  * every draw call and every render pass far more than Chrome), everything else `high`.
  */
-function detected(): QualityLevel {
+export function recommendedQuality(): QualityLevel {
   if (isTouchDevice()) return 'low';
   if (/firefox/i.test(navigator.userAgent)) return 'medium';
   return 'high';
@@ -139,7 +140,7 @@ function detected(): QualityLevel {
 
 function resolve(): QualitySettings {
   const param = new URLSearchParams(location.search).get('quality');
-  const level = isLevel(param) ? param : (stored() ?? detected());
+  const level = isLevel(param) ? param : (stored() ?? recommendedQuality());
   return { level, ...PRESETS[level] };
 }
 
@@ -152,7 +153,7 @@ export const QUALITY: Readonly<QualitySettings> = resolve();
 /** Saves `level` as the player's choice and reloads the page to rebuild everything with it. */
 export function setQuality(level: QualityLevel): void {
   try {
-    localStorage.setItem(STORAGE_KEY, level);
+    safeStorage()?.setItem(STORAGE_KEY, level);
   } catch {
     // Private mode: the choice lasts for this reload only, through the URL.
   }

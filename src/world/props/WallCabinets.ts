@@ -136,7 +136,8 @@ export class WallCabinets extends Prop {
       const glass = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.034, 0.11, 16, 1, true), GLASS);
       glass.position.set(x, shelfY + 0.0075 + 0.055, z - 0.09);
       interior.add(glass);
-      interior.add(cylinderMesh(0.03, 0.004, GLASS, { x, y: shelfY + 0.0075 + 0.108, z: z - 0.09 }, { segments: 16 }));
+      // The base, a little inside the wall so the two glass surfaces do not coincide.
+      interior.add(cylinderMesh(0.0285, 0.004, GLASS, { x, y: shelfY + 0.0075 + 0.108, z: z - 0.09 }, { segments: 16 }));
     }
     for (let i = 0; i < 3; i++) interior.add(cylinderMesh(0.07, 0.04, matte(0x9fb7c9, 0.3), { x: cx + inner / 4, y: floor + 0.07 + 0.02 + i * 0.03, z }, { radiusBottom: 0.045, segments: 16 }));
   }

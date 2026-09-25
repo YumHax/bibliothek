@@ -4,7 +4,10 @@ import { getPlatform } from '@/catalog/platforms';
 import { createCanvas, drawBarcode, drawImageCover, drawSeal, fitFontSize, roundRect, toTexture, wrapLines, FONT } from './canvasUtils';
 import { contrastText, css } from './palette';
 
+/** Layout width: every size below is in these units. */
 const WIDTH_PX = 640;
+/** Canvas height the layout is scaled down to: plenty for a box held at arm's length, a third of the pixels. */
+const HEIGHT_PX = 512;
 const MARGIN = 36;
 const FOOTER_H = 156;
 const DESC_LINE_H = 25;
@@ -29,7 +32,9 @@ export function createBackTexture(
   const { width, height } = platform.boxDimensions;
   const w = WIDTH_PX;
   const h = Math.round((w * height) / width);
-  const [canvas, ctx] = createCanvas(w, h);
+  const scale = Math.min(1, HEIGHT_PX / h);
+  const [canvas, ctx] = createCanvas(Math.round(w * scale), Math.round(h * scale));
+  ctx.scale(scale, scale);
   const m = MARGIN;
   const inner = w - m * 2;
   const footerTop = h - FOOTER_H;

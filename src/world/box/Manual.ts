@@ -26,11 +26,20 @@ export class Manual extends THREE.Mesh<THREE.BufferGeometry, THREE.MeshStandardM
     this.receiveShadow = true;
   }
 
-  setCover(texture: THREE.Texture): void {
+  /** Frees the previous cover; null leaves plain paper. */
+  setCover(texture: THREE.Texture | null): void {
     const mat = this.material[COVER];
     mat.map?.dispose();
     mat.map = texture;
-    mat.color.setHex(0xffffff);
+    mat.color.setHex(texture ? 0xffffff : 0xe6e1d3);
     mat.needsUpdate = true;
+  }
+
+  dispose(): void {
+    this.geometry.dispose();
+    for (const mat of this.material) {
+      mat.map?.dispose();
+      mat.dispose();
+    }
   }
 }

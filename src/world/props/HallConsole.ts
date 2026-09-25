@@ -61,9 +61,10 @@ export class HallConsole extends THREE.Group implements Furniture {
 
     if (options.mirror ?? true) {
       part(this, MIRROR_W, MIRROR_H, 0.02, WALNUT, { y: MIRROR_Y, z: 0.01 });
-      part(this, MIRROR_W - 0.06, MIRROR_H - 0.06, 0.008, GLASS, { y: MIRROR_Y, z: 0.012 });
+      // The glass on the face of the board (inside it, the board's face hid it), the silver a hair in front of the glass.
+      part(this, MIRROR_W - 0.06, MIRROR_H - 0.06, 0.008, GLASS, { y: MIRROR_Y, z: 0.024 });
       const silver = mirrorGlass(MIRROR_W - 0.06, MIRROR_H - 0.06);
-      silver.position.set(0, MIRROR_Y, 0.0165);
+      silver.position.set(0, MIRROR_Y, 0.029);
       this.add(silver);
     }
 

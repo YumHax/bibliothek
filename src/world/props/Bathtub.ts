@@ -236,10 +236,12 @@ export class Bathtub extends THREE.Group implements Furniture, Interactable, Upd
   /** A clear pane standing on the rim, hinged to a chrome profile against the wall. */
   private buildScreen(end: number, length: number, width: number, height: number): void {
     const z = width - SHELL / 2;
-    const x = end * (length / 2 - SCREEN_LENGTH / 2);
-    const glass = part(this, SCREEN_LENGTH, SCREEN_HEIGHT, 0.006, CLEAR_GLASS, { x, y: height + SCREEN_HEIGHT / 2, z });
+    // The pane and its rail stop inside the wall profile, and the rail runs 2 mm past the pane's
+    // free edge: no end face shares a plane with another (they would z-fight).
+    const pane = SCREEN_LENGTH - 0.01;
+    const glass = part(this, pane, SCREEN_HEIGHT, 0.006, CLEAR_GLASS, { x: end * (length / 2 - 0.01 - pane / 2), y: height + SCREEN_HEIGHT / 2, z });
     glass.castShadow = false;
-    part(this, 0.02, SCREEN_HEIGHT, 0.03, CHROME, { x: end * (length / 2 - 0.01), y: height + SCREEN_HEIGHT / 2, z });
-    part(this, SCREEN_LENGTH, 0.012, 0.02, CHROME, { x, y: height + 0.006, z });
+    part(this, 0.02, SCREEN_HEIGHT + 0.004, 0.03, CHROME, { x: end * (length / 2 - 0.01), y: height + SCREEN_HEIGHT / 2 + 0.002, z });
+    part(this, pane + 0.002, 0.012, 0.02, CHROME, { x: end * (length / 2 - 0.01 - (pane + 0.002) / 2), y: height + 0.006, z });
   }
 }

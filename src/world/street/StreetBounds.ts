@@ -21,12 +21,20 @@ export class StreetBounds extends THREE.Group implements Furniture {
   readonly contactShadow = false;
   readonly colliders: THREE.Box3[];
 
-  constructor({ minX, maxX, minZ, maxZ }: Walkable, extra: readonly THREE.Box3[] = []) {
+  /** `gaps`: where the wall along `minZ` (our building line) opens, x from and to: a door walked through (the sas, `world/airlock`). */
+  constructor({ minX, maxX, minZ, maxZ }: Walkable, extra: readonly THREE.Box3[] = [], gaps: readonly (readonly [number, number])[] = []) {
     super();
     this.name = 'StreetBounds';
     const box = (x0: number, z0: number, x1: number, z1: number) => new THREE.Box3(new THREE.Vector3(x0, 0, z0), new THREE.Vector3(x1, HIGH, z1));
+    const ours: THREE.Box3[] = [];
+    let from = minX - THICK;
+    for (const [a, b] of [...gaps].sort((p, q) => p[0] - q[0])) {
+      ours.push(box(from, minZ - THICK, a, minZ));
+      from = b;
+    }
+    ours.push(box(from, minZ - THICK, maxX + THICK, minZ));
     this.colliders = [
-      box(minX - THICK, minZ - THICK, maxX + THICK, minZ),
+      ...ours,
       box(minX - THICK, maxZ, maxX + THICK, maxZ + THICK),
       box(minX - THICK, minZ, minX, maxZ),
       box(maxX, minZ, maxX + THICK, maxZ),

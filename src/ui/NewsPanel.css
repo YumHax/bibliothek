@@ -1,14 +1,7 @@
-/* The newsstand's paper: a newsprint card over the view. Above the canvas (z-index 1). */
+/* The newsstand's paper: a newsprint card over the view (`.ui-modal--centre`). */
 .news-panel {
-  position: fixed;
-  inset: 0;
-  z-index: 3;
-  display: flex;
-  align-items: center;
-  justify-content: center;
   padding: 1.5rem;
-  box-sizing: border-box;
-  background: rgba(8, 8, 12, 0.55);
+  background: var(--ui-backdrop);
 }
 .news-panel__paper {
   width: min(34rem, 100%);
@@ -30,6 +23,8 @@
 }
 .news-panel__paper h2 {
   margin: 0;
+  font-family: var(--ui-font-display);
+  font-weight: 400;
   font-size: clamp(1.4rem, 5vw, 2.1rem);
   letter-spacing: 0.08em;
 }
@@ -75,4 +70,9 @@
 }
 .news-panel__paper button:hover {
   background: rgba(31, 27, 22, 0.08);
+}
+/* The paper is not a `.ui-card` (newsprint, not a menu panel), so it carries the focus ring itself. */
+.news-panel__paper button:focus-visible {
+  outline: 2px solid var(--ui-accent);
+  outline-offset: 2px;
 }

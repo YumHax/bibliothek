@@ -1,4 +1,5 @@
-import { audioContext } from './audioContext';
+import { Voice } from './ambient';
+import { whiteNoise } from './noise';
 
 /** Loudness of a downpour at level 1 (linear). */
 const MASTER = 0.09;
@@ -12,26 +13,37 @@ const SMOOTH = 1.5;
 /**
  * Rain on a big roof, heard from inside a hall: a broad band of noise (the roar), a brighter one
  * (the patter on the roof light) and single drops ticking on the glass. Generated, no samples.
- * `setLevel` follows how hard it rains; `update` places the drops.
+ * `setLevel` follows how hard it rains (0 dry .. 1 a downpour; eased, set only when it changes);
+ * `update` places the drops.
  */
-export class RainOnRoof {
-  private ctx: AudioContext | null = null;
-  private master: GainNode | null = null;
+export class RainOnRoof extends Voice {
   private dropBus: GainNode | null = null;
-  private sources: AudioBufferSourceNode[] = [];
-  private level = 0;
   private nextDrop = 0;
 
-  /** 0 dry .. 1 a downpour; eased. Builds the graph on the first non-zero level. */
-  setLevel(level: number): void {
-    this.level = Math.max(0, Math.min(1, level));
-    if (this.level > 0) this.build();
-    if (this.ctx && this.master) this.master.gain.setTargetAtTime(this.level * MASTER, this.ctx.currentTime, SMOOTH);
+  constructor() {
+    super(MASTER, { follow: SMOOTH, watch: false });
   }
 
-  update(dt: number): void {
-    const ctx = this.ctx;
-    if (!ctx || !this.dropBus || this.level < 0.05) return;
+  protected build(ctx: AudioContext, out: GainNode): void {
+    const noise = whiteNoise(ctx, 3);
+    for (const { frequency, q, level } of [{ ...ROAR, level: 1 }, PATTER]) {
+      const source = this.loop(ctx, noise);
+      const band = ctx.createBiquadFilter();
+      band.type = 'bandpass';
+      band.frequency.value = frequency;
+      band.Q.value = q;
+      const gain = ctx.createGain();
+      gain.gain.value = level;
+      source.connect(band).connect(gain).connect(out);
+    }
+    const drops = ctx.createGain();
+    drops.gain.value = 0.6;
+    drops.connect(out);
+    this.dropBus = drops;
+  }
+
+  protected tick(ctx: AudioContext, dt: number): void {
+    if (!this.dropBus || this.level < 0.05) return;
     this.nextDrop -= dt;
     while (this.nextDrop <= 0) {
       this.nextDrop += (0.3 + Math.random() * 1.4) / (DROPS_PER_SECOND * this.level);
@@ -47,47 +59,5 @@ export class RainOnRoof {
       osc.start(t);
       osc.stop(t + 0.06);
     }
-  }
-
-  /** Stops every source for good. */
-  dispose(): void {
-    for (const source of this.sources) source.stop();
-    this.sources = [];
-    this.master?.disconnect();
-    this.master = null;
-    this.dropBus = null;
-    this.ctx = null;
-  }
-
-  private build(): void {
-    if (this.ctx) return;
-    const ctx = audioContext();
-    this.ctx = ctx;
-    const master = ctx.createGain();
-    master.gain.value = 0;
-    master.connect(ctx.destination);
-    this.master = master;
-    const noise = ctx.createBuffer(1, ctx.sampleRate * 3, ctx.sampleRate);
-    const data = noise.getChannelData(0);
-    for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
-
-    for (const { frequency, q, level } of [{ ...ROAR, level: 1 }, PATTER]) {
-      const source = ctx.createBufferSource();
-      source.buffer = noise;
-      source.loop = true;
-      source.start(0, Math.random() * noise.duration);
-      this.sources.push(source);
-      const band = ctx.createBiquadFilter();
-      band.type = 'bandpass';
-      band.frequency.value = frequency;
-      band.Q.value = q;
-      const gain = ctx.createGain();
-      gain.gain.value = level;
-      source.connect(band).connect(gain).connect(master);
-    }
-    const drops = ctx.createGain();
-    drops.gain.value = 0.6;
-    drops.connect(master);
-    this.dropBus = drops;
   }
 }

@@ -1,118 +1,36 @@
 import * as THREE from 'three';
-import type { CssLayer } from '@/core/CssLayer';
-import type { Input } from '@/core/Input';
-import type { MarketStock } from '@/economy/MarketStock';
-import type { ArcadeScores } from '@/economy/ArcadeScores';
-import type { ArcadeDaily } from '@/economy/ArcadeDaily';
-import type { PrizeStore } from '@/economy/Prizes';
-import type { ArcadeMedals } from '@/economy/ArcadeMedals';
-import type { ArcadeLeague } from '@/economy/ArcadeLeague';
-import type { RemoteScreen } from './arcade/games';
-import type { GameSource } from '@/collection/GameSource';
-import type { GameList } from '@/collection/GameList';
-import type { ParcelContents } from './props/Parcel';
-import type { HomeUpgrades } from '@/economy/HomeUpgrades';
-import type { BoxArtLoader } from '@/covers/BoxArtLoader';
 import type { PlatformId } from '@/catalog/types';
 import { getPlatform } from '@/catalog/platforms';
 import type { Zone } from './zone/Zone';
-import type { Sky } from './Sky';
-import type { SoundOcclusion } from './acoustics/SoundOcclusion';
-import type { Room } from './Room';
 import { Television } from './Television';
 import { Projector } from './Projector';
 import { Seat } from './Seat';
 import { Shelving } from './shelving/Shelving';
 import { ROOM_PLAN } from './roomPlan';
-import type { ZoneKind } from './worldPlan';
+import type { ZoneKind, ZoneKindOf } from './worldPlan';
+import type { ZoneId } from './zoneIds';
+import type { BuildContext, ZoneHandle } from './buildContext';
 import { furnishShell } from './shell';
 import { furnishHallway } from './hallway/furnishHallway';
 import { furnishBathroom } from './bathroom/furnishBathroom';
 import { furnishBedroom } from './bedroom/furnishBedroom';
 import { furnishKitchen } from './kitchen/furnishKitchen';
 import { furnishBalcony } from './balcony/furnishBalcony';
-import { furnishArcade } from './arcade/furnishArcade';
-import { furnishMarket, type MarketHallServices } from './market/furnishMarket';
-import { furnishStreet } from './street/furnishStreet';
+import { furnishStairwell } from './stairwell/furnishStairwell';
 import { RoomWindow } from './props/Window';
 import { Poster } from './props/Poster';
 import { FeatherWand } from './prizes/FeatherWand';
 import { ConsoleStand } from './props/ConsoleStand';
-import { Console, type PlatformSelectHandler } from './props/Console';
-import { PendantLamp } from './props/PendantLamp';
-import { WallSwitch } from './props/WallSwitch';
-import { WallClock } from './props/WallClock';
+import { Console } from './props/Console';
 import { Cushion } from './props/Cushion';
-import { placeDecor } from './props/decor';
 import { LavaLamp } from './props/LavaLamp';
-import { tickRadiators } from './acoustics/radiatorTicks';
-import type { StrayGames } from './strays/StrayGames';
-import type { CatPerch } from './cat/spots';
-import type { WaterBowlLike } from './cat/types';
-import { placeWith } from './zone/attach';
-import { PointSound } from './acoustics/PointSound';
-import { ClockTick } from '@/audio/ambient';
+import { furnishDecor, placeClock, placeRoomLight } from './build/roomParts';
+import { heardBy } from './build/hearing';
+import { curtainsToSkylight, showWhenUpgraded } from './build/follow';
+import { furnishCollectorCorner } from './collector/furnishCollector';
 
-/** The shared services every zone builder may draw on; `main.ts` assembles it once. */
-export interface BuildContext {
-  cssLayer: CssLayer;
-  /** Object whose distance to a screen drives its volume (the camera). */
-  listener: THREE.Object3D;
-  /** Counts the walls between the listener and a screen, so a longplay is muffled from the next room. */
-  acoustics: SoundOcclusion;
-  /** The collection; the consoles and the posters follow it live. */
-  games: GameSource;
-  /** What the shelves show: the collection less what still waits in the parcel (`Deliveries.shelved`); `games` when absent. */
-  shelved?: GameSource;
-  /** The parcel in the hallway: games bought while out, waiting to be unpacked. */
-  deliveries?: ParcelContents;
-  /** Where the collection room's shelving writes the games it has no room for; the bedroom's bought bookcases show them. */
-  overflow?: GameList;
-  /** Furniture bought for the flat (the bedroom's bookcases, the market's home goods). */
-  upgrades?: HomeUpgrades;
-  /** The games left lying about the flat (the kitchen table, a nightstand); the shelves read `shelved` through it. */
-  strays?: StrayGames;
-  covers: BoxArtLoader;
-  /** The one sky: clock + view outside the windows. */
-  sky: Sky;
-  /** Clicking a console on the TV stand reports its platform. */
-  onSelectPlatform?: PlatformSelectHandler;
-  /** The keys, read directly by the arcade cabinets while a game runs. */
-  input: Input;
-  /** What the flea market has on its stalls today. */
-  market: MarketStock;
-  /** The player's coins: the market's price tags read as affordable or not. */
-  wallet: { readonly coins: number; readonly tickets: number; subscribe(cb: () => void): () => void };
-  /** The arcade's hall of fame: the cabinets' attract screens, the board, the initials. */
-  scores: ArcadeScores;
-  /** The arcade's day: the challenge, whether the change machine works. */
-  arcadeDaily?: ArcadeDaily;
-  /** The prizes taken home from the arcade (the bedroom's prize shelf shows them). */
-  prizes?: PrizeStore;
-  /** The medals per arcade machine: lamps on the cabinets, the next one on their attract screens. */
-  arcadeMedals?: ArcadeMedals;
-  /** The arcade's weekly league and the player's streak (the league board). */
-  arcadeLeague?: ArcadeLeague;
-  /** The big frame a web-page cabinet game (LexiPunk) is played in. */
-  arcadeScreen?: RemoteScreen;
-  /** Calls the cat over (the feather wand won at the arcade), and says how that went. */
-  callCat?: () => string;
-  /** The flea market's own services: the panels its hall opens (notice board, job lot), how the market knows the player. */
-  marketHall?: MarketHallServices;
-}
-
-/** What every zone builder returns: its `Room`, or for a zone without one (the street) how lit it is. */
-export interface ZoneHandle {
-  room?: Room;
-  /** How lit the zone is, 0 dark .. 1 full day (reflections and haze follow it); a `Room` says it itself. */
-  lightLevel?: () => number;
-  /** Floor points (world) the cat comes to have a look at when it wanders out of the collection room. */
-  catVisits?: THREE.Vector3[];
-  /** Places in the room the cat naps on (a radiator's cradle, the dry bath); see `CatPerch`. */
-  catPerches?: CatPerch[];
-  /** Water bowls of the cat's put down in the room. */
-  catWaters?: WaterBowlLike[];
-}
+// The builders' shared types live in `buildContext.ts`; re-exported for the code that imported them from here.
+export type { BuildContext, ZoneHandle, MarketHallServices, CollectionContext, HomeContext, MoneyContext, ArcadeContext, MarketContext } from './buildContext';
 
 /** What the collection room built that other features (the cat, the session) need to know about. */
 export interface RoomHandle extends ZoneHandle {
@@ -129,7 +47,8 @@ export interface RoomHandle extends ZoneHandle {
  * Everything goes through `zone.place()` (zone-local coordinates) so it collides, ticks and is
  * clickable as its class says. Lights are switched by clicking them; playing a video never touches them.
  */
-export function furnishRoom(zone: Zone, { cssLayer, listener, acoustics, games, shelved, overflow, covers, sky, onSelectPlatform, upgrades, prizes, callCat }: BuildContext): RoomHandle {
+export function furnishRoom(zone: Zone, ctx: BuildContext): RoomHandle {
+  const { cssLayer, covers, sky, collection: { games, shelved, overflow }, home: { onSelectPlatform, upgrades, callCat, collector }, arcade: { prizes } } = ctx;
   const plan = ROOM_PLAN;
   const { width } = plan.room;
 
@@ -144,8 +63,8 @@ export function furnishRoom(zone: Zone, { cssLayer, listener, acoustics, games, 
   zone.onUnload(() => shelving.dispose());
 
   // 2. Screens and seats.
-  const tv = zone.placeAt(new Television(cssLayer, { listener, occlusion: acoustics }), plan.tv);
-  const projector = zone.placeAt(new Projector(cssLayer, { pictureWidth: plan.projectorPicture.width, listener, occlusion: acoustics }), plan.projector);
+  const tv = zone.placeAt(new Television(cssLayer, heardBy(ctx)), plan.tv);
+  const projector = zone.placeAt(new Projector(cssLayer, { pictureWidth: plan.projectorPicture.width, ...heardBy(ctx) }), plan.projector);
   projector.aimAt(projector.worldToLocal(zone.toWorld(new THREE.Vector3(width / 2 - 0.005, plan.projectorPicture.centreY, 0))));
   const seats = plan.seats.map(({ at, cushion }) => {
     const seat = new Seat();
@@ -158,7 +77,7 @@ export function furnishRoom(zone: Zone, { cssLayer, listener, acoustics, games, 
   const { size: windowSize, list: windowPlans } = plan.windows;
   const mountY = RoomWindow.mountY(windowSize.height);
   const windows: RoomWindow[] = [];
-  const onCurtainsChange = (): void => room.setSkylight(windows.reduce((sum, w) => sum + w.curtainOpenness, 0) / windows.length);
+  const onCurtainsChange = curtainsToSkylight(room, windows);
   for (const w of windowPlans) {
     windows.push(zone.placeAt(new RoomWindow(sky.outdoors, { ...windowSize, onCurtainsChange }), { wall: w.wall, along: w.along, y: mountY }));
   }
@@ -183,49 +102,77 @@ export function furnishRoom(zone: Zone, { cssLayer, listener, acoustics, games, 
   zone.onUnload(games.subscribe(refresh));
 
   // 5. Wall clock over the door (reads the room's time; click = toggle night) and the pendant fixture
-  //    around the room's ceiling light (click = switch it).
+  //    around the room's ceiling light (click = switch it; the switch by the door drives the same lamp).
   const door = plan.room.doorways?.[0];
   const clockAt = door ? { wall: door.wall, along: door.along, y: door.height + plan.clock.aboveDoor } : plan.clock.fallback;
-  const clock = zone.placeAt(new WallClock(sky.dayNight), clockAt);
-  placeWith(zone, clock, new PointSound(new ClockTick(), { listener, occlusion: acoustics, volume: { maxDistance: 5 } }), new THREE.Vector3(0, 0, 0.03));
-  const pendant = zone.placeAt(new PendantLamp({ onSwitch: (on) => room.setLampOn(on) }), plan.pendant);
-  // The switch by the door drives the same lamp, so either works.
-  zone.placeAt(new WallSwitch({ lamp: pendant }), plan.lightSwitch);
+  placeClock(zone, ctx, clockAt);
+  placeRoomLight(zone, room, 'pendant', plan.pendant, plan.lightSwitch);
 
   // 6. Decoration: plants, rug, pictures, lamps, tables, straight from the plan; the radiator ticks
   //    (and the cat naps in its cradle).
-  const radiators = tickRadiators(zone, placeDecor(zone, plan.decor), { listener, occlusion: acoustics });
+  const radiators = furnishDecor(zone, ctx, plan.decor);
 
   // 7. Home goods bought at the market: the lava lamp on the side table. No light of its own, so it may come and go.
   if (upgrades) {
     const lamp = zone.placeAt(new LavaLamp(), plan.homeGoods.lamp.at);
     lamp.position.y += plan.homeGoods.lamp.y;
-    const refresh = (): void => {
-      lamp.visible = upgrades.count('lamp') > 0;
-    };
-    refresh();
-    zone.onUnload(upgrades.subscribe(refresh));
+    showWhenUpgraded(zone, upgrades, 'lamp', lamp);
   }
 
   // 8. The arcade's feather wand, once won: on the projector rug, waved for the cat.
-  if (prizes) zone.placeAt(new FeatherWand({ prizes, ...(callCat ? { callCat } : {}) }), plan.featherWand);
+  if (prizes) zone.placeAt(new FeatherWand({ prizes, ...(callCat ? { callCat } : {}) }), plan.featherWand.at).position.y += plan.featherWand.lift;
+  // 9. The collector's book on the sideboard, and what its milestones bring home: the brass plaque, the display cabinet.
+  if (collector) furnishCollectorCorner(zone, collector, { covers, shelved: shelved ?? games });
 
   return { room, shelving, tv, seats, windows, catPerches: radiators };
 }
 
+/** A zone builder, as `ZONE_BUILDERS` lists it: bound to the `BuildContext` by `bindBuilder`. */
+export type ContextBuilder<H extends ZoneHandle = ZoneHandle> = (zone: Zone, ctx: BuildContext) => H;
+
+/** A builder in a chunk of its own, fetched on demand (`import()`): the zones reached by travel, far from the flat. */
+export interface LazyContextBuilder<H extends ZoneHandle = ZoneHandle> {
+  load(): Promise<ContextBuilder<H>>;
+}
+
+/** `load` fetches the module once (and again after a failure), then hands back its builder. */
+function lazy<H extends ZoneHandle>(load: () => Promise<ContextBuilder<H>>): LazyContextBuilder<H> {
+  return { load };
+}
+
 /**
- * One builder per zone kind of `WORLD_PLAN`; `main.ts` binds them to the `BuildContext`. The
- * collection room is built here; every other room has its own folder (`src/world/<kind>/`) with
- * its plan and its builder.
+ * One builder per zone kind of `WORLD_PLAN`; `bootstrap/world.ts` binds them to the `BuildContext`
+ * (`bindBuilder`). The collection room is built here; every other room has its own folder
+ * (`src/world/<kind>/`) with its plan and its builder. The flat's rooms are built at start-up and
+ * bundled with it; the zones reached by travel (arcade, market, street: not persistent, no
+ * neighbours) are `lazy`, each in a chunk of its own that the `ZoneManager`, a travel or the idle
+ * preload at start-up fetches before the zone is built.
  */
-export const ZONE_BUILDERS: { [K in ZoneKind]: (zone: Zone, ctx: BuildContext) => ZoneHandle } = {
+export const ZONE_BUILDERS = {
   collectionRoom: furnishRoom,
   hallway: furnishHallway,
   bathroom: furnishBathroom,
   bedroom: furnishBedroom,
   kitchen: furnishKitchen,
   balcony: furnishBalcony,
-  arcade: furnishArcade,
-  market: furnishMarket,
-  street: furnishStreet,
-};
+  stairwell: furnishStairwell,
+  arcade: lazy(() => import('./arcade/furnishArcade').then((m) => m.furnishArcade)),
+  market: lazy(() => import('./market/furnishMarket').then((m) => m.furnishMarket)),
+  street: lazy(() => import('./street/furnishStreet').then((m) => m.furnishStreet)),
+} satisfies { [K in ZoneKind]: ContextBuilder | LazyContextBuilder };
+
+/** What a `ZONE_BUILDERS` entry builds. */
+type BuiltBy<B> = B extends ContextBuilder<infer H> ? H : B extends LazyContextBuilder<infer H> ? H : never;
+
+/** What each zone kind's builder returns. */
+export type ZoneHandles = { [K in ZoneKind]: BuiltBy<(typeof ZONE_BUILDERS)[K]> };
+
+/** What each zone's builder returns, by zone id (`World<ZoneHandleById>`: `world.handle('bedroom')` is a `BedroomHandle`). */
+export type ZoneHandleById = { [Id in ZoneId]: ZoneHandles[ZoneKindOf<Id>] };
+
+/** `ZONE_BUILDERS[kind]` bound to `ctx`, as the `World` takes a zone's builder (a lazy one stays lazy). */
+export function bindBuilder(kind: ZoneKind, ctx: BuildContext): ((zone: Zone) => ZoneHandle) | { load(): Promise<(zone: Zone) => ZoneHandle> } {
+  const entry: ContextBuilder | LazyContextBuilder = ZONE_BUILDERS[kind];
+  if (typeof entry === 'function') return (zone) => entry(zone, ctx);
+  return { load: () => entry.load().then((build) => (zone: Zone) => build(zone, ctx)) };
+}

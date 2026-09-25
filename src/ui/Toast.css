@@ -1,4 +1,4 @@
-/* Bottom-centre notification stack. Sits above the canvas (z-index 1) and the hint (bottom 2rem). */
+/* Bottom-centre notification stack, above the hint (bottom 2rem) and on top of every layer, panels and curtain included. */
 .toast-stack {
   position: fixed;
   left: 50%;
@@ -8,21 +8,21 @@
   flex-direction: column-reverse;
   align-items: center;
   gap: 0.4rem;
-  z-index: 3;
+  z-index: var(--z-toast);
   pointer-events: none;
 }
 
 .toast {
   max-width: min(32rem, 80vw);
   padding: 0.55rem 1rem;
-  border-radius: 8px;
+  border-radius: var(--ui-radius-sm);
   background: var(--ui-panel);
   border: 1px solid var(--ui-border);
   color: var(--ui-text);
   font-size: 0.95rem;
   text-align: center;
   white-space: pre-line;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  box-shadow: var(--ui-shadow);
   animation: toast-in 180ms ease-out;
   transition: opacity 320ms ease, transform 320ms ease;
 }

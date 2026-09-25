@@ -55,7 +55,8 @@ export class Sideboard extends THREE.Group implements Furniture {
     // Carcass: top, bottom, two sides, back; the doors fill the front with a thin gap between them.
     part(this, width, PANEL, depth, wood, { y: height - PANEL / 2, z });
     part(this, width, PANEL, depth, wood, { y: LEG_H + PANEL / 2, z });
-    for (const sx of [-1, 1]) part(this, PANEL, bodyH, depth, wood, { x: (sx * (width - PANEL)) / 2, y: LEG_H + bodyH / 2, z });
+    // The sides stand between the top and the bottom: overlapping them, their faces would fight the grain.
+    for (const sx of [-1, 1]) part(this, PANEL, bodyH - 2 * PANEL, depth, wood, { x: (sx * (width - PANEL)) / 2, y: LEG_H + bodyH / 2, z });
     part(this, width - 2 * PANEL, bodyH - 2 * PANEL, PANEL, darkWood, { y: LEG_H + bodyH / 2, z: OFF_WALL + PANEL / 2 });
     const doorW = (width - 2 * PANEL) / 2 - 0.004;
     const doorH = bodyH - 2 * PANEL - 0.006;

@@ -102,8 +102,8 @@ export const MARKET_PLAN = {
     at: { floor: [3.95, 3.2], rotationY: -Math.PI / 2 } as Placement,
     lines: ['One coffee, two coins. Puts you in a haggling mood, trust me.', 'The stallholders all drink mine. Softens them up.', 'Rain or shine, the coffee is hot.'],
   },
-  /** The notice board on the front wall, left of the door. */
-  noticeBoard: { wall: 'front', along: -1.6, y: 1.5 } as Placement,
+  /** The notice board on the front wall, left of the door; its bottom edge clears the brick's cap rail (1.18 m). */
+  noticeBoard: { wall: 'front', along: -1.6, y: 1.6 } as Placement,
   /** The day's job lot in a crate on the floor, next to the bargain bin. */
   lot: { floor: [1.9, HALF_DEPTH - 0.6], rotationY: Math.PI } as Placement,
   /** Two boards either side of the way in: where each platform's stall is, and the week's market days. */
@@ -134,6 +134,23 @@ export const MARKET_PLAN = {
 
   /** The bargain bin, by the way in: worn copies of anything at one price. */
   bin: { floor: [2.9, HALF_DEPTH - 0.55], rotationY: Math.PI } as Placement,
+
+  /**
+   * The Grande Brocante (the theme's `extraBins`, `bunting`): two more bargain bins at the aisle's
+   * ends, turned to face it, and the hall dressed up: bunting along both rows of awning poles and
+   * across the aisle at its ends, a cloth banner over the way in.
+   */
+  brocante: {
+    bins: [
+      { floor: [-4.2, 0.55], rotationY: Math.PI / 2 },
+      { floor: [4.2, -0.7], rotationY: -Math.PI / 2 },
+    ] as Placement[],
+    decor: [
+      ...[-POLE_Z, POLE_Z].map((z, i) => ({ kind: 'garland', at: { floor: [-STALL_X[2]! - POLE_DX, z] }, options: { style: 'bunting', length: 2 * (STALL_X[2]! + POLE_DX), height: POLE_TOP, sag: 0.35, seed: 31 + i } }) as DecorEntry),
+      ...[-STALL_X[2]! - POLE_DX, STALL_X[2]! + POLE_DX].map((x, i) => ({ kind: 'garland', at: { floor: [x, -POLE_Z], rotationY: -Math.PI / 2 }, options: { style: 'bunting', length: 2 * POLE_Z, height: POLE_TOP, sag: 0.22, seed: 41 + i } }) as DecorEntry),
+      { kind: 'flyer', at: { wall: 'front', along: 0, y: 2.62 }, options: { style: 'cloth', width: 3, height: 0.5, title: 'GRANDE BROCANTE', lines: ['once a month · the whole hall'], accent: 0xb3402a } },
+    ] as DecorEntry[],
+  },
 
   /** The people: a stallholder behind every table, a few shoppers drifting along the aisle (fewer at night). */
   crowd: {

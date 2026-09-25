@@ -36,6 +36,7 @@ export interface VideoSurfaceOptions {
  * showing a text message (off / searching / error) or a cut-out in the WebGL canvas revealing a
  * YouTube iframe positioned in the CSS3D layer at exactly the same spot (playing).
  * Local +z is the viewing side; add it where the picture should be and call `update()` every frame.
+ * The screen holding it forwards its zone's `setZoneActive` and its `dispose`.
  */
 export class VideoSurface extends THREE.Object3D {
   readonly width: number;
@@ -54,6 +55,10 @@ export class VideoSurface extends THREE.Object3D {
   private readonly listener?: THREE.Object3D;
   private readonly occlusion?: SoundOcclusion;
   private _loudness = 0;
+  /** The video `play()` put on and when, kept while the zone is dormant to reload it where it would be. */
+  private showing: { video: VideoInfo; startSeconds: number; since: number } | null = null;
+  /** False while the zone holding the screen is dormant (see `setZoneActive`). */
+  private zoneActive = true;
   private readonly stateListeners = new Set<ScreenStateListener>();
   private readonly worldPos = new THREE.Vector3();
   private readonly worldQuat = new THREE.Quaternion();
@@ -116,10 +121,10 @@ export class VideoSurface extends THREE.Object3D {
 
   play(video: VideoInfo, startSeconds: number): void {
     this.setState('playing');
-    this.player.load(video.videoId, startSeconds);
-    this.cssObject.visible = true;
+    this.showing = { video, startSeconds, since: performance.now() };
     this.cutout.visible = true;
     this.glass.visible = false;
+    if (this.zoneActive) this.load();
   }
 
   fail(message: string): void {
@@ -129,10 +134,47 @@ export class VideoSurface extends THREE.Object3D {
 
   stop(): void {
     this.setState('off');
-    this.player.unload();
-    this.cssObject.visible = false;
+    this.letGo();
     this.cutout.visible = false;
     this.showMessage('');
+  }
+
+  /**
+   * `ActivityAware` (forwarded by the screen holding it): a dormant zone is not ticked, so the
+   * volume could no longer follow the listener; the iframe is let go (silent, no decoding behind
+   * the walls) and the screen stays `playing`. Back in the loop, the video is reloaded where it
+   * would be had it played on meanwhile, like a set left on in an empty room.
+   */
+  setZoneActive(active: boolean): void {
+    if (active === this.zoneActive) return;
+    this.zoneActive = active;
+    if (!active) {
+      if (this.cssObject.visible) this.letGo();
+    } else if (this.showing) this.load();
+  }
+
+  /** Stops the video for good and takes the iframe out of the page. The surface is unusable afterwards. */
+  dispose(): void {
+    this.stop();
+    this.stateListeners.clear();
+    this.player.dispose();
+    this.cssLayer.scene.remove(this.cssObject);
+  }
+
+  /** Loads the video showing into the iframe, where it has got to since `play()`. */
+  private load(): void {
+    if (!this.showing) return;
+    const { video, startSeconds, since } = this.showing;
+    const elapsed = startSeconds + (performance.now() - since) / 1000;
+    this.player.load(video.videoId, video.durationSeconds > 0 ? elapsed % video.durationSeconds : elapsed);
+    this.cssObject.visible = true;
+  }
+
+  /** Empties the iframe and hides it; the picture area keeps its look. */
+  private letGo(): void {
+    this.player.unload();
+    this.cssObject.visible = false;
+    this._loudness = 0;
   }
 
   /** Keeps the iframe glued to the plane (even if the screen is moved) and follows the listener for volume. */
@@ -148,7 +190,10 @@ export class VideoSurface extends THREE.Object3D {
   private setState(next: ScreenState): void {
     if (next === this._state) return;
     this._state = next;
-    if (next !== 'playing') this._loudness = 0;
+    if (next !== 'playing') {
+      this._loudness = 0;
+      this.showing = null;
+    }
     for (const listener of this.stateListeners) listener(next);
   }
 

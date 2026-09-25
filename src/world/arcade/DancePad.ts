@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { createCanvas, toTexture } from '@/covers/generated/canvasUtils';
 import { boxMesh, cylinderMesh } from '../meshUtils';
-import { matte } from '../props/Prop';
+import { markShared, matte } from '../props/Prop';
 import type { AttachmentFrame, CabinetAttachment } from './CabinetAttachment';
 
 type Lane = 'left' | 'down' | 'up' | 'right';
@@ -21,8 +21,8 @@ const EYE_HEIGHT = 1.7;
 const GRID: Record<Lane, [number, number]> = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] };
 const COLORS: Record<Lane, number> = { left: 0xff7ad9, down: 0x63b3ff, up: 0x7ee787, right: 0xffb347 };
 const ROT: Record<Lane, number> = { up: 0, right: -Math.PI / 2, down: Math.PI, left: Math.PI / 2 };
-const STEEL = new THREE.MeshStandardMaterial({ color: 0x9a9ea6, metalness: 0.7, roughness: 0.35 });
-const PLATE = matte(0x1c1c22, 0.5);
+const STEEL = markShared(new THREE.MeshStandardMaterial({ color: 0x9a9ea6, metalness: 0.7, roughness: 0.35 }));
+const PLATE = markShared(matte(0x1c1c22, 0.5));
 
 /**
  * The dance cabinet's stage: a steel platform in front of it with four arrow panels (up, down,
@@ -119,6 +119,6 @@ function arrowTexture(): THREE.Texture {
   ctx.strokeStyle = 'rgba(0,0,0,0.35)';
   ctx.lineWidth = 4;
   ctx.strokeRect(2, 2, 124, 124);
-  arrow = toTexture(canvas, 4);
+  arrow = markShared(toTexture(canvas, 4));
   return arrow;
 }

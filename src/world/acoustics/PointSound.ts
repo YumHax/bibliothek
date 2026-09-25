@@ -3,6 +3,7 @@ import type { Updatable } from '@/core/Engine';
 import type { AmbientVoice } from '@/audio/ambient';
 import { proximityVolume, type ProximityVolumeOptions } from '@/video/proximityVolume';
 import { Prop } from '../props/Prop';
+import type { ActivityAware } from '../zone/lifecycle';
 import type { SoundOcclusion } from './SoundOcclusion';
 
 export interface PointSoundOptions {
@@ -20,9 +21,10 @@ const WALLS_EVERY_S = 0.3;
 /**
  * Where a room's own little sound comes from: an invisible point placed in the zone like any prop,
  * that turns the listener's distance and the walls in between into the loudness of its
- * `AmbientVoice` (the fridge's hum, a clock's tick). Ticked only while its zone is active.
+ * `AmbientVoice` (the fridge's hum, a clock's tick). Ticked only while its zone is active, and
+ * silent while it is not (`setZoneActive`).
  */
-export class PointSound extends Prop implements Updatable {
+export class PointSound extends Prop implements Updatable, ActivityAware {
   readonly contactShadow = false;
   private readonly here = new THREE.Vector3();
   private readonly ear = new THREE.Vector3();
@@ -53,6 +55,12 @@ export class PointSound extends Prop implements Updatable {
     }
     this.voice.setLevel(proximityVolume(distance, { ...volume, walls: this.walls }) / 100);
     this.voice.update(dt);
+  }
+
+  /** `ActivityAware`: no longer ticked, it could not lower the level any more, so it goes silent now. */
+  setZoneActive(active: boolean): void {
+    if (this.voice.setZoneActive) this.voice.setZoneActive(active);
+    else if (!active) this.voice.setLevel(0);
   }
 
   dispose(): void {

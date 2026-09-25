@@ -1,3 +1,4 @@
+import { ModalPanel } from './ModalPanel';
 import './ArcadeScreenPanel.css';
 
 /** What a cabinet whose game runs in a web page needs: open it, hear its score, know when it is shut. */
@@ -12,6 +13,8 @@ export interface RemoteScreenLike {
   readonly isOpen: boolean;
 }
 
+type RemoteGame = Parameters<RemoteScreenLike['open']>[0];
+
 /** How long the frame stays up once the page has said its game is over, so the final score can be seen. */
 const CLOSE_AFTER_FINAL_MS = 1800;
 
@@ -24,54 +27,42 @@ const CLOSE_AFTER_FINAL_MS = 1800;
  * mouse while it is up and re-enters the room when it shuts. The iframe is emptied on close so
  * the page's sound stops with it.
  */
-export class ArcadeScreenPanel implements RemoteScreenLike {
-  private readonly root: HTMLElement;
+export class ArcadeScreenPanel extends ModalPanel<[RemoteGame]> implements RemoteScreenLike {
   private readonly frame: HTMLIFrameElement;
   private readonly titleEl: HTMLElement;
   private readonly scoreEl: HTMLElement;
   private readonly statusEl: HTMLElement;
-  private session: Parameters<RemoteScreenLike['open']>[0] | null = null;
+  private session: RemoteGame | null = null;
   private closeTimer = 0;
 
-  /** Assigned by the Session so closing from the panel's own UI re-enters the room. */
-  onOpenChange?: (open: boolean) => void;
-
   constructor(container: HTMLElement) {
-    this.root = document.createElement('section');
-    this.root.className = 'arcade-screen';
-    this.root.hidden = true;
+    super(container, { className: 'ui-modal--centre arcade-screen' });
     this.root.innerHTML = `
-      <div class="arcade-screen__bezel">
+      <div class="arcade-screen__bezel" role="dialog" aria-modal="true" aria-label="Arcade game">
         <header class="arcade-screen__header">
           <h2 class="arcade-screen__title"></h2>
           <span class="arcade-screen__score"></span>
           <span class="arcade-screen__status"></span>
-          <button type="button" class="arcade-screen__done" data-action="done">Done</button>
+          <button type="button" class="arcade-screen__done ui-btn" data-action="done" aria-label="Close">Done</button>
         </header>
         <iframe class="arcade-screen__frame" title="Arcade game" allow="autoplay; fullscreen" referrerpolicy="origin"></iframe>
         <p class="arcade-screen__foot">Your score pays out in tickets when you are done. Done steps back from the cabinet (Esc too, once you click outside the game).</p>
       </div>`;
-    container.appendChild(this.root);
     this.frame = this.root.querySelector('iframe')!;
     this.titleEl = this.root.querySelector('.arcade-screen__title')!;
     this.scoreEl = this.root.querySelector('.arcade-screen__score')!;
     this.statusEl = this.root.querySelector('.arcade-screen__status')!;
     this.root.querySelector('[data-action="done"]')!.addEventListener('click', () => this.close());
-    // Keep keys off the window-level Input (WASD would walk); Escape goes through so the Session can close us.
-    for (const type of ['keydown', 'keyup'] as const) {
-      this.root.addEventListener(type, (e) => {
-        if (e.code !== 'Escape') e.stopPropagation();
-      });
-    }
     window.addEventListener('message', (e) => this.onMessage(e));
   }
 
-  get isOpen(): boolean {
-    return !this.root.hidden;
+  /** A cabinet opening it while it is up (a second coin) starts afresh. */
+  open(options: RemoteGame): void {
+    if (this.isOpen) this.close();
+    super.open(options);
   }
 
-  open(options: Parameters<RemoteScreenLike['open']>[0]): void {
-    if (this.isOpen) this.close();
+  protected onOpened(options: RemoteGame): void {
     this.session = options;
     this.titleEl.textContent = options.title;
     this.scoreEl.textContent = 'Score: —';
@@ -80,22 +71,21 @@ export class ArcadeScreenPanel implements RemoteScreenLike {
     this.frame.onload = () => {
       if (this.session === options) this.statusEl.textContent = '';
     };
-    if (document.pointerLockElement) document.exitPointerLock();
-    this.root.hidden = false;
-    this.onOpenChange?.(true);
     // The page gets the keyboard straight away.
     window.setTimeout(() => this.frame.focus(), 50);
   }
 
-  close(): void {
-    if (!this.isOpen) return;
+  protected onClosed(): void {
     window.clearTimeout(this.closeTimer);
-    this.root.hidden = true;
     this.frame.src = 'about:blank';
     const session = this.session;
     this.session = null;
     session?.onClose();
-    this.onOpenChange?.(false);
+  }
+
+  /** While the game page has the focus its keys and pad are its own (B must not close it); click outside to reach Done. */
+  protected navigable(): boolean {
+    return this.isOpen && document.activeElement !== this.frame;
   }
 
   /** ModalLike: the Session only ever closes it (a cabinet opens it). */

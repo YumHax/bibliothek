@@ -54,7 +54,6 @@ export class Snake extends BaseGame {
   private pellet: Cell = { x: 0, y: 0 };
   private gold: (Cell & { life: number }) | null = null;
   private eaten = 0;
-  private held: Record<Dir, boolean> = { left: false, right: false, up: false, down: false };
 
   constructor() {
     super(ROUND_SECONDS);
@@ -70,19 +69,16 @@ export class Snake extends BaseGame {
     this.stepTimer = 0;
     this.eaten = 0;
     this.gold = null;
-    this.held = { left: false, right: false, up: false, down: false };
     this.pellet = this.freeCell();
   }
 
   protected tick(dt: number, controls: ArcadeControls): void {
     // Turns are queued on the press, so two quick taps between steps both count.
     for (const d of ['left', 'right', 'up', 'down'] as const) {
-      const down = controls[d];
-      if (down && !this.held[d]) {
+      if (this.keys.pressed(controls, d)) {
         const last = this.queued[this.queued.length - 1] ?? this.dir;
         if (d !== last && d !== OPPOSITE[last] && this.queued.length < 2) this.queued.push(d);
       }
-      this.held[d] = down;
     }
     if (this.gold) {
       this.gold.life -= dt;
@@ -131,7 +127,7 @@ export class Snake extends BaseGame {
       const safe = (['left', 'right', 'up', 'down'] as const).filter((d) => d !== OPPOSITE[this.dir] && this.free(head.x + STEP[d][0], head.y + STEP[d][1], blocked));
       pick = safe.includes(this.dir) && !first ? this.dir : safe[Math.floor(Math.random() * safe.length)] ?? null;
     }
-    if (pick && pick !== this.dir && !this.held[pick]) out[pick] = true;
+    if (pick && pick !== this.dir && !this.keys.isHeld(pick)) out[pick] = true;
     return out;
   }
 

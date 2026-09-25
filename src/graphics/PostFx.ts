@@ -11,6 +11,13 @@ export interface PostFxOptions {
   focus?: () => number | null;
 }
 
+/** Photo mode's lens: the distance in focus (m; beyond it blurs), the blur's radius in pixels (0 = sharp), extra exposure (stops). */
+export interface PhotoLens {
+  focus: number;
+  blur: number;
+  exposure: number;
+}
+
 /** Bloom: only what is brighter than this (linear, before tone mapping) glows: lamps, neon, screens, the sun on white. */
 const BLOOM_THRESHOLD = 0.85;
 const BLOOM_RADIUS = 0.45;
@@ -83,6 +90,8 @@ export class PostFx implements FramePipeline, Updatable {
   private targetLook: Look = NEUTRAL_LOOK;
   private readonly lookColors = { shadows: new THREE.Color(), highlights: new THREE.Color(), targetShadows: new THREE.Color(), targetHighlights: new THREE.Color() };
   private dofAmount = 0;
+  /** Photo mode's lens (`setLens`), or null: the focus and the blur are the held box's, the exposure the eye's. */
+  private lens: PhotoLens | null = null;
   private time = 0;
   private camera: THREE.PerspectiveCamera | null = null;
   private readonly size = new THREE.Vector2();
@@ -194,6 +203,11 @@ export class PostFx implements FramePipeline, Updatable {
     this.setLook(NEUTRAL_LOOK, true);
   }
 
+  /** Photo mode's lens over the frame (focus, blur, extra exposure), or null to hand them back. */
+  setLens(lens: PhotoLens | null): void {
+    this.lens = lens;
+  }
+
   /** Eases to a zone's grade (instantly with `snap`, e.g. behind a travel fade). */
   setLook(look: Look, snap = false): void {
     this.targetLook = look;
@@ -206,10 +220,13 @@ export class PostFx implements FramePipeline, Updatable {
     this.time += dt;
     this.stepLook(1 - Math.exp(-LOOK_RATE * dt));
 
-    const focus = this.quality.depthOfField ? (this.options.focus?.() ?? null) : null;
-    const wanted = focus === null ? 0 : 1;
-    this.dofAmount += (wanted - this.dofAmount) * (1 - Math.exp(-DOF_RATE * dt));
+    const lens = this.lens;
+    const focus = lens ? lens.focus : this.quality.depthOfField ? (this.options.focus?.() ?? null) : null;
+    const wanted = lens ? (lens.blur > 0 ? 1 : 0) : focus === null ? 0 : 1;
+    // A photographer's lens follows its ring at once; the reading eye eases in and out.
+    this.dofAmount = lens ? wanted : this.dofAmount + (wanted - this.dofAmount) * (1 - Math.exp(-DOF_RATE * dt));
     if (focus !== null) this.prepMaterial.uniforms.focus.value = focus;
+    this.prepMaterial.uniforms.maxRadius.value = lens && lens.blur > 0 ? lens.blur : DOF_MAX_RADIUS;
 
     // The eye adapts slowly, faster to glare than to the dark.
     const tau = this.targetExposure < this.exposure ? ADAPT_DARKER_S : ADAPT_BRIGHTER_S;
@@ -243,7 +260,7 @@ export class PostFx implements FramePipeline, Updatable {
     this.meter();
 
     const out = this.outputMaterial.uniforms;
-    out.exposure.value = this.exposure * Math.pow(2, this.look.exposure);
+    out.exposure.value = this.exposure * Math.pow(2, this.look.exposure + (this.lens?.exposure ?? 0));
     out.time.value = this.time;
     renderer.setRenderTarget(null);
     this.quad.material = this.outputMaterial;

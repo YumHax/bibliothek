@@ -6,4 +6,5 @@
 export { GamepadInput, GAMEPAD_BUTTON_CODES, type GamepadOptions } from './Gamepad';
 export { TouchControls, DEFAULT_TOUCH_BUTTONS, type TouchButton, type TouchControlsOptions } from './TouchControls';
 export { SyntheticMouse, type MouseButton } from './SyntheticMouse';
+export { ACTIONS, PAD_ALIASES, isAction, primaryCode, type ActionId } from './actions';
 export { isTouchDevice, watchForTouch } from './deviceDetect';

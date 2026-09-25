@@ -2,6 +2,7 @@ import type { Game } from '@/catalog/types';
 import { getPlatform } from '@/catalog/platforms';
 import type { CollectionStore } from '@/collection/CollectionStore';
 import type { JobLot, MarketStock } from '@/economy/MarketStock';
+import type { Transactions } from '@/economy/Transactions';
 import { describeCondition } from '@/economy/pricing';
 import { playCoins } from '@/audio/coins';
 import { MarketPanel, coinsHtml, escapeHtml } from './MarketPanel';
@@ -19,7 +20,7 @@ export class JobLotPanel extends MarketPanel {
 
   constructor(
     container: HTMLElement,
-    private readonly deps: { wallet: { readonly coins: number; spend(coins: number): boolean; subscribe(cb: () => void): () => void }; collection: CollectionStore; market: MarketStock },
+    private readonly deps: { wallet: { readonly coins: number; subscribe(cb: () => void): () => void }; collection: CollectionStore; market: MarketStock; tx: Transactions },
     private readonly coverUrl?: (game: Game) => string | undefined,
   ) {
     super(container, deps.wallet, { title: 'Job lot', className: 'joblot', blurb: 'A whole crate from a house clearance, sold as it comes. No picking, no haggling.' });
@@ -31,7 +32,7 @@ export class JobLotPanel extends MarketPanel {
       this.body.innerHTML = '<p class="catalogue__empty">The stallholder is counting what is in the crate…</p>';
       void market.jobLot().then((lot) => {
         this.lot = lot;
-        if (this.isOpen) this.render();
+        if (this.isOpen) this.refresh();
       }, () => {
         this.body.innerHTML = '<p class="catalogue__empty">No job lot today.</p>';
       });
@@ -58,7 +59,7 @@ export class JobLotPanel extends MarketPanel {
       <div class="catalogue__row joblot__total">
         <span class="catalogue__title"><b>${lot.games.length} games</b> <span class="catalogue__meta">worth about ${lot.worth} one by one</span></span>
         ${coinsHtml(lot.price)}
-        <button type="button" data-action="buy" data-autofocus ${sold || !affordable ? 'disabled' : ''}>${sold ? 'Sold' : affordable ? 'Buy the lot' : 'Too dear'}</button>
+        <button type="button" class="ui-btn ui-btn--primary" data-action="buy" data-autofocus ${sold || !affordable ? 'disabled' : ''}>${sold ? 'Sold' : affordable ? 'Buy the lot' : 'Too dear'}</button>
       </div>`;
   }
 
@@ -72,21 +73,19 @@ export class JobLotPanel extends MarketPanel {
 
   protected onAction(action: string): void {
     if (action !== 'buy') return;
-    const { market, wallet, collection } = this.deps;
+    const { market, wallet, tx } = this.deps;
     const lot = this.lot;
     if (!lot || market.lotSold) return;
-    if (!wallet.spend(lot.price)) {
-      this.setStatus(`The lot is ${lot.price} coins and you have ${wallet.coins}.`, true);
+    const bought = tx.buyLot(lot);
+    if (!bought.ok) {
+      if (bought.reason === 'short') this.setStatus(`The lot is ${lot.price} coins and you have ${wallet.coins}.`, true);
       return;
     }
-    const addedAt = new Date().toISOString();
-    const fresh = lot.games.filter((g) => !collection.owns(g.id));
-    for (const game of fresh) collection.add({ ...game, status: 'owned', addedAt, acquired: { price: Math.round(lot.price / lot.games.length), where: 'a job lot', day: market.day } });
-    market.sellLot();
+    const fresh = bought.games.length;
     playCoins(6);
-    this.setStatus(`Bought the lot for ${lot.price} coins: ${fresh.length} new game${fresh.length === 1 ? '' : 's'} in a parcel in the hallway.`);
+    this.setStatus(`Bought the lot for ${lot.price} coins: ${fresh} new game${fresh === 1 ? '' : 's'} in a parcel in the hallway.`);
     this.onBought?.();
-    this.render();
+    this.refresh();
   }
 
   protected onClosed(): void {

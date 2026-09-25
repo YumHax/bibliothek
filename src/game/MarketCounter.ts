@@ -1,12 +1,28 @@
 import type { Game } from '@/catalog/types';
+import { grailById } from '@/economy/grails';
 import { UNDO_PURCHASE, describeEdition } from '@/economy/pricing';
+import { Transactions } from '@/economy/Transactions';
 import type { ForSaleLike, SaleReaction } from './SessionActions';
-import type { ModalLike, SessionParts } from './SessionParts';
+import type { CollectionLike, CoreParts, HagglePanelLike, MarketLike, ModalLike, StandingLike, TradePanelLike, WalletLike } from './SessionParts';
+import type { KeyRoute, SessionHost } from './SessionHost';
+import { isAction, keyMarkup } from '@/input/actions';
+import { actionKeyLabel, renderKeys } from '@/ui/keys';
+
+/** What the counter works with: the hands and the panel, the money, the market, its two panels. */
+export interface MarketCounterParts extends Pick<CoreParts, 'inspector' | 'panel'> {
+  wallet?: WalletLike;
+  collection?: CollectionLike;
+  market?: MarketLike;
+  standing?: StandingLike;
+  haggle?: HagglePanelLike;
+  trade?: TradePanelLike;
+  /** Whether a game bought now finds room on the shelves at home: a warning line, or null when it does. */
+  shelfRoom?: () => string | null;
+}
 
 /** What the counter needs from the session: its parts, a way to talk, and the moves it may make. */
-export interface MarketCounterHost {
-  readonly parts: SessionParts;
-  notify(text: string, ms?: number): void;
+export interface MarketCounterHost extends Pick<SessionHost, 'notify' | 'pickUp' | 'putBack'> {
+  readonly parts: MarketCounterParts;
   /** Opens a DOM panel over the room, the copy staying in hand. */
   showModal(modal: ModalLike): void;
 }
@@ -27,7 +43,7 @@ interface LastPurchase {
  * seconds of a purchase hands it back for most of the money. The glass case is for players the
  * market trusts. Every move is answered by the stallholder (`ForSaleLike.react`).
  */
-export class MarketCounter {
+export class MarketCounter implements KeyRoute {
   private sale: { item: ForSaleLike; unwatch: () => void } | null = null;
   private last: LastPurchase | null = null;
 
@@ -38,8 +54,23 @@ export class MarketCounter {
     return this.sale?.item ?? null;
   }
 
+  /**
+   * A market copy was clicked: hand it over for a closer look (turn it, open it: a missing manual
+   * shows), with its price and state in the panel. Buying takes a second, deliberate key (B), so a
+   * stray click never spends anything. Clicking one while holding another puts the held one back.
+   */
+  offer(sale: ForSaleLike): void {
+    if (this.host.parts.inspector.isActive) {
+      this.host.putBack();
+      return;
+    }
+    if (!this.mayHandle(sale)) return;
+    this.host.pickUp(sale.box);
+    this.begin(sale);
+  }
+
   /** Whether the stallholder lets the player take `sale` in hand (the glass case is for trusted players). */
-  mayHandle(sale: ForSaleLike): boolean {
+  private mayHandle(sale: ForSaleLike): boolean {
     const { standing } = this.host.parts;
     if (!sale.behindGlass || !standing || standing.mayHandleGlass) return true;
     const { name, points } = standing.reputation;
@@ -49,7 +80,7 @@ export class MarketCounter {
   }
 
   /** The copy was just taken in hand. */
-  begin(sale: ForSaleLike): void {
+  private begin(sale: ForSaleLike): void {
     this.end();
     this.sale = { item: sale, unwatch: sale.item.subscribe(() => this.show()) };
     sale.react?.('pickUp');
@@ -66,51 +97,41 @@ export class MarketCounter {
 
   /** Routes a key while a copy is in hand (or just after a purchase). True when it was the market's. */
   onKey(code: string): boolean {
-    if (code === 'KeyU' && this.undo()) return true;
+    if (isAction(code, 'handBack') && this.undo()) return true;
     if (!this.sale) return false;
-    switch (code) {
-      case 'KeyB': this.buy(); return true;
-      case 'KeyH': this.haggle(); return true;
-      case 'KeyR': this.hold(); return true;
-      case 'KeyX': this.swap(); return true;
-      case 'KeyO': this.inspectInside(); return false; // the session still opens the box
-      default: return false;
+    if (isAction(code, 'lookInside')) {
+      this.inspectInside();
+      return false; // the session still opens the box
     }
+    if (isAction(code, 'buy')) this.buy();
+    else if (isAction(code, 'haggle')) this.haggle();
+    else if (isAction(code, 'holdCopy')) this.hold();
+    else if (isAction(code, 'swap')) this.swap();
+    else return false;
+    return true;
+  }
+
+  /** The money moves (wallet, collection, ledger, standing, saved together), from the session's parts. */
+  private get transactions(): Transactions {
+    const { wallet, collection, market, standing } = this.host.parts;
+    return new Transactions({ wallet, collection, market, standing });
   }
 
   /** B: pay what is due, and the box goes into the bag (then off the stall). */
   private buy(): void {
     const sale = this.sale?.item;
-    const { wallet, collection, market, panel, inspector } = this.host.parts;
+    const { wallet, collection, panel, inspector } = this.host.parts;
     if (!sale || !wallet || !collection) return;
     const { item } = sale;
     const { game } = item;
-    if (!item.priced) {
-      this.host.notify('The stallholder is still working out the price. Give it a moment.');
+    const result = this.transactions.buyCopy(item, sale.where);
+    if (!result.ok) {
+      if (result.reason === 'pricing') this.host.notify('The stallholder is still working out the price. Give it a moment.');
+      else if (result.reason === 'owned') this.host.notify(`You already own ${game.title}`);
+      else if (result.reason === 'short') this.host.notify(`${game.title} costs ${result.needed} coins and you have ${result.have}.\n${item.source === 'bin' ? 'Win more at the arcade.' : `${actionKeyLabel('haggle')} to haggle, ${actionKeyLabel('holdCopy')} to hold it for the day, or win more at the arcade.`}`, 3500);
       return;
     }
-    const upgrade = item.source === 'upgrade';
-    if (collection.owns(game.id) && !upgrade) {
-      this.host.notify(`You already own ${game.title}`);
-      return;
-    }
-    const due = item.due;
-    if (!wallet.spend(due)) {
-      this.host.notify(`${game.title} costs ${due} coins and you have ${wallet.coins}.\n${item.source === 'bin' ? 'Win more at the arcade.' : 'H to haggle, R to hold it for the day, or win more at the arcade.'}`, 3500);
-      return;
-    }
-    const day = market?.day ?? 0;
-    const acquired = { price: item.price, where: sale.where, day };
-    const bought: Game = { ...game, status: 'owned', addedAt: new Date().toISOString(), acquired };
-    if (upgrade && collection.update && collection.find) {
-      // The first print takes the old copy's place on the shelf; the old one goes to the stallholder.
-      const old = collection.find(game.id);
-      if (old) market?.consign({ ...old, addedAt: undefined });
-      collection.update(game.id, { edition: 'firstPrint', condition: undefined, repro: undefined, acquired });
-    } else {
-      collection.add(bought);
-    }
-    market?.sold(item);
+    const { game: bought, paid: due, upgrade } = result;
     const thanks = sale.thanks();
     sale.react?.('bought');
     this.end();
@@ -119,7 +140,7 @@ export class MarketCounter {
     const undoable = item.source !== 'ordered' && !upgrade;
     this.last = undoable ? { sale, game: bought, paid: due, until: performance.now() + UNDO_PURCHASE.seconds * 1000 } : null;
     const paid = item.deposit ? `${due} more coins (${item.price} in all)` : `${due} coin${due === 1 ? '' : 's'}`;
-    const undo = undoable ? `\nChanged your mind? U within ${UNDO_PURCHASE.seconds} s hands it back.` : '';
+    const undo = undoable ? `\nChanged your mind? ${actionKeyLabel('handBack')} within ${UNDO_PURCHASE.seconds} s hands it back.` : '';
     const home = upgrade ? 'Your copy at home is a first print now.' : 'It will wait for you in a parcel in the hallway.';
     this.host.notify(`Bought ${game.title} for ${paid}. “${thanks}”\n${home}${undo}`, 4000);
   }
@@ -128,13 +149,11 @@ export class MarketCounter {
   private undo(): boolean {
     const last = this.last;
     if (!last || performance.now() > last.until || this.sale) return false;
-    const { wallet, collection, standing } = this.host.parts;
+    const { wallet, collection } = this.host.parts;
     if (!wallet || !collection?.remove || !last.sale.restock) return false;
     this.last = null;
     const refund = Math.floor(last.paid * UNDO_PURCHASE.refund);
-    collection.remove(last.game.id);
-    wallet.earnCoins(refund);
-    standing?.undo?.('buy', last.game.platform);
+    if (!this.transactions.undoPurchase(last.game, refund).ok) return false;
     last.sale.restock();
     this.host.notify(`“Changed your mind? No harm done.” ${last.game.title} is back on the table.\n${refund} of your ${last.paid} coins back.`, 3500);
     return true;
@@ -185,16 +204,13 @@ export class MarketCounter {
       this.host.notify(item.source === 'ordered' ? `“That's your order, it's not going anywhere.”` : `“It's held for you already. ${item.due} coins to go.”`);
       return;
     }
-    if (!item.priced) {
-      this.host.notify('The stallholder is still working out the price. Give it a moment.');
+    const result = this.transactions.holdCopy(item);
+    if (!result.ok) {
+      if (result.reason === 'pricing') this.host.notify('The stallholder is still working out the price. Give it a moment.');
+      else if (result.reason === 'short') this.host.notify(`A hold costs a ${result.needed}-coin deposit and you have ${result.have}.`);
       return;
     }
-    const deposit = market.holdDeposit(item);
-    if (!wallet.spend(deposit)) {
-      this.host.notify(`A hold costs a ${deposit}-coin deposit and you have ${wallet.coins}.`);
-      return;
-    }
-    market.hold(item, deposit);
+    const { deposit } = result;
     sale.react?.('hold');
     this.host.notify(`“I'll keep ${item.game.title} under the table for you till closing.”\n${deposit} coins down, ${item.due} to pay when you come back for it.`, 4000);
   }
@@ -219,16 +235,11 @@ export class MarketCounter {
 
   /** The swap is agreed: `mine` goes to the stall, the copy in hand comes home; the difference is paid (no change given). */
   private completeSwap(sale: ForSaleLike, mine: Game, value: number): string | null {
-    const { wallet, collection, market, standing, panel, inspector } = this.host.parts;
-    if (!wallet || !collection?.remove || !market) return 'The swap fell through.';
+    const { panel, inspector } = this.host.parts;
     const { item } = sale;
-    const topUp = Math.max(0, item.due - value);
-    if (!wallet.spend(topUp)) return `You need ${topUp} coins on top and you have ${wallet.coins}.`;
-    collection.remove(mine.id);
-    market.consign(mine);
-    collection.add({ ...item.game, status: 'owned', addedAt: new Date().toISOString(), acquired: { price: topUp, where: `a swap at ${sale.where}`, day: market.day } });
-    market.sold(item);
-    standing?.record('swap');
+    const result = this.transactions.swap(item, mine, value, sale.where);
+    if (!result.ok) return result.reason === 'short' ? `You need ${result.needed} coins on top and you have ${result.have}.` : 'The swap fell through.';
+    const { topUp } = result;
     sale.thanks();
     sale.react?.('bought');
     this.end();
@@ -268,19 +279,22 @@ export class MarketCounter {
     if (loyalty) rows.push(['You are', `${loyalty} at this stall`]);
     const room = this.host.parts.shelfRoom?.();
     if (room) rows.push(['At home', room]);
+    if (item.beforeSale !== undefined) rows.push(['Usual price', `${item.beforeSale} coins`]);
     const note = !item.priced ? 'The stallholder is looking it up.'
       : item.exposed ? 'A reproduction, found out: knocked right down.'
       : item.source === 'ordered' ? 'Your order, waiting for you.'
       : item.source === 'keptAside' ? 'Kept aside for you: a regular’s privilege.'
       : item.source === 'upgrade' ? 'A first print of a game you own: buy it and it replaces your copy (the stallholder takes the old one).'
+      : item.source === 'grail' ? `A grail. ${grailById(item.game.id)?.lore ?? 'Collectors dream of this one.'} The seller will not budge much.`
+      : item.sale < 1 ? `Clearance: ${Math.round((1 - item.sale) * 100)}% off. No haggling.`
       : item.gem ? 'In the bargain bin? Someone did not know what they had.'
       : coins < item.due ? `You have ${coins} coins: ${item.due - coins} short.`
       : wanted ? '★ On your wishlist.'
       : item.source === 'showpiece' || item.source === 'estate' ? 'The pride of the stall.' : undefined;
     const keys = item.source === 'bin'
-      ? ['<kbd>B</kbd> buy', '<kbd>O</kbd> open the box']
-      : ['<kbd>B</kbd> buy', '<kbd>H</kbd> haggle', item.reserved ? '' : '<kbd>R</kbd> hold for the day', item.source === 'ordered' || item.source === 'upgrade' ? '' : '<kbd>X</kbd> swap a game', '<kbd>O</kbd> open the box'];
-    const hints = [...keys.filter(Boolean), '<kbd>E</kbd> or <kbd>Click</kbd> elsewhere to put it back'].join(' · ');
+      ? [`${keyMarkup('buy')} buy`, `${keyMarkup('lookInside')} open the box`]
+      : [`${keyMarkup('buy')} buy`, `${keyMarkup('haggle')} haggle`, item.reserved ? '' : `${keyMarkup('holdCopy')} hold for the day`, item.source === 'ordered' || item.source === 'upgrade' ? '' : `${keyMarkup('swap')} swap a game`, `${keyMarkup('lookInside')} open the box`];
+    const hints = [...keys.filter(Boolean), `${keyMarkup('putBack')} or [Click] elsewhere to put it back`].map(renderKeys).join(' · ');
     this.host.parts.panel.show(item.game, { rows, note, hints });
   }
 }

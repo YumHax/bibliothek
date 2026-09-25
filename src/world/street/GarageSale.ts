@@ -2,7 +2,9 @@ import * as THREE from 'three';
 import type { Updatable } from '@/core/Engine';
 import type { BoxArtLoader } from '@/covers/BoxArtLoader';
 import { createCanvas, hashString, seededRandom, toTexture } from '@/covers/generated/canvasUtils';
+import { dayKey } from '@/economy/calendar';
 import { StockItem } from '@/economy/StockItem';
+import { KEYS, PersistedStore } from '@/persistence';
 import type { Furniture } from '../Furniture';
 import { ForSaleBox } from '../market/ForSaleBox';
 
@@ -35,8 +37,7 @@ const THANKS = ['Coins in the tin, ta!', 'Clearing out the loft. Enjoy it!', 'My
  * Whether today (the real date) is a garage-sale day on Front Street: about one day in `oneDayIn`.
  */
 export function isGarageSaleDay(oneDayIn: number, date = new Date()): boolean {
-  const key = `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
-  return hashString(`garage:${key}`) % oneDayIn === 0;
+  return hashString(`garage:${dayKey(date)}`) % oneDayIn === 0;
 }
 
 /**
@@ -102,15 +103,19 @@ export class GarageSale extends THREE.Group implements Furniture, Updatable {
   private fill(stock: readonly StockItem[]): void {
     this.filled = true;
     const { owns, price, covers, wallet, isWanted, host } = this.options;
-    const random = seededRandom(hashString(new Date().toDateString()) + 17);
-    const pool = stock.filter((item) => (item.source === 'stall' || item.source === 'bin') && !owns(item.game.id));
+    const random = seededRandom(hashString(`garage-table:${dayKey()}`));
+    // What was bought off this table today stays in the draw (so a reload lays the same table) but is not laid again.
+    const soldToday = soldHereToday();
+    const pool = stock.filter((item) => (item.source === 'stall' || item.source === 'bin') && (!owns(item.game.id) || soldToday.includes(item.game.id)));
     const count = Math.min(pool.length, 2 + Math.floor(random() * 3));
-    const chosen: StockItem[] = [];
-    while (chosen.length < count) {
+    const drawn: StockItem[] = [];
+    while (drawn.length < count) {
       const item = pool.splice(Math.floor(random() * pool.length), 1)[0]!;
-      chosen.push(new StockItem(item.game, random() < 0.5 ? 'worn' : 'noManual', 'bin', { list: price(), final: true }));
+      drawn.push(new StockItem(item.game, random() < 0.5 ? 'worn' : 'noManual', 'bin', { list: price(), final: true }));
     }
-    const spacing = TABLE.width / (count + 1);
+    const chosen = drawn.filter((item) => !soldToday.includes(item.game.id));
+    if (!chosen.length) return;
+    const spacing = TABLE.width / (chosen.length + 1);
     chosen.forEach((item, i) => {
       const box = new ForSaleBox(item, covers, {
         pose: { kind: 'flat' },
@@ -123,12 +128,41 @@ export class GarageSale extends THREE.Group implements Furniture, Updatable {
       const place = (): void => {
         host.place(box, at, this.rotation.y + (random() - 0.5) * 0.3);
       };
-      box.onSold = () => host.remove(box);
-      box.restock = place;
+      box.onSold = () => {
+        host.remove(box);
+        recordSold(item.game.id, true);
+      };
+      box.restock = () => {
+        place();
+        recordSold(item.game.id, false);
+      };
       place();
       this.boxes.push(box);
     });
   }
+}
+
+/** The games bought off the table on one (real) day: a reload that day does not lay new ones in their place. */
+const sales = new PersistedStore<{ day: string; sold: string[] }>({
+  key: KEYS.garageSale,
+  version: 1,
+  defaults: () => ({ day: '', sold: [] }),
+  read: (data) => {
+    if (typeof data !== 'object' || data === null) return null;
+    const { day, sold } = data as { day?: unknown; sold?: unknown };
+    return typeof day === 'string' && Array.isArray(sold) ? { day, sold: sold.filter((id): id is string => typeof id === 'string') } : null;
+  },
+});
+
+function soldHereToday(): string[] {
+  const saved = sales.load();
+  return saved.day === dayKey() ? saved.sold : [];
+}
+
+/** `id` was bought here (or handed back: `sold` false). */
+function recordSold(id: string, sold: boolean): void {
+  const rest = soldHereToday().filter((other) => other !== id);
+  sales.save({ day: dayKey(), sold: sold ? [...rest, id] : rest });
 }
 
 /** The cardboard sign: GARAGE SALE, the flat price, and the arrow across the street. */

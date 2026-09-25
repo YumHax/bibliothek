@@ -23,11 +23,20 @@ export class Cartridge extends THREE.Mesh<THREE.BufferGeometry, THREE.MeshStanda
     this.receiveShadow = true;
   }
 
-  setLabel(texture: THREE.Texture): void {
+  /** Frees the previous label; null leaves the plain grey plastic. */
+  setLabel(texture: THREE.Texture | null): void {
     const mat = this.material[LABEL];
     mat.map?.dispose();
     mat.map = texture;
-    mat.color.setHex(0xffffff);
+    mat.color.setHex(texture ? 0xffffff : 0x7a7a7e);
     mat.needsUpdate = true;
+  }
+
+  dispose(): void {
+    this.geometry.dispose();
+    for (const mat of this.material) {
+      mat.map?.dispose();
+      mat.dispose();
+    }
   }
 }

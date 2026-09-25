@@ -68,7 +68,7 @@ export class LotCrate extends THREE.Group implements Furniture, Interactable {
     }
     // A marker scrawl on the front wall.
     const scrawl = new THREE.Mesh(new THREE.PlaneGeometry(0.34, 0.12), new THREE.MeshStandardMaterial({ map: paintScrawl(), transparent: true, alphaTest: 0.3, roughness: 0.95 }));
-    scrawl.position.set(-0.05, HEIGHT * 0.45, DEPTH / 2 + 0.001);
+    scrawl.position.set(-0.05, HEIGHT * 0.45, DEPTH / 2 + 0.002);
     scrawl.castShadow = false;
     this.add(scrawl);
 

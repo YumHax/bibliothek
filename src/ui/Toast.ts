@@ -1,3 +1,4 @@
+import { announceSaveProblems } from './saveNotices';
 import './Toast.css';
 
 const FADE_MS = 320;
@@ -5,7 +6,8 @@ const MAX_VISIBLE = 3;
 
 /**
  * Small HUD notifications at the bottom centre of the screen. Toasts stack (newest on top,
- * oldest dropped past `MAX_VISIBLE`) and fade out on their own.
+ * oldest dropped past `MAX_VISIBLE`) and fade out on their own. Save problems (storage full, a
+ * damaged save, another tab on the same save) are announced here too (`announceSaveProblems`).
  */
 export class Toast {
   private readonly stack: HTMLDivElement;
@@ -14,6 +16,7 @@ export class Toast {
     this.stack = document.createElement('div');
     this.stack.className = 'toast-stack';
     container.appendChild(this.stack);
+    announceSaveProblems(this);
   }
 
   /** Shows `text` for `ms` milliseconds. Returns a function that dismisses it early. */

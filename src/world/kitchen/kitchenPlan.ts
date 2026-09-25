@@ -171,8 +171,9 @@ export const KITCHEN_PLAN = {
   homeGoods: { crt: { screenWidth: 0.3, setBack: 0.3 } },
 
   decor: [
-    // A runner along the back run, between the cabinets and the table.
-    { kind: 'rug', at: { floor: [-0.1, -0.4] }, options: { width: 1.7, depth: 0.6, field: 0x6e7b8c, border: 0x3e4a5c, motif: 0x9aa5b4 } },
+    // A runner along the back run, between the cabinets and the table, stopping short of the cat's water bowl in the
+    // corner (x up to -0.79): under it, the rug's top would z-fight with the bowl's inside floor.
+    { kind: 'rug', at: { floor: [0, -0.4] }, options: { width: 1.5, depth: 0.6, field: 0x6e7b8c, border: 0x3e4a5c, motif: 0x9aa5b4 } },
     // A yucca in the front-left corner, by the window end of the room, and a small pot on the sink run's drawers.
     { kind: 'plant', at: { corner: 'front-left', inset: 0.32 }, options: { kind: 'yucca', pot: 'terracotta', seed: 21 } },
     { kind: 'plant', at: { wall: 'left', along: 0.35, y: WORKTOP, offset: 0.3 }, options: { kind: 'small', pot: 'ceramic', seed: 27, collides: false } },

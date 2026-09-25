@@ -3,9 +3,7 @@ import type { Placement } from '../Placement';
 import type { DecorEntry } from '../props/decor';
 import type { TiledWainscotOptions } from '../props/TiledWainscot';
 import type { ArcadeGameId } from './games';
-import type { PinballOptions } from './Pinball';
-import type { ClawMachineOptions } from './ClawMachine';
-import type { AlleyRollerOptions } from './AlleyRoller';
+import type { MachineKind, MachineOptionsOf } from './machineKinds';
 import type { HangoutSpot, NavNode } from './ArcadeCrowd';
 
 /*
@@ -46,11 +44,31 @@ export interface CabinetPlan {
   wear?: number;
 }
 
-/** A printed card on a machine that is not a cabinet (the cabinets carry their own): machine-local, facing +z. */
+/** A printed card on a machine that is not a cabinet (the cabinets carry their own): machine-local, facing +z; titled with the game's title unless `title` says otherwise. */
 export interface CardPlan {
   at: [x: number, y: number, z: number];
   lines: string[];
+  title?: string;
 }
+
+/** What the hall adds to a physical machine, whatever its kind. */
+interface MachineExtras {
+  at: Placement;
+  /** Where a watcher stands, when behind the player's shoulder would be in the way. */
+  watchAt?: [x: number, z: number];
+  card?: CardPlan;
+  /** The medal lamps, machine-local, facing +z (a machine with a `table`). */
+  medalsAt?: [x: number, y: number, z: number];
+  /** Keeps a hall-of-fame table: on the board, and the daily challenge may be set on it. */
+  table?: boolean;
+  /** A warm pool of light on the carpet in front of it (machine-local z). */
+  pool?: { color: number; width: number; depth: number; z: number; level: number };
+  /** A regular is already on it when the player walks in. */
+  regularAtStart?: boolean;
+}
+
+/** A physical machine (not a cabinet): a `MACHINE_KINDS` kind (also its game id), its options, where it stands and what the hall adds to it. */
+export type MachinePlan = { [K in MachineKind]: MachineExtras & { kind: K; options: MachineOptionsOf<K> } }[MachineKind];
 
 /** 12 x 8 m under a 3 m ceiling, no windows, no doorways: the only way in or out is the teleport. */
 export const ARCADE_ROOM: RoomOptions = {
@@ -65,8 +83,11 @@ export const ARCADE_ROOM: RoomOptions = {
 const CABINET_OFF_WALL = 0.42;
 /** x of the six cabinets along the back wall, shoulder to shoulder (0.66 wide, a hand's width between). */
 const CABINET_X = [-2.25, -1.35, -0.45, 0.45, 1.35, 2.25];
-/** The island's two cabinets, back to back: half a cabinet's depth either side of z 0. */
-const ISLAND_Z = 0.4;
+/**
+ * The island's two cabinets, back to back: their backs (0.41 m behind their origin) a few mm either
+ * side of z 0. Any closer and they overlap, their side panels z-fighting down the seam.
+ */
+const ISLAND_Z = 0.412;
 /** The light-gun and dance cabinets, facing the way in. */
 const PAIR_X = 3.4;
 const PAIR_Z = -0.9;
@@ -126,46 +147,75 @@ export const ARCADE_PLAN = {
   challengeBoard: { wall: 'front', along: -1.6, y: 1.7 } as Placement,
   leagueBoard: { at: { wall: 'front', along: -3.2, y: 1.65 } as Placement, width: 1.1, height: 0.9 },
 
-  /** The pinball against the left wall, its backbox to the wall, the player's end towards the hall. */
-  pinball: {
-    at: { wall: 'left', along: -2.6, y: 0, offset: 0.7 } as Placement,
-    options: { title: 'METEOR ALLEY', color: 0x3a1f5c, accent: 0xff8a2a, seed: 3 } as PinballOptions,
-    card: { at: [0.14, 0.79, 0.652], lines: ['HOLD SPACE · PLUNGER', 'A / D · FLIPPERS', 'LIGHT THE LANES'] } as CardPlan,
-    medalsAt: [-0.15, 0.79, 0.652] as [number, number, number],
-  },
+  /**
+   * The physical machines, built by `MACHINE_KINDS` (in this order among the crowd's stations):
+   * the pinball against the left wall (its backbox to the wall, the player's end towards the hall,
+   * somebody on it when the player walks in), the claw machine on the front wall right of the door,
+   * the ball alley along the right wall (its rings at the back, played from its front end; the kid
+   * watches from the aisle side), HOOP FEVER along the left wall (the hoop at the back, played from
+   * its front end towards the way in), the ticket wheel on the front wall right of the claw.
+   */
+  machines: [
+    {
+      kind: 'pinball',
+      at: { wall: 'left', along: -2.6, y: 0, offset: 0.7 },
+      options: { title: 'METEOR ALLEY', color: 0x3a1f5c, accent: 0xff8a2a, seed: 3 },
+      card: { at: [0.14, 0.79, 0.652], lines: ['HOLD SPACE · PLUNGER', 'A / D · FLIPPERS', 'LIGHT THE LANES'] },
+      medalsAt: [-0.15, 0.79, 0.652],
+      table: true,
+      regularAtStart: true,
+    },
+    {
+      kind: 'claw',
+      at: { wall: 'front', along: 2.0, y: 0, offset: 0.42 },
+      options: { color: 0xd23a6a, seed: 4 },
+      card: { at: [0.2, 0.62, 0.379], lines: ['WASD · STEER', 'SPACE · DROP', '15 SECONDS'], title: 'CLAW' },
+    },
+    {
+      kind: 'alley',
+      at: { floor: [5.5, -2.5], rotationY: 0 },
+      options: { title: 'ALLEY ROLL', color: 0xb8202a },
+      watchAt: [4.6, -0.6],
+      card: { at: [-0.18, 0.5, 1.152], lines: ['A / D · AIM', 'HOLD SPACE · LET GO', 'NINE BALLS'] },
+      medalsAt: [0, 1.5, -1.125],
+      table: true,
+    },
+    {
+      kind: 'hoops',
+      at: { floor: [-5.45, -0.4], rotationY: 0 },
+      options: { title: 'HOOP FEVER', color: 0x1f4fa8 },
+      watchAt: [-4.3, 1.4],
+      card: { at: [0.1, 0.62, 0.952], lines: ['LOOK TO AIM', 'HOLD SPACE · LET GO', '30 SECONDS'] },
+      medalsAt: [-0.25, 0.62, 0.952],
+      table: true,
+    },
+    {
+      kind: 'wheel',
+      at: { wall: 'front', along: 3.6, y: 0 },
+      options: { title: 'TICKET WHEEL', color: 0x2a0f24 },
+      watchAt: [2.6, 2.7],
+      card: { at: [0.12, 0.55, 0.752], lines: ['SPACE · SPIN', 'PAYS THE SLICE', 'JACKPOT GROWS'] },
+      // The bulbs throw a warm pool on the carpet in front of it.
+      pool: { color: 0xffd08a, width: 1.6, depth: 1.4, z: 1.1, level: 0.6 },
+    },
+  ] as MachinePlan[],
 
-  /** HOOP FEVER along the left wall, the hoop at the back, played from its front end (towards the way in). */
-  hoops: {
-    at: { floor: [-5.45, -0.4], rotationY: 0 } as Placement,
-    options: { title: 'HOOP FEVER', color: 0x1f4fa8 },
-    watchAt: [-4.3, 1.4] as [number, number],
-    card: { at: [0.1, 0.62, 0.952], lines: ['LOOK TO AIM', 'HOLD SPACE · LET GO', '30 SECONDS'] } as CardPlan,
-    medalsAt: [-0.25, 0.62, 0.952] as [number, number, number],
-  },
-
-  /** The claw machine on the front wall, right of the door. */
-  claw: {
-    at: { wall: 'front', along: 2.0, y: 0, offset: 0.42 } as Placement,
-    options: { color: 0xd23a6a, seed: 4 } as ClawMachineOptions,
-    card: { at: [0.2, 0.62, 0.377], lines: ['WASD · STEER', 'SPACE · DROP', '15 SECONDS'] } as CardPlan,
-  },
-
-  /** The ticket wheel on the front wall, right of the claw. */
-  wheel: {
-    at: { wall: 'front', along: 3.6, y: 0 } as Placement,
-    title: 'TICKET WHEEL',
-    color: 0x2a0f24,
-    watchAt: [2.6, 2.7] as [number, number],
-    card: { at: [0.12, 0.55, 0.752], lines: ['SPACE · SPIN', 'PAYS THE SLICE', 'JACKPOT GROWS'] } as CardPlan,
-  },
-
-  /** The ball alley along the right wall, its rings at the back, played from its front end. The kid watches from the aisle side. */
-  alley: {
-    at: { floor: [5.5, -2.5], rotationY: 0 } as Placement,
-    options: { title: 'ALLEY ROLL', color: 0xb8202a } as AlleyRollerOptions,
-    watchAt: [4.6, -0.6] as [number, number],
-    card: { at: [-0.18, 0.5, 1.152], lines: ['A / D · AIM', 'HOLD SPACE · LET GO', 'NINE BALLS'] } as CardPlan,
-    medalsAt: [0, 1.5, -1.125] as [number, number, number],
+  /**
+   * The Saturday tournament (`economy/ArcadeTournament`): its bracket board with the sign-up sheet
+   * on the back wall right of the cabinets (above the way round behind STEP BEAT), the cabinets it
+   * may be played on (the classics along the back wall and the island: one player, no attachment),
+   * and where the watchers stand round the day's cabinet (cabinet-local, +z in front of it: a
+   * half-circle behind the player's back, clear of the next cabinet's player).
+   */
+  tournament: {
+    // x 3.65..4.75, the clipboard to 5.05: clear of the LEAGUE notice (x 3.2) and the ball alley's backboard (from x 5.1).
+    board: { wall: 'back', along: 4.2, y: 1.65 } as Placement,
+    width: 1.1,
+    height: 0.85,
+    games: ['breakout', 'invaders', 'stacker', 'arrows', 'snake', 'comets'] as ArcadeGameId[],
+    spectators: [[-0.75, 1.55], [0, 1.85], [0.75, 1.55]] as [x: number, z: number][],
+    /** The TOURNAMENT sign on the cabinet's roof (cabinet-local y). */
+    topperY: 1.92,
   },
 
   /** The change machine on the left wall by the way in (it works, some days). */
@@ -269,16 +319,33 @@ export const ARCADE_PLAN = {
     { kind: 'flyer', at: { wall: 'right', along: 0.1, y: 1.75 }, options: { title: 'HIGH SCORE?', lines: ['sign the board', 'with your initials'], accent: 0xe6a83a, ink: 0x3a2a10, seed: 24 } },
     { kind: 'flyer', at: { wall: 'front', along: -0.85, y: 1.7 }, options: { title: 'DAILY', lines: ['one challenge a day', 'see the board', 'beat it, bank it'], accent: 0x8a2f6f, seed: 21 } },
     { kind: 'flyer', at: { wall: 'back', along: -3.6, y: 1.6 }, options: { title: 'MEDALS', lines: ['bronze · silver · gold', 'on every machine', 'tickets for each'], accent: 0xe0995a, seed: 25 } },
-    { kind: 'flyer', at: { wall: 'back', along: 3.6, y: 1.6 }, options: { title: 'LEAGUE', lines: ['most tickets this week', 'wins the pennant', 'see the board'], accent: 0x33e0ff, seed: 26 } },
+    { kind: 'flyer', at: { wall: 'back', along: 3.2, y: 1.6 }, options: { title: 'LEAGUE', lines: ['most tickets this week', 'wins the pennant', 'see the board'], accent: 0x33e0ff, seed: 26 } },
 
     // A tired plant in each front corner, the way every arcade has one.
     { kind: 'plant', at: { corner: 'front-left', inset: 0.45 }, options: { kind: 'yucca', pot: 'ceramic', seed: 31 } },
     { kind: 'plant', at: { corner: 'front-right', inset: 0.45 }, options: { kind: 'fig', pot: 'ceramic', seed: 32 } },
+
+    // --- The holidays (up only then) ---
+    // Christmas: fairy lights along the side walls under the neon tubes (the left wall's run from the front to the back,
+    // the right wall's from the back to the front: a wall's local +x), a wreath above the NO REFUNDS notice by the way out.
+    { kind: 'fairyLights', at: { wall: 'left', along: 3.8, y: 0, offset: 0.05 }, options: { length: 7.6, height: 2.72, sag: 0.18, bulb: 0.018, seed: 21 }, holiday: 'christmas' },
+    { kind: 'fairyLights', at: { wall: 'right', along: -3.8, y: 0, offset: 0.05 }, options: { length: 7.6, height: 2.72, sag: 0.18, bulb: 0.018, seed: 22 }, holiday: 'christmas' },
+    { kind: 'wreath', at: { wall: 'front', along: 1.1, y: 2.3 }, options: { radius: 0.17, seed: 4 }, holiday: 'christmas' },
+    // Halloween: a lit pumpkin either side of the way out, cobwebs in the back corners.
+    { kind: 'pumpkin', at: { floor: [-0.72, 3.7], rotationY: Math.PI }, options: { radius: 0.15, seed: 41 }, holiday: 'halloween' },
+    { kind: 'pumpkin', at: { floor: [0.72, 3.7], rotationY: Math.PI }, options: { radius: 0.12, seed: 42 }, holiday: 'halloween' },
+    { kind: 'cobweb', at: { wall: 'back', along: -6, y: 3 }, options: { size: 0.6, spread: 'right', seed: 43 }, holiday: 'halloween' },
+    { kind: 'cobweb', at: { wall: 'back', along: 6, y: 3 }, options: { size: 0.55, spread: 'left', seed: 44 }, holiday: 'halloween' },
+    // New Year: a banner between the two others, over the island.
+    { kind: 'hangingBanner', at: { ceiling: [0, 1.05] }, options: { title: 'HAPPY NEW YEAR', line: 'high scores resolutions welcome', width: 2.0, height: 0.45, drop: 0.3, color: 0x1a1a1f, ink: 0xd4a52a, accent: 0xc4c7cc }, holiday: 'newyear' },
   ] as DecorEntry[],
 };
 
-/** Cabinets whose game can play itself (not LexiPunk, which runs in its frame): what a regular may take and a day may break. */
+/** Cabinets whose game can play itself (not LexiPunk, which runs in its frame): what a regular may take. */
 export const DEMO_CABINETS: readonly string[] = ARCADE_PLAN.cabinets.map((c) => c.game).filter((g) => g !== 'lexipunk');
 
-/** The games that pay tickets and keep a table (every cabinet but LexiPunk, the pinball, the alley, the hoops): what a daily challenge may be set on. */
-export const TICKET_GAMES: readonly string[] = [...DEMO_CABINETS, 'pinball', 'alley', 'hoops'];
+/** The games that pay tickets and keep a table (every cabinet but LexiPunk, the machines with a `table`): what a daily challenge may be set on. */
+export const TICKET_GAMES: readonly string[] = [...DEMO_CABINETS, ...ARCADE_PLAN.machines.filter((m) => m.table).map((m) => m.kind)];
+
+/** What a day may put out of order (one at most, never the challenge's): those cabinets and every physical machine. */
+export const BREAKABLE: readonly string[] = [...DEMO_CABINETS, ...ARCADE_PLAN.machines.map((m) => m.kind)];

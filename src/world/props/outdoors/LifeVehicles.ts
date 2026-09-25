@@ -3,7 +3,8 @@ import { type Rng, azimuthOf, azimuthX, heightY, sizePx } from './Sheet';
 import { AMBULANCE_BODY, BUS_BODY, CAR_BODY, type CarFrame, TAXI_BODY, TRUCK_BODY, VAN_BODY, type VehicleBody, paintCar } from './Car';
 import { between, pick } from './paint';
 import { resample } from './Park';
-import { type AtlasPens, type Cell, type LifeEnv, type Push, acrossSign, glowDot, pushStanding, uprightBounds } from './sprites';
+import { CYCLE_FAR, CYCLE_NEAR, LIFE_REACH, NEAR_KERB } from './plan';
+import { type AtlasPens, type Cell, type LifeEnv, type LifeLayer, type Push, acrossSign, glowDot, pushStanding, uprightBounds } from './sprites';
 
 /** How far ahead a headlight beam lights the road, in metres. */
 const BEAM = 2.8;
@@ -299,10 +300,8 @@ const BIKE = { scale: 36, length: 1.9, height: 1.85, margin: 3 };
 const BIKE_SPEED: [number, number] = [3.8, 6];
 const MAX_CYCLISTS = 5;
 const JERSEYS = ['#c8342a', '#2f5a9a', '#e8e2d2', '#2f2f36', '#e8c84a', '#3f8a5a'];
-/** The two cycle routes near the kerbs: our side's cycle lane (westward then south) and along the far parked cars (north then east). */
-const CYCLE_NEAR = 5.15;
-const CYCLE_FAR = 19.6;
-const CORNER: [number, number] = [-4, 4];
+/** The two cycle routes near the kerbs (`CYCLE_NEAR` westward then south, `CYCLE_FAR` north then east) bend round the corner of our pavements. */
+const CORNER: [number, number] = [-NEAR_KERB, NEAR_KERB];
 
 /** One cyclist: the path they follow (sampled every half metre), how far along, their speed, look, and the lateral dodge round an obstacle. */
 interface Cyclist {
@@ -315,7 +314,7 @@ interface Cyclist {
 }
 
 /** A turn of radius `r` about (cx, cz) from angle a0 to a1 (degrees in the x-z plane), a point every half metre. */
-function arc(cx: number, cz: number, r: number, a0: number, a1: number): [number, number][] {
+export function arc(cx: number, cz: number, r: number, a0: number, a1: number): [number, number][] {
   const n = Math.max(2, Math.ceil((Math.abs(a1 - a0) * THREE.MathUtils.DEG2RAD * r) / 0.5));
   return Array.from({ length: n }, (_, i) => {
     const a = THREE.MathUtils.degToRad(a0 + ((a1 - a0) * i) / n);
@@ -328,19 +327,23 @@ function arc(cx: number, cz: number, r: number, a0: number, a1: number): [number
  * more by day and in the dry, a front lamp and a red rear light after dark. They swing out round
  * whatever stands in their way (a double-parked van).
  */
-export class Cyclists {
+export class Cyclists implements LifeLayer {
   /** Per look, per facing (+azimuth, -azimuth): two pedalling poses. */
   private readonly cells: Cell[][][] = [];
   private readonly riders: Cyclist[] = [];
   private readonly paths: [number, number][][];
   private spawnClock = 3;
 
-  constructor(private readonly random: Rng) {
+  /** `obstacles` are (x, z) points to swing out round, kept up to date by whoever moves them (the traffic's double-parked van). */
+  constructor(
+    private readonly random: Rng,
+    private readonly obstacles: readonly (readonly [number, number])[],
+  ) {
     const R = CYCLE_NEAR - CORNER[1];
     const Rf = CYCLE_FAR - CORNER[1];
     this.paths = [
-      [...resample([[62, CYCLE_NEAR], [CORNER[0], CYCLE_NEAR]], 0.5), ...arc(CORNER[0], CORNER[1], R, 90, 180), ...resample([[-CYCLE_NEAR, CORNER[1]], [-CYCLE_NEAR, -62]], 0.5)],
-      [...resample([[-CYCLE_FAR, -62], [-CYCLE_FAR, CORNER[1]]], 0.5), ...arc(CORNER[0], CORNER[1], Rf, 180, 90), ...resample([[CORNER[0], CYCLE_FAR], [62, CYCLE_FAR]], 0.5)],
+      [...resample([[LIFE_REACH, CYCLE_NEAR], [CORNER[0], CYCLE_NEAR]], 0.5), ...arc(CORNER[0], CORNER[1], R, 90, 180), ...resample([[-CYCLE_NEAR, CORNER[1]], [-CYCLE_NEAR, -LIFE_REACH]], 0.5)],
+      [...resample([[-CYCLE_FAR, -LIFE_REACH], [-CYCLE_FAR, CORNER[1]]], 0.5), ...arc(CORNER[0], CORNER[1], Rf, 180, 90), ...resample([[CORNER[0], CYCLE_FAR], [LIFE_REACH, CYCLE_FAR]], 0.5)],
     ];
   }
 
@@ -358,8 +361,11 @@ export class Cyclists {
     }
   }
 
-  /** Moves the riders on and pushes them; `obstacles` are (x, z) points to swing out round. */
-  update(dt: number, env: LifeEnv, daylight: number, push: Push, obstacles: readonly [number, number][]): void {
+  /** Moves the riders on (in steps of at most 0.1 s, like the traffic) and pushes them. */
+  update(frameDt: number, env: LifeEnv, push: Push): void {
+    const dt = Math.min(frameDt, 0.1);
+    const daylight = 1 - env.dusk;
+    const obstacles = this.obstacles;
     this.spawnClock -= dt;
     if (this.spawnClock <= 0) {
       const busy = (0.2 + 0.8 * daylight) * env.wakefulness * (1 - 0.85 * THREE.MathUtils.smoothstep(env.wet, 0.1, 0.5));

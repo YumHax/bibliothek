@@ -6,7 +6,7 @@ import { Environment } from './Environment';
 import { Haze } from './Haze';
 import { LOOKS, type Look, type LookName } from './grade';
 
-export { QUALITY, QUALITY_LEVELS, setQuality, type QualityLevel, type QualitySettings } from './quality';
+export { QUALITY, QUALITY_LEVELS, recommendedQuality, setQuality, type QualityLevel, type QualitySettings } from './quality';
 export { LOOKS, NEUTRAL_LOOK, type Look, type LookName } from './grade';
 
 export interface GraphicsOptions {

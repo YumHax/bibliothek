@@ -2,6 +2,7 @@ import type { Sfx, SfxEvent } from '@/audio/ChipSpeaker';
 import { type ArcadeControls, type ArcadeGame, type RunContext, SCREEN_H, SCREEN_W, drawText } from './ArcadeGame';
 import { seededRandom } from '@/covers/generated/canvasUtils';
 import { Fx } from './Fx';
+import { KeyEdges } from './KeyEdges';
 
 /** The HUD strip across the top; the playfield starts at `PLAY_TOP`. */
 export const PLAY_TOP = 22;
@@ -31,6 +32,8 @@ export abstract class BaseGame implements ArcadeGame {
   over = false;
 
   protected readonly fx = new Fx();
+  /** Presses of the keys the rules read (`keys.pressed(controls, 'up')`), cleared with the board. */
+  protected readonly keys = new KeyEdges();
   protected combo = 1;
   protected timeLeft = Infinity;
   protected elapsed = 0;
@@ -79,6 +82,7 @@ export abstract class BaseGame implements ArcadeGame {
     this.sounds = [];
     this.rng = seededRandom(run.seed ?? Math.floor(Math.random() * 0x100000000));
     this.fx.clear();
+    this.keys.reset();
     this.begin();
     this.sound('ready');
   }

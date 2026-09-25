@@ -5,10 +5,11 @@ import type { DayNight } from '../props/DayNight';
 import { seasonalLawn } from '../props/outdoors/season';
 import { QuadBuilder } from './QuadBuilder';
 import { asphaltTile, kerbTile, lawnTile, pavingTile, type Tile } from './groundTextures';
-import { CROSS_STREET, FRONT, KERB_HEIGHT, PARK_STREET, STREET_PLAN } from './streetPlan';
+import { FRONT, KERB_HEIGHT, PARK_STREET, SIDE_STREET, STREET_ENDS, STREET_PLAN } from './streetPlan';
+import { STREET_SNOW } from './snowCover';
 
-/** How far the side streets run each way before the fog and the far plane take them. */
-const REACH = 64;
+/** The side street runs south to the building across its end. */
+const SIDE_END = -60;
 const LAWN_REACH = { x: -115, z: 100 };
 const SNOW = new THREE.Color(0xf2f4f8);
 /** Seconds between two readings of the weather (the ground soaks and dries over game hours). */
@@ -37,34 +38,34 @@ export class StreetGround extends THREE.Group implements Furniture, Updatable {
   constructor(private readonly dayNight: DayNight, anisotropy: number) {
     super();
     this.name = 'StreetGround';
+    const { south, east } = STREET_ENDS;
     const road = new QuadBuilder(1);
     const r = -KERB_HEIGHT;
-    road.floor(PARK_STREET.farKerb, FRONT.nearKerb, CROSS_STREET.farKerb, FRONT.farKerb, r);
-    road.floor(PARK_STREET.farKerb, -REACH, PARK_STREET.nearKerb, REACH, r);
-    road.floor(CROSS_STREET.nearKerb, -REACH, CROSS_STREET.farKerb, REACH, r);
+    // Front Street from Park Street's far kerb to the building across its end; Park Street and the side street running south.
+    road.floor(PARK_STREET.farKerb, FRONT.nearKerb, east, FRONT.farKerb, r);
+    road.floor(PARK_STREET.farKerb, south, PARK_STREET.nearKerb, FRONT.nearKerb, r);
+    road.floor(SIDE_STREET.nearKerb, SIDE_END, SIDE_STREET.farKerb, FRONT.nearKerb, r);
 
     const paving = new QuadBuilder(1);
-    paving.floor(PARK_STREET.nearKerb, FRONT.ourLine, CROSS_STREET.nearKerb, FRONT.nearKerb, 0);
-    paving.floor(PARK_STREET.nearKerb, FRONT.farKerb, CROSS_STREET.nearKerb, FRONT.farLine, 0);
-    paving.floor(PARK_STREET.nearKerb, -REACH, PARK_STREET.line, FRONT.ourLine, 0);
-    paving.floor(PARK_STREET.nearKerb, FRONT.farLine, PARK_STREET.line, REACH, 0);
-    paving.floor(PARK_STREET.hedge - 1, -REACH, PARK_STREET.farKerb, REACH, 0);
-    paving.floor(CROSS_STREET.line, -REACH, CROSS_STREET.nearKerb, FRONT.ourLine, 0);
-    paving.floor(CROSS_STREET.line, FRONT.farLine, CROSS_STREET.nearKerb, REACH, 0);
-    paving.floor(CROSS_STREET.farKerb, -REACH, CROSS_STREET.farLine, REACH, 0);
+    paving.floor(PARK_STREET.nearKerb, FRONT.ourLine, SIDE_STREET.nearKerb, FRONT.nearKerb, 0);
+    paving.floor(SIDE_STREET.farKerb, FRONT.ourLine, east, FRONT.nearKerb, 0);
+    paving.floor(PARK_STREET.hedge - 1, FRONT.farKerb, east, FRONT.farLine, 0);
+    paving.floor(PARK_STREET.nearKerb, south, PARK_STREET.line, FRONT.ourLine, 0);
+    paving.floor(PARK_STREET.hedge - 1, south, PARK_STREET.farKerb, FRONT.farKerb, 0);
+    paving.floor(SIDE_STREET.line, SIDE_END, SIDE_STREET.nearKerb, FRONT.ourLine, 0);
+    paving.floor(SIDE_STREET.farKerb, SIDE_END, SIDE_STREET.farLine, FRONT.ourLine, 0);
 
     // Kerb faces, each facing the road.
     const kerbs = new QuadBuilder(1);
-    kerbs.wall(PARK_STREET.nearKerb, FRONT.nearKerb, CROSS_STREET.nearKerb, FRONT.nearKerb, r, 0);
-    kerbs.wall(CROSS_STREET.nearKerb, FRONT.farKerb, PARK_STREET.nearKerb, FRONT.farKerb, r, 0);
-    kerbs.wall(PARK_STREET.nearKerb, -REACH, PARK_STREET.nearKerb, FRONT.nearKerb, r, 0);
-    kerbs.wall(PARK_STREET.nearKerb, FRONT.farKerb, PARK_STREET.nearKerb, REACH, r, 0);
-    kerbs.wall(PARK_STREET.farKerb, REACH, PARK_STREET.farKerb, -REACH, r, 0);
-    kerbs.wall(CROSS_STREET.nearKerb, FRONT.nearKerb, CROSS_STREET.nearKerb, -REACH, r, 0);
-    kerbs.wall(CROSS_STREET.nearKerb, REACH, CROSS_STREET.nearKerb, FRONT.farKerb, r, 0);
-    kerbs.wall(CROSS_STREET.farKerb, -REACH, CROSS_STREET.farKerb, REACH, r, 0);
+    kerbs.wall(PARK_STREET.nearKerb, FRONT.nearKerb, SIDE_STREET.nearKerb, FRONT.nearKerb, r, 0);
+    kerbs.wall(SIDE_STREET.farKerb, FRONT.nearKerb, east, FRONT.nearKerb, r, 0);
+    kerbs.wall(east, FRONT.farKerb, PARK_STREET.farKerb, FRONT.farKerb, r, 0);
+    kerbs.wall(PARK_STREET.nearKerb, south, PARK_STREET.nearKerb, FRONT.nearKerb, r, 0);
+    kerbs.wall(PARK_STREET.farKerb, FRONT.farKerb, PARK_STREET.farKerb, south, r, 0);
+    kerbs.wall(SIDE_STREET.nearKerb, FRONT.nearKerb, SIDE_STREET.nearKerb, SIDE_END, r, 0);
+    kerbs.wall(SIDE_STREET.farKerb, SIDE_END, SIDE_STREET.farKerb, FRONT.nearKerb, r, 0);
 
-    const lawn = new QuadBuilder(1).floor(LAWN_REACH.x, -LAWN_REACH.z, PARK_STREET.hedge - 1, LAWN_REACH.z, -0.02);
+    const lawn = new QuadBuilder(1).floor(LAWN_REACH.x, south, PARK_STREET.hedge - 1, LAWN_REACH.z, -0.02);
 
     this.addSurface(road.build(), asphaltTile(anisotropy), 0.92, 1);
     this.addSurface(paving.build(), pavingTile(anisotropy), 0.88, 0.7);
@@ -82,6 +83,7 @@ export class StreetGround extends THREE.Group implements Furniture, Updatable {
     if (this.clock < WEATHER_EVERY) return;
     this.clock = 0;
     const { wetness, snowCover } = this.dayNight.state;
+    STREET_SNOW.value = snowCover;
     for (const s of this.surfaces) {
       const wet = wetness * s.soaks;
       s.material.color.copy(s.dry).multiplyScalar(1 - 0.45 * wet).lerp(SNOW, snowCover * 0.85);
@@ -101,28 +103,57 @@ export class StreetGround extends THREE.Group implements Furniture, Updatable {
     return mesh;
   }
 
-  /** White paint on the road, a hair above it: the zebra, the lane dashes, the parking lines and the double centre line. */
+  /**
+   * Paint on the road, a hair above it: the crossings' zebras, the stop lines before the one with
+   * lights, the lane dashes, the parking lines and the double centre line of Front Street and Park
+   * Street; the bus stop's yellow box. White and yellow, one mesh each.
+   */
   private addMarkings(): void {
-    const q = new QuadBuilder(1);
+    const white = new QuadBuilder(1);
+    const yellow = new QuadBuilder(1);
     const y = -KERB_HEIGHT + 0.004;
-    const { zebra, laneDash, parkingLine } = STREET_PLAN;
-    const from = PARK_STREET.nearKerb - 0.5;
-    const to = CROSS_STREET.nearKerb + 0.5;
-    // Zebra: bars along the traffic, across the whole road.
-    for (let z = FRONT.nearKerb + 0.6; z < FRONT.farKerb - 0.4; z += 1) q.floor(zebra.from, z, zebra.to, z + 0.5, y);
-    // Lines stop a little short of the zebra either side.
-    const spans: [number, number][] = [[from, zebra.from - 1.5], [zebra.to + 1.5, to]];
-    for (const [a, b] of spans) {
+    const { crossings, laneDash, parkingLine, stopLine, bus } = STREET_PLAN;
+    // Zebras: bars along the traffic, across the whole road.
+    for (const c of crossings) {
+      for (let z = FRONT.nearKerb + 0.6; z < FRONT.farKerb - 0.4; z += 1) white.floor(c.from, z, c.to, z + 0.5, y);
+      if (!c.signals) continue;
+      // Stop lines: eastbound (z > 0) before the crossing's west side, westbound before its east side.
+      white.floor(c.from - stopLine - 0.3, 0.2, c.from - stopLine, parkingLine, y);
+      white.floor(c.to + stopLine, -parkingLine, c.to + stopLine + 0.3, -0.2, y);
+    }
+    // Front Street's lines, from Park Street's junction to the side street's, broken at the crossings.
+    const cuts = [...crossings].sort((a, b) => a.from - b.from);
+    const spans: [number, number][] = [];
+    let a = PARK_STREET.nearKerb - 0.5;
+    for (const c of cuts) {
+      if (c.from - stopLine - 0.5 > a) spans.push([a, c.from - stopLine - 0.5]);
+      a = Math.max(a, c.to + stopLine + 0.5);
+    }
+    spans.push([a, SIDE_STREET.nearKerb - 0.5], [SIDE_STREET.farKerb + 0.5, STREET_ENDS.east - 1]);
+    for (const [x0, x1] of spans) {
       for (const side of [-1, 1]) {
-        q.floor(a, side * parkingLine - 0.06, b, side * parkingLine + 0.06, y);
-        q.floor(a, side * 0.12 - 0.05, b, side * 0.12 + 0.05, y);
-        for (let x = a + 1; x + 3 <= b; x += 9) q.floor(x, side * laneDash - 0.06, x + 3, side * laneDash + 0.06, y);
+        white.floor(x0, side * parkingLine - 0.06, x1, side * parkingLine + 0.06, y);
+        white.floor(x0, side * 0.12 - 0.05, x1, side * 0.12 + 0.05, y);
+        for (let x = x0 + 1; x + 3 <= x1; x += 9) white.floor(x, side * laneDash - 0.06, x + 3, side * laneDash + 0.06, y);
       }
     }
-    const material = new THREE.MeshStandardMaterial({ color: 0xe8e6de, roughness: 0.7, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
-    const mesh = new THREE.Mesh(q.build(), material);
-    mesh.receiveShadow = true;
-    this.add(mesh);
-    this.surfaces.push({ material, dry: material.color.clone(), roughness: 0.7, soaks: 0.5 });
+    // Park Street: the double centre line and dashes, down from the junction.
+    const mid = (PARK_STREET.nearKerb + PARK_STREET.farKerb) / 2;
+    for (const side of [-1, 1]) white.floor(mid + side * 0.12 - 0.05, STREET_ENDS.south, mid + side * 0.12 + 0.05, FRONT.nearKerb - 1, y);
+    // The bus stop: a yellow box in the far parking lane, BUS in it (as bars).
+    const [bx] = bus.stop.at;
+    const [z0, z1] = [parkingLine + 0.1, FRONT.farKerb - 0.15];
+    yellow.floor(bx - 6, z0, bx + 6, z0 + 0.12, y);
+    yellow.floor(bx - 6, z1 - 0.12, bx + 6, z1, y);
+    yellow.floor(bx - 6, z0, bx - 5.88, z1, y);
+    yellow.floor(bx + 5.88, z0, bx + 6, z1, y);
+    for (let x = bx - 5.2; x < bx + 5.2; x += 0.8) yellow.floor(x, (z0 + z1) / 2 - 0.05, x + 0.4, (z0 + z1) / 2 + 0.05, y);
+    for (const [q, color] of [[white, 0xe8e6de], [yellow, 0xe8c030]] as const) {
+      const material = new THREE.MeshStandardMaterial({ color, roughness: 0.7, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+      const mesh = new THREE.Mesh(q.build(), material);
+      mesh.receiveShadow = true;
+      this.add(mesh);
+      this.surfaces.push({ material, dry: material.color.clone(), roughness: 0.7, soaks: 0.5 });
+    }
   }
 }

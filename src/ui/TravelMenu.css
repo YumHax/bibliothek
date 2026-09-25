@@ -1,8 +1,8 @@
-/* "Where to?" panel opened by a door. Above the canvas and the crosshair. */
+/* "Where to?" panel opened by a door. Above the canvas and the crosshair; the surface is `.ui-card`. */
 .travel-menu {
   position: fixed;
   inset: 0;
-  z-index: 2;
+  z-index: var(--z-overlay);
   display: grid;
   place-items: center;
   pointer-events: none;
@@ -11,25 +11,21 @@
   pointer-events: auto;
   min-width: 16rem;
   padding: 1.25rem 1.75rem;
-  border-radius: 12px;
-  background: rgba(20, 20, 28, 0.92);
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  color: #ece9e2;
   text-align: center;
   user-select: none;
-  animation: travel-in 160ms ease-out;
+  animation: travel-in 160ms var(--ui-ease);
 }
 @keyframes travel-in {
   from { opacity: 0; transform: translateY(0.4rem); }
   to   { opacity: 1; transform: none; }
 }
-.travel-menu__card h2 { margin: 0 0 0.75rem; font-size: 1.2rem; letter-spacing: 0.06em; }
-.travel-menu__card ul { list-style: none; margin: 0; padding: 0; text-align: left; }
-.travel-menu__card li {
-  padding: 0.45rem 0.6rem;
-  border-radius: 6px;
-  cursor: pointer;
-  font-size: 1rem;
+.travel-menu__card h2 {
+  margin: 0 0 0.9rem;
+  font-family: var(--ui-font-display);
+  font-weight: 400;
+  font-size: 1.25rem;
+  letter-spacing: 0.04em;
 }
-.travel-menu__card li:hover { background: rgba(255, 255, 255, 0.1); }
-.travel-menu__card p { margin: 0.75rem 0 0; font-size: 0.8rem; opacity: 0.6; }
+.travel-menu__card ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.4rem; }
+.travel-menu__card li .ui-btn { width: 100%; text-align: left; font-size: 1rem; padding: 0.6em 0.9em; }
+.travel-menu__stay { margin-top: 0.9rem; font-size: 0.85rem; color: var(--ui-text-dim); }

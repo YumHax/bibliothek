@@ -24,11 +24,11 @@ export class TradePanel extends MarketPanel {
 
   constructor(container: HTMLElement, wallet: PanelWallet, private readonly collection: GameSource, private readonly fame: Fame, private readonly coverUrl?: (game: Game) => string | undefined) {
     super(container, wallet, { title: 'Swap', className: 'trade' });
-    this.body.insertAdjacentHTML('beforebegin', '<div class="catalogue__search"><input type="search" placeholder="Filter your collection…" autocomplete="off" spellcheck="false" data-autofocus /></div>');
+    this.body.insertAdjacentHTML('beforebegin', '<div class="catalogue__search"><input type="search" aria-label="Filter your collection" placeholder="Filter your collection…" autocomplete="off" spellcheck="false" data-autofocus /></div>');
     const input = this.root.querySelector<HTMLInputElement>('input[type="search"]')!;
     input.addEventListener('input', () => {
       this.filter = input.value.trim().toLowerCase();
-      this.render();
+      this.refresh();
     });
   }
 
@@ -54,7 +54,7 @@ export class TradePanel extends MarketPanel {
     for (const game of games) {
       if (this.fame.peek(game) !== undefined) continue;
       void this.fame.lookup(game).then(() => {
-        if (this.isOpen) this.render();
+        if (this.isOpen) this.refresh();
       });
     }
   }
@@ -66,14 +66,14 @@ export class TradePanel extends MarketPanel {
     const now = performance.now();
     if (!this.armed || this.armed.id !== game.id || now > this.armed.until) {
       this.armed = { id: game.id, until: now + CONFIRM_MS };
-      this.render();
+      this.refresh();
       return;
     }
     this.armed = null;
     const failed = this.onSwap(game, tradeValue(game, this.fame.peek(game)));
     if (failed) {
       this.setStatus(failed, true);
-      this.render();
+      this.refresh();
       return;
     }
     this.close();
@@ -95,7 +95,7 @@ export class TradePanel extends MarketPanel {
         ${state ? `<span class="catalogue__meta">${escapeHtml(state)}</span>` : ''}
         <span class="catalogue__meta">${escapeHtml(getPlatform(game.platform).shortName)}</span>
         <span class="catalogue__meta">counts for</span>${coinsHtml(value)}
-        <button type="button" data-action="swap" data-id="${escapeHtml(game.id)}" class="${armed ? 'sell__armed' : ''}" ${!known || short ? 'disabled' : ''}>${label}</button>
+        <button type="button" data-action="swap" data-id="${escapeHtml(game.id)}" class="ui-btn${armed ? ' sell__armed' : ''}" ${!known || short ? 'disabled' : ''}>${label}</button>
       </div>`;
   }
 }

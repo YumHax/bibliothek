@@ -237,7 +237,8 @@ export class ForSaleBox extends THREE.Group implements Furniture, Interactable {
     if (!priced) return `${what} — being priced… click to look closer`;
     const coins = this.wallet.coins;
     const edition = describeEdition(this.item.edition, game.platform);
-    const cost = `${price} coin${price > 1 ? 's' : ''}${this.item.haggled ? ' (haggled)' : ''}`;
+    const was = this.item.beforeSale;
+    const cost = `${price} coin${price > 1 ? 's' : ''}${this.item.haggled ? ' (haggled)' : was !== undefined ? ` (clearance, was ${was})` : ''}${this.item.source === 'grail' ? ' · a grail' : ''}`;
     const due = this.item.due;
     const short = coins < due ? ` · you have ${coins}` : '';
     const wish = this.wanted ? ' · ★ on your wishlist' : '';
@@ -293,9 +294,11 @@ export class ForSaleBox extends THREE.Group implements Furniture, Interactable {
       return toTexture(canvas, 2);
     }
     ctx.fillStyle = faded ? FADED_INK : INK;
-    if (item.haggled) {
+    // The old price struck out: before a haggle, or before a clearance's cut.
+    const struck = item.haggled ? item.tagPrice : item.beforeSale;
+    if (struck !== undefined) {
       ctx.font = 'bold 26px system-ui, sans-serif';
-      ctx.fillText(String(item.tagPrice), 44, y - 30);
+      ctx.fillText(String(struck), 44, y - 30);
       ctx.fillRect(22, y - 31, 44, 3);
       ctx.fillStyle = faded ? FADED_INK : '#8a2a1a';
     }
@@ -323,6 +326,8 @@ function tagBand(item: StockItem): { text: string; color: string } | null {
   if (item.deposit) return { text: 'ON HOLD', color: '#2f5f8f' };
   if (item.source === 'keptAside') return { text: 'KEPT FOR YOU', color: '#3f7a4a' };
   if (item.source === 'upgrade') return { text: 'UPGRADE YOUR COPY', color: '#8a2a1a' };
+  if (item.source === 'grail') return { text: '★ GRAIL ★', color: '#6b1f5a' };
+  if (item.sale < 1) return { text: `CLEARANCE −${Math.round((1 - item.sale) * 100)}%`, color: '#c8342a' };
   if (item.source === 'showpiece' || item.source === 'estate') return { text: 'COLLECTOR’S PIECE', color: '#b8892a' };
   if (item.edition === 'firstPrint') return { text: 'FIRST PRINT', color: '#8a2a1a' };
   if (item.edition === 'budget') return { text: BUDGET_LABEL[item.game.platform].toUpperCase(), color: '#c8443a' };

@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { boxMesh } from '../meshUtils';
-import { matte, Prop } from './Prop';
+import { markShared, matte, Prop } from './Prop';
 
 export interface NeonTubeOptions {
   /** Length of the tube, centred on the origin along local x. Default 3. */
@@ -15,7 +15,7 @@ export interface NeonTubeOptions {
   standoff?: number;
 }
 
-const BRACKET = matte(0x2a2a30, 0.45);
+const BRACKET = markShared(matte(0x2a2a30, 0.45));
 
 /**
  * A straight tube of neon on wall brackets: the cove light along the top of an arcade's walls,

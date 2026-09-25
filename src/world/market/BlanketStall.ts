@@ -168,7 +168,8 @@ export class BlanketStall extends THREE.Group implements StallLike {
     for (const z of [SUIT_FRONT - SUIT_WALL / 2, SUIT_BACK + SUIT_WALL / 2]) this.add(boxMesh(SUIT_W, SUIT_H, SUIT_WALL, LEATHER, { y: SUIT_H / 2, z }));
     for (const x of [-SUIT_W / 2 + SUIT_WALL / 2, SUIT_W / 2 - SUIT_WALL / 2]) this.add(boxMesh(SUIT_WALL, SUIT_H, SUIT_D - 2 * SUIT_WALL, LEATHER, { x, y: SUIT_H / 2, z: cz }));
     for (const sx of [-1, 1]) {
-      for (const z of [SUIT_FRONT - 0.012, SUIT_BACK + 0.012]) this.add(boxMesh(0.04, 0.04, 0.03, BRASS, { x: sx * (SUIT_W / 2 - 0.018), y: SUIT_H - 0.02, z }));
+      // Their tops stand 2 mm proud of the walls' rim rather than flush with it.
+      for (const z of [SUIT_FRONT - 0.012, SUIT_BACK + 0.012]) this.add(boxMesh(0.04, 0.04, 0.03, BRASS, { x: sx * (SUIT_W / 2 - 0.018), y: SUIT_H - 0.018, z }));
       // A strap down the front, under the leaning boxes.
       this.add(boxMesh(0.035, SUIT_H + 0.004, 0.004, STRAP, { x: sx * SUIT_W * 0.3, y: SUIT_H / 2, z: SUIT_FRONT + 0.002 }));
     }

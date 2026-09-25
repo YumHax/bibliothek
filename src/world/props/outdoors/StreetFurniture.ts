@@ -1,6 +1,7 @@
 import { Polygon, Sheet, type Rng, azimuthOf, azimuthX, groundSquash, heightY, outline, sizePx, worldPoint } from './Sheet';
 import { between, pick, shade } from './paint';
 import { type Footprint, footPoint, paintBox, paintGroundShadow, paintPost } from './Solid';
+import { type SeatedPose, paintSeated } from './figures';
 
 /**
  * The things that stand on the pavements and in the park, each painted at a ground point (metres
@@ -10,8 +11,8 @@ import { type Footprint, footPoint, paintBox, paintGroundShadow, paintPost } fro
  */
 
 const IRON = '#23292a';
-const SHIRTS = ['#d94f3a', '#3b6fb3', '#e8e2d2', '#2f2f36', '#6fa35e', '#f0c94a', '#8c4f9e', '#c9c9c9'];
-const SKINS = ['#f1c9a5', '#d9a071', '#8d5a3b', '#f7d9c0', '#5b3a25'];
+/** Someone at a terrace table: a torso and a head over the chair, facing the street. */
+const ON_A_CHAIR: SeatedPose = { width: 0.42, seat: 0.48, shoulders: 1.05, torso: 1, neck: 1.1, minWidth: 0, minHead: 0 };
 
 /**
  * A lamp post: a cast-iron post on a fluted base, a lantern at the top that glows warm at night,
@@ -253,21 +254,6 @@ export function paintAdColumn(sheet: Sheet, random: Rng, x: number, z: number): 
   sheet.rect(cx - 1, top - r * 1.25, 2, r * 0.35, '#23392e');
 }
 
-/** A seated figure at (x, z): a torso and a head over the chair, facing the street. */
-function paintSitter(sheet: Sheet, random: Rng, x: number, z: number): void {
-  const d = Math.hypot(x, z);
-  const cx = azimuthX(azimuthOf(x, z));
-  const w = sizePx(0.42, d);
-  const seat = heightY(0.48, d);
-  const shoulders = heightY(1.05, d);
-  const head = sizePx(0.12, d);
-  sheet.begin(d);
-  sheet.rect(cx - w / 2, shoulders, w, seat - shoulders, pick(random, SHIRTS));
-  const p = new Path2D();
-  p.arc(cx, shoulders - head * 1.1, head, 0, Math.PI * 2);
-  sheet.path(p, pick(random, SKINS));
-}
-
 /**
  * A café or bar terrace along Front Street from x0 to x1, set against the shop front (z = `wall`):
  * round bistro tables with their chairs, some taken, under parasols now and then.
@@ -281,7 +267,7 @@ export function paintTerrace(sheet: Sheet, random: Rng, x0: number, x1: number, 
     for (const side of [-0.5, 0.5]) {
       paintPost(sheet, x + side, z, 0, 0.45, 0.05, IRON);
       paintBox(sheet, { x: x + side, z, along: [1, 0] }, 0.38, 0.38, 0.45, 0.49, pick(random, ['#b8302a', '#2f4a3a', '#c9a060', '#1c1c1e']));
-      if (random() < 0.4) paintSitter(sheet, random, x + side, z + 0.05);
+      if (random() < 0.4) paintSeated(sheet, random, x + side, z + 0.05, ON_A_CHAIR);
     }
     paintPost(sheet, x, z, 0, 0.74, 0.05, IRON);
     const [tx, ty] = worldPoint(x, z, 0.75);

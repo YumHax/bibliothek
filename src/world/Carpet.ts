@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { createCanvas, seededRandom, toTexture } from '@/covers/generated/canvasUtils';
 import { fabric } from '@/world/materials/finishes';
+import { paintOnce } from '@/world/materials/paintedTiles';
 
 /** Metres of floor covered by one tile of the texture; the confetti is drawn wrapped, so it tiles seamlessly. */
 const TILE_M = 3;
@@ -16,8 +17,16 @@ const NEON = ['#ff2fa0', '#33e0ff', '#ffe23a', '#4dff7a', '#b05cff', '#ff7a33'];
  * neon confetti (triangles, squiggles, rings, bars, sparkles) that glows faintly under the
  * blacklights. Painted once and tiled over the floor; the same canvas serves as the emissive map,
  * so the shapes read in a hall lit by nothing but its screens. The flat's rooms keep their parquet.
+ * Painted once for the page (`paintOnce`).
  */
 export function carpetMaterial(floorWidth: number, floorDepth: number): THREE.MeshStandardMaterial {
+  const [map] = paintOnce('carpet', paintCarpet);
+  map.repeat.set(floorWidth / TILE_M, floorDepth / TILE_M);
+  return fabric({ map, emissiveMap: map, emissive: 0xffffff, emissiveIntensity: GLOW, roughness: 1, metalness: 0, sheenTint: 0x4a4458 });
+}
+
+/** The confetti tile, repeat-wrapped. */
+function paintCarpet(): [THREE.Texture] {
   const [canvas, ctx] = createCanvas(TILE_PX, TILE_PX);
   const random = seededRandom(0x4a7c4de);
 
@@ -120,6 +129,5 @@ export function carpetMaterial(floorWidth: number, floorDepth: number): THREE.Me
 
   const map = toTexture(canvas, 8);
   map.wrapS = map.wrapT = THREE.RepeatWrapping;
-  map.repeat.set(floorWidth / TILE_M, floorDepth / TILE_M);
-  return fabric({ map, emissiveMap: map, emissive: 0xffffff, emissiveIntensity: GLOW, roughness: 1, metalness: 0, sheenTint: 0x4a4458 });
+  return [map];
 }

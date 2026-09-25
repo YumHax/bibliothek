@@ -1,12 +1,18 @@
 import { seededRandom } from '@/covers/generated/canvasUtils';
 import { themeOf } from '@/economy/marketDays';
+import type { MarketNews } from '@/economy/marketEvents';
+import { flyerRumour } from '@/economy/rumours';
 import { ARCADE_GAMES, type ArcadeGameId } from '../arcade/games';
 import type { MailPiece } from '../props/MailDrop';
 
 /** What the flyers can advertise, read-only: today's arcade challenge, today's market stock (if drawn yet); tomorrow's market theme comes from the calendar. */
 export interface MailSources {
   arcadeDaily?: { challenge(): { gameId: string; target: number; reward: number; done: boolean } };
-  market?: { peekToday(): readonly { readonly game: { readonly title: string }; readonly price: number; readonly priced: boolean; readonly source: string }[] | null };
+  market?: {
+    peekToday(): readonly { readonly game: { readonly title: string }; readonly price: number; readonly priced: boolean; readonly source: string }[] | null;
+    /** What is coming up at the market (a grail, the Brocante, a sale): `MarketStock.news`. */
+    news?(): readonly MarketNews[];
+  };
 }
 
 /** Whatever the day, one of these can come through the door. */
@@ -30,9 +36,11 @@ const ONE = 0.75;
 export function mailFor(day: number, sources: MailSources): MailPiece[] {
   const random = seededRandom(day * 7349 + 13);
   const roll = random();
-  const count = roll < NONE ? 0 : roll < ONE ? 1 : 2;
+  const rumour = rumourFlyer(sources);
+  // Talk of the market (a grail, the Brocante, a sale) always finds its way through the door.
+  const count = Math.max(rumour ? 1 : 0, roll < NONE ? 0 : roll < ONE ? 1 : 2);
   if (!count) return [];
-  const topical = [challengeFlyer(sources), tomorrowFlyer(day), dealFlyer(sources, random)].filter((p): p is MailPiece => p !== null);
+  const topical = [rumour, challengeFlyer(sources), tomorrowFlyer(day), dealFlyer(sources, random)].filter((p): p is MailPiece => p !== null);
   const everyday = [...EVERYDAY].sort(() => random() - 0.5);
   return [...topical, ...everyday].slice(0, count).map((piece, i) => ({ ...piece, seed: day * 3 + i }));
 }
@@ -42,6 +50,15 @@ function challengeFlyer({ arcadeDaily }: MailSources): MailPiece | null {
   if (!challenge || challenge.done) return null;
   const game = ARCADE_GAMES[challenge.gameId as ArcadeGameId]?.({}).title ?? challenge.gameId.toUpperCase();
   return { title: 'DAILY CHALLENGE', lines: [game, `Score ${challenge.target.toLocaleString('en')}`, `+${challenge.reward} tickets at the arcade`], accent: 0x7a2e8f };
+}
+
+/**
+ * The most pressing talk of the market (a grail on its way or on its stall, the Brocante in a few
+ * days, a sale): tomorrow's theme has a flyer of its own, so the Brocante tomorrow is left to it.
+ */
+function rumourFlyer({ market }: MailSources): MailPiece | null {
+  const news = market?.news?.().find((n) => !(n.kind === 'brocante' && n.inDays === 1));
+  return news ? flyerRumour(news) : null;
 }
 
 /** Tomorrow's market, when it is one of the special days (the ordinary ones are not worth the paper). */

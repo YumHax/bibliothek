@@ -19,12 +19,28 @@
   --ui-fill: rgba(255, 255, 255, 0.07);
   --ui-fill-hover: rgba(255, 255, 255, 0.15);
   --ui-accent: #d4a52a;
+  --ui-accent-hover: #e6b93c;
   --ui-accent-soft: rgba(212, 165, 42, 0.14);
   --ui-danger: #e06a5a;
+  --ui-danger-hover: #ec8072;
   --ui-radius: 12px;
   --ui-radius-sm: 6px;
   --ui-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
   --ui-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+  /*
+   * Stacking, back to front. The CSS3D screens sit behind the canvas (its cut-outs show them); the HUD
+   * and the title / pause card share a layer (later in the page draws on top); the full-screen panels
+   * and the search bar cover both; the travel curtain covers everything but the touch controls and the
+   * toasts, which stay readable over any of it.
+   */
+  --z-css-layer: 0;
+  --z-canvas: 1;
+  --z-hud: 2;
+  --z-overlay: 2;
+  --z-modal: 3;
+  --z-fader: 4;
+  --z-controls: 5;
+  --z-toast: 6;
 }
 
 html, body {
@@ -38,16 +54,22 @@ html, body {
 
 /* Author `display` rules would otherwise beat the UA stylesheet for [hidden]. */
 [hidden] { display: none !important; }
-#app canvas { display: block; position: absolute; inset: 0; z-index: 1; }
+#app canvas { display: block; position: absolute; inset: 0; z-index: var(--z-canvas); }
 /* CSS3D layer sits behind the canvas; cut-out meshes reveal it. */
-.css-layer { position: absolute !important; inset: 0; z-index: 0; pointer-events: none; }
+.css-layer { position: absolute !important; inset: 0; z-index: var(--z-css-layer); pointer-events: none; }
 .css-layer iframe { pointer-events: none; }
 /* HUD and menus must stack above the canvas (its z-index would otherwise cover them). */
-.overlay, .crosshair, .hint, .hover-label, .game-panel { z-index: 2; }
+.overlay { z-index: var(--z-overlay); }
+.crosshair, .hint, .hover-label, .game-panel { z-index: var(--z-hud); }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 1ms !important; transition-duration: 1ms !important; }
 }
+/* Settings > Display: the same, whatever the system says (`reduce-motion` on <html>). */
+.reduce-motion *, .reduce-motion *::before, .reduce-motion *::after { animation-duration: 1ms !important; transition-duration: 1ms !important; }
+/* Settings > Display > Text size: the HUD and the panels are sized in rem, so the root size scales them all. */
+html.ui-scale-small { font-size: 14px; }
+html.ui-scale-large { font-size: 18.5px; }
 
 kbd {
   display: inline-block;
@@ -82,7 +104,7 @@ kbd {
   bottom: 2rem;
   transform: translateX(-50%);
   padding: 0.5rem 0.9rem;
-  border-radius: 8px;
+  border-radius: var(--ui-radius-sm);
   background: var(--ui-panel);
   border: 1px solid var(--ui-border);
   color: var(--ui-text);
@@ -96,8 +118,8 @@ kbd {
   top: calc(50% + 1.5rem);
   transform: translateX(-50%);
   padding: 0.3rem 0.7rem;
-  border-radius: 6px;
-  background: rgba(20, 20, 28, 0.75);
+  border-radius: var(--ui-radius-sm);
+  background: var(--ui-panel);
   color: var(--ui-text);
   font-size: 0.85rem;
   white-space: nowrap;
@@ -117,7 +139,7 @@ kbd {
   transform: translateY(-50%);
   width: min(22rem, 40vw);
   padding: 1.5rem 1.75rem;
-  border-radius: 12px;
+  border-radius: var(--ui-radius);
   background: var(--ui-panel);
   border: 1px solid var(--ui-border);
   color: var(--ui-text);

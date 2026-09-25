@@ -1,18 +1,22 @@
+import { KEYS, PersistedStore } from '@/persistence';
 import { COATS, DEFAULT_CAT_SETTINGS, type CatSettings, type CoatKind } from './types';
 
-export const CAT_STORAGE_KEY = 'bibliothek.cat.v1';
+export const CAT_STORAGE_KEY = KEYS.cat;
 const NAME_MAX = 24;
 
 /**
- * The cat's name and coat, persisted in localStorage next to the collection. Listeners are told
- * of every change so the cat in the room and the settings form stay in step.
+ * The cat's name and coat, persisted (`KEYS.cat`, a preference: a new game keeps it). Listeners
+ * are told of every change so the cat in the room and the settings form stay in step.
  */
 export class CatSettingsStore {
   private current: CatSettings;
   private readonly listeners = new Set<(settings: CatSettings) => void>();
+  private readonly store: PersistedStore<CatSettings>;
 
-  constructor(private readonly key = CAT_STORAGE_KEY) {
-    this.current = this.load();
+  constructor(key: string = CAT_STORAGE_KEY) {
+    // Version 1: `{ name, coat }` (bare JSON before versions were kept); a missing or unknown field takes its default.
+    this.store = new PersistedStore<CatSettings>({ key, version: 1, defaults: () => ({ ...DEFAULT_CAT_SETTINGS }), read: readCatSettings });
+    this.current = this.store.load();
   }
 
   get settings(): CatSettings {
@@ -32,27 +36,15 @@ export class CatSettingsStore {
     for (const cb of this.listeners) cb(next);
   }
 
-  private load(): CatSettings {
-    try {
-      const raw = this.storage()?.getItem(this.key);
-      if (!raw) return { ...DEFAULT_CAT_SETTINGS };
-      return sanitize({ ...DEFAULT_CAT_SETTINGS, ...(JSON.parse(raw) as Partial<CatSettings>) });
-    } catch {
-      return { ...DEFAULT_CAT_SETTINGS };
-    }
-  }
-
   private save(): void {
-    try {
-      this.storage()?.setItem(this.key, JSON.stringify(this.current));
-    } catch (err) {
-      console.warn('[cat] settings not saved', err);
-    }
+    this.store.save(this.current);
   }
+}
 
-  private storage(): Storage | null {
-    return typeof localStorage === 'undefined' ? null : localStorage;
-  }
+/** The saved name and coat over the defaults; null when what was saved is not an object at all. */
+function readCatSettings(data: unknown): CatSettings | null {
+  if (typeof data !== 'object' || data === null || Array.isArray(data)) return null;
+  return sanitize({ ...DEFAULT_CAT_SETTINGS, ...(data as Partial<CatSettings>) });
 }
 
 function sanitize(settings: CatSettings): CatSettings {

@@ -1,6 +1,7 @@
 import type { Updatable } from '@/core/Engine';
 import type { CatVoiceLike } from '@/world/cat/types';
-import { audioContext } from './audioContext';
+import { audioBus, audioContext } from './audioContext';
+import { whiteNoise } from './noise';
 
 type MeowKind = Parameters<CatVoiceLike['meow']>[0];
 
@@ -148,6 +149,8 @@ export class CatVoice implements CatVoiceLike, Updatable {
   private purrLowpass: BiquadFilterNode | null = null;
   private purrBreath: GainNode | null = null;
   private purrSources: OscillatorNode[] = [];
+  /** The purr's noise grain, looping as long as the bed. */
+  private purrGrain: AudioBufferSourceNode | null = null;
   private noise: AudioBuffer | null = null;
 
   private loudness = VOICE_LEVEL;
@@ -213,7 +216,9 @@ export class CatVoice implements CatVoiceLike, Updatable {
         // already stopped
       }
     }
+    this.purrGrain?.stop();
     this.purrSources = [];
+    this.purrGrain = null;
     this.master?.disconnect();
     this.master = null;
     this.ctx = null;
@@ -248,8 +253,8 @@ export class CatVoice implements CatVoiceLike, Updatable {
     limiter.ratio.value = 8;
     limiter.attack.value = 0.003;
     limiter.release.value = 0.15;
-    this.master.connect(limiter).connect(ctx.destination);
-    this.noise = this.noiseBuffer(ctx, NOISE_SECONDS);
+    this.master.connect(limiter).connect(audioBus(ctx, 'world'));
+    this.noise = whiteNoise(ctx, NOISE_SECONDS);
     this.buildPurr(ctx, this.master);
   }
 
@@ -292,7 +297,8 @@ export class CatVoice implements CatVoiceLike, Updatable {
 
     const grain = ctx.createGain();
     grain.gain.value = PURR.noise;
-    this.noiseSource(ctx, true).connect(grain).connect(this.purrLowpass);
+    this.purrGrain = this.noiseSource(ctx, true);
+    this.purrGrain.connect(grain).connect(this.purrLowpass);
 
     this.purrSources = [saw, lfo];
   }
@@ -416,13 +422,6 @@ export class CatVoice implements CatVoiceLike, Updatable {
   }
 
   // --- helpers -----------------------------------------------------------------------------------
-
-  private noiseBuffer(ctx: AudioContext, seconds: number): AudioBuffer {
-    const buffer = ctx.createBuffer(1, Math.ceil(ctx.sampleRate * seconds), ctx.sampleRate);
-    const data = buffer.getChannelData(0);
-    for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
-    return buffer;
-  }
 
   private noiseSource(ctx: AudioContext, loop: boolean): AudioBufferSourceNode {
     const source = ctx.createBufferSource();

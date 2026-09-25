@@ -3,6 +3,11 @@ import type { FirstPersonController } from './FirstPersonController';
 import type { Overlay } from '@/ui/Overlay';
 import type { Input } from '@/core/Input';
 import { isTouchDevice } from '@/input/deviceDetect';
+import { isAction } from '@/input/actions';
+import type { PadButton } from '@/input/padButtons';
+
+/** The controller's Start: in and out of the room (no action of the table: it is not a key the Session hears). */
+const START: PadButton = 'GamepadStart';
 
 /** Chrome refuses a new pointer lock for ~1 s after Esc; we retry once after that cooldown. */
 const LOCK_RETRY_MS = 1200;
@@ -34,6 +39,8 @@ const MOUSE_BUTTON_EVENTS = ['mousedown', 'mouseup', 'click', 'dblclick', 'conte
 export class PointerLockFlow {
   private attempt = 0;
   private _mode: RoomMode | null = null;
+  /** The mode the player was last in the room with, for `resume`. */
+  private lastMode: RoomMode | null = null;
   private pendingVirtual: RoomMode | null = null;
 
   /**
@@ -105,6 +112,14 @@ export class PointerLockFlow {
     }
   }
 
+  /**
+   * Goes back into the room the way the player was last in it (after a panel closed): a controller
+   * player gets the virtual lock again instead of a pointer lock nobody clicked for.
+   */
+  resume(): Promise<void> {
+    return this.enter(this.lastMode ?? undefined);
+  }
+
   /** Leaves the room whichever way it was entered (releases the pointer lock or the virtual one). */
   exit(): void {
     if (this.player.hasPointerLock) this.player.unlock();
@@ -120,9 +135,9 @@ export class PointerLockFlow {
   }
 
   private onPress(code: string): void {
-    // A D-pad move or a pick in the menu is not a request to enter the room.
-    if (this.overlay.wasHandled(code)) return;
-    if (code === 'GamepadStart') {
+    // A D-pad move or a pick in the menu is not a request to enter the room, nor is a press in a panel.
+    if (this.overlay.wasHandled(code) || this.overlay.isModal) return;
+    if (code === START) {
       if (this.player.isLocked) this.exit();
       else void this.enter('gamepad');
       return;
@@ -132,12 +147,13 @@ export class PointerLockFlow {
       return;
     }
     // Esc leaves a real pointer lock through the browser; a virtual lock needs us to do it.
-    if (code === 'Escape' && this.player.isVirtualLocked) this.exit();
+    if (isAction(code, 'close') && this.player.isVirtualLocked) this.exit();
   }
 
   private setMode(mode: RoomMode | null): void {
     if (mode === this._mode) return;
     this._mode = mode;
+    if (mode) this.lastMode = mode;
     const classes = document.body.classList;
     for (const cls of Object.values(MODE_CLASS)) classes.remove(cls);
     classes.remove(VIRTUAL_CLASS);

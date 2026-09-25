@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { createCanvas, seededRandom, toTexture } from '@/covers/generated/canvasUtils';
+import { paintOnce } from './materials/paintedTiles';
 
 /** A tiled floor's look (`RoomFinish.floorTiles`); every field has a default. */
 export interface FloorTiles {
@@ -26,25 +27,45 @@ const PX_PER_M = 600;
 
 /**
  * A tiled floor: square tiles, a checkerboard or a hexagon mosaic, each tile a shade off its
- * neighbours, the grout sunk in a bump map. Painted once per call over a region of whole pattern
+ * neighbours, the grout sunk in a bump map. Painted over a region of whole pattern
  * periods and repeated over the floor, the joints lined up on the room's centre. Returns a standard
  * material like `parquetMaterial` (colour and bump; the `Room` adds the wear and the edge shading).
+ * Painted once per look for the page (`paintOnce`).
  */
 export function tiledFloorMaterial(floorWidth: number, floorDepth: number, options: FloorTiles = {}): THREE.MeshStandardMaterial {
+  const { roughness, ...look } = options;
+  const { regionX, regionY } = region(look);
+  const [map, bumpMap] = paintOnce(`tiles:${JSON.stringify(look)}`, () => paintTiles(look));
+  for (const t of [map, bumpMap]) {
+    t.repeat.set(floorWidth / regionX, floorDepth / regionY);
+    // A joint on the room's centre lines: the pattern starts at the origin.
+    t.offset.set(-floorWidth / regionX / 2, -floorDepth / regionY / 2);
+  }
+  return new THREE.MeshStandardMaterial({ map, bumpMap, bumpScale: 0.5, roughness: roughness ?? 0.35, metalness: 0 });
+}
+
+/** The pattern and tile size of `options`, with the region the texture covers: whole periods of the pattern, about `REGION_M` each way. */
+function region(options: FloorTiles): { pattern: NonNullable<FloorTiles['pattern']>; size: number; regionX: number; regionY: number } {
   const pattern = options.pattern ?? 'square';
   const size = options.size ?? (pattern === 'hex' ? 0.09 : 0.2);
+  // One period of the pattern, in metres: a square (two for the checker), or two columns by one row of hexagons.
+  const radius = size / Math.sqrt(3);
+  const period = pattern === 'hex' ? { x: 3 * radius, y: size } : pattern === 'checker' ? { x: 2 * size, y: 2 * size } : { x: size, y: size };
+  const regionX = Math.max(1, Math.round(REGION_M / period.x)) * period.x;
+  const regionY = Math.max(1, Math.round(REGION_M / period.y)) * period.y;
+  return { pattern, size, regionX, regionY };
+}
+
+/** The colour and bump tiles of one region, repeat-wrapped. */
+function paintTiles(options: FloorTiles): [THREE.Texture, THREE.Texture] {
+  const { pattern, size, regionX, regionY } = region(options);
   const tile = new THREE.Color(options.tile ?? 0xf2f1ec);
   const alt = new THREE.Color(options.alt ?? 0x2f3134);
   const grout = new THREE.Color(options.grout ?? 0xc4c5c0);
   const groutPx = Math.max(1.5, (options.groutWidth ?? 0.003) * PX_PER_M);
   const variance = options.variance ?? 0.03;
   const random = seededRandom(0x7113f100 + Math.round(size * 1000));
-
-  // One period of the pattern, in metres: a square (two for the checker), or two columns by one row of hexagons.
   const radius = size / Math.sqrt(3);
-  const period = pattern === 'hex' ? { x: 3 * radius, y: size } : pattern === 'checker' ? { x: 2 * size, y: 2 * size } : { x: size, y: size };
-  const regionX = Math.max(1, Math.round(REGION_M / period.x)) * period.x;
-  const regionY = Math.max(1, Math.round(REGION_M / period.y)) * period.y;
   const w = Math.round(regionX * PX_PER_M);
   const h = Math.round(regionY * PX_PER_M);
   const [colorCanvas, color] = createCanvas(w, h);
@@ -111,11 +132,6 @@ export function tiledFloorMaterial(floorWidth: number, floorDepth: number, optio
   // The bump map is data, not colour: no sRGB decoding.
   const bumpMap = new THREE.CanvasTexture(bumpCanvas);
   bumpMap.anisotropy = 4;
-  for (const t of [map, bumpMap]) {
-    t.wrapS = t.wrapT = THREE.RepeatWrapping;
-    t.repeat.set(floorWidth / regionX, floorDepth / regionY);
-    // A joint on the room's centre lines: the pattern starts at the origin.
-    t.offset.set(-floorWidth / regionX / 2, -floorDepth / regionY / 2);
-  }
-  return new THREE.MeshStandardMaterial({ map, bumpMap, bumpScale: 0.5, roughness: options.roughness ?? 0.35, metalness: 0 });
+  for (const t of [map, bumpMap]) t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  return [map, bumpMap];
 }

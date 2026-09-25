@@ -14,16 +14,38 @@ export class Input {
   /** Analog hold strength per code (0 < strength <= 1) coming from virtual sources. */
   private readonly virtual = new Map<string, number>();
   private readonly pressHandlers = new Set<KeyPressHandler>();
+  /** Rebound keys: physical code -> the code the game reads (a permutation, see `setBindings`). */
+  private readonly remap = new Map<string, string>();
 
   constructor(target: Window = window) {
     target.addEventListener('keydown', (e) => {
-      this.pressed.add(e.code);
-      if (!e.repeat) for (const handler of this.pressHandlers) handler(e.code, e);
+      const code = this.remap.get(e.code) ?? e.code;
+      this.pressed.add(code);
+      if (!e.repeat) for (const handler of this.pressHandlers) handler(code, e);
     });
-    target.addEventListener('keyup', (e) => this.pressed.delete(e.code));
+    // Capture phase: the panels stop their keys from reaching the window, and a key held when one opened
+    // (W while walking) must still be released, or the player walks on after closing it.
+    target.addEventListener('keyup', (e) => this.pressed.delete(this.remap.get(e.code) ?? e.code), true);
     // Losing focus (alt-tab) must not leave keys stuck down. Virtual holds are owned by their
     // source (polled gamepad, touch pointer lifecycle), which releases them itself.
     target.addEventListener('blur', () => this.pressed.clear());
+  }
+
+  /**
+   * Rebinds physical keys: `{ KeyP: 'KeyN' }` makes P do what N did. Everything downstream (`isDown`,
+   * `onPress`) sees the game's codes, so no consumer knows about it. Virtual presses are not remapped.
+   * The map should be a permutation (the Settings screen swaps two keys) so no action is lost.
+   */
+  setBindings(bindings: Readonly<Record<string, string>>): void {
+    this.remap.clear();
+    for (const [physical, logical] of Object.entries(bindings)) if (physical !== logical) this.remap.set(physical, logical);
+    this.pressed.clear();
+  }
+
+  /** The physical key that produces `code` under the current bindings. */
+  physicalFor(code: string): string {
+    for (const [physical, logical] of this.remap) if (logical === code) return physical;
+    return code;
   }
 
   isDown(...codes: string[]): boolean {

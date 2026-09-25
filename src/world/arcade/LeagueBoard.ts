@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import type { Updatable } from '@/core/Engine';
 import { createCanvas } from '@/covers/generated/canvasUtils';
 import { boxMesh } from '../meshUtils';
-import { matte, Prop } from '../props/Prop';
+import { markShared, matte, Prop } from '../props/Prop';
 import { drawText } from './games/ArcadeGame';
 
 /** The league as the board reads it (the concrete `ArcadeLeague` lives in `economy/`). */
@@ -25,7 +25,7 @@ export interface LeagueBoardOptions {
 const PX_PER_M = 640;
 /** The regulars' totals creep up with the week: the board looks again this often. */
 const REFRESH_SECONDS = 20;
-const FRAME = matte(0x0d0c12, 0.4);
+const FRAME = markShared(matte(0x0d0c12, 0.4));
 
 /**
  * The weekly league on the wall: this week's table (the regulars' ticket totals as far as they

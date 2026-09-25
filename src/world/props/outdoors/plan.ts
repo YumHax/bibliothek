@@ -39,6 +39,40 @@ export const STREET_TREE_LINE = FRONTAGE - 1.6;
 /** The park's near edge is Park Street's far frontage; its far edge is lined with mid-rise blocks. */
 export const PARK_EDGE = FRONTAGE;
 export const PARK_FAR = 250;
+/** The bus stop on Front Street's far pavement (its shelter; the bus in `Life` pulls up there). */
+export const BUS_STOP_X = 42;
+
+/**
+ * Traffic lanes, metres from the eye. Both streets end at the corner (the block across Front
+ * Street fills the quadrant beyond it, the park the one to the left), so the road simply bends
+ * there, round the corner of the two near pavements (-NEAR_KERB, NEAR_KERB). Right-hand traffic
+ * (facing +z, right is -x): cars coming west along Front Street are on its near lane and turn
+ * right, down Park Street's near lane; cars coming north up Park Street's far lane turn left,
+ * east along Front Street's far lane.
+ */
+export const NEAR_LANE = 11;
+export const FAR_LANE = 16.5;
+/** The cycle routes: our side's cycle lane, and along the far parked cars. */
+export const CYCLE_NEAR = 5.15;
+export const CYCLE_FAR = 19.6;
+/** Where pedestrians walk: the far pavement, just past the kerb. */
+export const WALK_LINE = KERB + 1.6;
+/**
+ * How far out along both streets what moves is simulated (x on Front Street, -z on Park Street):
+ * far enough for cars to be tiny when they appear or leave, well short of `FRONT_END`.
+ */
+export const LIFE_REACH = 62;
+
+/** The pond: an ellipse on the lawn, metres from the eye. */
+export const POND = { x: -115, z: -25, rx: 40, rz: 26 };
+/** The fountain in the middle of the pond (`Life` animates its plume). */
+export const FOUNTAIN = { x: POND.x, z: POND.z };
+/** Gravel paths across the lawn, as polylines from the park gates (the walkers of `Life` follow them). */
+export const PARK_PATHS: [number, number][][] = [
+  [[-PARK_EDGE, -10], [-70, -30], [-110, -72], [-160, -62], [-210, -20], [-PARK_FAR, 0]],
+  [[-PARK_EDGE, 30], [-60, 45], [-85, 40], [-120, 15], [-150, 40], [-200, 80], [-PARK_FAR, 90]],
+  [[-PARK_EDGE, -60], [-55, -90], [-90, -130], [-140, -170], [-200, -200]],
+];
 
 /** Azimuth of the street corner: Front Street's facades run right of it, the park lies left of it. */
 export const CORNER = deg(-45);

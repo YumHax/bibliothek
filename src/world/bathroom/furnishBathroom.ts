@@ -1,9 +1,10 @@
 import * as THREE from 'three';
 import type { Zone } from '../zone/Zone';
-import type { BuildContext, ZoneHandle } from '../layout';
+import type { BuildContext, ZoneHandle } from '../buildContext';
 import { furnishShell } from '../shell';
-import { FlushLamp } from '../props/FlushLamp';
-import { WallSwitch } from '../props/WallSwitch';
+import { furnishDecor, placeRoomLight } from '../build/roomParts';
+import { pointSound } from '../build/hearing';
+import { followDaylight } from '../build/follow';
 import { TiledWainscot } from '../props/TiledWainscot';
 import { Bathtub } from '../props/Bathtub';
 import { FrostedWindow } from '../props/FrostedWindow';
@@ -12,11 +13,8 @@ import { Toilet } from '../props/Toilet';
 import { TowelRail } from '../props/TowelRail';
 import { LaundryBasket } from '../props/LaundryBasket';
 import { MirrorCabinet } from '../props/MirrorCabinet';
-import { placeDecor } from '../props/decor';
 import { placeWith, placeLeaves, floorPointsToWorld } from '../zone/attach';
-import { PointSound } from '../acoustics/PointSound';
 import { RunningWater, ToiletFlush, FLUSH_SECONDS } from '@/audio/water';
-import { tickRadiators } from '../acoustics/radiatorTicks';
 import type { CatPerch } from '../cat/spots';
 import { BATHROOM_PLAN } from './bathroomPlan';
 
@@ -28,11 +26,11 @@ import { BATHROOM_PLAN } from './bathroomPlan';
  * The water works: each fitting's click drives its own `PointSound` (the basin's tap, which also
  * drips when shut; the tub's tap and drain; the flush).
  */
-export function furnishBathroom(zone: Zone, { sky, listener, acoustics }: BuildContext): ZoneHandle {
+export function furnishBathroom(zone: Zone, ctx: BuildContext): ZoneHandle {
+  const { sky } = ctx;
   const plan = BATHROOM_PLAN;
   const room = furnishShell(zone, sky, plan.room, { leafColor: plan.leafColor });
-  const light = zone.placeAt(new FlushLamp({ onSwitch: (on) => room.setLampOn(on) }), plan.light);
-  zone.placeAt(new WallSwitch({ lamp: light }), plan.lightSwitch);
+  placeRoomLight(zone, room, 'flush', plan.light, plan.lightSwitch);
   // The wainscot wraps the whole shell, so it stands at the room's origin like the Room does.
   zone.place(new TiledWainscot(plan.room, plan.wainscot), new THREE.Vector3());
 
@@ -50,23 +48,22 @@ export function furnishBathroom(zone: Zone, { sky, listener, acoustics }: BuildC
     plan.bathtub,
   );
   placeWith(zone, tub, tub.plugSpot);
-  placeWith(zone, tub, new PointSound(tubWater, { listener, occlusion: acoustics, volume: { maxDistance: 6 } }), tub.tapPoint);
-  const window = zone.placeAt(new FrostedWindow(), plan.window);
-  zone.onUnload(sky.dayNight.onChange((state) => window.setDaylight(state.daylight, state.ambient)));
+  placeWith(zone, tub, pointSound(ctx, tubWater, { maxDistance: 6 }), tub.tapPoint);
+  followDaylight(zone, sky, zone.placeAt(new FrostedWindow(), plan.window));
 
   // The basin's tap runs on a click, and never quite shuts: a drop every few seconds.
   const tap = new RunningWater({ drips: true, peak: 0.4 });
   const basin = zone.placeAt(new Washbasin({ shelfSide: 'right', mirror: false, onTap: (running) => tap.setRunning(running) }), plan.washbasin);
-  placeWith(zone, basin, new PointSound(tap, { listener, occlusion: acoustics, volume: { maxDistance: 5 } }), new THREE.Vector3(0, 0.82, 0.2));
+  placeWith(zone, basin, pointSound(ctx, tap, { maxDistance: 5 }), new THREE.Vector3(0, 0.82, 0.2));
   placeLeaves(zone, zone.placeAt(new MirrorCabinet(plan.mirrorCabinetOptions), plan.mirrorCabinet));
 
   const flush = new ToiletFlush();
   const toilet = zone.placeAt(new Toilet({ flushSeconds: FLUSH_SECONDS, onFlush: () => flush.flush() }), plan.toilet);
   placeWith(zone, toilet, toilet.lidSpot);
-  placeWith(zone, toilet, new PointSound(flush, { listener, occlusion: acoustics, volume: { maxDistance: 6 } }), new THREE.Vector3(0, 0.6, 0.2));
+  placeWith(zone, toilet, pointSound(ctx, flush, { maxDistance: 6 }), new THREE.Vector3(0, 0.6, 0.2));
   zone.placeAt(new TowelRail(), plan.towelRail);
   zone.placeAt(new LaundryBasket(), plan.laundryBasket);
-  tickRadiators(zone, placeDecor(zone, plan.decor), { listener, occlusion: acoustics });
+  furnishDecor(zone, ctx, plan.decor);
 
   // Where the cat naps in here: the dry tub (over its rim), or curled in the basin; never while water runs.
   const inTub: CatPerch = {

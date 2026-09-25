@@ -68,7 +68,8 @@ export class KitchenTable extends THREE.Group implements Furniture {
     knife.castShadow = false;
     const mug = cylinderMesh(0.04, 0.09, matte(0x3b5a7c, 0.4), { x: width * 0.15, y: y + 0.045, z: -depth * 0.1 }, { radiusBottom: 0.036, segments: 20 });
     this.add(mug);
-    const coffee = cylinderMesh(0.036, 0.004, matte(0x2a1a10, 0.25), { x: width * 0.15, y: y + 0.088, z: -depth * 0.1 }, { segments: 20 });
+    // The mug is a closed cylinder: the coffee's surface stands half a millimetre over its top (level, they z-fight).
+    const coffee = cylinderMesh(0.036, 0.004, matte(0x2a1a10, 0.25), { x: width * 0.15, y: y + 0.0885, z: -depth * 0.1 }, { segments: 20 });
     coffee.castShadow = false;
     this.add(coffee);
     const handle = new THREE.Mesh(new THREE.TorusGeometry(0.026, 0.006, 8, 16, Math.PI), mug.material);

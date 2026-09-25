@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import type { GameBox } from './GameBox';
+import { GameBox } from './GameBox';
 import { boxMesh } from './meshUtils';
 import { QUALITY } from '@/graphics/quality';
 import { wood as woodMaterial } from '@/world/materials/finishes';
@@ -26,10 +26,19 @@ const BOX_YAW = THREE.MathUtils.degToRad(1.4);
 const BOX_ROLL = THREE.MathUtils.degToRad(0.7);
 const BOX_PUSH = 0.014;
 const BOX_PULL = 0.008;
+/** What stands in for the boxes in the shadow maps: a plain unit box per box, scaled, all in one instanced draw. */
+const PROXY_GEOMETRY = new THREE.BoxGeometry(1, 1, 1);
+const PROXY_MATERIAL = new THREE.MeshBasicMaterial();
+/** Narrowest box a row could hold (m): sizes the proxy's instance buffer. */
+const MIN_BOX_WIDTH = 0.05;
 
 /**
  * A bookcase whose rows can each have their own height. Boxes stand upright with the cover
  * facing +Z (out of the shelf), laid left-to-right on the row they are given.
+ *
+ * The boxes standing on it do not cast shadows themselves: one instanced proxy of plain boxes
+ * does, on the zone's shadow layer only (the camera never draws it), kept in step with the boxes
+ * put on and taken off (`GameBox.setShadowProxied`). A box in hand casts its own again.
  */
 export class Shelf extends THREE.Group {
   readonly options: Required<ShelfOptions>;
@@ -39,14 +48,39 @@ export class Shelf extends THREE.Group {
   private readonly boards: THREE.Mesh[] = [];
   /** Mid-span sag of each row's board, top row first (0 without `QUALITY.detailedMaterials`). */
   private readonly rowSags: number[] = [];
+  private readonly shadowProxy: THREE.InstancedMesh;
+  private proxyQueued = false;
+  private readonly proxyMatrix = new THREE.Matrix4();
+  private readonly proxyScale = new THREE.Vector3();
 
   constructor(options: ShelfOptions) {
     super();
     this.name = 'Shelf';
     this.options = { boardThickness: 0.025, gap: 0.02, ...options };
-    const { rowHeights, boardThickness } = this.options;
+    const { rowHeights, boardThickness, width } = this.options;
     this.height = rowHeights.reduce((a, b) => a + b, 0) + (rowHeights.length + 1) * boardThickness;
     this.build();
+
+    const perRow = Math.ceil((width - 2 * boardThickness) / MIN_BOX_WIDTH);
+    this.shadowProxy = new THREE.InstancedMesh(PROXY_GEOMETRY, PROXY_MATERIAL, Math.max(1, perRow * rowHeights.length));
+    this.shadowProxy.name = 'ShelfShadowProxy';
+    this.shadowProxy.count = 0;
+    this.shadowProxy.castShadow = false;
+    // Shadow maps only: placing the shelf adds the zone's shadow layer (`Zone.adopt`); the camera's layer 0 never.
+    this.shadowProxy.layers.disableAll();
+    this.add(this.shadowProxy); // before the zone places the shelf, so its culling hides the proxy with the boards
+    this.addEventListener('childadded', ({ child }) => this.boxMoved(child, true));
+    this.addEventListener('childremoved', ({ child }) => this.boxMoved(child, false));
+  }
+
+  /** Redraws the shadow proxy before the next frame (a box changed status: a wishlist ghost casts none). */
+  updateShadowProxy(): void {
+    if (this.proxyQueued) return;
+    this.proxyQueued = true;
+    queueMicrotask(() => {
+      this.proxyQueued = false;
+      this.fillShadowProxy();
+    });
   }
 
   /** Bounding box in local space, used to register a collider. */
@@ -98,6 +132,32 @@ export class Shelf extends THREE.Group {
       board.geometry.dispose();
     }
     this.boards.length = 0;
+    this.shadowProxy.count = 0;
+    this.shadowProxy.castShadow = false;
+    this.shadowProxy.dispose(); // its instance buffer; refilled if a carried box comes back to this emptied shelf
+  }
+
+  private boxMoved(child: THREE.Object3D, onShelf: boolean): void {
+    if (!(child instanceof GameBox)) return;
+    child.setShadowProxied(onShelf);
+    this.updateShadowProxy();
+  }
+
+  /** One instance per box standing here (at its rest pose), ghosts left out. */
+  private fillShadowProxy(): void {
+    const proxy = this.shadowProxy;
+    const capacity = proxy.instanceMatrix.count;
+    let n = 0;
+    for (const child of this.children) {
+      if (!(child instanceof GameBox) || !child.castsShadow || n >= capacity) continue;
+      const { width, height, depth } = child.dimensions;
+      this.proxyMatrix.compose(child.restPosition, child.restQuaternion, this.proxyScale.set(width, height, depth));
+      proxy.setMatrixAt(n++, this.proxyMatrix);
+    }
+    proxy.count = n;
+    proxy.castShadow = n > 0;
+    proxy.instanceMatrix.needsUpdate = true;
+    proxy.computeBoundingSphere();
   }
 
   /** How far row `row`'s board has sagged at local `x`. */
@@ -115,7 +175,8 @@ export class Shelf extends THREE.Group {
     this.boards.push(
       boxMesh(boardThickness, h, depth, WOOD, { x: -width / 2 + boardThickness / 2, y: h / 2 }),
       boxMesh(boardThickness, h, depth, WOOD, { x: width / 2 - boardThickness / 2, y: h / 2 }),
-      boxMesh(width, h, boardThickness / 2, WOOD, { y: h / 2, z: -depth / 2 + boardThickness / 4 }),
+      // The back fits between the sides and under the top board: run past them, its ends and top would z-fight with theirs.
+      boxMesh(width - 2 * boardThickness, h - boardThickness, boardThickness / 2, WOOD, { y: (h - boardThickness) / 2, z: -depth / 2 + boardThickness / 4 }),
     );
 
     // Boards from the floor up; the top board closes the bookcase. The bottom one rests on the

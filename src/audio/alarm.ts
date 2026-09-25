@@ -1,4 +1,4 @@
-import { startedAudioContext } from './audioContext';
+import { audioBus, startedAudioContext } from './audioContext';
 
 /** Pitch of the beep (Hz): the thin, piercing note of a cheap alarm. */
 const BEEP_HZ = 2100;
@@ -16,7 +16,7 @@ export function playAlarm(level = 0.06): void {
   if (!ctx) return;
   const out = ctx.createGain();
   out.gain.value = level;
-  out.connect(ctx.destination);
+  out.connect(audioBus(ctx, 'world'));
   let t = ctx.currentTime + 0.02;
   for (let g = 0; g < PATTERN.groups; g++) {
     for (let b = 0; b < PATTERN.beeps; b++) {

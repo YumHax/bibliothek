@@ -1,9 +1,9 @@
-/* Coins and tickets, top left. Above the canvas (z-index 1). */
+/* Coins and tickets, top left, on the HUD layer. */
 .wallet-hud {
   position: fixed;
   top: 1rem;
   left: 1rem;
-  z-index: 2;
+  z-index: var(--z-hud);
   display: flex;
   gap: 0.9rem;
   padding: 0.4rem 0.8rem;
@@ -21,7 +21,7 @@
 .wallet-hud__ticket { display: inline-block; width: 0.85em; height: 0.85em; }
 .wallet-hud__coin {
   border-radius: 50%;
-  background: radial-gradient(circle at 35% 35%, #ffe7a0, #d4a52a 60%, #9a731a);
+  background: radial-gradient(circle at 35% 35%, #ffe7a0, var(--ui-accent) 60%, #9a731a);
   box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.35);
 }
 .wallet-hud__ticket {

@@ -1,7 +1,9 @@
 import type { PlatformId } from '@/catalog/types';
+import { isBrocante } from './marketEvents';
+import { BROCANTE } from './pricing';
 
 /** What kind of day it is at the market. */
-export type MarketDayKind = 'ordinary' | 'binDay' | 'nintendoFair' | 'segaSonyDay' | 'collectorsFair' | 'estateSale';
+export type MarketDayKind = 'ordinary' | 'binDay' | 'nintendoFair' | 'segaSonyDay' | 'collectorsFair' | 'estateSale' | 'grandeBrocante';
 
 /** A market day's theme: its name and blurb, and what it changes to the stock. */
 export interface MarketDayTheme {
@@ -20,6 +22,14 @@ export interface MarketDayTheme {
   bin?: { size: number; price: number };
   /** Every stall gets one more well-known title (a house clearance); `gems` more well-known titles hide in the bin. */
   estate?: { gems: number };
+  /** More gems hide in the bin (the Grande Brocante). */
+  gems?: number;
+  /** The hall's crowd: this many times the usual shoppers, and a louder murmur. */
+  crowd?: number;
+  /** Bunting and flags strung across the hall. */
+  bunting?: boolean;
+  /** Extra bargain bins set out along the hall (the plan's `extraBins` spots). */
+  extraBins?: boolean;
 }
 
 const NINTENDO: readonly PlatformId[] = ['nes', 'snes', 'gb', 'n64'];
@@ -55,13 +65,26 @@ const THEMES: Record<MarketDayKind, MarketDayTheme> = {
     blurb: 'A whole collection cleared out: a famous game on every stall, gems in the bin.',
     estate: { gems: 2 },
   },
+  grandeBrocante: {
+    kind: 'grandeBrocante',
+    title: 'GRANDE BROCANTE',
+    blurb: 'Once a month: every stall heaped, a huge bargain bin, prices down across the hall.',
+    extraCopies: { count: BROCANTE.extraCopies },
+    priceFactor: { factor: BROCANTE.priceFactor },
+    bin: BROCANTE.bin,
+    gems: BROCANTE.gems,
+    crowd: BROCANTE.crowd,
+    bunting: true,
+    extraBins: true,
+  },
 };
 
 /** The week's round, by market day: two quiet days between the special ones. */
 const WEEK: readonly MarketDayKind[] = ['ordinary', 'binDay', 'nintendoFair', 'ordinary', 'segaSonyDay', 'collectorsFair', 'estateSale'];
 
-/** What kind of day market day `day` is (the same for everyone, every reload). */
+/** What kind of day market day `day` is (the same for everyone, every reload): the week's round, or the month's Grande Brocante. */
 export function themeOf(day: number): MarketDayTheme {
+  if (isBrocante(day)) return THEMES.grandeBrocante;
   return THEMES[WEEK[((day % WEEK.length) + WEEK.length) % WEEK.length]!];
 }
 

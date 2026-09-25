@@ -3,7 +3,7 @@ import type { Updatable } from '@/core/Engine';
 import type { Collisions } from '@/core/Collider';
 import type { Interactable } from '@/interaction/Interactable';
 import type { SessionActions } from '@/game/SessionActions';
-import type { Furniture } from '../Furniture';
+import type { ActivityAware, Furniture } from '../Furniture';
 import type { Seat } from '../Seat';
 import type { CatBedLike, CatBody, CatClock, CatPlayerView, CatSettings, CatToyLike, CatVoiceLike, FoodBowlLike, ScratcherLike, WaterBowlLike } from './types';
 import { CatNav } from './CatNav';
@@ -46,7 +46,7 @@ export interface CatOptions {
  * player), clickable (a click is a stroke), ticked by the engine through `zone.place()`.
  * Local +z is the cat's forward; the origin sits on the floor under its body.
  */
-export class Cat extends THREE.Group implements Furniture, Interactable, Updatable {
+export class Cat extends THREE.Group implements Furniture, Interactable, Updatable, ActivityAware {
   /** It walks: it carries its own blob instead (see the constructor). */
   readonly contactShadow = false;
   /**
@@ -166,6 +166,11 @@ export class Cat extends THREE.Group implements Furniture, Interactable, Updatab
       this.settings.coat = settings.coat;
       this.body.setCoat(settings.coat);
     }
+  }
+
+  /** A dormant zone is not ticked: silence the purr now, `update` sets the distance again on return. */
+  setZoneActive(active: boolean): void {
+    if (!active) this.voice?.setDistance(Infinity);
   }
 
   // --- Updatable ------------------------------------------------------------------------------

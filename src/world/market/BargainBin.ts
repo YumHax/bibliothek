@@ -49,15 +49,16 @@ export class BargainBin extends THREE.Group implements Furniture {
     // Trestle legs and rails.
     for (const x of [-WIDTH / 2 + 0.05, WIDTH / 2 - 0.05]) {
       for (const z of [-DEPTH / 2 + 0.05, DEPTH / 2 - 0.05]) this.add(boxMesh(0.04, FLOOR_Y - 0.02, 0.04, LEGS, { x, y: (FLOOR_Y - 0.02) / 2, z }));
-      this.add(boxMesh(0.03, 0.03, DEPTH - 0.06, LEGS, { x, y: 0.12 }));
+      // Ends buried in the legs, not flush with their faces (coplanar faces z-fight).
+      this.add(boxMesh(0.03, 0.03, DEPTH - 0.08, LEGS, { x, y: 0.12 }));
     }
-    // The crate: floor, slatted sides and back, a low front board.
+    // The crate: floor, slatted sides and back, a low front board; back and front fit between the sides.
     this.add(boxMesh(WIDTH, 0.02, DEPTH, PINE, { y: FLOOR_Y - 0.01 }));
     for (const sx of [-1, 1]) {
       for (let s = 0; s < 2; s++) this.add(boxMesh(WALL, 0.06, DEPTH, PINE, { x: sx * (WIDTH / 2 - WALL / 2), y: FLOOR_Y + 0.035 + s * 0.09 }));
     }
-    for (let s = 0; s < 2; s++) this.add(boxMesh(WIDTH, 0.06, WALL, PINE, { y: FLOOR_Y + 0.035 + s * 0.09, z: -DEPTH / 2 + WALL / 2 }));
-    this.add(boxMesh(WIDTH, FRONT_H, WALL, PINE, { y: FLOOR_Y + FRONT_H / 2, z: DEPTH / 2 - WALL / 2 }));
+    for (let s = 0; s < 2; s++) this.add(boxMesh(WIDTH - 2 * WALL, 0.06, WALL, PINE, { y: FLOOR_Y + 0.035 + s * 0.09, z: -DEPTH / 2 + WALL / 2 }));
+    this.add(boxMesh(WIDTH - 2 * WALL, FRONT_H, WALL, PINE, { y: FLOOR_Y + FRONT_H / 2, z: DEPTH / 2 - WALL / 2 }));
     // A divider between the two files.
     this.add(boxMesh(0.01, SIDE_H * 0.7, DEPTH - 0.04, PINE, { y: FLOOR_Y + SIDE_H * 0.35 }));
 

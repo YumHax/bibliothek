@@ -1,11 +1,14 @@
 import type { BoxCondition, Game } from '@/catalog/types';
+import { canonicalGameId } from '@/catalog';
+import { readGame } from '@/catalog/validate';
+import { KEYS, PersistedStore, safeStorage } from '@/persistence';
 import type { Fame } from './Fame';
 import type { MarketLedger } from './MarketLedger';
 import type { StockItem } from './StockItem';
-import { FOR_SALE_AD, WANTED_AD, shopPrice } from './pricing';
+import { CARD_MEMORY_DAYS, FOR_SALE_AD, WANTED_AD, shopPrice } from './pricing';
 import { seeded } from './seeded';
 
-export const NOTICES_STORAGE_KEY = 'bibliothek.notices.v1';
+export const NOTICES_STORAGE_KEY = KEYS.notices;
 
 /** A collector's card: they want `game` and pay `pay` coins for it, until the card comes down. */
 export interface WantedAd {
@@ -44,13 +47,16 @@ export class MarketNotices {
   private ads: NoticeAd[];
   private drawing: Promise<void> | null = null;
   private drawingDay = -1;
+  private readonly store: PersistedStore<NoticeAd[]>;
 
   constructor(
     private readonly deps: { fame: Fame; ledger: MarketLedger },
-    private readonly storage: Storage | null = safeLocalStorage(),
-    private readonly key = NOTICES_STORAGE_KEY,
+    storage: Storage | null = safeStorage(),
+    key: string = NOTICES_STORAGE_KEY,
   ) {
-    this.ads = this.load();
+    // Version 1: the cards, an array.
+    this.store = new PersistedStore<NoticeAd[]>({ key, version: 1, storage, defaults: () => [], read: readAds });
+    this.ads = this.store.load();
   }
 
   /** The cards up on `day` (drawing that day's first if needed), minus the ones dealt with. */
@@ -98,41 +104,28 @@ export class MarketNotices {
       const game = pool[Math.floor(rng() * pool.length)]!;
       if (taken.has(game.id) || sources.collection.some((g) => g.id === game.id && g.status !== 'wishlist')) continue;
       taken.add(game.id);
-      const condition: BoxCondition = rng() < 0.6 ? 'complete' : 'noManual';
+      const condition: BoxCondition = rng() < FOR_SALE_AD.completeOdds ? 'complete' : 'noManual';
       const views = await this.deps.fame.lookup(game);
       const share = FOR_SALE_AD.share[0] + rng() * (FOR_SALE_AD.share[1] - FOR_SALE_AD.share[0]);
-      const factor = condition === 'complete' ? 1 : 0.8;
+      const factor = condition === 'complete' ? 1 : FOR_SALE_AD.noManualFactor;
       fresh.push({ id: `s:${day}:${game.id}`, kind: 'forSale', day, game: { ...game, condition: condition === 'complete' ? undefined : condition }, price: Math.max(1, Math.round(shopPrice(game, views) * share * factor)), from: name() });
     }
     // Keep a week of cards: the older ones are down anyway.
-    this.ads = [...this.ads.filter((ad) => day - ad.day < 7 && ad.day !== day), ...fresh];
-    this.save();
-  }
-
-  private save(): void {
-    try {
-      this.storage?.setItem(this.key, JSON.stringify(this.ads));
-    } catch (err) {
-      console.warn('[market] could not persist the notices', err);
-    }
-  }
-
-  private load(): NoticeAd[] {
-    const text = this.storage?.getItem(this.key);
-    if (!text) return [];
-    try {
-      const ads = JSON.parse(text) as NoticeAd[];
-      return Array.isArray(ads) ? ads.filter((ad) => ad && typeof ad.day === 'number' && ad.game) : [];
-    } catch {
-      return [];
-    }
+    this.ads = [...this.ads.filter((ad) => day - ad.day < CARD_MEMORY_DAYS && ad.day !== day), ...fresh];
+    this.store.save(this.ads);
   }
 }
 
-function safeLocalStorage(): Storage | null {
-  try {
-    return typeof localStorage === 'undefined' ? null : localStorage;
-  } catch {
-    return null;
-  }
+/** The cards saved, each checked (an unreadable one is dropped), old seed ids mapped. */
+function readAds(data: unknown): NoticeAd[] | null {
+  if (!Array.isArray(data)) return null;
+  return data.flatMap((value: unknown): NoticeAd[] => {
+    const ad = (typeof value === 'object' && value !== null ? value : {}) as Partial<Record<'id' | 'kind' | 'day' | 'game' | 'pay' | 'price' | 'from', unknown>>;
+    const game = readGame(ad.game);
+    if (!game || typeof ad.id !== 'string' || typeof ad.day !== 'number' || typeof ad.from !== 'string') return [];
+    const id = ad.id.replace(/^([ws]:-?\d+:)(.*)$/, (_m, head: string, gameId: string) => head + canonicalGameId(gameId));
+    if (ad.kind === 'wanted' && typeof ad.pay === 'number') return [{ id, kind: 'wanted', day: ad.day, game, pay: ad.pay, from: ad.from }];
+    if (ad.kind === 'forSale' && typeof ad.price === 'number') return [{ id, kind: 'forSale', day: ad.day, game, price: ad.price, from: ad.from }];
+    return [];
+  });
 }

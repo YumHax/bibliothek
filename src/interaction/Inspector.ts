@@ -1,11 +1,7 @@
 import * as THREE from 'three';
 import type { Updatable } from '@/core/Engine';
-import type { GameBox } from '@/world/GameBox';
-
-export interface InspectorEvents {
-  /** Called with false while the user is rotating the box (right button held), true afterwards. */
-  onLookEnabledChange?(enabled: boolean): void;
-}
+import { Listeners } from '@/core/Listeners';
+import type { Carriable } from './Carriable';
 
 type Phase = 'idle' | 'toHand' | 'inHand' | 'toShelf' | 'stowing';
 
@@ -21,20 +17,20 @@ const STOW_SECONDS = 0.35;
  * right while open so the whole spread stays in view. `release()` sends it back to its rest pose;
  * `stow()` (a box just bought) drops it down out of view and lets go of it for good.
  */
-export class Inspector implements Updatable {
+export class Inspector<Box extends Carriable = Carriable> implements Updatable {
   /** Hand pose in camera space (metres): x right, y up, z forward is negative. */
   readonly handOffset = new THREE.Vector3(-0.11, -0.05, -0.42);
   rotateSpeed = 0.005;
-  readonly events: InspectorEvents = {};
 
   private phase: Phase = 'idle';
-  private box: GameBox | null = null;
+  private box: Box | null = null;
   private originalParent: THREE.Object3D | null = null;
   private onStowed: (() => void) | null = null;
   private stowTime = 0;
   private rotating = false;
   private readonly userRotation = new THREE.Quaternion();
   private readonly euler = new THREE.Euler(0, 0, 0, 'YXZ');
+  private readonly lookListeners = new Listeners<[enabled: boolean]>();
 
   private readonly targetPos = new THREE.Vector3();
   private readonly targetQuat = new THREE.Quaternion();
@@ -50,11 +46,16 @@ export class Inspector implements Updatable {
     document.addEventListener('mouseup', this.onMouseUp);
   }
 
+  /** Calls `listener(false)` while the player turns the box (right button held), `true` afterwards; returns the unsubscribe. */
+  onLookEnabledChange(listener: (enabled: boolean) => void): () => void {
+    return this.lookListeners.add(listener);
+  }
+
   get isActive(): boolean {
     return this.phase !== 'idle';
   }
 
-  get current(): GameBox | null {
+  get current(): Box | null {
     return this.box;
   }
 
@@ -68,13 +69,14 @@ export class Inspector implements Updatable {
     return this.box?.isOpen ?? false;
   }
 
-  inspect(box: GameBox): void {
+  inspect(box: Box): void {
     if (this.phase !== 'idle') return;
     this.box = box;
     this.originalParent = box.parent;
     box.setHovered(false);
     box.snapClosed();
     this.scene.attach(box); // keep world transform, reparent to scene
+    box.setInHand(true); // the openable shell, its back, cartridge and manual
     this.userRotation.identity();
     this.euler.set(0, 0, 0);
     this.phase = 'toHand';
@@ -150,6 +152,7 @@ export class Inspector implements Updatable {
 
   private finishStow(): void {
     const done = this.onStowed;
+    this.box?.setInHand(false);
     this.box?.removeFromParent();
     this.phase = 'idle';
     this.box = null;
@@ -164,6 +167,7 @@ export class Inspector implements Updatable {
     box.position.copy(box.restPosition);
     box.quaternion.copy(box.restQuaternion);
     box.snapClosed();
+    box.setInHand(false); // back to the one-draw closed box
     this.phase = 'idle';
     this.box = null;
     this.originalParent = null;
@@ -172,7 +176,7 @@ export class Inspector implements Updatable {
   private setRotating(rotating: boolean): void {
     if (this.rotating === rotating) return;
     this.rotating = rotating;
-    this.events.onLookEnabledChange?.(!rotating);
+    this.lookListeners.emit(!rotating);
   }
 
   private onMouseDown = (e: MouseEvent): void => {

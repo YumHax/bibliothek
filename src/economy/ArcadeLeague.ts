@@ -1,7 +1,10 @@
+import { KEYS, PersistedStore } from '@/persistence';
+import { addDays, dayKey, isoWeek, weekProgress } from './calendar';
 import { LEAGUE, STREAK } from './pricing';
 import { REGULARS } from './rivals';
+import { seeded } from './seeded';
 
-export const ARCADE_LEAGUE_KEY = 'bibliothek.arcadeLeague.v1';
+export const ARCADE_LEAGUE_KEY = KEYS.arcadeLeague;
 
 /** One line of the league table. */
 export interface LeagueEntry {
@@ -54,14 +57,21 @@ export interface ArcadeLeagueOptions {
  */
 export class ArcadeLeague {
   private state: LeagueFile;
-  private readonly storage: Storage | null;
+  private readonly store: PersistedStore<LeagueFile>;
   private readonly now: () => Date;
   private readonly listeners = new Set<() => void>();
 
   constructor(options: ArcadeLeagueOptions = {}) {
-    this.storage = options.storage === undefined ? safeLocalStorage() : options.storage;
     this.now = options.now ?? (() => new Date());
-    this.state = this.load();
+    // Version 1: the week's count, the streak (local dates), the pennants.
+    this.store = new PersistedStore<LeagueFile>({
+      key: ARCADE_LEAGUE_KEY,
+      version: 1,
+      storage: options.storage,
+      defaults: () => ({ week: isoWeek(this.now()), tickets: 0, streak: 0, pennants: 0 }),
+      read: readLeague,
+    });
+    this.state = this.store.load();
     this.rollOver();
   }
 
@@ -169,85 +179,28 @@ export class ArcadeLeague {
   }
 
   private commit(): void {
-    try {
-      this.storage?.setItem(ARCADE_LEAGUE_KEY, JSON.stringify(this.state));
-    } catch (err) {
-      console.warn('[arcade] could not persist the league', err);
-    }
+    this.store.save(this.state);
     for (const cb of this.listeners) cb();
   }
+}
 
-  private load(): LeagueFile {
-    const fresh: LeagueFile = { week: isoWeek(this.now()), tickets: 0, streak: 0, pennants: 0 };
-    try {
-      const parsed = JSON.parse(this.storage?.getItem(ARCADE_LEAGUE_KEY) ?? 'null') as Partial<LeagueFile> | null;
-      if (!parsed || typeof parsed !== 'object' || typeof parsed.week !== 'string') return fresh;
-      const pending = parsed.pending;
-      return {
-        week: parsed.week,
-        tickets: typeof parsed.tickets === 'number' ? parsed.tickets : 0,
-        streak: typeof parsed.streak === 'number' ? parsed.streak : 0,
-        pennants: typeof parsed.pennants === 'number' ? parsed.pennants : 0,
-        ...(typeof parsed.lastPlayDay === 'string' ? { lastPlayDay: parsed.lastPlayDay } : {}),
-        ...(pending && typeof pending.week === 'string' && typeof pending.rank === 'number' ? { pending } : {}),
-      };
-    } catch {
-      return fresh;
-    }
-  }
+function readLeague(data: unknown): LeagueFile | null {
+  const parsed = data as Partial<LeagueFile> | null;
+  if (!parsed || typeof parsed !== 'object' || typeof parsed.week !== 'string') return null;
+  const pending = parsed.pending;
+  return {
+    week: parsed.week,
+    tickets: typeof parsed.tickets === 'number' ? parsed.tickets : 0,
+    streak: typeof parsed.streak === 'number' ? parsed.streak : 0,
+    pennants: typeof parsed.pennants === 'number' ? parsed.pennants : 0,
+    ...(typeof parsed.lastPlayDay === 'string' ? { lastPlayDay: parsed.lastPlayDay } : {}),
+    ...(pending && typeof pending.week === 'string' && typeof pending.rank === 'number'
+      ? { pending: { week: pending.week, rank: pending.rank, tickets: typeof pending.tickets === 'number' ? pending.tickets : 0, won: pending.won === true } }
+      : {}),
+  };
 }
 
 /** The bonus the first play of the `days`-th day in a row pays (nothing on the first day). */
 export function streakBonus(days: number): number {
   return days >= 2 ? Math.min(days, STREAK.maxDays) * STREAK.perDay : 0;
-}
-
-function dayKey(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
-
-function addDays(d: Date, days: number): Date {
-  const out = new Date(d);
-  out.setDate(out.getDate() + days);
-  return out;
-}
-
-/** ISO 8601 week, YYYY-Www (weeks start on Monday; week 1 holds the year's first Thursday). */
-function isoWeek(d: Date): string {
-  const t = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
-  const day = t.getUTCDay() || 7;
-  t.setUTCDate(t.getUTCDate() + 4 - day);
-  const yearStart = Date.UTC(t.getUTCFullYear(), 0, 1);
-  const week = Math.ceil(((t.getTime() - yearStart) / 86400000 + 1) / 7);
-  return `${t.getUTCFullYear()}-W${String(week).padStart(2, '0')}`;
-}
-
-/** How far through its week (Monday 00:00 to Sunday 24:00) `d` is, 0..1. */
-function weekProgress(d: Date): number {
-  const day = (d.getDay() + 6) % 7;
-  return (day + (d.getHours() + d.getMinutes() / 60) / 24) / 7;
-}
-
-/** mulberry32 seeded from a string. */
-function seeded(seed: string): () => number {
-  let h = 1779033703 ^ seed.length;
-  for (let i = 0; i < seed.length; i++) {
-    h = Math.imul(h ^ seed.charCodeAt(i), 3432918353);
-    h = (h << 13) | (h >>> 19);
-  }
-  let a = h >>> 0;
-  return () => {
-    a = (a + 0x6d2b79f5) | 0;
-    let t = Math.imul(a ^ (a >>> 15), 1 | a);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
-
-function safeLocalStorage(): Storage | null {
-  try {
-    return typeof localStorage === 'undefined' ? null : localStorage;
-  } catch {
-    return null;
-  }
 }

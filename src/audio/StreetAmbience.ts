@@ -4,7 +4,8 @@ import type { SkyState } from '@/world/props/DayNight';
 import type { LifeEvents } from '@/world/props/outdoors/lifeEvents';
 import { wakefulnessAt } from '@/world/props/outdoors/wakefulness';
 import { proximityVolume } from '@/video/proximityVolume';
-import { audioContext } from './audioContext';
+import { audioBus, audioContext } from './audioContext';
+import { brownNoise, whiteNoise } from './noise';
 
 export interface StreetAmbienceOptions {
   /** Where the ears are (the camera). */
@@ -69,6 +70,8 @@ export class StreetAmbience implements Updatable {
   private siren: { osc: OscillatorNode; gain: GainNode } | null = null;
   private diesel: { osc: OscillatorNode; gain: GainNode; whine: OscillatorNode; whineGain: GainNode } | null = null;
   private noise: AudioBuffer | null = null;
+  /** Everything that runs as long as the street does (the beds, the siren, the diesel), stopped by `dispose`. */
+  private sources: AudioScheduledSourceNode[] = [];
   private panes: readonly THREE.Object3D[] = [];
   private paneClock = PANE_REFRESH;
   private passClock = 4;
@@ -89,13 +92,38 @@ export class StreetAmbience implements Updatable {
   private readonly pane = new THREE.Vector3();
 
   constructor(private readonly options: StreetAmbienceOptions) {
-    const start = (): void => {
-      window.removeEventListener('pointerdown', start);
-      window.removeEventListener('keydown', start);
-      this.build();
-    };
-    window.addEventListener('pointerdown', start);
-    window.addEventListener('keydown', start);
+    window.addEventListener('pointerdown', this.start);
+    window.addEventListener('keydown', this.start);
+  }
+
+  /** Stops the street for good: its beds and engines, and the wait for the first gesture. */
+  dispose(): void {
+    this.stopListening();
+    for (const source of this.sources) source.stop();
+    this.sources = [];
+    this.master?.disconnect();
+    this.loud?.disconnect();
+    this.master = null;
+    this.loud = null;
+    this.traffic = null;
+    this.rainBed = null;
+    this.windBed = null;
+    this.windBand = null;
+    this.whistle = null;
+    this.fountainBed = null;
+    this.siren = null;
+    this.diesel = null;
+    this.ctx = null;
+  }
+
+  private readonly start = (): void => {
+    this.stopListening();
+    this.build();
+  };
+
+  private stopListening(): void {
+    window.removeEventListener('pointerdown', this.start);
+    window.removeEventListener('keydown', this.start);
   }
 
   update(dt: number): void {
@@ -196,29 +224,19 @@ export class StreetAmbience implements Updatable {
     const glass = ctx.createBiquadFilter();
     glass.type = 'lowpass';
     glass.frequency.value = 5200;
-    this.master.connect(glass).connect(ctx.destination);
+    this.master.connect(glass).connect(audioBus(ctx, 'world'));
     this.loud.connect(glass);
 
     // Two seconds of white noise, shared by every noisy thing.
-    const length = ctx.sampleRate * 2;
-    this.noise = ctx.createBuffer(1, length, ctx.sampleRate);
-    const data = this.noise.getChannelData(0);
-    for (let i = 0; i < length; i++) data[i] = Math.random() * 2 - 1;
+    this.noise = whiteNoise(ctx, 2);
 
     // The traffic: brown noise (white integrated), deep and slow.
-    const brown = ctx.createBuffer(1, length, ctx.sampleRate);
-    const b = brown.getChannelData(0);
-    let last = 0;
-    for (let i = 0; i < length; i++) {
-      last = (last + 0.02 * data[i]) / 1.02;
-      b[i] = last * 3.5;
-    }
     this.traffic = ctx.createGain();
     this.traffic.gain.value = 0;
     const rumble = ctx.createBiquadFilter();
     rumble.type = 'lowpass';
     rumble.frequency.value = 380;
-    this.loop(ctx, brown).connect(rumble).connect(this.traffic).connect(this.master);
+    this.loop(ctx, brownNoise(ctx, 2)).connect(rumble).connect(this.traffic).connect(this.master);
 
     // The rain: a band of hiss.
     this.rainBed = ctx.createGain();
@@ -264,7 +282,7 @@ export class StreetAmbience implements Updatable {
     sirenOsc.type = 'triangle';
     sirenOsc.frequency.value = 440;
     sirenOsc.connect(sirenTone).connect(sirenGain).connect(this.master);
-    sirenOsc.start();
+    this.keep(sirenOsc);
     this.siren = { osc: sirenOsc, gain: sirenGain };
     const dieselGain = ctx.createGain();
     dieselGain.gain.value = 0;
@@ -275,7 +293,7 @@ export class StreetAmbience implements Updatable {
     dieselOsc.type = 'sawtooth';
     dieselOsc.frequency.value = 42;
     dieselOsc.connect(dieselTone).connect(dieselGain).connect(this.master);
-    dieselOsc.start();
+    this.keep(dieselOsc);
     const whineGain = ctx.createGain();
     whineGain.gain.value = 0;
     const whineTone = ctx.createBiquadFilter();
@@ -286,7 +304,7 @@ export class StreetAmbience implements Updatable {
     whine.type = 'sawtooth';
     whine.frequency.value = 190;
     whine.connect(whineTone).connect(whineGain).connect(this.master);
-    whine.start();
+    this.keep(whine);
     this.diesel = { osc: dieselOsc, gain: dieselGain, whine, whineGain };
   }
 
@@ -295,7 +313,14 @@ export class StreetAmbience implements Updatable {
     source.buffer = buffer;
     source.loop = true;
     source.start(0, Math.random() * buffer.duration);
+    this.sources.push(source);
     return source;
+  }
+
+  /** Starts `source` for as long as the street runs. */
+  private keep(source: AudioScheduledSourceNode): void {
+    source.start();
+    this.sources.push(source);
   }
 
   /** A burst of the shared noise through `filter`, shaped by `envelope` (gain at times from its start), starting `delay` seconds from now. */

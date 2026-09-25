@@ -1,38 +1,40 @@
 /* The market's panels (haggle, swap, notice board, job lot): the catalogue's frame (CataloguePanel.css) plus these. */
-.market-panel h3 { margin: 1rem 0 0.35rem; font-size: 1rem; letter-spacing: 0.04em; }
+.market-panel h3 { margin: 1rem 0 0.35rem; font-family: var(--ui-font-display); font-weight: 400; font-size: 1rem; letter-spacing: 0.04em; }
 .market-panel h3:first-child { margin-top: 0.25rem; }
 .market-panel kbd {
   display: inline-block;
   min-width: 1.2em;
   padding: 0 0.3em;
   margin-right: 0.2em;
-  border: 1px solid var(--ui-border-strong, rgba(255, 255, 255, 0.35));
+  border: 1px solid var(--ui-border-strong);
   border-radius: 4px;
   font: inherit;
   font-size: 0.75rem;
   text-align: center;
   opacity: 0.8;
 }
-.market-panel .sell__armed { background: rgba(200, 68, 58, 0.45); border-color: rgba(255, 138, 128, 0.6); }
+/* Dark text on the accent: the key caps follow it. */
+.market-panel .ui-btn--primary kbd { border-color: currentColor; }
+.market-panel .sell__armed { background: rgba(200, 68, 58, 0.45); border-color: var(--ui-danger); }
 
 /* Haggle: the deal on top, what was said, the offers along the bottom. */
-.haggle .market-panel__body { display: flex; flex-direction: column; gap: 0.75rem; max-width: 46rem; width: 100%; margin: 0 auto; }
+.haggle .market-panel__body { display: flex; flex-direction: column; gap: 0.75rem; max-width: 46rem; width: 100%; margin: 0 auto; box-sizing: border-box; }
 .haggle__deal { display: flex; align-items: center; gap: 1rem; }
 .haggle__what { flex: 1; display: flex; flex-direction: column; gap: 0.15rem; min-width: 0; }
-.haggle__patience { white-space: nowrap; opacity: 0.8; }
-.haggle__patience span { color: var(--ui-accent, #d4a52a); letter-spacing: 0.15em; }
+.haggle__patience { white-space: nowrap; color: var(--ui-text-dim); }
+.haggle__patience span { color: var(--ui-accent); letter-spacing: 0.15em; }
 .haggle__log { flex: 1; min-height: 8rem; overflow-y: auto; display: flex; flex-direction: column; gap: 0.4rem; padding: 0.25rem; }
-.haggle__line { margin: 0; max-width: 80%; padding: 0.45rem 0.7rem; border-radius: 10px; background: rgba(255, 255, 255, 0.07); }
-.haggle__line b { display: block; font-size: 0.72rem; opacity: 0.6; font-weight: 600; }
-.haggle__line--you { align-self: flex-end; background: rgba(212, 165, 42, 0.16); }
+.haggle__line { margin: 0; max-width: 80%; padding: 0.45rem 0.7rem; border-radius: var(--ui-radius); background: var(--ui-fill); }
+.haggle__line b { display: block; font-size: 0.72rem; color: var(--ui-text-dim); font-weight: 600; }
+.haggle__line--you { align-self: flex-end; background: var(--ui-accent-soft); }
 .haggle__offers { display: flex; flex-wrap: wrap; gap: 0.5rem; }
-.haggle__offers button { display: inline-flex; align-items: center; gap: 0.35rem; }
+.haggle__offers .ui-btn { display: inline-flex; align-items: center; gap: 0.35rem; }
 .haggle__offers .catalogue__price { min-width: 0; }
 .haggle__back { margin-left: auto; }
 
-/* Notice board: tabs, cards, sets. */
+/* Notice board: tabs (`.ui-btn` marks the selected one), cards, sets. */
 .notices__tabs { display: flex; gap: 0.4rem; margin-bottom: 0.6rem; flex-wrap: wrap; }
-.notices__tabs button[aria-selected='true'] { background: rgba(255, 255, 255, 0.18); border-color: rgba(255, 255, 255, 0.4); }
+.notices__panel > h3:first-child { margin-top: 1rem; }
 .notices__kind {
   font-size: 0.68rem;
   font-weight: 700;
@@ -43,12 +45,12 @@
 }
 .notices__card--wanted .notices__kind { background: rgba(200, 68, 58, 0.35); color: #ffd2cc; }
 .notices__card--sale .notices__kind { background: rgba(79, 138, 90, 0.35); color: #d4f2d9; }
-.notices__set { border-top: 1px solid rgba(255, 255, 255, 0.08); padding: 0.3rem 0; }
-.notices__set--done b { color: var(--ui-accent, #d4a52a); }
+.notices__set { border-top: 1px solid var(--ui-border); padding: 0.3rem 0; }
+.notices__set--done b { color: var(--ui-accent); }
 .notices__pieces { list-style: none; margin: 0 0 0.3rem 0.5rem; padding: 0; display: flex; flex-wrap: wrap; gap: 0.25rem 1rem; font-size: 0.85rem; opacity: 0.75; }
 .notices__have { opacity: 1; color: #bfe8c6; }
 .notices__perks { margin: 0.3rem 0 0; padding-left: 1.2rem; font-size: 0.88rem; }
-.notices__today { background: rgba(212, 165, 42, 0.1); }
+.notices__today { background: var(--ui-accent-soft); }
 
 /* Job lot: the total along the bottom. */
-.joblot__total { border-top: 1px solid rgba(255, 255, 255, 0.12); margin-top: 0.4rem; padding-top: 0.6rem; }
+.joblot__total { border-top: 1px solid var(--ui-border); margin-top: 0.4rem; padding-top: 0.6rem; }

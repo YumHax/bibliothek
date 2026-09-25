@@ -37,7 +37,8 @@ export class LaundryBasket extends THREE.Group implements Furniture {
     this.add(body);
     // Braided rim and foot rings, a touch wider than the body.
     const trim = matte(WICKER_DARK, 0.9);
-    this.add(cylinderMesh(r + 0.008, 0.03, trim, { y: h - 0.015 }, { segments: SEGMENTS }));
+    // The rim stands a millimetre over the body's top (level with it, the two caps z-fight).
+    this.add(cylinderMesh(r + 0.008, 0.03, trim, { y: h - 0.014 }, { segments: SEGMENTS }));
     this.add(cylinderMesh(r * 0.88 + 0.006, 0.02, trim, { y: 0.01 }, { radiusBottom: r * 0.88, segments: SEGMENTS }));
     // Lid, sitting a little askew on the wash that did not quite fit.
     const lid = cylinderMesh(r + 0.012, 0.025, weave, { y: h + 0.02 }, { segments: SEGMENTS });

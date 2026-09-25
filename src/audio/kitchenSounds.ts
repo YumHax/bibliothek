@@ -47,14 +47,11 @@ export class KettleBoil extends Voice {
     this.body = ctx.createGain();
     this.body.gain.value = 0;
     this.body.connect(out);
-    const source = ctx.createBufferSource();
-    source.buffer = this.noise(ctx, 2);
-    source.loop = true;
+    const source = this.loop(ctx, this.noise(ctx, 2));
     this.hiss = ctx.createBiquadFilter();
     this.hiss.type = 'bandpass';
     this.hiss.Q.value = 0.7;
     source.connect(this.hiss).connect(this.body);
-    source.start();
     this.setBoiling(this.running, this.progress);
   }
 

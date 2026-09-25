@@ -1,4 +1,5 @@
-import { audioContext } from './audioContext';
+import { Voice } from './ambient';
+import { whiteNoise } from './noise';
 
 /** Loudness of the whole murmur at level 1 (linear). */
 const MASTER = 0.07;
@@ -15,7 +16,7 @@ const VOICES = [
 const BED = { frequency: 320, level: 0.35 };
 const SMOOTH = 0.6;
 
-interface Voice {
+interface Talker {
   gain: GainNode;
   talking: boolean;
   /** Seconds left in the current phrase or pause. */
@@ -27,60 +28,18 @@ interface Voice {
 /**
  * The hum of a market hall: a handful of unintelligible voices (noise through speech-band filters,
  * switched on in phrases and wobbled syllable by syllable) over a low bed. No samples, all
- * generated. `setLevel` follows how many people are about; `update` drives the chatter.
+ * generated. `setLevel` follows how many people are about (0 silent .. 1 a busy day; eased in and
+ * out, set only when it changes); `update` drives the chatter.
  */
-export class CrowdMurmur {
-  private ctx: AudioContext | null = null;
-  private master: GainNode | null = null;
-  private sources: AudioBufferSourceNode[] = [];
-  private voices: Voice[] = [];
-  private level = 0;
+export class CrowdMurmur extends Voice {
+  private talkers: Talker[] = [];
 
-  /** 0 silent .. 1 a busy day; eased in and out. Builds the graph on the first non-zero level. */
-  setLevel(level: number): void {
-    this.level = Math.max(0, Math.min(1, level));
-    if (this.level > 0) this.build();
-    if (this.ctx && this.master) this.master.gain.setTargetAtTime(this.level * MASTER, this.ctx.currentTime, SMOOTH);
+  constructor() {
+    super(MASTER, { follow: SMOOTH, watch: false });
   }
 
-  update(dt: number): void {
-    const ctx = this.ctx;
-    if (!ctx || this.level === 0) return;
-    for (const voice of this.voices) {
-      voice.phrase -= dt;
-      if (voice.phrase <= 0) {
-        voice.talking = !voice.talking;
-        voice.phrase = voice.talking ? 0.8 + Math.random() * 2.5 : 0.4 + Math.random() * 2.5 / Math.max(0.3, this.level);
-        if (!voice.talking) voice.gain.gain.setTargetAtTime(0, ctx.currentTime, 0.08);
-      }
-      if (!voice.talking) continue;
-      voice.syllable -= dt;
-      if (voice.syllable <= 0) {
-        voice.syllable = 0.1 + Math.random() * 0.16;
-        voice.gain.gain.setTargetAtTime(0.25 + Math.random() * 0.75, ctx.currentTime, 0.03);
-      }
-    }
-  }
-
-  /** Stops every source for good. */
-  dispose(): void {
-    for (const source of this.sources) source.stop();
-    this.sources = [];
-    this.master?.disconnect();
-    this.master = null;
-    this.voices = [];
-    this.ctx = null;
-  }
-
-  private build(): void {
-    if (this.ctx) return;
-    const ctx = audioContext();
-    this.ctx = ctx;
-    const master = ctx.createGain();
-    master.gain.value = 0;
-    master.connect(ctx.destination);
-    this.master = master;
-    const noise = noiseBuffer(ctx);
+  protected build(ctx: AudioContext, out: GainNode): void {
+    const noise = whiteNoise(ctx, 3);
 
     const bed = this.loop(ctx, noise);
     const low = ctx.createBiquadFilter();
@@ -88,8 +47,9 @@ export class CrowdMurmur {
     low.frequency.value = BED.frequency;
     const bedGain = ctx.createGain();
     bedGain.gain.value = BED.level;
-    bed.connect(low).connect(bedGain).connect(master);
+    bed.connect(low).connect(bedGain).connect(out);
 
+    this.talkers = [];
     for (const { frequency, q } of VOICES) {
       const source = this.loop(ctx, noise);
       const band = ctx.createBiquadFilter();
@@ -98,25 +58,25 @@ export class CrowdMurmur {
       band.Q.value = q;
       const gain = ctx.createGain();
       gain.gain.value = 0;
-      source.connect(band).connect(gain).connect(master);
-      this.voices.push({ gain, talking: false, phrase: Math.random() * 2, syllable: 0 });
+      source.connect(band).connect(gain).connect(out);
+      this.talkers.push({ gain, talking: false, phrase: Math.random() * 2, syllable: 0 });
     }
   }
 
-  /** A looping noise source started at a random point, so no two voices line up. */
-  private loop(ctx: AudioContext, buffer: AudioBuffer): AudioBufferSourceNode {
-    const source = ctx.createBufferSource();
-    source.buffer = buffer;
-    source.loop = true;
-    source.start(0, Math.random() * buffer.duration);
-    this.sources.push(source);
-    return source;
+  protected tick(ctx: AudioContext, dt: number): void {
+    for (const talker of this.talkers) {
+      talker.phrase -= dt;
+      if (talker.phrase <= 0) {
+        talker.talking = !talker.talking;
+        talker.phrase = talker.talking ? 0.8 + Math.random() * 2.5 : 0.4 + Math.random() * 2.5 / Math.max(0.3, this.level);
+        if (!talker.talking) talker.gain.gain.setTargetAtTime(0, ctx.currentTime, 0.08);
+      }
+      if (!talker.talking) continue;
+      talker.syllable -= dt;
+      if (talker.syllable <= 0) {
+        talker.syllable = 0.1 + Math.random() * 0.16;
+        talker.gain.gain.setTargetAtTime(0.25 + Math.random() * 0.75, ctx.currentTime, 0.03);
+      }
+    }
   }
-}
-
-function noiseBuffer(ctx: AudioContext): AudioBuffer {
-  const buffer = ctx.createBuffer(1, ctx.sampleRate * 3, ctx.sampleRate);
-  const data = buffer.getChannelData(0);
-  for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
-  return buffer;
 }

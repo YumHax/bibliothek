@@ -1,8 +1,8 @@
 import * as THREE from 'three';
-import { QUALITY } from '@/graphics/quality';
 import type { Updatable } from '@/core/Engine';
 import { IDLE_SHADOW_INTERVAL, type OccupancyAware } from '../Furniture';
 import { cylinderMesh, invisibleHitbox } from '../meshUtils';
+import type { DrawnAware } from '../zone/Zone';
 import { SwitchableLamp } from './SwitchableLamp';
 
 export interface ShelfLampOptions {
@@ -33,15 +33,22 @@ const HOVER_GLOW = 0.35;
  * away along local -z. Overhead, so it never collides (empty footprint, see `Prop`). Clicking
  * the can switches it. Owned by `Shelving`, one per bookcase, kept across rebuilds so a
  * switched-off spot stays off. Its shadow map is re-rendered every frame only while the player is
- * in the room (`setOccupied`), a couple of times a second otherwise.
+ * in the room (`setOccupied`), a couple of times a second otherwise, never while its zone is culled
+ * from view (`setZoneDrawn`). A spot for a slot with no bookcase yet is `parked`: dark, unseen,
+ * unclickable, but still a shadow-casting light in the scene, so buying a bookcase does not change
+ * the light count (which would recompile every shader).
  */
-export class ShelfLamp extends SwitchableLamp implements Updatable, OccupancyAware {
+export class ShelfLamp extends SwitchableLamp implements Updatable, OccupancyAware, DrawnAware {
   readonly options: Required<ShelfLampOptions>;
   readonly light: THREE.SpotLight;
   readonly hitboxes: THREE.Object3D[];
   private readonly metal: THREE.MeshStandardMaterial;
   private readonly lens: THREE.MeshStandardMaterial;
+  /** Canopy, stem and can: hidden as one while parked (a Group, so the zone's culling, which toggles meshes, never shows it again). */
+  private readonly fixture = new THREE.Group();
   private occupied = false;
+  private zoneDrawn = true;
+  private parked = false;
   private shadowTimer = Math.random() * IDLE_SHADOW_INTERVAL;
 
   constructor(options: ShelfLampOptions) {
@@ -74,19 +81,28 @@ export class ShelfLamp extends SwitchableLamp implements Updatable, OccupancyAwa
     this.light = new THREE.SpotLight(0xfff1dc, intensity, 6, Math.PI / 5, 0.5, 1.5);
     this.light.position.copy(pivot).addScaledVector(direction, CAN_LENGTH);
     this.light.target.position.copy(aim);
-    this.light.castShadow = true;
-    this.light.shadow.mapSize.setScalar(QUALITY.shadowMapSize);
-    this.light.shadow.camera.near = 0.2;
-    this.light.shadow.camera.far = 6;
-    this.light.shadow.bias = -0.0002;
-    this.light.shadow.normalBias = 0.02;
+    // Shadowless: every slot of every room's shelving has a spot (parked ones included, so the light count never
+    // follows the collection), and each shadow map is one more texture unit in every lit shader of the flat. With
+    // them casting, the flat passed the GPU's 16 units, every lit program failed to link and the rooms went black.
+    // The room's ceiling lamp still draws the shelves' shadows (their per-shelf proxies).
+    this.light.castShadow = false;
 
     const hitbox = invisibleHitbox(0.22, 0.28, 0.22);
     hitbox.position.copy(pivot).addScaledVector(direction, CAN_LENGTH / 2).add(new THREE.Vector3(0, 0.04, 0));
     this.hitboxes = [hitbox];
 
-    this.add(canopy, stem, can, this.light, this.light.target, hitbox);
+    this.fixture.add(canopy, stem, can);
+    this.add(this.fixture, this.light, this.light.target, hitbox);
     this.setOn(this.options.on);
+  }
+
+  /** Parked: no bookcase under it (yet). Dark and out of sight, its hitbox off the crosshair ray (layer 0); the switch state is kept for when it is back. */
+  setParked(parked: boolean): void {
+    if (parked === this.parked) return;
+    this.parked = parked;
+    this.fixture.visible = !parked;
+    for (const hitbox of this.hitboxes) hitbox.layers[parked ? 'disable' : 'enable'](0);
+    this.setOn(this.isOn);
   }
 
   setOccupied(occupied: boolean): void {
@@ -94,9 +110,15 @@ export class ShelfLamp extends SwitchableLamp implements Updatable, OccupancyAwa
     this.syncShadow();
   }
 
+  /** Culled from view: the idle refresh waits (the bookcase is hidden, the map would come out empty), and runs at once when drawn again. */
+  setZoneDrawn(drawn: boolean): void {
+    this.zoneDrawn = drawn;
+    this.syncShadow();
+  }
+
   /** Unoccupied and lit: refresh the shadow map now and then instead of every frame. */
   update(dt: number): void {
-    if (this.occupied || this.light.intensity <= 0) return;
+    if (this.occupied || !this.zoneDrawn || this.light.intensity <= 0) return;
     this.shadowTimer += dt;
     if (this.shadowTimer < IDLE_SHADOW_INTERVAL) return;
     this.shadowTimer = 0;
@@ -104,16 +126,17 @@ export class ShelfLamp extends SwitchableLamp implements Updatable, OccupancyAwa
   }
 
   protected render(on: boolean, hovered: boolean): void {
-    this.light.intensity = on ? this.options.intensity : 0;
-    this.lens.emissiveIntensity = on ? LENS_GLOW : 0;
+    const lit = on && !this.parked;
+    this.light.intensity = lit ? this.options.intensity : 0;
+    this.lens.emissiveIntensity = lit ? LENS_GLOW : 0;
     this.metal.emissiveIntensity = hovered ? HOVER_GLOW : 0;
     this.syncShadow();
   }
 
-  /** Per-frame shadow updates only while lit and in the player's room; a switched-off spot renders no map at all. */
+  /** Per-frame shadow updates only while lit and in the player's room; a switched-off (or parked, or culled) spot renders no map at all. */
   private syncShadow(): void {
-    const lit = this.light.intensity > 0;
-    this.light.shadow.autoUpdate = lit && this.occupied;
-    if (lit) this.light.shadow.needsUpdate = true;
+    const live = this.light.intensity > 0 && this.zoneDrawn;
+    this.light.shadow.autoUpdate = live && this.occupied;
+    if (live) this.light.shadow.needsUpdate = true;
   }
 }

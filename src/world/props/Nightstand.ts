@@ -124,12 +124,13 @@ export class Nightstand extends THREE.Group implements Furniture {
     knob.castShadow = false;
     drawer.front.add(knob);
 
-    // The box: a bottom, two sides and a back, a little narrower and lower than the front.
+    // The box: a bottom, two sides and a back, a little narrower and lower than the front. The
+    // bottom stops a hair inside the sides so its end grain does not fight their outer faces.
     const { inside } = drawer;
     const boxW = w - 0.02;
     const boxD = DEPTH - PANEL - 0.04;
     const sideH = DRAWER_H - 0.04;
-    part(inside, boxW, 0.008, boxD, DARK_OAK, { y: 0.016, z: -boxD / 2 });
+    part(inside, boxW - 0.004, 0.008, boxD, DARK_OAK, { y: 0.016, z: -boxD / 2 });
     for (const dx of [-boxW / 2 + 0.005, boxW / 2 - 0.005]) part(inside, 0.01, sideH, boxD, OAK, { x: dx, y: 0.012 + sideH / 2, z: -boxD / 2 });
     part(inside, boxW, sideH, 0.01, OAK, { y: 0.012 + sideH / 2, z: -boxD + 0.005 });
     const floor = 0.02;

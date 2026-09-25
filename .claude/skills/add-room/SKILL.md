@@ -16,12 +16,19 @@ Read `docs/zones.md` first (model, the flat's map, how two zones share a doorway
      `<KIND>_ROOM: RoomOptions` (`width`, `depth`, `height`, `doorways`, `opaqueWalls`, and `finish` when it is not a room of
      the flat: `floor: 'concrete' | 'carpet'`, wall / ceiling / trim colours, `moulding: false`; see the market, the arcade) and `<KIND>_PLAN` (the room, the
      spots of its wired props, a `decor` list of `DecorEntry`). Doorways use `...DOOR_LEAF` from `roomPlan.ts`.
-   - `furnish<Kind>.ts`: `export function furnish<Kind>(zone: Zone, { sky }: BuildContext): ZoneHandle`. Start with
-     `const room = furnishShell(zone, sky, plan.room, { leafColor })` (Room + sky + the doors this zone hangs), place a
-     `PendantLamp` or `FlushLamp` with `onSwitch: (on) => room.setLampOn(on)`, the room's own furniture with
-     `zone.placeAt(new X(opts), plan.x)`, then `placeDecor(zone, plan.decor)`; return `{ room }`. Windows:
-     `new RoomWindow(sky.outdoors, { ...size, onCurtainsChange })` at `{ wall, along, y: RoomWindow.mountY(height) }`,
-     wiring `room.setSkylight` like `furnishRoom` does; never `drivesClock`. Anything with a subscription goes through `zone.onUnload()`.
+   - `furnish<Kind>.ts`: `export function furnish<Kind>(zone: Zone, ctx: BuildContext): ZoneHandle` (both types from
+     `src/world/buildContext.ts`, never from `layout.ts`: the builders must not import each other through it; the context is
+     grouped: `ctx.sky`, `ctx.listener`..., then `ctx.collection.games`, `ctx.home.upgrades`, `ctx.money.wallet`,
+     `ctx.arcade.scores`, `ctx.market.stock`). Start with
+     `const room = furnishShell(zone, ctx.sky, plan.room, { leafColor })` (Room + sky + the doors this zone hangs), then
+     `placeRoomLight(zone, room, 'pendant' | 'flush', plan.pendant, plan.lightSwitch)` (fixture + wall switch), the room's
+     own furniture with `zone.placeAt(new X(opts), plan.x)`, then `furnishDecor(zone, ctx, plan.decor)` (decor + radiator
+     ticks); return `{ room }`. The shared pieces are in `src/world/build/`: `roomParts.ts` (`placeRoomLight`,
+     `placeClock`, `furnishDecor`, `placeStrayBox`), `hearing.ts` (`pointSound(ctx, voice, volume?)` for a `PointSound`,
+     `heardBy(ctx)` for a `Television`'s / `Projector`'s options), `follow.ts` (`followDaylight` for a frosted pane,
+     `followUpgrades` / `showWhenUpgraded` for home goods, `curtainsToSkylight`); each releases its subscription on
+     unload. Windows: `new RoomWindow(sky.outdoors, { ...size, onCurtainsChange: curtainsToSkylight(room, windows) })` at
+     `{ wall, along, y: RoomWindow.mountY(height) }`; never `drivesClock`. Any other subscription goes through `zone.onUnload()`.
 2. **The doorway, on both sides.** The neighbour's shell gets the same opening at the same world spot (its `along` in its
    own frame). Both sides name the zone across it in `to` (the portal the view is culled through). One side hangs the
    leaf, the other says `door: false`. The leaf swings away from the hanging room and lies against the far wall on the
@@ -29,8 +36,16 @@ Read `docs/zones.md` first (model, the flat's map, how two zones share a doorway
    it opens into the corridor.
 3. **Light-tight walls.** List every wall without a window in `opaqueWalls`, or the lamps shine through the wall plane into
    the room next door.
-4. **Kind**: add the name to `ZoneKind` in `src/world/worldPlan.ts` and the builder to `ZONE_BUILDERS` in `layout.ts`.
-5. **World plan**: add the zone to `WORLD_PLAN.zones`: `{ id, kind, origin: [x, 0, z], extent: <KIND>_ROOM, neighbours }`, and
+4. **Id and kind**: add the id to `ZoneId` in `src/world/zoneIds.ts` (a doorway's `to`, a travel door's `to` and
+   `world.zone(id)` only take those; `ui/menu/zoneNames.ts` then asks for its name), the kind to `ZoneKind` in
+   `src/world/worldPlan.ts` and the builder to `ZONE_BUILDERS` in `layout.ts`. A room of the flat is imported there as is;
+   a zone reached by travel is `lazy(() => import('./<kind>/furnish<Kind>').then((m) => m.furnish<Kind>))`, a chunk of
+   its own that `Travel` fetches behind the curtain (never import its builder anywhere else, or it is bundled again).
+   The handle's type follows from the builder's return type: `world.handle('<id>')` is typed, no cast. Anything the
+   rest of the game needs from it goes on the handle and is read in `src/bootstrap/world.ts` (shelves of the collection:
+   return them as `shelving`, the Session's `ShelvingGroup` picks them up; nothing to wire).
+5. **World plan**: add the zone to `ZONES` in `worldPlan.ts`: `<id>: { kind, origin: [x, 0, z], extent: <KIND>_ROOM, neighbours }`
+   (`satisfies` checks every `ZoneId` has an entry and nothing else does), and
    for a room of the flat add its id to `FLAT` and give it `neighbours: flatBut('<id>')` (the flat is always active as a
    whole, or the light count changes at doorways and every shader recompiles). Origin arithmetic: two
    zones sharing a wall keep `WALL_GAP` (0.06) between their wall planes; a room of depth D behind a wall at world z = Z has

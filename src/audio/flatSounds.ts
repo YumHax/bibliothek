@@ -124,20 +124,18 @@ export class NeighbourVoices extends Voice {
     this.osc.connect(this.f1).connect(mix);
     this.osc.connect(this.f2).connect(mix);
     mix.connect(this.envelope).connect(wall);
-    this.osc.start();
+    this.keep(this.osc);
 
     // The television's bed: noise shaped like speech, never parsed.
-    const noise = ctx.createBufferSource();
-    noise.buffer = this.noise(ctx, 3);
-    noise.loop = true;
+    const noise = this.loop(ctx, this.noise(ctx, 3));
     const band = ctx.createBiquadFilter();
     band.type = 'bandpass';
     band.frequency.value = 380;
     band.Q.value = 1.2;
     this.murmur = ctx.createGain();
-    this.murmur.gain.value = 0;
+    // Rebuilt in the middle of their programme (the voice was let go while unheard): the set is still on.
+    this.murmur.gain.value = this.tv && this.talkLeft > 0 ? 0.18 : 0;
     noise.connect(band).connect(this.murmur).connect(wall);
-    noise.start();
   }
 
   protected tick(ctx: AudioContext, dt: number): void {

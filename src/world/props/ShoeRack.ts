@@ -38,7 +38,8 @@ export class ShoeRack extends THREE.Group implements Furniture {
     for (const sx of [-1, 1]) {
       const x = sx * (width / 2 - 0.015);
       for (const dz of [-DEPTH / 2 + 0.02, DEPTH / 2 - 0.02]) part(this, 0.03, HEIGHT, 0.03, oak, { x, y: HEIGHT / 2, z: z + dz });
-      for (const y of SHELVES) part(this, 0.03, 0.03, DEPTH, oak, { x, y: y - 0.02, z });
+      // Rails a hair thinner than the legs, so their sides do not fight the legs' grain.
+      for (const y of SHELVES) part(this, 0.026, 0.03, DEPTH, oak, { x, y: y - 0.02, z });
     }
     for (const y of SHELVES) for (let i = 0; i < 4; i++) part(this, width - 0.06, 0.016, 0.05, oak, { y, z: z - DEPTH / 2 + 0.035 + i * 0.063 });
 

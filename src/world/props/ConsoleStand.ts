@@ -61,11 +61,14 @@ export class ConsoleStand extends THREE.Group implements Furniture {
     const dark = matte(0x241811, 0.8);
     const board = 0.02;
     const feet = 0.04;
+    const topBoard = 0.025;
+    // The sides and the back stop under the top board: sharing its faces, they would z-fight.
+    const sideH = height - feet - topBoard;
 
-    part(this, width, 0.025, depth, wood, { y: height - 0.0125 });
-    part(this, board, height - feet, depth, wood, { x: -width / 2 + board / 2, y: feet + (height - feet) / 2 });
-    part(this, board, height - feet, depth, wood, { x: width / 2 - board / 2, y: feet + (height - feet) / 2 });
-    part(this, width - 2 * board, height - feet, 0.012, dark, { y: feet + (height - feet) / 2, z: -depth / 2 + 0.006 });
+    part(this, width, topBoard, depth, wood, { y: height - topBoard / 2 });
+    part(this, board, sideH, depth, wood, { x: -width / 2 + board / 2, y: feet + sideH / 2 });
+    part(this, board, sideH, depth, wood, { x: width / 2 - board / 2, y: feet + sideH / 2 });
+    part(this, width - 2 * board, sideH, 0.012, dark, { y: feet + sideH / 2, z: -depth / 2 + 0.006 });
     for (const sx of [-1, 1]) for (const sz of [-1, 1]) part(this, 0.04, feet, 0.04, dark, { x: sx * (width / 2 - 0.05), y: feet / 2, z: sz * (depth / 2 - 0.05) });
 
     // Bottom board just above the feet, one shelf halfway up.

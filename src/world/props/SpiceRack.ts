@@ -41,7 +41,8 @@ export class SpiceRack extends Prop {
     const cap = matte(0x1e1f22, 0.5);
     const label = matte(0xf4efe2, 0.9);
 
-    part(this, width, height, 0.008, wood, { z: 0.004 }).castShadow = false;
+    // The back fits between the sides (full width, its ends would fight their grain).
+    part(this, width - 2 * t, height, 0.008, wood, { z: 0.004 }).castShadow = false;
     for (const side of [-1, 1]) part(this, t, height, DEPTH, wood, { x: side * (width / 2 - t / 2), z: DEPTH / 2 });
     const perRow = Math.max(1, Math.floor((width - 2 * t) / (JAR_RADIUS * 2 + 0.008)));
     const pitch = (width - 2 * t) / perRow;

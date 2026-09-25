@@ -7,19 +7,21 @@ Read this when touching money, prices, the cabinets, the stalls, or how the play
 The collection starts empty and Tab no longer adds games (`?debug` in the URL restores the seed list and the
 editor's "add" pane). Games are bought with coins; coins are won at the arcade:
 
-1. **Front door** (`TravelDoor` in the hallway, `to: 'street'`) -> fade (`Fader`) -> teleport (`Travel.go`) onto
-   Front Street (`src/world/street/`, docs/zones.md), in front of the building -> the `ZoneManager` loads it. There,
-   `StreetDoor`s lead home, into the arcade and into RÉTRO JEUX (the flea market is at its back); the arcade's and
+1. **Front door** (`hallway/FrontDoor`, a real door onto the landing) -> down the stairs or the lift of the stairwell
+   (`src/world/stairwell/`, docs/zones.md) -> the entrance hall's sas: the glass door, the door release, the street door
+   onto Front Street (`src/world/airlock/`, walked: docs/zones.md "The sas") -> the `ZoneManager` loads the street.
+   There our building's door leads back in the same way; `StreetDoor`s lead into the arcade and into RÉTRO JEUX (the flea
+   market is at its back; it keeps shop hours, 8:00 to 23:00, the arcade never shuts); the arcade's and
    market's exits go back to the street, in front of their door (`TravelPlan.arrivals`, keyed by the zone left). A
    `TravelDoor` without `to` would still open the "Where to?" menu (`TravelMenu`: every `travel` zone but the current).
-   The front door opens only with the flat's keys taken from the console bowl (`HouseKeys`, the door's `guard`);
-   coming home (`hallway/Homecoming.ts`) drops them back in the bowl and, some in-game days, leaves flyers on the
+   The front door opens from inside only with the flat's keys taken from the console bowl (`HouseKeys`, the door's
+   `guard`); coming home through it (`hallway/Homecoming.ts`) drops them back in the bowl and, some in-game days, leaves flyers on the
    doormat (`hallway/mail.ts`: today's arcade challenge, a copy on a stall, the neighbourhood's paper).
 2. **Arcade** (`src/world/arcade/`, see "The arcade" below): every machine (ten `ArcadeCabinet`s, the `Pinball`,
    the `AlleyRoller`, the `HoopShot`, the `TicketWheel`, the `ClawMachine`) is an `ArcadeMachineLike`: clicking it
    costs `PLAY_COST` coin and parks the player at the controls (`player.sit` + `lookAt`; the look stays free, which
    the light gun and the hoops aim with); the machine reads the keys straight from `Input` and reports an
-   `ArcadeResult` (score, new best, prize); the Session pays `ticketsFor(gameId, score)` tickets (the claw pays a
+   `ArcadeResult` (score, new best, prize); `economy/arcadePayout` works out and the Session's `ArcadePlay` pays `ticketsFor(gameId, score)` tickets (the claw pays a
    prize instead, into the `PrizeStore`), today's challenge bonus, any medal the score earned (`ArcadeMedals`) and,
    on the day's first ticket play, the streak's bonus (`ArcadeLeague`), and counts it all in the weekly league
    (`record`; a finished week is announced once, a won one brings the pennant home). A score that makes the hall of fame asks for
@@ -55,7 +57,8 @@ editor's "add" pane). Games are bought with coins; coins are won at the arcade:
 
 ## Numbers (`src/economy/pricing.ts`)
 
-Everything tunable is there: starting coins, play cost, tickets per coin, points per ticket, base price per
+Everything tunable is there (prize tickets `PRIZE_TICKETS`, household prices `HOME_GOOD_PRICES`, `MARKET_STOCK`,
+`CONDITION_ODDS`, `OUT_OF_ORDER_ODDS`, `CONSIGNMENT_DAYS`, `CARD_MEMORY_DAYS` included): starting coins, play cost, tickets per coin, points per ticket, base price per
 platform, the fame curve, the market discount range and condition factors, the bargain bin's flat price, the WE BUY
 desk's share (`BUY_BACK_SHARE` 0.3 of the shop price, up to 0.34 with reputation: below the cheapest a haggled
 market copy goes, `NEGOTIATION.lowest`, so buying to sell back never pays), the negotiation, and every rule of "The
@@ -115,6 +118,8 @@ settled, never in the bargain bin or on an order. The agreed price holds all day
 
 The stock follows **market days** (`MarketCalendar`): a day passes when the game's clock runs through midnight
 (ten real minutes a day; the N toggle does not count) or when the player comes back on another real date; persisted.
+Every draw has its own seed (`${day}:<platform>:<slot>`), so a platform's index failing, a copy bought or a platform
+added moves nothing else; a held copy is saved whole in the ledger and always put back on its stall.
 `MarketStock.todays()` draws, per platform and in stall order: the copies the player **ordered** (due today or
 before), a **showpiece** (a title from `SEED_GAMES`, under the index's id, complete, sometimes a first print), a
 second famous game on an **estate sale** (and a third for a trusted player), a copy **kept aside** for a friend of
@@ -174,18 +179,68 @@ booklet, dulled cover: `GameBox` reads `game.condition`). The shop only sells co
 - **Receipts**: every game bought carries `acquired` (price, where, market day); the panel shows it at home, with
   its edition. The market panel warns when the shelves at home are full (`shelfRoom`).
 
+## Grails, the Grande Brocante, sales (`economy/grails.ts`, `marketEvents.ts`, `rumours.ts`)
+
+Pure functions of the market day, so the stock, the tags, the papers and the rumours tell one story on every reload.
+The numbers are `GRAIL`, `BROCANTE`, `SALES` in `pricing.ts`.
+
+- **Grails** (`GRAILS`): a dozen rarities (Stadium Events, EarthBound, Suikoden II...) with the index's
+  `libretroName` (so the id is the index's), a price, a line of lore and who is selling. They are left out of every
+  ordinary draw (`releases()`, `famous()`) and the catalogue ("Market only", no "Used…"). `grailOn(day)`: one every
+  `GRAIL.every` days from `offset`, in turn through a seeded shuffle of the list (a new shuffle each round), whether
+  the player owns it or not (owned, it is just not shown). On its day it is first on its platform's stall
+  (source `'grail'`, tag ★ GRAIL ★, `price` fixed, final at once; on the N64 spot it is behind the glass case);
+  a haggle never goes under `GRAIL.floor`; rival shoppers leave it alone.
+- **Rumours** (`marketNews(day, owns)` -> `MarketStock.news()`): the next grail within `rumourDays` (not an owned
+  one), the next Brocante within `announceDays`, today's and tomorrow's sales. Told in four voices (`rumours.ts`):
+  stallholders' lines (`StallState.news`), THE GAMING WEEKLY's tips (a grail on the day makes the headline), a
+  flyer on the doormat (always delivered when there is talk: `mail.ts`), a card on the notice board and two lines
+  on the programme board; the barista passes on a grail's rumour too.
+- **The Grande Brocante** (`isBrocante`, theme `grandeBrocante` in `marketDays.ts`, which `themeOf` returns over
+  the week's round): every `BROCANTE.month` market days from `offset` (the week round's last day). More copies per
+  stall, a bin `bin.size` times as deep in two more crates (`MARKET_PLAN.brocante.bins`), extra gems, prices down
+  `priceFactor`, `crowd` times the shoppers and a louder murmur, bunting and a banner (`MARKET_PLAN.brocante.decor`).
+- **Sales**: the mail-order counter takes `SALES.catalogue.factor` off new copies on its days (`mailOrderPrice`;
+  the usual price struck out, a line when the panel opens). Some days one stall clears out (`clearanceOn`): its
+  ordinary copies at `clearance.factor` (`StockItem.sale`, tag CLEARANCE with the old price struck), no haggling
+  (a haggle on top would go under what the WE BUY desk pays).
+
 ## Persistence
 
-`bibliothek.wallet.v1` (coins + tickets), `bibliothek.arcade.v2` (the player's bests, the top-five tables, the last
-initials; `v1`, bests only, is folded in once; regulars' entries go in it too), `bibliothek.arcadeDaily.v1` (the day the challenge and the change
-machine were last claimed), `bibliothek.arcadeMedals.v1` (medals per machine), `bibliothek.arcadeLeague.v1` (this
-week's tickets, the streak, a finished week not yet announced, pennants), `bibliothek.arcadeJackpot.v1` (the wheel's
-pot), `bibliothek.arcadeReplays.v1` (the player's best run per cabinet game), `bibliothek.payoutStats.v1` (the
-balance table), `bibliothek.moodLamp.v1` (the lamp's colour), `bibliothek.prizes.v1` (the prizes taken home), `bibliothek.calendar.v1` (the market
-day), `bibliothek.market.v1` (the day's haggles, soured stalls, rival sales, holds, fakes found out, coffee and
-job lot; games sold to the market; copies on order; notice cards dealt with; v1 files with only haggles are read),
-`bibliothek.standing.v1` (reputation, loyalty per stall, sets claimed), `bibliothek.notices.v1` (the cards drawn),
-the collection as before (games now carry `edition`, `repro`, `acquired`).
+Every store goes through `src/persistence/` (see docs/architecture.md): keys in `KEYS` (`keys.ts`), each value
+`{ version, data }` (bare JSON from before counts as version 1), read through `PersistedStore` (migrations, per-entry
+validation, defaults). Unreadable data is copied to `bibliothek.corrupt.<key>.<ms>` before the store starts afresh;
+entries this build cannot read (a game on an unknown platform, a prize it does not know) are kept in storage untouched.
+`?debug` saves under `bibliothek.debug.*`. Money moves go through `Transactions` (`economy/Transactions.ts`: check
+everything, then wallet + collection + ledger + standing in one `batch`, saved together or put back together).
+
+`bibliothek.wallet.v1` (coins + tickets), `bibliothek.arcade.v2` (the player's bests, the entries made since the
+starting rivals, the last initials; the rivals of `rivals.ts` are merged in on read, so retuning them reaches saves;
+data v2 dropped the saved rival rows; `v1`, bests only, is folded in once; regulars' live entries go in it too),
+`bibliothek.arcadeDaily.v1` (local day the challenge and the change machine were last claimed; data v2, v1 was UTC),
+`bibliothek.arcadeMedals.v1`, `bibliothek.arcadeLeague.v1` (this week's tickets, the streak, a finished week not yet
+announced, pennants), `bibliothek.arcadeJackpot.v1`, `bibliothek.arcadeReplays.v1`, `bibliothek.payoutStats.v1`,
+`bibliothek.moodLamp.v1`, `bibliothek.prizes.v1`, `bibliothek.calendar.v1` (the market day and the local date; data
+v2, v1 was UTC), `bibliothek.market.v1` (the day's haggles, soured stalls, rival sales, holds with their copy (data v2),
+fakes found out, coffee and job lot; games sold to the market; copies on order; notice cards dealt with),
+`bibliothek.standing.v1`, `bibliothek.notices.v1` (the cards drawn), `bibliothek.collection.v1`,
+`bibliothek.deliveries.v1`, `bibliothek.home.v1`, `bibliothek.position.v1` (where the player stood). Front Street:
+`bibliothek.finds.v1` (dropped coins picked today), `bibliothek.scratch.v1` (cards bought today),
+`bibliothek.busker.v1` (tips today) — `{ day, n }` with a `dayKey` (data v2; v1 wrote `2026-9-5`, read as the same
+day; `DailyTally` in `world/street/`; the busker still writes v1 directly until it moves onto it); `bibliothek.trader.v1` (the collector's pick, by market day). Preferences, kept
+by a new game and shared with `?debug`: `bibliothek.settings.v1`, `bibliothek.quality`, `bibliothek.cat.v1`.
+Caches: `bibliothek.cache.longplay.v1`, `bibliothek.cache.fame.v1`
+(`BrowserCache`: one key each, LRU-capped, TTL). Game ids are canonical (`gameIdFor`, see `SEED_GAMES`): every store
+maps the seed lists' old hand-made ids on load (`canonicalGameId`).
+
+**Days and randomness**: one real-day convention, local time (`economy/calendar.ts`: `dayKey`, `dayNumber`, `isoWeek`);
+one RNG module (`economy/seeded.ts`: mulberry32 `seeded`, FNV `hash01`), never changed (it would reshuffle saved days).
+
+**Persisting something new**: (1) add its key to `KEYS` in `persistence/keys.ts` (`save(...)` for progress, which
+"New game" wipes and `?debug` keeps apart; `pref(...)` for a preference, then also in `PREFERENCE_KEYS`); (2) keep it in a
+`new PersistedStore({ key, version: 1, defaults, read })`, `read` checking every field and returning null only when
+nothing is usable; (3) on a format change bump `version` and add `migrate[old]` (never rename the key); days are `dayKey()`.
+Never call `localStorage` directly: `safeStorage()` for a bare value, `BrowserCache` for a cache.
 
 ## The arcade
 
@@ -215,8 +270,9 @@ its level following what the screen does; only the six original cabinets keep a 
   and right of the eye while playing, pointing at the aim, kicking back on each shot; the cabinet aims the game
   where the camera looks, `controls.aim`, and a click on the glass is the trigger) and the `DancePad` (a steel
   stage in front with four arrow panels that sink and light with the keys and glow with the beat, side bars to hold;
-  the player's eye stands over it). **Out of order**: about one day in three (`ArcadeDaily.outOfOrder`, never the
-  challenge's cabinet) one cabinet shows snow behind a taped note, says so and cannot be played; regulars walk past it.
+  the player's eye stands over it). **Out of order**: about one day in three (`ArcadeDaily.outOfOrder(BREAKABLE)`, never
+  the challenge's game) one machine, a cabinet or a physical one, carries a taped note (a cabinet's glass shows snow
+  behind it), says so and cannot be played; regulars walk past it (`MachineRun.outOfOrder`).
 - **LexiPunk** (`games/LexiPunk`, the user's own word game at lexipunk.com): a coin opens the big frame
   (`ui/ArcadeScreenPanel`, a modal: the page in an iframe inside a bezel, the live score, Done; Esc only reaches it
   from outside the page, which keeps the keyboard) and the glass
@@ -244,9 +300,11 @@ its level following what the screen does; only the six original cabinets keep a 
   the panel), Space drops; the grip depends on how close the claw came down to a plush (`GRIP`), a third of grabs
   slip out on the way home, six misses in a row buy one honest grip. A plush down the chute is its prize
   (`clawPrizeFor(color)`); a new one takes its place on the heap.
-- The physical machines share `TicketMachine` (the coin, the demo, the initials, the strip, the labels, out-of-order
-  days): a new one is only its play, its display and where people stand. The pinball, alley, claw, hoops and wheel
-  carry an `InstructionCard` (and medal lamps where there is a table) from the plan.
+- Every machine holds a `MachineRun` (the coin, the keys from `arcadeKeys`, the initials, the end card's count-up
+  with its ticks and the strip, the labels from `machineLines`, a regular's results, out-of-order days); the alley,
+  hoops and wheel get it through `TicketMachine`, so each is only its play, its display and where people stand.
+  The physical machines are `ARCADE_PLAN.machines` entries built by `MACHINE_KINDS` (`machineKinds.ts`); an entry
+  gives the `InstructionCard`, the medal lamps (with `table`), a glow pool, the watch spot, a regular at the start.
 - **Change machine**: out of order most days; `ArcadeDaily` makes it work about one day in four
   (`CHANGE_MACHINE`): then its note is gone and a click pays a few coins once (`Session.collectChange`).
 - **Hall of fame** (`ScoreBoard`): the top five of every machine that keeps a table (`ArcadeScores.table`, rivals
@@ -265,13 +323,27 @@ its level following what the screen does; only the six original cabinets keep a 
   week counts against five regulars whose totals grow through the week from a base drawn per week (`LEAGUE`); first
   on Sunday night wins the **league pennant** (announced after the next play, on the prize shelf). Days in a row with
   a ticket play make a streak: the day's first play pays `STREAK.perDay` per day of it (to `maxDays`).
+- **Saturday tournament** (`economy/ArcadeTournament`, real local calendar; `?tournament` makes any day a Saturday): one
+  cabinet a Saturday (seeded by the date among `ARCADE_PLAN.tournament.games`, never the one out of order; a lit
+  `TournamentTopper` on its roof) hosts an eight-entrant knock-out: the player against the hall's four regulars and
+  three others from the hall of fame. The `TournamentBoard` on the back wall (bracket, scores as they are known, the
+  sign-up clipboard) takes `TOURNAMENT.entry` coins on a click (`SessionActions.pay`), once a Saturday. Then every
+  play the player finishes on that cabinet is their next round, won by beating the opponent's score (drawn per regular,
+  round and date between the table's fifth/fourth score in the quarters and its second/first in the final). Going
+  out after n wins pays `TOURNAMENT.reward[n]` tickets, the champion also the **Saturday cup** (`saturdayCup`, a pewter
+  trophy on the prize shelf). One `ArcadeTournament` is made at boot (`bootstrap/services`) and handed to the hall
+  (`BuildContext.arcade.tournament`) and the Session: `game/ArcadePlay` settles the round with the play (its tickets
+  and the cup in the same `batch`, its line in the end-of-play toast), and the hall hears it (`tournament.onRound`) to
+  make the watchers react. That day the regulars leave the cabinet to the player (`ArcadeCrowd` `reserved`) and gather
+  round it to watch (`gathering`: `ARCADE_PLAN.tournament.spectators`), cheering or groaning each round
+  (`spectatorsReact`); the attendant mentions it.
 - **Prizes** (`economy/Prizes.ts`: the catalogue and the `PrizeStore`): the counter's glass case shows them
   (`prizes/prizeModel`), its panel (`ui/PrizePanel`) sells them for tickets and swaps tickets for coins. What is
   taken home stands on the `PrizeShelf` on the bedroom's right wall (the newest when it is full, a card counts the
   rest), except the prizes that **do something at home** (`Prize.home`; hidden until won, `prizes/ownedPrize`): the
   `ArcadePoster` framed on the bedroom wall, the `MoodLamp` on the dresser's books (click: next colour, a rainbow,
   off; a small shadowless light), the `FeatherWand` on the living room's projector rug (click: it swishes and calls
-  the cat, `BuildContext.callCat`). The **mystery game** (`Prize.game`) is a random seed game the collection lacks,
+  the cat, `BuildContext.home.callCat`). The **mystery game** (`Prize.game`) is a random seed game the collection lacks,
   added to it (so it waits in the parcel at home).
 - **Jukebox** (`Jukebox` + `audio/JukeboxTune`): a bubbler by the front wall playing generated music on four
   stations (synthwave, chiptune, funk, italo disco; a made-up song title every sixteen bars on its card), louder up
@@ -283,7 +355,7 @@ its level following what the screen does; only the six original cabinets keep a 
   follows how many regulars are in, and mains hum, while the player is in the hall. Nothing sounds before the page's
   first click or key (`unlockAudioOnFirstGesture`).
 - **People** (`ArcadeCrowd`, the walkers are `people/Walker`): the attendant (`Vendor`) behind the counter says
-  the day's news first (the challenge, the change machine, the broken cabinet, the streak, the league, the jackpot,
+  the day's news first (the challenge, the change machine, the broken machine, the streak, the league, the jackpot,
   a record of the player's, tickets enough for a prize), then the usual lines. Regulars (four, with initials) walk
   in through the door (only while the player looks elsewhere), **more of them in the evening** (`crowd.regulars.byHour`
   against the sky's clock: one in the morning, three after five), take a free machine (`Station.occupy`: it plays
@@ -331,7 +403,7 @@ sets, and the difficulty ramp is what ends the run.
 
 Extend `BaseGame` in `src/world/arcade/games/` (320 x 240 logical pixels, playfield below `PLAY_TOP`; implement
 `begin` / `tick` / `paint`, score with `addScore` / `bonus` / `bumpCombo`, end with `end('GAME OVER')` or let the
-clock run out; `sound(sfx)` for its own noises), implement `autopilot(skill)` (what a regular's hands do: read the
+clock run out; `sound(sfx)` for its own noises; `keys.pressed(controls, 'up')` for a press rather than a hold), implement `autopilot(skill)` (what a regular's hands do: read the
 board, return the keys; keep it pure), register it in `games/index.ts` (a factory taking the `GameContext`), name
 it in a `cabinets` entry of `ARCADE_PLAN` (a free spot, a stand spot reachable from the nav graph), give it a
 `PAYOUT` rate and a `rivals.ts` table (`simulatePayouts()` helps). No Session change. **For replays to hold**: draw
@@ -340,9 +412,34 @@ reset every field of the board in `begin` (a timer left over from the last run m
 nothing but `dt` and the controls. A light-gun game sets `gun` (it gets `controls.aim`, in whole pixels; aim only
 decides on the step the trigger is pulled); a two-player one implements `setOpponent` / `opponentControls` (and
 must play the same whoever holds the stick); one that cannot play itself sets `demoable: false`. Something bolted
-on is a `CabinetAttachment`. A whole new kind of physical machine extends `TicketMachine` (like `HoopShot` and
-`TicketWheel`; the older `AlleyRoller` and `Pinball` implement `ArcadeMachineLike` and `Station` themselves), and
-joins the crowd's `stations` in `furnishArcade`.
+on is a `CabinetAttachment`. A whole new kind of physical machine is its class (extending `TicketMachine`
+like `HoopShot`, or holding a `MachineRun` like `Pinball`; `machineParts` has the marquee, display and note), one
+line in `MACHINE_KINDS` (its key is its game id) and one entry in `ARCADE_PLAN.machines`; `furnishArcade` places it
+and adds it to the crowd's stations.
+
+## Front Street's shops and finds (`src/world/street/shops/`)
+
+The street is not only the way to the arcade and the market: every shop door on the walkable pavements is a
+`ShopEntrance` (`SHOP_HOURS` in `shopHours.ts`: closed, it says when it opens; `SHOP_TALK` in `shopPlan.ts`: what it
+says and sells). Coins come and go through `BuildContext.money.purse` (the wallet) and `SessionActions.pay`.
+- **Café Lumière**: a coffee (`COFFEE_PRICE`, 2 coins) *is* the flea market's coffee of the day (`market.drinkCoffee`:
+  the stallholders go easier on the haggle), with the barista's tip: a wishlisted game on a stall today, a gem in the
+  bin, or the day's theme. Had already, the barista still talks.
+- **The tabac**: GRATTE-PIXEL scratch cards (`scratchCard.ts`), 2 coins, five a real day (`bibliothek.scratch.v1`):
+  three alike of six cells win 2, 3, 5, 10 or 25 coins; drawn outcome first, 38 % win, 1.35 coins paid out on average
+  (the house wins). Scratched in `ui/ScratchCardPanel`; walking off scratches the rest and pays.
+- **The florist**: a potted plant for the balcony, 12 coins, three at most (`HomeUpgrades` 'plant',
+  `BALCONY_PLAN.boughtPlants`). The bakery's croissant (1) and the bar's lemonade (2, with the regulars' gossip) are
+  for the pleasure of it.
+- **Dropped coins** (`DroppedCoins`): three a real day at spots drawn from the date, glinting when the player is near,
+  one coin each, picked ones remembered (`bibliothek.finds.v1`).
+- **À DONNER** (`GiveawayBox`): one real day in four a box of cast-offs by a front door; once the market's stock is
+  drawn, one worn bin game lies in it for 0 coins (a `ForSaleBox`: B takes it).
+- **The collector** (`Trader`): one real day in three, 10:00 to 18:00, outside RÉTRO JEUX with three copies he took off
+  the flea market's stalls once the stock is drawn (`market.soldToRival`: gone from there; one from the wishlist if the
+  market had it), at 1.25 times their price. They are `'stall'` copies: B buys, H haggles, X swaps a game from the
+  collection in part exchange (it goes to the market), R holds. His picks are kept for the day (`bibliothek.trader.v1`).
+- The busker's tips and the garage sale are as before (docs/zones.md).
 
 ## Coming home: the parcel and the bookcase
 
@@ -351,9 +448,40 @@ joins the crowd's `stations` in `furnishArcade`.
   import and goes straight to the shelves) waits in the `Parcel` under the hall console, and clicking the parcel unpacks
   everything. The shelves, search and the random pick read `deliveries.shelved` (the collection less the parcel); the
   posters and consoles still count everything owned. A game sold back leaves the parcel too.
+- **The post** (`src/collection/MailPost.ts`, `bibliothek.post.v1`): a catalogue copy (`acquired.where === 'mail order'`)
+  is paid for and off the shelves at once, but stays out of the parcel (`Deliveries.setInPost`) until the postman's next
+  round (`POST_ROUNDS`, 10:00 and 15:00 on the game's clock, at least two game hours later). Then the stairwell's
+  `Postman` rings when the player is home (`home` from `bootstrap/world`) and hands it over at the front door; coming home after
+  a round, the concierge took it in (`furnishHallway`'s homecoming). Stall buys, the job lot and swaps skip the post.
+- **Swaps with the neighbours** (`economy/NeighbourTrades.ts`, `bibliothek.neighbourTrades.v1`): some market days
+  (`ODDS`, seeded per day) a resident wants one of the player's games (owned, not lent) and offers one of theirs worth
+  about as much (`shopPrice` with fame, within `FAIR`) for three days: a note under the flat's door (`Doorstep.slipNote`),
+  a word on the stairs, and their door on the landing opens the `NeighbourTradePanel` (`Transactions.swapWithNeighbour`:
+  one game out, theirs into the parcel, the offer closed in the same `batch`).
 - **The bedroom's bookcase** (`HomeUpgrades`, `BOOKCASE_PRICE` in `pricing.ts`): the collection room's shelving writes the
-  games it has no room for into `BuildContext.overflow`; the bedroom shows them on the bookcases bought (one slot, left
+  games it has no room for into `BuildContext.collection.overflow`; the bedroom shows them on the bookcases bought (one slot, left
   wall). Until then a `BookcaseKit` leans there; clicking it is `SessionActions.buyUpgrade`.
+
+## The collector's book (`economy/milestoneList.ts`, `Milestones.ts`, `CollectorWatch.ts`, `collectionValue.ts`)
+
+- **The binder** (`world/collector/CollectorsBook`) lies on the living room's sideboard (`ROOM_PLAN.collector`) and
+  opens the `CollectorBookPanel` (`ui/collector/`, a `MarketPanel` with three tabs) through `SessionActions.openPanel`.
+- **Milestones** (`MILESTONES`): the collection's size (10, 25, 50, 100, 250), one console's depth (10, 25), five
+  consoles, the collectors' club's sets (1, 3; the sets' own rewards are still claimed at the notice board), arcade
+  medals (1, 10), a league won, a haggled deal, a sale, the collection's value (1,000, 5,000 coins), a grail. `Milestones`
+  (`bibliothek.milestones.v1`) keeps the day each was first reached (it stays reached) and which rewards were claimed;
+  the coins or tickets (`MILESTONE_REWARD` in `pricing.ts`) are claimed in the book, in one `batch` with the wallet.
+- **What they bring home**: 25 games stand the `BrassPlaque` on the sideboard, engraved again at 50, 100 and 250; 50
+  games bring the `HomeVitrine`, a glass display cabinet against the front wall under the collection poster with the nine
+  most valuable copies on the shelves (not the parcel's, not the lent ones), best on the top tier. The cabinet is only
+  `zone.place`d once earned (no light, so no recompile), so it never stands invisible in the way.
+- **Value** (`collectionValue.ts`): a copy is worth what a stall would ask for it on an average day (`marketPrice` at the
+  mean `MARKET_DISCOUNT`, its condition and printing), a grail its grail price, a reproduction `REPRO_BUY_BACK`; the book
+  also shows what the WE BUY desk would pay (`buyBackPrice`). `ValueHistory` (`bibliothek.valueHistory.v1`) keeps one
+  point per real day (`dayKey`), drawn as a line chart (`ui/collector/valueChart`).
+- **`CollectorWatch`** listens to the collection, the medals, the league and the standing, takes the facts again (300 ms
+  after the last change), marks milestones (`onReached`: a toast), writes today's value, and looks the fame of every
+  owned game up in the background, two at a time, so the estimate is priced like the market prices.
 
 ## Not done yet
 
@@ -364,6 +492,4 @@ joins the crowd's `stations` in `furnishArcade`.
   rivals are first estimates; `?payout` collects the real spreads. The physical machines (pinball, alley, hoops,
   wheel) are not in `simulatePayouts`.
 - The arcade never closes: an empty hall late at night was considered, a shutter was not (it would dead-end the loop).
-- **The street** is walkable, but reached by travel (no stairwell); its busker takes tips (`SessionActions.pay`) and
-  its garage sale sells a few of the day's copies at the bin price (docs/zones.md).
-- Gamepad / touch have no digit keys: the travel menu's lines are clickable, the digits are keyboard only.
+- **Front Street's shops**: their prices and the scratch card's odds are first guesses.

@@ -53,9 +53,7 @@ export class RunningWater extends Voice {
   }
 
   protected build(ctx: AudioContext, out: GainNode): void {
-    const hiss = ctx.createBufferSource();
-    hiss.buffer = this.noise(ctx, 3);
-    hiss.loop = true;
+    const hiss = this.loop(ctx, this.noise(ctx, 3));
     this.splash = ctx.createBiquadFilter();
     this.splash.type = 'bandpass';
     this.splash.frequency.value = this.centre();
@@ -73,11 +71,8 @@ export class RunningWater extends Voice {
     const lowGain = ctx.createGain();
     lowGain.gain.value = 0.35;
     hiss.connect(low).connect(lowGain).connect(this.flow);
-    hiss.start();
 
-    const rumble = ctx.createBufferSource();
-    rumble.buffer = this.noise(ctx, 2);
-    rumble.loop = true;
+    const rumble = this.loop(ctx, this.noise(ctx, 2));
     const drainLow = ctx.createBiquadFilter();
     drainLow.type = 'lowpass';
     drainLow.frequency.value = 300;
@@ -87,7 +82,6 @@ export class RunningWater extends Voice {
     this.drain.gain.value = this.draining ? 1 : 0;
     this.drain.connect(out);
     rumble.connect(drainLow).connect(drainGain).connect(this.drain);
-    rumble.start();
   }
 
   protected tick(ctx: AudioContext, dt: number): void {

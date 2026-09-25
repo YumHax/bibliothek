@@ -66,7 +66,8 @@ export class NoticeBoard extends Prop implements Interactable {
     [this.canvas, this.ctx] = createCanvas(Math.round(inner.w * PX_PER_M), Math.round(inner.h * PX_PER_M));
     this.texture = toTexture(this.canvas, 4);
     const face = new THREE.Mesh(new THREE.PlaneGeometry(inner.w, inner.h), new THREE.MeshStandardMaterial({ map: this.texture, roughness: 0.95 }));
-    face.position.z = 0.0125;
+    // 2 mm proud of the backing: less z-fights with it when the board is read from across the hall.
+    face.position.z = 0.014;
     face.castShadow = false;
     face.receiveShadow = true;
     this.add(face);

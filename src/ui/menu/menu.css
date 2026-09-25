@@ -11,6 +11,33 @@
   box-shadow: var(--ui-shadow);
 }
 
+/*
+ * A full-screen DOM panel's root (`ModalPanel`): the modal layer over the view, with a layout. `--sheet`
+ * is a column of header, lines and a scrolling list over the blurred room (collection, catalogue, desks,
+ * prize counter; each sets its own gap and padding); `--centre` holds one card in the middle (the paper,
+ * the scratch card, the arcade's big screen; each sets its own backdrop and padding).
+ */
+.ui-modal {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal);
+  box-sizing: border-box;
+}
+.ui-modal--sheet {
+  display: flex;
+  flex-direction: column;
+  background: var(--ui-backdrop);
+  backdrop-filter: blur(6px);
+  color: var(--ui-text);
+  font-size: 0.92rem;
+  overflow: hidden;
+}
+.ui-modal--centre {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .ui-btn {
   font: inherit;
   color: inherit;
@@ -32,10 +59,17 @@
   background: var(--ui-accent);
   border-color: transparent;
 }
-.ui-btn--primary:hover:not(:disabled) { background: #e6b93c; }
+.ui-btn--primary:hover:not(:disabled) { background: var(--ui-accent-hover); }
+.ui-btn--danger { color: #1a0a08; font-weight: 600; background: var(--ui-danger); border-color: transparent; }
+.ui-btn--danger:hover:not(:disabled) { background: var(--ui-danger-hover); }
 .ui-btn:focus-visible,
+.ui-card :focus-visible,
 .menu input:focus-visible,
 .menu select:focus-visible { outline: 2px solid var(--ui-accent); outline-offset: 2px; }
+/* Fingers need bigger targets than a mouse, on any screen size. */
+@media (pointer: coarse) {
+  .ui-btn { min-height: 44px; }
+}
 
 /* --- title / pause menu --------------------------------------------------------------------- */
 
@@ -108,6 +142,20 @@
 .menu__essentials { list-style: none; padding: 0; margin: 1.5rem 0 0; font-size: 0.85rem; color: var(--ui-text-dim); }
 .menu__essentials li { margin: 0.35rem 0; }
 .menu__foot { margin: 1.25rem 0 0; font-size: 0.78rem; text-align: center; color: var(--ui-text-dim); }
+.menu__version { margin: 0.5rem 0 0; font-size: 0.7rem; text-align: center; color: var(--ui-text-dim); opacity: 0.7; }
+
+/* The pause menu's summary: coins, tickets, games, where. */
+.menu__status { display: grid; grid-template-columns: repeat(auto-fit, minmax(5.5rem, 1fr)); gap: 0.4rem; margin: 0.9rem 0 1.25rem; }
+.menu__status div { padding: 0.45rem 0.6rem; border-radius: var(--ui-radius-sm); background: var(--ui-fill); text-align: center; }
+.menu__status dt { font-size: 0.68rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ui-text-dim); }
+.menu__status dd { margin: 0.15rem 0 0; font-size: 1rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+
+/* A yes / no question. */
+.menu__confirm { text-align: center; }
+.menu__confirm h2 { margin: 0 0 0.75rem; font-family: var(--ui-font-display); font-weight: 400; font-size: 1.3rem; letter-spacing: 0.04em; }
+.menu__confirm p { margin: 0 0 1.5rem; line-height: 1.5; color: var(--ui-text-dim); }
+.menu__confirm-buttons { display: flex; gap: 0.6rem; justify-content: center; flex-wrap: wrap; }
+.menu__confirm-buttons .ui-btn { min-width: 8rem; padding: 0.65em 1em; }
 
 /* A sub-screen's header: back button on the left, title centred. */
 .menu__header { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 0.75rem; margin-bottom: 1.25rem; }
@@ -134,13 +182,43 @@
 
 .menu__tabs { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-bottom: 1rem; }
 .menu__tabs .ui-btn { padding: 0.35em 0.8em; font-size: 0.85rem; }
-.menu__controls { list-style: none; padding: 0; margin: 0; font-size: 0.9rem; line-height: 1.45; }
-.menu__controls li { padding: 0.45rem 0; border-top: 1px solid var(--ui-border); }
-.menu__controls li:first-child { border-top: none; }
+
+/* A row of exclusive choices (device, text size, graphics level). */
+.menu__segmented { display: inline-flex; flex-wrap: wrap; gap: 0.3rem; }
+.menu__controls-screen > .menu__segmented { margin-bottom: 0.9rem; }
+.menu__segmented .ui-btn { padding: 0.3em 0.75em; font-size: 0.82rem; }
+.menu__segmented .ui-btn[aria-checked='true'] { background: var(--ui-accent-soft); border-color: var(--ui-accent); color: var(--ui-text); }
+.menu__segmented small { font-size: 0.7em; color: var(--ui-accent); margin-left: 0.3em; }
+
+/* Controls: what to press | what it does. */
+.menu__controls { width: 100%; border-collapse: collapse; font-size: 0.9rem; line-height: 1.4; }
+.menu__controls tr + tr { border-top: 1px solid var(--ui-border); }
+.menu__controls th { width: 45%; padding: 0.45rem 0.9rem 0.45rem 0; text-align: left; font-weight: 400; vertical-align: top; color: var(--ui-text-dim); }
+.menu__controls td { padding: 0.45rem 0; vertical-align: top; }
+.menu__controls kbd { color: var(--ui-text); }
+.menu__controls--na { opacity: 0.4; }
+@media (max-width: 480px) {
+  .menu__controls th { width: auto; }
+}
+
+/* Settings fields: a label on the left, the control on the right. */
+.menu__fields { display: flex; flex-direction: column; gap: 0.55rem; }
+.menu__field { display: flex; align-items: center; justify-content: space-between; gap: 1rem; min-height: 2rem; }
+.menu__field-label { flex: 1; font-size: 0.92rem; }
+.menu__field--slider input[type='range'] { flex: 0 1 11rem; min-width: 6rem; accent-color: var(--ui-accent); background: none; border: none; padding: 0; }
+.menu__field--slider output { width: 3.2rem; text-align: right; font-size: 0.85rem; font-variant-numeric: tabular-nums; color: var(--ui-text-dim); }
+.menu__switch { min-width: 3.6rem; padding: 0.3em 0.6em; font-size: 0.82rem; }
+.menu__switch[aria-checked='true'] { background: var(--ui-accent-soft); border-color: var(--ui-accent); }
+.menu__fields > .ui-btn { align-self: flex-start; }
+.menu__bindings { display: flex; flex-direction: column; gap: 0.35rem; }
+.menu__key { min-width: 5.5rem; padding: 0.3em 0.6em; font-size: 0.85rem; font-variant-numeric: tabular-nums; }
+.menu__key--waiting { border-color: var(--ui-accent); color: var(--ui-accent); animation: key-wait 900ms ease-in-out infinite alternate; }
+@keyframes key-wait {
+  from { background: var(--ui-fill); }
+  to   { background: var(--ui-accent-soft); }
+}
 
 @media (max-width: 480px) {
   .menu__card { padding: 1.5rem 1.25rem; }
   .menu__buttons .ui-btn { min-height: 44px; }
 }
-
-.quality-picker { display: flex; gap: 0.4rem; flex-wrap: wrap; }

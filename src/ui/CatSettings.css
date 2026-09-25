@@ -11,5 +11,5 @@
   align-items: center;
   gap: 0.5rem;
 }
-.cat-settings__field span { opacity: 0.7; }
+.cat-settings__field span { color: var(--ui-text-dim); }
 .cat-settings input[type='text'] { width: 9rem; }

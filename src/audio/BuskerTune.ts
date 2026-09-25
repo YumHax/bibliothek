@@ -1,4 +1,4 @@
-import { startedAudioContext } from './audioContext';
+import { audioBus, startedAudioContext } from './audioContext';
 
 /** Semitones of the notes used, from the key's root: a major pentatonic over two octaves, plus the fourth and seventh for colour. */
 const SCALE = [0, 2, 4, 5, 7, 9, 11, 12, 14, 16, 17, 19, 21, 24];
@@ -111,7 +111,7 @@ export class BuskerTune {
     const tone = ctx.createBiquadFilter();
     tone.type = 'lowpass';
     tone.frequency.value = 3800;
-    this.out.connect(tone).connect(this.panner).connect(ctx.destination);
+    this.out.connect(tone).connect(this.panner).connect(audioBus(ctx, 'world'));
     this.nextTime = ctx.currentTime + 0.05;
     return ctx;
   }

@@ -1,6 +1,7 @@
+import { KEYS, PersistedStore, safeStorage } from '@/persistence';
 import { JACKPOT } from './pricing';
 
-export const JACKPOT_KEY = 'bibliothek.arcadeJackpot.v1';
+export const JACKPOT_KEY = KEYS.arcadeJackpot;
 
 /**
  * The ticket wheel's progressive jackpot, persisted: it grows with every spin anyone takes (the
@@ -9,10 +10,18 @@ export const JACKPOT_KEY = 'bibliothek.arcadeJackpot.v1';
 export class Jackpot {
   private tickets: number;
   private readonly listeners = new Set<() => void>();
+  private readonly store: PersistedStore<number>;
 
-  constructor(private readonly storage: Storage | null = safeLocalStorage()) {
-    const saved = Number(this.read());
-    this.tickets = Number.isFinite(saved) && saved >= JACKPOT.start ? Math.round(saved) : JACKPOT.start;
+  constructor(storage: Storage | null = safeStorage()) {
+    // Version 1: the pot, a number.
+    this.store = new PersistedStore<number>({
+      key: JACKPOT_KEY,
+      version: 1,
+      storage,
+      defaults: () => JACKPOT.start,
+      read: (data) => (typeof data === 'number' && Number.isFinite(data) ? Math.max(JACKPOT.start, Math.round(data)) : null),
+    });
+    this.tickets = this.store.load();
   }
 
   get value(): number {
@@ -38,27 +47,7 @@ export class Jackpot {
 
   private set(tickets: number): void {
     this.tickets = tickets;
-    try {
-      this.storage?.setItem(JACKPOT_KEY, String(tickets));
-    } catch (err) {
-      console.warn('[arcade] could not persist the jackpot', err);
-    }
+    this.store.save(tickets);
     for (const cb of this.listeners) cb();
-  }
-
-  private read(): string | null {
-    try {
-      return this.storage?.getItem(JACKPOT_KEY) ?? null;
-    } catch {
-      return null;
-    }
-  }
-}
-
-function safeLocalStorage(): Storage | null {
-  try {
-    return typeof localStorage === 'undefined' ? null : localStorage;
-  } catch {
-    return null;
   }
 }

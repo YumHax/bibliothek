@@ -1,4 +1,6 @@
-export const WALLET_STORAGE_KEY = 'bibliothek.wallet.v1';
+import { KEYS, PersistedStore, safeStorage } from '@/persistence';
+
+export const WALLET_STORAGE_KEY = KEYS.wallet;
 
 interface WalletFile {
   coins: number;
@@ -13,13 +15,16 @@ interface WalletFile {
 export class Wallet {
   private state: WalletFile;
   private readonly listeners = new Set<() => void>();
+  private readonly store: PersistedStore<WalletFile>;
 
   constructor(
     startingCoins: number,
-    private readonly storage: Storage | null = safeLocalStorage(),
-    private readonly key = WALLET_STORAGE_KEY,
+    storage: Storage | null = safeStorage(),
+    key: string = WALLET_STORAGE_KEY,
   ) {
-    this.state = this.load() ?? { coins: startingCoins, tickets: 0 };
+    // Version 1: `{ coins, tickets }`. An unreadable wallet is set aside (not overwritten) before starting afresh.
+    this.store = new PersistedStore<WalletFile>({ key, version: 1, storage, defaults: () => ({ coins: startingCoins, tickets: 0 }), read: readWallet });
+    this.state = this.store.load();
   }
 
   get coins(): number {
@@ -77,31 +82,14 @@ export class Wallet {
   }
 
   private commit(): void {
-    try {
-      this.storage?.setItem(this.key, JSON.stringify(this.state));
-    } catch (err) {
-      console.warn('[wallet] could not persist', err);
-    }
+    this.store.save(this.state);
     for (const cb of this.listeners) cb();
-  }
-
-  private load(): WalletFile | null {
-    const text = this.storage?.getItem(this.key);
-    if (!text) return null;
-    try {
-      const file = JSON.parse(text) as Partial<WalletFile>;
-      if (typeof file.coins !== 'number' || typeof file.tickets !== 'number') return null;
-      return { coins: Math.max(0, Math.floor(file.coins)), tickets: Math.max(0, Math.floor(file.tickets)) };
-    } catch {
-      return null;
-    }
   }
 }
 
-function safeLocalStorage(): Storage | null {
-  try {
-    return typeof localStorage === 'undefined' ? null : localStorage;
-  } catch {
-    return null;
-  }
+function readWallet(data: unknown): WalletFile | null {
+  const file = data as Partial<WalletFile> | null;
+  if (typeof file !== 'object' || file === null || typeof file.coins !== 'number' || typeof file.tickets !== 'number') return null;
+  if (!Number.isFinite(file.coins) || !Number.isFinite(file.tickets)) return null;
+  return { coins: Math.max(0, Math.floor(file.coins)), tickets: Math.max(0, Math.floor(file.tickets)) };
 }

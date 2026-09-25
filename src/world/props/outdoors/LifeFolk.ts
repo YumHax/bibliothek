@@ -1,41 +1,33 @@
 import * as THREE from 'three';
 import { type Rng, SCENE_WIDTH } from './Sheet';
-import { between, deg, pick } from './paint';
+import { between, pick } from './paint';
 import { FRONTAGE } from './plan';
+import { FLAT_IN_STREET, shopDoors } from '../../street/streetPlan';
+import { SHOP_HOURS } from '../../street/shops/shopHours';
 import { GROUND } from './Facades';
 import type { GoodsRect } from './Shopfront';
-import { type AtlasPens, type Cell, type LifeEnv, type Push, glowDot, hoursRamp, pushStanding } from './sprites';
+import { type AtlasPens, type Cell, type LifeEnv, type LifeLayer, type Push, glowDot, hoursRamp, pushStanding } from './sprites';
+import { FIGURE_MARGIN, FIGURE_SCALE, FOLK_SHIRTS, HAIRS, type Look, SKINS, TROUSERS, figurePen } from './figures';
 
 /** Pixels per metre of the figures painted here (the walkers' scale), and the feet margin in their cells. */
-const SCALE = 37.7;
-const MARGIN = 3;
+const SCALE = FIGURE_SCALE;
+const MARGIN = FIGURE_MARGIN;
 /** Floor-to-floor height of Front Street's blocks (their first floor's balcony slab is at `GROUND` + 0.1). */
 const FLOOR = 3.1;
 /** How far out from the wall a figure on a balcony stands, and how much nearer than that it is sorted (the facade's depth is coarse). */
 const BALCONY_OUT = 0.6;
 const BALCONY_DEPTH_MARGIN = 0.9;
-/** Where the retro games shop is until `setShop` says otherwise: across the street at 8° (see `Facades`). */
-const RETRO_X = FRONTAGE * Math.tan(deg(8));
-/** Opening hours of the shop (game hours), and the morning sweep before it opens. */
-const SHOP_OPEN: [number, number] = [9, 19];
+/** Where the retro games shop's door is until `setShop` says otherwise: where the walkable street has it (see `paintFrontBlock`). */
+const RETRO_X = (shopDoors().find((door) => door.shop.kind === 'retro')?.at[0] ?? 3) - FLAT_IN_STREET.x;
+/** Opening hours of the shop (game hours, the street's), and the morning sweep before it opens. */
+const SHOP_OPEN: [number, number] = [SHOP_HOURS.retro?.open ?? 8, SHOP_HOURS.retro?.close ?? 23];
 const SWEEP: [number, number] = [7.5, 9];
 /** The queue: at most this many, this far apart along the pavement, this far out from the wall. */
 export const MAX_QUEUE = 6;
 const QUEUE_SPACING = 0.72;
 const QUEUE_OUT = 0.9;
 
-const SHIRTS = ['#3b6fb3', '#d94f3a', '#2f2f36', '#6fa35e', '#e8e2d2', '#8c4f9e', '#f0c94a', '#5a6a7a'];
-const TROUSERS = ['#2b2f3d', '#1c1c1e', '#4b5563', '#6b5a48'];
-const SKINS = ['#f1c9a5', '#d9a071', '#8d5a3b', '#f7d9c0', '#5b3a25'];
-const HAIRS = ['#2a1f14', '#5a3a1a', '#c9a34a', '#111111', '#8a8a8a'];
 const RAILING = '#1e1f22';
-
-interface Look {
-  shirt: string;
-  trousers: string;
-  skin: string;
-  hair: string;
-}
 
 /** Someone who comes out onto a balcony now and then within their hours: where, when, and for how long each time. */
 interface BalconyFigure {
@@ -57,7 +49,7 @@ interface BalconyFigure {
  * watering the flower box in the morning; the shopkeeper sweeping the pavement before opening; the
  * rack of games put out on the pavement while the shop is open, and the queue `setQueue` asks for.
  */
-export class Folk {
+export class Folk implements LifeLayer {
   /** Per variant: seen from behind, two idle poses. */
   private readonly queueCells: Cell[][] = [];
   private readonly sweeperCells: Cell[] = [];
@@ -75,7 +67,7 @@ export class Folk {
   constructor(private readonly random: Rng) {
     const figure = (kind: BalconyFigure['kind'], x: number, floor: number, hours: [number, number]): BalconyFigure => ({ kind, x, floor, hours, outside: false, stint: between(random, 5, 60), out: 0, clock: random() * 10, variant: Math.floor(random() * 3) });
     this.balcony = [figure('smoker', -4.5, 2, [18.5, 23.8]), figure('smoker', 11.5, 1, [19, 1]), figure('waterer', 6.5, 3, [7, 9.5]), figure('waterer', -9.5, 1, [8, 10])];
-    for (let i = 0; i < MAX_QUEUE; i++) this.queue.push({ alpha: 0, phase: random() * 10, variant: i % SHIRTS.length, jitter: between(random, -0.15, 0.15) });
+    for (let i = 0; i < MAX_QUEUE; i++) this.queue.push({ alpha: 0, phase: random() * 10, variant: i % FOLK_SHIRTS.length, jitter: between(random, -0.15, 0.15) });
   }
 
   /** How many people queue at the shop door (0..`MAX_QUEUE`), during opening hours. */
@@ -93,7 +85,7 @@ export class Folk {
   }
 
   paint({ place, color, glow }: AtlasPens): void {
-    const looks: Look[] = SHIRTS.map((shirt) => ({ shirt, trousers: pick(this.random, TROUSERS), skin: pick(this.random, SKINS), hair: pick(this.random, HAIRS) }));
+    const looks: Look[] = FOLK_SHIRTS.map((shirt) => ({ shirt, trousers: pick(this.random, TROUSERS), skin: pick(this.random, SKINS), hair: pick(this.random, HAIRS) }));
     const w = 46;
     const h = Math.ceil(2 * SCALE) + MARGIN * 2;
     for (const look of looks) {
@@ -181,20 +173,6 @@ export class Folk {
       pushStanding(push, this.queueCells[q.variant][pose], SCALE, MARGIN, x, z, q.alpha);
     });
   }
-}
-
-/** A painter for figure parts: rounded rectangles in metres about the cell's centre line, feet at the bottom margin. */
-function figurePen(ctx: CanvasRenderingContext2D, cell: Cell): { cx: number; foot: number; rect: (x: number, yBottom: number, w: number, h: number, fill: string) => void } {
-  const s = SCALE;
-  const cx = cell.x + cell.w / 2;
-  const foot = cell.y + cell.h - MARGIN;
-  const rect = (x: number, yBottom: number, w: number, h: number, fill: string): void => {
-    ctx.fillStyle = fill;
-    ctx.beginPath();
-    ctx.roundRect(cx + x * s - (w * s) / 2, foot - yBottom * s - h * s, w * s, h * s, Math.min(w, h) * s * 0.35);
-    ctx.fill();
-  };
-  return { cx, foot, rect };
 }
 
 /** Someone standing in the queue, seen from behind (facing the shop): hair over the back of the head, weight on one leg or the other. */

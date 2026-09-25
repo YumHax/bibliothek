@@ -20,6 +20,10 @@ export interface WalkerOptions {
   lines?: readonly string[];
   /** The caption when hovered. */
   label?: string;
+  /** What they say when clicked, asked afresh each time (the street's passers-by); wins over `lines`. */
+  talk?: () => string;
+  /** Can be faded in and out (`setFade`): set once, as it changes their shaders. */
+  fade?: boolean;
 }
 
 /** How fast the body turns towards its heading, per second. */
@@ -50,6 +54,8 @@ export class Walker extends THREE.Group implements Furniture, Updatable, Interac
   private readonly speed: number;
   private readonly bubble = new SpeechBubble();
   private readonly lines: readonly string[];
+  private readonly talk: (() => string) | null;
+  private readonly blob: THREE.Mesh | null;
   private readonly caption: string;
   private nextLine: number;
   private state: State = { kind: 'stand', yaw: 0 };
@@ -72,10 +78,13 @@ export class Walker extends THREE.Group implements Furniture, Updatable, Interac
     this.add(this.model);
     const blob = blobShadow(0.55, 0.5);
     if (blob) this.add(blob);
+    this.blob = blob;
+    if (options.fade) this.model.enableFade();
     this.bubble.position.y = BUBBLE_Y;
     this.add(this.bubble);
     this.hitboxes = [this.model.hitbox];
     this.lines = options.lines ?? [];
+    this.talk = options.talk ?? null;
     this.caption = options.label ?? 'Click to chat';
     this.nextLine = seed;
   }
@@ -102,8 +111,25 @@ export class Walker extends THREE.Group implements Furniture, Updatable, Interac
     this.heading = NaN;
   }
 
+  /**
+   * How much of them shows, 0..1 (a passer-by fading out at the edge of sight or through a door);
+   * needs `fade` in the options. At 0 they are not drawn; their blob goes before they do.
+   */
+  setFade(amount: number): void {
+    this.model.setOpacity(amount);
+    this.model.visible = amount > 0.01;
+    if (this.blob) this.blob.visible = amount > 0.5;
+  }
+
+  /** Sits down where they are, on a seat `height` metres high, facing `yaw`, arms in `pose`, eyes on `focus` or wandering. */
+  sit(yaw: number, height: number, pose: Pose = 'lap', focus: THREE.Vector3 | null = null): void {
+    this.stand(yaw, pose, focus);
+    this.model.sit(height);
+  }
+
   /** Walks through `path` (floor points, zone-local), then calls `then`. */
   walk(path: THREE.Vector3[], then?: () => void): void {
+    this.model.sit(null);
     this.state = { kind: 'walk', path: path.map((p) => p.clone().setY(0)), then: then ?? null };
     this.focus = null;
     this.hands = null;
@@ -119,6 +145,7 @@ export class Walker extends THREE.Group implements Furniture, Updatable, Interac
    */
   stand(yaw: number, pose: Pose, focus: THREE.Vector3 | null = null, hands: (() => readonly [THREE.Vector3, THREE.Vector3]) | null = null, lean = 0): void {
     this.state = { kind: 'stand', yaw };
+    this.model.sit(null);
     this.model.setPose(pose);
     this.focus = focus;
     this.hands = hands;
@@ -159,10 +186,14 @@ export class Walker extends THREE.Group implements Furniture, Updatable, Interac
   }
 
   label(): string | null {
-    return this.present && this.lines.length ? this.caption : null;
+    return this.present && (this.lines.length || this.talk) ? this.caption : null;
   }
 
   activate(session: SessionActions): void {
+    if (this.talk) {
+      session.hint(this.talk());
+      return;
+    }
     if (!this.lines.length) return;
     session.hint(this.lines[this.nextLine % this.lines.length]!);
     this.nextLine++;

@@ -1,9 +1,10 @@
-import { CHALLENGE_REWARD, CHANGE_MACHINE } from './pricing';
+import { KEYS, PersistedStore } from '@/persistence';
+import { dayKey, fromUtcDayKey } from './calendar';
+import { CHALLENGE_REWARD, CHANGE_MACHINE, OUT_OF_ORDER_ODDS } from './pricing';
 import { rivalScore } from './rivals';
+import { seeded } from './seeded';
 
-export const ARCADE_DAILY_KEY = 'bibliothek.arcadeDaily.v1';
-/** How often a day has a cabinet out of order. */
-const OUT_OF_ORDER_ODDS = 0.35;
+export const ARCADE_DAILY_KEY = KEYS.arcadeDaily;
 
 /** Today's challenge: one game, a score to reach, what it pays, and whether it has been paid. */
 export interface Challenge {
@@ -15,7 +16,7 @@ export interface Challenge {
 }
 
 interface DailyFile {
-  /** The day each daily thing was last claimed (YYYY-MM-DD). */
+  /** The day each daily thing was last claimed (local YYYY-MM-DD, see `calendar.ts`; version 1 saved UTC dates). */
   challenge?: string;
   change?: string;
 }
@@ -23,7 +24,7 @@ interface DailyFile {
 export interface ArcadeDailyOptions {
   /** The games a challenge may be set on (the arcade's machines that pay tickets). */
   games: readonly string[];
-  /** Today's date as YYYY-MM-DD; injectable for a fixed day. */
+  /** Today's local date as YYYY-MM-DD (`dayKey`); injectable for a fixed day. */
   today?: () => string;
   storage?: Storage | null;
 }
@@ -37,14 +38,22 @@ export interface ArcadeDailyOptions {
 export class ArcadeDaily {
   private readonly games: readonly string[];
   private readonly today: () => string;
-  private readonly storage: Storage | null;
+  private readonly store: PersistedStore<DailyFile>;
   private state: DailyFile;
 
   constructor(options: ArcadeDailyOptions) {
     this.games = options.games;
-    this.today = options.today ?? (() => new Date().toISOString().slice(0, 10));
-    this.storage = options.storage === undefined ? safeLocalStorage() : options.storage;
-    this.state = this.load();
+    this.today = options.today ?? (() => dayKey());
+    // Version 2: local dates. Version 1 saved UTC dates: today's UTC date becomes today's local one (no second claim).
+    this.store = new PersistedStore<DailyFile>({
+      key: ARCADE_DAILY_KEY,
+      version: 2,
+      storage: options.storage,
+      defaults: () => ({}),
+      read: readDaily,
+      migrate: { 1: (data) => mapDays(readDaily(data) ?? {}, (day) => fromUtcDayKey(day)) },
+    });
+    this.state = this.store.load();
   }
 
   challenge(): Challenge {
@@ -104,47 +113,22 @@ export class ArcadeDaily {
   }
 
   private commit(): void {
-    try {
-      this.storage?.setItem(ARCADE_DAILY_KEY, JSON.stringify(this.state));
-    } catch (err) {
-      console.warn('[arcade] could not persist the daily state', err);
-    }
-  }
-
-  private load(): DailyFile {
-    try {
-      const parsed = JSON.parse(this.storage?.getItem(ARCADE_DAILY_KEY) ?? 'null') as DailyFile | null;
-      if (!parsed || typeof parsed !== 'object') return {};
-      return {
-        ...(typeof parsed.challenge === 'string' ? { challenge: parsed.challenge } : {}),
-        ...(typeof parsed.change === 'string' ? { change: parsed.change } : {}),
-      };
-    } catch {
-      return {};
-    }
+    this.store.save(this.state);
   }
 }
 
-/** mulberry32 seeded from a string: same day, same draw. */
-function seeded(seed: string): () => number {
-  let h = 1779033703 ^ seed.length;
-  for (let i = 0; i < seed.length; i++) {
-    h = Math.imul(h ^ seed.charCodeAt(i), 3432918353);
-    h = (h << 13) | (h >>> 19);
-  }
-  let a = h >>> 0;
-  return () => {
-    a = (a + 0x6d2b79f5) | 0;
-    let t = Math.imul(a ^ (a >>> 15), 1 | a);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+function readDaily(data: unknown): DailyFile | null {
+  if (typeof data !== 'object' || data === null) return null;
+  const parsed = data as DailyFile;
+  return {
+    ...(typeof parsed.challenge === 'string' ? { challenge: parsed.challenge } : {}),
+    ...(typeof parsed.change === 'string' ? { change: parsed.change } : {}),
   };
 }
 
-function safeLocalStorage(): Storage | null {
-  try {
-    return typeof localStorage === 'undefined' ? null : localStorage;
-  } catch {
-    return null;
-  }
+function mapDays(file: DailyFile, map: (day: string) => string): DailyFile {
+  return {
+    ...(file.challenge ? { challenge: map(file.challenge) } : {}),
+    ...(file.change ? { change: map(file.change) } : {}),
+  };
 }

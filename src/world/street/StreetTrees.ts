@@ -6,6 +6,7 @@ import type { Furniture } from '../Furniture';
 import type { DayNight } from '../props/DayNight';
 import { currentSeason } from '../props/outdoors/season';
 import { patchShader, afterChunk } from '../materials/shaderPatch';
+import { snowCovered } from './snowCover';
 import type { Vec2 } from './streetPlan';
 
 /** A tree to plant: where, and how big (1 = a street tree about 7 m tall). */
@@ -26,7 +27,8 @@ const WINTER = ['#6a5e52', '#5e564e'];
  * few limbs and a leafy crown (a lumpy sphere), both instanced (two draw calls for every tree),
  * each tree turned, sized and tinted on its own; the crowns sway with the wind (a vertex patch
  * fed from `SkyState.wind`). The season is the painted view's (`currentSeason`): fresh greens
- * and blossom in spring, turning in autumn and thinning as it deepens, bare in winter.
+ * and blossom in spring, turning in autumn and thinning as it deepens, bare in winter. Snow settles
+ * on the crowns' tops and along the limbs (`snowCovered`).
  */
 export class StreetTrees extends THREE.Group implements Furniture, Updatable {
   readonly contactShadow = false;
@@ -42,10 +44,11 @@ export class StreetTrees extends THREE.Group implements Furniture, Updatable {
     const limbs = [0, 2.1, 4.2].map((a) => new THREE.CylinderGeometry(0.04, 0.08, 2.2, 5).translate(0, 1.1, 0).rotateZ(0.7).rotateY(a).translate(0, CROWN_Y - 1.2, 0));
     const wood = mergeGeometries([trunk, ...limbs]);
     for (const g of [trunk, ...limbs]) g.dispose();
-    const trunks = new THREE.InstancedMesh(wood, new THREE.MeshStandardMaterial({ color: 0x4a3c30, roughness: 0.95 }), spots.length);
+    // Snow lies along the limbs' upper sides (the bare trees of winter get their dusting there).
+    const trunks = new THREE.InstancedMesh(wood, snowCovered(new THREE.MeshStandardMaterial({ color: 0x4a3c30, roughness: 0.95 })), spots.length);
 
     const crownGeometry = lumpySphere(random).scale(CROWN_RADIUS, CROWN_RADIUS * 0.85, CROWN_RADIUS).translate(0, CROWN_Y + 0.6, 0);
-    const crownMaterial = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9, flatShading: true });
+    const crownMaterial = snowCovered(new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9, flatShading: true }));
     patchShader(crownMaterial, 'streetTreeSway', (shader) => {
       shader.uniforms.swayTime = this.sway.time;
       shader.uniforms.swayWind = this.sway.wind;

@@ -16,7 +16,10 @@ or heard through the windows.
 - `plan.ts` is the neighbourhood: Front Street ahead with mid-rise facades, Park Street to the left with the park, our own
   pavement (`NEAR_KERB`) under the windows; `frontage()` / `parkLine()` give distances. Both streets end at a building
   standing across them (`FRONT_END`, `PARK_END`, painted by `paintStreetEnds`); `ground(a, offset)` is `frontage()` stopped
-  at those, and every ground band, line and row of street furniture must stop there too. Behind the room (x > 0, z < 0,
+  at those, and every ground band, line and row of street furniture must stop there too. It also holds what the painters
+  and `Life` share: `BUS_STOP_X`, `POND` / `FOUNTAIN`, `PARK_PATHS`, the traffic and cycle lanes (`NEAR_LANE`, `FAR_LANE`,
+  `CYCLE_NEAR`, `CYCLE_FAR`), `WALK_LINE` and `LIFE_REACH` (62 m: how far out along both streets what moves is
+  simulated; not `FRONT_END`, the end building). Behind the room (x > 0, z < 0,
   azimuth +90°..180°, `COURT_*`) is our own block's courtyard: no street painter belongs there, the seam at ±180° is our
   side wall's plane (Park Street on one side, the courtyard on the other).
 - `paintView()` (in `Outdoors.ts`) runs the painters in order and is what the headless check calls.
@@ -48,17 +51,21 @@ or heard through the windows.
   roofs and chimneys; setts, lawn, tree, bins, bikes, shed; nothing may reach x < 0), `Tree`, `Car` (`VehicleBody`: `CAR_BODY`, `TAXI_BODY`, `BUS_BODY`, `VAN_BODY`, `AMBULANCE_BODY`, `TRUCK_BODY`; `cargo` adds a load box behind the cab), `SkyDetail`,
   `shader.ts` (GLSL), `paint.ts`.
 - Helpers: `FacadeFrame`, `Shopfront` (shop types, lettering, displays; `Storefront` carries its light, closing curfew and
-  `goods` boxes; `RETRO_GAMES` sits across the street at `RETRO_AZIMUTH`), `StreetFurniture` (lamps with ground pool, small
+  `goods` boxes; `RETRO_GAMES` and its neighbours across the street are where the walkable street has them:
+  `paintFrontBlock` paints that row from `street/streetPlan.FACADES`, x shifted by `FLAT_IN_STREET`, storeys and
+  shops by kind and name as `PlannedShop`s; the rest of the block beyond is drawn by lots), `StreetFurniture` (lamps with ground pool, small
   halo and wall wash; benches, bins, bikes, planters, scooters, newsstand, bus shelter...), `ParkFeatures`, `Solid`.
 - `Holiday.ts` (`currentHoliday()`, `holidayOf(date)`, `?holiday=christmas|halloween|none`): at Christmas (1 Dec - 6 Jan)
   strings of fairy lights slung across both streets (pieces sorted in with the street's furniture), bulbs in the street
   trees, a lit fir with a star in the park (sorted in with the park); at Halloween (21-31 Oct) orange and violet strings and
   candle-lit pumpkins on a fifth of the lit sills. Decorations draw from their own random sequence (`beginHoliday()`), so a
   holiday never changes a building. Spring petals blow past on the wind (shader, `petals` uniform) while the trees flower.
+  The rooms and the walkable street dress up from the same holiday (`currentFestivities()`, which adds `newyear` from
+  30 Dec to 3 Jan or with `?holiday=newyear`): plan `decor` entries with a `holiday` gate (docs/props.md).
 - `season.ts`: the painters read the season (`currentSeason()`) set by `paintView`: spring blossom and fresh lawn, autumn
   turning by `depth` (litter under the trees, the late ones bare), winter bare broadleaves and empty flower beds. From the real
-  calendar; `?season=winter` or `?season=autumn:0.9` overrides (parsed in `main.ts`).
-- The retro games shop is a window on the market (`RetroShopLure`, made in `main.ts`): every 3 s it shows the day's stock
+  calendar; `?season=winter` or `?season=autumn:0.9` overrides (parsed in `bootstrap/services.ts`).
+- The retro games shop is a window on the market (`RetroShopLure`, made in `bootstrap/world.ts`): every 3 s it shows the day's stock
   (`Outdoors.showShopStock()`, platform accent colours onto the shop's `goods` boxes, one texture re-upload), and on a new
   market day, until the player has been in the `market` zone, a NOUVEAUTÉS banner (`showShopBanner()`, mirrored lettering,
   the texels under it kept to take it down) and a queue of 2-6 at the door (`Life.setShopQueue`).
@@ -105,6 +112,14 @@ a cornice and two bays of windows per storey lit by the same curfew rules. Rays 
 
 ## Life (what moves)
 
+- `Life` holds the atlas, the sprite slots and a list of `LifeLayer`s (`sprites.ts`: `paint(pens)` once, optional
+  `populate()` after every layer has painted, `update(dt, env, push)` each frame). One file per layer: `Traffic`
+  (`LifeTraffic.ts`), `Cyclists` (`LifeVehicles.ts`, with the vehicle looks and flashes), `Folk`, `Pedestrians`
+  (`LifePedestrians.ts`, dogs too), `Critters`, `Birds` (`LifeBirds.ts`), `Fountain` (`LifeFountain.ts`). A new mover is a
+  new layer added to the list in the constructor. Everything draws from the one shared random in a fixed order (`Critters`
+  and `Folk` in their constructors, then the atlas in paint order, then `populate` for the traffic, birds and walkers),
+  so a new layer added at the end keeps every existing draw and cell. `Life.update` fills one scratch `LifeEnv` and reuses pooled slots (no
+  per-frame arrays).
 - Cars round the corner on two concentric routes (right-hand traffic, queueing bumper to bumper by body length, positions
   interpolated between half-metre samples, a lateral `offset` to the right of the lane); ~18 % are taxis (lit roof sign);
   a bus every couple of minutes on the second route, pulling up at the shelter (`BUS_STOP_X`); the dustcart once a
@@ -113,16 +128,17 @@ a cornice and two bays of windows per storey lit by the same curfew rules. Rays 
   hazards blinking; a rare ambulance, fast, blue lights, cars ahead pulling over (`YIELD_OFFSET`) and crawling, cars near
   it on the other side braking. Vehicle stops are a generic `Stop[]` queue per vehicle.
 - `Cyclists` (`LifeVehicles.ts`): the cycle lane under our windows and along the far parked cars, more by day and dry,
-  front and rear lamps, swinging out round the double-parked van.
-- Walkers on the pavements and park paths, some with a dog, umbrellas up in the rain (the fair-weather half stays in); a
-  flock of pigeons by day in dry weather; the fountain's plume (off in deep snow).
+  front and rear lamps, swinging out round the double-parked van (`Traffic.obstacles`, handed to it at construction).
+- `Pedestrians`: walkers on the pavements (`WALK_LINE`) and park paths (`PARK_PATHS`), some with a dog, umbrellas up in the
+  rain (the fair-weather half stays in); `Birds`: a flock of pigeons by day in dry weather; `Fountain`: the plume (off in
+  deep snow).
 - `Critters` (`LifeCritters.ts`): bats erratic round six lamp heads (`BAT_LAMPS`, 7 m up) from dusk to ~3 h (not wet,
   not winter); a fox when wakefulness < 0.22 on one of `FOX_ROUTES` (eyes catch the light); two cats on the park hedge top
   (1.4 m, x = -`PARK_EDGE`) in the evening.
 - `Folk` (`LifeFolk.ts`): figures behind a railing on Front Street's balconies (smokers in the evening, glowing tip;
   someone watering a flower box in the morning), sorted `BALCONY_DEPTH_MARGIN` nearer than the facade (its depth byte is
   ~0.75 m coarse and stamped with the building's middle distance); at the retro games shop the keeper sweeping (7.5-9),
-  the games rack (9-19) and `Life.setShopQueue(n)` people queueing, seen from behind. The shop's span comes from its
+  the games rack (the shop's `SHOP_HOURS`, 8-23, the street's) and `Life.setShopQueue(n)` people queueing, seen from behind. The shop's span comes from its
   window goods via `Life.placeShop(shopGoods)` (called in the `Outdoors` constructor).
 - All are sprites the shader composites over the scenery: `SPRITE_COUNT` (56: three vec4 uniforms each, under WebGL's 224
   guaranteed) slots (band rect, atlas rect, alpha/distance/lod/packed tint), hidden where the scenery depth (lights.a) is
@@ -131,7 +147,10 @@ a cornice and two bays of windows per storey lit by the same curfew rules. Rays 
 - The atlas (2048 x 4096, ~3700 rows used, glow copy at half size on an opaque black canvas): car every 10° at 2 distances
   (tinted), taxi/bus/dustcart/van/ambulance every 20° at one distance in livery (`VEHICLE_LOOKS`), then people, dogs,
   birds, spray, flashes, cyclists, critters, folk. A new sprite kind must fit: `Life` warns `[outdoors] sprite atlas
-  overflow` (`life.atlasUsed` gives the rows). Shared helpers in `sprites.ts` (`Cell`, `Push`, `pushStanding`, `glowDot`).
+  overflow` (`life.atlasUsed` gives the rows). Shared helpers in `sprites.ts` (`Cell`, `Push`, `LifeLayer`,
+  `pushStanding`, `glowDot`). How people look is `figures.ts`: the palettes (`SHIRTS`, `FOLK_SHIRTS`, `TROUSERS`, `SKINS`,
+  `HAIRS`), `Look`, `figurePen` (the sprite figures) and `paintSeated(sheet, random, x, z, pose)` for the seated figures
+  painted into the scenery (picnics `ON_THE_GRASS`, terraces `ON_A_CHAIR`).
 - `Life.update(dt, nightness, wakefulness, weather)`: `weather` is the `SkyState` (rain, snow, `hours`, wind). Spawns
   divide by wakefulness; night owls fade below their `homeAt`. `Outdoors.update(dt)` also advances `time` and the clouds.
 - `Life.events` (`lifeEvents.ts`) is what the sound reads: counters (`busStops`, `busDepartures`, `barks`) that only go up,
@@ -143,7 +162,7 @@ Synthesised, heard from the nearest pane (`Outdoors.panesIn(scene)`), through wa
 following wakefulness, cars swelling past (hissier when wet), a rare horn, birdsong by day with a dawn chorus, rain hiss and
 patter on the glass, a wind band following `sky.wind` (a whistle when strong), church bells striking the hour 8-21.
 Thunder on each `sky.strikes` change, `strikeDistance / 343` s late, cracking when near; it has its own bus with a floor
-(`THUNDER_FLOOR`) so it is heard anywhere in the flat. From `life: () => Life.events` (wired in `main.ts`): air brakes and
+(`THUNDER_FLOOR`) so it is heard anywhere in the flat. From `life: () => Life.events` (wired in `bootstrap/world.ts`): air brakes and
 pull-away at the bus stop, barks, the two-tone siren with a doppler shift, the dustcart's diesel, compactor whine and bin
 clatter, the fountain faintly when the nearest pane is on the park side. Distances go through `reach(x, z)` (ears 18 m
 up). Starts on the first click or key press.

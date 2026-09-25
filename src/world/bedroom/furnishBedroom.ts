@@ -1,9 +1,10 @@
 import * as THREE from 'three';
 import type { Zone } from '../zone/Zone';
-import type { BuildContext, ZoneHandle } from '../layout';
+import type { BuildContext, CollectionContext, HomeContext, ZoneHandle } from '../buildContext';
 import { furnishShell } from '../shell';
-import { PendantLamp } from '../props/PendantLamp';
-import { WallSwitch } from '../props/WallSwitch';
+import { furnishDecor, placeRoomLight, placeStrayBox } from '../build/roomParts';
+import { heardBy, pointSound } from '../build/hearing';
+import { followDaylight, followUpgrades } from '../build/follow';
 import { Bed } from '../props/Bed';
 import { Nightstand } from '../props/Nightstand';
 import { BedsideLamp } from '../props/BedsideLamp';
@@ -14,7 +15,6 @@ import { SideTable } from '../props/SideTable';
 import { ReadingLamp } from '../props/ReadingLamp';
 import { Phone } from '../props/Phone';
 import { NightLight } from '../props/NightLight';
-import { placeDecor } from '../props/decor';
 import { placeLeaves, placeWith, floorPointsToWorld } from '../zone/attach';
 import { Television } from '../Television';
 import { FrostedWindow } from '../props/FrostedWindow';
@@ -25,10 +25,7 @@ import { BOOKCASE_PRICE } from '@/economy/pricing';
 import { PrizeShelf } from '../prizes/PrizeShelf';
 import { ArcadePoster } from '../prizes/ArcadePoster';
 import { MoodLamp } from '../prizes/MoodLamp';
-import { PointSound } from '../acoustics/PointSound';
-import { tickRadiators } from '../acoustics/radiatorTicks';
 import { NeighbourVoices } from '@/audio/flatSounds';
-import { StrayBox } from '../strays/StrayBox';
 import { BEDROOM_PLAN } from './bedroomPlan';
 
 /** What the bedroom built that the rest of the game needs: its screen, the bed (a cat's napping spot), the overflow shelving. */
@@ -47,15 +44,14 @@ export interface BedroomHandle extends ZoneHandle {
  * the reading corner, the bought bookcases (or the kit to buy one), the shelf of arcade prizes,
  * then the rug, pictures and plant. The clock unmakes the bed until noon and lights the glows at night.
  */
-export function furnishBedroom(zone: Zone, { sky, cssLayer, listener, acoustics, covers, overflow, upgrades, prizes, market, strays }: BuildContext): BedroomHandle {
+export function furnishBedroom(zone: Zone, ctx: BuildContext): BedroomHandle {
+  const { sky, cssLayer, covers, collection: { overflow }, home: { upgrades }, arcade: { prizes }, market: { stock: market } } = ctx;
   const plan = BEDROOM_PLAN;
   const room = furnishShell(zone, sky, plan.room);
-  const pendant = zone.placeAt(new PendantLamp({ onSwitch: (on) => room.setLampOn(on) }), plan.pendant);
-  zone.placeAt(new WallSwitch({ lamp: pendant }), plan.lightSwitch);
+  placeRoomLight(zone, room, 'pendant', plan.pendant, plan.lightSwitch);
 
   // The window onto the courtyard: frosted, glowing with the sky.
-  const window = zone.placeAt(new FrostedWindow({ width: plan.window.width, height: plan.window.height }), plan.window.at);
-  zone.onUnload(sky.dayNight.onChange((state) => window.setDaylight(state.daylight, state.ambient)));
+  followDaylight(zone, sky, zone.placeAt(new FrostedWindow({ width: plan.window.width, height: plan.window.height }), plan.window.at));
 
   // The bed and, either side, a nightstand with its lamp standing on the top and its drawer.
   const bed = zone.placeAt(new Bed(), plan.bed);
@@ -76,18 +72,11 @@ export function furnishBedroom(zone: Zone, { sky, cssLayer, listener, acoustics,
   nightLight.position.set(plan.nightLight.at[0], lightStand.topHeight, plan.nightLight.at[1]);
   placeWith(zone, lightStand, nightLight);
   // A game from the shelves left on the sleeper's nightstand, a different one each day.
-  if (strays) {
-    const strayStand = stands[plan.strayBox.stand]!;
-    const stray = new StrayBox({ strays, slot: 'nightstand', covers });
-    stray.position.set(plan.strayBox.at[0], strayStand.topHeight, plan.strayBox.at[1]);
-    stray.rotation.y = plan.strayBox.yaw;
-    placeWith(zone, strayStand, stray);
-    zone.onUnload(sky.dayNight.onChange(() => stray.setDay(market.day)));
-  }
+  placeStrayBox(zone, ctx, 'nightstand', stands[plan.strayBox.stand]!, plan.strayBox);
   placeLeaves(zone, zone.placeAt(new Wardrobe({ depth: plan.wardrobe.depth }), plan.wardrobe.at));
   // The dresser, and on it the portable TV, set straight on its top (no cabinet of its own).
   const dresser = zone.placeAt(new Dresser({ width: plan.dresser.width, tray: false }), plan.dresser.at);
-  const tv = new Television(cssLayer, { listener, occlusion: acoustics, screenWidth: plan.tv.screenWidth });
+  const tv = new Television(cssLayer, { ...heardBy(ctx), screenWidth: plan.tv.screenWidth });
   tv.position.set(plan.tv.along, dresser.topHeight, dresser.topCentreZ);
   tv.mountOn(0);
   placeWith(zone, dresser, tv);
@@ -121,9 +110,9 @@ export function furnishBedroom(zone: Zone, { sky, cssLayer, listener, acoustics,
     placeWith(zone, dresser, moodLamp);
   }
 
-  tickRadiators(zone, placeDecor(zone, plan.decor), { listener, occlusion: acoustics });
+  furnishDecor(zone, ctx, plan.decor);
   // The neighbours through the party wall, talking now and then (rarely at night).
-  zone.placeAt(new PointSound(new NeighbourVoices({ night: () => sky.dayNight.state.night }), { listener, occlusion: acoustics, volume: { maxDistance: 6 } }), plan.neighbours);
+  zone.placeAt(pointSound(ctx, new NeighbourVoices({ night: () => sky.dayNight.state.night }), { maxDistance: 6 }), plan.neighbours);
   return { room, tv, bed, shelving, catVisits: floorPointsToWorld(zone, plan.catVisits) };
 }
 
@@ -131,7 +120,7 @@ export function furnishBedroom(zone: Zone, { sky, cssLayer, listener, acoustics,
  * The bookcase slot: a Shelving over the games the collection room had no room for, standing as
  * many bookcases as were bought (one slot today), and until then the kit that buys one.
  */
-function furnishBookcases(zone: Zone, covers: BuildContext['covers'], overflow: NonNullable<BuildContext['overflow']>, upgrades: NonNullable<BuildContext['upgrades']>): Shelving {
+function furnishBookcases(zone: Zone, covers: BuildContext['covers'], overflow: NonNullable<CollectionContext['overflow']>, upgrades: NonNullable<HomeContext['upgrades']>): Shelving {
   const plan = BEDROOM_PLAN;
   const { position, rotationY } = resolvePlacement(plan.room, plan.bookcase.at);
   const slot = { position, rotationY, facing: new THREE.Vector3(Math.sin(rotationY), 0, Math.cos(rotationY)) };
@@ -146,11 +135,9 @@ function furnishBookcases(zone: Zone, covers: BuildContext['covers'], overflow: 
   });
   zone.onUnload(() => shelving.dispose());
   const kit = zone.placeAt(new BookcaseKit({ price: BOOKCASE_PRICE, onBought: () => upgrades.add('bookcase') }), plan.bookcaseKit);
-  const refresh = (): void => {
+  followUpgrades(zone, upgrades, () => {
     shelving.setCapacity(bought());
     kit.setAvailable(bought() < 1);
-  };
-  refresh();
-  zone.onUnload(upgrades.subscribe(refresh));
+  });
   return shelving;
 }

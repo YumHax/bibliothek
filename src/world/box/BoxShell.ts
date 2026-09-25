@@ -48,6 +48,12 @@ export class BoxShell extends THREE.Group {
     this.add(this.tray, this.hinge);
   }
 
+  /** Frees the geometry; the materials are the box's (see `GameBox`). */
+  dispose(): void {
+    this.tray.geometry.dispose();
+    this.lid.geometry.dispose();
+  }
+
   /** 0 = closed; positive angles swing the lid out through the front and round to the left. */
   setOpenAngle(radians: number): void {
     this.hinge.rotation.y = -radians;

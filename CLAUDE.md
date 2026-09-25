@@ -2,8 +2,9 @@
 
 First-person 3D video game collection room. three.js + Vite + TypeScript, no framework. The player walks a real-scale
 room, picks boxes off the shelves, reads them, plays longplays on the TV or projector; a cat lives there. Games are
-earned: the front door teleports to an arcade (mini-games pay tickets, swapped for prizes or coins) and a flea market that sells
-games; `?debug` restores the seed collection and the editor's add pane.
+earned: the front door opens on the building's stairwell, whose street door teleports to Front Street (shops, an arcade whose
+mini-games pay tickets, swapped for prizes or coins, and a flea market that sells games); `?debug` restores the seed
+collection and the editor's add pane.
 
 ## Commands
 
@@ -18,7 +19,8 @@ npm run build       # typecheck + production bundle
 - **Browser testing only when explicitly asked.** Never open Chrome or use browser tools on your own initiative; verify with
   typecheck + build and describe what to check. No test framework either: typecheck + build is the check.
 - Strict TypeScript (`noUnusedLocals`, `noUnusedParameters`). Path alias `@/` -> `src/`. One concern per file; a new
-  concept gets its own folder under `src/`. No logic in `index.html`; `src/main.ts` is wiring only.
+  concept gets its own folder under `src/`. No logic in `index.html`; `src/main.ts` only calls the
+  `src/bootstrap/*` steps, which are wiring only.
 - Positions and decoration are data in `src/world/roomPlan.ts` (`ROOM_PLAN`) and `src/world/<kind>/<kind>Plan.ts` for the
   other rooms; classes never hard-code where they stand.
 - Units are metres, real-world scale (NES box 0.127 x 0.178 x 0.025, eye height 1.7).
@@ -38,6 +40,7 @@ npm run build       # typecheck + production bundle
 | Anything else: folder map, layers, key patterns, data sources | `docs/architecture.md` |
 | The view outside the windows | `docs/outdoors.md` |
 | The cat | `docs/cat.md` |
+| Friends who visit, borrow and return games | `docs/visitors.md` |
 | Post-processing, quality levels, looks, material helpers (wood, fabric, plaster), reflections | `docs/graphics.md` |
 
 Layer order, outermost first: `worldPlan.ts` + the plan files (data) -> `layout.ts` + `src/world/<kind>/furnish<Kind>.ts`
@@ -48,15 +51,20 @@ Content work stays in the first two layers; the engine is never touched for cont
 ## Gotchas already hit
 
 - `[hidden] { display: none !important; }` is global because `styles.css` sets `display` on some elements. Toggle with `el.hidden`.
-- Chrome refuses a new pointer lock for ~1 s after Esc; `enterRoom()` in `main.ts` retries once.
+- Chrome refuses a new pointer lock for ~1 s after Esc; `PointerLockFlow` retries once.
 - The canvas has `z-index: 1`; any HUD element needs a higher one (shared rule in `styles.css`) or it renders behind the 3D view.
 - A JSDoc comment containing `*/` (e.g. a list of forbidden characters) ends the comment early.
 - Point-light shadow bias is in units of the shadow camera's `far` (default 500 m); keep `shadow.camera.far` at room scale.
 - `GameBox` material order is BoxGeometry's `[+x, -x, +y, -y, +z front, -z back]`; on +x the front edge is on the texture's left.
-- The clock is ticked once by `Sky` in `main.ts`; never set `drivesClock` on a `RoomWindow` or the day runs twice as fast.
+- The clock is ticked once by `Sky` (`bootstrap/services.ts`); never set `drivesClock` on a `RoomWindow` or the day runs twice as fast.
 - Frame cost is per pixel (every fragment samples every shadow map) and Firefox does not throttle `requestAnimationFrame`
   on GPU load: the `Engine` gates rendering on a GPU fence and caps the pixel ratio. Measure with `?stats` + `bibliothek.bisect()`.
+- Every shadow-casting light is one texture unit in every lit shader of the scene (the flat: ~10 of 16, the material's
+  own maps take the rest). One too many and every lit program fails to link: walls, floor and furniture go black while
+  unlit things (outdoors, whiskers) still show. `World.prime` logs `[world] N shadow maps`; new lamps stay shadowless.
 - `outdoors/shader.ts` is a template literal: a backtick in a GLSL comment ends it (typecheck fails with `',' expected`).
 - The canvas's alpha is the video cut-out: every post pass and additive effect must keep it (see `docs/graphics.md`).
 - Lights ignore wall planes: a room's lamp shines into the next room unless the wall is in `RoomOptions.opaqueWalls`; a
-  `HemisphereLight` lights the whole scene, so only the occupied `Room` runs its ambient (`setOccupied`, wired in `main.ts`).
+  `HemisphereLight` lights the whole scene, so only the occupied `Room` runs its ambient (`setOccupied`, wired in `bootstrap/world.ts`).
+- The floor is at world y 0 everywhere but the stairwell: the eye is the feet's height (`FirstPersonController.setGround`,
+  the stairwell's `ground`) plus eye height, collision probes follow the feet, and `Travel` passes the arrival's y.

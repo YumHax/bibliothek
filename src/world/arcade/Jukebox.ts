@@ -6,7 +6,7 @@ import { JukeboxTune, STYLES } from '@/audio/JukeboxTune';
 import { createCanvas, toTexture } from '@/covers/generated/canvasUtils';
 import type { Furniture, OccupancyAware } from '../Furniture';
 import { boxMesh, cylinderMesh, invisibleHitbox } from '../meshUtils';
-import { matte } from '../props/Prop';
+import { markShared, matte } from '../props/Prop';
 import { drawText } from './games/ArcadeGame';
 
 export interface JukeboxOptions {
@@ -26,7 +26,7 @@ const ARCH_R = W / 2;
 const FAR = 12;
 const NEAR = 1.2;
 
-const CHROME = new THREE.MeshStandardMaterial({ color: 0xd8dadd, metalness: 0.9, roughness: 0.2 });
+const CHROME = markShared(new THREE.MeshStandardMaterial({ color: 0xd8dadd, metalness: 0.9, roughness: 0.2 }));
 
 /**
  * The hall's jukebox: a fifties bubbler with an arched top, glowing tubes that cycle through the
@@ -77,7 +77,7 @@ export class Jukebox extends THREE.Group implements Furniture, Updatable, Intera
     const material = new THREE.MeshBasicMaterial({ map: texture, toneMapped: false });
     this.card = { ctx, texture, material };
     const card = new THREE.Mesh(new THREE.PlaneGeometry(W - 0.2, 0.3), material);
-    card.position.set(0, BODY_H + 0.05, D / 2 + 0.001);
+    card.position.set(0, BODY_H + 0.05, D / 2 + 0.002);
     this.add(card);
     // The chrome grille and the coin panel.
     this.add(boxMesh(W - 0.2, 0.012, 0.012, CHROME, { y: BODY_H - 0.14, z: D / 2 + 0.006 }));
@@ -85,7 +85,7 @@ export class Jukebox extends THREE.Group implements Furniture, Updatable, Intera
     grille.position.set(0, 0.5, D / 2 + 0.002);
     this.add(grille);
     this.add(boxMesh(W - 0.16, 0.06, 0.1, CHROME, { y: 0.86, z: D / 2 + 0.04 }));
-    this.add(boxMesh(W, 0.06, D + 0.02, matte(0x151518, 0.5), { y: 0.03 }));
+    this.add(boxMesh(W + 0.02, 0.06, D + 0.02, matte(0x151518, 0.5), { y: 0.03 }));
     this.traverse((o) => {
       const mesh = o as THREE.Mesh;
       if (mesh.isMesh && mesh !== card) {

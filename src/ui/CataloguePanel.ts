@@ -6,8 +6,14 @@ import type { IndexMatch, LibretroIndex } from '@/collection/LibretroIndex';
 import type { Fame } from '@/economy/Fame';
 import type { Wallet } from '@/economy/Wallet';
 import type { StockItem } from '@/economy/StockItem';
+import type { Transactions } from '@/economy/Transactions';
+import type { Views } from '@/economy/Fame';
 import { describeCondition, shopPrice } from '@/economy/pricing';
+import { catalogueSaleOn, mailOrderPrice } from '@/economy/marketEvents';
+import { isGrail } from '@/economy/grails';
 import { escapeHtml } from './html';
+import { ModalPanel } from './ModalPanel';
+import { rememberFocus } from './rememberFocus';
 import './CataloguePanel.css';
 
 const SEARCH_DEBOUNCE_MS = 250;
@@ -36,8 +42,7 @@ export interface CataloguePanelOptions {
  * greyed and cannot be bought until its lookup lands, then settles; a copy is bought at the price
  * its row shows. A row says so when one of today's stalls has a copy, and at what price.
  */
-export class CataloguePanel {
-  private readonly root: HTMLElement;
+export class CataloguePanel extends ModalPanel {
   private readonly walletEl: HTMLElement;
   private readonly statusEl: HTMLElement;
   private readonly resultsEl: HTMLElement;
@@ -53,37 +58,32 @@ export class CataloguePanel {
   /** A used copy quoted by a first click on "Used", confirmed by a second. */
   private quoted: { row: number; quote: { price: number; deposit: number; day: number } } | null = null;
 
-  /** Assigned by the Session so closing from the panel's own UI re-enters the room. */
-  onOpenChange?: (open: boolean) => void;
-
   constructor(
     container: HTMLElement,
     private readonly store: CollectionStore,
     private readonly index: LibretroIndex,
     private readonly wallet: Wallet,
     private readonly fame: Fame,
+    private readonly tx: Transactions,
     private readonly options: CataloguePanelOptions = {},
   ) {
-    this.root = document.createElement('section');
-    this.root.className = 'catalogue';
-    this.root.hidden = true;
+    super(container, { className: 'ui-modal--sheet catalogue', label: 'Mail order' });
     this.root.innerHTML = `
       <header class="catalogue__header">
         <h2>Mail order</h2>
         <span class="catalogue__wallet"></span>
-        <div class="catalogue__actions"><button type="button" data-action="close">Close</button></div>
+        <div class="catalogue__actions"><button type="button" class="ui-btn" data-action="close" aria-label="Close">Close</button></div>
       </header>
       <p class="catalogue__blurb">Any game, new and complete, at the catalogue price. Second-hand copies are cheaper on the stalls, and can be ordered: “Used…” puts one by for you on its stall.</p>
       <div class="catalogue__search">
-        <input type="search" placeholder="Search a title…" autocomplete="off" spellcheck="false" />
+        <input type="search" placeholder="Search a title…" autocomplete="off" spellcheck="false" data-autofocus />
         <select data-role="platform">
           <option value="">All platforms</option>
           ${PLATFORM_LIST.map((p) => `<option value="${p.id}">${escapeHtml(p.shortName)}</option>`).join('')}
         </select>
       </div>
       <div class="catalogue__status"></div>
-      <div class="catalogue__scroll" data-role="results"></div>`;
-    container.appendChild(this.root);
+      <div class="catalogue__scroll ui-card" data-role="results"></div>`;
 
     this.walletEl = this.root.querySelector('.catalogue__wallet')!;
     this.statusEl = this.root.querySelector('.catalogue__status')!;
@@ -102,38 +102,34 @@ export class CataloguePanel {
     this.renderWallet();
   }
 
-  get isOpen(): boolean {
-    return !this.root.hidden;
-  }
-
-  open(): void {
-    if (this.isOpen) return;
-    if (document.pointerLockElement) document.exitPointerLock();
-    this.root.hidden = false;
-    this.searchInput.focus();
+  protected onOpened(): void {
     if (this.lastResults.length) this.renderResults(this.lastResults); // today's stalls may have changed
-    this.onOpenChange?.(true);
+    const sale = catalogueSaleOn(this.day);
+    if (sale) this.setStatus(`Sale today: ${Math.round((1 - sale) * 100)}% off every new copy.`);
   }
 
-  close(): void {
-    if (!this.isOpen) return;
-    this.root.hidden = true;
+  /** Today's market day (the sale's calendar). */
+  private get day(): number {
+    return this.options.market?.day ?? 0;
+  }
+
+  /** A new copy's price today (the sale off it), or null for a grail: out of print, only ever found at the market. */
+  private priceOf(game: Game, views: Views): number | null {
+    return mailOrderPrice(game, views, this.day);
+  }
+
+  /** The row's price: today's, with the usual one struck out on a sale day. */
+  private priceHtml(game: Game, price: number | null, views: Views): string {
+    if (price === null) return 'out of print';
+    const usual = shopPrice(game, views);
+    return `${usual !== price ? `<s class="catalogue__was">${usual}</s> ` : ''}${price} <span class="catalogue__coin"></span>`;
+  }
+
+  protected onClosed(): void {
     this.setStatus('');
-    this.onOpenChange?.(false);
-  }
-
-  toggle(): void {
-    if (this.isOpen) this.close();
-    else this.open();
   }
 
   private bindEvents(): void {
-    // Keep typing away from the window-level Input (WASD would walk); Escape goes through so the Session can close us.
-    for (const type of ['keydown', 'keyup'] as const) {
-      this.root.addEventListener(type, (e) => {
-        if (e.code !== 'Escape') e.stopPropagation();
-      });
-    }
     this.root.addEventListener('click', (e) => {
       const button = (e.target as HTMLElement).closest<HTMLButtonElement>('button[data-action]');
       if (!button) return;
@@ -196,12 +192,14 @@ export class CataloguePanel {
     }
     const seq = this.searchSeq;
     const onStalls = new Map((this.options.market?.peekToday() ?? []).map((item) => [item.game.id, item]));
+    const restoreFocus = rememberFocus(this.resultsEl);
     this.resultsEl.innerHTML = results
       .map((r, i) => {
         const game = this.gameOf(r);
-        const known = this.fame.peek(game) !== undefined;
-        const price = shopPrice(game, this.fame.peek(game));
-        this.prices.set(i, price);
+        const views = this.fame.peek(game);
+        const known = views !== undefined;
+        const price = this.priceOf(game, views);
+        this.prices.set(i, price ?? Infinity);
         if (known) this.settled.add(i);
         const cover = this.options.coverUrl?.(game);
         const stall = onStalls.get(game.id);
@@ -212,18 +210,19 @@ export class CataloguePanel {
             ${stall ? `<span class="catalogue__stall">${escapeHtml(stallNote(stall))}</span>` : ''}
             ${r.region ? `<span class="catalogue__meta">${escapeHtml(r.region)}</span>` : ''}
             <span class="catalogue__meta">${escapeHtml(getPlatform(r.platform).shortName)}</span>
-            <span class="catalogue__price${known ? '' : ' catalogue__price--pending'}">${price} <span class="catalogue__coin"></span></span>
+            <span class="catalogue__price${known ? '' : ' catalogue__price--pending'}">${this.priceHtml(game, price, views)}</span>
             ${this.buttonHtml(i, game.id)}
             ${this.orderButtonHtml(i, game.id)}
           </div>`;
       })
       .join('');
+    restoreFocus();
     results.forEach((r, i) => {
       const game = this.gameOf(r);
-      if (this.fame.peek(game) !== undefined) return;
+      if (this.fame.peek(game) !== undefined || isGrail(game.id)) return;
       void this.fame.lookup(game).then((views) => {
         if (seq !== this.searchSeq || this.lastResults !== results) return;
-        this.settlePrice(i, game.id, shopPrice(game, views));
+        this.settlePrice(i, game, views);
       });
     });
   }
@@ -231,30 +230,32 @@ export class CataloguePanel {
   /** The row's button: owned, still being priced, too dear, or buy. */
   private buttonHtml(i: number, id: string): string {
     const [label, enabled] = this.buttonState(i, id);
-    return `<button type="button" data-action="buy" data-result="${i}" ${enabled ? '' : 'disabled'}>${label}</button>`;
+    return `<button type="button" class="ui-btn ui-btn--primary" data-action="buy" data-result="${i}" ${enabled ? '' : 'disabled'}>${label}</button>`;
   }
 
   private buttonState(i: number, id: string): [label: string, enabled: boolean] {
     if (this.store.owns(id)) return ['Owned', false];
+    if (isGrail(id)) return ['Market only', false];
     if (!this.settled.has(i)) return ['Pricing…', false];
     if (!this.wallet.canAfford(this.prices.get(i) ?? Infinity)) return ['Too dear', false];
     return ['Buy', true];
   }
 
   /** A fame lookup landed: the row shows its real price and whether the wallet still stretches to it. */
-  private settlePrice(i: number, id: string, price: number): void {
-    this.prices.set(i, price);
+  private settlePrice(i: number, game: Game, views: Views): void {
+    const price = this.priceOf(game, views);
+    this.prices.set(i, price ?? Infinity);
     this.settled.add(i);
     const row = this.resultsEl.querySelector<HTMLElement>(`.catalogue__row[data-result="${i}"]`);
     if (!row) return;
     const priceEl = row.querySelector<HTMLElement>('.catalogue__price');
     const button = row.querySelector<HTMLButtonElement>('button[data-action="buy"]');
     if (priceEl) {
-      priceEl.innerHTML = `${price} <span class="catalogue__coin"></span>`;
+      priceEl.innerHTML = this.priceHtml(game, price, views);
       priceEl.classList.remove('catalogue__price--pending');
     }
     if (button) {
-      const [label, enabled] = this.buttonState(i, id);
+      const [label, enabled] = this.buttonState(i, game.id);
       button.textContent = label;
       button.disabled = !enabled;
     }
@@ -263,10 +264,10 @@ export class CataloguePanel {
   /** "Used": a second-hand copy put by on its stall, for a deposit now and the rest when collected. */
   private orderButtonHtml(i: number, id: string): string {
     const market = this.options.market;
-    if (!market?.order || !market.orderQuote) return '';
+    if (!market?.order || !market.orderQuote || isGrail(id)) return '';
     const onOrder = market.orders?.some((o) => o.game.id === id);
     const disabled = onOrder || this.store.owns(id);
-    return `<button type="button" data-action="order" data-result="${i}" title="Order a second-hand copy: a deposit now, the rest when you collect it from its stall" ${disabled ? 'disabled' : ''}>${onOrder ? 'On order' : 'Used…'}</button>`;
+    return `<button type="button" class="ui-btn" data-action="order" data-result="${i}" title="Order a second-hand copy: a deposit now, the rest when you collect it from its stall" ${disabled ? 'disabled' : ''}>${onOrder ? 'On order' : 'Used…'}</button>`;
   }
 
   /** First click quotes a used copy (price, deposit, the day it arrives); a second one orders it. */
@@ -276,6 +277,7 @@ export class CataloguePanel {
     if (!r || !market?.orderQuote || !market.order) return;
     const game = this.gameOf(r);
     if (this.quoted?.row !== i) {
+      const hadFocus = document.activeElement === button;
       button.disabled = true;
       button.textContent = 'Asking…';
       const quote = await market.orderQuote(game);
@@ -283,6 +285,7 @@ export class CataloguePanel {
       this.quoted = { row: i, quote };
       const days = quote.day - (market.day ?? quote.day);
       button.disabled = false;
+      if (hadFocus) button.focus(); // disabling it dropped the focus
       button.textContent = `${quote.deposit} down?`;
       button.classList.add('sell__armed');
       this.setStatus(`A used, complete copy of "${game.title}": ${quote.price} coins, ${quote.deposit} down now. It will wait for you on the ${getPlatform(game.platform).shortName} stall in ${days} market day${days === 1 ? '' : 's'}. Click again to order.`);
@@ -290,12 +293,12 @@ export class CataloguePanel {
     }
     const { quote } = this.quoted;
     this.quoted = null;
-    if (!this.wallet.spend(quote.deposit)) {
-      this.setStatus(`The deposit is ${quote.deposit} coins and you have ${this.wallet.coins}.`, true);
+    const ordered = this.tx.orderUsed(game, quote);
+    if (!ordered.ok) {
+      if (ordered.reason === 'short') this.setStatus(`The deposit is ${quote.deposit} coins and you have ${this.wallet.coins}.`, true);
       this.renderResults(this.lastResults);
       return;
     }
-    market.order(game, quote);
     this.setStatus(`Ordered: "${game.title}" will be on the ${getPlatform(game.platform).shortName} stall, put by for you. ${quote.price - quote.deposit} coins to pay when you collect it.`);
     this.renderResults(this.lastResults);
   }
@@ -303,18 +306,18 @@ export class CataloguePanel {
   private buy(i: number): void {
     const r = this.lastResults[i];
     if (!r) return;
-    const game: Game = { ...this.gameOf(r), status: 'owned', addedAt: new Date().toISOString(), acquired: { price: this.prices.get(i) ?? 0, where: 'mail order', day: this.options.market?.day ?? 0 } };
+    const game = this.gameOf(r);
     if (this.store.owns(game.id)) return;
     const price = this.prices.get(i);
     if (price === undefined || !this.settled.has(i)) {
       this.setStatus('Still working out the price of that one.', true);
       return;
     }
-    if (!this.wallet.spend(price)) {
-      this.setStatus(`You need ${price} coins for "${game.title}".`, true);
+    const bought = this.tx.buyMailOrder(game, price);
+    if (!bought.ok) {
+      if (bought.reason === 'short') this.setStatus(`You need ${price} coins for "${game.title}".`, true);
       return;
     }
-    this.store.add(game);
     this.setStatus(`Bought "${game.title}" for ${price} coins. It will wait for you in a parcel in the hallway.`);
   }
 

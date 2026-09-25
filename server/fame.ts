@@ -25,6 +25,14 @@ const UPSTREAM_TIMEOUT_MS = 10_000;
 /** Pause between two Wikimedia requests, and the retry schedule when they answer 429 anyway. */
 const REQUEST_GAP_MS = 150;
 const RETRY_DELAYS_MS = [1000, 3000, 8000];
+/**
+ * All the time one lookup may take, queue, retries and timeouts included: under the serverless
+ * function's `maxDuration` (20 s in vercel.json) with room for a cold start. Out of time, the lookup
+ * fails (not cached): the client prices the game as ordinary and asks again later.
+ */
+const LOOKUP_BUDGET_MS = 14_000;
+/** A request is not started with less time than this left. */
+const MIN_REQUEST_MS = 1500;
 /** Months of page views averaged; a spike (a remake announcement) then moves a price gently. */
 const MONTHS = 6;
 /** Fame moves slowly: a month on disk, a week on the CDN. */
@@ -73,7 +81,7 @@ export class FameIndex {
     const cached = this.memory.get(key) ?? (await this.readDisk(key));
     if (cached && Date.now() - cached.fetchedAt < TTL_MS) return strip(cached);
 
-    const fame = await lookupFame(title, platform);
+    const fame = await lookupFame(title, platform, Date.now() + LOOKUP_BUDGET_MS);
     const entry: CachedFame = { ...fame, fetchedAt: Date.now() };
     this.remember(key, entry);
     await this.writeDisk(key, entry);
@@ -130,16 +138,17 @@ export async function handleFame(index: FameIndex, req: ApiRequest): Promise<Api
   }
 }
 
-async function lookupFame(title: string, platform: string): Promise<Fame> {
-  const article = (await findArticle(title, platform)) ?? (await findArticle(mainTitle(title), platform, title));
+/** `deadline` (epoch ms) bounds every Wikimedia call the lookup makes. */
+async function lookupFame(title: string, platform: string, deadline: number): Promise<Fame> {
+  const article = (await findArticle(title, platform, deadline)) ?? (await findArticle(mainTitle(title), platform, deadline, title));
   if (!article) return { views: null };
-  return { views: await monthlyViews(article), article };
+  return { views: await monthlyViews(article, deadline), article };
 }
 
 /** The article for `title`, or null. `unless` is a title already searched: the same query is not run twice. */
-async function findArticle(title: string, platform: string, unless?: string): Promise<string | null> {
+async function findArticle(title: string, platform: string, deadline: number, unless?: string): Promise<string | null> {
   if (!title || title === unless) return null;
-  return pickArticle(title, await searchWikipedia(`${title} ${platform} video game`));
+  return pickArticle(title, await searchWikipedia(`${title} ${platform} video game`, deadline));
 }
 
 /** "Solstice: The Quest for the Staff of Demnos" -> "Solstice"; a title without a subtitle stays as is. */
@@ -179,7 +188,7 @@ export function pickArticle(title: string, hits: SearchPage[]): string | null {
   return best?.title ?? null;
 }
 
-async function searchWikipedia(query: string): Promise<SearchPage[]> {
+async function searchWikipedia(query: string, deadline: number): Promise<SearchPage[]> {
   const url = new URL(WIKI_API);
   url.search = new URLSearchParams({
     action: 'query',
@@ -191,17 +200,17 @@ async function searchWikipedia(query: string): Promise<SearchPage[]> {
     format: 'json',
     formatversion: '2',
   }).toString();
-  const data = (await wikimedia(url)) as { query?: { pages?: SearchPage[] } };
+  const data = (await wikimedia(url, deadline)) as { query?: { pages?: SearchPage[] } };
   return data.query?.pages ?? [];
 }
 
 /** Average monthly views over the last `MONTHS` full months (0 when the API has none, e.g. a brand-new article). */
-async function monthlyViews(article: string): Promise<number> {
+async function monthlyViews(article: string, deadline: number): Promise<number> {
   const { start, end } = lastFullMonths(new Date(), MONTHS);
   const url = `${PAGEVIEWS_API}/${encodeURIComponent(article.replace(/ /g, '_'))}/monthly/${start}/${end}`;
   let data: { items?: { views: number }[] };
   try {
-    data = (await wikimedia(new URL(url))) as typeof data;
+    data = (await wikimedia(new URL(url), deadline)) as typeof data;
   } catch (err) {
     if (/ 404 /.test(errorMessage(err))) return 0; // no views recorded for this title
     throw err;
@@ -222,27 +231,43 @@ export function lastFullMonths(now: Date, count: number): { start: string; end: 
 /** Requests to Wikimedia run one at a time, `REQUEST_GAP_MS` apart, whatever the number of games being priced. */
 let queue: Promise<unknown> = Promise.resolve();
 
-function wikimedia(url: URL): Promise<unknown> {
-  const turn = queue.then(() => fetchWikimedia(url));
+/** A Wikimedia call through the queue, given up (and skipped when its turn comes) once `deadline` is past. */
+function wikimedia(url: URL, deadline: number): Promise<unknown> {
+  const turn = queue.then(() => {
+    if (deadline - Date.now() < MIN_REQUEST_MS) throw outOfTime();
+    return fetchWikimedia(url, deadline);
+  });
   queue = turn.then(
     () => sleep(REQUEST_GAP_MS),
     () => sleep(REQUEST_GAP_MS),
   );
-  return turn;
+  // Waiting in the queue counts too: the caller is answered in time even when the queue is long.
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const late = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(outOfTime()), Math.max(0, deadline - Date.now()));
+  });
+  return Promise.race([turn, late]).finally(() => clearTimeout(timer));
 }
 
-async function fetchWikimedia(url: URL): Promise<unknown> {
+async function fetchWikimedia(url: URL, deadline: number): Promise<unknown> {
   for (let attempt = 0; ; attempt++) {
     const res = await fetch(url, {
       headers: { 'User-Agent': USER_AGENT, Accept: 'application/json' },
-      signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
+      signal: AbortSignal.timeout(Math.max(1, Math.min(UPSTREAM_TIMEOUT_MS, deadline - Date.now()))),
     });
     if (res.ok) return res.json();
     const retry = RETRY_DELAYS_MS[attempt];
     if (res.status !== 429 || retry === undefined) throw new Error(`Wikimedia ${res.status} for ${url.pathname}`);
     const after = Number(res.headers.get('retry-after'));
-    await sleep(Number.isFinite(after) && after > 0 ? after * 1000 : retry);
+    const wait = Number.isFinite(after) && after > 0 ? after * 1000 : retry;
+    // A retry that could not finish in time is not worth waiting for.
+    if (deadline - Date.now() - wait < MIN_REQUEST_MS) throw new Error(`Wikimedia 429 for ${url.pathname} (no time left to retry)`);
+    await sleep(wait);
   }
+}
+
+function outOfTime(): Error {
+  return new Error('Wikimedia lookup out of time');
 }
 
 function sleep(ms: number): Promise<void> {

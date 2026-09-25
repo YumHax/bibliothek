@@ -16,6 +16,8 @@ export interface StallState {
   loyalty?: string;
   /** Today's market day, in capitals ("NINTENDO FAIR"), when it is a special one. */
   theme?: string;
+  /** What the stallholder has heard about the days ahead (a grail coming, the Brocante, a sale): `rumours.stallRumour` lines. */
+  news?: readonly string[];
 }
 
 /** Lines that fit any stall, any day; mixed in with the ones about the table. */
@@ -73,8 +75,13 @@ export function stallLines(state: StallState): string[] {
   if (upgrade) lines.push(`You've got ${upgrade.game.title}, haven't you? This one's a first print. I'll take yours in part exchange.`);
   const kept = items.find((item) => item.source === 'keptAside');
   if (kept) lines.push(`I kept ${kept.game.title} aside for you. Didn't even put it out.`);
+  const grail = items.find((item) => item.source === 'grail');
+  if (grail) lines.push(`Yes, that's a real ${grail.game.title}. ${grail.price} coins, and I'm not budging much. You won't see another.`);
+  const sale = items.find((item) => item.sale < 1);
+  if (sale) lines.push(`Clearing out, everything's ${Math.round((1 - sale.sale) * 100)}% off. No haggling, the prices are already slashed.`);
   if (state.loyalty) lines.push(state.loyalty === 'Regular' ? 'Good to see you again!' : `There's my ${state.loyalty === 'Friend' ? 'friend' : 'best customer'}! What'll it be?`);
   if (state.theme) lines.push(`${state.theme.charAt(0)}${state.theme.slice(1).toLowerCase()} today. Busy, busy.`);
+  if (state.news) lines.push(...state.news);
   if (state.night) lines.push("Quiet tonight. Take your time, I'm packing up slowly.");
   if (state.sold) lines.push(state.sold > 1 ? `${state.sold} gone already, you're my best customer.` : 'Good choice earlier. Anything else take your fancy?');
 

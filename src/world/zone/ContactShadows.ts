@@ -1,9 +1,13 @@
 import * as THREE from 'three';
 import { QUALITY } from '@/graphics/quality';
 import type { Furniture } from '../Furniture';
+import { markShared } from '../props/Prop';
 
-/** Height of the blobs over the floor: above a rug (so what stands on one keeps its shadow), below anything's feet. */
-const LIFT = 0.012;
+/**
+ * Height of the blobs over the floor: clear of a rug's top (12 mm, `Rug`; so what stands on one
+ * keeps its shadow without the two fighting), below anything's feet.
+ */
+const LIFT = 0.015;
 /** Darkness right under the object. */
 const OPACITY = 0.5;
 /** The blob reaches this much beyond the object's feet on each side (share of its size, plus a margin in metres). */
@@ -40,14 +44,14 @@ function texture(): THREE.CanvasTexture {
     }
   }
   ctx.putImageData(image, 0, 0);
-  blobTexture = new THREE.CanvasTexture(canvas);
+  blobTexture = markShared(new THREE.CanvasTexture(canvas));
   blobTexture.colorSpace = THREE.NoColorSpace;
   return blobTexture;
 }
 
 /** The one material of every blob: black, alpha from the texture, drawn over the floor without writing depth. */
 function material(): THREE.MeshBasicMaterial {
-  blobMaterial ??= new THREE.MeshBasicMaterial({
+  blobMaterial ??= markShared(new THREE.MeshBasicMaterial({
     color: 0x000000,
     alphaMap: texture(),
     transparent: true,
@@ -56,12 +60,12 @@ function material(): THREE.MeshBasicMaterial {
     polygonOffset: true,
     polygonOffsetFactor: -2,
     polygonOffsetUnits: -2,
-  });
+  }));
   return blobMaterial;
 }
 
 /** A unit square lying flat, facing up. */
-const FLAT_SQUARE = new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2);
+const FLAT_SQUARE = markShared(new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2));
 
 /**
  * A soft dark blob `width` x `depth` to add under something that moves (the cat, a shopper):

@@ -4,8 +4,13 @@ import { formatReleaseDate } from '@/catalog/format';
 import { describeEdition } from '@/economy/pricing';
 import { CONTROLS } from './controls';
 import { escapeHtml } from './html';
+import { renderKeys } from './keys';
 
-const HOLDING_HINTS = CONTROLS.filter((c) => c.whileHolding).map((c) => c.html).join(' · ');
+/** Built on each show: the key names follow the bindings and the keyboard layout. */
+const holdingHints = (): string =>
+  CONTROLS.filter((c) => c.whileHolding)
+    .map((c) => `${renderKeys(c.keys)} ${escapeHtml(c.action.toLowerCase())}`)
+    .join(' · ');
 
 /** What the panel adds for a copy that is not the player's yet (a market box): rows on top, a line of text, and its own key hints. */
 export interface PanelExtra {
@@ -55,7 +60,7 @@ export class GamePanel {
       </dl>
       ${note ? `<p class="game-panel__note">${escapeHtml(note)}</p>` : ''}
       ${game.description ? `<p>${escapeHtml(game.description)}</p>` : ''}
-      <footer>${extra.hints ?? HOLDING_HINTS}</footer>`;
+      <footer>${extra.hints ?? holdingHints()}</footer>`;
     this.root.hidden = false;
   }
 

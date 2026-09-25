@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { QUALITY } from '@/graphics/quality';
 import { createCanvas, seededRandom } from '@/covers/generated/canvasUtils';
 import { afterChunk, patchShader, VALUE_NOISE } from './shaderPatch';
+import { markShared } from '../props/Prop';
 
 /** Metres of wall covered by one tile of the plaster texture. */
 const PLASTER_TILE_M = 1.2;
@@ -41,7 +42,7 @@ function plasterBumpMap(): THREE.CanvasTexture {
     const v = Math.round(random() * 255);
     stamp(random() * PLASTER_PX, random() * PLASTER_PX, 0.6 + random() * 1.8, `rgba(${v},${v},${v},0.16)`);
   }
-  plasterBump = new THREE.CanvasTexture(canvas);
+  plasterBump = markShared(new THREE.CanvasTexture(canvas));
   plasterBump.wrapS = plasterBump.wrapT = THREE.RepeatWrapping;
   plasterBump.repeat.setScalar(1 / PLASTER_TILE_M);
   plasterBump.anisotropy = 4;

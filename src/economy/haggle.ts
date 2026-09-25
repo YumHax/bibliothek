@@ -1,4 +1,4 @@
-import { NEGOTIATION, hash01 } from './pricing';
+import { GRAIL, NEGOTIATION, hash01 } from './pricing';
 import type { StockItem } from './StockItem';
 
 /** The three offers the player can make, as shares of the tag (see `NEGOTIATION.offers`). */
@@ -68,12 +68,14 @@ export class Negotiation {
 
   constructor(private readonly item: StockItem, private readonly mood: NegotiationMood) {
     this.tag = item.tagPrice;
-    const kind = item.source === 'showpiece' || item.source === 'estate' ? 'showpiece' : item.condition === 'worn' ? 'worn' : 'ordinary';
+    const kind = item.source === 'showpiece' || item.source === 'estate' || item.source === 'grail' ? 'showpiece' : item.condition === 'worn' ? 'worn' : 'ordinary';
     const [lo, hi] = NEGOTIATION.floor[kind];
     let share = lo + hash01(`${mood.day}:floor:${item.game.id}`) * (hi - lo);
     share += mood.soured * NEGOTIATION.moodPenalty + mood.loyalty * NEGOTIATION.loyalty;
     if (mood.coffee) share += NEGOTIATION.coffee.floor;
     if (mood.rain) share += NEGOTIATION.rain;
+    // A grail's seller knows what they have: loyalty, coffee and rain move them a little, never far.
+    if (item.source === 'grail') share = Math.max(GRAIL.floor, share);
     this.floor = Math.max(1, Math.round(this.tag * Math.min(1, Math.max(NEGOTIATION.lowest, share))));
     this.patience = NEGOTIATION.patience - mood.soured + (mood.coffee ? NEGOTIATION.coffee.patience : 0);
     this.counterPrice = this.tag;

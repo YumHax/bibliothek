@@ -5,11 +5,12 @@ import type { Interactable, LabelPlacement } from '@/interaction/Interactable';
 import type { ArcadeMachineLike, ArcadeResult, SessionActions } from '@/game/SessionActions';
 import type { ChipSpeaker } from '@/audio/ChipSpeaker';
 import type { Furniture } from '../Furniture';
-import { type ArcadeControls, NO_CONTROLS } from './games/ArcadeGame';
-import { InitialsEntry } from './InitialsEntry';
+import type { ArcadeControls } from './games/ArcadeGame';
+import type { InitialsEntry } from './InitialsEntry';
 import type { TicketStrip } from './TicketStrip';
-import { TAKEN_LINE, type Occupant, type Station, type StationEvents } from './Station';
+import type { Occupant, Station, StationEvents } from './Station';
 import type { ScoreTable } from './scoreTable';
+import { MachineRun, type MachineRunOptions, type MachineState } from './MachineRun';
 
 /** What every physical ticket machine is wired to. */
 export interface TicketMachineWiring {
@@ -25,25 +26,17 @@ export interface TicketMachineWiring {
   outOfOrder?: () => boolean;
 }
 
-export type MachineState = 'attract' | 'playing' | 'initials' | 'over' | 'demo';
+export type { MachineState } from './MachineRun';
 
-const COUNT_UP_SECONDS = 1.2;
 const REGULAR_PAUSE = 3;
-const OUT_OF_ORDER_LINE = 'OUT OF ORDER. Sorry. — the management';
-const LEFT_KEYS = ['KeyA', 'ArrowLeft'];
-const RIGHT_KEYS = ['KeyD', 'ArrowRight'];
-const UP_KEYS = ['KeyW', 'ArrowUp'];
-const DOWN_KEYS = ['KeyS', 'ArrowDown'];
-const FIRE_KEYS = ['Space', 'Enter', 'NumpadEnter'];
 
 /**
- * What the hall's newer physical machines share (the ticket wheel, the hoops): the paid play from
- * coin to end card through the Session (`playArcade`), the keys read straight from `Input`, the
- * initials for a score that makes the table, the tickets counted out of the strip, a regular
- * taking it (`occupy`: it plays itself until `release`, their final score going to the crowd),
- * out-of-order days, the labels. A machine is only its play: `newGame`, `play` (one frame, true
- * when it is over), `demoControls` (a regular's hands), `score`, its display, and where people
- * stand. Subclasses build their model, `speaker` and `strip` in their constructor.
+ * A physical ticket machine (the alley, the hoops, the ticket wheel) over a `MachineRun`: the paid
+ * play from coin to end card, the initials, the strip, a regular taking it (their final score to
+ * the crowd), out-of-order days, the labels. A machine is only its play: `newGame`, `play` (one
+ * frame, true when it is over), `demoControls` (a regular's hands), `score`, its display, and
+ * where people stand. Subclasses build their model, `speaker`, `strip` and `note` in their
+ * constructor, before anything reads the state (the run is made on first use, from them).
  */
 export abstract class TicketMachine extends THREE.Group implements Furniture, Interactable, Updatable, ArcadeMachineLike, Station {
   abstract readonly hitboxes: THREE.Object3D[];
@@ -54,20 +47,12 @@ export abstract class TicketMachine extends THREE.Group implements Furniture, In
   readonly stationEvents: StationEvents = {};
   readonly freeWhenBroke = true;
 
-  protected state: MachineState = 'attract';
-  protected who: Occupant = null;
-  protected entry: InitialsEntry | null = null;
-  protected last: ArcadeResult = { score: 0, best: false };
-  protected lastRank: number | null = null;
-  protected overClock = 0;
   protected clock = 0;
   protected abstract readonly speaker: ChipSpeaker;
   protected abstract readonly strip: TicketStrip;
-  private onOver: ((result: ArcadeResult) => void) | null = null;
-  private lastFire = false;
-  private demoDone = false;
-  private demoPause = 0;
-  private counted = 0;
+  /** The out-of-order note on its display, when it has one. */
+  protected note: THREE.Object3D | null = null;
+  private machineRun: MachineRun | null = null;
 
   protected constructor(protected readonly wiring: TicketMachineWiring) {
     super();
@@ -88,16 +73,34 @@ export abstract class TicketMachine extends THREE.Group implements Furniture, In
   protected abstract paint(dt: number): void;
   abstract setHovered(hovered: boolean): void;
 
+  /** The play cycle, made on first use from what the subclass's constructor built. */
+  protected get run(): MachineRun {
+    this.machineRun ??= new MachineRun({
+      game: this.game,
+      input: this.wiring.input,
+      speaker: this.speaker,
+      stationEvents: this.stationEvents,
+      nextPlayCost: this.wiring.nextPlayCost,
+      pointsPerTicket: this.wiring.pointsPerTicket,
+      strip: this.strip,
+      ...(this.wiring.scores ? { scores: this.wiring.scores } : {}),
+      ...(this.wiring.outOfOrder ? { outOfOrder: this.wiring.outOfOrder } : {}),
+      ...(this.note ? { note: this.note } : {}),
+      ...this.runOptions(),
+    });
+    return this.machineRun;
+  }
+
   get isPlaying(): boolean {
-    return this.state === 'playing' || this.state === 'initials';
+    return this.run.isPlaying;
   }
 
   get occupant(): Occupant {
-    return this.who;
+    return this.run.occupant;
   }
 
   get outOfOrder(): boolean {
-    return this.who === null && (this.wiring.outOfOrder?.() ?? false);
+    return this.run.outOfOrder;
   }
 
   screenCentre(): THREE.Vector3 {
@@ -105,116 +108,52 @@ export abstract class TicketMachine extends THREE.Group implements Furniture, In
   }
 
   start(onOver: (result: ArcadeResult) => void): void {
-    this.onOver = onOver;
-    this.state = 'playing';
+    this.run.start(onOver);
     this.newGame();
-    this.speaker.level = 1;
-    this.speaker.play('coin');
-    this.strip.tear();
-    this.counted = 0;
-    this.lastFire = true;
-    if (this.who !== 'player') {
-      this.who = 'player';
-      this.stationEvents.onPlayerStart?.();
-    }
   }
 
   abort(): void {
-    if (this.state === 'initials' && this.entry) this.sign(this.entry.value);
-    this.onOver = null;
-    this.entry = null;
-    this.state = 'attract';
-    this.who = null;
-    this.strip.tear();
+    this.run.abort();
     this.newGame();
-    this.stationEvents.onPlayerLeave?.();
   }
 
   occupy(): boolean {
-    if (this.who || this.outOfOrder) return false;
-    this.who = 'regular';
-    this.state = 'demo';
-    this.speaker.level = 0.45;
-    this.demoDone = false;
-    this.demoPause = 0;
+    if (!this.run.occupy()) return false;
     this.newGame();
     return true;
   }
 
   release(): void {
-    if (this.who !== 'regular') return;
-    this.who = null;
-    this.state = 'attract';
-    this.newGame();
+    if (this.run.release()) this.newGame();
   }
 
   label(): string {
-    if (this.who === 'regular') return TAKEN_LINE;
-    if (this.outOfOrder) return OUT_OF_ORDER_LINE;
-    if (this.state === 'playing') return this.playingLabel();
-    if (this.state === 'initials') return 'Sign the hall of fame · E to walk away';
-    if (this.state === 'over') return `Space or click to play again (${this.priceText()}) · E to walk away`;
-    return this.attractLabel(this.priceText());
+    return this.run.label({ attract: this.attractLabel(this.run.priceText()), playing: this.playingLabel() });
   }
 
   labelPlacement(): LabelPlacement {
-    return this.state === 'attract' || this.who === 'regular' ? 'crosshair' : 'edge';
+    return this.run.labelPlacement();
   }
 
   activate(session: SessionActions): void {
-    if (this.who === 'regular') session.hint(TAKEN_LINE);
-    else if (this.outOfOrder) session.hint(OUT_OF_ORDER_LINE);
-    else if (this.state === 'playing' && this.clickWhilePlaying()) return;
-    else session.playArcade(this);
+    this.run.activate(session, this, () => this.clickWhilePlaying());
   }
 
   update(dt: number): void {
     this.clock += dt;
     this.speaker.follow();
     this.strip.update(dt);
-    switch (this.state) {
-      case 'playing':
-        if (this.play(dt, this.readControls())) this.finish();
-        break;
-      case 'demo':
-        if (this.demoDone) {
-          this.demoPause += dt;
-          if (this.demoPause > REGULAR_PAUSE) {
-            this.demoDone = false;
-            this.demoPause = 0;
-            this.speaker.play('coin');
-            this.newGame();
-          }
-        } else if (this.play(dt, this.demoControls(dt))) {
-          this.demoDone = true;
-          this.stationEvents.onRegularResult?.(this.score);
-          this.regularFinished(this.score);
-        }
-        break;
-      case 'initials': {
-        const sfx = this.entry?.update(dt, this.readControls());
-        if (sfx) this.speaker.play(sfx);
-        if (this.entry?.done) {
-          this.sign(this.entry.value);
-          this.entry = null;
-          this.state = 'over';
-          this.overClock = 0;
-        }
-        break;
+    const { run } = this;
+    run.update(dt);
+    if (run.state === 'playing') {
+      if (this.play(dt, run.readControls())) this.finished(run.finish(this.score));
+    } else if (run.state === 'demo') {
+      if (run.regularDone) {
+        if (run.regularPause(dt, REGULAR_PAUSE)) this.newGame();
+      } else if (this.play(dt, this.demoControls(dt))) {
+        run.regularResult(this.score);
+        this.regularFinished(this.score);
       }
-      case 'over': {
-        this.overClock += dt;
-        const tickets = this.ticketsOf(this.last.score);
-        const shown = Math.floor(tickets * Math.min(1, this.overClock / COUNT_UP_SECONDS));
-        if (shown > this.counted && shown - this.counted >= Math.max(1, tickets / 30)) {
-          this.counted = shown;
-          this.speaker.play('ticket');
-        }
-        this.strip.setTickets(shown);
-        break;
-      }
-      case 'attract':
-        break;
     }
     this.paint(dt);
   }
@@ -223,9 +162,51 @@ export abstract class TicketMachine extends THREE.Group implements Furniture, In
     this.speaker.dispose();
   }
 
+  // --- What the subclass reads of the run -------------------------------------------------------
+
+  protected get state(): MachineState {
+    return this.run.state;
+  }
+
+  protected get who(): Occupant {
+    return this.run.occupant;
+  }
+
+  protected get entry(): InitialsEntry | null {
+    return this.run.entry;
+  }
+
+  protected get last(): ArcadeResult {
+    return this.run.last;
+  }
+
+  protected get lastRank(): number | null {
+    return this.run.lastRank;
+  }
+
+  /** The count-up's progress on the end card, 0..1. */
+  protected get countUp(): number {
+    return this.run.countUp;
+  }
+
+  protected ticketsOf(score: number): number {
+    return this.run.tickets(score);
+  }
+
+  protected priceText(): string {
+    return this.run.priceText();
+  }
+
+  // --- Hooks ------------------------------------------------------------------------------------
+
+  /** More of the run's options (the alley's fire only counting once let go). */
+  protected runOptions(): Pick<MachineRunOptions, 'fireAfterRelease'> {
+    return {};
+  }
+
   /** The label while the player plays. */
-  protected playingLabel(): string {
-    return 'Press E or click to walk away (the play is lost)';
+  protected playingLabel(): string | undefined {
+    return undefined;
   }
 
   /** A click on the machine mid-play: true when it means something to the play (the wheel's lever), false to walk away. */
@@ -233,61 +214,9 @@ export abstract class TicketMachine extends THREE.Group implements Furniture, In
     return false;
   }
 
+  /** The player's play ended (the alley sighs or cheers). */
+  protected finished(_result: ArcadeResult): void {}
+
   /** A regular's play ended (the wheel pays its jackpot out to them). */
   protected regularFinished(_score: number): void {}
-
-  protected priceText(): string {
-    const cost = this.wiring.nextPlayCost();
-    return cost === 0 ? 'free play' : `${cost} coin${cost > 1 ? 's' : ''}`;
-  }
-
-  protected ticketsOf(score: number): number {
-    return Math.floor(score / this.wiring.pointsPerTicket);
-  }
-
-  /** The count-up's progress on the end card, 0..1. */
-  protected get countUp(): number {
-    return Math.min(1, this.overClock / COUNT_UP_SECONDS);
-  }
-
-  private finish(): void {
-    const { scores } = this.wiring;
-    const score = this.score;
-    this.last = { score, best: !!scores && score > 0 && score > scores.bestOf(this.game.id) };
-    this.lastRank = null;
-    this.counted = 0;
-    if (scores?.qualifies(this.game.id, score)) {
-      const rank = Math.max(0, scores.table(this.game.id).findIndex((e) => score > e.score));
-      this.entry = new InitialsEntry(scores.initials, rank, score);
-      this.state = 'initials';
-    } else {
-      if (scores) this.sign(scores.initials);
-      this.state = 'over';
-      this.overClock = 0;
-    }
-    const handler = this.onOver;
-    this.onOver = null;
-    handler?.(this.last);
-    this.stationEvents.onPlayerResult?.(this.last);
-  }
-
-  private sign(initials: string): void {
-    this.lastRank = this.wiring.scores?.submit(this.game.id, this.last.score, initials).rank ?? null;
-  }
-
-  protected readControls(): ArcadeControls {
-    const { input } = this.wiring;
-    const fire = input.isDown(...FIRE_KEYS);
-    const controls: ArcadeControls = {
-      ...NO_CONTROLS,
-      left: input.isDown(...LEFT_KEYS),
-      right: input.isDown(...RIGHT_KEYS),
-      up: input.isDown(...UP_KEYS),
-      down: input.isDown(...DOWN_KEYS),
-      fire,
-      firePressed: fire && !this.lastFire,
-    };
-    this.lastFire = fire;
-    return controls;
-  }
 }

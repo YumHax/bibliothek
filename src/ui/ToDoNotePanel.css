@@ -1,0 +1,71 @@
+/* The first day's note: a sheet of squared paper in felt pen, held up over the view. */
+.todo-note {
+  padding: 1.5rem;
+  background: var(--ui-backdrop);
+}
+.todo-note__paper {
+  width: min(30rem, 100%);
+  max-height: 100%;
+  overflow-y: auto;
+  box-sizing: border-box;
+  padding: 1.3rem 1.5rem 1rem;
+  color: #1d3557;
+  font-family: 'Segoe Print', 'Bradley Hand', 'Comic Sans MS', cursive;
+  font-size: 0.98rem;
+  line-height: 1.5;
+  border-radius: 2px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.55);
+  transform: rotate(0.8deg);
+  background:
+    repeating-linear-gradient(0deg, transparent 0, transparent 19px, rgba(80, 120, 170, 0.18) 19px, rgba(80, 120, 170, 0.18) 20px),
+    repeating-linear-gradient(90deg, transparent 0, transparent 19px, rgba(80, 120, 170, 0.18) 19px, rgba(80, 120, 170, 0.18) 20px),
+    #fdfcf7;
+}
+.todo-note__paper p {
+  margin: 0 0 0.6rem;
+}
+.todo-note__hello {
+  font-size: 1.3rem;
+}
+.todo-note__paper ol {
+  margin: 0 0 0.6rem;
+  padding: 0;
+  list-style: none;
+}
+.todo-note__paper li.is-done {
+  text-decoration: line-through;
+  opacity: 0.6;
+}
+.todo-note__sign {
+  text-align: right;
+}
+.todo-note__paper footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+.todo-note__paper button {
+  font: inherit;
+  font-size: 0.82rem;
+  color: inherit;
+  background: transparent;
+  border: 1px solid rgba(29, 53, 87, 0.45);
+  border-radius: 4px;
+  padding: 0.15rem 0.6rem;
+  cursor: pointer;
+}
+.todo-note__paper button:hover {
+  background: rgba(29, 53, 87, 0.08);
+}
+.todo-note__paper button:focus-visible {
+  outline: 2px solid var(--ui-accent);
+  outline-offset: 2px;
+}
+.todo-note .visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+}

@@ -55,7 +55,7 @@ export class HagglePanel extends MarketPanel {
     const pips = '●'.repeat(n.patienceLeft) || '—';
     const log = this.log.map((e) => `<p class="haggle__line haggle__line--${e.who}"><b>${e.who === 'you' ? 'You' : 'Stallholder'}</b> ${escapeHtml(e.text)}</p>`).join('');
     const offers = OFFER_KINDS.map((kind, i) => `
-      <button type="button" data-action="offer" data-kind="${kind}" ${n.done ? 'disabled' : ''} ${i === 1 ? 'data-autofocus' : ''}>
+      <button type="button" class="ui-btn" data-action="offer" data-kind="${kind}" ${n.done ? 'disabled' : ''} ${i === 1 ? 'data-autofocus' : ''}>
         <kbd>${i + 1}</kbd> ${OFFER_LABEL[kind]} ${coinsHtml(n.offerPrice(kind))}
       </button>`).join('');
     const canTake = !n.done && n.asking < n.tag;
@@ -70,8 +70,8 @@ export class HagglePanel extends MarketPanel {
       <div class="haggle__log">${log}</div>
       <div class="haggle__offers">
         ${offers}
-        <button type="button" data-action="take" ${canTake ? '' : 'disabled'}><kbd>Enter</kbd> Take ${n.asking}</button>
-        ${n.done ? `<button type="button" data-action="close" class="haggle__back">Back to the stall</button>` : ''}
+        <button type="button" class="ui-btn ui-btn--primary" data-action="take" ${canTake ? '' : 'disabled'}><kbd>Enter</kbd> Take ${n.asking}</button>
+        ${n.done ? `<button type="button" data-action="close" class="ui-btn ui-btn--primary haggle__back">Back to the stall</button>` : ''}
       </div>`;
     const logEl = this.body.querySelector('.haggle__log');
     if (logEl) logEl.scrollTop = logEl.scrollHeight;
@@ -127,6 +127,6 @@ export class HagglePanel extends MarketPanel {
       if (reply.insulted) this.insults++;
     }
     this.setStatus(reply.kind === 'accept' ? `Deal: ${reply.price} coins. B at the stall to pay.` : reply.kind === 'walk' ? `No deal: ${reply.price} coins stands for today.` : '');
-    this.render();
+    this.refresh();
   }
 }

@@ -1,7 +1,12 @@
 import * as THREE from 'three';
 import type { Updatable } from '@/core/Engine';
 import type { Zone } from './Zone';
-import type { ZoneManager } from './ZoneManager';
+
+/** What the culler asks the `ZoneManager`: the player's zone, and the zone a portal leads to. */
+export interface CurrentZone {
+  readonly current: Zone;
+  zone(id: string): Zone | undefined;
+}
 
 /**
  * A doorway the camera stands in (this close to it) always counts as in view: the zone manager's
@@ -26,7 +31,7 @@ export class PortalCuller implements Updatable {
 
   constructor(
     private readonly zones: readonly Zone[],
-    private readonly manager: ZoneManager,
+    private readonly manager: CurrentZone,
     private readonly camera: THREE.Camera,
   ) {}
 

@@ -1,7 +1,11 @@
 import type { Updatable } from '@/core/Engine';
 import type { Input } from '@/core/Input';
-import { SPRINT_CODE, CROUCH_CODES, type FirstPersonController } from '@/player/FirstPersonController';
+import { SPRINT_CODE, type FirstPersonController } from '@/player/FirstPersonController';
+import { primaryCode } from './actions';
+import { GAMEPAD_BUTTON_CODES } from './padButtons';
 import type { SyntheticMouse } from './SyntheticMouse';
+
+export { GAMEPAD_BUTTON_CODES } from './padButtons';
 
 export interface GamepadOptions {
   /** Radial dead zone of both sticks, in [0, 1). */
@@ -14,26 +18,19 @@ export interface GamepadOptions {
   /** How fast a full right-stick tilt spins a carried box, in synthetic mouse pixels per second. */
   rotateSpeed?: number;
   /**
-   * Extra key codes pressed alongside a button's own code, e.g. `{ GamepadX: 'KeyE', GamepadY: 'KeyO' }`.
-   * Empty by default so the Session can bind the `Gamepad*` codes itself without double actions.
+   * Extra key codes pressed alongside a button's own code, e.g. `{ GamepadX: 'KeyE', GamepadY: 'KeyO' }`
+   * (the action table's `PAD_ALIASES`). Empty by default so the Session can bind the `Gamepad*` codes
+   * itself without double actions.
    */
   keyAliases?: Record<string, string>;
   onConnectionChange?(connected: boolean, gamepad: Gamepad | null): void;
 }
 
-/** Standard mapping (https://w3c.github.io/gamepad/#remapping): button index → `Input` press code. */
-export const GAMEPAD_BUTTON_CODES: readonly string[] = [
-  'GamepadA', 'GamepadB', 'GamepadX', 'GamepadY',
-  'GamepadLB', 'GamepadRB', 'GamepadLT', 'GamepadRT',
-  'GamepadSelect', 'GamepadStart', 'GamepadLS', 'GamepadRS',
-  'GamepadUp', 'GamepadDown', 'GamepadLeft', 'GamepadRight', 'GamepadHome',
-];
-
 const BUTTON = { A: 0, B: 1, LB: 4, RB: 5, LS: 10, UP: 12, DOWN: 13, LEFT: 14, RIGHT: 15 } as const;
 /** Codes the left stick / d-pad hold, i.e. what the controller reads for movement. */
-const MOVE = { up: 'KeyW', down: 'KeyS', left: 'KeyA', right: 'KeyD' } as const;
+const MOVE = { up: primaryCode('forward'), down: primaryCode('back'), left: primaryCode('left'), right: primaryCode('right') } as const;
 /** Crouch code owned by the gamepad (touch never holds it, so the two never fight). */
-const CROUCH_CODE = CROUCH_CODES[0];
+const CROUCH_CODE = primaryCode('crouch');
 
 /**
  * Polls the first connected gamepad each frame (standard mapping) and translates it into what the
@@ -51,6 +48,7 @@ export class GamepadInput implements Updatable {
   private connected = false;
   private stickEngaged = false;
   private readonly opts: Required<Omit<GamepadOptions, 'onConnectionChange'>> & Pick<GamepadOptions, 'onConnectionChange'>;
+  private lookScale = 1;
 
   constructor(
     private readonly input: Input,
@@ -67,6 +65,12 @@ export class GamepadInput implements Updatable {
       keyAliases: options.keyAliases ?? {},
       onConnectionChange: options.onConnectionChange,
     };
+  }
+
+  /** Settings > Look: `speed` multiplies the configured `lookSpeed`. */
+  setLook(options: { speed: number; invertY: boolean }): void {
+    this.lookScale = options.speed;
+    this.opts.invertY = options.invertY;
   }
 
   update(dt: number): void {
@@ -146,7 +150,8 @@ export class GamepadInput implements Updatable {
     if (x === 0 && rawY === 0) return;
     const y = this.opts.invertY ? -rawY : rawY;
     if (this.player.lookEnabled) {
-      this.player.applyLook(x * this.opts.lookSpeed * dt, y * this.opts.lookSpeed * dt);
+      const speed = this.opts.lookSpeed * this.lookScale;
+      this.player.applyLook(x * speed * dt, y * speed * dt);
     } else {
       // Look is disabled while the Inspector rotates the held box: feed it mouse-like deltas instead.
       this.mouse.move(x * this.opts.rotateSpeed * dt, y * this.opts.rotateSpeed * dt);

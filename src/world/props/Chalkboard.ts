@@ -49,9 +49,12 @@ export class Chalkboard extends THREE.Group implements Furniture {
       const leaf = new THREE.Group();
       leaf.position.y = h;
       leaf.rotation.x = side * LEAN;
-      // Frame bars, then the slate set into them, its face towards the leaf's outside.
-      leaf.add(boxMesh(BAR, h, BAR, wood, { x: -w / 2 + BAR / 2, y: -h / 2 }));
-      leaf.add(boxMesh(BAR, h, BAR, wood, { x: w / 2 - BAR / 2, y: -h / 2 }));
+      // Frame bars, then the slate set into them, its face towards the leaf's outside. The back
+      // leaf's stiles sit a millimetre in: the two leaves' outer end faces cross at the hinge and
+      // would z-fight in one plane.
+      const stile = w / 2 - BAR / 2 - (side > 0 ? 0 : 0.001);
+      leaf.add(boxMesh(BAR, h, BAR, wood, { x: -stile, y: -h / 2 }));
+      leaf.add(boxMesh(BAR, h, BAR, wood, { x: stile, y: -h / 2 }));
       leaf.add(boxMesh(w - 2 * BAR, BAR, BAR, wood, { y: -BAR / 2 }));
       leaf.add(boxMesh(w - 2 * BAR, BAR, BAR, wood, { y: -h + BAR / 2 }));
       const dark = matte(0x111511, 0.9);

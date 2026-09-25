@@ -23,18 +23,8 @@ export interface Furniture extends THREE.Object3D {
   dispose?(): void;
 }
 
-/**
- * Furniture whose per-frame cost follows whether the player is in its zone: a room's sky ambient
- * (scene-wide), a lamp's shadow map (re-rendered every frame only where the player is, now and
- * then elsewhere). The zone calls it on every change of the player's zone, and once on `place()`.
- */
-export interface OccupancyAware {
-  setOccupied(occupied: boolean): void;
-}
-
-export function isOccupancyAware(obj: object): obj is OccupancyAware {
-  return typeof (obj as Partial<OccupancyAware>).setOccupied === 'function';
-}
+/** The zone-lifecycle hooks furniture may implement (occupied / drawn / active), see `zone/lifecycle.ts`. */
+export { isOccupancyAware, isDrawnAware, isActivityAware, type OccupancyAware, type DrawnAware, type ActivityAware } from './zone/lifecycle';
 
 /**
  * Seconds between two renders of a shadow map whose light is in a zone the player is not in.

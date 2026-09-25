@@ -55,6 +55,21 @@ export function invisibleHitbox(width: number, height: number, depth: number, po
   return mesh;
 }
 
+const INTO = new THREE.Vector3(0, 0, -1);
+/** The `facing` of a seat: whoever sits looks out along its local +z. */
+export const FACING_OUT: Readonly<THREE.Vector3> = new THREE.Vector3(0, 0, 1);
+
+/**
+ * Where the camera goes for someone at `object`'s local `eye`, looking along its local `facing`
+ * (default -z: into a machine from its front; a seat looks out, `FACING_OUT`): the world eye
+ * position and the yaw. A camera looks down -z, so yaw θ faces (-sin θ, 0, -cos θ).
+ */
+export function eyePoseAt(object: THREE.Object3D, eye: Readonly<THREE.Vector3>, facing: Readonly<THREE.Vector3> = INTO): { position: THREE.Vector3; yaw: number } {
+  const position = object.localToWorld(eye.clone());
+  const forward = facing.clone().applyQuaternion(object.getWorldQuaternion(new THREE.Quaternion()));
+  return { position, yaw: Math.atan2(-forward.x, -forward.z) };
+}
+
 function shadowed(mesh: THREE.Mesh, position: MeshPosition): THREE.Mesh {
   mesh.position.set(position.x ?? 0, position.y ?? 0, position.z ?? 0);
   mesh.castShadow = true;

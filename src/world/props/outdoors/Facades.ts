@@ -2,7 +2,8 @@ import { type LightKind, Polygon, Sheet, type Rng } from './Sheet';
 import { between, deg, integer, mixHex, pick, shade } from './paint';
 import { CORNER, FRONTAGE, FRONT_END, FRONT_END_FROM, FRONT_END_TO, PARK_END, PARK_END_FROM, PARK_END_TO, PARK_FAR, PARK_FROM, PARK_TO, frontage, parkLine } from './plan';
 import { FacadeFrame } from './FacadeFrame';
-import { RETRO_GAMES, type Storefront, paintShopfronts } from './Shopfront';
+import { RETRO_GAMES, type PlannedShop, type Storefront, paintShopfronts } from './Shopfront';
+import { FACADES, FLAT_IN_STREET, FRONT } from '../../street/streetPlan';
 import { holidayBetween, paintPumpkin, wantsPumpkin } from './Holiday';
 import { currentHoliday } from './season';
 
@@ -41,8 +42,6 @@ const WINDOW_GLASS = '#34434f';
 /** Ground floor height and floor-to-floor height, in metres. */
 export const GROUND = 4.2;
 const FLOOR = 3.1;
-/** Where the retro games shop is: across the street, a little right of straight ahead of the front windows. */
-const RETRO_AZIMUTH = deg(8);
 
 function architecture(random: Rng, stoneShare: number): Architecture {
   const r = random();
@@ -109,6 +108,8 @@ export interface BuildingSpec {
   shops?: boolean;
   /** Its ground floor is the retro games shop. */
   landmark?: boolean;
+  /** The walkable street's shops on it, where the plan has them (then no lots are drawn for the ground floor). */
+  planned?: readonly PlannedShop[];
 }
 
 /** Paints buildings shoulder to shoulder along `line` from azimuth `from` to `to`, `widths` metres each; returns their shops. */
@@ -157,7 +158,24 @@ export function paintBackdrops(sheet: Sheet, random: Rng): void {
  * in front of them once the pavement is down.
  */
 export function paintFrontBlock(sheet: Sheet, random: Rng): Storefront[] {
-  return paintFacadeRow(sheet, random, CORNER, deg(180), (a) => frontage(a), [5, 6], undefined, undefined, RETRO_AZIMUTH).filter((shop) => shop.a1 < deg(80) && frontage(shop.a0) <= FRONTAGE * 4);
+  // The row across Front Street as the walkable street has it (`FACADES`, street-local x shifted to the eye's),
+  // from the park corner along, its storeys and shops (RÉTRO JEUX among them); then the rest of the block by lots.
+  const eyeX = -FLAT_IN_STREET.x;
+  const row = FACADES.filter((spec) => spec.from[1] === FRONT.farLine && spec.to[1] === FRONT.farLine)
+    .map((spec) => ({ spec, x0: Math.min(spec.from[0], spec.to[0]) + eyeX, x1: Math.max(spec.from[0], spec.to[0]) + eyeX }))
+    .sort((a, b) => a.x0 - b.x0);
+  const at = (x: number): number => Math.atan2(x, FRONTAGE);
+  const line = (a: number): number => frontage(a);
+  const shops: Storefront[] = [];
+  for (const { spec, x0, x1 } of row) {
+    const width = x1 - x0;
+    // The plan measures along from the facade's +x end (its left seen from the street); the eye's frame starts at -x.
+    const planned = spec.shops.map((shop) => ({ s0: width - shop.to, s1: width - shop.from, kind: shop.kind, name: shop.name }));
+    shops.push(...paintBuilding(sheet, random, { a0: at(x0), a1: at(x1), line, floors: spec.storeys, shops: true, landmark: spec.shops.some((shop) => shop.kind === 'retro'), planned }));
+  }
+  const end = row.length ? at(row[row.length - 1]!.x1) : CORNER;
+  shops.push(...paintFacadeRow(sheet, random, end, deg(180), line, [5, 6]));
+  return shops.filter((shop) => shop.a1 < deg(80) && frontage(shop.a0) <= FRONTAGE * 4);
 }
 
 /**
@@ -204,8 +222,8 @@ export function paintBuilding(sheet: Sheet, random: Rng, spec: BuildingSpec): St
     f.detail(body, f.vertical(0, h, [[0, 'rgba(255,255,255,0.05)'], [0.55, 'rgba(0,0,0,0.04)'], [1, 'rgba(0,0,0,0.3)']]));
 
     // Street level: shops, or a residential entrance between windows.
-    if (spec.landmark || (spec.shops && fine && random() < 0.72)) {
-      shops = paintShopfronts(f, random, arch.wall, spec.landmark ? RETRO_GAMES : undefined);
+    if (spec.planned ? spec.planned.length > 0 : spec.landmark || (spec.shops && fine && random() < 0.72)) {
+      shops = paintShopfronts(f, random, arch.wall, spec.landmark ? RETRO_GAMES : undefined, spec.planned);
     } else {
       sheet.path(f.strip(0, w, -1.5, GROUND - 0.5), arch.rusticated ? shade(arch.wall, 0.95) : shade(arch.wall, 0.82));
       if (fine) {

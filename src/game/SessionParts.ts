@@ -4,16 +4,24 @@ import type { Interactor } from '@/interaction/Interactor';
 import type { Overlay } from '@/ui/Overlay';
 import type { GamePanel } from '@/ui/GamePanel';
 import type { Toast } from '@/ui/Toast';
-import type { SearchBar } from '@/ui/SearchBar';
-import type { VideoProvider } from '@/video/VideoProvider';
-import type { GameSource } from '@/collection/GameSource';
 import type { Game, PlatformId } from '@/catalog/types';
 import type { GameBox } from '@/world/GameBox';
+import type { ZoneId } from '@/world/zoneIds';
 import type { Seat } from '@/world/Seat';
 import type { SortMode } from '@/world/shelving/sort';
 import type { StockItem } from '@/economy/StockItem';
 import type { Negotiation } from '@/economy/haggle';
-import type { Highlighter } from './Highlighter';
+import type { ModalParts } from './ModalStack';
+import type { HandsParts } from './Hands';
+import type { SeatingParts } from './Seating';
+import type { ScreenParts } from './Screens';
+import type { TravelParts } from './GoingOut';
+import type { ArcadeParts } from './ArcadePlay';
+import type { MarketCounterParts } from './MarketCounter';
+import type { PurchaseParts } from './Purchases';
+import type { BrowseParts } from './Browse';
+import type { CatParts } from './CatCare';
+import type { PhotoParts } from './PhotoControl';
 
 /*
  * Minimal shapes of the optional features the session routes keys to. They are defined here (not
@@ -36,14 +44,18 @@ export interface DayNightLike {
 
 /**
  * A full-screen DOM panel that takes the keyboard and the mouse (the collection editor, the
- * mail-order catalogue). `onOpenChange` is assigned by the session so that closing the panel from
- * its own UI (close button, Esc) also re-enters the room.
+ * mail-order catalogue; `ui/ModalPanel`). The session subscribes through `addOpenListener` (or,
+ * failing it, assigns `onOpenChange`) so that closing the panel from its own UI (close button, Esc)
+ * also re-enters the room.
  */
 export interface ModalLike {
   toggle(): unknown;
   close(): unknown;
   readonly isOpen: boolean;
   onOpenChange?: (open: boolean) => void;
+  addOpenListener?(listener: (open: boolean) => void): () => void;
+  /** Works on the box in hand (haggle, swap): it stays in hand while the panel has the mouse. */
+  readonly keepsHeld?: boolean;
 }
 
 /** The cat: the session calls it with a key and tells it which armchair the player sits in. */
@@ -160,61 +172,34 @@ export interface ArcadeDailyLike {
 
 /** The teleport: where one can go from here, and going there. */
 export interface TravelLike {
-  choices(): { id: string; label: string }[];
-  go(id: string): Promise<void>;
+  choices(): { id: ZoneId; label: string }[];
+  go(id: ZoneId): Promise<void>;
 }
 
-/** The "Where to?" panel a door opens. */
+/** The "Where to?" panel a door opens: it hands back the id of the choice picked. */
 export interface TravelMenuLike {
-  open(choices: { id: string; label: string }[]): void;
+  open(choices: { id: ZoneId; label: string }[]): void;
   close(): void;
   readonly isOpen: boolean;
-  readonly events: { onPick?: (id: string) => void; onCancel?: () => void };
+  onPick(listener: (id: ZoneId) => void): () => void;
+  onCancel(listener: () => void): () => void;
 }
 
-export interface SessionParts {
+/** What every controller may be handed: the player, the hands, the crosshair, the HUD. */
+export interface CoreParts {
   player: FirstPersonController;
-  inspector: Inspector;
+  inspector: Inspector<GameBox>;
   interactor: Interactor;
   overlay: Overlay;
   panel: GamePanel;
-  videos: VideoProvider;
-
-  // --- optional features (each is silently skipped when absent) -------------------------------
+  /** The toast; without it, messages go to the hint line. */
   toast?: Toast;
-  search?: SearchBar;
-  highlighter?: Highlighter;
-  gameSource?: GameSource;
-  shelving?: ShelvingLike;
-  dayNight?: DayNightLike;
-  collectionEditor?: ModalLike;
-  cat?: CatLike;
-  /** A night's sleep from the bed (fade, clock to the next morning, fade back): `game/Sleep`. */
-  sleep?: SleepLike;
-  /** Re-enters the room after a modal (the collection editor) released the pointer lock: `() => void lockFlow.enter()`. */
-  enterRoom?: () => void;
-
-  // --- the economy: going out, playing, buying ---------------------------------------------------
-  wallet?: WalletLike;
-  collection?: CollectionLike;
-  prizes?: PrizesLike;
-  arcadeDaily?: ArcadeDailyLike;
-  /** The prize counter's panel (prizes for tickets, tickets for coins). */
-  prizeCounter?: ModalLike;
-  /** The big frame a web-page cabinet game plays in (LexiPunk): a modal the cabinet opens. */
-  arcadeScreen?: ModalLike;
-  medals?: MedalsLike;
-  league?: LeagueLike;
-  payoutStats?: PayoutStatsLike;
-  travel?: TravelLike;
-  travelMenu?: TravelMenuLike;
-  catalogue?: ModalLike;
-  market?: MarketLike;
-  /** The WE BUY desk's panel. */
-  sellDesk?: ModalLike;
-  standing?: StandingLike;
-  haggle?: HagglePanelLike;
-  trade?: TradePanelLike;
-  /** Whether a game bought now finds room on the shelves at home: a warning line, or null when it does. */
-  shelfRoom?: () => string | null;
 }
+
+/**
+ * Everything `main.ts` hands the Session: the core, and each controller's own parts (declared
+ * next to the controller). A new controller adds its parts interface here, once. Every optional
+ * part is silently skipped when absent.
+ */
+export interface SessionParts
+  extends CoreParts, ModalParts, HandsParts, SeatingParts, ScreenParts, TravelParts, ArcadeParts, MarketCounterParts, PurchaseParts, BrowseParts, CatParts, PhotoParts {}

@@ -108,6 +108,10 @@ export class PersonModel extends THREE.Group {
   private readonly reachTargets: [THREE.Vector3 | null, THREE.Vector3 | null] = [null, null];
   /** How far the upper body leans forward while standing (radians). */
   private leanAngle = 0;
+  /** Seat height (metres over the floor) while sitting, else null: standing. */
+  private seatHeight: number | null = null;
+  /** The materials `setOpacity` fades and their own opacity, once `enableFade` has run. */
+  private fading: { material: THREE.Material; opacity: number }[] | null = null;
 
   constructor(look: PersonLook) {
     super();
@@ -192,6 +196,42 @@ export class PersonModel extends THREE.Group {
     this.leanAngle = angle;
   }
 
+  /**
+   * Sits on a seat `height` metres over the floor (thighs level, shins hanging, the body lowered
+   * so the seat is under it; the origin is where the seat's back edge is), or stands again (null).
+   * Walking always stands; pair it with a pose for the arms (`lap`).
+   */
+  sit(height: number | null): void {
+    this.seatHeight = height;
+  }
+
+  /**
+   * Makes the whole person fadeable (`setOpacity`): every visible material dithers by its opacity
+   * (alpha hash, so no sorting). Call it once, early (it changes the shader programs).
+   */
+  enableFade(): void {
+    if (this.fading) return;
+    const list: { material: THREE.Material; opacity: number }[] = [];
+    const seen = new Set<THREE.Material>();
+    this.traverse((o) => {
+      const mesh = o as THREE.Mesh;
+      if (!mesh.isMesh || mesh === this.hitbox) return;
+      for (const material of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) {
+        if (!material.visible || seen.has(material)) continue;
+        seen.add(material);
+        if (!material.transparent) material.alphaHash = true;
+        list.push({ material, opacity: material.opacity });
+      }
+    });
+    this.fading = list;
+  }
+
+  /** 0 gone .. 1 solid, after `enableFade` (a no-op before). */
+  setOpacity(opacity: number): void {
+    if (!this.fading) return;
+    for (const f of this.fading) f.material.opacity = f.opacity * opacity;
+  }
+
   /** World point the head turns towards, or null to look ahead (with idle glances). */
   gaze(target: THREE.Vector3 | null): void {
     if (!target) {
@@ -205,6 +245,7 @@ export class PersonModel extends THREE.Group {
     this.time += dt;
     const t = this.time;
     const walking = this.speed > 0;
+    const seated = !walking && this.seatHeight !== null;
     const ease = Math.min(1, dt * 6);
     if (walking) this.phase += (dt * this.speed * Math.PI) / STRIDE;
 
@@ -217,6 +258,11 @@ export class PersonModel extends THREE.Group {
         leg.hip.rotation.x = thigh;
         leg.knee.rotation.x = knee;
         leg.ankle.rotation.x = -(thigh + knee) * 0.6;
+      } else if (seated) {
+        // Thighs level on the seat, shins hanging a little forward, feet flat; the knees a touch apart.
+        leg.hip.rotation.x += (-1.5 - leg.hip.rotation.x) * ease;
+        leg.knee.rotation.x += (1.38 - leg.knee.rotation.x) * ease;
+        leg.ankle.rotation.x += (0.1 - leg.ankle.rotation.x) * ease;
       } else {
         leg.hip.rotation.x += (0 - leg.hip.rotation.x) * ease;
         leg.knee.rotation.x += (0.04 - leg.knee.rotation.x) * ease;
@@ -248,11 +294,22 @@ export class PersonModel extends THREE.Group {
       const p = this.phase;
       this.root.position.y = -Math.cos(2 * p) * 0.014;
       this.root.position.x += (0 - this.root.position.x) * ease;
+      this.root.position.z += (0 - this.root.position.z) * ease;
       this.root.rotation.z = Math.sin(p) * 0.02;
       this.torso.rotation.y = Math.sin(p) * 0.07;
       this.torso.rotation.x += (0.04 - this.torso.rotation.x) * ease;
+    } else if (seated) {
+      // The hips come down onto the seat and a little forward of the origin; no weight shifting.
+      const drop = this.seatHeight! + 0.07 - HIP_Y * this.root.scale.y;
+      this.root.position.y += (drop - this.root.position.y) * ease;
+      this.root.position.x += (0 - this.root.position.x) * ease;
+      this.root.position.z += (0.12 - this.root.position.z) * ease;
+      this.root.rotation.z += (0 - this.root.rotation.z) * ease;
+      this.torso.rotation.y += (Math.sin(t * 0.23) * 0.03 - this.torso.rotation.y) * ease;
+      this.torso.rotation.x += (this.leanAngle - 0.06 - this.torso.rotation.x) * ease;
     } else {
       this.root.position.y += (0 - this.root.position.y) * ease;
+      this.root.position.z += (0 - this.root.position.z) * ease;
       this.root.position.x += (Math.sin(t * 0.35) * 0.012 - this.root.position.x) * ease;
       this.root.rotation.z += (Math.sin(t * 0.35) * 0.018 - this.root.rotation.z) * ease;
       this.torso.rotation.y += (Math.sin(t * 0.23) * 0.04 - this.torso.rotation.y) * ease;

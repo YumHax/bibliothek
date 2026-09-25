@@ -54,7 +54,6 @@ export class ArrowRush extends BaseGame {
   private lastLane: Lane | null = null;
   private spawned = 0;
   private hits = 0;
-  private held: Record<Lane, boolean> = { left: false, down: false, up: false, right: false };
   private flashLane: Partial<Record<Lane, number>> = {};
 
   constructor() {
@@ -67,7 +66,6 @@ export class ArrowRush extends BaseGame {
     this.lastLane = null;
     this.spawned = 0;
     this.hits = 0;
-    this.held = { left: false, down: false, up: false, right: false };
     this.flashLane = {};
   }
 
@@ -94,10 +92,7 @@ export class ArrowRush extends BaseGame {
     }
 
     for (const lane of LANES) {
-      const down = controls[lane];
-      const pressed = down && !this.held[lane];
-      this.held[lane] = down;
-      if (!pressed) continue;
+      if (!this.keys.pressed(controls, lane)) continue;
       this.flashLane[lane] = 0.12;
       // The arrow in this lane nearest the line decides the judgement.
       let nearest: Arrow | null = null;
@@ -161,7 +156,7 @@ export class ArrowRush extends BaseGame {
   autopilot(skill: number): ArcadeControls {
     const out = { left: false, right: false, up: false, down: false, fire: false, firePressed: false };
     for (const lane of LANES) {
-      if (this.held[lane]) continue; // let go first, so the next press registers
+      if (this.keys.isHeld(lane)) continue; // let go first, so the next press registers
       const arrow = this.arrows.find((a) => a.lane === lane && Math.abs(a.y - TARGET_Y) <= GOOD_WINDOW);
       if (!arrow) continue;
       const off = arrow.y - TARGET_Y;

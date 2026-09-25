@@ -1,6 +1,6 @@
 import { Polygon, Sheet, type Rng, azimuthOf, azimuthX, groundSquash, heightY, sizePx, worldPoint } from './Sheet';
 import { between, mixHex, pick } from './paint';
-import { CORNER, PARK_EDGE, PARK_FAR, PARK_FROM, PARK_TO, frontage, parkLine } from './plan';
+import { CORNER, PARK_EDGE, PARK_FAR, PARK_FROM, PARK_PATHS, PARK_TO, POND, frontage, parkLine } from './plan';
 import { paintGroundBand } from './Street';
 import { paintBench, paintBin, paintLamp } from './StreetFurniture';
 import { CONIFER_STYLE, TREE_STYLES, type TreeForm, WILLOW_STYLE, paintTree } from './Tree';
@@ -19,16 +19,6 @@ const WATER = '#7b9bb6';
 const WATER_DEEP = '#56788f';
 const SAND = '#c9bda0';
 
-/** The pond: an ellipse on the lawn, metres from the eye. */
-const POND = { x: -115, z: -25, rx: 40, rz: 26 };
-/** The fountain in the middle of the pond (`Life` animates its plume). */
-export const FOUNTAIN = { x: POND.x, z: POND.z };
-/** Gravel paths across the lawn, as polylines from the park gates (the walkers of `Life` follow them). */
-export const PATHS: [number, number][][] = [
-  [[-PARK_EDGE, -10], [-70, -30], [-110, -72], [-160, -62], [-210, -20], [-PARK_FAR, 0]],
-  [[-PARK_EDGE, 30], [-60, 45], [-85, 40], [-120, 15], [-150, 40], [-200, 80], [-PARK_FAR, 90]],
-  [[-PARK_EDGE, -60], [-55, -90], [-90, -130], [-140, -170], [-200, -200]],
-];
 const KIOSK = { x: -88, z: 54, width: 6 };
 const PLAYGROUND = { x: -55, z: -48, radius: 13 };
 /** Round flower beds: centre and radius, metres. */
@@ -150,7 +140,7 @@ function paintKiosk(sheet: Sheet): void {
 
 /** The hedge along Park Street's far pavement, broken by a gate where each path enters the park. */
 function paintHedge(sheet: Sheet, random: Rng): void {
-  const gates = PATHS.map((path) => azimuthOf(-PARK_EDGE, path[0][1]));
+  const gates = PARK_PATHS.map((path) => azimuthOf(-PARK_EDGE, path[0][1]));
   const ranges: [number, number][] = [];
   let start = PARK_FROM;
   for (const gate of [...gates].sort((p, q) => p - q)) {
@@ -278,7 +268,7 @@ export function paintPark(sheet: Sheet, random: Rng): void {
     }, PARK_FROM, PARK_TO, 0, { wet: 0.1, snow: 1 });
   }
   paintGrass(sheet, random);
-  for (const path of PATHS) paintPath(sheet, path, 3);
+  for (const path of PARK_PATHS) paintPath(sheet, path, 3);
   paintPond(sheet, random);
   for (const [x, z, r] of BEDS) paintFlowerBed(sheet, random, x, z, r);
 
@@ -306,7 +296,7 @@ export function paintPark(sheet: Sheet, random: Rng): void {
     add(x, z, () => paintPicnic(sheet, random, x, z));
   }
   // Lamps along the paths, benches facing them, a bin now and then.
-  PATHS.forEach((path, p) => {
+  PARK_PATHS.forEach((path, p) => {
     const pts = resample(path, 4);
     for (let i = 3; i < pts.length - 2; i += 7) {
       const [x, z] = pts[i];

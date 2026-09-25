@@ -157,7 +157,8 @@ export class CoffeeCart extends THREE.Group implements Furniture, Interactable {
     board.castShadow = true;
     stand.add(board);
     for (const dx of [-MENU_W / 2, MENU_W / 2]) stand.add(boxMesh(0.018, MENU_H + 0.01, 0.018, frame, { x: dx, y: MENU_H / 2, z: 0.004 }));
-    stand.add(boxMesh(MENU_W + 0.018, 0.018, 0.018, frame, { y: MENU_H, z: 0.004 }));
+    // The top rail caps the posts, 2 mm proud of them all round (flush faces z-fight).
+    stand.add(boxMesh(MENU_W + 0.022, 0.018, 0.022, frame, { y: MENU_H, z: 0.004 }));
     this.add(stand);
   }
 

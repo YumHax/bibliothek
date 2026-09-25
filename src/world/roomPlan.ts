@@ -95,8 +95,45 @@ export const ROOM_PLAN = {
    */
   homeGoods: { lamp: { at: { floor: [-0.98, 0.62] } as Placement, y: 0.5 } },
 
-  /** The feather wand won at the arcade (a prize that lives at home): lying on the projector rug, between the cushions and the sideboard. */
-  featherWand: { floor: [2.05, 0.3], rotationY: 0.5 } as Placement,
+  /**
+   * The feather wand won at the arcade (a prize that lives at home): lying on the projector rug, between the cushions and
+   * the sideboard, raised by the rug's thickness (`lift`) so it lies on its pile instead of sinking into it.
+   */
+  featherWand: { at: { floor: [2.05, 0.3], rotationY: 0.5 } as Placement, lift: 0.012 },
+
+  /**
+   * The collector's book (`src/world/collector/`). The binder lies on the sideboard's top (0.5 m) in the gap between the
+   * turntable (z -0.53..-0.11) and the records (z 0.23..0.54); the brass plaque, once earned (25 games), stands at the
+   * sideboard's far end past the records, low enough to stay under the projector picture (from 0.63 m). The glass display
+   * cabinet, once earned (50 games), stands against the front wall under the collection poster (x -2.11..-1.39, clear
+   * of the yucca's pot and of the radiator from x -1.3), its top (1.12 m) under the poster's bottom edge (1.3 m).
+   */
+  collector: {
+    book: { at: { wall: 'right', along: 0.06, y: 0.5, offset: 0.2 } as Placement, yaw: 0.1 },
+    plaque: { wall: 'right', along: 0.68, y: 0.5, offset: 0.12 } as Placement,
+    vitrine: { wall: 'front', along: -1.75, y: 0 } as Placement,
+  },
+
+  /**
+   * A visiting friend's round (`src/world/visitors/`), floor points: just inside the door from the hallway, a hub in the
+   * open floor by the bookcases every leg goes through, the spots they browse (facing `yaw`: 0 = +z, pi = the back wall's
+   * shelves, pi/2 = the right wall's), and the armchairs they may sit in (`seat`: index in `seats`), each reached from
+   * the hub `via` points that keep clear of the floor lamps, the cushions and the other chair.
+   */
+  visitor: {
+    door: [-1.5, -2.45] as [number, number],
+    hub: [-0.3, -1.6] as [number, number],
+    browse: [
+      { at: [-0.3, -2.15], yaw: Math.PI, kind: 'shelf' },
+      { at: [1.1, -2.15], yaw: Math.PI, kind: 'shelf' },
+      { at: [2.2, -1.7], yaw: Math.PI / 2, kind: 'shelf' },
+      { at: [0.3, 2.3], yaw: 0, kind: 'window', via: [[-0.2, 0]] },
+    ] as { at: [number, number]; yaw: number; kind: 'shelf' | 'window'; via?: [number, number][] }[],
+    seats: [
+      { seat: 0, via: [[-1.9, -1.4]] },
+      { seat: 1, via: [[1.3, -1.3]] },
+    ] as { seat: number; via: [number, number][] }[],
+  },
 
   /** Everything else: plants, rug, pictures, lamps, tables. One line each; see `props/decor.ts` for the kinds. */
   decor: [
@@ -143,5 +180,20 @@ export const ROOM_PLAN = {
     // A column radiator on the front wall under the posters, between the scratching post (x -1.79..-1.41) and the first
     // window's curtains (from x -0.6), a fleece cradle hooked over it for the cat.
     { kind: 'radiator', at: { wall: 'front', along: -1.0, y: 0 }, options: { width: 0.6, catCradle: true } },
+
+    // --- The holidays (up only then, see `props/outdoors/season.ts`) ---
+    // Christmas: the tree in front of the first window's right half (x 0.6..1.5, clear of the balcony door's swing in the
+    // front-right corner and of a visitor at the window at x 0.3), and fairy lights along the top of the front wall.
+    { kind: 'christmasTree', at: { floor: [1.05, 2.25] }, options: { height: 1.85, radius: 0.45, seed: 25 }, holiday: 'christmas' },
+    { kind: 'fairyLights', at: { wall: 'front', along: 2.9, y: 0, offset: 0.04 }, options: { length: 5.8, height: 2.62, sag: 0.1, seed: 6 }, holiday: 'christmas' },
+    // Halloween: two lit pumpkins at the foot of the first window, cobwebs in the top front-left and back-right corners.
+    { kind: 'pumpkin', at: { floor: [0.95, 2.62], rotationY: 0.1 }, options: { radius: 0.13, seed: 31 }, holiday: 'halloween' },
+    { kind: 'pumpkin', at: { floor: [1.3, 2.52], rotationY: -0.3 }, options: { radius: 0.085, seed: 7 }, holiday: 'halloween' },
+    { kind: 'cobweb', at: { wall: 'front', along: -3.0, y: 2.8 }, options: { size: 0.5, spread: 'left', seed: 11 }, holiday: 'halloween' },
+    { kind: 'cobweb', at: { wall: 'back', along: 3.0, y: 2.8 }, options: { size: 0.45, spread: 'left', seed: 12 }, holiday: 'halloween' },
+    // New Year: gold and silver bunting across the room over the armchairs, balloons by the TV's front window, a banner over the posters.
+    { kind: 'garland', at: { floor: [-2.8, 1.75] }, options: { style: 'bunting', length: 5.6, height: 2.6, sag: 0.3, colors: [0xd4a52a, 0xc4c7cc, 0x1a1a1f], seed: 9 }, holiday: 'newyear' },
+    { kind: 'balloons', at: { floor: [-2.2, 1.35] }, options: { count: 5, seed: 17 }, holiday: 'newyear' },
+    { kind: 'flyer', at: { wall: 'front', along: -1.62, y: 2.33 }, options: { style: 'cloth', title: 'HAPPY NEW YEAR', lines: [], width: 1.1, height: 0.26, paper: 0x1a1a1f, ink: 0xd4a52a, accent: 0xc4c7cc, seed: 3 }, holiday: 'newyear' },
   ] as DecorEntry[],
 };

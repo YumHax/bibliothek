@@ -5,7 +5,7 @@ import type { Interactable, LabelPlacement } from '@/interaction/Interactable';
 import type { PlayerState, SessionActions } from '@/game/SessionActions';
 import type { VideoInfo } from '@/video/VideoProvider';
 import { CrtSpeaker } from '@/audio/CrtSpeaker';
-import type { Furniture } from './Furniture';
+import type { ActivityAware, Furniture } from './Furniture';
 import { boxMesh } from './meshUtils';
 import type { SoundOcclusion } from './acoustics/SoundOcclusion';
 import { VideoSurface, type ScreenState, type ScreenStateListener, type VideoScreen } from './screen';
@@ -45,7 +45,7 @@ export interface TelevisionOptions {
  * A soft point light in front of the glass flickers while playing so the room reads as "TV on",
  * and a `CrtSpeaker` bed (hum, hiss, crackle) makes the sound read as "old TV".
  */
-export class Television extends THREE.Group implements Furniture, Updatable, Interactable, VideoScreen {
+export class Television extends THREE.Group implements Furniture, Updatable, Interactable, VideoScreen, ActivityAware {
   readonly hitboxes: THREE.Object3D[];
   readonly screenName = 'TV';
 
@@ -193,6 +193,18 @@ export class Television extends THREE.Group implements Furniture, Updatable, Int
 
   stop(): void {
     this.surface.stop();
+  }
+
+  /** Dormant zone: the picture lets its video go and the speaker's bed falls silent; both come back with the zone. */
+  setZoneActive(active: boolean): void {
+    this.surface.setZoneActive(active);
+    this.speaker.setZoneActive(active);
+  }
+
+  /** Zone unload: the iframe leaves the page and the speaker's oscillators stop. */
+  dispose(): void {
+    this.surface.dispose();
+    this.speaker.dispose();
   }
 
   update(dt: number): void {

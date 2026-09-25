@@ -1,8 +1,8 @@
-/* Teleport curtain: above everything in the 3D view and the HUD, below the modals (z-index 3). */
+/* Teleport curtain: above the 3D view, the HUD and the panels; only the touch controls and the toasts show through. */
 .fader {
   position: fixed;
   inset: 0;
-  z-index: 3;
+  z-index: var(--z-fader);
   background: #000;
   pointer-events: none;
   transition: opacity 350ms ease;

@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { markShared } from '../props/Prop';
 import type { Interactable } from '@/interaction/Interactable';
 import type { SessionActions } from '@/game/SessionActions';
 import { createCanvas, toTexture, FONT } from '@/covers/generated/canvasUtils';
@@ -20,8 +21,8 @@ const PLINTH_H = 0.08;
 const HEADER_H = 0.24;
 const PX_PER_M = 800;
 
-const STEEL_DARK = new THREE.MeshStandardMaterial({ color: 0x1d1f2a, roughness: 0.5, metalness: 0.4 });
-const CHROME = new THREE.MeshStandardMaterial({ color: 0xb9bcc0, metalness: 0.7, roughness: 0.3 });
+const STEEL_DARK = markShared(new THREE.MeshStandardMaterial({ color: 0x1d1f2a, roughness: 0.5, metalness: 0.4 }));
+const CHROME = markShared(new THREE.MeshStandardMaterial({ color: 0xb9bcc0, metalness: 0.7, roughness: 0.3 }));
 
 /**
  * The change machine every arcade has and nobody trusts: a tall steel box with a lit CHANGE

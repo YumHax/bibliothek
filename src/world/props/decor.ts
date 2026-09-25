@@ -39,6 +39,14 @@ import { ShoeRack, type ShoeRackOptions } from './ShoeRack';
 import { Doormat, type DoormatOptions } from './Doormat';
 import { KilimRug, type KilimRugOptions } from './KilimRug';
 import { Radiator, type RadiatorOptions } from './Radiator';
+import { Pumpkin, type PumpkinOptions } from './Pumpkin';
+import { Cobweb, type CobwebOptions } from './Cobweb';
+import { SweetsBowl, type SweetsBowlOptions } from './SweetsBowl';
+import { ChristmasTree, type ChristmasTreeOptions } from './ChristmasTree';
+import { FairyLights, type FairyLightsOptions } from './FairyLights';
+import { Wreath, type WreathOptions } from './Wreath';
+import { Balloons, type BalloonsOptions } from './Balloons';
+import { currentFestivities, type Festivity } from './outdoors/season';
 
 /**
  * Decoration the room plan can list by name. Each kind builds a `Furniture` from its options;
@@ -86,22 +94,38 @@ export const DECOR_KINDS = {
   doormat: (o: DoormatOptions = {}) => new Doormat(o),
   kilimRug: (o: KilimRugOptions = {}) => new KilimRug(o),
   radiator: (o: RadiatorOptions = {}) => new Radiator(o),
+  // The holidays' (plan entries gated by `holiday`).
+  pumpkin: (o: PumpkinOptions = {}) => new Pumpkin(o),
+  cobweb: (o: CobwebOptions = {}) => new Cobweb(o),
+  sweetsBowl: (o: SweetsBowlOptions = {}) => new SweetsBowl(o),
+  christmasTree: (o: ChristmasTreeOptions = {}) => new ChristmasTree(o),
+  fairyLights: (o: FairyLightsOptions = {}) => new FairyLights(o),
+  wreath: (o: WreathOptions = {}) => new Wreath(o),
+  balloons: (o: BalloonsOptions = {}) => new Balloons(o),
 };
 
 export type DecorKind = keyof typeof DECOR_KINDS;
 type OptionsOf<K extends DecorKind> = Parameters<(typeof DECOR_KINDS)[K]>[0];
 
-/** One line of the plan's `decor` list: what, where, how. */
+/**
+ * One line of the plan's `decor` list: what, where, how; `holiday` puts it up only for that
+ * festivity (the Christmas tree, the pumpkins, New Year's balloons; see `outdoors/season.ts`).
+ */
 export type DecorEntry = {
-  [K in DecorKind]: { kind: K; at: Placement; options?: OptionsOf<K> };
+  [K in DecorKind]: { kind: K; at: Placement; options?: OptionsOf<K>; holiday?: Festivity };
 }[DecorKind];
+
+/** Whether an entry is up today: always, or during its festivity. */
+export function isUp(entry: { holiday?: Festivity }): boolean {
+  return !entry.holiday || currentFestivities().includes(entry.holiday);
+}
 
 export function buildDecor(entry: DecorEntry): Furniture {
   const build = DECOR_KINDS[entry.kind] as (options?: object) => Furniture;
   return build(entry.options);
 }
 
-/** Builds and places every entry; returns them in plan order. */
+/** Builds and places every entry that is up today (see `isUp`); returns them in plan order. */
 export function placeDecor(zone: Zone, entries: readonly DecorEntry[]): Furniture[] {
-  return entries.map((entry) => zone.placeAt(buildDecor(entry), entry.at));
+  return entries.filter(isUp).map((entry) => zone.placeAt(buildDecor(entry), entry.at));
 }

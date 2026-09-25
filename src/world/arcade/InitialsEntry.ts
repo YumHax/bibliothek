@@ -1,5 +1,6 @@
 import type { Sfx } from '@/audio/ChipSpeaker';
 import { type ArcadeControls, drawText } from './games/ArcadeGame';
+import { type ArcadeKey, KeyEdges } from './games/KeyEdges';
 
 const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
 /** Held up / down repeats after this, then this often. */
@@ -17,7 +18,8 @@ const TIMEOUT = 25;
 export class InitialsEntry {
   private readonly letters: number[];
   private cursor = 0;
-  private held: Partial<Record<keyof ArcadeControls, boolean>> = { fire: true };
+  /** The fire press that ended the play counts as held, so it does not accept the first letter. */
+  private readonly keys = new KeyEdges({ fire: true });
   private repeat = 0;
   private clock = 0;
   done = false;
@@ -39,12 +41,7 @@ export class InitialsEntry {
       return 'confirm';
     }
     let sfx: Sfx | null = null;
-    const pressed = (key: 'left' | 'right' | 'up' | 'down' | 'fire'): boolean => {
-      const down = controls[key];
-      const edge = down && !this.held[key];
-      this.held[key] = down;
-      return edge;
-    };
+    const pressed = (key: ArcadeKey): boolean => this.keys.pressed(controls, key);
     const vertical = (controls.up ? 1 : 0) - (controls.down ? 1 : 0);
     const upEdge = pressed('up');
     const downEdge = pressed('down');

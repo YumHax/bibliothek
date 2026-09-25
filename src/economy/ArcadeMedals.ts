@@ -1,7 +1,8 @@
+import { KEYS, PersistedStore, safeStorage } from '@/persistence';
 import { MEDAL_REWARD } from './pricing';
 import { rivalScore } from './rivals';
 
-export const ARCADE_MEDALS_KEY = 'bibliothek.arcadeMedals.v1';
+export const ARCADE_MEDALS_KEY = KEYS.arcadeMedals;
 
 export type MedalTier = 'bronze' | 'silver' | 'gold';
 
@@ -24,12 +25,15 @@ export interface MedalAward {
 export class ArcadeMedals {
   private state: Record<string, MedalTier[]>;
   private readonly listeners = new Set<() => void>();
+  private readonly store: PersistedStore<Record<string, MedalTier[]>>;
 
   constructor(
-    private readonly storage: Storage | null = safeLocalStorage(),
-    private readonly key = ARCADE_MEDALS_KEY,
+    storage: Storage | null = safeStorage(),
+    key: string = ARCADE_MEDALS_KEY,
   ) {
-    this.state = this.load();
+    // Version 1: the tiers earned per machine id.
+    this.store = new PersistedStore<Record<string, MedalTier[]>>({ key, version: 1, storage, defaults: () => ({}), read: readMedals });
+    this.state = this.store.load();
   }
 
   earned(gameId: string): readonly MedalTier[] {
@@ -62,33 +66,16 @@ export class ArcadeMedals {
   }
 
   private commit(): void {
-    try {
-      this.storage?.setItem(this.key, JSON.stringify(this.state));
-    } catch (err) {
-      console.warn('[arcade] could not persist the medals', err);
-    }
+    this.store.save(this.state);
     for (const cb of this.listeners) cb();
-  }
-
-  private load(): Record<string, MedalTier[]> {
-    try {
-      const parsed = JSON.parse(this.storage?.getItem(this.key) ?? 'null') as Record<string, unknown> | null;
-      const out: Record<string, MedalTier[]> = {};
-      if (!parsed || typeof parsed !== 'object') return out;
-      for (const [id, tiers] of Object.entries(parsed)) {
-        if (Array.isArray(tiers)) out[id] = TIERS.filter((t) => tiers.includes(t));
-      }
-      return out;
-    } catch {
-      return {};
-    }
   }
 }
 
-function safeLocalStorage(): Storage | null {
-  try {
-    return typeof localStorage === 'undefined' ? null : localStorage;
-  } catch {
-    return null;
+function readMedals(data: unknown): Record<string, MedalTier[]> | null {
+  if (typeof data !== 'object' || data === null) return null;
+  const out: Record<string, MedalTier[]> = {};
+  for (const [id, tiers] of Object.entries(data)) {
+    if (Array.isArray(tiers)) out[id] = TIERS.filter((t) => tiers.includes(t));
   }
+  return out;
 }

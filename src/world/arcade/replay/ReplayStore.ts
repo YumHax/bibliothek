@@ -1,6 +1,7 @@
+import { KEYS, PersistedStore, safeStorage } from '@/persistence';
 import type { Replay } from './Replay';
 
-export const REPLAYS_KEY = 'bibliothek.arcadeReplays.v1';
+export const REPLAYS_KEY = KEYS.arcadeReplays;
 
 /** Where a cabinet keeps and finds the player's best run on its game. */
 export interface ReplayShelf {
@@ -16,12 +17,12 @@ export interface ReplayShelf {
  */
 export class ReplayStore implements ReplayShelf {
   private state: Record<string, Replay>;
+  private readonly store: PersistedStore<Record<string, Replay>>;
 
-  constructor(
-    private readonly storage: Storage | null = safeLocalStorage(),
-    private readonly key = REPLAYS_KEY,
-  ) {
-    this.state = this.load();
+  constructor(storage: Storage | null = safeStorage(), key: string = REPLAYS_KEY) {
+    // Version 1: game id -> `{ seed, score, initials, runs, aim }`. A run that cannot be read is dropped alone.
+    this.store = new PersistedStore<Record<string, Replay>>({ key, version: 1, storage, defaults: () => ({}), read: readReplays });
+    this.state = this.store.load();
   }
 
   get(gameId: string): Replay | null {
@@ -30,44 +31,24 @@ export class ReplayStore implements ReplayShelf {
 
   save(gameId: string, replay: Replay): void {
     this.state = { ...this.state, [gameId]: replay };
-    this.commit();
+    this.store.save(this.state);
   }
 
   drop(gameId: string): void {
     if (!this.state[gameId]) return;
     const { [gameId]: _dropped, ...rest } = this.state;
     this.state = rest;
-    this.commit();
-  }
-
-  private commit(): void {
-    try {
-      this.storage?.setItem(this.key, JSON.stringify(this.state));
-    } catch (err) {
-      console.warn('[arcade] could not persist the replays', err);
-    }
-  }
-
-  private load(): Record<string, Replay> {
-    try {
-      const parsed = JSON.parse(this.storage?.getItem(this.key) ?? 'null') as Record<string, Partial<Replay>> | null;
-      const out: Record<string, Replay> = {};
-      if (!parsed || typeof parsed !== 'object') return out;
-      for (const [id, r] of Object.entries(parsed)) {
-        if (typeof r?.seed !== 'number' || typeof r.score !== 'number' || !Array.isArray(r.runs)) continue;
-        out[id] = { seed: r.seed, score: r.score, initials: typeof r.initials === 'string' ? r.initials : 'YOU', runs: r.runs.filter((n) => typeof n === 'number'), aim: r.aim === true };
-      }
-      return out;
-    } catch {
-      return {};
-    }
+    this.store.save(this.state);
   }
 }
 
-function safeLocalStorage(): Storage | null {
-  try {
-    return typeof localStorage === 'undefined' ? null : localStorage;
-  } catch {
-    return null;
+function readReplays(data: unknown): Record<string, Replay> | null {
+  if (typeof data !== 'object' || data === null || Array.isArray(data)) return null;
+  const out: Record<string, Replay> = {};
+  for (const [id, value] of Object.entries(data as Record<string, unknown>)) {
+    const r = value as Partial<Replay> | null;
+    if (typeof r?.seed !== 'number' || typeof r.score !== 'number' || !Array.isArray(r.runs)) continue;
+    out[id] = { seed: r.seed, score: r.score, initials: typeof r.initials === 'string' ? r.initials : 'YOU', runs: r.runs.filter((n) => typeof n === 'number'), aim: r.aim === true };
   }
+  return out;
 }

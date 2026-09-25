@@ -1,0 +1,15 @@
+/* The collector's book (CollectorBookPanel): on the market panels' look (market.css), with a progress bar per milestone. */
+.collector__panel > h3:first-child { margin-top: 1rem; }
+.collector__milestone { border-top: 1px solid var(--ui-border); padding: 0.35rem 0; align-items: center; }
+.collector__milestone .catalogue__title { display: flex; flex-direction: column; gap: 0.2rem; }
+.collector__milestone--done b { color: var(--ui-accent); }
+.collector__seal { font-size: 1.2rem; width: 1.4rem; text-align: center; color: var(--ui-text-dim); }
+.collector__milestone--done .collector__seal { color: var(--ui-accent); }
+.collector__bar { display: block; height: 4px; max-width: 16rem; border-radius: 2px; background: var(--ui-fill); overflow: hidden; }
+.collector__bar > span { display: block; height: 100%; background: var(--ui-accent); }
+.collector__badge {
+  display: inline-block; min-width: 1.2em; padding: 0 0.3em; margin-left: 0.2em; border-radius: 0.6em;
+  background: var(--ui-accent); color: #15151d; font-size: 0.75em; text-align: center;
+}
+.collector__chart { display: block; margin: 0.6rem 0 0.4rem; border-radius: var(--ui-radius-sm); background: var(--ui-fill); }
+.collector__rank { width: 1.6rem; text-align: right; color: var(--ui-text-dim); }

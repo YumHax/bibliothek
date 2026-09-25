@@ -76,18 +76,51 @@ const LETTER_FONT = 'Georgia, "Times New Roman", serif';
 const GLASS = '#26313d';
 
 /**
+ * A shop the walkable street's plan puts on this facade (`street/streetPlan.ts`), so the view from
+ * the windows shows the shops the player finds down there: from `s0` to `s1` along the facade
+ * (metres from its left end as the eye sees it), the painted kind by the plan's kind, its own name.
+ */
+export interface PlannedShop {
+  s0: number;
+  s1: number;
+  kind: string;
+  name?: string;
+}
+
+/** The painted look of a plan's kind of shop ('shut' is a roller shutter, the arcade is not painted). */
+function plannedType(kind: string, name?: string): ShopType | null {
+  const byKind: Record<string, string> = { cafe: 'CAFÉ', bakery: 'BOULANGERIE', pharmacy: 'PHARMACIE', books: 'LIBRAIRIE', grocer: 'PRIMEUR', florist: 'FLEURS', tabac: 'TABAC', bar: 'BAR', butcher: 'BOUCHERIE', laundry: 'LAVERIE' };
+  const type = kind === 'retro' ? RETRO_GAMES : SHOPS.find((shop) => shop.name === byKind[kind]);
+  if (!type) return null;
+  return name && type !== RETRO_GAMES ? { ...type, name } : type;
+}
+
+/**
  * The ground floor of a building given over to shops: one shop across the whole front or two or
  * three side by side, each with its joinery, a fascia with its name, display windows full of
  * goods and a door, often an awning, sometimes a lit sign on a bracket; or a shop that has shut
  * for good behind a tagged roller shutter. At night the windows light until closing time and the
- * neon names burn on. Returns what each shop puts out on the pavement.
+ * neon names burn on. `planned` puts the plan's shops where the plan has them instead of drawing
+ * lots. Returns what each shop puts out on the pavement.
  */
-export function paintShopfronts(f: FacadeFrame, random: Rng, wall: string, landmark?: ShopType): Storefront[] {
+export function paintShopfronts(f: FacadeFrame, random: Rng, wall: string, landmark?: ShopType, planned?: readonly PlannedShop[]): Storefront[] {
   const { sheet, w } = f;
   const units = Math.max(1, Math.floor(w / 4.2));
-  const shopCount = landmark ? 1 : Math.min(units, random() < 0.5 ? 1 : integer(random, 2, 3));
   const out: Storefront[] = [];
   sheet.path(f.strip(0, w, -1.5, 4.2 - 0.55), shade(wall, 0.9));
+  if (planned) {
+    for (const shop of planned) {
+      const type = plannedType(shop.kind, shop.name);
+      if (!type) {
+        paintShutter(f, random, shop.s0 + 0.2, shop.s1 - 0.2);
+        continue;
+      }
+      const { closing, goods } = paintShop(f, random, type, shop.s0, shop.s1, Math.max(1, Math.round((shop.s1 - shop.s0) / 4.2)));
+      out.push({ a0: f.at(shop.s0), a1: f.at(shop.s1), display: type.display, landmark: type === RETRO_GAMES, light: type.light, closing, goods });
+    }
+    return out;
+  }
+  const shopCount = landmark ? 1 : Math.min(units, random() < 0.5 ? 1 : integer(random, 2, 3));
   for (let i = 0; i < shopCount; i++) {
     const s0 = (w * i) / shopCount;
     const s1 = (w * (i + 1)) / shopCount;

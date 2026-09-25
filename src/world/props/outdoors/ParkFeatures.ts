@@ -1,7 +1,8 @@
-import { Sheet, type Rng, azimuthOf, azimuthX, groundSquash, heightY, outline, sizePx, worldPoint } from './Sheet';
+import { Sheet, type Rng, groundSquash, outline, sizePx, worldPoint } from './Sheet';
 import { between, integer, pick } from './paint';
 import { paintBox, paintGroundShadow, paintPost } from './Solid';
 import { currentSeason } from './season';
+import { type SeatedPose, paintSeated } from './figures';
 
 /**
  * The things that make the park lived in, each at a ground point in metres from the eye: flower
@@ -9,8 +10,8 @@ import { currentSeason } from './season';
  * ducks and a rowing boat.
  */
 
-const SHIRTS = ['#d94f3a', '#3b6fb3', '#e8e2d2', '#2f2f36', '#6fa35e', '#f0c94a', '#8c4f9e', '#c9c9c9'];
-const SKINS = ['#f1c9a5', '#d9a071', '#8d5a3b', '#f7d9c0', '#5b3a25'];
+/** Someone sitting on the grass: folded legs, a torso and a head, never smaller than a pixel. */
+const ON_THE_GRASS: SeatedPose = { width: 0.4, seat: 0.15, shoulders: 0.8, torso: 0.8, neck: 1, minWidth: 1, minHead: 0.8, legs: ['#2b2f3d', '#4b5563', '#6b5a48', '#e8e2d2'] };
 const BLOOMS = ['#d9383a', '#f0c94a', '#e0567a', '#f0f0e8', '#b04ac0', '#f09a3a', '#6a5acd'];
 
 /** A ground ellipse around (x, z), radii in metres. */
@@ -51,22 +52,6 @@ export function paintFlowerBed(sheet: Sheet, random: Rng, x: number, z: number, 
   ctx.fill();
 }
 
-/** A person sitting on the grass: folded legs, a torso and a head. */
-function paintSittingPerson(sheet: Sheet, random: Rng, x: number, z: number): void {
-  const d = Math.hypot(x, z);
-  const cx = azimuthX(azimuthOf(x, z));
-  const w = Math.max(1, sizePx(0.4, d));
-  const base = heightY(0.15, d);
-  const shoulders = heightY(0.8, d);
-  const head = Math.max(0.8, sizePx(0.12, d));
-  sheet.begin(d);
-  sheet.rect(cx - w * 0.8, base - (base - shoulders) * 0.25, w * 1.6, (base - shoulders) * 0.25, pick(random, ['#2b2f3d', '#4b5563', '#6b5a48', '#e8e2d2']));
-  sheet.rect(cx - w / 2, shoulders, w, (base - shoulders) * 0.8, pick(random, SHIRTS));
-  const p = new Path2D();
-  p.arc(cx, shoulders - head, head, 0, Math.PI * 2);
-  sheet.path(p, pick(random, SKINS));
-}
-
 /** A picnic blanket, checked or plain, with one to three people on it and a basket. */
 export function paintPicnic(sheet: Sheet, random: Rng, x: number, z: number): void {
   const d = Math.hypot(x, z);
@@ -87,7 +72,7 @@ export function paintPicnic(sheet: Sheet, random: Rng, x: number, z: number): vo
   }
   paintBox(sheet, { x: x + 0.5, z: z - 0.3, along: [1, 0] }, 0.45, 0.3, 0, 0.3, '#b08a50');
   const people = integer(random, 1, 3);
-  for (let i = 0; i < people; i++) paintSittingPerson(sheet, random, x - 0.5 + i * 0.5, z + between(random, -0.3, 0.4));
+  for (let i = 0; i < people; i++) paintSeated(sheet, random, x - 0.5 + i * 0.5, z + between(random, -0.3, 0.4), ON_THE_GRASS);
 }
 
 /**

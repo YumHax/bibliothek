@@ -1,0 +1,48 @@
+/* A friend asks to borrow a game: a small card over the view (`.ui-modal--centre`). */
+.borrow-panel {
+  padding: 1.5rem;
+  background: var(--ui-backdrop);
+}
+.borrow-panel__card {
+  width: min(24rem, 100%);
+  max-height: 100%;
+  overflow-y: auto;
+  padding: 1.1rem 1.2rem 1rem;
+  box-sizing: border-box;
+}
+.borrow-panel__card h2 {
+  margin: 0 0 0.8rem;
+  font-family: var(--ui-font-display);
+  font-weight: 400;
+  font-size: 1.25rem;
+}
+.borrow-panel__game {
+  display: flex;
+  gap: 0.8rem;
+  align-items: center;
+}
+.borrow-panel__cover {
+  width: 4.5rem;
+  border-radius: var(--ui-radius-sm);
+  box-shadow: var(--ui-shadow);
+}
+.borrow-panel__title {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 600;
+}
+.borrow-panel__detail,
+.borrow-panel__terms {
+  margin: 0.2rem 0 0;
+  font-size: 0.85rem;
+  color: var(--ui-text-dim);
+}
+.borrow-panel__terms {
+  margin-top: 0.9rem;
+}
+.borrow-panel__card footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}

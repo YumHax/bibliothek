@@ -47,8 +47,9 @@ export class Seat extends THREE.Group implements Furniture, Interactable {
     this.restPoint = new THREE.Vector3(0, seatTop + 0.02, 0.1);
     this.backCentreZ = -depth / 2 + 0.07;
     this.backRecline = -0.12;
-    // A darker welt along the front edge of the seat cushion breaks up the block of fabric.
-    const welt = boxMesh(innerW, 0.015, 0.015, piping, { y: seatTop - 0.0075, z: depth / 2 + 0.02 - 0.0075 });
+    // A darker welt along the front edge of the seat cushion breaks up the block of fabric. It stands a few
+    // millimetres proud of the cushion's top, front and sides: flush with them, their faces would z-fight.
+    const welt = boxMesh(innerW + 0.004, 0.018, 0.018, piping, { y: seatTop - 0.006, z: depth / 2 + 0.02 - 0.006 });
     const arms = [-1, 1].map((sx) => boxMesh(armW, armH, depth, this.fabric, { x: (sx * (width - armW)) / 2, y: armH / 2 }));
     const legs = [-1, 1].flatMap((sx) =>
       [-1, 1].map((sz) => boxMesh(0.05, 0.06, 0.05, wood, { x: sx * (width / 2 - 0.08), y: 0.03, z: sz * (depth / 2 - 0.08) })),

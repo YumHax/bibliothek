@@ -6,12 +6,28 @@ Read this only when changing the cat's look, behaviour or belongings.
 
 - `types.ts`: contracts (CatBody, CatPose, the `*Like` props, CatVoiceLike, CatSettings, CatClock, CatPlayerView).
 - `CatModel.ts`: procedural rig (capsules + chained tail), 5 coats painted on canvases in `coats.ts`, 12 poses blended per
-  joint, walk/trot gait from `setSpeed`, `gaze`, blink/breath/ear twitch, purr tremble, `flick`.
+  joint (the joint-angle table and tail sway per pose are data in `catPoses.ts`), walk/trot gait from `setSpeed`, `gaze`,
+  blink/breath/ear twitch, purr tremble, `flick`.
 - `Cat.ts`: `Furniture` with an empty footprint + `Interactable`. Click = pet, 4 pets in 10 s = annoyed. `call()`,
   `setPlayerSeat()`, `applySettings()`.
-- `CatBrain.ts` (the big one): state machine. Sleeps most of the day by `sleepDrive(hours)`; hunger/thirst needs; eat, beg,
-  drink, groom, wander, window lookout, scratch, toy, TV watching, fly chase, rub, sunbathe; armchair perches and the player's
-  lap; startle + flee from a sprinting player. A new behaviour = a new state here, with its entry conditions and exit.
+- The behaviour, a state machine. Sleeps most of the day by `sleepDrive(hours)`; hunger/thirst needs; eat, beg, drink, groom,
+  wander, window lookout, scratch, toy, TV watching, fly chase, rub, sunbathe; armchair perches and the player's lap; startle
+  + flee from a sprinting player.
+  - `catStates.ts`: `STATES: Record<CatState, StateDef>`, everything about one state in one entry: `enter` (pose, `timer`,
+    facing), `tick`, `describe` (the caption), the flags `startles` (default true), `invitable` (a seated player's lap may
+    lure it away) and `followsPlayer` (head turns to a nearby player), and an optional `memo()`: the state's own scratch data
+    (next meow, meal length), made fresh on every `enter` and handed to `enter`/`tick` (declare it with `withMemo`).
+  - `catActivities.ts`: `ACTIVITIES: Record<Activity, ActivityDef>`: `weight(mind)` (what an idle cat picks by weighted
+    random; the weighted entries come first, in draw order; no weight = only started by a reaction) and `begin(mind)`
+    (walk there / enter the state; `false` = impossible now, the cat idles).
+  - `CatMind.ts`: the working memory both tables act on (state, `timer`, `next`/`pending`, spot/perch, needs, scratch
+    vectors) and the moves: `enter`, `startActivity` (hops off a perch first), `beginActivity`, `goTo`, `hop`, `setFacing`.
+  - `CatBrain.ts`: the public face `Cat` uses (`update`, `pet`, `call`, `setPlayerSeat`, `describe`); counts the needs down,
+    reacts to the player (half wake, startle, lap invitations, petting, calls) and ticks the current state.
+  - **A new behaviour:** add the name to `CatState` and its entry to `STATES`; if an idle cat should choose it, add an
+    `Activity` with its `weight` and `begin` (which walks there with `mind.goTo(point, 'yourState')`). The `Record` types
+    make the compiler list anything missing. Draws from `Math.random` happen in `enter`/`tick`/`begin` order; keep weights
+    free of randomness.
 - `CatNav.ts`: 0.15 m occupancy grid probed with `collisions.intersectsSphere`, A*, string pulling. Anything the cat must walk
   around only needs a real `footprint`. Given `areas` (the flat's rooms, each grown 0.1 m over its doorways) the grid spans
   the whole flat and only those cells are probed: walls are colliders, so paths go through doorways, and a shut door leaf
@@ -27,10 +43,10 @@ Read this only when changing the cat's look, behaviour or belongings.
   (rolling ball, bounces off colliders). A second `WaterBowl` stands in the kitchen's inside corner (`KITCHEN_PLAN.catWater`,
   returned as `catWaters`): `drink` goes to the nearest bowl it can reach (`CatOptions.waters`). The food stays home.
 - `catSettings.ts`: name + coat in localStorage `bibliothek.cat.v1`; form in `src/ui/CatSettings.ts`, a section of the
-  menu's Settings screen (`Overlay.addSetting()`).
+  menu's Settings screen (`Overlay.addSetting('game', …)`).
 - `index.ts`: `furnishCat(world, { settings, player, clock, seats, windows, tv, flat })` places everything in the shelf-free
   corner (bowls between the fig and the door, bed under the left wall's back window, scratcher by the front wall, ball on the
-  rug). Called from `main.ts` after the player exists and after every room of the flat is built; `flat` gives the rooms'
+  rug). Called from `bootstrap/world.ts` after the player exists and after every room of the flat is built; `flat` gives the rooms'
   floor bounds, the spots to visit (each builder returns `catVisits`, from its plan's `catVisits`) and the perches.
 
 ## Out of the collection room
@@ -52,4 +68,7 @@ render their own zone's layer).
 ## Headless check (no browser)
 
 Bundle a sim with esbuild (`--alias:@=./src`, canvas/document shims injected) and tick `Cat.update` for 1800 s to catch NaN,
-escapes and state balance.
+escapes and state balance. For a refactor of the brain, drive `CatBrain` with the real `CatNav`/`CatMotion` (a
+`CollisionWorld` of a few boxes), fake props and player, and a seeded `Math.random`; hash the event log (poses, meows, states,
+positions, gaze) before and after: identical hashes over a few dozen seeds mean identical behaviour. (Fake props made with
+`Object.assign` lose their getters: define `level` / `isRolling` with `Object.defineProperty`.)

@@ -41,6 +41,21 @@ export interface LifeEnv {
   wind: number;
 }
 
+/**
+ * One kind of thing moving outside (the traffic, the walkers, the birds...): it paints its own
+ * cells into the sprite atlas once, then every frame moves on and pushes its sprites. `Life` holds
+ * the list (its order is the push priority when the slots run out), the atlas and the slots.
+ */
+export interface LifeLayer {
+  paint(pens: AtlasPens): void;
+  /**
+   * Sets the movers out, once every layer has painted: what draws its starting state from the
+   * shared random after the atlas does it here, so the draws keep their order.
+   */
+  populate?(): void;
+  update(dt: number, env: LifeEnv, push: Push): void;
+}
+
 /** No tint: the sprite keeps its painted colours. */
 export const WHITE_TINT = 0xffffff;
 

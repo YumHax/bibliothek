@@ -1,9 +1,14 @@
-export const HOME_UPGRADES_STORAGE_KEY = 'bibliothek.home.v1';
+import { KEYS, PersistedStore, safeStorage } from '@/persistence';
 
-/** What can be bought for the flat itself, rather than for the collection (the catalogue is `HOME_GOODS` in `homeGoods.ts`). */
-export type HomeUpgrade = 'bookcase' | 'rug' | 'lamp' | 'poster' | 'crt';
+export const HOME_UPGRADES_STORAGE_KEY = KEYS.home;
 
-const UPGRADES: readonly HomeUpgrade[] = ['bookcase', 'rug', 'lamp', 'poster', 'crt'];
+/**
+ * What can be bought for the flat itself, rather than for the collection (the market's catalogue is
+ * `HOME_GOODS` in `homeGoods.ts`; the potted plants for the balcony come from the florist on Front Street).
+ */
+export type HomeUpgrade = 'bookcase' | 'rug' | 'lamp' | 'poster' | 'crt' | 'plant';
+
+const UPGRADES: readonly HomeUpgrade[] = ['bookcase', 'rug', 'lamp', 'poster', 'crt', 'plant'];
 
 type UpgradeCounts = Record<HomeUpgrade, number>;
 
@@ -15,12 +20,15 @@ type UpgradeCounts = Record<HomeUpgrade, number>;
 export class HomeUpgrades {
   private counts: UpgradeCounts;
   private readonly listeners = new Set<() => void>();
+  private readonly store: PersistedStore<UpgradeCounts>;
 
   constructor(
-    private readonly storage: Storage | null = safeLocalStorage(),
-    private readonly key = HOME_UPGRADES_STORAGE_KEY,
+    storage: Storage | null = safeStorage(),
+    key: string = HOME_UPGRADES_STORAGE_KEY,
   ) {
-    this.counts = this.load();
+    // Version 1: a count per upgrade.
+    this.store = new PersistedStore<UpgradeCounts>({ key, version: 1, storage, defaults: noneBought, read: readCounts });
+    this.counts = this.store.load();
   }
 
   count(upgrade: HomeUpgrade): number {
@@ -29,11 +37,7 @@ export class HomeUpgrades {
 
   add(upgrade: HomeUpgrade): void {
     this.counts = { ...this.counts, [upgrade]: this.counts[upgrade] + 1 };
-    try {
-      this.storage?.setItem(this.key, JSON.stringify(this.counts));
-    } catch {
-      // storage blocked: the purchase lasts until the page reloads
-    }
+    this.store.save(this.counts);
     for (const cb of [...this.listeners]) cb();
   }
 
@@ -41,27 +45,19 @@ export class HomeUpgrades {
     this.listeners.add(cb);
     return () => this.listeners.delete(cb);
   }
-
-  private load(): UpgradeCounts {
-    const counts = Object.fromEntries(UPGRADES.map((u) => [u, 0])) as UpgradeCounts;
-    try {
-      const raw = this.storage?.getItem(this.key);
-      const parsed = raw ? (JSON.parse(raw) as Partial<UpgradeCounts>) : {};
-      for (const u of UPGRADES) {
-        const n = parsed[u];
-        if (typeof n === 'number' && n >= 0) counts[u] = Math.floor(n);
-      }
-    } catch {
-      // unreadable: start with nothing bought
-    }
-    return counts;
-  }
 }
 
-function safeLocalStorage(): Storage | null {
-  try {
-    return typeof localStorage === 'undefined' ? null : localStorage;
-  } catch {
-    return null;
+function noneBought(): UpgradeCounts {
+  return Object.fromEntries(UPGRADES.map((u) => [u, 0])) as UpgradeCounts;
+}
+
+function readCounts(data: unknown): UpgradeCounts | null {
+  if (typeof data !== 'object' || data === null) return null;
+  const parsed = data as Partial<UpgradeCounts>;
+  const counts = noneBought();
+  for (const u of UPGRADES) {
+    const n = parsed[u];
+    if (typeof n === 'number' && n >= 0) counts[u] = Math.floor(n);
   }
+  return counts;
 }

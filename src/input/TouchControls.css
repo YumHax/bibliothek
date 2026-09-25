@@ -6,11 +6,11 @@
   user-select: none;
 }
 
-/* Everything here must stack above the canvas (z-index 1) and the regular HUD (2). */
+/* Everything here must stack above the canvas, the HUD, the panels and the curtain (`--z-controls`). */
 .touch-stick,
 .touch-bar,
 .touch-badge {
-  z-index: 3;
+  z-index: var(--z-controls);
 }
 
 /* Floating joystick, spawned where the finger lands on the left half of the screen. */

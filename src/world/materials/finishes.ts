@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { QUALITY } from '@/graphics/quality';
 import { createCanvas, seededRandom } from '@/covers/generated/canvasUtils';
 import { afterChunk, patchShader, VALUE_NOISE } from './shaderPatch';
+import { markShared } from '../props/Prop';
 
 /** Metres of timber one repeat of the grain texture covers (along the fibres, then across). */
 const GRAIN_ALONG_M = 1.6;
@@ -53,7 +54,7 @@ function grain(): THREE.CanvasTexture {
       ctx.stroke();
     }
   }
-  grainTexture = new THREE.CanvasTexture(canvas);
+  grainTexture = markShared(new THREE.CanvasTexture(canvas));
   grainTexture.wrapS = grainTexture.wrapT = THREE.RepeatWrapping;
   grainTexture.colorSpace = THREE.NoColorSpace;
   grainTexture.anisotropy = 4;

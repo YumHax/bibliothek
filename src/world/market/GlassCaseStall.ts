@@ -79,17 +79,21 @@ export class GlassCaseStall extends THREE.Group implements StallLike {
     this.add(boxMesh(WIDTH - 0.04, PLINTH_H, DEPTH - 0.04, PLINTH, { y: PLINTH_H / 2 }));
     this.add(boxMesh(WIDTH, BODY_TOP - PLINTH_H, DEPTH, WOOD, { y: (BODY_TOP + PLINTH_H) / 2 }));
     for (const x of [-WIDTH / 4, WIDTH / 4]) this.add(boxMesh(WIDTH / 2 - 0.12, 0.28, 0.012, WOOD, { x, y: (BODY_TOP + PLINTH_H) / 2, z: DEPTH / 2 + 0.006 }));
-    this.add(boxMesh(WIDTH + 0.006, 0.012, 0.012, BRASS, { y: BODY_TOP - 0.006, z: DEPTH / 2 - 0.004 }));
+    // Its top 2 mm under the cabinet's (a flush top z-fights with the wood).
+    this.add(boxMesh(WIDTH + 0.006, 0.012, 0.012, BRASS, { y: BODY_TOP - 0.008, z: DEPTH / 2 - 0.004 }));
 
-    // The glazed box's frame: four corner posts, rails round the top, a wooden back.
+    // The glazed box's frame: four corner posts, rails round the top, a wooden back. The members
+    // butt rather than overlap (the grain differs per piece, so shared faces would z-fight): the
+    // front and back rails run the full width, the side rails fit between them, the posts and the
+    // back stop under the rails.
     const glassH = TOP - BODY_TOP;
     for (const sx of [-1, 1]) {
-      for (const sz of [-1, 1]) this.add(boxMesh(FRAME, glassH, FRAME, WOOD, { x: sx * (WIDTH / 2 - FRAME / 2), y: BODY_TOP + glassH / 2, z: sz * (DEPTH / 2 - FRAME / 2) }));
-      this.add(boxMesh(FRAME, FRAME, DEPTH, WOOD, { x: sx * (WIDTH / 2 - FRAME / 2), y: TOP - FRAME / 2 }));
+      for (const sz of [-1, 1]) this.add(boxMesh(FRAME, glassH - FRAME, FRAME, WOOD, { x: sx * (WIDTH / 2 - FRAME / 2), y: BODY_TOP + (glassH - FRAME) / 2, z: sz * (DEPTH / 2 - FRAME / 2) }));
+      this.add(boxMesh(FRAME, FRAME, DEPTH - 2 * FRAME, WOOD, { x: sx * (WIDTH / 2 - FRAME / 2), y: TOP - FRAME / 2 }));
     }
     for (const sz of [-1, 1]) this.add(boxMesh(WIDTH, FRAME, FRAME, WOOD, { y: TOP - FRAME / 2, z: sz * (DEPTH / 2 - FRAME / 2) }));
     this.add(boxMesh(WIDTH + 0.004, 0.008, 0.008, BRASS, { y: TOP + 0.002, z: DEPTH / 2 - 0.002 }));
-    this.add(boxMesh(INNER_W, glassH, 0.02, WOOD, { y: BODY_TOP + glassH / 2, z: -DEPTH / 2 + 0.01 }));
+    this.add(boxMesh(INNER_W, glassH - FRAME, 0.02, WOOD, { y: BODY_TOP + (glassH - FRAME) / 2, z: -DEPTH / 2 + 0.01 }));
 
     // Velvet: the lower floor, the back panel's lining, the raised step.
     this.add(boxMesh(INNER_W, FLOOR_T, DEPTH - 2 * FRAME, velvet, { y: BODY_TOP + FLOOR_T / 2 }));

@@ -4,12 +4,15 @@ import type { Input } from '@/core/Input';
 import type { Interactable, LabelPlacement } from '@/interaction/Interactable';
 import type { ArcadeMachineLike, ArcadeResult, SessionActions } from '@/game/SessionActions';
 import { ChipSpeaker } from '@/audio/ChipSpeaker';
+import { actionKeyLabel } from '@/ui/keys';
 import { createCanvas, seededRandom, toTexture, FONT } from '@/covers/generated/canvasUtils';
 import type { Furniture } from '../Furniture';
-import { boxMesh, cylinderMesh, invisibleHitbox } from '../meshUtils';
-import { matte } from '../props/Prop';
+import { boxMesh, cylinderMesh, eyePoseAt, invisibleHitbox } from '../meshUtils';
+import { markShared, matte } from '../props/Prop';
 import { drawText } from './games/ArcadeGame';
-import { TAKEN_LINE, type Occupant, type Station, type StationEvents } from './Station';
+import type { Occupant, Station, StationEvents } from './Station';
+import { MachineRun } from './MachineRun';
+import { CHROME, type MachineDisplay, displayScreen, outOfOrderNote, paintMarquee } from './machineParts';
 
 export interface ClawMachineOptions {
   /** Paint of the base and the top. Default a fairground pink. */
@@ -20,8 +23,12 @@ export interface ClawMachineOptions {
 export interface ClawWiring {
   input: Input;
   listener: THREE.Object3D;
+  /** What a play costs (never free: the claw pays prizes, not tickets). */
+  playCost: () => number;
   /** The prize id a plush of this colour is (`economy/Prizes`), or undefined. */
   prizeFor: (color: number) => string | undefined;
+  /** Whether it is out of order today. */
+  outOfOrder?: () => boolean;
 }
 
 const WIDTH = 0.8;
@@ -55,17 +62,9 @@ const PITY_AFTER = 6;
 /** Where the top of a plush sits below the hub when it hangs in the claw. */
 const HANG = 0.1;
 
-const CHROME = new THREE.MeshStandardMaterial({ color: 0xc4c7cc, metalness: 0.75, roughness: 0.25 });
-const BLACK = matte(0x111116, 0.5);
+const BLACK = markShared(matte(0x111116, 0.5));
 const PASTELS = [0xffb3c6, 0xa8d8ff, 0xfff1a8, 0xc8f7c5, 0xe0c3ff, 0xffd6a8, 0xffffff];
 
-const LEFT_KEYS = ['KeyA', 'ArrowLeft'];
-const RIGHT_KEYS = ['KeyD', 'ArrowRight'];
-const UP_KEYS = ['KeyW', 'ArrowUp'];
-const DOWN_KEYS = ['KeyS', 'ArrowDown'];
-const DROP_KEYS = ['Space', 'Enter', 'NumpadEnter'];
-
-type Mode = 'idle' | 'demo' | 'playing' | 'over';
 type Phase = 'aim' | 'drop' | 'lift' | 'return' | 'release' | 'rest';
 
 interface Plush {
@@ -84,7 +83,7 @@ interface Plush {
  * is up to where it came down (and the machine's mood: a grabbed plush slips out a third of the
  * time; six misses in a row and it grips properly once). A plush that makes it down the chute is
  * a prize to take home. A regular playing it (`occupy`) roams, drops and comes up empty, as ever.
- * Origin on the floor under its centre, +z faces the room. Collides.
+ * The coin, the end and out-of-order days go through its `MachineRun` (no table, no tickets). Origin on the floor under its centre, +z faces the room. Collides.
  */
 export class ClawMachine extends THREE.Group implements Furniture, Interactable, Updatable, ArcadeMachineLike, Station {
   readonly hitboxes: THREE.Object3D[];
@@ -96,8 +95,7 @@ export class ClawMachine extends THREE.Group implements Furniture, Interactable,
   readonly game = { id: 'claw', title: 'GRAB A PRIZE', hint: 'WASD or arrows move the claw · Space drops it' };
 
   private readonly wiring: ClawWiring;
-  private mode: Mode = 'idle';
-  private who: Occupant = null;
+  private readonly run: MachineRun;
   private phase: Phase = 'rest';
   private phaseLeft = 0;
   private aimLeft = 0;
@@ -113,7 +111,7 @@ export class ClawMachine extends THREE.Group implements Furniture, Interactable,
   private readonly button: THREE.Mesh;
   private readonly hands: [THREE.Vector3, THREE.Vector3] = [new THREE.Vector3(), new THREE.Vector3()];
   private readonly plush: Plush[] = [];
-  private readonly display: { canvas: HTMLCanvasElement; ctx: CanvasRenderingContext2D; texture: THREE.CanvasTexture };
+  private readonly display: MachineDisplay;
   private readonly speaker: ChipSpeaker;
   private readonly random: () => number;
   private clock = 0;
@@ -124,8 +122,6 @@ export class ClawMachine extends THREE.Group implements Furniture, Interactable,
   private falling: { plush: Plush; to: number; won: boolean } | null = null;
   private misses = 0;
   private won: string | undefined;
-  private onOver: ((result: ArcadeResult) => void) | null = null;
-  private lastDrop = false;
   private whirClock = 0;
   private readonly from = new THREE.Vector3();
   private readonly scratch = new THREE.Vector3();
@@ -159,11 +155,8 @@ export class ClawMachine extends THREE.Group implements Furniture, Interactable,
     this.button = cylinderMesh(0.02, 0.015, matte(0xffd23a, 0.4), { x: 0.16, y: BASE_H + 0.05, z: DEPTH / 2 - 0.08 }, { segments: 14 });
     this.add(this.button);
     // The countdown display beside the button.
-    const [canvas, ctx] = createCanvas(128, 48);
-    const texture = new THREE.CanvasTexture(canvas);
-    texture.colorSpace = THREE.SRGBColorSpace;
-    this.display = { canvas, ctx, texture };
-    const screen = new THREE.Mesh(new THREE.PlaneGeometry(0.12, 0.045), new THREE.MeshBasicMaterial({ map: texture, toneMapped: false }));
+    this.display = displayScreen([128, 48], [0.12, 0.045]);
+    const screen = this.display.mesh;
     screen.position.set(0.28, BASE_H - 0.035, DEPTH / 2 + 0.003);
     this.add(screen);
 
@@ -181,8 +174,13 @@ export class ClawMachine extends THREE.Group implements Furniture, Interactable,
     pane(WIDTH - 0.06, 0, -DEPTH / 2 + 0.005, Math.PI);
     pane(DEPTH - 0.06, -WIDTH / 2 + 0.005, 0, Math.PI / 2);
     pane(DEPTH - 0.06, WIDTH / 2 - 0.005, 0, -Math.PI / 2);
+    // Out of order: a note taped on the front glass.
+    const note = outOfOrderNote();
+    note.position.set(0.12, BASE_H + CASE_H * 0.45, DEPTH / 2 - 0.002);
+    this.add(note);
     this.add(boxMesh(WIDTH, TOP_H, DEPTH, paint, { y: BASE_H + CASE_H + TOP_H / 2 }));
-    this.marquee = new THREE.MeshBasicMaterial({ map: paintMarquee(), toneMapped: false, color: 0xdddddd });
+    const marqueeMap = paintMarquee('GRAB A PRIZE!', { width: 768, height: 128, stops: ['#ff2fa0', '#ffe23a', '#33e0ff'], ink: '#2a0f3a', size: 48, textY: 66, decorate: starburst });
+    this.marquee = new THREE.MeshBasicMaterial({ map: marqueeMap, toneMapped: false, color: 0xdddddd });
     const marquee = new THREE.Mesh(new THREE.PlaneGeometry(WIDTH - 0.06, TOP_H - 0.1), this.marquee);
     marquee.position.set(0, BASE_H + CASE_H + TOP_H / 2, DEPTH / 2 + 0.002);
     this.add(marquee);
@@ -249,6 +247,15 @@ export class ClawMachine extends THREE.Group implements Furniture, Interactable,
       if (mesh.isMesh) mesh.receiveShadow = true;
     });
     this.speaker = new ChipSpeaker(this.carriage, wiring.listener, { volume: 0.18 });
+    this.run = new MachineRun({
+      game: this.game,
+      input: wiring.input,
+      speaker: this.speaker,
+      stationEvents: this.stationEvents,
+      nextPlayCost: wiring.playCost,
+      note,
+      ...(wiring.outOfOrder ? { outOfOrder: wiring.outOfOrder } : {}),
+    });
     this.paintDisplay('INSERT COIN');
   }
 
@@ -258,52 +265,40 @@ export class ClawMachine extends THREE.Group implements Furniture, Interactable,
 
   /** From the coin until the claw has opened over the chute. */
   get isPlaying(): boolean {
-    return this.mode === 'playing';
+    return this.run.isPlaying;
   }
 
   get occupant(): Occupant {
-    return this.who;
+    return this.run.occupant;
+  }
+
+  get outOfOrder(): boolean {
+    return this.run.outOfOrder;
   }
 
   start(onOver: (result: ArcadeResult) => void): void {
-    this.onOver = onOver;
-    this.mode = 'playing';
+    this.run.start(onOver);
     this.won = undefined;
     this.enter('aim', 0);
     this.aimLeft = AIM_SECONDS;
-    this.lastDrop = true;
-    this.speaker.level = 1;
-    this.speaker.play('coin');
-    if (this.who !== 'player') {
-      this.who = 'player';
-      this.stationEvents.onPlayerStart?.();
-    }
   }
 
   /** Walked away: the coin is lost; the claw goes home on its own. */
   abort(): void {
-    this.onOver = null;
-    this.who = null;
-    this.mode = 'idle';
+    this.run.abort();
     if (this.carried) this.slip();
     this.from.copy(this.carriage.position);
     this.enter('return', 1.8);
-    this.stationEvents.onPlayerLeave?.();
   }
 
   occupy(): boolean {
-    if (this.who) return false;
-    this.who = 'regular';
-    this.mode = 'demo';
-    this.speaker.level = 0.45;
+    if (!this.run.occupy()) return false;
     this.enter('rest', 1 + this.random() * 2);
     return true;
   }
 
   release(): void {
-    if (this.who !== 'regular') return;
-    this.who = null;
-    this.mode = 'idle';
+    if (!this.run.release()) return;
     this.from.copy(this.carriage.position);
     this.enter('return', 1.8);
   }
@@ -316,9 +311,7 @@ export class ClawMachine extends THREE.Group implements Furniture, Interactable,
   }
 
   eyePose(): { position: THREE.Vector3; yaw: number } {
-    const position = this.localToWorld(new THREE.Vector3(0, 1.55, EYE_Z));
-    const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(this.getWorldQuaternion(new THREE.Quaternion()));
-    return { position, yaw: Math.atan2(-forward.x, -forward.z) };
+    return eyePoseAt(this, new THREE.Vector3(0, 1.55, EYE_Z));
   }
 
   screenCentre(): THREE.Vector3 {
@@ -330,25 +323,27 @@ export class ClawMachine extends THREE.Group implements Furniture, Interactable,
   }
 
   label(): string {
-    if (this.who === 'regular') return TAKEN_LINE;
-    if (this.mode === 'playing') return 'Press E or click to walk away (the coin is lost)';
-    if (this.mode === 'over') return 'Space or click to try again (1 coin) · E to walk away';
-    return 'Claw machine — click to insert a coin (1 coin, prizes go home)';
+    const price = this.run.priceText();
+    return this.run.label({
+      attract: `Claw machine — click to insert a coin (${price}, prizes go home)`,
+      playing: `Press ${actionKeyLabel('walkAway')} or click to walk away (the coin is lost)`,
+      over: `${actionKeyLabel('fire')} or click to try again (${price}) · ${actionKeyLabel('walkAway')} to walk away`,
+    });
   }
 
   labelPlacement(): LabelPlacement {
-    return this.mode === 'playing' || this.mode === 'over' ? 'edge' : 'crosshair';
+    return this.run.labelPlacement();
   }
 
   activate(session: SessionActions): void {
-    if (this.who === 'regular') session.hint(TAKEN_LINE);
-    else session.playArcade(this);
+    this.run.activate(session, this);
   }
 
   update(dt: number): void {
     this.clock += dt;
-    this.chaser.offset.x -= dt * (this.mode === 'playing' ? 1.6 : 0.6);
+    this.chaser.offset.x -= dt * (this.run.state === 'playing' ? 1.6 : 0.6);
     this.speaker.follow();
+    this.run.update(dt);
     this.phaseLeft -= dt;
     const c = this.carriage.position;
     switch (this.phase) {
@@ -357,7 +352,7 @@ export class ClawMachine extends THREE.Group implements Furniture, Interactable,
         break;
       case 'rest':
         this.grip += (0 - this.grip) * Math.min(1, dt * 3);
-        if (this.mode === 'demo' && this.phaseLeft <= 0) this.enter('aim', 4 + this.random() * 4);
+        if (this.run.state === 'demo' && this.phaseLeft <= 0) this.enter('aim', 4 + this.random() * 4);
         break;
       case 'drop':
         this.drop += ((CLAW_DOWN - this.drop) * dt) / Math.max(0.05, this.phaseLeft);
@@ -411,13 +406,12 @@ export class ClawMachine extends THREE.Group implements Furniture, Interactable,
     let dx = 0;
     let dz = 0;
     let drop = false;
-    if (this.mode === 'playing') {
-      const { input } = this.wiring;
-      dx = (input.isDown(...RIGHT_KEYS) ? 1 : 0) - (input.isDown(...LEFT_KEYS) ? 1 : 0);
-      dz = (input.isDown(...DOWN_KEYS) ? 1 : 0) - (input.isDown(...UP_KEYS) ? 1 : 0);
-      const fire = input.isDown(...DROP_KEYS);
-      drop = fire && !this.lastDrop;
-      this.lastDrop = fire;
+    const playing = this.run.state === 'playing';
+    if (playing) {
+      const keys = this.run.readControls();
+      dx = (keys.right ? 1 : 0) - (keys.left ? 1 : 0);
+      dz = (keys.down ? 1 : 0) - (keys.up ? 1 : 0);
+      drop = keys.firePressed;
       this.aimLeft -= dt;
       this.paintDisplay(`${Math.max(0, Math.ceil(this.aimLeft))}`);
       if (this.aimLeft <= 0) drop = true;
@@ -443,7 +437,7 @@ export class ClawMachine extends THREE.Group implements Furniture, Interactable,
     if (drop) {
       this.speaker.play('drop');
       this.enter('drop', 1.4);
-      if (this.mode === 'playing') this.paintDisplay('GOOD LUCK');
+      if (playing) this.paintDisplay('GOOD LUCK');
     }
   }
 
@@ -461,9 +455,10 @@ export class ClawMachine extends THREE.Group implements Furniture, Interactable,
       }
     }
     const chance = GRIP.find((g) => bestD <= g.within)?.chance ?? 0;
-    const pity = this.mode === 'playing' && this.misses >= PITY_AFTER && bestD <= GRIP[GRIP.length - 1]!.within;
+    const playing = this.run.state === 'playing';
+    const pity = playing && this.misses >= PITY_AFTER && bestD <= GRIP[GRIP.length - 1]!.within;
     // A regular never wins: the heap has to last.
-    const holds = best && this.mode === 'playing' && (pity || this.random() < chance);
+    const holds = best && playing && (pity || this.random() < chance);
     this.speaker.play('clunk');
     if (holds && best) {
       this.carried = best;
@@ -483,22 +478,17 @@ export class ClawMachine extends THREE.Group implements Furniture, Interactable,
 
   /** The claw is open over the chute: tell whoever paid how it went. */
   private endTry(): void {
-    if (this.mode === 'demo') {
+    if (this.run.state === 'demo') {
       this.enter('rest', 2 + this.random() * 3);
       return;
     }
     this.enter('rest', 0);
-    if (this.mode !== 'playing') return;
+    if (this.run.state !== 'playing') return;
     const prize = this.won;
     this.misses = prize ? 0 : this.misses + 1;
-    this.mode = 'over';
     this.paintDisplay(prize ? 'WINNER!' : 'TRY AGAIN');
     if (prize) this.speaker.play('win');
-    const handler = this.onOver;
-    this.onOver = null;
-    const result: ArcadeResult = { score: 0, best: false, ...(prize ? { prize } : {}) };
-    handler?.(result);
-    this.stationEvents.onPlayerResult?.(result);
+    this.run.finish(0, prize);
   }
 
   /** A carried plush hangs from the claw; a falling one drops (to the heap, or down the chute and out of the case). */
@@ -517,7 +507,7 @@ export class ClawMachine extends THREE.Group implements Furniture, Interactable,
     this.speaker.play('thud');
     if (!falling.won) return;
     // Down the chute: the prize is the player's; a fresh plush takes its place on the heap.
-    if (this.mode === 'playing') this.won = this.wiring.prizeFor(falling.plush.color);
+    if (this.run.state === 'playing') this.won = this.wiring.prizeFor(falling.plush.color);
     this.restock(falling.plush);
   }
 
@@ -593,26 +583,19 @@ function plush(r: number, color: number, yaw: number): THREE.Group {
   return g;
 }
 
-/** GRAB A PRIZE on a starburst. */
-function paintMarquee(): THREE.Texture {
-  const [canvas, ctx] = createCanvas(768, 128);
-  const g = ctx.createLinearGradient(0, 0, 768, 0);
-  g.addColorStop(0, '#ff2fa0');
-  g.addColorStop(0.5, '#ffe23a');
-  g.addColorStop(1, '#33e0ff');
-  ctx.fillStyle = g;
-  ctx.fillRect(0, 0, 768, 128);
+/** The marquee's starburst behind GRAB A PRIZE!: pale rays from the middle. */
+function starburst(ctx: CanvasRenderingContext2D, width: number, height: number): void {
+  const cx = width / 2;
+  const cy = height / 2;
   ctx.fillStyle = 'rgba(255,255,255,0.25)';
   for (let i = 0; i < 12; i++) {
     ctx.beginPath();
-    ctx.moveTo(384, 64);
-    ctx.lineTo(384 + Math.cos((i / 12) * Math.PI * 2) * 500, 64 + Math.sin((i / 12) * Math.PI * 2) * 500);
-    ctx.lineTo(384 + Math.cos(((i + 0.5) / 12) * Math.PI * 2) * 500, 64 + Math.sin(((i + 0.5) / 12) * Math.PI * 2) * 500);
+    ctx.moveTo(cx, cy);
+    ctx.lineTo(cx + Math.cos((i / 12) * Math.PI * 2) * 500, cy + Math.sin((i / 12) * Math.PI * 2) * 500);
+    ctx.lineTo(cx + Math.cos(((i + 0.5) / 12) * Math.PI * 2) * 500, cy + Math.sin(((i + 0.5) / 12) * Math.PI * 2) * 500);
     ctx.closePath();
     ctx.fill();
   }
-  drawText(ctx, 'GRAB A PRIZE!', 384, 66, 48, '#2a0f3a');
-  return toTexture(canvas, 4);
 }
 
 /** One bulb per tile, lit at the left and fading right, so sliding the texture chases the lit one along. */
@@ -628,9 +611,7 @@ function paintChaser(): THREE.CanvasTexture {
   ctx.beginPath();
   ctx.arc(48, 16, 9, 0, Math.PI * 2);
   ctx.fill();
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.colorSpace = THREE.SRGBColorSpace;
-  return texture;
+  return toTexture(canvas);
 }
 
 /** The base's front print: the rules and the price. */

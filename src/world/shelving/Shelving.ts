@@ -82,6 +82,8 @@ export class Shelving {
   private minBookcases: number;
   private capacity: number;
   private readonly lamps: boolean;
+  /** What the last full rebuild laid out: its games in shelf order, the settings, the ids that did not fit. */
+  private laidOut: { games: readonly Game[]; settings: string; leftover: ReadonlySet<string> } | null = null;
   /** The games that did not fit, in shelf order; another Shelving can take them as its source. */
   readonly overflow: GameList;
 
@@ -157,8 +159,15 @@ export class Shelving {
   }
 
   rebuild(): void {
-    const previouslyShown = new Set(this.ordered);
     const games = dedupe(sortGames(this.source.games, this.mode));
+    const settings = `${this.mode}|${this.capacity}|${this.minBookcases}`;
+    // Most changes (a status, another room's list) leave the same games in the same order: restyle, do not rebuild.
+    if (this.laidOut && this.laidOut.settings === settings && sameLayout(this.laidOut.games, games)) {
+      this.restyle(games, this.laidOut.leftover);
+      return;
+    }
+
+    const previouslyShown = new Set(this.ordered);
     const dropped = this.reconcile(games);
     this.tearDown();
     for (const box of dropped) this.disposeBox(box);
@@ -182,8 +191,6 @@ export class Shelving {
         slot.rotationY,
       );
       this.shelves.push(shelf);
-      // Its spot hangs from the ceiling `SPOT_THROW` m in front of the bookcase, looking back at it (local -z).
-      if (this.lamps) this.placedLamps.push(this.host.place(this.lampFor(i), slot.position.clone().addScaledVector(slot.facing, SPOT_THROW).setY(this.ceiling), slot.rotationY));
       planned.rows.forEach((row, r) => {
         shelf.placeRow(r, row.items);
         for (const box of row.items) {
@@ -192,6 +199,16 @@ export class Shelving {
         }
       });
     });
+    // A spot hangs from the ceiling `SPOT_THROW` m in front of every slot, looking back at it (local -z):
+    // lit over a bookcase, parked over an empty slot, so the scene's light count never follows the
+    // collection (a light added or removed recompiles every shader).
+    if (this.lamps) {
+      this.slots.forEach((slot, i) => {
+        const lamp = this.lampFor(i);
+        lamp.setParked(i >= plan.bookcases.length);
+        this.placedLamps.push(this.host.place(lamp, slot.position.clone().addScaledVector(slot.facing, SPOT_THROW).setY(this.ceiling), slot.rotationY));
+      });
+    }
     for (const box of plan.leftover) {
       box.removeFromParent();
       this.homeOf.delete(box);
@@ -206,8 +223,17 @@ export class Shelving {
     const removed = [...previouslyShown].filter((b) => !shown.has(b));
     this.host.boxesChanged(added, removed);
     // Last, once this shelving is consistent: whoever shows the overflow rebuilds on this.
-    const leftover = new Set(plan.leftover);
-    this.overflow.set(games.filter((_, i) => leftover.has(boxes[i]!)));
+    const leftover = new Set(plan.leftover.map((box) => box.game.id));
+    this.laidOut = { games, settings, leftover };
+    this.overflow.set(games.filter((g) => leftover.has(g.id)));
+  }
+
+  /** Same games in the same order as the last rebuild: only their status (the ghost, the lent tag) can have changed. */
+  private restyle(games: readonly Game[], leftover: ReadonlySet<string>): void {
+    for (const game of games) this.boxById.get(game.id)?.setStatusStyle(game.status);
+    for (const shelf of [...this.shelves, ...this.ghosts]) shelf.updateShadowProxy(); // a ghost casts no shadow
+    this.laidOut = { ...this.laidOut!, games };
+    this.overflow.set(games.filter((g) => leftover.has(g.id)));
   }
 
   /**
@@ -301,9 +327,25 @@ function dedupe(games: Game[]): Game[] {
   });
 }
 
+/** Everything about a game but its status, as a string; computed once per Game object. */
+const signatures = new WeakMap<Game, string>();
+const withoutStatus = (key: string, value: unknown) => (key === 'status' ? undefined : value);
+
+function signature(game: Game): string {
+  let sig = signatures.get(game);
+  if (sig === undefined) {
+    sig = JSON.stringify(game, withoutStatus);
+    signatures.set(game, sig);
+  }
+  return sig;
+}
+
 /** A status change alone must not rebuild the box (its textures would be refetched). */
 function sameExceptStatus(a: Game, b: Game): boolean {
-  if (a === b) return true;
-  const strip = (key: string, value: unknown) => (key === 'status' ? undefined : value);
-  return JSON.stringify(a, strip) === JSON.stringify(b, strip);
+  return a === b || (a.id === b.id && signature(a) === signature(b));
+}
+
+/** The same games (but maybe their status) in the same order. */
+function sameLayout(a: readonly Game[], b: readonly Game[]): boolean {
+  return a.length === b.length && a.every((game, i) => sameExceptStatus(game, b[i]!));
 }

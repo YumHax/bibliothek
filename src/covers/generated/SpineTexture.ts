@@ -4,7 +4,10 @@ import { getPlatform } from '@/catalog/platforms';
 import { createCanvas, drawSeal, fitFontSize, roundRect, toTexture, FONT } from './canvasUtils';
 import { css } from './palette';
 
+/** Layout height: every size below is in these units. */
 const HEIGHT_PX = 1024;
+/** The canvas is drawn at this fraction of the layout: 512 px along a 0.178 m spine is as sharp as the front cover. */
+const SCALE = 0.5;
 /** Pixels reserved along the spine for the seal (top) and the platform tag (bottom). */
 const RESERVED_PX = 230;
 
@@ -19,7 +22,8 @@ export function createSpineTexture(game: Game, accent: THREE.Color, frontEdge: '
   const { depth, height } = platform.boxDimensions;
   const w = Math.max(48, Math.round((HEIGHT_PX * depth) / height));
   const h = HEIGHT_PX;
-  const [canvas, ctx] = createCanvas(w, h);
+  const [canvas, ctx] = createCanvas(Math.round(w * SCALE), h * SCALE);
+  ctx.scale(SCALE, SCALE);
   const angle = frontEdge === 'left' ? -Math.PI / 2 : Math.PI / 2;
   /** Canvas x of a position given as a fraction of the way from the front edge (0) to the back edge (1). */
   const across = (fraction: number) => (frontEdge === 'left' ? fraction * w : (1 - fraction) * w);

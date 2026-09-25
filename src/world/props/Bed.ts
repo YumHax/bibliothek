@@ -2,8 +2,9 @@ import * as THREE from 'three';
 import type { Furniture } from '../Furniture';
 import type { Interactable } from '@/interaction/Interactable';
 import type { PlayerState, SessionActions } from '@/game/SessionActions';
-import { invisibleHitbox } from '../meshUtils';
+import { FACING_OUT, eyePoseAt, invisibleHitbox } from '../meshUtils';
 import { part } from './Prop';
+import { actionKeyLabel } from '@/ui/keys';
 import { wood as woodMaterial } from '@/world/materials/finishes';
 import { fabric } from '@/world/materials/finishes';
 
@@ -203,10 +204,7 @@ export class Bed extends THREE.Group implements Furniture, Interactable {
 
   /** World-space eye and camera yaw of someone sitting up in bed, facing the foot (+z). */
   eyePose(): { position: THREE.Vector3; yaw: number } {
-    const position = this.localToWorld(this.eye.clone());
-    const forward = new THREE.Vector3(0, 0, 1).applyQuaternion(this.getWorldQuaternion(new THREE.Quaternion()));
-    // A camera looks down -z, so yaw θ gives the direction (-sin θ, 0, -cos θ).
-    return { position, yaw: Math.atan2(-forward.x, -forward.z) };
+    return eyePoseAt(this, this.eye, FACING_OUT);
   }
 
   /** World point on the duvet where a cat curls up; `approachPoint` is the floor at the foot it hops up from. */
@@ -234,6 +232,6 @@ export class Bed extends THREE.Group implements Furniture, Interactable {
     }
     if (session.seated) session.stand();
     session.sit(this);
-    session.hint('Click the bed to sleep until morning · move or press E to get up');
+    session.hint(`Click the bed to sleep until morning · move or press ${actionKeyLabel('standUp')} to get up`);
   }
 }

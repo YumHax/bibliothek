@@ -20,8 +20,10 @@ Append to the platform's array in `src/catalog/<platform>.ts` (`nes`, `snes`, `g
 },
 ```
 
-- `id` = `<platform>-<kebab-title>`, unique. `releaseDate` ISO date or bare year. `status` defaults to `'owned'`
-  (`'wishlist'` / `'lent'` change the box's look).
+- `id` = `<platform>-<kebab-title>`, unique. `SEED_GAMES` (`catalog/index.ts`) replaces it with the canonical
+  `gameIdFor(platform, libretroName)`, the id the market and the index use, and keeps the hand-made one in
+  `LEGACY_SEED_IDS` so old saves migrate; never compare against the hand-made id. `releaseDate` ISO date or bare year.
+  `status` defaults to `'owned'` (`'wishlist'` / `'lent'` change the box's look).
 - `libretroName` is the No-Intro name as it appears in the libretro-thumbnails repo for that platform, without extension,
   with the characters `& * / : \` < > ? \ |` replaced by `_`. The front cover, snap and title screen come from it; back and
   spine are always generated. Prefer the USA or Europe release name; check spelling against the repo listing

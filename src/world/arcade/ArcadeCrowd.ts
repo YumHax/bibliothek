@@ -45,6 +45,13 @@ export interface ArcadeCrowdOptions {
    * under their initials; what it returns (if anything) the regular says.
    */
   onRegularScore?: (station: Station, score: number, name: string) => string | null;
+  /** A machine the regulars leave to the player right now (the Saturday tournament's cabinet), or null. */
+  reserved?: () => Station | null;
+  /**
+   * Something worth crowding round right now (the Saturday tournament): zone-local spots where
+   * regulars stand to watch, and the world point they look at; null when there is nothing to see.
+   */
+  gathering?: () => { spots: readonly THREE.Vector3[]; focus: THREE.Vector3 } | null;
   /** The camera: nobody walks in or out while the player is looking at the door. */
   viewer: THREE.Object3D;
   /** Zone-local to world and back. */
@@ -64,7 +71,14 @@ type RegularState =
   | { kind: 'out'; left: number }
   | { kind: 'going'; to: CrowdStation }
   | { kind: 'playing'; at: CrowdStation; left: number; chatter: number }
+  | { kind: 'toWatch'; spot: number }
+  | { kind: 'watching'; spot: number; left: number; chatter: number }
   | { kind: 'leaving' };
+
+/** How long a regular stands watching the tournament before doing something else (seconds), what they mutter meanwhile, and how keen they are on it. */
+const WATCH_SECONDS: [number, number] = [45, 120];
+const WATCH_CHATTER = ['Who is next?', 'My money is on the new one.', 'Quarter-finals already.', 'I got knocked out by a kid once.', 'Shh, they are playing.', 'Tournament day. Best day.'];
+const WATCH_ODDS = 0.7;
 
 type KidState =
   | { kind: 'hanging'; left: number }
@@ -137,17 +151,33 @@ export class ArcadeCrowd extends Prop implements Updatable {
       case 'out': {
         s.left -= dt;
         if (s.left > 0 || this.inside >= this.options.maxInside() || this.doorInView()) return;
-        const target = this.freeStation();
-        if (!target) {
+        const spot = Math.random() < WATCH_ODDS ? this.freeWatchSpot() : null;
+        const target = spot === null ? this.freeStation() : null;
+        if (spot === null && !target) {
           s.left = 5;
           return;
         }
         r.walker.setPresent(true, this.nodePoint(this.options.door));
-        this.goTo(r, target);
+        if (spot !== null) this.goWatch(r, spot);
+        else this.goTo(r, target!);
         return;
       }
       case 'going':
+      case 'toWatch':
         return; // the walker's `then` moves the state on
+      case 'watching': {
+        s.left -= dt;
+        s.chatter -= dt;
+        if (s.chatter <= 0) {
+          s.chatter = 15 + Math.random() * 25;
+          r.walker.say(WATCH_CHATTER[Math.floor(Math.random() * WATCH_CHATTER.length)]!, 2);
+        }
+        if (s.left > 0 && this.options.gathering?.() && this.inside <= this.options.maxInside() + 1) return;
+        const next = Math.random() < 0.4 ? this.freeStation() : null;
+        if (next) this.goTo(r, next);
+        else this.leave(r);
+        return;
+      }
       case 'playing': {
         s.left -= dt;
         s.chatter -= dt;
@@ -158,7 +188,12 @@ export class ArcadeCrowd extends Prop implements Updatable {
         // Time to go, or the hall is emptying out for the night.
         if (s.left > 0 && this.inside <= this.options.maxInside() + 1) return;
         s.at.station.release();
-        // Another go somewhere else, or home.
+        // The tournament to watch, another go somewhere else, or home.
+        const spot = Math.random() < WATCH_ODDS ? this.freeWatchSpot() : null;
+        if (spot !== null) {
+          this.goWatch(r, spot);
+          return;
+        }
         const next = Math.random() < 0.45 ? this.freeStation() : null;
         if (next) this.goTo(r, next);
         else this.leave(r);
@@ -200,8 +235,57 @@ export class ArcadeCrowd extends Prop implements Updatable {
   }
 
   private freeStation(): CrowdStation | null {
-    const free = this.options.stations.filter((cs) => !cs.station.occupant && !cs.station.outOfOrder && !this.claimed.has(cs) && !this.partnered(cs));
+    const reserved = this.options.reserved?.() ?? null;
+    const free = this.options.stations.filter((cs) => cs.station !== reserved && !cs.station.occupant && !cs.station.outOfOrder && !this.claimed.has(cs) && !this.partnered(cs));
     return free[Math.floor(Math.random() * free.length)] ?? null;
+  }
+
+  // --- A crowd round the tournament ---------------------------------------------------------------
+
+  /** A watching spot nobody has taken or is heading for, or null (nothing to watch, or all taken). */
+  private freeWatchSpot(): number | null {
+    const gathering = this.options.gathering?.();
+    if (!gathering) return null;
+    const taken = new Set(this.regulars.map((o) => (o.state.kind === 'toWatch' || o.state.kind === 'watching' ? o.state.spot : -1)));
+    const free = gathering.spots.map((_, i) => i).filter((i) => !taken.has(i));
+    return free[Math.floor(Math.random() * free.length)] ?? null;
+  }
+
+  /** Off to stand at a watching spot, arms crossed, eyes on the tournament's screen. */
+  private goWatch(r: { walker: Walker; state: RegularState; name: string }, spot: number): void {
+    const gathering = this.options.gathering?.();
+    const at = gathering?.spots[spot];
+    if (!gathering || !at) {
+      this.leave(r);
+      return;
+    }
+    r.state = { kind: 'toWatch', spot };
+    r.walker.walk(this.route(r.walker.position, at.clone()), () => {
+      const now = this.options.gathering?.();
+      if (!now) {
+        this.leave(r);
+        return;
+      }
+      const world = this.options.toWorld(at.clone());
+      const yaw = Math.atan2(now.focus.x - world.x, now.focus.z - world.z);
+      r.walker.stand(yaw, Math.random() < 0.5 ? 'crossed' : 'hips', now.focus);
+      r.state = { kind: 'watching', spot, left: rand(WATCH_SECONDS), chatter: 6 + Math.random() * 10 };
+    });
+  }
+
+  /** The watchers react to a tournament round (a cheer with arms up, or a groan), each a moment after the other. */
+  spectatorsReact(lines: readonly string[], cheer: boolean): void {
+    this.regulars
+      .filter((r) => r.state.kind === 'watching')
+      .forEach((r, i) => {
+        window.setTimeout(() => {
+          if (r.state.kind !== 'watching') return;
+          r.walker.say(lines[Math.floor(Math.random() * lines.length)]!, 2.4);
+          if (!cheer) return;
+          r.walker.setPose('cheer');
+          window.setTimeout(() => r.state.kind === 'watching' && r.walker.setPose('crossed'), 1600);
+        }, 300 + i * 450);
+      });
   }
 
   // --- The kid ----------------------------------------------------------------------------------

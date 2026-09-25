@@ -1,5 +1,5 @@
 import type { Updatable } from '@/core/Engine';
-import { startedAudioContext } from '@/audio/audioContext';
+import { audioBus, startedAudioContext } from '@/audio/audioContext';
 import { CrowdMurmur } from '@/audio/CrowdMurmur';
 import type { OccupancyAware } from '../Furniture';
 import { Prop } from '../props/Prop';
@@ -63,7 +63,7 @@ export class ArcadeAmbience extends Prop implements Updatable, OccupancyAware {
     if (!this.hum && this.occupied) {
       const gain = ctx.createGain();
       gain.gain.value = 0;
-      gain.connect(ctx.destination);
+      gain.connect(audioBus(ctx, 'arcade'));
       const oscillators = HUM.map(([frequency, level]) => {
         const osc = ctx.createOscillator();
         osc.frequency.value = frequency;

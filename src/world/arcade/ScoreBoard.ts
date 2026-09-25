@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import type { Updatable } from '@/core/Engine';
 import { createCanvas } from '@/covers/generated/canvasUtils';
 import { boxMesh } from '../meshUtils';
-import { matte, Prop } from '../props/Prop';
+import { markShared, matte, Prop } from '../props/Prop';
 import { drawText } from './games/ArcadeGame';
 import type { ScoreTable } from './scoreTable';
 
@@ -19,7 +19,7 @@ const PX_PER_M = 700;
 /** Games per page (a 2 x 2 grid), and how long a page shows. */
 const PER_PAGE = 4;
 const PAGE_SECONDS = 8;
-const FRAME = matte(0x0d0c12, 0.4);
+const FRAME = markShared(matte(0x0d0c12, 0.4));
 const MEDALS = ['#ffd23a', '#d8dce6', '#e0995a', '#9a96c0', '#9a96c0'];
 
 /**

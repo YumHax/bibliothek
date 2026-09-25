@@ -2,14 +2,15 @@ import * as THREE from 'three';
 import { PointerLockControls } from 'three/examples/jsm/controls/PointerLockControls.js';
 import type { Updatable } from '@/core/Engine';
 import type { Input } from '@/core/Input';
+import { ACTIONS } from '@/input/actions';
 import type { CollisionWorld } from '@/core/Collider';
 
 /** Virtual code other input devices hold to sprint (gamepad stick click, touch joystick pushed far). */
 export const SPRINT_CODE = 'Sprint';
 /** Physical keys held to crouch; gamepad / touch may hold them virtually too. */
-export const CROUCH_CODES = ['ShiftLeft', 'ShiftRight'] as const;
+export const CROUCH_CODES = ACTIONS.crouch.codes;
 /** Physical key whose double tap starts a sprint. */
-const FORWARD_CODE = 'KeyW';
+const FORWARD_CODE = ACTIONS.forward.codes[0];
 
 export interface FirstPersonOptions {
   eyeHeight?: number;
@@ -24,6 +25,16 @@ export interface FirstPersonOptions {
   /** Radius of the player's collision sphere (metres). */
   bodyRadius?: number;
 }
+
+/** What `PointerLockControls` turns per pixel of mouse travel at `pointerSpeed` 1. */
+const MOUSE_RADIANS_PER_PIXEL = 0.002;
+/**
+ * The height of the floor under (x, z), world metres, given where the feet are now: stairs stack
+ * flight over flight, so the surface is the one just under the feet (a step up is allowed).
+ */
+export type GroundHeight = (x: number, z: number, feet: number) => number;
+/** A drop or rise bigger than this in one frame is a teleport, not a step: the feet go straight there. */
+const SNAP = 1.2;
 
 /** Keep the camera off the exact poles so the yaw stays well defined. */
 const MAX_PITCH = Math.PI / 2 - 0.01;
@@ -66,9 +77,14 @@ export class FirstPersonController implements Updatable {
   private virtualLock = false;
   /** Current eye height, eased between standing and crouching. */
   private height: number;
+  /** The floor under the feet (0 everywhere but on the stairwell's stairs), and who says where it is. */
+  private feet = 0;
+  private ground: GroundHeight | null = null;
   /** Sprint armed by a double tap; dropped as soon as forward is released. */
   private sprintLatched = false;
   private lastForwardTap = -Infinity;
+  /** Settings > Look: the mouse's up and down swapped. */
+  private invertMouseY = false;
 
   private readonly velocity = new THREE.Vector3();
   private readonly forward = new THREE.Vector3();
@@ -106,6 +122,12 @@ export class FirstPersonController implements Updatable {
     this.controls = new PointerLockControls(camera, domElement);
     // A real lock supersedes a virtual one, so the following real unlock takes us back to the card.
     this.controls.addEventListener('lock', () => (this.virtualLock = false));
+    // Inverted mouse: PointerLockControls has already turned the camera (its listener came first); undo its pitch twice over.
+    domElement.ownerDocument.addEventListener('mousemove', (e) => {
+      if (!this.invertMouseY || !this.controls.isLocked || !this.controls.enabled || !e.movementY) return;
+      this.lookEuler.setFromQuaternion(this.camera.quaternion);
+      this.setLook(this.lookEuler.y, this.lookEuler.x + 2 * e.movementY * MOUSE_RADIANS_PER_PIXEL * this.controls.pointerSpeed);
+    });
     this.camera.position.y = this.eyeHeight;
   }
 
@@ -163,7 +185,17 @@ export class FirstPersonController implements Updatable {
     if (!this.seated) return;
     this.seated = false;
     this.camera.position.copy(this.standingPosition);
-    this.camera.position.y = this.height;
+    this.camera.position.y = this.feet + this.height;
+  }
+
+  /** The floor's height wherever the player walks (the stairwell's stairs and landings); null: flat floors at 0. */
+  setGround(ground: GroundHeight | null): void {
+    this.ground = ground;
+  }
+
+  /** The height of the floor under the player's feet (world). */
+  get feetHeight(): number {
+    return this.feet;
   }
 
   set movementEnabled(enabled: boolean) {
@@ -173,6 +205,12 @@ export class FirstPersonController implements Updatable {
   }
 
   // --- Look -------------------------------------------------------------------------------------
+
+  /** Settings > Look: mouse speed (a multiplier of three.js's 0.002 rad per pixel) and inverted Y. */
+  setMouseLook(options: { sensitivity: number; invertY: boolean }): void {
+    this.controls.pointerSpeed = options.sensitivity;
+    this.invertMouseY = options.invertY;
+  }
 
   /**
    * Turns the camera by `yawDelta` / `pitchDelta` radians, mouse convention: positive yaw turns
@@ -259,8 +297,10 @@ export class FirstPersonController implements Updatable {
     this.controls.dispatchEvent({ type: 'unlock' });
   }
 
-  setPosition(x: number, z: number): void {
-    this.camera.position.set(x, this.height, z);
+  /** Puts the player at (x, z), their feet at `feet` (world floor height; default the ground there, else 0). */
+  setPosition(x: number, z: number, feet?: number): void {
+    this.feet = feet ?? (this.ground ? this.ground(x, z, this.feet) : 0);
+    this.camera.position.set(x, this.feet + this.height, z);
   }
 
   // --- Movement ---------------------------------------------------------------------------------
@@ -270,8 +310,8 @@ export class FirstPersonController implements Updatable {
 
     // WASD (QWERTY) and ZQSD (AZERTY) both work because we read physical key codes.
     // A gamepad stick / touch joystick feeds the same codes with fractional strengths.
-    const strafe = this.input.axis(['KeyA'], ['KeyD']);
-    const advance = this.input.axis(['KeyS'], [FORWARD_CODE]);
+    const strafe = this.input.axis([...ACTIONS.left.codes], [...ACTIONS.right.codes]);
+    const advance = this.input.axis([...ACTIONS.back.codes], [...ACTIONS.forward.codes]);
     if (advance <= 0) this.sprintLatched = false; // letting go of forward ends the sprint
     const crouch = this.isCrouching;
     const sprint = this.isSprinting;
@@ -297,10 +337,16 @@ export class FirstPersonController implements Updatable {
     this.moveAxis('x', this.velocity.x * dt);
     this.moveAxis('z', this.velocity.z * dt);
 
+    // The feet follow the floor (stairs), a little eased so each step does not jolt the eye.
+    if (this.ground) {
+      const floor = this.ground(this.camera.position.x, this.camera.position.z, this.feet);
+      this.feet = Math.abs(floor - this.feet) > SNAP ? floor : this.feet + (floor - this.feet) * (1 - Math.exp(-18 * dt));
+    }
+
     // Crouching eases the eye down and back up rather than snapping.
     const targetHeight = crouch ? this.crouchHeight : this.eyeHeight;
     this.height += (targetHeight - this.height) * (1 - Math.exp(-10 * dt));
-    this.camera.position.y = this.height;
+    this.camera.position.y = this.feet + this.height;
   }
 
   private moveAxis(axis: 'x' | 'z', delta: number): void {
@@ -324,7 +370,7 @@ export class FirstPersonController implements Updatable {
    */
   private blockedAt(position: THREE.Vector3): boolean {
     for (const y of [KNEE_HEIGHT, this.eyeHeight * 0.6]) {
-      this.probe.set(position.x, y, position.z);
+      this.probe.set(position.x, this.feet + y, position.z);
       if (this.collisions.intersectsSphere(this.probe, this.bodyRadius)) return true;
     }
     return false;

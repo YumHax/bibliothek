@@ -1,17 +1,11 @@
 import type { Game } from '@/catalog/types';
+import { Listeners } from '@/core/Listeners';
 import { getPlatform } from '@/catalog/platforms';
 import { fuzzyMatch, highlightHtml } from './fuzzy';
 import { escapeHtml } from './html';
 import './SearchBar.css';
 
 const MAX_RESULTS = 6;
-
-export interface SearchBarEvents {
-  /** The user picked a game (Enter or click). The bar closes itself first. */
-  onSelect?(game: Game): void;
-  /** The bar was closed without a selection (Esc, or `close()`). */
-  onCancel?(): void;
-}
 
 interface Result {
   game: Game;
@@ -25,14 +19,24 @@ interface Result {
  * Keyboard events are read on the input itself (the only place raw `keydown` is allowed).
  */
 export class SearchBar {
-  readonly events: SearchBarEvents = {};
-
   private readonly root: HTMLDivElement;
   private readonly input: HTMLInputElement;
   private readonly list: HTMLUListElement;
   private games: readonly Game[] = [];
   private results: Result[] = [];
   private active = 0;
+  private readonly selectListeners = new Listeners<[game: Game]>();
+  private readonly cancelListeners = new Listeners<[]>();
+
+  /** Calls `listener` with the game picked (Enter or click; the bar closes itself first); returns the unsubscribe. */
+  onSelect(listener: (game: Game) => void): () => void {
+    return this.selectListeners.add(listener);
+  }
+
+  /** Calls `listener` when the bar closes without a selection (Esc, or `close()`); returns the unsubscribe. */
+  onCancel(listener: () => void): () => void {
+    return this.cancelListeners.add(listener);
+  }
 
   constructor(container: HTMLElement) {
     this.root = document.createElement('div');
@@ -74,7 +78,7 @@ export class SearchBar {
   close(): void {
     if (!this.isOpen) return;
     this.hide();
-    this.events.onCancel?.();
+    this.cancelListeners.emit();
   }
 
   private hide(): void {
@@ -135,7 +139,7 @@ export class SearchBar {
     const result = this.results[index];
     if (!result) return;
     this.hide();
-    this.events.onSelect?.(result.game);
+    this.selectListeners.emit(result.game);
   }
 
   private onKeyDown = (e: KeyboardEvent): void => {

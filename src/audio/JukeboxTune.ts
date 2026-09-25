@@ -1,4 +1,5 @@
-import { audioContext } from './audioContext';
+import { audioBus, audioContext } from './audioContext';
+import { whiteNoise } from './noise';
 
 /** Loudness at volume 1, right next to the jukebox (linear). */
 const MASTER = 0.2;
@@ -126,6 +127,8 @@ export class JukeboxTune {
   private ctx: AudioContext | null = null;
   private out: GainNode | null = null;
   private echoSend: GainNode | null = null;
+  /** The echo's delay line: fed back into itself, so it is cut loose on its own. */
+  private echo: DelayNode | null = null;
   private noise: AudioBuffer | null = null;
   private style: Style | null = null;
   private volume = 0;
@@ -178,6 +181,9 @@ export class JukeboxTune {
     this.style = null;
     this.out?.disconnect();
     this.out = null;
+    this.echo?.disconnect();
+    this.echo = null;
+    this.echoSend = null;
     this.ctx = null;
   }
 
@@ -288,7 +294,7 @@ export class JukeboxTune {
     const low = ctx.createBiquadFilter();
     low.type = 'lowpass';
     low.frequency.value = 7500;
-    out.connect(high).connect(low).connect(ctx.destination);
+    out.connect(high).connect(low).connect(audioBus(ctx, 'arcade'));
     const delay = ctx.createDelay(1);
     delay.delayTime.value = 0.33;
     const feedback = ctx.createGain();
@@ -296,12 +302,11 @@ export class JukeboxTune {
     const send = ctx.createGain();
     send.gain.value = 0.2;
     low.connect(send).connect(delay).connect(feedback).connect(delay);
-    delay.connect(ctx.destination);
+    delay.connect(audioBus(ctx, 'arcade'));
     this.out = out;
     this.echoSend = send;
-    this.noise = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
-    const data = this.noise.getChannelData(0);
-    for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
+    this.echo = delay;
+    this.noise = whiteNoise(ctx, 1);
     return ctx;
   }
 }

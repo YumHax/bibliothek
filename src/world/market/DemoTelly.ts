@@ -72,7 +72,7 @@ export class DemoTelly extends THREE.Group implements Furniture, Updatable, Inte
     this.texture = toTexture(this.canvas);
     this.texture.magFilter = THREE.NearestFilter;
     const screen = new THREE.Mesh(new THREE.PlaneGeometry(SCREEN_W, SCREEN_H), crtScreenMaterial(this.texture, { lines: PX_H, bend: 0.08 }));
-    screen.position.set(SCREEN_X, H * 0.54, front + 0.0065);
+    screen.position.set(SCREEN_X, H * 0.54, front + 0.0075);
     screen.castShadow = false;
     this.add(screen);
     const stripX = W / 2 - 0.035;

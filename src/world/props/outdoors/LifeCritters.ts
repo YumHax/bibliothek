@@ -3,7 +3,7 @@ import { type Rng, azimuthOf, azimuthX, heightY } from './Sheet';
 import { between, pick } from './paint';
 import { LAMP_LINE, NEAR_KERB, PARK_EDGE } from './plan';
 import { currentSeason } from './season';
-import { type AtlasPens, type Cell, type LifeEnv, type Push, acrossSign, glowDot, hoursRamp, pushStanding } from './sprites';
+import { type AtlasPens, type Cell, type LifeEnv, type LifeLayer, type Push, acrossSign, glowDot, hoursRamp, pushStanding } from './sprites';
 
 /** Lamp heads the bats hunt round (the posts of `paintStreet`: far pavements and ours), metres; the lanterns are 7 m up. */
 const BAT_LAMPS: [number, number][] = [
@@ -47,13 +47,15 @@ interface Bat {
  * when the city is asleep, and a couple of cats on the park hedge in the evening, one sitting with
  * its tail twitching, one padding along the top.
  */
-export class Critters {
+export class Critters implements LifeLayer {
   private readonly batCells: Cell[] = [];
   /** Per facing (+azimuth, -azimuth): two trotting poses. */
   private readonly foxCells: Cell[][] = [];
   /** Per coat, per facing: walking poses 0-1, sitting poses 2-3. */
   private readonly catCells: Cell[][][] = [];
   private readonly bats: Bat[] = [];
+  /** Scratch: a bat's pull back towards its lantern. */
+  private readonly pull = new THREE.Vector3();
   private fox: { route: [number, number][]; s: number; pause: number; clock: number } | null = null;
   private foxTimer = 20;
   private readonly walkingCat = { z: 8, dir: 1 as 1 | -1, sitting: 0, clock: 0 };
@@ -124,7 +126,7 @@ export class Critters {
 
   private pushBats(dt: number, visible: number, push: Push): void {
     if (visible <= 0.01) return;
-    const pull = new THREE.Vector3();
+    const pull = this.pull;
     for (const bat of this.bats) {
       // Erratic: a new sharp swerve every fraction of a second, a spring back towards the lantern.
       bat.jerkClock -= dt;

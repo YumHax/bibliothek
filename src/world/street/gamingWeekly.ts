@@ -1,6 +1,8 @@
 import { getPlatform } from '@/catalog/platforms';
 import { seededRandom } from '@/covers/generated/canvasUtils';
 import type { StockItem } from '@/economy/StockItem';
+import type { MarketNews } from '@/economy/marketEvents';
+import { paperRumour } from '@/economy/rumours';
 
 /** One issue of the newsstand's paper: its masthead line, the day's lead and three or four tips. */
 export interface WeeklyIssue {
@@ -22,6 +24,8 @@ export interface WeeklySources {
   theme: { title: string; blurb: string };
   /** The player's wishlist and what they own (so a tip never points at a game they have). */
   wanted: (id: string) => boolean;
+  /** What is coming up at the market (`MarketStock.news`): a grail's rumour leads the tips, a sale follows. */
+  news?: readonly MarketNews[];
 }
 
 const RUMOURS = [
@@ -46,18 +50,24 @@ const QUIET = [
  * paper reads the same all day. Before anybody has been to the market (the stock is not drawn
  * yet) it prints general tips instead.
  */
-export function writeWeekly({ stock, day, theme, wanted }: WeeklySources): WeeklyIssue {
+export function writeWeekly({ stock, day, theme, wanted, news = [] }: WeeklySources): WeeklyIssue {
   const random = seededRandom(day * 131 + 7);
   const date = new Date();
   const dateline = `Issue ${day + 1} · ${date.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })}`;
-  const base = { masthead: 'THE GAMING WEEKLY', dateline, headline: `Today at the market: ${theme.title}`, blurb: theme.blurb };
+  // A grail on the market today makes the front page.
+  const grailToday = news.find((n) => n.kind === 'grail' && n.inDays === 0)?.grail;
+  const base = grailToday
+    ? { masthead: 'THE GAMING WEEKLY', dateline, headline: `GRAIL ALERT: ${grailToday.title} at the market`, blurb: grailToday.lore }
+    : { masthead: 'THE GAMING WEEKLY', dateline, headline: `Today at the market: ${theme.title}`, blurb: theme.blurb };
+  // The talk of the market leads the tips, drawn or not.
+  const talk = news.filter((n) => !(n.kind === 'grail' && n.inDays === 0)).slice(0, 2).map(paperRumour);
   if (!stock || stock.length === 0) {
-    const hints = [...QUIET].sort(() => random() - 0.5).slice(0, 3);
+    const hints = [...talk, ...[...QUIET].sort(() => random() - 0.5)].slice(0, 3);
     return { ...base, hints, prices: null };
   }
 
   const name = (item: StockItem): [string, string] => [item.game.title, getPlatform(item.game.platform).shortName];
-  const hints: string[] = [];
+  const hints: string[] = [...talk];
   const showpiece = stock.find((i) => i.source === 'showpiece');
   if (showpiece) hints.push(`Collector's piece: a complete ${name(showpiece)[0]} (${name(showpiece)[1]}) on the ${name(showpiece)[1]} stall.`);
   const wish = stock.find((i) => i.source === 'wanted' || wanted(i.game.id));

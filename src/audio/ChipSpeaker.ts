@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import { startedAudioContext } from './audioContext';
+import { audioBus, startedAudioContext } from './audioContext';
+import { whiteNoise } from './noise';
 
 /** Every sound an arcade machine makes; recipes below, no samples. */
 export type Sfx =
@@ -91,16 +92,6 @@ const RECIPES: Record<Sfx, { notes?: Note[]; hiss?: Hiss[] }> = {
   rim: { notes: [{ wave: 'triangle', from: 740, at: 0, length: 0.18, level: 0.5 }, { wave: 'sine', from: 1110, at: 0, length: 0.12, level: 0.3 }] },
 };
 
-let noise: AudioBuffer | null = null;
-
-function noiseBuffer(ctx: AudioContext): AudioBuffer {
-  if (noise && noise.sampleRate === ctx.sampleRate) return noise;
-  noise = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
-  const data = noise.getChannelData(0);
-  for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
-  return noise;
-}
-
 /**
  * A machine's little speaker: plays `Sfx` recipes (square and triangle notes, bursts of filtered
  * noise) through one gain and a stereo pan that follow where the listener stands relative to the
@@ -154,7 +145,7 @@ export class ChipSpeaker {
     }
     for (const hiss of recipe.hiss ?? []) {
       const source = ctx.createBufferSource();
-      source.buffer = noiseBuffer(ctx);
+      source.buffer = whiteNoise(ctx, 1);
       const filter = ctx.createBiquadFilter();
       filter.type = hiss.filter;
       filter.frequency.value = hiss.frequency;
@@ -211,7 +202,7 @@ export class ChipSpeaker {
     this.out = ctx.createGain();
     this.out.gain.value = 0;
     this.pan = ctx.createStereoPanner();
-    this.out.connect(this.pan).connect(ctx.destination);
+    this.out.connect(this.pan).connect(audioBus(ctx, 'arcade'));
     this.follow(true);
     return ctx;
   }

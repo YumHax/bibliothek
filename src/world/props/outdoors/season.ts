@@ -68,9 +68,10 @@ export function holidayOf(date: Date): Holiday | null {
   return null;
 }
 
-/** Parses `?holiday=christmas` (`none` for no holiday at all); undefined leaves it to the calendar. */
+/** Parses `?holiday=christmas` (`none` for no holiday at all; `newyear` is Christmas plus the streamers); undefined leaves it to the calendar. */
 export function parseHoliday(value: string | null): Holiday | null | undefined {
   if (value === 'christmas' || value === 'halloween') return value;
+  if (value === 'newyear') return 'christmas';
   if (value === 'none') return null;
   return undefined;
 }
@@ -84,4 +85,40 @@ export function useHoliday(value: Holiday | null): void {
 
 export function currentHoliday(): Holiday | null {
   return holiday;
+}
+
+/**
+ * What the flat, the arcade and the street are dressed for (plan entries with a `holiday` gate,
+ * see `props/decor.ts`): the holiday itself, and 'newyear' (streamers, a banner) in New Year's week,
+ * inside the Christmas season.
+ */
+export type Festivity = Holiday | 'newyear';
+
+/** New Year's week: the 30th of December to the 3rd of January. */
+export function isNewYear(date: Date): boolean {
+  const month = date.getMonth();
+  const day = date.getDate();
+  return (month === 11 && day >= 30) || (month === 0 && day <= 3);
+}
+
+/** Today's festivities for a holiday (the calendar's or `?holiday=`'s); `newYear` forces the streamers (`?holiday=newyear`). */
+export function festivitiesOf(holidayToday: Holiday | null, date: Date, newYear = false): Festivity[] {
+  if (!holidayToday) return [];
+  return holidayToday === 'christmas' && (newYear || isNewYear(date)) ? ['christmas', 'newyear'] : [holidayToday];
+}
+
+/** `?holiday=newyear`: the streamers whatever the date. */
+export function parseNewYear(value: string | null): boolean {
+  return value === 'newyear';
+}
+
+/** The festivities the rooms are furnished for (set once by `Sky`, before any zone is built). */
+let festivities: readonly Festivity[] = [];
+
+export function useFestivities(value: readonly Festivity[]): void {
+  festivities = value;
+}
+
+export function currentFestivities(): readonly Festivity[] {
+  return festivities;
 }

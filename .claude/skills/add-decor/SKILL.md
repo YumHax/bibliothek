@@ -41,4 +41,7 @@ room's plan; edit the entry.
 Do not force them into `DECOR_KINDS`. Add a plan entry for the spot in the room's plan and a step in its builder
 (`furnishRoom()` in `src/world/layout.ts`, or `src/world/<kind>/furnish<Kind>.ts`) that builds it with
 `zone.placeAt(new Thing(...), plan.myThing)`. If another feature needs the object (like the cat needs the seats), add it to
-the builder's handle (`RoomHandle`). Subscriptions go through `zone.onUnload()`.
+the builder's handle (`RoomHandle`). Subscriptions go through `zone.onUnload()`; the helpers in `src/world/build/` already
+do: its sound `placeWith(zone, thing, pointSound(ctx, voice, { maxDistance: 5 }), local)`, a home good hidden until bought
+`showWhenUpgraded(zone, upgrades, 'lamp', thing)` (or `followUpgrades(zone, upgrades, apply)`), a clock `placeClock`, a
+game left on a surface `placeStrayBox`.

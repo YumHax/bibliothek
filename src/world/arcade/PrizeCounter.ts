@@ -4,7 +4,7 @@ import type { SessionActions } from '@/game/SessionActions';
 import { createCanvas, toTexture } from '@/covers/generated/canvasUtils';
 import type { Furniture } from '../Furniture';
 import { boxMesh, cylinderMesh, invisibleHitbox } from '../meshUtils';
-import { matte } from '../props/Prop';
+import { markShared, matte } from '../props/Prop';
 import { drawText } from './games/ArcadeGame';
 import { wood as woodMaterial } from '@/world/materials/finishes';
 import type { PrizeKind } from '@/economy/Prizes';
@@ -24,9 +24,9 @@ const DEPTH = 0.6;
 const HEIGHT = 1.02;
 const SIGN_Y = 1.75;
 
-const WOOD = woodMaterial(0x4a3524, 0.6);
-const TOP = matte(0x8b6a44, 0.5);
-const GLASS = new THREE.MeshStandardMaterial({ color: 0xbfd8e6, roughness: 0.1, transparent: true, opacity: 0.35 });
+const WOOD = markShared(woodMaterial(0x4a3524, 0.6));
+const TOP = markShared(matte(0x8b6a44, 0.5));
+const GLASS = markShared(new THREE.MeshStandardMaterial({ color: 0xbfd8e6, roughness: 0.1, transparent: true, opacity: 0.35 }));
 
 /**
  * The arcade's prize counter: a glass-fronted desk showing the prizes on two glass shelves, a lit

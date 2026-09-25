@@ -4,6 +4,7 @@ import { createCanvas, seededRandom, toTexture } from '@/covers/generated/canvas
 import type { Updatable } from '@/core/Engine';
 import type { Furniture } from '../Furniture';
 import type { DayNight } from '../props/DayNight';
+import { snowCovered } from './snowCover';
 import { nightnessOf } from './streetAir';
 import type { Vec2 } from './streetPlan';
 
@@ -27,7 +28,8 @@ const BENCH = { length: 1.8, depth: 0.55 };
  * lot): the bus shelter on the far pavement (posts, roof, glass back and side, its bench, a lit
  * advertising panel), the benches, the litter bins, and along Park Street the park's clipped
  * hedge behind iron railings. Everything a person would bump into is in `colliders`
- * (zone-local); the hedge and railings are behind the street's invisible edge anyway.
+ * (zone-local); the hedge and railings are behind the street's invisible edge anyway. Snow settles
+ * on the shelter's roof, the benches, the bins and the hedge (`snowCovered`).
  */
 export class StreetFurniture extends THREE.Group implements Furniture, Updatable {
   readonly contactShadow = false;
@@ -48,11 +50,11 @@ export class StreetFurniture extends THREE.Group implements Furniture, Updatable
     this.railings(options.railings);
 
     const materials: Record<Finish, THREE.Material> = {
-      metal: new THREE.MeshStandardMaterial({ color: 0x2f3a36, roughness: 0.5, metalness: 0.55 }),
-      wood: new THREE.MeshStandardMaterial({ color: 0x8a5a36, roughness: 0.8 }),
+      metal: snowCovered(new THREE.MeshStandardMaterial({ color: 0x2f3a36, roughness: 0.5, metalness: 0.55 })),
+      wood: snowCovered(new THREE.MeshStandardMaterial({ color: 0x8a5a36, roughness: 0.8 })),
       glass: new THREE.MeshStandardMaterial({ color: 0xcfe0e8, roughness: 0.08, metalness: 0.1, transparent: true, opacity: 0.22, depthWrite: false }),
-      hedge: new THREE.MeshStandardMaterial({ map: hedgeTexture(options.anisotropy), roughness: 0.95 }),
-      bin: new THREE.MeshStandardMaterial({ color: 0x3d5446, roughness: 0.6, metalness: 0.3 }),
+      hedge: snowCovered(new THREE.MeshStandardMaterial({ map: hedgeTexture(options.anisotropy), roughness: 0.95 })),
+      bin: snowCovered(new THREE.MeshStandardMaterial({ color: 0x3d5446, roughness: 0.6, metalness: 0.3 })),
     };
     for (const [finish, geometries] of this.parts) {
       const mesh = new THREE.Mesh(mergeGeometries(geometries)!, materials[finish]);
@@ -152,8 +154,8 @@ export class StreetFurniture extends THREE.Group implements Furniture, Updatable
   private hedge({ x, from, to, height, depth }: StreetFurnitureOptions['hedge']): void {
     const length = to - from;
     this.put('hedge', new THREE.BoxGeometry(depth, height, length, 1, 1, 1), [x, (from + to) / 2], 0, [0, height / 2, 0]);
-    // A rounded top: a second, narrower course.
-    this.put('hedge', new THREE.BoxGeometry(depth * 0.8, 0.2, length), [x, (from + to) / 2], 0, [0, height + 0.08, 0]);
+    // A rounded top: a second, narrower course, a little shorter so its ends never share the main box's plane.
+    this.put('hedge', new THREE.BoxGeometry(depth * 0.8, 0.2, length - 0.1), [x, (from + to) / 2], 0, [0, height + 0.08, 0]);
   }
 
   /** Iron railings: a top and bottom rail, bars with spear tips every 14 cm, a post every 2.5 m. */

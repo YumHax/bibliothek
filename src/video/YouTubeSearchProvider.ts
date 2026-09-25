@@ -1,12 +1,18 @@
 import type { Game } from '@/catalog/types';
 import { getPlatform } from '@/catalog/platforms';
+import { canonicalGameId } from '@/catalog';
+import { BrowserCache, KEYS, safeStorage, storageKeys } from '@/persistence';
 import type { VideoInfo, VideoProvider } from './VideoProvider';
 
 const MIN_LONGPLAY_SECONDS = 15 * 60;
 const REQUEST_TIMEOUT_MS = 20_000;
-/** A "nothing found" answer is retried after a day; a found video is kept for good. */
+/** A "nothing found" answer is retried after a day; a found video is kept half a year (videos do get taken down). */
 const MISS_TTL_MS = 24 * 3600 * 1000;
-const STORAGE_PREFIX = 'bibliothek:longplay:';
+const HIT_TTL_MS = 180 * 24 * 3600 * 1000;
+/** Far more games than a collection holds. */
+const MAX_CACHED = 600;
+/** Where each game's answer used to be kept, one key per game: moved into the cache once, then removed. */
+const LEGACY_PREFIX = 'bibliothek:longplay:';
 
 /** What the endpoint returns: search hits already ranked best-first (see server/longplaySearch.ts). */
 interface RankedVideo extends VideoInfo {
@@ -18,6 +24,9 @@ interface CacheRecord {
   at: number;
 }
 
+/** A search's answer: the video, or null for "no longplay found". */
+type Answer = VideoInfo | null;
+
 /**
  * Uses the same-origin endpoint /api/youtube/search (Vite middleware in dev, serverless function
  * in production; see server/longplaySearch.ts), which scrapes YouTube's public results page and
@@ -27,7 +36,12 @@ interface CacheRecord {
 export class YouTubeSearchProvider implements VideoProvider {
   readonly id = 'youtube-search';
 
-  constructor(private readonly endpoint = '/api/youtube/search') {}
+  private readonly cache: BrowserCache<Answer>;
+
+  constructor(private readonly endpoint = '/api/youtube/search', storage: Storage | null = safeStorage()) {
+    this.cache = new BrowserCache<Answer>({ key: KEYS.longplayCache, maxEntries: MAX_CACHED, ttlMs: HIT_TTL_MS, valid: isAnswer, storage });
+    this.adoptLegacy(storage);
+  }
 
   async findLongplay(game: Game): Promise<VideoInfo | null> {
     const cached = this.readCache(game.id);
@@ -52,28 +66,44 @@ export class YouTubeSearchProvider implements VideoProvider {
     return best;
   }
 
-  private readCache(gameId: string): VideoInfo | null | undefined {
-    try {
-      const raw = localStorage.getItem(STORAGE_PREFIX + gameId);
-      if (!raw) return undefined;
-      const parsed = JSON.parse(raw) as CacheRecord | VideoInfo | null;
-      if (!parsed) return undefined; // legacy "null" entry: search again
-      if ('videoId' in parsed) return parsed; // legacy entry without timestamp
-      if (parsed.info) return parsed.info;
-      return Date.now() - parsed.at < MISS_TTL_MS ? null : undefined;
-    } catch {
-      return undefined;
-    }
+  private readCache(gameId: string): Answer | undefined {
+    return this.cache.get(gameId);
   }
 
-  private writeCache(gameId: string, info: VideoInfo | null): void {
-    try {
-      const record: CacheRecord = { info, at: Date.now() };
-      localStorage.setItem(STORAGE_PREFIX + gameId, JSON.stringify(record));
-    } catch {
-      /* storage unavailable: fine */
-    }
+  private writeCache(gameId: string, info: Answer): void {
+    this.cache.set(gameId, info, info ? HIT_TTL_MS : MISS_TTL_MS);
   }
+
+  /** Moves the old one-key-per-game answers (`bibliothek:longplay:<id>`) into the cache, under canonical ids, and removes them. */
+  private adoptLegacy(storage: Storage | null): void {
+    const keys = storageKeys(storage).filter((key) => key.startsWith(LEGACY_PREFIX));
+    for (const key of keys) {
+      try {
+        const parsed = JSON.parse(storage?.getItem(key) ?? 'null') as CacheRecord | VideoInfo | null;
+        const id = canonicalGameId(key.slice(LEGACY_PREFIX.length));
+        // A "null" entry means search again; an entry without a timestamp is a found video.
+        if (parsed && 'videoId' in parsed && isAnswer(parsed)) this.cache.set(id, parsed, HIT_TTL_MS);
+        else if (parsed && 'info' in parsed && typeof parsed.at === 'number' && isAnswer(parsed.info)) {
+          if (parsed.info) this.cache.set(id, parsed.info, HIT_TTL_MS, parsed.at);
+          else if (Date.now() - parsed.at < MISS_TTL_MS) this.cache.set(id, null, MISS_TTL_MS, parsed.at);
+        }
+      } catch {
+        // unreadable: searched again when needed
+      }
+      try {
+        storage?.removeItem(key);
+      } catch {
+        // storage blocked: nothing to tidy
+      }
+    }
+    if (keys.length) this.cache.flush();
+  }
+}
+
+function isAnswer(value: unknown): value is Answer {
+  if (value === null) return true;
+  const v = value as Partial<VideoInfo> | undefined;
+  return typeof v === 'object' && typeof v.videoId === 'string' && typeof v.title === 'string' && typeof v.durationSeconds === 'number';
 }
 
 /**

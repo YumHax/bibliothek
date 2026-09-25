@@ -5,7 +5,7 @@
   left: 50%;
   transform: translateX(-50%);
   width: min(30rem, 90vw);
-  z-index: 3;
+  z-index: var(--z-modal);
   color: var(--ui-text);
   animation: search-in 160ms ease-out;
 }
@@ -18,26 +18,26 @@
   box-sizing: border-box;
   width: 100%;
   padding: 0.7rem 1rem;
-  border-radius: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: var(--ui-radius);
+  border: 1px solid var(--ui-border);
   background: var(--ui-panel);
   color: inherit;
   font: inherit;
   font-size: 1.05rem;
   outline: none;
-  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.45);
+  box-shadow: var(--ui-shadow);
 }
-.search-bar__input:focus { border-color: rgba(255, 255, 255, 0.55); }
-.search-bar__input::placeholder { color: rgba(236, 233, 226, 0.45); }
+.search-bar__input:focus { border-color: var(--ui-border-strong); }
+.search-bar__input::placeholder { color: var(--ui-text-dim); }
 
 .search-bar__results {
   list-style: none;
   margin: 0.4rem 0 0;
   padding: 0.3rem;
-  border-radius: 10px;
+  border-radius: var(--ui-radius);
   background: var(--ui-panel);
   border: 1px solid var(--ui-border);
-  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.45);
+  box-shadow: var(--ui-shadow);
 }
 .search-bar__results:empty { display: none; }
 
@@ -46,14 +46,14 @@
   justify-content: space-between;
   gap: 1rem;
   padding: 0.45rem 0.7rem;
-  border-radius: 6px;
+  border-radius: var(--ui-radius-sm);
   font-size: 0.95rem;
   cursor: pointer;
 }
-.search-bar__item--active { background: rgba(255, 255, 255, 0.12); }
-.search-bar__item mark { background: none; color: #ffd27a; font-weight: 600; }
-.search-bar__meta { opacity: 0.6; font-size: 0.85em; white-space: nowrap; }
-.search-bar__empty { padding: 0.45rem 0.7rem; opacity: 0.6; font-size: 0.9rem; }
+.search-bar__item--active { background: var(--ui-fill-hover); }
+.search-bar__item mark { background: none; color: var(--ui-accent); font-weight: 600; }
+.search-bar__meta { color: var(--ui-text-dim); font-size: 0.85em; white-space: nowrap; }
+.search-bar__empty { padding: 0.45rem 0.7rem; color: var(--ui-text-dim); font-size: 0.9rem; }
 
 .search-bar__help {
   margin: 0.4rem 0 0;

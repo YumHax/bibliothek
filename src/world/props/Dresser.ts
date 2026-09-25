@@ -47,9 +47,9 @@ export class Dresser extends THREE.Group implements Furniture {
     const drawers = options.drawers ?? 3;
     const z = OFF_WALL + DEPTH / 2;
 
-    // Carcass on four tapered legs; the top overhangs a touch.
+    // Carcass on four tapered legs, stopping under the top (level with it, the two tops z-fight); the top overhangs a touch.
     const bodyH = HEIGHT - LEG;
-    part(this, width, bodyH, DEPTH - PANEL, WALNUT, { y: LEG + bodyH / 2, z: z - PANEL / 2 });
+    part(this, width, bodyH - PANEL, DEPTH - PANEL, WALNUT, { y: LEG + (bodyH - PANEL) / 2, z: z - PANEL / 2 });
     part(this, width + 0.03, PANEL, DEPTH + 0.02, WALNUT, { y: HEIGHT - PANEL / 2, z: z + 0.005 });
     for (const dx of [-width / 2 + 0.05, width / 2 - 0.05])
       for (const dz of [OFF_WALL + 0.05, OFF_WALL + DEPTH - 0.05]) this.add(cylinderMesh(0.022, LEG, DARK_WALNUT, { x: dx, y: LEG / 2, z: dz }, { radiusBottom: 0.014, segments: 10 }));

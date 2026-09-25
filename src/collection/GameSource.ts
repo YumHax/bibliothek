@@ -7,4 +7,9 @@ import type { Game } from '@/catalog/types';
 export interface GameSource {
   readonly games: readonly Game[];
   subscribe(cb: () => void): () => void;
+  /**
+   * What the last change was, when the source knows: 'import' (a whole collection loaded, the
+   * editor's import, back to the seed) or 'edit' (games bought, sold, changed one purchase at a time).
+   */
+  readonly lastChange?: 'import' | 'edit';
 }

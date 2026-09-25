@@ -112,10 +112,11 @@ export class Engine {
   /**
    * Compiles the shader program of every material in the scene, in view or not, hidden or not,
    * with the scene's current lights: the variants the loop will ask for (off-screen ones with a pipeline).
+   * `scene`: a stand-in holding content that is not in the scene yet, compiled with its own lights (`World.prepareZone`).
    */
-  compileScene(): void {
-    if (this.pipeline) this.pipeline.compile(this.scene, this.camera);
-    else this.renderer.compile(this.scene, this.camera);
+  compileScene(scene: THREE.Scene = this.scene): void {
+    if (this.pipeline) this.pipeline.compile(scene, this.camera);
+    else this.renderer.compile(scene, this.camera);
   }
 
   start(): void {

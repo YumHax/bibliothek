@@ -1,0 +1,84 @@
+/* The tabac's scratch card: a lottery ticket over the view (`.ui-modal--centre`). */
+.scratch-panel {
+  padding: 1.5rem;
+  background: var(--ui-backdrop);
+}
+.scratch-panel__card {
+  width: min(24rem, 100%);
+  max-height: 100%;
+  overflow-y: auto;
+  padding: 1.1rem 1.2rem 1rem;
+  box-sizing: border-box;
+  background: linear-gradient(160deg, #2a1f4a, #6a1f5a 60%, #b8322a);
+  color: var(--ui-text);
+  text-align: center;
+}
+.scratch-panel__card header h2 {
+  margin: 0;
+  font-family: var(--ui-font-display);
+  font-weight: 400;
+  font-size: 1.7rem;
+  letter-spacing: 0.06em;
+  color: #ffd23a;
+  text-shadow: 0 2px 0 #7a2a10;
+}
+.scratch-panel__card header p {
+  margin: 0.25rem 0 0.8rem;
+  font-size: 0.8rem;
+  color: var(--ui-text-dim);
+}
+.scratch-panel__cells {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.5rem;
+  margin: 0 auto;
+  max-width: 19rem;
+}
+.scratch-panel__cell {
+  position: relative;
+  aspect-ratio: 1;
+  border-radius: var(--ui-radius-sm);
+  background: #f4efe2;
+  overflow: hidden;
+  box-shadow: inset 0 0 0 2px rgba(0, 0, 0, 0.25);
+}
+.scratch-panel__cell canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  cursor: crosshair;
+  touch-action: none;
+}
+.scratch-panel__symbol {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 2.2rem;
+}
+.scratch-panel__symbol--seven {
+  font-family: var(--ui-font-display);
+  color: #d92a2a;
+  font-size: 2.6rem;
+}
+.scratch-panel__cell--win {
+  box-shadow: inset 0 0 0 3px #ffd23a, 0 0 14px rgba(255, 210, 58, 0.7);
+}
+.scratch-panel__result {
+  min-height: 1.4em;
+  margin: 0.8rem 0 0.2rem;
+  font-weight: 600;
+}
+.scratch-panel__hint {
+  margin: 0 0 0.8rem;
+  font-size: 0.75rem;
+  color: var(--ui-text-dim);
+}
+.scratch-panel__card footer {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: center;
+  flex-wrap: wrap;
+}

@@ -1,11 +1,13 @@
 import * as THREE from 'three';
 import { ChipSpeaker } from '@/audio/ChipSpeaker';
 import { createCanvas, toTexture } from '@/covers/generated/canvasUtils';
-import { boxMesh, cylinderMesh, invisibleHitbox } from '../meshUtils';
+import { boxMesh, cylinderMesh, eyePoseAt, invisibleHitbox } from '../meshUtils';
 import { matte } from '../props/Prop';
+import { actionKeyLabel } from '@/ui/keys';
 import { type ArcadeControls, NO_CONTROLS, drawText } from './games/ArcadeGame';
 import { TicketMachine, type TicketMachineWiring } from './TicketMachine';
 import { TicketStrip } from './TicketStrip';
+import { type MachineDisplay, displayScreen, outOfOrderNote, paintMarquee } from './machineParts';
 
 export interface HoopShotOptions {
   title?: string;
@@ -79,7 +81,7 @@ export class HoopShot extends TicketMachine {
   private readonly balls: Ball[] = [];
   private readonly hoop: THREE.Group;
   private readonly marquee: THREE.MeshBasicMaterial;
-  private readonly display: { ctx: CanvasRenderingContext2D; texture: THREE.CanvasTexture };
+  private readonly display: MachineDisplay;
   private readonly hands: [THREE.Vector3, THREE.Vector3] = [new THREE.Vector3(), new THREE.Vector3()];
   private readonly look = new THREE.Vector3();
   private readonly camQuat = new THREE.Quaternion();
@@ -97,6 +99,9 @@ export class HoopShot extends TicketMachine {
   private flashText = '';
   private displayClock = 0;
   private demoWait = 0;
+  /** Seconds since the clock ran out: a ball balanced on the rim must not hold the round open for ever. */
+  private overtime = 0;
+  private readonly away = new THREE.Vector3();
 
   constructor(options: HoopShotOptions, wiring: TicketMachineWiring) {
     super(wiring);
@@ -110,7 +115,8 @@ export class HoopShot extends TicketMachine {
     const midZ = (FRONT_Z + BACK_Z) / 2;
 
     // The cabinet under the ramp, its sides painted, the front with the gutter and the ticket slot.
-    this.add(boxMesh(WIDTH, RAMP.frontY - 0.04, length, dark, { y: (RAMP.frontY - 0.04) / 2, z: midZ }));
+    // The dark core stops inside the painted sides and front (flush with them, it would z-fight).
+    this.add(boxMesh(WIDTH - 0.01, RAMP.frontY - 0.04, length - 0.03, dark, { y: (RAMP.frontY - 0.04) / 2, z: midZ - 0.015 }));
     for (const sx of [-1, 1]) this.add(boxMesh(0.04, 1.0, length, paint, { x: sx * (WIDTH / 2 - 0.02), y: 0.5, z: midZ }));
     this.add(boxMesh(WIDTH, 0.9, 0.06, paint, { y: 0.45, z: FRONT_Z - 0.03 }));
     const ramp = boxMesh(WIDTH - 0.08, 0.02, Math.hypot(RAMP.frontZ - RAMP.backZ, RAMP.backY - RAMP.frontY), matte(0x2a2a30, 0.7), { y: (RAMP.frontY + RAMP.backY) / 2 - 0.01, z: (RAMP.frontZ + RAMP.backZ) / 2 });
@@ -138,17 +144,18 @@ export class HoopShot extends TicketMachine {
     this.add(board);
     this.add(boxMesh(BOARD.w + 0.03, BOARD.h + 0.03, 0.02, steel, { y: BOARD.y, z: BOARD.z - 0.012 }));
     for (const sx of [-1, 1]) this.add(boxMesh(0.03, 0.03, BOARD.z - BACK_Z, steel, { x: sx * 0.3, y: BOARD.y, z: (BOARD.z + BACK_Z) / 2 }));
-    this.marquee = new THREE.MeshBasicMaterial({ map: paintMarquee(title), toneMapped: false, color: 0xdddddd });
+    const marqueeMap = paintMarquee(title, { stops: ['#ff5a1a', '#ffd23a'], ink: '#1a0c04', size: 40 });
+    this.marquee = new THREE.MeshBasicMaterial({ map: marqueeMap, toneMapped: false, color: 0xdddddd });
     const marquee = new THREE.Mesh(new THREE.PlaneGeometry(WIDTH - 0.06, 0.2), this.marquee);
     marquee.position.set(0, CAGE_H + 0.03, BACK_Z + 0.002);
     this.add(marquee);
-    const [canvas, ctx] = createCanvas(256, 96);
-    const texture = new THREE.CanvasTexture(canvas);
-    texture.colorSpace = THREE.SRGBColorSpace;
-    this.display = { ctx, texture };
-    const screen = new THREE.Mesh(new THREE.PlaneGeometry(0.5, 0.19), new THREE.MeshBasicMaterial({ map: texture, toneMapped: false }));
+    this.display = displayScreen([256, 96], [0.5, 0.19]);
+    const screen = this.display.mesh;
     screen.position.set(0, BOARD.y + BOARD.h / 2 + 0.12, BOARD.z + 0.002);
     this.add(screen);
+    this.note = outOfOrderNote(0.26);
+    this.note.position.z = 0.004;
+    screen.add(this.note);
     // The hoop: an orange ring on a bracket, a net hanging under it.
     this.hoop = new THREE.Group();
     this.hoop.position.set(HOOP.x, HOOP.y, HOOP.z);
@@ -187,9 +194,7 @@ export class HoopShot extends TicketMachine {
   }
 
   eyePose(): { position: THREE.Vector3; yaw: number } {
-    const position = this.localToWorld(new THREE.Vector3(0, 1.62, STAND_Z));
-    const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(this.getWorldQuaternion(new THREE.Quaternion()));
-    return { position, yaw: Math.atan2(-forward.x, -forward.z) };
+    return eyePoseAt(this, new THREE.Vector3(0, 1.62, STAND_Z));
   }
 
   /** Both hands on the ball about to be thrown (or on the gutter's edge). */
@@ -212,6 +217,7 @@ export class HoopShot extends TicketMachine {
     this.baskets = 0;
     this.streak = 0;
     this.timeLeft = ROUND_SECONDS;
+    this.overtime = 0;
     this.charging = false;
     this.power = 0;
     this.hoopX = 0;
@@ -230,7 +236,7 @@ export class HoopShot extends TicketMachine {
   }
 
   protected playingLabel(): string {
-    return 'Hold Space, let go to throw · E to walk away';
+    return `Hold ${actionKeyLabel('fire')}, let go to throw · ${actionKeyLabel('walkAway')} to walk away`;
   }
 
   protected play(dt: number, controls: ArcadeControls): boolean {
@@ -241,8 +247,9 @@ export class HoopShot extends TicketMachine {
       else if (controls.firePressed) this.regularThrow();
     }
     this.simulate(dt);
-    // Over once the clock is out and nothing is in the air.
-    return this.timeLeft <= 0 && this.balls.every((b) => b.state === 'rest');
+    // Over once the clock is out and nothing is in the air (or, at the latest, a few seconds after the buzzer).
+    if (this.timeLeft <= 0) this.overtime += dt;
+    return this.timeLeft <= 0 && (this.balls.every((b) => b.state === 'rest') || this.overtime > 5);
   }
 
   protected demoControls(dt: number): ArcadeControls {
@@ -422,7 +429,7 @@ export class HoopShot extends TicketMachine {
     const dz = b.pos.z - HOOP.z;
     const flat = Math.hypot(dx, dz) || 1e-6;
     const nearest = this.scratch.set(this.hoopX + (dx / flat) * HOOP.r, HOOP.y, HOOP.z + (dz / flat) * HOOP.r);
-    const away = b.pos.clone().sub(nearest);
+    const away = this.away.copy(b.pos).sub(nearest);
     const dist = away.length();
     const reach = BALL_R + HOOP.tube;
     if (dist >= reach || dist === 0) return;
@@ -487,8 +494,7 @@ function netTexture(): THREE.Texture {
     ctx.lineTo(i, 256);
     ctx.stroke();
   }
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.colorSpace = THREE.SRGBColorSpace;
+  const texture = toTexture(canvas);
   texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
   texture.repeat.set(3, 2);
   return texture;
@@ -522,17 +528,4 @@ function ballTexture(): THREE.Texture {
   ctx.lineTo(128, 32);
   ctx.stroke();
   return toTexture(canvas, 2);
-}
-
-function paintMarquee(title: string): THREE.CanvasTexture {
-  const [canvas, ctx] = createCanvas(512, 96);
-  const g = ctx.createLinearGradient(0, 0, 512, 0);
-  g.addColorStop(0, '#ff5a1a');
-  g.addColorStop(1, '#ffd23a');
-  ctx.fillStyle = g;
-  ctx.fillRect(0, 0, 512, 96);
-  drawText(ctx, title, 256, 50, 40, '#1a0c04');
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.colorSpace = THREE.SRGBColorSpace;
-  return texture;
 }

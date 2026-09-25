@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import type { Interactable } from '@/interaction/Interactable';
 import type { Updatable } from '@/core/Engine';
+import { KEYS, PersistedStore } from '@/persistence';
 import type { Furniture } from '../Furniture';
 import { cylinderMesh, invisibleHitbox } from '../meshUtils';
 import { matte } from '../props/Prop';
@@ -22,7 +23,13 @@ const COLORS: readonly { name: string; hex: number | null }[] = [
   { name: 'rainbow', hex: -1 },
   { name: 'off', hex: null },
 ];
-const STORAGE_KEY = 'bibliothek.moodLamp.v1';
+/** Version 1: the index in `COLORS` (a bare number before versions were kept). */
+const store = new PersistedStore<number>({
+  key: KEYS.moodLamp,
+  version: 1,
+  defaults: () => 0,
+  read: (data) => (Number.isInteger(data) && (data as number) >= 0 && (data as number) < COLORS.length ? (data as number) : null),
+});
 const RADIUS = 0.07;
 
 /**
@@ -46,7 +53,7 @@ export class MoodLamp extends THREE.Group implements Furniture, Interactable, Up
   constructor(options: MoodLampOptions) {
     super();
     this.name = 'MoodLamp';
-    this.colour = readColour();
+    this.colour = store.load();
     this.body.add(cylinderMesh(0.05, 0.03, matte(0x151518, 0.4), { y: 0.015 }, { segments: 20 }));
     this.shade = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xff2fa0, emissiveIntensity: 1.6, roughness: 0.3 });
     const egg = new THREE.Mesh(new THREE.SphereGeometry(RADIUS, 24, 16), this.shade);
@@ -84,11 +91,7 @@ export class MoodLamp extends THREE.Group implements Furniture, Interactable, Up
   activate(): void {
     if (!this.owned) return;
     this.colour = (this.colour + 1) % COLORS.length;
-    try {
-      localStorage.setItem(STORAGE_KEY, String(this.colour));
-    } catch {
-      /* the colour is a convenience */
-    }
+    store.save(this.colour);
     this.apply();
   }
 
@@ -113,14 +116,5 @@ export class MoodLamp extends THREE.Group implements Furniture, Interactable, Up
       this.shade.emissive.setHex(hex);
       this.light.color.setHex(hex);
     }
-  }
-}
-
-function readColour(): number {
-  try {
-    const saved = Number(localStorage.getItem(STORAGE_KEY));
-    return Number.isInteger(saved) && saved >= 0 && saved < COLORS.length ? saved : 0;
-  } catch {
-    return 0;
   }
 }

@@ -1,5 +1,6 @@
 import type { LookName } from '@/graphics/grade';
 import type { ZoneSpec } from './zone/Zone';
+import type { ZoneId } from './zoneIds';
 import type { NearWall } from './props/outdoors/Outdoors';
 import { EYE_HEIGHT as STREET_TO_EYE } from './props/outdoors/Sheet';
 import { DEFAULT_ROOM, ROOM_PLAN } from './roomPlan';
@@ -11,6 +12,7 @@ import { BALCONY_ROOM } from './balcony/balconyPlan';
 import { ARCADE_PLAN, ARCADE_ROOM } from './arcade/arcadePlan';
 import { MARKET_PLAN, MARKET_ROOM } from './market/marketPlan';
 import { STREET_EXTENT, STREET_PLAN } from './street/streetPlan';
+import { STAIRWELL_PLAN, STAIRWELL_ROOM } from './stairwell/stairwellPlan';
 
 /*
  * THE WORLD PLAN: the zones (rooms, corridors, the street one day) and how they connect. Each zone
@@ -78,7 +80,7 @@ export const KITCHEN_WING: NearWall = {
 };
 
 /** What a zone is; one builder per kind in `layout.ts`. */
-export type ZoneKind = 'collectionRoom' | 'hallway' | 'bathroom' | 'bedroom' | 'kitchen' | 'balcony' | 'arcade' | 'market' | 'street';
+export type ZoneKind = 'collectionRoom' | 'hallway' | 'bathroom' | 'bedroom' | 'kitchen' | 'balcony' | 'stairwell' | 'arcade' | 'market' | 'street';
 
 /**
  * A zone the player is teleported to (and from) through a `TravelDoor`, instead of walking: the
@@ -87,18 +89,21 @@ export type ZoneKind = 'collectionRoom' | 'hallway' | 'bathroom' | 'bedroom' | '
  */
 export interface TravelPlan {
   label: string;
-  arrival: [x: number, z: number];
+  arrival: readonly [x: number, z: number];
   yaw: number;
   /** Other arrival spots by the zone the player comes from (the street: in front of the door they came out of). */
-  arrivals?: Record<string, { at: readonly [x: number, z: number]; yaw: number }>;
+  arrivals?: Partial<Record<ZoneId, { at: readonly [x: number, z: number]; yaw: number }>>;
 }
 
-export interface ZonePlan extends ZoneSpec {
+export interface ZonePlan extends ZoneSpec<ZoneId> {
   kind: ZoneKind;
   travel?: TravelPlan;
   /** Colour grade and haze while the player is here (`graphics/grade.ts`); default `home`. */
   look?: LookName;
 }
+
+/** A zone's entry in `ZONES` (its id is the key). */
+type ZoneEntry = Omit<ZonePlan, 'id'>;
 
 /**
  * World yaw the sun's azimuth is expressed against: the collection room's front wall (+z, rotation π).
@@ -116,98 +121,131 @@ export const SUN_ROTATION_Y = Math.PI;
  * Every room of the flat is `persistent`: small enough to keep, and rebuilding one on the way back
  * (geometry, painted textures) is a hitch in a doorway. Leave it off for something big, like the street.
  */
-export const FLAT = ['living', 'hallway', 'bathroom', 'bedroom', 'kitchen', 'balcony'] as const;
+export const FLAT = ['living', 'hallway', 'bathroom', 'bedroom', 'kitchen', 'balcony', 'stairwell'] as const satisfies readonly ZoneId[];
+/** A room of the flat. */
+export type FlatId = (typeof FLAT)[number];
 /** The rest of the flat, seen from `id`. */
-const flatBut = (id: (typeof FLAT)[number]): string[] => FLAT.filter((other) => other !== id);
+const flatBut = (id: FlatId): FlatId[] => FLAT.filter((other) => other !== id);
 
-export const WORLD_PLAN = {
+/** Whether zone `id` is one of the flat's (the pause menu offers Go home everywhere else). */
+export function inFlat(id: ZoneId): id is FlatId {
+  return (FLAT as readonly ZoneId[]).includes(id);
+}
+
+/**
+ * Every zone by id, in the order they are declared to the `World` (which gives each its shadow
+ * layer). `satisfies` checks it against `ZoneId` both ways (an id without an entry, or an entry
+ * without an id, fails to compile) and keeps each entry's `kind` literal for `ZoneKindOf`.
+ */
+const ZONES = {
+  living: {
+    kind: 'collectionRoom',
+    origin: [0, 0, 0],
+    extent: DEFAULT_ROOM,
+    neighbours: flatBut('living'),
+    persistent: true,
+  },
+  hallway: {
+    kind: 'hallway',
+    origin: [-1, 0, -3 - WALL_GAP - HALLWAY_ROOM.depth / 2],
+    extent: HALLWAY_ROOM,
+    neighbours: flatBut('hallway'),
+    persistent: true,
+    travel: { label: 'Home', arrival: HALLWAY_PLAN.arrival.at, yaw: HALLWAY_PLAN.arrival.yaw },
+  },
+  bathroom: {
+    kind: 'bathroom',
+    origin: [-2.1, 0, -5.62],
+    extent: BATHROOM_ROOM,
+    neighbours: flatBut('bathroom'),
+    persistent: true,
+  },
+  bedroom: {
+    kind: 'bedroom',
+    origin: [0.6, 0, -6.22],
+    extent: BEDROOM_ROOM,
+    neighbours: flatBut('bedroom'),
+    persistent: true,
+  },
+  kitchen: {
+    kind: 'kitchen',
+    origin: KITCHEN_ORIGIN,
+    extent: KITCHEN_ROOM,
+    neighbours: flatBut('kitchen'),
+    persistent: true,
+  },
+  // The open-air balcony on the collection room's front wall (Front Street), through the glazed door at x 2.
+  balcony: {
+    kind: 'balcony',
+    origin: [2, 0, 3 + WALL_GAP + BALCONY_ROOM.depth / 2],
+    extent: BALCONY_ROOM,
+    neighbours: flatBut('balcony'),
+    persistent: true,
+  },
+  // The building's stairwell behind the flat's front door (src/world/stairwell/): our landing,
+  // five storeys of stairs and the lift down to the entrance hall on the street (world y -16.3,
+  // x 1..8.2, z -8.4..3.3: east of the bedroom, behind the collection room's right wall, under
+  // the neighbours). Part of the flat (always active with it: its lights are compiled with the
+  // flat's); its box overlaps the living room's and the bedroom's corners, which is harmless:
+  // the current zone stays current while the player is inside it. Its street door travels out.
+  stairwell: {
+    kind: 'stairwell',
+    origin: STAIRWELL_PLAN.origin,
+    extent: STAIRWELL_ROOM,
+    neighbours: flatBut('stairwell'),
+    persistent: true,
+    travel: { label: 'Home (the entrance hall)', arrival: STAIRWELL_PLAN.arrival.at, yaw: STAIRWELL_PLAN.arrival.yaw },
+  },
+  // Out of the flat, reached by teleport only (see `travel`): far enough along +x never to touch
+  // the flat, no neighbours (nothing is seen through a door), not persistent (rebuilt on return).
+  arcade: {
+    kind: 'arcade',
+    origin: [40, 0, 0],
+    extent: ARCADE_ROOM,
+    neighbours: [],
+    travel: { label: 'Arcade', arrival: ARCADE_PLAN.arrival.at, yaw: ARCADE_PLAN.arrival.yaw },
+    look: 'arcade',
+  },
+  market: {
+    kind: 'market',
+    origin: [80, 0, 0],
+    extent: MARKET_ROOM,
+    neighbours: [],
+    travel: { label: 'Flea market', arrival: MARKET_PLAN.arrival.at, yaw: MARKET_PLAN.arrival.yaw },
+    look: 'market',
+  },
+  // Front Street, outside the building (src/world/street/): reached by the flat's front door and
+  // the arcade's and market's exits, all by travel; its doors lead back to them. Not persistent.
+  street: {
+    kind: 'street',
+    origin: [140, 0, 0],
+    extent: STREET_EXTENT,
+    neighbours: [],
+    travel: {
+      label: 'Street',
+      arrival: STREET_PLAN.arrivals.hallway.at,
+      yaw: STREET_PLAN.arrivals.hallway.yaw,
+      arrivals: STREET_PLAN.arrivals,
+    },
+    look: 'street',
+  },
+} satisfies { [Id in ZoneId]: ZoneEntry };
+
+/** What zone `id` is, as its entry says (`ZONE_BUILDERS[kind]` builds it; `ZoneHandleById` is what that returns). */
+export type ZoneKindOf<Id extends ZoneId> = (typeof ZONES)[Id]['kind'];
+
+/** The world: every zone (`ZONES` with its id), and where the player starts. */
+export const WORLD_PLAN: { readonly start: ZoneId; readonly zones: readonly ZonePlan[] } = {
   start: 'living',
-  zones: [
-    {
-      id: 'living',
-      kind: 'collectionRoom',
-      origin: [0, 0, 0],
-      extent: DEFAULT_ROOM,
-      neighbours: flatBut('living'),
-      persistent: true,
-    },
-    {
-      id: 'hallway',
-      kind: 'hallway',
-      origin: [-1, 0, -3 - WALL_GAP - HALLWAY_ROOM.depth / 2],
-      extent: HALLWAY_ROOM,
-      neighbours: flatBut('hallway'),
-      persistent: true,
-      travel: { label: 'Home', arrival: HALLWAY_PLAN.arrival.at, yaw: HALLWAY_PLAN.arrival.yaw },
-    },
-    {
-      id: 'bathroom',
-      kind: 'bathroom',
-      origin: [-2.1, 0, -5.62],
-      extent: BATHROOM_ROOM,
-      neighbours: flatBut('bathroom'),
-      persistent: true,
-    },
-    {
-      id: 'bedroom',
-      kind: 'bedroom',
-      origin: [0.6, 0, -6.22],
-      extent: BEDROOM_ROOM,
-      neighbours: flatBut('bedroom'),
-      persistent: true,
-    },
-    {
-      id: 'kitchen',
-      kind: 'kitchen',
-      origin: KITCHEN_ORIGIN,
-      extent: KITCHEN_ROOM,
-      neighbours: flatBut('kitchen'),
-      persistent: true,
-    },
-    {
-      // The open-air balcony on the collection room's front wall (Front Street), through the glazed door at x 2.
-      id: 'balcony',
-      kind: 'balcony',
-      origin: [2, 0, 3 + WALL_GAP + BALCONY_ROOM.depth / 2],
-      extent: BALCONY_ROOM,
-      neighbours: flatBut('balcony'),
-      persistent: true,
-    },
-    // Out of the flat, reached by teleport only (see `travel`): far enough along +x never to touch
-    // the flat, no neighbours (nothing is seen through a door), not persistent (rebuilt on return).
-    {
-      id: 'arcade',
-      kind: 'arcade',
-      origin: [40, 0, 0],
-      extent: ARCADE_ROOM,
-      neighbours: [],
-      travel: { label: 'Arcade', arrival: ARCADE_PLAN.arrival.at, yaw: ARCADE_PLAN.arrival.yaw },
-      look: 'arcade',
-    },
-    {
-      id: 'market',
-      kind: 'market',
-      origin: [80, 0, 0],
-      extent: MARKET_ROOM,
-      neighbours: [],
-      travel: { label: 'Flea market', arrival: MARKET_PLAN.arrival.at, yaw: MARKET_PLAN.arrival.yaw },
-      look: 'market',
-    },
-    // Front Street, outside the building (src/world/street/): reached by the flat's front door and
-    // the arcade's and market's exits, all by travel; its doors lead back to them. Not persistent.
-    {
-      id: 'street',
-      kind: 'street',
-      origin: [140, 0, 0],
-      extent: STREET_EXTENT,
-      neighbours: [],
-      travel: {
-        label: 'Street',
-        arrival: STREET_PLAN.arrivals.hallway.at,
-        yaw: STREET_PLAN.arrivals.hallway.yaw,
-        arrivals: STREET_PLAN.arrivals,
-      },
-      look: 'street',
-    },
-  ] as ZonePlan[],
+  zones: (Object.keys(ZONES) as ZoneId[]).map((id): ZonePlan => ({ id, ...ZONES[id] })),
 };
+
+/** Zone `id`'s entry of the plan. */
+export function zonePlan(id: ZoneId): ZonePlan {
+  return WORLD_PLAN.zones.find((plan) => plan.id === id)!;
+}
+
+/** Whether `id` (a saved position's, say) names a zone of the plan. */
+export function isZoneId(id: string): id is ZoneId {
+  return WORLD_PLAN.zones.some((plan) => plan.id === id);
+}

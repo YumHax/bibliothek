@@ -1,4 +1,5 @@
-import { audioContext } from './audioContext';
+import { audioBus, audioContext } from './audioContext';
+import { whiteNoise } from './noise';
 
 /** Loudness at volume 1, right next to the set (linear). */
 const MASTER = 0.16;
@@ -167,19 +168,17 @@ export class RadioTune {
     drive.curve = softClip();
     const level = ctx.createGain();
     level.gain.value = 1;
-    out.connect(high).connect(low).connect(drive).connect(level).connect(ctx.destination);
+    out.connect(high).connect(low).connect(drive).connect(level).connect(audioBus(ctx, 'screens'));
     this.out = out;
 
-    this.noise = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
-    const data = this.noise.getChannelData(0);
-    for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
+    this.noise = whiteNoise(ctx, 1);
     const hiss = ctx.createBufferSource();
     hiss.buffer = this.noise;
     hiss.loop = true;
     const hissGain = ctx.createGain();
     hissGain.gain.value = HISS;
     hiss.connect(hissGain).connect(out);
-    hiss.start();
+    hiss.start(0, Math.random() * this.noise.duration);
     this.hiss = hiss;
     return ctx;
   }

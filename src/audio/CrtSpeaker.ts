@@ -1,5 +1,7 @@
 import type { Updatable } from '@/core/Engine';
-import { audioContext } from './audioContext';
+import { Voice } from './ambient';
+import { audioBus, audioContext } from './audioContext';
+import { whiteNoise } from './noise';
 
 /** Level of the whole bed at full loudness (linear, relative to full scale). */
 const BED_LEVEL = 0.45;
@@ -22,54 +24,43 @@ const FOLLOW = 0.08;
  * sporadic crackles, the scan whistle, and a soft thump when the set is switched on. The video
  * itself comes from a cross-origin iframe and cannot be filtered, so this bed is the only way
  * to make the TV sound like a TV; its loudness follows the video's proximity volume so it stays
- * anchored to the set.
+ * anchored to the set. The bed is built while the set is on and heard, and let go (its
+ * oscillators and noise stopped) once it has gone unheard a while (see `Voice`).
  */
-export class CrtSpeaker implements Updatable {
-  private ctx: AudioContext | null = null;
-  private master: GainNode | null = null;
+export class CrtSpeaker extends Voice implements Updatable {
   private crackle: GainNode | null = null;
-  private noise: AudioBuffer | null = null;
   private crackleLevel = 0;
   private running = false;
   private loudness = 0;
+
+  constructor() {
+    super(BED_LEVEL, { bus: 'screens', follow: FOLLOW, watch: false });
+  }
 
   /** Powers the speaker up (with its thump) or lets the bed fade out. */
   setOn(on: boolean): void {
     if (on === this.running) return;
     this.running = on;
-    if (on) {
-      const ctx = this.build();
-      this.playPowerOnThump(ctx);
-    }
-    this.follow();
+    if (on) this.playPowerOnThump(audioContext());
+    this.follow = on ? FOLLOW : 0.25;
+    this.setLevel(on ? this.loudness : 0);
   }
 
   /** 0..1, the same loudness as the video so the bed comes from the same speaker. */
   setLoudness(loudness: number): void {
     this.loudness = Math.min(1, Math.max(0, loudness));
-    this.follow();
+    if (this.running) this.setLevel(this.loudness);
   }
 
-  update(dt: number): void {
-    if (!this.running || !this.crackle || !this.ctx) return;
+  protected tick(ctx: AudioContext, dt: number): void {
+    if (!this.crackle) return;
     if (Math.random() < dt * CRACKLE.perSecond) this.crackleLevel = CRACKLE.level * (0.3 + 0.7 * Math.random());
     this.crackleLevel *= Math.exp(-CRACKLE.decayPerSecond * dt);
-    this.crackle.gain.setTargetAtTime(this.crackleLevel, this.ctx.currentTime, 0.004);
+    this.crackle.gain.setTargetAtTime(this.crackleLevel, ctx.currentTime, 0.004);
   }
 
-  private follow(): void {
-    if (!this.ctx || !this.master) return;
-    const target = this.running ? this.loudness * BED_LEVEL : 0;
-    this.master.gain.setTargetAtTime(target, this.ctx.currentTime, this.running ? FOLLOW : 0.25);
-  }
-
-  /** Builds the graph once; the bed runs forever and is only ever faded by `master`. */
-  private build(): AudioContext {
-    if (this.ctx && this.master) return this.ctx;
-    const ctx = audioContext();
-    this.ctx = ctx;
-    this.master = ctx.createGain();
-    this.master.gain.value = 0;
+  /** The bed, into `out` (the loudness): it runs until the voice is let go, only ever faded. */
+  protected build(ctx: AudioContext, out: GainNode): void {
     // A small speaker in a plastic cabinet: no bass, no sparkle.
     const cabinet = ctx.createBiquadFilter();
     cabinet.type = 'highpass';
@@ -77,27 +68,27 @@ export class CrtSpeaker implements Updatable {
     const cone = ctx.createBiquadFilter();
     cone.type = 'lowpass';
     cone.frequency.value = 9000;
-    this.master.connect(cabinet).connect(cone).connect(ctx.destination);
+    cabinet.connect(cone).connect(out);
 
-    for (const [frequency, level] of HUM_PARTIALS) this.tone(ctx, frequency, level).connect(this.master);
-    this.tone(ctx, LINE_WHISTLE.frequency, LINE_WHISTLE.level).connect(this.master);
+    for (const [frequency, level] of HUM_PARTIALS) this.tone(ctx, frequency, level).connect(cabinet);
+    this.tone(ctx, LINE_WHISTLE.frequency, LINE_WHISTLE.level).connect(cabinet);
 
-    this.noise = this.noiseBuffer(ctx);
+    const noise = whiteNoise(ctx, 2);
     const hiss = ctx.createBiquadFilter();
     hiss.type = 'bandpass';
     hiss.frequency.value = HISS.frequency;
     hiss.Q.value = HISS.q;
     const hissGain = ctx.createGain();
     hissGain.gain.value = HISS.level;
-    this.noiseSource(ctx).connect(hiss).connect(hissGain).connect(this.master);
+    this.loop(ctx, noise).connect(hiss).connect(hissGain).connect(cabinet);
 
     this.crackle = ctx.createGain();
     this.crackle.gain.value = 0;
+    this.crackleLevel = 0;
     const crackleTone = ctx.createBiquadFilter();
     crackleTone.type = 'highpass';
     crackleTone.frequency.value = 1500;
-    this.noiseSource(ctx).connect(crackleTone).connect(this.crackle).connect(this.master);
-    return ctx;
+    this.loop(ctx, noise).connect(crackleTone).connect(this.crackle).connect(cabinet);
   }
 
   private tone(ctx: AudioContext, frequency: number, level: number): GainNode {
@@ -106,23 +97,8 @@ export class CrtSpeaker implements Updatable {
     const gain = ctx.createGain();
     gain.gain.value = level;
     osc.connect(gain);
-    osc.start();
+    this.keep(osc);
     return gain;
-  }
-
-  private noiseBuffer(ctx: AudioContext): AudioBuffer {
-    const buffer = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate);
-    const data = buffer.getChannelData(0);
-    for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
-    return buffer;
-  }
-
-  private noiseSource(ctx: AudioContext): AudioBufferSourceNode {
-    const source = ctx.createBufferSource();
-    source.buffer = this.noise;
-    source.loop = true;
-    source.start();
-    return source;
   }
 
   /** The degaussing "thoom" and relay click of a tube coming to life. Bypasses the loudness so it is heard even from afar. */
@@ -135,11 +111,12 @@ export class CrtSpeaker implements Updatable {
     thumpGain.gain.setValueAtTime(0.0001, now);
     thumpGain.gain.exponentialRampToValueAtTime(0.35 * Math.max(0.25, this.loudness), now + 0.015);
     thumpGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.45);
-    thump.connect(thumpGain).connect(ctx.destination);
+    thump.connect(thumpGain).connect(audioBus(ctx, 'screens'));
     thump.start(now);
     thump.stop(now + 0.5);
 
-    const click = this.noiseSource(ctx);
+    const click = ctx.createBufferSource();
+    click.buffer = whiteNoise(ctx, 2);
     const clickTone = ctx.createBiquadFilter();
     clickTone.type = 'bandpass';
     clickTone.frequency.value = 2500;
@@ -147,7 +124,8 @@ export class CrtSpeaker implements Updatable {
     const clickGain = ctx.createGain();
     clickGain.gain.setValueAtTime(0.12 * Math.max(0.25, this.loudness), now);
     clickGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.05);
-    click.connect(clickTone).connect(clickGain).connect(ctx.destination);
+    click.connect(clickTone).connect(clickGain).connect(audioBus(ctx, 'screens'));
+    click.start(now);
     click.stop(now + 0.06);
   }
 }

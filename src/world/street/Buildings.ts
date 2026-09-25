@@ -4,7 +4,7 @@ import { createCanvas, toTexture } from '@/covers/generated/canvasUtils';
 import type { Furniture } from '../Furniture';
 import type { DayNight } from '../props/DayNight';
 import { wakefulnessAt } from '../props/outdoors/wakefulness';
-import { NIGHT_SCALE, PARAPET, facadeHeight, paintFacade, type AtlasSlot, type NightLight } from './facadePainter';
+import { NIGHT_SCALE, PARAPET, facadeHeight, paintFacade, type AtlasSlot, type FacadeFeatures, type NightLight } from './facadePainter';
 import { nightnessOf } from './streetAir';
 import type { FacadeSpec } from './streetPlan';
 
@@ -24,6 +24,14 @@ const LEDGE = { depth: 0.38, height: 0.4 };
 const CHECK_EVERY = 1;
 const UPLOAD_EVERY = 6;
 
+/** A painted facade and what stands out of it, for the relief (`relief/`): its spec, size and features in facade metres. */
+export interface PaintedFront {
+  spec: FacadeSpec;
+  width: number;
+  height: number;
+  features: FacadeFeatures;
+}
+
 interface Placed {
   spec: FacadeSpec;
   width: number;
@@ -42,6 +50,8 @@ interface Placed {
  */
 export class Buildings extends THREE.Mesh implements Furniture, Updatable {
   readonly contactShadow = false;
+  /** Every facade's features (awnings, balconies, shop windows...), for the relief built in front of them. */
+  readonly fronts: PaintedFront[];
   private readonly lights: NightLight[] = [];
   private readonly on: boolean[];
   private readonly night: CanvasRenderingContext2D;
@@ -59,7 +69,12 @@ export class Buildings extends THREE.Mesh implements Furniture, Updatable {
     night.fillStyle = '#000';
     night.fillRect(0, 0, nightCanvas.width, nightCanvas.height);
     const lights: NightLight[] = [];
-    for (const p of placed) lights.push(...paintFacade(ctx, p.spec, p.width, p.slot, options.shopGoods));
+    const fronts: PaintedFront[] = [];
+    for (const p of placed) {
+      const painted = paintFacade(ctx, p.spec, p.width, p.slot, options.shopGoods);
+      lights.push(...painted.lights);
+      fronts.push({ spec: p.spec, width: p.width, height: p.height, features: painted.features });
+    }
 
     const map = toTexture(canvas, options.anisotropy);
     const nightTexture = toTexture(nightCanvas, options.anisotropy);
@@ -69,6 +84,7 @@ export class Buildings extends THREE.Mesh implements Furniture, Updatable {
     this.castShadow = true;
     this.receiveShadow = true;
     this.lights = lights;
+    this.fronts = fronts;
     this.on = lights.map(() => false);
     this.night = night;
     this.nightTexture = nightTexture;
@@ -163,10 +179,27 @@ function facadeGeometry(placed: readonly Placed[], atlasW: number, atlasH: numbe
     const u0 = slot.x / atlasW;
     const u1 = (slot.x + width * slot.k) / atlasW;
     const v = (y: number): number => 1 - (slot.y + (height - y) * slot.k) / atlasH;
-    // The face itself.
-    quad([ax, 0, az, bx, 0, bz, bx, height, bz, ax, height, az], [nx, 0, nz], [u0, v(0), u1, v(0), u1, v(height), u0, v(height)]);
+    const u = (s: number): number => (slot.x + s * slot.k) / atlasW;
+    const ux = (bx - ax) / width;
+    const uz = (bz - az) / width;
+    // The face itself, from `s0` to `s1` along and `y0` to `y1` up.
+    const face = (s0: number, s1: number, y0: number, y1: number): void => {
+      const [x0, z0, x1, z1] = [ax + ux * s0, az + uz * s0, ax + ux * s1, az + uz * s1];
+      quad([x0, y0, z0, x1, y0, z1, x1, y1, z1, x0, y1, z0], [nx, 0, nz], [u(s0), v(y0), u(s1), v(y0), u(s1), v(y1), u(s0), v(y1)]);
+    };
+    // Round its openings (street-level holes: a door walked through), in columns and the lintels over them.
+    let s0 = 0;
+    for (const hole of [...(spec.openings ?? [])].sort((a, b) => a.at - b.at)) {
+      const a = hole.at - hole.width / 2;
+      const b = hole.at + hole.width / 2;
+      face(s0, a, 0, height);
+      face(a, b, hole.height, height);
+      s0 = b;
+    }
+    face(s0, width, 0, height);
     // The cornice ledge: front, underside and top, all in the cornice band.
-    const y0 = height - PARAPET - 0.15;
+    // Facades running along z sit 3 cm lower, so the two ledges meeting at a corner never share a plane.
+    const y0 = height - PARAPET - 0.15 - (spec.from[0] === spec.to[0] ? 0.03 : 0);
     const y1 = y0 + LEDGE.height;
     const d = LEDGE.depth;
     const band = v(height - PARAPET + 0.05);

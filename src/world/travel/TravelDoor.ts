@@ -3,6 +3,7 @@ import type { Interactable } from '@/interaction/Interactable';
 import type { SessionActions } from '@/game/SessionActions';
 import { invisibleHitbox } from '../meshUtils';
 import { ShutDoor, type ShutDoorOptions } from '../props/ShutDoor';
+import type { ZoneId } from '../zoneIds';
 
 export interface TravelDoorOptions extends ShutDoorOptions {
   /** Caption under the crosshair, e.g. "Click to go out". */
@@ -12,7 +13,7 @@ export interface TravelDoorOptions extends ShutDoorOptions {
   /** The door let the player through (the destinations are being offered): the hallway waits for them to come home. */
   onGo?: (session: SessionActions) => void;
   /** The zone it leads straight to (the street); without it the door offers every destination (the travel menu). */
-  to?: string;
+  to?: ZoneId;
 }
 
 /**
@@ -26,7 +27,7 @@ export class TravelDoor extends ShutDoor implements Interactable {
   private readonly caption: string;
   private readonly guard?: TravelDoorOptions['guard'];
   private readonly onGo?: TravelDoorOptions['onGo'];
-  private readonly to?: string;
+  private readonly to?: ZoneId;
 
   constructor(options: TravelDoorOptions) {
     super(options);

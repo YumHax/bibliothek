@@ -1,22 +1,21 @@
 import * as THREE from 'three';
 import type { Zone } from '../zone/Zone';
-import type { BuildContext, ZoneHandle } from '../layout';
+import type { BuildContext, ZoneHandle } from '../buildContext';
 import { PLATFORM_LIST, getPlatform } from '@/catalog/platforms';
 import type { Platform, PlatformId } from '@/catalog/types';
 import type { StockItem } from '@/economy/StockItem';
-import type { MarketStanding } from '@/economy/MarketStanding';
-import type { NoticeAd } from '@/economy/MarketNotices';
 import { themeOf } from '@/economy/marketDays';
+import { flyerRumour, noticeRumour, stallRumour } from '@/economy/rumours';
 import { HOME_GOODS } from '@/economy/homeGoods';
 import type { HomeUpgrade } from '@/economy/HomeUpgrades';
 import { COFFEE_PRICE, RIVAL_BUYING } from '@/economy/pricing';
-import type { ModalLike } from '@/game/SessionParts';
 import type { SaleReaction } from '@/game/SessionActions';
 import { playBoxClack } from '@/audio/boxClack';
 import { furnishShell } from '../shell';
 import { TiledWainscot } from '../props/TiledWainscot';
 import { IndustrialPendant } from '../props/IndustrialPendant';
 import { placeDecor } from '../props/decor';
+import { followUpgrades } from '../build/follow';
 import { TravelDoor } from '../travel/TravelDoor';
 import { Vendor } from '../people/Vendor';
 import { Shopper, type BrowseSpot } from '../people/Shopper';
@@ -44,15 +43,7 @@ import { PriceScanner } from './PriceScanner';
 import { RivalBuyers } from './RivalBuyers';
 import { REACTIONS, callOuts, stallLines } from './stallTalk';
 import { MARKET_PLAN } from './marketPlan';
-
-/** What the market's hall needs beyond the shared services: the panels it opens, and how the market knows the player. */
-export interface MarketHallServices {
-  standing: MarketStanding;
-  /** The notice board's panel; `cards()` gives today's cards for the board's face. */
-  notices: ModalLike & { cards(): Promise<NoticeAd[]> };
-  /** The job lot's panel; `sign()` is what the crate's card says; `onBought` is set by the hall. */
-  lot: ModalLike & { sign(): Promise<string>; onBought?: () => void };
-}
+import { primaryCode } from '@/input/actions';
 
 /** One stall as the builder keeps track of it: what stands there, who sells, what is on it and what went. */
 interface StallEntry {
@@ -65,13 +56,13 @@ interface StallEntry {
 }
 
 /** How loud the hall's murmur is by day and after dark (0..1). */
-const CROWD_LEVEL = { day: 1, night: 0.3 };
+const CROWD_LEVEL = { day: 1, night: 0.3, bigDay: 1.35 };
 /** Rain this hard keeps half the shoppers at home. */
 const RAIN_KEEPS_AWAY = 0.45;
 /** How keen the other shoppers are to buy, by day, in the rain, at night. */
 const KEENNESS = { day: 1, rain: 0.5, night: 0.3 };
 /** Held to float titles and prices over the boxes (physical key). */
-const SCAN_KEY = 'KeyQ';
+const SCAN_KEY = primaryCode('readStalls');
 /** Chance a stallholder says something when a box of theirs is picked up (every other move always gets a word). */
 const PICK_UP_REMARK = 0.45;
 
@@ -88,7 +79,7 @@ const PICK_UP_REMARK = 0.45;
  * reads the tables from the aisle (`PriceScanner`). After dark, and in heavy rain, shoppers stay away.
  */
 export function furnishMarket(zone: Zone, context: BuildContext): ZoneHandle {
-  const { sky, covers, market, games, listener, wallet, input, marketHall } = context;
+  const { sky, covers, listener, input, market: { stock: market, hall: marketHall }, collection: { games }, money: { wallet } } = context;
   const plan = MARKET_PLAN;
   if (PLATFORM_LIST.length > plan.stalls.length) {
     throw new Error(`[market] ${PLATFORM_LIST.length} platforms but ${plan.stalls.length} stall spots: add one to MARKET_PLAN.stalls`);
@@ -120,6 +111,12 @@ export function furnishMarket(zone: Zone, context: BuildContext): ZoneHandle {
   const isWanted = (id: string): boolean => games.games.some((g) => g.id === id && g.status === 'wishlist');
   const theme = market.theme;
   let night = false;
+  // The Grande Brocante: more bins at the aisle's ends, the hall dressed up.
+  const bins = [bin, ...(theme.extraBins ? plan.brocante.bins.map((at) => zone.placeAt(new BargainBin({ price: market.binPrice }), at)) : [])];
+  if (theme.bunting) placeDecor(zone, plan.brocante.decor);
+  // What the stallholders have heard about the days ahead (a grail coming, the Brocante, a sale); the same all day.
+  const news = market.news();
+  const heard = news.filter((n) => n.inDays > 0 || n.kind !== 'clearance');
 
   // The stalls and their stallholders, who talk about what is on their table and cry out to passers-by.
   const stalls: StallEntry[] = PLATFORM_LIST.map((platform, i) => {
@@ -133,6 +130,7 @@ export function furnishMarket(zone: Zone, context: BuildContext): ZoneHandle {
       isWanted,
       loyalty: marketHall?.standing.loyaltyName(platform.id),
       theme: theme.kind === 'ordinary' ? undefined : theme.title,
+      news: heard.map((n, k) => stallRumour(n, i + k)),
     });
     const vendor = zone.place(new Vendor({ viewer: listener, lines, seed: i + 1, callOuts: callOuts(platform.shortName) }), behind(stall, stall.vendorAt), stall.rotation.y);
     const pennant = stall.pennantAt ? zone.place(new WishPennant(i + 1), onTop(stall, stall.pennantAt), stall.rotation.y) : null;
@@ -142,7 +140,7 @@ export function furnishMarket(zone: Zone, context: BuildContext): ZoneHandle {
   });
   const stallOf = (platform: PlatformId) => stalls.find((e) => e.platform.id === platform)!;
   // The stock is drawn to fit: never a copy on sale that is not on a table.
-  market.fitTo((id) => stallOf(id).stall.capacityFor(getPlatform(id).boxDimensions.width), BargainBin.capacity);
+  market.fitTo((id) => stallOf(id).stall.capacityFor(getPlatform(id).boxDimensions.width), BargainBin.capacity * bins.length);
 
   const radioStall = stalls[plan.radio.stall]?.stall;
   if (radioStall) zone.place(new TransistorRadio({ listener, color: plan.radio.color }), onTop(radioStall, radioStall.crateTop(plan.radio.x)), radioStall.rotation.y);
@@ -158,8 +156,10 @@ export function furnishMarket(zone: Zone, context: BuildContext): ZoneHandle {
   const { crowd } = plan;
   const claims = new Set<BrowseSpot>();
   const shoppers: Shopper[] = [];
-  for (let i = 0; i < crowd.shoppers; i++) {
-    const x = THREE.MathUtils.lerp(crowd.aisle.x[0], crowd.aisle.x[1], (i + 0.5) / crowd.shoppers);
+  // A big day brings more of them (never more than there are spots to browse at).
+  const shopperCount = Math.min(crowd.browseSpots.length - 1, Math.round(crowd.shoppers * (theme.crowd ?? 1)));
+  for (let i = 0; i < shopperCount; i++) {
+    const x = THREE.MathUtils.lerp(crowd.aisle.x[0], crowd.aisle.x[1], (i + 0.5) / shopperCount);
     shoppers.push(zone.place(new Shopper({ viewer: listener, spots: crowd.browseSpots, aisle: crowd.aisle, claims, seed: i + 1, speed: 0.65 + i * 0.08 }), new THREE.Vector3(x, 0, crowd.aisle.z), i % 2 ? Math.PI / 2 : -Math.PI / 2));
   }
   const raining = () => sky.weather.state.rain >= RAIN_KEEPS_AWAY;
@@ -174,7 +174,8 @@ export function furnishMarket(zone: Zone, context: BuildContext): ZoneHandle {
     wet = rain;
     const present = night ? crowd.nightShoppers : rain ? Math.ceil(shoppers.length / 2) : shoppers.length;
     shoppers.forEach((shopper, i) => shopper.setPresent(i < present));
-    crowdSound.setCrowd(night ? CROWD_LEVEL.night : rain ? (CROWD_LEVEL.day + CROWD_LEVEL.night) / 2 : CROWD_LEVEL.day);
+    const day = CROWD_LEVEL.day * Math.min(CROWD_LEVEL.bigDay, theme.crowd ?? 1);
+    crowdSound.setCrowd(night ? CROWD_LEVEL.night : rain ? (day + CROWD_LEVEL.night) / 2 : day);
   }));
 
   // The stock is fetched (the index, once per platform) after the hall stands; a zone unloaded
@@ -213,8 +214,8 @@ export function furnishMarket(zone: Zone, context: BuildContext): ZoneHandle {
     refreshPennants();
   };
 
-  /** Puts `item` on show at `slot` of `entry`'s stall (or in the bin when `entry` is null). */
-  const display = (item: StockItem, slot: DisplaySlot | { position: THREE.Vector3; angle: number }, entry: StallEntry | null): ForSaleBox => {
+  /** Puts `item` on show at `slot` of `entry`'s stall (or in `crate`, a bargain bin, when `entry` is null). */
+  const display = (item: StockItem, slot: DisplaySlot | { position: THREE.Vector3; angle: number }, entry: StallEntry | null, crate: BargainBin = bin): ForSaleBox => {
     const flat = 'pose' in slot && slot.pose === 'flat';
     const box = new ForSaleBox(item, covers, {
       pose: flat ? { kind: 'flat' } : { kind: 'lean', angle: slot.angle },
@@ -233,11 +234,11 @@ export function furnishMarket(zone: Zone, context: BuildContext): ZoneHandle {
     box.restock = () => {
       if (!live) return;
       if (entry) entry.sold = Math.max(0, entry.sold - 1);
-      display(item, slot, entry);
+      display(item, slot, entry, crate);
       refreshPennants();
     };
     displayed.add(box);
-    const holder = entry?.stall ?? bin;
+    const holder = entry?.stall ?? crate;
     const yaw = 'yaw' in slot ? slot.yaw : 0;
     zone.place(box, zone.toLocal(holder.localToWorld(slot.position.clone())), holder.rotation.y + yaw);
     entry?.boxes.add(box);
@@ -254,8 +255,12 @@ export function furnishMarket(zone: Zone, context: BuildContext): ZoneHandle {
       slots.forEach((slot, i) => display(onTable[i]!, slot, entry));
       stallStock += slots.length;
     }
+    // The bin's copies, crate by crate (the Brocante's extra bins take what the first cannot hold).
     const inBin = items.filter((item) => item.source === 'bin');
-    bin.slots(inBin.length).forEach((slot, i) => display(inBin[i]!, slot, null));
+    bins.forEach((crate, b) => {
+      const mine = inBin.slice(b * BargainBin.capacity, (b + 1) * BargainBin.capacity);
+      crate.slots(mine.length).forEach((slot, i) => display(mine[i]!, slot, null, crate));
+    });
     refreshPennants();
     refreshNotices();
   }).catch((err) => console.warn('[market] no stock today', err));
@@ -268,7 +273,8 @@ export function furnishMarket(zone: Zone, context: BuildContext): ZoneHandle {
     mayBuy: () => stallStock > 0 && market.soldToRivals < Math.floor(stallStock * RIVAL_BUYING.maxShare),
     buyAt: (spot) => {
       const entry = nearestStall(stalls, zone.toWorld(new THREE.Vector3(spot.at[0], 0, spot.at[1])));
-      const choices = entry ? [...entry.boxes].filter((b) => !b.isHeld && b.item.priced && !b.item.reserved && !entry.stall.behindGlass) : [];
+      // Nobody else can afford a grail: after all the rumours, it waits for the player all day.
+      const choices = entry ? [...entry.boxes].filter((b) => !b.isHeld && b.item.priced && !b.item.reserved && b.item.source !== 'grail' && !entry.stall.behindGlass) : [];
       const box = choices[Math.floor(Math.random() * choices.length)];
       if (!entry || !box) return false;
       market.soldToRival(box.item);
@@ -295,6 +301,9 @@ export function furnishMarket(zone: Zone, context: BuildContext): ZoneHandle {
   }
   const week: InfoRow[] = [{ text: theme.blurb }, { text: '' }, { text: 'COMING UP' }];
   for (let i = 1; i <= 3; i++) week.push({ text: themeOf(market.day + i).title, right: i === 1 ? 'tomorrow' : `in ${i} days` });
+  // Today's sales and the talk of the hall (a grail on its way); the Brocante is in the days above already.
+  const talk = news.filter((n) => n.kind !== 'brocante').slice(0, 2);
+  if (talk.length) week.push({ text: '' }, ...talk.map((n) => ({ text: noticeRumour(n) })));
   program.setContent(`TODAY: ${theme.title}`, week);
   refreshDirectory();
 
@@ -310,12 +319,18 @@ export function furnishMarket(zone: Zone, context: BuildContext): ZoneHandle {
     if (!noticeBoard || !marketHall) return;
     void marketHall.notices.cards().then((ads) => {
       if (!live) return;
-      noticeBoard.setCards(ads.slice(0, NOTICE_BOARD_MAX_CARDS - 1).map((ad, i) => ({
+      // A card pinned up about what is coming (a grail, the Brocante, a sale), when there is talk of one.
+      const rumour = news[0] ? flyerRumour(news[0]) : null;
+      const pinned = [
+        ...(rumour ? [{ title: rumour.title, lines: rumour.lines, color: '#ffd9b8', tilt: -0.04 }] : []),
+        { title: 'COLLECTORS’ CLUB', lines: ['complete a set,', 'claim a reward', 'ask at the board'], color: '#f6d2e0', tilt: 0.03 },
+      ];
+      noticeBoard.setCards(ads.slice(0, NOTICE_BOARD_MAX_CARDS - pinned.length).map((ad, i) => ({
         title: ad.kind === 'wanted' ? 'WANTED' : 'FOR SALE',
         lines: [ad.game.title, `${ad.kind === 'wanted' ? `paying ${ad.pay}` : `${ad.price}`} coins`, `— ${ad.from}`],
         color: ad.kind === 'wanted' ? '#fff1a8' : '#d6ecff',
         tilt: ((i * 37) % 9 - 4) * 0.02,
-      })).concat([{ title: 'COLLECTORS’ CLUB', lines: ['complete a set,', 'claim a reward', 'ask at the board'], color: '#f6d2e0', tilt: 0.03 }]));
+      })).concat(pinned));
     }, () => undefined);
   }
   if (marketHall) {
@@ -362,7 +377,7 @@ function buildStall(style: StallStyle, options: { sign: string; cloth: number; a
 }
 
 /** The household stall: furniture for the flat (`HOME_GOODS`), each piece bought with a click; one-offs vanish once bought. */
-function furnishHousehold(zone: Zone, { listener, upgrades }: BuildContext): void {
+function furnishHousehold(zone: Zone, { listener, home: { upgrades } }: BuildContext): void {
   const plan = MARKET_PLAN.household;
   const stall = zone.placeAt(new MarketStall({ sign: plan.sign, cloth: plan.cloth, seed: 17 }), plan.at);
   zone.place(new Vendor({
@@ -397,15 +412,13 @@ function furnishHousehold(zone: Zone, { listener, upgrades }: BuildContext): voi
     const at = item.offset.clone().add(new THREE.Vector3(0, stall.topHeight + 0.012, 0.1));
     zone.place(item, zone.toLocal(stall.localToWorld(at)), stall.rotation.y);
   }
-  const refresh = () => {
+  followUpgrades(zone, upgrades, () => {
     for (const item of items) item.setAvailable(!owned(item.goodsId));
-  };
-  refresh();
-  zone.onUnload(upgrades.subscribe(refresh));
+  });
 }
 
 /** The coffee cart and its barista: a coffee a day makes the stallholders easier (see `NEGOTIATION.coffee`). */
-function furnishCoffee(zone: Zone, { listener, market }: BuildContext): void {
+function furnishCoffee(zone: Zone, { listener, market: { stock: market } }: BuildContext): void {
   const plan = MARKET_PLAN.coffee;
   let barista: Vendor | null = null;
   const cart = zone.placeAt(new CoffeeCart({

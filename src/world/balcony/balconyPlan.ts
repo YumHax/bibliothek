@@ -51,4 +51,10 @@ export const BALCONY_PLAN = {
   ] as DecorEntry[],
   /** The little bistro table and its two chairs, facing the street. */
   bistro: { floor: [0.45, 0.15] as [number, number] },
+  /** Where the potted plants bought at the florist on Front Street stand, in the order they come home (`HomeUpgrades` 'plant'). */
+  boughtPlants: [
+    { floor: [-1.02, -0.38] as [number, number], kind: 'small', pot: 'terracotta', seed: 31 },
+    { floor: [1.02, -0.38] as [number, number], kind: 'yucca', pot: 'ceramic', seed: 32, scale: 0.55 },
+    { floor: [-0.6, 0.42] as [number, number], kind: 'small', pot: 'ceramic', seed: 33 },
+  ] as const,
 };

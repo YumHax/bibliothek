@@ -6,7 +6,11 @@ Read this to add or change something visible in the room. The recipe is in the `
 
 1. **Decor** (no wiring): plants, rug, picture frames, floor lamps, side tables. Listed in a plan's `decor`
    (`ROOM_PLAN` in `src/world/roomPlan.ts`, `<KIND>_PLAN` in `src/world/<kind>/<kind>Plan.ts`) as `{ kind, at, options }`;
-   kinds registered in `src/world/props/decor.ts`.
+   kinds registered in `src/world/props/decor.ts`. `holiday: 'christmas' | 'halloween' | 'newyear'` on an entry puts it up
+   only then (`placeDecor` skips it otherwise): the real date or `?holiday=` (`newyear`: Christmas plus the streamers),
+   read from `currentFestivities()` (`outdoors/season.ts`, set by `Sky` before any zone is built). No holiday prop has a
+   light (the light count must not change, docs/zones.md): the bulbs and candles are unlit colours that flicker. The street
+   has a `decor` list too (lights across Front Street, doorstep pumpkins) and a `Snowman` shown while the snow lies.
 2. **Wired props** (need a callback or another object, or exist once): door (doorways), windows (the shared Sky, skylight),
    posters and consoles (follow the collection), wall clock (DayNight), pendant / flush lamp (Room light), screens, seats,
    and a room's one-off furniture (bed, bathtub, kitchen run...). Their spots are still plan entries (`ROOM_PLAN.tv`,
@@ -98,6 +102,13 @@ Read this to add or change something visible in the room. The recipe is in the `
 | `shoeRack` | `width`, `wood` | wall placement with `y: 0`; two slatted oak tiers of shoes; collides |
 | `doormat` | `width`, `depth`, `text`, `wear`, `seed` | floor placement, long side along local x; worn coir on rubber, 18 mm thick (`DOORMAT_THICKNESS`) |
 | `kilimRug` | `width`, `depth`, `colors`, `seed` | floor placement; flat-woven stepped lozenges, fringes past both ends along x; never collides |
+| `pumpkin` | `radius`, `carved`, `seed`, `lift` | Halloween; ribbed, a carved face that glows with a candle's flicker (a canvas, no light) |
+| `cobweb` | `size`, `spread: left/right`, `seed` | wall placement with its origin in the top corner; line segments spreading towards local -x (`left`) or +x |
+| `sweetsBowl` | `radius`, `color`, `seed` | a bowl of wrapped sweets; a wall placement's `y` puts it on a console top |
+| `christmasTree` | `height`, `radius`, `baubles`, `lights`, `presents`, `seed` | stacked cones in a pot, baubles, a spiral of twinkling bulbs (no light), a star, presents; collides |
+| `fairyLights` | `length`, `height`, `sag`, `spacing`, `colors`, `bulb`, `twinkle`, `seed` | like `garland`'s bulbs but coloured and twinkling; from the origin along local +x |
+| `wreath` | `radius`, `seed` | wall-hung; the front door's is hung on its leaf's landing side (`Door.attachToLeaf(..., far)`) |
+| `balloons` | `count`, `colors`, `height`, `seed` | a bunch on strings tied to a floor weight, swaying |
 | `radiator` | `style: column/panel/towel`, `width`, `height`, `lift`, `color`, `valve`, `standoff`, `catCradle` | `wall` placement with `y: 0` (`offset` over tiles); body on brackets, pipes into the floor, a TRV; merged meshes, collides; the builder's `tickRadiators` gives each its ticking `PointSound`; with `catCradle` a fleece sling the cat naps in (a `CatPerch`) |
 
 Clickable fittings (bathroom): `Washbasin({ onTap })` runs a `WaterStream` from its mixer; `Bathtub({ onWater })` fills

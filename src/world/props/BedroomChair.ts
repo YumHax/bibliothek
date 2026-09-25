@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import type { Furniture } from '../Furniture';
 import type { Interactable } from '@/interaction/Interactable';
 import type { PlayerState, SessionActions } from '@/game/SessionActions';
-import { cylinderMesh, invisibleHitbox } from '../meshUtils';
+import { FACING_OUT, cylinderMesh, eyePoseAt, invisibleHitbox } from '../meshUtils';
 import { part } from './Prop';
 import { seededRandom } from '@/covers/generated/canvasUtils';
 import { wood as woodMaterial } from '@/world/materials/finishes';
@@ -153,10 +153,7 @@ export class BedroomChair extends THREE.Group implements Furniture, Interactable
 
   /** World-space eye and camera yaw of someone sitting on it, facing +z. */
   eyePose(): { position: THREE.Vector3; yaw: number } {
-    const position = this.localToWorld(new THREE.Vector3(0, SEATED_EYE, 0.05));
-    const forward = new THREE.Vector3(0, 0, 1).applyQuaternion(this.getWorldQuaternion(new THREE.Quaternion()));
-    // A camera looks down -z, so yaw θ gives the direction (-sin θ, 0, -cos θ).
-    return { position, yaw: Math.atan2(-forward.x, -forward.z) };
+    return eyePoseAt(this, new THREE.Vector3(0, SEATED_EYE, 0.05), FACING_OUT);
   }
 
   // --- Interactable -------------------------------------------------------------------------

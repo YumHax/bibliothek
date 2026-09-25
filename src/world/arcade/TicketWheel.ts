@@ -1,11 +1,13 @@
 import * as THREE from 'three';
 import { ChipSpeaker } from '@/audio/ChipSpeaker';
 import { createCanvas, toTexture } from '@/covers/generated/canvasUtils';
-import { boxMesh, cylinderMesh, invisibleHitbox } from '../meshUtils';
-import { matte } from '../props/Prop';
+import { boxMesh, cylinderMesh, eyePoseAt, invisibleHitbox } from '../meshUtils';
+import { markShared, matte } from '../props/Prop';
+import { actionKeyLabel } from '@/ui/keys';
 import { type ArcadeControls, NO_CONTROLS, drawText } from './games/ArcadeGame';
 import { TicketMachine, type TicketMachineWiring } from './TicketMachine';
 import { TicketStrip } from './TicketStrip';
+import { type MachineDisplay, displayScreen, outOfOrderNote, paintMarquee } from './machineParts';
 
 /** One slice of the wheel: what it pays (or the jackpot) and how wide it is (its odds). */
 export interface WheelSlice {
@@ -64,7 +66,7 @@ export class TicketWheel extends TicketMachine {
   private readonly bulbs: THREE.Mesh[] = [];
   private readonly button: THREE.Mesh;
   private readonly hands: [THREE.Vector3, THREE.Vector3] = [new THREE.Vector3(), new THREE.Vector3()];
-  private readonly display: { ctx: CanvasRenderingContext2D; texture: THREE.CanvasTexture };
+  private readonly display: MachineDisplay;
   /** Slice boundaries, radians counter-clockwise from +x on the wheel's face; slice i spans [edges[i], edges[i+1]). */
   private readonly edges: number[];
   private readonly unsubscribe: () => void;
@@ -93,7 +95,8 @@ export class TicketWheel extends TicketMachine {
     const gold = new THREE.MeshStandardMaterial({ color: 0xd4a52a, metalness: 0.8, roughness: 0.3 });
     // The backboard with the marquee on top.
     this.add(boxMesh(BOARD_W, BOARD_H, 0.06, paint, { y: BOARD_H / 2 + 0.3, z: 0.03 }));
-    const marquee = new THREE.Mesh(new THREE.PlaneGeometry(BOARD_W - 0.1, 0.24), new THREE.MeshBasicMaterial({ map: paintMarquee(title), toneMapped: false }));
+    const marqueeMap = paintMarquee(title, { stops: ['#ff2fa0', '#ffd23a'], ink: '#2a0f24', size: 40 });
+    const marquee = new THREE.Mesh(new THREE.PlaneGeometry(BOARD_W - 0.1, 0.24), new THREE.MeshBasicMaterial({ map: marqueeMap, toneMapped: false }));
     marquee.position.set(0, BOARD_H + 0.3 - 0.18, 0.062);
     this.add(marquee);
     // The wheel: a painted disc on a hub, pegs at the slice edges, a gold rim.
@@ -101,7 +104,7 @@ export class TicketWheel extends TicketMachine {
     this.wheel.position.set(0, WHEEL_Y, WHEEL_Z);
     const face = new THREE.Mesh(new THREE.CircleGeometry(WHEEL_R, 64), new THREE.MeshStandardMaterial({ map: this.paintFace(), roughness: 0.45 }));
     this.wheel.add(face);
-    const back = cylinderMesh(WHEEL_R, 0.04, matte(0x151518, 0.5), { z: -0.021 }, { segments: 48 });
+    const back = cylinderMesh(WHEEL_R, 0.04, matte(0x151518, 0.5), { z: -0.022 }, { segments: 48 });
     back.rotation.x = Math.PI / 2;
     this.wheel.add(back);
     for (const edge of this.edges.slice(0, -1)) {
@@ -138,13 +141,13 @@ export class TicketWheel extends TicketMachine {
     this.add(top);
     this.button = cylinderMesh(0.07, 0.05, new THREE.MeshStandardMaterial({ color: 0xe8303a, emissive: 0xe8303a, emissiveIntensity: 0.3, roughness: 0.4 }), { x: 0.08, y: PODIUM.h + 0.05, z: PODIUM.z + 0.05 }, { segments: 20 });
     this.add(this.button);
-    const [canvas, ctx] = createCanvas(256, 96);
-    const texture = new THREE.CanvasTexture(canvas);
-    texture.colorSpace = THREE.SRGBColorSpace;
-    this.display = { ctx, texture };
-    const screen = new THREE.Mesh(new THREE.PlaneGeometry(0.4, 0.15), new THREE.MeshBasicMaterial({ map: texture, toneMapped: false }));
+    this.display = displayScreen([256, 96], [0.4, 0.15]);
+    const screen = this.display.mesh;
     screen.position.set(0, PODIUM.h - 0.14, PODIUM.z + PODIUM.d / 2 + 0.002);
     this.add(screen);
+    this.note = outOfOrderNote(0.24);
+    this.note.position.z = 0.004;
+    screen.add(this.note);
     this.strip = new TicketStrip(0.4);
     this.strip.position.set(-0.14, 0.4, PODIUM.z + PODIUM.d / 2 + 0.001);
     this.add(this.strip);
@@ -166,9 +169,7 @@ export class TicketWheel extends TicketMachine {
   }
 
   eyePose(): { position: THREE.Vector3; yaw: number } {
-    const position = this.localToWorld(new THREE.Vector3(0, 1.58, STAND_Z));
-    const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(this.getWorldQuaternion(new THREE.Quaternion()));
-    return { position, yaw: Math.atan2(-forward.x, -forward.z) };
+    return eyePoseAt(this, new THREE.Vector3(0, 1.58, STAND_Z));
   }
 
   /** One hand on the button, the other resting on the podium. */
@@ -205,7 +206,7 @@ export class TicketWheel extends TicketMachine {
   }
 
   protected playingLabel(): string {
-    return this.spinning || this.landed !== null ? 'Round and round it goes…' : 'Space or click to spin · E to walk away';
+    return this.spinning || this.landed !== null ? 'Round and round it goes…' : `${actionKeyLabel('fire')} or click to spin · ${actionKeyLabel('walkAway')} to walk away`;
   }
 
   /** A click on the wheel mid-play pulls it. */
@@ -355,18 +356,5 @@ export class TicketWheel extends TicketMachine {
   }
 }
 
-const BULB_ON = new THREE.MeshBasicMaterial({ color: 0xfff1b0, toneMapped: false });
-const BULB_OFF = new THREE.MeshStandardMaterial({ color: 0x6a5a30, roughness: 0.4 });
-
-function paintMarquee(title: string): THREE.CanvasTexture {
-  const [canvas, ctx] = createCanvas(512, 96);
-  const g = ctx.createLinearGradient(0, 0, 512, 0);
-  g.addColorStop(0, '#ff2fa0');
-  g.addColorStop(1, '#ffd23a');
-  ctx.fillStyle = g;
-  ctx.fillRect(0, 0, 512, 96);
-  drawText(ctx, title, 256, 50, 40, '#2a0f24');
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.colorSpace = THREE.SRGBColorSpace;
-  return texture;
-}
+const BULB_ON = markShared(new THREE.MeshBasicMaterial({ color: 0xfff1b0, toneMapped: false }));
+const BULB_OFF = markShared(new THREE.MeshStandardMaterial({ color: 0x6a5a30, roughness: 0.4 }));

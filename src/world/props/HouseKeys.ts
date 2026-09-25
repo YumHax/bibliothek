@@ -35,16 +35,18 @@ export class HouseKeys extends Prop implements Interactable {
     ring.position.y = 0.002;
     this.bunch.add(ring);
     // Two keys fanned out from the ring: a head, a blade, a few bits cut along it.
-    const key = (angle: number, length: number, metal: THREE.Material): void => {
+    // `lift` stacks the second key on the first: their bows overlap by the ring and would z-fight level.
+    const key = (angle: number, length: number, metal: THREE.Material, lift: number): void => {
       const k = new THREE.Group();
       k.rotation.y = angle;
+      k.position.y = lift;
       part(k, 0.022, 0.003, 0.02, metal, { x: 0.022, y: 0.002 });
       part(k, length, 0.002, 0.007, metal, { x: 0.033 + length / 2, y: 0.002 });
       for (let i = 0; i < 3; i++) part(k, 0.004, 0.002, 0.004, metal, { x: 0.038 + length * (0.3 + i * 0.22), y: 0.002, z: 0.005 });
       this.bunch.add(k);
     };
-    key(0.3, 0.04, BRASS);
-    key(-0.9, 0.028, STEEL);
+    key(0.3, 0.04, BRASS, 0);
+    key(-0.9, 0.028, STEEL, 0.001);
     // The fob, a leather tab on the other side of the ring.
     this.fob = new THREE.MeshStandardMaterial({ color: LEATHER, roughness: 0.7, emissive: 0xc9a75b, emissiveIntensity: 0 });
     part(this.bunch, 0.05, 0.004, 0.018, this.fob, { x: -0.035, y: 0.002 }).rotation.y = -0.4;

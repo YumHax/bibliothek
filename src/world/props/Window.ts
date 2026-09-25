@@ -11,6 +11,7 @@ import { RollerBlind } from './RollerBlind';
 import { SunShaft } from './SunShaft';
 import type { DayNight, SkyState } from './DayNight';
 import type { Outdoors } from './outdoors/Outdoors';
+import type { DrawnAware } from '../zone/Zone';
 
 export interface WindowOptions {
   /** Size of the glazed opening in metres. The kick rail below it reaches the floor. */
@@ -72,7 +73,7 @@ const HEM_CLEARANCE = 0.015;
  * Clicking the window draws or opens its curtains; drawn curtains shut the sun out (the spot fades
  * with them) and report their openness through `onCurtainsChange` so the room's skylight follows.
  */
-export class RoomWindow extends Prop implements Updatable, Interactable, OccupancyAware {
+export class RoomWindow extends Prop implements Updatable, Interactable, OccupancyAware, DrawnAware {
   readonly options: Required<Omit<WindowOptions, 'onCurtainsChange'>> & Pick<WindowOptions, 'onCurtainsChange'>;
   /** Local y of the floor (the bottom of the kick rail). */
   readonly floorY: number;
@@ -80,6 +81,8 @@ export class RoomWindow extends Prop implements Updatable, Interactable, Occupan
   readonly hitboxes: THREE.Object3D[];
   /** The sun's shadow map is re-rendered every frame only in the player's room; now and then elsewhere (see `update`). */
   private occupied = false;
+  /** Whether the zone's meshes are drawn: while they are hidden a refresh would render an empty map (see `setZoneDrawn`). */
+  private zoneDrawn = true;
   private shadowTimer = Math.random() * IDLE_SHADOW_INTERVAL;
 
   /** The sun/moon spot; null when `sunlight` is off. */
@@ -202,6 +205,12 @@ export class RoomWindow extends Prop implements Updatable, Interactable, Occupan
     if (this.sky) this.apply(this.sky);
   }
 
+  /** Culled from view: the idle refresh waits (the room is hidden, its map would come out empty), and runs at once when drawn again. */
+  setZoneDrawn(drawn: boolean): void {
+    this.zoneDrawn = drawn;
+    if (drawn && this.light) this.light.shadow.needsUpdate = true;
+  }
+
   /**
    * Ticks the shared clock and the life outside (only when this window `drivesClock`), eases the
    * curtains, and refreshes the sun's shadow map now and then when the player is in another room.
@@ -216,7 +225,7 @@ export class RoomWindow extends Prop implements Updatable, Interactable, Occupan
       this.options.onCurtainsChange?.(this.curtains.currentOpenness);
     }
     this.shaft?.update(dt);
-    if (this.occupied || !this.light || this.light.intensity <= 0) return;
+    if (this.occupied || !this.zoneDrawn || !this.light || this.light.intensity <= 0) return;
     this.shadowTimer += dt;
     if (this.shadowTimer < IDLE_SHADOW_INTERVAL) return;
     this.shadowTimer = 0;

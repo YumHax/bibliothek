@@ -65,17 +65,20 @@ function woodCrate(w: number, h: number, d: number, random: () => number): THREE
   const tint = new THREE.Color().setHSL(0.09 + (random() - 0.5) * 0.02, 0.35 + (random() - 0.5) * 0.1, 0.55 + (random() - 0.5) * 0.12);
   const wood = woodMaterial(tint, 0.85);
   const post = 0.03;
-  for (const sx of [-1, 1]) for (const sz of [-1, 1]) g.add(boxMesh(post, h, post, wood, { x: sx * (w / 2 - post / 2), y: h / 2, z: sz * (d / 2 - post / 2) }));
+  const slat = 0.012;
+  // The posts stand inside the slats, which are nailed on their outside: flush with them, the
+  // faces of a post and a slat would share a plane (and the grain of each its own) and z-fight.
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) g.add(boxMesh(post, h, post, wood, { x: sx * (w / 2 - slat - post / 2), y: h / 2, z: sz * (d / 2 - slat - post / 2) }));
   g.add(boxMesh(w - 2 * post, 0.015, d - 2 * post, wood, { y: 0.03 }));
   // Three slats a side with a finger's gap between them.
   const slats = 3;
   const slatH = (h - 0.02) / slats - 0.02;
   for (let i = 0; i < slats; i++) {
     const y = 0.02 + i * (slatH + 0.02) + slatH / 2;
-    g.add(boxMesh(w, slatH, 0.012, wood, { y, z: d / 2 - 0.006 }));
-    g.add(boxMesh(w, slatH, 0.012, wood, { y, z: -d / 2 + 0.006 }));
-    g.add(boxMesh(0.012, slatH, d - 0.024, wood, { x: w / 2 - 0.006, y }));
-    g.add(boxMesh(0.012, slatH, d - 0.024, wood, { x: -w / 2 + 0.006, y }));
+    g.add(boxMesh(w, slatH, slat, wood, { y, z: d / 2 - slat / 2 }));
+    g.add(boxMesh(w, slatH, slat, wood, { y, z: -d / 2 + slat / 2 }));
+    g.add(boxMesh(slat, slatH, d - 2 * slat, wood, { x: w / 2 - slat / 2, y }));
+    g.add(boxMesh(slat, slatH, d - 2 * slat, wood, { x: -w / 2 + slat / 2, y }));
   }
   return g;
 }

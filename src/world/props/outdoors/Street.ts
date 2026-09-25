@@ -1,6 +1,6 @@
 import { Sheet, type Rng, type Fill, type Surface, SCENE_HEIGHT, azimuthX, heightY, outline, sizePx, worldPoint } from './Sheet';
 import { between, integer, pick, shade } from './paint';
-import { CAR_LINE, FRONTAGE, FRONT_END, KERB, LAMP_LINE, NEAR_KERB, PARK_END, STREET_TREE_LINE, frontage, ground, streetEnd } from './plan';
+import { BUS_STOP_X, CAR_LINE, FRONTAGE, FRONT_END, KERB, LAMP_LINE, NEAR_KERB, PARK_END, STREET_TREE_LINE, frontage, ground, streetEnd } from './plan';
 import { TREE_STYLES, paintTree } from './Tree';
 import { holidayStreetItems, paintTreeLights } from './Holiday';
 import { CAR_COLORS, CAR_LENGTH, CAR_WIDTH, type CarFrame, paintCar } from './Car';
@@ -43,8 +43,6 @@ const CYCLE_EDGE = 6.3;
 /** The zebra crossings: Front Street's (x from, x to) and Park Street's (z from, z to). */
 const FRONT_CROSSING: [number, number] = [12, 16];
 const PARK_CROSSING: [number, number] = [-6, -2];
-/** The bus stop on Front Street's far pavement (the bus in `Life` pulls up there). */
-export const BUS_STOP_X = 42;
 /** The newspaper kiosk on Front Street's far pavement. */
 const KIOSK_X = 60;
 

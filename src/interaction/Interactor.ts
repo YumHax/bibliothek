@@ -1,11 +1,7 @@
 import * as THREE from 'three';
 import type { Updatable } from '@/core/Engine';
+import { Listeners } from '@/core/Listeners';
 import type { Interactable } from './Interactable';
-
-export interface InteractorEvents {
-  onHoverChange?(item: Interactable | null): void;
-  onSelect?(item: Interactable): void;
-}
 
 /**
  * Casts a ray from the crosshair every frame and reports which interactable is under it.
@@ -16,37 +12,53 @@ export interface InteractorEvents {
 export class Interactor implements Updatable {
   enabled = true;
   maxDistance = 3;
-  readonly events: InteractorEvents = {};
   /** Interactables for which this returns true are skipped, letting the ray pass through them. */
   ignore: (item: Interactable) => boolean = () => false;
 
   private readonly raycaster = new THREE.Raycaster();
   private readonly centre = new THREE.Vector2(0, 0);
   private readonly owners = new Map<THREE.Object3D, Interactable>();
+  /** What the ray tests, rebuilt from `owners` / `occluderSet` before the next pick after a change (a trip (de)activates hundreds at once). */
   private hitboxes: THREE.Object3D[] = [];
   private occluders: THREE.Object3D[] = [];
+  private readonly occluderSet = new Set<THREE.Object3D>();
+  private dirty = false;
   private hovered: Interactable | null = null;
+  private readonly hoverListeners = new Listeners<[item: Interactable | null]>();
+  private readonly selectListeners = new Listeners<[item: Interactable]>();
 
   constructor(private readonly camera: THREE.Camera) {}
 
+  /** Calls `listener` with what is under the crosshair whenever that changes (null: nothing); returns the unsubscribe. */
+  onHoverChange(listener: (item: Interactable | null) => void): () => void {
+    return this.hoverListeners.add(listener);
+  }
+
+  /** Calls `listener` with the item `select()` picked; returns the unsubscribe. */
+  onSelect(listener: (item: Interactable) => void): () => void {
+    return this.selectListeners.add(listener);
+  }
+
   add(...items: Interactable[]): void {
     for (const item of items) for (const hitbox of item.hitboxes) this.owners.set(hitbox, item);
-    this.hitboxes = [...this.owners.keys()];
+    this.dirty = true;
   }
 
   remove(item: Interactable): void {
     for (const hitbox of item.hitboxes) this.owners.delete(hitbox);
-    this.hitboxes = [...this.owners.keys()];
+    this.dirty = true;
     if (this.hovered === item) this.setHovered(null);
   }
 
   /** Meshes the ray cannot see through (walls). Not clickable themselves; they only cut the ray short. */
   addOccluders(...objects: THREE.Object3D[]): void {
-    for (const object of objects) if (!this.occluders.includes(object)) this.occluders.push(object);
+    for (const object of objects) this.occluderSet.add(object);
+    this.dirty = true;
   }
 
   removeOccluders(...objects: THREE.Object3D[]): void {
-    this.occluders = this.occluders.filter((o) => !objects.includes(o));
+    for (const object of objects) this.occluderSet.delete(object);
+    this.dirty = true;
   }
 
   update(): void {
@@ -58,7 +70,7 @@ export class Interactor implements Updatable {
     const target = this.hovered;
     if (!this.enabled || !target) return false;
     this.setHovered(null);
-    this.events.onSelect?.(target);
+    this.selectListeners.emit(target);
     return true;
   }
 
@@ -67,10 +79,15 @@ export class Interactor implements Updatable {
     this.hovered?.setHovered(false);
     this.hovered = next;
     this.hovered?.setHovered(true);
-    this.events.onHoverChange?.(this.hovered);
+    this.hoverListeners.emit(this.hovered);
   }
 
   private pick(): Interactable | null {
+    if (this.dirty) {
+      this.hitboxes = [...this.owners.keys()];
+      this.occluders = [...this.occluderSet];
+      this.dirty = false;
+    }
     this.raycaster.far = this.maxDistance;
     this.raycaster.setFromCamera(this.centre, this.camera);
     const hits = this.raycaster.intersectObjects(this.hitboxes, false);

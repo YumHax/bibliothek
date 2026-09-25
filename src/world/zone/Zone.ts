@@ -2,13 +2,14 @@ import * as THREE from 'three';
 import { isUpdatable, type Updatable } from '@/core/Engine';
 import type { ColliderSet, Collisions, CollisionWorld } from '@/core/Collider';
 import { isInteractable, type Interactable } from '@/interaction/Interactable';
-import { isOccupancyAware, type Furniture } from '../Furniture';
+import type { Furniture } from '../Furniture';
 import type { GameBox } from '../GameBox';
 import { resolvePlacement, type Placement } from '../Placement';
 import type { RoomOptions } from '../Room';
 import type { ShelvingHost } from '../shelving/Shelving';
 import { disposeTree } from '../props/Prop';
 import { ContactShadows } from './ContactShadows';
+import { isActivityAware, isDrawnAware, isOccupancyAware } from './lifecycle';
 
 /**
  * `empty`: nothing built (costs nothing). `dormant`: built and kept in memory but out of the scene,
@@ -17,15 +18,15 @@ import { ContactShadows } from './ContactShadows';
 export type ZoneState = 'empty' | 'dormant' | 'active';
 
 /** A zone's place in the world: where it sits, how big it is, who it connects to. */
-export interface ZoneSpec {
-  id: string;
+export interface ZoneSpec<Id extends string = string> {
+  id: Id;
   /** World position of the zone's local origin (the centre of a room's floor). */
   origin: [x: number, y: number, z: number];
   rotationY?: number;
   /** Extent around the origin (metres): `bounds` is width x height x depth centred on origin on the floor. */
   extent: Pick<RoomOptions, 'width' | 'depth' | 'height'>;
   /** Zones kept active while the player is here (what is seen through the doorways). */
-  neighbours: readonly string[];
+  neighbours: readonly Id[];
   /** Never unloaded (the collection room: its shelving follows the collection, the cat lives there). */
   persistent?: boolean;
 }
@@ -46,6 +47,15 @@ export interface ZoneHost {
 export type ZoneBuilder = (zone: Zone) => unknown;
 
 /**
+ * A builder whose module is fetched on demand (a dynamic `import()`, its own chunk): the zones
+ * reached by travel. `Zone.load()` resolves it; until then the zone cannot be built, and the
+ * `ZoneManager` keeps the player's current zone while it loads (a travel loads it behind the curtain).
+ */
+export interface LazyZoneBuilder {
+  load(): Promise<ZoneBuilder>;
+}
+
+/**
  * Shadow maps do not know about walls: a light renders every caster in range, the room next door
  * included. So every zone's shadow-casting lights render two layers only: their own zone's
  * (`Zone.shadowLayer`, set on everything placed in it) and this shared one, which holds what keeps
@@ -59,6 +69,8 @@ export const FIRST_ZONE_SHADOW_LAYER = 2;
 export function shareShadowCaster(root: THREE.Object3D): void {
   root.traverse((obj) => obj.layers.enable(SHARED_SHADOW_LAYER));
 }
+
+export type { DrawnAware } from './lifecycle';
 
 /** A doorway into another zone: `bounds` is the opening (world space); `door` the leaf hung in it by this side, if any. */
 export interface Portal {
@@ -110,8 +122,8 @@ class ScopedCollisions implements Collisions {
  * coordinates and a whole zone leaves the scene in one call. Content is built lazily by the
  * builder on first activation; `ZoneManager` decides which zones are active from the player's position.
  */
-export class Zone implements ShelvingHost {
-  readonly id: string;
+export class Zone<Id extends string = string> implements ShelvingHost {
+  readonly id: Id;
   readonly group = new THREE.Group();
   /** World-space box the player is "in this zone" inside of. */
   readonly bounds: THREE.Box3;
@@ -127,6 +139,8 @@ export class Zone implements ShelvingHost {
   private drawn = true;
   /** Meshes `setDrawn(false)` hid, to show again; only those that were visible, so a prop's own hiding is respected. */
   private hiddenMeshes: THREE.Mesh[] = [];
+  /** Interactables `setDrawn(false)` took off the crosshair (the ray ignores `visible`), to hand back when drawn again. */
+  private readonly culled = new Set<Interactable>();
   private readonly items = new Map<Furniture, THREE.Box3[]>();
   /** Interactables that are not placed furniture themselves (the boxes on the shelves). */
   private readonly looseInteractables = new Set<Interactable>();
@@ -134,14 +148,20 @@ export class Zone implements ShelvingHost {
   private readonly scoped: ScopedCollisions;
   /** The soft shadows where the furniture stands on the floor, one instanced mesh for the zone. */
   private readonly contactShadows: ContactShadows;
+  /** The builder, once its module is there (at once for an eager one). */
+  private builder: ZoneBuilder | null;
+  private readonly lazy: LazyZoneBuilder | null;
+  private loading: Promise<void> | null = null;
 
   constructor(
-    readonly spec: ZoneSpec,
+    readonly spec: ZoneSpec<Id>,
     private readonly host: ZoneHost,
-    private readonly builder: ZoneBuilder,
+    source: ZoneBuilder | LazyZoneBuilder,
     /** The layer this zone's content casts shadows on, for this zone's lights only (see `SHARED_SHADOW_LAYER`). */
     readonly shadowLayer: number,
   ) {
+    this.builder = typeof source === 'function' ? source : null;
+    this.lazy = typeof source === 'function' ? null : source;
     this.id = spec.id;
     this.group.name = `Zone:${spec.id}`;
     this.group.position.set(...spec.origin);
@@ -206,6 +226,7 @@ export class Zone implements ShelvingHost {
     this.contactShadows.add(item);
     if (!this.drawn && !item.seenFromNextDoor) this.hide(item);
     if (this.state === 'active') this.plug(item, boxes);
+    else if (isActivityAware(item)) item.setZoneActive(false);
     if (isOccupancyAware(item)) item.setOccupied(this.occupied);
     return item;
   }
@@ -230,15 +251,32 @@ export class Zone implements ShelvingHost {
   setDrawn(drawn: boolean): void {
     if (drawn === this.drawn) return;
     this.drawn = drawn;
+    for (const item of this.items.keys()) if (isDrawnAware(item)) item.setZoneDrawn(drawn);
     if (drawn) {
       for (const mesh of this.hiddenMeshes) mesh.visible = true;
       this.hiddenMeshes = [];
+      if (this.state === 'active') for (const item of this.culled) this.host.interactableAdded(item);
+      this.culled.clear();
       return;
     }
     this.hide(this.contactShadows.mesh);
-    for (const item of this.items.keys()) if (!item.seenFromNextDoor) this.hide(item);
+    for (const item of this.items.keys()) {
+      if (item.seenFromNextDoor) continue;
+      this.hide(item);
+      if (isInteractable(item)) this.cull(item);
+    }
     // A box in the player's hand has left the zone's group for the scene: it stays in view.
-    for (const box of this.looseInteractables) if (this.holds(box as unknown as THREE.Object3D)) this.hide(box as unknown as THREE.Object3D);
+    for (const box of this.looseInteractables) {
+      if (!this.holds(box as unknown as THREE.Object3D)) continue;
+      this.hide(box as unknown as THREE.Object3D);
+      this.cull(box);
+    }
+  }
+
+  /** Takes an interactable of this undrawn zone off the crosshair until `setDrawn(true)`. */
+  private cull(item: Interactable): void {
+    this.culled.add(item);
+    if (this.state === 'active') this.host.interactableRemoved(item);
   }
 
   /** Shows again what culling hid under `root`: a shelf box taken in hand while its zone was out of view (a stray game, `world/strays`). */
@@ -250,6 +288,8 @@ export class Zone implements ShelvingHost {
       mesh.visible = true;
       return false;
     });
+    const item = root as unknown as Interactable;
+    if (this.culled.delete(item) && this.state === 'active') this.host.interactableAdded(item);
   }
 
   /** Whether `obj` is (still) inside this zone's group. */
@@ -300,13 +340,16 @@ export class Zone implements ShelvingHost {
   boxesChanged(added: readonly GameBox[], removed: readonly GameBox[]): void {
     for (const box of removed) {
       this.looseInteractables.delete(box);
+      this.culled.delete(box);
       if (this.state === 'active') this.host.interactableRemoved(box);
     }
     for (const box of added) {
       this.looseInteractables.add(box);
       this.adopt(box);
-      if (!this.drawn) this.hide(box);
-      if (this.state === 'active') this.host.interactableAdded(box);
+      if (!this.drawn) {
+        this.hide(box);
+        this.culled.add(box);
+      } else if (this.state === 'active') this.host.interactableAdded(box);
     }
   }
 
@@ -317,9 +360,30 @@ export class Zone implements ShelvingHost {
 
   // --- lifecycle ------------------------------------------------------------------------------------
 
-  /** Builds the content if it is not there yet; the zone stays out of the scene until `activate()`. */
+  /** Whether the builder's module is there: an eager builder always, a lazy one once `load()` resolved. */
+  get isLoaded(): boolean {
+    return this.builder !== null;
+  }
+
+  /** Fetches a lazy builder's module (once; a failed fetch may be retried). Resolves at once for an eager builder. */
+  load(): Promise<void> {
+    if (this.builder || !this.lazy) return Promise.resolve();
+    this.loading ??= this.lazy.load().then(
+      (builder) => {
+        this.builder = builder;
+      },
+      (error: unknown) => {
+        this.loading = null;
+        throw error;
+      },
+    );
+    return this.loading;
+  }
+
+  /** Builds the content if it is not there yet; the zone stays out of the scene until `activate()`. A lazy builder must be `load()`ed first. */
   build(): unknown {
     if (this.state === 'empty') {
+      if (!this.builder) throw new Error(`[zone] ${this.id} cannot be built before its module is loaded (await zone.load() first)`);
       this.handle = this.builder(this);
       this.state = 'dormant';
     }
@@ -333,7 +397,7 @@ export class Zone implements ShelvingHost {
       this.host.scene.add(this.group);
       for (const [item, boxes] of this.items) this.plug(item, boxes);
       this.scoped.setLive(true);
-      for (const item of this.looseInteractables) this.host.interactableAdded(item);
+      for (const item of this.looseInteractables) if (!this.culled.has(item)) this.host.interactableAdded(item);
       this.state = 'active';
     }
     return handle;
@@ -364,6 +428,7 @@ export class Zone implements ShelvingHost {
     this.looseInteractables.clear();
     this.portals.length = 0;
     this.hiddenMeshes = [];
+    this.culled.clear();
     this.drawn = true;
     this.scoped.clear();
     this.handle = null;
@@ -374,13 +439,19 @@ export class Zone implements ShelvingHost {
     for (const box of boxes) this.host.collisions.add(box);
     for (const object of item.occluders ?? []) this.host.occluderAdded(object);
     if (isUpdatable(item)) this.host.addUpdatable(item);
-    if (isInteractable(item)) this.host.interactableAdded(item);
+    if (isActivityAware(item)) item.setZoneActive(true);
+    if (!isInteractable(item)) return;
+    if (this.drawn || item.seenFromNextDoor) this.host.interactableAdded(item);
+    else this.culled.add(item);
   }
 
   private unplug(item: Furniture, boxes: THREE.Box3[]): void {
     for (const box of boxes) this.host.collisions.remove(box);
     for (const object of item.occluders ?? []) this.host.occluderRemoved(object);
     if (isUpdatable(item)) this.host.removeUpdatable(item);
-    if (isInteractable(item)) this.host.interactableRemoved(item);
+    if (isActivityAware(item)) item.setZoneActive(false);
+    if (!isInteractable(item)) return;
+    this.host.interactableRemoved(item);
+    this.culled.delete(item);
   }
 }

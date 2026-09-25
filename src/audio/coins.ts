@@ -1,4 +1,4 @@
-import { audioContext } from './audioContext';
+import { audioBus, audioContext } from './audioContext';
 
 /** Partials of a struck coin (Hz): inharmonic, bright, short. */
 const PARTIALS = [2350, 3900, 5600];
@@ -11,7 +11,7 @@ export function playCoins(count = 3, level = 0.12): void {
   const ctx = audioContext();
   const out = ctx.createGain();
   out.gain.value = level;
-  out.connect(ctx.destination);
+  out.connect(audioBus(ctx, 'world'));
   let t = ctx.currentTime + 0.01;
   for (let i = 0; i < count; i++) {
     const pitch = 0.9 + Math.random() * 0.25;

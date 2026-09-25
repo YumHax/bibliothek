@@ -1,7 +1,9 @@
 import type { PlatformId } from '@/catalog/types';
+import { PLATFORMS } from '@/catalog/platforms';
+import { KEYS, PersistedStore, safeStorage } from '@/persistence';
 import { LOYALTY, REPUTATION } from './pricing';
 
-export const STANDING_STORAGE_KEY = 'bibliothek.standing.v1';
+export const STANDING_STORAGE_KEY = KEYS.standing;
 
 /** Something the player did that the market remembers (see `REPUTATION.points`). */
 export type Deed = keyof typeof REPUTATION.points;
@@ -35,12 +37,17 @@ export interface ReputationLevel {
 export class MarketStanding {
   private state: StandingFile;
   private readonly listeners = new Set<() => void>();
+  private readonly store: PersistedStore<StandingFile>;
 
   constructor(
-    private readonly storage: Storage | null = safeLocalStorage(),
-    private readonly key = STANDING_STORAGE_KEY,
+    storage: Storage | null = safeStorage(),
+    key: string = STANDING_STORAGE_KEY,
   ) {
-    this.state = this.load() ?? { points: 0, stallBuys: {}, sets: [], deeds: {} };
+    // Version 1: points, buys per stall, sets claimed, deeds.
+    this.store = new PersistedStore<StandingFile>({
+      key, version: 1, storage, defaults: () => ({ points: 0, stallBuys: {}, sets: [], deeds: {} }), read: readStanding,
+    });
+    this.state = this.store.load();
   }
 
   /** The player did `deed` (a stall purchase also counts towards that stall's loyalty). */
@@ -116,31 +123,22 @@ export class MarketStanding {
   }
 
   private commit(): void {
-    try {
-      this.storage?.setItem(this.key, JSON.stringify(this.state));
-    } catch (err) {
-      console.warn('[market] could not persist the standing', err);
-    }
+    this.store.save(this.state);
     for (const cb of [...this.listeners]) cb();
-  }
-
-  private load(): StandingFile | null {
-    const text = this.storage?.getItem(this.key);
-    if (!text) return null;
-    try {
-      const file = JSON.parse(text) as Partial<StandingFile>;
-      if (typeof file.points !== 'number') return null;
-      return { points: file.points, stallBuys: file.stallBuys ?? {}, sets: Array.isArray(file.sets) ? file.sets : [], deeds: file.deeds ?? {} };
-    } catch {
-      return null;
-    }
   }
 }
 
-function safeLocalStorage(): Storage | null {
-  try {
-    return typeof localStorage === 'undefined' ? null : localStorage;
-  } catch {
-    return null;
+function readStanding(data: unknown): StandingFile | null {
+  const file = data as Partial<StandingFile> | null;
+  if (typeof file !== 'object' || file === null || typeof file.points !== 'number' || !Number.isFinite(file.points)) return null;
+  const stallBuys: Partial<Record<PlatformId, number>> = {};
+  for (const [platform, n] of Object.entries(file.stallBuys ?? {})) {
+    if (platform in PLATFORMS && typeof n === 'number' && n >= 0) stallBuys[platform as PlatformId] = Math.floor(n);
   }
+  const deeds: Partial<Record<Deed, number>> = {};
+  for (const [deed, n] of Object.entries(file.deeds ?? {})) {
+    if (deed in REPUTATION.points && typeof n === 'number' && n >= 0) deeds[deed as Deed] = Math.floor(n);
+  }
+  const sets = Array.isArray(file.sets) ? file.sets.filter((id): id is string => typeof id === 'string') : [];
+  return { points: Math.max(0, file.points), stallBuys, sets, deeds };
 }
