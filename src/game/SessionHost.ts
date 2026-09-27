@@ -1,14 +1,13 @@
+import type { NoticeActions } from '@/notices';
 import type { GameBox } from '@/world/GameBox';
 
 /**
- * What a Session controller may ask of the Session: say something, and the few moves every
+ * What a Session controller may ask of the Session: tell the player something (each kind in its
+ * place, `NoticeActions`), and the few moves every
  * feature shares (the hands, standing up, freezing the walk). The Session is the only host; a
  * controller never reaches another controller except through it (or through what it was given).
  */
-export interface SessionHost {
-  /** A toast (or the hint line when there is no toast). */
-  notify(text: string, ms?: number): void;
-  hint(message: string): void;
+export interface SessionHost extends NoticeActions {
   pickUp(box: GameBox): void;
   /** Empties the hands (a market copy goes back on its stall). */
   putBack(): void;

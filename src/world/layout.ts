@@ -173,6 +173,7 @@ export const ZONE_BUILDERS = {
   arcade: lazy(() => import('./arcade/furnishArcade').then((m) => m.furnishArcade)),
   market: lazy(() => import('./market/furnishMarket').then((m) => m.furnishMarket)),
   street: lazy(() => import('./street/furnishStreet').then((m) => m.furnishStreet)),
+  shop: lazy(() => import('./shop/furnishShop').then((m) => m.furnishShop)),
 } satisfies { [K in ZoneKind]: ContextBuilder | LazyContextBuilder };
 
 /** What a `ZONE_BUILDERS` entry builds. */

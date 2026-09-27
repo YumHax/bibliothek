@@ -27,7 +27,7 @@ import { HOUSEHOLD } from '@/household';
 import type { DoorLike } from '@/world/visitors/Visit';
 import { SEED_GAMES } from '@/catalog';
 import type { PlayerMoves } from './player';
-import type { Toast } from '@/ui/Toast';
+import type { Notices } from '@/notices';
 import { lightLevelOf } from '@/world/zoneHandle';
 import { catPlacers, followAdoption, furnishCat, type Cat } from '@/world/cat';
 import { ShelvingGroup } from '@/world/shelving/ShelvingGroup';
@@ -64,7 +64,7 @@ export interface FlatPanels {
   collectorBook: ModalLike;
   journalPanel: ModalLike;
   neighbourTradePanel: TradePanelLike;
-  toast: Toast;
+  notices: Notices;
   /** The bedroom's phone (it reaches the friends once they exist, here) and wardrobe (docs/household.md). */
   phone: ModalLike & { setFriends(friends: PhoneFriends): void };
   wardrobe: ModalLike;
@@ -135,7 +135,7 @@ export function buildWorld(services: Services, parts: { world: GameWorld; player
         life: services.homeLife,
         phone: flat.phone,
         wardrobe: flat.wardrobe,
-        say: (text, ms) => flat.toast.show(text, ms),
+        notices: flat.notices,
         catName: () => services.catSettings.settings.name,
         callCat: () => callCat(cat.get(), 'treats'),
       },
@@ -165,7 +165,7 @@ export function buildWorld(services: Services, parts: { world: GameWorld; player
     graphics.setLook(zonePlan(zone.id).look);
   });
   // The first day's tips follow the stores and the player's zone (a new game only; silent otherwise).
-  firstDay.connect({ wallet, collection, deliveries, prizes, zone: () => manager.current.id, say: (text, ms) => flat.toast.show(text, ms) });
+  firstDay.connect({ wallet, collection, deliveries, prizes, zone: () => manager.current.id, notices: flat.notices });
   engine.addUpdatable(firstDay);
   // Of the active zones, only draw the player's and those seen through an open doorway in view.
   engine.addUpdatable(new PortalCuller(world.zones, manager, engine.camera));
@@ -217,7 +217,7 @@ export function buildWorld(services: Services, parts: { world: GameWorld; player
     purse: wallet,
     giftPool: SEED_GAMES,
     cat: () => (cat.get().adopted ? { at: cat.get().getWorldPosition(new Vector3()), name: services.catSettings.settings.name } : null),
-    notice: (text) => flat.toast.show(text, 4500),
+    notices: flat.notices,
     coverUrl,
     viewsOf: (game) => fame.peek(game),
     acoustics: context.acoustics,

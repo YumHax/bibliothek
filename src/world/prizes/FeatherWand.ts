@@ -75,7 +75,7 @@ export class FeatherWand extends THREE.Group implements Furniture, Interactable,
   activate(session: SessionActions): void {
     if (!this.owned) return;
     this.waving = WAVE_SECONDS;
-    session.hint(this.callCat?.() ?? 'Swish, swish. Nobody comes.');
+    session.react(this.callCat?.() ?? 'Swish, swish. Nobody comes.');
   }
 
   update(dt: number): void {

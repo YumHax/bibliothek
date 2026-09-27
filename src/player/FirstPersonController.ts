@@ -306,7 +306,13 @@ export class FirstPersonController implements Updatable {
   // --- Movement ---------------------------------------------------------------------------------
 
   update(dt: number): void {
-    if (!this.isLocked || !this._movementEnabled || this.seated) return;
+    if (this.seated) return;
+    if (!this.isLocked || !this._movementEnabled) {
+      // Standing still (a menu, a panel, Esc), the floor may still move under the feet: the lift's car.
+      this.followGround(dt);
+      this.camera.position.y = this.feet + this.height;
+      return;
+    }
 
     // WASD (QWERTY) and ZQSD (AZERTY) both work because we read physical key codes.
     // A gamepad stick / touch joystick feeds the same codes with fractional strengths.
@@ -337,16 +343,19 @@ export class FirstPersonController implements Updatable {
     this.moveAxis('x', this.velocity.x * dt);
     this.moveAxis('z', this.velocity.z * dt);
 
-    // The feet follow the floor (stairs), a little eased so each step does not jolt the eye.
-    if (this.ground) {
-      const floor = this.ground(this.camera.position.x, this.camera.position.z, this.feet);
-      this.feet = Math.abs(floor - this.feet) > SNAP ? floor : this.feet + (floor - this.feet) * (1 - Math.exp(-18 * dt));
-    }
+    this.followGround(dt);
 
     // Crouching eases the eye down and back up rather than snapping.
     const targetHeight = crouch ? this.crouchHeight : this.eyeHeight;
     this.height += (targetHeight - this.height) * (1 - Math.exp(-10 * dt));
     this.camera.position.y = this.feet + this.height;
+  }
+
+  /** The feet follow the floor (stairs, the lift's car), a little eased so each step does not jolt the eye. */
+  private followGround(dt: number): void {
+    if (!this.ground) return;
+    const floor = this.ground(this.camera.position.x, this.camera.position.z, this.feet);
+    this.feet = Math.abs(floor - this.feet) > SNAP ? floor : this.feet + (floor - this.feet) * (1 - Math.exp(-18 * dt));
   }
 
   private moveAxis(axis: 'x' | 'z', delta: number): void {

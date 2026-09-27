@@ -66,8 +66,9 @@ export function furnishHallway(zone: Zone, ctx: BuildContext): ZoneHandle {
         }
         // A mail order whose round came while the player was out: the concierge took it in.
         const posted = building?.post?.deliver().length ?? 0;
-        const parcel = posted ? `; the concierge took in a parcel for you (under the console)` : '';
-        session.hint(mail.count ? `Home: keys back in the bowl, and there is mail on the mat${parcel}` : `Home: keys back in the bowl${parcel}`);
+        session.react('Home: keys back in the bowl');
+        if (posted) session.reward({ title: 'A parcel came', detail: 'The concierge took it in while you were out: it is under the hall console.' });
+        if (mail.count) session.tip('There is mail on the mat by the door: click it to read.', { id: 'mail', until: () => mail.count === 0 });
       },
     }),
     new THREE.Vector3(),

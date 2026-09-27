@@ -13,6 +13,7 @@ import { ARCADE_PLAN, ARCADE_ROOM } from './arcade/arcadePlan';
 import { MARKET_PLAN, MARKET_ROOM } from './market/marketPlan';
 import { STREET_EXTENT, STREET_PLAN } from './street/streetPlan';
 import { STAIRWELL_PLAN, STAIRWELL_ROOM } from './stairwell/stairwellPlan';
+import { SHOP_PLANS, type ShopZoneId } from './shop/shopPlan';
 
 /*
  * THE WORLD PLAN: the zones (rooms, corridors, the street one day) and how they connect. Each zone
@@ -37,7 +38,7 @@ import { STAIRWELL_PLAN, STAIRWELL_ROOM } from './stairwell/stairwellPlan';
  * Elsewhere, reached by teleport (`travel`): the street at x 140 (the front door leads down to
  * it; its doors lead home, into the arcade and into the retro games shop), the arcade at x 40 and
  * the flea market at x 80, each a windowless hall of its own (`src/world/arcade/`, `src/world/market/`),
- * whose exits lead back to the street.
+ * and past the street the four shops one walks into (x 200 to 245, `src/world/shop/`), whose exits lead back to the street.
  *
  * Outside: Front Street runs past the front wall (+z), Park Street past the left wall (-x); the
  * right side (+x) is the neighbours' and the landing, the back (-z) the block's courtyard (the panes'
@@ -81,7 +82,7 @@ export const KITCHEN_WING: NearWall = {
 };
 
 /** What a zone is; one builder per kind in `layout.ts`. */
-export type ZoneKind = 'collectionRoom' | 'hallway' | 'bathroom' | 'bedroom' | 'kitchen' | 'balcony' | 'stairwell' | 'arcade' | 'market' | 'street';
+export type ZoneKind = 'collectionRoom' | 'hallway' | 'bathroom' | 'bedroom' | 'kitchen' | 'balcony' | 'stairwell' | 'arcade' | 'market' | 'street' | 'shop';
 
 /**
  * A zone the player is teleported to (and from) through a `TravelDoor`, instead of walking: the
@@ -131,6 +132,18 @@ const flatBut = (id: FlatId): FlatId[] => FLAT.filter((other) => other !== id);
 /** Whether zone `id` is one of the flat's (the pause menu offers Go home everywhere else). */
 export function inFlat(id: ZoneId): id is FlatId {
   return (FLAT as readonly ZoneId[]).includes(id);
+}
+
+/** A shop's zone: its room at `x` (far past the street), reached by travel only, like the arcade. */
+function shopZone(id: ShopZoneId, x: number, label: string) {
+  const plan = SHOP_PLANS[id];
+  return {
+    kind: 'shop',
+    origin: [x, 0, 0],
+    extent: plan.room,
+    neighbours: [],
+    travel: { label, arrival: plan.arrival.at, yaw: plan.arrival.yaw },
+  } as const satisfies ZoneEntry;
 }
 
 /**
@@ -230,6 +243,12 @@ const ZONES = {
     },
     look: 'street',
   },
+  // Front Street's shops inside (src/world/shop/): SECOND HOME, TV REPAIR, PAWS & CLAWS and the florist, each a
+  // windowless room reached by travel from its door on the street, beyond the street along +x; their exits lead back.
+  furnitureShop: shopZone('furnitureShop', 200, 'Second Home (furniture)'),
+  tvShop: shopZone('tvShop', 215, 'TV Repair'),
+  petShop: shopZone('petShop', 230, 'Paws & Claws (pet shop)'),
+  flowerShop: shopZone('flowerShop', 245, 'The florist'),
 } satisfies { [Id in ZoneId]: ZoneEntry };
 
 /** What zone `id` is, as its entry says (`ZONE_BUILDERS[kind]` builds it; `ZoneHandleById` is what that returns). */

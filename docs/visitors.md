@@ -16,7 +16,7 @@ Borrowing: a click on the friend opens the `BorrowPanel` (`src/ui/BorrowPanel.ts
 Lending marks the game `lent` in the collection (the existing status: its box wears the LENT OUT tag, the WE BUY desk
 refuses it). It comes back when due (2-4 days): the friend rings again and hands it back inside the door, sometimes with
 a tip (coins) or a game they no longer want (a built-in game to their taste, added to the collection, so it waits in
-the parcel). A loan `postAfter` days overdue comes back by post (a toast). A game marked back to owned in the editor, or
+the parcel). A loan `postAfter` days overdue comes back by post (a letter card to read). A game marked back to owned in the editor, or
 gone from the collection, ends its loan.
 
 From the flat (docs/household.md): a friend asked round on the bedroom's phone is that day's visit (`VisitBook.invite`);

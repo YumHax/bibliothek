@@ -47,12 +47,12 @@ import { Spray } from './traffic/Spray';
 import { ShopSounds } from './audio/ShopSounds';
 import { streetSurfaceAt } from './audio/streetSurface';
 import { ShopEntrance, type ShopServices } from './shops/ShopEntrance';
-import { retroShutNotice } from './shops/shopHours';
+import { retroShutNotice, shopShutNotice } from './shops/shopHours';
+import { SHOP_TALK, shopName } from './shops/shopPlan';
 import { DroppedCoins } from './shops/DroppedCoins';
 import { GiveawayBox, giveawaySpot, isGiveawayDay } from './shops/GiveawayBox';
 import { Trader, isTraderDay } from './shops/Trader';
-import type { HomeShop } from '@/economy/homeGoods';
-import { FACADES, STREET_PLAN, isWalkable, shopDoors, type Vec2 } from './streetPlan';
+import { FACADES, SHOP_ZONE_OF, STREET_PLAN, doorOnPavement, shopDoors, walkInShops, type Vec2 } from './streetPlan';
 import { CLOSURES } from './details/roadworks';
 import { Flagger } from './details/Flagger';
 import { placeAirlock, sasBounds } from '../airlock';
@@ -77,7 +77,7 @@ const FLAGGER_LINES = {
  * street's sound, and the edges (the facades, the railings, the roadworks and their roadworkers). Returns how lit the street is (for the reflections and
  * the haze) and what is underfoot.
  */
-export function furnishStreet(zone: Zone, { sky, listener, covers, today, panels, money: { wallet, purse }, home: { upgrades }, market: { stock: market, day: marketDay }, collection, arcade: { scores } }: BuildContext): ZoneHandle {
+export function furnishStreet(zone: Zone, { sky, listener, covers, today, panels, money: { wallet, purse }, market: { stock: market, day: marketDay }, collection, arcade: { scores } }: BuildContext): ZoneHandle {
   const plan = STREET_PLAN;
   const { dayNight } = sky;
   const origin = new THREE.Vector3();
@@ -122,6 +122,13 @@ export function furnishStreet(zone: Zone, { sky, listener, covers, today, panels
   for (const door of [plan.doors.arcade, plan.doors.market]) {
     const guard = door.to === 'market' ? () => retroShutNotice(dayNight.state.hours) : undefined;
     zone.place(new StreetDoor({ width: door.width, height: door.height, to: door.to, label: door.label, guard }), at(door.at), door.yaw);
+  }
+  // The shops one walks into (the furniture shop, the TV repair shop, the pet shop, the florist: `world/shop/`), in shop hours.
+  for (const { zone: to, door } of walkInShops()) {
+    const { kind } = door.shop;
+    const name = shopName(door.shop);
+    const guard = () => shopShutNotice(kind, name, SHOP_TALK[kind].closed, dayNight.state.hours);
+    zone.place(new StreetDoor({ width: 1.3, height: 2.5, to, label: `Click to go into ${name}`, guard }), at(door.at), door.yaw);
   }
   // Our building's door is real: the sas behind it is the entrance hall's twin, walked through (`world/airlock`).
   const home = plan.doors.home;
@@ -199,23 +206,12 @@ export function furnishStreet(zone: Zone, { sky, listener, covers, today, panels
   // Every shop door along the walkable pavements (RETRO GAMES and the arcade are travel doors, above).
   if (purse) {
     const scratch = panels.scratch;
-    // The counter of the shops that sell for the flat (the furniture, the TV repair, the pet shop, the florist): one panel, set per shop.
-    const counter = upgrades ? panels.homeShop : null;
-    const services: ShopServices = {
-      hours: () => dayNight.state.hours,
-      purse,
-      market,
-      marketDay,
-      isWanted,
-      plants: upgrades ? { count: () => upgrades.count('plant'), add: () => upgrades.add('plant') } : undefined,
-      ...(counter ? { homeShop: (shop: HomeShop) => counter.forShop(shop) } : {}),
-      scratch,
-    };
+    const services: ShopServices = { hours: () => dayNight.state.hours, purse, market, marketDay, isWanted, scratch };
     for (const door of shopDoors()) {
-      if (door.shop.kind === 'retro' || door.shop.kind === 'arcade') continue;
+      // RETRO GAMES, the arcade and the shops one walks into are travel doors (above).
+      if (door.shop.kind === 'retro' || door.shop.kind === 'arcade' || SHOP_ZONE_OF[door.shop.kind]) continue;
       // The door's step, half a metre out on the pavement, must be somewhere the player can stand.
-      const step: Vec2 = [door.at[0] + Math.sin(door.yaw) * 0.5, door.at[1] + Math.cos(door.yaw) * 0.5];
-      if (!isWalkable(step)) continue;
+      if (!doorOnPavement(door)) continue;
       zone.place(new ShopEntrance(door, services), at(door.at), door.yaw);
     }
     zone.place(new DroppedCoins({ spots: plan.coins.spots, perDay: plan.coins.perDay, host: zone, purse, viewer: listener }), origin);

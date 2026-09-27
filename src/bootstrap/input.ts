@@ -8,7 +8,7 @@ import type { Overlay } from '@/ui/Overlay';
 import type { Services } from './services';
 import type { BuiltWorld, GameWorld } from './world';
 import type { PlayerMoves } from './player';
-import type { Toast } from '@/ui/Toast';
+import type { NoticeActions } from '@/notices';
 import { PhotoMode } from '@/photo';
 import { LOOKS } from '@/graphics';
 import { zonePlan } from '@/world/worldPlan';
@@ -21,9 +21,9 @@ export type Interaction = ReturnType<typeof createInteraction>;
  * controller and the touch bar feed the same key / mouse channels the Session listens to, and the
  * player's settings are applied to all of them.
  */
-export function createInteraction(services: Services, parts: { world: GameWorld; built: BuiltWorld; player: FirstPersonController; overlay: Overlay; moves: PlayerMoves; toast: Toast }) {
+export function createInteraction(services: Services, parts: { world: GameWorld; built: BuiltWorld; player: FirstPersonController; overlay: Overlay; moves: PlayerMoves; notices: NoticeActions }) {
   const { engine, input, settings, container } = services;
-  const { world, built, player, overlay, moves, toast } = parts;
+  const { world, built, player, overlay, moves, notices } = parts;
   const { inspector, graphics, zones } = built;
   engine.addUpdatable(inspector);
 
@@ -60,7 +60,7 @@ export function createInteraction(services: Services, parts: { world: GameWorld;
     container,
     interactor,
     blocked: () => (inspector.isActive ? 'Put the game down first' : moves.travel.isTravelling || moves.sleep.isAsleep ? 'Not now' : null),
-    say: (text) => toast.show(text, 2000),
+    say: (text) => notices.refuse(text),
   });
   engine.addUpdatable(photo);
 

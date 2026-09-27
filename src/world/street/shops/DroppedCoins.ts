@@ -147,7 +147,7 @@ class DroppedCoin extends THREE.Group implements Furniture, Interactable {
   }
 
   activate(session: SessionActions): void {
-    session.hint(this.onPick());
+    session.reward({ title: 'A coin!', detail: this.onPick(), coins: 1 });
   }
 
   /** A short twinkle every few seconds while the player is close enough to catch it. */

@@ -1,10 +1,14 @@
 /* Photo mode: the game's HUD out of the way, the guides and the card above the canvas. */
 body.photo-mode .crosshair,
 body.photo-mode .hover-label,
-body.photo-mode .hint,
 body.photo-mode .game-panel,
 body.photo-mode .wallet-hud,
-body.photo-mode .toast-stack,
+body.photo-mode .speech-layer,
+body.photo-mode .subtitles,
+body.photo-mode .reaction,
+body.photo-mode .tip-board,
+body.photo-mode .reading-stage,
+body.photo-mode .reward-stage,
 body.photo-mode .touch-stick,
 body.photo-mode .touch-bar,
 body.photo-mode .touch-badge {

@@ -38,7 +38,8 @@ export class Seating implements KeyRoute {
     this.seat = seat;
     // The cat only knows the armchairs (it comes to the lap there); in bed the player is simply not in one.
     this.parts.cat?.setPlayerSeat?.(isArmchair(seat) ? seat : null);
-    this.host.hint(`Move or press ${actionKeyLabel('standUp')} to stand up`);
+    const player = this.parts.player;
+    this.host.tip(`Move or press ${actionKeyLabel('standUp')} to stand up.`, { id: 'seated', until: () => !player.isSeated });
   }
 
   stand(): void {
@@ -51,7 +52,7 @@ export class Seating implements KeyRoute {
   sleep(): void {
     const { sleep } = this.parts;
     if (!sleep) {
-      this.host.hint('Not sleepy');
+      this.host.refuse('Not sleepy');
       return;
     }
     if (sleep.isAsleep) return;
@@ -59,7 +60,9 @@ export class Seating implements KeyRoute {
     this.host.setFrozen(true);
     void sleep.untilMorning().then(() => {
       this.host.setFrozen(false);
-      this.host.notify(`Good morning!\nMove or press ${actionKeyLabel('standUp')} to get up`, 3000);
+      const player = this.parts.player;
+      this.host.react('Good morning!');
+      this.host.tip(`Move or press ${actionKeyLabel('standUp')} to get up.`, { id: 'seated', until: () => !player.isSeated });
       this.parts.dreams?.afterSleep();
     });
   }

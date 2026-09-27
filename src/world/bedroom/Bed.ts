@@ -242,6 +242,6 @@ export class Bed extends THREE.Group implements Furniture, Interactable {
     }
     if (session.seated) session.stand();
     session.sit(this);
-    session.hint(`Click the bed to sleep until morning · move or press ${actionKeyLabel('standUp')} to get up`);
+    session.tip(`Click the bed to sleep until morning.\nMove or press ${actionKeyLabel('standUp')} to get up.`, { id: 'seated', until: () => session.seatedIn !== this });
   }
 }

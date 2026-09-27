@@ -19,11 +19,21 @@ Optional `labelPlacement()` returns `'edge'` to keep the caption off the crossha
 
 ## A clickable object needs the player moved, a game shown, a panel opened, coins spent
 
-Use the existing `SessionActions`: `pickUp`, `putBack`, `sit`, `stand`, `playOn(screen, box)`, `stopScreen`, `hint`,
+Use the existing `SessionActions`: `pickUp`, `putBack`, `sit`, `stand`, `playOn(screen, box)`, `stopScreen`,
 `openPanel(panel)` (any `ModalLike`, e.g. a `ui/ModalPanel`: hands emptied, mouse released, room re-entered on close),
 `pay({ price, paid })`, `buyUpgrade(offer)`. If a new verb is needed: add it to `SessionActions`, implement it in the
 controller that owns the feature, and add a one-line delegation in `Session` (section "SessionActions"). World classes
 only ever see `SessionActions`.
+
+## Telling the player something: pick its kind (docs/notices.md)
+
+No generic "show a message": every line has a kind, and each kind its place and look. `react(text)` (what the click
+did, under the crosshair), `refuse(text)` (why it did nothing: red, shake, buzz), `reward({ title, detail, coins,
+tickets, big })` (something gained: the banner with a fanfare), `tip(text, { id, until })` (how to do something:
+pinned top left until `until()` is true), `read({ title, text, effect, look })` (something the player clicked to
+read: a paper card), `say(line, speaker)` (a voice with no body in view). A person in the room speaks through their
+own bubble: `walker.speak(line, name)` / `vendor.speak(line)` (over the head, named); `say(word)` is a word in passing.
+Split a mixed message: the stallholder's words to `speak`, the purchase to `reward`, the next key to `tip`.
 
 ## A key or a feature (like N for night, T for sort, C for the cat): one controller
 
@@ -38,8 +48,8 @@ code and no `rebind`/`pad`/`touch` (those live on one entry per key), and a line
    - `export interface <Feature>Parts { thing?: ThingLike }`: optional, structural shapes (`ThingLike { doIt(): unknown }`,
      in the file or in `SessionParts.ts` if several controllers share it), so the Session compiles without the feature.
      Core objects come as `Pick<CoreParts, 'player' | ...>`.
-   - `constructor(parts, host: SessionHost)`: `host` is the Session's shared moves (`notify`, `hint`, `pickUp`,
-     `putBack`, `stand`, `setFrozen`). Never reach another controller except through the host or a constructor argument.
+   - `constructor(parts, host: SessionHost)`: `host` is the Session's shared moves (the notices: `react`,
+     `refuse`, `reward`, `tip`, `read`, `say`; `pickUp`, `putBack`, `stand`, `setFrozen`). Never reach another controller except through the host or a constructor argument.
    - `implements KeyRoute`: `onKey(code, e): boolean` returns true when it took the key (the routing stops). Check the
      part exists before taking the key. Test `isAction(code, 'id')`, never a raw code string (codes arrive already
      rebound by `Input.setBindings`, so the check follows the player's keys).

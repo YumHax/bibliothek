@@ -136,12 +136,12 @@ class NeighbourDoor extends ShutDoor implements Interactable {
     const offer = this.offer();
     const panel = this.resident?.building?.tradePanel;
     if (!offer) {
-      session.hint(this.line);
+      session.react(this.line);
       return;
     }
     playKnock(3, 0.35);
     if (!panel) {
-      session.hint(`"I'd swap my ${offer.gives.title} for your ${offer.wants.title}, if you like." (${offer.who})`);
+      session.say(`I'd swap my ${offer.gives.title} for your ${offer.wants.title}, if you like.`, offer.who);
       return;
     }
     panel.prepare(offer);

@@ -25,6 +25,8 @@ export interface WalkerOptions {
   talk?: () => string;
   /** Can be faded in and out (`setFade`): set once, as it changes their shaders. */
   fade?: boolean;
+  /** The name on what they say to the player (a friend's, "Postman"); none for a stranger. */
+  speaker?: string;
 }
 
 /** How fast the body turns towards its heading, per second. */
@@ -58,6 +60,7 @@ export class Walker extends THREE.Group implements Furniture, Updatable, Interac
   private readonly talk: (() => string) | null;
   private readonly blob: THREE.Mesh | null;
   private readonly caption: string;
+  private readonly speaker: string | undefined;
   private nextLine: number;
   private state: State = { kind: 'stand', yaw: 0 };
   private heading = NaN;
@@ -88,6 +91,7 @@ export class Walker extends THREE.Group implements Furniture, Updatable, Interac
     this.lines = options.lines ?? [];
     this.talk = options.talk ?? null;
     this.caption = options.label ?? 'Click to chat';
+    this.speaker = options.speaker;
     this.nextLine = seed;
   }
 
@@ -164,14 +168,19 @@ export class Walker extends THREE.Group implements Furniture, Updatable, Interac
     this.focus = focus;
   }
 
+  /** A word in passing, over their head ("Bye!"). */
   say(text: string, seconds?: number): void {
     this.bubble.say(text, seconds);
+  }
+
+  /** A line to the player, over their head with their name (or in the subtitles, out of view); `name` overrides theirs. */
+  speak(text: string, name = this.speaker): void {
+    this.bubble.speak(text, name);
   }
 
   update(dt: number): void {
     if (!this.present) return;
     if (Number.isNaN(this.heading)) this.heading = this.rotation.y;
-    this.bubble.update(dt);
     if (this.state.kind === 'walk') this.step(dt, this.state);
     else {
       this.face(this.state.yaw, dt);
@@ -191,13 +200,13 @@ export class Walker extends THREE.Group implements Furniture, Updatable, Interac
     return this.present && (this.lines.length || this.talk) ? this.caption : null;
   }
 
-  activate(session: SessionActions): void {
+  activate(_session: SessionActions): void {
     if (this.talk) {
-      session.hint(this.talk());
+      this.speak(this.talk());
       return;
     }
     if (!this.lines.length) return;
-    session.hint(this.lines[this.nextLine % this.lines.length]!);
+    this.speak(this.lines[this.nextLine % this.lines.length]!);
     this.nextLine++;
   }
 

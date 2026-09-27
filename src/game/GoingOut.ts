@@ -40,7 +40,7 @@ export class GoingOut {
       return;
     }
     if (!travel || !travelMenu) {
-      this.host.notify('The door is locked');
+      this.host.refuse('The door is locked');
       return;
     }
     const choices = travel.choices();

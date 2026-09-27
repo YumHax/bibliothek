@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { Updatable } from '@/core/Engine';
+import type { NoticeActions } from '@/notices';
 import type { Game, GameStatus } from '@/catalog/types';
 import { getPlatform } from '@/catalog/platforms';
 import type { GameSource } from '@/collection/GameSource';
@@ -80,8 +81,8 @@ export interface VisitorsOptions {
   giftPool?: readonly Game[];
   /** The cat, when it is about: where it is and its name. */
   cat?: () => { at: THREE.Vector3; name: string } | null;
-  /** A line for the HUD (a toast): what a friend says in earshot, a game posted back. */
-  notice?: (text: string) => void;
+  /** What the player is told that no friend says in person: one let themself out, a game posted back, a gift. */
+  notices?: Pick<NoticeActions, 'react' | 'reward' | 'read'>;
   coverUrl?: (game: Game) => string | undefined;
   /** A game's fame (page views), for the comments. */
   viewsOf?: (game: Game) => number | null | undefined;
@@ -211,7 +212,7 @@ export class Visitors extends Prop implements Updatable, ActivityAware, DoorCall
       const home = this.options.atHome() || visit.passingFront;
       this.awayFor = home ? 0 : this.awayFor + dt;
       if (this.awayFor > VISIT_RULES.aloneFor) {
-        this.options.notice?.(`${visit.friend.plan.name} let themself out.`);
+        this.options.notices?.react(`${visit.friend.plan.name} let themself out.`);
         visit.cancel();
         return;
       }
@@ -263,7 +264,7 @@ export class Visitors extends Prop implements Updatable, ActivityAware, DoorCall
       this.ring();
     } else if (waited > VISIT_RULES.giveUpAfter) {
       ringing.since = -1;
-      if (this.options.atHome()) this.options.notice?.(`Nobody answered: ${visit.friend.plan.name} will try another day.`);
+      if (this.options.atHome()) this.options.notices?.react(`Nobody answered: ${visit.friend.plan.name} will try another day.`);
       visit.turnAway();
     }
   }
@@ -308,7 +309,7 @@ export class Visitors extends Prop implements Updatable, ActivityAware, DoorCall
 
   /** A friend who had cake leaves a thank-you: a game they no longer play (to their taste), else a few coins. */
   private thankForCake(plan: FriendPlan): void {
-    const { collection, day: dayOf, purse, giftPool, notice } = this.options;
+    const { collection, day: dayOf, purse, giftPool, notices } = this.options;
     const day = dayOf();
     const random = seeded(`cake:${plan.id}:${day}`);
     const { giftChance, tip } = HOUSEHOLD.cake;
@@ -316,11 +317,13 @@ export class Visitors extends Prop implements Updatable, ActivityAware, DoorCall
     const gift = random() < giftChance ? unowned[Math.floor(random() * unowned.length)] : undefined;
     if (gift) {
       collection.add({ ...gift, status: 'owned', condition: 'noManual', acquired: { price: 0, where: `a gift from ${plan.name}`, day } });
-      notice?.(`${plan.name}: ${fill(pickLine(SHARED_LINES.cakeGift, random), { title: gift.title })}`);
+      this.say(plan, fill(pickLine(SHARED_LINES.cakeGift, random), { title: gift.title }), 'Here!', true);
+      notices?.reward({ title: `A gift: ${gift.title}`, detail: `From ${plan.name}, for the cake. It is on your shelves.` });
     } else if (purse) {
       const coins = tip[0] + Math.floor(random() * (tip[1] - tip[0] + 1));
       purse.earnCoins(coins);
-      notice?.(`${plan.name}: ${fill(pickLine(SHARED_LINES.cakeTip, random), { coins })}`);
+      this.say(plan, fill(pickLine(SHARED_LINES.cakeTip, random), { coins }), 'Here!', true);
+      notices?.reward({ title: `${plan.name} says thanks`, detail: 'For the cake.', coins });
     }
   }
 
@@ -401,10 +404,12 @@ export class Visitors extends Prop implements Updatable, ActivityAware, DoorCall
     this.closeLoan(loan);
     const random = seeded(`thanks:${plan.id}:${loan.gameId}:${loan.lentDay}`);
     const lines = [fill(pickLine(SHARED_LINES.returned, random), { title: loan.title })];
+    let coins = 0;
+    let gifted: string | null = null;
     if (day > loan.dueDay) lines.push(fill(pickLine(SHARED_LINES.late, random), { title: loan.title }));
     const { tipChance, tip, giftChance } = VISIT_RULES.thanks;
     if (purse && random() < tipChance) {
-      const coins = tip[0] + Math.floor(random() * (tip[1] - tip[0] + 1));
+      coins = tip[0] + Math.floor(random() * (tip[1] - tip[0] + 1));
       purse.earnCoins(coins);
       lines.push(fill(pickLine(SHARED_LINES.tip, random), { coins }));
     }
@@ -414,9 +419,11 @@ export class Visitors extends Prop implements Updatable, ActivityAware, DoorCall
       if (gift) {
         collection.add({ ...gift, status: 'owned', condition: 'noManual', acquired: { price: 0, where: `a gift from ${plan.name}`, day } });
         lines.push(fill(pickLine(SHARED_LINES.gift, random), { title: gift.title }));
+        gifted = gift.title;
       }
     }
     this.say(plan, lines.join(' '), 'Here!', true);
+    if (coins || gifted) this.options.notices?.reward({ title: gifted ? `A gift: ${gifted}` : `${plan.name} says thanks`, detail: `${loan.title} is back on its shelf.${gifted ? ` ${gifted} joins it, from ${plan.name}.` : ''}`, coins: coins || undefined });
   }
 
   /** A loan whose game is gone from the collection (or no longer marked lent) is over; one long overdue comes back by post. */
@@ -430,7 +437,7 @@ export class Visitors extends Prop implements Updatable, ActivityAware, DoorCall
       if (this.book.overdue(day).includes(loan) && this.visit?.friend.plan.id !== loan.friendId) {
         this.closeLoan(loan);
         const name = FRIENDS.find((f) => f.id === loan.friendId)?.name ?? 'A friend';
-        this.options.notice?.(`${name} posted ${loan.title} back, with a note: "Sorry! Thanks for the loan."`);
+        this.options.notices?.read({ title: `${loan.title} came back by post`, text: `A padded envelope from ${name}, and a note: "Sorry! Thanks for the loan."`, effect: `${loan.title} is back on its shelf.`, look: 'letter' });
       }
     }
   }
@@ -451,14 +458,17 @@ export class Visitors extends Prop implements Updatable, ActivityAware, DoorCall
 
   // --- speaking -------------------------------------------------------------------------------------
 
-  /** A word in the bubble; the line itself for a player in earshot (or always, for what matters: a greeting, a hand-back). */
+  /**
+   * The line itself, over their head with their name, for a player in earshot (or always, for what matters: a
+   * greeting, a hand-back: out of view it goes to the subtitles); out of earshot, a word in passing.
+   */
   private say(plan: FriendPlan, line: string, word: string, always = false): void {
     const friend = this.friends.get(plan.id);
     if (!friend || !line) return;
-    friend.say(word);
     this.options.viewer.getWorldPosition(eye);
     friend.getWorldPosition(tmp);
-    if (always || Math.hypot(eye.x - tmp.x, eye.z - tmp.z) < VISIT_RULES.earshot) this.options.notice?.(`${plan.name}: ${line}`);
+    if (always || Math.hypot(eye.x - tmp.x, eye.z - tmp.z) < VISIT_RULES.earshot) friend.speak(line, plan.name);
+    else friend.say(word);
   }
 
   private chatLine(plan: FriendPlan): string {

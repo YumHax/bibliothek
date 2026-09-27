@@ -30,6 +30,6 @@ const built = buildWorld(services, { world, player, marketHall: ui.marketHall, f
 zones.set(built.zones);
 // Travel, sleep, the spot remembered across reloads, the footsteps; the crosshair and the input devices.
 moves.set(createPlayerMoves(services, { world, built, player, fader: ui.fader }));
-const interaction = createInteraction(services, { world, built, player, overlay: ui.overlay, moves: moves.get(), toast: ui.toast });
+const interaction = createInteraction(services, { world, built, player, overlay: ui.overlay, moves: moves.get(), notices: ui.notices });
 session.set(createSession(services, { player, ui, built, moves: moves.get(), interaction }));
 startWhenReady(services.engine, world);

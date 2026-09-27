@@ -137,13 +137,13 @@ export class Cat extends THREE.Group implements Furniture, Interactable, Updatab
     const name = this.settings.name;
     switch (this.brain.pet()) {
       case 'purr':
-        session.hint(`${name} purrs`);
+        session.react(`${name} purrs`);
         break;
       case 'woke':
-        session.hint(`${name} wakes up and stretches`);
+        session.react(`${name} wakes up and stretches`);
         break;
       case 'annoyed':
-        session.hint(`${name} has had enough`);
+        session.refuse(`${name} has had enough`);
         break;
       case 'busy':
         break;

@@ -12,7 +12,7 @@ import type { ZoneId } from '@/world/zoneIds';
 import type { ZoneManager } from '@/world/zone';
 import { Overlay } from '@/ui/Overlay';
 import { GamePanel } from '@/ui/GamePanel';
-import { Toast } from '@/ui/Toast';
+import { Notices } from '@/notices';
 import { SearchBar } from '@/ui/SearchBar';
 import { CollectionEditor } from '@/ui/CollectionEditor';
 import { CatSettingsForm } from '@/ui/CatSettings';
@@ -89,13 +89,15 @@ export function createUi(services: Services, player: FirstPersonController, late
     onNewGame: eraseProgress,
     version,
   });
-  const lockFlow = lockFlowRef.set(new PointerLockFlow(player, overlay, engine.renderer.domElement, input));
+  // What the game tells the player, each kind in its place (src/notices): its clocks stop under the pause menu.
+  const notices = new Notices(container, { camera: engine.camera, attending: () => !document.hidden && (overlay.isPlaying || overlay.isModal) });
+  engine.addUpdatable(notices);
+  const lockFlow = lockFlowRef.set(new PointerLockFlow(player, overlay, engine.renderer.domElement, input, notices));
   overlay.addSetting('display', 'Graphics', new QualityPicker((options) => overlay.confirm(options)).element, QualityPicker.NOTE);
   addGameSettings(overlay, settings, { onEraseProgress: eraseProgress, version });
   overlay.addSetting('game', 'Cat', new CatSettingsForm(catSettings).element);
 
   const panel = new GamePanel(container);
-  const toast = new Toast(container);
   const search = new SearchBar(container);
   const editor = new CollectionEditor(container, collection, index, { canAdd: debug });
   const catalogue = new CataloguePanel(container, collection, index, wallet, fame, tx, { market, coverUrl });
@@ -145,10 +147,14 @@ export function createUi(services: Services, player: FirstPersonController, late
     wear: (id) => household.wear(id),
   });
   const dreamCard = new DreamCard(container, coverUrl);
-  // A milestone reached anywhere (a purchase, a medal, a sale): one toast, the book on the sideboard has the rest.
+  // A milestone reached anywhere (a purchase, a medal, a sale): a big reward, the book on the sideboard has the rest.
   collectorWatch.onReached = (reached) => {
     const first = reached[0]!;
-    toast.show(reached.length === 1 ? `Milestone reached: ${first.title}\nThe collector’s book on the sideboard has your reward` : `${reached.length} milestones reached\nSee the collector’s book on the sideboard`, 4000);
+    notices.reward({
+      title: reached.length === 1 ? 'Milestone reached!' : `${reached.length} milestones reached!`,
+      detail: reached.length === 1 ? `${first.title}\nThe collector’s book on the sideboard has your reward.` : 'The collector’s book on the sideboard has your rewards.',
+      big: true,
+    });
   };
   if (params.has('payout')) installPayoutTable(container, payoutStats);
   const walletHud = new WalletHud(container, wallet);
@@ -160,5 +166,5 @@ export function createUi(services: Services, player: FirstPersonController, late
   const fader = new Fader(container);
   const travelMenu = new TravelMenu<ZoneId>(container, input);
 
-  return { overlay, lockFlow, panel, toast, search, editor, catalogue, sellDesk, haggle, trade, marketHall, prizeCounter, walletHud, fader, travelMenu, collectorBook, journalPanel, neighbourTradePanel, phone, wardrobe, dreamCard, panels };
+  return { overlay, lockFlow, panel, notices, search, editor, catalogue, sellDesk, haggle, trade, marketHall, prizeCounter, walletHud, fader, travelMenu, collectorBook, journalPanel, neighbourTradePanel, phone, wardrobe, dreamCard, panels };
 }

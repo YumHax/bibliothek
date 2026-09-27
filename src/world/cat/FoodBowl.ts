@@ -168,11 +168,11 @@ export class FoodBowl extends THREE.Group implements Furniture, Interactable, Up
 
   activate(session: SessionActions): void {
     if (this._level >= 0.95) {
-      session.hint('The bowl is full');
+      session.refuse('The bowl is full');
       return;
     }
     this.refill();
-    session.hint('Kibble refilled');
+    session.react('Kibble refilled');
   }
 
   setHovered(hovered: boolean): void {

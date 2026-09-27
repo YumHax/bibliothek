@@ -197,7 +197,8 @@ export class HomeVitrine extends THREE.Group implements Furniture, Interactable,
 
   activate(session: SessionActions): void {
     const best = this.pieces.slice(0, 3).map((p) => `${p.game.title} (${p.value})`).join(', ');
-    session.hint(best ? `On show: ${best}${this.pieces.length > 3 ? '…' : ''}. The collector’s book on the sideboard has the full list.` : 'Nothing precious enough yet.');
+    if (best) session.read({ title: 'The vitrine', text: `On show: ${best}${this.pieces.length > 3 ? '…' : ''}.`, effect: 'The collector’s book on the sideboard has the full list.', look: 'plaque' });
+    else session.react('Nothing precious enough yet.');
   }
 
   dispose(): void {

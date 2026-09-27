@@ -54,7 +54,7 @@ export class TravelDoor extends ShutDoor implements Interactable {
   activate(session: SessionActions): void {
     const blocked = this.guard?.();
     if (blocked) {
-      session.hint(blocked.hint);
+      session.refuse(blocked.hint);
       return;
     }
     this.onGo?.(session);

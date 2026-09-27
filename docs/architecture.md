@@ -127,6 +127,11 @@ src/world/street/       streetPlan (Front Street's map and every spot, `shopDoor
                         Dog, Figure, fade), relief/ (FacadeRelief, ShopInteriors, Shutters, ShopGlow, WetGround, Leaves), details/
                         (StreetDetails, LampBuzz), shops/ (shopHours, shopPlan, ShopEntrance, scratchCard, DroppedCoins, GiveawayBox,
                         Trader), audio/ (ShopSounds, streetSurface). See docs/zones.md
+src/world/shop/         shopPlan (`SHOP_PLANS`: the walk-in shops' rooms, displays, fixtures) + furnishShop (one builder for the four
+                        `shop` zones): ForSale (a piece + its PriceTag, a click buys it), displayPieces (`buildPiece` / `displayPiece`:
+                        the flat's pieces as shown, lights stripped), shopModels (PortableTv, ShopProjector, CatBallBasket),
+                        ShopCounter (the till: the HomeShopPanel), DisplayTable, GoodsShelf, TvWall + snowScreen, FishTank,
+                        FlowerStand. See docs/economy.md ("The bare flat")
 src/world/stairwell/    stairwellPlan + furnishStairwell: the building's stairs from our landing to the entrance hall (Staircase with
                         `floorAt`, Lift, StairLights; the sas at the street door). See docs/zones.md
 src/world/airlock/      the sas at the building's street door, built twice (the hall's, the street's): airlockPlan (SAS, TWINS), SasShell
@@ -180,7 +185,7 @@ src/world/cat/          The cat: model, brain, nav, bowls, bed, scratcher, toy, 
 src/persistence/        One storage layer: safeStorage, KEYS (every key; `?debug` saves under `bibliothek.debug.`), PersistedStore
                         (`{ version, data }`, migrate chain, validate, defaults; unreadable data copied to `bibliothek.corrupt.*`),
                         batch (writes held and flushed together, put back on failure), onWriteFailure / onCorruptSave (emit only,
-                        for a toast), onOtherTab (BroadcastChannel + `storage` event), BrowserCache (LRU + TTL, one key). See docs/economy.md.
+                        for the alert bar), onOtherTab (BroadcastChannel + `storage` event), BrowserCache (LRU + TTL, one key). See docs/economy.md.
 src/household/          What the kitchen, bathroom and bedroom are for: Household (persisted), HomeLife (the rules their furniture
                         calls), Perks (what it sends the player out with: haggles, the glass case, arcade tickets), rules, outfits,
                         chronicle, dreams, catGift. See docs/household.md.
@@ -191,9 +196,18 @@ src/onboarding/         FirstDay (the guided first day: steps ticked by the stor
                         off for a save that predates it), firstDaySteps (the steps, the to-do lines, the tips per zone), ToDoNote (the
                         folded card on the hall console), StickyNote ("KEYS!" on the front door's leaf, `Door.attachToLeaf`), context
                         (`HomeNotesContext`: what the hallway reads).
+src/notices/            What the game tells the player, by kind (docs/notices.md): Notices (the facade, ticked by the engine; its clocks
+                        run only while `attending`), SpeechLayer (bubbles over heads projected on the HUD, named when addressed; the subtitle
+                        strip out of view), speech (`bindSpeech`: where `people/SpeechBubble` sends its lines), CrosshairLine (react /
+                        refuse), RewardBanner (queued, big ones with rays), TipBoard (pinned, `until`), ReadingCard (paper card, stays its
+                        reading time), AlertBar (save problems, the mouse lock), saveNotices, readingTime (`readMs`), types (NoticeActions)
 src/photo/              PhotoMode (free camera on a leash, lens via `PostFx.setLens`, grades over the zone's look, guides, PNG capture;
                         `toggle` / `capture` / `handleKey`), PhotoHud (guides, card, flash; `body.photo-mode` hides the HUD), photoLooks,
                         frames, savePhoto. See docs/graphics.md ("Photo mode").
+src/thumbnails/         ThumbnailStudio (`studio.shoot(key, build, view)`: a product photo of a model as a PNG data URL, from its own
+                        small WebGLRenderer + Scene + lights, never the world's; one shot per idle slot, cached by key, packs up
+                        when idle), prizePhotos (a prize's `prizeModel`), homeGoodPhotos (+ homeGoodModels, a lazy chunk: the shops'
+                        `displayPiece`, the market stall's four). The shop panels (PrizePanel, HomeShopPanel) show them.
 src/time/               Today (the one "today": `gameDay`, the market calendar's count, and `realDay`; in BuildContext), daily
                         (`dailySeed` / `isEventDay` / `dailyRandom` / `gameDayRandom`: every day-seeded draw), DailyList and DailyTally
                         (per-real-day saved lists and counts), season (the real calendar's season and holidays), wakefulness (how busy the
@@ -232,8 +246,8 @@ src/ui/                 Overlay (title: Continue / New game; pause: status, Go h
                         Controls by group and device; `confirm()` yes / no in the card), menu/ (menu.css: `.ui-btn`, `.ui-card`, fields;
                         MenuNav: arrows / D-pad for the menu, `registerPanel()` for every DOM panel, `initPanelNav`; ControlsScreen; zoneNames),
                         settings/ (GameSettingsForm, KeyBindingsForm, fields), keys (key names from the bindings and the keyboard layout,
-                        `renderKeys('{KeyW} [Click]')`), GamePanel, Toast, SearchBar, CollectionEditor (Tab; `canAdd` only with ?debug),
-                        CataloguePanel (mail order, a modal like the editor), SellPanel (the WE BUY desk), PrizePanel (the arcade's prize counter, the mystery game), ArcadeScreenPanel (LexiPunk's
+                        `renderKeys('{KeyW} [Click]')`), GamePanel, SearchBar, CollectionEditor (Tab; `canAdd` only with ?debug),
+                        CataloguePanel (mail order, a modal like the editor), SellPanel (the WE BUY desk), PrizePanel (the arcade's prize counter drawn as one: shelves by ticket band, photos, the ticket muncher; the mystery game), HomeShopPanel (a Front Street shop's leaflet, paper per shop via `data-shop`), ArcadeScreenPanel (LexiPunk's
                         big frame, its score by postMessage), PayoutOverlay (`?payout`), TravelMenu ("Where to?", digits / click), WalletHud, Fader,
                         NewsPanel (the newsstand's paper), ScratchCardPanel (the newsagent's scratch card), JournalPanel (the notebook's
                         pages: today's sums and lines, the challenge, what is coming, the days before), ToDoNotePanel (the first day's

@@ -94,7 +94,7 @@ export class Busker extends THREE.Group implements Furniture, Updatable, Interac
   activate(session: SessionActions): void {
     if (!this.present) return;
     if (this.tipsToday() >= this.options.tipsPerDay) {
-      session.hint(`“${LINES[this.lineIndex++ % LINES.length]}”`);
+      this.person.speak(LINES[this.lineIndex++ % LINES.length]!, 'Busker');
       return;
     }
     session.pay({
@@ -104,10 +104,10 @@ export class Busker extends THREE.Group implements Furniture, Updatable, Interac
         playCoins();
         this.tune.flourish();
         const thanks = THANKS[Math.floor(Math.random() * THANKS.length)]!;
-        this.person.say(thanks, 2.5);
+        this.person.speak(thanks, 'Busker');
         this.person.setPose('cheer');
         this.timers.after(1.4, () => this.person.setPose('play'));
-        return `You drop a coin in the keyboard case. “${thanks}”`;
+        return 'You drop a coin in the keyboard case.';
       },
     });
   }

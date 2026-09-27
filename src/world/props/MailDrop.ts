@@ -78,7 +78,7 @@ export class MailDrop extends Prop implements Interactable {
     this.remove(top.sheet);
     disposeTree(top.sheet);
     const { title, lines } = top.piece;
-    session.hint(`${title}: ${lines.join(' · ')} (into the recycling)`);
+    session.read({ title, text: lines.join('\n'), effect: 'Read, and into the recycling.', look: 'letter' });
     this.refresh();
   }
 

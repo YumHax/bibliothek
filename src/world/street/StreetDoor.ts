@@ -50,7 +50,7 @@ export class StreetDoor extends THREE.Group implements Furniture, Interactable {
   activate(session: SessionActions): void {
     const blocked = this.options.guard?.();
     if (blocked) {
-      session.hint(blocked.hint);
+      session.refuse(blocked.hint);
       return;
     }
     session.travel(this.options.to);

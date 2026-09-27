@@ -33,7 +33,7 @@ Every number is in `household/rules.ts` (`HOUSEHOLD`) or at the top of `outfits.
 - `Household.ts`: the persisted store (`KEYS.household`): kit, cleanings today, the bath's calm, the cake, the treat
   and the cat's gift, manuals read per platform, the outfit, the wake hour, and `once(what)` for the once-a-day
   things (dream, radio, invite, first sale). Days are game days (`Today.gameDay`, the market calendar's count).
-- `HomeLife.ts`: the rules the furniture calls. Each returns an `Outcome` (`done`, the toast's `line`); captions come
+- `HomeLife.ts`: the rules the furniture calls. Each returns an `Outcome` (`done`, a `line`, told by `tellOutcome`: a refusal, a reaction, or a card to read with its effect under it); captions come
   from its `*Label` getters. `cleanBox` / `peelSticker` take a `before` (the builder puts the box down first, so its
   shelf rebuilds it with the new state).
 - `perks.ts`: `Perks`, what the flat sends the player out with, as the Session asks (`PerksLike` in `SessionParts`):

@@ -42,7 +42,7 @@ export class CatCare implements KeyRoute {
   onKey(code: string): boolean {
     const { cat } = this.parts;
     if (!isAction(code, 'callCat') || !cat || cat.adopted === false) return false;
-    this.host.notify(callCat(cat, 'voice'), 1500);
+    this.host.react(callCat(cat, 'voice'));
     return true;
   }
 }

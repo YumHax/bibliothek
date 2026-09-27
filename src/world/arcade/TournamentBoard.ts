@@ -137,13 +137,13 @@ export class TournamentBoard extends Prop implements Updatable, Interactable {
     const v = tournament.view();
     const game = titleOf(v.gameId);
     if (!v.on) {
-      session.hint('Every Saturday: three rounds on one cabinet against the regulars. Sign the sheet, beat their scores.');
+      session.read({ title: 'The Saturday tournament', text: 'Every Saturday: three rounds on one cabinet against the regulars.', effect: 'Sign the sheet, beat their scores.' });
       return;
     }
     if (v.entered) {
       this.options.onClicked?.(session);
-      if (v.next) session.hint(`${ROUND_TITLES[v.next.round]}: play ${game} and beat ${v.next.name}'s ${v.next.score.toLocaleString('en-US')}.`);
-      else session.hint(v.out ? 'You are out for today. The bracket plays on without you.' : 'You won the tournament. Frame the bracket.');
+      if (v.next) session.tip(`${ROUND_TITLES[v.next.round]}: play ${game} and beat ${v.next.name}'s ${v.next.score.toLocaleString('en-US')}.`, { id: 'tournament' });
+      else session.react(v.out ? 'You are out for today. The bracket plays on without you.' : 'You won the tournament. Frame the bracket.');
       return;
     }
     session.pay({

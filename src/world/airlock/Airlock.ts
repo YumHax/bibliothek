@@ -165,7 +165,7 @@ export class Airlock extends Prop implements Updatable, ActivityAware {
   private go(session: SessionActions): void {
     if (this.link.isCrossing) return;
     if (!this.holdsViewer()) {
-      session.hint(this.outdoors ? 'Step inside first' : 'Step into the entrance first');
+      session.refuse(this.outdoors ? 'Step inside first' : 'Step into the entrance first');
       return;
     }
     session.putBack();

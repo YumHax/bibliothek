@@ -28,6 +28,7 @@ import { Television } from '../Television';
 import { FrostedWindow } from '../props/FrostedWindow';
 import { BookcaseKit } from './BookcaseKit';
 import { Shelving } from '../shelving/Shelving';
+import { tellOutcome } from '@/household/tellOutcome';
 import { resolvePlacement } from '../Placement';
 import { BOOKCASE_PRICE } from '@/economy/pricing';
 import { PrizeShelf } from '../prizes/PrizeShelf';
@@ -108,8 +109,7 @@ export function furnishBedroom(zone: Zone, ctx: BuildContext): BedroomHandle {
   const manual = household && {
     label: (box: GameBox) => household.life.readLabel(box.game),
     read: (box: GameBox) => {
-      const { line } = household.life.readManual(box.game);
-      if (line) household.say(line, 6000);
+      tellOutcome(household.notices, household.life.readManual(box.game), `${box.game.title}: the manual`);
     },
   };
   const chair = reading.placeAt(new BedroomChair({ reading: manual || undefined }), plan.chair);
@@ -189,7 +189,7 @@ function furnishBookcases(zone: Zone, covers: BuildContext['covers'], overflow: 
  * (what to wear). The reading chair is the chair's own click.
  */
 function furnishBedroomLife(zone: Zone, household: HouseholdContext, parts: { stands: Placer; nightstands: readonly Nightstand[]; phone: Phone; wardrobe: Wardrobe }): void {
-  const { life, say } = household;
+  const { life, notices } = household;
   const { alarm: alarmAt, phoneSpot, rail } = BEDROOM_PLAN.household;
   const { stands, nightstands } = parts;
   const alarmStand = nightstands[alarmAt.stand]!;
@@ -198,7 +198,7 @@ function furnishBedroomLife(zone: Zone, household: HouseholdContext, parts: { st
     use: () => {
       const hour = life.household.cycleAlarm();
       alarm.setAlarm(hour);
-      say(`The alarm will wake you at ${clockTime(hour)}.`, 2000);
+      notices.react(`The alarm will wake you at ${clockTime(hour)}.`);
     },
   });
   alarm.setAlarm(life.household.wakeHour);

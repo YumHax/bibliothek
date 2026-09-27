@@ -58,6 +58,6 @@ export class Notebook extends Prop implements Interactable {
   activate(session: SessionActions): void {
     const panel = this.options.panel();
     if (panel) session.openPanel(panel);
-    else session.hint('The pages are still blank.');
+    else session.react('The pages are still blank.');
   }
 }

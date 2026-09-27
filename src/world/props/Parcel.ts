@@ -68,7 +68,7 @@ export class Parcel extends Prop implements Interactable {
     const games = this.contents.unpack();
     if (!games.length) return;
     const names = games.length <= 3 ? games.map((g) => g.title).join(', ') : `${games.length} games`;
-    session.hint(`Unpacked ${names}: on the shelves now`);
+    session.reward({ title: 'Unpacked!', detail: `${names}: on the shelves now.` });
   }
 
   /** There only while it holds something; the hitbox shrinks away with it (the ray does not care about `visible`). */

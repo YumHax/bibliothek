@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import type { Zone } from '../zone/Zone';
 import type { BuildContext, HouseholdContext, ZoneHandle } from '../buildContext';
 import type { Outcome } from '@/household/HomeLife';
+import { tellOutcome } from '@/household/tellOutcome';
 import { ClickSpot } from '../props/ClickSpot';
 import { HairDryer } from './HairDryer';
 import { furnishShell } from '../shell';
@@ -91,9 +92,8 @@ export function furnishBathroom(zone: Zone, ctx: BuildContext): ZoneHandle {
 }
 
 /** Says what came of a household action; true when something happened. */
-function showOutcome({ say }: HouseholdContext, outcome: Outcome): boolean {
-  say(outcome.line, 5000);
-  return outcome.done;
+function showOutcome({ notices }: HouseholdContext, outcome: Outcome): boolean {
+  return tellOutcome(notices, outcome);
 }
 
 /**
@@ -118,7 +118,7 @@ function furnishBathroomLife(zone: Zone, household: HouseholdContext, cabinet: M
     use: (session) => {
       const game = session.held?.game;
       if (game) showOutcome(household, life.peelSticker(game, () => session.putBack()));
-      else session.hint(life.stickerLabel(null));
+      else session.refuse(life.stickerLabel(null));
     },
   }), hairDryer);
 }

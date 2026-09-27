@@ -23,6 +23,7 @@ import { FridgeHum } from '@/audio/ambient';
 import { WaterBowl } from '../cat/WaterBowl';
 import { Television } from '../Television';
 import { KITCHEN_PLAN } from './kitchenPlan';
+import { tellOutcome } from '@/household/tellOutcome';
 
 /**
  * Builds the kitchen into its zone from `KITCHEN_PLAN`: shell (the hallway hangs the door), the
@@ -100,7 +101,7 @@ export function furnishKitchen(zone: Zone, ctx: BuildContext): ZoneHandle {
  * it lasts), the treat jar and whatever the cat leaves by its bowl the next day, and Radio Brocante's
  * chronicle when the radio is switched on in the morning.
  */
-function furnishKitchenLife(zone: Zone, ctx: BuildContext, { life, say, catName, callCat }: HouseholdContext, parts: { table: KitchenTable; furnished: Placer; catThings: Placer; radio: Radio }): void {
+function furnishKitchenLife(zone: Zone, ctx: BuildContext, { life, notices, catName, callCat }: HouseholdContext, parts: { table: KitchenTable; furnished: Placer; catThings: Placer; radio: Radio }): void {
   const plan = KITCHEN_PLAN.household;
   const { household } = life;
   const { table, furnished, catThings, radio } = parts;
@@ -119,7 +120,8 @@ function furnishKitchenLife(zone: Zone, ctx: BuildContext, { life, say, catName,
     label: (player) => life.cleanLabel(player.held?.game ?? null),
     use: (session) => {
       const game = session.held?.game;
-      say(game ? life.cleanBox(game, () => session.putBack()).line : life.cleanLabel(null), 5000);
+      if (game) tellOutcome(notices, life.cleanBox(game, () => session.putBack()));
+      else notices.refuse(life.cleanLabel(null));
     },
   });
   kit.rotation.y = plan.kit.yaw;
@@ -131,11 +133,11 @@ function furnishKitchenLife(zone: Zone, ctx: BuildContext, { life, say, catName,
     placeWith(zone, table, cake, onTable(plan.cake.at));
     presentWhile(zone, cake, () => household.cakeOut, follow);
   });
-  zone.placeAt(new MixingBowl({ label: () => life.bakeLabel, use: () => say(life.bake().line, 5000) }), plan.mixingBowl);
+  zone.placeAt(new MixingBowl({ label: () => life.bakeLabel, use: () => tellOutcome(notices, life.bake()) }), plan.mixingBowl);
 
   // The treats and what the cat leaves: with the cat's own things (once there is a cat).
-  catThings.placeAt(new TreatJar({ label: () => life.treatLabel, use: () => say(life.giveTreat(callCat).line, 3500) }), plan.treatJar);
-  const find = new CatFind({ label: () => life.giftLabel, use: () => say(life.takeGift(catName()).line, 5000) });
+  catThings.placeAt(new TreatJar({ label: () => life.treatLabel, use: () => tellOutcome(notices, life.giveTreat(callCat)) }), plan.treatJar);
+  const find = new CatFind({ label: () => life.giftLabel, use: () => tellOutcome(notices, life.takeGift(catName())) });
   catThings.onOwned(() => {
     zone.placeAt(find, plan.catFind);
     presentWhile(zone, find, () => household.gift !== null, follow);
@@ -146,6 +148,6 @@ function furnishKitchenLife(zone: Zone, ctx: BuildContext, { life, say, catName,
   // Switched on in the morning, the radio has the market's news (once a day), a moment after the jingle.
   onRise(zone, () => radio.sound.isOn, () => {
     const lines = life.chronicle();
-    if (lines) window.setTimeout(() => say(`Radio Brocante, the morning chronicle:\n${lines.join('\n')}`, 9000), 1500);
+    if (lines) window.setTimeout(() => notices.read({ title: 'Radio Brocante · the morning chronicle', text: lines.join('\n'), look: 'radio' }), 1500);
   });
 }

@@ -59,7 +59,7 @@ export class Intercom extends Prop implements Interactable {
   }
 
   activate(session: SessionActions): void {
-    session.hint(LINES[this.calls++ % LINES.length]!);
+    session.react(LINES[this.calls++ % LINES.length]!);
   }
 }
 

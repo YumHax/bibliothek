@@ -23,7 +23,7 @@ export class Friend extends Walker {
   chat: (() => string) | null = null;
 
   constructor(readonly plan: FriendPlan, viewer: THREE.Object3D) {
-    super({ viewer, seed: plan.seed, look: { ...randomLook(plan.seed, 'shopper'), ...plan.look }, speed: plan.speed, fade: true });
+    super({ viewer, seed: plan.seed, look: { ...randomLook(plan.seed, 'shopper'), ...plan.look }, speed: plan.speed, fade: true, speaker: plan.name });
     this.name = `Friend:${plan.id}`;
   }
 
@@ -39,6 +39,6 @@ export class Friend extends Walker {
       return;
     }
     const line = this.chat?.();
-    if (line) session.hint(`${this.plan.name}: ${line}`);
+    if (line) this.speak(line);
   }
 }

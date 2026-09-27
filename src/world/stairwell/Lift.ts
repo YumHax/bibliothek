@@ -115,10 +115,17 @@ export class Lift extends Prop implements Updatable, OccupancyAware {
     return new THREE.Box3();
   }
 
-  /** The car's floor (local) under (x, z) when the feet are in it, else null. */
+  /**
+   * The car's floor (local) under (x, z) when the feet are in it, else null. Its shaft is walled all
+   * the way up (the well's boxes, the gates), so whoever stands in it is in the car, however far the
+   * feet are from its floor: the car moves on while the player's controller is paused (Esc, a panel,
+   * a long frame), and the feet must catch it up rather than float in the shaft. Only the gateway's
+   * lip, which is also the landing's edge, asks for the feet to be near the car.
+   */
   floorAt(x: number, z: number, feet: number): number | null {
     const { car } = plan;
     if (x < car.x0 || x > car.x1 || z < car.z0 || z > car.z1 + 0.05) return null;
+    if (z <= car.z1) return this.y;
     return Math.abs(feet - this.y) < 1.2 ? this.y : null;
   }
 
@@ -197,7 +204,7 @@ export class Lift extends Prop implements Updatable, OccupancyAware {
 
   private call(k: number, session: SessionActions): void {
     if (this.phase === 'moving') {
-      session.hint('The lift is on its way.');
+      session.react('The lift is on its way.');
       return;
     }
     if (this.stop === k) {
@@ -207,14 +214,14 @@ export class Lift extends Prop implements Updatable, OccupancyAware {
       return;
     }
     this.send(k, false);
-    session.hint('Somewhere above or below, the lift wakes up with a clank.');
+    session.react('Somewhere above or below, the lift wakes up with a clank.');
   }
 
   private ride(session: SessionActions): void {
     if (this.phase === 'moving') return;
     this.send(this.stop === 0 ? STOREYS : 0, false);
     this.armed = false;
-    session.hint(this.target === 0 ? 'Up to the fifth floor.' : 'Down to the ground floor.');
+    session.react(this.target === 0 ? 'Up to the fifth floor.' : 'Down to the ground floor.');
   }
 
   /** Off to stop `k`: the gate folds shut (once the gateway is clear), then the car goes. */

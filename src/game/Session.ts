@@ -5,6 +5,7 @@ import type { GameBox } from '@/world/GameBox';
 import type { VideoScreen } from '@/world/screen';
 import type { ZoneId } from '@/world/zoneIds';
 import type { ArcadeMachineLike, ForSaleLike, PaymentLike, SeatLike, SessionActions, UpgradeOfferLike } from './SessionActions';
+import type { ReadingNotice, RewardNotice, TipOptions } from '@/notices';
 import type { ModalLike, SessionParts } from './SessionParts';
 import type { KeyRoute, SessionHost } from './SessionHost';
 import { ModalStack } from './ModalStack';
@@ -61,7 +62,7 @@ export class Session implements SessionActions, SessionHost {
     this.modals = new ModalStack(parts);
     // Panels that open or close from their own UI (a Close button, a cabinet opening the big screen), watched from the start.
     for (const modal of [parts.collectionEditor, parts.catalogue, parts.prizeCounter, parts.sellDesk, parts.haggle, parts.trade, parts.arcadeScreen]) if (modal) this.modals.watch(modal);
-    this.counter = new MarketCounter({ parts, notify: (text, ms) => this.notify(text, ms), pickUp: (box) => this.pickUp(box), putBack: () => this.putBack(), showModal: (modal) => this.modals.openHolding(modal) });
+    this.counter = new MarketCounter({ parts, notices: parts.notices, pickUp: (box) => this.pickUp(box), putBack: () => this.putBack(), showModal: (modal) => this.modals.openHolding(modal) });
     this.browse = new Browse(parts, this);
     this.hands = new Hands(parts, (taking) => {
       this.counter.end(true);
@@ -157,10 +158,6 @@ export class Session implements SessionActions, SessionHost {
     this.screens.stop(screen);
   }
 
-  hint(message: string): void {
-    this.parts.overlay.showHint(message);
-  }
-
   travel(to?: ZoneId): void {
     this.goingOut.travel(to);
   }
@@ -201,9 +198,28 @@ export class Session implements SessionActions, SessionHost {
     this.openModal(panel);
   }
 
-  notify(text: string, ms = 2000): void {
-    if (this.parts.toast) this.parts.toast.show(text, ms);
-    else this.parts.overlay.showHint(text, ms);
+  say(line: string, speaker?: string): void {
+    this.parts.notices.say(line, speaker);
+  }
+
+  react(text: string): void {
+    this.parts.notices.react(text);
+  }
+
+  refuse(text: string): void {
+    this.parts.notices.refuse(text);
+  }
+
+  reward(reward: RewardNotice): void {
+    this.parts.notices.reward(reward);
+  }
+
+  tip(text: string, options?: TipOptions): () => void {
+    return this.parts.notices.tip(text, options);
+  }
+
+  read(card: ReadingNotice): void {
+    this.parts.notices.read(card);
   }
 
   setFrozen(frozen: boolean): void {

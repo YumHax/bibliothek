@@ -11,13 +11,11 @@ import { invisibleHitbox } from '../../meshUtils';
 import type { Furniture } from '../../Furniture';
 import type { ShopDoor } from '../streetPlan';
 import { SHOP_HOURS, clockTime, isShopOpen } from './shopHours';
-import { BALCONY_PLANTS, BAR_GOSSIP, HOME_SHOP_OF, SHOP_TALK, type ShopOffer } from './shopPlan';
-import type { HomeShop } from '@/economy/homeGoods';
-import type { ModalLike } from '@/game/SessionParts';
+import { BAR_GOSSIP, SHOP_TALK, shopName, type ShopOffer } from './shopPlan';
 import { seededRandom } from '@/graphics/canvas';
 import { SCRATCH_PER_DAY, cardInProgress, cardsToday, drawCard, keepCardInProgress, recordCard, type CardInProgress } from './scratchCard';
 
-/** What the shops draw on: the clock, the coins, the flea market (the café's tips and coffee), the flat (the florist's plants), the tabac's card. */
+/** What the shops draw on: the clock, the coins, the flea market (the café's tips and coffee), the tabac's card. */
 export interface ShopServices {
   hours: () => number;
   purse: { readonly coins: number; spend(coins: number): boolean; earnCoins(coins: number): void };
@@ -25,28 +23,17 @@ export interface ShopServices {
   /** What kind of market day it is, and the talk of the days ahead (the barista's tips). */
   marketDay: { readonly theme: MarketDayTheme; news(): readonly MarketNews[] };
   isWanted: (id: string) => boolean;
-  /** The flat's bought furniture: the florist's plants go on the balcony (when there is no `homeShop`). */
-  plants?: { count(): number; add(): void };
-  /** The counter of a shop that sells for the flat (`HOME_SHOP_OF`): the furniture, the screens, the plants, the cat. */
-  homeShop?: (shop: HomeShop) => ModalLike;
   scratch: ScratchCardPanel;
 }
-
-/** Names of the kinds, when the plan gives the shop none of its own. */
-const KIND_NAMES: Record<string, string> = {
-  cafe: 'the café', bakery: 'the bakery', pharmacy: 'the pharmacy', books: 'the bookshop', grocer: 'the greengrocer', florist: 'the florist',
-  tabac: 'the newsagent’s', bar: 'the bar', butcher: 'the butcher’s', laundry: 'the launderette', shut: 'an empty shop',
-  furniture: 'the furniture shop', electronics: 'the TV repair shop', pets: 'the pet shop',
-};
 
 /**
  * A shop's door on Front Street, as the player meets it: the caption says whose it is and what it
  * sells over the counter, or that it is shut and when it opens (`SHOP_HOURS`); a click buys the
  * offer (`SHOP_TALK`), or has a look in (a line). The café's coffee is the flea market's coffee of
  * the day (the stallholders go easier) and comes with the barista's tip about today's stock; the
- * tabac's scratch card opens `ScratchCardPanel`; the shops that sell for the flat (`HOME_SHOP_OF`: the furniture
- * shop, the TV repair shop, the pet shop, the florist) open their counter (`homeShop`, a `HomeShopPanel`). The door
- * itself is painted on the facade: this is the click on it. Origin on the pavement at the door,
+ * tabac's scratch card opens `ScratchCardPanel`. The shops that sell for the flat (the furniture shop, the TV repair
+ * shop, the pet shop, the florist) are walked into instead (`SHOP_ZONE_OF`, a `StreetDoor`). The door itself is
+ * painted on the facade: this is the click on it. Origin on the pavement at the door,
  * +z facing the street; never collides.
  */
 export class ShopEntrance extends THREE.Group implements Furniture, Interactable {
@@ -59,7 +46,7 @@ export class ShopEntrance extends THREE.Group implements Furniture, Interactable
     super();
     const { shop } = door;
     this.name = `ShopEntrance:${shop.kind}`;
-    this.shopName = shop.name ? titleCase(shop.name) : KIND_NAMES[shop.kind] ?? 'the shop';
+    this.shopName = shopName(shop);
     const hitbox = invisibleHitbox(1.3, 2.5, 0.25, { y: 1.25, z: 0.08 });
     this.hitboxes = [hitbox];
     this.add(hitbox);
@@ -79,11 +66,9 @@ export class ShopEntrance extends THREE.Group implements Furniture, Interactable
     if (kind === 'shut') return `${name} · shut for good`;
     if (SHOP_TALK[kind].offer?.id === 'scratch' && cardInProgress()) return `${name} · click to finish your scratch card`;
     if (!this.isOpen) return `${name} · closed, opens at ${clockTime(SHOP_HOURS[kind]?.open ?? 8)}`;
-    if (this.homeShop) return `Click to see what ${this.shopName} has for the flat`;
     const offer = SHOP_TALK[kind].offer;
     if (!offer) return `Click to look in ${this.shopName}`;
     if (offer.id === 'coffee' && this.services.market.hadCoffee) return `${name} · you have had your coffee today · click for a word with the barista`;
-    if (offer.id === 'plant' && (this.services.plants?.count() ?? BALCONY_PLANTS) >= BALCONY_PLANTS) return `${name} · the balcony has all the plants it can take`;
     if (offer.id === 'scratch' && cardsToday() >= SCRATCH_PER_DAY) return `${name} · “That’s enough cards for today, love.”`;
     return `Click for ${offer.title}: ${offer.price} coin${offer.price > 1 ? 's' : ''} · ${this.shopName}`;
   }
@@ -99,24 +84,14 @@ export class ShopEntrance extends THREE.Group implements Furniture, Interactable
       return;
     }
     if (kind !== 'shut' && !this.isOpen) {
-      session.hint(`${capitalise(this.shopName)} is closed. ${talk.closed} Opens at ${clockTime(SHOP_HOURS[kind]?.open ?? 8)}.`);
-      return;
-    }
-    const counter = this.homeShop;
-    if (counter && this.services.homeShop) {
-      session.openPanel(this.services.homeShop(counter));
+      session.refuse(`${capitalise(this.shopName)} is closed. ${talk.closed} Opens at ${clockTime(SHOP_HOURS[kind]?.open ?? 8)}.`);
       return;
     }
     if (talk.offer) {
       this.sell(session, talk.offer);
       return;
     }
-    session.hint(talk.looks[this.looked++ % talk.looks.length] ?? '');
-  }
-
-  /** The flat's goods this shop sells, when it sells any and the street was given a counter for them. */
-  private get homeShop(): HomeShop | null {
-    return this.services.homeShop ? HOME_SHOP_OF[this.door.shop.kind] ?? null : null;
+    session.react(talk.looks[this.looked++ % talk.looks.length] ?? '');
   }
 
   private get isOpen(): boolean {
@@ -124,41 +99,32 @@ export class ShopEntrance extends THREE.Group implements Furniture, Interactable
   }
 
   private sell(session: SessionActions, offer: ShopOffer): void {
-    const { market, plants, purse } = this.services;
+    const { market, purse } = this.services;
     switch (offer.id) {
       case 'coffee':
         if (market.hadCoffee) {
-          session.hint(`“Another one? You’ll be haggling in your sleep.” ${this.tip()}`);
+          session.say('Another one? You’ll be haggling in your sleep.', 'Café');
+          session.refuse('One coffee a day is plenty.');
+          session.tip(this.tip(), { id: 'barista', head: 'Market tip' });
           return;
         }
         session.pay({
           price: offer.price,
           paid: () => {
             market.drinkCoffee();
-            return `A coffee at the counter. The stallholders will go easier on you today.\n${this.tip()}`;
-          },
-        });
-        return;
-      case 'plant':
-        if (!plants || plants.count() >= BALCONY_PLANTS) {
-          session.hint('“Your balcony must be a jungle by now.” There is no room for another pot.');
-          return;
-        }
-        session.pay({
-          price: offer.price,
-          paid: () => {
-            plants.add();
-            return 'A little potted plant, wrapped in paper. It will be waiting on the balcony when you get home.';
+            session.tip(this.tip(), { id: 'barista', head: 'Market tip' });
+            return 'A coffee at the counter.\nThe stallholders will go easier on you today.';
           },
         });
         return;
       case 'scratch':
         if (cardsToday() >= SCRATCH_PER_DAY) {
-          session.hint('“That’s enough cards for today, love. Come back tomorrow.”');
+          session.say('That’s enough cards for today, love. Come back tomorrow.', 'Tabac');
+          session.refuse('No more scratch cards today.');
           return;
         }
         if (!purse.spend(offer.price)) {
-          session.hint(`A scratch card is ${offer.price} coins and you have ${purse.coins}.`);
+          session.refuse(`A scratch card is ${offer.price} coins and you have ${purse.coins}.`);
           return;
         }
         this.dealCard();
@@ -229,13 +195,4 @@ export class ShopEntrance extends THREE.Group implements Furniture, Interactable
 
 function capitalise(text: string): string {
   return text.charAt(0).toUpperCase() + text.slice(1);
-}
-
-/** "SUNNY SIDE CAFE" -> "Sunny Side Cafe" (small words kept small). */
-function titleCase(text: string): string {
-  return text
-    .toLowerCase()
-    .split(' ')
-    .map((word, i) => (i > 0 && ['of', 'the', 'and', '&'].includes(word) ? word : word.charAt(0).toUpperCase() + word.slice(1)))
-    .join(' ');
 }

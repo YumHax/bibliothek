@@ -70,7 +70,7 @@ export class FrontDoor extends Door {
       // From the landing the player is let in whatever: they are out, so the keys went with them.
       const blocked = this.fromInside() ? this.frontOptions.guard() : null;
       if (blocked) {
-        session.hint(blocked.hint);
+        session.refuse(blocked.hint);
         return;
       }
       this.frontOptions.onOpen(session);

@@ -69,11 +69,12 @@ export class Browse implements KeyRoute {
     const boxes = this.ownedBoxes().filter((b) => b.game.platform === id);
     const name = getPlatform(id).name;
     if (!boxes.length) {
-      this.host.notify(`No ${name} games on the shelves`);
+      this.host.refuse(`No ${name} games on the shelves`);
       return;
     }
     if (this.locate(boxes[0]!.game, 'random')) {
-      this.host.notify(`${name}: ${boxes.length} game${boxes.length > 1 ? 's' : ''}\nPress ${actionKeyLabel('randomPick')} to go there`, RANDOM_FOLLOW_UP_MS);
+      this.host.react(`${name}: ${boxes.length} game${boxes.length > 1 ? 's' : ''}`);
+      this.tipWhileFocused(`Press ${actionKeyLabel('randomPick')} to go to the glowing box.`);
     }
   }
 
@@ -108,7 +109,7 @@ export class Browse implements KeyRoute {
   private openSearch(search: SearchBar): void {
     const games = this.games();
     if (!games.length) {
-      this.host.notify('No games to search — the collection is empty');
+      this.host.refuse('No games to search: the collection is empty');
       return;
     }
     search.open(games);
@@ -120,7 +121,7 @@ export class Browse implements KeyRoute {
     const { player, highlighter } = this.parts;
     const box = this.parts.shelving?.findBox(game.id);
     if (!box) {
-      this.host.notify(`${game.title} is not on a shelf`);
+      this.host.refuse(`${game.title} is not on a shelf`);
       return null;
     }
     highlighter?.highlight(box, HIGHLIGHT_SECONDS);
@@ -130,12 +131,8 @@ export class Browse implements KeyRoute {
 
     if (kind === 'search') {
       const distance = distanceTo(player, box);
-      this.host.notify(
-        distance < REACH_M
-          ? `${game.title} — press Enter to pick it up`
-          : `${game.title} is ${distance.toFixed(1)} m away — walk closer and press Enter`,
-        4000,
-      );
+      this.host.react(distance < REACH_M ? `Found ${game.title}` : `${game.title} is ${distance.toFixed(1)} m away`);
+      this.tipWhileFocused(distance < REACH_M ? 'Press Enter to pick up the glowing box.' : 'Walk up to the glowing box and press Enter to pick it up.');
     }
     return box;
   }
@@ -145,7 +142,7 @@ export class Browse implements KeyRoute {
     const focus = this.currentFocus();
     if (!focus || this.parts.inspector.isActive) return false;
     if (distanceTo(this.parts.player, focus.box) > REACH_M) {
-      this.host.notify('Too far away — walk closer', 1500);
+      this.host.refuse('Too far away: walk closer');
       return true;
     }
     this.host.pickUp(focus.box);
@@ -169,12 +166,13 @@ export class Browse implements KeyRoute {
     }
     const boxes = this.ownedBoxes();
     if (!boxes.length) {
-      this.host.notify('No games on the shelves');
+      this.host.refuse('No games on the shelves');
       return;
     }
     const box = boxes[Math.floor(Math.random() * boxes.length)]!;
     if (this.locate(box.game, 'random')) {
-      this.host.notify(`Random pick: ${box.game.title}\nPress ${actionKeyLabel('randomPick')} again to go there`, RANDOM_FOLLOW_UP_MS);
+      this.host.react(`Random pick: ${box.game.title}`);
+      this.tipWhileFocused(`Press ${actionKeyLabel('randomPick')} again to go there.`);
     }
   }
 
@@ -184,12 +182,18 @@ export class Browse implements KeyRoute {
     const mode = this.parts.shelving?.cycleSort?.();
     if (!mode) return;
     this.forget(); // boxes move; a stale glow would mislead
-    this.host.notify(`Sorted by ${SORT_LABELS[mode] ?? mode}`);
+    this.host.react(`Sorted by ${SORT_LABELS[mode] ?? mode}`);
   }
 
   private toggleNight(dayNight: DayNightLike): void {
     dayNight.toggleNight();
-    if (dayNight.isNight !== undefined) this.host.notify(dayNight.isNight ? 'Night' : 'Day', 1200);
+    if (dayNight.isNight !== undefined) this.host.react(dayNight.isNight ? 'Night' : 'Day');
+  }
+
+  /** A tip that stays while a box is picked out (and goes when it is taken, or the pick times out). */
+  private tipWhileFocused(text: string): void {
+    const focus = this.focus;
+    this.host.tip(text, { id: 'focused-box', until: () => this.currentFocus() !== focus });
   }
 
   private games(): readonly Game[] {

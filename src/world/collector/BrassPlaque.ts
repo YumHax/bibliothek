@@ -64,7 +64,7 @@ export class BrassPlaque extends Prop implements Interactable {
   }
 
   activate(session: SessionActions): void {
-    if (this.visible) session.hint(`“Bibliothek · ${this.text}.” The next line on the plaque comes with the next milestone.`);
+    if (this.visible) session.read({ text: `Bibliothek · ${this.text}`, effect: 'The next line on the plaque comes with the next milestone.', look: 'plaque' });
   }
 
   dispose(): void {

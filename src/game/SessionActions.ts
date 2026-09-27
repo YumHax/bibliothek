@@ -3,6 +3,7 @@ import type { GameBox } from '@/world/GameBox';
 import type { VideoScreen } from '@/world/screen';
 import type { StockItem } from '@/economy/StockItem';
 import type { ZoneId } from '@/world/zoneIds';
+import type { NoticeActions } from '@/notices';
 import type { ModalLike } from './SessionParts';
 
 /** What the player is doing right now; interactables read it to phrase labels and choose actions. */
@@ -59,6 +60,8 @@ export interface ForSaleLike {
   thanks(): string;
   /** The stallholder answers what the player just did. */
   react?(reaction: SaleReaction): void;
+  /** The stallholder says a line to the player, over their head; without it the line is a subtitle. */
+  speak?(line: string): void;
   /** Puts the copy back on its stall after it was sold (a purchase handed back at once). */
   restock?(): void;
 }
@@ -75,14 +78,18 @@ export interface UpgradeOfferLike {
   bought(): void;
 }
 
-/** A few coins handed over on the spot (a tip for the busker): the price, and what is said once paid (the toast). */
+/** A few coins handed over on the spot (a tip for the busker): the price, and what is said once paid (a reaction under the crosshair). */
 export interface PaymentLike {
   readonly price: number;
   paid(): string;
 }
 
-/** The moves an interactable may ask the session to make on the player's behalf. */
-export interface SessionActions extends PlayerState {
+/**
+ * The moves an interactable may ask the session to make on the player's behalf, and what it may
+ * tell the player (`NoticeActions`: `react`, `refuse`, `reward`, `tip`, `read`, and `say` for a voice
+ * without a body; a person in the room speaks through their own `SpeechBubble`).
+ */
+export interface SessionActions extends PlayerState, NoticeActions {
   pickUp(box: GameBox): void;
   putBack(): void;
   sit(seat: SeatLike): void;
@@ -92,7 +99,6 @@ export interface SessionActions extends PlayerState {
   /** Shows the game's longplay on `screen` (TV, projector…); any other screen that was on is switched off. */
   playOn(screen: VideoScreen, box: GameBox): Promise<void>;
   stopScreen(screen: VideoScreen): void;
-  hint(message: string): void;
   /** A door that leads elsewhere was clicked: teleport to `to`, or offer the destinations when it names none. */
   travel(to?: ZoneId): void;
   /** Insert a coin and play (or walk away from the machine being played). */
@@ -111,6 +117,6 @@ export interface SessionActions extends PlayerState {
   buyUpgrade(offer: UpgradeOfferLike): void;
   /** Opens a DOM panel over the room (the notice board, the job lot, the household stall...); the player's hands are emptied first. */
   openPanel(panel: ModalLike): void;
-  /** Hand over a few coins (a tip): spent from the wallet, then `paid()`'s line as a toast. */
+  /** Hand over a few coins (a tip): spent from the wallet, then `paid()`'s line as a reaction. */
   pay(payment: PaymentLike): void;
 }

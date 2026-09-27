@@ -4,6 +4,7 @@ import { UNDO_PURCHASE, describeEdition } from '@/economy/pricing';
 import { Transactions } from '@/economy/Transactions';
 import type { ForSaleLike, SaleReaction } from './SessionActions';
 import type { CollectionLike, CoreParts, HagglePanelLike, MarketLike, ModalLike, PerksLike, StandingLike, TradePanelLike, WalletLike } from './SessionParts';
+import type { NoticeActions } from '@/notices';
 import type { KeyRoute, SessionHost } from './SessionHost';
 import { isAction, keyMarkup } from '@/input/actions';
 import { actionKeyLabel, renderKeys } from '@/ui/keys';
@@ -23,8 +24,9 @@ export interface MarketCounterParts extends Pick<CoreParts, 'inspector' | 'panel
 }
 
 /** What the counter needs from the session: its parts, a way to talk, and the moves it may make. */
-export interface MarketCounterHost extends Pick<SessionHost, 'notify' | 'pickUp' | 'putBack'> {
+export interface MarketCounterHost extends Pick<SessionHost, 'pickUp' | 'putBack'> {
   readonly parts: MarketCounterParts;
+  readonly notices: NoticeActions;
   /** Opens a DOM panel over the room, the copy staying in hand. */
   showModal(modal: ModalLike): void;
 }
@@ -76,12 +78,14 @@ export class MarketCounter implements KeyRoute {
     const { standing, perks } = this.host.parts;
     if (!sale.behindGlass || !standing || standing.mayHandleGlass) return true;
     if (perks?.mayHandleGlass) {
-      this.host.notify('The stallholder takes in your Sunday best and unlocks the case.', 3000);
+      this.host.notices.react('The stallholder takes in your Sunday best and unlocks the case.');
       return true;
     }
     const { name, points } = standing.reputation;
     sale.react?.('locked');
-    this.host.notify(`“Collectors only, friend. The case stays shut.”\nThe market has to know you better: you are a ${name} (${points} reputation).\nBuy, sell and haggle here to earn it.`, 4500);
+    this.speak(sale, 'Collectors only, friend. The case stays shut.');
+    this.host.notices.refuse(`The glass case opens to trusted collectors: you are a ${name} (${points} reputation).`);
+    this.host.notices.tip('Buy, sell and haggle at the market to earn reputation: the glass case opens once they know you.', { id: 'glass-case' });
     return false;
   }
 
@@ -132,9 +136,12 @@ export class MarketCounter implements KeyRoute {
     const { game } = item;
     const result = this.transactions.buyCopy(item, sale.where);
     if (!result.ok) {
-      if (result.reason === 'pricing') this.host.notify('The stallholder is still working out the price. Give it a moment.');
-      else if (result.reason === 'owned') this.host.notify(`You already own ${game.title}`);
-      else if (result.reason === 'short') this.host.notify(`${game.title} costs ${result.needed} coins and you have ${result.have}.\n${item.source === 'bin' ? 'Win more at the arcade.' : `${actionKeyLabel('haggle')} to haggle, ${actionKeyLabel('holdCopy')} to hold it for the day, or win more at the arcade.`}`, 3500);
+      if (result.reason === 'pricing') this.host.notices.refuse('The stallholder is still working out the price. Give it a moment.');
+      else if (result.reason === 'owned') this.host.notices.refuse(`You already own ${game.title}`);
+      else if (result.reason === 'short') {
+        this.host.notices.refuse(`${game.title} costs ${result.needed} coins and you have ${result.have}.`);
+        this.host.notices.tip(item.source === 'bin' ? 'Short of coins? Win tickets at the arcade and change them at its prize counter.' : `Short of coins? ${actionKeyLabel('haggle')} haggles the price down, ${actionKeyLabel('holdCopy')} holds the copy for the day against a deposit, and the arcade pays in tickets.`, { id: 'short-of-coins', until: () => !this.sale });
+      }
       return;
     }
     const { game: bought, paid: due, upgrade } = result;
@@ -146,10 +153,13 @@ export class MarketCounter implements KeyRoute {
     inspector.stow(() => sale.sold());
     const undoable = item.source !== 'ordered' && !upgrade;
     this.last = undoable ? { sale, game: bought, paid: due, until: performance.now() + UNDO_PURCHASE.seconds * 1000 } : null;
-    const paid = item.deposit ? `${due} more coins (${item.price} in all)` : `${due} coin${due === 1 ? '' : 's'}`;
-    const undo = undoable ? `\nChanged your mind? ${actionKeyLabel('handBack')} within ${UNDO_PURCHASE.seconds} s hands it back.` : '';
-    const home = upgrade ? 'Your copy at home is a first print now.' : 'It will wait for you in a parcel in the hallway.';
-    this.host.notify(`Bought ${game.title} for ${paid}. “${thanks}”\n${home}${undo}`, 4000);
+    const home = upgrade ? 'Your copy at home is a first print now.' : 'It waits for you in a parcel in the hallway.';
+    this.speak(sale, thanks);
+    this.host.notices.reward({ title: `Bought ${game.title}`, detail: item.deposit ? `${home}\n${item.price} coins in all, the deposit included.` : home, coins: -due });
+    if (undoable) {
+      const last = this.last;
+      this.host.notices.tip(`Changed your mind? ${actionKeyLabel('handBack')} within ${UNDO_PURCHASE.seconds} s hands it back.`, { id: 'hand-back', until: () => this.last !== last || performance.now() > (last?.until ?? 0) });
+    }
   }
 
   /** U just after a purchase: the copy goes back on the stall, most of the money comes back. */
@@ -162,7 +172,8 @@ export class MarketCounter implements KeyRoute {
     const refund = Math.floor(last.paid * UNDO_PURCHASE.refund);
     if (!this.transactions.undoPurchase(last.game, refund).ok) return false;
     last.sale.restock();
-    this.host.notify(`“Changed your mind? No harm done.” ${last.game.title} is back on the table.\n${refund} of your ${last.paid} coins back.`, 3500);
+    this.speak(last.sale, 'Changed your mind? No harm done.');
+    this.host.notices.react(`${last.game.title} is back on the table: ${refund} of your ${last.paid} coins back.`);
     return true;
   }
 
@@ -173,18 +184,18 @@ export class MarketCounter implements KeyRoute {
     if (!sale || !market) return;
     // Flat-price copies (the bin, a garage sale on the street) are never haggled over.
     if (sale.item.source === 'bin') {
-      this.host.notify(`“It's ${sale.where}, friend. ${sale.item.price} coins, that's the deal.”`, 3500);
+      this.speak(sale, `It's ${sale.where}, friend. ${sale.item.price} coins, that's the deal.`);
       return;
     }
     const opened = market.negotiate(sale.item);
     if (!('offer' in opened)) {
-      this.host.notify(`“${opened.line}”`, 3500);
+      this.speak(sale, opened.line);
       return;
     }
     if (!haggle) return;
     // What the player brings along eases it (said as the panel opens).
     const eased = this.host.parts.perks?.ease(sale.item, opened) ?? [];
-    if (eased.length) this.host.notify(eased.join('\n'), 4500);
+    if (eased.length) this.host.notices.tip(eased.join('\n'), { id: 'haggle-eased' });
     haggle.start({
       item: sale.item,
       negotiation: opened,
@@ -207,22 +218,23 @@ export class MarketCounter implements KeyRoute {
     if (!sale || !market || !wallet) return;
     const { item } = sale;
     if (item.source === 'bin') {
-      this.host.notify(`“No holds at ${sale.where}. Grab it or leave it.”`);
+      this.speak(sale, `No holds at ${sale.where}. Grab it or leave it.`);
       return;
     }
     if (item.reserved) {
-      this.host.notify(item.source === 'ordered' ? `“That's your order, it's not going anywhere.”` : `“It's held for you already. ${item.due} coins to go.”`);
+      this.speak(sale, item.source === 'ordered' ? `That's your order, it's not going anywhere.` : `It's held for you already. ${item.due} coins to go.`);
       return;
     }
     const result = this.transactions.holdCopy(item);
     if (!result.ok) {
-      if (result.reason === 'pricing') this.host.notify('The stallholder is still working out the price. Give it a moment.');
-      else if (result.reason === 'short') this.host.notify(`A hold costs a ${result.needed}-coin deposit and you have ${result.have}.`);
+      if (result.reason === 'pricing') this.host.notices.refuse('The stallholder is still working out the price. Give it a moment.');
+      else if (result.reason === 'short') this.host.notices.refuse(`A hold costs a ${result.needed}-coin deposit and you have ${result.have}.`);
       return;
     }
     const { deposit } = result;
     sale.react?.('hold');
-    this.host.notify(`“I'll keep ${item.game.title} under the table for you till closing.”\n${deposit} coins down, ${item.due} to pay when you come back for it.`, 4000);
+    this.speak(sale, `I'll keep ${item.game.title} under the table for you till closing.`);
+    this.host.notices.reward({ title: `${item.game.title} on hold`, detail: `${item.due} coins to pay when you come back for it, before closing.`, coins: -deposit });
   }
 
   /** X: offer a game from the collection in part exchange. */
@@ -232,11 +244,11 @@ export class MarketCounter implements KeyRoute {
     if (!sale || !trade || !market) return;
     const { item } = sale;
     if (item.source === 'bin' || item.source === 'ordered' || item.source === 'upgrade') {
-      this.host.notify(item.source === 'bin' ? `“No swaps at ${sale.where}, friend.”` : item.source === 'upgrade' ? '“Your old copy is part of the deal already. Coins for the rest.”' : `“That's your order: coins, please.”`);
+      this.speak(sale, item.source === 'bin' ? `No swaps at ${sale.where}, friend.` : item.source === 'upgrade' ? 'Your old copy is part of the deal already. Coins for the rest.' : `That's your order: coins, please.`);
       return;
     }
     if (!item.priced) {
-      this.host.notify('The stallholder is still working out the price. Give it a moment.');
+      this.host.notices.refuse('The stallholder is still working out the price. Give it a moment.');
       return;
     }
     trade.start({ item, stall: sale.where, onSwap: (mine, value) => this.completeSwap(sale, mine, value) });
@@ -256,7 +268,7 @@ export class MarketCounter implements KeyRoute {
     panel.hide();
     inspector.stow(() => sale.sold());
     this.last = null;
-    this.host.notify(`Swapped ${mine.title} for ${item.game.title}${topUp ? ` and ${topUp} coins` : ''}.\nIt will wait for you in a parcel in the hallway.`, 4000);
+    this.host.notices.reward({ title: `Swapped for ${item.game.title}`, detail: `${mine.title} stays on the stall. The new one waits for you in a parcel in the hallway.`, coins: topUp ? -topUp : undefined });
     return null;
   }
 
@@ -266,7 +278,14 @@ export class MarketCounter implements KeyRoute {
     const { market } = this.host.parts;
     if (!sale || !market || !market.expose(sale.item)) return;
     sale.react?.('caught');
-    this.host.notify(`The label is a glossy print and the board inside is brand new: a reproduction.\n“Ah. Well spotted. ${sale.item.price} coins and it's yours, no questions.”`, 5000);
+    this.host.notices.read({ title: 'A reproduction', text: 'The label is a glossy print and the board inside is brand new.', effect: `Found out: ${sale.item.price} coins now, no questions.` });
+    this.speak(sale, `Ah. Well spotted. ${sale.item.price} coins and it's yours, no questions.`);
+  }
+
+  /** The stallholder says `line` to the player: over their head, or as a subtitle when nobody stands by (the bargain bin). */
+  private speak(sale: ForSaleLike, line: string): void {
+    if (sale.speak) sale.speak(line);
+    else this.host.notices.say(line, 'Stallholder');
   }
 
   /** The panel for the copy in hand: price (settled, haggled, deposit), state, edition, and the keys. */

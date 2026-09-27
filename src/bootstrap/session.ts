@@ -22,7 +22,7 @@ export function createSession(services: Services, parts: { player: FirstPersonCo
     overlay: ui.overlay,
     panel: ui.panel,
     videos,
-    toast: ui.toast,
+    notices: ui.notices,
     search: ui.search,
     highlighter: interaction.highlighter,
     // Search and the random pick look at the shelves: a game still in its parcel is not there yet.

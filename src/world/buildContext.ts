@@ -16,6 +16,7 @@ import type { GameSource } from '@/collection/GameSource';
 import type { GameList } from '@/collection/GameList';
 import type { BoxArtLoader } from '@/covers/BoxArtLoader';
 import type { ModalLike } from '@/game/SessionParts';
+import type { NoticeActions } from '@/notices';
 import type { FootSurface } from '@/audio/footSurface';
 import type { RemoteScreen } from './arcade/games';
 import type { ReplayShelf } from './arcade/replay/ReplayStore';
@@ -81,15 +82,15 @@ export interface HomeContext {
   household?: HouseholdContext;
 }
 
-/** What the flat's rooms are for (`src/household/`): the rules their furniture calls, the panels it opens, the toast. */
+/** What the flat's rooms are for (`src/household/`): the rules their furniture calls, the panels it opens, what it tells the player. */
 export interface HouseholdContext {
   life: HomeLife;
   /** The phone's panel (the stallholders, the friends), opened by the phone on the nightstand. */
   phone: ModalLike;
   /** The wardrobe's panel: what to wear. */
   wardrobe: ModalLike;
-  /** A line for the HUD (the toast). */
-  say(text: string, ms?: number): void;
+  /** What came of it, told to the player (`tellOutcome`), and the radio's chronicle. */
+  notices: NoticeActions;
   /** The cat's name, for what it left by its bowl. */
   catName(): string;
   /** The treat jar shaken: the cat comes (or not), and how that went. */

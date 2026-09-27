@@ -3,7 +3,7 @@ import type { Inspector } from '@/interaction/Inspector';
 import type { Interactor } from '@/interaction/Interactor';
 import type { Overlay } from '@/ui/Overlay';
 import type { GamePanel } from '@/ui/GamePanel';
-import type { Toast } from '@/ui/Toast';
+import type { NoticeActions } from '@/notices';
 import type { Game, PlatformId } from '@/catalog/types';
 import type { GameBox } from '@/world/GameBox';
 import type { ZoneId } from '@/world/zoneIds';
@@ -36,7 +36,7 @@ export interface ShelvingLike {
   cycleSort?(): SortMode;
 }
 
-/** Day / night lighting toggle. `isNight` lets the toast name the new state. */
+/** Day / night lighting toggle. `isNight` lets the reaction name the new state. */
 export interface DayNightLike {
   toggleNight(): unknown;
   readonly isNight?: boolean;
@@ -213,8 +213,8 @@ export interface CoreParts {
   interactor: Interactor;
   overlay: Overlay;
   panel: GamePanel;
-  /** The toast; without it, messages go to the hint line. */
-  toast?: Toast;
+  /** What the game tells the player (src/notices): speech, reactions, rewards, tips, cards to read. */
+  notices: NoticeActions;
 }
 
 /**

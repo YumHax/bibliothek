@@ -1,5 +1,9 @@
-/* Headings only; the body text stays on the system font. Falls back cleanly offline. */
-@import url('https://fonts.googleapis.com/css2?family=Bungee&display=swap');
+/*
+ * Headings only; the body text stays on the system font. Falls back cleanly offline. Bungee is the game's own; the
+ * shops add theirs: a marker for the arcade's hand-written price cards, a dot-matrix face for its ticket counter,
+ * a serif for the Front Street shops' printed leaflets.
+ */
+@import url('https://fonts.googleapis.com/css2?family=Bungee&family=Permanent+Marker&family=VT323&family=DM+Serif+Display&display=swap');
 
 /*
  * UI tokens: every HUD element, menu and panel reads its colours and shapes from here, so the look
@@ -9,6 +13,9 @@
   color-scheme: dark;
   font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
   --ui-font-display: 'Bungee', system-ui, sans-serif;
+  --ui-font-marker: 'Permanent Marker', 'Comic Sans MS', cursive;
+  --ui-font-led: 'VT323', ui-monospace, monospace;
+  --ui-font-print: 'DM Serif Display', Georgia, serif;
   --ui-text: #ece9e2;
   --ui-text-dim: rgba(236, 233, 226, 0.65);
   --ui-panel: rgba(20, 20, 28, 0.88);
@@ -31,7 +38,7 @@
    * Stacking, back to front. The CSS3D screens sit behind the canvas (its cut-outs show them); the HUD
    * and the title / pause card share a layer (later in the page draws on top); the full-screen panels
    * and the search bar cover both; the travel curtain covers everything but the touch controls and the
-   * toasts, which stay readable over any of it.
+   * rewards and alerts (src/notices), which stay readable over any of it.
    */
   --z-css-layer: 0;
   --z-canvas: 1;
@@ -60,7 +67,7 @@ html, body {
 .css-layer iframe { pointer-events: none; }
 /* HUD and menus must stack above the canvas (its z-index would otherwise cover them). */
 .overlay { z-index: var(--z-overlay); }
-.crosshair, .hint, .hover-label, .game-panel { z-index: var(--z-hud); }
+.crosshair, .hover-label, .game-panel { z-index: var(--z-hud); }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 1ms !important; transition-duration: 1ms !important; }
@@ -95,20 +102,6 @@ kbd {
   background: rgba(255, 255, 255, 0.9);
   border: 1px solid rgba(0, 0, 0, 0.6);
   box-shadow: 0 0 4px rgba(0, 0, 0, 0.9);
-  pointer-events: none;
-}
-
-.hint {
-  position: fixed;
-  left: 50%;
-  bottom: 2rem;
-  transform: translateX(-50%);
-  padding: 0.5rem 0.9rem;
-  border-radius: var(--ui-radius-sm);
-  background: var(--ui-panel);
-  border: 1px solid var(--ui-border);
-  color: var(--ui-text);
-  font-size: 0.9rem;
   pointer-events: none;
 }
 

@@ -130,7 +130,7 @@ export class StrayCat extends THREE.Group implements Furniture, Updatable, Inter
 
   activate(session: SessionActions): void {
     this.stare = 3;
-    session.hint(LINES[this.line++ % LINES.length]!);
+    session.react(LINES[this.line++ % LINES.length]!);
   }
 
   update(dt: number): void {

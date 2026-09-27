@@ -52,7 +52,8 @@ const TOUCH_FOOT = 'Tap a button';
 const BACK = '<button type="button" class="ui-btn menu__back" data-nav data-action="back">‹ Back</button>';
 
 /**
- * The menus shown while the player is out of the room, plus the in-room crosshair, hover label and hint.
+ * The menus shown while the player is out of the room, plus the in-room crosshair and hover label (what the game tells
+ * the player is `src/notices`').
  * - Title screen (before the first entry): Enter the room (or Continue / New game over a save), Settings, Controls and the essential keys.
  * - Pause menu (Esc afterwards): where the player stands and what they have, Resume, Go home (when out), Collection, Settings, Controls.
  * - Settings hosts the sections other parts add (`addSetting`), in tabs; Controls lists `CONTROLS` by tab and device;
@@ -70,9 +71,7 @@ export class Overlay {
   private settingsTab: SettingsTab = 'display';
   private readonly controls = new ControlsScreen();
   private readonly crosshair: HTMLDivElement;
-  private readonly hint: HTMLDivElement;
   private readonly label: HTMLDivElement;
-  private hintTimer: number | undefined;
   private screen: Screen = 'main';
   /** The screen a confirmation returns to, and what it confirms. */
   private confirmFrom: Screen = 'main';
@@ -183,12 +182,6 @@ export class Overlay {
     this.label.className = 'hover-label';
     this.label.hidden = true;
     container.appendChild(this.label);
-
-    this.hint = document.createElement('div');
-    this.hint.className = 'hint';
-    this.hint.setAttribute('role', 'status');
-    this.hint.hidden = true;
-    container.appendChild(this.hint);
   }
 
   /**
@@ -262,6 +255,11 @@ export class Overlay {
     this.modal = modal;
     if (modal) this.setHoverLabel(null);
     this.apply();
+  }
+
+  /** In the room: the menu is not up (a panel may be open over the room). */
+  get isPlaying(): boolean {
+    return this.playing;
   }
 
   /** True while a DOM panel owns the screen: controller presses are the panel's, not a request to enter the room. */
@@ -470,12 +468,5 @@ export class Overlay {
     this.label.hidden = !text || !this.hud.hoverLabel;
     if (text) this.label.textContent = text;
     this.label.classList.toggle('hover-label--edge', placement === 'edge');
-  }
-
-  showHint(message: string, durationMs = 2500): void {
-    this.hint.textContent = message;
-    this.hint.hidden = false;
-    window.clearTimeout(this.hintTimer);
-    this.hintTimer = window.setTimeout(() => (this.hint.hidden = true), durationMs);
   }
 }

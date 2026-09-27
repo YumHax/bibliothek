@@ -14,7 +14,8 @@ export function furnishCoffee(zone: Zone, { listener, market: { stock: market } 
     label: () => (market.hadCoffee ? 'The coffee cart · you have had your coffee today' : `Click for a coffee: ${COFFEE_PRICE} coins · the stallholders go easier on you all day`),
     onActivate: (session) => {
       if (market.hadCoffee) {
-        session.hint('“Another one? You’ll be haggling in your sleep.” One a day is plenty.');
+        barista?.speak('Another one? You’ll be haggling in your sleep.');
+        session.refuse('One coffee a day is plenty.');
         return;
       }
       session.buyUpgrade({

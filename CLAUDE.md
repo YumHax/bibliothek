@@ -43,6 +43,7 @@ npm run build       # typecheck + production bundle
 | The cat | `docs/cat.md` |
 | Friends who visit, borrow and return games | `docs/visitors.md` |
 | What the kitchen, bathroom and bedroom are for (cleaning boxes, the bath, cake, radio, manuals, outfits, phone, dreams) | `docs/household.md` |
+| Telling the player something (speech bubbles, reactions, rewards, tips, cards to read); no toasts | `docs/notices.md` |
 | Post-processing, quality levels, looks, material helpers (wood, fabric, plaster), reflections | `docs/graphics.md` |
 | Materials, how parts meet, anything flat on a surface (z-fighting), hiding lamps | `docs/props.md` "Materials, joints and layers" |
 

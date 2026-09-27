@@ -23,6 +23,8 @@ export interface VendorOptions {
   focus?: [x: number, y: number, z: number];
   /** Short cries now and then when the player comes by (a speech bubble): "All tested!". None by default. */
   callOuts?: readonly string[];
+  /** The name on what they say to the player. Default "Stallholder". */
+  speaker?: string;
 }
 
 /** A player nearer than this, in front of the stall, gets looked at. */
@@ -39,8 +41,8 @@ const STANCES: Pose[] = ['stand', 'crossed', 'hips', 'pockets', 'crossed'];
 /**
  * The stallholder: stands behind the table facing the aisle, shifts their weight, looks over
  * their wares, folds their arms or puts their hands on their hips for a while, and turns to the
- * player when they come up to the stall. Clicking them gets a line
- * (`SessionActions.hint`). Origin on the floor, faces local +z like the stall. Collides (a
+ * player when they come up to the stall. Clicking them gets a line, said over their head
+ * (`speak`). Origin on the floor, faces local +z like the stall. Collides (a
  * standing person is not walked through), but never moves.
  */
 export class Vendor extends THREE.Group implements Furniture, Interactable, Updatable {
@@ -51,6 +53,7 @@ export class Vendor extends THREE.Group implements Furniture, Interactable, Upda
   private readonly viewer: THREE.Object3D;
   private readonly lines: () => readonly string[];
   private readonly caption: string;
+  private readonly speaker: string;
   private readonly focus: THREE.Vector3;
   private nextLine: number;
   private glanceTimer = 0;
@@ -69,6 +72,7 @@ export class Vendor extends THREE.Group implements Furniture, Interactable, Upda
     const lines = options.lines;
     this.lines = typeof lines === 'function' ? lines : () => lines;
     this.caption = options.label ?? 'Click to chat with the stallholder';
+    this.speaker = options.speaker ?? 'Stallholder';
     this.focus = options.focus ? new THREE.Vector3(...options.focus) : TABLE_POINT.clone();
     const seed = options.seed ?? 1;
     this.nextLine = seed;
@@ -95,7 +99,6 @@ export class Vendor extends THREE.Group implements Furniture, Interactable, Upda
     this.local.copy(this.viewerPos);
     this.worldToLocal(this.local);
     const near = this.local.z > 0.3 && Math.hypot(this.local.x, this.local.z) < NOTICE_RANGE;
-    this.bubble.update(dt);
     if (near && this.callOuts.length) {
       this.callOutTimer -= dt;
       if (this.callOutTimer <= 0) {
@@ -123,6 +126,11 @@ export class Vendor extends THREE.Group implements Furniture, Interactable, Upda
     this.bubble.say(text, seconds);
   }
 
+  /** A line to the player, over their head with their name (or in the subtitles, out of view). */
+  speak(text: string): void {
+    this.bubble.speak(text, this.speaker);
+  }
+
   /** Strikes a pose for a moment (a shrug, a wave), then goes back to waiting. */
   gesture(pose: Pose, seconds = 2.5): void {
     this.model.setPose(pose);
@@ -137,10 +145,10 @@ export class Vendor extends THREE.Group implements Furniture, Interactable, Upda
     return this.caption;
   }
 
-  activate(session: SessionActions): void {
+  activate(_session: SessionActions): void {
     const lines = this.lines();
     if (!lines.length) return;
-    session.hint(lines[this.nextLine % lines.length]!);
+    this.speak(lines[this.nextLine % lines.length]!);
     this.nextLine++;
   }
 

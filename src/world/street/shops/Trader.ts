@@ -112,12 +112,11 @@ export class Trader extends THREE.Group implements Furniture, Updatable, Interac
     return this.present ? 'Click to chat with the collector' : null;
   }
 
-  activate(session: SessionActions): void {
+  activate(_session: SessionActions): void {
     if (!this.present) return;
     const lines = this.boxes.length ? LINES : EMPTY_LINES;
     const line = lines[this.line++ % lines.length]!;
-    this.person.say(line.length > 34 ? '…' : line, 2);
-    session.hint(`“${line}”`);
+    this.person.speak(line, 'The collector');
   }
 
   dispose(): void {

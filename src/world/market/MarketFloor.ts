@@ -250,6 +250,7 @@ export class MarketFloor {
       where: entry ? `the ${entry.platform.shortName} stall` : 'the bargain bin',
       behindGlass: entry?.stall.behindGlass,
       react: (reaction) => this.reactAt(entry, reaction),
+      speak: entry ? (line) => entry.vendor.speak(line) : undefined,
     });
     box.onSold = () => {
       if (entry) entry.sold++;

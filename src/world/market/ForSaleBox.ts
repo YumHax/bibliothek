@@ -30,6 +30,8 @@ export interface ForSaleBoxOptions {
   behindGlass?: boolean;
   /** The stallholder answers what the player does with it. */
   react?: (reaction: SaleReaction) => void;
+  /** The stallholder says a line to the player (over their head); none: a subtitle. */
+  speak?: (line: string) => void;
 }
 
 /** How far a displayed box leans back against whatever stands behind it. */
@@ -86,6 +88,7 @@ export class ForSaleBox extends THREE.Group implements Furniture, Interactable {
     this.where = options.where;
     this.behindGlass = options.behindGlass ?? false;
     this.reactTo = options.react;
+    if (options.speak) this.speak = options.speak;
     this.affordable = this.wallet.coins >= item.price;
     this.box = new GameBox(item.game, covers);
     const { height, depth } = this.box.dimensions;
@@ -154,6 +157,9 @@ export class ForSaleBox extends THREE.Group implements Furniture, Interactable {
   react(reaction: SaleReaction): void {
     this.reactTo?.(reaction);
   }
+
+  /** Set from the options when a stallholder stands by (`ForSaleLike.speak`). */
+  speak?: (line: string) => void;
 
   /**
    * Shows (or hides) the title and price floating over the box, for a player scanning the stalls

@@ -28,7 +28,7 @@ export interface PhotoReadout {
 /**
  * Photo mode's DOM: the framing guides over the view (thirds, the cinema bars, the square), the
  * settings and keys card in a corner (H hides it), and the shutter's white flash. While it is up,
- * `body.photo-mode` hides the game's HUD (crosshair, labels, hints, toasts, wallet, touch
+ * `body.photo-mode` hides the game's HUD (crosshair, labels, notices, wallet, touch
  * controls). None of it is in a photo: only the canvas is saved.
  */
 export class PhotoHud {

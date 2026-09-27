@@ -48,8 +48,8 @@ Five rooms: the collection room (`living`, persistent), the `hallway` behind its
 `bathroom` and `bedroom` (back wall) and the `kitchen` (left end); with the `balcony` and the `stairwell` they make
 `FLAT`. The flat's front door at the corridor's right end is a real door (`hallway/FrontDoor`, locked from inside
 without the keys from the bowl, self-closing) onto our landing: the stairwell (see "The stairwell"), whose street door
-travels (fade, `Travel.go`) to the `street` (x 140, see "The street"), whose doors lead to the `arcade` (x 40) and the
-`market` (x 80), two windowless, doorless halls with no neighbours, not persistent (rebuilt on return: the market's
+travels (fade, `Travel.go`) to the `street` (x 140, see "The street"), whose doors lead to the `arcade` (x 40), the
+`market` (x 80) and the four walk-in shops (x 200, 215, 230, 245: one `shop` kind, `SHOP_PLANS`), windowless, doorless halls with no neighbours, not persistent (rebuilt on return: the market's
 stock is fetched again, cached per day). Each carries a `travel: { label, arrival, yaw }` in `WORLD_PLAN`; their exit
 doors travel back to the street. In the flat every zone neighbours every other
 (`FLAT` in `worldPlan.ts`), so they are always active together: a zone coming or going changes the scene's light
@@ -244,7 +244,9 @@ RETRO GAMES keeps `SHOP_HOURS`).
   `snowCovered()` (`snowCover.ts`, uniform written by `StreetGround`) whitens up-facing faces of everything.
 - **Shops** (`shops/`): `ShopEntrance` on every shop door along the walkable pavements (caption, `SHOP_HOURS`, a word,
   or an offer: the café's coffee = the market's coffee of the day plus the barista's tip, the newsagent's scratch cards in
-  `ui/ScratchCardPanel`, the florist's potted plants for the balcony, a croissant, a lemonade and gossip),
+  `ui/ScratchCardPanel`, a croissant, a lemonade and gossip); the furniture shop, the TV repair shop, the pet shop and
+  the florist are walked into (`SHOP_ZONE_OF`: a `StreetDoor` to their `shop` zone, `src/world/shop/`, at x 200 to
+  245 like the arcade: no neighbours, not persistent, arrivals in front of their doors),
   `DroppedCoins` (a few a day), `GiveawayBox` (some days, one free worn game once the stock is drawn), `Trader` (a rival
   collector some days, with three copies taken off the market's stalls: buy, haggle, swap). Coins go in through
   `BuildContext.money.purse`. See `docs/economy.md`.

@@ -138,16 +138,17 @@ export class WallClock extends Prop implements Interactable {
     this.lastClickAt = again ? -Infinity : now;
     if (!again) {
       const next = this.alarm ? `cancel the ${formatTime(this.alarm.at)} alarm` : `set an alarm for ${formatTime(this.hours + ALARM_IN_HOURS)}`;
-      session.hint(`It's ${formatTime(this.hours)} · click again to ${next}`);
+      session.react(`It's ${formatTime(this.hours)}`);
+      session.tip(`Click the clock again to ${next}.`, { id: 'wall-clock', ms: DOUBLE_CLICK_MS });
       return;
     }
     if (this.alarm) {
       this.alarm = null;
-      session.hint('Alarm off');
+      session.react('Alarm off');
       return;
     }
     this.alarm = { left: ALARM_IN_HOURS, at: (this.hours + ALARM_IN_HOURS) % 24 };
-    session.hint(`Alarm set for ${formatTime(this.alarm.at)}`);
+    session.react(`Alarm set for ${formatTime(this.alarm.at)}`);
   }
 
   /** Counts the clock's forward run down to the alarm; a jump back (the N key's afternoon) is not time passing. */
@@ -160,7 +161,7 @@ export class WallClock extends Prop implements Interactable {
     const at = this.alarm.at;
     this.alarm = null;
     playAlarm();
-    this.session?.hint(`The alarm rings: ${formatTime(at)}`);
+    this.session?.react(`The alarm rings: ${formatTime(at)}`);
   }
 }
 

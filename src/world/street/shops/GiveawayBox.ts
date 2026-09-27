@@ -116,7 +116,7 @@ export class GiveawayBox extends THREE.Group implements Furniture, Updatable, In
   }
 
   activate(session: SessionActions): void {
-    session.hint(this.game ? 'Under the magazines, a game. Free to a good home: click it to look.' : JUNK[this.line++ % JUNK.length]!);
+    session.react(this.game ? 'Under the magazines, a game. Free to a good home: click it to look.' : JUNK[this.line++ % JUNK.length]!);
   }
 
   dispose(): void {

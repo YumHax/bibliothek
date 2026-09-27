@@ -63,9 +63,10 @@ export class ArcadePlay implements KeyRoute {
     if (!wallet) return;
     // Broke, and not even a coin's worth of tickets: the house stands a ticket machine's play, so the loop never dead-ends.
     const onTheHouse = machine.freeWhenBroke && playIsFree(wallet);
-    if (onTheHouse) this.host.notify('Out of coins? This play is on the house. Win some tickets!', 3000);
+    if (onTheHouse) this.host.reward({ title: 'On the house!', detail: 'Out of coins? This play is free. Win some tickets!' });
     else if (!wallet.spend(PLAY_COST)) {
-      this.host.notify(`Insert coin: a play costs ${PLAY_COST} coin${PLAY_COST > 1 ? 's' : ''} and you have ${wallet.coins}.\nSell tickets at the prize counter, or come back richer.`, 3500);
+      this.host.refuse(`Insert coin: a play costs ${PLAY_COST} coin${PLAY_COST > 1 ? 's' : ''} and you have ${wallet.coins}.`);
+      this.host.tip('Short of coins? Tickets turn into coins at the prize counter.', { id: 'short-of-coins' });
       return;
     }
     if (!replay) {
@@ -80,8 +81,8 @@ export class ArcadePlay implements KeyRoute {
     machine.start((result) => this.over(machine, result));
     const first = !this.hinted.has(machine.game.id);
     this.hinted.add(machine.game.id);
-    const walkAway = `${actionKeyLabel('walkAway')} to walk away`;
-    this.host.hint(first ? `${machine.game.hint} · ${walkAway}` : walkAway);
+    const walkAway = `${actionKeyLabel('walkAway')} walks away.`;
+    this.host.tip(first ? `${machine.game.hint}\n${walkAway}` : walkAway, { id: 'arcade-play', until: () => this.machine !== machine || !machine.isPlaying });
   }
 
   /** Walks away from the machine (a running play is lost). False when the player was at none. */
@@ -99,16 +100,16 @@ export class ArcadePlay implements KeyRoute {
     const { arcadeDaily, wallet } = this.parts;
     if (!arcadeDaily || !wallet) return;
     if (!arcadeDaily.changeMachineWorks) {
-      this.host.hint('OUT OF ORDER. Tickets turn into coins at the prize counter.');
+      this.host.refuse('OUT OF ORDER. Tickets turn into coins at the prize counter.');
       return;
     }
     const coins = arcadeDaily.claimChange();
     if (!coins) {
-      this.host.hint('It works today, for once. It has nothing left in it, though.');
+      this.host.refuse('It works today, for once. It has nothing left in it, though.');
       return;
     }
     wallet.earnCoins(coins);
-    this.host.notify(`The change machine coughs up ${coins} coin${coins > 1 ? 's' : ''}. Lucky day.`, 3000);
+    this.host.reward({ title: 'Lucky day!', detail: 'The change machine coughs up some coins.', coins });
   }
 
   /** At a machine every key is the game's, except E to walk away and, on the end card, fire to replay. */
@@ -138,7 +139,12 @@ export class ArcadePlay implements KeyRoute {
     if (payout.tickets) payoutStats?.record(machine.game.id, result.score, payout.tickets.earned, (performance.now() - this.started) / 1000);
     if (round) payout.lines.push(tournamentLine(round));
     // A score that makes the table goes to the initials screen first (the machine is still being played).
-    const next = machine.isPlaying ? 'Sign the hall of fame: up / down picks a letter, fire moves on' : `${actionKeyLabel('fire')} or click plays again, ${actionKeyLabel('walkAway')} walks away`;
-    this.host.notify([...payout.lines, next].join('\n'), 5000);
+    const [headline, ...extras] = payout.lines;
+    const tickets = (payout.tickets?.paid ?? 0) + tee + (round?.tickets ?? 0);
+    const prizesWon = payout.prizes.length > 0 || Boolean(round?.prize);
+    if (tickets || prizesWon) this.host.reward({ title: headline ?? 'Well played!', detail: extras.join('\n') || undefined, tickets: tickets || undefined, big: prizesWon || result.best });
+    else if (headline) this.host.react([headline, ...extras].join('\n'));
+    if (machine.isPlaying) this.host.tip('Sign the hall of fame: up / down picks a letter, fire moves on.', { id: 'arcade-play', until: () => !machine.isPlaying });
+    else this.host.tip(`${actionKeyLabel('fire')} or a click plays again, ${actionKeyLabel('walkAway')} walks away.`, { id: 'arcade-play', until: () => this.machine !== machine || machine.isPlaying });
   }
 }

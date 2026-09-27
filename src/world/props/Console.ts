@@ -74,6 +74,6 @@ export class Console extends Prop implements Interactable {
   activate(session: SessionActions): void {
     if (!this.platform) return;
     if (this.onSelect) this.onSelect(this.platform.id);
-    else session.hint(this.platform.name);
+    else session.react(this.platform.name);
   }
 }

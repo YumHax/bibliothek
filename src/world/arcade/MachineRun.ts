@@ -238,8 +238,8 @@ export class MachineRun {
 
   /** A click on the machine: taken or broken, it says so; mid-play `clickWhilePlaying` may use it (true: it did), else the Session plays or walks away. */
   activate(session: SessionActions, machine: ArcadeMachineLike, clickWhilePlaying?: () => boolean): void {
-    if (this.who === 'regular') session.hint(TAKEN_LINE);
-    else if (this.outOfOrder) session.hint(OUT_OF_ORDER_LINE);
+    if (this.who === 'regular') session.refuse(TAKEN_LINE);
+    else if (this.outOfOrder) session.refuse(OUT_OF_ORDER_LINE);
     else if (this.current === 'playing' && clickWhilePlaying?.()) return;
     else session.playArcade(machine);
   }

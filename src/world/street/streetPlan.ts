@@ -29,6 +29,7 @@
 import type { DecorEntry } from '../props/decor';
 import { SAS } from '../airlock/airlockPlan';
 import type { ZoneId } from '../zoneIds';
+import type { ShopZoneId } from '../shop/shopPlan';
 
 export type Vec2 = [x: number, z: number];
 
@@ -251,6 +252,39 @@ export interface Spot {
   yaw: number;
 }
 
+/**
+ * The shops one walks into (`world/shop/`): their door travels to their room, the way RETRO GAMES' leads to the
+ * flea market, and coming back out sets the player down in front of it (`STREET_PLAN.arrivals`).
+ */
+export const SHOP_ZONE_OF: Partial<Record<ShopKind, ShopZoneId>> = { furniture: 'furnitureShop', electronics: 'tvShop', pets: 'petShop', florist: 'flowerShop' };
+
+/** How far out on the pavement a door's step is, and where the player comes back out of a shop. */
+const DOOR_STEP = 0.5;
+const COMING_OUT = 1.3;
+
+/** Whether the pavement in front of `door` is somewhere the player can stand (only those doors get a click). */
+export function doorOnPavement(door: ShopDoor): boolean {
+  return isWalkable([door.at[0] + Math.sin(door.yaw) * DOOR_STEP, door.at[1] + Math.cos(door.yaw) * DOOR_STEP]);
+}
+
+/** The door on the walkable pavements of each shop one walks into, by its zone (the first of a kind, should two share one). */
+export function walkInShops(): { zone: ShopZoneId; door: ShopDoor }[] {
+  const seen = new Set<ShopZoneId>();
+  return shopDoors().flatMap((door) => {
+    const zone = SHOP_ZONE_OF[door.shop.kind];
+    if (!zone || seen.has(zone) || !doorOnPavement(door)) return [];
+    seen.add(zone);
+    return [{ zone, door }];
+  });
+}
+
+/** Coming out of each walk-in shop: on the pavement in front of its door, facing the street. */
+function shopArrivals(): Partial<Record<ShopZoneId, ArrivalSpec>> {
+  return Object.fromEntries(
+    walkInShops().map(({ zone, door }) => [zone, { at: [door.at[0] + Math.sin(door.yaw) * COMING_OUT, door.at[1] + Math.cos(door.yaw) * COMING_OUT], yaw: door.yaw + Math.PI }]),
+  );
+}
+
 export const STREET_PLAN = {
   /** The doors: our building's (into the stairwell's entrance hall), the arcade's, the retro games shop's (the flea market's way in). */
   doors: {
@@ -265,6 +299,7 @@ export const STREET_PLAN = {
     hallway: { at: [-6, -10.7], yaw: Math.PI } as ArrivalSpec,
     arcade: { at: [8, -10.7], yaw: Math.PI } as ArrivalSpec,
     market: { at: [3, 10.7], yaw: 0 } as ArrivalSpec,
+    ...shopArrivals(),
   },
   /** Neon over the arcade and the retro games shop: centre (zone-local, y up), facing yaw, size. */
   signs: [

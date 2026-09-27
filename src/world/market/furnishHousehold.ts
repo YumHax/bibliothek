@@ -35,7 +35,7 @@ export function furnishHousehold(zone: Zone, { listener, home: { upgrades } }: B
       const good = goodOf(id);
       if (!good) return;
       if (owned(id)) {
-        session.hint(`You have the ${good.name.toLowerCase()} already.`);
+        session.refuse(`You have the ${good.name.toLowerCase()} already.`);
         return;
       }
       session.buyUpgrade({ title: good.name, price: good.price, bought: () => upgrades.add(good.id) });

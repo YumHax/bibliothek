@@ -83,6 +83,6 @@ export class HouseKeys extends Prop implements Interactable {
 
   activate(session: SessionActions): void {
     this.setInPocket(!this.pocketed);
-    session.hint(this.pocketed ? 'Keys in pocket' : 'Keys left in the bowl');
+    session.react(this.pocketed ? 'Keys in pocket' : 'Keys left in the bowl');
   }
 }

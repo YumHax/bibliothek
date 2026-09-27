@@ -52,6 +52,8 @@ export class PointerLockFlow {
     private readonly overlay: Overlay,
     canvas: HTMLElement,
     input?: Input,
+    /** Where a refused lock is announced, and the controller mode's keys shown. */
+    private readonly notices?: { alert(text: string, ms?: number): void; tip(text: string, options?: { id?: string; ms?: number }): unknown },
   ) {
     player.controls.addEventListener('lock', () => {
       const mode: RoomMode = player.hasPointerLock ? 'pointer' : (this.pendingVirtual ?? 'gamepad');
@@ -103,12 +105,12 @@ export class PointerLockFlow {
     this.overlay.setPlaying(true);
     if (await this.player.lock()) return;
     if (attempt !== this.attempt) return; // superseded by a newer click
-    this.overlay.showHint('Mouse lock refused by the browser, retrying…');
+    this.notices?.alert('Mouse lock refused by the browser, retrying…', 2500);
     await new Promise((r) => setTimeout(r, LOCK_RETRY_MS));
     if (attempt !== this.attempt || this.player.isLocked) return;
     if (!(await this.player.lock())) {
       this.overlay.setPlaying(false);
-      this.overlay.showHint('Pointer lock unavailable. Click again, or check the page is not inside an iframe.', 5000);
+      this.notices?.alert('Pointer lock unavailable. Click again, or check the page is not inside an iframe.');
     }
   }
 
@@ -131,7 +133,7 @@ export class PointerLockFlow {
     this.pendingVirtual = mode;
     this.overlay.setPlaying(true);
     this.player.enterVirtual();
-    if (mode === 'gamepad') this.overlay.showHint('Controller mode — press Start or Esc to return to the menu', 3500);
+    if (mode === 'gamepad') this.notices?.tip('Controller mode: press Start or Esc to return to the menu.', { id: 'controller-mode', ms: 8000 });
   }
 
   private onPress(code: string): void {

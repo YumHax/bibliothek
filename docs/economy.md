@@ -333,7 +333,7 @@ its level following what the screen does; only the six original cabinets keep a 
   out after n wins pays `TOURNAMENT.reward[n]` tickets, the champion also the **Saturday cup** (`saturdayCup`, a pewter
   trophy on the prize shelf). One `ArcadeTournament` is made at boot (`bootstrap/services`) and handed to the hall
   (`BuildContext.arcade.tournament`) and the Session: `game/ArcadePlay` settles the round with the play (its tickets
-  and the cup in the same `batch`, its line in the end-of-play toast), and the hall hears it (`tournament.onRound`) to
+  and the cup in the same `batch`, its line in the end-of-play reward banner), and the hall hears it (`tournament.onRound`) to
   make the watchers react. That day the regulars leave the cabinet to the player (`ArcadeCrowd` `reserved`) and gather
   round it to watch (`gathering`: `ARCADE_PLAN.tournament.spectators`), cheering or groaning each round
   (`spectatorsReact`); the attendant mentions it.
@@ -421,17 +421,18 @@ and adds it to the crowd's stations.
 
 The street is not only the way to the arcade and the market: every shop door on the walkable pavements is a
 `ShopEntrance` (`SHOP_HOURS` in `shopHours.ts`: closed, it says when it opens; `SHOP_TALK` in `shopPlan.ts`: what it
-says and sells). Coins come and go through `BuildContext.money.purse` (the wallet) and `SessionActions.pay`.
+says and sells), except the four shops one walks into (`SHOP_ZONE_OF` in `streetPlan.ts`, see "The bare flat": their
+door is a `StreetDoor` that travels inside in shop hours, `shopShutNotice` otherwise). Coins come and go through
+`BuildContext.money.purse` (the wallet) and `SessionActions.pay`.
 - **Café Lumière**: a coffee (`COFFEE_PRICE`, 2 coins) *is* the flea market's coffee of the day (`market.drinkCoffee`:
   the stallholders go easier on the haggle), with the barista's tip: a wishlisted game on a stall today, a gem in the
   bin, or the day's theme. Had already, the barista still talks.
 - **The newsagent** (kind `tabac`): PIXEL SCRATCH cards (`scratchCard.ts`), 2 coins, five a real day (`bibliothek.scratch.v1`):
   three alike of six cells win 2, 3, 5, 10 or 25 coins; drawn outcome first, 38 % win, 1.35 coins paid out on average
   (the house wins). Scratched in `ui/ScratchCardPanel`; walking off scratches the rest and pays.
-- **The florist**: its counter (`HomeShopPanel`, see "The bare flat") sells the houseplants for every room and the
-  balcony's pots (`HomeUpgrades` 'plant', `BALCONY_PLAN.boughtPlants` then two `decor` pots); without a counter its old
-  single offer (a pot for 12 coins, `BALCONY_PLANTS` at most) still works. The bakery's croissant (1) and the bar's lemonade (2, with the regulars' gossip) are
-  for the pleasure of it.
+- **The florist** is walked into (see "The bare flat"): the houseplants for every room and the balcony's pots
+  (`HomeUpgrades` 'plant', `BALCONY_PLAN.boughtPlants` then two `decor` pots). The bakery's croissant (1) and the bar's
+  lemonade (2, with the regulars' gossip) are for the pleasure of it.
 - **Dropped coins** (`DroppedCoins`): three a real day at spots drawn from the date, glinting when the player is near,
   one coin each, picked ones remembered (`bibliothek.finds.v1`).
 - **FREE TO TAKE** (`GiveawayBox`): one real day in four a box of cast-offs by a front door; once the market's stock is
@@ -481,10 +482,20 @@ bought, and stands at home the moment it is paid for:
   `<KIND>_PLAN.upgrades`). Builders place them through `placerFor(zone, upgrades, owned)`: not bought yet, a piece is
   staged (hung where it will stand, hidden with `setShownKeepingLights`, neither colliding nor clickable) and
   `zone.place`d on the purchase. The flat's lights are the same bought or not, so a purchase never recompiles a shader.
-- **The shops** (`ShopEntrance` + `HOME_SHOP_OF` in `street/shops/shopPlan.ts`): SECOND HOME (kind `furniture`, across
-  the street by the pharmacy), TV REPAIR (`electronics`, the workshop on Park Street), PAWS & CLAWS (`pets`, by COMICS &
-  MANGA) and the florist (houseplants and balcony pots) open a `HomeShopPanel` (`ui/HomeShopPanel.ts`) on their goods,
-  in shop hours. The flea market's household stall keeps its own display (bookcase, kilim, lava lamp, poster, CRT).
+- **The shops** (`src/world/shop/`, one zone each, kind `shop`, reached by travel like the flea market): SECOND HOME
+  (`furnitureShop`, across the street by the pharmacy), TV REPAIR (`tvShop`, the workshop on Park Street), PAWS & CLAWS
+  (`petShop`, by COMICS & MANGA) and the florist (`flowerShop`, by the launderette). Their street door
+  (`streetPlan.SHOP_ZONE_OF`, `walkInShops()`) opens in shop hours; coming out sets the player down in front of it
+  (`STREET_PLAN.arrivals`). Inside (`SHOP_PLANS` in `shop/shopPlan.ts`, built by `furnishShop`): every piece the shop
+  sells stands on the floor, on a wall or on a table as the flat will have it (`displayPieces.buildPiece`: the flat's
+  own class, lights stripped, merged; the rescue cat asleep in her basket in the settings' coat), each a `ForSale`
+  with its `PriceTag` (the price; SOLD once a one-off is at home, AT HOME once the flat has no room for another):
+  hover for the blurb and what stands in the way (`requires`), click to buy (`SessionActions.buyUpgrade`). The display
+  stays, only the tag changes. The till on the `ShopCounter` opens the shop's list (`HomeShopPanel`, `forShop`), a
+  clerk (`Vendor`) behind it. The rest is the shop's own (`fixtures`): the TV wall showing snow (`TvWall`, the
+  shared `snowScreen` repainted by one `SnowTicker`), the repairer's bench, shelves of stock (`GoodsShelf`), the fish
+  tank, the florist's stepped stand of cut flowers. `displayPiece(id)` is also what the panels' thumbnails photograph.
+  The flea market's household stall keeps its own display (bookcase, kilim, lava lamp, poster, CRT).
 - **The cat** is adopted at the pet shop (docs/cat.md "Adoption"): till then C, the feather wand and the visitors know
   there is none.
 - **Old saves** (data v1) keep the pieces they bought, lose the rest of the furnished flat, and are given once the
@@ -508,7 +519,7 @@ bought, and stands at home the moment it is paid for:
   also shows what the WE BUY desk would pay (`buyBackPrice`). `ValueHistory` (`bibliothek.valueHistory.v1`) keeps one
   point per real day (`dayKey`), drawn as a line chart (`ui/collector/valueChart`).
 - **`CollectorWatch`** listens to the collection, the medals, the league and the standing, takes the facts again (300 ms
-  after the last change), marks milestones (`onReached`: a toast), writes today's value, and looks the fame of every
+  after the last change), marks milestones (`onReached`: a big reward banner), writes today's value, and looks the fame of every
   owned game up in the background, two at a time, so the estimate is priced like the market prices.
 
 ## Not done yet
@@ -521,4 +532,6 @@ bought, and stands at home the moment it is paid for:
   wheel) are not in `simulatePayouts`.
 - The arcade never closes: an empty hall late at night was considered, a shutter was not (it would dead-end the loop).
 - **Front Street's shops**: their prices, the flat's (`HOME_GOOD_PRICES`) and the scratch card's odds are first guesses.
+  The walk-in shops' layouts (`SHOP_PLANS`) were placed from the pieces' sizes, not yet walked: check nothing overlaps
+  and every tag faces the aisle. A shop does not put the player out at closing time.
 - The window view from the flat (`props/outdoors/Shopfront.ts`) still paints the three new shops as roller shutters.

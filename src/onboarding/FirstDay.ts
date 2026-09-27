@@ -1,9 +1,10 @@
 import type { Updatable } from '@/core/Engine';
 import type { Game } from '@/catalog/types';
+import type { NoticeActions } from '@/notices';
 import { KEYS, PersistedStore, safeStorage } from '@/persistence';
 import { FIRST_DAY_DONE, FIRST_DAY_STEPS, type FirstDayStepId } from './firstDaySteps';
 
-/** What the first day watches: the stores by their counts, the player's zone, and a way to say a tip. */
+/** What the first day watches: the stores by their counts, the player's zone, and where its tips are pinned. */
 export interface FirstDaySources {
   wallet: { readonly coins: number; readonly tickets: number; subscribe(cb: () => void): () => void };
   collection: { readonly games: readonly Game[]; subscribe(cb: () => void): () => void };
@@ -11,8 +12,8 @@ export interface FirstDaySources {
   prizes?: { readonly owned: readonly unknown[]; subscribe(cb: () => void): () => void };
   /** The zone the player stands in (`ZoneManager.current.id`). */
   zone: () => string;
-  /** Shows a tip for `ms` (the Toast). */
-  say: (text: string, ms: number) => void;
+  /** The tips pinned top left, and the banner at the end. */
+  notices: Pick<NoticeActions, 'tip' | 'reward'>;
 }
 
 export interface FirstDayOptions {
@@ -46,7 +47,8 @@ interface FirstDayState {
 const STEP_IDS = new Set<string>(FIRST_DAY_STEPS.map((s) => s.id));
 /** A tip waits this long after the player enters a zone (s), so it is not lost in the travel fade. */
 const SETTLE_S = 1.2;
-const TIP_MS = 6000;
+/** A to-do tip stays pinned while the player is in its zone and the step is not done, this long at most. */
+const TIP_MS = 120_000;
 
 /**
  * THE GUIDED FIRST DAY: the to-do list on the hall console and the sticky note on the front door,
@@ -149,9 +151,10 @@ export class FirstDay implements Updatable {
     if (!tip || this.state.shown.includes(id)) return;
     this.state = { ...this.state, shown: [...this.state.shown, id] };
     this.commit();
-    sources.say(tip, TIP_MS);
-    // The last step is a pointer, not a chore: showing it is doing it.
-    if (step.id === 'shelf') this.complete('shelf');
+    // The last step is a pointer, not a chore: showing it is doing it (its tip stays its reading time, twice over).
+    const pointer = step.id === 'shelf';
+    sources.notices.tip(tip, { id: 'first-day', head: 'To do', ms: pointer ? undefined : TIP_MS, until: pointer ? undefined : () => this.isDone(step.id) || this.zone !== zone || !this.active });
+    if (pointer) this.complete('shelf');
   }
 
   /** Where the player went ticks what going there meant. */
@@ -175,7 +178,7 @@ export class FirstDay implements Updatable {
   private finish(): void {
     this.state = { ...this.state, finished: true };
     this.commit();
-    this.sources?.say(FIRST_DAY_DONE, TIP_MS);
+    this.sources?.notices.reward({ title: 'First day done!', detail: FIRST_DAY_DONE, big: true });
   }
 
   private commit(): void {

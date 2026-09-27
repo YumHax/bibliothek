@@ -48,6 +48,17 @@ export function retroShutNotice(hours: number): { label: string; hint: string } 
   return { label: `RETRO GAMES is closed · opens at ${opens}`, hint: `RETRO GAMES is shut for the night, and the flea market behind it. It opens at ${opens}. The arcade is open all night.` };
 }
 
+/**
+ * Why the door of a shop one walks into (`SHOP_ZONE_OF`) will not open at `hours`: its caption and the hint on a click
+ * (`closed`, the shop's word when shut), or null while it is open. `name` is what the player calls it ("the florist").
+ */
+export function shopShutNotice(kind: ShopKind, name: string, closed: string, hours: number): { label: string; hint: string } | null {
+  if (isShopOpen(kind, hours)) return null;
+  const opens = clockTime(SHOP_HOURS[kind]?.open ?? 8);
+  const Name = name.charAt(0).toUpperCase() + name.slice(1);
+  return { label: `${Name} · closed, opens at ${opens}`, hint: `${Name} is closed. ${closed} Opens at ${opens}.` };
+}
+
 /** "8:00", "19:30": a game hour as a clock reading. */
 export function clockTime(hours: number): string {
   const h = Math.floor(hours) % 24;
