@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { createCanvas, fitFontSize, toTexture, FONT } from '@/covers/generated/canvasUtils';
 import { boxMesh } from '../meshUtils';
 import { Prop } from '../props/Prop';
-import { wood as woodMaterial } from '@/world/materials/finishes';
+import { timber } from '../materials/palette';
 
 /** One line of the board: text on the left, an optional figure on the right, a red star in front when `star`. */
 export interface InfoRow {
@@ -49,7 +49,7 @@ export class InfoBoard extends Prop {
     super();
     this.name = 'InfoBoard';
     this.accent = `#${new THREE.Color(options.accent ?? 0x6b2f2a).getHexString()}`;
-    const wood = woodMaterial(0x5a4632, 0.7);
+    const wood = timber(0x5a4632, 0.7);
     // Two posts on feet, the board between them.
     const postX = BOARD_W / 2 + LEG / 2;
     for (const sx of [-1, 1]) {

@@ -1,8 +1,9 @@
 import * as THREE from 'three';
 import { GameBox } from './GameBox';
 import { boxMesh } from './meshUtils';
+import { isShared } from './materials/sharedResources';
 import { QUALITY } from '@/graphics/quality';
-import { wood as woodMaterial } from '@/world/materials/finishes';
+import { basic, timber } from '@/world/materials/palette';
 
 export interface ShelfOptions {
   width: number;
@@ -17,7 +18,7 @@ export interface ShelfOptions {
   gap?: number;
 }
 
-const WOOD = woodMaterial(0x6b4a2b, 0.6);
+const WOOD = timber(0x6b4a2b, 0.6);
 /** Mid-span sag of a loaded board 0.8 m long (metres); it grows with the square of the span, up to `MAX_SAG`. */
 const SAG_AT_80CM = 0.0022;
 const MAX_SAG = 0.005;
@@ -28,7 +29,7 @@ const BOX_PUSH = 0.014;
 const BOX_PULL = 0.008;
 /** What stands in for the boxes in the shadow maps: a plain unit box per box, scaled, all in one instanced draw. */
 const PROXY_GEOMETRY = new THREE.BoxGeometry(1, 1, 1);
-const PROXY_MATERIAL = new THREE.MeshBasicMaterial();
+const PROXY_MATERIAL = basic({});
 /** Narrowest box a row could hold (m): sizes the proxy's instance buffer. */
 const MIN_BOX_WIDTH = 0.05;
 
@@ -129,7 +130,7 @@ export class Shelf extends THREE.Group {
   dispose(): void {
     for (const board of this.boards) {
       this.remove(board);
-      board.geometry.dispose();
+      if (!isShared(board.geometry)) board.geometry.dispose();
     }
     this.boards.length = 0;
     this.shadowProxy.count = 0;
@@ -190,7 +191,7 @@ export class Shelf extends THREE.Group {
       const bottom = i === rowHeights.length - 1;
       const loaded = i >= 0 && !bottom ? sag : 0;
       const board = boxMesh(span, boardThickness, depth, WOOD, { y });
-      if (loaded > 0) bow(board.geometry, span, loaded);
+      if (loaded > 0) bow((board.geometry = board.geometry.clone()), span, loaded); // its own copy: boxMesh geometries are shared
       this.boards.push(board);
       if (i >= 0) {
         tops.push(y + boardThickness / 2);

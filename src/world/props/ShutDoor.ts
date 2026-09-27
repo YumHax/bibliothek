@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { cylinderMesh } from '../meshUtils';
-import { Prop, part, matte } from './Prop';
+import { METAL, paint, standard } from '../materials/palette';
+import { Prop, part } from './Prop';
 
 /** `panelled`: a painted interior door. `glazed`: stiles and rails round frosted panes. `entrance`: the flat's dark front door, peephole, lock and mat. */
 export type ShutDoorStyle = 'panelled' | 'glazed' | 'entrance';
@@ -19,11 +20,11 @@ const TRIM = 0.07;
 const TRIM_DEPTH = 0.022;
 const HANDLE_Y = 1.03;
 
-const TRIM_PAINT = matte(0xf6f3ee, 0.7);
-const LEAF_PAINT = matte(0xf1ede6, 0.6);
-const STEEL = new THREE.MeshStandardMaterial({ color: 0xb9bcc0, metalness: 0.6, roughness: 0.35 });
-const BRASS = new THREE.MeshStandardMaterial({ color: 0xc9a75b, metalness: 0.85, roughness: 0.3 });
-const FROSTED = new THREE.MeshStandardMaterial({ color: 0xeef2ec, roughness: 0.6, transparent: true, opacity: 0.6, emissive: 0xfff1d6, emissiveIntensity: 0.35 });
+const TRIM_PAINT = paint(0xf6f3ee, 0.7);
+const LEAF_PAINT = paint(0xf1ede6, 0.6);
+const STEEL = METAL.satinSteel();
+const BRASS = METAL.brass();
+const FROSTED = standard({ color: 0xeef2ec, roughness: 0.6, transparent: true, opacity: 0.6, emissive: 0xfff1d6, emissiveIntensity: 0.35 });
 
 /**
  * A door that never opens, lying on a wall face: architrave and a leaf filling it, a lever handle
@@ -65,10 +66,10 @@ export class ShutDoor extends Prop {
         if (i < panes - 1) part(this, paneW, rail, THICKNESS, LEAF_PAINT, { y: y0 + paneH + rail / 2, z: face / 2 });
       }
     } else {
-      const paint = style === 'entrance' ? matte(0x3a2e28, 0.5) : LEAF_PAINT;
-      part(this, width, height, THICKNESS, paint, { y: height / 2, z: face / 2 });
+      const leaf = style === 'entrance' ? paint(0x3a2e28, 0.5) : LEAF_PAINT;
+      part(this, width, height, THICKNESS, leaf, { y: height / 2, z: face / 2 });
       // Two raised panels, a lock rail between them.
-      const raised = matte(new THREE.Color(paint.color).multiplyScalar(0.92).getHex(), 0.5);
+      const raised = paint(new THREE.Color(leaf.color).multiplyScalar(0.92).getHex(), 0.5);
       const panelW = width - 0.22;
       const panels = [
         { y: 0.16, h: height * 0.36 },
@@ -81,7 +82,7 @@ export class ShutDoor extends Prop {
         peephole.rotation.x = Math.PI / 2;
         this.add(peephole);
         part(this, 0.04, 0.1, 0.006, BRASS, { x: width / 2 - 0.09, y: HANDLE_Y - 0.13, z: face + 0.003 });
-        if (options.mat ?? true) part(this, 0.65, 0.012, 0.4, matte(0x5a4a3a, 1), { y: 0.006, z: 0.26 });
+        if (options.mat ?? true) part(this, 0.65, 0.012, 0.4, paint(0x5a4a3a, 1), { y: 0.006, z: 0.26 });
       }
     }
 

@@ -36,7 +36,8 @@ export function createPlayerMoves(services: Services, parts: { world: GameWorld;
   // (docs/zones.md "The sas"); the far zone is built and compiled out of sight while the door release buzzes.
   airlockLink.connect({ camera: engine.camera, player, prepare: (id) => world.prepareZone(id), settle: () => world.primeAsync() });
   // A night in the bedroom's bed: the same curtain, the shared clock wound on to the next morning.
-  const sleep = new Sleep(sky.dayNight, fader);
+  // The bedside alarm sets the hour the night ends at (docs/household.md).
+  const sleep = new Sleep(sky.dayNight, fader, () => services.household.wakeHour);
   // Back where the player last stood (zone, spot, look) after a reload; `?fresh` starts in the living room.
   // The ZoneManager notices on the first frame and loads that zone.
   const positionMemory = new PositionMemory({

@@ -24,9 +24,11 @@ interface BookState {
   /** Visits each friend actually made (the door opened). */
   visits: Record<string, number>;
   loans: Loan[];
+  /** A friend asked round on the phone: who, on which in-game day, from what hour (`household/`). */
+  invited: { friendId: string; day: number; hour: number } | null;
 }
 
-const fresh = (): BookState => ({ lastDay: -99, visits: {}, loans: [] });
+const fresh = (): BookState => ({ lastDay: -99, visits: {}, loans: [], invited: null });
 
 /**
  * The flat's visitors' book: which in-game day brings which friend (deterministic, so a reload
@@ -61,6 +63,10 @@ export class VisitBook {
    */
   plan(day: number): PlannedVisit | null {
     if (this.state.lastDay === day) return null;
+    // Asked round on the phone: they come today whatever the draw (with a loan due back, they bring it).
+    const invited = this.state.invited;
+    const guest = invited && invited.day === day ? FRIENDS.find((f) => f.id === invited.friendId) : undefined;
+    if (guest) return { friend: guest, hour: invited!.hour, loan: this.state.loans.find((loan) => loan.friendId === guest.id && loan.dueDay <= day) ?? null };
     const hour = VISIT_RULES.hours.from + hash01(`visit-hour:${day}`) * (VISIT_RULES.hours.until - VISIT_RULES.hours.from);
     const due = this.state.loans.filter((loan) => loan.dueDay <= day).sort((a, b) => a.dueDay - b.dueDay)[0];
     if (due) {
@@ -102,6 +108,25 @@ export class VisitBook {
     this.save();
   }
 
+  /** A friend asked round for `day`, from `hour`: false when a visit is already had or asked for that day. */
+  invite(friendId: string, day: number, hour: number): boolean {
+    if (this.state.lastDay === day || this.state.invited?.day === day) return false;
+    this.state.invited = { friendId, day, hour };
+    this.save();
+    return true;
+  }
+
+  /** Whether the bell already rang on `day` (one visit a day). */
+  rangOn(day: number): boolean {
+    return this.state.lastDay === day;
+  }
+
+  /** Who was asked round for `day`, if anyone. */
+  invitedOn(day: number): string | null {
+    const invited = this.state.invited;
+    return invited && invited.day === day ? invited.friendId : null;
+  }
+
   /** Loans kept `postAfter` days past their due day: they come back by post. */
   overdue(day: number): Loan[] {
     return this.state.loans.filter((loan) => day >= loan.dueDay + VISIT_RULES.postAfter);
@@ -120,5 +145,7 @@ function readBook(data: unknown): BookState | null {
   const loans = (Array.isArray(raw.loans) ? raw.loans : []).filter(
     (l): l is Loan => typeof l === 'object' && l !== null && typeof l.friendId === 'string' && typeof l.gameId === 'string' && typeof l.title === 'string' && typeof l.lentDay === 'number' && typeof l.dueDay === 'number',
   );
-  return { lastDay: typeof raw.lastDay === 'number' ? raw.lastDay : -99, visits, loans };
+  const inv = raw.invited as Partial<NonNullable<BookState['invited']>> | null | undefined;
+  const invited = inv && typeof inv.friendId === 'string' && typeof inv.day === 'number' && typeof inv.hour === 'number' ? { friendId: inv.friendId, day: inv.day, hour: inv.hour } : null;
+  return { lastDay: typeof raw.lastDay === 'number' ? raw.lastDay : -99, visits, loans, invited };
 }

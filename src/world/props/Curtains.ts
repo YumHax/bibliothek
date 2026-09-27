@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { createCanvas, toTexture } from '@/covers/generated/canvasUtils';
 import { part } from './Prop';
+import { standard } from '../materials/palette';
 import { fabric } from '@/world/materials/finishes';
 
 export interface CurtainsOptions {
@@ -55,7 +56,7 @@ export class Curtains extends THREE.Group {
     this.rodY = rodY;
     const halfRod = width / 2 + ROD_OVERHANG;
 
-    const metal = new THREE.MeshStandardMaterial({ color: 0x3a3430, roughness: 0.45, metalness: 0.6 });
+    const metal = standard({ color: 0x3a3430, roughness: 0.45, metalness: 0.6 });
     const rod = new THREE.Mesh(new THREE.CylinderGeometry(ROD_RADIUS, ROD_RADIUS, halfRod * 2, 12), metal);
     rod.rotation.z = Math.PI / 2;
     rod.position.set(0, rodY, STANDOFF);

@@ -1,10 +1,10 @@
 import * as THREE from 'three';
 import { createCanvas, toTexture } from '@/covers/generated/canvasUtils';
-import { markShared } from '../props/Prop';
+import { standard } from '../materials/palette';
 import { drawText } from './games/ArcadeGame';
 
 /** The polished steel of the physical machines' rails, legs, posts and plunger rods. */
-export const CHROME = markShared(new THREE.MeshStandardMaterial({ color: 0xc4c7cc, metalness: 0.75, roughness: 0.25 }));
+export const CHROME = standard({ color: 0xc4c7cc, metalness: 0.75, roughness: 0.25 });
 
 export interface MarqueeStyle {
   /** Canvas size in pixels. Default 512 x 96. */

@@ -59,7 +59,7 @@ export const STAIRWELL_PLAN = {
   well: { x0: -0.3, x1: 1.8, z0: -4.28, z1: -1.76 } as Rect,
   car: { x0: 0.2, x1: 1.3, z0: -2.9, z1: -1.76, height: 2.15 },
   /** The lift runs between our landing and the entrance hall, this fast (m/s). */
-  liftSpeed: 1.15,
+  liftSpeed: 3.5,
   /** The entrance hall on the street, through the opening in the shaft's north wall at the bottom. */
   hall: { x0: 0.6, x1: 3.6, z0: -0.46, z1: 5.9, height: 3.1 } as Rect & { height: number },
   opening: { x0: 0.6, x1: 3.0, height: 2.4 },
@@ -77,15 +77,15 @@ export const STAIRWELL_PLAN = {
   mailboxes: { x: 0.62, z: 2.6, rows: 3, columns: 6 },
   /** Who lives behind the neighbours' doors on each landing (floor 4 down to 1), two a floor. */
   neighbours: [
-    ['M. & Mme Moreau', 'A. Leclerc'],
-    ['Famille Nguyen', 'P. Girard'],
-    ['R. Haddad', 'Mme Dubois'],
+    ['Mr & Mrs Moreau', 'A. Leclerc'],
+    ['The Nguyens', 'P. Girard'],
+    ['R. Haddad', 'Mrs Dubois'],
     ['J.-P. Martin', 'S. Rossi'],
   ] as [string, string][],
   /** The floors' names, painted by each landing. */
-  floorNames: ['5e', '4e', '3e', '2e', '1er', 'RDC'],
+  floorNames: ['5th', '4th', '3rd', '2nd', '1st', 'G'],
   /** Our landing's other door, and where it is; the other floors' two doors stand at `doorX`. */
-  ourNeighbour: 'Mme Roux',
+  ourNeighbour: 'Mrs Roux',
   ourNeighbourX: 2.3,
   doorX: [-0.8, 2.3] as [number, number],
   /**
@@ -118,7 +118,7 @@ export const STAIRWELL_PLAN = {
     { k: 1, i: 0, out: 8, back: 18.5, lift: false, seed: 23, lines: ['Morning! Off to work, as ever.', 'We heard music from your flat. Old video games? My son loves those.', 'Mind the third step, it creaks.'] },
     { k: 2, i: 1, out: 7.5, back: 19, lift: false, seed: 37, lines: ['Stairs are my gym.', 'There is a new arcade machine down the street, I hear.', 'You collect games? I had a Game Boy once. No idea where it went.'] },
     { k: 3, i: 0, out: 10, back: 20, lift: false, seed: 41, lines: ['Hello, neighbour.', 'The flea market had a lot of cartridges this week.', 'If you ever want to swap games, knock on my door.'] },
-    { k: 4, i: 1, out: 8.5, back: 18, lift: false, seed: 59, lines: ['Ciao!', 'The postman came by earlier, he looked lost.', 'I am on the first floor: I never take the lift.'] },
+    { k: 4, i: 1, out: 8.5, back: 18, lift: false, seed: 59, lines: ['Hi there!', 'The postman came by earlier, he looked lost.', 'I am on the first floor: I never take the lift.'] },
   ] as { k: number; i: number; out: number; back: number; lift: boolean; seed: number; lines: string[] }[],
   /** The postman on our landing, waiting by the front door clear of its leaf's swing (local x, z; yaw towards the door). */
   postman: { at: [-2.4, -0.72] as [number, number], yaw: -Math.PI / 2, seed: 77 },

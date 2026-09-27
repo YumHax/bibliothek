@@ -61,6 +61,8 @@ export interface ModalLike {
 /** The cat: the session calls it with a key and tells it which armchair the player sits in. */
 export interface CatLike {
   readonly settings: { readonly name: string };
+  /** False while no cat lives in the flat (it is adopted at the pet shop on Front Street): C does nothing then. */
+  readonly adopted?: boolean;
   /** The player calls it: it comes, ignores the call, or is asleep. */
   call(): 'coming' | 'ignored' | 'asleep';
   setPlayerSeat?(seat: Seat | null): void;
@@ -117,6 +119,25 @@ export interface StandingLike {
   loyaltyName(platform: PlatformId): string;
   record(deed: 'swap'): void;
   undo?(deed: 'buy', platform: PlatformId): void;
+}
+
+/**
+ * What the flat sends the player out with (`household/Perks`): a bath's calm, the morning's first sale,
+ * a platform's know-how, what they wear. The market counter and the arcade play apply what it returns.
+ */
+export interface PerksLike {
+  /** The Sunday best: the glass case's copies are handed over whatever the reputation. */
+  readonly mayHandleGlass: boolean;
+  /** Eases a haggle just opened over `item`; the lines saying why (none: nothing to ease). */
+  ease(item: StockItem, negotiation: Negotiation): string[];
+  /** A word the player's know-how has on the copy in hand (a fake's print), or null. */
+  tell(item: StockItem): string | null;
+  /** A line for the copy's panel (the morning's first sale on offer), or null. */
+  note(item: StockItem): string | null;
+  /** A copy was bought at a stall. */
+  bought(item: StockItem): void;
+  /** Tickets on top of what a play paid (the arcade tee); 0 for none. */
+  arcadeBonus(tickets: number): number;
 }
 
 /** The haggle panel: an exchange of offers over the copy in hand. */

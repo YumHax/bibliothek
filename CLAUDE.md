@@ -3,14 +3,15 @@
 First-person 3D video game collection room. three.js + Vite + TypeScript, no framework. The player walks a real-scale
 room, picks boxes off the shelves, reads them, plays longplays on the TV or projector; a cat lives there. Games are
 earned: the front door opens on the building's stairwell, whose street door teleports to Front Street (shops, an arcade whose
-mini-games pay tickets, swapped for prizes or coins, and a flea market that sells games); `?debug` restores the seed
-collection and the editor's add pane.
+mini-games pay tickets, swapped for prizes or coins, and a flea market that sells games). So is the flat: it starts bare
+(one bookcase, one game, the TV, a mattress; no cat), the rest is bought in Front Street's shops (docs/economy.md "The
+bare flat"). `?debug` restores the seed collection, the furnished flat and the editor's add pane.
 
 ## Commands
 
 ```bash
 npm run dev         # Vite dev server on :5173 (also serves /api/* via Vite plugins); the user usually has it running: check `lsof -i tcp:5173`, never start a second one
-npm run typecheck   # tsc --noEmit (src) + tsc -p api — run after every change
+npm run typecheck   # tsc --noEmit (src) + tsc -p api + scripts/check-conventions.mjs — run after every change
 npm run build       # typecheck + production bundle
 ```
 
@@ -41,7 +42,9 @@ npm run build       # typecheck + production bundle
 | The view outside the windows | `docs/outdoors.md` |
 | The cat | `docs/cat.md` |
 | Friends who visit, borrow and return games | `docs/visitors.md` |
+| What the kitchen, bathroom and bedroom are for (cleaning boxes, the bath, cake, radio, manuals, outfits, phone, dreams) | `docs/household.md` |
 | Post-processing, quality levels, looks, material helpers (wood, fabric, plaster), reflections | `docs/graphics.md` |
+| Materials, how parts meet, anything flat on a surface (z-fighting), hiding lamps | `docs/props.md` "Materials, joints and layers" |
 
 Layer order, outermost first: `worldPlan.ts` + the plan files (data) -> `layout.ts` + `src/world/<kind>/furnish<Kind>.ts`
 (zone builders, the only wiring) -> zones (`src/world/zone/`: a room loads and unloads as one; positions are zone-local) ->
@@ -66,5 +69,9 @@ Content work stays in the first two layers; the engine is never touched for cont
 - The canvas's alpha is the video cut-out: every post pass and additive effect must keep it (see `docs/graphics.md`).
 - Lights ignore wall planes: a room's lamp shines into the next room unless the wall is in `RoomOptions.opaqueWalls`; a
   `HemisphereLight` lights the whole scene, so only the occupied `Room` runs its ambient (`setOccupied`, wired in `bootstrap/world.ts`).
+- Z-fighting comes back whenever two faces share a plane: take materials from `world/materials/palette`, join parts per
+  `world/props/joinery`, lift flat things by a layer of `world/surface/layers`, then check `bibliothek.zfight()` (`?debug`).
+- `boxMesh` / `part` / `cylinderMesh` geometries are cached and shared, palette materials too: never edit either in place.
+- Days: `ctx.today.gameDay` (the market calendar) or the real date through `time/daily`; never `new Date()` for a draw.
 - The floor is at world y 0 everywhere but the stairwell: the eye is the feet's height (`FirstPersonController.setGround`,
   the stairwell's `ground`) plus eye height, collision probes follow the feet, and `Travel` passes the arrival's y.

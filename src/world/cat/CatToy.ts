@@ -5,6 +5,7 @@ import type { Furniture } from '@/world/Furniture';
 import { createCanvas, toTexture } from '@/covers/generated/canvasUtils';
 import type { CatToyLike } from './types';
 import { blobShadow } from '../zone/ContactShadows';
+import { standard } from '../materials/palette';
 
 /**
  * A small two-tone ball the cat bats around: it rolls with friction, bounces off the room walls
@@ -67,7 +68,7 @@ export class CatToy extends THREE.Group implements Furniture, Updatable, CatToyL
     // A little bell peeking through the top pole.
     const bell = new THREE.Mesh(
       new THREE.SphereGeometry(this.radius * 0.28, 12, 8),
-      new THREE.MeshStandardMaterial({ color: 0xd8b04a, roughness: 0.3, metalness: 0.8 }),
+      standard({ color: 0xd8b04a, roughness: 0.3, metalness: 0.8 }),
     );
     bell.position.y = this.radius * 0.85;
     bell.castShadow = true;

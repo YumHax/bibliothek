@@ -4,9 +4,11 @@ import { Walker } from '../../people/Walker';
 import { CAR_SIZES, LORRY, carGeometries, lorryGeometries } from '../carModel';
 import { nightnessOf } from '../streetAir';
 import { snowCovered } from '../snowCover';
+import { paint, standard } from '../../materials/palette';
 import type { Vec2 } from '../streetPlan';
 import { ScriptedVehicle, type CollisionSet } from './ScriptedVehicle';
 import type { StreetTraffic } from './StreetTraffic';
+import { CRUISE } from '../../city/traffic';
 
 interface Common {
   traffic: StreetTraffic;
@@ -73,15 +75,15 @@ export class DeliveryVan extends ScriptedVehicle {
   private blink = 0;
 
   constructor(private readonly dayNight: DayNight, private readonly van: DeliveryVanOptions) {
-    super({ traffic: van.traffic, viewer: van.viewer, route: withPullIn(van.route, van.at), cruise: 7, size: CAR_SIZES.van, kind: 'van', stops: [{ at: van.at, dwell: 0 }], stopFor: van.stopFor, collisions: van.collisions });
+    super({ traffic: van.traffic, viewer: van.viewer, route: withPullIn(van.route, van.at), cruise: CRUISE.van, size: CAR_SIZES.van, kind: 'van', stops: [{ at: van.at, dwell: 0 }], stopFor: van.stopFor, collisions: van.collisions });
     this.name = 'DeliveryVan';
     const g = carGeometries('van');
     this.lamps = lampMaterial();
     this.hazard = new THREE.MeshBasicMaterial({ color: 0x331800 });
     this.add(
       shade(new THREE.Mesh(g.body, snowCovered(new THREE.MeshStandardMaterial({ color: 0xeeeae2, roughness: 0.4, metalness: 0.3, flatShading: true })))),
-      shade(new THREE.Mesh(g.glass, new THREE.MeshStandardMaterial({ color: 0x1a232b, roughness: 0.12, metalness: 0.6, flatShading: true }))),
-      shade(new THREE.Mesh(g.wheels, new THREE.MeshStandardMaterial({ color: 0x151515, roughness: 0.85 }))),
+      shade(new THREE.Mesh(g.glass, standard({ color: 0x1a232b, roughness: 0.12, metalness: 0.6, flatShading: true }))),
+      shade(new THREE.Mesh(g.wheels, paint(0x151515, 0.85))),
       new THREE.Mesh(g.lamps, this.lamps),
     );
     // The bakery's name on the side, and the hazard lamps at the four corners.
@@ -93,14 +95,14 @@ export class DeliveryVan extends ScriptedVehicle {
         this.add(lamp);
       }
     }
-    const stripe = new THREE.MeshStandardMaterial({ color: 0xb8862f, roughness: 0.6 });
+    const stripe = paint(0xb8862f, 0.6);
     for (const side of [-1, 1]) {
       const band = new THREE.Mesh(new THREE.BoxGeometry(2.6, 0.22, 0.01), stripe);
       band.position.set(-0.8, 1.35, side * (width / 2 + 0.056));
       this.add(band);
     }
     // Rear doors, hinged at the back corners.
-    const doorMaterial = new THREE.MeshStandardMaterial({ color: 0xe6e2da, roughness: 0.45, metalness: 0.3 });
+    const doorMaterial = standard({ color: 0xe6e2da, roughness: 0.45, metalness: 0.3 });
     for (const side of [-1, 1]) {
       const pivot = new THREE.Mesh(new THREE.BoxGeometry(0.04, 1.8, width / 2 - 0.06).translate(0, 0, (-side * (width / 2 - 0.06)) / 2), doorMaterial);
       pivot.position.set(-length / 2 - 0.07, 1.25, side * (width / 2 - 0.04));
@@ -113,7 +115,7 @@ export class DeliveryVan extends ScriptedVehicle {
     this.driver.traverse((o) => {
       o.castShadow = false;
     });
-    this.crate = new THREE.Mesh(new THREE.BoxGeometry(CRATE.w, CRATE.h, CRATE.d), new THREE.MeshStandardMaterial({ color: 0x9a6a3a, roughness: 0.85 }));
+    this.crate = new THREE.Mesh(new THREE.BoxGeometry(CRATE.w, CRATE.h, CRATE.d), paint(0x9a6a3a, 0.85));
     this.crate.position.set(0, 1.0, 0.36);
     this.driver.add(this.crate);
     this.driver.setPresent(false);
@@ -228,20 +230,20 @@ export class BinLorry extends ScriptedVehicle {
     const bins = [...lorry.bins].sort((a, b) => a[0] - b[0]);
     // A stop on the lane level with each bin (in the order the lorry meets them, west to east).
     const lane = lorry.route.find(([x]) => x === 0)?.[1] ?? 1.6;
-    super({ traffic: lorry.traffic, viewer: lorry.viewer, route: lorry.route, cruise: 4, size: LORRY, kind: 'lorry', stops: bins.map(([x]) => ({ at: [x, lane] as Vec2, dwell: PER_BIN })), stopFor: lorry.stopFor, collisions: lorry.collisions, accel: 1 });
+    super({ traffic: lorry.traffic, viewer: lorry.viewer, route: lorry.route, cruise: CRUISE.lorry, size: LORRY, kind: 'lorry', stops: bins.map(([x]) => ({ at: [x, lane] as Vec2, dwell: PER_BIN })), stopFor: lorry.stopFor, collisions: lorry.collisions, accel: 1 });
     this.name = 'BinLorry';
     const g = lorryGeometries();
     this.lamps = lampMaterial();
     this.beacon = new THREE.MeshBasicMaterial({ color: 0x331800 });
     this.add(
       shade(new THREE.Mesh(g.body, snowCovered(new THREE.MeshStandardMaterial({ color: 0x3f7a4f, roughness: 0.5, metalness: 0.2, flatShading: true })))),
-      shade(new THREE.Mesh(g.glass, new THREE.MeshStandardMaterial({ color: 0x1a232b, roughness: 0.12, metalness: 0.6 }))),
-      shade(new THREE.Mesh(g.wheels, new THREE.MeshStandardMaterial({ color: 0x151515, roughness: 0.85 }))),
+      shade(new THREE.Mesh(g.glass, standard({ color: 0x1a232b, roughness: 0.12, metalness: 0.6 }))),
+      shade(new THREE.Mesh(g.wheels, paint(0x151515, 0.85))),
       new THREE.Mesh(g.lamps, this.lamps),
       new THREE.Mesh(g.beacon, this.beacon),
     );
     // A white band down the compactor body.
-    const band = new THREE.Mesh(new THREE.BoxGeometry(6.8, 0.35, LORRY.width - 0.02), new THREE.MeshStandardMaterial({ color: 0xe8e6de, roughness: 0.6 }));
+    const band = new THREE.Mesh(new THREE.BoxGeometry(6.8, 0.35, LORRY.width - 0.02), paint(0xe8e6de, 0.6));
     band.position.set(-0.9, 1.6, 0);
     this.add(band);
   }

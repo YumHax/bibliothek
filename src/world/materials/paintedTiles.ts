@@ -1,5 +1,5 @@
 import type * as THREE from 'three';
-import { markShared } from '../props/Prop';
+import { markShared } from './sharedResources';
 
 const painted = new Map<string, readonly THREE.Texture[]>();
 

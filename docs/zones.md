@@ -22,7 +22,8 @@ player cannot see must be *out of the scene*, not just behind a wall.
   moves its own collider) follow the zone's activation. Furniture and creatures get this, never the world's set.
 - **`ZoneManager`** (an `Updatable`): finds the zone whose `bounds` contain the camera (with 0.4 m hysteresis so a doorway
   does not flicker), keeps *current + its `neighbours`* active, deactivates the rest, and unloads a dormant zone after
-  30 s unless it is `persistent`. `onZoneChange(listener)` subscribes (any number; returns the unsubscribe). A zone
+  30 s unless it is `persistent` or one of the `keepRecent` (2) travel zones (lazy builders) left most recently: going
+  back to the street from a shop is then instant (no rebuild, repaint, re-upload or recompile). `onZoneChange(listener)` subscribes (any number; returns the unsubscribe). A zone
   whose builder is lazy and not loaded yet is fetched first (`Zone.load`): the current zone stays current meanwhile.
 - **`World`** owns the scene, the `CollisionWorld`, the live `interactables` list and the zones (`addZone`, `zone(id)`).
   It has no `place()` any more: content goes through a zone. It is a `World<ZoneHandleById>`: `zone(id)` only takes a
@@ -77,7 +78,12 @@ right wall (map in `stairwellPlan.ts`). A zone of `FLAT` (persistent, always act
 flat's) with no `Room`: `Staircase` (plaster shaft, stone landings, ten flights of nine steps round the well, the iron
 balustrade, our landing's strip from the front door, the hall's cabochon tiles; walls and the well's sides are its
 `colliders`), `Lift` (an iron cage the full height, a wooden car that rides between our landing and the hall with the
-player in it, folding gates whose colliders come and go; brass buttons on both stops and in the car), `StairLights`
+player in it at `liftSpeed` 3.5 m/s, ~6 s a trip, folding gates (0.45 s) whose colliders come and go; it runs itself
+(`Lift.autoPilot`): idle at the other stop, it sets off for the player as soon as they stand on our landing or in the
+hall (the front door opened, the sas crossed), folds its gate open when they walk up, and leaves 0.6 s after they step
+in (not again until the rider it brought has stepped out; sent off by itself and they step back out, it stays). The
+brass buttons on both stops and in the car still call and send it at once. Residents' rides are timed from
+`liftSpeed` and never touch the car), `StairLights`
 (globes on every landing lit by a sensor while someone is there, two shadowless point lights following the player,
 dimmed to 0 otherwise because lights ignore walls; a hemisphere only while occupied; the skylight), the neighbours'
 doors and floor names, the mailboxes, and at the street door the sas (see "The sas"). Travel still lands in the hall
@@ -120,10 +126,10 @@ is teleported in view: with both doors shut, the player is moved from one twin t
   is lit like the rest of its zone. Rain and snow skip the sas (`Precipitation`'s `shelter`); underfoot it is tiles.
 - **Each twin's doors.** Its *live* door opens onto its own zone (the hall's glass door, the street's street door: both
   swing away from the sas, `SasDoor`) and swings shut once the player has walked off; its *far* door is the way through
-  (`TWINS`). In the hall, the far door and the door release (the brass PORTE button by the street door) cross; in the
+  (`TWINS`). In the hall, the far door and the door release (the brass DOOR button by the street door) cross; in the
   street, the release just opens the street door.
 - **A crossing** (`AirlockLink.cross`): only from inside (`holdsViewer`); the live door swings shut behind the player,
-  the release buzzes (`doorSounds`, at least 0.7 s) while `World.prepareZone` builds the other twin's zone and its
+  the release buzzes (`doorSounds`, at least 0.4 s; the leaves swing in 0.9 s, the glass door in 0.75 s) while `World.prepareZone` builds the other twin's zone and its
   neighbours if need be (loading a lazy builder's module first) and compiles them out of the scene, in a stand-in holding only their own lights (programs are
   cached per material, so switching back compiles nothing); the other twin's doors are shut at once, the player moved
   (feet on its floor: `setPosition(x, z, floor)`), the `ZoneManager` switches on its next tick, `World.primeAsync`
@@ -160,6 +166,11 @@ is teleported in view: with both doors shut, the player is moved from one twin t
   is drawn only if reached through open doors whose openings are in view (`Zone.setDrawn`). Undrawn zones keep their
   lights (removing a light recompiles every shader) and their doors (both rooms see a door); only their meshes hide,
   and their interactables leave the crosshair (the ray ignores `visible`). Measured in the corridor with the doors shut: 36 draw calls instead of 950.
+  Their `Updatable` items tick at `UNDRAWN_TICK_HZ` (20), handed the time they missed (`Zone.tick`/`retime`): out of
+  sight, 60 Hz buys nothing. A door (`seenFromNextDoor`) or an item with `tickEveryFrame` keeps every frame.
+- `Zone.place` freezes the local matrices of the parts of an item nothing animates (`freezeStatic`: not `Updatable`, not
+  clickable, no `dispose`, no light or skeleton, no `userData.live` part): composed once instead of every frame.
+- Each zone takes a shadow layer (three.js has 32): `World.addZone` throws past 29 zones.
 - `World.prime()` (called once in `bootstrap/world.ts`) activates every zone, compiles every shader and uploads every texture before
   the first frame, so no doorway triggers a compile. The flat's rooms are all `persistent`: they go dormant (out of the
   scene) but are never rebuilt.
@@ -190,17 +201,28 @@ is teleported in view: with both doors shut, the player is moved from one twin t
 ## The street (`src/world/street/`)
 
 Front Street outside the building, a zone without a `Room` (the map is in `streetPlan.ts`): 24 m between building lines,
-walkable from the park's hedge to the roadworks (x 38; invisible walls, `StreetBounds`). The layout is the painted
+walkable (`WALKABLE_AREAS`) from the park's railings to the roadworks at x 38, down Park Street to its own roadworks at
+z -47, and into the bay at our corner. No invisible wall: `StreetBounds` is a thin box behind every facade, the railings
+collide (`StreetFurniture`, with the park's gate the walkers leave by), both roadworks (`details/roadworks.CLOSURES`, one
+frame per closure) have hoardings over the pavements and barriers over the parking lanes that collide, and in the
+traffic lanes' gap a roadworker (`details/Flagger`: hi-vis, STOP/GO board, a collider across the lanes, a word in his
+bubble for anyone walking up the road, the reason when clicked). The layout is the painted
 view's: Park Street runs south from a T junction at our corner with the park on its far side, the block across Front
 Street closes its end (`fA`, `fB`), Front Street runs on east past the roadworks to a side street on our side and a
 building across its end (x 136). The flat is our corner building's top floor (`FLAT_IN_STREET`): the painted view's
-row across Front Street is painted from `FACADES` (`props/outdoors/Facades.paintFrontBlock`), so RÉTRO JEUX and its
+row across Front Street is painted from `FACADES` (`props/outdoors/Facades.paintFrontBlock`), so RETRO GAMES and its
 neighbours are where the windows show them, and looking up from the street the flat's window and balcony are where
-they are (`FacadeSpec.flat`). Walked into from the stairwell through the sas (see "The sas"; our facade has a hole
-there, `FacadeSpec.openings`, and `StreetBounds` a gap, `OUR_LINE_GAPS`), or reached by travel from the arcade and the
+they are (`FacadeSpec.flat`, on every face the flat has: blank there when it has no window). Our building follows the
+flat's footprint: Park Street's building line is the kitchen wing's outer face (x -19.26), the collection room's left
+wall with its two windows stands 3.26 m back round the corner bay (`CORNER_BAY`, open to the roof, the kitchen wing's
+blind front across its back, where the panes paint `KITCHEN_WING`), the kitchen's window is on the wing's side. Behind
+it the block's courtyard (`COURTYARD`, the panes' `COURT_*`), closed on Park Street by a one-storey workshop so the
+upper floors round it show: our back wall with the bedroom's frosted window and, in a light well, the bathroom's
+(`frosted` windows), the neighbour's wing, the rear building. Walked into from the stairwell through the sas (see
+"The sas"; our facade has a hole there, `FacadeSpec.openings`, which `StreetBounds` leaves open), or reached by travel from the arcade and the
 market: `TravelPlan.arrivals` (keyed by the zone left) sets the player down in front of the door they came out of; the
-arcade's and RÉTRO JEUX's `StreetDoor`s travel straight on (`SessionActions.travel(to)`, no menu; a `guard` may refuse:
-RÉTRO JEUX keeps `SHOP_HOURS`).
+arcade's and RETRO GAMES' `StreetDoor`s travel straight on (`SessionActions.travel(to)`, no menu; a `guard` may refuse:
+RETRO GAMES keeps `SHOP_HOURS`).
 - **Traffic** (`traffic/`): `StreetTraffic` is what road users agree on (the signalled crossing's cycle, obstacles
   drivers stop for, vehicles for the queues, `busAtStop`). The driving rules are `driving.allowedSpeed` (the player,
   obstacles, the car ahead, red and amber at the lights, giving way at the plain zebra), shared by `StreetCars` (three
@@ -221,7 +243,7 @@ RÉTRO JEUX keeps `SHOP_HOURS`).
   hydrants, bollards, a Morris column and the roadworks (`StreetDetails`), the flickering lamp's buzz (`LampBuzz`).
   `snowCovered()` (`snowCover.ts`, uniform written by `StreetGround`) whitens up-facing faces of everything.
 - **Shops** (`shops/`): `ShopEntrance` on every shop door along the walkable pavements (caption, `SHOP_HOURS`, a word,
-  or an offer: the café's coffee = the market's coffee of the day plus the barista's tip, the tabac's scratch cards in
+  or an offer: the café's coffee = the market's coffee of the day plus the barista's tip, the newsagent's scratch cards in
   `ui/ScratchCardPanel`, the florist's potted plants for the balcony, a croissant, a lemonade and gossip),
   `DroppedCoins` (a few a day), `GiveawayBox` (some days, one free worn game once the stock is drawn), `Trader` (a rival
   collector some days, with three copies taken off the market's stalls: buy, haggle, swap). Coins go in through

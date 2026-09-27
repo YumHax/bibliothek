@@ -2,9 +2,11 @@ import * as THREE from 'three';
 import { createCanvas, seededRandom, toTexture, FONT } from '@/covers/generated/canvasUtils';
 import type { DisplaySlot, StallLike } from './stallTypes';
 import { boxMesh, cylinderMesh } from '../meshUtils';
-import { matte } from '../props/Prop';
-import { fabric, wood as woodMaterial } from '@/world/materials/finishes';
-import { centreOutRow, evenRow, fitInRow } from './stallPaint';
+import { fabric } from '@/world/materials/finishes';
+import { METAL, paint, standard, timber } from '../materials/palette';
+import { PROUD, proud } from '../props/joinery';
+import { FLOOR } from '../surface/layers';
+import { centreOutRow, evenRow, fitInRow, plainCloth } from './stallPaint';
 
 export interface BlanketStallOptions {
   /** What is scrawled on the cardboard sign (a platform's name). */
@@ -20,7 +22,7 @@ export interface BlanketStallOptions {
 const BLANKET_W = 1.6;
 const BLANKET_D = 1.1;
 /** The blanket lies a hair over the floor; the boxes rest on it. */
-const BLANKET_Y = 0.004;
+const BLANKET_Y = FLOOR.blanket.lift;
 const BOX_Y = 0.012;
 /** A fold across the blanket, raised a little (never up to the boxes' height). */
 const FOLD_X = 0.28;
@@ -60,11 +62,11 @@ const STOOL_X = 0.5;
 const STOOL_Z = SUIT_BACK - 0.35;
 const STOOL_H = 0.42;
 
-const LEATHER = matte(0x6a3f24, 0.55);
-const LINING = fabric({ color: 0x8a6a4a, roughness: 0.95 });
-const BRASS = new THREE.MeshStandardMaterial({ color: 0xb8892a, roughness: 0.35, metalness: 0.9 });
-const STRAP = matte(0x3a2616, 0.7);
-const ALUMINIUM = new THREE.MeshStandardMaterial({ color: 0xb0b4b8, roughness: 0.35, metalness: 0.85 });
+const LEATHER = paint(0x6a3f24, 0.55);
+const LINING = plainCloth(0x8a6a4a);
+const BRASS = METAL.agedBrass();
+const STRAP = paint(0x3a2616, 0.7);
+const ALUMINIUM = standard({ color: 0xb0b4b8, roughness: 0.35, metalness: 0.85 });
 
 /**
  * A car-boot seller's pitch on the floor: a patterned woollen blanket with a fold in it, an old
@@ -102,7 +104,7 @@ export class BlanketStall extends THREE.Group implements StallLike {
 
     // The cardboard sign, its foot on the clothes, leaning back on the open lid.
     const signMat = new THREE.MeshStandardMaterial({ map: paintCardboard(options.sign, accent, random), roughness: 0.95 });
-    const card = matte(0xb8935e, 0.95);
+    const card = paint(0xb8935e, 0.95);
     const sign = new THREE.Mesh(new THREE.BoxGeometry(SIGN_W, SIGN_H, 0.005), [card, card, card, card, signMat, card]);
     const foot = new THREE.Group();
     foot.position.set(SIGN_X, CLOTHES_TOP, SUIT_BACK + 0.07);
@@ -113,7 +115,7 @@ export class BlanketStall extends THREE.Group implements StallLike {
     this.add(foot);
 
     // The pennant stick, pushed into the ground by the suitcase.
-    const stick = cylinderMesh(0.008, STICK_H, woodMaterial(0x8a6a44, 0.7), { x: STICK_X, y: STICK_H / 2, z: STICK_Z }, { segments: 6 });
+    const stick = cylinderMesh(0.008, STICK_H, timber(0x8a6a44, 0.7), { x: STICK_X, y: STICK_H / 2, z: STICK_Z }, { segments: 6 });
     stick.rotation.z = 0.03;
     this.add(stick);
 
@@ -169,12 +171,12 @@ export class BlanketStall extends THREE.Group implements StallLike {
     for (const x of [-SUIT_W / 2 + SUIT_WALL / 2, SUIT_W / 2 - SUIT_WALL / 2]) this.add(boxMesh(SUIT_WALL, SUIT_H, SUIT_D - 2 * SUIT_WALL, LEATHER, { x, y: SUIT_H / 2, z: cz }));
     for (const sx of [-1, 1]) {
       // Their tops stand 2 mm proud of the walls' rim rather than flush with it.
-      for (const z of [SUIT_FRONT - 0.012, SUIT_BACK + 0.012]) this.add(boxMesh(0.04, 0.04, 0.03, BRASS, { x: sx * (SUIT_W / 2 - 0.018), y: SUIT_H - 0.018, z }));
+      for (const z of [SUIT_FRONT - 0.012, SUIT_BACK + 0.012]) this.add(boxMesh(0.04, 0.04, 0.03, BRASS, { x: sx * (SUIT_W / 2 - 0.018), y: SUIT_H + PROUD - 0.04 / 2, z }));
       // A strap down the front, under the leaning boxes.
-      this.add(boxMesh(0.035, SUIT_H + 0.004, 0.004, STRAP, { x: sx * SUIT_W * 0.3, y: SUIT_H / 2, z: SUIT_FRONT + 0.002 }));
+      this.add(boxMesh(0.035, proud(SUIT_H), 0.004, STRAP, { x: sx * SUIT_W * 0.3, y: SUIT_H / 2, z: SUIT_FRONT + 0.002 }));
     }
     // Clothes bundled in the shell: a soft lump over most of its floor.
-    const clothes = boxMesh(SUIT_W - 2 * SUIT_WALL - 0.02, CLOTHES_TOP - 0.02, SUIT_D - 2 * SUIT_WALL - 0.02, fabric({ color: 0x5a6a8a, roughness: 0.95 }), { y: 0.02 + (CLOTHES_TOP - 0.02) / 2, z: cz });
+    const clothes = boxMesh(SUIT_W - 2 * SUIT_WALL - 0.02, CLOTHES_TOP - 0.02, SUIT_D - 2 * SUIT_WALL - 0.02, plainCloth(0x5a6a8a), { y: 0.02 + (CLOTHES_TOP - 0.02) / 2, z: cz });
     clothes.castShadow = false;
     this.add(clothes);
     // The lid, hinged at the shell's back top edge, fallen just past upright; its lining faces the aisle.
@@ -298,7 +300,7 @@ function foldingStool(): THREE.Group {
     }
   }
   for (const z of [-half, half]) g.add(cylinderMesh(0.01, 0.3, ALUMINIUM, { y: STOOL_H, z }, { segments: 6 }).rotateZ(Math.PI / 2));
-  const seat = boxMesh(0.28, 0.008, 2 * half, fabric({ color: 0x2f4a6a, roughness: 0.95 }), { y: STOOL_H - 0.01 });
+  const seat = boxMesh(0.28, 0.008, 2 * half, plainCloth(0x2f4a6a), { y: STOOL_H - 0.01 });
   g.add(seat);
   return g;
 }

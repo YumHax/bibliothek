@@ -2,8 +2,8 @@ import * as THREE from 'three';
 import { createCanvas, fitFontSize, seededRandom, toTexture, FONT } from '@/covers/generated/canvasUtils';
 import type { Furniture } from '../Furniture';
 import { boxMesh } from '../meshUtils';
-import { matte } from './Prop';
-import { wood as woodMaterial } from '@/world/materials/finishes';
+import { paint, timber } from '@/world/materials/palette';
+import { INSET } from './joinery';
 
 export interface ChalkboardOptions {
   /** What is chalked on it, the first line bigger. Default a welcome. */
@@ -38,7 +38,7 @@ export class Chalkboard extends THREE.Group implements Furniture {
     this.width = options.width ?? 0.55;
     this.height = options.height ?? 0.95;
     const lines = options.lines ?? ['WELCOME', 'prices as marked', 'haggling welcome'];
-    const wood = woodMaterial(options.wood ?? 0x5a4632, 0.8);
+    const wood = timber(options.wood ?? 0x5a4632, 0.8);
     const random = seededRandom((options.seed ?? 1) * 7919);
     const map = paintSlate(this.width, this.height, lines, options.slate ?? 0x1f2a22, random);
     const slate = new THREE.MeshStandardMaterial({ map, roughness: 0.9 });
@@ -50,14 +50,14 @@ export class Chalkboard extends THREE.Group implements Furniture {
       leaf.position.y = h;
       leaf.rotation.x = side * LEAN;
       // Frame bars, then the slate set into them, its face towards the leaf's outside. The back
-      // leaf's stiles sit a millimetre in: the two leaves' outer end faces cross at the hinge and
+      // leaf's stiles sit `INSET` in: the two leaves' outer end faces cross at the hinge and
       // would z-fight in one plane.
-      const stile = w / 2 - BAR / 2 - (side > 0 ? 0 : 0.001);
+      const stile = w / 2 - BAR / 2 - (side > 0 ? 0 : INSET);
       leaf.add(boxMesh(BAR, h, BAR, wood, { x: -stile, y: -h / 2 }));
       leaf.add(boxMesh(BAR, h, BAR, wood, { x: stile, y: -h / 2 }));
       leaf.add(boxMesh(w - 2 * BAR, BAR, BAR, wood, { y: -BAR / 2 }));
       leaf.add(boxMesh(w - 2 * BAR, BAR, BAR, wood, { y: -h + BAR / 2 }));
-      const dark = matte(0x111511, 0.9);
+      const dark = paint(0x111511, 0.9);
       // BoxGeometry material order: +x, -x, +y, -y, +z, -z. A positive lean about x swings the leaf's foot
       // towards -z, so that leaf's outside is its -z face: that is where the chalk goes.
       const board = new THREE.Mesh(new THREE.BoxGeometry(w - 2 * BAR, h - 2 * BAR, BOARD_T), side > 0 ? [dark, dark, dark, dark, dark, slate] : [dark, dark, dark, dark, slate, dark]);
@@ -68,8 +68,8 @@ export class Chalkboard extends THREE.Group implements Furniture {
       this.add(leaf);
     }
     // The hinge along the top, and a chain holding the leaves apart halfway down.
-    this.add(boxMesh(w - BAR, 0.02, 0.02, matte(0x3a3632, 0.4), { y: h + 0.005 }));
-    const chain = boxMesh(0.008, 0.008, 2 * (h / 2) * Math.sin(LEAN), matte(0x6a6660, 0.4), { x: -w / 2 + BAR / 2, y: h / 2 });
+    this.add(boxMesh(w - BAR, 0.02, 0.02, paint(0x3a3632, 0.4), { y: h + 0.005 }));
+    const chain = boxMesh(0.008, 0.008, 2 * (h / 2) * Math.sin(LEAN), paint(0x6a6660, 0.4), { x: -w / 2 + BAR / 2, y: h / 2 });
     chain.castShadow = false;
     this.add(chain);
   }

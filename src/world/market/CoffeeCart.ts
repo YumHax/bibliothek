@@ -4,8 +4,8 @@ import type { SessionActions } from '@/game/SessionActions';
 import { createCanvas, fitFontSize, toTexture, FONT } from '@/covers/generated/canvasUtils';
 import type { Furniture } from '../Furniture';
 import { boxMesh, cylinderMesh, invisibleHitbox } from '../meshUtils';
-import { matte } from '../props/Prop';
-import { wood as woodMaterial } from '@/world/materials/finishes';
+import { paint, standard, timber } from '../materials/palette';
+import { PROUD, proud } from '../props/joinery';
 
 export interface CoffeeCartOptions {
   /** Price of a cup, chalked on the menu board. */
@@ -41,10 +41,10 @@ const PARASOL_PANELS = 12;
 const MENU_W = 0.24;
 const MENU_H = 0.3;
 
-const CHROME = new THREE.MeshStandardMaterial({ color: 0xd0d2d4, roughness: 0.18, metalness: 0.95 });
-const BLACK = matte(0x1c1a18, 0.5);
-const RUBBER = matte(0x1a1a1a, 0.9);
-const PAPER = matte(0xf4efe4, 0.8);
+const CHROME = standard({ color: 0xd0d2d4, roughness: 0.18, metalness: 0.95 });
+const BLACK = paint(0x1c1a18, 0.5);
+const RUBBER = paint(0x1a1a1a, 0.9);
+const PAPER = paint(0xf4efe4, 0.8);
 
 /**
  * A little espresso cart: a painted wooden body on two spoked wheels and two legs, a counter
@@ -61,12 +61,12 @@ export class CoffeeCart extends THREE.Group implements Furniture, Interactable {
   constructor(private readonly options: CoffeeCartOptions) {
     super();
     this.name = 'CoffeeCart';
-    const paint = matte(0x2f5a4a, 0.5);
-    const trim = woodMaterial(0x8b6a44, 0.55);
+    const body = paint(0x2f5a4a, 0.5);
+    const trim = timber(0x8b6a44, 0.55);
 
     // The body: a painted box, framed panels on the customer's side, a wooden counter overhanging it.
     const bodyH = COUNTER_Y - BODY_BOTTOM;
-    this.add(boxMesh(WIDTH, bodyH, DEPTH, paint, { y: BODY_BOTTOM + bodyH / 2 }));
+    this.add(boxMesh(WIDTH, bodyH, DEPTH, body, { y: BODY_BOTTOM + bodyH / 2 }));
     for (const x of [-WIDTH / 4, WIDTH / 4]) this.add(boxMesh(WIDTH / 2 - 0.1, bodyH - 0.14, 0.012, trim, { x, y: BODY_BOTTOM + bodyH / 2, z: DEPTH / 2 + 0.006 }));
     this.add(boxMesh(WIDTH + 0.06, COUNTER_T, DEPTH + 0.06, trim, { y: COUNTER_Y + COUNTER_T / 2 }));
     // Wheels on an axle under the right half, two legs under the left, a push handle at the left end.
@@ -92,7 +92,7 @@ export class CoffeeCart extends THREE.Group implements Furniture, Interactable {
     // A stack of paper cups, a sleeve band round the lower ones, and a saucer of sugar sticks.
     const cups = cylinderMesh(0.042, 0.26, PAPER, { x: 0.12, y: COUNTER_TOP + 0.13, z: 0.08 }, { radiusBottom: 0.032, segments: 16 });
     this.add(cups);
-    this.add(cylinderMesh(0.041, 0.05, matte(0x8a5a32, 0.8), { x: 0.12, y: COUNTER_TOP + 0.05, z: 0.08 }, { radiusBottom: 0.035, segments: 16 }));
+    this.add(cylinderMesh(0.041, 0.05, paint(0x8a5a32, 0.8), { x: 0.12, y: COUNTER_TOP + 0.05, z: 0.08 }, { radiusBottom: 0.035, segments: 16 }));
     this.add(cylinderMesh(0.06, 0.012, PAPER, { x: 0.12, y: COUNTER_TOP + 0.006, z: -0.1 }, { segments: 16 }));
     this.buildMenu();
     this.buildParasol();
@@ -141,7 +141,7 @@ export class CoffeeCart extends THREE.Group implements Furniture, Interactable {
     wand.rotation.x = 0.25;
     this.add(wand);
     const gauge = new THREE.Mesh(new THREE.CircleGeometry(0.032, 20), new THREE.MeshStandardMaterial({ map: paintGauge(), roughness: 0.3 }));
-    gauge.position.set(x, COUNTER_TOP + MACHINE_H - 0.07, front + 0.002);
+    gauge.position.set(x, COUNTER_TOP + MACHINE_H - 0.07, front + PROUD);
     this.add(gauge);
   }
 
@@ -151,14 +151,14 @@ export class CoffeeCart extends THREE.Group implements Furniture, Interactable {
     stand.position.set(0.38, COUNTER_TOP, 0.12);
     stand.rotation.set(-0.18, -0.25, 0);
     const slate = new THREE.MeshStandardMaterial({ map: paintMenu(this.options.price), roughness: 0.9 });
-    const frame = woodMaterial(0x6a4a2a, 0.7);
+    const frame = timber(0x6a4a2a, 0.7);
     const board = new THREE.Mesh(new THREE.BoxGeometry(MENU_W, MENU_H, 0.012), [frame, frame, frame, frame, slate, frame]);
     board.position.y = MENU_H / 2;
     board.castShadow = true;
     stand.add(board);
     for (const dx of [-MENU_W / 2, MENU_W / 2]) stand.add(boxMesh(0.018, MENU_H + 0.01, 0.018, frame, { x: dx, y: MENU_H / 2, z: 0.004 }));
     // The top rail caps the posts, 2 mm proud of them all round (flush faces z-fight).
-    stand.add(boxMesh(MENU_W + 0.022, 0.018, 0.022, frame, { y: MENU_H, z: 0.004 }));
+    stand.add(boxMesh(proud(MENU_W + 0.018), 0.018, proud(0.018), frame, { y: MENU_H, z: 0.004 }));
     this.add(stand);
   }
 

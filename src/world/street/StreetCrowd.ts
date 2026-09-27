@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import type { Updatable } from '@/core/Engine';
 import type { Furniture } from '../Furniture';
 import type { DayNight } from '../props/DayNight';
-import { wakefulnessAt } from '../props/outdoors/wakefulness';
+import { wakefulnessAt } from '@/time/wakefulness';
 import { Walker } from '../people/Walker';
 import { Dog } from './life/Dog';
 import { distanceFade } from './life/fade';

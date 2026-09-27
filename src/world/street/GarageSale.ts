@@ -1,11 +1,13 @@
 import * as THREE from 'three';
 import type { Updatable } from '@/core/Engine';
 import type { BoxArtLoader } from '@/covers/BoxArtLoader';
-import { createCanvas, hashString, seededRandom, toTexture } from '@/covers/generated/canvasUtils';
-import { dayKey } from '@/economy/calendar';
+import { createCanvas, toTexture } from '@/covers/generated/canvasUtils';
 import { StockItem } from '@/economy/StockItem';
-import { KEYS, PersistedStore } from '@/persistence';
+import { KEYS } from '@/persistence';
+import { DailyList } from '@/time/DailyList';
+import { dailyRandom, isEventDay } from '@/time/daily';
 import type { Furniture } from '../Furniture';
+import { paint, standard } from '../materials/palette';
 import { ForSaleBox } from '../market/ForSaleBox';
 
 /** Where the sale's boxes go: the zone (they must be placed to be clickable). */
@@ -37,7 +39,7 @@ const THANKS = ['Coins in the tin, ta!', 'Clearing out the loft. Enjoy it!', 'My
  * Whether today (the real date) is a garage-sale day on Front Street: about one day in `oneDayIn`.
  */
 export function isGarageSaleDay(oneDayIn: number, date = new Date()): boolean {
-  return hashString(`garage:${dayKey(date)}`) % oneDayIn === 0;
+  return isEventDay('garage', oneDayIn, { date });
 }
 
 /**
@@ -58,7 +60,7 @@ export class GarageSale extends THREE.Group implements Furniture, Updatable {
     super();
     this.name = 'GarageSale';
     const { width, depth, height } = TABLE;
-    const legs = new THREE.MeshStandardMaterial({ color: 0x9aa0a6, roughness: 0.4, metalness: 0.6 });
+    const legs = standard({ color: 0x9aa0a6, roughness: 0.4, metalness: 0.6 });
     for (const x of [-width / 2 + 0.1, width / 2 - 0.1]) {
       for (const z of [-1, 1]) {
         const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, height * 1.05, 6), legs);
@@ -67,9 +69,9 @@ export class GarageSale extends THREE.Group implements Furniture, Updatable {
         this.add(leg);
       }
     }
-    const top = new THREE.Mesh(new THREE.BoxGeometry(width, 0.03, depth), new THREE.MeshStandardMaterial({ color: 0xe8dcc6, roughness: 0.8 }));
+    const top = new THREE.Mesh(new THREE.BoxGeometry(width, 0.03, depth), paint(0xe8dcc6, 0.8));
     top.position.y = height;
-    const cloth = new THREE.Mesh(new THREE.BoxGeometry(width + 0.04, 0.26, depth + 0.04), new THREE.MeshStandardMaterial({ color: 0x3a6a8a, roughness: 0.95 }));
+    const cloth = new THREE.Mesh(new THREE.BoxGeometry(width + 0.04, 0.26, depth + 0.04), paint(0x3a6a8a, 0.95));
     cloth.position.y = height - 0.12;
     const sign = new THREE.Mesh(new THREE.PlaneGeometry(0.62, 0.44), new THREE.MeshStandardMaterial({ map: signTexture(options.price()), roughness: 0.9 }));
     sign.position.set(-width / 2 + 0.35, height + 0.22, -depth / 2 + 0.1);
@@ -103,9 +105,9 @@ export class GarageSale extends THREE.Group implements Furniture, Updatable {
   private fill(stock: readonly StockItem[]): void {
     this.filled = true;
     const { owns, price, covers, wallet, isWanted, host } = this.options;
-    const random = seededRandom(hashString(`garage-table:${dayKey()}`));
+    const random = dailyRandom('garage-table');
     // What was bought off this table today stays in the draw (so a reload lays the same table) but is not laid again.
-    const soldToday = soldHereToday();
+    const soldToday = sales.today();
     const pool = stock.filter((item) => (item.source === 'stall' || item.source === 'bin') && (!owns(item.game.id) || soldToday.includes(item.game.id)));
     const count = Math.min(pool.length, 2 + Math.floor(random() * 3));
     const drawn: StockItem[] = [];
@@ -130,11 +132,11 @@ export class GarageSale extends THREE.Group implements Furniture, Updatable {
       };
       box.onSold = () => {
         host.remove(box);
-        recordSold(item.game.id, true);
+        sales.add(item.game.id);
       };
       box.restock = () => {
         place();
-        recordSold(item.game.id, false);
+        sales.remove(item.game.id);
       };
       place();
       this.boxes.push(box);
@@ -142,28 +144,16 @@ export class GarageSale extends THREE.Group implements Furniture, Updatable {
   }
 }
 
-/** The games bought off the table on one (real) day: a reload that day does not lay new ones in their place. */
-const sales = new PersistedStore<{ day: string; sold: string[] }>({
+/**
+ * The games bought off the table on one (real) day (`{ day, sold }`): a reload that day does not
+ * lay new ones in their place; one handed back is removed.
+ */
+const sales = new DailyList<string>({
   key: KEYS.garageSale,
   version: 1,
-  defaults: () => ({ day: '', sold: [] }),
-  read: (data) => {
-    if (typeof data !== 'object' || data === null) return null;
-    const { day, sold } = data as { day?: unknown; sold?: unknown };
-    return typeof day === 'string' && Array.isArray(sold) ? { day, sold: sold.filter((id): id is string => typeof id === 'string') } : null;
-  },
+  field: 'sold',
+  isItem: (id): id is string => typeof id === 'string',
 });
-
-function soldHereToday(): string[] {
-  const saved = sales.load();
-  return saved.day === dayKey() ? saved.sold : [];
-}
-
-/** `id` was bought here (or handed back: `sold` false). */
-function recordSold(id: string, sold: boolean): void {
-  const rest = soldHereToday().filter((other) => other !== id);
-  sales.save({ day: dayKey(), sold: sold ? [...rest, id] : rest });
-}
 
 /** The cardboard sign: GARAGE SALE, the flat price, and the arrow across the street. */
 function signTexture(price: number): THREE.CanvasTexture {
@@ -177,7 +167,7 @@ function signTexture(price: number): THREE.CanvasTexture {
   ctx.font = 'bold 30px "Comic Sans MS", "Chalkboard SE", sans-serif';
   ctx.fillText(`games ${price} coins`, 160, 112);
   ctx.font = '22px "Comic Sans MS", "Chalkboard SE", sans-serif';
-  ctx.fillText('more inside RÉTRO JEUX ➜', 160, 170);
+  ctx.fillText('more inside RETRO GAMES ➜', 160, 170);
   ctx.fillText('(the flea market, at the back)', 160, 200);
   return toTexture(canvas, 2);
 }

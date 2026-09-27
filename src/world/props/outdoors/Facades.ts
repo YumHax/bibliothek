@@ -2,10 +2,11 @@ import { type LightKind, Polygon, Sheet, type Rng } from './Sheet';
 import { between, deg, integer, mixHex, pick, shade } from './paint';
 import { CORNER, FRONTAGE, FRONT_END, FRONT_END_FROM, FRONT_END_TO, PARK_END, PARK_END_FROM, PARK_END_TO, PARK_FAR, PARK_FROM, PARK_TO, frontage, parkLine } from './plan';
 import { FacadeFrame } from './FacadeFrame';
+import { BLINDS, CHIMNEY_POT, CURTAINS, DISH, POT_LEAVES, TERRACOTTA, WINDOW_FRAME, WINDOW_GLASS } from './palette';
 import { RETRO_GAMES, type PlannedShop, type Storefront, paintShopfronts } from './Shopfront';
 import { FACADES, FLAT_IN_STREET, FRONT } from '../../street/streetPlan';
 import { holidayBetween, paintPumpkin, wantsPumpkin } from './Holiday';
-import { currentHoliday } from './season';
+import { currentHoliday } from '@/time/season';
 
 /**
  * The architecture of one building: its wall, the stone of its trims, how its windows are dressed
@@ -37,8 +38,6 @@ const RENDERS = ['#c9a583', '#b99b6d', '#cdb79b', '#d8b49a', '#c8c2a8', '#e2cf9e
 const STONES = ['#d9ccb4', '#e0d5c1', '#d4c6a8', '#cfc4b0'];
 const SHUTTERS = ['#4f6b5a', '#5a7189', '#8c3b2e', '#e6dfcf', '#6b6f4a', '#3f4f6a'];
 const FLOWERS = ['#d9383a', '#e0567a', '#f0f0e8', '#b04ac0', '#f09a3a', '#e8d040'];
-const CURTAINS = ['#d9cfbf', '#c9b9a4', '#e6e0d4', '#b9b3a8', '#c9a58a', '#a8b4b8'];
-const WINDOW_GLASS = '#34434f';
 /** Ground floor height and floor-to-floor height, in metres. */
 export const GROUND = 4.2;
 const FLOOR = 3.1;
@@ -84,7 +83,7 @@ function architecture(random: Rng, stoneShare: number): Architecture {
     trim: shade(wall, 1.28),
     brick: false,
     window: random() < 0.7 ? 'plain' : 'lintel',
-    frame: random() < 0.75 ? '#ebe7de' : '#3a3a3c',
+    frame: random() < 0.75 ? WINDOW_FRAME : '#3a3a3c',
     shutters: random() < 0.55 ? pick(random, SHUTTERS) : null,
     flowers: 0.3,
     balconies: random() < 0.5 ? 'few' : 'none',
@@ -159,7 +158,7 @@ export function paintBackdrops(sheet: Sheet, random: Rng): void {
  */
 export function paintFrontBlock(sheet: Sheet, random: Rng): Storefront[] {
   // The row across Front Street as the walkable street has it (`FACADES`, street-local x shifted to the eye's),
-  // from the park corner along, its storeys and shops (RÉTRO JEUX among them); then the rest of the block by lots.
+  // from the park corner along, its storeys and shops (RETRO GAMES among them); then the rest of the block by lots.
   const eyeX = -FLAT_IN_STREET.x;
   const row = FACADES.filter((spec) => spec.from[1] === FRONT.farLine && spec.to[1] === FRONT.farLine)
     .map((spec) => ({ spec, x0: Math.min(spec.from[0], spec.to[0]) + eyeX, x1: Math.max(spec.from[0], spec.to[0]) + eyeX }))
@@ -427,7 +426,7 @@ function paintWindow(f: FacadeFrame, random: Rng, arch: Architecture, s0: number
     } else if (inside < 0.6) {
       // A blind half down.
       const blind = f.quad(s0 + 0.03, s1 - 0.03, ht - rise - (ht - hb) * between(random, 0.25, 0.55), ht - rise - 0.03);
-      f.detail(blind, pick(random, ['#e8e0cc', '#d8cfb8', '#c9d0d4']));
+      f.detail(blind, pick(random, BLINDS));
       if (lit) sheet.lit(blind, 'warm', strength * 0.8, curfew);
     }
     if (lit && inside >= 0.1 && random() < 0.6) {
@@ -507,9 +506,9 @@ function paintBalcony(f: FacadeFrame, random: Rng, arch: Architecture, s0: numbe
       const s = between(random, s0 + 0.3, s1 - 0.5);
       const [x, y] = f.P(s, hb, depth * 0.5);
       const r = between(random, 0.25, 0.5) * pxY;
-      ctx.fillStyle = '#9a5a3a';
+      ctx.fillStyle = TERRACOTTA;
       ctx.fillRect(x - r * 0.5, y - r * 0.6, r, r * 0.6);
-      ctx.fillStyle = pick(random, ['#3f6b33', '#4d7a3a', '#5a8a44']);
+      ctx.fillStyle = pick(random, POT_LEAVES);
       ctx.beginPath();
       ctx.arc(x, y - r * 1.1, r * 0.8, 0, Math.PI * 2);
       ctx.fill();
@@ -625,7 +624,7 @@ function paintRoof(f: FacadeFrame, random: Rng, arch: Architecture, h: number, c
         const dish = new Path2D();
         dish.ellipse(cx, cy, Math.max(1, px * 0.35), Math.max(1, py * 0.4), -0.4, 0, Math.PI * 2);
         sheet.path(f.quad(s - 0.03, s + 0.03, base + 0.7, base + 1.3, -0.5), '#8a8c8e');
-        sheet.path(dish, '#d8d8d4');
+        sheet.path(dish, DISH);
       }
     }
     if (fine && random() < 0.18) {
@@ -654,7 +653,7 @@ function paintRoof(f: FacadeFrame, random: Rng, arch: Architecture, h: number, c
     sheet.path(f.quad(s - 0.06, s + cw + 0.06, ch, ch + 0.15), shade(stack, 1.2));
     if (fine) {
       f.detail(f.quad(s + cw * 0.6, s + cw, roofTop - 1, ch), 'rgba(0,0,0,0.2)');
-      for (let k = 0; k < Math.floor(cw / 0.35); k++) sheet.path(f.quad(s + 0.1 + k * 0.35, s + 0.3 + k * 0.35, ch + 0.15, ch + 0.5), '#b86a44');
+      for (let k = 0; k < Math.floor(cw / 0.35); k++) sheet.path(f.quad(s + 0.1 + k * 0.35, s + 0.3 + k * 0.35, ch + 0.15, ch + 0.5), CHIMNEY_POT);
     }
   }
   if (fine && random() < 0.35) {

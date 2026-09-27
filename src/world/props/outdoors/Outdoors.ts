@@ -12,8 +12,8 @@ import type { GoodsRect } from './Shopfront';
 import { Life } from './Life';
 import { beginHoliday } from './Holiday';
 import { fragmentShader, vertexShader } from './shader';
-import { wakefulnessAt } from './wakefulness';
-import { type Holiday, type Season, holidayOf, seasonOf, useHoliday, useSeason } from './season';
+import { wakefulnessAt } from '@/time/wakefulness';
+import { type Holiday, type Season, holidayOf, seasonOf, useHoliday, useSeason } from '@/time/season';
 
 /**
  * A wall of the building itself, close outside some windows, facing +z (world): the pane shader
@@ -245,7 +245,7 @@ export class Outdoors {
   }
 
   /**
-   * Hangs a banner across the top of the retro games shop's window (`text`, e.g. "NOUVEAUTÉS" on a
+   * Hangs a banner across the top of the retro games shop's window (`text`, e.g. "NEW IN" on a
    * day of fresh stock), or takes it down (null). Repaints those texels and re-uploads the scenery.
    */
   showShopBanner(text: string | null): void {

@@ -1,63 +1,118 @@
 import { KEYS, PersistedStore, safeStorage } from '@/persistence';
+import { HOME_GOODS, HOME_UPGRADES, homeGood, type HomeUpgrade } from './homeGoods';
+
+export type { HomeUpgrade } from './homeGoods';
 
 export const HOME_UPGRADES_STORAGE_KEY = KEYS.home;
 
-/**
- * What can be bought for the flat itself, rather than for the collection (the market's catalogue is
- * `HOME_GOODS` in `homeGoods.ts`; the potted plants for the balcony come from the florist on Front Street).
- */
-export type HomeUpgrade = 'bookcase' | 'rug' | 'lamp' | 'poster' | 'crt' | 'plant';
-
-const UPGRADES: readonly HomeUpgrade[] = ['bookcase', 'rug', 'lamp', 'poster', 'crt', 'plant'];
+/** Roughly how many boxes one bookcase takes (NES-sized; bigger boxes, fewer): what a save from before the bare flat is given shelves for. */
+const BOXES_PER_BOOKCASE = 35;
 
 type UpgradeCounts = Record<HomeUpgrade, number>;
 
+interface Saved {
+  counts: UpgradeCounts;
+  /**
+   * Saved before the flat started bare (data v1): the collection room's shelving then grew with the collection. Such a
+   * save is given the bookcases its games need once (`shelveCollection`), so no game is left without a shelf.
+   */
+  shelvesOwed: boolean;
+}
+
+export interface HomeUpgradesOptions {
+  /** Everything bought already, at its most (`?debug`: the furnished flat of before). */
+  furnished?: boolean;
+}
+
 /**
- * Furniture bought for the flat: extra bookcases in the bedroom (for the games the collection
- * room has no room left for), and the one-off pieces of `HOME_GOODS`. Counts persist in localStorage; consumers `subscribe`
- * and re-read `count`.
+ * What has been bought for the flat (`HOME_GOODS` in `homeGoods.ts`: the furniture, the screens, the plants, the cat):
+ * a count per piece. The flat starts bare; the plans' entries marked `upgrade` show once their piece is owned. Counts
+ * persist in localStorage; consumers `subscribe` and re-read `count`.
  */
 export class HomeUpgrades {
-  private counts: UpgradeCounts;
+  private state: Saved;
   private readonly listeners = new Set<() => void>();
-  private readonly store: PersistedStore<UpgradeCounts>;
+  private readonly store: PersistedStore<Saved>;
 
   constructor(
     storage: Storage | null = safeStorage(),
     key: string = HOME_UPGRADES_STORAGE_KEY,
+    options: HomeUpgradesOptions = {},
   ) {
-    // Version 1: a count per upgrade.
-    this.store = new PersistedStore<UpgradeCounts>({ key, version: 1, storage, defaults: noneBought, read: readCounts });
-    this.counts = this.store.load();
+    const defaults = (): Saved => ({ counts: options.furnished ? everything() : noneBought(), shelvesOwed: false });
+    // Version 1: a count per upgrade, from before the flat started bare. Version 2: `{ counts, shelvesOwed }`.
+    this.store = new PersistedStore<Saved>({
+      key,
+      version: 2,
+      storage,
+      defaults,
+      read: readSaved,
+      migrate: { 1: (data) => ({ counts: data, shelvesOwed: true }) },
+    });
+    this.state = this.store.load();
   }
 
   count(upgrade: HomeUpgrade): number {
-    return this.counts[upgrade];
+    return this.state.counts[upgrade];
+  }
+
+  /** Whether `upgrade` is owned: at least one, or more than `nth` of it (the nth armchair, print, plant...). */
+  has(upgrade: HomeUpgrade, nth = 0): boolean {
+    return this.state.counts[upgrade] > nth;
+  }
+
+  /** Whether one more of `upgrade` can be bought: under its `max`, and what it needs is owned. */
+  canBuy(upgrade: HomeUpgrade): boolean {
+    const good = homeGood(upgrade);
+    return this.count(upgrade) < good.max && (!good.requires || this.has(good.requires));
   }
 
   add(upgrade: HomeUpgrade): void {
-    this.counts = { ...this.counts, [upgrade]: this.counts[upgrade] + 1 };
-    this.store.save(this.counts);
-    for (const cb of [...this.listeners]) cb();
+    this.set({ ...this.state, counts: { ...this.state.counts, [upgrade]: this.state.counts[upgrade] + 1 } });
+  }
+
+  /**
+   * Once, for a save from before the flat started bare (called with a persisted collection): bookcases enough for `games`
+   * boxes (beyond the one that stands from the start), so a collection that grew on self-sizing shelves still stands on
+   * shelves. Nothing else is given back.
+   */
+  shelveCollection(games: number): void {
+    // Nothing saved yet with games already owned: a save from before that never bought anything for the flat.
+    if (!this.state.shelvesOwed && this.store.exists) return;
+    const needed = Math.max(0, Math.ceil(games / BOXES_PER_BOOKCASE) - 1);
+    const bookcases = Math.min(homeGood('bookcase').max, this.state.counts.bookcase + needed);
+    this.set({ counts: { ...this.state.counts, bookcase: bookcases }, shelvesOwed: false });
   }
 
   subscribe(cb: () => void): () => void {
     this.listeners.add(cb);
     return () => this.listeners.delete(cb);
   }
+
+  private set(state: Saved): void {
+    this.state = state;
+    this.store.save(state);
+    for (const cb of [...this.listeners]) cb();
+  }
 }
 
 function noneBought(): UpgradeCounts {
-  return Object.fromEntries(UPGRADES.map((u) => [u, 0])) as UpgradeCounts;
+  return Object.fromEntries(HOME_UPGRADES.map((u) => [u, 0])) as UpgradeCounts;
 }
 
-function readCounts(data: unknown): UpgradeCounts | null {
+function everything(): UpgradeCounts {
+  return Object.fromEntries(HOME_GOODS.map((g) => [g.id, g.max])) as UpgradeCounts;
+}
+
+function readSaved(data: unknown): Saved | null {
   if (typeof data !== 'object' || data === null) return null;
-  const parsed = data as Partial<UpgradeCounts>;
+  const { counts: raw, shelvesOwed } = data as { counts?: unknown; shelvesOwed?: unknown };
+  if (typeof raw !== 'object' || raw === null) return null;
+  const parsed = raw as Partial<Record<string, unknown>>;
   const counts = noneBought();
-  for (const u of UPGRADES) {
+  for (const u of HOME_UPGRADES) {
     const n = parsed[u];
-    if (typeof n === 'number' && n >= 0) counts[u] = Math.floor(n);
+    if (typeof n === 'number' && n >= 0) counts[u] = Math.min(Math.floor(n), homeGood(u).max);
   }
-  return counts;
+  return { counts, shelvesOwed: shelvesOwed === true };
 }

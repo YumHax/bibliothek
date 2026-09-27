@@ -3,6 +3,7 @@ import type { Updatable } from '@/core/Engine';
 import type { Furniture } from '@/world/Furniture';
 import { BOWL_HEIGHT, BOWL_INNER_RADIUS, MAT_SIZE, bowlMat, bowlMesh, ceramicMaterial } from './FoodBowl';
 import type { WaterBowlLike } from './types';
+import { standard } from '@/world/materials/palette';
 
 /**
  * The cat's water bowl: the same lathed dish as the food bowl (brushed steel or glazed ceramic)
@@ -45,13 +46,13 @@ export class WaterBowl extends THREE.Group implements Furniture, Updatable, Wate
     const base = this.options.mat ? MAT_SIZE.height : 0;
     const material =
       this.options.finish === 'steel'
-        ? new THREE.MeshStandardMaterial({ color: 0xb9bcc2, roughness: 0.35, metalness: 0.85, side: THREE.DoubleSide })
+        ? standard({ color: 0xb9bcc2, roughness: 0.35, metalness: 0.85, side: THREE.DoubleSide })
         : ceramicMaterial(this.options.glaze);
     const dish = bowlMesh(material);
     dish.position.y = base;
     this.add(dish);
 
-    const surface = new THREE.MeshStandardMaterial({
+    const surface = standard({
       color: 0x7fb4d6,
       transparent: true,
       opacity: 0.7,

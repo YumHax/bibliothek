@@ -100,6 +100,9 @@ export const ARCADE_PLAN = {
   /** Where the teleport sets the player down: just inside the exit door, facing the hall (-z). */
   arrival: { at: [0, 3.1] as [number, number], yaw: 0 },
 
+  /** Real lights lent to the nearest screen glows and case lights (`LightPool`); the rest glow without lighting. */
+  glowLights: 3,
+
   /** The way out, on the front wall; clicking it offers the other destinations. */
   exit: { wall: 'front', along: 0, y: 0 } as Placement,
 
@@ -214,6 +217,9 @@ export const ARCADE_PLAN = {
     height: 0.85,
     games: ['breakout', 'invaders', 'stacker', 'arrows', 'snake', 'comets'] as ArcadeGameId[],
     spectators: [[-0.75, 1.55], [0, 1.85], [0.75, 1.55]] as [x: number, z: number][],
+    /** What the watchers say when the player wins a round, and when they go out. */
+    cheers: ['YES!', 'Through to the next round!', 'Did you see that?', 'Clean!'],
+    groans: ['Ohhh...', 'So close.', 'Unlucky.', 'Next Saturday, then.'],
     /** The TOURNAMENT sign on the cabinet's roof (cabinet-local y). */
     topperY: 1.92,
   },
@@ -221,8 +227,13 @@ export const ARCADE_PLAN = {
   /** The change machine on the left wall by the way in (it works, some days). */
   changeMachine: { wall: 'left', along: 2.9, y: 0, offset: 0.26 } as Placement,
 
-  /** The jukebox against the front wall, left of the boards. */
-  jukebox: { at: { wall: 'front', along: -4.6, y: 0, offset: 0.3 } as Placement, color: 0x5a1a14, startStation: 0 },
+  /** The jukebox against the front wall, left of the boards, and the pink pool its tubes throw on the carpet (jukebox-local z). */
+  jukebox: {
+    at: { wall: 'front', along: -4.6, y: 0, offset: 0.3 } as Placement,
+    color: 0x5a1a14,
+    startStation: 0,
+    pool: { color: 0xff7ad9, width: 1.3, depth: 1.1, z: 0.75, level: 0.5 },
+  },
 
   /** The people: the attendant behind the counter, regulars coming and going, a kid who watches. */
   crowd: {

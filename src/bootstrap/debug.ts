@@ -1,4 +1,4 @@
-import type * as THREE from 'three';
+import * as THREE from 'three';
 import type { Engine } from '@/core/Engine';
 import { startPerfLog } from '@/core/PerfLog';
 import type { Graphics } from '@/graphics';
@@ -6,15 +6,16 @@ import type { Zone } from '@/world/zone';
 import type { FirstPersonController } from '@/player/FirstPersonController';
 import type { PayoutStats } from '@/economy';
 import { PayoutOverlay } from '@/ui/PayoutOverlay';
+import { findZFighting, type ZFightOptions } from '@/world/surface/zfight';
 
-/** Every shadow-casting light in the active zones but `current` (for the F9 bisection's "shadows elsewhere off"). */
-function shadowLightsOutside(zones: readonly { readonly group: THREE.Object3D }[], current: object): THREE.Light[] {
+/** Every light (every shadow-casting one with `shadowed`) in the zones but `current`, for the F9 bisection. */
+function lightsOutside(zones: readonly { readonly group: THREE.Object3D }[], current: object, shadowed: boolean): THREE.Light[] {
   const lights: THREE.Light[] = [];
   for (const zone of zones) {
     if (zone === current) continue;
     zone.group.traverse((obj) => {
       const light = obj as THREE.Light;
-      if (light.isLight && light.castShadow) lights.push(light);
+      if (light.isLight && (!shadowed || light.castShadow)) lights.push(light);
     });
   }
   return lights;
@@ -29,9 +30,76 @@ export function installStats(parts: { engine: Engine; world: { readonly zones: r
   const perf = startPerfLog(engine, {
     drawCurrentZoneOnly: () => world.zones.forEach((zone) => zone !== zones.current && zone.setDrawn(false)),
     drawAllZones: () => world.zones.forEach((zone) => zone.isActive && zone.setDrawn(true)),
-    shadowLightsOutsideCurrentZone: () => shadowLightsOutside(world.zones, zones.current),
+    shadowLightsOutsideCurrentZone: () => lightsOutside(world.zones, zones.current, true),
+    lightsOutsideCurrentZone: () => lightsOutside(world.zones, zones.current, false),
   });
-  Object.assign(globalThis, { bibliothek: { engine, world, player, zones, graphics, bisect: perf.bisect } });
+  exposeDebug({ engine, world, player, zones, graphics, bisect: perf.bisect });
+}
+
+/** Adds `entries` to the console's `bibliothek` handle (each installer adds its own). */
+function exposeDebug(entries: Record<string, unknown>): void {
+  const global = globalThis as { bibliothek?: Record<string, unknown> };
+  global.bibliothek = { ...global.bibliothek, ...entries };
+}
+
+/**
+ * `?debug` / `?stats`: `bibliothek.zfight(zoneId?, options?)` lists the overlapping coplanar faces
+ * of a zone (the player's by default) that z-fight, and each zone logs its count the first time the
+ * player enters it once built (see `world/surface/zfight`).
+ */
+export function installZFight(parts: { world: { readonly zones: readonly Zone[] }; zones: { readonly current: Zone; onZoneChange(listener: (zone: Zone) => void): () => void } }): void {
+  const { world, zones } = parts;
+  const run = (zone: Zone, options?: ZFightOptions): ReturnType<typeof findZFighting> => {
+    const diagonal = zone.bounds.getSize(new THREE.Vector3()).length();
+    const pairs = findZFighting(zone.group, { viewDistance: Math.min(40, Math.max(6, diagonal * 0.6)), ...options });
+    console.log(`[zfight] ${zone.id}: ${pairs.length} pair${pairs.length === 1 ? '' : 's'}${pairs.length ? ' (bibliothek.zfight() lists them)' : ''}`);
+    return pairs;
+  };
+  const checked = new WeakSet<THREE.Object3D>();
+  const materialsChecked = new WeakSet<THREE.Object3D>();
+  const check = (zone: Zone): void => {
+    if (checked.has(zone.group) || !zone.isActive) return;
+    checked.add(zone.group);
+    // After the frame that shows it: the zone's own `activate` may still be placing things.
+    setTimeout(() => {
+      run(zone);
+      if (!materialsChecked.has(zone.group)) {
+        materialsChecked.add(zone.group);
+        reportMixedInstancing(zone);
+      }
+    }, 1500);
+  };
+  check(zones.current);
+  zones.onZoneChange((zone) => check(zone));
+  exposeDebug({
+    zfight: (id?: string, options?: ZFightOptions) => {
+      const zone = id ? world.zones.find((z) => z.id === id) : zones.current;
+      if (!zone) return console.warn(`[zfight] no zone ${id}`);
+      const pairs = run(zone, options);
+      console.table(pairs.slice(0, 60));
+      return pairs;
+    },
+  });
+}
+
+/**
+ * Materials drawn by both an `InstancedMesh` and a plain mesh in `zone`: three r169 switches their
+ * program at every such draw (see `world/materials/palette`). Logged once per zone under `?debug`.
+ */
+function reportMixedInstancing(zone: Zone): void {
+  const uses = new Map<THREE.Material, { instanced: string[]; plain: string[] }>();
+  zone.group.traverse((obj) => {
+    const mesh = obj as THREE.Mesh;
+    if (!mesh.isMesh) return;
+    const instanced = (mesh as THREE.InstancedMesh).isInstancedMesh === true;
+    for (const material of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) {
+      let use = uses.get(material);
+      if (!use) uses.set(material, (use = { instanced: [], plain: [] }));
+      (instanced ? use.instanced : use.plain).push(mesh.parent?.name || mesh.name || mesh.type);
+    }
+  });
+  const mixed = [...uses].filter(([, u]) => u.instanced.length && u.plain.length);
+  if (mixed.length) console.warn(`[materials] ${zone.id}: ${mixed.length} material(s) on both instanced and plain meshes (a program switch per draw):`, mixed.map(([m, u]) => ({ material: m.name || m.type, instanced: u.instanced.slice(0, 3), plain: u.plain.slice(0, 3) })));
 }
 
 /** `?payout`: the arcade's balance table, and `simulatePayouts()` in the console (the cabinet games on autopilot, fetched on demand). */

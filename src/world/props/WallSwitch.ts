@@ -2,7 +2,8 @@ import * as THREE from 'three';
 import type { Interactable } from '@/interaction/Interactable';
 import type { SessionActions } from '@/game/SessionActions';
 import { invisibleHitbox } from '../meshUtils';
-import { Prop, part, matte } from './Prop';
+import { paint } from '../materials/palette';
+import { Prop, part } from './Prop';
 import type { SwitchableLamp } from './SwitchableLamp';
 
 export interface WallSwitchOptions {
@@ -37,14 +38,14 @@ export class WallSwitch extends Prop implements Interactable {
     super();
     this.name = 'WallSwitch';
     this.lamp = options.lamp;
-    const plate = matte(options.plateColor ?? 0xf1ede6, 0.5);
+    const plate = paint(options.plateColor ?? 0xf1ede6, 0.5);
     part(this, PLATE, PLATE, PLATE_DEPTH, plate, { z: PLATE_DEPTH / 2 }).castShadow = false;
     this.rockerMat = new THREE.MeshStandardMaterial({ color: 0xf6f3ee, roughness: 0.35, emissive: 0xfff1d6, emissiveIntensity: 0 });
     this.rocker = part(this, ROCKER, ROCKER, ROCKER_DEPTH, this.rockerMat, {});
     this.rocker.castShadow = false;
     this.rocker.position.z = PLATE_DEPTH + ROCKER_DEPTH / 2;
     // Two screw heads either side of the rocker.
-    const screw = matte(0xc9c4ba, 0.4);
+    const screw = paint(0xc9c4ba, 0.4);
     for (const dx of [-PLATE * 0.38, PLATE * 0.38]) part(this, 0.006, 0.006, 0.002, screw, { x: dx, z: PLATE_DEPTH + 0.001 }).castShadow = false;
     const hitbox = invisibleHitbox(PLATE + 0.04, PLATE + 0.04, 0.05, { z: 0.025 });
     this.hitboxes = [hitbox];

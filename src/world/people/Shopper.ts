@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import type { Updatable } from '@/core/Engine';
 import type { Furniture } from '../Furniture';
+import { Glance, idleGlance, nextLeg, stepAlong, turnTowards, viewerWithin, type Leg } from './locomotion';
 import { PersonModel } from './PersonModel';
 import { randomLook, type PersonLook } from './looks';
 import type { Pose } from './poses';
@@ -68,10 +69,11 @@ export class Shopper extends THREE.Group implements Furniture, Updatable {
   private present = true;
   private state: State;
   private heading = NaN;
-  private glanceTimer = 0;
-  private lookUp = false;
+  /** One glance for browsing and walking alike: a new one waits for the last to run out. */
+  private readonly glance = new Glance();
+  private readonly leg: Leg = { dx: 0, dz: 0, dist: 0 };
   private readonly viewerPos = new THREE.Vector3();
-  private readonly scratch = new THREE.Vector3();
+  private readonly gazePoint = new THREE.Vector3();
   private readonly mine = new THREE.Vector3();
 
   constructor(options: ShopperOptions) {
@@ -83,7 +85,7 @@ export class Shopper extends THREE.Group implements Furniture, Updatable {
     this.speed = options.speed ?? 0.75;
     this.claims = options.claims ?? new Set();
     const seed = options.seed ?? 1;
-    this.model = new PersonModel(options.look ?? randomLook(seed + 100, 'shopper'));
+    this.model = new PersonModel(options.look ?? randomLook(seed + 100, 'shopper'), this.viewer);
     this.add(this.model);
     const blob = blobShadow(0.55, 0.5);
     if (blob) this.add(blob);
@@ -144,28 +146,21 @@ export class Shopper extends THREE.Group implements Furniture, Updatable {
   }
 
   private walk(dt: number, state: { path: THREE.Vector3[]; then: BrowseSpot | null }): void {
-    const next = state.path[0];
-    if (!next) {
+    const leg = nextLeg(this.position, state.path, ARRIVE, this.leg);
+    if (leg === 'done') {
       this.state = state.then ? { kind: 'browse', spot: state.then, left: 4 + Math.random() * 7 } : { kind: 'linger', left: 1.5 + Math.random() * 3 };
       const poses = state.then ? BROWSE_POSES : LINGER_POSES;
       this.model.setPose(poses[Math.floor(Math.random() * poses.length)]!);
       return;
     }
-    const dx = next.x - this.position.x;
-    const dz = next.z - this.position.z;
-    const dist = Math.hypot(dx, dz);
-    if (dist < ARRIVE) {
-      state.path.shift();
-      return;
-    }
+    if (leg === 'reached') return;
+    const { dx, dz, dist } = this.leg;
     if (this.blocked(dx / dist, dz / dist, dt)) {
       this.model.setSpeed(0);
       this.idleGaze(dt);
       return;
     }
-    const step = Math.min(dist, this.speed * dt);
-    this.position.x += (dx / dist) * step;
-    this.position.z += (dz / dist) * step;
+    stepAlong(this.position, this.leg, this.speed * dt);
     this.face(Math.atan2(dx, dz), dt);
     this.model.setSpeed(this.speed);
     this.idleGaze(dt);
@@ -213,41 +208,39 @@ export class Shopper extends THREE.Group implements Furniture, Updatable {
   }
 
   private face(yaw: number, dt: number): void {
-    let delta = yaw - this.heading;
-    delta = Math.atan2(Math.sin(delta), Math.cos(delta));
-    this.heading += delta * Math.min(1, dt * TURN_RATE);
+    this.heading = turnTowards(this.heading, yaw, dt, TURN_RATE);
     this.rotation.y = this.heading;
   }
 
   /** Browsing: eyes on the table ahead, wandering along it, an occasional look up. */
   private browseGaze(dt: number): void {
     if (this.playerGlance()) return;
-    this.glanceTimer -= dt;
-    if (this.glanceTimer <= 0) {
-      this.glanceTimer = 1.5 + Math.random() * 3;
-      this.lookUp = Math.random() < 0.2;
-      this.scratch.set((Math.random() - 0.5) * 1.2, this.lookUp ? 1.7 : 0.9, this.lookUp ? 3 : 0.9);
-    }
-    this.model.gaze(this.localToWorld(this.scratch.clone()));
+    this.gazeAt(this.glance.update(dt, browseGlance));
   }
 
   /** Walking or lingering: ahead, with the odd look aside. */
   private idleGaze(dt: number): void {
     if (this.playerGlance()) return;
-    this.glanceTimer -= dt;
-    if (this.glanceTimer <= 0) {
-      this.glanceTimer = 2 + Math.random() * 4;
-      this.scratch.set((Math.random() - 0.5) * 4, 1.2 + Math.random() * 0.6, 2.5);
-    }
-    this.model.gaze(this.localToWorld(this.scratch.clone()));
+    this.gazeAt(this.glance.update(dt, idleGlance));
+  }
+
+  /** Looks at `point`, in this shopper's frame. */
+  private gazeAt(point: THREE.Vector3): void {
+    this.model.gaze(this.localToWorld(this.gazePoint.copy(point)));
   }
 
   /** The player close by gets looked at; true when that is what the head is doing. */
   private playerGlance(): boolean {
-    this.viewer.getWorldPosition(this.viewerPos);
-    const mine = this.getWorldPosition(new THREE.Vector3());
-    if (Math.hypot(this.viewerPos.x - mine.x, this.viewerPos.z - mine.z) > NOTICE_RANGE) return false;
+    if (!viewerWithin(this, this.viewer, NOTICE_RANGE, this.viewerPos, this.mine)) return false;
     this.model.gaze(this.viewerPos);
     return true;
   }
+}
+
+/** Browsing: somewhere along the table ahead, once in five a look up across the hall; for 1.5 to 4.5 seconds. */
+function browseGlance(point: THREE.Vector3): number {
+  const timer = 1.5 + Math.random() * 3;
+  const up = Math.random() < 0.2;
+  point.set((Math.random() - 0.5) * 1.2, up ? 1.7 : 0.9, up ? 3 : 0.9);
+  return timer;
 }

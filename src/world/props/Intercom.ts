@@ -2,7 +2,8 @@ import * as THREE from 'three';
 import type { Interactable } from '@/interaction/Interactable';
 import type { SessionActions } from '@/game/SessionActions';
 import { invisibleHitbox } from '../meshUtils';
-import { Prop, part, matte } from './Prop';
+import { Prop, part } from './Prop';
+import { paint } from '../materials/palette';
 
 export interface IntercomOptions {
   /** Colour of the plastic. Default an old beige. */
@@ -29,7 +30,7 @@ export class Intercom extends Prop implements Interactable {
     super();
     this.name = 'Intercom';
     this.plastic = new THREE.MeshStandardMaterial({ color: options.color ?? 0xd9d0bc, roughness: 0.55, emissive: 0xffffff, emissiveIntensity: 0 });
-    const dark = matte(0x3a3834, 0.6);
+    const dark = paint(0x3a3834, 0.6);
     part(this, W, H, 0.03, this.plastic, { z: 0.015 });
     // Speaker grille and the door-release button at the bottom of the base.
     for (let i = 0; i < 4; i++) part(this, 0.04, 0.003, 0.002, dark, { y: -H / 2 + 0.05 + i * 0.008, z: 0.031 });

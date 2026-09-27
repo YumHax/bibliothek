@@ -1,5 +1,6 @@
 import { seededRandom } from '@/covers/generated/canvasUtils';
 import { GROUND_FLOOR, STOREY, type FacadeSpec, type FlatFront, type ShopKind, type ShopSpec } from './streetPlan';
+import { SHOP_LOOKS } from '../city/shopLooks';
 
 /** A light painted on the night map: a rect (night-map pixels), its colour, when it comes on at dusk and when it goes out. */
 export interface NightLight {
@@ -91,20 +92,26 @@ export interface ShopLook {
   neon?: string;
 }
 
+/**
+ * Each kind's look (`city/shopLooks`, shared with the window view) and how it lights up here. RETRO
+ * GAMES and the arcade paint no name: their signs are props of their own.
+ */
 export const SHOPS: Record<Exclude<ShopKind, 'shut'>, ShopLook> = {
-  cafe: { name: 'CAFÉ', front: '#2f4a3a', fascia: '#2f4a3a', letters: '#e9dcb5', awning: ['#2f5a44', '#efe6d2'], goods: ['#6a4a32', '#d9c9a8', '#3a2a22'], light: '#ffd49a', late: false },
-  bakery: { name: 'BOULANGERIE', front: '#6b4a2a', fascia: '#5a3a22', letters: '#f1d890', awning: ['#b8862f', '#f3ead6'], goods: ['#d9a05a', '#b8763a', '#e8c890', '#8a5a2a'], light: '#ffd49a', late: false },
-  pharmacy: { name: 'PHARMACIE', front: '#d8d8d2', fascia: '#2f7a4a', letters: '#f4f4ee', awning: null, goods: ['#f0f0f0', '#6fb0d0', '#e0e8e0', '#8fc0a0'], light: '#e8f4ff', late: false, neon: '#4dff8a' },
-  books: { name: 'LIBRAIRIE', front: '#2a3550', fascia: '#2a3550', letters: '#e0c878', awning: ['#2f4f6a', '#e8e0cc'], goods: ['#8a2a2a', '#2f4f6a', '#d9c9a0', '#3f6b4f', '#b8862f', '#e8e2d2'], light: '#ffd49a', late: false },
-  grocer: { name: 'PRIMEUR', front: '#3f5a2a', fascia: '#3f5a2a', letters: '#f0e8c8', awning: ['#3f6b4f', '#f0ead8'], goods: ['#d9383a', '#f09a3a', '#6fa35e', '#e8d040'], light: '#ffe0b0', late: false },
-  florist: { name: 'FLEURS', front: '#4a3a5a', fascia: '#e8e0d4', letters: '#5a3f6a', awning: ['#5a3f6a', '#e8e0d4'], goods: ['#e0567a', '#f0f0e8', '#b04ac0', '#4d7a3a', '#f09a3a'], light: '#ffe0b0', late: false },
-  tabac: { name: 'TABAC', front: '#3a3634', fascia: '#8a2a2a', letters: '#f0e8d8', awning: null, goods: ['#c9c9c9', '#d94f3a', '#3b6fb3'], light: '#ffd49a', late: true, neon: '#ff5a3a' },
-  bar: { name: 'BAR', front: '#241c1a', fascia: '#241c1a', letters: '#f0c060', awning: ['#7a2f2f', '#2a2020'], goods: ['#c9a050', '#6a8a5a', '#a03a2a', '#3a2a22'], light: '#ffb060', late: true, neon: '#ffc060' },
-  butcher: { name: 'BOUCHERIE', front: '#7a2a2a', fascia: '#7a2a2a', letters: '#f0e8d8', awning: ['#8a2a2a', '#f0ead8'], goods: ['#c9544a', '#e8d8c8', '#a83a30'], light: '#f0f4ff', late: false },
-  laundry: { name: 'LAVERIE', front: '#3a6a8a', fascia: '#f0f0ea', letters: '#3a6a8a', awning: null, goods: ['#e8e8e8', '#c9c9c9', '#3a6a8a'], light: '#e8f4ff', late: true },
-  // The neon signs over these two are separate meshes (`NeonSign`); the fascia stays dark under them.
-  retro: { name: '', front: '#1c1a2a', fascia: '#2a1f4a', letters: '#8fe6ff', awning: null, goods: ['#d94f3a', '#3b6fb3', '#f0c94a', '#e8e8e8', '#6fa35e', '#8c4f9e'], light: '#c8e0ff', late: false },
-  arcade: { name: '', front: '#120c18', fascia: '#1a1024', letters: '#ff2fa0', awning: null, goods: ['#ff2fa0', '#5fe6ff', '#ffd23a', '#7a5cff', '#3aff8a'], light: '#c070ff', late: true },
+  cafe: { ...SHOP_LOOKS.cafe, light: '#ffd49a' },
+  bakery: { ...SHOP_LOOKS.bakery, light: '#ffd49a' },
+  pharmacy: { ...SHOP_LOOKS.pharmacy, light: '#e8f4ff', neon: '#4dff8a' },
+  books: { ...SHOP_LOOKS.books, light: '#ffd49a' },
+  grocer: { ...SHOP_LOOKS.grocer, light: '#ffe0b0' },
+  florist: { ...SHOP_LOOKS.florist, light: '#ffe0b0' },
+  tabac: { ...SHOP_LOOKS.tabac, light: '#ffd49a', neon: '#ff5a3a' },
+  bar: { ...SHOP_LOOKS.bar, light: '#ffb060', neon: '#ffc060' },
+  butcher: { ...SHOP_LOOKS.butcher, light: '#f0f4ff' },
+  furniture: { ...SHOP_LOOKS.furniture, light: '#ffd49a' },
+  electronics: { ...SHOP_LOOKS.electronics, light: '#d8e8ff', neon: '#5fd0ff' },
+  pets: { ...SHOP_LOOKS.pets, light: '#ffe8c0' },
+  laundry: { ...SHOP_LOOKS.laundry, light: '#e8f4ff' },
+  retro: { ...SHOP_LOOKS.retro, name: '', light: '#c8e0ff' },
+  arcade: { ...SHOP_LOOKS.arcade, name: '', light: '#c070ff' },
 };
 
 const LETTER_FONT = 'Georgia, "Times New Roman", serif';
@@ -168,7 +175,7 @@ export function paintFacade(ctx: CanvasRenderingContext2D, spec: FacadeSpec, wid
   p.rect(0, height - 0.12, width, height, style.trim);
 
   // Storeys over the ground floor: a row of bays.
-  const bays = Math.max(1, Math.round(width / 2.7));
+  const bays = spec.bays ?? Math.max(1, Math.round(width / 2.7));
   const bay = width / bays;
   const winW = Math.min(1.15, bay * 0.5);
   const winH = 1.65;
@@ -222,23 +229,43 @@ export function paintFacade(ctx: CanvasRenderingContext2D, spec: FacadeSpec, wid
 }
 
 /**
- * Our flat's floor: the collection room's front window and the balcony's glazed door, at their
- * real places and heights (the balcony itself is built in 3D). Their light is home's: warm, on from
- * early dusk until very late.
+ * Our flat's floor on this face: the collection room's windows and the balcony's glazed door, the
+ * kitchen's window, the frosted panes of the bathroom and the bedroom, at their real places and
+ * heights (the balcony itself is built in 3D); nothing else on that floor. Their light is home's:
+ * warm, on from early dusk until very late (the frosted ones dimmer, and out earlier).
  */
 function paintFlat(p: Brush, style: Style, flat: FlatFront): void {
   const y = flat.floorY;
   for (const w of flat.windows) {
     const s0 = w.at - w.width / 2;
     const s1 = w.at + w.width / 2;
+    if (w.frosted) {
+      paintFrostedGlass(p, style, s0, y + w.bottom, s1, y + w.top);
+      p.light(s0 + 0.04, y + w.bottom + 0.04, s1 - 0.04, y + w.top - 0.04, '#d9c9a8', 0.1, 0.2);
+      continue;
+    }
     paintTallGlass(p, style, s0, y + w.bottom, s1, y + w.top);
     p.light(s0 + 0.05, y + w.bottom + 0.05, s1 - 0.05, y + w.top - 0.05, '#ffcf8a', 0.05, 0.03);
   }
+  if (!flat.balcony) return;
   const { at, door } = flat.balcony;
   const s0 = at - door.width / 2;
   const s1 = at + door.width / 2;
   paintTallGlass(p, style, s0, y, s1, y + door.height);
   p.light(s0 + 0.05, y + 0.05, s1 - 0.05, y + door.height - 0.05, '#ffd9a0', 0.05, 0.03);
+}
+
+/** A small obscured pane (a bathroom's, a bedroom's on the courtyard): reveal, milky glass, frame, a sill under it. */
+function paintFrostedGlass(p: Brush, style: Style, s0: number, y0: number, s1: number, y1: number): void {
+  p.rect(s0 - 0.06, y0 - 0.03, s1 + 0.06, y1 + 0.04, 'rgba(0,0,0,0.3)');
+  p.rect(s0, y0, s1, y1, '#b9c2c4');
+  p.rect(s0, y0 + (y1 - y0) * 0.55, s1, y1, 'rgba(235,240,242,0.35)');
+  const bar = Math.max(0.03, 1.5 / p.slot.k);
+  p.rect(s0, y0, s1, y0 + bar, style.frame);
+  p.rect(s0, y1 - bar, s1, y1, style.frame);
+  p.rect(s0, y0, s0 + bar, y1, style.frame);
+  p.rect(s1 - bar, y0, s1, y1, style.frame);
+  p.rect(s0 - 0.08, y0 - 0.1, s1 + 0.08, y0 - 0.02, style.trim);
 }
 
 /** A tall pane (a French window, a glazed door): reveal, glass, sky reflection, frame and bars, a head over it. */
@@ -349,7 +376,7 @@ function paintShop(p: Brush, random: () => number, shop: ShopSpec, goods: readon
   // Joinery, fascia board and its lettering.
   p.rect(s0, 0, s1, 3.6, look.front);
   p.rect(s0, 3.05, s1, 3.75, look.fascia);
-  // Its own name when the plan gives one ('CAFÉ LUMIÈRE'), else its trade's.
+  // Its own name when the plan gives one ('SUNNY SIDE CAFE'), else its trade's.
   const name = shop.name ?? look.name;
   if (name) {
     const size = Math.min(0.5, (width * 0.9) / (name.length * 0.62));

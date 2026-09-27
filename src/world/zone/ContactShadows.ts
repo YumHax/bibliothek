@@ -1,13 +1,14 @@
 import * as THREE from 'three';
 import { QUALITY } from '@/graphics/quality';
 import type { Furniture } from '../Furniture';
-import { markShared } from '../props/Prop';
+import { markShared } from '../materials/sharedResources';
+import { FLOOR, RENDER_ORDER, onSurface } from '../surface/layers';
 
 /**
- * Height of the blobs over the floor: clear of a rug's top (12 mm, `Rug`; so what stands on one
- * keeps its shadow without the two fighting), below anything's feet.
+ * Height of the blobs over the floor (`FLOOR.contactShadow`): clear of a rug's top (so what stands
+ * on one keeps its shadow without the two fighting), below anything's feet.
  */
-const LIFT = 0.015;
+const LIFT = FLOOR.contactShadow.lift;
 /** Darkness right under the object. */
 const OPACITY = 0.5;
 /** The blob reaches this much beyond the object's feet on each side (share of its size, plus a margin in metres). */
@@ -49,18 +50,11 @@ function texture(): THREE.CanvasTexture {
   return blobTexture;
 }
 
-/** The one material of every blob: black, alpha from the texture, drawn over the floor without writing depth. */
+/** The one material of every blob: black, alpha from the texture, drawn over the floor (its layer) without writing depth. */
 function material(): THREE.MeshBasicMaterial {
-  blobMaterial ??= markShared(new THREE.MeshBasicMaterial({
-    color: 0x000000,
-    alphaMap: texture(),
-    transparent: true,
-    opacity: OPACITY,
-    depthWrite: false,
-    polygonOffset: true,
-    polygonOffsetFactor: -2,
-    polygonOffsetUnits: -2,
-  }));
+  blobMaterial ??= markShared(
+    onSurface(new THREE.MeshBasicMaterial({ color: 0x000000, alphaMap: texture(), transparent: true, opacity: OPACITY }), FLOOR.contactShadow, { depthWrite: false }),
+  );
   return blobMaterial;
 }
 
@@ -80,7 +74,7 @@ export function blobShadow(width: number, depth: number, opacity = 1): THREE.Mes
   mesh.position.y = LIFT;
   mesh.castShadow = false;
   mesh.receiveShadow = false;
-  mesh.renderOrder = -1;
+  mesh.renderOrder = RENDER_ORDER.contactShadow;
   mesh.name = 'ContactShadow';
   // Its geometry is shared by every blob; a clone of the material (other opacity) is its own.
   mesh.userData.sharedResources = mat === material();
@@ -191,7 +185,7 @@ export class ContactShadows {
     mesh.count = 0;
     mesh.castShadow = false;
     mesh.receiveShadow = false;
-    mesh.renderOrder = -1;
+    mesh.renderOrder = RENDER_ORDER.contactShadow;
     mesh.name = 'ContactShadows';
     mesh.frustumCulled = false;
     mesh.userData.sharedResources = true;

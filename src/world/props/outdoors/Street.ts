@@ -1,10 +1,12 @@
 import { Sheet, type Rng, type Fill, type Surface, SCENE_HEIGHT, azimuthX, heightY, outline, sizePx, worldPoint } from './Sheet';
 import { between, integer, pick, shade } from './paint';
-import { BUS_STOP_X, CAR_LINE, FRONTAGE, FRONT_END, KERB, LAMP_LINE, NEAR_KERB, PARK_END, STREET_TREE_LINE, frontage, ground, streetEnd } from './plan';
+import { BUS_SHELTER, BUS_STOP_X, CAR_LINE, CYCLE_NEAR, FAR_LANE, FRONTAGE, FRONT_END, KERB, LAMPS, LAMP_LINE, NEAR_KERB, NEAR_LANE, OUR_LINE, PARK_END, ROAD, STREET_TREE_LINE, frontage, ground, streetEnd } from './plan';
+import { BIKE_RACKS, CROSSINGS, LAMP_HEIGHT, SIGNAL_POSTS, STOP_LINE, STREET_BINS } from '@/world/city/frontage';
 import { TREE_STYLES, paintTree } from './Tree';
 import { holidayStreetItems, paintTreeLights } from './Holiday';
-import { CAR_COLORS, CAR_LENGTH, CAR_WIDTH, type CarFrame, paintCar } from './Car';
+import { CAR_BODY, CAR_COLORS, CAR_LENGTH, CAR_WIDTH, type CarFrame, paintCar } from './Car';
 import type { Storefront } from './Shopfront';
+import { PAVEMENT } from './palette';
 import {
   paintAdColumn,
   paintBench,
@@ -27,7 +29,6 @@ import {
 } from './StreetFurniture';
 
 const ASPHALT = '#4a4c50';
-const PAVEMENT = '#a39e93';
 /** How the ground takes the weather: the road puddles most, the flags a little less; snow settles on both. */
 const ROAD_SURFACE: Surface = { wet: 1, snow: 0.9 };
 const PAVEMENT_SURFACE: Surface = { wet: 0.6, snow: 1 };
@@ -36,13 +37,19 @@ const FRONT_REACH = FRONT_END - 4;
 const PARK_REACH = PARK_END - 4;
 /** Azimuth width of the strips the ground is painted in (each with its own distance for the haze). */
 const STRIP = Math.PI / 18;
-/** Road markings, metres from the eye: the line between the two directions, the parking lane's edge, the cycle lane's. */
-const CENTRE_LINE = 13.75;
-const PARKING_EDGE = KERB - 2.3;
-const CYCLE_EDGE = 6.3;
-/** The zebra crossings: Front Street's (x from, x to) and Park Street's (z from, z to). */
-const FRONT_CROSSING: [number, number] = [12, 16];
+/** Road markings, metres from the eye (the walkable street's): the line between the two directions, the far parking lane's edge. */
+const CENTRE_LINE = ROAD.centre;
+const PARKING_EDGE = ROAD.farParking;
+/** The middle of each traffic lane, from our kerb out: outer and inner each way. */
+const LANES = [(ROAD.nearParking + ROAD.nearDash) / 2, (ROAD.nearDash + ROAD.centre) / 2, (ROAD.centre + ROAD.farDash) / 2, (ROAD.farDash + ROAD.farParking) / 2];
+/** The zebra crossings: Front Street's with lights (x from, x to), and Park Street's (z from, z to, painted only). */
+const FRONT_CROSSING: [number, number] = (() => {
+  const lit = CROSSINGS.find((c) => c.signals)!;
+  return [lit.from, lit.to];
+})();
 const PARK_CROSSING: [number, number] = [-6, -2];
+/** Whether x on Front Street is on (or `margin` either side of) one of its crossings. */
+const onCrossing = (x0: number, x1: number, margin: number): boolean => CROSSINGS.some((c) => x1 > c.from - margin && x0 < c.to + margin);
 /** The newspaper kiosk on Front Street's far pavement. */
 const KIOSK_X = 60;
 
@@ -62,7 +69,7 @@ export function paintGroundBand(sheet: Sheet, far: (a: number) => number, near: 
     const a1 = Math.min(a0 + STRIP, to);
     const mid = (a0 + a1) / 2;
     // Stamped with the far line's distance: whatever moves on this ground is nearer than it.
-    sheet.begin(far(mid) * 1.02, glass, surface);
+    sheet.begin(far(mid) * 1.02, glass, { ...surface, flat: true });
     const p = new Path2D();
     for (let i = 0; i <= steps; i++) {
       const a = a0 + ((a1 - a0) * i) / steps;
@@ -124,7 +131,7 @@ function paintParkedCar(sheet: Sheet, random: Rng, frame: CarFrame): void {
           sheet.color.fillStyle = fill;
           sheet.color.fill(p);
         },
-        wheelRadius: sizePx(0.33, d),
+        wheelRadius: sizePx(CAR_BODY.wheel, d),
         shadow: (p) => sheet.shadow(p, 0.5),
       },
       frame,
@@ -134,26 +141,27 @@ function paintParkedCar(sheet: Sheet, random: Rng, frame: CarFrame): void {
 }
 
 /**
- * The road's paint: the dashed line between the two directions, the parking lane's edge with its
- * bay marks, the cycle lane along our side with a bike every so often, and a zebra crossing on
- * each street with its stop lines.
+ * The road's paint, as the walkable street has it: the double line between the two directions,
+ * the lane dashes, the parking lanes' edges (bay marks across the far one), a bike every so often
+ * where the riders go, and a zebra on each crossing with the stop lines of the one with lights.
  */
 function paintMarkings(sheet: Sheet): void {
   const ctx = sheet.color;
   const white = 'rgba(232,230,220,0.8)';
-  paintGroundLine(sheet, CENTRE_LINE, 0.15, white, 3, 5);
-  paintGroundLine(sheet, PARKING_EDGE, 0.12, 'rgba(232,230,220,0.6)');
-  paintGroundLine(sheet, CYCLE_EDGE, 0.15, white);
-  // Bay marks across the parking lane, one per car length and a bit.
+  for (const side of [-0.12, 0.12]) paintGroundLine(sheet, CENTRE_LINE + side, 0.1, white);
+  for (const dash of [ROAD.nearDash, ROAD.farDash]) paintGroundLine(sheet, dash, 0.12, white, 3, 6);
+  for (const edge of [ROAD.nearParking, PARKING_EDGE]) paintGroundLine(sheet, edge, 0.12, 'rgba(232,230,220,0.6)');
+  // Bay marks across the far parking lane, one per car length and a bit.
   ctx.strokeStyle = 'rgba(232,230,220,0.5)';
-  for (let s = -20; s < 160; s += 5.8) {
+  for (let s = -20; s < FRONT_REACH; s += 5.8) {
     ctx.lineWidth = Math.max(0.7, sizePx(0.1, Math.hypot(s, KERB)));
     ctx.stroke(quad(s, PARKING_EDGE, s, KERB, 0, 0));
-    ctx.stroke(quad(-PARKING_EDGE, -s, -KERB, -s, 0, 0));
+    if (s < PARK_REACH) ctx.stroke(quad(-PARKING_EDGE, -s, -KERB, -s, 0, 0));
   }
-  // The cycle lane's bicycles, in outline.
-  for (let s = -10; s < 200; s += 38) {
-    for (const [x, z, along] of [[s, (4 + CYCLE_EDGE) / 2, true], [-(4 + CYCLE_EDGE) / 2, -s, false]] as const) {
+  // A bicycle in outline down the riders' lane now and then.
+  for (let s = -10; s < FRONT_REACH; s += 38) {
+    for (const [x, z, along] of [[s, CYCLE_NEAR, true], [-CYCLE_NEAR, -s, false]] as const) {
+      if (!along && s > PARK_REACH) continue;
       const d = Math.hypot(x, z);
       ctx.lineWidth = Math.max(0.7, sizePx(0.08, d));
       ctx.strokeStyle = 'rgba(232,230,220,0.6)';
@@ -171,16 +179,19 @@ function paintMarkings(sheet: Sheet): void {
   }
   // Lane arrows ahead of the crossings, pointing the way each lane drives.
   ctx.fillStyle = 'rgba(232,230,222,0.75)';
-  for (const [x, z, dx, dz] of [[27, 11, -1, 0], [5, 16.5, 1, 0], [-11, -13, 0, -1], [-16.5, -15, 0, 1], [60, 11, -1, 0], [-11, -48, 0, -1]] as const) ctx.fill(laneArrow(x, z, dx, dz));
-  // Zebra stripes, and a stop line either side.
+  for (const [x, z, dx, dz] of [[27, NEAR_LANE, -1, 0], [5, FAR_LANE, 1, 0], [-NEAR_LANE, -13, 0, -1], [-FAR_LANE, -15, 0, 1], [60, NEAR_LANE, -1, 0], [-NEAR_LANE, -48, 0, -1]] as const) ctx.fill(laneArrow(x, z, dx, dz));
+  // Zebras: bars along the traffic, one a metre across the road; Park Street's the same way round.
   ctx.fillStyle = 'rgba(232,230,222,0.85)';
-  for (let x = FRONT_CROSSING[0]; x < FRONT_CROSSING[1]; x += 1) ctx.fill(quad(x, 4.3, x + 0.5, 4.3, 0, 0, 0, KERB - 4.6));
-  for (let z = PARK_CROSSING[0]; z < PARK_CROSSING[1]; z += 1) ctx.fill(quad(-4.3, z, -4.3, z + 0.5, 0, 0, -(KERB - 4.6), 0));
+  for (let v = NEAR_KERB + 0.6; v < KERB - 0.4; v += 1) {
+    for (const c of CROSSINGS) ctx.fill(quad(c.from, v, c.to, v, 0, 0, 0, 0.5));
+    ctx.fill(quad(-v, PARK_CROSSING[0], -v, PARK_CROSSING[1], 0, 0, -0.5, 0));
+  }
+  // Stop lines before the crossings with lights, across the lanes coming up to them.
   ctx.fillStyle = 'rgba(232,230,222,0.7)';
-  ctx.fill(quad(FRONT_CROSSING[1] + 1.5, 4.2, FRONT_CROSSING[1] + 1.9, 4.2, 0, 0, 0, CENTRE_LINE - 4.2));
-  ctx.fill(quad(FRONT_CROSSING[0] - 1.9, CENTRE_LINE, FRONT_CROSSING[0] - 1.5, CENTRE_LINE, 0, 0, 0, PARKING_EDGE - CENTRE_LINE));
-  ctx.fill(quad(-4.2, PARK_CROSSING[0] - 1.9, -4.2, PARK_CROSSING[0] - 1.5, 0, 0, -(CENTRE_LINE - 4.2), 0));
-  ctx.fill(quad(-CENTRE_LINE, PARK_CROSSING[1] + 1.5, -CENTRE_LINE, PARK_CROSSING[1] + 1.9, 0, 0, -(PARKING_EDGE - CENTRE_LINE), 0));
+  ctx.fill(quad(FRONT_CROSSING[1] + STOP_LINE, ROAD.nearParking, FRONT_CROSSING[1] + STOP_LINE + 0.3, ROAD.nearParking, 0, 0, 0, CENTRE_LINE - 0.2 - ROAD.nearParking));
+  ctx.fill(quad(FRONT_CROSSING[0] - STOP_LINE - 0.3, CENTRE_LINE + 0.2, FRONT_CROSSING[0] - STOP_LINE, CENTRE_LINE + 0.2, 0, 0, 0, PARKING_EDGE - CENTRE_LINE - 0.2));
+  ctx.fill(quad(-ROAD.nearParking, PARK_CROSSING[0] - STOP_LINE - 0.3, -ROAD.nearParking, PARK_CROSSING[0] - STOP_LINE, 0, 0, -(CENTRE_LINE - 0.2 - ROAD.nearParking), 0));
+  ctx.fill(quad(-(CENTRE_LINE + 0.2), PARK_CROSSING[1] + STOP_LINE, -(CENTRE_LINE + 0.2), PARK_CROSSING[1] + STOP_LINE + 0.3, 0, 0, -(PARKING_EDGE - CENTRE_LINE - 0.2), 0));
 }
 
 /** A straight-ahead arrow painted on the road at (x, z), pointing along (dx, dz). */
@@ -193,7 +204,7 @@ function laneArrow(x: number, z: number, dx: number, dz: number): Path2D {
 function paintPaving(sheet: Sheet): void {
   const ctx = sheet.color;
   for (const offset of [KERB + 0.35, KERB + 1.6, KERB + 2.8]) paintGroundLine(sheet, offset, 0.03, offset === KERB + 0.35 ? 'rgba(0,0,0,0.18)' : 'rgba(0,0,0,0.07)');
-  for (const offset of [NEAR_KERB - 0.35, 1.3, 2.6]) paintGroundLine(sheet, offset, 0.03, offset === NEAR_KERB - 0.35 ? 'rgba(0,0,0,0.18)' : 'rgba(0,0,0,0.08)');
+  for (const offset of [NEAR_KERB - 0.35, OUR_LINE + 1.3, OUR_LINE + 2.6]) paintGroundLine(sheet, offset, 0.03, offset === NEAR_KERB - 0.35 ? 'rgba(0,0,0,0.18)' : 'rgba(0,0,0,0.08)');
   ctx.strokeStyle = 'rgba(0,0,0,0.07)';
   for (let s = -KERB; s < 140; s += 1.2) {
     ctx.lineWidth = Math.max(0.6, sizePx(0.03, Math.hypot(s, KERB)));
@@ -202,9 +213,9 @@ function paintPaving(sheet: Sheet): void {
   }
   // Our own pavement, right under the windows: its flags are big from up here.
   for (let s = -NEAR_KERB; s < 90; s += 1.2) {
-    ctx.lineWidth = Math.max(0.6, sizePx(0.03, Math.hypot(s, 2)));
-    ctx.stroke(quad(s, 0, s, NEAR_KERB - 0.35, 0, 0));
-    if (s < 60) ctx.stroke(quad(-(NEAR_KERB - 0.35), -s, 0, -s, 0, 0));
+    ctx.lineWidth = Math.max(0.6, sizePx(0.03, Math.hypot(s, (OUR_LINE + NEAR_KERB) / 2)));
+    ctx.stroke(quad(s, OUR_LINE, s, NEAR_KERB - 0.35, 0, 0));
+    if (s < 60) ctx.stroke(quad(-(NEAR_KERB - 0.35), -s, -OUR_LINE, -s, 0, 0));
   }
 }
 
@@ -223,7 +234,7 @@ function paintRoadWear(sheet: Sheet, random: Rng): void {
     ctx.fillRect(azimuthX(a), y, between(random, 1, 4), 1);
   }
   // The dark drip line down the middle of each lane, where engines stand and wheels do not roll.
-  for (const lane of [8.2, 11, 16.5, 19.5]) {
+  for (const lane of LANES) {
     for (const front of [true, false]) {
       for (let s = -8; s < 110; s += between(random, 2, 6)) {
         const len = between(random, 3, 9);
@@ -231,7 +242,8 @@ function paintRoadWear(sheet: Sheet, random: Rng): void {
         const [x1, z1] = streetPoint(front, s + len, lane - 0.14);
         const [dx, dz] = front ? [0, 0.28] : [-0.28, 0];
         ctx.fillStyle = `rgba(18,18,22,${between(random, 0.04, 0.09)})`;
-        ctx.fill(quad(x0, z0, x1, z1, 0, 0, dx, dz));
+        // Drawn either way (the same draws), painted only short of the building across the street's end.
+        if (s + len < (front ? FRONT_REACH : PARK_REACH)) ctx.fill(quad(x0, z0, x1, z1, 0, 0, dx, dz));
         s += len;
       }
     }
@@ -239,7 +251,7 @@ function paintRoadWear(sheet: Sheet, random: Rng): void {
   // Patches of newer, darker asphalt where the road was dug up: ragged edges, a sealed seam round them.
   for (let i = 0; i < 12; i++) {
     const front = random() < 0.65;
-    const [cx, cz] = streetPoint(front, between(random, -4, 70), between(random, 6, 21));
+    const [cx, cz] = streetPoint(front, between(random, -4, 70), between(random, ROAD.nearParking, PARKING_EDGE));
     const w = between(random, 1.2, 4);
     const h = between(random, 0.8, 2.2);
     const pts: [number, number][] = [];
@@ -258,7 +270,8 @@ function paintRoadWear(sheet: Sheet, random: Rng): void {
   for (let i = 0; i < 60; i++) {
     const front = random() < 0.6;
     let s = between(random, -4, 90);
-    let v = pick(random, [7.4, 9.9, 12.2, 15.5, 17.7, 20.4]) + between(random, -0.3, 0.3);
+    const shown = s + 8 < (front ? FRONT_REACH : PARK_REACH);
+    let v = pick(random, [CYCLE_NEAR, NEAR_LANE - 0.75, NEAR_LANE + 0.75, FAR_LANE - 0.75, FAR_LANE + 0.75, ROAD.farCycle]) + between(random, -0.3, 0.3);
     ctx.strokeStyle = random() < 0.5 ? 'rgba(10,10,12,0.5)' : 'rgba(10,10,12,0.25)';
     ctx.lineWidth = Math.max(0.6, sizePx(0.04, Math.hypot(s, v)));
     ctx.beginPath();
@@ -268,7 +281,7 @@ function paintRoadWear(sheet: Sheet, random: Rng): void {
       v += between(random, -0.25, 0.25);
       ctx.lineTo(...worldPoint(...streetPoint(front, s, v), 0));
     }
-    ctx.stroke();
+    if (shown) ctx.stroke();
   }
   for (const [x, z] of [[3, 12], [22, 9.5], [48, 14], [-14, 15], [-11, -12], [-15, -34], [80, 11]] as const) paintManhole(sheet, x, z);
   // Drain grilles in the gutters, both sides.
@@ -331,8 +344,8 @@ export function paintStreet(sheet: Sheet, random: Rng, shops: readonly Storefron
   };
   /** Whether Front Street's far pavement at x is kept clear (the bus stop, the crossing, a terrace, the retro games shop). */
   const busy = (x: number): boolean =>
-    Math.abs(x - BUS_STOP_X) < 4 ||
-    (x > FRONT_CROSSING[0] - 1 && x < FRONT_CROSSING[1] + 1) ||
+    Math.abs(x - BUS_SHELTER.x) < 4 ||
+    onCrossing(x, x, 1) ||
     shops.some((shop) => (shop.display === 'terrace' || shop.landmark) && x > FRONTAGE * Math.tan(shop.a0) - 2 && x < FRONTAGE * Math.tan(shop.a1) + 2);
 
   // Trees on the far pavements, each in its grille: a proper avenue, gaps only where something needs the room.
@@ -348,12 +361,8 @@ export function paintStreet(sheet: Sheet, random: Rng, shops: readonly Storefron
     if (!busy(x) && Math.abs(x - KIOSK_X) > 4) tree(x, z);
   });
   along((s) => [-STREET_TREE_LINE, s], -PARK_REACH, 18, () => between(random, 9, 11.5), 0.9, tree);
-  // Lamp posts on both pavements; the far ones wash the facade behind them.
-  const lamp = (x: number, z: number, wall: number): void => add(x, z, () => paintLamp(sheet, x, z, 7, 4.5, wall));
-  along((s) => [s, LAMP_LINE], -14, FRONT_REACH, () => 24, 1, (x, z) => lamp(x, z, FRONTAGE - LAMP_LINE));
-  along((s) => [-LAMP_LINE, s], -PARK_REACH, 10, () => 24, 1, (x, z) => lamp(x, z, FRONTAGE - LAMP_LINE));
-  for (const s of [10, 34, 58, 82]) lamp(s, NEAR_KERB - 0.6, 0);
-  for (const s of [-10, -34, -58]) lamp(-(NEAR_KERB - 0.6), s, 0);
+  // Lamp posts where the walkable street has them; the far ones wash the facade behind them.
+  for (const { x, z, far } of LAMPS) add(x, z, () => paintLamp(sheet, x, z, LAMP_HEIGHT, 4.5, far ? FRONTAGE - LAMP_LINE : 0));
 
   // Benches, bins, planters, bike racks, mopeds and hire scooters between the trees, near enough to be made out.
   for (let s = -16; s < 110; s += between(random, 6, 10)) {
@@ -367,7 +376,7 @@ export function paintStreet(sheet: Sheet, random: Rng, shops: readonly Storefron
     else if (kind < 0.74) add(s, z + 0.2, () => paintPlanter(sheet, random, { x: s, z: z + 0.2, along: [1, 0] }));
     else if (kind < 0.86) add(s, z, () => paintScooter(sheet, random, s, z));
   }
-  for (let s = -90; s < 14; s += between(random, 8, 12)) {
+  for (let s = -PARK_REACH; s < 14; s += between(random, 8, 12)) {
     const x = -(KERB + 1);
     const kind = random();
     if (kind < 0.3) add(x - 0.4, s, () => paintBench(sheet, { x: x - 0.4, z: s, along: [0, -1] }));
@@ -375,7 +384,7 @@ export function paintStreet(sheet: Sheet, random: Rng, shops: readonly Storefron
     else if (kind < 0.62) add(x, s, () => paintBikeRack(sheet, random, { x, z: s, along: [0, 1] }, integer(random, 3, 5)));
     else if (kind < 0.76) add(x, s, () => paintPlanter(sheet, random, { x, z: s, along: [0, 1] }));
   }
-  add(BUS_STOP_X, KERB + 1.6, () => paintBusShelter(sheet, random, { x: BUS_STOP_X, z: KERB + 1.6, along: [1, 0] }));
+  add(BUS_SHELTER.x, BUS_SHELTER.z, () => paintBusShelter(sheet, random, { x: BUS_SHELTER.x, z: BUS_SHELTER.z, along: [1, 0] }));
   add(KIOSK_X, KERB + 1.8, () => paintNewsstand(sheet, random, { x: KIOSK_X, z: KERB + 1.8, along: [1, 0] }));
   add(-(KERB + 1.9), KERB + 1.9, () => paintAdColumn(sheet, random, -(KERB + 1.9), KERB + 1.9));
   // Bollards round both corners, traffic lights at both ends of each crossing.
@@ -383,17 +392,16 @@ export function paintStreet(sheet: Sheet, random: Rng, shops: readonly Storefron
     add(s, KERB + 0.3, () => paintBollard(sheet, s, KERB + 0.3));
     add(-(KERB + 0.3), -s, () => paintBollard(sheet, -(KERB + 0.3), -s));
   }
-  for (let s = -NEAR_KERB + 0.6; s < 6; s += 1.4) {
+  for (let s = -NEAR_KERB + 0.6; s < -NEAR_KERB + 10; s += 1.4) {
     add(s, NEAR_KERB - 0.3, () => paintBollard(sheet, s, NEAR_KERB - 0.3));
     add(-(NEAR_KERB - 0.3), -s, () => paintBollard(sheet, -(NEAR_KERB - 0.3), -s));
   }
-  add(FRONT_CROSSING[0] - 0.8, KERB + 0.5, () => paintTrafficLight(sheet, FRONT_CROSSING[0] - 0.8, KERB + 0.5));
+  for (const [x, z] of SIGNAL_POSTS) add(x, z, () => paintTrafficLight(sheet, x, z));
   add(-(KERB + 0.5), PARK_CROSSING[0] - 0.8, () => paintTrafficLight(sheet, -(KERB + 0.5), PARK_CROSSING[0] - 0.8));
-  add(FRONT_CROSSING[1] + 0.8, NEAR_KERB - 0.5, () => paintTrafficLight(sheet, FRONT_CROSSING[1] + 0.8, NEAR_KERB - 0.5));
   add(-(NEAR_KERB - 0.5), PARK_CROSSING[1] + 0.8, () => paintTrafficLight(sheet, -(NEAR_KERB - 0.5), PARK_CROSSING[1] + 0.8));
-  // Under our windows: a bin, a bike stand, scooters left on the flags.
-  add(22, NEAR_KERB - 0.5, () => paintBin(sheet, 22, NEAR_KERB - 0.5));
-  add(30, NEAR_KERB - 1, () => paintBikeRack(sheet, random, { x: 30, z: NEAR_KERB - 1, along: [1, 0] }, 4));
+  // Under our windows: the bins and the bike rack where the walkable street has them, a scooter left on the flags.
+  for (const [x, z] of STREET_BINS) if (z < CENTRE_LINE) add(x, z, () => paintBin(sheet, x, z));
+  for (const { at: [x, z], bikes } of BIKE_RACKS) if (z < CENTRE_LINE && x > 0) add(x, z, () => paintBikeRack(sheet, random, { x, z, along: [1, 0] }, bikes));
   add(40, NEAR_KERB - 0.8, () => paintScooter(sheet, random, 40, NEAR_KERB - 0.8));
   add(-(NEAR_KERB - 0.8), -22, () => paintScooter(sheet, random, -(NEAR_KERB - 0.8), -22));
 
@@ -417,7 +425,7 @@ export function paintStreet(sheet: Sheet, random: Rng, shops: readonly Storefron
   // (right-hand traffic: +x across Front Street, +z across Park Street); none on the crossings.
   const half = CAR_LENGTH / 2;
   along((s) => [s, CAR_LINE], -24, FRONT_REACH, () => between(random, 5.4, 7), 0.72, (x, z) => {
-    if (x + half > FRONT_CROSSING[0] - 2 && x - half < FRONT_CROSSING[1] + 2) return;
+    if (onCrossing(x - half, x + half, 2)) return;
     if (Math.abs(x - BUS_STOP_X) < 9) return;
     add(x, z, () => paintParkedCar(sheet, random, { x: x - half, z, along: [1, 0], across: [0, 1] }));
   });

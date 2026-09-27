@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { cylinderMesh, invisibleHitbox } from '../meshUtils';
-import { matte } from './Prop';
+import { paint } from '../materials/palette';
 import { SwitchableLamp } from './SwitchableLamp';
 
 export interface FlushLampOptions {
@@ -14,7 +14,7 @@ export interface FlushLampOptions {
 
 const DOME_GLOW = 1.4;
 const HOVER_GLOW = 0.3;
-const PLATE = matte(0xf6f3ee, 0.7);
+const PLATE = paint(0xf6f3ee, 0.7);
 
 /**
  * A flush ceiling fixture: a plate against the ceiling and a frosted half-dome under it. The

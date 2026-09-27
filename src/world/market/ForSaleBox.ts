@@ -9,6 +9,7 @@ import { BUDGET_LABEL, describeCondition, describeEdition } from '@/economy/pric
 import { playCoins } from '@/audio/coins';
 import type { Furniture } from '../Furniture';
 import { GameBox } from '../GameBox';
+import { RENDER_ORDER } from '../surface/layers';
 
 /** How the box stands: tipped back onto a support by `angle`, or lying face up on the table. */
 export type ForSalePose = { kind: 'lean'; angle?: number } | { kind: 'flat' };
@@ -171,7 +172,7 @@ export class ForSaleBox extends THREE.Group implements Furniture, Interactable {
       this.scanLabel = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, transparent: true, depthWrite: false, toneMapped: false }));
       this.scanLabel.scale.set(SCAN_W, (SCAN_W * h) / w, 1);
       this.scanLabel.position.set(0, this.box.dimensions.height + 0.1, 0.02);
-      this.scanLabel.renderOrder = 9;
+      this.scanLabel.renderOrder = RENDER_ORDER.label;
       this.add(this.scanLabel);
     }
     if (!this.scanLabel.visible || !this.scanPainted) this.paintScanLabel();

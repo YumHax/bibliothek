@@ -4,9 +4,11 @@ import type { DayNight } from '../../props/DayNight';
 import { BUS, busGeometries } from '../carModel';
 import { nightnessOf } from '../streetAir';
 import { snowCovered } from '../snowCover';
+import { paint, standard } from '../../materials/palette';
 import type { Vec2 } from '../streetPlan';
 import { ScriptedVehicle, type CollisionSet } from './ScriptedVehicle';
 import type { StreetTraffic } from './StreetTraffic';
+import { CRUISE as CITY_CRUISE } from '../../city/traffic';
 
 export interface StreetBusOptions {
   traffic: StreetTraffic;
@@ -26,7 +28,7 @@ export interface StreetBusOptions {
 /** Never closer than this (real seconds) between two buses, whatever the timetable says: a game day is only ten minutes. */
 const MIN_GAP_S = 80;
 const NIGHT_MIN_GAP_S = 160;
-const CRUISE = 7;
+const CRUISE = CITY_CRUISE.bus;
 /** How far the doors slide open along the side, and how long they take. */
 const DOOR_SLIDE = 0.42;
 const DOOR_TIME = 0.8;
@@ -72,9 +74,9 @@ export class StreetBus extends ScriptedVehicle {
     this.name = 'StreetBus';
     const g = busGeometries();
     const body = new THREE.Mesh(g.body, snowCovered(new THREE.MeshStandardMaterial({ color: LIVERY, roughness: 0.4, metalness: 0.3 })));
-    const stripe = new THREE.Mesh(g.stripe, new THREE.MeshStandardMaterial({ color: STRIPE, roughness: 0.45, metalness: 0.2 }));
-    const glass = new THREE.Mesh(g.glass, new THREE.MeshStandardMaterial({ color: 0x18222a, roughness: 0.1, metalness: 0.6 }));
-    const wheels = new THREE.Mesh(g.wheels, new THREE.MeshStandardMaterial({ color: 0x151515, roughness: 0.85 }));
+    const stripe = new THREE.Mesh(g.stripe, standard({ color: STRIPE, roughness: 0.45, metalness: 0.2 }));
+    const glass = new THREE.Mesh(g.glass, standard({ color: 0x18222a, roughness: 0.1, metalness: 0.6 }));
+    const wheels = new THREE.Mesh(g.wheels, paint(0x151515, 0.85));
     this.lampMaterial = new THREE.MeshBasicMaterial({ vertexColors: true, color: 0x666666 });
     this.indicatorMaterial = new THREE.MeshBasicMaterial({ vertexColors: true, color: 0x222222 });
     const lamps = new THREE.Mesh(g.lamps, this.lampMaterial);
@@ -86,7 +88,7 @@ export class StreetBus extends ScriptedVehicle {
     this.add(body, stripe, glass, wheels, lamps, indicators);
 
     // The door leaves: dark glass in a frame, on the kerb side (+z), sliding outwards and apart.
-    const leafMaterial = new THREE.MeshStandardMaterial({ color: 0x2a3438, roughness: 0.2, metalness: 0.5 });
+    const leafMaterial = standard({ color: 0x2a3438, roughness: 0.2, metalness: 0.5 });
     for (const x of BUS.doors) {
       for (const side of [-1, 1]) {
         const leaf = new THREE.Mesh(new THREE.BoxGeometry(BUS.doorWidth / 2 - 0.02, BUS.doorHeight - 0.2, 0.04), leafMaterial);
@@ -189,7 +191,7 @@ function signTexture(line: string): THREE.CanvasTexture {
   ctx.textAlign = 'left';
   ctx.fillText(line, 8, 19);
   ctx.textAlign = 'center';
-  ctx.fillText('GARE CENTRALE', 150, 19);
+  ctx.fillText('CENTRAL STATION', 150, 19, 200);
   // The dot matrix: a grid of dark lines over the letters.
   ctx.fillStyle = 'rgba(0,0,0,0.45)';
   for (let x = 0; x < 256; x += 3) ctx.fillRect(x, 0, 1, 36);

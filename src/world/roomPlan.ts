@@ -4,6 +4,7 @@ import type { DecorEntry } from './props/decor';
 import type { CushionOptions } from './props/Cushion';
 import type { SortMode } from './shelving/sort';
 import { BALCONY_DOOR } from './balcony/balconyPlan';
+import type { Owned } from './build/owned';
 
 /*
  * THE ROOM PLAN: every position in the collection room, as data, in zone-local coordinates (the room
@@ -37,6 +38,8 @@ export interface WindowPlan {
 export interface SeatPlan {
   at: Placement;
   cushion: CushionOptions;
+  /** What must be bought for it to stand (see `build/owned.ts`). */
+  upgrade?: Owned;
 }
 
 export const ROOM_PLAN = {
@@ -56,13 +59,14 @@ export const ROOM_PLAN = {
 
   /** CRT on its console stand against the left wall, screen facing +x. */
   tv: { floor: [-2.7, 0], rotationY: Math.PI / 2 } as Placement,
-  /** Ceiling projector a metre left of centre, throwing +x. */
+  /** Ceiling projector a metre left of centre, throwing +x; sold by the TV repair shop. */
   projector: { ceiling: [-1, 0], rotationY: Math.PI / 2 } as Placement,
+  projectorUpgrade: 'projector' as Owned,
 
-  /** Armchairs (`Seat`), in front of the TV and in front of the projector wall. */
+  /** Armchairs (`Seat`), in front of the TV and in front of the projector wall, in the order they are bought. */
   seats: [
-    { at: { floor: [-1.1, 0], rotationY: -Math.PI / 2 }, cushion: { color: 0x8fa383, tilt: 0.25 } },
-    { at: { floor: [0.5, 0], rotationY: Math.PI / 2 }, cushion: { color: 0xc8785a, tilt: 0.2 } },
+    { at: { floor: [-1.1, 0], rotationY: -Math.PI / 2 }, cushion: { color: 0x8fa383, tilt: 0.25 }, upgrade: { good: 'armchair', nth: 0 } },
+    { at: { floor: [0.5, 0], rotationY: Math.PI / 2 }, cushion: { color: 0xc8785a, tilt: 0.2 }, upgrade: { good: 'armchair', nth: 1 } },
   ] as SeatPlan[],
 
   /** Floor-to-ceiling loft windows: two on the front wall, two on the left wall either side of the TV. */
@@ -93,7 +97,7 @@ export const ROOM_PLAN = {
    * The lava lamp on the TV armchair's side table (top at 0.5 m), on its free side past the mug and the magazines:
    * on the sideboard it would stand in front of the projector picture (whose bottom edge is at 0.63 m).
    */
-  homeGoods: { lamp: { at: { floor: [-0.98, 0.62] } as Placement, y: 0.5 } },
+  homeGoods: { lamp: { at: { floor: [-0.98, 0.62] } as Placement, y: 0.5, upgrade: ['lamp', 'sideTable'] as Owned } },
 
   /**
    * The feather wand won at the arcade (a prize that lives at home): lying on the projector rug, between the cushions and
@@ -109,6 +113,8 @@ export const ROOM_PLAN = {
    * of the yucca's pot and of the radiator from x -1.3), its top (1.12 m) under the poster's bottom edge (1.3 m).
    */
   collector: {
+    /** The binder and the plaque lie on the sideboard: they come with it. */
+    upgrade: 'sideboard' as Owned,
     book: { at: { wall: 'right', along: 0.06, y: 0.5, offset: 0.2 } as Placement, yaw: 0.1 },
     plaque: { wall: 'right', along: 0.68, y: 0.5, offset: 0.12 } as Placement,
     vitrine: { wall: 'front', along: -1.75, y: 0 } as Placement,
@@ -138,40 +144,43 @@ export const ROOM_PLAN = {
   /** Everything else: plants, rug, pictures, lamps, tables. One line each; see `props/decor.ts` for the kinds. */
   decor: [
     // Around the TV armchair (at x -1.1): side table by its right armrest, floor lamp by its left one.
-    { kind: 'sideTable', at: { floor: [-1.1, 0.72] } },
-    { kind: 'floorLamp', at: { floor: [-1.1, -0.76] } },
+    // Everything marked `upgrade` stands once bought (`economy/homeGoods.ts`: the shops of Front Street), staged till then.
+    { kind: 'sideTable', at: { floor: [-1.1, 0.72] }, upgrade: 'sideTable' },
+    { kind: 'floorLamp', at: { floor: [-1.1, -0.76] }, upgrade: { good: 'floorLamp', nth: 0 } },
     // Floor lamp beside the projector armchair (at x 0.5).
-    { kind: 'floorLamp', at: { floor: [0.5, -0.76] }, options: { intensity: 5 } },
+    { kind: 'floorLamp', at: { floor: [0.5, -0.76] }, options: { intensity: 5 }, upgrade: { good: 'floorLamp', nth: 1 } },
     // Rug between the TV and its armchair, long side along the wall.
-    { kind: 'rug', at: { floor: [-1.55, 0], rotationY: Math.PI / 2 }, options: { width: 2.4, depth: 1.8 } },
+    { kind: 'rug', at: { floor: [-1.55, 0], rotationY: Math.PI / 2 }, options: { width: 2.4, depth: 1.8 }, upgrade: { good: 'livingRug', nth: 0 } },
     // Hi-fi speakers either side of the TV stand (1.4 m wide), facing into the room like the screen.
-    { kind: 'speaker', at: { floor: [-2.72, -0.92], rotationY: Math.PI / 2 } },
-    { kind: 'speaker', at: { floor: [-2.72, 0.92], rotationY: Math.PI / 2 } },
+    { kind: 'speaker', at: { floor: [-2.72, -0.92], rotationY: Math.PI / 2 }, upgrade: 'speakers' },
+    { kind: 'speaker', at: { floor: [-2.72, 0.92], rotationY: Math.PI / 2 }, upgrade: 'speakers' },
     // The projector corner: a rug between the projector armchair (front edge at x 0.8) and the sideboard,
     // two floor cushions thrown on it for whoever does not get the chair, and the sideboard under the picture.
-    { kind: 'rug', at: { floor: [1.7, 0] }, options: { width: 1.5, depth: 1.7, field: 0x3e4a5c, border: 0xc9b98a, motif: 0x6e7b8c } },
-    { kind: 'cushion', at: { floor: [1.45, 0.55], rotationY: 0.4 }, options: { width: 0.55, depth: 0.55, thickness: 0.13, color: 0xc9a552 } },
-    { kind: 'cushion', at: { floor: [1.75, -0.5], rotationY: -0.7 }, options: { width: 0.55, depth: 0.55, thickness: 0.13, color: 0x8fa383 } },
+    { kind: 'rug', at: { floor: [1.7, 0] }, options: { width: 1.5, depth: 1.7, field: 0x3e4a5c, border: 0xc9b98a, motif: 0x6e7b8c }, upgrade: { good: 'livingRug', nth: 1 } },
+    { kind: 'cushion', at: { floor: [1.45, 0.55], rotationY: 0.4 }, options: { width: 0.55, depth: 0.55, thickness: 0.13, color: 0xc9a552 }, upgrade: 'floorCushions' },
+    { kind: 'cushion', at: { floor: [1.75, -0.5], rotationY: -0.7 }, options: { width: 0.55, depth: 0.55, thickness: 0.13, color: 0x8fa383 }, upgrade: 'floorCushions' },
     // Sideboard under the projector picture (whose bottom edge is at y 0.63), in the stretch the shelving keeps clear.
-    { kind: 'sideboard', at: { wall: 'right', along: 0, y: 0 } },
+    { kind: 'sideboard', at: { wall: 'right', along: 0, y: 0 }, upgrade: 'sideboard' },
     // Smoke detector on the ceiling over the door side of the room, clear of the pendant and the hung plants.
     { kind: 'smokeDetector', at: { ceiling: [-2.2, 1.0] } },
     // Floor plants: fig in the back-left corner, yucca in the front-left one, monstera beside the TV.
-    { kind: 'plant', at: { corner: 'back-left', inset: 0.45 }, options: { kind: 'fig', pot: 'ceramic', seed: 3 } },
-    { kind: 'plant', at: { corner: 'front-left', inset: 0.45 }, options: { kind: 'yucca', pot: 'terracotta', seed: 5 } },
-    { kind: 'plant', at: { floor: [-2.5, -1.3] }, options: { kind: 'monstera', pot: 'ceramic', seed: 11 } },
+    // The florist's houseplants come in this order (`houseplant` nth 0-6 here, then the bedroom, the kitchen, the bathroom).
+    { kind: 'plant', at: { corner: 'back-left', inset: 0.45 }, options: { kind: 'fig', pot: 'ceramic', seed: 3 }, upgrade: { good: 'houseplant', nth: 0 } },
+    { kind: 'plant', at: { corner: 'front-left', inset: 0.45 }, options: { kind: 'yucca', pot: 'terracotta', seed: 5 }, upgrade: { good: 'houseplant', nth: 2 } },
+    { kind: 'plant', at: { floor: [-2.5, -1.3] }, options: { kind: 'monstera', pot: 'ceramic', seed: 11 }, upgrade: { good: 'houseplant', nth: 1 } },
     // Trailing plants hung from the ceiling: by the front wall between the radiator and the first window (the front-right
     // corner is the balcony door's swing now), and over the rug.
-    { kind: 'plant', at: { ceiling: [-0.6, 2.3] }, options: { kind: 'hanging', seed: 13, scale: 0.8 } },
-    { kind: 'plant', at: { ceiling: [-1.1, 0.95] }, options: { kind: 'hanging', seed: 17, scale: 0.75 } },
+    { kind: 'plant', at: { ceiling: [-0.6, 2.3] }, options: { kind: 'hanging', seed: 13, scale: 0.8 }, upgrade: { good: 'houseplant', nth: 5 } },
+    { kind: 'plant', at: { ceiling: [-1.1, 0.95] }, options: { kind: 'hanging', seed: 17, scale: 0.75 }, upgrade: { good: 'houseplant', nth: 6 } },
     // Small pots at the foot of the first front window and the front left window, just inside the curtains' travel
     // (the back left window's foot is the cat's bed and the monstera's pot).
-    { kind: 'plant', at: { wall: 'front', along: -0.13, y: 0, offset: 0.32 }, options: { kind: 'small', pot: 'ceramic', seed: 8, collides: false } },
-    { kind: 'plant', at: { wall: 'left', along: 1.4, y: 0, offset: 0.32 }, options: { kind: 'small', pot: 'ceramic', seed: 9, collides: false } },
+    { kind: 'plant', at: { wall: 'front', along: -0.13, y: 0, offset: 0.32 }, options: { kind: 'small', pot: 'ceramic', seed: 8, collides: false }, upgrade: { good: 'houseplant', nth: 3 } },
+    { kind: 'plant', at: { wall: 'left', along: 1.4, y: 0, offset: 0.32 }, options: { kind: 'small', pot: 'ceramic', seed: 9, collides: false }, upgrade: { good: 'houseplant', nth: 4 } },
     // Three small framed pictures on the left wall above the TV, between its two windows.
-    { kind: 'pictureFrame', at: { wall: 'left', along: -0.5, y: 1.8 }, options: { motif: 'mountains', seed: 1 } },
-    { kind: 'pictureFrame', at: { wall: 'left', along: 0, y: 1.8 }, options: { motif: 'sunset', seed: 2 } },
-    { kind: 'pictureFrame', at: { wall: 'left', along: 0.5, y: 1.8 }, options: { motif: 'abstract', seed: 3 } },
+    // The furniture shop's framed prints come in this order (`framedPrint` nth 0-2 here, then the hallway, the bedroom, the kitchen).
+    { kind: 'pictureFrame', at: { wall: 'left', along: -0.5, y: 1.8 }, options: { motif: 'mountains', seed: 1 }, upgrade: { good: 'framedPrint', nth: 1 } },
+    { kind: 'pictureFrame', at: { wall: 'left', along: 0, y: 1.8 }, options: { motif: 'sunset', seed: 2 }, upgrade: { good: 'framedPrint', nth: 0 } },
+    { kind: 'pictureFrame', at: { wall: 'left', along: 0.5, y: 1.8 }, options: { motif: 'abstract', seed: 3 }, upgrade: { good: 'framedPrint', nth: 2 } },
     // Sockets: behind the TV stand (the set and the console plugged in, cables into the back of the
     // stand), by the sideboard (the turntable), and a free one under the light switch.
     { kind: 'wallSocket', at: { wall: 'left', along: 0.3, y: 0 }, options: { cables: [[0.25, 0.45, 0.15], [0.12, 0.3, 0.12]] } },

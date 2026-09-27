@@ -19,6 +19,10 @@ import { FRIENDS, SHARED_LINES, VISIT_RULES, type FriendPlan } from './friendsPl
 import { borrowPick, fill, pickLine, shelfComment, tasteScore, yearOf } from './friendLines';
 import { Visit, type DoorLike, type RouteSeat, type VisitRoute, type VisitScript } from './Visit';
 import { VisitBook, type Loan, type PlannedVisit } from './VisitBook';
+import { HOUSEHOLD } from '@/household/rules';
+
+/** Real ms between a friend's hello and their word on the cake, so the two bubbles do not collide. */
+const CAKE_LINE_DELAY_MS = 3000;
 
 /** The collection as the visitors need it: what is in it, and marking a copy lent or back. */
 export interface VisitorsCollection extends GameSource {
@@ -55,6 +59,8 @@ export interface VisitorsOptions {
   busy?: () => boolean;
   /** The collection room's armchairs (`ROOM_PLAN.seats` order). */
   seats: readonly VisitorSeat[];
+  /** Those of `seats` that stand (bought for the flat), live; all of them when not given. A friend only sits in one of these. */
+  standing?: readonly VisitorSeat[];
   /**
    * The flat's front door (the hallway's `FrontDoor`), which the friends let themselves out through. It learns who
    * rings through the building's `Doorstep`: hand these visitors to it (`doorstep.also(visitors)`).
@@ -81,6 +87,8 @@ export interface VisitorsOptions {
   viewsOf?: (game: Game) => number | null | undefined;
   /** `?visit`: a friend rings as soon as the player is home. */
   force?: boolean;
+  /** A cake on the kitchen table (docs/household.md): a friend has a slice, stays longer, and leaves a thank-you. */
+  hosting?: { cakeOut(): boolean; eatCake(): void };
 }
 
 const eye = new THREE.Vector3();
@@ -110,6 +118,8 @@ export class Visitors extends Prop implements Updatable, ActivityAware, DoorCall
   private checkedDay = -1;
   private primed = false;
   private forced: boolean;
+  /** This visit's friend had some of the cake. */
+  private caked = false;
 
   constructor(private readonly options: VisitorsOptions) {
     super();
@@ -159,6 +169,12 @@ export class Visitors extends Prop implements Updatable, ActivityAware, DoorCall
     const random = Math.random;
     this.say(plan, pickLine(plan.lines.greet, random), 'Hi!', true);
     visit.letIn();
+    const hosting = this.options.hosting;
+    if (hosting?.cakeOut()) {
+      this.caked = true;
+      hosting.eatCake();
+      window.setTimeout(() => this.say(plan, pickLine(SHARED_LINES.cake, Math.random), 'Cake!', true), CAKE_LINE_DELAY_MS);
+    }
   }
 
   passing(): boolean {
@@ -221,9 +237,11 @@ export class Visitors extends Prop implements Updatable, ActivityAware, DoorCall
     this.ringing = { since: -1, rings: 0 };
     this.awayFor = 0;
     friend.chat = () => this.chatLine(friend.plan);
+    this.caked = false;
     this.visit = new Visit(friend, this.route, options.viewer, { front: door, living: options.livingDoor }, this.script(friend.plan, plan.loan), {
       returning: plan.loan !== null,
       cat: () => options.cat?.()?.at ?? null,
+      linger: () => (this.caked ? HOUSEHOLD.cake.linger : 1),
     });
     this.visit.start();
   }
@@ -282,8 +300,54 @@ export class Visitors extends Prop implements Updatable, ActivityAware, DoorCall
     if (visit) {
       visit.friend.request = null;
       visit.friend.chat = null;
+      if (this.caked) this.thankForCake(visit.friend.plan);
     }
+    this.caked = false;
     if (this.panel.isOpen) this.panel.close();
+  }
+
+  /** A friend who had cake leaves a thank-you: a game they no longer play (to their taste), else a few coins. */
+  private thankForCake(plan: FriendPlan): void {
+    const { collection, day: dayOf, purse, giftPool, notice } = this.options;
+    const day = dayOf();
+    const random = seeded(`cake:${plan.id}:${day}`);
+    const { giftChance, tip } = HOUSEHOLD.cake;
+    const unowned = giftPool?.filter((g) => !collection.owns(g.id) && tasteScore(plan.taste, g) >= 2) ?? [];
+    const gift = random() < giftChance ? unowned[Math.floor(random() * unowned.length)] : undefined;
+    if (gift) {
+      collection.add({ ...gift, status: 'owned', condition: 'noManual', acquired: { price: 0, where: `a gift from ${plan.name}`, day } });
+      notice?.(`${plan.name}: ${fill(pickLine(SHARED_LINES.cakeGift, random), { title: gift.title })}`);
+    } else if (purse) {
+      const coins = tip[0] + Math.floor(random() * (tip[1] - tip[0] + 1));
+      purse.earnCoins(coins);
+      notice?.(`${plan.name}: ${fill(pickLine(SHARED_LINES.cakeTip, random), { coins })}`);
+    }
+  }
+
+  // --- the phone ------------------------------------------------------------------------------------
+
+  /** The friends as the phone lists them: whether each could be asked round today, and a word on them. */
+  phoneBook(): { id: string; name: string; note: string; free: boolean }[] {
+    const day = this.options.day();
+    const invited = this.book.invitedOn(day);
+    const taken = this.visit !== null || invited !== null || this.book.rangOn(day);
+    return FRIENDS.map((f) => {
+      const loan = this.book.loans.find((l) => l.friendId === f.id);
+      const note = invited === f.id ? 'coming today' : loan ? `has your ${loan.title}` : this.book.visitsOf(f.id) ? `${this.book.visitsOf(f.id)} visits` : 'never been round';
+      return { id: f.id, name: f.name, note, free: !taken };
+    });
+  }
+
+  /** Asks `friendId` round today, from `hour` of the clock: what they say (or why not). */
+  invite(friendId: string, hour: number): { ok: boolean; line: string } {
+    const plan = FRIENDS.find((f) => f.id === friendId);
+    const day = this.options.day();
+    if (!plan) return { ok: false, line: 'Wrong number.' };
+    if (this.visit || this.book.rangOn(day)) return { ok: false, line: 'You have had a visitor today already. Another day.' };
+    if (hour >= VISIT_RULES.hours.latest) return { ok: false, line: `${plan.name}: “Bit late now, isn't it? Another day.”` };
+    if (!this.book.invite(friendId, day, hour)) return { ok: false, line: 'Someone is coming round today already.' };
+    const at = `${Math.floor(hour)}:${String(Math.round((hour % 1) * 60)).padStart(2, '0')}`;
+    return { ok: true, line: `${plan.name}: “${fill(pickLine(SHARED_LINES.invited, Math.random), { hour: at })}”` };
   }
 
   /** At the second shelf: the game they would most like to borrow, if any suits them and they feel like asking. */
@@ -403,7 +467,7 @@ export class Visitors extends Prop implements Updatable, ActivityAware, DoorCall
   }
 
   private routeSeat(seat: VisitorSeat, via: THREE.Vector3[]): RouteSeat {
-    const { living, viewer, cat } = this.options;
+    const { living, viewer, cat, standing } = this.options;
     const forward = seat.getWorldDirection(new THREE.Vector3());
     const at = living.toLocal(seat.localToWorld(new THREE.Vector3(0, 0, -0.02))).setY(0);
     const approach = living.toLocal(seat.approachPoint(new THREE.Vector3())).setY(0);
@@ -414,6 +478,7 @@ export class Visitors extends Prop implements Updatable, ActivityAware, DoorCall
       at,
       yaw: Math.atan2(forward.x, forward.z),
       free: () => {
+        if (standing && !standing.includes(seat)) return false;
         viewer.getWorldPosition(eye);
         const catAt = cat?.()?.at;
         return Math.hypot(eye.x - world.x, eye.z - world.z) > 0.9 && (!catAt || Math.hypot(catAt.x - world.x, catAt.z - world.z) > 0.7);

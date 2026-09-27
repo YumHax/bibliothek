@@ -31,7 +31,10 @@ sRGB, grade, vignette, grain, straight to the canvas.
   `ShaderMaterial`s should still `#include <tonemapping_fragment>` + `<colorspace_fragment>` (no-ops off-screen,
   correct on `low`).
 - `World.prime()` renders one frame through the pipeline (`Engine.renderFrame`): the off-screen shader variants are
-  the ones the loop uses. It logs the shadow maps every lit shader samples against `capabilities.maxTextures` once.
+  the ones the loop uses. `World.lights` (a `LightMonitor`, `world/lighting/lightBudget.ts`) checks the drawn lights
+  every 2 s: an error when shadow maps + `MATERIAL_UNITS` pass `capabilities.maxTextures` (lit programs would fail to
+  link), and with `?stats` / `?debug` a warning naming the lights that came or went within one set of active zones
+  (each change recompiles every lit program).
   `World.primeAsync()` does the same after a trip, waiting for the driver's parallel compile before the frame.
 - The scene's MSAA buffer is invalidated after its resolve: never draw into `sceneTarget` after the scene render.
 
@@ -42,7 +45,24 @@ and haze. Zones pick one by name in `WORLD_PLAN` (`look: 'arcade'`); default `ho
 `graphics.setLook` on zone change; `PostFx` and `Haze` ease over about a second. The haze is a `FogExp2` always in the
 scene (density 0 in the flat, so no recompile at doorways), its colour scaled by the room's `lightLevel`.
 
+## Depth and z-fighting
+
+- The camera's near plane is 0.1 m (`core/Engine`), the scene target's depth 24 bits: a depth step is about
+  `z² / (near · 2²⁴)` m at distance `z` (0.1 mm at 12 m, 0.5 mm at 30 m, 2 mm at 60 m). Offsets below that fight.
+- Flat things on a surface take a layer of `world/surface/layers.ts` (`FLOOR`, `GROUND`, `WALL`: a lift in metres and a
+  rank turned into a polygon offset by `onSurface`); transparent things a `RENDER_ORDER` band. Parts of a prop never
+  share a face (`world/props/joinery.ts`). `bibliothek.zfight()` (`?debug`) finds what still fights.
+- Not used, on purpose: `logarithmicDepthBuffer` (writes `gl_FragDepth`, so no early-Z, and PostFx decodes depth
+  linearly); reversed-Z (r169's is experimental: `perspectiveDepthToViewZ`, the AO's inverse projection, the polygon
+  offsets' sign and the `Reflector`s' oblique clipping would all need changing; worth it only with a three.js upgrade).
+
 ## Lighting helpers
+
+- The light budget (`world/lighting/`): the flat's zones are all neighbours, so every lamp of the flat is in every lit
+  shader; a new lamp stays shadowless. Decorative glows that only light their surroundings are `PooledLight`s sharing a
+  zone's `LightPool` (a fixed handful of real point lights lent to the heaviest glows near the viewer, faded over
+  0.35 s, the count never changing): the arcade's screens and claw machine (`ARCADE_PLAN.glowLights`). Hidden lamps keep
+  their (dark) lights: `setShownKeepingLights`.
 
 - `Environment`: `RoomEnvironment` prefiltered once (PMREM) as `scene.environment`; `environmentIntensity` follows
   the player's room `Room.lightLevel` (0 dark .. 1 lamp or sun), max 0.24, so a dark room does not glow.
@@ -63,6 +83,10 @@ scene (density 0 in the flat, so no recompile at doorways), its colour scaled by
 
 ## Material helpers (`src/world/materials/`)
 
+- `palette.ts`: the shared materials (`paint`, `timber`, `standard`, `basic`, `METAL`, `shared`, `invisible`), one per
+  look for the page and marked shared (`sharedResources.ts`: `markShared`, `disposeTree`). A material a class mutates
+  stays its own. See docs/props.md "Materials, joints and layers".
+
 - `patchShader(material, key, patch)` / `afterChunk(source, chunk, code)`: `onBeforeCompile` patches that chain and
   share one program per key. `afterChunk` throws on a missing chunk so a three.js upgrade fails loudly.
 - `wood(color, roughness)`: drop-in for `matte()` on timber (object-space grain, dust on up-facing faces, more above
@@ -73,6 +97,7 @@ scene (density 0 in the flat, so no recompile at doorways), its colour scaled by
   uvs are in metres), `edgeOcclusion` (floor and ceiling edges), `floorWearMap` (whole-floor roughness, lanes to the doors).
 - `GlossyFloor`: a `Reflector` with a blurred additive Fresnel shader, from `RoomFinish.reflective`.
 - `boxMesh` bevels its edges (`RoundedBoxGeometry`, face groups kept) unless the box is thin, huge or invisible.
+  `boxMesh` / `cylinderMesh` / `invisibleHitbox` geometries are cached per size and shared: never edited in place.
 - Mirrors: `props/MirrorGlass.ts` (`Reflector` on high, polished metal reflecting the environment otherwise).
 
 ## The street's extras (`src/world/street/`)

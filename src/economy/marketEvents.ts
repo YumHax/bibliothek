@@ -7,7 +7,7 @@ import { seeded } from './seeded';
 
 /*
  * THE MARKET'S CALENDAR OF EVENTS, by market day (`MarketCalendar`'s count): the grail of the day,
- * the monthly Grande Brocante, the mail-order sale, a stall's clearance. Pure functions of the day,
+ * the monthly Grand Flea Fair, the mail-order sale, a stall's clearance. Pure functions of the day,
  * so the stock, the tags, the papers and the rumours all tell the same story on every reload.
  */
 
@@ -22,20 +22,20 @@ export interface MarketEvents {
   day: number;
   /** The grail on its stall today, if any (`grails.ts`). */
   grail: Grail | null;
-  /** The Grande Brocante: the hall full to the rafters. */
+  /** The Grand Flea Fair: the hall full to the rafters. */
   brocante: boolean;
   /** The mail-order counter's price factor on new copies today (null: no sale). */
   catalogueSale: number | null;
   clearance: Clearance | null;
 }
 
-/** Whether market day `day` is the month's Grande Brocante. */
+/** Whether market day `day` is the month's Grand Flea Fair. */
 export function isBrocante(day: number): boolean {
   const k = day - BROCANTE.offset;
   return k >= 0 && k % BROCANTE.month === 0;
 }
 
-/** The first Grande Brocante on or after `day`. */
+/** The first Grand Flea Fair on or after `day`. */
 export function nextBrocante(day: number): number {
   if (day <= BROCANTE.offset) return BROCANTE.offset;
   const k = day - BROCANTE.offset;
@@ -84,7 +84,7 @@ export interface MarketNews {
 
 /**
  * What is worth telling from `day` on: the next grail (within `GRAIL.rumourDays`, unless the
- * player owns it: nobody bothers them with it), the next Grande Brocante (within
+ * player owns it: nobody bothers them with it), the next Grand Flea Fair (within
  * `BROCANTE.announceDays`), today's and tomorrow's mail-order sale, today's and tomorrow's clearance.
  * Most pressing first: today's, then by kind, then by date.
  */
@@ -99,7 +99,7 @@ export function marketNews(day: number, owns: (id: string) => boolean = () => fa
     const clearance = clearanceOn(d);
     if (clearance) news.push({ kind: 'clearance', day: d, inDays: d - day, platform: clearance.platform });
   }
-  // What is on today first, then the grail before the Brocante before the sales, then the soonest.
+  // What is on today first, then the grail before the Flea Fair before the sales, then the soonest.
   return news.sort((a, b) => Number(a.inDays > 0) - Number(b.inDays > 0) || weight(a) - weight(b) || a.inDays - b.inDays);
 }
 

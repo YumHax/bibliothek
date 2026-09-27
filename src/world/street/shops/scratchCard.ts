@@ -1,8 +1,8 @@
 import { KEYS, PersistedStore } from '@/persistence';
-import { DailyTally } from '../DailyTally';
+import { DailyTally } from '@/time/DailyTally';
 
 /*
- * The tabac's scratch card, GRATTE-PIXEL: six silver cells, three matching symbols win that
+ * The newsagent's scratch card, PIXEL SCRATCH: six silver cells, three matching symbols win that
  * symbol's prize. The outcome is drawn first (odds below, a little under the card's price on
  * average: the house wins), then the symbols are laid to show it.
  */

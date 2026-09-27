@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { cylinderMesh, invisibleHitbox } from '../meshUtils';
 import { SwitchableLamp } from './SwitchableLamp';
+import { standard } from '../materials/palette';
 
 export interface FloorLampOptions {
   /** Height of the pole top (the drum shade is centred on it), m. */
@@ -23,7 +24,7 @@ const BULB_GLOW = 2.5;
 const FABRIC_GLOW = 0.15;
 const HOVER_GLOW = 0.3;
 
-const DARK_METAL = new THREE.MeshStandardMaterial({ color: 0x3a3632, roughness: 0.4, metalness: 0.7 });
+const DARK_METAL = standard({ color: 0x3a3632, roughness: 0.4, metalness: 0.7 });
 
 /**
  * A slim floor lamp: weighted base, pole, drum shade closed by soft glowing diffusers, with its

@@ -38,9 +38,10 @@ export interface TxMarket {
   consign(game: Game): void;
   holdDeposit?(item: StockItem): number;
   hold?(item: StockItem, deposit: number): void;
-  readonly lotSold?: boolean;
-  sellLot?(): void;
-  order?(game: Game, quote: { price: number; deposit: number; day: number }): void;
+  /** Today's job lot (`JobLotDraw`). */
+  readonly lot?: { readonly sold: boolean; sell(): void };
+  /** The counter's orders (`MarketOrders`). */
+  readonly orders?: { place(game: Game, quote: { price: number; deposit: number; day: number }): void };
 }
 
 export interface TxStanding {
@@ -235,8 +236,9 @@ export class Transactions {
   /** The day's job lot: every game in it the player lacks comes home in one parcel. */
   buyLot(lot: JobLot): TxResult<{ games: Game[] }> {
     const { wallet, collection, market } = this.deps;
-    if (!wallet || !collection || !market?.sellLot) return fail('unavailable');
-    if (market.lotSold) return fail('done');
+    const lotDraw = market?.lot;
+    if (!wallet || !collection || !market || !lotDraw) return fail('unavailable');
+    if (lotDraw.sold) return fail('done');
     if (wallet.coins < lot.price) return fail('short', lot.price, wallet.coins);
     const each = Math.round(lot.price / Math.max(1, lot.games.length));
     const games = lot.games.filter((g) => !collection.owns(g.id)).map((g) => bought(g, each, 'a job lot', market.day));
@@ -244,7 +246,7 @@ export class Transactions {
       wallet.spend(lot.price);
       if (collection.addMany) collection.addMany(games);
       else for (const game of games) collection.add(game);
-      market.sellLot!();
+      lotDraw.sell();
     });
     return { ok: true, games };
   }
@@ -266,11 +268,12 @@ export class Transactions {
   /** The counter's used-copy order: the deposit now, the copy on its stall from `quote.day`. */
   orderUsed(game: Game, quote: { price: number; deposit: number; day: number }): TxResult {
     const { wallet, market } = this.deps;
-    if (!wallet || !market?.order) return fail('unavailable');
+    const orders = market?.orders;
+    if (!wallet || !orders) return fail('unavailable');
     if (wallet.coins < quote.deposit) return fail('short', quote.deposit, wallet.coins);
     batch(() => {
       wallet.spend(quote.deposit);
-      market.order!(game, quote);
+      orders.place(game, quote);
     });
     return { ok: true };
   }

@@ -60,7 +60,7 @@ Read `docs/zones.md` first (model, the flat's map, how two zones share a doorway
 
 Outside, a balcony, a stairwell: same steps, but the builder places its own shell (no `Room`) and returns
 `{ lightLevel }` instead of `{ room }`. `src/world/street/` is the example: its own rig (`StreetLighting`: sun, a
-hemisphere only while occupied, the fog), a `SkyDome`, invisible walls (`StreetBounds`). Keep the `Sky` as the single
+hemisphere only while occupied, the fog), a `SkyDome`, edges the player can see (`StreetBounds` behind the facades, railings, roadworks with a roadworker). Keep the `Sky` as the single
 source of time and sun direction; never add or remove lights at runtime (dim them).
 
 ## Not walkable to? (a teleport destination like the arcade or the market)

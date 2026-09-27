@@ -271,16 +271,32 @@ export function marketPrice(game: Pick<Game, 'id' | 'platform'>, views: Views, c
  * What the WE BUY desk offers for `game` (its condition and edition; a reproduction fetches
  * `REPRO_BUY_BACK`), integer coins, at least 1. `bonus` is the player's reputation share on top.
  */
-export function buyBackPrice(game: Pick<Game, 'id' | 'platform' | 'condition' | 'edition' | 'repro'>, views: Views, bonus = 0): number {
+export function buyBackPrice(game: Pick<Game, 'id' | 'platform' | 'condition' | 'edition' | 'repro' | 'restored' | 'sticker'>, views: Views, bonus = 0): number {
   if (game.repro) return REPRO_BUY_BACK;
-  return Math.max(1, Math.round(shopPrice(game, views) * (BUY_BACK_SHARE + bonus) * CONDITION_FACTOR[game.condition ?? 'complete'] * EDITION_FACTOR[game.edition ?? 'standard']));
+  return Math.max(1, Math.round(shopPrice(game, views) * (BUY_BACK_SHARE + bonus) * dealerFactor(game) * EDITION_FACTOR[game.edition ?? 'standard']));
 }
 
 /** What `game` counts for in a swap at a stall (a reproduction nearly nothing), integer coins. */
-export function tradeValue(game: Pick<Game, 'id' | 'platform' | 'condition' | 'edition' | 'repro'>, views: Views): number {
+export function tradeValue(game: Pick<Game, 'id' | 'platform' | 'condition' | 'edition' | 'repro' | 'restored' | 'sticker'>, views: Views): number {
   if (game.repro) return REPRO_BUY_BACK;
-  return Math.max(1, Math.round(shopPrice(game, views) * TRADE_SHARE * CONDITION_FACTOR[game.condition ?? 'complete'] * EDITION_FACTOR[game.edition ?? 'standard']));
+  return Math.max(1, Math.round(shopPrice(game, views) * TRADE_SHARE * dealerFactor(game) * EDITION_FACTOR[game.edition ?? 'standard']));
 }
+
+/**
+ * The state of a copy as a dealer counts it (the WE BUY desk, a swap): its condition, a worn copy
+ * cleaned at home still counted as worn (so a cheap worn copy bought, cleaned and sold back never
+ * pays), less an old price sticker left on the cover.
+ */
+function dealerFactor(game: Pick<Game, 'condition' | 'restored' | 'sticker'>): number {
+  const condition = game.restored ? 'worn' : game.condition ?? 'complete';
+  return CONDITION_FACTOR[condition] * (game.sticker ? STICKER.factor : 1);
+}
+
+/**
+ * An old shop's price sticker on some second-hand covers (`odds` of a stall copy): the copy goes at
+ * `factor` of its price, and is worth that much less (value, desk, swap) until it is peeled off at home.
+ */
+export const STICKER = { odds: 0.12, factor: 0.85 } as const;
 
 /** How a copy's printing reads on a tag or a panel ('' for the standard run). */
 export function describeEdition(edition: Edition | undefined, platform: PlatformId): string {
@@ -302,8 +318,8 @@ export function describeCondition(condition: BoxCondition | undefined): string {
 
 
 /**
- * A bookcase kit for the bedroom, for the games the collection room has no room left for (about
- * 170 NES boxes): a bit over ten minutes at the cabinets, dearer than any ordinary copy.
+ * A bookcase (about 40 NES boxes): the collection room starts with one, those bought stand along its
+ * walls, then in the bedroom. A bit over ten minutes at the cabinets, dearer than any ordinary copy.
  */
 export const BOOKCASE_PRICE = 250;
 
@@ -379,8 +395,26 @@ export const PRIZE_TICKETS = {
   mysteryGame: MYSTERY_GAME_TICKETS,
 } as const;
 
-/** The household stall's one-off pieces for the flat, in coins (the bookcase is `BOOKCASE_PRICE`; `homeGoods.ts` has the list). */
-export const HOME_GOOD_PRICES = { rug: 120, lamp: 90, poster: 60, crt: 300 } as const;
+/**
+ * What the flat's furniture costs, in coins (the bookcase is `BOOKCASE_PRICE`; `homeGoods.ts` has the list, who sells
+ * what and how many). The flat starts bare (a bookcase, the TV, a mattress): at ~20 coins a minute at the cabinets a
+ * print or a plant is under a minute, an armchair or a lamp a few, a bed or a dresser about five, the projector the
+ * long goal (about half an hour). First guesses.
+ */
+export const HOME_GOOD_PRICES = {
+  // The market's household stall.
+  rug: 120, lamp: 90, poster: 60,
+  // The furniture shop.
+  armchair: 70, floorLamp: 55, sideTable: 30, livingRug: 45, floorCushions: 20, sideboard: 110, framedPrint: 15,
+  bed: 120, nightstands: 50, dresser: 90, readingCorner: 80, bedroomRug: 35, mirror: 30,
+  kitchenTable: 70, kitchenRug: 20, bathMat: 10, hallStand: 30, bistroSet: 60,
+  // The TV repair shop.
+  crt: 300, projector: 550, speakers: 120, bedroomTv: 150, radio: 40, appliances: 45,
+  // The florist.
+  houseplant: 14, plant: 12,
+  // The pet shop.
+  cat: 60, scratcher: 25, catToy: 5,
+} as const;
 
 // --- The market's calendar of events: grails, the monthly big market, sales (see `marketEvents.ts`) ---
 
@@ -392,7 +426,7 @@ export const HOME_GOOD_PRICES = { rug: 120, lamp: 90, poster: 60, crt: 300 } as 
 export const GRAIL = { every: 8, offset: 5, rumourDays: 3, floor: 0.92 } as const;
 
 /**
- * The Grande Brocante: once a market "month" (`month` days, from day `offset`; it falls on the week
+ * The Grand Flea Fair: once a market "month" (`month` days, from day `offset`; it falls on the week
  * round's last day), the hall fills up: `extraCopies` more per stall, the bin `bin.size` times as
  * deep at `bin.price` of its price, `gems` more gems in it, `crowd` times the shoppers, and every
  * stall `priceFactor` of its usual prices (with a haggle, still above what the WE BUY desk pays).

@@ -23,6 +23,16 @@ export class Interactor implements Updatable {
   private occluders: THREE.Object3D[] = [];
   private readonly occluderSet = new Set<THREE.Object3D>();
   private dirty = false;
+  /**
+   * The hitboxes within reach, re-sorted out of all of them when the camera has moved `NEAR_STEP`
+   * or `NEAR_SECONDS` went by (things move: a walker, a box in hand): the ray then tests a handful,
+   * not every box on every shelf of every loaded room.
+   */
+  private near: THREE.Object3D[] = [];
+  private readonly nearFrom = new THREE.Vector3(Infinity, 0, 0);
+  private nearAge = Infinity;
+  private readonly scratch = new THREE.Vector3();
+  private readonly sphere = new THREE.Sphere();
   private hovered: Interactable | null = null;
   private readonly hoverListeners = new Listeners<[item: Interactable | null]>();
   private readonly selectListeners = new Listeners<[item: Interactable]>();
@@ -61,7 +71,8 @@ export class Interactor implements Updatable {
     this.dirty = true;
   }
 
-  update(): void {
+  update(dt = 0): void {
+    this.nearAge += dt;
     this.setHovered(this.enabled ? this.pick() : null);
   }
 
@@ -83,14 +94,17 @@ export class Interactor implements Updatable {
   }
 
   private pick(): Interactable | null {
+    const eye = this.camera.getWorldPosition(this.scratch);
     if (this.dirty) {
       this.hitboxes = [...this.owners.keys()];
       this.occluders = [...this.occluderSet];
       this.dirty = false;
+      this.nearAge = Infinity;
     }
+    if (this.nearAge > NEAR_SECONDS || eye.distanceToSquared(this.nearFrom) > NEAR_STEP * NEAR_STEP) this.sortNear(eye);
     this.raycaster.far = this.maxDistance;
     this.raycaster.setFromCamera(this.centre, this.camera);
-    const hits = this.raycaster.intersectObjects(this.hitboxes, false);
+    const hits = this.raycaster.intersectObjects(this.near, false);
     if (!hits.length) return null;
     const wallAt = this.raycaster.intersectObjects(this.occluders, false)[0]?.distance ?? Infinity;
     for (const hit of hits) {
@@ -100,4 +114,22 @@ export class Interactor implements Updatable {
     }
     return null;
   }
+
+  /** Keeps the hitboxes whose bounding sphere comes within `maxDistance + NEAR_STEP` of `eye`. */
+  private sortNear(eye: THREE.Vector3): void {
+    this.nearFrom.copy(eye);
+    this.nearAge = 0;
+    const reach = this.maxDistance + NEAR_STEP;
+    this.near = this.hitboxes.filter((hitbox) => {
+      const geometry = (hitbox as THREE.Mesh).geometry as THREE.BufferGeometry | undefined;
+      if (!geometry) return true;
+      if (!geometry.boundingSphere) geometry.computeBoundingSphere();
+      this.sphere.copy(geometry.boundingSphere!).applyMatrix4(hitbox.matrixWorld);
+      return this.sphere.center.distanceTo(eye) - this.sphere.radius < reach;
+    });
+  }
 }
+
+/** How far the camera moves, and how long it waits, before the hitboxes within reach are sorted again. */
+const NEAR_STEP = 0.75;
+const NEAR_SECONDS = 0.5;

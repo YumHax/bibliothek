@@ -4,8 +4,7 @@ import type { SessionActions } from '@/game/SessionActions';
 import { createCanvas, toTexture } from '@/covers/generated/canvasUtils';
 import type { Furniture } from '../Furniture';
 import { boxMesh, invisibleHitbox } from '../meshUtils';
-import { matte } from '../props/Prop';
-import { wood as woodMaterial } from '@/world/materials/finishes';
+import { paint, timber } from '../materials/palette';
 
 const WIDTH = 1.6;
 const DEPTH = 0.7;
@@ -19,8 +18,8 @@ export interface OrderCounterOptions {
   wallBehind?: number;
 }
 
-const OAK = woodMaterial(0x8b6a44, 0.55);
-const DARK = matte(0x4a3524, 0.6);
+const OAK = timber(0x8b6a44, 0.55);
+const DARK = paint(0x4a3524, 0.6);
 
 /**
  * The market's mail-order counter: a desk with a thick catalogue on it and a sign on the wall behind
@@ -48,7 +47,7 @@ export class OrderCounter extends THREE.Group implements Furniture, Interactable
     book.castShadow = true;
     book.receiveShadow = true;
     this.add(book);
-    this.add(boxMesh(0.14, 0.01, 0.01, matte(0x1b1b1b, 0.4), { x: 0.35, y: HEIGHT + 0.005, z: 0.1 }));
+    this.add(boxMesh(0.14, 0.01, 0.01, paint(0x1b1b1b, 0.4), { x: 0.35, y: HEIGHT + 0.005, z: 0.1 }));
     // Sign on the wall behind the counter.
     const sign = new THREE.Mesh(new THREE.PlaneGeometry(1.1, 0.28), new THREE.MeshStandardMaterial({ map: this.paintSign(), roughness: 0.8 }));
     sign.position.set(0, 1.75, -wallBehind + 0.01);

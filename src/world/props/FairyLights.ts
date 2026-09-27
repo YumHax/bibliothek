@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import type { Updatable } from '@/core/Engine';
 import { seededRandom } from '@/covers/generated/canvasUtils';
-import { markShared, Prop } from './Prop';
+import { Prop } from './Prop';
+import { standard, instancedBasic } from '../materials/palette';
 
 export interface FairyLightsOptions {
   /** Distance between the two ends, along local +x from the origin. Default 3. */
@@ -21,7 +22,7 @@ export interface FairyLightsOptions {
   seed?: number;
 }
 
-const WIRE = markShared(new THREE.MeshStandardMaterial({ color: 0x1a2a1a, roughness: 0.7 }));
+const WIRE = standard({ color: 0x1a2a1a, roughness: 0.7 });
 const COLORS = [0xff3a2a, 0xffd23a, 0x3aff6a, 0x4a8aff, 0xfff4e0];
 const TWINKLE_SECONDS = 0.5;
 
@@ -66,7 +67,7 @@ export class FairyLights extends Prop implements Updatable {
 
     const count = Math.max(1, Math.floor(length / spacing) - 1);
     const palette = options.colors ?? COLORS;
-    this.bulbs = new THREE.InstancedMesh(new THREE.SphereGeometry(options.bulb ?? 0.014, 6, 5), new THREE.MeshBasicMaterial({ toneMapped: false }), count);
+    this.bulbs = new THREE.InstancedMesh(new THREE.SphereGeometry(options.bulb ?? 0.014, 6, 5), instancedBasic({ toneMapped: false }), count);
     this.bulbs.castShadow = false;
     const m = new THREE.Matrix4();
     const p = new THREE.Vector3();

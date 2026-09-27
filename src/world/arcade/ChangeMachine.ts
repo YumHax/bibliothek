@@ -1,10 +1,11 @@
 import * as THREE from 'three';
-import { markShared } from '../props/Prop';
+import { standard } from '../materials/palette';
 import type { Interactable } from '@/interaction/Interactable';
 import type { SessionActions } from '@/game/SessionActions';
 import { createCanvas, toTexture, FONT } from '@/covers/generated/canvasUtils';
 import type { Furniture } from '../Furniture';
 import { boxMesh, cylinderMesh, invisibleHitbox } from '../meshUtils';
+import { WALL } from '../surface/layers';
 import { drawText } from './games/ArcadeGame';
 
 export interface ChangeMachineOptions {
@@ -21,8 +22,8 @@ const PLINTH_H = 0.08;
 const HEADER_H = 0.24;
 const PX_PER_M = 800;
 
-const STEEL_DARK = markShared(new THREE.MeshStandardMaterial({ color: 0x1d1f2a, roughness: 0.5, metalness: 0.4 }));
-const CHROME = markShared(new THREE.MeshStandardMaterial({ color: 0xb9bcc0, metalness: 0.7, roughness: 0.3 }));
+const STEEL_DARK = standard({ color: 0x1d1f2a, roughness: 0.5, metalness: 0.4 });
+const CHROME = standard({ color: 0xb9bcc0, metalness: 0.7, roughness: 0.3 });
 
 /**
  * The change machine every arcade has and nobody trusts: a tall steel box with a lit CHANGE
@@ -40,14 +41,14 @@ export class ChangeMachine extends THREE.Group implements Furniture, Interactabl
     super();
     this.name = 'ChangeMachine';
     this.working = options.working ?? false;
-    const steel = new THREE.MeshStandardMaterial({ color: options.color ?? 0x3b4258, roughness: 0.45, metalness: 0.35 });
+    const steel = standard({ color: options.color ?? 0x3b4258, roughness: 0.45, metalness: 0.35 });
 
     this.add(boxMesh(WIDTH, PLINTH_H, DEPTH, STEEL_DARK, { y: PLINTH_H / 2 }));
     this.add(boxMesh(WIDTH, HEIGHT - PLINTH_H, DEPTH, steel, { y: PLINTH_H + (HEIGHT - PLINTH_H) / 2 }));
     // The front panel: everything printed on the machine, painted.
     const panelH = HEIGHT - PLINTH_H - HEADER_H - 0.04;
     const panel = new THREE.Mesh(new THREE.PlaneGeometry(WIDTH - 0.04, panelH), new THREE.MeshStandardMaterial({ map: paintPanel(WIDTH - 0.04, panelH, this.working), roughness: 0.5, metalness: 0.2 }));
-    panel.position.set(0, PLINTH_H + panelH / 2 + 0.01, DEPTH / 2 + 0.002);
+    panel.position.set(0, PLINTH_H + panelH / 2 + 0.01, DEPTH / 2 + WALL.notice.lift);
     panel.receiveShadow = true;
     this.add(panel);
     // The lit header.

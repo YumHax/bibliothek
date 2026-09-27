@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import type { Updatable } from '@/core/Engine';
 import { seededRandom } from '@/covers/generated/canvasUtils';
-import { Prop, matte } from './Prop';
+import { paint, standard } from '../materials/palette';
+import { Prop } from './Prop';
 
 /**
  * `yucca`: a trunk with a rosette of long sword leaves; `fig`: a leaning trunk with big oval leaves;
@@ -48,15 +49,15 @@ const POT_SEGMENTS = 24;
 const HANGING_DROP = 0.55;
 const HANGING_POT = { r: 0.11, h: 0.14 };
 // Pots are open at the top, so their inside wall must render too.
-const CERAMIC = new THREE.MeshStandardMaterial({ color: 0xf1ede6, roughness: 0.45, side: THREE.DoubleSide });
-const TERRACOTTA = new THREE.MeshStandardMaterial({ color: 0xb8643a, roughness: 0.9, side: THREE.DoubleSide });
-const SOIL = matte(0x2e2119, 1);
-const TRUNK = matte(0x6b4a2b, 0.85);
-const STEM = matte(0x4f6a3a, 0.7);
-const CORD = matte(0xd9cbb0, 0.95);
+const CERAMIC = standard({ color: 0xf1ede6, roughness: 0.45, side: THREE.DoubleSide });
+const TERRACOTTA = standard({ color: 0xb8643a, roughness: 0.9, side: THREE.DoubleSide });
+const SOIL = paint(0x2e2119, 1);
+const TRUNK = paint(0x6b4a2b, 0.85);
+const STEM = paint(0x4f6a3a, 0.7);
+const CORD = paint(0xd9cbb0, 0.95);
 
 function greens(colors: number[], roughness: number): THREE.MeshStandardMaterial[] {
-  return colors.map((color) => new THREE.MeshStandardMaterial({ color, roughness, side: THREE.DoubleSide }));
+  return colors.map((color) => standard({ color, roughness, side: THREE.DoubleSide }));
 }
 // One material per colour, shared by every leaf of every plant of that kind.
 const CLASSIC_GREENS = greens([0x3f7a3a, 0x4d8b3f, 0x336b33, 0x5a9a48], 0.65);

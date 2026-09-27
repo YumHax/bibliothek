@@ -108,7 +108,7 @@ export class Postman extends Prop implements Updatable, DoorRinger {
     } else {
       const titles = games.length <= 2 ? games.map((g) => g.title).join(' and ') : `${games.length} games`;
       session.hint(`The postman hands you a parcel: ${titles}. It goes under the hall console with the rest.`);
-      this.walker.say('Bonne journée !', 2.5);
+      this.walker.say('Have a nice day!', 2.5);
     }
     this.leave();
   }
@@ -144,7 +144,7 @@ export class Postman extends Prop implements Updatable, DoorRinger {
     const { post, doorstep } = this.options;
     doorstep.leave(this);
     if (post.deliver().length) {
-      doorstep.slipNote({ title: 'SORRY WE MISSED YOU', lines: ['Your parcel is with the concierge', 'She put it inside your door', 'La Poste'], accent: 0xd8b21e });
+      doorstep.slipNote({ title: 'SORRY WE MISSED YOU', lines: ['Your parcel is with the concierge', 'She put it inside your door', 'The Post Office'], accent: 0xd8b21e });
     }
     this.leave();
   }

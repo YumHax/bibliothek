@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { createCanvas, seededRandom } from '@/covers/generated/canvasUtils';
+import { RENDER_ORDER } from '../surface/layers';
 
 /** Visible scan lines over the picture (a 480-line set seen up close). */
 const SCAN_LINES = 240;
@@ -88,7 +89,7 @@ export class CrtGlass extends THREE.Mesh<THREE.PlaneGeometry, THREE.ShaderMateri
     this.playing = playing;
     this.castShadow = false;
     this.receiveShadow = false;
-    this.renderOrder = 1;
+    this.renderOrder = RENDER_ORDER.glass;
   }
 
   /** Scan lines and corner shading only show over a picture. */

@@ -37,7 +37,7 @@ const RUMOURS = [
 
 const QUIET = [
   'The market restocks every morning. Nobody knows what is on the stalls until they go and look.',
-  'Our reporter could not get in before opening. Try RÉTRO JEUX across the street: the market is through the back.',
+  'Our reporter could not get in before opening. Try RETRO GAMES across the street: the market is through the back.',
   'Tip: the bargain bin is where the gems hide. Dig.',
   'Tip: haggling works best on worn copies. Stallholders rarely budge on a showpiece.',
   'The arcade pays tickets for scores; the prize counter swaps tickets for coins.',

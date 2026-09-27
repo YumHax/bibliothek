@@ -4,6 +4,7 @@ import type { Updatable } from '@/core/Engine';
 import type { Interactable } from '@/interaction/Interactable';
 import type { SessionActions } from '@/game/SessionActions';
 import type { Furniture } from '../../Furniture';
+import { standard } from '../../materials/palette';
 import { invisibleHitbox } from '../../meshUtils';
 import type { RoadObstacle, StreetTraffic } from '../traffic/StreetTraffic';
 import { FRONT, KERB_HEIGHT, type Vec2 } from '../streetPlan';
@@ -70,8 +71,8 @@ export class StrayCat extends THREE.Group implements Furniture, Updatable, Inter
   constructor(private readonly options: StrayCatOptions) {
     super();
     this.name = 'StrayCat';
-    const coat = new THREE.MeshStandardMaterial({ color: 0xc8743a, roughness: 0.85, flatShading: true });
-    const dark = new THREE.MeshStandardMaterial({ color: 0x8a4a22, roughness: 0.85, flatShading: true });
+    const coat = standard({ color: 0xc8743a, roughness: 0.85, flatShading: true });
+    const dark = standard({ color: 0x8a4a22, roughness: 0.85, flatShading: true });
     const trunk = new THREE.BoxGeometry(0.15, 0.14, 0.36).translate(0, 0.2, 0);
     const haunch = new THREE.BoxGeometry(0.16, 0.13, 0.12).translate(0, 0.19, -0.13);
     this.body.add(mesh(mergeAll([trunk, haunch]), coat));

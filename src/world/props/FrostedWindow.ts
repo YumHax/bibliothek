@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import { Prop, part, matte } from './Prop';
+import { Prop, part } from './Prop';
+import { paint } from '../materials/palette';
 
 export interface FrostedWindowOptions {
   /** Size of the glazed opening. Default 0.6 x 0.5. */
@@ -17,7 +18,7 @@ const NIGHT_GLOW = 0.06;
 const DAY_GLOW = 0.9;
 const DAY_WHITE = new THREE.Color(0xfff8ee);
 
-const PAINT = matte(0xf6f3ee, 0.7);
+const PAINT = paint(0xf6f3ee, 0.7);
 
 /**
  * A small obscured window high on an outside wall, the kind a bathroom gets: a painted frame

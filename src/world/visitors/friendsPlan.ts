@@ -132,4 +132,10 @@ export const SHARED_LINES = {
   late: ['Sorry, I kept {title} a bit long.'],
   tip: ['And that is for your trouble: {coins} coins. No arguing.'],
   gift: ['Oh, and I do not play {title} any more. It is yours, I left it in your parcel.'],
+  /** A cake on the kitchen table (docs/household.md): a slice on the way in, a thank-you on the way out. */
+  cake: ['Is that cake I smell? You should not have. (You should have.)', 'Cake! You spoil me. Just a small slice. Maybe two.'],
+  cakeGift: ['That cake was something. I brought you {title}, I never play it: it is in your parcel.'],
+  cakeTip: ['For the cake. {coins} coins, and I want the recipe.'],
+  /** Asked round on the phone. */
+  invited: ['Today? Go on then. See you around {hour}.', 'Sure! I will drop by around {hour}.'],
 } as const;

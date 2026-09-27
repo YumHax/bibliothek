@@ -1,8 +1,9 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { VEHICLES } from '../city/vehicles';
 
-/** A small hatchback at real scale, nose to +x, wheels on y = 0, centred. */
-export const CAR = { length: 4.2, width: 1.74, height: 1.46, wheelRadius: 0.32 } as const;
+/** A small hatchback at real scale (`city/vehicles`), nose to +x, wheels on y = 0, centred. */
+export const CAR = VEHICLES.car;
 
 /** The street's car shapes: the hatchback, a saloon with a boot, a small panel van (parked, and the delivery van). */
 export type CarModelId = 'hatch' | 'saloon' | 'van';
@@ -16,8 +17,8 @@ export interface VehicleSize {
 
 export const CAR_SIZES: Record<CarModelId, VehicleSize> = {
   hatch: { length: CAR.length, width: CAR.width, height: CAR.height },
-  saloon: { length: 4.65, width: 1.8, height: 1.44 },
-  van: { length: 4.9, width: 1.95, height: 2.3 },
+  saloon: VEHICLES.saloon,
+  van: VEHICLES.van,
 };
 
 /** The parts of the car, one geometry per material so every car on the street shares each draw call. */
@@ -123,7 +124,7 @@ function saloon(): CarGeometries {
   return finish({
     body: mergeGeometries([plain(body), plain(roof)])!,
     glass: plain(glass),
-    wheels: tyres([-1.45, 1.42], width - 0.28, 0.33, length, width),
+    wheels: tyres([-1.45, 1.42], width - 0.28, VEHICLES.saloon.wheelRadius, length, width),
     lamps: lamps.build(),
   });
 }
@@ -143,16 +144,16 @@ function van(): CarGeometries {
   return finish({
     body: plain(body),
     glass,
-    wheels: tyres([-1.6, 1.55], width - 0.3, 0.34, length, width),
+    wheels: tyres([-1.6, 1.55], width - 0.3, VEHICLES.van.wheelRadius, length, width),
     lamps: lamps.build(),
   });
 }
 
 /** The city bus: size, and where its doors and destination sign are (on the +z side, the kerb's, nose to +x). */
 export const BUS = {
-  length: 12,
-  width: 2.5,
-  height: 3.1,
+  length: VEHICLES.bus.length,
+  width: VEHICLES.bus.width,
+  height: VEHICLES.bus.height,
   /** Door openings along x (centre), on the +z side. */
   doors: [4.95, 0],
   doorWidth: 1.2,
@@ -184,14 +185,14 @@ export function busGeometries(): BusGeometries {
   for (const z of [-0.95, 0.95]) lamps.add(half + 0.07, 0.62, z, 1, WHITE, 0.3, 0.16).add(-half - 0.06, 0.7, z, -1, RED, 0.2, 0.4);
   const indicators = new LampSet().add(half + 0.07, 0.62, 1.12, 1, AMBER, 0.14, 0.14).add(-half - 0.06, 1.05, 1.12, -1, AMBER, 0.14, 0.16).build();
   return {
-    ...finish({ body: plain(body), glass, wheels: tyres([-3.4, 3.9], width - 0.34, 0.5, length, width, 0.32), lamps: lamps.build() }),
+    ...finish({ body: plain(body), glass, wheels: tyres([-3.4, 3.9], width - 0.34, VEHICLES.bus.wheelRadius, length, width, 0.32), lamps: lamps.build() }),
     stripe,
     indicators,
   };
 }
 
 /** The bin lorry: a cab and the compactor body behind it, three axles, nose to +x. */
-export const LORRY = { length: 9, width: 2.5, height: 3.4 } as const;
+export const LORRY = VEHICLES.lorry;
 
 export interface LorryGeometries extends CarGeometries {
   /** The orange beacon on the cab's roof. */
@@ -208,7 +209,7 @@ export function lorryGeometries(): LorryGeometries {
   for (const z of [-1.0, 1.0]) lamps.add(half + 0.07, 0.8, z, 1, WHITE, 0.28, 0.16).add(-half - 0.06, 1.0, z, -1, RED, 0.2, 0.3);
   const beacon = plain(new THREE.CylinderGeometry(0.1, 0.12, 0.16, 10).translate(3.8, 3.03, 0));
   return {
-    ...finish({ body: mergeGeometries([plain(cab), plain(box)])!, glass, wheels: tyres([-3.1, -1.8, 3.5], width - 0.34, 0.5, length, width, 0.34), lamps: lamps.build() }),
+    ...finish({ body: mergeGeometries([plain(cab), plain(box)])!, glass, wheels: tyres([-3.1, -1.8, 3.5], width - 0.34, VEHICLES.lorry.wheelRadius, length, width, 0.34), lamps: lamps.build() }),
     beacon,
   };
 }

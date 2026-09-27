@@ -5,6 +5,7 @@ import type { Furniture } from '../../Furniture';
 import type { DayNight } from '../../props/DayNight';
 import { ROAD_Y } from './driving';
 import type { StreetTraffic } from './StreetTraffic';
+import { RENDER_ORDER } from '../../surface/layers';
 
 /** How long a droplet flies (s), gravity on it, and how wet the road must be before anything throws spray. */
 const LIFE = 0.9;
@@ -92,7 +93,7 @@ export class Spray extends THREE.Group implements Furniture, Updatable {
     });
     this.points = new THREE.Points(geometry, this.material);
     this.points.frustumCulled = false;
-    this.points.renderOrder = 3;
+    this.points.renderOrder = RENDER_ORDER.particles;
     this.points.visible = false;
     this.add(this.points);
   }

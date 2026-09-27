@@ -3,9 +3,10 @@ import type { Updatable } from '@/core/Engine';
 import { createCanvas, seededRandom } from '@/covers/generated/canvasUtils';
 import type { Furniture } from '../../Furniture';
 import type { DayNight } from '../../props/DayNight';
-import type { Season } from '../../props/outdoors/season';
+import type { Season } from '@/time/season';
 import { FRONT, type Vec2 } from '../streetPlan';
 import { groundHeight } from './ground';
+import { GROUND, RENDER_ORDER, onSurface } from '../../surface/layers';
 
 const AUTUMN = ['#c9862f', '#d9a33a', '#b8562a', '#8a7a32', '#a8442a', '#e0b048', '#7a5a2a'];
 /** Fallen leaves at the season's deepest, and how many fall at once. */
@@ -80,7 +81,7 @@ export class Leaves extends THREE.Group implements Furniture, Updatable {
     // Fallen: around the trees (denser near the trunk) and in the gutters.
     const count = Math.round(FALLEN * depth);
     const leaf = new THREE.PlaneGeometry(0.13, 0.09).rotateX(-Math.PI / 2);
-    const material = new THREE.MeshStandardMaterial({ map: leafTexture(), alphaTest: 0.5, side: THREE.DoubleSide, roughness: 0.85 });
+    const material = onSurface(new THREE.MeshStandardMaterial({ map: leafTexture(), alphaTest: 0.5, side: THREE.DoubleSide, roughness: 0.85 }), GROUND.leaf);
     const fallen = new THREE.InstancedMesh(leaf, material, count);
     const m = new THREE.Matrix4();
     const q = new THREE.Quaternion();
@@ -102,7 +103,8 @@ export class Leaves extends THREE.Group implements Furniture, Updatable {
         x = -34 + random() * 130;
         z = (random() < 0.5 ? -1 : 1) * (FRONT.farKerb - 0.1 - Math.pow(random(), 2) * 0.6);
       }
-      p.set(x, groundHeight(x, z) + 0.004 + random() * 0.006, z);
+      // Each at its own height between the two leaf layers: over the markings, grates and puddles.
+      p.set(x, groundHeight(x, z) + GROUND.leaf.lift + random() * (GROUND.leafTop.lift - GROUND.leaf.lift), z);
       e.set((random() - 0.5) * 0.3, random() * Math.PI * 2, (random() - 0.5) * 0.3);
       q.setFromEuler(e);
       const k = 0.7 + random() * 0.6;
@@ -144,7 +146,7 @@ export class Leaves extends THREE.Group implements Furniture, Updatable {
     fallMaterial.blendDstAlpha = THREE.OneFactor;
     const points = new THREE.Points(geometry, fallMaterial);
     points.frustumCulled = false;
-    points.renderOrder = 3;
+    points.renderOrder = RENDER_ORDER.particles;
     this.add(points);
   }
 

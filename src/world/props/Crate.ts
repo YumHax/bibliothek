@@ -2,8 +2,7 @@ import * as THREE from 'three';
 import { createCanvas, seededRandom, toTexture, FONT } from '@/covers/generated/canvasUtils';
 import type { Furniture } from '../Furniture';
 import { boxMesh } from '../meshUtils';
-import { matte } from './Prop';
-import { wood as woodMaterial } from '@/world/materials/finishes';
+import { paint, timber } from '../materials/palette';
 
 /** `wood`: a slatted fruit crate; `cardboard`: a taped-up moving box with a marker scrawl. */
 export type CrateStyle = 'wood' | 'cardboard';
@@ -63,7 +62,7 @@ export class Crate extends THREE.Group implements Furniture {
 function woodCrate(w: number, h: number, d: number, random: () => number): THREE.Group {
   const g = new THREE.Group();
   const tint = new THREE.Color().setHSL(0.09 + (random() - 0.5) * 0.02, 0.35 + (random() - 0.5) * 0.1, 0.55 + (random() - 0.5) * 0.12);
-  const wood = woodMaterial(tint, 0.85);
+  const wood = timber(tint, 0.85);
   const post = 0.03;
   const slat = 0.012;
   // The posts stand inside the slats, which are nailed on their outside: flush with them, the
@@ -88,7 +87,7 @@ function cardboardBox(w: number, h: number, d: number, label: string, random: ()
   const g = new THREE.Group();
   const shade = 0.9 + random() * 0.2;
   const card = new THREE.Color(0xc4a26f).multiplyScalar(shade);
-  const plain = matte(card, 0.95);
+  const plain = paint(card, 0.95);
   const top = new THREE.MeshStandardMaterial({ map: paintTop(card, random), roughness: 0.95 });
   const front = new THREE.MeshStandardMaterial({ map: paintFront(card, label, random), roughness: 0.95 });
   // BoxGeometry material order: +x, -x, +y (top), -y, +z (front), -z.

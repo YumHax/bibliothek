@@ -48,6 +48,10 @@ Read this only when changing the cat's look, behaviour or belongings.
   corner (bowls between the fig and the door, bed under the left wall's back window, scratcher by the front wall, ball on the
   rug). Called from `bootstrap/world.ts` after the player exists and after every room of the flat is built; `flat` gives the rooms'
   floor bounds, the spots to visit (each builder returns `catVisits`, from its plan's `catVisits`) and the perches.
+  **Adoption**: there is no cat in a new game. `placers` (`adoption.catPlacers`) stage the cat, its bowls and bed until
+  it is adopted at the pet shop on Front Street (`HomeUpgrades` 'cat'), the scratching post and the ball until they are
+  bought there (handed over then with `Cat.provide`); `followAdoption` keeps `Cat.adopted`, which C (`CatCare`), the
+  feather wand and the visitors check. It gets `seats` as the armchairs that stand (`RoomHandle.armchairs`, live).
 
 ## Out of the collection room
 

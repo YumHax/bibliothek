@@ -3,6 +3,7 @@ import { createCanvas, seededRandom, toTexture } from '@/covers/generated/canvas
 import { bump, ramp } from './geometry';
 import { beardCover } from './hair';
 import type { PersonLook } from './looks';
+import { cachedTexture } from './textureCache';
 
 /*
  * The skin of the head, painted once from the look. The canvas is laid out like the head's
@@ -18,7 +19,13 @@ const H = 512;
 
 type RGB = [number, number, number];
 
+/** The head's skin for `look`, shared by every look with the same values for it (`cachedTexture`). */
 export function paintFace(look: PersonLook): THREE.CanvasTexture {
+  const key = ['face', look.skin, look.hair, Math.round(look.nose * 100), look.beard ?? '', look.freckles, look.brows, look.smile].join('|');
+  return cachedTexture(key, () => paint(look));
+}
+
+function paint(look: PersonLook): THREE.CanvasTexture {
   const [canvas, ctx] = createCanvas(W, H);
   const random = seededRandom(look.skin * 13 + look.hair * 7 + Math.round(look.nose * 100));
   const skin = rgb(look.skin);

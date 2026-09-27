@@ -4,7 +4,8 @@ import type { ModalLike } from '@/game/SessionParts';
 import type { SessionActions } from '@/game/SessionActions';
 import { createCanvas, toTexture } from '@/graphics/canvas';
 import { invisibleHitbox } from '../meshUtils';
-import { Prop, part, matte } from '../props/Prop';
+import { Prop, part } from '../props/Prop';
+import { METAL, paint } from '../materials/palette';
 
 export interface CollectorsBookOptions {
   /** The collector's book panel the binder opens. */
@@ -20,9 +21,9 @@ const BOARD = 0.004;
 const THICK = 0.042;
 const SPINE = 0.022;
 
-const LEATHER = new THREE.MeshStandardMaterial({ color: 0x1f3b2d, roughness: 0.72 });
-const PAGES = matte(0xeee6d2, 0.9);
-const BRASS = new THREE.MeshStandardMaterial({ color: 0xb8892a, roughness: 0.35, metalness: 0.9 });
+const LEATHER = paint(0x1f3b2d, 0.72);
+const PAGES = paint(0xeee6d2, 0.9);
+const BRASS = METAL.agedBrass();
 
 /**
  * The collector's book: a green leather ring binder with a gilt label, lying on the living room's

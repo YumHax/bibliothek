@@ -3,6 +3,7 @@ import { createCanvas, seededRandom, toTexture } from '@/covers/generated/canvas
 import { filterTriangles, Parts, radialSurface, ramp, spline, type Keys } from './geometry';
 import { headRadius, type FaceShape } from './head';
 import type { HairStyle, PersonLook } from './looks';
+import { cachedTexture } from './textureCache';
 
 /*
  * Hair and beard, in the head's frame. Both are a shell over the skin: the head's own surface
@@ -76,9 +77,10 @@ const BEARD_LINE: Keys = [
 const SUNK = -0.003;
 
 export function hairMaterial(look: PersonLook): THREE.MeshStandardMaterial {
-  const map = strandTexture(look.hair, look.hairStyle === 'curly', look.hair * 7 + 3);
+  const curly = look.hairStyle === 'curly';
+  const map = cachedTexture(`hair|${look.hair}|${curly}`, () => strandTexture(look.hair, curly, look.hair * 7 + 3));
   // Where a shell tapers to the skin (hairline, fringe, beard edge) it lies within a hair of it: the offset keeps it in front instead of z-fighting.
-  return new THREE.MeshStandardMaterial({ map, bumpMap: map, bumpScale: 1.5, roughness: 0.55, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2 });
+  return new THREE.MeshStandardMaterial({ map, bumpMap: map, bumpScale: 1.5, roughness: 0.55, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2 }); // convention-ok: a shell over the skin, not a surface layer
 }
 
 /** The hair and beard for `look`, added to the head's parts. */

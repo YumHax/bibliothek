@@ -1,6 +1,7 @@
 import * as THREE from 'three';
-import { createCanvas, roundRect, toTexture } from '@/covers/generated/canvasUtils';
+import { createCanvas, hashString, roundRect, seededRandom, toTexture } from '@/covers/generated/canvasUtils';
 import type { PersonLook } from './looks';
+import { cachedTexture } from './textureCache';
 
 /*
  * The one canvas a person wears: the torso's texture, painted once from the look. The trunk's
@@ -10,13 +11,19 @@ import type { PersonLook } from './looks';
  * check, a hoodie with its pocket and strings, a jacket open over a shirt, a buttoned shirt; and
  * the stallholder's apron over any of them. The trousers get their seams and pockets, and
  * `finish` adds what makes paint read as fabric. `paintCloth` is the small tile the sleeves and
- * trouser legs wear.
+ * trouser legs wear. Both are shared by every look with the same values for them (`cachedTexture`),
+ * the weave's flecks drawn from a random seeded by those values.
  */
 
 const W = 512;
 const H = 512;
 
 export function paintTorso(look: PersonLook, waistV: number): THREE.CanvasTexture {
+  const key = ['torso', look.top, look.topColor, look.topAccent, look.trousers, look.apron ?? '', waistV].join('|');
+  return cachedTexture(key, () => torso(look, waistV, seededRandom(hashString(key))));
+}
+
+function torso(look: PersonLook, waistV: number, random: () => number): THREE.CanvasTexture {
   const [canvas, ctx] = createCanvas(W, H);
   const waistY = (1 - waistV) * H;
   const base = css(look.topColor);
@@ -195,7 +202,7 @@ export function paintTorso(look: PersonLook, waistV: number): THREE.CanvasTextur
     ctx.strokeRect(W * 0.4, H * 0.62, W * 0.2, H * 0.14);
   }
 
-  finish(ctx, look.top === 'tee' || look.top === 'stripes');
+  finish(ctx, look.top === 'tee' || look.top === 'stripes', random);
   return toTexture(canvas, 4);
 }
 
@@ -203,7 +210,7 @@ export function paintTorso(look: PersonLook, waistV: number): THREE.CanvasTextur
  * What makes paint read as cloth: side seams and a neckline, soft folds where the fabric bunches
  * (at the waist, under the arms), and a fine weave of noise over everything.
  */
-function finish(ctx: CanvasRenderingContext2D, ribbedNeck: boolean): void {
+function finish(ctx: CanvasRenderingContext2D, ribbedNeck: boolean, random: () => number): void {
   ctx.fillStyle = 'rgba(0,0,0,0.18)';
   for (const u of [0.25, 0.75]) ctx.fillRect(W * u - 1, 0, 2, H);
   if (ribbedNeck) {
@@ -231,7 +238,7 @@ function finish(ctx: CanvasRenderingContext2D, ribbedNeck: boolean): void {
     const x = p % W;
     const y = (p - x) / W;
     // A twill: diagonal ribs plus a little random fleck.
-    const weave = ((x + y) % 4 < 2 ? 1.025 : 0.975) * (0.97 + Math.random() * 0.06);
+    const weave = ((x + y) % 4 < 2 ? 1.025 : 0.975) * (0.97 + random() * 0.06);
     data[i] = Math.min(255, data[i]! * weave);
     data[i + 1] = Math.min(255, data[i + 1]! * weave);
     data[i + 2] = Math.min(255, data[i + 2]! * weave);
@@ -244,6 +251,12 @@ function finish(ctx: CanvasRenderingContext2D, ribbedNeck: boolean): void {
  * striped or checked top its pattern, so a striped tee has striped sleeves.
  */
 export function paintCloth(color: number, accent: number, pattern: 'plain' | 'stripes' | 'check'): THREE.CanvasTexture {
+  // A plain tile never shows its accent: leave it out of the key so it is shared more.
+  const key = ['cloth', color, pattern === 'plain' ? '' : accent, pattern].join('|');
+  return cachedTexture(key, () => cloth(color, accent, pattern, seededRandom(hashString(key))));
+}
+
+function cloth(color: number, accent: number, pattern: 'plain' | 'stripes' | 'check', random: () => number): THREE.CanvasTexture {
   const S = 64;
   const [canvas, ctx] = createCanvas(S, S);
   ctx.fillStyle = css(color);
@@ -264,7 +277,7 @@ export function paintCloth(color: number, accent: number, pattern: 'plain' | 'st
   for (let i = 0; i < data.length; i += 4) {
     const p = i / 4;
     const weave = ((p % S) + Math.floor(p / S)) % 4 < 2 ? 1.03 : 0.97;
-    const k = weave * (0.97 + Math.random() * 0.06);
+    const k = weave * (0.97 + random() * 0.06);
     data[i] = Math.min(255, data[i]! * k);
     data[i + 1] = Math.min(255, data[i + 1]! * k);
     data[i + 2] = Math.min(255, data[i + 2]! * k);

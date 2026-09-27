@@ -7,7 +7,8 @@ import { ChipSpeaker, type Sfx } from '@/audio/ChipSpeaker';
 import { createCanvas, seededRandom, toTexture } from '@/covers/generated/canvasUtils';
 import type { Furniture } from '../Furniture';
 import { boxMesh, cylinderMesh, eyePoseAt, invisibleHitbox } from '../meshUtils';
-import { markShared, matte } from '../props/Prop';
+import { WALL } from '../surface/layers';
+import { paint, standard } from '../materials/palette';
 import { drawText } from './games/ArcadeGame';
 import { ordinal } from './InitialsEntry';
 import { BALL_R, type PinballEvent, PinballSim } from './pinball/PinballSim';
@@ -56,8 +57,8 @@ const IDLE_FPS = 4;
 const REGULAR_SKILL = 0.7;
 const REGULAR_PAUSE = 3;
 
-const STEEL_BALL = markShared(new THREE.MeshStandardMaterial({ color: 0xe8ecf0, metalness: 1, roughness: 0.12 }));
-const BLACK = markShared(matte(0x111116, 0.5));
+const STEEL_BALL = standard({ color: 0xe8ecf0, metalness: 1, roughness: 0.12 });
+const BLACK = paint(0x111116, 0.5);
 
 const SOUNDS: Partial<Record<PinballEvent, Sfx>> = {
   bumper: 'bumper',
@@ -120,7 +121,7 @@ export class Pinball extends THREE.Group implements Furniture, Interactable, Upd
     this.game = { id: 'pinball', title: this.title, hint: 'A / D flip · hold Space to pull the plunger, let go to launch' };
     const random = seededRandom((options.seed ?? 1) * 6151);
     const color = options.color ?? 0x3a1f5c;
-    const paint = matte(color, 0.5);
+    const body = paint(color, 0.5);
     const accent = new THREE.Color(options.accent ?? 0xff8a2a);
     this.accent = `#${accent.getHexString()}`;
 
@@ -143,23 +144,23 @@ export class Pinball extends THREE.Group implements Furniture, Interactable, Upd
     // (a solid box would bury the playfield, the ball and the flippers under its lid).
     // Its top stops a hair under the playfield plane (level with it, the two would z-fight).
     const bottomH = FIELD_Y + BODY_H / 2 - 0.003;
-    deck.add(boxMesh(BODY_W, bottomH, BODY_L, paint, { y: -BODY_H / 2 + bottomH / 2 }));
+    deck.add(boxMesh(BODY_W, bottomH, BODY_L, body, { y: -BODY_H / 2 + bottomH / 2 }));
     const rimH = BODY_H / 2 - FIELD_Y;
     const rimY = FIELD_Y + rimH / 2;
     const side = (BODY_W - FIELD_W) / 2;
     const fieldFront = FIELD_L / 2 + 0.01;
     const fieldBack = -FIELD_L / 2 + 0.01;
-    for (const sx of [-1, 1]) deck.add(boxMesh(side, rimH, BODY_L, paint, { x: sx * (BODY_W / 2 - side / 2), y: rimY }));
-    deck.add(boxMesh(FIELD_W, rimH, BODY_L / 2 - fieldFront, paint, { y: rimY, z: (BODY_L / 2 + fieldFront) / 2 }));
-    deck.add(boxMesh(FIELD_W, rimH, fieldBack + BODY_L / 2, paint, { y: rimY, z: (fieldBack - BODY_L / 2) / 2 }));
-    const stripe = matte(accent, 0.5);
+    for (const sx of [-1, 1]) deck.add(boxMesh(side, rimH, BODY_L, body, { x: sx * (BODY_W / 2 - side / 2), y: rimY }));
+    deck.add(boxMesh(FIELD_W, rimH, BODY_L / 2 - fieldFront, body, { y: rimY, z: (BODY_L / 2 + fieldFront) / 2 }));
+    deck.add(boxMesh(FIELD_W, rimH, fieldBack + BODY_L / 2, body, { y: rimY, z: (fieldBack - BODY_L / 2) / 2 }));
+    const stripe = paint(accent, 0.5);
     for (const sx of [-1, 1]) deck.add(boxMesh(0.004, 0.05, BODY_L - 0.1, stripe, { x: sx * (BODY_W / 2 + 0.002), y: 0.02 }));
     // Playfield under glass: the sim's walls, lanes and targets painted once on the table's art.
     const field = new THREE.Mesh(new THREE.PlaneGeometry(FIELD_W, FIELD_L), new THREE.MeshBasicMaterial({ map: this.paintPlayfield(color, accent, random), toneMapped: false, color: 0x9a9a9a }));
     field.rotation.x = -Math.PI / 2;
     field.position.set(0, FIELD_Y, 0.01);
     deck.add(field);
-    const glass = new THREE.Mesh(new THREE.PlaneGeometry(FIELD_W, FIELD_L), new THREE.MeshStandardMaterial({ color: 0xdde8ee, roughness: 0.05, metalness: 0.1, transparent: true, opacity: 0.12, depthWrite: false }));
+    const glass = new THREE.Mesh(new THREE.PlaneGeometry(FIELD_W, FIELD_L), standard({ color: 0xdde8ee, roughness: 0.05, metalness: 0.1, transparent: true, opacity: 0.12, depthWrite: false }));
     glass.rotation.x = -Math.PI / 2;
     glass.position.set(0, BODY_H / 2 + 0.002, 0.01);
     glass.castShadow = false;
@@ -173,7 +174,7 @@ export class Pinball extends THREE.Group implements Furniture, Interactable, Upd
       const r = bumper.r * FIELD_W;
       const cap = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: accent, emissiveIntensity: 0.6, roughness: 0.4 });
       this.bumperCaps.push(cap);
-      deck.add(cylinderMesh(r, 0.028, matte(0xeeeeee, 0.4), { x: at.x, y: FIELD_Y + 0.014, z: at.z }, { segments: 16 }));
+      deck.add(cylinderMesh(r, 0.028, paint(0xeeeeee, 0.4), { x: at.x, y: FIELD_Y + 0.014, z: at.z }, { segments: 16 }));
       const top = cylinderMesh(r * 0.85, 0.01, cap, { x: at.x, y: FIELD_Y + 0.033, z: at.z }, { segments: 16 });
       top.castShadow = false;
       deck.add(top);
@@ -196,8 +197,8 @@ export class Pinball extends THREE.Group implements Furniture, Interactable, Upd
       const at = this.toDeck(f.pivot.x, f.pivot.y);
       pivot.position.set(at.x, FIELD_Y + 0.009, at.z);
       const length = f.length * FIELD_W;
-      const bat = boxMesh(length, 0.016, 0.012, matte(0xf4f1ea, 0.4), { x: length / 2 });
-      pivot.add(bat, cylinderMesh(0.007, 0.02, matte(0xd23a3a, 0.4), {}, { segments: 10 }));
+      const bat = boxMesh(length, 0.016, 0.012, paint(0xf4f1ea, 0.4), { x: length / 2 });
+      pivot.add(bat, cylinderMesh(0.007, 0.02, paint(0xd23a3a, 0.4), {}, { segments: 10 }));
       deck.add(pivot);
       return pivot;
     });
@@ -207,7 +208,7 @@ export class Pinball extends THREE.Group implements Furniture, Interactable, Upd
 
     // Flipper buttons on both sides, the plunger on the right of the front, the coin door on the front face.
     for (const sx of [-1, 1]) {
-      const button = cylinderMesh(0.018, 0.02, matte(0xd23a3a, 0.4), { x: sx * (BODY_W / 2 + 0.01), y: 0, z: BUTTON_Z }, { segments: 12 });
+      const button = cylinderMesh(0.018, 0.02, paint(0xd23a3a, 0.4), { x: sx * (BODY_W / 2 + 0.01), y: 0, z: BUTTON_Z }, { segments: 12 });
       button.rotation.z = Math.PI / 2;
       deck.add(button);
     }
@@ -215,7 +216,7 @@ export class Pinball extends THREE.Group implements Furniture, Interactable, Upd
     this.plunger.position.set(BODY_W / 2 - 0.06, 0.03, BODY_L / 2 + 0.06);
     const rod = cylinderMesh(0.008, 0.12, CHROME, {}, { segments: 8 });
     rod.rotation.x = Math.PI / 2;
-    const knob = new THREE.Mesh(new THREE.SphereGeometry(0.022, 12, 10), matte(0xd23a3a, 0.4));
+    const knob = new THREE.Mesh(new THREE.SphereGeometry(0.022, 12, 10), paint(0xd23a3a, 0.4));
     knob.position.z = 0.07;
     knob.castShadow = true;
     this.plunger.add(rod, knob);
@@ -225,14 +226,14 @@ export class Pinball extends THREE.Group implements Furniture, Interactable, Upd
 
     // The backbox standing on the back end, its lit backglass facing the player.
     const backTop = FRONT_TOP + RISE;
-    this.add(boxMesh(BODY_W, BACKBOX_H, BACKBOX_D, paint, { y: backTop + BACKBOX_H / 2, z: -BODY_L / 2 + BACKBOX_D / 2 }));
+    this.add(boxMesh(BODY_W, BACKBOX_H, BACKBOX_D, body, { y: backTop + BACKBOX_H / 2, z: -BODY_L / 2 + BACKBOX_D / 2 }));
     this.backglass = displayScreen([448, 512], [BODY_W - 0.06, BACKBOX_H - 0.08], { anisotropy: 4, color: 0xcccccc });
     const backglass = this.backglass.mesh;
-    backglass.position.set(0, backTop + BACKBOX_H / 2, -BODY_L / 2 + BACKBOX_D + 0.002);
+    backglass.position.set(0, backTop + BACKBOX_H / 2, -BODY_L / 2 + BACKBOX_D + WALL.notice.lift);
     this.add(backglass);
     // Out of order: a note over the score display.
     const note = outOfOrderNote();
-    note.position.set(0.02, -0.06, 0.004);
+    note.position.set(0.02, -0.06, WALL.flyer.lift);
     backglass.add(note);
 
     const hitbox = invisibleHitbox(BODY_W + 0.06, backTop + BACKBOX_H, BODY_L + 0.2, { y: (backTop + BACKBOX_H) / 2, z: 0.05 });

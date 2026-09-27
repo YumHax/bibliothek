@@ -27,7 +27,9 @@ interface Saved {
  * list is persisted to localStorage and the seed is no longer consulted (except via `resetToSeed`).
  */
 export class CollectionStore implements GameSource {
-  private list: Game[];
+  private games_: Game[] = [];
+  /** The games by id (the first of a duplicated id, as `find` always returned): `owns` / `find` / `isWanted` in O(1). */
+  private byId = new Map<string, Game>();
   private aside: unknown[] = [];
   private change: 'import' | 'edit' = 'edit';
   private readonly listeners = new Set<() => void>();
@@ -66,8 +68,19 @@ export class CollectionStore implements GameSource {
     return this.change;
   }
 
+  /** Every write of the list goes through here, so the index follows it. */
+  private get list(): Game[] {
+    return this.games_;
+  }
+
+  private set list(games: Game[]) {
+    this.games_ = games;
+    this.byId = new Map();
+    for (const game of games) if (!this.byId.has(game.id)) this.byId.set(game.id, game);
+  }
+
   has(id: string): boolean {
-    return this.list.some((g) => g.id === id);
+    return this.byId.has(id);
   }
 
   /** True when a copy is the player's (owned or lent out); a wishlist entry is not. */
@@ -76,8 +89,13 @@ export class CollectionStore implements GameSource {
     return game !== undefined && game.status !== 'wishlist';
   }
 
+  /** True when `id` is on the wishlist (wanted, not owned). */
+  isWanted(id: string): boolean {
+    return this.find(id)?.status === 'wishlist';
+  }
+
   find(id: string): Game | undefined {
-    return this.list.find((g) => g.id === id);
+    return this.byId.get(id);
   }
 
   subscribe(cb: () => void): () => void {

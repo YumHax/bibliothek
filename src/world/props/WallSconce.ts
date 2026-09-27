@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { cylinderMesh, invisibleHitbox } from '../meshUtils';
+import { standard } from '../materials/palette';
 import { part } from './Prop';
 import { SwitchableLamp } from './SwitchableLamp';
 
@@ -23,7 +24,7 @@ const SHADE_H = 0.11;
 const GLOW = 1.2;
 const HOVER_GLOW = 0.3;
 
-const BRASS = new THREE.MeshStandardMaterial({ color: 0xb8955a, metalness: 0.85, roughness: 0.35 });
+const BRASS = standard({ color: 0xb8955a, metalness: 0.85, roughness: 0.35 });
 
 /**
  * A brass wall light: a round back plate, a swan-neck arm and an opal tulip shade opening down,

@@ -8,18 +8,17 @@ import { SHOPS } from '../facadePainter';
 import { isShopOpen } from '../shops/shopHours';
 import type { ShopKind } from '../streetPlan';
 import { FacadeFrame } from './facadeFrame';
+import { FACADE, onSurface } from '../../surface/layers';
 
-/** The glass stands this far in front of the painted wall. */
-const GLASS_OUT = 0.015;
 /** How deep the rooms behind the windows are, how high their ceilings, and the metres of back wall one art tile covers. */
 const ROOM = { depth: 2.6, ceiling: 3.3, tile: 2.4, display: 0.5 };
 /** Seconds between two looks at the clock (shops opening and shutting). */
 const CHECK_EVERY = 1;
 const TILE_PX = 256;
 type Kind = Exclude<ShopKind, 'shut'>;
-const KINDS: readonly Kind[] = ['cafe', 'bakery', 'pharmacy', 'books', 'grocer', 'florist', 'tabac', 'bar', 'butcher', 'laundry', 'retro', 'arcade'];
+const KINDS: readonly Kind[] = ['cafe', 'bakery', 'pharmacy', 'books', 'grocer', 'florist', 'tabac', 'bar', 'butcher', 'laundry', 'retro', 'arcade', 'furniture', 'electronics', 'pets'];
 const COLUMNS = 2;
-const ROWS = 6;
+const ROWS = 8;
 
 const VERTEX = /* glsl */ `
 attribute vec2 aLocal;
@@ -132,7 +131,7 @@ interface Pane {
  * The shops seen through their windows: a pane of glass just in front of every painted display
  * window and shop door, whose shader traces the view ray into a room behind it (interior mapping)
  * instead of showing a flat picture: the back wall painted per kind of shop on a canvas atlas
- * (the baker's loaves, the bookseller's spines, the bar's bottles, RÉTRO JEUX's game boxes in
+ * (the baker's loaves, the bookseller's spines, the bar's bottles, RETRO GAMES' game boxes in
  * today's stock colours, the arcade's cabinets), the display just behind the glass, side walls, a
  * tiled floor and a lit ceiling, all moving with parallax as the player walks by. Lit by the shop's
  * own light while it is open (`isShopOpen`), by daylight through the glass otherwise, and
@@ -157,7 +156,8 @@ export class ShopInteriors extends THREE.Mesh implements Furniture, Updatable {
       tileMetres: { value: ROOM.tile },
       displayDepth: { value: ROOM.display },
     };
-    const material = new THREE.ShaderMaterial({ uniforms, vertexShader: VERTEX, fragmentShader: FRAGMENT, fog: true, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2 });
+    // The glass stands `FACADE.shopInterior` in front of the painted wall.
+    const material = onSurface(new THREE.ShaderMaterial({ uniforms, vertexShader: VERTEX, fragmentShader: FRAGMENT, fog: true }), FACADE.shopInterior);
     const { geometry, panes } = paneGeometry(fronts);
     super(geometry, material);
     this.name = 'ShopInteriors';
@@ -220,7 +220,7 @@ function paneGeometry(fronts: readonly PaintedFront[]): { geometry: THREE.Buffer
       lightColor.set(w.light);
       wallColor.set(SHOPS[kind].front).lerp(new THREE.Color(0xe8dcc8), 0.45);
       for (const [a, b] of [[0, 0], [1, 0], [1, 1], [0, 1]] as const) {
-        frame.point(w.s0 + a * width, w.y0 + b * height, GLASS_OUT, p);
+        frame.point(w.s0 + a * width, w.y0 + b * height, FACADE.shopInterior.lift, p);
         position.push(p.x, p.y, p.z);
         normal.push(frame.n.x, 0, frame.n.y);
         tangent.push(frame.u.x, 0, frame.u.y);
@@ -413,6 +413,54 @@ function paintBackWall(ctx: CanvasRenderingContext2D, kind: Kind, palette: reado
           ctx.fill();
         }
       }
+      break;
+    case 'furniture':
+      // Framed pictures up the wall, armchairs and a standard lamp on the floor.
+      for (let px = 10; px < S - 30; px += 46) {
+        ctx.fillStyle = '#6a4a30';
+        ctx.fillRect(px, Y(2.6), 30, Y(2.05) - Y(2.6));
+        ctx.fillStyle = pick(random, palette);
+        ctx.fillRect(px + 3, Y(2.55), 24, Y(2.1) - Y(2.55));
+      }
+      for (let px = 6; px < S - 50; px += 64) {
+        ctx.fillStyle = pick(random, palette);
+        ctx.fillRect(px, Y(0.9), 48, Y(0.4) - Y(0.9));
+        ctx.fillRect(px, Y(0.45), 48, Y(0.1) - Y(0.45));
+        ctx.fillRect(px - 4, Y(0.7), 8, Y(0.1) - Y(0.7));
+        ctx.fillRect(px + 44, Y(0.7), 8, Y(0.1) - Y(0.7));
+        ctx.fillStyle = '#3a2a1e';
+        ctx.fillRect(px + 58, Y(1.6), 3, Y(0) - Y(1.6));
+        ctx.fillStyle = '#efe0b8';
+        ctx.fillRect(px + 50, Y(1.85), 19, Y(1.55) - Y(1.85));
+      }
+      break;
+    case 'electronics':
+      // Shelves of television sets, their screens lit.
+      shelves([0.5, 1.1, 1.7, 2.3], (px, base) => {
+        const w = 22 + random() * 10;
+        ctx.fillStyle = pick(random, ['#2a2a2e', '#4a4a52', '#5a4a3a']);
+        ctx.fillRect(px, base - 22, w, 22);
+        ctx.fillStyle = pick(random, ['#9ab8c8', '#6fa0c8', '#c8d8e0', '#8fc0a0']);
+        ctx.fillRect(px + 3, base - 19, w - 9, 16);
+        return w + 3;
+      });
+      break;
+    case 'pets':
+      // Fish tanks on a stand, cages and sacks of food on shelves.
+      ctx.fillStyle = '#2f3a3a';
+      ctx.fillRect(0, Y(0.8), S, Y(0) - Y(0.8));
+      for (let px = 6; px < S - 50; px += 60) {
+        ctx.fillStyle = 'rgba(80,150,190,0.85)';
+        ctx.fillRect(px, Y(1.5), 52, Y(0.8) - Y(1.5));
+        ctx.fillStyle = '#e0a040';
+        ctx.fillRect(px + 10 + random() * 30, Y(1.2), 6, 3);
+      }
+      shelves([1.9, 2.5], (px, base) => {
+        const w = 14 + random() * 10;
+        ctx.fillStyle = pick(random, palette);
+        ctx.fillRect(px, base - 18, w, 18);
+        return w + 3;
+      });
       break;
     case 'arcade':
       for (let px = 8; px < S - 30; px += 42) {

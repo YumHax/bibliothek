@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { seededRandom } from '@/covers/generated/canvasUtils';
-import { markShared, Prop } from './Prop';
+import { standard, instancedStandard } from '../materials/palette';
+import { Prop } from './Prop';
 
 export interface SweetsBowlOptions {
   /** Rim radius, metres. Default 0.1. */
@@ -10,7 +11,7 @@ export interface SweetsBowlOptions {
   seed?: number;
 }
 
-const WRAPPER = markShared(new THREE.MeshStandardMaterial({ roughness: 0.3, metalness: 0.2 }));
+const WRAPPER = instancedStandard({ roughness: 0.3, metalness: 0.2 });
 const WRAPPERS = [0xff8a1a, 0x7a3aa8, 0x2a2a2a, 0x3ac85a, 0xffd23a, 0xd23a3a];
 
 /**
@@ -35,7 +36,7 @@ export class SweetsBowl extends Prop {
       new THREE.Vector2(radius * 0.76, depth * 0.5),
       new THREE.Vector2(0, depth * 0.18),
     ];
-    const bowl = new THREE.Mesh(new THREE.LatheGeometry(profile, 24), new THREE.MeshStandardMaterial({ color: options.color ?? 0xe0701c, roughness: 0.35, side: THREE.DoubleSide }));
+    const bowl = new THREE.Mesh(new THREE.LatheGeometry(profile, 24), standard({ color: options.color ?? 0xe0701c, roughness: 0.35, side: THREE.DoubleSide }));
     bowl.castShadow = false;
     this.add(bowl);
 

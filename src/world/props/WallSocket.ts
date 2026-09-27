@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import { Prop, part, matte } from './Prop';
+import { paint } from '../materials/palette';
+import { Prop, part } from './Prop';
 
 export interface WallSocketOptions {
   /** Height of the plate's centre above the floor. Default 0.3. */
@@ -37,8 +38,8 @@ export class WallSocket extends Prop {
     this.name = 'WallSocket';
     const height = options.height ?? 0.3;
     const gangs = options.gangs ?? 2;
-    const plastic = matte(0xf3f1ec, 0.35);
-    const dark = matte(0x2a2a2c, 0.6);
+    const plastic = paint(0xf3f1ec, 0.35);
+    const dark = paint(0x2a2a2c, 0.6);
     const pitch = PLATE;
     const outlets = Array.from({ length: gangs }, (_, i) => (i - (gangs - 1) / 2) * pitch);
 
@@ -50,8 +51,8 @@ export class WallSocket extends Prop {
       this.add(well);
     }
 
-    const cableMat = matte(options.cableColor ?? 0x18181a, 0.55);
-    const plugMat = matte(options.cableColor === undefined ? 0x202022 : options.cableColor, 0.45);
+    const cableMat = paint(options.cableColor ?? 0x18181a, 0.55);
+    const plugMat = paint(options.cableColor === undefined ? 0x202022 : options.cableColor, 0.45);
     (options.cables ?? []).slice(0, gangs).forEach((end, i) => {
       const x = outlets[i]!;
       const plug = new THREE.Mesh(new THREE.CylinderGeometry(0.017, 0.019, 0.03, 16), plugMat);

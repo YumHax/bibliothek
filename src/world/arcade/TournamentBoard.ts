@@ -4,7 +4,8 @@ import type { Interactable } from '@/interaction/Interactable';
 import type { SessionActions } from '@/game/SessionActions';
 import { createCanvas } from '@/covers/generated/canvasUtils';
 import { boxMesh, invisibleHitbox } from '../meshUtils';
-import { markShared, matte, Prop } from '../props/Prop';
+import { Prop } from '../props/Prop';
+import { paint, standard } from '../materials/palette';
 import { drawText } from './games/ArcadeGame';
 
 /** One match as the board draws it (the concrete bracket is `economy/ArcadeTournament`'s). */
@@ -50,9 +51,9 @@ export interface TournamentBoardOptions {
 const PX_PER_M = 640;
 /** The day can turn Saturday (or stop being) while the player stands there: look again this often. */
 const POLL_SECONDS = 5;
-const FRAME = markShared(matte(0x14100a, 0.45));
-const CLIPBOARD = markShared(matte(0x8a5a2e, 0.7));
-const CLIP = markShared(new THREE.MeshStandardMaterial({ color: 0xb9bcc0, metalness: 0.7, roughness: 0.3 }));
+const FRAME = paint(0x14100a, 0.45);
+const CLIPBOARD = paint(0x8a5a2e, 0.7);
+const CLIP = standard({ color: 0xb9bcc0, metalness: 0.7, roughness: 0.3 });
 const ROUND_TITLES = ['QUARTERS', 'SEMIS', 'FINAL'];
 
 /**

@@ -1,7 +1,9 @@
 import * as THREE from 'three';
 import { createCanvas, toTexture } from '@/covers/generated/canvasUtils';
 import { cylinderMesh } from '../meshUtils';
-import { matte, Prop } from './Prop';
+import { Prop } from './Prop';
+import { PROUD } from './joinery';
+import { paint } from '../materials/palette';
 
 export interface HangingBannerOptions {
   /** Big words across the banner. */
@@ -39,12 +41,12 @@ export class HangingBanner extends Prop {
     // Two sheets back to back, so the lettering reads the right way round from both sides.
     for (const ry of [0, Math.PI]) {
       const face = new THREE.Mesh(new THREE.PlaneGeometry(width, height), sheet);
-      face.position.set(0, top, ry ? -0.002 : 0.002);
+      face.position.set(0, top, ry ? -PROUD : PROUD);
       face.rotation.y = ry;
       face.castShadow = false;
       this.add(face);
     }
-    const pole = matte(0x2a2a30, 0.4);
+    const pole = paint(0x2a2a30, 0.4);
     for (const y of [-drop, -drop - height]) {
       const bar = cylinderMesh(0.008, width + 0.04, pole, { y }, { segments: 8 });
       bar.rotation.z = Math.PI / 2;

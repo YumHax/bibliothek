@@ -7,8 +7,10 @@ import type { SkyState } from '../../props/DayNight';
 export interface StreetTalkOptions {
   /** The sky right now: the time, the weather. */
   sky: () => SkyState;
-  /** The flea market: today's stock once drawn, the day's theme. */
-  market: { peekToday(): readonly StockItem[] | null; readonly theme: MarketDayTheme };
+  /** The flea market: today's stock once drawn. */
+  market: { peekToday(): readonly StockItem[] | null };
+  /** What kind of market day it is. */
+  marketDay: { readonly theme: MarketDayTheme };
   /** The collection: its wishlist is what the neighbours have heard the player is after. */
   games: { readonly games: readonly Game[] };
   /** The arcade's tables (top five per game, rivals and the player). */
@@ -49,7 +51,7 @@ export function streetTalk(options: StreetTalkOptions): () => string {
   };
 }
 
-function candidates({ sky, market, games, scores }: StreetTalkOptions): string[] {
+function candidates({ sky, market, marketDay, games, scores }: StreetTalkOptions): string[] {
   const s = sky();
   const lines: string[] = [];
   // The hour.
@@ -65,7 +67,7 @@ function candidates({ sky, market, games, scores }: StreetTalkOptions): string[]
   if (s.fog > 0.4) lines.push('Can’t see the end of the street in this fog.');
   if (s.wind > 0.6) lines.push('Hold on to your hat!');
   // The market.
-  const { theme } = market;
+  const { theme } = marketDay;
   if (theme.kind !== 'ordinary') lines.push(`It’s ${theme.title} at the flea market today. ${theme.blurb}`);
   else lines.push('Have you been to the market yet? Get there before the dealers do.');
   const stock = market.peekToday();
@@ -78,7 +80,7 @@ function candidates({ sky, market, games, scores }: StreetTalkOptions): string[]
     const any = pick(stock);
     lines.push(`I nearly bought ${any.game.title} at the market. Maybe tomorrow.`);
   } else {
-    lines.push('RÉTRO JEUX has fresh crates at the back, they say.');
+    lines.push('RETRO GAMES has fresh crates at the back, they say.');
   }
   // The arcade's tables.
   if (scores) {

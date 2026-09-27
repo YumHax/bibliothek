@@ -10,6 +10,7 @@ import type { PrizeStore } from '@/economy/Prizes';
 import type { ArcadeMedals } from '@/economy/ArcadeMedals';
 import type { ArcadeLeague } from '@/economy/ArcadeLeague';
 import type { ArcadeTournament } from '@/economy/ArcadeTournament';
+import type { Jackpot } from '@/economy/Jackpot';
 import type { HomeUpgrades } from '@/economy/HomeUpgrades';
 import type { GameSource } from '@/collection/GameSource';
 import type { GameList } from '@/collection/GameList';
@@ -17,6 +18,7 @@ import type { BoxArtLoader } from '@/covers/BoxArtLoader';
 import type { ModalLike } from '@/game/SessionParts';
 import type { FootSurface } from '@/audio/footSurface';
 import type { RemoteScreen } from './arcade/games';
+import type { ReplayShelf } from './arcade/replay/ReplayStore';
 import type { ParcelContents } from './props/Parcel';
 import type { PlatformSelectHandler } from './props/Console';
 import type { Sky } from './Sky';
@@ -29,6 +31,13 @@ import type { WaterBowlLike } from './cat/types';
 import type { CollectorHome } from './collector/furnishCollector';
 import type { BuildingServices } from './stairwell/building';
 import type { FirstDayLike } from '@/onboarding/FirstDay';
+import type { HomeLife } from '@/household/HomeLife';
+import type { Today } from '@/time/Today';
+import type { MarketDay } from '@/economy/MarketDay';
+import type { NewsPanel } from '@/ui/NewsPanel';
+import type { ScratchCardPanel } from '@/ui/ScratchCardPanel';
+import type { HomeShopPanel } from '@/ui/HomeShopPanel';
+import type { ToDoNotePanel } from '@/ui/ToDoNotePanel';
 
 /*
  * What every zone builder is handed (`BuildContext`) and what it hands back (`ZoneHandle`). Kept
@@ -40,6 +49,10 @@ import type { FirstDayLike } from '@/onboarding/FirstDay';
 export interface CollectionContext {
   /** The collection; the consoles and the posters follow it live. */
   games: GameSource;
+  /** Whether a copy of `id` is the player's (owned or lent; a wishlist entry is not). O(1): use it, never a scan of `games`. */
+  owns(id: string): boolean;
+  /** Whether `id` is on the wishlist. O(1). */
+  isWanted(id: string): boolean;
   /** What the shelves show: the collection less what still waits in the parcel (`Deliveries.shelved`); `games` when absent. */
   shelved?: GameSource;
   /** The parcel in the hallway: games bought while out, waiting to be unpacked. */
@@ -64,6 +77,23 @@ export interface HomeContext {
   firstDay?: FirstDayLike;
   /** The journal's panel, opened by the notebook on the hall console. */
   journalPanel?: ModalLike;
+  /** What the kitchen, the bathroom and the bedroom are for (docs/household.md); none: they stay as they were. */
+  household?: HouseholdContext;
+}
+
+/** What the flat's rooms are for (`src/household/`): the rules their furniture calls, the panels it opens, the toast. */
+export interface HouseholdContext {
+  life: HomeLife;
+  /** The phone's panel (the stallholders, the friends), opened by the phone on the nightstand. */
+  phone: ModalLike;
+  /** The wardrobe's panel: what to wear. */
+  wardrobe: ModalLike;
+  /** A line for the HUD (the toast). */
+  say(text: string, ms?: number): void;
+  /** The cat's name, for what it left by its bowl. */
+  catName(): string;
+  /** The treat jar shaken: the cat comes (or not), and how that went. */
+  callCat?: () => string;
 }
 
 /** The player's money, as the builders see it. */
@@ -88,8 +118,12 @@ export interface ArcadeContext {
   league?: ArcadeLeague;
   /** The big frame a web-page cabinet game (LexiPunk) is played in. */
   screen?: RemoteScreen;
-  /** The Saturday tournament (the Session's arcade play settles its rounds); the hall makes its own when absent. */
+  /** The Saturday tournament (the Session's arcade play settles its rounds). Absent: the hall's own, made once (`arcade/hallStores`). */
   tournament?: ArcadeTournament;
+  /** The ticket wheel's progressive pot. Absent: the hall's own, made once. */
+  jackpot?: Jackpot;
+  /** The player's best run per cabinet game (the attract screens replay them). Absent: the hall's own, made once. */
+  replays?: ReplayShelf;
 }
 
 /** What the market's hall needs beyond the shared services: the panels it opens, and how the market knows the player. */
@@ -105,8 +139,22 @@ export interface MarketHallServices {
 export interface MarketContext {
   /** What the flea market has on its stalls today (also the retro shop's window, the street's talk). */
   stock: MarketStock;
+  /** What kind of market day it is: the theme, the events, the talk of the days ahead. */
+  day: MarketDay;
   /** The panels its hall opens (notice board, job lot), how the market knows the player. */
   hall?: MarketHallServices;
+}
+
+/**
+ * The DOM panels world things open (made once in `bootstrap/ui`, so no builder builds DOM): the
+ * newsstand's paper, the tabac's scratch card, the counter of the shops that sell for the flat, the
+ * first day's to-do list.
+ */
+export interface WorldPanels {
+  news: NewsPanel;
+  scratch: ScratchCardPanel;
+  homeShop: HomeShopPanel;
+  toDo?: ToDoNotePanel;
 }
 
 /** The shared services every zone builder may draw on; `src/bootstrap/world.ts` assembles it once. */
@@ -120,6 +168,10 @@ export interface BuildContext {
   input: Input;
   /** The one sky: clock + view outside the windows. */
   sky: Sky;
+  /** The one "today": the game day and the real date (see `time/Today`). */
+  today: Today;
+  /** The DOM panels world things open. */
+  panels: WorldPanels;
   covers: BoxArtLoader;
   collection: CollectionContext;
   home: HomeContext;

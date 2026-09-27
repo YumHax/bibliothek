@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { Updatable } from '@/core/Engine';
+import { Timers } from '@/core/Timers';
 import type { ArcadeResult } from '@/game/SessionActions';
 import type { Walker } from '../people/Walker';
 import type { Station } from './Station';
@@ -98,6 +99,8 @@ const rand = ([a, b]: [number, number]): number => a + Math.random() * (b - a);
  * places the walkers.
  */
 export class ArcadeCrowd extends Prop implements Updatable {
+  /** The reactions a moment later: on the hall's own time, dropped with it. */
+  private readonly timers = new Timers();
   private readonly options: ArcadeCrowdOptions;
   private readonly nodes = new Map<string, NavNode>();
   private readonly regulars: { walker: Walker; state: RegularState; name: string }[];
@@ -134,6 +137,7 @@ export class ArcadeCrowd extends Prop implements Updatable {
   }
 
   update(dt: number): void {
+    this.timers.update(dt);
     for (const r of this.regulars) this.updateRegular(r, dt);
     this.updateKid(dt);
   }
@@ -278,13 +282,13 @@ export class ArcadeCrowd extends Prop implements Updatable {
     this.regulars
       .filter((r) => r.state.kind === 'watching')
       .forEach((r, i) => {
-        window.setTimeout(() => {
+        this.timers.after(0.3 + i * 0.45, () => {
           if (r.state.kind !== 'watching') return;
           r.walker.say(lines[Math.floor(Math.random() * lines.length)]!, 2.4);
           if (!cheer) return;
           r.walker.setPose('cheer');
-          window.setTimeout(() => r.state.kind === 'watching' && r.walker.setPose('crossed'), 1600);
-        }, 300 + i * 450);
+          this.timers.after(1.6, () => r.state.kind === 'watching' && r.walker.setPose('crossed'));
+        });
       });
   }
 
@@ -391,7 +395,7 @@ export class ArcadeCrowd extends Prop implements Updatable {
     kid.say(line, 2.4);
     if (cheer) {
       kid.setPose('cheer');
-      window.setTimeout(() => kid.setPose('crossed'), 1800);
+      this.timers.after(1.8, () => kid.setPose('crossed'));
     }
   }
 
@@ -410,9 +414,9 @@ export class ArcadeCrowd extends Prop implements Updatable {
       r.walker.say(line, 2.6);
       r.walker.setPose('cheer');
       // Then back to the controls, if still at them.
-      window.setTimeout(() => {
+      this.timers.after(1.5, () => {
         if (r.state.kind === 'playing' && r.state.at === cs) this.standAtMachine(r.walker, cs);
-      }, 1500);
+      });
     }
   }
 

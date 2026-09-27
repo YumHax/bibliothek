@@ -6,6 +6,7 @@ import type { ModalLike } from '@/game/SessionParts';
 import { createCanvas, seededRandom, toTexture } from '@/covers/generated/canvasUtils';
 import { invisibleHitbox } from '../meshUtils';
 import type { Furniture } from '../Furniture';
+import { paint, standard } from '../materials/palette';
 import type { WeeklyIssue } from './gamingWeekly';
 
 export interface NewsstandOptions {
@@ -38,10 +39,10 @@ export class Newsstand extends THREE.Group implements Furniture, Interactable {
       new THREE.BoxGeometry(0.2, 1.0, 0.4).translate(-width / 2 + 0.1, 1.4, depth / 2 - 0.2),
       new THREE.BoxGeometry(0.2, 1.0, 0.4).translate(width / 2 - 0.1, 1.4, depth / 2 - 0.2),
     ])!;
-    const green = new THREE.MeshStandardMaterial({ color: GREEN, roughness: 0.55, metalness: 0.2 });
+    const green = standard({ color: GREEN, roughness: 0.55, metalness: 0.2 });
     const shell = new THREE.Mesh(body, green);
-    const roof = new THREE.Mesh(new THREE.BoxGeometry(width + 0.5, 0.12, depth + 0.6).translate(0, height + 0.06, 0.1), new THREE.MeshStandardMaterial({ color: 0x1f2a26, roughness: 0.6 }));
-    const counter = new THREE.Mesh(new THREE.BoxGeometry(width - 0.3, 0.05, 0.45).translate(0, 0.92, depth / 2 + 0.1), new THREE.MeshStandardMaterial({ color: 0x6a4a32, roughness: 0.7 }));
+    const roof = new THREE.Mesh(new THREE.BoxGeometry(width + 0.5, 0.12, depth + 0.6).translate(0, height + 0.06, 0.1), paint(0x1f2a26, 0.6));
+    const counter = new THREE.Mesh(new THREE.BoxGeometry(width - 0.3, 0.05, 0.45).translate(0, 0.92, depth / 2 + 0.1), paint(0x6a4a32, 0.7));
     for (const mesh of [shell, roof, counter]) {
       mesh.castShadow = true;
       mesh.receiveShadow = true;
@@ -90,7 +91,7 @@ function paintFront(width: number, height: number): THREE.CanvasTexture {
   ctx.font = `bold ${Math.round(0.3 * k)}px Georgia, serif`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText('PRESSE · JOURNAUX', canvas.width / 2, y(height - 0.22));
+  ctx.fillText('NEWS · MAGAZINES', canvas.width / 2, y(height - 0.22), canvas.width * 0.95);
   // Papers and magazines on the panels either side of the hatch and on the lower front.
   const covers = ['#d9383a', '#3b6fb3', '#f0c94a', '#e8e6e0', '#6fa35e', '#8c4f9e', '#f09a3a', '#222222'];
   const peg = (x0: number, y0: number, x1: number, y1: number): void => {

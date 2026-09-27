@@ -3,7 +3,7 @@ import type { Updatable } from '@/core/Engine';
 import { seededRandom } from '@/covers/generated/canvasUtils';
 import type { Furniture } from '../Furniture';
 import type { DayNight } from '../props/DayNight';
-import { wakefulnessAt } from '../props/outdoors/wakefulness';
+import { wakefulnessAt } from '@/time/wakefulness';
 import { CAR_SIZES, carGeometries, type CarModelId } from './carModel';
 import { nightnessOf } from './streetAir';
 import { snowCovered } from './snowCover';
@@ -120,6 +120,7 @@ export class StreetCars extends THREE.Group implements Furniture, Updatable {
 
     const body = snowCovered(new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.35, metalness: 0.4, flatShading: true }));
     const glass = snowCovered(new THREE.MeshStandardMaterial({ color: 0x1a232b, roughness: 0.12, metalness: 0.6, flatShading: true }));
+    // Its own, not the palette's: an instanced mesh sharing a material with plain meshes (the bus's wheels) switches programs every draw.
     const tyres = new THREE.MeshStandardMaterial({ color: 0x151515, roughness: 0.85 });
     this.lampMaterial = new THREE.MeshBasicMaterial({ vertexColors: true, color: 0x666666 });
     for (const model of MODELS) {

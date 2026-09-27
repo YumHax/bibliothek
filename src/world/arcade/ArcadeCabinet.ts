@@ -21,6 +21,7 @@ import { CabinetScreens } from './CabinetScreens';
 import { AttractLoop } from './AttractLoop';
 import { CabinetControls } from './CabinetControls';
 import { BEZEL_BORDER, DEPTH, FRONT_Z, SCREEN_HEIGHT, SCREEN_Y, SCREEN_Z, TOTAL_H, WIDTH, buildCabinetBody } from './cabinetModel';
+import { PooledLight } from '../lighting/LightPool';
 
 export interface ArcadeCabinetOptions {
   /** Colour of the side panels. */
@@ -97,7 +98,7 @@ export class ArcadeCabinet extends THREE.Group implements Furniture, Interactabl
   private readonly screens: CabinetScreens;
   private readonly attract: AttractLoop;
   private readonly controls: CabinetControls;
-  private readonly glow: THREE.PointLight | null;
+  private readonly glow: PooledLight | null;
   private readonly pool: GlowPool;
   private readonly marquee: THREE.MeshBasicMaterial;
   /** The body's paint and the two side-art prints; all glow a little when hovered. */
@@ -140,8 +141,8 @@ export class ArcadeCabinet extends THREE.Group implements Furniture, Interactabl
     this.strip = new TicketStrip(SLOT.y);
     this.strip.position.copy(SLOT);
     this.add(this.strip);
-    // Screen light thrown at the player (no shadows: six passes for a soft glow is not worth it), and its pool on the carpet.
-    this.glow = options.glowLight === false ? null : new THREE.PointLight(glowColor, 0.6, 2.5, 2);
+    // Screen light thrown at the player (the arcade's `LightPool` lends it a real light when near), and its pool on the carpet.
+    this.glow = options.glowLight === false ? null : new PooledLight(glowColor, 0.6, 2.5, 2);
     if (this.glow) {
       this.glow.position.set(0, SCREEN_Y, 0.5);
       this.add(this.glow);

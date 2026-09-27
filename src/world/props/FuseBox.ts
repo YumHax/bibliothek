@@ -1,5 +1,5 @@
-import * as THREE from 'three';
-import { Prop, part, matte } from './Prop';
+import { Prop, part } from './Prop';
+import { paint, standard } from '../materials/palette';
 
 export interface FuseBoxOptions {
   /** Outer size. Default 0.36 x 0.26. */
@@ -10,12 +10,12 @@ export interface FuseBoxOptions {
 }
 
 const DEPTH = 0.085;
-const CASE = matte(0xeceae4, 0.5);
-const RAIL = matte(0x9a9c9e, 0.4);
-const SMOKED = new THREE.MeshStandardMaterial({ color: 0x5a6068, roughness: 0.15, metalness: 0.1, transparent: true, opacity: 0.35, depthWrite: false });
-const BREAKER = matte(0xf6f5f1, 0.6);
-const LEVER = matte(0x2b2b2d, 0.5);
-const MAIN = matte(0xc0392b, 0.5);
+const CASE = paint(0xeceae4, 0.5);
+const RAIL = paint(0x9a9c9e, 0.4);
+const SMOKED = standard({ color: 0x5a6068, roughness: 0.15, metalness: 0.1, transparent: true, opacity: 0.35, depthWrite: false });
+const BREAKER = paint(0xf6f5f1, 0.6);
+const LEVER = paint(0x2b2b2d, 0.5);
+const MAIN = paint(0xc0392b, 0.5);
 
 /**
  * The flat's consumer unit: a white plastic box with a smoked hinged cover over one DIN rail of
@@ -41,7 +41,7 @@ export class FuseBox extends Prop {
       part(this, pitch * 0.4, 0.018, 0.012, i === 0 ? MAIN : LEVER, { x, y: 0.02, z: DEPTH + 0.008 });
     }
     // The label strip, the cover over it all, and the conduit carrying the cables up.
-    part(this, width - 0.06, 0.02, 0.002, matte(0xf1e6c8, 0.8), { y: -0.055, z: DEPTH + 0.001 });
+    part(this, width - 0.06, 0.02, 0.002, paint(0xf1e6c8, 0.8), { y: -0.055, z: DEPTH + 0.001 });
     part(this, width - 0.03, height - 0.06, 0.004, SMOKED, { y: 0, z: DEPTH + 0.02 });
     part(this, 0.04, 0.3, 0.03, CASE, { x: width * 0.3, y: height / 2 + 0.15, z: 0.015 });
     this.traverse((o) => (o.castShadow = false));

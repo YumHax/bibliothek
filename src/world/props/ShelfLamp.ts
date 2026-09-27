@@ -3,6 +3,7 @@ import type { Updatable } from '@/core/Engine';
 import { IDLE_SHADOW_INTERVAL, type OccupancyAware } from '../Furniture';
 import { cylinderMesh, invisibleHitbox } from '../meshUtils';
 import type { DrawnAware } from '../zone/Zone';
+import { PROUD } from './joinery';
 import { SwitchableLamp } from './SwitchableLamp';
 
 export interface ShelfLampOptions {
@@ -73,7 +74,7 @@ export class ShelfLamp extends SwitchableLamp implements Updatable, OccupancyAwa
     body.rotation.x = Math.PI / 2;
     this.lens = new THREE.MeshStandardMaterial({ color: 0xfff3dc, emissive: 0xffe2b0, emissiveIntensity: LENS_GLOW, roughness: 0.3 });
     const lens = new THREE.Mesh(new THREE.CircleGeometry(CAN_RADIUS * 0.8, 24), this.lens);
-    lens.position.z = CAN_LENGTH - 0.02 + 0.002;
+    lens.position.z = CAN_LENGTH - 0.02 + PROUD;
     lens.castShadow = false;
     can.add(body, lens);
 

@@ -4,7 +4,7 @@ import type { Interactable } from '@/interaction/Interactable';
 import { createCanvas, fitFontSize, seededRandom, toTexture, MONO } from '@/covers/generated/canvasUtils';
 import type { Furniture, OccupancyAware } from '../Furniture';
 import { boxMesh, cylinderMesh, invisibleHitbox } from '../meshUtils';
-import { matte } from '../props/Prop';
+import { paint, standard } from '../materials/palette';
 import { crtScreenMaterial } from '../arcade/crtScreen';
 
 export interface DemoTellyOptions {
@@ -58,9 +58,9 @@ export class DemoTelly extends THREE.Group implements Furniture, Updatable, Inte
     super();
     this.name = 'DemoTelly';
     this.title = options.title;
-    const plastic = matte(options.color ?? 0xd8ccb0, 0.55);
-    const dark = matte(0x1a1a1a, 0.6);
-    const chrome = new THREE.MeshStandardMaterial({ color: 0xc8c8c8, roughness: 0.25, metalness: 0.9 });
+    const plastic = paint(options.color ?? 0xd8ccb0, 0.55);
+    const dark = paint(0x1a1a1a, 0.6);
+    const chrome = standard({ color: 0xc8c8c8, roughness: 0.25, metalness: 0.9 });
 
     // The case: the front box, and a tapered back (the tube's neck) as a smaller box behind.
     this.add(boxMesh(W, H, D * 0.62, plastic, { y: H / 2, z: D / 2 - (D * 0.62) / 2 }));

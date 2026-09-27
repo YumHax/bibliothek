@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { seededRandom } from '@/covers/generated/canvasUtils';
 import { Prop } from './Prop';
+import { standard, instancedStandard } from '../materials/palette';
 
 /** `bulbs`: a string of warm fairground bulbs; `bunting`: triangular cloth flags on a string. */
 export type GarlandStyle = 'bulbs' | 'bunting';
@@ -30,7 +31,8 @@ const FLAG_H = 0.22;
 const BULB_GLOW = 1.8;
 const BUNTING_COLORS = [0xc8443a, 0xf1e1b4, 0x2f6b8f, 0xe6a83a, 0x4f8a5a];
 
-const WIRE = new THREE.MeshStandardMaterial({ color: 0x2a2623, roughness: 0.7 });
+const WIRE = standard({ color: 0x2a2623, roughness: 0.7 });
+const WIRE_INSTANCED = instancedStandard({ color: 0x2a2623, roughness: 0.7 });
 
 /** The sag of a slack string between two points: a parabola, close enough to a catenary at this scale. */
 class Slack extends THREE.Curve<THREE.Vector3> {
@@ -73,8 +75,8 @@ export class Garland extends Prop {
     const geometry = style === 'bulbs' ? new THREE.SphereGeometry(BULB_RADIUS, 10, 8) : flagGeometry();
     const material =
       style === 'bulbs'
-        ? new THREE.MeshStandardMaterial({ color: 0xfff3dc, emissive: 0xffc46e, emissiveIntensity: BULB_GLOW, roughness: 0.3 })
-        : new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1, side: THREE.DoubleSide });
+        ? standard({ color: 0xfff3dc, emissive: 0xffc46e, emissiveIntensity: BULB_GLOW, roughness: 0.3 })
+        : standard({ color: 0xffffff, roughness: 1, side: THREE.DoubleSide });
     const hung = new THREE.InstancedMesh(geometry, material, count);
     hung.castShadow = false;
     hung.receiveShadow = style === 'bunting';
@@ -106,7 +108,7 @@ export class Garland extends Prop {
 
     if (style === 'bulbs') {
       // A socket under each bulb's wire: one instanced short cylinder, dark like the wire.
-      const sockets = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.008, 0.01, BULB_DROP - BULB_RADIUS + 0.01, 6), WIRE, count);
+      const sockets = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.008, 0.01, BULB_DROP - BULB_RADIUS + 0.01, 6), WIRE_INSTANCED, count);
       sockets.castShadow = false;
       for (let i = 0; i < count; i++) {
         curve.getPoint((i + 1) / (count + 1), position);

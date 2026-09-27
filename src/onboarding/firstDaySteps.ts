@@ -22,7 +22,7 @@ export const FIRST_DAY_STEPS: readonly FirstDayStep[] = [
   {
     id: 'note',
     todo: 'Read this list (done!)',
-    tips: everywhereAtHome('New flat, empty shelves. Your to-do list is on the hall console, by the keys.'),
+    tips: everywhereAtHome('New flat, bare walls: one bookcase, one game, the TV. Your to-do list is on the hall console, by the keys.'),
   },
   {
     id: 'out',
@@ -52,16 +52,19 @@ export const FIRST_DAY_STEPS: readonly FirstDayStep[] = [
   },
   {
     id: 'market',
-    todo: 'Flea market, at the back of RÉTRO JEUX',
+    todo: 'Flea market, at the back of RETRO GAMES',
     tips: {
-      arcade: 'Coins in hand: the flea market is at the back of RÉTRO JEUX, across the street.',
-      street: 'RÉTRO JEUX: the flea market is at its back, open 8:00 to 23:00.',
+      arcade: 'Coins in hand: the flea market is at the back of RETRO GAMES, across the street.',
+      street: 'RETRO GAMES: the flea market is at its back, open 8:00 to 23:00.',
     },
   },
   {
     id: 'buy',
     todo: 'Buy a first game!',
-    tips: { market: 'Click a game to look closer: B buys it, H haggles. What you buy is sent home.' },
+    tips: {
+      market: 'Click a game to look closer: B buys it, H haggles. What you buy is sent home.',
+      street: 'The flat is bare: the furniture shop, the TV repair shop, the florist and the pet shop are on this street too.',
+    },
   },
   {
     id: 'unpack',

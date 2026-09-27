@@ -8,6 +8,8 @@ import type { ActivityAware, Furniture } from './Furniture';
 import { boxMesh } from './meshUtils';
 import type { SoundOcclusion } from './acoustics/SoundOcclusion';
 import { VideoSurface, type ScreenState, type ScreenStateListener, type VideoScreen } from './screen';
+import { paint, standard } from './materials/palette';
+import { RENDER_ORDER } from './surface/layers';
 
 export interface ProjectorOptions {
   /** Width of the picture on the wall (metres). */
@@ -51,7 +53,7 @@ export class Projector extends THREE.Group implements Furniture, Updatable, Inte
     this.name = 'Projector';
 
     // Ceiling plate and pole, then the unit hanging under it.
-    const dark = new THREE.MeshStandardMaterial({ color: 0x2b2b30, roughness: 0.6 });
+    const dark = paint(0x2b2b30, 0.6);
     this.unitMaterial = new THREE.MeshStandardMaterial({ color: 0xe6e6e2, roughness: 0.45 });
     const poleLength = 0.3;
     const unitW = 0.32;
@@ -65,7 +67,7 @@ export class Projector extends THREE.Group implements Furniture, Updatable, Inte
     const lensRing = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.03, 0.03, 20), dark);
     lensRing.rotation.x = Math.PI / 2;
     lensRing.position.set(unitW * 0.2, unitY, unitD / 2 + 0.015);
-    const glassMat = new THREE.MeshStandardMaterial({ color: 0x0a0f1a, roughness: 0.1, metalness: 0.3 });
+    const glassMat = standard({ color: 0x0a0f1a, roughness: 0.1, metalness: 0.3 });
     const lensGlass = new THREE.Mesh(new THREE.CircleGeometry(0.028, 20), glassMat);
     lensGlass.position.set(lensRing.position.x, unitY, unitD / 2 + 0.031);
     this.standby = new THREE.MeshStandardMaterial({ color: 0x220000, emissive: 0xff2a1a, emissiveIntensity: 1.2 });
@@ -111,7 +113,7 @@ export class Projector extends THREE.Group implements Furniture, Updatable, Inte
         toneMapped: false,
       }),
     );
-    this.cone.renderOrder = 10;
+    this.cone.renderOrder = RENDER_ORDER.overlay;
     this.add(this.cone);
 
     this.hitboxes = [unit, this.surface.glass];

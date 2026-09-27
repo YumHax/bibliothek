@@ -4,7 +4,7 @@ import type { Updatable } from '@/core/Engine';
 import { seededRandom } from '@/covers/generated/canvasUtils';
 import type { Furniture } from '../Furniture';
 import type { DayNight } from '../props/DayNight';
-import { currentSeason } from '../props/outdoors/season';
+import { currentSeason } from '@/time/season';
 import { patchShader, afterChunk } from '../materials/shaderPatch';
 import { snowCovered } from './snowCover';
 import type { Vec2 } from './streetPlan';

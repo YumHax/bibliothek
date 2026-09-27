@@ -3,6 +3,7 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import { Prop } from '../props/Prop';
 import { SAS } from './airlockPlan';
 import { bake, sasFinish } from './sasFinish';
+import { WALL } from '../surface/layers';
 
 /** Subdivide the baked surfaces this finely (metres), so the globe's light grades smoothly across them. */
 const CELL = 0.15;
@@ -70,7 +71,7 @@ const Z = v(0, 0, 1);
 /**
  * The sas's room (see `airlockPlan.ts`): the tiled floor and a doormat, the plaster ceiling and its
  * globe, the side walls with their marble dado, the street wall round the street door's opening and
- * its reveal, the partition round the inner door's, architraves, the syndic's notice. Everything
+ * its reveal, the partition round the inner door's, architraves, the management's notice. Everything
  * seen from inside is baked (`sasFinish`); the partition's face on the building side is lit, like the
  * entrance hall it closes. Walls are colliders and stop the crosshair. Sas-local: place it at the
  * street door's outer face, +z out.
@@ -142,7 +143,7 @@ export class SasShell extends Prop {
     mat.box(v(0, 0.01, zf - 0.38), v(1.1, 0.012, 0.55));
     this.mesh(mat, f.mat);
     const notice = new Surfaces();
-    notice.quad(v(x0 + 0.003, SAS.notice.y - 0.16, SAS.notice.z - 0.12), v(0, 0, 0.24), v(0, 0.32, 0), X, (p) => [1 - (p.z - (SAS.notice.z - 0.12)) / 0.24, (p.y - (SAS.notice.y - 0.16)) / 0.32]);
+    notice.quad(v(x0 + WALL.sign.lift, SAS.notice.y - 0.16, SAS.notice.z - 0.12), v(0, 0, 0.24), v(0, 0.32, 0), X, (p) => [1 - (p.z - (SAS.notice.z - 0.12)) / 0.24, (p.y - (SAS.notice.y - 0.16)) / 0.32]);
     this.mesh(notice, f.notice);
 
     const globe = new THREE.Mesh(new THREE.SphereGeometry(0.12, 20, 14), f.globe);

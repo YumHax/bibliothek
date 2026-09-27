@@ -26,6 +26,11 @@ import { PrizePanel } from '@/ui/PrizePanel';
 import { CollectorBookPanel } from '@/ui/collector/CollectorBookPanel';
 import { JournalPanel } from '@/ui/JournalPanel';
 import { NeighbourTradePanel } from '@/ui/NeighbourTradePanel';
+import { PhonePanel } from '@/ui/household/PhonePanel';
+import { WardrobePanel } from '@/ui/household/WardrobePanel';
+import { DreamCard } from '@/ui/household/DreamCard';
+import { HOUSEHOLD } from '@/household';
+import { SHOP_HOURS, clockTime } from '@/world/street/shops/shopHours';
 import { upcomingMarketDays } from '@/journal';
 import { TravelMenu } from '@/ui/TravelMenu';
 import { WalletHud } from '@/ui/WalletHud';
@@ -37,6 +42,11 @@ import { version } from '../../package.json';
 import { late as lateBound, type Late } from './late';
 import type { Services } from './services';
 import { installPayoutTable } from './debug';
+import { NewsPanel } from '@/ui/NewsPanel';
+import { ScratchCardPanel } from '@/ui/ScratchCardPanel';
+import { HomeShopPanel } from '@/ui/HomeShopPanel';
+import { ToDoNotePanel } from '@/ui/ToDoNotePanel';
+import type { WorldPanels } from '@/world/buildContext';
 
 export type Ui = ReturnType<typeof createUi>;
 
@@ -52,7 +62,7 @@ export interface UiLate {
  * when its builder is bound. What they ask of the world and the Session is read on use (`late`).
  */
 export function createUi(services: Services, player: FirstPersonController, late: UiLate) {
-  const { container, engine, input, settings, params, debug, wallet, collection, index, fame, tx, market, ledger, standing, prizes, coverUrl, catSettings, payoutStats, arcadeDaily, milestones, valueHistory, collectorWatch, neighbourTrades, journal } = services;
+  const { container, engine, input, settings, params, debug, wallet, collection, index, fame, tx, market, ledger, standing, prizes, coverUrl, catSettings, payoutStats, arcadeDaily, milestones, valueHistory, collectorWatch, neighbourTrades, journal, household, homeLife, perks } = services;
   const here = (): ZoneId => late.zones.get().current.id;
   // The start card's button enters the room through the lock flow, which needs the card first.
   const lockFlowRef = lateBound<PointerLockFlow>('the pointer lock flow');
@@ -106,6 +116,35 @@ export function createUi(services: Services, player: FirstPersonController, late
   });
   overlay.addPauseButton('journal', 'Journal', () => late.session.get().openPanel(journalPanel));
   const neighbourTradePanel = new NeighbourTradePanel(container, wallet, { trades: neighbourTrades, tx, collection }, coverUrl);
+  // What the street's shops and the hall console open: made once here, handed to their builders (`BuildContext.panels`).
+  const panels: WorldPanels = {
+    news: new NewsPanel(container),
+    scratch: new ScratchCardPanel(container),
+    homeShop: new HomeShopPanel(container, { wallet, upgrades: services.upgrades }),
+    toDo: services.firstDay ? new ToDoNotePanel(container, services.firstDay) : undefined,
+  };
+  // What the bedroom opens (docs/household.md): the phone on the nightstand, the wardrobe's rail; and the dream on waking.
+  const retro = SHOP_HOURS.retro!;
+  const phone = new PhonePanel(container, {
+    marketOpen: () => homeLife.marketOpen,
+    closedLine: () => `Nobody picks up: the market keeps RETRO GAMES’ hours, ${clockTime(retro.open)} to ${clockTime(retro.close)}.`,
+    loyalty: (platform) => standing.loyalty(platform),
+    loyaltyName: (platform) => standing.loyaltyName(platform),
+    regularFrom: HOUSEHOLD.phone.regularFrom,
+    todays: () => market.todays(),
+    deposit: (item) => market.holdDeposit(item),
+    hold: (item) => {
+      const result = tx.holdCopy(item);
+      if (result.ok) return null;
+      return result.reason === 'short' ? `“That's a ${result.needed}-coin deposit, and you've got ${result.have}.”` : '“Hm, I can’t put that one by. Come and see.”';
+    },
+  });
+  const wardrobe = new WardrobePanel(container, {
+    facts: () => perks.facts,
+    worn: () => perks.outfit.id,
+    wear: (id) => household.wear(id),
+  });
+  const dreamCard = new DreamCard(container, coverUrl);
   // A milestone reached anywhere (a purchase, a medal, a sale): one toast, the book on the sideboard has the rest.
   collectorWatch.onReached = (reached) => {
     const first = reached[0]!;
@@ -121,5 +160,5 @@ export function createUi(services: Services, player: FirstPersonController, late
   const fader = new Fader(container);
   const travelMenu = new TravelMenu<ZoneId>(container, input);
 
-  return { overlay, lockFlow, panel, toast, search, editor, catalogue, sellDesk, haggle, trade, marketHall, prizeCounter, walletHud, fader, travelMenu, collectorBook, journalPanel, neighbourTradePanel };
+  return { overlay, lockFlow, panel, toast, search, editor, catalogue, sellDesk, haggle, trade, marketHall, prizeCounter, walletHud, fader, travelMenu, collectorBook, journalPanel, neighbourTradePanel, phone, wardrobe, dreamCard, panels };
 }

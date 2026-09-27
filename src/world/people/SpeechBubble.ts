@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { createCanvas } from '@/covers/generated/canvasUtils';
+import { RENDER_ORDER } from '../surface/layers';
 
 const PX_W = 256;
 const PX_H = 96;
@@ -26,7 +27,7 @@ export class SpeechBubble extends THREE.Sprite {
     this.texture = texture;
     this.scale.set(WIDTH, (WIDTH * PX_H) / PX_W, 1);
     this.visible = false;
-    this.renderOrder = 10;
+    this.renderOrder = RENDER_ORDER.overlay;
   }
 
   say(text: string, seconds = 2.2): void {

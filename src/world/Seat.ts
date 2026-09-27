@@ -3,7 +3,8 @@ import type { Interactable } from '@/interaction/Interactable';
 import type { PlayerState, SessionActions } from '@/game/SessionActions';
 import type { Furniture } from './Furniture';
 import { boxMesh, invisibleHitbox } from './meshUtils';
-import { wood as woodMaterial } from '@/world/materials/finishes';
+import { paint, timber } from '@/world/materials/palette';
+import { proud } from './props/joinery';
 import { fabric as fabricMaterial } from '@/world/materials/finishes';
 
 /** Eye height above the floor when sitting (seat cushion at ~0.45 m plus torso). */
@@ -36,8 +37,8 @@ export class Seat extends THREE.Group implements Furniture, Interactable {
     const armW = 0.1;
     const armH = seatTop + 0.25;
     const innerW = width - 2 * armW;
-    const wood = woodMaterial(0x4a3524, 0.6);
-    const piping = new THREE.MeshStandardMaterial({ color: 0x6e5f4f, roughness: 0.9 });
+    const wood = timber(0x4a3524, 0.6);
+    const piping = paint(0x6e5f4f, 0.9);
 
     const base = boxMesh(innerW, seatTop - 0.12, depth, this.fabric, { y: (seatTop - 0.12) / 2 + 0.06 });
     const cushion = boxMesh(innerW, 0.12, depth, this.fabric, { y: seatTop - 0.06, z: 0.02 });
@@ -49,7 +50,7 @@ export class Seat extends THREE.Group implements Furniture, Interactable {
     this.backRecline = -0.12;
     // A darker welt along the front edge of the seat cushion breaks up the block of fabric. It stands a few
     // millimetres proud of the cushion's top, front and sides: flush with them, their faces would z-fight.
-    const welt = boxMesh(innerW + 0.004, 0.018, 0.018, piping, { y: seatTop - 0.006, z: depth / 2 + 0.02 - 0.006 });
+    const welt = boxMesh(proud(innerW), 0.018, 0.018, piping, { y: seatTop - 0.006, z: depth / 2 + 0.02 - 0.006 });
     const arms = [-1, 1].map((sx) => boxMesh(armW, armH, depth, this.fabric, { x: (sx * (width - armW)) / 2, y: armH / 2 }));
     const legs = [-1, 1].flatMap((sx) =>
       [-1, 1].map((sz) => boxMesh(0.05, 0.06, 0.05, wood, { x: sx * (width / 2 - 0.08), y: 0.03, z: sz * (depth / 2 - 0.08) })),

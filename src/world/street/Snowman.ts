@@ -1,14 +1,15 @@
 import * as THREE from 'three';
 import type { Updatable } from '@/core/Engine';
 import { cylinderMesh } from '../meshUtils';
-import { markShared, matte, Prop } from '../props/Prop';
+import { Prop } from '../props/Prop';
+import { paint } from '../materials/palette';
 import { STREET_SNOW } from './snowCover';
 
-const SNOW = markShared(new THREE.MeshStandardMaterial({ color: 0xf2f4f8, roughness: 0.95 }));
-const COAL = markShared(matte(0x151515, 0.8));
-const CARROT = markShared(matte(0xe0701c, 0.6));
-const STICK = markShared(matte(0x4a3422, 0.9));
-const SCARF = markShared(matte(0xc8243a, 0.8));
+const SNOW = paint(0xf2f4f8, 0.95);
+const COAL = paint(0x151515, 0.8);
+const CARROT = paint(0xe0701c, 0.6);
+const STICK = paint(0x4a3422, 0.9);
+const SCARF = paint(0xc8243a, 0.8);
 /** It is built once this much snow lies, and gone (melted, or kicked over) once it is under the second. */
 const BUILT_AT = 0.45;
 const GONE_AT = 0.2;

@@ -2,6 +2,8 @@ import * as THREE from 'three';
 import { createCanvas, toTexture } from '@/covers/generated/canvasUtils';
 import { Prop } from './Prop';
 import { fabric } from '@/world/materials/finishes';
+import { cloth as paletteCloth } from '@/world/materials/palette';
+import { FLOOR } from '@/world/surface/layers';
 
 export interface RugOptions {
   width?: number;
@@ -12,7 +14,8 @@ export interface RugOptions {
   motif?: number;
 }
 
-const THICKNESS = 0.012;
+/** The slab's height: its top is the floor's `rug` layer. */
+const THICKNESS = FLOOR.rug.lift;
 
 /**
  * A flat woven rug: a thin slab (so its edge reads in first person) with a procedural
@@ -28,7 +31,8 @@ export class Rug extends Prop {
     const { width, depth } = this.options;
 
     const top = fabric({ map: this.paint(), roughness: 1, sheenTint: 0x8a8580 });
-    const edge = fabric({ color: new THREE.Color(this.options.field).multiplyScalar(0.7), roughness: 1 });
+    const edgeColor = new THREE.Color(this.options.field).multiplyScalar(0.7);
+    const edge = paletteCloth(edgeColor, 1);
     // BoxGeometry material order: +x, -x, +y (top), -y, +z, -z.
     const slab = new THREE.Mesh(new THREE.BoxGeometry(width, THICKNESS, depth), [edge, edge, top, edge, edge, edge]);
     slab.position.y = THICKNESS / 2;

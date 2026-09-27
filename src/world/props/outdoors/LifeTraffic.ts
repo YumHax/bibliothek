@@ -3,38 +3,39 @@ import { type Rng, azimuthOf } from './Sheet';
 import { CAR_BODY, CAR_COLORS } from './Car';
 import { between, pick } from './paint';
 import { BUS_STOP_X, FAR_LANE, KERB, LIFE_REACH, NEAR_KERB, NEAR_LANE } from './plan';
+import { BIN_ROUND_HOURS, BUS_DWELL, CRUISE as SPEEDS } from '@/world/city/traffic';
+import { DELIVERY_OUT, STREET_BINS } from '@/world/city/frontage';
 import { resample } from './Park';
 import type { LifeEvents } from './lifeEvents';
 import { type AtlasPens, type Cell, type LifeEnv, type LifeLayer, type Push, WHITE_TINT, packTint } from './sprites';
 import { type FlashColor, type VehicleKind, VEHICLE_LOOKS, arc, carBounds, carFrameAt, flashesOf, paintFlashCells, paintVehicleCells, pushFlash, vehicleCell } from './LifeVehicles';
 
 const MAX_CARS = 14;
-const CRUISE: [number, number] = [6, 9];
+/** Each driver's own cruising speed, round the street's (`city/traffic`). */
+const CRUISE: [number, number] = [SPEEDS.car - 2.5, SPEEDS.car + 0.5];
 const TURN_SPEED = 4;
 /** Braking deceleration (m/s²) and the distance kept to the car ahead (centre to centre for two cars; longer vehicles add their extra length). */
 const BRAKING = 3;
 const GAP = 6.5;
 /** How many of the cars setting off are taxis. */
 const TAXI_SHARE = 0.18;
-/** The bus: one route, every couple of minutes, pulling up at the shelter for a while. */
+/** The bus: one route, every couple of minutes, pulling up at the shelter for `BUS_DWELL` (the street's). */
 const BUS_INTERVAL = 110;
-const BUS_DWELL = 9;
 /**
- * The dustcart: out once a morning between these game hours, west along Front Street's near lane
- * and down Park Street at a crawl, stopping at these points (x on Front Street, then z on Park
- * Street) while the crew empties the bins.
+ * The dustcart: out once a morning between these game hours (the street's bin round), up Park
+ * Street and east along Front Street's far lane like the walkable street's bin lorry, stopping
+ * level with each of its litter bins (x on Front Street) while the crew empties them.
  */
-const GARBAGE_HOURS: [number, number] = [5.5, 7];
-const GARBAGE_STOPS_X = [52, 36, 20];
-const GARBAGE_STOPS_Z = [-18];
+const GARBAGE_HOURS = BIN_ROUND_HOURS;
+const GARBAGE_STOPS_X = STREET_BINS.map(([x]) => x).sort((a, b) => a - b);
 const GARBAGE_DWELL: [number, number] = [5, 8];
 /** The delivery van: every few minutes in business hours, double-parked by a shop on Front Street's far side a while, hazards blinking. */
 const VAN_HOURS: [number, number] = [8, 19];
 const VAN_INTERVAL: [number, number] = [120, 260];
 const VAN_DWELL: [number, number] = [35, 80];
 const VAN_PARK_X: [number, number] = [18, 33];
-/** How far a double-parked van stands out from its lane, towards the parked cars. */
-const VAN_OFFSET = 3.1;
+/** How far a double-parked van stands out from its lane, towards the parked cars (where the street's delivery van stands). */
+const VAN_OFFSET = DELIVERY_OUT - FAR_LANE;
 /** The ambulance: rare, fast; cars ahead of it pull over towards the kerb and crawl, cars on the other side brake. */
 const AMBULANCE_INTERVAL: [number, number] = [220, 520];
 const AMBULANCE_CRUISE = 12.5;
@@ -188,17 +189,17 @@ export class Traffic implements LifeLayer {
       this.busTimer = between(this.random, BUS_INTERVAL * 0.7, BUS_INTERVAL * 1.3) / Math.max(wakefulness, 0.2);
       const route = this.routes[1];
       if (wakefulness > 0.3 && this.clearStart(route, GAP + 12) && this.cars.length < MAX_CARS) {
-        this.cars.push(this.newCar(route, 'bus', 7, [{ at: this.sampleNear(route, BUS_STOP_X, 0, KERB - 8), dwell: BUS_DWELL, waited: 0 }]));
+        this.cars.push(this.newCar(route, 'bus', SPEEDS.bus, [{ at: this.sampleNear(route, BUS_STOP_X, 0, KERB - 8), dwell: BUS_DWELL, waited: 0 }]));
       }
     }
     // The dustcart, once each morning.
     if (hours < GARBAGE_HOURS[0] - 0.5 || hours > 12) this.garbageDone = false;
-    if (!this.garbageDone && hours >= GARBAGE_HOURS[0] && hours < GARBAGE_HOURS[1] && this.clearStart(this.routes[0], GAP + 10)) {
+    if (!this.garbageDone && hours >= GARBAGE_HOURS[0] && hours < GARBAGE_HOURS[1] && this.clearStart(this.routes[1], GAP + 10)) {
       this.garbageDone = true;
-      const route = this.routes[0];
+      const route = this.routes[1];
       const dwell = (): number => between(this.random, GARBAGE_DWELL[0], GARBAGE_DWELL[1]);
-      const stops = [...GARBAGE_STOPS_X.map((x) => this.sampleNear(route, x, 0, 6)), ...GARBAGE_STOPS_Z.map((z) => this.sampleNear(route, null, z))].map((at) => ({ at, dwell: dwell(), waited: 0 }));
-      this.cars.push(this.newCar(route, 'truck', 4.5, stops));
+      const stops = GARBAGE_STOPS_X.map((x) => ({ at: this.sampleNear(route, x, 0), dwell: dwell(), waited: 0 }));
+      this.cars.push(this.newCar(route, 'truck', SPEEDS.lorry, stops));
     }
     // The delivery van, in business hours.
     this.vanTimer -= dt;
@@ -209,7 +210,7 @@ export class Traffic implements LifeLayer {
       if (!busy && hours >= VAN_HOURS[0] && hours < VAN_HOURS[1] && this.clearStart(route, GAP + 4) && this.cars.length < MAX_CARS) {
         this.vanTimer = between(this.random, VAN_INTERVAL[0], VAN_INTERVAL[1]);
         const at = this.sampleNear(route, between(this.random, VAN_PARK_X[0], VAN_PARK_X[1]), 0);
-        this.cars.push(this.newCar(route, 'van', 7, [{ at, dwell: between(this.random, VAN_DWELL[0], VAN_DWELL[1]), waited: 0 }]));
+        this.cars.push(this.newCar(route, 'van', SPEEDS.van, [{ at, dwell: between(this.random, VAN_DWELL[0], VAN_DWELL[1]), waited: 0 }]));
       }
     }
     // Now and then an ambulance, siren going.

@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { cylinderMesh, invisibleHitbox } from '../meshUtils';
-import { matte } from './Prop';
+import { paint, standard } from '../materials/palette';
 import { SwitchableLamp } from './SwitchableLamp';
 
 export interface IndustrialPendantOptions {
@@ -24,8 +24,8 @@ const INNER_GLOW = 1.1;
 const BULB_GLOW = 2.6;
 const HOVER_GLOW = 0.3;
 
-const CORD = matte(0x1e1c1a, 0.8);
-const CAP = new THREE.MeshStandardMaterial({ color: 0x3a3632, roughness: 0.4, metalness: 0.6 });
+const CORD = paint(0x1e1c1a, 0.8);
+const CAP = standard({ color: 0x3a3632, roughness: 0.4, metalness: 0.6 });
 
 /**
  * A factory pendant: a long cord, a wide enamelled cone with a white inside, a bare bulb at its
@@ -47,7 +47,7 @@ export class IndustrialPendant extends SwitchableLamp {
     this.onSwitch = options.onSwitch;
     this.intensity = options.intensity ?? 6;
     const drop = options.drop ?? 0.9;
-    const enamel = new THREE.MeshStandardMaterial({ color: options.color ?? 0x2f4f3f, roughness: 0.35, metalness: 0.25 });
+    const enamel = standard({ color: options.color ?? 0x2f4f3f, roughness: 0.35, metalness: 0.25 });
 
     const rose = cylinderMesh(0.05, 0.02, CAP, { y: -0.01 }, { segments: 16 });
     const cord = cylinderMesh(0.005, drop, CORD, { y: -drop / 2 }, { segments: 6 });

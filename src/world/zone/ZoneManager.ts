@@ -10,6 +10,13 @@ export interface ZoneManagerOptions<Id extends string = string> {
   hysteresis?: number;
   /** Seconds a non-persistent zone stays dormant before its memory is freed. Default 30. */
   unloadAfterSeconds?: number;
+  /**
+   * How many of the travel zones (lazy builders: the street, the arcade, the market) left most
+   * recently stay dormant however long the player is away (built, uploaded, compiled: going back is
+   * instant, no rebuild, no repaint). Older ones, and every other zone, unload after
+   * `unloadAfterSeconds`. Default 2: the street and the shop last visited.
+   */
+  keepRecent?: number;
 }
 
 /**
@@ -25,6 +32,9 @@ export class ZoneManager<Id extends string = string> implements Updatable {
   private readonly hysteresis: number;
   private readonly unloadAfter: number;
   private readonly dormantFor = new Map<Zone<Id>, number>();
+  private readonly keepRecent: number;
+  /** Travel zones in the order the player last had them active, most recent last. */
+  private readonly recency: Zone<Id>[] = [];
   /** Modules asked for, once each (a failed fetch is reported, not retried every frame). */
   private readonly requested = new Set<Zone<Id>>();
 
@@ -38,6 +48,7 @@ export class ZoneManager<Id extends string = string> implements Updatable {
     if (!start) throw new Error(`[zones] unknown start zone ${options.start}`);
     this.hysteresis = options.hysteresis ?? 0.4;
     this.unloadAfter = options.unloadAfterSeconds ?? 30;
+    this.keepRecent = options.keepRecent ?? 2;
     this._current = start;
     this.apply();
   }
@@ -68,14 +79,22 @@ export class ZoneManager<Id extends string = string> implements Updatable {
         this.zoneChange.emit(next, previous);
       }
     }
+    const kept = new Set(this.recency.filter((z) => z.status === 'dormant').slice(-this.keepRecent));
     for (const zone of this.zones) {
-      if (zone.status !== 'dormant' || zone.spec.persistent) continue;
+      if (zone.status !== 'dormant' || zone.spec.persistent || kept.has(zone)) continue;
       const t = (this.dormantFor.get(zone) ?? 0) + dt;
       if (t >= this.unloadAfter) {
         zone.unload();
         this.dormantFor.delete(zone);
       } else this.dormantFor.set(zone, t);
     }
+  }
+
+  /** `zone` was just active: the most recent. */
+  private touch(zone: Zone<Id>): void {
+    const i = this.recency.indexOf(zone);
+    if (i !== -1) this.recency.splice(i, 1);
+    this.recency.push(zone);
   }
 
   private neighboursOf(zone: Zone<Id>): Zone<Id>[] {
@@ -103,6 +122,7 @@ export class ZoneManager<Id extends string = string> implements Updatable {
         if (!this.ready(zone)) continue;
         zone.activate();
         this.dormantFor.delete(zone);
+        if (zone.isLazy && !zone.spec.persistent) this.touch(zone);
       } else zone.deactivate();
     }
   }

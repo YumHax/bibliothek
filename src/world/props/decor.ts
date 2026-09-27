@@ -46,7 +46,9 @@ import { ChristmasTree, type ChristmasTreeOptions } from './ChristmasTree';
 import { FairyLights, type FairyLightsOptions } from './FairyLights';
 import { Wreath, type WreathOptions } from './Wreath';
 import { Balloons, type BalloonsOptions } from './Balloons';
-import { currentFestivities, type Festivity } from './outdoors/season';
+import { currentFestivities, type Festivity } from '@/time/season';
+import type { HomeUpgrades } from '@/economy/HomeUpgrades';
+import { placerFor, type Owned } from '../build/owned';
 
 /**
  * Decoration the room plan can list by name. Each kind builds a `Furniture` from its options;
@@ -109,10 +111,11 @@ type OptionsOf<K extends DecorKind> = Parameters<(typeof DECOR_KINDS)[K]>[0];
 
 /**
  * One line of the plan's `decor` list: what, where, how; `holiday` puts it up only for that
- * festivity (the Christmas tree, the pumpkins, New Year's balloons; see `outdoors/season.ts`).
+ * festivity (the Christmas tree, the pumpkins, New Year's balloons; see `outdoors/season.ts`);
+ * `upgrade` only once that piece is bought for the flat (`build/owned.ts`, `economy/homeGoods.ts`).
  */
 export type DecorEntry = {
-  [K in DecorKind]: { kind: K; at: Placement; options?: OptionsOf<K>; holiday?: Festivity };
+  [K in DecorKind]: { kind: K; at: Placement; options?: OptionsOf<K>; holiday?: Festivity; upgrade?: Owned };
 }[DecorKind];
 
 /** Whether an entry is up today: always, or during its festivity. */
@@ -125,7 +128,10 @@ export function buildDecor(entry: DecorEntry): Furniture {
   return build(entry.options);
 }
 
-/** Builds and places every entry that is up today (see `isUp`); returns them in plan order. */
-export function placeDecor(zone: Zone, entries: readonly DecorEntry[]): Furniture[] {
-  return entries.filter(isUp).map((entry) => zone.placeAt(buildDecor(entry), entry.at));
+/**
+ * Builds and places every entry that is up today (see `isUp`); returns them in plan order. An entry with an `upgrade`
+ * not bought yet is staged (hidden, stands once bought: `placerFor`); without `upgrades` everything stands.
+ */
+export function placeDecor(zone: Zone, entries: readonly DecorEntry[], upgrades?: HomeUpgrades): Furniture[] {
+  return entries.filter(isUp).map((entry) => placerFor(zone, upgrades, entry.upgrade).placeAt(buildDecor(entry), entry.at));
 }

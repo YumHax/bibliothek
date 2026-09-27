@@ -3,7 +3,7 @@ import { arcadePayout } from '@/economy/arcadePayout';
 import { tournamentLine, type TournamentOutcome } from '@/economy/ArcadeTournament';
 import { batch } from '@/persistence';
 import type { ArcadeMachineLike, ArcadeResult } from './SessionActions';
-import type { ArcadeDailyLike, CoreParts, LeagueLike, MedalsLike, PayoutStatsLike, PrizesLike, WalletLike } from './SessionParts';
+import type { ArcadeDailyLike, CoreParts, LeagueLike, MedalsLike, PayoutStatsLike, PerksLike, PrizesLike, WalletLike } from './SessionParts';
 import { isAction } from '@/input/actions';
 import { actionKeyLabel } from '@/ui/keys';
 import type { KeyRoute, SessionHost } from './SessionHost';
@@ -17,6 +17,8 @@ export interface ArcadeParts extends Pick<CoreParts, 'player'> {
   payoutStats?: PayoutStatsLike;
   /** The Saturday tournament: a play on its cabinet, once signed, is the player's next round (`economy/ArcadeTournament`). */
   tournament?: TournamentLike;
+  /** What the player wears: the arcade tee pays a few tickets more a play (`household/`). */
+  perks?: PerksLike;
 }
 
 /** The tournament as a finished play is settled against it. */
@@ -120,13 +122,16 @@ export class ArcadePlay implements KeyRoute {
 
   /** A play ended: hand over what `arcadePayout` settles, and say it. */
   private over(machine: ArcadeMachineLike, result: ArcadeResult): void {
-    const { wallet, prizes, arcadeDaily, medals, league, payoutStats, tournament } = this.parts;
+    const { wallet, prizes, arcadeDaily, medals, league, payoutStats, tournament, perks } = this.parts;
     const payout = arcadePayout(machine, result, { daily: arcadeDaily, medals, league });
+    // The arcade tee: the regulars nod the player through, a few tickets on top of the play's own.
+    const tee = payout.tickets ? perks?.arcadeBonus(payout.tickets.paid) ?? 0 : 0;
+    if (tee) payout.lines.push(`Arcade tee: +${tee} tickets`);
     // On tournament day, a play on its cabinet by a player still in is their next round.
     const round = tournament && machine.freeWhenBroke && machine.game.id === tournament.gameId && tournament.running ? tournament.play(result.score) : null;
     batch(() => {
       for (const prize of payout.prizes) prizes?.add(prize);
-      if (payout.tickets) wallet?.addTickets(payout.tickets.paid);
+      if (payout.tickets) wallet?.addTickets(payout.tickets.paid + tee);
       if (round?.tickets) wallet?.addTickets(round.tickets);
       if (round?.prize) prizes?.add(round.prize);
     });

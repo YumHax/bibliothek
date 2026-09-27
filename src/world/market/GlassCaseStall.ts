@@ -1,9 +1,9 @@
 import * as THREE from 'three';
 import type { DisplaySlot, StallLike } from './stallTypes';
 import { boxMesh, cylinderMesh } from '../meshUtils';
-import { matte } from '../props/Prop';
-import { fabric, wood as woodMaterial } from '@/world/materials/finishes';
-import { centreOutRow, fitInRow, paintStallSign, unclickable } from './stallPaint';
+import { METAL, paint, standard, timber } from '../materials/palette';
+import { PROUD, proud } from '../props/joinery';
+import { centreOutRow, fitInRow, paintStallSign, plainCloth, unclickable } from './stallPaint';
 
 export interface GlassCaseStallOptions {
   /** Text on the little sign on its post (a platform's name). */
@@ -45,9 +45,11 @@ const POST_Z = -DEPTH / 2 + FRAME / 2;
 const POST_TOP = 1.55;
 const SIGN_PX_PER_M = 1600;
 
-const WOOD = woodMaterial(0x3a2418, 0.45);
-const PLINTH = woodMaterial(0x24160e, 0.55);
-const BRASS = new THREE.MeshStandardMaterial({ color: 0xb8892a, roughness: 0.35, metalness: 0.9 });
+const WOOD = timber(0x3a2418, 0.45);
+const PLINTH = timber(0x24160e, 0.55);
+const BRASS = METAL.agedBrass();
+/** The glass: front, sides and top, see-through to the eye and to the crosshair. */
+const GLASS = standard({ color: 0xe8f4f4, roughness: 0.05, metalness: 0, transparent: true, opacity: 0.12, depthWrite: false, side: THREE.DoubleSide });
 
 /**
  * A collector's glass display case: a dark wooden base on a recessed plinth, and on it a glazed
@@ -73,14 +75,14 @@ export class GlassCaseStall extends THREE.Group implements StallLike {
   constructor(options: GlassCaseStallOptions) {
     super();
     this.name = 'GlassCaseStall';
-    const velvet = fabric({ color: options.cloth ?? 0x4a1626, roughness: 0.95 });
+    const velvet = plainCloth(options.cloth ?? 0x4a1626);
 
     // The base: a recessed plinth, the cabinet, two raised panels on its front and a brass strip along its top edge.
     this.add(boxMesh(WIDTH - 0.04, PLINTH_H, DEPTH - 0.04, PLINTH, { y: PLINTH_H / 2 }));
     this.add(boxMesh(WIDTH, BODY_TOP - PLINTH_H, DEPTH, WOOD, { y: (BODY_TOP + PLINTH_H) / 2 }));
     for (const x of [-WIDTH / 4, WIDTH / 4]) this.add(boxMesh(WIDTH / 2 - 0.12, 0.28, 0.012, WOOD, { x, y: (BODY_TOP + PLINTH_H) / 2, z: DEPTH / 2 + 0.006 }));
     // Its top 2 mm under the cabinet's (a flush top z-fights with the wood).
-    this.add(boxMesh(WIDTH + 0.006, 0.012, 0.012, BRASS, { y: BODY_TOP - 0.008, z: DEPTH / 2 - 0.004 }));
+    this.add(boxMesh(WIDTH + 0.006, 0.012, 0.012, BRASS, { y: BODY_TOP - PROUD - 0.012 / 2, z: DEPTH / 2 + PROUD - 0.012 / 2 }));
 
     // The glazed box's frame: four corner posts, rails round the top, a wooden back. The members
     // butt rather than overlap (the grain differs per piece, so shared faces would z-fight): the
@@ -92,7 +94,7 @@ export class GlassCaseStall extends THREE.Group implements StallLike {
       this.add(boxMesh(FRAME, FRAME, DEPTH - 2 * FRAME, WOOD, { x: sx * (WIDTH / 2 - FRAME / 2), y: TOP - FRAME / 2 }));
     }
     for (const sz of [-1, 1]) this.add(boxMesh(WIDTH, FRAME, FRAME, WOOD, { y: TOP - FRAME / 2, z: sz * (DEPTH / 2 - FRAME / 2) }));
-    this.add(boxMesh(WIDTH + 0.004, 0.008, 0.008, BRASS, { y: TOP + 0.002, z: DEPTH / 2 - 0.002 }));
+    this.add(boxMesh(proud(WIDTH), 0.008, 0.008, BRASS, { y: TOP + 0.002, z: DEPTH / 2 + PROUD - 0.008 / 2 }));
     this.add(boxMesh(INNER_W, glassH - FRAME, 0.02, WOOD, { y: BODY_TOP + (glassH - FRAME) / 2, z: -DEPTH / 2 + 0.01 }));
 
     // Velvet: the lower floor, the back panel's lining, the raised step.
@@ -101,7 +103,7 @@ export class GlassCaseStall extends THREE.Group implements StallLike {
     this.add(boxMesh(INNER_W - 0.01, STEP_H, STEP_FRONT - BACK_FACE, velvet, { y: FLOOR_Y + STEP_H / 2, z: (STEP_FRONT + BACK_FACE) / 2 }));
 
     // The glass: front, sides and top, see-through to the eye and to the crosshair.
-    const glass = new THREE.MeshStandardMaterial({ color: 0xe8f4f4, roughness: 0.05, metalness: 0, transparent: true, opacity: 0.12, depthWrite: false, side: THREE.DoubleSide });
+    const glass = GLASS;
     const panes = [
       boxMesh(WIDTH - 2 * FRAME, glassH - FRAME, GLASS_T, glass, { y: BODY_TOP + (glassH - FRAME) / 2, z: DEPTH / 2 - FRAME / 2 }),
       boxMesh(GLASS_T, glassH - FRAME, DEPTH - 2 * FRAME, glass, { x: -WIDTH / 2 + FRAME / 2, y: BODY_TOP + (glassH - FRAME) / 2 }),
@@ -119,7 +121,7 @@ export class GlassCaseStall extends THREE.Group implements StallLike {
     const painted = paintStallSign(options.sign, options.accent ?? 0x6b2f2a, { pxPerMetre: SIGN_PX_PER_M, border: '#b8892a' });
     const armY = POST_TOP - 0.04;
     this.add(boxMesh(painted.width + 0.03, 0.01, 0.01, BRASS, { x: POST_X - (painted.width + 0.03) / 2, y: armY, z: POST_Z }));
-    const edge = matte(0x2a1a10, 0.7);
+    const edge = paint(0x2a1a10, 0.7);
     const signMat = new THREE.MeshStandardMaterial({ map: painted.map, roughness: 0.7 });
     const sign = new THREE.Mesh(new THREE.BoxGeometry(painted.width, painted.height, 0.006), [edge, edge, edge, edge, signMat, signMat]);
     sign.position.set(POST_X - painted.width / 2 - 0.02, armY - 0.012 - painted.height / 2, POST_Z);

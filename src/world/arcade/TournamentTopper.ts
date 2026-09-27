@@ -2,10 +2,11 @@ import * as THREE from 'three';
 import type { Updatable } from '@/core/Engine';
 import { createCanvas } from '@/covers/generated/canvasUtils';
 import { boxMesh } from '../meshUtils';
-import { markShared, matte, Prop } from '../props/Prop';
+import { Prop } from '../props/Prop';
+import { paint } from '../materials/palette';
 import { drawText } from './games/ArcadeGame';
 
-const STAND = markShared(matte(0x121018, 0.5));
+const STAND = paint(0x121018, 0.5);
 /** How often it checks whether today is still tournament day (seconds). */
 const POLL_SECONDS = 5;
 

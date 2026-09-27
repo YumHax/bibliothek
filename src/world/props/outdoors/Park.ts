@@ -4,7 +4,7 @@ import { CORNER, PARK_EDGE, PARK_FAR, PARK_FROM, PARK_PATHS, PARK_TO, POND, fron
 import { paintGroundBand } from './Street';
 import { paintBench, paintBin, paintLamp } from './StreetFurniture';
 import { CONIFER_STYLE, TREE_STYLES, type TreeForm, WILLOW_STYLE, paintTree } from './Tree';
-import { seasonalLawn } from './season';
+import { seasonalLawn } from './paint';
 import { holidayParkItems } from './Holiday';
 import { groundEllipse, paintDucks, paintFlowerBed, paintFountain, paintLilyPads, paintPicnic, paintPlayground, paintRowingBoat } from './ParkFeatures';
 
@@ -70,7 +70,7 @@ function paintPath(sheet: Sheet, line: [number, number][], width: number): void 
       p.moveTo(corners[0][0], corners[0][1]);
       for (const [x, y] of corners.slice(1)) p.lineTo(x, y);
       p.closePath();
-      sheet.begin(Math.hypot((x0 + x1) / 2, (z0 + z1) / 2), 0, { wet: 0.45, snow: 1 });
+      sheet.begin(Math.hypot((x0 + x1) / 2, (z0 + z1) / 2), 0, { wet: 0.45, snow: 1, flat: true });
       sheet.path(p, fill);
     }
   }

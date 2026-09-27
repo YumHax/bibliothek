@@ -32,7 +32,7 @@ export function stairwellResidents(): Resident[] {
   const residents: Resident[] = [];
   for (let k = 0; k < STOREYS; k++) {
     const names = k === 0 ? [STAIRWELL_PLAN.ourNeighbour] : STAIRWELL_PLAN.neighbours[k - 1]!;
-    names.forEach((who, i) => residents.push({ door: doorKey(k, i), who, floor: STAIRWELL_PLAN.floorNames[k]! }));
+    names.forEach((who, i) => residents.push({ door: doorKey(k, i), who, floor: `${STAIRWELL_PLAN.floorNames[k]!} floor` }));
   }
   return residents;
 }

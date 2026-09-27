@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import { createCanvas, toTexture, seededRandom, FONT } from '@/covers/generated/canvasUtils';
 import { cylinderMesh } from '../meshUtils';
-import { Prop, matte } from './Prop';
+import { paint, standard } from '@/world/materials/palette';
+import { Prop } from './Prop';
 
 export interface WallCalendarOptions {
   /** Size of the sheet. Default 0.3 x 0.45 m. */
@@ -32,14 +33,14 @@ export class WallCalendar extends Prop {
     const now = new Date();
     const texture = paintPage(width, height, now, options.seed ?? now.getFullYear() * 12 + now.getMonth(), options.accent ?? '#c8322a');
     const face = new THREE.MeshStandardMaterial({ map: texture, roughness: 0.85 });
-    const edge = matte(0xf4f1ea, 0.9);
+    const edge = paint(0xf4f1ea, 0.9);
     // A thin pad of pages: the printed face on the front, plain paper on the edges.
     const pad = new THREE.Mesh(new THREE.BoxGeometry(width, height, 0.004), [edge, edge, edge, edge, face, edge]);
     pad.position.z = 0.002;
     pad.receiveShadow = true;
     this.add(pad);
     // The wire binding along the top and the nail it hangs from.
-    const wire = new THREE.MeshStandardMaterial({ color: 0x9a9ea3, metalness: 0.8, roughness: 0.35 });
+    const wire = standard({ color: 0x9a9ea3, metalness: 0.8, roughness: 0.35 });
     const loops = Math.round(width / 0.012);
     for (let i = 0; i < loops; i++) {
       const loop = new THREE.Mesh(new THREE.TorusGeometry(0.004, 0.0008, 4, 8), wire);

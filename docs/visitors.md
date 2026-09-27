@@ -19,6 +19,9 @@ a tip (coins) or a game they no longer want (a built-in game to their taste, add
 the parcel). A loan `postAfter` days overdue comes back by post (a toast). A game marked back to owned in the editor, or
 gone from the collection, ends its loan.
 
+From the flat (docs/household.md): a friend asked round on the bedroom's phone is that day's visit (`VisitBook.invite`);
+a cake on the kitchen table gets a slice, a longer stay and a thank-you (`VisitorsOptions.hosting`).
+
 ## Files
 
 - `friendsPlan.ts`: `FRIENDS` (name, look seed + fixed traits, taste: platforms, genres, years; speed, borrow chance,

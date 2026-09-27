@@ -5,7 +5,8 @@ import { RadioTune } from '@/audio/RadioTune';
 import { createCanvas, toTexture } from '@/covers/generated/canvasUtils';
 import type { Furniture, OccupancyAware } from '../Furniture';
 import { boxMesh, cylinderMesh, invisibleHitbox } from '../meshUtils';
-import { matte } from '../props/Prop';
+import { paint, standard } from '../materials/palette';
+import { WALL } from '../surface/layers';
 
 export interface TransistorRadioOptions {
   /** Whose distance sets the volume: the camera. */
@@ -21,7 +22,7 @@ const D = 0.06;
 const FAR = 9;
 const NEAR = 0.8;
 
-const CHROME = new THREE.MeshStandardMaterial({ color: 0xc8c8c8, roughness: 0.25, metalness: 0.9 });
+const CHROME = standard({ color: 0xc8c8c8, roughness: 0.25, metalness: 0.9 });
 
 /**
  * A stallholder's transistor radio, playing a generated pop station (`RadioTune`) for the whole
@@ -44,14 +45,14 @@ export class TransistorRadio extends THREE.Group implements Furniture, Updatable
     super();
     this.name = 'TransistorRadio';
     this.listener = options.listener;
-    const body = matte(options.color ?? 0xb8342a, 0.5);
+    const body = paint(options.color ?? 0xb8342a, 0.5);
     this.add(boxMesh(W, H, D, body, { y: H / 2 }));
     const grille = new THREE.Mesh(new THREE.PlaneGeometry(W * 0.55, H * 0.7), new THREE.MeshStandardMaterial({ map: paintGrille(), roughness: 0.6, metalness: 0.4 }));
-    grille.position.set(-W * 0.17, H / 2, D / 2 + 0.001);
+    grille.position.set(-W * 0.17, H / 2, D / 2 + WALL.framed.lift);
     this.add(grille);
     this.dial = new THREE.MeshStandardMaterial({ color: 0xf1e8d6, roughness: 0.5, emissive: 0xffb050, emissiveIntensity: 0 });
     const dial = new THREE.Mesh(new THREE.CircleGeometry(0.025, 20), this.dial);
-    dial.position.set(W * 0.3, H / 2 + 0.01, D / 2 + 0.001);
+    dial.position.set(W * 0.3, H / 2 + 0.01, D / 2 + WALL.framed.lift);
     this.add(dial);
     this.add(cylinderMesh(0.008, 0.012, CHROME, { x: W * 0.3, y: H * 0.18, z: D / 2 + 0.004 }, { segments: 10 }).rotateX(Math.PI / 2));
     // The handle and the telescopic aerial.

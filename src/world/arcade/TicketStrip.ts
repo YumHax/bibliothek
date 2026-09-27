@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import { createCanvas } from '@/covers/generated/canvasUtils';
 import { boxMesh } from '../meshUtils';
-import { markShared, matte } from '../props/Prop';
+import { markShared } from '../props/Prop';
+import { METAL, paint } from '../materials/palette';
 import { drawText } from './games/ArcadeGame';
 
 /** One ticket's length along the strip, metres. */
@@ -45,8 +46,8 @@ export class TicketStrip extends THREE.Group {
   constructor(drop: number) {
     super();
     this.maxLength = Math.max(0.05, drop - 0.01);
-    this.add(boxMesh(0.07, 0.025, 0.01, new THREE.MeshStandardMaterial({ color: 0xb9bcc0, metalness: 0.6, roughness: 0.35 }), { z: 0.005 }));
-    this.add(boxMesh(0.045, 0.004, 0.012, matte(0x050505, 0.8), { z: 0.006 }));
+    this.add(boxMesh(0.07, 0.025, 0.01, METAL.satinSteel(), { z: 0.005 }));
+    this.add(boxMesh(0.045, 0.004, 0.012, paint(0x050505, 0.8), { z: 0.006 }));
     this.texture = art().clone();
     this.texture.wrapT = THREE.RepeatWrapping;
     const geometry = new THREE.PlaneGeometry(WIDTH, 1);

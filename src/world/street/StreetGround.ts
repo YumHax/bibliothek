@@ -2,11 +2,12 @@ import * as THREE from 'three';
 import type { Updatable } from '@/core/Engine';
 import type { Furniture } from '../Furniture';
 import type { DayNight } from '../props/DayNight';
-import { seasonalLawn } from '../props/outdoors/season';
+import { seasonalLawn } from '../props/outdoors/paint';
 import { QuadBuilder } from './QuadBuilder';
 import { asphaltTile, kerbTile, lawnTile, pavingTile, type Tile } from './groundTextures';
-import { FRONT, KERB_HEIGHT, PARK_STREET, SIDE_STREET, STREET_ENDS, STREET_PLAN } from './streetPlan';
+import { CORNER_BAY, FRONT, KERB_HEIGHT, PARK_STREET, SIDE_STREET, STREET_ENDS, STREET_PLAN } from './streetPlan';
 import { STREET_SNOW } from './snowCover';
+import { GROUND, onSurface } from '../surface/layers';
 
 /** The side street runs south to the building across its end. */
 const SIDE_END = -60;
@@ -51,6 +52,8 @@ export class StreetGround extends THREE.Group implements Furniture, Updatable {
     paving.floor(SIDE_STREET.farKerb, FRONT.ourLine, east, FRONT.nearKerb, 0);
     paving.floor(PARK_STREET.hedge - 1, FRONT.farKerb, east, FRONT.farLine, 0);
     paving.floor(PARK_STREET.nearKerb, south, PARK_STREET.line, FRONT.ourLine, 0);
+    // The bay at our building's corner, paved up to the collection room's wall and the kitchen wing.
+    paving.floor(CORNER_BAY.x0, CORNER_BAY.z0, CORNER_BAY.x1, CORNER_BAY.z1, 0);
     paving.floor(PARK_STREET.hedge - 1, south, PARK_STREET.farKerb, FRONT.farKerb, 0);
     paving.floor(SIDE_STREET.line, SIDE_END, SIDE_STREET.nearKerb, FRONT.ourLine, 0);
     paving.floor(SIDE_STREET.farKerb, SIDE_END, SIDE_STREET.farLine, FRONT.ourLine, 0);
@@ -104,14 +107,14 @@ export class StreetGround extends THREE.Group implements Furniture, Updatable {
   }
 
   /**
-   * Paint on the road, a hair above it: the crossings' zebras, the stop lines before the one with
+   * Paint on the road (`GROUND.marking`): the crossings' zebras, the stop lines before the one with
    * lights, the lane dashes, the parking lines and the double centre line of Front Street and Park
    * Street; the bus stop's yellow box. White and yellow, one mesh each.
    */
   private addMarkings(): void {
     const white = new QuadBuilder(1);
     const yellow = new QuadBuilder(1);
-    const y = -KERB_HEIGHT + 0.004;
+    const y = -KERB_HEIGHT + GROUND.marking.lift;
     const { crossings, laneDash, parkingLine, stopLine, bus } = STREET_PLAN;
     // Zebras: bars along the traffic, across the whole road.
     for (const c of crossings) {
@@ -149,7 +152,7 @@ export class StreetGround extends THREE.Group implements Furniture, Updatable {
     yellow.floor(bx + 5.88, z0, bx + 6, z1, y);
     for (let x = bx - 5.2; x < bx + 5.2; x += 0.8) yellow.floor(x, (z0 + z1) / 2 - 0.05, x + 0.4, (z0 + z1) / 2 + 0.05, y);
     for (const [q, color] of [[white, 0xe8e6de], [yellow, 0xe8c030]] as const) {
-      const material = new THREE.MeshStandardMaterial({ color, roughness: 0.7, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+      const material = onSurface(new THREE.MeshStandardMaterial({ color, roughness: 0.7 }), GROUND.marking);
       const mesh = new THREE.Mesh(q.build(), material);
       mesh.receiveShadow = true;
       this.add(mesh);

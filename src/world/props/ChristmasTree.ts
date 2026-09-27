@@ -3,7 +3,8 @@ import type { Updatable } from '@/core/Engine';
 import type { Furniture } from '../Furniture';
 import { seededRandom } from '@/covers/generated/canvasUtils';
 import { boxMesh, cylinderMesh } from '../meshUtils';
-import { markShared, matte } from './Prop';
+import { basic, paint, standard, instancedStandard, instancedBasic } from '../materials/palette';
+import { proud } from './joinery';
 
 export interface ChristmasTreeOptions {
   /** Height to the tip, metres (the star sits on it). Default 1.8. */
@@ -19,12 +20,12 @@ export interface ChristmasTreeOptions {
   seed?: number;
 }
 
-const NEEDLES = markShared(new THREE.MeshStandardMaterial({ color: 0x1f4a2a, roughness: 0.85, flatShading: true }));
-const TRUNK = markShared(matte(0x5a3a22, 0.9));
-const POT = markShared(matte(0x8a1f1f, 0.5));
-const BAUBLE = markShared(new THREE.MeshStandardMaterial({ roughness: 0.2, metalness: 0.6 }));
-const STAR = markShared(new THREE.MeshBasicMaterial({ color: 0xffe07a, toneMapped: false }));
-const RIBBON = markShared(matte(0xf1e1b4, 0.6));
+const NEEDLES = standard({ color: 0x1f4a2a, roughness: 0.85, flatShading: true });
+const TRUNK = paint(0x5a3a22, 0.9);
+const POT = paint(0x8a1f1f, 0.5);
+const BAUBLE = instancedStandard({ roughness: 0.2, metalness: 0.6 });
+const STAR = basic({ color: 0xffe07a, toneMapped: false });
+const RIBBON = paint(0xf1e1b4, 0.6);
 const BAUBLE_COLORS = [0xc8243a, 0xd4a52a, 0x2a5ac8, 0xe8e8f0];
 const LIGHT_COLORS = [0xffc46e, 0xff4a3a, 0x3aff6a, 0x4a8aff, 0xffe07a];
 const PRESENT_COLORS = [0xc8243a, 0x2a6a3a, 0x2a4a9a, 0xd4a52a];
@@ -105,7 +106,7 @@ export class ChristmasTree extends THREE.Group implements Furniture, Updatable {
     // The fairy lights: a spiral from the bottom tier to the top, a bulb every few centimetres.
     const lightColors = options.lights ?? LIGHT_COLORS;
     const bulbCount = 60;
-    this.bulbs = new THREE.InstancedMesh(new THREE.SphereGeometry(0.012, 6, 5), new THREE.MeshBasicMaterial({ toneMapped: false }), bulbCount);
+    this.bulbs = new THREE.InstancedMesh(new THREE.SphereGeometry(0.012, 6, 5), instancedBasic({ toneMapped: false }), bulbCount);
     this.bulbColors = [];
     for (let i = 0; i < bulbCount; i++) {
       const t = i / bulbCount;
@@ -134,9 +135,9 @@ export class ChristmasTree extends THREE.Group implements Furniture, Updatable {
       const a = (i / presents) * Math.PI * 1.2 + 0.4;
       const r = radius * 0.72;
       const box = new THREE.Group();
-      box.add(boxMesh(w, h, w * 0.85, matte(PRESENT_COLORS[i % PRESENT_COLORS.length]!, 0.55), { y: h / 2 }));
-      box.add(boxMesh(w + 0.004, h + 0.004, 0.02, RIBBON, { y: h / 2 }));
-      box.add(boxMesh(0.02, h + 0.004, w * 0.85 + 0.004, RIBBON, { y: h / 2 }));
+      box.add(boxMesh(w, h, w * 0.85, paint(PRESENT_COLORS[i % PRESENT_COLORS.length]!, 0.55), { y: h / 2 }));
+      box.add(boxMesh(proud(w), proud(h), 0.02, RIBBON, { y: h / 2 }));
+      box.add(boxMesh(0.02, proud(h), proud(w * 0.85), RIBBON, { y: h / 2 }));
       box.position.set(Math.cos(a) * r, 0, Math.sin(a) * r);
       box.rotation.y = this.random() * Math.PI;
       this.add(box);

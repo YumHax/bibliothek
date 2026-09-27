@@ -5,6 +5,7 @@ import type { Interactable } from '@/interaction/Interactable';
 import type { SessionActions } from '@/game/SessionActions';
 import { IDLE_SHADOW_INTERVAL, type OccupancyAware } from '../Furniture';
 import { invisibleHitbox } from '../meshUtils';
+import { basic } from '../materials/palette';
 import { Prop, part } from './Prop';
 import { Curtains } from './Curtains';
 import { RollerBlind } from './RollerBlind';
@@ -157,7 +158,7 @@ export class RoomWindow extends Prop implements Updatable, Interactable, Occupan
 
     if (this.options.sunlight) {
       // Shadow-only slabs outside the wall: they cast into the shadow map but draw nothing.
-      const maskMat = new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: false });
+      const maskMat = basic({ colorWrite: false, depthWrite: false });
       const masks = [
         part(this, w + 2 * MASK_REACH, MASK_REACH, 0.02, maskMat, { y: h / 2 + MASK_REACH / 2, z: -0.03 }),
         part(this, w + 2 * MASK_REACH, MASK_REACH, 0.02, maskMat, { y: -h / 2 - MASK_REACH / 2, z: -0.03 }),

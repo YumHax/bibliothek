@@ -2,8 +2,7 @@ import * as THREE from 'three';
 import { createCanvas, toTexture } from '@/covers/generated/canvasUtils';
 import type { Furniture } from '../Furniture';
 import { boxMesh, cylinderMesh } from '../meshUtils';
-import { matte } from '../props/Prop';
-import { wood as woodMaterial } from '@/world/materials/finishes';
+import { paint, timber } from '../materials/palette';
 
 export interface BargainBinOptions {
   /** The flat price painted on the card. */
@@ -30,9 +29,9 @@ const PER_COLUMN = 6;
 const STEP = 0.06;
 const BOX_LEAN = THREE.MathUtils.degToRad(11);
 
-const PINE = woodMaterial(0xa8804f, 0.7);
-const LEGS = woodMaterial(0x6a4a2a, 0.6);
-const IRON = matte(0x2a2623, 0.6);
+const PINE = timber(0xa8804f, 0.7);
+const LEGS = timber(0x6a4a2a, 0.6);
+const IRON = paint(0x2a2623, 0.6);
 
 /**
  * A crate of worn copies to dig through at a flat price: an open slatted crate on a low trestle,

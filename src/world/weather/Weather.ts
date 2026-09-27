@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { seededRandom } from '@/covers/generated/canvasUtils';
-import type { SeasonName } from '@/world/props/outdoors/season';
+import type { SeasonName } from '@/time/season';
 
 /** The kinds of weather a spell can bring. */
 export type WeatherKind = 'clear' | 'fair' | 'cloudy' | 'overcast' | 'fog' | 'showers' | 'rain' | 'storm' | 'snow';

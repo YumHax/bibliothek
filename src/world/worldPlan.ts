@@ -40,7 +40,8 @@ import { STAIRWELL_PLAN, STAIRWELL_ROOM } from './stairwell/stairwellPlan';
  * whose exits lead back to the street.
  *
  * Outside: Front Street runs past the front wall (+z), Park Street past the left wall (-x); the
- * right side (+x) is the neighbours' and the landing, the back (-z) a courtyard nothing paints.
+ * right side (+x) is the neighbours' and the landing, the back (-z) the block's courtyard (the panes'
+ * `Courtyard`; in the street, `COURTYARD` behind the workshop on Park Street).
  * The kitchen juts past the collection room's left wall, so its wall shows in the left windows
  * (`KITCHEN_WING`, rendered by the pane shader; see `docs/outdoors.md`).
  */

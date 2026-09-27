@@ -4,7 +4,8 @@ import type { SessionActions } from '@/game/SessionActions';
 import { createCanvas, fitFontSize, seededRandom, toTexture, wrapLines, FONT } from '@/covers/generated/canvasUtils';
 import { boxMesh, invisibleHitbox } from '../meshUtils';
 import { Prop } from '../props/Prop';
-import { wood as woodMaterial } from '@/world/materials/finishes';
+import { timber } from '../materials/palette';
+import { WALL } from '../surface/layers';
 
 /** One card pinned on the board. */
 export interface NoticeCard {
@@ -27,6 +28,8 @@ const WIDTH = 1.1;
 const HEIGHT = 0.8;
 const FRAME = 0.04;
 const DEPTH = 0.025;
+/** The cork's backing slab, against the wall. */
+const BACKING_T = 0.012;
 /** The cork (header strip included) is painted at this scale. */
 const PX_PER_M = 900;
 const HEADER_M = 0.1;
@@ -54,7 +57,7 @@ export class NoticeBoard extends Prop implements Interactable {
   constructor(private readonly options: NoticeBoardOptions) {
     super();
     this.name = 'NoticeBoard';
-    const frame = woodMaterial(0x6a4a2a, 0.6);
+    const frame = timber(0x6a4a2a, 0.6);
     // The frame: four bars round the cork, standing a little proud of it.
     this.add(boxMesh(WIDTH, FRAME, DEPTH, frame, { y: HEIGHT / 2 - FRAME / 2, z: DEPTH / 2 }));
     this.add(boxMesh(WIDTH, FRAME, DEPTH, frame, { y: -HEIGHT / 2 + FRAME / 2, z: DEPTH / 2 }));
@@ -62,12 +65,12 @@ export class NoticeBoard extends Prop implements Interactable {
     this.add(boxMesh(FRAME, HEIGHT - 2 * FRAME, DEPTH, frame, { x: WIDTH / 2 - FRAME / 2, z: DEPTH / 2 }));
     // The cork itself: a backing slab and the painted face over it.
     const inner = { w: WIDTH - 2 * FRAME, h: HEIGHT - 2 * FRAME };
-    this.add(boxMesh(inner.w, inner.h, 0.012, frame, { z: 0.006 }));
+    this.add(boxMesh(inner.w, inner.h, BACKING_T, frame, { z: BACKING_T / 2 }));
     [this.canvas, this.ctx] = createCanvas(Math.round(inner.w * PX_PER_M), Math.round(inner.h * PX_PER_M));
     this.texture = toTexture(this.canvas, 4);
     const face = new THREE.Mesh(new THREE.PlaneGeometry(inner.w, inner.h), new THREE.MeshStandardMaterial({ map: this.texture, roughness: 0.95 }));
-    // 2 mm proud of the backing: less z-fights with it when the board is read from across the hall.
-    face.position.z = 0.014;
+    // A notice's lift off the backing: it does not z-fight with it when the board is read from across the hall.
+    face.position.z = BACKING_T + WALL.notice.lift;
     face.castShadow = false;
     face.receiveShadow = true;
     this.add(face);

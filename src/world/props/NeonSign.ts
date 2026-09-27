@@ -2,7 +2,8 @@ import * as THREE from 'three';
 import type { Updatable } from '@/core/Engine';
 import { createCanvas, seededRandom, toTexture } from '@/covers/generated/canvasUtils';
 import { boxMesh } from '../meshUtils';
-import { matte, Prop } from './Prop';
+import { paint } from '../materials/palette';
+import { Prop } from './Prop';
 
 export interface NeonSignOptions {
   /** The word(s) in glass tubing. Default ARCADE. */
@@ -26,8 +27,8 @@ const PX_PER_M = 400;
 /** The black acrylic panel the tubes are mounted on, and how far the tubes stand off it. */
 const PANEL_T = 0.025;
 const STANDOFF = 0.03;
-const PANEL = matte(0x0b0a0f, 0.4);
-const STANDOFF_MAT = matte(0x2a2a30, 0.4);
+const PANEL = paint(0x0b0a0f, 0.4);
+const STANDOFF_MAT = paint(0x2a2a30, 0.4);
 
 /**
  * A neon sign: the text as glowing glass tubing (a white-hot core in a coloured halo) on a black

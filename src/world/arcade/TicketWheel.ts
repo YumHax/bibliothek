@@ -2,7 +2,8 @@ import * as THREE from 'three';
 import { ChipSpeaker } from '@/audio/ChipSpeaker';
 import { createCanvas, toTexture } from '@/covers/generated/canvasUtils';
 import { boxMesh, cylinderMesh, eyePoseAt, invisibleHitbox } from '../meshUtils';
-import { markShared, matte } from '../props/Prop';
+import { WALL } from '../surface/layers';
+import { basic, paint, standard } from '../materials/palette';
 import { actionKeyLabel } from '@/ui/keys';
 import { type ArcadeControls, NO_CONTROLS, drawText } from './games/ArcadeGame';
 import { TicketMachine, type TicketMachineWiring } from './TicketMachine';
@@ -91,20 +92,20 @@ export class TicketWheel extends TicketMachine {
     this.edges = [0];
     for (const s of options.slices) this.edges.push(this.edges[this.edges.length - 1]! + (s.weight / total) * Math.PI * 2);
 
-    const paint = matte(options.color ?? 0x2a0f24, 0.5);
-    const gold = new THREE.MeshStandardMaterial({ color: 0xd4a52a, metalness: 0.8, roughness: 0.3 });
+    const body = paint(options.color ?? 0x2a0f24, 0.5);
+    const gold = standard({ color: 0xd4a52a, metalness: 0.8, roughness: 0.3 });
     // The backboard with the marquee on top.
-    this.add(boxMesh(BOARD_W, BOARD_H, 0.06, paint, { y: BOARD_H / 2 + 0.3, z: 0.03 }));
+    this.add(boxMesh(BOARD_W, BOARD_H, 0.06, body, { y: BOARD_H / 2 + 0.3, z: 0.03 }));
     const marqueeMap = paintMarquee(title, { stops: ['#ff2fa0', '#ffd23a'], ink: '#2a0f24', size: 40 });
     const marquee = new THREE.Mesh(new THREE.PlaneGeometry(BOARD_W - 0.1, 0.24), new THREE.MeshBasicMaterial({ map: marqueeMap, toneMapped: false }));
-    marquee.position.set(0, BOARD_H + 0.3 - 0.18, 0.062);
+    marquee.position.set(0, BOARD_H + 0.3 - 0.18, 0.06 + WALL.notice.lift);
     this.add(marquee);
     // The wheel: a painted disc on a hub, pegs at the slice edges, a gold rim.
     this.wheel = new THREE.Group();
     this.wheel.position.set(0, WHEEL_Y, WHEEL_Z);
     const face = new THREE.Mesh(new THREE.CircleGeometry(WHEEL_R, 64), new THREE.MeshStandardMaterial({ map: this.paintFace(), roughness: 0.45 }));
     this.wheel.add(face);
-    const back = cylinderMesh(WHEEL_R, 0.04, matte(0x151518, 0.5), { z: -0.022 }, { segments: 48 });
+    const back = cylinderMesh(WHEEL_R, 0.04, paint(0x151518, 0.5), { z: -0.022 }, { segments: 48 });
     back.rotation.x = Math.PI / 2;
     this.wheel.add(back);
     for (const edge of this.edges.slice(0, -1)) {
@@ -130,23 +131,23 @@ export class TicketWheel extends TicketMachine {
     // The flapper at the top, pivoting where it is bolted on.
     this.flapper = new THREE.Group();
     this.flapper.position.set(0, WHEEL_Y + WHEEL_R + 0.1, WHEEL_Z + 0.04);
-    const tongue = new THREE.Mesh(new THREE.ConeGeometry(0.04, 0.14, 3), matte(0xe8303a, 0.4));
+    const tongue = new THREE.Mesh(new THREE.ConeGeometry(0.04, 0.14, 3), paint(0xe8303a, 0.4));
     tongue.rotation.z = Math.PI;
     tongue.position.y = -0.07;
     this.flapper.add(tongue, cylinderMesh(0.02, 0.03, gold, {}, { segments: 12 }).rotateX(Math.PI / 2));
     this.add(this.flapper);
     // The podium: the button, the display, the ticket slot.
-    this.add(boxMesh(PODIUM.w, PODIUM.h, PODIUM.d, paint, { y: PODIUM.h / 2, z: PODIUM.z }));
-    const top = boxMesh(PODIUM.w + 0.04, 0.03, PODIUM.d + 0.04, matte(0x151518, 0.5), { y: PODIUM.h + 0.015, z: PODIUM.z });
+    this.add(boxMesh(PODIUM.w, PODIUM.h, PODIUM.d, body, { y: PODIUM.h / 2, z: PODIUM.z }));
+    const top = boxMesh(PODIUM.w + 0.04, 0.03, PODIUM.d + 0.04, paint(0x151518, 0.5), { y: PODIUM.h + 0.015, z: PODIUM.z });
     this.add(top);
     this.button = cylinderMesh(0.07, 0.05, new THREE.MeshStandardMaterial({ color: 0xe8303a, emissive: 0xe8303a, emissiveIntensity: 0.3, roughness: 0.4 }), { x: 0.08, y: PODIUM.h + 0.05, z: PODIUM.z + 0.05 }, { segments: 20 });
     this.add(this.button);
     this.display = displayScreen([256, 96], [0.4, 0.15]);
     const screen = this.display.mesh;
-    screen.position.set(0, PODIUM.h - 0.14, PODIUM.z + PODIUM.d / 2 + 0.002);
+    screen.position.set(0, PODIUM.h - 0.14, PODIUM.z + PODIUM.d / 2 + WALL.notice.lift);
     this.add(screen);
     this.note = outOfOrderNote(0.24);
-    this.note.position.z = 0.004;
+    this.note.position.z = WALL.flyer.lift;
     screen.add(this.note);
     this.strip = new TicketStrip(0.4);
     this.strip.position.set(-0.14, 0.4, PODIUM.z + PODIUM.d / 2 + 0.001);
@@ -356,5 +357,5 @@ export class TicketWheel extends TicketMachine {
   }
 }
 
-const BULB_ON = markShared(new THREE.MeshBasicMaterial({ color: 0xfff1b0, toneMapped: false }));
-const BULB_OFF = markShared(new THREE.MeshStandardMaterial({ color: 0x6a5a30, roughness: 0.4 }));
+const BULB_ON = basic({ color: 0xfff1b0, toneMapped: false });
+const BULB_OFF = paint(0x6a5a30, 0.4);

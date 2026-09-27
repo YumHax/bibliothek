@@ -4,8 +4,8 @@ const PER_BOOKCASE = 40;
 /**
  * What the market panel says about room at home for one more game, from what the collection
  * room's shelves could not take (`overflow`, kept since they were last built) and the bookcases
- * bought for the bedroom: null while the living room has space, else where the game will go, or
- * that it will stay boxed until another bookcase is bought (an estimate: box sizes vary).
+ * standing in the bedroom (bought ones go to the living room first): null while the living room has space, else where
+ * the game will go, or that it will stay boxed until another bookcase is bought (an estimate: box sizes vary).
  */
 export function shelfRoomNote(overflow: number, bookcases: number): string | null {
   if (overflow === 0) return null;

@@ -33,6 +33,8 @@ export interface LayerRenderer {
  * The graphics quality lowers it further (`QUALITY.maxPixelRatio`).
  */
 const MAX_PIXEL_RATIO = QUALITY.maxPixelRatio;
+/** The camera's near plane (metres). */
+const NEAR = 0.1;
 /**
  * A fence still pending after this long is not a slow frame, it is a browser that does not report
  * sync status (a hidden tab, an odd driver): the frame is rendered anyway, and after a few of those
@@ -63,6 +65,10 @@ export class Engine {
   private fenceSince = 0;
   private fenceTimeouts = 0;
   private pacing = true;
+  /** `?stats` only: milliseconds each updatable spent in `update` since the readout last cleared it. */
+  profile: Map<Updatable, number> | null = null;
+  /** Frames actually rendered (a tick waiting on the GPU renders none). */
+  renderedFrames = 0;
 
   constructor(container: HTMLElement) {
     // alpha:true lets cut-out materials expose DOM layers sitting behind the canvas. With the
@@ -80,7 +86,10 @@ export class Engine {
 
     this.scene = new THREE.Scene();
 
-    this.camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.05, 100);
+    // Near at 0.1 m: nothing is ever drawn closer (walls stop the body 0.3 m away, a held box
+    // rides 0.42 m out), and depth precision scales with it, so every mm-offset layer holds
+    // twice as far as it did at 0.05 (see `world/surface/layers.ts`).
+    this.camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, NEAR, 100);
 
     window.addEventListener('resize', this.onResize);
   }
@@ -131,8 +140,16 @@ export class Engine {
   private tick = (): void => {
     // Clamp dt so a backgrounded tab does not teleport the player when it comes back.
     const dt = Math.min(this.clock.getDelta(), 0.1);
-    for (const u of this.updatables) u.update(dt);
+    const profile = this.profile;
+    if (profile) {
+      for (const u of this.updatables) {
+        const t0 = performance.now();
+        u.update(dt);
+        profile.set(u, (profile.get(u) ?? 0) + performance.now() - t0);
+      }
+    } else for (const u of this.updatables) u.update(dt);
     if (!this.gpuIdle()) return;
+    this.renderedFrames++;
     this.renderFrame();
     for (const layer of this.layers) layer.render(this.camera);
     if (!this.pacing) return;

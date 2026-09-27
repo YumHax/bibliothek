@@ -5,12 +5,13 @@ import { seededRandom } from '@/covers/generated/canvasUtils';
 import { QUALITY } from '@/graphics/quality';
 import type { Furniture } from '../../Furniture';
 import type { DayNight } from '../../props/DayNight';
-import { wakefulnessAt } from '../../props/outdoors/wakefulness';
+import { wakefulnessAt } from '@/time/wakefulness';
 import { BIKE, bikeGeometry, tube } from '../carModel';
 import type { CarVoice } from '../StreetCars';
 import type { Spot, Vec2 } from '../streetPlan';
 import { ROAD_Y, allowedSpeed, approach, corneringSpeed, placeOnRoute, sampleRoute, type Route } from './driving';
 import type { RoadVehicle, StreetTraffic } from './StreetTraffic';
+import { CYCLE_OFFSET } from '../../city/frontage';
 
 export interface StreetBikesOptions {
   traffic: StreetTraffic;
@@ -22,7 +23,7 @@ export interface StreetBikesOptions {
   racks: readonly (Spot & { bikes: number })[];
 }
 
-const LANE_OFFSET = 2.2;
+const LANE_OFFSET = CYCLE_OFFSET;
 const CRUISE = 4.6;
 /** How far out towards the car lane a rider swings to get round something standing in the way. */
 const SWERVE = 1.7;

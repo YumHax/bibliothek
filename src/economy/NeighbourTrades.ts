@@ -35,8 +35,10 @@ interface State {
 
 export interface NeighbourTradesOptions {
   collection: { readonly games: readonly Game[]; owns(id: string): boolean; find?(id: string): Game | undefined };
-  /** The market: its in-game day, and games from the index at large (seeded). */
-  market: { readonly day: number; randomGames(seed: string, count: number): Promise<Game[]> };
+  /** The game day (`time/Today`): a note lasts some days of it. */
+  today: { readonly gameDay: number };
+  /** The market: games from the index at large (seeded). */
+  market: { randomGames(seed: string, count: number): Promise<Game[]> };
   fame: { lookup(game: Pick<Game, 'id' | 'title' | 'platform'>): Promise<Views> };
   residents: readonly Resident[];
   storage?: Storage | null;
@@ -75,7 +77,7 @@ export class NeighbourTrades {
   /** The offer standing now, if any (not dealt with, not expired). */
   get offer(): TradeOffer | null {
     const offer = this.state.offer;
-    if (!offer || this.state.done.includes(offer.id) || offer.until < this.options.market.day) return null;
+    if (!offer || this.state.done.includes(offer.id) || offer.until < this.options.today.gameDay) return null;
     return offer;
   }
 
@@ -102,7 +104,7 @@ export class NeighbourTrades {
 
   /** Looks at the day: a new one may bring an offer (drawn in the background). Cheap: call it often. */
   refresh(): void {
-    const day = this.options.market.day;
+    const day = this.options.today.gameDay;
     if (day === this.state.day || this.drawing) return;
     const random = seeded(`neighbours:${day}`);
     if (this.offer || random() >= ODDS) {
@@ -113,7 +115,7 @@ export class NeighbourTrades {
     this.drawing = true;
     void this.draw(day, random).then((offer) => {
       this.drawing = false;
-      if (this.options.market.day !== day) return;
+      if (this.options.today.gameDay !== day) return;
       this.state = { ...this.state, day, offer: offer ?? this.state.offer };
       this.store.save(this.state);
       if (offer) for (const listener of [...this.listeners]) listener(offer);

@@ -8,6 +8,7 @@ import { LampBuzz } from './details/LampBuzz';
 import { snowCovered } from './snowCover';
 import { nightnessOf } from './streetAir';
 import type { Vec2 } from './streetPlan';
+import { GROUND, RENDER_ORDER, onSurface } from '../surface/layers';
 
 export interface StreetLampsOptions {
   lamps: readonly { at: Vec2; yaw: number }[];
@@ -87,21 +88,24 @@ export class StreetLamps extends THREE.Group implements Furniture, Updatable, Oc
     this.heads = new THREE.MeshBasicMaterial({ color: WARM.clone() });
     const lens = new THREE.InstancedMesh(new THREE.BoxGeometry(0.28, 0.03, 0.5).translate(0, height - 0.135, ARM), this.heads, lamps.length);
 
-    this.pools = new THREE.MeshBasicMaterial({
-      map: poolTexture(),
-      color: WARM.clone(),
-      transparent: true,
-      depthWrite: false,
-      blending: THREE.CustomBlending,
-      blendSrc: THREE.SrcAlphaFactor,
-      blendDst: THREE.OneFactor,
-      blendSrcAlpha: THREE.ZeroFactor,
-      blendDstAlpha: THREE.OneFactor,
-      opacity: 0,
-      fog: true,
-    });
-    const pool = new THREE.InstancedMesh(new THREE.PlaneGeometry(2 * POOL_RADIUS, 2 * POOL_RADIUS).rotateX(-Math.PI / 2).translate(0, 0.012, ARM), this.pools, lamps.length);
-    pool.renderOrder = 1;
+    this.pools = onSurface(
+      new THREE.MeshBasicMaterial({
+        map: poolTexture(),
+        color: WARM.clone(),
+        transparent: true,
+        blending: THREE.CustomBlending,
+        blendSrc: THREE.SrcAlphaFactor,
+        blendDst: THREE.OneFactor,
+        blendSrcAlpha: THREE.ZeroFactor,
+        blendDstAlpha: THREE.OneFactor,
+        opacity: 0,
+        fog: true,
+      }),
+      GROUND.lampPool,
+      { depthWrite: false },
+    );
+    const pool = new THREE.InstancedMesh(new THREE.PlaneGeometry(2 * POOL_RADIUS, 2 * POOL_RADIUS).rotateX(-Math.PI / 2).translate(0, GROUND.lampPool.lift, ARM), this.pools, lamps.length);
+    pool.renderOrder = RENDER_ORDER.groundGlow;
 
     const white = new THREE.Color(1, 1, 1);
     matrices.forEach((m, i) => {

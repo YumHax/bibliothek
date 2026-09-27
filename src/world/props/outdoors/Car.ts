@@ -1,5 +1,6 @@
 import type { Fill } from './Sheet';
 import { shade } from './paint';
+import { VEHICLES } from '@/world/city/vehicles';
 
 /**
  * The shape of a vehicle's box model, in metres: overall `length`, `width`, `height`; the `body`
@@ -28,18 +29,36 @@ export interface VehicleBody {
   roofTop?: number;
 }
 
-/** A small hatchback. */
-export const CAR_BODY: VehicleBody = { length: 4.4, width: 1.8, height: 1.45, body: 0.85, floor: 0.3, cab0: 1.1, roof0: 1.75, roof1: 3.35, cab1: 3.9, inset: 0.15, wheel: 0.33, wheelIn: 0.85, pillars: 1 };
+/**
+ * A profile drawn at `drawnAt` metres long (the u values: windscreen, roof, rear window, wheels),
+ * stretched to a vehicle `length` long, so the painted box keeps its proportions at the
+ * neighbourhood's size (`city/vehicles`).
+ */
+function profile(length: number, drawnAt: number, u: Pick<VehicleBody, 'cab0' | 'roof0' | 'roof1' | 'cab1' | 'wheelIn'>): Pick<VehicleBody, 'cab0' | 'roof0' | 'roof1' | 'cab1' | 'wheelIn'> {
+  const k = length / drawnAt;
+  return { cab0: u.cab0 * k, roof0: u.roof0 * k, roof1: u.roof1 * k, cab1: u.cab1 * k, wheelIn: u.wheelIn * k };
+}
+
+const { car: CAR, bus: BUS, van: VAN, lorry: LORRY } = VEHICLES;
+/** A small hatchback, the street's (`city/vehicles`). */
+export const CAR_BODY: VehicleBody = {
+  length: CAR.length, width: CAR.width, height: CAR.height, body: 0.85, floor: 0.3, inset: 0.15, wheel: CAR.wheelRadius, pillars: 1,
+  ...profile(CAR.length, 4.4, { cab0: 1.1, roof0: 1.75, roof1: 3.35, cab1: 3.9, wheelIn: 0.85 }),
+};
 /** A city bus: a long box, nearly all window above the waist, the windscreen almost upright. */
-export const BUS_BODY: VehicleBody = { length: 11.5, width: 2.5, height: 3.05, body: 1.15, floor: 0.35, cab0: 0.05, roof0: 0.3, roof1: 11.25, cab1: 11.4, inset: 0.06, wheel: 0.5, wheelIn: 2.4, pillars: 7 };
+export const BUS_BODY: VehicleBody = { length: BUS.length, width: BUS.width, height: BUS.height, body: 1.15, floor: 0.35, cab0: 0.05, roof0: 0.3, roof1: BUS.length - 0.25, cab1: BUS.length - 0.1, inset: 0.06, wheel: BUS.wheelRadius, wheelIn: 2.4, pillars: 7 };
 /** A taxi: the hatchback with its sign on the roof. */
 export const TAXI_BODY: VehicleBody = { ...CAR_BODY, roofTop: 0.3 };
-/** A delivery van: a short cab with a steep windscreen in front of a tall box. */
-export const VAN_BODY: VehicleBody = { length: 6, width: 2.05, height: 2.15, body: 1.1, floor: 0.35, cab0: 4.2, roof0: 4.3, roof1: 5.1, cab1: 5.65, inset: 0.08, wheel: 0.36, wheelIn: 1.05, pillars: 0, cargo: { length: 4.25, height: 2.75 } };
-/** An ambulance: a van chassis with a box body a little longer and lower than the delivery van's. */
-export const AMBULANCE_BODY: VehicleBody = { ...VAN_BODY, length: 6.3, height: 2.25, cab0: 4.5, roof0: 4.6, roof1: 5.4, cab1: 5.95, cargo: { length: 4.55, height: 2.7 } };
-/** A dustcart: a high cab over the front wheels, the long compactor body behind. */
-export const TRUCK_BODY: VehicleBody = { length: 9, width: 2.5, height: 2.95, body: 1.55, floor: 0.5, cab0: 6.9, roof0: 7, roof1: 8.2, cab1: 8.85, inset: 0.06, wheel: 0.52, wheelIn: 1.5, pillars: 0, cargo: { length: 6.8, height: 3.35 } };
+/** A delivery van, the street's panel van: a short cab with a steep windscreen, the box as tall as the cab. */
+export const VAN_BODY: VehicleBody = {
+  length: VAN.length, width: VAN.width, height: VAN.height, body: 1.1, floor: 0.35, inset: 0.08, wheel: VAN.wheelRadius, pillars: 0,
+  ...profile(VAN.length, 6, { cab0: 4.2, roof0: 4.3, roof1: 5.1, cab1: 5.65, wheelIn: 1.05 }),
+  cargo: { length: (VAN.length * 4.25) / 6, height: VAN.height },
+};
+/** An ambulance: a van chassis with a box body taller than its cab (none drives down the walkable street). */
+export const AMBULANCE_BODY: VehicleBody = { length: 6.3, width: 2.05, height: 2.25, body: 1.1, floor: 0.35, cab0: 4.5, roof0: 4.6, roof1: 5.4, cab1: 5.95, inset: 0.08, wheel: 0.36, wheelIn: 1.05, pillars: 0, cargo: { length: 4.55, height: 2.7 } };
+/** A dustcart, the street's bin lorry: a high cab over the front wheels, the long compactor body behind. */
+export const TRUCK_BODY: VehicleBody = { length: LORRY.length, width: LORRY.width, height: 2.95, body: 1.55, floor: 0.5, cab0: 6.9, roof0: 7, roof1: 8.2, cab1: 8.85, inset: 0.06, wheel: LORRY.wheelRadius, wheelIn: 1.5, pillars: 0, cargo: { length: 6.8, height: LORRY.height } };
 export const CAR_LENGTH = CAR_BODY.length;
 export const CAR_WIDTH = CAR_BODY.width;
 export const CAR_HEIGHT = CAR_BODY.height;

@@ -7,7 +7,8 @@ import type { Furniture } from '../Furniture';
 import type { DrawnAware } from '../zone/lifecycle';
 import { GameBox } from '../GameBox';
 import { boxMesh, invisibleHitbox } from '../meshUtils';
-import { fabric, wood } from '../materials/finishes';
+import { fabric } from '../materials/finishes';
+import { METAL, shared, standard, timber } from '../materials/palette';
 
 /** A copy on show, and what it is worth. */
 export interface Showpiece {
@@ -36,9 +37,9 @@ const LEAN = THREE.MathUtils.degToRad(9);
 /** Most boxes shown: three tiers of three NES boxes. */
 export const VITRINE_CAPACITY = 9;
 
-const WALNUT = wood(0x3b2416, 0.42);
-const BRASS = new THREE.MeshStandardMaterial({ color: 0xb8892a, roughness: 0.35, metalness: 0.9 });
-const STRIP = new THREE.MeshStandardMaterial({ color: 0xfff1d0, emissive: 0xffe2a8, emissiveIntensity: 1.2, roughness: 0.5 });
+const WALNUT = timber(0x3b2416, 0.42);
+const BRASS = METAL.agedBrass();
+const STRIP = standard({ color: 0xfff1d0, emissive: 0xffe2a8, emissiveIntensity: 1.2, roughness: 0.5 });
 
 export interface HomeVitrineOptions {
   covers: BoxArtLoader;
@@ -66,7 +67,7 @@ export class HomeVitrine extends THREE.Group implements Furniture, Interactable,
   constructor(private readonly options: HomeVitrineOptions) {
     super();
     this.name = 'HomeVitrine';
-    const velvet = fabric({ color: 0x3b1422, roughness: 0.95 });
+    const velvet = shared('fabric|3b1422|0.95', () => fabric({ color: 0x3b1422, roughness: 0.95 }));
     const z0 = OFF_WALL;
     const zc = z0 + DEPTH / 2;
     // Plinth (set back a little), the back panel lined with velvet, the top board.
@@ -86,8 +87,8 @@ export class HomeVitrine extends THREE.Group implements Furniture, Interactable,
     strip.castShadow = false;
     this.add(strip);
     // Glass shelves, and the glass: front, sides, top light enough to read the covers through.
-    const glass = new THREE.MeshStandardMaterial({ color: 0xe8f4f4, roughness: 0.05, metalness: 0, transparent: true, opacity: 0.12, depthWrite: false, side: THREE.DoubleSide });
-    const shelfGlass = new THREE.MeshStandardMaterial({ color: 0xcfe6e2, roughness: 0.1, metalness: 0, transparent: true, opacity: 0.35, depthWrite: false });
+    const glass = standard({ color: 0xe8f4f4, roughness: 0.05, metalness: 0, transparent: true, opacity: 0.12, depthWrite: false, side: THREE.DoubleSide });
+    const shelfGlass = standard({ color: 0xcfe6e2, roughness: 0.1, metalness: 0, transparent: true, opacity: 0.35, depthWrite: false });
     const glassH = HEIGHT - PLINTH_H - TOP_T;
     const panes = [
       boxMesh(INNER_W, glassH, GLASS_T, glass, { y: PLINTH_H + glassH / 2, z: z0 + DEPTH - POST / 2 }),

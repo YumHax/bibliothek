@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { Reflector } from 'three/examples/jsm/objects/Reflector.js';
+import { FLOOR } from '../surface/layers';
 
 /** Reflection texture size: blurred anyway, so a modest one does. */
 const TEXTURE_PX = 512;
@@ -20,7 +21,7 @@ export function glossyFloor(width: number, depth: number, strength: number): THR
   });
   floor.name = 'GlossyFloor';
   floor.rotation.x = -Math.PI / 2;
-  floor.position.y = 0.0015;
+  floor.position.y = FLOOR.gloss.lift;
   const material = floor.material as THREE.ShaderMaterial;
   material.uniforms.strength.value = strength;
   material.transparent = true;

@@ -54,7 +54,7 @@ export class FacadeRelief extends THREE.Group implements Furniture {
         if (door.shop && awnings.some((f) => door.s > f.s0 && door.s < f.s1)) continue;
         surround(stone, m, door.s, door.width, door.height, door.shop ? door.color : features.trim);
       }
-      if (front.spec.flat) flatBalcony(stone, iron, props, m, front.spec.flat, slab);
+      if (front.spec.flat?.balcony) flatBalcony(stone, iron, props, m, front.spec.flat.floorY, front.spec.flat.balcony, slab);
     }
 
     const materials: [TriBuilder, THREE.MeshStandardMaterial][] = [
@@ -150,8 +150,7 @@ function surround(stone: TriBuilder, m: THREE.Matrix4, s: number, width: number,
  * three open sides, the two potted plants and the little bistro table with its two chairs.
  * Positions are the balcony zone's (x across, z out from the wall, origin at the slab's middle).
  */
-function flatBalcony(stone: TriBuilder, iron: TriBuilder, props: TriBuilder, m: THREE.Matrix4, flat: FlatFront, slab: THREE.Color): void {
-  const { floorY: y, balcony: b } = flat;
+function flatBalcony(stone: TriBuilder, iron: TriBuilder, props: TriBuilder, m: THREE.Matrix4, y: number, b: NonNullable<FlatFront['balcony']>, slab: THREE.Color): void {
   const s0 = b.at - b.width / 2;
   const s1 = b.at + b.width / 2;
   stone.box(m, b.at, y - 0.09, (b.depth + 0.06) / 2, b.width + 0.12, 0.18, b.depth + 0.06, slab);

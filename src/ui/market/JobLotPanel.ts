@@ -30,7 +30,7 @@ export class JobLotPanel extends MarketPanel {
     const { market } = this.deps;
     if (!this.lot) {
       this.body.innerHTML = '<p class="catalogue__empty">The stallholder is counting what is in the crate…</p>';
-      void market.jobLot().then((lot) => {
+      void market.lot.today().then((lot) => {
         this.lot = lot;
         if (this.isOpen) this.refresh();
       }, () => {
@@ -39,7 +39,7 @@ export class JobLotPanel extends MarketPanel {
       return;
     }
     const lot = this.lot;
-    const sold = market.lotSold;
+    const sold = market.lot.sold;
     const rows = lot.games.map((game) => {
       const cover = this.coverUrl?.(game);
       const state = describeCondition(game.condition);
@@ -65,8 +65,8 @@ export class JobLotPanel extends MarketPanel {
 
   /** The lot shown on the crate's card once known. */
   async sign(): Promise<string> {
-    if (this.deps.market.lotSold) return 'SOLD';
-    const lot = await this.deps.market.jobLot();
+    if (this.deps.market.lot.sold) return 'SOLD';
+    const lot = await this.deps.market.lot.today();
     this.lot ??= lot;
     return `${lot.games.length} games · ${lot.price} coins`;
   }
@@ -75,7 +75,7 @@ export class JobLotPanel extends MarketPanel {
     if (action !== 'buy') return;
     const { market, wallet, tx } = this.deps;
     const lot = this.lot;
-    if (!lot || market.lotSold) return;
+    if (!lot || market.lot.sold) return;
     const bought = tx.buyLot(lot);
     if (!bought.ok) {
       if (bought.reason === 'short') this.setStatus(`The lot is ${lot.price} coins and you have ${wallet.coins}.`, true);

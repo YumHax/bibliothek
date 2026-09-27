@@ -8,10 +8,10 @@ import { isShopOpen } from '../shops/shopHours';
 import { nightnessOf } from '../streetAir';
 import type { ShopKind } from '../streetPlan';
 import { FacadeFrame } from './facadeFrame';
+import { GROUND, RENDER_ORDER, onSurface } from '../../surface/layers';
 
-/** How far the light reaches out over the pavement, how high over it the decal lies, how strong it is at full night. */
+/** How far the light reaches out over the pavement and how strong it is at full night (it lies at `GROUND.shopGlow`). */
 const REACH = 2.8;
-const LIFT = 0.014;
 const STRENGTH = 0.5;
 const CHECK_EVERY = 0.5;
 
@@ -39,22 +39,25 @@ export class ShopGlow extends THREE.InstancedMesh implements Furniture, Updatabl
       const frame = new FacadeFrame(front.spec);
       for (const shop of front.features.shopfronts) {
         const width = shop.s1 - shop.s0;
-        const m = frame.matrix((shop.s0 + shop.s1) / 2, LIFT, REACH / 2);
+        const m = frame.matrix((shop.s0 + shop.s1) / 2, GROUND.shopGlow.lift, REACH / 2);
         matrices.push(m.multiply(new THREE.Matrix4().makeScale(width + 0.6, 1, REACH)));
         pools.push({ kind: shop.kind, color: new THREE.Color(shop.light) });
       }
     }
-    const material = new THREE.MeshBasicMaterial({
-      map: glowTexture(),
-      transparent: true,
-      depthWrite: false,
-      blending: THREE.CustomBlending,
-      blendSrc: THREE.SrcAlphaFactor,
-      blendDst: THREE.OneFactor,
-      blendSrcAlpha: THREE.ZeroFactor,
-      blendDstAlpha: THREE.OneFactor,
-      fog: true,
-    });
+    const material = onSurface(
+      new THREE.MeshBasicMaterial({
+        map: glowTexture(),
+        transparent: true,
+        blending: THREE.CustomBlending,
+        blendSrc: THREE.SrcAlphaFactor,
+        blendDst: THREE.OneFactor,
+        blendSrcAlpha: THREE.ZeroFactor,
+        blendDstAlpha: THREE.OneFactor,
+        fog: true,
+      }),
+      GROUND.shopGlow,
+      { depthWrite: false },
+    );
     super(new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2), material, Math.max(1, pools.length));
     this.name = 'ShopGlow';
     this.pools = pools;
@@ -67,7 +70,7 @@ export class ShopGlow extends THREE.InstancedMesh implements Furniture, Updatabl
     this.computeBoundingSphere();
     this.castShadow = false;
     this.receiveShadow = false;
-    this.renderOrder = 1;
+    this.renderOrder = RENDER_ORDER.groundGlow;
   }
 
   get footprint(): THREE.Box3 {

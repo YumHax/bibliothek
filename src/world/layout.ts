@@ -5,7 +5,7 @@ import type { Zone } from './zone/Zone';
 import { Television } from './Television';
 import { Projector } from './Projector';
 import { Seat } from './Seat';
-import { Shelving } from './shelving/Shelving';
+import { Shelving, slotCount } from './shelving/Shelving';
 import { ROOM_PLAN } from './roomPlan';
 import type { ZoneKind, ZoneKindOf } from './worldPlan';
 import type { ZoneId } from './zoneIds';
@@ -26,7 +26,10 @@ import { Cushion } from './props/Cushion';
 import { LavaLamp } from './props/LavaLamp';
 import { furnishDecor, placeClock, placeRoomLight } from './build/roomParts';
 import { heardBy } from './build/hearing';
-import { curtainsToSkylight, showWhenUpgraded } from './build/follow';
+import { curtainsToSkylight } from './build/follow';
+import { placerFor } from './build/owned';
+import { bookcasesIn, livingShelvingOptions } from './build/bookcases';
+import { resolvePlacement } from './Placement';
 import { furnishCollectorCorner } from './collector/furnishCollector';
 
 // The builders' shared types live in `buildContext.ts`; re-exported for the code that imported them from here.
@@ -36,7 +39,10 @@ export type { BuildContext, ZoneHandle, MarketHallServices, CollectionContext, H
 export interface RoomHandle extends ZoneHandle {
   shelving: Shelving;
   tv: Television;
+  /** Every armchair of the plan, bought or not (`ROOM_PLAN.seats` order). */
   seats: Seat[];
+  /** The armchairs that stand (bought), in plan order; filled as they are bought. */
+  armchairs: Seat[];
   /** The loft windows (the cat looks out of them and naps in their sun patch). */
   windows: RoomWindow[];
 }
@@ -56,20 +62,29 @@ export function furnishRoom(zone: Zone, ctx: BuildContext): RoomHandle {
   //    the door to the hallway hung in its doorway (the leaf moves its own collider through the zone's scoped set).
   const room = furnishShell(zone, sky, plan.room);
 
-  // 1. Shelving sized to the collection; the right wall keeps clear of the projector picture.
-  const pictureHalf = plan.projectorPicture.width / 2 + plan.projectorPicture.margin;
-  //    What does not fit goes to `overflow`, for the bedroom's bookcases.
-  const shelving = new Shelving(zone, covers, shelved ?? games, { room: plan.room, ...plan.shelving, rightWallKeepClear: { minZ: -pictureHalf, maxZ: pictureHalf }, overflow });
+  // 1. Shelving along the back wall then the right one (clear of the projector picture): the one bookcase the flat
+  //    starts with and those bought (`bookcasesIn`); what does not fit goes to `overflow`, for the bedroom's bookcases.
+  const standing = (): number => (upgrades ? bookcasesIn(upgrades.count('bookcase')).living : slotCount(livingShelvingOptions()));
+  const shelving = new Shelving(zone, covers, shelved ?? games, { ...livingShelvingOptions(), overflow, ...(upgrades ? { capacity: standing(), minBookcases: standing() } : {}) });
   zone.onUnload(() => shelving.dispose());
+  if (upgrades) zone.onUnload(upgrades.subscribe(() => shelving.setCapacity(standing())));
 
-  // 2. Screens and seats.
+  // 2. Screens and seats: the TV from the start; the projector and the armchairs once bought (staged till then, see
+  //    `build/owned.ts`). `armchairs` lists the seats that stand, as they come (the cat's laps).
   const tv = zone.placeAt(new Television(cssLayer, heardBy(ctx)), plan.tv);
-  const projector = zone.placeAt(new Projector(cssLayer, { pictureWidth: plan.projectorPicture.width, ...heardBy(ctx) }), plan.projector);
+  const projector = placerFor(zone, upgrades, plan.projectorUpgrade).placeAt(new Projector(cssLayer, { pictureWidth: plan.projectorPicture.width, ...heardBy(ctx) }), plan.projector);
   projector.aimAt(projector.worldToLocal(zone.toWorld(new THREE.Vector3(width / 2 - 0.005, plan.projectorPicture.centreY, 0))));
-  const seats = plan.seats.map(({ at, cushion }) => {
+  const armchairs: Seat[] = [];
+  const seats = plan.seats.map(({ at, cushion, upgrade }) => {
     const seat = new Seat();
     seat.mountCushion(new Cushion(cushion));
-    return zone.placeAt(seat, at);
+    const placer = placerFor(zone, upgrades, upgrade);
+    placer.placeAt(seat, at);
+    placer.onOwned(() => {
+      armchairs.push(seat);
+      armchairs.sort((a, b) => seats.indexOf(a) - seats.indexOf(b));
+    });
+    return seat;
   });
 
   // 3. Windows. Every window throws the sun (one shadow map each) while the sun is on its side; all
@@ -112,19 +127,18 @@ export function furnishRoom(zone: Zone, ctx: BuildContext): RoomHandle {
   //    (and the cat naps in its cradle).
   const radiators = furnishDecor(zone, ctx, plan.decor);
 
-  // 7. Home goods bought at the market: the lava lamp on the side table. No light of its own, so it may come and go.
-  if (upgrades) {
-    const lamp = zone.placeAt(new LavaLamp(), plan.homeGoods.lamp.at);
-    lamp.position.y += plan.homeGoods.lamp.y;
-    showWhenUpgraded(zone, upgrades, 'lamp', lamp);
-  }
+  // 7. Home goods bought at the market: the lava lamp on the side table (once both are bought).
+  const lampAt = resolvePlacement(plan.room, plan.homeGoods.lamp.at);
+  lampAt.position.y += plan.homeGoods.lamp.y;
+  placerFor(zone, upgrades, plan.homeGoods.lamp.upgrade).place(new LavaLamp(), lampAt.position, lampAt.rotationY);
 
   // 8. The arcade's feather wand, once won: on the projector rug, waved for the cat.
   if (prizes) zone.placeAt(new FeatherWand({ prizes, ...(callCat ? { callCat } : {}) }), plan.featherWand.at).position.y += plan.featherWand.lift;
-  // 9. The collector's book on the sideboard, and what its milestones bring home: the brass plaque, the display cabinet.
-  if (collector) furnishCollectorCorner(zone, collector, { covers, shelved: shelved ?? games });
+  // 9. The collector's book on the sideboard (once the sideboard is bought), and what its milestones bring home: the
+  //    brass plaque, the display cabinet.
+  if (collector) placerFor(zone, upgrades, plan.collector.upgrade).onOwned(() => furnishCollectorCorner(zone, collector, { covers, shelved: shelved ?? games }));
 
-  return { room, shelving, tv, seats, windows, catPerches: radiators };
+  return { room, shelving, tv, seats, armchairs, windows, catPerches: radiators };
 }
 
 /** A zone builder, as `ZONE_BUILDERS` lists it: bound to the `BuildContext` by `bindBuilder`. */

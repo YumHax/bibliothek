@@ -2,10 +2,11 @@ import * as THREE from 'three';
 import type { Updatable } from '@/core/Engine';
 import type { Furniture } from '../Furniture';
 import type { DayNight } from '../props/DayNight';
-import { wakefulnessAt } from '../props/outdoors/wakefulness';
+import { wakefulnessAt } from '@/time/wakefulness';
 import { skyDirection } from './skyDirection';
 import { airColor, nightnessOf } from './streetAir';
 import { SKY_DOME_FRAGMENT, SKY_DOME_VERTEX } from './skyDomeShader';
+import { RENDER_ORDER } from '../surface/layers';
 
 /** Inside the camera's far plane (100 m). */
 const RADIUS = 90;
@@ -58,7 +59,7 @@ export class SkyDome extends THREE.Mesh implements Furniture, Updatable {
     this.uniforms = uniforms;
     this.name = 'SkyDome';
     this.frustumCulled = false;
-    this.renderOrder = -1000;
+    this.renderOrder = RENDER_ORDER.sky;
     this.castShadow = false;
     this.receiveShadow = false;
   }

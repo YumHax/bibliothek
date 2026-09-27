@@ -2,6 +2,9 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { createCanvas, toTexture } from '@/covers/generated/canvasUtils';
 import { Prop } from '../props/Prop';
+import { INSET } from '../props/joinery';
+import { paint, standard } from '../materials/palette';
+import { isShared } from '../materials/sharedResources';
 import { STAIRWELL_PLAN as plan, STOREY, STOREYS, landingY, type Rect } from './stairwellPlan';
 
 type Finish = 'stone' | 'plaster' | 'iron' | 'wood' | 'hall' | 'tread';
@@ -48,11 +51,11 @@ export class Staircase extends Prop {
     this.buildColliders();
 
     const materials: Record<Finish, THREE.Material> = {
-      stone: new THREE.MeshStandardMaterial({ color: 0xcfc8ba, roughness: 0.75 }),
+      stone: paint(0xcfc8ba, 0.75),
       tread: new THREE.MeshStandardMaterial({ map: treadTexture(), roughness: 0.6 }),
-      plaster: new THREE.MeshStandardMaterial({ color: 0xe6dcc6, roughness: 0.95 }),
-      iron: new THREE.MeshStandardMaterial({ color: 0x1c1d20, roughness: 0.45, metalness: 0.6 }),
-      wood: new THREE.MeshStandardMaterial({ color: 0x4a2c1c, roughness: 0.5 }),
+      plaster: paint(0xe6dcc6, 0.95),
+      iron: standard({ color: 0x1c1d20, roughness: 0.45, metalness: 0.6 }),
+      wood: paint(0x4a2c1c, 0.5),
       hall: new THREE.MeshStandardMaterial({ map: cabochonTexture(), roughness: 0.35 }),
     };
     for (const [finish, geometries] of this.parts) {
@@ -62,7 +65,7 @@ export class Staircase extends Prop {
       mesh.castShadow = finish !== 'plaster';
       this.add(mesh);
     }
-    for (const [finish, material] of Object.entries(materials)) if (!this.parts.has(finish as Finish)) material.dispose();
+    for (const [finish, material] of Object.entries(materials)) if (!this.parts.has(finish as Finish) && !isShared(material)) material.dispose();
   }
 
   /**
@@ -165,7 +168,7 @@ export class Staircase extends Prop {
       return;
     }
     this.flat('tread', r, y);
-    this.box('stone', r.x0, y - SLAB, r.z0, r.x1, y - 0.001, r.z1);
+    this.box('stone', r.x0, y - SLAB, r.z0, r.x1, y - INSET, r.z1); // its top just under the tread's
   }
 
   private buildHalfLanding(k: number): void {
@@ -173,7 +176,7 @@ export class Staircase extends Prop {
     const { shaft, halfLanding } = plan;
     const r: Rect = { x0: shaft.x0, x1: shaft.x1, z0: halfLanding.z0, z1: halfLanding.z1 };
     this.flat('tread', r, y);
-    this.box('stone', r.x0, y - SLAB, r.z0, r.x1, y - 0.001, r.z1);
+    this.box('stone', r.x0, y - SLAB, r.z0, r.x1, y - INSET, r.z1); // its top just under the tread's
   }
 
   /** Nine steps from the floor landing down to the half landing (A, south), or from there to the next floor (B, north); the stone soffit under them. */

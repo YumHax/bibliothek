@@ -8,9 +8,13 @@ Read this to add or change something visible in the room. The recipe is in the `
    (`ROOM_PLAN` in `src/world/roomPlan.ts`, `<KIND>_PLAN` in `src/world/<kind>/<kind>Plan.ts`) as `{ kind, at, options }`;
    kinds registered in `src/world/props/decor.ts`. `holiday: 'christmas' | 'halloween' | 'newyear'` on an entry puts it up
    only then (`placeDecor` skips it otherwise): the real date or `?holiday=` (`newyear`: Christmas plus the streamers),
-   read from `currentFestivities()` (`outdoors/season.ts`, set by `Sky` before any zone is built). No holiday prop has a
+   read from `currentFestivities()` (`time/season.ts`, set by `Sky` before any zone is built). No holiday prop has a
    light (the light count must not change, docs/zones.md): the bulbs and candles are unlit colours that flicker. The street
    has a `decor` list too (lights across Front Street, doorstep pumpkins) and a `Snowman` shown while the snow lies.
+   `upgrade` on an entry of the flat stands it only once bought (the flat starts bare, docs/economy.md "The bare flat"):
+   a `HOME_GOODS` id (`'sideboard'`), the nth of a piece with several spots (`{ good: 'houseplant', nth: 3 }`), or a list
+   of both. Till then it is staged (`build/owned.placerFor`: hidden, lights kept dark, not colliding, not clickable); the
+   wired props use the same placers in their builders (`placerFor(zone, upgrades, plan.upgrades.x)`).
 2. **Wired props** (need a callback or another object, or exist once): door (doorways), windows (the shared Sky, skylight),
    posters and consoles (follow the collection), wall clock (DayNight), pendant / flush lamp (Room light), screens, seats,
    and a room's one-off furniture (bed, bathtub, kitchen run...). Their spots are still plan entries (`ROOM_PLAN.tv`,
@@ -32,8 +36,11 @@ Read this to add or change something visible in the room. The recipe is in the `
 
 - Decoration: `extends Prop` (empty footprint, never collides). Real furniture: `extends THREE.Group implements Furniture`
   with a `footprint: Box3` in local space (+ optional `colliders` list for L-shapes).
-- Build with `part()` / `boxMesh` / `cylinderMesh` (shadow-casting) and `matte()` materials; textures via
-  `createCanvas` + `toTexture` from `covers/generated/canvasUtils`.
+- Build with `part()` / `boxMesh` / `cylinderMesh` (shadow-casting); textures via `createCanvas` + `toTexture` from
+  `covers/generated/canvasUtils`. See "Materials, joints and layers" below: they are what keeps z-fighting and
+  recompiles away.
+- Their geometries are cached and shared (one per size for the page): never `translate` / `rotateX` / edit
+  `mesh.geometry` in place; move the mesh, or `clone()` the geometry first.
 - Clickable: `implements Interactable` with `hitboxes` (an `invisibleHitbox` around the thing), `label(player)`, `activate(session)`.
   A lamp: `extends SwitchableLamp`, implement `render(on, hovered)` and list `hitboxes`; `setOn(initial)` at the end of the constructor.
 - A door that opens (fridge, wardrobe, cupboard): a `SwingLeaf` per door. The host builds the face into `leaf.panel`
@@ -55,11 +62,40 @@ Read this to add or change something visible in the room. The recipe is in the `
 - Animated: implement `update(dt)`; `place()` registers it while the zone is active.
 - Holding a subscription, audio or timer: implement `dispose()`; the zone calls it on unload (geometry is freed for you).
 - Wall-hung classes have their back at local z = 0 and face +z; floor classes have their base at local y = 0.
-- Material constants at module level are shared across instances; per-instance state (emissive toggles) must be own materials.
+- A material a class changes at runtime (a glow on hover, an emissive toggle, a fade) is its own (`matte()`, `new
+  THREE.Mesh*Material`); every other look comes from the palette (below).
 - Nothing decorative casts shadows unless it matters; point-light `shadow.camera.far` at room scale (see gotchas). A prop
   with a shadow-casting light implements `OccupancyAware` (`setOccupied`) like `ShelfLamp`: per-frame shadow updates only
   in the player's zone, `IDLE_SHADOW_INTERVAL` refreshes elsewhere.
 - Something the crosshair must not see through (a wall, a partition) lists its meshes in `occluders`.
+
+## Materials, joints and layers
+
+- **Materials: the palette** (`world/materials/palette.ts`). `paint(color, roughness)` (the shared twin of `matte()`),
+  `timber()` (of `wood()`), `standard({...})` / `basic({...})` (any parameters: identical ones anywhere are the same
+  material), `METAL.brass()` / `agedBrass()` / `steel()` / `satinSteel()` / `chrome()`, `shared(key, make)` for anything
+  else (a `fabric()`, a patched shader). One material per look for the page, marked shared so no zone's unload frees it,
+  so looks alike batch and never recompile. Never mutate a palette material. A module-level material must be one of them
+  (or `markShared`): `npm run typecheck` refuses a bare one.
+- **Joints** (`world/props/joinery.ts`): two parts never share a face. Pick per joint: *buried* (`INSET`, 1 mm into the
+  other), *proud* (`PROUD`, 2 mm out: a top over its carcass, a rim over a body), *apart* (`SEAM`, 0.5 mm: two fronts side
+  by side); `inset()`, `proud()`, `topOf(mesh)`, `partOn(parent, below, ...)` (a part resting on another, a seam above).
+- **Layers** (`world/surface/layers.ts`): anything flat on a floor, the ground or a wall takes its height from the
+  `FLOOR` / `GROUND` / `WALL` table (rug, mat, glow pool, contact shadow; marking, puddle, leaves; paper, print, notice,
+  flyer...) and its material from `onSurface(material, layer)` (a polygon offset by rank; it copies a palette material
+  rather than change it), or is made by `decal(w, h, material, layer)`. A new kind of flat thing adds a named layer to its
+  table, its lift between its neighbours'. Transparent things draw in a `RENDER_ORDER` band, never a bare number (the
+  typecheck refuses one).
+- **Check**: `?debug` (or `?stats`) logs `[zfight] <zone>: N pairs` the first time each zone is shown, and
+  `bibliothek.zfight()` in the console lists the overlapping coplanar faces of the player's zone (paths, gap, area,
+  where). Run it after adding a prop.
+- **Lights**: never hide a light or a subtree holding one with `visible` (the light count changes, every lit shader
+  recompiles): `setShownKeepingLights(root, shown)` (`world/lighting/keepLights.ts`), or `intensity = 0`. A glow that
+  lights only its surroundings (a screen, a neon's spill) is a `PooledLight` (`world/lighting/LightPool.ts`): its zone's
+  `LightPool` lends the nearest few a real light. `?stats` / `?debug` log every change of the drawn lights.
+- **Static parts are frozen**: `Zone.place` composes once the local matrices of the parts of an item that nothing
+  animates (not `Updatable`, not clickable, no `dispose`, no light). A class that moves a part later from an event gives
+  it `userData.live = true` or calls `updateMatrix()`.
 
 ## Existing kinds and their options
 

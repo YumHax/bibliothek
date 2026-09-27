@@ -24,7 +24,7 @@ export interface AirlockDeps {
 }
 
 /** The door release buzzes at least this long (ms), however quickly the other side was ready. */
-const MIN_BUZZ_MS = 700;
+const MIN_BUZZ_MS = 400;
 /** Waiting for a leaf to swing shut gives up after this (ms). */
 const SHUT_WAIT_MS = 3000;
 

@@ -50,6 +50,11 @@ import { addShoe } from './shoes';
  * gait with bending knees and swinging arms when `setSpeed()` is above zero; breathing, a slow
  * shift of weight and idle glances when standing; the arms easing into whatever `setPose()` asked
  * for; the eyes leading the head onto the gaze target and darting about when idle; blinking.
+ *
+ * Given the viewer, a person far from it (beyond `LOD_FAR`, until back within `LOD_NEAR`, both
+ * scaled by the camera's zoom) hides what is under a pixel there (the eyes and lids, the bowls of
+ * the ears), stops moving the eyes and blinking, and animates the rest at `FAR_RATE` with the time
+ * it skipped.
  */
 
 /** One step every this many metres walked. */
@@ -65,6 +70,13 @@ const EYE_RATE = 22;
 const POSE_RATE = 4;
 /** The eyes above the neck pivot, in the head's frame: gaze angles are measured from there. */
 const EYES_ABOVE_PIVOT = HEAD_Y + 0.014 - NECK_PIVOT.y;
+/** Beyond this far from the viewer (metres) a person goes to the far level of detail; back within `LOD_NEAR`, to the near one. */
+const LOD_FAR = 16;
+const LOD_NEAR = 14;
+/** Rig updates per second at the far level of detail. */
+const FAR_RATE = 15;
+/** Those distances hold at the default field of view (70 degrees); a narrower one (photo mode's zoom) brings the far level of detail further out. */
+const REFERENCE_TAN = Math.tan(THREE.MathUtils.degToRad(70) / 2);
 
 interface Arm {
   shoulder: THREE.Group;
@@ -112,10 +124,21 @@ export class PersonModel extends THREE.Group {
   private seatHeight: number | null = null;
   /** The materials `setOpacity` fades and their own opacity, once `enableFade` has run. */
   private fading: { material: THREE.Material; opacity: number }[] | null = null;
+  /** Whose distance picks the level of detail; null: always near. */
+  private readonly viewer: THREE.Object3D | null;
+  /** What the far level of detail hides: the eyes and lids, the ears' bowls. */
+  private readonly details: THREE.Object3D[] = [];
+  private far = false;
+  /** Seconds of animation not yet applied (the far level of detail updates less often). */
+  private pending = 0;
+  private readonly viewerPos = new THREE.Vector3();
+  private readonly here = new THREE.Vector3();
 
-  constructor(look: PersonLook) {
+  /** `viewer` (the camera), when given, sets the level of detail by distance. */
+  constructor(look: PersonLook, viewer?: THREE.Object3D) {
     super();
     this.name = 'PersonModel';
+    this.viewer = viewer ?? null;
     const build = look.build;
     // Limb girth follows the build a little, never as much as the trunk.
     const girth = 0.7 + 0.3 * build;
@@ -242,6 +265,25 @@ export class PersonModel extends THREE.Group {
   }
 
   update(dt: number): void {
+    if (this.viewer) this.pickDetail(this.viewer);
+    this.pending += dt;
+    if (this.far && this.pending < 1 / FAR_RATE) return;
+    const step = this.pending;
+    this.pending = 0;
+    this.animate(step);
+  }
+
+  /** Near or far from `viewer`, with some slack both ways so it does not flicker at the edge. */
+  private pickDetail(viewer: THREE.Object3D): void {
+    viewer.getWorldPosition(this.viewerPos);
+    const distance = this.getWorldPosition(this.here).distanceTo(this.viewerPos) / magnification(viewer);
+    const far = distance > (this.far ? LOD_NEAR : LOD_FAR);
+    if (far === this.far) return;
+    this.far = far;
+    for (const detail of this.details) detail.visible = !far;
+  }
+
+  private animate(dt: number): void {
     this.time += dt;
     const t = this.time;
     const walking = this.speed > 0;
@@ -336,7 +378,7 @@ export class PersonModel extends THREE.Group {
       // The eyes get there first and make up what the neck cannot.
       eyeYaw = THREE.MathUtils.clamp(rawYaw - this.yaw, -EYE_YAW, EYE_YAW);
       eyePitch = THREE.MathUtils.clamp(rawPitch - this.pitch, -EYE_PITCH, EYE_PITCH);
-    } else {
+    } else if (!this.far) {
       this.saccadeIn -= dt;
       if (this.saccadeIn <= 0) {
         this.saccadeIn = 0.6 + Math.random() * 2.2;
@@ -349,6 +391,8 @@ export class PersonModel extends THREE.Group {
     this.yaw += (yaw - this.yaw) * gazeEase;
     this.pitch += (pitch - this.pitch) * gazeEase;
     this.head.rotation.set(this.pitch, this.yaw, 0, 'YXZ');
+    // Far away the eyes are hidden: they wait (and so does the blinking) until the viewer comes near.
+    if (this.far) return;
     const eyeEase = Math.min(1, dt * EYE_RATE);
     this.eyeYaw += (eyeYaw - this.eyeYaw) * eyeEase;
     this.eyePitch += (eyePitch - this.eyePitch) * eyeEase;
@@ -446,13 +490,22 @@ export class PersonModel extends THREE.Group {
     addHair(parts, look, shape, hairMaterial(look));
     addHat(parts, look);
     if (look.glasses !== undefined) addGlasses(parts, look.glasses, shape);
-    skull.add(...parts.meshes());
+    const headParts = parts.meshes();
+    skull.add(...headParts);
 
     const eyes = buildEyes(look, shape);
     for (const eye of eyes) skull.add(eye.group);
+    this.details.push(...eyes.map((eye) => eye.group), ...headParts.filter((mesh) => mesh.material === earInner));
     this.head.add(skull);
     return eyes;
   }
+}
+
+/** How many times larger than at the default field of view things look through `viewer`; 1 for anything but a perspective camera. */
+function magnification(viewer: THREE.Object3D): number {
+  const camera = viewer as THREE.PerspectiveCamera;
+  if (!camera.isPerspectiveCamera) return 1;
+  return (REFERENCE_TAN * camera.zoom) / Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2);
 }
 
 /** A shirt collar, the shirt's collar under a jacket, or a hood bunched at the back of the neck. */

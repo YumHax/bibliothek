@@ -38,6 +38,12 @@ export const LEGACY_SEED_IDS: ReadonlyMap<string, string> = new Map(
  */
 export const SEED_GAMES: readonly Game[] = LISTED.map((g) => ({ ...g, id: canonicalId(g) }));
 
+/**
+ * What a new game's collection starts with: one game (its console stands under the TV), so the TV has something to play
+ * on the first evening. The rest is earned at the arcade and bought at the market.
+ */
+export const STARTER_GAMES: readonly Game[] = SEED_GAMES.filter((g) => g.platform === 'nes' && g.title === 'Super Mario Bros.');
+
 /** `id`, or the canonical id when it is one of the built-in lists' old hand-made ids. */
 export function canonicalGameId(id: string): string {
   return LEGACY_SEED_IDS.get(id) ?? id;

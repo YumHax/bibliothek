@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { boxMesh, cylinderMesh } from '../meshUtils';
-import { matte } from '../props/Prop';
+import { paint } from '../materials/palette';
 import type { AttachmentFrame, CabinetAttachment } from './CabinetAttachment';
 
 export interface LightGunOptions {
@@ -50,8 +50,8 @@ export class LightGun implements CabinetAttachment {
     this.regularHand = options.regularHand ?? new THREE.Vector3(0.14, 1.25, 0.32);
     this.anchor = this.holster.clone().add(new THREE.Vector3(0, -0.02, -0.06));
     this.object.name = 'LightGun';
-    const body = matte(options.color ?? 0xff7a1a, 0.45);
-    const dark = matte(0x1e1e24, 0.5);
+    const body = paint(options.color ?? 0xff7a1a, 0.45);
+    const dark = paint(0x1e1e24, 0.5);
     // The pistol, barrel along +z: grip, frame, barrel with an orange tip, a trigger in its guard.
     const grip = boxMesh(0.028, 0.08, 0.035, dark, { y: -0.035, z: -0.02 });
     grip.rotation.x = 0.25;
@@ -60,7 +60,7 @@ export class LightGun implements CabinetAttachment {
     const barrel = cylinderMesh(0.01, 0.07, dark, { y: 0.012, z: 0.105 }, { segments: 10 });
     barrel.rotation.x = Math.PI / 2;
     this.gun.add(barrel);
-    const tip = cylinderMesh(0.011, 0.012, matte(0xff3a1a, 0.4), { y: 0.012, z: 0.142 }, { segments: 10 });
+    const tip = cylinderMesh(0.011, 0.012, paint(0xff3a1a, 0.4), { y: 0.012, z: 0.142 }, { segments: 10 });
     tip.rotation.x = Math.PI / 2;
     this.gun.add(tip, boxMesh(0.006, 0.02, 0.012, dark, { y: -0.02, z: 0.02 }));
     this.grip.position.set(0, -0.07, -0.03);

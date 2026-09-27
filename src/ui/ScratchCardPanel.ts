@@ -24,7 +24,7 @@ export interface ScratchDeal {
 }
 
 /**
- * The tabac's scratch card, GRATTE-PIXEL, held in hand: six silver cells over their symbols,
+ * The newsagent's scratch card, PIXEL SCRATCH, held in hand: six silver cells over their symbols,
  * scratched off with the pointer (drag, or a tap reveals a cell at once; Enter or the pad's A
  * reveals the next one). Three alike win that symbol's coins, paid when the last cell shows. A
  * `ModalLike` the Session opens through `SessionActions.openPanel`: Close, Esc or a click outside
@@ -43,7 +43,7 @@ export class ScratchCardPanel extends ModalPanel {
     super(container, { className: 'ui-modal--centre scratch-panel' });
     this.root.innerHTML = `
       <article class="scratch-panel__card ui-card" role="dialog" aria-modal="true" aria-label="A scratch card">
-        <header><h2>GRATTE-PIXEL</h2><p>Three alike win. 🍒 2 · 🎮 3 · 💾 5 · ⭐ 10 · 7 25 coins</p></header>
+        <header><h2>PIXEL SCRATCH</h2><p>Three alike win. 🍒 2 · 🎮 3 · 💾 5 · ⭐ 10 · 7 25 coins</p></header>
         <div class="scratch-panel__cells"></div>
         <p class="scratch-panel__result" aria-live="polite"></p>
         <p class="scratch-panel__hint">${renderKeys('Scratch with the mouse, tap a cell, or {Enter} for the next one')}</p>

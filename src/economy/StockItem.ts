@@ -1,4 +1,5 @@
 import type { BoxCondition, Edition, Game } from '@/catalog/types';
+import { STICKER } from './pricing';
 
 /**
  * Where a copy on sale comes from: an ordinary pick from the index, the stall's showpiece (a
@@ -19,6 +20,8 @@ export interface StockTraits {
   gem?: boolean;
   /** On sale (a stall's clearance): the list price is already this share of the usual one. */
   sale?: number;
+  /** An old shop's price sticker on the cover: it goes at `STICKER.factor` of the price (peeled off at home, it is worth the full price). */
+  sticker?: boolean;
 }
 
 /**
@@ -33,6 +36,7 @@ export class StockItem {
   readonly edition: Edition;
   readonly repro: boolean;
   readonly gem: boolean;
+  readonly sticker: boolean;
   /** The share of the usual price a sale asks (1: not on sale). */
   readonly sale: number;
   private listPrice: number;
@@ -59,14 +63,16 @@ export class StockItem {
     this.repro = traits.repro ?? false;
     this.gem = traits.gem ?? false;
     this.sale = traits.sale ?? 1;
+    this.sticker = traits.sticker ?? false;
     // A real copy, whatever the source entry was (a wishlist entry would draw as a ghost box).
-    this.game = { ...game, condition, status: 'owned', edition: this.edition === 'standard' ? undefined : this.edition, repro: this.repro || undefined };
-    this.listPrice = price.list;
+    this.game = { ...game, condition, status: 'owned', edition: this.edition === 'standard' ? undefined : this.edition, repro: this.repro || undefined, sticker: this.sticker || undefined };
+    const stickered = (list: number) => (this.sticker ? Math.max(1, Math.round(list * STICKER.factor)) : list);
+    this.listPrice = stickered(price.list);
     this.isPriced = price.final || !price.settle;
     this.settled = this.isPriced || !price.settle
       ? Promise.resolve()
       : price.settle.then((list) => {
-        if (list !== undefined) this.listPrice = list;
+        if (list !== undefined) this.listPrice = stickered(list);
         this.isPriced = true;
         this.notify();
       });

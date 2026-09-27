@@ -2,7 +2,8 @@ import * as THREE from 'three';
 import type { Interactable } from '@/interaction/Interactable';
 import type { SessionActions } from '@/game/SessionActions';
 import { invisibleHitbox } from '../meshUtils';
-import { Prop, part, matte } from './Prop';
+import { paint } from '../materials/palette';
+import { Prop, part } from './Prop';
 
 /** What the parcel shows: the games waiting in it (`Deliveries` fits). */
 export interface ParcelContents {
@@ -15,11 +16,11 @@ const WIDTH = 0.46;
 const HEIGHT = 0.24;
 const DEPTH = 0.22;
 
-const CARDBOARD = matte(0xb88a58, 0.9);
-const TAPE = matte(0xd9b27a, 0.35);
-const LABEL = matte(0xf6f3ea, 0.8);
-const INK = matte(0x2b2b30, 0.8);
-const FRAGILE = matte(0xc0392b, 0.7);
+const CARDBOARD = paint(0xb88a58, 0.9);
+const TAPE = paint(0xd9b27a, 0.35);
+const LABEL = paint(0xf6f3ea, 0.8);
+const INK = paint(0x2b2b30, 0.8);
+const FRAGILE = paint(0xc0392b, 0.7);
 
 /**
  * The parcel the games bought while out are delivered in: a taped cardboard box with a shipping

@@ -6,8 +6,8 @@ export interface CatParts {
   cat?: CatLike;
 }
 
-/** How the cat was called: by name (C), or with the feather wand (an arcade prize). */
-export type CatCall = 'voice' | 'feathers';
+/** How the cat was called: by name (C), with the feather wand (an arcade prize), or with the kitchen's treat jar. */
+export type CatCall = 'voice' | 'feathers' | 'treats';
 
 type Outcome = ReturnType<CatLike['call']>;
 
@@ -21,6 +21,11 @@ const LINES: Record<CatCall, Record<Outcome, (name: string) => string>> = {
     coming: (name) => `${name} comes running for the feathers!`,
     ignored: (name) => `${name} watches the feathers swish, and decides against it.`,
     asleep: (name) => `${name} is asleep. The feathers can wait.`,
+  },
+  treats: {
+    coming: (name) => `${name} comes running from the other end of the flat. Crunch.`,
+    ignored: (name) => `${name} pretends not to hear… then saunters over for it anyway.`,
+    asleep: (name) => `${name} is asleep. The treat will keep till it wakes.`,
   },
 };
 
@@ -36,7 +41,7 @@ export class CatCare implements KeyRoute {
 
   onKey(code: string): boolean {
     const { cat } = this.parts;
-    if (!isAction(code, 'callCat') || !cat) return false;
+    if (!isAction(code, 'callCat') || !cat || cat.adopted === false) return false;
     this.host.notify(callCat(cat, 'voice'), 1500);
     return true;
   }

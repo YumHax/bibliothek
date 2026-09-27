@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import type { Furniture } from '../Furniture';
 import { boxMesh } from '../meshUtils';
-import { matte } from './Prop';
+import { paint, standard } from '../materials/palette';
 
 export interface MirrorPillarOptions {
   /** Side of the square column, metres. Default 0.5. */
@@ -13,8 +13,8 @@ export interface MirrorPillarOptions {
 }
 
 const BASE_H = 0.12;
-const FRAME = new THREE.MeshStandardMaterial({ color: 0xb9bcc0, metalness: 0.7, roughness: 0.3 });
-const MIRROR = new THREE.MeshStandardMaterial({ color: 0xc8d0dc, metalness: 1, roughness: 0.04 });
+const FRAME = standard({ color: 0xb9bcc0, metalness: 0.7, roughness: 0.3 });
+const MIRROR = standard({ color: 0xc8d0dc, metalness: 1, roughness: 0.04 });
 
 /**
  * A structural column dressed for an arcade: a black plinth, mirrored panels on all four faces
@@ -32,10 +32,10 @@ export class MirrorPillar extends THREE.Group implements Furniture {
     this.height = options.height ?? 3;
     const s = this.size;
     const h = this.height;
-    this.add(boxMesh(s, h, s, matte(0x1a1720, 0.6), { y: h / 2 }));
-    this.add(boxMesh(s + 0.03, BASE_H, s + 0.03, matte(0x0c0b10, 0.5), { y: BASE_H / 2 }));
+    this.add(boxMesh(s, h, s, paint(0x1a1720, 0.6), { y: h / 2 }));
+    this.add(boxMesh(s + 0.03, BASE_H, s + 0.03, paint(0x0c0b10, 0.5), { y: BASE_H / 2 }));
     const neonColor = new THREE.Color(options.neon ?? 0xff2fa0);
-    const neon = new THREE.MeshStandardMaterial({ color: neonColor.clone().multiplyScalar(0.3), emissive: neonColor, emissiveIntensity: 2.2, toneMapped: false });
+    const neon = standard({ color: neonColor.clone().multiplyScalar(0.3), emissive: neonColor, emissiveIntensity: 2.2, toneMapped: false });
     const band = boxMesh(s + 0.02, 0.03, s + 0.02, neon, { y: 2.25 });
     band.castShadow = false;
     this.add(band);

@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { markShared } from '../props/Prop';
+import { FLOOR, RENDER_ORDER, onSurface } from '../surface/layers';
 import { createCanvas } from '@/covers/generated/canvasUtils';
 
 /** How bright the pool is at level 1 (additive, so small numbers go a long way on a dark carpet). */
@@ -10,7 +11,8 @@ const STRENGTH = 0.32;
  * screen's colour, drawn additively on the floor (no light source: a point light per machine
  * would cost every pixel of the frame). The machine sets its level every frame from what its
  * screen is doing (brighter while a game runs, a flicker with the action). Adds colour without
- * touching the canvas alpha (see docs/graphics.md). Origin at its centre on the floor.
+ * touching the canvas alpha (see docs/graphics.md). Lies on the floor as `FLOOR.glowPool`. Origin at
+ * its centre on the floor.
  */
 export class GlowPool extends THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial> {
   constructor(color: number, width: number, depth: number) {
@@ -21,13 +23,11 @@ export class GlowPool extends THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMat
     material.blendDst = THREE.OneFactor;
     material.blendSrcAlpha = THREE.ZeroFactor;
     material.blendDstAlpha = THREE.OneFactor;
-    material.polygonOffset = true;
-    material.polygonOffsetFactor = -2;
-    super(new THREE.PlaneGeometry(width, depth), material);
+    super(new THREE.PlaneGeometry(width, depth), onSurface(material, FLOOR.glowPool));
     this.name = 'GlowPool';
     this.rotation.x = -Math.PI / 2;
-    this.position.y = 0.004;
-    this.renderOrder = 1;
+    this.position.y = FLOOR.glowPool.lift;
+    this.renderOrder = RENDER_ORDER.groundGlow;
   }
 
   /** 0 (screen dark) .. 1 (a game running flat out). */

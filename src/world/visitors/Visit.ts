@@ -96,7 +96,12 @@ export class Visit {
     private readonly viewer: THREE.Object3D,
     private readonly doors: { front: DoorLike | null; living: DoorLike | null },
     private readonly script: VisitScript,
-    private readonly options: { returning: boolean; cat: () => THREE.Vector3 | null },
+    private readonly options: {
+      returning: boolean;
+      cat: () => THREE.Vector3 | null;
+      /** How much longer than usual they linger at each stop (a cake on the kitchen table: `HOUSEHOLD.cake.linger`); read at each stop. */
+      linger?: () => number;
+    },
   ) {}
 
   /** Waiting on the landing for the door. */
@@ -207,7 +212,7 @@ export class Visit {
         await this.pause(2.5);
         this.script.ask();
       }
-      await this.pause(between(VISIT_RULES.linger.browse));
+      await this.pause(between(VISIT_RULES.linger.browse) * (this.options.linger?.() ?? 1));
       await this.walk([...[...stop.via].reverse().map((at) => ({ at })), { at: r.hub }]);
     }
     const seat = this.options.returning ? undefined : r.seats.find((s) => s.free());
@@ -215,7 +220,7 @@ export class Visit {
       await this.walk([...seat.via.map((at) => ({ at })), { at: seat.approach }, { at: seat.at }]);
       this.friend.sit(seat.yaw, 0.46, 'lap');
       this.script.say(this.script.sitLine(), 'Ahh');
-      await this.pause(between(VISIT_RULES.linger.seat));
+      await this.pause(between(VISIT_RULES.linger.seat) * (this.options.linger?.() ?? 1));
       this.friend.stand(seat.yaw, 'stand');
       await this.walk([{ at: seat.approach }, ...[...seat.via].reverse().map((at) => ({ at })), { at: r.hub }]);
     }

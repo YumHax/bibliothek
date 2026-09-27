@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import type { Furniture } from '../Furniture';
-import { part, matte } from './Prop';
-import { wood as woodMaterial } from '@/world/materials/finishes';
+import { paint, timber } from '../materials/palette';
+import { part } from './Prop';
 
 export interface ShoeRackOptions {
   /** Length along the wall. Default 0.7. */
@@ -14,8 +14,8 @@ const DEPTH = 0.26;
 const HEIGHT = 0.46;
 /** Heights of the two slatted shelves (the top one is the bench). */
 const SHELVES = [0.1, HEIGHT - 0.02];
-const RUBBER = matte(0x2a2826, 0.8);
-const SOLE = matte(0xe8e4dc, 0.8);
+const RUBBER = paint(0x2a2826, 0.8);
+const SOLE = paint(0xe8e4dc, 0.8);
 
 type ShoeKind = 'trainer' | 'boot' | 'shoe' | 'slipper';
 
@@ -31,7 +31,7 @@ export class ShoeRack extends THREE.Group implements Furniture {
     super();
     this.name = 'ShoeRack';
     const width = options.width ?? 0.7;
-    const oak = woodMaterial(options.wood ?? 0xb38a5c, 0.55);
+    const oak = timber(options.wood ?? 0xb38a5c, 0.55);
     const z = 0.01 + DEPTH / 2;
 
     // Two end frames, each two legs and a rail, and the slatted shelves between them.
@@ -56,7 +56,7 @@ export class ShoeRack extends THREE.Group implements Furniture {
 
   /** Two shoes side by side, toes to the room, at (x, y) on a shelf. */
   private pair(kind: ShoeKind, color: number, x: number, y: number, z: number): void {
-    const leather = matte(color, kind === 'shoe' ? 0.35 : 0.75);
+    const leather = paint(color, kind === 'shoe' ? 0.35 : 0.75);
     for (const side of [-1, 1]) this.add(shoe(kind, leather, x + side * 0.055, y, z + 0.02, side * 0.05));
   }
 }

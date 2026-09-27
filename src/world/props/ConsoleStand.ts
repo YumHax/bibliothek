@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import type { Furniture } from '../Furniture';
-import { part, matte } from './Prop';
-import { wood as woodMaterial } from '@/world/materials/finishes';
+import { part } from './Prop';
+import { paint, timber } from '@/world/materials/palette';
 
 export interface ConsoleStandOptions {
   width?: number;
@@ -57,8 +57,8 @@ export class ConsoleStand extends THREE.Group implements Furniture {
 
   private build(): void {
     const { width, depth, height } = this.options;
-    const wood = woodMaterial(0x3b2a1e, 0.7);
-    const dark = matte(0x241811, 0.8);
+    const wood = timber(0x3b2a1e, 0.7);
+    const dark = paint(0x241811, 0.8);
     const board = 0.02;
     const feet = 0.04;
     const topBoard = 0.025;

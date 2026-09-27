@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { QUALITY } from '@/graphics/quality';
 import { createCanvas, seededRandom } from '@/covers/generated/canvasUtils';
 import { afterChunk, patchShader, VALUE_NOISE } from './shaderPatch';
-import { markShared } from '../props/Prop';
+import { markShared } from './sharedResources';
 
 /** Metres of timber one repeat of the grain texture covers (along the fibres, then across). */
 const GRAIN_ALONG_M = 1.6;

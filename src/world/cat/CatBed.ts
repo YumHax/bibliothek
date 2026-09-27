@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import type { Furniture } from '@/world/Furniture';
 import type { CatBedLike } from './types';
-import { fabric as fabricMaterial } from '@/world/materials/finishes';
+import { cloth as paletteCloth } from '@/world/materials/palette';
 
 /**
  * The cat's bed: a round padded disc with a soft bolster ring around it, about 0.45 m across
@@ -39,8 +39,9 @@ export class CatBed extends THREE.Group implements Furniture, CatBedLike {
       diameter: options.diameter ?? 0.45,
     };
 
-    const fabric = fabricMaterial({ color: this.options.color, roughness: 1 });
-    const cushion = fabricMaterial({ color: this.options.padding, roughness: 1 });
+    const cloth = (color: number): THREE.MeshStandardMaterial => paletteCloth(color, 1);
+    const fabric = cloth(this.options.color);
+    const cushion = cloth(this.options.padding);
 
     const pad = new THREE.Mesh(new THREE.CylinderGeometry(PAD_DIAMETER / 2, PAD_DIAMETER / 2 - 0.01, PAD_HEIGHT, 40), cushion);
     pad.position.y = PAD_HEIGHT / 2;

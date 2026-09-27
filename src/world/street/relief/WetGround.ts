@@ -10,6 +10,7 @@ import { nightnessOf } from '../streetAir';
 import { FRONT, KERB_HEIGHT, PARK_STREET, STREET_PLAN, type ShopKind, type Vec2 } from '../streetPlan';
 import { FacadeFrame } from './facadeFrame';
 import { groundHeight } from './ground';
+import { GROUND, RENDER_ORDER, onSurface } from '../../surface/layers';
 
 export interface WetGroundOptions {
   fronts: readonly PaintedFront[];
@@ -44,7 +45,7 @@ interface Puddle {
 
 /**
  * The street after rain. The lights stand in the wet ground as long soft streaks running from each
- * one's foot towards the eye (the street lamps, the neon over the arcade and RÉTRO JEUX, the lit
+ * one's foot towards the eye (the street lamps, the neon over the arcade and RETRO GAMES, the lit
  * shop windows): camera-facing quads laid flat, additive with the canvas alpha kept, as bright as
  * the ground is wet and the night dark. Puddles lie in the gutters, along the kerbs and on the
  * pavements' low spots: dark glossy decals that grow as the ground soaks and shrink as it dries,
@@ -95,48 +96,48 @@ export class WetGround extends THREE.Group implements Furniture, Updatable {
       }
     }
 
-    const streakMaterial = new THREE.MeshBasicMaterial({
-      map: streakTexture(),
-      transparent: true,
-      depthWrite: false,
-      blending: THREE.CustomBlending,
-      blendSrc: THREE.SrcAlphaFactor,
-      blendDst: THREE.OneFactor,
-      blendSrcAlpha: THREE.ZeroFactor,
-      blendDstAlpha: THREE.OneFactor,
-      fog: true,
-      polygonOffset: true,
-      polygonOffsetFactor: -3,
-      polygonOffsetUnits: -3,
-    });
+    const streakMaterial = onSurface(
+      new THREE.MeshBasicMaterial({
+        map: streakTexture(),
+        transparent: true,
+        blending: THREE.CustomBlending,
+        blendSrc: THREE.SrcAlphaFactor,
+        blendDst: THREE.OneFactor,
+        blendSrcAlpha: THREE.ZeroFactor,
+        blendDstAlpha: THREE.OneFactor,
+        fog: true,
+      }),
+      GROUND.streak,
+      { depthWrite: false },
+    );
     // A flat quad from its foot (z = 0) out to z = 1, x across: turned towards the eye and stretched every frame.
     const streak = new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2).translate(0, 0, 0.5);
     this.streaks = new THREE.InstancedMesh(streak, streakMaterial, Math.max(1, this.sources.length));
     this.streaks.frustumCulled = false;
-    this.streaks.renderOrder = 2;
+    this.streaks.renderOrder = RENDER_ORDER.sheen;
     this.streaks.castShadow = false;
     this.streaks.visible = false;
     for (let i = 0; i < this.sources.length; i++) this.streaks.setColorAt(i, new THREE.Color(0, 0, 0));
     this.add(this.streaks);
 
     this.puddleSpots = puddleSpots();
-    this.puddleMaterial = new THREE.MeshStandardMaterial({
-      color: 0x101316,
-      roughness: 0.05,
-      metalness: 0.1,
-      alphaMap: blobTexture(),
-      transparent: true,
-      depthWrite: false,
-      opacity: 0,
-      envMapIntensity: 1.4,
-      polygonOffset: true,
-      polygonOffsetFactor: -2,
-      polygonOffsetUnits: -2,
-    });
+    this.puddleMaterial = onSurface(
+      new THREE.MeshStandardMaterial({
+        color: 0x101316,
+        roughness: 0.05,
+        metalness: 0.1,
+        alphaMap: blobTexture(),
+        transparent: true,
+        opacity: 0,
+        envMapIntensity: 1.4,
+      }),
+      GROUND.puddle,
+      { depthWrite: false },
+    );
     this.puddles = new THREE.InstancedMesh(new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2), this.puddleMaterial, this.puddleSpots.length);
     this.puddles.receiveShadow = true;
     this.puddles.castShadow = false;
-    this.puddles.renderOrder = 1;
+    this.puddles.renderOrder = RENDER_ORDER.groundGlow;
     this.puddles.visible = false;
     this.add(this.puddles);
     this.layPuddles(1);
@@ -199,7 +200,7 @@ export class WetGround extends THREE.Group implements Furniture, Updatable {
       const length = Math.min(STREAK_MAX, distance * 0.9, 1.4 * mirror + 1.5);
       const start = Math.max(0, mirror - length * 0.55);
       this.spot.copy(src.foot).addScaledVector(this.dir, start);
-      this.spot.y += 0.008;
+      this.spot.y += GROUND.streak.lift;
       this.q.setFromAxisAngle(this.yAxis, Math.atan2(this.dir.x, this.dir.z));
       this.stretch.set(src.width * (1 + distance * 0.015), 1, length);
       this.m.compose(this.spot, this.q, this.stretch);
@@ -235,12 +236,11 @@ export class WetGround extends THREE.Group implements Furniture, Updatable {
     });
     mirror.name = 'WetRoadMirror';
     mirror.rotation.x = -Math.PI / 2;
-    mirror.position.set((x0 + x1) / 2, -KERB_HEIGHT + 0.009, (z0 + z1) / 2);
-    const material = mirror.material as THREE.ShaderMaterial;
+    mirror.position.set((x0 + x1) / 2, -KERB_HEIGHT + GROUND.mirror.lift, (z0 + z1) / 2);
+    const material = onSurface(mirror.material as THREE.ShaderMaterial, GROUND.mirror, { depthWrite: false });
     material.uniforms.strength = this.mirrorStrength;
     material.uniforms.mask!.value = mask;
     material.transparent = true;
-    material.depthWrite = false;
     material.blending = THREE.CustomBlending;
     material.blendEquation = THREE.AddEquation;
     material.blendSrc = THREE.OneFactor;
@@ -249,7 +249,7 @@ export class WetGround extends THREE.Group implements Furniture, Updatable {
     material.blendDstAlpha = THREE.OneFactor;
     mirror.receiveShadow = false;
     mirror.castShadow = false;
-    mirror.renderOrder = 2;
+    mirror.renderOrder = RENDER_ORDER.sheen;
     mirror.visible = false;
     this.add(mirror);
     return mirror;
@@ -261,7 +261,7 @@ function puddleSpots(): Puddle[] {
   const random = seededRandom(6061);
   const out: Puddle[] = [];
   const add = (x: number, z: number, big: number): void => {
-    out.push({ at: [x, z], y: groundHeight(x, z) + 0.006, sx: (0.8 + random() * 1.6) * big, sz: (0.5 + random() * 0.7) * big, yaw: (random() - 0.5) * 0.5 });
+    out.push({ at: [x, z], y: groundHeight(x, z) + GROUND.puddle.lift, sx: (0.8 + random() * 1.6) * big, sz: (0.5 + random() * 0.7) * big, yaw: (random() - 0.5) * 0.5 });
   };
   for (let i = 0; i < 22; i++) {
     const side = random() < 0.5 ? -1 : 1;

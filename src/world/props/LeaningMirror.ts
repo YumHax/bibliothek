@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import type { Furniture } from '../Furniture';
 import { part } from './Prop';
-import { wood as woodMaterial } from '@/world/materials/finishes';
+import { SEAM } from './joinery';
+import { standard, timber } from '../materials/palette';
 import { mirrorGlass } from './MirrorGlass';
 
 export interface LeaningMirrorOptions {
@@ -16,7 +17,7 @@ export interface LeaningMirrorOptions {
 
 const FRAME = 0.035;
 const FRAME_DEPTH = 0.03;
-const GLASS = new THREE.MeshStandardMaterial({ color: 0xb8c4cc, roughness: 0.08, metalness: 0.2 });
+const GLASS = standard({ color: 0xb8c4cc, roughness: 0.08, metalness: 0.2 });
 
 /**
  * A full-length mirror standing on the floor, leaning back against a wall: its foot a little way
@@ -32,7 +33,7 @@ export class LeaningMirror extends THREE.Group implements Furniture {
     const width = options.width ?? 0.5;
     const height = options.height ?? 1.6;
     const lean = options.lean ?? 0.14;
-    const wood = woodMaterial(options.frameColor ?? 0x3c2f24, 0.5);
+    const wood = timber(options.frameColor ?? 0x3c2f24, 0.5);
 
     // The frame is built upright with its back at local z = 0, then tipped about its bottom back edge:
     // the top moves towards the wall, so the foot must start off the wall by what the top travels.
@@ -45,7 +46,7 @@ export class LeaningMirror extends THREE.Group implements Furniture {
     const glass = part(tilt, width - 2 * FRAME, height - 2 * FRAME, 0.006, GLASS, { y: height / 2, z: FRAME_DEPTH - 0.004 });
     glass.castShadow = false;
     const silver = mirrorGlass(width - 2 * FRAME, height - 2 * FRAME);
-    silver.position.set(0, height / 2, FRAME_DEPTH - 0.0005);
+    silver.position.set(0, height / 2, FRAME_DEPTH - SEAM);
     tilt.add(silver);
     this.add(tilt);
 

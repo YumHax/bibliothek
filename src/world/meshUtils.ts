@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import { QUALITY } from '@/graphics/quality';
+import { invisible } from './materials/palette';
+import { markShared } from './materials/sharedResources';
 
 export interface MeshPosition {
   x?: number;
@@ -16,9 +18,26 @@ const BEVEL_MIN_SIDE = 0.012;
 const BEVEL_MAX_SIDE = 3;
 
 /**
+ * The geometries `boxMesh`, `cylinderMesh` and `invisibleHitbox` hand out, one per size for the
+ * page: two boards cut alike share one buffer. They are marked shared (no zone's unload frees
+ * them), so **never transform or edit a mesh's geometry in place** (`translate`, `rotateX`,
+ * attributes): move the mesh, or `clone()` the geometry first.
+ */
+const geometries = new Map<string, THREE.BufferGeometry>();
+
+function cachedGeometry(key: string, make: () => THREE.BufferGeometry): THREE.BufferGeometry {
+  let geometry = geometries.get(key);
+  if (!geometry) {
+    geometry = markShared(make());
+    geometries.set(key, geometry);
+  }
+  return geometry;
+}
+
+/**
  * A shadow-casting, shadow-receiving box at `position` (its centre). With `QUALITY.bevels` its
  * edges are rounded by a few millimetres so they catch a highlight, as real joinery does; the
- * face groups (one material per face) survive the rounding.
+ * face groups (one material per face) survive the rounding. Its geometry is shared (see above).
  */
 export function boxMesh(width: number, height: number, depth: number, material: THREE.Material, position: MeshPosition = {}): THREE.Mesh {
   return shadowed(new THREE.Mesh(boxGeometry(width, height, depth, material), material), position);
@@ -28,9 +47,10 @@ function boxGeometry(width: number, height: number, depth: number, material: THR
   const thinnest = Math.min(width, height, depth);
   const drawn = material.visible && material.colorWrite;
   if (!QUALITY.bevels || !drawn || thinnest < BEVEL_MIN_SIDE || Math.max(width, height, depth) > BEVEL_MAX_SIDE) {
-    return new THREE.BoxGeometry(width, height, depth);
+    return cachedGeometry(`box|${width}|${height}|${depth}`, () => new THREE.BoxGeometry(width, height, depth));
   }
-  return new RoundedBoxGeometry(width, height, depth, 1, Math.min(BEVEL_RADIUS, thinnest * BEVEL_SHARE));
+  const radius = Math.min(BEVEL_RADIUS, thinnest * BEVEL_SHARE);
+  return cachedGeometry(`rounded|${width}|${height}|${depth}|${radius}`, () => new RoundedBoxGeometry(width, height, depth, 1, radius));
 }
 
 /** A shadow-casting, shadow-receiving upright cylinder at `position` (its centre). `radiusBottom` defaults to `radiusTop`. */
@@ -41,7 +61,8 @@ export function cylinderMesh(
   position: MeshPosition = {},
   { radiusBottom = radiusTop, segments = 20 }: { radiusBottom?: number; segments?: number } = {},
 ): THREE.Mesh {
-  return shadowed(new THREE.Mesh(new THREE.CylinderGeometry(radiusTop, radiusBottom, height, segments), material), position);
+  const geometry = cachedGeometry(`cylinder|${radiusTop}|${radiusBottom}|${height}|${segments}`, () => new THREE.CylinderGeometry(radiusTop, radiusBottom, height, segments));
+  return shadowed(new THREE.Mesh(geometry, material), position);
 }
 
 /**
@@ -49,7 +70,10 @@ export function cylinderMesh(
  * visible parts are too thin or too many to test one by one. Draws nothing, casts no shadow.
  */
 export function invisibleHitbox(width: number, height: number, depth: number, position: MeshPosition = {}): THREE.Mesh {
-  const mesh = new THREE.Mesh(new THREE.BoxGeometry(width, height, depth), new THREE.MeshBasicMaterial({ visible: false }));
+  const mesh = new THREE.Mesh(
+    cachedGeometry(`box|${width}|${height}|${depth}`, () => new THREE.BoxGeometry(width, height, depth)),
+    invisible(),
+  );
   mesh.position.set(position.x ?? 0, position.y ?? 0, position.z ?? 0);
   mesh.castShadow = false;
   return mesh;

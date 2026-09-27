@@ -19,7 +19,7 @@ export interface StreetDoorOptions {
  * A door on a facade that leads somewhere (home, the arcade, the retro games shop and the flea
  * market behind it): the door itself is painted on the facade, this is the click on it. It asks
  * the Session to travel straight there (`SessionActions.travel(to)`), no menu, unless its `guard`
- * says it is shut (RÉTRO JEUX keeps shop hours; the arcade never closes). Wall-hung: origin
+ * says it is shut (RETRO GAMES keeps shop hours; the arcade never closes). Wall-hung: origin
  * on the pavement at the middle of the door, +z facing the street. Never collides (the building
  * line does).
  */

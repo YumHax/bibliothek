@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import { createCanvas, toTexture, seededRandom } from '@/covers/generated/canvasUtils';
-import { Prop, part, matte } from './Prop';
-import { wood as woodMaterial } from '@/world/materials/finishes';
+import { paint, timber } from '@/world/materials/palette';
+import { WALL } from '@/world/surface/layers';
+import { Prop, part } from './Prop';
 
 /** `sunset`: soft gradient over a sea line; `mountains`: layered pastel-blue ridges; `abstract`: pastel shapes on cream. */
 export type PictureMotif = 'sunset' | 'mountains' | 'abstract';
@@ -40,7 +41,7 @@ export class PictureFrame extends Prop {
     this.name = `PictureFrame:${this.options.motif}`;
     const { width, height, frameWidth, frameColor } = this.options;
 
-    const wood = woodMaterial(frameColor, 0.5);
+    const wood = timber(frameColor, 0.5);
     // Four bars, the horizontal ones spanning the full width, sitting proud of the wall.
     const zBar = FRAME_DEPTH / 2;
     part(this, width, frameWidth, FRAME_DEPTH, wood, { y: height / 2 - frameWidth / 2, z: zBar });
@@ -51,13 +52,13 @@ export class PictureFrame extends Prop {
     // Backboard recessed inside the bars, carrying mat + picture as one texture.
     const innerW = width - 2 * frameWidth;
     const innerH = height - 2 * frameWidth;
-    const board = part(this, innerW, innerH, BOARD_DEPTH, matte(0x2a221c, 0.8), { z: BOARD_DEPTH / 2 });
+    const board = part(this, innerW, innerH, BOARD_DEPTH, paint(0x2a221c, 0.8), { z: BOARD_DEPTH / 2 });
     board.castShadow = false;
     const picture = new THREE.Mesh(
       new THREE.PlaneGeometry(innerW, innerH),
       new THREE.MeshStandardMaterial({ map: this.paint(innerW, innerH), roughness: 0.85 }),
     );
-    picture.position.z = BOARD_DEPTH + 0.0005;
+    picture.position.z = BOARD_DEPTH + WALL.paper.lift;
     picture.receiveShadow = true;
     this.add(picture);
   }

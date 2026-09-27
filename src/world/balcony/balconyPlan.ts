@@ -1,5 +1,6 @@
 import type { Doorway, RoomOptions } from '../Room';
 import type { DecorEntry } from '../props/decor';
+import type { Owned } from '../build/owned';
 
 /*
  * THE BALCONY: a small stone balcony on the collection room's front wall (Front Street side, sixth
@@ -46,11 +47,12 @@ export const BALCONY_PLAN = {
   /** The balcony's sun: a narrow spot this far out, aimed at the balcony's middle. */
   sun: { distance: 20, radius: 2.2 },
   decor: [
-    { kind: 'plant', at: { floor: [-1.0, 0.35] }, options: { kind: 'small', pot: 'terracotta', seed: 21, collides: true } },
-    { kind: 'plant', at: { floor: [1.05, 0.4] }, options: { kind: 'small', pot: 'ceramic', seed: 22, collides: true } },
+    // The florist's fourth and fifth pots (`plant` nth 3, 4: after the three of `boughtPlants`).
+    { kind: 'plant', at: { floor: [-1.0, 0.35] }, options: { kind: 'small', pot: 'terracotta', seed: 21, collides: true }, upgrade: { good: 'plant', nth: 3 } },
+    { kind: 'plant', at: { floor: [1.05, 0.4] }, options: { kind: 'small', pot: 'ceramic', seed: 22, collides: true }, upgrade: { good: 'plant', nth: 4 } },
   ] as DecorEntry[],
   /** The little bistro table and its two chairs, facing the street. */
-  bistro: { floor: [0.45, 0.15] as [number, number] },
+  bistro: { floor: [0.45, 0.15] as [number, number], upgrade: 'bistroSet' as Owned },
   /** Where the potted plants bought at the florist on Front Street stand, in the order they come home (`HomeUpgrades` 'plant'). */
   boughtPlants: [
     { floor: [-1.02, -0.38] as [number, number], kind: 'small', pot: 'terracotta', seed: 31 },

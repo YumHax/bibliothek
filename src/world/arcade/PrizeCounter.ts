@@ -4,9 +4,8 @@ import type { SessionActions } from '@/game/SessionActions';
 import { createCanvas, toTexture } from '@/covers/generated/canvasUtils';
 import type { Furniture } from '../Furniture';
 import { boxMesh, cylinderMesh, invisibleHitbox } from '../meshUtils';
-import { markShared, matte } from '../props/Prop';
 import { drawText } from './games/ArcadeGame';
-import { wood as woodMaterial } from '@/world/materials/finishes';
+import { paint, standard, timber } from '@/world/materials/palette';
 import type { PrizeKind } from '@/economy/Prizes';
 import { prizeModel } from '../prizes/prizeModel';
 
@@ -24,9 +23,9 @@ const DEPTH = 0.6;
 const HEIGHT = 1.02;
 const SIGN_Y = 1.75;
 
-const WOOD = markShared(woodMaterial(0x4a3524, 0.6));
-const TOP = markShared(matte(0x8b6a44, 0.5));
-const GLASS = markShared(new THREE.MeshStandardMaterial({ color: 0xbfd8e6, roughness: 0.1, transparent: true, opacity: 0.35 }));
+const WOOD = timber(0x4a3524, 0.6);
+const TOP = paint(0x8b6a44, 0.5);
+const GLASS = standard({ color: 0xbfd8e6, roughness: 0.1, transparent: true, opacity: 0.35 });
 
 /**
  * The arcade's prize counter: a glass-fronted desk showing the prizes on two glass shelves, a lit
@@ -63,8 +62,8 @@ export class PrizeCounter extends THREE.Group implements Furniture, Interactable
     });
     this.add(boxMesh(WIDTH - 0.1, 0.006, DEPTH * 0.4, GLASS, { y: 0.12 + 0.35, z: DEPTH * 0.28 }));
     // A bowl of coins on the top.
-    const bowl = cylinderMesh(0.09, 0.04, matte(0x2a2a30, 0.4), { x: 0.5, y: HEIGHT + 0.02, z: 0.05 }, { radiusBottom: 0.06, segments: 20 });
-    const coins = cylinderMesh(0.08, 0.01, new THREE.MeshStandardMaterial({ color: 0xd4a52a, metalness: 0.8, roughness: 0.3 }), { x: 0.5, y: HEIGHT + 0.04, z: 0.05 }, { segments: 20 });
+    const bowl = cylinderMesh(0.09, 0.04, paint(0x2a2a30, 0.4), { x: 0.5, y: HEIGHT + 0.02, z: 0.05 }, { radiusBottom: 0.06, segments: 20 });
+    const coins = cylinderMesh(0.08, 0.01, standard({ color: 0xd4a52a, metalness: 0.8, roughness: 0.3 }), { x: 0.5, y: HEIGHT + 0.04, z: 0.05 }, { segments: 20 });
     this.add(bowl, coins);
 
     // Lit sign on the wall behind (a hair off it, whatever the gap to the counter), hung from two rods.
@@ -73,7 +72,7 @@ export class PrizeCounter extends THREE.Group implements Furniture, Interactable
     const sign = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 0.3), this.sign);
     sign.position.set(0, SIGN_Y, signZ);
     this.add(sign);
-    for (const x of [-0.5, 0.5]) this.add(cylinderMesh(0.006, 0.4, matte(0x2a2a30, 0.5), { x, y: SIGN_Y + 0.35, z: signZ }, { segments: 8 }));
+    for (const x of [-0.5, 0.5]) this.add(cylinderMesh(0.006, 0.4, paint(0x2a2a30, 0.5), { x, y: SIGN_Y + 0.35, z: signZ }, { segments: 8 }));
 
     const hitbox = invisibleHitbox(WIDTH + 0.06, HEIGHT + 0.1, DEPTH + 0.06, { y: (HEIGHT + 0.1) / 2 });
     this.hitboxes = [hitbox];

@@ -6,10 +6,12 @@ import { BuskerTune } from '@/audio/BuskerTune';
 import { playCoins } from '@/audio/coins';
 import { createCanvas, toTexture } from '@/covers/generated/canvasUtils';
 import type { Furniture } from '../Furniture';
+import { paint, standard } from '../materials/palette';
 import type { DayNight } from '../props/DayNight';
 import { Walker } from '../people/Walker';
 import { KEYS as SAVE_KEYS } from '@/persistence';
-import { DailyTally } from './DailyTally';
+import { DailyTally } from '@/time/DailyTally';
+import { Timers } from '@/core/Timers';
 
 export interface BuskerOptions {
   /** The ears (the camera): the tune's level and side follow it. */
@@ -44,6 +46,8 @@ const KEYS = { y: 0.93, z: 0.42, spread: 0.17 };
  * a few tips a day at most (remembered across reloads), then a nod.
  */
 export class Busker extends THREE.Group implements Furniture, Updatable, Interactable {
+  /** The pose back to playing after a thank-you: on the street's own time. */
+  private readonly timers = new Timers();
   readonly contactShadow = false;
   readonly hitboxes: THREE.Object3D[];
   private readonly person: Walker;
@@ -102,13 +106,14 @@ export class Busker extends THREE.Group implements Furniture, Updatable, Interac
         const thanks = THANKS[Math.floor(Math.random() * THANKS.length)]!;
         this.person.say(thanks, 2.5);
         this.person.setPose('cheer');
-        window.setTimeout(() => this.person.setPose('play'), 1400);
+        this.timers.after(1.4, () => this.person.setPose('play'));
         return `You drop a coin in the keyboard case. “${thanks}”`;
       },
     });
   }
 
   update(dt: number): void {
+    this.timers.update(dt);
     const s = this.dayNight.state;
     const [from, to] = this.options.hours;
     const present = s.hours >= from && s.hours < to && s.rain < 0.08 && s.snow < 0.15;
@@ -151,7 +156,7 @@ export class Busker extends THREE.Group implements Furniture, Updatable, Interac
   }
 
   private buildKit(): void {
-    const metal = new THREE.MeshStandardMaterial({ color: 0x222428, roughness: 0.4, metalness: 0.6 });
+    const metal = standard({ color: 0x222428, roughness: 0.4, metalness: 0.6 });
     // The X-stand and the keyboard on it.
     for (const side of [-1, 1]) {
       const leg = new THREE.Mesh(new THREE.BoxGeometry(0.025, 1.05, 0.025), metal);
@@ -161,12 +166,12 @@ export class Busker extends THREE.Group implements Furniture, Updatable, Interac
       leg2.rotation.x = -0.5;
       this.kit.add(leg, leg2);
     }
-    const body = new THREE.Mesh(new THREE.BoxGeometry(0.82, 0.06, 0.28), new THREE.MeshStandardMaterial({ color: 0xd8342a, roughness: 0.35 }));
+    const body = new THREE.Mesh(new THREE.BoxGeometry(0.82, 0.06, 0.28), paint(0xd8342a, 0.35));
     body.position.set(0, KEYS.y - 0.05, KEYS.z + 0.04);
     const keys = new THREE.Mesh(new THREE.PlaneGeometry(0.74, 0.14).rotateX(-Math.PI / 2), new THREE.MeshStandardMaterial({ map: keysTexture(), roughness: 0.5 }));
     keys.position.set(0, KEYS.y - 0.018, KEYS.z - 0.02);
     // The open case on the pavement, a few coins in it, and the sign.
-    const caseMesh = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.08, 0.32), new THREE.MeshStandardMaterial({ color: 0x5a1a2a, roughness: 0.9 }));
+    const caseMesh = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.08, 0.32), paint(0x5a1a2a, 0.9));
     caseMesh.position.set(0.1, 0.04, 1.0);
     const sign = new THREE.Mesh(new THREE.PlaneGeometry(0.4, 0.26), new THREE.MeshStandardMaterial({ map: signTexture(), roughness: 0.9 }));
     sign.position.set(0.1, 0.18, 1.14);

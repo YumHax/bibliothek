@@ -1,9 +1,10 @@
 import type { RoomOptions } from '../Room';
 import type { Placement } from '../Placement';
 import type { DecorEntry } from '../props/decor';
-import type { KitchenRunOptions } from '../props/KitchenRun';
-import type { WallCabinetsOptions } from '../props/WallCabinets';
+import type { KitchenRunOptions } from './KitchenRun';
+import type { WallCabinetsOptions } from './WallCabinets';
 import { DOOR_LEAF } from '../roomPlan';
+import type { Owned } from '../build/owned';
 
 /*
  * THE KITCHEN PLAN, zone-local coordinates (origin at the centre of its floor). Walls as named
@@ -170,15 +171,45 @@ export const KITCHEN_PLAN = {
    */
   homeGoods: { crt: { screenWidth: 0.3, setBack: 0.3 } },
 
+  /**
+   * What the kitchen is used for (docs/household.md). On the table (table-local [x, z] on its top, the room side is -z):
+   * the cleaning kit once fetched from the bathroom, at the right end clear of the mug (x 0.09..0.17, z -0.11..-0.03);
+   * a cake on its stand while one is out, at the left end in front of the plate (r 0.11 at [-0.15, 0.035]).
+   * On the worktop: the mixing bowl on the cold hob's front-left (the oven unit spans x -0.1..0.5), clear of the
+   * toaster (x up to -0.2); the cat's treat jar behind the kettle, at the end of the run by the fridge. On the floor,
+   * on the runner by the cat's water bowl: whatever the cat left there.
+   */
+  household: {
+    kit: { at: [0.27, -0.22] as [number, number], yaw: 0.1 },
+    cake: { at: [-0.2, -0.21] as [number, number] },
+    mixingBowl: { wall: 'back', along: 0.05, y: WORKTOP, offset: 0.36 } as Placement,
+    treatJar: { wall: 'back', along: 0.93, y: WORKTOP, offset: 0.1 } as Placement,
+    catFind: { floor: [-0.55, -0.4], rotationY: 0.4 } as Placement,
+  },
+
+  /**
+   * What stands only once bought (`economy/homeGoods.ts`; `build/owned.ts`): the table and its chairs, the kettle and the
+   * toaster, the radio, the CRT, and the cat's water bowl once there is a cat. The fitted units, the fridge and what is
+   * left out on the worktop are the flat's.
+   */
+  upgrades: {
+    table: 'kitchenTable' as Owned,
+    appliances: 'appliances' as Owned,
+    radio: 'radio' as Owned,
+    crt: 'crt' as Owned,
+    catWater: 'cat' as Owned,
+  },
+
   decor: [
     // A runner along the back run, between the cabinets and the table, stopping short of the cat's water bowl in the
-    // corner (x up to -0.79): under it, the rug's top would z-fight with the bowl's inside floor.
-    { kind: 'rug', at: { floor: [0, -0.4] }, options: { width: 1.5, depth: 0.6, field: 0x6e7b8c, border: 0x3e4a5c, motif: 0x9aa5b4 } },
+    // corner (x up to -0.79): the bowl would stand on the rug rather than on the floor (its inside floor, `BOWL_FLOOR`,
+    // is a millimetre over the rug's top, so the two no longer fight either way).
+    { kind: 'rug', at: { floor: [0, -0.4] }, options: { width: 1.5, depth: 0.6, field: 0x6e7b8c, border: 0x3e4a5c, motif: 0x9aa5b4 }, upgrade: 'kitchenRug' },
     // A yucca in the front-left corner, by the window end of the room, and a small pot on the sink run's drawers.
-    { kind: 'plant', at: { corner: 'front-left', inset: 0.32 }, options: { kind: 'yucca', pot: 'terracotta', seed: 21 } },
-    { kind: 'plant', at: { wall: 'left', along: 0.35, y: WORKTOP, offset: 0.3 }, options: { kind: 'small', pot: 'ceramic', seed: 27, collides: false } },
+    { kind: 'plant', at: { corner: 'front-left', inset: 0.32 }, options: { kind: 'yucca', pot: 'terracotta', seed: 21 }, upgrade: { good: 'houseplant', nth: 8 } },
+    { kind: 'plant', at: { wall: 'left', along: 0.35, y: WORKTOP, offset: 0.3 }, options: { kind: 'small', pot: 'ceramic', seed: 27, collides: false }, upgrade: { good: 'houseplant', nth: 9 } },
     // A framed print over the table.
-    { kind: 'pictureFrame', at: { wall: 'front', along: -0.15, y: 1.5 }, options: { motif: 'sunset', seed: 6, width: 0.5, height: 0.38 } },
+    { kind: 'pictureFrame', at: { wall: 'front', along: -0.15, y: 1.5 }, options: { motif: 'sunset', seed: 6, width: 0.5, height: 0.38 }, upgrade: { good: 'framedPrint', nth: 7 } },
     // The pedal bin by the front wall right of the table's far chair (x 0.21..0.72), its pedal to the room. Slim
     // (x 0.77..1.03, z 0.97..1.28) so the way in from the door stays 0.7 m wide between it and the open leaf, which
     // stands 0.25 m off the right wall down to z 0.34.

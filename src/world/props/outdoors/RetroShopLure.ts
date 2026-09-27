@@ -24,7 +24,7 @@ const QUEUE: [number, number] = [2, 6];
 /**
  * The retro games shop across the street as a window onto the flea market: its display shelves
  * show the day's stock (in platform colours), and on a new market day, until the player has been
- * in, a "NOUVEAUTÉS" banner hangs in the window and a few collectors queue at the door. Seen from
+ * in, a "NEW IN" banner hangs in the window and a few collectors queue at the door. Seen from
  * the flat, it says when it is worth going out.
  */
 export class RetroShopLure {
@@ -53,7 +53,7 @@ export class RetroShopLure {
       this.outdoors.showShopStock(items.map((item) => this.options.colorOf(item.game.platform)));
     }
     const fresh = items !== null && items.length > 0 && this.visitedDay !== day;
-    this.outdoors.showShopBanner(fresh ? 'NOUVEAUTÉS' : null);
+    this.outdoors.showShopBanner(fresh ? 'NEW IN' : null);
     const random = seededRandom(day * 131 + 7);
     this.outdoors.life.setShopQueue(fresh ? QUEUE[0] + Math.floor(random() * (QUEUE[1] - QUEUE[0] + 1)) : 0);
   }

@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { createCanvas, seededRandom } from '@/covers/generated/canvasUtils';
 import type { SkyState } from '../props/DayNight';
-import { wakefulnessAt } from '../props/outdoors/wakefulness';
+import { wakefulnessAt } from '@/time/wakefulness';
 import { Prop } from '../props/Prop';
 
 export interface BuildingFrontOptions {

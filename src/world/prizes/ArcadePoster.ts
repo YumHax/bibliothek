@@ -1,7 +1,9 @@
 import * as THREE from 'three';
 import { createCanvas, toTexture } from '@/covers/generated/canvasUtils';
 import { boxMesh } from '../meshUtils';
-import { matte, Prop } from '../props/Prop';
+import { Prop } from '../props/Prop';
+import { paint } from '../materials/palette';
+import { WALL } from '../surface/layers';
 import { type OwnedPrizes, showWhenOwned } from './ownedPrize';
 
 export interface ArcadePosterOptions {
@@ -27,9 +29,9 @@ export class ArcadePoster extends Prop {
     const width = options.width ?? 0.5;
     const height = options.height ?? 0.7;
     const art = new THREE.Group();
-    art.add(boxMesh(width + 0.04, height + 0.04, 0.02, matte(0x111114, 0.4), { z: 0.01 }));
+    art.add(boxMesh(width + 0.04, height + 0.04, 0.02, paint(0x111114, 0.4), { z: 0.01 }));
     const face = new THREE.Mesh(new THREE.PlaneGeometry(width, height), new THREE.MeshStandardMaterial({ map: paintPoster(), roughness: 0.35 }));
-    face.position.z = 0.021;
+    face.position.z = 0.02 + WALL.framed.lift; // off the frame's face
     art.add(face);
     this.add(art);
     this.unsubscribe = showWhenOwned(options.prizes, options.prizeId ?? 'poster', art, null);

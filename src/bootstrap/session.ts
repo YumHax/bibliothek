@@ -1,6 +1,7 @@
 import { Session } from '@/game/Session';
 import type { FirstPersonController } from '@/player/FirstPersonController';
 import { shelfRoomNote } from '@/ui/market/shelfRoom';
+import { bookcasesIn } from '@/world/build/bookcases';
 import type { Services } from './services';
 import type { Ui } from './ui';
 import type { BuiltWorld } from './world';
@@ -53,7 +54,10 @@ export function createSession(services: Services, parts: { player: FirstPersonCo
     trade: ui.trade,
     photo: interaction.photo,
     journalPanel: ui.journalPanel,
-    shelfRoom: () => shelfRoomNote(overflow.games.length, upgrades.count('bookcase')),
+    shelfRoom: () => shelfRoomNote(overflow.games.length, bookcasesIn(upgrades.count('bookcase')).bedroom),
+    // What the flat sends the player out with, and a night's dream on waking (docs/household.md).
+    perks: services.perks,
+    dreams: { afterSleep: () => void services.homeLife.dream().then((dream) => dream && ui.dreamCard.show(dream)) },
   });
   session.bindInput(input);
   return session;

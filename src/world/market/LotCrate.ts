@@ -4,7 +4,7 @@ import type { SessionActions } from '@/game/SessionActions';
 import { createCanvas, fitFontSize, seededRandom, toTexture, FONT } from '@/covers/generated/canvasUtils';
 import type { Furniture } from '../Furniture';
 import { boxMesh, cylinderMesh, invisibleHitbox } from '../meshUtils';
-import { matte } from '../props/Prop';
+import { paint } from '../materials/palette';
 
 export interface LotCrateOptions {
   /** Hover caption. */
@@ -49,8 +49,8 @@ export class LotCrate extends THREE.Group implements Furniture, Interactable {
     super();
     this.name = 'LotCrate';
     const random = seededRandom((options.seed ?? 1) * 22695477);
-    const card = matte(new THREE.Color(0xc4a26f).multiplyScalar(0.92 + random() * 0.12), 0.95);
-    const inside = matte(0x9a7a4a, 0.95);
+    const card = paint(new THREE.Color(0xc4a26f).multiplyScalar(0.92 + random() * 0.12), 0.95);
+    const inside = paint(0x9a7a4a, 0.95);
 
     // The box: floor, four walls (tan outside, darker inside), and the four flaps hanging open.
     this.add(boxMesh(WIDTH, WALL, DEPTH, card, { y: WALL / 2 }));
@@ -78,7 +78,7 @@ export class LotCrate extends THREE.Group implements Furniture, Interactable {
     // The card on its stick, pushed into the gap between two flaps at the front right corner.
     const stickX = WIDTH / 2 + 0.015;
     const stickZ = DEPTH / 2 + 0.015;
-    this.add(cylinderMesh(0.006, STICK_H, matte(0x8a6a44, 0.7), { x: stickX, y: STICK_H / 2, z: stickZ }, { segments: 6 }));
+    this.add(cylinderMesh(0.006, STICK_H, paint(0x8a6a44, 0.7), { x: stickX, y: STICK_H / 2, z: stickZ }, { segments: 6 }));
     this.cardMat = new THREE.MeshStandardMaterial({ roughness: 0.9 });
     const cardMesh = new THREE.Mesh(new THREE.BoxGeometry(CARD_W, CARD_H, 0.003), [card, card, card, card, this.cardMat, this.cardMat]);
     cardMesh.position.set(stickX, STICK_H - CARD_H / 2 + 0.02, stickZ + 0.005);
@@ -128,14 +128,14 @@ export class LotCrate extends THREE.Group implements Furniture, Interactable {
 
   /** Crumpled paper, a console's box standing at the back, and the game boxes jammed in two files at odd angles. */
   private fill(random: () => number): void {
-    const paper = matte(0xe8e0cc, 1);
+    const paper = paint(0xe8e0cc, 1);
     this.contents.add(boxMesh(WIDTH - 2 * WALL - 0.01, 0.02, DEPTH - 2 * WALL - 0.01, paper, { y: FILL_Y - 0.01 }));
-    const consoleBox = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.24, 0.09), [matte(0x2a2a2a, 0.6), matte(0x2a2a2a, 0.6), matte(0x3a3a3a, 0.6), matte(0x2a2a2a, 0.6), new THREE.MeshStandardMaterial({ map: paintConsoleBox(), roughness: 0.6 }), matte(0x2a2a2a, 0.6)]);
+    const consoleBox = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.24, 0.09), [paint(0x2a2a2a, 0.6), paint(0x2a2a2a, 0.6), paint(0x3a3a3a, 0.6), paint(0x2a2a2a, 0.6), new THREE.MeshStandardMaterial({ map: paintConsoleBox(), roughness: 0.6 }), paint(0x2a2a2a, 0.6)]);
     consoleBox.position.set(-0.08, FILL_Y + 0.1, -DEPTH / 2 + 0.07);
     consoleBox.rotation.set(-0.12, 0.08, 0.05);
     this.contents.add(consoleBox);
     const covers = [paintCover('#b8342a', random), paintCover('#2f4a8a', random), paintCover('#2a2a2a', random)].map((map) => new THREE.MeshStandardMaterial({ map, roughness: 0.55 }));
-    const plain = BOX_COLOURS.map((c) => matte(c, 0.55));
+    const plain = BOX_COLOURS.map((c) => paint(c, 0.55));
     for (let i = 0; i < BOXES; i++) {
       const row = i % 2;
       const w = random() < 0.5 ? 0.127 : 0.14;

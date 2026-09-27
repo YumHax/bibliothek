@@ -1,7 +1,7 @@
 import { Sheet, type Rng, groundSquash, outline, sizePx, worldPoint } from './Sheet';
 import { between, integer, pick } from './paint';
 import { paintBox, paintGroundShadow, paintPost } from './Solid';
-import { currentSeason } from './season';
+import { currentSeason } from '@/time/season';
 import { type SeatedPose, paintSeated } from './figures';
 
 /**

@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import type { Interactable } from '@/interaction/Interactable';
 import type { SessionActions } from '@/game/SessionActions';
 import { createCanvas, toTexture } from '@/graphics/canvas';
-import { wood } from '../materials/finishes';
+import { standard, timber } from '../materials/palette';
 import { invisibleHitbox } from '../meshUtils';
 import { Prop, part } from '../props/Prop';
 
@@ -15,7 +15,7 @@ const PLATE_H = 0.075;
 const LEAN = 0.35;
 const PX_PER_M = 2400;
 
-const WALNUT = wood(0x3b2416, 0.45);
+const WALNUT = timber(0x3b2416, 0.45);
 
 /**
  * The brass plaque the collector's book brings home at 25 games: an engraved brass plate leaning
@@ -34,7 +34,7 @@ export class BrassPlaque extends Prop implements Interactable {
     this.name = 'BrassPlaque';
     part(this, BASE_W, BASE_H, BASE_D, WALNUT, { y: BASE_H / 2 });
     this.face = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.32, metalness: 0.85 });
-    const edge = new THREE.MeshStandardMaterial({ color: 0xa87a22, roughness: 0.3, metalness: 0.9 });
+    const edge = standard({ color: 0xa87a22, roughness: 0.3, metalness: 0.9 });
     const plate = new THREE.Group();
     plate.position.set(0, BASE_H, 0.006);
     plate.rotation.x = -LEAN;

@@ -1,7 +1,6 @@
 import * as THREE from 'three';
 import type { Furniture } from '../Furniture';
-import { matte } from './Prop';
-import { wood as woodMaterial } from '@/world/materials/finishes';
+import { paint, standard, timber } from '../materials/palette';
 
 export interface SideTableOptions {
   /** Radius of the round top. */
@@ -20,7 +19,7 @@ const TOP_THICKNESS = 0.025;
 const SEGMENTS = 32;
 const MUG_R = 0.04;
 const MUG_H = 0.09;
-const PAGES = matte(0xf0e9d8, 0.9);
+const PAGES = paint(0xf0e9d8, 0.9);
 
 /**
  * A small round side table on three splayed legs, with a ceramic mug and a short stack of
@@ -56,8 +55,8 @@ export class SideTable extends THREE.Group implements Furniture {
 
   private buildTable(): void {
     const { radius, height, wood } = this.options;
-    const oak = woodMaterial(wood, 0.55);
-    const darkOak = woodMaterial(new THREE.Color(wood).multiplyScalar(0.8).getHex(), 0.6);
+    const oak = timber(wood, 0.55);
+    const darkOak = timber(new THREE.Color(wood).multiplyScalar(0.8).getHex(), 0.6);
 
     const top = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius * 0.97, TOP_THICKNESS, SEGMENTS), oak);
     top.position.y = height - TOP_THICKNESS / 2;
@@ -94,7 +93,7 @@ export class SideTable extends THREE.Group implements Furniture {
 
   /** An open ceramic mug with a half-ring handle facing +x, standing at (x, z) on the top. */
   private buildMug(x: number, z: number): void {
-    const ceramic = new THREE.MeshStandardMaterial({ color: this.options.mug, roughness: 0.4, side: THREE.DoubleSide });
+    const ceramic = standard({ color: this.options.mug, roughness: 0.4, side: THREE.DoubleSide });
     const mug = new THREE.Group();
     mug.position.set(x, this.topHeight, z);
     mug.rotation.y = -0.6; // handle turned a little towards the room
@@ -107,7 +106,7 @@ export class SideTable extends THREE.Group implements Furniture {
     bottom.rotation.x = -Math.PI / 2;
     bottom.position.y = 0.004;
     // Coffee left in the bottom.
-    const coffee = new THREE.Mesh(new THREE.CircleGeometry(MUG_R * 0.93, 24), matte(0x2a1a10, 0.25));
+    const coffee = new THREE.Mesh(new THREE.CircleGeometry(MUG_R * 0.93, 24), paint(0x2a1a10, 0.25));
     coffee.rotation.x = -Math.PI / 2;
     coffee.position.y = MUG_H * 0.3;
     // Handle: half a torus in the vertical x/y plane, bulging out along +x.
@@ -127,7 +126,7 @@ export class SideTable extends THREE.Group implements Furniture {
     covers.forEach((color, i) => {
       const w = 0.17 - i * 0.008;
       const d = 0.23 - i * 0.01;
-      const cover = matte(color, 0.75);
+      const cover = paint(color, 0.75);
       // BoxGeometry material order: +x, -x (spine), +y (cover), -y, +z, -z.
       const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, thickness, d), [PAGES, cover, cover, cover, PAGES, PAGES]);
       mesh.position.set(x + (i % 2 ? 0.012 : -0.008), y + thickness / 2, z + (i % 2 ? -0.01 : 0.006));

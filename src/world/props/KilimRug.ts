@@ -2,6 +2,8 @@ import * as THREE from 'three';
 import { createCanvas, seededRandom, toTexture } from '@/covers/generated/canvasUtils';
 import { Prop } from './Prop';
 import { fabric } from '@/world/materials/finishes';
+import { cloth as paletteCloth } from '@/world/materials/palette';
+import { FLOOR } from '@/world/surface/layers';
 
 export interface KilimRugOptions {
   /** Size of the woven part, along local x and z (the fringes come on top along x). Default 1.55 x 0.7. */
@@ -12,7 +14,8 @@ export interface KilimRugOptions {
   seed?: number;
 }
 
-const THICKNESS = 0.008;
+/** The slab's height: its top is the floor's `kilim` layer. */
+const THICKNESS = FLOOR.kilim.lift;
 const FRINGE = 0.06;
 const PX_PER_M = 700;
 
@@ -31,7 +34,8 @@ export class KilimRug extends Prop {
     const random = seededRandom((options.seed ?? 11) * 48271);
 
     const top = fabric({ map: paintKilim(width, depth, colors, random), roughness: 1, sheenTint: 0x8a8580 });
-    const edge = fabric({ color: new THREE.Color(colors[0]).multiplyScalar(0.6), roughness: 1 });
+    const edgeColor = new THREE.Color(colors[0]).multiplyScalar(0.6);
+    const edge = paletteCloth(edgeColor, 1);
     // BoxGeometry material order: +x, -x, +y (top), -y, +z, -z.
     const slab = new THREE.Mesh(new THREE.BoxGeometry(width, THICKNESS, depth), [edge, edge, top, edge, edge, edge]);
     slab.position.y = THICKNESS / 2;
@@ -42,7 +46,7 @@ export class KilimRug extends Prop {
     for (const sx of [-1, 1]) {
       const fringe = new THREE.Mesh(new THREE.PlaneGeometry(FRINGE, depth), tassels);
       fringe.rotation.set(-Math.PI / 2, 0, sx > 0 ? 0 : Math.PI);
-      fringe.position.set(sx * (width / 2 + FRINGE / 2 - 0.004), 0.002, 0);
+      fringe.position.set(sx * (width / 2 + FRINGE / 2 - 0.004), FLOOR.fringe.lift, 0);
       fringe.receiveShadow = true;
       this.add(fringe);
     }

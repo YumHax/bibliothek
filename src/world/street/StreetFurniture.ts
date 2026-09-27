@@ -7,6 +7,9 @@ import type { DayNight } from '../props/DayNight';
 import { snowCovered } from './snowCover';
 import { nightnessOf } from './streetAir';
 import type { Vec2 } from './streetPlan';
+import { standard } from '../materials/palette';
+import { isShared } from '../materials/sharedResources';
+import { RENDER_ORDER } from '../surface/layers';
 
 export interface StreetFurnitureOptions {
   shelter: { at: Vec2; yaw: number; length: number };
@@ -14,6 +17,8 @@ export interface StreetFurnitureOptions {
   bins: readonly Vec2[];
   hedge: { x: number; from: number; to: number; height: number; depth: number };
   railings: { x: number; from: number; to: number; height: number };
+  /** The park's gate (its middle z along the railings, and width): a gap in the hedge, taller piers, the gate shut. */
+  gate: { z: number; width: number };
   anisotropy: number;
   /** The clock: the advertising panel lights up at night. */
   dayNight: DayNight;
@@ -27,8 +32,8 @@ const BENCH = { length: 1.8, depth: 0.55 };
  * The things standing on the pavements, merged per material (a draw call per material for the
  * lot): the bus shelter on the far pavement (posts, roof, glass back and side, its bench, a lit
  * advertising panel), the benches, the litter bins, and along Park Street the park's clipped
- * hedge behind iron railings. Everything a person would bump into is in `colliders`
- * (zone-local); the hedge and railings are behind the street's invisible edge anyway. Snow settles
+ * hedge behind iron railings, with the park's gate. Everything a person would bump into is in
+ * `colliders` (zone-local); the railings are the street's edge on the park side. Snow settles
  * on the shelter's roof, the benches, the bins and the hedge (`snowCovered`).
  */
 export class StreetFurniture extends THREE.Group implements Furniture, Updatable {
@@ -46,13 +51,13 @@ export class StreetFurniture extends THREE.Group implements Furniture, Updatable
     this.shelter(options.shelter);
     for (const bench of options.benches) this.bench(bench.at, bench.yaw);
     for (const bin of options.bins) this.bin(bin);
-    this.hedge(options.hedge);
-    this.railings(options.railings);
+    this.hedge(options.hedge, options.gate);
+    this.railings(options.railings, options.gate);
 
     const materials: Record<Finish, THREE.Material> = {
       metal: snowCovered(new THREE.MeshStandardMaterial({ color: 0x2f3a36, roughness: 0.5, metalness: 0.55 })),
       wood: snowCovered(new THREE.MeshStandardMaterial({ color: 0x8a5a36, roughness: 0.8 })),
-      glass: new THREE.MeshStandardMaterial({ color: 0xcfe0e8, roughness: 0.08, metalness: 0.1, transparent: true, opacity: 0.22, depthWrite: false }),
+      glass: standard({ color: 0xcfe0e8, roughness: 0.08, metalness: 0.1, transparent: true, opacity: 0.22, depthWrite: false }),
       hedge: snowCovered(new THREE.MeshStandardMaterial({ map: hedgeTexture(options.anisotropy), roughness: 0.95 })),
       bin: snowCovered(new THREE.MeshStandardMaterial({ color: 0x3d5446, roughness: 0.6, metalness: 0.3 })),
     };
@@ -61,10 +66,10 @@ export class StreetFurniture extends THREE.Group implements Furniture, Updatable
       for (const g of geometries) g.dispose();
       mesh.castShadow = finish !== 'glass';
       mesh.receiveShadow = finish !== 'glass';
-      if (finish === 'glass') mesh.renderOrder = 2;
+      if (finish === 'glass') mesh.renderOrder = RENDER_ORDER.sheen;
       this.add(mesh);
     }
-    for (const [finish, material] of Object.entries(materials)) if (!this.parts.has(finish as Finish)) material.dispose();
+    for (const [finish, material] of Object.entries(materials)) if (!this.parts.has(finish as Finish) && !isShared(material)) material.dispose();
 
     // The shelter's advertising panel, lit from inside at night.
     const poster = adTexture();
@@ -151,25 +156,44 @@ export class StreetFurniture extends THREE.Group implements Furniture, Updatable
     this.collide(at, 0, 0.55, 0.55, 1);
   }
 
-  private hedge({ x, from, to, height, depth }: StreetFurnitureOptions['hedge']): void {
-    const length = to - from;
-    this.put('hedge', new THREE.BoxGeometry(depth, height, length, 1, 1, 1), [x, (from + to) / 2], 0, [0, height / 2, 0]);
-    // A rounded top: a second, narrower course, a little shorter so its ends never share the main box's plane.
-    this.put('hedge', new THREE.BoxGeometry(depth * 0.8, 0.2, length - 0.1), [x, (from + to) / 2], 0, [0, height + 0.08, 0]);
+  /** The clipped hedge, in two runs either side of the gate's gap. */
+  private hedge({ x, from, to, height, depth }: StreetFurnitureOptions['hedge'], gate: StreetFurnitureOptions['gate']): void {
+    const gap = gate.width / 2 + 0.25;
+    for (const [z0, z1] of [[from, gate.z - gap], [gate.z + gap, to]] as const) {
+      const length = z1 - z0;
+      this.put('hedge', new THREE.BoxGeometry(depth, height, length, 1, 1, 1), [x, (z0 + z1) / 2], 0, [0, height / 2, 0]);
+      // A rounded top: a second, narrower course, a little shorter so its ends never share the main box's plane.
+      this.put('hedge', new THREE.BoxGeometry(depth * 0.8, 0.2, length - 0.1), [x, (z0 + z1) / 2], 0, [0, height + 0.08, 0]);
+    }
   }
 
-  /** Iron railings: a top and bottom rail, bars with spear tips every 14 cm, a post every 2.5 m. */
-  private railings({ x, from, to, height }: StreetFurnitureOptions['railings']): void {
+  /**
+   * Iron railings: a top and bottom rail, bars with spear tips every 14 cm, a post every 2.5 m; the
+   * gate between two taller piers with ball finials, its two leaves shut. They are the street's edge (`colliders`).
+   */
+  private railings({ x, from, to, height }: StreetFurnitureOptions['railings'], gate: StreetFurnitureOptions['gate']): void {
     const length = to - from;
     const mid: Vec2 = [x, (from + to) / 2];
     this.box('metal', 0.04, 0.04, length, mid, 0, [0, height - 0.08, 0]);
     this.box('metal', 0.04, 0.04, length, mid, 0, [0, 0.12, 0]);
+    const half = gate.width / 2;
+    const inGate = (z: number): boolean => Math.abs(z - gate.z) < half + 0.25;
     const bars: THREE.BufferGeometry[] = [];
-    for (let z = from; z <= to; z += 0.14) bars.push(new THREE.BoxGeometry(0.018, height, 0.018).translate(x, height / 2, z));
-    for (let z = from; z <= to; z += 2.5) bars.push(new THREE.BoxGeometry(0.06, height + 0.12, 0.06).translate(x, (height + 0.12) / 2, z));
-    const merged = mergeGeometries(bars)!;
+    for (let z = from; z <= to; z += 0.14) if (!inGate(z)) bars.push(new THREE.BoxGeometry(0.018, height, 0.018).translate(x, height / 2, z));
+    for (let z = from; z <= to; z += 2.5) if (!inGate(z)) bars.push(new THREE.BoxGeometry(0.06, height + 0.12, 0.06).translate(x, (height + 0.12) / 2, z));
+    // The gate: the leaves' bars go up to a higher rail, a pier either side.
+    const gateHeight = height + 0.45;
+    for (let z = gate.z - half + 0.07; z < gate.z + half; z += 0.14) bars.push(new THREE.BoxGeometry(0.02, gateHeight, 0.02).translate(x, gateHeight / 2, z));
+    bars.push(new THREE.BoxGeometry(0.05, 0.05, gate.width).translate(x, gateHeight - 0.1, gate.z));
+    for (const side of [-1, 1]) {
+      const z = gate.z + side * (half + 0.12);
+      bars.push(new THREE.BoxGeometry(0.2, gateHeight + 0.2, 0.2).translate(x, (gateHeight + 0.2) / 2, z));
+      bars.push(new THREE.SphereGeometry(0.1, 10, 6).translate(x, gateHeight + 0.3, z));
+    }
+    const merged = mergeGeometries(bars.map((b) => (b.index ? b.toNonIndexed() : b)))!;
     for (const b of bars) b.dispose();
     this.put('metal', merged, [0, 0], 0, [0, 0, 0]);
+    this.colliders.push(new THREE.Box3(new THREE.Vector3(x - 1.1, 0, from), new THREE.Vector3(x + 0.08, 3, to)));
   }
 }
 

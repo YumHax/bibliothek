@@ -11,6 +11,8 @@ export interface SeatingParts extends Pick<CoreParts, 'player'> {
   cat?: CatLike;
   /** A night's sleep from the bed (fade, clock to the next morning, fade back): `game/Sleep`. */
   sleep?: SleepLike;
+  /** Told once the player is awake again: a night's dream, some mornings (`household/dreams`). */
+  dreams?: { afterSleep(): void };
 }
 
 /** Armchairs and the bed: sitting down, standing up (a movement key or E), and sleeping until morning. */
@@ -58,6 +60,7 @@ export class Seating implements KeyRoute {
     void sleep.untilMorning().then(() => {
       this.host.setFrozen(false);
       this.host.notify(`Good morning!\nMove or press ${actionKeyLabel('standUp')} to get up`, 3000);
+      this.parts.dreams?.afterSleep();
     });
   }
 

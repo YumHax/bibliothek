@@ -80,6 +80,11 @@ export class CatBrain {
     this.mind.enter('idle');
   }
 
+  /** Something bought for it after it moved in (the scratching post, the ball): from now on it may go to it. */
+  provide(things: Pick<CatBrainContext, 'scratcher' | 'toy'>): void {
+    Object.assign(this.ctx, things);
+  }
+
   // --- public ---------------------------------------------------------------------------------
 
   get state(): CatState {

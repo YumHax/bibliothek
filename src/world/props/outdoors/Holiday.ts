@@ -1,33 +1,27 @@
 import { seededRandom } from '@/covers/generated/canvasUtils';
 import { Polygon, Sheet, type Rng, sizePx, worldPoint } from './Sheet';
 import { between, pick } from './paint';
-import { FRONTAGE, NEAR_KERB } from './plan';
+import { FRONTAGE, OUR_LINE } from './plan';
+import { LIGHT_STRINGS } from '@/world/city/frontage';
 import { CONIFER_STYLE, paintTree } from './Tree';
-import { currentHoliday } from './season';
+import { currentHoliday } from '@/time/season';
 
 /**
- * What the neighbourhood puts up for the holidays (`currentHoliday()`): strings of lights slung
- * across both streets from our own front to the facades opposite, bulbs wound round the street
- * trees, a tall lit fir in the park at Christmas; orange and violet strings and carved pumpkins on
- * the sills at Halloween. Everything here is painted in its place in the far-to-near order of the
+ * What the neighbourhood puts up for the holidays (`currentHoliday()`): at Christmas strings of
+ * lights slung across Front Street from our own front to the facades opposite (where the walkable
+ * street hangs them), bulbs wound round the street trees, a tall lit fir in the park; carved
+ * pumpkins on the sills at Halloween. Everything here is painted in its place in the far-to-near order of the
  * street or the park it belongs to (see `holidayStreetItems`, `holidayParkItems`); the bulbs are
  * fairy lights (`Sheet.fairy`), twinkling at night in their own colours.
  */
 
-/** Bulb colours of the strings, per holiday. */
-const BULBS = {
-  christmas: ['#ff3a2a', '#ffd23a', '#3aff6a', '#4a8aff', '#fff4e0'],
-  halloween: ['#ff8a1a', '#b04aff', '#ff8a1a', '#ffb03a'],
-} as const;
-/** Our own front on Front Street and on Park Street, where the strings are made fast (metres from the eye). */
-const OUR_FRONT = NEAR_KERB - 0.8;
-/** Height of the strings where they are fixed, how far they sag mid-street, and the spacing of their bulbs. */
-const STRING_HEIGHT = 6.5;
-const STRING_SAG = 1.1;
-const BULB_SPACING = 0.45;
-/** Where the strings cross each street: x along Front Street, z along Park Street. */
-const FRONT_STRINGS = [9, 20, 31, 42, 53];
-const PARK_STRINGS = [-9, -20, -31, -42];
+/** Bulb colours of the Christmas strings (and the park's fir). */
+const BULBS = ['#ff3a2a', '#ffd23a', '#3aff6a', '#4a8aff', '#fff4e0'];
+/** Our own front on Front Street, where the strings are made fast (metres from the eye). */
+const OUR_FRONT = OUR_LINE - 0.1;
+/** Where the strings cross Front Street (x), the height of their ends, how far they sag mid-street and the spacing of their bulbs: the walkable street's. */
+const FRONT_STRINGS = LIGHT_STRINGS.map((string) => string.x);
+const { height: STRING_HEIGHT, sag: STRING_SAG, spacing: BULB_SPACING } = LIGHT_STRINGS[0]!;
 /** Length of the pieces a string is cut into for the far-to-near order. */
 const PIECE = 3;
 /** The park's lit fir, near the gate, and its size. */
@@ -58,14 +52,11 @@ export function holidayBetween(min: number, max: number): number {
   return between(random, min, max);
 }
 
-/** The strings across both streets, cut into pieces, for the street painter to sort in with the rest. */
+/** The strings across Front Street, cut into pieces, for the street painter to sort in with the rest. */
 export function holidayStreetItems(sheet: Sheet): Item[] {
-  const holiday = currentHoliday();
-  if (!holiday) return [];
-  const colors = BULBS[holiday];
+  if (currentHoliday() !== 'christmas') return [];
   const items: Item[] = [];
-  for (const x of FRONT_STRINGS) items.push(...stringItems(sheet, colors, [x, OUR_FRONT], [x + between(random, -1.5, 1.5), FRONTAGE - 0.3]));
-  for (const z of PARK_STRINGS) items.push(...stringItems(sheet, colors, [-OUR_FRONT, z], [-(FRONTAGE - 0.3), z + between(random, -1.5, 1.5)]));
+  for (const x of FRONT_STRINGS) items.push(...stringItems(sheet, BULBS, [x, OUR_FRONT], [x + between(random, -1.5, 1.5), FRONTAGE - 0.3]));
   return items;
 }
 
@@ -171,7 +162,7 @@ function bulb(sheet: Sheet, color: string, x: number, z: number, h: number, d: n
 function paintChristmasTree(sheet: Sheet, x: number, z: number, height: number, radius: number): void {
   paintTree(sheet, random, { x, z, height, radius, style: CONIFER_STYLE, form: 'conifer' });
   const d = Math.hypot(x, z);
-  const colors = BULBS.christmas;
+  const colors = BULBS;
   // Spiral garlands, only the front half of each turn shows.
   const turns = 5;
   const n = 320;

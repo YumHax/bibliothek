@@ -65,6 +65,13 @@ export interface Game {
   edition?: Edition;
   /** True for a reproduction sold as the real thing (the market's fakes): worth next to nothing. */
   repro?: boolean;
+  /**
+   * A worn copy cleaned up at home (`household/`): it reads as `noManual` on the shelf and in the
+   * collection's value, but the WE BUY desk and a swap still count it as worn.
+   */
+  restored?: boolean;
+  /** An old shop's price sticker on the cover: worth a little less until it is peeled off at home. */
+  sticker?: boolean;
   /** Where and for how much the player got it; absent for games from before receipts were kept. */
   acquired?: Acquisition;
   /**

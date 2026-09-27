@@ -3,7 +3,7 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import type { Updatable } from '@/core/Engine';
 import type { Furniture } from '../../Furniture';
 import type { DayNight } from '../../props/DayNight';
-import { wakefulnessAt } from '../../props/outdoors/wakefulness';
+import { wakefulnessAt } from '@/time/wakefulness';
 import { Walker } from '../../people/Walker';
 import { snowCovered } from '../snowCover';
 import { shopDoors, type Vec2 } from '../streetPlan';

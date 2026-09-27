@@ -4,8 +4,7 @@ import type { SessionActions } from '@/game/SessionActions';
 import { createCanvas, toTexture } from '@/covers/generated/canvasUtils';
 import type { Furniture } from '../Furniture';
 import { boxMesh, cylinderMesh, invisibleHitbox } from '../meshUtils';
-import { matte } from '../props/Prop';
-import { wood as woodMaterial } from '@/world/materials/finishes';
+import { paint, standard, timber } from '../materials/palette';
 
 export interface BuyBackDeskOptions {
   /** Distance from the origin back to the wall the sign hangs on (room for the clerk in between). */
@@ -16,10 +15,9 @@ const WIDTH = 1.3;
 const DEPTH = 0.62;
 const HEIGHT = 1.02;
 
-const PINE = woodMaterial(0x9a7650, 0.6);
-const PANEL = matte(0x3a4a5a, 0.7);
-const TIN = new THREE.MeshStandardMaterial({ color: 0x2f5a3a, roughness: 0.45, metalness: 0.6 });
-const BRASS = new THREE.MeshStandardMaterial({ color: 0xb08a3a, roughness: 0.35, metalness: 0.8 });
+const PINE = timber(0x9a7650, 0.6);
+const PANEL = paint(0x3a4a5a, 0.7);
+const BRASS = standard({ color: 0xb08a3a, roughness: 0.35, metalness: 0.8 });
 
 /**
  * The WE BUY desk: where the market buys games off the player. A plain desk with a cash tin and a
@@ -40,8 +38,8 @@ export class BuyBackDesk extends THREE.Group implements Furniture, Interactable 
     // Tongue-and-groove boards down the front.
     for (let x = -WIDTH / 2 + 0.06; x < WIDTH / 2; x += 0.12) this.add(boxMesh(0.1, HEIGHT - 0.12, 0.01, PINE, { x, y: (HEIGHT - 0.04) / 2, z: DEPTH * 0.3 + 0.005 }));
 
-    // The cash tin, its lid a little open, and the bell.
-    this.lid = TIN.clone();
+    // The cash tin, its lid a little open, and the bell. Its own material: it glows on hover.
+    this.lid = new THREE.MeshStandardMaterial({ color: 0x2f5a3a, roughness: 0.45, metalness: 0.6 });
     this.add(boxMesh(0.26, 0.08, 0.18, this.lid, { x: 0.3, y: HEIGHT + 0.04, z: -0.05 }));
     const lid = boxMesh(0.26, 0.012, 0.18, this.lid, { x: 0.3, y: HEIGHT + 0.085, z: -0.14 });
     lid.rotation.x = -0.5;
@@ -52,7 +50,7 @@ export class BuyBackDesk extends THREE.Group implements Furniture, Interactable 
     dome.position.set(-0.35, HEIGHT + 0.01, 0.08);
     this.add(dome);
     // A stack of boxes bought today, waiting to be priced.
-    this.add(boxMesh(0.14, 0.09, 0.2, matte(0x7a3a2a, 0.8), { x: -0.05, y: HEIGHT + 0.045, z: -0.12 }));
+    this.add(boxMesh(0.14, 0.09, 0.2, paint(0x7a3a2a, 0.8), { x: -0.05, y: HEIGHT + 0.045, z: -0.12 }));
 
     const sign = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 0.42), new THREE.MeshStandardMaterial({ map: paintSign(), roughness: 0.85 }));
     sign.position.set(0, 1.8, -wallBehind + 0.01);

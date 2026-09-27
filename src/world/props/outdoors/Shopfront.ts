@@ -1,6 +1,7 @@
 import { Polygon, type Rng } from './Sheet';
 import { between, integer, pick, shade } from './paint';
 import { FacadeFrame } from './FacadeFrame';
+import { SHOP_LOOKS } from '@/world/city/shopLooks';
 
 /** What a shop puts out on the pavement in front of it. */
 export type ShopDisplay = 'terrace' | 'crates' | 'buckets' | 'board' | 'none';
@@ -47,31 +48,32 @@ interface ShopType {
   bracket?: 'cross' | 'diamond';
 }
 
+/** A kind's colours (`city/shopLooks`, shared with the walkable street) with how the painted front lights up and dresses the pavement. */
+function look(kind: keyof typeof SHOP_LOOKS, painted: Pick<ShopType, 'light' | 'display'> & Partial<Pick<ShopType, 'neon' | 'bracket'>>): ShopType {
+  return { ...SHOP_LOOKS[kind], ...painted };
+}
+
+/** The shops the facades draw lots from (their order is the draw's: a new kind goes in `PLANNED_SHOPS`, never here). */
 const SHOPS: readonly ShopType[] = [
-  { name: 'CAFÉ', front: '#2f4a3a', fascia: '#2f4a3a', letters: '#e9dcb5', awning: ['#2f5a44', '#efe6d2'], goods: ['#6a4a32', '#d9c9a8', '#3a2a22'], light: 'warm', late: false, display: 'terrace' },
-  { name: 'BOULANGERIE', front: '#6b4a2a', fascia: '#5a3a22', letters: '#f1d890', awning: ['#b8862f', '#f3ead6'], goods: ['#d9a05a', '#b8763a', '#e8c890', '#8a5a2a'], light: 'warm', late: false, display: 'board' },
-  { name: 'PHARMACIE', front: '#d8d8d2', fascia: '#2f7a4a', letters: '#f4f4ee', awning: null, goods: ['#f0f0f0', '#6fb0d0', '#e0e8e0', '#8fc0a0'], light: 'cool', late: false, display: 'none', bracket: 'cross' },
-  { name: 'LIBRAIRIE', front: '#2a3550', fascia: '#2a3550', letters: '#e0c878', awning: ['#2f4f6a', '#e8e0cc'], goods: ['#8a2a2a', '#2f4f6a', '#d9c9a0', '#3f6b4f', '#b8862f', '#e8e2d2'], light: 'warm', late: false, display: 'board' },
-  { name: 'PRIMEUR', front: '#3f5a2a', fascia: '#3f5a2a', letters: '#f0e8c8', awning: ['#3f6b4f', '#f0ead8'], goods: ['#d9383a', '#f09a3a', '#6fa35e', '#e8d040'], light: 'warm', late: false, display: 'crates' },
-  { name: 'FLEURS', front: '#4a3a5a', fascia: '#e8e0d4', letters: '#5a3f6a', awning: ['#5a3f6a', '#e8e0d4'], goods: ['#e0567a', '#f0f0e8', '#b04ac0', '#4d7a3a', '#f09a3a'], light: 'warm', late: false, display: 'buckets' },
-  { name: 'TABAC', front: '#3a3634', fascia: '#8a2a2a', letters: '#f0e8d8', awning: null, goods: ['#c9c9c9', '#d94f3a', '#3b6fb3'], light: 'warm', late: true, display: 'none', neon: 'warm', bracket: 'diamond' },
-  { name: 'BAR', front: '#241c1a', fascia: '#241c1a', letters: '#f0c060', awning: ['#7a2f2f', '#2a2020'], goods: ['#c9a050', '#6a8a5a', '#a03a2a', '#3a2a22'], light: 'warm', late: true, display: 'terrace', neon: 'warm' },
-  { name: 'BOUCHERIE', front: '#7a2a2a', fascia: '#7a2a2a', letters: '#f0e8d8', awning: ['#8a2a2a', '#f0ead8'], goods: ['#c9544a', '#e8d8c8', '#a83a30'], light: 'cool', late: false, display: 'none' },
-  { name: 'LAVERIE', front: '#3a6a8a', fascia: '#f0f0ea', letters: '#3a6a8a', awning: null, goods: ['#e8e8e8', '#c9c9c9', '#3a6a8a'], light: 'cool', late: true, display: 'none' },
+  look('cafe', { light: 'warm', display: 'terrace' }),
+  look('bakery', { light: 'warm', display: 'board' }),
+  look('pharmacy', { light: 'cool', display: 'none', bracket: 'cross' }),
+  look('books', { light: 'warm', display: 'board' }),
+  look('grocer', { light: 'warm', display: 'crates' }),
+  look('florist', { light: 'warm', display: 'buckets' }),
+  look('tabac', { light: 'warm', display: 'none', neon: 'warm', bracket: 'diamond' }),
+  look('bar', { light: 'warm', display: 'terrace', neon: 'warm' }),
+  look('butcher', { light: 'cool', display: 'none' }),
+  look('laundry', { light: 'cool', display: 'none' }),
+];
+/** Kinds only the walkable street's plan puts somewhere (`plannedType`), never drawn by lot. */
+const PLANNED_SHOPS: readonly ShopType[] = [
+  look('furniture', { light: 'warm', display: 'none' }),
+  look('pets', { light: 'warm', display: 'none' }),
+  look('electronics', { light: 'cool', display: 'none', neon: 'cool' }),
 ];
 /** The shop across the street the collector surely haunts. */
-export const RETRO_GAMES: ShopType = {
-  name: 'RÉTRO JEUX',
-  front: '#1c1a2a',
-  fascia: '#2a1f4a',
-  letters: '#8fe6ff',
-  awning: null,
-  goods: ['#d94f3a', '#3b6fb3', '#f0c94a', '#e8e8e8', '#6fa35e', '#8c4f9e'],
-  light: 'cool',
-  late: false,
-  display: 'board',
-  neon: 'cool',
-};
+export const RETRO_GAMES: ShopType = look('retro', { light: 'cool', display: 'board', neon: 'cool' });
 const LETTER_FONT = 'Georgia, "Times New Roman", serif';
 const GLASS = '#26313d';
 
@@ -89,8 +91,11 @@ export interface PlannedShop {
 
 /** The painted look of a plan's kind of shop ('shut' is a roller shutter, the arcade is not painted). */
 function plannedType(kind: string, name?: string): ShopType | null {
-  const byKind: Record<string, string> = { cafe: 'CAFÉ', bakery: 'BOULANGERIE', pharmacy: 'PHARMACIE', books: 'LIBRAIRIE', grocer: 'PRIMEUR', florist: 'FLEURS', tabac: 'TABAC', bar: 'BAR', butcher: 'BOUCHERIE', laundry: 'LAVERIE' };
-  const type = kind === 'retro' ? RETRO_GAMES : SHOPS.find((shop) => shop.name === byKind[kind]);
+  const byKind: Record<string, string> = {
+    cafe: 'CAFE', bakery: 'BAKERY', pharmacy: 'PHARMACY', books: 'BOOKSHOP', grocer: 'GREENGROCER', florist: 'FLOWERS', tabac: 'NEWSAGENT', bar: 'BAR', butcher: 'BUTCHER', laundry: 'LAUNDERETTE',
+    furniture: 'FURNITURE', pets: 'PET SHOP', electronics: 'TV REPAIR',
+  };
+  const type = kind === 'retro' ? RETRO_GAMES : [...SHOPS, ...PLANNED_SHOPS].find((shop) => shop.name === byKind[kind]);
   if (!type) return null;
   return name && type !== RETRO_GAMES ? { ...type, name } : type;
 }

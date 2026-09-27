@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import { cylinderMesh } from '../meshUtils';
-import { Prop, part, matte } from './Prop';
+import { Prop, part } from './Prop';
+import { paint } from '../materials/palette';
+import { PROUD } from './joinery';
 import { fabric } from '@/world/materials/finishes';
 
 export interface DrapedTowelOptions {
@@ -50,8 +52,8 @@ export class DrapedTowel extends Prop {
       body.add(fold);
     }
     // The outside fall hangs a hair off the face, the inside one against it.
-    part(body, width, drop, THICKNESS, cloth, { y: -drop / 2, z: half + 0.002 });
+    part(body, width, drop, THICKNESS, cloth, { y: -drop / 2, z: half + PROUD });
     part(body, width * 0.97, inner, THICKNESS, cloth, { y: -inner / 2, z: -half });
-    part(body, width + 0.002, 0.035, THICKNESS + 0.004, matte(colour, 0.7), { y: -drop + 0.05, z: half + 0.002 }).castShadow = false;
+    part(body, width + 0.002, 0.035, THICKNESS + 0.004, paint(colour, 0.7), { y: -drop + 0.05, z: half + PROUD }).castShadow = false;
   }
 }

@@ -4,6 +4,7 @@ import { seededRandom } from '@/covers/generated/canvasUtils';
 import type { Furniture } from '../Furniture';
 import type { DayNight } from '../props/DayNight';
 import { KERB_HEIGHT } from './streetPlan';
+import { RENDER_ORDER } from '../surface/layers';
 
 /** The box of air around the eye the drops and flakes fill (metres), and how many there can be at most. */
 const BOX = new THREE.Vector3(34, 16, 34);
@@ -247,7 +248,7 @@ export class Precipitation extends THREE.Group implements Furniture, Updatable {
     for (const mesh of [this.rain, this.snow, this.splash]) {
       mesh.frustumCulled = false;
       mesh.castShadow = false;
-      mesh.renderOrder = 3;
+      mesh.renderOrder = RENDER_ORDER.particles;
       mesh.visible = false;
       this.add(mesh);
     }

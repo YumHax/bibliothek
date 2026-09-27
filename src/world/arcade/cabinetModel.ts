@@ -1,6 +1,9 @@
 import * as THREE from 'three';
 import { boxMesh, type MeshPosition } from '../meshUtils';
-import { markShared, matte } from '../props/Prop';
+import { WALL } from '../surface/layers';
+import { matte } from '../props/Prop';
+import { proud } from '../props/joinery';
+import { METAL, paint as paintOf } from '../materials/palette';
 import { InstructionCard, hintLines } from './InstructionCard';
 import { paintCabinetMarquee, paintPanel, paintSideArt } from './cabinetArt';
 
@@ -28,8 +31,8 @@ export const FRONT_Z = -0.11 + UPPER_DEPTH / 2;
  */
 export const SCREEN_Z = FRONT_Z + (SCREEN_HEIGHT / 2 + BEZEL_BORDER) * Math.sin(SCREEN_TILT) + BEZEL_THICKNESS / 2 + 0.004;
 
-const BLACK = markShared(matte(0x16161a, 0.5));
-export const CABINET_CHROME = markShared(new THREE.MeshStandardMaterial({ color: 0xb9bcc0, metalness: 0.6, roughness: 0.35 }));
+const BLACK = paintOf(0x16161a, 0.5);
+export const CABINET_CHROME = METAL.satinSteel();
 
 export interface CabinetBodySpec {
   color: number;
@@ -78,13 +81,13 @@ export function buildCabinetBody(cabinet: THREE.Group, spec: CabinetBodySpec): C
   bezel.rotation.x = -SCREEN_TILT;
   cabinet.add(bezel);
   // Kick plate (standing 2 mm proud of the base, whose faces it would otherwise share) and a chrome trim on the panel.
-  cabinet.add(boxMesh(WIDTH + 0.004, 0.06, DEPTH + 0.004, BLACK, { y: 0.03, z: -0.02 }));
+  cabinet.add(boxMesh(proud(WIDTH), 0.06, proud(DEPTH), BLACK, { y: 0.03, z: -0.02 }));
   cabinet.add(boxMesh(WIDTH, 0.015, 0.015, CABINET_CHROME, { y: BASE_H + 0.085, z: DEPTH / 2 + 0.02 }));
 
   // Marquee: the title on a glowing strip; brighter when hovered.
   const marquee = new THREE.MeshBasicMaterial({ map: paintCabinetMarquee(spec.title, color, glow), toneMapped: false, color: 0xcccccc });
   const marqueeMesh = new THREE.Mesh(new THREE.PlaneGeometry(WIDTH - 0.04, 0.16), marquee);
-  marqueeMesh.position.set(0, TOTAL_H - 0.1, -0.11 + UPPER_DEPTH / 2 + 0.002);
+  marqueeMesh.position.set(0, TOTAL_H - 0.1, -0.11 + UPPER_DEPTH / 2 + WALL.notice.lift);
   cabinet.add(marqueeMesh);
   return { body: [paint, baseArt, upperArt], marquee, marqueeMesh };
 }

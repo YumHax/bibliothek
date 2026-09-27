@@ -7,6 +7,7 @@ import type { BuildContext, ZoneHandle } from '../buildContext';
 import { ShutDoor } from '../props/ShutDoor';
 import { placeAirlock } from '../airlock';
 import { Prop } from '../props/Prop';
+import { paint } from '../materials/palette';
 import { invisibleHitbox } from '../meshUtils';
 import { Staircase } from './Staircase';
 import { Lift } from './Lift';
@@ -56,7 +57,7 @@ export function furnishStairwell(zone: Zone, { sky, listener, acoustics, buildin
     const names = k === 0 ? [plan.ourNeighbour] : plan.neighbours[k - 1]!;
     names.forEach((name, i) => {
       const x = k === 0 ? plan.ourNeighbourX : plan.doorX[i]!;
-      const door = new NeighbourDoor(`${name} · ${plan.floorNames[k]}`, NEIGHBOUR_LINES[(k * 2 + i) % NEIGHBOUR_LINES.length]!, 'panelled', { key: doorKey(k, i), building });
+      const door = new NeighbourDoor(`${name} · ${plan.floorNames[k]} floor`, NEIGHBOUR_LINES[(k * 2 + i) % NEIGHBOUR_LINES.length]!, 'panelled', { key: doorKey(k, i), building });
       zone.place(door, new THREE.Vector3(x, y, floorLanding.z1 - 0.005), Math.PI);
     });
   }
@@ -162,7 +163,7 @@ function tradeNote(offer: TradeOffer): MailPiece {
   };
 }
 
-/** The floor's name painted on the wall by the stairs: 5e, 4e … RDC. */
+/** The floor's name painted on the wall by the stairs: 5th, 4th … G. */
 class FloorName extends Prop {
   readonly contactShadow = false;
 
@@ -175,7 +176,7 @@ class FloorName extends Prop {
     ctx.font = 'bold 58px Georgia, serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(name, 64, 52);
+    ctx.fillText(name, 64, 52, 116);
     const plate = new THREE.Mesh(new THREE.PlaneGeometry(0.32, 0.24), new THREE.MeshStandardMaterial({ map: toTexture(canvas, 2), roughness: 0.9 }));
     this.add(plate);
   }
@@ -214,7 +215,7 @@ class Mailboxes extends Prop {
       }
     }
     const face = new THREE.MeshStandardMaterial({ map: toTexture(canvas, 4), roughness: 0.6 });
-    const wood = new THREE.MeshStandardMaterial({ color: 0x4a2c1c, roughness: 0.6 });
+    const wood = paint(0x4a2c1c, 0.6);
     const cabinet = new THREE.Mesh(new THREE.BoxGeometry(w, h, 0.12), [wood, wood, wood, wood, face, wood]);
     cabinet.position.z = 0.06;
     cabinet.castShadow = true;

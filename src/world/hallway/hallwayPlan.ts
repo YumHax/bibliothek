@@ -102,14 +102,18 @@ export const HALLWAY_PLAN = {
 
   /**
    * A runner down the middle: dark red border round a faded field. It stops short of the kitchen and bedroom doors'
-   * mats (each 0.42 m into the corridor), which lie at the same height and would z-fight with it. The builder places it
-   * (not `decor`): the kilim, once bought, takes its place.
+   * mats (each 0.42 m into the corridor): both lie on the floor's `rug` layer (`surface/layers.ts` `FLOOR.rug`, the
+   * `Rug` and `Door` take their height from it), so an overlap would z-fight. The builder places it (not `decor`): the
+   * kilim, once bought, takes its place.
    */
   runner: { at: { floor: [-0.675, 0] } as Placement, options: { width: 1.55, depth: 0.7, field: 0x9c6a5a, border: 0x6b2f2a, motif: 0x7a4a40 } },
 
   /** Where the market's home goods for the hallway (`economy/homeGoods.ts`) go once bought; nothing shows there before. */
   homeGoods: {
-    /** The kilim replaces the runner on the same spot (never both: same height, they would z-fight); a little shorter, as its fringes reach past its ends. */
+    /**
+     * The kilim replaces the runner on the same spot (never both: it lies on `FLOOR.kilim`, under the runner's
+     * `FLOOR.rug`, which would bury it); a little shorter, as its fringes (`FLOOR.fringe`) reach past its ends.
+     */
     rug: { at: { floor: [-0.675, 0] } as Placement, options: { width: 1.45, depth: 0.7, seed: 7 } },
     /** The framed shop poster on our wall in the corner by the front door, above the umbrellas, past the camel coat (x <= 1.67). */
     poster: { at: { wall: 'front', along: 1.83, y: 1.47 } as Placement, width: 0.26, height: 0.36 },
@@ -118,8 +122,9 @@ export const HALLWAY_PLAN = {
   decor: [
     // Two framed pictures on our wall between the collection room's door and the coats (x 0..0.83; left of the door the
     // open leaf would cover them), clear of the light switch below.
-    { kind: 'pictureFrame', at: { wall: 'front', along: 0.3, y: 1.5 }, options: { motif: 'abstract', seed: 4, width: 0.42, height: 0.32 } },
-    { kind: 'pictureFrame', at: { wall: 'front', along: 0.68, y: 1.55 }, options: { motif: 'sunset', seed: 9, width: 0.24, height: 0.3, matWidth: 0.025 } },
+    // Bought at the furniture shop (`framedPrint` nth 3, 4: after the living room's three).
+    { kind: 'pictureFrame', at: { wall: 'front', along: 0.3, y: 1.5 }, options: { motif: 'abstract', seed: 4, width: 0.42, height: 0.32 }, upgrade: { good: 'framedPrint', nth: 3 } },
+    { kind: 'pictureFrame', at: { wall: 'front', along: 0.68, y: 1.55 }, options: { motif: 'sunset', seed: 9, width: 0.24, height: 0.3, matWidth: 0.025 }, upgrade: { good: 'framedPrint', nth: 4 } },
     // A cork noticeboard on the far wall in the stretch between the kitchen door and the bathroom door (x -2..-1.585 with
     // its architrave); the bathroom's leaf opens into the corridor and lies over the wall right of its opening, so nothing hangs there.
     { kind: 'noticeboard', at: { wall: 'back', along: -1.79, y: 1.45 }, options: { width: 0.34, height: 0.44 } },
@@ -132,9 +137,10 @@ export const HALLWAY_PLAN = {
     { kind: 'intercom', at: { wall: 'right', along: -0.57, y: 1.35 } },
     { kind: 'fuseBox', at: { wall: 'right', along: 0.15, y: 2.32 } },
     // An oak shoe rack under the coats (x 0.9..1.6; the coat rack is built without its own wire one), clear of the umbrellas.
-    { kind: 'shoeRack', at: { wall: 'front', along: 1.25, y: 0 } },
+    // Both come from the furniture shop (`hallStand`).
+    { kind: 'shoeRack', at: { wall: 'front', along: 1.25, y: 0 }, upgrade: 'hallStand' },
     // Umbrellas in the corner by the front door, past the end of the coat rack (which ends at x 1.6).
-    { kind: 'umbrellaStand', at: { corner: 'front-right', inset: 0.22 } },
+    { kind: 'umbrellaStand', at: { corner: 'front-right', inset: 0.22 }, upgrade: 'hallStand' },
     // Smoke detector on the corridor's ceiling, off the flush light.
     { kind: 'smokeDetector', at: { ceiling: [0.9, 0] } },
     // A low panel radiator on our wall under the pictures, between the collection room's door (its latch side at x -0.085)

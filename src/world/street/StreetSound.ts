@@ -2,9 +2,11 @@ import * as THREE from 'three';
 import type { Updatable } from '@/core/Engine';
 import { outdoorsInput, startedAudioContext } from '@/audio/audioContext';
 import { ringTheHour } from '@/audio/churchBells';
+import { brownNoise, whiteNoise } from '@/audio/noise';
+import { birdNote, horn, sirenVoice, twoTone } from '@/audio/street/streetVoices';
 import type { Furniture, OccupancyAware } from '../Furniture';
 import type { DayNight } from '../props/DayNight';
-import { wakefulnessAt } from '../props/outdoors/wakefulness';
+import { wakefulnessAt } from '@/time/wakefulness';
 import type { CarVoice } from './StreetCars';
 import { STREET_PLAN } from './streetPlan';
 
@@ -20,6 +22,9 @@ const MASTER = 0.5;
 const BELL_HOURS = [8, 21] as const;
 /** Real seconds between two distant sirens: by day, and at night (more often). */
 const SIREN_EVERY = { day: [150, 420], night: [80, 240] } as const;
+/** The distant siren's two tones (the French la, si) and how long each is held. */
+const SIREN_TONES: [number, number] = [435, 488];
+const SIREN_STEP = 0.55;
 
 /** What a road user may say about itself beyond `CarVoice` (the vehicles' fork adds these; read defensively). */
 interface VoiceExtras {
@@ -178,17 +183,8 @@ export class StreetSound extends THREE.Group implements Furniture, Updatable, Oc
     // Through the street's filter: heard muffled from the building's sas with the door shut.
     this.master.connect(outdoorsInput(ctx));
 
-    const length = ctx.sampleRate * 2;
-    this.noise = ctx.createBuffer(1, length, ctx.sampleRate);
-    const white = this.noise.getChannelData(0);
-    for (let i = 0; i < length; i++) white[i] = Math.random() * 2 - 1;
-    const brown = ctx.createBuffer(1, length, ctx.sampleRate);
-    const b = brown.getChannelData(0);
-    let last = 0;
-    for (let i = 0; i < length; i++) {
-      last = (last + 0.02 * white[i]!) / 1.02;
-      b[i] = last * 3.5;
-    }
+    this.noise = whiteNoise(ctx, 2);
+    const brown = brownNoise(ctx, 2);
 
     this.rumble = ctx.createGain();
     this.rumble.gain.value = 0;
@@ -248,37 +244,23 @@ export class StreetSound extends THREE.Group implements Furniture, Updatable, Oc
     return source;
   }
 
-  /** A horn: two detuned reedy tones, a short blast or two (the bus's lower and longer). */
+  /** A horn: two reedy tones, a short blast or two (the bus's lower and longer). */
   private horn(ctx: AudioContext, level: number, pan: number, heavy: boolean): void {
     if (!this.master) return;
-    const t = ctx.currentTime + 0.02;
     const panner = ctx.createStereoPanner();
     panner.pan.value = pan;
-    const band = ctx.createBiquadFilter();
-    band.type = 'bandpass';
-    band.frequency.value = heavy ? 700 : 1100;
-    band.Q.value = 0.9;
-    band.connect(panner).connect(this.master);
-    const blasts = Math.random() < 0.4 ? 2 : 1;
-    const length = heavy ? 0.7 : 0.32;
-    const loud = Math.min(0.5, 0.15 + level * 1.2);
-    for (let n = 0; n < blasts; n++) {
-      const start = t + n * (length + 0.12);
-      for (const f of heavy ? [233, 294] : [415, 523]) {
-        const osc = ctx.createOscillator();
-        osc.type = 'square';
-        osc.frequency.value = f;
-        const env = ctx.createGain();
-        env.gain.setValueAtTime(0, start);
-        env.gain.linearRampToValueAtTime(loud * 0.25, start + 0.015);
-        env.gain.setValueAtTime(loud * 0.25, start + length - 0.03);
-        env.gain.linearRampToValueAtTime(0, start + length);
-        osc.connect(env).connect(band);
-        osc.start(start);
-        osc.stop(start + length + 0.02);
-      }
-    }
-    window.setTimeout(() => panner.disconnect(), (blasts * (length + 0.12) + 0.5) * 1000);
+    panner.connect(this.master);
+    const end = horn(ctx, panner, {
+      pitches: heavy ? [233, 294] : [415, 523],
+      blasts: Math.random() < 0.4 ? 2 : 1,
+      length: heavy ? 0.7 : 0.32,
+      gap: 0.12,
+      level: Math.min(0.5, 0.15 + level * 1.2) * 0.25,
+      attack: 0.015,
+      release: 0.03,
+      filter: { type: 'bandpass', frequency: heavy ? 700 : 1100, q: 0.9 },
+    }, ctx.currentTime + 0.02);
+    window.setTimeout(() => panner.disconnect(), (end - ctx.currentTime + 0.62) * 1000);
   }
 
   /** A two-tone siren far off, drifting past: it swells, its pitch sags as it goes (a whiff of Doppler), it fades. */
@@ -290,23 +272,16 @@ export class StreetSound extends THREE.Group implements Furniture, Updatable, Oc
     const from = Math.random() * 1.6 - 0.8;
     panner.pan.setValueAtTime(from, t);
     panner.pan.linearRampToValueAtTime(-from * 0.6, t + length);
-    const low = ctx.createBiquadFilter();
-    low.type = 'lowpass';
-    low.frequency.value = 1800;
-    const env = ctx.createGain();
+    panner.connect(this.master);
+    const { osc, gain: env } = sirenVoice(ctx, panner, 1800);
     env.gain.setValueAtTime(0, t);
     env.gain.linearRampToValueAtTime(0.03, t + length * 0.45);
     env.gain.linearRampToValueAtTime(0, t + length);
-    env.connect(low).connect(panner).connect(this.master);
-    const osc = ctx.createOscillator();
-    osc.type = 'triangle';
-    // The French two-tone (la, si), half a second each, slipping down a little as it passes.
-    const step = 0.55;
-    for (let i = 0; t + i * step < t + length; i++) {
-      const bend = 1 - 0.03 * THREE.MathUtils.smoothstep((i * step) / length, 0.4, 0.6);
-      osc.frequency.setValueAtTime((i % 2 ? 488 : 435) * bend, t + i * step);
+    // The two-tone, half a second each, slipping down a little as it passes.
+    for (let i = 0; i * SIREN_STEP < length; i++) {
+      const bend = 1 - 0.03 * THREE.MathUtils.smoothstep((i * SIREN_STEP) / length, 0.4, 0.6);
+      osc.frequency.setValueAtTime(twoTone(SIREN_TONES, SIREN_STEP, (i + 0.5) * SIREN_STEP) * bend, t + i * SIREN_STEP);
     }
-    osc.connect(env);
     osc.start(t);
     osc.stop(t + length + 0.05);
     window.setTimeout(() => panner.disconnect(), (length + 1) * 1000);
@@ -321,18 +296,9 @@ export class StreetSound extends THREE.Group implements Furniture, Updatable, Oc
     pan.pan.value = Math.random() * 1.6 - 0.8;
     pan.connect(this.master);
     for (let i = 0; i < notes; i++) {
-      const osc = ctx.createOscillator();
-      const env = ctx.createGain();
       const start = t + i * (0.09 + Math.random() * 0.05);
       const f = 3800 + Math.random() * 1400;
-      osc.frequency.setValueAtTime(f, start);
-      osc.frequency.exponentialRampToValueAtTime(f * 0.7, start + 0.06);
-      env.gain.setValueAtTime(0, start);
-      env.gain.linearRampToValueAtTime(0.05, start + 0.01);
-      env.gain.linearRampToValueAtTime(0, start + 0.07);
-      osc.connect(env).connect(pan);
-      osc.start(start);
-      osc.stop(start + 0.08);
+      birdNote(ctx, pan, { at: start, from: f, to: f * 0.7, sweep: 0.06, attack: 0.01, length: 0.07, level: 0.05 });
     }
     window.setTimeout(() => pan.disconnect(), 1000);
   }

@@ -3,9 +3,10 @@ import type { Interactable } from '@/interaction/Interactable';
 import type { SessionActions } from '@/game/SessionActions';
 import { createCanvas, toTexture, FONT } from '@/covers/generated/canvasUtils';
 import { invisibleHitbox } from '../meshUtils';
-import { Prop, matte } from './Prop';
+import { paint, standard, timber } from '../materials/palette';
+import { WALL } from '../surface/layers';
+import { Prop } from './Prop';
 import type { DayNight } from './DayNight';
-import { wood as woodMaterial } from '@/world/materials/finishes';
 import { playAlarm } from '@/audio/alarm';
 
 export interface WallClockOptions {
@@ -58,7 +59,7 @@ export class WallClock extends Prop implements Interactable {
     const faceZ = CASE_DEPTH;
 
     // Case: a shallow cylinder proud of the wall, axis along z.
-    const wood = woodMaterial(options.caseColor ?? 0x3a2c22, 0.55);
+    const wood = timber(options.caseColor ?? 0x3a2c22, 0.55);
     const body = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius, CASE_DEPTH, SEGMENTS), wood);
     body.rotation.x = Math.PI / 2;
     body.position.z = CASE_DEPTH / 2;
@@ -71,12 +72,12 @@ export class WallClock extends Prop implements Interactable {
       new THREE.CircleGeometry(dialRadius, SEGMENTS),
       new THREE.MeshStandardMaterial({ map: paintDial(), roughness: 0.9 }),
     );
-    dial.position.z = faceZ + 0.0005;
+    dial.position.z = faceZ + WALL.paper.lift;
     dial.receiveShadow = true;
     this.add(dial);
 
     // Hands: dark slabs pivoting at the centre, slightly above the dial; the hour hand under the minute hand.
-    const ink = matte(0x1c1a17, 0.4);
+    const ink = paint(0x1c1a17, 0.4);
     this.hourHand.add(hand(dialRadius * 0.55, 0.011, ink));
     this.minuteHand.add(hand(dialRadius * 0.82, 0.008, ink));
     this.hourHand.position.z = faceZ + 0.004;
@@ -93,7 +94,7 @@ export class WallClock extends Prop implements Interactable {
     ring.castShadow = true;
     const glass = new THREE.Mesh(
       new THREE.CircleGeometry(radius * 0.9, SEGMENTS),
-      new THREE.MeshStandardMaterial({ color: 0xffffff, transparent: true, opacity: 0.08, roughness: 0.05, metalness: 0.1, depthWrite: false }),
+      standard({ color: 0xffffff, transparent: true, opacity: 0.08, roughness: 0.05, metalness: 0.1, depthWrite: false }),
     );
     glass.position.z = faceZ + 0.016;
     this.add(ring, glass);

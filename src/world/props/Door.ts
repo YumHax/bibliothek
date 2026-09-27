@@ -6,8 +6,9 @@ import type { SessionActions } from '@/game/SessionActions';
 import { LidMotion } from '../box/LidMotion';
 import type { Doorway } from '../Room';
 import { cylinderMesh, invisibleHitbox } from '../meshUtils';
-import { Prop, part, matte, markShared } from './Prop';
-import { scuffed, wood as woodMaterial } from '@/world/materials/finishes';
+import { Prop, part, markShared } from './Prop';
+import { paint as paintMaterial, scuffedPaint, timber } from '../materials/palette';
+import { FLOOR } from '../surface/layers';
 
 export interface DoorOptions {
   /** Colour of the painted leaf. Default a deep slate green. */
@@ -43,8 +44,8 @@ const BLOCKER_SWAP = 0.5;
 const HANDLE_Y = 1.03;
 // The gap between two zones' wall planes (see `worldPlan.ts`) must stay within `FRAME_DEPTH` so the lining covers it.
 
-const PAINT = scuffed(matte(0xf6f3ee, 0.7));
-const OAK = markShared(woodMaterial(0x8b6a44, 0.55));
+const PAINT = scuffedPaint(0xf6f3ee, 0.7);
+const OAK = timber(0x8b6a44, 0.55);
 const BRASS = markShared(new THREE.MeshStandardMaterial({ color: 0xc9a75b, metalness: 0.85, roughness: 0.3, emissive: 0xc9a75b, emissiveIntensity: 0 }));
 
 /**
@@ -89,14 +90,14 @@ export class Door extends Prop implements Updatable, Interactable {
     this.side = doorway.hinge === 'right' ? -1 : 1;
     this.brass = BRASS.clone();
     this.collisions = options.collisions;
-    const leafPaint = matte(options.leafColor ?? 0x1f3538, 0.5);
+    const leafPaint = paintMaterial(options.leafColor ?? 0x1f3538, 0.5);
 
     this.buildFrame(width, height);
     this.buildLeaf(width, height, leafPaint);
 
-    // The doormat, just inside.
+    // The doormat, just inside: a thin one, its top at the floor's `threshold` layer (a runner laid over it stays on top).
     if (options.mat !== false) {
-      const mat = part(this, width * 0.8, 0.012, 0.42, matte(0x4a4038, 1), { y: 0.006, z: 0.3 });
+      const mat = part(this, width * 0.8, FLOOR.threshold.lift, 0.42, paintMaterial(0x4a4038, 1), { y: FLOOR.threshold.lift / 2, z: 0.3 });
       mat.castShadow = false;
     }
 
@@ -223,7 +224,7 @@ export class Door extends Prop implements Updatable, Interactable {
     leaf.receiveShadow = true;
     this.occluders.push(leaf);
     // Two raised panels on each face, a lock rail between them.
-    const raised = matte(new THREE.Color(paint.color).multiplyScalar(0.9).getHex(), 0.5);
+    const raised = paintMaterial(new THREE.Color(paint.color).multiplyScalar(0.9).getHex(), 0.5);
     const panelW = leafW - 0.24;
     const panels = [
       { y: 0.16, h: leafH * 0.38 },

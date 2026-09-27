@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import type { Updatable } from '@/core/Engine';
 import type { Furniture } from '../../Furniture';
 import type { DayNight } from '../../props/DayNight';
-import { wakefulnessAt } from '../../props/outdoors/wakefulness';
+import { wakefulnessAt } from '@/time/wakefulness';
 import { Walker } from '../../people/Walker';
 import type { StreetTraffic } from '../traffic/StreetTraffic';
 import { FRONT, STREET_PLAN, type Vec2 } from '../streetPlan';
@@ -32,8 +32,8 @@ export interface StandingPeopleOptions {
 
 /** Where the waiting passenger comes from when the stop is empty again: the pharmacy's door, just along. */
 const FROM_DOOR: Vec2 = [32.5, 12];
-/** Where someone who got off walks to: along the far pavement and away down Park Street. */
-const ALIGHT_ROUTE: Vec2[] = [[31, 10.2], [-26, 10.2], [-38.2, 10.2], [-38.2, -70]];
+/** Where someone who got off walks to: along the far pavement, down Park Street and into the park by its gate. */
+const ALIGHT_ROUTE: Vec2[] = [[31, 10.2], [-26, 10.2], [-38.2, 10.2], [-38.2, STREET_PLAN.parkGate.at[1]], STREET_PLAN.parkGate.at];
 /** The bus's doors, from its stop point along its heading (+x), and the kerb they open onto. */
 const DOORS_AHEAD = 3.5;
 const KERB_Z = FRONT.farKerb + 0.35;

@@ -1,8 +1,8 @@
 import * as THREE from 'three';
 import type { Furniture } from '../Furniture';
 import { cylinderMesh } from '../meshUtils';
-import { part, matte } from './Prop';
-import { wood as woodMaterial } from '@/world/materials/finishes';
+import { METAL, paint, standard, timber } from '../materials/palette';
+import { part } from './Prop';
 
 export interface SideboardOptions {
   /** Length along the wall. Default 1.6. */
@@ -23,11 +23,11 @@ const LEG_H = 0.12;
 const PANEL = 0.02;
 /** How far the back legs stand off the wall. */
 const OFF_WALL = 0.02;
-const BRASS = new THREE.MeshStandardMaterial({ color: 0xc9a75b, metalness: 0.85, roughness: 0.3 });
-const BLACK = matte(0x1e1d1b, 0.6);
-const VINYL = new THREE.MeshStandardMaterial({ color: 0x0f0f11, roughness: 0.35, metalness: 0.1 });
-const STEEL = new THREE.MeshStandardMaterial({ color: 0xc4c7cb, metalness: 0.7, roughness: 0.3 });
-const SLEEVE_EDGE = matte(0xe8e2d4, 0.9);
+const BRASS = METAL.brass();
+const BLACK = paint(0x1e1d1b, 0.6);
+const VINYL = standard({ color: 0x0f0f11, roughness: 0.35, metalness: 0.1 });
+const STEEL = METAL.steel();
+const SLEEVE_EDGE = paint(0xe8e2d4, 0.9);
 
 /**
  * A low mid-century sideboard against a wall: an oak carcass on four splayed legs, two sliding
@@ -46,8 +46,8 @@ export class Sideboard extends THREE.Group implements Furniture {
     const width = options.width ?? 1.6;
     const depth = options.depth ?? 0.4;
     const height = options.height ?? 0.5;
-    const wood = woodMaterial(options.wood ?? 0xb98f63, 0.55);
-    const darkWood = woodMaterial(new THREE.Color(options.wood ?? 0xb98f63).multiplyScalar(0.72).getHex(), 0.6);
+    const wood = timber(options.wood ?? 0xb98f63, 0.55);
+    const darkWood = timber(new THREE.Color(options.wood ?? 0xb98f63).multiplyScalar(0.72).getHex(), 0.6);
     this.topHeight = height;
     const z = OFF_WALL + depth / 2;
     const bodyH = height - LEG_H;
@@ -93,13 +93,13 @@ export class Sideboard extends THREE.Group implements Furniture {
     const plinthW = 0.42;
     const plinthD = 0.34;
     const plinthH = 0.05;
-    part(this, plinthW, plinthH, plinthD, matte(0x3a2f26, 0.5), { x, y: top + plinthH / 2, z });
+    part(this, plinthW, plinthH, plinthD, paint(0x3a2f26, 0.5), { x, y: top + plinthH / 2, z });
     const platterY = top + plinthH;
     this.add(cylinderMesh(0.15, 0.012, STEEL, { x: x - 0.03, y: platterY + 0.006, z }, { segments: 32 }));
     const record = cylinderMesh(0.15, 0.003, VINYL, { x: x - 0.03, y: platterY + 0.0135, z }, { segments: 40 });
     record.castShadow = false;
     this.add(record);
-    const label = cylinderMesh(0.045, 0.001, matte(0xd9a441, 0.7), { x: x - 0.03, y: platterY + 0.0155, z }, { segments: 20 });
+    const label = cylinderMesh(0.045, 0.001, paint(0xd9a441, 0.7), { x: x - 0.03, y: platterY + 0.0155, z }, { segments: 20 });
     label.castShadow = false;
     this.add(label);
     this.add(cylinderMesh(0.004, 0.02, STEEL, { x: x - 0.03, y: platterY + 0.02, z }, { segments: 8 }));
@@ -113,7 +113,7 @@ export class Sideboard extends THREE.Group implements Furniture {
     // The dust lid, hinged at the back, standing up open.
     const lid = new THREE.Mesh(
       new THREE.BoxGeometry(plinthW, 0.004, plinthD),
-      new THREE.MeshStandardMaterial({ color: 0xdfe8ee, roughness: 0.1, transparent: true, opacity: 0.35 }),
+      standard({ color: 0xdfe8ee, roughness: 0.1, transparent: true, opacity: 0.35 }),
     );
     lid.position.set(x, platterY + plinthD / 2, z - plinthD / 2);
     lid.rotation.x = -Math.PI / 2 + 0.2;
@@ -127,7 +127,7 @@ export class Sideboard extends THREE.Group implements Furniture {
     const size = 0.315;
     const thick = 0.006;
     colors.forEach((color, i) => {
-      const cover = matte(color, 0.8);
+      const cover = paint(color, 0.8);
       // BoxGeometry material order: +x, -x, +y (cover), -y, +z, -z.
       const sleeve = new THREE.Mesh(new THREE.BoxGeometry(size, thick, size), [SLEEVE_EDGE, SLEEVE_EDGE, cover, cover, SLEEVE_EDGE, SLEEVE_EDGE]);
       sleeve.position.set(x + (i % 2 ? 0.012 : -0.01), top + thick / 2 + i * thick, z + (i % 3 ? 0.008 : -0.012));

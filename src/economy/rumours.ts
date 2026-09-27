@@ -30,7 +30,7 @@ export function stallRumour(news: MarketNews, pick: number): string {
       return lines[pick % lines.length]!;
     }
     case 'brocante':
-      return news.inDays === 0 ? 'Grande Brocante today! Every table in the hall, and then some.' : `The Grande Brocante is ${soon(news.inDays)}. Once a month, the whole hall. Don't miss it.`;
+      return news.inDays === 0 ? 'Grand Flea Fair today! Every table in the hall, and then some.' : `The Grand Flea Fair is ${soon(news.inDays)}. Once a month, the whole hall. Don't miss it.`;
     case 'catalogueSale':
       return `The mail-order counter's got ${percent(SALES.catalogue.factor)} off new copies ${whenText(news.inDays)}. Don't tell them I said so.`;
     case 'clearance':
@@ -49,7 +49,7 @@ export function paperRumour(news: MarketNews): string {
       return `Rumour: ${g.seller}, and a ${g.title} may be among it. Expected at the market ${soon(news.inDays)}.`;
     }
     case 'brocante':
-      return news.inDays === 0 ? 'The Grande Brocante is on: heaped stalls, a deep bargain bin, the whole neighbourhood in the hall.' : `Diary: the monthly Grande Brocante is ${soon(news.inDays)}. More stalls, more crates, ${percent(BROCANTE.priceFactor)} off everywhere.`;
+      return news.inDays === 0 ? 'The Grand Flea Fair is on: heaped stalls, a deep bargain bin, the whole neighbourhood in the hall.' : `Diary: the monthly Grand Flea Fair is ${soon(news.inDays)}. More stalls, more crates, ${percent(BROCANTE.priceFactor)} off everywhere.`;
     case 'catalogueSale':
       return `Mail-order sale ${whenText(news.inDays)}: ${percent(SALES.catalogue.factor)} off every new copy at the market's counter.`;
     case 'clearance':

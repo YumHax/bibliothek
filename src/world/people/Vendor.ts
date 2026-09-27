@@ -72,7 +72,7 @@ export class Vendor extends THREE.Group implements Furniture, Interactable, Upda
     this.focus = options.focus ? new THREE.Vector3(...options.focus) : TABLE_POINT.clone();
     const seed = options.seed ?? 1;
     this.nextLine = seed;
-    this.model = new PersonModel(options.look ?? randomLook(seed, 'vendor'));
+    this.model = new PersonModel(options.look ?? randomLook(seed, 'vendor'), this.viewer);
     this.add(this.model);
     const blob = blobShadow(0.55, 0.5);
     if (blob) this.add(blob);

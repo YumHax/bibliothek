@@ -5,6 +5,7 @@ import type { SessionActions } from '@/game/SessionActions';
 import type { Furniture } from '@/world/Furniture';
 import { boxMesh, invisibleHitbox } from '@/world/meshUtils';
 import { seededRandom } from '@/covers/generated/canvasUtils';
+import { paint } from '@/world/materials/palette';
 import type { FoodBowlLike } from './types';
 
 /**
@@ -35,8 +36,8 @@ export const BOWL_RADIUS = 0.07;
 export const BOWL_HEIGHT = 0.04;
 /** Radius of the opening inside the rim. */
 export const BOWL_INNER_RADIUS = 0.06;
-/** Height of the inside floor of the dish. */
-export const BOWL_FLOOR = 0.012;
+/** Height of the inside floor of the dish: a millimetre over a rug's top (`FLOOR.rug`), so a bowl on a rug never fights it. */
+export const BOWL_FLOOR = 0.013;
 /** The rubber mat both bowls sit on: 0.30 x 0.20 x 0.005 m. */
 export const MAT_SIZE = { width: 0.3, height: 0.005, depth: 0.2 };
 
@@ -82,7 +83,7 @@ export function bowlMesh(material: THREE.Material): THREE.Mesh {
 
 /** The rubber mat: a thin dark slab centred under the bowl. */
 export function bowlMat(): THREE.Mesh {
-  const rubber = new THREE.MeshStandardMaterial({ color: 0x2b2b2e, roughness: 0.95 });
+  const rubber = paint(0x2b2b2e, 0.95);
   const mat = boxMesh(MAT_SIZE.width, MAT_SIZE.height, MAT_SIZE.depth, rubber, { y: MAT_SIZE.height / 2 });
   mat.castShadow = false;
   return mat;
@@ -119,7 +120,7 @@ export class FoodBowl extends THREE.Group implements Furniture, Interactable, Up
 
     this.kibble = new THREE.InstancedMesh(
       new THREE.DodecahedronGeometry(KIBBLE_RADIUS, 0),
-      new THREE.MeshStandardMaterial({ color: this.options.kibble, roughness: 0.9 }),
+      paint(this.options.kibble, 0.9),
       KIBBLE_COUNT,
     );
     this.kibble.castShadow = true;

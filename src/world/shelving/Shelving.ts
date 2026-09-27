@@ -45,6 +45,13 @@ export interface ShelvingOptions {
   overflow?: GameList;
 }
 
+/** How many bookcases `options` has room for (its `layout`'s slots, or the collection room's run along its walls). */
+export function slotCount(options: Pick<ShelvingOptions, 'room' | 'backWallMinX' | 'rightWallKeepClear' | 'bookcase' | 'layout'>): number {
+  if (options.layout) return options.layout.slots.length;
+  const spec = { ...DEFAULT_SPEC, ...options.bookcase };
+  return computeSlots(options.room, spec, options.backWallMinX ?? -options.room.width / 6, options.rightWallKeepClear).slots.length;
+}
+
 /** Horizontal distance from a bookcase face to its ceiling spot (m). */
 const SPOT_THROW = 1.4;
 

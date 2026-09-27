@@ -1,8 +1,9 @@
 import type { RoomOptions } from '../Room';
 import type { Placement } from '../Placement';
 import type { DecorEntry } from '../props/decor';
-import type { NightstandItem } from '../props/Nightstand';
+import type { NightstandItem } from './Nightstand';
 import { DOOR_LEAF } from '../roomPlan';
+import type { Owned } from '../build/owned';
 
 /*
  * THE BEDROOM PLAN, zone-local coordinates (origin at the centre of its floor). Walls as named
@@ -109,6 +110,16 @@ export const BEDROOM_PLAN = {
     tableRadius: 0.25,
     lamp: { at: [-0.08, 0.15] as [number, number], yaw: -0.1 },
   },
+  /**
+   * What the bedroom is used for (docs/household.md): the alarm clock on the far nightstand, left of its lamp and
+   * turned towards the pillow (stand-local [x, z], yaw); a click on the phone (its size) makes a call; inside the
+   * wardrobe, behind its doors, the rail one picks the day's clothes from (wardrobe-local centre and size).
+   */
+  household: {
+    alarm: { stand: 1, at: [-0.13, 0.3] as [number, number], yaw: -0.5 },
+    phoneSpot: [0.1, 0.04, 0.18] as [number, number, number],
+    rail: { at: [0, 1.3, 0.3] as [number, number, number], size: [1.1, 1.2, 0.3] as [number, number, number] },
+  },
   /** The prize shelf: two boards on the bare right wall between the mirror and the chair (z 0.1..0.9), what the arcade paid out on it. */
   prizeShelf: { at: { wall: 'right', along: 0.5, y: 1.25 } as Placement, width: 0.8 },
   /** The arcade's poster once won (a prize that lives at home): framed on the right wall above the radiator, beside the mirror. */
@@ -116,17 +127,31 @@ export const BEDROOM_PLAN = {
   /** The arcade's mood lamp once won: on the dresser's pile of books (dresser-local x, height above its top). */
   moodLamp: { along: 0.23, above: 0.06 },
 
+  /**
+   * What stands only once bought (`economy/homeGoods.ts`; `build/owned.ts`). Before the bed, a mattress lies on the floor
+   * where it will stand; the nightstands (with their lamps, the phone and the night light) need the bed, the small TV the
+   * dresser. The wardrobe is the flat's.
+   */
+  upgrades: {
+    bed: 'bed' as Owned,
+    nightstands: ['nightstands', 'bed'] as Owned,
+    dresser: 'dresser' as Owned,
+    tv: ['bedroomTv', 'dresser'] as Owned,
+    readingCorner: 'readingCorner' as Owned,
+  },
+
   decor: [
     // A rug at the foot of the bed, between it and the door's swing.
-    { kind: 'rug', at: { floor: [0.4, 0.65] }, options: { width: 1.6, depth: 0.7, field: 0xb9a68a, border: 0x6e5a48, motif: 0x8c7358 } },
+    { kind: 'rug', at: { floor: [0.4, 0.65] }, options: { width: 1.6, depth: 0.7, field: 0xb9a68a, border: 0x6e5a48, motif: 0x8c7358 }, upgrade: 'bedroomRug' },
     // A wide landscape over the headboard, a small one over the dresser.
-    { kind: 'pictureFrame', at: { wall: 'back', along: 0.4, y: 1.7 }, options: { motif: 'mountains', seed: 7, width: 0.9, height: 0.5, matWidth: 0.05 } },
-    { kind: 'pictureFrame', at: { wall: 'front', along: 0.6, y: 1.55 }, options: { motif: 'sunset', seed: 12, width: 0.42, height: 0.32 } },
+    // Bought at the furniture shop (`framedPrint` nth 5, 6: after the living room's and the hallway's).
+    { kind: 'pictureFrame', at: { wall: 'back', along: 0.4, y: 1.7 }, options: { motif: 'mountains', seed: 7, width: 0.9, height: 0.5, matWidth: 0.05 }, upgrade: { good: 'framedPrint', nth: 5 } },
+    { kind: 'pictureFrame', at: { wall: 'front', along: 0.6, y: 1.55 }, options: { motif: 'sunset', seed: 12, width: 0.42, height: 0.32 }, upgrade: { good: 'framedPrint', nth: 6 } },
     // A small fig tucked in the back-left corner, between the left nightstand and the bookcase slot.
-    { kind: 'plant', at: { corner: 'back-left', inset: 0.26 }, options: { kind: 'fig', pot: 'terracotta', seed: 21, scale: 0.7 } },
+    { kind: 'plant', at: { corner: 'back-left', inset: 0.26 }, options: { kind: 'fig', pot: 'terracotta', seed: 21, scale: 0.7 }, upgrade: { good: 'houseplant', nth: 7 } },
     // A full-length mirror leaning on the bare right wall beside the foot of the bed (z -0.45..0.05), between the
     // radiator and the chair, short of the prize shelf (from z 0.1).
-    { kind: 'leaningMirror', at: { wall: 'right', along: -0.2, y: 0 } },
+    { kind: 'leaningMirror', at: { wall: 'right', along: -0.2, y: 0 }, upgrade: 'mirror' },
     // A slim panel radiator on the right wall between the right nightstand and the mirror (z -1.09..-0.51 with its
     // pipes), clear of the nightstand's drawer, which slides out to z -1.12. The strip between the bed and this wall
     // (0.47 m) is too narrow to walk anyway: that side's lamp and drawer are reached from the foot of the bed.

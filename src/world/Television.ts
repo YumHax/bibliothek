@@ -11,7 +11,8 @@ import type { SoundOcclusion } from './acoustics/SoundOcclusion';
 import { VideoSurface, type ScreenState, type ScreenStateListener, type VideoScreen } from './screen';
 import { CrtGlass } from './screen/CrtGlass';
 import { QUALITY } from '@/graphics/quality';
-import { wood as woodMaterial } from '@/world/materials/finishes';
+import { timber } from '@/world/materials/palette';
+import { PROUD } from './props/joinery';
 
 /** Height of the built-in cabinet the CRT sits on when nothing else carries it (see `mountOn`). */
 const OWN_CABINET_HEIGHT = 0.55;
@@ -76,7 +77,7 @@ export class Television extends THREE.Group implements Furniture, Updatable, Int
     /** A smaller tube is shallower and throws less light. */
     const scale = screenWidth / 0.56;
 
-    this.cabinet = boxMesh(0.9, OWN_CABINET_HEIGHT, 0.45, woodMaterial(0x3b2a1e, 0.7), {
+    this.cabinet = boxMesh(0.9, OWN_CABINET_HEIGHT, 0.45, timber(0x3b2a1e, 0.7), {
       y: OWN_CABINET_HEIGHT / 2,
     });
 
@@ -103,7 +104,7 @@ export class Television extends THREE.Group implements Furniture, Updatable, Int
     this.hitboxes = [body];
 
     // Picture on the front face of the body, facing +z, the tube's glass just in front of it.
-    this.surface.position.set(0, body.position.y, body.position.z + bodyD / 2 + 0.002);
+    this.surface.position.set(0, body.position.y, body.position.z + bodyD / 2 + PROUD);
     this.glass = new CrtGlass(this.screenWidth, this.surface.height);
     this.glass.position.copy(this.surface.position).add(new THREE.Vector3(0, 0, 0.0015));
 

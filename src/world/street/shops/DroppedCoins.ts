@@ -3,11 +3,15 @@ import type { Updatable } from '@/core/Engine';
 import type { Interactable } from '@/interaction/Interactable';
 import type { SessionActions } from '@/game/SessionActions';
 import { playCoins } from '@/audio/coins';
-import { hashString, seededRandom } from '@/covers/generated/canvasUtils';
-import { dayKey, fromUnpaddedDayKey } from '@/economy/calendar';
-import { KEYS, PersistedStore } from '@/persistence';
-import { withDay } from '../DailyTally';
+import { fromUnpaddedDayKey } from '@/economy/calendar';
+import { KEYS } from '@/persistence';
+import { withDay } from '@/time/DailyTally';
+import { DailyList } from '@/time/DailyList';
+import { dailyRandom } from '@/time/daily';
+import { standard } from '../../materials/palette';
+import { markShared } from '../../materials/sharedResources';
 import { invisibleHitbox } from '../../meshUtils';
+import { RENDER_ORDER } from '../../surface/layers';
 import type { Furniture } from '../../Furniture';
 import type { Vec2 } from '../streetPlan';
 
@@ -26,39 +30,18 @@ export interface DroppedCoinsOptions {
 const GLINT_RANGE = 9;
 const LINES = ['A coin in the gutter. Finders keepers.', 'A coin, face up. Lucky.', 'Someone’s change, lost between the slabs.', 'A coin, a little bent. It still counts.'];
 
-interface FindsFile {
-  /** The local day (`dayKey`). */
-  day: string;
-  /** The spots picked clean that day (indices into `spots`). */
-  picked: number[];
-}
-
 /**
+ * The spots picked clean today (indices into `spots`), remembered across reloads: `{ day, picked }`.
  * Version 2: `day` is a `dayKey` (YYYY-MM-DD); version 1 wrote it unpadded (`2026-9-5`), read as
  * the same day. Without storage (private mode) a coin comes back on the next visit.
  */
-const store = new PersistedStore<FindsFile>({
+const picks = new DailyList<number>({
   key: KEYS.finds,
   version: 2,
-  defaults: () => ({ day: '', picked: [] }),
-  read: (data) => {
-    if (typeof data !== 'object' || data === null) return null;
-    const { day, picked } = data as Partial<FindsFile>;
-    if (typeof day !== 'string' || !Array.isArray(picked)) return null;
-    return { day, picked: picked.filter((n) => Number.isInteger(n)) };
-  },
+  field: 'picked',
+  isItem: (n): n is number => Number.isInteger(n),
   migrate: { 1: (data) => withDay(data, fromUnpaddedDayKey) },
 });
-
-/** The spots already picked clean today (remembered across reloads). */
-function pickedToday(): number[] {
-  const saved = store.load();
-  return saved.day === dayKey() ? saved.picked : [];
-}
-
-function recordPicked(spot: number): void {
-  store.save({ day: dayKey(), picked: [...pickedToday(), spot] });
-}
 
 /**
  * The coins people drop on Front Street: a few a (real) day at spots drawn from the date, each a
@@ -73,8 +56,8 @@ export class DroppedCoins extends THREE.Group implements Furniture, Updatable {
   constructor(private readonly options: DroppedCoinsOptions) {
     super();
     this.name = 'DroppedCoins';
-    const random = seededRandom(hashString(`coins:${dayKey()}`));
-    const picked = new Set(pickedToday());
+    const random = dailyRandom('coins');
+    const picked = new Set(picks.today());
     const order = options.spots.map((_, i) => i).sort(() => random() - 0.5);
     const layout = order.slice(0, options.perDay);
     // Picks off another layout (drawn under the old day format, or before `spots` changed) still count against today's few.
@@ -101,7 +84,7 @@ export class DroppedCoins extends THREE.Group implements Furniture, Updatable {
   }
 
   private pick(coin: DroppedCoin, spot: number): string {
-    recordPicked(spot);
+    picks.add(spot);
     this.options.purse.earnCoins(1);
     playCoins(1, 0.1);
     this.coins.splice(this.coins.indexOf(coin), 1);
@@ -110,8 +93,9 @@ export class DroppedCoins extends THREE.Group implements Furniture, Updatable {
   }
 }
 
-const COIN_MATERIAL = new THREE.MeshStandardMaterial({ color: 0xc9a24a, metalness: 0.9, roughness: 0.35 });
-const GLINT_TEXTURE = glintTexture();
+const COIN_MATERIAL = standard({ color: 0xc9a24a, metalness: 0.9, roughness: 0.35 });
+/** Shared by every coin's glint and kept across unloads (each glint's material is its own: it fades). */
+const GLINT_TEXTURE = markShared(glintTexture());
 
 /** One coin on the pavement: the disc, its glint, the click. */
 class DroppedCoin extends THREE.Group implements Furniture, Interactable {
@@ -142,7 +126,7 @@ class DroppedCoin extends THREE.Group implements Furniture, Interactable {
     }));
     this.spark.scale.setScalar(0.09);
     this.spark.position.y = 0.012;
-    this.spark.renderOrder = 3;
+    this.spark.renderOrder = RENDER_ORDER.particles;
     this.add(this.spark);
     // A generous hitbox: a coin is tiny from eye height.
     const hitbox = invisibleHitbox(0.3, 0.12, 0.3, { y: 0.06 });

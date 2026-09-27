@@ -32,6 +32,11 @@ export type LightKind = 'warm' | 'cool' | 'neutral';
 export interface Surface {
   wet?: number;
   snow?: number;
+  /**
+   * Lies on the street's plane (road, pavements, lawn, paths). Such ground is stamped with one
+   * distance per strip, far too coarse for the parallax: the shader meets the plane exactly instead.
+   */
+  flat?: boolean;
 }
 
 export type Fill = string | CanvasGradient;
@@ -101,8 +106,9 @@ export function encodeDepth(distance: number): number {
  *  - `color`: the day colours, transparent where there is only sky;
  *  - `light`: R the warm lights that come on at night (windows, shops, lamps and the pools they cast),
  *    G the cool ones (offices, screens), B how much a surface mirrors the sky (glass, water);
- *  - `haze`: grey = how far away the surface is (`encodeDepth`), for the atmospheric perspective and to
- *    hide the moving sprites behind nearer things;
+ *  - `haze`: red = how far away the surface is (`encodeDepth`), for the atmospheric perspective and to
+ *    hide the moving sprites behind nearer things; green = the surface lies on the street's plane
+ *    (`Surface.flat`, packed into the fx texture's alpha for the parallax);
  *  - `curfew`: grey = how early in the night each light goes out (0 = never: street lamps, signs left on).
  *    The shader keeps a light on while the city's wakefulness (`wakefulnessAt`) is above its curfew, so
  *    the windows go dark one by one through the night, and switches them on one by one at dusk in an
@@ -159,7 +165,8 @@ export class Sheet {
    */
   begin(distance: number, glass = 0, surface: Surface = {}): void {
     const h = encodeDepth(distance);
-    this.hazeStyle = `rgb(${h},${h},${h})`;
+    // Red: the distance; green: on the street's plane (see `Surface.flat`).
+    this.hazeStyle = `rgb(${h},${surface.flat ? 255 : 0},0)`;
     this.glassByte = Math.round(THREE.MathUtils.clamp(glass, 0, 1) * 255);
     this.groundStyle = `rgb(0,${byte(surface.wet ?? 0)},${byte(surface.snow ?? 0)})`;
     this.fxStyle = '#000000';
@@ -442,6 +449,12 @@ export class Sheet {
     const fxSrc = this.fx.getImageData(0, 0, SCENE_WIDTH, SCENE_HEIGHT).data;
     const fxBytes = new Uint8Array(fxSrc.length);
     for (let y = 0; y < SCENE_HEIGHT; y++) fxBytes.set(fxSrc.subarray((SCENE_HEIGHT - 1 - y) * rowBytes, (SCENE_HEIGHT - y) * rowBytes), y * rowBytes);
+    // Alpha: the texel lies on the street's plane (the haze's green, `Surface.flat`).
+    for (let y = 0; y < SCENE_HEIGHT; y++) {
+      const src = (SCENE_HEIGHT - 1 - y) * rowBytes;
+      const dst = y * rowBytes;
+      for (let i = 0; i < rowBytes; i += 4) fxBytes[dst + i + 3] = haze[src + i + 1];
+    }
     const fx = new THREE.DataTexture(fxBytes, SCENE_WIDTH, SCENE_HEIGHT, THREE.RGBAFormat, THREE.UnsignedByteType);
     fx.colorSpace = THREE.NoColorSpace;
     fx.generateMipmaps = false;

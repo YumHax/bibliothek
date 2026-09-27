@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import type { Furniture } from '../Furniture';
 import { cylinderMesh } from '../meshUtils';
-import { part, matte } from './Prop';
+import { METAL, paint } from '../materials/palette';
+import { part } from './Prop';
 
 export interface PedalBinOptions {
   /** Default 0.15. */
@@ -10,8 +11,8 @@ export interface PedalBinOptions {
   height?: number;
 }
 
-const STEEL = new THREE.MeshStandardMaterial({ color: 0xc4c7cb, metalness: 0.7, roughness: 0.3 });
-const BLACK = matte(0x1e1f22, 0.6);
+const STEEL = METAL.steel();
+const BLACK = paint(0x1e1f22, 0.6);
 
 /**
  * A brushed-steel pedal bin: a tall cylinder, a domed black lid with its hinge at the back, the

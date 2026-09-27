@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { RENDER_ORDER } from '@/world/surface/layers';
 
 export interface SunShaftOptions {
   /** Glazed opening, metres (the shaft's section at the glass). */
@@ -82,7 +83,7 @@ export class SunShaft extends THREE.Group {
       ),
     );
     this.beam.frustumCulled = false;
-    this.beam.renderOrder = 2;
+    this.beam.renderOrder = RENDER_ORDER.sheen;
     // The camera in the window's frame, for the march (cheaper here than a matrix inverse per fragment).
     this.beam.onBeforeRender = (_renderer, _scene, camera) => {
       this.uniforms.eye.value.setFromMatrixPosition(camera.matrixWorld);
@@ -112,7 +113,7 @@ export class SunShaft extends THREE.Group {
       ),
     );
     this.motes.frustumCulled = false;
-    this.motes.renderOrder = 2;
+    this.motes.renderOrder = RENDER_ORDER.sheen;
 
     for (const object of [this.beam, this.motes]) {
       object.castShadow = false;

@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { cylinderMesh } from '../meshUtils';
-import { matte } from '../props/Prop';
+import { paint } from '../materials/palette';
 import type { ArcadeControls } from './games/ArcadeGame';
 import { BASE_H, CABINET_CHROME, DEPTH } from './cabinetModel';
 
@@ -56,12 +56,12 @@ function addControls(cabinet: THREE.Group, x: number, knobColor: number, twoPlay
   const stick = new THREE.Group();
   stick.position.set(x, BASE_H + 0.07, DEPTH / 2 - 0.1);
   stick.add(cylinderMesh(0.008, 0.08, CABINET_CHROME, { y: 0.04 }, { segments: 10 }));
-  const knob = new THREE.Mesh(new THREE.SphereGeometry(0.02, 12, 10), matte(knobColor, 0.4));
+  const knob = new THREE.Mesh(new THREE.SphereGeometry(0.02, 12, 10), paint(knobColor, 0.4));
   knob.position.y = 0.09;
   knob.castShadow = true;
   stick.add(knob);
-  const a = cylinderMesh(0.018, 0.015, matte(0xffd23a, 0.4), { x: x + 0.2, y: BUTTON_REST, z: DEPTH / 2 - 0.1 }, { segments: 14 });
-  const b = cylinderMesh(0.018, 0.015, matte(0x3ad2a0, 0.4), { x: x + 0.27, y: BUTTON_REST, z: DEPTH / 2 - 0.13 }, { segments: 14 });
+  const a = cylinderMesh(0.018, 0.015, paint(0xffd23a, 0.4), { x: x + 0.2, y: BUTTON_REST, z: DEPTH / 2 - 0.1 }, { segments: 14 });
+  const b = cylinderMesh(0.018, 0.015, paint(0x3ad2a0, 0.4), { x: x + 0.27, y: BUTTON_REST, z: DEPTH / 2 - 0.13 }, { segments: 14 });
   // On a two-player panel the buttons sit closer to their stick.
   if (twoPlayer) {
     a.position.x = x + 0.1;

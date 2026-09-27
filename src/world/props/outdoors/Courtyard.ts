@@ -6,7 +6,9 @@ import { TREE_STYLES, paintTree } from './Tree';
 import { paintBicycle } from './StreetFurniture';
 import { type Footprint, paintBox, paintGroundShadow, paintPost } from './Solid';
 import { groundEllipse } from './ParkFeatures';
-import { currentSeason, seasonalLawn } from './season';
+import { currentSeason } from '@/time/season';
+import { seasonalLawn } from './paint';
+import { BLINDS, CHIMNEY_POT, CURTAINS, DISH, PAVEMENT, POT_LEAVES, TERRACOTTA, WINDOW_FRAME, WINDOW_GLASS } from './palette';
 
 /**
  * Our own block's inner courtyard, behind the building (azimuths +90°..180°, `COURT_*` in
@@ -50,13 +52,11 @@ const STOREY = 3.0;
 const RENDERS = ['#c9bfae', '#bdb3a0', '#d2c8b4', '#b5ab98', '#c4b8a0', '#a9a397', '#d8cfbd', '#c7b49a', '#b9b4a6'];
 /** Yellow and red Berlin brick, for the one front left unrendered. */
 const BRICKS = ['#c9a86a', '#b8784e', '#a8674a'];
-const GLASS = '#34434f';
 const FROSTED = '#b4bcbf';
 const TILES = ['#9a5a3d', '#8a4a32', '#a8664a', '#7a4636'];
 const TAR = '#4a4a4c';
 const ZINC = '#7d848a';
 const STEEL = '#3a3e42';
-const CURTAINS = ['#d9cfbf', '#c9b9a4', '#e6e0d4', '#b9b3a8', '#c9a58a', '#a8b4b8'];
 const PANELS = ['#c9c4b8', '#6f8a9a', '#a85a44', '#d8d2c0', '#5a7a5a'];
 const CLOTHES = ['#f0ede4', '#d94f3a', '#3b6fb3', '#2f2f36', '#e8d24a', '#8c4f9e', '#9ac0d8', '#e0a0b0'];
 const BINS = ['#4a4d50', '#4a4d50', '#2d5aa0', '#e0b93a', '#6b4a2e', '#3d7a45'];
@@ -240,7 +240,7 @@ function paintRearBuilding(sheet: Sheet, random: Rng, wall: CourtWall, spec: Cou
     const c = integer(random, 0, cols - 1);
     if (c !== stair) balconyCols.add(c);
   }
-  const frame = random() < 0.8 ? '#ebe7de' : '#6a5a48';
+  const frame = random() < 0.8 ? WINDOW_FRAME : '#6a5a48';
 
   paintCourtRoof(sheet, random, wall, spec, eave, color);
 
@@ -331,7 +331,7 @@ function paintWindow(sheet: Sheet, random: Rng, wall: CourtWall, s0: number, s1:
   wall.detail(wall.quad(s0 - 0.07, s1 + 0.07, hb - 0.07, ht + 0.07), frame);
   const glass = wall.quad(s0, s1, hb, ht);
   sheet.begin(d, kind === 'bathroom' ? 0.05 : 0.22);
-  sheet.path(glass, kind === 'bathroom' ? FROSTED : GLASS);
+  sheet.path(glass, kind === 'bathroom' ? FROSTED : WINDOW_GLASS);
   sheet.begin(d, 0.04);
   if (kind === 'stair') {
     // Stairwell lights: neutral, on while people still come home.
@@ -364,7 +364,7 @@ function paintWindow(sheet: Sheet, random: Rng, wall: CourtWall, s0: number, s1:
     if (lit) sheet.lit(panel, 'warm', strength * 0.7, curfew);
   } else if (inside < 0.62) {
     const blind = wall.quad(s0 + 0.03, s1 - 0.03, ht - (ht - hb) * between(random, 0.2, 0.6), ht - 0.03);
-    wall.detail(blind, pick(random, ['#e8e0cc', '#d8cfb8', '#c9d0d4']));
+    wall.detail(blind, pick(random, BLINDS));
     if (lit) sheet.lit(blind, 'warm', strength * 0.8, curfew);
   }
   // Casement bars, then the sill; a pot of geraniums on a few.
@@ -375,7 +375,7 @@ function paintWindow(sheet: Sheet, random: Rng, wall: CourtWall, s0: number, s1:
   wall.detail(wall.quad(s0 - 0.1, s1 + 0.1, hb - 0.12, hb - 0.03), '#d8d2c4');
   if (currentSeason().name !== 'winter' && random() < 0.12) {
     const s = between(random, s0 + 0.1, s1 - 0.3);
-    wall.detail(wall.quad(s, s + 0.22, hb - 0.03, hb + 0.14, 0.1), '#9a5a3a');
+    wall.detail(wall.quad(s, s + 0.22, hb - 0.03, hb + 0.14, 0.1), TERRACOTTA);
     wall.detail(wall.quad(s - 0.06, s + 0.28, hb + 0.14, hb + 0.38, 0.1), pick(random, ['#3f6b33', '#4d7a3a']));
     wall.detail(wall.quad(s + 0.02, s + 0.1, hb + 0.26, hb + 0.34, 0.12), pick(random, ['#d9383a', '#e0567a', '#f0f0e8']));
   }
@@ -386,7 +386,7 @@ function paintStairDoor(sheet: Sheet, random: Rng, wall: CourtWall, s: number, f
   wall.detail(wall.quad(s - 0.65, s + 0.65, 0, 2.9), shade(frame, 0.85));
   wall.detail(wall.quad(s - 0.55, s + 0.55, 0.05, 2.2), pick(random, ['#5a4632', '#3f4a3a', '#6a5a48', '#4a3a2e']));
   const fan = wall.quad(s - 0.5, s + 0.5, 2.3, 2.8);
-  wall.detail(fan, GLASS);
+  wall.detail(fan, WINDOW_GLASS);
   sheet.lit(fan, 'neutral', 0.6, between(random, 0.3, 0.7));
   // The lamp over the door: burns all night, a pool on the ground and a wash up the wall.
   const lamp = wall.quad(s + 0.75, s + 0.95, 2.3, 2.5, 0.1);
@@ -397,7 +397,7 @@ function paintStairDoor(sheet: Sheet, random: Rng, wall: CourtWall, s: number, f
   sheet.glow(gx, gy, 2.6 * px, 1.1 * px, 0.22);
   const [wx, wy] = wall.P(s + 0.85, 2.2);
   sheet.glow(wx, wy, 1.4 * px, 1.6 * px, 0.14);
-  wall.detail(wall.quad(s - 0.8, s + 0.8, -0.05, 0.12, 0.3), '#a39e93');
+  wall.detail(wall.quad(s - 0.8, s + 0.8, -0.05, 0.12, 0.3), PAVEMENT);
 }
 
 /**
@@ -427,8 +427,8 @@ function paintCourtBalcony(sheet: Sheet, random: Rng, wall: CourtWall, s: number
   }
   if (random() < 0.5) {
     const x = between(random, s0 + 0.2, s1 - 0.5);
-    sheet.path(wall.quad(x, x + 0.3, floorH, floorH + 0.35, depth * 0.5), '#9a5a3a');
-    sheet.path(wall.quad(x - 0.1, x + 0.4, floorH + 0.35, floorH + 0.8, depth * 0.5), pick(random, ['#3f6b33', '#4d7a3a', '#5a8a44']));
+    sheet.path(wall.quad(x, x + 0.3, floorH, floorH + 0.35, depth * 0.5), TERRACOTTA);
+    sheet.path(wall.quad(x - 0.1, x + 0.4, floorH + 0.35, floorH + 0.8, depth * 0.5), pick(random, POT_LEAVES));
   }
   const panel = random() < 0.6;
   if (panel) {
@@ -445,7 +445,7 @@ function paintCourtBalcony(sheet: Sheet, random: Rng, wall: CourtWall, s: number
     const px = wall.px(x);
     const dish = new Path2D();
     dish.ellipse(cx, cy, Math.max(1, 0.3 * px), Math.max(1, 0.34 * px), -0.3, 0, Math.PI * 2);
-    sheet.path(dish, '#d8d8d4');
+    sheet.path(dish, DISH);
   }
 }
 
@@ -494,7 +494,7 @@ function paintCourtRoof(sheet: Sheet, random: Rng, wall: CourtWall, spec: CourtB
       const t1 = 0.6;
       const pane = new Polygon([wall.P(s, eave + rise * t0, 0.35 + (back - 0.35) * t0), wall.P(s + 0.8, eave + rise * t0, 0.35 + (back - 0.35) * t0), wall.P(s + 0.8, eave + rise * t1, 0.35 + (back - 0.35) * t1), wall.P(s, eave + rise * t1, 0.35 + (back - 0.35) * t1)]);
       sheet.begin(d - back / 2, 0.35);
-      sheet.path(pane, GLASS);
+      sheet.path(pane, WINDOW_GLASS);
       sheet.begin(d - back / 2, 0.05, ROOF_SURFACE);
       if (random() < 0.4) sheet.lit(pane, 'warm', 0.8, random());
     }
@@ -513,7 +513,7 @@ function paintCourtRoof(sheet: Sheet, random: Rng, wall: CourtWall, spec: CourtB
     sheet.path(wall.quad(s, s + cw, ridgeH - 0.4, top, off), stack);
     wall.detail(wall.quad(s + cw * 0.6, s + cw, ridgeH - 0.4, top, off), 'rgba(0,0,0,0.22)');
     sheet.path(wall.quad(s - 0.06, s + cw + 0.06, top, top + 0.14, off), shade(stack, 1.2));
-    for (let k = 0; k < Math.floor(cw / 0.3); k++) sheet.path(wall.quad(s + 0.08 + k * 0.3, s + 0.24 + k * 0.3, top + 0.14, top + 0.45, off), '#b86a44');
+    for (let k = 0; k < Math.floor(cw / 0.3); k++) sheet.path(wall.quad(s + 0.08 + k * 0.3, s + 0.24 + k * 0.3, top + 0.14, top + 0.45, off), CHIMNEY_POT);
   }
   if (random() < 0.4) {
     const s = between(random, 1, w - 1);

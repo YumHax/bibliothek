@@ -3,6 +3,7 @@ import type { Updatable } from '@/core/Engine';
 import type { Interactable } from '@/interaction/Interactable';
 import type { SessionActions } from '@/game/SessionActions';
 import type { Furniture } from '../Furniture';
+import { angleBetween, Glance, idleGlance, nextLeg, stepAlong, turnTowards, viewerWithin, type Leg } from './locomotion';
 import { PersonModel } from './PersonModel';
 import { randomLook, type PersonLook } from './looks';
 import type { Pose } from './poses';
@@ -63,10 +64,11 @@ export class Walker extends THREE.Group implements Furniture, Updatable, Interac
   private present = true;
   private focus: THREE.Vector3 | null = null;
   private hands: (() => readonly [THREE.Vector3, THREE.Vector3]) | null = null;
-  private glanceTimer = 0;
-  private readonly glance = new THREE.Vector3();
+  private readonly glance = new Glance();
+  private readonly leg: Leg = { dx: 0, dz: 0, dist: 0 };
   private readonly viewerPos = new THREE.Vector3();
   private readonly here = new THREE.Vector3();
+  private readonly gazePoint = new THREE.Vector3();
 
   constructor(options: WalkerOptions) {
     super();
@@ -74,7 +76,7 @@ export class Walker extends THREE.Group implements Furniture, Updatable, Interac
     this.viewer = options.viewer;
     this.speed = options.speed ?? 0.8;
     const seed = options.seed ?? 1;
-    this.model = new PersonModel(options.look ?? randomLook(seed + 200, 'shopper'));
+    this.model = new PersonModel(options.look ?? randomLook(seed + 200, 'shopper'), this.viewer);
     this.add(this.model);
     const blob = blobShadow(0.55, 0.5);
     if (blob) this.add(blob);
@@ -200,45 +202,33 @@ export class Walker extends THREE.Group implements Furniture, Updatable, Interac
   }
 
   private step(dt: number, state: { path: THREE.Vector3[]; then: (() => void) | null }): void {
-    const next = state.path[0];
-    if (!next) {
+    const leg = nextLeg(this.position, state.path, ARRIVE, this.leg);
+    if (leg === 'done') {
       this.state = { kind: 'stand', yaw: this.heading };
       this.model.setSpeed(0);
       state.then?.();
       return;
     }
-    const dx = next.x - this.position.x;
-    const dz = next.z - this.position.z;
-    const dist = Math.hypot(dx, dz);
-    if (dist < ARRIVE) {
-      state.path.shift();
-      return;
-    }
-    const move = Math.min(dist, this.speed * dt);
-    this.position.x += (dx / dist) * move;
-    this.position.z += (dz / dist) * move;
-    this.face(Math.atan2(dx, dz), dt);
+    if (leg === 'reached') return;
+    stepAlong(this.position, this.leg, this.speed * dt);
+    this.face(Math.atan2(this.leg.dx, this.leg.dz), dt);
     this.model.setSpeed(this.speed);
     this.look(dt);
   }
 
   /** Whether the body has (nearly) finished turning to `yaw`. */
   private facing(yaw: number): boolean {
-    return Math.abs(Math.atan2(Math.sin(yaw - this.heading), Math.cos(yaw - this.heading))) < 0.25;
+    return Math.abs(angleBetween(this.heading, yaw)) < 0.25;
   }
 
   private face(yaw: number, dt: number): void {
-    let delta = yaw - this.heading;
-    delta = Math.atan2(Math.sin(delta), Math.cos(delta));
-    this.heading += delta * Math.min(1, dt * TURN_RATE);
+    this.heading = turnTowards(this.heading, yaw, dt, TURN_RATE);
     this.rotation.y = this.heading;
   }
 
   /** The player close by gets a look; else the focus, else a glance about now and then. */
   private look(dt: number): void {
-    this.viewer.getWorldPosition(this.viewerPos);
-    this.getWorldPosition(this.here);
-    const near = Math.hypot(this.viewerPos.x - this.here.x, this.viewerPos.z - this.here.z) < NOTICE_RANGE;
+    const near = viewerWithin(this, this.viewer, NOTICE_RANGE, this.viewerPos, this.here);
     if (near && (!this.focus || Math.random() < 0.01)) {
       this.model.gaze(this.viewerPos);
       return;
@@ -247,11 +237,6 @@ export class Walker extends THREE.Group implements Furniture, Updatable, Interac
       this.model.gaze(this.focus);
       return;
     }
-    this.glanceTimer -= dt;
-    if (this.glanceTimer <= 0) {
-      this.glanceTimer = 2 + Math.random() * 4;
-      this.glance.set((Math.random() - 0.5) * 4, 1.2 + Math.random() * 0.6, 2.5);
-    }
-    this.model.gaze(this.localToWorld(this.glance.clone()));
+    this.model.gaze(this.localToWorld(this.gazePoint.copy(this.glance.update(dt, idleGlance))));
   }
 }

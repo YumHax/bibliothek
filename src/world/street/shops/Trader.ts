@@ -5,10 +5,12 @@ import type { SessionActions } from '@/game/SessionActions';
 import type { BoxArtLoader } from '@/covers/BoxArtLoader';
 import type { Game } from '@/catalog/types';
 import { readGame } from '@/catalog/validate';
-import { createCanvas, hashString, seededRandom, toTexture } from '@/covers/generated/canvasUtils';
-import { dayKey } from '@/economy/calendar';
+import { createCanvas, toTexture } from '@/covers/generated/canvasUtils';
 import { StockItem } from '@/economy/StockItem';
 import { KEYS, PersistedStore } from '@/persistence';
+import { gameDayRandom, isEventDay } from '@/time/daily';
+import type { Today } from '@/time/Today';
+import { standard } from '../../materials/palette';
 import type { DayNight } from '../../props/DayNight';
 import type { Furniture } from '../../Furniture';
 import { ForSaleBox } from '../../market/ForSaleBox';
@@ -19,8 +21,10 @@ export interface TraderOptions {
   host: { place<F extends Furniture>(item: F, position: THREE.Vector3, rotationY?: number): F; remove(item: Furniture): void; toLocal(point: THREE.Vector3): THREE.Vector3 };
   covers: BoxArtLoader;
   wallet: { readonly coins: number; subscribe(cb: () => void): () => void };
-  /** The flea market: today's stock once drawn, the market day, and what buying one of its copies away from it means. */
-  market: { peekToday(): readonly StockItem[] | null; readonly day: number; soldToRival(item: StockItem): void };
+  /** The flea market: today's stock once drawn, and what buying one of its copies away from it means. */
+  market: { peekToday(): readonly StockItem[] | null; soldToRival(item: StockItem): void };
+  /** His pick follows the game day (the market's stock), his coming the real day (`isTraderDay`). */
+  today: Pick<Today, 'gameDay'>;
   owns: (id: string) => boolean;
   isWanted: (id: string) => boolean;
   /** Game hours he stands there between. */
@@ -28,9 +32,9 @@ export interface TraderOptions {
   viewer: THREE.Object3D;
 }
 
-/** Whether today (the real date) the collector sets up on Front Street: about one day in `oneDayIn`. */
+/** Whether today (the real date) the collector sets up on Front Street: about one day in `oneDayIn` (phase 1 of the cycle). */
 export function isTraderDay(oneDayIn: number, date = new Date()): boolean {
-  return hashString(`trader:${dayKey(date)}`) % oneDayIn === 1 % oneDayIn;
+  return isEventDay('trader', oneDayIn, { date, phase: 1 });
 }
 
 /** What he adds to what the stall asked him. */
@@ -50,15 +54,16 @@ const EMPTY_LINES = [
 ];
 const THANKS = ['Pleasure. Tell your friends. Or don’t.', 'A fair deal. Mostly for me.', 'Look after it: I might buy it back.'];
 
-/** What he picked out of today's stock (the same all day, reloads included). */
+/** What he picked out of today's stock (the same all game day, reloads included). */
 interface SavedPick {
+  /** The game day (`Today.gameDay`). */
   day: number;
   games: Game[];
   prices: number[];
 }
 
 /**
- * A rival collector who sets up outside RÉTRO JEUX some days (`isTraderDay`), during `hours`: a
+ * A rival collector who sets up outside RETRO GAMES some days (`isTraderDay`), during `hours`: a
  * person behind an open suitcase on a folding stand, with three games he bought off the flea
  * market's stalls at opening, so they are gone from there, one of them from the player's
  * wishlist when the market had it (he is a dealer), at a markup. They are market copies (`ForSaleBox`,
@@ -148,13 +153,14 @@ export class Trader extends THREE.Group implements Furniture, Updatable, Interac
 
   /** Today's three copies: remembered if he already picked them, else taken off the market's stalls now (once it has stock). */
   private pick(): { games: Game[]; prices: number[] } | null {
-    const { market, owns, isWanted } = this.options;
+    const { market, owns, isWanted, today } = this.options;
+    const day = today.gameDay;
     const saved = load();
-    if (saved && saved.day === market.day) return saved;
+    if (saved && saved.day === day) return saved;
     const stock = market.peekToday();
     if (!stock) return null;
     const pool = stock.filter((item) => item.priced && item.source !== 'bin' && item.source !== 'ordered' && item.source !== 'upgrade' && !item.reserved && !owns(item.game.id));
-    const random = seededRandom(hashString(`trader:${market.day}`));
+    const random = gameDayRandom('trader', day);
     const chosen: StockItem[] = [];
     const wanted = pool.find((item) => isWanted(item.game.id));
     if (wanted) chosen.push(wanted);
@@ -163,7 +169,7 @@ export class Trader extends THREE.Group implements Furniture, Updatable, Interac
       if (!chosen.includes(item)) chosen.push(item);
     }
     for (const item of chosen) market.soldToRival(item);
-    const pick: SavedPick = { day: market.day, games: chosen.map((item) => item.game), prices: chosen.map((item) => Math.max(2, Math.round(item.price * MARKUP))) };
+    const pick: SavedPick = { day, games: chosen.map((item) => item.game), prices: chosen.map((item) => Math.max(2, Math.round(item.price * MARKUP))) };
     save(pick);
     return pick;
   }
@@ -179,7 +185,7 @@ export class Trader extends THREE.Group implements Furniture, Updatable, Interac
       const box = new ForSaleBox(item, covers, {
         pose: { kind: 'lean', angle: 0.35 },
         wallet,
-        where: 'the collector outside RÉTRO JEUX',
+        where: 'the collector outside RETRO GAMES',
         isWanted: () => isWanted(game.id),
         thanks: () => THANKS[Math.floor(Math.random() * THANKS.length)]!,
       });
@@ -203,7 +209,7 @@ export class Trader extends THREE.Group implements Furniture, Updatable, Interac
 
   private buildKit(): void {
     const { width, depth, height } = SUITCASE;
-    const metal = new THREE.MeshStandardMaterial({ color: 0x2a2c30, roughness: 0.4, metalness: 0.7 });
+    const metal = standard({ color: 0x2a2c30, roughness: 0.4, metalness: 0.7 });
     // The folding stand: two crossed frames.
     for (const side of [-1, 1]) {
       for (const tilt of [-0.45, 0.45]) {
@@ -214,7 +220,7 @@ export class Trader extends THREE.Group implements Furniture, Updatable, Interac
       }
     }
     // The suitcase, open: its base on the stand, its lid standing up behind with the sign.
-    const leather = new THREE.MeshStandardMaterial({ color: 0x5a3422, roughness: 0.7 });
+    const leather = standard({ color: 0x5a3422, roughness: 0.7 });
     const base = new THREE.Mesh(new THREE.BoxGeometry(width, 0.1, depth), leather);
     base.position.set(0, height + 0.05, 0.5);
     const lid = new THREE.Mesh(new THREE.BoxGeometry(width, depth, 0.06), leather);

@@ -14,6 +14,7 @@ import { CatToy } from './CatToy';
 import type { CatSettingsStore } from './catSettings';
 import type { CatClock, CatPlayerView, WaterBowlLike } from './types';
 import type { CatPerch } from './spots';
+import type { Placer } from '../build/owned';
 
 export { Cat } from './Cat';
 export { CatModel } from './CatModel';
@@ -23,6 +24,7 @@ export { CatBed } from './CatBed';
 export { Scratcher } from './Scratcher';
 export { CatToy } from './CatToy';
 export { CatSettingsStore, CAT_STORAGE_KEY } from './catSettings';
+export { catPlacers, followAdoption } from './adoption';
 export * from './types';
 
 export interface CatFurnishOptions {
@@ -35,6 +37,11 @@ export interface CatFurnishOptions {
   tv: Television;
   /** The rest of the flat: its rooms (world XZ), spots to visit there, places to nap and more water (see `CatOptions`). */
   flat?: { rooms: THREE.Box2[]; visits: THREE.Vector3[]; perches: CatPerch[]; waters?: WaterBowlLike[] };
+  /**
+   * Who places what (`build/owned.placerFor`): the cat with its bowls and bed once adopted, the scratching post and the
+   * ball once bought. The zone itself (everything at once) without.
+   */
+  placers?: { cat: Placer; scratcher: Placer; toy: Placer };
 }
 
 /**
@@ -48,16 +55,18 @@ export function furnishCat(zone: Zone, options: CatFurnishOptions): Cat {
   const back = -depth / 2;
   const front = depth / 2;
   const left = -width / 2;
+  const everything = { place: zone.place.bind(zone), owned: true, onOwned: (cb: () => void) => cb() };
+  const { cat: home, scratcher: post, toy: ball } = options.placers ?? { cat: everything, scratcher: everything, toy: everything };
 
   // The corner: food and water side by side on one mat between the fig and the door; the bed round
   // the corner against the left wall, in the back window's sun.
-  const bowl = zone.place(new FoodBowl({ mat: true }), new THREE.Vector3(left + 0.78, 0, back + 0.45));
-  const water = zone.place(new WaterBowl(), new THREE.Vector3(left + 0.93, 0, back + 0.45));
-  const bed = zone.place(new CatBed(), new THREE.Vector3(left + 0.45, 0, back + 1.15));
+  const bowl = home.place(new FoodBowl({ mat: true }), new THREE.Vector3(left + 0.78, 0, back + 0.45));
+  const water = home.place(new WaterBowl(), new THREE.Vector3(left + 0.93, 0, back + 0.45));
+  const bed = home.place(new CatBed(), new THREE.Vector3(left + 0.45, 0, back + 1.15));
   // Scratching post against the front wall, the cat works it from the room side.
-  const scratcher = zone.place(new Scratcher(), new THREE.Vector3(left + 1.4, 0, front - 0.45), Math.PI);
+  const scratcher = post.place(new Scratcher(), new THREE.Vector3(left + 1.4, 0, front - 0.45), Math.PI);
   // A ball left on the rug in front of the TV.
-  const toy = zone.place(
+  const toy = ball.place(
     new CatToy({ bounds: zone.floorBounds, collisions: zone.collisions }),
     new THREE.Vector3(left + 1.3, 0, 0.8),
   );
@@ -78,8 +87,9 @@ export function furnishCat(zone: Zone, options: CatFurnishOptions): Cat {
     bowl,
     water,
     bed,
-    scratcher,
-    toy,
+    // Bought after it moved in, the post and the ball are handed over then (`provide`).
+    ...(post.owned ? { scratcher } : {}),
+    ...(ball.owned ? { toy } : {}),
     windows: options.windows,
     tv: {
       isPlaying: () => tv.state === 'playing',
@@ -93,8 +103,10 @@ export function furnishCat(zone: Zone, options: CatFurnishOptions): Cat {
     waters: options.flat?.waters,
   });
   options.settings.subscribe((s) => cat.applySettings(s));
+  if (!post.owned) post.onOwned(() => cat.provide({ scratcher }));
+  if (!ball.owned) ball.onOwned(() => cat.provide({ toy }));
 
   const start = zone.toLocal(bed.restingSpot(new THREE.Vector3())).setY(0);
-  zone.place(cat, start, Math.PI / 2);
+  home.place(cat, start, Math.PI / 2);
   return cat;
 }

@@ -1,5 +1,7 @@
 import * as THREE from 'three';
 import { createCanvas, seededRandom, toTexture, FONT } from '@/covers/generated/canvasUtils';
+import { paint } from '@/world/materials/palette';
+import { FLOOR } from '@/world/surface/layers';
 import { Prop } from './Prop';
 
 export interface DoormatOptions {
@@ -13,8 +15,8 @@ export interface DoormatOptions {
   seed?: number;
 }
 
-/** Coir is thick: a mat stands this proud of the floor. */
-export const DOORMAT_THICKNESS = 0.018;
+/** Coir is thick: a mat stands this proud of the floor (the floor's `mat` layer). */
+export const DOORMAT_THICKNESS = FLOOR.mat.lift;
 const PX_PER_M = 900;
 
 /**
@@ -30,7 +32,7 @@ export class Doormat extends Prop {
     const depth = options.depth ?? 0.4;
     const map = paintCoir(width, depth, options.text ?? '', options.wear ?? 0.7, seededRandom((options.seed ?? 3) * 7919));
     const top = new THREE.MeshStandardMaterial({ map, roughness: 1, bumpMap: map, bumpScale: 1.5 });
-    const rubber = new THREE.MeshStandardMaterial({ color: 0x1e1c1a, roughness: 0.9 });
+    const rubber = paint(0x1e1c1a, 0.9);
     // BoxGeometry material order: +x, -x, +y (top), -y, +z, -z.
     const slab = new THREE.Mesh(new THREE.BoxGeometry(width, DOORMAT_THICKNESS, depth), [rubber, rubber, top, rubber, rubber, rubber]);
     slab.position.y = DOORMAT_THICKNESS / 2;

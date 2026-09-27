@@ -1,16 +1,15 @@
 import * as THREE from 'three';
 import type { ArcadeResult } from '@/game/SessionActions';
 import { ChipSpeaker } from '@/audio/ChipSpeaker';
-import { createCanvas, toTexture } from '@/covers/generated/canvasUtils';
-import { boxMesh, cylinderMesh, eyePoseAt, invisibleHitbox } from '../meshUtils';
-import { markShared, matte } from '../props/Prop';
-import { type ArcadeControls, NO_CONTROLS, drawText } from './games/ArcadeGame';
+import { eyePoseAt } from '../meshUtils';
+import { type ArcadeControls, drawText } from './games/ArcadeGame';
 import { ordinal } from './InitialsEntry';
-import { TicketStrip } from './TicketStrip';
+import type { TicketStrip } from './TicketStrip';
 import { TicketMachine, type TicketMachineWiring } from './TicketMachine';
 import type { MachineRunOptions } from './MachineRun';
-import { CHROME, type MachineDisplay, displayScreen, outOfOrderNote, paintMarquee } from './machineParts';
 import type { ScoreTable } from './scoreTable';
+import { AlleySim, BALL_R, LANE_NEAR } from './alley/AlleySim';
+import { type AlleyModel, BACK_H, BACK_Z, WIDTH, buildAlleyModel } from './alley/alleyModel';
 
 export interface AlleyRollerOptions {
   /** Paint of the cabinet. Default a racing red. */
@@ -22,57 +21,20 @@ export interface AlleyRollerOptions {
 /** The alley keeps a table: its backboard shows the top score. */
 export type AlleyWiring = TicketMachineWiring & { scores: ScoreTable };
 
-type BallPhase = 'aim' | 'roll' | 'fly' | 'sink' | 'back';
-
-const WIDTH = 0.8;
-const LANE_W = 0.56;
-/** The lane, from the player's end (near) up to the hump (far): z and height of its surface. */
-const LANE_NEAR = { z: 1.0, y: 0.78 };
-const LANE_FAR = { z: -0.4, y: 0.92 };
-/** The target board: its front edge at the hump, tilted up to its back edge. */
-const BOARD_FRONT = { z: -0.5, y: 0.96 };
-const BOARD_BACK = { z: -1.08, y: 1.34 };
-const BOARD_W = 0.6;
-const BACK_Z = -1.16;
-const BACK_H = 2.2;
-const BALL_R = 0.045;
-const BALLS = 9;
-/** The rings' centre on the board (u across, v up the board from its front edge, metres) and the corner pockets. */
-const RING_CENTRE = { u: 0, v: 0.36 };
-const RINGS = [
-  { within: 0.05, points: 50 },
-  { within: 0.1, points: 40 },
-  { within: 0.15, points: 30 },
-  { within: 0.21, points: 20 },
-];
-const POCKETS = [
-  { u: -0.22, v: 0.62 },
-  { u: 0.22, v: 0.62 },
-];
-const POCKET_R = 0.04;
-const POCKET_POINTS = 100;
-const BOARD_V = Math.hypot(BOARD_BACK.z - BOARD_FRONT.z, BOARD_BACK.y - BOARD_FRONT.y);
-/** Aim: how fast the ball in hand moves across, and how far. */
-const AIM_SPEED = 0.35;
-const AIM_MAX = LANE_W / 2 - BALL_R - 0.02;
-/** The power meter swings up and down while fire is held (a full swing in this many seconds). */
-const POWER_PERIOD = 1.1;
 const STAND_Z = 1.45;
 /** Where a regular's feet go: close enough to reach the ball in hand, bending over the lane's end. */
 const PERSON_Z = 1.3;
-
-const WOOD = markShared(matte(0xb7874f, 0.55));
-const BLACK = markShared(matte(0x131318, 0.6));
-const BALL_MAT = markShared(matte(0xf2e6c8, 0.35));
 
 /**
  * The ticket alley every funfair has: roll a wooden ball up an inclined lane, over the hump and
  * into the rings (10 to 50, 100 in the corner pockets). Nine balls a play. A / D move the ball in
  * hand across the lane; hold Space and the power meter on the backboard swings up and down, let
- * go to roll at that strength (too soft and it rolls back: nothing). A `TicketMachine`: paid for
- * like a cabinet (`playArcade`), pays tickets from a slot at the front, asks for initials on the
- * backboard for a score that makes the table; a regular can take it (`occupy`). Origin on the
- * floor under the middle of the lane; +z is the player's end. Collides.
+ * go to roll at that strength (too soft and it rolls back: nothing). The rules and the ball's path
+ * are the `AlleySim`'s, the body `alley/alleyModel`'s; this class moves the ball to match, plays
+ * the sounds and paints the backboard. A `TicketMachine`: paid for like a cabinet (`playArcade`),
+ * pays tickets from a slot at the front, asks for initials on the backboard for a score that
+ * makes the table; a regular can take it (`occupy`). Origin on the floor under the middle of the
+ * lane; +z is the player's end. Collides.
  */
 export class AlleyRoller extends TicketMachine {
   readonly hitboxes: THREE.Object3D[];
@@ -84,25 +46,8 @@ export class AlleyRoller extends TicketMachine {
   protected readonly strip: TicketStrip;
 
   private readonly scores: ScoreTable;
-  private phase: BallPhase = 'aim';
-  private phaseClock = 0;
-  private aimU = 0;
-  private charging = false;
-  private chargeClock = 0;
-  private power = 0;
-  private ballsLeft = BALLS;
-  private points = 0;
-  private lastPoints: number | null = null;
-  private flightFrom = new THREE.Vector3();
-  private flightTo = new THREE.Vector3();
-  private landing: { u: number; v: number; points: number } = { u: 0, v: 0, points: 0 };
-  private rollSeconds = 1;
-  private demoTarget = { u: 0, power: 0.4, holdFor: 0.5 };
-  private demoClock = 0;
-  private readonly ball: THREE.Mesh;
-  private readonly trough: THREE.Mesh[] = [];
-  private readonly display: MachineDisplay;
-  private readonly marquee: THREE.MeshBasicMaterial;
+  private readonly sim = new AlleySim();
+  private readonly model: AlleyModel;
   private readonly title: string;
   private readonly hands: [THREE.Vector3, THREE.Vector3] = [new THREE.Vector3(), new THREE.Vector3()];
   private displayClock = 0;
@@ -113,83 +58,12 @@ export class AlleyRoller extends TicketMachine {
     this.scores = wiring.scores;
     this.title = options.title ?? 'ALLEY ROLL';
     this.game = { id: 'alley', title: this.title, hint: 'A / D aim · hold Space, let go at the power you want' };
-    const paint = matte(options.color ?? 0xb8202a, 0.5);
-
-    // The cabinet: side walls the length of the machine, rising to the backboard.
-    const length = LANE_NEAR.z - BACK_Z + 0.15;
-    const centreZ = (LANE_NEAR.z + 0.15 + BACK_Z) / 2;
-    for (const sx of [-1, 1]) {
-      this.add(boxMesh(0.1, 0.7, length, paint, { x: sx * (WIDTH / 2 - 0.05), y: 0.35, z: centreZ }));
-      // The side rail rises with the lane, then with the board.
-      const rail = boxMesh(0.1, 0.3, LANE_NEAR.z - LANE_FAR.z, paint, { x: sx * (WIDTH / 2 - 0.05), y: (LANE_NEAR.y + LANE_FAR.y) / 2 - 0.02, z: (LANE_NEAR.z + LANE_FAR.z) / 2 });
-      rail.rotation.x = Math.atan2(LANE_FAR.y - LANE_NEAR.y, LANE_NEAR.z - LANE_FAR.z);
-      this.add(rail);
-      const cage = boxMesh(0.1, BACK_H - 1.0, BOARD_FRONT.z - BACK_Z, paint, { x: sx * (WIDTH / 2 - 0.05), y: 1.0 + (BACK_H - 1.0) / 2, z: (BOARD_FRONT.z + BACK_Z) / 2 });
-      this.add(cage);
-      this.add(boxMesh(0.012, 0.012, LANE_NEAR.z - LANE_FAR.z, CHROME, { x: sx * (WIDTH / 2 - 0.1), y: LANE_NEAR.y + 0.1, z: (LANE_NEAR.z + LANE_FAR.z) / 2 }));
-    }
-    // A plinth under it all, and the front with the ball trough.
-    this.add(boxMesh(WIDTH - 0.2, 0.7, length, BLACK, { y: 0.35, z: centreZ }));
-    this.add(boxMesh(WIDTH, 0.08, 0.2, paint, { y: LANE_NEAR.y - 0.04, z: LANE_NEAR.z + 0.08 }));
-    // The lane: wood, inclined up to the hump.
-    const laneLen = Math.hypot(LANE_NEAR.z - LANE_FAR.z, LANE_FAR.y - LANE_NEAR.y);
-    const lane = boxMesh(LANE_W, 0.02, laneLen, WOOD, { y: (LANE_NEAR.y + LANE_FAR.y) / 2 - 0.01, z: (LANE_NEAR.z + LANE_FAR.z) / 2 });
-    lane.rotation.x = Math.atan2(LANE_FAR.y - LANE_NEAR.y, LANE_NEAR.z - LANE_FAR.z);
-    this.add(lane);
-    const hump = cylinderMesh(0.05, LANE_W, WOOD, { y: LANE_FAR.y - 0.02, z: LANE_FAR.z }, { segments: 16 });
-    hump.rotation.z = Math.PI / 2;
-    this.add(hump);
-    // The target board with its rings, tilted back.
-    const board = new THREE.Mesh(new THREE.PlaneGeometry(BOARD_W, BOARD_V), new THREE.MeshStandardMaterial({ map: paintBoard(), roughness: 0.6 }));
-    board.position.set(0, (BOARD_FRONT.y + BOARD_BACK.y) / 2, (BOARD_FRONT.z + BOARD_BACK.z) / 2);
-    board.rotation.x = -Math.PI / 2 + Math.atan2(BOARD_BACK.y - BOARD_FRONT.y, BOARD_FRONT.z - BOARD_BACK.z);
-    board.receiveShadow = true;
-    this.add(board);
-    this.add(boxMesh(BOARD_W, BOARD_BACK.y - 0.2, 0.04, BLACK, { y: (BOARD_BACK.y - 0.2) / 2 + 0.2, z: BOARD_BACK.z - 0.03 }));
-    // The backboard: marquee, the score display, and a mesh screen in front of the rings.
-    this.add(boxMesh(WIDTH, BACK_H - BOARD_BACK.y, 0.06, paint, { y: BOARD_BACK.y + (BACK_H - BOARD_BACK.y) / 2, z: BACK_Z }));
-    const marqueeMap = paintMarquee(this.title, { height: 128, stops: ['#ffd23a', '#ff7a33'], ink: '#3a0f10', size: 52, textY: 70, decorate: notches });
-    this.marquee = new THREE.MeshBasicMaterial({ map: marqueeMap, toneMapped: false, color: 0xdddddd });
-    const marquee = new THREE.Mesh(new THREE.PlaneGeometry(WIDTH - 0.06, 0.2), this.marquee);
-    marquee.position.set(0, BACK_H - 0.14, BACK_Z + 0.032);
-    this.add(marquee);
-    this.display = displayScreen([320, 200], [0.56, 0.35]);
-    const screen = this.display.mesh;
-    screen.position.set(0, BACK_H - 0.47, BACK_Z + 0.032);
-    this.add(screen);
-    this.note = outOfOrderNote();
-    this.note.position.set(0.02, -0.02, 0.004);
-    screen.add(this.note);
-    // The net over the rings starts above the ball's flight, so the player sees the board under it.
-    const NET_Y = 1.45;
-    const net = new THREE.Mesh(new THREE.PlaneGeometry(WIDTH - 0.2, BACK_H - NET_Y), new THREE.MeshBasicMaterial({ map: paintNet(), transparent: true, depthWrite: false, side: THREE.DoubleSide }));
-    net.position.set(0, NET_Y + (BACK_H - NET_Y) / 2 - 0.05, BOARD_FRONT.z - 0.05);
-    net.rotation.x = 0.35;
-    this.add(net);
-
-    // The ball in play, and the trough of balls waiting at the front.
-    this.ball = new THREE.Mesh(new THREE.SphereGeometry(BALL_R, 16, 12), BALL_MAT);
-    this.ball.castShadow = true;
-    this.add(this.ball);
-    for (let i = 0; i < BALLS - 1; i++) {
-      const waiting = new THREE.Mesh(new THREE.SphereGeometry(BALL_R, 12, 10), BALL_MAT);
-      waiting.position.set(-LANE_W / 2 + BALL_R + 0.005 + i * (BALL_R * 2 + 0.004), LANE_NEAR.y + BALL_R - 0.02, LANE_NEAR.z + 0.08);
-      this.trough.push(waiting);
-      this.add(waiting);
-    }
-    this.strip = new TicketStrip(0.55);
-    this.strip.position.set(WIDTH / 2 - 0.16, 0.55, LANE_NEAR.z + 0.15 + 0.001);
-    this.add(this.strip);
-
-    const hitbox = invisibleHitbox(WIDTH + 0.04, BACK_H, length + 0.04, { y: BACK_H / 2, z: centreZ });
-    this.hitboxes = [hitbox];
-    this.add(hitbox);
-    this.traverse((obj) => {
-      const mesh = obj as THREE.Mesh;
-      if (mesh.isMesh && mesh !== net) mesh.receiveShadow = true;
-    });
-    this.speaker = new ChipSpeaker(screen, wiring.listener);
-    this.resetBall();
+    this.model = buildAlleyModel(this, options.color ?? 0xb8202a, this.title);
+    this.note = this.model.note;
+    this.strip = this.model.strip;
+    this.hitboxes = [this.model.hitbox];
+    this.speaker = new ChipSpeaker(this.model.display.mesh, wiring.listener);
+    this.placeBall();
     this.paintDisplay();
   }
 
@@ -199,8 +73,9 @@ export class AlleyRoller extends TicketMachine {
 
   /** The left hand on the rail, the right on the ball in hand while aiming (else resting on the lane's end). */
   handsAt(): readonly [THREE.Vector3, THREE.Vector3] {
+    const { ball } = this.model;
     this.localToWorld(this.hands[0].set(-(WIDTH / 2 - 0.1), LANE_NEAR.y + 0.13, LANE_NEAR.z + 0.04));
-    if (this.phase === 'aim' && this.ball.visible) this.localToWorld(this.hands[1].copy(this.ball.position).setY(this.ball.position.y + BALL_R * 0.8));
+    if (this.sim.phase === 'aim' && ball.visible) this.localToWorld(this.hands[1].copy(ball.position).setY(ball.position.y + BALL_R * 0.8));
     else this.localToWorld(this.hands[1].set(0.12, LANE_NEAR.y + 0.06, LANE_NEAR.z + 0.12));
     return this.hands;
   }
@@ -210,11 +85,11 @@ export class AlleyRoller extends TicketMachine {
   }
 
   setHovered(hovered: boolean): void {
-    this.marquee.color.setHex(hovered ? 0xffffff : 0xdddddd);
+    this.model.marquee.color.setHex(hovered ? 0xffffff : 0xdddddd);
   }
 
   protected get score(): number {
-    return this.points;
+    return this.sim.points;
   }
 
   protected attractLabel(price: string): string {
@@ -231,6 +106,7 @@ export class AlleyRoller extends TicketMachine {
   }
 
   protected paint(dt: number): void {
+    this.placeBall();
     this.displayClock += dt;
     if (this.state !== 'attract' || this.displayClock > 0.25) {
       this.displayClock = 0;
@@ -238,188 +114,34 @@ export class AlleyRoller extends TicketMachine {
     }
   }
 
-  // --- The roll ---------------------------------------------------------------------------------
-
   protected newGame(): void {
-    this.points = 0;
-    this.ballsLeft = BALLS;
-    this.lastPoints = null;
-    this.resetBall();
+    this.sim.newGame(this.state === 'attract');
+    this.placeBall();
   }
 
   /** One frame of the play; over once the last ball is back and none is in hand. */
   protected play(dt: number, controls: ArcadeControls): boolean {
-    this.advance(dt, controls);
-    return this.ballsLeft === 0 && this.phase === 'aim';
+    const over = this.sim.play(dt, controls);
+    for (const { sfx, pitch } of this.sim.takeSounds()) this.speaker.play(sfx, pitch);
+    return over;
   }
 
-  /** Aim and power with the ball in hand, then the ball's roll, flight and sinking. */
-  private advance(dt: number, controls: ArcadeControls): void {
-    this.phaseClock += dt;
-    switch (this.phase) {
-      case 'aim': {
-        if (this.ballsLeft === 0) return;
-        const dir = (controls.right ? 1 : 0) - (controls.left ? 1 : 0);
-        this.aimU = THREE.MathUtils.clamp(this.aimU + dir * AIM_SPEED * dt, -AIM_MAX, AIM_MAX);
-        if (controls.fire) {
-          if (!this.charging) {
-            this.charging = true;
-            this.chargeClock = 0;
-          }
-          this.chargeClock += dt;
-          // A triangle wave: up to full over half a period, back down, and again.
-          const t = (this.chargeClock % POWER_PERIOD) / POWER_PERIOD;
-          this.power = t < 0.5 ? t * 2 : 2 - t * 2;
-        } else if (this.charging) {
-          this.charging = false;
-          this.roll();
-        }
-        this.placeBallInHand();
-        break;
-      }
-      case 'roll': {
-        const t = Math.min(1, this.phaseClock / this.rollSeconds);
-        // Slowing as it climbs: position eases out.
-        const s = 1 - (1 - t) * (1 - t);
-        const soft = this.landing.points < 0;
-        const reach = soft ? 0.6 : 1;
-        this.ball.position.set(
-          THREE.MathUtils.lerp(this.aimU, this.aimU * 0.95, s),
-          THREE.MathUtils.lerp(LANE_NEAR.y, LANE_FAR.y, s * reach) + BALL_R,
-          THREE.MathUtils.lerp(LANE_NEAR.z - 0.02, LANE_FAR.z, s * reach),
-        );
-        this.ball.rotation.x -= dt * 20;
-        if (t >= 1) {
-          if (soft) this.enterPhase('back');
-          else {
-            this.flightFrom.copy(this.ball.position);
-            this.flightTo.copy(this.boardPoint(this.landing.u, this.landing.v)).add(new THREE.Vector3(0, BALL_R, 0));
-            this.enterPhase('fly');
-          }
-        }
-        break;
-      }
-      case 'fly': {
-        const t = Math.min(1, this.phaseClock / 0.35);
-        this.ball.position.lerpVectors(this.flightFrom, this.flightTo, t);
-        this.ball.position.y += Math.sin(t * Math.PI) * 0.12;
-        if (t >= 1) {
-          this.speaker.play('thud');
-          this.enterPhase('sink');
-        }
-        break;
-      }
-      case 'sink': {
-        const t = Math.min(1, this.phaseClock / 0.3);
-        this.ball.position.y = this.flightTo.y - t * BALL_R * 2.2;
-        if (t >= 1) {
-          const points = this.landing.points;
-          this.points += points;
-          this.lastPoints = points;
-          this.speaker.play(points >= POCKET_POINTS ? 'bonus' : points >= 40 ? 'score' : 'blip', 1 + points / 200);
-          this.nextBall();
-        }
-        break;
-      }
-      case 'back': {
-        // Too soft: it rolls back down to the trough.
-        const t = Math.min(1, this.phaseClock / 0.8);
-        this.ball.position.z = THREE.MathUtils.lerp(this.ball.position.z, LANE_NEAR.z, t);
-        this.ball.position.y = THREE.MathUtils.lerp(this.ball.position.y, LANE_NEAR.y + BALL_R, t);
-        this.ball.rotation.x += dt * 14;
-        if (t >= 1) {
-          this.lastPoints = 0;
-          this.speaker.play('lose');
-          this.nextBall();
-        }
-        break;
-      }
-    }
-  }
-
-  /** Lets go: where it lands follows the power (and a little luck); too soft, it never clears the hump. */
-  private roll(): void {
-    const power = this.power;
-    this.ballsLeft -= 1;
-    this.syncTrough();
-    this.speaker.play('roll');
-    this.rollSeconds = 0.9 - power * 0.35;
-    if (power < 0.12) {
-      this.landing = { u: this.aimU, v: 0, points: -1 };
-      this.enterPhase('roll');
-      return;
-    }
-    const noise = (): number => (Math.random() + Math.random() - 1) * 0.035;
-    let v = 0.04 + power * 0.72 + noise();
-    // Over the top: it hits the back of the cage and drops somewhere on the upper board.
-    if (v > BOARD_V - 0.02) v = BOARD_V - 0.1 - Math.random() * 0.2;
-    const u = THREE.MathUtils.clamp(this.aimU * 1.05 + noise(), -BOARD_W / 2 + 0.05, BOARD_W / 2 - 0.05);
-    this.landing = { u, v, points: scoreAt(u, v) };
-    this.enterPhase('roll');
-  }
-
-  private nextBall(): void {
-    this.resetBall();
-  }
-
-  private resetBall(): void {
-    this.phase = 'aim';
-    this.phaseClock = 0;
-    this.power = 0;
-    this.charging = false;
-    this.syncTrough();
-    this.placeBallInHand();
-    this.ball.visible = this.ballsLeft > 0 || this.state === 'attract';
-  }
-
-  private enterPhase(phase: BallPhase): void {
-    this.phase = phase;
-    this.phaseClock = 0;
-  }
-
-  private placeBallInHand(): void {
-    this.ball.position.set(this.aimU, LANE_NEAR.y + BALL_R + 0.01, LANE_NEAR.z - 0.02);
-  }
-
-  /** The waiting balls in the trough: one fewer per ball rolled (the one in hand is not in it). */
-  private syncTrough(): void {
-    const waiting = this.state === 'attract' ? BALLS - 1 : Math.max(0, this.ballsLeft - 1);
-    this.trough.forEach((b, i) => (b.visible = i < waiting));
-  }
-
-  /** A point on the target board's surface: `u` across, `v` up the board from its front edge. */
-  private boardPoint(u: number, v: number): THREE.Vector3 {
-    const t = v / BOARD_V;
-    return new THREE.Vector3(u, THREE.MathUtils.lerp(BOARD_FRONT.y, BOARD_BACK.y, t), THREE.MathUtils.lerp(BOARD_FRONT.z, BOARD_BACK.z, t));
-  }
-
-  /** A regular: aims at the rings (or, feeling lucky, a pocket), holds for about the right power. */
   protected demoControls(dt: number): ArcadeControls {
-    const out: ArcadeControls = { ...NO_CONTROLS };
-    if (this.phase !== 'aim') return out;
-    if (!this.charging && this.phaseClock === 0) {
-      const pocket = Math.random() < 0.2 ? POCKETS[Math.floor(Math.random() * 2)]! : null;
-      const u = pocket ? pocket.u : RING_CENTRE.u + (Math.random() - 0.5) * 0.06;
-      const v = pocket ? pocket.v : RING_CENTRE.v;
-      const power = THREE.MathUtils.clamp((v - 0.04) / 0.72 + (Math.random() - 0.5) * 0.12, 0.15, 1);
-      // Once lined up: a beat's wait, then fire held until the meter has climbed to that power on its first way up.
-      this.demoTarget = { u, power, holdFor: 0.6 + power * (POWER_PERIOD / 2) };
-      this.demoClock = 0;
-    }
-    const diff = this.demoTarget.u - this.aimU;
-    if (Math.abs(diff) > 0.01 && !this.charging) {
-      out.left = diff < 0;
-      out.right = diff > 0;
-      return out;
-    }
-    this.demoClock += dt;
-    out.fire = this.demoClock > 0.6 && this.demoClock < this.demoTarget.holdFor;
-    return out;
+    return this.sim.autopilot(dt);
+  }
+
+  /** The ball and the trough follow the sim. */
+  private placeBall(): void {
+    const { ball, trough } = this.model;
+    ball.position.copy(this.sim.ball);
+    ball.rotation.x = this.sim.spin;
+    ball.visible = this.sim.ballShown;
+    trough.forEach((b, i) => (b.visible = i < this.sim.waiting));
   }
 
   /** The backboard's display: the score and balls left, the power meter while charging, the initials or the end card. */
   private paintDisplay(): void {
-    const { ctx, canvas, texture } = this.display;
+    const { ctx, canvas, texture } = this.model.display;
     const W = canvas.width;
     const H = canvas.height;
     ctx.fillStyle = '#0a0612';
@@ -452,9 +174,11 @@ export class AlleyRoller extends TicketMachine {
       texture.needsUpdate = true;
       return;
     }
-    drawText(ctx, `${this.points}`, W / 2, 50, 40, '#ff8a3a');
-    drawText(ctx, `BALLS ${this.ballsLeft}`, 20, 100, 12, '#c9c4ff', 'left');
-    if (this.lastPoints !== null && this.phase === 'aim') drawText(ctx, this.lastPoints > 0 ? `+${this.lastPoints}` : 'MISS', W - 20, 100, 14, this.lastPoints >= 100 ? '#ffd23a' : this.lastPoints > 0 ? '#7ee787' : '#ff8a80', 'right');
+    const { sim } = this;
+    const aiming = sim.phase === 'aim';
+    drawText(ctx, `${sim.points}`, W / 2, 50, 40, '#ff8a3a');
+    drawText(ctx, `BALLS ${sim.ballsLeft}`, 20, 100, 12, '#c9c4ff', 'left');
+    if (sim.lastPoints !== null && aiming) drawText(ctx, sim.lastPoints > 0 ? `+${sim.lastPoints}` : 'MISS', W - 20, 100, 14, sim.lastPoints >= 100 ? '#ffd23a' : sim.lastPoints > 0 ? '#7ee787' : '#ff8a80', 'right');
     // The power meter.
     ctx.fillStyle = '#222233';
     ctx.fillRect(20, 130, W - 40, 26);
@@ -463,80 +187,8 @@ export class AlleyRoller extends TicketMachine {
     grad.addColorStop(0.6, '#ffe23a');
     grad.addColorStop(1, '#ff4a3a');
     ctx.fillStyle = grad;
-    ctx.fillRect(20, 130, (W - 40) * (this.phase === 'aim' ? this.power : 0), 26);
-    drawText(ctx, this.phase === 'aim' ? 'HOLD SPACE · LET GO' : 'ROLLING...', W / 2, 176, 10, '#9a96c0');
+    ctx.fillRect(20, 130, (W - 40) * (aiming ? sim.power : 0), 26);
+    drawText(ctx, aiming ? 'HOLD SPACE · LET GO' : 'ROLLING...', W / 2, 176, 10, '#9a96c0');
     texture.needsUpdate = true;
   }
-}
-
-/** Points for a ball that lands at (u, v) on the board: a corner pocket, else the ring it drops into, else the 10 at the bottom. */
-function scoreAt(u: number, v: number): number {
-  for (const p of POCKETS) if (Math.hypot(u - p.u, v - p.v) <= POCKET_R) return POCKET_POINTS;
-  const d = Math.hypot(u - RING_CENTRE.u, v - RING_CENTRE.v);
-  return RINGS.find((r) => d <= r.within)?.points ?? 10;
-}
-
-/** The board: concentric rings round the 50, the numbers, the two 100 pockets in the top corners. */
-function paintBoard(): THREE.Texture {
-  const PX = 700;
-  const W = Math.round(BOARD_W * PX);
-  const H = Math.round(BOARD_V * PX);
-  const [canvas, ctx] = createCanvas(W, H);
-  ctx.fillStyle = '#1b3a6b';
-  ctx.fillRect(0, 0, W, H);
-  // Canvas y grows down; the board's v grows up from the front edge.
-  const at = (u: number, v: number): [number, number] => [(u + BOARD_W / 2) * PX, H - v * PX];
-  const [cx, cy] = at(RING_CENTRE.u, RING_CENTRE.v);
-  const colours = ['#e8e2d0', '#c8443a', '#e8e2d0', '#c8443a'];
-  [...RINGS].reverse().forEach((ring, i) => {
-    ctx.fillStyle = colours[i]!;
-    ctx.beginPath();
-    ctx.arc(cx, cy, ring.within * PX, 0, Math.PI * 2);
-    ctx.fill();
-  });
-  ctx.fillStyle = '#111';
-  ctx.beginPath();
-  ctx.arc(cx, cy, 0.03 * PX, 0, Math.PI * 2);
-  ctx.fill();
-  RINGS.forEach((ring, i) => drawText(ctx, `${ring.points}`, cx, cy - (i === 0 ? 0.035 : (ring.within - 0.025)) * PX, 18, i % 2 ? '#e8e2d0' : '#1b3a6b'));
-  for (const p of POCKETS) {
-    const [px, py] = at(p.u, p.v);
-    ctx.fillStyle = '#ffd23a';
-    ctx.beginPath();
-    ctx.arc(px, py, POCKET_R * PX + 6, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = '#111';
-    ctx.beginPath();
-    ctx.arc(px, py, POCKET_R * PX, 0, Math.PI * 2);
-    ctx.fill();
-    drawText(ctx, '100', px, py - POCKET_R * PX - 16, 16, '#ffd23a');
-  }
-  drawText(ctx, '10', W / 2, H - 22, 18, '#e8e2d0');
-  return toTexture(canvas, 4);
-}
-
-/** The marquee's top edge: dark notches, like a fairground booth's. */
-function notches(ctx: CanvasRenderingContext2D, width: number): void {
-  ctx.fillStyle = 'rgba(0,0,0,0.25)';
-  for (let x = 0; x < width; x += 32) ctx.fillRect(x, 0, 16, 10);
-}
-
-/** A see-through wire mesh in front of the rings (it keeps the balls in). */
-function paintNet(): THREE.Texture {
-  const [canvas, ctx] = createCanvas(256, 256);
-  ctx.clearRect(0, 0, 256, 256);
-  ctx.strokeStyle = 'rgba(200,200,210,0.35)';
-  ctx.lineWidth = 2;
-  for (let i = -256; i < 512; i += 24) {
-    ctx.beginPath();
-    ctx.moveTo(i, 0);
-    ctx.lineTo(i + 256, 256);
-    ctx.moveTo(i + 256, 0);
-    ctx.lineTo(i, 256);
-    ctx.stroke();
-  }
-  const texture = toTexture(canvas);
-  texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
-  texture.repeat.set(2, 3);
-  return texture;
 }

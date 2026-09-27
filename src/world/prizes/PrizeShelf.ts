@@ -2,8 +2,9 @@ import * as THREE from 'three';
 import { getPrize, type OwnedPrize } from '@/economy/Prizes';
 import { createCanvas } from '@/covers/generated/canvasUtils';
 import { boxMesh } from '../meshUtils';
-import { matte, Prop } from '../props/Prop';
-import { wood as woodMaterial } from '@/world/materials/finishes';
+import { Prop } from '../props/Prop';
+import { paint, timber } from '../materials/palette';
+import { isShared } from '../materials/sharedResources';
 import { prizeModel } from './prizeModel';
 
 export interface PrizeShelfOptions {
@@ -20,8 +21,8 @@ const DEPTH = 0.16;
 const BOARD = 0.022;
 /** Room each prize takes along a board. */
 const SLOT = 0.1;
-const WOOD = woodMaterial(0x6a4a30, 0.55);
-const BRACKET = matte(0x2a2a30, 0.5);
+const WOOD = timber(0x6a4a30, 0.55);
+const BRACKET = paint(0x2a2a30, 0.5);
 
 /**
  * The prize shelf at home: a couple of wall-hung boards where what the player won at the arcade
@@ -57,7 +58,10 @@ export class PrizeShelf extends Prop {
   private rebuild(): void {
     for (const child of [...this.shown.children]) {
       this.shown.remove(child);
-      child.traverse((obj) => (obj as THREE.Mesh).geometry?.dispose());
+      child.traverse((obj) => {
+        const geometry = (obj as THREE.Mesh).geometry;
+        if (geometry && !isShared(geometry)) geometry.dispose(); // the models' boxes and cylinders are shared (`boxMesh`)
+      });
     }
     const { width, tiers, gap } = this.options;
     const perTier = Math.floor((width - 0.04) / SLOT);

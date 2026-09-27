@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { createCanvas, seededRandom, toTexture, FONT } from '@/covers/generated/canvasUtils';
 import { Prop, part } from './Prop';
-import { wood as woodMaterial } from '@/world/materials/finishes';
+import { timber } from '@/world/materials/palette';
 
 export interface NoticeboardOptions {
   /** Outer size of the frame. Default 0.34 x 0.44. */
@@ -29,7 +29,7 @@ export class Noticeboard extends Prop {
     this.name = 'Noticeboard';
     const width = options.width ?? 0.34;
     const height = options.height ?? 0.44;
-    const pine = woodMaterial(0xc9a473, 0.6);
+    const pine = timber(0xc9a473, 0.6);
     part(this, width, FRAME, 0.02, pine, { y: height / 2 - FRAME / 2, z: 0.01 });
     part(this, width, FRAME, 0.02, pine, { y: -height / 2 + FRAME / 2, z: 0.01 });
     for (const sx of [-1, 1]) part(this, FRAME, height - 2 * FRAME, 0.02, pine, { x: (sx * (width - FRAME)) / 2, z: 0.01 });

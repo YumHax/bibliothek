@@ -3,6 +3,7 @@ import type { Zone } from '../zone/Zone';
 import type { BuildContext, ZoneHandle } from '../buildContext';
 import { placeDecor } from '../props/decor';
 import { followUpgrades } from '../build/follow';
+import { placerFor } from '../build/owned';
 import { Plant } from '../props/Plant';
 import { BALCONY_PLAN as plan } from './balconyPlan';
 import { BalconySlab } from './BalconySlab';
@@ -49,8 +50,8 @@ export function furnishBalcony(zone: Zone, { sky, home: { upgrades } }: BuildCon
   );
   zone.onUnload(sky.dayNight.onChange((state) => front.apply(state)));
 
-  zone.place(new BistroSet(), new THREE.Vector3(plan.bistro.floor[0], 0, plan.bistro.floor[1]));
-  placeDecor(zone, plan.decor);
+  placerFor(zone, upgrades, plan.bistro.upgrade).place(new BistroSet(), new THREE.Vector3(plan.bistro.floor[0], 0, plan.bistro.floor[1]));
+  placeDecor(zone, plan.decor, upgrades);
   // The florist's potted plants, as many as have been bought (they stand clear of the way: no colliders).
   if (upgrades) {
     const pots = plan.boughtPlants.map((spot) => zone.place(new Plant({ kind: spot.kind, pot: spot.pot, seed: spot.seed, scale: 'scale' in spot ? spot.scale : 1, collides: false }), new THREE.Vector3(spot.floor[0], 0, spot.floor[1])));

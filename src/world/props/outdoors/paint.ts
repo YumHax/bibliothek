@@ -1,3 +1,4 @@
+import { currentSeason } from '@/time/season';
 import * as THREE from 'three';
 import type { Rng } from './Sheet';
 
@@ -39,4 +40,13 @@ export function integer(random: Rng, min: number, max: number): number {
 
 export function deg(degrees: number): number {
   return THREE.MathUtils.degToRad(degrees);
+}
+
+/** The lawn's colour in the current season: fresh in spring, parched at the end of summer, dun in winter. */
+export function seasonalLawn(hex: string): string {
+  const { name, depth } = currentSeason();
+  if (name === 'spring') return mixHex(hex, '#8fc05a', 0.25);
+  if (name === 'summer') return mixHex(hex, '#a8a860', 0.2 * depth);
+  if (name === 'autumn') return mixHex(hex, '#9a9658', 0.15 + 0.2 * depth);
+  return mixHex(hex, '#8f8a6a', 0.6);
 }

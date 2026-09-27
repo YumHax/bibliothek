@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { boxMesh } from '../meshUtils';
-import { markShared, matte, Prop } from './Prop';
+import { basic, paint, standard } from '../materials/palette';
+import { Prop } from './Prop';
 
 export interface NeonTubeOptions {
   /** Length of the tube, centred on the origin along local x. Default 3. */
@@ -15,7 +16,7 @@ export interface NeonTubeOptions {
   standoff?: number;
 }
 
-const BRACKET = markShared(matte(0x2a2a30, 0.45));
+const BRACKET = paint(0x2a2a30, 0.45);
 
 /**
  * A straight tube of neon on wall brackets: the cove light along the top of an arcade's walls,
@@ -32,7 +33,7 @@ export class NeonTube extends Prop {
     const radius = options.radius ?? 0.015;
     const standoff = options.standoff ?? 0.06;
 
-    const glass = new THREE.MeshStandardMaterial({ color: color.clone().multiplyScalar(0.3), emissive: color, emissiveIntensity: 2.4, roughness: 0.3, toneMapped: false });
+    const glass = standard({ color: color.clone().multiplyScalar(0.3), emissive: color, emissiveIntensity: 2.4, roughness: 0.3, toneMapped: false });
     const tube = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius, length, 10), glass);
     tube.rotation.z = Math.PI / 2;
     tube.position.z = standoff;
@@ -42,7 +43,7 @@ export class NeonTube extends Prop {
     // A faint outer halo: a wider, translucent tube around the glass.
     const halo = new THREE.Mesh(
       new THREE.CylinderGeometry(radius * 2.6, radius * 2.6, length, 10),
-      new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.14, toneMapped: false, depthWrite: false }),
+      basic({ color, transparent: true, opacity: 0.14, toneMapped: false, depthWrite: false }),
     );
     halo.rotation.z = Math.PI / 2;
     halo.position.z = standoff;

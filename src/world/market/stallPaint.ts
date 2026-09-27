@@ -1,5 +1,7 @@
 import * as THREE from 'three';
 import { createCanvas, toTexture } from '@/covers/generated/canvasUtils';
+import { fabric } from '@/world/materials/finishes';
+import { shared } from '../materials/palette';
 
 /**
  * Shared painting and layout helpers of the market's stall styles (`GlassCaseStall`,
@@ -72,6 +74,11 @@ export function paintGingham(cloth: THREE.Color): THREE.Texture {
   ctx.fillStyle = 'rgba(0,0,0,0.07)';
   for (let y = 0; y < S; y += 3) ctx.fillRect(0, y, S, 1);
   return toTexture(canvas, 4);
+}
+
+/** A plain woollen or cotton cloth of `color` (velvet lining, clothes, a stool's seat): one shared material per colour. */
+export function plainCloth(color: number, roughness = 0.95): THREE.MeshStandardMaterial {
+  return shared(`fabric|${color}|${roughness}`, () => fabric({ color, roughness }));
 }
 
 /** A material carrying `map` repeated `u` x `v` times over its face (its own clone of the texture). */

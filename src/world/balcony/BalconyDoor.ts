@@ -5,7 +5,9 @@ import type { Interactable } from '@/interaction/Interactable';
 import type { SessionActions } from '@/game/SessionActions';
 import { LidMotion } from '../box/LidMotion';
 import { cylinderMesh, invisibleHitbox } from '../meshUtils';
-import { Prop, part, matte } from '../props/Prop';
+import { paint, standard } from '../materials/palette';
+import { Prop, part } from '../props/Prop';
+import { RENDER_ORDER } from '../surface/layers';
 
 export interface BalconyDoorOptions {
   width: number;
@@ -25,9 +27,9 @@ const OPEN_ANGLE = THREE.MathUtils.degToRad(110);
 const SWING_SECONDS = 1.2;
 const BLOCKER_SWAP = 0.5;
 
-const PAINT = matte(0xf2efe8, 0.55);
-const GLASS = new THREE.MeshStandardMaterial({ color: 0xd8e6ee, roughness: 0.04, metalness: 0.2, transparent: true, opacity: 0.14, depthWrite: false });
-const BRASS = new THREE.MeshStandardMaterial({ color: 0xc9a75b, metalness: 0.85, roughness: 0.3, emissive: 0xc9a75b, emissiveIntensity: 0 });
+const PAINT = paint(0xf2efe8, 0.55);
+const GLASS = standard({ color: 0xd8e6ee, roughness: 0.04, metalness: 0.2, transparent: true, opacity: 0.14, depthWrite: false });
+const BRASS = new THREE.MeshStandardMaterial({ color: 0xc9a75b, metalness: 0.85, roughness: 0.3, emissive: 0xc9a75b, emissiveIntensity: 0 }); // convention-ok: a template, cloned per door (its handle glows on hover)
 
 /**
  * The glazed door onto the balcony: a painted frame through the wall, a single French leaf of six
@@ -61,7 +63,7 @@ export class BalconyDoor extends Prop implements Updatable, Interactable {
     part(this, FRAME, height, FRAME_DEPTH, PAINT, { x: -width / 2 + FRAME / 2, y: height / 2, z });
     part(this, FRAME, height, FRAME_DEPTH, PAINT, { x: width / 2 - FRAME / 2, y: height / 2, z });
     part(this, width, FRAME, FRAME_DEPTH, PAINT, { y: height - FRAME / 2, z });
-    part(this, width + 0.1, 0.03, FRAME_DEPTH + 0.06, matte(0xb9b1a3, 0.8), { y: 0.015, z });
+    part(this, width + 0.1, 0.03, FRAME_DEPTH + 0.06, paint(0xb9b1a3, 0.8), { y: 0.015, z });
 
     // The leaf, hinged on the left jamb, seen from the balcony.
     const leafW = width - 2 * FRAME - 0.006;
@@ -81,7 +83,7 @@ export class BalconyDoor extends Prop implements Updatable, Interactable {
     const gy1 = leafH - STILE;
     const glass = at(gx0, gy0, gx1 - gx0, gy1 - gy0, GLASS, 0.008);
     glass.castShadow = false;
-    glass.renderOrder = 1;
+    glass.renderOrder = RENDER_ORDER.glass;
     at((gx0 + gx1) / 2 - BAR / 2, gy0, BAR, gy1 - gy0, PAINT, LEAF_THICKNESS * 0.6);
     for (const k of [1 / 3, 2 / 3]) at(gx0, gy0 + (gy1 - gy0) * k - BAR / 2, gx1 - gx0, BAR, PAINT, LEAF_THICKNESS * 0.6);
 

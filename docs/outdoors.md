@@ -11,13 +11,20 @@ or heard through the windows.
   painting was made from one eye (`center`); from anywhere else the shader starts on a 40 m sphere and takes
   `PARALLAX_STEPS` (6) fixed-point steps: read the painted depth along the current direction, move to the point of the ray
   that far from the painting's eye. So every window (the kitchen's too, the balcony) sees the near pavement shift more than
-  the skyline; a thin sliver where something nearer uncovers what it hid is stretched from its neighbour. Sky gradient, sunset glow, sun tint, night darkness, lights, sun,
+  the skyline; a thin sliver where something nearer uncovers what it hid is stretched from its neighbour. Ground on the
+  street's plane (`Surface.flat`: `paintGroundBand`, the park paths; haze G, packed in fx A) is stamped with one distance
+  per strip, too coarse for that (from the balcony the strips shift apart in slices and the cars hop across them): there
+  the step meets the plane exactly instead. Anything painted on the ground straight onto `sheet.color` keeps the flag. Sky gradient, sunset glow, sun tint, night darkness, lights, sun,
   moon, clouds and weather are uniforms: nothing repaints after start. Everything is true perspective from `EYE_HEIGHT`.
-- `plan.ts` is the neighbourhood: Front Street ahead with mid-rise facades, Park Street to the left with the park, our own
+- `plan.ts` is the neighbourhood as the window sees it, derived from `src/world/city/` (the one data model the painted
+  view and the walkable street share: `frontage` (the road's cross-section `ROAD`, kerbs, lanes, `OUR_LINE`, the bus stop,
+  the ends, from `STREET_PLAN` + `FLAT_IN_STREET`), `vehicles` (every body's size), `traffic` (cruise speeds, the bus's
+  dwell, the bin round's hours), `shopLooks` (each kind of shop's colours)): never retype a street value here, derive it.
+  Front Street ahead with mid-rise facades, Park Street to the left with the park, our own
   pavement (`NEAR_KERB`) under the windows; `frontage()` / `parkLine()` give distances. Both streets end at a building
   standing across them (`FRONT_END`, `PARK_END`, painted by `paintStreetEnds`); `ground(a, offset)` is `frontage()` stopped
   at those, and every ground band, line and row of street furniture must stop there too. It also holds what the painters
-  and `Life` share: `BUS_STOP_X`, `POND` / `FOUNTAIN`, `PARK_PATHS`, the traffic and cycle lanes (`NEAR_LANE`, `FAR_LANE`,
+  and `Life` share: `BUS_SHELTER` / `BUS_STOP_X`, `LAMPS` (the street's own lamp posts), `POND` / `FOUNTAIN`, `PARK_PATHS`, the traffic and cycle lanes (`NEAR_LANE`, `FAR_LANE`,
   `CYCLE_NEAR`, `CYCLE_FAR`), `WALK_LINE` and `LIFE_REACH` (62 m: how far out along both streets what moves is
   simulated; not `FRONT_END`, the end building). Behind the room (x > 0, z < 0,
   azimuth +90°..180°, `COURT_*`) is our own block's courtyard: no street painter belongs there, the seam at ±180° is our
@@ -56,9 +63,9 @@ or heard through the windows.
   shops by kind and name as `PlannedShop`s; the rest of the block beyond is drawn by lots), `StreetFurniture` (lamps with ground pool, small
   halo and wall wash; benches, bins, bikes, planters, scooters, newsstand, bus shelter...), `ParkFeatures`, `Solid`.
 - `Holiday.ts` (`currentHoliday()`, `holidayOf(date)`, `?holiday=christmas|halloween|none`): at Christmas (1 Dec - 6 Jan)
-  strings of fairy lights slung across both streets (pieces sorted in with the street's furniture), bulbs in the street
-  trees, a lit fir with a star in the park (sorted in with the park); at Halloween (21-31 Oct) orange and violet strings and
-  candle-lit pumpkins on a fifth of the lit sills. Decorations draw from their own random sequence (`beginHoliday()`), so a
+  strings of fairy lights slung across Front Street where the walkable street has them (pieces sorted in with the
+  street's furniture), bulbs in the street trees, a lit fir with a star in the park (sorted in with the park); at Halloween
+  (21-31 Oct) candle-lit pumpkins on a fifth of the lit sills. Decorations draw from their own random sequence (`beginHoliday()`), so a
   holiday never changes a building. Spring petals blow past on the wind (shader, `petals` uniform) while the trees flower.
   The rooms and the walkable street dress up from the same holiday (`currentFestivities()`, which adds `newyear` from
   30 Dec to 3 Jan or with `?holiday=newyear`): plan `decor` entries with a `holiday` gate (docs/props.md).
@@ -67,7 +74,7 @@ or heard through the windows.
   calendar; `?season=winter` or `?season=autumn:0.9` overrides (parsed in `bootstrap/services.ts`).
 - The retro games shop is a window on the market (`RetroShopLure`, made in `bootstrap/world.ts`): every 3 s it shows the day's stock
   (`Outdoors.showShopStock()`, platform accent colours onto the shop's `goods` boxes, one texture re-upload), and on a new
-  market day, until the player has been in the `market` zone, a NOUVEAUTÉS banner (`showShopBanner()`, mirrored lettering,
+  market day, until the player has been in the `market` zone, a NEW IN banner (`showShopBanner()`, mirrored lettering,
   the texels under it kept to take it down) and a queue of 2-6 at the door (`Life.setShopQueue`).
 
 ## The near wall (not painted)
@@ -123,7 +130,7 @@ a cornice and two bays of windows per storey lit by the same curfew rules. Rays 
 - Cars round the corner on two concentric routes (right-hand traffic, queueing bumper to bumper by body length, positions
   interpolated between half-metre samples, a lateral `offset` to the right of the lane); ~18 % are taxis (lit roof sign);
   a bus every couple of minutes on the second route, pulling up at the shelter (`BUS_STOP_X`); the dustcart once a
-  morning (game hours 5.5-7) crawling west along the near lane with stops (amber beacon); a delivery van in business hours
+  morning (`city/traffic` hours) crawling east along the far lane, stopping at the street's bins (amber beacon); a delivery van in business hours
   double-parking by a shop on the far side (`VAN_OFFSET` out of lane: others pass it, it pulls out when clear) with its
   hazards blinking; a rare ambulance, fast, blue lights, cars ahead pulling over (`YIELD_OFFSET`) and crawling, cars near
   it on the other side braking. Vehicle stops are a generic `Stop[]` queue per vehicle.
@@ -158,7 +165,9 @@ a cornice and two bays of windows per storey lit by the same curfew rules. Rays 
 
 ## Sound (`src/audio/StreetAmbience.ts`)
 
-Synthesised, heard from the nearest pane (`Outdoors.panesIn(scene)`), through walls via `SoundOcclusion`: traffic rumble
+Synthesised, heard from the loudest way in, through walls via `SoundOcclusion`: a shut pane (`Outdoors.panesIn(scene)`)
+lets `THROUGH_GLASS` (0.2) of it through, the balcony door (`openings`) from that up to the full level as it opens, and
+on the balcony (`outside`) it is full: traffic rumble
 following wakefulness, cars swelling past (hissier when wet), a rare horn, birdsong by day with a dawn chorus, rain hiss and
 patter on the glass, a wind band following `sky.wind` (a whistle when strong), church bells striking the hour 8-21.
 Thunder on each `sky.strikes` change, `strikeDistance / 343` s late, cracking when near; it has its own bus with a floor

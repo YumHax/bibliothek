@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import { createCanvas, toTexture } from '@/covers/generated/canvasUtils';
 import { cylinderMesh } from '../meshUtils';
-import { part, matte } from './Prop';
+import { paint } from '../materials/palette';
+import { part } from './Prop';
 import { fabric } from '@/world/materials/finishes';
 
 export interface RollerBlindOptions {
@@ -47,8 +48,8 @@ export class RollerBlind extends THREE.Group {
     this.rollY = height / 2 - ROLL_RADIUS + frame * 0.6;
     const rollZ = standoff + ROLL_RADIUS;
     const rollW = width + 0.04;
-    const metal = matte(0xd9d6cf, 0.4);
-    const roll = cylinderMesh(ROLL_RADIUS, rollW, matte(color, 0.9), { y: this.rollY, z: rollZ }, { segments: 16 });
+    const metal = paint(0xd9d6cf, 0.4);
+    const roll = cylinderMesh(ROLL_RADIUS, rollW, paint(color, 0.9), { y: this.rollY, z: rollZ }, { segments: 16 });
     roll.rotation.z = Math.PI / 2;
     this.add(roll);
     for (const side of [-1, 1]) part(this, BRACKET, ROLL_RADIUS * 2.4, rollZ + ROLL_RADIUS, metal, { x: side * (rollW / 2 + BRACKET / 2), y: this.rollY, z: (rollZ + ROLL_RADIUS) / 2 });

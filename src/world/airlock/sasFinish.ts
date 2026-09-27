@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { createCanvas, seededRandom, toTexture } from '@/graphics/canvas';
-import { markShared } from '../props/Prop';
+import { markShared } from '../materials/sharedResources';
+import { METAL, basic, paint, standard } from '../materials/palette';
 import { SAS } from './airlockPlan';
 
 /*
@@ -73,7 +74,7 @@ export function bake(geometry: THREE.BufferGeometry, toSas: THREE.Matrix4 = new 
 
 /** The baked look for `map` (or a plain `color`): unlit, lit by its vertex colours, no fog. */
 function baked(map: THREE.Texture | null, color = 0xffffff): THREE.MeshBasicMaterial {
-  return markShared(new THREE.MeshBasicMaterial({ map, color, vertexColors: true, fog: false }));
+  return basic({ map, color, vertexColors: true, fog: false });
 }
 
 function shared(canvas: HTMLCanvasElement, repeat = false): THREE.CanvasTexture {
@@ -125,12 +126,13 @@ export function sasFinish(): SasFinish {
     notice: baked(shared(paintNotice())),
     plate: baked(shared(paintPlate())),
     brass: baked(null, 0xd8b56a),
+    // Its own shared material, not `basic()`: the palette keys colours by hex, which clamps this one to white.
     globe: markShared(new THREE.MeshBasicMaterial({ color: new THREE.Color(2.4, 2.1, 1.7), fog: false })),
-    streetLeaf: { baked: baked(streetLeaf), lit: markShared(new THREE.MeshStandardMaterial({ map: streetLeaf, roughness: 0.55 })) },
-    glazedLeaf: { baked: baked(glazedLeaf), lit: markShared(new THREE.MeshStandardMaterial({ map: glazedLeaf, roughness: 0.45 })) },
-    hallPlaster: markShared(new THREE.MeshStandardMaterial({ color: 0xe6dcc6, roughness: 0.95 })),
-    hallTrim: markShared(new THREE.MeshStandardMaterial({ color: 0xf2ece0, roughness: 0.6 })),
-    litBrass: markShared(new THREE.MeshStandardMaterial({ color: 0xc9a75b, metalness: 0.85, roughness: 0.3 })),
+    streetLeaf: { baked: baked(streetLeaf), lit: standard({ map: streetLeaf, roughness: 0.55 }) },
+    glazedLeaf: { baked: baked(glazedLeaf), lit: standard({ map: glazedLeaf, roughness: 0.45 }) },
+    hallPlaster: paint(0xe6dcc6, 0.95),
+    hallTrim: paint(0xf2ece0, 0.6),
+    litBrass: METAL.brass(),
   };
   return finish;
 }
@@ -239,7 +241,7 @@ function paintMat(): HTMLCanvasElement {
   return canvas;
 }
 
-/** The syndic's notice: please shut the door behind you. */
+/** The management's notice: please shut the door behind you. */
 function paintNotice(): HTMLCanvasElement {
   const [canvas, ctx] = createCanvas(256, 340);
   ctx.fillStyle = '#f6f1e2';
@@ -247,17 +249,17 @@ function paintNotice(): HTMLCanvasElement {
   ctx.fillStyle = '#20242c';
   ctx.textAlign = 'center';
   ctx.font = 'bold 26px Georgia, serif';
-  ctx.fillText('AVIS', 128, 52);
+  ctx.fillText('NOTICE', 128, 52);
   ctx.font = '19px Georgia, serif';
-  ['Merci de bien', 'refermer la porte', 'derrière vous.', '', 'Please shut the', 'door behind you.'].forEach((line, i) => ctx.fillText(line, 128, 104 + i * 30));
+  ['Residents are', 'kindly asked to', 'shut the door', 'behind them.', '', 'Thank you.'].forEach((line, i) => ctx.fillText(line, 128, 104 + i * 30));
   ctx.font = 'italic 16px Georgia, serif';
-  ctx.fillText('— Le syndic', 150, 310);
+  ctx.fillText('— The management', 140, 310);
   ctx.fillStyle = '#b8a47a';
   for (const [x, y] of [[14, 14], [242, 14], [14, 326], [242, 326]] as const) ctx.fillRect(x - 4, y - 4, 8, 8);
   return canvas;
 }
 
-/** The door release: a brass plate, a round button glowing orange, PORTE engraved over it. */
+/** The door release: a brass plate, a round button glowing orange, DOOR engraved over it. */
 function paintPlate(): HTMLCanvasElement {
   const [canvas, ctx] = createCanvas(128, 192);
   ctx.fillStyle = '#c9a75b';
@@ -268,7 +270,7 @@ function paintPlate(): HTMLCanvasElement {
   ctx.fillStyle = '#4a3a1c';
   ctx.font = 'bold 22px Georgia, serif';
   ctx.textAlign = 'center';
-  ctx.fillText('PORTE', 64, 52);
+  ctx.fillText('DOOR', 64, 52);
   const glow = ctx.createRadialGradient(64, 118, 4, 64, 118, 36);
   glow.addColorStop(0, '#ffd28a');
   glow.addColorStop(0.55, '#ff9a2a');

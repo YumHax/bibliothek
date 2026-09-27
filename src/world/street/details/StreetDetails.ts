@@ -5,6 +5,8 @@ import { snowCovered } from '../snowCover';
 import { FRONT, KERB_HEIGHT, PARK_STREET, STREET_PLAN, type Vec2 } from '../streetPlan';
 import { groundHeight } from '../relief/ground';
 import { TriBuilder } from '../relief/TriBuilder';
+import { CLOSURES, closureBox } from './roadworks';
+import { GROUND, onSurface } from '../../surface/layers';
 
 /*
  * Where the little things stand (zone-local): purely visual placements, kept clear of the
@@ -15,7 +17,7 @@ const HYDRANTS: Vec2[] = [[-15.4, -8.5], [24.6, 8.5], [35.6, -8.5], [-36.6, -24]
 const BOLLARDS: Vec2[] = [
   [-0.6, -8.35], [-1.3, -8.35], [5.6, -8.35], [6.3, -8.35],
   [-0.6, 8.35], [0.3, 8.35], [6.6, 8.35], [7.3, 8.35],
-  [-19.7, -9.3], [-19.7, -10.3], [-19.7, -11.3],
+  [-23, -9.3], [-23, -10.3], [-23, -11.3],
   [-34.5, 8.35], [-32.5, 8.35], [-30.5, 8.35], [-22.5, 8.35],
 ];
 /** The Morris column: at the mouth of Park Street on the far pavement, clear of the route along the shops. */
@@ -28,10 +30,10 @@ const DRAIN_EVERY = 13;
  * The street's small print, merged per material: cast-iron manhole covers on the road and the
  * pavements, gutter drains along the kerbs, red fire hydrants, dark bollards either side of the
  * crossing and at Park Street's corners, a Morris column with its posters at the mouth of Park
- * Street, and the roadworks that close the walkable stretch (`STREET_PLAN.roadworks`): a plywood
- * hoarding across each pavement with TRAVAUX / PASSAGE INTERDIT, red and white water-filled
+ * Street, and the two roadworks that close the walkable street (`CLOSURES`, across Front Street
+ * and across Park Street): a plywood hoarding across each pavement, red and white water-filled
  * barriers across the parking lanes, a few cones. Everything the player can bump into within the
- * walkable street collides; the snow settles on it.
+ * walkable street collides, the works included; the snow settles on it.
  */
 export class StreetDetails extends THREE.Group implements Furniture {
   readonly contactShadow = false;
@@ -43,18 +45,18 @@ export class StreetDetails extends THREE.Group implements Furniture {
     const random = seededRandom(2718);
     const painted = new TriBuilder();
 
-    // Manholes and drains: flat discs and grates a hair over the ground, one textured mesh.
+    // Manholes and drains: flat discs and grates on the ground (`GROUND.grate`), one textured mesh.
     const iron = ironTexture(anisotropy);
     const covers: THREE.BufferGeometry[] = [];
     for (const [x, z] of MANHOLES) {
-      const g = new THREE.CircleGeometry(0.34, 20).rotateX(-Math.PI / 2).translate(x, groundHeight(x, z) + 0.005, z);
+      const g = new THREE.CircleGeometry(0.34, 20).rotateX(-Math.PI / 2).translate(x, groundHeight(x, z) + GROUND.grate.lift, z);
       // The cover is the texture's left half.
       const uv = g.getAttribute('uv') as THREE.BufferAttribute;
       for (let i = 0; i < uv.count; i++) uv.setX(i, uv.getX(i) * 0.5);
       covers.push(g);
     }
     const grate = (x: number, z: number, yaw: number): void => {
-      const g = new THREE.PlaneGeometry(0.55, 0.3).rotateX(-Math.PI / 2).rotateY(yaw).translate(x, groundHeight(x, z) + 0.005, z);
+      const g = new THREE.PlaneGeometry(0.55, 0.3).rotateX(-Math.PI / 2).rotateY(yaw).translate(x, groundHeight(x, z) + GROUND.grate.lift, z);
       // The grate is the texture's right half.
       const uv = g.getAttribute('uv') as THREE.BufferAttribute;
       for (let i = 0; i < uv.count; i++) uv.setX(i, 0.5 + uv.getX(i) * 0.5);
@@ -70,7 +72,7 @@ export class StreetDetails extends THREE.Group implements Furniture {
       grate(PARK_STREET.nearKerb - 0.2, z, Math.PI / 2);
       grate(PARK_STREET.farKerb + 0.2, z - 6, Math.PI / 2);
     }
-    this.addMesh(merge(covers), new THREE.MeshStandardMaterial({ map: iron, roughness: 0.55, metalness: 0.6 }), false);
+    this.addMesh(merge(covers), onSurface(new THREE.MeshStandardMaterial({ map: iron, roughness: 0.55, metalness: 0.6 }), GROUND.grate), false);
 
     // Hydrants: a red post with a cap and two nozzles.
     for (const [x, z] of HYDRANTS) {
@@ -135,43 +137,51 @@ export class StreetDetails extends THREE.Group implements Furniture {
   }
 
   /**
-   * The roadworks at the walkable street's east end: a hoarding across each pavement (its panels
-   * the texture), red and white barriers across both parking lanes, cones along them.
+   * The roadworks closing the walkable street (`CLOSURES`: across Front Street and across Park
+   * Street): a hoarding across each pavement (its panels the texture) on concrete feet, red and
+   * white barriers across both parking lanes, cones along the lane lines beyond. They collide; the
+   * traffic lanes' gap between the barriers is the roadworker's (`Flagger`).
    */
   private buildRoadworks(painted: TriBuilder, random: () => number, anisotropy: number): void {
-    const { x, depth, height } = STREET_PLAN.roadworks;
+    const { depth, height } = STREET_PLAN.roadworks;
     const panels: THREE.BufferGeometry[] = [];
-    for (const [z0, z1] of [[FRONT.ourLine, FRONT.nearKerb], [FRONT.farKerb, FRONT.farLine]] as const) {
-      const w = z1 - z0;
-      panels.push(new THREE.BoxGeometry(depth, height, w).translate(x, height / 2, (z0 + z1) / 2));
-      // Feet: two concrete blocks.
-      for (const f of [0.2, 0.8]) painted.box(new THREE.Matrix4(), x, 0.08, z0 + w * f, 0.6, 0.16, 0.35, '#8a8a86');
+    const road = -KERB_HEIGHT;
+    for (const closure of CLOSURES) {
+      const { frame } = closure;
+      for (const [z0, z1] of closure.pavements) {
+        const w = z1 - z0;
+        panels.push(new THREE.BoxGeometry(depth, height, w).translate(0, height / 2, (z0 + z1) / 2).applyMatrix4(frame));
+        // Feet: two concrete blocks.
+        for (const f of [0.2, 0.8]) painted.box(frame, 0, 0.08, z0 + w * f, 0.6, 0.16, 0.35, '#8a8a86');
+        this.colliders.push(closureBox(closure, -depth, depth, z0 - 0.05, z1 + 0.05, 0, height));
+      }
+      // Barriers across the parking lanes, alternately red and white.
+      for (const [z0, z1] of closure.parking) {
+        const n = 2;
+        const w = (z1 - z0) / n;
+        for (let i = 0; i < n; i++) {
+          const m = frame.clone().multiply(new THREE.Matrix4().makeTranslation(0.2, road, z0 + w * (i + 0.5)));
+          painted.box(m, 0, 0.4, 0, 0.45, 0.8, w - 0.04, i % 2 ? '#e8e6e0' : '#c8281e');
+          painted.box(m, 0, 0.84, 0, 0.3, 0.08, w - 0.2, i % 2 ? '#d8d6d0' : '#b8241c');
+        }
+        // As tall as the player: no stepping over the barrier either.
+        this.colliders.push(closureBox(closure, -0.05, 0.45, z0 - 0.05, z1 + 0.05, road, 2));
+      }
+      // Cones along the lane lines beyond, orange with a white band.
+      for (const line of closure.coneLines) {
+        for (let cx = 1.2; cx < 12; cx += 2.2) {
+          const m = frame.clone().multiply(new THREE.Matrix4().makeTranslation(cx + (random() - 0.5) * 0.2, road, line));
+          painted.box(m, 0, 0.02, 0, 0.36, 0.04, 0.36, '#1a1a1a');
+          painted.box(m, 0, 0.2, 0, 0.2, 0.34, 0.2, '#f06a1a');
+          painted.box(m, 0, 0.26, 0, 0.21, 0.07, 0.21, '#f4f4f0');
+          painted.box(m, 0, 0.42, 0, 0.1, 0.12, 0.1, '#f06a1a');
+        }
+      }
     }
     const hoarding = new THREE.Mesh(merge(panels), snowCovered(new THREE.MeshStandardMaterial({ map: hoardingTexture(anisotropy), roughness: 0.8 })));
     hoarding.castShadow = true;
     hoarding.receiveShadow = true;
     this.add(hoarding);
-    // Barriers across the parking lanes, alternately red and white.
-    const road = -KERB_HEIGHT;
-    for (const [z0, z1] of [[FRONT.nearKerb, -STREET_PLAN.parkingLine], [STREET_PLAN.parkingLine, FRONT.farKerb]] as const) {
-      const n = 2;
-      const w = (z1 - z0) / n;
-      for (let i = 0; i < n; i++) {
-        const m = new THREE.Matrix4().makeTranslation(x + 0.2, road, z0 + w * (i + 0.5));
-        painted.box(m, 0, 0.4, 0, 0.45, 0.8, w - 0.04, i % 2 ? '#e8e6e0' : '#c8281e');
-        painted.box(m, 0, 0.84, 0, 0.3, 0.08, w - 0.2, i % 2 ? '#d8d6d0' : '#b8241c');
-      }
-    }
-    // Cones along the lane lines beyond, orange with a white band.
-    for (const side of [-1, 1]) {
-      for (let cx = x + 1.2; cx < x + 12; cx += 2.2) {
-        const m = new THREE.Matrix4().makeTranslation(cx + (random() - 0.5) * 0.2, road, side * (STREET_PLAN.parkingLine + 0.05));
-        painted.box(m, 0, 0.02, 0, 0.36, 0.04, 0.36, '#1a1a1a');
-        painted.box(m, 0, 0.2, 0, 0.2, 0.34, 0.2, '#f06a1a');
-        painted.box(m, 0, 0.26, 0, 0.21, 0.07, 0.21, '#f4f4f0');
-        painted.box(m, 0, 0.42, 0, 0.1, 0.12, 0.1, '#f06a1a');
-      }
-    }
   }
 }
 
@@ -223,8 +233,8 @@ function ironTexture(anisotropy: number): THREE.CanvasTexture {
   ctx.fillStyle = '#2a2b2e';
   ctx.font = 'bold 11px sans-serif';
   ctx.textAlign = 'center';
-  ctx.fillText('VILLE', 64, 56);
-  ctx.fillText('EU', 64, 78);
+  ctx.fillText('CITY', 64, 56);
+  ctx.fillText('WATER', 64, 78);
   // Grate: slots.
   ctx.fillStyle = '#4a4b4d';
   ctx.fillRect(128, 0, 128, 128);
@@ -246,12 +256,12 @@ function postersTexture(anisotropy: number): THREE.CanvasTexture {
   ctx.fillStyle = '#e8dcc0';
   ctx.fillRect(0, 0, w, h);
   const bills = [
-    { bg: '#1a2a4a', fg: '#f0c94a', title: 'CONCERT', sub: 'Salle Pleyel · 21 h' },
-    { bg: '#f0e8d0', fg: '#8a2a2a', title: 'THÉÂTRE', sub: 'Les Fourberies' },
-    { bg: '#2a1f4a', fg: '#5fe6ff', title: 'GAME FAIR', sub: 'Rétro · Consoles · Cartouches' },
-    { bg: '#c8281e', fg: '#f4f0e0', title: 'CIRQUE', sub: 'Sous le chapiteau' },
+    { bg: '#1a2a4a', fg: '#f0c94a', title: 'CONCERT', sub: 'The Old Hall · 9 pm' },
+    { bg: '#f0e8d0', fg: '#8a2a2a', title: 'THEATRE', sub: 'The Rogue’s Tricks' },
+    { bg: '#2a1f4a', fg: '#5fe6ff', title: 'GAME FAIR', sub: 'Retro · Consoles · Cartridges' },
+    { bg: '#c8281e', fg: '#f4f0e0', title: 'CIRCUS', sub: 'Under the big top' },
     { bg: '#3f6b4f', fg: '#f0e8c8', title: 'EXPO', sub: 'Pixel Art 1985-1995' },
-    { bg: '#f6d23a', fg: '#1a1a22', title: 'CINÉMA', sub: 'Nuit du film culte' },
+    { bg: '#f6d23a', fg: '#1a1a22', title: 'CINEMA', sub: 'Cult film night' },
   ];
   const pw = w / bills.length;
   bills.forEach((b, i) => {
@@ -274,7 +284,7 @@ function postersTexture(anisotropy: number): THREE.CanvasTexture {
   return toTexture(canvas, anisotropy);
 }
 
-/** Roadworks hoarding: white plywood panels, a red and white band, TRAVAUX and PASSAGE INTERDIT, the contractor's board. */
+/** Roadworks hoarding: white plywood panels, a red and white band, ROADWORKS and PAVEMENT CLOSED, the contractor's board. */
 function hoardingTexture(anisotropy: number): THREE.CanvasTexture {
   const w = 512;
   const h = 288;
@@ -297,7 +307,7 @@ function hoardingTexture(anisotropy: number): THREE.CanvasTexture {
   ctx.fillStyle = '#1a1a1a';
   ctx.font = 'bold 44px sans-serif';
   ctx.textAlign = 'center';
-  ctx.fillText('TRAVAUX', 135, 105);
+  ctx.fillText('ROADWORKS', 135, 105, 176);
   // A no-entry sign.
   ctx.fillStyle = '#c8281e';
   ctx.beginPath();
@@ -307,8 +317,8 @@ function hoardingTexture(anisotropy: number): THREE.CanvasTexture {
   ctx.fillRect(318, 80, 84, 20);
   ctx.fillStyle = '#1a1a1a';
   ctx.font = 'bold 22px sans-serif';
-  ctx.fillText('PASSAGE INTERDIT', 360, 180);
+  ctx.fillText('PAVEMENT CLOSED', 360, 180);
   ctx.font = '16px sans-serif';
-  ctx.fillText('Piétons : merci de rebrousser chemin', 256, 215);
+  ctx.fillText('Pedestrians: please turn back', 256, 215);
   return toTexture(canvas, anisotropy);
 }

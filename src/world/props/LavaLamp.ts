@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import type { Updatable } from '@/core/Engine';
-import { Prop, matte } from './Prop';
+import { paint, standard } from '@/world/materials/palette';
+import { RENDER_ORDER } from '@/world/surface/layers';
+import { Prop } from './Prop';
 
 export interface LavaLampOptions {
   /** Colour of the wax. Default orange. */
@@ -28,7 +30,7 @@ const RADIUS = 0.5;
 const BASE_SHARE = 0.34;
 const CAP_SHARE = 0.1;
 
-const METAL = new THREE.MeshStandardMaterial({ color: 0x8c8f94, metalness: 0.85, roughness: 0.3 });
+const METAL = standard({ color: 0x8c8f94, metalness: 0.85, roughness: 0.3 });
 
 interface Blob {
   mesh: THREE.Mesh;
@@ -75,13 +77,13 @@ export class LavaLamp extends Prop implements Updatable {
     cap.position.y = height - capH / 2;
     cap.castShadow = true;
     // The switch box's cable out of the back of the base.
-    const cable = new THREE.Mesh(new THREE.CylinderGeometry(0.003, 0.003, 0.12, 6).rotateX(Math.PI / 2), matte(0x1d1d1f, 0.6));
+    const cable = new THREE.Mesh(new THREE.CylinderGeometry(0.003, 0.003, 0.12, 6).rotateX(Math.PI / 2), paint(0x1d1d1f, 0.6));
     cable.position.set(0, 0.004, -height * 0.16 - 0.05);
     this.add(base, cap, cable);
 
     // The vessel: the liquid as a lathe of the profile, see-through; the glow sits in its emissive.
     const points = VESSEL.map(([r, y]) => new THREE.Vector2(r * RADIUS * height, y * this.vesselHeight));
-    const liquid = new THREE.MeshStandardMaterial({
+    const liquid = standard({
       color: options.liquid ?? 0xe7a24a,
       emissive: options.liquid ?? 0xe7a24a,
       emissiveIntensity: 0.25,
@@ -98,12 +100,12 @@ export class LavaLamp extends Prop implements Updatable {
     });
     const vessel = new THREE.Mesh(new THREE.LatheGeometry(points, 28), liquid);
     vessel.position.y = baseH;
-    vessel.renderOrder = 1;
+    vessel.renderOrder = RENDER_ORDER.glass;
     this.add(vessel);
 
     // The wax: one material for every blob, lit from within.
     const waxColour = options.wax ?? 0xff5a1f;
-    const wax = new THREE.MeshStandardMaterial({ color: waxColour, emissive: waxColour, emissiveIntensity: 0.9, roughness: 0.5 });
+    const wax = standard({ color: waxColour, emissive: waxColour, emissiveIntensity: 0.9, roughness: 0.5 });
     const sphere = new THREE.SphereGeometry(1, 16, 12);
     for (let i = 0; i < BLOBS; i++) {
       const mesh = new THREE.Mesh(sphere, wax);

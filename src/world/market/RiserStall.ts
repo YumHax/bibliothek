@@ -1,8 +1,7 @@
 import * as THREE from 'three';
 import type { DisplaySlot, StallLike } from './stallTypes';
 import { boxMesh, cylinderMesh } from '../meshUtils';
-import { matte } from '../props/Prop';
-import { wood as woodMaterial } from '@/world/materials/finishes';
+import { paint, standard, timber } from '../materials/palette';
 import { centreOutRow, fitInRow, paintGingham, paintStallSign, tiledMaterial } from './stallPaint';
 
 export interface RiserStallOptions {
@@ -49,9 +48,9 @@ const POLE_R = 0.018;
 const ARM_Y = 2.05;
 const LAMP_Y = 1.72;
 
-const WOOD = woodMaterial(0x8b6a44, 0.6);
-const RISER_WOOD = woodMaterial(0xa8804f, 0.7);
-const IRON = matte(0x2a2623, 0.6);
+const WOOD = timber(0x8b6a44, 0.6);
+const RISER_WOOD = timber(0xa8804f, 0.7);
+const IRON = paint(0x2a2623, 0.6);
 
 /**
  * A trestle table under a checked cloth carrying three stepped wooden risers that climb towards
@@ -175,7 +174,7 @@ export class RiserStall extends THREE.Group implements StallLike {
       chain.castShadow = false;
       this.add(chain);
     }
-    const edge = matte(0x3a2a1a, 0.7);
+    const edge = paint(0x3a2a1a, 0.7);
     const signMat = new THREE.MeshStandardMaterial({ map: painted.map, roughness: 0.8 });
     const sign = new THREE.Mesh(new THREE.BoxGeometry(painted.width, painted.height, 0.012), [edge, edge, edge, edge, signMat, signMat]);
     sign.position.set(signX, signTop - painted.height / 2, POLE_Z);
@@ -188,11 +187,11 @@ export class RiserStall extends THREE.Group implements StallLike {
     lamp.position.set(POLE_X + 0.12, LAMP_Y + 0.02, POLE_Z + 0.08);
     lamp.rotation.set(0.5, 0, -0.7);
     this.add(boxMesh(0.14, 0.012, 0.012, IRON, { x: POLE_X + 0.06, y: LAMP_Y + 0.01, z: POLE_Z + 0.04 }).rotateY(-0.6));
-    const shadeMat = new THREE.MeshStandardMaterial({ color: 0x2f5a3a, roughness: 0.4, metalness: 0.5, side: THREE.DoubleSide });
+    const shadeMat = standard({ color: 0x2f5a3a, roughness: 0.4, metalness: 0.5, side: THREE.DoubleSide });
     const shade = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.08, 0.13, 16, 1, true), shadeMat);
     shade.castShadow = true;
     lamp.add(shade);
-    const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.028, 12, 8), new THREE.MeshStandardMaterial({ color: 0xfff4d8, emissive: 0xffe0a0, emissiveIntensity: 2.2 }));
+    const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.028, 12, 8), standard({ color: 0xfff4d8, emissive: 0xffe0a0, emissiveIntensity: 2.2 }));
     bulb.position.y = -0.03;
     bulb.castShadow = false;
     lamp.add(bulb);

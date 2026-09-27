@@ -3,7 +3,7 @@ import { grailById } from '@/economy/grails';
 import { UNDO_PURCHASE, describeEdition } from '@/economy/pricing';
 import { Transactions } from '@/economy/Transactions';
 import type { ForSaleLike, SaleReaction } from './SessionActions';
-import type { CollectionLike, CoreParts, HagglePanelLike, MarketLike, ModalLike, StandingLike, TradePanelLike, WalletLike } from './SessionParts';
+import type { CollectionLike, CoreParts, HagglePanelLike, MarketLike, ModalLike, PerksLike, StandingLike, TradePanelLike, WalletLike } from './SessionParts';
 import type { KeyRoute, SessionHost } from './SessionHost';
 import { isAction, keyMarkup } from '@/input/actions';
 import { actionKeyLabel, renderKeys } from '@/ui/keys';
@@ -18,6 +18,8 @@ export interface MarketCounterParts extends Pick<CoreParts, 'inspector' | 'panel
   trade?: TradePanelLike;
   /** Whether a game bought now finds room on the shelves at home: a warning line, or null when it does. */
   shelfRoom?: () => string | null;
+  /** What the flat sends the player out with (a bath's calm, the first sale, know-how, clothes): `household/Perks`. */
+  perks?: PerksLike;
 }
 
 /** What the counter needs from the session: its parts, a way to talk, and the moves it may make. */
@@ -71,8 +73,12 @@ export class MarketCounter implements KeyRoute {
 
   /** Whether the stallholder lets the player take `sale` in hand (the glass case is for trusted players). */
   private mayHandle(sale: ForSaleLike): boolean {
-    const { standing } = this.host.parts;
+    const { standing, perks } = this.host.parts;
     if (!sale.behindGlass || !standing || standing.mayHandleGlass) return true;
+    if (perks?.mayHandleGlass) {
+      this.host.notify('The stallholder takes in your Sunday best and unlocks the case.', 3000);
+      return true;
+    }
     const { name, points } = standing.reputation;
     sale.react?.('locked');
     this.host.notify(`“Collectors only, friend. The case stays shut.”\nThe market has to know you better: you are a ${name} (${points} reputation).\nBuy, sell and haggle here to earn it.`, 4500);
@@ -132,6 +138,7 @@ export class MarketCounter implements KeyRoute {
       return;
     }
     const { game: bought, paid: due, upgrade } = result;
+    this.host.parts.perks?.bought(item);
     const thanks = sale.thanks();
     sale.react?.('bought');
     this.end();
@@ -175,6 +182,9 @@ export class MarketCounter implements KeyRoute {
       return;
     }
     if (!haggle) return;
+    // What the player brings along eases it (said as the panel opens).
+    const eased = this.host.parts.perks?.ease(sale.item, opened) ?? [];
+    if (eased.length) this.host.notify(eased.join('\n'), 4500);
     haggle.start({
       item: sale.item,
       negotiation: opened,
@@ -273,6 +283,12 @@ export class MarketCounter implements KeyRoute {
     const rows: [string, string][] = [['Price', price]];
     if (item.deposit) rows.push(['Still due', `${item.due} coins (${item.deposit} paid down)`]);
     rows.push(['State', state]);
+    if (item.sticker) rows.push(['Sticker', 'An old shop’s price sticker on the cover: cheaper for it, and it peels off at home']);
+    const { perks } = this.host.parts;
+    const tell = perks?.tell(item);
+    if (tell) rows.push(['Your eye', tell]);
+    const luck = perks?.note(item);
+    if (luck) rows.push(['This morning', luck]);
     const edition = describeEdition(item.edition, item.game.platform);
     if (edition) rows.push(['Edition', edition[0]!.toUpperCase() + edition.slice(1)]);
     const loyalty = item.source !== 'bin' ? standing?.loyaltyName(item.game.platform) : '';

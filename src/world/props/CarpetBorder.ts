@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { createCanvas } from '@/covers/generated/canvasUtils';
 import { fabric } from '@/world/materials/finishes';
+import { FLOOR } from '@/world/surface/layers';
 import { Prop } from './Prop';
 
 export interface CarpetBorderOptions {
@@ -15,7 +16,8 @@ export interface CarpetBorderOptions {
 }
 
 const TILE_M = 0.5;
-const THICKNESS = 0.004;
+/** How far the strips lie above the carpet: the floor's `border` layer. */
+const THICKNESS = FLOOR.border.lift;
 
 /**
  * A neon border woven into the carpet a little in from the walls: a band of chevrons between two

@@ -25,9 +25,12 @@ export interface CataloguePanelOptions {
    */
   market?: {
     peekToday(): readonly StockItem[] | null;
-    orderQuote?(game: Game): Promise<{ price: number; deposit: number; day: number }>;
-    order?(game: Game, quote: { price: number; deposit: number; day: number }): void;
-    readonly orders?: readonly { game: Game }[];
+    /** The counter's orders (`MarketOrders`). */
+    readonly orders?: {
+      quote(game: Game): Promise<{ price: number; deposit: number; day: number }>;
+      place(game: Game, quote: { price: number; deposit: number; day: number }): void;
+      readonly list: readonly { game: Game }[];
+    };
     readonly day?: number;
   };
   /** Front cover image for a game (a thumbnail per row); none when absent. */
@@ -264,8 +267,8 @@ export class CataloguePanel extends ModalPanel {
   /** "Used": a second-hand copy put by on its stall, for a deposit now and the rest when collected. */
   private orderButtonHtml(i: number, id: string): string {
     const market = this.options.market;
-    if (!market?.order || !market.orderQuote || isGrail(id)) return '';
-    const onOrder = market.orders?.some((o) => o.game.id === id);
+    if (!market?.orders || isGrail(id)) return '';
+    const onOrder = market.orders.list.some((o) => o.game.id === id);
     const disabled = onOrder || this.store.owns(id);
     return `<button type="button" class="ui-btn" data-action="order" data-result="${i}" title="Order a second-hand copy: a deposit now, the rest when you collect it from its stall" ${disabled ? 'disabled' : ''}>${onOrder ? 'On order' : 'Used…'}</button>`;
   }
@@ -274,13 +277,13 @@ export class CataloguePanel extends ModalPanel {
   private async orderUsed(i: number, button: HTMLButtonElement): Promise<void> {
     const market = this.options.market;
     const r = this.lastResults[i];
-    if (!r || !market?.orderQuote || !market.order) return;
+    if (!r || !market?.orders) return;
     const game = this.gameOf(r);
     if (this.quoted?.row !== i) {
       const hadFocus = document.activeElement === button;
       button.disabled = true;
       button.textContent = 'Asking…';
-      const quote = await market.orderQuote(game);
+      const quote = await market.orders.quote(game);
       if (this.lastResults[i] !== r) return;
       this.quoted = { row: i, quote };
       const days = quote.day - (market.day ?? quote.day);

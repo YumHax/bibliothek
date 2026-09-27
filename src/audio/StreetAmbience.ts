@@ -2,10 +2,12 @@ import * as THREE from 'three';
 import type { Updatable } from '@/core/Engine';
 import type { SkyState } from '@/world/props/DayNight';
 import type { LifeEvents } from '@/world/props/outdoors/lifeEvents';
-import { wakefulnessAt } from '@/world/props/outdoors/wakefulness';
+import { wakefulnessAt } from '@/time/wakefulness';
 import { proximityVolume } from '@/video/proximityVolume';
 import { audioBus, audioContext } from './audioContext';
 import { brownNoise, whiteNoise } from './noise';
+import { birdNote, horn, sirenVoice, twoTone } from './street/streetVoices';
+import { BUS_STOP } from '@/world/city/frontage';
 
 export interface StreetAmbienceOptions {
   /** Where the ears are (the camera). */
@@ -18,10 +20,22 @@ export interface StreetAmbienceOptions {
   wallsBetween?: (listener: THREE.Vector3, source: THREE.Vector3) => number;
   /** What the street's life is doing (the bus, the dogs, the ambulance, the dustcart; see `Life.events`). */
   life?: () => LifeEvents;
+  /** Doors out to the open air (the balcony's): heard like a pane while shut, at the street's full level once open. */
+  openings?: () => readonly StreetOpening[];
+  /** Whether the listener is out in the open (on the balcony): the street at its full level, no glass between. */
+  outside?: () => boolean;
 }
 
-/** Level of the whole bed with an ear against the glass (linear): the glass keeps most of the street out. */
+/** A door to the open air: where it is, and how open (0 shut .. 1). */
+export interface StreetOpening {
+  getWorldPosition(target: THREE.Vector3): THREE.Vector3;
+  readonly openness: number;
+}
+
+/** Level of the whole bed in the open air, or at an open door to it (linear). */
 const LEVEL = 0.32;
+/** What a shut window lets through of that (about -14 dB): the street is a murmur behind the glass. */
+const THROUGH_GLASS = 0.2;
 /** How the street fades with the distance to the nearest pane. */
 const FALLOFF = { referenceDistance: 0.8, rolloff: 0.55, maxDistance: 18, wallGain: 0.25 };
 /** Seconds between re-reading the panes, and the loudness smoothing time constant. */
@@ -38,8 +52,11 @@ const STRIKE_NEAR = 400;
 const STRIKE_FAR = 5000;
 /** How high the ears are over the street (a sixth floor), for the distance to what is down there. */
 const EAR_HEIGHT = 18;
-/** How much of the bus at its shelter (Front Street's far pavement, ~50 m off) reaches the flat (see `reach`). */
-const BUS_REACH = 14 / (14 + Math.hypot(42, 20, EAR_HEIGHT));
+/** How much of the bus at its stop (by the shelter on Front Street's far pavement, ~50 m off) reaches the flat (see `reach`). */
+const BUS_REACH = 14 / (14 + Math.hypot(BUS_STOP.stop[0], BUS_STOP.stop[1], EAR_HEIGHT));
+/** The siren's two tones (hi-lo) and how long each is held. */
+const SIREN_TONES: [number, number] = [880, 660];
+const SIREN_STEP = 0.65;
 /** Church bells strike the hour between these hours only, this many seconds apart. */
 const BELL_HOURS: [number, number] = [8, 21];
 const BELL_SPACING = 1.8;
@@ -73,6 +90,7 @@ export class StreetAmbience implements Updatable {
   /** Everything that runs as long as the street does (the beds, the siren, the diesel), stopped by `dispose`. */
   private sources: AudioScheduledSourceNode[] = [];
   private panes: readonly THREE.Object3D[] = [];
+  private openings: readonly StreetOpening[] = [];
   private paneClock = PANE_REFRESH;
   private passClock = 4;
   private hornClock = 60;
@@ -133,6 +151,7 @@ export class StreetAmbience implements Updatable {
     if (this.paneClock >= PANE_REFRESH) {
       this.paneClock = 0;
       this.panes = this.options.panes();
+      this.openings = this.options.openings?.() ?? [];
     }
     const sky = this.options.sky();
     const now = ctx.currentTime;
@@ -192,23 +211,30 @@ export class StreetAmbience implements Updatable {
     }
   }
 
-  /** How loud the street is where the listener stands: the nearest pane's proximity, walls counted. Notes which side that pane is on. */
+  /**
+   * How loud the street is where the listener stands: full out in the open, else the loudest way in,
+   * a shut pane (through the glass) or a door to the open air (the more open, the louder), by its
+   * proximity with the walls counted. Notes which side that way in is on.
+   */
   private loudness(): number {
-    if (this.panes.length === 0) return 0;
+    if (this.options.outside?.()) {
+      this.parkSide = false;
+      return LEVEL;
+    }
     this.options.listener.getWorldPosition(this.ear);
     let best = 0;
-    for (const pane of this.panes) {
-      pane.getWorldPosition(this.pane);
-      const distance = this.ear.distanceTo(this.pane);
-      if (distance > FALLOFF.maxDistance) continue;
-      const walls = this.options.wallsBetween?.(this.ear, this.pane) ?? 0;
-      const volume = proximityVolume(distance, { ...FALLOFF, walls }) / 100;
-      if (volume > best) {
-        best = volume;
-        const dx = this.pane.x - this.ear.x;
-        this.parkSide = dx < 0 && Math.abs(dx) > Math.abs(this.pane.z - this.ear.z);
-      }
-    }
+    const hear = (at: THREE.Vector3, gain: number): void => {
+      const distance = this.ear.distanceTo(at);
+      if (distance > FALLOFF.maxDistance) return;
+      const walls = this.options.wallsBetween?.(this.ear, at) ?? 0;
+      const volume = (proximityVolume(distance, { ...FALLOFF, walls }) / 100) * gain;
+      if (volume <= best) return;
+      best = volume;
+      const dx = at.x - this.ear.x;
+      this.parkSide = dx < 0 && Math.abs(dx) > Math.abs(at.z - this.ear.z);
+    };
+    for (const pane of this.panes) hear(pane.getWorldPosition(this.pane), THROUGH_GLASS);
+    for (const door of this.openings) hear(door.getWorldPosition(this.pane), THREE.MathUtils.lerp(THROUGH_GLASS, 1, door.openness));
     return best * LEVEL;
   }
 
@@ -273,17 +299,8 @@ export class StreetAmbience implements Updatable {
     this.loop(ctx, this.noise).connect(splash).connect(this.fountainBed).connect(this.master);
 
     // The siren and the dustcart run all the time, silent until they are on the streets.
-    const sirenGain = ctx.createGain();
-    sirenGain.gain.value = 0;
-    const sirenTone = ctx.createBiquadFilter();
-    sirenTone.type = 'lowpass';
-    sirenTone.frequency.value = 2200;
-    const sirenOsc = ctx.createOscillator();
-    sirenOsc.type = 'triangle';
-    sirenOsc.frequency.value = 440;
-    sirenOsc.connect(sirenTone).connect(sirenGain).connect(this.master);
-    this.keep(sirenOsc);
-    this.siren = { osc: sirenOsc, gain: sirenGain };
+    this.siren = sirenVoice(ctx, this.master, 2200);
+    this.keep(this.siren.osc);
     const dieselGain = ctx.createGain();
     dieselGain.gain.value = 0;
     const dieselTone = ctx.createBiquadFilter();
@@ -424,7 +441,7 @@ export class StreetAmbience implements Updatable {
         const closing = this.sirenDistance < 0 || dt <= 0 ? 0 : (d - this.sirenDistance) / dt;
         this.sirenDistance = d;
         const doppler = SOUND_SPEED / (SOUND_SPEED + THREE.MathUtils.clamp(closing, -40, 40));
-        const pitch = Math.floor(now / 0.65) % 2 ? 660 : 880;
+        const pitch = twoTone(SIREN_TONES, SIREN_STEP, now);
         siren.osc.frequency.setTargetAtTime(pitch * doppler, now, 0.015);
         siren.gain.gain.setTargetAtTime(0.14 * this.reach(life.siren.x, life.siren.z), now, 0.2);
       } else {
@@ -527,26 +544,10 @@ export class StreetAmbience implements Updatable {
     this.burst(ctx, out, filter, [[rise, peak], [rise + 1.5 + Math.random() * 2, 0]], rise + 4);
   }
 
+  /** A car's horn somewhere down the street: one toot, muffled. */
   private horn(ctx: AudioContext, out: AudioNode): void {
-    const now = ctx.currentTime;
-    const gain = ctx.createGain();
-    const tone = ctx.createBiquadFilter();
-    tone.type = 'lowpass';
-    tone.frequency.value = 1400;
-    gain.gain.setValueAtTime(0, now);
-    gain.gain.linearRampToValueAtTime(0.05, now + 0.02);
     const toot = 0.18 + Math.random() * 0.3;
-    gain.gain.setValueAtTime(0.05, now + toot);
-    gain.gain.linearRampToValueAtTime(0, now + toot + 0.05);
-    gain.connect(tone).connect(out);
-    for (const f of [410, 515]) {
-      const osc = ctx.createOscillator();
-      osc.type = 'square';
-      osc.frequency.value = f + Math.random() * 20;
-      osc.connect(gain);
-      osc.start(now);
-      osc.stop(now + toot + 0.1);
-    }
+    horn(ctx, out, { pitches: [410, 515], detune: 20, blasts: 1, length: toot + 0.05, gap: 0, level: 0.05, attack: 0.02, release: 0.05, filter: { type: 'lowpass', frequency: 1400 } });
   }
 
   /** A few quick chirps sweeping up or down, like a sparrow or a tit, sometimes a blackbird's fluting. */
@@ -558,19 +559,9 @@ export class StreetAmbience implements Updatable {
     let t = now + Math.random() * 0.2;
     for (let i = 0; i < notes; i++) {
       const length = blackbird ? 0.12 + Math.random() * 0.18 : 0.04 + Math.random() * 0.06;
-      const osc = ctx.createOscillator();
-      osc.type = 'sine';
       const f0 = base * (0.85 + Math.random() * 0.3);
-      osc.frequency.setValueAtTime(f0, t);
-      osc.frequency.exponentialRampToValueAtTime(f0 * (Math.random() < 0.5 ? 1.35 : 0.75), t + length);
-      const gain = ctx.createGain();
-      const level = (blackbird ? 0.035 : 0.022) * strength;
-      gain.gain.setValueAtTime(0, t);
-      gain.gain.linearRampToValueAtTime(level, t + length * 0.2);
-      gain.gain.linearRampToValueAtTime(0, t + length);
-      osc.connect(gain).connect(out);
-      osc.start(t);
-      osc.stop(t + length + 0.02);
+      const to = f0 * (Math.random() < 0.5 ? 1.35 : 0.75);
+      birdNote(ctx, out, { at: t, from: f0, to, sweep: length, attack: length * 0.2, length, level: (blackbird ? 0.035 : 0.022) * strength });
       t += length + (blackbird ? 0.05 + Math.random() * 0.12 : 0.03 + Math.random() * 0.08);
     }
   }

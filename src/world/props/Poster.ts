@@ -2,12 +2,16 @@ import * as THREE from 'three';
 import type { Platform } from '@/catalog/types';
 import { createCanvas, toTexture, fitFontSize, wrapLines, FONT } from '@/covers/generated/canvasUtils';
 import { contrastText, css } from '@/covers/generated/palette';
-import { Prop, part, matte } from './Prop';
+import { paint } from '@/world/materials/palette';
+import { WALL } from '@/world/surface/layers';
+import { Prop, part } from './Prop';
 
 /** Draws a poster on a canvas of `w` x `h` pixels. */
 export type PosterPainter = (ctx: CanvasRenderingContext2D, w: number, h: number) => void;
 
 const CANVAS_W = 512;
+/** The frame's depth: its front face, which the mount lies on. */
+const FRAME_DEPTH = 0.02;
 
 /**
  * A framed poster on a wall, painted procedurally. Local +z faces into the room; use
@@ -26,12 +30,13 @@ export class Poster extends Prop {
     this.name = 'Poster';
     this.canvasH = Math.round((CANVAS_W * height) / width);
 
-    part(this, width + 0.05, height + 0.05, 0.02, matte(0x1e1a18, 0.5), { z: 0.01 });
-    const mat = new THREE.Mesh(new THREE.PlaneGeometry(width + 0.03, height + 0.03), matte(0xf4f1ea, 0.9));
-    mat.position.z = 0.0205;
+    part(this, width + 0.05, height + 0.05, FRAME_DEPTH, paint(0x1e1a18, 0.5), { z: FRAME_DEPTH / 2 });
+    const mat = new THREE.Mesh(new THREE.PlaneGeometry(width + 0.03, height + 0.03), paint(0xf4f1ea, 0.9));
+    mat.position.z = FRAME_DEPTH + WALL.paper.lift;
     mat.receiveShadow = true;
+    // Its own material: `repaint()` swaps the map. The print lies over the mount.
     this.picture = new THREE.Mesh(new THREE.PlaneGeometry(width, height), new THREE.MeshStandardMaterial({ roughness: 0.75 }));
-    this.picture.position.z = 0.022;
+    this.picture.position.z = mat.position.z + WALL.overlay.lift;
     this.picture.receiveShadow = true;
     this.add(mat, this.picture);
     this.repaint(painter);

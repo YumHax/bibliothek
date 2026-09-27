@@ -17,24 +17,32 @@ Read `docs/props.md` first (placement grammar, kinds, class rules). Do not read 
 2. Check it does not stand in the shelving (collection room: back wall x >= -1, right wall except the projector picture
    |z| <= 1.2), on the TV/armchair line (z = 0, x from -2.7 to 0.5), in a door swing (the leaf lies against the wall on its
    hinge side once open; see the plan's doorway comments) or the cat's corner (back-left of the collection room).
-3. `npm run typecheck`. Done. Describe where it is; do not open a browser.
+3. In the flat, anything that is not built in is bought (the flat starts bare): give the line an `upgrade` (a
+   `HOME_GOODS` id from `src/economy/homeGoods.ts`, or `{ good, nth }` for a piece with several spots, then raise that
+   good's `max`), or add a good for it. Without one it stands from the start.
+4. `npm run typecheck`. Done. Describe where it is; do not open a browser.
 
 Wired props (windows, posters, seats, TV, projector, clock, pendant, a room's own furniture) also have their spots in the
 room's plan; edit the entry.
 
 ## Add a new kind of prop
 
-1. Write `src/world/props/MyThing.ts`: `export class MyThing extends Prop` (decoration, never collides) or
-   `extends THREE.Group implements Furniture` with a real `footprint`. Options interface `MyThingOptions` with defaults.
-   Build with `part()` / `matte()` from `./Prop`, `cylinderMesh` / `invisibleHitbox` from `../meshUtils`.
+1. Write `src/world/props/MyThing.ts` (in `src/world/<room>/` if only one room has it): `export class MyThing extends Prop`
+   (decoration, never collides) or `extends THREE.Group implements Furniture` with a real `footprint`. Options interface
+   `MyThingOptions` with defaults. Build with `part()` from `./Prop`, `cylinderMesh` / `invisibleHitbox` from `../meshUtils`;
+   materials from `../materials/palette` (`paint`, `timber`, `standard`, `METAL.*`; `matte()` only for one the class
+   changes at runtime). Parts never share a face: `INSET` / `PROUD` / `SEAM` from `./joinery`. Anything flat on it or on
+   the floor or a wall takes a layer from `../surface/layers` (`FLOOR` / `WALL`, `onSurface`), a transparent part a
+   `RENDER_ORDER` band. A light: never hidden with `visible`; a glow that only lights its surroundings is a `PooledLight`.
    Floor items: base at local y = 0. Wall items: back at local z = 0, facing +z.
 2. Clickable? `implements Interactable`: `hitboxes`, `label(player)`, `activate(session: SessionActions)`. A lamp:
    `extends SwitchableLamp`, implement `render(on, hovered)`, call `setOn(initial)` at the end of the constructor.
    Animated? `update(dt: number)`.
 3. Register it: one line in `DECOR_KINDS` (`src/world/props/decor.ts`): `myThing: (o: MyThingOptions = {}) => new MyThing(o),`
-   and export the class from `src/world/props/index.ts`.
+   (there is no barrel file: import the class by its path).
 4. Add its plan line(s) to the room's `decor`; add a row to the kinds table in `docs/props.md`.
-5. `npm run typecheck && npm run build`.
+5. `npm run typecheck && npm run build` (the typecheck also runs the convention checks). Tell the user to look at it
+   with `?debug`: the console's `[zfight]` line for the room, or `bibliothek.zfight()`, lists faces that fight.
 
 ## Props that need wiring (a callback, the clock, the collection) or exist once (a bed, a bathtub)
 

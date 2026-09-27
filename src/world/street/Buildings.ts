@@ -3,7 +3,7 @@ import type { Updatable } from '@/core/Engine';
 import { createCanvas, toTexture } from '@/covers/generated/canvasUtils';
 import type { Furniture } from '../Furniture';
 import type { DayNight } from '../props/DayNight';
-import { wakefulnessAt } from '../props/outdoors/wakefulness';
+import { wakefulnessAt } from '@/time/wakefulness';
 import { NIGHT_SCALE, PARAPET, facadeHeight, paintFacade, type AtlasSlot, type FacadeFeatures, type NightLight } from './facadePainter';
 import { nightnessOf } from './streetAir';
 import type { FacadeSpec } from './streetPlan';

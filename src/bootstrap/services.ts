@@ -2,7 +2,7 @@ import type { Game } from '@/catalog/types';
 import { Engine } from '@/core/Engine';
 import { Input } from '@/core/Input';
 import { CssLayer } from '@/core/CssLayer';
-import { SEED_GAMES } from '@/catalog';
+import { SEED_GAMES, STARTER_GAMES } from '@/catalog';
 import { CollectionStore } from '@/collection/CollectionStore';
 import { Deliveries } from '@/collection/Deliveries';
 import { GameList } from '@/collection/GameList';
@@ -11,18 +11,24 @@ import { CoverArtResolver } from '@/covers/CoverArtProvider';
 import { LibretroCoverProvider } from '@/covers/LibretroCoverProvider';
 import { BoxArtLoader } from '@/covers/BoxArtLoader';
 import { YouTubeSearchProvider } from '@/video/YouTubeSearchProvider';
+import { Today } from '@/time/Today';
+import { MarketDay } from '@/economy/MarketDay';
 import { ArcadeDaily, ArcadeLeague, ArcadeMedals, ArcadeScores, CollectorWatch, Fame, MarketCalendar, MarketLedger, MarketStanding, MarketStock, Milestones, PayoutStats, PrizeStore, STARTING_COINS, Transactions, ValueHistory, Wallet } from '@/economy';
 import { ArcadeTournament } from '@/economy/ArcadeTournament';
+import { Jackpot } from '@/economy/Jackpot';
+import { ReplayStore } from '@/world/arcade/replay/ReplayStore';
 import { NeighbourTrades } from '@/economy/NeighbourTrades';
 import { FirstDay } from '@/onboarding';
 import { Journal, watchForJournal } from '@/journal';
+import { HomeLife, Household, Perks } from '@/household';
+import { isShopOpen } from '@/world/street/shops/shopHours';
 import { stairwellResidents } from '@/world/stairwell/building';
 import { HomeUpgrades } from '@/economy/HomeUpgrades';
 import { ARCADE_PLAN, TICKET_GAMES } from '@/world/arcade/arcadePlan';
 import { StrayGames } from '@/world/strays/StrayGames';
 import { Sky } from '@/world/Sky';
 import { KITCHEN_WING, SUN_ROTATION_Y } from '@/world/worldPlan';
-import { parseHoliday, parseNewYear, parseSeason } from '@/world/props/outdoors/season';
+import { parseHoliday, parseNewYear, parseSeason } from '@/time/season';
 import { parseLatitude } from '@/world/props/solar';
 import { parseWeather } from '@/world/weather/Weather';
 import { CatSettingsStore } from '@/world/cat';
@@ -55,15 +61,18 @@ export function createServices(container: HTMLElement) {
   const cssLayer = new CssLayer(container);
   engine.addLayer(cssLayer);
 
-  // The collection starts empty: games are bought at the market with coins won at the arcade. Whatever
-  // the player owns is persisted in localStorage; an exported collection can still be imported (Tab).
-  const collection = new CollectionStore(debug ? SEED_GAMES : []);
+  // The collection starts with one game (`STARTER_GAMES`, its console under the TV): the rest are bought at the market
+  // with coins won at the arcade. Whatever the player owns is persisted in localStorage; an exported collection can
+  // still be imported (Tab).
+  const collection = new CollectionStore(debug ? SEED_GAMES : STARTER_GAMES);
   // Games bought while out wait in a parcel in the hallway until unpacked; the shelves show the rest.
   const deliveries = new Deliveries(collection);
   // A game or two left lying about the flat each day (the kitchen table, a nightstand): off their shelves until picked up.
   const strays = new StrayGames(deliveries.shelved);
-  // Furniture bought for the flat: the bedroom's bookcases, which take what the collection room cannot hold.
-  const upgrades = new HomeUpgrades();
+  // What has been bought for the flat (it starts bare: a bookcase, the TV, a mattress; `?debug` has it all). A save from
+  // before the bare flat is given the bookcases its games need, once.
+  const upgrades = new HomeUpgrades(undefined, undefined, { furnished: debug });
+  if (collection.isPersisted) upgrades.shelveCollection(collection.games.length);
   const overflow = new GameList();
   const wallet = new Wallet(STARTING_COINS);
   // The arcade: its hall of fame, the day's challenge and change machine, the prizes taken home.
@@ -94,7 +103,10 @@ export function createServices(container: HTMLElement) {
   // remembered, and so is how well it knows the player (reputation, regulars at each stall).
   const ledger = new MarketLedger();
   const standing = new MarketStanding();
-  const market = new MarketStock({ index, collection, fame, calendar: new MarketCalendar(sky.dayNight), ledger, standing, raining: () => sky.weather.state.rain >= 0.45 });
+  // The one "today" (the game day and the real date, see `time/Today`), and what kind of market day it is.
+  const today = new Today(new MarketCalendar(sky.dayNight));
+  const marketDay = new MarketDay(today, (id) => collection.owns(id));
+  const market = new MarketStock({ index, collection, fame, today, ledger, standing, raining: () => sky.weather.state.rain >= 0.45 });
   engine.addUpdatable(sky);
   // Every exchange of money for games the panels make: checked first, then its saves written as one.
   const tx = new Transactions({ wallet, collection, market, ledger, standing, prizes });
@@ -102,23 +114,41 @@ export function createServices(container: HTMLElement) {
   const catSettings = new CatSettingsStore();
   // The Saturday tournament at the arcade: the hall shows its bracket, the Session's arcade play settles its rounds.
   const tournament = new ArcadeTournament({ games: ARCADE_PLAN.tournament.games, names: ARCADE_PLAN.crowd.regulars.names });
+  // The ticket wheel's progressive pot and the player's best run per cabinet, kept across the hall's loads.
+  const jackpot = new Jackpot();
+  const replays = new ReplayStore();
   // The collector's book: milestones reached (the plaque, the display cabinet, rewards to claim) and the collection's value day by day.
   const milestones = new Milestones();
   const valueHistory = new ValueHistory();
   const collectorWatch = new CollectorWatch({ collection, fame, medals, standing, league, milestones, history: valueHistory });
   // The neighbours' swaps, slipped under the door some market days (the post and the doorstep are the world's: `bootstrap/world`).
-  const neighbourTrades = new NeighbourTrades({ collection, market, fame, residents: stairwellResidents() });
+  const neighbourTrades = new NeighbourTrades({ collection, today, market, fame, residents: stairwellResidents() });
   // The guided first day (a new game only) and the daily journal, which fills itself from the stores.
   const firstDay = new FirstDay({ returningPlayer, enabled: !debug });
   const journal = new Journal();
   watchForJournal(journal, { wallet, collection, deliveries, prizes, medals });
+  // What the kitchen, the bathroom and the bedroom are for (docs/household.md): what was done at home, its rules,
+  // and what it sends the player out with (the market's haggles, the arcade's tickets).
+  const hours = () => sky.dayNight.state.hours;
+  const household = new Household(() => today.gameDay);
+  const homeLife = new HomeLife({
+    household, collection, shelved: strays, purse: wallet, hours,
+    marketOpen: () => isShopOpen('retro', hours() % 24),
+    todays: () => market.todays(),
+  });
+  const perks = new Perks({
+    household,
+    hours,
+    facts: () => ({ ownsPrize: (id) => prizes.owns(id), reputationLevel: standing.reputation.level, gamesOwned: collection.games.filter((g) => g.status !== 'wishlist').length }),
+  });
 
   return {
     container, params, debug, engine, input, settings, cssLayer,
     collection, deliveries, strays, upgrades, overflow, wallet,
     scores, arcadeDaily, prizes, medals, league, payoutStats, arcadeScreen,
     index, fame, coverUrl, covers, videos,
-    sky, ledger, standing, market, tx, catSettings,
-    tournament, milestones, valueHistory, collectorWatch, neighbourTrades, firstDay, journal,
+    sky, today, marketDay, ledger, standing, market, tx, catSettings,
+    tournament, jackpot, replays, milestones, valueHistory, collectorWatch, neighbourTrades, firstDay, journal,
+    household, homeLife, perks,
   };
 }

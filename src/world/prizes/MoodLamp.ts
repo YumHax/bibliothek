@@ -31,6 +31,7 @@ const store = new PersistedStore<number>({
   read: (data) => (Number.isInteger(data) && (data as number) >= 0 && (data as number) < COLORS.length ? (data as number) : null),
 });
 const RADIUS = 0.07;
+const LIGHT_INTENSITY = 0.8;
 
 /**
  * The neon mood lamp won at the prize counter, standing on a piece of bedroom furniture: a glowing
@@ -60,7 +61,7 @@ export class MoodLamp extends THREE.Group implements Furniture, Interactable, Up
     egg.scale.y = 1.35;
     egg.position.y = 0.03 + RADIUS * 1.3;
     this.body.add(egg);
-    this.light = new THREE.PointLight(0xff2fa0, 0.8, 2.4, 2);
+    this.light = new THREE.PointLight(0xff2fa0, LIGHT_INTENSITY, 2.4, 2);
     this.light.position.y = 0.14;
     this.light.castShadow = false;
     this.body.add(this.light);
@@ -98,9 +99,8 @@ export class MoodLamp extends THREE.Group implements Furniture, Interactable, Up
   update(dt: number): void {
     this.clock += dt;
     if (!this.owned || COLORS[this.colour]!.hex !== -1) return;
-    const c = new THREE.Color().setHSL((this.clock * 0.04) % 1, 0.9, 0.55);
-    this.shade.emissive.copy(c);
-    this.light.color.copy(c);
+    this.shade.emissive.setHSL((this.clock * 0.04) % 1, 0.9, 0.55);
+    this.light.color.copy(this.shade.emissive);
   }
 
   dispose(): void {
@@ -110,7 +110,7 @@ export class MoodLamp extends THREE.Group implements Furniture, Interactable, Up
   private apply(): void {
     const { hex } = COLORS[this.colour]!;
     const on = this.owned && hex !== null;
-    this.light.visible = on;
+    this.light.intensity = on ? LIGHT_INTENSITY : 0; // never `visible`: a light leaving the scene recompiles every shader
     this.shade.emissiveIntensity = on ? 1.6 : 0;
     if (hex !== null && hex !== -1) {
       this.shade.emissive.setHex(hex);

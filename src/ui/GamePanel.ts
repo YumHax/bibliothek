@@ -42,6 +42,9 @@ export class GamePanel {
     const rows: Array<[string, string | undefined]> = [
       ...(extra.rows ?? []),
       ['Edition', edition ? edition[0]!.toUpperCase() + edition.slice(1) : undefined],
+      // What the flat can do for it (docs/household.md): a worn box cleaned at the kitchen table, a sticker lifted with warm air.
+      ['State', own ? ownState(game) : undefined],
+      ['Sticker', own && game.sticker ? 'An old shop’s price sticker on the cover (warm air lifts it off)' : undefined],
       ['Bought for', bought],
       ['Platform', platform.name],
       ['Released', formatReleaseDate(game.releaseDate)],
@@ -67,4 +70,11 @@ export class GamePanel {
   hide(): void {
     this.root.hidden = true;
   }
+}
+
+/** A copy of the player's own, as it stands: undefined when it is complete (nothing to say). */
+function ownState(game: Game): string | undefined {
+  if (game.condition === 'worn') return 'Worn, no manual (a good clean would brighten it up)';
+  if (game.condition === 'noManual') return game.restored ? 'Cleaned up, no manual' : 'No manual';
+  return undefined;
 }

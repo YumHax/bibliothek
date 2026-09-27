@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { Updatable } from '@/core/Engine';
+import { Timers } from '@/core/Timers';
 import type { OccupancyAware } from '../Furniture';
 import type { NeighbourTrades } from '@/economy/NeighbourTrades';
 import { randomLook } from '../people/looks';
@@ -67,6 +68,8 @@ export class Neighbours extends Prop implements Updatable, OccupancyAware {
   readonly walkers: StairWalker[];
   private readonly residents: Resident[];
   private occupied = false;
+  /** The lift rides: on the stairwell's own time, dropped when it unloads. */
+  private readonly timers = new Timers();
   private primed = false;
   private readonly eye = new THREE.Vector3();
 
@@ -82,7 +85,7 @@ export class Neighbours extends Prop implements Updatable, OccupancyAware {
         seed: r.seed,
         look: randomLook(r.seed + 900, 'shopper'),
         speed: 0.75 + (r.seed % 5) * 0.05,
-        label: `${who} · ${plan.floorNames[r.k]}`,
+        label: `${who} · ${plan.floorNames[r.k]} floor`,
         talk: () => this.chat(resident),
         ground: options.ground,
       });
@@ -104,7 +107,8 @@ export class Neighbours extends Prop implements Updatable, OccupancyAware {
     if (occupied) this.meetSomeone();
   }
 
-  update(): void {
+  update(dt: number): void {
+    this.timers.update(dt);
     if (!this.primed) {
       this.primed = true;
       this.settle();
@@ -183,11 +187,11 @@ export class Neighbours extends Prop implements Updatable, OccupancyAware {
       walker.appear(door, landingY(k));
       if (byLift) {
         walker.walk(toLiftGate(door), () => walker.vanish(() => {
-          window.setTimeout(() => {
+          this.timers.after(RIDE_S, () => {
             if (r.going !== to || !this.occupied) return;
             walker.appear(liftGate(), landingY(STOREYS));
             walker.walk(liftToStreet(), () => walker.vanish(done));
-          }, RIDE_S * 1000);
+          });
         }));
       } else {
         walker.walk(routeDown(k, door), () => walker.vanish(done));
@@ -197,11 +201,11 @@ export class Neighbours extends Prop implements Updatable, OccupancyAware {
     if (byLift) {
       walker.appear(streetDoorSpot(), landingY(STOREYS));
       walker.walk([...liftToStreet().reverse().slice(1), liftGate()], () => walker.vanish(() => {
-        window.setTimeout(() => {
+        this.timers.after(RIDE_S, () => {
           if (r.going !== to || !this.occupied) return;
           walker.appear(liftGate(), landingY(k));
           walker.walk([door.clone()], () => walker.vanish(done));
-        }, RIDE_S * 1000);
+        });
       }));
       return;
     }
@@ -216,7 +220,7 @@ export class Neighbours extends Prop implements Updatable, OccupancyAware {
     r.greeted = true;
     const offer = this.options.trades?.offerAt(r.door);
     if (offer) r.walker.say('Did you see my note?', 2.5);
-    else r.walker.say(hours < 12 ? 'Bonjour !' : hours < 18 ? 'Hello!' : 'Bonsoir !', 2.2);
+    else r.walker.say(hours < 12 ? 'Good morning!' : hours < 18 ? 'Hello!' : 'Good evening!', 2.2);
   }
 
   /** A click: their swap if they have one going, else one of their lines in turn. */

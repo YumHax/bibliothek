@@ -2,7 +2,7 @@ import type { Updatable } from '@/core/Engine';
 import { DayNight } from './props/DayNight';
 import { localPlace } from './props/solar';
 import { Outdoors, type NearWall } from './props/outdoors/Outdoors';
-import { type Festivity, type Holiday, type Season, festivitiesOf, holidayOf, seasonOf, useFestivities } from './props/outdoors/season';
+import { type Festivity, type Holiday, type Season, festivitiesOf, holidayOf, seasonOf, useFestivities } from '@/time/season';
 import { Weather, type WeatherKind } from './weather/Weather';
 
 export interface SkyOptions {

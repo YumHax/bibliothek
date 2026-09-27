@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { seededRandom } from '@/covers/generated/canvasUtils';
-import { markShared, matte, Prop } from './Prop';
+import { paint, standard, instancedStandard } from '../materials/palette';
+import { Prop } from './Prop';
 
 export interface WreathOptions {
   /** Outer radius, metres. Default 0.19. */
@@ -8,9 +9,10 @@ export interface WreathOptions {
   seed?: number;
 }
 
-const FIR = markShared(new THREE.MeshStandardMaterial({ color: 0x1f4a2a, roughness: 0.85, flatShading: true }));
-const BERRY = markShared(new THREE.MeshStandardMaterial({ color: 0xb01a1a, roughness: 0.3 }));
-const BOW = markShared(matte(0xc8243a, 0.45));
+const FIR = standard({ color: 0x1f4a2a, roughness: 0.85, flatShading: true });
+const FIR_INSTANCED = instancedStandard({ color: 0x1f4a2a, roughness: 0.85, flatShading: true });
+const BERRY = instancedStandard({ color: 0xb01a1a, roughness: 0.3 });
+const BOW = paint(0xc8243a, 0.45);
 
 /**
  * A Christmas wreath for a door (hung on its leaf, `Door.attachToLeaf`) or a wall: a ring of fir
@@ -30,7 +32,7 @@ export class Wreath extends Prop {
     base.castShadow = false;
     this.add(base);
     // Sprigs sticking out of the ring, and berries in clusters of three.
-    const sprigs = new THREE.InstancedMesh(new THREE.ConeGeometry(tube * 0.55, tube * 2.2, 5), FIR, 36);
+    const sprigs = new THREE.InstancedMesh(new THREE.ConeGeometry(tube * 0.55, tube * 2.2, 5), FIR_INSTANCED, 36);
     const berries = new THREE.InstancedMesh(new THREE.SphereGeometry(tube * 0.22, 6, 5), BERRY, 18);
     const m = new THREE.Matrix4();
     const q = new THREE.Quaternion();

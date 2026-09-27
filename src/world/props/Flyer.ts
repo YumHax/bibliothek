@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { createCanvas, fitFontSize, seededRandom, toTexture, FONT } from '@/covers/generated/canvasUtils';
+import { WALL } from '@/world/surface/layers';
 import { Prop } from './Prop';
 
 /** `paper`: a pinned-up A3 poster, a little askew; `cloth`: a hemmed banner slung on eyelets. */
@@ -46,7 +47,7 @@ export class Flyer extends Prop {
     const map = style === 'paper' ? paintPaper(width, height, text, colours, random) : paintCloth(width, height, text, colours);
     const material = new THREE.MeshStandardMaterial({ map, roughness: 0.95, transparent: style === 'paper', alphaTest: 0.5 });
     const sheet = new THREE.Mesh(new THREE.PlaneGeometry(width, height), material);
-    sheet.position.z = 0.004;
+    sheet.position.z = WALL.flyer.lift;
     sheet.rotation.z = options.tilt ?? (style === 'paper' ? (random() - 0.5) * 0.09 : 0);
     sheet.castShadow = false;
     sheet.receiveShadow = true;

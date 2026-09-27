@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { createCanvas, toTexture } from '@/covers/generated/canvasUtils';
 import { EYE_DIRECTION, headPoint, type FaceShape } from './head';
 import type { PersonLook } from './looks';
+import { cachedTexture } from './textureCache';
 
 /*
  * Eyes at real scale, set into the sockets of the head: an eyeball (a glossy sphere painted with
@@ -28,7 +29,7 @@ export interface Eye {
 }
 
 export function buildEyes(look: PersonLook, shape: FaceShape): [Eye, Eye] {
-  const ballMaterial = new THREE.MeshStandardMaterial({ map: eyeTexture(look.eyes), roughness: 0.12 });
+  const ballMaterial = new THREE.MeshStandardMaterial({ map: cachedTexture(`eye|${look.eyes}`, () => eyeTexture(look.eyes)), roughness: 0.12 });
   const lidMaterial = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.6 });
   const skin = new THREE.Color(look.skin);
   const lash = new THREE.Color(0x17110e).lerp(new THREE.Color(look.hair), 0.2);

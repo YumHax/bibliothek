@@ -9,7 +9,7 @@ import { carpetMaterial } from './Carpet';
 import { tiledFloorMaterial, type FloorTiles } from './TiledFloor';
 import { edgeOcclusion, floorWearMap, wallMaterial } from './materials/surfaces';
 import { glossyFloor } from './materials/GlossyFloor';
-import { scuffed } from './materials/finishes';
+import { basic, paint, scuffedPaint } from './materials/palette';
 import type { DrawnAware } from './zone/Zone';
 import type { ZoneId } from './zoneIds';
 
@@ -330,7 +330,7 @@ export class Room extends THREE.Group implements Updatable, OccupancyAware, Draw
     // lamps stay in the room. Double-sided so it also stops the neighbour's lamps coming in.
     const opaque = this.options.opaqueWalls ?? [];
     if (opaque.length) {
-      const casterMat = new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: false, side: THREE.DoubleSide });
+      const casterMat = basic({ colorWrite: false, depthWrite: false, side: THREE.DoubleSide });
       const caster = (name: Wall, template: THREE.Mesh, outward: THREE.Vector3): void => {
         if (!opaque.includes(name)) return;
         const mesh = new THREE.Mesh(template.geometry, casterMat);
@@ -347,7 +347,7 @@ export class Room extends THREE.Group implements Updatable, OccupancyAware, Draw
     }
 
     // Baseboard trim helps read the floor/wall edge in first person; it stops at the doorways.
-    const trimMat = scuffed(new THREE.MeshStandardMaterial({ color: finish.trim ?? 0xe4e0d8, roughness: 0.7 }));
+    const trimMat = scuffedPaint(finish.trim ?? 0xe4e0d8, 0.7);
     const trimH = 0.08;
     const trimD = 0.02;
     const y = trimH / 2;
@@ -366,7 +366,7 @@ export class Room extends THREE.Group implements Updatable, OccupancyAware, Draw
 
     // Crown moulding where the walls meet the ceiling: a finished room, not a box.
     if (finish.moulding === false) return;
-    const coveMat = new THREE.MeshStandardMaterial({ color: 0xfbf9f5, roughness: 0.8 });
+    const coveMat = paint(0xfbf9f5, 0.8);
     const cove = 0.07;
     const cy = height - cove / 2;
     this.add(

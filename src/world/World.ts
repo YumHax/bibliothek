@@ -3,12 +3,11 @@ import type { Engine, Updatable } from '@/core/Engine';
 import type { Interactable } from '@/interaction/Interactable';
 import { CollisionWorld } from '@/core/Collider';
 import { Listeners } from '@/core/Listeners';
+import { LightMonitor } from './lighting/lightBudget';
 import { FIRST_ZONE_SHADOW_LAYER, Zone, type LazyZoneBuilder, type ZoneBuilder, type ZoneHost, type ZoneSpec } from './zone/Zone';
 
 /** How long `primeAsync` waits at most for the driver to finish compiling (ms). */
 const PRIME_WAIT_MS = 3000;
-/** Texture units a lit material may take besides the shadow maps (map, bump, roughness, env, area-light tables). */
-const MATERIAL_UNITS = 6;
 
 function materialsOf(obj: THREE.Object3D): THREE.Material[] {
   const material = (obj as Partial<THREE.Mesh>).material;
@@ -37,9 +36,22 @@ export class World<Handles extends object = Record<string, unknown>> implements 
   private readonly interactableRemovedListeners = new Listeners<[item: Interactable]>();
   private readonly occluderAddedListeners = new Listeners<[object: THREE.Object3D]>();
   private readonly occluderRemovedListeners = new Listeners<[object: THREE.Object3D]>();
-  private reported = false;
+  /**
+   * The light budget, checked every couple of seconds (see `lighting/lightBudget`): always an error
+   * when shadow maps crowd out the materials' texture units; with `verbose` (`?stats` / `?debug`),
+   * every change of the drawn lights within one set of active zones.
+   */
+  readonly lights: LightMonitor;
 
-  constructor(private readonly engine: Engine) {}
+  constructor(private readonly engine: Engine) {
+    this.lights = new LightMonitor(engine.scene, engine.renderer.capabilities.maxTextures, () =>
+      this.zones
+        .filter((z) => z.isActive)
+        .map((z) => z.id)
+        .join(','),
+    );
+    engine.addUpdatable(this.lights);
+  }
 
   get scene(): THREE.Scene {
     return this.engine.scene;
@@ -76,7 +88,7 @@ export class World<Handles extends object = Record<string, unknown>> implements 
     this.engine.compileScene();
     // One real frame: the shadow passes and the post-processing passes compile too.
     this.engine.renderFrame();
-    this.reportShadowSamplers();
+    this.lights.check('prime');
   }
 
   /**
@@ -158,36 +170,14 @@ export class World<Handles extends object = Record<string, unknown>> implements 
   }
 
   /**
-   * Once: how many shadow maps every lit shader samples (one per shadow-casting light in the scene)
-   * against the GPU's texture units per shader, which the material's own maps share. Past it, programs fail to link.
-   */
-  private reportShadowSamplers(): void {
-    if (this.reported) return;
-    this.reported = true;
-    const count = { point: 0, spot: 0, directional: 0 };
-    this.engine.scene.traverse((obj) => {
-      const light = obj as THREE.Light & { isPointLight?: boolean; isSpotLight?: boolean; isDirectionalLight?: boolean };
-      if (!light.isLight || !light.castShadow) return;
-      if (light.isPointLight) count.point++;
-      else if (light.isSpotLight) count.spot++;
-      else if (light.isDirectionalLight) count.directional++;
-    });
-    const maps = count.point + count.spot + count.directional;
-    const units = this.engine.renderer.capabilities.maxTextures;
-    const line = `[world] ${maps} shadow maps per lit shader (${count.point} point, ${count.spot} spot, ${count.directional} directional) of ${units} texture units`;
-    // A lit material adds its own maps (colour, bump, roughness, environment, the area lights' two tables): past
-    // the units left, every lit program fails to link and the rooms render black. Keep a margin of MATERIAL_UNITS.
-    if (maps + MATERIAL_UNITS > units) console.error(`${line}: too many shadow-casting lights, lit shaders will not link`);
-    else console.info(line);
-  }
-
-  /**
    * Declares a zone; nothing is built until it is activated (or `build()` is called). A lazy
    * builder (`LazyZoneBuilder`: its module fetched on demand) is loaded by the `ZoneManager`, by
    * `load()` or by `prepareZone()` before the zone is built.
    */
   addZone(spec: ZoneSpec<IdOf<Handles>>, build: ZoneBuilder | LazyZoneBuilder): Zone<IdOf<Handles>> {
     if (this.zones.some((z) => z.id === spec.id)) throw new Error(`[world] duplicate zone ${spec.id}`);
+    // One shadow layer per zone, and three.js has 32 (0 is the camera's, 1 the shared casters'): past it, zones must share layers.
+    if (FIRST_ZONE_SHADOW_LAYER + this.zones.length > 31) throw new Error(`[world] zone ${spec.id}: no shadow layer left (three.js has 32)`);
     const zone = new Zone(spec, this, build, FIRST_ZONE_SHADOW_LAYER + this.zones.length);
     this.zones.push(zone);
     return zone;

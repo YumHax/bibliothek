@@ -1,20 +1,24 @@
 import * as THREE from 'three';
 import { type Rng, azimuthOf, azimuthX, heightY } from './Sheet';
 import { between, pick } from './paint';
-import { LAMP_LINE, NEAR_KERB, PARK_EDGE } from './plan';
-import { currentSeason } from './season';
+import { LAMP_LINE, NEAR_KERB, PARK_EDGE, nearestLamp } from './plan';
+import { LAMP_HEIGHT } from '@/world/city/frontage';
+import { currentSeason } from '@/time/season';
 import { type AtlasPens, type Cell, type LifeEnv, type LifeLayer, type Push, acrossSign, glowDot, hoursRamp, pushStanding } from './sprites';
 
-/** Lamp heads the bats hunt round (the posts of `paintStreet`: far pavements and ours), metres; the lanterns are 7 m up. */
+/** Lamp heads the bats hunt round (posts of `paintStreet` near the windows: far pavements and ours), metres; `LAMP_HEAD` up. */
 const BAT_LAMPS: [number, number][] = [
   [10, LAMP_LINE],
   [34, LAMP_LINE],
   [-LAMP_LINE, -10],
-  [10, NEAR_KERB - 0.6],
-  [34, NEAR_KERB - 0.6],
-  [-(NEAR_KERB - 0.6), -10],
-];
-const LAMP_HEAD = 7;
+  [10, NEAR_KERB],
+  [34, NEAR_KERB],
+  [-NEAR_KERB, -10],
+].map(([x, z]): [number, number] => {
+  const lamp = nearestLamp(x, z);
+  return [lamp.x, lamp.z];
+});
+const LAMP_HEAD = LAMP_HEIGHT;
 /** Bats: how many, wingspan (m), the atlas scale, how far they stray from their lamp and how fast they fly. */
 const BATS = 8;
 const BAT = { span: 0.3, scale: 70, roam: 3.5, speed: [3.5, 7] as const, jerk: 38 };

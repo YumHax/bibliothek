@@ -1,4 +1,6 @@
 import { deg } from './paint';
+import { BUS_STOP, COURT, FRONT_SECTION, PARK_SECTION, STREET_END, STREET_LAMPS } from '@/world/city/frontage';
+import { VEHICLES } from '@/world/city/vehicles';
 
 /**
  * The plan of the neighbourhood, the eye at the origin on a sixth floor at the corner of two
@@ -14,33 +16,42 @@ import { deg } from './paint';
  * Distances are metres from the eye; azimuth 0 looks straight out of the front wall, +90° is +x.
  */
 
-/** Far building line of both streets (a 24 m street: two pavements and a four-lane road). */
-export const FRONTAGE = 27;
+/*
+ * The street's lines are the walkable street's (`city/frontage`, from `street/streetPlan.ts`): Front
+ * Street's cross-section out of the front windows, and Park Street painted as its mirror (x = -z),
+ * as every painter here assumes; the real Park Street is a little narrower and further out.
+ */
+/** Front Street's cross-section, metres out of the front windows (`FRONT_SECTION`). */
+export const ROAD = FRONT_SECTION;
+/** Far building line of both streets (a 24 m street: two pavements, two parking lanes, four traffic lanes). */
+export const FRONTAGE = ROAD.farLine;
 /** The far kerb, a pavement's width nearer. */
-export const KERB = 23;
-/** Our own kerb: the pavement under the windows is this wide. */
-export const NEAR_KERB = 4;
+export const KERB = ROAD.farKerb;
+/** Our own kerb; our building line (the front wall's outer face) is `OUR_LINE`, the pavement between. */
+export const NEAR_KERB = ROAD.nearKerb;
+export const OUR_LINE = ROAD.ourLine;
 /**
  * Where each street ends at a building standing across it, so the view down the street closes
  * on a facade rather than running on to the horizon: Front Street at x = FRONT_END, Park Street
- * at z = -PARK_END.
+ * at z = -PARK_END (the walkable street's end buildings).
  */
-export const FRONT_END = 230;
-export const PARK_END = 230;
+export const FRONT_END = STREET_END.front;
+export const PARK_END = STREET_END.park;
 /** Azimuth ranges those two end buildings fill (Park Street's straddles the seam behind the room). */
 export const FRONT_END_FROM = Math.atan2(FRONT_END, FRONTAGE);
 export const FRONT_END_TO = Math.atan2(FRONT_END, -2);
 export const PARK_END_FROM = deg(-180) - Math.atan2(2, PARK_END);
 export const PARK_END_TO = Math.atan2(-FRONTAGE, -PARK_END);
-/** Where the parked cars, the street lamps and the street trees stand. */
-export const CAR_LINE = KERB - 1.1;
-export const LAMP_LINE = KERB + 0.7;
+/** Where the parked cars stand (the near side of their boxes, the street's parked cars' middles), the far street lamps and the street trees. */
+export const CAR_LINE = ROAD.farParked - VEHICLES.car.width / 2;
+export const LAMP_LINE = STREET_LAMPS.find((lamp) => lamp.yaw === Math.PI)!.at[1];
 export const STREET_TREE_LINE = FRONTAGE - 1.6;
-/** The park's near edge is Park Street's far frontage; its far edge is lined with mid-rise blocks. */
-export const PARK_EDGE = FRONTAGE;
+/** The park's near edge is Park Street's far frontage (its hedge); its far edge is lined with mid-rise blocks. */
+export const PARK_EDGE = -PARK_SECTION.hedge;
 export const PARK_FAR = 250;
-/** The bus stop on Front Street's far pavement (its shelter; the bus in `Life` pulls up there). */
-export const BUS_STOP_X = 42;
+/** The bus shelter on Front Street's far pavement (its middle), and where the bus in `Life` pulls up (x). */
+export const BUS_SHELTER = { x: BUS_STOP.shelter[0], z: BUS_STOP.shelter[1] };
+export const BUS_STOP_X = BUS_STOP.stop[0];
 
 /**
  * Traffic lanes, metres from the eye. Both streets end at the corner (the block across Front
@@ -50,18 +61,45 @@ export const BUS_STOP_X = 42;
  * right, down Park Street's near lane; cars coming north up Park Street's far lane turn left,
  * east along Front Street's far lane.
  */
-export const NEAR_LANE = 11;
-export const FAR_LANE = 16.5;
-/** The cycle routes: our side's cycle lane, and along the far parked cars. */
-export const CYCLE_NEAR = 5.15;
-export const CYCLE_FAR = 19.6;
+export const NEAR_LANE = ROAD.nearLane;
+export const FAR_LANE = ROAD.farLane;
+/** The cycle routes: the outer lanes, a little to the kerb side of the cars. */
+export const CYCLE_NEAR = ROAD.nearCycle;
+export const CYCLE_FAR = ROAD.farCycle;
 /** Where pedestrians walk: the far pavement, just past the kerb. */
 export const WALK_LINE = KERB + 1.6;
 /**
  * How far out along both streets what moves is simulated (x on Front Street, -z on Park Street):
- * far enough for cars to be tiny when they appear or leave, well short of `FRONT_END`.
+ * far enough for cars to be tiny when they appear or leave, short of `PARK_END`.
  */
 export const LIFE_REACH = 62;
+
+/** A street lamp: where it stands, and whether it is on a far pavement (washing the facade behind it) or ours. */
+export interface PaintedLamp {
+  x: number;
+  z: number;
+  far: boolean;
+}
+
+/**
+ * The street lamps where the walkable street has them (`STREET_LAMPS`). Park Street's stand where
+ * they are along it; ours on it at our Front Street lamps' distance out, like the mirrored road.
+ */
+export const LAMPS: readonly PaintedLamp[] = (() => {
+  const ours = STREET_LAMPS.find((lamp) => lamp.yaw === 0)!.at[1];
+  return STREET_LAMPS.map(({ at: [x, z], yaw }): PaintedLamp => {
+    if (yaw === 0) return { x, z, far: false };
+    if (yaw === -Math.PI / 2) return { x: -ours, z, far: false };
+    return { x, z, far: true };
+  });
+})();
+
+/** The lamp standing nearest to (x, z). */
+export function nearestLamp(x: number, z: number): PaintedLamp {
+  let best = LAMPS[0]!;
+  for (const lamp of LAMPS) if (Math.hypot(lamp.x - x, lamp.z - z) < Math.hypot(best.x - x, best.z - z)) best = lamp;
+  return best;
+}
 
 /** The pond: an ellipse on the lawn, metres from the eye. */
 export const POND = { x: -115, z: -25, rx: 40, rz: 26 };
@@ -112,8 +150,8 @@ export function parkLine(a: number, offset: number): number {
  * which no street painter reaches): the neighbour's side wing closes it at x = COURT_EAST, the
  * rear building across its back at z = -COURT_BACK. Painted by `paintCourtyard`.
  */
-export const COURT_EAST = 15;
-export const COURT_BACK = 24;
+export const COURT_EAST = COURT.east;
+export const COURT_BACK = COURT.back;
 /** Azimuth range the courtyard fills: from our front wall's plane round to our side wall's, the seam behind the room. */
 export const COURT_FROM = deg(90);
 export const COURT_TO = deg(180);

@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { cylinderMesh, invisibleHitbox } from '../meshUtils';
-import { matte } from './Prop';
+import { paint, standard } from '../materials/palette';
 import { SwitchableLamp } from './SwitchableLamp';
 
 export interface PendantLampOptions {
@@ -29,8 +29,8 @@ const BULB_GLOW = 3;
 const DIFFUSER_GLOW = 1.2;
 const HOVER_GLOW = 0.3;
 
-const BRUSHED_METAL = new THREE.MeshStandardMaterial({ color: 0xb9b3a8, roughness: 0.35, metalness: 0.8 });
-const CORD = matte(0x2a2623, 0.8);
+const BRUSHED_METAL = standard({ color: 0xb9b3a8, roughness: 0.35, metalness: 0.8 });
+const CORD = paint(0x2a2623, 0.8);
 
 /**
  * The visible fixture for the room's ceiling lamp: canopy, cord and a conical fabric shade with a

@@ -2,9 +2,8 @@ import * as THREE from 'three';
 import { createCanvas, toTexture, seededRandom } from '@/covers/generated/canvasUtils';
 import type { DisplaySlot, StallLike } from './stallTypes';
 import { boxMesh, cylinderMesh } from '../meshUtils';
-import { matte } from '../props/Prop';
 import { Crate } from '../props/Crate';
-import { wood as woodMaterial } from '@/world/materials/finishes';
+import { paint, timber } from '../materials/palette';
 
 export interface MarketStallOptions {
   /** Text on the sign hung from the awning (a platform's name). */
@@ -58,9 +57,9 @@ const SIGN_FONT_PX = 84;
 const SIGN_PAD_PX = 50;
 const SIGN_MIN_PX = 620;
 
-const WOOD = woodMaterial(0x8b6a44, 0.6);
-const IRON = matte(0x2a2623, 0.6);
-const CARD = matte(0xd9c9a8, 0.85);
+const WOOD = timber(0x8b6a44, 0.6);
+const IRON = paint(0x2a2623, 0.6);
+const CARD = paint(0xd9c9a8, 0.85);
 
 /**
  * A flea-market stall: a trestle table under a checked cloth hanging down the front, a row of

@@ -38,9 +38,12 @@ export function placeClock(zone: Zone, { sky, ...hearing }: Pick<BuildContext, '
   return clock;
 }
 
-/** Places a room's `decor` list and gives its radiators their ticking; returns the radiators (the cat naps by them). */
-export function furnishDecor(zone: Zone, hearing: Hearing, decor: readonly DecorEntry[]): Radiator[] {
-  return tickRadiators(zone, placeDecor(zone, decor), heardBy(hearing));
+/**
+ * Places a room's `decor` list (the entries marked `upgrade` once bought, from `ctx.home.upgrades`) and gives its
+ * radiators their ticking; returns the radiators (the cat naps by them).
+ */
+export function furnishDecor(zone: Zone, ctx: Hearing & { home?: Pick<BuildContext['home'], 'upgrades'> }, decor: readonly DecorEntry[]): Radiator[] {
+  return tickRadiators(zone, placeDecor(zone, decor, ctx.home?.upgrades), heardBy(ctx));
 }
 
 /** A spot on a surface for a `StrayBox`: `at` is `[x, z]` on the host's top, `yaw` about its local y. */
@@ -55,7 +58,7 @@ export interface StraySpot {
  */
 export function placeStrayBox(
   zone: Zone,
-  { collection: { strays }, covers, sky, market: { stock: market } }: Pick<BuildContext, 'collection' | 'covers' | 'sky' | 'market'>,
+  { collection: { strays }, covers, sky, today }: Pick<BuildContext, 'collection' | 'covers' | 'sky' | 'today'>,
   slot: string,
   host: THREE.Object3D & { readonly topHeight: number },
   spot: StraySpot,
@@ -65,6 +68,6 @@ export function placeStrayBox(
   stray.position.set(spot.at[0], host.topHeight, spot.at[1]);
   stray.rotation.y = spot.yaw;
   placeWith(zone, host, stray);
-  zone.onUnload(sky.dayNight.onChange(() => stray.setDay(market.day)));
+  zone.onUnload(sky.dayNight.onChange(() => stray.setDay(today.gameDay)));
   return stray;
 }

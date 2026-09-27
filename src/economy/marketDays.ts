@@ -22,7 +22,7 @@ export interface MarketDayTheme {
   bin?: { size: number; price: number };
   /** Every stall gets one more well-known title (a house clearance); `gems` more well-known titles hide in the bin. */
   estate?: { gems: number };
-  /** More gems hide in the bin (the Grande Brocante). */
+  /** More gems hide in the bin (the Grand Flea Fair). */
   gems?: number;
   /** The hall's crowd: this many times the usual shoppers, and a louder murmur. */
   crowd?: number;
@@ -67,7 +67,7 @@ const THEMES: Record<MarketDayKind, MarketDayTheme> = {
   },
   grandeBrocante: {
     kind: 'grandeBrocante',
-    title: 'GRANDE BROCANTE',
+    title: 'GRAND FLEA FAIR',
     blurb: 'Once a month: every stall heaped, a huge bargain bin, prices down across the hall.',
     extraCopies: { count: BROCANTE.extraCopies },
     priceFactor: { factor: BROCANTE.priceFactor },
@@ -82,7 +82,7 @@ const THEMES: Record<MarketDayKind, MarketDayTheme> = {
 /** The week's round, by market day: two quiet days between the special ones. */
 const WEEK: readonly MarketDayKind[] = ['ordinary', 'binDay', 'nintendoFair', 'ordinary', 'segaSonyDay', 'collectorsFair', 'estateSale'];
 
-/** What kind of day market day `day` is (the same for everyone, every reload): the week's round, or the month's Grande Brocante. */
+/** What kind of day market day `day` is (the same for everyone, every reload): the week's round, or the month's Grand Flea Fair. */
 export function themeOf(day: number): MarketDayTheme {
   if (isBrocante(day)) return THEMES.grandeBrocante;
   return THEMES[WEEK[((day % WEEK.length) + WEEK.length) % WEEK.length]!];

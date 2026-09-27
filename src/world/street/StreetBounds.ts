@@ -1,48 +1,54 @@
 import * as THREE from 'three';
 import type { Furniture } from '../Furniture';
+import type { FacadeSpec } from './streetPlan';
 
-export interface Walkable {
-  minX: number;
-  maxX: number;
-  minZ: number;
-  maxZ: number;
-}
-
-const THICK = 1;
+/** How deep the box behind a face is: the facade's own wall, no deeper (our door's sas stands right behind it). */
+const THICK = 0.2;
 const HIGH = 3;
 
 /**
- * The street's edges as invisible walls (zone-local colliders): the two building lines, the park's
- * hedge at one end, the corner where the cross street turns out of sight at the other; plus the
+ * What stops the player at the street's edges, where they see it: a box behind every building face
+ * (`FACADES`, the street-level holes in them left open: our building's door into its sas), plus the
  * `extra` obstacles drawn by instanced meshes that cannot collide themselves (lamp posts, tree
- * trunks). Nothing is drawn; the facades, the hedge and the corner are what the player sees there.
+ * trunks). The railings, the hoardings and barriers of the roadworks and the roadworker in the
+ * road's gap collide on their own (`StreetFurniture`, `StreetDetails`, `Flagger`). Nothing is drawn.
  */
 export class StreetBounds extends THREE.Group implements Furniture {
   readonly contactShadow = false;
   readonly colliders: THREE.Box3[];
 
-  /** `gaps`: where the wall along `minZ` (our building line) opens, x from and to: a door walked through (the sas, `world/airlock`). */
-  constructor({ minX, maxX, minZ, maxZ }: Walkable, extra: readonly THREE.Box3[] = [], gaps: readonly (readonly [number, number])[] = []) {
+  constructor(facades: readonly FacadeSpec[], extra: readonly THREE.Box3[] = []) {
     super();
     this.name = 'StreetBounds';
-    const box = (x0: number, z0: number, x1: number, z1: number) => new THREE.Box3(new THREE.Vector3(x0, 0, z0), new THREE.Vector3(x1, HIGH, z1));
-    const ours: THREE.Box3[] = [];
-    let from = minX - THICK;
-    for (const [a, b] of [...gaps].sort((p, q) => p[0] - q[0])) {
-      ours.push(box(from, minZ - THICK, a, minZ));
-      from = b;
-    }
-    ours.push(box(from, minZ - THICK, maxX + THICK, minZ));
-    this.colliders = [
-      ...ours,
-      box(minX - THICK, maxZ, maxX + THICK, maxZ + THICK),
-      box(minX - THICK, minZ, minX, maxZ),
-      box(maxX, minZ, maxX + THICK, maxZ),
-      ...extra,
-    ];
+    this.colliders = [...facades.flatMap(behind), ...extra];
   }
 
   get footprint(): THREE.Box3 {
     return new THREE.Box3();
   }
+}
+
+/** The boxes behind a face (every face runs along x or z), `THICK` deep away from the way it looks, round its openings. */
+function behind(spec: FacadeSpec): THREE.Box3[] {
+  const [ax, az] = spec.from;
+  const [bx, bz] = spec.to;
+  const length = Math.hypot(bx - ax, bz - az);
+  const ux = (bx - ax) / length;
+  const uz = (bz - az) / length;
+  // The face looks along the left-hand normal (-uz, ux); the wall's body lies the other way.
+  const nx = -uz;
+  const nz = ux;
+  const box = (s0: number, s1: number): THREE.Box3 => {
+    const p0 = new THREE.Vector3(ax + ux * s0, 0, az + uz * s0);
+    const p1 = new THREE.Vector3(ax + ux * s1 - nx * THICK, HIGH, az + uz * s1 - nz * THICK);
+    return new THREE.Box3().setFromPoints([p0, p1]);
+  };
+  const boxes: THREE.Box3[] = [];
+  let s0 = 0;
+  for (const hole of [...(spec.openings ?? [])].sort((a, b) => a.at - b.at)) {
+    boxes.push(box(s0, hole.at - hole.width / 2));
+    s0 = hole.at + hole.width / 2;
+  }
+  boxes.push(box(s0, length));
+  return boxes;
 }

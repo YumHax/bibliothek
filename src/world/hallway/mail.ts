@@ -10,16 +10,16 @@ export interface MailSources {
   arcadeDaily?: { challenge(): { gameId: string; target: number; reward: number; done: boolean } };
   market?: {
     peekToday(): readonly { readonly game: { readonly title: string }; readonly price: number; readonly priced: boolean; readonly source: string }[] | null;
-    /** What is coming up at the market (a grail, the Brocante, a sale): `MarketStock.news`. */
-    news?(): readonly MarketNews[];
   };
+  /** What is coming up at the market (a grail, the Flea Fair, a sale): `MarketDay.news`. */
+  marketDay?: { news(): readonly MarketNews[] };
 }
 
 /** Whatever the day, one of these can come through the door. */
 const EVERYDAY: MailPiece[] = [
   { title: 'PIZZA NAPOLI', lines: ['2 for 1 on Tuesdays', 'Free delivery on the block', 'Round the corner, open late'], accent: 0x2f7a3a },
   { title: 'WE BUY GAMES', lines: ['Old cartridges, boxed or loose', 'The desk at the flea market', 'Cash paid on the spot'], accent: 0x6b2f2a },
-  { title: 'CAT SITTER', lines: ['Away for the weekend?', 'Feeding, cuddles, litter', 'Ask Mme Duval, 3rd floor'], accent: 0x2f6b8f },
+  { title: 'CAT SITTER', lines: ['Away for the weekend?', 'Feeding, cuddles, litter', 'Ask Mrs Duval, 3rd floor'], accent: 0x2f6b8f },
   { title: 'RESIDENTS', lines: ['The lift is serviced on Monday', 'Bins go out Tuesday night', 'The management'], accent: 0x55565a },
 ];
 
@@ -37,7 +37,7 @@ export function mailFor(day: number, sources: MailSources): MailPiece[] {
   const random = seededRandom(day * 7349 + 13);
   const roll = random();
   const rumour = rumourFlyer(sources);
-  // Talk of the market (a grail, the Brocante, a sale) always finds its way through the door.
+  // Talk of the market (a grail, the Flea Fair, a sale) always finds its way through the door.
   const count = Math.max(rumour ? 1 : 0, roll < NONE ? 0 : roll < ONE ? 1 : 2);
   if (!count) return [];
   const topical = [rumour, challengeFlyer(sources), tomorrowFlyer(day), dealFlyer(sources, random)].filter((p): p is MailPiece => p !== null);
@@ -53,11 +53,11 @@ function challengeFlyer({ arcadeDaily }: MailSources): MailPiece | null {
 }
 
 /**
- * The most pressing talk of the market (a grail on its way or on its stall, the Brocante in a few
- * days, a sale): tomorrow's theme has a flyer of its own, so the Brocante tomorrow is left to it.
+ * The most pressing talk of the market (a grail on its way or on its stall, the Flea Fair in a few
+ * days, a sale): tomorrow's theme has a flyer of its own, so the Flea Fair tomorrow is left to it.
  */
-function rumourFlyer({ market }: MailSources): MailPiece | null {
-  const news = market?.news?.().find((n) => !(n.kind === 'brocante' && n.inDays === 1));
+function rumourFlyer({ marketDay }: MailSources): MailPiece | null {
+  const news = marketDay?.news().find((n) => !(n.kind === 'brocante' && n.inDays === 1));
   return news ? flyerRumour(news) : null;
 }
 

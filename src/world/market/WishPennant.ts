@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import type { Updatable } from '@/core/Engine';
 import { createCanvas, toTexture } from '@/covers/generated/canvasUtils';
-import { Prop, matte } from '../props/Prop';
+import { Prop } from '../props/Prop';
+import { paint, shared } from '../materials/palette';
 
 /** A cord from the hanging point down to a dowel, the flag hanging under the dowel point down. */
 const CORD = 0.04;
@@ -29,14 +30,15 @@ export class WishPennant extends Prop implements Updatable {
     this.name = 'WishPennant';
     this.time = (seed * 1.7) % (Math.PI * 2);
     this.add(this.swing);
-    const cord = new THREE.Mesh(new THREE.BoxGeometry(0.003, CORD, 0.003), matte(0xe8e2d4, 0.8));
+    const cord = new THREE.Mesh(new THREE.BoxGeometry(0.003, CORD, 0.003), paint(0xe8e2d4, 0.8));
     cord.position.y = -CORD / 2;
-    const dowel = new THREE.Mesh(new THREE.CylinderGeometry(0.004, 0.004, FLAG_W + 0.02, 6), matte(0x8a6a44, 0.7));
+    const dowel = new THREE.Mesh(new THREE.CylinderGeometry(0.004, 0.004, FLAG_W + 0.02, 6), paint(0x8a6a44, 0.7));
     dowel.rotation.z = Math.PI / 2;
     dowel.position.y = -CORD;
     const flag = new THREE.Mesh(
       new THREE.PlaneGeometry(FLAG_W, FLAG_H),
-      new THREE.MeshStandardMaterial({ map: paintPennant(), roughness: 0.85, side: THREE.DoubleSide, alphaTest: 0.5, transparent: true }),
+      // Every pennant flies the same flag: one material and texture for the page.
+      shared('market.wishPennant', () => new THREE.MeshStandardMaterial({ map: paintPennant(), roughness: 0.85, side: THREE.DoubleSide, alphaTest: 0.5, transparent: true })),
     );
     flag.position.y = -CORD - 0.004 - FLAG_H / 2;
     this.swing.add(cord, dowel, flag);

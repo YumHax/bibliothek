@@ -4,7 +4,7 @@ import type { Furniture } from '@/world/Furniture';
 import { boxMesh, cylinderMesh } from '@/world/meshUtils';
 import { createCanvas, toTexture } from '@/covers/generated/canvasUtils';
 import type { ScratcherLike } from './types';
-import { wood as woodMaterial } from '@/world/materials/finishes';
+import { paint, timber } from '@/world/materials/palette';
 
 /**
  * A sisal scratching post: square wooden base, rope-wrapped post (a canvas texture of stacked
@@ -52,7 +52,7 @@ export class Scratcher extends THREE.Group implements Furniture, Updatable, Scra
     this.name = 'Scratcher';
     this.options = { wood: 0x8a6a48, carpet: 0x6f6a63, pompom: 0xc94f6a, ...options };
 
-    const wood = woodMaterial(this.options.wood, 0.65);
+    const wood = timber(this.options.wood, 0.65);
     this.add(boxMesh(BASE.width, BASE.height, BASE.width, wood, { y: BASE.height / 2 }));
 
     this.upper.position.y = BASE.height;
@@ -62,15 +62,15 @@ export class Scratcher extends THREE.Group implements Furniture, Updatable, Scra
     const rope = new THREE.MeshStandardMaterial({ color: 0xffffff, map: this.sisal, roughness: 0.95 });
     this.upper.add(cylinderMesh(POST.radius, POST.height, rope, { y: POST.height / 2 }, { segments: 24 }));
 
-    const carpet = new THREE.MeshStandardMaterial({ color: this.options.carpet, roughness: 1 });
+    const carpet = paint(this.options.carpet, 1);
     this.upper.add(boxMesh(PLATFORM.width, PLATFORM.height, PLATFORM.width, carpet, { y: POST.height + PLATFORM.height / 2 }));
 
     // The toy hangs from the front-right corner region of the platform.
     this.pendulum.position.set(PLATFORM.width / 2 - 0.02, POST.height, PLATFORM.width / 2 - 0.05);
-    const cord = new THREE.MeshStandardMaterial({ color: 0xd9cbb0, roughness: 0.95 });
+    const cord = paint(0xd9cbb0, 0.95);
     const string = cylinderMesh(0.0015, STRING_LENGTH, cord, { y: -STRING_LENGTH / 2 }, { segments: 6 });
     string.castShadow = false;
-    const fluff = new THREE.MeshStandardMaterial({ color: this.options.pompom, roughness: 1 });
+    const fluff = paint(this.options.pompom, 1);
     const pompom = new THREE.Mesh(new THREE.IcosahedronGeometry(POMPOM_RADIUS, 1), fluff);
     pompom.position.y = -STRING_LENGTH - POMPOM_RADIUS * 0.8;
     pompom.castShadow = true;

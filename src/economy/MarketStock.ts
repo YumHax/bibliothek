@@ -7,25 +7,29 @@ import type { Fame } from './Fame';
 import type { HeldCopy, MarketLedger } from './MarketLedger';
 import type { MarketStanding } from './MarketStanding';
 import { Negotiation } from './haggle';
-import { appliesTo, themeOf, type MarketDayTheme } from './marketDays';
-import { eventsOn, marketNews, type MarketEvents, type MarketNews } from './marketEvents';
+import { appliesTo, themeOf } from './marketDays';
+import { eventsOn } from './marketEvents';
 import { grailGame, isGrail } from './grails';
 import {
-  BARGAIN_PRICE, BIN_GEM_ODDS, CONDITION_ODDS, EDITION_ODDS, HOLD_DEPOSIT, IMPORT, JOB_LOT, LOYALTY, MARKET_DISCOUNT, MARKET_ORDER, MARKET_STOCK,
-  REPRO_CAUGHT, REPRO_ODDS, REPUTATION, UPGRADE_ODDS, marketPrice, shopPrice,
+  BARGAIN_PRICE, BIN_GEM_ODDS, EDITION_ODDS, HOLD_DEPOSIT, IMPORT, LOYALTY, MARKET_DISCOUNT, MARKET_STOCK,
+  REPRO_CAUGHT, REPRO_ODDS, REPUTATION, STICKER, UPGRADE_ODDS, marketPrice,
 } from './pricing';
 import { StockItem, type StockSource, type StockTraits } from './StockItem';
-import { seeded } from './seeded';
+import { hash01, seeded } from './seeded';
+import { JobLotDraw } from './JobLot';
+import { MarketOrders } from './MarketOrders';
+import { drawCondition, gameFrom } from './stockDraws';
 
 export { StockItem } from './StockItem';
+export type { JobLot } from './JobLot';
 
 export interface MarketStockDeps {
   index: LibretroIndex;
   /** The collection: what the player owns (a wishlist entry is not owned) and wishes for. */
   collection: { owns(id: string): boolean; readonly games: readonly Game[] };
   fame: Fame;
-  /** Today's market day (see `MarketCalendar`). */
-  calendar: { readonly day: number };
+  /** The game day the stock is drawn for (see `time/Today`). */
+  today: { readonly gameDay: number };
   ledger: MarketLedger;
   /** How the market knows the player: loyalty per stall (wishlist finds, kept-aside copies, better haggles). */
   standing: MarketStanding;
@@ -40,14 +44,6 @@ export interface MarketStockOptions {
   bin?: number;
   /** Chance a day that one wishlisted game turns up on its platform's stall. Default `MARKET_STOCK.wantedOdds`. */
   wantedOdds?: number;
-}
-
-/** The day's job lot: a few games sold together, cheaper than one by one. */
-export interface JobLot {
-  games: Game[];
-  /** What they would cost one by one on the stalls. */
-  worth: number;
-  price: number;
 }
 
 /** Entries that are not a box on a shelf: hacks and translations (square brackets), prototypes, demos, pirates... */
@@ -83,10 +79,16 @@ export class MarketStock {
   private capacity: (platform: PlatformId) => number = () => Infinity;
   private binCapacity = Infinity;
   private cache: Day | null = null;
-  private lotCache: { day: number; lot: Promise<JobLot> } | null = null;
   private readonly pools = new Map<PlatformId, Promise<readonly IndexEntry[]>>();
 
+  /** Today's job lot (`JobLotDraw`). */
+  readonly lot: JobLotDraw;
+  /** Copies ordered at the counter (`MarketOrders`). */
+  readonly orders: MarketOrders;
+
   constructor(private readonly deps: MarketStockDeps, options: MarketStockOptions = {}) {
+    this.lot = new JobLotDraw({ ...deps, releases: (platform) => this.releases(platform) });
+    this.orders = new MarketOrders(deps);
     this.perPlatform = options.perPlatform ?? MARKET_STOCK.perPlatform;
     this.binSize = options.bin ?? MARKET_STOCK.bin;
     this.wantedOdds = options.wantedOdds ?? MARKET_STOCK.wantedOdds;
@@ -98,28 +100,18 @@ export class MarketStock {
     this.binCapacity = bin;
   }
 
+  /**
+   * The game day the stock is today's for (`Today.gameDay`), for what is bought and booked at the
+   * market. What kind of day it is (theme, events, news) is `MarketDay`'s; anything else that follows
+   * the days reads `Today`.
+   */
   get day(): number {
-    return this.deps.calendar.day;
-  }
-
-  /** What kind of day it is. */
-  get theme(): MarketDayTheme {
-    return themeOf(this.day);
-  }
-
-  /** What is on today: the grail, the Grande Brocante, the sales (`marketEvents`). */
-  get events(): MarketEvents {
-    return eventsOn(this.day);
-  }
-
-  /** What people are saying about the days ahead (grail rumours, the next Brocante, sales), for the stalls, the papers and the flyers. */
-  news(): MarketNews[] {
-    return marketNews(this.day, (id) => this.deps.collection.owns(id));
+    return this.deps.today.gameDay;
   }
 
   /** The bargain bin's price today. */
   get binPrice(): number {
-    return Math.max(1, Math.round(BARGAIN_PRICE * (this.theme.bin?.price ?? 1)));
+    return Math.max(1, Math.round(BARGAIN_PRICE * (themeOf(this.day).bin?.price ?? 1)));
   }
 
   /** Today's stock minus what the player already owns and what other shoppers bought. */
@@ -198,40 +190,6 @@ export class MarketStock {
   /** The player sold `game`: it goes on its stall from tomorrow. */
   consign(game: Game): void {
     this.deps.ledger.consign(game, this.day);
-  }
-
-  /** What ordering a used copy of `game` at the counter costs, once its fame is known. */
-  async orderQuote(game: Game): Promise<{ price: number; deposit: number; day: number }> {
-    const views = await this.deps.fame.lookup(game);
-    const price = Math.max(1, Math.round(shopPrice(game, views) * MARKET_ORDER.share));
-    return { price, deposit: Math.max(1, Math.round(price * MARKET_ORDER.deposit)), day: this.day + MARKET_ORDER.days };
-  }
-
-  /** Books a used copy of `game` (deposit already paid): it waits on its stall from `day`. */
-  order(game: Game, quote: { price: number; deposit: number; day: number }): void {
-    this.deps.ledger.order({ game: { ...game, status: 'owned' }, day: quote.day, deposit: quote.deposit, price: quote.price });
-  }
-
-  /** The copies on order, due or not. */
-  get orders(): readonly { game: Game; day: number; deposit: number; price: number }[] {
-    return this.deps.ledger.orders;
-  }
-
-  /** Today's job lot (the same all day). */
-  jobLot(): Promise<JobLot> {
-    const day = this.day;
-    if (!this.lotCache || this.lotCache.day !== day) this.lotCache = { day, lot: this.drawLot(day) };
-    return this.lotCache.lot;
-  }
-
-  get lotSold(): boolean {
-    return this.deps.ledger.lotBought(this.day);
-  }
-
-  /** The job lot was bought: the crate is empty for the day. */
-  sellLot(): void {
-    this.deps.ledger.recordLot(this.day);
-    this.deps.standing.record('lot');
   }
 
   get hadCoffee(): boolean {
@@ -431,7 +389,7 @@ export class MarketStock {
       // The copies held for the player that the draw did not give again: paid for, so on the stall all the same.
       for (const hold of heldHere) if (!taken.has(hold.game.id)) putHeld(hold);
       items.push(...stall);
-      // A deeper bin (a bin day, the Brocante) needs more to choose from.
+      // A deeper bin (a bin day, the Flea Fair) needs more to choose from.
       for (const entry of pickDistinct(pool, Math.ceil(3 * (theme.bin?.size ?? 1)), rngOf(`${p}:bin`))) binCandidates.push({ entry, platform: p });
     }
 
@@ -468,36 +426,15 @@ export class MarketStock {
     return items;
   }
 
-  /** A crate of a few games from anywhere, at a share of what they would fetch one by one. Each pick has a seed of its own. */
-  private async drawLot(day: number): Promise<JobLot> {
-    const rng = seeded(`${day}:lot`);
-    const size = JOB_LOT.min + Math.floor(rng() * (JOB_LOT.max - JOB_LOT.min + 1));
-    const games: Game[] = [];
-    for (let i = 0; i < size * 3 && games.length < size; i++) {
-      const r = seeded(`${day}:lot:${i}`);
-      const [platformRoll, entryRoll, conditionRoll] = [r(), r(), r()];
-      const platform = PLATFORM_LIST[Math.floor(platformRoll * PLATFORM_LIST.length)]!.id;
-      const pool = await this.releases(platform).catch(() => [] as readonly IndexEntry[]);
-      const entry = pool[Math.floor(entryRoll * pool.length)];
-      if (!entry) continue;
-      const game = gameFrom(entry, platform);
-      const condition = drawCondition(conditionRoll);
-      if (games.some((g) => g.id === game.id) || this.deps.collection.owns(game.id)) continue;
-      games.push({ ...game, condition: condition === 'complete' ? undefined : condition });
-    }
-    // Priced once every lookup is back (a failed one leaves its game ordinary).
-    const views = await Promise.all(games.map((g) => this.deps.fame.lookup(g)));
-    const worth = games.reduce((sum, g, i) => sum + marketPrice(g, views[i], g.condition ?? 'complete', (MARKET_DISCOUNT.min + MARKET_DISCOUNT.max) / 2), 0);
-    return { games, worth, price: Math.max(1, Math.round(worth * JOB_LOT.share)) };
-  }
-
   /** The item at the price its known fame gives, final once the lookup lands (a failed lookup leaves it ordinary). */
   private priced(game: Game, condition: BoxCondition, source: StockSource, discount: number, traits: StockTraits): StockItem {
     const { fame, ledger } = this.deps;
     const edition: Edition = traits.edition ?? 'standard';
     const known = fame.peek(game);
     const settle = known !== undefined ? undefined : fame.lookup(game).then((views) => marketPrice(game, views, condition, discount, edition));
-    const item = new StockItem(game, condition, source, { list: marketPrice(game, known, condition, discount, edition), final: known !== undefined, settle }, traits);
+    // An old shop's price sticker on some ordinary copies (peeled off at home: docs/household.md). A hash of its own, so no other draw moves.
+    const sticker = source === 'stall' && hash01(`${this.day}:sticker:${game.id}`) < STICKER.odds;
+    const item = new StockItem(game, condition, source, { list: marketPrice(game, known, condition, discount, edition), final: known !== undefined, settle }, sticker ? { ...traits, sticker } : traits);
     const agreed = ledger.haggleOf(this.day, game.id);
     if (agreed !== undefined) item.setHaggle(agreed);
     return item;
@@ -520,22 +457,6 @@ function heldCopyOf(item: StockItem): HeldCopy {
     ...(item.repro ? { repro: true } : {}),
     ...(item.gem ? { gem: true } : {}),
   };
-}
-
-function gameFrom(entry: IndexEntry, platform: PlatformId): Game {
-  return {
-    id: gameIdFor(platform, entry.name),
-    title: entry.title,
-    platform,
-    region: entry.region,
-    status: 'owned',
-    externalIds: { libretroName: entry.name },
-  };
-}
-
-/** Most copies are complete; some lack the manual; a few have seen better days (`CONDITION_ODDS`). */
-function drawCondition(u: number): BoxCondition {
-  return u < CONDITION_ODDS.worn ? 'worn' : u < CONDITION_ODDS.worn + CONDITION_ODDS.noManual ? 'noManual' : 'complete';
 }
 
 /** Now and then a first print (more on a collectors' fair), more often a budget re-release. */

@@ -6,26 +6,25 @@ import { furnishShell } from '../shell';
 import { furnishDecor, placeRoomLight } from '../build/roomParts';
 import { pointSound } from '../build/hearing';
 import { showWhenUpgraded } from '../build/follow';
-import { HallConsole } from '../props/HallConsole';
-import { CoatRack } from '../props/CoatRack';
+import { HallConsole } from './HallConsole';
+import { CoatRack } from './CoatRack';
 import { FrontDoor } from './FrontDoor';
 import { Wreath } from '../props/Wreath';
-import { currentFestivities } from '../props/outdoors/season';
+import { currentFestivities } from '@/time/season';
 import { Parcel } from '../props/Parcel';
-import { HouseKeys } from '../props/HouseKeys';
+import { HouseKeys } from './HouseKeys';
 import { Doormat, DOORMAT_THICKNESS } from '../props/Doormat';
 import { MailDrop } from '../props/MailDrop';
 import { Rug } from '../props/Rug';
 import { KilimRug } from '../props/KilimRug';
 import { Poster } from '../props/Poster';
-import { shopPoster } from '../props/shopPoster';
+import { shopPoster } from './shopPoster';
 import { Homecoming } from './Homecoming';
 import { mailFor } from './mail';
 import { StairwellSounds } from '@/audio/flatSounds';
 import { HALLWAY_PLAN } from './hallwayPlan';
-import { Notebook } from '../props/Notebook';
+import { Notebook } from './Notebook';
 import { StickyNote, ToDoNote } from '@/onboarding';
-import { ToDoNotePanel } from '@/ui/ToDoNotePanel';
 
 /**
  * Builds the flat's hallway into its zone from `HALLWAY_PLAN`: the corridor shell with its doors
@@ -36,7 +35,7 @@ import { ToDoNotePanel } from '@/ui/ToDoNotePanel';
  * kilim, once bought) and the shop poster (once bought), then the decor.
  */
 export function furnishHallway(zone: Zone, ctx: BuildContext): ZoneHandle {
-  const { sky, listener, building, collection: { deliveries }, market: { stock: market }, arcade: { daily: arcadeDaily }, home: { upgrades } } = ctx;
+  const { sky, listener, building, collection: { deliveries }, market: { stock: market, day: marketDay }, today, arcade: { daily: arcadeDaily }, home: { upgrades } } = ctx;
   const plan = HALLWAY_PLAN;
   const room = furnishShell(zone, sky, plan.room, { leafColor: plan.leafColor });
   placeRoomLight(zone, room, 'flush', plan.light, plan.lightSwitch);
@@ -61,9 +60,9 @@ export function furnishHallway(zone: Zone, ctx: BuildContext): ZoneHandle {
       door: zone.toWorld(new THREE.Vector3(plan.room.width / 2, 0, entrance.along)),
       onHome: (session) => {
         keys.setInPocket(false);
-        if (market.day !== lastMailDay) {
-          lastMailDay = market.day;
-          mail.deliver(mailFor(market.day, { arcadeDaily, market }));
+        if (today.gameDay !== lastMailDay) {
+          lastMailDay = today.gameDay;
+          mail.deliver(mailFor(today.gameDay, { arcadeDaily, market, marketDay }));
         }
         // A mail order whose round came while the player was out: the concierge took it in.
         const posted = building?.post?.deliver().length ?? 0;
@@ -98,9 +97,8 @@ export function furnishHallway(zone: Zone, ctx: BuildContext): ZoneHandle {
   };
   onConsole(new Notebook({ panel: () => notes.journalPanel }), plan.journal);
   if (notes.firstDay) {
-    const panel = new ToDoNotePanel(ctx.cssLayer.renderer.domElement.parentElement ?? document.body, notes.firstDay);
-    zone.onUnload(() => panel.close());
-    onConsole(new ToDoNote(notes.firstDay, panel), plan.toDoNote);
+    const panel = ctx.panels.toDo;
+    if (panel) onConsole(new ToDoNote(notes.firstDay, panel), plan.toDoNote);
     const sticky = new StickyNote(plan.keysNote.lines, notes.firstDay, 'out');
     frontDoor.attachToLeaf(sticky, plan.keysNote.along, plan.keysNote.y);
     zone.onUnload(() => sticky.dispose());

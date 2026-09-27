@@ -1,14 +1,13 @@
 import * as THREE from 'three';
 import { Reflector } from 'three/examples/jsm/objects/Reflector.js';
 import { QUALITY } from '@/graphics/quality';
+import { standard } from '../materials/palette';
 
 /** Silvered glass returns a little less than it gets, slightly cool. */
 const TINT = 0xb4bcc2;
 /** Reflection texture resolution per metre of mirror (capped): a mirror is seen from a few metres at most. */
 const PX_PER_M = 700;
 const MAX_PX = 1024;
-
-let polished: THREE.MeshStandardMaterial | null = null;
 
 /**
  * The silvered face of a mirror, `width` x `height`, facing local +z. With `QUALITY.reflections`
@@ -29,8 +28,7 @@ export function mirrorGlass(width: number, height: number): THREE.Mesh {
     mirror.name = 'Mirror';
     return mirror;
   }
-  polished ??= new THREE.MeshStandardMaterial({ color: TINT, metalness: 1, roughness: 0.05 });
-  const mesh = new THREE.Mesh(geometry, polished);
+  const mesh = new THREE.Mesh(geometry, standard({ color: TINT, metalness: 1, roughness: 0.05 }));
   mesh.name = 'Mirror';
   return mesh;
 }

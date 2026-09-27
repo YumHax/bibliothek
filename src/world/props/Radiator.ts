@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import type { Furniture } from '../Furniture';
-import { matte } from './Prop';
+import { paint, shared, standard } from '../materials/palette';
 import { CHROME } from './bathroomMaterials';
 import { fabric } from '@/world/materials/finishes';
 
@@ -43,10 +43,10 @@ const APPROACH = 0.5;
 /** In front of a cradle's edge, where the cat hops up from. */
 const CRADLE_APPROACH = 0.22;
 
-const WHITE_PIPE = matte(0xeeeeea, 0.35);
-const VALVE_HEAD = matte(0xf4f4f2, 0.45);
-const VALVE_RING = matte(0x3b3d40, 0.5);
-const BRASS = new THREE.MeshStandardMaterial({ color: 0xbfa36a, metalness: 0.8, roughness: 0.35 });
+const WHITE_PIPE = paint(0xeeeeea, 0.35);
+const VALVE_HEAD = paint(0xf4f4f2, 0.45);
+const VALVE_RING = paint(0x3b3d40, 0.5);
+const BRASS = standard({ color: 0xbfa36a, metalness: 0.8, roughness: 0.35 });
 
 /**
  * A radiator under or beside a window: the body on two wall brackets, and at its bottom corners
@@ -75,7 +75,7 @@ export class Radiator extends THREE.Group implements Furniture {
     const lift = options.lift ?? (towel ? 0.35 : 0.12);
     const standoff = options.standoff ?? 0.04;
     const depth = style === 'column' ? 0.075 : style === 'panel' ? 0.07 : 0.035;
-    const body = towel ? CHROME : new THREE.MeshStandardMaterial({ color: options.color ?? 0xf1efe8, roughness: 0.4, metalness: 0.05 });
+    const body = towel ? CHROME : standard({ color: options.color ?? 0xf1efe8, roughness: 0.4, metalness: 0.05 });
     const midZ = standoff + depth / 2;
     const bodyParts: THREE.BufferGeometry[] = [];
     if (style === 'column') this.columns(bodyParts, width, height, lift, midZ);
@@ -202,7 +202,7 @@ export class Radiator extends THREE.Group implements Furniture {
     }
     wire.push(cylinder(0.004, CRADLE_WIDTH, 0, y + 0.03, zOut, 'x'));
     this.mesh(wire, CHROME);
-    const fleece = fabric({ color: 0xcfc3b1, roughness: 1 });
+    const fleece = shared('radiator-fleece', () => fabric({ color: 0xcfc3b1, roughness: 1 }));
     const sling = new THREE.Mesh(new THREE.BoxGeometry(CRADLE_WIDTH - 0.01, 0.03, CRADLE_REACH - 0.01), fleece);
     sling.position.set(0, y, face + CRADLE_REACH / 2);
     sling.castShadow = true;

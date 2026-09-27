@@ -1,8 +1,8 @@
 import * as THREE from 'three';
 import type { Furniture } from '../Furniture';
 import { cylinderMesh } from '../meshUtils';
-import { part, matte } from './Prop';
-import { wood as woodMaterial } from '@/world/materials/finishes';
+import { paint, standard, timber } from '../materials/palette';
+import { part } from './Prop';
 
 export interface SpeakerOptions {
   /** Height of the cabinet. Default 0.85 (a slim floor-stander). */
@@ -14,11 +14,11 @@ export interface SpeakerOptions {
 const WIDTH = 0.2;
 const DEPTH = 0.26;
 const PLINTH = 0.03;
-const BAFFLE = matte(0x1c1b1a, 0.85);
-const CONE = matte(0x2a2826, 0.95);
-const DUST_CAP = new THREE.MeshStandardMaterial({ color: 0x3a3836, roughness: 0.3, metalness: 0.5 });
-const DOME = new THREE.MeshStandardMaterial({ color: 0xc9c4b8, roughness: 0.25, metalness: 0.7 });
-const LED = new THREE.MeshStandardMaterial({ color: 0x6fd08a, emissive: 0x4fd070, emissiveIntensity: 1.6, roughness: 0.4 });
+const BAFFLE = paint(0x1c1b1a, 0.85);
+const CONE = paint(0x2a2826, 0.95);
+const DUST_CAP = standard({ color: 0x3a3836, roughness: 0.3, metalness: 0.5 });
+const DOME = standard({ color: 0xc9c4b8, roughness: 0.25, metalness: 0.7 });
+const LED = standard({ color: 0x6fd08a, emissive: 0x4fd070, emissiveIntensity: 1.6, roughness: 0.4 });
 
 /**
  * A slim floor-standing hi-fi speaker: a walnut cabinet on a black plinth, a black baffle with a
@@ -32,7 +32,7 @@ export class Speaker extends THREE.Group implements Furniture {
     super();
     this.name = 'Speaker';
     const height = options.height ?? 0.85;
-    const wood = woodMaterial(options.wood ?? 0x5a3f2a, 0.5);
+    const wood = timber(options.wood ?? 0x5a3f2a, 0.5);
     const bodyH = height - PLINTH;
 
     part(this, WIDTH + 0.02, PLINTH, DEPTH + 0.02, BAFFLE, { y: PLINTH / 2 });

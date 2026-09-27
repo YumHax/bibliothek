@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import { Prop, part, matte } from '../props/Prop';
+import { Prop, part } from '../props/Prop';
+import { paint, standard, instancedStandard } from '../materials/palette';
 
 export interface BalconySlabOptions {
   width: number;
@@ -12,9 +13,10 @@ export interface BalconySlabOptions {
   barSpacing: number;
 }
 
-const STONE = matte(0xb9b1a3, 0.85);
-const STONE_EDGE = matte(0xa39b8c, 0.9);
-const IRON = new THREE.MeshStandardMaterial({ color: 0x1d1f22, roughness: 0.45, metalness: 0.6 });
+const STONE = paint(0xb9b1a3, 0.85);
+const STONE_EDGE = paint(0xa39b8c, 0.9);
+const IRON = standard({ color: 0x1d1f22, roughness: 0.45, metalness: 0.6 });
+const IRON_INSTANCED = instancedStandard({ color: 0x1d1f22, roughness: 0.45, metalness: 0.6 });
 const BAR = 0.014;
 const RAIL = 0.035;
 /** How far above the railing's top the colliders reach: no leaning out and falling six floors. */
@@ -50,7 +52,7 @@ export class BalconySlab extends Prop {
     const bars: THREE.Vector3[] = [];
     for (let x = -side + barSpacing; x < side - barSpacing / 2; x += barSpacing) bars.push(new THREE.Vector3(x, 0, front));
     for (let z = -d / 2 + barSpacing; z < front - barSpacing / 2; z += barSpacing) bars.push(new THREE.Vector3(-side, 0, z), new THREE.Vector3(side, 0, z));
-    const barMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(BAR, h - 0.1, BAR), IRON, bars.length);
+    const barMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(BAR, h - 0.1, BAR), IRON_INSTANCED, bars.length);
     const m = new THREE.Matrix4();
     bars.forEach((p, i) => barMesh.setMatrixAt(i, m.makeTranslation(p.x, 0.05 + (h - 0.1) / 2, p.z)));
     barMesh.castShadow = true;

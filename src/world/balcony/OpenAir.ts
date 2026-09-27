@@ -5,6 +5,7 @@ import { IDLE_SHADOW_INTERVAL, type OccupancyAware } from '../Furniture';
 import type { SkyState } from '../props/DayNight';
 import type { Outdoors } from '../props/outdoors/Outdoors';
 import { Prop } from '../props/Prop';
+import { RENDER_ORDER } from '../surface/layers';
 
 export interface OpenAirOptions {
   /** Radius of the surround the view is shown on: clear of everything built nearby. */
@@ -56,7 +57,7 @@ export class OpenAir extends Prop implements Updatable, OccupancyAware {
     surround.frustumCulled = false;
     // Drawn after everything opaque: the depth test then skips every pixel something nearer covers,
     // so the costly view shader only runs where the open air is actually seen.
-    surround.renderOrder = 10;
+    surround.renderOrder = RENDER_ORDER.overlay;
     surround.castShadow = false;
     surround.receiveShadow = false;
     this.add(surround);

@@ -4,7 +4,7 @@ import type { Updatable } from '@/core/Engine';
 import type { SessionActions } from '@/game/SessionActions';
 import type { Furniture } from '../Furniture';
 import { cylinderMesh, invisibleHitbox } from '../meshUtils';
-import { matte } from '../props/Prop';
+import { paint } from '../materials/palette';
 import { type OwnedPrizes, showWhenOwned } from './ownedPrize';
 
 export interface FeatherWandOptions {
@@ -39,14 +39,14 @@ export class FeatherWand extends THREE.Group implements Furniture, Interactable,
     super();
     this.name = 'FeatherWand';
     this.callCat = options.callCat;
-    const stick = cylinderMesh(0.005, STICK, matte(0xc8a060, 0.5), { y: STICK / 2 }, { segments: 8 });
+    const stick = cylinderMesh(0.005, STICK, paint(0xc8a060, 0.5), { y: STICK / 2 }, { segments: 8 });
     this.wand.add(stick);
     // The string and the feathers at the end of it.
-    const string = cylinderMesh(0.0012, 0.18, matte(0xeeeeee, 0.6), { y: -0.09 }, { segments: 4 });
+    const string = cylinderMesh(0.0012, 0.18, paint(0xeeeeee, 0.6), { y: -0.09 }, { segments: 4 });
     this.tuft.add(string);
     const colours = [0x33e0ff, 0xff2fa0, 0xffd23a, 0x33e0ff, 0xff2fa0];
     colours.forEach((c, i) => {
-      const feather = new THREE.Mesh(new THREE.ConeGeometry(0.012, 0.09, 6), matte(c, 0.6));
+      const feather = new THREE.Mesh(new THREE.ConeGeometry(0.012, 0.09, 6), paint(c, 0.6));
       feather.position.set(Math.cos(i * 1.3) * 0.012, -0.2, Math.sin(i * 1.3) * 0.012);
       feather.rotation.set(Math.PI + Math.cos(i) * 0.4, 0, Math.sin(i * 2) * 0.4);
       this.tuft.add(feather);

@@ -136,7 +136,7 @@ export const MARKET_PLAN = {
   bin: { floor: [2.9, HALF_DEPTH - 0.55], rotationY: Math.PI } as Placement,
 
   /**
-   * The Grande Brocante (the theme's `extraBins`, `bunting`): two more bargain bins at the aisle's
+   * The Grand Flea Fair (the theme's `extraBins`, `bunting`): two more bargain bins at the aisle's
    * ends, turned to face it, and the hall dressed up: bunting along both rows of awning poles and
    * across the aisle at its ends, a cloth banner over the way in.
    */
@@ -148,7 +148,7 @@ export const MARKET_PLAN = {
     decor: [
       ...[-POLE_Z, POLE_Z].map((z, i) => ({ kind: 'garland', at: { floor: [-STALL_X[2]! - POLE_DX, z] }, options: { style: 'bunting', length: 2 * (STALL_X[2]! + POLE_DX), height: POLE_TOP, sag: 0.35, seed: 31 + i } }) as DecorEntry),
       ...[-STALL_X[2]! - POLE_DX, STALL_X[2]! + POLE_DX].map((x, i) => ({ kind: 'garland', at: { floor: [x, -POLE_Z], rotationY: -Math.PI / 2 }, options: { style: 'bunting', length: 2 * POLE_Z, height: POLE_TOP, sag: 0.22, seed: 41 + i } }) as DecorEntry),
-      { kind: 'flyer', at: { wall: 'front', along: 0, y: 2.62 }, options: { style: 'cloth', width: 3, height: 0.5, title: 'GRANDE BROCANTE', lines: ['once a month · the whole hall'], accent: 0xb3402a } },
+      { kind: 'flyer', at: { wall: 'front', along: 0, y: 2.62 }, options: { style: 'cloth', width: 3, height: 0.5, title: 'GRAND FLEA FAIR', lines: ['once a month · the whole hall'], accent: 0xb3402a } },
     ] as DecorEntry[],
   },
 

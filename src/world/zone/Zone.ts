@@ -9,7 +9,70 @@ import type { RoomOptions } from '../Room';
 import type { ShelvingHost } from '../shelving/Shelving';
 import { disposeTree } from '../props/Prop';
 import { ContactShadows } from './ContactShadows';
+import { mergeStaticParts } from './mergeStatic';
 import { isActivityAware, isDrawnAware, isOccupancyAware } from './lifecycle';
+
+/**
+ * How often an undrawn zone's items tick (per second): out of sight, a smooth 60 Hz buys nothing,
+ * and each tick is handed the time since the last one, so clocks and walks keep their pace.
+ */
+export const UNDRAWN_TICK_HZ = 20;
+
+/** An item's tick while its zone is undrawn: every `1 / UNDRAWN_TICK_HZ` s, with the time owed (capped like the engine's). */
+class ThrottledTick implements Updatable {
+  private owed = 0;
+
+  constructor(readonly target: Updatable) {}
+
+  /** For `?stats`: the item's own name. */
+  get name(): string {
+    const name = (this.target as { name?: unknown }).name;
+    return `${typeof name === 'string' && name ? name : this.target.constructor.name} (undrawn)`;
+  }
+
+  update(dt: number): void {
+    this.owed += dt;
+    if (this.owed < 1 / UNDRAWN_TICK_HZ) return;
+    const owed = Math.min(this.owed, 0.1);
+    this.owed = 0;
+    this.target.update(owed);
+  }
+}
+
+/**
+ * A placed item that nothing animates (not `Updatable`, not clickable, no `dispose` (which says it
+ * listens to something), nothing under it that is, no light, no skeleton, not flagged
+ * `userData.live`, no occluders): its parts' local matrices are composed once here instead of every
+ * frame (`matrixAutoUpdate = false`), and `Zone.place` then merges its parts by material
+ * (`mergeStaticParts`). The item's own transform stays live, so a builder may still move it after
+ * placing. Returns whether it froze the item.
+ */
+function freezeStatic(item: Furniture): boolean {
+  if (isLive(item) || item.occluders?.length) return false;
+  let live = false;
+  item.traverse((obj) => {
+    if (obj !== item && isLive(obj)) live = true;
+  });
+  if (live) return false;
+  item.traverse((obj) => {
+    if (obj === item) return;
+    obj.updateMatrix();
+    obj.matrixAutoUpdate = false;
+  });
+  return true;
+}
+
+function isLive(obj: THREE.Object3D): boolean {
+  return (
+    isUpdatable(obj) ||
+    isInteractable(obj) ||
+    typeof (obj as Partial<Furniture>).dispose === 'function' ||
+    (obj as THREE.Light).isLight === true ||
+    (obj as THREE.Bone).isBone === true ||
+    (obj as THREE.SkinnedMesh).isSkinnedMesh === true ||
+    obj.userData.live === true
+  );
+}
 
 /**
  * `empty`: nothing built (costs nothing). `dormant`: built and kept in memory but out of the scene,
@@ -141,6 +204,8 @@ export class Zone<Id extends string = string> implements ShelvingHost {
   private hiddenMeshes: THREE.Mesh[] = [];
   /** Interactables `setDrawn(false)` took off the crosshair (the ray ignores `visible`), to hand back when drawn again. */
   private readonly culled = new Set<Interactable>();
+  /** The slowed ticks standing in for the items' own while the zone is undrawn (see `UNDRAWN_TICK_HZ`). */
+  private readonly throttled = new Map<Updatable, ThrottledTick>();
   private readonly items = new Map<Furniture, THREE.Box3[]>();
   /** Interactables that are not placed furniture themselves (the boxes on the shelves). */
   private readonly looseInteractables = new Set<Interactable>();
@@ -224,6 +289,7 @@ export class Zone<Id extends string = string> implements ShelvingHost {
     this.items.set(item, boxes);
     this.adopt(item);
     this.contactShadows.add(item);
+    if (freezeStatic(item)) mergeStaticParts(item);
     if (!this.drawn && !item.seenFromNextDoor) this.hide(item);
     if (this.state === 'active') this.plug(item, boxes);
     else if (isActivityAware(item)) item.setZoneActive(false);
@@ -252,6 +318,7 @@ export class Zone<Id extends string = string> implements ShelvingHost {
     if (drawn === this.drawn) return;
     this.drawn = drawn;
     for (const item of this.items.keys()) if (isDrawnAware(item)) item.setZoneDrawn(drawn);
+    if (this.state === 'active') for (const item of this.items.keys()) this.retime(item);
     if (drawn) {
       for (const mesh of this.hiddenMeshes) mesh.visible = true;
       this.hiddenMeshes = [];
@@ -360,6 +427,11 @@ export class Zone<Id extends string = string> implements ShelvingHost {
 
   // --- lifecycle ------------------------------------------------------------------------------------
 
+  /** Whether the builder is a `LazyZoneBuilder` (its own chunk): the zones reached by travel, the dearest to rebuild. */
+  get isLazy(): boolean {
+    return this.lazy !== null;
+  }
+
   /** Whether the builder's module is there: an eager builder always, a lazy one once `load()` resolved. */
   get isLoaded(): boolean {
     return this.builder !== null;
@@ -435,10 +507,39 @@ export class Zone<Id extends string = string> implements ShelvingHost {
     this.state = 'empty';
   }
 
+  /** Whether `item` ticks slowed now: an Updatable of an undrawn zone that does not ask for every frame. */
+  private slowed(item: Furniture): item is Furniture & Updatable {
+    return !this.drawn && isUpdatable(item) && !item.tickEveryFrame && !item.seenFromNextDoor;
+  }
+
+  private tick(item: Furniture & Updatable): void {
+    if (!this.slowed(item)) return this.host.addUpdatable(item);
+    const throttled = new ThrottledTick(item);
+    this.throttled.set(item, throttled);
+    this.host.addUpdatable(throttled);
+  }
+
+  private untick(item: Furniture & Updatable): void {
+    const throttled = this.throttled.get(item);
+    if (throttled) {
+      this.throttled.delete(item);
+      this.host.removeUpdatable(throttled);
+    } else {
+      this.host.removeUpdatable(item);
+    }
+  }
+
+  /** Swaps an active item between its own tick and the slowed one after a change of `drawn`. */
+  private retime(item: Furniture): void {
+    if (!isUpdatable(item) || this.slowed(item) === this.throttled.has(item)) return;
+    this.untick(item);
+    this.tick(item);
+  }
+
   private plug(item: Furniture, boxes: THREE.Box3[]): void {
     for (const box of boxes) this.host.collisions.add(box);
     for (const object of item.occluders ?? []) this.host.occluderAdded(object);
-    if (isUpdatable(item)) this.host.addUpdatable(item);
+    if (isUpdatable(item)) this.tick(item);
     if (isActivityAware(item)) item.setZoneActive(true);
     if (!isInteractable(item)) return;
     if (this.drawn || item.seenFromNextDoor) this.host.interactableAdded(item);
@@ -448,7 +549,7 @@ export class Zone<Id extends string = string> implements ShelvingHost {
   private unplug(item: Furniture, boxes: THREE.Box3[]): void {
     for (const box of boxes) this.host.collisions.remove(box);
     for (const object of item.occluders ?? []) this.host.occluderRemoved(object);
-    if (isUpdatable(item)) this.host.removeUpdatable(item);
+    if (isUpdatable(item)) this.untick(item);
     if (isActivityAware(item)) item.setZoneActive(false);
     if (!isInteractable(item)) return;
     this.host.interactableRemoved(item);

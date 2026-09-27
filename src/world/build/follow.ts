@@ -4,6 +4,7 @@ import type { Zone } from '../zone/Zone';
 import type { Sky } from '../Sky';
 import type { Room } from '../Room';
 import type { RoomWindow } from '../props/Window';
+import { setShownKeepingLights } from '../lighting/keepLights';
 
 /** Anything lit by the time of day: a `Room`, a frosted pane. */
 export interface DaylightFollower {
@@ -29,8 +30,8 @@ export function followUpgrades(zone: Zone, upgrades: HomeUpgrades, apply: () => 
 export function showWhenUpgraded(zone: Zone, upgrades: HomeUpgrades, id: HomeUpgrade, shown: THREE.Object3D, instead?: THREE.Object3D): void {
   followUpgrades(zone, upgrades, () => {
     const bought = upgrades.count(id) > 0;
-    shown.visible = bought;
-    if (instead) instead.visible = !bought;
+    setShownKeepingLights(shown, bought); // a bought lamp's light was there all along, dark: no shader recompiles
+    if (instead) setShownKeepingLights(instead, !bought);
   });
 }
 

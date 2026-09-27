@@ -66,6 +66,7 @@ export const KEYS = {
   firstDay: save('firstDay.v1'),
   post: save('post.v1'),
   neighbourTrades: save('neighbourTrades.v1'),
+  household: save('household.v1'),
   // Caches.
   longplayCache: `${CACHE_PREFIX}longplay.v1`,
   fameCache: `${CACHE_PREFIX}fame.v1`,

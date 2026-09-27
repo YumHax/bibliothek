@@ -5,6 +5,7 @@ import { createCanvas, fitFontSize, toTexture, FONT } from '@/covers/generated/c
 import { cylinderMesh, invisibleHitbox } from '../meshUtils';
 import { Prop, part, matte } from '../props/Prop';
 import { fabric, wood as woodMaterial } from '@/world/materials/finishes';
+import { proud } from '../props/joinery';
 
 /** The five things a household stall sells. */
 export type HomeGoodsId = 'bookcase' | 'rug' | 'lamp' | 'poster' | 'crt';
@@ -108,7 +109,10 @@ export class HomeGoodsDisplay {
   }
 }
 
-/** Builds an item's meshes into `g` (its own materials, so a hover lights only it) and returns its hitbox's size. */
+/**
+ * Builds an item's meshes into `g` and returns its hitbox's size. Every material is the item's own
+ * (never a palette one): a hover lights all of them, and only it.
+ */
 type Builder = (g: THREE.Group) => { w: number; h: number; d: number; z?: number };
 
 const BUILDERS: Record<HomeGoodsId, Builder> = {
@@ -132,7 +136,7 @@ const BUILDERS: Record<HomeGoodsId, Builder> = {
     slab.receiveShadow = true;
     box.add(slab);
     const strap = matte(0xe8e2d4, 0.5);
-    for (const y of [0.1, 0.34]) part(box, W + 0.004, 0.018, T + 0.004, strap, { y, z: -T / 2 }).castShadow = false;
+    for (const y of [0.1, 0.34]) part(box, proud(W), 0.018, proud(T), strap, { y, z: -T / 2 }).castShadow = false;
     return { w: W + 0.04, h: H + 0.02, d: 0.24, z: -0.04 };
   },
   /** A rug rolled up along z, a stripe pattern on the roll, a spiral on its ends, two string ties. */

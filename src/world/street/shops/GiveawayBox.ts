@@ -3,10 +3,12 @@ import type { Updatable } from '@/core/Engine';
 import type { Interactable } from '@/interaction/Interactable';
 import type { SessionActions } from '@/game/SessionActions';
 import type { BoxArtLoader } from '@/covers/BoxArtLoader';
-import { createCanvas, hashString, seededRandom, toTexture } from '@/covers/generated/canvasUtils';
+import { createCanvas, seededRandom, toTexture } from '@/covers/generated/canvasUtils';
 import { dayKey } from '@/economy/calendar';
 import { KEYS, PersistedStore } from '@/persistence';
 import { StockItem } from '@/economy/StockItem';
+import { dailyRandom, isEventDay } from '@/time/daily';
+import { paint, standard } from '../../materials/palette';
 import { invisibleHitbox } from '../../meshUtils';
 import type { Furniture } from '../../Furniture';
 import { ForSaleBox } from '../../market/ForSaleBox';
@@ -25,7 +27,12 @@ export interface GiveawayBoxOptions {
 
 /** Whether today (the real date) somebody leaves a box out: about one day in `oneDayIn`. */
 export function isGiveawayDay(oneDayIn: number, date = new Date()): boolean {
-  return hashString(`giveaway:${dayKey(date)}`) % oneDayIn === 0;
+  return isEventDay('giveaway', oneDayIn, { date });
+}
+
+/** Where the box stands on the real day `date`: the spot for its day of the month. */
+export function giveawaySpot<S>(spots: readonly S[], date: Date): S {
+  return spots[date.getDate() % spots.length]!;
 }
 
 /** The day (`dayKey`) the box's game was taken: a reload that day finds only junk, not another game. */
@@ -45,7 +52,7 @@ const JUNK = [
 ];
 
 /**
- * A cardboard box of cast-offs left out by a front door some days, À DONNER written on its flap:
+ * A cardboard box of cast-offs left out by a front door some days, FREE TO TAKE written on its flap:
  * old magazines and cables, and once the flea market's stock is drawn (the dealers have been
  * through the lofts of the street) one worn game in it, free to a good home (`ForSaleBox` at 0
  * coins: click to look, B takes it; no haggling over a gift). Taken, the box is only junk again.
@@ -63,7 +70,7 @@ export class GiveawayBox extends THREE.Group implements Furniture, Updatable, In
     this.name = 'GiveawayBox';
     const { width, depth, height } = BOX;
     const card = snowCovered(new THREE.MeshStandardMaterial({ color: 0xa8804e, roughness: 0.95 }));
-    const inside = new THREE.MeshStandardMaterial({ color: 0x6e5232, roughness: 1, side: THREE.BackSide });
+    const inside = standard({ color: 0x6e5232, roughness: 1, side: THREE.BackSide });
     // Four walls and a floor (open on top), the flaps folded out.
     const walls = new THREE.Mesh(new THREE.BoxGeometry(width, height, depth, 1, 1, 1), [card, card, inside, card, card, card]);
     walls.position.y = height / 2;
@@ -77,10 +84,10 @@ export class GiveawayBox extends THREE.Group implements Furniture, Updatable, In
     back.position.set(0, height + 0.05, -depth / 2 - 0.05);
     back.rotation.x = 0.9;
     // What fills it: a stack of magazines and a coil of cable.
-    const mags = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.12, 0.22), new THREE.MeshStandardMaterial({ color: 0xd9383a, roughness: 0.8 }));
+    const mags = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.12, 0.22), paint(0xd9383a, 0.8));
     mags.position.set(-0.07, height - 0.12, -0.04);
     mags.rotation.y = 0.3;
-    const cable = new THREE.Mesh(new THREE.TorusGeometry(0.07, 0.008, 6, 20), new THREE.MeshStandardMaterial({ color: 0x1e1e22, roughness: 0.6 }));
+    const cable = new THREE.Mesh(new THREE.TorusGeometry(0.07, 0.008, 6, 20), paint(0x1e1e22, 0.6));
     cable.position.set(0.14, height - 0.05, 0.06);
     cable.rotation.x = Math.PI / 2 - 0.3;
     for (const mesh of [walls, flap, back, mags, cable]) {
@@ -105,7 +112,7 @@ export class GiveawayBox extends THREE.Group implements Furniture, Updatable, In
   }
 
   label(): string {
-    return 'A box of cast-offs: À DONNER · click to rummage';
+    return 'A box of cast-offs: FREE TO TAKE · click to rummage';
   }
 
   activate(session: SessionActions): void {
@@ -132,7 +139,7 @@ export class GiveawayBox extends THREE.Group implements Furniture, Updatable, In
     const { owns, covers, wallet, isWanted, host } = this.options;
     const pool = stock.filter((item) => item.source === 'bin' && !owns(item.game.id));
     if (!pool.length) return;
-    const random = seededRandom(hashString(`giveaway-game:${dayKey()}`));
+    const random = dailyRandom('giveaway-game');
     const item = pool[Math.floor(random() * pool.length)]!;
     const gift = new StockItem(item.game, 'worn', 'bin', { list: 0, final: true });
     const box = new ForSaleBox(gift, covers, {
@@ -162,7 +169,7 @@ export class GiveawayBox extends THREE.Group implements Furniture, Updatable, In
   }
 }
 
-/** The flap's lettering, in marker: À DONNER. */
+/** The flap's lettering, in marker: FREE TO TAKE. */
 function flapTexture(): THREE.CanvasTexture {
   const [canvas, ctx] = createCanvas(256, 82);
   const random = seededRandom(404);
@@ -176,6 +183,6 @@ function flapTexture(): THREE.CanvasTexture {
   ctx.font = 'bold 44px "Comic Sans MS", "Chalkboard SE", sans-serif';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText('À DONNER', 128, 44);
+  ctx.fillText('FREE TO TAKE', 128, 44, 240);
   return toTexture(canvas, 2);
 }

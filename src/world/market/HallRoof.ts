@@ -2,6 +2,8 @@ import * as THREE from 'three';
 import type { RoomOptions } from '../Room';
 import { boxMesh } from '../meshUtils';
 import { Prop } from '../props/Prop';
+import { standard } from '../materials/palette';
+import { WALL } from '../surface/layers';
 
 export interface HallRoofOptions {
   /** Distance between two trusses along the hall's depth. Default 2. */
@@ -19,8 +21,8 @@ const DAY_WHITE = new THREE.Color(0xfff8ee);
 const CHORD = 0.08;
 const WEB = 0.05;
 
-const IRON = new THREE.MeshStandardMaterial({ color: 0x3b3a38, roughness: 0.55, metalness: 0.5 });
-const GLAZING_BAR = new THREE.MeshStandardMaterial({ color: 0x4a4846, roughness: 0.5, metalness: 0.4 });
+const IRON = standard({ color: 0x3b3a38, roughness: 0.55, metalness: 0.5 });
+const GLAZING_BAR = standard({ color: 0x4a4846, roughness: 0.5, metalness: 0.4 });
 
 /**
  * What turns a plastered ceiling into a market hall's roof: riveted iron trusses spanning the
@@ -74,11 +76,12 @@ export class HallRoof extends Prop {
       const glazedW = options.skylight?.width ?? 1.6;
       const margin = options.skylight?.margin ?? 1.2;
       const glazedL = depth - 2 * margin;
+      // Its own material: it follows the sky.
       this.glass = new THREE.MeshStandardMaterial({ color: 0xe6ecee, roughness: 0.6, emissive: DAY_WHITE, emissiveIntensity: NIGHT_GLOW });
       // The glass runs the hall's depth (z) down the middle, just under the ceiling, facing down.
       const pane = new THREE.Mesh(new THREE.PlaneGeometry(glazedW, glazedL), this.glass);
       pane.rotation.x = Math.PI / 2;
-      pane.position.y = height - 0.01;
+      pane.position.y = height - WALL.rooflight.lift;
       pane.receiveShadow = false;
       this.add(pane);
       // Frame and glazing bars.

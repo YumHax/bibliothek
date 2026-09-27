@@ -1,6 +1,6 @@
 import { Sheet, type Rng, azimuthOf, azimuthX, groundSquash, heightY, sizePx } from './Sheet';
 import { between, mixHex, pick } from './paint';
-import { currentSeason } from './season';
+import { currentSeason } from '@/time/season';
 
 export interface TreeStyle {
   base: string;

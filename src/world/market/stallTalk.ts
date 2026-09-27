@@ -16,7 +16,7 @@ export interface StallState {
   loyalty?: string;
   /** Today's market day, in capitals ("NINTENDO FAIR"), when it is a special one. */
   theme?: string;
-  /** What the stallholder has heard about the days ahead (a grail coming, the Brocante, a sale): `rumours.stallRumour` lines. */
+  /** What the stallholder has heard about the days ahead (a grail coming, the Flea Fair, a sale): `rumours.stallRumour` lines. */
   news?: readonly string[];
 }
 

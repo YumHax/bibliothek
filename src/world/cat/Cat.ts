@@ -57,6 +57,8 @@ export class Cat extends THREE.Group implements Furniture, Interactable, Updatab
   private readonly blob: THREE.Mesh | null;
   readonly hitboxes: THREE.Object3D[];
   readonly settings: CatSettings;
+  /** Whether it lives in the flat yet (adopted at the pet shop): till then it waits staged, unseen (`furnishCat`'s placers). */
+  adopted = true;
 
   private readonly nav: CatNav;
   private readonly motion: CatMotion;
@@ -153,6 +155,11 @@ export class Cat extends THREE.Group implements Furniture, Interactable, Updatab
   /** The player calls the cat: it comes and sits in front of them (or ignores them, cat-style). */
   call(): 'coming' | 'ignored' | 'asleep' {
     return this.brain.call();
+  }
+
+  /** Something bought for it after it moved in (the scratching post, the ball): from now on it may go to it. */
+  provide(things: { scratcher?: ScratcherLike; toy?: CatToyLike }): void {
+    this.brain.provide(things);
   }
 
   /** Which armchair the player sits in; null when standing. */

@@ -9,7 +9,7 @@ export interface SleepCurtain {
   in(ms?: number): Promise<void>;
 }
 
-/** When the player wakes up. */
+/** When the player wakes up, unless the alarm clock says otherwise. */
 const WAKE_HOUR = 7;
 /** A slow fade to black, a beat in the dark, a slow fade back: it should feel like a night, not a teleport. */
 const FALL_ASLEEP_MS = 1200;
@@ -18,8 +18,9 @@ const WAKE_UP_MS = 1500;
 
 /**
  * A night's sleep in the bed: the view fades out, the shared clock winds forward to the next
- * morning (7:00; the market calendar sees the day go by), and the view fades back in with the
- * player still lying in bed. `isAsleep` is true from the first fade to the last.
+ * morning (7:00, or the hour the bedside alarm is set to: `wakeHour`; the market calendar sees the
+ * day go by), and the view fades back in with the player still lying in bed. `isAsleep` is true
+ * from the first fade to the last.
  */
 export class Sleep {
   private asleep = false;
@@ -27,6 +28,7 @@ export class Sleep {
   constructor(
     private readonly clock: SleepClock,
     private readonly curtain: SleepCurtain,
+    private readonly wakeHour: () => number = () => WAKE_HOUR,
   ) {}
 
   get isAsleep(): boolean {
@@ -39,7 +41,7 @@ export class Sleep {
     this.asleep = true;
     try {
       await this.curtain.out(FALL_ASLEEP_MS);
-      this.clock.advanceTo(WAKE_HOUR);
+      this.clock.advanceTo(this.wakeHour());
       await new Promise((resolve) => window.setTimeout(resolve, DARK_MS));
       await this.curtain.in(WAKE_UP_MS);
     } finally {

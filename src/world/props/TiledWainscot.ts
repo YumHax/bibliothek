@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import type { RoomOptions, Wall } from '../Room';
 import { createCanvas, toTexture } from '@/covers/generated/canvasUtils';
-import { Prop, part, matte } from './Prop';
+import { paint } from '../materials/palette';
+import { Prop, part } from './Prop';
 
 export interface TiledWainscotOptions {
   /** Height of the tiling above the floor. Default 1.2. */
@@ -57,7 +58,7 @@ export class TiledWainscot extends Prop {
     const colours = { tile: options.tile ?? 0xf6f5f0, grout: options.grout ?? 0xcfd0cc, accent: options.accent ?? 0x9db3a6 };
     const style: TileStyle = { w: options.tileWidth ?? TILE_W, h: options.tileHeight ?? TILE_H, bevel: options.bevel ?? true, variance: options.variance ?? 0.008 };
     const roughness = options.roughness ?? 0.25;
-    const capPaint = matte(colours.accent, 0.35);
+    const capPaint = paint(colours.accent, 0.35);
     const doorways = room.doorways ?? [];
 
     for (const wall of walls) {
@@ -81,7 +82,7 @@ export class TiledWainscot extends Prop {
         tiles.map!.repeat.set(seg.length / length, 1);
         tiles.map!.offset.set((seg.centre - seg.length / 2 + length / 2) / length, 0);
         tiles.map!.needsUpdate = true;
-        const grout = matte(colours.grout, 0.8);
+        const grout = paint(colours.grout, 0.8);
         // BoxGeometry material order: +x, -x, +y, -y, +z (the face into the room), -z.
         const slab = new THREE.Mesh(new THREE.BoxGeometry(seg.length, height, THICKNESS), [grout, grout, grout, grout, tiles, grout]);
         slab.position.set(seg.centre, height / 2, THICKNESS / 2);

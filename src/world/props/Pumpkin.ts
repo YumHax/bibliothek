@@ -2,7 +2,8 @@ import * as THREE from 'three';
 import type { Updatable } from '@/core/Engine';
 import { createCanvas, seededRandom } from '@/covers/generated/canvasUtils';
 import { cylinderMesh } from '../meshUtils';
-import { markShared, matte, Prop } from './Prop';
+import { paint, standard } from '../materials/palette';
+import { Prop } from './Prop';
 
 export interface PumpkinOptions {
   /** Radius, metres. Default 0.14 (a carving pumpkin); a small one 0.09. */
@@ -15,8 +16,8 @@ export interface PumpkinOptions {
   lift?: number;
 }
 
-const SKIN = markShared(new THREE.MeshStandardMaterial({ color: 0xe0701c, roughness: 0.55 }));
-const STEM = markShared(matte(0x5a6a2a, 0.8));
+const SKIN = standard({ color: 0xe0701c, roughness: 0.55 });
+const STEM = paint(0x5a6a2a, 0.8);
 const RIBS = 10;
 const RIB_DEPTH = 0.045;
 

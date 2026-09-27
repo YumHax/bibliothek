@@ -3,8 +3,8 @@ import type { Placement } from '../Placement';
 import type { DecorEntry } from '../props/decor';
 import { WAINSCOT_THICKNESS, type TiledWainscotOptions } from '../props/TiledWainscot';
 import { DOOR_LEAF } from '../roomPlan';
-import { CISTERN_DEPTH, CISTERN_TOP } from '../props/Toilet';
-import type { MirrorCabinetOptions } from '../props/MirrorCabinet';
+import { CISTERN_DEPTH, CISTERN_TOP } from './Toilet';
+import type { MirrorCabinetOptions } from './MirrorCabinet';
 
 /*
  * THE BATHROOM PLAN, zone-local coordinates (origin at the centre of its floor). Walls as named
@@ -69,6 +69,16 @@ export const BATHROOM_PLAN = {
   mirrorCabinet: { wall: 'right', along: 0.05, y: 1.3 } as Placement,
   mirrorCabinetOptions: { width: 0.5, height: 0.62, hinge: 'left' } as MirrorCabinetOptions,
 
+  /**
+   * What the bathroom is used for (docs/household.md): the cleaning kit on the cabinet's shelves (cabinet-local
+   * centre and size of what a click takes), and the hair dryer in its holder on the right wall above the tiles,
+   * between the tub's front (z -0.44) and the cabinet (z -0.2..0.3).
+   */
+  household: {
+    kitSpot: { at: [0, 0.31, 0.06] as [number, number, number], size: [0.46, 0.56, 0.1] as [number, number, number] },
+    hairDryer: { wall: 'right', along: -0.32, y: 1.48 } as Placement,
+  },
+
   /** Towels by the door, on the front wall right of the architrave (x 0.485..0.9), the rail just under the tiles' cap. */
   towelRail: { wall: 'front', along: 0.69, y: 1.12, offset: WAINSCOT_THICKNESS } as Placement,
   /** The laundry basket in the corner inside the door, clear of the doormat. */
@@ -79,12 +89,13 @@ export const BATHROOM_PLAN = {
 
   decor: [
     // A plain cotton bath mat between the WC and the basin, in front of the tub.
-    { kind: 'rug', at: { floor: [0.12, -0.2] }, options: { width: 0.68, depth: 0.42, field: 0x8fa3ad, border: 0x8fa3ad, motif: 0x8fa3ad } },
+    { kind: 'rug', at: { floor: [0.12, -0.2] }, options: { width: 0.68, depth: 0.42, field: 0x8fa3ad, border: 0x8fa3ad, motif: 0x8fa3ad }, upgrade: 'bathMat' },
     // A small fern on the cistern lid, away from the flush button (which sits towards -along, the tub side).
     {
       kind: 'plant',
       at: { wall: 'left', along: TOILET_ALONG + 0.12, y: CISTERN_TOP, offset: WAINSCOT_THICKNESS + CISTERN_DEPTH / 2 },
       options: { kind: 'small', pot: 'ceramic', seed: 31, collides: false, scale: 0.9 },
+      upgrade: { good: 'houseplant', nth: 10 },
     },
     // A towel thrown over the tub's front rim, right of the screen and clear of the basin (x from 0.46).
     {

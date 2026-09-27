@@ -399,7 +399,9 @@ export const fragmentShader = /* glsl */ `
     // camera away from it sees each thing along another direction, the nearer the more. Start from a
     // sphere radius out, then step: read the painted distance along the current direction and
     // move to the point of the ray that far from the painting's eye. A few steps settle on the
-    // surface (the sky, painted at no distance, sends the ray to infinity along itself).
+    // surface (the sky, painted at no distance, sends the ray to infinity along itself). Ground on
+    // the street's plane (fx alpha) is stamped with one distance per strip: there the ray meets the
+    // plane itself, exactly, or the strips would shift apart in slices and what drives on them jump.
     vec3 o = cameraPosition - center;
     float b = dot(o, d);
     float oo = dot(o, o);
@@ -407,9 +409,13 @@ export const fragmentShader = /* glsl */ `
     vec3 s = normalize(o + t * d);
     vec2 uv = band(s);
     for (int i = 0; i < PARALLAX_STEPS; i++) {
-      float stored = texture2D(lights, uv).a;
-      float reach = stored < 0.002 ? 5000.0 : -DEPTH_SCALE * log(1.0 - min(stored, 0.996));
-      t = -b + sqrt(max(b * b - oo + reach * reach, 0.0));
+      if (d.y < -0.001 && texture2D(fx, uv).a > 0.5) {
+        t = -(EYE_HEIGHT + o.y) / d.y;
+      } else {
+        float stored = texture2D(lights, uv).a;
+        float reach = stored < 0.002 ? 5000.0 : -DEPTH_SCALE * log(1.0 - min(stored, 0.996));
+        t = -b + sqrt(max(b * b - oo + reach * reach, 0.0));
+      }
       s = normalize(o + t * d);
       uv = band(s);
     }

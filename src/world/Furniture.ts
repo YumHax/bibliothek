@@ -17,6 +17,12 @@ export interface Furniture extends THREE.Object3D {
   /** Stays drawn when its zone is culled from view: a door, which the room on the other side sees too. */
   readonly seenFromNextDoor?: boolean;
   /**
+   * An `Updatable` ticked every frame even while its zone is culled from view (by default an
+   * undrawn zone's items tick at `UNDRAWN_TICK_HZ`, handed the time they missed). For what the
+   * player perceives from elsewhere at frame rate. A `seenFromNextDoor` item always ticks every frame.
+   */
+  readonly tickEveryFrame?: boolean;
+  /**
    * Called when the zone holding it is unloaded: release subscriptions, audio, timers. Geometries,
    * materials and textures are freed by the zone itself (`disposeTree`), so most props need nothing.
    */

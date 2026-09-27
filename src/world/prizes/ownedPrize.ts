@@ -1,4 +1,5 @@
 import type * as THREE from 'three';
+import { setShownKeepingLights } from '../lighting/keepLights';
 
 /** The prizes taken home, as a prize that stands at home reads them. */
 export interface OwnedPrizes {
@@ -18,7 +19,7 @@ export function showWhenOwned(prizes: OwnedPrizes, id: string, object: THREE.Obj
   const hitboxY = hitbox?.position.y ?? 0;
   const apply = (): void => {
     const owned = prizes.owns(id);
-    object.visible = owned;
+    setShownKeepingLights(object, owned); // a won lamp's light was there all along, dark: no shader recompiles
     if (hitbox) hitbox.position.y = owned ? hitboxY : HIDDEN_Y;
     onChange?.(owned);
   };

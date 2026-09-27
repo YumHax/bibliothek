@@ -1,8 +1,9 @@
 import * as THREE from 'three';
 import { seededRandom } from '@/covers/generated/canvasUtils';
 import { cylinderMesh } from '../meshUtils';
-import { Prop, part, matte } from './Prop';
-import { wood as woodMaterial } from '@/world/materials/finishes';
+import { paint, standard, timber } from '../materials/palette';
+import { WALL } from '../surface/layers';
+import { Prop, part } from './Prop';
 
 export interface SpiceRackOptions {
   /** Outer width. Default 0.4. */
@@ -34,12 +35,12 @@ export class SpiceRack extends Prop {
     const width = options.width ?? 0.4;
     const rows = options.rows ?? 2;
     const random = seededRandom(options.seed ?? 11);
-    const wood = woodMaterial(options.wood ?? 0xc9a577, 0.6);
+    const wood = timber(options.wood ?? 0xc9a577, 0.6);
     const height = rows * ROW_HEIGHT + 0.02;
     const t = 0.012;
-    const glass = new THREE.MeshStandardMaterial({ color: 0xe8f0f2, roughness: 0.05, metalness: 0.1, transparent: true, opacity: 0.35 });
-    const cap = matte(0x1e1f22, 0.5);
-    const label = matte(0xf4efe2, 0.9);
+    const glass = standard({ color: 0xe8f0f2, roughness: 0.05, metalness: 0.1, transparent: true, opacity: 0.35 });
+    const cap = paint(0x1e1f22, 0.5);
+    const label = paint(0xf4efe2, 0.9);
 
     // The back fits between the sides (full width, its ends would fight their grain).
     part(this, width - 2 * t, height, 0.008, wood, { z: 0.004 }).castShadow = false;
@@ -54,7 +55,7 @@ export class SpiceRack extends Prop {
         const x = -width / 2 + t + (i + 0.5) * pitch;
         const z = DEPTH / 2 - 0.004;
         const base = y + t;
-        const spice = cylinderMesh(JAR_RADIUS - 0.003, JAR_HEIGHT * (0.5 + random() * 0.35), matte(SPICES[Math.floor(random() * SPICES.length)]!, 0.95), { x, z }, { segments: 12 });
+        const spice = cylinderMesh(JAR_RADIUS - 0.003, JAR_HEIGHT * (0.5 + random() * 0.35), paint(SPICES[Math.floor(random() * SPICES.length)]!, 0.95), { x, z }, { segments: 12 });
         const fillH = (spice.geometry as THREE.CylinderGeometry).parameters.height;
         spice.position.y = base + fillH / 2 + 0.002;
         spice.castShadow = false;
@@ -63,7 +64,7 @@ export class SpiceRack extends Prop {
         jar.castShadow = false;
         this.add(jar);
         this.add(cylinderMesh(JAR_RADIUS + 0.001, 0.016, cap, { x, y: base + JAR_HEIGHT + 0.008, z }, { segments: 12 }));
-        part(this, 0.024, 0.02, 0.001, label, { x, y: base + JAR_HEIGHT * 0.65, z: z + JAR_RADIUS + 0.0005 }).castShadow = false;
+        part(this, 0.024, 0.02, 0.001, label, { x, y: base + JAR_HEIGHT * 0.65, z: z + JAR_RADIUS + WALL.paper.lift }).castShadow = false;
       }
     }
   }

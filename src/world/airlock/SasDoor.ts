@@ -37,8 +37,8 @@ interface Leaf {
  * painted double door; the inner door a glazed single leaf hinged on the left.
  */
 const HANGING = {
-  street: { z: -0.005, z0: -0.05, z1: 0, swing: 1, open: THREE.MathUtils.degToRad(88), sasFace: -1, seconds: 1.3 },
-  inner: { z: -SAS.depth + 0.005, z0: 0, z1: 0.04, swing: -1, open: THREE.MathUtils.degToRad(95), sasFace: 1, seconds: 1.1 },
+  street: { z: -0.005, z0: -0.05, z1: 0, swing: 1, open: THREE.MathUtils.degToRad(88), sasFace: -1, seconds: 0.9 },
+  inner: { z: -SAS.depth + 0.005, z0: 0, z1: 0.04, swing: -1, open: THREE.MathUtils.degToRad(95), sasFace: 1, seconds: 0.75 },
 } as const;
 /** The leaves' colliders swap from shut to open as they swing past this. */
 const BLOCKER_SWAP = 0.5;

@@ -11,7 +11,9 @@ import { invisibleHitbox } from '../../meshUtils';
 import type { Furniture } from '../../Furniture';
 import type { ShopDoor } from '../streetPlan';
 import { SHOP_HOURS, clockTime, isShopOpen } from './shopHours';
-import { BALCONY_PLANTS, BAR_GOSSIP, SHOP_TALK, type ShopOffer } from './shopPlan';
+import { BALCONY_PLANTS, BAR_GOSSIP, HOME_SHOP_OF, SHOP_TALK, type ShopOffer } from './shopPlan';
+import type { HomeShop } from '@/economy/homeGoods';
+import type { ModalLike } from '@/game/SessionParts';
 import { seededRandom } from '@/graphics/canvas';
 import { SCRATCH_PER_DAY, cardInProgress, cardsToday, drawCard, keepCardInProgress, recordCard, type CardInProgress } from './scratchCard';
 
@@ -19,17 +21,22 @@ import { SCRATCH_PER_DAY, cardInProgress, cardsToday, drawCard, keepCardInProgre
 export interface ShopServices {
   hours: () => number;
   purse: { readonly coins: number; spend(coins: number): boolean; earnCoins(coins: number): void };
-  market: { peekToday(): readonly StockItem[] | null; readonly theme: MarketDayTheme; readonly hadCoffee: boolean; drinkCoffee(): void; news?(): readonly MarketNews[] };
+  market: { peekToday(): readonly StockItem[] | null; readonly hadCoffee: boolean; drinkCoffee(): void };
+  /** What kind of market day it is, and the talk of the days ahead (the barista's tips). */
+  marketDay: { readonly theme: MarketDayTheme; news(): readonly MarketNews[] };
   isWanted: (id: string) => boolean;
-  /** The flat's bought furniture: the florist's plants go on the balcony. */
+  /** The flat's bought furniture: the florist's plants go on the balcony (when there is no `homeShop`). */
   plants?: { count(): number; add(): void };
+  /** The counter of a shop that sells for the flat (`HOME_SHOP_OF`): the furniture, the screens, the plants, the cat. */
+  homeShop?: (shop: HomeShop) => ModalLike;
   scratch: ScratchCardPanel;
 }
 
 /** Names of the kinds, when the plan gives the shop none of its own. */
 const KIND_NAMES: Record<string, string> = {
   cafe: 'the café', bakery: 'the bakery', pharmacy: 'the pharmacy', books: 'the bookshop', grocer: 'the greengrocer', florist: 'the florist',
-  tabac: 'the tabac', bar: 'the bar', butcher: 'the butcher’s', laundry: 'the launderette', shut: 'an empty shop',
+  tabac: 'the newsagent’s', bar: 'the bar', butcher: 'the butcher’s', laundry: 'the launderette', shut: 'an empty shop',
+  furniture: 'the furniture shop', electronics: 'the TV repair shop', pets: 'the pet shop',
 };
 
 /**
@@ -37,7 +44,8 @@ const KIND_NAMES: Record<string, string> = {
  * sells over the counter, or that it is shut and when it opens (`SHOP_HOURS`); a click buys the
  * offer (`SHOP_TALK`), or has a look in (a line). The café's coffee is the flea market's coffee of
  * the day (the stallholders go easier) and comes with the barista's tip about today's stock; the
- * tabac's scratch card opens `ScratchCardPanel`; the florist's plants go on the balcony. The door
+ * tabac's scratch card opens `ScratchCardPanel`; the shops that sell for the flat (`HOME_SHOP_OF`: the furniture
+ * shop, the TV repair shop, the pet shop, the florist) open their counter (`homeShop`, a `HomeShopPanel`). The door
  * itself is painted on the facade: this is the click on it. Origin on the pavement at the door,
  * +z facing the street; never collides.
  */
@@ -71,6 +79,7 @@ export class ShopEntrance extends THREE.Group implements Furniture, Interactable
     if (kind === 'shut') return `${name} · shut for good`;
     if (SHOP_TALK[kind].offer?.id === 'scratch' && cardInProgress()) return `${name} · click to finish your scratch card`;
     if (!this.isOpen) return `${name} · closed, opens at ${clockTime(SHOP_HOURS[kind]?.open ?? 8)}`;
+    if (this.homeShop) return `Click to see what ${this.shopName} has for the flat`;
     const offer = SHOP_TALK[kind].offer;
     if (!offer) return `Click to look in ${this.shopName}`;
     if (offer.id === 'coffee' && this.services.market.hadCoffee) return `${name} · you have had your coffee today · click for a word with the barista`;
@@ -93,11 +102,21 @@ export class ShopEntrance extends THREE.Group implements Furniture, Interactable
       session.hint(`${capitalise(this.shopName)} is closed. ${talk.closed} Opens at ${clockTime(SHOP_HOURS[kind]?.open ?? 8)}.`);
       return;
     }
+    const counter = this.homeShop;
+    if (counter && this.services.homeShop) {
+      session.openPanel(this.services.homeShop(counter));
+      return;
+    }
     if (talk.offer) {
       this.sell(session, talk.offer);
       return;
     }
     session.hint(talk.looks[this.looked++ % talk.looks.length] ?? '');
+  }
+
+  /** The flat's goods this shop sells, when it sells any and the street was given a counter for them. */
+  private get homeShop(): HomeShop | null {
+    return this.services.homeShop ? HOME_SHOP_OF[this.door.shop.kind] ?? null : null;
   }
 
   private get isOpen(): boolean {
@@ -193,18 +212,18 @@ export class ShopEntrance extends THREE.Group implements Furniture, Interactable
 
   /** The barista's tip: a wishlisted game on a stall today, a gem in the bin, or what kind of day the market has. */
   private tip(): string {
-    const { market, isWanted } = this.services;
+    const { market, marketDay, isWanted } = this.services;
     const stock = market.peekToday();
     const wanted = stock?.find((item) => isWanted(item.game.id));
     if (wanted) return `The barista leans over: “Someone saw ${wanted.game.title} on a stall this morning. Be quick.”`;
     const gem = stock?.find((item) => item.gem);
     if (gem) return `The barista winks: “There’s a ${gem.game.title} in the bargain bin. Nobody’s noticed yet.”`;
-    const news = market.news?.()[0];
+    const news = marketDay.news()[0];
     if (news?.kind === 'grail') return `The barista lowers their voice: “${stallRumour(news, 0)}”`;
-    const { title, blurb } = market.theme;
+    const { title, blurb } = marketDay.theme;
     return stock
       ? `The barista says it’s ${title} at the flea market today. ${blurb}`
-      : `“${title} at the flea market today, behind RÉTRO JEUX. ${blurb} The dealers get there early.”`;
+      : `“${title} at the flea market today, behind RETRO GAMES. ${blurb} The dealers get there early.”`;
   }
 }
 
@@ -212,11 +231,11 @@ function capitalise(text: string): string {
   return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
-/** "CAFÉ LUMIÈRE" -> "Café Lumière" (small words kept small). */
+/** "SUNNY SIDE CAFE" -> "Sunny Side Cafe" (small words kept small). */
 function titleCase(text: string): string {
   return text
     .toLowerCase()
     .split(' ')
-    .map((word, i) => (i > 0 && ['du', 'des', 'de', 'la', 'le', '&'].includes(word) ? word : word.charAt(0).toUpperCase() + word.slice(1)))
+    .map((word, i) => (i > 0 && ['of', 'the', 'and', '&'].includes(word) ? word : word.charAt(0).toUpperCase() + word.slice(1)))
     .join(' ');
 }

@@ -60,7 +60,9 @@ const WALK = [
  */
 export class Negotiation {
   readonly tag: number;
-  private readonly floor: number;
+  /** The lowest price as a share of the tag (before `NEGOTIATION.lowest`), and in coins. */
+  private share: number;
+  private floor: number;
   private patience: number;
   private counterPrice: number;
   private finished: { price: number } | null = null;
@@ -76,9 +78,28 @@ export class Negotiation {
     if (mood.rain) share += NEGOTIATION.rain;
     // A grail's seller knows what they have: loyalty, coffee and rain move them a little, never far.
     if (item.source === 'grail') share = Math.max(GRAIL.floor, share);
-    this.floor = Math.max(1, Math.round(this.tag * Math.min(1, Math.max(NEGOTIATION.lowest, share))));
+    this.share = share;
+    this.floor = this.floorFor(share);
     this.patience = NEGOTIATION.patience - mood.soured + (mood.coffee ? NEGOTIATION.coffee.patience : 0);
     this.counterPrice = this.tag;
+  }
+
+  /**
+   * What the player brings along besides a coffee (`household/perks`: a bath's calm, the day's first
+   * sale, a platform's know-how, a jacket): `floor` moves the lowest share (never under
+   * `NEGOTIATION.lowest`, nor a grail's `GRAIL.floor`), `patience` adds offers. Before the first offer only.
+   */
+  ease(change: { floor?: number; patience?: number }): void {
+    if (this.turn > 0 || this.finished) return;
+    let share = this.share + (change.floor ?? 0);
+    if (this.item.source === 'grail') share = Math.max(GRAIL.floor, share);
+    this.share = share;
+    this.floor = this.floorFor(share);
+    this.patience += change.patience ?? 0;
+  }
+
+  private floorFor(share: number): number {
+    return Math.max(1, Math.round(this.tag * Math.min(1, Math.max(NEGOTIATION.lowest, share))));
   }
 
   /** What each offer would be, in coins. */
