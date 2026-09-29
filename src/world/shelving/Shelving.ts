@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { Game } from '@/catalog/types';
+import { boxDimensionsOf } from '@/catalog/media';
 import type { BoxArtLoader } from '@/covers/BoxArtLoader';
 import type { GameSource } from '@/collection/GameSource';
 import { GameList } from '@/collection/GameList';
@@ -9,9 +10,11 @@ import { GameBox } from '../GameBox';
 import { PLINTH, Shelf } from '../Shelf';
 import { ShelfLamp } from '../props/ShelfLamp';
 import { BoxMotion } from './BoxMotion';
-import { planShelving, type BookcaseSpec } from './plan';
+import { planArranged, planShelving, type BookcaseSpec, type ShelvingPlan } from './plan';
 import { computeSlots, type Slot, type ZRange } from './slots';
 import { nextSortMode, rowGroupKey, sortGames, type SortMode } from './sort';
+import { BoxPool, sameExceptStatus } from './BoxPool';
+import type { ShelfArrangement, ShelvingRows } from './arrangement';
 
 /** What the shelving needs from the World: a way in and out of the scene for its furniture. */
 export interface ShelvingHost {
@@ -19,8 +22,11 @@ export interface ShelvingHost {
   readonly scene: THREE.Object3D;
   place<T extends Furniture>(item: T, position: THREE.Vector3, rotationY?: number): T;
   remove(item: Furniture): void;
-  /** Boxes that entered / left the room, so the host can update its interactables. */
-  boxesChanged(added: readonly GameBox[], removed: readonly GameBox[]): void;
+  /**
+   * Boxes that entered / left the room, so the host can update its interactables. `handedOver` left it for another
+   * shelving that shows them now (it may have taken them first): forgotten here, but still clickable.
+   */
+  boxesChanged(added: readonly GameBox[], removed: readonly GameBox[], handedOver?: readonly GameBox[]): void;
 }
 
 export interface ShelvingOptions {
@@ -46,6 +52,17 @@ export interface ShelvingOptions {
   overflow?: GameList;
   /** A card on the first bookcase while it holds only a few games (the bare flat's start): what it is for. */
   starterCard?: { title: string; line: string; upTo: number };
+  /** Its name in the player's arrangement (`arrangement.ts`): 'living', 'bedroom'. */
+  id?: string;
+  /** The sort the shelves stand in and the player's own arrangement ('custom'); the sort is `sort` alone without it. */
+  arrangement?: ShelfArrangement;
+  /** The boxes, shared with the flat's other shelvings so a game passing from one to the next keeps its box; its own by default. */
+  pool?: BoxPool;
+  /**
+   * In the player's arrangement, the rows are counted for these games (the whole shelved collection) rather than
+   * this shelving's own: every shelving keeps its rows, so no arranged row vanishes when a tall box comes to one.
+   */
+  rowsFrom?: GameSource;
 }
 
 /** How many bookcases `options` has room for (its `layout`'s slots, or the collection room's run along its walls). */
@@ -69,18 +86,26 @@ const DEFAULT_SPEC: Omit<BookcaseSpec, 'width' | 'rows'> = {
   headroom: 0.04,
 };
 
+/** A game's box size, without a box: the plan decides what fits before any box is made. */
+const dimensionsOf = (game: Game) => boxDimensionsOf(game);
+
 /**
  * Owns every bookcase in the room. Sizes the shelving to the collection (as many bookcases as
- * the rows need, along the back wall then the right wall), sorts the boxes, and rebuilds when
- * the GameSource changes — reusing the GameBox of every game that is still there so its art
- * is not fetched twice. What does not fit goes to `overflow`, which another Shelving (elsewhere in
- * the flat) can display.
+ * the rows need, along the back wall then the right wall), sorts the boxes (or lays them out as the
+ * player arranged them, the 'custom' sort), and rebuilds when the GameSource changes. The boxes come
+ * from a `BoxPool` shared with the flat's other shelvings, made only for the games that get a spot:
+ * what does not fit goes to `overflow`, which another Shelving (elsewhere in the flat) can display.
+ * When the bookcases come out the same (a new sort, a box moved by the player), they stay and the
+ * boxes slide to their new spots.
  */
 export class Shelving {
   private mode: SortMode;
+  readonly id: string;
   private readonly slots: readonly Slot[];
   private readonly spec: Omit<BookcaseSpec, 'rows'>;
-  private readonly boxById = new Map<string, GameBox>();
+  private readonly pool: BoxPool;
+  /** The boxes this shelving shows, by game id. */
+  private readonly shown = new Map<string, GameBox>();
   /** Boxes currently on a shelf, in shelf order. */
   private ordered: GameBox[] = [];
   private shelves: Shelf[] = [];
@@ -88,15 +113,18 @@ export class Shelving {
   /** One ceiling spot per slot, created on first use and kept across rebuilds so its switch state survives. */
   private readonly lampBySlot = new Map<number, ShelfLamp>();
   private placedLamps: ShelfLamp[] = [];
-  /** The Group the Inspector will return each box to (its shelf, or an emptied "ghost" of it). */
-  private readonly homeOf = new Map<GameBox, Shelf>();
-  private ghosts: Shelf[] = [];
   private readonly unsubscribe: () => void;
   private minBookcases: number;
   private capacity: number;
   private readonly lamps: boolean;
   private readonly starterCard: ShelvingOptions['starterCard'];
-  /** What the last full rebuild laid out: its games in shelf order, the settings, the ids that did not fit. */
+  private readonly arrangement: ShelfArrangement | null;
+  private readonly rowsFrom: GameSource | null;
+  /** Someone downstream shows the overflow: a box the player put on another shelving is left over here, for it. */
+  private readonly passesOn: boolean;
+  /** Bumped by `arranged()`: the player's arrangement changed, a 'custom' layout is stale. */
+  private revision = 0;
+  /** What the last layout laid out: its games in input order, the settings, the ids that did not fit. */
   private laidOut: { games: readonly Game[]; settings: string; leftover: ReadonlySet<string> } | null = null;
   /** The games that did not fit, in shelf order; another Shelving can take them as its source. */
   readonly overflow: GameList;
@@ -105,14 +133,19 @@ export class Shelving {
 
   constructor(
     private readonly host: ShelvingHost,
-    private readonly covers: BoxArtLoader,
+    covers: BoxArtLoader,
     private readonly source: GameSource,
     options: ShelvingOptions,
   ) {
-    this.mode = options.sort ?? 'platform';
+    this.id = options.id ?? 'shelving';
+    this.arrangement = options.arrangement ?? null;
+    this.rowsFrom = options.rowsFrom ?? null;
+    this.mode = this.arrangement?.mode ?? options.sort ?? 'platform';
+    this.pool = options.pool ?? new BoxPool(covers);
     this.minBookcases = options.minBookcases ?? 0;
     this.lamps = options.lamps ?? true;
     this.starterCard = options.starterCard;
+    this.passesOn = options.overflow !== undefined;
     this.overflow = options.overflow ?? new GameList();
     this.ceiling = options.room.height;
     const partial = { ...DEFAULT_SPEC, ...options.bookcase };
@@ -139,8 +172,12 @@ export class Shelving {
   }
 
   findBox(gameId: string): GameBox | undefined {
-    const box = this.boxById.get(gameId);
-    return box && this.ordered.includes(box) ? box : undefined;
+    return this.shown.get(gameId);
+  }
+
+  /** The game ids as they stand: bookcase by bookcase, row by row, left to right (a box in hand counts on its row). */
+  rows(): ShelvingRows {
+    return this.shelves.map((shelf) => shelf.rowIds());
   }
 
   setSort(mode: SortMode): void {
@@ -163,13 +200,18 @@ export class Shelving {
     this.mode = mode;
   }
 
+  /** The player's arrangement changed (a box moved by hand): the next rebuild lays it out again. */
+  arranged(): void {
+    this.revision++;
+  }
+
   /** The sort the boxes stand in now (null before the first layout). */
   get sortShown(): SortMode | null {
     return this.laidOut ? (this.laidOut.settings.slice(0, this.laidOut.settings.indexOf('|')) as SortMode) : null;
   }
 
   cycleSort(): SortMode {
-    this.setSort(nextSortMode(this.mode));
+    this.setSort(nextSortMode(this.mode, this.arrangement?.exists ?? false));
     return this.mode;
   }
 
@@ -178,130 +220,136 @@ export class Shelving {
     this.unsubscribe();
     const shown = this.ordered;
     this.tearDown();
-    for (const box of this.boxById.values()) this.disposeBox(box);
-    this.boxById.clear();
+    // `tearDown` took the boxes off these shelves; one standing on another shelving's now stays there.
+    for (const id of this.shown.keys()) this.pool.letGo(this, id);
+    this.shown.clear();
     this.ordered = [];
-    for (const ghost of this.ghosts) this.host.scene.remove(ghost);
-    this.ghosts = [];
     this.host.remove(this.motion);
     this.host.boxesChanged([], shown);
   }
 
   rebuild(): void {
     const games = dedupe(sortGames(this.source.games, this.mode));
-    const settings = `${this.mode}|${this.capacity}|${this.minBookcases}`;
+    const settings = `${this.mode}|${this.capacity}|${this.minBookcases}|${this.mode === 'custom' ? this.revision : ''}`;
     // Most changes (a status, another room's list) leave the same games in the same order: restyle, do not rebuild.
     if (this.laidOut && this.laidOut.settings === settings && sameLayout(this.laidOut.games, games)) {
       this.restyle(games, this.laidOut.leftover);
       return;
     }
-    // Only the order changed (a new sort) and the bookcases would come out the same: the boxes slide.
-    if (this.reorder(games, settings)) return;
 
+    const plan = this.plan(games);
     const previouslyShown = new Set(this.ordered);
-    const dropped = this.reconcile(games);
-    this.tearDown();
-    for (const box of dropped) this.disposeBox(box);
+    const placed = plan.bookcases.flatMap((b) => b.rows.flatMap((r) => r.items));
+    const boxes = this.takeBoxes(placed);
+    const boxOf = (game: Game): GameBox => boxes.get(game.id)!;
+    // The bookcases come out as they stand: they stay, and the boxes slide to their new spots.
+    const inPlace = this.laidOut !== null && plan.bookcases.length === this.shelves.length && plan.bookcases.every((planned, i) => sameNumbers(planned.rowHeights, this.shelves[i]!.options.rowHeights));
 
-    const boxes = games.map((g) => this.boxById.get(g.id)!);
-    const spec: BookcaseSpec = { ...this.spec, height: this.spec.height - PLINTH, rows: this.rowsFor(boxes) };
-    const plan = planShelving<GameBox>({
-      items: boxes,
-      dimensions: (box) => box.dimensions,
-      groupKey: (box) => rowGroupKey(box.game, this.mode),
-      spec,
-      maxBookcases: this.capacity,
-      minBookcases: this.minBookcases,
-    });
-
-    plan.bookcases.forEach((planned, i) => {
-      const slot = this.slots[i];
-      const shelf = this.host.place(
-        new Shelf({ width: spec.width, depth: spec.depth, rowHeights: planned.rowHeights, gap: spec.gap, boardThickness: spec.boardThickness }, this.motion),
-        slot.position,
-        slot.rotationY,
-      );
-      this.shelves.push(shelf);
-      planned.rows.forEach((row, r) => {
-        shelf.placeRow(r, row.items);
-        for (const box of row.items) {
-          if (box.parent === shelf) this.homeOf.set(box, shelf);
-          else this.followGhost(box, shelf); // carried by the player: its return target moves with it
-        }
+    if (inPlace) {
+      const mine = new Set<THREE.Object3D>(this.shelves);
+      const order = new Map(placed.map((game, i) => [game.id, i]));
+      const last = Math.max(1, placed.length - 1);
+      // Only a box standing on one of these bookcases slides; one arriving from elsewhere (another room's shelves) appears.
+      const slide = (box: GameBox): number | null => (box.parent && mine.has(box.parent) ? (order.get(box.game.id)! / last) * SORT_STAGGER : null);
+      plan.bookcases.forEach((planned, i) => this.fillShelf(this.shelves[i]!, planned.rows.map((row) => row.items.map(boxOf)), slide));
+      for (const shelf of this.shelves) shelf.updateShadowProxy(); // the proxy stands at the new rest poses
+    } else {
+      this.tearDown();
+      const spec = this.bookcaseSpec(games);
+      plan.bookcases.forEach((planned, i) => {
+        const slot = this.slots[i]!;
+        const shelf = this.host.place(
+          new Shelf({ width: spec.width, depth: spec.depth, rowHeights: planned.rowHeights, gap: spec.gap, boardThickness: spec.boardThickness }, this.motion),
+          slot.position,
+          slot.rotationY,
+        );
+        this.shelves.push(shelf);
+        this.fillShelf(shelf, planned.rows.map((row) => row.items.map(boxOf)));
       });
-    });
-    // A spot hangs from the ceiling `SPOT_THROW` m in front of every slot, looking back at it (local -z):
-    // lit over a bookcase, parked over an empty slot, so the scene's light count never follows the
-    // collection (a light added or removed recompiles every shader).
-    if (this.lamps) {
-      this.slots.forEach((slot, i) => {
-        const lamp = this.lampFor(i);
-        lamp.setParked(i >= plan.bookcases.length);
-        this.placedLamps.push(this.host.place(lamp, slot.position.clone().addScaledVector(slot.facing, SPOT_THROW).setY(this.ceiling), slot.rotationY));
-      });
-    }
-    for (const box of plan.leftover) {
-      box.removeFromParent();
-      this.homeOf.delete(box);
+      // A spot hangs from the ceiling `SPOT_THROW` m in front of every slot, looking back at it (local -z):
+      // lit over a bookcase, parked over an empty slot, so the scene's light count never follows the
+      // collection (a light added or removed recompiles every shader).
+      if (this.lamps) {
+        this.slots.forEach((slot, i) => {
+          const lamp = this.lampFor(i);
+          lamp.setParked(i >= plan.bookcases.length);
+          this.placedLamps.push(this.host.place(lamp, slot.position.clone().addScaledVector(slot.facing, SPOT_THROW).setY(this.ceiling), slot.rotationY));
+        });
+      }
     }
 
-    this.ordered = plan.bookcases.flatMap((b) => b.rows.flatMap((r) => r.items));
+    this.ordered = placed.map(boxOf);
     this.placeStarterCard();
     // Status comes from the fresh Game object: a reused box still holds the one it was built with.
-    games.forEach((game, i) => boxes[i]!.setStatusStyle(game.status));
+    for (const game of placed) boxOf(game).setStatusStyle(game.status);
 
     const shown = new Set(this.ordered);
     const added = this.ordered.filter((b) => !previouslyShown.has(b));
-    const removed = [...previouslyShown].filter((b) => !shown.has(b));
-    this.host.boxesChanged(added, removed);
+    const gone = [...previouslyShown].filter((b) => !shown.has(b));
+    this.host.boxesChanged(added, gone.filter((b) => !this.pool.isHeld(b)), gone.filter((b) => this.pool.isHeld(b)));
     // Last, once this shelving is consistent: whoever shows the overflow rebuilds on this.
-    const leftover = new Set(plan.leftover.map((box) => box.game.id));
+    const leftover = new Set(plan.leftover.map((game) => game.id));
     this.laidOut = { games, settings, leftover };
     this.overflow.set(games.filter((g) => leftover.has(g.id)));
   }
 
-  /**
-   * A re-sort that leaves every bookcase as it stands (the same games, the same count of bookcases
-   * with the same rows, the same games left over, none in the player's hand): the shelves stay,
-   * each box slides from where it stood to its new spot, one after another. False when it would
-   * not (the caller rebuilds everything).
-   */
-  private reorder(games: readonly Game[], settings: string): boolean {
-    const before = this.laidOut;
-    if (!before || withoutMode(before.settings) !== withoutMode(settings) || !sameGames(before.games, games)) return false;
-    const boxes = games.map((g) => this.boxById.get(g.id));
-    if (boxes.some((box) => !box || (box.parent !== null && !(box.parent instanceof Shelf)))) return false;
-    const all = boxes as GameBox[];
-    const spec: BookcaseSpec = { ...this.spec, height: this.spec.height - PLINTH, rows: this.rowsFor(all) };
-    const plan = planShelving<GameBox>({
-      items: all,
-      dimensions: (box) => box.dimensions,
-      groupKey: (box) => rowGroupKey(box.game, this.mode),
+  /** Where every game goes: sorted and flowed, or as the player arranged them. */
+  private plan(games: readonly Game[]): ShelvingPlan<Game> {
+    const spec = this.bookcaseSpec(games);
+    if (this.mode === 'custom' && this.arrangement) {
+      const arrangement = this.arrangement;
+      return planArranged<Game>({
+        items: games,
+        id: (game) => game.id,
+        dimensions: dimensionsOf,
+        arranged: arrangement.rowsOf(this.id),
+        elsewhere: (id) => {
+          if (!this.passesOn) return false;
+          const where = arrangement.shelvingOf(id);
+          return where !== null && where !== this.id;
+        },
+        spec,
+        maxBookcases: this.capacity,
+        minBookcases: this.minBookcases,
+      });
+    }
+    return planShelving<Game>({
+      items: games,
+      dimensions: dimensionsOf,
+      groupKey: (game) => rowGroupKey(game, this.mode),
       spec,
       maxBookcases: this.capacity,
       minBookcases: this.minBookcases,
     });
-    if (plan.bookcases.length !== this.shelves.length) return false;
-    if (!plan.bookcases.every((planned, i) => sameNumbers(planned.rowHeights, this.shelves[i]!.options.rowHeights))) return false;
-    const leftover = new Set(plan.leftover.map((box) => box.game.id));
-    if (leftover.size !== before.leftover.size || [...leftover].some((id) => !before.leftover.has(id))) return false;
+  }
 
-    const ordered = plan.bookcases.flatMap((b) => b.rows.flatMap((r) => r.items));
-    const order = new Map(ordered.map((box, i) => [box, i]));
-    const last = Math.max(1, ordered.length - 1);
-    plan.bookcases.forEach((planned, i) => {
-      const shelf = this.shelves[i]!;
-      planned.rows.forEach((row, r) => {
-        shelf.placeRow(r, row.items, (box) => (order.get(box)! / last) * SORT_STAGGER);
-        for (const box of row.items) this.homeOf.set(box, shelf);
-      });
-      shelf.updateShadowProxy(); // the proxy stands at the new rest poses
-    });
-    this.ordered = ordered;
-    games.forEach((game, i) => all[i]!.setStatusStyle(game.status));
-    this.laidOut = { games, settings, leftover };
-    this.overflow.set(games.filter((g) => leftover.has(g.id)));
-    return true;
+  private bookcaseSpec(games: readonly Game[]): BookcaseSpec {
+    const counted = this.mode === 'custom' && this.rowsFrom ? this.rowsFrom.games : games;
+    return { ...this.spec, height: this.spec.height - PLINTH, rows: this.rowsFor(counted) };
+  }
+
+  /**
+   * The boxes of `placed` (taken from the pool: the one there is, or a new one when the game's art-relevant data
+   * changed); the pool is told of the games this shelving no longer shows.
+   */
+  private takeBoxes(placed: readonly Game[]): Map<string, GameBox> {
+    const boxes = new Map<string, GameBox>();
+    for (const game of placed) boxes.set(game.id, this.pool.take(this, game));
+    for (const [id, box] of this.shown) {
+      // Still shown (the pool replaced and disposed the old box if the game's art-relevant data changed).
+      if (boxes.has(id)) continue;
+      // Off these shelves only: the next shelving may have taken it already (a box the player moved there).
+      if (box.parent instanceof Shelf && this.shelves.includes(box.parent)) box.removeFromParent();
+      this.pool.letGo(this, id);
+    }
+    this.shown.clear();
+    for (const [id, box] of boxes) this.shown.set(id, box);
+    return boxes;
+  }
+
+  /** Lays every row of `shelf` (the rows `rows` leaves out stand empty). */
+  private fillShelf(shelf: Shelf, rows: readonly (readonly GameBox[])[], slide?: (box: GameBox) => number | null): void {
+    for (let r = 0; r < shelf.rowCount; r++) shelf.placeRow(r, rows[r] ?? [], slide);
   }
 
   /** The starter card on the first bookcase's top row, right of its few boxes, while there are few enough of them. */
@@ -315,50 +363,20 @@ export class Shelving {
 
   /** Same games in the same order as the last rebuild: only their status (the ghost, the lent tag) can have changed. */
   private restyle(games: readonly Game[], leftover: ReadonlySet<string>): void {
-    for (const game of games) this.boxById.get(game.id)?.setStatusStyle(game.status);
-    for (const shelf of [...this.shelves, ...this.ghosts]) shelf.updateShadowProxy(); // a ghost casts no shadow
+    for (const game of games) this.shown.get(game.id)?.setStatusStyle(game.status);
+    for (const shelf of this.shelves) shelf.updateShadowProxy(); // a ghost casts no shadow
     this.laidOut = { ...this.laidOut!, games };
     this.overflow.set(games.filter((g) => leftover.has(g.id)));
   }
 
-  /**
-   * Makes sure a GameBox exists for every game, reusing the current one unless art-relevant
-   * data changed. Returns the boxes that are no longer wanted (caller disposes them).
-   */
-  private reconcile(games: readonly Game[]): GameBox[] {
-    const dropped: GameBox[] = [];
-    const keep = new Set<string>();
-    for (const game of games) {
-      keep.add(game.id);
-      const previous = this.boxById.get(game.id);
-      if (previous && sameExceptStatus(previous.game, game)) continue;
-      if (previous) dropped.push(previous);
-      this.boxById.set(game.id, new GameBox(game, this.covers));
-    }
-    for (const [id, box] of this.boxById) {
-      if (keep.has(id)) continue;
-      dropped.push(box);
-      this.boxById.delete(id);
-    }
-    return dropped;
-  }
-
-  /** Removes shelves and their lights, leaving boxes parentless (or in the player's hand). */
+  /** Removes shelves and their lights, leaving boxes parentless (or in the player's hand, the shelf they belong on gone). */
   private tearDown(): void {
-    const carriedHomes = new Set<Shelf>();
-    for (const box of this.boxById.values()) {
-      if (!box.parent || box.parent instanceof Shelf) continue;
-      const home = this.homeOf.get(box);
-      if (home) carriedHomes.add(home);
-    }
-    for (const shelf of [...this.shelves, ...this.ghosts]) {
+    for (const shelf of this.shelves) {
       for (const child of [...shelf.children]) if (child instanceof GameBox) shelf.remove(child);
       this.host.remove(shelf);
       shelf.dispose();
-      if (carriedHomes.has(shelf)) this.host.scene.add(shelf); // invisible, only a return target now
     }
     this.shelves = [];
-    this.ghosts = [...carriedHomes];
     for (const lamp of this.placedLamps) this.host.remove(lamp);
     this.placedLamps = [];
   }
@@ -372,27 +390,9 @@ export class Shelving {
     return lamp;
   }
 
-  /** Moves the carried box's return target (an emptied old shelf) onto the shelf it now belongs to. */
-  private followGhost(box: GameBox, shelf: Shelf): void {
-    const ghost = this.homeOf.get(box);
-    if (!ghost) {
-      this.homeOf.set(box, shelf);
-      return;
-    }
-    ghost.position.copy(shelf.position);
-    ghost.quaternion.copy(shelf.quaternion);
-    ghost.updateMatrixWorld(true);
-  }
-
-  private disposeBox(box: GameBox): void {
-    box.removeFromParent();
-    this.homeOf.delete(box);
-    box.dispose();
-  }
-
-  /** 5 rows when the tallest box of the collection fits in a fifth of the bookcase, else 4. */
-  private rowsFor(boxes: readonly GameBox[]): number {
-    const tallest = boxes.reduce((h, b) => Math.max(h, b.dimensions.height), 0) + this.spec.headroom;
+  /** 5 rows when the tallest box of the games fits in a fifth of the bookcase, else 4. */
+  private rowsFor(games: readonly Game[]): number {
+    const tallest = games.reduce((h, g) => Math.max(h, dimensionsOf(g).height), 0) + this.spec.headroom;
     const { height, boardThickness } = this.spec;
     // The rows share what the plinth leaves of the bookcase's height (`Shelf` stands them on it).
     const clearance = (rows: number) => (height - PLINTH - (rows + 1) * boardThickness) / rows;
@@ -411,39 +411,6 @@ function dedupe(games: Game[]): Game[] {
     seen.add(g.id);
     return true;
   });
-}
-
-/** Everything about a game but its status, as a string; computed once per Game object. */
-const signatures = new WeakMap<Game, string>();
-const withoutStatus = (key: string, value: unknown) => (key === 'status' ? undefined : value);
-
-function signature(game: Game): string {
-  let sig = signatures.get(game);
-  if (sig === undefined) {
-    sig = JSON.stringify(game, withoutStatus);
-    signatures.set(game, sig);
-  }
-  return sig;
-}
-
-/** A status change alone must not rebuild the box (its textures would be refetched). */
-function sameExceptStatus(a: Game, b: Game): boolean {
-  return a === b || (a.id === b.id && signature(a) === signature(b));
-}
-
-/** The same games (but maybe their status), in any order. */
-function sameGames(a: readonly Game[], b: readonly Game[]): boolean {
-  if (a.length !== b.length) return false;
-  const byId = new Map(a.map((game) => [game.id, game]));
-  return b.every((game) => {
-    const other = byId.get(game.id);
-    return other !== undefined && sameExceptStatus(other, game);
-  });
-}
-
-/** The settings but the sort mode (its first field). */
-function withoutMode(settings: string): string {
-  return settings.slice(settings.indexOf('|'));
 }
 
 function sameNumbers(a: readonly number[], b: readonly number[]): boolean {

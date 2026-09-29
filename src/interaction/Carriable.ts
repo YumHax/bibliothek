@@ -9,6 +9,12 @@ export interface Carriable extends THREE.Object3D {
   /** Where it rests in its parent's space: the Inspector brings it back there. */
   readonly restPosition: THREE.Vector3;
   readonly restQuaternion: THREE.Quaternion;
+  /**
+   * Where it belongs now, when that changed while it was in hand (its shelf rebuilt, the player putting it on
+   * another one): the Inspector brings it back there, `restPosition` being in that object's space. Absent or
+   * null: where it was taken from.
+   */
+  readonly home?: THREE.Object3D | null;
   /** How far out of its row it must slide (m, along its front) before it can fly to the hand clear of the board above. */
   readonly slideOut: number;
   /** Set by the Inspector while it carries the object: called when the object is disposed under it (its shelf rebuilt). */

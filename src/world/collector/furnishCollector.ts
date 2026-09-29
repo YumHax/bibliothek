@@ -1,3 +1,4 @@
+import type * as THREE from 'three';
 import type { BoxArtLoader } from '@/covers/BoxArtLoader';
 import type { GameSource } from '@/collection/GameSource';
 import type { ModalLike } from '@/game/SessionParts';
@@ -21,20 +22,23 @@ export interface CollectorHome {
 
 export interface CollectorCornerOptions {
   covers: BoxArtLoader;
+  /** The sideboard the plaque stands on: it rides it when the player moves it. */
+  sideboard?: THREE.Object3D;
   /** What stands on the shelves at home: only those go in the display cabinet (not the parcel's, not the lent ones). */
   shelved: GameSource;
 }
 
 /**
  * The collector's binder (it opens the book): on the sideboard when there is one, else on the floor where it will
- * stand; `moveToSideboard` puts it up there once the sideboard is bought.
+ * stand; `moveToSideboard` puts it up there once the sideboard is bought. Up there it rides `sideboard` (moved by the player).
  */
-export function placeCollectorsBook(zone: Zone, home: CollectorHome, onSideboard: boolean): { moveToSideboard(): void } {
+export function placeCollectorsBook(zone: Zone, home: CollectorHome, onSideboard: boolean, sideboard?: THREE.Object3D): { moveToSideboard(): void } {
   const plan = ROOM_PLAN.collector;
   const book = new CollectorsBook({ panel: home.book, unclaimed: () => home.milestones.unclaimed });
   const put = (spot: { at: Placement; yaw: number }): void => {
     zone.placeAt(book, spot.at);
     book.rotation.y += spot.yaw;
+    if (spot === plan.book && sideboard) zone.ride(sideboard, book);
   };
   put(onSideboard ? plan.book : plan.bookOnFloor);
   let up = onSideboard;
@@ -60,6 +64,7 @@ export function furnishCollectorCorner(zone: Zone, home: CollectorHome, options:
   const { milestones, watch } = home;
 
   const plaque = zone.placeAt(new BrassPlaque(), plan.plaque);
+  if (options.sideboard) zone.ride(options.sideboard, plaque);
   let engraved = -1;
   const engrave = (): void => {
     const tier = milestones.hasHome('plaque') ? plaqueTier((id) => milestones.has(id)) : 0;

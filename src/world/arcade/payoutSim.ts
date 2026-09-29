@@ -21,8 +21,9 @@ const MAX_SECONDS = 240;
  * fixed step, and reports what a play scores, lasts and pays (`PAYOUT`): a quick way to see which
  * game is the obvious earner after a change of rules or rates. The autopilots play better than
  * people (they read the board), so compare the games with each other, not with a person's plays
- * (`?payout` shows those). The machines that are not cabinets (pinball, alley, hoops, wheel) are
- * 3D and not simulated here. Console: `bibliothek.simulatePayouts()` (with `?stats`).
+ * (`?payout` shows those; `npm run balance` plays every machine, the physical ones too, as simulated
+ * people, and is what `PAYOUT` is set from). The machines that are not cabinets (pinball, alley,
+ * hoops, wheel) are 3D and not simulated here. Console: `bibliothek.simulatePayouts()` (with `?stats`).
  */
 export function simulatePayouts(options: { runs?: number; skills?: readonly number[] } = {}): SimulatedPayout[] {
   const runs = options.runs ?? 12;

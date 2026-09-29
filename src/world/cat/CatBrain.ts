@@ -1,7 +1,7 @@
 import type * as THREE from 'three';
 import type { Seat } from '../Seat';
 import type { CatBedLike, CatBody, CatClock, CatPlayerView, CatToyLike, CatVoiceLike, FoodBowlLike, ScratcherLike, WaterBowlLike } from './types';
-import type { CatNav } from './CatNav';
+import type { FloorNav } from '../nav/FloorNav';
 import type { CatMotion } from './CatMotion';
 import type { CatPerch, WindowLookout } from './spots';
 import { CatMind } from './CatMind';
@@ -23,7 +23,7 @@ export interface CatScreen {
 export interface CatBrainContext {
   cat: THREE.Object3D;
   body: CatBody;
-  nav: CatNav;
+  nav: FloorNav;
   motion: CatMotion;
   bounds: THREE.Box2;
   player: CatPlayerView;

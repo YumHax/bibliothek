@@ -15,6 +15,7 @@ import type { CatSettingsStore } from './catSettings';
 import type { CatClock, CatPlayerView, WaterBowlLike } from './types';
 import type { CatPerch } from './spots';
 import type { Placer } from '../build/owned';
+import type { Furnishings } from '@/furnishing/Furnishings';
 
 export { Cat } from './Cat';
 export { CatModel } from './CatModel';
@@ -42,6 +43,8 @@ export interface CatFurnishOptions {
    * ball once bought. The zone itself (everything at once) without.
    */
   placers?: { cat: Placer; scratcher: Placer; toy: Placer };
+  /** Its bowls, its bed and the scratching post may be moved by the player once bought (M). */
+  furnishings?: Furnishings;
   /** The ears (the camera) and the walls in between (`SoundOcclusion`): the cat's voice is placed and muffled by them. */
   listener?: THREE.Object3D;
   acoustics?: { wallsBetween(listener: THREE.Vector3, source: THREE.Vector3): number };
@@ -68,6 +71,11 @@ export function furnishCat(zone: Zone, options: CatFurnishOptions): Cat {
   const bed = home.place(new CatBed(), new THREE.Vector3(left + 0.45, 0, back + 1.15));
   // Scratching post against the front wall, the cat works it from the room side.
   const scratcher = post.place(new Scratcher(), new THREE.Vector3(left + 1.4, 0, front - 0.45), Math.PI);
+  const furnishings = options.furnishings;
+  furnishings?.register(zone, bowl, { key: 'catFood', owned: 'cat', name: 'Food bowl' });
+  furnishings?.register(zone, water, { key: 'catWater', owned: 'cat', name: 'Water bowl' });
+  furnishings?.register(zone, bed, { key: 'catBed', owned: 'cat', name: 'Cat bed' });
+  furnishings?.register(zone, scratcher, { key: 'scratcher', owned: 'scratcher' });
   // A ball left on the rug in front of the TV.
   const toy = ball.place(
     new CatToy({ bounds: zone.floorBounds, collisions: zone.collisions }),

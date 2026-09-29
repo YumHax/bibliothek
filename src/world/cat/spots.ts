@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import type { Seat } from '../Seat';
 import type { CatBedLike } from './types';
-import type { CatNav } from './CatNav';
+import type { FloorNav } from '../nav/FloorNav';
 
 /**
  * What the cat needs from a window (`RoomWindow` fits structurally): where to sit to look out,
@@ -53,7 +53,7 @@ export function isElevated(spot: RestingSpot): boolean {
 }
 
 export interface RestingSpotSources {
-  nav: CatNav;
+  nav: FloorNav;
   bounds: THREE.Box2;
   seats: readonly Seat[];
   /** The armchair the player sits in, never offered. */

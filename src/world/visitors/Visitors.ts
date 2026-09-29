@@ -31,6 +31,7 @@ import { borrowPick, fill, lookPick, shelfComment, tasteScore, yearOf, type Line
 import { Visit, type DoorLike, type HeldBox, type RouteSeat, type VisitRoute, type VisitScript } from './Visit';
 import { VisitBook, type Loan, type PlannedVisit } from './VisitBook';
 import { HOUSEHOLD } from '@/household/rules';
+import { FloorNav, PERSON_WALKER } from '../nav/FloorNav';
 
 /** Seconds (the visit's clock) between a friend's hello and their word on the cake, so the two bubbles do not collide. */
 const CAKE_LINE_DELAY = 3;
@@ -125,6 +126,10 @@ const tmp = new THREE.Vector3();
 const probe = new THREE.Vector3();
 /** The straight-way probe: a body-wide sphere (m) at these heights over the floor, every `step` m. */
 const WALK_PROBE = { radius: 0.2, heights: [0.35, 1.0], step: 0.12 };
+/** An armchair further than this (m) from where it stood when the round was made has been moved: its plan route is dropped. */
+const SEAT_MOVED = 0.05;
+/** The detour grid is probed again at most this often (ms): the furniture moves only by the player's hand. */
+const NAV_FRESH_MS = 1000;
 /**
  * Friends who drop by: decides the day and the hour (`VisitBook`), rings the bell with a friend
  * waiting on the landing, tells the front door who is there (a `DoorCaller`, chained behind the
@@ -143,6 +148,9 @@ export class Visitors extends Prop implements Updatable, ActivityAware, DoorCall
   private readonly panel: BorrowPanel;
   private readonly doorPoint: THREE.Vector3;
   private visit: Visit | null = null;
+  /** The collection room's floor as a friend walks it round the furniture (`detour`), made on first need. */
+  private nav: FloorNav | null = null;
+  private navAt = -Infinity;
   private ringing = { since: -1, rings: 0 };
   private askedAt = -1;
   private awayFor = 0;
@@ -297,6 +305,7 @@ export class Visitors extends Prop implements Updatable, ActivityAware, DoorCall
       linger: () => (this.caked ? HOUSEHOLD.cake.linger : 1),
       watch: options.watch,
       clear: acoustics ? (a, b) => acoustics.wallsBetween(a, b) === 0 && this.walkable(a, b) : undefined,
+      detour: acoustics && options.collisions ? (a, b) => this.detour(a, b) : undefined,
     });
     this.visit.start();
   }
@@ -673,19 +682,54 @@ export class Visitors extends Prop implements Updatable, ActivityAware, DoorCall
     return shelfComment(plan, this.options.shelved.games, random, { viewsOf: this.options.viewsOf, focus, pick: this.picker });
   }
 
+  /**
+   * A way round the furniture between two floor points of the collection room (zone-local), for a friend's round
+   * after the player moved a piece onto it: the grid's legs to `to` (or the nearest free spot); null outside the room
+   * or when no way is found (they walk straight, stopping at what is in the way).
+   */
+  private detour(a: THREE.Vector3, b: THREE.Vector3): THREE.Vector3[] | null {
+    const { living, collisions } = this.options;
+    if (!collisions) return null;
+    const floor = living.floorBounds;
+    const from = living.toWorld(a.clone().setY(0));
+    const to = living.toWorld(b.clone().setY(0));
+    if (!floor.containsPoint(new THREE.Vector2(from.x, from.z)) || !floor.containsPoint(new THREE.Vector2(to.x, to.z))) return null;
+    this.nav ??= new FloorNav(collisions, floor, undefined, PERSON_WALKER);
+    const now = performance.now();
+    if (now - this.navAt > NAV_FRESH_MS) {
+      this.nav.invalidate();
+      this.navAt = now;
+    }
+    return this.nav.planPath(from, to)?.map((point) => living.toLocal(point.clone()).setY(0)) ?? null;
+  }
+
+  /**
+   * An armchair on the round, read live from the armchair (the player may move it): where they stand before sitting,
+   * where and which way they sit. The plan's way there (`via`) holds while it stands where it stood; moved, the
+   * detours find the way.
+   */
   private routeSeat(seat: VisitorSeat, via: THREE.Vector3[]): RouteSeat {
     const { living, viewer, cat, standing } = this.options;
-    const forward = seat.getWorldDirection(new THREE.Vector3());
-    const at = living.toLocal(seat.localToWorld(new THREE.Vector3(0, 0, -0.02))).setY(0);
-    const approach = living.toLocal(seat.approachPoint(new THREE.Vector3())).setY(0);
-    const world = seat.localToWorld(new THREE.Vector3());
+    const placed = seat.localToWorld(new THREE.Vector3());
+    const world = new THREE.Vector3();
+    const forward = new THREE.Vector3();
     return {
-      via,
-      approach,
-      at,
-      yaw: Math.atan2(forward.x, forward.z),
+      get via() {
+        return seat.localToWorld(world.set(0, 0, 0)).distanceTo(placed) > SEAT_MOVED ? [] : via;
+      },
+      get approach() {
+        return living.toLocal(seat.approachPoint(new THREE.Vector3())).setY(0);
+      },
+      get at() {
+        return living.toLocal(seat.localToWorld(new THREE.Vector3(0, 0, -0.02))).setY(0);
+      },
+      get yaw() {
+        seat.getWorldDirection(forward);
+        return Math.atan2(forward.x, forward.z);
+      },
       height: seat.sittingHeight,
       free: () => {
+        seat.localToWorld(world.set(0, 0, 0));
         if (standing && !standing.includes(seat)) return false;
         viewer.getWorldPosition(eye);
         const catAt = cat?.()?.at;

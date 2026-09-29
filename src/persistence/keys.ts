@@ -69,6 +69,10 @@ export const KEYS = {
   post: save('post.v1'),
   neighbourTrades: save('neighbourTrades.v1'),
   household: save('household.v1'),
+  /** The sort the shelves stand in and the player's own arrangement of the boxes (`world/shelving/arrangement`). */
+  shelves: save('shelves.v1'),
+  /** Where the player moved the flat's furniture (`furnishing/FurnitureLayout`). */
+  furniture: save('furniture.v1'),
   // Caches.
   longplayCache: `${CACHE_PREFIX}longplay.v1`,
   fameCache: `${CACHE_PREFIX}fame.v1`,

@@ -25,7 +25,7 @@ const PORTAL_HALF_DEPTH = 0.15;
  * painted view on a surround, the sun, the sky's ambient while the player is out). No `Room`: the
  * handle says how lit it is instead.
  */
-export function furnishBalcony(zone: Zone, { sky, home: { upgrades } }: BuildContext): ZoneHandle {
+export function furnishBalcony(zone: Zone, { sky, home: { upgrades, furnishings } }: BuildContext): ZoneHandle {
   const { width, depth } = plan.room;
   const doorway = plan.room.doorways![0];
   zone.place(new BalconySlab({ width, depth, thickness: plan.slab.thickness, lip: plan.slab.lip, railHeight: plan.railing.height, barSpacing: plan.railing.barSpacing }), new THREE.Vector3());
@@ -52,11 +52,13 @@ export function furnishBalcony(zone: Zone, { sky, home: { upgrades } }: BuildCon
   );
   zone.onUnload(sky.dayNight.onChange((state) => front.apply(state)));
 
-  placerFor(zone, upgrades, plan.bistro.upgrade).place(new BistroSet(), new THREE.Vector3(plan.bistro.floor[0], 0, plan.bistro.floor[1]));
-  placeDecor(zone, plan.decor, upgrades);
+  const bistro = placerFor(zone, upgrades, plan.bistro.upgrade).place(new BistroSet(), new THREE.Vector3(plan.bistro.floor[0], 0, plan.bistro.floor[1]));
+  furnishings?.register(zone, bistro, { key: 'bistroSet', owned: plan.bistro.upgrade });
+  placeDecor(zone, plan.decor, upgrades, furnishings);
   // The florist's potted plants, as many as have been bought (they stand clear of the way: no colliders).
   if (upgrades) {
     const pots = plan.boughtPlants.map((spot) => zone.place(new Plant({ kind: spot.kind, pot: spot.pot, seed: spot.seed, scale: 'scale' in spot ? spot.scale : 1, collides: false }), new THREE.Vector3(spot.floor[0], 0, spot.floor[1])));
+    pots.forEach((pot, nth) => furnishings?.register(zone, pot, { key: `plant#${nth}`, owned: { good: 'plant', nth } }));
     followUpgrades(zone, upgrades, () => pots.forEach((pot, i) => (pot.visible = i < upgrades.count('plant'))));
   }
   // Out here the plants sway in the weather's wind, not a room's draught.

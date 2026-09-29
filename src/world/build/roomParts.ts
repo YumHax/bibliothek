@@ -44,8 +44,8 @@ export function placeClock(zone: Zone, { sky, ...hearing }: Pick<BuildContext, '
  * Places a room's `decor` list (the entries marked `upgrade` once bought, from `ctx.home.upgrades`) and gives its
  * radiators their ticking; returns the radiators (the cat naps by them).
  */
-export function furnishDecor(zone: Zone, ctx: Hearing & { home?: Pick<BuildContext['home'], 'upgrades'> }, decor: readonly DecorEntry[]): Radiator[] {
-  return tickRadiators(zone, placeDecor(zone, decor, ctx.home?.upgrades), heardBy(ctx));
+export function furnishDecor(zone: Zone, ctx: Hearing & { home?: Pick<BuildContext['home'], 'upgrades' | 'furnishings'> }, decor: readonly DecorEntry[]): Radiator[] {
+  return tickRadiators(zone, placeDecor(zone, decor, ctx.home?.upgrades, ctx.home?.furnishings), heardBy(ctx));
 }
 
 /** A spot on a surface for a `StrayBox`: `at` is `[x, z]` on the host's top, `yaw` about its local y. */

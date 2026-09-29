@@ -25,6 +25,11 @@ import { stairwellResidents } from '@/world/stairwell/building';
 import { HomeUpgrades } from '@/economy/HomeUpgrades';
 import { ARCADE_PLAN, TICKET_GAMES } from '@/world/arcade/arcadePlan';
 import { StrayGames } from '@/world/strays/StrayGames';
+import { ShelfArrangement } from '@/world/shelving/arrangement';
+import { BoxPool } from '@/world/shelving/BoxPool';
+import { ROOM_PLAN } from '@/world/roomPlan';
+import { FurnitureLayout } from '@/furnishing/FurnitureLayout';
+import { Furnishings } from '@/furnishing/Furnishings';
 import { Sky } from '@/world/Sky';
 import { HEAVY_RAIN } from '@/world/weather/Weather';
 import { KITCHEN_WING, SUN_ROTATION_Y } from '@/world/worldPlan';
@@ -74,6 +79,10 @@ export function createServices(container: HTMLElement) {
   const upgrades = new HomeUpgrades(undefined, undefined, { furnished: debug });
   if (collection.isPersisted) upgrades.shelveCollection(collection.games.length);
   const overflow = new GameList();
+  // The sort the shelves stand in (T) and the boxes as the player arranged them by hand, kept across reloads.
+  const arrangement = new ShelfArrangement(undefined, undefined, ROOM_PLAN.shelving.sort);
+  // The furniture bought for the flat, where the player moved it (M): each builder registers what it places.
+  const furnishings = new Furnishings(new FurnitureLayout(), upgrades);
   const wallet = new Wallet(STARTING_COINS);
   // The arcade: its hall of fame, the day's challenge and change machine, the prizes taken home.
   const scores = new ArcadeScores();
@@ -145,7 +154,7 @@ export function createServices(container: HTMLElement) {
 
   return {
     container, params, debug, engine, input, settings, cssLayer,
-    collection, deliveries, strays, upgrades, overflow, wallet,
+    collection, deliveries, strays, upgrades, overflow, arrangement, boxPool: new BoxPool(covers), furnishings, wallet,
     scores, arcadeDaily, prizes, medals, league, payoutStats, arcadeScreen,
     index, fame, coverUrl, covers, videos,
     sky, today, marketDay, ledger, standing, market, tx, catSettings,

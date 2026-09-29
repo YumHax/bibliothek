@@ -14,6 +14,19 @@ const CARD_W = 0.13;
 const CARD_H = 0.075;
 const CARD_LEAN = 0.22;
 
+/** Where a box would go on a bookcase (`Shelf.spotAt`). */
+export interface ShelfSpot {
+  row: number;
+  /** Among the row's boxes, the box in hand left out. */
+  index: number;
+  /** Whether the row has room for the box. */
+  fits: boolean;
+  /** The gap it would go into: its foot, at the front of the row (local to the bookcase). */
+  gap: THREE.Vector3;
+  /** The box's height. */
+  height: number;
+}
+
 export interface ShelfOptions {
   width: number;
   depth: number;
@@ -76,6 +89,8 @@ export class Shelf extends THREE.Group {
   private proxyQueued = false;
   private readonly proxyMatrix = new THREE.Matrix4();
   private readonly proxyScale = new THREE.Vector3();
+  /** The boxes of each row as last laid out (`placeRow`), top row first. */
+  private readonly rowBoxes: GameBox[][] = [];
   /** The card standing on a board, if any (`setCard`). */
   private card: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshStandardMaterial> | null = null;
 
@@ -125,15 +140,17 @@ export class Shelf extends THREE.Group {
 
   /**
    * Lays `boxes` left-to-right on row `row` (0 = top). A box that is currently away from any
-   * shelf (carried by the player) only gets its rest pose updated, so the Inspector can bring
-   * it back to the right spot without this method yanking it out of the player's hand.
-   * `slide`, when given, eases each box from where it stands now (on this shelf or another) to
-   * its new spot, after the delay it returns for that box (a sort, staggered); else they jump.
+   * shelf (carried by the player) only gets its rest pose updated, and this shelf as its `home`, so
+   * the Inspector brings it back to the right spot without this method yanking it out of the hand.
+   * `slide`, when given, eases each box it returns a delay for from where it stands now (on this shelf
+   * or another) to its new spot, after that delay (a sort, staggered); a box it returns null for, or
+   * every box without it, jumps there.
    */
-  placeRow(row: number, boxes: readonly GameBox[], slide?: (box: GameBox) => number): void {
+  placeRow(row: number, boxes: readonly GameBox[], slide?: (box: GameBox) => number | null): void {
     const { width, depth, gap, boardThickness } = this.options;
     const top = this.boardTops[row];
     if (top === undefined) throw new Error(`[shelf] row ${row} does not exist`);
+    this.rowBoxes[row] = [...boxes];
 
     const inner = width / 2 - boardThickness;
     let cursorX = -inner;
@@ -149,17 +166,50 @@ export class Shelf extends THREE.Group {
       box.slideOut = depth / 2 - (z + bd / 2) + EDGE_CLEAR;
       box.restPosition.set(x, top + bh / 2 - this.sagAt(row, x), z);
       box.restQuaternion.setFromEuler(new THREE.Euler(0, yaw, 0));
+      box.home = this;
       if (!carried) {
-        if (slide && box.parent && box.parent !== this) this.attach(box); // keeps where it stands, in this shelf's frame
+        // Already standing on its (new) spot here: nothing to slide (a box moved by hand shifts only its neighbours).
+        const unmoved = box.parent === this && box.position.distanceToSquared(box.restPosition) < 1e-10;
+        const delay = unmoved ? null : (slide?.(box) ?? null);
+        if (delay !== null && box.parent && box.parent !== this) this.attach(box); // keeps where it stands, in this shelf's frame
         else if (box.parent !== this) this.add(box);
-        if (slide) box.slideToRest(slide(box));
+        if (delay !== null) box.slideToRest(delay);
         else {
+          box.stopSettling();
           box.position.copy(box.restPosition);
           box.quaternion.copy(box.restQuaternion);
         }
       }
       cursorX += bw + gap;
     });
+  }
+
+  /** The game ids on each row, top row first, left to right (the boxes in hand included: this is still their row). */
+  rowIds(): string[][] {
+    return Array.from({ length: this.rowCount }, (_, r) => (this.rowBoxes[r] ?? []).map((box) => box.game.id));
+  }
+
+  /**
+   * Where `held` would go if put in at local point `at` (a point on this bookcase under the crosshair): the row
+   * whose space holds it, the index among that row's boxes (`held` left out) and the gap's centre (local, on the
+   * front of the row). `fits` is false when the row has no room left for it. Null outside every row.
+   */
+  spotAt(at: THREE.Vector3, held: GameBox): ShelfSpot | null {
+    const { width, depth, gap, boardThickness: t, rowHeights } = this.options;
+    const inner = width / 2 - t;
+    if (Math.abs(at.x) > width / 2 + 0.01) return null;
+    // A board's front edge counts for the row standing on it.
+    const row = this.boardTops.findIndex((top, r) => at.y >= top - t - 0.005 && at.y <= top + rowHeights[r]!);
+    if (row < 0) return null;
+    const boxes = (this.rowBoxes[row] ?? []).filter((box) => box !== held);
+    const index = boxes.filter((box) => box.restPosition.x < at.x).length;
+    const used = boxes.reduce((sum, box) => sum + box.dimensions.width, 0) + boxes.length * gap;
+    const fits = used + held.dimensions.width <= 2 * inner + 1e-6;
+    const before = boxes[index - 1];
+    const after = boxes[index];
+    const x = before ? before.restPosition.x + before.dimensions.width / 2 + gap / 2 : after ? after.restPosition.x - after.dimensions.width / 2 - gap / 2 : -inner + gap / 2;
+    const top = this.boardTops[row]!;
+    return { row, index, fits, gap: new THREE.Vector3(THREE.MathUtils.clamp(x, -inner, inner), top - this.sagAt(row, x), depth / 2 - FRONT_SET + 0.004), height: held.dimensions.height };
   }
 
   /**

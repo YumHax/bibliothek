@@ -56,9 +56,9 @@ interface Ball {
 /**
  * BRICK STORM: thirty seconds, a wide paddle, a wall of big bricks, and balls that multiply: one
  * to start, one more from the paddle every five bricks (up to four), two served after a cleared
- * wall. Bricks hit in quick succession chain the combo (up to x5). Extra balls are free to lose;
- * only the last one costs two seconds before a new one is served. Clock bricks pay two seconds
- * each; clearing the wall pays a bonus and five more seconds. Every wall is harder: a faster
+ * wall. Bricks hit in quick succession chain the combo (up to x5), as long as no ball is lost:
+ * any ball down the bottom breaks it, and the last one costs three seconds before a new one is
+ * served. Clock bricks pay three seconds each; clearing the wall pays a bonus and five more seconds. Every wall is harder: a faster
  * ball, a narrower paddle, more rows, fewer clock bricks. Nothing stops a run but the clock.
  */
 export class Breakout extends BaseGame {

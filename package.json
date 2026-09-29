@@ -11,6 +11,7 @@
     "build": "npm run typecheck && vite build",
     "preview": "vite preview",
     "bake-art": "node scripts/bake-box-art.mjs",
+    "balance": "node scripts/arcade-balance.mjs",
     "typecheck": "tsc --noEmit && tsc --noEmit -p api && node scripts/check-conventions.mjs"
   },
   "dependencies": {

@@ -1,12 +1,15 @@
 import type { Game } from '@/catalog/types';
 import { PLATFORMS } from '@/catalog/platforms';
 
-export type SortMode = 'platform' | 'year' | 'title';
+/** 'custom': the player's own arrangement (`arrangement.ts`), boxes where they were put by hand. */
+export type SortMode = 'platform' | 'year' | 'title' | 'custom';
 
-export const SORT_MODES: readonly SortMode[] = ['platform', 'year', 'title'];
+export const SORT_MODES: readonly SortMode[] = ['platform', 'year', 'title', 'custom'];
 
-export function nextSortMode(mode: SortMode): SortMode {
-  return SORT_MODES[(SORT_MODES.indexOf(mode) + 1) % SORT_MODES.length];
+/** The sort after `mode` (T); the player's own arrangement only when there is one (`withCustom`). */
+export function nextSortMode(mode: SortMode, withCustom = false): SortMode {
+  const modes = withCustom ? SORT_MODES : SORT_MODES.filter((m) => m !== 'custom');
+  return modes[(modes.indexOf(mode) + 1) % modes.length]!;
 }
 
 /** Title without a leading article so "The Legend of Zelda" files under L. */
@@ -32,6 +35,8 @@ const COMPARATORS: Record<SortMode, (a: Game, b: Game) => number> = {
   platform: (a, b) => platformRank(a) - platformRank(b) || byTitle(a, b),
   year: (a, b) => year(a) - year(b) || byTitle(a, b),
   title: byTitle,
+  // Boxes the player has not put anywhere yet go into the gaps in platform order.
+  custom: (a, b) => platformRank(a) - platformRank(b) || byTitle(a, b),
 };
 
 export function sortGames(games: readonly Game[], mode: SortMode): Game[] {
@@ -49,6 +54,7 @@ export function rowGroupKey(game: Game, mode: SortMode): string {
     case 'year':
       return String(Math.floor(year(game) / 10));
     case 'title':
+    case 'custom':
       return '';
   }
 }

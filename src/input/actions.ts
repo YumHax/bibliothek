@@ -10,7 +10,9 @@ import { PAD_LABELS, type PadButton } from './padButtons';
  * remapped). The first code is the one the help and the hints name.
  *
  * Shared keys are settled by the Session's route order (`Session.routes`), never here:
- * - `KeyE`: `walkAway` (arcade, first) > `putBack` (a box in hand) > `standUp` (seated, last);
+ * - `KeyE`: `walkAway` (arcade, first) > `putBackPiece` (furniture carried) > `putBack` (a box in hand) > `standUp` (seated, last);
+ * - `KeyM`: `setDown` (furniture carried) > `putHere` (a shelf box in hand, aimed at a shelf) > `moveFurniture` (hands free);
+ * - `KeyR`: `turnPiece` (furniture carried) first;
  * - `KeyO`: `lookInside` (a market copy: finds out a fake, lets the key go on) then `openBox`;
  * - `KeyR`: `holdCopy` (a market copy in hand) > `randomPick` (Browse skips it while holding);
  * - `Space` / `Enter`: `fire` (the arcade replays on its end card) > `pickUpFound` (Browse);
@@ -37,7 +39,9 @@ export type ActionContext =
   /** Panels and menus (over the room and the start card too). */
   | 'panels'
   /** In photo mode: every key is its own (the walking keys fly the camera). */
-  | 'photo';
+  | 'photo'
+  /** Carrying a piece of furniture about the room. */
+  | 'furnishing';
 
 export interface TouchSpec {
   label: string;
@@ -82,6 +86,28 @@ export const ACTIONS = {
     touch: { label: 'Open', title: 'Open the box', slot: 2 }, rebind: 'Open the box',
   },
   lookInside: { codes: ['KeyO'], context: 'market', hint: 'open a market copy: a fake shows inside (shares openBox’s key)' },
+
+  // --- M: moving things about the flat (docs/furnishing.md) ----------------------------------------------
+  moveFurniture: {
+    codes: ['KeyM'], context: 'room', hint: 'pick up the piece of furniture looked at, to move it', padHold: 'GamepadX',
+    touch: { label: 'Move', title: 'Move the furniture you look at', slot: 8 }, rebind: 'Move furniture / put the box here',
+  },
+  putHere: {
+    codes: ['KeyM'], context: 'held', hint: 'put the box in hand where you aim on a shelf (shares moveFurniture’s key)',
+    touch: { label: 'Put here', title: 'Put the box where you aim on a shelf', slot: 8 },
+  },
+  setDown: {
+    codes: ['KeyM'], context: 'furnishing', hint: 'set the carried piece down (a click does too)',
+    touch: { label: 'Set down', title: 'Set the piece down here', slot: 1 },
+  },
+  turnPiece: {
+    codes: ['KeyR'], context: 'furnishing', hint: 'turn the carried piece (the mouse wheel turns it finer)',
+    touch: { label: 'Turn', title: 'Turn the piece', slot: 2 },
+  },
+  putBackPiece: {
+    codes: ['KeyE'], context: 'furnishing', hint: 'put the carried piece back where it was',
+    touch: { label: 'Put back', title: 'Put the piece back where it was', slot: 3 },
+  },
 
   // --- browsing the room -------------------------------------------------------------------------------
   search: {

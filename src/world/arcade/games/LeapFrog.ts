@@ -122,8 +122,9 @@ export class LeapFrog extends BaseGame {
 
     if (this.hop) {
       this.hop.t += dt;
-      if (this.hop.t >= HOP_SECONDS) this.land();
-      else return;
+      if (this.hop.t < HOP_SECONDS) return;
+      this.land();
+      if (this.dead > 0) return;
     }
 
     // Riding a log.

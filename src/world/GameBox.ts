@@ -95,6 +95,8 @@ export class GameBox extends THREE.Mesh<THREE.BoxGeometry, THREE.Material[]> imp
   /** Set by the shelf it stands on: out of the row far enough to clear the board's front edge (see `Carriable`). */
   slideOut = SLIDE_OUT;
   onDisposed: (() => void) | null = null;
+  /** The shelf it belongs on now (set by `Shelf.placeRow`, even while it is in hand): where the Inspector brings it back. */
+  home: THREE.Object3D | null = null;
 
   private readonly dims: BoxDimensions;
   private readonly kind: CaseKind;

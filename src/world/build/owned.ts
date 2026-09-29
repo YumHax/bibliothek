@@ -39,11 +39,6 @@ export interface Placer {
   onOwned(cb: () => void): void;
 }
 
-interface Staged {
-  item: Furniture;
-  position: THREE.Vector3;
-  rotationY: number;
-}
 
 /**
  * Places what `owned` needs bought: straight into the zone when it is (or when nothing is needed), else *staged*: hung in
@@ -54,7 +49,7 @@ interface Staged {
  */
 export function placerFor(zone: Zone, upgrades: HomeUpgrades | undefined, owned: Owned | undefined): Placer {
   const direct = isOwned(upgrades, owned);
-  const staged: Staged[] = [];
+  const staged: Furniture[] = [];
   const callbacks: (() => void)[] = [];
   let isBought = direct;
 
@@ -65,7 +60,7 @@ export function placerFor(zone: Zone, upgrades: HomeUpgrades | undefined, owned:
     zone.group.add(item);
     item.updateWorldMatrix(true, true);
     setShownKeepingLights(item, false);
-    staged.push({ item, position: position.clone(), rotationY });
+    staged.push(item);
     // Not placed, still the zone's: disposed on unload even if never bought.
     zone.keep(item);
     return item;
@@ -82,7 +77,9 @@ export function placerFor(zone: Zone, upgrades: HomeUpgrades | undefined, owned:
     },
     placeWith: (host, item, local = item.position) => {
       host.updateWorldMatrix(true, false);
-      return put(item, zone.toLocal(host.localToWorld(local.clone())), host.rotation.y + item.rotation.y);
+      put(item, zone.toLocal(host.localToWorld(local.clone())), host.rotation.y + item.rotation.y);
+      zone.ride(host, item);
+      return item;
     },
     placeLeaves: (host) => {
       for (const leaf of host.leaves) placer.placeWith(host, leaf);
@@ -98,9 +95,10 @@ export function placerFor(zone: Zone, upgrades: HomeUpgrades | undefined, owned:
       if (isBought || !isOwned(upgrades, owned)) return;
       isBought = true;
       unsubscribe();
-      for (const { item, position, rotationY } of staged.splice(0)) {
+      // Where it hangs now (the piece it stands on may have been moved meanwhile, carrying it along).
+      for (const item of staged.splice(0)) {
         setShownKeepingLights(item, true);
-        zone.place(item, position, rotationY);
+        zone.place(item, item.position.clone(), item.rotation.y);
       }
       for (const cb of callbacks.splice(0)) cb();
     });

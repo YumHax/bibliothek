@@ -133,7 +133,7 @@ export const ARCADE_PLAN = {
     { at: { wall: 'back', along: CABINET_X[1]!, y: 0, offset: CABINET_OFF_WALL }, game: 'breakout', color: 0x8f2f4f, glow: 0xffb3c6, wear: 0.8 },
     { at: { wall: 'back', along: CABINET_X[2]!, y: 0, offset: CABINET_OFF_WALL }, game: 'invaders', color: 0x2f4f8f, glow: 0x9ad6ff, wear: 0.9 },
     { at: { wall: 'back', along: CABINET_X[3]!, y: 0, offset: CABINET_OFF_WALL }, game: 'stacker', color: 0x2f8f5f, glow: 0xa8ffcf, wear: 0.6 },
-    { at: { wall: 'back', along: CABINET_X[4]!, y: 0, offset: CABINET_OFF_WALL }, game: 'arrows', color: 0x8f6f2f, glow: 0xffe3a8, wear: 0.7 },
+    { at: { wall: 'back', along: CABINET_X[4]!, y: 0, offset: CABINET_OFF_WALL }, game: 'frog', color: 0x2f6f3a, glow: 0xa8ffb8, wear: 0.7 },
     { at: { wall: 'back', along: CABINET_X[5]!, y: 0, offset: CABINET_OFF_WALL }, game: 'duel', color: 0x1f3f6f, glow: 0x63b3ff, glowLight: false, wear: 0.5, watchAt: [1.6, -2.3] },
     { at: { floor: [0, ISLAND_Z], rotationY: 0 }, game: 'snake', color: 0x1f6f5a, glow: 0x39ff9e, watchAt: [0.6, 1.8], wear: 0.3 },
     { at: { floor: [0, -ISLAND_Z], rotationY: Math.PI }, game: 'comets', color: 0x5a2f8f, glow: 0xd0a8ff, watchAt: [-0.6, -1.8], wear: 0.3 },
@@ -218,7 +218,7 @@ export const ARCADE_PLAN = {
     board: { wall: 'back', along: 4.2, y: 1.65 } as Placement,
     width: 1.1,
     height: 0.85,
-    games: ['breakout', 'invaders', 'stacker', 'arrows', 'snake', 'comets'] as ArcadeGameId[],
+    games: ['breakout', 'invaders', 'stacker', 'frog', 'snake', 'comets'] as ArcadeGameId[],
     spectators: [[-0.75, 1.55], [0, 1.85], [0.75, 1.55]] as [x: number, z: number][],
     /** What the watchers say when the player wins a round, and when they go out. */
     cheers: ['YES!', 'Through to the next round!', 'Did you see that?', 'Clean!'],

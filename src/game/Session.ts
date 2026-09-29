@@ -19,6 +19,7 @@ import { Purchases } from './Purchases';
 import { Browse } from './Browse';
 import { CatCare } from './CatCare';
 import { PhotoControl } from './PhotoControl';
+import { Rearranging } from './Rearranging';
 import { isAction } from '@/input/actions';
 
 export type { SessionParts } from './SessionParts';
@@ -27,7 +28,7 @@ export type { SessionParts } from './SessionParts';
  * Game rules: what happens when the player clicks something, presses a key or leaves the room.
  * A thin router: each feature is a controller with its own narrow parts (`ModalStack`, `Hands`,
  * `Seating`, `Screens`, `GoingOut`, `ArcadePlay`, `MarketCounter`, `Purchases`, `Browse`,
- * `CatCare`); the Session builds them, is their `SessionHost` (the shared moves), routes keys
+ * `CatCare`, `Rearranging`); the Session builds them, is their `SessionHost` (the shared moves), routes keys
  * through them in one fixed order (`routes`) and answers `SessionActions` by delegating.
  * Interactables call back into it through `SessionActions`; it owns nothing in the scene itself.
  * Optional features are silently skipped when their part is not wired in (see `SessionParts`).
@@ -43,6 +44,8 @@ export class Session implements SessionActions, SessionHost {
   private readonly counter: MarketCounter;
   private readonly purchases: Purchases;
   private readonly browse: Browse;
+  /** Moving things about the flat: a box into any shelf's gap, the furniture about its room (M). */
+  private readonly rearranging: Rearranging;
   /**
    * Who hears a key, in this order; the first to take it ends the routing. The order is the rules (the
    * keys are the action table's, `input/actions`, which lists the shared ones):
@@ -51,6 +54,8 @@ export class Session implements SessionActions, SessionHost {
    *    travel menu reads its digits, or the player sleeps;
    * 3. at an arcade machine every key is the game's (E walks away, fire replays on the end card);
    *    then photo mode: while it is on every key is its own; P enters it, J opens the journal;
+   *    then moving things: while a piece of furniture is carried M / R / E are its; M puts the shelf box in hand
+   *    where it is aimed, M on a bought piece picks it up;
    * 4. a market copy in hand: U (just bought), B, H, R, X; O finds out a fake and goes on to 5;
    * 5. a box in hand: E puts it back, O opens it;
    * 6. browsing: F / Slash search, T sorts, N night, R random pick (not while holding), Enter picks up the found box;
@@ -74,9 +79,10 @@ export class Session implements SessionActions, SessionHost {
     this.goingOut = new GoingOut(parts, this, this.screens);
     this.arcade = new ArcadePlay(parts, this);
     this.purchases = new Purchases(parts, this);
+    this.rearranging = new Rearranging(parts, this, () => this.onHover(this.hovered));
     const deaf: KeyRoute = { onKey: () => this.modalOpen || !parts.player.isLocked || this.goingOut.menuOpen || this.seating.asleep };
     const photo = new PhotoControl(parts, (panel) => this.openPanel(panel));
-    this.routes = [this.modals, deaf, this.arcade, photo, this.counter, this.hands, this.browse, new CatCare(parts, this), this.seating];
+    this.routes = [this.modals, deaf, this.arcade, photo, this.rearranging, this.counter, this.hands, this.browse, new CatCare(parts, this), this.seating];
 
     const { interactor, inspector, player, search } = parts;
     // The carried box must not block the ray, nor its wrapper (a market copy's `ForSaleBox` owns the box's hitbox).
@@ -91,6 +97,7 @@ export class Session implements SessionActions, SessionHost {
       // A panel needs the hands (a haggle or a swap panel works on the copy still in hand); the pause menu leaves the box held.
       if (inspector.isActive && this.modals.active && !this.modals.holdingThrough) this.putBack();
       inspector.stopRotating(); // a right button held through the unlock must not leave the look frozen
+      this.rearranging.cancel(); // a piece being carried goes back where it was
       // A paid arcade play holds still (it goes on once the pointer is locked again) instead of being lost.
       if (!this.arcade.hold()) this.stand();
       // Esc under pointer lock is eaten by the browser and unlocks instead: treat it as "close search / stay here".
@@ -113,8 +120,9 @@ export class Session implements SessionActions, SessionHost {
   }
 
   /** What the hands are on (a machine, a market copy, a box, a seat, nothing): the touch bar shows what works there. */
-  get handsContext(): 'arcade' | 'market' | 'held' | 'seated' | 'room' {
+  get handsContext(): 'arcade' | 'market' | 'held' | 'seated' | 'room' | 'furnishing' {
     if (this.arcade.current) return 'arcade';
+    if (this.rearranging.carrying) return 'furnishing';
     if (this.counter.holding) return 'market';
     if (this.hands.held) return 'held';
     return this.parts.player.isSeated ? 'seated' : 'room';
@@ -130,6 +138,7 @@ export class Session implements SessionActions, SessionHost {
     const { player, interactor, inspector } = this.parts;
     doc.addEventListener('mousedown', (e) => {
       if (this.modalOpen || !player.isLocked || e.button !== 0) return;
+      if (this.rearranging.click()) return; // sets the carried piece down
       if (!interactor.select() && inspector.isActive) this.putBack(); // clicked at nothing while holding
     });
     // Right-click drag rotates the held box; the browser menu would steal the mouse.
@@ -243,7 +252,7 @@ export class Session implements SessionActions, SessionHost {
   setFrozen(frozen: boolean): void {
     const { player, interactor } = this.parts;
     player.movementEnabled = !frozen;
-    interactor.enabled = !frozen && !this.modals.active;
+    interactor.enabled = !frozen && !this.modals.active && !this.rearranging.carrying;
   }
 
   // --- Helpers ----------------------------------------------------------------------------------
@@ -251,6 +260,7 @@ export class Session implements SessionActions, SessionHost {
   /** Every panel opens this way: the hands are emptied first, then the panel takes the mouse. */
   private openModal(modal: ModalLike | undefined): void {
     if (!modal) return;
+    this.rearranging.cancel();
     this.putBack();
     this.modals.open(modal);
   }
@@ -263,12 +273,19 @@ export class Session implements SessionActions, SessionHost {
   private onHover(item: Interactable | null): void {
     this.hovered = item;
     window.clearInterval(this.hoverTimer);
-    this.hoverTimer = item ? window.setInterval(() => this.showHoverLabel(), 250) : undefined;
+    // A piece of furniture being carried (the crosshair picks nothing then) says whether it fits where it is aimed.
+    this.hoverTimer = item || this.rearranging.carrying ? window.setInterval(() => this.showHoverLabel(), 250) : undefined;
     this.showHoverLabel();
   }
 
   private showHoverLabel(): void {
+    const carried = this.rearranging.caption();
+    if (carried) return this.parts.overlay.setHoverLabel(carried, 'crosshair');
     const item = this.hovered;
+    if (!item) {
+      window.clearInterval(this.hoverTimer); // set down with nothing under the crosshair: nothing more to re-read
+      this.hoverTimer = undefined;
+    }
     this.parts.overlay.setHoverLabel(item?.label(this) ?? null, item?.labelPlacement?.() ?? 'crosshair');
   }
 }

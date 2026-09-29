@@ -95,7 +95,7 @@ const RECIPES: Record<Sfx, { notes?: Note[]; hiss?: Hiss[] }> = {
   // The hoops: the net taking the ball, the rim ringing.
   swish: { hiss: [{ at: 0, length: 0.25, filter: 'bandpass', frequency: 900, level: 0.45 }] },
   rim: { notes: [{ wave: 'triangle', from: 740, at: 0, length: 0.18, level: 0.5 }, { wave: 'sine', from: 1110, at: 0, length: 0.12, level: 0.3 }] },
-  // ARROW RUSH: a lane's own tone (pitched per lane), a clean PERFECT chime, a softer GOOD, a flat buzz for a miss.
+  // LEAP FROG: a hop's tone (pitched up the rows), the far bank's chime, a softer one for the verge, a flat buzz when it dies.
   lane: { notes: [{ wave: 'triangle', from: 440, at: 0, length: 0.07, level: 0.45 }] },
   perfect: { notes: [{ wave: 'square', from: 1318, at: 0, length: 0.04, level: 0.35 }, { wave: 'square', from: 1976, at: 0.04, length: 0.08, level: 0.35 }] },
   good: { notes: [{ wave: 'triangle', from: 988, at: 0, length: 0.07, level: 0.4 }] },

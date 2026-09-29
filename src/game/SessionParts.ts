@@ -22,6 +22,7 @@ import type { PurchaseParts } from './Purchases';
 import type { BrowseParts } from './Browse';
 import type { CatParts } from './CatCare';
 import type { PhotoParts } from './PhotoControl';
+import type { RearrangingParts } from './Rearranging';
 
 /*
  * Minimal shapes of the optional features the session routes keys to. They are defined here (not
@@ -233,4 +234,4 @@ export interface CoreParts {
  * part is silently skipped when absent.
  */
 export interface SessionParts
-  extends CoreParts, ModalParts, HandsParts, SeatingParts, ScreenParts, TravelParts, ArcadeParts, MarketCounterParts, PurchaseParts, BrowseParts, CatParts, PhotoParts {}
+  extends CoreParts, ModalParts, HandsParts, SeatingParts, ScreenParts, TravelParts, ArcadeParts, MarketCounterParts, PurchaseParts, BrowseParts, CatParts, PhotoParts, RearrangingParts {}

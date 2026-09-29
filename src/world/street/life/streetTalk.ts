@@ -20,7 +20,7 @@ export interface StreetTalkOptions {
 
 /** The arcade's cabinets as the street calls them (ids as in `ARCADE_GAMES`). */
 const ARCADE: readonly [id: string, title: string][] = [
-  ['breakout', 'BRICK STORM'], ['invaders', 'STAR RAID'], ['stacker', 'SKY STACK'], ['arrows', 'ARROW RUSH'], ['snake', 'NEON SNAKE'],
+  ['breakout', 'BRICK STORM'], ['invaders', 'STAR RAID'], ['stacker', 'SKY STACK'], ['frog', 'LEAP FROG'], ['snake', 'NEON SNAKE'],
   ['comets', 'COMET DASH'], ['duel', 'PADDLE WARS'], ['stepbeat', 'STEP BEAT'], ['sheriff', 'NEON SHERIFF'],
 ];
 

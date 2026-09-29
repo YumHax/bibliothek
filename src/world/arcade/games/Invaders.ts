@@ -46,8 +46,9 @@ interface Shot {
 }
 
 /**
- * STAR RAID: a fifteen-second shooting gallery. Hold fire for a stream of shots (four in the air),
- * mow down the marching fleet; kills in quick succession chain the combo. Aliens peel off and dive
+ * STAR RAID: a fifteen-second shooting gallery. Hold fire for a stream of shots (two in the air),
+ * mow down the marching fleet; kills in quick succession chain the combo, and a shot that hits
+ * nothing breaks it, so aiming pays and spraying does not. Aliens peel off and dive
  * for a fat bonus and cost a second if they get past; the saucer crossing the top every six
  * seconds is the clock: shooting it pays three seconds. Nothing shoots back: a cleared wave pays a bonus and five more seconds. Every
  * wave is harder: the fleet marches faster and gains a row, divers come quicker, the saucer flies
@@ -57,7 +58,7 @@ export class Invaders extends BaseGame {
   readonly id = 'invaders';
   readonly title = 'STAR RAID';
   readonly hint = 'A / D or arrows move the ship · hold Space to fire';
-  readonly summary = '15 SEC · CHAIN KILLS · SAUCER = +3S';
+  readonly summary = '15 SEC · AIM TO CHAIN · SAUCER = +3S';
 
   private shipX = SCREEN_W / 2;
   private wave = 1;

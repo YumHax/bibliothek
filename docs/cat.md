@@ -37,7 +37,7 @@ Read this only when changing the cat's look, behaviour or belongings.
     `Activity` with its `weight` and `begin` (which walks there with `mind.goTo(point, 'yourState')`). The `Record` types
     make the compiler list anything missing. Draws from `Math.random` happen in `enter`/`tick`/`begin` order; keep weights
     free of randomness.
-- `CatNav.ts`: 0.15 m occupancy grid probed with `collisions.intersectsSphere`, A*, string pulling. Anything the cat must walk
+- `../nav/FloorNav.ts` (shared with the visiting friends, `CAT_WALKER` here): 0.15 m occupancy grid probed with `collisions.intersectsSphere`, A*, string pulling. Anything the cat must walk
   around only needs a real `footprint`. Given `areas` (the flat's rooms, each grown 0.1 m over its doorways) the grid spans
   the whole flat and only those cells are probed: walls are colliders, so paths go through doorways, and a shut door leaf
   (a collider) keeps the cat in. `blockedNow` probes a point live.
@@ -45,7 +45,7 @@ Read this only when changing the cat's look, behaviour or belongings.
   (legs shuffle while turning in place), parabolic hops (0.15 s crouch, eased horizontal, `land` + `onLand` thud; `lift`
   keeps the blob shadow on the ground, shrinking and fading). `stop()` never cuts a hop short and a `walkTo` asked mid-hop
   sets off on landing (its answer is whether a path exists from where it lands). `faceTowards` first steps 0.12 m clear
-  when the head (or tail tip) would turn into furniture (`CatNav.reachBlocked`; `keepClear` false at the scratching post):
+  when the head (or tail tip) would turn into furniture (`FloorNav.reachBlocked`; `keepClear` false at the scratching post):
   never backwards (a step behind it goes sideways, or not at all), standing up for it (the posture comes back once turned),
   each step probed live and clamped inside the grid (the grid can be 10 s old). `teleport` for the morning. Every 0.2 s it checks 0.2 m ahead with `blockedNow` and stops
   (`blocked`, the grid invalidated) when a door was shut across the path; `hopTo(target, duration, apex)` clears an
@@ -114,7 +114,7 @@ render their own zone's layer).
 ## Headless check (no browser)
 
 Bundle a sim with esbuild (`--alias:@=./src`, canvas/document shims injected) and tick `Cat.update` for 1800 s to catch NaN,
-escapes and state balance. For a refactor of the brain, drive `CatBrain` with the real `CatNav`/`CatMotion` (a
+escapes and state balance. For a refactor of the brain, drive `CatBrain` with the real `FloorNav`/`CatMotion` (a
 `CollisionWorld` of a few boxes), fake props and player, and a seeded `Math.random`; hash the event log (poses, meows, states,
 positions, gaze) before and after: identical hashes over a few dozen seeds mean identical behaviour. (Fake props made with
 `Object.assign` lose their getters: define `level` / `isRolling` with `Object.defineProperty`.)

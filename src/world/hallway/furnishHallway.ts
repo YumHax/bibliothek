@@ -121,6 +121,9 @@ export function furnishHallway(zone: Zone, ctx: BuildContext): ZoneHandle {
     const poster = zone.placeAt(new Poster(posterSlot.width, posterSlot.height, shopPoster()), posterSlot.at);
     showWhenUpgraded(zone, upgrades, 'rug', kilim, runner);
     showWhenUpgraded(zone, upgrades, 'poster', poster);
+    // Moved by the player once bought (M).
+    ctx.home.furnishings?.register(zone, kilim, { key: 'rug', at: rug.at, owned: 'rug' });
+    ctx.home.furnishings?.register(zone, poster, { key: 'poster', at: posterSlot.at, owned: 'poster' });
   }
 
   furnishDecor(zone, ctx, plan.decor);

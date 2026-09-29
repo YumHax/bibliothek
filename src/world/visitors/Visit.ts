@@ -13,6 +13,8 @@ export interface DoorLike {
 export interface Leg {
   at: THREE.Vector3;
   door?: DoorLike | null;
+  /** Walked straight even when something stands in the way (the last step into an armchair: the armchair itself). */
+  direct?: boolean;
 }
 
 /** An armchair on the round: how to get there from the hub, where to stand before sitting, where and which way to sit. */
@@ -168,6 +170,11 @@ export class Visit {
       watch?: () => THREE.Vector3 | null;
       /** Whether nothing solid stands between two world points (a sidestep's way); without it they never sidestep. */
       clear?: (a: THREE.Vector3, b: THREE.Vector3) => boolean;
+      /**
+       * A way round what stands between two floor points (zone-local, the furniture the player moved onto the round):
+       * the points to walk through, ending at `to` (or the nearest free spot to it); null to walk straight.
+       */
+      detour?: (from: THREE.Vector3, to: THREE.Vector3) => THREE.Vector3[] | null;
     },
   ) {}
 
@@ -353,7 +360,7 @@ export class Visit {
       seat = r.seats.find((s) => s !== back && s.free());
     }
     if (!seat) return;
-    await this.walk([{ at: seat.at }]);
+    await this.walk([{ at: seat.at, direct: true }]);
     this.friend.stand(seat.yaw, 'stand');
     await this.until(() => Math.abs(angleDelta(seat.yaw, this.friend.rotation.y)) < 0.25, VISIT_RULES.sitTurnFor);
     this.seated = true;
@@ -379,7 +386,7 @@ export class Visit {
     this.friend.setLean(riseLean);
     await this.pause(riseFor);
     this.friend.setLean(0);
-    await this.walk([{ at: seat.approach }]);
+    await this.walk([{ at: seat.approach, direct: true }]);
     this.release();
     await this.walk([...[...seat.via].reverse().map((at) => ({ at })), { at: r.hub }]);
   }
@@ -485,7 +492,7 @@ export class Visit {
 
   private walk(legs: Leg[]): Promise<void> {
     if (this.cancelled) return Promise.reject(CANCELLED);
-    this.legs = [...legs];
+    this.legs = this.roundFurniture(legs);
     this.stepping = false;
     this.resetBlocked();
     return new Promise((resolve, reject) => (this.walking = { resolve, reject }));
@@ -657,6 +664,30 @@ export class Visit {
         return;
       }
     }
+  }
+
+  /**
+   * The legs with a way round what stands across one (an armchair moved onto the round, a lamp): each leg through
+   * no door, not `direct`, whose straight line is blocked, is replaced by the detour's points.
+   */
+  private roundFurniture(legs: readonly Leg[]): Leg[] {
+    const detour = this.options.detour;
+    if (!detour) return [...legs];
+    const out: Leg[] = [];
+    let at = this.friend.position.clone().setY(0);
+    for (const leg of legs) {
+      const target = leg.at.clone().setY(0);
+      const way = leg.door || leg.direct || this.isClear(at, target) ? null : detour(at, target);
+      if (way?.length) {
+        const y = leg.at.y;
+        out.push(...way.map((point) => ({ at: point.clone().setY(y) })));
+        at = way[way.length - 1]!.clone().setY(0);
+      } else {
+        out.push(leg);
+        at = target;
+      }
+    }
+    return out;
   }
 
   private isClear(a: THREE.Vector3, b: THREE.Vector3): boolean {

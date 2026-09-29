@@ -19,7 +19,9 @@ Read `docs/props.md` first (placement grammar, kinds, class rules). Do not read 
    hinge side once open; see the plan's doorway comments) or the cat's corner (back-left of the collection room).
 3. In the flat, anything that is not built in is bought (the flat starts bare): give the line an `upgrade` (a
    `HOME_GOODS` id from `src/economy/homeGoods.ts`, or `{ good, nth }` for a piece with several spots, then raise that
-   good's `max`), or add a good for it. Without one it stands from the start.
+   good's `max`), or add a good for it. Without one it stands from the start. A line with an `upgrade` can be moved by
+   the player (M) once bought, nothing to add (`docs/furnishing.md`); something put on top of a movable piece must be
+   placed with `placeWith(zone, piece, item, local)` so it rides along.
 4. `npm run typecheck`. Done. Describe where it is; do not open a browser.
 
 Wired props (windows, posters, seats, TV, projector, clock, pendant, a room's own furniture) also have their spots in the
@@ -52,4 +54,5 @@ Do not force them into `DECOR_KINDS`. Add a plan entry for the spot in the room'
 the builder's handle (`RoomHandle`). Subscriptions go through `zone.onUnload()`; the helpers in `src/world/build/` already
 do: its sound `placeWith(zone, thing, pointSound(ctx, voice, { maxDistance: 5 }), local)`, a home good hidden until bought
 `showWhenUpgraded(zone, upgrades, 'lamp', thing)` (or `followUpgrades(zone, upgrades, apply)`), a clock `placeClock`, a
-game left on a surface `placeStrayBox`.
+game left on a surface `placeStrayBox`. A bought piece built this way is registered for moving by hand:
+`ctx.home.furnishings?.register(zone, thing, { key, at, owned })` (`docs/furnishing.md`).

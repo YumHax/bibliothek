@@ -13,6 +13,7 @@ bare flat"). `?debug` restores the seed collection, the furnished flat and the e
 npm run dev         # Vite dev server on :5173 (also serves /api/* via Vite plugins); the user usually has it running: check `lsof -i tcp:5173`, never start a second one
 npm run typecheck   # tsc --noEmit (src) + tsc -p api + scripts/check-conventions.mjs — run after every change
 npm run build       # typecheck + production bundle
+npm run balance     # the arcade's machines played headless by simulated people: what each pays (docs/economy.md)
 ```
 
 ## Working rules
@@ -44,6 +45,7 @@ npm run build       # typecheck + production bundle
 | The cat | `docs/cat.md` |
 | Friends who visit, borrow and return games | `docs/visitors.md` |
 | What the kitchen, bathroom and bedroom are for (cleaning boxes, the bath, cake, radio, manuals, outfits, phone, dreams) | `docs/household.md` |
+| Moving boxes to any shelf spot, moving the flat's furniture (M), the player's shelf arrangement, making a piece movable | `docs/furnishing.md` |
 | Telling the player something (speech bubbles, reactions, rewards, tips, cards to read); no toasts | `docs/notices.md` |
 | Post-processing, quality levels, looks, material helpers (wood, fabric, plaster), reflections | `docs/graphics.md` |
 | Materials, how parts meet, anything flat on a surface (z-fighting), hiding lamps | `docs/props.md` "Materials, joints and layers" |

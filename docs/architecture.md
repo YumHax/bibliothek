@@ -45,10 +45,13 @@ src/game/               Session (thin router: builds the controllers, key route 
                         Tab / Esc), Hands (pick up, put back E, open O), Seating (sit, stand, sleep), Screens (TV / projector, one at a
                         time), GoingOut (travel doors + menu; stops the screen on leaving), ArcadePlay (coin, play, payout via
                         economy/arcadePayout, change machine), MarketCounter (the copy in hand: U B H R X O), Purchases (buyUpgrade, pay),
-                        Browse (search, random pick, console focus, sort T, night N), CatCare (C; `callCat` words every cat call).
+                        Browse (search, random pick, console focus, sort T, night N), CatCare (C; `callCat` words every cat call),
+                        Rearranging (M: the shelf box in hand into the gap aimed at, a bought piece of furniture carried about its room;
+                        docs/furnishing.md).
                         Highlighter (emissive pulse), playerPose, Sleep (fade, wind the clock to 7:00, fade back)
 src/interaction/        Interactable (hitboxes + label + activate), Interactor (crosshair raycast -> owner; `onHoverChange` / `onSelect`),
-                        Inspector (carry/rotate/return/open any `Carriable`, the shape of a `GameBox`; `onLookEnabledChange`)
+                        Inspector (carry/rotate/return/open any `Carriable`, the shape of a `GameBox`, back to its `home` when that
+                        changed while in hand; `onLookEnabledChange`)
 src/world/              World<ZoneHandleById> (scene + CollisionWorld + live interactables + zones: addZone, `zone(id)` / `handle(id)` / `build(id)` typed by
                         zone id, `load` / `loadAll` for lazy builders, `onInteractableAdded` / `onOccluderAdded`...), zoneIds (`ZoneId`: every
                         zone's id, a leaf type), zoneHandle (`lightLevelOf`, `surfaceUnderfoot`: the current zone's handle), Sky (DayNight + Weather + Outdoors, ticked once), worldPlan (WORLD_PLAN,
@@ -87,7 +90,7 @@ src/world/arcade/       arcadePlan (+ TICKET_GAMES / DEMO_CABINETS / BREAKABLE, 
                         ArcadeCrowd (regulars coming and going by the hour and signing the board, the kid watching and taking player
                         two), ArcadeAmbience (murmur following the crowd + hum), payoutSim (the cabinet games on autopilot, for
                         `PAYOUT`), games/ (ArcadeGame contract with `takeSounds` / `autopilot` / `gun` / `demoable` / `setOpponent`,
-                        BaseGame with its seeded `rand()` and `keys` (KeyEdges: press edges), Breakout, Invaders, Stacker, ArrowRush, Snake, Comets, Duel, StepBeat,
+                        BaseGame with its seeded `rand()` and `keys` (KeyEdges: press edges), Breakout, Invaders, Stacker, LeapFrog, Snake, Comets, Duel, StepBeat,
                         NeonSheriff, LexiPunk (its game in a web page, `RemoteScreen`), registry). See docs/economy.md
 src/world/prizes/       prizeModel (a small model per PrizeKind), PrizeShelf (the bedroom's shelf of prizes, following the PrizeStore), the
                         prizes that live at home, hidden until won (ownedPrize): ArcadePoster, MoodLamp (bedroom), FeatherWand (calls the cat)
@@ -144,11 +147,13 @@ src/world/travel/       TravelDoor (a ShutDoor that asks the Session to travel, 
                         stops (`travelStops`: the stops from `WORLD_PLAN`)
 src/world/zone/         Zone (group at origin, place()/placeAt()/remove(), scoped collisions, empty/dormant/active, build/activate/deactivate/unload,
                         own shadow layer, portals, setOccupied/setDrawn; a builder may be a `LazyZoneBuilder`, `load()`ed before it builds),
-                        undrawn items tick at 20 Hz, static items frozen and their parts merged per material: mergeStatic),
+                        undrawn items tick at 20 Hz, static items frozen and their parts merged per material: mergeStatic; `ride` /
+                        `move`: what stands on a piece moves with it, colliders and contact shadow following; `lift` / `setDown`: a piece
+                        the player carries stops colliding and being clickable, its lights never leaving the scene),
                         ZoneManager (Updatable: player position -> current zone, neighbours active, unload after 30 s unless persistent
                         or one of the 2 travel zones left last; `onZoneChange`; a zone still loading its module is switched to once
                         loaded), PortalCuller (Updatable: draws only zones seen through open doorways),
-                        attach (placeWith / placeLeaves: furniture posed in a placed host's space; floorPointsToWorld)
+                        attach (placeWith / placeLeaves: furniture posed in a placed host's space, riding it; floorPointsToWorld)
 src/world/surface/      layers (FLOOR / GROUND / WALL: every flat thing's lift and rank, `onSurface`, `decal`, RENDER_ORDER bands),
                         zfight (`findZFighting`: the coplanar overlapping faces of a subtree; `bibliothek.zfight()` under ?debug)
 src/world/lighting/     lightBudget (LightMonitor: shadow maps vs texture units, changes of the drawn lights), LightPool + PooledLight
@@ -161,8 +166,12 @@ src/world/acoustics/    SoundOcclusion (walls between the listener and a screen:
                         room's walls and the door leaves; `proximityVolume` keeps `wallGain` of the volume per wall), PointSound (a
                         room's own sound: distance + walls -> an `AmbientVoice`'s level)
 src/world/shelving/     Shelving (bookcases sized from the collection, `minBookcases` standing empty from the start, live rebuild, sort modes, one
-                        ShelfLamp per bookcase unless `lamps: false`, explicit `layout` + buyable `capacity`, what does not fit -> `overflow`),
-                        ShelvingGroup (the collection room's and the bedroom's shelvings as one for the Session), plan, slots, sort
+                        ShelfLamp per bookcase unless `lamps: false`, explicit `layout` + buyable `capacity`, what does not fit -> `overflow`;
+                        planned on the games, boxes made only for those that get a spot; bookcases that come out the same stay and the
+                        boxes slide), BoxPool (the flat's GameBoxes shared by its shelvings: a game passing from one to the next keeps its
+                        box), arrangement (ShelfArrangement: the sort shown and the player's own 'custom' rows, persisted), ShelvingGroup
+                        (the collection room's and the bedroom's shelvings as one for the Session; `spotAt`, `moveBox`), ShelfPlacing (the
+                        gap marker with a shelf box in hand), plan (`planShelving`, `planArranged`), slots, sort
 src/world/materials/    palette (the shared materials: paint, timber, cloth, standard, basic, METAL, shared), sharedResources
                         (markShared / isShared / disposeTree), shaderPatch (onBeforeCompile helpers), finishes (wood, fabric, plastic,
                         scuffed), surfaces (walls, floor and ceiling edges, floor wear), paintedTiles (paintOnce), GlossyFloor
@@ -190,7 +199,13 @@ src/world/balcony/      balconyPlan + furnishBalcony: the balcony off the living
 src/world/visitors/     Friends who ring, come in, borrow and return games: Visitors (the rules), Visit, VisitBook (who came, lent
                         what, invited when), Friend (the walker), friendsPlan, friendLines. See docs/visitors.md.
 src/world/weather/      Weather (spells of clear/cloudy/rain/snow in game hours, seeded by the date; wet and snowy ground). See docs/outdoors.md.
-src/world/cat/          The cat: model, brain, nav, bowls, bed, scratcher, toy, settings. See docs/cat.md.
+src/world/cat/          The cat: model, brain, bowls, bed, scratcher, toy, settings. See docs/cat.md.
+src/world/nav/          FloorNav (an occupancy grid over the collision world, A*, string pulling; `CAT_WALKER` the cat's, `PERSON_WALKER`
+                        the visiting friends' round furniture the player moved)
+src/furnishing/         Moving the flat's furniture (docs/furnishing.md): Furnishings (the registry: builders `register` what is bought,
+                        saved poses restored once the builder is done), FurnitureLayout (the saved poses), surfaces (floor / wall / ceiling
+                        from the plan's Placement, the aimed pose, snapping flush to a wall), fit (`localBounds`, `Fit`: what a piece may
+                        not be set down over), FurnitureCarrier (the carry, an Updatable)
 src/persistence/        One storage layer: safeStorage, KEYS (every key; `?debug` saves under `bibliothek.debug.`), PersistedStore
                         (`{ version, data }`, migrate chain, validate, defaults; unreadable data copied to `bibliothek.corrupt.<key>.<time>`,
                         the last 3 per key kept; a newer build's save copied once per version to `…<key>.newer-v<n>`),

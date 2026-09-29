@@ -82,7 +82,7 @@ export interface FlatPanels {
 }
 
 export function buildWorld(services: Services, parts: { world: GameWorld; player: FirstPersonController; marketHall: MarketHallServices; flat: FlatPanels; session: Late<Session>; moves: Late<PlayerMoves> }) {
-  const { engine, params, sky, market, cssLayer, input, covers, collection, deliveries, strays, overflow, upgrades, wallet, scores, arcadeDaily, prizes, medals, league, arcadeScreen, tournament, jackpot, replays, milestones, collectorWatch, firstDay, fame, container, coverUrl } = services;
+  const { engine, params, sky, market, cssLayer, input, covers, collection, deliveries, strays, overflow, arrangement, boxPool, upgrades, wallet, scores, arcadeDaily, prizes, medals, league, arcadeScreen, tournament, jackpot, replays, milestones, collectorWatch, firstDay, fame, container, coverUrl } = services;
   const { world, player, marketHall, flat, session, moves } = parts;
   const zones = late<ZoneManager<ZoneId>>('the zone manager');
   const cat = late<Cat>('the cat');
@@ -137,9 +137,10 @@ export function buildWorld(services: Services, parts: { world: GameWorld; player
     input,
     sky,
     covers,
-    collection: { games: collection, owns: (id) => collection.owns(id), isWanted: (id) => collection.isWanted(id), shelved: strays, strays, deliveries, overflow },
+    collection: { games: collection, owns: (id) => collection.owns(id), isWanted: (id) => collection.isWanted(id), shelved: strays, strays, deliveries, overflow, arrangement, boxes: boxPool },
     home: {
       upgrades,
+      furnishings: services.furnishings,
       onSelectPlatform: (id) => session.get().focusPlatform(id),
       // The feather wand (an arcade prize) calls the cat over; the cat exists by the time anyone can click it.
       callCat: () => (cat.get().adopted ? callCat(cat.get(), 'feathers') : 'The feathers swish. No cat lives here yet: the pet shop on Front Street has some to adopt.'),
@@ -226,6 +227,7 @@ export function buildWorld(services: Services, parts: { world: GameWorld; player
   cat.set(furnishCat(world.zone(WORLD_PLAN.start), {
     settings: services.catSettings, player, clock: sky.dayNight, seats: home.armchairs, windows: home.windows, tv: home.tv,
     placers: catPlacers(world.zone(WORLD_PLAN.start), upgrades),
+    furnishings: services.furnishings,
     listener: context.listener,
     acoustics: context.acoustics,
     flat: {
@@ -299,7 +301,7 @@ export function buildWorld(services: Services, parts: { world: GameWorld; player
   setInterval(() => covers.setPriorityOrigin(engine.camera.position), 1000);
 
   // The shelves of every zone of the flat (the collection room's, the bedroom's bought bookcases), searched and sorted as one.
-  const shelves = new ShelvingGroup(flatHandles.map((handle) => handle.shelving));
+  const shelves = new ShelvingGroup(flatHandles.map((handle) => handle.shelving), arrangement);
   // A stray game picked up becomes its shelf's own box (shown even if its room is out of view), which goes home when put down.
   strays.homeBox = (gameId) => {
     const box = shelves.findBox(gameId);

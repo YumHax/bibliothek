@@ -75,6 +75,7 @@ export class Stacker extends BaseGame {
     this.tower = 0;
     this.lastLanded = null;
     this.settle = 0;
+    this.pilotTurn = -1;
     this.startRow();
   }
 

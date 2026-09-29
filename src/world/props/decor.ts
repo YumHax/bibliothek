@@ -49,6 +49,7 @@ import { Balloons, type BalloonsOptions } from './Balloons';
 import { currentFestivities, type Festivity } from '@/time/season';
 import type { HomeUpgrades } from '@/economy/HomeUpgrades';
 import { placerFor, type Owned } from '../build/owned';
+import { ownedKey, type Furnishings } from '@/furnishing/Furnishings';
 
 /**
  * Decoration the room plan can list by name. Each kind builds a `Furniture` from its options;
@@ -130,8 +131,14 @@ export function buildDecor(entry: DecorEntry): Furniture {
 
 /**
  * Builds and places every entry that is up today (see `isUp`); returns them in plan order. An entry with an `upgrade`
- * not bought yet is staged (hidden, stands once bought: `placerFor`); without `upgrades` everything stands.
+ * not bought yet is staged (hidden, stands once bought: `placerFor`); without `upgrades` everything stands. What is
+ * bought may be moved by the player (`furnishings`), keyed by what it needs bought ("houseplant#3").
  */
-export function placeDecor(zone: Zone, entries: readonly DecorEntry[], upgrades?: HomeUpgrades): Furniture[] {
-  return entries.filter(isUp).map((entry) => placerFor(zone, upgrades, entry.upgrade).placeAt(buildDecor(entry), entry.at));
+export function placeDecor(zone: Zone, entries: readonly DecorEntry[], upgrades?: HomeUpgrades, furnishings?: Furnishings): Furniture[] {
+  const seen = new Map<string, number>();
+  return entries.filter(isUp).map((entry) => {
+    const item = placerFor(zone, upgrades, entry.upgrade).placeAt(buildDecor(entry), entry.at);
+    if (entry.upgrade !== undefined) furnishings?.register(zone, item, { key: ownedKey(entry.upgrade, seen), at: entry.at, owned: entry.upgrade });
+    return item;
+  });
 }

@@ -1,13 +1,20 @@
 import * as THREE from 'three';
-import type { Collisions } from '@/core/Collider';
+import type { CollisionProbe } from '@/core/Collider';
 
 /** Grid cell size (metres). */
 const CELL = 0.15;
-/** The cat keeps this far from the walls. */
-const WALL_MARGIN = 0.15;
-/** Probe used to decide whether a cell is blocked: a cat-sized sphere just above the floor. */
-const PROBE_Y = 0.12;
-const PROBE_RADIUS = 0.12;
+
+/** Who walks the grid: how far from the walls they keep, and the sphere probing whether a cell is free for them. */
+export interface Walker {
+  wallMargin: number;
+  probeY: number;
+  probeRadius: number;
+}
+
+/** The cat: a cat-sized sphere just above the floor, 15 cm off the walls. */
+export const CAT_WALKER: Walker = { wallMargin: 0.15, probeY: 0.12, probeRadius: 0.12 };
+/** A person (a visiting friend): knee height, a body's width, a step off the walls. */
+export const PERSON_WALKER: Walker = { wallMargin: 0.25, probeY: 0.4, probeRadius: 0.24 };
 /** The blocked grid is recomputed at most this often (the shelving may be rebuilt). */
 const REFRESH_S = 10;
 /** Step of the straight-segment test used by the path smoothing. */
@@ -21,10 +28,11 @@ const SQRT2 = Math.SQRT2;
  * lazily from the collision world, A* between cells (8 neighbours, no corner cutting) and
  * string-pulling to turn the cell chain into a few straight legs. Given `areas` (the rooms of the
  * flat), the grid spans all of them and only their cells are probed: the walls between them are
- * colliders, so the cat goes from room to room through the doorways, and a shut door (its leaf is a
- * collider too) keeps it in.
+ * colliders, so the walker goes from room to room through the doorways, and a shut door (its leaf is a
+ * collider too) keeps it in. The cat's (`CAT_WALKER`), and the visiting friends' round the furniture
+ * the player moved (`PERSON_WALKER`).
  */
-export class CatNav {
+export class FloorNav {
   private readonly minX: number;
   private readonly minZ: number;
   private readonly cols: number;
@@ -44,14 +52,16 @@ export class CatNav {
   private readonly inside: Uint8Array;
 
   constructor(
-    private readonly collisions: Collisions,
+    private readonly collisions: CollisionProbe,
     bounds: THREE.Box2,
     areas?: readonly THREE.Box2[],
+    private readonly walker: Walker = CAT_WALKER,
   ) {
-    this.minX = bounds.min.x + WALL_MARGIN;
-    this.minZ = bounds.min.y + WALL_MARGIN;
-    this.cols = Math.max(1, Math.floor((bounds.max.x - WALL_MARGIN - this.minX) / CELL));
-    this.rows = Math.max(1, Math.floor((bounds.max.y - WALL_MARGIN - this.minZ) / CELL));
+    const margin = walker.wallMargin;
+    this.minX = bounds.min.x + margin;
+    this.minZ = bounds.min.y + margin;
+    this.cols = Math.max(1, Math.floor((bounds.max.x - margin - this.minX) / CELL));
+    this.rows = Math.max(1, Math.floor((bounds.max.y - margin - this.minZ) / CELL));
     const n = this.cols * this.rows;
     this.blocked = new Uint8Array(n);
     this.gCost = new Float32Array(n);
@@ -137,7 +147,7 @@ export class CatNav {
    * in free cells, clear of everything that stood still, so a hit can only be what moved.
    */
   blockedNow(point: THREE.Vector3): boolean {
-    this.probe.set(point.x, PROBE_Y, point.z);
+    this.probe.set(point.x, this.walker.probeY, point.z);
     return this.collisions.intersectsSphere(this.probe, 0.01);
   }
 
@@ -174,8 +184,8 @@ export class CatNav {
           this.blocked[cell] = 1;
           continue;
         }
-        this.probe.set(this.minX + (col + 0.5) * CELL, PROBE_Y, this.minZ + (row + 0.5) * CELL);
-        this.blocked[cell] = this.collisions.intersectsSphere(this.probe, PROBE_RADIUS) ? 1 : 0;
+        this.probe.set(this.minX + (col + 0.5) * CELL, this.walker.probeY, this.minZ + (row + 0.5) * CELL);
+        this.blocked[cell] = this.collisions.intersectsSphere(this.probe, this.walker.probeRadius) ? 1 : 0;
       }
     }
   }

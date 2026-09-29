@@ -6,12 +6,15 @@ import type { Zone } from './Zone';
  * Places `item` in `zone` at the pose it holds in `host`'s local space (`local`, or its own
  * `position`, and its `rotation.y`): what belongs to a placed piece of furniture but must be placed
  * furniture itself to be ticked and clickable, like a cupboard's doors or the hum of a fridge.
- * `host` must already stand in `zone`, turned about y only.
+ * `host` must already stand in `zone`, turned about y only. The item rides the host (`Zone.ride`):
+ * moving the host carries it along.
  */
 export function placeWith<F extends Furniture>(zone: Zone, host: THREE.Object3D, item: F, local: THREE.Vector3 = item.position): F {
   host.updateWorldMatrix(true, false);
   const position = zone.toLocal(host.localToWorld(local.clone()));
-  return zone.place(item, position, host.rotation.y + item.rotation.y);
+  zone.place(item, position, host.rotation.y + item.rotation.y);
+  zone.ride(host, item);
+  return item;
 }
 
 /** `placeWith` for every leaf of a host that has some (a fridge, a wardrobe, a row of cupboards). */

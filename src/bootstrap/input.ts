@@ -1,3 +1,4 @@
+import type * as THREE from 'three';
 import { Interactor } from '@/interaction/Interactor';
 import { Highlighter } from '@/game/Highlighter';
 import { GamepadInput, TouchControls, SyntheticMouse, PAD_ALIASES } from '@/input';
@@ -13,6 +14,8 @@ import type { SpeechLayer } from '@/notices/SpeechLayer';
 import { PhotoMode } from '@/photo';
 import { LOOKS } from '@/graphics';
 import { zonePlan } from '@/world/worldPlan';
+import { FurnitureCarrier } from '@/furnishing/FurnitureCarrier';
+import { ShelfPlacing } from '@/world/shelving/ShelfPlacing';
 
 export type Interaction = ReturnType<typeof createInteraction>;
 
@@ -43,6 +46,12 @@ export function createInteraction(services: Services, parts: { world: GameWorld;
   // The crosshair aims from the steady eye (not the walk's bob), and a speech bubble is not drawn over a wall.
   interactor.eyeSway = player.eyeSway;
   notices.speech.setLineOfSight((from, to) => interactor.blocked(from, to));
+  // Moving things about the flat (M, docs/furnishing.md): the box in hand into any shelf's gap, the furniture about its room.
+  const blocked = (from: THREE.Vector3, to: THREE.Vector3) => interactor.blocked(from, to);
+  const shelfPlacing = new ShelfPlacing(engine.camera, engine.scene, built.shelves, inspector, blocked);
+  engine.addUpdatable(shelfPlacing);
+  const furniture = new FurnitureCarrier(engine.camera, services.furnishings, blocked);
+  engine.addUpdatable(furniture);
 
   // Controller and touch feed the same key / mouse channels the session already listens to.
   const syntheticMouse = new SyntheticMouse(engine.renderer.domElement);
@@ -81,5 +90,5 @@ export function createInteraction(services: Services, parts: { world: GameWorld;
   });
   engine.addUpdatable(photo);
 
-  return { inspector, highlighter, interactor, photo, touch };
+  return { inspector, highlighter, interactor, photo, touch, shelfPlacing, furniture };
 }

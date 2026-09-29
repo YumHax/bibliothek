@@ -64,7 +64,10 @@ a cake on the kitchen table gets a slice, a longer stay and a thank-you (`Visito
   (`catHome`); they murmur too.
 - The flight is the stairwell's plan (`STAIRWELL_PLAN.flightA`, its treads). The route is plan data: `HALLWAY_PLAN.visitor` (stairs top, landing, inside the front door, beside the collection
   room's door on its latch side) and `ROOM_PLAN.visitor` (inside the door, a hub, browse spots with a facing, the
-  armchairs reached `via` points clear of the lamps and cushions). Armchairs come from the room's `Seat`s.
+  armchairs reached `via` points clear of the lamps and cushions). Armchairs come from the room's `Seat`s, read live
+  (the player may move them, docs/furnishing.md): moved off its spot, an armchair's `via` is dropped. Any leg in the
+  collection room that is not a door's nor the step into the chair (`Leg.direct`), blocked by something the player put
+  across it, is walked round (`Visit.roundFurniture`, `Visitors.detour`: `world/nav/FloorNav` with `PERSON_WALKER`).
 
 ## Wiring and testing
 

@@ -11,8 +11,6 @@ import { Prop } from '../props/Prop';
  * one with a light must stay placed from the start (a light added mid-game recompiles every shader).
  */
 export function presentWhile(zone: Zone, item: Furniture, shown: () => boolean, subscribe: (cb: () => void) => () => void): void {
-  const position = item.position.clone();
-  const yaw = item.rotation.y;
   let placed = true;
   // Taken out, it is still the zone's: disposed on unload wherever it is then.
   zone.keep(item);
@@ -20,7 +18,8 @@ export function presentWhile(zone: Zone, item: Furniture, shown: () => boolean, 
     const want = shown();
     if (want === placed) return;
     placed = want;
-    if (want) zone.place(item, position.clone(), yaw);
+    // Where it stood, or where the piece it stands on carried it meanwhile (`Zone.move`).
+    if (want) zone.place(item, item.position.clone(), item.rotation.y);
     else zone.remove(item);
   };
   apply();

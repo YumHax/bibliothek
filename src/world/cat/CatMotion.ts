@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { CatBody, CatPose } from './types';
-import type { CatNav } from './CatNav';
+import type { FloorNav } from '../nav/FloorNav';
 
 /** Gaits (m/s). */
 export const WALK_SPEED = 0.45;
@@ -55,7 +55,7 @@ const REACH = { head: 0.24, tail: 0.26, radius: 0.05, y: 0.15, shuffle: 0.12, sp
 type Mode = 'idle' | 'walk' | 'hop';
 
 /**
- * Moves the cat: follows a path from `CatNav` (easing into its pace, turning towards the next leg,
+ * Moves the cat: follows a path from `FloorNav` (easing into its pace, turning towards the next leg,
  * slowing while the turn is wide, braking into its goal), hops in a parabola onto and off
  * furniture (a short crouch first, a squash on landing), and turns in place to face a point,
  * shuffling clear first when its head or tail would end up in furniture. Reports the ground speed
@@ -105,7 +105,7 @@ export class CatMotion {
   constructor(
     private readonly cat: THREE.Object3D,
     private readonly body: CatBody,
-    private readonly nav: CatNav,
+    private readonly nav: FloorNav,
   ) {}
 
   get busy(): boolean {

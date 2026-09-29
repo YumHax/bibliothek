@@ -60,7 +60,7 @@ export interface BedroomHandle extends ZoneHandle {
  * then the rug, pictures and plant. The clock unmakes the bed until noon and lights the glows at night.
  */
 export function furnishBedroom(zone: Zone, ctx: BuildContext): BedroomHandle {
-  const { sky, cssLayer, covers, collection: { overflow }, home: { upgrades }, arcade: { prizes }, today } = ctx;
+  const { sky, cssLayer, covers, collection: { overflow }, home: { upgrades, furnishings }, arcade: { prizes }, today } = ctx;
   const plan = BEDROOM_PLAN;
   const room = furnishShell(zone, sky, plan.room);
   placeRoomLight(zone, room, 'pendant', plan.pendant, plan.lightSwitch);
@@ -74,6 +74,8 @@ export function furnishBedroom(zone: Zone, ctx: BuildContext): BedroomHandle {
   const own = plan.upgrades;
   const frame = placerFor(zone, upgrades, own.bed);
   const bed = frame.placeAt(new Bed(), plan.bed);
+  // What is bought may be moved by the player (M); what stands on it rides along.
+  furnishings?.register(zone, bed, { key: 'bed', at: plan.bed, owned: own.bed });
   let mattress: Bed | null = frame.owned ? null : zone.placeAt(new Bed({ frame: false }), plan.bed);
   frame.onOwned(() => {
     if (mattress) zone.remove(mattress);
@@ -82,7 +84,11 @@ export function furnishBedroom(zone: Zone, ctx: BuildContext): BedroomHandle {
   const stands = placerFor(zone, upgrades, own.nightstands);
   const nightstands = plan.nightstands.map((at, i) => {
     const stand = stands.placeAt(new Nightstand({ drawer: plan.nightstandDrawers[i] }), at);
-    stands.place(new BedsideLamp(), zone.toLocal(stand.localToWorld(stand.lampAnchor.clone())));
+    furnishings?.register(zone, stand, { key: `nightstand#${i}`, at, owned: own.nightstands, name: 'Nightstand' });
+    // Turned as it always stood (square to the room), whichever way the stand faces.
+    const lamp = new BedsideLamp();
+    lamp.rotation.y = -stand.rotation.y;
+    stands.placeWith(stand, lamp, stand.lampAnchor.clone());
     for (const drawer of stand.drawers) stands.placeWith(stand, drawer);
     return stand;
   });
@@ -103,6 +109,7 @@ export function furnishBedroom(zone: Zone, ctx: BuildContext): BedroomHandle {
   // The dresser, and on it the portable TV, set straight on its top (no cabinet of its own).
   const drawers = placerFor(zone, upgrades, own.dresser);
   const dresser = drawers.placeAt(new Dresser({ width: plan.dresser.width, tray: false }), plan.dresser.at);
+  furnishings?.register(zone, dresser, { key: 'dresser', at: plan.dresser.at, owned: own.dresser });
   const tv = new Television(cssLayer, { ...heardBy(ctx), screenWidth: plan.tv.screenWidth });
   tv.position.set(plan.tv.along, dresser.topHeight, dresser.topCentreZ);
   tv.mountOn(0);
@@ -123,6 +130,8 @@ export function furnishBedroom(zone: Zone, ctx: BuildContext): BedroomHandle {
   const chair = reading.placeAt(new BedroomChair({ reading: manual || undefined }), plan.chair);
   const corner = plan.readingCorner;
   const table = reading.placeAt(new SideTable({ radius: corner.tableRadius }), corner.table);
+  furnishings?.register(zone, chair, { key: 'readingChair', at: plan.chair, owned: own.readingCorner, name: 'Reading chair' });
+  furnishings?.register(zone, table, { key: 'readingTable', at: corner.table, owned: own.readingCorner, name: 'Reading table' });
   const readingLamp = new ReadingLamp();
   readingLamp.position.set(corner.lamp.at[0], table.topHeight, corner.lamp.at[1]);
   readingLamp.rotation.y = corner.lamp.yaw;
@@ -155,7 +164,7 @@ export function furnishBedroom(zone: Zone, ctx: BuildContext): BedroomHandle {
     }),
   );
 
-  const shelving = overflow && upgrades ? furnishBookcases(zone, covers, overflow, upgrades) : null;
+  const shelving = overflow && upgrades ? furnishBookcases(zone, covers, overflow, upgrades, ctx.collection) : null;
   // What the arcade paid out, on the bare right wall.
   if (prizes) zone.placeAt(new PrizeShelf({ prizes, width: plan.prizeShelf.width }), plan.prizeShelf.at);
   // Prizes that live at home, hidden until won: the arcade poster on the wall, the mood lamp on the dresser's books.
@@ -182,13 +191,23 @@ export function furnishBedroom(zone: Zone, ctx: BuildContext): BedroomHandle {
  * The bookcase slot: a Shelving over the games the collection room had no room for, standing as
  * many bookcases as were bought (one slot today), and until then the kit that buys one.
  */
-function furnishBookcases(zone: Zone, covers: BuildContext['covers'], overflow: NonNullable<CollectionContext['overflow']>, upgrades: NonNullable<HomeContext['upgrades']>): Shelving {
+function furnishBookcases(
+  zone: Zone,
+  covers: BuildContext['covers'],
+  overflow: NonNullable<CollectionContext['overflow']>,
+  upgrades: NonNullable<HomeContext['upgrades']>,
+  { arrangement, boxes, shelved }: Pick<CollectionContext, 'arrangement' | 'boxes' | 'shelved'>,
+): Shelving {
   const plan = BEDROOM_PLAN;
   const { position, rotationY } = resolvePlacement(plan.room, plan.bookcase.at);
   const slot = { position, rotationY, facing: new THREE.Vector3(Math.sin(rotationY), 0, Math.cos(rotationY)) };
   // The collection room takes the bought bookcases first (`bookcasesIn`): this slot gets what its walls cannot.
   const here = (bought = upgrades.count('bookcase')) => bookcasesIn(bought).bedroom;
   const shelving = new Shelving(zone, covers, overflow, {
+    id: 'bedroom',
+    ...(arrangement ? { arrangement } : {}),
+    ...(boxes ? { pool: boxes } : {}),
+    ...(shelved ? { rowsFrom: shelved } : {}),
     room: plan.room,
     layout: { slots: [slot], width: plan.bookcase.width },
     capacity: here(),

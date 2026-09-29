@@ -315,9 +315,14 @@ export class Inspector<Box extends Carriable = Carriable> implements Updatable {
     this.targetQuat.copy(this.tmpQuat).multiply(this.userRotation);
   }
 
+  /** Where the box goes back to: its `home` when it has one (re-shelved while in hand), else where it was taken from. */
+  private homeOf(box: Box): THREE.Object3D {
+    return box.home ?? this.originalParent!;
+  }
+
   /** The box's rest pose in world space (`restPos`, `restQuat`). */
   private restPose(box: Box): void {
-    const parent = this.originalParent!;
+    const parent = this.homeOf(box);
     parent.updateWorldMatrix(true, false);
     this.restPos.copy(box.restPosition).applyMatrix4(parent.matrixWorld);
     parent.getWorldQuaternion(this.restQuat);
@@ -343,7 +348,7 @@ export class Inspector<Box extends Carriable = Carriable> implements Updatable {
   private finishReturn(): void {
     const box = this.box!;
     box.onDisposed = null;
-    this.originalParent!.attach(box);
+    this.homeOf(box).attach(box);
     box.position.copy(box.restPosition);
     box.quaternion.copy(box.restQuaternion);
     box.snapClosed();

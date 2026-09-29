@@ -8,7 +8,7 @@ const ROWS = Math.floor((SCREEN_H - PLAY_TOP) / CELL);
 const TOP = SCREEN_H - ROWS * CELL;
 const START_LENGTH = 4;
 /** Cells per second at the start, and what every stage adds. */
-const START_SPEED = 8;
+const START_SPEED = 7.5;
 const SPEED_PER_STAGE = 0.9;
 const MAX_SPEED = 17;
 /** Pellets on the board at once: the next one is never across the whole board. */
@@ -28,6 +28,8 @@ const GOLD_SECONDS = 2;
 const GOLD_LIFE = 4;
 /** Pellets eaten this close together keep the chain going. */
 const CHAIN_HOLD = 2.5;
+/** The chain's top multiplier: a long snake already scores fast, x5 on top made the best runs pay six times an ordinary one. */
+const SNAKE_COMBO_MAX = 4;
 const BODY = ['#39ff9e', '#2fe0c0', '#33c0ff', '#7a8cff', '#c98cff'];
 
 type Dir = 'left' | 'right' | 'up' | 'down';
@@ -64,7 +66,7 @@ export class Snake extends BaseGame {
   private eaten = 0;
 
   constructor() {
-    super(ROUND_SECONDS);
+    super(ROUND_SECONDS, SNAKE_COMBO_MAX);
   }
 
   protected begin(): void {
@@ -101,7 +103,13 @@ export class Snake extends BaseGame {
     }
     if (this.crashed > 0) {
       this.crashed -= dt;
-      if (this.crashed <= 0) this.startSnake();
+      if (this.crashed <= 0) {
+        this.startSnake();
+        // Nothing to eat under the new body: a pellet there moves.
+        const under = (c: Cell): boolean => this.body.some((b) => b.x === c.x && b.y === c.y);
+        this.pellets = this.pellets.map((p) => (under(p) ? this.freeCell() : p));
+        if (this.gold && under(this.gold)) this.gold = { ...this.freeCell(), life: this.gold.life };
+      }
       return;
     }
     this.stepTimer -= dt;

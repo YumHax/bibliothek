@@ -24,7 +24,12 @@ import { ConsoleStand } from './props/ConsoleStand';
 import { Console } from './props/Console';
 import { Cushion } from './props/Cushion';
 import { LavaLamp } from './props/LavaLamp';
-import { furnishDecor, placeClock, placeRoomLight } from './build/roomParts';
+import { placeClock, placeRoomLight } from './build/roomParts';
+import { placeDecor } from './props/decor';
+import { SideTable } from './props/SideTable';
+import { Sideboard } from './props/Sideboard';
+import { tickRadiators } from './acoustics/radiatorTicks';
+import { ownedKey } from '@/furnishing/Furnishings';
 import { heardBy } from './build/hearing';
 import { curtainsToSkylight } from './build/follow';
 import { placerFor } from './build/owned';
@@ -55,7 +60,7 @@ export interface RoomHandle extends ZoneHandle {
  * clickable as its class says. Lights are switched by clicking them; playing a video never touches them.
  */
 export function furnishRoom(zone: Zone, ctx: BuildContext): RoomHandle {
-  const { cssLayer, covers, sky, collection: { games, shelved, overflow }, home: { onSelectPlatform, upgrades, callCat, collector }, arcade: { prizes } } = ctx;
+  const { cssLayer, covers, sky, collection: { games, shelved, overflow, arrangement, boxes }, home: { onSelectPlatform, upgrades, furnishings, callCat, collector }, arcade: { prizes } } = ctx;
   const plan = ROOM_PLAN;
   const { width } = plan.room;
 
@@ -66,7 +71,7 @@ export function furnishRoom(zone: Zone, ctx: BuildContext): RoomHandle {
   // 1. Shelving along the back wall then the right one (clear of the projector picture): the one bookcase the flat
   //    starts with and those bought (`bookcasesIn`); what does not fit goes to `overflow`, for the bedroom's bookcases.
   const standing = (): number => (upgrades ? bookcasesIn(upgrades.count('bookcase')).living : slotCount(livingShelvingOptions()));
-  const shelving = new Shelving(zone, covers, shelved ?? games, { ...livingShelvingOptions(), overflow, ...(upgrades ? { capacity: standing(), minBookcases: standing() } : {}) });
+  const shelving = new Shelving(zone, covers, shelved ?? games, { ...livingShelvingOptions(), id: 'living', overflow, ...(arrangement ? { arrangement } : {}), ...(boxes ? { pool: boxes } : {}), ...(upgrades ? { capacity: standing(), minBookcases: standing() } : {}) });
   zone.onUnload(() => shelving.dispose());
   if (upgrades) zone.onUnload(upgrades.subscribe(() => shelving.setCapacity(standing())));
 
@@ -76,11 +81,14 @@ export function furnishRoom(zone: Zone, ctx: BuildContext): RoomHandle {
   const projector = placerFor(zone, upgrades, plan.projectorUpgrade).placeAt(new Projector(cssLayer, { pictureWidth: plan.projectorPicture.width, ...heardBy(ctx) }), plan.projector);
   projector.aimAt(projector.worldToLocal(zone.toWorld(new THREE.Vector3(width / 2 - 0.005, plan.projectorPicture.centreY, 0))));
   const armchairs: Seat[] = [];
+  const seatKeys = new Map<string, number>();
   const placed = plan.seats.map(({ at, cushion, upgrade }) => {
     const seat = new Seat();
     seat.mountCushion(new Cushion(cushion));
     const placer = placerFor(zone, upgrades, upgrade);
     placer.placeAt(seat, at);
+    // Moved by the player (M) once bought.
+    if (upgrade) furnishings?.register(zone, seat, { key: ownedKey(upgrade, seatKeys), at, owned: upgrade });
     return { seat, placer };
   });
   const seats = placed.map(({ seat }) => seat);
@@ -134,14 +142,26 @@ export function furnishRoom(zone: Zone, ctx: BuildContext): RoomHandle {
   placeClock(zone, ctx, clockAt);
   placeRoomLight(zone, room, 'pendant', plan.pendant, plan.lightSwitch);
 
-  // 6. Decoration: plants, rug, pictures, lamps, tables, straight from the plan; the radiator ticks
-  //    (and the cat naps in its cradle).
-  const radiators = furnishDecor(zone, ctx, plan.decor);
+  // 6. Decoration: plants, rug, pictures, lamps, tables, straight from the plan (what is bought, movable: M); the
+  //    radiator ticks (and the cat naps in its cradle).
+  const decor = placeDecor(zone, plan.decor, upgrades, furnishings);
+  const radiators = tickRadiators(zone, decor, heardBy(ctx));
+  const sideTable = decor.find((item): item is SideTable => item instanceof SideTable);
+  const sideboard = decor.find((item): item is Sideboard => item instanceof Sideboard);
 
-  // 7. Home goods bought at the market: the lava lamp on the side table (once both are bought).
+  // 7. Home goods bought at the market: the lava lamp on the side table (once both are bought), riding it when it is moved.
   const lampAt = resolvePlacement(plan.room, plan.homeGoods.lamp.at);
   lampAt.position.y += plan.homeGoods.lamp.y;
-  placerFor(zone, upgrades, plan.homeGoods.lamp.upgrade).place(new LavaLamp(), lampAt.position, lampAt.rotationY);
+  const lamp = new LavaLamp();
+  const lampPlacer = placerFor(zone, upgrades, plan.homeGoods.lamp.upgrade);
+  if (sideTable) {
+    sideTable.updateWorldMatrix(true, false);
+    lamp.position.copy(sideTable.worldToLocal(zone.toWorld(lampAt.position.clone())));
+    lamp.rotation.y = lampAt.rotationY - sideTable.rotation.y;
+    lampPlacer.placeWith(sideTable, lamp);
+  } else {
+    lampPlacer.place(lamp, lampAt.position, lampAt.rotationY);
+  }
 
   // 8. The arcade's feather wand, once won: on the projector rug (on its pile once the rug is bought), waved for the cat.
   if (prizes) {
@@ -152,11 +172,12 @@ export function furnishRoom(zone: Zone, ctx: BuildContext): RoomHandle {
   //    brass plaque, the display cabinet.
   //    The binder is there from the start (a milestone's reward waits in it), on the floor until the sideboard stands.
   if (collector) {
-    const sideboard = placerFor(zone, upgrades, plan.collector.upgrade);
-    const book = placeCollectorsBook(zone, collector, sideboard.owned);
-    sideboard.onOwned(() => {
+    const bought = placerFor(zone, upgrades, plan.collector.upgrade);
+    // Up there, the binder and the plaque ride the sideboard when it is moved.
+    const book = placeCollectorsBook(zone, collector, bought.owned, sideboard);
+    bought.onOwned(() => {
       book.moveToSideboard();
-      furnishCollectorCorner(zone, collector, { covers, shelved: shelved ?? games });
+      furnishCollectorCorner(zone, collector, { covers, shelved: shelved ?? games, ...(sideboard ? { sideboard } : {}) });
     });
   }
 

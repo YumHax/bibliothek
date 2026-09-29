@@ -26,25 +26,27 @@ export const POINTS_PER_TICKET = 50;
 /**
  * Points per ticket, per arcade game (by the id its machine reports). The games score on very
  * different scales (a pinball ball is worth tens of thousands, a roll up the alley a few hundred)
- * and last differently long (BRICK STORM and the hoops run 30 s, PADDLE WARS and STEP BEAT 20, the
- * others 12-15, a pinball game a minute or so), so each rate is set for a decent play (the table's
- * fourth regular, `rivals.ts`) to pay about the same tickets per minute: roughly 35-40 tickets for
- * a decent 15-second cabinet play, about 50 for a 20-second one, 70-80 for a 30-second one. Retune a rate when one game turns out to be the obvious
- * earner (`?payout` shows the real plays; see docs/economy.md).
+ * and last differently long, so each rate is set on what an ordinary player nets there a minute,
+ * the coin each play costs paid: about 50 tickets (5 coins) a minute on every machine, some 20 a
+ * play on a short one, 35-45 on a long one; a first-timer clears the coin, a good player makes
+ * two or three times as much. The plays are measured by `npm run balance` (scripts/arcade-balance.mjs:
+ * every cabinet game and the alley, hoops and pinball played headless by simulated people, a novice,
+ * an ordinary player and a good one: their reactions, their timing, their slips); retune a rate
+ * from its table, and check the real plays with `?payout` (see docs/economy.md).
  */
 export const PAYOUT: Readonly<Record<string, number>> = {
-  breakout: 40,
-  invaders: 40,
-  stacker: 50,
-  arrows: 32,
-  snake: 40,
-  comets: 28,
-  pinball: 200,
-  alley: 6,
-  duel: 13,
-  stepbeat: 95,
-  sheriff: 120,
-  hoops: 5,
+  breakout: 70,
+  invaders: 75,
+  stacker: 135,
+  frog: 80,
+  snake: 14,
+  comets: 47,
+  pinball: 320,
+  alley: 12,
+  duel: 16,
+  stepbeat: 175,
+  sheriff: 100,
+  hoops: 16,
   /** LexiPunk's scale is its own: a first guess until the site's scores are seen. */
   lexipunk: 50,
   /** The ticket wheel's score is the tickets it landed on. */
@@ -82,13 +84,12 @@ export const CHANGE_MACHINE = { minCoins: 1, maxCoins: 3, workingOdds: 0.25 };
 export const CHALLENGE_REWARD = { min: 50, max: 90 };
 /**
  * Where the daily challenge's target falls on a game's starting table (`rivals.ts`, 0-based ranks,
- * best first): between the `low` rank's score and the `high` one's. Most games aim between the
- * fourth and the second score; the pinball's table was measured higher (its fourth is the upper
- * quartile of a real game, the median about 10 000), so it aims between the fifth and the third.
+ * best first): between the `low` rank's score and the `high` one's, the fourth and the second
+ * score (an ordinary player's good play to a good player's best in ten). A game whose table sits
+ * higher or lower than the others' can have its own band here.
  */
 export const CHALLENGE_BAND: Readonly<Record<string, { low: number; high: number }>> & { default: { low: number; high: number } } = {
   default: { low: 3, high: 1 },
-  pinball: { low: 4, high: 2 },
 };
 
 /** How often a day has an arcade machine out of order. */
@@ -96,11 +97,10 @@ export const OUT_OF_ORDER_ODDS = 0.35;
 
 /**
  * Shop price of an ordinary game per platform, before the fame factor. Calibrated against the
- * arcade: a decent play pays 35-40 tickets and, with the countdown, the end card and the next coin,
- * takes about 19 s, so a good player makes about 11-12 coins a minute there, some 8-9 once the
- * coin each play costs is paid (more on a challenge or a medal); an ordinary market copy (about
- * 0.7 of the shop price: a NES one about 110) is 12-14 minutes of play, a famous shop title an
- * hour or more, a bargain-bin game three.
+ * arcade (`PAYOUT`): an ordinary player nets about 5 coins a minute there once the coin each play
+ * costs is paid, a good one 7-9 (more on a challenge or a medal); for a good player an ordinary
+ * market copy (about 0.7 of the shop price: a NES one about 110) is 12-15 minutes of play, a famous
+ * shop title an hour or more, a bargain-bin game three (twice that for an ordinary player).
  */
 const BASE_PRICE: Record<PlatformId, number> = { nes: 160, snes: 240, gb: 120, megadrive: 200, n64: 280, ps1: 200 };
 
@@ -472,7 +472,7 @@ export function describeCondition(condition: BoxCondition | undefined): string {
 
 /**
  * A bookcase (about 40 NES boxes): the collection room starts with one, those bought stand along its
- * walls, then in the bedroom. About half an hour at the cabinets (net of the plays), dearer than any ordinary copy.
+ * walls, then in the bedroom. About half an hour at the cabinets for a good player (net of the plays), dearer than any ordinary copy.
  */
 export const BOOKCASE_PRICE = 250;
 
@@ -504,7 +504,7 @@ export const TOURNAMENT = { entry: 3, reward: [0, 60, 180, 450], prize: 'saturda
 /**
  * The ticket wheel: what each slice pays and how wide it is (weights, so the slices are drawn to
  * their odds). Expected about 9.4 tickets a spin at the jackpot's start (10 with it at 450), under a
- * coin's worth and well under a decent skill play (35-40): the wheel is for the thrill. `JACKPOT` is progressive: it starts at `start`, grows by `perSpin` every spin
+ * coin's worth and well under an ordinary skill play (20-45): the wheel is for the thrill, and worth a spin when the jackpot has grown. `JACKPOT` is progressive: it starts at `start`, grows by `perSpin` every spin
  * anyone takes, and goes back to `start` when someone hits it.
  */
 export const WHEEL_SLICES: readonly { tickets: number | 'jackpot'; weight: number }[] = [
@@ -557,8 +557,8 @@ export const PRIZE_TICKETS = {
 
 /**
  * What the flat's furniture costs, in coins (the bookcase is `BOOKCASE_PRICE`; `homeGoods.ts` has the list, who sells
- * what and how many). The flat starts bare (a bookcase, the TV, a mattress): at some 8-9 coins a minute at the cabinets
- * (net of the plays) a print or a plant is a couple of minutes, an armchair or a lamp seven to ten, a bed or a dresser
+ * what and how many). The flat starts bare (a bookcase, the TV, a mattress): at a good player's 7-9 coins a minute at the
+ * cabinets (net of the plays; an ordinary player's 5) a print or a plant is a couple of minutes, an armchair or a lamp seven to ten, a bed or a dresser
  * about a quarter of an hour, the projector the long goal (about an hour). The whole flat is some eight hours.
  */
 export const HOME_GOOD_PRICES = {

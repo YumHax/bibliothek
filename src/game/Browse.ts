@@ -21,7 +21,7 @@ const SEARCH_FOLLOW_UP_MS = 10000;
 const TELEPORT_DISTANCE_M = 2;
 const HIGHLIGHT_SECONDS = 3;
 
-const SORT_LABELS: Record<SortMode, string> = { platform: 'platform', year: 'release year', title: 'title' };
+const SORT_LINES: Record<SortMode, string> = { platform: 'Sorted by platform', year: 'Sorted by release year', title: 'Sorted by title', custom: 'Back as you arranged them' };
 
 export interface BrowseParts extends Pick<CoreParts, 'player' | 'inspector'> {
   search?: SearchBar;
@@ -182,7 +182,7 @@ export class Browse implements KeyRoute {
     const mode = this.parts.shelving?.cycleSort?.();
     if (!mode) return;
     this.forget(); // boxes move; a stale glow would mislead
-    this.host.react(`Sorted by ${SORT_LABELS[mode] ?? mode}`);
+    this.host.react(SORT_LINES[mode] ?? `Sorted by ${mode}`);
   }
 
   private toggleNight(dayNight: DayNightLike): void {

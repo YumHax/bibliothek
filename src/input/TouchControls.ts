@@ -15,7 +15,7 @@ export interface TouchButton {
 }
 
 /** What the player's hands are on now, for the bar (`setContext`): the Session's `handsContext`. */
-export type TouchContext = 'room' | 'held' | 'market' | 'arcade' | 'seated';
+export type TouchContext = 'room' | 'held' | 'market' | 'arcade' | 'seated' | 'furnishing';
 
 /**
  * Default action bar: the action table's `touch` entries (`input/actions`), in slot order. Only the
@@ -31,6 +31,7 @@ const SHOWN_IN: Record<TouchContext, ReadonlySet<ActionContext>> = {
   market: new Set(['held', 'market', 'panels']),
   arcade: new Set(['panels']),
   seated: new Set(['room', 'panels']),
+  furnishing: new Set(['furnishing', 'panels']),
 };
 /** The put-back key (E) is also walking away and standing up: shown and named for those too. */
 const E_CODE = primaryCode('putBack');

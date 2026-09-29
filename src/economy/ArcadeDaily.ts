@@ -32,7 +32,7 @@ export interface ArcadeDailyOptions {
 /**
  * What changes at the arcade from one day to the next, the same for everyone all day (seeded by the
  * date, like the market's stock): the challenge (a game, a target between the table's fourth and
- * second score, the pinball's fifth and third: `CHALLENGE_BAND`; a bonus in tickets, paid once) and whether the dead change machine works today (then it gives a
+ * second score: `CHALLENGE_BAND`; a bonus in tickets, paid once) and whether the dead change machine works today (then it gives a
  * few coins, once). What was claimed is persisted by date.
  */
 export class ArcadeDaily {

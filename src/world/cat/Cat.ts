@@ -7,7 +7,7 @@ import type { ActivityAware, Furniture } from '../Furniture';
 import type { Seat } from '../Seat';
 import { CAT_EARSHOT, type CatBedLike, type CatBody, type CatClock, type CatPlayerView, type CatSettings, type CatToyLike, type CatVoiceLike, type FoodBowlLike, type ScratcherLike, type WaterBowlLike } from './types';
 import { rearOf, stereoPan } from '@/audio/spatial';
-import { CatNav } from './CatNav';
+import { FloorNav } from '../nav/FloorNav';
 import { CatMotion } from './CatMotion';
 import { CatBrain, type CatScreen } from './CatBrain';
 import type { CatPerch, WindowLookout } from './spots';
@@ -64,7 +64,7 @@ export type CatCallHow = 'voice' | 'feathers' | 'treats';
 
 /**
  * The cat: a procedural body (`CatBody`) driven by a behaviour (`CatBrain`) that walks it around
- * the room (`CatNav` + `CatMotion`). Furniture with an empty footprint (it never blocks the
+ * the room (`FloorNav` + `CatMotion`). Furniture with an empty footprint (it never blocks the
  * player), clickable (a click is a stroke), ticked by the engine through `zone.place()`.
  * Local +z is the cat's forward; the origin sits on the floor under its body.
  */
@@ -84,7 +84,7 @@ export class Cat extends THREE.Group implements Furniture, Interactable, Updatab
   /** Whether it lives in the flat yet (adopted at the pet shop): till then it waits staged, unseen (`furnishCat`'s placers). */
   adopted = true;
 
-  private readonly nav: CatNav;
+  private readonly nav: FloorNav;
   private readonly motion: CatMotion;
   private readonly brain: CatBrain;
   private readonly voice: CatVoiceLike | undefined;
@@ -126,7 +126,7 @@ export class Cat extends THREE.Group implements Furniture, Interactable, Updatab
 
     const roam = options.roam?.length ? options.roam : null;
     const navBounds = roam ? roam.reduce((all, room) => all.union(room), new THREE.Box2().makeEmpty()) : options.bounds;
-    this.nav = new CatNav(options.collisions, navBounds, roam ?? undefined);
+    this.nav = new FloorNav(options.collisions, navBounds, roam ?? undefined);
     this.motion = new CatMotion(this, body, this.nav);
     this.motion.onLand = (strength) => this.voice?.noise('thud', strength);
     this.brain = new CatBrain({

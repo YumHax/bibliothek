@@ -27,6 +27,9 @@ import type { SoundOcclusion } from './acoustics/SoundOcclusion';
 import type { Room } from './Room';
 import type { Shelving } from './shelving/Shelving';
 import type { StrayGames } from './strays/StrayGames';
+import type { ShelfArrangement } from './shelving/arrangement';
+import type { BoxPool } from './shelving/BoxPool';
+import type { Furnishings } from '@/furnishing/Furnishings';
 import type { CatPerch } from './cat/spots';
 import type { WaterBowlLike } from './cat/types';
 import type { CollectorHome } from './collector/furnishCollector';
@@ -64,12 +67,18 @@ export interface CollectionContext {
   overflow?: GameList;
   /** The games left lying about the flat (the kitchen table, a nightstand); the shelves read `shelved` through it. */
   strays?: StrayGames;
+  /** The sort the flat's shelves stand in and the player's own arrangement of the boxes (moved by hand). */
+  arrangement?: ShelfArrangement;
+  /** The flat's shelf boxes, shared by its shelvings (a game passing from one room's shelves to the other keeps its box). */
+  boxes?: BoxPool;
 }
 
 /** The flat's own: what was bought for it, what its furniture reports or asks for. */
 export interface HomeContext {
   /** Furniture bought for the flat (the bedroom's bookcases, the market's home goods). */
   upgrades?: HomeUpgrades;
+  /** What the player may move about the flat (M): builders register the bought pieces they place. */
+  furnishings?: Furnishings;
   /** Clicking a console on the TV stand reports its platform. */
   onSelectPlatform?: PlatformSelectHandler;
   /** Calls the cat over (the feather wand won at the arcade), and says how that went. */

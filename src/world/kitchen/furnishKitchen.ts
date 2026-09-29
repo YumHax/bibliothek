@@ -69,7 +69,10 @@ export function furnishKitchen(zone: Zone, ctx: BuildContext): ZoneHandle {
   // 3. Breakfast table and its two chairs, once bought (`build/owned.ts`: staged till then).
   const furnished = placerFor(zone, upgrades, plan.upgrades.table);
   const table = furnished.placeAt(new KitchenTable(), plan.table);
-  for (const at of plan.chairs) furnished.placeAt(new Chair(), at);
+  // Moved by the player once bought (M): what is left on the table rides along.
+  const furnishings = ctx.home.furnishings;
+  furnishings?.register(zone, table, { key: 'kitchenTable', at: plan.table, owned: plan.upgrades.table });
+  plan.chairs.forEach((at, i) => furnishings?.register(zone, furnished.placeAt(new Chair(), at), { key: `kitchenChair#${i}`, at, owned: plan.upgrades.table, name: 'Chair' }));
   // A game from the shelves left on the table, a different one each day.
   furnished.onOwned(() => placeStrayBox(zone, ctx, 'kitchenTable', table, plan.strayBox));
 
@@ -94,6 +97,7 @@ export function furnishKitchen(zone: Zone, ctx: BuildContext): ZoneHandle {
   // 6. The cat's second water bowl (once there is a cat), so a thirsty cat in this end of the flat need not go home.
   const catThings = placerFor(zone, upgrades, plan.upgrades.catWater);
   const water = catThings.placeAt(new WaterBowl({ finish: 'ceramic', glaze: 0xb3623b }), plan.catWater);
+  ctx.home.furnishings?.register(zone, water, { key: 'catWater', at: plan.catWater, owned: plan.upgrades.catWater, name: 'Water bowl' });
 
   // 7. Home goods: the portable CRT on the fridge once bought. Its glow is a light: staged from the first frame
   //    (`build/owned.ts`), drawn, clickable and colliding only once bought.

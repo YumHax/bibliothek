@@ -102,25 +102,29 @@ pays at most `WANTED_AD.premium` (1.15) times what the copy cost (a swap's recei
 copy bought off a stall that morning is never a sure profit at noon. The job lot is priced as a legend for a game
 whose fame is unknown (offline), and asked again next time. A price is `BASE_PRICE[platform] x
 fameFactor(views) x jitter(id)`: no real price source exists key-less, so fame stands in for value (see below).
-Calibration: a good player earns about 11-12 coins a minute at the cabinets, some 8-9 net of the coin each play costs
-(a decent play pays 35-40 tickets and, with the READY / GO, the TIME UP card, the end card's count-up and the next
-coin, takes about 19 s; an ordinary player, the table's fifth, about 3-4 net), more on a challenge or a medal. `PAYOUT` sets each game's points per ticket so that a decent play (the table's fourth
-regular) pays about the same tickets per minute whatever the game (a decent 15-second cabinet play about 35-40
-tickets, a 20-second one about 50, a 30-second one 70-80: BRICK STORM 40, COMETS 28, PADDLE WARS 13, STEP BEAT 95,
-the hoops 5 points a ticket; the pinball's points are worth far less, the alley's far more):
-first estimates, retune one when a game turns out to be the obvious earner. `rivals.ts` holds each game's starting
-table (five made-up scores, an ordinary play to a very good one) and the daily challenge aims between its fourth
-and second (`CHALLENGE_BAND`; the pinball's fifth and third, its table being measured high); move them with `PAYOUT`
-when a game's scoring changes. The pinball's were measured with its autopilot
-(a 3-ball game about 45 s, median 10 000, upper quartile 24 000); the cabinets' pilots play far better than a
-person, so their tables are estimates; `simulatePayouts()` (console, with `?payout`) plays every cabinet game
-headless on its autopilot and prints score, length and tickets a minute per skill, to compare the games with each
-other after a change, and `?payout` shows the player's real plays per machine (`PayoutStats`, `PayoutOverlay`).
-The newer games (PADDLE WARS, STEP BEAT, NEON SHERIFF, HOOP FEVER) were set that way; LexiPunk's rate is a guess
-until the site's scores are seen. The extras have their numbers there too: `MEDAL_REWARD`, `STREAK`, `LEAGUE`,
+Calibration: `PAYOUT` sets each machine's points per ticket so that an ordinary player nets about the same there,
+the coin each play costs paid: some 50 tickets (5 coins) a minute whatever the machine (a short play of 10-20 s about
+20-35 tickets, a 30-second one 40-45); a first-timer still clears the coin on every machine (SKY STACK and NEON SNAKE
+only just), a good player nets 7-9 coins a minute (NEON SNAKE and SKY STACK pay skill most), more on a challenge or a
+medal. The plays are measured by **`npm run balance`** (`scripts/arcade-balance.mjs`): every cabinet game, the hoops,
+the alley and the pinball played headless at the machines' own step by simulated people (a novice, an ordinary
+player, a good one: reaction time, the spread of a timed press, slips; on the pinball the machine's flipper timing
+made late, the plunger pulled a different way each ball) and by a regular's autopilot, printing per profile the
+points, seconds, tickets and net tickets a minute, and the rate that would net `--net` a minute for the ordinary
+player. The people are models: compare the machines with each other, then check real plays with `?payout`
+(`PayoutStats`, `PayoutOverlay`; `simulatePayouts()` in the console runs the cabinets' autopilots in the browser).
+`rivals.ts` holds each game's starting table, set from the same runs (the fifth an ordinary player's usual play, the
+fourth their good one, the third a good player's usual, the second a good player's best in ten, the first beyond),
+and the daily challenge aims between its fourth and second (`CHALLENGE_BAND`). When a game's scoring changes, rerun
+the balance, move its rate and table, and bump its `SCORE_RULES` (`rivals.ts`): `ArcadeScores` then drops that game's
+saved best and table entries once (a best made under easier rules would wall the table off; medals paid stay paid,
+replays that no longer end on their score are dropped anyway). The September 2026 pass found an ordinary play paying
+from 7-11 tickets (NEON SNAKE, PADDLE WARS, COMET DASH: under the coin, close to impossible to profit) to over a
+hundred (STAR RAID's four shots in the air, the hoops' roof net sliding every hard throw in); LexiPunk's rate is a guess until the site's scores are
+seen. The extras have their numbers there too: `MEDAL_REWARD`, `STREAK`, `LEAGUE`,
 `WHEEL_SLICES` and `JACKPOT` (the wheel pays about 9.4 tickets a spin on average at the jackpot's start, 10 with it at
 450: under a coin's worth, a thrill, not an earner), `MYSTERY_GAME_TICKETS` and `MYSTERY_GAME_MAX_PRICE`. Base prices
-are set against that rate (net, a decent player):
+are set against that rate (net, a good player; an ordinary one takes about half again as long):
 
 | Buy | Coins | Plays | Time |
 | --- | --- | --- | --- |
@@ -394,7 +398,9 @@ its level following what the screen does; only the six original cabinets keep a 
   ramp to the gutter. Aim where you look, hold Space (the meter on the scoreboard swings), let go to throw: the ball
   leaves with a lift above the line of sight. Thirty seconds; a basket pays 20 (30 in the last ten), baskets in a
   row multiply up to x3, after ten baskets the hoop slides, after twenty faster. The balls are simulated (gravity,
-  the rim as a tube, the backboard, the nets, the ramp), so a ball rattles out. Keeps a table.
+  the rim as a tube, the backboard, the nets, the ramp), so a ball rattles out; the roof net gives and drags
+  (`ROOF_DRAG`), so a throw too hard drops short: looking at the hoop, the power that scores is about a fifth of the
+  meter (0.34-0.55). Keeps a table.
 - **Ticket wheel** (`TicketWheel`, on the front wall): pure luck. A coin, then fire or a click spins a wheel of
   sixteen slices as wide as their odds (`WHEEL_SLICES`), slowed by friction and the pegs under the flapper; it pays
   the slice it stops on (score = tickets, `luck`: no medal, no challenge, no table). One thin gold slice is the
@@ -461,8 +467,8 @@ its level following what the screen does; only the six original cabinets keep a 
   close; a click moves to the next station, then silence. Plays while the player is in the hall.
 - **Sound** (`audio/ChipSpeaker`): every machine has a little chip speaker whose level and pan follow the camera;
   games queue `Sfx` events (`BaseGame.sound`: score, combo, time, penalty, READY / GO, over, NEW BEST, plus each
-  game's own: the dance cabinet's drums, the gun's bang and reload, the wheel's pegs, the hoops' swish and rim, ARROW
-  RUSH's tone per lane and its PERFECT / GOOD / miss, COMETS' rock crunch, shield hum and stage sting), a
+  game's own: the dance cabinet's drums, the gun's bang and reload, the wheel's pegs, the hoops' swish and rim, LEAP
+  FROG's hop climbing up the rows, its chimes at the verge and the far bank and its buzz, COMETS' rock crunch, shield hum and stage sting), a
   machine a regular plays is quieter, a demo on an idle cabinet silent. `ArcadeAmbience` adds a crowd murmur that
   follows how many regulars are in, and mains hum, while the player is in the hall. Nothing sounds before the page's
   first click or key (`unlockAudioOnFirstGesture`).
@@ -488,26 +494,28 @@ Nine games that run on the glass, one per cabinet (plus LexiPunk, which runs in 
 readable and greedy for a replay. They share `BaseGame`
 (`games/BaseGame.ts`): a READY / GO countdown, an optional clock with a time bar that games can add seconds to
 (seconds banked over the limit show as a green bar over the blue),
-a combo multiplier (x1 to x5) that decays, score pops (`Fx`: pops, shake, flash), a live `TIX` counter at the
+a combo multiplier (x1 to x5, lower where every step chains: SKY STACK x3, NEON SNAKE x4) that decays, score pops (`Fx`: pops, shake, flash), a live `TIX` counter at the
 payout rate, a NEW BEST banner the moment the record falls, and a held TIME UP / GAME OVER card before `over`.
 Nothing costs the play except the clock or the game's own single rule; mistakes cost seconds and the combo.
 
 | Game | Clock | Earning time | Losing time | Harder every stage |
 | --- | --- | --- | --- | --- |
-| `Breakout` BRICK STORM | 30 s | clock bricks +3 s, wall clear +5 s (and +300) | last ball lost -2 s | per wall: ball +10%, paddle -5 px (to 52), a row more every 2 walls (to 6), a clock brick fewer every 2 walls (to 1) |
-| `Invaders` STAR RAID | 15 s | saucer +3 s (and 100), wave clear +5 s (and +200) | a diver getting past -1 s | per wave: march faster, a row more every 3 waves (to 5), divers quicker, saucer +15% speed and 0.5 s rarer |
+| `Breakout` BRICK STORM | 30 s | clock bricks +3 s, wall clear +5 s (and +300) | last ball lost -3 s (any ball lost breaks the chain) | per wall: ball +10%, paddle -5 px (to 52), a row more every 2 walls (to 6), a clock brick fewer every 2 walls (to 1) |
+| `Invaders` STAR RAID | 15 s | saucer +3 s (and 100), wave clear +5 s (and +200) | a diver getting past -1 s (two shots in the air; one that hits nothing breaks the chain) | per wave: march faster, a row more every 3 waves (to 5), divers quicker, saucer +15% speed and 0.5 s rarer |
 | `Stacker` SKY STACK | 12 s | every landed row +1.5 s, a clean one +1 s more, minor prize (row 10) +5 s, jackpot (row 15) +10 s | a landing that lost cells +1 s less (net +0.5 s) | per row: faster block, narrower (3 / 2 / 1 cells); each tower after a jackpot +25% speed; a miss ends it |
-| `ArrowRush` ARROW RUSH | 15 s | gold arrows +2 s, every 10 hits a level = +3 s | a late arrow or a wrong press -1 s (spamming the lanes loses) | per level: arrows +22 px/s, spawn gap -0.045 s (to 0.15), gold one arrow rarer |
-| `Snake` NEON SNAKE | 15 s | every pellet +0.6 s, gold pellet +3 s (every 5th, for 4 s), every 6 pellets a stage +2 s | none: a wall or your own tail ends it | per stage: +1.2 cells/s (to 20) |
-| `Comets` COMET DASH | 15 s | clocks +2 s (one faller in 9), every 8 stars a stage +2 s | a rock -2 s (and the combo), then 1 s of shield | per stage: rocks faster, spawns denser |
-| `Duel` PADDLE WARS | 20 s | a goal +3 s (and 100), every 3 goals a set +2 s | a goal conceded -2 s (and the combo) | per set: ball +12%, player two faster (it reacts once the ball crosses 42% of the court, aims up to 22 px off) |
+| `LeapFrog` LEAP FROG | 15 s | each crossing +5 s, 0.6 s less each crossing after (to 2) | run over, drowned or carried off the screen -2 s (and the combo), back on the kerb | per crossing: traffic and logs +14% |
+| `Snake` NEON SNAKE | 15 s | every pellet +0.4 s, gold pellet +2 s (every 5th, for 4 s), every 6 pellets a stage +2 s | a wall or your own tail -3 s (and the combo), the snake starts again short | per stage: +0.9 cells/s (from 7.5, to 17) |
+| `Comets` COMET DASH | 15 s | clocks +2 s (one faller in 9), every 12 stars a stage +2 s | a rock -2 s (and the combo), then 1 s of shield | per stage: rocks faster, spawns denser |
+| `Duel` PADDLE WARS | 20 s | a goal +3 s (and 150), every 3 goals a set +2 s | a goal conceded -2 s (and the combo) | per set: ball +12%, player two faster (it reacts once the ball crosses half the court, aims up to 24 px off, 105 px/s and +10 a set) |
 | `StepBeat` STEP BEAT | 20 s | FEVER (24 clean steps) +2 s and x2 for 4 s, every 20 steps a stage +2 s | a late arrow or a step on nothing -1 s | per stage: +8 BPM (to 176), denser charts, jumps from stage 2 |
-| `NeonSheriff` NEON SHERIFF | 15 s | the sheriff's star +3 s, every 8 bandits a stage +2 s | a bandit who draws first -1 s, shooting townsfolk -2 s (and the combo) | per stage: faster draws, more at once (to 5) |
+| `NeonSheriff` NEON SHERIFF | 15 s | the sheriff's star +3 s, every 8 bandits a stage +2 s (a quarter less each stage after, to 0.5) | a bandit who draws first -1 s, shooting townsfolk -2 s (and the combo) | per stage: faster draws, more at once (to 5) |
 
-Scoring: bricks 30-100 (chain within 1.2 s), aliens 5-25 and divers 100 (chain within 0.5 s), stack row *n* pays
-25*n* (+40 and chain when clean, +300 minor, +1500 jackpot), arrows perfect 20 / good 8 (every hit chains, a late
-arrow or a wrong press breaks), pellets 20 and gold 100 (chain within 2.2 s), stars 30 (chain within 2 s), returns
-10 (+10 smashed with Space held; chain within 3 s) and goals 100, steps MARVELOUS 30 / GREAT 20 / GOOD 10 per panel
+Scoring: bricks 30-100 (chain within 1.2 s, broken by a ball lost), aliens 5-25, divers 100 and the saucer 100
+(chain within 1.5 s, broken by a shot that hits nothing), stack row *n* pays 25*n* (+40 and chain when clean, +300
+minor, +1500 jackpot), a hop onto a row not reached yet this crossing 10 and the far bank 100 (chain within 1.4 s,
+broken by dying), pellets 20 and gold 100 (two pellets on the board; chain within 2.5 s), stars 30 (some in a trail of
+three; caught 5 px wider than drawn; chain within 2 s), returns 10 (+10 smashed with Space held; chain within 3 s) and
+goals 150, steps MARVELOUS 30 / GREAT 20 / GOOD 10 per panel
 (every step chains), bandits 50, quick ones 80 (+20 before they reach for the gun; chain within 1.6 s), bottles 30. Every
 game is unbounded in theory: the seconds it hands out are enough to keep going at the pace a very good player
 sets, and the difficulty ramp is what ends the run.
@@ -519,7 +527,8 @@ Extend `BaseGame` in `src/world/arcade/games/` (320 x 240 logical pixels, playfi
 clock run out; `sound(sfx)` for its own noises; `keys.pressed(controls, 'up')` for a press rather than a hold), implement `autopilot(skill)` (what a regular's hands do: read the
 board, return the keys; keep it pure), register it in `games/index.ts` (a factory taking the `GameContext`), name
 it in a `cabinets` entry of `ARCADE_PLAN` (a free spot, a stand spot reachable from the nav graph), give it a
-`PAYOUT` rate and a `rivals.ts` table (`simulatePayouts()` helps). No Session change. **For replays to hold**: draw
+`PAYOUT` rate and a `rivals.ts` table (`npm run balance`: give it a driver in `scripts/arcade-balance.mjs` if the
+autopilot played `react` late is not how a person plays it). No Session change. **For replays to hold**: draw
 every board-shaping number with `this.rand()` (never `Math.random`, which only autopilots and visuals may use),
 reset every field of the board in `begin` (a timer left over from the last run makes the replay diverge), and read
 nothing but `dt` and the controls. A light-gun game sets `gun` (it gets `controls.aim`, in whole pixels; aim only
@@ -652,9 +661,9 @@ bought, and stands at home the moment it is paid for:
   (`{ type: 'lexipunk:score', score, final }` / `{ type: 'lexipunk:over', score }` to `window.parent`); until it does,
   a LexiPunk play pays nothing, so it plays free (`freePlay` in `ARCADE_PLAN.cabinets`: drop the flag once scores come
   in). Its `PAYOUT` and table are guesses until its scores are seen.
-- **Tuning by play**: `PAYOUT`, the rival tables, the claw's `GRIP` odds, the wheel's slices and the league's
-  rivals are first estimates; `?payout` collects the real spreads. The physical machines (pinball, alley, hoops,
-  wheel) are not in `simulatePayouts`.
+- **Tuning by play**: `PAYOUT` and the rival tables come from simulated people (`npm run balance`), the claw's `GRIP`
+  odds, the wheel's slices and the league's rivals are first estimates; `?payout` collects the real spreads to check
+  them against.
 - The arcade never closes: an empty hall late at night was considered, a shutter was not (it would dead-end the loop).
 - **Front Street's shops**: their prices, the flat's (`HOME_GOOD_PRICES`) and the scratch card's odds are first guesses.
   The walk-in shops' layouts (`SHOP_PLANS`) were placed from the pieces' sizes, not yet walked: check nothing overlaps
