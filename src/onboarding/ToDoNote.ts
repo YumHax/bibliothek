@@ -82,7 +82,7 @@ export class ToDoNote extends Prop implements Interactable {
   setHovered(_hovered: boolean): void {}
 
   label(): string | null {
-    return this.firstDay.active ? 'A note for you: click to read it' : null;
+    return this.firstDay.active ? 'A note for you · read it' : null;
   }
 
   activate(session: SessionActions): void {

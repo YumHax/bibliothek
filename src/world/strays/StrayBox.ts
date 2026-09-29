@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { hashString, seededRandom } from '@/graphics/canvas';
 import type { Furniture } from '../Furniture';
 import type { Interactable } from '@/interaction/Interactable';
 import type { PlayerState, SessionActions } from '@/game/SessionActions';
@@ -8,11 +9,17 @@ import { GameBox } from '../GameBox';
 import { invisibleHitbox } from '../meshUtils';
 import type { StrayGames } from './StrayGames';
 
+/** How far a stray box lies off square (radians) and off its spot (metres), unless its spot says less. */
+const MAX_YAW = THREE.MathUtils.degToRad(20);
+const MAX_OFFSET = 0.03;
+
 export interface StrayBoxOptions {
   strays: StrayGames;
   /** The slot's name, unique in the flat: with the day it seeds which game lies here. */
   slot: string;
   covers: BoxArtLoader;
+  /** How untidily it may lie here: at most this turn (radians) and this slide off the spot (m); a small top wants less. */
+  jitter?: { yaw: number; offset: number };
 }
 
 /** The click target covers the largest box lying flat (a PC big box would overhang it a little). */
@@ -66,15 +73,12 @@ export class StrayBox extends THREE.Group implements Furniture, Interactable {
 
   label(player: PlayerState): string | null {
     if (!this.box) return null;
-    return player.held ? 'Click to put the box in hand back' : `${this.box.game.title}, left out here: click to pick up`;
+    return player.held ? `${this.box.game.title}, left out here · swap for the box in hand` : `${this.box.game.title}, left out here · pick up`;
   }
 
-  /** Picks the game up; in hand it is its shelf's box, which goes home when put down. */
+  /** Picks the game up (the box in hand goes home first); in hand it is its shelf's box, which goes home when put down. */
   activate(session: SessionActions): void {
-    if (session.held) {
-      session.putBack();
-      return;
-    }
+    if (session.held) session.putBack();
     const box = this.box;
     if (!box) return;
     const { strays, slot } = this.options;
@@ -101,9 +105,13 @@ export class StrayBox extends THREE.Group implements Furniture, Interactable {
   private show(game: Game): void {
     const box = new GameBox(game, this.options.covers);
     const { depth } = box.dimensions;
-    // Lying on its back, cover up, the top of the cover towards local -z.
-    box.rotation.set(-Math.PI / 2, 0, 0);
-    box.position.set(0, depth / 2 + 0.001, 0);
+    // Lying on its back, cover up, the top of the cover towards local -z; dropped there, not squared up:
+    // turned up to 20° either way and off the spot by a few centimetres (the same all day for this spot).
+    const random = seededRandom(hashString(`${this.options.slot}:${this.day}`));
+    const jitter = this.options.jitter ?? { yaw: MAX_YAW, offset: MAX_OFFSET };
+    const yaw = (random() * 2 - 1) * jitter.yaw;
+    box.rotation.set(-Math.PI / 2, yaw, 0, 'YXZ');
+    box.position.set((random() - 0.5) * 2 * jitter.offset, depth / 2 + 0.001, (random() - 0.5) * 2 * jitter.offset);
     box.saveRestPose();
     // The zone's shadow layer (the spot was adopted when placed) and the default one.
     const mask = this.hitbox.layers.mask | 1;

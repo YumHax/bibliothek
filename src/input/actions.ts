@@ -16,6 +16,10 @@ import { PAD_LABELS, type PadButton } from './padButtons';
  * - `Space` / `Enter`: `fire` (the arcade replays on its end card) > `pickUpFound` (Browse);
  * - movement keys: walking, the arcade stick while at a machine, `standUp` when seated.
  * A shared key has one Settings row (the entry with `rebind`); rebinding moves every action on it.
+ *
+ * Controller buttons that spend (`buy`, `haggle`) sit on the triggers, which do nothing else: B and RB
+ * are the right mouse button (rotating a box) and the d-pad walks, so neither may ever buy by accident.
+ * The right stick's click only calls the cat (harmless anywhere); holding Select opens the journal.
  */
 export type ActionContext =
   /** Walking about (the `FirstPersonController` reads these as held keys). */
@@ -49,6 +53,8 @@ export interface ActionSpec {
   hint: string;
   /** Controller button that also presses `codes[0]` (the gamepad's key aliases). */
   pad?: PadButton;
+  /** Controller button that presses `codes[0]` when held (half a second, in the room); its short press stays its own. */
+  padHold?: PadButton;
   /** On-screen button (touch bar) that presses `codes[0]`. */
   touch?: TouchSpec;
   /** Settings > Keyboard row label: the player may move this key (one row per key). */
@@ -61,7 +67,8 @@ export const ACTIONS = {
   back: { codes: ['KeyS'], context: 'walk', hint: 'walk back', rebind: 'Back' },
   left: { codes: ['KeyA'], context: 'walk', hint: 'strafe left', rebind: 'Left' },
   right: { codes: ['KeyD'], context: 'walk', hint: 'strafe right', rebind: 'Right' },
-  crouch: { codes: ['ShiftLeft', 'ShiftRight'], context: 'walk', hint: 'crouch while held', rebind: 'Crouch' },
+  crouch: { codes: ['ShiftLeft', 'ShiftRight'], context: 'walk', hint: 'crouch while held (sprint while held when Settings > Controls says Shift sprints)', rebind: 'Crouch / sprint' },
+  crouchAlt: { codes: ['KeyZ'], context: 'walk', hint: 'crouch while Shift sprints (Settings > Controls)', rebind: 'Crouch when Shift sprints' },
 
   // --- E, O: the box in hand ---------------------------------------------------------------------------
   putBack: {
@@ -84,17 +91,17 @@ export const ACTIONS = {
   randomPick: { codes: ['KeyR'], context: 'room', hint: 'random pick, again: walk to it', rebind: 'Random pick / hold for the day' },
   sortShelves: { codes: ['KeyT'], context: 'room', hint: 'sort the shelves by platform / year / title', rebind: 'Sort the shelves' },
   nightMode: { codes: ['KeyN'], context: 'room', hint: 'night mode', rebind: 'Night mode' },
-  callCat: { codes: ['KeyC'], context: 'room', hint: 'call the cat', rebind: 'Call the cat' },
-  journal: { codes: ['KeyJ'], context: 'room', hint: 'open the journal: today, the days before', rebind: 'Journal' },
+  callCat: { codes: ['KeyC'], context: 'room', hint: 'call the cat', pad: 'GamepadRS', rebind: 'Call the cat' },
+  journal: { codes: ['KeyJ'], context: 'room', hint: 'open the journal: today, the days before', padHold: 'GamepadSelect', rebind: 'Journal' },
   photoMode: { codes: ['KeyP'], context: 'room', hint: 'photo mode (again: leave it)', rebind: 'Photo mode' },
 
   // --- a market copy in hand ---------------------------------------------------------------------------
   buy: {
-    codes: ['KeyB'], context: 'market', hint: 'buy it', pad: 'GamepadB',
+    codes: ['KeyB'], context: 'market', hint: 'buy it', pad: 'GamepadRT',
     touch: { label: 'Buy', title: 'Buy the market copy in hand', slot: 3 }, rebind: 'Buy',
   },
   haggle: {
-    codes: ['KeyH'], context: 'market', hint: 'haggle (once a day per copy)', pad: 'GamepadRight',
+    codes: ['KeyH'], context: 'market', hint: 'haggle (once a day per copy)', pad: 'GamepadLT',
     touch: { label: 'Haggle', title: 'Make the stallholder an offer', slot: 4 }, rebind: 'Haggle',
   },
   holdCopy: { codes: ['KeyR'], context: 'market', hint: 'hold it for the day (shares randomPick’s key)' },
@@ -110,7 +117,7 @@ export const ACTIONS = {
   },
   close: {
     codes: ['Escape'], context: 'panels', hint: 'close the open panel, pause (the controller’s Start: PointerLockFlow)',
-    touch: { label: 'Menu', title: 'Back to the start screen', slot: 7 },
+    touch: { label: 'Menu', title: 'Pause menu', slot: 7 },
   },
 
   // --- at an arcade machine (read as held keys by `MachineRun` through `ARCADE_KEYS`) ------------------
@@ -188,13 +195,21 @@ export const PAD_ALIASES: Readonly<Record<string, string>> = Object.fromEntries(
   }),
 );
 
-/** The touch action bar, left to right: each button presses its action's key. */
-export const TOUCH_ACTIONS: ReadonlyArray<{ label: string; code: string; title: string }> = IDS.flatMap((id) => {
+/** Long presses on the controller (`GamepadInput`): each held button presses its action's key. */
+export const PAD_HOLD_ALIASES: Readonly<Record<string, string>> = Object.fromEntries(
+  IDS.flatMap((id) => {
+    const pad = SPECS[id].padHold;
+    return pad ? [[pad, primaryCode(id)]] : [];
+  }),
+);
+
+/** The touch action bar, left to right: each button presses its action's key, shown where its `context` applies (`TouchControls`). */
+export const TOUCH_ACTIONS: ReadonlyArray<{ label: string; code: string; title: string; context: ActionContext }> = IDS.flatMap((id) => {
   const touch = SPECS[id].touch;
-  return touch ? [{ ...touch, code: primaryCode(id) }] : [];
+  return touch ? [{ ...touch, code: primaryCode(id), context: SPECS[id].context }] : [];
 })
   .sort((a, b) => a.slot - b.slot)
-  .map(({ label, code, title }) => ({ label, code, title }));
+  .map(({ label, code, title, context }) => ({ label, code, title, context }));
 
 /** The keys the Settings screen lets the player move, in table order, with the action each one names. */
 export const REBINDABLE_ACTIONS: ReadonlyArray<{ code: string; label: string }> = IDS.flatMap((id) => {

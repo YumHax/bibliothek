@@ -9,6 +9,10 @@ export interface Carriable extends THREE.Object3D {
   /** Where it rests in its parent's space: the Inspector brings it back there. */
   readonly restPosition: THREE.Vector3;
   readonly restQuaternion: THREE.Quaternion;
+  /** How far out of its row it must slide (m, along its front) before it can fly to the hand clear of the board above. */
+  readonly slideOut: number;
+  /** Set by the Inspector while it carries the object: called when the object is disposed under it (its shelf rebuilt). */
+  onDisposed: (() => void) | null;
   readonly isOpen: boolean;
   /** 0 shut .. 1 open: the hand shifts right as it opens so the spread stays in view. */
   readonly openness: number;

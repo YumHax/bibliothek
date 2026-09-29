@@ -10,11 +10,11 @@ import { paint, standard, timber } from '../materials/palette';
  * toaster work, so they have their own files (`Kettle.ts`, `Toaster.ts`).
  */
 
-const STEEL = standard({ color: 0xc4c7cb, metalness: 0.7, roughness: 0.35 });
+const STEEL = standard({ color: 0xc4c7cb, metalness: 1, roughness: 0.4 });
 const BLACK = paint(0x1e1f22, 0.6);
 const CERAMIC = standard({ color: 0xf2eee6, roughness: 0.35, side: THREE.DoubleSide });
-const GLASS = standard({ color: 0xe8f0f2, roughness: 0.05, metalness: 0.1, transparent: true, opacity: 0.35, side: THREE.DoubleSide });
-const WATER = standard({ color: 0xcfd8dc, roughness: 0.02, metalness: 0.2, transparent: true, opacity: 0.25 });
+const GLASS = standard({ color: 0xe8f0f2, roughness: 0.05, metalness: 0, transparent: true, opacity: 0.35, side: THREE.DoubleSide });
+const WATER = standard({ color: 0xcfd8dc, roughness: 0.02, metalness: 0, transparent: true, opacity: 0.25 });
 
 export interface FruitBowlOptions {
   /** Colour of the bowl. Default a glazed cream. */
@@ -93,7 +93,7 @@ export class StorageJars extends Prop {
     super();
     this.name = 'StorageJars';
     const contents = options.contents ?? [0xe0b96a, 0xf1eadb, 0x3a2418];
-    const glass = standard({ color: 0xe8f0f2, roughness: 0.05, metalness: 0.1, transparent: true, opacity: 0.35, side: THREE.DoubleSide });
+    const glass = standard({ color: 0xe8f0f2, roughness: 0.05, metalness: 0, transparent: true, opacity: 0.35, side: THREE.DoubleSide });
     const lid = paint(0xb98a58, 0.6);
     const r = 0.045;
     const pitch = r * 2 + 0.02;

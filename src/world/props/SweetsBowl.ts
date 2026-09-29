@@ -11,7 +11,7 @@ export interface SweetsBowlOptions {
   seed?: number;
 }
 
-const WRAPPER = instancedStandard({ roughness: 0.3, metalness: 0.2 });
+const WRAPPER = instancedStandard({ roughness: 0.3, metalness: 0 });
 const WRAPPERS = [0xff8a1a, 0x7a3aa8, 0x2a2a2a, 0x3ac85a, 0xffd23a, 0xd23a3a];
 
 /**

@@ -1,4 +1,5 @@
 import type { Game } from '@/catalog/types';
+import { coverAttrs } from '../coverPlaceholder';
 import type { GameSource } from '@/collection/GameSource';
 import { getPlatform } from '@/catalog/platforms';
 import { COLLECTOR_SETS, setProgress } from '@/economy/collectorSets';
@@ -152,7 +153,7 @@ export class CollectorBookPanel extends MarketPanel {
       return `
         <div class="catalogue__row">
           <span class="collector__rank">${i + 1}</span>
-          ${cover ? `<img class="catalogue__cover" src="${escapeHtml(cover)}" alt="" loading="lazy" />` : ''}
+          ${cover ? `<img class="catalogue__cover" src="${escapeHtml(cover)}" alt=""${coverAttrs(game)} loading="lazy" />` : ''}
           <span class="catalogue__title">${escapeHtml(game.title)} <span class="catalogue__meta">${escapeHtml(getPlatform(game.platform).shortName)}${game.status === 'lent' ? ' · lent out' : ''}</span></span>
           ${coinsHtml(value)}
         </div>`;
@@ -161,7 +162,7 @@ export class CollectorBookPanel extends MarketPanel {
       <h3>Worth about ${value.market.toLocaleString('en-US')} coins <span class="catalogue__meta">the market’s asking prices on an average day${since}</span></h3>
       <p class="catalogue__meta">The WE BUY desk would give ${value.desk.toLocaleString('en-US')} coins for the lot.</p>
       ${pending}
-      <canvas class="collector__chart" width="640" height="180" aria-label="The collection's value, day by day"></canvas>
+      <canvas class="collector__chart" width="640" height="180" aria-label="The collection’s value, day by day"></canvas>
       <h3>The best of it</h3>
       ${top || '<p class="catalogue__empty">Nothing yet: the collection is empty.</p>'}`;
   }

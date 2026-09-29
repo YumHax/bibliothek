@@ -68,9 +68,10 @@ export const BEDROOM_PLAN = {
   nightLight: { stand: 1, at: [0.15, 0.13] as [number, number] },
   /**
    * A game from the collection left on the sleeper's nightstand (the handheld is in its drawer), on the bed side of the
-   * lamp (base r 0.06 at [0, 0.18]) and across from the phone: stand-local [x, z] on the top, and its turn.
+   * lamp (base r 0.06 at [0, 0.18]) and across from the phone: stand-local [x, z] on the top, and its turn. The top is
+   * small: the box lies nearly square, a centimetre off at most, so it stays on it and clear of the lamp's foot.
    */
-  strayBox: { stand: 0, at: [0.115, 0.32] as [number, number], yaw: Math.PI / 2 + 0.15 },
+  strayBox: { stand: 0, at: [0.1, 0.33] as [number, number], yaw: Math.PI / 2 + 0.15, jitter: { yaw: 0.1, offset: 0.008 } },
   /**
    * The neighbours heard through the party wall (the right wall): where their muffled voices come from, just in front of
    * the wall at head height beside the bed. It is inside the room so the wall is not counted twice; the voice is muffled itself.
@@ -145,8 +146,8 @@ export const BEDROOM_PLAN = {
     { kind: 'rug', at: { floor: [0.4, 0.65] }, options: { width: 1.6, depth: 0.7, field: 0xb9a68a, border: 0x6e5a48, motif: 0x8c7358 }, upgrade: 'bedroomRug' },
     // A wide landscape over the headboard, a small one over the dresser.
     // Bought at the furniture shop (`framedPrint` nth 5, 6: after the living room's and the hallway's).
-    { kind: 'pictureFrame', at: { wall: 'back', along: 0.4, y: 1.7 }, options: { motif: 'mountains', seed: 7, width: 0.9, height: 0.5, matWidth: 0.05 }, upgrade: { good: 'framedPrint', nth: 5 } },
-    { kind: 'pictureFrame', at: { wall: 'front', along: 0.6, y: 1.55 }, options: { motif: 'sunset', seed: 12, width: 0.42, height: 0.32 }, upgrade: { good: 'framedPrint', nth: 6 } },
+    { kind: 'pictureFrame', at: { wall: 'back', along: 0.4, y: 1.7 }, options: { motif: 'mountains', seed: 7, width: 0.9, height: 0.5, matWidth: 0.05, frameColor: 0x8a6a48 }, upgrade: { good: 'framedPrint', nth: 5 } },
+    { kind: 'pictureFrame', at: { wall: 'front', along: 0.6, y: 1.55 }, options: { motif: 'botanical', seed: 12, width: 0.42, height: 0.32, frameColor: 0x2a2a2c }, upgrade: { good: 'framedPrint', nth: 6 } },
     // A small fig tucked in the back-left corner, between the left nightstand and the bookcase slot.
     { kind: 'plant', at: { corner: 'back-left', inset: 0.26 }, options: { kind: 'fig', pot: 'terracotta', seed: 21, scale: 0.7 }, upgrade: { good: 'houseplant', nth: 7 } },
     // A full-length mirror leaning on the bare right wall beside the foot of the bed (z -0.45..0.05), between the
@@ -156,5 +157,8 @@ export const BEDROOM_PLAN = {
     // pipes), clear of the nightstand's drawer, which slides out to z -1.12. The strip between the bed and this wall
     // (0.47 m) is too narrow to walk anyway: that side's lamp and drawer are reached from the foot of the bed.
     { kind: 'radiator', at: { wall: 'right', along: -0.8, y: 0 }, options: { style: 'panel', width: 0.45, height: 0.5 } },
+    // A socket over each nightstand, where the lamps, the phone's charger and the alarm clock plug in (the flat's).
+    { kind: 'wallSocket', at: { wall: 'back', along: -0.52, y: 0 }, options: { height: 0.72 } },
+    { kind: 'wallSocket', at: { wall: 'back', along: 1.32, y: 0 }, options: { height: 0.72, gangs: 1 } },
   ] as DecorEntry[],
 };

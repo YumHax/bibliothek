@@ -109,3 +109,12 @@ body.photo-mode .touch-badge {
   from { opacity: 0.85; }
   to { opacity: 0; }
 }
+/* Reduced motion: no white burst, a brief soft dim instead (the reduced-motion rule shortens the animation, so hold it with a transition-free class). */
+.photo-flash--dim { background: #000; }
+.photo-flash--dim.photo-flash--go { animation: photo-dim 0.42s ease-out !important; animation-duration: 0.42s !important; }
+@keyframes photo-dim {
+  from { opacity: 0.35; }
+  to { opacity: 0; }
+}
+.photo-card__saved { margin: 0.5rem 0 0; color: #bfe3b4; word-break: break-all; }
+.photo-card__saved--failed { color: #f2a497; word-break: normal; }

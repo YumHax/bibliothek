@@ -1,4 +1,4 @@
-import { ticketsFor } from './pricing';
+import { BEGINNER, ticketsFor } from './pricing';
 import { getPrize } from './Prizes';
 
 /** The machine a play was on, as the payout reads it. */
@@ -10,11 +10,14 @@ export interface PayoutMachine {
   readonly luck?: boolean;
 }
 
-/** How the play went: the score, whether it beat the player's best, a prize won (the claw). */
+/** How the play went: the score, whether it beat the player's best (or was their first score there), a prize won (the claw). */
 export interface PayoutPlay {
   readonly score: number;
   readonly best: boolean;
+  readonly first?: boolean;
   readonly prize?: string;
+  /** One of the player's first plays on this machine (`BEGINNER`): a poor score still pays about its coin back. */
+  readonly beginner?: boolean;
 }
 
 /**
@@ -39,8 +42,12 @@ export interface ArcadePayout {
   prizes: string[];
   /** A ticket play: what the score earned on its own (the balance table's figure) and everything paid with the extras. */
   tickets: { earned: number; paid: number } | null;
-  /** The toast, a line each. */
+  /** The banner, a line each. */
   lines: string[];
+  /** The tickets paid on top of the score's, a line each for the machine's end card ("+60 CHALLENGE"). */
+  bonuses: { label: string; tickets: number }[];
+  /** Something beyond the score happened (a challenge, a medal, the streak, the week's result, a prize): worth a banner. */
+  notable: boolean;
 }
 
 /**
@@ -51,28 +58,39 @@ export interface ArcadePayout {
 export function arcadePayout(machine: PayoutMachine, play: PayoutPlay, books: PayoutBooks): ArcadePayout {
   const { daily, medals, league } = books;
   if (play.prize) {
-    return { prizes: [play.prize], tickets: null, lines: [`You won the ${getPrize(play.prize)?.name ?? 'prize'}! It is on the prize shelf at home.`] };
+    return { prizes: [play.prize], tickets: null, lines: [`You won the ${getPrize(play.prize)?.name ?? 'prize'}! It is on the prize shelf at home.`], bonuses: [], notable: true };
   }
-  if (!machine.freeWhenBroke) return { prizes: [], tickets: null, lines: ['Nothing this time.'] };
+  if (!machine.freeWhenBroke) return { prizes: [], tickets: null, lines: ['Nothing this time.'], bonuses: [], notable: false };
 
   const prizes: string[] = [];
   const lines: string[] = [];
+  const bonuses: { label: string; tickets: number }[] = [];
   const earned = ticketsFor(machine.game.id, play.score);
   let paid = earned;
-  lines.push(machine.luck ? `The wheel pays ${earned} ticket${earned === 1 ? '' : 's'}!` : `${play.score.toLocaleString('en-US')} points: ${earned} ticket${earned === 1 ? '' : 's'} in your pocket${play.best ? ' — new best!' : ''}`);
+  const mark = play.best ? ' — new best!' : play.first ? ' — first score on the board' : '';
+  lines.push(machine.luck ? `The wheel pays ${earned} ticket${earned === 1 ? '' : 's'}!` : `${play.score.toLocaleString('en-US')} points: ${earned} ticket${earned === 1 ? '' : 's'} in your pocket${mark}`);
+  if (play.beginner && !machine.luck && earned < BEGINNER.tickets) {
+    const luck = BEGINNER.tickets - earned;
+    paid += luck;
+    lines.push(`Beginner’s luck: +${luck} tickets while you learn this one.`);
+    bonuses.push({ label: 'BEGINNER', tickets: luck });
+  }
   const challenge = daily?.challenge();
   if (challenge && !challenge.done && challenge.gameId === machine.game.id && play.score >= challenge.target && daily?.claimChallenge()) {
     paid += challenge.reward;
     lines.push(`Daily challenge beaten: +${challenge.reward} tickets!`);
+    bonuses.push({ label: 'CHALLENGE', tickets: challenge.reward });
   }
   for (const medal of machine.luck ? [] : (medals?.award(machine.game.id, play.score) ?? [])) {
     paid += medal.reward;
     lines.push(`${medal.tier[0]!.toUpperCase()}${medal.tier.slice(1)} medal on ${machine.game.title}: +${medal.reward} tickets!`);
+    bonuses.push({ label: `${medal.tier.toUpperCase()} MEDAL`, tickets: medal.reward });
   }
   const streak = league?.record(paid);
   if (streak?.bonus) {
     paid += streak.bonus;
     lines.push(`Day ${streak.days} in a row: +${streak.bonus} tickets!`);
+    bonuses.push({ label: `DAY ${streak.days} STREAK`, tickets: streak.bonus });
   }
   const week = league?.takeWeekResult();
   if (week?.won) {
@@ -81,7 +99,7 @@ export function arcadePayout(machine: PayoutMachine, play: PayoutPlay, books: Pa
   } else if (week) {
     lines.push(`Last week's league: you came ${ordinalOf(week.rank + 1)} with ${week.tickets} tickets.`);
   }
-  return { prizes, tickets: { earned, paid }, lines };
+  return { prizes, tickets: { earned, paid }, lines, bonuses, notable: bonuses.length > 0 || Boolean(week) };
 }
 
 /** 1st, 2nd, 3rd, 4th… */

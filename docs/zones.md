@@ -49,9 +49,14 @@ Five rooms: the collection room (`living`, persistent), the `hallway` behind its
 `FLAT`. The flat's front door at the corridor's right end is a real door (`hallway/FrontDoor`, locked from inside
 without the keys from the bowl, self-closing) onto our landing: the stairwell (see "The stairwell"), whose street door
 travels (fade, `Travel.go`) to the `street` (x 140, see "The street"), whose doors lead to the `arcade` (x 40), the
-`market` (x 80) and the four walk-in shops (x 200, 215, 230, 245: one `shop` kind, `SHOP_PLANS`), windowless, doorless halls with no neighbours, not persistent (rebuilt on return: the market's
+`market` (x 80) and the four walk-in shops (x 200, 215, 230, 245: one `shop` kind, `SHOP_PLANS`), doorless halls with no neighbours, not persistent (rebuilt on return: the market's
 stock is fetched again, cached per day). Each carries a `travel: { label, arrival, yaw }` in `WORLD_PLAN`; their exit
-doors travel back to the street. In the flat every zone neighbours every other
+doors (`TravelDoor` with `shopfront`, as big as the street's door: 1.3, 1.4, 1.6 x 2.5, captioned with the street
+they open on) travel back to the street. A travel door's leaf swings ajar onto a dark gap as the curtain falls, a
+shop's bell bobbing on its spring, and is shut again when its zone comes back (`travel/doorSwing`); the street's shop
+doors (`StreetDoor`) are real leaves too, frames in the shop's joinery colour round the painted glass. A
+travel sounds like a door (`travel/travelSounds`: the latch, a shop's bell when either end is a shop, the arcade or
+the market, the door shut on arrival) and crossfades the room's sound under its curtain (`audio/audioContext.duckScene`). In the flat every zone neighbours every other
 (`FLAT` in `worldPlan.ts`), so they are always active together: a zone coming or going changes the scene's light
 count, which recompiles every shader program (a freeze of seconds at a doorway). The `PortalCuller` still draws only what
 is seen, and idle rooms refresh their shadow maps twice a second, so an active room out of sight costs little.
@@ -77,19 +82,33 @@ balcony that is 0 when the sun is behind the building, a hemisphere on only whil
 right wall (map in `stairwellPlan.ts`). A zone of `FLAT` (persistent, always active: its lights are compiled with the
 flat's) with no `Room`: `Staircase` (plaster shaft, stone landings, ten flights of nine steps round the well, the iron
 balustrade, our landing's strip from the front door, the hall's cabochon tiles; walls and the well's sides are its
-`colliders`), `Lift` (an iron cage the full height, a wooden car that rides between our landing and the hall with the
-player in it at `liftSpeed` 3.5 m/s, ~6 s a trip, folding gates (0.45 s) whose colliders come and go; it runs itself
-(`Lift.autoPilot`): idle at the other stop, it sets off for the player as soon as they stand on our landing or in the
-hall (the front door opened, the sas crossed), folds its gate open when they walk up, and leaves 0.6 s after they step
-in (not again until the rider it brought has stepped out; sent off by itself and they step back out, it stays). The
-brass buttons on both stops and in the car still call and send it at once. Residents' rides are timed from
-`liftSpeed` and never touch the car), `StairLights`
-(globes on every landing lit by a sensor while someone is there, two shadowless point lights following the player,
-dimmed to 0 otherwise because lights ignore walls; a hemisphere only while occupied; the skylight), the neighbours'
-doors and floor names, the mailboxes, and at the street door the sas (see "The sas"). Travel still lands in the hall
-(the menu's "Go home", `STAIRWELL_PLAN.arrival`, in front of the sas's glass door).
+`colliders`), `Lift` (an iron cage the full height, a wooden car that stops on every landing, the player in it at
+`liftSpeed` 3.5 m/s, ~6 s from top to bottom, folding gates (0.45 s) whose colliders come and go; at the two ends it
+runs itself (`Lift.autoPilot`): idle elsewhere, it sets off for the player as soon as they stand on our landing or in
+the hall (the front door opened, the sas crossed), folds its gate open when they walk up (on any landing), and leaves
+for the other end 0.6 s after they step in (not again until the rider it brought has stepped out; sent off by itself
+and they step back out, it stays). The floors between never draw it by themselves (the stairs run past them): their
+landing's brass button calls it. The car's panel has a button a floor and sends it at once, even turning it on its way. Residents and the postman ride
+it for real when it idles empty (`Lift.carry`: called to their landing, they step in, it rides, they step out; busy,
+they fade at the gate and come out the ride's time later). Its hum and clank are on the world bus), `StairLights`
+(a timer globe on every landing, each with its own sensor: lit `LIT_S` after the player, a resident or the postman left
+it (`watch`), a relay clack at each switch, so a climb leaves a trail of landings going dark one by one; two shadowless
+point lights fade from lit globe to lit globe near the player, reaching a storey and a bit (never the landing above or
+below through the slabs), dimmed with their intensity, to 0 while nobody is here because lights ignore walls; a
+hemisphere only while occupied; the skylight tinted by the sky and the weather), `StairWindows` (a courtyard window on
+every half landing, the courtyard built in 3D through it: `outlook/`, docs/outdoors.md "Views onto the street"), what is heard (`stairSounds`: the hall's air, a TV, a piano or a dog behind a
+neighbour's door while they are home, the street behind the street door; one-shots echo in the stone; the third step
+of the 4th floor's flight creaks, `STAIRWELL_PLAN.creak`), the neighbours' doors (each in its resident's colour, with
+its doormat and brass name plate, its knock line and sound: `STAIRWELL_PLAN.doors`; a knock is always heard, and nobody
+answers while they are out), the floor names, the mailboxes (ours first, the residents' surnames, the concierge), and
+at the street door the sas (see "The sas"). Underfoot: tiles in the hall and the sas, stone (`concrete`: `stone` is an
+outdoor surface, it would splash on a rainy day) on the flights and landings. The menu's "Go home" lands in the
+hallway (`HALLWAY_PLAN.arrival`); travel to the stairwell (the entrance hall, `STAIRWELL_PLAN.arrival`, in front of
+the sas's glass door) is only the street's home door when the sas is not connected.
 - **The player's ground.** `FirstPersonController.setGround(fn)` gives the floor's height under (x, z) for the feet's
   current height (`GroundHeight`): flights stack, so the surface is the highest one no more than a step above the feet.
+  On a flight it is the tread's top under the feet (`Staircase.floorAt`, stepped), so the controller's easing and its
+  dip stepping down make each step felt; the residents' feet follow the slope instead (a tread at a time they would hop).
   The stairwell's handle provides it (`StairwellHandle.ground`, world metres; the car's floor while inside), `bootstrap/world.ts`
   hands it to the player; everywhere else it leaves the feet where they are (0). The eye is `feet + height`, the
   collision probes are relative to the feet, and `Travel` passes the arrival's height (`setPosition(x, z, feet)`).
@@ -103,9 +122,9 @@ doors and floor names, the mailboxes, and at the street door the sas (see "The s
   evening, a lift user or two) are only met while the player is in the stairwell (its occupancy): on entering, someone
   whose hour it is (or on an errand) comes out of their door and walks the flights down to the street door (`stairRoutes`:
   across the landings, down the middle of each flight), or in and up; nobody walks unseen, their day just says where
-  they are. `StairWalker` is a `Walker` whose feet follow `Staircase.floorAt` and that fades at doors and the lift's gate
-  (the car is not ridden: they fade at one stop and come out at the other after the ride's time). No colliders. They say
-  hello in passing and chat when clicked. The `Postman` steps out of the lift onto our landing with the mail orders
+  they are. `StairWalker` is a `Walker` whose feet follow `Staircase.floorAt` and that fades at doors (the door's latch
+  heard on the landing) and the lift's gate (the car rides for them when it is free, see `Lift.carry`). No colliders. They say
+  hello in passing and chat when clicked. The `Postman` comes up in the lift onto our landing with the mail orders
   (`MailPost`), rings, and waits clear of the front door's swing.
 - **The doorstep** (`hallway/Doorstep`, in `BuildContext.building` with the post, the swaps and their panel,
   `stairwell/building.ts`): the front door's `visitors` slot. Whoever rings (the postman; the friends through `also`)
@@ -134,7 +153,9 @@ is teleported in view: with both doors shut, the player is moved from one twin t
   cached per material, so switching back compiles nothing); the other twin's doors are shut at once, the player moved
   (feet on its floor: `setPosition(x, z, floor)`), the `ZoneManager` switches on its next tick, `World.primeAsync`
   compiles any straggler while the doors are still shut, the lock clacks and the other twin's live door opens. The
-  first crossing of a visit builds the street while the buzzer sounds: a still frame in a shut box. `bootstrap/player`
+  street is built ahead: once the player is down the last two flights or in the hall, `StreetAhead` (`bootstrap/world`)
+  builds it dormant and compiles it at the next idle moment (`World.prepareZone`) and holds it loaded while they stay
+  down there (`ZoneManager.hold`), so the crossing only switches; climbing back up lets it go. `bootstrap/player`
   connects the link (`airlockLink.connect`); unconnected (a test page), a crossing falls back on travel (the curtain).
 - **Sound.** The street's `StreetSound` and `ShopSounds` go through `outdoorsInput` (a low-pass and a gain before the
   world bus); the street's twin closes it round the player inside (`setOutdoorsMuffle`), less as the street door opens.
@@ -151,12 +172,16 @@ is teleported in view: with both doors shut, the player is moved from one twin t
 - Light does not stop at a wall plane: a room's lamps would pour through it. `RoomOptions.opaqueWalls` lays an invisible
   shadow caster just outside each listed wall (cut by its doorways); list every wall without a window.
 - A `HemisphereLight` lights the whole scene, so `Room` keeps its sky ambient off until `setOccupied(true)`. `bootstrap/world.ts`
-  calls `Zone.setOccupied()` on `onZoneChange`, which reaches every `OccupancyAware` item of the zone: the room, its
-  shelf lamps and its windows re-render their shadow maps every frame only while occupied (a point light's shadow is six
-  passes), and refresh them twice a second, out of phase, otherwise, never while their zone is undrawn (a refresh would
-  render the hidden room as an empty map; `DrawnAware.setZoneDrawn` forces one when it is drawn again). A room's ceiling
-  lamp has a finite range (2.5x its farthest corner, the shadow's `far` too): beyond it no fragment pays for its shadow
-  lookup. `?stats` in the URL logs fps, draw calls and the light count every 2 s.
+  calls `Zone.setOccupied()` on `onZoneChange`, which reaches every `OccupancyAware` item of the zone: the room's lit
+  lamp and its sunny windows redraw their shadow maps regularly only while occupied (`lighting/ShadowRefresh`, at
+  `QUALITY.shadowRefreshHz`: a point light's shadow is six passes), and twice a second, out of phase, otherwise, never
+  while the lamp is off or their zone is undrawn (a refresh would render the hidden room as an empty map;
+  `DrawnAware.setZoneDrawn` forces one when it is drawn again). A room's ceiling lamp has a finite range (2.5x its
+  farthest corner, the shadow's `far` too). Beyond it the light adds nothing, but three.js still runs its lighting sums for
+  every fragment, dark or not: that is the `LightCuller`'s job (`World.lightCuller`, `QUALITY.lights`). Each frame it keeps a
+  fixed number of point, spot and hemisphere lights, the player's room first, then the zones drawn, lit and near before
+  dark and far, and hides the rest. The counts never change, so nothing recompiles. Owners never set a light's `visible`.
+  `?stats` in the URL logs fps, draw calls and the light count every 2 s.
 - Shadow maps do not know about walls: a lamp renders every caster in range, the collection room's shelving included,
   even from behind a wall. So each zone has its own shadow layer (`Zone.shadowLayer`, set on everything placed in it),
   every shell and every door is also on `SHARED_SHADOW_LAYER` (`furnishShell`), and every shadow-casting light placed in
@@ -169,7 +194,9 @@ is teleported in view: with both doors shut, the player is moved from one twin t
   Their `Updatable` items tick at `UNDRAWN_TICK_HZ` (20), handed the time they missed (`Zone.tick`/`retime`): out of
   sight, 60 Hz buys nothing. A door (`seenFromNextDoor`) or an item with `tickEveryFrame` keeps every frame.
 - `Zone.place` freezes the local matrices of the parts of an item nothing animates (`freezeStatic`: not `Updatable`, not
-  clickable, no `dispose`, no light or skeleton, no `userData.live` part): composed once instead of every frame.
+  clickable, no `dispose`, no light or skeleton, no `userData.live` part): composed once instead of every frame. The scene
+  and every zone group never move (`matrixAutoUpdate = false`), so only what moves pushes world-matrix updates down. A
+  live item whose parts never move on their own may merge them itself (`Plant` merges its foliage: the sway turns the group).
 - Each zone takes a shadow layer (three.js has 32): `World.addZone` throws past 29 zones.
 - `World.prime()` (called once in `bootstrap/world.ts`) activates every zone, compiles every shader and uploads every texture before
   the first frame, so no doorway triggers a compile. The flat's rooms are all `persistent`: they go dormant (out of the
@@ -186,6 +213,9 @@ is teleported in view: with both doors shut, the player is moved from one twin t
   materials and textures (every map, `ShaderMaterial` uniforms, shadow maps, reflector targets) are freed by the zone
   (`disposeTree`). A module-level material, texture or geometry used by more than one zone is `markShared()` (`props/Prop.ts`)
   so an unload leaves it alone; generated floor canvases are painted once per page (`materials/paintedTiles.ts`).
+- A piece the zone holds without it being placed right now is handed over with `zone.keep(item)`: staged until bought
+  (`build/owned`, hidden in the group) or taken out while unwanted (`build/presence`, out of the group). Unload calls its
+  `dispose()` and, out of the group, `disposeTree` on it, so neither leaks.
 - Lifecycle hooks (`zone/lifecycle.ts`, duck-typed on every *placed* item, like `Updatable`; a composite forwards them
   to its parts): `OccupancyAware.setOccupied` (the player is in this zone: per-frame costs, sounds only heard in the
   room), `DrawnAware.setZoneDrawn` (the `PortalCuller` hides or shows the zone's meshes), `ActivityAware.setZoneActive`
@@ -246,7 +276,14 @@ RETRO GAMES keeps `SHOP_HOURS`).
   or an offer: the café's coffee = the market's coffee of the day plus the barista's tip, the newsagent's scratch cards in
   `ui/ScratchCardPanel`, a croissant, a lemonade and gossip); the furniture shop, the TV repair shop, the pet shop and
   the florist are walked into (`SHOP_ZONE_OF`: a `StreetDoor` to their `shop` zone, `src/world/shop/`, at x 200 to
-  245 like the arcade: no neighbours, not persistent, arrivals in front of their doors),
+  245 like the arcade: no neighbours, not persistent, arrivals in front of their doors; inside, the shop window
+  lit by the sky sets the room's daylight and shows the street itself as its door looks out on it (`ShopWindow`: the
+  street's own pieces built in 3D behind the glass, `outlook/`, docs/outdoors.md "Views onto the street": the row across
+  Front Street, or Park Street and the park's trees, the cars going by), lettered with the shop's name in its street
+  colours (`SHOP_LOOKS`); a clerk who goes off on chores, another customer now and then
+  (never walking in while the player stands at the door), each fixture's sound from something there (the clock, the
+  radio set, the budgies' cage, the tank, the TV wall), rugs on show soft underfoot, and price tags bought in two
+  clicks, faded when the wallet is short),
   `DroppedCoins` (a few a day), `GiveawayBox` (some days, one free worn game once the stock is drawn), `Trader` (a rival
   collector some days, with three copies taken off the market's stalls: buy, haggle, swap). Coins go in through
   `BuildContext.money.purse`. See `docs/economy.md`.
@@ -254,10 +291,18 @@ RETRO GAMES keeps `SHOP_HOURS`).
   hour (8:00 to 21:00), sparrows; `ShopSounds` (the arcade's door, cafés and bars and their terraces, the laundry, shop
   bells rung by `StreetCrowd.onDoor`). `streetSurfaceAt` tells the footsteps paving from asphalt and grass.
 - **Rig instead of a shell** (`StreetLighting`): a shadow-casting `DirectionalLight` from `sky.outdoors.lightDirection`,
-  shadow camera a square around the player snapped to texels; a `HemisphereLight` only while occupied; it overrides
+  shadow camera a square around the player snapped to texels, its map redrawn at `QUALITY.shadowRefreshHz` while occupied (`lighting/ShadowRefresh`); a `HemisphereLight` only while occupied; it overrides
   the scene's `Haze` fog every frame with the weather's (`streetAir`), and returns `lightLevel` in its handle (what
-  `zoneHandle.lightLevelOf` reads when there is no `room`). `SkyDome` (radius 90, inside the camera's 100 m far plane) draws the sky.
-- **Cost**: every building face is one mesh with a canvas atlas (`Buildings`: `paintFacade`, night windows on a
+  `zoneHandle.lightLevelOf` reads when there is no `room`). `SkyDome` (radius 90, inside the camera's 100 m far plane, drawn last of the opaque things on the far plane with the depth test on, so only where the sky shows) draws the sky,
+  with the window view's towers on its horizon (`SkylineSilhouette`: `city/SKYLINE` seen from the player, a 1D texture
+  re-baked on the CPU every 3 m walked).
+- **The same as from the windows**: everything the painted view shows of the street comes from `src/world/city/`
+  (docs/outdoors.md "One neighbourhood, two pictures"): each facade's look is `city/facadeStyle` from its plan `seed`
+  (`facadePainter`; a sloping roof in that style is built behind its parapet by `Buildings`, its band painted over the
+  facade's in the atlas), the trees are `city/trees`, the parked cars `city/parkedCars`, the small print
+  `STREET_PLAN.details`. A new thing in the street goes into `streetPlan.ts` and, if the windows see it, is painted from
+  there (never a second list of positions).
+- **Cost**: every building face is one mesh with a canvas atlas (`Buildings`: `paintFacade` and its roof, night windows on a
   quarter-size emissive atlas re-uploaded at most every 6 s, curfews as the painted view); lamps, trees, cars are
   instanced; four point lights move to the lamps nearest the player (never added or removed). People are the costly
   part (~33 draw calls each): up to about ten (four walkers, the standing ones, terrace customers, the busker, the
@@ -272,8 +317,9 @@ RETRO GAMES keeps `SHOP_HOURS`).
    hysteresis (0.4 m) covers the threshold.
 2. **The street under the flat.** Walked all the way now (the stairs, then the sas: see "The sas"), but the street is
    still a place of its own at x 140 behind the sas's twin: putting it under the flat would make it the stairwell's
-   neighbour, and its lights would join the flat's. Only the far row and our facade match the painted view; the painted
-   street furniture (parked cars, lamps) is its own. The grade eases from `home` to `street` while the player stands in
+   neighbour, and its lights would join the flat's. The painted view and the walkable street share one neighbourhood
+   (`src/world/city/`, docs/outdoors.md "One neighbourhood, two pictures"): the rows, trees, parked cars and lamps the
+   windows show are the street's own, derived from the same plan. The grade eases from `home` to `street` while the player stands in
    the street's twin (the look follows the zone).
 3. **Session parts.** Done for the shelves: the Session's `shelving` is a `ShelvingGroup` of every flat zone handle's
    `shelving` (the collection room's first, leading the sort), so a new room with shelves needs no wiring.

@@ -2,7 +2,8 @@ import * as THREE from 'three';
 import type { Updatable } from '@/core/Engine';
 import { createCanvas, toTexture } from '@/covers/generated/canvasUtils';
 import { Prop } from '../props/Prop';
-import { paint, shared } from '../materials/palette';
+import { coverageKeepsAlpha, paint, shared } from '../materials/palette';
+import { QUALITY } from '@/graphics/quality';
 
 /** A cord from the hanging point down to a dowel, the flag hanging under the dowel point down. */
 const CORD = 0.04;
@@ -38,7 +39,7 @@ export class WishPennant extends Prop implements Updatable {
     const flag = new THREE.Mesh(
       new THREE.PlaneGeometry(FLAG_W, FLAG_H),
       // Every pennant flies the same flag: one material and texture for the page.
-      shared('market.wishPennant', () => new THREE.MeshStandardMaterial({ map: paintPennant(), roughness: 0.85, side: THREE.DoubleSide, alphaTest: 0.5, transparent: true })),
+      shared('market.wishPennant', () => coverageKeepsAlpha(new THREE.MeshStandardMaterial({ map: paintPennant(), roughness: 0.85, side: THREE.DoubleSide, alphaTest: 0.5, alphaToCoverage: QUALITY.msaa > 0 }))),
     );
     flag.position.y = -CORD - 0.004 - FLAG_H / 2;
     this.swing.add(cord, dowel, flag);

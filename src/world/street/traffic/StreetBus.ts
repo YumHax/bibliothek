@@ -73,9 +73,9 @@ export class StreetBus extends ScriptedVehicle {
     });
     this.name = 'StreetBus';
     const g = busGeometries();
-    const body = new THREE.Mesh(g.body, snowCovered(new THREE.MeshStandardMaterial({ color: LIVERY, roughness: 0.4, metalness: 0.3 })));
-    const stripe = new THREE.Mesh(g.stripe, standard({ color: STRIPE, roughness: 0.45, metalness: 0.2 }));
-    const glass = new THREE.Mesh(g.glass, standard({ color: 0x18222a, roughness: 0.1, metalness: 0.6 }));
+    const body = new THREE.Mesh(g.body, snowCovered(new THREE.MeshStandardMaterial({ color: LIVERY, roughness: 0.35 })));
+    const stripe = new THREE.Mesh(g.stripe, standard({ color: STRIPE, roughness: 0.4 }));
+    const glass = new THREE.Mesh(g.glass, standard({ color: 0x18222a, roughness: 0.06 }));
     const wheels = new THREE.Mesh(g.wheels, paint(0x151515, 0.85));
     this.lampMaterial = new THREE.MeshBasicMaterial({ vertexColors: true, color: 0x666666 });
     this.indicatorMaterial = new THREE.MeshBasicMaterial({ vertexColors: true, color: 0x222222 });
@@ -88,7 +88,7 @@ export class StreetBus extends ScriptedVehicle {
     this.add(body, stripe, glass, wheels, lamps, indicators);
 
     // The door leaves: dark glass in a frame, on the kerb side (+z), sliding outwards and apart.
-    const leafMaterial = standard({ color: 0x2a3438, roughness: 0.2, metalness: 0.5 });
+    const leafMaterial = standard({ color: 0x2a3438, roughness: 0.1 });
     for (const x of BUS.doors) {
       for (const side of [-1, 1]) {
         const leaf = new THREE.Mesh(new THREE.BoxGeometry(BUS.doorWidth / 2 - 0.02, BUS.doorHeight - 0.2, 0.04), leafMaterial);

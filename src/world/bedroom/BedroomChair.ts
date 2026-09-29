@@ -7,6 +7,7 @@ import { part } from '../props/Prop';
 import { seededRandom } from '@/covers/generated/canvasUtils';
 import { fabric } from '@/world/materials/finishes';
 import { timber, cloth as paletteCloth } from '@/world/materials/palette';
+import { HoverGlint } from '../props/hoverGlint';
 
 export interface BedroomChairOptions {
   /** Colour of the shirt thrown over the back; `null` for a bare chair. */
@@ -56,6 +57,7 @@ interface Garment {
 export class BedroomChair extends THREE.Group implements Furniture, Interactable {
   readonly footprint: THREE.Box3;
   readonly hitboxes: THREE.Object3D[];
+  private readonly glint = HoverGlint.fittings(this);
   private readonly garments: Garment[] = [];
   /** Top of the folded jeans (or the seat): where the day's pile starts. */
   private readonly pileBase: number;
@@ -168,12 +170,15 @@ export class BedroomChair extends THREE.Group implements Furniture, Interactable
 
   // --- Interactable -------------------------------------------------------------------------
 
-  setHovered(_hovered: boolean): void {}
+  /** Its small parts (the legs, a button of the day's clothes) catch the light, never the upholstery. */
+  setHovered(hovered: boolean): void {
+    this.glint.set(hovered);
+  }
 
   label(player: PlayerState): string {
-    if (player.seatedIn === this) return 'Click to get up';
+    if (player.seatedIn === this) return 'Chair · get up';
     const { reading } = this.options;
-    return reading && player.held ? reading.label(player.held) : 'Click to sit down';
+    return reading && player.held ? reading.label(player.held) : 'Chair · sit';
   }
 
   activate(session: SessionActions): void {

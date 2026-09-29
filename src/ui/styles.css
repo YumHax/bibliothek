@@ -1,9 +1,9 @@
 /*
- * Headings only; the body text stays on the system font. Falls back cleanly offline. Bungee is the game's own; the
- * shops add theirs: a marker for the arcade's hand-written price cards, a dot-matrix face for its ticket counter,
- * a serif for the Front Street shops' printed leaflets.
+ * Headings only; the body text stays on the system font. Self-hosted (`fonts.css`, public/fonts), so it works offline
+ * and asks nothing of a font CDN. Bungee is the game's own; the shops add theirs: a marker for the arcade's
+ * hand-written price cards, a dot-matrix face for its ticket counter, a serif for the Front Street shops' leaflets.
  */
-@import url('https://fonts.googleapis.com/css2?family=Bungee&family=Permanent+Marker&family=VT323&family=DM+Serif+Display&display=swap');
+@import './fonts.css';
 
 /*
  * UI tokens: every HUD element, menu and panel reads its colours and shapes from here, so the look
@@ -11,16 +11,25 @@
  */
 :root {
   color-scheme: dark;
-  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --ui-font-body: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font-family: var(--ui-font-body);
   --ui-font-display: 'Bungee', system-ui, sans-serif;
   --ui-font-marker: 'Permanent Marker', 'Comic Sans MS', cursive;
   --ui-font-led: 'VT323', ui-monospace, monospace;
   --ui-font-print: 'DM Serif Display', Georgia, serif;
+  /* Printed paragraphs (the paper, a card to read): the print face is a display cut, too heavy for running text. */
+  --ui-font-serif: Georgia, 'Iowan Old Style', 'Times New Roman', serif;
+  /* A pen on paper: the to-do list, the journal, the first day's tips. */
+  --ui-font-hand: 'Segoe Print', 'Bradley Hand', 'Comic Sans MS', cursive;
+  /* A word said in passing, comic-book style. */
+  --ui-font-comic: 'Comic Sans MS', 'Chalkboard SE', system-ui, sans-serif;
   --ui-text: #ece9e2;
   --ui-text-dim: rgba(236, 233, 226, 0.65);
   --ui-panel: rgba(20, 20, 28, 0.88);
   --ui-panel-solid: #15151d;
   --ui-backdrop: rgba(8, 8, 12, 0.72);
+  /* Behind a full-screen panel: translucent enough that the room shows through. */
+  --ui-backdrop-panel: rgba(8, 8, 12, 0.6);
   --ui-border: rgba(255, 255, 255, 0.14);
   --ui-border-strong: rgba(255, 255, 255, 0.35);
   --ui-fill: rgba(255, 255, 255, 0.07);
@@ -28,6 +37,9 @@
   --ui-accent: #d4a52a;
   --ui-accent-hover: #e6b93c;
   --ui-accent-soft: rgba(212, 165, 42, 0.14);
+  /* "How to": the tips' blue. */
+  --ui-info: #5fb3e6;
+  --ui-info-glow: rgba(95, 179, 230, 0.55);
   --ui-danger: #e06a5a;
   --ui-danger-hover: #ec8072;
   --ui-radius: 12px;
@@ -48,6 +60,8 @@
   --z-fader: 4;
   --z-controls: 5;
   --z-toast: 6;
+  /* The hover caption's height: the reaction under it keeps its place when it goes. */
+  --caption-height: 1.8rem;
 }
 
 html, body {
@@ -67,13 +81,46 @@ html, body {
 .css-layer iframe { pointer-events: none; }
 /* HUD and menus must stack above the canvas (its z-index would otherwise cover them). */
 .overlay { z-index: var(--z-overlay); }
-.crosshair, .hover-label, .game-panel { z-index: var(--z-hud); }
+.crosshair, .hud-slot, .game-panel { z-index: var(--z-hud); }
+/*
+ * The pause menu shares the HUD's layer: while it is up (`body.menu-open`, the Overlay), the HUD's notices step
+ * back behind it (the rewards and the alerts stay: they sit above everything on purpose).
+ */
+.overlay { isolation: isolate; }
+body.menu-open .speech-layer,
+body.menu-open .subtitles,
+body.menu-open .reaction,
+body.menu-open .tip-board,
+body.menu-open .reading-stage,
+body.menu-open .game-panel,
+body.menu-open .hover-label,
+body.menu-open .crosshair,
+body.menu-open .wallet-hud { visibility: hidden; }
 
-@media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { animation-duration: 1ms !important; transition-duration: 1ms !important; }
+/*
+ * Shared HUD columns (`ui/hudSlot`): what several parts show in one place stacks there, `order` top to bottom.
+ * Under the crosshair: the caption (0), the reaction (1), the touch "rotating" badge (2). Top left: the wallet
+ * chip (0), the tips (1).
+ */
+.hud-slot { position: fixed; display: flex; flex-direction: column; pointer-events: none; }
+.hud-slot--crosshair { left: 0; right: 0; top: calc(50% + 1.5rem); align-items: center; gap: 0.45rem; }
+/*
+ * The reaction keeps its place while it is read: with no caption in the column (nothing looked at any more, or the
+ * caption moved to the top edge), an empty row the caption's height stands in for it, so the line does not jump up.
+ */
+.hud-slot--crosshair:has(> .reaction:not([hidden])):not(:has(> .hover-label:not([hidden]):not(.hover-label--edge)))::before {
+  content: '';
+  order: 0;
+  height: var(--caption-height);
 }
-/* Settings > Display: the same, whatever the system says (`reduce-motion` on <html>). */
-.reduce-motion *, .reduce-motion *::before, .reduce-motion *::after { animation-duration: 1ms !important; transition-duration: 1ms !important; }
+.hud-slot--top-left { top: 1rem; left: 1rem; align-items: flex-start; gap: 0.5rem; }
+
+/*
+ * Reduced motion: every animation and transition runs in a blink, played once (a 1 ms loop would flicker), and the
+ * ones that only decorate (spinning rays, a waiting key's pulse) stop. One selector for it everywhere:
+ * `reduce-motion` on <html>, set by Settings > Display or the system's preference (`settings/motion`).
+ */
+.reduce-motion *, .reduce-motion *::before, .reduce-motion *::after { animation-duration: 1ms !important; animation-iteration-count: 1 !important; transition-duration: 1ms !important; }
 /* Settings > Display > Text size: the HUD and the panels are sized in rem, so the root size scales them all. */
 html.ui-scale-small { font-size: 14px; }
 html.ui-scale-large { font-size: 18.5px; }
@@ -103,27 +150,85 @@ kbd {
   border: 1px solid rgba(0, 0, 0, 0.6);
   box-shadow: 0 0 4px rgba(0, 0, 0, 0.9);
   pointer-events: none;
+  /* Nothing in reach: dimmed (still found on a cream wall, the dark ring does the contrast); over something to use: full and a touch bigger (`--active`, the Overlay). */
+  opacity: 0.65;
+  transition: opacity 120ms ease, scale 120ms var(--ui-ease);
+  /* Shown: a quick fade in; hidden: `crosshair--out` fades it first (`ui/fade`). */
+  animation: crosshair-in 100ms ease;
 }
+.crosshair--active { opacity: 1; scale: 1.3; }
+.crosshair.crosshair--out { opacity: 0; transition-duration: 100ms; }
+@keyframes crosshair-in { from { opacity: 0; } }
 
+/* What the crosshair is on: the name, and the verb after a key cap for the device in hand (`Overlay.setHoverLabel`). First in the crosshair's column. */
 .hover-label {
-  position: fixed;
-  left: 50%;
-  top: calc(50% + 1.5rem);
-  transform: translateX(-50%);
+  order: 0;
+  max-width: min(90vw, 36rem);
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
   padding: 0.3rem 0.7rem;
   border-radius: var(--ui-radius-sm);
   background: var(--ui-panel);
   color: var(--ui-text);
   font-size: 0.85rem;
   white-space: nowrap;
+  min-height: var(--caption-height);
   pointer-events: none;
+  opacity: 0;
+  transition: opacity 120ms ease;
 }
+.hover-label--in { opacity: 1; }
+/* A long name gives way (an ellipsis), the verb and its key cap never do. */
+.hover-label__name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.hover-label__verb { display: inline-flex; flex-shrink: 0; align-items: center; gap: 0.3rem; color: var(--ui-text-dim); }
+.hover-label__cap {
+  display: inline-grid;
+  place-items: center;
+  min-width: 1.15rem;
+  height: 1.15rem;
+  padding: 0 0.2rem;
+  box-sizing: border-box;
+  border-radius: 4px;
+  border: 1px solid var(--ui-border-strong);
+  background: var(--ui-fill);
+  color: var(--ui-text);
+  font-size: max(0.68rem, 11px);
+  font-weight: 700;
+  line-height: 1;
+}
+/* The mouse: a little body with its left button lit. */
+.hover-label__cap--mouse { width: 0.8rem; min-width: 0; height: 1.1rem; padding: 0; border-radius: 0.4rem; position: relative; }
+.hover-label__cap--mouse::before {
+  content: '';
+  position: absolute;
+  left: 1px;
+  top: 1px;
+  width: calc(50% - 1px);
+  height: 42%;
+  border-radius: 0.35rem 0 0 0;
+  background: var(--ui-accent);
+}
+/* The controller's A: the round face button. */
+.hover-label__cap--pad { border-radius: 50%; border-color: #6fcf7c; color: #6fcf7c; }
+/* Touch: a fingertip. */
+.hover-label__cap--touch { border-radius: 50%; width: 1.1rem; min-width: 0; padding: 0; }
+.hover-label__cap--touch::before { content: ''; width: 0.45rem; height: 0.45rem; border-radius: 50%; background: var(--ui-text); }
 
-/* Looking at a playing screen: keep the caption out of the picture. */
+/* Looking at a playing screen: keep the caption out of the picture, along the top edge (out of the column). */
 .hover-label--edge {
+  position: fixed;
+  left: 50%;
   top: 1.5rem;
-  opacity: 0.85;
+  transform: translateX(-50%);
 }
+.hover-label--edge.hover-label--in { opacity: 0.85; }
+/* Touch: below the action bar along the top; an alert there (`body.alert-up`) has the edge to itself. */
+body.input-touch .hover-label--edge { top: calc(var(--touch-bar-bottom, 3.9rem) + 0.4rem); }
+/* Touch: the wallet and the tips under the action bar (two rows on a phone), not beneath it. */
+body.input-touch .hud-slot--top-left { top: calc(var(--touch-bar-bottom, 0px) + 0.5rem); }
+body.alert-up .hover-label--edge { visibility: hidden; }
 
 .game-panel {
   position: fixed;
@@ -138,15 +243,18 @@ kbd {
   color: var(--ui-text);
   pointer-events: none;
   animation: panel-in 220ms ease-out;
+  transition: opacity 150ms ease;
 }
+/* Put down: a short fade before it hides (`GamePanel.hide`). */
+.game-panel--closing { opacity: 0; }
 @keyframes panel-in {
   from { opacity: 0; transform: translateY(-50%) translateX(1rem); }
   to   { opacity: 1; transform: translateY(-50%); }
 }
 .game-panel h2 { margin: 0 0 1rem; font-size: 1.4rem; line-height: 1.2; }
 .game-panel dl { display: grid; grid-template-columns: auto 1fr; gap: 0.35rem 1rem; margin: 0; font-size: 0.9rem; }
-.game-panel dt { opacity: 0.6; }
+.game-panel dt { color: var(--ui-text-dim); }
 .game-panel dd { margin: 0; }
 .game-panel p { margin: 1rem 0 0; font-size: 0.9rem; line-height: 1.45; opacity: 0.9; }
-.game-panel footer { margin-top: 1.25rem; font-size: 0.75rem; opacity: 0.6; }
+.game-panel footer { margin-top: 1.25rem; font-size: 0.78rem; color: var(--ui-text-dim); }
 .game-panel .game-panel__note { padding: 0.5rem 0.7rem; border-left: 3px solid var(--ui-accent); background: var(--ui-accent-soft); opacity: 1; }

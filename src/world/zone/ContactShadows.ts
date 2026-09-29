@@ -9,8 +9,11 @@ import { FLOOR, RENDER_ORDER, onSurface } from '../surface/layers';
  * on one keeps its shadow without the two fighting), below anything's feet.
  */
 const LIFT = FLOOR.contactShadow.lift;
-/** Darkness right under the object. */
-const OPACITY = 0.5;
+/**
+ * Darkness right under the object; lighter with screen-space ambient occlusion (high), which
+ * darkens the same creases: the two stacked made every foot a black pool.
+ */
+const OPACITY = QUALITY.ssao ? 0.32 : 0.5;
 /** The blob reaches this much beyond the object's feet on each side (share of its size, plus a margin in metres). */
 const SPREAD = 1.12;
 const MARGIN = 0.06;
@@ -20,6 +23,11 @@ const CONTACT_HEIGHT = 0.15;
 const MIN_HEIGHT = 0.06;
 const MAX_AREA = 8;
 const INITIAL_CAPACITY = 64;
+
+/** The darkness left where the room's light is all direct (lamp, sun): what their real shadows already show. */
+const DIRECT_LIGHT_STRENGTH = 0.55;
+/** Current strength of every blob, 1 = `OPACITY` (see `setContactShadowStrength`). */
+let strength = 1;
 
 let blobTexture: THREE.CanvasTexture | null = null;
 let blobMaterial: THREE.MeshBasicMaterial | null = null;
@@ -53,9 +61,22 @@ function texture(): THREE.CanvasTexture {
 /** The one material of every blob: black, alpha from the texture, drawn over the floor (its layer) without writing depth. */
 function material(): THREE.MeshBasicMaterial {
   blobMaterial ??= markShared(
-    onSurface(new THREE.MeshBasicMaterial({ color: 0x000000, alphaMap: texture(), transparent: true, opacity: OPACITY }), FLOOR.contactShadow, { depthWrite: false }),
+    onSurface(new THREE.MeshBasicMaterial({ color: 0x000000, alphaMap: texture(), transparent: true, opacity: OPACITY * strength }), FLOOR.contactShadow, { depthWrite: false }),
   );
   return blobMaterial;
+}
+
+/**
+ * How much of the player's room's light is ambient, 0..1 (`Room.ambientShare`): the blobs stand in
+ * for the occlusion of the ambient, so under a lit lamp or in full sun (direct light, its own shadows)
+ * they are lighter, at dusk with the lamp off full strength. One value for every blob: the occupied
+ * room's (the others are seen through a doorway at most).
+ */
+export function setContactShadowStrength(ambientShare: number): void {
+  const next = THREE.MathUtils.lerp(DIRECT_LIGHT_STRENGTH, 1, THREE.MathUtils.clamp(ambientShare, 0, 1));
+  if (Math.abs(next - strength) < 1e-3) return;
+  strength = next;
+  if (blobMaterial) blobMaterial.opacity = OPACITY * strength;
 }
 
 /** A unit square lying flat, facing up. */
@@ -68,8 +89,9 @@ const FLAT_SQUARE = markShared(new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 
 export function blobShadow(width: number, depth: number, opacity = 1): THREE.Mesh | null {
   if (!QUALITY.contactShadows) return null;
   const mat = opacity === 1 ? material() : material().clone();
-  if (opacity !== 1) mat.opacity = OPACITY * opacity;
   const mesh = new THREE.Mesh(FLAT_SQUARE, mat);
+  // Its own material follows the room's strength at draw time (the shared one is set by `setContactShadowStrength`).
+  if (opacity !== 1) mesh.onBeforeRender = () => (mat.opacity = OPACITY * opacity * strength);
   mesh.scale.set(width, 1, depth);
   mesh.position.y = LIFT;
   mesh.castShadow = false;
@@ -123,7 +145,8 @@ export class ContactShadows {
     mesh.setMatrixAt(index, feet);
     mesh.count = this.owners.length;
     mesh.instanceMatrix.needsUpdate = true;
-    mesh.computeBoundingSphere();
+    // Never frustum-culled (see `createMesh`): no bounds to keep. Stale ones would mislead a raycast, which recomputes them when null.
+    mesh.boundingSphere = null;
   }
 
   remove(item: Furniture): void {

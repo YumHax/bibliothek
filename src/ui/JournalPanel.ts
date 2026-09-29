@@ -1,4 +1,4 @@
-import type { JournalDay, JournalEntry } from '@/journal/Journal';
+import { gameDayOf, type JournalDay, type JournalEntry } from '@/journal/Journal';
 import { escapeHtml } from './html';
 import { ModalPanel } from './ModalPanel';
 import './JournalPanel.css';
@@ -28,6 +28,9 @@ const BULLETS: Record<string, string> = {
   unpacked: '▣',
   prize: '♦',
   medal: '●',
+  visit: '☺',
+  gift: '✦',
+  home: '⌂',
 };
 
 /**
@@ -109,9 +112,18 @@ function line(entry: JournalEntry): string {
   return `<li data-kind="${escapeHtml(entry.kind)}"><span class="journal-panel__bullet">${BULLETS[entry.kind] ?? '·'}</span><time>${escapeHtml(entry.at)}</time> ${escapeHtml(entry.text)}</li>`;
 }
 
-/** "Friday 25 September" from "2026-09-25" (local, no time zone shift). */
+/**
+ * One way to head a page: "Day 12" from a game day's key; an older page, kept by date ("2026-09-25", local,
+ * no time zone shift), reads "Before day 1 · Fri 25 Sep" so it sits with the numbered days.
+ */
 function longDate(key: string): string {
+  const gameDay = gameDayOf(key);
+  if (gameDay !== null) return `Day ${gameDay}`;
   const [y, m, d] = key.split('-').map(Number);
-  const date = new Date(y!, (m ?? 1) - 1, d ?? 1);
-  return date.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
+  const date = new Date(y!, (m ?? 1) - 1, d ?? 1); // a stored page's date, not a draw
+  return `Before day 1 · ${WEEKDAYS[date.getDay()]} ${date.getDate()} ${MONTHS[date.getMonth()]}`;
 }
+
+/** Spelled out here: the locale's short forms vary ("Sept" in some). */
+const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];

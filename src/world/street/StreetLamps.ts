@@ -9,6 +9,7 @@ import { snowCovered } from './snowCover';
 import { nightnessOf } from './streetAir';
 import type { Vec2 } from './streetPlan';
 import { GROUND, RENDER_ORDER, onSurface } from '../surface/layers';
+import { LAMP_GLOW, LAMP_LIGHT } from '../lighting/lampColours';
 
 export interface StreetLampsOptions {
   lamps: readonly { at: Vec2; yaw: number }[];
@@ -26,13 +27,27 @@ export interface StreetLampsOptions {
 export const LAMP_ARM = 1.3;
 const ARM = LAMP_ARM;
 const POLE_RADIUS = 0.075;
-const WARM = new THREE.Color(0xffd7a0);
+/** Sodium: the light thrown, and the head's own glow (whiter). */
+const WARM = LAMP_LIGHT.sodium.clone();
+const GLOW = LAMP_GLOW.sodium.clone();
+/** A sodium lamp striking: a dim pink glow that warms to amber and full brightness over `WARM_UP` seconds (each lamp its own pace). */
+const STRIKE = new THREE.Color(1, 0.32, 0.42);
+const WARM_UP = [7, 12] as const;
+/** Off again (dawn, a dropout): quicker than warming. */
+const COOL_DOWN = 2.5;
+/** Each lamp's photocell switches at its own point of the dusk (the street's nightness), within this range; off again this much lower. */
+const SWITCH_AT = [0.26, 0.5] as const;
+const SWITCH_SLACK = 0.03;
+/** The head by day (unlit, lens catching the sky) and fully lit, over the glow colour. */
+const HEAD_DAY = 0.25;
+const HEAD_LIT = 2.85;
 const POOL_RADIUS = 6.5;
 /** A lamp's candela and reach (the light's `distance`). */
 const INTENSITY = 55;
 const REACH = 24;
-/** Seconds between two choices of which lamps are real lights. */
+/** Seconds between two choices of which lamps are real lights, and to fade a light out of one lamp (and into the next). */
 const CHOOSE_EVERY = 0.5;
+const HANDOVER = 0.5;
 /** How far the failing lamp's buzz carries. */
 const BUZZ_REACH = 14;
 
@@ -65,8 +80,21 @@ export class StreetLamps extends THREE.Group implements Furniture, Updatable, Oc
   private readonly bulbs: THREE.PointLight[] = [];
   private readonly spots: THREE.Vector3[];
   private readonly order: number[];
+  /** Per real light: the lamp it hangs under, the lamp it moves to once faded out (-1: staying), how lit it is (0..1). */
+  private readonly slots: { lamp: number; next: number; level: number }[] = [];
+  private readonly wanted = new Set<number>();
   private readonly eye = new THREE.Vector3();
   private chooseClock = CHOOSE_EVERY;
+  /** No light has been handed out yet: the first choice puts them straight at the nearest lamps. */
+  private placed = false;
+  /** Per lamp: where its photocell switches (nightness), whether it is on, how warmed up (0 off .. 1 full amber), its pace. */
+  private readonly lampSwitch: number[];
+  private readonly lampOn: boolean[];
+  private readonly lampWarm: Float32Array;
+  private readonly lampPace: Float32Array;
+  /** Just (re)activated: the lamps take the clock's state at once (nothing warms up in front of the player on arrival). */
+  private fresh = true;
+  private readonly tint = new THREE.Color();
 
   constructor(private readonly dayNight: DayNight, private readonly options: StreetLampsOptions) {
     super();
@@ -81,11 +109,11 @@ export class StreetLamps extends THREE.Group implements Furniture, Updatable, Oc
     const housing = new THREE.BoxGeometry(0.34, 0.12, 0.6).translate(0, height - 0.06, ARM);
     const metal = mergeGeometries([pole, base, arm, brace, housing]);
     for (const g of [pole, base, arm, brace, housing]) g.dispose();
-    const poles = new THREE.InstancedMesh(metal, snowCovered(new THREE.MeshStandardMaterial({ color: 0x2c3431, roughness: 0.55, metalness: 0.5 })), lamps.length);
+    const poles = new THREE.InstancedMesh(metal, snowCovered(new THREE.MeshStandardMaterial({ color: 0x2c3431, roughness: 0.5 })), lamps.length);
     poles.castShadow = true;
     poles.receiveShadow = true;
 
-    this.heads = new THREE.MeshBasicMaterial({ color: WARM.clone() });
+    this.heads = new THREE.MeshBasicMaterial({ color: GLOW.clone().multiplyScalar(HEAD_LIT) });
     const lens = new THREE.InstancedMesh(new THREE.BoxGeometry(0.28, 0.03, 0.5).translate(0, height - 0.135, ARM), this.heads, lamps.length);
 
     this.pools = onSurface(
@@ -93,6 +121,7 @@ export class StreetLamps extends THREE.Group implements Furniture, Updatable, Oc
         map: poolTexture(),
         color: WARM.clone(),
         transparent: true,
+        // Per lamp, instance colours carry how warmed up it is (0 off).
         blending: THREE.CustomBlending,
         blendSrc: THREE.SrcAlphaFactor,
         blendDst: THREE.OneFactor,
@@ -118,6 +147,15 @@ export class StreetLamps extends THREE.Group implements Furniture, Updatable, Oc
     this.lens = lens;
     this.pool = pool;
     this.flickering = options.flickering ?? -1;
+    // Each lamp its own switching point and warm-up pace (fixed per lamp: the same ones come on first every evening).
+    const hash = (i: number, k: number): number => {
+      const x = Math.sin(i * 12.9898 + k * 78.233) * 43758.5453;
+      return x - Math.floor(x);
+    };
+    this.lampSwitch = lamps.map((_, i) => THREE.MathUtils.lerp(SWITCH_AT[0], SWITCH_AT[1], hash(i, 1)));
+    this.lampOn = lamps.map(() => false);
+    this.lampWarm = new Float32Array(lamps.length);
+    this.lampPace = Float32Array.from(lamps, (_, i) => 1 / THREE.MathUtils.lerp(WARM_UP[0], WARM_UP[1], hash(i, 2)));
     for (const mesh of [poles, lens, pool]) {
       mesh.instanceMatrix.needsUpdate = true;
       mesh.computeBoundingSphere();
@@ -135,6 +173,7 @@ export class StreetLamps extends THREE.Group implements Furniture, Updatable, Oc
       bulb.castShadow = false;
       bulb.position.copy(this.spots[i]!);
       this.bulbs.push(bulb);
+      this.slots.push({ lamp: i, next: -1, level: 1 });
       this.add(bulb);
     }
   }
@@ -157,24 +196,111 @@ export class StreetLamps extends THREE.Group implements Furniture, Updatable, Oc
     this.buzz.dispose();
   }
 
+  setZoneActive(active: boolean): void {
+    if (active) this.fresh = true;
+  }
+
   update(dt: number): void {
     const s = this.dayNight.state;
-    const night = THREE.MathUtils.smoothstep(nightnessOf(s), 0.25, 0.6);
-    this.heads.color.copy(WARM).multiplyScalar(0.25 + 2.6 * night);
-    this.pools.opacity = 0.55 * night * (1 - 0.5 * s.snowCover);
-    const intensity = INTENSITY * night;
+    const nightness = nightnessOf(s);
+    const night = THREE.MathUtils.smoothstep(nightness, 0.25, 0.6);
+    this.pools.opacity = 0.55 * (1 - 0.5 * s.snowCover);
     this.stutter(dt, night);
-    for (let i = 0; i < this.bulbs.length; i++) this.bulbs[i]!.intensity = intensity * (this.order[i] === this.flickering ? this.flicker : 1);
+    this.warm(dt, nightness);
+    // A light leaving its lamp fades out over `HANDOVER`, moves (unseen, at 0) and fades in under the new one.
+    for (let i = 0; i < this.bulbs.length; i++) {
+      const slot = this.slots[i]!;
+      const step = dt / HANDOVER;
+      if (slot.next >= 0) {
+        slot.level = Math.max(0, slot.level - step);
+        if (slot.level === 0) {
+          slot.lamp = slot.next;
+          slot.next = -1;
+          this.bulbs[i]!.position.copy(this.spots[slot.lamp]!);
+        }
+      } else slot.level = Math.min(1, slot.level + step);
+      const warm = this.lampWarm[slot.lamp]!;
+      const bulb = this.bulbs[i]!;
+      bulb.intensity = INTENSITY * lampLevel(warm) * slot.level * (slot.lamp === this.flickering ? this.flicker : 1);
+      strikeColour(warm, WARM, bulb.color);
+    }
     this.chooseClock += dt;
     if (this.chooseClock < CHOOSE_EVERY || night === 0) return;
     this.chooseClock = 0;
-    // The lamps nearest the player get the real lights.
+    this.choose();
+  }
+
+  /**
+   * The lamps nearest the player get the real lights: a light already under one of them stays; one
+   * under a lamp no longer wanted is sent (fading) to a wanted lamp that has none.
+   */
+  private choose(): void {
     this.options.viewer.getWorldPosition(this.eye);
     this.worldToLocal(this.eye);
     const eye = this.eye;
     const spots = this.spots;
     this.order.sort((a, b) => spots[a]!.distanceToSquared(eye) - spots[b]!.distanceToSquared(eye));
-    for (let i = 0; i < this.bulbs.length; i++) this.bulbs[i]!.position.copy(spots[this.order[i]!]!);
+    const wanted = this.wanted;
+    wanted.clear();
+    for (let i = 0; i < this.slots.length; i++) wanted.add(this.order[i]!);
+    if (!this.placed) {
+      this.placed = true;
+      this.slots.forEach((slot, i) => {
+        slot.lamp = this.order[i]!;
+        slot.next = -1;
+        slot.level = 1;
+        this.bulbs[i]!.position.copy(spots[slot.lamp]!);
+      });
+      return;
+    }
+    for (const slot of this.slots) {
+      const going = slot.next >= 0 ? slot.next : slot.lamp;
+      if (wanted.has(going)) wanted.delete(going);
+      else slot.next = -2;
+    }
+    // Send the lights no lamp wants any more to the wanted lamps left (nearest first).
+    for (let k = 0; k < this.order.length && wanted.size; k++) {
+      const lamp = this.order[k]!;
+      if (!wanted.has(lamp)) continue;
+      const slot = this.slots.find((s) => s.next === -2);
+      if (!slot) break;
+      wanted.delete(lamp);
+      // Back under its own lamp? It just fades up again.
+      slot.next = slot.lamp === lamp ? -1 : lamp;
+    }
+    for (const slot of this.slots) if (slot.next === -2) slot.next = -1;
+  }
+
+  /**
+   * Each lamp's photocell: on past its own point of the dusk, off again a little below it; a lamp
+   * that is on warms up (pink, dim) to full amber at its own pace, one that is off cools quickly.
+   * The heads and pools take it (and the failing tube's stutter) as instance colours.
+   */
+  private warm(dt: number, nightness: number): void {
+    const fresh = this.fresh;
+    this.fresh = false;
+    let changed = false;
+    for (let i = 0; i < this.lampWarm.length; i++) {
+      const at = this.lampSwitch[i]!;
+      const on = this.lampOn[i] ? nightness > at - SWITCH_SLACK : nightness > at;
+      this.lampOn[i] = on;
+      const before = this.lampWarm[i]!;
+      const after = fresh ? (on ? 1 : 0) : on ? Math.min(1, before + dt * this.lampPace[i]!) : Math.max(0, before - dt / COOL_DOWN);
+      this.lampWarm[i] = after;
+      if (after === before && !fresh && i !== this.flickering) continue;
+      changed = true;
+      const flicker = i === this.flickering ? this.flicker : 1;
+      const level = lampLevel(after) * flicker;
+      strikeColour(after, WHITE, this.tint).multiplyScalar(level);
+      this.pool.setColorAt(i, this.tint);
+      // The head: the lens by day, glowing as the lamp warms.
+      const day = HEAD_DAY / HEAD_LIT;
+      this.tint.multiplyScalar(1 - day).addScalar(day);
+      this.lens.setColorAt(i, this.tint);
+    }
+    if (!changed) return;
+    if (this.lens.instanceColor) this.lens.instanceColor.needsUpdate = true;
+    if (this.pool.instanceColor) this.pool.instanceColor.needsUpdate = true;
   }
 
   /**
@@ -195,15 +321,8 @@ export class StreetLamps extends THREE.Group implements Furniture, Updatable, Oc
         this.dropout = Math.random() < 0.15 ? 0.8 + Math.random() * 0.8 : 0.05 + Math.random() * 0.2;
       }
     }
-    const changed = Math.abs(level - this.flicker) > 0.01;
+    // Its head and pool take the level in `warm()`, with its warm-up.
     this.flicker = level;
-    if (changed) {
-      const c = new THREE.Color(level, level, level);
-      this.lens.setColorAt(i, c);
-      this.pool.setColorAt(i, c);
-      if (this.lens.instanceColor) this.lens.instanceColor.needsUpdate = true;
-      if (this.pool.instanceColor) this.pool.instanceColor.needsUpdate = true;
-    }
     // The buzz: near it, only at night and while the player is out here.
     let loud = 0;
     let pan = 0;
@@ -220,6 +339,19 @@ export class StreetLamps extends THREE.Group implements Furniture, Updatable, Oc
     }
     this.buzz.set(loud, pan, level < 0.5);
   }
+}
+
+const WHITE = new THREE.Color(1, 1, 1);
+
+/** How bright a lamp is at `warm` (0..1) of its warm-up: a dim glow when it strikes, full at the end; 0 when off. */
+function lampLevel(warm: number): number {
+  return warm <= 0 ? 0 : 0.12 + 0.88 * warm * warm;
+}
+
+/** A striking sodium lamp's colour at `warm`: pink at first, `full` once warm (a multiplier over the lamp's own colour). */
+function strikeColour(warm: number, full: THREE.Color, out: THREE.Color): THREE.Color {
+  const t = THREE.MathUtils.smoothstep(warm, 0.05, 0.7);
+  return out.copy(STRIKE).multiply(full).lerp(full, t);
 }
 
 /** A soft round pool: bright under the lamp, fading out to nothing at the rim. */

@@ -13,7 +13,7 @@
   color: #1f1b16;
   border-radius: 3px;
   box-shadow: 0 10px 40px rgba(0, 0, 0, 0.55);
-  font-family: Georgia, 'Times New Roman', serif;
+  font-family: var(--ui-font-serif);
   transform: rotate(-0.6deg);
 }
 .news-panel__paper header {
@@ -36,7 +36,9 @@
 }
 .news-panel__paper h3 {
   margin: 0 0 0.2rem;
-  font-size: 1.15rem;
+  font-family: var(--ui-font-print);
+  font-weight: 400;
+  font-size: 1.25rem;
 }
 .news-panel__blurb {
   margin: 0 0 0.7rem;

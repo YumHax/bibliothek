@@ -9,6 +9,7 @@ import type { Services } from './services';
 import type { BuiltWorld, GameWorld } from './world';
 import type { PlayerMoves } from './player';
 import type { NoticeActions } from '@/notices';
+import type { SpeechLayer } from '@/notices/SpeechLayer';
 import { PhotoMode } from '@/photo';
 import { LOOKS } from '@/graphics';
 import { zonePlan } from '@/world/worldPlan';
@@ -21,7 +22,7 @@ export type Interaction = ReturnType<typeof createInteraction>;
  * controller and the touch bar feed the same key / mouse channels the Session listens to, and the
  * player's settings are applied to all of them.
  */
-export function createInteraction(services: Services, parts: { world: GameWorld; built: BuiltWorld; player: FirstPersonController; overlay: Overlay; moves: PlayerMoves; notices: NoticeActions }) {
+export function createInteraction(services: Services, parts: { world: GameWorld; built: BuiltWorld; player: FirstPersonController; overlay: Overlay; moves: PlayerMoves; notices: NoticeActions & { setTipsShown(shown: boolean): void; speech: Pick<SpeechLayer, 'setLineOfSight'> } }) {
   const { engine, input, settings, container } = services;
   const { world, built, player, overlay, moves, notices } = parts;
   const { inspector, graphics, zones } = built;
@@ -39,13 +40,29 @@ export function createInteraction(services: Services, parts: { world: GameWorld;
   world.onOccluderAdded((object) => interactor.addOccluders(object));
   world.onOccluderRemoved((object) => interactor.removeOccluders(object));
   engine.addUpdatable(interactor);
+  // The crosshair aims from the steady eye (not the walk's bob), and a speech bubble is not drawn over a wall.
+  interactor.eyeSway = player.eyeSway;
+  notices.speech.setLineOfSight((from, to) => interactor.blocked(from, to));
 
   // Controller and touch feed the same key / mouse channels the session already listens to.
   const syntheticMouse = new SyntheticMouse(engine.renderer.domElement);
-  const gamepad = new GamepadInput(input, player, syntheticMouse, { keyAliases: PAD_ALIASES });
+  // A controller unplugged while it was the way in: back to the menu (nothing else would move), and a word either way.
+  const gamepad = new GamepadInput(input, player, syntheticMouse, {
+    keyAliases: PAD_ALIASES,
+    onConnectionChange: (connected) => {
+      if (connected) {
+        // In the room with the mouse, a button does nothing until the menu is up: say the way in that works.
+        const text = player.hasPointerLock ? 'Controller connected. Press Start, then any button, to play with it.' : 'Controller connected. Press any button to play with it.';
+        notices.tip(text, { id: 'controller', ms: 5000 });
+        return;
+      }
+      if (player.isVirtualLocked && document.body.classList.contains('input-gamepad')) player.exitVirtual();
+      notices.tip('Controller disconnected.', { id: 'controller', ms: 6000 });
+    },
+  });
   engine.addUpdatable(gamepad);
   const touch = new TouchControls(container, engine.renderer.domElement, input, player, syntheticMouse);
-  applySettings(settings, { camera: engine.camera, input, mouse: player, gamepad, touch, hud: overlay, onBindingsChange: keyLabelsChanged });
+  applySettings(settings, { input, mouse: player, player, inspector, notices, gamepad, touch, hud: overlay, onBindingsChange: keyLabelsChanged });
 
   // Photo mode (P): the HUD away, a free camera on a leash, the lens and the grade, a PNG of the frame (docs/graphics.md).
   const photo = new PhotoMode({
@@ -59,10 +76,10 @@ export function createInteraction(services: Services, parts: { world: GameWorld;
     setLook: (look, snap) => graphics.setLook(look, snap),
     container,
     interactor,
-    blocked: () => (inspector.isActive ? 'Put the game down first' : moves.travel.isTravelling || moves.sleep.isAsleep ? 'Not now' : null),
+    blocked: () => (inspector.isActive ? 'Put the game down first' : moves.travel.isTravelling || moves.sleep.isAsleep || built.pastimes.isBusy ? 'Not now' : null),
     say: (text) => notices.refuse(text),
   });
   engine.addUpdatable(photo);
 
-  return { inspector, highlighter, interactor, photo };
+  return { inspector, highlighter, interactor, photo, touch };
 }

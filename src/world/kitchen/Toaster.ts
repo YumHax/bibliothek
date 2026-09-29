@@ -6,6 +6,7 @@ import { ToasterSound } from '@/audio/kitchenSounds';
 import { cylinderMesh, invisibleHitbox } from '../meshUtils';
 import { Prop, part, matte } from '../props/Prop';
 import { paint, standard } from '../materials/palette';
+import { HoverGlint } from '../props/hoverGlint';
 
 /** Seconds the slices stay down. */
 const TOAST_SECONDS = 8;
@@ -14,7 +15,7 @@ const SINK = 0.085;
 const PRESS_SECONDS = 0.15;
 const POP_SECONDS = 0.35;
 
-const STEEL = standard({ color: 0xc4c7cb, metalness: 0.7, roughness: 0.35 });
+const STEEL = standard({ color: 0xc4c7cb, metalness: 1, roughness: 0.4 });
 const BLACK = paint(0x1e1f22, 0.6);
 const BREAD = new THREE.Color(0xe8d2a4);
 const TOAST = new THREE.Color(0xc48a4a);
@@ -42,6 +43,8 @@ export class Toaster extends Prop implements Interactable, Updatable {
   private sincePop = -1;
   /** 0 pale bread .. 1 golden toast. */
   private brown = 1;
+  /** The lever and the browning dial glint on hover. */
+  private readonly glint: HoverGlint;
 
   constructor() {
     super();
@@ -61,11 +64,12 @@ export class Toaster extends Prop implements Interactable, Updatable {
     // Front: the lever on its slot, and the dial.
     part(this, 0.008, 0.06, 0.004, paint(0x0b0b0d, 0.9), { x: w / 2 - 0.035, y: feet + h * 0.6, z: d / 2 + 0.002 }).castShadow = false;
     this.lever.position.set(w / 2 - 0.035, feet + h * 0.74, d / 2 + 0.01);
-    part(this.lever, 0.03, 0.012, 0.016, BLACK);
+    const leverKnob = part(this.lever, 0.03, 0.012, 0.016, BLACK);
     this.add(this.lever);
     const dial = cylinderMesh(0.014, 0.012, BLACK, { x: w / 2 - 0.035, y: feet + h * 0.28, z: d / 2 + 0.006 }, { segments: 14 });
     dial.rotation.x = Math.PI / 2;
     this.add(dial);
+    this.glint = HoverGlint.of(leverKnob, dial);
     for (const dz of [-0.05, 0.05]) for (const dx of [-0.1, 0.1]) this.add(cylinderMesh(0.01, feet, BLACK, { x: dx, y: feet / 2, z: dz }, { segments: 8 }));
 
     const hitbox = invisibleHitbox(w + 0.02, h + 0.1, d + 0.04, { y: feet + (h + 0.1) / 2 });
@@ -101,10 +105,12 @@ export class Toaster extends Prop implements Interactable, Updatable {
 
   // --- Interactable -------------------------------------------------------------------------
 
-  setHovered(_hovered: boolean): void {}
+  setHovered(hovered: boolean): void {
+    this.glint.set(hovered);
+  }
 
   label(): string {
-    return this.toasting ? 'Click to pop the toast' : 'Click to make toast';
+    return this.toasting ? 'Toaster · pop the toast' : 'Toaster · make toast';
   }
 
   activate(_session: SessionActions): void {

@@ -207,6 +207,8 @@ export class Zone<Id extends string = string> implements ShelvingHost {
   /** The slowed ticks standing in for the items' own while the zone is undrawn (see `UNDRAWN_TICK_HZ`). */
   private readonly throttled = new Map<Updatable, ThrottledTick>();
   private readonly items = new Map<Furniture, THREE.Box3[]>();
+  /** What the zone holds without it being placed now (`keep`): disposed on unload with the placed items. */
+  private readonly kept = new Set<Furniture>();
   /** Interactables that are not placed furniture themselves (the boxes on the shelves). */
   private readonly looseInteractables = new Set<Interactable>();
   private readonly disposers: Array<() => void> = [];
@@ -232,6 +234,8 @@ export class Zone<Id extends string = string> implements ShelvingHost {
     this.group.position.set(...spec.origin);
     this.group.rotation.y = spec.rotationY ?? 0;
     this.group.updateMatrixWorld(true);
+    // A zone never moves: its matrix is composed once (automatic, it would push a world-matrix update through the whole zone every frame).
+    this.group.matrixAutoUpdate = false;
     const { width, depth, height } = spec.extent;
     this.bounds = new THREE.Box3(new THREE.Vector3(-width / 2, 0, -depth / 2), new THREE.Vector3(width / 2, height, depth / 2)).applyMatrix4(this.group.matrixWorld);
     this.scoped = new ScopedCollisions(host.collisions);
@@ -250,6 +254,16 @@ export class Zone<Id extends string = string> implements ShelvingHost {
 
   get isActive(): boolean {
     return this.state === 'active';
+  }
+
+  /** Whether the zone is drawn this frame (see `setDrawn`). */
+  get isDrawn(): boolean {
+    return this.drawn;
+  }
+
+  /** Whether the player is in this zone (see `setOccupied`). */
+  get isOccupied(): boolean {
+    return this.occupied;
   }
 
   /** World-space XZ rectangle of the zone (the cat's world when it lives here). */
@@ -420,6 +434,17 @@ export class Zone<Id extends string = string> implements ShelvingHost {
     }
   }
 
+  /**
+   * Hands the zone a piece it holds without it being placed now: one staged until it is bought
+   * (`build/owned`: in the group, hidden), one taken out while it is not wanted (`build/presence`:
+   * out of the group). On unload it is disposed like a placed one: its `dispose()` (subscriptions),
+   * and its GPU resources when it is out of the group (`disposeTree(group)` does the rest). Placed
+   * again meanwhile, it is disposed as a placed item, once.
+   */
+  keep(item: Furniture): void {
+    this.kept.add(item);
+  }
+
   /** Registers clean-up for things the builder created that are not furniture (subscriptions, a Shelving). */
   onUnload(dispose: () => void): void {
     this.disposers.push(dispose);
@@ -492,6 +517,12 @@ export class Zone<Id extends string = string> implements ShelvingHost {
     if (this.state === 'empty') return;
     for (const dispose of this.disposers.splice(0)) dispose();
     for (const item of this.items.keys()) item.dispose?.();
+    for (const item of this.kept) {
+      if (this.items.has(item)) continue;
+      item.dispose?.();
+      if (!this.holds(item)) disposeTree(item);
+    }
+    this.kept.clear();
     disposeTree(this.group);
     this.group.clear();
     this.contactShadows.clear();

@@ -31,6 +31,8 @@ const FRICTION = 1.2;
 const STOP_SPEED = 0.03;
 /** Fraction of the speed kept along a bounced axis. */
 const BOUNCE = 0.5;
+/** A bounce is heard at this speed (m/s) as hard as it gets; slower than `QUIET` it makes no sound; ticks at most this often (s). */
+const TICK = { full: 1.5, quiet: 0.12, every: 0.08 };
 const UP = new THREE.Vector3(0, 1, 0);
 
 const scratchNext = new THREE.Vector3();
@@ -46,6 +48,8 @@ export class CatToy extends THREE.Group implements Furniture, Updatable, CatToyL
   private readonly collisions: Collisions;
   private readonly velocity = new THREE.Vector3();
   private readonly ball: THREE.Mesh;
+  onBounce: ((strength: number) => void) | null = null;
+  private tickIn = 0;
 
   constructor(options: CatToyOptions) {
     super();
@@ -68,7 +72,7 @@ export class CatToy extends THREE.Group implements Furniture, Updatable, CatToyL
     // A little bell peeking through the top pole.
     const bell = new THREE.Mesh(
       new THREE.SphereGeometry(this.radius * 0.28, 12, 8),
-      standard({ color: 0xd8b04a, roughness: 0.3, metalness: 0.8 }),
+      standard({ color: 0xd8b04a, roughness: 0.3, metalness: 1 }),
     );
     bell.position.y = this.radius * 0.85;
     bell.castShadow = true;
@@ -96,8 +100,10 @@ export class CatToy extends THREE.Group implements Furniture, Updatable, CatToyL
 
   update(dt: number): void {
     this.position.y = this.radius;
+    this.tickIn -= dt;
     if (!this.isRolling || dt <= 0) return;
     const v = this.velocity;
+    const speedBefore = v.length();
     const p = this.position;
     const r = this.radius;
 
@@ -129,6 +135,12 @@ export class CatToy extends THREE.Group implements Furniture, Updatable, CatToyL
           scratchNext.set(p.x, r, p.z);
         }
       }
+    }
+
+    // A bounce (the speed lost against something): a soft tick, as hard as it came.
+    if (v.length() < speedBefore - 1e-6 && speedBefore > TICK.quiet && this.tickIn <= 0) {
+      this.tickIn = TICK.every;
+      this.onBounce?.(Math.min(1, speedBefore / TICK.full));
     }
 
     // Roll: turn about the horizontal axis perpendicular to the travel, by distance / radius.

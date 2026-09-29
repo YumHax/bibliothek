@@ -24,7 +24,9 @@ export interface ProximityVolumeOptions {
  * linear fade to silence over the last metre before `maxDistance`.
  * When `facing` is given, the source is attenuated as it moves behind the listener. This is the
  * only spatial cue available: the YouTube embed's audio is cross-origin and cannot be panned.
- * Each of the `walls` in between lets `wallGain` of the volume through.
+ * Each of the `walls` in between lets `wallGain` of the volume through. A synthesised sound also
+ * takes the walls' low-pass and the side it is heard from (`audio/spatial.ts`: `SpatialOut`,
+ * `spatialInput`; `PointSound` does it for every room voice); a YouTube player can only get this.
  */
 export function proximityVolume(distance: number, options: ProximityVolumeOptions = {}): number {
   const ref = options.referenceDistance ?? 1;

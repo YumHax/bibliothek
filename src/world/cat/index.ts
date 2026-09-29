@@ -42,6 +42,9 @@ export interface CatFurnishOptions {
    * ball once bought. The zone itself (everything at once) without.
    */
   placers?: { cat: Placer; scratcher: Placer; toy: Placer };
+  /** The ears (the camera) and the walls in between (`SoundOcclusion`): the cat's voice is placed and muffled by them. */
+  listener?: THREE.Object3D;
+  acoustics?: { wallsBetween(listener: THREE.Vector3, source: THREE.Vector3): number };
 }
 
 /**
@@ -97,6 +100,8 @@ export function furnishCat(zone: Zone, options: CatFurnishOptions): Cat {
       screenPoint: (out) => tv.getWorldPosition(out).setY(0.9),
     },
     voice: new CatVoice(),
+    listener: options.listener,
+    acoustics: options.acoustics,
     roam: options.flat?.rooms,
     visits: options.flat?.visits,
     perches: options.flat?.perches,

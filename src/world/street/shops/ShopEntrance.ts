@@ -64,13 +64,13 @@ export class ShopEntrance extends THREE.Group implements Furniture, Interactable
     const { kind } = this.door.shop;
     const name = capitalise(this.shopName);
     if (kind === 'shut') return `${name} · shut for good`;
-    if (SHOP_TALK[kind].offer?.id === 'scratch' && cardInProgress()) return `${name} · click to finish your scratch card`;
+    if (SHOP_TALK[kind].offer?.id === 'scratch' && cardInProgress()) return `${name} · finish your scratch card`;
     if (!this.isOpen) return `${name} · closed, opens at ${clockTime(SHOP_HOURS[kind]?.open ?? 8)}`;
     const offer = SHOP_TALK[kind].offer;
-    if (!offer) return `Click to look in ${this.shopName}`;
-    if (offer.id === 'coffee' && this.services.market.hadCoffee) return `${name} · you have had your coffee today · click for a word with the barista`;
+    if (!offer) return `${name} · look in`;
+    if (offer.id === 'coffee' && this.services.market.hadCoffee) return `${name} · a word with the barista (you have had your coffee today)`;
     if (offer.id === 'scratch' && cardsToday() >= SCRATCH_PER_DAY) return `${name} · “That’s enough cards for today, love.”`;
-    return `Click for ${offer.title}: ${offer.price} coin${offer.price > 1 ? 's' : ''} · ${this.shopName}`;
+    return `${name} · buy ${offer.title} (${offer.price} coin${offer.price > 1 ? 's' : ''})`;
   }
 
   activate(session: SessionActions): void {

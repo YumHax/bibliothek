@@ -38,6 +38,8 @@ export class PriceScanner extends THREE.Object3D implements Furniture, Updatable
   private readonly eye = new THREE.Vector3();
   private readonly look = new THREE.Vector3();
   private readonly at = new THREE.Vector3();
+  /** Reused every frame (no garbage): the boxes in the cone this frame. */
+  private readonly inCone = new Set<Scannable>();
 
   constructor(private readonly options: PriceScannerOptions) {
     super();
@@ -56,7 +58,8 @@ export class PriceScanner extends THREE.Object3D implements Furniture, Updatable
     }
     viewer.getWorldPosition(this.eye);
     viewer.getWorldDirection(this.look);
-    const visible = new Set<Scannable>();
+    const visible = this.inCone;
+    visible.clear();
     for (const box of this.options.boxes()) {
       if (box.isHeld) continue;
       box.getWorldPosition(this.at).sub(this.eye);

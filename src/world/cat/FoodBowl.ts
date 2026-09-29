@@ -7,6 +7,7 @@ import { boxMesh, invisibleHitbox } from '@/world/meshUtils';
 import { seededRandom } from '@/covers/generated/canvasUtils';
 import { paint } from '@/world/materials/palette';
 import type { FoodBowlLike } from './types';
+import { playKibblePour } from '@/audio/catNoises';
 
 /**
  * The cat's food bowl: a shallow glazed ceramic dish on a rubber mat with a heap of kibble in it.
@@ -91,7 +92,7 @@ export function bowlMat(): THREE.Mesh {
 
 /** Glazed ceramic that can glow a little when hovered. */
 export function ceramicMaterial(color: number): THREE.MeshStandardMaterial {
-  return new THREE.MeshStandardMaterial({ color, roughness: 0.35, metalness: 0.05, side: THREE.DoubleSide });
+  return new THREE.MeshStandardMaterial({ color, roughness: 0.35, metalness: 0, side: THREE.DoubleSide });
 }
 
 export class FoodBowl extends THREE.Group implements Furniture, Interactable, Updatable, FoodBowlLike {
@@ -153,6 +154,7 @@ export class FoodBowl extends THREE.Group implements Furniture, Interactable, Up
     this._level = 1;
     this.pouring = 0;
     this.layoutKibble();
+    playKibblePour();
   }
 
   feedingSpot(out: THREE.Vector3): THREE.Vector3 {
@@ -161,14 +163,15 @@ export class FoodBowl extends THREE.Group implements Furniture, Interactable, Up
   }
 
   label(): string {
-    if (this._level < 0.1) return 'Empty bowl — click to fill';
-    if (this._level < 0.5) return 'Half-empty bowl — click to top up';
+    if (this._level < 0.1) return 'Empty bowl · fill';
+    if (this._level < 0.5) return 'Half-empty bowl · top up';
     return 'Bowl of kibble';
   }
 
   activate(session: SessionActions): void {
     if (this._level >= 0.95) {
-      session.refuse('The bowl is full');
+      // Nothing wrong, nothing to do: a quiet word, not the buzzer.
+      session.react('The bowl is already full');
       return;
     }
     this.refill();

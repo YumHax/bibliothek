@@ -82,7 +82,7 @@ export class Jukebox extends THREE.Group implements Furniture, Updatable, Intera
     this.add(card);
     // The chrome grille and the coin panel.
     this.add(boxMesh(W - 0.2, 0.012, 0.012, CHROME, { y: BODY_H - 0.14, z: D / 2 + 0.006 }));
-    const grille = new THREE.Mesh(new THREE.PlaneGeometry(W - 0.22, 0.52), new THREE.MeshStandardMaterial({ map: grilleTexture(), metalness: 0.6, roughness: 0.35 }));
+    const grille = new THREE.Mesh(new THREE.PlaneGeometry(W - 0.22, 0.52), new THREE.MeshStandardMaterial({ map: grilleTexture(), metalness: 1, roughness: 0.35 }));
     grille.position.set(0, 0.5, D / 2 + WALL.notice.lift);
     this.add(grille);
     this.add(boxMesh(W - 0.16, 0.06, 0.1, CHROME, { y: 0.86, z: D / 2 + 0.04 }));
@@ -132,7 +132,7 @@ export class Jukebox extends THREE.Group implements Furniture, Updatable, Intera
   label(): string {
     const next = this.station === null ? STYLES[0]!.name : this.station + 1 < STYLES.length ? STYLES[this.station + 1]!.name : 'off';
     const now = this.station === null ? 'Jukebox (off)' : `Jukebox: ${STYLES[this.station]!.name}${this.tune.title ? ` — “${this.tune.title}”` : ''}`;
-    return `${now} · click for ${next === 'off' ? 'silence' : next}`;
+    return `${now} · ${next === 'off' ? 'switch off' : `play ${next}`}`;
   }
 
   activate(): void {

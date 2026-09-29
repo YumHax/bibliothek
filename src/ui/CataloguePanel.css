@@ -67,6 +67,42 @@
   filter: drop-shadow(0 3px 3px rgba(0, 0, 0, 0.55));
 }
 .catalogue__cover--missing { visibility: hidden; }
+/* No art for it: a made-up box in the platform's colour, its name on a band, the title (`ui/coverPlaceholder`). */
+.catalogue__cover--placeholder {
+  --cover-colour: #5a5a66;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  overflow: hidden;
+  border-radius: 2px;
+  background: linear-gradient(160deg, color-mix(in srgb, var(--cover-colour) 80%, #fff 20%), var(--cover-colour) 55%, color-mix(in srgb, var(--cover-colour) 70%, #000 30%));
+  color: #fff;
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.7);
+  filter: none;
+  box-shadow: 0 3px 5px rgba(0, 0, 0, 0.5), inset 0 0 0 1px rgba(255, 255, 255, 0.18);
+}
+.catalogue__cover-band {
+  padding: 0.1rem 0.15rem;
+  background: rgba(0, 0, 0, 0.45);
+  font-family: var(--ui-font-display);
+  font-size: 0.42rem;
+  letter-spacing: 0.04em;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.catalogue__cover-title {
+  flex: 1;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+  overflow: hidden;
+  padding: 0.15rem 0.2rem;
+  font-size: 0.5rem;
+  font-weight: 700;
+  line-height: 1.15;
+  word-break: break-word;
+}
 /* A button asking to be clicked again to confirm (a used copy ordered). */
 .catalogue .sell__armed { background: rgba(200, 68, 58, 0.45); border-color: var(--ui-danger); }
 .catalogue__stall {

@@ -65,11 +65,13 @@ export class Steam extends THREE.Points {
     this.receiveShadow = false;
     this.renderOrder = RENDER_ORDER.sheen;
     this.visible = false;
-    // Puff sizes are in metres: the shader needs the pixels one metre spans at one metre away.
+    // Puff sizes are in metres: the shader needs the pixels one metre spans at one metre away. The
+    // viewport's, not the drawing buffer's: the post chain may render at a share of it (adaptive
+    // resolution), a mirror at its own size.
     this.onBeforeRender = (renderer, _scene, camera) => {
       const perspective = camera as THREE.PerspectiveCamera;
       if (!perspective.isPerspectiveCamera) return;
-      const height = renderer.getDrawingBufferSize(SIZE).y;
+      const height = renderer.getCurrentViewport(VIEWPORT).w;
       this.uniforms.viewScale.value = height / (2 * Math.tan(THREE.MathUtils.degToRad(perspective.fov) / 2));
     };
   }
@@ -118,7 +120,7 @@ export class Steam extends THREE.Points {
   }
 }
 
-const SIZE = new THREE.Vector2();
+const VIEWPORT = new THREE.Vector4();
 
 const VERTEX = /* glsl */ `
 uniform float viewScale;

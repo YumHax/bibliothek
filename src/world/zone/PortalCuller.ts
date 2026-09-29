@@ -28,6 +28,9 @@ export class PortalCuller implements Updatable {
   private readonly viewProjection = new THREE.Matrix4();
   private readonly box = new THREE.Box3();
   private readonly eye = new THREE.Vector3();
+  /** Reused each frame (no garbage): the zones seen, and the ones still to look through. */
+  private readonly seen = new Set<Zone>();
+  private readonly queue: Zone[] = [];
 
   constructor(
     private readonly zones: readonly Zone[],
@@ -41,8 +44,11 @@ export class PortalCuller implements Updatable {
     this.frustum.setFromProjectionMatrix(this.viewProjection.multiplyMatrices(this.camera.projectionMatrix, this.camera.matrixWorldInverse));
     this.camera.getWorldPosition(this.eye);
 
-    const seen = new Set<Zone>([this.manager.current]);
-    const queue: Zone[] = [this.manager.current];
+    const { seen, queue } = this;
+    seen.clear();
+    queue.length = 0;
+    seen.add(this.manager.current);
+    queue.push(this.manager.current);
     for (let i = 0; i < queue.length; i++) {
       const zone = queue[i]!;
       for (const portal of zone.portals) {

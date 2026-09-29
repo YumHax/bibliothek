@@ -31,7 +31,8 @@ export function createSession(services: Services, parts: { player: FirstPersonCo
     dayNight: sky.dayNight,
     collectionEditor: ui.editor,
     cat: built.cat,
-    sleep: moves.sleep,
+    // A household beat (cleaning, baking, a soak) is dark like a night: the keys wait for it too (the deaf route).
+    sleep: { get isAsleep() { return moves.sleep.isAsleep || built.pastimes.isBusy; }, untilMorning: () => moves.sleep.untilMorning() },
     // Back the way the player was in (a controller player gets the virtual lock again).
     enterRoom: () => void ui.lockFlow.resume(),
     wallet,
@@ -54,11 +55,30 @@ export function createSession(services: Services, parts: { player: FirstPersonCo
     trade: ui.trade,
     photo: interaction.photo,
     journalPanel: ui.journalPanel,
-    shelfRoom: () => shelfRoomNote(overflow.games.length, bookcasesIn(upgrades.count('bookcase')).bedroom),
+    shelfRoom: () => shelfRoomNote(overflow.games.length, bookcasesIn(upgrades.count('bookcase')).bedroom, !upgrades.canBuy('bookcase')),
     // What the flat sends the player out with, and a night's dream on waking (docs/household.md).
     perks: services.perks,
-    dreams: { afterSleep: () => void services.homeLife.dream().then((dream) => dream && ui.dreamCard.show(dream)) },
+    // Which machines' controls were spelled out once, kept with the first day's notes.
+    arcadeHints: services.firstDay,
+    // The first day ends once a longplay is on (or its last tip has been read).
+    onScreenPlaying: () => services.firstDay.screenPlayed(),
+    dreams: {
+      afterSleep: () =>
+        services.homeLife.dream().then((dream) => {
+          if (dream) ui.dreamCard.show(dream);
+          return dream !== null && dream !== undefined;
+        }),
+    },
   });
   session.bindInput(input);
+  // The touch bar shows the buttons that work where the hands are (a box, a market copy, a machine, a seat).
+  interaction.touch.setContext(() => session.handsContext);
+  // A hold lasts its market day: one never collected gives its deposit back the next (docs/economy.md "Holds and orders").
+  const refundHolds = (): void => {
+    const back = services.tx.refundLapsedHolds(services.today.gameDay);
+    if (back.ok) ui.notices.reward({ title: 'Deposit back', detail: `The market kept ${back.titles.join(', ')} for you till closing: your deposit is back in your pocket.`, coins: back.coins });
+  };
+  refundHolds();
+  services.today.onNewGameDay(refundHolds);
   return session;
 }

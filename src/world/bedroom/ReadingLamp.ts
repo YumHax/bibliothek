@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { cylinderMesh, invisibleHitbox } from '../meshUtils';
 import { SwitchableLamp } from '../props/SwitchableLamp';
 import { METAL, standard } from '../materials/palette';
+import { LAMP_GLOW, LAMP_LIGHT } from '../lighting/lampColours';
 
 export interface ReadingLampOptions {
   /** Light intensity when on (a reading bulb: about a bedside lamp's). */
@@ -24,10 +25,9 @@ const SHADE_R = 0.07;
 /** How far the light reaches: a pool round the chair, not into the hallway through the wall. */
 const REACH = 3;
 const BULB_GLOW = 2.2;
-const HOVER_GLOW = 0.08;
 
 const BRASS = METAL.brass();
-const IRON = standard({ color: 0x2b2b2e, metalness: 0.4, roughness: 0.5 });
+const IRON = standard({ color: 0x2b2b2e, metalness: 0, roughness: 0.5 });
 
 /**
  * A reading lamp for a side table: a heavy iron base, a brass stem, an arm leaning out and an
@@ -61,15 +61,15 @@ export class ReadingLamp extends SwitchableLamp {
     const head = new THREE.Group();
     head.position.copy(tip);
     head.rotation.x = -SHADE_TIP; // turns the mouth (-y) forward, towards +z
-    this.enamel = new THREE.MeshStandardMaterial({ color: this.options.shade, roughness: 0.35, metalness: 0.1, side: THREE.DoubleSide, emissive: 0xffffff, emissiveIntensity: 0 });
+    this.enamel = new THREE.MeshStandardMaterial({ color: this.options.shade, roughness: 0.35, metalness: 0, side: THREE.DoubleSide });
     const shade = new THREE.Mesh(new THREE.CylinderGeometry(0.02, SHADE_R, SHADE_H, 24, 1, true), this.enamel);
     shade.position.y = -SHADE_H / 2;
-    this.bulb = new THREE.MeshStandardMaterial({ color: 0xfff4e0, emissive: 0xffe2b0, emissiveIntensity: 0, roughness: 0.3 });
+    this.bulb = new THREE.MeshStandardMaterial({ color: 0xfff4e0, emissive: LAMP_GLOW.incandescent, emissiveIntensity: 0, roughness: 0.3 });
     const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.022, 14, 10), this.bulb);
     bulb.position.y = -SHADE_H + 0.03;
     head.add(shade, bulb);
 
-    this.light = new THREE.PointLight(0xffd9a8, 0, REACH, 2);
+    this.light = new THREE.PointLight(LAMP_LIGHT.incandescent, 0, REACH, 2);
     this.light.castShadow = false;
     this.light.position.copy(tip).add(new THREE.Vector3(0, -SHADE_H * 0.9, SHADE_H * 0.5));
 
@@ -81,9 +81,10 @@ export class ReadingLamp extends SwitchableLamp {
     this.setOn(this.options.on);
   }
 
-  protected render(on: boolean, hovered: boolean): void {
-    this.light.intensity = on ? this.options.intensity : 0;
-    this.bulb.emissiveIntensity = on ? BULB_GLOW : 0;
-    this.enamel.emissiveIntensity = hovered ? HOVER_GLOW : 0;
+  /** Hover glints the brass arm (the base class), never the enamel shade. */
+  protected render(level: number): void {
+    this.light.intensity = level * this.options.intensity;
+    SwitchableLamp.warmGlow(this.bulb, LAMP_GLOW.incandescent, level);
+    this.bulb.emissiveIntensity = level * BULB_GLOW;
   }
 }

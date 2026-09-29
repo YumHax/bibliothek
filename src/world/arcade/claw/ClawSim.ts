@@ -84,7 +84,8 @@ export class ClawSim {
   private carried: ClawPlush | null = null;
   /** A plush on its way down: back to the heap (slipped) or down the chute (won). */
   private falling: { plush: ClawPlush; to: number; won: boolean } | null = null;
-  private misses = 0;
+  /** Misses in a row, kept across visits when `luck` is given (else for this hall's life). */
+  private readonly luck: { clawMisses: number };
   private won: string | undefined;
   private whirClock = 0;
   private readonly random: () => number;
@@ -95,9 +96,11 @@ export class ClawSim {
   private shown: string | null = null;
   private outcome: ClawOutcome | null = null;
 
-  constructor(seed: number, prizeFor: (color: number) => string | undefined) {
+  /** `luck` keeps the misses in a row (the pity grip's count) across visits: `economy/ArcadeHabits`. */
+  constructor(seed: number, prizeFor: (color: number) => string | undefined, luck: { clawMisses: number } = { clawMisses: 0 }) {
     this.random = seededRandom(seed * 4099);
     this.prizeFor = prizeFor;
+    this.luck = luck;
     // The heap: soft blobs in pastels on the floor of the case, clear of the chute.
     for (let i = 0; i < PLUSH_COUNT; i++) {
       const r = 0.06 + this.random() * 0.04;
@@ -266,13 +269,13 @@ export class ClawSim {
     }
     const chance = GRIP.find((g) => bestD <= g.within)?.chance ?? 0;
     const playing = mode === 'playing';
-    const pity = playing && this.misses >= PITY_AFTER && bestD <= GRIP[GRIP.length - 1]!.within;
+    const pity = playing && this.luck.clawMisses >= PITY_AFTER && bestD <= GRIP[GRIP.length - 1]!.within;
     // A regular never wins: the heap has to last.
     const holds = best && playing && (pity || this.random() < chance);
     this.sounds.push('clunk');
     if (holds && best) {
       this.carried = best;
-      if (pity) this.misses = 0;
+      if (pity) this.luck.clawMisses = 0;
     }
   }
 
@@ -295,7 +298,7 @@ export class ClawSim {
     this.enter('rest', 0);
     if (mode !== 'playing') return;
     const prize = this.won;
-    this.misses = prize ? 0 : this.misses + 1;
+    this.luck.clawMisses = prize ? 0 : this.luck.clawMisses + 1;
     this.shown = prize ? 'WINNER!' : 'TRY AGAIN';
     if (prize) this.sounds.push('win');
     this.outcome = { prize };

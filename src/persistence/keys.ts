@@ -49,6 +49,7 @@ export const KEYS = {
   arcadeJackpot: save('arcadeJackpot.v1'),
   arcadeTournament: save('arcadeTournament.v1'),
   arcadeReplays: save('arcadeReplays.v1'),
+  arcadeHabits: save('arcadeHabits.v1'),
   payoutStats: save('payoutStats.v1'),
   position: save('position.v1'),
   moodLamp: save('moodLamp.v1'),

@@ -15,8 +15,8 @@ export interface BalconySlabOptions {
 
 const STONE = paint(0xb9b1a3, 0.85);
 const STONE_EDGE = paint(0xa39b8c, 0.9);
-const IRON = standard({ color: 0x1d1f22, roughness: 0.45, metalness: 0.6 });
-const IRON_INSTANCED = instancedStandard({ color: 0x1d1f22, roughness: 0.45, metalness: 0.6 });
+const IRON = standard({ color: 0x1d1f22, roughness: 0.45, metalness: 0 });
+const IRON_INSTANCED = instancedStandard({ color: 0x1d1f22, roughness: 0.45, metalness: 0 });
 const BAR = 0.014;
 const RAIL = 0.035;
 /** How far above the railing's top the colliders reach: no leaning out and falling six floors. */

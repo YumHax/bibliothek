@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import type { BoxDimensions } from '@/catalog/types';
 import { boxAtlasLayout, createBoxAtlas, paintBoxAtlas, type AtlasColumn, type BoxAtlasFaces, type BoxAtlasLayout } from '@/covers/generated/BoxAtlas';
 import { plastic } from '../materials/finishes';
+import { printGlow } from '../materials/printGlow';
 
 /** BoxGeometry's faces in order: +x, -x, +y, -y, +z (front), -z (back); which atlas column each one shows. */
 const FACE_COLUMNS: readonly (keyof Omit<BoxAtlasLayout, 'width' | 'height'>)[] = ['right', 'left', 'flap', 'flap', 'front', 'back'];
@@ -24,7 +25,8 @@ export class ClosedBox extends THREE.Mesh<THREE.BoxGeometry, THREE.MeshStandardM
     const layout = boxAtlasLayout(dims);
     const atlas = createBoxAtlas(layout);
     // The front's finish over the whole box (the spines were a touch rougher).
-    super(new THREE.BoxGeometry(dims.width, dims.height, dims.depth), plastic({ map: atlas, roughness: 0.5 }, 0.7));
+    // The atlas lights itself a little under a hover (`GameBox.setGlow`): the print brightens rather than go grey.
+    super(new THREE.BoxGeometry(dims.width, dims.height, dims.depth), printGlow(plastic({ map: atlas, emissive: 0x000000, roughness: 0.5 }, 0.7)));
     this.name = 'ClosedBox';
     this.layout = layout;
     this.atlas = atlas;

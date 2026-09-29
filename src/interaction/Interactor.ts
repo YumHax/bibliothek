@@ -14,6 +14,11 @@ export class Interactor implements Updatable {
   maxDistance = 3;
   /** Interactables for which this returns true are skipped, letting the ray pass through them. */
   ignore: (item: Interactable) => boolean = () => false;
+  /**
+   * What the walk's bob adds to the eye (world metres), taken off the ray's origin: the crosshair
+   * aims from the steady eye, so the caption does not hop box to box with each step.
+   */
+  eyeSway: THREE.Vector3 | null = null;
 
   private readonly raycaster = new THREE.Raycaster();
   private readonly centre = new THREE.Vector2(0, 0);
@@ -34,6 +39,11 @@ export class Interactor implements Updatable {
   private readonly scratch = new THREE.Vector3();
   private readonly sphere = new THREE.Sphere();
   private hovered: Interactable | null = null;
+  /** A different item under the ray, and for how many frames in a row: a neighbour takes over after `SWITCH_FRAMES`. */
+  private rival: Interactable | null = null;
+  private rivalFrames = 0;
+  private readonly sightRay = new THREE.Raycaster();
+  private readonly sightDir = new THREE.Vector3();
   private readonly hoverListeners = new Listeners<[item: Interactable | null]>();
   private readonly selectListeners = new Listeners<[item: Interactable]>();
 
@@ -73,7 +83,43 @@ export class Interactor implements Updatable {
 
   update(dt = 0): void {
     this.nearAge += dt;
-    this.setHovered(this.enabled ? this.pick() : null);
+    this.setHovered(this.enabled ? this.steady(this.pick()) : null);
+  }
+
+  /** True when a wall (an occluder) stands between `from` and `to` (world): a speech bubble is not drawn over it. */
+  blocked(from: THREE.Vector3, to: THREE.Vector3): boolean {
+    this.refresh();
+    this.sightDir.subVectors(to, from);
+    const length = this.sightDir.length();
+    if (length < 1e-3 || !this.occluders.length) return false;
+    this.sightRay.set(from, this.sightDir.divideScalar(length));
+    this.sightRay.far = length - 0.05;
+    return this.sightRay.intersectObjects(this.occluders, false).length > 0;
+  }
+
+  /**
+   * Hysteresis between neighbours (the boxes on a shelf are 25 mm apart): the hovered item gives way to
+   * the next one only once the ray has stayed on it a few frames; nothing under the ray clears at once.
+   */
+  private steady(picked: Interactable | null): Interactable | null {
+    if (!picked || !this.hovered || picked === this.hovered) {
+      this.rival = null;
+      this.rivalFrames = 0;
+      return picked;
+    }
+    if (picked !== this.rival) {
+      this.rival = picked;
+      this.rivalFrames = 0;
+    }
+    return ++this.rivalFrames >= SWITCH_FRAMES ? picked : this.hovered;
+  }
+
+  private refresh(): void {
+    if (!this.dirty) return;
+    this.hitboxes = [...this.owners.keys()];
+    this.occluders = [...this.occluderSet];
+    this.dirty = false;
+    this.nearAge = Infinity;
   }
 
   /** Fires onSelect for the hovered item, if any. Hover is cleared first so the item is handed over clean. */
@@ -95,15 +141,11 @@ export class Interactor implements Updatable {
 
   private pick(): Interactable | null {
     const eye = this.camera.getWorldPosition(this.scratch);
-    if (this.dirty) {
-      this.hitboxes = [...this.owners.keys()];
-      this.occluders = [...this.occluderSet];
-      this.dirty = false;
-      this.nearAge = Infinity;
-    }
+    this.refresh();
     if (this.nearAge > NEAR_SECONDS || eye.distanceToSquared(this.nearFrom) > NEAR_STEP * NEAR_STEP) this.sortNear(eye);
     this.raycaster.far = this.maxDistance;
     this.raycaster.setFromCamera(this.centre, this.camera);
+    if (this.eyeSway) this.raycaster.ray.origin.sub(this.eyeSway);
     const hits = this.raycaster.intersectObjects(this.near, false);
     if (!hits.length) return null;
     const wallAt = this.raycaster.intersectObjects(this.occluders, false)[0]?.distance ?? Infinity;
@@ -133,3 +175,5 @@ export class Interactor implements Updatable {
 /** How far the camera moves, and how long it waits, before the hitboxes within reach are sorted again. */
 const NEAR_STEP = 0.75;
 const NEAR_SECONDS = 0.5;
+/** Frames in a row a neighbour must stay under the ray before it takes the hover over (about 50 ms). */
+const SWITCH_FRAMES = 3;

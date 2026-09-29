@@ -2,6 +2,8 @@ import type { Input } from '@/core/Input';
 import { Listeners } from '@/core/Listeners';
 import { escapeHtml } from './html';
 import { registerPanel } from './menu/MenuNav';
+import { fadeIn, fadeOut } from './fade';
+import { lastDevice } from '@/input/lastDevice';
 import './TravelMenu.css';
 
 /** Somewhere the player can go from a door; `key` is the physical code that picks it (Digit1...). */
@@ -26,6 +28,8 @@ export class TravelMenu<Id extends string = string> {
   private choices: TravelChoice<Id>[] = [];
   private readonly pickListeners = new Listeners<[id: Id]>();
   private readonly cancelListeners = new Listeners<[]>();
+  /** Open (the card fades out after closing, so `hidden` lags behind). */
+  private shown = false;
 
   constructor(container: HTMLElement, input: Input) {
     this.root = document.createElement('div');
@@ -35,7 +39,7 @@ export class TravelMenu<Id extends string = string> {
       <div class="travel-menu__card ui-card" role="dialog" aria-modal="true" aria-labelledby="travel-menu-title">
         <h2 id="travel-menu-title">Where to?</h2>
         <ul></ul>
-        <button type="button" class="ui-btn travel-menu__stay" data-action="stay"><kbd>Esc</kbd> Stay</button>
+        <button type="button" class="ui-btn travel-menu__stay" data-action="stay">Stay</button>
       </div>`;
     this.list = this.root.querySelector('ul')!;
     container.appendChild(this.root);
@@ -71,21 +75,27 @@ export class TravelMenu<Id extends string = string> {
   }
 
   get isOpen(): boolean {
-    return !this.root.hidden;
+    return this.shown;
   }
 
   open(choices: TravelChoice<Id>[]): void {
     this.choices = choices;
+    // Key caps for the device in hand: the digits and Esc on a keyboard, B on a controller (A takes the focused line), none on a touchscreen.
+    const device = lastDevice();
     this.list.innerHTML = choices
-      .map((c, i) => `<li><button type="button" class="ui-btn" data-id="${escapeHtml(c.id)}"><kbd>${i + 1}</kbd> ${escapeHtml(c.label)}</button></li>`)
+      .map((c, i) => `<li><button type="button" class="ui-btn" data-id="${escapeHtml(c.id)}">${device === 'keyboard' ? `<kbd>${i + 1}</kbd> ` : ''}${escapeHtml(c.label)}</button></li>`)
       .join('');
-    this.root.hidden = false;
+    const stayCap = device === 'keyboard' ? 'Esc' : device === 'gamepad' ? 'B' : null;
+    this.root.querySelector<HTMLElement>('[data-action="stay"]')!.innerHTML = `${stayCap ? `<kbd>${stayCap}</kbd> ` : ''}Stay`;
+    this.shown = true;
+    fadeIn(this.root, 'travel-menu--closing');
     // The first destination has the focus: a controller's A takes it, the D-pad walks on, a tap picks any.
     this.list.querySelector<HTMLElement>('button')?.focus({ preventScroll: true });
   }
 
   close(): void {
-    this.root.hidden = true;
+    this.shown = false;
+    fadeOut(this.root, 'travel-menu--closing', 150);
     if (this.root.contains(document.activeElement)) (document.activeElement as HTMLElement).blur();
   }
 

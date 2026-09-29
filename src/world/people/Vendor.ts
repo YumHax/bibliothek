@@ -71,7 +71,7 @@ export class Vendor extends THREE.Group implements Furniture, Interactable, Upda
     this.viewer = options.viewer;
     const lines = options.lines;
     this.lines = typeof lines === 'function' ? lines : () => lines;
-    this.caption = options.label ?? 'Click to chat with the stallholder';
+    this.caption = options.label ?? 'Stallholder · chat';
     this.speaker = options.speaker ?? 'Stallholder';
     this.focus = options.focus ? new THREE.Vector3(...options.focus) : TABLE_POINT.clone();
     const seed = options.seed ?? 1;

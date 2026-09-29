@@ -4,6 +4,7 @@ import { cylinderMesh } from '../meshUtils';
 import { paint } from '../materials/palette';
 import { part } from './Prop';
 import { fabric } from '@/world/materials/finishes';
+import { Backlight } from '../materials/backlight';
 
 export interface RollerBlindOptions {
   /** Size of the opening it covers, in metres. */
@@ -40,6 +41,7 @@ export class RollerBlind extends THREE.Group {
   private readonly rollY: number;
   private readonly drop: number;
   private readonly texture: THREE.Texture;
+  private readonly backlight: Backlight;
 
   constructor({ width, height, frame = 0.05, standoff = 0.064, color = 0xe9e0cc }: RollerBlindOptions) {
     super();
@@ -58,6 +60,8 @@ export class RollerBlind extends THREE.Group {
     this.drop = this.rollY - -height / 2;
     this.texture = weave(color);
     const material = fabric({ map: this.texture, roughness: 1, sheenTint: 0xbdb6a6, side: THREE.DoubleSide });
+    // The whole sheet hangs in front of the glass: all of it glows with the sky behind (its own frame, any height).
+    this.backlight = new Backlight(material, width / 2 + 0.05, 2);
     this.sheet = new THREE.Mesh(new THREE.PlaneGeometry(width, 1).translate(0, -0.5, 0), material);
     this.sheet.position.set(0, this.rollY, standoff);
     this.sheet.castShadow = true;
@@ -86,6 +90,11 @@ export class RollerBlind extends THREE.Group {
 
   toggle(): void {
     this.setDrawn(!this.isDrawn);
+  }
+
+  /** The sky behind the glass (its colour, the daylight 0..1): the lowered fabric glows with it. */
+  setBacklight(sky: THREE.Color, daylight: number): void {
+    this.backlight.set(sky, daylight);
   }
 
   /** Eases the blind towards `target`; returns true when it moved this frame. */

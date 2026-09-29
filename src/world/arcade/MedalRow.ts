@@ -8,7 +8,7 @@ const LIT: Record<MedalTier, number> = { bronze: 0xe0995a, silver: 0xe4e8f0, gol
 const RADIUS = 0.02;
 const GAP = 0.052;
 const UNLIT = paint(0x2a2630, 0.4);
-const RIM = standard({ color: 0xb9bcc0, metalness: 0.7, roughness: 0.3 });
+const RIM = standard({ color: 0xb9bcc0, metalness: 1, roughness: 0.35 });
 
 /**
  * Three medal lamps in a row, bronze to gold, lit once the player has earned that medal on the

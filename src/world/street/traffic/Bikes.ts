@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { bareMetal } from '../metals';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import type { Updatable } from '@/core/Engine';
 import { seededRandom } from '@/covers/generated/canvasUtils';
@@ -86,7 +87,7 @@ export class StreetBikes extends THREE.Group implements Furniture, Updatable {
     const parked = options.racks.reduce((n, r) => n + r.bikes, 0);
     this.routes = options.routes.map((points) => sampleRoute(points, LANE_OFFSET));
 
-    const metal = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.4, metalness: 0.6 });
+    const metal = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.4 });
     const cloth = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.85 });
     this.frames = new THREE.InstancedMesh(bikeGeometry(), metal, riders + parked);
     this.bodies = new THREE.InstancedMesh(riderBody(), cloth, riders);
@@ -124,7 +125,7 @@ export class StreetBikes extends THREE.Group implements Furniture, Updatable {
       const [hx, hz] = along ? [long, 0.45] : [0.45, long];
       this.colliders.push(new THREE.Box3(new THREE.Vector3(at[0] - hx, 0, at[1] - hz), new THREE.Vector3(at[0] + hx, 0.9, at[1] + hz)));
     }
-    const stands = new THREE.Mesh(mergeGeometries(hoops)!, new THREE.MeshStandardMaterial({ color: 0x3a3f44, roughness: 0.45, metalness: 0.6 }));
+    const stands = new THREE.Mesh(mergeGeometries(hoops)!, bareMetal({ color: 0x9a9fa4, roughness: 0.45 }));
     for (const g of hoops) g.dispose();
     stands.castShadow = true;
     stands.receiveShadow = true;

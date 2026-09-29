@@ -5,8 +5,10 @@ import { setProgress } from './collectorSets';
 import type { ForSaleAd, WantedAd } from './MarketNotices';
 import type { Deed } from './MarketStanding';
 import type { JobLot } from './MarketStock';
+import { lotOffer } from './JobLot';
 import type { Prize } from './Prizes';
 import type { StockItem } from './StockItem';
+import { PRIZE_WHERE, SWAP_WHERE_PREFIX, wantedPay } from './pricing';
 
 /*
  * The shapes a transaction needs of each store: structural, so the Session's parts (`SessionParts`)
@@ -38,6 +40,8 @@ export interface TxMarket {
   consign(game: Game): void;
   holdDeposit?(item: StockItem): number;
   hold?(item: StockItem, deposit: number): void;
+  /** Whether `item` was laid out on a market day gone by (no hold on it any more). */
+  isStale?(item: StockItem): boolean;
   /** Today's job lot (`JobLotDraw`). */
   readonly lot?: { readonly sold: boolean; sell(): void };
   /** The counter's orders (`MarketOrders`). */
@@ -54,6 +58,8 @@ export interface TxStanding {
 export interface TxLedger {
   cardDone(id: string): boolean;
   recordCard(day: number, id: string): void;
+  /** Holds of a day gone by, never collected: taken off the ledger (their deposits are owed back). */
+  takeLapsedHolds?(day: number): { title: string; deposit: number }[];
 }
 
 export interface TxPrizes {
@@ -113,7 +119,8 @@ export class Transactions {
         // The first print takes the old copy's place on the shelf; the old one goes to the stallholder.
         const old = collection.find(item.game.id);
         if (old) market?.consign({ ...old, addedAt: undefined });
-        collection.update(item.game.id, { edition: 'firstPrint', condition: undefined, repro: undefined, acquired: game.acquired });
+        // The first print is a fresh copy: nothing of the old one's state (cleaned, stickered, an import) carries over.
+        collection.update(item.game.id, { edition: 'firstPrint', condition: undefined, repro: undefined, restored: undefined, sticker: undefined, region: item.game.region, acquired: game.acquired });
       } else {
         collection.add(game);
       }
@@ -122,17 +129,54 @@ export class Transactions {
     return { ok: true, game, paid: due, upgrade };
   }
 
-  /** U just after a purchase: `game` goes back, `refund` coins come back, the stall forgets the sale. */
-  undoPurchase(game: Game, refund: number): TxResult {
-    const { wallet, collection, standing } = this.deps;
+  /**
+   * U just after a purchase: `game` goes back, `refund` coins come back, the stall forgets the sale. A copy that was
+   * held (`hold`) goes back on hold with its deposit; `alsoDo` runs in the same save (a perk the purchase used, given back).
+   */
+  undoPurchase(game: Game, refund: number, hold?: { item: StockItem; deposit: number }, alsoDo?: () => void): TxResult {
+    const { wallet, collection, standing, market } = this.deps;
     if (!wallet || !collection?.remove) return fail('unavailable');
     if (!collection.owns(game.id)) return fail('notOwned');
     batch(() => {
       collection.remove!(game.id);
       wallet.earnCoins(refund);
       standing?.undo?.('buy', game.platform);
+      if (hold && hold.deposit > 0) market?.hold?.(hold.item, hold.deposit);
+      alsoDo?.();
     });
     return { ok: true };
+  }
+
+  /**
+   * Holds of a market day gone by that were never collected: their deposits come back (the stallholder kept the copy
+   * till closing, then put it out again). The titles and the coins, or `done` when none lapsed.
+   */
+  refundLapsedHolds(day: number): TxResult<{ titles: string[]; coins: number }> {
+    const { wallet, ledger } = this.deps;
+    if (!wallet || !ledger?.takeLapsedHolds) return fail('unavailable');
+    let lapsed: { title: string; deposit: number }[] = [];
+    batch(() => {
+      lapsed = ledger.takeLapsedHolds!(day);
+      wallet.earnCoins(lapsed.reduce((sum, h) => sum + h.deposit, 0));
+    });
+    if (!lapsed.length) return fail('done');
+    return { ok: true, titles: lapsed.map((h) => h.title), coins: lapsed.reduce((sum, h) => sum + h.deposit, 0) };
+  }
+
+  /**
+   * Something for the flat bought on the spot (a shop's tag or till, the household stall, the bookcase kit, a coffee):
+   * the coins and `offer.bought()` (the piece counted at home) saved as one.
+   */
+  buyHomeGood(offer: { readonly price: number; bought(): void }): TxResult<{ paid: number }> {
+    const { wallet } = this.deps;
+    if (!wallet) return fail('unavailable');
+    if (wallet.coins < offer.price) return fail('short', offer.price, wallet.coins);
+    let paid = false;
+    batch(() => {
+      paid = wallet.spend(offer.price);
+      if (paid) offer.bought();
+    });
+    return paid ? { ok: true, paid: offer.price } : fail('short', offer.price, wallet.coins);
   }
 
   /** R at a stall: a deposit holds `item` for the day. */
@@ -140,7 +184,7 @@ export class Transactions {
     const { wallet, market } = this.deps;
     if (!wallet || !market?.holdDeposit || !market.hold) return fail('unavailable');
     if (!item.priced) return fail('pricing');
-    if (item.reserved) return fail('done');
+    if (item.reserved || market.isStale?.(item)) return fail('done');
     const deposit = market.holdDeposit(item);
     if (wallet.coins < deposit) return fail('short', deposit, wallet.coins);
     batch(() => {
@@ -155,11 +199,12 @@ export class Transactions {
     const { wallet, collection, market, standing } = this.deps;
     if (!wallet || !collection?.remove || !market) return fail('unavailable');
     if (!item.priced) return fail('pricing');
-    if (!collection.owns(mine.id)) return fail('notOwned');
+    // A game lent to a friend is not on the shelf to hand over (the panel hides it; this keeps it so).
+    if (!collection.owns(mine.id) || mine.status === 'lent') return fail('notOwned');
     if (collection.owns(item.game.id)) return fail('owned');
     const topUp = Math.max(0, item.due - value);
     if (wallet.coins < topUp) return fail('short', topUp, wallet.coins);
-    const game = bought(item.game, topUp, `a swap at ${where}`, market.day);
+    const game = bought(item.game, topUp, `${SWAP_WHERE_PREFIX}${where}`, market.day);
     batch(() => {
       wallet.spend(topUp);
       collection.remove!(mine.id);
@@ -185,21 +230,25 @@ export class Transactions {
     return { ok: true };
   }
 
-  /** A wanted card answered: the player's copy goes to the collector, who pays the card's price. */
-  answerWanted(ad: WantedAd): TxResult<{ game: Game }> {
+  /**
+   * A wanted card answered: the player's copy goes to the collector, who pays the card's price for a complete copy,
+   * less for a worse one (`wantedPay`: its state, printing, a fake, a flat-price receipt).
+   */
+  answerWanted(ad: WantedAd): TxResult<{ game: Game; pay: number }> {
     const { wallet, collection, market, ledger, standing } = this.deps;
     if (!wallet || !collection?.remove || !market || !ledger) return fail('unavailable');
     if (ledger.cardDone(ad.id)) return fail('done');
     const mine = collection.find?.(ad.game.id) ?? collection.games?.find((g) => g.id === ad.game.id);
     if (!mine || (mine.status ?? 'owned') !== 'owned') return fail('notOwned');
+    const pay = wantedPay(ad.pay, mine);
     batch(() => {
       collection.remove!(mine.id);
       market.consign(mine);
-      wallet.earnCoins(ad.pay);
+      wallet.earnCoins(pay);
       ledger.recordCard(market.day, ad.id);
       standing?.record('wanted');
     });
-    return { ok: true, game: mine };
+    return { ok: true, game: mine, pay };
   }
 
   /** A private seller's card: the copy for its price, into the parcel like any purchase. */
@@ -239,11 +288,13 @@ export class Transactions {
     const lotDraw = market?.lot;
     if (!wallet || !collection || !market || !lotDraw) return fail('unavailable');
     if (lotDraw.sold) return fail('done');
-    if (wallet.coins < lot.price) return fail('short', lot.price, wallet.coins);
-    const each = Math.round(lot.price / Math.max(1, lot.games.length));
-    const games = lot.games.filter((g) => !collection.owns(g.id)).map((g) => bought(g, each, 'a job lot', market.day));
+    // Games bought elsewhere since the crate was drawn come out of it, and out of the price.
+    const offer = lotOffer(lot, (id) => collection.owns(id));
+    if (!offer.games.length) return fail('owned');
+    if (wallet.coins < offer.price) return fail('short', offer.price, wallet.coins);
+    const games = offer.games.map((g, i) => bought(g, offer.prices[i] ?? 0, 'a job lot', market.day));
     batch(() => {
-      wallet.spend(lot.price);
+      wallet.spend(offer.price);
       if (collection.addMany) collection.addMany(games);
       else for (const game of games) collection.add(game);
       lotDraw.sell();
@@ -253,7 +304,7 @@ export class Transactions {
 
   /** The mail-order catalogue: a new copy at `price`, into the parcel. */
   buyMailOrder(game: Game, price: number): TxResult<{ game: Game }> {
-    const { wallet, collection, market } = this.deps;
+    const { wallet, collection, market, standing } = this.deps;
     if (!wallet || !collection) return fail('unavailable');
     if (collection.owns(game.id)) return fail('owned');
     if (wallet.coins < price) return fail('short', price, wallet.coins);
@@ -261,6 +312,7 @@ export class Transactions {
     batch(() => {
       wallet.spend(price);
       collection.add(copy);
+      standing?.record('buy', game.platform);
     });
     return { ok: true, game: copy };
   }
@@ -280,7 +332,7 @@ export class Transactions {
 
   /** The prize counter: `prize` for its tickets; the mystery game (`game`, drawn by the caller) goes into the collection instead of on the shelf. */
   takePrize(prize: Prize, game: Game | null = null): TxResult {
-    const { wallet, collection, prizes } = this.deps;
+    const { wallet, collection, prizes, market } = this.deps;
     if (!wallet?.spendTickets || prize.tickets === null) return fail('unavailable');
     if (prize.game ? !game || !collection : !prizes) return fail('unavailable');
     if (game && collection?.owns(game.id)) return fail('owned');
@@ -288,7 +340,8 @@ export class Transactions {
     if (have < prize.tickets) return fail('short', prize.tickets, have);
     batch(() => {
       wallet.spendTickets!(prize.tickets!);
-      if (game) collection!.add(game);
+      // The mystery game comes with its receipt, like anything else that joins the collection.
+      if (game) collection!.add(bought(game, 0, PRIZE_WHERE, market?.day ?? 0));
       else prizes!.add(prize.id);
     });
     return { ok: true };

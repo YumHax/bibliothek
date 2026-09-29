@@ -41,6 +41,25 @@ export interface Rect {
   z1: number;
 }
 
+/**
+ * A resident met on the stairs (`STAIRWELL_PLAN.residents`): landing `k`, door `i`, the hours they go out and come
+ * back, whether they take the lift, their look's seed, a few hellos of their own (said passing the player, in turn) and
+ * their chat lines, in turn: a line may be for the `morning` (before noon), the `day` or the `evening` (from 18:00)
+ * only, or only once a cat lives in the flat (`needsCat`).
+ */
+export interface ResidentOnStairs {
+  k: number;
+  i: number;
+  out: number;
+  back: number;
+  lift: boolean;
+  seed: number;
+  /** Their murmur's voice, `pitch` 0 (deep) .. 1 (light). */
+  voice: { pitch: number };
+  hello: string[];
+  lines: (string | { text: string; when?: 'morning' | 'day' | 'evening'; needsCat?: boolean })[];
+}
+
 export const STAIRWELL_PLAN = {
   /** World position of the zone's origin (see `worldPlan.ts`). */
   origin: [4.6, -STOREYS * STOREY, -2.6] as [number, number, number],
@@ -73,9 +92,14 @@ export const STAIRWELL_PLAN = {
   arrival: { at: [2.1, 3.6] as [number, number], yaw: 0 },
   /** Where the flat's front door is, and the doorway through the shaft's west wall onto our landing. */
   frontDoor: { x: -3.54, z: -1.11, width: 0.83, height: 2.04 },
-  /** The mailboxes on the hall's west wall, a doormat by the street door. */
-  mailboxes: { x: 0.62, z: 2.6, rows: 3, columns: 6 },
-  /** Who lives behind the neighbours' doors on each landing (floor 4 down to 1), two a floor. */
+  /** The window onto the courtyard on every half landing's south wall (local x of its middle; size; sill over the half landing). */
+  courtyardWindow: { x: 1.35, width: 0.9, height: 1.3, sill: 1.0 },
+  /**
+   * The mailboxes on the hall's west wall (`y` their middle): a flap a flat, ours first (`ours`), then the residents'
+   * surnames floor by floor, the concierge's, the rest blank.
+   */
+  mailboxes: { x: 0.62, y: 1.05, z: 2.6, rows: 3, columns: 6, ours: '5TH · YOU', concierge: 'CONCIERGE' },
+  /** Who lives behind the neighbours' doors on each landing (floor 4 down to 1), two a floor (their doors: `doors`). */
   neighbours: [
     ['Mr & Mrs Moreau', 'A. Leclerc'],
     ['The Nguyens', 'P. Girard'],
@@ -84,10 +108,52 @@ export const STAIRWELL_PLAN = {
   ] as [string, string][],
   /** The floors' names, painted by each landing. */
   floorNames: ['5th', '4th', '3rd', '2nd', '1st', 'G'],
+  /** On our landing the west wall is the strip's opening: the name goes on the north wall, just past it, at this x. */
+  ourFloorNameX: -0.9,
   /** Our landing's other door, and where it is; the other floors' two doors stand at `doorX`. */
   ourNeighbour: 'Mrs Roux',
   ourNeighbourX: 2.3,
   doorX: [-0.8, 2.3] as [number, number],
+  /**
+   * Each neighbour's door, landing by landing as `neighbours` (ours first: Mrs Roux's), door by door: its paint, its
+   * doormat (none: null), what a knock gets while they are home (`line`), and what is heard behind it then (`sound`: a
+   * TV, a dog, a piano, in its hours; out of them the knock gets footsteps). Nobody home, nobody answers.
+   */
+  doors: [
+    [{ color: 0x3a4a5a, mat: 0x6a5040, line: 'A TV behind the door, loud.', sound: { voice: 'tv', from: 7, to: 24 } }],
+    [
+      { color: 0x5a2e2a, mat: 0x4a5a3a, line: 'Someone is practising the piano. Badly.', sound: { voice: 'piano', from: 9.5, to: 21 } },
+      { color: 0x2f4a3a, mat: null, line: 'It smells of onions frying.' },
+    ],
+    [
+      { color: 0x3a2e28, mat: 0x8a6a3a, line: 'You hear laughter, and a game show.', sound: { voice: 'tv', from: 11, to: 23.5 } },
+      { color: 0x7a6a52, mat: 0x5a4a3a, line: 'A dog barks once, then thinks better of it.', sound: { voice: 'dog', from: 0, to: 24 } },
+    ],
+    [
+      { color: 0x2a3a4a, mat: 0x7a3a2a, line: 'A kettle whistles, then stops. “Just a minute!” Nobody comes.' },
+      { color: 0xe2dccf, mat: 0x6a5a48, line: 'The news on the TV, turned up for the deaf.', sound: { voice: 'tv', from: 8, to: 22 } },
+    ],
+    [
+      { color: 0x4a3a4a, mat: null, line: 'A radio sings along with someone. Or the other way round.' },
+      { color: 0x6a4a2a, mat: 0x3a4a5a, line: 'A small dog yaps, then a “shh!”.', sound: { voice: 'dog', from: 7, to: 23 } },
+    ],
+  ] as { color: number; mat: number | null; line: string; sound?: { voice: 'tv' | 'dog' | 'piano'; from: number; to: number } }[][],
+  /** What a knock gets with nobody home, and with them home out of their sound's hours. */
+  knock: { nobody: 'Nobody answers.', quiet: 'Footsteps behind the door, then nothing.' },
+  /** The cellar door at the foot of the stairs, off the hall. */
+  cellar: { label: 'The cellars', line: 'Locked. It always is.' },
+  /** Behind a neighbour's door, how far into their flat and how high its sound comes from (m off the door, over the landing). */
+  behindDoor: { z: 1.2, y: 1.2 },
+  /** The floor's name, this high on the wall over its landing. */
+  floorNameY: 1.55,
+  /**
+   * The stairwell's own air (`HallTone`): over every other landing (`landings`, `offset` from the landing's floor at
+   * `x`, `z`) and one in the hall; the street heard behind the street door, this far in and this high.
+   */
+  hallTone: { landings: [0, 2, 4], x: 0.75, offset: -0.3, z: -3.0, hall: [2.1, 1.6, 1.5] as [number, number, number] },
+  streetBehind: { inset: 0.4, y: 1.6 },
+  /** The third step of the 4th floor's flight down creaks, as Mrs Moreau says (landing `k`, flight, tread from the top). */
+  creak: { k: 1, flight: 'A' as 'A' | 'B', tread: 3 },
   /**
    * How the residents get about the stairs (local x, z): the line walked across a landing, down the
    * middle of each flight, across the half landings; the spot in front of a door, of the lift's
@@ -114,12 +180,41 @@ export const STAIRWELL_PLAN = {
    * stop), and a few words for a chat.
    */
   residents: [
-    { k: 0, i: 0, out: 9.5, back: 17, lift: true, seed: 11, lines: ['The lift is a blessing at my age, young man.', 'Your cat was on the landing again. Charming creature.', 'All those little boxes you carry up! Games, is it?'] },
-    { k: 1, i: 0, out: 8, back: 18.5, lift: false, seed: 23, lines: ['Morning! Off to work, as ever.', 'We heard music from your flat. Old video games? My son loves those.', 'Mind the third step, it creaks.'] },
-    { k: 2, i: 1, out: 7.5, back: 19, lift: false, seed: 37, lines: ['Stairs are my gym.', 'There is a new arcade machine down the street, I hear.', 'You collect games? I had a Game Boy once. No idea where it went.'] },
-    { k: 3, i: 0, out: 10, back: 20, lift: false, seed: 41, lines: ['Hello, neighbour.', 'The flea market had a lot of cartridges this week.', 'If you ever want to swap games, knock on my door.'] },
-    { k: 4, i: 1, out: 8.5, back: 18, lift: false, seed: 59, lines: ['Hi there!', 'The postman came by earlier, he looked lost.', 'I am on the first floor: I never take the lift.'] },
-  ] as { k: number; i: number; out: number; back: number; lift: boolean; seed: number; lines: string[] }[],
+    {
+      k: 0, i: 0, out: 9.5, back: 17, lift: true, seed: 11, voice: { pitch: 0.12 },
+      hello: ['Ah, hello, young man.', 'Good day to you.', 'There you are.'],
+      lines: [
+        'The lift is a blessing at my age, young man.',
+        { text: 'Your cat was on the landing again. Charming creature.', needsCat: true },
+        'All those little boxes you carry up! Games, is it?',
+      ],
+    },
+    {
+      k: 1, i: 0, out: 8, back: 18.5, lift: false, seed: 23, voice: { pitch: 0.72 },
+      hello: ['Hiya!', 'Oh, hi!', 'Hey, neighbour!'],
+      lines: [
+        { text: 'Morning! Off to work, as ever.', when: 'morning' },
+        { text: 'Home at last. What a day.', when: 'evening' },
+        'We heard music from your flat. Old video games? My son loves those.',
+        'Mind the third step, it creaks.',
+      ],
+    },
+    {
+      k: 2, i: 1, out: 7.5, back: 19, lift: false, seed: 37, voice: { pitch: 0.45 },
+      hello: ['Hey!', 'Morning, or whatever it is.', 'Up and down, up and down.'],
+      lines: ['Stairs are my gym.', 'There is a new arcade machine down the street, I hear.', 'You collect games? I had a Game Boy once. No idea where it went.'],
+    },
+    {
+      k: 3, i: 0, out: 10, back: 20, lift: false, seed: 41, voice: { pitch: 0.28 },
+      hello: ['Hello, neighbour.', 'Ah, the collector.', 'Hello again.'],
+      lines: ['Hello, neighbour.', 'The flea market had a lot of cartridges this week.', 'If you ever want to swap games, knock on my door.'],
+    },
+    {
+      k: 4, i: 1, out: 8.5, back: 18, lift: false, seed: 59, voice: { pitch: 0.86 },
+      hello: ['Hi there!', 'Hey hey!', 'Oh, hello!'],
+      lines: ['Hi there!', 'The postman came by earlier, he looked lost.', 'I am on the first floor: I never take the lift.'],
+    },
+  ] as ResidentOnStairs[],
   /** The postman on our landing, waiting by the front door clear of its leaf's swing (local x, z; yaw towards the door). */
   postman: { at: [-2.4, -0.72] as [number, number], yaw: -Math.PI / 2, seed: 77 },
 };

@@ -33,7 +33,7 @@ import type { CabinetAttachment } from './CabinetAttachment';
 import type { Station } from './Station';
 import { ARCADE_GAMES, type ArcadeGame, StepBeat } from './games';
 import { type MachineContext, buildMachine } from './machineKinds';
-import { ARCADE_PLAN, BREAKABLE } from './arcadePlan';
+import { ARCADE_DOOR, ARCADE_PLAN, BREAKABLE } from './arcadePlan';
 import { LightPool } from '../lighting/LightPool';
 
 /**
@@ -95,7 +95,8 @@ export function furnishArcade(zone: Zone, { sky, input, listener, money: { walle
         color: c.color,
         glow: c.glow,
         scores,
-        nextPlayCost,
+        nextPlayCost: c.freePlay ? () => 0 : nextPlayCost,
+        ...(c.freePlay ? { freePlay: true } : {}),
         pointsPerTicket: pointsPerTicket(game.id),
         challenge: hall.challengeFor(game.id),
         listener,
@@ -155,10 +156,10 @@ export function furnishArcade(zone: Zone, { sky, input, listener, money: { walle
   const counter = zone.placeAt(new PrizeCounter({ ticketsPerCoin: TICKETS_PER_COIN, wallBehind: plan.counter.wallBehind, prizes: forSale }), plan.counter.at);
   const behind = counter.localToWorld(new THREE.Vector3(crowd.attendant.at[0], 0, crowd.attendant.at[1]));
   const attendantLines = hall.attendantLines(crowd.attendant.lines, titleOf, tabled);
-  zone.place(new Vendor({ viewer: listener, lines: attendantLines, seed: crowd.attendant.seed, label: 'Click to chat with the attendant', focus: crowd.attendant.focus }), zone.toLocal(behind), counter.rotation.y);
+  zone.place(new Vendor({ viewer: listener, lines: attendantLines, seed: crowd.attendant.seed, label: 'The attendant · chat', focus: crowd.attendant.focus }), zone.toLocal(behind), counter.rotation.y);
 
-  zone.placeAt(new ChangeMachine({ working: arcadeDaily?.changeMachineWorks ?? false }), plan.changeMachine);
-  zone.placeAt(new TravelDoor({ style: 'glazed', label: 'Click to go out to the street', to: 'street' }), plan.exit);
+  zone.placeAt(new ChangeMachine({ working: arcadeDaily?.changeMachineWorks ?? false, waiting: () => arcadeDaily?.changeWaiting ?? false }), plan.changeMachine);
+  zone.placeAt(new TravelDoor({ style: 'glazed', shopfront: true, ...ARCADE_DOOR, label: 'Front Street · go out', to: 'street' }), plan.exit);
   const jukebox = zone.placeAt(new Jukebox({ listener, color: plan.jukebox.color, startStation: plan.jukebox.startStation }), plan.jukebox.at);
   jukebox.add(glowPool(plan.jukebox.pool));
   placeDecor(zone, plan.decor);
@@ -166,10 +167,10 @@ export function furnishArcade(zone: Zone, { sky, input, listener, money: { walle
   // The people: regulars (out of the hall until they walk in) and the kid, directed by the crowd.
   const door = crowd.nav.find((n) => n.id === crowd.door)!.at;
   const regulars = crowd.regulars.seeds.slice(0, crowd.regulars.count).map((seed) =>
-    zone.place(new Walker({ viewer: listener, seed, lines: crowd.regularLines, label: 'Click to chat with the regular' }), new THREE.Vector3(door[0], 0, door[1]), Math.PI),
+    zone.place(new Walker({ viewer: listener, seed, lines: crowd.regularLines, label: 'A regular · chat' }), new THREE.Vector3(door[0], 0, door[1]), Math.PI),
   );
   const kidSpot = crowd.hangouts[0]!;
-  const kid = zone.place(new Walker({ viewer: listener, seed: crowd.kid.seed, speed: 0.95, lines: crowd.kid.lines, label: 'Click to chat with the kid' }), new THREE.Vector3(kidSpot.at[0], 0, kidSpot.at[1]), kidSpot.yaw);
+  const kid = zone.place(new Walker({ viewer: listener, seed: crowd.kid.seed, speed: 0.95, lines: crowd.kid.lines, label: 'The kid · chat' }), new THREE.Vector3(kidSpot.at[0], 0, kidSpot.at[1]), kidSpot.yaw);
   const tabledIds = new Set(tabled.map((g) => g.id));
   const director = zone.place(
     new ArcadeCrowd({

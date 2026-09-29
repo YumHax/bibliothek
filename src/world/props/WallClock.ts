@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import type { Updatable } from '@/core/Engine';
 import type { Interactable } from '@/interaction/Interactable';
 import type { SessionActions } from '@/game/SessionActions';
 import { createCanvas, toTexture, FONT } from '@/covers/generated/canvasUtils';
@@ -8,12 +9,15 @@ import { WALL } from '../surface/layers';
 import { Prop } from './Prop';
 import type { DayNight } from './DayNight';
 import { playAlarm } from '@/audio/alarm';
+import { useVerbOnCap } from '@/ui/verb';
 
 export interface WallClockOptions {
   /** Outer diameter of the case. Default 0.32 m. */
   diameter?: number;
   /** Colour of the case. Default dark walnut. */
   caseColor?: number;
+  /** Called each time the second hand steps (once a real second): the builder's tick sound strikes with it. */
+  onSecond?: () => void;
 }
 
 const CASE_DEPTH = 0.05;
@@ -28,16 +32,21 @@ const ALARM_IN_HOURS = 1;
 
 /**
  * A round wall clock that keeps the room's time: its hands follow the `DayNight` cycle (a whole
- * day in ten minutes, so the minute hand visibly sweeps). Hovering it reads the time; clicking it
+ * day in ten minutes, so the minute hand visibly sweeps), and a thin red second hand steps once a
+ * real second, the tick heard with it (`onSecond`). Hovering it reads the time; clicking it
  * says the time, and a second click within two seconds sets an alarm an in-game hour later (or
  * cancels the one set), which beeps when the clock gets there (wherever the player is by then).
  * Local origin is the centre of the clock, on the wall; local +z faces into the room (`wallMount()`).
  */
-export class WallClock extends Prop implements Interactable {
+export class WallClock extends Prop implements Interactable, Updatable {
   readonly hitboxes: THREE.Object3D[];
 
   private readonly hourHand = new THREE.Group();
   private readonly minuteHand = new THREE.Group();
+  private readonly secondHand = new THREE.Group();
+  /** Real seconds on the second hand (its step is the whole part), and who hears each step. */
+  private seconds = Math.floor(Math.random() * 60);
+  private readonly onSecond?: () => void;
   private readonly bezel: THREE.MeshStandardMaterial;
   private hours = 0;
   /** In-game hours until the alarm rings, and the time it was set for; null when none is set. */
@@ -56,6 +65,7 @@ export class WallClock extends Prop implements Interactable {
     const diameter = options.diameter ?? 0.32;
     const radius = diameter / 2;
     const dialRadius = radius * 0.88;
+    this.onSecond = options.onSecond;
     const faceZ = CASE_DEPTH;
 
     // Case: a shallow cylinder proud of the wall, axis along z.
@@ -82,19 +92,24 @@ export class WallClock extends Prop implements Interactable {
     this.minuteHand.add(hand(dialRadius * 0.82, 0.008, ink));
     this.hourHand.position.z = faceZ + 0.004;
     this.minuteHand.position.z = faceZ + 0.008;
-    const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.006, 16), ink);
+    // The second hand: a thin red needle with a long tail, over the other two.
+    const red = paint(0xb3261e, 0.4);
+    this.secondHand.add(hand(dialRadius * 0.88, 0.0025, red, 0.035));
+    this.secondHand.position.z = faceZ + 0.0115;
+    this.secondHand.rotation.z = -(this.seconds / 60) * Math.PI * 2;
+    const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.004, 16), ink);
     cap.rotation.x = Math.PI / 2;
-    cap.position.z = faceZ + 0.011;
-    this.add(this.hourHand, this.minuteHand, cap);
+    cap.position.z = faceZ + 0.0145;
+    this.add(this.hourHand, this.minuteHand, this.secondHand, cap);
 
     // Bezel ring and a faint glass over the face; the bezel glints when hovered.
-    this.bezel = new THREE.MeshStandardMaterial({ color: 0xb8a37a, metalness: 0.7, roughness: 0.35, emissive: 0xb8a37a, emissiveIntensity: 0 });
+    this.bezel = new THREE.MeshStandardMaterial({ color: 0xb8a37a, metalness: 1, roughness: 0.35, emissive: 0xb8a37a, emissiveIntensity: 0 });
     const ring = new THREE.Mesh(new THREE.TorusGeometry(radius * 0.93, radius * 0.06, 12, SEGMENTS), this.bezel);
     ring.position.z = faceZ + 0.006;
     ring.castShadow = true;
     const glass = new THREE.Mesh(
       new THREE.CircleGeometry(radius * 0.9, SEGMENTS),
-      standard({ color: 0xffffff, transparent: true, opacity: 0.08, roughness: 0.05, metalness: 0.1, depthWrite: false }),
+      standard({ color: 0xffffff, transparent: true, opacity: 0.08, roughness: 0.05, metalness: 0, depthWrite: false }),
     );
     glass.position.z = faceZ + 0.016;
     this.add(ring, glass);
@@ -109,6 +124,16 @@ export class WallClock extends Prop implements Interactable {
   /** `Furniture.dispose`: the zone unloads, the clock stops following the sky. */
   dispose(): void {
     this.unsubscribe();
+  }
+
+  /** Steps the second hand on each whole real second, and strikes the tick with it. */
+  update(dt: number): void {
+    const before = Math.floor(this.seconds);
+    this.seconds = (this.seconds + Math.min(dt, 1)) % 60;
+    const now = Math.floor(this.seconds);
+    if (now === before) return;
+    this.secondHand.rotation.z = -(now / 60) * Math.PI * 2;
+    this.onSecond?.();
   }
 
   /** Turns the hands to `hours` (0 ≤ hours < 24, fractional). */
@@ -128,7 +153,7 @@ export class WallClock extends Prop implements Interactable {
 
   label(): string {
     const alarm = this.alarm ? ` · alarm ${formatTime(this.alarm.at)}` : '';
-    return `${formatTime(this.hours)}${alarm} — click to check the time`;
+    return `Clock ${formatTime(this.hours)}${alarm} · check the time`;
   }
 
   activate(session: SessionActions): void {
@@ -138,8 +163,8 @@ export class WallClock extends Prop implements Interactable {
     this.lastClickAt = again ? -Infinity : now;
     if (!again) {
       const next = this.alarm ? `cancel the ${formatTime(this.alarm.at)} alarm` : `set an alarm for ${formatTime(this.hours + ALARM_IN_HOURS)}`;
-      session.react(`It's ${formatTime(this.hours)}`);
-      session.tip(`Click the clock again to ${next}.`, { id: 'wall-clock', ms: DOUBLE_CLICK_MS });
+      session.react(`It’s ${formatTime(this.hours)}`);
+      session.tip(`${useVerbOnCap('the clock')} again to ${next}.`, { id: 'wall-clock', ms: DOUBLE_CLICK_MS });
       return;
     }
     if (this.alarm) {
@@ -173,9 +198,8 @@ export function formatTime(hours: number): string {
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
 }
 
-/** A hand of `length` pointing up (+y) from the pivot, with a short tail past it. */
-function hand(length: number, width: number, material: THREE.Material): THREE.Mesh {
-  const tail = 0.015;
+/** A hand of `length` pointing up (+y) from the pivot, with a short `tail` past it. */
+function hand(length: number, width: number, material: THREE.Material, tail = 0.015): THREE.Mesh {
   const mesh = new THREE.Mesh(new THREE.BoxGeometry(width, length + tail, 0.003), material);
   mesh.position.y = (length - tail) / 2;
   mesh.castShadow = false;

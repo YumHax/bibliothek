@@ -8,7 +8,8 @@ import { KEYS } from '@/persistence';
 import { withDay } from '@/time/DailyTally';
 import { DailyList } from '@/time/DailyList';
 import { dailyRandom } from '@/time/daily';
-import { standard } from '../../materials/palette';
+import { shared } from '../../materials/palette';
+import { bareMetal } from '../metals';
 import { markShared } from '../../materials/sharedResources';
 import { invisibleHitbox } from '../../meshUtils';
 import { RENDER_ORDER } from '../../surface/layers';
@@ -93,7 +94,7 @@ export class DroppedCoins extends THREE.Group implements Furniture, Updatable {
   }
 }
 
-const COIN_MATERIAL = standard({ color: 0xc9a24a, metalness: 0.9, roughness: 0.35 });
+const COIN_MATERIAL = shared('street|coin', () => bareMetal({ color: 0xc9a24a, roughness: 0.32 }, 0.12));
 /** Shared by every coin's glint and kept across unloads (each glint's material is its own: it fades). */
 const GLINT_TEXTURE = markShared(glintTexture());
 
@@ -143,7 +144,7 @@ class DroppedCoin extends THREE.Group implements Furniture, Interactable {
   }
 
   label(): string {
-    return 'Click to pick up the coin';
+    return 'A coin · pick up';
   }
 
   activate(session: SessionActions): void {

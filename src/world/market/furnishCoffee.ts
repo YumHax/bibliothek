@@ -11,7 +11,7 @@ export function furnishCoffee(zone: Zone, { listener, market: { stock: market } 
   let barista: Vendor | null = null;
   const cart = zone.placeAt(new CoffeeCart({
     price: COFFEE_PRICE,
-    label: () => (market.hadCoffee ? 'The coffee cart · you have had your coffee today' : `Click for a coffee: ${COFFEE_PRICE} coins · the stallholders go easier on you all day`),
+    label: () => (market.hadCoffee ? 'The coffee cart · you have had your coffee today' : `The coffee cart · buy a coffee (${COFFEE_PRICE} coins: the stallholders go easier on you all day)`),
     onActivate: (session) => {
       if (market.hadCoffee) {
         barista?.speak('Another one? You’ll be haggling in your sleep.');
@@ -28,5 +28,5 @@ export function furnishCoffee(zone: Zone, { listener, market: { stock: market } 
       });
     },
   }), plan.at);
-  barista = zone.place(new Vendor({ viewer: listener, seed: 53, lines: plan.lines, label: 'Click to chat with the barista', focus: [0, 1.0, 0.5], callOuts: ['Coffee! Hot coffee!'] }), zone.toLocal(cart.localToWorld(cart.serveAt.clone())), cart.rotation.y);
+  barista = zone.place(new Vendor({ viewer: listener, seed: 53, lines: plan.lines, label: 'The barista · chat', focus: [0, 1.0, 0.5], callOuts: ['Coffee! Hot coffee!'] }), zone.toLocal(cart.localToWorld(cart.serveAt.clone())), cart.rotation.y);
 }

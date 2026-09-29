@@ -4,6 +4,7 @@ import type { SessionActions, UpgradeOfferLike } from '@/game/SessionActions';
 import { invisibleHitbox } from '../meshUtils';
 import { Prop, part } from '../props/Prop';
 import { paint } from '../materials/palette';
+import { HoverGlint } from '../props/hoverGlint';
 
 export interface BookcaseKitOptions {
   price: number;
@@ -23,14 +24,16 @@ const STRAP = paint(0xe8e2d4, 0.5);
 
 /**
  * A flat-packed bookcase leaning against a wall, waiting to be bought: a tall, thin cardboard box
- * with a drawing of the bookcase printed on it and two straps round it. Clicking it pays for it
- * (`SessionActions.buyUpgrade`); the builder then stands the bookcase where the kit was. Wall-hung
+ * with a drawing of the bookcase printed on it and two straps round it. Clicking it buys it like any
+ * piece for the flat (`SessionActions.buyUpgrade`: dear as it is, a second click confirms); the builder then stands the bookcase where the kit was. Wall-hung
  * with `y: 0`: origin on the floor at the wall, +z into the room. Decoration: never collides.
  */
 export class BookcaseKit extends Prop implements Interactable, UpgradeOfferLike {
   readonly title = 'A bookcase for the bedroom';
+  readonly detail = 'It stands where the kit leaned: the games waiting for a shelf go up on it.';
   readonly hitboxes: THREE.Object3D[];
   readonly price: number;
+  private readonly glint: HoverGlint;
 
   constructor(private readonly options: BookcaseKitOptions) {
     super();
@@ -47,7 +50,13 @@ export class BookcaseKit extends Prop implements Interactable, UpgradeOfferLike 
     const front = 0.002;
     for (const dx of [-0.16, 0.16]) part(box, 0.012, 0.8, front, PRINT, { x: dx, y: 0.62, z: front / 2 }).castShadow = false;
     for (let i = 0; i < 5; i++) part(box, 0.33, 0.012, front, PRINT, { y: 0.23 + i * 0.195, z: front / 2 }).castShadow = false;
-    for (const y of [0.3, 0.95]) part(box, WIDTH + 0.006, 0.03, THICKNESS + 0.006, STRAP, { y, z }).castShadow = false;
+    const straps = [0.3, 0.95].map((y) => {
+      const strap = part(box, WIDTH + 0.006, 0.03, THICKNESS + 0.006, STRAP, { y, z });
+      strap.castShadow = false;
+      return strap;
+    });
+    // Its hover cue: the straps (what a hand would take it by) catch the light.
+    this.glint = HoverGlint.of(...straps);
     const hitbox = invisibleHitbox(WIDTH + 0.04, HEIGHT, THICKNESS + 0.06, { y: HEIGHT / 2, z });
     box.add(hitbox);
     this.hitboxes = [hitbox];
@@ -67,10 +76,12 @@ export class BookcaseKit extends Prop implements Interactable, UpgradeOfferLike 
 
   // --- Interactable -------------------------------------------------------------------------
 
-  setHovered(_hovered: boolean): void {}
+  setHovered(hovered: boolean): void {
+    this.glint.set(hovered);
+  }
 
   label(): string | null {
-    return this.visible ? `Bookcase kit, for the games the living room has no room left for: ${this.price} coins. Click to buy it` : null;
+    return this.visible ? `Bookcase kit (${this.price} coins, for the games the living room has no room left for) · buy` : null;
   }
 
   activate(session: SessionActions): void {

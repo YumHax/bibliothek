@@ -11,9 +11,12 @@ export interface SeatingParts extends Pick<CoreParts, 'player'> {
   cat?: CatLike;
   /** A night's sleep from the bed (fade, clock to the next morning, fade back): `game/Sleep`. */
   sleep?: SleepLike;
-  /** Told once the player is awake again: a night's dream, some mornings (`household/dreams`). */
-  dreams?: { afterSleep(): void };
+  /** Told once the player is awake again: a night's dream, some mornings (`household/dreams`); true when its card shows. */
+  dreams?: { afterSleep(): Promise<boolean> };
 }
+
+/** A dream's card stays up this long (ms, `DreamCard`): the tip to get up waits for it, one thing at a time. */
+const DREAM_CARD_MS = 8000;
 
 /** Armchairs and the bed: sitting down, standing up (a movement key or E), and sleeping until morning. */
 export class Seating implements KeyRoute {
@@ -58,12 +61,25 @@ export class Seating implements KeyRoute {
     if (sleep.isAsleep) return;
     this.host.putBack();
     this.host.setFrozen(true);
-    void sleep.untilMorning().then(() => {
+    void sleep.untilMorning().then(async (slept) => {
       this.host.setFrozen(false);
       const player = this.parts.player;
+      const getUp = (): void => {
+        if (player.isSeated) this.host.tip(`Move or press ${actionKeyLabel('standUp')} to get up.`, { id: 'seated', until: () => !player.isSeated });
+      };
+      if (!slept) {
+        this.host.refuse('Not sleepy: bedtime is after 8 pm');
+        getUp();
+        return;
+      }
+      // One thing at a time on waking: the dream's card when there is one (then the tip), else a good morning.
+      const dreamt = (await this.parts.dreams?.afterSleep()) ?? false;
+      if (dreamt) {
+        window.setTimeout(getUp, DREAM_CARD_MS);
+        return;
+      }
       this.host.react('Good morning!');
-      this.host.tip(`Move or press ${actionKeyLabel('standUp')} to get up.`, { id: 'seated', until: () => !player.isSeated });
-      this.parts.dreams?.afterSleep();
+      getUp();
     });
   }
 

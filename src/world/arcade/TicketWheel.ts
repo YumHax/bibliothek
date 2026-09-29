@@ -5,6 +5,7 @@ import { boxMesh, cylinderMesh, eyePoseAt, invisibleHitbox } from '../meshUtils'
 import { WALL } from '../surface/layers';
 import { basic, paint, standard } from '../materials/palette';
 import { actionKeyLabel } from '@/ui/keys';
+import { keyOrUse } from '@/ui/verb';
 import { type ArcadeControls, NO_CONTROLS, drawText } from './games/ArcadeGame';
 import { TicketMachine, type TicketMachineWiring } from './TicketMachine';
 import { TicketStrip } from './TicketStrip';
@@ -87,13 +88,14 @@ export class TicketWheel extends TicketMachine {
     this.name = 'TicketWheel';
     this.options = options;
     const title = options.title ?? 'TICKET WHEEL';
-    this.game = { id: 'wheel', title, hint: 'Space or click to spin · the slice under the flapper pays' };
+    // Read when shown (the first play's tip): the words follow the device in hand.
+    this.game = { id: 'wheel', title, get hint() { return `${keyOrUse(actionKeyLabel('fire'))} to spin · the slice under the flapper pays`; } };
     const total = options.slices.reduce((sum, s) => sum + s.weight, 0);
     this.edges = [0];
     for (const s of options.slices) this.edges.push(this.edges[this.edges.length - 1]! + (s.weight / total) * Math.PI * 2);
 
     const body = paint(options.color ?? 0x2a0f24, 0.5);
-    const gold = standard({ color: 0xd4a52a, metalness: 0.8, roughness: 0.3 });
+    const gold = standard({ color: 0xd4a52a, metalness: 1, roughness: 0.3 });
     // The backboard with the marquee on top.
     this.add(boxMesh(BOARD_W, BOARD_H, 0.06, body, { y: BOARD_H / 2 + 0.3, z: 0.03 }));
     const marqueeMap = paintMarquee(title, { stops: ['#ff2fa0', '#ffd23a'], ink: '#2a0f24', size: 40 });
@@ -203,11 +205,11 @@ export class TicketWheel extends TicketMachine {
   }
 
   protected attractLabel(price: string): string {
-    return `${this.game.title} — click to insert a coin (${price}) · jackpot ${this.options.jackpot.value} tickets`;
+    return `${this.game.title} · insert a coin (${price}) · jackpot ${this.options.jackpot.value} tickets`;
   }
 
   protected playingLabel(): string {
-    return this.spinning || this.landed !== null ? 'Round and round it goes…' : `${actionKeyLabel('fire')} or click to spin · ${actionKeyLabel('walkAway')} to walk away`;
+    return this.spinning || this.landed !== null ? 'Round and round it goes…' : `${this.game.title} · ${keyOrUse(actionKeyLabel('fire'))} to spin · ${actionKeyLabel('walkAway')} walks away`;
   }
 
   /** A click on the wheel mid-play pulls it. */
@@ -305,7 +307,7 @@ export class TicketWheel extends TicketMachine {
     ctx.fillRect(0, 0, 256, 96);
     const jackpot = this.options.jackpot.value;
     if (this.state === 'over' || (this.landed !== null && this.state !== 'attract')) {
-      const shown = this.state === 'over' ? Math.floor(this.won * this.countUp) : this.won;
+      const shown = this.state === 'over' ? this.shownTotal : this.won;
       const jack = this.landed !== null && this.options.slices[this.landed]!.tickets === 'jackpot';
       drawText(ctx, jack ? 'JACKPOT!!!' : 'YOU WIN', 128, 28, jack ? 24 : 18, jack ? '#ffd23a' : '#7ee787');
       drawText(ctx, `${shown} TICKETS`, 128, 66, 20, '#ffe066');
@@ -313,7 +315,7 @@ export class TicketWheel extends TicketMachine {
       drawText(ctx, 'SPINNING…', 128, 34, 20, '#33e0ff');
       drawText(ctx, `JACKPOT ${jackpot}`, 128, 70, 14, '#ffd23a');
     } else if (this.state === 'playing' || this.state === 'demo') {
-      drawText(ctx, Math.floor(this.clock * 2) % 2 ? 'PRESS SPACE' : 'TO SPIN', 128, 34, 18, '#ff8a80');
+      drawText(ctx, Math.floor(this.clock * 2) % 2 ? `PRESS ${actionKeyLabel('fire').toUpperCase()}` : 'TO SPIN', 128, 34, 18, '#ff8a80');
       drawText(ctx, `JACKPOT ${jackpot}`, 128, 70, 14, '#ffd23a');
     } else {
       drawText(ctx, 'JACKPOT', 128, 26, 16, '#ffd23a');

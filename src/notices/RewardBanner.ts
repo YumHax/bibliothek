@@ -1,3 +1,5 @@
+import { formatCoins } from '@/ui/money';
+import { reduceMotion } from '@/settings/motion';
 import { playNoticeSound } from '@/audio/noticeSounds';
 import { readMs } from './readingTime';
 import type { RewardNotice } from './types';
@@ -61,7 +63,8 @@ export class RewardBanner {
 
   private open(reward: RewardNotice): void {
     const el = document.createElement('div');
-    el.className = `reward${reward.big ? ' reward--big' : ''}`;
+    // Reduced motion: no overshoot on the way in, no spinning rays (notices.css).
+    el.className = `reward${reward.big ? ' reward--big' : ''}${reduceMotion() ? ' reward--calm' : ''}`;
     if (reward.big) {
       const rays = document.createElement('div');
       rays.className = 'reward__rays';
@@ -98,19 +101,25 @@ function chip(amount: number | undefined, kind: 'coin' | 'ticket'): HTMLSpanElem
   el.className = `reward__chip reward__chip--${kind}${amount < 0 ? ' reward__chip--spent' : ''}`;
   const icon = document.createElement('span');
   icon.className = `reward__icon reward__icon--${kind}`;
-  const n = Math.abs(amount);
-  el.append(icon, `${amount > 0 ? '+' : '−'}${n.toLocaleString('en-US')} ${kind}${n === 1 ? '' : 's'}`);
+  el.append(icon, formatCoins(amount, { sign: true, unit: kind }));
   return el;
 }
+
+/** How many rewards a merged banner stands for (a merged one merged again still counts them all). */
+const MERGED = new WeakMap<RewardNotice, number>();
 
 /** Several waiting rewards as one: the first's title, the others counted, their amounts summed. */
 function merged(rewards: RewardNotice[]): RewardNotice {
   const sum = (key: 'coins' | 'tickets') => rewards.reduce((total, r) => total + (r[key] ?? 0), 0);
-  return {
-    title: rewards[0]!.title,
-    detail: `…and ${rewards.length - 1} more`,
+  const count = rewards.reduce((total, r) => total + (MERGED.get(r) ?? 1), 0);
+  const first = rewards[0]!;
+  const reward: RewardNotice = {
+    title: first.title,
+    detail: `…and ${count - 1} more`,
     coins: sum('coins') || undefined,
     tickets: sum('tickets') || undefined,
     big: rewards.some((r) => r.big),
   };
+  MERGED.set(reward, count);
+  return reward;
 }

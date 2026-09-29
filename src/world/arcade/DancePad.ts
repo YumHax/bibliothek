@@ -22,7 +22,7 @@ const EYE_HEIGHT = 1.7;
 const GRID: Record<Lane, [number, number]> = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] };
 const COLORS: Record<Lane, number> = { left: 0xff7ad9, down: 0x63b3ff, up: 0x7ee787, right: 0xffb347 };
 const ROT: Record<Lane, number> = { up: 0, right: -Math.PI / 2, down: Math.PI, left: Math.PI / 2 };
-const STEEL = standard({ color: 0x9a9ea6, metalness: 0.7, roughness: 0.35 });
+const STEEL = standard({ color: 0x9a9ea6, metalness: 1, roughness: 0.4 });
 const PLATE = paint(0x1c1c22, 0.5);
 
 /**

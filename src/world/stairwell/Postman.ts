@@ -3,6 +3,7 @@ import type { Updatable } from '@/core/Engine';
 import type { SessionActions } from '@/game/SessionActions';
 import type { MailPost } from '@/collection/MailPost';
 import { playDoorbell } from '@/audio/doorbell';
+import { spatialOf } from '@/audio/spatial';
 import { proximityVolume } from '@/video/proximityVolume';
 import type { SoundOcclusion } from '../acoustics/SoundOcclusion';
 import type { DoorRinger, Doorstep } from '../hallway/Doorstep';
@@ -10,7 +11,8 @@ import { randomLook } from '../people/looks';
 import { Prop } from '../props/Prop';
 import { StairWalker, type StairWalkerOptions } from './StairWalker';
 import { liftGate } from './stairRoutes';
-import { STAIRWELL_PLAN as plan, landingY } from './stairwellPlan';
+import { STAIRWELL_PLAN as plan, STOREYS, landingY } from './stairwellPlan';
+import type { LiftRides } from './Lift';
 
 export interface PostmanOptions {
   viewer: THREE.Object3D;
@@ -21,6 +23,8 @@ export interface PostmanOptions {
   acoustics?: SoundOcclusion;
   /** World point of the bell: inside the flat, by the front door. */
   bell: THREE.Vector3;
+  /** The lift he comes up and goes down in, for real when it is free (else he steps out of its gate, and fades into it). */
+  lift?: LiftRides;
 }
 
 /** Seconds between rings, and how many before the parcel is left with the concierge. */
@@ -59,7 +63,7 @@ export class Postman extends Prop implements Updatable, DoorRinger {
     // Clicked on the landing: the same as opening the door to him.
     this.walker = new (class extends StairWalker {
       override label(): string | null {
-        return self.state === 'waiting' || self.state === 'coming' ? 'The postman: click to take the parcel' : null;
+        return self.state === 'waiting' || self.state === 'coming' ? 'The postman · take the parcel' : null;
       }
       override activate(session: SessionActions): void {
         if (self.state !== 'waiting' && self.state !== 'coming') return;
@@ -118,16 +122,20 @@ export class Postman extends Prop implements Updatable, DoorRinger {
     this.state = 'coming';
     this.timer = 0;
     this.rings = 0;
-    const gate = liftGate();
-    this.walker.appear(gate, landingY(0));
-    const path = [new THREE.Vector3(-1.2, 0, plan.walk.landingZ), this.spot()];
-    this.walker.walk(path, () => {
+    const stepOut = (): void => {
       if (this.state !== 'coming') return;
-      this.walker.stand(plan.postman.yaw, 'stand');
-      this.state = 'waiting';
-      if (this.options.doorstep.ring(this)) this.ring();
-      else this.leave(); // someone else at the door: he comes back on the next round
-    });
+      this.walker.appear(liftGate(), landingY(0));
+      const path = [new THREE.Vector3(-1.2, 0, plan.walk.landingZ), this.spot()];
+      this.walker.walk(path, () => {
+        if (this.state !== 'coming') return;
+        this.walker.stand(plan.postman.yaw, 'stand');
+        this.state = 'waiting';
+        if (this.options.doorstep.ring(this)) this.ring();
+        else this.leave(); // someone else at the door: he comes back on the next round
+      });
+    };
+    // Up from the hall in the lift, the car really riding when it is free; else he just steps out of its gate.
+    if (!this.options.lift?.carry(STOREYS, 0, { arrive: stepOut })) stepOut();
   }
 
   private ring(): void {
@@ -136,8 +144,8 @@ export class Postman extends Prop implements Updatable, DoorRinger {
     const { viewer, acoustics, bell } = this.options;
     viewer.getWorldPosition(this.ear);
     const walls = acoustics?.wallsBetween(this.ear, bell) ?? 0;
-    const level = BELL_LEVEL * proximityVolume(this.ear.distanceTo(bell), { referenceDistance: 2, maxDistance: 40, walls, wallGain: 0.6 });
-    playDoorbell(Math.max(BELL_FLOOR, level));
+    const level = (BELL_LEVEL * proximityVolume(this.ear.distanceTo(bell), { referenceDistance: 2, maxDistance: 40, walls, wallGain: 0.6 })) / 100;
+    playDoorbell(Math.max(BELL_FLOOR, level), spatialOf(viewer, bell, walls));
   }
 
   /** Nobody came: the parcel is left with the concierge, a card slipped under the door. */
@@ -153,10 +161,16 @@ export class Postman extends Prop implements Updatable, DoorRinger {
   private leave(): void {
     this.state = 'leaving';
     this.timer = 0;
-    this.walker.walk([new THREE.Vector3(-1.2, 0, plan.walk.landingZ), liftGate()], () => this.walker.vanish(() => {
+    const gone = (): void => {
       this.state = 'away';
       this.timer = 0;
-    }));
+    };
+    let atGate = false;
+    const riding = this.options.lift?.carry(0, STOREYS, { ready: () => atGate, board: () => this.walker.vanish(gone) });
+    this.walker.walk([new THREE.Vector3(-1.2, 0, plan.walk.landingZ), liftGate()], () => {
+      atGate = true;
+      if (!riding) this.walker.vanish(gone);
+    });
   }
 
   private spot(): THREE.Vector3 {

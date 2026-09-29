@@ -86,8 +86,9 @@ export interface ArcadeTournamentOptions {
  * THE SATURDAY TOURNAMENT at the arcade, on the real calendar (local time): every Saturday one
  * cabinet (seeded by the date, the same for everyone) hosts an eight-entrant knock-out, the player
  * against seven regulars. Signing the sheet costs `TOURNAMENT.entry` coins, once a Saturday; then
- * each paid play on the day's cabinet is the player's next round, won by beating the opponent's
- * score (drawn per regular and round from the hall of fame's starting scores: harder each round).
+ * each paid play on the day's cabinet (not one on the house) is the player's next round, won by beating
+ * the opponent's score (drawn per regular and round from the hall of fame's starting scores: harder each
+ * round), shown on the sheet and said when the round starts.
  * The other matches are decided the same way and shown as the player's round reaches them (all of
  * them once the player is out). Going out after n wins pays `TOURNAMENT.reward[n]` tickets, the
  * champion also takes the cup home. Persisted by date: a new Saturday starts a new bracket.
@@ -132,6 +133,11 @@ export class ArcadeTournament {
   /** Whether the player signed today's sheet. */
   get entered(): boolean {
     return this.isOn && this.current().entered;
+  }
+
+  /** The player's next round and the score to beat, while they are still in. */
+  get next(): TournamentView['next'] {
+    return this.view().next;
   }
 
   /** Whether the player is still in today's tournament (signed, not out, not yet champion). */
@@ -208,8 +214,10 @@ export class ArcadeTournament {
             through.push(winner);
           } else {
             // The first round not yet played is the next one (the player stands in the later ones until then).
-            if (entered && !out && next === null) next = { round: r, name: b, score: scoreB };
-            matches.push({ a, b, scoreA: null, scoreB: null, winner: null });
+            const upcoming = entered && !out && next === null;
+            if (upcoming) next = { round: r, name: b, score: scoreB };
+            // The score to beat is on the sheet before the round is played: the player knows what they are up against.
+            matches.push({ a, b, scoreA: null, scoreB: upcoming ? scoreB : null, winner: null });
             through.push(entered ? YOU : this.npcWinner(a, b, r));
           }
           continue;

@@ -45,6 +45,11 @@ export class StockItem {
   private paid = 0;
   private foundOut = false;
   private readonly listeners = new Set<() => void>();
+  /**
+   * The market day the copy was laid out for (set by `MarketStock`'s draw; undefined for a copy made elsewhere): what
+   * is agreed on it (a haggle, a hold, a sale) is that day's, even once midnight has passed with it still in hand.
+   */
+  drawnOn?: number;
   /** Resolves once `priced` is true. */
   readonly settled: Promise<void>;
 

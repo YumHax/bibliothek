@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { QUALITY } from './quality';
 
 /** Generic helpers for textures drawn on a 2D canvas (covers, labels, signs, posters). */
 
@@ -9,7 +10,8 @@ export function createCanvas(width: number, height: number): [HTMLCanvasElement,
   return [canvas, canvas.getContext('2d')!];
 }
 
-export function toTexture(canvas: HTMLCanvasElement, anisotropy = 1): THREE.CanvasTexture {
+/** `anisotropy` defaults to the quality level's (`QUALITY.anisotropy`: labels and signs are often seen at an angle). */
+export function toTexture(canvas: HTMLCanvasElement, anisotropy = QUALITY.anisotropy): THREE.CanvasTexture {
   const tex = new THREE.CanvasTexture(canvas);
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.anisotropy = anisotropy;

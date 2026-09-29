@@ -1,8 +1,10 @@
 import * as THREE from 'three';
 import type { Updatable } from '@/core/Engine';
 import { seededRandom } from '@/covers/generated/canvasUtils';
-import { paint, standard } from '../materials/palette';
+import { paint, shared, standard } from '../materials/palette';
+import { foliage } from '../materials/finishes';
 import { Prop } from './Prop';
+import { mergeStaticParts } from '../zone/mergeStatic';
 
 /**
  * `yucca`: a trunk with a rosette of long sword leaves; `fig`: a leaning trunk with big oval leaves;
@@ -44,6 +46,10 @@ interface LeafExtras {
 }
 
 const LEAF_ROWS = 10;
+/** In a full wind the sway reaches this many times further than the room's draught, this much quicker, and flutters this much (radians). */
+const WIND_REACH = 5;
+const WIND_PACE = 1.6;
+const WIND_FLUTTER = 0.02;
 const POT_SEGMENTS = 24;
 /** Rim of the hanging pot below its hook, and the pot's size. */
 const HANGING_DROP = 0.55;
@@ -57,7 +63,8 @@ const STEM = paint(0x4f6a3a, 0.7);
 const CORD = paint(0xd9cbb0, 0.95);
 
 function greens(colors: number[], roughness: number): THREE.MeshStandardMaterial[] {
-  return colors.map((color) => standard({ color, roughness, side: THREE.DoubleSide }));
+  // Leaves let light through (`foliage`): against a lamp or a window they glow instead of going black.
+  return colors.map((color) => shared(`foliage|${color}|${roughness}`, () => foliage({ color, roughness })));
 }
 // One material per colour, shared by every leaf of every plant of that kind.
 const CLASSIC_GREENS = greens([0x3f7a3a, 0x4d8b3f, 0x336b33, 0x5a9a48], 0.65);
@@ -95,6 +102,10 @@ export class Plant extends Prop implements Updatable {
   /** Local y of the pot's bottom (negative for the hanging kind). */
   private readonly potBase: number;
   private time: number;
+  /** Phase of the sway, advanced faster the harder the wind blows (a jump in speed never jolts it). */
+  private phase = 0;
+  /** Out in the open air: how hard the wind blows (0..1, `SkyState.wind`); null indoors (a draught only). */
+  private wind: (() => number) | null = null;
 
   constructor(options: PlantOptions = {}) {
     super();
@@ -119,6 +130,10 @@ export class Plant extends Prop implements Updatable {
     else if (kind === 'small') this.buildSmall(random);
     else if (kind === 'hanging') this.buildHanging(random);
     else this.buildMonstera(random);
+    // A plant ticks (its sway), so the zone never merges it; but the sway turns whole groups and no
+    // leaf moves on its own: the leaves merge by material (a draw call per green, not per leaf, in
+    // the view and in every shadow pass), the pot's parts too.
+    mergeStaticParts(this.foliage);
 
     this.scale.setScalar(this.options.scale);
   }
@@ -130,17 +145,28 @@ export class Plant extends Prop implements Updatable {
     return new THREE.Box3(new THREE.Vector3(-r, this.potBase, -r), new THREE.Vector3(r, this.potBase + this.potHeight, r));
   }
 
+  /** Stands in the open air: the sway follows `wind` (0..1) instead of the room's draught. */
+  setWind(wind: () => number): void {
+    this.wind = wind;
+  }
+
   update(dt: number): void {
     this.time += dt;
+    // Indoors a draught; outside the wind: a wider, quicker sway, and a flutter on top in the gusts.
+    const wind = this.wind ? THREE.MathUtils.clamp(this.wind(), 0, 1) : 0;
+    const reach = 1 + wind * WIND_REACH;
+    this.phase += dt * (1 + wind * WIND_PACE);
+    const flutter = wind * wind * WIND_FLUTTER * Math.sin(this.time * 7.3);
+    const t = this.phase;
     if (this.options.kind === 'hanging') {
       // The whole planter swings from its hook like a slow pendulum.
-      this.body.rotation.z = Math.sin(this.time * 0.9) * 0.02;
-      this.body.rotation.x = Math.sin(this.time * 0.67 + 1.3) * 0.015;
+      this.body.rotation.z = Math.sin(t * 0.9) * 0.02 * reach + flutter;
+      this.body.rotation.x = Math.sin(t * 0.67 + 1.3) * 0.015 * reach;
       return;
     }
     // A slow, almost imperceptible sway, as if a draught went through the room.
-    this.foliage.rotation.z = Math.sin(this.time * 0.7) * 0.012;
-    this.foliage.rotation.x = Math.sin(this.time * 0.53 + 1.3) * 0.009;
+    this.foliage.rotation.z = Math.sin(t * 0.7) * 0.012 * reach + flutter;
+    this.foliage.rotation.x = Math.sin(t * 0.53 + 1.3) * 0.009 * reach + flutter * 0.6;
   }
 
   /** Pot of radius `r` and height `h` standing on local `y = base`, rim at `base + h`. */
@@ -167,6 +193,7 @@ export class Plant extends Prop implements Updatable {
     const pot = new THREE.Group();
     pot.position.y = base;
     pot.add(body, lip, rim, bottom, soil);
+    mergeStaticParts(pot);
     this.body.add(pot);
   }
 

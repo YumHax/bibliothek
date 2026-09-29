@@ -118,7 +118,7 @@ export function addHat(parts: Parts, look: PersonLook): void {
 
 /** Thin frames: two rims in front of the eyes, a bridge, and temples running back over the ears. */
 export function addGlasses(parts: Parts, color: number, shape: FaceShape): void {
-  const frame = new THREE.MeshStandardMaterial({ color, roughness: 0.35, metalness: 0.2 });
+  const frame = new THREE.MeshStandardMaterial({ color, roughness: 0.3 });
   const eye = headPoint(EYE_DIRECTION, shape);
   // They rest on the bridge of the nose.
   const z = Math.max(eye.z + 0.022, headPoint(new THREE.Vector3(0, 0.0145, 0.09).normalize(), shape).z + 0.004);

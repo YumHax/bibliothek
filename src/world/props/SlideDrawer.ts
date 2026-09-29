@@ -4,6 +4,9 @@ import type { Interactable } from '@/interaction/Interactable';
 import type { SessionActions } from '@/game/SessionActions';
 import { invisibleHitbox } from '../meshUtils';
 import { Prop } from './Prop';
+import { HoverGlint } from './hoverGlint';
+import { captionName } from './SwingLeaf';
+import { playWoodKnock } from '@/audio/furnitureSounds';
 
 export interface SlideDrawerOptions {
   /** Size of the drawer front. */
@@ -38,6 +41,8 @@ export class SlideDrawer extends Prop implements Interactable, Updatable {
   private readonly seconds: number;
   private target = 0;
   private openness = 0;
+  /** The pull (the front's small fittings, not what is in the drawer) glints on hover; found on first hover, once the host has built it. */
+  private readonly glint = HoverGlint.fittings(this.front, this.inside);
 
   constructor(options: SlideDrawerOptions) {
     super();
@@ -62,14 +67,18 @@ export class SlideDrawer extends Prop implements Interactable, Updatable {
     this.openness = this.target > this.openness ? Math.min(this.target, this.openness + step) : Math.max(this.target, this.openness - step);
     this.front.position.z = this.travel * THREE.MathUtils.smoothstep(this.openness, 0, 1);
     this.inside.visible = this.openness > 0;
+    // The end of its runners: a light knock out, a fuller one as it closes home.
+    if (this.openness === this.target) playWoodKnock(this.target > 0 ? 0.04 : 0.08, this.target > 0 ? 1.6 : 1.4);
   }
 
   // --- Interactable -------------------------------------------------------------------------
 
-  setHovered(_hovered: boolean): void {}
+  setHovered(hovered: boolean): void {
+    this.glint.set(hovered);
+  }
 
   label(): string {
-    return this.isOpen ? `Click to close the ${this.noun}` : `Click to open the ${this.noun}`;
+    return `${captionName(this.noun)} · ${this.isOpen ? 'close' : 'open'}`;
   }
 
   activate(_session: SessionActions): void {

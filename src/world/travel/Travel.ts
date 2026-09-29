@@ -1,6 +1,9 @@
 import type * as THREE from 'three';
 import type { TravelChoice } from '@/ui/TravelMenu';
 import type { ZoneId } from '../zoneIds';
+import { duckScene } from '@/audio/audioContext';
+import { zonePlan } from '../worldPlan';
+import { playDoorShut, playLatch, playShopBell } from './travelSounds';
 
 /** A place a door can take the player to: a zone's arrival spot (world space) and the way to face. */
 export interface TravelStop extends TravelChoice<ZoneId> {
@@ -16,6 +19,8 @@ export interface Traveller {
   /** Feet at `feet` (world floor height): the stairwell's lobby is far below the flat. */
   setPosition(x: number, z: number, feet?: number): void;
   setLook(yaw: number, pitch: number): void;
+  /** Held still from the moment the curtain starts to fall until it has lifted (no stepping on while it is dark). */
+  movementEnabled: boolean;
 }
 
 export interface Curtain {
@@ -76,6 +81,8 @@ export class Travel {
     const stop = this.stops.find((s) => s.id === id);
     if (!stop || this.busy) return;
     this.busy = true;
+    const couldMove = this.player.movementEnabled;
+    this.player.movementEnabled = false;
     try {
       const spot = stop.from?.[this.here()] ?? stop;
       const loaded = this.load(stop.id).then(
@@ -85,8 +92,15 @@ export class Travel {
           return false;
         },
       );
+      // The door: its latch (and a shop's bell) as the player goes through, the room's sound fading under the curtain.
+      const from = this.here();
+      const shopDoor = isShop(from) || isShop(stop.id);
+      playLatch();
+      if (shopDoor) playShopBell(0.09, 0.12);
+      duckScene(0, CURTAIN_S);
       await this.curtain.out();
       if (!(await loaded)) {
+        duckScene(1, CURTAIN_S);
         await this.curtain.in();
         return;
       }
@@ -99,11 +113,28 @@ export class Travel {
       await nextFrame();
       await this.prepare();
       await nextFrame();
+      // The other side: the door shut behind the player (a shop's bell still bobbing), the new room's sound coming up.
+      playDoorShut(shopDoor ? 0.18 : 0.25);
+      if (shopDoor) playShopBell(0.035);
+      duckScene(1, CURTAIN_S * 1.5);
       await this.curtain.in();
+    } catch (error) {
+      duckScene(1, CURTAIN_S);
+      throw error;
     } finally {
+      this.player.movementEnabled = couldMove;
       this.busy = false;
     }
   }
+}
+
+/** About how long the curtain takes to fall (s): the room's sound fades as long. */
+const CURTAIN_S = 0.35;
+
+/** A zone entered by a shop's door (with a bell over it): the walk-in shops, the arcade, RETRO GAMES and its market. */
+function isShop(id: ZoneId): boolean {
+  const kind = zonePlan(id).kind;
+  return kind === 'shop' || kind === 'arcade' || kind === 'market';
 }
 
 function nextFrame(): Promise<void> {

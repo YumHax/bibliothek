@@ -31,7 +31,7 @@ export class MirrorBall extends Prop implements Updatable {
     const drop = options.drop ?? 0.45;
     this.speed = ((options.rpm ?? 3) / 60) * Math.PI * 2;
     this.add(cylinderMesh(0.05, 0.06, paint(0x1a1a1f, 0.5), { y: -0.03 }, { segments: 12 }));
-    this.add(cylinderMesh(0.006, drop, standard({ color: 0xb9bcc0, metalness: 0.7, roughness: 0.3 }), { y: -drop / 2 }, { segments: 6 }));
+    this.add(cylinderMesh(0.006, drop, standard({ color: 0xb9bcc0, metalness: 1, roughness: 0.35 }), { y: -drop / 2 }, { segments: 6 }));
     const glints = paintGlints(options.seed ?? 1);
     const mirror = new THREE.MeshStandardMaterial({ color: 0xd8dde6, metalness: 1, roughness: 0.12, flatShading: true, emissive: 0xffffff, emissiveMap: glints, emissiveIntensity: 1.6 });
     this.ball = new THREE.Mesh(new THREE.IcosahedronGeometry(radius, 3), mirror);

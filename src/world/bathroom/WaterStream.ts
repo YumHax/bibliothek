@@ -25,6 +25,7 @@ function streakTexture(): THREE.CanvasTexture {
   }
   streaks = new THREE.CanvasTexture(canvas);
   streaks.wrapS = streaks.wrapT = THREE.RepeatWrapping;
+  streaks.colorSpace = THREE.SRGBColorSpace;
   return streaks;
 }
 
@@ -46,7 +47,7 @@ export class WaterStream extends THREE.Mesh<THREE.CylinderGeometry, THREE.MeshSt
       color: 0xe4f1f4,
       map,
       roughness: 0.05,
-      metalness: 0.1,
+      metalness: 0,
       transparent: true,
       opacity: 0.55,
       depthWrite: false,

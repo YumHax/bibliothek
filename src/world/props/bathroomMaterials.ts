@@ -10,7 +10,7 @@ import { paint, standard } from '../materials/palette';
 /** Glazed white ceramic (sanitaryware, tiles' cousin). */
 export const CERAMIC = paint(0xf4f4f0, 0.25);
 /** Polished chrome for taps, rails and brackets. */
-export const CHROME = standard({ color: 0xd8dde0, metalness: 0.9, roughness: 0.2 });
+export const CHROME = standard({ color: 0xd8dde0, metalness: 1, roughness: 0.15 });
 /** White plastic of seats and lids: a touch less glossy than the ceramic. */
 export const WHITE_PLASTIC = paint(0xf7f7f4, 0.4);
 /**
@@ -20,7 +20,7 @@ export const WHITE_PLASTIC = paint(0xf7f7f4, 0.4);
 export const STILL_WATER = standard({
   color: 0xa9c8cc,
   roughness: 0.03,
-  metalness: 0.15,
+  metalness: 0,
   transparent: true,
   opacity: 0.6,
   depthWrite: false,
@@ -29,7 +29,7 @@ export const STILL_WATER = standard({
 export const CLEAR_GLASS = standard({
   color: 0xdff0f0,
   roughness: 0.05,
-  metalness: 0.1,
+  metalness: 0,
   transparent: true,
   opacity: 0.28,
   side: THREE.DoubleSide,

@@ -7,7 +7,7 @@ import type { MarketNotices, NoticeAd } from '@/economy/MarketNotices';
 import type { Transactions } from '@/economy/Transactions';
 import { COLLECTOR_SETS, setProgress } from '@/economy/collectorSets';
 import { themeOf } from '@/economy/marketDays';
-import { FOR_SALE_AD, LOYALTY, REPUTATION, WANTED_AD, describeCondition } from '@/economy/pricing';
+import { FOR_SALE_AD, LOYALTY, REPUTATION, WANTED_AD, describeCondition, wantedPay } from '@/economy/pricing';
 import { playCoins } from '@/audio/coins';
 import { MarketPanel, coinsHtml, escapeHtml } from './MarketPanel';
 
@@ -113,7 +113,9 @@ export class NoticeBoardPanel extends MarketPanel {
       if (ad.kind === 'wanted') {
         const mine = collection.games.find((g) => g.id === ad.game.id && g.status !== 'wishlist');
         const lent = mine?.status === 'lent';
-        const hint = mine ? (lent ? 'yours, but lent out' : 'you have it') : onStalls.has(ad.game.id) ? `on the ${platform} stall today` : 'not yours yet';
+        // What they would pay for the player's own copy: the card's price is for a complete one.
+        const yours = mine && !lent ? wantedPay(ad.pay, mine) : ad.pay;
+        const hint = mine ? (lent ? 'yours, but lent out' : yours < ad.pay ? `you have it: ${yours} for your copy` : 'you have it') : onStalls.has(ad.game.id) ? `on the ${platform} stall today` : 'not yours yet';
         const daysLeft = WANTED_AD.days - (market.day - ad.day);
         return `
           <div class="catalogue__row notices__card notices__card--wanted">
@@ -189,11 +191,11 @@ export class NoticeBoardPanel extends MarketPanel {
     if (!ad || ad.kind !== 'wanted') return;
     const done = this.deps.tx.answerWanted(ad);
     if (!done.ok) {
-      if (done.reason === 'notOwned') this.setStatus(`You don't have ${ad.game.title} to sell.`, true);
+      if (done.reason === 'notOwned') this.setStatus(`You don’t have ${ad.game.title} to sell.`, true);
       return;
     }
     playCoins();
-    this.setStatus(`${ad.from} paid ${ad.pay} coins for ${ad.game.title}. They'll be thrilled.`);
+    this.setStatus(done.pay < ad.pay ? `${ad.from} paid ${done.pay} coins for your copy of ${ad.game.title} (${ad.pay} was for a complete one).` : `${ad.from} paid ${done.pay} coins for ${ad.game.title}. They’ll be thrilled.`);
     this.refresh();
   }
 

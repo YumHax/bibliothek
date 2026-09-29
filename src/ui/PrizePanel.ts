@@ -2,11 +2,14 @@ import type { Game } from '@/catalog/types';
 import type { Wallet } from '@/economy/Wallet';
 import { PRIZES, type Prize, type PrizeStore } from '@/economy/Prizes';
 import type { Transactions } from '@/economy/Transactions';
-import { TICKETS_PER_COIN } from '@/economy/pricing';
+import { CONFIRM_MS, MYSTERY_GAME_MAX_PRICE, TICKETS_PER_COIN } from '@/economy/pricing';
+import type { NoticeActions } from '@/notices';
+import { isGrail } from '@/economy/grails';
 import { playCoins } from '@/audio/coins';
 import { playUiSound } from '@/audio/uiSounds';
 import { prizePhoto } from '@/thumbnails/prizePhotos';
 import { escapeHtml } from './html';
+import { useVerbCap } from './verb';
 import { ModalPanel } from './ModalPanel';
 import { rememberFocus } from './rememberFocus';
 import './PrizePanel.css';
@@ -15,7 +18,25 @@ import './PrizePanel.css';
 export interface MysteryGameSource {
   collection: { owns(id: string): boolean };
   games: readonly Game[];
+  /** A game's shop price: the box holds nothing dearer than `MYSTERY_GAME_MAX_PRICE` (unpriced: anything but a grail). */
+  worth?: (game: Game) => number;
 }
+
+/** What is at home, for where a prize will go: the dresser the mood lamp stands on, the cat the wand is for. Absent: everything. */
+export interface PrizeHomeSource {
+  has(what: 'dresser' | 'cat'): boolean;
+}
+
+/** How many coins' worth of tickets each of the muncher's buttons feeds (the last: all of them). */
+const FEEDS: readonly number[] = [1, 10, Infinity];
+
+/** What the attendant says handing a prize over, by the prize's shelf (cheap to dear). */
+const HANDOVER: readonly (readonly string[])[] = [
+  ['There you go. Do not lose it on the way home.', 'Classic choice. The kids fight over those.'],
+  ['Good pick. I would have taken that one too.', 'Mind how you carry it, it is fragile. Probably.'],
+  ['That is a proper prize. Wear it with pride.', 'I will put it down in the book: taken by a champion.'],
+  ['Now that is a lot of tickets. Enjoy it, you earned it.', 'Big spender! I will miss seeing it in the case.'],
+];
 
 /** The case's shelves, top to bottom: what a prize costs puts it on one (up to `upTo` tickets). */
 const SHELVES: readonly { upTo: number; card: string }[] = [
@@ -49,6 +70,8 @@ export class PrizePanel extends ModalPanel {
   private status: { text: string; error: boolean; prize: string | null } = { text: '', error: false, prize: null };
   private shownTickets: number;
   private rollFrame = 0;
+  /** "Feed all" clicked once while the pocket covers a prize, until when a second click feeds it. */
+  private armedAll = 0;
 
   constructor(
     container: HTMLElement,
@@ -56,6 +79,9 @@ export class PrizePanel extends ModalPanel {
     private readonly prizes: PrizeStore,
     private readonly tx: Transactions,
     private readonly mystery: MysteryGameSource | null = null,
+    private readonly home: PrizeHomeSource | null = null,
+    /** The attendant's word (a subtitle) and the prize's reward banner; without them both go on the counter's slip. */
+    private readonly notices: Pick<NoticeActions, 'say' | 'reward'> | null = null,
   ) {
     super(container, { className: 'ui-modal--centre prizes', label: 'Prize counter' });
     this.root.innerHTML = `
@@ -90,6 +116,7 @@ export class PrizePanel extends ModalPanel {
 
   protected onOpened(): void {
     this.status = { text: '', error: false, prize: null };
+    this.armedAll = 0;
     this.shownTickets = this.wallet.tickets;
     this.render();
     this.loadPhotos();
@@ -110,7 +137,7 @@ export class PrizePanel extends ModalPanel {
       if (!button || button.disabled) return;
       const { action, prize } = button.dataset;
       if (action === 'close') this.close();
-      else if (action === 'exchange') this.exchange();
+      else if (action === 'exchange') this.exchange(Number(button.dataset.coins ?? Infinity));
       else if (action === 'pick') this.pick(prize ?? '', true);
       else if (action === 'take') this.take(prize ?? '');
     });
@@ -132,9 +159,28 @@ export class PrizePanel extends ModalPanel {
     if (toButton) this.detailEl.querySelector<HTMLButtonElement>('button[data-action="take"]:not([disabled])')?.focus();
   }
 
-  private exchange(): void {
+  /** The dearest prize the pocket covers now (not one already at home for good), or null. */
+  private affordablePrize(): Prize | null {
+    const have = this.wallet.tickets;
+    const covered = this.forSale().filter((p) => p.tickets! <= have && !(p.home && this.prizes.count(p.id) > 0));
+    return covered[covered.length - 1] ?? null;
+  }
+
+  /**
+   * The muncher eats `maxCoins` coins' worth of tickets (all of them: `Infinity`). Feeding it all while the pocket
+   * covers a prize takes a second click (within `CONFIRM_MS`): the tickets do not come back.
+   */
+  private exchange(maxCoins: number): void {
     const before = this.wallet.tickets;
-    const coins = this.wallet.redeemTickets(TICKETS_PER_COIN);
+    const prize = !Number.isFinite(maxCoins) ? this.affordablePrize() : null;
+    if (prize && performance.now() > this.armedAll) {
+      this.armedAll = performance.now() + CONFIRM_MS;
+      const left = before % TICKETS_PER_COIN;
+      this.setStatus(`That is enough for the ${prize.name}. Feed all ${before - left} tickets all the same (${left} left)? ${useVerbCap()} again to feed.`, true);
+      return;
+    }
+    this.armedAll = 0;
+    const coins = this.wallet.redeemTickets(TICKETS_PER_COIN, Number.isFinite(maxCoins) ? maxCoins : Infinity);
     if (!coins) {
       this.setStatus(before ? `Only ${before} ticket${before > 1 ? 's' : ''}: ${TICKETS_PER_COIN} make a coin.` : 'No tickets to exchange. Play something!', true);
       return;
@@ -148,7 +194,7 @@ export class PrizePanel extends ModalPanel {
     if (!prize || prize.tickets === null) return;
     const game = prize.game ? this.drawMysteryGame() : null;
     if (prize.game && !game) {
-      this.setStatus('The mystery box is empty: you already own every game it could hold.', true, id);
+      this.setStatus('The mystery box is empty today: every game it could hold is yours already.', true, id);
       return;
     }
     const taken = this.tx.takePrize(prize, game);
@@ -157,15 +203,41 @@ export class PrizePanel extends ModalPanel {
       return;
     }
     playUiSound('pick');
-    if (game) this.setStatus(`You unwrap it: ${game.title}! It will be waiting in the parcel at home.`, false, id);
-    else this.setStatus(`The ${prize.name} is yours. ${whereItGoes(prize)}`, false, id);
+    // The attendant hands it over across the counter, with a word.
+    const shelf = Math.max(0, SHELVES.findIndex((s) => prize.tickets! <= s.upTo));
+    const lines = HANDOVER[shelf] ?? HANDOVER[0]!;
+    const line = lines[Math.floor(Math.random() * lines.length)]!;
+    const where = game ? 'It will be waiting in the parcel at home.' : this.whereItGoes(prize);
+    const notices = this.notices;
+    if (!notices) {
+      this.setStatus(`Attendant: “${line}” ${game ? `You unwrap it: ${game.title}!` : `The ${prize.name} is yours.`} ${where}`, false, id);
+      return;
+    }
+    // Who speaks is a voice, what was won a reward, where it goes the counter's slip (docs/notices.md).
+    notices.say(line, 'Attendant');
+    notices.reward({ title: game ? `Mystery game: ${game.title}` : `${prize.name}: yours`, tickets: -prize.tickets! });
+    this.setStatus(where, false, id);
   }
 
-  /** A random game the collection does not own yet, or null when there is none. */
+  /**
+   * A random game the collection does not own yet (never a grail, nothing over `MYSTERY_GAME_MAX_PRICE`), or null when
+   * there is none: the cap always holds (a game whose fame is not known yet is priced as ordinary, well under it).
+   */
   private drawMysteryGame(): Game | null {
-    if (!this.mystery) return null;
-    const left = this.mystery.games.filter((g) => !this.mystery!.collection.owns(g.id));
+    const mystery = this.mystery;
+    if (!mystery) return null;
+    const unowned = mystery.games.filter((g) => !mystery.collection.owns(g.id) && !isGrail(g.id));
+    const worth = mystery.worth;
+    const left = worth ? unowned.filter((g) => worth(g) <= MYSTERY_GAME_MAX_PRICE) : unowned;
     return left[Math.floor(Math.random() * left.length)] ?? null;
+  }
+
+  /** Where a prize ends up, for the counter's status line: a prize that needs something at home says so. */
+  private whereItGoes(prize: Prize): string {
+    const home = this.home;
+    if (prize.home === 'moodLamp' && home && !home.has('dresser')) return 'It needs the dresser at home: it will stand on it once you have one (the furniture shop sells it).';
+    if (prize.home === 'catToy' && home && !home.has('cat')) return 'For when you adopt a cat (the pet shop): it will wait by the armchairs until then.';
+    return whereItGoes(prize);
   }
 
   /** What the counter sells: the mystery game only with a collection to draw it for. */
@@ -252,7 +324,7 @@ export class PrizePanel extends ModalPanel {
       <div class="prizes__stage">${this.photoHtml(p)}</div>
       <h3>${escapeHtml(p.name)}</h3>
       <p class="prizes__blurb">${escapeHtml(p.blurb)}</p>
-      <p class="prizes__where">${escapeHtml(p.game ? 'Comes home in the parcel.' : whereItGoes(p))}${owned && !p.home ? ` <b>${owned} at home already.</b>` : ''}</p>
+      <p class="prizes__where">${escapeHtml(p.game ? 'Comes home in the parcel.' : this.whereItGoes(p))}${owned && !p.home ? ` <b>${owned} at home already.</b>` : ''}</p>
       <div class="prizes__price"><span class="prizes__stub prizes__stub--big">${p.tickets}</span>${short > 0 && !done ? `<span class="prizes__need">you have ${have}</span>` : ''}</div>
       <button type="button" class="prizes__take" data-action="take" data-prize="${p.id}" ${done || short > 0 ? 'disabled' : ''}>${label}</button>
       ${status?.text ? `<p class="prizes__slip${status.error ? ' prizes__slip--error' : ''}">${escapeHtml(status.text)}</p>` : ''}`;
@@ -263,11 +335,18 @@ export class PrizePanel extends ModalPanel {
     const restoreFocus = rememberFocus(this.munchEl);
     const gain = Math.floor(this.wallet.tickets / TICKETS_PER_COIN);
     const status = this.status.prize === null ? this.status : null;
+    // Fed a step at a time (a coin, ten, or the lot), so a pocket saved for a prize is not munched by one click.
+    const feeds = FEEDS.filter((coins, i) => i === FEEDS.length - 1 || coins < gain).map((coins) => {
+      const n = Math.min(coins, gain);
+      const armed = coins === Infinity && performance.now() < this.armedAll;
+      const label = !gain ? `Needs ${TICKETS_PER_COIN} tickets` : `${armed ? 'Sure? Feed all' : coins === Infinity ? 'Feed all' : 'Feed'} ${(n * TICKETS_PER_COIN).toLocaleString('en-US')} → ${n} coin${n > 1 ? 's' : ''}`;
+      return `<button type="button" class="prizes__feed" data-action="exchange" data-coins="${coins === Infinity ? 'Infinity' : coins}" ${gain ? '' : 'disabled'}>${label}</button>`;
+    }).join('');
     this.munchEl.innerHTML = `
       <span class="prizes__slot" aria-hidden="true"></span>
       <p class="prizes__muncher-text"><b>Ticket muncher</b> ${TICKETS_PER_COIN} tickets make a coin, as ever. <span>The claw's bunnies are not for sale.</span></p>
       ${status?.text ? `<p class="prizes__slip prizes__slip--inline${status.error ? ' prizes__slip--error' : ''}">${escapeHtml(status.text)}</p>` : ''}
-      <button type="button" class="prizes__feed" data-action="exchange" ${gain ? '' : 'disabled'}>${gain ? `Feed ${(gain * TICKETS_PER_COIN).toLocaleString('en-US')} → ${gain} coin${gain > 1 ? 's' : ''}` : `Needs ${TICKETS_PER_COIN} tickets`}</button>`;
+      ${feeds}`;
     restoreFocus();
   }
 

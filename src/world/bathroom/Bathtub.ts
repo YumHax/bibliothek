@@ -9,6 +9,9 @@ import { proud } from '../props/joinery';
 import { paint } from '../materials/palette';
 import { ClickSpot } from '../props/ClickSpot';
 import { WaterStream } from './WaterStream';
+import { WaterRipples, rippleNormals } from './WaterRipples';
+import { Steam } from '../kitchen/Steam';
+import { HoverGlint } from '../props/hoverGlint';
 import { CERAMIC, CHROME, CLEAR_GLASS, STILL_WATER } from '../props/bathroomMaterials';
 
 /** What the tub's water is doing, for the builder's sound: tap running, plug out, how full (0..1). */
@@ -51,6 +54,10 @@ const FILL_SECONDS = 45;
 const DRAIN_SECONDS = 25;
 /** The water is drawn once it is deeper than this. */
 const WET = 0.004;
+/** How fast the surface's ripples drift (uv per second): stirred by the tap, barely moving still. */
+const RIPPLE_DRIFT = { running: 0.22, still: 0.012 };
+/** A full bath steams: from this full, harder the fuller. */
+const STEAM_FROM = 0.65;
 
 const RUBBER = paint(0x1d1d1f, 0.7);
 
@@ -80,6 +87,12 @@ export class Bathtub extends THREE.Group implements Furniture, Interactable, Upd
   private readonly catSpot: THREE.Vector3;
   private readonly catApproach: THREE.Vector3;
   private readonly rim: THREE.Vector3;
+  /** The surface's normal map, drifted each frame, and the rings spreading where the stream lands. */
+  private readonly ripples: THREE.Texture;
+  private readonly rings = new WaterRipples(0.16);
+  private readonly steam = new Steam({ count: 14, life: 4.5, rise: 0.07, startSize: 0.12, endSize: 0.5, opacity: 0.07 });
+  /** The two cross handles glint on hover. */
+  private glint: HoverGlint | null = null;
 
   constructor(private readonly options: BathtubOptions = {}) {
     super();
@@ -99,13 +112,22 @@ export class Bathtub extends THREE.Group implements Furniture, Interactable, Upd
 
     // The water: one sheet at the level, as big as the basin (the inner faces hide its edges).
     const material = STILL_WATER.clone();
+    // Not the palette's any more: this copy wears the bath's own drifting ripples.
+    material.userData = {};
+    this.ripples = rippleNormals();
+    this.ripples.repeat.set(inner / 0.35, (width - 2 * SHELL) / 0.35);
+    material.normalMap = this.ripples;
+    material.normalScale.set(0.35, 0.35);
     this.surface = new THREE.Mesh(new THREE.PlaneGeometry(inner - 0.004, width - 2 * SHELL - 0.004).rotateX(-Math.PI / 2), material);
     this.surface.position.set(0, BASIN_FLOOR, width / 2);
     this.surface.visible = false;
     this.tapPoint = new THREE.Vector3(tapX, SPOUT_TIP.y, SPOUT_TIP.z);
     this.stream.position.copy(this.tapPoint);
     this.plug = cylinderMesh(0.03, 0.012, RUBBER, { x: this.drain.x, y: BASIN_FLOOR + 0.006, z: this.drain.z }, { radiusBottom: 0.026, segments: 14 });
-    this.add(this.surface, this.stream, this.plug);
+    // The rings under the spout, and the steam over the middle of the basin, both riding the water's level.
+    this.rings.position.set(tapX, BASIN_FLOOR, SPOUT_TIP.z);
+    this.steam.position.set(0, BASIN_FLOOR, width / 2);
+    this.add(this.surface, this.stream, this.plug, this.rings, this.steam);
     this.showWater();
 
     const hitbox = invisibleHitbox(0.24, 0.16, 0.22, { x: tapX, y: TAP_Y, z: 0.1 });
@@ -113,7 +135,7 @@ export class Bathtub extends THREE.Group implements Furniture, Interactable, Upd
     this.hitboxes = [hitbox];
     this.plugSpot = new ClickSpot({
       size: [0.16, 0.1, 0.16],
-      label: () => (this.water.draining ? 'Click to put the plug in' : this.water.depth > 0 ? 'Click to pull the plug' : null),
+      label: () => (this.water.draining ? 'Plug · put in' : this.water.depth > 0 ? 'Plug · pull' : null),
       onClick: () => this.setDraining(!this.water.draining),
     });
     this.plugSpot.position.set(this.drain.x, BASIN_FLOOR + 0.05, this.drain.z);
@@ -146,6 +168,7 @@ export class Bathtub extends THREE.Group implements Furniture, Interactable, Upd
 
   update(dt: number): void {
     this.stream.update(dt);
+    this.stir(dt);
     const { running, draining } = this.water;
     if (!running && !draining) return;
     const rate = (running ? 1 / FILL_SECONDS : 0) - (draining ? 1 / DRAIN_SECONDS : 0);
@@ -163,12 +186,28 @@ export class Bathtub extends THREE.Group implements Furniture, Interactable, Upd
 
   // --- Interactable -------------------------------------------------------------------------
 
-  setHovered(_hovered: boolean): void {}
+  /** The surface's ripples drift (quicker under the running tap), the rings spread where the stream lands, a full bath steams. */
+  private stir(dt: number): void {
+    const wet = this.surface.visible;
+    if (wet) {
+      const drift = (this.water.running ? RIPPLE_DRIFT.running : RIPPLE_DRIFT.still) * dt;
+      this.ripples.offset.x = (this.ripples.offset.x + drift) % 1;
+      this.ripples.offset.y = (this.ripples.offset.y + drift * 0.6) % 1;
+    }
+    this.rings.running = wet && this.water.running;
+    this.rings.update(dt);
+    this.steam.rate = wet ? 0.6 * THREE.MathUtils.smoothstep(this.water.depth, STEAM_FROM, 1) : 0;
+    this.steam.update(dt);
+  }
+
+  setHovered(hovered: boolean): void {
+    this.glint?.set(hovered);
+  }
 
   label(): string {
-    if (this.water.running) return 'Click to turn the bath tap off';
-    if (this.water.depth >= 1) return this.options.onSoak ? 'Click to take a bath' : 'The bath is full';
-    return 'Click to run the bath';
+    if (this.water.running) return 'Bath tap · turn off';
+    if (this.water.depth >= 1) return this.options.onSoak ? 'Bath · take a bath' : 'The bath is full';
+    return 'Bath · run';
   }
 
   activate(_session: SessionActions): void {
@@ -193,6 +232,8 @@ export class Bathtub extends THREE.Group implements Furniture, Interactable, Upd
     const level = BASIN_FLOOR + this.water.depth * this.capacity;
     this.surface.position.y = level;
     this.surface.visible = level - BASIN_FLOOR > WET;
+    this.rings.position.y = level;
+    this.steam.position.y = level;
     this.surface.material.opacity = 0.35 + 0.35 * this.water.depth;
     this.stream.visible = this.water.running;
     this.stream.setLength(SPOUT_TIP.y - level);
@@ -225,11 +266,13 @@ export class Bathtub extends THREE.Group implements Furniture, Interactable, Upd
     const spout = cylinderMesh(0.014, 0.16, CHROME, { x, y: TAP_Y - 0.02, z: 0.09 }, { segments: 12 });
     spout.rotation.x = Math.PI / 2;
     this.add(spout);
-    for (const dx of [-0.065, 0.065]) {
+    const handles = [-0.065, 0.065].map((dx) => {
       const handle = cylinderMesh(0.022, 0.03, CHROME, { x: x + dx, y: TAP_Y, z: 0.027 }, { segments: 12 });
       handle.rotation.x = Math.PI / 2;
       this.add(handle);
-    }
+      return handle;
+    });
+    this.glint = HoverGlint.of(...handles);
     const riserH = HEAD_Y - TAP_Y;
     this.add(cylinderMesh(0.011, riserH, CHROME, { x, y: TAP_Y + riserH / 2, z: 0.03 }, { segments: 10 }));
     const arm = cylinderMesh(0.01, HEAD_REACH, CHROME, { x, y: HEAD_Y, z: HEAD_REACH / 2 }, { segments: 10 });

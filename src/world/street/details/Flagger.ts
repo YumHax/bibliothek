@@ -58,14 +58,14 @@ export class Flagger extends THREE.Group implements Furniture, Updatable {
 
     const look = { ...randomLook(options.seed, 'vendor'), hat: 'cap' as const, hatColor: 0xf2f0ea, top: 'jacket' as const, topColor: 0xff6a12, topAccent: 0xd8e84a, longSleeves: true, trousers: 0x2a2d33 };
     delete look.apron;
-    this.walker = new Walker({ viewer: options.viewer, seed: options.seed, look, lines: options.lines, label: 'Roadworker · click to ask the way' });
+    this.walker = new Walker({ viewer: options.viewer, seed: options.seed, look, lines: options.lines, label: 'Roadworker · ask the way' });
     options.place(this.walker, this.spot.clone());
     // He faces the walkable street (local -x).
     this.walker.stand(closure.rotation - Math.PI / 2, 'hips');
 
     // The STOP / GO board on its pole, beside him on the far side of the centre line.
     const board = new THREE.Group();
-    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 1.7, 8), standard({ color: 0x2a2a2e, roughness: 0.5, metalness: 0.4 }));
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 1.7, 8), standard({ color: 0x2a2a2e, roughness: 0.5 }));
     pole.position.y = 0.85;
     const foot = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.2, 0.06, 12), paint(0x1a1a1a, 0.9));
     foot.position.y = 0.03;

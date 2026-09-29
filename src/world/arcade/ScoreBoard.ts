@@ -6,6 +6,7 @@ import { Prop } from '../props/Prop';
 import { paint } from '../materials/palette';
 import { drawText } from './games/ArcadeGame';
 import type { ScoreTable } from './scoreTable';
+import { QUALITY } from '@/graphics/quality';
 
 export interface ScoreBoardOptions {
   /** The hall's games, in the order they are listed. */
@@ -52,7 +53,7 @@ export class ScoreBoard extends Prop implements Updatable {
     this.ctx = this.canvas.getContext('2d')!;
     this.texture = new THREE.CanvasTexture(this.canvas);
     this.texture.colorSpace = THREE.SRGBColorSpace;
-    this.texture.anisotropy = 4;
+    this.texture.anisotropy = QUALITY.anisotropy;
     const face = new THREE.Mesh(new THREE.PlaneGeometry(width, height), new THREE.MeshBasicMaterial({ map: this.texture, toneMapped: false, color: 0xd0d0d0 }));
     face.position.z = 0.052;
     this.add(face);

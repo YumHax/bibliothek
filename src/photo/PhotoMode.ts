@@ -6,14 +6,16 @@ import { PHOTO_FRAMES, cropOf } from './frames';
 import { PHOTO_LOOKS } from './photoLooks';
 import { PhotoHud } from './PhotoHud';
 import { savePhoto } from './savePhoto';
+import { playShutter } from './shutterSound';
 import { ACTIONS, isAction, type ActionId } from '@/input/actions';
 
 /** The player as photo mode parks and frees it (`FirstPersonController` fits). */
 export interface PhotoPlayer {
   readonly isLocked: boolean;
   readonly isSeated: boolean;
-  sit(eyePosition: THREE.Vector3, yaw: number): void;
-  stand(): void;
+  /** `instant`: no eased move (photo mode parks the camera where it is). */
+  sit(eyePosition: THREE.Vector3, yaw: number, instant?: boolean): void;
+  stand(instant?: boolean): void;
   getLook(): { yaw: number; pitch: number };
   setLook(yaw: number, pitch: number): void;
 }
@@ -113,7 +115,7 @@ export class PhotoMode implements Updatable {
     this.satDown = !player.isSeated;
     if (this.satDown) {
       const { yaw, pitch } = player.getLook();
-      player.sit(camera.position.clone(), yaw);
+      player.sit(camera.position.clone(), yaw, true);
       player.setLook(yaw, pitch);
     }
     if (interactor) interactor.enabled = false;
@@ -131,7 +133,7 @@ export class PhotoMode implements Updatable {
     camera.quaternion.copy(this.startQuaternion);
     camera.fov = this.startFov;
     camera.updateProjectionMatrix();
-    if (this.satDown && player.isSeated) player.stand();
+    if (this.satDown && player.isSeated) player.stand(true);
     this.satDown = false;
     if (interactor) interactor.enabled = true;
     this.deps.postFx?.setLens(null);
@@ -155,7 +157,12 @@ export class PhotoMode implements Updatable {
     ctx.fillRect(0, 0, crop.w, crop.h);
     ctx.drawImage(canvas, crop.x, crop.y, crop.w, crop.h, 0, 0, crop.w, crop.h);
     this.hud.flash();
-    savePhoto(out);
+    playShutter();
+    savePhoto(out, (result) => {
+      if (result.ok) this.hud.setSaved(`Saved ${result.name}`, false);
+      else this.hud.setSaved(`Not saved: ${result.reason}`, true);
+      this.refresh();
+    });
   }
 
   /** A key press while active: true when photo mode used it (always, while active: nothing else should hear it). */

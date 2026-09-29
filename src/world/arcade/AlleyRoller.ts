@@ -1,3 +1,4 @@
+import { actionKeyLabel } from '@/ui/keys';
 import * as THREE from 'three';
 import type { ArcadeResult } from '@/game/SessionActions';
 import { ChipSpeaker } from '@/audio/ChipSpeaker';
@@ -93,7 +94,7 @@ export class AlleyRoller extends TicketMachine {
   }
 
   protected attractLabel(price: string): string {
-    return `${this.title} — click to insert a coin (${price}, nine balls)`;
+    return `${this.title} · insert a coin (${price}, nine balls)`;
   }
 
   /** The Space (or click) that started the play counts only once it has been let go. */
@@ -165,12 +166,11 @@ export class AlleyRoller extends TicketMachine {
       return;
     }
     if (this.state === 'over') {
-      const shown = Math.floor(this.ticketsOf(this.last.score) * this.countUp);
       drawText(ctx, `SCORE ${this.last.score}`, W / 2, 36, 18, '#fff2a8');
-      drawText(ctx, `${shown} TICKETS`, W / 2, 80, 24, '#ffd23a');
-      const note = this.lastRank !== null ? `${ordinal(this.lastRank + 1)} ON THE BOARD!` : this.last.best ? 'NEW BEST!' : '';
+      drawText(ctx, `${this.shownTotal} TICKETS`, W / 2, 80, 24, '#ffd23a');
+      const note = this.lastRank !== null ? `${ordinal(this.lastRank + 1)} ON THE BOARD!` : this.last.best ? 'NEW BEST!' : this.last.first ? 'FIRST SCORE!' : '';
       if (note) drawText(ctx, note, W / 2, 118, 14, blink ? '#7ee787' : '#ffffff');
-      drawText(ctx, `SPACE: AGAIN (${this.priceText().toUpperCase()})`, W / 2, 160, 11, '#ff8a80');
+      if (this.canReplay) drawText(ctx, `${actionKeyLabel('fire').toUpperCase()}: AGAIN (${this.priceText().toUpperCase()})`, W / 2, 160, 11, '#ff8a80');
       texture.needsUpdate = true;
       return;
     }

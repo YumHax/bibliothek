@@ -23,7 +23,8 @@ export interface ChristmasTreeOptions {
 const NEEDLES = standard({ color: 0x1f4a2a, roughness: 0.85, flatShading: true });
 const TRUNK = paint(0x5a3a22, 0.9);
 const POT = paint(0x8a1f1f, 0.5);
-const BAUBLE = instancedStandard({ roughness: 0.2, metalness: 0.6 });
+// Mirrored glass baubles: metal-like (metalness 1), the instance colour their tint.
+const BAUBLE = instancedStandard({ roughness: 0.2, metalness: 1 });
 const STAR = basic({ color: 0xffe07a, toneMapped: false });
 const RIBBON = paint(0xf1e1b4, 0.6);
 const BAUBLE_COLORS = [0xc8243a, 0xd4a52a, 0x2a5ac8, 0xe8e8f0];
@@ -31,6 +32,8 @@ const LIGHT_COLORS = [0xffc46e, 0xff4a3a, 0x3aff6a, 0x4a8aff, 0xffe07a];
 const PRESENT_COLORS = [0xc8243a, 0x2a6a3a, 0x2a4a9a, 0xd4a52a];
 /** Seconds between two twinkles of the lights. */
 const TWINKLE_SECONDS = 0.45;
+/** Scratch colour of a twinkle (filled and copied into the instance buffer at once). */
+const TWINKLE_COLOR = new THREE.Color();
 
 /**
  * THE CHRISTMAS TREE in the living room: a fir of stacked cones in a red pot, hung with baubles
@@ -150,7 +153,7 @@ export class ChristmasTree extends THREE.Group implements Furniture, Updatable {
     if (this.clock < TWINKLE_SECONDS) return;
     this.clock = 0;
     // A few bulbs dim, the rest come back up: a slow twinkle rather than a disco.
-    const c = new THREE.Color();
+    const c = TWINKLE_COLOR;
     for (let i = 0; i < this.bulbColors.length; i++) {
       const level = this.random() < 0.25 ? 0.35 : 1.25;
       this.bulbs.setColorAt(i, c.copy(this.bulbColors[i]!).multiplyScalar(level));

@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { cylinderMesh, invisibleHitbox } from '../meshUtils';
 import { paint, standard } from '../materials/palette';
 import { SwitchableLamp } from './SwitchableLamp';
+import { LAMP_GLOW } from '../lighting/lampColours';
 
 export interface PendantLampOptions {
   /** Total hang from the ceiling to the bottom rim of the shade (m). */
@@ -27,9 +28,8 @@ const DEFAULT_DROP = 0.2 + BULB_ABOVE_RIM;
 const FABRIC_GLOW = 0.2;
 const BULB_GLOW = 3;
 const DIFFUSER_GLOW = 1.2;
-const HOVER_GLOW = 0.3;
 
-const BRUSHED_METAL = standard({ color: 0xb9b3a8, roughness: 0.35, metalness: 0.8 });
+const BRUSHED_METAL = standard({ color: 0xb9b3a8, roughness: 0.4, metalness: 1 });
 const CORD = paint(0x2a2623, 0.8);
 
 /**
@@ -61,16 +61,16 @@ export class PendantLamp extends SwitchableLamp {
     const cord = cylinderMesh(0.004, cordLength, CORD, { y: -CANOPY_HEIGHT - cordLength / 2 }, { segments: 8 });
     const socket = cylinderMesh(0.014, 0.035, BRUSHED_METAL, { y: this.bulbOffset + BULB_RADIUS + 0.012 }, { radiusBottom: 0.012, segments: 12 });
 
-    this.bulb = new THREE.MeshStandardMaterial({ color: 0xfff4e0, emissive: 0xffe2b0, emissiveIntensity: BULB_GLOW, roughness: 0.3 });
+    this.bulb = new THREE.MeshStandardMaterial({ color: 0xfff4e0, emissive: LAMP_GLOW.led, emissiveIntensity: BULB_GLOW, roughness: 0.3 });
     const bulb = new THREE.Mesh(new THREE.SphereGeometry(BULB_RADIUS, 16, 12), this.bulb);
     bulb.position.y = this.bulbOffset;
 
-    this.fabric = new THREE.MeshStandardMaterial({ color: 0xf2ead9, roughness: 1, side: THREE.DoubleSide, emissive: 0xffe2b0, emissiveIntensity: FABRIC_GLOW });
+    this.fabric = new THREE.MeshStandardMaterial({ color: 0xf2ead9, roughness: 1, side: THREE.DoubleSide, emissive: LAMP_GLOW.led, emissiveIntensity: FABRIC_GLOW });
     const shade = new THREE.Mesh(new THREE.CylinderGeometry(SHADE_TOP_RADIUS, SHADE_BOTTOM_RADIUS, SHADE_HEIGHT, SEGMENTS, 1, true), this.fabric);
     shade.position.y = rim + SHADE_HEIGHT / 2;
     shade.receiveShadow = true;
 
-    this.diffuser = new THREE.MeshStandardMaterial({ color: 0xfff6e8, emissive: 0xffe9c9, emissiveIntensity: DIFFUSER_GLOW, roughness: 1, side: THREE.DoubleSide });
+    this.diffuser = new THREE.MeshStandardMaterial({ color: 0xfff6e8, emissive: LAMP_GLOW.led, emissiveIntensity: DIFFUSER_GLOW, roughness: 1, side: THREE.DoubleSide });
     const diffuser = new THREE.Mesh(new THREE.CircleGeometry(SHADE_BOTTOM_RADIUS - 0.005, SEGMENTS), this.diffuser);
     diffuser.rotation.x = -Math.PI / 2;
     diffuser.position.y = rim + 0.003;
@@ -90,9 +90,11 @@ export class PendantLamp extends SwitchableLamp {
     this.options.onSwitch?.(on);
   }
 
-  protected render(on: boolean, hovered: boolean): void {
-    this.bulb.emissiveIntensity = on ? BULB_GLOW : 0;
-    this.diffuser.emissiveIntensity = on ? DIFFUSER_GLOW : 0;
-    this.fabric.emissiveIntensity = (on ? FABRIC_GLOW : 0) + (hovered ? HOVER_GLOW : 0);
+  /** Hover glints the canopy and the socket (the base class), never the shade. */
+  protected render(level: number): void {
+    SwitchableLamp.warmGlow(this.bulb, LAMP_GLOW.led, level);
+    this.bulb.emissiveIntensity = level * BULB_GLOW;
+    this.diffuser.emissiveIntensity = level * DIFFUSER_GLOW;
+    this.fabric.emissiveIntensity = level * FABRIC_GLOW;
   }
 }

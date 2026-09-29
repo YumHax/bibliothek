@@ -66,6 +66,8 @@ export function placerFor(zone: Zone, upgrades: HomeUpgrades | undefined, owned:
     item.updateWorldMatrix(true, true);
     setShownKeepingLights(item, false);
     staged.push({ item, position: position.clone(), rotationY });
+    // Not placed, still the zone's: disposed on unload even if never bought.
+    zone.keep(item);
     return item;
   };
 

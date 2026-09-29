@@ -1,7 +1,7 @@
 import type { Game, PlatformId } from '@/catalog/types';
 import { KEYS, PersistedStore, safeStorage } from '@/persistence';
 import type { Views } from './Fame';
-import { shopPrice } from './pricing';
+import { NEIGHBOUR_SWAPS, shopPrice } from './pricing';
 import { seeded } from './seeded';
 
 /** Who lives behind a door on the stairs: the door's key (`landing:index`), the name, the floor's name. */
@@ -44,17 +44,8 @@ export interface NeighbourTradesOptions {
   storage?: Storage | null;
 }
 
-/** Share of market days a neighbour slips a note under the door. */
-const ODDS = 0.35;
-/** Market days an offer stands. */
-const LASTS = 3;
-/** Owned games before anyone asks for one. */
-const MIN_OWNED = 3;
-/** Games of theirs the neighbour considers giving. */
-const CANDIDATES = 10;
-/** What they give is worth this share of what they get: fair, a little generous at best. */
-const FAIR: readonly [number, number] = [0.8, 1.35];
-const IDEAL = 1.05;
+/** The numbers are `NEIGHBOUR_SWAPS` in pricing.ts: how often, how long, from how many games, how fair. */
+const { odds: ODDS, lasts: LASTS, minOwned: MIN_OWNED, candidates: CANDIDATES, fair: FAIR, ideal: IDEAL } = NEIGHBOUR_SWAPS;
 
 /**
  * The neighbours' swaps. Some market days (`ODDS`, drawn per day, the same whenever looked at) one

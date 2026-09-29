@@ -5,6 +5,9 @@ import type { Outcome } from '@/household/HomeLife';
 import { tellOutcome } from '@/household/tellOutcome';
 import { ClickSpot } from '../props/ClickSpot';
 import { HairDryer } from './HairDryer';
+import { boxJob } from '../build/boxJob';
+import { HOUSEHOLD } from '@/household/rules';
+import { playBathSplash, playHairDryer, playKitTake, playRunningWater } from '@/audio/householdSounds';
 import { furnishShell } from '../shell';
 import { furnishDecor, placeRoomLight } from '../build/roomParts';
 import { pointSound } from '../build/hearing';
@@ -17,10 +20,13 @@ import { Toilet } from './Toilet';
 import { TowelRail } from './TowelRail';
 import { LaundryBasket } from './LaundryBasket';
 import { MirrorCabinet } from './MirrorCabinet';
+import { CabinetKit } from './CabinetKit';
+import { presentWhile } from '../build/presence';
 import { placeWith, placeLeaves, floorPointsToWorld } from '../zone/attach';
 import { RunningWater, ToiletFlush, FLUSH_SECONDS } from '@/audio/water';
 import type { CatPerch } from '../cat/spots';
 import { BATHROOM_PLAN } from './bathroomPlan';
+import { rugsUnderfoot } from '../build/rugsUnderfoot';
 
 /**
  * Builds the bathroom into its zone from `BATHROOM_PLAN`: shell with its door (opening out into
@@ -45,7 +51,7 @@ export function furnishBathroom(zone: Zone, ctx: BuildContext): ZoneHandle {
       tapEnd: 'left',
       ...plan.bathtubSize,
       // A full bath is for soaking in (docs/household.md); the water goes out after.
-      onSoak: household ? () => showOutcome(household, household.life.soak()) : undefined,
+      onSoak: household ? () => soak(household) : undefined,
       onWater: ({ running, draining, depth }) => {
         tubWater.setRunning(running);
         tubWater.setDraining(draining);
@@ -88,7 +94,22 @@ export function furnishBathroom(zone: Zone, ctx: BuildContext): ZoneHandle {
     available: () => !basin.isRunning,
     catWeight: (night) => (night ? 0.2 : 0.6),
   };
-  return { room, catVisits: floorPointsToWorld(zone, plan.catVisits), catPerches: [inTub, inBasin] };
+  return { room, catVisits: floorPointsToWorld(zone, plan.catVisits), catPerches: [inTub, inBasin], surfaceAt: rugsUnderfoot(zone) };
+}
+
+/**
+ * A soak in the full bath: said at once when it does nothing, else a slow fade to black over the
+ * splash and the lapping water, the clock wound on, and what it did. True lets the water out.
+ */
+function soak(household: HouseholdContext): boolean {
+  const { life, pastimes } = household;
+  const outcome = life.soak();
+  if (!outcome.done || !pastimes) return showOutcome(household, outcome);
+  const plan = HOUSEHOLD.pastime.soak;
+  void pastimes.run({ ...plan, start: () => playBathSplash(), dark: () => playRunningWater(plan.darkMs / 1000 + 0.6) }, () => outcome).then((told) => {
+    if (told) showOutcome(household, told);
+  });
+  return true;
 }
 
 /** Says what came of a household action; true when something happened. */
@@ -107,18 +128,33 @@ function furnishBathroomLife(zone: Zone, household: HouseholdContext, cabinet: M
   // Behind the cabinet's door: only reached with it open.
   const spot = new ClickSpot({
     size: kitSpot.size,
-    label: () => (life.household.hasKit ? null : 'Click to take the cleaning kit (cotton buds, isopropyl)'),
+    label: () => (life.household.hasKit ? null : 'Cleaning kit · take it (cotton buds, isopropyl)'),
     onClick: () => {
-      if (!life.household.hasKit) showOutcome(household, life.takeKit());
+      if (life.household.hasKit) return;
+      const outcome = life.takeKit();
+      if (outcome.done) playKitTake();
+      showOutcome(household, outcome);
     },
   });
   placeWith(zone, cabinet, spot, new THREE.Vector3(...kitSpot.at));
+  // The kit itself on the bottom shelf, there until it is taken.
+  const kit = placeWith(zone, cabinet, new CabinetKit(), cabinet.bottomShelf.clone().setX(kitSpot.shelfX));
+  presentWhile(zone, kit, () => !life.household.hasKit, (cb) => life.household.subscribe(cb));
   zone.placeAt(new HairDryer({
     label: (player) => life.stickerLabel(player.held?.game ?? null),
     use: (session) => {
       const game = session.held?.game;
-      if (game) showOutcome(household, life.peelSticker(game, () => session.putBack()));
-      else session.refuse(life.stickerLabel(null));
+      if (!game) {
+        // A help click, not a mistake: said under the crosshair, never with the refusal buzzer.
+        session.react('Bring a box with an old price sticker: warm air lifts it off.');
+        return;
+      }
+      // A minute of warm air: the dryer's whir over a short fade, the box back in hand without its sticker.
+      boxJob(household, session, game, {
+        refusal: life.mayPeel(game),
+        pastime: { ...HOUSEHOLD.pastime.peel, start: () => playHairDryer(2.2) },
+        change: (before) => life.peelSticker(game, before),
+      });
     },
   }), hairDryer);
 }

@@ -15,7 +15,10 @@ export interface SliderOptions {
   max: number;
   step: number;
   format(value: number): string;
+  /** Every step of a drag: applied live (the store saves a moment after the last one). */
   onInput(value: number): void;
+  /** The slider let go (or stepped by a key / the D-pad): a volume plays its sample here. */
+  onChange?(value: number): void;
 }
 
 export function slider(label: string, options: SliderOptions): Field<number> {
@@ -32,6 +35,7 @@ export function slider(label: string, options: SliderOptions): Field<number> {
     output.textContent = options.format(value);
     options.onInput(value);
   });
+  range.addEventListener('change', () => options.onChange?.(Number(range.value)));
   return {
     element,
     set(value) {

@@ -4,6 +4,15 @@ import { boxMesh } from './meshUtils';
 import { isShared } from './materials/sharedResources';
 import { QUALITY } from '@/graphics/quality';
 import { basic, timber } from '@/world/materials/palette';
+import { INSET, PROUD } from './props/joinery';
+import { mergeStaticParts } from './zone/mergeStatic';
+import type { BoxMotion } from './shelving/BoxMotion';
+import { createCanvas } from '@/covers/generated/canvasUtils';
+
+/** A folded card standing on a board (`Shelf.setCard`): its size (m) and how far it leans back. */
+const CARD_W = 0.13;
+const CARD_H = 0.075;
+const CARD_LEAN = 0.22;
 
 export interface ShelfOptions {
   width: number;
@@ -19,6 +28,22 @@ export interface ShelfOptions {
 }
 
 const WOOD = timber(0x6b4a2b, 0.6);
+/** The thin veneer strip glued over the boards' front edges: a shade lighter than the faces. */
+const BANDING = timber(0x80603d, 0.5);
+/** The back: a thin sheet of hardboard, pale and dull, set in behind the boards. */
+const HARDBOARD = timber(0xa0845f, 0.85);
+const BACK_THICKNESS = 0.004;
+/** The plinth: the bottom board stands this high on a kick board set back from the front. */
+export const PLINTH = 0.07;
+const KICK_RECESS = 0.02;
+/** How far the top board overhangs the sides and the front. */
+const TOP_OVERHANG = 0.012;
+/** A partly filled row leans its last box against its neighbour (radians at most), when there is room for it. */
+const LEAN_MAX = THREE.MathUtils.degToRad(11);
+/** Boxes stand this far behind the boards' front edge (m), where the light reaches their covers. */
+const FRONT_SET = 0.035;
+/** Out of the row, a box clears the front edge by this much before it flies to the hand (m). */
+const EDGE_CLEAR = 0.02;
 /** Mid-span sag of a loaded board 0.8 m long (metres); it grows with the square of the span, up to `MAX_SAG`. */
 const SAG_AT_80CM = 0.0022;
 const MAX_SAG = 0.005;
@@ -46,20 +71,27 @@ export class Shelf extends THREE.Group {
   readonly height: number;
   /** Top face of each board, top row first. */
   private readonly boardTops: number[] = [];
-  private readonly boards: THREE.Mesh[] = [];
+  /** The carcass (sides, plinth, boards, top, back, banding), merged into a draw per material. */
+  private readonly carcass = new THREE.Group();
   /** Mid-span sag of each row's board, top row first (0 without `QUALITY.detailedMaterials`). */
   private readonly rowSags: number[] = [];
   private readonly shadowProxy: THREE.InstancedMesh;
   private proxyQueued = false;
   private readonly proxyMatrix = new THREE.Matrix4();
   private readonly proxyScale = new THREE.Vector3();
+  /** The card standing on a board, if any (`setCard`). */
+  private card: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshStandardMaterial> | null = null;
 
-  constructor(options: ShelfOptions) {
+  /** `motion` ticks the boxes while they move (a hover, a slide after a sort); without it they jump. */
+  constructor(
+    options: ShelfOptions,
+    private readonly motion: BoxMotion | null = null,
+  ) {
     super();
     this.name = 'Shelf';
     this.options = { boardThickness: 0.025, gap: 0.02, ...options };
     const { rowHeights, boardThickness, width } = this.options;
-    this.height = rowHeights.reduce((a, b) => a + b, 0) + (rowHeights.length + 1) * boardThickness;
+    this.height = PLINTH + rowHeights.reduce((a, b) => a + b, 0) + (rowHeights.length + 1) * boardThickness;
     this.build();
 
     const perRow = Math.ceil((width - 2 * boardThickness) / MIN_BOX_WIDTH);
@@ -98,29 +130,109 @@ export class Shelf extends THREE.Group {
    * Lays `boxes` left-to-right on row `row` (0 = top). A box that is currently away from any
    * shelf (carried by the player) only gets its rest pose updated, so the Inspector can bring
    * it back to the right spot without this method yanking it out of the player's hand.
+   * `slide`, when given, eases each box from where it stands now (on this shelf or another) to
+   * its new spot, after the delay it returns for that box (a sort, staggered); else they jump.
    */
-  placeRow(row: number, boxes: readonly GameBox[]): void {
+  placeRow(row: number, boxes: readonly GameBox[], slide?: (box: GameBox) => number): void {
     const { width, depth, gap, boardThickness } = this.options;
     const top = this.boardTops[row];
     if (top === undefined) throw new Error(`[shelf] row ${row} does not exist`);
 
-    let cursorX = -(width / 2 - boardThickness);
-    for (const box of boxes) {
+    const inner = width / 2 - boardThickness;
+    let cursorX = -inner;
+    boxes.forEach((box, i) => {
       const { width: bw, height: bh, depth: bd } = box.dimensions;
       const carried = box.parent !== null && !(box.parent instanceof Shelf);
       // Real shelves are not tidy: each box a touch askew, some pushed back or pulled out, all
       // following the board's sag. Seeded by the game, so a box always stands the same way.
       const x = cursorX + bw / 2;
       const [yaw, roll, push] = untidiness(box.game.id);
-      box.restPosition.set(x, top + bh / 2 - this.sagAt(row, x), -depth / 2 + bd / 2 + 0.03 + push);
-      box.restQuaternion.setFromEuler(new THREE.Euler(0, yaw, roll));
+      const z = depth / 2 - bd / 2 - FRONT_SET + push;
+      box.slideOut = depth / 2 - (z + bd / 2) + EDGE_CLEAR;
+      const lean = i === boxes.length - 1 ? this.leanOf(boxes[i - 1] ?? null, box, cursorX, inner) : null;
+      if (lean) {
+        box.restPosition.set(lean.x, top + lean.lift - this.sagAt(row, lean.x), z);
+        box.restQuaternion.setFromEuler(new THREE.Euler(0, yaw, lean.angle));
+      } else {
+        box.restPosition.set(x, top + bh / 2 - this.sagAt(row, x), z);
+        box.restQuaternion.setFromEuler(new THREE.Euler(0, yaw, roll));
+      }
       if (!carried) {
-        this.add(box);
-        box.position.copy(box.restPosition);
-        box.quaternion.copy(box.restQuaternion);
+        if (slide && box.parent && box.parent !== this) this.attach(box); // keeps where it stands, in this shelf's frame
+        else if (box.parent !== this) this.add(box);
+        if (slide) box.slideToRest(slide(box));
+        else {
+          box.position.copy(box.restPosition);
+          box.quaternion.copy(box.restQuaternion);
+        }
       }
       cursorX += bw + gap;
+    });
+  }
+
+  /**
+   * The last box of a partly filled row, leaning back against the one before it (or the side of
+   * the bookcase, alone on its row) on its far bottom corner: its centre x, the lift of its centre
+   * over the board and the roll. Null when the row is full enough that it stands upright (or the
+   * quality keeps things tidy).
+   */
+  private leanOf(before: GameBox | null, box: GameBox, from: number, inner: number): { x: number; lift: number; angle: number } | null {
+    if (!QUALITY.detailedMaterials) return null;
+    const { width: w, height: h } = box.dimensions;
+    // Where the one before ends (the row's cursor has already stepped past the gap), and how tall it stands.
+    const edge = before ? from - this.options.gap : from;
+    // Alone on its row it rests its top corner against the bookcase's side: only the first term counts.
+    const leanOn = before ? before.dimensions.height : 0;
+    const slack = inner - edge - w;
+    if (slack < w * 0.4) return null;
+    for (let angle = LEAN_MAX; angle > LEAN_MAX / 3; angle *= 0.8) {
+      const c = Math.cos(angle);
+      const s = Math.sin(angle);
+      // Top tipped towards -x: it rests on its bottom corner there, its side against the neighbour's
+      // top corner (or its own top corner against a taller neighbour, or the bookcase's side).
+      const x = edge + Math.max(w / 2 * c + h / 2 * s, leanOn * Math.tan(angle) + w / 2 * c - h / 2 * s);
+      if (x + w / 2 * c + h / 2 * s > inner) continue;
+      return { x, lift: w / 2 * s + h / 2 * c, angle };
     }
+    return null;
+  }
+
+  /**
+   * A folded card standing on row `row`'s board at local `x`, leaning back, facing out (what the bookcase
+   * is for, on a nearly empty one); null takes it away.
+   */
+  setCard(text: { title: string; line: string } | null, row = 0, x = 0): void {
+    if (this.card) {
+      this.remove(this.card);
+      this.card.material.map?.dispose();
+      this.card.material.dispose();
+      this.card.geometry.dispose();
+      this.card = null;
+    }
+    const top = this.boardTops[row];
+    if (!text || top === undefined) return;
+    const [canvas, ctx] = createCanvas(260, 150);
+    ctx.fillStyle = '#f4eedc';
+    ctx.fillRect(0, 0, 260, 150);
+    ctx.strokeStyle = 'rgba(58,42,26,0.35)';
+    ctx.lineWidth = 3;
+    ctx.strokeRect(8, 8, 244, 134);
+    ctx.fillStyle = '#3a2a1a';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.font = 'italic bold 30px Georgia, serif';
+    ctx.fillText(text.title, 130, 60, 230);
+    ctx.font = 'italic 24px Georgia, serif';
+    ctx.fillText(text.line, 130, 100, 230);
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.colorSpace = THREE.SRGBColorSpace;
+    // Its origin at its foot, on the board.
+    const card = new THREE.Mesh(new THREE.PlaneGeometry(CARD_W, CARD_H).translate(0, CARD_H / 2, 0), new THREE.MeshStandardMaterial({ map: texture, roughness: 0.85 }));
+    card.position.set(x, top + 0.001, this.options.depth / 2 - FRONT_SET - 0.02);
+    card.rotation.x = -CARD_LEAN;
+    card.receiveShadow = true;
+    this.card = card;
+    this.add(card);
   }
 
   /**
@@ -128,11 +240,13 @@ export class Shelf extends THREE.Group {
    * taken off the shelf first; the shared wood material is kept for the next bookcase.
    */
   dispose(): void {
-    for (const board of this.boards) {
-      this.remove(board);
-      if (!isShared(board.geometry)) board.geometry.dispose();
-    }
-    this.boards.length = 0;
+    this.carcass.traverse((obj) => {
+      const mesh = obj as THREE.Mesh;
+      if (mesh.isMesh && !isShared(mesh.geometry)) mesh.geometry.dispose();
+    });
+    this.remove(this.carcass);
+    this.carcass.clear();
+    this.setCard(null);
     this.shadowProxy.count = 0;
     this.shadowProxy.castShadow = false;
     this.shadowProxy.dispose(); // its instance buffer; refilled if a carried box comes back to this emptied shelf
@@ -141,6 +255,13 @@ export class Shelf extends THREE.Group {
   private boxMoved(child: THREE.Object3D, onShelf: boolean): void {
     if (!(child instanceof GameBox)) return;
     child.setShadowProxied(onShelf);
+    const motion = this.motion;
+    if (onShelf && motion) child.restless = (box) => motion.track(box);
+    else if (!onShelf) {
+      child.restless = null;
+      motion?.untrack(child);
+      child.stopSettling();
+    }
     this.updateShadowProxy();
   }
 
@@ -169,39 +290,65 @@ export class Shelf extends THREE.Group {
     return sag * (1 - t * t);
   }
 
+  /**
+   * The carcass: two sides from the floor, a plinth (the bottom board raised on a kick board set
+   * back from the front), the shelves between the sides, a top that overhangs them, a hardboard back
+   * set in behind the boards, and veneer banding over every front edge. Merged by material at the
+   * end: a bookcase is three draws, whatever its rows.
+   */
   private build(): void {
-    const { width, depth, rowHeights, boardThickness } = this.options;
+    const { width, depth, rowHeights, boardThickness: t } = this.options;
     const h = this.height;
+    const parts: THREE.Mesh[] = [];
+    const span = width - 2 * t;
+    // The boards stop at the back's face, buried a hair into it; the sides run over its edges to the wall.
+    const boardDepth = depth - BACK_THICKNESS + INSET;
+    const boardZ = (BACK_THICKNESS - INSET) / 2;
+    const front = depth / 2;
+    const band = (w: number, bandH: number, at: { x?: number; y: number; z?: number }): void => {
+      parts.push(boxMesh(w, bandH, PROUD, BANDING, { x: at.x ?? 0, y: at.y, z: (at.z ?? front) + PROUD / 2 }));
+    };
 
-    this.boards.push(
-      boxMesh(boardThickness, h, depth, WOOD, { x: -width / 2 + boardThickness / 2, y: h / 2 }),
-      boxMesh(boardThickness, h, depth, WOOD, { x: width / 2 - boardThickness / 2, y: h / 2 }),
-      // The back fits between the sides and under the top board: run past them, its ends and top would z-fight with theirs.
-      boxMesh(width - 2 * boardThickness, h - boardThickness, boardThickness / 2, WOOD, { y: (h - boardThickness) / 2, z: -depth / 2 + boardThickness / 4 }),
-    );
+    // Sides, up to the top's underside, banded down their front edge.
+    for (const side of [-1, 1]) {
+      const x = side * (width / 2 - t / 2);
+      parts.push(boxMesh(t, h - t + INSET, depth, WOOD, { x, y: (h - t + INSET) / 2 }));
+      band(t, h - t + INSET, { x, y: (h - t + INSET) / 2 });
+    }
+    // The top, over the sides, standing out past them and the front.
+    const topDepth = depth + TOP_OVERHANG;
+    parts.push(boxMesh(width + 2 * TOP_OVERHANG, t, topDepth, WOOD, { y: h - t / 2, z: TOP_OVERHANG / 2 }));
+    band(width + 2 * TOP_OVERHANG, t, { y: h - t / 2, z: front + TOP_OVERHANG });
+    // The hardboard back, between the sides (buried in them) from the floor to the top's underside.
+    parts.push(boxMesh(span + 2 * INSET, h - t + INSET, BACK_THICKNESS, HARDBOARD, { y: (h - t + INSET) / 2, z: -depth / 2 + BACK_THICKNESS / 2 }));
+    // The kick board under the bottom shelf, set back in the shadow of it.
+    parts.push(boxMesh(span + 2 * INSET, PLINTH + INSET, t, WOOD, { y: (PLINTH + INSET) / 2, z: front - KICK_RECESS - t / 2 }));
 
-    // Boards from the floor up; the top board closes the bookcase. The bottom one rests on the
-    // plinth; the others bow a little under the boxes (the top one carries nothing).
-    let y = boardThickness / 2;
+    // Shelves from the plinth up. The bottom one rests on the plinth; the others bow a little under
+    // the boxes. The top row's ceiling is the top board itself.
+    let y = PLINTH + t / 2;
     const tops: number[] = [];
     const sags: number[] = [];
-    const span = width - 2 * boardThickness;
     const sag = QUALITY.detailedMaterials ? Math.min(MAX_SAG, SAG_AT_80CM * (span / 0.8) ** 2) : 0;
-    for (let i = rowHeights.length - 1; i >= -1; i--) {
-      const bottom = i === rowHeights.length - 1;
-      const loaded = i >= 0 && !bottom ? sag : 0;
-      const board = boxMesh(span, boardThickness, depth, WOOD, { y });
-      if (loaded > 0) bow((board.geometry = board.geometry.clone()), span, loaded); // its own copy: boxMesh geometries are shared
-      this.boards.push(board);
-      if (i >= 0) {
-        tops.push(y + boardThickness / 2);
-        sags.push(loaded);
-        y += boardThickness + rowHeights[i];
+    for (let i = rowHeights.length - 1; i >= 0; i--) {
+      const loaded = i !== rowHeights.length - 1 ? sag : 0;
+      const board = boxMesh(span + 2 * INSET, t, boardDepth, WOOD, { y, z: boardZ });
+      const edge = boxMesh(span, t, PROUD, BANDING, { y, z: front + PROUD / 2 });
+      if (loaded > 0) {
+        // Their own copies: boxMesh geometries are shared.
+        bow((board.geometry = board.geometry.clone()), span, loaded);
+        bow((edge.geometry = edge.geometry.clone()), span, loaded);
       }
+      parts.push(board, edge);
+      tops.push(y + t / 2);
+      sags.push(loaded);
+      y += t + rowHeights[i]!;
     }
     this.boardTops.push(...tops.reverse()); // top row first
     this.rowSags.push(...sags.reverse());
-    this.add(...this.boards);
+    this.carcass.add(...parts);
+    this.add(this.carcass);
+    mergeStaticParts(this.carcass);
   }
 }
 

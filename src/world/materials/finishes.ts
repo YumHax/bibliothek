@@ -8,13 +8,16 @@ import { markShared } from './sharedResources';
 const GRAIN_ALONG_M = 1.6;
 const GRAIN_ACROSS_M = 0.4;
 const GRAIN_PX = 512;
+/** Height of the grain's relief (bump scale, the fibre value being the height). */
+const WOOD_RELIEF = 0.35;
 
 let grainTexture: THREE.CanvasTexture | null = null;
 
 /**
  * Timber grain, greyscale and seamless: long wavering fibres along x, darker late-wood bands,
  * the odd knot with its growth rings swirling round it. Painted once and shared; the wood shader
- * reads it in object space, so every board gets grain at the same scale whatever its size.
+ * reads it in object space, so every board gets grain at the same scale whatever its size, shifted
+ * per mesh (and per instance) so boards cut alike differ, and uses it as a faint relief too.
  */
 function grain(): THREE.CanvasTexture {
   if (grainTexture) return grainTexture;
@@ -57,7 +60,7 @@ function grain(): THREE.CanvasTexture {
   grainTexture = markShared(new THREE.CanvasTexture(canvas));
   grainTexture.wrapS = grainTexture.wrapT = THREE.RepeatWrapping;
   grainTexture.colorSpace = THREE.NoColorSpace;
-  grainTexture.anisotropy = 4;
+  grainTexture.anisotropy = QUALITY.anisotropy;
   return grainTexture;
 }
 
@@ -78,21 +81,28 @@ export function woodGrain<M extends THREE.MeshStandardMaterial>(material: M): M 
   return patchShader(material, 'wood', (shader) => {
     Object.assign(shader.uniforms, uniforms);
     shader.vertexShader =
-      'varying vec3 vObjectPos;\nvarying vec3 vObjectNormal;\nvarying float vWorldHeight;\nvarying float vUpFacing;\n' +
+      'varying vec3 vObjectPos;\nvarying vec3 vObjectNormal;\nvarying float vWorldHeight;\nvarying float vUpFacing;\nvarying vec2 vGrainShift;\n' +
       afterChunk(
         shader.vertexShader,
         'begin_vertex',
         `vObjectPos = position;
         vObjectNormal = normal;
         vWorldHeight = (modelMatrix * vec4(position, 1.0)).y;
-        vUpFacing = normalize((modelMatrix * vec4(normal, 0.0)).xyz).y;`,
+        vUpFacing = normalize((modelMatrix * vec4(normal, 0.0)).xyz).y;
+        // Every board is cut from its own stretch of the log: the grain is shifted by a hash of where
+        // the mesh (or the instance) stands, so two boards cut alike never show the same figure.
+        vec3 grainOrigin = modelMatrix[3].xyz;
+        #ifdef USE_INSTANCING
+          grainOrigin += instanceMatrix[3].xyz * 1.618;
+        #endif
+        vGrainShift = fract(sin(vec2(dot(grainOrigin, vec3(12.9898, 78.233, 37.719)), dot(grainOrigin, vec3(39.346, 11.135, 83.155)))) * 43758.5453);`,
       );
     shader.fragmentShader =
-      `varying vec3 vObjectPos;\nvarying vec3 vObjectNormal;\nvarying float vWorldHeight;\nvarying float vUpFacing;\nuniform sampler2D woodGrain;\nuniform vec2 grainScale;\n${VALUE_NOISE}
+      `varying vec3 vObjectPos;\nvarying vec3 vObjectNormal;\nvarying float vWorldHeight;\nvarying float vUpFacing;\nvarying vec2 vGrainShift;\nuniform sampler2D woodGrain;\nuniform vec2 grainScale;\n${VALUE_NOISE}
       float woodFibre() {
         vec3 n = abs(vObjectNormal);
         vec2 p = n.y > max(n.x, n.z) ? vObjectPos.xz : (n.x > n.z ? vObjectPos.zy : vObjectPos.xy);
-        return texture2D(woodGrain, p * grainScale).r;
+        return texture2D(woodGrain, p * grainScale + vGrainShift).r;
       }
       float woodDust() {
         return smoothstep(0.8, 0.97, vUpFacing) * (0.12 + 0.6 * smoothstep(1.6, 2.1, vWorldHeight)) * (0.6 + 0.4 * patchNoise(vObjectPos.xz * 23.0));
@@ -109,6 +119,24 @@ export function woodGrain<M extends THREE.MeshStandardMaterial>(material: M): M 
         'roughnessmap_fragment',
         'roughnessFactor = clamp(roughnessFactor * mix(1.15, 0.88, fibre) + dust * 0.3, 0.0, 1.0);',
       );
+    // The grain as a faint relief too: its screen-space slope tilts the normal (three's bump
+    // mapping, with the fibre for the height), so the late-wood bands catch a grazing light.
+    shader.fragmentShader = afterChunk(
+      shader.fragmentShader,
+      'normal_fragment_maps',
+      `{
+        vec3 sigmaX = normalize(dFdx(-vViewPosition));
+        vec3 sigmaY = normalize(dFdy(-vViewPosition));
+        vec3 r1 = cross(sigmaY, normal);
+        vec3 r2 = cross(normal, sigmaX);
+        float det = dot(sigmaX, r1) * faceDirection;
+        // Fades out as a pixel covers more wood (far off, or at a grazing angle): the fibres are then
+        // finer than the pixels, their slope noise, and the relief would sparkle along shelf edges.
+        float footprint = length(fwidth(vObjectPos));
+        vec2 slope = vec2(dFdx(fibre), dFdy(fibre)) * ${WOOD_RELIEF.toFixed(3)} * (1.0 - smoothstep(0.003, 0.01, footprint));
+        normal = normalize(abs(det) * normal - sign(det) * (slope.x * r1 + slope.y * r2));
+      }`,
+    );
   });
 }
 
@@ -122,6 +150,38 @@ export function fabric(parameters: THREE.MeshStandardMaterialParameters & { shee
   const base = new THREE.Color(parameters.color ?? 0xffffff);
   const sheenColor = sheenTint !== undefined ? new THREE.Color(sheenTint) : base.clone().lerp(new THREE.Color(0xffffff), 0.45);
   return new THREE.MeshPhysicalMaterial({ ...standard, sheen: 1, sheenColor, sheenRoughness: 0.75 });
+}
+
+/** Share of the light on a leaf's far side that comes through it, and how it is tinted on the way (yellower, greener). */
+const LEAF_TRANSMISSION = 0.55;
+const LEAF_TINT = 'vec3(1.05, 1.2, 0.55)';
+/** How far the light wraps round past a leaf's edge-on terminator (the blade is thin and waxy, never pitch dark). */
+const LEAF_WRAP = 0.35;
+
+/**
+ * A leaf (double-sided, thin): with `QUALITY.detailedMaterials`, the light striking its far side
+ * comes through it, tinted, and the light wraps a little past the terminator, so a leaf against a
+ * lamp or a window glows green instead of going black. Per light, inside three's own lighting loop
+ * (every direct light, shadows included); a new material per call, like `wood()`.
+ */
+export function foliage(parameters: THREE.MeshStandardMaterialParameters): THREE.MeshStandardMaterial {
+  const material = new THREE.MeshStandardMaterial({ side: THREE.DoubleSide, ...parameters });
+  if (!QUALITY.detailedMaterials) return material;
+  return patchShader(material, 'foliage', (shader) => {
+    shader.fragmentShader = afterChunk(
+      shader.fragmentShader,
+      'lights_physical_pars_fragment',
+      `void RE_Direct_Leaf(const in IncidentLight directLight, const in vec3 geometryPosition, const in vec3 geometryNormal, const in vec3 geometryViewDir, const in vec3 geometryClearcoatNormal, const in PhysicalMaterial material, inout ReflectedLight reflectedLight) {
+        RE_Direct_Physical(directLight, geometryPosition, geometryNormal, geometryViewDir, geometryClearcoatNormal, material, reflectedLight);
+        float facing = dot(geometryNormal, directLight.direction);
+        float through = saturate(-facing);
+        float wrap = saturate((facing + ${LEAF_WRAP.toFixed(2)}) / ${(1 + LEAF_WRAP).toFixed(2)}) - saturate(facing);
+        reflectedLight.directDiffuse += directLight.color * BRDF_Lambert(material.diffuseColor) * (${LEAF_TRANSMISSION.toFixed(2)} * through * ${LEAF_TINT} + wrap);
+      }
+      #undef RE_Direct
+      #define RE_Direct RE_Direct_Leaf`,
+    );
+  });
 }
 
 /**

@@ -8,3 +8,4 @@ export { TouchControls, DEFAULT_TOUCH_BUTTONS, type TouchButton, type TouchContr
 export { SyntheticMouse, type MouseButton } from './SyntheticMouse';
 export { ACTIONS, PAD_ALIASES, isAction, primaryCode, type ActionId } from './actions';
 export { isTouchDevice, watchForTouch } from './deviceDetect';
+export { lastDevice, noteDevice, onDeviceChange, type InputDevice } from './lastDevice';

@@ -4,6 +4,7 @@ import type { Updatable } from '@/core/Engine';
 import type { Interactable } from '@/interaction/Interactable';
 import type { SessionActions } from '@/game/SessionActions';
 import { LidMotion } from '../box/LidMotion';
+import { playLatchClick, playWoodKnock } from '@/audio/furnitureSounds';
 import { cylinderMesh, invisibleHitbox } from '../meshUtils';
 import { paint, standard } from '../materials/palette';
 import { Prop, part } from '../props/Prop';
@@ -28,8 +29,8 @@ const SWING_SECONDS = 1.2;
 const BLOCKER_SWAP = 0.5;
 
 const PAINT = paint(0xf2efe8, 0.55);
-const GLASS = standard({ color: 0xd8e6ee, roughness: 0.04, metalness: 0.2, transparent: true, opacity: 0.14, depthWrite: false });
-const BRASS = new THREE.MeshStandardMaterial({ color: 0xc9a75b, metalness: 0.85, roughness: 0.3, emissive: 0xc9a75b, emissiveIntensity: 0 }); // convention-ok: a template, cloned per door (its handle glows on hover)
+const GLASS = standard({ color: 0xd8e6ee, roughness: 0.04, metalness: 0, transparent: true, opacity: 0.14, depthWrite: false });
+const BRASS = new THREE.MeshStandardMaterial({ color: 0xc9a75b, metalness: 1, roughness: 0.32, emissive: 0xc9a75b, emissiveIntensity: 0 }); // convention-ok: a template, cloned per door (its handle glows on hover)
 
 /**
  * The glazed door onto the balcony: a painted frame through the wall, a single French leaf of six
@@ -43,7 +44,8 @@ export class BalconyDoor extends Prop implements Updatable, Interactable {
   readonly seenFromNextDoor = true;
   readonly hitboxes: THREE.Object3D[];
 
-  private readonly motion = new LidMotion(OPEN_ANGLE, SWING_SECONDS);
+  /** Shut, the latch springs home; open, a soft knock on its stop. */
+  private readonly motion = new LidMotion(OPEN_ANGLE, SWING_SECONDS, (open) => (open ? playWoodKnock(0.05, 0.75) : playLatchClick()));
   private readonly pivot = new THREE.Group();
   private readonly brass = BRASS.clone();
   private readonly collisions?: Collisions;
@@ -113,7 +115,7 @@ export class BalconyDoor extends Prop implements Updatable, Interactable {
   }
 
   label(): string {
-    return this.motion.isOpen ? 'Click to close the balcony door' : 'Click to open the balcony door';
+    return this.motion.isOpen ? 'Balcony door · close' : 'Balcony door · open';
   }
 
   activate(_session: SessionActions): void {

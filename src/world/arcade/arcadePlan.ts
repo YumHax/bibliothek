@@ -7,7 +7,7 @@ import type { MachineKind, MachineOptionsOf } from './machineKinds';
 import type { HangoutSpot, NavNode } from './ArcadeCrowd';
 
 /*
- * THE ARCADE PLAN: a dim hall reached by teleport from the flat's front door (see `worldPlan.ts`,
+ * THE ARCADE PLAN: a dim hall reached by teleport from its door on Front Street (see `worldPlan.ts`,
  * `travel`). Zone-local coordinates, origin at the centre of the floor: x from -6 (left) to 6,
  * z from -4 (back) to 4 (front, the way in). Walls as named from the arrival spot:
  *
@@ -42,6 +42,8 @@ export interface CabinetPlan {
   glowLight?: boolean;
   /** Stickers, burns and scuffs, 0..1. */
   wear?: number;
+  /** Plays cost nothing and pay nothing (LexiPunk, until its page reports scores): the screen says FREE PLAY. */
+  freePlay?: boolean;
 }
 
 /** A printed card on a machine that is not a cabinet (the cabinets carry their own): machine-local, facing +z; titled with the game's title unless `title` says otherwise. */
@@ -91,8 +93,9 @@ const ISLAND_Z = 0.412;
 /** The light-gun and dance cabinets, facing the way in. */
 const PAIR_X = 3.4;
 const PAIR_Z = -0.9;
-/** The exit door's leaf plus its architrave, left untiled. */
-const DOOR_GAP = 0.83 + 2 * 0.07 + 0.04;
+/** The exit door's leaf (as wide and tall as the arcade's door on Front Street), its architrave left untiled round it. */
+export const ARCADE_DOOR = { width: 1.6, height: 2.5 };
+const DOOR_GAP = ARCADE_DOOR.width + 2 * 0.07 + 0.04;
 
 export const ARCADE_PLAN = {
   room: ARCADE_ROOM,
@@ -126,7 +129,7 @@ export const ARCADE_PLAN = {
 
   /** The cabinets: six along the back wall facing the hall, two back to back in the middle, the gun and the dance cabinets either side. One game each. */
   cabinets: [
-    { at: { wall: 'back', along: CABINET_X[0]!, y: 0, offset: CABINET_OFF_WALL }, game: 'lexipunk', color: 0x3a1f5c, glow: 0xff2fa0, glowLight: false, wear: 0.1 },
+    { at: { wall: 'back', along: CABINET_X[0]!, y: 0, offset: CABINET_OFF_WALL }, game: 'lexipunk', color: 0x3a1f5c, glow: 0xff2fa0, glowLight: false, wear: 0.1, freePlay: true },
     { at: { wall: 'back', along: CABINET_X[1]!, y: 0, offset: CABINET_OFF_WALL }, game: 'breakout', color: 0x8f2f4f, glow: 0xffb3c6, wear: 0.8 },
     { at: { wall: 'back', along: CABINET_X[2]!, y: 0, offset: CABINET_OFF_WALL }, game: 'invaders', color: 0x2f4f8f, glow: 0x9ad6ff, wear: 0.9 },
     { at: { wall: 'back', along: CABINET_X[3]!, y: 0, offset: CABINET_OFF_WALL }, game: 'stacker', color: 0x2f8f5f, glow: 0xa8ffcf, wear: 0.6 },
@@ -305,7 +308,7 @@ export const ARCADE_PLAN = {
   decor: [
     // Neon: the hall's name over the cabinets, INSERT COIN over the way out, tubes along the tops of the walls.
     { kind: 'neonSign', at: { wall: 'back', along: 0, y: 2.5 }, options: { text: 'ARCADE', color: 0xff2fa0, width: 2.6, height: 0.55, intensity: 4, seed: 1 } },
-    { kind: 'neonSign', at: { wall: 'front', along: 0, y: 2.55 }, options: { text: 'INSERT COIN', color: 0x33e0ff, width: 1.5, height: 0.34, intensity: 2.5, seed: 2 } },
+    { kind: 'neonSign', at: { wall: 'front', along: 0, y: 2.72 }, options: { text: 'INSERT COIN', color: 0x33e0ff, width: 1.5, height: 0.34, intensity: 2.5, seed: 2 } },
     { kind: 'neonTube', at: { wall: 'left', along: 0, y: 2.9 }, options: { length: 7.6, color: 0xff2fa0, intensity: 3 } },
     { kind: 'neonTube', at: { wall: 'right', along: 0, y: 2.9 }, options: { length: 7.6, color: 0x33e0ff, intensity: 3 } },
     { kind: 'neonTube', at: { wall: 'back', along: 0, y: 2.92 }, options: { length: 11.6, color: 0xb05cff } },
@@ -328,7 +331,7 @@ export const ARCADE_PLAN = {
     { kind: 'flyer', at: { wall: 'front', along: 1.1, y: 1.75 }, options: { title: 'NO REFUNDS', lines: ['tokens only', 'the machines eat coins', 'not us'], accent: 0xc8443a, seed: 22 } },
     { kind: 'flyer', at: { wall: 'right', along: -0.9, y: 1.8 }, options: { title: 'PLEASE', lines: ['do not rock', 'the machines', '(they rock back)'], accent: 0x2f6b8f, seed: 23 } },
     { kind: 'flyer', at: { wall: 'right', along: 0.1, y: 1.75 }, options: { title: 'HIGH SCORE?', lines: ['sign the board', 'with your initials'], accent: 0xe6a83a, ink: 0x3a2a10, seed: 24 } },
-    { kind: 'flyer', at: { wall: 'front', along: -0.85, y: 1.7 }, options: { title: 'DAILY', lines: ['one challenge a day', 'see the board', 'beat it, bank it'], accent: 0x8a2f6f, seed: 21 } },
+    { kind: 'flyer', at: { wall: 'front', along: -1.6, y: 2.3 }, options: { title: 'DAILY', lines: ['one challenge a day', 'see the board', 'beat it, bank it'], accent: 0x8a2f6f, seed: 21 } },
     { kind: 'flyer', at: { wall: 'back', along: -3.6, y: 1.6 }, options: { title: 'MEDALS', lines: ['bronze · silver · gold', 'on every machine', 'tickets for each'], accent: 0xe0995a, seed: 25 } },
     { kind: 'flyer', at: { wall: 'back', along: 3.2, y: 1.6 }, options: { title: 'LEAGUE', lines: ['most tickets this week', 'wins the pennant', 'see the board'], accent: 0x33e0ff, seed: 26 } },
 

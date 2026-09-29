@@ -1,6 +1,8 @@
 import { escapeHtml } from '@/ui/html';
 import { renderKeys } from '@/ui/keys';
 import { keyMarkup } from '@/input/actions';
+import { reduceMotion } from '@/settings/motion';
+import { lastDevice } from '@/input/lastDevice';
 import type { PhotoFrame } from './frames';
 import './PhotoMode.css';
 
@@ -12,6 +14,15 @@ const HELP = [
   `${k('photoLook')} look · ${k('photoFrame')} frame · ${k('photoReset')} reset · ${k('photoHelp')} hide this`,
   `${k('photoCapture')} or [Click]: take the photo · ${k('photoMode')} back`,
 ];
+/** A controller or a touchscreen takes the photo and goes back; flying and the lens are the keyboard's. */
+const HELP_PAD = ['[A]: take the photo · [Start]: back', 'Flying, zoom and the lens need a keyboard and mouse.'];
+const HELP_TOUCH = ['Tap: take the photo · [Menu]: back', 'Flying, zoom and the lens need a keyboard and mouse.'];
+
+/** The help for the device in hand now. */
+function help(): readonly string[] {
+  const device = lastDevice();
+  return device === 'gamepad' ? HELP_PAD : device === 'touch' ? HELP_TOUCH : HELP;
+}
 
 /** What the settings card shows. */
 export interface PhotoReadout {
@@ -36,6 +47,8 @@ export class PhotoHud {
   private readonly card: HTMLDivElement;
   private readonly flashEl: HTMLDivElement;
   private helpShown = true;
+  /** The last photo's line on the card ("Saved bibliothek-….png", or why not). */
+  private saved: { text: string; failed: boolean } | null = null;
 
   constructor(container: HTMLElement) {
     this.guides = document.createElement('div');
@@ -51,9 +64,15 @@ export class PhotoHud {
   }
 
   show(on: boolean): void {
+    if (on) this.saved = null;
     document.body.classList.toggle('photo-mode', on);
     this.guides.hidden = !on;
     this.card.hidden = !on || !this.helpShown;
+  }
+
+  /** The last photo's line on the card, until the next one (or leaving photo mode). */
+  setSaved(text: string, failed: boolean): void {
+    this.saved = { text, failed };
   }
 
   toggleHelp(): void {
@@ -81,12 +100,14 @@ export class PhotoHud {
         <dt>Look</dt><dd>${escapeHtml(r.look)}</dd>
         <dt>Frame</dt><dd>${escapeHtml(r.frame)}</dd>
       </dl>
-      <ul>${HELP.map((line) => `<li>${renderKeys(line)}</li>`).join('')}</ul>`;
+      <ul>${help().map((line) => `<li>${renderKeys(line)}</li>`).join('')}</ul>
+      ${this.saved ? `<p class="photo-card__saved${this.saved.failed ? ' photo-card__saved--failed' : ''}" role="status">${escapeHtml(this.saved.text)}</p>` : ''}`;
   }
 
-  /** The shutter: a white flash that fades. */
+  /** The shutter: a white flash that fades (a soft dim instead with reduced motion). */
   flash(): void {
     const el = this.flashEl;
+    el.classList.toggle('photo-flash--dim', reduceMotion());
     el.hidden = false;
     el.classList.remove('photo-flash--go');
     void el.offsetWidth; // restart the animation

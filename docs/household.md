@@ -8,11 +8,11 @@ friend coming round), never a daily chore. What is worn or set stays so (saved) 
 
 | Where | What | The plus | Rules |
 | --- | --- | --- | --- |
-| Bathroom, mirror cabinet (door open) | Take the cleaning kit | It moves to the kitchen table, once | `HomeLife.takeKit` |
+| Bathroom, mirror cabinet (door open) | Take the cleaning kit (it stands on the bottom shelf, `CabinetKit`) | It moves to the kitchen table, once; refused while the kitchen has no table (`HomeLife.setKitchenTable`) | `HomeLife.takeKit` |
 | Kitchen table, the kit | A **worn** box in hand, click | Cleaned: `condition` `noManual` + `restored` (bright cover, still no manual), worth more in the collector's book; the WE BUY desk and swaps still count it worn (`pricing.dealerFactor`), so bin-to-desk never pays. One a market day | `HomeLife.cleanBox` |
 | Bathroom, hair dryer | A box with an old **price sticker** in hand | Peeled: worth its full price again (stickered copies sell at `STICKER.factor` and are worth that much less) | `HomeLife.peelSticker` |
 | Bathroom, the full bath | Click to soak (the water goes out after) | The next haggle's stallholder hears one more offer (`soak.patience`), whenever it comes | `HomeLife.soak`, `Perks.ease` |
-| Kitchen hob, mixing bowl | Bake a cake (on the table two market days) | A friend visiting while it is out has a slice, lingers `cake.linger` times as long and leaves a thank-you (a game to their taste, else coins) | `HomeLife.bake`, `Visitors.thankForCake` |
+| Kitchen hob, mixing bowl | Bake a cake (on the table two market days; refused without the table) | A friend visiting while it is out has a slice, lingers `cake.linger` times as long and leaves a thank-you (a game to their taste, else coins) | `HomeLife.bake`, `Visitors.thankForCake` |
 | Kitchen worktop, treat jar | A treat, once a market day (the cat comes) | Next morning, sometimes, something by its kitchen bowl: coins, or the lost booklet of a shelved `noManual` game (complete again) | `HomeLife.giveTreat` / `takeGift`, `catGift.ts` |
 | Kitchen radio | Switched on between `radio.from` and `radio.until`, once a day | Radio Brocante: a grail heard of `radio.grailDays` ahead (the others say 3), tomorrow's theme and clearance, the Flea Fair | `chronicle.ts` |
 | Bedroom chair | Sit with a **complete** box in hand | Its manual read: platform know-how. From `knowHow.eye` manuals a fake's print is noticed before opening the box; from `respect` that platform's stallholders go easier | `HomeLife.readManual`, `Perks.tell` / `ease` |
@@ -24,6 +24,24 @@ friend coming round), never a daily chore. What is worn or set stays so (saved) 
 | Market stalls | Some ordinary copies carry an old price sticker (`STICKER.odds`) | Sold at `STICKER.factor`: a bargain once peeled off at home | `MarketStock.priced` (its own hash) |
 | Bedroom wardrobe (door open) | Choose an outfit | Arcade tee: +10 % tickets. Bargain hunter's jacket: every haggle opens lower. Sunday best: the glass case opens whatever the reputation. Each is earned (a trophy, reputation, 25 games) | `outfits.ts`, `WardrobePanel` |
 
+The long jobs are told in a beat, not lived through (`household/pastime.ts`, `Pastimes`, like `Sleep`): cleaning a
+box (an hour: cloth and cotton buds), peeling a sticker (a minute: the dryer's whir), baking (the whisk, the oven door
+in the dark, its timer on the way back) and the soak (a splash, lapping water) fade to black with their sounds
+(`audio/householdSounds.ts`, on the UI bus: the room's sound is ducked with the view, `duckScene`), make the change in
+the dark, wind the clock on by `HOUSEHOLD.pastime.*.minutes` (each under `pastimeMaxMinutes`, 179: a 3 h jump between
+5:00 and 11:00 reads as a night and teleports the cat to its breakfast spot; `Pastimes.run` logs an error over it) and
+fade back. While one plays (`Pastimes.isBusy`) the player is frozen (`Session.setFrozen`), the keys are deaf (the
+Session's `sleep.isAsleep` covers it), photo mode, the remembered spot and the footsteps wait, and friends do not ring.
+A night's sleep ducks the flat's sound the same way and brings it back just before the alarm rings. A box job (`world/build/boxJob.ts`) puts the box
+down and takes its rebuilt box (`HouseholdContext.boxOf`) back in hand, so the refreshed cover is what the view comes
+back to. The treat jar rattles, the alarm clock's button beeps, the wardrobe's hangers clink, the kit clinks off its
+shelf, the cat's coins jingle when picked up, and the morning after a night fades in to the alarm clock ringing a
+moment, then the slap on its button (`Sleep.onWake` -> `HomeLife.ringAlarm`, once the clock stands). A treat is spent
+only on a cat that comes (`callCatFor(...).came`): asleep or mid-leap, it stays in the jar for later. Clicking the kit
+or the dryer with nothing in hand says what to bring (a reaction, not the refusal buzzer). A dream's line is one of a
+few per kind of copy, drawn from the market day.
+The kitchen radio ducks its music `DUCK_DB` under a jingle while the chronicle's card is up (`RadioVoice.announce`).
+
 Every number is in `household/rules.ts` (`HOUSEHOLD`) or at the top of `outfits.ts`; the sticker's in `pricing.ts`
 (`STICKER`). All first guesses.
 
@@ -33,9 +51,11 @@ Every number is in `household/rules.ts` (`HOUSEHOLD`) or at the top of `outfits.
 - `Household.ts`: the persisted store (`KEYS.household`): kit, cleanings today, the bath's calm, the cake, the treat
   and the cat's gift, manuals read per platform, the outfit, the wake hour, and `once(what)` for the once-a-day
   things (dream, radio, invite, first sale). Days are game days (`Today.gameDay`, the market calendar's count).
-- `HomeLife.ts`: the rules the furniture calls. Each returns an `Outcome` (`done`, a `line`, told by `tellOutcome`: a refusal, a reaction, or a card to read with its effect under it); captions come
+- `pastime.ts`: `Pastimes`, the fade-to-black beat of a long job (curtain + clock from `bootstrap/world`).
+- `HomeLife.ts`: the rules the furniture calls (`mayClean` / `mayPeel` / `mayBake` refuse before the beat starts). Each returns an `Outcome` (`done`, a `line`, told by `tellOutcome`: a refusal, a reaction, or a card to read with its effect under it); captions come
   from its `*Label` getters. `cleanBox` / `peelSticker` take a `before` (the builder puts the box down first, so its
-  shelf rebuilds it with the new state).
+  shelf rebuilds it with the new state). What gets done (a box cleaned, a sticker peeled, a cake, a soak, a manual
+  read, what the cat turned up) goes in the day's journal as a `home` line (`HomeLifeDeps.journal`).
 - `perks.ts`: `Perks`, what the flat sends the player out with, as the Session asks (`PerksLike` in `SessionParts`):
   `MarketCounter` calls `ease` when a haggle opens (then `Negotiation.ease`, clamped at `NEGOTIATION.lowest`),
   `tell` / `note` for the copy's panel, `bought` on a purchase, `mayHandleGlass`; `ArcadePlay` calls `arcadeBonus`.

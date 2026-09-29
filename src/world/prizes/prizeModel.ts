@@ -5,7 +5,7 @@ import { boxMesh, cylinderMesh } from '../meshUtils';
 import { basic, paint, standard } from '../materials/palette';
 import { WALL } from '../surface/layers';
 
-const CHROME = standard({ color: 0xc4c7cc, metalness: 0.8, roughness: 0.25 });
+const CHROME = standard({ color: 0xc4c7cc, metalness: 1, roughness: 0.2 });
 const DARK = paint(0x1a1a1f, 0.5);
 const WHITE = paint(0xf4f1ea, 0.5);
 
@@ -50,7 +50,7 @@ export function prizeModel(kind: PrizeKind, color: number): THREE.Group {
       break;
     }
     case 'ball': {
-      const ball = new THREE.Mesh(new THREE.SphereGeometry(0.025, 16, 12), standard({ color, roughness: 0.15, metalness: 0.1, emissive: color, emissiveIntensity: 0.15 }));
+      const ball = new THREE.Mesh(new THREE.SphereGeometry(0.025, 16, 12), standard({ color, roughness: 0.15, metalness: 0, emissive: color, emissiveIntensity: 0.15 }));
       ball.position.y = 0.025;
       g.add(ball);
       break;
@@ -107,7 +107,8 @@ export function prizeModel(kind: PrizeKind, color: number): THREE.Group {
       break;
     }
     case 'rocket': {
-      const tin = standard({ color, metalness: 0.6, roughness: 0.35 });
+      // Printed tin: the lacquer is what shows, so a dielectric.
+      const tin = standard({ color, metalness: 0, roughness: 0.35 });
       g.add(cylinderMesh(0.022, 0.1, tin, { y: 0.06 }, { segments: 14 }));
       const nose = new THREE.Mesh(new THREE.ConeGeometry(0.022, 0.05, 14), CHROME);
       nose.position.y = 0.135;
@@ -140,7 +141,7 @@ export function prizeModel(kind: PrizeKind, color: number): THREE.Group {
       break;
     }
     case 'trophy': {
-      const gold = standard({ color, metalness: 0.9, roughness: 0.25 });
+      const gold = standard({ color, metalness: 1, roughness: 0.25 });
       g.add(boxMesh(0.07, 0.03, 0.07, DARK, { y: 0.015 }));
       const plate = new THREE.Mesh(new THREE.PlaneGeometry(0.05, 0.016), basic({ map: plateTexture() }));
       plate.position.set(0, 0.015, 0.0365);

@@ -13,6 +13,7 @@ import { invisibleHitbox } from '../../meshUtils';
 import type { Furniture } from '../../Furniture';
 import { ForSaleBox } from '../../market/ForSaleBox';
 import { snowCovered } from '../snowCover';
+import { GIVEAWAY_WHERE } from '@/economy/pricing';
 
 export interface GiveawayBoxOptions {
   /** The zone: the free game must be placed to be clickable. */
@@ -112,7 +113,7 @@ export class GiveawayBox extends THREE.Group implements Furniture, Updatable, In
   }
 
   label(): string {
-    return 'A box of cast-offs: FREE TO TAKE · click to rummage';
+    return 'Box of cast-offs, FREE TO TAKE · rummage';
   }
 
   activate(session: SessionActions): void {
@@ -146,7 +147,7 @@ export class GiveawayBox extends THREE.Group implements Furniture, Updatable, In
       pose: { kind: 'flat' },
       tag: false,
       wallet,
-      where: 'a box of cast-offs on Front Street',
+      where: GIVEAWAY_WHERE,
       isWanted: () => isWanted(gift.game.id),
       thanks: () => 'Nobody minds: that is what the box is for.',
     });

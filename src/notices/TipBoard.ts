@@ -1,6 +1,7 @@
 import { playNoticeSound } from '@/audio/noticeSounds';
 import { readMs } from './readingTime';
 import type { TipOptions } from './types';
+import { hudSlot } from '@/ui/hudSlot';
 
 const MIN_MS = 12000;
 const MAX_TIPS = 3;
@@ -23,15 +24,30 @@ let serial = 0;
 export class TipBoard {
   private readonly root: HTMLDivElement;
   private readonly tips: Tip[] = [];
+  /** Settings > Game > Show tips. */
+  private shown = true;
 
   constructor(container: HTMLElement) {
     this.root = document.createElement('div');
     this.root.className = 'tip-board';
     this.root.setAttribute('role', 'status');
-    container.appendChild(this.root);
+    // Under the wallet chip, in one column with it: the chip coming and going moves the tips, never leaves a gap.
+    hudSlot(container, 'top-left').appendChild(this.root);
+  }
+
+  /** Settings > Game > Show tips. */
+  get isShown(): boolean {
+    return this.shown;
+  }
+
+  /** Off: the tips up now go, and new ones are dropped. */
+  setShown(shown: boolean): void {
+    this.shown = shown;
+    if (!shown) for (const tip of [...this.tips]) this.remove(tip);
   }
 
   show(text: string, options: TipOptions = {}): () => void {
+    if (!this.shown) return () => {};
     const id = options.id ?? `tip:${serial++}`;
     const same = this.tips.find((t) => t.id === id);
     if (same && same.el.querySelector('.tip__text')?.textContent === text) {
@@ -41,7 +57,8 @@ export class TipBoard {
     }
     if (same) this.remove(same, true);
     const el = document.createElement('div');
-    el.className = 'tip';
+    // The first day's steps ("To do") are a note in pen, like the to-do list they come from.
+    el.className = (options.look ?? (options.head === 'To do' ? 'note' : 'card')) === 'note' ? 'tip tip--note' : 'tip';
     const head = document.createElement('div');
     head.className = 'tip__head';
     head.textContent = options.head ?? 'Tip';

@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { QUALITY } from '@/graphics/quality';
 import type { Updatable } from '@/core/Engine';
 import { createCanvas, seededRandom } from '@/covers/generated/canvasUtils';
 import type { Furniture } from '../../Furniture';
@@ -7,6 +8,7 @@ import type { Season } from '@/time/season';
 import { FRONT, type Vec2 } from '../streetPlan';
 import { groundHeight } from './ground';
 import { GROUND, RENDER_ORDER, onSurface } from '../../surface/layers';
+import { coverageKeepsAlpha } from '../../materials/palette';
 
 const AUTUMN = ['#c9862f', '#d9a33a', '#b8562a', '#8a7a32', '#a8442a', '#e0b048', '#7a5a2a'];
 /** Fallen leaves at the season's deepest, and how many fall at once. */
@@ -81,7 +83,7 @@ export class Leaves extends THREE.Group implements Furniture, Updatable {
     // Fallen: around the trees (denser near the trunk) and in the gutters.
     const count = Math.round(FALLEN * depth);
     const leaf = new THREE.PlaneGeometry(0.13, 0.09).rotateX(-Math.PI / 2);
-    const material = onSurface(new THREE.MeshStandardMaterial({ map: leafTexture(), alphaTest: 0.5, side: THREE.DoubleSide, roughness: 0.85 }), GROUND.leaf);
+    const material = onSurface(coverageKeepsAlpha(new THREE.MeshStandardMaterial({ map: leafTexture(), alphaTest: 0.5, alphaToCoverage: QUALITY.msaa > 0, side: THREE.DoubleSide, roughness: 0.85 })), GROUND.leaf);
     const fallen = new THREE.InstancedMesh(leaf, material, count);
     const m = new THREE.Matrix4();
     const q = new THREE.Quaternion();

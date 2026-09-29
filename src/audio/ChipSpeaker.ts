@@ -1,13 +1,18 @@
 import * as THREE from 'three';
 import { audioBus, startedAudioContext } from './audioContext';
 import { whiteNoise } from './noise';
+import { stereoPan } from './spatial';
+
+/** Every blip a little off (±3 % pitch): a machine that plays the same coin twice in a row does not sound like a loop. */
+const PITCH_JITTER = 0.03;
 
 /** Every sound an arcade machine makes; recipes below, no samples. */
 export type Sfx =
   | 'blip' | 'hit' | 'score' | 'bonus' | 'time' | 'penalty' | 'lose' | 'shoot' | 'drop' | 'ready' | 'go' | 'over' | 'best'
   | 'ticket' | 'coin' | 'tilt' | 'bumper' | 'flipper' | 'launch' | 'drain' | 'whir' | 'clunk' | 'win' | 'roll' | 'thud'
   | 'letter' | 'confirm' | 'jingle' | 'eat'
-  | 'kick' | 'snare' | 'hat' | 'bang' | 'reload' | 'empty' | 'tick' | 'swish' | 'rim' | 'jackpot';
+  | 'kick' | 'snare' | 'hat' | 'bang' | 'reload' | 'empty' | 'tick' | 'swish' | 'rim' | 'jackpot'
+  | 'lane' | 'perfect' | 'good' | 'miss' | 'crunch' | 'shield' | 'stage';
 
 /** A sound a game asked for this frame; `pitch` scales its notes (a combo climbs). */
 export interface SfxEvent {
@@ -90,6 +95,15 @@ const RECIPES: Record<Sfx, { notes?: Note[]; hiss?: Hiss[] }> = {
   // The hoops: the net taking the ball, the rim ringing.
   swish: { hiss: [{ at: 0, length: 0.25, filter: 'bandpass', frequency: 900, level: 0.45 }] },
   rim: { notes: [{ wave: 'triangle', from: 740, at: 0, length: 0.18, level: 0.5 }, { wave: 'sine', from: 1110, at: 0, length: 0.12, level: 0.3 }] },
+  // ARROW RUSH: a lane's own tone (pitched per lane), a clean PERFECT chime, a softer GOOD, a flat buzz for a miss.
+  lane: { notes: [{ wave: 'triangle', from: 440, at: 0, length: 0.07, level: 0.45 }] },
+  perfect: { notes: [{ wave: 'square', from: 1318, at: 0, length: 0.04, level: 0.35 }, { wave: 'square', from: 1976, at: 0.04, length: 0.08, level: 0.35 }] },
+  good: { notes: [{ wave: 'triangle', from: 988, at: 0, length: 0.07, level: 0.4 }] },
+  miss: { notes: [{ wave: 'sawtooth', from: 150, to: 120, at: 0, length: 0.14, level: 0.35 }] },
+  // COMETS: a rock breaking up on the hull, the shield's hum while it holds, the next stage's sting.
+  crunch: { hiss: [{ at: 0, length: 0.18, filter: 'lowpass', frequency: 1400, level: 0.9 }, { at: 0.05, length: 0.1, filter: 'bandpass', frequency: 500, level: 0.6 }], notes: [{ wave: 'square', from: 140, to: 45, at: 0, length: 0.16, level: 0.6 }] },
+  shield: { notes: [{ wave: 'sine', from: 180, to: 220, at: 0, length: 0.95, level: 0.22 }, { wave: 'triangle', from: 360, to: 440, at: 0, length: 0.95, level: 0.08 }] },
+  stage: { notes: [...scale([659, 880, 1318], 0.06, 'square', 0.06, 0.5), { wave: 'square', from: 1760, at: 0.18, length: 0.2, level: 0.5 }] },
 };
 
 /**
@@ -107,8 +121,6 @@ export class ChipSpeaker {
   private readonly refDistance: number;
   private readonly here = new THREE.Vector3();
   private readonly ear = new THREE.Vector3();
-  private readonly right = new THREE.Vector3();
-  private readonly turn = new THREE.Quaternion();
   /** Scales every sound (a machine playing itself is quieter than one the player plays). */
   level = 1;
 
@@ -124,6 +136,7 @@ export class ChipSpeaker {
   play(sfx: Sfx, pitch = 1): void {
     const ctx = this.build();
     if (!ctx || !this.out) return;
+    pitch *= 1 + (Math.random() * 2 - 1) * PITCH_JITTER;
     const recipe = RECIPES[sfx];
     const t0 = ctx.currentTime + 0.005;
     for (const note of recipe.notes ?? []) {
@@ -161,9 +174,14 @@ export class ChipSpeaker {
     }
   }
 
-  /** Plays every event a game queued this frame. */
+  /** Plays every event a game queued this frame, each sound once (ten coins in a frame are one coin, not a clip). */
   playAll(events: readonly SfxEvent[]): void {
-    for (const e of events) this.play(e.sfx, e.pitch);
+    const played = new Set<Sfx>();
+    for (const e of events) {
+      if (played.has(e.sfx)) continue;
+      played.add(e.sfx);
+      this.play(e.sfx, e.pitch);
+    }
   }
 
   /** Level and pan from where the listener is: 1/distance past `refDistance`, panned by the side the speaker is on. */
@@ -173,9 +191,8 @@ export class ChipSpeaker {
     this.listener.getWorldPosition(this.ear);
     const distance = this.here.distanceTo(this.ear);
     const gain = this.volume * Math.min(1, this.refDistance / Math.max(0.01, distance));
-    this.right.set(1, 0, 0).applyQuaternion(this.listener.getWorldQuaternion(this.turn));
-    const side = distance > 0.01 ? this.here.sub(this.ear).normalize().dot(this.right) : 0;
-    const pan = THREE.MathUtils.clamp(side * 0.8, -0.8, 0.8);
+    // The side it is heard from: the flat's shared rule (`spatial.ts`).
+    const pan = stereoPan(this.listener, this.here);
     if (immediate) {
       this.out.gain.value = gain;
       this.pan.pan.value = pan;

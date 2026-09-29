@@ -68,8 +68,14 @@ export class KeyBindingsForm {
     const { code, button } = this.waiting;
     this.waiting = null;
     button.classList.remove('menu__key--waiting');
+    // Said out loud (the note is aria-live): what moved where, and which action the swap sent to the old key.
+    const oldKey = keyLabel(code);
+    const newKey = physicalKeyLabel(e.code);
+    const row = REBINDABLE_ACTIONS.find((r) => r.code === code);
+    const displaced = REBINDABLE_ACTIONS.find((r) => r.code !== code && keyLabel(r.code) === newKey);
     this.store.update({ bindings: rebind(this.store.settings.bindings, code, e.code) });
-    this.note.textContent = '';
+    const moved = `${row?.label ?? 'It'} → ${newKey}`;
+    this.note.textContent = oldKey === newKey ? `${moved} (unchanged)` : displaced ? `${moved} · ${displaced.label} moved to ${oldKey}` : moved;
     button.focus();
   }
 

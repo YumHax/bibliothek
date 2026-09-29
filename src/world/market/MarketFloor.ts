@@ -7,7 +7,7 @@ import type { StockItem } from '@/economy/StockItem';
 import type { MarketNews } from '@/economy/marketEvents';
 import type { MarketDayTheme } from '@/economy/marketDays';
 import { flyerRumour, noticeRumour, stallRumour } from '@/economy/rumours';
-import { RIVAL_BUYING } from '@/economy/pricing';
+import { BIN_WHERE, RIVAL_BUYING } from '@/economy/pricing';
 import type { SaleReaction } from '@/game/SessionActions';
 import { playBoxClack } from '@/audio/boxClack';
 import type { SkyState } from '../props/DayNight';
@@ -79,11 +79,13 @@ const PICK_UP_REMARK = 0.45;
 export class MarketFloor {
   /** Every copy on show, stalls and bins (the price scanner reads them). */
   readonly displayed = new Set<ForSaleBox>();
-  private readonly theme: MarketDayTheme;
+  private theme: MarketDayTheme;
   /** What the stallholders have heard about the days ahead (a grail coming, the Flea Fair, a sale); the same all day. */
-  private readonly news: MarketNews[];
-  private readonly heard: MarketNews[];
+  private news: MarketNews[];
+  private heard: MarketNews[];
   private night = false;
+  /** The sky was followed once already (the shoppers were set in place when the hall was built). */
+  private skyFollowed = false;
   private wet: boolean;
   /** Copies laid out on the stalls today (the rivals' cap is a share of it). */
   private stallStock = 0;
@@ -104,16 +106,12 @@ export class MarketFloor {
     this.wet = this.raining();
     this.unsubscribe.push(context.sky.dayNight.onChange((state) => this.followSky(state)));
 
-    void market.todays().then((items) => {
-      if (!this.live) return;
-      this.layOut(items);
-      this.refreshPennants();
-      this.refreshNotices();
-    }).catch((err) => console.warn('[market] no stock today', err));
-
+    this.stockUp();
     this.showProgram();
     this.refreshDirectory();
     this.followLot();
+    // Midnight with the player in the hall: yesterday's copies are packed up and the new day's laid out.
+    this.unsubscribe.push(context.today.onNewGameDay(() => this.newDay()));
 
     // A copy ordered from the catalogue (or imported) while its twin sits on a stall: the stall copy goes too
     // (not the one in the player's hand: that one leaves through the sale). The pennants and cards follow the wishlist.
@@ -128,6 +126,57 @@ export class MarketFloor {
       }
       this.refreshPennants();
     }));
+  }
+
+  /** Fetches the day's stock and lays it out (nothing once the zone has unloaded, nor if the day turned meanwhile). */
+  private stockUp(): void {
+    const { stock: market } = this.options.context.market;
+    const day = market.day;
+    void market.todays().then((items) => {
+      if (!this.live || market.day !== day) return;
+      this.layOut(items);
+      this.refreshPennants();
+      this.refreshNotices();
+    }).catch((err) => console.warn('[market] no stock today', err));
+  }
+
+  /**
+   * A new market day while the hall stands: every stallholder packs up yesterday's table and lays out today's (the
+   * copy in the player's hand stays there, at yesterday's price, and leaves when bought or put back: a hold on it has
+   * lapsed, its deposit comes back with the others', so it is due in full). The boards, the talk and the crowd follow.
+   */
+  private newDay(): void {
+    if (!this.live) return;
+    const { context, stalls } = this.options;
+    const marketDay = context.market.day;
+    this.theme = marketDay.theme;
+    this.news = marketDay.news();
+    this.heard = this.news.filter((n) => n.inDays > 0 || n.kind !== 'clearance');
+    for (const box of [...this.displayed]) {
+      if (!box.isHeld) {
+        this.takeOff(box);
+        continue;
+      }
+      if (box.item.source !== 'ordered') box.item.setDeposit(0);
+      this.retireWhenBack(box);
+    }
+    for (const entry of stalls) entry.sold = 0;
+    this.stallStock = 0;
+    stalls[0]?.vendor.say('New day, new stock! Give us a minute to set out.');
+    this.stockUp();
+    this.showProgram();
+    this.refreshDirectory();
+    this.followLot();
+  }
+
+  /** Yesterday's copy still in the player's hand: taken off its stall once it is back in its place (put back). */
+  private retireWhenBack(box: ForSaleBox): void {
+    const check = (): void => {
+      if (!this.live || !this.displayed.has(box)) return;
+      if (box.isHeld) requestAnimationFrame(check);
+      else this.takeOff(box);
+    };
+    requestAnimationFrame(check);
   }
 
   /** What `entry`'s stallholder has to say right now: their table, the hour, the day, the talk. */
@@ -209,11 +258,14 @@ export class MarketFloor {
   private followSky(state: SkyState): void {
     const { shoppers, nightShoppers, crowdSound } = this.options;
     const rain = this.raining();
-    if (state.night === this.night && rain === this.wet && shoppers.length) return;
+    if (state.night === this.night && rain === this.wet && this.skyFollowed) return;
+    // The first time is the hall being built: whoever is not there is simply not there. After that they walk out by the door.
+    const instant = !this.skyFollowed;
+    this.skyFollowed = true;
     this.night = state.night;
     this.wet = rain;
     const present = this.night ? nightShoppers : rain ? Math.ceil(shoppers.length / 2) : shoppers.length;
-    shoppers.forEach((shopper, i) => shopper.setPresent(i < present));
+    shoppers.forEach((shopper, i) => shopper.setPresent(i < present, instant));
     const day = CROWD_LEVEL.day * Math.min(CROWD_LEVEL.bigDay, this.theme.crowd ?? 1);
     crowdSound.setCrowd(this.night ? CROWD_LEVEL.night : rain ? (day + CROWD_LEVEL.night) / 2 : day);
   }
@@ -247,7 +299,7 @@ export class MarketFloor {
       tag: entry !== null,
       wallet: context.money.wallet,
       isWanted: () => collection.isWanted(item.game.id),
-      where: entry ? `the ${entry.platform.shortName} stall` : 'the bargain bin',
+      where: entry ? `the ${entry.platform.shortName} stall` : BIN_WHERE,
       behindGlass: entry?.stall.behindGlass,
       react: (reaction) => this.reactAt(entry, reaction),
       speak: entry ? (line) => entry.vendor.speak(line) : undefined,

@@ -30,7 +30,12 @@ export function createPlayerMoves(services: Services, parts: { world: GameWorld;
     curtain: fader,
     here: () => zones.current.id,
     load: (id) => world.load(id),
-    prepare: () => world.primeAsync(),
+    // Behind the curtain: the destination's look, air, reflections and eye settled first, so the frame
+    // primed (and the fade-in) shows them where they are going, not easing there for seconds after.
+    prepare: () => {
+      built.graphics.settle();
+      return world.primeAsync();
+    },
   });
   // The building's sas: crossing between the hall's twin and the street's moves the player with no curtain
   // (docs/zones.md "The sas"); the far zone is built and compiled out of sight while the door release buzzes.
@@ -38,6 +43,8 @@ export function createPlayerMoves(services: Services, parts: { world: GameWorld;
   // A night in the bedroom's bed: the same curtain, the shared clock wound on to the next morning.
   // The bedside alarm sets the hour the night ends at (docs/household.md).
   const sleep = new Sleep(sky.dayNight, fader, () => services.household.wakeHour);
+  // The morning fades in to the bedside alarm clock's ring (once it stands on its nightstand).
+  sleep.onWake(() => services.homeLife.ringAlarm());
   // Back where the player last stood (zone, spot, look) after a reload; `?fresh` starts in the living room.
   // The ZoneManager notices on the first frame and loads that zone.
   const positionMemory = new PositionMemory({
@@ -46,7 +53,7 @@ export function createPlayerMoves(services: Services, parts: { world: GameWorld;
     currentZone: () => zones.current.id,
     // Not on the stairs: a floor plan cannot say which flight the player stood on (they wake up at home instead).
     floorOf: (id) => (id !== 'stairwell' && isZoneId(id) ? world.zone(id).floorBounds : null),
-    busy: () => travel.isTravelling || sleep.isAsleep || airlockLink.isCrossing,
+    busy: () => travel.isTravelling || sleep.isAsleep || built.pastimes.isBusy || airlockLink.isCrossing,
   });
   positionMemory.restore();
   engine.addUpdatable(positionMemory);
@@ -56,7 +63,7 @@ export function createPlayerMoves(services: Services, parts: { world: GameWorld;
     player,
     surfaceAt: (at) => surfaceUnderfoot(zones.current, at),
     ground: () => sky.dayNight.state,
-    suspended: () => travel.isTravelling || sleep.isAsleep || airlockLink.isCrossing,
+    suspended: () => travel.isTravelling || sleep.isAsleep || built.pastimes.isBusy || airlockLink.isCrossing,
   }));
 
   return { travel, sleep };

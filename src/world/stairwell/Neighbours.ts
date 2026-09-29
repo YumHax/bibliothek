@@ -9,6 +9,10 @@ import { StairWalker } from './StairWalker';
 import { doorKey } from './building';
 import { doorSpot, liftGate, liftToStreet, routeDown, routeUp, streetDoorSpot, toLiftGate } from './stairRoutes';
 import { STAIRWELL_PLAN as plan, STOREYS, STOREY, landingY } from './stairwellPlan';
+import type { LiftRides } from './Lift';
+import { playMurmur } from '@/audio/murmur';
+import { stereoPan } from '@/audio/spatial';
+import { proximityVolume } from '@/video/proximityVolume';
 
 type ResidentPlan = (typeof plan.residents)[number];
 
@@ -25,6 +29,9 @@ interface Resident {
   hold: number | null;
   /** Said hello on this trip already. */
   greeted: boolean;
+  /** Where they are in their hellos and in their chat lines (each said in turn). */
+  nextHello: number;
+  nextLine: number;
 }
 
 export interface NeighboursOptions {
@@ -35,6 +42,12 @@ export interface NeighboursOptions {
   ground: (x: number, z: number, feet: number) => number | null;
   /** The swaps: a resident with a standing offer mentions it. */
   trades?: NeighbourTrades;
+  /** The lift, to ride for real when it is free (else they fade at its gate and are gone the ride's time). */
+  lift?: LiftRides;
+  /** A resident's door opening or shutting as they go through it (landing `k`, door `i`): its latch, heard on the landing. */
+  door?: (k: number, i: number) => void;
+  /** Whether a cat lives in the flat (their word on it waits till then); always, when not given. */
+  catHome?: () => boolean;
 }
 
 /** Nearer than this (m, level and across) and a resident says hello. */
@@ -52,6 +65,8 @@ const HOLD_MAX = 6;
 /** Nobody goes out at night. */
 const QUIET = { from: 22.5, to: 6.5 };
 const scratch = new THREE.Vector3();
+/** What they say is heard as a murmur at their mouth: this loud right by them (0..1), heard up to `maxDistance` m. */
+const MURMUR = { level: 0.05, y: 1.6, maxDistance: 10 };
 
 /**
  * The residents on the stairs. Each has a day (`STAIRWELL_PLAN.residents`): out in the morning,
@@ -79,7 +94,8 @@ export class Neighbours extends Prop implements Updatable, OccupancyAware {
     this.residents = plan.residents.map((r) => {
       const who = r.k === 0 ? plan.ourNeighbour : plan.neighbours[r.k - 1]![r.i]!;
       const door = doorKey(r.k, r.i);
-      const resident: Resident = { plan: r, who, door, at: 'home', going: null, hold: null, greeted: false } as Resident;
+      // Each starts somewhere of their own in their lines, so two neighbours never open alike.
+      const resident: Resident = { plan: r, who, door, at: 'home', going: null, hold: null, greeted: false, nextHello: r.seed % r.hello.length, nextLine: r.seed % r.lines.length } as Resident;
       resident.walker = new StairWalker({
         viewer: options.viewer,
         seed: r.seed,
@@ -170,6 +186,12 @@ export class Neighbours extends Prop implements Updatable, OccupancyAware {
     this.startTrip(r, 'out', hours + 1 + Math.random() * 1.5);
   }
 
+  /** Whether whoever lives behind door `key` is in (no resident on the stairs lives there: someone always is). */
+  isHome(key: string): boolean {
+    const r = this.residents.find((resident) => resident.door === key);
+    return !r || (r.going === null && r.at === 'home');
+  }
+
   /** `r` (held there until `holdUntil`, a game hour, if given) comes out of their door (or in by the street door) and walks the stairs (or rides the lift) there. */
   private startTrip(r: Resident, to: 'home' | 'out', holdUntil: number | null = null): void {
     const { k, i, lift } = r.plan;
@@ -183,16 +205,21 @@ export class Neighbours extends Prop implements Updatable, OccupancyAware {
     r.greeted = false;
     const walker = r.walker;
     const byLift = lift && Math.random() < 0.7;
+    const going = (): boolean => r.going === to && this.occupied;
+    const intoDoor = (): void => {
+      this.options.door?.(k, i);
+      walker.vanish(done);
+    };
     if (to === 'out') {
       walker.appear(door, landingY(k));
+      this.options.door?.(k, i);
       if (byLift) {
-        walker.walk(toLiftGate(door), () => walker.vanish(() => {
-          this.timers.after(RIDE_S, () => {
-            if (r.going !== to || !this.occupied) return;
-            walker.appear(liftGate(), landingY(STOREYS));
-            walker.walk(liftToStreet(), () => walker.vanish(done));
-          });
-        }));
+        const outOfLift = (): void => {
+          if (!going()) return;
+          walker.appear(liftGate(), landingY(STOREYS));
+          walker.walk(liftToStreet(), () => walker.vanish(done));
+        };
+        this.ride(r, k, STOREYS, toLiftGate(door), outOfLift);
       } else {
         walker.walk(routeDown(k, door), () => walker.vanish(done));
       }
@@ -200,17 +227,39 @@ export class Neighbours extends Prop implements Updatable, OccupancyAware {
     }
     if (byLift) {
       walker.appear(streetDoorSpot(), landingY(STOREYS));
-      walker.walk([...liftToStreet().reverse().slice(1), liftGate()], () => walker.vanish(() => {
-        this.timers.after(RIDE_S, () => {
-          if (r.going !== to || !this.occupied) return;
-          walker.appear(liftGate(), landingY(k));
-          walker.walk([door.clone()], () => walker.vanish(done));
-        });
-      }));
+      const outOfLift = (): void => {
+        if (!going()) return;
+        walker.appear(liftGate(), landingY(k));
+        walker.walk([door.clone()], intoDoor);
+      };
+      this.ride(r, STOREYS, k, [...liftToStreet().reverse().slice(1), liftGate()], outOfLift);
       return;
     }
     walker.appear(streetDoorSpot(), landingY(STOREYS));
-    walker.walk(routeUp(k, door), () => walker.vanish(done));
+    walker.walk(routeUp(k, door), intoDoor);
+  }
+
+  /**
+   * `r` walks `toGate` to the lift's gate on landing `from` and rides to `to`, then `outOfLift`. The lift is called
+   * for them as they set off (a real ride: the car comes, they step in, it goes); busy (the player in it, another
+   * ride), they fade at the gate and step out at `to` the ride's time later.
+   */
+  private ride(r: Resident, from: number, to: number, toGate: THREE.Vector3[], outOfLift: () => void): void {
+    const walker = r.walker;
+    const trip = r.going;
+    let atGate = false;
+    const riding = this.options.lift?.carry(from, to, {
+      ready: () => atGate,
+      board: () => {
+        if (r.going === trip) walker.vanish();
+      },
+      arrive: outOfLift,
+    });
+    walker.walk(toGate, () => {
+      atGate = true;
+      if (riding) return;
+      walker.vanish(() => this.timers.after(RIDE_S, outOfLift));
+    });
   }
 
   /** Passing the player (near, on the same flight or landing): a word for the time of day. */
@@ -219,16 +268,47 @@ export class Neighbours extends Prop implements Updatable, OccupancyAware {
     if (Math.hypot(scratch.x - this.eye.x, scratch.z - this.eye.z) > HELLO_RANGE || Math.abs(this.eye.y - 1.6 - scratch.y) > 1.2) return;
     r.greeted = true;
     const offer = this.options.trades?.offerAt(r.door);
-    if (offer) r.walker.say('Did you see my note?', 2.5);
-    else r.walker.say(hours < 12 ? 'Good morning!' : hours < 18 ? 'Hello!' : 'Good evening!', 2.2);
+    const hello = offer ? 'Did you see my note?' : this.hello(r, hours);
+    r.walker.say(hello, offer ? 2.5 : 2.2);
+    this.murmur(r, hello);
   }
 
-  /** A click: their swap if they have one going, else one of their lines in turn. */
+  /** Their hellos in turn, the time of day's among them. */
+  private hello(r: Resident, hours: number): string {
+    const pool = [hours < 12 ? 'Good morning!' : hours < 18 ? 'Hello!' : 'Good evening!', ...r.plan.hello];
+    const line = pool[r.nextHello % pool.length]!;
+    r.nextHello++;
+    return line;
+  }
+
+  /** A click: their swap if they have one going, else the next of their lines that fits the hour (and the cat). */
   private chat(r: Resident): string {
     const offer = this.options.trades?.offerAt(r.door);
-    if (offer) return `${r.who}: "Did you get my note? I'd swap my ${offer.gives.title} for your ${offer.wants.title}. Knock on my door, ${offer.floor}."`;
+    const text = offer ? `Did you get my note? I’d swap my ${offer.gives.title} for your ${offer.wants.title}. Knock on my door, ${offer.floor}.` : this.nextLine(r);
+    this.murmur(r, text);
+    return `${r.who}: “${text}”`;
+  }
+
+  private nextLine(r: Resident): string {
     const lines = r.plan.lines;
-    const line = lines[Math.floor(Math.random() * lines.length)]!;
-    return `${r.who}: "${line}"`;
+    const hours = this.options.hours();
+    const now = hours < 12 ? 'morning' : hours < 18 ? 'day' : 'evening';
+    const cat = this.options.catHome?.() ?? true;
+    for (let tries = 0; tries < lines.length; tries++) {
+      const line = lines[r.nextLine % lines.length]!;
+      r.nextLine++;
+      if (typeof line === 'string') return line;
+      if ((!line.when || line.when === now) && (!line.needsCat || cat)) return line.text;
+    }
+    return r.plan.hello[0] ?? 'Hello.';
+  }
+
+  /** What `r` says, heard faintly from where they stand (by distance, and the side). */
+  private murmur(r: Resident, text: string): void {
+    r.walker.getWorldPosition(scratch);
+    scratch.y += MURMUR.y;
+    this.options.viewer.getWorldPosition(this.eye);
+    const level = proximityVolume(this.eye.distanceTo(scratch), { referenceDistance: 1, maxDistance: MURMUR.maxDistance }) / 100;
+    playMurmur(text, MURMUR.level * level, { pan: stereoPan(this.options.viewer, scratch), walls: 0 }, r.plan.voice.pitch);
   }
 }

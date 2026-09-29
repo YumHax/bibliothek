@@ -41,6 +41,7 @@ export function furnishBalcony(zone: Zone, { sky, home: { upgrades } }: BuildCon
       street: f.street,
       top: f.top,
       storey: f.storey,
+      groundFloor: f.groundFloor,
       pitch: f.pitch,
       door: { x: doorway.along, width: doorway.width, height: doorway.height },
       ourWindows: f.ourWindows.map((w) => ({ ...w, x: w.x - origin.x })),
@@ -57,6 +58,11 @@ export function furnishBalcony(zone: Zone, { sky, home: { upgrades } }: BuildCon
     const pots = plan.boughtPlants.map((spot) => zone.place(new Plant({ kind: spot.kind, pot: spot.pot, seed: spot.seed, scale: 'scale' in spot ? spot.scale : 1, collides: false }), new THREE.Vector3(spot.floor[0], 0, spot.floor[1])));
     followUpgrades(zone, upgrades, () => pots.forEach((pot, i) => (pot.visible = i < upgrades.count('plant'))));
   }
+  // Out here the plants sway in the weather's wind, not a room's draught.
+  const wind = (): number => sky.dayNight.state.wind;
+  zone.group.traverse((obj) => {
+    if (obj instanceof Plant) obj.setWind(wind);
+  });
   const air = zone.place(new OpenAir(sky.outdoors, { radius: plan.surround, sunDistance: plan.sun.distance, sunRadius: plan.sun.radius }), new THREE.Vector3(0, 1, 0));
   return { lightLevel: () => air.lightLevel };
 }

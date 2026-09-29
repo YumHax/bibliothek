@@ -5,12 +5,19 @@ import { describeEdition } from '@/economy/pricing';
 import { CONTROLS } from './controls';
 import { escapeHtml } from './html';
 import { renderKeys } from './keys';
+import { fadeIn, fadeOut } from './fade';
+import { lastDevice } from '@/input/lastDevice';
 
-/** Built on each show: the key names follow the bindings and the keyboard layout. */
-const holdingHints = (): string =>
-  CONTROLS.filter((c) => c.whileHolding)
-    .map((c) => `${renderKeys(c.keys)} ${escapeHtml(c.action.toLowerCase())}`)
+/** Built on each show, for the device last used (the controller's buttons, the touch bar's, or the keys as bound and printed). */
+const holdingHints = (): string => {
+  const device = lastDevice();
+  return CONTROLS.filter((c) => c.whileHolding)
+    .flatMap((c) => {
+      const keys = device === 'gamepad' ? c.pad : device === 'touch' ? c.touch : c.keys;
+      return keys === undefined ? [] : [`${renderKeys(keys)} ${escapeHtml(c.action.toLowerCase())}`];
+    })
     .join(' · ');
+};
 
 /** What the panel adds for a copy that is not the player's yet (a market box): rows on top, a line of text, and its own key hints. */
 export interface PanelExtra {
@@ -64,11 +71,12 @@ export class GamePanel {
       ${note ? `<p class="game-panel__note">${escapeHtml(note)}</p>` : ''}
       ${game.description ? `<p>${escapeHtml(game.description)}</p>` : ''}
       <footer>${extra.hints ?? holdingHints()}</footer>`;
-    this.root.hidden = false;
+    fadeIn(this.root, 'game-panel--closing');
   }
 
+  /** Put down: a short fade, then hidden. */
   hide(): void {
-    this.root.hidden = true;
+    fadeOut(this.root, 'game-panel--closing', 150);
   }
 }
 

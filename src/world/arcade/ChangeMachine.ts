@@ -13,6 +13,8 @@ export interface ChangeMachineOptions {
   working?: boolean;
   /** Paint of the steel body. Default a blue-grey. */
   color?: number;
+  /** Whether today's change is still in it (a working machine once emptied says so). */
+  waiting?: () => boolean;
 }
 
 const WIDTH = 0.6;
@@ -22,8 +24,8 @@ const PLINTH_H = 0.08;
 const HEADER_H = 0.24;
 const PX_PER_M = 800;
 
-const STEEL_DARK = standard({ color: 0x1d1f2a, roughness: 0.5, metalness: 0.4 });
-const CHROME = standard({ color: 0xb9bcc0, metalness: 0.7, roughness: 0.3 });
+const STEEL_DARK = standard({ color: 0x1d1f2a, roughness: 0.5, metalness: 0 });
+const CHROME = standard({ color: 0xb9bcc0, metalness: 1, roughness: 0.25 });
 
 /**
  * The change machine every arcade has and nobody trusts: a tall steel box with a lit CHANGE
@@ -36,18 +38,20 @@ export class ChangeMachine extends THREE.Group implements Furniture, Interactabl
   readonly hitboxes: THREE.Object3D[];
   private readonly header: THREE.MeshBasicMaterial;
   private readonly working: boolean;
+  private readonly waiting: () => boolean;
 
   constructor(options: ChangeMachineOptions = {}) {
     super();
     this.name = 'ChangeMachine';
     this.working = options.working ?? false;
-    const steel = standard({ color: options.color ?? 0x3b4258, roughness: 0.45, metalness: 0.35 });
+    this.waiting = options.waiting ?? (() => true);
+    const steel = standard({ color: options.color ?? 0x3b4258, roughness: 0.45, metalness: 0 });
 
     this.add(boxMesh(WIDTH, PLINTH_H, DEPTH, STEEL_DARK, { y: PLINTH_H / 2 }));
     this.add(boxMesh(WIDTH, HEIGHT - PLINTH_H, DEPTH, steel, { y: PLINTH_H + (HEIGHT - PLINTH_H) / 2 }));
     // The front panel: everything printed on the machine, painted.
     const panelH = HEIGHT - PLINTH_H - HEADER_H - 0.04;
-    const panel = new THREE.Mesh(new THREE.PlaneGeometry(WIDTH - 0.04, panelH), new THREE.MeshStandardMaterial({ map: paintPanel(WIDTH - 0.04, panelH, this.working), roughness: 0.5, metalness: 0.2 }));
+    const panel = new THREE.Mesh(new THREE.PlaneGeometry(WIDTH - 0.04, panelH), new THREE.MeshStandardMaterial({ map: paintPanel(WIDTH - 0.04, panelH, this.working), roughness: 0.5, metalness: 0 }));
     panel.position.set(0, PLINTH_H + panelH / 2 + 0.01, DEPTH / 2 + WALL.notice.lift);
     panel.receiveShadow = true;
     this.add(panel);
@@ -83,7 +87,8 @@ export class ChangeMachine extends THREE.Group implements Furniture, Interactabl
   }
 
   label(): string {
-    return this.working ? 'Change machine — it works today! Click for change' : 'Change machine — click';
+    if (!this.working) return 'Change machine · out of order';
+    return this.waiting() ? 'Change machine · take the change (it works today!)' : 'Change machine · empty today';
   }
 
   activate(session: SessionActions): void {

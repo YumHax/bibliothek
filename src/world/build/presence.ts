@@ -14,6 +14,8 @@ export function presentWhile(zone: Zone, item: Furniture, shown: () => boolean, 
   const position = item.position.clone();
   const yaw = item.rotation.y;
   let placed = true;
+  // Taken out, it is still the zone's: disposed on unload wherever it is then.
+  zone.keep(item);
   const apply = (): void => {
     const want = shown();
     if (want === placed) return;

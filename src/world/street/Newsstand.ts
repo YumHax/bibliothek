@@ -1,12 +1,14 @@
 import * as THREE from 'three';
+import { QUALITY } from '@/graphics/quality';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import type { Interactable } from '@/interaction/Interactable';
 import type { SessionActions } from '@/game/SessionActions';
 import type { ModalLike } from '@/game/SessionParts';
 import { createCanvas, seededRandom, toTexture } from '@/covers/generated/canvasUtils';
 import { invisibleHitbox } from '../meshUtils';
 import type { Furniture } from '../Furniture';
-import { paint, standard } from '../materials/palette';
+import { coverageKeepsAlpha, paint, standard } from '../materials/palette';
 import type { WeeklyIssue } from './gamingWeekly';
 
 export interface NewsstandOptions {
@@ -17,6 +19,17 @@ export interface NewsstandOptions {
 }
 
 const SIZE = { width: 2.2, height: 2.35, depth: 1.5 };
+/** The roof's overhang (on the width, on the depth: more at the hatch) and thickness. */
+const ROOF = { wider: 0.5, deeper: 0.6, thick: 0.12, forward: 0.1 };
+/** The kiosk's roof as a box round its origin (width along its x, depth along z, top): what keeps the rain off (`Precipitation`). */
+export const NEWSSTAND_ROOF = { width: SIZE.width + ROOF.wider, depth: SIZE.depth + ROOF.deeper, height: SIZE.height + ROOF.thick } as const;
+/** The kiosk's edges, rounded. */
+const EDGE = 0.012;
+
+/** A box with rounded edges, centred at (x, y, z). */
+function rounded(w: number, h: number, d: number, x: number, y: number, z: number): THREE.BufferGeometry {
+  return new RoundedBoxGeometry(w, h, d, 2, Math.min(EDGE, Math.min(w, h, d) * 0.2)).translate(x, y, z);
+}
 const GREEN = 0x2f5a44;
 
 /**
@@ -33,23 +46,23 @@ export class Newsstand extends THREE.Group implements Furniture, Interactable {
     this.name = 'Newsstand';
     const { width, height, depth } = SIZE;
     const body = mergeGeometries([
-      new THREE.BoxGeometry(width, 0.9, depth).translate(0, 0.45, 0),
-      new THREE.BoxGeometry(width, height - 1.9, depth).translate(0, 1.9 + (height - 1.9) / 2, 0),
-      new THREE.BoxGeometry(width, 1.0, depth - 0.4).translate(0, 1.4, -0.2),
-      new THREE.BoxGeometry(0.2, 1.0, 0.4).translate(-width / 2 + 0.1, 1.4, depth / 2 - 0.2),
-      new THREE.BoxGeometry(0.2, 1.0, 0.4).translate(width / 2 - 0.1, 1.4, depth / 2 - 0.2),
+      rounded(width, 0.9, depth, 0, 0.45, 0),
+      rounded(width, height - 1.9, depth, 0, 1.9 + (height - 1.9) / 2, 0),
+      rounded(width, 1.0, depth - 0.4, 0, 1.4, -0.2),
+      rounded(0.2, 1.0, 0.4, -width / 2 + 0.1, 1.4, depth / 2 - 0.2),
+      rounded(0.2, 1.0, 0.4, width / 2 - 0.1, 1.4, depth / 2 - 0.2),
     ])!;
-    const green = standard({ color: GREEN, roughness: 0.55, metalness: 0.2 });
+    const green = standard({ color: GREEN, roughness: 0.5 });
     const shell = new THREE.Mesh(body, green);
-    const roof = new THREE.Mesh(new THREE.BoxGeometry(width + 0.5, 0.12, depth + 0.6).translate(0, height + 0.06, 0.1), paint(0x1f2a26, 0.6));
-    const counter = new THREE.Mesh(new THREE.BoxGeometry(width - 0.3, 0.05, 0.45).translate(0, 0.92, depth / 2 + 0.1), paint(0x6a4a32, 0.7));
+    const roof = new THREE.Mesh(rounded(NEWSSTAND_ROOF.width, ROOF.thick, NEWSSTAND_ROOF.depth, 0, height + ROOF.thick / 2, ROOF.forward), paint(0x1f2a26, 0.6));
+    const counter = new THREE.Mesh(rounded(width - 0.3, 0.05, 0.45, 0, 0.92, depth / 2 + 0.1), paint(0x6a4a32, 0.7));
     for (const mesh of [shell, roof, counter]) {
       mesh.castShadow = true;
       mesh.receiveShadow = true;
       this.add(mesh);
     }
     // The papers pegged round the hatch and the fascia's PRESSE: one painted board on the front.
-    const board = new THREE.Mesh(new THREE.PlaneGeometry(width, height), new THREE.MeshStandardMaterial({ map: paintFront(width, height), transparent: true, alphaTest: 0.5, roughness: 0.8 }));
+    const board = new THREE.Mesh(new THREE.PlaneGeometry(width, height), coverageKeepsAlpha(new THREE.MeshStandardMaterial({ map: paintFront(width, height), alphaTest: 0.5, alphaToCoverage: QUALITY.msaa > 0, roughness: 0.8 })));
     board.position.set(0, height / 2, depth / 2 + 0.005);
     this.add(board);
 
@@ -68,7 +81,7 @@ export class Newsstand extends THREE.Group implements Furniture, Interactable {
   }
 
   label(): string {
-    return 'Click to read THE GAMING WEEKLY';
+    return 'THE GAMING WEEKLY · read';
   }
 
   activate(session: SessionActions): void {

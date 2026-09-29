@@ -68,7 +68,7 @@ export function buildClawModel(root: THREE.Group, color: number, plush: readonly
 
   // The case: chrome posts at the corners, glass all round, a lit top with the marquee.
   for (const sx of [-1, 1]) for (const sz of [-1, 1]) root.add(boxMesh(0.03, CASE_H, 0.03, CHROME, { x: sx * (WIDTH / 2 - 0.015), y: BASE_H + CASE_H / 2, z: sz * (DEPTH / 2 - 0.015) }));
-  const glassMat = standard({ color: 0xdde8ee, roughness: 0.05, metalness: 0.1, transparent: true, opacity: 0.14, side: THREE.DoubleSide, depthWrite: false });
+  const glassMat = standard({ color: 0xdde8ee, roughness: 0.05, metalness: 0, transparent: true, opacity: 0.14, side: THREE.DoubleSide, depthWrite: false });
   const pane = (w: number, x: number, z: number, ry: number): void => {
     const glass = new THREE.Mesh(new THREE.PlaneGeometry(w, CASE_H), glassMat);
     glass.position.set(x, BASE_H + CASE_H / 2, z);

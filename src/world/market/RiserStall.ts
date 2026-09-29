@@ -187,7 +187,7 @@ export class RiserStall extends THREE.Group implements StallLike {
     lamp.position.set(POLE_X + 0.12, LAMP_Y + 0.02, POLE_Z + 0.08);
     lamp.rotation.set(0.5, 0, -0.7);
     this.add(boxMesh(0.14, 0.012, 0.012, IRON, { x: POLE_X + 0.06, y: LAMP_Y + 0.01, z: POLE_Z + 0.04 }).rotateY(-0.6));
-    const shadeMat = standard({ color: 0x2f5a3a, roughness: 0.4, metalness: 0.5, side: THREE.DoubleSide });
+    const shadeMat = standard({ color: 0x2f5a3a, roughness: 0.4, metalness: 0, side: THREE.DoubleSide });
     const shade = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.08, 0.13, 16, 1, true), shadeMat);
     shade.castShadow = true;
     lamp.add(shade);

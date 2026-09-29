@@ -14,8 +14,8 @@ export interface PortableTvOptions {
 }
 
 const DARK = paint(0x151515, 0.6);
-const GLASS = standard({ color: 0x1e2a26, roughness: 0.15, metalness: 0.1 });
-const CHROME = standard({ color: 0xc8c8c8, roughness: 0.25, metalness: 0.9 });
+const GLASS = standard({ color: 0x1e2a26, roughness: 0.15, metalness: 0 });
+const CHROME = standard({ color: 0xc8c8c8, roughness: 0.2, metalness: 1 });
 
 /**
  * A portable CRT set as the TV repair shop shows it (the flat's `Television` needs a video layer and a speaker, so the
@@ -50,7 +50,7 @@ export class PortableTv extends Prop {
 }
 
 const PROJECTOR_CASE = paint(0x2c2e33, 0.45);
-const LENS = standard({ color: 0x0c1418, roughness: 0.05, metalness: 0.4 });
+const LENS = standard({ color: 0x0c1418, roughness: 0.05, metalness: 0 });
 
 /**
  * The ceiling projector the TV repair shop has on its bench: a flat dark case, the lens barrel at the front, the vents

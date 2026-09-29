@@ -25,6 +25,8 @@ export type Activity =
   | 'sunbathe'
   | 'lap'
   | 'call'
+  | 'treat'
+  | 'rushToBowl'
   | 'flee'
   | 'fleeMild';
 
@@ -37,6 +39,8 @@ export interface ActivityDef {
 
 /** After finding the way to another room shut, the cat does not try again for this long. */
 const EXPLORE_RETRY_S = 45;
+/** How far from the player's feet (m) the cat stops for a treat. */
+const TREAT_DISTANCE = 0.45;
 
 /** 1 - `sleepDrive`: how lively the cat is at this time of day. */
 function active(mind: CatMind): number {
@@ -285,6 +289,26 @@ export const ACTIVITIES: Record<Activity, ActivityDef> = {
       return true;
     },
   },
+  treat: {
+    begin(mind) {
+      // Straight to the rattled jar, at a trot: stop just short of the player's feet.
+      const { tmp, tmp2, goal } = mind;
+      tmp.set(mind.eye.x, 0, mind.eye.z);
+      tmp2.subVectors(mind.ctx.cat.position, tmp).setY(0);
+      if (tmp2.lengthSq() < 1e-4) tmp2.set(0, 0, 1);
+      goal.copy(tmp).addScaledVector(tmp2.normalize(), TREAT_DISTANCE);
+      if (!mind.ctx.nav.isFree(goal) && !mind.ctx.nav.randomFreePoint(goal, tmp, 0.7)) return false;
+      if (goal.distanceTo(mind.ctx.cat.position) < 0.15) mind.enter('treat');
+      else mind.goTo(goal, 'treat', TROT_SPEED);
+      return true;
+    },
+  },
+  rushToBowl: {
+    begin(mind) {
+      mind.goTo(mind.ctx.bowl.feedingSpot(mind.goal), 'eat', TROT_SPEED);
+      return true;
+    },
+  },
   flee: {
     begin: (mind) => runOff(mind, false),
   },
@@ -296,9 +320,19 @@ export const ACTIVITIES: Record<Activity, ActivityDef> = {
 /** The activities an idle cat picks from, in the order of the draw. */
 const CHOOSABLE = (Object.keys(ACTIVITIES) as Activity[]).filter((activity) => ACTIVITIES[activity].weight !== undefined);
 
+/** Needs are never damped (a hungry cat eats again); anything else it just did weighs less: no window, window, window. */
+const RECENCY = [0.35, 0.7] as const;
+const ALWAYS_WANTED: readonly Activity[] = ['sleep', 'eat', 'drink', 'beg'];
+
+function recency(mind: CatMind, activity: Activity): number {
+  if (ALWAYS_WANTED.includes(activity)) return 1;
+  const i = mind.recent.indexOf(activity);
+  return i < 0 ? 1 : RECENCY[i] ?? 1;
+}
+
 /** An idle cat's weighted pick; `wander` when nothing weighs anything. */
 export function pickActivity(mind: CatMind): Activity {
-  const options = CHOOSABLE.map((activity) => ({ activity, weight: ACTIVITIES[activity].weight?.(mind) ?? 0 }));
+  const options = CHOOSABLE.map((activity) => ({ activity, weight: (ACTIVITIES[activity].weight?.(mind) ?? 0) * recency(mind, activity) }));
   return pickWeighted(options)?.activity ?? 'wander';
 }
 

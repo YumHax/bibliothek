@@ -81,12 +81,14 @@ export class Terraces extends THREE.Group implements Furniture, Updatable {
   private readonly eye = new THREE.Vector3();
   private readonly local = new THREE.Vector3();
   private clock = CHECK_EVERY;
+  /** Just (re)activated: the next look at the clock lays every terrace out as it says, near or not (the player has only just arrived). */
+  private fresh = true;
 
   constructor(private readonly dayNight: DayNight, private readonly options: TerracesOptions) {
     super();
     this.name = 'Terraces';
     this.materials = {
-      metal: snowCovered(new THREE.MeshStandardMaterial({ color: 0x23272a, roughness: 0.45, metalness: 0.6 })),
+      metal: snowCovered(new THREE.MeshStandardMaterial({ color: 0x23272a, roughness: 0.45 })),
       top: snowCovered(new THREE.MeshStandardMaterial({ color: 0xe6e1d6, roughness: 0.35 })),
       rattan: snowCovered(new THREE.MeshStandardMaterial({ color: 0xb08a52, roughness: 0.85 })),
     };
@@ -95,7 +97,7 @@ export class Terraces extends THREE.Group implements Furniture, Updatable {
       const terrace = this.build(spec);
       const count = Math.min(spec.customers, options.maxCustomers ?? spec.customers);
       for (let i = 0; i < count; i++) {
-        const walker = new Walker({ viewer: options.viewer, seed: seed++, talk: options.talk, label: 'Click to say hello', fade: true });
+        const walker = new Walker({ viewer: options.viewer, seed: seed++, talk: options.talk, label: 'Customer · say hello', labelWithin: 4, fade: true });
         walker.traverse((o) => {
           o.castShadow = false;
         });
@@ -109,6 +111,12 @@ export class Terraces extends THREE.Group implements Furniture, Updatable {
 
   get footprint(): THREE.Box3 {
     return new THREE.Box3();
+  }
+
+  setZoneActive(active: boolean): void {
+    if (!active) return;
+    this.fresh = true;
+    this.clock = CHECK_EVERY;
   }
 
   dispose(): void {
@@ -128,9 +136,10 @@ export class Terraces extends THREE.Group implements Furniture, Updatable {
       for (const t of this.terraces) {
         const [from, to] = t.spec.hours;
         const wanted = dry && s.hours >= from && s.hours < to;
-        if (wanted !== t.isOpen && this.local.distanceTo(t.centre) > UNSEEN) this.setOpen(t, wanted);
-        this.seatCustomers(t, t.isOpen && awake > 0.25);
+        if (wanted !== t.isOpen && (this.fresh || this.local.distanceTo(t.centre) > UNSEEN)) this.setOpen(t, wanted);
+        this.seatCustomers(t, t.isOpen && awake > 0.25, this.fresh);
       }
+      this.fresh = false;
     }
     for (const t of this.terraces) for (const c of t.customers) c.update(dt, this.eye, this.options.drawDistance, this.options.fade);
   }
@@ -144,13 +153,13 @@ export class Terraces extends THREE.Group implements Furniture, Updatable {
   }
 
   /** Customers sit down at free chairs while it is open (and the city is up), and go when it shuts. */
-  private seatCustomers(t: Terrace, open: boolean): void {
+  private seatCustomers(t: Terrace, open: boolean, instantly: boolean): void {
     const free = [...t.seats];
     for (const c of t.customers) {
       if (open && !c.shown) {
         const seat = free.splice(Math.floor(Math.random() * free.length), 1)[0];
         if (!seat) continue;
-        c.show(seat.at.clone());
+        c.show(seat.at.clone(), instantly);
         c.walker.sit(seat.yaw, CHAIR.seat, 'lap');
       } else if (!open && c.shown) c.hide();
     }

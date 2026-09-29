@@ -69,7 +69,7 @@ export class FeatherWand extends THREE.Group implements Furniture, Interactable,
   setHovered(): void {}
 
   label(): string | null {
-    return this.owned ? 'Feather wand — click to wave it for the cat' : null;
+    return this.owned ? 'Feather wand · wave it for the cat' : null;
   }
 
   activate(session: SessionActions): void {

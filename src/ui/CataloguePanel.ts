@@ -8,10 +8,13 @@ import type { Wallet } from '@/economy/Wallet';
 import type { StockItem } from '@/economy/StockItem';
 import type { Transactions } from '@/economy/Transactions';
 import type { Views } from '@/economy/Fame';
-import { describeCondition, shopPrice } from '@/economy/pricing';
+import { CONFIRM_MS, describeCondition, purchaseClinks, shopPrice } from '@/economy/pricing';
 import { catalogueSaleOn, mailOrderPrice } from '@/economy/marketEvents';
 import { isGrail } from '@/economy/grails';
+import { playCoins } from '@/audio/coins';
 import { escapeHtml } from './html';
+import { useVerbCap } from './verb';
+import { coverAttrs } from './coverPlaceholder';
 import { ModalPanel } from './ModalPanel';
 import { rememberFocus } from './rememberFocus';
 import './CataloguePanel.css';
@@ -60,6 +63,8 @@ export class CataloguePanel extends ModalPanel {
   private settled = new Set<number>();
   /** A used copy quoted by a first click on "Used", confirmed by a second. */
   private quoted: { row: number; quote: { price: number; deposit: number; day: number } } | null = null;
+  /** A new copy's row clicked once ("N coins?"), until when a second click orders it (no handing a posted copy back). */
+  private armedBuy: { row: number; until: number } | null = null;
 
   constructor(
     container: HTMLElement,
@@ -137,7 +142,7 @@ export class CataloguePanel extends ModalPanel {
       const button = (e.target as HTMLElement).closest<HTMLButtonElement>('button[data-action]');
       if (!button) return;
       if (button.dataset.action === 'close') this.close();
-      else if (button.dataset.action === 'buy') this.buy(Number(button.dataset.result));
+      else if (button.dataset.action === 'buy') this.buy(Number(button.dataset.result), button);
       else if (button.dataset.action === 'order') void this.orderUsed(Number(button.dataset.result), button);
     });
     this.root.addEventListener('change', (e) => {
@@ -147,7 +152,7 @@ export class CataloguePanel extends ModalPanel {
     this.searchInput.addEventListener('keydown', (e) => {
       if (e.code === 'Enter') this.scheduleSearch(0);
     });
-    // A cover that does not exist leaves an empty frame rather than a broken-image icon.
+    // A cover that does not exist: a made-up box (`coverPlaceholder`, installed on the container); this is the fallback's fallback.
     this.resultsEl.addEventListener('error', (e) => {
       const img = e.target as HTMLElement;
       if (img instanceof HTMLImageElement) img.classList.add('catalogue__cover--missing');
@@ -187,6 +192,7 @@ export class CataloguePanel extends ModalPanel {
 
   private renderResults(results: IndexMatch[]): void {
     this.quoted = null;
+    this.armedBuy = null;
     this.prices.clear();
     this.settled.clear();
     if (results.length === 0) {
@@ -208,7 +214,7 @@ export class CataloguePanel extends ModalPanel {
         const stall = onStalls.get(game.id);
         return `
           <div class="catalogue__row" data-result="${i}">
-            ${cover ? `<img class="catalogue__cover" src="${escapeHtml(cover)}" alt="" loading="lazy" />` : ''}
+            ${cover ? `<img class="catalogue__cover" src="${escapeHtml(cover)}" alt=""${coverAttrs(game)} loading="lazy" />` : ''}
             <span class="catalogue__title" title="${escapeHtml(r.name)}">${escapeHtml(r.title)}</span>
             ${stall ? `<span class="catalogue__stall">${escapeHtml(stallNote(stall))}</span>` : ''}
             ${r.region ? `<span class="catalogue__meta">${escapeHtml(r.region)}</span>` : ''}
@@ -291,7 +297,7 @@ export class CataloguePanel extends ModalPanel {
       if (hadFocus) button.focus(); // disabling it dropped the focus
       button.textContent = `${quote.deposit} down?`;
       button.classList.add('sell__armed');
-      this.setStatus(`A used, complete copy of "${game.title}": ${quote.price} coins, ${quote.deposit} down now. It will wait for you on the ${getPlatform(game.platform).shortName} stall in ${days} market day${days === 1 ? '' : 's'}. Click again to order.`);
+      this.setStatus(`A used, complete copy of "${game.title}": ${quote.price} coins, ${quote.deposit} down now. It will wait for you on the ${getPlatform(game.platform).shortName} stall in ${days} market day${days === 1 ? '' : 's'}. ${useVerbCap()} again to order.`);
       return;
     }
     const { quote } = this.quoted;
@@ -302,11 +308,13 @@ export class CataloguePanel extends ModalPanel {
       this.renderResults(this.lastResults);
       return;
     }
+    playCoins(2);
     this.setStatus(`Ordered: "${game.title}" will be on the ${getPlatform(game.platform).shortName} stall, put by for you. ${quote.price - quote.deposit} coins to pay when you collect it.`);
     this.renderResults(this.lastResults);
   }
 
-  private buy(i: number): void {
+  /** First click on "Buy" arms the row ("N coins?"), the second within `CONFIRM_MS` orders the new copy: a posted copy cannot be handed back. */
+  private buy(i: number, button: HTMLButtonElement): void {
     const r = this.lastResults[i];
     if (!r) return;
     const game = this.gameOf(r);
@@ -316,12 +324,41 @@ export class CataloguePanel extends ModalPanel {
       this.setStatus('Still working out the price of that one.', true);
       return;
     }
+    const now = performance.now();
+    if (this.armedBuy?.row !== i || now > this.armedBuy.until) {
+      this.disarmBuy();
+      this.armedBuy = { row: i, until: now + CONFIRM_MS };
+      button.textContent = `${price} coins?`;
+      button.classList.add('sell__armed');
+      this.setStatus(`A new copy of "${game.title}" by post: ${price} coins. ${useVerbCap()} again to order.`);
+      const armed = this.armedBuy;
+      window.setTimeout(() => {
+        if (this.armedBuy === armed) this.disarmBuy();
+      }, CONFIRM_MS + 50);
+      return;
+    }
+    this.disarmBuy();
     const bought = this.tx.buyMailOrder(game, price);
     if (!bought.ok) {
       if (bought.reason === 'short') this.setStatus(`You need ${price} coins for "${game.title}".`, true);
       return;
     }
-    this.setStatus(`Bought "${game.title}" for ${price} coins. It will wait for you in a parcel in the hallway.`);
+    playCoins(purchaseClinks(price));
+    this.setStatus(`Bought "${game.title}" for ${price} coins. The postman brings it on his next round: it will be in the hallway.`);
+  }
+
+  /** The armed "Buy" button (if any) reads what it did before. */
+  private disarmBuy(): void {
+    const armed = this.armedBuy;
+    this.armedBuy = null;
+    if (!armed) return;
+    const button = this.resultsEl.querySelector<HTMLButtonElement>(`.catalogue__row[data-result="${armed.row}"] button[data-action="buy"]`);
+    const r = this.lastResults[armed.row];
+    if (!button || !r) return;
+    const [label, enabled] = this.buttonState(armed.row, this.gameOf(r).id);
+    button.textContent = label;
+    button.disabled = !enabled;
+    button.classList.remove('sell__armed');
   }
 
   private gameOf(r: IndexMatch): Game {

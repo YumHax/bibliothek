@@ -31,6 +31,7 @@ export type CatPose =
   | 'eat' // standing, head down to bowl height
   | 'drink'
   | 'scratch' // rearing on hind legs, front paws high (against the scratcher)
+  | 'knead' // low stretch on the rug, front paws treading in turn
   | 'crouch'
   | 'pounce';
 
@@ -43,6 +44,8 @@ export interface CatBody extends THREE.Object3D {
   /** Single click target covering the body (an `invisibleHitbox`). */
   readonly hitbox: THREE.Object3D;
   setPose(pose: CatPose): void;
+  /** The pose last asked for. */
+  readonly pose: CatPose;
   /** Walking speed in m/s; 0 = standing still. Drives the leg cycle and body bob. */
   setSpeed(mps: number): void;
   /** Turns the head (clamped) towards a world point; null = look ahead. */
@@ -51,6 +54,12 @@ export interface CatBody extends THREE.Object3D {
   setPurring(on: boolean): void;
   /** Ears back + tail lash for a moment (grumbling, startled). */
   flick(): void;
+  /** Both ears forward for a moment (something caught its eye). */
+  prick(): void;
+  /** A slow, contented blink (~0.8 s): the cat's smile. */
+  slowBlink(): void;
+  /** Squash on touching down after a hop; `strength` 0..1 with the drop. */
+  land(strength: number): void;
   setCoat(coat: CoatKind): void;
   setHovered(hovered: boolean): void;
   update(dt: number): void;
@@ -95,14 +104,43 @@ export interface CatToyLike extends THREE.Object3D {
   readonly isRolling: boolean;
   /** Ball radius (metres). */
   readonly radius: number;
+  /** Called when it bounces off a wall or furniture, with how hard (0..1): the cat's `Cat` makes it tick. */
+  onBounce?: ((strength: number) => void) | null;
 }
 
-/** The cat's voice (Web Audio): purr bed and meows, faded by distance to the listener. */
+/**
+ * Calls the voice makes: meows, a trill or chirp (greeting, prey), the chatter at a bird it cannot
+ * reach, a little yawn (stretching), a hiss or yowl (startled).
+ */
+export type CatCallKind = 'demand' | 'greet' | 'grumble' | 'trill' | 'chirp' | 'chatter' | 'yawn' | 'hiss' | 'yowl';
+/**
+ * Noises the cat makes with its body, heard from where it is: lapping, a lick of its fur, kibble
+ * crunch, claws on sisal or rug, a landing, the ball it bats; `tick`: the ball bouncing off something.
+ */
+export type CatNoiseKind = 'lap' | 'lick' | 'crunch' | 'claws' | 'rug' | 'thud' | 'ball' | 'tick';
+/** Beyond this (m) nothing of the cat is heard: its voice, its things; walls are not even counted. */
+export const CAT_EARSHOT = 7.5;
+
+/** The cat's voice (Web Audio): purr and snore beds, calls and body noises, placed round the listener. */
 export interface CatVoiceLike {
   setPurring(on: boolean): void;
-  meow(kind: 'demand' | 'greet' | 'grumble'): void;
-  /** Distance from the listener to the cat, metres; the voice fades with it. */
-  setDistance(metres: number): void;
+  /** Gentle heavy breathing while fast asleep. */
+  setSnoring(on: boolean): void;
+  /** A call; `insistence` 0..1 (the begging meow) makes it longer, higher and louder. */
+  meow(kind: CatCallKind, insistence?: number): void;
+  /** The fly it chases buzzing about its head (a faint bed while it is there). */
+  setBuzzing?(on: boolean): void;
+  /** A noise of one of its things away from the cat (the ball bouncing): where it is heard from given here. */
+  noiseAt?(kind: CatNoiseKind, strength: number, metres: number, pan: number, walls: number): void;
+  /** A one-off noise at the cat; `strength` 0..1 scales it (a harder landing, a faster ball). */
+  noise(kind: CatNoiseKind, strength?: number): void;
+  /**
+   * Where the cat is for the listener: distance (m; everything fades with it), `pan` -1 (left) ..
+   * 1 (right) from the listener's heading, and the `walls` in between (quieter and duller).
+   */
+  setDistance(metres: number, pan?: number, walls?: number, rear?: number): void;
+  /** This cat's own pitch (1 = the table's): two cats never sound alike. */
+  setPitch?(scale: number): void;
   update(dt: number): void;
 }
 

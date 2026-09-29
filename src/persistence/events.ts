@@ -13,6 +13,8 @@ export interface CorruptSave {
   /** Where the raw text was copied, or null when even that failed. */
   backup: string | null;
   reason: string;
+  /** Saved by a newer build of the game (a copy kept, not damage): worded as such. */
+  newer?: boolean;
 }
 
 type Listener<T> = (event: T) => void;
@@ -42,6 +44,7 @@ export function emitWriteFailure(event: WriteFailure): void {
 
 export function emitCorruptSave(event: CorruptSave): void {
   corruptSoFar.push(event);
-  console.warn(`[save] ${event.key} was unreadable (${event.reason}); ${event.backup ? `copied to ${event.backup}` : 'no copy could be kept'}, starting afresh`);
+  if (event.newer) console.warn(`[save] ${event.key} was ${event.reason}: ${event.backup ? `a copy is kept at ${event.backup}` : 'no copy could be kept'}, and play from here goes on in this version's format`);
+  else console.warn(`[save] ${event.key} was unreadable (${event.reason}); ${event.backup ? `copied to ${event.backup}` : 'no copy could be kept'}, starting afresh`);
   for (const cb of [...corruptSaves]) cb(event);
 }

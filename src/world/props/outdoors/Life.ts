@@ -1,10 +1,12 @@
 import * as THREE from 'three';
 import { createCanvas } from '@/covers/generated/canvasUtils';
-import { type Rng, SCENE_HEIGHT, SCENE_WIDTH } from './Sheet';
+import { QUALITY } from '@/graphics/quality';
+import { type Rng, ELEVATION_MAX, ELEVATION_MIN, EYE_HEIGHT, SCENE_HEIGHT, SCENE_WIDTH, azimuthX, elevationY } from './Sheet';
 import type { GoodsRect } from './Shopfront';
 import { type AtlasPens, type Cell, type LifeEnv, type LifeLayer, WHITE_TINT } from './sprites';
 import { Traffic } from './LifeTraffic';
-import { Cyclists } from './LifeVehicles';
+import { VEHICLE_COUNT } from './vehicleShader';
+import { Cyclists, type VehiclePose } from './LifeVehicles';
 import { Pedestrians } from './LifePedestrians';
 import { Birds } from './LifeBirds';
 import { Fountain } from './LifeFountain';
@@ -12,23 +14,23 @@ import { Critters } from './LifeCritters';
 import { Folk, MAX_QUEUE } from './LifeFolk';
 import { type LifeEvents, quietStreet } from './lifeEvents';
 
-export { carBounds, carFrameAt } from './LifeVehicles';
+export { carFrameAt } from './LifeVehicles';
 export type { LifeEvents } from './lifeEvents';
 
 /**
- * How many moving things the pane shader looks up per pixel; the arrays below have this many slots.
- * Three vec4 uniforms each: 56 keeps the pane shader under WebGL's guaranteed 224 fragment uniform
- * vectors. A busy afternoon peaks around 45.
+ * How many moving things the pane shader looks up per pixel as sprites; the arrays below have this
+ * many slots. Three vec4 uniforms each, and two per vehicle or cyclist (`VEHICLE_COUNT`, drawn as
+ * solids): 42 x 3 + 20 x 2 keeps the pane shader under WebGL's guaranteed 224 fragment uniform
+ * vectors. A busy afternoon peaks around 30 sprites now the vehicles and cyclists are not among them;
+ * low quality keeps 16 (the pane shader loops over every slot on every pixel), dropping the last pushed.
  */
-export const SPRITE_COUNT = 56;
+export const SPRITE_COUNT = QUALITY.level === 'low' ? 16 : 42;
 /**
- * Atlas size: the car and the taxi from every angle at two distances (the nearest up to ~500 px
- * wide with their beam), the bus, dustcart, van and ambulance, pedestrians, dogs, cyclists,
- * pigeons, bats, the fox and the cats, the balcony and shop figures, the fountain; the glow copy
- * is at half size.
+ * Atlas size: pedestrians, dogs, cyclists, pigeons, bats, the fox and the cats, the balcony and
+ * shop figures, the fountain, the blinking lights; the glow copy is at half size.
  */
 const ATLAS_W = 2048;
-const ATLAS_H = 4096;
+const ATLAS_H = 512;
 const GLOW_SCALE = 0.5;
 
 /** What `Life.update` reads of the sky (a `SkyState` will do): falling rain and snow, the game hour, the wind. */
@@ -75,12 +77,19 @@ export class Life {
   readonly rects = new Float32Array(SPRITE_COUNT * 4);
   readonly cells = new Float32Array(SPRITE_COUNT * 4);
   readonly info = new Float32Array(SPRITE_COUNT * 4);
+  /** Per vehicle or cyclist (`vehicleShader`): (x, z, heading, kind; kind -1 for an empty slot) and (packed paint, alpha, 0, 0). */
+  readonly vehiclePose = new Float32Array(VEHICLE_COUNT * 4);
+  readonly vehicleLook = new Float32Array(VEHICLE_COUNT * 4);
   /** What can be heard (see `LifeEvents`); read, never written, by `StreetAmbience`. */
   readonly events: LifeEvents = quietStreet();
   /** How many pixel rows of the atlas the painters used (the headless check reads it). */
   atlasUsed = 0;
 
   private readonly folk: Folk;
+  private readonly traffic: Traffic;
+  private readonly cyclists: Cyclists;
+  /** This frame's vehicles and cyclists together (scratch for `writeVehicles`). */
+  private readonly solids: VehiclePose[] = [];
   /** In update (and push priority) order: vehicles first, the fountain's spray last. */
   private readonly layers: readonly LifeLayer[];
   /** This frame's sprites, in push order until sorted; each one of the `pool`'s slots. */
@@ -88,6 +97,9 @@ export class Life {
   private readonly pool: Slot[] = Array.from({ length: SPRITE_COUNT }, () => ({ d: 0, alpha: 0, lod: 0, tint: 0, rect: [0, 0, 0, 0], cell: [0, 0, 0, 0] }));
   /** The moment every layer reads, rewritten each frame. */
   private readonly env: LifeEnv = { hours: 12, nightness: 0, dusk: 0, wakefulness: 1, rain: 0, snow: 0, wet: 0, wind: 0 };
+  /** Where the camera is, metres from the painting's eye (see `update`), and a scratch for `seenFromEye`. */
+  private readonly eye = new THREE.Vector3();
+  private readonly scratch = [0, 0, 0, 0];
   private readonly push = (bounds: number[], cell: Cell, d: number, alpha: number, tint = WHITE_TINT): void => this.pushSprite(bounds, cell, d, alpha, tint);
 
   constructor(random: Rng) {
@@ -100,6 +112,8 @@ export class Life {
     const pedestrians = new Pedestrians(random, this.events);
     const birds = new Birds(random);
     const fountain = new Fountain(random, this.events);
+    this.traffic = traffic;
+    this.cyclists = cyclists;
     this.layers = [traffic, cyclists, this.folk, pedestrians, critters, birds, fountain];
     const [colorCanvas, color] = createCanvas(ATLAS_W, ATLAS_H);
     const [glowCanvas, glow] = createCanvas(ATLAS_W * GLOW_SCALE, ATLAS_H * GLOW_SCALE);
@@ -133,9 +147,12 @@ export class Life {
    * home at dusk; `wakefulness` (0..1, see `wakefulnessAt`) sends the night owls home too as the
    * city falls asleep and spaces the cars out: at 0.1 a car sets off ten times less often. The
    * `weather` (a `SkyState` will do) carries the rain and snow, and the game hour the dustcart, the
-   * van, the shop and the animals keep to.
+   * van, the shop and the animals keep to. `eye` is where the camera is, metres from the painting's
+   * eye (`Outdoors` center): every sprite is placed as seen from there (`pushSprite`).
    */
-  update(dt: number, nightness: number, wakefulness = 1, weather: LifeWeather = CLEAR): void {
+  update(dt: number, nightness: number, wakefulness = 1, weather: LifeWeather = CLEAR, eye?: THREE.Vector3): void {
+    if (eye) this.eye.copy(eye);
+    else this.eye.set(0, 0, 0);
     this.slots.length = 0;
     const env = this.env;
     env.hours = weather.hours ?? 12;
@@ -147,6 +164,7 @@ export class Life {
     env.wet = Math.max(weather.rain, weather.snow);
     env.wind = weather.wind ?? 0;
     for (const layer of this.layers) layer.update(dt, env, this.push);
+    this.writeVehicles();
 
     // Far to near, so nearer sprites are composited over farther ones.
     this.slots.sort(farFirst);
@@ -162,10 +180,16 @@ export class Life {
     }
   }
 
-  /** Queues a sprite: `bounds` are scenery-texture pixels (left, top, right, bottom). */
+  /**
+   * Queues a sprite: `bounds` are scenery-texture pixels (left, top, right, bottom) as the painting's
+   * eye sees it, `d` its distance on the ground. It is moved to where the camera (`eye`) sees it: the
+   * shader matches sprites against the camera ray's own direction, not the scenery point behind them
+   * (which slides with the depth of whatever the sprite passes over, and made it wobble), so a car
+   * driving straight stays on its line from any window, the balcony included.
+   */
   private pushSprite(bounds: number[], cell: Cell, d: number, alpha: number, tint: number): void {
     if (this.slots.length >= SPRITE_COUNT || alpha <= 0.01) return;
-    const [left, top, right, bottom] = bounds;
+    const [left, top, right, bottom] = this.seenFromEye(bounds, d);
     const slot = this.pool[this.slots.length];
     slot.d = d;
     slot.alpha = alpha;
@@ -181,6 +205,50 @@ export class Life {
     uv[2] = (cell.x + cell.w) / ATLAS_W;
     uv[3] = 1 - cell.y / ATLAS_H;
     this.slots.push(slot);
+  }
+
+  /** Copies this frame's vehicles and cyclists into the shader's arrays: the nearest to the camera when there are more than the slots. */
+  private writeVehicles(): void {
+    const vehicles = this.solids;
+    vehicles.length = 0;
+    vehicles.push(...this.traffic.vehicles, ...this.cyclists.poses);
+    const eye = this.eye;
+    if (vehicles.length > VEHICLE_COUNT) vehicles.sort((p, q) => Math.hypot(p.x - eye.x, p.z - eye.z) - Math.hypot(q.x - eye.x, q.z - eye.z));
+    for (let i = 0; i < VEHICLE_COUNT; i++) {
+      const v = vehicles[i];
+      const k = i * 4;
+      if (!v || v.alpha <= 0.01) {
+        this.vehiclePose[k + 3] = -1;
+        continue;
+      }
+      this.vehiclePose[k] = v.x;
+      this.vehiclePose[k + 1] = v.z;
+      this.vehiclePose[k + 2] = v.heading;
+      this.vehiclePose[k + 3] = v.kind;
+      this.vehicleLook[k] = v.paint;
+      this.vehicleLook[k + 1] = v.alpha;
+    }
+  }
+
+  /** Bounds from the painting's eye turned into bounds from the camera (`eye`), for a sprite `d` metres out on the ground. */
+  private seenFromEye(bounds: number[], d: number): number[] {
+    const { x: ox, y: oy, z: oz } = this.eye;
+    if (ox === 0 && oy === 0 && oz === 0) return bounds;
+    const [left, top, right, bottom] = bounds;
+    const a = (((left + right) / 2) / SCENE_WIDTH - 0.5) * Math.PI * 2;
+    const heightAt = (y: number): number => EYE_HEIGHT + Math.tan(ELEVATION_MIN + (1 - y / SCENE_HEIGHT) * (ELEVATION_MAX - ELEVATION_MIN)) * d;
+    const dx = Math.sin(a) * d - ox;
+    const dz = Math.cos(a) * d - oz;
+    const near = Math.max(0.5, Math.hypot(dx, dz));
+    const half = ((right - left) / 2) * (d / near);
+    const centre = azimuthX(Math.atan2(dx, dz));
+    const elevation = (y: number): number => elevationY(Math.atan2(heightAt(y) - EYE_HEIGHT - oy, near));
+    const out = this.scratch;
+    out[0] = centre - half;
+    out[1] = elevation(top);
+    out[2] = centre + half;
+    out[3] = elevation(bottom);
+    return out;
   }
 
   /**

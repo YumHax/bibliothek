@@ -59,7 +59,7 @@ export class CollectorsBook extends Prop implements Interactable {
 
   label(): string | null {
     const waiting = this.options.unclaimed?.() ?? 0;
-    return `Collector’s book${waiting ? ` · ${waiting} reward${waiting === 1 ? '' : 's'} to claim` : ''}. Click to open it`;
+    return `Collector’s book · open${waiting ? ` (${waiting} reward${waiting === 1 ? '' : 's'} to claim)` : ''}`;
   }
 
   activate(session: SessionActions): void {

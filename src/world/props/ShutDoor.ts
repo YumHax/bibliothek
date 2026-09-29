@@ -13,6 +13,10 @@ export interface ShutDoorOptions {
   height?: number;
   /** The `entrance` style's plain mat on the floor in front of it. Default true; false when the room lays its own. */
   mat?: boolean;
+  /** The leaf's paint (the `panelled` and `entrance` styles): a neighbour's own door colour. Default each style's. */
+  leafColor?: number;
+  /** The `entrance` mat's colour. Default a brown coir. */
+  matColor?: number;
 }
 
 const THICKNESS = 0.016;
@@ -30,17 +34,28 @@ const FROSTED = standard({ color: 0xeef2ec, roughness: 0.6, transparent: true, o
  * A door that never opens, lying on a wall face: architrave and a leaf filling it, a lever handle
  * on the right. For openings that lead nowhere the player can go (the flat's front door, a
  * cupboard). The leaf sits within the architrave's depth so the wall behind needs no hole.
- * Wall-hung: origin on the floor at the middle of the leaf, +z facing into the room.
+ * Wall-hung: origin on the floor at the middle of the leaf, +z facing into the room. The leaf and
+ * its fittings are `leaf`, hinged on the left edge of its back face: a subclass may swing it ajar
+ * (turning it negative about y opens it into the room) and adds its own fittings to `leafFace`.
  */
 export class ShutDoor extends Prop {
   /** Flat against its wall like the working doors: no blob on the floor. */
   readonly contactShadow = false;
+  /** The leaf, turning about its hinge line (the left edge of its back face). */
+  protected readonly leaf = new THREE.Group();
+  /** The leaf's parts, in door coordinates (x from the door's middle) while the leaf is shut. */
+  protected readonly leafFace = new THREE.Group();
   constructor(options: ShutDoorOptions = {}) {
     super();
     this.name = 'ShutDoor';
     const style = options.style ?? 'panelled';
     const width = options.width ?? 0.83;
     const height = options.height ?? 2.04;
+    this.leaf.position.x = -width / 2;
+    this.leafFace.position.x = width / 2;
+    this.leaf.add(this.leafFace);
+    this.add(this.leaf);
+    const leafPart = this.leafFace;
 
     part(this, TRIM, height + TRIM, TRIM_DEPTH, TRIM_PAINT, { x: -width / 2 - TRIM / 2, y: (height + TRIM) / 2, z: TRIM_DEPTH / 2 });
     part(this, TRIM, height + TRIM, TRIM_DEPTH, TRIM_PAINT, { x: width / 2 + TRIM / 2, y: (height + TRIM) / 2, z: TRIM_DEPTH / 2 });
@@ -52,22 +67,22 @@ export class ShutDoor extends Prop {
       // Stiles and rails framing three frosted panes.
       const stile = 0.1;
       const rail = 0.12;
-      part(this, stile, height, THICKNESS, LEAF_PAINT, { x: -width / 2 + stile / 2, y: height / 2, z: face / 2 });
-      part(this, stile, height, THICKNESS, LEAF_PAINT, { x: width / 2 - stile / 2, y: height / 2, z: face / 2 });
+      part(leafPart, stile, height, THICKNESS, LEAF_PAINT, { x: -width / 2 + stile / 2, y: height / 2, z: face / 2 });
+      part(leafPart, stile, height, THICKNESS, LEAF_PAINT, { x: width / 2 - stile / 2, y: height / 2, z: face / 2 });
       const paneW = width - 2 * stile;
       const bottomRail = 0.3;
-      part(this, paneW, bottomRail, THICKNESS, LEAF_PAINT, { y: bottomRail / 2, z: face / 2 });
-      part(this, paneW, rail, THICKNESS, LEAF_PAINT, { y: height - rail / 2, z: face / 2 });
+      part(leafPart, paneW, bottomRail, THICKNESS, LEAF_PAINT, { y: bottomRail / 2, z: face / 2 });
+      part(leafPart, paneW, rail, THICKNESS, LEAF_PAINT, { y: height - rail / 2, z: face / 2 });
       const panes = 3;
       const paneH = (height - bottomRail - rail - (panes - 1) * rail) / panes;
       for (let i = 0; i < panes; i++) {
         const y0 = bottomRail + i * (paneH + rail);
-        part(this, paneW, paneH, 0.006, FROSTED, { y: y0 + paneH / 2, z: face / 2 });
-        if (i < panes - 1) part(this, paneW, rail, THICKNESS, LEAF_PAINT, { y: y0 + paneH + rail / 2, z: face / 2 });
+        part(leafPart, paneW, paneH, 0.006, FROSTED, { y: y0 + paneH / 2, z: face / 2 });
+        if (i < panes - 1) part(leafPart, paneW, rail, THICKNESS, LEAF_PAINT, { y: y0 + paneH + rail / 2, z: face / 2 });
       }
     } else {
-      const leaf = style === 'entrance' ? paint(0x3a2e28, 0.5) : LEAF_PAINT;
-      part(this, width, height, THICKNESS, leaf, { y: height / 2, z: face / 2 });
+      const leaf = options.leafColor !== undefined ? paint(options.leafColor, style === 'entrance' ? 0.5 : 0.6) : style === 'entrance' ? paint(0x3a2e28, 0.5) : LEAF_PAINT;
+      part(leafPart, width, height, THICKNESS, leaf, { y: height / 2, z: face / 2 });
       // Two raised panels, a lock rail between them.
       const raised = paint(new THREE.Color(leaf.color).multiplyScalar(0.92).getHex(), 0.5);
       const panelW = width - 0.22;
@@ -75,14 +90,14 @@ export class ShutDoor extends Prop {
         { y: 0.16, h: height * 0.36 },
         { y: 0.16 + height * 0.36 + 0.14, h: height - 0.16 - height * 0.36 - 0.14 - 0.16 },
       ];
-      for (const { y, h } of panels) part(this, panelW, h, 0.004, raised, { y: y + h / 2, z: face + 0.002 });
+      for (const { y, h } of panels) part(leafPart, panelW, h, 0.004, raised, { y: y + h / 2, z: face + 0.002 });
       if (style === 'entrance') {
         // Peephole, a security lock under the handle, and the mat everyone wipes their feet on.
         const peephole = cylinderMesh(0.012, 0.01, BRASS, { y: 1.5, z: face + 0.005 }, { segments: 12 });
         peephole.rotation.x = Math.PI / 2;
-        this.add(peephole);
-        part(this, 0.04, 0.1, 0.006, BRASS, { x: width / 2 - 0.09, y: HANDLE_Y - 0.13, z: face + 0.003 });
-        if (options.mat ?? true) part(this, 0.65, 0.012, 0.4, paint(0x5a4a3a, 1), { y: 0.006, z: 0.26 });
+        leafPart.add(peephole);
+        part(leafPart, 0.04, 0.1, 0.006, BRASS, { x: width / 2 - 0.09, y: HANDLE_Y - 0.13, z: face + 0.003 });
+        if (options.mat ?? true) part(this, 0.65, 0.012, 0.4, paint(options.matColor ?? 0x5a4a3a, 1), { y: 0.006, z: 0.26 });
       }
     }
 
@@ -92,8 +107,8 @@ export class ShutDoor extends Prop {
     rose.rotation.x = Math.PI / 2;
     const stem = cylinderMesh(0.008, 0.03, handleMetal, { x: handleX, y: HANDLE_Y, z: face + 0.02 }, { segments: 10 });
     stem.rotation.x = Math.PI / 2;
-    this.add(rose, stem);
-    part(this, 0.12, 0.014, 0.014, handleMetal, { x: handleX - 0.05, y: HANDLE_Y, z: face + 0.035 });
+    leafPart.add(rose, stem);
+    part(leafPart, 0.12, 0.014, 0.014, handleMetal, { x: handleX - 0.05, y: HANDLE_Y, z: face + 0.035 });
 
     // Flat on a wall: nothing here throws a shadow worth its draw calls.
     this.traverse((obj) => {

@@ -33,8 +33,10 @@ export function placeRoomLight(zone: Zone, room: Room, kind: 'pendant' | 'flush'
 
 /** A wall clock reading the sky's time (click: the time, twice: an alarm), and its tick heard across the room. */
 export function placeClock(zone: Zone, { sky, ...hearing }: Pick<BuildContext, 'sky'> & Hearing, at: Placement): WallClock {
-  const clock = zone.placeAt(new WallClock(sky.dayNight), at);
-  placeWith(zone, clock, pointSound(hearing, new ClockTick(), { maxDistance: 5 }), CLOCK_TICK_AT);
+  // The tick strikes as the second hand steps, so what is heard and what is seen agree.
+  const tick = new ClockTick();
+  const clock = zone.placeAt(new WallClock(sky.dayNight, { onSecond: () => tick.strike() }), at);
+  placeWith(zone, clock, pointSound(hearing, tick, { maxDistance: 5 }), CLOCK_TICK_AT);
   return clock;
 }
 
@@ -50,6 +52,8 @@ export function furnishDecor(zone: Zone, ctx: Hearing & { home?: Pick<BuildConte
 export interface StraySpot {
   readonly at: readonly [number, number];
   readonly yaw: number;
+  /** How far off square and off the spot the box may lie (radians, m): less than the default on a small top. */
+  readonly jitter?: { readonly yaw: number; readonly offset: number };
 }
 
 /**
@@ -64,7 +68,7 @@ export function placeStrayBox(
   spot: StraySpot,
 ): StrayBox | null {
   if (!strays) return null;
-  const stray = new StrayBox({ strays, slot, covers });
+  const stray = new StrayBox({ strays, slot, covers, ...(spot.jitter ? { jitter: spot.jitter } : {}) });
   stray.position.set(spot.at[0], host.topHeight, spot.at[1]);
   stray.rotation.y = spot.yaw;
   placeWith(zone, host, stray);

@@ -4,14 +4,16 @@ import type { CssLayer } from '@/core/CssLayer';
 import type { Interactable, LabelPlacement } from '@/interaction/Interactable';
 import type { PlayerState, SessionActions } from '@/game/SessionActions';
 import type { VideoInfo } from '@/video/VideoProvider';
+import { unplayableWhy } from './box/unplayable';
 import { CrtSpeaker } from '@/audio/CrtSpeaker';
 import type { ActivityAware, Furniture } from './Furniture';
-import { boxMesh } from './meshUtils';
+import { boxMesh, cylinderMesh } from './meshUtils';
 import type { SoundOcclusion } from './acoustics/SoundOcclusion';
 import { VideoSurface, type ScreenState, type ScreenStateListener, type VideoScreen } from './screen';
 import { CrtGlass } from './screen/CrtGlass';
+import { HueDrift } from './screen/HueDrift';
 import { QUALITY } from '@/graphics/quality';
-import { timber } from '@/world/materials/palette';
+import { paint, timber } from '@/world/materials/palette';
 import { PROUD } from './props/joinery';
 
 /** Height of the built-in cabinet the CRT sits on when nothing else carries it (see `mountOn`). */
@@ -22,14 +24,17 @@ const GLOW_PLAYING = 3;
 const GLOW_MESSAGE = 0.7;
 /** The same glow as a soft panel the size of the picture (`QUALITY.areaLights`), per unit of point-light glow. */
 const PANEL_PER_GLOW = 1.4;
-/**
- * The picture's light is not one colour: without access to the video's pixels (a cross-origin
- * iframe), the glow drifts between the hues a longplay is made of, a new one every few seconds.
- */
-const GLOW_HUES = [0xa9c7ff, 0xd8e4ff, 0x9fd1b8, 0xffd9b0, 0xb8a9ff, 0xcfe8ff];
-const HUE_SECONDS = 3.2;
 /** A CRT's little speaker never gets as loud as the projector's sound system. */
 const SPEAKER_GAIN = 0.8;
+/** The power LED: a dim red standby, green while the set is on. */
+const LED_STANDBY = new THREE.Color(0xff2a1a).multiplyScalar(0.35);
+const LED_ON = new THREE.Color(0x2aff5a).multiplyScalar(1.4);
+/** Share of the body's depth that is the front shell; the rest tapers back round the tube's neck. */
+const FRONT_SHARE = 0.4;
+/** The rear's back face, as a share of the front's width and height. */
+const REAR_TAPER = { w: 0.56, h: 0.62 };
+/** How far the middle of the glass stands in front of its edges, for a 27" tube (m). */
+const GLASS_BULGE = 0.006;
 
 export interface TelevisionOptions {
   /** Object whose distance and facing drive the volume (the camera). */
@@ -61,14 +66,17 @@ export class Television extends THREE.Group implements Furniture, Updatable, Int
   /** The picture as a soft area light (high quality); the point glow then only stands in for its falloff. */
   private readonly panel: THREE.RectAreaLight | null = null;
   private readonly glass: CrtGlass;
-  private readonly hueFrom = new THREE.Color(GLOW_HUES[0]);
-  private readonly hueTo = new THREE.Color(GLOW_HUES[1]);
-  private hueTimer = 0;
-  private hueIndex = 1;
+  private readonly hue = new HueDrift();
   private readonly speaker = new CrtSpeaker();
   private glowTime = 0;
-  private readonly bodyMaterial: THREE.MeshStandardMaterial;
+  /** The power button: the one part that glints under the crosshair. */
+  private readonly buttonMaterial: THREE.MeshStandardMaterial;
+  private readonly ledMaterial: THREE.MeshStandardMaterial;
+  /** The front face of the set's shell (crt-local z): the picture sits on it, the collider reaches `bodySize.z` back from it. */
+  private readonly frontZ: number;
   private readonly glowScale: number;
+  /** Whether the tube is lit (anything but off): the power-on and power-off animations run on its changes. */
+  private powered = false;
 
   constructor(cssLayer: CssLayer, { listener, occlusion, screenWidth = 0.56 }: TelevisionOptions = {}) {
     super();
@@ -89,24 +97,37 @@ export class Television extends THREE.Group implements Furniture, Updatable, Int
       volume: { referenceDistance: 1.5, rolloff: 1.5, maxDistance: 12, rearGain: 0.5 }, // the armchair sits just inside the reference: full volume when seated
       gain: SPEAKER_GAIN,
     });
+    // The tube lights up (thump, hiss, the line opening) as soon as the search begins; it collapses when switched off.
     this.surface.onStateChange((state) => {
-      this.speaker.setOn(state === 'playing');
-      this.glass.setPlaying(state === 'playing');
+      const on = state !== 'off';
+      this.speaker.setOn(on);
+      this.glass.setPlaying(on);
+      if (on === this.powered) return;
+      this.powered = on;
+      if (on) this.glass.powerOn();
+      else this.glass.powerOff();
     });
 
-    // CRT body, slightly deeper than the screen. Local y = 0 is the underside of the set.
+    // CRT body: a front shell round the picture, the rear tapering back round the tube's neck. Local y = 0 is the underside of the set.
     const bodyW = this.screenWidth + 0.14 * scale;
     const bodyH = this.surface.height + 0.14 * scale;
     const bodyD = 0.45 * Math.sqrt(scale);
     this.bodySize = new THREE.Vector3(bodyW, bodyH, bodyD);
-    this.bodyMaterial = new THREE.MeshStandardMaterial({ color: 0x2a2a2e, roughness: 0.55 });
-    const body = boxMesh(bodyW, bodyH, bodyD, this.bodyMaterial, { y: bodyH / 2, z: -0.02 });
-    this.hitboxes = [body];
+    this.frontZ = -0.02 + bodyD / 2;
+    const shell = paint(0x2a2a2e, 0.55);
+    const frontD = bodyD * FRONT_SHARE;
+    const front = boxMesh(bodyW, bodyH, frontD, shell, { y: bodyH / 2, z: this.frontZ - frontD / 2 });
+    const rear = taperedRear(bodyW * 0.97, bodyH * 0.95, bodyD - frontD, shell);
+    rear.position.set(0, bodyH * 0.52, this.frontZ - frontD - (bodyD - frontD) / 2);
+    this.hitboxes = [front, rear];
 
-    // Picture on the front face of the body, facing +z, the tube's glass just in front of it.
-    this.surface.position.set(0, body.position.y, body.position.z + bodyD / 2 + PROUD);
-    this.glass = new CrtGlass(this.screenWidth, this.surface.height);
+    // Picture on the front face of the shell, facing +z, the tube's glass bulging just in front of it inside a bezel.
+    this.surface.position.set(0, front.position.y, this.frontZ + PROUD);
+    this.glass = new CrtGlass(this.screenWidth, this.surface.height, GLASS_BULGE * scale);
     this.glass.position.copy(this.surface.position).add(new THREE.Vector3(0, 0, 0.0015));
+    const details = this.frontDetails(bodyW, bodyH, frontD, scale);
+    this.buttonMaterial = details.button;
+    this.ledMaterial = details.led;
 
     // No shadows: a shadow-casting point light costs six passes and the glow is meant to be soft.
     this.glow = new THREE.PointLight(GLOW_COLOR, 0, 3.5, 2);
@@ -114,7 +135,7 @@ export class Television extends THREE.Group implements Furniture, Updatable, Int
     this.glow.position.copy(this.surface.position).add(new THREE.Vector3(0, 0, 0.35));
 
     this.crt.position.y = OWN_CABINET_HEIGHT;
-    this.crt.add(body, this.surface, this.glass, this.glow);
+    this.crt.add(front, rear, ...details.parts, this.surface, this.glass, this.glow);
     if (QUALITY.areaLights) {
       this.panel = new THREE.RectAreaLight(GLOW_COLOR, 0, this.screenWidth, this.surface.height);
       this.panel.position.copy(this.surface.position).add(new THREE.Vector3(0, 0, 0.01));
@@ -132,11 +153,17 @@ export class Television extends THREE.Group implements Furniture, Updatable, Int
     return this.surface.isPlaying;
   }
 
-  /** Bounding box for collisions (local space): the built-in cabinet and the set on it, or the set alone once mounted. */
+  /** Bounding box for collisions (local space): the built-in cabinet and the set on it, or the set's own size once mounted. */
   get footprint(): THREE.Box3 {
-    const half = Math.max(0.45, this.bodySize.x / 2);
     const top = this.crt.position.y + this.bodySize.y;
-    return new THREE.Box3(new THREE.Vector3(-half, 0, -0.25), new THREE.Vector3(half, top, 0.25));
+    const back = this.frontZ - this.bodySize.z;
+    const face = this.frontZ + 0.015; // the bezel and the glass's bulge
+    if (!this.cabinet.visible) {
+      const half = this.bodySize.x / 2;
+      return new THREE.Box3(new THREE.Vector3(-half, this.crt.position.y, back), new THREE.Vector3(half, top, face));
+    }
+    const half = Math.max(0.45, this.bodySize.x / 2);
+    return new THREE.Box3(new THREE.Vector3(-half, 0, Math.min(-0.25, back)), new THREE.Vector3(half, top, Math.max(0.25, face)));
   }
 
   /**
@@ -155,25 +182,32 @@ export class Television extends THREE.Group implements Furniture, Updatable, Int
 
   // --- Interactable -------------------------------------------------------------------------
 
+  /** Only the power button glints: the set itself does not light up under the crosshair. */
   setHovered(hovered: boolean): void {
-    this.bodyMaterial.emissive.setHex(hovered ? 0x1a1a1a : 0x000000);
+    this.buttonMaterial.emissive.setHex(hovered ? 0x4a4a52 : 0x000000);
   }
 
   label(player: PlayerState): string | null {
-    if (player.held) return `Play ${player.held.game.title} on the TV`;
-    return this.isPlaying ? 'Click to turn the TV off' : 'TV';
+    if (player.held) return player.held.playable ? `TV · play ${player.held.game.title}` : `TV · can’t play it, ${unplayableWhy(player.held)}`;
+    if (this.state === 'searching') return `TV · looking for a longplay of ${this.surface.searchingFor ?? 'the game'}…`;
+    if (this.surface.tuning) return 'TV · tuning in…';
+    if (this.state === 'error') return 'TV, no longplay found · switch off';
+    return this.state !== 'off' ? 'TV · switch off' : 'TV · bring a game box';
   }
 
   labelPlacement(): LabelPlacement {
     return this.isPlaying ? 'edge' : 'crosshair';
   }
 
+  /** With a box in hand, plays its longplay; otherwise switches the set off, even while it is still searching. */
   activate(session: SessionActions): void {
     const box = session.held;
-    if (box) {
+    if (box && !box.playable) {
+      session.refuse(`${box.game.title} is ${unplayableWhy(box)}: no cartridge to put in.`);
+    } else if (box) {
       session.putBack();
       void session.playOn(this, box);
-    } else if (this.state === 'playing' || this.state === 'error') {
+    } else if (this.state !== 'off') {
       session.stopScreen(this);
     }
   }
@@ -184,8 +218,8 @@ export class Television extends THREE.Group implements Furniture, Updatable, Int
     this.surface.searching(title);
   }
 
-  play(video: VideoInfo, startSeconds: number): void {
-    this.surface.play(video, startSeconds);
+  play(video: VideoInfo, startSeconds: number, onRejected?: (videoId: string) => void): void {
+    this.surface.play(video, startSeconds, onRejected);
   }
 
   fail(message: string): void {
@@ -210,12 +244,14 @@ export class Television extends THREE.Group implements Furniture, Updatable, Int
 
   update(dt: number): void {
     this.updateGlow(dt);
-    this.surface.update();
+    this.surface.update(dt);
+    this.glass.update(dt);
     this.speaker.setLoudness(this.surface.loudness);
+    if (this.state !== 'off') this.speaker.setSpatial(this.surface.pan, this.surface.walls); // the bed sits where the set is, like the video
     this.speaker.update(dt);
   }
 
-  /** Screen light: a gentle flicker while playing, a steady dim glow while the glass shows a message. */
+  /** Screen light: a gentle flicker while playing, a steady dim glow over the static; the power LED follows. */
   private updateGlow(dt: number): void {
     let target = 0;
     if (this.state === 'playing') {
@@ -229,22 +265,73 @@ export class Television extends THREE.Group implements Furniture, Updatable, Int
     // Ease so switching the set on or off does not pop.
     this.glow.intensity += (target - this.glow.intensity) * Math.min(1, dt * 6);
 
-    // The hue drifts from one to the next while playing; a message glows the plain bluish white.
-    if (this.state === 'playing') {
-      this.hueTimer += dt;
-      if (this.hueTimer >= HUE_SECONDS) {
-        this.hueTimer = 0;
-        this.hueFrom.copy(this.hueTo);
-        this.hueIndex = (this.hueIndex + 1 + Math.floor(Math.random() * (GLOW_HUES.length - 1))) % GLOW_HUES.length;
-        this.hueTo.set(GLOW_HUES[this.hueIndex]!);
-      }
-      this.glow.color.lerpColors(this.hueFrom, this.hueTo, THREE.MathUtils.smoothstep(this.hueTimer / HUE_SECONDS, 0, 0.6));
-    } else {
-      this.glow.color.set(GLOW_COLOR);
-    }
+    // The hue drifts from one to the next while playing; the static glows the plain bluish white.
+    if (this.state === 'playing') this.glow.color.copy(this.hue.update(dt));
+    else this.glow.color.set(GLOW_COLOR);
+    this.ledMaterial.emissive.lerp(this.state === 'off' ? LED_STANDBY : LED_ON, Math.min(1, dt * 8));
     if (this.panel) {
       this.panel.color.copy(this.glow.color);
       this.panel.intensity = this.glow.intensity * PANEL_PER_GLOW;
     }
   }
+
+  /**
+   * The front's details, on the shell's face and sides (crt-local): the bezel framing the tube, the
+   * power button and its LED under the picture, the grille slots down both sides.
+   */
+  private frontDetails(bodyW: number, bodyH: number, frontD: number, scale: number): { parts: THREE.Mesh[]; button: THREE.MeshStandardMaterial; led: THREE.MeshStandardMaterial } {
+    const parts: THREE.Mesh[] = [];
+    const y = this.surface.position.y;
+    const w = this.screenWidth;
+    const h = this.surface.height;
+    // Bezel: four bars round the picture, standing out of the face so the bulging glass sits in a recess.
+    const bezel = paint(0x1d1d20, 0.45);
+    const rim = 0.014 * scale;
+    const depth = 0.012;
+    const z = this.frontZ + depth / 2;
+    parts.push(
+      boxMesh(w + 2 * rim, rim, depth, bezel, { y: y + h / 2 + rim / 2, z }),
+      boxMesh(w + 2 * rim, rim, depth, bezel, { y: y - h / 2 - rim / 2, z }),
+      boxMesh(rim, h, depth, bezel, { x: -w / 2 - rim / 2, y, z }),
+      boxMesh(rim, h, depth, bezel, { x: w / 2 + rim / 2, y, z }),
+    );
+    // Power button and LED, in the band under the picture, right-hand side.
+    const band = (bodyH - h) / 4;
+    const button = new THREE.MeshStandardMaterial({ color: 0x3a3a40, roughness: 0.35, metalness: 0 });
+    const knob = cylinderMesh(0.008 * scale, 0.006, button, { x: bodyW / 2 - 0.05 * scale, y: band, z: this.frontZ + 0.003 }, { segments: 16 });
+    knob.rotation.x = Math.PI / 2;
+    const led = new THREE.MeshStandardMaterial({ color: 0x1a0806, emissive: LED_STANDBY.clone(), roughness: 0.3 });
+    const lamp = boxMesh(0.005 * scale, 0.005 * scale, 0.003, led, { x: bodyW / 2 - 0.075 * scale, y: band, z: this.frontZ + 0.0015 });
+    parts.push(knob, lamp);
+    // Grille slots down both sides, towards the back of the shell.
+    const slot = paint(0x121214, 0.8);
+    const slots = 6;
+    for (const side of [-1, 1]) {
+      for (let i = 0; i < slots; i++) {
+        const sy = bodyH * (0.3 + (0.45 * i) / (slots - 1));
+        parts.push(boxMesh(0.002, 0.006 * scale, frontD * 0.55, slot, { x: side * (bodyW / 2 + 0.001), y: sy, z: this.frontZ - frontD * 0.55 }));
+      }
+    }
+    for (const small of parts.slice(4)) small.castShadow = false;
+    return { parts, button, led };
+  }
+}
+
+/**
+ * The back of a CRT: a box whose rear face shrinks to `REAR_TAPER` of its front (`width` x `height`),
+ * `depth` long, centred on its origin. Its own geometry (never a shared one).
+ */
+function taperedRear(width: number, height: number, depth: number, material: THREE.Material): THREE.Mesh {
+  const geometry = new THREE.BoxGeometry(width, height, depth);
+  const position = geometry.getAttribute('position');
+  for (let i = 0; i < position.count; i++) {
+    if (position.getZ(i) > 0) continue; // the front face keeps its size
+    position.setX(i, position.getX(i) * REAR_TAPER.w);
+    position.setY(i, position.getY(i) * REAR_TAPER.h - height * 0.04);
+  }
+  geometry.computeVertexNormals();
+  const mesh = new THREE.Mesh(geometry, material);
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  return mesh;
 }

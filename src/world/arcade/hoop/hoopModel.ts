@@ -29,7 +29,7 @@ export interface HoopModel {
  */
 export function buildHoopModel(root: THREE.Group, color: number, title: string): HoopModel {
   const body = paint(color, 0.5);
-  const steel = standard({ color: 0xb9bcc0, metalness: 0.7, roughness: 0.3 });
+  const steel = standard({ color: 0xb9bcc0, metalness: 1, roughness: 0.35 });
   const dark = paint(0x131318, 0.6);
   const length = FRONT_Z - BACK_Z;
   const midZ = (FRONT_Z + BACK_Z) / 2;

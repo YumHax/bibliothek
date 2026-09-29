@@ -11,7 +11,7 @@ import { paint, standard } from '../materials/palette';
  * on its base at local y = 0 facing +z; the builder wires their captions and clicks to `HomeLife`.
  */
 
-const GLASS = standard({ color: 0xe8f0f2, roughness: 0.05, metalness: 0.1, transparent: true, opacity: 0.35, side: THREE.DoubleSide });
+const GLASS = standard({ color: 0xe8f0f2, roughness: 0.05, metalness: 0, transparent: true, opacity: 0.35, side: THREE.DoubleSide });
 const CERAMIC = standard({ color: 0xf2eee6, roughness: 0.35, side: THREE.DoubleSide });
 
 /**
@@ -120,7 +120,7 @@ export class CatFind extends UsableProp {
   constructor(use: UseOptions) {
     super(use);
     this.name = 'CatFind';
-    const gold = standard({ color: 0xd4a52a, metalness: 0.9, roughness: 0.35 });
+    const gold = standard({ color: 0xd4a52a, metalness: 1, roughness: 0.35 });
     for (const [x, z, y] of [[0, 0, 0], [0.025, 0.012, 0], [-0.015, 0.022, 0], [0.008, 0.008, 0.004], [0.03, -0.02, 0]] as const) {
       const coin = cylinderMesh(0.012, 0.003, gold, { x, y: 0.0015 + y, z }, { segments: 16 });
       coin.rotation.x = (x * 7) % 0.2;

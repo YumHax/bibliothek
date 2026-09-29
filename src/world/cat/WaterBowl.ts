@@ -46,7 +46,7 @@ export class WaterBowl extends THREE.Group implements Furniture, Updatable, Wate
     const base = this.options.mat ? MAT_SIZE.height : 0;
     const material =
       this.options.finish === 'steel'
-        ? standard({ color: 0xb9bcc2, roughness: 0.35, metalness: 0.85, side: THREE.DoubleSide })
+        ? standard({ color: 0xb9bcc2, roughness: 0.35, metalness: 1, side: THREE.DoubleSide })
         : ceramicMaterial(this.options.glaze);
     const dish = bowlMesh(material);
     dish.position.y = base;
@@ -57,7 +57,7 @@ export class WaterBowl extends THREE.Group implements Furniture, Updatable, Wate
       transparent: true,
       opacity: 0.7,
       roughness: 0.1,
-      metalness: 0.3,
+      metalness: 0,
       depthWrite: false,
     });
     this.water = new THREE.Mesh(new THREE.CircleGeometry(WATER_RADIUS, 40), surface);

@@ -85,6 +85,8 @@ export class Comets extends BaseGame {
       if (f.kind === 'rock') {
         if (this.shield > 0) return true;
         this.shield = INVULNERABLE;
+        this.sound('crunch');
+        this.sound('shield');
         this.breakCombo();
         this.addTime(-HIT_SECONDS, this.shipX, SHIP_Y - 26);
         this.fx.shake(3, 0.25);
@@ -101,6 +103,7 @@ export class Comets extends BaseGame {
       this.addScore(STAR_POINTS, f.x, f.y - 10, '#ffe066');
       if (this.caught % STARS_PER_STAGE === 0) {
         this.fx.pop(`STAGE ${this.stage}`, SCREEN_W / 2, SCREEN_H / 2 - 20, '#ffffff', 12);
+        this.sound('stage');
         this.addTime(STAGE_SECONDS, SCREEN_W / 2, SCREEN_H / 2);
       }
       return false;

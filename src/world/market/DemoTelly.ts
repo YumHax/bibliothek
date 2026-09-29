@@ -60,7 +60,7 @@ export class DemoTelly extends THREE.Group implements Furniture, Updatable, Inte
     this.title = options.title;
     const plastic = paint(options.color ?? 0xd8ccb0, 0.55);
     const dark = paint(0x1a1a1a, 0.6);
-    const chrome = standard({ color: 0xc8c8c8, roughness: 0.25, metalness: 0.9 });
+    const chrome = standard({ color: 0xc8c8c8, roughness: 0.2, metalness: 1 });
 
     // The case: the front box, and a tapered back (the tube's neck) as a smaller box behind.
     this.add(boxMesh(W, H, D * 0.62, plastic, { y: H / 2, z: D / 2 - (D * 0.62) / 2 }));
@@ -130,7 +130,7 @@ export class DemoTelly extends THREE.Group implements Furniture, Updatable, Inte
   setHovered(_hovered: boolean): void {}
 
   label(): string {
-    return this.on ? 'Click to switch the telly off' : 'Click to switch the telly on';
+    return this.on ? 'The telly · switch off' : 'The telly · switch on';
   }
 
   activate(): void {

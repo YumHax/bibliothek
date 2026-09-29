@@ -49,7 +49,8 @@ export const ROOM_PLAN = {
    * Bookcases fill the back wall from this x (the left third stays shelf-free for the door and the cat), then the right
    * wall. One stands empty from the start: the collection begins with nothing in it and the room must still read as a collection room.
    */
-  shelving: { backWallMinX: -1, sort: 'platform' as SortMode, minBookcases: 1 },
+  // The bare flat's one bookcase says what it is for while it holds a game or two (`Shelving.starterCard`).
+  shelving: { backWallMinX: -1, sort: 'platform' as SortMode, minBookcases: 1, starterCard: { title: 'Your collection', line: 'starts here', upTo: 2 } },
 
   /** The light switch by the door, on its hinge side (the leaf swings out into the hallway, the latch side is where the bookcases start). */
   lightSwitch: { wall: 'back', along: -2.05, y: 1.1 } as Placement,
@@ -100,10 +101,11 @@ export const ROOM_PLAN = {
   homeGoods: { lamp: { at: { floor: [-0.98, 0.62] } as Placement, y: 0.5, upgrade: ['lamp', 'sideTable'] as Owned } },
 
   /**
-   * The feather wand won at the arcade (a prize that lives at home): lying on the projector rug, between the cushions and
-   * the sideboard, raised by the rug's thickness (`lift`) so it lies on its pile instead of sinking into it.
+   * The feather wand won at the arcade (a prize that lives at home): lying where the projector rug goes, between the
+   * cushions and the sideboard, raised by the rug's thickness (`lift`) once that rug is bought (`rug`), so it lies on
+   * its pile instead of sinking into it (on the bare boards before).
    */
-  featherWand: { at: { floor: [2.05, 0.3], rotationY: 0.5 } as Placement, lift: 0.012 },
+  featherWand: { at: { floor: [2.05, 0.3], rotationY: 0.5 } as Placement, lift: 0.012, rug: { good: 'livingRug', nth: 1 } as Owned },
 
   /**
    * The collector's book (`src/world/collector/`). The binder lies on the sideboard's top (0.5 m) in the gap between the
@@ -113,9 +115,11 @@ export const ROOM_PLAN = {
    * of the yucca's pot and of the radiator from x -1.3), its top (1.12 m) under the poster's bottom edge (1.3 m).
    */
   collector: {
-    /** The binder and the plaque lie on the sideboard: they come with it. */
+    /** The plaque stands on the sideboard: it comes with it. The binder moves up there from the floor once it is bought. */
     upgrade: 'sideboard' as Owned,
     book: { at: { wall: 'right', along: 0.06, y: 0.5, offset: 0.2 } as Placement, yaw: 0.1 },
+    /** Until there is a sideboard, the binder lies on the floor at the foot of the bare right wall, where the sideboard will go. */
+    bookOnFloor: { at: { wall: 'right', along: 0.3, y: 0, offset: 0.22 } as Placement, yaw: 0.3 },
     plaque: { wall: 'right', along: 0.68, y: 0.5, offset: 0.12 } as Placement,
     vitrine: { wall: 'front', along: -1.75, y: 0 } as Placement,
   },
@@ -178,9 +182,10 @@ export const ROOM_PLAN = {
     { kind: 'plant', at: { wall: 'left', along: 1.4, y: 0, offset: 0.32 }, options: { kind: 'small', pot: 'ceramic', seed: 9, collides: false }, upgrade: { good: 'houseplant', nth: 4 } },
     // Three small framed pictures on the left wall above the TV, between its two windows.
     // The furniture shop's framed prints come in this order (`framedPrint` nth 0-2 here, then the hallway, the bedroom, the kitchen).
-    { kind: 'pictureFrame', at: { wall: 'left', along: -0.5, y: 1.8 }, options: { motif: 'mountains', seed: 1 }, upgrade: { good: 'framedPrint', nth: 1 } },
-    { kind: 'pictureFrame', at: { wall: 'left', along: 0, y: 1.8 }, options: { motif: 'sunset', seed: 2 }, upgrade: { good: 'framedPrint', nth: 0 } },
-    { kind: 'pictureFrame', at: { wall: 'left', along: 0.5, y: 1.8 }, options: { motif: 'abstract', seed: 3 }, upgrade: { good: 'framedPrint', nth: 2 } },
+    // Each print of the flat its own motif and frame: walnut, gilt, black here.
+    { kind: 'pictureFrame', at: { wall: 'left', along: -0.5, y: 1.8 }, options: { motif: 'poster', seed: 1 }, upgrade: { good: 'framedPrint', nth: 1 } },
+    { kind: 'pictureFrame', at: { wall: 'left', along: 0, y: 1.8 }, options: { motif: 'sunset', seed: 2, frameColor: 0xa8843a }, upgrade: { good: 'framedPrint', nth: 0 } },
+    { kind: 'pictureFrame', at: { wall: 'left', along: 0.5, y: 1.8 }, options: { motif: 'abstract', seed: 3, frameColor: 0x1e1c1a }, upgrade: { good: 'framedPrint', nth: 2 } },
     // Sockets: behind the TV stand (the set and the console plugged in, cables into the back of the
     // stand), by the sideboard (the turntable), and a free one under the light switch.
     { kind: 'wallSocket', at: { wall: 'left', along: 0.3, y: 0 }, options: { cables: [[0.25, 0.45, 0.15], [0.12, 0.3, 0.12]] } },
@@ -191,13 +196,15 @@ export const ROOM_PLAN = {
     { kind: 'radiator', at: { wall: 'front', along: -1.0, y: 0 }, options: { width: 0.6, catCradle: true } },
 
     // --- The holidays (up only then, see `props/outdoors/season.ts`) ---
-    // Christmas: the tree in front of the first window's right half (x 0.6..1.5, clear of the balcony door's swing in the
-    // front-right corner and of a visitor at the window at x 0.3), and fairy lights along the top of the front wall.
+    // Christmas: the tree between the first window (x -0.3..0.9) and the balcony door, its branches over the window's
+    // +x edge (x 0.6..1.5: clear of the balcony door's swing in the front-right corner and of a visitor at the window at
+    // x 0.3), and fairy lights along the top of the front wall.
     { kind: 'christmasTree', at: { floor: [1.05, 2.25] }, options: { height: 1.85, radius: 0.45, seed: 25 }, holiday: 'christmas' },
     { kind: 'fairyLights', at: { wall: 'front', along: 2.9, y: 0, offset: 0.04 }, options: { length: 5.8, height: 2.62, sag: 0.1, seed: 6 }, holiday: 'christmas' },
-    // Halloween: two lit pumpkins at the foot of the first window, cobwebs in the top front-left and back-right corners.
-    { kind: 'pumpkin', at: { floor: [0.95, 2.62], rotationY: 0.1 }, options: { radius: 0.13, seed: 31 }, holiday: 'halloween' },
-    { kind: 'pumpkin', at: { floor: [1.3, 2.52], rotationY: -0.3 }, options: { radius: 0.085, seed: 7 }, holiday: 'halloween' },
+    // Halloween: two lit pumpkins at the foot of the first window (x -0.3..0.9), past its small pot (x -0.13), cobwebs
+    // in the top front-left and back-right corners.
+    { kind: 'pumpkin', at: { floor: [0.3, 2.62], rotationY: 0.1 }, options: { radius: 0.13, seed: 31 }, holiday: 'halloween' },
+    { kind: 'pumpkin', at: { floor: [0.64, 2.55], rotationY: -0.3 }, options: { radius: 0.085, seed: 7 }, holiday: 'halloween' },
     { kind: 'cobweb', at: { wall: 'front', along: -3.0, y: 2.8 }, options: { size: 0.5, spread: 'left', seed: 11 }, holiday: 'halloween' },
     { kind: 'cobweb', at: { wall: 'back', along: 3.0, y: 2.8 }, options: { size: 0.45, spread: 'left', seed: 12 }, holiday: 'halloween' },
     // New Year: gold and silver bunting across the room over the armchairs, balloons by the TV's front window, a banner over the posters.

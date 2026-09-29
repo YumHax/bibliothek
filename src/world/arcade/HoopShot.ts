@@ -87,11 +87,11 @@ export class HoopShot extends TicketMachine {
   }
 
   protected attractLabel(price: string): string {
-    return `${this.game.title} — click to insert a coin (${price}, thirty seconds)`;
+    return `${this.game.title} · insert a coin (${price}, thirty seconds)`;
   }
 
   protected playingLabel(): string {
-    return `Hold ${actionKeyLabel('fire')}, let go to throw · ${actionKeyLabel('walkAway')} to walk away`;
+    return `${this.game.title} · hold ${actionKeyLabel('fire')}, let go to throw · ${actionKeyLabel('walkAway')} walks away`;
   }
 
   protected play(dt: number, controls: ArcadeControls): boolean {
@@ -124,7 +124,7 @@ export class HoopShot extends TicketMachine {
       this.entry.draw(ctx, 128, 50);
     } else if (this.state === 'over') {
       drawText(ctx, `${this.last.score}`, 128, 30, 24, '#ffd23a');
-      drawText(ctx, `${Math.floor(this.ticketsOf(this.last.score) * this.countUp)} TICKETS`, 128, 68, 14, '#ffe066');
+      drawText(ctx, `${this.shownTotal} TICKETS`, 128, 68, 14, '#ffe066');
     } else if (this.state === 'attract') {
       drawText(ctx, this.game.title, 128, 30, 18, '#ff8a3a');
       drawText(ctx, Math.floor(this.clock * 2) % 2 ? 'INSERT COIN' : '30 SECONDS', 128, 66, 14, '#ff8a80');

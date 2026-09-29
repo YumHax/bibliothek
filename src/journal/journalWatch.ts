@@ -1,6 +1,7 @@
 import type { Game } from '@/catalog/types';
 import { getPlatform } from '@/catalog/platforms';
 import { getPrize } from '@/economy/Prizes';
+import { HOME_GOODS } from '@/economy/homeGoods';
 import type { Journal } from './Journal';
 
 /*
@@ -37,7 +38,23 @@ export interface WatchedMedals {
   subscribe(cb: () => void): () => void;
 }
 
+export interface WatchedHome {
+  count(id: (typeof HOME_GOODS)[number]['id']): number;
+  subscribe(cb: () => void): () => void;
+}
+
+export interface WatchedLeague {
+  readonly playedToday: boolean;
+  readonly streakDays: number;
+  readonly pennants: number;
+  subscribe(cb: () => void): () => void;
+}
+
 export interface JournalSources {
+  /** What the flat has been bought (`HomeUpgrades`): a line for each piece. */
+  home?: WatchedHome;
+  /** The arcade's week (`ArcadeLeague`): the day's first play, a won pennant. */
+  league?: WatchedLeague;
   wallet?: WatchedWallet;
   collection?: WatchedCollection;
   deliveries?: WatchedParcel;
@@ -51,7 +68,31 @@ const BULK = 5;
 /** Starts writing the day from the stores; returns the unsubscribe. */
 export function watchForJournal(journal: Journal, sources: JournalSources): () => void {
   const stops: (() => void)[] = [];
-  const { wallet, collection, deliveries, prizes, medals } = sources;
+  const { wallet, collection, deliveries, prizes, medals, home, league } = sources;
+
+  if (home) {
+    let counts = new Map(HOME_GOODS.map((g) => [g.id, home.count(g.id)]));
+    stops.push(home.subscribe(() => {
+      const now = new Map(HOME_GOODS.map((g) => [g.id, home.count(g.id)]));
+      for (const good of HOME_GOODS) {
+        const more = (now.get(good.id) ?? 0) - (counts.get(good.id) ?? 0);
+        // The bookcases the collection starts with are not bought: only what a shop sold is noted.
+        if (more > 0 && more <= 2) journal.note('home', good.id === 'cat' ? `Adopted a cat (${good.price} coins)` : `Bought for the flat: ${good.name.toLowerCase()} (${good.price} coins)`, { id: good.id });
+      }
+      counts = now;
+    }));
+  }
+
+  if (league) {
+    let played = league.playedToday;
+    let pennants = league.pennants;
+    stops.push(league.subscribe(() => {
+      if (league.playedToday && !played) journal.note('arcade', league.streakDays >= 2 ? `First arcade play of the day: ${league.streakDays} days in a row` : 'First arcade play of the day');
+      if (league.pennants > pennants) journal.note('arcade', 'Won the weekly league: the pennant came home');
+      played = league.playedToday;
+      pennants = league.pennants;
+    }));
+  }
 
   if (wallet) {
     let coins = wallet.coins;
@@ -94,7 +135,11 @@ export function watchForJournal(journal: Journal, sources: JournalSources): () =
       }
       for (const game of arrived) {
         journal.tally('gamesIn', 1);
-        journal.note('bought', `Got ${game.title} (${platformName(game)})`, { id: game.id });
+        // A game given (a friend's thank-you: `acquired.where` "a gift from Sam") is a gift, not a purchase.
+        const giver = /^a gift from (.+)$/i.exec(game.acquired?.where ?? '')?.[1];
+        if (giver) journal.note('gift', `A gift from ${giver}: ${game.title} (${platformName(game)})`, { id: game.id });
+        else if (game.acquired && game.acquired.price > 0) journal.note('bought', `Got ${game.title} (${platformName(game)}) from ${game.acquired.where}, ${game.acquired.price} coins`, { id: game.id, price: game.acquired.price });
+        else journal.note('bought', `Got ${game.title} (${platformName(game)})`, { id: game.id });
       }
       for (const game of wished) journal.note('wished', `Put ${game.title} on the wishlist`, { id: game.id });
       for (const id of left) {

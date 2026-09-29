@@ -4,6 +4,8 @@ import type { Interactable } from '@/interaction/Interactable';
 import type { SessionActions } from '@/game/SessionActions';
 import { invisibleHitbox } from '../meshUtils';
 import { Prop } from './Prop';
+import { HoverGlint } from './hoverGlint';
+import { playFridgeSeal, playHingeCreak, playWoodKnock } from '@/audio/furnitureSounds';
 
 export interface SwingLeafOptions {
   width: number;
@@ -19,9 +21,18 @@ export interface SwingLeafOptions {
   seconds?: number;
   /** Called whenever the openness (0 shut .. 1 open) changes: the host shows its insides while any leaf is ajar. */
   onOpenness?: (openness: number) => void;
+  /** A door on a rubber seal (a fridge): it lets go and sucks shut with a "thup" instead of knocking home. */
+  seal?: boolean;
 }
 
 const DEFAULT_ANGLE = THREE.MathUtils.degToRad(100);
+/** How often a cupboard's hinge squeaks as it opens. */
+const CREAK_CHANCE = 0.2;
+
+/** "fridge" -> "Fridge": the caption's name. */
+export function captionName(noun: string): string {
+  return noun.charAt(0).toUpperCase() + noun.slice(1);
+}
 
 /**
  * A hinged leaf that opens on a click: a fridge door, a wardrobe door, a cupboard door. The host
@@ -45,6 +56,8 @@ export class SwingLeaf extends Prop implements Interactable, Updatable {
   private readonly seconds: number;
   private target = 0;
   private openness = 0;
+  /** The handle (the panel's small fittings) glints on hover; the host builds it after this constructor, so it is found on first hover. */
+  private readonly glint = HoverGlint.fittings(this.panel);
 
   constructor(private readonly options: SwingLeafOptions) {
     super();
@@ -78,18 +91,28 @@ export class SwingLeaf extends Prop implements Interactable, Updatable {
     // Hinged on the left, a negative turn about +y brings the free edge (+x) forward (+z).
     this.pivot.rotation.y = -this.sign * this.maxAngle * THREE.MathUtils.smoothstep(this.openness, 0, 1);
     this.options.onOpenness?.(this.openness);
+    // Home: the knock of the leaf on its carcass, or the seal sucking shut.
+    if (this.openness === 0) {
+      if (this.options.seal) playFridgeSeal(false);
+      else playWoodKnock(0.07, 1.25);
+    }
   }
 
   // --- Interactable -------------------------------------------------------------------------
 
-  setHovered(_hovered: boolean): void {}
+  setHovered(hovered: boolean): void {
+    this.glint.set(hovered);
+  }
 
   label(): string {
-    return this.isOpen ? `Click to close the ${this.options.noun}` : `Click to open the ${this.options.noun}`;
+    return `${captionName(this.options.noun)} · ${this.isOpen ? 'close' : 'open'}`;
   }
 
   activate(_session: SessionActions): void {
     this.target = this.target > 0 ? 0 : 1;
+    if (this.target === 0) return;
+    if (this.options.seal) playFridgeSeal(true);
+    else if (Math.random() < CREAK_CHANCE) playHingeCreak(0.025);
   }
 }
 

@@ -1,14 +1,14 @@
 import * as THREE from 'three';
-import { type Rng, azimuthOf } from './Sheet';
+import type { Rng } from './Sheet';
 import { CAR_BODY, CAR_COLORS } from './Car';
 import { between, pick } from './paint';
-import { BUS_STOP_X, FAR_LANE, KERB, LIFE_REACH, NEAR_KERB, NEAR_LANE } from './plan';
+import { BUS_STOP_X, FAR_LANE, KERB, LIFE_REACH, NEAR_KERB, NEAR_LANE, TURN_CENTRE } from './plan';
 import { BIN_ROUND_HOURS, BUS_DWELL, CRUISE as SPEEDS } from '@/world/city/traffic';
 import { DELIVERY_OUT, STREET_BINS } from '@/world/city/frontage';
 import { resample } from './Park';
 import type { LifeEvents } from './lifeEvents';
-import { type AtlasPens, type Cell, type LifeEnv, type LifeLayer, type Push, WHITE_TINT, packTint } from './sprites';
-import { type FlashColor, type VehicleKind, VEHICLE_LOOKS, arc, carBounds, carFrameAt, flashesOf, paintFlashCells, paintVehicleCells, pushFlash, vehicleCell } from './LifeVehicles';
+import { type AtlasPens, type Cell, type LifeEnv, type LifeLayer, type Push, packTint } from './sprites';
+import { type FlashColor, type VehicleKind, type VehiclePose, VEHICLE_KINDS, VEHICLE_LOOKS, arc, carFrameAt, flashesOf, paintFlashCells, pushFlash } from './LifeVehicles';
 
 const MAX_CARS = 14;
 /** Each driver's own cruising speed, round the street's (`city/traffic`). */
@@ -85,12 +85,11 @@ type Placement = [number, number, number];
 
 /**
  * The traffic through the crossroads: cars follow the road round the corner, one route per
- * direction, both beginning and ending far out of sight, and keep their distance in a queue. The
- * atlas holds the car (in white, tinted per car by the shader) seen from every 10° of viewing angle
- * at two distances, so a car turning or seen down the street shows the right faces; taxis, the
- * bus, the morning dustcart, a delivery van that double-parks with its hazards on and the odd
- * ambulance (blue lights, everyone pulling over) in their own liveries. Writes what can be heard
- * of it into `events`.
+ * direction, both beginning and ending far out of sight, and keep their distance in a queue; taxis,
+ * the bus, the morning dustcart, a delivery van that double-parks with its hazards on and the odd
+ * ambulance (blue lights, everyone pulling over). Each frame it lists where every vehicle is
+ * (`vehicles`), which the pane shader draws as solids in true perspective (`vehicleShader`); only
+ * the blinking lights are sprites. Writes what can be heard of it into `events`.
  */
 export class Traffic implements LifeLayer {
   /** Where something stands in the road this frame that the cyclists swing out round (the double-parked van). */
@@ -102,11 +101,14 @@ export class Traffic implements LifeLayer {
     },
   };
 
-  private readonly vehicleCells = {} as Record<VehicleKind, Cell[][]>;
+  /** This frame's vehicles, for the pane shader (`Life` copies them into its uniforms). */
+  readonly vehicles: VehiclePose[] = [];
   private flashCells = {} as Record<FlashColor, Cell>;
   private readonly routes = buildRoutes();
   private readonly cars: MovingCar[] = [];
   private readonly tints = CAR_COLORS.map(packTint);
+  /** Each kind's own paint, for all but the plain car (tinted per car). */
+  private readonly liveries = Object.fromEntries(VEHICLE_KINDS.map((kind) => [kind, packTint(VEHICLE_LOOKS[kind].color)])) as Record<VehicleKind, number>;
   private clock = 0;
   private busTimer = 20;
   private vanTimer = 40;
@@ -121,9 +123,8 @@ export class Traffic implements LifeLayer {
     private readonly events: LifeEvents,
   ) {}
 
-  paint(pens: AtlasPens): void {
-    for (const kind of ['car', 'taxi', 'bus', 'truck', 'van', 'ambulance'] as const) this.vehicleCells[kind] = paintVehicleCells(pens, kind);
-  }
+  /** Nothing of its own in the atlas: the vehicles are solids in the shader, the flashes paint apart (`flashes`). */
+  paint(_pens: AtlasPens): void {}
 
   /** Starts with traffic already on the roads. */
   populate(): void {
@@ -138,10 +139,11 @@ export class Traffic implements LifeLayer {
     }
   }
 
-  /** Drives on in steps of at most 0.1 s (fewer cars the sleepier the city), pushes every vehicle and its flashes. */
+  /** Drives on in steps of at most 0.1 s (fewer cars the sleepier the city; a long unseen `dt` in several), pushes every vehicle and its flashes. */
   update(dt: number, env: LifeEnv, push: Push): void {
     this.clock += dt;
-    this.drive(Math.min(dt, 0.1), env);
+    for (let left = Math.min(dt, 1); left > 1e-6; left -= 0.1) this.drive(Math.min(left, 0.1), env);
+    this.vehicles.length = 0;
     for (const car of this.cars) this.pushCar(car, push);
     let n = 0;
     for (const car of this.cars) {
@@ -157,7 +159,7 @@ export class Traffic implements LifeLayer {
 
   /** A vehicle of `kind` at the start of `route`, keen to go at `cruise`. */
   private newCar(route: Route, kind: VehicleKind, cruise: number, stops: Stop[] = []): MovingCar {
-    return { kind, stops, route, s: 0, speed: cruise * 0.6, cruise, tint: kind === 'car' ? pick(this.random, this.tints) : WHITE_TINT, offset: 0, offsetTarget: 0 };
+    return { kind, stops, route, s: 0, speed: cruise * 0.6, cruise, tint: kind === 'car' ? pick(this.random, this.tints) : this.liveries[kind], offset: 0, offsetTarget: 0 };
   }
 
   /** Whether nothing on `route` is still within `room` metres of its start (a new vehicle may set off). */
@@ -320,29 +322,29 @@ export class Traffic implements LifeLayer {
     return out;
   }
 
+  /** Lists a vehicle for the shader, and pushes its blinking lights. */
   private pushCar(car: MovingCar, push: Push): void {
     const { route } = car;
     const [x, z, heading] = this.carPosition(car, this.at);
-    const body = VEHICLE_LOOKS[car.kind].body;
-    const d = Math.hypot(x, z);
-    const frame = carFrameAt(x, z, heading, body);
-    const relative = THREE.MathUtils.euclideanModulo(heading - azimuthOf(x, z), Math.PI * 2);
-    const cell = vehicleCell(this.vehicleCells[car.kind], car.kind, relative, d);
     // Fade over the first and last metres of the route (only the far end of Front Street is ever in view).
     const along = car.s * route.step;
     const left = (route.points.length - 1 - car.s) * route.step;
     const alpha = Math.min(1, along / 8, left / 8);
-    push(carBounds(frame, body), cell, d, alpha, car.tint);
+    this.vehicles.push({ x, z, heading, kind: VEHICLE_KINDS.indexOf(car.kind), paint: car.tint, alpha });
     const hazards = car.kind === 'van' && car.offset > 0.4;
-    for (const [color, u, v, h] of flashesOf(car.kind, this.clock, hazards)) pushFlash(push, this.flashCells[color], frame, u, v, h, d, alpha);
+    const flashes = flashesOf(car.kind, this.clock, hazards);
+    if (!flashes.length) return;
+    const frame = carFrameAt(x, z, heading, VEHICLE_LOOKS[car.kind].body);
+    for (const [color, u, v, h] of flashes) pushFlash(push, this.flashCells[color], frame, u, v, h, alpha);
   }
+
 }
 
 /**
  * The two ways round the corner (right-hand traffic; both streets end there): west along Front
  * Street's near lane then right, down Park Street's near lane; north up Park Street's far lane
- * then left, east along Front Street's far lane. Concentric arcs about the corner of our own
- * pavements, so the two directions never cross. Both routes start and end far out of sight
+ * then left, east along Front Street's far lane. Concentric arcs about `TURN_CENTRE`, so the two
+ * directions never cross. Both routes start and end far out of sight
  * (`LIFE_REACH`).
  */
 function buildRoutes(): Route[] {
@@ -363,11 +365,11 @@ function buildRoutes(): Route[] {
     return { points, headings, step, limits, interval, nextSpawn: 0 };
   };
   // `arc` samples every half metre, the routes' step.
-  const corner: [number, number] = [-NEAR_KERB, NEAR_KERB];
-  const inner = NEAR_LANE - NEAR_KERB;
-  const outer = FAR_LANE - NEAR_KERB;
+  const [cx, cz] = TURN_CENTRE;
+  const inner = NEAR_LANE - cz;
+  const outer = FAR_LANE - cz;
   return [
-    make([line([LIFE_REACH, NEAR_LANE], [-NEAR_KERB, NEAR_LANE]), arc(corner[0], corner[1], inner, 90, 180), line([-NEAR_LANE, NEAR_KERB], [-NEAR_LANE, -LIFE_REACH])], 9),
-    make([line([-FAR_LANE, -LIFE_REACH], [-FAR_LANE, NEAR_KERB]), arc(corner[0], corner[1], outer, 180, 90), line([-NEAR_KERB, FAR_LANE], [LIFE_REACH, FAR_LANE])], 9),
+    make([line([LIFE_REACH, NEAR_LANE], [cx, NEAR_LANE]), arc(cx, cz, inner, 90, 180), line([cx - inner, cz], [cx - inner, -LIFE_REACH])], 9),
+    make([line([cx - outer, -LIFE_REACH], [cx - outer, cz]), arc(cx, cz, outer, 180, 90), line([cx, FAR_LANE], [LIFE_REACH, FAR_LANE])], 9),
   ];
 }

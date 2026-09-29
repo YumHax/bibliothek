@@ -146,6 +146,7 @@ export class RadioVoice implements AmbientVoice {
   private readonly tune = new RadioTune();
   private lastSet = 0;
   private watchdog: ReturnType<typeof setInterval> | null = null;
+  private unduck: ReturnType<typeof setTimeout> | null = null;
 
   get isOn(): boolean {
     return this.tune.isOn;
@@ -165,6 +166,22 @@ export class RadioVoice implements AmbientVoice {
     this.tune.setVolume(level);
   }
 
+  setSpatial(pan: number, walls: number): void {
+    this.tune.setSpatial(pan, walls);
+  }
+
+  /** The station's jingle, then the music ducked under the announcer for `seconds` (a chronicle being read). */
+  announce(seconds: number): void {
+    if (!this.tune.isOn) return;
+    this.tune.jingle();
+    this.tune.duck(true);
+    if (this.unduck !== null) clearTimeout(this.unduck);
+    this.unduck = setTimeout(() => {
+      this.unduck = null;
+      this.tune.duck(false);
+    }, seconds * 1000);
+  }
+
   update(): void {
     this.tune.update();
   }
@@ -172,6 +189,8 @@ export class RadioVoice implements AmbientVoice {
   dispose(): void {
     if (this.watchdog !== null) clearInterval(this.watchdog);
     this.watchdog = null;
+    if (this.unduck !== null) clearTimeout(this.unduck);
+    this.unduck = null;
     this.tune.dispose();
   }
 }

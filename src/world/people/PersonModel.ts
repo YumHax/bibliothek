@@ -29,6 +29,7 @@ import { addEars, addGlasses, addHat, headGeometry, type FaceShape } from './hea
 import type { PersonLook } from './looks';
 import { POSES, type ArmAngles, type Pose } from './poses';
 import { addShoe } from './shoes';
+import { bookMesh, hoodMesh, phoneMesh, umbrellaMesh, UMBRELLA_ARM, type Held } from './held';
 
 /*
  * A person at real scale, modelled rather than assembled from primitives:
@@ -47,7 +48,8 @@ import { addShoe } from './shoes';
  *                              ears, hat, glasses; eyes that follow the gaze and blink
  *
  * Every bone's pieces are merged into one mesh per material (`Parts`). `update(dt)` animates: a
- * gait with bending knees and swinging arms when `setSpeed()` is above zero; breathing, a slow
+ * gait with bending knees and swinging arms when `setSpeed()` is above zero (easing in and out over
+ * `GAIT_S`, its swing scaled to the speed); small nods while `talk()`ing; breathing, a slow
  * shift of weight and idle glances when standing; the arms easing into whatever `setPose()` asked
  * for; the eyes leading the head onto the gaze target and darting about when idle; blinking.
  *
@@ -59,6 +61,13 @@ import { addShoe } from './shoes';
 
 /** One step every this many metres walked. */
 const STRIDE = 0.68;
+/** How long the gait takes to come in from standing, or to settle back (s): no leg snaps into a stride. */
+const GAIT_S = 0.25;
+/** The walking speed (m/s) the gait's swing is drawn for; slower walks swing less, quicker ones a little more. */
+const GAIT_SPEED = 1.2;
+const GAIT_AMP = [0.6, 1.15] as const;
+/** How fast the hips come down onto a seat (per second): slower than the legs fold, so no thigh goes through the cushion. */
+const SEAT_RATE = 3.2;
 const MAX_YAW = 1.15;
 const MAX_PITCH = 0.55;
 /** How far the eyes turn in their sockets beyond the head. */
@@ -70,9 +79,11 @@ const EYE_RATE = 22;
 const POSE_RATE = 4;
 /** The eyes above the neck pivot, in the head's frame: gaze angles are measured from there. */
 const EYES_ABOVE_PIVOT = HEAD_Y + 0.014 - NECK_PIVOT.y;
-/** Beyond this far from the viewer (metres) a person goes to the far level of detail; back within `LOD_NEAR`, to the near one. */
+/** Beyond this far from the viewer (metres) a person goes to the far level of detail (the rig's rate); back within `LOD_NEAR`, to the near one. */
 const LOD_FAR = 16;
 const LOD_NEAR = 14;
+/** The details (eyes, inner ears) dither out between these distances (alpha hash), not all at once. */
+const DETAIL_FADE = [LOD_NEAR, LOD_FAR] as const;
 /** Rig updates per second at the far level of detail. */
 const FAR_RATE = 15;
 /** Those distances hold at the default field of view (70 degrees); a narrower one (photo mode's zoom) brings the far level of detail further out. */
@@ -104,7 +115,18 @@ export class PersonModel extends THREE.Group {
   private readonly arms: [Arm, Arm];
   private pose: Pose = 'stand';
   private speed = 0;
+  /** The last walking speed, kept while the gait settles after a stop. */
+  private lastSpeed = 0;
+  /** How much of the gait shows, 0 standing .. 1 walking, eased over `GAIT_S`. */
+  private gait = 0;
   private phase = 0;
+  /** Seconds left of talking (`talk`): small nods and a bob of the shoulders. */
+  private talking = 0;
+  /** Per leg, the rest the gait blends from (hip, knee, ankle): taken when the gait starts (a stand, a seat), easing to standing. */
+  private readonly legRest: [number, number, number][] = [
+    [0, 0.04, -0.04],
+    [0, 0.04, -0.04],
+  ];
   private time = Math.random() * 100;
   private blinkIn = 2 + Math.random() * 4;
   private blink = 0;
@@ -124,6 +146,11 @@ export class PersonModel extends THREE.Group {
   private seatHeight: number | null = null;
   /** The materials `setOpacity` fades and their own opacity, once `enableFade` has run. */
   private fading: { material: THREE.Material; opacity: number }[] | null = null;
+  /** The whole person's opacity (`setOpacity`), and how much of the details shows (1 near .. 0 past `DETAIL_FADE`). */
+  private opacity = 1;
+  private detailLevel = 1;
+  /** The details' own materials (no other part uses them) with their opacity at full detail. */
+  private readonly detailMaterials = new Map<THREE.Material, number>();
   /** Whose distance picks the level of detail; null: always near. */
   private readonly viewer: THREE.Object3D | null;
   /** What the far level of detail hides: the eyes and lids, the ears' bowls. */
@@ -133,12 +160,17 @@ export class PersonModel extends THREE.Group {
   private pending = 0;
   private readonly viewerPos = new THREE.Vector3();
   private readonly here = new THREE.Vector3();
+  /** What the right hand holds (`hold`), and the meshes built for it so far (on first use). */
+  private held: Held | null = null;
+  private readonly heldMeshes = new Map<Held | 'hood', THREE.Object3D>();
+  private readonly look: PersonLook;
 
   /** `viewer` (the camera), when given, sets the level of detail by distance. */
   constructor(look: PersonLook, viewer?: THREE.Object3D) {
     super();
     this.name = 'PersonModel';
     this.viewer = viewer ?? null;
+    this.look = look;
     const build = look.build;
     // Limb girth follows the build a little, never as much as the trunk.
     const girth = 0.7 + 0.3 * build;
@@ -189,6 +221,12 @@ export class PersonModel extends THREE.Group {
   /** Walking speed in m/s; 0 stands still. Drives the gait only, moving the model is the owner's job. */
   setSpeed(speed: number): void {
     this.speed = Math.max(0, speed);
+    if (this.speed > 0) this.lastSpeed = this.speed;
+  }
+
+  /** Talking for `seconds`: the head nods a little and the shoulders move with the words (a line being said). */
+  talk(seconds: number): void {
+    this.talking = Math.max(this.talking, seconds);
   }
 
   /** What the arms do while standing; walking always swings them. */
@@ -212,6 +250,53 @@ export class PersonModel extends THREE.Group {
     const [low, high] = aLocal <= bLocal ? [a, b] : [b, a];
     (this.reachTargets[0] ??= new THREE.Vector3()).copy(low);
     (this.reachTargets[1] ??= new THREE.Vector3()).copy(high);
+  }
+
+  /**
+   * Something in the right hand: a phone (pair it with the `phone` pose), an open book (`read`),
+   * an umbrella over the head (the arm holds it up even while walking); null: empty-handed.
+   */
+  hold(item: Held | null): void {
+    if (item === this.held) return;
+    if (this.held) this.heldMeshes.get(this.held)!.visible = false;
+    this.held = item;
+    if (!item) return;
+    let mesh = this.heldMeshes.get(item);
+    if (!mesh) {
+      const seed = Math.round(this.look.height * 1000);
+      mesh = item === 'phone' ? phoneMesh() : item === 'book' ? bookMesh(seed) : umbrellaMesh(seed);
+      (item === 'umbrella' ? this.torso : this.arms[1].elbow).add(mesh);
+      this.adoptFade(mesh);
+      this.heldMeshes.set(item, mesh);
+    }
+    mesh.visible = true;
+  }
+
+  /** The hood up over the head (in the snow) or down. */
+  setHood(up: boolean): void {
+    let hood = this.heldMeshes.get('hood');
+    if (!up && !hood) return;
+    if (!hood) {
+      hood = hoodMesh(this.look.top === 'jacket' ? this.look.topAccent : this.look.topColor);
+      this.head.add(hood);
+      this.adoptFade(hood);
+      this.heldMeshes.set('hood', hood);
+    }
+    hood.visible = up;
+  }
+
+  /** A part added after `enableFade` fades with the rest. */
+  private adoptFade(object: THREE.Object3D): void {
+    if (!this.fading) return;
+    const current = this.opacity;
+    object.traverse((o) => {
+      const mesh = o as THREE.Mesh;
+      if (!mesh.isMesh) return;
+      const material = mesh.material as THREE.Material;
+      material.alphaHash = true;
+      this.fading!.push({ material, opacity: material.opacity });
+      material.opacity *= current;
+    });
   }
 
   /** Leans the upper body forward by `angle` radians while standing (over a pinball, a control panel). */
@@ -252,7 +337,8 @@ export class PersonModel extends THREE.Group {
   /** 0 gone .. 1 solid, after `enableFade` (a no-op before). */
   setOpacity(opacity: number): void {
     if (!this.fading) return;
-    for (const f of this.fading) f.material.opacity = f.opacity * opacity;
+    this.opacity = opacity;
+    for (const f of this.fading) f.material.opacity = f.opacity * opacity * (this.detailMaterials.has(f.material) ? this.detailLevel : 1);
   }
 
   /** World point the head turns towards, or null to look ahead (with idle glances). */
@@ -277,29 +363,48 @@ export class PersonModel extends THREE.Group {
   private pickDetail(viewer: THREE.Object3D): void {
     viewer.getWorldPosition(this.viewerPos);
     const distance = this.getWorldPosition(this.here).distanceTo(this.viewerPos) / magnification(viewer);
-    const far = distance > (this.far ? LOD_NEAR : LOD_FAR);
-    if (far === this.far) return;
-    this.far = far;
-    for (const detail of this.details) detail.visible = !far;
+    this.fadeDetails(1 - THREE.MathUtils.smoothstep(distance, DETAIL_FADE[0], DETAIL_FADE[1]));
+    this.far = distance > (this.far ? LOD_NEAR : LOD_FAR);
+  }
+
+  /** The details at `level` (0..1): dithered by their materials' opacity, hidden (not drawn) at 0. */
+  private fadeDetails(level: number): void {
+    if (level === this.detailLevel) return;
+    this.detailLevel = level;
+    for (const detail of this.details) detail.visible = level > 0;
+    for (const [material, opacity] of this.detailMaterials) material.opacity = opacity * this.opacity * level;
   }
 
   private animate(dt: number): void {
     this.time += dt;
     const t = this.time;
-    const walking = this.speed > 0;
+    // The gait comes in and settles over `GAIT_S` (weight `w`); its swing is scaled to the speed (`amp`).
+    const moving = this.speed > 0;
+    if (moving && this.gait === 0) for (const [i, leg] of this.legs.entries()) this.legRest[i] = [leg.hip.rotation.x, leg.knee.rotation.x, leg.ankle.rotation.x];
+    this.gait = moving ? Math.min(1, this.gait + dt / GAIT_S) : Math.max(0, this.gait - dt / GAIT_S);
+    const w = this.gait * this.gait * (3 - 2 * this.gait);
+    const walking = w > 0;
+    const pace = moving ? this.speed : this.lastSpeed * this.gait;
+    const amp = THREE.MathUtils.clamp(this.lastSpeed / GAIT_SPEED, GAIT_AMP[0], GAIT_AMP[1]);
     const seated = !walking && this.seatHeight !== null;
     const ease = Math.min(1, dt * 6);
-    if (walking) this.phase += (dt * this.speed * Math.PI) / STRIDE;
+    if (walking) this.phase += (dt * pace * Math.PI) / STRIDE;
+    const talk = this.talking > 0 ? Math.min(1, this.talking / 0.3) : 0;
+    this.talking = Math.max(0, this.talking - dt);
 
-    // Legs: the gait is written straight to the joints (easing would damp it); at rest they ease back.
+    // Legs: the gait is written straight to the joints (easing would damp it), blended with the rest pose by its weight; at rest they ease back.
     for (const [i, leg] of this.legs.entries()) {
       const p = this.phase + i * Math.PI;
       if (walking) {
-        const thigh = -Math.sin(p) * 0.5;
-        const knee = 0.1 + Math.max(0, Math.cos(p)) * 0.85;
-        leg.hip.rotation.x = thigh;
-        leg.knee.rotation.x = knee;
-        leg.ankle.rotation.x = -(thigh + knee) * 0.6;
+        const thigh = -Math.sin(p) * 0.5 * amp;
+        const knee = 0.1 + Math.max(0, Math.cos(p)) * 0.85 * amp;
+        const rest = this.legRest[i]!;
+        rest[0] += (0 - rest[0]) * ease;
+        rest[1] += (0.04 - rest[1]) * ease;
+        rest[2] += (-0.04 - rest[2]) * ease;
+        leg.hip.rotation.x = rest[0] + (thigh - rest[0]) * w;
+        leg.knee.rotation.x = rest[1] + (knee - rest[1]) * w;
+        leg.ankle.rotation.x = rest[2] + (-(thigh + knee) * 0.6 - rest[2]) * w;
       } else if (seated) {
         // Thighs level on the seat, shins hanging a little forward, feet flat; the knees a touch apart.
         leg.hip.rotation.x += (-1.5 - leg.hip.rotation.x) * ease;
@@ -313,13 +418,15 @@ export class PersonModel extends THREE.Group {
     }
 
     // Arms: ease into the pose, then add the gait's swing (or a faint idle sway) on top.
-    const pose = POSES[walking ? 'stand' : this.pose];
+    const pose = POSES[moving ? 'stand' : this.pose];
     for (const [i, arm] of this.arms.entries()) {
-      const reach = walking ? null : this.reachTargets[i];
-      const target = reach ? solveArm(arm, i ? 1 : -1, reach) : i ? pose.right : pose.left;
+      const reach = moving ? null : this.reachTargets[i];
+      // An umbrella is held up, a phone at the ear, walking or not.
+      const holding = i === 1 && (this.held === 'umbrella' || (moving && this.held === 'phone'));
+      const target = holding ? (this.held === 'phone' ? POSES.phone.right : UMBRELLA_ARM) : reach ? solveArm(arm, i ? 1 : -1, reach) : i ? pose.right : pose.left;
       const p = this.phase + i * Math.PI;
-      const swing = walking ? Math.sin(p) * 0.38 : Math.sin(t * 0.7 + i) * 0.02;
-      const bend = walking ? Math.max(0, -Math.sin(p)) * 0.35 : 0;
+      const swing = holding ? 0 : Math.sin(p) * 0.38 * amp * w + Math.sin(t * 0.7 + i) * 0.02 * (1 - w);
+      const bend = !holding ? Math.max(0, -Math.sin(p)) * 0.35 * amp * w : 0;
       const k = Math.min(1, dt * POSE_RATE);
       const c = arm.current;
       c.ux += (target.ux - c.ux) * k;
@@ -334,16 +441,16 @@ export class PersonModel extends THREE.Group {
     // Body: bob and counter-twist when walking, weight shift and breathing when not.
     if (walking) {
       const p = this.phase;
-      this.root.position.y = -Math.cos(2 * p) * 0.014;
+      this.root.position.y += (-Math.cos(2 * p) * 0.014 * amp * w - this.root.position.y) * Math.min(1, dt * 20);
       this.root.position.x += (0 - this.root.position.x) * ease;
       this.root.position.z += (0 - this.root.position.z) * ease;
-      this.root.rotation.z = Math.sin(p) * 0.02;
-      this.torso.rotation.y = Math.sin(p) * 0.07;
-      this.torso.rotation.x += (0.04 - this.torso.rotation.x) * ease;
+      this.root.rotation.z = Math.sin(p) * 0.02 * amp * w;
+      this.torso.rotation.y = Math.sin(p) * 0.07 * amp * w;
+      this.torso.rotation.x += (0.04 * w + this.leanAngle * (1 - w) - this.torso.rotation.x) * ease;
     } else if (seated) {
-      // The hips come down onto the seat and a little forward of the origin; no weight shifting.
+      // The hips come down onto the seat and a little forward of the origin (slower than the legs fold); no weight shifting.
       const drop = this.seatHeight! + 0.07 - HIP_Y * this.root.scale.y;
-      this.root.position.y += (drop - this.root.position.y) * ease;
+      this.root.position.y += (drop - this.root.position.y) * Math.min(1, dt * SEAT_RATE);
       this.root.position.x += (0 - this.root.position.x) * ease;
       this.root.position.z += (0.12 - this.root.position.z) * ease;
       this.root.rotation.z += (0 - this.root.rotation.z) * ease;
@@ -390,7 +497,11 @@ export class PersonModel extends THREE.Group {
     const gazeEase = Math.min(1, dt * GAZE_RATE);
     this.yaw += (yaw - this.yaw) * gazeEase;
     this.pitch += (pitch - this.pitch) * gazeEase;
-    this.head.rotation.set(this.pitch, this.yaw, 0, 'YXZ');
+    // Talking: little nods on the words, a tilt, and the shoulders moving with them.
+    const nod = talk ? talk * (Math.sin(t * 7.3) * 0.045 + Math.sin(t * 3.1) * 0.03) : 0;
+    const tilt = talk ? talk * Math.sin(t * 1.7) * 0.05 : 0;
+    this.head.rotation.set(this.pitch + nod, this.yaw, tilt, 'YXZ');
+    this.torso.rotation.z = talk * Math.sin(t * 2.3) * 0.022;
     // Far away the eyes are hidden: they wait (and so does the blinking) until the viewer comes near.
     if (this.far) return;
     const eyeEase = Math.min(1, dt * EYE_RATE);
@@ -496,6 +607,18 @@ export class PersonModel extends THREE.Group {
     const eyes = buildEyes(look, shape);
     for (const eye of eyes) skull.add(eye.group);
     this.details.push(...eyes.map((eye) => eye.group), ...headParts.filter((mesh) => mesh.material === earInner));
+    // Their materials are theirs alone: they dither by opacity as the person walks away (`pickDetail`).
+    for (const detail of this.details) {
+      detail.traverse((o) => {
+        const mesh = o as THREE.Mesh;
+        if (!mesh.isMesh) return;
+        for (const material of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) {
+          if (this.detailMaterials.has(material) || material.transparent) continue;
+          material.alphaHash = true;
+          this.detailMaterials.set(material, material.opacity);
+        }
+      });
+    }
     this.head.add(skull);
     return eyes;
   }

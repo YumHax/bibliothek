@@ -18,7 +18,31 @@ export class CssLayer implements LayerRenderer {
     container.prepend(el); // behind the canvas
   }
 
+  /** Whether the last render showed anything: once everything is hidden, one more render hides the elements and the layer then rests. */
+  private shown = true;
+  private filter = '';
+
+  /**
+   * A CSS filter over the whole layer: the frame's exposure, contrast, saturation and depth-of-field
+   * blur mirrored by the graphics (`graphics` `VideoLayer`), since no pass reaches the DOM behind
+   * the cut-out. Written only when it changes (a style write is a recalc); a neutral filter is none.
+   */
+  setFilter(filter: string): void {
+    const value = filter === 'brightness(1.00) contrast(1.00) saturate(1.00)' || filter === 'brightness(1.00)' ? '' : filter;
+    if (value === this.filter) return;
+    this.filter = value;
+    this.renderer.domElement.style.filter = value;
+  }
+
+  /**
+   * Places the elements with the camera. With nothing shown (no video playing, the usual case) it
+   * does nothing: `CSS3DRenderer` would otherwise rewrite the camera's transform and hide every
+   * element again each frame, a style recalc for a layer that shows nothing.
+   */
   render(camera: THREE.Camera): void {
+    const shown = this.scene.children.some((child) => child.visible);
+    if (!shown && !this.shown) return;
+    this.shown = shown;
     this.renderer.render(this.scene, camera);
   }
 

@@ -24,15 +24,21 @@ const LINES: Record<CatCall, Record<Outcome, (name: string) => string>> = {
   },
   treats: {
     coming: (name) => `${name} comes running from the other end of the flat. Crunch.`,
-    ignored: (name) => `${name} pretends not to hear… then saunters over for it anyway.`,
-    asleep: (name) => `${name} is asleep. The treat will keep till it wakes.`,
+    // Not coming means no treat given: the jar keeps today's (`HomeLife.giveTreat`).
+    ignored: (name) => `${name} is too busy to notice the jar. The treat can wait.`,
+    asleep: (name) => `${name} is asleep. The jar goes back on the shelf till it wakes.`,
   },
 };
 
 /** Calls the cat and says how it went: the one place its answers are worded. */
 export function callCat(cat: CatLike, how: CatCall): string {
-  const name = cat.settings.name;
-  return LINES[how][cat.call()](name);
+  return callCatFor(cat, how).line;
+}
+
+/** `callCat`, also telling whether the cat is on its way (the treat jar only spends the day's treat then). */
+export function callCatFor(cat: CatLike, how: CatCall): { came: boolean; line: string } {
+  const outcome = cat.call(how);
+  return { came: outcome === 'coming', line: LINES[how][outcome](cat.settings.name) };
 }
 
 /** C calls the cat over. */

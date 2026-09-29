@@ -36,6 +36,11 @@ export class LexiPunk implements ArcadeGame {
 
   constructor(private readonly screen: RemoteScreen | null) {}
 
+  /** Over without a single score from the page (it never loaded, or does not speak to the frame yet): the coin is refunded. */
+  get unreported(): boolean {
+    return this.over && !this.reported;
+  }
+
   reset(): void {
     this.score = 0;
     this.over = false;

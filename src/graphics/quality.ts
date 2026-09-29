@@ -1,5 +1,7 @@
 import { isTouchDevice } from '@/input/deviceDetect';
 import { KEYS, safeStorage } from '@/persistence';
+import { toneMapEveryMaterial } from './displayTone';
+import { brightenMetalReflections } from './metalReflections';
 
 /**
  * How much the GPU is asked to do. `low` is the plain forward render the game shipped with;
@@ -11,16 +13,58 @@ export type QualityLevel = 'low' | 'medium' | 'high';
 
 export const QUALITY_LEVELS: readonly QualityLevel[] = ['low', 'medium', 'high'];
 
+/**
+ * How many lights of each kind the renderer is handed at once (`world/lighting/LightCuller`): every
+ * light in the scene is evaluated by every lit fragment, so the budget keeps the best of them (the
+ * player's room first, then what is seen through the doorways, bright and near before dim and far)
+ * and hides the rest. Each count is fixed, so choosing other lights recompiles nothing.
+ * `pointShadows` / `spotShadows` are the lights that must cast their shadow to be shown at all (the
+ * ceiling lamps, the window suns: without it they would shine through the walls).
+ */
+export interface LightBudgetSettings {
+  point: number;
+  pointShadows: number;
+  spot: number;
+  spotShadows: number;
+  hemisphere: number;
+}
+
 export interface QualitySettings {
   level: QualityLevel;
   /** Ceiling of the renderer's pixel ratio (the frame's cost is per pixel). */
   maxPixelRatio: number;
-  /** Shadow map size of the lamps and the sun. */
+  /** Floor the pixel ratio may drop to while the GPU cannot keep up (`core/AdaptiveResolution`). */
+  minPixelRatio: number;
+  /** Frames per second the loop never goes past (a 120 Hz screen would double the work); 0 for the display's rate. */
+  maxFps: number;
+  /** Shadow map size of the lamps. */
   shadowMapSize: number;
+  /**
+   * Shadow map size of the narrow sun spots through the windows and onto the balcony: a small patch
+   * of floor at a grazing angle, where the mullions' shadows need the texels (the street's wide sun
+   * takes twice `shadowMapSize`, at most 2048).
+   */
+  sunShadowMapSize: number;
+  /**
+   * Anisotropic filtering of the textures seen at a grazing angle (floors, walls, labels, signs):
+   * the default of `toTexture` and the floor and wall finishes. three.js caps it at the GPU's own
+   * maximum (`capabilities.getMaxAnisotropy()`).
+   */
+  anisotropy: number;
+  /**
+   * How often a lit lamp or sun of the player's room re-renders its shadow map (per second; 0 = every
+   * frame). Each refresh redraws the room from the light (six times for a lamp).
+   */
+  shadowRefreshHz: number;
+  /** Casters smaller than this (metres, largest side) cast no shadow: below a shadow texel, a draw call each for nothing. */
+  minShadowCaster: number;
+  lights: LightBudgetSettings;
   /** The off-screen HDR pipeline (`PostFx`); off, the scene renders straight to the canvas as before. */
   postFx: boolean;
   /** MSAA samples of the HDR target (the canvas's own antialiasing does not reach an off-screen target). */
   msaa: number;
+  /** A light FXAA in the output pass, on the tone-mapped values (the MSAA resolve happens in HDR, before tone mapping: bright edges still step). */
+  fxaa: boolean;
   bloom: boolean;
   /** Screen-space ambient occlusion from the depth buffer (no extra scene render). */
   ssao: boolean;
@@ -53,9 +97,17 @@ export interface QualitySettings {
 const PRESETS: Record<QualityLevel, Omit<QualitySettings, 'level'>> = {
   low: {
     maxPixelRatio: 1.25,
+    minPixelRatio: 0.75,
+    maxFps: 60,
     shadowMapSize: 512,
+    sunShadowMapSize: 512,
+    anisotropy: 2,
+    shadowRefreshHz: 15,
+    minShadowCaster: 0.15,
+    lights: { point: 5, pointShadows: 2, spot: 6, spotShadows: 3, hemisphere: 2 },
     postFx: false,
     msaa: 0,
+    fxaa: false,
     bloom: false,
     ssao: false,
     depthOfField: false,
@@ -73,9 +125,17 @@ const PRESETS: Record<QualityLevel, Omit<QualitySettings, 'level'>> = {
   },
   medium: {
     maxPixelRatio: 1.5,
+    minPixelRatio: 1,
+    maxFps: 60,
     shadowMapSize: 1024,
+    sunShadowMapSize: 1024,
+    anisotropy: 4,
+    shadowRefreshHz: 30,
+    minShadowCaster: 0.08,
+    lights: { point: 8, pointShadows: 3, spot: 10, spotShadows: 4, hemisphere: 2 },
     postFx: true,
     msaa: 4,
+    fxaa: true,
     bloom: true,
     ssao: false,
     depthOfField: true,
@@ -93,9 +153,17 @@ const PRESETS: Record<QualityLevel, Omit<QualitySettings, 'level'>> = {
   },
   high: {
     maxPixelRatio: 1.5,
+    minPixelRatio: 1,
+    maxFps: 0,
     shadowMapSize: 1024,
+    sunShadowMapSize: 2048,
+    anisotropy: 8,
+    shadowRefreshHz: 0,
+    minShadowCaster: 0.04,
+    lights: { point: 12, pointShadows: 5, spot: 16, spotShadows: 5, hemisphere: 2 },
     postFx: true,
     msaa: 4,
+    fxaa: true,
     bloom: true,
     ssao: true,
     depthOfField: true,
@@ -149,6 +217,11 @@ function resolve(): QualitySettings {
  * so a change is saved and applied by reloading (`setQuality`). `?quality=low|medium|high` overrides.
  */
 export const QUALITY: Readonly<QualitySettings> = resolve();
+
+// One tone-mapping rule for every level (see `displayTone`): set before any material is made.
+toneMapEveryMaterial(!QUALITY.postFx);
+// Bare metal takes more of the reflections than paint (see `metalReflections`): before any program compiles.
+brightenMetalReflections();
 
 /** Saves `level` as the player's choice and reloads the page to rebuild everything with it. */
 export function setQuality(level: QualityLevel): void {

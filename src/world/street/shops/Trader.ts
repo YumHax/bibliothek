@@ -7,6 +7,7 @@ import type { Game } from '@/catalog/types';
 import { readGame } from '@/catalog/validate';
 import { createCanvas, toTexture } from '@/covers/generated/canvasUtils';
 import { StockItem } from '@/economy/StockItem';
+import { TRADER_MARKUP } from '@/economy/pricing';
 import { KEYS, PersistedStore } from '@/persistence';
 import { gameDayRandom, isEventDay } from '@/time/daily';
 import type { Today } from '@/time/Today';
@@ -15,6 +16,7 @@ import type { DayNight } from '../../props/DayNight';
 import type { Furniture } from '../../Furniture';
 import { ForSaleBox } from '../../market/ForSaleBox';
 import { Walker } from '../../people/Walker';
+import { outOfSight } from '../life/sight';
 
 export interface TraderOptions {
   /** The zone: his games must be placed to be clickable. */
@@ -30,6 +32,8 @@ export interface TraderOptions {
   /** Game hours he stands there between. */
   hours: readonly [number, number];
   viewer: THREE.Object3D;
+  /** The zone's collision set (world boxes): his stand collides only while he is there. */
+  collisions?: { add(box: THREE.Box3): void; remove(box: THREE.Box3): void };
 }
 
 /** Whether today (the real date) the collector sets up on Front Street: about one day in `oneDayIn` (phase 1 of the cycle). */
@@ -37,8 +41,8 @@ export function isTraderDay(oneDayIn: number, date = new Date()): boolean {
   return isEventDay('trader', oneDayIn, { date, phase: 1 });
 }
 
-/** What he adds to what the stall asked him. */
-const MARKUP = 1.25;
+/** What he adds to what the stall asked him (`TRADER_MARKUP` in pricing.ts). */
+const MARKUP = TRADER_MARKUP;
 const COPIES = 3;
 const SUITCASE = { width: 0.72, depth: 0.46, height: 0.72 };
 const LOOK_EVERY = 2;
@@ -83,11 +87,16 @@ export class Trader extends THREE.Group implements Furniture, Updatable, Interac
   private present = false;
   private lookClock = LOOK_EVERY;
   private line = 0;
+  /** The stand's box in world space (built on the first update, once placed), in the zone's collisions while he is there. */
+  private collider: THREE.Box3 | null = null;
+  /** Just (re)activated: the first update takes what the clock says, seen or not (the player has only just arrived). */
+  private fresh = true;
+  private readonly here = new THREE.Vector3();
 
   constructor(private readonly dayNight: DayNight, private readonly options: TraderOptions) {
     super();
     this.name = 'Trader';
-    this.person = new Walker({ viewer: options.viewer, seed: 911, label: 'Click to chat with the collector' });
+    this.person = new Walker({ viewer: options.viewer, seed: 911, label: 'The collector · chat' });
     this.person.traverse((o) => {
       o.castShadow = false;
     });
@@ -100,8 +109,13 @@ export class Trader extends THREE.Group implements Furniture, Updatable, Interac
     this.setPresent(false);
   }
 
+  /** Empty: the stand's box comes and goes with him (`collider`), no ghost once he has packed up. */
   get footprint(): THREE.Box3 {
-    return new THREE.Box3(new THREE.Vector3(-0.45, 0, -0.6), new THREE.Vector3(0.45, 1.1, 0.8));
+    return new THREE.Box3();
+  }
+
+  setZoneActive(active: boolean): void {
+    if (active) this.fresh = true;
   }
 
   setHovered(): void {
@@ -109,7 +123,7 @@ export class Trader extends THREE.Group implements Furniture, Updatable, Interac
   }
 
   label(): string | null {
-    return this.present ? 'Click to chat with the collector' : null;
+    return this.present ? 'The collector · chat' : null;
   }
 
   activate(_session: SessionActions): void {
@@ -121,13 +135,20 @@ export class Trader extends THREE.Group implements Furniture, Updatable, Interac
 
   dispose(): void {
     for (const box of this.boxes) box.dispose();
+    if (this.collider && this.present) this.options.collisions?.remove(this.collider);
   }
 
   update(dt: number): void {
     const [from, to] = this.options.hours;
     const s = this.dayNight.state;
     const present = s.hours >= from && s.hours < to && s.rain < 0.3;
-    if (present !== this.present) this.setPresent(present);
+    if (!this.collider) {
+      this.updateWorldMatrix(true, false);
+      this.collider = new THREE.Box3(new THREE.Vector3(-0.45, 0, -0.6), new THREE.Vector3(0.45, 1.1, 0.8)).applyMatrix4(this.matrixWorld);
+    }
+    // He sets up and packs up only while the player cannot see the spot.
+    if (present !== this.present && (this.fresh || outOfSight(this.options.viewer, this.getWorldPosition(this.here)))) this.setPresent(present);
+    this.fresh = false;
     if (!present) return;
     this.person.update(dt);
     if (this.filled) return;
@@ -139,6 +160,10 @@ export class Trader extends THREE.Group implements Furniture, Updatable, Interac
   }
 
   private setPresent(present: boolean): void {
+    if (this.collider && present !== this.present) {
+      if (present) this.options.collisions?.add(this.collider);
+      else this.options.collisions?.remove(this.collider);
+    }
     this.present = present;
     this.visible = present;
     this.person.setPresent(present, new THREE.Vector3(0, 0, -0.35));
@@ -208,7 +233,7 @@ export class Trader extends THREE.Group implements Furniture, Updatable, Interac
 
   private buildKit(): void {
     const { width, depth, height } = SUITCASE;
-    const metal = standard({ color: 0x2a2c30, roughness: 0.4, metalness: 0.7 });
+    const metal = standard({ color: 0x2a2c30, roughness: 0.45 });
     // The folding stand: two crossed frames.
     for (const side of [-1, 1]) {
       for (const tilt of [-0.45, 0.45]) {

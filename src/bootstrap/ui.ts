@@ -1,5 +1,6 @@
 import { SEED_GAMES } from '@/catalog';
 import { MarketNotices } from '@/economy';
+import { shopPrice } from '@/economy/pricing';
 import type { Session } from '@/game/Session';
 import type { FirstPersonController } from '@/player/FirstPersonController';
 import { PointerLockFlow } from '@/player/PointerLockFlow';
@@ -34,6 +35,9 @@ import { SHOP_HOURS, clockTime } from '@/world/street/shops/shopHours';
 import { upcomingMarketDays } from '@/journal';
 import { TravelMenu } from '@/ui/TravelMenu';
 import { WalletHud } from '@/ui/WalletHud';
+import { formatCount } from '@/ui/money';
+import { installCoverPlaceholders } from '@/ui/coverPlaceholder';
+import { onWorldLoad } from '@/ui/worldLoad';
 import { Fader } from '@/ui/Fader';
 import { QualityPicker } from '@/ui/QualityPicker';
 import { addGameSettings } from '@/ui/settings/GameSettingsForm';
@@ -49,6 +53,9 @@ import { ToDoNotePanel } from '@/ui/ToDoNotePanel';
 import type { WorldPanels } from '@/world/buildContext';
 
 export type Ui = ReturnType<typeof createUi>;
+
+/** Where the wallet chip stays up: the places money changes hands. */
+const MONEY_ZONES: ReadonlySet<ZoneId> = new Set<ZoneId>(['arcade', 'market', 'furnitureShop', 'tvShop', 'petShop', 'flowerShop']);
 
 /** What the menus read of things made after them: where the player is, the rules. */
 export interface UiLate {
@@ -72,8 +79,8 @@ export function createUi(services: Services, player: FirstPersonController, late
   const overlay = new Overlay(container, input, () => void lockFlowRef.get().enter(), {
     onCollection: () => input.pressVirtual(primaryCode('collection')),
     status: () => [
-      ['Coins', String(wallet.coins)],
-      ['Tickets', String(wallet.tickets)],
+      ['Coins', formatCount(wallet.coins)],
+      ['Tickets', formatCount(wallet.tickets)],
       ['Games', String(collection.games.length)],
       ['Where', zoneName(here())],
     ],
@@ -88,6 +95,7 @@ export function createUi(services: Services, player: FirstPersonController, late
     hasProgress: hasProgress(),
     onNewGame: eraseProgress,
     version,
+    textSize: { get: () => settings.settings.uiScale, set: (uiScale) => settings.update({ uiScale }) },
   });
   // What the game tells the player, each kind in its place (src/notices): its clocks stop under the pause menu.
   const notices = new Notices(container, { camera: engine.camera, attending: () => !document.hidden && (overlay.isPlaying || overlay.isModal) });
@@ -97,6 +105,8 @@ export function createUi(services: Services, player: FirstPersonController, late
   addGameSettings(overlay, settings, { onEraseProgress: eraseProgress, version });
   overlay.addSetting('game', 'Cat', new CatSettingsForm(catSettings).element);
 
+  // A thumbnail whose art does not load becomes a made-up box (platform colour, title) in every panel.
+  installCoverPlaceholders(container);
   const panel = new GamePanel(container);
   const search = new SearchBar(container);
   const editor = new CollectionEditor(container, collection, index, { canAdd: debug });
@@ -108,15 +118,32 @@ export function createUi(services: Services, player: FirstPersonController, late
   const noticeBoard = new NoticeBoardPanel(container, { wallet, collection, market, ledger, standing, notices: new MarketNotices({ fame, ledger }), tx });
   const jobLot = new JobLotPanel(container, { wallet, collection, market, tx }, coverUrl);
   const marketHall: MarketHallServices = { standing, notices: noticeBoard, lot: jobLot };
-  const prizeCounter = new PrizePanel(container, wallet, prizes, tx, { collection, games: SEED_GAMES });
+  // The mystery game: a seed game the collection lacks, never a grail nor a very dear one; the lamp and the wand say what they need at home.
+  const prizeCounter = new PrizePanel(container, wallet, prizes, tx, { collection, games: SEED_GAMES, worth: (game) => shopPrice(game, fame.peek(game)) }, debug ? null : { has: (what) => services.upgrades.has(what) }, notices);
   // The flat's own panels: the collector's book on the sideboard, the journal on the hall console (and in the pause menu),
   // the swap a neighbour's door opens.
   const collectorBook = new CollectorBookPanel(container, { wallet, collection, standing, milestones, history: valueHistory, watch: collectorWatch, coverUrl });
+  // The journal turns its page with the game's days (a night's sleep) and stamps lines with the game clock.
+  journal.setClock({ day: () => services.today.gameDay, hours: () => services.sky.dayNight.state.hours });
   const journalPanel = new JournalPanel(container, journal, {
     challenge: () => arcadeDaily.challenge(),
     upcoming: () => upcomingMarketDays(market.day),
   });
   overlay.addPauseButton('journal', 'Journal', () => late.session.get().openPanel(journalPanel));
+  // Photo mode and the search from the pause menu (a controller or a touchscreen has no P or F): back in the room, then the key.
+  const inRoomThen = (code: string) => {
+    const press = () => {
+      window.clearTimeout(giveUp);
+      player.controls.removeEventListener('lock', press);
+      input.pressVirtual(code);
+    };
+    // Once the room is entered; a lock that never comes (the return card) forgets the press rather than firing it later.
+    const giveUp = window.setTimeout(() => player.controls.removeEventListener('lock', press), 4000);
+    player.controls.addEventListener('lock', press);
+    void lockFlowRef.get().resume();
+  };
+  overlay.addPauseButton('photo', 'Photo mode', () => inRoomThen(primaryCode('photoMode')));
+  overlay.addPauseButton('search', 'Search a game', () => inRoomThen(primaryCode('search')));
   const neighbourTradePanel = new NeighbourTradePanel(container, wallet, { trades: neighbourTrades, tx, collection }, coverUrl);
   // What the street's shops and the hall console open: made once here, handed to their builders (`BuildContext.panels`).
   const panels: WorldPanels = {
@@ -138,7 +165,7 @@ export function createUi(services: Services, player: FirstPersonController, late
     hold: (item) => {
       const result = tx.holdCopy(item);
       if (result.ok) return null;
-      return result.reason === 'short' ? `“That's a ${result.needed}-coin deposit, and you've got ${result.have}.”` : '“Hm, I can’t put that one by. Come and see.”';
+      return result.reason === 'short' ? `“That’s a ${result.needed}-coin deposit, and you’ve got ${result.have}.”` : '“Hm, I can’t put that one by. Come and see.”';
     },
   });
   const wardrobe = new WardrobePanel(container, {
@@ -152,16 +179,31 @@ export function createUi(services: Services, player: FirstPersonController, late
     const first = reached[0]!;
     notices.reward({
       title: reached.length === 1 ? 'Milestone reached!' : `${reached.length} milestones reached!`,
-      detail: reached.length === 1 ? `${first.title}\nThe collector’s book on the sideboard has your reward.` : 'The collector’s book on the sideboard has your rewards.',
+      detail: reached.length === 1 ? `${first.title}\nThe collector’s book in the living room has your reward.` : 'The collector’s book in the living room has your rewards.',
       big: true,
     });
   };
   if (params.has('payout')) installPayoutTable(container, payoutStats);
-  const walletHud = new WalletHud(container, wallet);
+  // The wallet chip: up where money is the point, under the pause menu, and a few seconds after money moves elsewhere.
+  const walletHud = new WalletHud(container, wallet, { moneyHere: () => late.zones.isSet && MONEY_ZONES.has(here()) });
+  engine.addUpdatable(walletHud);
   // Sounds nobody clicked for (the arcade's machines and hum) wait for the first gesture to start the audio.
   unlockAudioOnFirstGesture();
-  player.controls.addEventListener('lock', () => walletHud.setVisible(true));
-  player.controls.addEventListener('unlock', () => walletHud.setVisible(false));
+  let entered = false;
+  player.controls.addEventListener('lock', () => {
+    entered = true;
+    walletHud.setPaused(false);
+    walletHud.setVisible(true);
+  });
+  // Out of the room: the chip stays over a panel (money is often its point); under the pause menu its status says it instead.
+  player.controls.addEventListener('unlock', () => {
+    walletHud.setVisible(false);
+    walletHud.setPaused(entered && overlay.isModal);
+  });
+  // The world would not load: say so, with a Retry, instead of a start button that leads nowhere.
+  onWorldLoad((state, retry) => {
+    if (state === 'failed' && retry) notices.alert('The room could not be loaded. Check the connection, then try again.', undefined, { label: 'Retry', run: retry });
+  });
   // The curtain every trip and every night falls behind, and the "Where to?" a door opens.
   const fader = new Fader(container);
   const travelMenu = new TravelMenu<ZoneId>(container, input);

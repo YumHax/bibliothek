@@ -25,7 +25,7 @@ export class UmbrellaStand extends THREE.Group implements Furniture {
   constructor(options: UmbrellaStandOptions = {}) {
     super();
     this.name = 'UmbrellaStand';
-    const enamel = standard({ color: options.color ?? 0x2f4a3a, roughness: 0.35, metalness: 0.2, side: THREE.DoubleSide });
+    const enamel = standard({ color: options.color ?? 0x2f4a3a, roughness: 0.35, metalness: 0, side: THREE.DoubleSide });
     const tube = new THREE.Mesh(new THREE.CylinderGeometry(RADIUS, RADIUS * 0.9, HEIGHT, 24, 1, true), enamel);
     tube.position.y = HEIGHT / 2;
     tube.castShadow = true;

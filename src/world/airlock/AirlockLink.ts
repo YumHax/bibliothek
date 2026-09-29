@@ -81,7 +81,8 @@ export class AirlockLink {
       if (!to || !from.holdsViewer()) return;
       to.snapShut();
       this.move(from, to, deps);
-      setOutdoorsMuffle(to.outdoors ? 1 : 0, true);
+      // Eased over a few tenths of a second, as a door would: the street swells in, or dulls behind the glass.
+      setOutdoorsMuffle(to.outdoors ? 1 : 0);
       // Two frames for the ZoneManager to switch whatever the order of the frame callbacks, then the stragglers.
       await nextFrame();
       await nextFrame();

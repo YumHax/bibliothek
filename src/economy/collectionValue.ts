@@ -1,7 +1,7 @@
 import type { Game } from '@/catalog/types';
 import type { Views } from './Fame';
 import { grailById } from './grails';
-import { MARKET_DISCOUNT, REPRO_BUY_BACK, STICKER, buyBackPrice, marketPrice } from './pricing';
+import { IMPORT, MARKET_DISCOUNT, REPRO_BUY_BACK, STICKER, buyBackPrice, isImport, marketPrice } from './pricing';
 
 /** The market's average day: halfway between its deepest and its shallowest discount. */
 const AVERAGE_DISCOUNT = (MARKET_DISCOUNT.min + MARKET_DISCOUNT.max) / 2;
@@ -25,7 +25,7 @@ export function copyValue(game: Game, views: Views): CopyValue {
   if (game.repro) return { market: REPRO_BUY_BACK, desk: REPRO_BUY_BACK, priced: true };
   if (grail) return { market: grail.price, desk: buyBackPrice(game, views), priced: true };
   return {
-    market: Math.max(1, Math.round(marketPrice(game, views, game.condition ?? 'complete', AVERAGE_DISCOUNT, game.edition ?? 'standard') * (game.sticker ? STICKER.factor : 1))),
+    market: Math.max(1, Math.round(marketPrice(game, views, game.condition ?? 'complete', AVERAGE_DISCOUNT, game.edition ?? 'standard') * (game.sticker ? STICKER.factor : 1) * (isImport(game) ? IMPORT.price : 1))),
     desk: buyBackPrice(game, views),
     priced: views !== undefined,
   };

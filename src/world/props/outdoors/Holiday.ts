@@ -5,6 +5,7 @@ import { FRONTAGE, OUR_LINE } from './plan';
 import { LIGHT_STRINGS } from '@/world/city/frontage';
 import { CONIFER_STYLE, paintTree } from './Tree';
 import { currentHoliday } from '@/time/season';
+import { PARK_FIR } from '@/world/city/park';
 
 /**
  * What the neighbourhood puts up for the holidays (`currentHoliday()`): at Christmas strings of
@@ -16,7 +17,7 @@ import { currentHoliday } from '@/time/season';
  */
 
 /** Bulb colours of the Christmas strings (and the park's fir). */
-const BULBS = ['#ff3a2a', '#ffd23a', '#3aff6a', '#4a8aff', '#fff4e0'];
+export const BULBS = ['#ff3a2a', '#ffd23a', '#3aff6a', '#4a8aff', '#fff4e0'];
 /** Our own front on Front Street, where the strings are made fast (metres from the eye). */
 const OUR_FRONT = OUR_LINE - 0.1;
 /** Where the strings cross Front Street (x), the height of their ends, how far they sag mid-street and the spacing of their bulbs: the walkable street's. */
@@ -24,8 +25,6 @@ const FRONT_STRINGS = LIGHT_STRINGS.map((string) => string.x);
 const { height: STRING_HEIGHT, sag: STRING_SAG, spacing: BULB_SPACING } = LIGHT_STRINGS[0]!;
 /** Length of the pieces a string is cut into for the far-to-near order. */
 const PIECE = 3;
-/** The park's lit fir, near the gate, and its size. */
-const PARK_FIR = { x: -46, z: -2, height: 13, radius: 4.2 };
 /** Share of the lit windows' sills that carry a pumpkin at Halloween. */
 const PUMPKIN_SHARE = 0.2;
 

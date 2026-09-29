@@ -63,14 +63,14 @@ export function isGrail(id: string): boolean {
 
 /**
  * The grail on the market on `day`, if any: every `GRAIL.every` market days (from `GRAIL.offset`),
- * one grail, taken in turn from a seeded shuffle of the whole list (a new shuffle each time round),
+ * for `GRAIL.stays` days, one grail, taken in turn from a seeded shuffle of the whole list (a new shuffle each time round),
  * so each one comes back, and a reload always tells the same story. Owning it does not change the
  * schedule: the copy is simply left out of what the player is shown.
  */
 export function grailOn(day: number): Grail | null {
   const k = day - GRAIL.offset;
-  if (k < 0 || k % GRAIL.every !== 0) return null;
-  const turn = k / GRAIL.every;
+  if (k < 0 || k % GRAIL.every >= GRAIL.stays) return null;
+  const turn = Math.floor(k / GRAIL.every);
   const round = Math.floor(turn / GRAILS.length);
   return shuffled(round)[turn % GRAILS.length]!;
 }

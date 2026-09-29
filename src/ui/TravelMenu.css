@@ -28,4 +28,12 @@
 }
 .travel-menu__card ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.4rem; }
 .travel-menu__card li .ui-btn { width: 100%; text-align: left; font-size: 1rem; padding: 0.6em 0.9em; }
+.travel-menu__card li .ui-btn:hover:not(:disabled),
+.travel-menu__card li .ui-btn:focus-visible { border-color: var(--ui-accent); background: var(--ui-fill-hover); }
 .travel-menu__stay { margin-top: 0.9rem; font-size: 0.85rem; color: var(--ui-text-dim); }
+.travel-menu__stay:hover:not(:disabled),
+.travel-menu__stay:focus-visible { color: var(--ui-text); }
+/* Closing: the shared short fade before `hidden` (`ui/fade`). */
+.travel-menu { transition: opacity 150ms ease; }
+.travel-menu--closing { opacity: 0; }
+.travel-menu--closing .travel-menu__card { pointer-events: none; }

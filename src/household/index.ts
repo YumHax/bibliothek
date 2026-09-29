@@ -5,3 +5,4 @@ export { OUTFITS, outfitById, type Outfit, type OutfitFacts, type OutfitId } fro
 export { dreamOf, type Dream } from './dreams';
 export { HOUSEHOLD } from './rules';
 export { tellOutcome } from './tellOutcome';
+export { Pastimes, type Pastime, type PastimeClock, type PastimeCurtain } from './pastime';

@@ -22,6 +22,8 @@ export interface HomeLifeDeps {
   marketOpen: () => boolean;
   /** The market's stock today (owned copies left out): what a night's dream is of. */
   todays?: () => Promise<readonly StockItem[]>;
+  /** The day's journal: what got done at home (a box cleaned, a cake baked, what the cat turned up). */
+  journal?: { note(kind: string, text: string): void };
 }
 
 /** A thing to do, and what came of it: a line for the toast, and whether anything happened. */
@@ -39,10 +41,25 @@ const yes = (line: string): Outcome => ({ done: true, line });
  * anything they had.
  */
 export class HomeLife {
+  /** The bedside alarm clock's ring, set by the bedroom's builder once the clock stands (`setAlarmRinger`). */
+  private alarmRinger: (() => void) | null = null;
+  /** Whether the kitchen has its table (where the kit is used and a cake cools), set by the kitchen's builder; yes until then. */
+  private kitchenTable: () => boolean = () => true;
+
   constructor(private readonly deps: HomeLifeDeps) {}
+
+  /** The kitchen's builder says whether its table is bought (`isOwned`, readable with the kitchen unloaded). */
+  setKitchenTable(owned: () => boolean): void {
+    this.kitchenTable = owned;
+  }
 
   get household(): Household {
     return this.deps.household;
+  }
+
+  /** A line in the day's journal (kind `home`). */
+  private log(text: string): void {
+    this.deps.journal?.note('home', text);
   }
 
   /** The copy of `game` in the collection (a box in hand may carry an older Game object). */
@@ -56,29 +73,40 @@ export class HomeLife {
   /** The cleaning kit taken from the mirror cabinet: it goes to the kitchen table, where the light is good. */
   takeKit(): Outcome {
     if (this.household.hasKit) return no('The kit is on the kitchen table.');
+    if (!this.kitchenTable()) return no('The kit stays in the cabinet for now: it wants a table in good light.\nSECOND HOME, on Front Street, sells a kitchen table.');
     this.household.takeKit();
     return yes('You take the cleaning kit: cotton buds, isopropyl, a soft cloth.\nIt goes on the kitchen table, where the light is good. Bring a worn box there.');
   }
 
   /** What the hair dryer would do for `game` in hand, for its caption. */
   stickerLabel(game: Game | null): string {
-    if (!game) return 'A hair dryer. Warm air lifts old price stickers';
-    return this.owned(game)?.sticker ? `Click to peel the price sticker off ${game.title}` : `No sticker on ${game.title}`;
+    if (!game) return 'Hair dryer · warm air lifts old price stickers';
+    return this.owned(game)?.sticker ? `Hair dryer · peel the sticker off ${game.title}` : `Hair dryer · no sticker on ${game.title}`;
+  }
+
+  /** Why the hair dryer cannot help with `game` (a refusal), or null when it can. */
+  mayPeel(game: Game): Outcome | null {
+    const copy = this.owned(game);
+    if (!copy) return no('Only your own boxes, at home.');
+    if (!copy.sticker) return no(`No sticker on ${copy.title}.`);
+    return null;
   }
 
   /** Warm air on `game`'s old price sticker, peeled off whole. `before` runs just before the copy changes (the box put down). */
   peelSticker(game: Game, before?: () => void): Outcome {
-    const copy = this.owned(game);
-    if (!copy) return no('Only your own boxes, at home.');
-    if (!copy.sticker) return no(`No sticker on ${copy.title}.`);
+    const refusal = this.mayPeel(game);
+    if (refusal) return refusal;
+    const copy = this.owned(game)!;
     before?.();
     this.deps.collection.update(copy.id, { sticker: undefined });
+    this.log(`Peeled the old price sticker off ${copy.title}`);
     return yes(`A minute of warm air and the old price sticker lifts off in one piece.\n${copy.title} is worth its full price again.`);
   }
 
   /** The bath is full: a long soak. */
   soak(): Outcome {
     if (!this.household.soak()) return no('You are as relaxed as you are going to get.');
+    this.log('A long hot soak in the bath');
     return yes('You sink into the hot water and let the day go…\nUnhurried: the next stallholder you haggle with will hear one more offer.');
   }
 
@@ -86,12 +114,21 @@ export class HomeLife {
 
   /** What the kit on the table would do for `game` in hand, for its caption. */
   cleanLabel(game: Game | null): string {
-    if (!game) return 'The cleaning kit: bring a worn box here to clean it up';
+    if (!game) return 'Cleaning kit · bring a worn box here to clean it up';
     const copy = this.owned(game);
-    if (!copy) return 'The cleaning kit';
-    if (copy.condition !== 'worn') return `${copy.title} is in good shape`;
-    if (this.household.restoresLeft <= 0) return 'One careful job a day: come back tomorrow';
-    return `Click to clean up ${copy.title}`;
+    if (!copy) return 'Cleaning kit';
+    if (copy.condition !== 'worn') return `Cleaning kit · ${copy.title} is in good shape`;
+    if (this.household.restoresLeft <= 0) return 'Cleaning kit · one careful job a day, come back tomorrow';
+    return `Cleaning kit · clean up ${copy.title}`;
+  }
+
+  /** Why the kit cannot clean `game` (a refusal), or null when it can. */
+  mayClean(game: Game): Outcome | null {
+    const copy = this.owned(game);
+    if (!copy) return no('Only your own boxes, at home.');
+    if (copy.condition !== 'worn') return no(`${copy.title} does not need it.`);
+    if (this.household.restoresLeft <= 0) return no('That is enough fiddly work for one day. Tomorrow.');
+    return null;
   }
 
   /**
@@ -99,41 +136,53 @@ export class HomeLife {
    * `before` runs just before the copy changes (the box put down: its shelf rebuilds it).
    */
   cleanBox(game: Game, before?: () => void): Outcome {
-    const copy = this.owned(game);
-    if (!copy) return no('Only your own boxes, at home.');
-    if (copy.condition !== 'worn') return no(`${copy.title} does not need it.`);
-    if (this.household.restoresLeft <= 0) return no('That is enough fiddly work for one day. Tomorrow.');
+    const refusal = this.mayClean(game);
+    if (refusal) return refusal;
+    const copy = this.owned(game)!;
     before?.();
     this.household.markRestored();
     this.deps.collection.update(copy.id, { condition: 'noManual', restored: true });
-    return yes(`An hour with cotton buds and isopropyl: the grime comes off and the cover comes up bright.\n${copy.title} is a tidy copy now (still no manual). The collector's book counts it at its new worth.`);
+    this.log(`Cleaned up ${copy.title}’s box`);
+    return yes(`An hour with cotton buds and isopropyl: the grime comes off and the cover comes up bright.\n${copy.title} is a tidy copy now (still no manual). The collector’s book counts it at its new worth.`);
   }
 
   get bakeLabel(): string {
-    return this.household.cakeOut ? 'A cake is out already' : 'Click to bake a cake (for when friends drop by)';
+    if (!this.kitchenTable()) return 'Mixing bowl, nowhere to cool a cake yet · look';
+    return this.household.cakeOut ? 'Mixing bowl · a cake is out already' : 'Mixing bowl · bake a cake (for when friends drop by)';
+  }
+
+  /** Why no cake can be baked now (a refusal), or null. */
+  mayBake(): Outcome | null {
+    if (!this.kitchenTable()) return no('Nowhere to let a cake cool: the kitchen has no table yet.\nSECOND HOME, on Front Street, sells one.');
+    return this.household.cakeOut ? no('There is still cake on the table.') : null;
   }
 
   bake(): Outcome {
     if (!this.household.bake()) return no('There is still cake on the table.');
+    this.log('Baked a sponge cake');
     return yes('Flour, eggs, butter, forty minutes in the oven: a sponge cake cools on the table.\nA friend who drops by in the next day or so will stay longer, and be grateful.');
   }
 
   get treatLabel(): string {
-    return this.household.treatedToday ? 'The treats: one a day, or the cat gets round' : 'Click to give the cat a treat';
+    return this.household.treatedToday ? 'Treat jar · one a day, or the cat gets round' : 'Treat jar · give the cat a treat';
   }
 
-  /** A treat for the cat (it comes running); tomorrow, perhaps, it leaves something by its bowl. */
-  giveTreat(callCat?: () => string): Outcome {
+  /**
+   * A treat for the cat (it comes running); tomorrow, perhaps, it leaves something by its bowl. A cat that
+   * does not come (asleep, mid-leap) gets none: the day's treat stays in the jar for later.
+   */
+  giveTreat(callCat?: () => { came: boolean; line: string }): Outcome {
     if (this.household.treatedToday) return no('One a day. Look at that face, though.');
-    this.household.giveTreat(drawCatGift(this.household.today, this.deps.shelved.games));
     const call = callCat?.();
-    return yes(`You shake the jar.${call ? `\n${call}` : ''}`);
+    if (call && !call.came) return no(`You shake the jar.\n${call.line}`);
+    this.household.giveTreat(drawCatGift(this.household.today, this.deps.shelved.games));
+    return yes(`You shake the jar.${call ? `\n${call.line}` : ''}`);
   }
 
   get giftLabel(): string | null {
     const gift = this.household.gift;
     if (!gift) return null;
-    return gift.kind === 'coins' ? 'Click to pick up the coins the cat left' : 'Click to pick up the booklet the cat dragged out';
+    return gift.kind === 'coins' ? 'Coins the cat left · pick up' : 'A booklet the cat dragged out · pick up';
   }
 
   /** What the cat left by its bowl, picked up. */
@@ -142,12 +191,20 @@ export class HomeLife {
     if (!gift) return no('Nothing there.');
     if (gift.kind === 'coins') {
       this.deps.purse.earnCoins(gift.coins);
-      return yes(`${gift.coins} coins, fished out from under the sofa cushions by ${catName}. Good cat.`);
+      this.log(`${catName} turned up ${gift.coins} coins`);
+      return yes(`${gift.coins} coins, ${catName} fished out from ${pickPlace(gift.coins, COIN_PLACES)}. Good cat.`);
     }
     const copy = this.deps.collection.find(gift.gameId);
     if (!copy || copy.condition !== 'noManual') return yes(`An old booklet… for ${gift.title}, which you no longer have. ${catName} looks proud anyway.`);
     this.deps.collection.update(copy.id, { condition: 'complete' });
-    return yes(`The manual of ${copy.title}! It was behind the sofa all along. ${catName} looks very pleased.\nThe copy is complete again.`);
+    this.log(`${catName} found the manual of ${copy.title}`);
+    return yes(`The manual of ${copy.title}! It was ${pickPlace(copy.title.length, BOOKLET_PLACES)} all along. ${catName} looks very pleased.\nThe copy is complete again.`);
+  }
+
+  /** Radio Brocante's chronicle is on the air and not heard yet today (the radio's caption says so). */
+  get chronicleDue(): boolean {
+    const hours = this.deps.hours();
+    return hours >= HOUSEHOLD.radio.from && hours < HOUSEHOLD.radio.until && !this.household.doneToday('radio');
   }
 
   /** The radio switched on: Radio Brocante's chronicle, once a market day in the morning; null otherwise. */
@@ -162,18 +219,20 @@ export class HomeLife {
   /** What the reading chair would do with `game` in hand, for its caption. */
   readLabel(game: Game): string {
     const copy = this.owned(game);
-    if (!copy) return 'Click to sit down';
-    if (copy.condition === 'noManual' || copy.condition === 'worn') return `Click to sit down (${copy.title} has no manual)`;
-    return this.household.hasRead(copy.platform, copy.id) ? `Click to sit down (you know ${copy.title}'s manual by heart)` : `Click to sit and read ${copy.title}'s manual`;
+    if (!copy) return 'Chair · sit';
+    if (copy.condition === 'noManual' || copy.condition === 'worn') return `Chair · sit (${copy.title} has no manual)`;
+    return this.household.hasRead(copy.platform, copy.id) ? `Chair · sit (you know ${copy.title}'s manual by heart)` : `Chair · sit and read ${copy.title}'s manual`;
   }
 
   /** Reads `game`'s manual in the chair: the platform's know-how grows. */
   readManual(game: Game): Outcome {
     const copy = this.owned(game);
-    if (!copy || copy.condition === 'noManual' || copy.condition === 'worn') return no('');
+    if (!copy) return no('');
+    if (copy.condition === 'noManual' || copy.condition === 'worn') return no('No manual in this one.');
     const platform = getPlatform(copy.platform).shortName;
     if (this.household.hasRead(copy.platform, copy.id)) return no(`You know ${copy.title}'s manual by heart.`);
     const n = this.household.read(copy.platform, copy.id);
+    this.log(`Read the manual of ${copy.title}`);
     const { eye, respect } = HOUSEHOLD.knowHow;
     const level = knowHowOf(n);
     const next = level === 'none' ? `${eye - n} more and you will spot a fake ${platform} print at a glance.`
@@ -189,8 +248,26 @@ export class HomeLife {
     return dreamOf(this.household.today, await todays());
   }
 
+  /** The bedroom's builder: how the bedside alarm clock rings (null while it does not stand). */
+  setAlarmRinger(ring: (() => void) | null): void {
+    this.alarmRinger = ring;
+  }
+
+  /** The morning after a night's sleep: the alarm clock rings, if there is one. */
+  ringAlarm(): void {
+    this.alarmRinger?.();
+  }
+
   /** Whether the market answers the phone now. */
   get marketOpen(): boolean {
     return this.deps.marketOpen();
   }
+}
+
+/** Where the cat turns things up in this flat (docs/household.md): real places, drawn by a number of the find. */
+const COIN_PLACES = ['under the armchair', 'behind the radiator', 'under the bed', 'down the side of the armchair cushion'] as const;
+const BOOKLET_PLACES = ['under the bed', 'behind the radiator', 'under the armchair', 'behind the bookcase'] as const;
+
+function pickPlace(n: number, places: readonly string[]): string {
+  return places[Math.abs(Math.round(n)) % places.length]!;
 }

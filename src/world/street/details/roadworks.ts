@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { FRONT, PARK_STREET, STREET_PLAN, WORKS } from '../streetPlan';
+import { FRONT, PARK_PARKING, PARK_STREET, STREET_PLAN, WORKS } from '../streetPlan';
 
 /** A span across a street (zone-local metres on the across axis), low to high. */
 export type Span = readonly [number, number];
@@ -21,11 +21,11 @@ export interface Closure {
   lanes: Span;
   /** The lines the cones stand along, past the works. */
   coneLines: readonly number[];
+  /** Where the cars drive through the lanes' gap (the traffic's lines, local z): the cones on the works' line keep clear. */
+  carLines: readonly number[];
 }
 
 const span = (a: number, b: number): Span => [Math.min(a, b), Math.max(a, b)];
-/** Park Street's parking lanes are this wide (Front Street's end at `STREET_PLAN.parkingLine`). */
-const PARK_PARKING = 2.1;
 
 /** Across Front Street at x `WORKS.front`: past it (+x) the road runs on to the side street. */
 const FRONT_WORKS: Closure = {
@@ -36,6 +36,7 @@ const FRONT_WORKS: Closure = {
   parking: [span(FRONT.nearKerb, -STREET_PLAN.parkingLine), span(STREET_PLAN.parkingLine, FRONT.farKerb)],
   lanes: span(-STREET_PLAN.parkingLine, STREET_PLAN.parkingLine),
   coneLines: [-STREET_PLAN.parkingLine - 0.05, STREET_PLAN.parkingLine + 0.05],
+  carLines: [-1.6, 1.6],
 };
 
 /** Across Park Street at z `WORKS.park`: past it (-z) the street runs on south. Local +x is zone -z, local z is zone x. */
@@ -47,6 +48,7 @@ const PARK_WORKS: Closure = {
   parking: [span(PARK_STREET.nearKerb, PARK_STREET.nearKerb - PARK_PARKING), span(PARK_STREET.farKerb + PARK_PARKING, PARK_STREET.farKerb)],
   lanes: span(PARK_STREET.nearKerb - PARK_PARKING, PARK_STREET.farKerb + PARK_PARKING),
   coneLines: [PARK_STREET.nearKerb - PARK_PARKING - 0.05, PARK_STREET.farKerb + PARK_PARKING + 0.05],
+  carLines: [-31, -27.4],
 };
 
 export const CLOSURES: readonly Closure[] = [FRONT_WORKS, PARK_WORKS];

@@ -3,7 +3,9 @@ import type { Engine, Updatable } from '@/core/Engine';
 import type { Interactable } from '@/interaction/Interactable';
 import { CollisionWorld } from '@/core/Collider';
 import { Listeners } from '@/core/Listeners';
+import { QUALITY } from '@/graphics/quality';
 import { LightMonitor } from './lighting/lightBudget';
+import { LightCuller } from './lighting/LightCuller';
 import { FIRST_ZONE_SHADOW_LAYER, Zone, type LazyZoneBuilder, type ZoneBuilder, type ZoneHost, type ZoneSpec } from './zone/Zone';
 
 /** How long `primeAsync` waits at most for the driver to finish compiling (ms). */
@@ -16,6 +18,25 @@ function materialsOf(obj: THREE.Object3D): THREE.Material[] {
 
 /** The zone ids of a handle map. */
 type IdOf<Handles> = Extract<keyof Handles, string>;
+
+/**
+ * Something in the scene whose look changes later, with programs no draw has linked yet (a game
+ * box: its openable shell, cartridge and manual exist only in hand): `primeShaders` hands out a
+ * throwaway copy of that later look for `World.prime` to compile with the scene's lights. The copy
+ * is dropped, never disposed: disposing its materials would free the programs they linked.
+ */
+export interface ShaderPrimer {
+  primeShaders(): THREE.Object3D;
+}
+
+function isShaderPrimer(obj: THREE.Object3D): obj is THREE.Object3D & ShaderPrimer {
+  return typeof (obj as Partial<ShaderPrimer>).primeShaders === 'function';
+}
+
+/** `promise`, or nothing after `ms` (the driver taking too long is no reason to hold the fade). */
+function atMost(promise: Promise<void>, ms: number): Promise<void> {
+  return Promise.race([promise, new Promise<void>((resolve) => setTimeout(resolve, ms))]);
+}
 
 /**
  * The whole 3D world: one scene, one collision world, one list of clickables, and the zones that
@@ -42,8 +63,15 @@ export class World<Handles extends object = Record<string, unknown>> implements 
    * every change of the drawn lights within one set of active zones.
    */
   readonly lights: LightMonitor;
+  /** Hands the renderer a fixed number of lights of each kind, the best ones for where the player is (`QUALITY.lights`). */
+  readonly lightCuller: LightCuller;
 
   constructor(private readonly engine: Engine) {
+    this.lightCuller = new LightCuller(engine.scene, () => this.zones, engine.camera, QUALITY.lights);
+    // Late: it fades the intensities the lamps' owners set during the frame.
+    engine.addLateUpdatable(this.lightCuller);
+    // Early: hands the owners their own intensities back before they ease from them.
+    engine.addEarlyUpdatable(this.lightCuller.restoreOwners);
     this.lights = new LightMonitor(engine.scene, engine.renderer.capabilities.maxTextures, () =>
       this.zones
         .filter((z) => z.isActive)
@@ -85,22 +113,46 @@ export class World<Handles extends object = Record<string, unknown>> implements 
    */
   prime(): void {
     this.uploadTextures();
-    this.engine.compileScene();
+    this.lightCuller.apply();
+    void this.engine.compileScene();
+    this.primeLaterLooks();
     // One real frame: the shadow passes and the post-processing passes compile too.
     this.engine.renderFrame();
     this.lights.check('prime');
   }
 
   /**
+   * Compiles, with the scene's lights, a throwaway copy of each kind of `ShaderPrimer` in the scene
+   * (one per class): the first box taken in hand then links no program (a hitch of a frame or two
+   * otherwise, the clearcoat variants on high). The copies stay out of the scene and are dropped.
+   */
+  private primeLaterLooks(): void {
+    const kinds = new Set<unknown>();
+    const standIn = new THREE.Scene();
+    const { scene } = this.engine;
+    standIn.fog = scene.fog;
+    standIn.environment = scene.environment;
+    scene.traverse((obj) => {
+      if (!isShaderPrimer(obj) || kinds.has(obj.constructor)) return;
+      kinds.add(obj.constructor);
+      standIn.add(obj.primeShaders());
+    });
+    if (!standIn.children.length) return;
+    standIn.updateMatrixWorld(true);
+    this.uploadTextures(standIn);
+    void this.engine.compileScene(standIn, scene);
+  }
+
+  /**
    * `prime()` for a zone reached by travel, behind the curtain once the `ZoneManager` has switched:
-   * the programs are handed to the driver, then awaited frame by frame while it compiles them in
-   * the background (`KHR_parallel_shader_compile`; at most `PRIME_WAIT_MS`), so the one real frame
-   * at the end does not stall on them and the view fades in on a scene that is ready.
+   * the programs are handed to the driver, then awaited while it compiles them in the background
+   * (`renderer.compileAsync`, `KHR_parallel_shader_compile`; at most `PRIME_WAIT_MS`), so the one
+   * real frame at the end does not stall on them and the view fades in on a scene that is ready.
    */
   async primeAsync(): Promise<void> {
     this.uploadTextures();
-    this.engine.compileScene();
-    await this.whenCompiled(this.engine.scene);
+    this.lightCuller.apply();
+    await atMost(this.engine.compileScene(), PRIME_WAIT_MS);
     this.engine.renderFrame();
   }
 
@@ -129,30 +181,12 @@ export class World<Handles extends object = Record<string, unknown>> implements 
     standIn.updateMatrixWorld(true);
     try {
       this.uploadTextures(standIn);
-      this.engine.compileScene(standIn);
-      await this.whenCompiled(standIn);
+      // The counts the loop will draw them with once they are in (the culler's), not all their lights.
+      this.lightCuller.apply(standIn);
+      await atMost(this.engine.compileScene(standIn), PRIME_WAIT_MS);
     } finally {
       // A zone the ZoneManager activated meanwhile has moved on into the scene: leave it there.
       for (const zone of dormant) if (zone.group.parent === standIn) standIn.remove(zone.group);
-    }
-  }
-
-  /** Waits frame by frame (at most `PRIME_WAIT_MS`) until the driver has linked every program `root`'s materials use. */
-  private async whenCompiled(root: THREE.Object3D): Promise<void> {
-    const { renderer } = this.engine;
-    const pending = new Set<THREE.Material>();
-    root.traverse((obj) => {
-      for (const m of materialsOf(obj)) pending.add(m);
-    });
-    const ready = (m: THREE.Material): boolean => {
-      const program = (renderer.properties.get(m) as { currentProgram?: { isReady(): boolean } }).currentProgram;
-      return !program || program.isReady();
-    };
-    const deadline = performance.now() + PRIME_WAIT_MS;
-    while (performance.now() < deadline) {
-      for (const m of pending) if (ready(m)) pending.delete(m);
-      if (!pending.size) break;
-      await new Promise((resolve) => requestAnimationFrame(resolve));
     }
   }
 

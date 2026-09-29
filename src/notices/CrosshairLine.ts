@@ -1,5 +1,6 @@
 import { playNoticeSound } from '@/audio/noticeSounds';
 import { readMs } from './readingTime';
+import { hudSlot } from '@/ui/hudSlot';
 
 const FADE_MS = 220;
 
@@ -17,7 +18,8 @@ export class CrosshairLine {
     this.el.className = 'reaction';
     this.el.setAttribute('role', 'status');
     this.el.hidden = true;
-    container.appendChild(this.el);
+    // In the column under the crosshair, after its caption (`hudSlot`): the two never overlap.
+    hudSlot(container, 'crosshair').appendChild(this.el);
   }
 
   show(text: string, tone: 'ok' | 'no'): void {

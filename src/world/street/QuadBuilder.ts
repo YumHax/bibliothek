@@ -39,6 +39,31 @@ export class QuadBuilder {
     );
   }
 
+  /**
+   * Any four corners (x, y, z each, counter-clockwise seen from the side it faces; a triangle repeats
+   * its last), its normal from them: a ramp, a ramp's cheek. uv = (x, -z) / tile as a floor's, or
+   * (along x or z, height) / tile as an upright face's with `upright`.
+   */
+  surface(corners: number[], upright = false, toward?: THREE.Vector3): this {
+    const t = this.tile;
+    const at = (i: number): THREE.Vector3 => new THREE.Vector3(corners[i * 3], corners[i * 3 + 1], corners[i * 3 + 2]);
+    const a = at(0);
+    // A triangle's normal from its three distinct corners.
+    const n = at(1).sub(a).cross(at(3).equals(at(2)) ? at(2).sub(a) : at(3).sub(a)).normalize();
+    if (toward && n.dot(toward) < 0) {
+      // Wound the other way round: reverse it (a triangle keeps its repeated corner last).
+      const order = at(3).equals(at(2)) ? [2, 1, 0, 0] : [3, 2, 1, 0];
+      return this.surface(order.flatMap((i) => [corners[i * 3]!, corners[i * 3 + 1]!, corners[i * 3 + 2]!]), upright);
+    }
+    const uv: number[] = [];
+    for (let i = 0; i < 4; i++) {
+      const [x, y, z] = [corners[i * 3]!, corners[i * 3 + 1]!, corners[i * 3 + 2]!];
+      if (!upright) uv.push(x / t, -z / t);
+      else uv.push((Math.abs(n.x) > Math.abs(n.z) ? z : x) / t, y / t);
+    }
+    return this.quad(corners, [n.x, n.y, n.z], uv);
+  }
+
   get isEmpty(): boolean {
     return this.positions.length === 0;
   }

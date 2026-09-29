@@ -12,7 +12,7 @@ export interface FuseBoxOptions {
 const DEPTH = 0.085;
 const CASE = paint(0xeceae4, 0.5);
 const RAIL = paint(0x9a9c9e, 0.4);
-const SMOKED = standard({ color: 0x5a6068, roughness: 0.15, metalness: 0.1, transparent: true, opacity: 0.35, depthWrite: false });
+const SMOKED = standard({ color: 0x5a6068, roughness: 0.15, metalness: 0, transparent: true, opacity: 0.35, depthWrite: false });
 const BREAKER = paint(0xf6f5f1, 0.6);
 const LEVER = paint(0x2b2b2d, 0.5);
 const MAIN = paint(0xc0392b, 0.5);

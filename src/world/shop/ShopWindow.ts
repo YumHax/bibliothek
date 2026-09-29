@@ -1,0 +1,137 @@
+import * as THREE from 'three';
+import type { Updatable } from '@/core/Engine';
+import type { Furniture, OccupancyAware } from '../Furniture';
+import type { DayNight, SkyState } from '../props/DayNight';
+import type { Outdoors } from '../props/outdoors/Outdoors';
+import { part } from '../props/Prop';
+import { paint } from '../materials/palette';
+import { WALL, decal } from '../surface/layers';
+import { createCanvas, toTexture } from '@/graphics/canvas';
+import { FONT } from '@/covers/generated/canvasUtils';
+import type { ShopDoor } from '../street/streetPlan';
+import { OutlookView } from '../outlook/OutlookView';
+import { shopToStreet } from '../outlook/frames';
+
+export interface ShopWindowOptions {
+  width: number;
+  height: number;
+  /** The shop's name, painted on the glass (read backwards from inside). */
+  name: string;
+  /** The lettering's colour (the shop's fascia lettering in the street, `SHOP_LOOKS`). */
+  letters: string;
+  /** The shop's door on the street (`shopOutlook.shopDoorOf`): the view is the street's from there. Null: the glass stays a pale sky. */
+  door: ShopDoor | null;
+  /** Where the window is: `along` the front wall from the exit (room x), the front wall's inner face (room z). */
+  along: number;
+  front: number;
+  /** The zone's group: its world matrix takes the room's frame to the world's. */
+  zoneFrame: THREE.Object3D;
+  dayNight: DayNight;
+  outdoors: Outdoors;
+  /** The main camera, the view through the glass is rendered from. */
+  viewer: THREE.Camera;
+}
+
+/** The glass's bottom edge over the floor (a stall riser under it). */
+export const SILL = 0.55;
+const FRAME = 0.06;
+const FRAME_PAINT = paint(0x2e2a26, 0.5);
+/** Pixels per metre of the lettering on the glass. */
+const PX = 220;
+/** How thick the shop's front wall is: the facade in the street stands this far outside the glass. */
+const FRONT_WALL = 0.3;
+
+/**
+ * A shop's front window from inside: a painted frame on the front wall and, through the glass, Front Street (or Park
+ * Street) itself, built in 3D from the street's plan as seen from the shop's own place in its facade (`outlook/`: the
+ * facades across in their colours with their shops and lit windows, the road, the parked and passing cars, the lamps,
+ * the trees and the park), in true perspective from wherever the player stands, lit by the hour and the weather; the
+ * shop's name lettered on the glass backwards. Wall-hung like a picture with `y: 0`: origin on the floor at the wall,
+ * +z into the shop. Never collides.
+ */
+export class ShopWindow extends THREE.Group implements Furniture, Updatable, OccupancyAware {
+  readonly contactShadow = false;
+  readonly footprint = new THREE.Box3();
+  private readonly view: OutlookView;
+  private readonly letters: THREE.MeshBasicMaterial;
+  private readonly tint = new THREE.Color();
+
+  constructor(options: ShopWindowOptions) {
+    super();
+    this.name = 'ShopWindow';
+    const { width: w, height: h, door, dayNight, outdoors } = options;
+    const toStreet = new THREE.Matrix4();
+    const shopFrame = door ? shopToStreet(door, options.front, FRONT_WALL) : new THREE.Matrix4();
+    const waiting = new THREE.Color();
+    this.view = new OutlookView({
+      viewer: options.viewer,
+      toOutlook: () => toStreet.copy(options.zoneFrame.matrixWorld).invert().premultiply(shopFrame),
+      build: (camera) => {
+        if (!door) return Promise.reject(new Error(`[shop] ${options.name} has no door on the street to look out of`));
+        const eye = new THREE.Vector3(options.along, 0, options.front).applyMatrix4(shopFrame);
+        return import('../outlook/streetOutlook').then(({ buildStreetOutlook }) =>
+          buildStreetOutlook(camera, { dayNight, lightDirection: (out) => outdoors.lightDirection(dayNight.state, out), eye: [eye.x, eye.z], without: [door.facade.id] }),
+        );
+      },
+      waiting: () => waiting.copy(dayNight.state.horizon).multiplyScalar(0.3 + 0.7 * dayNight.state.daylight),
+    });
+    this.add(this.view);
+    const glass = this.view.pane(w, h);
+    glass.position.set(0, SILL + h / 2, WALL.paper.lift);
+    this.add(glass);
+    this.letters = new THREE.MeshBasicMaterial({ map: toTexture(paintLetters(Math.round(w * PX), Math.round(h * PX), options), 2), transparent: true, depthWrite: false });
+    const lettering = decal(w, h, this.letters, WALL.sign);
+    lettering.position.y = SILL + h / 2;
+    lettering.receiveShadow = false;
+    lettering.castShadow = false;
+    this.add(lettering);
+    // The frame round the glass, a transom bar across its top, the sill board.
+    part(this, FRAME, h + 2 * FRAME, 0.05, FRAME_PAINT, { x: -w / 2 - FRAME / 2, y: SILL + h / 2, z: 0.025 });
+    part(this, FRAME, h + 2 * FRAME, 0.05, FRAME_PAINT, { x: w / 2 + FRAME / 2, y: SILL + h / 2, z: 0.025 });
+    part(this, w, FRAME, 0.05, FRAME_PAINT, { y: SILL + h + FRAME / 2, z: 0.025 });
+    part(this, w, 0.035, 0.04, FRAME_PAINT, { y: SILL + h * 0.8, z: 0.02 });
+    part(this, w + 2 * FRAME + 0.04, 0.04, 0.2, paint(0xd8d0c0, 0.6), { y: SILL - 0.02, z: 0.1 });
+    part(this, w + 2 * FRAME, SILL - 0.04, 0.04, FRAME_PAINT, { y: (SILL - 0.04) / 2, z: 0.02 });
+  }
+
+  /** The daylight outside, on the gilt lettering (it is unlit: the street's light behind it). */
+  setSky(state: SkyState): void {
+    this.tint.copy(state.horizon).lerp(WHITE, 0.6).multiplyScalar(0.1 + 0.95 * state.daylight);
+    this.letters.color.copy(this.tint).lerp(WHITE, 0.3);
+  }
+
+  /** The player walked in: what is out there is built now, at the next idle moment (`OutlookView.prefetch`). */
+  setOccupied(occupied: boolean): void {
+    if (occupied) this.view.prefetch();
+  }
+
+  update(dt: number): void {
+    this.view.update(dt);
+  }
+
+  dispose(): void {
+    this.view.dispose();
+    this.letters.map?.dispose();
+  }
+}
+
+const WHITE = new THREE.Color(0xffffff);
+
+/** The shop's name on the glass, backwards from in here, in gilt letters over the top of the window. */
+function paintLetters(w: number, h: number, options: ShopWindowOptions): HTMLCanvasElement {
+  const [canvas, ctx] = createCanvas(w, h);
+  ctx.clearRect(0, 0, w, h);
+  ctx.save();
+  ctx.translate(w / 2, h * 0.12);
+  ctx.scale(-1, 1);
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.font = `bold ${Math.round(h * 0.09)}px Georgia, ${FONT}`;
+  ctx.fillStyle = options.letters;
+  ctx.strokeStyle = 'rgba(255, 240, 200, 0.8)';
+  ctx.lineWidth = 2;
+  ctx.strokeText(options.name, 0, 0, w * 0.86);
+  ctx.fillText(options.name, 0, 0, w * 0.86);
+  ctx.restore();
+  return canvas;
+}

@@ -6,9 +6,11 @@ import type { SessionActions } from '@/game/SessionActions';
 import type { Furniture } from '../Furniture';
 import type { DrawnAware } from '../zone/lifecycle';
 import { GameBox } from '../GameBox';
+import { createCanvas } from '@/covers/generated/canvasUtils';
 import { boxMesh, invisibleHitbox } from '../meshUtils';
 import { fabric } from '../materials/finishes';
 import { METAL, shared, standard, timber } from '../materials/palette';
+import { FLOOR, WALL, onSurface } from '../surface/layers';
 
 /** A copy on show, and what it is worth. */
 export interface Showpiece {
@@ -39,7 +41,12 @@ export const VITRINE_CAPACITY = 9;
 
 const WALNUT = timber(0x3b2416, 0.42);
 const BRASS = METAL.agedBrass();
-const STRIP = standard({ color: 0xfff1d0, emissive: 0xffe2a8, emissiveIntensity: 1.2, roughness: 0.5 });
+const STRIP = standard({ color: 0xfff1d0, emissive: 0xffe2a8, emissiveIntensity: 1.6, roughness: 0.5 });
+/**
+ * The strip's light, baked (it is no light of its own): a warm wash down the velvet from the top,
+ * and a pool on each tier's floor, brightest on the top one. Added over what is under them, alpha kept.
+ */
+const WASH = { color: 0xffd9a0, opacity: [0.34, 0.22, 0.14] as const };
 
 export interface HomeVitrineOptions {
   covers: BoxArtLoader;
@@ -87,8 +94,9 @@ export class HomeVitrine extends THREE.Group implements Furniture, Interactable,
     strip.castShadow = false;
     this.add(strip);
     // Glass shelves, and the glass: front, sides, top light enough to read the covers through.
-    const glass = standard({ color: 0xe8f4f4, roughness: 0.05, metalness: 0, transparent: true, opacity: 0.12, depthWrite: false, side: THREE.DoubleSide });
-    const shelfGlass = standard({ color: 0xcfe6e2, roughness: 0.1, metalness: 0, transparent: true, opacity: 0.35, depthWrite: false });
+    // The glass mirrors the room (the scene's environment, turned up so the panes catch it).
+    const glass = standard({ color: 0xe8f4f4, roughness: 0.03, metalness: 0, transparent: true, opacity: 0.12, depthWrite: false, side: THREE.DoubleSide, envMapIntensity: 2.4 });
+    const shelfGlass = standard({ color: 0xcfe6e2, roughness: 0.08, metalness: 0, transparent: true, opacity: 0.35, depthWrite: false, envMapIntensity: 1.8 });
     const glassH = HEIGHT - PLINTH_H - TOP_T;
     const panes = [
       boxMesh(INNER_W, glassH, GLASS_T, glass, { y: PLINTH_H + glassH / 2, z: z0 + DEPTH - POST / 2 }),
@@ -105,9 +113,30 @@ export class HomeVitrine extends THREE.Group implements Furniture, Interactable,
       const mesh = obj as THREE.Mesh;
       if (mesh.isMesh && mesh.material !== glass && mesh.material !== shelfGlass) mesh.receiveShadow = true;
     });
+    this.bakeStripLight(z0);
     const hitbox = invisibleHitbox(WIDTH + 0.02, HEIGHT, DEPTH + 0.02, { y: HEIGHT / 2, z: zc });
     this.add(hitbox);
     this.hitboxes = [hitbox];
+  }
+
+  /** The strip's light on the velvet and the tiers, painted on (see `WASH`). */
+  private bakeStripLight(z0: number): void {
+    const glow = (opacity: number, map: THREE.Texture): THREE.MeshBasicMaterial =>
+      new THREE.MeshBasicMaterial({ color: WASH.color, map, transparent: true, opacity, depthWrite: false, blending: THREE.CustomBlending, blendSrc: THREE.SrcAlphaFactor, blendDst: THREE.OneFactor, blendSrcAlpha: THREE.ZeroFactor, blendDstAlpha: THREE.OneFactor });
+    const fade = washTexture();
+    const velvetH = HEIGHT - PLINTH_H - TOP_T - 0.02;
+    const wash = new THREE.Mesh(new THREE.PlaneGeometry(INNER_W, velvetH), onSurface(glow(0.5, fade), WALL.overlay, { depthWrite: false }));
+    wash.position.set(0, (PLINTH_H + HEIGHT - TOP_T) / 2, z0 + BACK_T + 0.004 + WALL.overlay.lift);
+    wash.castShadow = false;
+    this.add(wash);
+    const depth = DEPTH - BACK_T - POST;
+    const pool = poolTexture();
+    [...TIERS].reverse().forEach((y, i) => {
+      const floor = new THREE.Mesh(new THREE.PlaneGeometry(INNER_W, depth).rotateX(-Math.PI / 2), onSurface(glow(WASH.opacity[i]!, pool), FLOOR.glowPool, { depthWrite: false }));
+      floor.position.set(0, y + FLOOR.glowPool.lift, z0 + BACK_T + depth / 2);
+      floor.castShadow = false;
+      this.add(floor);
+    });
   }
 
   get footprint(): THREE.Box3 {
@@ -204,4 +233,27 @@ export class HomeVitrine extends THREE.Group implements Furniture, Interactable,
   dispose(): void {
     for (const box of this.boxes.splice(0)) box.dispose();
   }
+}
+
+/** Bright at the top (under the strip), fading down the velvet. */
+function washTexture(): THREE.CanvasTexture {
+  const [canvas, ctx] = createCanvas(8, 64);
+  const g = ctx.createLinearGradient(0, 0, 0, 64);
+  g.addColorStop(0, 'rgba(255,255,255,1)');
+  g.addColorStop(0.35, 'rgba(255,255,255,0.45)');
+  g.addColorStop(1, 'rgba(255,255,255,0.08)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, 8, 64);
+  return new THREE.CanvasTexture(canvas);
+}
+
+/** A soft oval pool, brightest at the front where the strip shines down. */
+function poolTexture(): THREE.CanvasTexture {
+  const [canvas, ctx] = createCanvas(64, 32);
+  const g = ctx.createRadialGradient(32, 22, 2, 32, 22, 34);
+  g.addColorStop(0, 'rgba(255,255,255,1)');
+  g.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, 64, 32);
+  return new THREE.CanvasTexture(canvas);
 }

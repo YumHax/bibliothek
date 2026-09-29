@@ -11,6 +11,9 @@ import { FRONT, KERB_HEIGHT, PARK_STREET, STREET_PLAN, type ShopKind, type Vec2 
 import { FacadeFrame } from './facadeFrame';
 import { groundHeight } from './ground';
 import { GROUND, RENDER_ORDER, onSurface } from '../../surface/layers';
+import { LAMP_LIGHT } from '../../lighting/lampColours';
+import { envBoost } from '../../materials/envBoost';
+import type { MovingLamp } from '../StreetCars';
 
 export interface WetGroundOptions {
   fronts: readonly PaintedFront[];
@@ -20,20 +23,25 @@ export interface WetGroundOptions {
   viewer: THREE.Object3D;
   /** A real reflection of the street in the puddles on the road (a second render while wet; `QUALITY.reflections`). */
   mirror: boolean;
+  /** The driving cars: their headlamps and tail lamps streak the wet road too, following them. */
+  cars?: readonly MovingLamp[];
 }
+
+/** A car's lamps as streak sources: the pair of headlamps (as one, at the nose) and the tail lamps (at the back), their height. */
+const CAR_LAMPS = { head: new THREE.Color(1, 0.94, 0.84), tail: new THREE.Color(0.9, 0.08, 0.05), height: 0.66, width: 0.9 };
 
 /** Streaks are not drawn for lights further than this from the eye; they are at most this long. */
 const STREAK_RANGE = 55;
 const STREAK_MAX = 11;
 /** The eye's height, for where along the ground a light's reflection sits. */
 const EYE = 1.7;
-const LAMP_COLOR = new THREE.Color(0xffd7a0);
+const LAMP_COLOR = LAMP_LIGHT.sodium.clone();
 const WEATHER_EVERY = 0.5;
 /** The stretch of road the mirror covers (the walkable part of Front Street), zone-local. */
 const MIRROR = { x0: PARK_STREET.farKerb, x1: 40, z0: FRONT.nearKerb, z1: FRONT.farKerb };
 const MIRROR_TEXTURE = 512;
 
-type Source = { kind: 'lamp' | 'neon' | 'shop'; top: THREE.Vector3; foot: THREE.Vector3; color: THREE.Color; width: number; shop?: ShopKind };
+type Source = { kind: 'lamp' | 'neon' | 'shop' | 'car'; top: THREE.Vector3; foot: THREE.Vector3; color: THREE.Color; width: number; shop?: ShopKind };
 
 interface Puddle {
   at: Vec2;
@@ -56,6 +64,7 @@ interface Puddle {
 export class WetGround extends THREE.Group implements Furniture, Updatable {
   readonly contactShadow = false;
   private readonly sources: Source[] = [];
+  private readonly carSources: { car: MovingLamp; head: Source; tail: Source }[];
   private readonly streaks: THREE.InstancedMesh;
   private readonly puddles: THREE.InstancedMesh;
   private readonly puddleSpots: Puddle[];
@@ -85,6 +94,13 @@ export class WetGround extends THREE.Group implements Furniture, Updatable {
       const fz = z + Math.cos(sign.yaw) * 0.6;
       this.sources.push({ kind: 'neon', top: new THREE.Vector3(x, y, z), foot: new THREE.Vector3(fx, groundHeight(fx, fz), fz), color: new THREE.Color(sign.color), width: sign.width * 0.5 });
     }
+    // Two sources a car (head, tail), moved with it every frame (`layStreaks`).
+    this.carSources = (options.cars ?? []).map((car) => {
+      const head: Source = { kind: 'car', top: new THREE.Vector3(), foot: new THREE.Vector3(), color: CAR_LAMPS.head, width: CAR_LAMPS.width };
+      const tail: Source = { kind: 'car', top: new THREE.Vector3(), foot: new THREE.Vector3(), color: CAR_LAMPS.tail, width: CAR_LAMPS.width * 0.8 };
+      this.sources.push(head, tail);
+      return { car, head, tail };
+    });
     for (const front of options.fronts) {
       if (front.spec.detail < 20) continue;
       const frame = new FacadeFrame(front.spec);
@@ -122,15 +138,19 @@ export class WetGround extends THREE.Group implements Furniture, Updatable {
 
     this.puddleSpots = puddleSpots();
     this.puddleMaterial = onSurface(
-      new THREE.MeshStandardMaterial({
-        color: 0x101316,
-        roughness: 0.05,
-        metalness: 0.1,
-        alphaMap: blobTexture(),
-        transparent: true,
-        opacity: 0,
-        envMapIntensity: 1.4,
-      }),
+      // Water is a dielectric (metalness 0); its mirror of the sky is raised by `envBoost` (three
+      // ignores `envMapIntensity` under a scene environment).
+      envBoost(
+        new THREE.MeshStandardMaterial({
+          color: 0x101316,
+          roughness: 0.05,
+          metalness: 0,
+          alphaMap: blobTexture(),
+          transparent: true,
+          opacity: 0,
+        }),
+        1.4,
+      ),
       GROUND.puddle,
       { depthWrite: false },
     );
@@ -172,6 +192,12 @@ export class WetGround extends THREE.Group implements Furniture, Updatable {
     this.layStreaks(s);
   }
 
+  /** Whether a car source's car is on the road. */
+  private carLit(src: Source): boolean {
+    for (const c of this.carSources) if (c.head === src || c.tail === src) return c.car.active;
+    return false;
+  }
+
   /** Every light near enough: a streak from its foot towards the eye, centred on where its mirror image lies. */
   private layStreaks(s: SkyState): void {
     const night = THREE.MathUtils.smoothstep(nightnessOf(s), 0.15, 0.6);
@@ -181,12 +207,21 @@ export class WetGround extends THREE.Group implements Furniture, Updatable {
     this.options.viewer.getWorldPosition(this.eye);
     this.worldToLocal(this.eye);
     const lampNight = THREE.MathUtils.smoothstep(nightnessOf(s), 0.25, 0.6);
+    for (const { car, head, tail } of this.carSources) {
+      const cx = Math.cos(car.yaw);
+      const cz = -Math.sin(car.yaw);
+      const half = car.length / 2;
+      head.foot.set(car.position.x + cx * (half + 0.3), groundHeight(car.position.x, car.position.z), car.position.z + cz * (half + 0.3));
+      tail.foot.set(car.position.x - cx * (half + 0.2), head.foot.y, car.position.z - cz * (half + 0.2));
+      head.top.copy(head.foot).setY(head.foot.y + CAR_LAMPS.height);
+      tail.top.copy(tail.foot).setY(tail.foot.y + CAR_LAMPS.height + 0.1);
+    }
     this.sources.forEach((src, i) => {
       this.dir.set(this.eye.x - src.foot.x, 0, this.eye.z - src.foot.z);
       const distance = this.dir.length();
       let level = 0;
       if (distance < STREAK_RANGE && distance > 0.5) {
-        level = src.kind === 'lamp' ? 1.1 * lampNight : src.kind === 'neon' ? 0.9 * (0.3 + 0.7 * night) : src.shop && isShopOpen(src.shop, this.hours) ? 0.6 * night : 0;
+        level = src.kind === 'lamp' ? 1.1 * lampNight : src.kind === 'neon' ? 0.9 * (0.3 + 0.7 * night) : src.kind === 'car' ? (this.carLit(src) ? 0.9 * lampNight : 0) : src.shop && isShopOpen(src.shop, this.hours) ? 0.6 * night : 0;
       }
       if (level <= 0) {
         this.m.makeScale(0, 0, 0);

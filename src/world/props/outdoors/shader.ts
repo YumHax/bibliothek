@@ -1,5 +1,8 @@
 import { DEPTH_SCALE, ELEVATION_MAX, ELEVATION_MIN, EYE_HEIGHT, SCENE_HEIGHT, SCENE_WIDTH } from './Sheet';
 import { SPRITE_COUNT } from './Life';
+import { QUALITY } from '@/graphics/quality';
+import { VEHICLE_FUNCTIONS, VEHICLE_UNIFORMS } from './vehicleShader';
+import { SKY_CHUNK } from '../../city/skyGlsl';
 
 /** Angular radius of the sun disc and of the moon, in radians. */
 export const SUN_RADIUS = 0.05;
@@ -10,9 +13,11 @@ const GLOW_RADIUS_Y = 0.7;
 /**
  * Fixed-point steps that find where the eye ray really meets the painted scenery (see `main()`):
  * the panorama was painted from one eye, and a camera a few metres from it sees it shifted by
- * parallax, the near pavement most. Each step is one depth lookup.
+ * parallax, the near pavement most. Each step is one depth lookup. Fewer on low quality, like the
+ * clouds' octaves: the pane shader runs on every pixel of every window and the balcony's sky.
  */
-export const PARALLAX_STEPS = 6;
+export const PARALLAX_STEPS = QUALITY.level === 'low' ? 3 : 6;
+const CLOUD_OCTAVES = QUALITY.level === 'low' ? 3 : 4;
 
 export const vertexShader = /* glsl */ `
   varying vec3 vWorld;
@@ -90,12 +95,16 @@ export const fragmentShader = /* glsl */ `
   uniform vec4 spriteCell[SPRITES];
   uniform vec4 spriteInfo[SPRITES]; // alpha, distance, atlas lod, packed tint
   uniform float lightsOn;
+  ${VEHICLE_UNIFORMS}
   varying vec3 vWorld;
   const float DEPTH_SCALE = ${DEPTH_SCALE.toFixed(1)};
   const float EYE_HEIGHT = ${EYE_HEIGHT.toFixed(1)};
   const int PARALLAX_STEPS = ${PARALLAX_STEPS};
   const float SUN_RADIUS = ${SUN_RADIUS.toFixed(4)};
   const float MOON_RADIUS = ${MOON_RADIUS.toFixed(4)};
+  // The painted ground shadows shift away from the sun as a thing this tall would cast them (metres), at most this far.
+  const float SHADOW_CASTER = 1.4;
+  const float SHADOW_REACH_MAX = 4.5;
   const float GLOW_RADIUS_X = ${GLOW_RADIUS_X.toFixed(4)};
   const float GLOW_RADIUS_Y = ${GLOW_RADIUS_Y.toFixed(4)};
   const float ELEVATION_MIN = ${ELEVATION_MIN.toFixed(5)};
@@ -120,6 +129,8 @@ export const fragmentShader = /* glsl */ `
   vec2 band(vec3 d) {
     return vec2(atan(d.x, d.z) / PI2 + 0.5, (asin(clamp(d.y, -1.0, 1.0)) - ELEVATION_MIN) / (ELEVATION_MAX - ELEVATION_MIN));
   }
+  ${VEHICLE_FUNCTIONS}
+  ${SKY_CHUNK}
   float angleBetween(vec3 a, vec3 b) {
     return acos(clamp(dot(a, b), -1.0, 1.0));
   }
@@ -137,7 +148,7 @@ export const fragmentShader = /* glsl */ `
   float fbm(vec2 p) {
     float v = 0.0;
     float a = 0.5;
-    for (int i = 0; i < 4; i++) {
+    for (int i = 0; i < ${CLOUD_OCTAVES}; i++) {
       v += a * valueNoise(p);
       p = p * 2.03 + vec2(17.1, 9.2);
       a *= 0.5;
@@ -169,13 +180,12 @@ export const fragmentShader = /* glsl */ `
     float low = 1.0 - clamp(d.y / 0.55, 0.0, 1.0);
     return color + CITY * cityGlow * low * low;
   }
-  // The sun: a disc with a soft halo that widens and warms as the sun gets low; hidden by cloud.
+  // The sun: a disc with a soft halo that widens and warms as the sun gets low (city/skyGlsl, as over the street); hidden by cloud.
   vec3 drawSun(vec3 color, vec3 d, float veil) {
     float angle = angleBetween(d, sunDir);
-    float haloRadius = 0.22 + 0.3 * sunLow;
-    float halo = pow(max(1.0 - angle / haloRadius, 0.0), 2.4) * (0.7 + 0.9 * sunLow);
+    float halo = skySunHalo(angle, sunLow);
     float disc = 1.0 - smoothstep(SUN_RADIUS * 0.85, SUN_RADIUS * 1.1, angle);
-    vec3 discColor = mix(vec3(1.0, 0.98, 0.93), sunColor * 1.15, sunLow);
+    vec3 discColor = skySunDisc(sunColor, sunLow);
     float seen = sunVisibility * (1.0 - veil);
     color += sunColor * halo * sunVisibility * (1.0 - 0.85 * cloudCover);
     return mix(color, discColor * 1.6, disc * seen);
@@ -266,14 +276,11 @@ export const fragmentShader = /* glsl */ `
     color = mix(color, mix(vec3(0.02, 0.03, 0.04), mirrored, 0.6 * (1.0 - nightness)), glass);
     return color + WARM * 0.75 * on;
   }
-  // The moon: a pale disc with a bite taken out of it (the crescent) and a faint halo; hidden by cloud.
+  // The moon: a pale disc with a bite taken out of it (the crescent) and a faint halo (city/skyGlsl, as over the street); hidden by cloud.
   vec3 drawMoon(vec3 color, vec3 d, float veil) {
-    float angle = angleBetween(d, moonDir);
-    float disc = 1.0 - smoothstep(MOON_RADIUS * 0.9, MOON_RADIUS * 1.1, angle);
-    float shadow = 1.0 - smoothstep(MOON_RADIUS * 0.85, MOON_RADIUS * 1.05, angleBetween(d, moonShadowDir));
-    float halo = pow(max(1.0 - angle / 0.2, 0.0), 2.0) * 0.18;
-    color += vec3(0.55, 0.62, 0.85) * halo * moonVisibility * (1.0 - 0.8 * cloudCover);
-    return mix(color, vec3(0.86, 0.9, 1.0), disc * (1.0 - shadow) * moonVisibility * (1.0 - veil));
+    float lit = skyMoonLit(d, moonDir, moonShadowDir, MOON_RADIUS);
+    color += vec3(0.55, 0.62, 0.85) * skyMoonHalo(d, moonDir) * moonVisibility * (1.0 - 0.8 * cloudCover);
+    return mix(color, vec3(0.86, 0.9, 1.0), lit * moonVisibility * (1.0 - veil));
   }
   // A lightning bolt under the clouds, towards boltDir: a jagged stroke from the cloud base down to
   // the horizon with one fork, reseeded each strike; 0 away from it.
@@ -301,7 +308,7 @@ export const fragmentShader = /* glsl */ `
     // The overcast: a sheet of cloud over the whole sky, thicker the more the sky is covered.
     vec2 sp = d.xz / max(d.y + 0.12, 0.05) * 1.4 + cloudDrift * 60.0;
     float n = fbm(sp);
-    float sheet = smoothstep(1.0 - cloudCover, 1.25 - cloudCover, n + 0.2 * cloudCover) * smoothstep(-0.03, 0.08, d.y);
+    float sheet = skyCloudSheet(n, cloudCover) * smoothstep(-0.03, 0.08, d.y);
     // Stars only through the gaps.
     color = mix(color, vec3(1.0), detail.r * starAlpha * (1.0 - sheet));
     vec3 cumulus = cloudTint * mix(vec3(1.0), vec3(0.66, 0.7, 0.8), clouds.b);
@@ -435,10 +442,28 @@ export const fragmentShader = /* glsl */ `
       if (fx0.g > 0.5 || (fx1.g > 0.5 && fx1.r > 0.0)) suv = duv;
     }
 
-    vec4 sc = texture2D(scene, suv); // premultiplied by coverage
+    // The mip of the scenery follows the eye ray, not the parallax-stepped uv: that one jumps at every
+    // silhouette (and at the wrap of the azimuth), and derivatives across the jump would pick the
+    // blurriest mip, a pale fringe round every roof and tree. The wrap is taken the short way round.
+    vec2 viewUv = band(d);
+    vec2 gradX = dFdx(viewUv);
+    vec2 gradY = dFdy(viewUv);
+    gradX.x -= floor(gradX.x + 0.5);
+    gradY.x -= floor(gradY.x + 0.5);
+    vec4 sc = texture2DGradEXT(scene, suv, gradX, gradY); // premultiplied by coverage
     float fairy;
     vec4 li = sampleLights(suv, fairy); // warm, cool (already switched on or off), glass, depth
-    vec4 gr = texture2D(ground, suv); // cast shadow, wet, snow
+    vec4 gr = texture2DGradEXT(ground, suv, gradX, gradY); // cast shadow, wet, snow
+    // Shadows are painted straight under what casts them; on the street's plane (fx alpha) they are
+    // read from a point towards the sun instead, as far as a person-high thing's shadow reaches at
+    // this sun (capped), so they fall away from the sun as the walkable street's do. What is right
+    // under the caster keeps a little of its own.
+    if (fx0.a > 0.5 && d.y < -0.001 && sunDir.y > 0.04) {
+      vec3 toSun = normalize(vec3(sunDir.x, 0.0, sunDir.z) + vec3(1e-5, 0.0, 0.0));
+      float reach = min(SHADOW_REACH_MAX, SHADOW_CASTER / max(tan(asin(clamp(sunDir.y, 0.0, 1.0))), 0.05));
+      float fallen = texture2D(ground, band(normalize(o + t * d + toSun * reach))).r;
+      gr.r = max(gr.r * 0.3, fallen);
+    }
     float cov = sc.a * step(uv.y, 1.0);
     float sceneDist = -DEPTH_SCALE * log(1.0 - min(li.a, 0.996));
     // A shop shut behind its roller shutter (fx B is the shop's curfew): ribbed grey, unlit, not glass.
@@ -498,14 +523,98 @@ export const fragmentShader = /* glsl */ `
     // Fog and mist: the view fades into the grey with distance, lights last.
     float fogged = fogAt(sceneDist, hitHeight);
     base = mix(base, fogColor * cov, fogged);
-    // Moving things, far to near: each a textured rectangle, skipped where the scenery stands in front
-    // of it. Over the open sky (a bird) nothing stands in front, and it covers the sky as it goes.
     float occluder = cov > 0.01 ? sceneDist : 1e6;
+    // The vehicles (vehicleShader.ts): solids met by the ray where they really are. First their
+    // shadows and headlight beams on the road, then the nearest one over whatever is behind it.
+    float roadT = d.y < -1e-4 ? -(EYE_HEIGHT + o.y) / d.y : -1.0;
+    bool onRoad = roadT > 0.0 && fx0.a > 0.5 && onWall < 0.5;
+    vec2 roadP = (o + max(roadT, 0.0) * d).xz;
+    float carShade = 0.0;
+    vec3 beam = vec3(0.0);
+    float carT = 1e9;
+    vec3 carN = vec3(0.0, 1.0, 0.0);
+    vec3 carP = vec3(0.0);
+    int carPart = 0;
+    vec4 carPose = vec4(0.0, 0.0, 0.0, -1.0);
+    vec4 carLook = vec4(0.0);
+    for (int i = 0; i < VEHICLES; i++) {
+      vec4 pose = vehiclePose[i];
+      if (pose.w < 0.0) continue;
+      Shape s = shapeOf(int(pose.w + 0.5));
+      float len = s.a.x;
+      // Skipped unless the ray passes near it (its beam and shadow included).
+      vec3 pc = vec3(pose.x, -EYE_HEIGHT + s.a.z * 0.5, pose.y) - o;
+      float reach = len * 0.5 + VEHICLE_BEAM + s.a.z + 0.5;
+      float tc = dot(pc, d);
+      if (dot(pc, pc) - tc * tc > reach * reach) continue;
+      vec2 along = vec2(sin(pose.z), cos(pose.z));
+      vec2 across = vec2(along.y, -along.x);
+      float alpha = vehicleLook[i].y;
+      if (onRoad) {
+        vec2 g = roadP - pose.xy;
+        float u = dot(g, along);
+        float v = dot(g, across);
+        vec2 q = vec2(abs(u) - len * 0.5, abs(v) - s.a.y * 0.5);
+        float outside = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0);
+        carShade = max(carShade, (0.3 + 0.3 * sunShadow) * (1.0 - smoothstep(-0.15, 0.5, outside)) * alpha);
+        float ahead = u - len * 0.5;
+        if (s.e.w >= 0.0 && ahead > 0.0 && ahead < VEHICLE_BEAM) {
+          float spread = s.a.y * 0.5 + ahead * 0.3;
+          beam += vec3(1.0, 0.9, 0.72) * (1.0 - ahead / VEHICLE_BEAM) * (1.0 - smoothstep(spread * 0.5, spread, abs(v))) * 0.35 * lightsOn * alpha;
+        }
+      }
+      vec3 p = o - vec3(pose.x, -EYE_HEIGHT, pose.y);
+      vec3 ro = vec3(dot(p.xz, along) + len * 0.5, p.y, dot(p.xz, across));
+      vec3 rd = safeDir(vec3(dot(d.xz, along), d.y, dot(d.xz, across)));
+      vec3 n;
+      int part;
+      float t = s.e.w < 0.0 ? bikeHit(ro, rd, n, part) : vehicleHit(ro, rd, s, n, part);
+      if (t < carT) {
+        carT = t;
+        carN = n;
+        carP = ro + t * rd;
+        carPart = part;
+        carPose = pose;
+        carLook = vehicleLook[i];
+      }
+    }
+    if (onRoad) base = base * (1.0 - carShade) + beam;
+    if (carT < 1e8) {
+      vec3 hp = o + carT * d;
+      float dist = length(hp.xz);
+      if (dist < occluder) {
+        Shape s = shapeOf(int(carPose.w + 0.5));
+        vec2 along = vec2(sin(carPose.z), cos(carPose.z));
+        vec2 across = vec2(along.y, -along.x);
+        vec3 paint = vec3(floor(carLook.x / 65536.0), floor(mod(carLook.x, 65536.0) / 256.0), mod(carLook.x, 256.0)) / 255.0;
+        vec3 albedo;
+        float glass;
+        vec3 emit;
+        vehicleSurface(s, carPart, carP, carN, paint, albedo, glass, emit);
+        vec3 nw = vec3(carN.x * along.x + carN.z * across.x, carN.y, carN.x * along.y + carN.z * across.y);
+        vec3 lit = albedo * sceneTint * (0.58 + 0.2 * nw.y + 0.55 * max(dot(nw, sunDir), 0.0) * sunShadow);
+        vec3 col = mix(lit, albedo * NIGHT * (1.2 + 0.4 * nw.y), nightness);
+        col = mix(col, mirrored, glass * (1.0 - 0.6 * nightness));
+        col = mix(col, airColor, 1.0 - exp(-dist / hazeDistance));
+        float carFog = fogAt(dist, hp.y + EYE_HEIGHT);
+        col = mix(col, fogColor, carFog) + emit * (1.0 - 0.8 * carFog);
+        float a = carLook.y;
+        base = mix(base, col, a);
+        cov = mix(cov, 1.0, a);
+        if (a > 0.5) occluder = dist;
+      }
+    }
+    // The other moving things, far to near: each a textured rectangle, skipped where the scenery (or
+    // a vehicle) stands in front of it. Over the open sky (a bird) nothing stands in front, and it
+    // covers the sky as it goes. Their rectangles are placed as the camera sees them
+    // (Life.seenFromEye), so they are matched against the ray's own direction, not the scenery
+    // point behind them.
+    vec2 view = band(d);
     for (int i = 0; i < SPRITES; i++) {
       vec4 rc = spriteRect[i];
       vec4 info = spriteInfo[i];
-      if (info.x <= 0.0 || uv.x < rc.x || uv.x > rc.z || uv.y < rc.y || uv.y > rc.w || info.y > occluder) continue;
-      vec2 st = (uv - rc.xy) / (rc.zw - rc.xy);
+      if (info.x <= 0.0 || view.x < rc.x || view.x > rc.z || view.y < rc.y || view.y > rc.w || info.y > occluder) continue;
+      vec2 st = (view - rc.xy) / (rc.zw - rc.xy);
       vec2 auv = mix(spriteCell[i].xy, spriteCell[i].zw, st);
       vec4 sp = texture2DLodEXT(sprites, auv, info.z); // premultiplied, white where the car's own colour goes
       vec3 tint = vec3(floor(info.w / 65536.0), floor(mod(info.w, 65536.0) / 256.0), mod(info.w, 256.0)) / 255.0;

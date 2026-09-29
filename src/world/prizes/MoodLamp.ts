@@ -86,7 +86,7 @@ export class MoodLamp extends THREE.Group implements Furniture, Interactable, Up
   label(): string | null {
     if (!this.owned) return null;
     const next = COLORS[(this.colour + 1) % COLORS.length]!;
-    return `Mood lamp (${COLORS[this.colour]!.name}) — click for ${next.name}`;
+    return `Mood lamp (${COLORS[this.colour]!.name}) · switch to ${next.name}`;
   }
 
   activate(): void {

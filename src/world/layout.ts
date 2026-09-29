@@ -30,7 +30,8 @@ import { curtainsToSkylight } from './build/follow';
 import { placerFor } from './build/owned';
 import { bookcasesIn, livingShelvingOptions } from './build/bookcases';
 import { resolvePlacement } from './Placement';
-import { furnishCollectorCorner } from './collector/furnishCollector';
+import { furnishCollectorCorner, placeCollectorsBook } from './collector/furnishCollector';
+import { rugsUnderfoot } from './build/rugsUnderfoot';
 
 // The builders' shared types live in `buildContext.ts`; re-exported for the code that imported them from here.
 export type { BuildContext, ZoneHandle, MarketHallServices, CollectionContext, HomeContext, MoneyContext, ArcadeContext, MarketContext } from './buildContext';
@@ -132,13 +133,24 @@ export function furnishRoom(zone: Zone, ctx: BuildContext): RoomHandle {
   lampAt.position.y += plan.homeGoods.lamp.y;
   placerFor(zone, upgrades, plan.homeGoods.lamp.upgrade).place(new LavaLamp(), lampAt.position, lampAt.rotationY);
 
-  // 8. The arcade's feather wand, once won: on the projector rug, waved for the cat.
-  if (prizes) zone.placeAt(new FeatherWand({ prizes, ...(callCat ? { callCat } : {}) }), plan.featherWand.at).position.y += plan.featherWand.lift;
-  // 9. The collector's book on the sideboard (once the sideboard is bought), and what its milestones bring home: the
+  // 8. The arcade's feather wand, once won: on the projector rug (on its pile once the rug is bought), waved for the cat.
+  if (prizes) {
+    const wand = zone.placeAt(new FeatherWand({ prizes, ...(callCat ? { callCat } : {}) }), plan.featherWand.at);
+    placerFor(zone, upgrades, plan.featherWand.rug).onOwned(() => void (wand.position.y += plan.featherWand.lift));
+  }
+  // 9. The collector's book (on the sideboard once it is bought), and what its milestones bring home: the
   //    brass plaque, the display cabinet.
-  if (collector) placerFor(zone, upgrades, plan.collector.upgrade).onOwned(() => furnishCollectorCorner(zone, collector, { covers, shelved: shelved ?? games }));
+  //    The binder is there from the start (a milestone's reward waits in it), on the floor until the sideboard stands.
+  if (collector) {
+    const sideboard = placerFor(zone, upgrades, plan.collector.upgrade);
+    const book = placeCollectorsBook(zone, collector, sideboard.owned);
+    sideboard.onOwned(() => {
+      book.moveToSideboard();
+      furnishCollectorCorner(zone, collector, { covers, shelved: shelved ?? games });
+    });
+  }
 
-  return { room, shelving, tv, seats, armchairs, windows, catPerches: radiators };
+  return { room, shelving, tv, seats, armchairs, windows, catPerches: radiators, surfaceAt: rugsUnderfoot(zone) };
 }
 
 /** A zone builder, as `ZONE_BUILDERS` lists it: bound to the `BuildContext` by `bindBuilder`. */

@@ -1,6 +1,7 @@
 import * as THREE from 'three';
-import { createCanvas, toTexture } from '@/covers/generated/canvasUtils';
+import { createCanvas, seededRandom, toTexture } from '@/covers/generated/canvasUtils';
 import { Prop } from './Prop';
+import { addFringes } from './KilimRug';
 import { fabric } from '@/world/materials/finishes';
 import { cloth as paletteCloth } from '@/world/materials/palette';
 import { FLOOR } from '@/world/surface/layers';
@@ -16,28 +17,35 @@ export interface RugOptions {
 
 /** The slab's height: its top is the floor's `rug` layer. */
 const THICKNESS = FLOOR.rug.lift;
+/** Its corners are rounded off this much (a rug is not cut with a saw), and its fringes are this long. */
+const CORNER = 0.05;
+const FRINGE = 0.07;
 
 /**
- * A flat woven rug: a thin slab (so its edge reads in first person) with a procedural
- * border-and-lozenge pattern on top. Decoration only; never a collider (see `Prop`).
+ * A flat woven rug: a thin slab with softened corners (so its edge reads in first person), a
+ * procedural border-and-lozenge pattern on top and a cotton fringe past both short ends (along
+ * x). Decoration only; never a collider (see `Prop`).
  */
 export class Rug extends Prop {
   readonly options: Required<RugOptions>;
+  /** What it covers of the floor, along local x and z (the fringes aside): underfoot is soft there. */
+  readonly size: THREE.Vector2;
 
   constructor(options: RugOptions = {}) {
     super();
     this.name = 'Rug';
     this.options = { width: 2.4, depth: 1.8, field: 0x6b2f2f, border: 0xd9c9a3, motif: 0x8a3d3d, ...options };
     const { width, depth } = this.options;
+    this.size = new THREE.Vector2(width, depth);
 
     const top = fabric({ map: this.paint(), roughness: 1, sheenTint: 0x8a8580 });
     const edgeColor = new THREE.Color(this.options.field).multiplyScalar(0.7);
     const edge = paletteCloth(edgeColor, 1);
-    // BoxGeometry material order: +x, -x, +y (top), -y, +z, -z.
-    const slab = new THREE.Mesh(new THREE.BoxGeometry(width, THICKNESS, depth), [edge, edge, top, edge, edge, edge]);
-    slab.position.y = THICKNESS / 2;
+    // ExtrudeGeometry's groups: the two caps (the top, and the underside nobody sees), then the sides.
+    const slab = new THREE.Mesh(roundedSlab(width, depth), [top, edge]);
     slab.receiveShadow = true;
     this.add(slab);
+    addFringes(this, width, depth, FRINGE, seededRandom(Math.round(width * 1000 + depth * 7)));
   }
 
   private paint(): THREE.CanvasTexture {
@@ -114,4 +122,31 @@ export class Rug extends Prop {
     }
     return toTexture(canvas, 4);
   }
+}
+
+/**
+ * A `width` x `depth` slab `THICKNESS` thick lying on the origin (its underside at y 0), corners
+ * rounded by `CORNER`; the caps' uvs run 0..1 over the rug like a plane's.
+ */
+function roundedSlab(width: number, depth: number): THREE.BufferGeometry {
+  const r = Math.min(CORNER, width / 4, depth / 4);
+  const w = width / 2;
+  const d = depth / 2;
+  const shape = new THREE.Shape();
+  shape.moveTo(-w + r, -d);
+  shape.lineTo(w - r, -d);
+  shape.quadraticCurveTo(w, -d, w, -d + r);
+  shape.lineTo(w, d - r);
+  shape.quadraticCurveTo(w, d, w - r, d);
+  shape.lineTo(-w + r, d);
+  shape.quadraticCurveTo(-w, d, -w, d - r);
+  shape.lineTo(-w, -d + r);
+  shape.quadraticCurveTo(-w, -d, -w + r, -d);
+  const geometry = new THREE.ExtrudeGeometry(shape, { depth: THICKNESS, bevelEnabled: false, curveSegments: 4 });
+  // The shape's y becomes -z once laid flat; the extrusion becomes the thickness.
+  geometry.rotateX(-Math.PI / 2);
+  const position = geometry.getAttribute('position');
+  const uv = geometry.getAttribute('uv');
+  for (let i = 0; i < uv.count; i++) uv.setXY(i, position.getX(i) / width + 0.5, 0.5 - position.getZ(i) / depth);
+  return geometry;
 }

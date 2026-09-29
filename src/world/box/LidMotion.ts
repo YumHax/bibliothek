@@ -1,4 +1,8 @@
-/** Eased open/close progress of a hinged lid. Pure state; something ticked must call `tick`. */
+/**
+ * Eased open/close progress of a hinged lid. Pure state; something ticked must call `tick`.
+ * `onSettle` hears the end of each travel (`open`: it came fully open, else it shut): the host's
+ * sound for it (a box lid's plastic click, a door's latch).
+ */
 export class LidMotion {
   private progress = 0;
   private target: 0 | 1 = 0;
@@ -8,6 +12,7 @@ export class LidMotion {
     readonly maxAngle: number,
     /** Seconds for a full open or close. */
     readonly duration: number,
+    private readonly onSettle?: (open: boolean) => void,
   ) {}
 
   get isOpen(): boolean {
@@ -50,6 +55,7 @@ export class LidMotion {
     if (!this.isMoving) return false;
     const step = dt / this.duration;
     this.progress = this.target > this.progress ? Math.min(this.target, this.progress + step) : Math.max(this.target, this.progress - step);
+    if (this.progress === this.target) this.onSettle?.(this.target === 1);
     return true;
   }
 }

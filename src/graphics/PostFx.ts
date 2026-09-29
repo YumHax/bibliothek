@@ -3,8 +3,9 @@ import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import type { FramePipeline, Updatable } from '@/core/Engine';
 import type { QualitySettings } from './quality';
-import { NEUTRAL_LOOK, type Look } from './grade';
-import { AO_FRAGMENT, AO_BLUR_FRAGMENT, DOF_FRAGMENT, LUMINANCE_FRAGMENT, OUTPUT_FRAGMENT, QUAD_VERTEX } from './postFxShaders';
+import { NEUTRAL_LOOK, displayColor, type Look } from './grade';
+import { whiteBalance } from './whiteBalance';
+import { AO_FRAGMENT, AO_BLUR_FRAGMENT, DOF_FRAGMENT, LUMINANCE_FRAGMENT, METER_DOWNSAMPLE_FRAGMENT, OUTPUT_FRAGMENT, QUAD_VERTEX } from './postFxShaders';
 
 export interface PostFxOptions {
   /** Distance (metres) of what the player is reading up close, or null: the background blurs beyond it. */
@@ -20,7 +21,14 @@ export interface PhotoLens {
 
 /** Bloom: only what is brighter than this (linear, before tone mapping) glows: lamps, neon, screens, the sun on white. */
 const BLOOM_THRESHOLD = 0.85;
-const BLOOM_RADIUS = 0.45;
+/**
+ * The bloom's first level is half the frame (it was a quarter: small lamps and neon letters
+ * shimmered as they crossed its texels), so its narrowest glow is half as wide as before; a larger
+ * radius leans on the wider levels to keep the halo's reach.
+ */
+const BLOOM_RADIUS = 0.55;
+/** Width of the threshold's soft knee (three's default 0.01 is a hard cut: glows popped in and out as a lamp's brightness crossed it). */
+const BLOOM_KNEE = 0.15;
 /** Ambient occlusion: how far a crease darkens (metres) and how dark it gets. */
 const AO_RADIUS = 0.32;
 const AO_INTENSITY = 1.15;
@@ -28,6 +36,10 @@ const AO_SAMPLES = 12;
 /** Depth of field: blur radius in pixels at full strength, and how fast it comes and goes. */
 const DOF_MAX_RADIUS = 5;
 const DOF_RATE = 3;
+/** Taps of the blur's spiral, and the count past `DOF_WIDE_RADIUS` pixels (photo mode's wide blur). */
+const DOF_TAPS = 16;
+const DOF_MAX_TAPS = 32;
+const DOF_WIDE_RADIUS = 6;
 /**
  * The eye: average (log) luminance it aims for, how much of the difference it corrects (0 none,
  * 1 all: a lamp-lit room must still look darker than a sunny one), the range it may move in,
@@ -47,7 +59,7 @@ const LOOK_RATE = 1.5;
 interface LookUniforms {
   contrast: THREE.IUniform<number>;
   saturation: THREE.IUniform<number>;
-  temperature: THREE.IUniform<number>;
+  whiteBalance: THREE.IUniform<THREE.Matrix3>;
   shadows: THREE.IUniform<THREE.Color>;
   highlights: THREE.IUniform<THREE.Color>;
   vignette: THREE.IUniform<number>;
@@ -57,8 +69,14 @@ interface LookUniforms {
 /**
  * The HDR frame: the scene renders into a multisampled half-float target (linear light, with its
  * depth), then full-screen passes: ambient occlusion from the depth (no second scene render),
- * depth of field while a box is held up, bloom, a light meter the exposure adapts to, and one
- * output pass that tone-maps (ACES, like the plain renderer), grades, vignettes and adds grain.
+ * applied in the prep copy with depth of field while a box is held up, bloom, a light meter the
+ * exposure adapts to, and one output pass that antialiases (FXAA), tone-maps (ACES, like the
+ * plain renderer), grades, vignettes and adds grain.
+ *
+ * Adaptive resolution (`setRenderScale`) never reallocates: every target keeps the drawing
+ * buffer's size, the scene and the passes before the bloom draw into its lower-left share (the
+ * viewport), each pass reads at `vUv * uvScale`, and the output pass stretches that share over the
+ * canvas. A step of the resolution is a uniform change, not a hitch.
  *
  * The canvas is transparent where a video plays (a cut-out onto the CSS layer behind it), so
  * every pass keeps the alpha: bloom adds light without making the cut-out opaque (a glow over the
@@ -73,10 +91,17 @@ export class PostFx implements FramePipeline, Updatable {
   private readonly aoTarget: THREE.WebGLRenderTarget | null = null;
   private readonly aoBlurTarget: THREE.WebGLRenderTarget | null = null;
   private readonly meterTarget: THREE.WebGLRenderTarget | null = null;
+  /** The meter's area average: the frame at a quarter, then a sixteenth of its size (log luminance, weight). */
+  private readonly meterQuarter: THREE.WebGLRenderTarget | null = null;
+  private readonly meterSixteenth: THREE.WebGLRenderTarget | null = null;
+  private readonly meterLogMaterial: THREE.ShaderMaterial | null = null;
+  private readonly meterAverageMaterial: THREE.ShaderMaterial | null = null;
   private readonly meterPixels = new Uint8Array(METER_SIZE * METER_SIZE * 4);
   private metering = false;
   private meterTimer = 0;
   private targetExposure = 1;
+  /** `settle()` asked for the eye to take the next reading at once (a trip: no adapting behind the fade). */
+  private settleEye = false;
 
   private readonly quad = new FullScreenQuad();
   private readonly prepMaterial: THREE.ShaderMaterial;
@@ -85,6 +110,8 @@ export class PostFx implements FramePipeline, Updatable {
   private readonly meterMaterial: THREE.ShaderMaterial | null = null;
   private readonly outputMaterial: THREE.ShaderMaterial;
   private readonly bloom: UnrealBloomPass | null = null;
+  /** The bloom's high-pass threshold, set each frame from the exposure. */
+  private bloomThreshold: THREE.IUniform<number> = { value: BLOOM_THRESHOLD };
 
   private readonly look: Look = { ...NEUTRAL_LOOK };
   private targetLook: Look = NEUTRAL_LOOK;
@@ -95,6 +122,14 @@ export class PostFx implements FramePipeline, Updatable {
   private time = 0;
   private camera: THREE.PerspectiveCamera | null = null;
   private readonly size = new THREE.Vector2();
+  /** Share of the drawing buffer the frame is rendered at (`setRenderScale`), and the frame's size in texels at that share. */
+  private renderScale = 1;
+  private readonly frame = new THREE.Vector2();
+  /** The frame's share of the full-size textures (uv), and the last texel coordinate inside it. */
+  private readonly uvScale = new THREE.Vector2(1, 1);
+  private readonly uvLimit = new THREE.Vector2(1, 1);
+  private readonly aoScale = new THREE.Vector2(1, 1);
+  private lastTemperature = NaN;
 
   constructor(
     private readonly renderer: THREE.WebGLRenderer,
@@ -120,7 +155,7 @@ export class PostFx implements FramePipeline, Updatable {
     this.prepMaterial = new THREE.ShaderMaterial({
       ...common,
       fragmentShader: DOF_FRAGMENT,
-      defines: { DOF_TAPS: 16 },
+      defines: { DOF_TAPS, DOF_MAX_TAPS, DOF_WIDE_RADIUS: DOF_WIDE_RADIUS.toFixed(1), USE_AO: quality.ssao ? 1 : 0 },
       uniforms: {
         ...depthUniforms(),
         tColor: { value: this.sceneTarget.texture },
@@ -128,6 +163,11 @@ export class PostFx implements FramePipeline, Updatable {
         focus: { value: 0.45 },
         amount: { value: 0 },
         maxRadius: { value: DOF_MAX_RADIUS },
+        tAO: { value: null },
+        aoTexel: { value: new THREE.Vector2() },
+        fogDensity: { value: 0 },
+        uvScale: { value: this.uvScale },
+        uvLimit: { value: this.uvLimit },
       },
     });
 
@@ -148,17 +188,32 @@ export class PostFx implements FramePipeline, Updatable {
           aspect: { value: w / h },
           radius: { value: AO_RADIUS },
           intensity: { value: AO_INTENSITY },
+          uvScale: { value: this.aoScale },
+          uvLimit: { value: this.uvLimit },
         },
       });
       this.aoBlurMaterial = new THREE.ShaderMaterial({
         ...common,
         fragmentShader: AO_BLUR_FRAGMENT,
-        uniforms: { ...depthUniforms(), tAO: { value: this.aoTarget.texture }, aoTexel: { value: new THREE.Vector2(1 / aoSize.w, 1 / aoSize.h) } },
+        uniforms: {
+          ...depthUniforms(),
+          tAO: { value: this.aoTarget.texture },
+          aoTexel: { value: new THREE.Vector2(1 / aoSize.w, 1 / aoSize.h) },
+          uvScale: { value: this.aoScale },
+          uvLimit: { value: this.uvLimit },
+        },
       });
+      // The occlusion darkens the working copy (the prep pass), before the bloom.
+      this.prepMaterial.uniforms.tAO.value = this.aoBlurTarget.texture;
+      this.prepMaterial.uniforms.aoTexel.value.set(1 / aoSize.w, 1 / aoSize.h);
     }
 
     if (quality.bloom) {
-      this.bloom = new UnrealBloomPass(new THREE.Vector2(w / 2, h / 2), NEUTRAL_LOOK.bloom, BLOOM_RADIUS, BLOOM_THRESHOLD);
+      // The pass halves the size it is given for its first level.
+      this.bloom = new UnrealBloomPass(new THREE.Vector2(w, h), NEUTRAL_LOOK.bloom, BLOOM_RADIUS, BLOOM_THRESHOLD);
+      const highPass = this.bloom.highPassUniforms as Record<string, THREE.IUniform<number>>;
+      highPass.smoothWidth.value = BLOOM_KNEE;
+      this.bloomThreshold = highPass.luminosityThreshold;
       // Add the glow's colour but leave the alpha alone: over a cut-out (a video playing) the glow
       // lies over the picture instead of turning the hole opaque.
       const blend = this.bloom.blendMaterial;
@@ -172,28 +227,42 @@ export class PostFx implements FramePipeline, Updatable {
 
     if (quality.autoExposure) {
       this.meterTarget = new THREE.WebGLRenderTarget(METER_SIZE, METER_SIZE, { type: THREE.UnsignedByteType, depthBuffer: false });
+      this.meterQuarter = new THREE.WebGLRenderTarget(Math.max(1, Math.ceil(w / 4)), Math.max(1, Math.ceil(h / 4)), hdr);
+      this.meterSixteenth = new THREE.WebGLRenderTarget(Math.max(1, Math.ceil(w / 16)), Math.max(1, Math.ceil(h / 16)), hdr);
+      // The first step reads the frame's share of the colour target; the second a whole quarter-size map.
+      const downsample = (source: THREE.Texture, texel: THREE.Vector2, log: boolean) =>
+        new THREE.ShaderMaterial({
+          ...common,
+          fragmentShader: METER_DOWNSAMPLE_FRAGMENT,
+          defines: { LOG_INPUT: log ? 1 : 0 },
+          uniforms: { tSource: { value: source }, sourceTexel: { value: texel }, uvScale: { value: log ? this.uvScale : new THREE.Vector2(1, 1) } },
+        });
+      this.meterLogMaterial = downsample(this.colorTarget.texture, new THREE.Vector2(1 / w, 1 / h), true);
+      this.meterAverageMaterial = downsample(this.meterQuarter.texture, new THREE.Vector2(1 / this.meterQuarter.width, 1 / this.meterQuarter.height), false);
       this.meterMaterial = new THREE.ShaderMaterial({
         ...common,
         fragmentShader: LUMINANCE_FRAGMENT,
-        uniforms: { tColor: { value: this.colorTarget.texture }, cell: { value: 1 / METER_SIZE } },
+        uniforms: { tColor: { value: this.meterSixteenth.texture }, cell: { value: 1 / METER_SIZE } },
       });
     }
 
     this.outputMaterial = new THREE.ShaderMaterial({
       ...common,
       fragmentShader: OUTPUT_FRAGMENT,
-      defines: { USE_AO: this.aoBlurTarget ? 1 : 0 },
+      defines: { USE_FXAA: quality.fxaa ? 1 : 0 },
       uniforms: {
         tColor: { value: this.colorTarget.texture },
-        tAO: { value: this.aoBlurTarget?.texture ?? null },
+        texel: { value: new THREE.Vector2(1 / w, 1 / h) },
         exposure: { value: 1 },
         aspect: { value: w / h },
         time: { value: 0 },
         contrast: { value: 1 },
         saturation: { value: 1 },
-        temperature: { value: 0 },
+        whiteBalance: { value: new THREE.Matrix3() },
+        uvScale: { value: this.uvScale },
+        uvLimit: { value: this.uvLimit },
         shadows: { value: this.lookColors.shadows },
-        highlights: { value: this.lookColors.highlights.set(0xffffff) },
+        highlights: { value: this.lookColors.highlights.setRGB(1, 1, 1) },
         vignette: { value: 0 },
         grain: { value: 0 },
       } satisfies Record<string, THREE.IUniform> & LookUniforms,
@@ -211,9 +280,41 @@ export class PostFx implements FramePipeline, Updatable {
   /** Eases to a zone's grade (instantly with `snap`, e.g. behind a travel fade). */
   setLook(look: Look, snap = false): void {
     this.targetLook = look;
-    this.lookColors.targetShadows.set(look.shadows);
-    this.lookColors.targetHighlights.set(look.highlights);
+    // Display values, read as is: the grade runs after sRGB (see `Look.shadows`).
+    displayColor(this.lookColors.targetShadows, look.shadows);
+    displayColor(this.lookColors.targetHighlights, look.highlights);
     if (snap) this.stepLook(1);
+  }
+
+  /**
+   * Behind a travel's curtain: the look where it is going now, the eye where the last reading puts
+   * it, and a reading taken on the next frame whose result the eye jumps to (it would otherwise
+   * adapt for a second or two after the fade-in).
+   */
+  settle(): void {
+    this.stepLook(1);
+    this.exposure = this.targetExposure;
+    this.meterTimer = METER_INTERVAL_S;
+    this.settleEye = true;
+  }
+
+  /**
+   * The frame's exposure, grade and blur as a CSS filter for the video layer behind the canvas
+   * (the cut-out shows it untouched by the passes), rounded so it changes only when it shows:
+   * brightness follows the exposure (a square root: the video is already display values),
+   * contrast and saturation the look's, blur the depth of field (the screen is always behind
+   * the box held up to read).
+   */
+  videoFilter(pixelRatio: number): string {
+    const exposure = this.exposure * Math.pow(2, this.look.exposure + (this.lens?.exposure ?? 0));
+    const round = (v: number, step: number) => Math.round(v / step) * step;
+    const parts = [`brightness(${round(Math.sqrt(exposure), 0.02).toFixed(2)})`];
+    if (this.quality.grade) parts.push(`contrast(${round(this.look.contrast, 0.01).toFixed(2)})`, `saturate(${round(this.look.saturation, 0.01).toFixed(2)})`);
+    const radius = this.dofAmount < 0.01 ? 0 : this.dofAmount * (this.prepMaterial.uniforms.maxRadius.value as number);
+    // A disc of radius r reads like a Gaussian of about r / 2; the canvas's pixels are CSS pixels x the ratio.
+    const blur = round(radius / 2 / Math.max(pixelRatio, 0.1), 0.25);
+    if (blur > 0) parts.push(`blur(${blur.toFixed(2)}px)`);
+    return parts.join(' ');
   }
 
   update(dt: number): void {
@@ -241,38 +342,87 @@ export class PostFx implements FramePipeline, Updatable {
 
     renderer.setRenderTarget(this.sceneTarget);
     renderer.render(scene, camera);
+    const fog = scene.fog as THREE.FogExp2 | null;
+    this.prepMaterial.uniforms.fogDensity.value = fog && (fog as THREE.FogExp2).isFogExp2 ? fog.density : 0;
 
     if (this.aoMaterial && this.aoBlurMaterial && this.aoTarget && this.aoBlurTarget) {
       this.pass(this.aoMaterial, this.aoTarget);
       this.pass(this.aoBlurMaterial, this.aoBlurTarget);
     }
 
-    // The scene's MSAA buffer is resolved and gone: everything after works on this copy.
+    // The scene's MSAA buffer is resolved and gone: everything after works on this copy (occluded, maybe blurred).
     const prep = this.prepMaterial.uniforms;
     prep.amount.value = this.dofAmount < 0.01 ? 0 : this.dofAmount;
+    const colorViewport = this.colorTarget.viewport;
+    if (this.renderScale < 1) {
+      // The bloom works on the whole target: what lies beyond the frame's share must be black, not last frame's glow.
+      this.renderer.setRenderTarget(this.colorTarget);
+      this.renderer.clear(true, false, false);
+      colorViewport.set(0, 0, this.frame.x, this.frame.y);
+    }
     this.pass(this.prepMaterial, this.colorTarget);
+    // The bloom reads and blends over the whole target.
+    colorViewport.set(0, 0, this.size.x, this.size.y);
 
+    const exposure = this.exposure * Math.pow(2, this.look.exposure + (this.lens?.exposure ?? 0));
     if (this.bloom) {
       this.bloom.strength = this.look.bloom;
+      // The threshold is on what the eye sees, after its exposure: a lamp shown brighter in a dark
+      // room the eye has adapted to glows more, not less (the scene's linear values do not change).
+      this.bloomThreshold.value = THREE.MathUtils.clamp(BLOOM_THRESHOLD / exposure, BLOOM_THRESHOLD * 0.5, BLOOM_THRESHOLD * 1.6);
       this.bloom.render(renderer, this.colorTarget, this.colorTarget, 0, false);
     }
 
     this.meter();
 
     const out = this.outputMaterial.uniforms;
-    out.exposure.value = this.exposure * Math.pow(2, this.look.exposure + (this.lens?.exposure ?? 0));
+    out.exposure.value = exposure;
     out.time.value = this.time;
     renderer.setRenderTarget(null);
     this.quad.material = this.outputMaterial;
     this.quad.render(renderer);
   }
 
-  compile(scene: THREE.Scene, camera: THREE.Camera): void {
+  compile(scene: THREE.Scene, camera: THREE.Camera, lightsFrom?: THREE.Scene): Promise<void> {
     // Program variants depend on the bound target (tone mapping, colour space): bind the scene's.
+    // `compileAsync` hands the programs over at once (synchronously, while the target is bound) and resolves once the driver has linked them.
     const previous = this.renderer.getRenderTarget();
     this.renderer.setRenderTarget(this.sceneTarget);
-    this.renderer.compile(scene, camera);
-    this.renderer.setRenderTarget(previous);
+    try {
+      return this.renderer.compileAsync(scene, camera, lightsFrom ?? null).then(() => undefined);
+    } finally {
+      this.renderer.setRenderTarget(previous);
+    }
+  }
+
+  /**
+   * Renders the frame at `scale` of the drawing buffer (0 < scale <= 1, the adaptive resolution's
+   * ratio over the canvas's): only viewports and uniforms change, no target is reallocated.
+   */
+  setRenderScale(scale: number): void {
+    const next = THREE.MathUtils.clamp(scale, 0.1, 1);
+    if (next === this.renderScale) return;
+    this.renderScale = next;
+    this.applyRenderScale();
+  }
+
+  private applyRenderScale(): void {
+    const { x: w, y: h } = this.size;
+    const s = this.renderScale;
+    this.frame.set(Math.max(1, Math.round(w * s)), Math.max(1, Math.round(h * s)));
+    this.uvScale.set(this.frame.x / w, this.frame.y / h);
+    this.uvLimit.set(this.uvScale.x - 0.5 / w, this.uvScale.y - 0.5 / h);
+    this.sceneTarget.viewport.set(0, 0, this.frame.x, this.frame.y);
+    this.sceneTarget.scissor.set(0, 0, this.frame.x, this.frame.y);
+    if (this.aoTarget && this.aoBlurTarget) {
+      const aw = this.aoTarget.width;
+      const ah = this.aoTarget.height;
+      const fw = Math.min(aw, Math.ceil(aw * this.uvScale.x));
+      const fh = Math.min(ah, Math.ceil(ah * this.uvScale.y));
+      this.aoScale.set(fw / aw, fh / ah);
+      this.aoTarget.viewport.set(0, 0, fw, fh);
+      this.aoBlurTarget.viewport.set(0, 0, fw, fh);
+    }
   }
 
   setSize(): void {
@@ -282,6 +432,13 @@ export class PostFx implements FramePipeline, Updatable {
     this.colorTarget.setSize(w, h);
     this.prepMaterial.uniforms.texel.value.set(1 / w, 1 / h);
     this.outputMaterial.uniforms.aspect.value = w / h;
+    this.outputMaterial.uniforms.texel.value.set(1 / w, 1 / h);
+    if (this.meterQuarter && this.meterSixteenth && this.meterLogMaterial && this.meterAverageMaterial) {
+      this.meterQuarter.setSize(Math.max(1, Math.ceil(w / 4)), Math.max(1, Math.ceil(h / 4)));
+      this.meterSixteenth.setSize(Math.max(1, Math.ceil(w / 16)), Math.max(1, Math.ceil(h / 16)));
+      this.meterLogMaterial.uniforms.sourceTexel.value.set(1 / w, 1 / h);
+      this.meterAverageMaterial.uniforms.sourceTexel.value.set(1 / this.meterQuarter.width, 1 / this.meterQuarter.height);
+    }
     if (this.aoTarget && this.aoBlurTarget && this.aoMaterial && this.aoBlurMaterial) {
       const aw = Math.max(1, Math.round(w / 2));
       const ah = Math.max(1, Math.round(h / 2));
@@ -290,8 +447,11 @@ export class PostFx implements FramePipeline, Updatable {
       this.aoMaterial.uniforms.depthTexel.value.set(1 / w, 1 / h);
       this.aoMaterial.uniforms.aspect.value = w / h;
       this.aoBlurMaterial.uniforms.aoTexel.value.set(1 / aw, 1 / ah);
+      this.prepMaterial.uniforms.aoTexel.value.set(1 / aw, 1 / ah);
     }
-    this.bloom?.setSize(w / 2, h / 2);
+    this.bloom?.setSize(w, h);
+    // `setSize` resets each target's viewport to the whole of it.
+    this.applyRenderScale();
   }
 
   private pass(material: THREE.ShaderMaterial, target: THREE.WebGLRenderTarget): void {
@@ -314,20 +474,29 @@ export class PostFx implements FramePipeline, Updatable {
     }
   }
 
-  /** Every `METER_INTERVAL_S`, a 16 x 16 log-luminance map of the frame is read back without stalling; the exposure follows it. */
+  /**
+   * Every `METER_INTERVAL_S`, the frame is averaged down (a quarter, a sixteenth) into a 16 x 16
+   * log-luminance map read back without stalling; the exposure follows it.
+   */
   private meter(): void {
-    if (!this.meterMaterial || !this.meterTarget || this.metering || this.meterTimer < METER_INTERVAL_S) return;
+    if (!this.meterMaterial || !this.meterTarget || !this.meterQuarter || !this.meterSixteenth || !this.meterLogMaterial || !this.meterAverageMaterial) return;
+    if (this.metering || this.meterTimer < METER_INTERVAL_S) return;
     this.meterTimer = 0;
+    this.pass(this.meterLogMaterial, this.meterQuarter);
+    this.pass(this.meterAverageMaterial, this.meterSixteenth);
     this.pass(this.meterMaterial, this.meterTarget);
     this.metering = true;
+    // Only a reading of a frame drawn after `settle()` may move the eye at once.
+    const snap = this.settleEye;
+    this.settleEye = false;
     this.renderer
       .readRenderTargetPixelsAsync(this.meterTarget, 0, 0, METER_SIZE, METER_SIZE, this.meterPixels)
-      .then(() => this.readMeter())
+      .then(() => this.readMeter(snap))
       .catch(() => undefined)
       .finally(() => (this.metering = false));
   }
 
-  private readMeter(): void {
+  private readMeter(snap: boolean): void {
     const px = this.meterPixels;
     let sum = 0;
     let weight = 0;
@@ -346,6 +515,7 @@ export class PostFx implements FramePipeline, Updatable {
     if (weight <= 0) return;
     const average = Math.pow(2, sum / weight);
     this.targetExposure = THREE.MathUtils.clamp(Math.pow(EXPOSURE_KEY / average, EXPOSURE_STRENGTH), EXPOSURE_MIN, EXPOSURE_MAX);
+    if (snap) this.exposure = this.targetExposure;
   }
 
   private stepLook(t: number): void {
@@ -366,12 +536,16 @@ export class PostFx implements FramePipeline, Updatable {
     const u = this.outputMaterial.uniforms;
     u.contrast.value = grade ? look.contrast : 1;
     u.saturation.value = grade ? look.saturation : 1;
-    u.temperature.value = grade ? look.temperature : 0;
+    const temperature = grade ? look.temperature : 0;
+    if (temperature !== this.lastTemperature) {
+      this.lastTemperature = temperature;
+      whiteBalance(temperature, u.whiteBalance.value);
+    }
     u.vignette.value = grade ? look.vignette : 0;
     u.grain.value = grade ? look.grain : 0;
     if (!grade) {
-      this.lookColors.shadows.set(0x000000);
-      this.lookColors.highlights.set(0xffffff);
+      this.lookColors.shadows.setRGB(0, 0, 0);
+      this.lookColors.highlights.setRGB(1, 1, 1);
     }
   }
 }

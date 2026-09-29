@@ -1,9 +1,10 @@
 import type { Doorway, RoomOptions } from '../Room';
 import type { DecorEntry } from '../props/decor';
 import type { Owned } from '../build/owned';
+import { GROUND_FLOOR, STOREY } from '../street/streetPlan';
 
 /*
- * THE BALCONY: a small stone balcony on the collection room's front wall (Front Street side, sixth
+ * THE BALCONY: a small stone balcony on the collection room's front wall (Front Street side, fifth
  * floor), reached through a glazed door where the room's right-hand front window used to be. Zone-local
  * coordinates, the origin on the balcony's floor at its middle; back (-z) is the building, front
  * (+z) the street. It is open air: no `Room` shell, the view all round is the painted panorama
@@ -35,9 +36,11 @@ export const BALCONY_PLAN = {
    */
   front: {
     x: [-3.3, 42] as [number, number],
-    street: -16.3,
+    // The same building the street paints (`streetPlan`): the shops' ground floor, then four storeys up to ours.
+    street: -(GROUND_FLOOR + 4 * STOREY),
     top: 3.6,
-    storey: 3.26,
+    storey: STOREY,
+    groundFloor: GROUND_FLOOR,
     ourWindows: [{ x: 0.3, width: 1.2, bottom: 0.1, top: 2.5 }],
     /** Window pitch along the neighbours' part and the lower floors. */
     pitch: 2.6,

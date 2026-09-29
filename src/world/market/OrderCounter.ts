@@ -72,7 +72,7 @@ export class OrderCounter extends THREE.Group implements Furniture, Interactable
   }
 
   label(): string {
-    return 'Mail order — click to leaf through the catalogue (any game, new, at the shop price)';
+    return 'Mail order · leaf through the catalogue (any game, new, at the shop price)';
   }
 
   activate(session: SessionActions): void {

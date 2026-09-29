@@ -103,7 +103,8 @@ export function pickRestingSpot(sources: RestingSpotSources): RestingSpot | null
   }
 
   for (const seat of sources.seats) {
-    if (seat === sources.playerSeat) continue;
+    // The player's armchair, or one a visiting friend sits in (or is heading for), is never offered.
+    if (seat === sources.playerSeat || seat.guest) continue;
     const approach = seat.approachPoint(new THREE.Vector3());
     if (!sources.nav.isFree(approach)) continue;
     const position = seat.restingSpot(new THREE.Vector3());

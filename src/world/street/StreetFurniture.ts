@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import { createCanvas, seededRandom, toTexture } from '@/covers/generated/canvasUtils';
 import type { Updatable } from '@/core/Engine';
 import type { Furniture } from '../Furniture';
@@ -27,6 +28,18 @@ export interface StreetFurnitureOptions {
 type Finish = 'metal' | 'wood' | 'glass' | 'hedge' | 'bin';
 
 const BENCH = { length: 1.8, depth: 0.55 };
+/** The bus shelter's frame: depth front to back, the posts' height, and how far the roof overhangs all round. */
+export const SHELTER = { depth: 1.4, height: 2.5, overhang: 0.15, roof: 0.1 } as const;
+/** The shelter's roof as a box on the pavement (length along the kerb, depth, top): what keeps the rain off (`Precipitation`). */
+export function shelterRoof(length: number): { length: number; depth: number; height: number } {
+  return { length: length + 2 * SHELTER.overhang, depth: SHELTER.depth + 2 * SHELTER.overhang, height: SHELTER.height + SHELTER.roof / 2 };
+}
+/** Edges of the street furniture are rounded this much (never more than a fifth of the part's thinnest side). */
+const EDGE = 0.008;
+/** Parts thinner than this stay sharp boxes (glass, bars): a bevel there is below a pixel. */
+const EDGE_MIN_SIDE = 0.03;
+/** Lumps in the hedge's clipped top and sides: how far they bulge, and how long a lump runs. */
+const HEDGE_LUMP = { up: 0.07, out: 0.035, every: 0.55 };
 
 /**
  * The things standing on the pavements, merged per material (a draw call per material for the
@@ -55,11 +68,11 @@ export class StreetFurniture extends THREE.Group implements Furniture, Updatable
     this.railings(options.railings, options.gate);
 
     const materials: Record<Finish, THREE.Material> = {
-      metal: snowCovered(new THREE.MeshStandardMaterial({ color: 0x2f3a36, roughness: 0.5, metalness: 0.55 })),
+      metal: snowCovered(new THREE.MeshStandardMaterial({ color: 0x2f3a36, roughness: 0.5 })),
       wood: snowCovered(new THREE.MeshStandardMaterial({ color: 0x8a5a36, roughness: 0.8 })),
-      glass: standard({ color: 0xcfe0e8, roughness: 0.08, metalness: 0.1, transparent: true, opacity: 0.22, depthWrite: false }),
+      glass: standard({ color: 0xcfe0e8, roughness: 0.06, transparent: true, opacity: 0.22, depthWrite: false }),
       hedge: snowCovered(new THREE.MeshStandardMaterial({ map: hedgeTexture(options.anisotropy), roughness: 0.95 })),
-      bin: snowCovered(new THREE.MeshStandardMaterial({ color: 0x3d5446, roughness: 0.6, metalness: 0.3 })),
+      bin: snowCovered(new THREE.MeshStandardMaterial({ color: 0x3d5446, roughness: 0.55 })),
     };
     for (const [finish, geometries] of this.parts) {
       const mesh = new THREE.Mesh(mergeGeometries(geometries)!, materials[finish]);
@@ -102,8 +115,11 @@ export class StreetFurniture extends THREE.Group implements Furniture, Updatable
     this.parts.set(finish, list);
   }
 
+  /** A part, its edges rounded (`EDGE`) unless it is glass or too thin to show it. */
   private box(finish: Finish, w: number, h: number, d: number, at: Vec2, yaw: number, local: [number, number, number]): void {
-    this.put(finish, new THREE.BoxGeometry(w, h, d), at, yaw, local);
+    const thinnest = Math.min(w, h, d);
+    const rounded = finish !== 'glass' && thinnest >= EDGE_MIN_SIDE;
+    this.put(finish, rounded ? new RoundedBoxGeometry(w, h, d, 2, Math.min(EDGE, thinnest * 0.2)) : new THREE.BoxGeometry(w, h, d), at, yaw, local);
   }
 
   /** A collider box around `at`, `w` x `d` turned by `yaw` (axis-aligned: yaw in quarter turns). */
@@ -120,12 +136,11 @@ export class StreetFurniture extends THREE.Group implements Furniture, Updatable
 
   /** Local +z is the open front (towards the road); x runs along the kerb. */
   private shelter({ at, yaw, length }: StreetFurnitureOptions['shelter']): void {
-    const depth = 1.4;
-    const height = 2.5;
+    const { depth, height, overhang, roof } = SHELTER;
     for (const x of [-length / 2, length / 2]) {
       for (const z of [-depth / 2, depth / 2]) this.box('metal', 0.08, height, 0.08, at, yaw, [x, height / 2, z]);
     }
-    this.box('metal', length + 0.3, 0.1, depth + 0.3, at, yaw, [0, height + 0.05, 0]);
+    this.box('metal', length + 2 * overhang, roof, depth + 2 * overhang, at, yaw, [0, height + roof / 2, 0]);
     this.box('metal', length, 0.06, 0.06, at, yaw, [0, 0.25, -depth / 2]);
     this.box('glass', length, height - 0.35, 0.02, at, yaw, [0, 0.35 + (height - 0.35) / 2, -depth / 2]);
     this.box('glass', 0.02, height - 0.35, depth * 0.9, at, yaw, [-length / 2, 0.35 + (height - 0.35) / 2, 0]);
@@ -150,20 +165,17 @@ export class StreetFurniture extends THREE.Group implements Furniture, Updatable
   }
 
   private bin(at: Vec2): void {
-    this.put('bin', new THREE.CylinderGeometry(0.24, 0.21, 0.85, 12), at, 0, [0, 0.425 + 0.05, 0]);
-    this.put('metal', new THREE.CylinderGeometry(0.26, 0.26, 0.06, 12), at, 0, [0, 0.93, 0]);
+    this.put('bin', new THREE.CylinderGeometry(0.24, 0.21, 0.85, 20), at, 0, [0, 0.425 + 0.05, 0]);
+    this.put('metal', new THREE.CylinderGeometry(0.26, 0.26, 0.06, 20), at, 0, [0, 0.93, 0]);
     this.put('metal', new THREE.CylinderGeometry(0.03, 0.03, 0.06, 6), at, 0, [0, 0.03, 0]);
     this.collide(at, 0, 0.55, 0.55, 1);
   }
 
-  /** The clipped hedge, in two runs either side of the gate's gap. */
+  /** The clipped hedge, in two runs either side of the gate's gap: rounded shoulders, a lumpy top and sides. */
   private hedge({ x, from, to, height, depth }: StreetFurnitureOptions['hedge'], gate: StreetFurnitureOptions['gate']): void {
     const gap = gate.width / 2 + 0.25;
     for (const [z0, z1] of [[from, gate.z - gap], [gate.z + gap, to]] as const) {
-      const length = z1 - z0;
-      this.put('hedge', new THREE.BoxGeometry(depth, height, length, 1, 1, 1), [x, (z0 + z1) / 2], 0, [0, height / 2, 0]);
-      // A rounded top: a second, narrower course, a little shorter so its ends never share the main box's plane.
-      this.put('hedge', new THREE.BoxGeometry(depth * 0.8, 0.2, length - 0.1), [x, (z0 + z1) / 2], 0, [0, height + 0.08, 0]);
+      this.put('hedge', hedgeRun(depth, height, z1 - z0, z0), [x, (z0 + z1) / 2], 0, [0, height / 2, 0]);
     }
   }
 
@@ -195,6 +207,42 @@ export class StreetFurniture extends THREE.Group implements Furniture, Updatable
     this.put('metal', merged, [0, 0], 0, [0, 0, 0]);
     this.colliders.push(new THREE.Box3(new THREE.Vector3(x - 1.1, 0, from), new THREE.Vector3(x + 0.08, 3, to)));
   }
+}
+
+/**
+ * One run of clipped hedge, centred (y from -height/2), `length` along z: a finely cut box whose top
+ * edges are rounded into shoulders and whose top and sides bulge in lumps the clippers missed
+ * (smooth noise along the run, seeded by where it starts so both runs differ). Normals recomputed.
+ */
+function hedgeRun(depth: number, height: number, length: number, seed: number): THREE.BufferGeometry {
+  const segments = Math.max(4, Math.ceil(length / 0.25));
+  const g = new THREE.BoxGeometry(depth, height, length, 6, 5, segments);
+  const position = g.getAttribute('position') as THREE.BufferAttribute;
+  const shoulder = Math.min(0.22, depth * 0.3);
+  const lump = (z: number, k: number): number => {
+    const t = (z + seed * 1.7 + k * 13.1) / HEDGE_LUMP.every;
+    return 0.6 * Math.sin(t * 2.1) * Math.sin(t * 0.73 + k) + 0.4 * Math.sin(t * 4.3 + 1.3 * k);
+  };
+  for (let i = 0; i < position.count; i++) {
+    let px = position.getX(i);
+    let py = position.getY(i);
+    const pz = position.getZ(i);
+    const up = (py + height / 2) / height;
+    // The shoulders: near the top the sides draw in on a quarter circle.
+    const below = height / 2 - py;
+    if (below < shoulder) {
+      const t = 1 - below / shoulder;
+      const pull = shoulder * (1 - Math.sqrt(Math.max(0, 1 - t * t)));
+      px -= Math.sign(px) * pull * (Math.abs(px) / (depth / 2));
+    }
+    // Lumps: the top rises and falls, the sides bulge more towards the top (clipped less up there).
+    const top = THREE.MathUtils.smoothstep(up, 0.6, 1);
+    py += HEDGE_LUMP.up * top * lump(pz, 0);
+    px += Math.sign(px) * HEDGE_LUMP.out * up * lump(pz, Math.sign(px) + 2) * (Math.abs(px) / (depth / 2));
+    position.setXYZ(i, px, py, pz);
+  }
+  g.computeVertexNormals();
+  return g;
 }
 
 /** Clipped privet: dense small leaves in greens, darker hollows. */

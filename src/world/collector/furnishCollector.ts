@@ -5,6 +5,7 @@ import type { Milestones } from '@/economy/Milestones';
 import type { CollectorWatch } from '@/economy/CollectorWatch';
 import { plaqueTier } from '@/economy/milestoneList';
 import type { Zone } from '../zone/Zone';
+import type { Placement } from '../Placement';
 import { ROOM_PLAN } from '../roomPlan';
 import { CollectorsBook } from './CollectorsBook';
 import { BrassPlaque } from './BrassPlaque';
@@ -25,8 +26,31 @@ export interface CollectorCornerOptions {
 }
 
 /**
- * Places what the collector's book brings into the collection room, from `ROOM_PLAN.collector`: the
- * binder on the sideboard (it opens the book), the brass plaque beside it once 25 games are reached
+ * The collector's binder (it opens the book): on the sideboard when there is one, else on the floor where it will
+ * stand; `moveToSideboard` puts it up there once the sideboard is bought.
+ */
+export function placeCollectorsBook(zone: Zone, home: CollectorHome, onSideboard: boolean): { moveToSideboard(): void } {
+  const plan = ROOM_PLAN.collector;
+  const book = new CollectorsBook({ panel: home.book, unclaimed: () => home.milestones.unclaimed });
+  const put = (spot: { at: Placement; yaw: number }): void => {
+    zone.placeAt(book, spot.at);
+    book.rotation.y += spot.yaw;
+  };
+  put(onSideboard ? plan.book : plan.bookOnFloor);
+  let up = onSideboard;
+  return {
+    moveToSideboard: () => {
+      if (up) return;
+      up = true;
+      zone.remove(book);
+      put(plan.book);
+    },
+  };
+}
+
+/**
+ * Places what the collector's book brings into the collection room, from `ROOM_PLAN.collector` (the binder is
+ * `placeCollectorsBook`'s): the brass plaque on the sideboard once 25 games are reached
  * (engraved again at 50, 100, 250), and the glass display cabinet against the front wall once 50
  * are, holding the most valuable copies on the shelves. The cabinet is only placed once earned (no
  * light, so placing it later costs no recompile), so it never stands invisible in the way.
@@ -34,9 +58,6 @@ export interface CollectorCornerOptions {
 export function furnishCollectorCorner(zone: Zone, home: CollectorHome, options: CollectorCornerOptions): void {
   const plan = ROOM_PLAN.collector;
   const { milestones, watch } = home;
-
-  const book = zone.placeAt(new CollectorsBook({ panel: home.book, unclaimed: () => milestones.unclaimed }), plan.book.at);
-  book.rotation.y += plan.book.yaw;
 
   const plaque = zone.placeAt(new BrassPlaque(), plan.plaque);
   let engraved = -1;

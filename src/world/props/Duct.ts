@@ -13,8 +13,8 @@ export interface DuctOptions {
   ventEvery?: number;
 }
 
-const METAL = standard({ color: 0x8a9098, metalness: 0.75, roughness: 0.45 });
-const SEAM = standard({ color: 0x6a7078, metalness: 0.7, roughness: 0.5 });
+const METAL = standard({ color: 0x8a9098, metalness: 1, roughness: 0.5 });
+const SEAM = standard({ color: 0x6a7078, metalness: 1, roughness: 0.55 });
 
 /**
  * A round galvanised air duct run under a black ceiling, the kind every arcade left exposed:

@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { createCanvas } from '@/covers/generated/canvasUtils';
+import { QUALITY } from '@/graphics/quality';
 
 /**
  * Scenery texture size. The panorama covers 360° across but only the `ELEVATION_MIN..MAX` band
@@ -131,6 +132,13 @@ export function encodeDepth(distance: number): number {
  * `color` directly, and lights go through `lit()` / `glow()`.
  */
 export class Sheet {
+  /**
+   * The day colours are painted on a canvas this many times finer than the scene texel (2 on high
+   * quality where the GPU takes the size, `Outdoors`): painters still work in scene texels (the
+   * context is scaled once, here), only pixel copies (`getImageData`) must multiply by it. The
+   * masks (lights, haze, curfew, ground, fx) stay at the scene's size.
+   */
+  readonly colorScale: number;
   readonly color: CanvasRenderingContext2D;
   readonly light: CanvasRenderingContext2D;
   readonly haze: CanvasRenderingContext2D;
@@ -142,8 +150,10 @@ export class Sheet {
   private groundStyle = '#000000';
   private glassByte = 0;
 
-  constructor() {
-    [, this.color] = createCanvas(SCENE_WIDTH, SCENE_HEIGHT);
+  constructor(colorScale = 1) {
+    this.colorScale = colorScale;
+    [, this.color] = createCanvas(SCENE_WIDTH * colorScale, SCENE_HEIGHT * colorScale);
+    this.color.scale(colorScale, colorScale);
     [, this.light] = createCanvas(SCENE_WIDTH, SCENE_HEIGHT);
     [, this.haze] = createCanvas(SCENE_WIDTH, SCENE_HEIGHT);
     [, this.curfew] = createCanvas(SCENE_WIDTH, SCENE_HEIGHT);
@@ -351,13 +361,15 @@ export class Sheet {
 
   /**
    * Neon or back-lit lettering centred on (x, y): `size` px tall, squeezed across by `squeeze` for a
-   * facade seen at an angle (negative to mirror it: see the shop fascias). Anti-aliased, so it carries no curfew: a sign lit this way burns all night.
+   * facade seen at an angle (negative to mirror it: see the shop fascias), sheared by `slant` (texture
+   * y per x) to run along a fascia that crosses the panorama aslant. Anti-aliased, so it carries no curfew: a sign lit this way burns all night.
    */
-  sign(text: string, x: number, y: number, size: number, squeeze: number, font: string, kind: 'warm' | 'cool', strength: number): void {
+  sign(text: string, x: number, y: number, size: number, squeeze: number, font: string, kind: 'warm' | 'cool', strength: number, slant = 0): void {
     const ctx = this.light;
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
     ctx.translate(x, y);
+    ctx.transform(1, slant, 0, 1, 0, 0);
     ctx.scale(squeeze, 1);
     ctx.font = `${Math.round(size * 10) / 10}px ${font}`;
     ctx.textAlign = 'center';
@@ -390,7 +402,7 @@ export class Sheet {
     const scene = new THREE.CanvasTexture(this.color.canvas);
     scene.colorSpace = THREE.SRGBColorSpace;
     scene.premultiplyAlpha = true;
-    scene.anisotropy = 8;
+    scene.anisotropy = QUALITY.anisotropy;
     scene.wrapS = THREE.RepeatWrapping;
     scene.wrapT = THREE.ClampToEdgeWrapping;
 

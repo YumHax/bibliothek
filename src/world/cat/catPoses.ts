@@ -98,6 +98,33 @@ const LIE: JointAngles = pose({
   ...front(-1.25, 0.35),
   ...hind(-1.3, 2.4),
 });
+// Grooming, right paw (`mirrored` gives the left): licking the raised paw, wiping the face with it, licking the flank.
+const GROOM_PAW: JointAngles = { ...SIT, neck: 1.1, headYaw: -0.25, eyes: 0.6, ears: 0.1, frUpper: -1.45, frLower: -0.5 };
+const GROOM_FACE: JointAngles = { ...SIT, neck: 0.55, headPitch: 0.15, headYaw: -0.3, roll: -0.06, eyes: 0.35, ears: 0.05, frUpper: -1.75, frLower: -1.05 };
+const GROOM_FLANK: JointAngles = { ...SIT, neck: 0.95, headPitch: 0.45, headYaw: 1.25, roll: 0.12, eyes: 0.5, ears: 0.1, tailYaw: 0.9 };
+/** The phases a wash cycles through (`CatModel` switches between them while the pose is `groom`). */
+export const GROOM_PHASES = { paw: GROOM_PAW, face: GROOM_FACE, flank: GROOM_FLANK } as const;
+export type GroomPhase = keyof typeof GROOM_PHASES;
+
+/** The same pose on the other side: left and right legs swapped, yaws and roll negated. */
+export function mirrored(pose: JointAngles): JointAngles {
+  return {
+    ...pose,
+    roll: -pose.roll,
+    headYaw: -pose.headYaw,
+    tailYaw: -pose.tailYaw,
+    tailWrap: -pose.tailWrap,
+    flUpper: pose.frUpper,
+    flLower: pose.frLower,
+    frUpper: pose.flUpper,
+    frLower: pose.flLower,
+    hlUpper: pose.hrUpper,
+    hlLower: pose.hrLower,
+    hrUpper: pose.hlUpper,
+    hrLower: pose.hlLower,
+  };
+}
+
 export const POSES: Record<CatPose, JointAngles> = {
   stand: STAND,
   sit: SIT,
@@ -141,7 +168,7 @@ export const POSES: Record<CatPose, JointAngles> = {
     ...front(-1.54, 0.05),
     ...hind(-0.45, 0),
   }),
-  groom: { ...SIT, neck: 1.1, headYaw: -0.25, eyes: 0.6, ears: 0.1, frUpper: -1.45, frLower: -0.5 },
+  groom: GROOM_PAW,
   eat: pose({
     rootY: 0.15,
     pitch: 0.3,
@@ -174,6 +201,17 @@ export const POSES: Record<CatPose, JointAngles> = {
     tailCurl: 0.25,
     ...front(-1.35, -0.3),
     ...hind(0.7, 0.5),
+  }),
+  knead: pose({
+    rootY: 0.105,
+    pitch: 0.3,
+    neck: 0.05,
+    ears: 0.05,
+    eyes: 0.45,
+    tailBase: 0.2,
+    tailCurl: 0.08,
+    ...front(-1.45, 0.25),
+    ...hind(-0.5, 0.35),
   }),
   crouch: pose({
     rootY: 0.115,
@@ -209,6 +247,35 @@ export const TAIL_SWAY: Record<CatPose, number> = {
   eat: 0.2,
   drink: 0.2,
   scratch: 0.1,
+  knead: 0.12,
   crouch: 0.08,
   pounce: 0.05,
+};
+
+/**
+ * How long each joint takes to follow a new pose (blend time constant, s; 3τ to settle). The
+ * head leads, the front legs follow, the body and hind legs come last and the tail trails, so
+ * getting up from lying reads as head, forelegs, then rump rather than one morph.
+ */
+export const JOINT_TAU: Record<keyof JointAngles, number> = {
+  neck: 0.07,
+  headPitch: 0.07,
+  headYaw: 0.07,
+  ears: 0.06,
+  eyes: 0.08,
+  flUpper: 0.11,
+  flLower: 0.11,
+  frUpper: 0.11,
+  frLower: 0.11,
+  rootY: 0.16,
+  pitch: 0.15,
+  roll: 0.18,
+  hlUpper: 0.19,
+  hlLower: 0.19,
+  hrUpper: 0.19,
+  hrLower: 0.19,
+  tailBase: 0.24,
+  tailCurl: 0.28,
+  tailYaw: 0.28,
+  tailWrap: 0.3,
 };

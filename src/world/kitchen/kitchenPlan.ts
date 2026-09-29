@@ -161,9 +161,9 @@ export const KITCHEN_PLAN = {
 
   /**
    * A game from the collection left on the breakfast table, at its left end on the wall side, clear of the plate
-   * (table-local x -0.26..-0.04) and the paper: table-local [x, z] on its top, and its turn.
+   * (table-local x -0.26..-0.04) and the paper: table-local [x, z] on its top, and its turn; a little askew, never onto the plate.
    */
-  strayBox: { at: [-0.28, 0.24] as [number, number], yaw: Math.PI / 2 + 0.25 },
+  strayBox: { at: [-0.3, 0.24] as [number, number], yaw: Math.PI / 2 + 0.25, jitter: { yaw: 0.15, offset: 0.012 } },
 
   /**
    * Where the market's home goods for the kitchen (`economy/homeGoods.ts`) go once bought. The portable CRT stands on
@@ -185,6 +185,8 @@ export const KITCHEN_PLAN = {
     mixingBowl: { wall: 'back', along: 0.05, y: WORKTOP, offset: 0.36 } as Placement,
     treatJar: { wall: 'back', along: 0.93, y: WORKTOP, offset: 0.1 } as Placement,
     catFind: { floor: [-0.55, -0.4], rotationY: 0.4 } as Placement,
+    /** A radio left on gives the morning chronicle when it comes on the air only with the player this near it (m). */
+    chronicleEarshot: 5,
   },
 
   /**
@@ -209,7 +211,7 @@ export const KITCHEN_PLAN = {
     { kind: 'plant', at: { corner: 'front-left', inset: 0.32 }, options: { kind: 'yucca', pot: 'terracotta', seed: 21 }, upgrade: { good: 'houseplant', nth: 8 } },
     { kind: 'plant', at: { wall: 'left', along: 0.35, y: WORKTOP, offset: 0.3 }, options: { kind: 'small', pot: 'ceramic', seed: 27, collides: false }, upgrade: { good: 'houseplant', nth: 9 } },
     // A framed print over the table.
-    { kind: 'pictureFrame', at: { wall: 'front', along: -0.15, y: 1.5 }, options: { motif: 'sunset', seed: 6, width: 0.5, height: 0.38 }, upgrade: { good: 'framedPrint', nth: 7 } },
+    { kind: 'pictureFrame', at: { wall: 'front', along: -0.15, y: 1.5 }, options: { motif: 'stillLife', seed: 6, width: 0.5, height: 0.38, frameColor: 0xc9b28a }, upgrade: { good: 'framedPrint', nth: 7 } },
     // The pedal bin by the front wall right of the table's far chair (x 0.21..0.72), its pedal to the room. Slim
     // (x 0.77..1.03, z 0.97..1.28) so the way in from the door stays 0.7 m wide between it and the open leaf, which
     // stands 0.25 m off the right wall down to z 0.34.
@@ -218,6 +220,8 @@ export const KITCHEN_PLAN = {
     { kind: 'wallShelf', at: { wall: 'front', along: -0.15, y: 1.85 }, options: { width: 0.8, tiers: 2, spacing: 0.3, items: 'mixed', seed: 4 } },
     // The calendar left of the clock, over the far chair (x 0.47..0.77, y 1.23..1.68), open at this month.
     { kind: 'wallCalendar', at: { wall: 'front', along: 0.62, y: 1.45 } },
+    // A double socket on the splashback between the radio and the kettle (on the tiles, 0.012 thick), for the worktop's things.
+    { kind: 'wallSocket', at: { wall: 'back', along: 0.74, y: 0, offset: 0.013 }, options: { height: WORKTOP + 0.16 } },
     // A spice rack on the tiles over the toaster, clear of the toast (up to y 1.16) and under the wall cupboards (1.45).
     { kind: 'spiceRack', at: { wall: 'back', along: -0.35, y: 1.25, offset: 0.012 }, options: { width: 0.4, rows: 2, seed: 3 } },
     // A compact panel radiator in the front-right corner, between the bin (x up to 1.03) and the right wall, outside the

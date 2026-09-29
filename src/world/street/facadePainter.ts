@@ -1,8 +1,10 @@
 import { seededRandom } from '@/covers/generated/canvasUtils';
 import { GROUND_FLOOR, STOREY, type FacadeSpec, type FlatFront, type ShopKind, type ShopSpec } from './streetPlan';
 import { SHOP_LOOKS } from '../city/shopLooks';
+import { FACADE_WINDOW, balconyRows, facadeBays, facadeStyle, onBalcony, type FacadeStyle } from '../city/facadeStyle';
+import type { FlatRoomId } from '../city/flatWindows';
 
-/** A light painted on the night map: a rect (night-map pixels), its colour, when it comes on at dusk and when it goes out. */
+/** A light painted on the night map: a rect (colour-atlas pixels: `Buildings` scales them to its night map), its colour, when it comes on at dusk and when it goes out. */
 export interface NightLight {
   x: number;
   y: number;
@@ -13,6 +15,17 @@ export interface NightLight {
   litAt: number;
   /** Wakefulness below which it is off (0 = burns all night), as the painted view's curfews. */
   curfew: number;
+  /** One of our flat's windows: lit as that room was left (its lamp, its curtains), not by the curfew. */
+  room?: FlatRoomId;
+}
+
+/** A pane of glass on a facade (colour-atlas pixels) and how rough it is (0 clear .. 1 matte): the glass mask. */
+export interface GlassPane {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  rough: number;
 }
 
 /**
@@ -33,9 +46,10 @@ export interface FacadeFeatures {
   shopfronts: { s0: number; s1: number; kind: ShopKind; light: string; awning: boolean }[];
 }
 
-/** One painted facade: its night lights and what stands out of it. */
+/** One painted facade: its night lights, its panes of glass and what stands out of it. */
 export interface PaintedFacade {
   lights: NightLight[];
+  glass: GlassPane[];
   features: FacadeFeatures;
 }
 
@@ -47,8 +61,9 @@ export interface AtlasSlot {
   k: number;
 }
 
-/** The night map is painted at this fraction of the colour atlas's resolution. */
-export const NIGHT_SCALE = 0.25;
+/** How rough the facades' window glass is (clear, frosted), for the glass mask (`Buildings`). */
+const CLEAR_GLASS = 0.06;
+const FROSTED_GLASS = 0.35;
 /** Parapet over the top floor's windows, metres. */
 export const PARAPET = 1.1;
 
@@ -57,21 +72,6 @@ export function facadeHeight(storeys: number): number {
   return GROUND_FLOOR + (storeys - 1) * STOREY + PARAPET;
 }
 
-interface Style {
-  wall: string;
-  trim: string;
-  brick: boolean;
-  frame: string;
-  shutters: string | null;
-  window: 'plain' | 'lintel' | 'arched';
-  balconies: boolean;
-  flowers: number;
-}
-
-const BRICKS = ['#b8654b', '#a86a52', '#9c6b55', '#8e4f3c', '#b0735a'];
-const RENDERS = ['#c9a583', '#b99b6d', '#cdb79b', '#d8b49a', '#c8c2a8', '#e2cf9e', '#b9c2b0', '#d9b8b0'];
-const STONES = ['#d9ccb4', '#e0d5c1', '#d4c6a8', '#cfc4b0'];
-const SHUTTERS = ['#4f6b5a', '#5a7189', '#8c3b2e', '#e6dfcf', '#6b6f4a', '#3f4f6a'];
 const CURTAINS = ['#d9cfbf', '#c9b9a4', '#e6e0d4', '#b9b3a8', '#c9a58a', '#a8b4b8'];
 const FLOWERS = ['#d9383a', '#e0567a', '#f0f0e8', '#b04ac0', '#f09a3a'];
 const GLASS = '#2f3d48';
@@ -126,12 +126,6 @@ function shade(hex: string, k: number): string {
   return `rgb(${c((n >> 16) & 255)}, ${c((n >> 8) & 255)}, ${c(n & 255)})`;
 }
 
-function styleFor(random: () => number): Style {
-  const r = random();
-  if (r < 0.3) return { wall: pick(random, STONES), trim: '#ece4d2', brick: false, frame: '#ece8e0', shutters: null, window: random() < 0.6 ? 'lintel' : 'arched', balconies: true, flowers: 0.12 };
-  if (r < 0.62) return { wall: pick(random, BRICKS), trim: '#e0d6c4', brick: true, frame: random() < 0.5 ? '#f2eee6' : '#3a3f44', shutters: null, window: random() < 0.5 ? 'plain' : 'lintel', balconies: random() < 0.3, flowers: 0.2 };
-  return { wall: pick(random, RENDERS), trim: '#efe8da', brick: false, frame: '#f2eee6', shutters: random() < 0.6 ? pick(random, SHUTTERS) : null, window: 'plain', balconies: random() < 0.35, flowers: 0.3 };
-}
 
 /**
  * Paints one facade into the colour atlas (`ctx`, at `slot`) and returns the lights it holds for
@@ -145,7 +139,8 @@ function styleFor(random: () => number): Style {
  */
 export function paintFacade(ctx: CanvasRenderingContext2D, spec: FacadeSpec, width: number, slot: AtlasSlot, goods: readonly string[] | null): PaintedFacade {
   const random = seededRandom(spec.seed * 7919);
-  const style = styleFor(random);
+  // The building's look is the neighbourhood's (`city/facadeStyle`): the window view paints the same front.
+  const style = facadeStyle(spec.seed);
   const height = facadeHeight(spec.storeys);
   const p = new Brush(ctx, slot, height);
   p.features.wall = style.wall;
@@ -153,7 +148,7 @@ export function paintFacade(ctx: CanvasRenderingContext2D, spec: FacadeSpec, wid
 
   // The wall, and its texture.
   p.rect(0, 0, width, height, style.wall);
-  if (style.brick && slot.k > 20) {
+  if (style.kind === 'brick' && slot.k > 20) {
     for (let y = 0; y < height; y += 0.075) p.rect(0, y, width, y + Math.max(0.012, 1 / slot.k), 'rgba(60, 40, 30, 0.18)');
   }
   for (let i = 0; i < width * height * 0.8; i++) {
@@ -173,27 +168,36 @@ export function paintFacade(ctx: CanvasRenderingContext2D, spec: FacadeSpec, wid
   p.rect(0, height - PARAPET - 0.1, width, height - PARAPET + 0.25, style.trim);
   p.rect(0, height - PARAPET - 0.16, width, height - PARAPET - 0.1, 'rgba(0,0,0,0.25)');
   p.rect(0, height - 0.12, width, height, style.trim);
+  if (style.quoins) paintQuoins(p, style, width, height - PARAPET);
 
-  // Storeys over the ground floor: a row of bays.
-  const bays = spec.bays ?? Math.max(1, Math.round(width / 2.7));
+  // Storeys over the ground floor: a row of bays, balconies where the style hangs them.
+  const bays = facadeBays(width, spec.bays);
   const bay = width / bays;
-  const winW = Math.min(1.15, bay * 0.5);
-  const winH = 1.65;
+  const winW = Math.min(FACADE_WINDOW.maxWidth, bay * FACADE_WINDOW.share);
+  const balconies = balconyRows(style, spec.storeys, bays);
   for (let storey = 1; storey < spec.storeys; storey++) {
     const floorY = GROUND_FLOOR + (storey - 1) * STOREY;
-    // A string course at each floor.
-    p.rect(0, floorY - 0.06, width, floorY + 0.1, shade(style.trim, 0.96));
+    // A string course at the floor, where the front has them.
+    if (style.courses) p.rect(0, floorY - 0.06, width, floorY + 0.1, shade(style.trim, 0.96));
     // Our flat's floor: its own windows where they really are (painted after the loop).
     if (spec.flat && storey === spec.storeys - 1) continue;
-    const balconyRow = style.balconies && (storey === 1 || storey === spec.storeys - 1);
+    const y0 = floorY + FACADE_WINDOW.sill;
+    const y1 = y0 + FACADE_WINDOW.height;
+    for (const row of balconies) {
+      if (row.floor !== storey) continue;
+      // A wrought-iron balcony across the row's bays over a stone slab: built in 3D (`relief/FacadeRelief`), a shadow painted under it.
+      const s0 = row.from * bay + bay * 0.08;
+      const s1 = (row.to + 1) * bay - bay * 0.08;
+      p.rect(s0, y0 - 0.3, s1, y0 - 0.12, 'rgba(0,0,0,0.12)');
+      p.features.balconies.push({ s0, s1, y: y0 });
+    }
     for (let b = 0; b < bays; b++) {
       const cx = (b + 0.5) * bay;
       const s0 = cx - winW / 2;
       const s1 = cx + winW / 2;
-      const y0 = floorY + 0.9;
-      const y1 = y0 + winH;
-      paintWindow(p, style, random, s0, y0, s1, y1);
-      if (style.shutters && !balconyRow) {
+      const balcony = onBalcony(balconies, storey, b);
+      paintWindow(p, style, random, s0, y0, s1, y1, storey === 1 && !balcony);
+      if (style.shutters && !balcony) {
         p.rect(s0 - winW * 0.48, y0, s0 - 0.04, y1, style.shutters);
         p.rect(s1 + 0.04, y0, s1 + winW * 0.48, y1, style.shutters);
         for (let y = y0 + 0.1; y < y1; y += 0.12) {
@@ -201,11 +205,7 @@ export function paintFacade(ctx: CanvasRenderingContext2D, spec: FacadeSpec, wid
           p.rect(s1 + 0.06, y, s1 + winW * 0.46, y + 0.02, 'rgba(0,0,0,0.18)');
         }
       }
-      if (balconyRow) {
-        // A wrought-iron balcony across the bay over a stone slab: built in 3D (`relief/FacadeRelief`), a shadow painted under it.
-        p.rect(cx - bay * 0.42, y0 - 0.3, cx + bay * 0.42, y0 - 0.12, 'rgba(0,0,0,0.12)');
-        p.features.balconies.push({ s0: cx - bay * 0.42, s1: cx + bay * 0.42, y: y0 });
-      } else if (random() < style.flowers) {
+      if (!balcony && random() < style.flowers) {
         p.rect(s0 - 0.05, y0 - 0.02, s1 + 0.05, y0 + 0.2, '#6a4a32');
         for (let i = 0; i < 6; i++) p.rect(s0 + (i / 6) * winW, y0 + 0.15, s0 + ((i + 0.8) / 6) * winW, y0 + 0.32, pick(random, FLOWERS));
       }
@@ -222,10 +222,11 @@ export function paintFacade(ctx: CanvasRenderingContext2D, spec: FacadeSpec, wid
   // The ground floor: a plinth, then shops, a door.
   p.rect(0, 0, width, GROUND_FLOOR, shade(style.wall, 0.86));
   p.rect(0, 0, width, 0.35, shade(style.wall, 0.62));
+  if (style.rusticated) for (let y = 0.8; y < GROUND_FLOOR - 0.3; y += 0.45) p.rect(0, y, width, y + 0.05, 'rgba(0,0,0,0.16)');
   p.rect(0, GROUND_FLOOR - 0.12, width, GROUND_FLOOR, style.trim);
   for (const shop of spec.shops) paintShop(p, random, shop, goods);
   if (spec.door !== undefined) paintEntrance(p, spec.door);
-  return { lights: p.lights, features: p.features };
+  return { lights: p.lights, glass: p.panes, features: p.features };
 }
 
 /**
@@ -234,31 +235,32 @@ export function paintFacade(ctx: CanvasRenderingContext2D, spec: FacadeSpec, wid
  * heights (the balcony itself is built in 3D); nothing else on that floor. Their light is home's:
  * warm, on from early dusk until very late (the frosted ones dimmer, and out earlier).
  */
-function paintFlat(p: Brush, style: Style, flat: FlatFront): void {
+function paintFlat(p: Brush, style: FacadeStyle, flat: FlatFront): void {
   const y = flat.floorY;
   for (const w of flat.windows) {
     const s0 = w.at - w.width / 2;
     const s1 = w.at + w.width / 2;
     if (w.frosted) {
       paintFrostedGlass(p, style, s0, y + w.bottom, s1, y + w.top);
-      p.light(s0 + 0.04, y + w.bottom + 0.04, s1 - 0.04, y + w.top - 0.04, '#d9c9a8', 0.1, 0.2);
+      p.light(s0 + 0.04, y + w.bottom + 0.04, s1 - 0.04, y + w.top - 0.04, '#d9c9a8', 0.1, 0.2, w.room);
       continue;
     }
     paintTallGlass(p, style, s0, y + w.bottom, s1, y + w.top);
-    p.light(s0 + 0.05, y + w.bottom + 0.05, s1 - 0.05, y + w.top - 0.05, '#ffcf8a', 0.05, 0.03);
+    p.light(s0 + 0.05, y + w.bottom + 0.05, s1 - 0.05, y + w.top - 0.05, '#ffcf8a', 0.05, 0.03, w.room);
   }
   if (!flat.balcony) return;
   const { at, door } = flat.balcony;
   const s0 = at - door.width / 2;
   const s1 = at + door.width / 2;
   paintTallGlass(p, style, s0, y, s1, y + door.height);
-  p.light(s0 + 0.05, y + 0.05, s1 - 0.05, y + door.height - 0.05, '#ffd9a0', 0.05, 0.03);
+  p.light(s0 + 0.05, y + 0.05, s1 - 0.05, y + door.height - 0.05, '#ffd9a0', 0.05, 0.03, 'living');
 }
 
 /** A small obscured pane (a bathroom's, a bedroom's on the courtyard): reveal, milky glass, frame, a sill under it. */
-function paintFrostedGlass(p: Brush, style: Style, s0: number, y0: number, s1: number, y1: number): void {
+function paintFrostedGlass(p: Brush, style: FacadeStyle, s0: number, y0: number, s1: number, y1: number): void {
   p.rect(s0 - 0.06, y0 - 0.03, s1 + 0.06, y1 + 0.04, 'rgba(0,0,0,0.3)');
   p.rect(s0, y0, s1, y1, '#b9c2c4');
+  p.glass(s0, y0, s1, y1, FROSTED_GLASS);
   p.rect(s0, y0 + (y1 - y0) * 0.55, s1, y1, 'rgba(235,240,242,0.35)');
   const bar = Math.max(0.03, 1.5 / p.slot.k);
   p.rect(s0, y0, s1, y0 + bar, style.frame);
@@ -269,9 +271,10 @@ function paintFrostedGlass(p: Brush, style: Style, s0: number, y0: number, s1: n
 }
 
 /** A tall pane (a French window, a glazed door): reveal, glass, sky reflection, frame and bars, a head over it. */
-function paintTallGlass(p: Brush, style: Style, s0: number, y0: number, s1: number, y1: number): void {
+function paintTallGlass(p: Brush, style: FacadeStyle, s0: number, y0: number, s1: number, y1: number): void {
   p.rect(s0 - 0.08, y0 - 0.04, s1 + 0.08, y1 + 0.06, 'rgba(0,0,0,0.32)');
   p.rect(s0, y0, s1, y1, GLASS);
+  p.glass(s0, y0, s1, y1, CLEAR_GLASS);
   p.rect(s0, y1 - (y1 - y0) * 0.3, s1, y1, 'rgba(160,185,210,0.22)');
   const bar = Math.max(0.035, 1.5 / p.slot.k);
   p.rect(s0, y0, s1, y0 + bar, style.frame);
@@ -286,6 +289,7 @@ function paintTallGlass(p: Brush, style: Style, s0: number, y0: number, s1: numb
 /** Paints in facade metres (s along from the left, y up from the street) into the atlas, and collects the night lights. */
 class Brush {
   readonly lights: NightLight[] = [];
+  readonly panes: GlassPane[] = [];
   readonly features: FacadeFeatures = { wall: '#888888', trim: '#dddddd', awnings: [], balconies: [], sills: [], windows: [], doors: [], shopfronts: [] };
 
   constructor(
@@ -308,9 +312,15 @@ class Brush {
     this.ctx.fillRect(this.x(s0), this.y(y1), (s1 - s0) * k, (y1 - y0) * k);
   }
 
-  light(s0: number, y0: number, s1: number, y1: number, color: string, litAt: number, curfew: number): void {
+  light(s0: number, y0: number, s1: number, y1: number, color: string, litAt: number, curfew: number, room?: FlatRoomId): void {
     const { k } = this.slot;
-    this.lights.push({ x: this.x(s0) * NIGHT_SCALE, y: this.y(y1) * NIGHT_SCALE, w: (s1 - s0) * k * NIGHT_SCALE, h: (y1 - y0) * k * NIGHT_SCALE, color, litAt, curfew });
+    this.lights.push({ x: this.x(s0), y: this.y(y1), w: (s1 - s0) * k, h: (y1 - y0) * k, color, litAt, curfew, room });
+  }
+
+  /** A pane of glass (for the glass mask: glossy, reflecting, set back behind its reveal). */
+  glass(s0: number, y0: number, s1: number, y1: number, rough: number): void {
+    const { k } = this.slot;
+    this.panes.push({ x: this.x(s0), y: this.y(y1), w: (s1 - s0) * k, h: (y1 - y0) * k, rough });
   }
 
   /** Centred lettering, `size` metres tall, its middle at (s, y). */
@@ -324,11 +334,12 @@ class Brush {
   }
 }
 
-function paintWindow(p: Brush, style: Style, random: () => number, s0: number, y0: number, s1: number, y1: number): void {
+function paintWindow(p: Brush, style: FacadeStyle, random: () => number, s0: number, y0: number, s1: number, y1: number, nobile: boolean): void {
   const w = s1 - s0;
   // Reveal, glass with the sky's reflection fading down, then the frame and glazing bars.
   p.rect(s0 - 0.08, y0 - 0.06, s1 + 0.08, y1 + 0.06, 'rgba(0,0,0,0.3)');
   p.rect(s0, y0, s1, y1, GLASS);
+  p.glass(s0, y0, s1, y1, CLEAR_GLASS);
   p.rect(s0, y1 - (y1 - y0) * 0.35, s1, y1, 'rgba(160,185,210,0.22)');
   if (random() < 0.6) {
     const curtain = pick(random, CURTAINS);
@@ -347,7 +358,11 @@ function paintWindow(p: Brush, style: Style, random: () => number, s0: number, y
   // Sill and head (the sill also stands out in 3D on the near facades).
   p.rect(s0 - 0.1, y0 - 0.08, s1 + 0.1, y0, style.trim);
   p.features.sills.push({ s0: s0 - 0.1, s1: s1 + 0.1, y: y0 });
-  if (style.window === 'lintel') p.rect(s0 - 0.12, y1 + 0.02, s1 + 0.12, y1 + 0.2, style.trim);
+  if (style.window === 'lintel' || style.window === 'pediment') p.rect(s0 - 0.12, y1 + 0.02, s1 + 0.12, y1 + 0.2, style.trim);
+  if (style.window === 'pediment' && nobile) {
+    // A carved head over the first floor's windows: a pediment stepped up to its point.
+    for (let k = 0; k < 4; k++) p.rect(s0 - 0.15 + k * w * 0.14, y1 + 0.2 + k * 0.11, s1 + 0.15 - k * w * 0.14, y1 + 0.31 + k * 0.11, style.trim);
+  }
   if (style.window === 'arched') {
     // A keystoned head: a band and a stepped key over it.
     p.rect(s0 - 0.1, y1, s1 + 0.1, y1 + 0.12, style.trim);
@@ -434,6 +449,38 @@ function paintShop(p: Brush, random: () => number, shop: ShopSpec, goods: readon
 }
 
 /** A tall wooden double door under a fanlight, in a stone surround, a brass plate over it. */
+/** Stone blocks up both corners to the cornice, long and short in turn. */
+function paintQuoins(p: Brush, style: FacadeStyle, width: number, top: number): void {
+  let long = true;
+  for (let y = 0.3; y < top - 0.6; y += 0.62) {
+    const w = long ? 0.7 : 0.45;
+    p.rect(0.15, y, 0.15 + w, y + 0.55, style.trim);
+    p.rect(width - 0.15 - w, y, width - 0.15, y + 0.55, style.trim);
+    long = !long;
+  }
+}
+
+/**
+ * The roof over a facade, for the sloping face `Buildings` builds behind its parapet (`ROOF_SLOPE`):
+ * a band `depth` metres of slope long, from its foot (y 0) to its ridge, whose top edge is at
+ * `slot.y` in the atlas: slate with zinc seams and dormers under a mansard, tile courses on a
+ * pitched roof, rain streaks down both.
+ */
+export function paintRoof(ctx: CanvasRenderingContext2D, style: FacadeStyle, width: number, depth: number, slot: AtlasSlot): void {
+  const p = new Brush(ctx, slot, depth);
+  const random = seededRandom(style.seed * 31 + 5);
+  p.rect(0, 0, width, depth, style.roofColor);
+  const mansard = style.roof === 'mansard';
+  if (mansard) for (let s = 0.4; s < width; s += 0.5) p.rect(s, 0, s + 0.04, depth, 'rgba(255,255,255,0.08)');
+  else for (let y = 0.25; y < depth; y += 0.3) p.rect(0, y, width, y + 0.06, 'rgba(0,0,0,0.14)');
+  for (let i = 3 + Math.floor(random() * 6); i > 0; i--) {
+    const s = random() * (width - 0.6);
+    p.rect(s, depth * (0.1 + random() * 0.5), s + 0.15 + random() * 0.35, depth, mansard ? 'rgba(20,24,30,0.12)' : 'rgba(60,70,30,0.12)');
+  }
+  // Lighter towards the ridge, the ridge itself capped.
+  p.rect(0, depth - 0.18, width, depth, mansard ? '#6b717c' : '#b9755a');
+}
+
 function paintEntrance(p: Brush, at: number): void {
   p.features.doors.push({ s: at, width: 1.4, height: 2.7, color: '#d8ccb8', shop: false });
   p.rect(at - 0.95, 0, at + 0.95, 3.5, '#e6dccb');

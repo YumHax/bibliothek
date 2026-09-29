@@ -8,7 +8,7 @@ export interface ShopHours {
 
 /**
  * Opening hours by kind of shop, every day alike: the bakery at dawn, the bars till late, the
- * arcade never shut, RETRO GAMES (and the flea market behind it) from 8:00 to 23:00. A `shut` shop
+ * arcade never shut, the flat's shops (furniture, TV repair, pets, the florist) from 9:00 to 21:00, RETRO GAMES (and the flea market behind it) from 8:00 to 23:00. A `shut` shop
  * never opens. Its roller shutter, its window light, its sounds and its door all follow this.
  */
 export const SHOP_HOURS: Record<ShopKind, ShopHours | null> = {
@@ -17,16 +17,17 @@ export const SHOP_HOURS: Record<ShopKind, ShopHours | null> = {
   pharmacy: { open: 8.5, close: 19.5 },
   books: { open: 9.5, close: 19 },
   grocer: { open: 8, close: 20.5 },
-  florist: { open: 9, close: 19 },
+  florist: { open: 9, close: 21 },
   tabac: { open: 7, close: 21 },
   bar: { open: 11, close: 26 },
   butcher: { open: 8, close: 19 },
   laundry: { open: 7, close: 23 },
   retro: { open: 8, close: 23 },
   arcade: { open: 0, close: 24 },
-  furniture: { open: 9, close: 19 },
-  electronics: { open: 9, close: 19 },
-  pets: { open: 9, close: 19 },
+  // The flat's shops (docs/economy.md "The bare flat") stay open into the evening: the whole flat is bought there.
+  furniture: { open: 9, close: 21 },
+  electronics: { open: 9, close: 21 },
+  pets: { open: 9, close: 21 },
   shut: null,
 };
 

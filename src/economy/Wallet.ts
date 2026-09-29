@@ -46,19 +46,27 @@ export class Wallet {
 
   /** Takes `coins` out; false (and nothing taken) when the wallet is short. */
   spend(coins: number): boolean {
-    if (coins < 0 || !this.canAfford(coins)) return false;
+    if (!Number.isFinite(coins) || coins < 0) return false;
+    coins = Math.ceil(coins);
+    if (!this.canAfford(coins)) return false;
     this.state = { ...this.state, coins: this.state.coins - coins };
     this.commit();
     return true;
   }
 
+  /** Adds `coins` (whole coins; nothing for a non-number or a non-positive amount, so a bad sum never corrupts the save). */
   earnCoins(coins: number): void {
+    if (!Number.isFinite(coins) || coins <= 0) return;
+    coins = Math.floor(coins);
     if (coins <= 0) return;
     this.state = { ...this.state, coins: this.state.coins + coins };
     this.commit();
   }
 
+  /** Adds `tickets` (whole tickets; nothing for a non-number or a non-positive amount). */
   addTickets(tickets: number): void {
+    if (!Number.isFinite(tickets) || tickets <= 0) return;
+    tickets = Math.floor(tickets);
     if (tickets <= 0) return;
     this.state = { ...this.state, tickets: this.state.tickets + tickets };
     this.commit();
@@ -66,15 +74,18 @@ export class Wallet {
 
   /** Takes `tickets` out (a prize); false (and nothing taken) when the wallet is short. */
   spendTickets(tickets: number): boolean {
-    if (tickets < 0 || this.state.tickets < tickets) return false;
+    if (!Number.isFinite(tickets) || tickets < 0) return false;
+    tickets = Math.ceil(tickets);
+    if (this.state.tickets < tickets) return false;
     this.state = { ...this.state, tickets: this.state.tickets - tickets };
     this.commit();
     return true;
   }
 
-  /** Turns every ticket into coins at `ticketsPerCoin`; the remainder stays. Returns the coins gained. */
-  redeemTickets(ticketsPerCoin: number): number {
-    const coins = Math.floor(this.state.tickets / ticketsPerCoin);
+  /** Turns tickets into coins at `ticketsPerCoin` (every one, or at most `maxCoins` coins' worth); the remainder stays. Returns the coins gained. */
+  redeemTickets(ticketsPerCoin: number, maxCoins = Infinity): number {
+    if (!Number.isFinite(ticketsPerCoin) || ticketsPerCoin <= 0 || Number.isNaN(maxCoins)) return 0;
+    const coins = Math.min(Math.max(0, Math.floor(maxCoins)), Math.floor(this.state.tickets / ticketsPerCoin));
     if (coins <= 0) return 0;
     this.state = { coins: this.state.coins + coins, tickets: this.state.tickets - coins * ticketsPerCoin };
     this.commit();

@@ -1,6 +1,8 @@
 import * as THREE from 'three';
+import { QUALITY } from '@/graphics/quality';
 import { markShared } from './sharedResources';
 import { fabric, scuffed, wood } from './finishes';
+import { envBoost } from './envBoost';
 
 /**
  * Shared, memoised materials: one per look for the whole page, marked shared so no zone's unload
@@ -17,11 +19,18 @@ import { fabric, scuffed, wood } from './finishes';
  */
 const cache = new Map<string, THREE.Material>();
 
+/**
+ * `low` has no output pass, so no grain to break up the 8-bit gradients (a lamp's falloff on a wall
+ * bands): the shared materials dither themselves there instead (three's `dithering`, a few ALU).
+ */
+const DITHER = !QUALITY.postFx;
+
 /** The material cached under `key`, made by `make` the first time. For looks the helpers below do not cover (a patched shader, a canvas map). */
 export function shared<M extends THREE.Material>(key: string, make: () => M): M {
   let material = cache.get(key) as M | undefined;
   if (!material) {
     material = markShared(make());
+    if (DITHER) material.dithering = true;
     cache.set(key, material);
   }
   return material;
@@ -29,12 +38,17 @@ export function shared<M extends THREE.Material>(key: string, make: () => M): M 
 
 /** A shared `MeshStandardMaterial` with these parameters: identical parameters anywhere in the code give the same material. */
 export function standard(parameters: THREE.MeshStandardMaterialParameters): THREE.MeshStandardMaterial {
-  return shared(`standard|${keyOf(parameters)}`, () => new THREE.MeshStandardMaterial(parameters));
+  return shared(`standard|${keyOf(parameters)}`, () => standardMaterial(parameters));
 }
 
 /** The twin of `standard(parameters)` for `InstancedMesh`es only (see the rule above: one material never serves both). */
 export function instancedStandard(parameters: THREE.MeshStandardMaterialParameters): THREE.MeshStandardMaterial {
-  return shared(`instanced|standard|${keyOf(parameters)}`, () => new THREE.MeshStandardMaterial(parameters));
+  return shared(`instanced|standard|${keyOf(parameters)}`, () => standardMaterial(parameters));
+}
+
+/** `envMapIntensity` is ignored by three under a scene environment: honoured through `envBoost`. */
+function standardMaterial(parameters: THREE.MeshStandardMaterialParameters): THREE.MeshStandardMaterial {
+  return envBoost(new THREE.MeshStandardMaterial(parameters), parameters.envMapIntensity ?? 1);
 }
 
 /** The twin of `basic(parameters)` for `InstancedMesh`es only. */
@@ -67,19 +81,41 @@ export function scuffedPaint(color: THREE.ColorRepresentation, roughness = 0.6):
   return shared(`scuffed|${colorKey(color)}|${roughness}`, () => scuffed(new THREE.MeshStandardMaterial({ color, roughness })));
 }
 
-/** The house metals and the invisible hit material, each one material for the page. */
+/**
+ * The house metals and the invisible hit material, each one material for the page. Raw metal is
+ * `metalness: 1`, its colour its reflectance and its roughness what tells one finish from another
+ * (an in-between metalness reads as murky plastic); painted, enamelled or blackened metal is a
+ * dielectric, `metalness: 0` (a `paint()` or `standard()` with its roughness).
+ */
 export const METAL = {
   /** Polished brass: handles, lamp stems, keys. */
-  brass: (): THREE.MeshStandardMaterial => standard({ color: 0xc9a75b, metalness: 0.85, roughness: 0.3 }),
+  brass: (): THREE.MeshStandardMaterial => standard({ color: 0xc9a75b, metalness: 1, roughness: 0.32 }),
   /** Old, darker brass: display cabinets, the collector's binder, market fittings. */
-  agedBrass: (): THREE.MeshStandardMaterial => standard({ color: 0xb8892a, metalness: 0.9, roughness: 0.35 }),
+  agedBrass: (): THREE.MeshStandardMaterial => standard({ color: 0xb8892a, metalness: 1, roughness: 0.45 }),
   /** Brushed steel: appliances, bins, rails. */
-  steel: (): THREE.MeshStandardMaterial => standard({ color: 0xc4c7cb, metalness: 0.7, roughness: 0.3 }),
+  steel: (): THREE.MeshStandardMaterial => standard({ color: 0xc4c7cb, metalness: 1, roughness: 0.4 }),
   /** Satin steel, duller: coat hooks, umbrella stands, door furniture. */
-  satinSteel: (): THREE.MeshStandardMaterial => standard({ color: 0xb9bcc0, metalness: 0.6, roughness: 0.35 }),
+  satinSteel: (): THREE.MeshStandardMaterial => standard({ color: 0xb9bcc0, metalness: 1, roughness: 0.5 }),
   /** Bright chrome: taps, jukebox trim, radio grilles. */
-  chrome: (): THREE.MeshStandardMaterial => standard({ color: 0xd8dadd, metalness: 0.9, roughness: 0.2 }),
+  chrome: (): THREE.MeshStandardMaterial => standard({ color: 0xd8dadd, metalness: 1, roughness: 0.15 }),
 } as const;
+
+/**
+ * For a cut-out material with `alphaToCoverage` on: its edge fragments keep an alpha below 1 (the
+ * coverage), which an opaque material writes as is into the canvas's alpha, the video cut-out
+ * (docs/graphics.md), so the edges would show what lies behind the canvas. Blended instead: the
+ * colour replaced, the alpha left alone. Returns the material; nothing changes without coverage.
+ */
+export function coverageKeepsAlpha<M extends THREE.Material>(material: M): M {
+  if (!material.alphaToCoverage) return material;
+  material.blending = THREE.CustomBlending;
+  material.blendEquation = THREE.AddEquation;
+  material.blendSrc = THREE.OneFactor;
+  material.blendDst = THREE.ZeroFactor;
+  material.blendSrcAlpha = THREE.ZeroFactor;
+  material.blendDstAlpha = THREE.OneFactor;
+  return material;
+}
 
 /** The material of every invisible hitbox: draws nothing. */
 export function invisible(): THREE.MeshBasicMaterial {

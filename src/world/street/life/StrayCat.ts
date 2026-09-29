@@ -7,11 +7,14 @@ import type { Furniture } from '../../Furniture';
 import { standard } from '../../materials/palette';
 import { invisibleHitbox } from '../../meshUtils';
 import type { RoadObstacle, StreetTraffic } from '../traffic/StreetTraffic';
-import { FRONT, KERB_HEIGHT, type Vec2 } from '../streetPlan';
+import { FRONT, KERB_HEIGHT, PARK_STREET, type StrayCatPerch } from '../streetPlan';
+import { catRoute } from './catPaths';
 
 export interface StrayCatOptions {
   /** Where it likes to sit: a spot on the ground, how high the perch is (a car roof, a bench, a bin), the way it faces. */
-  perches: readonly { at: Vec2; y: number; yaw: number }[];
+  perches: readonly StrayCatPerch[];
+  /** Whether what the perch is on is in use now (someone on the bench, the bin lorry on its round): he skips it, and leaves it if taken. */
+  taken?: (on: NonNullable<StrayCatPerch['on']>) => boolean;
   viewer: THREE.Object3D;
   /** Drivers stop for it while it crosses the road. */
   traffic: StreetTraffic;
@@ -30,7 +33,8 @@ const LINES = [
   'The laundry lady calls him Mistigri. The butcher calls him Trouble.',
 ];
 
-type State = { kind: 'perched'; since: number } | { kind: 'down' | 'walk' | 'up'; t: number; from: THREE.Vector3; to: THREE.Vector3 };
+/** On the way: one leg `from` -> `to`; a walk goes on through `rest` (the pavements and crossings, `catRoute`). */
+type State = { kind: 'perched'; since: number } | { kind: 'down' | 'walk' | 'up'; t: number; from: THREE.Vector3; to: THREE.Vector3; rest: THREE.Vector3[] };
 
 class CatObstacle implements RoadObstacle {
   readonly position = new THREE.Vector3();
@@ -125,7 +129,7 @@ export class StrayCat extends THREE.Group implements Furniture, Updatable, Inter
   }
 
   label(): string {
-    return 'Click to talk to the stray cat';
+    return 'Stray cat · talk';
   }
 
   activate(session: SessionActions): void {
@@ -148,20 +152,25 @@ export class StrayCat extends THREE.Group implements Furniture, Updatable, Inter
     const state = this.state;
     if (state.kind === 'perched') {
       state.since += dt;
-      if (near < WARY && state.since > 1.5) this.leave();
+      if ((near < WARY || this.isTaken(this.perch)) && state.since > 1.5) this.leave();
     } else this.move(state, dt);
     this.animate(dt);
     this.obstacle.position.copy(this.position);
     this.obstacle.active = this.state.kind !== 'perched' && Math.abs(this.position.z) < FRONT.farKerb + 0.2;
   }
 
-  /** Off the perch, towards another one away from the player. */
+  private isTaken(i: number): boolean {
+    const on = this.options.perches[i]!.on;
+    return on !== undefined && (this.options.taken?.(on) ?? false);
+  }
+
+  /** Off the perch, towards another one away from the player (and not one in use). */
   private leave(): void {
     const { perches } = this.options;
     let best = this.perch;
     let far = -1;
     for (let i = 0; i < perches.length; i++) {
-      if (i === this.perch) continue;
+      if (i === this.perch || this.isTaken(i)) continue;
       const [x, z] = perches[i]!.at;
       const d = Math.hypot(x - this.eye.x, z - this.eye.z) + Math.random() * 4;
       if (d > far) {
@@ -172,7 +181,7 @@ export class StrayCat extends THREE.Group implements Furniture, Updatable, Inter
     this.next = best;
     const here = this.position.clone();
     const down = new THREE.Vector3(here.x, groundY(here.z), here.z);
-    this.state = here.y > groundY(here.z) + 0.05 ? { kind: 'down', t: 0, from: here, to: down.add(this.toward(best, 0.35)) } : { kind: 'walk', t: 0, from: here, to: this.groundAt(best) };
+    this.state = here.y > groundY(here.z) + 0.05 ? { kind: 'down', t: 0, from: here, to: down.add(this.toward(best, 0.35)), rest: [] } : this.walkTo(here, best);
   }
 
   private move(state: Extract<State, { kind: 'down' | 'walk' | 'up' }>, dt: number): void {
@@ -181,15 +190,31 @@ export class StrayCat extends THREE.Group implements Furniture, Updatable, Inter
     state.t = Math.min(1, state.t + dt / duration);
     this.position.lerpVectors(state.from, state.to, state.t);
     if (state.kind !== 'walk') this.position.y += Math.sin(state.t * Math.PI) * 0.25;
+    // Walking, the feet are on whatever is underfoot (a kerb down onto the road and up again).
+    else this.position.y = roadY(this.position.x, this.position.z);
     this.face(Math.atan2(state.to.x - state.from.x, state.to.z - state.from.z), dt);
     if (state.t < 1) return;
     const perch = this.options.perches[this.next]!;
-    if (state.kind === 'down') this.state = { kind: 'walk', t: 0, from: this.position.clone(), to: this.groundAt(this.next) };
-    else if (state.kind === 'walk' && perch.y > 0.05) this.state = { kind: 'up', t: 0, from: this.position.clone(), to: new THREE.Vector3(perch.at[0], groundY(perch.at[1]) + perch.y, perch.at[1]) };
+    const next = state.rest.shift();
+    if (state.kind === 'walk' && next) {
+      // On to the next point of the way (round a corner, over a crossing).
+      state.from.copy(state.to);
+      state.to.copy(next);
+      state.t = 0;
+    } else if (state.kind === 'down') this.state = this.walkTo(this.position.clone(), this.next);
+    else if (state.kind === 'walk' && perch.y > 0.05) this.state = { kind: 'up', t: 0, from: this.position.clone(), to: new THREE.Vector3(perch.at[0], groundY(perch.at[1]) + perch.y, perch.at[1]), rest: [] };
     else {
       this.perch = this.next;
       this.state = { kind: 'perched', since: 0 };
     }
+  }
+
+  /** Walking from `here` (on the ground) to beside perch `i`: along the pavements and over the crossings, not through the cars and posts. */
+  private walkTo(here: THREE.Vector3, i: number): State {
+    const end = this.groundAt(i);
+    const points = catRoute([here.x, here.z], [end.x, end.z]).map(([x, z]) => new THREE.Vector3(x, groundY(z), z));
+    const first = points.shift() ?? end;
+    return { kind: 'walk', t: 0, from: here.clone(), to: first, rest: points };
   }
 
   /** The ground spot beside perch `i` (on the way in), or the perch itself when it is on the ground. */
@@ -256,6 +281,13 @@ export class StrayCat extends THREE.Group implements Furniture, Updatable, Inter
 /** The ground's height under z: the road is a kerb below the pavements. */
 function groundY(z: number): number {
   return Math.abs(z) < FRONT.farKerb ? -KERB_HEIGHT : 0;
+}
+
+/** The ground's height at (x, z): a kerb down on Front Street's road and on Park Street's. */
+function roadY(x: number, z: number): number {
+  const front = Math.abs(z) < FRONT.farKerb && x > PARK_STREET.farKerb;
+  const park = x > PARK_STREET.farKerb && x < PARK_STREET.nearKerb && z < -FRONT.farKerb;
+  return front || park ? -KERB_HEIGHT : 0;
 }
 
 function mesh(geometry: THREE.BufferGeometry, material: THREE.Material): THREE.Mesh {

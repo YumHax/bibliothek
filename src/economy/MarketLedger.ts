@@ -64,6 +64,15 @@ interface LedgerFile {
   orders: MarketOrder[];
   /** Notice-board cards dealt with (a wanted ad answered, a private sale bought): card id -> the day, kept a week. */
   cards: Record<string, number>;
+  /** Holds of a day gone by never collected, whose deposits are still owed back (`takeLapsedHolds`). */
+  lapsed: LapsedHold[];
+}
+
+/** A hold whose day went by uncollected: the copy's id and title, and the deposit owed back. */
+interface LapsedHold {
+  id: string;
+  title: string;
+  deposit: number;
 }
 
 /**
@@ -85,7 +94,7 @@ export class MarketLedger {
       key,
       version: 2,
       storage,
-      defaults: () => ({ today: emptyDay(0), consigned: [], orders: [], cards: {} }),
+      defaults: () => ({ today: emptyDay(0), consigned: [], orders: [], cards: {}, lapsed: [] }),
       read: readLedger,
       migrate: { 1: fromVersion1 },
     });
@@ -134,8 +143,28 @@ export class MarketLedger {
     this.edit(day, (t) => ({ ...t, holds: { ...t.holds, [id]: copy ? { deposit, copy } : { deposit } } }));
   }
 
+  /**
+   * The holds of market days before `day` that were never collected (a hold lasts its day): taken off the ledger, for
+   * their deposits to be paid back. Empty when there are none.
+   */
+  takeLapsedHolds(day: number): { title: string; deposit: number }[] {
+    const old = this.state.today.day < day ? lapsedOf(this.state.today) : [];
+    const lapsed = [...this.state.lapsed, ...old];
+    if (!lapsed.length) return [];
+    this.state = { ...this.state, lapsed: [], today: old.length ? { ...this.state.today, holds: {} } : this.state.today };
+    this.save();
+    return lapsed;
+  }
+
   /** The copy was bought (or handed back): its hold is spent. */
   release(day: number, id: string): void {
+    // A copy of a day gone by (laid out before midnight, bought after): its hold lapsed; spent now, it is not owed back.
+    if (day < this.state.today.day) {
+      if (!this.state.lapsed.some((l) => l.id === id)) return;
+      this.state = { ...this.state, lapsed: this.state.lapsed.filter((l) => l.id !== id) };
+      this.save();
+      return;
+    }
     this.edit(day, (t) => {
       const { [id]: _gone, ...holds } = t.holds;
       return { ...t, holds };
@@ -210,13 +239,22 @@ export class MarketLedger {
   }
 
   private edit(day: number, change: (today: Today) => Today): void {
-    this.state = { ...this.state, today: change(this.on(day) ?? emptyDay(day)) };
+    // A day gone by is not written to (a copy laid out before midnight, haggled over after): the ledger keeps today's.
+    if (day < this.state.today.day) return;
+    // A new day starts over: holds left from the old one are owed back, kept until paid (`takeLapsedHolds`).
+    const lapsed = this.on(day) ? this.state.lapsed : [...this.state.lapsed, ...lapsedOf(this.state.today)];
+    this.state = { ...this.state, lapsed, today: change(this.on(day) ?? emptyDay(day)) };
     this.save();
   }
 
   private save(): void {
     this.store.save(this.state);
   }
+}
+
+/** A day's holds as deposits owed back, named by the copy's title (a hold saved before copies were kept by a generic name). */
+function lapsedOf(today: Today): LapsedHold[] {
+  return Object.entries(today.holds).filter(([, h]) => h.deposit > 0).map(([id, h]) => ({ id, title: h.copy?.game.title ?? 'a copy on hold', deposit: h.deposit }));
 }
 
 function emptyDay(day: number): Today {
@@ -266,7 +304,9 @@ function readLedger(data: unknown): LedgerFile | null {
     const [kind, day, ...game] = k.split(':');
     return [game.length ? `${kind}:${day}:${id(game.join(':'))}` : k, d as number];
   }));
-  return { today, consigned, orders, cards };
+  const lapsed = (Array.isArray(file.lapsed) ? file.lapsed : []).flatMap((l: { id?: unknown; title?: unknown; deposit?: unknown }) =>
+    typeof l?.id === 'string' && typeof l.title === 'string' && typeof l.deposit === 'number' && Number.isFinite(l.deposit) && l.deposit > 0 ? [{ id: id(l.id), title: l.title, deposit: l.deposit }] : []);
+  return { today, consigned, orders, cards, lapsed };
 }
 
 function readHold(value: unknown): Hold | null {

@@ -38,7 +38,7 @@ export class SpiceRack extends Prop {
     const wood = timber(options.wood ?? 0xc9a577, 0.6);
     const height = rows * ROW_HEIGHT + 0.02;
     const t = 0.012;
-    const glass = standard({ color: 0xe8f0f2, roughness: 0.05, metalness: 0.1, transparent: true, opacity: 0.35 });
+    const glass = standard({ color: 0xe8f0f2, roughness: 0.05, metalness: 0, transparent: true, opacity: 0.35 });
     const cap = paint(0x1e1f22, 0.5);
     const label = paint(0xf4efe2, 0.9);
 

@@ -5,6 +5,7 @@ import { boxMesh } from '../meshUtils';
 import { Prop } from '../props/Prop';
 import { paint } from '../materials/palette';
 import { drawText } from './games/ArcadeGame';
+import { QUALITY } from '@/graphics/quality';
 
 /** The league as the board reads it (the concrete `ArcadeLeague` lives in `economy/`). */
 export interface LeagueSource {
@@ -14,6 +15,8 @@ export interface LeagueSource {
   readonly playedToday: boolean;
   readonly nextStreakBonus: number;
   readonly pennants: number;
+  /** Last week's result, until a ticket play settles it (a won week's pennant goes home then). */
+  readonly lastWeek?: { rank: number; tickets: number; won: boolean } | null;
   subscribe(cb: () => void): () => void;
 }
 
@@ -24,6 +27,13 @@ export interface LeagueBoardOptions {
 }
 
 const PX_PER_M = 640;
+
+/** 1ST, 2ND, 3RD, 4TH… */
+function ordinal(n: number): string {
+  const tens = n % 100;
+  const suffix = tens >= 11 && tens <= 13 ? 'TH' : (['TH', 'ST', 'ND', 'RD'][n % 10] ?? 'TH');
+  return `${n}${suffix}`;
+}
 /** The regulars' totals creep up with the week: the board looks again this often. */
 const REFRESH_SECONDS = 20;
 const FRAME = paint(0x0d0c12, 0.4);
@@ -57,7 +67,7 @@ export class LeagueBoard extends Prop implements Updatable {
     this.H = canvas.height;
     this.texture = new THREE.CanvasTexture(canvas);
     this.texture.colorSpace = THREE.SRGBColorSpace;
-    this.texture.anisotropy = 4;
+    this.texture.anisotropy = QUALITY.anisotropy;
     const face = new THREE.Mesh(new THREE.PlaneGeometry(width, height), new THREE.MeshBasicMaterial({ map: this.texture, toneMapped: false, color: 0xd0d0d0 }));
     face.position.z = 0.042;
     this.add(face);
@@ -101,7 +111,11 @@ export class LeagueBoard extends Prop implements Updatable {
       drawText(ctx, row.name, 100, y, Math.round(rowH * 0.5), color, 'left');
       drawText(ctx, row.tickets.toLocaleString('en-US'), W - 50, y, Math.round(rowH * 0.5), color, 'right');
     });
-    drawText(ctx, 'FIRST ON SUNDAY NIGHT TAKES THE PENNANT HOME', W / 2, H * 0.79, Math.round(H * 0.028), '#ff8a80');
+    const last = league.lastWeek;
+    const lastLine = last
+      ? last.won ? `LAST WEEK: YOU WON! ONE PLAY TAKES THE PENNANT HOME` : `LAST WEEK: YOU CAME ${ordinal(last.rank + 1)} WITH ${last.tickets.toLocaleString('en-US')} TIX`
+      : 'FIRST ON SUNDAY NIGHT TAKES THE PENNANT HOME';
+    drawText(ctx, lastLine, W / 2, H * 0.79, Math.round(H * 0.028), last?.won ? '#ffd23a' : '#ff8a80');
     const streak = league.streakDays;
     const streakLine = streak >= 2 ? `STREAK: ${streak} DAYS` : streak === 1 ? 'STREAK: 1 DAY' : 'NO STREAK YET';
     const bonusLine = league.playedToday ? `COME BACK TOMORROW: +${league.nextStreakBonus} TIX` : `PLAY TODAY: +${league.nextStreakBonus} TIX ON YOUR FIRST GO`;

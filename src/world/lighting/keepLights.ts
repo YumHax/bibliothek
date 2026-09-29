@@ -1,4 +1,5 @@
 import type * as THREE from 'three';
+import { intendedIntensity } from './LightCuller';
 
 /** Where a hidden light's intensity waits to come back. */
 const SAVED = 'keptIntensity';
@@ -24,7 +25,7 @@ export function setShownKeepingLights(root: THREE.Object3D, shown: boolean): voi
 function setLit(light: THREE.Light, lit: boolean): void {
   const saved = light.userData[SAVED] as number | undefined;
   if (!lit && saved === undefined) {
-    light.userData[SAVED] = light.intensity;
+    light.userData[SAVED] = intendedIntensity(light);
     light.intensity = 0;
   } else if (lit && saved !== undefined) {
     light.intensity = saved;

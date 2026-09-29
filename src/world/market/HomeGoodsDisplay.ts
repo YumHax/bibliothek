@@ -32,7 +32,7 @@ const HOVER_GLOW = new THREE.Color(0x1a1612);
 const BLACK = new THREE.Color(0x000000);
 
 const CARDBOARD = 0xc29a68;
-const CHROME = { color: 0xc8c8c8, roughness: 0.25, metalness: 0.9 };
+const CHROME = { color: 0xc8c8c8, roughness: 0.2, metalness: 1 };
 
 /**
  * One thing for sale on a household stall's table, clickable on its own: a flat-packed bookcase
@@ -222,7 +222,7 @@ const BUILDERS: Record<HomeGoodsId, Builder> = {
     const dark = matte(0x151515, 0.6);
     part(g, W, H, D * 0.7, plastic, { y: H / 2, z: D / 2 - D * 0.35 });
     part(g, W * 0.7, H * 0.75, D * 0.3, plastic, { y: H * 0.42, z: -D / 2 + D * 0.15 });
-    const screen = new THREE.Mesh(new THREE.PlaneGeometry(W * 0.62, H * 0.62), new THREE.MeshStandardMaterial({ color: 0x1e2a26, roughness: 0.15, metalness: 0.1 }));
+    const screen = new THREE.Mesh(new THREE.PlaneGeometry(W * 0.62, H * 0.62), new THREE.MeshStandardMaterial({ color: 0x1e2a26, roughness: 0.15, metalness: 0 }));
     screen.position.set(-W * 0.1, H * 0.54, D / 2 + 0.002);
     g.add(screen);
     for (const y of [H * 0.7, H * 0.45]) {

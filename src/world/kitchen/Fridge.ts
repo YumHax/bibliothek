@@ -4,6 +4,7 @@ import { cylinderMesh } from '../meshUtils';
 import { part } from '../props/Prop';
 import { paint, standard } from '../materials/palette';
 import { SwingLeaf, revealWhileOpen } from '../props/SwingLeaf';
+import { PooledLight } from '../lighting/LightPool';
 
 export interface FridgeOptions {
   /** Outer size. Default a slim 0.6 x 0.65 x 1.85 m fridge-freezer. */
@@ -22,7 +23,7 @@ const FEET = 0.03;
 /** Thickness of the cabinet's insulated walls. */
 const WALL = 0.035;
 
-const STEEL = standard({ color: 0xbfc2c6, metalness: 0.7, roughness: 0.35 });
+const STEEL = standard({ color: 0xbfc2c6, metalness: 1, roughness: 0.4 });
 const SIDES = paint(0x9d9fa3, 0.55);
 const GASKET = paint(0x1c1d20, 0.8);
 const MAGNET_COLOURS = [0xd9463c, 0x2f6fb3, 0xf0b429, 0x3f9b5e];
@@ -30,6 +31,11 @@ const MAGNET_COLOURS = [0xd9463c, 0x2f6fb3, 0xf0b429, 0x3f9b5e];
 const LINER = standard({ color: 0xf2f4f6, emissive: 0xeaf1ff, emissiveIntensity: 0.3, roughness: 0.45 });
 const FROST = standard({ color: 0xe4ecf2, emissive: 0xdde8f5, emissiveIntensity: 0.2, roughness: 0.7 });
 const SHELF = paint(0xd6dde2, 0.25);
+/**
+ * The fridge's bulb, spilling out of the open door onto the floor and whoever stands there: a glow
+ * the kitchen's `LightPool` lends a real light while the insides are drawn (a door ajar), never its own light.
+ */
+const SPILL = { color: 0xeef4ff, intensity: 1.1, distance: 2.4 };
 /** The bulb's frosted cover under the fridge's ceiling, glowing while it is drawn (only with a door open). */
 const BULB = standard({ color: 0xfffaf0, emissive: 0xfff3dc, emissiveIntensity: 1.6, roughness: 0.3 });
 
@@ -71,6 +77,10 @@ export class Fridge extends THREE.Group implements Furniture {
     const interior = new THREE.Group();
     this.add(interior);
     this.buildInterior(interior, width, bodyD, fridgeH, freezer);
+    // Inside the door, high in the fridge: hidden with the insides, so lent a light only while a door is open.
+    const spill = new PooledLight(SPILL.color, SPILL.intensity, SPILL.distance);
+    spill.position.set(0, FEET + fridgeH * 0.8, bodyD - 0.06);
+    interior.add(spill);
 
     // Two doors on the hinge side: fridge (below), freezer (top).
     const reveal = revealWhileOpen(interior, 2);
@@ -86,7 +96,7 @@ export class Fridge extends THREE.Group implements Furniture {
 
   /** A steel door with its gasket behind and its bar handle on the free edge. */
   private buildDoor(width: number, h: number, hinge: 'left' | 'right', noun: string, onOpenness: (openness: number) => void): SwingLeaf {
-    const leaf = new SwingLeaf({ width, height: h, thickness: DOOR_THICKNESS, hinge, noun, maxAngle: THREE.MathUtils.degToRad(105), onOpenness });
+    const leaf = new SwingLeaf({ width, height: h, thickness: DOOR_THICKNESS, hinge, noun, maxAngle: THREE.MathUtils.degToRad(105), onOpenness, seal: true });
     const { panel } = leaf;
     const x = leaf.edge(width / 2);
     part(panel, width, h, DOOR_THICKNESS, STEEL, { x, y: h / 2, z: DOOR_THICKNESS / 2 });

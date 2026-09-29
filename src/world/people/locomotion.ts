@@ -76,3 +76,53 @@ export function viewerWithin(self: THREE.Object3D, viewer: THREE.Object3D, range
   self.getWorldPosition(here);
   return Math.hypot(viewerPos.x - here.x, viewerPos.z - here.z) < range;
 }
+
+/** A turn sharper than this (radians) at a path's corner is rounded by `roundCorners`. */
+const ROUND_ABOVE = 0.35;
+
+/**
+ * `path` with its corners rounded: each interior point where the way turns is replaced by a short
+ * arc (a quadratic curve through it, `radius` metres either side, less on a short leg), so a
+ * walker sweeps round a street corner instead of pivoting on the spot. The last point is kept as
+ * it is (where they stop). Returns the new points, those on an arc (walked a little slower), and
+ * for each new point the index of the point of `path` it stands for (`owners`).
+ */
+export function roundCorners(from: THREE.Vector3, path: readonly THREE.Vector3[], radius: number): { path: THREE.Vector3[]; arcs: Set<THREE.Vector3>; owners: number[] } {
+  const out: THREE.Vector3[] = [];
+  const arcs = new Set<THREE.Vector3>();
+  const owners: number[] = [];
+  for (let i = 0; i < path.length; i++) {
+    const v = path[i]!;
+    const prev = i === 0 ? from : path[i - 1]!;
+    const next = path[i + 1];
+    if (!next) {
+      out.push(v.clone());
+      owners.push(i);
+      continue;
+    }
+    const ax = prev.x - v.x;
+    const az = prev.z - v.z;
+    const bx = next.x - v.x;
+    const bz = next.z - v.z;
+    const la = Math.hypot(ax, az);
+    const lb = Math.hypot(bx, bz);
+    const turn = la > 1e-3 && lb > 1e-3 ? Math.PI - Math.acos(Math.max(-1, Math.min(1, (ax * bx + az * bz) / (la * lb)))) : 0;
+    const r = Math.min(radius, la * 0.45, lb * 0.45);
+    if (turn < ROUND_ABOVE || r < 0.05) {
+      out.push(v.clone());
+      owners.push(i);
+      continue;
+    }
+    // A quadratic curve from `r` before the corner to `r` after it, the corner its control point (weights sum to 1).
+    for (let k = 0; k <= 4; k++) {
+      const t = k / 4;
+      const p0 = (1 - t) * (1 - t);
+      const p2 = t * t;
+      const point = new THREE.Vector3(v.x + (ax / la) * r * p0 + (bx / lb) * r * p2, v.y, v.z + (az / la) * r * p0 + (bz / lb) * r * p2);
+      out.push(point);
+      owners.push(i);
+      arcs.add(point);
+    }
+  }
+  return { path: out, arcs, owners };
+}

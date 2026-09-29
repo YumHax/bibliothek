@@ -241,7 +241,7 @@ export class ForSaleBox extends THREE.Group implements Furniture, Interactable {
     const state = describeCondition(condition);
     const platform = getPlatform(game.platform).shortName;
     const what = `${game.title} (${platform}${state ? `, ${state}` : ''})`;
-    if (!priced) return `${what} — being priced… click to look closer`;
+    if (!priced) return `${what} — being priced… look closer`;
     const coins = this.wallet.coins;
     const edition = describeEdition(this.item.edition, game.platform);
     const was = this.item.beforeSale;
@@ -251,7 +251,7 @@ export class ForSaleBox extends THREE.Group implements Furniture, Interactable {
     const wish = this.wanted ? ' · ★ on your wishlist' : '';
     const held = this.item.source === 'ordered' ? ' · your order' : this.item.deposit ? ` · held for you, ${due} to pay` : '';
     const glass = this.behindGlass ? ' · behind glass' : '';
-    return `${what}${edition ? `, ${edition}` : ''} — ${cost}${held}${short}${wish}${glass} · click to look closer`;
+    return `${what}${edition ? `, ${edition}` : ''} — ${cost}${held}${short}${wish}${glass} · look closer`;
   }
 
   activate(session: SessionActions): void {

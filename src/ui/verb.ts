@@ -1,0 +1,33 @@
+import { lastDevice } from '@/input/lastDevice';
+
+/**
+ * The word for "use it" on the device in hand, for tips and captions written as a sentence: `click`
+ * (the mouse), `press A` (a controller), `tap` (a touchscreen). `useVerb()` is lowercase, `useVerbCap()`
+ * starts a sentence. Read when the line is written, so a tip says what the player's hands can do now.
+ */
+export function useVerb(): string {
+  const device = lastDevice();
+  return device === 'gamepad' ? 'press A' : device === 'touch' ? 'tap' : 'click';
+}
+
+/** `useVerb()` at the start of a sentence: Click, Press A, Tap. */
+export function useVerbCap(): string {
+  const verb = useVerb();
+  return verb[0]!.toUpperCase() + verb.slice(1);
+}
+
+/** "click it" / "press A on it" / "tap it": the verb with its object, `it` by default. */
+export function useVerbOn(what = 'it'): string {
+  return lastDevice() === 'gamepad' ? `press A on ${what}` : `${useVerb()} ${what}`;
+}
+
+/** "Space or click" on the keyboard (a key that also does it), else the device's own verb: "press A", "tap". */
+export function keyOrUse(key: string): string {
+  return lastDevice() === 'keyboard' ? `${key} or click` : useVerb();
+}
+
+/** `useVerbOn(what)` at the start of a sentence: "Click a machine", "Press A on a machine", "Tap a machine". */
+export function useVerbOnCap(what = 'it'): string {
+  const line = useVerbOn(what);
+  return line[0]!.toUpperCase() + line.slice(1);
+}

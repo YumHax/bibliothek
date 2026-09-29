@@ -5,25 +5,34 @@ Read this only when changing the cat's look, behaviour or belongings.
 ## Files
 
 - `types.ts`: contracts (CatBody, CatPose, the `*Like` props, CatVoiceLike, CatSettings, CatClock, CatPlayerView).
-- `CatModel.ts`: procedural rig (capsules + chained tail), 5 coats painted on canvases in `coats.ts`, 12 poses blended per
-  joint (the joint-angle table and tail sway per pose are data in `catPoses.ts`), walk/trot gait from `setSpeed`, `gaze`,
-  blink/breath/ear twitch, purr tremble, `flick`.
+- `CatModel.ts`: procedural rig (capsules + chained tail), 5 coats painted on canvases in `coats.ts`, 13 poses blended per
+  joint, each joint at its own pace (`JOINT_TAU`: head first, rump and tail last), the joint-angle table and tail sway per
+  pose are data in `catPoses.ts`. Walk blends into trot with `setSpeed` (0.45..1.1 m/s); a wash cycles paw / face / flank
+  phases with a random paw (`GROOM_PHASES`, `mirrored`); `knead` treads the front paws in turn (rug scratching). `gaze`
+  (saccades: fast when far off, slow settling; a point more than 110° round, behind it, is let go rather than followed to
+  the clamp, so nothing passing behind snaps the head from shoulder to shoulder), blinks (some double), `slowBlink` (petted, on the lap, the crosshair resting
+  on it 1.5 s), `prick`, `land` (squash), breath, purr tremble, `flick`; tail sway and lash travel to the tip.
 - `Cat.ts`: `Furniture` with an empty footprint + `Interactable`. Click = pet, 4 pets in 10 s = annoyed. `call()`,
   `setPlayerSeat()`, `applySettings()`.
 - The behaviour, a state machine. Sleeps most of the day by `sleepDrive(hours)`; hunger/thirst needs; eat, beg, drink, groom,
   wander, window lookout, scratch, toy, TV watching, fly chase, rub, sunbathe; armchair perches and the player's lap; startle
   + flee from a sprinting player.
   - `catStates.ts`: `STATES: Record<CatState, StateDef>`, everything about one state in one entry: `enter` (pose, `timer`,
-    facing), `tick`, `describe` (the caption), the flags `startles` (default true), `invitable` (a seated player's lap may
-    lure it away) and `followsPlayer` (head turns to a nearby player), and an optional `memo()`: the state's own scratch data
-    (next meow, meal length), made fresh on every `enter` and handed to `enter`/`tick` (declare it with `withMemo`).
+    facing), `tick`, `describe` (the caption), the flags `startles` (default true), `calm` (settled: a walking player close
+    enough to stroke it does not startle it, only a sprint does: lie, groom, window, TV, sun, eat, drink, scratch),
+    `invitable` (a seated player's lap may lure it away) and `followsPlayer` (head turns to a nearby player), and an
+    optional `memo()`: the state's own scratch data (next meow, meal length), made fresh on every `enter` and handed to
+    `enter`/`tick` (declare it with `withMemo`). **Every rhythm is in `CAT_TIMING`** next to `STATES` (state lengths,
+    sound intervals, cooldowns, the brain's per-second chances): tune there, never inline. Idle and look-around keep the
+    posture they have (sit or stand; lying on a perch), glances stay in a cone in front of it.
   - `catActivities.ts`: `ACTIVITIES: Record<Activity, ActivityDef>`: `weight(mind)` (what an idle cat picks by weighted
     random; the weighted entries come first, in draw order; no weight = only started by a reaction) and `begin(mind)`
     (walk there / enter the state; `false` = impossible now, the cat idles).
   - `CatMind.ts`: the working memory both tables act on (state, `timer`, `next`/`pending`, spot/perch, needs, scratch
     vectors) and the moves: `enter`, `startActivity` (hops off a perch first), `beginActivity`, `goTo`, `hop`, `setFacing`.
   - `CatBrain.ts`: the public face `Cat` uses (`update`, `pet`, `call`, `setPlayerSeat`, `describe`); counts the needs down,
-    reacts to the player (half wake, startle, lap invitations, petting, calls) and ticks the current state.
+    reacts to the player (half wake, startle, lap invitations, petting, calls) and ticks the current state. Stroked while
+    eating, drinking or at the post it purrs a moment and slow-blinks but carries on.
   - **A new behaviour:** add the name to `CatState` and its entry to `STATES`; if an idle cat should choose it, add an
     `Activity` with its `weight` and `begin` (which walks there with `mind.goTo(point, 'yourState')`). The `Record` types
     make the compiler list anything missing. Draws from `Math.random` happen in `enter`/`tick`/`begin` order; keep weights
@@ -32,13 +41,20 @@ Read this only when changing the cat's look, behaviour or belongings.
   around only needs a real `footprint`. Given `areas` (the flat's rooms, each grown 0.1 m over its doorways) the grid spans
   the whole flat and only those cells are probed: walls are colliders, so paths go through doorways, and a shut door leaf
   (a collider) keeps the cat in. `blockedNow` probes a point live.
-- `CatMotion.ts`: path following, parabolic hops; every 0.2 s it checks 0.2 m ahead with `blockedNow` and stops
+- `CatMotion.ts`: path following (0.2 s ease-in, `sqrt` braking over the last 0.3 m), yaw on a critically damped spring
+  (legs shuffle while turning in place), parabolic hops (0.15 s crouch, eased horizontal, `land` + `onLand` thud; `lift`
+  keeps the blob shadow on the ground, shrinking and fading). `stop()` never cuts a hop short and a `walkTo` asked mid-hop
+  sets off on landing (its answer is whether a path exists from where it lands). `faceTowards` first steps 0.12 m clear
+  when the head (or tail tip) would turn into furniture (`CatNav.reachBlocked`; `keepClear` false at the scratching post):
+  never backwards (a step behind it goes sideways, or not at all), standing up for it (the posture comes back once turned),
+  each step probed live and clamped inside the grid (the grid can be 10 s old). `teleport` for the morning. Every 0.2 s it checks 0.2 m ahead with `blockedNow` and stops
   (`blocked`, the grid invalidated) when a door was shut across the path; `hopTo(target, duration, apex)` clears an
   obstacle in between (a tub's rim). `spots.ts`: resting spot choice, including `perches` elsewhere in the flat
   (`CatPerch`: `restingSpot` / `approachPoint`, optional `hopApex`, `available()`, `catWeight(night)`): the bedroom's `Bed`,
   the living room radiator's fleece cradle (`Radiator({ catCradle })`; a radiator without one offers the floor in front),
   the dry bathtub (`Bathtub.isEmpty`, hopped into over its rim) and the basin (`!Washbasin.isRunning`). Each builder returns
   its room's `catPerches`. A perch that stops being `available` under the cat (the bath run) makes it hop out, grumbling.
+  An armchair with a `Seat.guest` (a visiting friend sits there, or is on the way) is never offered nor mounted.
 - Belongings: `FoodBowl` (clickable, kibble InstancedMesh level, refill), `WaterBowl`, `CatBed`, `Scratcher`, `CatToy`
   (rolling ball, bounces off colliders). A second `WaterBowl` stands in the kitchen's inside corner (`KITCHEN_PLAN.catWater`,
   returned as `catWaters`): `drink` goes to the nearest bowl it can reach (`CatOptions.waters`). The food stays home.
@@ -60,8 +76,34 @@ The cat lives in the collection room's zone (its belongings, windows, TV and `bo
 elsewhere drifts home. A walk that cannot be planned (a door shut on the way) puts `explore` off for 45 s. The cat is
 `seenFromNextDoor`, so it stays drawn when its own zone is culled; in the other rooms it casts only its blob shadow (lights
 render their own zone's layer).
-- `src/audio/CatVoice.ts`: synthesized purr (AM sawtooth + noise, breathing LFO) and meows (demand / greet / grumble), faded by
-  distance; AudioContext guarded.
+- `src/audio/CatVoice.ts`: synthesized purr (AM sawtooth + noise, breathing LFO), snore (asleep in the `sleep` pose), calls
+  (demand / greet / grumble / trill / chirp / chatter / yawn / yowl / hiss) and body noises (`noise`: lap, lick, crunch,
+  claws, rug, thud, ball, tick, in `src/audio/catNoises.ts`, which also has the kibble pour of `FoodBowl.refill`). Placed by
+  `Cat.placeVoice` with the flat's shared rule: `stereoPan` and a `SpatialOut` (`audio/spatial.ts`), walls from
+  `SoundOcclusion` (0.3 of the level each), nothing beyond `CAT_EARSHOT` (7.5 m, `types.ts`); AudioContext guarded. A call
+  more urgent than the one sounding cuts in (`PRIORITY`: hiss / yowl over a grumble over the rest, 40 ms fade); every
+  scheduled fade holds its param first (`cancelAndHoldAtTime`), so no clicks. `setBuzzing` (the fly), `noiseAt` (a thing
+  of the cat's heard where it is: the ball's bounce).
+- Sounds per state: crunch while eating, lapping at each sip, a soft sparse lick while washing, a little yawn in most
+  stretches, claws at the post, rug knead, the ball's roll + bell on a nudge and a tick on each bounce, hiss or yowl on a
+  startle, trill when called and on the lap, chirp at the fly (which buzzes faintly) or a refilled bowl, now and then a
+  chirp or a chatter at the window. Begging grows insistent meow after meow (`meow('demand', insistence)`: longer,
+  higher, louder), a trill now and then, and it hushes, eyes on the player, while they walk towards the bowl.
+- `CatFly.ts`: the speck the cat chases (`flyStalk` watches, `flyPounce` leaps under it); `CatBrain.fly` is its point
+  (`CatMind.flying`, set on entering either state). The ball is batted on along the cat-to-ball direction.
+
+## Time, treats and the bowl
+
+- `sleepDrive` is a smoothstep curve over hour knots (`SLEEP_CURVE` in `CatMind.ts`), no steps.
+- `CatBrain.noticeTimeSkip`: the clock jumping ≥ 3 h in a frame (a night in bed: `Sleep` needs no hook) runs
+  `morning.placeForMorning`: hungrier and thirstier, and between 5:00 and 11:00 it is put by its bowl (begging or eating)
+  or stretching on the people's bed, facing the side it hops down from. The household's beats stay under 3 h
+  (`HOUSEHOLD.pastimeMaxMinutes`) so they never trigger it.
+- `call(how)`: `'treats'` (the kitchen jar) always fetches an awake cat (trot, `treat` state: sniffs at the hand, then
+  crunches it on the floor); the voice and the wand keep the one-in-three snub. A bowl refilled near a hungry, free cat
+  sends it trotting over (`noticeRefill`, activity `rushToBowl`).
+- No buzzer from the cat's things: an annoyed cat or a full bowl answer with `react` (the cat grumbles).
+- Captions follow `Name · verb`: `Miso is sleeping · pet`, `Empty bowl · fill`.
 
 ## Hooks into the rest of the room
 

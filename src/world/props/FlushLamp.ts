@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { cylinderMesh, invisibleHitbox } from '../meshUtils';
 import { paint } from '../materials/palette';
 import { SwitchableLamp } from './SwitchableLamp';
+import { HoverGlint } from './hoverGlint';
 
 export interface FlushLampOptions {
   /** Radius of the ceiling plate. Default 0.17. */
@@ -13,7 +14,6 @@ export interface FlushLampOptions {
 }
 
 const DOME_GLOW = 1.4;
-const HOVER_GLOW = 0.3;
 const PLATE = paint(0xf6f3ee, 0.7);
 
 /**
@@ -41,6 +41,8 @@ export class FlushLamp extends SwitchableLamp {
     dome.position.y = -0.03;
     const hitbox = invisibleHitbox(radius * 2 + 0.04, domeRadius + 0.08, radius * 2 + 0.04, { y: -domeRadius / 2 - 0.02 });
     this.hitboxes = [hitbox];
+    // No metal on it: the plate's rim takes the hover glint, the frosted dome never glows for it.
+    this.glint = HoverGlint.of(plate);
     for (const m of [plate, dome]) m.castShadow = false;
     this.add(plate, dome, hitbox);
     this.setOn(options.on ?? true);
@@ -51,7 +53,7 @@ export class FlushLamp extends SwitchableLamp {
     this.onSwitch?.(on);
   }
 
-  protected render(on: boolean, hovered: boolean): void {
-    this.glass.emissiveIntensity = (on ? DOME_GLOW : 0) + (hovered ? HOVER_GLOW : 0);
+  protected render(level: number): void {
+    this.glass.emissiveIntensity = level * DOME_GLOW;
   }
 }

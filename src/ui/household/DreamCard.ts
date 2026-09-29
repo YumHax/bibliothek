@@ -1,5 +1,6 @@
 import type { Game } from '@/catalog/types';
 import type { Dream } from '@/household/dreams';
+import { coverAttrs } from '../coverPlaceholder';
 import { escapeHtml } from '../html';
 import './household.css';
 
@@ -25,14 +26,14 @@ export class DreamCard {
   show(dream: Dream): void {
     const cover = this.coverUrl(dream.game);
     this.root.innerHTML = `
-      ${cover ? `<img class="dream-card__cover" src="${escapeHtml(cover)}" alt="">` : ''}
+      ${cover ? `<img class="dream-card__cover catalogue__cover" src="${escapeHtml(cover)}" alt=""${coverAttrs(dream.game)}>` : ''}
       <div>
         <p class="dream-card__kicker">Last night you dreamt of…</p>
         <p class="dream-card__title">${escapeHtml(dream.game.title)}</p>
         <p class="dream-card__where">${escapeHtml(dream.where)}. ${escapeHtml(dream.line)}</p>
         <p class="dream-card__hint">It felt like this very morning.</p>
       </div>`;
-    this.root.querySelector('img')?.addEventListener('error', (e) => (e.target as HTMLElement).remove());
+    // A cover that fails becomes a made-up box, blurred like the art (`installCoverPlaceholders`).
     this.root.hidden = false;
     window.clearTimeout(this.timer);
     this.timer = window.setTimeout(() => this.hide(), SHOWN_MS);

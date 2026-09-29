@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { cylinderMesh, invisibleHitbox } from '../meshUtils';
 import { SwitchableLamp } from '../props/SwitchableLamp';
 import { METAL, standard } from '../materials/palette';
+import { LAMP_GLOW, LAMP_LIGHT } from '../lighting/lampColours';
 
 export interface BedsideLampOptions {
   /** Light intensity when on (a small bulb: a fraction of a floor lamp's). */
@@ -22,9 +23,8 @@ const SHADE_BOTTOM_RADIUS = 0.11;
 const SHADE_HEIGHT = 0.13;
 const DIFFUSER_GLOW = 1.0;
 const BULB_GLOW = 2.5;
-/** Faint glow of the fabric while lit, and while hovered so a switched-off lamp still reacts. */
+/** Faint glow of the fabric while lit. */
 const FABRIC_GLOW = 0.25;
-const HOVER_GLOW = 0.3;
 
 const CERAMIC = standard({ color: 0x3f4a55, roughness: 0.3 });
 const BRASS = METAL.brass();
@@ -55,21 +55,21 @@ export class BedsideLamp extends SwitchableLamp {
     const shadeY = BASE_HEIGHT + 0.08 + STEM_HEIGHT + SHADE_HEIGHT / 2 - 0.03;
 
     // Own materials: the emissive state is per lamp.
-    this.fabric = new THREE.MeshStandardMaterial({ color: this.options.shade, roughness: 1, side: THREE.DoubleSide, emissive: 0xffe2b0, emissiveIntensity: 0 });
+    this.fabric = new THREE.MeshStandardMaterial({ color: this.options.shade, roughness: 1, side: THREE.DoubleSide, emissive: LAMP_GLOW.incandescent, emissiveIntensity: 0 });
     const shade = new THREE.Mesh(new THREE.CylinderGeometry(SHADE_TOP_RADIUS, SHADE_BOTTOM_RADIUS, SHADE_HEIGHT, SEGMENTS, 1, true), this.fabric);
     shade.position.y = shadeY;
     shade.receiveShadow = true;
 
-    this.diffuser = new THREE.MeshStandardMaterial({ color: 0xfff6e8, emissive: 0xffe4bc, emissiveIntensity: DIFFUSER_GLOW, roughness: 1, side: THREE.DoubleSide });
+    this.diffuser = new THREE.MeshStandardMaterial({ color: 0xfff6e8, emissive: LAMP_GLOW.incandescent, emissiveIntensity: DIFFUSER_GLOW, roughness: 1, side: THREE.DoubleSide });
     const top = new THREE.Mesh(new THREE.CircleGeometry(SHADE_TOP_RADIUS - 0.003, SEGMENTS), this.diffuser);
     top.position.y = shadeY + SHADE_HEIGHT / 2 - 0.002;
     top.rotation.x = -Math.PI / 2;
 
-    this.bulb = new THREE.MeshStandardMaterial({ color: 0xfff4e0, emissive: 0xffe2b0, emissiveIntensity: BULB_GLOW, roughness: 0.3 });
+    this.bulb = new THREE.MeshStandardMaterial({ color: 0xfff4e0, emissive: LAMP_GLOW.incandescent, emissiveIntensity: BULB_GLOW, roughness: 0.3 });
     const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.02, 14, 10), this.bulb);
     bulb.position.y = shadeY;
 
-    this.light = new THREE.PointLight(0xffd9a8, this.options.intensity, 0, 2);
+    this.light = new THREE.PointLight(LAMP_LIGHT.incandescent, this.options.intensity, 0, 2);
     this.light.position.y = shadeY;
     this.light.castShadow = false;
 
@@ -81,10 +81,12 @@ export class BedsideLamp extends SwitchableLamp {
     this.setOn(this.options.on);
   }
 
-  protected render(on: boolean, hovered: boolean): void {
-    this.light.intensity = on ? this.options.intensity : 0;
-    this.diffuser.emissiveIntensity = on ? DIFFUSER_GLOW : 0;
-    this.bulb.emissiveIntensity = on ? BULB_GLOW : 0;
-    this.fabric.emissiveIntensity = (on ? FABRIC_GLOW : 0) + (hovered ? HOVER_GLOW : 0);
+  /** Hover glints the brass stem (the base class), never the shade. */
+  protected render(level: number): void {
+    this.light.intensity = level * this.options.intensity;
+    this.diffuser.emissiveIntensity = level * DIFFUSER_GLOW;
+    SwitchableLamp.warmGlow(this.bulb, LAMP_GLOW.incandescent, level);
+    this.bulb.emissiveIntensity = level * BULB_GLOW;
+    this.fabric.emissiveIntensity = level * FABRIC_GLOW;
   }
 }

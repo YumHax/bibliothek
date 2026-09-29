@@ -57,12 +57,12 @@ const LINES: readonly GoodLine[] = [
   { id: 'sideboard', name: 'Sideboard', price: HOME_GOOD_PRICES.sideboard, blurb: 'Low teak, with a turntable and a few records. Under the projector wall.', shop: 'furniture' },
   { id: 'framedPrint', name: 'Framed print', price: HOME_GOOD_PRICES.framedPrint, blurb: 'Mountains, a sunset, something abstract. One wall at a time.', shop: 'furniture', max: PRINT_SPOTS },
   { id: 'bed', name: 'Bed', price: HOME_GOOD_PRICES.bed, blurb: 'A proper double bed, off the floor at last.', shop: 'furniture' },
-  { id: 'nightstands', name: 'Nightstands', price: HOME_GOOD_PRICES.nightstands, blurb: 'A pair, each with its drawer and a bedside lamp.', shop: 'furniture', requires: 'bed' },
+  { id: 'nightstands', name: 'Nightstands', price: HOME_GOOD_PRICES.nightstands, blurb: 'A pair, each with its drawer and a bedside lamp. The alarm clock and the phone go on them.', shop: 'furniture', requires: 'bed' },
   { id: 'dresser', name: 'Dresser', price: HOME_GOOD_PRICES.dresser, blurb: 'Three drawers and room on top for a small TV.', shop: 'furniture' },
-  { id: 'readingCorner', name: 'Reading corner', price: HOME_GOOD_PRICES.readingCorner, blurb: 'A bedroom chair, a little table and a reading lamp.', shop: 'furniture' },
+  { id: 'readingCorner', name: 'Reading corner', price: HOME_GOOD_PRICES.readingCorner, blurb: 'A bedroom chair, a little table and a reading lamp. Sit there with a boxed game to read its manual.', shop: 'furniture' },
   { id: 'bedroomRug', name: 'Bedroom rug', price: HOME_GOOD_PRICES.bedroomRug, blurb: 'Something warm to step out of bed onto.', shop: 'furniture' },
   { id: 'mirror', name: 'Leaning mirror', price: HOME_GOOD_PRICES.mirror, blurb: 'Full length, for the bedroom.', shop: 'furniture' },
-  { id: 'kitchenTable', name: 'Kitchen table', price: HOME_GOOD_PRICES.kitchenTable, blurb: 'A breakfast table and two chairs.', shop: 'furniture' },
+  { id: 'kitchenTable', name: 'Kitchen table', price: HOME_GOOD_PRICES.kitchenTable, blurb: 'A breakfast table and two chairs. Where the cleaning kit is used and a cake cools.', shop: 'furniture' },
   { id: 'kitchenRug', name: 'Kitchen runner', price: HOME_GOOD_PRICES.kitchenRug, blurb: 'Along the units, for cold mornings.', shop: 'furniture' },
   { id: 'bathMat', name: 'Bath mat', price: HOME_GOOD_PRICES.bathMat, blurb: 'Cotton, for the bathroom.', shop: 'furniture' },
   { id: 'hallStand', name: 'Shoe rack and umbrella stand', price: HOME_GOOD_PRICES.hallStand, blurb: 'For the hallway, by the front door.', shop: 'furniture' },
@@ -72,7 +72,7 @@ const LINES: readonly GoodLine[] = [
   { id: 'projector', name: 'Projector', price: HOME_GOOD_PRICES.projector, blurb: 'Ceiling-mounted, throws a 2-metre picture on the right wall.', shop: 'electronics' },
   { id: 'speakers', name: 'Hi-fi speakers', price: HOME_GOOD_PRICES.speakers, blurb: 'A pair, either side of the TV stand.', shop: 'electronics' },
   { id: 'bedroomTv', name: 'Small TV', price: HOME_GOOD_PRICES.bedroomTv, blurb: 'A portable set for the bedroom dresser.', shop: 'electronics', requires: 'dresser' },
-  { id: 'radio', name: 'Kitchen radio', price: HOME_GOOD_PRICES.radio, blurb: 'Two bands and a dial that sticks.', shop: 'electronics' },
+  { id: 'radio', name: 'Kitchen radio', price: HOME_GOOD_PRICES.radio, blurb: 'Two bands and a dial that sticks. On in the morning, it has the market’s news.', shop: 'electronics' },
   { id: 'appliances', name: 'Kettle and toaster', price: HOME_GOOD_PRICES.appliances, blurb: 'For the kitchen worktop.', shop: 'electronics' },
   // The florist.
   { id: 'houseplant', name: 'Houseplant', price: HOME_GOOD_PRICES.houseplant, blurb: 'A fig, a yucca, a monstera, trailing pots... one spot at a time.', shop: 'florist', max: HOUSEPLANT_SPOTS },
@@ -107,4 +107,19 @@ export function homeGood(id: HomeUpgrade): HomeGood {
 /** What `shop` sells, in list order. */
 export function goodsOf(shop: HomeShop): HomeGood[] {
   return HOME_GOODS.filter((g) => g.shop === shop);
+}
+
+/** Whether one more of a piece can be bought: `buy`, `full` (as many at home as there is room for) or `needs` (what it goes with first). */
+export type HomeGoodStatus = 'buy' | 'full' | 'needs';
+
+/** What is said once `good` is paid for, wherever it was bought (a shop's tag or till, the household stall). */
+export function boughtLine(good: Pick<HomeGood, 'id'>): string {
+  return good.id === 'cat' ? 'Adopted! The cat is waiting at home, by its bowls.' : 'It is at home already.';
+}
+
+/** Why `good` cannot be bought now, as a refusal (null when it can): no room left for another, or what it goes with first. */
+export function refusalFor(good: HomeGood, status: HomeGoodStatus): string | null {
+  if (status === 'full') return good.max > 1 ? `The flat has no room for another ${good.name.toLowerCase()}.` : `You have the ${good.name.toLowerCase()} already.`;
+  if (status === 'needs') return `The ${good.name.toLowerCase()} goes with the ${homeGood(good.requires!).name.toLowerCase()}: buy that first.`;
+  return null;
 }

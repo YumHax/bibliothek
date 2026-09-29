@@ -1,4 +1,5 @@
 import type { Game } from '@/catalog/types';
+import { coverAttrs } from './coverPlaceholder';
 import { getPlatform } from '@/catalog/platforms';
 import type { NeighbourTrades, TradeOffer } from '@/economy/NeighbourTrades';
 import type { Transactions } from '@/economy/Transactions';
@@ -58,7 +59,7 @@ export class NeighbourTradePanel extends MarketPanel {
     const { trades, tx, collection } = this.deps;
     if (action === 'decline') {
       trades.decline(offer);
-      this.outcome = `"No worries, I'll ask around." ${offer.who} closes the door.`;
+      this.outcome = `“No worries, I’ll ask around.” ${offer.who} closes the door.`;
       this.refresh();
       return;
     }
@@ -78,7 +79,7 @@ export class NeighbourTradePanel extends MarketPanel {
     const cover = this.coverUrl?.(game);
     return `
       <div class="catalogue__row">
-        ${cover ? `<img class="catalogue__cover" src="${escapeHtml(cover)}" alt="" loading="lazy" />` : ''}
+        ${cover ? `<img class="catalogue__cover" src="${escapeHtml(cover)}" alt=""${coverAttrs(game)} loading="lazy" />` : ''}
         <span class="catalogue__title">${escapeHtml(game.title)}</span>
         <span class="catalogue__stall">${whose}</span>
         <span class="catalogue__meta">${escapeHtml(getPlatform(game.platform).shortName)}</span>

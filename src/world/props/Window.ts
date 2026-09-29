@@ -13,6 +13,10 @@ import { SunShaft } from './SunShaft';
 import type { DayNight, SkyState } from './DayNight';
 import type { Outdoors } from './outdoors/Outdoors';
 import type { DrawnAware } from '../zone/Zone';
+import { ShadowRefresh } from '../lighting/shadowRefresh';
+import { PaneReflection } from '../materials/paneReflection';
+import { RENDER_ORDER } from '../surface/layers';
+import { normalBiasAt, snapDirection, texelAngle } from './shadowTexels';
 
 export interface WindowOptions {
   /** Size of the glazed opening in metres. The kick rail below it reaches the floor. */
@@ -53,8 +57,12 @@ const MASK_REACH = 3;
 /** Distance of the sun/moon spot from the window and its half-angle: the cone just covers the opening. */
 const LIGHT_DISTANCE = 9;
 const LIGHT_HALF_ANGLE = THREE.MathUtils.degToRad(9.5);
+/** How far the sun's direction leans out of the wall's plane (sine of the angle) before it lights the room fully. */
+const SUN_GRAZE = 0.12;
 /** Soft light of the sky through the glass (a rect area light, `QUALITY.areaLights`): its brightness in full daylight. */
 const SKY_PANEL_INTENSITY = 1.6;
+/** Local z of the pane's reflection: just in front of the pane, behind the mullions' faces and any curtain. */
+const PANE_REFLECTION_Z = 0.006;
 /** The curtain hem hangs this far above the floor. */
 const HEM_CLEARANCE = 0.015;
 
@@ -80,11 +88,13 @@ export class RoomWindow extends Prop implements Updatable, Interactable, Occupan
   readonly floorY: number;
   private readonly unsubscribe: () => void;
   readonly hitboxes: THREE.Object3D[];
-  /** The sun's shadow map is re-rendered every frame only in the player's room; now and then elsewhere (see `update`). */
+  /** The sun's shadow map is re-rendered regularly only in the player's room (`sunShadow`); now and then elsewhere (see `update`). */
   private occupied = false;
   /** Whether the zone's meshes are drawn: while they are hidden a refresh would render an empty map (see `setZoneDrawn`). */
   private zoneDrawn = true;
   private shadowTimer = Math.random() * IDLE_SHADOW_INTERVAL;
+  /** The sun's regular shadow refresh while the player is in this room and the sun comes in. */
+  private sunShadow: ShadowRefresh | null = null;
 
   /** The sun/moon spot; null when `sunlight` is off. */
   private readonly light: THREE.SpotLight | null = null;
@@ -94,9 +104,13 @@ export class RoomWindow extends Prop implements Updatable, Interactable, Occupan
   /** The sky's soft light pouring through the whole opening (`QUALITY.areaLights`). */
   private readonly skyPanel: THREE.RectAreaLight | null = null;
   private readonly steel: THREE.MeshStandardMaterial;
+  /** The pane's reflection of the room, stronger as the outside darkens. */
+  private readonly reflection = new PaneReflection();
   private sky: SkyState | null = null;
   private readonly worldQuaternion = new THREE.Quaternion();
   private readonly lightDir = new THREE.Vector3();
+  /** `lightDir` snapped to whole shadow texels: where the spot actually stands (see `apply`). */
+  private readonly aimDir = new THREE.Vector3();
 
   /** Height at which to `place()` a window of glass height `height` so its kick rail stands on the floor. */
   static mountY(height: number): number {
@@ -117,10 +131,16 @@ export class RoomWindow extends Prop implements Updatable, Interactable, Occupan
     const pane = new THREE.Mesh(new THREE.PlaneGeometry(w, h), outdoors.material);
     pane.position.z = 0.004;
     this.add(pane);
+    // Over it, the room given back by the glass: faint by day, the lit room in the dark pane at night.
+    const reflection = new THREE.Mesh(pane.geometry, this.reflection.material);
+    reflection.position.z = PANE_REFLECTION_Z;
+    reflection.renderOrder = RENDER_ORDER.sheen;
+    this.add(reflection);
 
     // Black steel frame: side rails from the floor to the head, a head rail, a kick rail down to
     // the floor (tall enough to swallow the baseboard), then the grid of mullions.
-    const steel = new THREE.MeshStandardMaterial({ color: 0x2b2b2e, roughness: 0.5, metalness: 0.35 });
+    // Painted steel: a dielectric (metalness 0), the paint's sheen in its roughness.
+    const steel = new THREE.MeshStandardMaterial({ color: 0x2b2b2e, roughness: 0.45, metalness: 0 });
     this.steel = steel;
     const frameDepth = 0.06;
     const top = h / 2 + RAIL;
@@ -165,18 +185,24 @@ export class RoomWindow extends Prop implements Updatable, Interactable, Occupan
         part(this, MASK_REACH, h, 0.02, maskMat, { x: -w / 2 - MASK_REACH / 2, z: -0.03 }),
         part(this, MASK_REACH, h, 0.02, maskMat, { x: w / 2 + MASK_REACH / 2, z: -0.03 }),
       ];
-      for (const m of masks) m.receiveShadow = false;
+      for (const m of masks) {
+        m.receiveShadow = false;
+        // Shadow passes only: the camera would draw them for nothing.
+        m.layers.disable(0);
+      }
 
       // Sun / moon: a narrow spot with no distance falloff, aimed at the centre of the glass.
       this.light = new THREE.SpotLight(0xffffff, 0, 0, LIGHT_HALF_ANGLE, 0.35, 0);
       this.light.castShadow = true;
-      this.light.shadow.mapSize.setScalar(QUALITY.shadowMapSize);
+      this.light.shadow.mapSize.setScalar(QUALITY.sunShadowMapSize);
       this.light.shadow.camera.near = LIGHT_DISTANCE - 2;
       this.light.shadow.camera.far = LIGHT_DISTANCE + 12;
       this.light.shadow.bias = -0.0003;
-      this.light.shadow.normalBias = 0.02;
+      // In texels of the map, at the far end of the patch it throws (the floor a few metres in).
+      this.light.shadow.normalBias = normalBiasAt(LIGHT_DISTANCE + MASK_REACH, LIGHT_HALF_ANGLE, QUALITY.sunShadowMapSize);
       this.light.target.position.set(0, 0, 0);
       this.add(this.light, this.light.target);
+      this.sunShadow = new ShadowRefresh(this.light);
 
       if (QUALITY.lightShafts) {
         this.shaft = new SunShaft({ width: w, height: h, columns, rows, floorY: this.floorY });
@@ -226,6 +252,7 @@ export class RoomWindow extends Prop implements Updatable, Interactable, Occupan
       this.options.onCurtainsChange?.(this.curtains.currentOpenness);
     }
     this.shaft?.update(dt);
+    this.sunShadow?.update(dt);
     if (this.occupied || !this.zoneDrawn || !this.light || this.light.intensity <= 0) return;
     this.shadowTimer += dt;
     if (this.shadowTimer < IDLE_SHADOW_INTERVAL) return;
@@ -241,8 +268,8 @@ export class RoomWindow extends Prop implements Updatable, Interactable, Occupan
 
   label(): string | null {
     if (!this.curtains) return null;
-    if (this.curtains instanceof RollerBlind) return this.curtains.isDrawn ? 'Click to raise the blind' : 'Click to lower the blind';
-    return this.curtains.isDrawn ? 'Click to open the curtains' : 'Click to draw the curtains';
+    if (this.curtains instanceof RollerBlind) return this.curtains.isDrawn ? 'Blind · raise' : 'Blind · lower';
+    return this.curtains.isDrawn ? 'Curtains · open' : 'Curtains · draw';
   }
 
   activate(_session: SessionActions): void {
@@ -272,6 +299,9 @@ export class RoomWindow extends Prop implements Updatable, Interactable, Occupan
 
   private apply(sky: SkyState): void {
     this.sky = sky;
+    this.reflection.set(sky.daylight);
+    // The fabric in front of the glass glows with the sky behind it.
+    this.curtains?.setBacklight(sky.ambient, sky.daylight);
     if (this.skyPanel) {
       this.skyPanel.color.copy(sky.ambient);
       this.skyPanel.intensity = SKY_PANEL_INTENSITY * sky.daylight * THREE.MathUtils.lerp(0.15, 1, this.curtainOpenness);
@@ -281,15 +311,20 @@ export class RoomWindow extends Prop implements Updatable, Interactable, Occupan
     // Behind the wall: no light. The first call runs before `place()`, the per-frame ones after.
     this.getWorldQuaternion(this.worldQuaternion).invert();
     this.outdoors.lightDirection(sky, this.lightDir).applyQuaternion(this.worldQuaternion);
-    this.light.position.copy(this.lightDir).multiplyScalar(LIGHT_DISTANCE);
+    // The spot moves in whole texels of its map as the sun crosses the sky: the window's shadow hops
+    // a texel now and then instead of its edges crawling every frame.
+    snapDirection(this.lightDir, texelAngle(LIGHT_HALF_ANGLE, this.light.shadow.mapSize.x), this.aimDir);
+    this.light.position.copy(this.aimDir).multiplyScalar(LIGHT_DISTANCE);
     this.light.color.copy(sky.lightColor);
-    // Drawn curtains shut the sun out; the light fades with the panels.
-    this.light.intensity = this.lightDir.z < 0 ? sky.lightIntensity * this.curtainOpenness : 0;
-    // A dark light still gets its shadow map rendered every frame unless told otherwise: skip the
-    // pass while the sun is behind this wall (or the curtains drawn), and while the player is in
-    // another room (`update` refreshes it now and then). Toggling `castShadow` instead would
-    // recompile every material, so the light stays a shadow caster and only stops updating.
-    this.light.shadow.autoUpdate = this.occupied && this.light.intensity > 0;
+    // Drawn curtains shut the sun out; the light fades with the panels. As the sun comes round into
+    // the wall's plane it fades out over the last few degrees rather than going off at once.
+    const facing = THREE.MathUtils.smoothstep(-this.lightDir.z, 0, SUN_GRAZE);
+    this.light.intensity = sky.lightIntensity * this.curtainOpenness * facing;
+    // A dark light still gets its shadow map rendered unless told otherwise: skip the pass while the
+    // sun is behind this wall (or the curtains drawn), and while the player is in another room
+    // (`update` refreshes it now and then). Toggling `castShadow` instead would recompile every
+    // material, so the light stays a shadow caster and only stops updating.
+    this.sunShadow?.setLive(this.occupied && this.light.intensity > 0);
     this.shaft?.setSun(this.lightDir, sky.lightColor, sky.night ? 0 : this.light.intensity);
   }
 }

@@ -5,6 +5,7 @@ import { RadioVoice } from '@/audio/kitchenSounds';
 import { cylinderMesh, invisibleHitbox } from '../meshUtils';
 import { Prop, part } from '../props/Prop';
 import { paint, standard } from '../materials/palette';
+import { HoverGlint } from '../props/hoverGlint';
 
 export interface RadioOptions {
   /** Body colour. Default a cream enamel. */
@@ -14,7 +15,7 @@ export interface RadioOptions {
 const W = 0.22;
 const H = 0.13;
 const D = 0.08;
-const CHROME = standard({ color: 0xd4d6d9, metalness: 0.85, roughness: 0.25 });
+const CHROME = standard({ color: 0xd4d6d9, metalness: 1, roughness: 0.2 });
 const GRILLE = paint(0x3b352e, 0.8);
 
 /**
@@ -29,6 +30,8 @@ export class Radio extends Prop implements Interactable {
   /** Its voice, placed by the builder with a `PointSound` at the speaker. */
   readonly sound = new RadioVoice();
   private readonly dial = new THREE.MeshStandardMaterial({ color: 0xe9dcb8, emissive: 0xffb347, emissiveIntensity: 0, roughness: 0.4 });
+  /** The two knobs glint on hover. */
+  private readonly glint: HoverGlint;
 
   constructor(options: RadioOptions = {}) {
     super();
@@ -50,11 +53,13 @@ export class Radio extends Prop implements Interactable {
     for (let i = 0; i < 9; i++) part(this, 0.001, 0.008, 0.001, paint(0x3b352e, 0.8), { x: dx - W * 0.16 + i * W * 0.04, y: 0.008 + H * 0.66 + 0.008, z: front + 0.0015 }).castShadow = false;
     part(this, 0.0015, 0.03, 0.001, paint(0xc0392b, 0.5), { x: dx + 0.01, y: 0.008 + H * 0.66, z: front + 0.002 }).castShadow = false;
     // Two knobs under the dial.
-    for (const k of [-1, 1]) {
+    const knobs = [-1, 1].map((k) => {
       const knob = cylinderMesh(0.012, 0.014, CHROME, { x: dx + k * 0.022, y: 0.008 + H * 0.3, z: front + 0.007 }, { segments: 14 });
       knob.rotation.x = Math.PI / 2;
       this.add(knob);
-    }
+      return knob;
+    });
+    this.glint = HoverGlint.of(...knobs);
     // The handle on top and the aerial leaning back.
     for (const hx of [-W / 2 + 0.03, W / 2 - 0.03]) this.add(cylinderMesh(0.004, 0.025, CHROME, { x: hx, y: 0.008 + H + 0.0125 }, { segments: 8 }));
     const bar = cylinderMesh(0.005, W - 0.06, CHROME, { y: 0.008 + H + 0.025 }, { segments: 8 });
@@ -72,14 +77,23 @@ export class Radio extends Prop implements Interactable {
 
   // --- Interactable -------------------------------------------------------------------------
 
-  setHovered(_hovered: boolean): void {}
+  setHovered(hovered: boolean): void {
+    this.glint.set(hovered);
+  }
+
+  /** A word after the radio's name in its caption (", morning news on"), set by its room; none by default. */
+  note: (() => string | null) | null = null;
 
   label(): string {
-    return this.sound.isOn ? 'Click to switch the radio off' : 'Click to switch the radio on';
+    return `Radio${this.note?.() ?? ''} · switch ${this.sound.isOn ? 'off' : 'on'}`;
   }
 
   activate(_session: SessionActions): void {
-    const on = !this.sound.isOn;
+    this.setOn(!this.sound.isOn);
+  }
+
+  /** Switched on or off, the dial lit with it: by a click, or by its room (a shop's radio, on all day). */
+  setOn(on: boolean): void {
     this.sound.setOn(on);
     this.dial.emissiveIntensity = on ? 0.9 : 0;
   }

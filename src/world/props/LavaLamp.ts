@@ -30,7 +30,7 @@ const RADIUS = 0.5;
 const BASE_SHARE = 0.34;
 const CAP_SHARE = 0.1;
 
-const METAL = standard({ color: 0x8c8f94, metalness: 0.85, roughness: 0.3 });
+const METAL = standard({ color: 0x8c8f94, metalness: 1, roughness: 0.3 });
 
 interface Blob {
   mesh: THREE.Mesh;

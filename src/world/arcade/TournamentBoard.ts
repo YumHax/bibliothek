@@ -7,6 +7,7 @@ import { boxMesh, invisibleHitbox } from '../meshUtils';
 import { Prop } from '../props/Prop';
 import { paint, standard } from '../materials/palette';
 import { drawText } from './games/ArcadeGame';
+import { QUALITY } from '@/graphics/quality';
 
 /** One match as the board draws it (the concrete bracket is `economy/ArcadeTournament`'s). */
 interface BoardMatch {
@@ -53,7 +54,7 @@ const PX_PER_M = 640;
 const POLL_SECONDS = 5;
 const FRAME = paint(0x14100a, 0.45);
 const CLIPBOARD = paint(0x8a5a2e, 0.7);
-const CLIP = standard({ color: 0xb9bcc0, metalness: 0.7, roughness: 0.3 });
+const CLIP = standard({ color: 0xb9bcc0, metalness: 1, roughness: 0.35 });
 const ROUND_TITLES = ['QUARTERS', 'SEMIS', 'FINAL'];
 
 /**
@@ -92,7 +93,7 @@ export class TournamentBoard extends Prop implements Updatable, Interactable {
     this.H = canvas.height;
     this.texture = new THREE.CanvasTexture(canvas);
     this.texture.colorSpace = THREE.SRGBColorSpace;
-    this.texture.anisotropy = 4;
+    this.texture.anisotropy = QUALITY.anisotropy;
     const face = new THREE.Mesh(new THREE.PlaneGeometry(width, height), new THREE.MeshBasicMaterial({ map: this.texture, toneMapped: false, color: 0xd8d8d8 }));
     face.position.z = 0.042;
     this.add(face);
@@ -127,7 +128,7 @@ export class TournamentBoard extends Prop implements Updatable, Interactable {
   label(): string | null {
     const v = this.options.tournament.view();
     if (!v.on) return 'SATURDAY TOURNAMENT · every Saturday';
-    if (!v.entered) return `Click to sign up for today's tournament (${this.options.entry} coin${this.options.entry === 1 ? '' : 's'})`;
+    if (!v.entered) return `Saturday tournament · sign up (${this.options.entry} coin${this.options.entry === 1 ? '' : 's'})`;
     if (v.next) return `Next: ${v.next.name} on ${this.options.titleOf(v.gameId)} · beat ${v.next.score.toLocaleString('en-US')}`;
     return v.out ? 'Knocked out. Next Saturday, then.' : 'Champion! The cup is on the prize shelf at home.';
   }
@@ -250,7 +251,7 @@ export class TournamentBoard extends Prop implements Updatable, Interactable {
     const champion = final?.winner ?? null;
     slot(colX[3]!, centres[3]![0]!, champion ?? '???', null, champion ? 'won' : 'open', champion === 'YOU');
     const foot = !v.entered
-      ? 'CLICK TO SIGN UP · EACH ROUND IS ONE PLAY ON THE CABINET'
+      ? 'SIGN UP HERE · EACH ROUND IS ONE PLAY ON THE CABINET'
       : v.next
         ? `YOUR ${ROUND_TITLES[v.next.round]}: BEAT ${v.next.name} · ${v.next.score.toLocaleString('en-US')}`
         : v.out

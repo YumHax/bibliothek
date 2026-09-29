@@ -1,8 +1,16 @@
 /*
  * THE FIRST DAY'S STEPS, in order: the to-do list on the hall console (`ToDoNote`), with the tip a
- * zone shows for the first step not done yet. Each (step, zone) tip shows once; a step is done by
+ * zone shows for the first step not done yet. Each (step, zone) tip shows once a visit, a few visits at most; a step is done by
  * what the stores and the zones say (`FirstDay`), never by a timer.
  */
+
+import { actionKeyLabel } from '@/ui/keys';
+import { useVerbOn, useVerbOnCap } from '@/ui/verb';
+import { BARGAIN_PRICE, HOME_GOOD_PRICES, TICKETS_PER_COIN } from '@/economy/pricing';
+import { SHOP_HOURS, clockTime } from '@/world/street/shops/shopHours';
+
+/** The flat's shops' hours, as the tips say them ("9:00 to 21:00"). */
+const FLAT_SHOPS_HOURS = `${clockTime(SHOP_HOURS.furniture?.open ?? 9)} to ${clockTime(SHOP_HOURS.furniture?.close ?? 21)}`;
 
 export type FirstDayStepId = 'note' | 'out' | 'arcade' | 'play' | 'redeem' | 'market' | 'buy' | 'unpack' | 'shelf';
 
@@ -10,8 +18,14 @@ export interface FirstDayStep {
   id: FirstDayStepId;
   /** The line on the to-do list, in the player's own hand. */
   todo: string;
-  /** What the HUD says in a zone (by id) while this is the first step not done. */
-  tips: Partial<Record<string, string>>;
+  /** What the HUD says in a zone (by id) while this is the first step not done; a function when it names keys (they follow the bindings and the layout). */
+  tips: Partial<Record<string, string | (() => string)>>;
+}
+
+/** A step's tip in `zone`, keys named as the player's keyboard prints them. */
+export function tipText(step: FirstDayStep, zone: string): string | undefined {
+  const tip = step.tips[zone];
+  return typeof tip === 'function' ? tip() : tip;
 }
 
 /** The flat's rooms, where the first tip may show. */
@@ -29,7 +43,7 @@ export const FIRST_DAY_STEPS: readonly FirstDayStep[] = [
     todo: 'Keys from the bowl, out the front door',
     tips: {
       hallway: 'Take the keys from the bowl on the console, then the front door at the end of the corridor.',
-      living: 'The hallway is through the green door: keys in the bowl, then out.',
+      living: 'Through the door to the hallway: keys in the bowl on the console, then out.',
     },
   },
   {
@@ -43,27 +57,27 @@ export const FIRST_DAY_STEPS: readonly FirstDayStep[] = [
   {
     id: 'play',
     todo: 'Play something: good scores pay tickets',
-    tips: { arcade: 'Click a machine to put a coin in. Good scores pay tickets; E walks away.' },
+    tips: { arcade: () => `${useVerbOnCap('a machine')} to put a coin in. Good scores pay tickets; ${actionKeyLabel('walkAway')} walks away.` },
   },
   {
     id: 'redeem',
-    todo: 'Tickets -> coins at the prize counter',
-    tips: { arcade: 'Tickets in your pocket: the prize counter swaps them for coins, or for prizes to take home.' },
+    todo: `Tickets → ${BARGAIN_PRICE} coins at the prize counter`,
+    tips: { arcade: `Tickets in your pocket: the prize counter swaps them for coins (${TICKETS_PER_COIN} a coin), or for prizes. About ${BARGAIN_PRICE} coins buys a bargain-bin game.` },
   },
   {
     id: 'market',
     todo: 'Flea market, at the back of RETRO GAMES',
     tips: {
       arcade: 'Coins in hand: the flea market is at the back of RETRO GAMES, across the street.',
-      street: 'RETRO GAMES: the flea market is at its back, open 8:00 to 23:00.',
+      street: `RETRO GAMES: the flea market is at its back, open ${clockTime(SHOP_HOURS.retro?.open ?? 8)} to ${clockTime(SHOP_HOURS.retro?.close ?? 23)}.`,
     },
   },
   {
     id: 'buy',
     todo: 'Buy a first game!',
     tips: {
-      market: 'Click a game to look closer: B buys it, H haggles. What you buy is sent home.',
-      street: 'The flat is bare: the furniture shop, the TV repair shop, the florist and the pet shop are on this street too.',
+      market: () => `The bargain bin: anything in it for ${BARGAIN_PRICE} coins. ${useVerbOnCap('a game')} to look closer: ${actionKeyLabel('buy')} buys it, ${actionKeyLabel('haggle')} haggles (not in the bin). What you buy is sent home.`,
+      street: `The flat is bare: the furniture shop, the TV repair shop, the florist and the pet shop are on this street too, open ${FLAT_SHOPS_HOURS}. A houseplant is ${HOME_GOOD_PRICES.houseplant} coins.`,
     },
   },
   {
@@ -71,15 +85,15 @@ export const FIRST_DAY_STEPS: readonly FirstDayStep[] = [
     todo: 'Unpack the parcel in the hall',
     tips: {
       market: 'Your game is on its way home: the parcel will wait in the hall.',
-      hallway: 'Your parcel is under the console: click it to unpack.',
+      hallway: () => `Your parcel is under the console: ${useVerbOn()} to unpack.`,
     },
   },
   {
     id: 'shelf',
     todo: 'Find it on the shelf, watch it on the TV',
-    tips: { living: 'It is on the shelf now. Pick it up, bring it to the TV and click the TV to watch it played.' },
+    tips: { living: () => `It is on the shelf now. Pick it up, bring it to the TV and ${useVerbOn('the TV')} to watch it played.` },
   },
 ];
 
 /** Said once the list is done (or skipped from the note). */
-export const FIRST_DAY_DONE = 'That is the round: arcade, market, shelves. The journal on the console keeps your days.';
+export const FIRST_DAY_DONE = `That is the round: arcade, market, shelves. The flat fills up from the shops on Front Street (${FLAT_SHOPS_HOURS}): a plant, an armchair, one day a cat. The journal on the console keeps your days.`;

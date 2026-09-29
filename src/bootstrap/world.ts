@@ -3,7 +3,7 @@ import type { PlatformId } from '@/catalog/types';
 import { getPlatform } from '@/catalog/platforms';
 import type { Engine } from '@/core/Engine';
 import type { Session } from '@/game/Session';
-import { callCat } from '@/game/CatCare';
+import { callCat, callCatFor } from '@/game/CatCare';
 import { setupGraphics } from '@/graphics';
 import { Inspector } from '@/interaction/Inspector';
 import { FirstPersonController } from '@/player/FirstPersonController';
@@ -11,8 +11,11 @@ import { StreetAmbience } from '@/audio/StreetAmbience';
 import { World } from '@/world/World';
 import type { GameBox } from '@/world/GameBox';
 import { SoundOcclusion } from '@/world/acoustics/SoundOcclusion';
+import { setEars } from '@/audio/spatial';
 import { RetroShopLure } from '@/world/props/outdoors/RetroShopLure';
 import { ZoneManager, PortalCuller } from '@/world/zone';
+import { StreetAhead } from '@/world/airlock/StreetAhead';
+import { groundHeight } from '@/world/street/relief/ground';
 import { FLAT, WORLD_PLAN, inFlat, zonePlan } from '@/world/worldPlan';
 import type { ZoneId } from '@/world/zoneIds';
 import { bindBuilder, type ZoneHandleById } from '@/world/layout';
@@ -23,18 +26,22 @@ import { Doorstep } from '@/world/hallway/Doorstep';
 import type { BuildingServices, TradePanelLike } from '@/world/stairwell/building';
 import { furnishVisitors } from '@/world/visitors';
 import type { PhoneFriends } from '@/ui/household/PhonePanel';
-import { HOUSEHOLD } from '@/household';
+import { HOUSEHOLD, Pastimes, type PastimeCurtain } from '@/household';
 import type { DoorLike } from '@/world/visitors/Visit';
 import { SEED_GAMES } from '@/catalog';
 import type { PlayerMoves } from './player';
 import type { Notices } from '@/notices';
-import { lightLevelOf } from '@/world/zoneHandle';
+import { lightLevelOf, surfaceUnderfoot } from '@/world/zoneHandle';
 import { catPlacers, followAdoption, furnishCat, type Cat } from '@/world/cat';
 import { ShelvingGroup } from '@/world/shelving/ShelvingGroup';
 import { late, type Late } from './late';
 import type { Services } from './services';
 import { installStats, installZFight } from './debug';
+import { trackWorldLoad } from '@/ui/worldLoad';
 import { BalconyDoor } from '@/world/balcony/BalconyDoor';
+
+/** Where the TV a seated friend watches stands (read every frame, copied by the visit). */
+const tvAt = new Vector3();
 
 /** The world of zones, every zone id typed with what its builder returns. */
 export type GameWorld = World<ZoneHandleById>;
@@ -70,6 +77,8 @@ export interface FlatPanels {
   wardrobe: ModalLike;
   /** What the street's shops and the hall console open (`BuildContext.panels`). */
   panels: WorldPanels;
+  /** The teleport's curtain: the household's long jobs fade to black behind it (`household/pastime.ts`). */
+  fader: PastimeCurtain;
 }
 
 export function buildWorld(services: Services, parts: { world: GameWorld; player: FirstPersonController; marketHall: MarketHallServices; flat: FlatPanels; session: Late<Session>; moves: Late<PlayerMoves> }) {
@@ -77,15 +86,21 @@ export function buildWorld(services: Services, parts: { world: GameWorld; player
   const { world, player, marketHall, flat, session, moves } = parts;
   const zones = late<ZoneManager<ZoneId>>('the zone manager');
   const cat = late<Cat>('the cat');
+  // The household's beats (cleaning, baking, a soak): a fade that holds the player still, like a night (docs/household.md).
+  const pastimes = new Pastimes(flat.fader, sky.dayNight, (busy) => session.isSet && session.get().setFrozen(busy));
 
   // The street heard through the nearest window; the retro games shop across it shows the market's stock once drawn.
   const streetWalls = new SoundOcclusion(() => world.occluders);
+  // The flat's one-shots with no listener of their own (a door's latch) are heard from the camera, through the walls.
+  setEars(engine.camera, (a, b) => streetWalls.wallsBetween(a, b));
   // Through the shut windows a murmur; at the full level with the balcony door open or out on the balcony.
   engine.addUpdatable(new StreetAmbience({
     listener: engine.camera,
     panes: () => sky.outdoors.panesIn(engine.scene),
     openings: () => balconyDoorsIn(engine.scene),
     outside: () => zones.isSet && zones.get().current.id === 'balcony',
+    open: () => zones.isSet && zones.get().current.id === 'street',
+    underRoof: () => zones.isSet && zones.get().current.id === 'market',
     sky: () => sky.dayNight.state,
     wallsBetween: (a, b) => streetWalls.wallsBetween(a, b),
     life: () => sky.outdoors.life.events,
@@ -96,12 +111,13 @@ export function buildWorld(services: Services, parts: { world: GameWorld; player
     here: () => zones.get().current.id,
   });
   // The box in hand: the view focuses on it (ticked with the interaction, `bootstrap/interaction`).
-  const inspector = new Inspector<GameBox>(engine.camera, engine.scene);
+  const inspector = new Inspector<GameBox>(engine.camera, engine.scene, () => world.occluders);
   // Post-processing, reflections and haze (see docs/graphics.md), set up before anything compiles; the
   // grade and the air follow the player's zone. The callbacks are only read once the loop runs.
   const graphics = setupGraphics(engine, {
     focus: () => inspector.focusDistance,
     lightLevel: () => lightLevelOf(zones.get().current),
+    videoLayer: cssLayer,
   });
 
   // The building's life the hallway and the stairs share (docs/zones.md "The stairwell"): who rings at the door,
@@ -137,7 +153,9 @@ export function buildWorld(services: Services, parts: { world: GameWorld; player
         wardrobe: flat.wardrobe,
         notices: flat.notices,
         catName: () => services.catSettings.settings.name,
-        callCat: () => callCat(cat.get(), 'treats'),
+        callCat: () => callCatFor(cat.get(), 'treats'),
+        pastimes,
+        boxOf: (gameId) => strays.homeBox?.(gameId),
       },
     },
     money: { wallet, purse: wallet },
@@ -163,12 +181,26 @@ export function buildWorld(services: Services, parts: { world: GameWorld; player
     previous.setOccupied(false);
     zone.setOccupied(true);
     graphics.setLook(zonePlan(zone.id).look);
+    // The flea market's stock is priced on the way there (a fame lookup per copy, 15-20 s for a fresh day).
+    if (zone.id === 'street') market.warm();
+  });
+  // A new market day while the player is out: the new stock starts pricing at once.
+  services.today.onNewGameDay(() => {
+    if (!inFlat(manager.current.id)) market.warm();
   });
   // The first day's tips follow the stores and the player's zone (a new game only; silent otherwise).
   firstDay.connect({ wallet, collection, deliveries, prizes, zone: () => manager.current.id, notices: flat.notices });
   engine.addUpdatable(firstDay);
   // Of the active zones, only draw the player's and those seen through an open doorway in view.
   engine.addUpdatable(new PortalCuller(world.zones, manager, engine.camera));
+  // Down in the entrance hall, the street is built and compiled ahead (held loaded there): the sas then crosses at once.
+  engine.addUpdatable(new StreetAhead({
+    viewer: engine.camera,
+    here: () => manager.current.id,
+    built: (id) => manager.zone(id)?.status !== 'empty',
+    prepare: (id) => world.prepareZone(id),
+    hold: (id, held) => manager.hold(id, held),
+  }));
   if (params.has('stats')) installStats({ engine, world, zones: manager, player, graphics });
   if (params.has('stats') || params.has('debug')) {
     installZFight({ world, zones: manager });
@@ -180,12 +212,22 @@ export function buildWorld(services: Services, parts: { world: GameWorld; player
   // its doorways, with the spots its builder named and the bedroom's bed to nap on.
   const flatZones = FLAT.map((id) => world.zone(id));
   const flatHandles = FLAT.map((id) => world.build(id));
-  // The stairwell's stairs and lift are the player's ground (flights stack: the one under the feet); the cat stays in the flat.
-  player.setGround(world.build('stairwell').ground);
+  // The stairwell's stairs and lift are the player's ground (flights stack: the one under the feet), and out on Front Street
+  // the road a kerb below the pavements (the feet step down off it as the passers-by do); the cat stays in the flat.
+  const onStairs = world.build('stairwell').ground;
+  const streetGroup = world.zone('street').group;
+  const streetLocal = new Vector3();
+  player.setGround((x, z, feet) => {
+    if (manager.current.id !== 'street') return onStairs(x, z, feet);
+    streetGroup.worldToLocal(streetLocal.set(x, feet, z));
+    return streetGroup.position.y + groundHeight(streetLocal.x, streetLocal.z);
+  });
   // Until it is adopted at the pet shop, the cat and its things wait unseen (`catPlacers`).
   cat.set(furnishCat(world.zone(WORLD_PLAN.start), {
     settings: services.catSettings, player, clock: sky.dayNight, seats: home.armchairs, windows: home.windows, tv: home.tv,
     placers: catPlacers(world.zone(WORLD_PLAN.start), upgrades),
+    listener: context.listener,
+    acoustics: context.acoustics,
     flat: {
       rooms: flatZones.filter((zone) => zone.id !== 'stairwell').map((zone) => zone.floorBounds.expandByScalar(0.1)),
       visits: flatHandles.flatMap((handle) => handle.catVisits ?? []),
@@ -208,7 +250,7 @@ export function buildWorld(services: Services, parts: { world: GameWorld; player
     day: () => services.today.gameDay,
     clock: sky.dayNight,
     atHome: () => zones.get().current.id !== 'stairwell' && inFlat(zones.get().current.id),
-    busy: () => moves.isSet && (moves.get().travel.isTravelling || moves.get().sleep.isAsleep),
+    busy: () => pastimes.isBusy || (moves.isSet && (moves.get().travel.isTravelling || moves.get().sleep.isAsleep)),
     seats: home.seats,
     standing: home.armchairs,
     frontDoor: doorTo(hallway, 'stairwell'),
@@ -221,6 +263,15 @@ export function buildWorld(services: Services, parts: { world: GameWorld; player
     coverUrl,
     viewsOf: (game) => fame.peek(game),
     acoustics: context.acoustics,
+    // A sidestep only goes where no furniture stands.
+    collisions: world.collisions,
+    journal: services.journal,
+    // Their footsteps sound of the floor of the zone they walk (the hallway's, the stairwell's); a game handed back
+    // is held out as its box; browsing, they look at a box on the shelves; seated, at the TV if it plays.
+    surfaceAt: (at) => surfaceUnderfoot(flatZones.find((zone) => zone.contains(at)) ?? living, at),
+    covers,
+    shelfBoxes: () => shelves.boxes,
+    watch: () => (home.tv.isPlaying ? home.tv.getWorldPosition(tvAt).setY(0.9) : null),
     doorTaken: () => building.doorstep.waiting !== null,
     // `?visit`: a friend rings as soon as the player is home (testing).
     force: params.has('visit'),
@@ -256,7 +307,7 @@ export function buildWorld(services: Services, parts: { world: GameWorld; player
     return box;
   };
 
-  return { zones: manager, graphics, inspector, cat: cat.get(), shelves };
+  return { zones: manager, graphics, inspector, cat: cat.get(), shelves, pastimes };
 }
 
 /** The balcony doors in the scene (the street is heard through them, full once open). */
@@ -273,7 +324,8 @@ function balconyDoorsIn(root: Object3D): BalconyDoor[] {
  */
 export function startWhenReady(engine: Engine, world: GameWorld): void {
   const here = world.zones.find((zone) => zone.contains(engine.camera.position));
-  const ready = here ? here.load().catch((error: unknown) => console.error(`[world] ${here.id} failed to load`, error)) : Promise.resolve();
+  // The start card's button waits for this; a failure is told with a Retry (`ui/worldLoad`, `bootstrap/ui`).
+  const ready = trackWorldLoad(() => (here ? here.load() : Promise.resolve()));
   void ready.then(() => {
     engine.start();
     const idle = (run: () => void): void => {

@@ -9,6 +9,7 @@ import { CERAMIC, CHROME, CLEAR_GLASS } from '../props/bathroomMaterials';
 import { paint, standard, timber } from '../materials/palette';
 import { mirrorGlass } from '../props/MirrorGlass';
 import { WaterStream } from './WaterStream';
+import { HoverGlint } from '../props/hoverGlint';
 
 export interface WashbasinOptions {
   /** Length of the cabinet along the wall. Default 0.6. */
@@ -40,7 +41,8 @@ const SHELF_Y = 1.35;
 
 const OAK = timber(0xc9ad86, 0.55);
 const DARK = paint(0x2e2c2a, 0.7);
-const MIRROR = standard({ color: 0xb8c4cc, roughness: 0.08, metalness: 0.2 });
+// Silvered glass: raw metal (metalness 1), its tint the silver's.
+const MIRROR = standard({ color: 0xc8ccd0, roughness: 0.05, metalness: 1 });
 const BRISTLES = paint(0xf2f4f5, 0.9);
 const TOOTHPASTE = paint(0xe9eef2, 0.45);
 
@@ -56,6 +58,8 @@ export class Washbasin extends THREE.Group implements Furniture, Interactable, U
   readonly hitboxes: THREE.Object3D[];
   private readonly stream = new WaterStream(0.0055);
   private running = false;
+  /** The mixer's lever glints on hover. */
+  private glint: HoverGlint | null = null;
 
   constructor(private readonly options: WashbasinOptions = {}) {
     super();
@@ -100,10 +104,12 @@ export class Washbasin extends THREE.Group implements Furniture, Interactable, U
 
   // --- Interactable -------------------------------------------------------------------------
 
-  setHovered(_hovered: boolean): void {}
+  setHovered(hovered: boolean): void {
+    this.glint?.set(hovered);
+  }
 
   label(): string {
-    return this.running ? 'Click to turn the tap off' : 'Click to run the tap';
+    return this.running ? 'Tap · turn off' : 'Tap · run';
   }
 
   activate(_session: SessionActions): void {
@@ -146,7 +152,8 @@ export class Washbasin extends THREE.Group implements Furniture, Interactable, U
     const spout = cylinderMesh(0.011, 0.14, CHROME, { y: TOP_Y + MIXER_H - 0.02, z: 0.11 }, { segments: 12 });
     spout.rotation.x = Math.PI / 2;
     this.add(spout);
-    part(this, 0.012, 0.012, 0.06, CHROME, { y: TOP_Y + MIXER_H + 0.006, z: 0.07 });
+    const lever = part(this, 0.012, 0.012, 0.06, CHROME, { y: TOP_Y + MIXER_H + 0.006, z: 0.07 });
+    this.glint = HoverGlint.of(lever, spout);
 
     // A soap pump and a cup with two toothbrushes (white bristle heads at the top), a tube of toothpaste lying beside it.
     this.add(cylinderMesh(0.026, 0.13, paint(0x3a3f44, 0.5), { x: 0.23, y: TOP_Y + 0.065, z: 0.15 }, { segments: 14 }));

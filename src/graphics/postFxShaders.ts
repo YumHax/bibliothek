@@ -1,5 +1,10 @@
 /*
  * GLSL of the `PostFx` passes. Template literals: a backtick inside a GLSL comment ends the string.
+ *
+ * Render scale: the targets are allocated at the full drawing-buffer size and, while the adaptive
+ * resolution is lowered, only their lower-left part is drawn (the viewport). A pass reads its inputs
+ * at st = vUv * uvScale (texture space: the share of the texture that holds the frame) and clamps
+ * its taps to uvLimit (half a texel short of the frame's edge), so nothing stale is ever read.
  */
 
 export const QUAD_VERTEX = /* glsl */ `
@@ -21,6 +26,20 @@ float linearDepth(vec2 uv) {
 }
 `;
 
+/** Per-pixel noise in [0, 1) (Jimenez's interleaved gradient): rotates a spiral of taps per pixel, so fixed patterns turn into fine noise. */
+const INTERLEAVED_NOISE = /* glsl */ `
+float interleavedNoise(vec2 px) {
+  return fract(52.9829189 * fract(dot(px, vec2(0.06711056, 0.00583715))));
+}
+`;
+
+/** Rec. 709 luminance weights. */
+const LUMA = /* glsl */ `
+float lumaOf(vec3 c) {
+  return dot(c, vec3(0.2126, 0.7152, 0.0722));
+}
+`;
+
 /**
  * Ambient occlusion from the depth buffer alone, at half resolution. Normals come from the
  * neighbouring depths (the flatter side of each pixel, so edges do not smear); a spiral of taps,
@@ -37,40 +56,44 @@ uniform float radius;
 uniform float intensity;
 uniform float cameraNear;
 uniform float cameraFar;
+uniform vec2 uvScale;
+uniform vec2 uvLimit;
 varying vec2 vUv;
 
-vec3 viewPosition(vec2 uv, float depth) {
-  vec4 clip = vec4(vec3(uv, depth) * 2.0 - 1.0, 1.0);
+/** View-space position of a screen point (uv 0..1 over the frame) at a depth-buffer value. */
+vec3 viewPosition(vec2 screen, float depth) {
+  vec4 clip = vec4(vec3(screen, depth) * 2.0 - 1.0, 1.0);
   vec4 view = projectionInverse * clip;
   return view.xyz / view.w;
 }
 
-vec3 viewAt(vec2 uv) {
-  return viewPosition(uv, texture2D(tDepth, uv).x);
+/** The view position at texture coordinate st (clamped to the frame). */
+vec3 viewAt(vec2 st) {
+  st = min(st, uvLimit);
+  return viewPosition(st / uvScale, texture2D(tDepth, st).x);
 }
 
-vec3 normalAt(vec2 uv, vec3 p) {
-  vec3 l = viewAt(uv - vec2(depthTexel.x, 0.0));
-  vec3 r = viewAt(uv + vec2(depthTexel.x, 0.0));
-  vec3 d = viewAt(uv - vec2(0.0, depthTexel.y));
-  vec3 u = viewAt(uv + vec2(0.0, depthTexel.y));
+vec3 normalAt(vec2 st, vec3 p) {
+  vec3 l = viewAt(st - vec2(depthTexel.x, 0.0));
+  vec3 r = viewAt(st + vec2(depthTexel.x, 0.0));
+  vec3 d = viewAt(st - vec2(0.0, depthTexel.y));
+  vec3 u = viewAt(st + vec2(0.0, depthTexel.y));
   vec3 dx = abs(l.z - p.z) < abs(r.z - p.z) ? p - l : r - p;
   vec3 dy = abs(d.z - p.z) < abs(u.z - p.z) ? p - d : u - p;
   return normalize(cross(dx, dy));
 }
 
-float interleavedNoise(vec2 px) {
-  return fract(52.9829189 * fract(dot(px, vec2(0.06711056, 0.00583715))));
-}
+${INTERLEAVED_NOISE}
 
 void main() {
-  float depth = texture2D(tDepth, vUv).x;
+  vec2 st = vUv * uvScale;
+  float depth = texture2D(tDepth, st).x;
   if (depth >= 1.0) {
     gl_FragColor = vec4(1.0);
     return;
   }
   vec3 p = viewPosition(vUv, depth);
-  vec3 n = normalAt(vUv, p);
+  vec3 n = normalAt(st, p);
   // The radius in uv units (vertical), capped so the taps stay close for things right at the eye.
   float reach = min(radius * projection[1][1] * 0.5 / -p.z, 0.08);
   float spin = interleavedNoise(gl_FragCoord.xy) * 6.2831853;
@@ -79,7 +102,7 @@ void main() {
     float t = (float(i) + 0.5) / float(SAMPLES);
     float angle = float(i) * 2.3999632 + spin;
     vec2 offset = vec2(cos(angle) / aspect, sin(angle)) * t * reach;
-    vec3 v = viewAt(vUv + offset) - p;
+    vec3 v = viewAt(st + offset * uvScale) - p;
     float vv = dot(v, v);
     float falloff = max(0.0, 1.0 - vv / (radius * radius));
     occlusion += max(0.0, dot(v, n) * inversesqrt(vv + 1e-5) - 0.12) * falloff;
@@ -94,14 +117,17 @@ export const AO_BLUR_FRAGMENT = /* glsl */ `
 ${LINEAR_DEPTH}
 uniform sampler2D tAO;
 uniform vec2 aoTexel;
+uniform vec2 uvScale;
+uniform vec2 uvLimit;
 varying vec2 vUv;
 void main() {
-  float z = linearDepth(vUv);
+  vec2 st = vUv * uvScale;
+  float z = linearDepth(st);
   float sum = 0.0;
   float weight = 0.0;
   for (int x = 0; x < 4; x++) {
     for (int y = 0; y < 4; y++) {
-      vec2 uv = vUv + (vec2(float(x), float(y)) - 1.5) * aoTexel;
+      vec2 uv = min(st + (vec2(float(x), float(y)) - 1.5) * aoTexel, uvLimit);
       float w = exp(-abs(linearDepth(uv) - z) / (0.04 * z + 0.01));
       sum += texture2D(tAO, uv).r * w;
       weight += w;
@@ -112,52 +138,132 @@ void main() {
 `;
 
 /**
- * Copies the resolved scene into the working buffer; while a box is held up (`amount` > 0) the
- * background beyond `focus` is gathered over a disc that grows with depth. Taps closer than the
- * pixel's own blur are weighted down so the sharp box in hand never bleeds into the blur.
+ * Copies the resolved scene into the working buffer, darkened by the ambient occlusion (high), so
+ * the bloom that follows glows from the occluded colour and no glow is darkened after the fact.
+ * The half-resolution occlusion is upsampled from its four nearest texels weighted by how close
+ * their depth is to this pixel's (like `AO_BLUR_FRAGMENT`), so a silhouette gets no halo. While a
+ * box is held up (`amount` > 0) the background beyond `focus` is gathered over a disc that grows
+ * with depth: a spiral of taps rotated per pixel (no ghost copies), more of them for a wide blur
+ * (photo mode). Taps closer than the pixel's own blur are weighted down so the sharp box in hand
+ * never bleeds into the blur. The occlusion spares what glows (a lamp, a screen: light, not a
+ * surface in a crease) and thins out with the haze, as the fog hides the crease it would darken.
  */
 export const DOF_FRAGMENT = /* glsl */ `
 ${LINEAR_DEPTH}
+${INTERLEAVED_NOISE}
 uniform sampler2D tColor;
 uniform vec2 texel;
 uniform float focus;
 uniform float amount;
 uniform float maxRadius;
+uniform vec2 uvScale;
+uniform vec2 uvLimit;
+#if USE_AO
+uniform sampler2D tAO;
+uniform vec2 aoTexel;
+uniform float fogDensity;
+#endif
 varying vec2 vUv;
+${LUMA}
 
 float blurRadius(float z) {
   return clamp((z - focus * 1.5) / (focus * 5.0), 0.0, 1.0) * amount * maxRadius;
 }
 
+#if USE_AO
+float occlusionAt(vec2 uv, float z) {
+  vec2 grid = uv / aoTexel - 0.5;
+  vec2 base = floor(grid);
+  vec2 f = grid - base;
+  float sum = 0.0;
+  float weight = 0.0;
+  for (int i = 0; i < 4; i++) {
+    vec2 corner = vec2(float(i - (i / 2) * 2), float(i / 2));
+    vec2 at = min((base + corner + 0.5) * aoTexel, uvLimit);
+    vec2 bilinear = mix(1.0 - f, f, corner);
+    float w = bilinear.x * bilinear.y * exp(-abs(linearDepth(at) - z) / (0.04 * z + 0.01)) + 1e-4;
+    sum += texture2D(tAO, at).r * w;
+    weight += w;
+  }
+  return sum / weight;
+}
+#endif
+
 void main() {
-  vec4 centre = texture2D(tColor, vUv);
+  vec2 st = vUv * uvScale;
+  vec4 centre = texture2D(tColor, st);
+  #if USE_AO
+  float z = linearDepth(st);
+  float ao = occlusionAt(st, z);
+  // Bright as a lamp: light, not a surface in a crease. Far in the haze: the fog covers the crease.
+  ao = mix(ao, 1.0, smoothstep(1.0, 3.0, lumaOf(centre.rgb)));
+  float fogDepth = fogDensity * z;
+  ao = mix(ao, 1.0, 1.0 - exp(-fogDepth * fogDepth));
+  #else
+  float ao = 1.0;
   if (amount <= 0.0) {
     gl_FragColor = centre;
     return;
   }
-  float r = blurRadius(linearDepth(vUv));
+  float z = linearDepth(st);
+  #endif
+  float r = amount > 0.0 ? blurRadius(z) : 0.0;
   if (r < 0.5) {
-    gl_FragColor = centre;
+    gl_FragColor = vec4(centre.rgb * ao, centre.a);
     return;
   }
+  int taps = r > DOF_WIDE_RADIUS ? DOF_MAX_TAPS : DOF_TAPS;
+  float count = float(taps);
+  float spin = interleavedNoise(gl_FragCoord.xy) * 6.2831853;
   vec3 sum = centre.rgb;
   float weight = 1.0;
-  for (int i = 0; i < DOF_TAPS; i++) {
-    float t = sqrt((float(i) + 0.5) / float(DOF_TAPS));
-    float angle = float(i) * 2.3999632;
-    vec2 uv = vUv + vec2(cos(angle), sin(angle)) * t * r * texel;
+  for (int i = 0; i < DOF_MAX_TAPS; i++) {
+    if (i >= taps) break;
+    float t = sqrt((float(i) + 0.5) / count);
+    float angle = float(i) * 2.3999632 + spin;
+    vec2 uv = min(max(st + vec2(cos(angle), sin(angle)) * t * r * texel, vec2(0.0)), uvLimit);
     float w = clamp(blurRadius(linearDepth(uv)) / (t * r + 0.5), 0.0, 1.0);
     sum += texture2D(tColor, uv).rgb * w;
     weight += w;
   }
-  gl_FragColor = vec4(sum / weight, centre.a);
+  gl_FragColor = vec4(sum / weight * ao, centre.a);
 }
 `;
 
 /**
- * The light meter: each of the 16 x 16 texels averages the log luminance of a 4 x 4 grid of the
- * frame under it. R = log2(luminance) mapped from [-14, 4] to [0, 1], G = how much of it is
- * scene (the video cut-out has alpha 0 and is not metered).
+ * The light meter's area average, in two quarter-size steps (full -> 1/4 -> 1/16, only when the
+ * meter reads, every quarter second): each output texel is the mean of the 4 x 4 source texels
+ * under it (four bilinear taps, each the mean of 2 x 2). The first step turns colour into
+ * (log2 luminance x alpha, alpha), the second averages those, so the cut-out (alpha 0) carries no
+ * weight and the average stays a log average.
+ */
+export const METER_DOWNSAMPLE_FRAGMENT = /* glsl */ `
+${LUMA}
+uniform sampler2D tSource;
+uniform vec2 sourceTexel;
+uniform vec2 uvScale;
+varying vec2 vUv;
+vec2 tap(vec2 uv) {
+  #if LOG_INPUT
+  vec4 c = texture2D(tSource, uv);
+  return vec2(log2(max(lumaOf(c.rgb), 1e-4)) * c.a, c.a);
+  #else
+  return texture2D(tSource, uv).rg;
+  #endif
+}
+void main() {
+  vec2 st = vUv * uvScale;
+  vec2 sum = tap(st + vec2(-1.0, -1.0) * sourceTexel) + tap(st + vec2(1.0, -1.0) * sourceTexel)
+    + tap(st + vec2(-1.0, 1.0) * sourceTexel) + tap(st + vec2(1.0, 1.0) * sourceTexel);
+  gl_FragColor = vec4(sum * 0.25, 0.0, 1.0);
+}
+`;
+
+/**
+ * The light meter: each of the 16 x 16 texels averages a 4 x 4 grid of bilinear taps of the
+ * sixteenth-size log map under it (`METER_DOWNSAMPLE_FRAGMENT`), so every pixel of the frame counts.
+ * R = the log2 luminance mapped from [-14, 4] to [0, 1], G = how much of it is scene (the video
+ * cut-out has alpha 0 and is not metered).
  */
 export const LUMINANCE_FRAGMENT = /* glsl */ `
 uniform sampler2D tColor;
@@ -169,10 +275,9 @@ void main() {
   float weight = 0.0;
   for (int x = 0; x < 4; x++) {
     for (int y = 0; y < 4; y++) {
-      vec4 c = texture2D(tColor, origin + (vec2(float(x), float(y)) + 0.5) * cell / 4.0);
-      float l = dot(c.rgb, vec3(0.2126, 0.7152, 0.0722));
-      sum += log2(max(l, 1e-4)) * c.a;
-      weight += c.a;
+      vec2 v = texture2D(tColor, origin + (vec2(float(x), float(y)) + 0.5) * cell / 4.0).rg;
+      sum += v.r;
+      weight += v.g;
     }
   }
   float average = weight > 0.0 ? sum / weight : 0.0;
@@ -181,20 +286,29 @@ void main() {
 `;
 
 /**
- * To the screen: ambient occlusion, exposure, ACES filmic (three.js's fit, so the look matches
- * the plain renderer), sRGB, then the grade in display space (white balance, lift / gain,
- * contrast S-curve, saturation), the vignette (as a black veil, so it darkens a video cut-out
- * too) and grain (which also dithers the gradients). Output stays premultiplied.
+ * To the screen: the white balance (a von Kries matrix from the CPU, in linear light), exposure,
+ * ACES filmic (three.js's fit, so the look matches the plain renderer), sRGB, then the grade in
+ * display space (lift / gain, contrast S-curve, saturation), the vignette (as a black veil, so it darkens a video cut-out too) and grain (which
+ * also dithers the gradients). Output stays premultiplied.
+ *
+ * `USE_FXAA`: the scene's MSAA resolves in linear HDR, before tone mapping, so an edge against a
+ * lamp or the sky still steps. A light FXAA (the classic one: four diagonal neighbours, two or four
+ * taps along the edge) runs on the HDR frame compressed by x / (1 + luma) (Karis), averaged there
+ * and expanded back, so a bright edge blends like a tone-mapped one; the alpha is blended with the
+ * colour, so the cut-out's border is smoothed and stays premultiplied.
  */
 export const OUTPUT_FRAGMENT = /* glsl */ `
+${LUMA}
 uniform sampler2D tColor;
-uniform sampler2D tAO;
+uniform vec2 texel;
 uniform float exposure;
 uniform float aspect;
 uniform float time;
 uniform float contrast;
 uniform float saturation;
-uniform float temperature;
+uniform mat3 whiteBalance;
+uniform vec2 uvScale;
+uniform vec2 uvLimit;
 uniform vec3 shadows;
 uniform vec3 highlights;
 uniform float vignette;
@@ -227,25 +341,61 @@ float hash(vec2 p) {
   return fract((p3.x + p3.y) * p3.z);
 }
 
-void main() {
-  vec4 texel = texture2D(tColor, vUv);
-  vec3 color = texel.rgb;
-  #if USE_AO
-  color *= texture2D(tAO, vUv).r;
-  #endif
-  color = toSRGB(acesFilmic(color));
+#if USE_FXAA
+/** The HDR texel at uv, exposed and compressed into [0, 1) (premultiplied alpha kept). */
+vec4 compressed(vec2 uv) {
+  vec4 c = texture2D(tColor, min(uv, uvLimit));
+  vec3 x = c.rgb * exposure;
+  return vec4(x / (1.0 + lumaOf(x)), c.a);
+}
 
-  color *= vec3(1.0 + 0.08 * temperature, 1.0 + 0.01 * temperature, 1.0 - 0.1 * temperature);
+vec4 antialiased(vec4 centre, vec2 st) {
+  vec3 m = centre.rgb * exposure;
+  float lM = sqrt(lumaOf(m / (1.0 + lumaOf(m))));
+  vec4 nw = compressed(st + vec2(-1.0, -1.0) * texel);
+  vec4 ne = compressed(st + vec2(1.0, -1.0) * texel);
+  vec4 sw = compressed(st + vec2(-1.0, 1.0) * texel);
+  vec4 se = compressed(st + vec2(1.0, 1.0) * texel);
+  float lNW = sqrt(lumaOf(nw.rgb));
+  float lNE = sqrt(lumaOf(ne.rgb));
+  float lSW = sqrt(lumaOf(sw.rgb));
+  float lSE = sqrt(lumaOf(se.rgb));
+  float lMin = min(lM, min(min(lNW, lNE), min(lSW, lSE)));
+  float lMax = max(lM, max(max(lNW, lNE), max(lSW, lSE)));
+  // Flat, or an edge too faint to step: the pixel as it is (and the alpha's edges too).
+  float alphaRange = max(max(nw.a, ne.a), max(sw.a, se.a)) - min(min(nw.a, ne.a), min(sw.a, se.a));
+  if (lMax - lMin < max(0.05, lMax * 0.125) && alphaRange < 0.5) return centre;
+  vec2 dir = vec2(-((lNW + lNE) - (lSW + lSE)), (lNW + lSW) - (lNE + lSE));
+  float reduce = max((lNW + lNE + lSW + lSE) * 0.03125, 0.0078125);
+  float rcpMin = 1.0 / (min(abs(dir.x), abs(dir.y)) + reduce);
+  dir = clamp(dir * rcpMin, -8.0, 8.0) * texel;
+  vec4 a = 0.5 * (compressed(st + dir * (1.0 / 3.0 - 0.5)) + compressed(st + dir * (2.0 / 3.0 - 0.5)));
+  vec4 b = 0.5 * a + 0.25 * (compressed(st - dir * 0.5) + compressed(st + dir * 0.5));
+  float lB = sqrt(lumaOf(b.rgb));
+  vec4 t = (lB < lMin || lB > lMax) ? a : b;
+  return vec4(t.rgb / max(1.0 - lumaOf(t.rgb), 1e-3) / exposure, t.a);
+}
+#endif
+
+void main() {
+  vec2 st = vUv * uvScale;
+  vec4 texel0 = texture2D(tColor, st);
+  #if USE_FXAA
+  texel0 = antialiased(texel0, st);
+  #endif
+  // Premultiplied: the balance scales the colour only, a cut-out stays a cut-out.
+  vec3 color = toSRGB(acesFilmic(max(whiteBalance * texel0.rgb, vec3(0.0))));
+
   color = color * highlights + shadows * (1.0 - color);
   vec3 curve = color * color * (3.0 - 2.0 * color);
   color = mix(color, curve, (contrast - 1.0) * 2.0);
-  float luma = dot(color, vec3(0.2126, 0.7152, 0.0722));
+  float luma = lumaOf(color);
   color = clamp(mix(vec3(luma), color, saturation), 0.0, 1.0);
 
   vec2 q = (vUv - 0.5) * vec2(aspect, 1.0);
   float corner = length(q) / length(vec2(aspect, 1.0) * 0.5);
   float veil = 1.0 - vignette * smoothstep(0.35, 1.05, corner);
-  float alpha = 1.0 - (1.0 - texel.a) * veil;
+  float alpha = 1.0 - (1.0 - texel0.a) * veil;
   color *= veil;
 
   float n = hash(gl_FragCoord.xy + fract(time * 7.13) * 431.0) - 0.5;

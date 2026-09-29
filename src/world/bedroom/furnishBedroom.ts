@@ -21,7 +21,8 @@ import { Dresser } from './Dresser';
 import { BedroomChair } from './BedroomChair';
 import { SideTable } from '../props/SideTable';
 import { ReadingLamp } from './ReadingLamp';
-import { Phone } from './Phone';
+import { Phone, duskDarkness } from './Phone';
+import { UnseenSwap } from './UnseenSwap';
 import { NightLight } from './NightLight';
 import { placeLeaves, placeWith, floorPointsToWorld } from '../zone/attach';
 import { Television } from '../Television';
@@ -29,6 +30,9 @@ import { FrostedWindow } from '../props/FrostedWindow';
 import { BookcaseKit } from './BookcaseKit';
 import { Shelving } from '../shelving/Shelving';
 import { tellOutcome } from '@/household/tellOutcome';
+import { playAlarmButton, playHangers } from '@/audio/householdSounds';
+import { playAlarm } from '@/audio/alarm';
+import { heardAt } from '@/audio/spatial';
 import { resolvePlacement } from '../Placement';
 import { BOOKCASE_PRICE } from '@/economy/pricing';
 import { PrizeShelf } from '../prizes/PrizeShelf';
@@ -36,6 +40,7 @@ import { ArcadePoster } from '../prizes/ArcadePoster';
 import { MoodLamp } from '../prizes/MoodLamp';
 import { NeighbourVoices } from '@/audio/flatSounds';
 import { BEDROOM_PLAN } from './bedroomPlan';
+import { rugsUnderfoot } from '../build/rugsUnderfoot';
 
 /** What the bedroom built that the rest of the game needs: its screen, the bed (a cat's napping spot), the overflow shelving. */
 export interface BedroomHandle extends ZoneHandle {
@@ -109,7 +114,10 @@ export function furnishBedroom(zone: Zone, ctx: BuildContext): BedroomHandle {
   const manual = household && {
     label: (box: GameBox) => household.life.readLabel(box.game),
     read: (box: GameBox) => {
-      tellOutcome(household.notices, household.life.readManual(box.game), `${box.game.title}: the manual`);
+      // Seated either way: nothing to read is said, not refused.
+      const outcome = household.life.readManual(box.game);
+      if (!outcome.done && outcome.line) household.notices.react(outcome.line);
+      else tellOutcome(household.notices, outcome, `${box.game.title}: the manual`);
     },
   };
   const chair = reading.placeAt(new BedroomChair({ reading: manual || undefined }), plan.chair);
@@ -120,15 +128,30 @@ export function furnishBedroom(zone: Zone, ctx: BuildContext): BedroomHandle {
   readingLamp.rotation.y = corner.lamp.yaw;
   reading.placeWith(table, readingLamp);
 
-  // What the clock changes: the bed slept in until noon, the glows after dark, the day's clothes on the chair.
+  // What the clock changes: the bed slept in until noon, the glows with the dusk, the day's clothes on the chair.
+  // The bed and the chair change only unseen: at once while the player is elsewhere, else once they look away.
+  const bedSwap = zone.place(new UnseenSwap(ctx.listener, bed), new THREE.Vector3());
+  const chairSwap = zone.place(new UnseenSwap(ctx.listener, chair), new THREE.Vector3());
+  let wasMade: boolean | null = null;
+  let wasDay: number | null = null;
   zone.onUnload(
     sky.dayNight.onChange((state) => {
       const made = !(state.hours >= plan.bedUnmade.from && state.hours < plan.bedUnmade.until);
-      bed.setMade(made);
-      mattress?.setMade(made);
-      phone.setNight(state.night);
-      nightLight.setNight(state.night);
-      chair.setDay(today.gameDay);
+      if (made !== wasMade) {
+        wasMade = made;
+        bedSwap.defer(() => {
+          bed.setMade(made);
+          mattress?.setMade(made);
+        });
+      }
+      const dark = duskDarkness(state.sunHeight);
+      phone.setDark(dark);
+      nightLight.setDark(dark);
+      const day = today.gameDay;
+      if (day !== wasDay) {
+        wasDay = day;
+        chairSwap.defer(() => chair.setDay(day));
+      }
     }),
   );
 
@@ -152,7 +175,7 @@ export function furnishBedroom(zone: Zone, ctx: BuildContext): BedroomHandle {
     restingSpot: (out) => (mattress ?? bed).restingSpot(out),
     approachPoint: (out) => (mattress ?? bed).approachPoint(out),
   };
-  return { room, tv, bed: sleeper, shelving, catVisits: floorPointsToWorld(zone, plan.catVisits) };
+  return { room, tv, bed: sleeper, shelving, catVisits: floorPointsToWorld(zone, plan.catVisits), surfaceAt: rugsUnderfoot(zone) };
 }
 
 /**
@@ -194,8 +217,9 @@ function furnishBedroomLife(zone: Zone, household: HouseholdContext, parts: { st
   const { stands, nightstands } = parts;
   const alarmStand = nightstands[alarmAt.stand]!;
   const alarm = new AlarmClock({
-    label: () => `Alarm set for ${clockTime(life.household.wakeHour)}: click to change`,
+    label: () => `Alarm clock (${clockTime(life.household.wakeHour)}) · change the hour`,
     use: () => {
+      playAlarmButton();
       const hour = life.household.cycleAlarm();
       alarm.setAlarm(hour);
       notices.react(`The alarm will wake you at ${clockTime(hour)}.`);
@@ -205,14 +229,26 @@ function furnishBedroomLife(zone: Zone, household: HouseholdContext, parts: { st
   alarm.position.set(alarmAt.at[0], alarmStand.topHeight, alarmAt.at[1]);
   alarm.rotation.y = alarmAt.yaw;
   stands.placeWith(alarmStand, alarm);
+  // The morning after a night in the bed, it rings for a moment on the fade-in (`Sleep.onWake`), once it stands.
+  life.setAlarmRinger(() => {
+    if (!stands.owned) return;
+    // Two groups of beeps, then the slap on the button that stops it.
+    const heard = heardAt(alarm.getWorldPosition(new THREE.Vector3()));
+    if (heard.gain <= 0) return;
+    const rang = playAlarm(0.05 * heard.gain, 2, heard.spatial);
+    if (rang > 0) window.setTimeout(() => playAlarmButton(0.08), (rang + 0.12) * 1000);
+  });
 
-  const call = new ClickSpot({ size: phoneSpot, label: () => 'Click to make a call', onClick: () => undefined });
+  const call = new ClickSpot({ size: phoneSpot, label: () => 'Phone · make a call', onClick: () => undefined });
   call.activate = (session) => session.openPanel(household.phone);
   const { phone } = parts;
   stands.placeWith(nightstands[BEDROOM_PLAN.phone.stand]!, call, phone.position.clone().setY(phone.position.y + phoneSpot[1] / 2));
 
   // Behind the doors: only reached with one open.
-  const clothes = new ClickSpot({ size: rail.size, label: () => 'Click to choose what to wear', onClick: () => undefined });
-  clothes.activate = (session) => session.openPanel(household.wardrobe);
+  const clothes = new ClickSpot({ size: rail.size, label: () => 'Wardrobe · choose what to wear', onClick: () => undefined });
+  clothes.activate = (session) => {
+    playHangers();
+    session.openPanel(household.wardrobe);
+  };
   placeWith(zone, parts.wardrobe, clothes, new THREE.Vector3(...rail.at));
 }

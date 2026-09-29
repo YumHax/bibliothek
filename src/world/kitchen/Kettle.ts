@@ -7,6 +7,7 @@ import { cylinderMesh, invisibleHitbox } from '../meshUtils';
 import { Prop, part } from '../props/Prop';
 import { paint, standard } from '../materials/palette';
 import { Steam } from './Steam';
+import { HoverGlint } from '../props/hoverGlint';
 
 /** Seconds from a click to the boil; then the steam dies away over `COOL_SECONDS`. */
 const BOIL_SECONDS = 12;
@@ -14,7 +15,7 @@ const COOL_SECONDS = 5;
 /** The voice's pitch and loudness are re-aimed this often while it boils (s). */
 const VOICE_EVERY = 0.2;
 
-const STEEL = standard({ color: 0xc4c7cb, metalness: 0.7, roughness: 0.35 });
+const STEEL = standard({ color: 0xc4c7cb, metalness: 1, roughness: 0.4 });
 const BLACK = paint(0x1e1f22, 0.6);
 
 /**
@@ -38,6 +39,8 @@ export class Kettle extends Prop implements Interactable, Updatable {
   private cooling = 0;
   private voiceIn = 0;
   private time = 0;
+  /** The handle and the lid's knob glint on hover. */
+  private readonly glint: HoverGlint;
 
   constructor() {
     super();
@@ -53,6 +56,7 @@ export class Kettle extends Prop implements Interactable, Updatable {
     spout.rotation.z = -0.55;
     this.add(spout);
     const handle = new THREE.Mesh(new THREE.TorusGeometry(0.06, 0.009, 8, 18, Math.PI), BLACK);
+    this.glint = HoverGlint.of(handle, this.lid.children[1] as THREE.Mesh);
     handle.position.set(-0.078, 0.13, 0);
     handle.rotation.z = Math.PI / 2;
     handle.castShadow = true;
@@ -103,10 +107,12 @@ export class Kettle extends Prop implements Interactable, Updatable {
 
   // --- Interactable -------------------------------------------------------------------------
 
-  setHovered(_hovered: boolean): void {}
+  setHovered(hovered: boolean): void {
+    this.glint.set(hovered);
+  }
 
   label(): string {
-    return this.boiling ? 'Click to switch the kettle off' : 'Click to boil the kettle';
+    return this.boiling ? 'Kettle · switch off' : 'Kettle · boil';
   }
 
   activate(_session: SessionActions): void {

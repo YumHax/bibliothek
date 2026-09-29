@@ -96,9 +96,14 @@ export class Perks {
     return this.firstSale(item) ? 'First sale of the morning: stallholders say it brings luck. Haggle!' : null;
   }
 
-  /** A copy was bought at a stall: the morning's first sale is used. */
-  bought(item: StockItem): void {
-    if (this.firstSale(item)) this.deps.household.once('firstSale');
+  /** A copy was bought at a stall: the morning's first sale is used. True when this purchase used it. */
+  bought(item: StockItem): boolean {
+    return this.firstSale(item) && this.deps.household.once('firstSale');
+  }
+
+  /** The purchase that used the morning's first sale was handed back: the luck is the player's again. */
+  unbought(): void {
+    this.deps.household.forgetToday('firstSale');
   }
 
   /** Tickets on top of `tickets` a play just paid (the arcade tee), 0 for none. */

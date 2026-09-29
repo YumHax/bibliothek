@@ -7,6 +7,7 @@ import { paint, standard } from '../materials/palette';
 import { SwingLeaf, revealWhileOpen } from '../props/SwingLeaf';
 import { SlideDrawer } from '../props/SlideDrawer';
 import { DropDoor } from './DropDoor';
+import { PooledLight } from '../lighting/LightPool';
 
 /**
  * One cabinet of a run, left to right as seen from the room. `doors`: one door under 0.5 m, two
@@ -52,14 +53,18 @@ const HOB = { width: 0.58, depth: 0.5 };
 const CARCASS = paint(0xe9e4da, 0.8);
 const PLINTH = paint(0x2e2e30, 0.7);
 const TILE = paint(0xf1ede4, 0.3);
-const STEEL = standard({ color: 0xbfc2c6, metalness: 0.7, roughness: 0.35 });
-const DARK_STEEL = standard({ color: 0x6f7378, metalness: 0.7, roughness: 0.4 });
-const HOB_GLASS = standard({ color: 0x0f1013, metalness: 0.3, roughness: 0.12 });
+const STEEL = standard({ color: 0xbfc2c6, metalness: 1, roughness: 0.4 });
+const DARK_STEEL = standard({ color: 0x6f7378, metalness: 1, roughness: 0.45 });
+const HOB_GLASS = standard({ color: 0x0f1013, metalness: 0, roughness: 0.12 });
 const HOB_RING = paint(0x3a3b40, 0.5);
-const OVEN_GLASS = standard({ color: 0x15171a, metalness: 0.2, roughness: 0.15 });
+const OVEN_GLASS = standard({ color: 0x15171a, metalness: 0, roughness: 0.15 });
 const OVEN_FASCIA = paint(0x2a2c30, 0.5);
 const OVEN_ENAMEL = paint(0x1d1e22, 0.35);
-/** The oven's lamp, lit while its door is open: an emissive lens, not a light. */
+/**
+ * The oven's lamp, lit while its door is open: an emissive lens, and a warm glow the kitchen's
+ * `LightPool` lends a real light while the cavity is drawn (door open), never its own light.
+ */
+const OVEN_SPILL = { color: 0xffc27a, intensity: 0.7, distance: 1.6 };
 const OVEN_LAMP = standard({ color: 0xfff1d0, emissive: 0xffd28a, emissiveIntensity: 1.2 });
 /** Thickness of the carcass boards (back, bottom, the sides between units). */
 const CARCASS_WALL = 0.016;
@@ -412,6 +417,9 @@ export class KitchenRun extends THREE.Group implements Furniture {
     for (const side of [-1, 1]) part(interior, 0.01, h, d, OVEN_ENAMEL, { x: cx + side * (w / 2), y, z }).castShadow = false;
     for (const dy of [-h / 2, h / 2]) part(interior, w, 0.01, d, OVEN_ENAMEL, { x: cx, y: y + dy, z }).castShadow = false;
     part(interior, 0.06, 0.04, 0.004, OVEN_LAMP, { x: cx + w / 2 - 0.06, y: y + h / 2 - 0.05, z: depth - d + 0.008 }).castShadow = false;
+    const spill = new PooledLight(OVEN_SPILL.color, OVEN_SPILL.intensity, OVEN_SPILL.distance);
+    spill.position.set(cx, y + h / 2 - 0.08, depth - 0.04);
+    interior.add(spill);
     // Runners at three levels on both sides, the rack on the middle pair.
     for (let level = 0; level < 3; level++) {
       const ry = bottom + 0.02 + (h * (level + 1)) / 4;

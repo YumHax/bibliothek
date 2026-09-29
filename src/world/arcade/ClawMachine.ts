@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import type { Updatable } from '@/core/Engine';
 import type { Input } from '@/core/Input';
 import type { Interactable, LabelPlacement } from '@/interaction/Interactable';
-import type { ArcadeMachineLike, ArcadeResult, SessionActions } from '@/game/SessionActions';
+import type { ArcadeBonus, ArcadeMachineLike, ArcadeResult, SessionActions } from '@/game/SessionActions';
 import { ChipSpeaker } from '@/audio/ChipSpeaker';
 import { actionKeyLabel } from '@/ui/keys';
 import type { Furniture } from '../Furniture';
@@ -28,6 +28,8 @@ export interface ClawWiring {
   prizeFor: (color: number) => string | undefined;
   /** Whether it is out of order today. */
   outOfOrder?: () => boolean;
+  /** Where the misses in a row are kept across visits (the pity grip's count: `economy/ArcadeHabits`). */
+  luck?: { clawMisses: number };
 }
 
 /** Where a regular's feet go (close enough to reach the stick), and where the player's eye goes. */
@@ -65,7 +67,7 @@ export class ClawMachine extends THREE.Group implements Furniture, Interactable,
   constructor(options: ClawMachineOptions, wiring: ClawWiring) {
     super();
     this.name = 'ClawMachine';
-    this.sim = new ClawSim(options.seed ?? 1, wiring.prizeFor);
+    this.sim = new ClawSim(options.seed ?? 1, wiring.prizeFor, wiring.luck);
     this.model = buildClawModel(this, options.color ?? 0xd23a6a, this.sim.plush);
     this.furColors = this.sim.plush.map((p) => p.color);
     this.hitboxes = [this.model.hitbox];
@@ -145,9 +147,9 @@ export class ClawMachine extends THREE.Group implements Furniture, Interactable,
   label(): string {
     const price = this.run.priceText();
     return this.run.label({
-      attract: `Claw machine — click to insert a coin (${price}, prizes go home)`,
-      playing: `Press ${actionKeyLabel('walkAway')} or click to walk away (the coin is lost)`,
-      over: `${actionKeyLabel('fire')} or click to try again (${price}) · ${actionKeyLabel('walkAway')} to walk away`,
+      attract: `Claw machine · insert a coin (${price}, prizes go home)`,
+      playing: `Claw machine · ${actionKeyLabel('walkAway')} or a click walks away (the coin is lost)`,
+      over: `Claw machine · ${actionKeyLabel('fire')} or a click tries again (${price}) · ${actionKeyLabel('walkAway')} walks away`,
     });
   }
 
@@ -159,7 +161,21 @@ export class ClawMachine extends THREE.Group implements Furniture, Interactable,
     this.run.activate(session, this);
   }
 
+  get canReplay(): boolean {
+    return this.run.canReplay;
+  }
+
+  pause(paused: boolean): void {
+    this.run.setPaused(paused);
+  }
+
+  showBonus(bonuses: readonly ArcadeBonus[]): void {
+    this.run.showBonus(bonuses);
+  }
+
   update(dt: number): void {
+    // The pointer went free mid-play: the claw hangs where it is until it is locked again.
+    if (this.run.paused) return;
     this.model.chaser.offset.x -= dt * (this.run.state === 'playing' ? 1.6 : 0.6);
     this.speaker.follow();
     this.run.update(dt);

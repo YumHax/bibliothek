@@ -8,7 +8,7 @@ import type { BrowseSpot } from '../people/Shopper';
 import type { StallStyle } from './stallTypes';
 
 /*
- * THE MARKET PLAN: a covered flea market reached by teleport from the flat's front door (see
+ * THE MARKET PLAN: a covered flea market reached by teleport through RETRO GAMES' door on Front Street (see
  * `worldPlan.ts`, `travel`). Zone-local coordinates, origin at the centre of the floor. Walls as
  * named from the arrival spot: the exit is on the front wall (+z); against the back wall (-z) the
  * mail-order counter and the WE BUY desk, a clerk behind each; the stalls in two rows either side
@@ -53,7 +53,10 @@ export const MARKET_PLAN = {
 
   exit: { wall: 'front', along: 0, y: 0 } as Placement,
 
-  /** Brick to waist height round the hall, plaster above; it stops either side of the exit door (leaf 0.83 plus its architrave). */
+  /** The exit's leaf: as wide and tall as RETRO GAMES's door on Front Street. */
+  door: { width: 1.4, height: 2.5 },
+
+  /** Brick to waist height round the hall, plaster above; it stops either side of the exit door (its leaf plus its architrave). */
   wainscot: {
     height: 1.15,
     tile: 0x8c4f3f,
@@ -64,7 +67,7 @@ export const MARKET_PLAN = {
     bevel: false,
     variance: 0.03,
     roughness: 0.85,
-    openings: [{ wall: 'front', along: 0, width: 0.83 + 2 * 0.07 + 0.04 }],
+    openings: [{ wall: 'front', along: 0, width: 1.4 + 2 * 0.07 + 0.04 }],
   } as TiledWainscotOptions,
 
   /** Iron trusses across the hall and a roof light down the aisle. */
@@ -115,7 +118,7 @@ export const MARKET_PLAN = {
   buyBack: { at: { wall: 'back', along: 1.3, y: 0, offset: DESK_OFF_WALL } as Placement, wallBehind: DESK_OFF_WALL, clerkAt: CLERK_AT },
   clerks: {
     counter: {
-      label: 'Click to chat with the mail-order clerk',
+      label: 'The mail-order clerk · chat',
       lines: [
         "Anything in the catalogue, new and sealed. Takes a day or two, but it's worth the wait.",
         'Cheaper on the stalls, mind. If they have it.',
@@ -123,7 +126,7 @@ export const MARKET_PLAN = {
       ],
     },
     buyBack: {
-      label: 'Click to chat with the buyer',
+      label: 'The buyer · chat',
       lines: [
         "I'll take anything off your hands. Can't pay what the stalls ask, though.",
         'Whatever you sell me goes out on the stalls tomorrow. Buy it back if you miss it.',
@@ -148,7 +151,7 @@ export const MARKET_PLAN = {
     decor: [
       ...[-POLE_Z, POLE_Z].map((z, i) => ({ kind: 'garland', at: { floor: [-STALL_X[2]! - POLE_DX, z] }, options: { style: 'bunting', length: 2 * (STALL_X[2]! + POLE_DX), height: POLE_TOP, sag: 0.35, seed: 31 + i } }) as DecorEntry),
       ...[-STALL_X[2]! - POLE_DX, STALL_X[2]! + POLE_DX].map((x, i) => ({ kind: 'garland', at: { floor: [x, -POLE_Z], rotationY: -Math.PI / 2 }, options: { style: 'bunting', length: 2 * POLE_Z, height: POLE_TOP, sag: 0.22, seed: 41 + i } }) as DecorEntry),
-      { kind: 'flyer', at: { wall: 'front', along: 0, y: 2.62 }, options: { style: 'cloth', width: 3, height: 0.5, title: 'GRAND FLEA FAIR', lines: ['once a month · the whole hall'], accent: 0xb3402a } },
+      { kind: 'flyer', at: { wall: 'front', along: 0, y: 2.9 }, options: { style: 'cloth', width: 3, height: 0.5, title: 'GRAND FLEA FAIR', lines: ['once a month · the whole hall'], accent: 0xb3402a } },
     ] as DecorEntry[],
   },
 
@@ -161,6 +164,11 @@ export const MARKET_PLAN = {
     nightShoppers: 1,
     /** The aisle the shoppers walk along (zone-local x range, on the centre line). */
     aisle: { x: [-4, 4] as [number, number], z: 0 },
+    /**
+     * The shoppers' way out at nightfall (and in again): the gaps between the front row's stalls, past the row,
+     * between the two boards, to the door.
+     */
+    exit: { gaps: [-(STALL_X[2]! / 2), STALL_X[2]! / 2], rowZ: ROW_Z + 1.2, out: [[0, HALF_DEPTH - 1.5], [0, HALF_DEPTH - 0.45]] as [number, number][] },
     /** Where a shopper stops to browse: in front of each stall, a little left or right of its middle, facing it. */
     browseSpots: STALL_X.flatMap((x, i) => [
       { at: [x + (i % 2 ? 0.35 : -0.35), -(ROW_Z - 0.7)], yaw: Math.PI },

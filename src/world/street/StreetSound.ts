@@ -48,7 +48,7 @@ interface Engine {
  * but heard in the open): the city's distant traffic rumble following how awake it is, each
  * driving vehicle's tyres and engine where it is (louder and to its side as it passes, hissier
  * on a wet road; the bus and the bin lorry a deep diesel), a horn when a driver loses patience
- * (`honks`), the rain's hiss, sparrows now and then by day, a siren far off now and then (more
+ * (`honks`), the rain's hiss, the wind (a whistle when it blows hard), sparrows now and then by day, a siren far off now and then (more
  * at night), and the church clock beyond the park striking the hours from 8:00 to 21:00, a
  * quarter chime first. Only while the player is in the street (`setOccupied`); nothing before the
  * page's first gesture started the audio.
@@ -61,6 +61,9 @@ export class StreetSound extends THREE.Group implements Furniture, Updatable, Oc
   private farPan: StereoPannerNode | null = null;
   private rumble: GainNode | null = null;
   private rain: GainNode | null = null;
+  private windBed: GainNode | null = null;
+  private windBand: BiquadFilterNode | null = null;
+  private whistle: GainNode | null = null;
   private noise: AudioBuffer | null = null;
   private readonly engines: Engine[] = [];
   private occupied = false;
@@ -103,6 +106,11 @@ export class StreetSound extends THREE.Group implements Furniture, Updatable, Oc
     const awake = wakefulnessAt(s.hours);
     this.rumble.gain.setTargetAtTime(0.06 + 0.22 * awake, now, 2);
     this.rain.gain.setTargetAtTime(0.45 * s.rain + 0.08 * s.wetness * awake, now, 2);
+    // The wind, as through the windows but in the open: a band of noise rising with it, a whistle round the corners when it blows hard.
+    const wind = s.wind;
+    this.windBed?.gain.setTargetAtTime(0.5 * wind * wind, now, 0.6);
+    this.windBand?.frequency.setTargetAtTime(200 + 700 * wind, now, 0.8);
+    this.whistle?.gain.setTargetAtTime(0.045 * THREE.MathUtils.smoothstep(wind, 0.55, 0.95), now, 1);
 
     this.options.listener.getWorldPosition(this.ear);
     this.options.listener.getWorldDirection(this.facing);
@@ -200,6 +208,22 @@ export class StreetSound extends THREE.Group implements Furniture, Updatable, Oc
     hiss.frequency.value = 3000;
     hiss.Q.value = 0.35;
     this.loop(ctx, this.noise).connect(hiss).connect(this.rain).connect(this.master);
+
+    // The wind: a low band of noise whose centre rises as it blows harder, and a thin whistle round the buildings' corners.
+    this.windBed = ctx.createGain();
+    this.windBed.gain.value = 0;
+    this.windBand = ctx.createBiquadFilter();
+    this.windBand.type = 'bandpass';
+    this.windBand.frequency.value = 400;
+    this.windBand.Q.value = 0.8;
+    this.loop(ctx, this.noise).connect(this.windBand).connect(this.windBed).connect(this.master);
+    this.whistle = ctx.createGain();
+    this.whistle.gain.value = 0;
+    const whistleBand = ctx.createBiquadFilter();
+    whistleBand.type = 'bandpass';
+    whistleBand.frequency.value = 980;
+    whistleBand.Q.value = 16;
+    this.loop(ctx, this.noise).connect(whistleBand).connect(this.whistle).connect(this.master);
 
     // Far-off sounds (the bells, sirens) come through the air muffled: a lowpass and a pan of their own.
     this.far = ctx.createGain();

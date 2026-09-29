@@ -1,7 +1,7 @@
 import type * as THREE from 'three';
 import type { Input } from '@/core/Input';
 import type { LabelPlacement } from '@/interaction/Interactable';
-import type { ArcadeMachineLike, ArcadeResult, SessionActions } from '@/game/SessionActions';
+import type { ArcadeBonus, ArcadeMachineLike, ArcadeResult, SessionActions } from '@/game/SessionActions';
 import type { ChipSpeaker } from '@/audio/ChipSpeaker';
 import { type ArcadeControls, NO_CONTROLS } from './games/ArcadeGame';
 import { InitialsEntry } from './InitialsEntry';
@@ -38,6 +38,8 @@ export interface MachineRunOptions {
 }
 
 const COUNT_UP_SECONDS = 1.2;
+/** Each bonus line (challenge, medal...) counts up on the end card this long after the score's tickets. */
+const BONUS_SECONDS = 0.55;
 
 /**
  * The paid play every arcade machine goes through, from the coin to the end card, as a part the
@@ -64,6 +66,12 @@ export class MachineRun {
   private clicked = false;
   private reported = false;
   private pause = 0;
+  /** The pointer was unlocked mid-play: nothing moves until it is locked again. */
+  private held = false;
+  /** Fire was up at some point on the end card (a finger still on Space from the play does not replay). */
+  private fireReleased = false;
+  private bonusLines: readonly ArcadeBonus[] = [];
+  private bonusTicked = 0;
 
   constructor(private readonly options: MachineRunOptions) {}
 
@@ -114,6 +122,52 @@ export class MachineRun {
     return Math.floor(this.tickets(this.result.score) * this.countUp);
   }
 
+  /** The play's bonuses (challenge, medal, streak...), counted up on the end card after the score's tickets. */
+  get bonuses(): readonly ArcadeBonus[] {
+    return this.bonusLines;
+  }
+
+  /** How far bonus `i`'s count-up is, 0..1 (it starts once the one before it is done). */
+  bonusCountUp(i: number): number {
+    return Math.max(0, Math.min(1, (this.clock - COUNT_UP_SECONDS - i * BONUS_SECONDS) / BONUS_SECONDS));
+  }
+
+  /** Every ticket the end card has counted so far, the bonuses' too (what the strip feeds out). */
+  get shownTotal(): number {
+    return this.shownTickets + this.bonusLines.reduce((sum, b, i) => sum + Math.floor(b.tickets * this.bonusCountUp(i)), 0);
+  }
+
+  /** The end card has counted everything up. */
+  get countDone(): boolean {
+    return this.clock >= COUNT_UP_SECONDS + this.bonusLines.length * BONUS_SECONDS;
+  }
+
+  /** On the end card, done counting, and fire let go since: a press or a click now plays again. */
+  get canReplay(): boolean {
+    return this.current === 'over' && this.countDone && this.fireReleased;
+  }
+
+  /** Whether the play is held still (the pointer unlocked). */
+  get paused(): boolean {
+    return this.held;
+  }
+
+  /** Holds the play still, or lets it go on (fire must be let go first: the click that locked the pointer is not a shot). */
+  setPaused(paused: boolean): void {
+    if (this.held === paused) return;
+    this.held = paused;
+    if (!paused) {
+      this.latched = true;
+      this.lastFire = true;
+      this.clicked = false;
+    }
+  }
+
+  /** What the play earned besides its score, shown on the end card and fed out on the strip. */
+  showBonus(bonuses: readonly ArcadeBonus[]): void {
+    this.bonusLines = bonuses.filter((b) => b.tickets > 0);
+  }
+
   tickets(score: number): number {
     const { pointsPerTicket } = this.options;
     return pointsPerTicket ? Math.floor(score / pointsPerTicket) : 0;
@@ -138,6 +192,8 @@ export class MachineRun {
     speaker.play('coin');
     strip?.tear();
     this.counted = 0;
+    this.held = false;
+    this.bonusLines = [];
     // The click or Space that started it must not count as a fire press.
     this.lastFire = true;
     this.latched = this.options.fireAfterRelease ?? false;
@@ -155,6 +211,8 @@ export class MachineRun {
     this.initials = null;
     this.current = 'attract';
     this.who = null;
+    this.held = false;
+    this.bonusLines = [];
     this.options.strip?.tear();
     this.options.stationEvents.onPlayerLeave?.();
   }
@@ -178,12 +236,21 @@ export class MachineRun {
     return true;
   }
 
-  /** The play is over with `score` (and a prize, for the claw): the table's initials first when it makes it, else the end card. */
-  finish(score: number, prize?: string): ArcadeResult {
+  /**
+   * The play is over with `score` (and a prize, for the claw; `refund` when it reported nothing through
+   * no fault of the player's): the table's initials first when it makes it, else the end card. A best
+   * is only a best when there was one to beat; the first score on a machine is just `first`.
+   */
+  finish(score: number, prize?: string, refund = false): ArcadeResult {
     const { scores, game } = this.options;
-    this.result = { score, best: !!scores && score > 0 && score > scores.bestOf(game.id), ...(prize ? { prize } : {}) };
+    const before = scores?.bestOf(game.id) ?? 0;
+    const scored = !!scores && score > 0;
+    this.result = { score, best: scored && before > 0 && score > before, ...(scored && before <= 0 ? { first: true } : {}), ...(prize ? { prize } : {}), ...(refund ? { refund: true } : {}) };
     this.rank = null;
     this.counted = 0;
+    this.bonusLines = [];
+    this.bonusTicked = 0;
+    this.fireReleased = false;
     if (scores?.qualifies(game.id, score)) {
       const rank = Math.max(0, scores.table(game.id).findIndex((e) => score > e.score));
       this.initials = new InitialsEntry(scores.initials, rank, score);
@@ -241,7 +308,15 @@ export class MachineRun {
     if (this.who === 'regular') session.refuse(TAKEN_LINE);
     else if (this.outOfOrder) session.refuse(OUT_OF_ORDER_LINE);
     else if (this.current === 'playing' && clickWhilePlaying?.()) return;
+    // A click on the end card while it counts: the count jumps to its end (the next click plays again).
+    else if (this.current === 'over' && !this.countDone && this.who === 'player') this.skipCount();
     else session.playArcade(machine);
+  }
+
+  /** The end card's count-up jumps to its end (every ticket and bonus shown, the strip fed out); fire must be let go before it replays. */
+  private skipCount(): void {
+    this.clock = Math.max(this.clock, COUNT_UP_SECONDS + this.bonusLines.length * BONUS_SECONDS);
+    this.fireReleased = false;
   }
 
   /** A click counts as a fire press on the next `readControls` (a light gun's trigger). */
@@ -278,6 +353,7 @@ export class MachineRun {
   update(dt: number): ArcadeControls {
     const { note, speaker, strip } = this.options;
     if (note) note.visible = this.outOfOrder;
+    if (this.held) return NO_CONTROLS;
     if (this.current === 'initials') {
       const controls = this.readControls();
       const sfx = this.initials?.update(dt, controls);
@@ -288,11 +364,15 @@ export class MachineRun {
         this.current = 'over';
         this.clock = 0;
         this.counted = 0;
+        this.fireReleased = false;
       }
       return controls;
     }
     if (this.current === 'over') {
       this.clock += dt;
+      // Fire let go since the play: a fresh press while the card still counts skips to its end; the next one replays.
+      if (!this.options.input.isDown(...ARCADE_KEYS.fire)) this.fireReleased = true;
+      else if (this.fireReleased && !this.countDone && this.who === 'player') this.skipCount();
       const tickets = this.tickets(this.result.score);
       const shown = this.shownTickets;
       // One tick per ticket paid out, as many as the ear can take.
@@ -300,7 +380,13 @@ export class MachineRun {
         this.counted = shown;
         speaker.play('ticket');
       }
-      strip?.setTickets(shown);
+      // The bonuses land after it, a chime each.
+      const started = this.bonusLines.filter((_, i) => this.bonusCountUp(i) > 0).length;
+      if (started > this.bonusTicked) {
+        this.bonusTicked = started;
+        speaker.play('bonus');
+      }
+      strip?.setTickets(this.shownTotal);
     }
     return NO_CONTROLS;
   }

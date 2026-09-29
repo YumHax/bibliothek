@@ -2,6 +2,7 @@ import { Polygon, type Rng } from './Sheet';
 import { between, integer, pick, shade } from './paint';
 import { FacadeFrame } from './FacadeFrame';
 import { SHOP_LOOKS } from '@/world/city/shopLooks';
+import { GROUND_FLOOR } from '@/world/street/streetPlan';
 
 /** What a shop puts out on the pavement in front of it. */
 export type ShopDisplay = 'terrace' | 'crates' | 'buckets' | 'board' | 'none';
@@ -112,7 +113,8 @@ export function paintShopfronts(f: FacadeFrame, random: Rng, wall: string, landm
   const { sheet, w } = f;
   const units = Math.max(1, Math.floor(w / 4.2));
   const out: Storefront[] = [];
-  sheet.path(f.strip(0, w, -1.5, 4.2 - 0.55), shade(wall, 0.9));
+  // The shops' band of wall, up to the course under the first floor (`Facades`: GROUND - 0.25 to GROUND).
+  sheet.path(f.strip(0, w, -1.5, GROUND_FLOOR - 0.25), shade(wall, 0.9));
   if (planned) {
     for (const shop of planned) {
       const type = plannedType(shop.kind, shop.name);
@@ -196,7 +198,13 @@ function paintShop(f: FacadeFrame, random: Rng, type: ShopType, s0: number, s1: 
     ctx.save();
     ctx.font = `bold ${size}px ${LETTER_FONT}`;
     const squeeze = Math.min(pxX / pxY, ((s1 - s0 - 0.6) * pxX) / Math.max(1, ctx.measureText(type.name).width));
+    // The fascia runs aslant across the panorama (its far end is lower or higher): the lettering is
+    // sheared to run along it, not level with the texture.
+    const [xa, ya] = f.P(s0 + 0.3, 3.33);
+    const [xb, yb] = f.P(s1 - 0.3, 3.33);
+    const slant = Math.abs(xb - xa) > 1 ? (yb - ya) / (xb - xa) : 0;
     ctx.translate(cx, cy);
+    ctx.transform(1, slant, 0, 1, 0, 0);
     // Texture x grows with the azimuth, which runs right to left for someone looking out: the
     // lettering is painted mirrored so it reads the right way round from the window.
     ctx.scale(-squeeze, 1);
@@ -205,7 +213,7 @@ function paintShop(f: FacadeFrame, random: Rng, type: ShopType, s0: number, s1: 
     ctx.fillStyle = type.letters;
     ctx.fillText(type.name, 0, 0);
     ctx.restore();
-    if (type.neon) sheet.sign(type.name, cx, cy, size, -squeeze, `bold ${LETTER_FONT}`, type.neon, 0.85);
+    if (type.neon) sheet.sign(type.name, cx, cy, size, -squeeze, `bold ${LETTER_FONT}`, type.neon, 0.85, slant);
     else if (random() < 0.5) sheet.lit(fascia, type.light, 0.35, closing);
   }
 

@@ -1,80 +1,27 @@
 import { Sheet, type Rng, azimuthX, heightY, sizePx } from './Sheet';
-import { between, deg, pick, shade } from './paint';
+import { between, shade } from './paint';
+import { SKYLINE, TOWER_STYLES, type SkylineTower } from '@/world/city/skyline';
 
-interface TowerStyle {
-  color: string;
-  /** How much of the facade is sky reflection (curtain-wall glass mirrors it, stone hardly). */
-  glass: number;
-  kind: 'glass' | 'stone' | 'dark';
-}
-
-/**
- * Tower claddings. Curtain walls mirror the sky only in part: tinted glass keeps its own colour, and
- * a tower mirroring it fully would melt into the sky behind it, leaving its grid floating.
- */
-const STYLES: readonly TowerStyle[] = [
-  { color: '#4f6f8c', glass: 0.3, kind: 'glass' },
-  { color: '#3f5c78', glass: 0.34, kind: 'glass' },
-  { color: '#6a8298', glass: 0.26, kind: 'glass' },
-  { color: '#a9a297', glass: 0.06, kind: 'stone' },
-  { color: '#8e9198', glass: 0.08, kind: 'stone' },
-  { color: '#b7ab99', glass: 0.06, kind: 'stone' },
-  { color: '#3d4753', glass: 0.2, kind: 'dark' },
-  { color: '#2f3844', glass: 0.24, kind: 'dark' },
-];
-
-type Crown = 'flat' | 'setback' | 'spire' | 'slant' | 'lit';
-const CROWNS: readonly Crown[] = ['flat', 'flat', 'setback', 'setback', 'spire', 'slant', 'lit'];
-
-interface Tower {
-  azimuth: number;
-  distance: number;
-  /** Footprint width and roof height, in metres. */
-  width: number;
-  height: number;
-  style: TowerStyle;
-  crown: Crown;
-  /** Which side the second, shaded face shows on. */
-  sideLeft: boolean;
-}
+type Tower = SkylineTower;
 
 /** Floor-to-floor and column pitch of the facade grids, in metres. */
 const FLOOR = 3.6;
 const COLUMN = 3.2;
 
 /**
- * The skyline: a dense cluster of towers behind Front Street's block, a sparser and further one
- * behind the park, a few behind the room for completeness, painted far to near. Each tower shows a
- * lit main face and a shaded side face, a facade grid, one of a few crowns, and a scatter of
- * windows that light up at night (mostly cool office light, some warm).
+ * The skyline (`city/SKYLINE`, which the walkable street's sky shows too), painted far to near: a
+ * dense cluster of towers behind Front Street's block, a sparser and further one behind the park, a
+ * few behind the room for completeness. Each tower shows a lit main face and a shaded side face, a
+ * facade grid, one of a few crowns, and a scatter of windows that light up at night (mostly cool
+ * office light, some warm).
  */
 export function paintSkyline(sheet: Sheet, random: Rng): void {
-  const towers: Tower[] = [];
-  const cluster = (from: number, to: number, count: number, near: number, far: number, minH: number, maxH: number): void => {
-    for (let i = 0; i < count; i++) {
-      towers.push({
-        azimuth: between(random, from, to),
-        distance: between(random, near, far),
-        width: between(random, 24, 56),
-        height: between(random, minH, maxH),
-        style: pick(random, STYLES),
-        crown: pick(random, CROWNS),
-        sideLeft: random() < 0.5,
-      });
-    }
-  };
-  cluster(deg(-32), deg(100), 24, 340, 800, 75, 230);
-  cluster(deg(100), deg(200), 8, 400, 800, 75, 180);
-  cluster(deg(-160), deg(-32), 10, 520, 950, 70, 200);
-  // Two landmarks: a spire ahead and a stepped tower behind the park.
-  towers.push({ azimuth: deg(25), distance: 620, width: 48, height: 290, style: STYLES[1], crown: 'spire', sideLeft: false });
-  towers.push({ azimuth: deg(-95), distance: 700, width: 40, height: 240, style: STYLES[0], crown: 'setback', sideLeft: true });
-  towers.sort((p, q) => q.distance - p.distance);
-  for (const tower of towers) paintTower(sheet, random, tower);
+  for (const tower of SKYLINE) paintTower(sheet, random, tower);
 }
 
 function paintTower(sheet: Sheet, random: Rng, t: Tower): void {
-  const { distance: d, style } = t;
+  const { distance: d } = t;
+  const style = TOWER_STYLES[t.style]!;
   const width = sizePx(t.width, d);
   const x0 = azimuthX(t.azimuth) - width / 2;
   const base = heightY(0, d) + 2;

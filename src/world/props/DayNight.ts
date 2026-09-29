@@ -110,6 +110,13 @@ const DAY_HOUR = 14;
 const NIGHT_HOUR = 23;
 /** Largest jump `advanceTo` makes at once: under 12 h, so a jump across midnight reads as a day passing. */
 const ADVANCE_STEP_H = 6;
+/**
+ * Seconds between two notices to the listeners while the clock runs. They move lamps, sun spots,
+ * window light and sky uniforms that change over minutes: ten times a second is plenty, where every
+ * frame cost every window of the flat its sums even with the player across town. A lightning flash
+ * is followed frame by frame.
+ */
+const NOTIFY_INTERVAL = 0.1;
 /** An overcast sky's grey, by day and by night (zenith, horizon). */
 const OVERCAST_DAY = { zenith: new THREE.Color(0x8a95a2), horizon: new THREE.Color(0xb4bac0) };
 const OVERCAST_NIGHT = { zenith: new THREE.Color(0x12151c), horizon: new THREE.Color(0x2a2a30) };
@@ -182,6 +189,8 @@ export class DayNight implements Updatable {
   /** Today's sun: sunrise, noon, sunset and the elevation through the day. */
   readonly sun: SolarDay;
   private readonly listeners = new Set<SkyListener>();
+  private sinceNotify = 0;
+  private flashing = false;
 
   constructor({ hours = DEFAULT_HOURS, dayLength = DEFAULT_DAY_LENGTH_S, place, date = new Date() }: DayNightOptions = {}) {
     this.dayLength = dayLength;
@@ -238,6 +247,12 @@ export class DayNight implements Updatable {
     // A frozen clock still follows the weather (gusts, lightning), which lives on the real clock.
     if (!this.dayLength && !this.weather) return;
     if (this.dayLength) this.hours = (this.hours + (dt * 24) / this.dayLength) % 24;
+    this.sinceNotify += dt;
+    // During a flash, and once more as it ends so it does not stay lit.
+    const flashing = (this.weather?.lightning ?? 0) > 0.01;
+    if (!flashing && !this.flashing && this.sinceNotify < NOTIFY_INTERVAL) return;
+    this.flashing = flashing;
+    this.sinceNotify = 0;
     this.compute();
     this.notify();
   }

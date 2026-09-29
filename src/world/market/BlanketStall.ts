@@ -66,7 +66,7 @@ const LEATHER = paint(0x6a3f24, 0.55);
 const LINING = plainCloth(0x8a6a4a);
 const BRASS = METAL.agedBrass();
 const STRAP = paint(0x3a2616, 0.7);
-const ALUMINIUM = standard({ color: 0xb0b4b8, roughness: 0.35, metalness: 0.85 });
+const ALUMINIUM = standard({ color: 0xb0b4b8, roughness: 0.4, metalness: 1 });
 
 /**
  * A car-boot seller's pitch on the floor: a patterned woollen blanket with a fold in it, an old

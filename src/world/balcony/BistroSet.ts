@@ -3,7 +3,7 @@ import { cylinderMesh } from '../meshUtils';
 import { Prop, part } from '../props/Prop';
 import { standard } from '../materials/palette';
 
-const PAINTED_STEEL = standard({ color: 0x2f5a44, roughness: 0.5, metalness: 0.5 });
+const PAINTED_STEEL = standard({ color: 0x2f5a44, roughness: 0.5, metalness: 0 });
 
 /**
  * A folding bistro table and two chairs in painted steel, the balcony's furniture: a round top on

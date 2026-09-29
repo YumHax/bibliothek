@@ -16,6 +16,13 @@ export interface RetroShopLureOptions {
   marketZone?: string;
 }
 
+/**
+ * What the lure last worked out, for the walkable street's own copy of it (`street/RetroLure`): the
+ * market day, today's stock colours once drawn, whether it is fresh (a new day the player has not
+ * been in yet) and how many queue. Written every `EVERY` seconds; read, never written, elsewhere.
+ */
+export const RETRO_NEWS: { day: number; colors: readonly string[] | null; fresh: boolean; queue: number } = { day: -1, colors: null, fresh: false, queue: 0 };
+
 /** Seconds between two looks at the market. */
 const EVERY = 3;
 /** People queueing outside on a day of fresh stock, before the player has been in. */
@@ -50,11 +57,16 @@ export class RetroShopLure {
     const items = this.market.peekToday();
     if (items && day !== this.stockDay) {
       this.stockDay = day;
-      this.outdoors.showShopStock(items.map((item) => this.options.colorOf(item.game.platform)));
+      RETRO_NEWS.colors = items.map((item) => this.options.colorOf(item.game.platform));
+      this.outdoors.showShopStock(RETRO_NEWS.colors);
     }
     const fresh = items !== null && items.length > 0 && this.visitedDay !== day;
     this.outdoors.showShopBanner(fresh ? 'NEW IN' : null);
     const random = seededRandom(day * 131 + 7);
-    this.outdoors.life.setShopQueue(fresh ? QUEUE[0] + Math.floor(random() * (QUEUE[1] - QUEUE[0] + 1)) : 0);
+    const queue = fresh ? QUEUE[0] + Math.floor(random() * (QUEUE[1] - QUEUE[0] + 1)) : 0;
+    this.outdoors.life.setShopQueue(queue);
+    RETRO_NEWS.day = day;
+    RETRO_NEWS.fresh = fresh;
+    RETRO_NEWS.queue = queue;
   }
 }

@@ -3,6 +3,7 @@ import type { Input } from '@/core/Input';
 import type { ArcadeMachineLike } from '@/game/SessionActions';
 import { PLAY_COST, WHEEL_SLICES, pointsPerTicket } from '@/economy/pricing';
 import { clawPrizeFor } from '@/economy/Prizes';
+import { ArcadeHabits } from '@/economy/ArcadeHabits';
 import type { Jackpot } from '@/economy/Jackpot';
 import type { Furniture } from '../Furniture';
 import type { Station } from './Station';
@@ -45,7 +46,7 @@ function ticketWiring(ctx: MachineContext, id: string): TicketMachineWiring {
 export const MACHINE_KINDS = {
   pinball: (ctx: MachineContext, options: PinballOptions) => new Pinball(options, { ...ticketWiring(ctx, 'pinball'), scores: ctx.scores }),
   claw: (ctx: MachineContext, options: ClawMachineOptions) =>
-    new ClawMachine(options, { input: ctx.input, listener: ctx.listener, playCost: () => PLAY_COST, prizeFor: (color) => clawPrizeFor(color)?.id, outOfOrder: ctx.outOfOrder('claw') }),
+    new ClawMachine(options, { input: ctx.input, listener: ctx.listener, playCost: () => PLAY_COST, prizeFor: (color) => clawPrizeFor(color)?.id, outOfOrder: ctx.outOfOrder('claw'), luck: new ArcadeHabits() }),
   alley: (ctx: MachineContext, options: AlleyRollerOptions) => new AlleyRoller(options, { ...ticketWiring(ctx, 'alley'), scores: ctx.scores }),
   hoops: (ctx: MachineContext, options: HoopShotOptions) => new HoopShot(options, { ...ticketWiring(ctx, 'hoops'), scores: ctx.scores }),
   wheel: (ctx: MachineContext, options: Omit<TicketWheelOptions, 'slices' | 'jackpot'>) => new TicketWheel({ slices: WHEEL_SLICES, jackpot: ctx.jackpot, ...options }, ticketWiring(ctx, 'wheel')),

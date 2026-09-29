@@ -17,12 +17,26 @@ import { LidMotion } from './box/LidMotion';
 import { Manual } from './box/Manual';
 import { computeShellLayout, type ShellLayout } from './box/shellLayout';
 import { slabSize } from './box/slabs';
+import { WishCard } from './box/WishCard';
 import { plastic } from './materials/finishes';
+import { printGlow } from './materials/printGlow';
+import { SHARED_SHADOW_LAYER } from './zone/Zone';
+import { playBoxClack } from '@/audio/boxClack';
+import { playPlasticClick } from '@/audio/furnitureSounds';
 
+/** How far a hovered box slides out of its row, how long it takes (s), and the faint lift of its cover's print. */
 const HOVER_POP_OUT = 0.02;
-const HOVER_GLOW = 0x222222;
+const HOVER_SECONDS = 0.08;
+const HOVER_GLOW = 0.16;
+/** Off a stall (no shelf to clear): how far the box slides out along its front before it flies to the hand (m). */
+const SLIDE_OUT = 0.05;
+/** A box moving to another spot on the shelves (the sort changed) takes this long (s). */
+const SLIDE_SECONDS = 0.4;
+/** A move to another row or bookcase goes out of the row, across in front of the boards and back in: it takes longer (s). */
+const ROUND_SLIDE_SECONDS = 0.75;
 const OPEN_ANGLE = (160 * Math.PI) / 180;
 const OPEN_SECONDS = 0.4;
+/** A wishlist game's parts, seen in hand: a see-through ghost (on the shelf it is a `WishCard` in the gap). */
 const WISHLIST_OPACITY = 0.35;
 /** A worn second-hand box: its printed faces are dulled to this tint instead of pure white. */
 const WORN_TINT = 0xb8afa2;
@@ -55,6 +69,9 @@ export class GameBox extends THREE.Mesh<THREE.BoxGeometry, THREE.Material[]> imp
   /** Where the box sits when at rest on its shelf (local to the shelf). */
   readonly restPosition = new THREE.Vector3();
   readonly restQuaternion = new THREE.Quaternion();
+  /** Set by the shelf it stands on: out of the row far enough to clear the board's front edge (see `Carriable`). */
+  slideOut = SLIDE_OUT;
+  onDisposed: (() => void) | null = null;
 
   private readonly art: BoxArtLoader;
   private readonly artOptions: BoxArtOptions;
@@ -62,8 +79,19 @@ export class GameBox extends THREE.Mesh<THREE.BoxGeometry, THREE.Material[]> imp
   private readonly layout: ShellLayout;
   private readonly closed: ClosedBox;
   private parts: OpenableParts | null = null;
-  private readonly lid = new LidMotion(OPEN_ANGLE, OPEN_SECONDS);
+  private readonly lid = new LidMotion(OPEN_ANGLE, OPEN_SECONDS, (open) => playPlasticClick(!open));
   private hovered = false;
+  /** How far out of the row the hover has brought it, 0..1 (eased by `settle`). */
+  private pop = 0;
+  /** A move to a new rest pose under way: where it started, how far along (0..1), the wait before it sets off. */
+  private slide: { from: THREE.Vector3; fromQuaternion: THREE.Quaternion; t: number; delay: number; around: boolean } | null = null;
+  /**
+   * Set by the shelf the box stands on: called when the box starts moving (a hover, a slide), so the
+   * shelf ticks `settle` until it rests. Without one (a market stall), the pose is set at once.
+   */
+  restless: ((box: GameBox) => void) | null = null;
+  /** In the gap of a wishlist game on the shelf, instead of the box. */
+  private wishCard: WishCard | null = null;
   private status: GameStatus = 'owned';
   private lentTag: LentTag | null = null;
   private anisotropy = 1;
@@ -82,6 +110,8 @@ export class GameBox extends THREE.Mesh<THREE.BoxGeometry, THREE.Material[]> imp
   /** Whether the back, the label and the manual cover are drawn for the current art. */
   private detailsPainted = false;
   private disposed = false;
+  /** Whether the box was on the shared shadow layer before it was taken in hand (every light renders it there). */
+  private sharedBeforeHand = false;
 
   constructor(game: Game, art: BoxArtLoader) {
     const platform = getPlatform(game.platform);
@@ -95,7 +125,7 @@ export class GameBox extends THREE.Mesh<THREE.BoxGeometry, THREE.Material[]> imp
       left: side(),
       top: side(),
       bottom: side(),
-      front: plastic({ map: art.placeholder(game), roughness: 0.5 }, 0.7),
+      front: printGlow(plastic({ map: art.placeholder(game), roughness: 0.5 }, 0.7)),
       back: side(),
       interior: new THREE.MeshStandardMaterial({ color: interiorColor(accent), roughness: 0.95 }),
     };
@@ -127,8 +157,9 @@ export class GameBox extends THREE.Mesh<THREE.BoxGeometry, THREE.Material[]> imp
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
+    this.onDisposed?.(); // the hand lets go of it first
     this.art.release(this.game, this.artOptions);
-    this.setStatusStyle('owned'); // drops the lent tag
+    this.setStatusStyle('owned'); // drops the lent tag and the wish card
     this.geometry.dispose();
     this.material[HITBOX_INDEX]!.dispose();
     this.closed.dispose();
@@ -162,20 +193,95 @@ export class GameBox extends THREE.Mesh<THREE.BoxGeometry, THREE.Material[]> imp
   setHovered(hovered: boolean): void {
     if (this.hovered === hovered) return;
     this.hovered = hovered;
-    this.faces.front.emissive.setHex(hovered ? HOVER_GLOW : 0x000000);
-    this.closed.material.emissive.setHex(hovered ? HOVER_GLOW : 0x000000);
-    this.position.copy(this.restPosition);
-    if (hovered) this.position.z += HOVER_POP_OUT;
+    if (this.restless) return this.restless(this);
+    this.pop = hovered ? 1 : 0;
+    this.applyPose();
   }
 
   label(): string {
-    return `${this.game.title} — click to pick up`;
+    const note = this.status === 'wishlist' ? ', on your wishlist' : this.status === 'lent' ? ', lent out' : '';
+    return `${this.game.title}${note} · pick up`;
   }
 
-  /** Picks the box up, or puts the one already in hand back when clicking another box. */
+  /** Picks the box up; clicking it with another box in hand puts that one back and takes this one once it is home. */
   activate(session: SessionActions): void {
-    if (session.held) session.putBack();
-    else session.pickUp(this);
+    const held = session.held;
+    if (held === this) return session.putBack();
+    if (held) session.putBack();
+    // Off a shelf (it lands back with the same clack, see `setInHand`); a stall plays its own.
+    if (this.shadowProxied && !held) playBoxClack(false);
+    session.pickUp(this);
+  }
+
+  /** On the wishlist (a ghost in the gap) or lent to a friend: not a copy the TV can play. */
+  get playable(): boolean {
+    return this.status !== 'wishlist' && this.status !== 'lent';
+  }
+
+  get statusStyle(): GameStatus {
+    return this.status;
+  }
+
+  /**
+   * Sets off from where it stands now to its (new) rest pose, after `delay` seconds, over
+   * `SLIDE_SECONDS`: the shelf re-sorted. Its shelf ticks it (`restless`); without one it jumps there.
+   */
+  slideToRest(delay: number): void {
+    const from = this.position.clone();
+    // Along its own row it slides; to another row (or bookcase) it would cut through the boards: out, across, in.
+    const around = Math.abs(from.y - this.restPosition.y) > 0.02 || from.distanceTo(this.restPosition) > 0.6;
+    this.slide = { from, fromQuaternion: this.quaternion.clone(), t: 0, delay, around };
+    if (this.restless) this.restless(this);
+    else this.stopSettling(true);
+  }
+
+  /** One step of the hover pop and of a slide; false once the box is at rest (the shelf stops ticking it). */
+  settle(dt: number): boolean {
+    const want = this.hovered ? 1 : 0;
+    if (this.pop !== want) this.pop = want > this.pop ? Math.min(1, this.pop + dt / HOVER_SECONDS) : Math.max(0, this.pop - dt / HOVER_SECONDS);
+    if (this.slide) {
+      if (this.slide.delay > 0) this.slide.delay -= dt;
+      else this.slide.t = Math.min(1, this.slide.t + dt / (this.slide.around ? ROUND_SLIDE_SECONDS : SLIDE_SECONDS));
+    }
+    this.applyPose();
+    if (this.slide && this.slide.t >= 1) this.slide = null;
+    return this.pop !== want || this.slide !== null;
+  }
+
+  /** Off its shelf (taken in hand): the pop, the glow and any slide end here; `toRest` also puts it at its rest pose. */
+  stopSettling(toRest = false): void {
+    this.slide = null;
+    this.pop = 0;
+    this.setGlow(0);
+    if (toRest) this.applyPose();
+  }
+
+  /** The rest pose (or on its way there), pushed out by the hover pop, and the cover's glow with it. */
+  private applyPose(): void {
+    const eased = THREE.MathUtils.smoothstep(this.pop, 0, 1);
+    const slide = this.slide;
+    if (slide && slide.t < 1 && slide.around) {
+      // The first quarter out of the row, the middle half across in front of the boards, the last quarter in.
+      const across = easeInOut(THREE.MathUtils.clamp((slide.t - 0.25) / 0.5, 0, 1));
+      const out = THREE.MathUtils.smoothstep(slide.t, 0, 0.25) * (1 - THREE.MathUtils.smoothstep(slide.t, 0.75, 1));
+      this.position.lerpVectors(slide.from, this.restPosition, across);
+      this.position.z += out * this.slideOut;
+      this.quaternion.slerpQuaternions(slide.fromQuaternion, this.restQuaternion, across);
+    } else if (slide && slide.t < 1) {
+      const t = easeInOut(slide.t);
+      this.position.lerpVectors(slide.from, this.restPosition, t);
+      this.quaternion.slerpQuaternions(slide.fromQuaternion, this.restQuaternion, t);
+    } else {
+      this.position.copy(this.restPosition);
+      this.quaternion.copy(this.restQuaternion);
+    }
+    this.position.z += eased * HOVER_POP_OUT;
+    this.setGlow(eased);
+  }
+
+  private setGlow(amount: number): void {
+    this.faces.front.emissive.setScalar(HOVER_GLOW * amount);
+    this.closed.material.emissive.setScalar(HOVER_GLOW * amount);
   }
 
   /**
@@ -188,11 +294,15 @@ export class GameBox extends THREE.Mesh<THREE.BoxGeometry, THREE.Material[]> imp
     if (inHand) {
       const parts = (this.parts ??= this.buildParts());
       this.remove(this.closed);
+      this.showWish();
       this.add(parts.shell, parts.cartridge, parts.manual);
       if (this.lentTag) parts.shell.lid.add(this.lentTag);
       this.showContents(this.lid.openness > 0);
       if (!this.detailsPainted) this.paintDetails();
       this.askDetails();
+      // Carried out of its room, it still casts: every zone's lights render the shared layer.
+      this.sharedBeforeHand = this.layers.isEnabled(SHARED_SHADOW_LAYER);
+      this.traverse((obj) => obj.layers.enable(SHARED_SHADOW_LAYER));
     } else if (this.parts) {
       const { shell, cartridge, manual } = this.parts;
       this.remove(shell, cartridge, manual);
@@ -200,6 +310,10 @@ export class GameBox extends THREE.Mesh<THREE.BoxGeometry, THREE.Material[]> imp
       this.add(this.closed);
       if (this.lentTag) this.closed.lidAnchor.add(this.lentTag);
       this.dropDetails();
+      this.showWish();
+      if (!this.sharedBeforeHand) this.traverse((obj) => obj.layers.disable(SHARED_SHADOW_LAYER));
+      // Home on a shelf again (the shelf took it back just before): the clack of it landing.
+      if (this.shadowProxied) playBoxClack(true);
     }
     this.updateShadows();
   }
@@ -258,12 +372,25 @@ export class GameBox extends THREE.Mesh<THREE.BoxGeometry, THREE.Material[]> imp
 
   // --- Status ---------------------------------------------------------------------------------
 
-  /** Wishlist boxes are see-through ghosts; lent boxes wear a paper tag on the cover. Idempotent. */
+  /**
+   * Wishlist games leave a gap on the shelf with a handwritten card in it (a see-through ghost in
+   * hand); lent boxes wear a paper tag on the cover. Idempotent.
+   */
   setStatusStyle(status: GameStatus | undefined): void {
     const next = status ?? 'owned';
     if (next === this.status) return;
     this.status = next;
     this.styleMaterials(this.visibleMaterials());
+    if (next === 'wishlist' && !this.wishCard) {
+      const { width, height } = this.dimensions;
+      this.wishCard = new WishCard(this.game.title, width, height, this.anisotropy);
+      this.wishCard.layers.mask = this.layers.mask;
+    } else if (next !== 'wishlist' && this.wishCard) {
+      this.wishCard.removeFromParent();
+      this.wishCard.dispose();
+      this.wishCard = null;
+    }
+    this.showWish();
 
     if (next === 'lent' && !this.lentTag) {
       const lidSize = slabSize(this.layout.lidSlab);
@@ -287,6 +414,21 @@ export class GameBox extends THREE.Mesh<THREE.BoxGeometry, THREE.Material[]> imp
       mat.depthWrite = !ghost;
       mat.needsUpdate = true;
     }
+  }
+
+  /**
+   * A wishlist game, down: its card in the gap and no box. Swapped in and out of the group, not
+   * hidden (the zone's culling shows every mesh it hid again).
+   */
+  private showWish(): void {
+    const wish = this.status === 'wishlist' && !this.inHand;
+    if (!this.inHand) {
+      if (wish) this.remove(this.closed);
+      else if (this.closed.parent !== this) this.add(this.closed);
+    }
+    if (!this.wishCard) return;
+    if (wish) this.add(this.wishCard);
+    else this.remove(this.wishCard);
   }
 
   /** Ghosts cast nothing; a box on a shelf leaves its shadow to the shelf's proxy, except in hand. */
@@ -388,6 +530,32 @@ export class GameBox extends THREE.Mesh<THREE.BoxGeometry, THREE.Material[]> imp
     this.detailsPainted = false;
   }
 
+  /**
+   * `World.prime`'s `ShaderPrimer`: what only a box in hand draws (the shell's printed faces with their
+   * maps, a labelled cartridge, a covered manual), as copies with a 1-pixel map, so the first box
+   * picked up links no program. The caller drops the copy without disposing it (see `ShaderPrimer`).
+   */
+  primeShaders(): THREE.Object3D {
+    const map = new THREE.DataTexture(new Uint8Array([255, 255, 255, 255]), 1, 1);
+    map.colorSpace = THREE.SRGBColorSpace;
+    map.needsUpdate = true;
+    const printed = new Set<keyof ShellMaterials>(['front', 'back', 'left', 'right']);
+    const faces = Object.fromEntries(
+      SHELL_MATERIAL_ORDER.map((name) => {
+        const material = this.faces[name].clone();
+        if (printed.has(name)) material.map = map;
+        return [name, material];
+      }),
+    ) as unknown as ShellMaterials;
+    const cartridge = new Cartridge(this.layout.cartridge);
+    cartridge.setLabel(map);
+    const manual = new Manual(this.layout.manual);
+    manual.setCover(map);
+    const root = new THREE.Group();
+    root.add(new BoxShell(this.layout, faces), cartridge, manual);
+    return root;
+  }
+
   private buildParts(): OpenableParts {
     const parts: OpenableParts = {
       shell: new BoxShell(this.layout, this.faces),
@@ -405,6 +573,11 @@ export class GameBox extends THREE.Mesh<THREE.BoxGeometry, THREE.Material[]> imp
     const contents = this.parts ? [...this.parts.cartridge.material, ...this.parts.manual.material] : [];
     return [...SHELL_MATERIAL_ORDER.map((name) => this.faces[name]), this.closed.material, ...contents];
   }
+}
+
+/** Slow start, slow finish: a box eased out of its row and into its new place. */
+function easeInOut(t: number): number {
+  return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
 }
 
 /** Darker shade of the accent for the inside of the box, lifted a little so black covers do not give a black hole. */

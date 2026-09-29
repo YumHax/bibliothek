@@ -14,3 +14,6 @@ export const BUS_DWELL = STREET_PLAN.bus.stop.dwell;
 
 /** Game hours the bin lorry does its morning round between. */
 export const BIN_ROUND_HOURS = STREET_PLAN.binLorry.hours;
+
+/** How many of the cars setting off are taxis (yellow, a lit sign on the roof), and their paint. */
+export const TAXI = { share: 0.18, paint: 0xe8b820 } as const;

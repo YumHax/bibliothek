@@ -1,6 +1,6 @@
 import type { GameBox } from '../GameBox';
 import type { Shelving } from './Shelving';
-import type { SortMode } from './sort';
+import { nextSortMode, type SortMode } from './sort';
 
 /**
  * Several Shelvings seen as one by the session: every zone handle's `shelving` (the collection
@@ -31,8 +31,11 @@ export class ShelvingGroup {
 
   cycleSort(): SortMode {
     const [first, ...rest] = this.members;
-    const mode = first!.cycleSort();
-    for (const shelving of rest) shelving.setSort(mode);
+    const mode = nextSortMode(first!.sortMode);
+    // The others take the mode first: the leader's new overflow rebuilds them once, already in it.
+    for (const shelving of rest) shelving.presetSort(mode);
+    first!.setSort(mode);
+    for (const shelving of rest) if (shelving.sortShown !== mode) shelving.rebuild();
     return mode;
   }
 }

@@ -4,16 +4,13 @@ import type { CollectionStore } from '@/collection/CollectionStore';
 import type { Fame } from '@/economy/Fame';
 import type { Transactions } from '@/economy/Transactions';
 import type { Wallet } from '@/economy/Wallet';
-import { buyBackPrice, describeCondition } from '@/economy/pricing';
+import { CONFIRM_MS, buyBackPrice, describeCondition } from '@/economy/pricing';
 import { playCoins } from '@/audio/coins';
 import { escapeHtml } from './html';
 import { ModalPanel } from './ModalPanel';
 import { rememberFocus } from './rememberFocus';
 import './CataloguePanel.css';
 import './SellPanel.css';
-
-/** A click on "Sell" arms the row for this long; a second click within it sells. */
-const CONFIRM_MS = 4000;
 
 export interface SellPanelOptions {
   /** Front cover image for a game (a thumbnail per row). */
@@ -123,6 +120,7 @@ export class SellPanel extends ModalPanel {
         <span class="catalogue__title">${escapeHtml(game.title)}</span>
         ${state ? `<span class="catalogue__meta">${escapeHtml(state)}</span>` : ''}
         <span class="catalogue__meta">${escapeHtml(getPlatform(game.platform).shortName)}</span>
+        ${game.acquired && game.acquired.price > 0 ? `<span class="catalogue__meta">paid ${game.acquired.price}</span>` : ''}
         ${this.priceAndButton(game)}
       </div>`;
   }

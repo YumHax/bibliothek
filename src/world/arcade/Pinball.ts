@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import type { Updatable } from '@/core/Engine';
 import type { Interactable, LabelPlacement } from '@/interaction/Interactable';
-import type { ArcadeMachineLike, ArcadeResult, SessionActions } from '@/game/SessionActions';
+import type { ArcadeBonus, ArcadeMachineLike, ArcadeResult, SessionActions } from '@/game/SessionActions';
 import { actionKeyLabel } from '@/ui/keys';
 import { ChipSpeaker, type Sfx } from '@/audio/ChipSpeaker';
 import { createCanvas, seededRandom, toTexture } from '@/covers/generated/canvasUtils';
@@ -17,6 +17,7 @@ import type { ScoreTable } from './scoreTable';
 import type { TicketMachineWiring } from './TicketMachine';
 import { MachineRun, type MachineState } from './MachineRun';
 import { CHROME, type MachineDisplay, displayScreen, outOfOrderNote } from './machineParts';
+import { QUALITY } from '@/graphics/quality';
 
 export interface PinballOptions {
   /** The table's name, on the backglass. Default METEOR ALLEY. */
@@ -160,7 +161,7 @@ export class Pinball extends THREE.Group implements Furniture, Interactable, Upd
     field.rotation.x = -Math.PI / 2;
     field.position.set(0, FIELD_Y, 0.01);
     deck.add(field);
-    const glass = new THREE.Mesh(new THREE.PlaneGeometry(FIELD_W, FIELD_L), standard({ color: 0xdde8ee, roughness: 0.05, metalness: 0.1, transparent: true, opacity: 0.12, depthWrite: false }));
+    const glass = new THREE.Mesh(new THREE.PlaneGeometry(FIELD_W, FIELD_L), standard({ color: 0xdde8ee, roughness: 0.05, metalness: 0, transparent: true, opacity: 0.12, depthWrite: false }));
     glass.rotation.x = -Math.PI / 2;
     glass.position.set(0, BODY_H / 2 + 0.002, 0.01);
     glass.castShadow = false;
@@ -227,7 +228,7 @@ export class Pinball extends THREE.Group implements Furniture, Interactable, Upd
     // The backbox standing on the back end, its lit backglass facing the player.
     const backTop = FRONT_TOP + RISE;
     this.add(boxMesh(BODY_W, BACKBOX_H, BACKBOX_D, body, { y: backTop + BACKBOX_H / 2, z: -BODY_L / 2 + BACKBOX_D / 2 }));
-    this.backglass = displayScreen([448, 512], [BODY_W - 0.06, BACKBOX_H - 0.08], { anisotropy: 4, color: 0xcccccc });
+    this.backglass = displayScreen([448, 512], [BODY_W - 0.06, BACKBOX_H - 0.08], { anisotropy: QUALITY.anisotropy, color: 0xcccccc });
     const backglass = this.backglass.mesh;
     backglass.position.set(0, backTop + BACKBOX_H / 2, -BODY_L / 2 + BACKBOX_D + WALL.notice.lift);
     this.add(backglass);
@@ -273,6 +274,18 @@ export class Pinball extends THREE.Group implements Furniture, Interactable, Upd
 
   get outOfOrder(): boolean {
     return this.run.outOfOrder;
+  }
+
+  get canReplay(): boolean {
+    return this.run.canReplay;
+  }
+
+  pause(paused: boolean): void {
+    this.run.setPaused(paused);
+  }
+
+  showBonus(bonuses: readonly ArcadeBonus[]): void {
+    this.run.showBonus(bonuses);
   }
 
   start(onOver: (result: ArcadeResult) => void): void {
@@ -323,7 +336,7 @@ export class Pinball extends THREE.Group implements Furniture, Interactable, Upd
   }
 
   label(): string {
-    return this.run.label({ attract: `Pinball · ${this.title} — click to insert a coin (${this.run.priceText()})`, playing: `Press ${actionKeyLabel('walkAway')} or click to walk away (the game is lost)` });
+    return this.run.label({ attract: `Pinball · ${this.title} · insert a coin (${this.run.priceText()})`, playing: `Pinball · ${actionKeyLabel('walkAway')} or a click walks away (the game is lost)` });
   }
 
   labelPlacement(): LabelPlacement {
@@ -337,8 +350,10 @@ export class Pinball extends THREE.Group implements Furniture, Interactable, Upd
   // --- Updatable ------------------------------------------------------------------------------
 
   update(dt: number): void {
-    this.clock += dt;
     this.speaker.follow();
+    // The pointer went free mid-play: the ball hangs where it is until it is locked again.
+    if (this.run.paused) return;
+    this.clock += dt;
     this.run.update(dt);
     switch (this.state) {
       case 'playing': {
@@ -480,10 +495,11 @@ export class Pinball extends THREE.Group implements Furniture, Interactable, Upd
       drawText(ctx, format(score), W / 2, H * 0.5 + 76, 34, '#ff8a3a');
       const blink = Math.floor(this.clock * 3) % 2 === 0;
       if (this.state === 'over') {
-        drawText(ctx, `${this.run.shownTickets} TICKETS`, W / 2, H * 0.8, 22, '#ffd23a');
-        const note = lastRank !== null ? `${ordinal(lastRank + 1)} ON THE BOARD!` : last.best ? 'NEW BEST!' : 'GAME OVER';
+        // Every ticket counted so far, the bonuses' (challenge, medal...) too.
+        drawText(ctx, `${this.run.shownTotal} TICKETS`, W / 2, H * 0.8, 22, '#ffd23a');
+        const note = lastRank !== null ? `${ordinal(lastRank + 1)} ON THE BOARD!` : last.best ? 'NEW BEST!' : last.first ? 'FIRST SCORE!' : 'GAME OVER';
         drawText(ctx, note, W / 2, H * 0.87, 16, blink ? '#7ee787' : '#ffffff');
-        drawText(ctx, `SPACE: AGAIN (${this.run.priceText().toUpperCase()})`, W / 2, H * 0.94, 12, '#ffd6a0');
+        if (this.run.canReplay) drawText(ctx, `${actionKeyLabel('fire').toUpperCase()}: AGAIN (${this.run.priceText().toUpperCase()})`, W / 2, H * 0.94, 12, '#ffd6a0');
       } else if (this.state === 'attract') {
         drawText(ctx, 'GAME OVER', W / 2, H * 0.82, 20, '#ff4a4a');
         if (blink) drawText(ctx, 'INSERT COIN', W / 2, H * 0.9, 16, '#ffd6a0');

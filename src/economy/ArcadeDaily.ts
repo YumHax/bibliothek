@@ -1,6 +1,6 @@
 import { KEYS, PersistedStore } from '@/persistence';
 import { dayKey, fromUtcDayKey } from './calendar';
-import { CHALLENGE_REWARD, CHANGE_MACHINE, OUT_OF_ORDER_ODDS } from './pricing';
+import { CHALLENGE_BAND, CHALLENGE_REWARD, CHANGE_MACHINE, OUT_OF_ORDER_ODDS } from './pricing';
 import { rivalScore } from './rivals';
 import { seeded } from './seeded';
 
@@ -31,8 +31,8 @@ export interface ArcadeDailyOptions {
 
 /**
  * What changes at the arcade from one day to the next, the same for everyone all day (seeded by the
- * date, like the market's stock): the challenge (a game, a target around the table's third score,
- * a bonus in tickets, paid once) and whether the dead change machine works today (then it gives a
+ * date, like the market's stock): the challenge (a game, a target between the table's fourth and
+ * second score, the pinball's fifth and third: `CHALLENGE_BAND`; a bonus in tickets, paid once) and whether the dead change machine works today (then it gives a
  * few coins, once). What was claimed is persisted by date.
  */
 export class ArcadeDaily {
@@ -60,9 +60,10 @@ export class ArcadeDaily {
     const day = this.today();
     const rng = seeded(`${day}:challenge`);
     const gameId = this.games[Math.floor(rng() * this.games.length)] ?? 'stacker';
-    // Somewhere between the table's fourth and second score, rounded like a sign would say it.
-    const low = rivalScore(gameId, 3);
-    const high = rivalScore(gameId, 1);
+    // Somewhere in the game's band of its starting table (most: the fourth to the second score), rounded like a sign would say it.
+    const band = CHALLENGE_BAND[gameId] ?? CHALLENGE_BAND.default;
+    const low = rivalScore(gameId, band.low);
+    const high = rivalScore(gameId, band.high);
     const raw = low + (high - low) * rng();
     const step = raw >= 10000 ? 1000 : raw >= 1000 ? 100 : 10;
     const target = Math.round(raw / step) * step;

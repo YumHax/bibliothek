@@ -41,7 +41,7 @@ const RULES = [
     name: 'light visibility',
     // Hiding a light changes the scene's light count and recompiles every lit shader.
     test: (line) => /\b(light|bulb|lamp|glow)\w*\.visible\s*=/i.test(line) && !/mesh|Mesh|shade|Shade|glass|Glass|lens|Lens|halo|Halo|pool|Pool/.test(line),
-    except: ['world/lighting/keepLights.ts'],
+    except: ['world/lighting/keepLights.ts', 'world/lighting/LightCuller.ts'],
     hint: 'dim it (intensity = 0) or hide its lamp with setShownKeepingLights (world/lighting/keepLights)',
   },
 ];

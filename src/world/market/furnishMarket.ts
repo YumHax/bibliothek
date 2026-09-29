@@ -79,7 +79,7 @@ export function furnishMarket(zone: Zone, context: BuildContext): ZoneHandle {
   zone.place(new Vendor({ viewer: listener, seed: 31, ...plan.clerks.counter, focus: [0, 1.05, 0.4] }), behind(counter, plan.counter.clerkAt), counter.rotation.y);
   zone.place(new Vendor({ viewer: listener, seed: 37, ...plan.clerks.buyBack, focus: [0.3, 1.05, 0.4] }), behind(buyBack, plan.buyBack.clerkAt), buyBack.rotation.y);
 
-  zone.placeAt(new TravelDoor({ style: 'glazed', label: 'Click to go out to the street', to: 'street' }), plan.exit);
+  zone.placeAt(new TravelDoor({ style: 'glazed', shopfront: true, ...plan.door, label: 'Front Street · go out', to: 'street' }), plan.exit);
   placeDecor(zone, plan.decor);
   const bin = zone.placeAt(new BargainBin({ price: market.binPrice }), plan.bin);
 
@@ -92,7 +92,7 @@ export function furnishMarket(zone: Zone, context: BuildContext): ZoneHandle {
   const stalls: FloorStall[] = PLATFORM_LIST.map((platform, i) => {
     const spot = plan.stalls[i]!;
     const stall = zone.placeAt(buildStall(spot.style, { sign: platform.name, cloth: spot.cloth, accent: platform.accentColor, seed: i + 1 }), spot.at);
-    const vendor = zone.place(new Vendor({ viewer: listener, lines: () => floor.linesAt(entry), seed: i + 1, callOuts: callOuts(platform.shortName) }), behind(stall, stall.vendorAt), stall.rotation.y);
+    const vendor = zone.place(new Vendor({ viewer: listener, lines: () => floor.linesAt(entry), seed: i + 1, callOuts: callOuts(platform.shortName), label: 'The stallholder · chat' }), behind(stall, stall.vendorAt), stall.rotation.y);
     const pennant = stall.pennantAt ? zone.place(new WishPennant(i + 1), onTop(stall, stall.pennantAt), stall.rotation.y) : null;
     if (pennant) pennant.visible = false;
     const entry: FloorStall = { index: i, platform, stall, vendor, boxes: new Set(), sold: 0, pennant };
@@ -117,7 +117,7 @@ export function furnishMarket(zone: Zone, context: BuildContext): ZoneHandle {
   const shopperCount = Math.min(crowd.browseSpots.length - 1, Math.round(crowd.shoppers * (theme.crowd ?? 1)));
   for (let i = 0; i < shopperCount; i++) {
     const x = THREE.MathUtils.lerp(crowd.aisle.x[0], crowd.aisle.x[1], (i + 0.5) / shopperCount);
-    shoppers.push(zone.place(new Shopper({ viewer: listener, spots: crowd.browseSpots, aisle: crowd.aisle, claims, seed: i + 1, speed: 0.65 + i * 0.08 }), new THREE.Vector3(x, 0, crowd.aisle.z), i % 2 ? Math.PI / 2 : -Math.PI / 2));
+    shoppers.push(zone.place(new Shopper({ viewer: listener, spots: crowd.browseSpots, aisle: crowd.aisle, exit: crowd.exit, claims, seed: i + 1, speed: 0.65 + i * 0.08 }), new THREE.Vector3(x, 0, crowd.aisle.z), i % 2 ? Math.PI / 2 : -Math.PI / 2));
   }
 
   // By the way in: where each platform's stall is (a star where a wishlist game waits), and the week.
@@ -126,14 +126,14 @@ export function furnishMarket(zone: Zone, context: BuildContext): ZoneHandle {
 
   // The notice board, and the job lot's crate.
   const noticeBoard = marketHall ? zone.placeAt(new NoticeBoard({
-    label: () => 'Click to read the notice board: wanted cards, private sales, the collectors’ club',
+    label: () => 'The notice board · read (wanted cards, private sales, the collectors’ club)',
     onActivate: (session) => {
       session.openPanel(marketHall.notices);
       floor.refreshNotices();
     },
   }), plan.noticeBoard) : null;
   const lotCrate = marketHall ? zone.placeAt(new LotCrate({
-    label: () => (market.lot.sold ? 'The job lot: sold today' : 'Click to see the job lot: a crate of games sold as one'),
+    label: () => (market.lot.sold ? 'The job lot: sold today' : 'The job lot · look (a crate of games sold as one)'),
     onActivate: (session) => session.openPanel(marketHall.lot),
   }), plan.lot) : null;
 

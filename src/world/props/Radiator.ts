@@ -46,7 +46,7 @@ const CRADLE_APPROACH = 0.22;
 const WHITE_PIPE = paint(0xeeeeea, 0.35);
 const VALVE_HEAD = paint(0xf4f4f2, 0.45);
 const VALVE_RING = paint(0x3b3d40, 0.5);
-const BRASS = standard({ color: 0xbfa36a, metalness: 0.8, roughness: 0.35 });
+const BRASS = standard({ color: 0xbfa36a, metalness: 1, roughness: 0.35 });
 
 /**
  * A radiator under or beside a window: the body on two wall brackets, and at its bottom corners
@@ -75,7 +75,7 @@ export class Radiator extends THREE.Group implements Furniture {
     const lift = options.lift ?? (towel ? 0.35 : 0.12);
     const standoff = options.standoff ?? 0.04;
     const depth = style === 'column' ? 0.075 : style === 'panel' ? 0.07 : 0.035;
-    const body = towel ? CHROME : standard({ color: options.color ?? 0xf1efe8, roughness: 0.4, metalness: 0.05 });
+    const body = towel ? CHROME : standard({ color: options.color ?? 0xf1efe8, roughness: 0.4, metalness: 0 });
     const midZ = standoff + depth / 2;
     const bodyParts: THREE.BufferGeometry[] = [];
     if (style === 'column') this.columns(bodyParts, width, height, lift, midZ);

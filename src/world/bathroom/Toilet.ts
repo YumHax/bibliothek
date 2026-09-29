@@ -9,6 +9,7 @@ import { paint } from '../materials/palette';
 import { PROUD } from '../props/joinery';
 import { ClickSpot } from '../props/ClickSpot';
 import { CERAMIC, CHROME, STILL_WATER, WHITE_PLASTIC } from '../props/bathroomMaterials';
+import { HoverGlint } from '../props/hoverGlint';
 
 export interface ToiletOptions {
   /** A roll holder on the wall beside it (local +x) and a brush on the floor on the other side. Default true. */
@@ -69,6 +70,7 @@ export class Toilet extends THREE.Group implements Furniture, Interactable, Upda
   /** The click target on the seat that lifts and lowers the lid. */
   readonly lidSpot: ClickSpot;
   private readonly button: THREE.Mesh;
+  private readonly glint: HoverGlint;
   private readonly lid = new THREE.Group();
   private readonly water: THREE.Mesh;
   private readonly flushSeconds: number;
@@ -81,6 +83,7 @@ export class Toilet extends THREE.Group implements Furniture, Interactable, Upda
     this.name = 'Toilet';
     this.flushSeconds = options.flushSeconds ?? 8;
     this.button = this.buildCistern();
+    this.glint = HoverGlint.of(this.button);
     this.water = this.buildPan();
     if (options.accessories ?? true) this.buildAccessories();
 
@@ -89,7 +92,7 @@ export class Toilet extends THREE.Group implements Furniture, Interactable, Upda
     this.hitboxes = [hitbox];
     this.lidSpot = new ClickSpot({
       size: [0.38, 0.1, 0.44],
-      label: () => (this.lidTarget > 0 ? 'Click to put the lid down' : 'Click to lift the lid'),
+      label: () => (this.lidTarget > 0 ? 'Toilet lid · put down' : 'Toilet lid · lift'),
       onClick: () => (this.lidTarget = this.lidTarget > 0 ? 0 : 1),
     });
     this.lidSpot.position.set(0, PAN_H + 0.05, PAN_Z + 0.02);
@@ -117,10 +120,13 @@ export class Toilet extends THREE.Group implements Furniture, Interactable, Upda
 
   // --- Interactable -------------------------------------------------------------------------
 
-  setHovered(_hovered: boolean): void {}
+  /** The chrome flush button glints (the one cue the flat's fittings share, `HoverGlint`). */
+  setHovered(hovered: boolean): void {
+    this.glint.set(hovered);
+  }
 
   label(): string | null {
-    return this.flushLeft > 0 ? 'The cistern is refilling' : 'Click to flush';
+    return this.flushLeft > 0 ? 'The cistern is refilling' : 'Toilet · flush';
   }
 
   activate(_session: SessionActions): void {

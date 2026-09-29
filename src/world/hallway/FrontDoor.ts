@@ -54,9 +54,9 @@ export class FrontDoor extends Door {
 
   override label(): string {
     const caller = this.isOpen ? null : this.visitors?.caller();
-    if (caller) return `Open the door to ${caller}`;
-    if (!this.isOpen) return (this.fromInside() ? this.frontOptions.guard()?.label : null) ?? 'Click to open the front door';
-    return 'Click to close the front door';
+    if (caller) return `Front door · open to ${caller}`;
+    if (!this.isOpen) return (this.fromInside() ? this.frontOptions.guard()?.label : null) ?? 'Front door · open';
+    return 'Front door · close';
   }
 
   override activate(session: SessionActions): void {

@@ -4,8 +4,11 @@ import { CrowdMurmur } from '@/audio/CrowdMurmur';
 import type { OccupancyAware } from '../Furniture';
 import { Prop } from '../props/Prop';
 
-/** Murmur level while the player is in the hall (the market's is louder: this is a quieter crowd), empty to full. */
-const MURMUR: [quiet: number, busy: number] = [0.22, 0.5];
+/**
+ * Murmur level while the player is in the hall (the market's is louder: this is a quieter crowd): silent with nobody
+ * in, then up quickly with the first regulars (a square root), to `full` with all of them in.
+ */
+const MURMUR = { full: 0.5 };
 /** The machines' power supplies and the neon ballasts: a low mains hum, linear level. */
 const HUM: [frequency: number, level: number][] = [
   [100, 0.012],
@@ -18,7 +21,7 @@ const HUM: [frequency: number, level: number][] = [
  * (`CrowdMurmur`, kept low) and the hum of forty power supplies and a lot of neon. Runs only while
  * the player is in the arcade (`setOccupied`), and only once a gesture has started the page's
  * audio (it never starts it). The murmur follows how busy the hall is (`busy`, 0..1: the evening
- * crowd is louder than the morning's). An empty `Prop`; place anywhere in the zone.
+ * crowd is louder than the morning's, an empty hall only hums). An empty `Prop`; place anywhere in the zone.
  */
 export class ArcadeAmbience extends Prop implements Updatable, OccupancyAware {
   private readonly murmur = new CrowdMurmur();
@@ -43,7 +46,8 @@ export class ArcadeAmbience extends Prop implements Updatable, OccupancyAware {
   }
 
   private murmurLevel(): number {
-    return MURMUR[0] + (MURMUR[1] - MURMUR[0]) * Math.min(1, Math.max(0, this.busy()));
+    const busy = this.busy();
+    return Number.isFinite(busy) ? MURMUR.full * Math.sqrt(Math.min(1, Math.max(0, busy))) : 0;
   }
 
   dispose(): void {

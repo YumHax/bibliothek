@@ -3,6 +3,7 @@ import { cylinderMesh, invisibleHitbox } from '../meshUtils';
 import { standard } from '../materials/palette';
 import { part } from './Prop';
 import { SwitchableLamp } from './SwitchableLamp';
+import { LAMP_GLOW, LAMP_LIGHT } from '../lighting/lampColours';
 
 export interface WallSconceOptions {
   /** Intensity of its (shadow-less) spot. Default 2.5. */
@@ -22,9 +23,8 @@ const SHADE_Y = -0.02;
 const SHADE_R = 0.065;
 const SHADE_H = 0.11;
 const GLOW = 1.2;
-const HOVER_GLOW = 0.3;
 
-const BRASS = standard({ color: 0xb8955a, metalness: 0.85, roughness: 0.35 });
+const BRASS = standard({ color: 0xb8955a, metalness: 1, roughness: 0.38 });
 
 /**
  * A brass wall light: a round back plate, a swan-neck arm and an opal tulip shade opening down,
@@ -55,7 +55,7 @@ export class WallSconce extends SwitchableLamp {
     const drop = cylinderMesh(0.006, 0.05, BRASS, { y: 0.015, z: ARM }, { segments: 8 });
     const collar = cylinderMesh(0.018, 0.02, BRASS, { y: SHADE_Y + SHADE_H / 2 + 0.005, z: ARM }, { segments: 12 });
     part(this, 0.012, 0.03, 0.012, BRASS, { y: 0.04, z: 0.012 });
-    this.opal = new THREE.MeshStandardMaterial({ color: 0xf8f2e6, emissive: 0xffdcaa, emissiveIntensity: 0, roughness: 0.5, side: THREE.DoubleSide });
+    this.opal = new THREE.MeshStandardMaterial({ color: 0xf8f2e6, emissive: LAMP_GLOW.incandescent, emissiveIntensity: 0, roughness: 0.5, side: THREE.DoubleSide });
     const shade = new THREE.Mesh(new THREE.CylinderGeometry(0.02, SHADE_R, SHADE_H, 20, 1, true), this.opal);
     shade.position.set(0, SHADE_Y, ARM);
     for (const m of [plate, arm, drop, collar, shade]) {
@@ -64,7 +64,7 @@ export class WallSconce extends SwitchableLamp {
     }
     this.add(plate, arm, drop, collar, shade);
 
-    this.light = new THREE.SpotLight(0xffd9a8, 0, options.reach ?? 1.4, CONE, 0.7, 2);
+    this.light = new THREE.SpotLight(LAMP_LIGHT.incandescent, 0, options.reach ?? 1.4, CONE, 0.7, 2);
     this.light.castShadow = false;
     this.light.position.set(0, SHADE_Y - SHADE_H * 0.2, ARM);
     this.light.target.position.set(0, this.light.position.y - Math.cos(CONE), ARM + Math.sin(CONE));
@@ -81,8 +81,9 @@ export class WallSconce extends SwitchableLamp {
     this.onSwitch?.(on);
   }
 
-  protected render(on: boolean, hovered: boolean): void {
-    this.light.intensity = on ? this.intensity : 0;
-    this.opal.emissiveIntensity = (on ? GLOW : 0) + (hovered ? HOVER_GLOW : 0);
+  /** Hover glints the brass arm and plate (the base class), never the opal shade. */
+  protected render(level: number): void {
+    this.light.intensity = level * this.intensity;
+    this.opal.emissiveIntensity = level * GLOW;
   }
 }

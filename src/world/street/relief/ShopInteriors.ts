@@ -172,6 +172,13 @@ export class ShopInteriors extends THREE.Mesh implements Furniture, Updatable {
     return new THREE.Box3();
   }
 
+  /** The retro games shop's shelves in `goods` (today's stock colours): the atlas painted afresh. */
+  repaintGoods(goods: readonly string[]): void {
+    const old = this.uniforms.atlas!.value as THREE.Texture;
+    this.uniforms.atlas!.value = paintAtlas(goods);
+    old.dispose();
+  }
+
   update(dt: number): void {
     const s = this.dayNight.state;
     this.uniforms.daylight!.value = s.daylight;

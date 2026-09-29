@@ -1,11 +1,12 @@
 import * as THREE from 'three';
+import { bareMetal } from '../metals';
 import type { Updatable } from '@/core/Engine';
 import { createCanvas, seededRandom, toTexture } from '@/covers/generated/canvasUtils';
 import type { Furniture } from '../../Furniture';
 import type { DayNight } from '../../props/DayNight';
 import type { PaintedFront } from '../Buildings';
 import { isShopOpen } from '../shops/shopHours';
-import type { ShopKind } from '../streetPlan';
+import type { ShopKind, Vec2 } from '../streetPlan';
 import { snowCovered } from '../snowCover';
 import { FacadeFrame } from './facadeFrame';
 
@@ -47,8 +48,10 @@ export class Shutters extends THREE.Group implements Furniture, Updatable {
   private readonly curtain: THREE.Mesh;
   private clock = CHECK_EVERY;
   private rolling = true;
+  private readonly frameMatrix = new THREE.Matrix4();
 
-  constructor(fronts: readonly PaintedFront[], private readonly dayNight: DayNight) {
+  /** `onRoll`: a shutter starts rolling (up or down) at `at` (zone-local, on the pavement before it), for its rattle. */
+  constructor(fronts: readonly PaintedFront[], private readonly dayNight: DayNight, private readonly onRoll?: (at: Vec2) => void) {
     super();
     this.name = 'Shutters';
     const random = seededRandom(4141);
@@ -88,14 +91,14 @@ export class Shutters extends THREE.Group implements Furniture, Updatable {
     geometry.setIndex(index);
     const texture = shutterTexture();
     texture.wrapT = THREE.RepeatWrapping;
-    this.curtain = new THREE.Mesh(geometry, new THREE.MeshStandardMaterial({ map: texture, roughness: 0.55, metalness: 0.45, side: THREE.DoubleSide }));
+    this.curtain = new THREE.Mesh(geometry, new THREE.MeshStandardMaterial({ map: texture, roughness: 0.5, side: THREE.DoubleSide }));
     this.curtain.castShadow = false;
     this.curtain.receiveShadow = true;
     // The corners move: bounds computed now would cull it wrongly.
     this.curtain.frustumCulled = false;
     this.add(this.curtain);
     if (boxes.length) {
-      const merged = new THREE.Mesh(mergeAll(boxes), snowCovered(new THREE.MeshStandardMaterial({ color: 0x7a7e82, roughness: 0.5, metalness: 0.5 })));
+      const merged = new THREE.Mesh(mergeAll(boxes), snowCovered(bareMetal({ color: 0xa4a8ac, roughness: 0.5 })));
       merged.castShadow = true;
       merged.receiveShadow = true;
       this.add(merged);
@@ -120,6 +123,10 @@ export class Shutters extends THREE.Group implements Furniture, Updatable {
         if (target !== s.target) {
           s.target = target;
           this.rolling = true;
+          if (this.onRoll) {
+            const at = new THREE.Vector3().setFromMatrixPosition(s.frame.matrix((s.s0 + s.s1) / 2, 1.5, 0.3, this.frameMatrix));
+            this.onRoll([at.x, at.z]);
+          }
         }
       }
     }

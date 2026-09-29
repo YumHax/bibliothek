@@ -1,15 +1,16 @@
 import { KEYS, PersistedStore } from '@/persistence';
 import { DailyTally } from '@/time/DailyTally';
+import { SCRATCH } from '@/economy/pricing';
 
 /*
  * The newsagent's scratch card, PIXEL SCRATCH: six silver cells, three matching symbols win that
- * symbol's prize. The outcome is drawn first (odds below, a little under the card's price on
+ * symbol's prize. The outcome is drawn first (odds in `SCRATCH`, a little under the card's price on
  * average: the house wins), then the symbols are laid to show it.
  */
 
-/** What a card costs, and how many the tabac sells one player in a (real) day. */
-export const SCRATCH_PRICE = 2;
-export const SCRATCH_PER_DAY = 5;
+/** What a card costs, and how many the tabac sells one player in a (real) day (`SCRATCH` in pricing.ts). */
+export const SCRATCH_PRICE = SCRATCH.price;
+export const SCRATCH_PER_DAY = SCRATCH.perDay;
 
 /** A symbol and the coins three of them pay. */
 export interface ScratchSymbol {
@@ -19,15 +20,15 @@ export interface ScratchSymbol {
 }
 
 export const SYMBOLS: readonly ScratchSymbol[] = [
-  { glyph: '🍒', name: 'cherries', prize: 2 },
-  { glyph: '🎮', name: 'pads', prize: 3 },
-  { glyph: '💾', name: 'cartridges', prize: 5 },
-  { glyph: '⭐', name: 'stars', prize: 10 },
-  { glyph: '7', name: 'sevens', prize: 25 },
+  { glyph: '🍒', name: 'cherries', prize: SCRATCH.prizes[0] },
+  { glyph: '🎮', name: 'pads', prize: SCRATCH.prizes[1] },
+  { glyph: '💾', name: 'cartridges', prize: SCRATCH.prizes[2] },
+  { glyph: '⭐', name: 'stars', prize: SCRATCH.prizes[3] },
+  { glyph: '7', name: 'sevens', prize: SCRATCH.prizes[4] },
 ];
 
 /** Chance of each outcome: a loss, then three of `SYMBOLS[i]` (expected payout 1.35 coins a card). */
-const ODDS = { lose: 0.62, win: [0.2, 0.09, 0.06, 0.025, 0.005] } as const;
+const ODDS = SCRATCH.odds;
 
 export interface ScratchCard {
   /** The six cells, left to right, top to bottom. */

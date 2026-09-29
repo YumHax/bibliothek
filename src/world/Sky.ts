@@ -1,3 +1,4 @@
+import type * as THREE from 'three';
 import type { Updatable } from '@/core/Engine';
 import { DayNight } from './props/DayNight';
 import { localPlace } from './props/solar';
@@ -24,6 +25,8 @@ export interface SkyOptions {
   weather?: WeatherKind;
   /** Latitude the sunrise and sunset are computed for (`?lat=`); default the time zone's city (see `localPlace`). */
   latitude?: number;
+  /** The camera, so the view's moving sprites are placed as it sees them (see `OutdoorsOptions.viewer`). */
+  viewer?: THREE.Object3D;
 }
 
 /**
@@ -50,7 +53,7 @@ export class Sky implements Updatable {
       this.weather.settle();
     }
     this.dayNight.setWeather(this.weather.state);
-    this.outdoors = new Outdoors(this.dayNight, { primaryRotationY: options.sunRotationY, nearWall: options.nearWall, season, holiday: options.holiday });
+    this.outdoors = new Outdoors(this.dayNight, { primaryRotationY: options.sunRotationY, nearWall: options.nearWall, season, holiday: options.holiday, viewer: options.viewer });
   }
 
   update(dt: number): void {

@@ -13,9 +13,11 @@ export interface PigeonsOptions {
   share?: number;
   /** A flock took off from `at` (the flutter of wings, for whoever plays it). */
   onTakeOff?: (at: Vec2) => void;
+  /** Everyone else in the street (zone-local, a live list): those on the move scare the birds as the player does (not someone sitting or standing). */
+  walkers?: readonly { readonly position: THREE.Vector3; readonly isPresent: boolean; readonly isWalking: boolean }[];
 }
 
-/** A pigeon takes off when the player comes this close; its flockmates this close to it follow. */
+/** A pigeon takes off when the player (or a passer-by) comes this close; its flockmates this close to it follow. */
 const SCARE = 3;
 const SPREAD = 2.2;
 /** How far round its flock's spot a pigeon pecks, and how far away it may land. */
@@ -25,6 +27,10 @@ const LAND_MAX = 14;
 const FLIGHT_SPEED = 7;
 const GREYS = [0x8a8e96, 0x7a7e86, 0x9a9ca2, 0x6a6e76, 0xb0aca4, 0x5a5650];
 const HIDDEN = new THREE.Matrix4().makeScale(0, 0, 0);
+/** Below this daylight they fly up to roost on the roofs' edges (and come down again above it). */
+const ROOST_BELOW = 0.12;
+/** Where they roost: this high, on the building line over their pavement, spread along it. */
+const ROOST = { y: 15.5, line: 12.4, spread: 6 };
 
 interface Bird {
   flock: number;
@@ -44,13 +50,18 @@ interface Bird {
   hopTo: [number, number];
   hopT: number;
   peck: number;
+  /** Up on the roofs for the night: not drawn. */
+  gone: boolean;
+  /** This flight goes up to roost (it is gone once there). */
+  roosting: boolean;
 }
 
 /**
  * Pigeons pecking about the pavement in little flocks: each bird bobs its head at the ground,
  * hops a step now and then, turns; when the player comes within `SCARE` metres it takes off, its
  * flockmates in a ripple after it, and the flock flies off in an arc (wings beating) to land a way
- * along the pavement, clear of the player, where it goes on pecking. Gone to roost at night. One
+ * along the pavement, clear of the player, where it goes on pecking. At dusk every flock takes off
+ * towards the roofs' edges and is gone once up there (`onTakeOff` rings their wings), down again at dawn. One
  * instanced mesh for the bodies, one for the wings (two per bird): two draw calls for them all.
  */
 export class Pigeons extends THREE.Group implements Furniture, Updatable {
@@ -60,6 +71,8 @@ export class Pigeons extends THREE.Group implements Furniture, Updatable {
   private readonly wings: THREE.InstancedMesh;
   private readonly spots: THREE.Vector3[];
   private readonly eye = new THREE.Vector3();
+  /** This frame's scarers (the player's eye first, then every present walker), x and z pairs: filled once a frame. */
+  private readonly scarers: number[] = [];
   private readonly pose = new THREE.Matrix4();
   private readonly turn = new THREE.Quaternion();
   private readonly euler = new THREE.Euler(0, 0, 0, 'YXZ');
@@ -68,6 +81,10 @@ export class Pigeons extends THREE.Group implements Furniture, Updatable {
   private readonly lift = new THREE.Matrix4();
   private readonly wingOffset = new THREE.Matrix4();
   private time = 0;
+  /** Whether it is roosting time (dusk to dawn): the flocks are on their way up, or up. */
+  private roosted = false;
+  /** Just (re)activated: at night the birds are already up there, by day already down. */
+  private fresh = true;
 
   constructor(private readonly dayNight: DayNight, private readonly options: PigeonsOptions) {
     super();
@@ -79,7 +96,7 @@ export class Pigeons extends THREE.Group implements Furniture, Updatable {
         const [x, z] = [at[0] + (Math.random() - 0.5) * 2 * FORAGE, at[1] + (Math.random() - 0.5) * FORAGE];
         this.birds.push({
           flock, x, z, y: 0, yaw: Math.random() * Math.PI * 2, flying: false, from: new THREE.Vector3(), to: new THREE.Vector3(), t: 0, duration: 1,
-          startle: -1, hop: 1 + Math.random() * 4, hopFrom: [x, z], hopTo: [x, z], hopT: 1, peck: Math.random() * 10,
+          startle: -1, hop: 1 + Math.random() * 4, hopFrom: [x, z], hopTo: [x, z], hopT: 1, peck: Math.random() * 10, gone: false, roosting: false,
         });
       }
     });
@@ -104,19 +121,90 @@ export class Pigeons extends THREE.Group implements Furniture, Updatable {
     return new THREE.Box3();
   }
 
+  setZoneActive(active: boolean): void {
+    if (active) this.fresh = true;
+  }
+
   update(dt: number): void {
     this.time += dt;
-    // Off to roost at night.
-    const out = this.dayNight.state.daylight > 0.12;
-    this.visible = out;
-    if (!out) return;
+    // Off to roost at dusk: each flock takes off in its ripple towards the roofs, and is gone once up there; down again at dawn.
+    const night = this.dayNight.state.daylight <= ROOST_BELOW;
+    if (this.fresh) {
+      this.fresh = false;
+      this.roosted = night;
+      for (const bird of this.birds) {
+        bird.gone = night;
+        bird.flying = false;
+        bird.startle = -1;
+      }
+    } else if (night !== this.roosted) {
+      this.roosted = night;
+      if (night) this.flyUp();
+      else this.comeDown();
+    }
+    const anyone = this.birds.some((b) => !b.gone);
+    this.visible = anyone;
+    if (!anyone) return;
     this.options.viewer.getWorldPosition(this.eye);
     this.worldToLocal(this.eye);
+    this.scarers.length = 0;
+    this.scarers.push(this.eye.x, this.eye.z);
+    for (const walker of this.options.walkers ?? []) if (walker.isPresent && walker.isWalking) this.scarers.push(walker.position.x, walker.position.z);
     for (const bird of this.birds) {
+      if (bird.gone) continue;
       if (bird.flying) this.fly(bird, dt);
-      else this.forage(bird, dt);
+      else if (this.roosted) {
+        // Waiting for its turn in the ripple up.
+        if (bird.startle >= 0 && (bird.startle -= dt) < 0) this.takeOffToRoost(bird);
+      } else this.forage(bird, dt);
     }
     this.draw();
+  }
+
+  /** Dusk: every flock goes up in a ripple, one wing-clatter per flock. */
+  private flyUp(): void {
+    const told = new Set<number>();
+    for (const bird of this.birds) {
+      if (bird.gone) continue;
+      if (!told.has(bird.flock)) {
+        told.add(bird.flock);
+        this.options.onTakeOff?.([bird.x, bird.z]);
+      }
+      if (!bird.flying) bird.startle = Math.random() * 1.2;
+      else bird.roosting = true;
+    }
+  }
+
+  private takeOffToRoost(bird: Bird): void {
+    bird.startle = -1;
+    bird.flying = true;
+    bird.roosting = true;
+    bird.from.set(bird.x, bird.y, bird.z);
+    const side = Math.sign(bird.z) || 1;
+    bird.to.set(bird.x + (Math.random() - 0.5) * 2 * ROOST.spread, ROOST.y + Math.random() * 2, side * ROOST.line);
+    bird.duration = Math.max(1.6, bird.from.distanceTo(bird.to) / FLIGHT_SPEED);
+    bird.t = 0;
+    bird.yaw = Math.atan2(bird.to.x - bird.x, bird.to.z - bird.z);
+  }
+
+  /** Dawn: down from the roofs onto their flock's spot. */
+  private comeDown(): void {
+    for (const bird of this.birds) {
+      const spot = this.spots[bird.flock]!;
+      const side = Math.sign(spot.z) || 1;
+      bird.gone = false;
+      bird.roosting = false;
+      bird.startle = -1;
+      bird.flying = true;
+      bird.from.set(spot.x + (Math.random() - 0.5) * 2 * ROOST.spread, ROOST.y, side * ROOST.line);
+      bird.to.set(spot.x + (Math.random() - 0.5) * 2 * FORAGE, 0, spot.z + (Math.random() - 0.5) * FORAGE);
+      bird.x = bird.from.x;
+      bird.y = bird.from.y;
+      bird.z = bird.from.z;
+      bird.duration = Math.max(1.6, bird.from.distanceTo(bird.to) / FLIGHT_SPEED) + Math.random();
+      bird.t = 0;
+      bird.yaw = Math.atan2(bird.to.x - bird.x, bird.to.z - bird.z);
+    }
   }
 
   private forage(bird: Bird, dt: number): void {
@@ -125,7 +213,7 @@ export class Pigeons extends THREE.Group implements Furniture, Updatable {
       if (bird.startle < 0) this.takeOff(bird);
       return;
     }
-    if (Math.hypot(this.eye.x - bird.x, this.eye.z - bird.z) < SCARE) {
+    if (this.scared(bird)) {
       this.scare(bird);
       return;
     }
@@ -149,6 +237,17 @@ export class Pigeons extends THREE.Group implements Furniture, Updatable {
       bird.y = Math.sin(bird.hopT * Math.PI) * 0.06;
     } else bird.y = 0;
     bird.peck += dt;
+  }
+
+  /** Whether the player or anyone walking is within `SCARE` of this bird. */
+  private scared(bird: Bird): boolean {
+    const s = this.scarers;
+    for (let i = 0; i < s.length; i += 2) {
+      const dx = s[i]! - bird.x;
+      const dz = s[i + 1]! - bird.z;
+      if (dx * dx + dz * dz < SCARE * SCARE) return true;
+    }
+    return false;
   }
 
   /** This bird and its flockmates close by take off, one after another. */
@@ -183,7 +282,13 @@ export class Pigeons extends THREE.Group implements Furniture, Updatable {
     const t = bird.t;
     bird.x = THREE.MathUtils.lerp(bird.from.x, bird.to.x, t);
     bird.z = THREE.MathUtils.lerp(bird.from.z, bird.to.z, t);
-    bird.y = Math.sin(t * Math.PI) * (2.2 + bird.duration * 0.6);
+    // Up (or down) to where it lands, in an arc over the straight line.
+    bird.y = THREE.MathUtils.lerp(bird.from.y, bird.to.y, t) + Math.sin(t * Math.PI) * (2.2 + bird.duration * 0.6);
+    if (t >= 1 && bird.roosting) {
+      bird.flying = false;
+      bird.gone = true;
+      return;
+    }
     if (t >= 1) {
       bird.flying = false;
       bird.y = 0;
@@ -200,8 +305,9 @@ export class Pigeons extends THREE.Group implements Furniture, Updatable {
       this.turn.setFromEuler(this.euler);
       this.spot.set(bird.x, bird.y, bird.z);
       this.pose.compose(this.spot, this.turn, this.unit);
+      if (bird.gone) this.pose.copy(HIDDEN);
       this.bodies.setMatrixAt(i, this.pose);
-      if (!bird.flying) {
+      if (!bird.flying || bird.gone) {
         this.wings.setMatrixAt(2 * i, HIDDEN);
         this.wings.setMatrixAt(2 * i + 1, HIDDEN);
         return;

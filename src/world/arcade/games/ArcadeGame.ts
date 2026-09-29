@@ -55,6 +55,8 @@ export interface ArcadeGame {
    * demo on the attract screen, no replay, no regular takes it. Default true.
    */
   readonly demoable?: boolean;
+  /** The play ended with nothing reported through no fault of the player's (LexiPunk's page sent no score): the coin goes back. */
+  readonly unreported?: boolean;
   /** A two-player game: who holds the second stick ('CPU' when nobody does) and how well they play (0..1). */
   setOpponent?(name: string, skill: number): void;
   /** What the second player's hands are doing this frame (the cabinet's second stick follows it). */

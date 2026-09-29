@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { mergeGeometries, toCreasedNormals } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { VEHICLES } from '../city/vehicles';
 
 /** A small hatchback at real scale (`city/vehicles`), nose to +x, wheels on y = 0, centred. */
@@ -33,9 +33,16 @@ export interface CarGeometries {
   lamps: THREE.BufferGeometry;
 }
 
+/** Steps round a body's bevel: with creased normals (`finish`) the edges read rounded, not chamfered. */
+const BEVEL_SEGMENTS = 3;
+/** Faces meeting at less than this share their normals (the bevels, the tyre's shoulders); sharper edges stay sharp. */
+const CREASE = THREE.MathUtils.degToRad(38);
+/** Round a tyre: enough that its silhouette reads round from a pavement away. */
+const TYRE_SEGMENTS = 20;
+
 function prism(points: [number, number][], width: number, bevel: number): THREE.BufferGeometry {
   const shape = new THREE.Shape(points.map(([x, y]) => new THREE.Vector2(x, y)));
-  const g = new THREE.ExtrudeGeometry(shape, { depth: width - 2 * bevel, bevelEnabled: bevel > 0, bevelThickness: bevel, bevelSize: bevel, bevelSegments: 1, curveSegments: 1 });
+  const g = new THREE.ExtrudeGeometry(shape, { depth: width - 2 * bevel, bevelEnabled: bevel > 0, bevelThickness: bevel, bevelSize: bevel, bevelSegments: BEVEL_SEGMENTS, curveSegments: 1 });
   g.translate(0, 0, -(width - 2 * bevel) / 2);
   g.clearGroups();
   return g;
@@ -54,14 +61,38 @@ function block(w: number, h: number, d: number, x: number, y: number, z: number)
   return plain(new THREE.BoxGeometry(w, h, d).translate(x, y, z));
 }
 
+/**
+ * A tyre turned on a lathe, axis along z: tread, rounded shoulders into the sidewalls, and the
+ * sidewall running in to the rim, with a recessed dark wheel disc. Keeps its own smooth normals.
+ */
+function tyre(radius: number, width: number): THREE.BufferGeometry {
+  const half = width / 2;
+  const fillet = Math.min(0.045, width * 0.22, radius * 0.18);
+  const rim = radius * 0.64;
+  const profile: THREE.Vector2[] = [new THREE.Vector2(rim, -half + 0.012)];
+  const shoulder = (cx: number, cy: number, from: number): void => {
+    for (let i = 0; i <= 4; i++) {
+      const a = from + (i / 4) * (Math.PI / 2);
+      profile.push(new THREE.Vector2(cx + Math.cos(a) * fillet, cy + Math.sin(a) * fillet));
+    }
+  };
+  shoulder(radius - fillet, -half + fillet, -Math.PI / 2);
+  shoulder(radius - fillet, half - fillet, 0);
+  profile.push(new THREE.Vector2(rim, half - 0.012));
+  // The lathe turns about y and faces outward for a profile going up the outside (+y): the tyre's axis becomes z.
+  const lathe = new THREE.LatheGeometry(profile, TYRE_SEGMENTS).rotateX(Math.PI / 2);
+  const disc = new THREE.CylinderGeometry(rim, rim, width - 0.05, TYRE_SEGMENTS).rotateX(Math.PI / 2);
+  return mergeGeometries([plain(lathe), plain(disc)])!;
+}
+
 /** Four (or more) tyres at `axles` (x), `track` apart, and the dark underbody between them. */
 function tyres(axles: readonly number[], track: number, radius: number, length: number, width: number, tyreWidth = 0.22): THREE.BufferGeometry {
   const parts: THREE.BufferGeometry[] = [];
+  const one = tyre(radius, tyreWidth);
   for (const x of axles) {
-    for (const z of [-1, 1]) {
-      parts.push(plain(new THREE.CylinderGeometry(radius, radius, tyreWidth, 12).rotateX(Math.PI / 2).translate(x, radius, (z * track) / 2)));
-    }
+    for (const z of [-1, 1]) parts.push(one.clone().translate(x, radius, (z * track) / 2));
   }
+  one.dispose();
   parts.push(block(length - 0.5, 0.16, width - 0.3, 0, radius - 0.02, 0));
   return mergeGeometries(parts)!;
 }
@@ -88,9 +119,14 @@ class LampSet {
   }
 }
 
+/** Smooth normals across the bevels (creased at sharp edges); the tyres keep their lathe's. */
 function finish(out: CarGeometries): CarGeometries {
-  for (const g of Object.values(out)) g.computeVertexNormals();
-  return out;
+  const creased = (g: THREE.BufferGeometry): THREE.BufferGeometry => {
+    const c = toCreasedNormals(g, CREASE);
+    if (c !== g) g.dispose();
+    return c;
+  };
+  return { ...out, body: creased(out.body), glass: creased(out.glass), lamps: creased(out.lamps) };
 }
 
 /** Builds a car shape's geometries once; every car of that shape (parked or driving) instances them. */

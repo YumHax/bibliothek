@@ -1,6 +1,9 @@
 import { CORRUPT_PREFIX, ROOT_PREFIX } from './keys';
 import { emitCorruptSave, emitWriteFailure } from './events';
-import { safeStorage } from './storage';
+import { safeStorage, storageKeys } from './storage';
+
+/** Timestamped copies of a damaged save kept per key: older ones are pruned. */
+const MAX_COPIES = 3;
 
 /** How one store is kept: its key, its format version, how to read and upgrade what was saved, and where to start. */
 export interface PersistedSpec<T> {
@@ -33,6 +36,12 @@ interface Envelope {
 
 /** Writes waiting for the end of a `batch`, by key (null removes). */
 const pending = new Map<string, { storage: Storage; text: string | null }>();
+/**
+ * A batch whose write failed (storage full, blocked): the game plays on with that state in memory, so its writes are
+ * kept and tried again, as a whole with the next write any store makes, rather than lost (a later lone write would
+ * otherwise save a state the failed ones do not match).
+ */
+const unsaved = new Map<string, { storage: Storage; text: string | null }>();
 let depth = 0;
 
 /**
@@ -51,8 +60,12 @@ export function batch<R>(fn: () => R): R {
 }
 
 function flush(): void {
-  const writes = [...pending];
+  // What failed before goes first; anything written since for the same key replaces it.
+  const merged = new Map(unsaved);
+  for (const [key, write] of pending) merged.set(key, write);
+  const writes = [...merged];
   pending.clear();
+  unsaved.clear();
   const done: { storage: Storage; key: string; previous: string | null }[] = [];
   for (const [key, { storage, text }] of writes) {
     try {
@@ -69,6 +82,7 @@ function flush(): void {
           // storage gone altogether: nothing more to do
         }
       }
+      for (const [k, write] of writes) unsaved.set(k, write);
       emitWriteFailure({ key, keys: writes.map(([k]) => k), error });
       return;
     }
@@ -78,8 +92,9 @@ function flush(): void {
 /**
  * One store's state in localStorage, versioned: written as `{ version, data }`, read back through
  * the store's migrations and validation. Unreadable data is never silently lost: the raw text is
- * copied to `bibliothek.corrupt.<key>.<timestamp>` (and `onCorruptSave` told) before the store
- * starts from its defaults. A failed write is reported through `onWriteFailure`. Inside `batch`
+ * copied to `bibliothek.corrupt.<key>.<timestamp>` (the last `MAX_COPIES` kept, and `onCorruptSave`
+ * told) before the store starts from its defaults; a save from a newer build is copied once per
+ * version to `bibliothek.corrupt.<key>.newer-v<n>`. A failed write is reported through `onWriteFailure`. Inside `batch`
  * writes wait for the batch to end.
  */
 export class PersistedStore<T> {
@@ -118,11 +133,12 @@ export class PersistedStore<T> {
       for (let v = version; v < this.spec.version; v++) upgraded = this.spec.migrate?.[v]?.(upgraded) ?? upgraded;
       const state = this.spec.read(upgraded);
       if (state === null) {
-        this.setAside(text, version > this.spec.version ? `saved by a newer version (${version})` : 'not a valid save');
+        if (version > this.spec.version) this.keepNewer(text, version, true);
+        else this.setAside(text, 'not a valid save');
         return null;
       }
-      // Saved by a newer build: keep a copy, since this one may drop what it does not know.
-      if (version > this.spec.version) this.setAside(text, `saved by a newer version (${version})`, false);
+      // Saved by a newer build: keep a copy (once per version), since this one may drop what it does not know.
+      if (version > this.spec.version) this.keepNewer(text, version, false);
       return state;
     } catch (err) {
       this.setAside(text, `migration failed: ${err instanceof Error ? err.message : String(err)}`);
@@ -143,8 +159,10 @@ export class PersistedStore<T> {
   private put(text: string | null): void {
     const storage = this.storage;
     if (!storage) return;
-    if (depth > 0) {
+    // In a batch it waits for the batch's end; with failed writes still unsaved it goes with them, as one.
+    if (depth > 0 || unsaved.size > 0) {
       pending.set(this.key, { storage, text });
+      if (depth === 0) flush();
       return;
     }
     try {
@@ -156,8 +174,8 @@ export class PersistedStore<T> {
   }
 
   private raw(): string | null {
-    // A write waiting in a batch is what the store holds now.
-    const waiting = pending.get(this.key);
+    // A write waiting in a batch (or not saved yet after a failure) is what the store holds now.
+    const waiting = pending.get(this.key) ?? unsaved.get(this.key);
     if (waiting) return waiting.text;
     try {
       return this.storage?.getItem(this.key) ?? null;
@@ -166,17 +184,53 @@ export class PersistedStore<T> {
     }
   }
 
-  /** Copies the raw text aside; once copied, an unusable original is dropped so the next load does not copy it again. */
-  private setAside(text: string, reason: string, drop = true): void {
+  /** Where this key's copies go: `bibliothek.corrupt.<key>.`. */
+  private get asidePrefix(): string {
     const name = this.key.startsWith(ROOT_PREFIX) ? this.key.slice(ROOT_PREFIX.length) : this.key;
-    let backup: string | null = `${CORRUPT_PREFIX}${name}.${Date.now()}`;
+    return `${CORRUPT_PREFIX}${name}.`;
+  }
+
+  /**
+   * Copies the raw text aside (keeping the `MAX_COPIES` latest per key); once copied, the unusable
+   * original is dropped so the next load does not copy it again.
+   */
+  private setAside(text: string, reason: string): void {
+    let backup: string | null = `${this.asidePrefix}${Date.now()}`;
     try {
       this.storage?.setItem(backup, text);
-      if (drop && !pending.has(this.key)) this.storage?.removeItem(this.key);
+      if (!pending.has(this.key)) this.storage?.removeItem(this.key);
+      this.prune();
     } catch {
       backup = null;
     }
     emitCorruptSave({ key: this.key, backup, reason });
+  }
+
+  /**
+   * A save from a newer build of the game: one copy per version (`…<key>.newer-v<n>`, made once, never
+   * overwritten), and told on every load while this build plays on it, since what is played now writes
+   * over the newer save in this build's format (the copy is what the newer build can go back to).
+   * `unusable`: this build could read none of it.
+   */
+  private keepNewer(text: string, version: number, unusable: boolean): void {
+    const backup = `${this.asidePrefix}newer-v${version}`;
+    let kept: string | null = backup;
+    try {
+      if (this.storage?.getItem(backup) === null) this.storage?.setItem(backup, text);
+      if (unusable && !pending.has(this.key)) this.storage?.removeItem(this.key);
+    } catch {
+      kept = null;
+    }
+    emitCorruptSave({ key: this.key, backup: kept, reason: `saved by a newer version (${version}); played on by version ${this.spec.version}`, newer: true });
+  }
+
+  /** Drops the oldest timestamped copies of this key past `MAX_COPIES` (the newer-version copies stay). */
+  private prune(): void {
+    const prefix = this.asidePrefix;
+    const stamped = storageKeys(this.storage)
+      .filter((key) => key.startsWith(prefix) && /^\d+$/.test(key.slice(prefix.length)))
+      .sort((a, b) => Number(a.slice(prefix.length)) - Number(b.slice(prefix.length)));
+    for (const key of stamped.slice(0, Math.max(0, stamped.length - MAX_COPIES))) this.storage?.removeItem(key);
   }
 }
 

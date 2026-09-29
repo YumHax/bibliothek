@@ -71,11 +71,11 @@ export const BATHROOM_PLAN = {
 
   /**
    * What the bathroom is used for (docs/household.md): the cleaning kit on the cabinet's shelves (cabinet-local
-   * centre and size of what a click takes), and the hair dryer in its holder on the right wall above the tiles,
+   * centre and size of what a click takes, and where along the bottom shelf the kit stands), and the hair dryer in its holder on the right wall above the tiles,
    * between the tub's front (z -0.44) and the cabinet (z -0.2..0.3).
    */
   household: {
-    kitSpot: { at: [0, 0.31, 0.06] as [number, number, number], size: [0.46, 0.56, 0.1] as [number, number, number] },
+    kitSpot: { at: [0, 0.31, 0.06] as [number, number, number], size: [0.46, 0.56, 0.1] as [number, number, number], shelfX: 0 },
     hairDryer: { wall: 'right', along: -0.32, y: 1.48 } as Placement,
   },
 

@@ -1,7 +1,7 @@
 import type * as THREE from 'three';
 import type { Updatable } from '@/core/Engine';
 import { announceSaveProblems } from './saveNotices';
-import { AlertBar } from './AlertBar';
+import { AlertBar, type AlertAction } from './AlertBar';
 import { CrosshairLine } from './CrosshairLine';
 import { ReadingCard } from './ReadingCard';
 import { RewardBanner } from './RewardBanner';
@@ -67,9 +67,19 @@ export class Notices implements NoticeActions, Updatable {
     this.reading.show(card);
   }
 
-  /** The game's own trouble (a save lost, the mouse lock refused): the red bar at the top. */
-  alert(text: string, ms?: number): void {
-    this.alerts.show(text, ms);
+  /** The game's own trouble (a save lost, the mouse lock refused): the red bar at the top; with `action`, a button (Retry) it waits for. */
+  alert(text: string, ms?: number, action?: AlertAction): void {
+    this.alerts.show(text, ms, action);
+  }
+
+  /** Settings > Game: the tips top left shown or not (a tip asked for while off is dropped). */
+  setTipsShown(shown: boolean): void {
+    this.tips.setShown(shown);
+  }
+
+  /** False while Settings > Game > Show tips is off: a chain of tips (the first day) waits instead of marking them seen. */
+  get tipsShown(): boolean {
+    return this.tips.isShown;
   }
 
   update(dt: number): void {

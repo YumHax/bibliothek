@@ -79,6 +79,8 @@ export class MarketStock {
   private capacity: (platform: PlatformId) => number = () => Infinity;
   private binCapacity = Infinity;
   private cache: Day | null = null;
+  /** The day `warm` last priced ahead. */
+  private warmedDay = -1;
   private readonly pools = new Map<PlatformId, Promise<readonly IndexEntry[]>>();
 
   /** Today's job lot (`JobLotDraw`). */
@@ -114,6 +116,18 @@ export class MarketStock {
     return Math.max(1, Math.round(BARGAIN_PRICE * (themeOf(this.day).bin?.price ?? 1)));
   }
 
+  /**
+   * Starts pricing today's stock ahead of the market's hall (Front Street reached, a new market day): one fame lookup per
+   * copy, one at a time server-side, so a fresh day takes 15-20 s, walked off on the way there. Nothing is kept of the
+   * draw (the hall draws its own once it knows how much each stall shows): the lookups land in `Fame`'s cache. Once a day.
+   */
+  warm(): void {
+    const day = this.day;
+    if (this.warmedDay === day || this.cache?.day === day) return;
+    this.warmedDay = day;
+    void this.draw(day).catch(() => undefined);
+  }
+
   /** Today's stock minus what the player already owns and what other shoppers bought. */
   async todays(): Promise<StockItem[]> {
     const items = await this.current().items;
@@ -127,31 +141,59 @@ export class MarketStock {
     return this.available(cache.ready);
   }
 
-  /** Opens a haggle over `item`, or says why there is none (still pricing, the bin, already agreed today). */
+  /** The market day `item` belongs to: the one it was laid out for (today's, unless midnight passed with it in hand). */
+  dayOf(item: StockItem): number {
+    return item.drawnOn ?? this.day;
+  }
+
+  /** Whether `item` was laid out on a market day gone by (midnight passed with it on the table or in hand): no more haggles or holds on it. */
+  isStale(item: StockItem): boolean {
+    return this.dayOf(item) < this.day;
+  }
+
+  /**
+   * Whether `negotiate` would open a haggle over `item` (priced, not a flat price or a sale, not haggled over today, a
+   * copy of today's, and a stallholder not so soured by insults that they would walk at the first offer).
+   */
+  canNegotiate(item: StockItem): boolean {
+    if (!item.priced || item.source === 'bin' || item.source === 'ordered' || item.sale < 1 || this.isStale(item)) return false;
+    const day = this.dayOf(item);
+    if (Negotiation.patienceFor(this.deps.ledger.moodOf(day, item.game.platform), this.deps.ledger.hadCoffee(day)) <= 0) return false;
+    return this.deps.ledger.haggleOf(day, item.game.id) === undefined;
+  }
+
+  /** Opens a haggle over `item`, or says why there is none (still pricing, the bin, already agreed today, a soured stall). */
   negotiate(item: StockItem): Negotiation | { line: string } {
     const platform = item.game.platform;
     if (!item.priced) return { line: 'Hang on, I’m still working out what it’s worth.' };
-    if (item.source === 'bin') return { line: `It's the bargain bin, friend. ${this.binPrice} coins, that's the deal.` };
-    if (item.source === 'ordered') return { line: `That's your order: ${item.price} coins, as agreed.` };
-    if (item.sale < 1) return { line: `It's a clearance, friend: ${item.price} coins, already slashed. No haggling.` };
+    if (item.source === 'bin') return { line: `It’s the bargain bin, friend. ${this.binPrice} coins, that’s the deal.` };
+    if (item.source === 'ordered') return { line: `That’s your order: ${item.price} coins, as agreed.` };
+    if (item.sale < 1) return { line: `It’s a clearance, friend: ${item.price} coins, already slashed. No haggling.` };
+    if (this.isStale(item)) return { line: `We’re packing up yesterday’s table, friend. ${item.price} coins or put it back.` };
     const { ledger, standing } = this.deps;
-    const agreed = ledger.haggleOf(this.day, item.game.id);
+    const day = this.dayOf(item);
+    const agreed = ledger.haggleOf(day, item.game.id);
     if (agreed !== undefined) return { line: agreed < 1 ? `We already shook on ${item.price} coins.` : `I said ${item.price}. My last word.` };
+    const soured = ledger.moodOf(day, platform);
+    const coffee = ledger.hadCoffee(day);
+    // Insulted enough today, the stallholder will not even start: a haggle that would open already lost.
+    if (Negotiation.patienceFor(soured, coffee) <= 0) return { line: `Not today, friend. ${item.price} coins, like the tag says.` };
     return new Negotiation(item, {
-      day: this.day,
-      soured: ledger.moodOf(this.day, platform),
+      day,
+      soured,
       loyalty: standing.loyalty(platform),
-      coffee: ledger.hadCoffee(this.day),
+      coffee,
       rain: this.deps.raining?.() ?? false,
     });
   }
 
-  /** A haggle ended: its price holds all day; an insult sours the stall. */
+  /** A haggle ended: its price holds all day (the copy's day); an insult sours the stall. */
   settle(item: StockItem, negotiation: Negotiation, insults: number): void {
     const platform = item.game.platform;
     const factor = negotiation.factor;
-    this.deps.ledger.recordHaggle(this.day, item.game.id, factor);
-    for (let i = 0; i < insults; i++) this.deps.ledger.sour(this.day, platform);
+    const day = this.dayOf(item);
+    this.deps.ledger.recordHaggle(day, item.game.id, factor);
+    for (let i = 0; i < insults; i++) this.deps.ledger.sour(day, platform);
     item.setHaggle(factor);
     if (factor < 1) this.deps.standing.record('deal');
   }
@@ -163,13 +205,13 @@ export class MarketStock {
 
   /** The deposit on `item` is paid: other shoppers leave it alone today, and the copy stays on its stall all day whatever happens. */
   hold(item: StockItem, deposit: number): void {
-    this.deps.ledger.hold(this.day, item.game.id, deposit, heldCopyOf(item));
+    this.deps.ledger.hold(this.dayOf(item), item.game.id, deposit, heldCopyOf(item));
     item.setDeposit(deposit);
   }
 
   /** `item` changed hands (bought): its hold or order is done, and the stall remembers the custom. */
   sold(item: StockItem): void {
-    this.deps.ledger.release(this.day, item.game.id);
+    this.deps.ledger.release(this.dayOf(item), item.game.id);
     if (item.source === 'ordered') this.deps.ledger.fulfil(item.game.id);
     if (item.source !== 'bin') this.deps.standing.record('buy', item.game.platform);
   }
@@ -177,14 +219,14 @@ export class MarketStock {
   /** The player found out a fake on the stall: the stallholder lets it go cheap, and does not argue. False when it is no fake, or already found out. */
   expose(item: StockItem): boolean {
     if (!item.repro || item.exposed) return false;
-    this.deps.ledger.catchRepro(this.day, item.game.id);
+    this.deps.ledger.catchRepro(this.dayOf(item), item.game.id);
     item.expose(REPRO_CAUGHT);
     return true;
   }
 
   /** Another shopper bought `item`: gone for the day. */
   soldToRival(item: StockItem): void {
-    this.deps.ledger.recordRivalSale(this.day, item.game.id);
+    this.deps.ledger.recordRivalSale(this.dayOf(item), item.game.id);
   }
 
   /** The player sold `game`: it goes on its stall from tomorrow. */
@@ -419,6 +461,7 @@ export class MarketStock {
 
     // Held copies keep their deposit (those held before copies were kept, when the draw gave them again); fakes found out keep their knock-down price.
     for (const item of items) {
+      item.drawnOn = day;
       const deposit = ledger.holdOf(day, item.game.id);
       if (deposit !== undefined) item.setDeposit(deposit);
       if (item.repro && ledger.isCaught(day, item.game.id)) item.expose(REPRO_CAUGHT);
@@ -433,7 +476,8 @@ export class MarketStock {
     const known = fame.peek(game);
     const settle = known !== undefined ? undefined : fame.lookup(game).then((views) => marketPrice(game, views, condition, discount, edition));
     // An old shop's price sticker on some ordinary copies (peeled off at home: docs/household.md). A hash of its own, so no other draw moves.
-    const sticker = source === 'stall' && hash01(`${this.day}:sticker:${game.id}`) < STICKER.odds;
+    // Never on a clearance stall: the sale and the sticker's cut together would go under what the WE BUY desk pays once peeled.
+    const sticker = source === 'stall' && traits.sale === undefined && hash01(`${this.day}:sticker:${game.id}`) < STICKER.odds;
     const item = new StockItem(game, condition, source, { list: marketPrice(game, known, condition, discount, edition), final: known !== undefined, settle }, sticker ? { ...traits, sticker } : traits);
     const agreed = ledger.haggleOf(this.day, game.id);
     if (agreed !== undefined) item.setHaggle(agreed);

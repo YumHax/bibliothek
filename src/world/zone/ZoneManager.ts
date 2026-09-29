@@ -35,8 +35,12 @@ export class ZoneManager<Id extends string = string> implements Updatable {
   private readonly keepRecent: number;
   /** Travel zones in the order the player last had them active, most recent last. */
   private readonly recency: Zone<Id>[] = [];
+  /** The dormant travel zones kept loaded (the `keepRecent` most recent), refilled in place (no garbage per frame). */
+  private readonly kept = new Set<Zone<Id>>();
   /** Modules asked for, once each (a failed fetch is reported, not retried every frame). */
   private readonly requested = new Set<Zone<Id>>();
+  /** Dormant zones kept loaded however long, while something needs them ready (`hold`). */
+  private readonly held = new Set<Zone<Id>>();
 
   constructor(
     private readonly zones: readonly Zone<Id>[],
@@ -79,14 +83,37 @@ export class ZoneManager<Id extends string = string> implements Updatable {
         this.zoneChange.emit(next, previous);
       }
     }
-    const kept = new Set(this.recency.filter((z) => z.status === 'dormant').slice(-this.keepRecent));
+    // Most frames nothing is waiting to unload: no allocation then.
+    if (!this.zones.some((z) => z.status === 'dormant' && !z.spec.persistent)) return;
+    this.refreshKept();
     for (const zone of this.zones) {
-      if (zone.status !== 'dormant' || zone.spec.persistent || kept.has(zone)) continue;
+      if (zone.status !== 'dormant' || zone.spec.persistent || this.kept.has(zone) || this.held.has(zone)) continue;
       const t = (this.dormantFor.get(zone) ?? 0) + dt;
       if (t >= this.unloadAfter) {
         zone.unload();
         this.dormantFor.delete(zone);
       } else this.dormantFor.set(zone, t);
+    }
+  }
+
+  /**
+   * Keeps zone `id` loaded while dormant (`held`), whatever `unloadAfterSeconds` says: the street, built ahead while
+   * the player is down in the entrance hall so the sas crosses into it at once (`airlock/StreetAhead`). Released, it
+   * unloads after the usual wait.
+   */
+  hold(id: string, held: boolean): void {
+    const zone = this.zone(id);
+    if (!zone) return;
+    if (held) this.held.add(zone);
+    else if (this.held.delete(zone)) this.dormantFor.delete(zone);
+  }
+
+  /** The `keepRecent` travel zones left most recently that are dormant now. */
+  private refreshKept(): void {
+    this.kept.clear();
+    for (let i = this.recency.length - 1; i >= 0 && this.kept.size < this.keepRecent; i--) {
+      const zone = this.recency[i]!;
+      if (zone.status === 'dormant') this.kept.add(zone);
     }
   }
 

@@ -1,26 +1,30 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import type { Updatable } from '@/core/Engine';
-import { seededRandom } from '@/covers/generated/canvasUtils';
 import type { Furniture } from '../Furniture';
 import type { DayNight } from '../props/DayNight';
 import { currentSeason } from '@/time/season';
 import { patchShader, afterChunk } from '../materials/shaderPatch';
 import { snowCovered } from './snowCover';
-import type { Vec2 } from './streetPlan';
+import { PARK_STREET, type Vec2 } from './streetPlan';
+import { isRoad } from './relief/ground';
+import { GROUND, onSurface } from '../surface/layers';
+import { createCanvas, seededRandom, toTexture } from '@/covers/generated/canvasUtils';
+import { TREE_FORM, type PlantedTree } from '../city/trees';
 
-/** A tree to plant: where, and how big (1 = a street tree about 7 m tall). */
-export interface TreeSpot {
-  at: Vec2;
-  scale: number;
-}
+/** A tree to plant: where, and how big (1 = a street tree about 7 m tall; `city/trees`). */
+export type TreeSpot = PlantedTree;
 
-const CROWN_Y = 4.6;
-const CROWN_RADIUS = 2.3;
+const CROWN_Y = TREE_FORM.trunk;
+const CROWN_RADIUS = TREE_FORM.crown;
 const SUMMER = ['#4f7a34', '#5a8a3a', '#46703a', '#628f42'];
 const SPRING = ['#7fb04a', '#8cc05a', '#72a444', '#e7b8c8'];
 const AUTUMN = ['#c9862f', '#d9a33a', '#b8562a', '#8a7a32', '#6a8a3a'];
 const WINTER = ['#6a5e52', '#5e564e'];
+/** How many crown shapes the trees share (a draw call each). */
+const CROWN_SHAPES = 3;
+/** A pavement tree's pit, square (metres). */
+const PIT = 1.2;
 
 /**
  * The trees: along the pavements and scattered over the park behind the hedge. A trunk with a
@@ -47,7 +51,8 @@ export class StreetTrees extends THREE.Group implements Furniture, Updatable {
     // Snow lies along the limbs' upper sides (the bare trees of winter get their dusting there).
     const trunks = new THREE.InstancedMesh(wood, snowCovered(new THREE.MeshStandardMaterial({ color: 0x4a3c30, roughness: 0.95 })), spots.length);
 
-    const crownGeometry = lumpySphere(random).scale(CROWN_RADIUS, CROWN_RADIUS * 0.85, CROWN_RADIUS).translate(0, CROWN_Y + 0.6, 0);
+    // A few crown shapes (each its own lumps), each tree one of them, stretched on its own.
+    const crownGeometries = Array.from({ length: CROWN_SHAPES }, () => lumpySphere(random).scale(CROWN_RADIUS, CROWN_RADIUS * 0.85, CROWN_RADIUS).translate(0, CROWN_Y + 0.6, 0));
     const crownMaterial = snowCovered(new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9, flatShading: true }));
     patchShader(crownMaterial, 'streetTreeSway', (shader) => {
       shader.uniforms.swayTime = this.sway.time;
@@ -63,33 +68,53 @@ export class StreetTrees extends THREE.Group implements Furniture, Updatable {
         transformed.z += cos(swayTime * 1.05 + swayPhase * 1.3) * swayWind * 0.05 * swayHeight;
       `);
     });
-    const crowns = new THREE.InstancedMesh(crownGeometry, crownMaterial, spots.length);
+    const shapeOf = spots.map((_, i) => i % CROWN_SHAPES);
+    const crowns = crownGeometries.map((g, k) => new THREE.InstancedMesh(g, crownMaterial, Math.max(1, shapeOf.filter((shape) => shape === k).length)));
+    const filled = crowns.map(() => 0);
+    // The pavements' trees stand in square pits with a cast-iron grate (the park's in the lawn).
+    const pitted = spots.filter(({ at }) => at[0] > PARK_STREET.hedge && !isRoad(at[0], at[1]));
+    const pits = pitted.length > 0 ? new THREE.InstancedMesh(new THREE.PlaneGeometry(PIT, PIT).rotateX(-Math.PI / 2), onSurface(new THREE.MeshStandardMaterial({ map: grateTexture(), color: 0xffffff, roughness: 0.75 }), GROUND.grate), pitted.length) : null;
 
     const palette = season.name === 'spring' ? SPRING : season.name === 'autumn' ? AUTUMN : season.name === 'winter' ? WINTER : SUMMER;
     const matrix = new THREE.Matrix4();
     const crownMatrix = new THREE.Matrix4();
     const q = new THREE.Quaternion();
     const color = new THREE.Color();
-    spots.forEach(({ at, scale }, i) => {
-      const s = scale * (0.85 + random() * 0.3);
+    spots.forEach(({ at, scale: s }, i) => {
       q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), random() * Math.PI * 2);
       matrix.compose(new THREE.Vector3(at[0], 0, at[1]), q, new THREE.Vector3(s, s, s));
       trunks.setMatrixAt(i, matrix);
       // Winter strips the crowns; late autumn thins them.
       const leaf = season.name === 'winter' ? 0.001 : season.name === 'autumn' ? 1 - 0.55 * season.depth * random() : 1;
-      crownMatrix.copy(matrix).multiply(new THREE.Matrix4().makeScale(leaf, leaf, leaf).setPosition(0, (1 - leaf) * (CROWN_Y + 0.6), 0));
-      crowns.setMatrixAt(i, crownMatrix);
+      // Wider or taller, about the crown's middle.
+      const [sx, sy, sz] = [leaf * (0.88 + random() * 0.24), leaf * (0.85 + random() * 0.3), leaf * (0.88 + random() * 0.24)];
+      crownMatrix.copy(matrix).multiply(new THREE.Matrix4().makeScale(sx, sy, sz).setPosition(0, (1 - sy) * (CROWN_Y + 0.6), 0));
+      const shape = shapeOf[i]!;
+      const crown = crowns[shape]!;
+      crown.setMatrixAt(filled[shape]!, crownMatrix);
       color.set(palette[Math.floor(random() * palette.length)]!).multiplyScalar(0.85 + random() * 0.3);
-      crowns.setColorAt(i, color);
+      crown.setColorAt(filled[shape]!++, color);
     });
-    for (const mesh of [trunks, crowns]) {
+    pitted.forEach(({ at }, i) => {
+      pits!.setMatrixAt(i, matrix.makeRotationY(random() < 0.5 ? 0 : Math.PI / 2).setPosition(at[0], GROUND.grate.lift, at[1]));
+    });
+    if (pits) {
+      pits.instanceMatrix.needsUpdate = true;
+      pits.computeBoundingSphere();
+      pits.receiveShadow = true;
+      this.add(pits);
+    }
+    for (const mesh of [trunks, ...crowns]) {
       mesh.instanceMatrix.needsUpdate = true;
       mesh.computeBoundingSphere();
       mesh.castShadow = true;
       mesh.receiveShadow = true;
     }
-    if (crowns.instanceColor) crowns.instanceColor.needsUpdate = true;
-    this.add(trunks, crowns);
+    crowns.forEach((crown, k) => {
+      crown.count = filled[k]!;
+      if (crown.instanceColor) crown.instanceColor.needsUpdate = true;
+    });
+    this.add(trunks, ...crowns);
   }
 
   get footprint(): THREE.Box3 {
@@ -123,4 +148,35 @@ function lumpySphere(random: () => number): THREE.BufferGeometry {
   }
   g.computeVertexNormals();
   return g;
+}
+
+/** A tree pit's cast-iron grate: a frame, rings of slots round the trunk's hole, the soil dark through them. */
+function grateTexture(): THREE.CanvasTexture {
+  const size = 128;
+  const [canvas, ctx] = createCanvas(size, size);
+  const c = size / 2;
+  ctx.fillStyle = '#2b2622';
+  ctx.fillRect(0, 0, size, size);
+  ctx.strokeStyle = '#4a4744';
+  ctx.lineWidth = 6;
+  ctx.strokeRect(3, 3, size - 6, size - 6);
+  ctx.lineWidth = 2.5;
+  for (const r of [18, 30, 42, 54]) {
+    ctx.beginPath();
+    ctx.arc(c, c, r, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  for (let a = 0; a < 16; a++) {
+    const t = (a / 16) * Math.PI * 2;
+    ctx.beginPath();
+    ctx.moveTo(c + Math.cos(t) * 14, c + Math.sin(t) * 14);
+    ctx.lineTo(c + Math.cos(t) * 62, c + Math.sin(t) * 62);
+    ctx.stroke();
+  }
+  // The trunk's hole: soil.
+  ctx.fillStyle = '#1e1a16';
+  ctx.beginPath();
+  ctx.arc(c, c, 13, 0, Math.PI * 2);
+  ctx.fill();
+  return toTexture(canvas, 4);
 }

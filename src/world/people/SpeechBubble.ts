@@ -8,6 +8,8 @@ import { speechSink } from '@/notices';
  * - `say`: a word in passing ("WHOA!", "Sold!"), to nobody in particular: seen only near and in view.
  * - `speak`: a line said to the player, with the speaker's name: it waits for the line before it,
  *   stays its reading time, and goes to the subtitles while the speaker is out of view.
+ * `onShow` runs when the line actually shows (a queued line: after the ones before it), so a voice
+ * or a nod starts with its bubble.
  */
 export class SpeechBubble extends THREE.Object3D {
   constructor() {
@@ -15,11 +17,11 @@ export class SpeechBubble extends THREE.Object3D {
     this.name = 'SpeechBubble';
   }
 
-  say(text: string, seconds = 2.2): void {
-    speechSink()?.speak(this, text, { seconds });
+  say(text: string, seconds = 2.2, onShow?: () => void): void {
+    speechSink()?.speak(this, text, { seconds, onShow });
   }
 
-  speak(text: string, name?: string): void {
-    speechSink()?.speak(this, text, { addressed: true, name });
+  speak(text: string, name?: string, onShow?: () => void): void {
+    speechSink()?.speak(this, text, { addressed: true, name, onShow });
   }
 }

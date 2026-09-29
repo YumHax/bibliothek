@@ -33,6 +33,8 @@ import type { CollectorHome } from './collector/furnishCollector';
 import type { BuildingServices } from './stairwell/building';
 import type { FirstDayLike } from '@/onboarding/FirstDay';
 import type { HomeLife } from '@/household/HomeLife';
+import type { Pastimes } from '@/household/pastime';
+import type { GameBox } from './GameBox';
 import type { Today } from '@/time/Today';
 import type { MarketDay } from '@/economy/MarketDay';
 import type { NewsPanel } from '@/ui/NewsPanel';
@@ -93,8 +95,12 @@ export interface HouseholdContext {
   notices: NoticeActions;
   /** The cat's name, for what it left by its bowl. */
   catName(): string;
-  /** The treat jar shaken: the cat comes (or not), and how that went. */
-  callCat?: () => string;
+  /** The treat jar shaken: whether the cat comes (the day's treat is spent only then), and how that went. */
+  callCat?: () => { came: boolean; line: string };
+  /** The long jobs (cleaning a box, a sticker, the cake, a soak) told in a fade to black, the clock wound on (`household/pastime.ts`). */
+  pastimes?: Pastimes;
+  /** The shelf's own box of a game (rebuilt after a change to the copy): the one put back in the hand after a job on it. */
+  boxOf?: (gameId: string) => GameBox | undefined;
 }
 
 /** The player's money, as the builders see it. */

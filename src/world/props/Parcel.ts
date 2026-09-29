@@ -4,6 +4,7 @@ import type { SessionActions } from '@/game/SessionActions';
 import { invisibleHitbox } from '../meshUtils';
 import { paint } from '../materials/palette';
 import { Prop, part } from './Prop';
+import { HoverGlint } from './hoverGlint';
 
 /** What the parcel shows: the games waiting in it (`Deliveries` fits). */
 export interface ParcelContents {
@@ -31,6 +32,8 @@ const FRAGILE = paint(0xc0392b, 0.7);
 export class Parcel extends Prop implements Interactable {
   readonly hitboxes: THREE.Object3D[];
   private readonly unsubscribe: () => void;
+  /** Its hover cue: the tape catches the light, like every other thing to click. */
+  private readonly glint: HoverGlint;
 
   constructor(private readonly contents: ParcelContents) {
     super();
@@ -38,8 +41,11 @@ export class Parcel extends Prop implements Interactable {
     const z = DEPTH / 2;
     part(this, WIDTH, HEIGHT, DEPTH, CARDBOARD, { y: HEIGHT / 2, z });
     // Tape along the flaps and down the front, the label on the lid, a red FRAGILE stripe on the side.
-    part(this, 0.06, 0.004, DEPTH + 0.002, TAPE, { y: HEIGHT + 0.002, z }).castShadow = false;
-    part(this, 0.06, HEIGHT * 0.5, 0.004, TAPE, { y: HEIGHT * 0.75, z: DEPTH + 0.002 }).castShadow = false;
+    const lidTape = part(this, 0.06, 0.004, DEPTH + 0.002, TAPE, { y: HEIGHT + 0.002, z });
+    const frontTape = part(this, 0.06, HEIGHT * 0.5, 0.004, TAPE, { y: HEIGHT * 0.75, z: DEPTH + 0.002 });
+    lidTape.castShadow = false;
+    frontTape.castShadow = false;
+    this.glint = HoverGlint.of(lidTape, frontTape);
     part(this, 0.14, 0.003, 0.1, LABEL, { x: WIDTH * 0.25, y: HEIGHT + 0.002, z: z + 0.02 }).castShadow = false;
     for (let i = 0; i < 3; i++) part(this, 0.1 - i * 0.02, 0.004, 0.008, INK, { x: WIDTH * 0.25 - i * 0.01, y: HEIGHT + 0.004, z: z + 0.045 - i * 0.02 }).castShadow = false;
     part(this, 0.004, 0.05, 0.14, FRAGILE, { x: WIDTH / 2 + 0.002, y: HEIGHT * 0.6, z }).castShadow = false;
@@ -56,12 +62,14 @@ export class Parcel extends Prop implements Interactable {
 
   // --- Interactable -------------------------------------------------------------------------
 
-  setHovered(_hovered: boolean): void {}
+  setHovered(hovered: boolean): void {
+    this.glint.set(hovered);
+  }
 
   label(): string | null {
     const n = this.contents.count;
     if (!n) return null;
-    return `A parcel for you: click to unpack ${n === 1 ? 'the game' : `the ${n} games`}`;
+    return `Parcel for you · unpack ${n === 1 ? 'the game' : `the ${n} games`}`;
   }
 
   activate(session: SessionActions): void {

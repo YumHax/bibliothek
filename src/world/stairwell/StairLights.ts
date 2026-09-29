@@ -1,42 +1,87 @@
 import * as THREE from 'three';
-import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import type { Updatable } from '@/core/Engine';
+import { proximityVolume } from '@/video/proximityVolume';
 import type { Furniture, OccupancyAware } from '../Furniture';
-import type { DayNight } from '../props/DayNight';
+import type { DayNight, SkyState } from '../props/DayNight';
 import { STAIRWELL_PLAN as plan, STOREY, STOREYS, landingY } from './stairwellPlan';
+import { playRelay } from './stairSounds';
+import { LAMP_GLOW, LAMP_LIGHT } from '../lighting/lampColours';
 
 export interface StairLightsOptions {
-  /** The eye: the real lights follow the landings nearest to it. */
+  /** The eye: the sensors see it, and the real lights follow the lit globes nearest to it. */
   viewer: THREE.Object3D;
 }
 
-/** How many real lights follow the player, their candela and reach (a lamp never lights a landing two floors off). */
+/**
+ * How many real lights follow the player, their candela and reach: about a storey and a bit, so a landing's lamp lights
+ * its landing and the flights off it, never the landing above or below through the stairs (lights ignore the slabs).
+ */
 const LIGHTS = 2;
 const INTENSITY = 9;
-const REACH = 6.5;
-const WARM = new THREE.Color(0xffd9a8);
+const REACH = STOREY * 1.3;
+const WARM = LAMP_LIGHT.incandescent.clone();
 const TOP = landingY(0) + 2.8;
-/** Seconds the lights take to come up once the player is in (the stair lights' sensor), and to go down after. */
-const RAMP = 0.6;
+/** Seconds a globe stays lit once its sensor saw someone (the building's timer), and its bulb's warm-up and fade. */
+const LIT_S = 45;
+const WARM_UP_S = 0.25;
+const COOL_S = 0.9;
+/** A sensor sees the player (or a resident, the postman) this near across its landing (m) and this near in height (feet to its floor, m). */
+const SENSOR_REACH = 3.9;
+const SENSOR_HEIGHT = 1.9;
+/** Seconds a real light takes to fade out of one globe and into another (it never jumps while lit). */
+const SLOT_FADE_S = 0.3;
+/** The globes over each floor: 2.35 m up the wall. */
+const GLOBE_Y = 2.35;
+const EYE = 1.7;
+/** The sky through the roof light, by weather: an overcast's grey, the white of snow lying on the glass. */
+const OVERCAST = new THREE.Color(0x9aa2aa);
+const SNOW_GLASS = new THREE.Color(0xe8eef2);
+
+interface Slot {
+  at: THREE.Vector3;
+  /** The floor the sensor watches (local y). */
+  floor: number;
+  /** Seconds left lit (0: off). */
+  left: number;
+  /** 0 dark .. 1 lit, following `left`. */
+  glow: number;
+}
+
+interface Bulb {
+  light: THREE.PointLight;
+  /** The globe it lights now, and the one it is fading over to. */
+  slot: number;
+  next: number;
+  fade: number;
+}
 
 /**
- * The stairwell's light: a frosted globe on every landing's wall and over the hall, glowing while
- * someone is on the stairs (a sensor, like the building's timer lights) and dark otherwise; two
- * real point lights (no shadow; never added or removed) that move to the globes nearest the
- * player, dimmed to 0 while nobody is here (the lights ignore walls, so they must not shine into
- * the flat); a hemisphere for the soft light bouncing down the shaft, on only while occupied; and
- * the skylight in the roof, as bright as the sky. `lightLevel` is what the reflections follow.
+ * The stairwell's light, the building's timer lights: a frosted globe on every landing's wall (floor and half
+ * landings), over the hall and on our strip, each with its own sensor: the player coming onto a landing switches its
+ * globe on (the relay's clack echoing down the stone), and it stays lit `LIT_S` seconds after they left it, then goes
+ * out with a softer clack, so a climb leaves a trail of lit landings behind it going dark one by one, never the whole
+ * building at once. Two real point lights (no shadow; never added or removed, dimmed with their intensity) light the
+ * lit globes nearest the player, fading out of one globe and into the next rather than jumping; dimmed to 0 while
+ * nobody is here (the lights ignore walls, so they must not shine into the flat); a hemisphere for the soft light
+ * bouncing down the shaft, on only while occupied; and the skylight in the roof, the sky's colour through dusty glass
+ * (grey under cloud, dark with rain, white with snow on it). `lightLevel` is what the reflections follow.
  */
 export class StairLights extends THREE.Group implements Furniture, Updatable, OccupancyAware {
   readonly contactShadow = false;
-  private readonly bulbs: THREE.PointLight[] = [];
-  private readonly spots: THREE.Vector3[] = [];
-  private readonly order: number[];
-  private readonly globes: THREE.MeshBasicMaterial;
+  private readonly slots: Slot[] = [];
+  private readonly bulbs: Bulb[] = [];
+  private readonly globes: THREE.InstancedMesh;
   private readonly sky: THREE.MeshBasicMaterial;
   private readonly ambient: THREE.HemisphereLight;
   private readonly eye = new THREE.Vector3();
+  private readonly ear = new THREE.Vector3();
+  private readonly colour = new THREE.Color();
+  private readonly snowGlass = new THREE.Color();
+  private readonly order: number[];
   private occupied = false;
+  /** The people on the stairs the sensors see too (zone-local, feet at `position.y`), while they are about. */
+  private walkers: readonly { readonly isPresent: boolean; readonly position: THREE.Vector3 }[] = [];
+  /** 0 .. 1: the stairwell's real lights allowed on (the player in it), eased. */
   private on = 0;
   private chooseClock = 0;
 
@@ -44,17 +89,24 @@ export class StairLights extends THREE.Group implements Furniture, Updatable, Oc
     super();
     this.name = 'StairLights';
     const half = STOREY / 2;
-    const { shaft, hall, floorLanding, halfLanding } = plan;
+    const { shaft, hall, floorLanding, halfLanding, strip } = plan;
     const mid = (shaft.x0 + shaft.x1) / 2 - 0.4;
-    for (let k = 0; k <= STOREYS; k++) this.spots.push(new THREE.Vector3(mid, landingY(k) + 2.35, floorLanding.z1 - 0.07));
-    for (let k = 0; k < STOREYS; k++) this.spots.push(new THREE.Vector3(mid, landingY(k) - half + 2.35, halfLanding.z0 + 0.07));
-    this.spots.push(new THREE.Vector3((hall.x0 + hall.x1) / 2, hall.height - 0.12, (hall.z0 + hall.z1) / 2));
-    this.spots.push(new THREE.Vector3((plan.strip.x0 + plan.strip.x1) / 2, landingY(0) + plan.strip.ceiling - 0.1, (plan.strip.z0 + plan.strip.z1) / 2));
-    this.order = this.spots.map((_, i) => i);
+    const slot = (at: THREE.Vector3, floor: number): Slot => ({ at, floor, left: 0, glow: 0 });
+    for (let k = 0; k <= STOREYS; k++) this.slots.push(slot(new THREE.Vector3(mid, landingY(k) + GLOBE_Y, floorLanding.z1 - 0.07), landingY(k)));
+    for (let k = 0; k < STOREYS; k++) this.slots.push(slot(new THREE.Vector3(mid, landingY(k) - half + GLOBE_Y, halfLanding.z0 + 0.07), landingY(k) - half));
+    this.slots.push(slot(new THREE.Vector3((hall.x0 + hall.x1) / 2, hall.height - 0.12, (hall.z0 + hall.z1) / 2), landingY(STOREYS)));
+    this.slots.push(slot(new THREE.Vector3((strip.x0 + strip.x1) / 2, landingY(0) + strip.ceiling - 0.1, (strip.z0 + strip.z1) / 2), landingY(0)));
+    this.order = this.slots.map((_, i) => i);
 
-    this.globes = new THREE.MeshBasicMaterial({ color: WARM.clone() });
-    const globe = mergeGeometries(this.spots.map((p) => new THREE.SphereGeometry(0.11, 12, 8).translate(p.x, p.y, p.z)))!;
-    this.add(new THREE.Mesh(globe, this.globes));
+    // One draw for every globe, each lit on its own (an instance colour).
+    this.globes = new THREE.InstancedMesh(new THREE.SphereGeometry(0.11, 12, 8), new THREE.MeshBasicMaterial({ color: 0xffffff }), this.slots.length);
+    this.slots.forEach((s, i) => {
+      this.globes.setMatrixAt(i, new THREE.Matrix4().makeTranslation(s.at.x, s.at.y, s.at.z));
+      this.globes.setColorAt(i, this.colour.copy(WARM).multiplyScalar(0.12));
+    });
+    this.globes.castShadow = false;
+    this.globes.computeBoundingSphere();
+    this.add(this.globes);
 
     // The skylight over the well.
     this.sky = new THREE.MeshBasicMaterial({ color: 0x000000 });
@@ -63,13 +115,13 @@ export class StairLights extends THREE.Group implements Furniture, Updatable, Oc
     this.add(skylight);
 
     for (let i = 0; i < LIGHTS; i++) {
-      const bulb = new THREE.PointLight(WARM, 0, REACH, 2);
-      bulb.castShadow = false;
-      bulb.position.copy(this.spots[i]!);
-      this.bulbs.push(bulb);
-      this.add(bulb);
+      const light = new THREE.PointLight(WARM, 0, REACH, 2);
+      light.castShadow = false;
+      light.position.copy(this.slots[i]!.at);
+      this.bulbs.push({ light, slot: i, next: i, fade: 0 });
+      this.add(light);
     }
-    this.ambient = new THREE.HemisphereLight(0xfff1dc, 0x7a6a58, 0);
+    this.ambient = new THREE.HemisphereLight(LAMP_GLOW.led, 0x7a6a58, 0);
     this.add(this.ambient);
   }
 
@@ -77,31 +129,115 @@ export class StairLights extends THREE.Group implements Furniture, Updatable, Oc
     return new THREE.Box3();
   }
 
+  /** The residents and the postman: they trip a landing's sensor as the player does. */
+  watch(walkers: readonly { readonly isPresent: boolean; readonly position: THREE.Vector3 }[]): void {
+    this.walkers = walkers;
+  }
+
   setOccupied(occupied: boolean): void {
     this.occupied = occupied;
   }
 
-  /** How lit the stairwell is, 0 dark .. 1 bright: the lights once on, a little daylight from the roof. */
+  /** How lit the stairwell is where the player is, 0 dark .. 1 bright: the lit globes near them, a little daylight from the roof. */
   lightLevel(): number {
-    return THREE.MathUtils.clamp(0.25 + 0.5 * this.on + 0.25 * this.dayNight.state.daylight, 0, 1);
+    return THREE.MathUtils.clamp(0.25 + 0.5 * this.litNear() + 0.25 * this.dayNight.state.daylight, 0, 1);
   }
 
   update(dt: number): void {
-    const target = this.occupied ? 1 : 0;
-    this.on += THREE.MathUtils.clamp(target - this.on, -dt / RAMP, dt / RAMP);
-    const s = this.dayNight.state;
-    this.globes.color.copy(WARM).multiplyScalar(0.12 + 1.6 * this.on);
-    this.sky.color.copy(s.zenith).lerp(s.horizon, 0.4).multiplyScalar(0.25 + 1.1 * s.daylight);
-    this.ambient.intensity = this.occupied ? 0.1 + 0.45 * this.on + 0.2 * s.daylight : 0;
-    for (const bulb of this.bulbs) bulb.intensity = INTENSITY * this.on;
-    this.chooseClock -= dt;
-    if (this.chooseClock > 0 || !this.occupied) return;
-    this.chooseClock = 0.25;
-    this.options.viewer.getWorldPosition(this.eye);
+    this.on += THREE.MathUtils.clamp((this.occupied ? 1 : 0) - this.on, -dt / COOL_S, dt / WARM_UP_S);
+    this.options.viewer.getWorldPosition(this.ear);
+    this.eye.copy(this.ear);
     this.worldToLocal(this.eye);
-    const eye = this.eye;
-    const spots = this.spots;
-    this.order.sort((a, b) => spots[a]!.distanceToSquared(eye) - spots[b]!.distanceToSquared(eye));
-    for (let i = 0; i < this.bulbs.length; i++) this.bulbs[i]!.position.copy(spots[this.order[i]!]!);
+    this.sensors(dt);
+    this.chooseClock -= dt;
+    if (this.chooseClock <= 0 && this.occupied) {
+      this.chooseClock = 0.25;
+      this.choose();
+    }
+    for (const bulb of this.bulbs) {
+      if (bulb.next !== bulb.slot) {
+        bulb.fade = Math.max(0, bulb.fade - dt / SLOT_FADE_S);
+        if (bulb.fade === 0) {
+          bulb.slot = bulb.next;
+          bulb.light.position.copy(this.slots[bulb.slot]!.at);
+        }
+      } else {
+        bulb.fade = Math.min(1, bulb.fade + dt / SLOT_FADE_S);
+      }
+      bulb.light.intensity = INTENSITY * this.on * bulb.fade * this.slots[bulb.slot]!.glow;
+    }
+    const lit = this.litNear();
+    const s = this.dayNight.state;
+    this.ambient.intensity = this.occupied ? 0.1 + 0.45 * lit * this.on + 0.2 * s.daylight : 0;
+    this.paintSky(s);
   }
+
+  /** Every landing's sensor: the player on it keeps its globe lit; the timer runs down once they left; the relay clacks at each switch. */
+  private sensors(dt: number): void {
+    const feet = this.eye.y - EYE;
+    let changed = false;
+    this.slots.forEach((slot, i) => {
+      const seen = this.occupied && (sees(slot, this.eye.x, this.eye.z, feet) || this.walkers.some((w) => w.isPresent && sees(slot, w.position.x, w.position.z, w.position.y)));
+      if (seen) {
+        if (slot.left <= 0) this.relay(slot, true);
+        slot.left = LIT_S;
+      } else if (slot.left > 0) {
+        slot.left -= dt;
+        if (slot.left <= 0) this.relay(slot, false);
+      }
+      const target = slot.left > 0 ? 1 : 0;
+      if (slot.glow === target) return;
+      slot.glow = THREE.MathUtils.clamp(slot.glow + (target > slot.glow ? dt / WARM_UP_S : -dt / COOL_S), 0, 1);
+      this.globes.setColorAt(i, this.colour.copy(WARM).multiplyScalar(0.12 + 1.6 * slot.glow));
+      changed = true;
+    });
+    if (changed && this.globes.instanceColor) this.globes.instanceColor.needsUpdate = true;
+  }
+
+  /** The two real lights go to the lit globes nearest the player (a bulb already on one of them stays). */
+  private choose(): void {
+    const { slots, eye } = this;
+    this.order.sort((a, b) => rank(slots[a]!, eye) - rank(slots[b]!, eye));
+    const wanted = this.order.slice(0, this.bulbs.length);
+    const free = wanted.filter((i) => !this.bulbs.some((b) => b.next === i));
+    for (const bulb of this.bulbs) {
+      if (wanted.includes(bulb.next)) continue;
+      const next = free.shift();
+      if (next !== undefined) bulb.next = next;
+    }
+  }
+
+  /** The glow the player stands in: the brightest real light's globe, as lit as it is. */
+  private litNear(): number {
+    let lit = 0;
+    for (const bulb of this.bulbs) lit = Math.max(lit, bulb.fade * this.slots[bulb.slot]!.glow);
+    return lit;
+  }
+
+  /** A relay clacks at `slot`, heard from where the player is (only while they are in the stairwell). */
+  private relay(slot: Slot, on: boolean): void {
+    if (!this.occupied) return;
+    const distance = this.eye.distanceTo(slot.at);
+    playRelay((0.12 * proximityVolume(distance, { referenceDistance: 1.5, rolloff: 1, maxDistance: 14 })) / 100, on);
+  }
+
+  /** The roof light: the sky's colour, greyed by cloud, darkened by rain, white with snow lying on it, a lightning flash. */
+  private paintSky(s: SkyState): void {
+    const c = this.colour.copy(s.zenith).lerp(s.horizon, 0.4);
+    c.lerp(OVERCAST, 0.7 * s.cloudCover);
+    c.multiplyScalar((0.25 + 1.1 * s.daylight) * (1 - 0.35 * s.rain));
+    c.lerp(this.snowGlass.copy(SNOW_GLASS).multiplyScalar(0.3 + 0.8 * s.daylight), 0.8 * s.snowCover);
+    c.addScalar(1.5 * s.lightning);
+    this.sky.color.copy(c);
+  }
+}
+
+/** Whether `slot`'s sensor sees feet at (x, y, z), local. */
+function sees(slot: Slot, x: number, z: number, y: number): boolean {
+  return Math.abs(y - slot.floor) < SENSOR_HEIGHT && Math.hypot(x - slot.at.x, z - slot.at.z) < SENSOR_REACH;
+}
+
+/** Where a globe comes in the choice for the real lights: lit ones first, nearest first. */
+function rank(slot: Slot, eye: THREE.Vector3): number {
+  return slot.at.distanceToSquared(eye) + (slot.glow > 0.02 || slot.left > 0 ? 0 : 1000);
 }

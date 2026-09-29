@@ -1,28 +1,16 @@
 import * as THREE from 'three';
+import { bareMetal } from '../metals';
 import { createCanvas, seededRandom, toTexture } from '@/covers/generated/canvasUtils';
 import type { Furniture } from '../../Furniture';
 import { snowCovered } from '../snowCover';
-import { FRONT, KERB_HEIGHT, PARK_STREET, STREET_PLAN, type Vec2 } from '../streetPlan';
+import { FRONT, KERB_HEIGHT, PARK_STREET, STREET_PLAN } from '../streetPlan';
 import { groundHeight } from '../relief/ground';
 import { TriBuilder } from '../relief/TriBuilder';
 import { CLOSURES, closureBox } from './roadworks';
 import { GROUND, onSurface } from '../../surface/layers';
 
-/*
- * Where the little things stand (zone-local): purely visual placements, kept clear of the
- * passers-by's routes (z about ±10.1..10.6 on the pavements), the crossings and the signal posts.
- */
-const MANHOLES: Vec2[] = [[-10, -4.5], [6.8, 3.2], [22, -2.8], [33, 4.4], [52, -3], [80, 2.8], [-28, -22], [-28, -58], [-7.6, -9.1], [14.2, 9.2], [29.2, -9.4], [-33, 9.3]];
-const HYDRANTS: Vec2[] = [[-15.4, -8.5], [24.6, 8.5], [35.6, -8.5], [-36.6, -24]];
-const BOLLARDS: Vec2[] = [
-  [-0.6, -8.35], [-1.3, -8.35], [5.6, -8.35], [6.3, -8.35],
-  [-0.6, 8.35], [0.3, 8.35], [6.6, 8.35], [7.3, 8.35],
-  [-23, -9.3], [-23, -10.3], [-23, -11.3],
-  [-34.5, 8.35], [-32.5, 8.35], [-30.5, 8.35], [-22.5, 8.35],
-];
-/** The Morris column: at the mouth of Park Street on the far pavement, clear of the route along the shops. */
-const COLUMN: Vec2 = [-24.5, 9.05];
-const COLUMN_SIZE = { radius: 0.6, height: 3.1 };
+/* Where the little things stand: the street's plan (`STREET_PLAN.details`, which the window view paints too). */
+const { manholes: MANHOLES, hydrants: HYDRANTS, bollards: BOLLARDS, column: { at: COLUMN, ...COLUMN_SIZE } } = STREET_PLAN.details;
 /** Gutter drains along the kerbs every so many metres. */
 const DRAIN_EVERY = 13;
 
@@ -72,7 +60,7 @@ export class StreetDetails extends THREE.Group implements Furniture {
       grate(PARK_STREET.nearKerb - 0.2, z, Math.PI / 2);
       grate(PARK_STREET.farKerb + 0.2, z - 6, Math.PI / 2);
     }
-    this.addMesh(merge(covers), onSurface(new THREE.MeshStandardMaterial({ map: iron, roughness: 0.55, metalness: 0.6 }), GROUND.grate), false);
+    this.addMesh(merge(covers), onSurface(bareMetal({ map: iron, roughness: 0.6 }, 0.22), GROUND.grate), false);
 
     // Hydrants: a red post with a cap and two nozzles.
     for (const [x, z] of HYDRANTS) {
@@ -93,7 +81,7 @@ export class StreetDetails extends THREE.Group implements Furniture {
     }
     this.buildColumn(anisotropy);
     this.buildRoadworks(painted, random, anisotropy);
-    this.addMesh(painted.build(), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.6, metalness: 0.2 }), true);
+    this.addMesh(painted.build(), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.55 }), true);
   }
 
   get footprint(): THREE.Box3 {
@@ -118,7 +106,7 @@ export class StreetDetails extends THREE.Group implements Furniture {
     const [x, z] = COLUMN;
     const { radius, height } = COLUMN_SIZE;
     const drum = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius, height - 0.9, 28, 1, true).translate(x, 0.35 + (height - 0.9) / 2, z), snowCovered(new THREE.MeshStandardMaterial({ map: postersTexture(anisotropy), roughness: 0.85 })));
-    const green = new THREE.MeshStandardMaterial({ color: 0x24392e, roughness: 0.55, metalness: 0.3 });
+    const green = new THREE.MeshStandardMaterial({ color: 0x24392e, roughness: 0.5 });
     const trim = new THREE.Mesh(
       merge([
         new THREE.CylinderGeometry(radius + 0.05, radius + 0.1, 0.35, 28).translate(x, 0.175, z),
@@ -168,14 +156,20 @@ export class StreetDetails extends THREE.Group implements Furniture {
         this.colliders.push(closureBox(closure, -0.05, 0.45, z0 - 0.05, z1 + 0.05, road, 2));
       }
       // Cones along the lane lines beyond, orange with a white band.
-      for (const line of closure.coneLines) {
-        for (let cx = 1.2; cx < 12; cx += 2.2) {
-          const m = frame.clone().multiply(new THREE.Matrix4().makeTranslation(cx + (random() - 0.5) * 0.2, road, line));
-          painted.box(m, 0, 0.02, 0, 0.36, 0.04, 0.36, '#1a1a1a');
-          painted.box(m, 0, 0.2, 0, 0.2, 0.34, 0.2, '#f06a1a');
-          painted.box(m, 0, 0.26, 0, 0.21, 0.07, 0.21, '#f4f4f0');
-          painted.box(m, 0, 0.42, 0, 0.1, 0.12, 0.1, '#f06a1a');
-        }
+      const cone = (x: number, z: number): void => {
+        const m = frame.clone().multiply(new THREE.Matrix4().makeTranslation(x, road, z));
+        painted.box(m, 0, 0.02, 0, 0.36, 0.04, 0.36, '#1a1a1a');
+        painted.box(m, 0, 0.2, 0, 0.2, 0.34, 0.2, '#f06a1a');
+        painted.box(m, 0, 0.26, 0, 0.21, 0.07, 0.21, '#f4f4f0');
+        painted.box(m, 0, 0.42, 0, 0.1, 0.12, 0.1, '#f06a1a');
+      };
+      for (const line of closure.coneLines) for (let cx = 1.2; cx < 12; cx += 2.2) cone(cx + (random() - 0.5) * 0.2, line);
+      // And across the lanes' gap on the works' line itself, clear of where the cars drive: the line the roadworker
+      // keeps walkers behind (`Flagger`'s collider) shows.
+      const [l0, l1] = closure.lanes;
+      for (let z = l0 + 0.35; z <= l1 - 0.35; z += 0.7) {
+        if (closure.carLines.some((line) => Math.abs(z - line) < 1.15)) continue;
+        cone(0.05 + (random() - 0.5) * 0.06, z);
       }
     }
     const hoarding = new THREE.Mesh(merge(panels), snowCovered(new THREE.MeshStandardMaterial({ map: hoardingTexture(anisotropy), roughness: 0.8 })));

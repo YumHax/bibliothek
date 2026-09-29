@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { QUALITY } from '@/graphics/quality';
 import { createCanvas, seededRandom, toTexture } from '@/covers/generated/canvasUtils';
 import { paintOnce } from './materials/paintedTiles';
 
@@ -108,7 +109,9 @@ function paintConcrete(): [THREE.Texture, THREE.Texture] {
   }
   // Saw-cut joints between the slabs: a dark line with a lighter chamfer either side, sunk in the bump.
   const slabPx = SLAB_M * PX_PER_M;
-  for (let k = 0; k < TILE_M / SLAB_M; k++) {
+  // The joint on the tile's edge is drawn at both edges (0 and TILE_PX): each half is cut off by
+  // its edge, and the two halves meet across the seam as one joint as wide as the others.
+  for (let k = 0; k <= TILE_M / SLAB_M; k++) {
     const p = k * slabPx;
     for (const vertical of [true, false]) {
       const rect = (offset: number, w: number, style: string, ctx: CanvasRenderingContext2D): void => {
@@ -123,10 +126,10 @@ function paintConcrete(): [THREE.Texture, THREE.Texture] {
     }
   }
 
-  const map = toTexture(colorCanvas, 8);
+  const map = toTexture(colorCanvas);
   // The bump map is data, not colour: no sRGB decoding.
   const bumpMap = new THREE.CanvasTexture(bumpCanvas);
-  bumpMap.anisotropy = 4;
+  bumpMap.anisotropy = QUALITY.anisotropy;
   for (const t of [map, bumpMap]) t.wrapS = t.wrapT = THREE.RepeatWrapping;
   return [map, bumpMap];
 }

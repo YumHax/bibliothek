@@ -1,8 +1,10 @@
 import * as THREE from 'three';
+import { QUALITY } from '@/graphics/quality';
 import { createCanvas, seededRandom } from '@/covers/generated/canvasUtils';
 import type { SkyState } from '../props/DayNight';
 import { wakefulnessAt } from '@/time/wakefulness';
 import { Prop } from '../props/Prop';
+import { afterChunk, patchShader } from '../materials/shaderPatch';
 
 export interface BuildingFrontOptions {
   /** Extent along the wall (local x) and from the street to the parapet (local y), metres. */
@@ -11,6 +13,8 @@ export interface BuildingFrontOptions {
   top: number;
   /** Height of a storey; the flat's floor is local y 0, the storeys below count down from it. */
   storey: number;
+  /** Height of the shops' floor at street level (taller than the others). */
+  groundFloor: number;
   /** Window pitch along the neighbours' part and the lower floors. */
   pitch: number;
   /** The opening cut through it (the balcony door): local x of its middle, width and height. */
@@ -72,21 +76,28 @@ export class BuildingFront extends Prop {
 
     const map = new THREE.CanvasTexture(colorCanvas);
     map.colorSpace = THREE.SRGBColorSpace;
-    map.anisotropy = 8;
+    map.anisotropy = QUALITY.anisotropy;
     const roughness = new THREE.CanvasTexture(roughCanvas);
     this.lightTexture = new THREE.CanvasTexture(lightCanvas);
     this.lightTexture.colorSpace = THREE.SRGBColorSpace;
-    // Roughness from G, metalness from B (the glass catches the sky, the plaster does not).
-    this.material = new THREE.MeshStandardMaterial({
-      map,
-      roughnessMap: roughness,
-      metalnessMap: roughness,
-      roughness: 1,
-      metalness: 1,
-      emissive: 0xffffff,
-      emissiveMap: this.lightTexture,
-      emissiveIntensity: 0,
-    });
+    // Roughness from G, metalness from B (the glass catches the sky, the plaster does not). The
+    // metalness is read from the roughness map's own sampler: a `metalnessMap` would be one more
+    // texture unit, and beside the flat's shadow maps the lit program would no longer link.
+    this.material = patchShader(
+      new THREE.MeshStandardMaterial({
+        map,
+        roughnessMap: roughness,
+        roughness: 1,
+        metalness: 1,
+        emissive: 0xffffff,
+        emissiveMap: this.lightTexture,
+        emissiveIntensity: 0,
+      }),
+      'buildingFrontMetal',
+      (shader) => {
+        shader.fragmentShader = afterChunk(shader.fragmentShader, 'metalnessmap_fragment', '#ifdef USE_ROUGHNESSMAP\nmetalnessFactor *= texture2D(roughnessMap, vRoughnessMapUv).b;\n#endif');
+      },
+    );
 
     // The wall, the door cut out of it.
     const shape = new THREE.Shape();
@@ -132,7 +143,7 @@ export class BuildingFront extends Prop {
   }
 
   private paint(color: CanvasRenderingContext2D, rough: CanvasRenderingContext2D, W: number, H: number): void {
-    const { x, street, top, storey, pitch, ourWindows, ours } = this.options;
+    const { x, street, top, storey, groundFloor, pitch, ourWindows, ours } = this.options;
     const random = seededRandom(3303);
     color.fillStyle = PLASTER;
     color.fillRect(0, 0, W, H);
@@ -161,7 +172,7 @@ export class BuildingFront extends Prop {
     // Cornice under the parapet, string courses at each floor.
     rect(color, x[0], top - 0.35, x[1], top - 0.1, TRIM);
     rect(color, x[0], top - 0.12, x[1], top, '#6d5c4a');
-    for (let y = 0; y > street; y -= storey) rect(color, x[0], y - 0.18, x[1], y - 0.02, TRIM);
+    for (let y = 0; y > street + groundFloor - 0.05; y -= storey) rect(color, x[0], y - 0.18, x[1], y - 0.02, TRIM);
 
     const window = (cx: number, w: number, y0: number, y1: number, curfew: number): void => {
       rect(color, cx - w / 2 - 0.1, y0 - 0.12, cx + w / 2 + 0.1, y1 + 0.1, TRIM);
@@ -188,10 +199,10 @@ export class BuildingFront extends Prop {
     // The floors below, down to the first; then the shops and the street door.
     for (let floor = 1; floor * storey < -street - storey * 0.5; floor++) {
       const base = -floor * storey;
-      if (base - storey < street + 0.5) break;
+      if (base - storey < street + groundFloor - storey - 0.05) break;
       for (let cx = x[0] + pitch / 2; cx < x[1] - 0.8; cx += pitch) window(cx, 1.15, base + 0.25, base + 2.45, bedtime());
     }
-    const ground = street + 3.6;
+    const ground = street + groundFloor - 0.3;
     rect(color, x[0], street, x[1], ground, '#6a5a4a');
     let s = x[0] + 0.6;
     while (s < x[1] - 3) {

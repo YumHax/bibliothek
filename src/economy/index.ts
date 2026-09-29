@@ -20,6 +20,7 @@ export { ArcadeDaily, type Challenge } from './ArcadeDaily';
 export { ArcadeMedals, type MedalAward, type MedalTier } from './ArcadeMedals';
 export { ArcadeLeague, type LeagueEntry, type WeekResult, type StreakNews } from './ArcadeLeague';
 export { Jackpot } from './Jackpot';
+export { ArcadeHabits, HINTED_PLAYS } from './ArcadeHabits';
 export { ArcadeTournament, type TournamentView, type TournamentOutcome } from './ArcadeTournament';
 export { PayoutStats, type PayoutRow } from './PayoutStats';
 export { PrizeStore, PRIZES, getPrize, clawPrizeFor, type Prize, type PrizeKind, type OwnedPrize } from './Prizes';

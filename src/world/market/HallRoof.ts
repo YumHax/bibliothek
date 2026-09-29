@@ -21,8 +21,9 @@ const DAY_WHITE = new THREE.Color(0xfff8ee);
 const CHORD = 0.08;
 const WEB = 0.05;
 
-const IRON = standard({ color: 0x3b3a38, roughness: 0.55, metalness: 0.5 });
-const GLAZING_BAR = standard({ color: 0x4a4846, roughness: 0.5, metalness: 0.4 });
+// Painted ironwork: dielectrics (metalness 0).
+const IRON = standard({ color: 0x3b3a38, roughness: 0.55, metalness: 0 });
+const GLAZING_BAR = standard({ color: 0x4a4846, roughness: 0.5, metalness: 0 });
 
 /**
  * What turns a plastered ceiling into a market hall's roof: riveted iron trusses spanning the

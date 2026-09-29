@@ -1,5 +1,5 @@
 import { KEYS, PersistedStore, safeStorage } from '@/persistence';
-import { HOME_GOODS, HOME_UPGRADES, homeGood, type HomeUpgrade } from './homeGoods';
+import { HOME_GOODS, HOME_UPGRADES, homeGood, type HomeGoodStatus, type HomeUpgrade } from './homeGoods';
 
 export type { HomeUpgrade } from './homeGoods';
 
@@ -65,6 +65,12 @@ export class HomeUpgrades {
   canBuy(upgrade: HomeUpgrade): boolean {
     const good = homeGood(upgrade);
     return this.count(upgrade) < good.max && (!good.requires || this.has(good.requires));
+  }
+
+  /** `buy`, `full` (as many at home as it has spots) or `needs` (what it goes with is not bought yet): the one rule every counter shows. */
+  status(upgrade: HomeUpgrade): HomeGoodStatus {
+    if (this.count(upgrade) >= homeGood(upgrade).max) return 'full';
+    return this.canBuy(upgrade) ? 'buy' : 'needs';
   }
 
   add(upgrade: HomeUpgrade): void {

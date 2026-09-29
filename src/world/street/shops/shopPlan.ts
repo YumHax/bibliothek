@@ -1,4 +1,4 @@
-import { COFFEE_PRICE } from '@/economy/pricing';
+import { COFFEE_PRICE, SCRATCH, STREET_TREATS } from '@/economy/pricing';
 import type { ShopKind, ShopSpec } from '../streetPlan';
 
 /** Something a shop sells over the counter: the coffee, a croissant, a scratch card, a drink. */
@@ -36,7 +36,7 @@ export const SHOP_TALK: Record<ShopKind, ShopTalk> = {
   bakery: {
     looks: ['Warm bread, the smell of butter.'],
     closed: 'The shelves are bare till the morning bake.',
-    offer: { id: 'croissant', title: 'a croissant', price: 1 },
+    offer: { id: 'croissant', title: 'a croissant', price: STREET_TREATS.croissant },
   },
   pharmacy: {
     looks: ['The pharmacist asks after the cat.', 'A poster about screen time. You look away.', 'The green cross blinks on its bracket.'],
@@ -54,12 +54,12 @@ export const SHOP_TALK: Record<ShopKind, ShopTalk> = {
   tabac: {
     looks: ['Stamps, lighters, the day’s papers.'],
     closed: 'The papers are in, the lottery sign is off.',
-    offer: { id: 'scratch', title: 'a PIXEL SCRATCH card', price: 2 },
+    offer: { id: 'scratch', title: 'a PIXEL SCRATCH card', price: SCRATCH.price },
   },
   bar: {
     looks: ['The regulars look up, then back at the match.'],
     closed: 'Chairs stacked, the till counted.',
-    offer: { id: 'drink', title: 'a lemonade at the bar', price: 2 },
+    offer: { id: 'drink', title: 'a lemonade at the bar', price: STREET_TREATS.lemonade },
   },
   butcher: {
     looks: ['The butcher waves a cleaver in greeting.', '“For the cat?” A scrap wrapped in paper. You say you will think about it.'],

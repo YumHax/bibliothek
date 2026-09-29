@@ -46,3 +46,12 @@
   gap: 0.5rem;
   margin-top: 1rem;
 }
+/* The shared thumbnail class (for the placeholder swap) must not shrink the card's cover. */
+.borrow-panel .borrow-panel__cover.catalogue__cover {
+  width: 4.5rem;
+  height: auto;
+}
+.borrow-panel .catalogue__cover--placeholder {
+  width: 4.5rem;
+  height: 5.4rem;
+}

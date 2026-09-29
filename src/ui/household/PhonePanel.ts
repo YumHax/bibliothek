@@ -110,7 +110,7 @@ export class PhonePanel extends ModalPanel {
       <li><span>${escapeHtml(item.game.title)}<small>${escapeHtml(stateOf(item))} · ${item.price} coins</small></span>
       <button type="button" class="ui-btn" data-action="hold" data-id="${i}">Put it aside (${this.deps.deposit(item)} down)</button></li>`).join('');
     this.paint(`<h3>The ${escapeHtml(name)} stall</h3>
-      <p class="household-panel__dim">“Oh, it's you! Here's what I've got on the table today.”</p>
+      <p class="household-panel__dim">“Oh, it’s you! Here’s what I’ve got on the table today.”</p>
       ${rows ? `<ul class="household-panel__rows">${rows}</ul>` : '<p class="household-panel__dim">“Nothing I could put by, sorry. Come and see.”</p>'}`, true);
   }
 

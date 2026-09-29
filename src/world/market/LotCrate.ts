@@ -4,7 +4,8 @@ import type { SessionActions } from '@/game/SessionActions';
 import { createCanvas, fitFontSize, seededRandom, toTexture, FONT } from '@/covers/generated/canvasUtils';
 import type { Furniture } from '../Furniture';
 import { boxMesh, cylinderMesh, invisibleHitbox } from '../meshUtils';
-import { paint } from '../materials/palette';
+import { coverageKeepsAlpha, paint } from '../materials/palette';
+import { QUALITY } from '@/graphics/quality';
 
 export interface LotCrateOptions {
   /** Hover caption. */
@@ -67,7 +68,7 @@ export class LotCrate extends THREE.Group implements Furniture, Interactable {
       this.add(flap(DEPTH, FLAP_LONG, card, new THREE.Vector3(sx * WIDTH / 2, HEIGHT, 0), sx > 0 ? Math.PI / 2 : -Math.PI / 2));
     }
     // A marker scrawl on the front wall.
-    const scrawl = new THREE.Mesh(new THREE.PlaneGeometry(0.34, 0.12), new THREE.MeshStandardMaterial({ map: paintScrawl(), transparent: true, alphaTest: 0.3, roughness: 0.95 }));
+    const scrawl = new THREE.Mesh(new THREE.PlaneGeometry(0.34, 0.12), coverageKeepsAlpha(new THREE.MeshStandardMaterial({ map: paintScrawl(), alphaTest: 0.3, alphaToCoverage: QUALITY.msaa > 0, roughness: 0.95 })));
     scrawl.position.set(-0.05, HEIGHT * 0.45, DEPTH / 2 + 0.002);
     scrawl.castShadow = false;
     this.add(scrawl);

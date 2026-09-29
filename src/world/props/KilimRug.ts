@@ -2,8 +2,9 @@ import * as THREE from 'three';
 import { createCanvas, seededRandom, toTexture } from '@/covers/generated/canvasUtils';
 import { Prop } from './Prop';
 import { fabric } from '@/world/materials/finishes';
-import { cloth as paletteCloth } from '@/world/materials/palette';
+import { cloth as paletteCloth, coverageKeepsAlpha } from '@/world/materials/palette';
 import { FLOOR } from '@/world/surface/layers';
+import { QUALITY } from '@/graphics/quality';
 
 export interface KilimRugOptions {
   /** Size of the woven part, along local x and z (the fringes come on top along x). Default 1.55 x 0.7. */
@@ -25,11 +26,15 @@ const PX_PER_M = 700;
  * placement, long side along local x. Decoration: never collides.
  */
 export class KilimRug extends Prop {
+  /** What it covers of the floor, along local x and z (the fringes aside): underfoot is soft there. */
+  readonly size: THREE.Vector2;
+
   constructor(options: KilimRugOptions = {}) {
     super();
     this.name = 'KilimRug';
     const width = options.width ?? 1.55;
     const depth = options.depth ?? 0.7;
+    this.size = new THREE.Vector2(width, depth);
     const colors = options.colors ?? [0xa6392e, 0x243a5e, 0xd9a441, 0xeee4cc];
     const random = seededRandom((options.seed ?? 11) * 48271);
 
@@ -42,14 +47,23 @@ export class KilimRug extends Prop {
     slab.receiveShadow = true;
     this.add(slab);
 
-    const tassels = new THREE.MeshStandardMaterial({ map: paintFringe(depth, random), roughness: 1, alphaTest: 0.5, side: THREE.DoubleSide });
-    for (const sx of [-1, 1]) {
-      const fringe = new THREE.Mesh(new THREE.PlaneGeometry(FRINGE, depth), tassels);
-      fringe.rotation.set(-Math.PI / 2, 0, sx > 0 ? 0 : Math.PI);
-      fringe.position.set(sx * (width / 2 + FRINGE / 2 - 0.004), FLOOR.fringe.lift, 0);
-      fringe.receiveShadow = true;
-      this.add(fringe);
-    }
+    addFringes(this, width, depth, FRINGE, random);
+  }
+}
+
+/**
+ * The loose warp ends past both short ends (along x) of a rug `width` x `depth` centred on the
+ * origin: two cut-out planes on the floor's `fringe` layer, tucked a few millimetres under the
+ * rug's edge. Alpha-tested strands, smoothed by coverage under MSAA. Shared with the pile `Rug`.
+ */
+export function addFringes(parent: THREE.Object3D, width: number, depth: number, length: number, random: () => number): void {
+  const tassels = coverageKeepsAlpha(new THREE.MeshStandardMaterial({ map: paintFringe(depth, random), roughness: 1, alphaTest: 0.5, alphaToCoverage: QUALITY.msaa > 0, side: THREE.DoubleSide }));
+  for (const sx of [-1, 1]) {
+    const fringe = new THREE.Mesh(new THREE.PlaneGeometry(length, depth), tassels);
+    fringe.rotation.set(-Math.PI / 2, 0, sx > 0 ? 0 : Math.PI);
+    fringe.position.set(sx * (width / 2 + length / 2 - 0.004), FLOOR.fringe.lift, 0);
+    fringe.receiveShadow = true;
+    parent.add(fringe);
   }
 }
 

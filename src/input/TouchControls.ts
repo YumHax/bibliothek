@@ -1,22 +1,45 @@
 import './TouchControls.css';
 import type { Input } from '@/core/Input';
 import { SPRINT_CODE, type FirstPersonController } from '@/player/FirstPersonController';
-import { TOUCH_ACTIONS, primaryCode } from './actions';
+import { TOUCH_ACTIONS, primaryCode, type ActionContext } from './actions';
+import { hudSlot } from '@/ui/hudSlot';
 import type { SyntheticMouse } from './SyntheticMouse';
 import { isTouchDevice, watchForTouch } from './deviceDetect';
 
-/** One on-screen button: its label and the key code it presses through `Input`. */
+/** One on-screen button: its label, the key code it presses through `Input`, and where it applies (always, without). */
 export interface TouchButton {
   label: string;
   code: string;
   title?: string;
+  context?: ActionContext;
 }
 
+/** What the player's hands are on now, for the bar (`setContext`): the Session's `handsContext`. */
+export type TouchContext = 'room' | 'held' | 'market' | 'arcade' | 'seated';
+
 /**
- * Default action bar: the action table's `touch` entries (`input/actions`), in slot order. Sitting has
- * no key (tap the armchair); `KeyE` both puts a box back and stands up, which is why it is labelled for both.
+ * Default action bar: the action table's `touch` entries (`input/actions`), in slot order. Only the
+ * buttons that do something where the player is show (`setContext`); `KeyE` is named for what it does
+ * there: put back, walk away (a machine), stand up (a seat).
  */
 export const DEFAULT_TOUCH_BUTTONS: TouchButton[] = TOUCH_ACTIONS.map((button) => ({ ...button }));
+
+/** Which buttons show in each context, by their action's context (`panels`: everywhere). */
+const SHOWN_IN: Record<TouchContext, ReadonlySet<ActionContext>> = {
+  room: new Set(['room', 'panels']),
+  held: new Set(['held', 'panels']),
+  market: new Set(['held', 'market', 'panels']),
+  arcade: new Set(['panels']),
+  seated: new Set(['room', 'panels']),
+};
+/** The put-back key (E) is also walking away and standing up: shown and named for those too. */
+const E_CODE = primaryCode('putBack');
+const E_LABELS: Partial<Record<TouchContext, { label: string; title: string }>> = {
+  arcade: { label: 'Walk away', title: 'Walk away from the machine' },
+  seated: { label: 'Stand up', title: 'Stand up' },
+};
+/** How often the bar re-reads the context while in the room (ms). */
+const CONTEXT_POLL_MS = 200;
 
 export interface TouchControlsOptions {
   buttons?: TouchButton[];
@@ -80,6 +103,10 @@ export class TouchControls {
   private readonly knobEl: HTMLDivElement;
   private readonly barEl: HTMLDivElement;
   private readonly badgeEl: HTMLDivElement;
+  private readonly buttonEls: Array<{ spec: TouchButton; el: HTMLButtonElement }> = [];
+  private readContext: (() => TouchContext) | null = null;
+  private shownContext: TouchContext | null = null;
+  private contextTimer: number | undefined;
 
   constructor(
     container: HTMLElement,
@@ -94,7 +121,8 @@ export class TouchControls {
       lookSensitivity: options.lookSensitivity ?? 0.0045,
       joystickRadius: options.joystickRadius ?? 56,
       sprintRatio: options.sprintRatio ?? 1.4,
-      tapMaxMs: options.tapMaxMs ?? 250,
+      // A tap set down with care lasts longer than a flick: under the long press, with room to spare.
+      tapMaxMs: options.tapMaxMs ?? 330,
       tapMaxMove: options.tapMaxMove ?? 12,
       longPressMs: options.longPressMs ?? 450,
       moveZone: options.moveZone ?? 0.5,
@@ -113,17 +141,45 @@ export class TouchControls {
     this.barEl = document.createElement('div');
     this.barEl.className = 'touch-bar';
     this.barEl.hidden = true;
-    for (const button of this.opts.buttons) this.barEl.appendChild(this.createButton(button));
+    for (const button of this.opts.buttons) {
+      const el = this.createButton(button);
+      this.buttonEls.push({ spec: button, el });
+      this.barEl.appendChild(el);
+    }
 
     this.badgeEl = document.createElement('div');
     this.badgeEl.className = 'touch-badge';
-    this.badgeEl.textContent = 'Rotating — drag, release to stop';
+    this.badgeEl.textContent = 'Rotating · lift to stop';
     this.badgeEl.hidden = true;
 
-    container.append(this.stickEl, this.barEl, this.badgeEl);
+    container.append(this.stickEl, this.barEl);
+    // Where the bar ends (it wraps to two rows on a phone): the HUD along the top sits under it (`--touch-bar-bottom`, styles.css).
+    if (typeof ResizeObserver === 'function') new ResizeObserver(() => this.publishBarBottom()).observe(this.barEl);
+    // Last in the column under the crosshair (`hudSlot`), below the caption and the reaction.
+    hudSlot(container, 'crosshair').appendChild(this.badgeEl);
 
     if (isTouchDevice()) this.activate();
     else watchForTouch(() => this.activate());
+  }
+
+  /** Where the player's hands are (the Session): the bar shows only what works there, E named for what it does. */
+  setContext(read: () => TouchContext): void {
+    this.readContext = read;
+    this.refreshContext();
+  }
+
+  private refreshContext(): void {
+    const context = this.readContext?.() ?? null;
+    if (context === this.shownContext) return;
+    this.shownContext = context;
+    for (const { spec, el } of this.buttonEls) {
+      const relabel = spec.code === E_CODE && context ? E_LABELS[context] : undefined;
+      const shown = !context || !spec.context || SHOWN_IN[context].has(spec.context) || !!relabel;
+      el.hidden = !shown;
+      el.textContent = relabel?.label ?? spec.label;
+      el.title = relabel?.title ?? spec.title ?? '';
+    }
+    this.publishBarBottom();
   }
 
   /** Settings > Look: `sensitivity` multiplies the configured `lookSensitivity`. */
@@ -154,8 +210,19 @@ export class TouchControls {
     this.setInRoom(this.player.isLocked);
   }
 
+  private publishBarBottom(): void {
+    const bottom = this.barEl.hidden ? 0 : this.barEl.getBoundingClientRect().bottom;
+    document.documentElement.style.setProperty('--touch-bar-bottom', `${Math.round(bottom)}px`);
+  }
+
   private setInRoom(inRoom: boolean): void {
     this.barEl.hidden = !inRoom;
+    this.publishBarBottom();
+    window.clearInterval(this.contextTimer);
+    if (inRoom) {
+      this.refreshContext();
+      this.contextTimer = window.setInterval(() => this.refreshContext(), CONTEXT_POLL_MS);
+    }
     if (!inRoom) {
       this.endStick();
       if (this.look) this.endLook(this.look, false);
@@ -284,13 +351,16 @@ export class TouchControls {
 
   private updateLook(e: PointerEvent): void {
     const look = this.look!;
-    const dx = e.clientX - look.lastX;
-    const dy = e.clientY - look.lastY;
+    let dx = e.clientX - look.lastX;
+    let dy = e.clientY - look.lastY;
     look.lastX = e.clientX;
     look.lastY = e.clientY;
     if (!look.moved && Math.hypot(e.clientX - look.startX, e.clientY - look.startY) > this.opts.tapMaxMove) {
       look.moved = true;
       if (!look.longPress) window.clearTimeout(look.timer);
+      // The drag counts from where the finger landed: the pixels spent telling it from a tap are not lost.
+      dx = e.clientX - look.startX;
+      dy = e.clientY - look.startY;
     }
     if (!look.moved) return;
     if (this.player.lookEnabled) {

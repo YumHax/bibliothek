@@ -35,8 +35,9 @@ import { SHOP_PLANS, type ShopZoneId } from './shop/shopPlan';
  * Two zones sharing a doorway keep `WALL_GAP` between their wall planes (coplanar walls would
  * z-fight); the `Door`'s lining bridges it. Both shells cut the same opening; one hangs the leaf.
  *
- * Elsewhere, reached by teleport (`travel`): the street at x 140 (the front door leads down to
- * it; its doors lead home, into the arcade and into the retro games shop), the arcade at x 40 and
+ * Elsewhere: the street at x 140, walked into from the stairwell's entrance hall through the sas (the
+ * front door opens on the landing and the stairs down; `world/airlock`); its doors lead by travel
+ * (`travel`) into the arcade and into the retro games shop, the arcade at x 40 and
  * the flea market at x 80, each a windowless hall of its own (`src/world/arcade/`, `src/world/market/`),
  * and past the street the four shops one walks into (x 200 to 245, `src/world/shop/`), whose exits lead back to the street.
  *
@@ -85,8 +86,9 @@ export const KITCHEN_WING: NearWall = {
 export type ZoneKind = 'collectionRoom' | 'hallway' | 'bathroom' | 'bedroom' | 'kitchen' | 'balcony' | 'stairwell' | 'arcade' | 'market' | 'street' | 'shop';
 
 /**
- * A zone the player is teleported to (and from) through a `TravelDoor`, instead of walking: the
- * hallway (the flat's front door), the arcade, the market. `arrival` is the zone-local floor spot
+ * A zone the player is teleported to (and from) instead of walking: the arcade, the market and the walk-in shops
+ * (their `StreetDoor` in, their `TravelDoor` out), the street (coming out of them), the hallway (the pause menu's
+ * "Go home") and the entrance hall (the street's home door when the sas is not connected). `arrival` is the zone-local floor spot
  * the player is set down on, `yaw` the way they face there. The travel menu lists every such zone but the current one.
  */
 export interface TravelPlan {
@@ -143,6 +145,7 @@ function shopZone(id: ShopZoneId, x: number, label: string) {
     extent: plan.room,
     neighbours: [],
     travel: { label, arrival: plan.arrival.at, yaw: plan.arrival.yaw },
+    look: 'shop',
   } as const satisfies ZoneEntry;
 }
 
@@ -208,7 +211,9 @@ const ZONES = {
     extent: STAIRWELL_ROOM,
     neighbours: flatBut('stairwell'),
     persistent: true,
-    travel: { label: 'Home (the entrance hall)', arrival: STAIRWELL_PLAN.arrival.at, yaw: STAIRWELL_PLAN.arrival.yaw },
+    // Not "Home" (the hallway is): the travel menu lists both.
+    travel: { label: 'The entrance hall', arrival: STAIRWELL_PLAN.arrival.at, yaw: STAIRWELL_PLAN.arrival.yaw },
+    look: 'stairwell',
   },
   // Out of the flat, reached by teleport only (see `travel`): far enough along +x never to touch
   // the flat, no neighbours (nothing is seen through a door), not persistent (rebuilt on return).
@@ -228,8 +233,8 @@ const ZONES = {
     travel: { label: 'Flea market', arrival: MARKET_PLAN.arrival.at, yaw: MARKET_PLAN.arrival.yaw },
     look: 'market',
   },
-  // Front Street, outside the building (src/world/street/): reached by the flat's front door and
-  // the arcade's and market's exits, all by travel; its doors lead back to them. Not persistent.
+  // Front Street, outside the building (src/world/street/): walked into through the sas from the entrance hall,
+  // reached by travel from the exits of the arcade, the market and the shops; its doors lead back to them. Not persistent.
   street: {
     kind: 'street',
     origin: [140, 0, 0],

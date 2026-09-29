@@ -3,16 +3,14 @@ import { getPlatform } from '@/catalog/platforms';
 import type { GameSource } from '@/collection/GameSource';
 import type { Fame } from '@/economy/Fame';
 import type { StockItem } from '@/economy/StockItem';
-import { describeCondition, tradeValue } from '@/economy/pricing';
+import { CONFIRM_MS, describeCondition, tradeValue } from '@/economy/pricing';
 import { MarketPanel, coinsHtml, escapeHtml, type PanelWallet } from './MarketPanel';
-
-/** A click on "Swap" arms the row for this long; a second click within it swaps. */
-const CONFIRM_MS = 4000;
 
 /**
  * A swap at a stall: the player's games (not lent out, not on the wishlist) with what each counts
  * for against the copy in hand (`tradeValue`, more than the WE BUY desk pays) and the coins to add
- * on top; no change is given when a game is worth more. Two clicks swap (the first arms the row),
+ * on top; no change is given when a game is worth more (the button says how much value is lost). Two
+ * clicks swap (the first arms the row, for `CONFIRM_MS`),
  * then the Session does the rest (`onSwap`). Values depend on fame: a row can be swapped once its
  * lookup landed.
  */
@@ -87,7 +85,10 @@ export class TradePanel extends MarketPanel {
     const state = describeCondition(game.condition);
     const armed = this.armed?.id === game.id && performance.now() <= this.armed.until;
     const short = topUp > this.wallet.coins;
-    const label = !known ? 'Valuing…' : short ? 'Too dear' : armed ? `Swap${topUp ? ` +${topUp}` : ''}?` : topUp ? `Swap +${topUp}` : 'Swap even';
+    // Worth more than what is due: no change is given, so the button says what the swap throws away.
+    const lost = Math.max(0, value - item.due);
+    const terms = topUp ? ` +${topUp}` : lost ? ` (−${lost} value)` : ' even';
+    const label = !known ? 'Valuing…' : short ? 'Too dear' : armed ? `Swap${terms}?` : `Swap${terms}`;
     return `
       <div class="catalogue__row">
         ${cover ? `<img class="catalogue__cover" src="${escapeHtml(cover)}" alt="" loading="lazy" />` : ''}

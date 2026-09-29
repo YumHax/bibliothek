@@ -63,15 +63,15 @@ export interface CatLike {
   readonly settings: { readonly name: string };
   /** False while no cat lives in the flat (it is adopted at the pet shop on Front Street): C does nothing then. */
   readonly adopted?: boolean;
-  /** The player calls it: it comes, ignores the call, or is asleep. */
-  call(): 'coming' | 'ignored' | 'asleep';
+  /** The player calls it: it comes, ignores the call, or is asleep (`how`: by name, the feather wand, the treat jar). */
+  call(how?: 'voice' | 'feathers' | 'treats'): 'coming' | 'ignored' | 'asleep';
   setPlayerSeat?(seat: Seat | null): void;
 }
 
-/** Sleeping until morning in bed; `isAsleep` while the view is dark. */
+/** Sleeping until morning in bed; `isAsleep` while the view is dark. `untilMorning` is false when it is no time to sleep (nothing happened). */
 export interface SleepLike {
   readonly isAsleep: boolean;
-  untilMorning(): Promise<void>;
+  untilMorning(): Promise<boolean>;
 }
 
 /** The player's money: coins to spend, tickets to redeem. */
@@ -81,6 +81,8 @@ export interface WalletLike {
   spend(coins: number): boolean;
   addTickets(tickets: number): void;
   earnCoins(coins: number): void;
+  /** Turns tickets into coins at `ticketsPerCoin`, at most `maxCoins` of them (all when absent); the coins gained. */
+  redeemTickets?(ticketsPerCoin: number, maxCoins?: number): number;
 }
 
 /** The collection as something that can be bought into. */
@@ -101,6 +103,10 @@ export interface MarketLike {
   readonly day: number;
   /** A haggle over `item`, or the stallholder's reason for not haggling. */
   negotiate(item: StockItem): Negotiation | { line: string };
+  /** Whether `negotiate` would open a haggle (the H hint shows only then). */
+  canNegotiate?(item: StockItem): boolean;
+  /** Whether `item` was laid out on a market day gone by (midnight passed with it in hand): no more holds or haggles on it. */
+  isStale?(item: StockItem): boolean;
   settle(item: StockItem, negotiation: Negotiation, insults: number): void;
   holdDeposit(item: StockItem): number;
   hold(item: StockItem, deposit: number): void;
@@ -134,8 +140,10 @@ export interface PerksLike {
   tell(item: StockItem): string | null;
   /** A line for the copy's panel (the morning's first sale on offer), or null. */
   note(item: StockItem): string | null;
-  /** A copy was bought at a stall. */
-  bought(item: StockItem): void;
+  /** A copy was bought at a stall; true when the purchase used a perk (the morning's first sale). */
+  bought(item: StockItem): boolean | void;
+  /** The purchase that used a perk was handed back: the perk is given back. */
+  unbought?(): void;
   /** Tickets on top of what a play paid (the arcade tee); 0 for none. */
   arcadeBonus(tickets: number): number;
 }
@@ -176,6 +184,8 @@ export interface MedalsLike {
 export interface LeagueLike {
   record(tickets: number): { days: number; bonus: number };
   takeWeekResult(): { rank: number; tickets: number; won: boolean } | null;
+  /** Tickets won beside a play's own (the tee's, a tournament round's): they count in the week too. */
+  count?(tickets: number): void;
 }
 
 /** The balance table (`?payout`): each real play's score, tickets and time. */

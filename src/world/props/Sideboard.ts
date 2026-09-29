@@ -13,7 +13,7 @@ export interface SideboardOptions {
   height?: number;
   /** Carcass and door veneer. Default light oak. */
   wood?: number;
-  /** A turntable on the top, its lid up. Default true. */
+  /** A turntable on the top, its lid down. Default true. */
   turntable?: boolean;
   /** Sleeve colours of the records stacked beside it; empty for none. */
   records?: number[];
@@ -25,9 +25,11 @@ const PANEL = 0.02;
 const OFF_WALL = 0.02;
 const BRASS = METAL.brass();
 const BLACK = paint(0x1e1d1b, 0.6);
-const VINYL = standard({ color: 0x0f0f11, roughness: 0.35, metalness: 0.1 });
+const VINYL = standard({ color: 0x0f0f11, roughness: 0.35, metalness: 0 });
 const STEEL = METAL.steel();
 const SLEEVE_EDGE = paint(0xe8e2d4, 0.9);
+/** The dust lid's height over the deck at its hinge: clear of the tonearm's post (m). */
+const LID_CLEAR = 0.048;
 
 /**
  * A low mid-century sideboard against a wall: an oak carcass on four splayed legs, two sliding
@@ -110,13 +112,14 @@ export class Sideboard extends THREE.Group implements Furniture {
     const arm = part(this, 0.008, 0.006, 0.2, STEEL, { x: pivotX - 0.03, y: platterY + 0.038, z: pivotZ + 0.1 });
     arm.rotation.y = 0.25;
     arm.castShadow = false;
-    // The dust lid, hinged at the back, standing up open.
+    // The dust lid, down over the deck and just lifted off it at the front: stood up open it would reach into
+    // a projected picture above the sideboard (docs: the picture's bottom edge is at 0.63 m).
     const lid = new THREE.Mesh(
-      new THREE.BoxGeometry(plinthW, 0.004, plinthD),
+      new THREE.BoxGeometry(plinthW, 0.004, plinthD).translate(0, 0, plinthD / 2), // hinged at its back edge
       standard({ color: 0xdfe8ee, roughness: 0.1, transparent: true, opacity: 0.35 }),
     );
-    lid.position.set(x, platterY + plinthD / 2, z - plinthD / 2);
-    lid.rotation.x = -Math.PI / 2 + 0.2;
+    lid.position.set(x, platterY + LID_CLEAR, z - plinthD / 2);
+    lid.rotation.x = -0.06;
     lid.castShadow = false;
     lid.receiveShadow = false;
     this.add(lid);

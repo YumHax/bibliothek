@@ -74,7 +74,7 @@ export class SignalHeads extends THREE.Group implements Furniture, Updatable {
       metal.push(new THREE.BoxGeometry(0.12, 0.18, 0.08).translate(0, 1.1, POLE.radius + 0.04).applyMatrix4(head));
       this.colliders.push(new THREE.Box3(new THREE.Vector3(at[0] - 0.12, 0, at[1] - 0.12), new THREE.Vector3(at[0] + 0.12, 2, at[1] + 0.12)));
     }
-    const poles = new THREE.Mesh(mergeGeometries(metal.map((g) => g.toNonIndexed()))!, snowCovered(new THREE.MeshStandardMaterial({ color: 0x2a2e30, roughness: 0.5, metalness: 0.5 })));
+    const poles = new THREE.Mesh(mergeGeometries(metal.map((g) => g.toNonIndexed()))!, snowCovered(new THREE.MeshStandardMaterial({ color: 0x2a2e30, roughness: 0.5 })));
     for (const g of metal) g.dispose();
     poles.castShadow = true;
     poles.receiveShadow = true;

@@ -22,7 +22,7 @@ const D = 0.06;
 const FAR = 9;
 const NEAR = 0.8;
 
-const CHROME = standard({ color: 0xc8c8c8, roughness: 0.25, metalness: 0.9 });
+const CHROME = standard({ color: 0xc8c8c8, roughness: 0.2, metalness: 1 });
 
 /**
  * A stallholder's transistor radio, playing a generated pop station (`RadioTune`) for the whole
@@ -47,7 +47,7 @@ export class TransistorRadio extends THREE.Group implements Furniture, Updatable
     this.listener = options.listener;
     const body = paint(options.color ?? 0xb8342a, 0.5);
     this.add(boxMesh(W, H, D, body, { y: H / 2 }));
-    const grille = new THREE.Mesh(new THREE.PlaneGeometry(W * 0.55, H * 0.7), new THREE.MeshStandardMaterial({ map: paintGrille(), roughness: 0.6, metalness: 0.4 }));
+    const grille = new THREE.Mesh(new THREE.PlaneGeometry(W * 0.55, H * 0.7), new THREE.MeshStandardMaterial({ map: paintGrille(), roughness: 0.6, metalness: 0 }));
     grille.position.set(-W * 0.17, H / 2, D / 2 + WALL.framed.lift);
     this.add(grille);
     this.dial = new THREE.MeshStandardMaterial({ color: 0xf1e8d6, roughness: 0.5, emissive: 0xffb050, emissiveIntensity: 0 });
@@ -97,7 +97,7 @@ export class TransistorRadio extends THREE.Group implements Furniture, Updatable
   }
 
   label(): string {
-    return this.wanted ? 'A radio — click to switch it off' : 'A radio — click to switch it on';
+    return this.wanted ? 'A radio · switch off' : 'A radio · switch on';
   }
 
   activate(): void {

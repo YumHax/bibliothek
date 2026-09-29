@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { createCanvas } from '@/covers/generated/canvasUtils';
+import { QUALITY } from '@/graphics/quality';
 import type { Rng } from './Sheet';
 import { between } from './paint';
 
@@ -93,7 +94,7 @@ export function paintSkyDetail(random: Rng): THREE.CanvasTexture {
 
   const tex = new THREE.CanvasTexture(canvas);
   tex.colorSpace = THREE.NoColorSpace;
-  tex.anisotropy = 8;
+  tex.anisotropy = QUALITY.anisotropy;
   tex.wrapS = THREE.RepeatWrapping;
   return tex;
 }

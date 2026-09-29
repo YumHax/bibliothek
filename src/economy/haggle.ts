@@ -1,4 +1,4 @@
-import { GRAIL, NEGOTIATION, hash01 } from './pricing';
+import { GRAIL, NEGOTIATION, STICKER, hash01 } from './pricing';
 import type { StockItem } from './StockItem';
 
 /** The three offers the player can make, as shares of the tag (see `NEGOTIATION.offers`). */
@@ -24,7 +24,7 @@ export type Reply =
   | { kind: 'accept'; price: number; line: string }
   /** Not that low, but `price` would do: the player may take it (or try again). */
   | { kind: 'counter'; price: number; line: string; insulted: boolean }
-  /** Out of patience: the tag stands for the rest of the day. */
+  /** Out of patience: their last counter-offer (the tag if none was made) stands for the rest of the day. */
   | { kind: 'walk'; price: number; line: string; insulted: boolean };
 
 const ACCEPT = [
@@ -46,7 +46,7 @@ const INSULT = [
 ];
 const WALK = [
   "Enough. It's {price}, take it or leave it.",
-  "We're done haggling. {price}, like the tag says.",
+  "We're done haggling. {price}, my last word.",
   "You've worn me out. {price}, not a coin less.",
 ];
 
@@ -55,13 +55,17 @@ const WALK = [
  * shares of the tag); the stallholder, who has a lowest price in mind (drawn per copy and day, so
  * it cannot be rerolled, nudged by loyalty, a coffee, the rain and the stall's mood) and a few
  * offers' patience, takes an offer at or over it, counters one under it (each counter closer to
- * that lowest price), and takes offence at one far under it. Out of patience, the tag stands.
+ * that lowest price), and takes offence at one far under it. Out of patience, their last
+ * counter-offer stands (the tag if none was made), as it does when the player walks off.
  * Pure: the caller records the outcome (`factor`) and any soured mood.
  */
 export class Negotiation {
   readonly tag: number;
   /** The lowest price as a share of the tag (before `NEGOTIATION.lowest`), and in coins. */
   private share: number;
+  /** The drawn share plus the soured mood, before anything that sways them down (`sway`, capped at `NEGOTIATION.maxSway`). */
+  private readonly drawn: number;
+  private sway = 0;
   private floor: number;
   private patience: number;
   private counterPrice: number;
@@ -72,16 +76,17 @@ export class Negotiation {
     this.tag = item.tagPrice;
     const kind = item.source === 'showpiece' || item.source === 'estate' || item.source === 'grail' ? 'showpiece' : item.condition === 'worn' ? 'worn' : 'ordinary';
     const [lo, hi] = NEGOTIATION.floor[kind];
-    let share = lo + hash01(`${mood.day}:floor:${item.game.id}`) * (hi - lo);
-    share += mood.soured * NEGOTIATION.moodPenalty + mood.loyalty * NEGOTIATION.loyalty;
-    if (mood.coffee) share += NEGOTIATION.coffee.floor;
-    if (mood.rain) share += NEGOTIATION.rain;
-    // A grail's seller knows what they have: loyalty, coffee and rain move them a little, never far.
-    if (item.source === 'grail') share = Math.max(GRAIL.floor, share);
-    this.share = share;
-    this.floor = this.floorFor(share);
-    this.patience = NEGOTIATION.patience - mood.soured + (mood.coffee ? NEGOTIATION.coffee.patience : 0);
+    this.drawn = lo + hash01(`${mood.day}:floor:${item.game.id}`) * (hi - lo) + mood.soured * NEGOTIATION.moodPenalty;
+    this.sway = mood.loyalty * NEGOTIATION.loyalty + (mood.coffee ? NEGOTIATION.coffee.floor : 0) + (mood.rain ? NEGOTIATION.rain : 0);
+    this.share = this.swayed();
+    this.floor = this.floorFor(this.share);
+    this.patience = Negotiation.patienceFor(mood.soured, mood.coffee);
     this.counterPrice = this.tag;
+  }
+
+  /** The offers a stallholder hears before losing patience, soured `soured` times today, with or without the player's coffee. */
+  static patienceFor(soured: number, coffee: boolean): number {
+    return NEGOTIATION.patience - soured + (coffee ? NEGOTIATION.coffee.patience : 0);
   }
 
   /**
@@ -91,15 +96,39 @@ export class Negotiation {
    */
   ease(change: { floor?: number; patience?: number }): void {
     if (this.turn > 0 || this.finished) return;
-    let share = this.share + (change.floor ?? 0);
-    if (this.item.source === 'grail') share = Math.max(GRAIL.floor, share);
-    this.share = share;
-    this.floor = this.floorFor(share);
+    this.sway += change.floor ?? 0;
+    this.share = this.swayed();
+    this.floor = this.floorFor(this.share);
     this.patience += change.patience ?? 0;
   }
 
+  /**
+   * The lowest share with what sways them: loyalty, a coffee, the rain and the player's perks add up, but only to
+   * `NEGOTIATION.maxSway` together (past it they would all end on `lowest` and count for nothing). A grail's seller
+   * knows what they have: moved a little, never under `GRAIL.floor`.
+   */
+  private swayed(): number {
+    const share = this.drawn + Math.max(-NEGOTIATION.maxSway, this.sway);
+    return this.item.source === 'grail' ? Math.max(GRAIL.floor, share) : share;
+  }
+
+  /** How far what sways them moves the lowest share today, as a positive share of the tag (capped: `NEGOTIATION.maxSway`). */
+  get swayShare(): number {
+    return Math.min(NEGOTIATION.maxSway, Math.max(0, -this.sway));
+  }
+
   private floorFor(share: number): number {
-    return Math.max(1, Math.round(this.tag * Math.min(1, Math.max(NEGOTIATION.lowest, share))));
+    return Math.max(1, Math.round(this.tag * Math.min(1, Math.max(this.lowestShare, share))));
+  }
+
+  /**
+   * No stallholder goes under this share of the tag: `NEGOTIATION.lowest` (`lowestWorn` for a worn
+   * copy), divided by the sticker's discount on a stickered one (its tag is already lower: the
+   * haggle stops where an unstickered copy's would, so peeling it at home and selling back never pays).
+   */
+  private get lowestShare(): number {
+    const lowest = this.item.condition === 'worn' ? NEGOTIATION.lowestWorn : NEGOTIATION.lowest;
+    return this.item.sticker ? Math.min(1, lowest / STICKER.factor) : lowest;
   }
 
   /** What each offer would be, in coins. */
@@ -121,7 +150,7 @@ export class Negotiation {
     return this.finished !== null;
   }
 
-  /** The agreed price as a share of the tag, once done (1 when the stallholder walked). */
+  /** The agreed price as a share of the tag, once done (their last counter's when they ran out of patience; 1 with none made). */
   get factor(): number {
     return this.finished ? this.finished.price / this.tag : 1;
   }
@@ -136,8 +165,9 @@ export class Negotiation {
     const insulted = offered < this.floor - this.tag * NEGOTIATION.insult;
     this.patience -= insulted ? 2 : 1;
     if (this.patience <= 0) {
-      this.finished = { price: this.tag };
-      return { kind: 'walk', price: this.tag, line: this.say(WALK, this.tag), insulted };
+      // Take it or leave it: the last counter-offer stands, as when the player walks off (so walking off never beats this).
+      this.finished = { price: this.counterPrice };
+      return { kind: 'walk', price: this.counterPrice, line: this.say(WALK, this.counterPrice), insulted };
     }
     // Each counter halves the way down to the lowest price (never under it, never over the last one).
     const next = Math.max(this.floor, Math.round(this.floor + (this.counterPrice - this.floor) * (insulted ? 0.8 : 0.5)));

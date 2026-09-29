@@ -36,6 +36,8 @@ const EDGE = paint(0xdfe3e4, 0.35);
  */
 export class MirrorCabinet extends Prop {
   readonly leaves: SwingLeaf[] = [];
+  /** Where the bottom shelf's middle is, local: the cleaning kit stands there until it is taken (`CabinetKit`). */
+  readonly bottomShelf = new THREE.Vector3();
 
   constructor(options: MirrorCabinetOptions = {}) {
     super();
@@ -75,8 +77,9 @@ export class MirrorCabinet extends Prop {
     const levels = [BOARD, height * 0.36, height * 0.69];
     for (const y of levels.slice(1)) part(interior, inner, 0.006, bodyD - BOARD - 0.01, CLEAR_GLASS, { y, z }).castShadow = false;
     const on = (level: number): number => levels[level] + (level === 0 ? BOARD / 2 : 0.003);
+    this.bottomShelf.set(0, on(0), z);
 
-    // Bottom: two bottles, a jar of cotton buds.
+    // Bottom: two bottles; the cleaning kit stands in the middle until it is taken (placed by the bathroom's builder).
     const bottles: [x: number, r: number, h: number, colour: number][] = [
       [-0.16, 0.022, 0.15, 0x7fa7c4],
       [-0.1, 0.018, 0.12, 0xf0ece2],
@@ -85,8 +88,6 @@ export class MirrorCabinet extends Prop {
       interior.add(cylinderMesh(r, hh, paint(colour, 0.35), { x, y: on(0) + hh / 2, z }, { segments: 12 }));
       interior.add(cylinderMesh(r * 0.5, 0.02, paint(0x2a2a2a, 0.5), { x, y: on(0) + hh + 0.01, z }, { segments: 8 }));
     }
-    interior.add(cylinderMesh(0.03, 0.09, CLEAR_GLASS, { x: 0.02, y: on(0) + 0.045, z }, { segments: 14 }));
-    interior.add(cylinderMesh(0.026, 0.07, paint(0xfafafa, 0.95), { x: 0.02, y: on(0) + 0.036, z }, { segments: 12 }));
     part(interior, 0.07, 0.1, 0.04, paint(0xd84d3f, 0.5), { x: 0.14, y: on(0) + 0.05, z });
 
     // Middle: a razor lying down, a tube of cream, a box of plasters.

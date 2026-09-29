@@ -1,5 +1,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
+import { QUALITY } from '@/graphics/quality';
 import { createCanvas, toTexture } from '@/covers/generated/canvasUtils';
 import { Prop } from '../props/Prop';
 import { INSET } from '../props/joinery';
@@ -15,8 +17,13 @@ const SLAB = 0.18;
 const RAIL_HEIGHT = 0.95;
 const BAR = 0.016;
 const BAR_SPACING = 0.12;
+/** The treads' nosings, rounded this much (with `QUALITY.bevels`) so each step catches the light. */
+const NOSING = 0.008;
 /** The shaft's walls and our strip's run up to here (the roof over our landing). */
 const TOP = landingY(0) + 2.8;
+
+/** A tread of a flight: the floor landing above it (`k`), which flight, which tread from the top. */
+type OnFlight = { k: number; which: 'A' | 'B'; tread: number };
 
 const inside = (r: Rect, x: number, z: number): boolean => x >= r.x0 && x <= r.x1 && z >= r.z0 && z <= r.z1;
 
@@ -54,7 +61,7 @@ export class Staircase extends Prop {
       stone: paint(0xcfc8ba, 0.75),
       tread: new THREE.MeshStandardMaterial({ map: treadTexture(), roughness: 0.6 }),
       plaster: paint(0xe6dcc6, 0.95),
-      iron: standard({ color: 0x1c1d20, roughness: 0.45, metalness: 0.6 }),
+      iron: standard({ color: 0x1c1d20, roughness: 0.45, metalness: 0 }),
       wood: paint(0x4a2c1c, 0.5),
       hall: new THREE.MeshStandardMaterial({ map: cabochonTexture(), roughness: 0.35 }),
     };
@@ -71,14 +78,40 @@ export class Staircase extends Prop {
   /**
    * The height (local) of the floor under (x, z) for feet at `feet` (local): of every landing,
    * flight and floor there, the highest no more than a step above the feet. Null where the
-   * stairwell has no floor (anywhere else in the world).
+   * stairwell has no floor (anywhere else in the world). On a flight it is the tread under the
+   * feet (`stepped`, the player's: the controller eases each step and dips the eye stepping down),
+   * or the slope along the nosings (a resident's feet, which would hop from tread to tread).
    */
-  floorAt(x: number, z: number, feet: number): number | null {
+  floorAt(x: number, z: number, feet: number, stepped = true): number | null {
+    return this.find(x, z, feet, stepped)?.height ?? null;
+  }
+
+  /** Which tread of which flight (landing `k` above it, `A` or `B`, 1 from the top) the feet at (x, z) stand on; null off the flights. */
+  treadAt(x: number, z: number, feet: number): { k: number; flight: 'A' | 'B'; tread: number } | null {
+    const found = this.find(x, z, feet, true);
+    return found?.flight ? { k: found.flight.k, flight: found.flight.which, tread: found.flight.tread } : null;
+  }
+
+  private find(x: number, z: number, feet: number, stepped: boolean): { height: number; flight: OnFlight | null } | null {
     let best = -Infinity;
     let lowest = Infinity;
-    const offer = (h: number): void => {
-      lowest = Math.min(lowest, h);
-      if (h <= feet + STEP_UP && h > best) best = h;
+    let bestFlight: OnFlight | null = null;
+    let lowestFlight: OnFlight | null = null;
+    const offer = (h: number, flight: OnFlight | null = null): void => {
+      if (h < lowest) {
+        lowest = h;
+        lowestFlight = flight;
+      }
+      if (h <= feet + STEP_UP && h > best) {
+        best = h;
+        bestFlight = flight;
+      }
+    };
+    const { treads } = plan;
+    // How far down a flight the feet are, 0 at its head .. 1 at its foot: on the tread's top, or on the slope.
+    const drop = (along: number): { share: number; tread: number } => {
+      const tread = THREE.MathUtils.clamp(Math.ceil(along * treads), 1, treads);
+      return { share: stepped ? tread / treads : along, tread };
     };
     const { shaft, floorLanding, halfLanding, flightA, flightB, strip, hall } = plan;
     if (inside(strip, x, z)) offer(landingY(0));
@@ -88,21 +121,22 @@ export class Staircase extends Prop {
       if (z >= halfLanding.z0 && z <= halfLanding.z1) for (let k = 0; k < STOREYS; k++) offer(landingY(k) - this.half);
       if (z > halfLanding.z1 && z < floorLanding.z0) {
         // Down flight A going south from the floor landing; down flight B going north from the half landing.
-        const alongA = (floorLanding.z0 - z) / this.flightRun;
-        const alongB = (z - halfLanding.z1) / this.flightRun;
+        const a = drop((floorLanding.z0 - z) / this.flightRun);
+        const b = drop((z - halfLanding.z1) / this.flightRun);
         for (let k = 0; k < STOREYS; k++) {
-          if (x >= flightA.x0 && x <= flightA.x1) offer(landingY(k) - this.half * alongA);
-          if (x >= flightB.x0 && x <= flightB.x1) offer(landingY(k) - this.half - this.half * alongB);
+          if (x >= flightA.x0 && x <= flightA.x1) offer(landingY(k) - this.half * a.share, { k, which: 'A', tread: a.tread });
+          if (x >= flightB.x0 && x <= flightB.x1) offer(landingY(k) - this.half - this.half * b.share, { k, which: 'B', tread: b.tread });
         }
       }
     }
     if (lowest === Infinity) return null;
-    return best === -Infinity ? lowest : best;
+    return best === -Infinity ? { height: lowest, flight: lowestFlight } : { height: best, flight: bestFlight };
   }
 
   private put(finish: Finish, geometry: THREE.BufferGeometry): void {
     const g = geometry.index ? geometry.toNonIndexed() : geometry;
     if (g !== geometry) geometry.dispose();
+    metreUvs(g);
     const list = this.parts.get(finish) ?? [];
     list.push(g);
     this.parts.set(finish, list);
@@ -111,6 +145,16 @@ export class Staircase extends Prop {
   /** A box from (x0, y0, z0) to (x1, y1, z1). */
   private box(finish: Finish, x0: number, y0: number, z0: number, x1: number, y1: number, z1: number): void {
     this.put(finish, new THREE.BoxGeometry(x1 - x0, y1 - y0, z1 - z0).translate((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2));
+  }
+
+  /** A step: a box whose edges are rounded a few millimetres on the better qualities (`QUALITY.bevels`). */
+  private tread(x0: number, y0: number, z0: number, x1: number, y1: number, z1: number): void {
+    if (!QUALITY.bevels) {
+      this.box('tread', x0, y0, z0, x1, y1, z1);
+      return;
+    }
+    const g = new RoundedBoxGeometry(x1 - x0, y1 - y0, z1 - z0, 1, NOSING);
+    this.put('tread', g.translate((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2));
   }
 
   /** A wall face from (ax, az) to (bx, bz), y0 to y1, facing the left-hand normal (-dz, dx); uvs in metres. */
@@ -191,7 +235,8 @@ export class Staircase extends Prop {
       // Flight A runs south (-z) from the floor landing; flight B north (+z) from the half landing.
       const z0 = which === 'A' ? floorLanding.z0 - i * depth : halfLanding.z1 + (i - 1) * depth;
       const z1 = z0 + depth;
-      if (i < treads) this.box('tread', lane.x0, y - rise - 0.02, z0, lane.x1, y, z1);
+      // The last tread is level with the landing below it; at the foot of the building's last flight the shaft's stone floor is that tread.
+      if (i < treads || which === 'A' || k < STOREYS - 1) this.tread(lane.x0, y - rise - 0.02, z0, lane.x1, y, z1);
     }
     // The soffit: a slab along the slope, under the steps.
     const zTop = which === 'A' ? floorLanding.z0 : halfLanding.z1;
@@ -298,6 +343,29 @@ export class Staircase extends Prop {
   }
 }
 
+/**
+ * Every part's uvs in metres, projected along its faces' main axis (the top of a tread or a
+ * landing on x/z, a riser on x/y, a side on z/y): one tile size on every step, landing and floor.
+ */
+function metreUvs(g: THREE.BufferGeometry): void {
+  const pos = g.getAttribute('position');
+  const normal = g.getAttribute('normal');
+  const uv = g.getAttribute('uv');
+  if (!pos || !normal || !uv) return;
+  for (let i = 0; i < pos.count; i++) {
+    const ax = Math.abs(normal.getX(i));
+    const ay = Math.abs(normal.getY(i));
+    const az = Math.abs(normal.getZ(i));
+    const x = pos.getX(i);
+    const y = pos.getY(i);
+    const z = pos.getZ(i);
+    if (ay >= ax && ay >= az) uv.setXY(i, x, z);
+    else if (ax >= az) uv.setXY(i, z, y);
+    else uv.setXY(i, x, y);
+  }
+  uv.needsUpdate = true;
+}
+
 /** Pale stone treads: a speckled terrazzo, a worn darker nosing strip. */
 function treadTexture(): THREE.CanvasTexture {
   const size = 256;
@@ -313,6 +381,7 @@ function treadTexture(): THREE.CanvasTexture {
   const texture = toTexture(canvas, 4);
   texture.wrapS = THREE.RepeatWrapping;
   texture.wrapT = THREE.RepeatWrapping;
+  texture.repeat.set(2, 2); // uvs are metres: a tile every half metre
   return texture;
 }
 
@@ -345,6 +414,6 @@ function cabochonTexture(): THREE.CanvasTexture {
   const texture = toTexture(canvas, 4);
   texture.wrapS = THREE.RepeatWrapping;
   texture.wrapT = THREE.RepeatWrapping;
-  texture.repeat.set(3, 6);
+  // uvs are metres: four octagons a metre, the same on the hall and under the last flight.
   return texture;
 }

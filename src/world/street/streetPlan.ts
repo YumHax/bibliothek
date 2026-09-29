@@ -26,6 +26,7 @@
  * a roadworker turns them back. Everything else is scenery.
  */
 
+import type { FlatRoomId } from '../city/flatWindows';
 import type { DecorEntry } from '../props/decor';
 import { SAS } from '../airlock/airlockPlan';
 import type { ZoneId } from '../zoneIds';
@@ -66,6 +67,8 @@ export const KERB_HEIGHT = 0.12;
 
 /** Where the roadworks close the walkable street: across Front Street at x `front`, across Park Street at z `park`. */
 export const WORKS = { front: 38.4, park: -47 } as const;
+/** Park Street's parking lanes are this wide (Front Street's end at `STREET_PLAN.parkingLine`). */
+export const PARK_PARKING = 2.1;
 
 /** A rectangle of ground (zone-local). */
 export interface Area {
@@ -88,8 +91,12 @@ export const WALKABLE_AREAS: readonly Area[] = [
   { minX: CORNER_BAY.x0, maxX: CORNER_BAY.x1 - 0.1, minZ: CORNER_BAY.z0 + 0.1, maxZ: WALKABLE.minZ },
 ];
 
-/** Ground floor and floor-to-floor heights, as in the painted view (`Facades.GROUND`). */
-export const GROUND_FLOOR = 4.2;
+/**
+ * Ground floor and floor-to-floor heights, as in the painted view (`Facades.GROUND`). Our flat's floor, on the fifth
+ * floor, is the stairwell's five storeys of 3.26 m up (`FLAT_IN_STREET.height`, 16.3 m): the ground floor is what
+ * puts the painted fifth floor there too (3.9 + 4 x 3.1).
+ */
+export const GROUND_FLOOR = 3.9;
 export const STOREY = 3.1;
 
 /**
@@ -144,7 +151,9 @@ export interface FacadeSpec {
  */
 export interface FlatFront {
   floorY: number;
-  windows: { at: number; width: number; bottom: number; top: number; frosted?: boolean }[];
+  /** `room`: whose window it is (lit at night as that room was left: its lamp, its curtains, `city/flatWindows`). */
+  windows: { at: number; width: number; bottom: number; top: number; frosted?: boolean; room: FlatRoomId }[];
+  /** The balcony's glazed door is the collection room's. */
   balcony?: { at: number; width: number; depth: number; door: { width: number; height: number } };
 }
 
@@ -164,24 +173,24 @@ export const FACADES: readonly FacadeSpec[] = [
     id: 'ours', from: [-16, -12], to: [2, -12], storeys: 6, seed: 11, door: 10, detail: NEAR,
     openings: [{ at: 10, width: SAS.outerDoor.width, height: SAS.outerDoor.height }],
     shops: [{ kind: 'books', from: 0.6, to: 7, name: 'CORNER BOOKS' }, { kind: 'grocer', from: 12.4, to: 17.6 }],
-    flat: { floorY: FLAT_IN_STREET.height, windows: [{ at: 3.6, width: 1.2, bottom: 0.1, top: 2.5 }], balcony: { at: 5.3, width: 2.6, depth: 1.3, door: { width: 0.9, height: 2.3 } } },
+    flat: { floorY: FLAT_IN_STREET.height, windows: [{ at: 3.6, width: 1.2, bottom: 0.1, top: 2.5, room: 'living' }], balcony: { at: 5.3, width: 2.6, depth: 1.3, door: { width: 0.9, height: 2.3 } } },
   },
   { id: 'arcade', from: [2, -12], to: [14, -12], storeys: 5, seed: 23, shops: [{ kind: 'arcade', from: 0.4, to: 11.6, door: 6 }], detail: NEAR },
-  { id: 'n3', from: [14, -12], to: [26, -12], storeys: 4, seed: 37, shops: [{ kind: 'laundry', from: 0.4, to: 5.8 }, { kind: 'florist', from: 6.2, to: 11.6 }], detail: NEAR },
+  { id: 'n3', from: [14, -12], to: [26, -12], storeys: 4, seed: 37, shops: [{ kind: 'laundry', from: 0.4, to: 5.8 }, { kind: 'florist', from: 6.2, to: 11.6, door: 8.9 }], detail: NEAR },
   { id: 'n4', from: [26, -12], to: [36, -12], storeys: 6, seed: 41, shops: [{ kind: 'tabac', from: 0.4, to: 4.8 }, { kind: 'bar', from: 5.2, to: 9.6, name: 'THE ANCHOR' }], detail: NEAR },
   { id: 'n5', from: [36, -12], to: [50, -12], storeys: 5, seed: 43, shops: [{ kind: 'shut', from: 0.4, to: 6.6 }, { kind: 'butcher', from: 7.4, to: 13.6 }], detail: MID },
   { id: 'n6', from: [50, -12], to: [64, -12], storeys: 6, seed: 45, shops: [{ kind: 'cafe', from: 0.6, to: 6.8 }], door: 10.5, detail: FAR },
   { id: 'n7', from: [64, -12], to: [80, -12], storeys: 5, seed: 47, shops: [{ kind: 'pharmacy', from: 0.6, to: 6.4 }, { kind: 'bakery', from: 9.4, to: 15.4 }], detail: FAR },
   { id: 'n8', from: [80, -12], to: [96, -12], storeys: 6, seed: 49, shops: [{ kind: 'grocer', from: 0.6, to: 6.4 }], door: 11, detail: FAR },
   { id: 'n9', from: [96, -12], to: [112, -12], storeys: 5, seed: 51, shops: [{ kind: 'bar', from: 8.4, to: 15.4 }], door: 4, detail: FAR },
-  { id: 'n10', from: [120, -12], to: [136, -12], storeys: 6, seed: 53, shops: [{ kind: 'laundry', from: 0.6, to: 6 }], door: 11, detail: FAR },
+  { id: 'n10', from: [120, -12], to: [136, -12], storeys: 6, seed: 56, shops: [{ kind: 'laundry', from: 0.6, to: 6 }], door: 11, detail: FAR },
   // Across the street (faces -z; left end is +x). fA and fB close Park Street's end.
   { id: 'fA', from: [-29, 12], to: [-40, 12], storeys: 6, seed: 81, shops: [{ kind: 'grocer', from: 0.4, to: 5.6, name: 'PARK FRUIT & VEG' }], door: 8, detail: NEAR },
-  { id: 'fB', from: [-16, 12], to: [-29, 12], storeys: 5, seed: 82, shops: [{ kind: 'books', from: 0.4, to: 6.2, name: 'COMICS & MANGA' }, { kind: 'pets', from: 6.8, to: 12.6, name: 'PAWS & CLAWS' }], detail: NEAR },
+  { id: 'fB', from: [-16, 12], to: [-29, 12], storeys: 5, seed: 82, shops: [{ kind: 'books', from: 0.4, to: 6.2, name: 'COMICS & MANGA' }, { kind: 'pets', from: 6.8, to: 12.6, door: 9.7, name: 'PAWS & CLAWS' }], detail: NEAR },
   { id: 'f1', from: [-2, 12], to: [-16, 12], storeys: 4, seed: 83, shops: [{ kind: 'butcher', from: 0.4, to: 6.6 }, { kind: 'bar', from: 7.4, to: 13.6, name: 'THE LOCAL' }], detail: NEAR },
   { id: 'retro', from: [10, 12], to: [-2, 12], storeys: 5, seed: 71, shops: [{ kind: 'retro', from: 1.2, to: 10.8, door: 7 }], detail: NEAR },
   { id: 'f3', from: [22, 12], to: [10, 12], storeys: 6, seed: 67, shops: [{ kind: 'bakery', from: 0.4, to: 5.8 }, { kind: 'cafe', from: 6.2, to: 11.6, name: 'SUNNY SIDE CAFE' }], detail: NEAR },
-  { id: 'f4', from: [36, 12], to: [22, 12], storeys: 5, seed: 53, shops: [{ kind: 'pharmacy', from: 0.4, to: 6.6 }, { kind: 'furniture', from: 7.4, to: 13.6, name: 'SECOND HOME' }], detail: NEAR },
+  { id: 'f4', from: [36, 12], to: [22, 12], storeys: 5, seed: 53, shops: [{ kind: 'pharmacy', from: 0.4, to: 6.6 }, { kind: 'furniture', from: 7.4, to: 13.6, door: 10.5, name: 'SECOND HOME' }], detail: NEAR },
   { id: 'f5', from: [50, 12], to: [36, 12], storeys: 6, seed: 55, shops: [{ kind: 'florist', from: 0.6, to: 6.2 }, { kind: 'tabac', from: 8, to: 13.4 }], detail: MID },
   { id: 'f6', from: [63, 12], to: [50, 12], storeys: 5, seed: 57, shops: [{ kind: 'books', from: 0.6, to: 6.4 }], door: 9.5, detail: FAR },
   { id: 'f7', from: [78, 12], to: [63, 12], storeys: 6, seed: 59, shops: [{ kind: 'cafe', from: 0.6, to: 7 }, { kind: 'shut', from: 8, to: 14.4 }], detail: FAR },
@@ -193,25 +202,25 @@ export const FACADES: readonly FacadeSpec[] = [
   {
     id: 'oursBay', from: [-16, CORNER_BAY.z0], to: [-16, -12], storeys: 6, seed: 11, detail: NEAR,
     shops: [{ kind: 'cafe', from: 0.4, to: 5.3, name: 'PARKSIDE CAFE' }],
-    flat: { floorY: FLAT_IN_STREET.height, windows: [{ at: 0.61, width: 1.2, bottom: 0.1, top: 2.5 }, { at: 4.21, width: 1.2, bottom: 0.1, top: 2.5 }] },
+    flat: { floorY: FLAT_IN_STREET.height, windows: [{ at: 0.61, width: 1.2, bottom: 0.1, top: 2.5, room: 'living' }, { at: 4.21, width: 1.2, bottom: 0.1, top: 2.5, room: 'living' }] },
   },
   { id: 'oursWing', from: [PARK_STREET.line, CORNER_BAY.z0], to: [-16, CORNER_BAY.z0], storeys: 6, seed: 11, shops: [], bays: 2, detail: NEAR, flat: { floorY: FLAT_IN_STREET.height, windows: [] } },
   {
     id: 'oursSide', from: [PARK_STREET.line, COURTYARD.back], to: [PARK_STREET.line, CORNER_BAY.z0], storeys: 6, seed: 11, detail: NEAR,
     shops: [{ kind: 'shut', from: 0.5, to: 3.4 }], door: 4.9,
-    flat: { floorY: FLAT_IN_STREET.height, windows: [{ at: 4.1, width: 0.9, bottom: 0.95, top: 2.05 }] },
+    flat: { floorY: FLAT_IN_STREET.height, windows: [{ at: 4.1, width: 0.9, bottom: 0.95, top: 2.05, room: 'kitchen' }] },
   },
   // The courtyard behind (`COURTYARD`): the workshop on Park Street, and over it the upper floors round the yard. Our
   // back wall carries the bedroom's frosted window (world x -0.3) and, in the light well, the bathroom's (world x -1.75).
-  { id: 'courtWorkshop', from: [PARK_STREET.line, COURTYARD.far], to: [PARK_STREET.line, COURTYARD.back], storeys: 1, seed: 14, shops: [{ kind: 'electronics', from: 1.2, to: 6.8, name: 'TV REPAIR' }], door: 11.5, detail: MID },
+  { id: 'courtWorkshop', from: [PARK_STREET.line, COURTYARD.far], to: [PARK_STREET.line, COURTYARD.back], storeys: 1, seed: 14, shops: [{ kind: 'electronics', from: 1.2, to: 6.8, door: 4, name: 'TV REPAIR' }], door: 11.5, detail: MID },
   {
     id: 'oursBack', from: [COURTYARD.east, COURTYARD.back], to: [COURTYARD.well.x1, COURTYARD.back], storeys: 6, seed: 15, shops: [], detail: MID,
-    flat: { floorY: FLAT_IN_STREET.height, windows: [{ at: 15.3, width: 0.7, bottom: 1.15, top: 2.05, frosted: true }] },
+    flat: { floorY: FLAT_IN_STREET.height, windows: [{ at: 15.3, width: 0.7, bottom: 1.15, top: 2.05, frosted: true, room: 'bedroom' }] },
   },
   { id: 'oursWellE', from: [COURTYARD.well.x1, COURTYARD.back], to: [COURTYARD.well.x1, COURTYARD.well.z], storeys: 6, seed: 15, shops: [], detail: MID, flat: { floorY: FLAT_IN_STREET.height, windows: [] } },
   {
     id: 'oursWell', from: [COURTYARD.well.x1, COURTYARD.well.z], to: [COURTYARD.well.x0, COURTYARD.well.z], storeys: 6, seed: 15, shops: [], detail: MID,
-    flat: { floorY: FLAT_IN_STREET.height, windows: [{ at: 0.6, width: 0.6, bottom: 1.75, top: 2.25, frosted: true }] },
+    flat: { floorY: FLAT_IN_STREET.height, windows: [{ at: 0.6, width: 0.6, bottom: 1.75, top: 2.25, frosted: true, room: 'bathroom' }] },
   },
   { id: 'oursWellW', from: [COURTYARD.well.x0, COURTYARD.well.z], to: [COURTYARD.well.x0, COURTYARD.back], storeys: 6, seed: 15, shops: [], detail: MID, flat: { floorY: FLAT_IN_STREET.height, windows: [] } },
   { id: 'oursBackW', from: [COURTYARD.well.x0, COURTYARD.back], to: [PARK_STREET.line, COURTYARD.back], storeys: 6, seed: 15, shops: [], detail: MID, flat: { floorY: FLAT_IN_STREET.height, windows: [] } },
@@ -285,13 +294,33 @@ function shopArrivals(): Partial<Record<ShopZoneId, ArrivalSpec>> {
   );
 }
 
+/** Where the stray cat sits: the spot, how high (a car roof, a bench, a bin), the way he faces, and what else may want the spot. */
+export interface StrayCatPerch {
+  at: Vec2;
+  y: number;
+  yaw: number;
+  on?: 'bench' | 'bin';
+}
+
+/** The park's gate in the railings on Park Street (its middle). */
+const PARK_GATE: Vec2 = [-39.75, -30];
+/**
+ * The far pavement walked west, from behind the bus shelter (its back at z 10.7; people pass behind it, not
+ * through it) to Park Street's far kerb: the lane is z 10.1, bent to 9.6-9.85 past the terraces' chairs (z
+ * 10.5-11.3) and the snowman (x -33.5), and back up past the street trees' pits (z up to 9.7).
+ */
+const FAR_WEST: Vec2[] = [
+  [25.3, 11.3], [24.4, 10.1], [16.4, 10.1], [15.9, 9.6], [10.6, 9.6], [10.1, 10.1],
+  [-9.4, 10.1], [-9.9, 9.85], [-15.2, 9.85], [-15.7, 10.1], [-31.9, 10.1], [-32.4, 9.6], [-34.6, 9.6], [-35.1, 10.1], [-38.2, 10.1],
+];
+
 export const STREET_PLAN = {
   /** The doors: our building's (into the stairwell's entrance hall), the arcade's, the retro games shop's (the flea market's way in). */
   doors: {
     // Our building's: the street door of the sas (`world/airlock`), placed at `at` by `furnishStreet`; `to` for the fallback's travel.
-    home: { at: [-6, -12], yaw: 0, width: SAS.outerDoor.width, height: SAS.outerDoor.height, to: 'stairwell', label: 'Click to go in (home is five floors up)' } as DoorSpec,
-    arcade: { at: [8, -12], yaw: 0, width: 1.6, height: 2.5, to: 'arcade', label: 'Click to go into the arcade' } as DoorSpec,
-    market: { at: [3, 12], yaw: Math.PI, width: 1.4, height: 2.5, to: 'market', label: 'Click to go into RETRO GAMES (the flea market is in the back)' } as DoorSpec,
+    home: { at: [-6, -12], yaw: 0, width: SAS.outerDoor.width, height: SAS.outerDoor.height, to: 'stairwell', label: 'Home · go in' } as DoorSpec,
+    arcade: { at: [8, -12], yaw: 0, width: 1.6, height: 2.5, to: 'arcade', label: 'Arcade · go in' } as DoorSpec,
+    market: { at: [3, 12], yaw: Math.PI, width: 1.4, height: 2.5, to: 'market', label: 'RETRO GAMES · go in (flea market at the back)' } as DoorSpec,
   },
   /** Arrival spots by the zone the player comes from (`TravelPlan.arrivals`): on the pavement in front of the matching door, facing the street. */
   arrivals: {
@@ -301,10 +330,13 @@ export const STREET_PLAN = {
     market: { at: [3, 10.7], yaw: 0 } as ArrivalSpec,
     ...shopArrivals(),
   },
-  /** Neon over the arcade and the retro games shop: centre (zone-local, y up), facing yaw, size. */
+  /**
+   * Neon over the arcade and the retro games shop: centre (zone-local, y up), facing yaw, size. Its panel (0.95 m
+   * high) spans the fascia (3.05-3.75), under the ground floor's trim at `GROUND_FLOOR` (3.9) and over the glass (2.95).
+   */
   signs: [
-    { text: 'ARCADE', color: 0xff2fa0, at: [8, 3.55, -11.93] as [number, number, number], yaw: 0, width: 3.6, seed: 5 },
-    { text: 'RETRO GAMES', color: 0x5fe6ff, at: [4, 3.55, 11.93] as [number, number, number], yaw: Math.PI, width: 4.2, seed: 9 },
+    { text: 'ARCADE', color: 0xff2fa0, at: [8, 3.42, -11.93] as [number, number, number], yaw: 0, width: 3.6, seed: 5 },
+    { text: 'RETRO GAMES', color: 0x5fe6ff, at: [4, 3.42, 11.93] as [number, number, number], yaw: Math.PI, width: 4.2, seed: 9 },
   ],
   /** Street lamps on the kerbs: position and the way the arm reaches (yaw of the arm, 0 = +z). `flicker`: the one that buzzes. */
   lamps: [
@@ -342,10 +374,14 @@ export const STREET_PLAN = {
    * `signals`), and a plain zebra at Park Street's end where drivers give way to anyone on it.
    */
   crossings: [{ from: 1, to: 5, signals: true }, { from: -19.4, to: -16.6, signals: false }] as { from: number; to: number; signals: boolean }[],
+  /** At each crossing the kerbs are dropped: a lip this high over the road, the pavement ramping down to it over `run`. */
+  droppedKerb: { rise: 0.03, run: 0.9 },
   /** Road markings: the lane dashes and the parking lines (|z|), the stop lines' distance before a crossing. */
   laneDash: 3,
   parkingLine: 6,
   stopLine: 1.5,
+  /** Patched repairs in the road (x0, z0, x1, z1): newer asphalt, clear of the manholes. */
+  roadPatches: [[-5, -4.8, -2.2, -2.9], [14, 2.5, 17.5, 4.2], [40, -3.5, 44.5, -1.9], [60, 0.4, 62.5, 2.2], [-30.5, -30, -28.6, -26.2], [26, -1.2, 27.6, 0.9]] as [number, number, number, number][],
   /** The bus shelter on the far pavement (centre, faces the road), the benches and bins. */
   shelter: { at: [28, 10] as Vec2, yaw: Math.PI, length: 4 },
   benches: [{ at: [-10.5, -11.4], yaw: 0 }, { at: [-8, 11.4], yaw: Math.PI }] as { at: Vec2; yaw: number }[],
@@ -360,13 +396,29 @@ export const STREET_PLAN = {
    */
   roadworks: { depth: 0.25, height: 2.2 },
   /** The park's gate in the railings on Park Street, where the walkers going into the park leave the street (shut to the player: the gardeners are in). */
-  parkGate: { at: [-39.75, -30] as Vec2, width: 1.6 },
+  parkGate: { at: PARK_GATE, width: 1.6 },
   /** The newsstand (kiosk): centre, the way its hatch faces. */
   kiosk: { at: [15.5, -11.05] as Vec2, yaw: 0 },
   /** The busker by the bus shelter: where they stand and face; the chiptune's reach. */
   busker: { at: [22.6, 10.8] as Vec2, yaw: Math.PI, hours: [9, 21.5] as [number, number], tipsPerDay: 3, reach: 22 },
   /** The garage sale's folding table (some days): centre, facing the pavement. */
   garageSale: { at: [29.5, -11.2] as Vec2, yaw: 0, oneDayIn: 3 },
+  /**
+   * The street's small print (`details/StreetDetails`), clear of the passers-by's routes (z about ±10.1..10.6 on the
+   * pavements), the crossings and the signal posts: manhole covers, fire hydrants, the bollards either side of the
+   * crossing and at Park Street's corners, the Morris column at the mouth of Park Street on the far pavement.
+   */
+  details: {
+    manholes: [[-10, -4.5], [6.8, 3.2], [22, -2.8], [33, 4.4], [52, -3], [80, 2.8], [-28, -22], [-28, -58], [-7.6, -9.1], [14.2, 9.2], [29.2, -9.4], [-33, 9.3]] as Vec2[],
+    hydrants: [[-15.4, -8.5], [24.6, 8.5], [35.6, -8.5], [-36.6, -24]] as Vec2[],
+    bollards: [
+      [-0.6, -8.35], [-1.3, -8.35], [5.6, -8.35], [6.3, -8.35],
+      [-0.6, 8.35], [0.3, 8.35], [6.6, 8.35], [7.3, 8.35],
+      [-23, -9.3], [-23, -10.3], [-23, -11.3],
+      [-34.5, 8.35], [-32.5, 8.35], [-30.5, 8.35], [-22.5, 8.35],
+    ] as Vec2[],
+    column: { at: [-24.5, 9.05] as Vec2, radius: 0.6, height: 3.1 },
+  },
 
   // --- Traffic -------------------------------------------------------------------------------
   /** Traffic: the two routes (right-hand traffic), cruising speed, and how long between cars. */
@@ -379,7 +431,9 @@ export const STREET_PLAN = {
     ] as Vec2[][],
     speed: 8.5,
     gap: [7, 22] as [number, number],
+    /** How many cars can drive at once, by quality (the window view runs up to 14 across its two streets). */
     cars: 3,
+    carsByQuality: { low: 3, medium: 5, high: 6 },
     /** A car stops for anyone standing this close ahead of it. */
     stopFor: 4,
   },
@@ -400,10 +454,12 @@ export const STREET_PLAN = {
    */
   bus: { stop: { at: [30, 6.6] as Vec2, dwell: 14 }, every: 200, nightEvery: 420, line: '38' },
   /** Cyclists on the road's outer lanes, and the bike racks on the pavements (with a few bikes locked to them). */
-  bikes: { riders: 2, racks: [{ at: [-2.6, -8.75], yaw: 0, bikes: 3 }, { at: [19.8, 8.75], yaw: Math.PI, bikes: 2 }, { at: [-22.6, -32.5], yaw: -Math.PI / 2, bikes: 2 }] as (Spot & { bikes: number })[] },
+  bikes: { riders: 2, ridersByQuality: { low: 1, medium: 2, high: 3 }, racks: [{ at: [-2.6, -8.75], yaw: 0, bikes: 3 }, { at: [19.8, 8.75], yaw: Math.PI, bikes: 2 }, { at: [-22.6, -32.5], yaw: -Math.PI / 2, bikes: 2 }] as (Spot & { bikes: number })[] },
   /** The morning: the delivery van double-parked outside the bakery (f3), and the bin lorry doing the round. */
   delivery: { at: [19, 4.4] as Vec2, yaw: 0, door: [19, 11.9] as Vec2, hours: [6.5, 9.5] as [number, number] },
   binLorry: { hours: [5.5, 7.5] as [number, number] },
+  /** Now and then an ambulance down Front Street, siren on: real seconds between two, before the first, its speed. */
+  ambulance: { every: [420, 1100] as [number, number], first: [90, 400] as [number, number], cruise: 11 },
 
   // --- People and animals -------------------------------------------------------------------
   /** Passers-by: how many walk at once, and their routes (they appear at the first point, vanish at the last). */
@@ -419,30 +475,35 @@ export const STREET_PLAN = {
      */
     routes: [
       { path: [[PARK_STREET.line, -27.8], [-20.4, -27.8], [-20.6, -10.2], [8, -10.2], [8, -12]] },
-      { path: [[3, 12], [3, 10.4], [-17.6, 10.4], [-17.6, 8.4], [-18.2, -8.4], [-21, -10.4], [-21, -42.5], [PARK_STREET.line, -42.5]], crossing: 3 },
-      { path: [[-6, -12], [-6, -10.4], [3, -10.4], [3, -8.4], [3, 8.4], [3, 10.4], [13.1, 10.4], [13.1, 12]], crossing: 3 },
-      { path: [[PARK_STREET.line, -42.5], [-20.8, -42.5], [-20.8, -10.6], [22.9, -10.6], [22.9, -12]] },
-      { path: [[13.1, 12], [13.1, 10.2], [3.4, 10.2], [3.4, 8.4], [3.4, -8.4], [3.4, -10.2], [-12, -10.2], [-12, -12]], crossing: 3 },
-      { path: [[33.4, -12], [33.4, -10.3], [-21.4, -10.3], [-21.4, -27.8], [PARK_STREET.line, -27.8]] },
-      { path: [[-32, 12], [-32, 10.4], [18.9, 10.4], [18.9, 12]] },
-      { path: [[32.5, 12], [32.5, 10.1], [-26, 10.1], [-38.2, 10.1], [-38.2, -30], [-39.75, -30]] },
+      { path: [[3, 12], [3, 10.1], [-9.4, 10.1], [-9.9, 9.85], [-15.2, 9.85], [-15.7, 10.1], [-17.6, 10.1], [-17.6, 8.4], [-18.2, -8.4], [-21, -10.4], [-21, -42.5], [PARK_STREET.line, -42.5]], crossing: 7 },
+      { path: [[-6, -12], [-6, -10.4], [3, -10.4], [3, -8.4], [3, 8.4], [3, 10.4], [10.3, 10.4], [10.7, 9.95], [12.7, 9.95], [13.1, 10.4], [13.1, 12]], crossing: 3 },
+      // Round the front of the newsstand (x 14.4..16.6, its counter out to z -9.98).
+      { path: [[PARK_STREET.line, -42.5], [-20.8, -42.5], [-20.8, -10.6], [13.6, -10.6], [14, -9.6], [17, -9.6], [17.4, -10.6], [22.9, -10.6], [22.9, -12]] },
+      { path: [[13.1, 12], [13.1, 9.7], [10.6, 9.7], [10.1, 10.2], [3.4, 10.2], [3.4, 8.4], [3.4, -8.4], [3.4, -10.2], [-12, -10.2], [-12, -12]], crossing: 5 },
+      { path: [[33.4, -12], [33.4, -10.3], [17.4, -10.3], [17, -9.6], [14, -9.6], [13.6, -10.3], [-21.4, -10.3], [-21.4, -27.8], [PARK_STREET.line, -27.8]] },
+      // East along the far pavement: z 10.4, down to 10.15 / 9.95 past the terraces' chairs.
+      { path: [[-32, 12], [-32, 10.4], [-15.7, 10.4], [-15.3, 10.15], [-9.8, 10.15], [-9.4, 10.4], [10.3, 10.4], [10.7, 9.95], [15.8, 9.95], [16.4, 10.4], [18.9, 10.4], [18.9, 12]] },
+      { path: [[32.5, 12], [32.5, 11.3], ...FAR_WEST, [-38.2, PARK_GATE[1]], PARK_GATE] },
     ] as { path: Vec2[]; crossing?: number }[],
   },
   /** People standing about: on the phone, waiting for the bus, on a bench. */
   standing: {
     phone: { at: [-2.4, -10.9], yaw: Math.PI * 0.85, hours: [8, 21] as [number, number] },
-    busStop: { at: [28.6, 10.35], yaw: Math.PI },
+    /** The one waiting in the shelter, and where someone who got off walks to: out behind the shelter, along the far pavement, into the park by its gate. */
+    busStop: { at: [28.6, 10.35], yaw: Math.PI, alight: [[31, 10.2], [30.9, 11.3], ...FAR_WEST, [-38.2, PARK_GATE[1]], PARK_GATE] as Vec2[] },
     bench: { at: [-10.5, -11.3], yaw: 0, hours: [9, 19] as [number, number] },
   },
   /** The café's, the bars' terraces: along a stretch of pavement in front of them, how many tables, when they are out. */
   terraces: [
     { from: [15.5, 10.9] as Vec2, to: [10.9, 10.9] as Vec2, tables: 3, hours: [7.5, 20] as [number, number], customers: 2 },
     { from: [-9.9, 10.9] as Vec2, to: [-15.2, 10.9] as Vec2, tables: 3, hours: [11, 24] as [number, number], customers: 2 },
-    { from: [31.8, -10.9] as Vec2, to: [35.2, -10.9] as Vec2, tables: 2, hours: [10, 24] as [number, number], customers: 1 },
+    // THE ANCHOR's front (x 31.2..35.6): a table either side of its door (the middle one gives way to the door).
+    { from: [31.2, -10.9] as Vec2, to: [35.6, -10.9] as Vec2, tables: 3, hours: [10, 24] as [number, number], customers: 2 },
   ],
   /** Pigeons pecking about (they take off when the player comes close), and where the stray cat sits. */
   pigeons: [{ at: [6.5, -10.2] as Vec2, count: 7 }, { at: [-30, 10.2] as Vec2, count: 9 }, { at: [24, 10.6] as Vec2, count: 5 }],
-  strayCat: { perches: [{ at: [11, -7], y: 1.46, yaw: 0.6 }, { at: [-10.5, -11.55], y: 0.82, yaw: 0 }, { at: [-38.5, -14], y: 0, yaw: -1.2 }, { at: [21.2, 8.55], y: 0.96, yaw: 2.4 }] as { at: Vec2; y: number; yaw: number }[] },
+  /** `on`: the perch is the bench (taken while someone sits there) or a bin (while the bin lorry is on its round): he sits elsewhere then. */
+  strayCat: { perches: [{ at: [11, -7], y: 1.46, yaw: 0.6 }, { at: [-10.5, -11.55], y: 0.82, yaw: 0, on: 'bench' }, { at: [-38.5, -14], y: 0, yaw: -1.2 }, { at: [21.2, 8.55], y: 0.96, yaw: 2.4, on: 'bin' }] as StrayCatPerch[] },
 
   // --- Things to find, shops to go into -------------------------------------------------------
   /** Coins dropped on the pavement: where one may lie (a few a day, seeded by the date), how many a day. */
@@ -451,6 +512,14 @@ export const STREET_PLAN = {
   giveaway: { spots: [{ at: [-4.8, -11.55], yaw: 0 }, { at: [-36.4, 11.5], yaw: Math.PI }, { at: [-19.75, -26.8], yaw: -Math.PI / 2 }] as Spot[], oneDayIn: 4 },
   /** The collector who sets up outside RETRO GAMES some days, selling and swapping. */
   trader: { at: [8.4, 10.85] as Vec2, yaw: Math.PI, oneDayIn: 3, hours: [10, 18] as [number, number] },
+  /**
+   * RETRO GAMES on a new market day, as the window view shows it (`RetroLure`): the NEW IN banner in its window
+   * (middle, facing the road) and the spots of the queue along the pavement from its door (nearest first).
+   */
+  retroLure: {
+    banner: { at: [6, 2.45, 11.94] as [number, number, number], yaw: Math.PI, width: 1.7, height: 0.48 },
+    queue: [[3.9, 11.2], [4.6, 11.28], [5.3, 11.2], [6.0, 11.28], [6.7, 11.2], [7.4, 11.28]] as Vec2[],
+  },
   /** Where the church clock the bells ring from is (far off, beyond the park), for the sound's side. */
   church: [-160, 60] as Vec2,
   /** A snowman on the far pavement near the park, there while the snow lies. */

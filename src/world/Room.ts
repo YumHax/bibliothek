@@ -2,15 +2,22 @@ import * as THREE from 'three';
 import { QUALITY } from '@/graphics/quality';
 import type { Updatable } from '@/core/Engine';
 import { IDLE_SHADOW_INTERVAL, type OccupancyAware } from './Furniture';
-import { boxMesh } from './meshUtils';
 import { parquetMaterial } from './Parquet';
 import { concreteMaterial } from './Concrete';
 import { carpetMaterial } from './Carpet';
 import { tiledFloorMaterial, type FloorTiles } from './TiledFloor';
-import { edgeOcclusion, floorWearMap, wallMaterial } from './materials/surfaces';
+import { avoidOnWall, edgeOcclusion, floorWearMap, wallMaterial, type WallRect } from './materials/surfaces';
+import { COVE, mouldingGeometry, SKIRTING, type MouldingKind, type RunEnd } from './mouldings';
 import { glossyFloor } from './materials/GlossyFloor';
 import { basic, paint, scuffedPaint } from './materials/palette';
 import type { DrawnAware } from './zone/Zone';
+import { ShadowRefresh } from './lighting/shadowRefresh';
+import { LAMP_BOUNCE, LAMP_LIGHT } from './lighting/lampColours';
+import { floorBounce } from './lighting/floorBounce';
+import { setContactShadowStrength } from './zone/ContactShadows';
+import { CUBE_FACE_HALF_ANGLE, normalBiasAt } from './props/shadowTexels';
+import { createCanvas } from '@/covers/generated/canvasUtils';
+import { patchShader, replaceChunk } from './materials/shaderPatch';
 import type { ZoneId } from './zoneIds';
 
 /** Walls as seen from the default spawn: back = -z (shelves), front = +z, left = -x (TV), right = +x. */
@@ -89,10 +96,39 @@ const SKY_HUE_WEIGHT = 0.7;
 const LAMP_INTENSITY = 22;
 const REFERENCE_AREA = 36;
 const MIN_LAMP_SHARE = 0.15;
-/** Ground colour of the hemisphere ambient per floor: the light the floor bounces back up takes its colour. */
+/**
+ * Ground colour of the hemisphere ambient per floor, when its map cannot be read: the light the
+ * floor bounces back up takes its colour (else worked out from the floor's albedo, `lighting/floorBounce`).
+ */
 const FLOOR_BOUNCE: Record<NonNullable<RoomFinish['floor']>, number> = { parquet: 0x7a6450, concrete: 0x6e6b66, carpet: 0x2c2436, tiles: 0x8a8984 };
-/** Emissive of the ceiling standing in for the lamp's bounce off the walls, with the lamp on. */
+/** Emissive of the ceiling standing in for the lamp's bounce off the walls, with the lamp on, right over it (it falls off towards the walls). */
 const CEILING_BOUNCE = 0.3;
+/** Share of the ceiling's bounce left in its corners, and how far out (m) from the lamp it has fallen to that. */
+const CEILING_BOUNCE_EDGE = 0.35;
+const CEILING_BOUNCE_REACH = 3.2;
+/** The ceiling's emissive from daylight alone (lamp off, full day, curtains open). */
+const CEILING_DAYLIGHT = 0.08;
+/** The sky's part of the ambient: from night to full day, and the share left with every curtain drawn. */
+const SKYLIGHT_NIGHT = 0.12;
+const SKYLIGHT_DAY = 0.85;
+const SKYLIGHT_DRAWN = 0.3;
+/** The lamp's bounce off the walls, added to the ambient while it is lit: more at night, less by day (the sky dominates). */
+const LAMP_BOUNCE_NIGHT = 0.23;
+const LAMP_BOUNCE_DAY = 0.1;
+/** Direct light next to the ambient, for the contact shadows' share (`ambientShare`): the lit ceiling lamp, and full sun through open curtains. */
+const LAMP_DIRECT = 0.6;
+const SUN_DIRECT = 0.5;
+/** What a lit lamp adds to `lightLevel` on its own. */
+const LAMP_LIGHT_LEVEL = 0.65;
+/** Seconds the ceiling lamp takes to come up and to go dark after its switch (like the other lamps, `SwitchableLamp`). */
+const LAMP_WARM_SECONDS = 0.14;
+const LAMP_COOL_SECONDS = 0.09;
+/** Time constant (s) of the ambient following a change (the player walks in, a curtain is drawn): settled in about 0.4 s. */
+const AMBIENT_EASE = 0.13;
+const WALLS: readonly Wall[] = ['back', 'front', 'left', 'right'];
+/** Seconds the zone's contents must stay unchanged before the walls' ghosts of frames are placed round them, and how far from a wall (m) a thing counts as against it. */
+const WALL_DETAIL_SETTLE = 0.5;
+const WALL_DETAIL_REACH = 0.3;
 /** Thickness of the wall colliders, laid just outside each wall plane so nothing inside the room touches them. */
 const WALL_COLLIDER = 0.05;
 /** How far outside the wall plane an opaque wall's shadow caster stands: clear of the shadow bias, inside the gap between two rooms' shells. */
@@ -109,7 +145,8 @@ const LAMP_RANGE = 2.5;
  * `setLampOn` is the switch of the ceiling lamp (its visible fixture is props/PendantLamp).
  * Several rooms are active at once, so what costs the whole scene is tied to `setOccupied()`: the sky
  * ambient (a scene-wide `HemisphereLight`, they would stack) only runs in the occupied room, and only
- * the occupied room's lamp re-renders its shadow map every frame; `main.ts` flips it on zone change.
+ * the occupied room's lit lamp re-renders its shadow map regularly (`ShadowRefresh`); `bootstrap/world`
+ * flips it on zone change.
  */
 export class Room extends THREE.Group implements Updatable, OccupancyAware, DrawnAware {
   /** The shell: its floor is where contact shadows fall, not something standing on it. */
@@ -120,16 +157,34 @@ export class Room extends THREE.Group implements Updatable, OccupancyAware, Draw
   private readonly lampIntensity: number;
   private hemisphere!: THREE.HemisphereLight;
   private ceilingLamp!: THREE.PointLight;
+  private lampShadow!: ShadowRefresh;
   private ceilingMat!: THREE.MeshStandardMaterial;
+  /** 0: the ceiling's emissive falls off round the lamp (its bounce); 1: even (daylight from the windows). */
+  private readonly ceilingEven = { value: 0 };
   private daylight = 1;
   private skyHue: THREE.Color | null = null;
   private lampOn = true;
+  /** The lamp's eased level, 0 dark .. 1 lit, following `lampOn`. */
+  private lampLevel = 1;
+  /** Where the hemisphere ambient is heading (`applyLighting`); `update` eases it there. */
+  private readonly ambientColor = new THREE.Color();
+  private ambientIntensity = 0;
+  /**
+   * The ambient's eased intensity: kept here, not read back from the light, whose intensity the
+   * `LightCuller` scales while it fades it in or out.
+   */
+  private ambientNow = 0;
+  /** The hemisphere's ground colour: the floor's bounce (`lighting/floorBounce`). */
+  private readonly floorBounce = new THREE.Color();
   private skylightOpen = 1;
   private occupied = false;
   /** Whether the zone's meshes are drawn: while they are hidden a refresh would render an empty map (see `setZoneDrawn`). */
   private zoneDrawn = true;
   /** Starts at a random phase so several idle rooms do not all refresh their shadows on the same frame. */
   private shadowTimer = Math.random() * IDLE_SHADOW_INTERVAL;
+  /** How many things stood in the zone when the walls' ghosts of frames were last placed round them (see `settleWallDetail`). */
+  private wallDetailCount = -1;
+  private wallDetailWait = 0;
 
   constructor(options: RoomOptions) {
     super();
@@ -139,6 +194,7 @@ export class Room extends THREE.Group implements Updatable, OccupancyAware, Draw
     this.buildSurfaces();
     this.buildLights();
     this.applyLighting();
+    this.settleAmbient();
   }
 
   /**
@@ -160,14 +216,19 @@ export class Room extends THREE.Group implements Updatable, OccupancyAware, Draw
   /** Switches the ceiling lamp; with it goes the part of the ambient that stands in for its bounce off the walls. */
   setLampOn(on: boolean): void {
     this.lampOn = on;
+    this.lampShadow.setLive(this.occupied && on);
+    if (on) this.ceilingLamp.shadow.needsUpdate = true;
+    // `update` brings the lamp up or down; the first call, before anything ticks, is shown at once.
+    if (!this.parent) this.lampLevel = on ? 1 : 0;
     this.applyLighting();
   }
 
-  /** Whether the player is in this room: sky ambient and per-frame lamp shadows follow it (see the class doc). Off until told. */
+  /** Whether the player is in this room: sky ambient and the lamp's regular shadow refresh follow it (see the class doc). Off until told. */
   setOccupied(occupied: boolean): void {
     this.occupied = occupied;
-    this.ceilingLamp.shadow.autoUpdate = occupied;
-    this.ceilingLamp.shadow.needsUpdate = true;
+    // Out of here: neutral until the next room (or none, outdoors) says otherwise.
+    if (!occupied) setContactShadowStrength(1);
+    this.lampShadow.setLive(occupied && this.lampOn);
     this.applyLighting();
   }
 
@@ -175,11 +236,28 @@ export class Room extends THREE.Group implements Updatable, OccupancyAware, Draw
   setZoneDrawn(drawn: boolean): void {
     this.zoneDrawn = drawn;
     if (drawn) this.ceilingLamp.shadow.needsUpdate = true;
+    // Hidden, the room ticks slowed: whatever it was fading to, it is there now.
+    else this.settleAmbient();
   }
 
-  /** Unoccupied: refresh the lamp's shadow map now and then instead of every frame. */
+  /**
+   * Eases the lamp towards its switch and the ambient towards its target; then the shadow refresh.
+   * Occupied: the lamp's regular refresh; unoccupied: now and then, and never while the lamp is off (nothing to see).
+   */
   update(dt: number): void {
-    if (this.occupied || !this.zoneDrawn) return;
+    const lampTarget = this.lampOn ? 1 : 0;
+    if (this.lampLevel !== lampTarget) {
+      const step = dt / (this.lampOn ? LAMP_WARM_SECONDS : LAMP_COOL_SECONDS);
+      this.lampLevel = this.lampOn ? Math.min(1, this.lampLevel + step) : Math.max(0, this.lampLevel - step);
+      this.applyLighting();
+    }
+    this.easeAmbient(dt);
+    this.settleWallDetail(dt);
+    if (this.occupied) {
+      setContactShadowStrength(this.ambientShare());
+      return this.lampShadow.update(dt);
+    }
+    if (!this.zoneDrawn || !this.lampOn) return;
     this.shadowTimer += dt;
     if (this.shadowTimer < IDLE_SHADOW_INTERVAL) return;
     this.shadowTimer = 0;
@@ -187,26 +265,110 @@ export class Room extends THREE.Group implements Updatable, OccupancyAware, Draw
   }
 
   /**
+   * Once the zone's furniture is placed (and again whenever something is added or taken away, half
+   * a second after the count settles), moves each wall's ghosts of frames clear of what hangs or
+   * stands against it: a pale frame behind a real picture, or peeking out round the TV, would read
+   * as a glitch. Only drawn meshes count (not the windows' shadow-only masks).
+   */
+  private settleWallDetail(dt: number): void {
+    const zone = this.parent;
+    if (!zone || !QUALITY.detailedMaterials || zone.children.length === this.wallDetailCount) return;
+    this.wallDetailWait += dt;
+    if (this.wallDetailWait < WALL_DETAIL_SETTLE) return;
+    this.wallDetailWait = 0;
+    this.wallDetailCount = zone.children.length;
+    zone.updateWorldMatrix(true, true);
+    const toWall = new THREE.Matrix4();
+    const box = new THREE.Box3();
+    for (const wall of this.walls) {
+      toWall.copy(wall.matrixWorld).invert();
+      const blocked: WallRect[] = [];
+      for (const item of zone.children) {
+        if (item === this) continue;
+        item.traverse((obj) => {
+          const mesh = obj as THREE.Mesh;
+          if (!mesh.isMesh || !mesh.layers.isEnabled(0) || !obj.visible) return;
+          const material = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material;
+          if (!material?.visible || !material.colorWrite) return;
+          if (!mesh.geometry.boundingBox) mesh.geometry.computeBoundingBox();
+          box.copy(mesh.geometry.boundingBox!).applyMatrix4(mesh.matrixWorld).applyMatrix4(toWall);
+          // Against the wall: within a hand's depth of its plane, on the room side.
+          if (box.isEmpty() || box.min.z > WALL_DETAIL_REACH || box.max.z < -0.02) return;
+          blocked.push({ x: (box.min.x + box.max.x) / 2, y: (box.min.y + box.max.y) / 2, halfWidth: (box.max.x - box.min.x) / 2, halfHeight: (box.max.y - box.min.y) / 2 });
+        });
+      }
+      avoidOnWall(wall.material as THREE.Material, blocked);
+    }
+  }
+
+  /**
    * How lit the room is, 0 (night, lamp off) .. 1 (lamp on or full sun): what the reflections and
    * the haze of the player's room follow (see `graphics/`).
    */
   get lightLevel(): number {
-    const skylight = THREE.MathUtils.lerp(0.12, 0.85, this.daylight) * THREE.MathUtils.lerp(0.3, 1, this.skylightOpen);
-    return THREE.MathUtils.clamp(skylight / 0.85 + (this.lampOn ? 0.65 : 0), 0, 1);
+    return THREE.MathUtils.clamp(this.skylight() / SKYLIGHT_DAY + this.lampLevel * LAMP_LIGHT_LEVEL, 0, 1);
+  }
+
+  /** The lamp's eased level (0..1) and how open the curtains are (0..1): what the street sees of this room (`city/flatWindows`). */
+  get lampShown(): number {
+    return this.lampLevel;
+  }
+
+  get curtainsOpen(): number {
+    return this.skylightOpen;
+  }
+
+  /**
+   * The share of the room's light that is ambient (sky and bounce, which contact shadows stand in
+   * for the occlusion of) rather than direct (the lamp, the sun through the windows, which cast real
+   * shadows): 1 at dusk with the lamp off, lower under the lamp or in full sun.
+   */
+  private ambientShare(): number {
+    const ambient = this.skylight();
+    const direct = this.lampLevel * LAMP_DIRECT + this.daylight * this.daylight * this.skylightOpen * SUN_DIRECT;
+    return ambient / Math.max(1e-3, ambient + direct);
+  }
+
+  /** The sky's part of the ambient: through the windows by day, less with the curtains drawn. */
+  private skylight(): number {
+    return THREE.MathUtils.lerp(SKYLIGHT_NIGHT, SKYLIGHT_DAY, this.daylight) * THREE.MathUtils.lerp(SKYLIGHT_DRAWN, 1, this.skylightOpen);
   }
 
   private applyLighting(): void {
-    const { daylight, lampOn, skylightOpen, occupied } = this;
-    this.hemisphere.color.lerpColors(NIGHT_SKY, DAY_SKY, daylight);
-    if (this.skyHue) this.hemisphere.color.lerp(this.skyHue, SKY_HUE_WEIGHT);
-    // Ambient: the sky through the windows by day (less with the curtains drawn), plus the lamp's
-    // bounce when it is on. After dark with the lamp off only a moonlit trace remains, so the room
-    // reads as genuinely switched off.
-    const skylight = THREE.MathUtils.lerp(0.12, 0.85, daylight) * THREE.MathUtils.lerp(0.3, 1, skylightOpen);
-    this.hemisphere.intensity = occupied ? skylight + (lampOn ? THREE.MathUtils.lerp(0.23, 0.1, daylight) : 0) : 0;
-    this.ceilingLamp.intensity = lampOn ? this.lampIntensity : 0;
+    const { daylight, lampLevel, skylightOpen, occupied } = this;
+    this.ambientColor.lerpColors(NIGHT_SKY, DAY_SKY, daylight);
+    if (this.skyHue) this.ambientColor.lerp(this.skyHue, SKY_HUE_WEIGHT);
+    // Ambient: the sky, plus the lamp's bounce while it is lit. After dark with the lamp off only a
+    // moonlit trace remains, so the room reads as genuinely switched off. `update` eases it there.
+    this.ambientIntensity = occupied ? this.skylight() + lampLevel * THREE.MathUtils.lerp(LAMP_BOUNCE_NIGHT, LAMP_BOUNCE_DAY, daylight) : 0;
+    this.ceilingLamp.intensity = lampLevel * this.lampIntensity;
     // The ceiling's fake bounce is the lamp's; with it off only a little daylight reaches up there.
-    this.ceilingMat.emissiveIntensity = lampOn ? CEILING_BOUNCE : 0.08 * daylight * skylightOpen;
+    // That daylight comes in by the windows, not from the lamp: the sky's colour, spread evenly
+    // (the lamp's part keeps its falloff round the rose and its LED white).
+    const day = CEILING_DAYLIGHT * daylight * skylightOpen * (1 - lampLevel);
+    const lamp = CEILING_BOUNCE * lampLevel;
+    const dayShare = day / Math.max(1e-4, day + lamp);
+    this.ceilingMat.emissiveIntensity = day + lamp;
+    this.ceilingMat.emissive.lerpColors(LAMP_BOUNCE.led, this.ambientColor, dayShare);
+    this.ceilingEven.value = dayShare;
+  }
+
+  /** Moves the hemisphere a step towards `ambientColor` / `ambientIntensity` (time constant `AMBIENT_EASE`). */
+  private easeAmbient(dt: number): void {
+    const light = this.hemisphere;
+    if (this.ambientNow === this.ambientIntensity && light.color.equals(this.ambientColor)) return;
+    const t = 1 - Math.exp(-dt / AMBIENT_EASE);
+    this.ambientNow += (this.ambientIntensity - this.ambientNow) * t;
+    light.intensity = this.ambientNow;
+    light.color.lerp(this.ambientColor, t);
+    if (Math.abs(this.ambientNow - this.ambientIntensity) < 1e-3) this.settleAmbient();
+  }
+
+  /** Puts the hemisphere where it is heading at once. */
+  private settleAmbient(): void {
+    this.ambientNow = this.ambientIntensity;
+    this.hemisphere.intensity = this.ambientIntensity;
+    this.hemisphere.color.copy(this.ambientColor);
   }
 
   /** Zone-local floor spots (x, z) just inside each doorway: where the walking lanes lead. */
@@ -278,6 +440,8 @@ export class Room extends THREE.Group implements Updatable, OccupancyAware, Draw
             : parquetMaterial(width, depth);
     // Where the floor meets the walls it darkens; the varnish or the slab is dulled along the walking lanes.
     edgeOcclusion(floorMat, new THREE.Vector2(width / 2, depth / 2), 0.3, 0.22);
+    // `low` has no grain pass: the big plain surfaces dither themselves against banding.
+    floorMat.dithering = !QUALITY.postFx;
     if (finish.floor !== 'carpet') {
       const wear = floorWearMap(width, depth, this.doorSpots(), Math.round(width * 1000 + depth * 10));
       if (wear) {
@@ -285,6 +449,7 @@ export class Room extends THREE.Group implements Updatable, OccupancyAware, Draw
         floorMat.roughness = Math.min(1, floorMat.roughness * 1.3);
       }
     }
+    floorBounce(floorMat, FLOOR_BOUNCE[finish.floor ?? 'parquet'], this.floorBounce);
     const floor = new THREE.Mesh(new THREE.PlaneGeometry(width, depth), floorMat);
     floor.rotation.x = -Math.PI / 2;
     floor.receiveShadow = true;
@@ -293,7 +458,23 @@ export class Room extends THREE.Group implements Updatable, OccupancyAware, Draw
 
     // The ceiling only sees the lamp at grazing angles and the hemisphere's ground tint, so a
     // touch of emissive stands in for the light the white walls would bounce back up onto it.
-    const ceilingMat = new THREE.MeshStandardMaterial({ color: finish.ceiling ?? 0xffffff, roughness: 1, emissive: 0xfff8f0, emissiveIntensity: CEILING_BOUNCE });
+    const ceilingMat = new THREE.MeshStandardMaterial({
+      color: finish.ceiling ?? 0xffffff,
+      roughness: 1,
+      emissive: LAMP_BOUNCE.led,
+      emissiveIntensity: CEILING_BOUNCE,
+      emissiveMap: bounceFalloff(width, depth),
+      dithering: !QUALITY.postFx,
+    });
+    const even = this.ceilingEven;
+    patchShader(ceilingMat, 'ceilingEven', (shader) => {
+      shader.uniforms.ceilingEven = even;
+      shader.fragmentShader = 'uniform float ceilingEven;\n' + replaceChunk(shader.fragmentShader, 'emissivemap_fragment', /* glsl */ `
+        #ifdef USE_EMISSIVEMAP
+          totalEmissiveRadiance *= mix(texture2D(emissiveMap, vEmissiveMapUv).rgb, vec3(1.0), ceilingEven);
+        #endif
+      `);
+    });
     edgeOcclusion(ceilingMat, new THREE.Vector2(width / 2, depth / 2), 0.2, 0.3);
     this.ceilingMat = ceilingMat;
     const ceiling = new THREE.Mesh(new THREE.PlaneGeometry(width, depth), ceilingMat);
@@ -308,7 +489,7 @@ export class Room extends THREE.Group implements Updatable, OccupancyAware, Draw
     const wall = (name: Wall, length: number): THREE.Mesh => {
       const holes = doorways.filter((d) => d.wall === name).map((d) => ({ x: wallLocalX(name, d.along), width: d.width, height: d.height }));
       const seed = Math.round(width * 7919 + depth * 104729) + name.length * 31 + name.charCodeAt(0);
-      const mesh = new THREE.Mesh(wallGeometry(length, height, holes), wallMaterial(finish.walls ?? 0xf3f0ea, { length, height, seed }));
+      const mesh = new THREE.Mesh(wallGeometry(length, height, holes), wallMaterial(finish.walls ?? 0xf3f0ea, { length, height, seed, openings: holes }));
       mesh.receiveShadow = true;
       return mesh;
     };
@@ -338,6 +519,8 @@ export class Room extends THREE.Group implements Updatable, OccupancyAware, Draw
         mesh.rotation.copy(template.rotation);
         mesh.castShadow = true;
         mesh.receiveShadow = false;
+        // Shadow passes only: the camera would draw it for nothing (it writes neither colour nor depth).
+        mesh.layers.disable(0);
         this.add(mesh);
       };
       caster('back', back, new THREE.Vector3(0, 0, -1));
@@ -346,41 +529,59 @@ export class Room extends THREE.Group implements Updatable, OccupancyAware, Draw
       caster('right', right, new THREE.Vector3(1, 0, 0));
     }
 
-    // Baseboard trim helps read the floor/wall edge in first person; it stops at the doorways.
+    // Baseboard (an ogee-topped skirting, `mouldings.ts`) helps read the floor/wall edge in first
+    // person; it stops at the doorways (capped there) and is mitred into the corners.
     const trimMat = scuffedPaint(finish.trim ?? 0xe4e0d8, 0.7);
-    const trimH = 0.08;
-    const trimD = 0.02;
-    const y = trimH / 2;
-    const trim = (name: Wall, length: number, at: (along: number) => { x?: number; z?: number }): void => {
-      const gaps = doorways.filter((d) => d.wall === name).map((d) => ({ centre: d.along, width: d.width }));
-      for (const seg of trimSegments(length, gaps)) {
-        const across = name === 'back' || name === 'front';
-        this.add(boxMesh(across ? seg.length : trimD, trimH, across ? trimD : seg.length, trimMat, { y, ...at(seg.centre) }));
-      }
-    };
-    // The side runs stop at the back and front runs: overlapping in the corners, their tops would z-fight.
-    trim('back', width, (x) => ({ x, z: -depth / 2 + trimD / 2 }));
-    trim('front', width, (x) => ({ x, z: depth / 2 - trimD / 2 }));
-    trim('left', depth - 2 * trimD, (z) => ({ x: -width / 2 + trimD / 2, z }));
-    trim('right', depth - 2 * trimD, (z) => ({ x: width / 2 - trimD / 2, z }));
+    for (const name of WALLS) this.addRuns('skirting', name, trimMat, 0, doorways.filter((d) => d.wall === name));
 
-    // Crown moulding where the walls meet the ceiling: a finished room, not a box.
+    // Crown moulding where the walls meet the ceiling (a hollow cove): a finished room, not a box.
     if (finish.moulding === false) return;
     const coveMat = paint(0xfbf9f5, 0.8);
-    const cove = 0.07;
-    const cy = height - cove / 2;
-    this.add(
-      boxMesh(width, cove, cove, coveMat, { y: cy, z: -depth / 2 + cove / 2 }),
-      boxMesh(width, cove, cove, coveMat, { y: cy, z: depth / 2 - cove / 2 }),
-      // Like the baseboard, the side runs stop at the others instead of overlapping them in the corners.
-      boxMesh(cove, cove, depth - 2 * cove, coveMat, { x: -width / 2 + cove / 2, y: cy }),
-      boxMesh(cove, cove, depth - 2 * cove, coveMat, { x: width / 2 - cove / 2, y: cy }),
-    );
+    for (const name of WALLS) this.addRuns('cove', name, coveMat, height, []);
+  }
+
+  /**
+   * The runs of `kind` moulding along wall `name` at height `y` (the floor for the skirting, the
+   * ceiling for the cove), cut round `gaps`: each run mitred where it meets a corner, capped at a doorway.
+   */
+  private addRuns(kind: MouldingKind, name: Wall, material: THREE.Material, y: number, gaps: readonly Doorway[]): void {
+    const { width, depth } = this.options;
+    const length = name === 'back' || name === 'front' ? width : depth;
+    const eps = 1e-6;
+    for (const seg of trimSegments(length, gaps.map((d) => ({ centre: d.along, width: d.width })))) {
+      // In world order along the wall; the front and left walls run the other way in their own frame.
+      const atLow: RunEnd = seg.centre - seg.length / 2 <= -length / 2 + eps ? 'mitre' : 'cap';
+      const atHigh: RunEnd = seg.centre + seg.length / 2 >= length / 2 - eps ? 'mitre' : 'cap';
+      const flipped = wallLocalX(name, 1) < 0;
+      const mesh = new THREE.Mesh(mouldingGeometry(kind, seg.length, flipped ? atHigh : atLow, flipped ? atLow : atHigh), material);
+      // Turned so its local +z points into the room (like the wall planes).
+      switch (name) {
+        case 'back':
+          mesh.position.set(seg.centre, y, -depth / 2);
+          break;
+        case 'front':
+          mesh.position.set(seg.centre, y, depth / 2);
+          mesh.rotation.y = Math.PI;
+          break;
+        case 'left':
+          mesh.position.set(-width / 2, y, seg.centre);
+          mesh.rotation.y = Math.PI / 2;
+          break;
+        case 'right':
+          mesh.position.set(width / 2, y, seg.centre);
+          mesh.rotation.y = -Math.PI / 2;
+          break;
+      }
+      // Like `boxMesh`: a caster when its longest side is (the run's length).
+      mesh.castShadow = Math.max(seg.length, kind === 'skirting' ? SKIRTING.height : COVE.size) >= QUALITY.minShadowCaster;
+      mesh.receiveShadow = true;
+      this.add(mesh);
+    }
   }
 
   private buildLights(): void {
     const { width, depth, height } = this.options;
-    this.hemisphere = new THREE.HemisphereLight(DAY_SKY, FLOOR_BOUNCE[this.options.finish?.floor ?? 'parquet'], 0.95);
+    this.hemisphere = new THREE.HemisphereLight(DAY_SKY, this.floorBounce, 0.95);
     this.add(this.hemisphere);
 
     // Farthest point of the room from the lamp (a floor corner).
@@ -389,7 +590,7 @@ export class Room extends THREE.Group implements Updatable, OccupancyAware, Draw
     // distance 0 every fragment of the flat paid for it). three's window is (1 - (d/distance)^4)^2:
     // at LAMP_RANGE x reach it costs the farthest corner under 5 % and the rest of the room nothing visible.
     const range = LAMP_RANGE * reach;
-    const ceilingLamp = new THREE.PointLight(0xffe9c9, this.lampIntensity, range, 2);
+    const ceilingLamp = new THREE.PointLight(LAMP_LIGHT.led, this.lampIntensity, range, 2);
     ceilingLamp.position.set(0, height - 0.2, 0);
     ceilingLamp.castShadow = true;
     ceilingLamp.shadow.mapSize.setScalar(QUALITY.shadowMapSize);
@@ -402,14 +603,35 @@ export class Room extends THREE.Group implements Updatable, OccupancyAware, Draw
     ceilingLamp.shadow.camera.far = far;
     ceilingLamp.shadow.camera.updateProjectionMatrix();
     ceilingLamp.shadow.bias = -LAMP_SHADOW_BIAS_M / far;
-    ceilingLamp.shadow.normalBias = 0.02;
+    // The normal offset in texels of the cube's faces, at the farthest corner (the coarsest texel it lays down).
+    ceilingLamp.shadow.normalBias = normalBiasAt(reach, CUBE_FACE_HALF_ANGLE, QUALITY.shadowMapSize);
     // Rendered once now, then only while occupied or on `update()`'s slow tick; unoccupied until told
     // (see `setOccupied`). The zone that places the room restricts what it renders to the zone's own layer.
-    ceilingLamp.shadow.autoUpdate = false;
+    this.lampShadow = new ShadowRefresh(ceilingLamp);
     ceilingLamp.shadow.needsUpdate = true;
     this.ceilingLamp = ceilingLamp;
     this.add(ceilingLamp);
   }
+}
+
+/**
+ * The ceiling's bounce, strongest over the lamp (the plane's middle) and falling off towards the
+ * walls, round in metres whatever the room's proportions: the plane's emissive map.
+ */
+function bounceFalloff(width: number, depth: number): THREE.CanvasTexture {
+  const px = 64;
+  const [canvas, ctx] = createCanvas(px, px);
+  ctx.setTransform(px / width, 0, 0, px / depth, px / 2, px / 2);
+  const glow = ctx.createRadialGradient(0, 0, 0, 0, 0, CEILING_BOUNCE_REACH);
+  const edge = Math.round(255 * CEILING_BOUNCE_EDGE);
+  glow.addColorStop(0, '#ffffff');
+  glow.addColorStop(0.45, `rgb(${Math.round(255 * 0.8)},${Math.round(255 * 0.8)},${Math.round(255 * 0.8)})`);
+  glow.addColorStop(1, `rgb(${edge},${edge},${edge})`);
+  ctx.fillStyle = glow;
+  ctx.fillRect(-width / 2, -depth / 2, width, depth);
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  return texture;
 }
 
 /**

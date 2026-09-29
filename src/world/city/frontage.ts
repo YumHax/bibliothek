@@ -1,4 +1,4 @@
-import { COURTYARD, FLAT_IN_STREET, FRONT, KERB_HEIGHT, PARK_STREET, STREET_ENDS, STREET_PLAN, type Vec2 } from '../street/streetPlan';
+import { COURTYARD, FLAT_IN_STREET, FRONT, KERB_HEIGHT, PARK_PARKING, PARK_STREET, STREET_ENDS, STREET_PLAN, WORKS, type Vec2 } from '../street/streetPlan';
 
 /*
  * The neighbourhood's ground plan in the flat's frame: metres from the collection room's floor
@@ -22,6 +22,13 @@ function laneOf(route: readonly Vec2[]): number {
   const point = route.find(([x, z]) => x === 0 && Math.abs(z) < FRONT.farKerb);
   if (!point) throw new Error('[city] a traffic route does not run along Front Street');
   return point[1];
+}
+
+/** The x where a car route runs down Park Street (its point well south of Front Street). */
+function parkLaneOf(route: readonly Vec2[]): number {
+  const point = route.find(([x, z]) => z < FRONT.ourLine - 10 && x < PARK_STREET.line);
+  if (!point) throw new Error('[city] a traffic route does not run along Park Street');
+  return point[0];
 }
 
 /** How far to the right of the cars' line a rider keeps (the road's outer lane, towards the kerb). */
@@ -58,13 +65,16 @@ export const FRONT_SECTION = {
 
 /**
  * Park Street's cross-section, x in the flat's frame (negative: out of the left windows): our
- * building line (the kitchen wing's outer face), our kerb, the far kerb, the park's hedge.
+ * building line (the kitchen wing's outer face), our kerb, the far kerb, the park's hedge; where the
+ * cars drive down it (`nearLane`, coming from Front Street) and up it (`farLane`).
  */
 export const PARK_SECTION = {
   ourLine: along(PARK_STREET.line),
   nearKerb: along(PARK_STREET.nearKerb),
   farKerb: along(PARK_STREET.farKerb),
   hedge: along(PARK_STREET.hedge),
+  nearLane: along(parkLaneOf(westbound)),
+  farLane: along(parkLaneOf(eastbound)),
 } as const;
 
 /** Where the buildings standing across the streets' far ends are: Front Street's at x `front`, Park Street's at z -`park`. */
@@ -104,3 +114,50 @@ export const LIGHT_STRINGS = STREET_PLAN.decor.flatMap((entry) =>
     ? [{ x: along(entry.at.floor[0]), height: entry.options?.height ?? 0, sag: entry.options?.sag ?? 0, spacing: entry.options?.spacing ?? 0 }]
     : [],
 );
+
+/** Something standing on the pavement: where, and the way it faces (yaw 0 = +z, the plan's). */
+export interface PlacedThing {
+  at: Vec2;
+  yaw: number;
+}
+
+/** The benches and the newsstand. */
+export const BENCHES: readonly PlacedThing[] = STREET_PLAN.benches.map((bench) => ({ at: inFlatFrame(bench.at), yaw: bench.yaw }));
+export const KIOSK: PlacedThing = { at: inFlatFrame(STREET_PLAN.kiosk.at), yaw: STREET_PLAN.kiosk.yaw };
+
+/** The café and bar terraces: from x to x along the line of their tables (z), all on Front Street's pavements. */
+export const TERRACES = STREET_PLAN.terraces.map((terrace) => {
+  const [x0, z] = inFlatFrame(terrace.from);
+  const [x1] = inFlatFrame(terrace.to);
+  return { from: Math.min(x0, x1), to: Math.max(x0, x1), z };
+});
+
+/** The street's small print: manhole covers, hydrants, bollards, the Morris column. */
+export const STREET_DETAILS = {
+  manholes: STREET_PLAN.details.manholes.map(inFlatFrame),
+  hydrants: STREET_PLAN.details.hydrants.map(inFlatFrame),
+  bollards: STREET_PLAN.details.bollards.map(inFlatFrame),
+  column: { ...STREET_PLAN.details.column, at: inFlatFrame(STREET_PLAN.details.column.at) },
+} as const;
+
+/** Where a span across a street runs (low, high), in the flat's frame. */
+export type Span = readonly [number, number];
+const span = (a: number, b: number): Span => [Math.min(a, b), Math.max(a, b)];
+
+/**
+ * The two roadworks closing the walkable street (`street/details/roadworks`): across Front Street at
+ * x `front.x` (spans in z), across Park Street at z `park.z` (spans in x); a hoarding over each
+ * pavement, barriers over the parking lanes, the traffic lanes between them open to a roadworker.
+ */
+export const ROADWORKS = {
+  front: {
+    x: along(WORKS.front),
+    pavements: [span(out(FRONT.ourLine), out(FRONT.nearKerb)), span(out(FRONT.farKerb), out(FRONT.farLine))],
+    parking: [span(out(FRONT.nearKerb), out(-STREET_PLAN.parkingLine)), span(out(STREET_PLAN.parkingLine), out(FRONT.farKerb))],
+  },
+  park: {
+    z: out(WORKS.park),
+    pavements: [span(along(PARK_STREET.line), along(PARK_STREET.nearKerb)), span(along(PARK_STREET.farKerb), along(PARK_STREET.hedge))],
+    parking: [span(along(PARK_STREET.nearKerb), along(PARK_STREET.nearKerb - PARK_PARKING)), span(along(PARK_STREET.farKerb + PARK_PARKING), along(PARK_STREET.farKerb))],
+  },
+} as const;

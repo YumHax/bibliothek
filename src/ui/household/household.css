@@ -137,3 +137,14 @@
   from { opacity: 0; filter: blur(6px); }
   to   { opacity: 1; filter: none; }
 }
+/* The shared thumbnail class (for the placeholder swap) must not shrink the dream's cover; a made-up box is blurred too. */
+.dream-card .dream-card__cover.catalogue__cover {
+  width: 3.8rem;
+  height: auto;
+}
+.dream-card .catalogue__cover--placeholder {
+  width: 3.8rem;
+  height: 4.6rem;
+  filter: blur(2px) saturate(0.8);
+  opacity: 0.9;
+}

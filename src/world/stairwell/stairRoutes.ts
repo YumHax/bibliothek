@@ -50,7 +50,7 @@ export function liftToStreet(): THREE.Vector3[] {
   return hallToDoor(walk.liftGate[0]);
 }
 
-/** The lift's gate on any landing (the car stops at ours and at the hall's). */
+/** The lift's gate on any landing (the car stops at every one). */
 export function liftGate(): THREE.Vector3 {
   return v(walk.liftGate[0], walk.liftGate[1]);
 }

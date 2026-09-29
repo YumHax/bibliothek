@@ -6,8 +6,8 @@ import { type SeatedPose, paintSeated } from './figures';
 /**
  * The things that stand on the pavements and in the park, each painted at a ground point (metres
  * from the eye) in true perspective: lamp posts, benches, bins, bicycles, bollards, traffic lights,
- * a bus shelter, an advertising column, and what the shops put out (café terraces, fruit crates,
- * flower buckets, a chalkboard).
+ * a bus shelter, an advertising column, hydrants, café terraces, the roadworks' hoardings,
+ * barriers and cones.
  */
 
 const IRON = '#23292a';
@@ -255,11 +255,10 @@ export function paintAdColumn(sheet: Sheet, random: Rng, x: number, z: number): 
 }
 
 /**
- * A café or bar terrace along Front Street from x0 to x1, set against the shop front (z = `wall`):
- * round bistro tables with their chairs, some taken, under parasols now and then.
+ * A café or bar terrace along Front Street from x0 to x1, its tables in a row along z: round
+ * bistro tables with their chairs, some taken, under parasols now and then.
  */
-export function paintTerrace(sheet: Sheet, random: Rng, x0: number, x1: number, wall: number): void {
-  const z = wall - 1.1;
+export function paintTerrace(sheet: Sheet, random: Rng, x0: number, x1: number, z: number): void {
   for (let x = x0 + 0.9; x < x1 - 0.6; x += between(random, 1.5, 1.9)) {
     const d = Math.hypot(x, z);
     paintGroundShadow(sheet, x, z, 0.6, 0.45, 0.2);
@@ -298,85 +297,6 @@ export function paintTerrace(sheet: Sheet, random: Rng, x0: number, x1: number, 
   }
 }
 
-/** The greengrocer's stall out front: tilted crates heaped with fruit and vegetables. */
-export function paintCrates(sheet: Sheet, random: Rng, x0: number, x1: number, wall: number): void {
-  const z = wall - 0.7;
-  paintBox(sheet, { x: (x0 + x1) / 2, z, along: [1, 0] }, x1 - x0 - 1, 0.9, 0, 0.7, '#6a5038');
-  const ctx = sheet.color;
-  for (let x = x0 + 0.6; x < x1 - 0.8; x += 0.55) {
-    const [cx0, cy0] = worldPoint(x, z - 0.4, 0.75);
-    const [cx1, cy1] = worldPoint(x + 0.5, z + 0.4, 0.95);
-    const color = pick(random, ['#d9383a', '#f09a3a', '#6fa35e', '#e8d040', '#8a3a6a', '#4d7a3a']);
-    ctx.fillStyle = '#b89060';
-    ctx.fillRect(cx0, cy1, cx1 - cx0, cy0 - cy1);
-    ctx.fillStyle = color;
-    ctx.fillRect(cx0 + 1, cy1, cx1 - cx0 - 2, (cy0 - cy1) * 0.7);
-    ctx.fillStyle = 'rgba(255,255,255,0.2)';
-    ctx.fillRect(cx0 + 1, cy1, (cx1 - cx0) * 0.4, (cy0 - cy1) * 0.25);
-  }
-}
-
-/** The florist's buckets along the front, each a bunch of colour on stems. */
-export function paintBuckets(sheet: Sheet, random: Rng, x0: number, x1: number, wall: number): void {
-  const ctx = sheet.color;
-  for (let x = x0 + 0.5; x < x1 - 0.5; x += between(random, 0.45, 0.7)) {
-    const z = wall - between(random, 0.4, 0.9);
-    const d = Math.hypot(x, z);
-    paintBox(sheet, { x, z, along: [1, 0] }, 0.3, 0.3, 0, 0.35, '#5a6468');
-    const [cx, cy] = worldPoint(x, z, 0.65);
-    const r = sizePx(0.28, d);
-    ctx.fillStyle = '#3f6b33';
-    ctx.beginPath();
-    ctx.arc(cx, cy, r, 0, Math.PI * 2);
-    ctx.fill();
-    const color = pick(random, ['#e0567a', '#f0f0e8', '#b04ac0', '#f09a3a', '#d9383a', '#e8d040']);
-    ctx.fillStyle = color;
-    for (let i = 0; i < 9; i++) ctx.fillRect(cx + between(random, -r, r) * 0.8, cy + between(random, -r, r) * 0.7, Math.max(1, r * 0.3), Math.max(1, r * 0.3));
-  }
-}
-
-/** A chalkboard on an A-frame, set out by the door. */
-export function paintBoard(sheet: Sheet, x: number, wall: number): void {
-  const z = wall - 1.3;
-  const d = Math.hypot(x, z);
-  const cx = azimuthX(azimuthOf(x, z));
-  const w = sizePx(0.55, d);
-  const top = heightY(1, d);
-  const bottom = heightY(0, d);
-  sheet.begin(d);
-  const p = new Path2D();
-  p.moveTo(cx - w * 0.5, bottom);
-  p.lineTo(cx + w * 0.5, bottom);
-  p.lineTo(cx + w * 0.4, top);
-  p.lineTo(cx - w * 0.4, top);
-  p.closePath();
-  sheet.path(p, '#6a4a32');
-  sheet.color.fillStyle = '#2a2e2c';
-  sheet.color.fillRect(cx - w * 0.36, top + (bottom - top) * 0.1, w * 0.72, (bottom - top) * 0.6);
-  sheet.color.fillStyle = 'rgba(240,240,230,0.6)';
-  for (let i = 0; i < 4; i++) sheet.color.fillRect(cx - w * 0.28, top + (bottom - top) * (0.18 + i * 0.12), w * (0.3 + 0.25 * ((i * 7) % 3) / 2), Math.max(0.6, (bottom - top) * 0.03));
-}
-
-/** A moped parked on its stand, across the kerb. */
-export function paintMoped(sheet: Sheet, random: Rng, f: Footprint): void {
-  const d = Math.hypot(f.x, f.z);
-  if (sizePx(1, d) < 6) return;
-  const color = pick(random, ['#d9383a', '#e8e2d2', '#3b6fb3', '#6fa35e', '#1c1c1e', '#e8c84a']);
-  paintGroundShadow(sheet, f.x, f.z, 0.9, 0.4, 0.25);
-  const ctx = sheet.color;
-  for (const u of [-0.6, 0.6]) {
-    const [wx, wy] = footPoint(f, u, 0, 0.22);
-    ctx.fillStyle = '#141414';
-    ctx.beginPath();
-    ctx.arc(wx, wy, sizePx(0.22, d), 0, Math.PI * 2);
-    ctx.fill();
-  }
-  paintBox(sheet, f, 1.1, 0.4, 0.3, 0.6, color, 0.1);
-  paintBox(sheet, f, 0.55, 0.3, 0.6, 0.72, '#1c1c1e', 0, -0.2);
-  paintBox(sheet, f, 0.12, 0.25, 0.3, 1.05, color, 0.1, 0.55);
-  paintBox(sheet, f, 0.06, 0.6, 1.05, 1.08, '#2a2a2c', 0, 0.55);
-}
-
 /** A newspaper kiosk (newsstand): a green box with a shallow roof, the day's papers and magazines pegged round its hatch. */
 export function paintNewsstand(sheet: Sheet, random: Rng, f: Footprint): void {
   const L = 3;
@@ -400,35 +320,6 @@ export function paintNewsstand(sheet: Sheet, random: Rng, f: Footprint): void {
   }
   paintBox(sheet, f, L + 0.5, W + 0.5, 2.5, 2.65, '#23392e');
   paintBox(sheet, f, 1.4, 0.8, 2.65, 2.95, '#23392e');
-}
-
-/** A stone planter along `along`, a clipped shrub or a spill of flowers in it. */
-export function paintPlanter(sheet: Sheet, random: Rng, f: Footprint): void {
-  paintGroundShadow(sheet, f.x, f.z, 0.8, 0.45, 0.2);
-  paintBox(sheet, f, 1.2, 0.6, 0, 0.5, pick(random, ['#b8b0a0', '#8a8680', '#6a5a4a']));
-  const d = Math.hypot(f.x, f.z);
-  const [cx, cy] = worldPoint(f.x, f.z, 0.75);
-  const r = sizePx(0.55, d);
-  const ctx = sheet.color;
-  const bush = new Path2D();
-  bush.ellipse(cx, cy, r, r * 0.6, 0, 0, Math.PI * 2);
-  sheet.begin(d, 0, { snow: 0.6 });
-  sheet.path(bush, pick(random, ['#3f6b33', '#4d7a3a', '#2f5a30']));
-  if (random() < 0.5) {
-    ctx.fillStyle = pick(random, ['#e0567a', '#f0f0e8', '#f09a3a', '#b04ac0']);
-    for (let i = 0; i < 12; i++) ctx.fillRect(cx + between(random, -r, r) * 0.8, cy + between(random, -r, r) * 0.45, Math.max(1, r * 0.15), Math.max(1, r * 0.15));
-  }
-}
-
-/** A hire e-scooter left on its stand: a slim deck, a stem and bars in the operator's colour. */
-export function paintScooter(sheet: Sheet, random: Rng, x: number, z: number): void {
-  const color = pick(random, ['#2fb86a', '#e84a3a', '#1c1c1e', '#3b6fb3']);
-  const lean = between(random, -0.5, 0.5);
-  const f: Footprint = { x, z, along: [Math.cos(lean), Math.sin(lean)] };
-  paintGroundShadow(sheet, x, z, 0.6, 0.25, 0.15);
-  paintBox(sheet, f, 1.05, 0.18, 0.08, 0.16, '#2a2a2c');
-  paintBox(sheet, f, 0.06, 0.06, 0.16, 1.1, color, 0, 0.48);
-  paintBox(sheet, f, 0.06, 0.5, 1.1, 1.14, '#2a2a2c', 0, 0.48);
 }
 
 /** The iron grille over a street tree's pit. */
@@ -458,4 +349,45 @@ export function paintManhole(sheet: Sheet, x: number, z: number, radius = 0.35):
   ctx.strokeStyle = 'rgba(160,160,160,0.25)';
   ctx.lineWidth = Math.max(0.6, sizePx(0.04, Math.hypot(x, z)));
   ctx.stroke(outline(pts));
+}
+
+/** A red fire hydrant on the pavement. */
+export function paintHydrant(sheet: Sheet, x: number, z: number): void {
+  paintPost(sheet, x, z, 0, 0.7, 0.22, '#b8302a');
+  paintPost(sheet, x, z, 0.3, 0.42, 0.36, '#9a2822');
+  paintPost(sheet, x, z, 0.7, 0.8, 0.12, '#9a2822');
+}
+
+/**
+ * The roadworks' plywood hoarding right across a pavement, from (x0, z0) to (x1, z1), `height`
+ * tall: raw boards on a darker frame, a strip of warning tape along the top, fly-posters on it.
+ */
+export function paintHoarding(sheet: Sheet, random: Rng, x0: number, z0: number, x1: number, z1: number, height: number): void {
+  const f: Footprint = { x: (x0 + x1) / 2, z: (z0 + z1) / 2, along: [x1 - x0, z1 - z0].map((v) => v / Math.hypot(x1 - x0, z1 - z0)) as [number, number] };
+  const length = Math.hypot(x1 - x0, z1 - z0);
+  paintBox(sheet, f, length, 0.08, 0, height, '#c9a877');
+  paintBox(sheet, f, length, 0.1, height - 0.25, height, '#e8c030');
+  const ctx = sheet.color;
+  for (let u = -length / 2 + 0.3; u < length / 2 - 0.8; u += between(random, 0.9, 1.6)) {
+    if (random() < 0.4) continue;
+    ctx.fillStyle = pick(random, ['#f0e8d0', '#f6d23a', '#e8e8e8', '#ff6a3a', '#9ad0e8']);
+    ctx.fill(outline([footPoint(f, u, -0.06, 0.8), footPoint(f, u + 0.6, -0.06, 0.8), footPoint(f, u + 0.6, -0.06, 1.7), footPoint(f, u, -0.06, 1.7)]));
+  }
+}
+
+/** A row of red and white water-filled barriers from (x0, z0) to (x1, z1), end to end. */
+export function paintBarriers(sheet: Sheet, x0: number, z0: number, x1: number, z1: number): void {
+  const length = Math.hypot(x1 - x0, z1 - z0);
+  const along: [number, number] = [(x1 - x0) / length, (z1 - z0) / length];
+  const n = Math.max(1, Math.round(length / 1.2));
+  for (let i = 0; i < n; i++) {
+    const t = (i + 0.5) / n;
+    paintBox(sheet, { x: x0 + (x1 - x0) * t, z: z0 + (z1 - z0) * t, along }, length / n - 0.05, 0.45, 0, 0.8, i % 2 === 0 ? '#d8302a' : '#ece8e0');
+  }
+}
+
+/** A traffic cone. */
+export function paintCone(sheet: Sheet, x: number, z: number): void {
+  paintPost(sheet, x, z, 0, 0.7, 0.3, '#f06a1a');
+  paintPost(sheet, x, z, 0.35, 0.47, 0.26, '#f0f0e8');
 }

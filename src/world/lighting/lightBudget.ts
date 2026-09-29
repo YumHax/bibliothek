@@ -9,6 +9,8 @@ import type { Updatable } from '@/core/Engine';
  *   fail to link and the rooms go black): `MATERIAL_UNITS` is the margin kept for the maps;
  * - the count must not change while playing (a light hidden with `visible`, a lamp built on a
  *   purchase): hide a lamp with `setShownKeepingLights`, dim a light with `intensity = 0`;
+ * - only a few of each kind reach the renderer at once (`QUALITY.lights`): the `LightCuller` picks
+ *   them each frame and hides the others, keeping every count fixed; owners never set `visible`;
  * - decorative glows that do not need a light each (a cabinet's screen, a neon, a claw machine's
  *   case) are `PooledLight`s sharing a zone's `LightPool`, a fixed handful of real lights.
  *
@@ -73,12 +75,14 @@ function pathOf(obj: THREE.Object3D): string {
 /**
  * Watches the scene's lights every couple of seconds. Always: an error when the shadow maps leave
  * less than `MATERIAL_UNITS` of the GPU's texture units. With `verbose` (`?stats` / `?debug`): a
- * warning each time the drawn set changes, naming the lights that came and went (each change
- * recompiles every lit program), and a line per change of zone with the new totals.
+ * warning each time the drawn counts change within one set of zones, naming the lights that came
+ * and went (each change recompiles every lit program; the `LightCuller` trading one light for
+ * another of the same kind does not), and a line per change of zone with the new totals.
  */
 export class LightMonitor implements Updatable {
   private timer = 0;
   private last: Map<string, THREE.Light> | null = null;
+  private lastCount = '';
   private lastSet = '';
   private shadowErrorShown = false;
 
@@ -119,9 +123,16 @@ export class LightMonitor implements Updatable {
     const set = this.activeSet();
     const sameSet = set === this.lastSet;
     this.lastSet = set;
+    const described = describeCount(count);
+    const sameCount = described === this.lastCount;
+    this.lastCount = described;
     if (this.verbose && this.last && !sameSet) {
       console.info(`${line} (${set})`);
     } else if (this.verbose && this.last) {
+      if (sameCount) {
+        this.last = now;
+        return count;
+      }
       const came = lights.filter((l) => !this.last!.has(l.uuid));
       const went = [...this.last.values()].filter((l) => !now.has(l.uuid));
       if (came.length || went.length) {

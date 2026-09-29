@@ -4,6 +4,9 @@ import { Walker } from '../people/Walker';
 import { randomLook } from '../people/looks';
 import type { FriendPlan } from './friendsPlan';
 
+/** The radius (m) their path's corners are swept round with: tight enough for the flat's doorways. */
+const CORNERS = 0.25;
+
 /** Something the friend waits for the player to answer (a game they would like to borrow): the caption, and what a click does. */
 export interface FriendRequest {
   label: string;
@@ -12,8 +15,8 @@ export interface FriendRequest {
 
 /**
  * A friend on a visit: a `Walker` (walks what the `Visit` gives it, says a word in a bubble, fades
- * so the camera can pass through) with a name. A click chats (`chat`), or answers what they asked
- * (`request`, a borrow). Seen from next door: they belong to the collection room's zone, like the
+ * so the camera can pass through) with a name. A click chats (`chat`, which turns them to the
+ * player first), or answers what they asked (`request`, a borrow). Seen from next door: they belong to the collection room's zone, like the
  * cat, but walk the whole flat, so culling the room never hides them in the corridor.
  */
 export class Friend extends Walker {
@@ -21,15 +24,24 @@ export class Friend extends Walker {
   request: FriendRequest | null = null;
   /** A line for a click, asked afresh each time. */
   chat: (() => string) | null = null;
+  /** Hears them talk: every line or word said, when its bubble shows (the host plays it as a murmur at their mouth). */
+  voice: ((text: string) => void) | null = null;
 
   constructor(readonly plan: FriendPlan, viewer: THREE.Object3D) {
-    super({ viewer, seed: plan.seed, look: { ...randomLook(plan.seed, 'shopper'), ...plan.look }, speed: plan.speed, fade: true, speaker: plan.name });
+    // Corners swept rather than pivoted; the `Visit` makes way for the player itself (a word, a sidestep clear of walls).
+    super({ viewer, seed: plan.seed, look: { ...randomLook(plan.seed, 'shopper'), ...plan.look }, speed: plan.speed, fade: true, speaker: plan.name, corners: CORNERS, yields: false });
     this.name = `Friend:${plan.id}`;
+  }
+
+  /** Their murmur starts with the bubble (a line queued behind another waits with it). */
+  protected override lineShown(text: string): void {
+    super.lineShown(text);
+    this.voice?.(text);
   }
 
   override label(): string | null {
     if (!this.isPresent) return null;
-    return this.request?.label ?? `Chat with ${this.plan.name}`;
+    return this.request?.label ?? `${this.plan.name} · chat`;
   }
 
   override activate(session: SessionActions): void {

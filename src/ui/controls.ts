@@ -42,14 +42,28 @@ const k = keyMarkup;
 const pad = padMarkup;
 const touch = touchMarkup;
 const walk = `${k('forward')}${k('left')}${k('back')}${k('right')}`;
+
+/** Settings > Controls > Walking, as the Controls screen shows it: only the mode chosen (`setControlModes`, from the settings form). */
+let modes: { sprint: 'doubleTap' | 'hold'; crouch: 'hold' | 'toggle' } = { sprint: 'doubleTap', crouch: 'hold' };
+
+/** The sprint and crouch modes the help describes (Settings > Controls > Walking). */
+export function setControlModes(next: { sprint: 'doubleTap' | 'hold'; crouch: 'hold' | 'toggle' }): void {
+  modes = { ...next };
+}
+
+const sprintKeys = (): string => (modes.sprint === 'hold' ? `Hold ${k('crouch')}` : `Double-tap ${k('forward')}, keep it held`);
+const crouchKeys = (): string => {
+  const key = k(modes.sprint === 'hold' ? 'crouchAlt' : 'crouch');
+  return modes.crouch === 'toggle' ? `${key} (again: stand up)` : `Hold ${key}`;
+};
 const stick = `${k('stickUp')}${k('stickLeft')}${k('stickDown')}${k('stickRight')}`;
 
 export const CONTROLS: ControlHint[] = [
   // --- at home ---------------------------------------------------------------------------------------
   { group: 'room', action: 'Move', keys: walk, pad: '[Left stick]', touch: '[Left joystick]', essential: true },
   { group: 'room', action: 'Look around', keys: '[Mouse]', pad: '[Right stick]', touch: 'Drag on the right', essential: true },
-  { group: 'room', action: 'Sprint', keys: `Double-tap ${k('forward')}, keep it held`, pad: 'Click [Left stick]', touch: 'Push the joystick far' },
-  { group: 'room', action: 'Crouch', keys: `Hold ${k('crouch')}`, pad: 'Hold [LB]' },
+  { group: 'room', action: 'Sprint', get keys() { return sprintKeys(); }, pad: 'Click [Left stick]', touch: 'Push the joystick far' },
+  { group: 'room', action: 'Crouch', get keys() { return crouchKeys(); }, get pad() { return modes.crouch === 'toggle' ? '[LB] (again: stand up)' : 'Hold [LB]'; } },
   { group: 'room', action: 'Pick a game up, use what you look at', keys: '[Click]', pad: '[A]', touch: 'Tap', essential: true },
   { group: 'room', action: 'Rotate the game in hand', keys: 'Hold [Right click]', pad: 'Hold [RB], [Right stick]', touch: 'Long-press, drag', whileHolding: true },
   { group: 'room', action: 'Open / close the box', keys: k('openBox'), pad: pad('openBox'), touch: touch('openBox'), whileHolding: true },
@@ -67,26 +81,26 @@ export const CONTROLS: ControlHint[] = [
   { group: 'room', action: 'The time (click twice: alarm in an hour)', keys: '[Click] a wall clock', pad: '[A]', touch: 'Tap' },
   { group: 'room', action: 'Doors, drawers, fridge, cupboards, taps, kettle, radio…', keys: '[Click] them', pad: '[A]', touch: 'Tap' },
   { group: 'room', action: 'Sleep until morning', keys: 'In bed, [Click] the bed again', pad: '[A]', touch: 'Tap' },
-  { group: 'room', action: 'Call the cat', keys: k('callCat') },
-  { group: 'room', action: 'Your journal: the day, the days before', keys: `${k('journal')} or [Click] the notebook on the hall console` },
-  { group: 'room', action: 'The collector’s book: milestones, sets, value', keys: '[Click] the binder on the sideboard', pad: '[A]', touch: 'Tap' },
-  { group: 'room', action: 'Photo mode (fly, focus, take a PNG)', keys: k('photoMode') },
+  { group: 'room', action: 'Call the cat', keys: k('callCat'), pad: 'Click [Right stick]' },
+  { group: 'room', action: 'Your journal: the day, the days before', keys: `${k('journal')} or [Click] the notebook on the hall console`, pad: 'Hold [Select], or [Start] › Journal', touch: '[Menu] › Journal' },
+  { group: 'room', action: 'The collector’s book: milestones, sets, value', keys: '[Click] the binder in the living room', pad: '[A]', touch: 'Tap' },
+  { group: 'room', action: 'Photo mode (fly, focus, take a PNG)', keys: k('photoMode'), pad: '[Start] › Photo mode', touch: '[Menu] › Photo mode' },
   { group: 'room', action: 'Pet the cat, refill its bowl', keys: '[Click] it, [Click] the bowl', pad: '[A]', touch: 'Tap' },
   { group: 'room', action: 'Go out (arcade, flea market)', keys: '[Click] the key bowl, then the front door', pad: '[A]', touch: 'Tap', essential: true },
   { group: 'room', action: 'Pause, release the mouse', keys: k('close'), pad: '[Start]', touch: touch('close'), essential: true },
 
   // --- arcade ----------------------------------------------------------------------------------------
   { group: 'arcade', action: 'Play a cabinet (insert coin)', keys: '[Click] it', pad: '[A]', touch: 'Tap' },
-  { group: 'arcade', action: 'Cabinet: move, fire', keys: `${k('stickLeft')}${k('stickRight')} / arrows, ${k('fire')}` },
+  { group: 'arcade', action: 'Cabinet: move, fire', keys: `${k('stickLeft')}${k('stickRight')} / arrows, ${k('fire')}`, pad: '[Left stick], [A]' },
   { group: 'arcade', action: 'Walk away from a machine', keys: k('walkAway'), pad: pad('walkAway'), touch: touch('walkAway') },
-  { group: 'arcade', action: 'High score initials: letter, next', keys: `${k('stickUp')}${k('stickDown')}, ${k('fire')}` },
-  { group: 'arcade', action: 'Pinball: flippers, launch', keys: `${k('stickLeft')} ${k('stickRight')}, hold and release ${k('fire')}` },
-  { group: 'arcade', action: 'Alley: aim, power', keys: `${k('stickLeft')}${k('stickRight')}, hold and release ${k('fire')}` },
-  { group: 'arcade', action: 'Claw: steer, drop', keys: `${stick}, ${k('fire')}` },
+  { group: 'arcade', action: 'High score initials: letter, next', keys: `${k('stickUp')}${k('stickDown')}, ${k('fire')}`, pad: '[Left stick], [A]' },
+  { group: 'arcade', action: 'Pinball: flippers, launch', keys: `${k('stickLeft')} ${k('stickRight')}, hold and release ${k('fire')}`, pad: '[Left stick], hold and release [A]' },
+  { group: 'arcade', action: 'Alley: aim, power', keys: `${k('stickLeft')}${k('stickRight')}, hold and release ${k('fire')}`, pad: '[Left stick], hold and release [A]' },
+  { group: 'arcade', action: 'Claw: steer, drop', keys: `${stick}, ${k('fire')}`, pad: '[Left stick], [A]' },
   { group: 'arcade', action: 'Neon Sheriff: aim, shoot (off screen reloads)', keys: `[Mouse], [Click] or ${k('fire')}`, pad: '[Right stick], [A]' },
   { group: 'arcade', action: 'Step Beat: step', keys: `${stick} / arrows`, pad: '[D-pad]' },
-  { group: 'arcade', action: 'Paddle Wars: move, smash', keys: `${k('stickUp')}${k('stickDown')}, hold ${k('fire')}` },
-  { group: 'arcade', action: 'Hoop Fever: aim, throw', keys: `[Mouse], hold and release ${k('fire')}` },
+  { group: 'arcade', action: 'Paddle Wars: move, smash', keys: `${k('stickUp')}${k('stickDown')}, hold ${k('fire')}`, pad: '[Left stick], hold [A]' },
+  { group: 'arcade', action: 'Hoop Fever: aim, throw', keys: `[Mouse], hold and release ${k('fire')}`, pad: '[Right stick], hold and release [A]' },
   { group: 'arcade', action: 'Spin the ticket wheel', keys: `${k('fire')} or [Click]`, pad: '[A]', touch: 'Tap' },
   { group: 'arcade', action: 'Next station on the jukebox', keys: '[Click] the jukebox', pad: '[A]', touch: 'Tap' },
   { group: 'arcade', action: 'Swap tickets for prizes, a mystery game or coins', keys: '[Click] the prize counter', pad: '[A]', touch: 'Tap' },

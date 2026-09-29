@@ -10,7 +10,7 @@
   box-sizing: border-box;
   padding: 1.3rem 1.6rem 1rem 2.6rem;
   color: #22303f;
-  font-family: 'Segoe Print', 'Bradley Hand', 'Comic Sans MS', cursive;
+  font-family: var(--ui-font-hand);
   font-size: 0.95rem;
   line-height: 1.6rem;
   border-radius: 4px 8px 8px 4px;

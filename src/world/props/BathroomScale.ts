@@ -18,7 +18,7 @@ export class BathroomScale extends Prop {
   constructor(options: BathroomScaleOptions = {}) {
     super();
     this.name = 'BathroomScale';
-    const glass = standard({ color: options.color ?? 0xf4f4f2, roughness: 0.15, metalness: 0.1 });
+    const glass = standard({ color: options.color ?? 0xf4f4f2, roughness: 0.15, metalness: 0 });
     part(this, SIZE, HEIGHT - 0.006, SIZE, glass, { y: 0.006 + (HEIGHT - 0.006) / 2 });
     const display = part(this, 0.09, 0.002, 0.03, paint(0x14161a, 0.3), { y: HEIGHT + 0.001, z: SIZE / 2 - 0.035 });
     display.castShadow = false;

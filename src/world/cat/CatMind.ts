@@ -30,6 +30,8 @@ export class CatMind {
   /** The resting spot chosen for the current lie-down; `perch` while actually up there. */
   spot: RestingSpot | null = null;
   perch: RestingSpot | null = null;
+  /** A fly is being chased: `lookPoint` is where it buzzes (set on entering a state). */
+  flying = false;
   /** The water bowl it went to drink from. */
   drinkingFrom: WaterBowlLike | null = null;
   /** A play bout (the ball, an imaginary fly): pounces so far, out of how many. */
@@ -63,6 +65,10 @@ export class CatMind {
   /** What is left of a nap interrupted by a half wake. */
   sleepRemaining = 0;
   purring = false;
+  /** What set off the current startle: a sprint (hiss, yowl) or a player simply walking too close (a grumble). */
+  startledBy: 'sprint' | 'crowd' = 'sprint';
+  /** The last two activities chosen when idle, newest first: the draw leans away from repeating them. */
+  readonly recent: Activity[] = [];
 
   constructor(readonly ctx: CatBrainContext) {}
 
@@ -73,6 +79,7 @@ export class CatMind {
     this.previous = this.state;
     this.state = state;
     this.age = 0;
+    this.flying = state === 'flyStalk' || state === 'flyPounce';
     const def = STATES[state];
     this.memo = def.memo?.();
     def.enter?.(this, this.memo);
@@ -80,7 +87,10 @@ export class CatMind {
 
   /** What an idle cat does next: a weighted pick of the activity table. */
   chooseActivity(): void {
-    this.startActivity(pickActivity(this));
+    const activity = pickActivity(this);
+    this.recent.unshift(activity);
+    this.recent.length = Math.min(this.recent.length, 2);
+    this.startActivity(activity);
   }
 
   /** Runs an activity, first hopping down from a perch when the activity needs the floor. */
@@ -126,10 +136,10 @@ export class CatMind {
     this.hasFacing = true;
   }
 
-  /** Turns towards the pending facing point (set before the walk), once. */
-  faceIfAny(): void {
+  /** Turns towards the pending facing point (set before the walk), once; `keepClear` false when it means to touch what it faces (the post). */
+  faceIfAny(keepClear = true): void {
     if (!this.hasFacing) return;
-    this.ctx.motion.faceTowards(this.facing);
+    this.ctx.motion.faceTowards(this.facing, keepClear);
     this.hasFacing = false;
   }
 
@@ -154,12 +164,28 @@ export class CatMind {
     return null;
   }
 
-  /** 0 (wide awake) .. 1 (dead tired) from the time of day: naps midday and at night, active at dawn and dusk. */
+  /** 0 (wide awake) .. 1 (dead tired) from the time of day: naps midday and at night, active at dawn and dusk (eased between the knots). */
   sleepDrive(): number {
-    const h = this.ctx.clock.state.hours;
-    if (h >= 22 || h < 5) return 0.9;
-    if (h >= 11 && h < 17) return 0.85;
-    if ((h >= 6 && h < 9) || (h >= 18 && h < 21)) return 0.15;
-    return 0.5;
+    const h = ((this.ctx.clock.state.hours % 24) + 24) % 24;
+    let i = 0;
+    while (i < SLEEP_CURVE.length - 1 && SLEEP_CURVE[i + 1][0] <= h) i++;
+    const [h0, d0] = SLEEP_CURVE[i];
+    const [h1, d1] = SLEEP_CURVE[Math.min(i + 1, SLEEP_CURVE.length - 1)];
+    return THREE.MathUtils.lerp(d0, d1, THREE.MathUtils.smoothstep(h, h0, h1));
   }
 }
+
+/** (hour, sleep drive) knots, eased between with a smoothstep and wrapping at midnight: deep at night, a long midday nap, lively at dawn and dusk. */
+const SLEEP_CURVE: readonly [number, number][] = [
+  [0, 0.9],
+  [4.5, 0.9],
+  [6, 0.2],
+  [8.5, 0.15],
+  [10, 0.55],
+  [11.5, 0.85],
+  [16.5, 0.85],
+  [18, 0.2],
+  [20.5, 0.15],
+  [22, 0.9],
+  [24, 0.9],
+];

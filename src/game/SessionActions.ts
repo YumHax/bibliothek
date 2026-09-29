@@ -20,6 +20,16 @@ export interface ArcadeResult {
   best: boolean;
   /** A prize id (`economy/Prizes`) to take home. */
   prize?: string;
+  /** The player's first score on this machine (there was no best to beat: no fanfare). */
+  first?: boolean;
+  /** The play reported nothing through no fault of the player's (LexiPunk's page sent no score): the coin goes back. */
+  refund?: boolean;
+}
+
+/** A bonus a play earned on top of its score's tickets, counted up on the machine's end card: "+60 CHALLENGE". */
+export interface ArcadeBonus {
+  label: string;
+  tickets: number;
 }
 
 /**
@@ -34,11 +44,19 @@ export interface ArcadeMachineLike {
   readonly freeWhenBroke: boolean;
   /** A game of pure luck (the ticket wheel): its score is the tickets it paid; no medals, no challenge. */
   readonly luck?: boolean;
+  /** Plays cost no coin (LexiPunk, until its page reports scores). */
+  readonly freePlay?: boolean;
   eyePose(): { position: THREE.Vector3; yaw: number };
   /** World point the camera looks at while playing. */
   screenCentre(): THREE.Vector3;
   start(onOver: (result: ArcadeResult) => void): void;
   abort(): void;
+  /** The end card is done counting and fire was let go since: a press or a click now plays again. Absent: always. */
+  readonly canReplay?: boolean;
+  /** Holds the play still (the pointer was unlocked) or lets it go on. */
+  pause?(paused: boolean): void;
+  /** The bonuses the play earned besides its score (challenge, medal, streak...), for the end card and the ticket strip. */
+  showBonus?(bonuses: readonly ArcadeBonus[]): void;
 }
 
 /** Something the player did with a stall copy that its stallholder answers (a word, a look). */
@@ -75,6 +93,11 @@ export interface SeatLike {
 export interface UpgradeOfferLike {
   readonly title: string;
   readonly price: number;
+  /** A line under the reward once paid (where it is now: "It is at home already."). */
+  readonly detail?: string;
+  /** The seller asked for its own second click already (a shop's armed tag): no arming here. */
+  readonly confirmed?: boolean;
+  /** Counted at home: runs in the same save as the coins going (`Transactions.buyHomeGood`). */
   bought(): void;
 }
 

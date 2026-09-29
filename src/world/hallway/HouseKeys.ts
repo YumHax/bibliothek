@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { playCoins } from '@/audio/coins';
 import type { Interactable } from '@/interaction/Interactable';
 import type { SessionActions } from '@/game/SessionActions';
 import { invisibleHitbox } from '../meshUtils';
@@ -11,7 +12,7 @@ export interface HouseKeysOptions {
 }
 
 const BRASS = METAL.brass();
-const STEEL = standard({ color: 0xc4c7cb, metalness: 0.8, roughness: 0.28 });
+const STEEL = standard({ color: 0xc4c7cb, metalness: 1, roughness: 0.3 });
 const LEATHER = 0x7a3b22;
 const HOVER_GLOW = 0.35;
 
@@ -78,11 +79,17 @@ export class HouseKeys extends Prop implements Interactable {
   }
 
   label(): string {
-    return this.pocketed ? 'Click to leave your keys in the bowl' : 'Click to take your keys';
+    return this.pocketed ? 'Key bowl · leave your keys' : 'Your keys · take';
+  }
+
+  /** The bunch clinking into the bowl or out of it. */
+  jingle(): void {
+    playCoins(3, 0.06);
   }
 
   activate(session: SessionActions): void {
     this.setInPocket(!this.pocketed);
+    this.jingle();
     session.react(this.pocketed ? 'Keys in pocket' : 'Keys left in the bowl');
   }
 }

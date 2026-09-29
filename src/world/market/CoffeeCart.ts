@@ -41,7 +41,7 @@ const PARASOL_PANELS = 12;
 const MENU_W = 0.24;
 const MENU_H = 0.3;
 
-const CHROME = standard({ color: 0xd0d2d4, roughness: 0.18, metalness: 0.95 });
+const CHROME = standard({ color: 0xd0d2d4, roughness: 0.18, metalness: 1 });
 const BLACK = paint(0x1c1a18, 0.5);
 const RUBBER = paint(0x1a1a1a, 0.9);
 const PAPER = paint(0xf4efe4, 0.8);

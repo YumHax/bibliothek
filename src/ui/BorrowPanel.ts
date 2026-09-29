@@ -1,3 +1,5 @@
+import type { Game } from '@/catalog/types';
+import { coverAttrs } from './coverPlaceholder';
 import { escapeHtml } from './html';
 import { ModalPanel } from './ModalPanel';
 import './BorrowPanel.css';
@@ -11,6 +13,8 @@ export interface BorrowRequest {
   days: number;
   /** A front cover to show, if any. */
   cover?: string;
+  /** The game asked for: a cover that fails to load becomes its made-up box (`ui/coverPlaceholder`). */
+  game?: Game;
   lend: () => void;
   refuse: () => void;
 }
@@ -39,18 +43,18 @@ export class BorrowPanel extends ModalPanel {
   /** Deals the question (call before the Session opens the panel). */
   show(request: BorrowRequest): void {
     this.request = request;
-    const cover = request.cover ? `<img class="borrow-panel__cover" src="${escapeHtml(request.cover)}" alt="">` : '';
+    // A cover that fails is swapped for a made-up box by the shared listener (`installCoverPlaceholders`).
+    const attrs = request.game ? coverAttrs(request.game) : ` data-cover-title="${escapeHtml(request.title)}"`;
+    const cover = request.cover ? `<img class="borrow-panel__cover catalogue__cover" src="${escapeHtml(request.cover)}" alt=""${attrs}>` : '';
     this.card.innerHTML = `
       <header><h2>${escapeHtml(request.friend)} would like to borrow</h2></header>
       <div class="borrow-panel__game">${cover}<div><p class="borrow-panel__title">${escapeHtml(request.title)}</p><p class="borrow-panel__detail">${escapeHtml(request.detail)}</p></div></div>
-      <p class="borrow-panel__terms">Back in ${request.days} days. It stays in your collection meanwhile (it cannot be sold while it is out).</p>
+      <p class="borrow-panel__terms">Back in ${request.days} days. It stays in your collection meanwhile, but it cannot be sold or swapped while it is out. Friends often bring a little something back with it.</p>
       <footer>
         <button type="button" class="ui-btn ui-btn--primary" data-action="lend" data-autofocus>Lend it</button>
         <button type="button" class="ui-btn" data-action="refuse">Not this one</button>
         <button type="button" class="ui-btn" data-action="close">Think about it</button>
       </footer>`;
-    const img = this.card.querySelector('img');
-    img?.addEventListener('error', () => img.remove());
   }
 
   private answer(kind: 'lend' | 'refuse'): void {

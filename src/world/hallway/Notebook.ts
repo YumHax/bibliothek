@@ -52,7 +52,7 @@ export class Notebook extends Prop implements Interactable {
   }
 
   label(): string {
-    return 'Your journal: click to read your days';
+    return 'Your journal · read your days';
   }
 
   activate(session: SessionActions): void {

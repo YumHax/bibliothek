@@ -40,7 +40,7 @@ export class WallCalendar extends Prop {
     pad.receiveShadow = true;
     this.add(pad);
     // The wire binding along the top and the nail it hangs from.
-    const wire = standard({ color: 0x9a9ea3, metalness: 0.8, roughness: 0.35 });
+    const wire = standard({ color: 0x9a9ea3, metalness: 1, roughness: 0.4 });
     const loops = Math.round(width / 0.012);
     for (let i = 0; i < loops; i++) {
       const loop = new THREE.Mesh(new THREE.TorusGeometry(0.004, 0.0008, 4, 8), wire);

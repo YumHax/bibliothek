@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import { seededRandom } from '@/covers/generated/canvasUtils';
 import type { DayNight, SkyState } from '../DayNight';
-import { type Rng, Sheet } from './Sheet';
+import { type Rng, SCENE_WIDTH, Sheet } from './Sheet';
+import { QUALITY } from '@/graphics/quality';
 import { paintSkyDetail } from './SkyDetail';
 import { paintSkyline } from './Skyline';
 import { paintBackdrops, paintFrontBlock, paintStreetEnds } from './Facades';
@@ -11,7 +12,8 @@ import { paintCourtyard } from './Courtyard';
 import type { GoodsRect } from './Shopfront';
 import { Life } from './Life';
 import { beginHoliday } from './Holiday';
-import { fragmentShader, vertexShader } from './shader';
+import { MOON_RADIUS, fragmentShader, vertexShader } from './shader';
+import { MOON_SHADOW_OFFSET as MOON_CRESCENT } from '../../city/skyGlsl';
 import { wakefulnessAt } from '@/time/wakefulness';
 import { type Holiday, type Season, holidayOf, seasonOf, useHoliday, useSeason } from '@/time/season';
 
@@ -48,10 +50,32 @@ export interface OutdoorsOptions {
   season?: Season;
   /** The holiday it is dressed for (string lights, pumpkins); default the real calendar's, null for none. */
   holiday?: Holiday | null;
+  /** The camera the view is seen from: the moving sprites are placed as it sees them (see `Life.update`). */
+  viewer?: THREE.Object3D;
 }
 
-/** How much the moon's shadow disc is offset from the moon (yaw, pitch), for the crescent. */
-const MOON_SHADOW_OFFSET = { yaw: -0.024, pitch: 0.012 };
+/**
+ * The day colours are painted twice as fine on high quality (8192 x 2688: about 23 texels a degree,
+ * near what a window shows on a large screen) if the GPU takes textures that wide; else at the
+ * scene's size. Asked of a throwaway WebGL context, once.
+ */
+function sceneColorScale(): number {
+  if (QUALITY.level !== 'high') return 1;
+  try {
+    const gl = document.createElement('canvas').getContext('webgl2');
+    if (!gl) return 1;
+    const max = gl.getParameter(gl.MAX_TEXTURE_SIZE) as number;
+    gl.getExtension('WEBGL_lose_context')?.loseContext();
+    return max >= SCENE_WIDTH * 2 ? 2 : 1;
+  } catch {
+    return 1;
+  }
+}
+
+/** How much the moon's shadow disc is offset from the moon (yaw, pitch), for the crescent: the street's dome's, in this moon's radii. */
+const MOON_SHADOW_OFFSET = { yaw: MOON_CRESCENT.yaw * MOON_RADIUS, pitch: MOON_CRESCENT.pitch * MOON_RADIUS };
+/** Seconds between two moves of the life outside while no pane shows it. */
+const UNSEEN_LIFE_STEP = 0.2;
 /** How fast the clouds drift across the sky: a turn of the cumulus map in about forty minutes. */
 const CLOUD_DRIFT = 1 / 2400;
 /** Distance over which the air dissolves about two thirds of a thing's own colour into the sky, in clear weather. */
@@ -65,11 +89,11 @@ const CITY_LIT_CLOUD = new THREE.Color(0x4a3e36);
  * streets themselves with everything standing on them. Returns the sheet and the retro games
  * shop's display boxes. Shared with the headless check (see `docs/outdoors.md`).
  */
-export function paintView(random: Rng, season: Season, holiday: Holiday | null = null): { sheet: Sheet; shopGoods: GoodsRect[] } {
+export function paintView(random: Rng, season: Season, holiday: Holiday | null = null, colorScale = 1): { sheet: Sheet; shopGoods: GoodsRect[] } {
   useSeason(season);
   useHoliday(holiday);
   beginHoliday();
-  const sheet = new Sheet();
+  const sheet = new Sheet(colorScale);
   paintSkyline(sheet, random);
   paintBackdrops(sheet, random);
   paintPark(sheet, random);
@@ -101,9 +125,9 @@ export function paintView(random: Rng, season: Season, holiday: Holiday | null =
  * moon (drawn analytically exactly where the room's light comes from), and how awake the city is
  * (`wakefulnessAt`: the windows go out one by one after ten, the small hours are dark but for street
  * lamps, signs and a few insomniacs). So the cycle costs the GPU a few extra instructions per pane
- * pixel and the CPU nothing. What moves is `Life`: cars, a bus, pedestrians, birds, ducks as sprites
- * the shader draws over the scenery, advanced by `update()`, sparser as the city sleeps or the rain
- * comes. One thing is not painted but rendered analytically per pixel: the `nearWall`, a wall of
+ * pixel and the CPU nothing. What moves is `Life`: the vehicles as solids the shader intersects per
+ * pixel (`vehicleShader`), pedestrians, cyclists, birds as sprites it draws over the scenery, advanced
+ * by `update()`, sparser as the city sleeps or the rain comes. One thing is not painted but rendered analytically per pixel: the `nearWall`, a wall of
  * the building itself a few metres outside some windows (the flat's kitchen wing).
  */
 export class Outdoors {
@@ -120,17 +144,27 @@ export class Outdoors {
   private strikes = 0;
   private bannerText: string | null = null;
   private bannerUnder: ImageData | null = null;
+  /** The day colours' canvas texels per scene texel (`Sheet.colorScale`): pixel copies on it scale by it. */
+  private readonly colorScale: number;
+  /** The camera (`OutdoorsOptions.viewer`) and where it is from the painting's eye this frame. */
+  private readonly viewer: THREE.Object3D | undefined;
+  private readonly eye = new THREE.Vector3();
+  /** Whether a pane was drawn since the last `update`, and the time the life outside has not been moved by. */
+  private drawn = true;
+  private lifeClock = 0;
 
   constructor(
     readonly dayNight: DayNight,
     options: OutdoorsOptions,
   ) {
     this.primaryQuaternion = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), options.primaryRotationY);
+    this.viewer = options.viewer;
     const random = seededRandom(1987);
 
     const season = options.season ?? seasonOf(new Date());
-    const { sheet, shopGoods } = paintView(random, season, options.holiday === undefined ? holidayOf(new Date()) : options.holiday);
+    const { sheet, shopGoods } = paintView(random, season, options.holiday === undefined ? holidayOf(new Date()) : options.holiday, sceneColorScale());
     this.shopGoods = shopGoods;
+    this.colorScale = sheet.colorScale;
     const { scene, lights, curfew, ground, fx } = sheet.finish();
     this.scene = scene;
     const sky = paintSkyDetail(random);
@@ -152,6 +186,8 @@ export class Outdoors {
         spriteRect: { value: this.life.rects },
         spriteCell: { value: this.life.cells },
         spriteInfo: { value: this.life.info },
+        vehiclePose: { value: this.life.vehiclePose },
+        vehicleLook: { value: this.life.vehicleLook },
         /** Headlights and tail lights: faint by day, full after dark. */
         lightsOn: { value: 0.03 },
         center: { value: options.center ?? new THREE.Vector3(0, 1.2, 0) },
@@ -214,9 +250,18 @@ export class Outdoors {
       vertexShader,
       fragmentShader,
     });
+    this.material.onBeforeRender = this.markDrawn;
 
     this.dayNight.onChange((state) => this.apply(state));
   }
+
+  /**
+   * Called as a pane (or the balcony's open air, whose material shares these uniforms) is drawn:
+   * while none is, `update` moves the life outside only a few times a second.
+   */
+  readonly markDrawn = (): void => {
+    this.drawn = true;
+  };
 
   /** Moves the traffic, the passers-by, the birds and the clouds on by `dt` seconds. */
   update(dt: number): void {
@@ -225,7 +270,15 @@ export class Outdoors {
     const drift = u.cloudDrift.value as THREE.Vector2;
     drift.x = (drift.x + dt * CLOUD_DRIFT * (0.6 + this.sky.cloudCover)) % 1;
     drift.y = (drift.y + dt * CLOUD_DRIFT * 0.3) % 1;
-    this.life.update(dt, u.nightness.value as number, u.wakefulness.value as number, this.sky);
+    // Unseen (the street, the arcade, a room without a window), the traffic and the walkers still go
+    // on for the street's sound, but a few times a second, not every frame.
+    this.lifeClock += dt;
+    const drawn = this.drawn;
+    this.drawn = false;
+    if (!drawn && this.lifeClock < UNSEEN_LIFE_STEP) return;
+    if (this.viewer) this.viewer.getWorldPosition(this.eye).sub(u.center.value as THREE.Vector3);
+    this.life.update(this.lifeClock, u.nightness.value as number, u.wakefulness.value as number, this.sky, this.viewer ? this.eye : undefined);
+    this.lifeClock = 0;
   }
 
   /**
@@ -259,8 +312,10 @@ export class Outdoors {
     const h = Math.max(3, Math.round((y1 - y0) * 0.28));
     const top = y0 - Math.round(h * 0.4);
     // What the banner covers, kept to take it down again.
-    this.bannerUnder ??= ctx.getImageData(x0, top, x1 - x0, h);
-    ctx.putImageData(this.bannerUnder, x0, top);
+    // Pixel copies ignore the context's scale: in the canvas's own texels.
+    const k = this.colorScale;
+    this.bannerUnder ??= ctx.getImageData(x0 * k, top * k, (x1 - x0) * k, h * k);
+    ctx.putImageData(this.bannerUnder, x0 * k, top * k);
     this.bannerText = text;
     if (text) {
       ctx.fillStyle = '#d8262a';

@@ -6,6 +6,7 @@ import type { SessionActions } from '@/game/SessionActions';
 import { LidMotion } from '../box/LidMotion';
 import { invisibleHitbox } from '../meshUtils';
 import { Prop } from '../props/Prop';
+import { HoverGlint } from '../props/hoverGlint';
 import { SAS } from './airlockPlan';
 import { bake, sasFinish } from './sasFinish';
 import { playClack, playThud } from './doorSounds';
@@ -62,6 +63,11 @@ export class SasDoor extends Prop implements Updatable, Interactable {
   private readonly openBlockers: THREE.Box3[] = [];
   private blockersLaidOut = false;
   private blocking: THREE.Box3[] | null = null;
+  /** The handles, which glint on hover: the lit ones (`HoverGlint`), the baked ones inside by a brighter copy of their colour. */
+  private readonly handles: THREE.Mesh[] = [];
+  private glint: HoverGlint | null = null;
+  private bakedGlint: { material: THREE.MeshBasicMaterial; base: THREE.Color }[] | null = null;
+  private hovered = false;
 
   constructor(private readonly options: SasDoorOptions) {
     super();
@@ -155,8 +161,19 @@ export class SasDoor extends Prop implements Updatable, Interactable {
 
   // --- Interactable ---------------------------------------------------------------------------------
 
-  setHovered(): void {
-    // The caption says what the door does.
+  setHovered(hovered: boolean): void {
+    if (hovered === this.hovered) return;
+    this.hovered = hovered;
+    (this.glint ??= HoverGlint.of(...this.handles.filter((mesh) => mesh.material instanceof THREE.MeshStandardMaterial))).set(hovered);
+    // The baked handles are unlit: a copy of their material each (the sas's finish is shared), a touch brighter.
+    this.bakedGlint ??= this.handles.flatMap((mesh) => {
+      if (!(mesh.material instanceof THREE.MeshBasicMaterial)) return [];
+      const material = mesh.material.clone();
+      material.userData = {};
+      mesh.material = material;
+      return [{ material, base: material.color.clone() }];
+    });
+    for (const { material, base } of this.bakedGlint) material.color.copy(base).multiplyScalar(hovered ? BAKED_GLINT : 1);
   }
 
   label(): string | null {
@@ -204,6 +221,10 @@ export class SasDoor extends Prop implements Updatable, Interactable {
       mesh.position.copy(at);
       if (inside) bake(geometry, new THREE.Matrix4().multiplyMatrices(leaf.pivot.matrix, new THREE.Matrix4().makeTranslation(at)));
       leaf.pivot.add(mesh);
+      this.handles.push(mesh);
     }
   }
 }
+
+/** How much brighter a baked (unlit) handle shows while hovered. */
+const BAKED_GLINT = 1.45;

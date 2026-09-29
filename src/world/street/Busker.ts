@@ -12,6 +12,7 @@ import { Walker } from '../people/Walker';
 import { KEYS as SAVE_KEYS } from '@/persistence';
 import { DailyTally } from '@/time/DailyTally';
 import { Timers } from '@/core/Timers';
+import { outOfSight } from './life/sight';
 
 export interface BuskerOptions {
   /** The ears (the camera): the tune's level and side follow it. */
@@ -23,6 +24,8 @@ export interface BuskerOptions {
   /** How far the tune carries (metres). */
   reach: number;
   seed?: number;
+  /** The zone's collision set (world boxes): the stand collides only while they are there. */
+  collisions?: { add(box: THREE.Box3): void; remove(box: THREE.Box3): void };
 }
 
 const LINES = [
@@ -61,11 +64,15 @@ export class Busker extends THREE.Group implements Furniture, Updatable, Interac
   private readonly here = new THREE.Vector3();
   private readonly facing = new THREE.Vector3();
   private readonly toMe = new THREE.Vector3();
+  /** The stand's box in world space, in the zone's collisions while they play (built on the first update, once placed). */
+  private collider: THREE.Box3 | null = null;
+  /** Just (re)activated: the first update takes what the clock says, seen or not (the player has only just arrived). */
+  private fresh = true;
 
   constructor(private readonly dayNight: DayNight, private readonly options: BuskerOptions) {
     super();
     this.name = 'Busker';
-    this.person = new Walker({ viewer: options.viewer, seed: options.seed ?? 77, label: 'Click to tip the busker' });
+    this.person = new Walker({ viewer: options.viewer, seed: options.seed ?? 77, label: 'Busker · tip' });
     this.add(this.person);
     this.person.stand(0, 'play', null, () => this.handPoints(), 0.12);
     this.hitboxes = this.person.hitboxes;
@@ -74,12 +81,18 @@ export class Busker extends THREE.Group implements Furniture, Updatable, Interac
     this.add(this.kit);
   }
 
+  /** Empty: the stand's box comes and goes with them (`collider`), so no ghost is left once they have packed up. */
   get footprint(): THREE.Box3 {
-    return new THREE.Box3(new THREE.Vector3(-0.35, 0, -0.3), new THREE.Vector3(0.35, 1.8, 0.65));
+    return new THREE.Box3();
   }
 
   dispose(): void {
     this.tune.dispose();
+    if (this.collider && this.present) this.options.collisions?.remove(this.collider);
+  }
+
+  setZoneActive(active: boolean): void {
+    if (active) this.fresh = true;
   }
 
   setHovered(): void {
@@ -88,7 +101,7 @@ export class Busker extends THREE.Group implements Furniture, Updatable, Interac
 
   label(): string | null {
     if (!this.present) return null;
-    return this.tipsToday() >= this.options.tipsPerDay ? 'The busker nods at you' : 'Click to tip the busker a coin';
+    return this.tipsToday() >= this.options.tipsPerDay ? 'Busker' : 'Busker · tip';
   }
 
   activate(session: SessionActions): void {
@@ -117,14 +130,23 @@ export class Busker extends THREE.Group implements Furniture, Updatable, Interac
     const s = this.dayNight.state;
     const [from, to] = this.options.hours;
     const present = s.hours >= from && s.hours < to && s.rain < 0.08 && s.snow < 0.15;
-    if (present !== this.present) {
+    if (!this.collider) {
+      this.updateWorldMatrix(true, false);
+      this.collider = new THREE.Box3(new THREE.Vector3(-0.35, 0, -0.3), new THREE.Vector3(0.35, 1.8, 0.65)).applyMatrix4(this.matrixWorld);
+      if (this.present) this.options.collisions?.add(this.collider);
+    }
+    // They come and go only while the player cannot see the spot (no one vanishes mid-song in view).
+    if (present !== this.present && (this.fresh || outOfSight(this.options.viewer, this.getWorldPosition(this.here)))) {
       this.present = present;
       this.visible = present;
       this.person.setPresent(present);
       if (present) this.person.stand(0, 'play', null, () => this.handPoints(), 0.12);
+      if (present) this.options.collisions?.add(this.collider);
+      else this.options.collisions?.remove(this.collider);
     }
+    this.fresh = false;
     let level = 0;
-    if (present) {
+    if (this.present) {
       this.beat += dt;
       this.person.update(dt);
       // The tune: fainter with distance, to the side it is on.
@@ -156,7 +178,7 @@ export class Busker extends THREE.Group implements Furniture, Updatable, Interac
   }
 
   private buildKit(): void {
-    const metal = standard({ color: 0x222428, roughness: 0.4, metalness: 0.6 });
+    const metal = standard({ color: 0x222428, roughness: 0.45 });
     // The X-stand and the keyboard on it.
     for (const side of [-1, 1]) {
       const leg = new THREE.Mesh(new THREE.BoxGeometry(0.025, 1.05, 0.025), metal);

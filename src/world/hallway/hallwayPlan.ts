@@ -2,6 +2,7 @@ import type { RoomOptions } from '../Room';
 import type { Placement } from '../Placement';
 import type { DecorEntry } from '../props/decor';
 import { DOOR_LEAF } from '../roomPlan';
+import { HALL_CONSOLE_TOP } from './HallConsole';
 
 /*
  * THE HALLWAY PLAN: the flat's corridor behind the collection room's door, in zone-local
@@ -123,8 +124,8 @@ export const HALLWAY_PLAN = {
     // Two framed pictures on our wall between the collection room's door and the coats (x 0..0.83; left of the door the
     // open leaf would cover them), clear of the light switch below.
     // Bought at the furniture shop (`framedPrint` nth 3, 4: after the living room's three).
-    { kind: 'pictureFrame', at: { wall: 'front', along: 0.3, y: 1.5 }, options: { motif: 'abstract', seed: 4, width: 0.42, height: 0.32 }, upgrade: { good: 'framedPrint', nth: 3 } },
-    { kind: 'pictureFrame', at: { wall: 'front', along: 0.68, y: 1.55 }, options: { motif: 'sunset', seed: 9, width: 0.24, height: 0.3, matWidth: 0.025 }, upgrade: { good: 'framedPrint', nth: 4 } },
+    { kind: 'pictureFrame', at: { wall: 'front', along: 0.3, y: 1.5 }, options: { motif: 'roofs', seed: 4, width: 0.42, height: 0.32, frameColor: 0xe6e0d4 }, upgrade: { good: 'framedPrint', nth: 3 } },
+    { kind: 'pictureFrame', at: { wall: 'front', along: 0.68, y: 1.55 }, options: { motif: 'map', seed: 9, width: 0.24, height: 0.3, matWidth: 0.025, frameColor: 0x6a4a2e }, upgrade: { good: 'framedPrint', nth: 4 } },
     // A cork noticeboard on the far wall in the stretch between the kitchen door and the bathroom door (x -2..-1.585 with
     // its architrave); the bathroom's leaf opens into the corridor and lies over the wall right of its opening, so nothing hangs there.
     { kind: 'noticeboard', at: { wall: 'back', along: -1.79, y: 1.45 }, options: { width: 0.34, height: 0.44 } },
@@ -149,7 +150,7 @@ export const HALLWAY_PLAN = {
 
     // Halloween: a small bowl of sweets on the console for the trick-or-treaters, in the gap between the letters
     // (console-local x -0.03..0.19) and the plant at its end (from 0.29); a cobweb in the top corner over the umbrellas.
-    { kind: 'sweetsBowl', at: { wall: 'back', along: 1.74, y: 0.82, offset: 0.14 }, options: { radius: 0.05, seed: 3 }, holiday: 'halloween' },
+    { kind: 'sweetsBowl', at: { wall: 'back', along: 1.74, y: HALL_CONSOLE_TOP, offset: 0.14 }, options: { radius: 0.05, seed: 3 }, holiday: 'halloween' },
     { kind: 'cobweb', at: { wall: 'front', along: 2.0, y: 2.6 }, options: { size: 0.4, spread: 'right', seed: 4 }, holiday: 'halloween' },
     // Christmas: a string of fairy lights along our wall under the ceiling, from the collection room's door to the coats.
     { kind: 'fairyLights', at: { wall: 'front', along: -0.05, y: 0, offset: 0.03 }, options: { length: 1.9, height: 2.45, sag: 0.12, colors: [0xffc46e], seed: 5 }, holiday: 'christmas' },

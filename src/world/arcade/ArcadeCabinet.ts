@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import type { Updatable } from '@/core/Engine';
 import type { Input } from '@/core/Input';
 import type { Interactable, LabelPlacement } from '@/interaction/Interactable';
-import type { ArcadeMachineLike, ArcadeResult, PlayerState, SessionActions } from '@/game/SessionActions';
+import type { ArcadeBonus, ArcadeMachineLike, ArcadeResult, PlayerState, SessionActions } from '@/game/SessionActions';
 import { ChipSpeaker } from '@/audio/ChipSpeaker';
 import { actionKeyLabel } from '@/ui/keys';
 import type { Furniture } from '../Furniture';
@@ -50,6 +50,8 @@ export interface ArcadeCabinetOptions {
   glowLight?: boolean;
   /** Stickers, burns and scuffs: 0 a cabinet fresh from the factory, 1 a veteran. Default 0.5. */
   wear?: number;
+  /** Plays cost nothing and pay no tickets (LexiPunk, until its page reports scores). */
+  freePlay?: boolean;
 }
 
 /** Where the player's eye goes while playing: standing at the control panel. */
@@ -85,6 +87,11 @@ export class ArcadeCabinet extends THREE.Group implements Furniture, Interactabl
   readonly hitboxes: THREE.Object3D[];
   readonly game: ArcadeGame;
   readonly freeWhenBroke = true;
+
+  /** Plays cost nothing (LexiPunk, until its page reports scores). */
+  get freePlay(): boolean {
+    return this.options.freePlay === true;
+  }
   /** Where a regular stands: closer than the player's eye (`PLAY_DISTANCE`), so their hands reach the panel. */
   readonly standAt: THREE.Vector3;
   readonly lean: number;
@@ -127,7 +134,8 @@ export class ArcadeCabinet extends THREE.Group implements Furniture, Interactabl
     this.marquee = marquee;
     // The controls: one joystick and two buttons, or a set for each player on a two-player game.
     this.controls = new CabinetControls(this, twoPlayer);
-    const info = { scores: options.scores, pointsPerTicket: options.pointsPerTicket, ...(options.medals ? { medals: options.medals } : {}), ...(options.challenge ? { challenge: options.challenge } : {}) };
+    const price = (): { free: boolean; text: string } => ({ free: this.run.free, text: this.run.priceText() });
+    const info = { scores: options.scores, pointsPerTicket: options.pointsPerTicket, price, ...(options.medals ? { medals: options.medals } : {}), ...(options.challenge ? { challenge: options.challenge } : {}) };
     this.screens = new CabinetScreens(game, info, options.listener, this);
     const { screen } = this.screens;
     this.add(screen);
@@ -173,7 +181,7 @@ export class ArcadeCabinet extends THREE.Group implements Furniture, Interactabl
       ...(options.outOfOrder ? { outOfOrder: options.outOfOrder } : {}),
       // A new best keeps its run for the attract screen.
       onSign: (initials, result) => {
-        const replay = result.best ? this.runner.finishRecording(result.score, initials) : null;
+        const replay = result.best || result.first ? this.runner.finishRecording(result.score, initials) : null;
         this.runner.dropRecording();
         if (replay) options.replays?.save(game.id, replay);
       },
@@ -223,6 +231,18 @@ export class ArcadeCabinet extends THREE.Group implements Furniture, Interactabl
 
   get outOfOrder(): boolean {
     return this.run.outOfOrder;
+  }
+
+  get canReplay(): boolean {
+    return this.run.canReplay;
+  }
+
+  pause(paused: boolean): void {
+    this.run.setPaused(paused);
+  }
+
+  showBonus(bonuses: readonly ArcadeBonus[]): void {
+    this.run.showBonus(bonuses);
   }
 
   /** Starts a paid play (recorded, when the game can replay); `onOver` is told the result once. */
@@ -275,8 +295,8 @@ export class ArcadeCabinet extends THREE.Group implements Furniture, Interactabl
   }
 
   label(_player: PlayerState): string {
-    const attract = `${this.game.title} — click to insert a coin (${this.run.priceText()})`;
-    return this.run.label(this.game.gun ? { attract, playing: `Click or ${actionKeyLabel('fire')} to shoot · ${actionKeyLabel('walkAway')} to walk away` } : { attract });
+    const attract = `${this.game.title} · insert a coin (${this.run.priceText()})`;
+    return this.run.label(this.game.gun ? { attract, playing: `${this.game.title} (${actionKeyLabel('walkAway')}: walk away) · shoot` } : { attract });
   }
 
   labelPlacement(): LabelPlacement {
@@ -295,6 +315,8 @@ export class ArcadeCabinet extends THREE.Group implements Furniture, Interactabl
 
   update(dt: number): void {
     this.speaker.follow();
+    // The pointer went free mid-play: the game holds still, its frame on the glass, until it is locked again.
+    if (this.run.paused) return;
     this.strip.update(dt);
     let controls = this.run.update(dt);
     let poolLevel = 0.55;
@@ -305,7 +327,7 @@ export class ArcadeCabinet extends THREE.Group implements Furniture, Interactabl
         this.screens.paintGame(dt, true);
         this.speaker.playAll(this.game.takeSounds());
         poolLevel = 0.9 + Math.sin(performance.now() * 0.02) * 0.12;
-        if (this.game.over) this.run.finish(this.game.score);
+        if (this.game.over) this.run.finish(this.game.score, undefined, this.game.unreported === true);
         break;
       }
       case 'initials':

@@ -69,7 +69,7 @@ export class MailDrop extends Prop implements Interactable {
   label(): string | null {
     const n = this.pile.length;
     if (!n) return null;
-    return n === 1 ? 'A flyer on the mat: click to read it' : `${n} flyers on the mat: click to read one`;
+    return n === 1 ? 'Flyer on the mat · read' : `${n} flyers on the mat · read one`;
   }
 
   activate(session: SessionActions): void {

@@ -393,8 +393,9 @@
 
 .prizes__muncher {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 1rem;
+  gap: 0.6rem 1rem;
   padding: 0.7rem 1.2rem;
   border-top: 3px solid #000;
   background: linear-gradient(180deg, #34303a, #232028);
@@ -462,8 +463,5 @@
   .prizes__close, .prizes__feed { min-height: 44px; }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .prizes__marquee::before, .prizes__photo::before { animation: none !important; }
-}
 .reduce-motion .prizes__marquee::before,
 .reduce-motion .prizes__photo::before { animation: none !important; }

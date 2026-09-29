@@ -212,6 +212,12 @@ export class Household {
     return true;
   }
 
+  /** Takes back today's `once(what)` (a first sale handed back at the stall): it may happen again today. */
+  forgetToday(what: 'firstSale'): void {
+    const key = ONCE_KEYS[what];
+    if (this.state[key] === this.day()) this.commit({ [key]: -1 } as Partial<HouseholdState>);
+  }
+
   /** Whether `what` was done today already (without doing it). */
   doneToday(what: 'dream' | 'radio' | 'invite' | 'firstSale'): boolean {
     return this.state[ONCE_KEYS[what]] === this.day();

@@ -21,7 +21,12 @@ export class Input {
     target.addEventListener('keydown', (e) => {
       const code = this.remap.get(e.code) ?? e.code;
       this.pressed.add(code);
-      if (!e.repeat) for (const handler of this.pressHandlers) handler(code, e);
+      // A browser or system shortcut (Cmd+F, Ctrl+W, Alt+Tab) is not a game action; the key still counts as held (Shift is a modifier too, and walks).
+      // A modifier pressed on its own (a key bound to Ctrl) still counts: only a chord with another key is skipped.
+      const own = e.code;
+      const chord = (e.metaKey && !own.startsWith('Meta')) || (e.ctrlKey && !own.startsWith('Control')) || (e.altKey && !own.startsWith('Alt'));
+      if (e.repeat || chord) return;
+      for (const handler of this.pressHandlers) handler(code, e);
     });
     // Capture phase: the panels stop their keys from reaching the window, and a key held when one opened
     // (W while walking) must still be released, or the player walks on after closing it.
@@ -61,7 +66,7 @@ export class Input {
    * Signed axis in [-1, 1]: strength of the positive key group minus strength of the negative one.
    * Keyboard-only input yields exactly -1, 0 or 1; an analog stick yields fractional values.
    */
-  axis(negative: string[], positive: string[]): number {
+  axis(negative: readonly string[], positive: readonly string[]): number {
     return this.groupStrength(positive) - this.groupStrength(negative);
   }
 
@@ -95,7 +100,7 @@ export class Input {
     this.virtual.clear();
   }
 
-  private groupStrength(codes: string[]): number {
+  private groupStrength(codes: readonly string[]): number {
     let max = 0;
     for (const code of codes) max = Math.max(max, this.strength(code));
     return max;

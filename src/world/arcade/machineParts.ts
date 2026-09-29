@@ -2,9 +2,10 @@ import * as THREE from 'three';
 import { createCanvas, toTexture } from '@/covers/generated/canvasUtils';
 import { standard } from '../materials/palette';
 import { drawText } from './games/ArcadeGame';
+import { QUALITY } from '@/graphics/quality';
 
 /** The polished steel of the physical machines' rails, legs, posts and plunger rods. */
-export const CHROME = standard({ color: 0xc4c7cc, metalness: 0.75, roughness: 0.25 });
+export const CHROME = standard({ color: 0xc4c7cc, metalness: 1, roughness: 0.2 });
 
 export interface MarqueeStyle {
   /** Canvas size in pixels. Default 512 x 96. */
@@ -33,7 +34,7 @@ export function paintMarquee(title: string, style: MarqueeStyle): THREE.CanvasTe
   ctx.fillRect(0, 0, width, height);
   style.decorate?.(ctx, width, height);
   drawText(ctx, title, width / 2, style.textY ?? height / 2 + 2, style.size, style.ink);
-  return toTexture(canvas, style.anisotropy ?? 4);
+  return toTexture(canvas, style.anisotropy ?? QUALITY.anisotropy);
 }
 
 /** A machine's lit display: a canvas to paint and the plane showing it (unlit, so it reads as lit). */

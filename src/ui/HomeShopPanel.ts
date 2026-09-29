@@ -1,15 +1,14 @@
-import { batch } from '@/persistence';
 import type { HomeUpgrades } from '@/economy/HomeUpgrades';
-import { goodsOf, homeGood, type HomeGood, type HomeShop } from '@/economy/homeGoods';
+import { boughtLine, goodsOf, homeGood, type HomeGood, type HomeShop } from '@/economy/homeGoods';
+import { ARM_ABOVE, CONFIRM_MS, purchaseClinks } from '@/economy/pricing';
+import { Transactions, type TxWallet } from '@/economy/Transactions';
 import { playCoins } from '@/audio/coins';
 import { homeGoodPhoto } from '@/thumbnails/homeGoodPhotos';
 import { MarketPanel, escapeHtml } from './market/MarketPanel';
 import './HomeShopPanel.css';
 
 /** The purse a shop takes coins from. */
-export interface ShopWallet {
-  readonly coins: number;
-  spend(coins: number): boolean;
+export interface ShopWallet extends TxWallet {
   subscribe(cb: () => void): () => void;
 }
 
@@ -26,13 +25,17 @@ const SHOP_TITLES: Record<HomeShop, { title: string; blurb: string }> = {
  * A shop's counter for the flat (`HOME_GOODS` of one `HomeShop`), laid out as the shop's own printed leaflet: a card per
  * piece with a studio photo of it as the flat will have it (`thumbnails/homeGoodPhotos`), its line, how many of its
  * spots at home are filled, its price on a swing tag and one button; a piece at home gets the shop's stamp. Each shop
- * prints on its own paper (`data-shop` on the root). Bought, the coins go and the piece stands at home at once
- * (`HomeUpgrades.add`; the flat's plans place it). `forShop` picks the shop before the Session opens the panel.
+ * prints on its own paper (`data-shop` on the root). A piece dearer than `ARM_ABOVE` takes a second click within
+ * `CONFIRM_MS` (the same rule as the shop floor's tags). Bought (`Transactions.buyHomeGood`: the coins and the piece
+ * saved as one), the piece stands at home at once (`HomeUpgrades.add`; the flat's plans place it). `forShop` picks the
+ * shop before the Session opens the panel.
  */
 export class HomeShopPanel extends MarketPanel {
   private shop: HomeShop = 'furniture';
   private readonly unsubscribe: () => void;
   private readonly photos = new Map<string, string>();
+  /** The piece whose button was clicked once, until when a second click buys it. */
+  private armed: { id: string; until: number } | null = null;
 
   constructor(container: HTMLElement, private readonly deps: { wallet: ShopWallet; upgrades: HomeUpgrades }) {
     super(container, deps.wallet, { title: SHOP_TITLES.furniture.title, className: 'home-shop', blurb: SHOP_TITLES.furniture.blurb });
@@ -74,7 +77,8 @@ export class HomeShopPanel extends MarketPanel {
     const dear = wallet.coins < good.price;
     const disabled = status !== 'buy' || dear;
     const needs = status === 'needs' ? homeGood(good.requires!).name.toLowerCase() : null;
-    const label = status === 'full' ? (good.max > 1 ? 'No more room' : 'At home') : needs ? `Needs the ${escapeHtml(needs)}` : dear ? `${good.price - wallet.coins} short` : good.id === 'cat' ? 'Adopt' : 'Buy';
+    const armed = this.isArmed(good.id);
+    const label = status === 'full' ? (good.max > 1 ? 'No more room' : 'At home') : needs ? `Needs the ${escapeHtml(needs)}` : dear ? `${good.price - wallet.coins} short` : armed ? 'Again to buy' : good.id === 'cat' ? 'Adopt' : 'Buy';
     const url = this.photos.get(good.id);
     const stamp = status === 'full' ? (good.id === 'cat' ? 'Adopted' : good.max > 1 ? 'All placed' : 'At home') : '';
     return `
@@ -90,7 +94,7 @@ export class HomeShopPanel extends MarketPanel {
         </div>
         <div class="shop__buy">
           <span class="shop__tag">${good.price}<span class="shop__coin" aria-label="coins"></span></span>
-          <button type="button" class="shop__btn" data-action="buy" data-id="${good.id}" ${disabled ? 'disabled' : ''}>${label}</button>
+          <button type="button" class="shop__btn${armed ? ' sell__armed' : ''}" data-action="buy" data-id="${good.id}" ${disabled ? 'disabled' : ''}>${label}</button>
         </div>
       </article>`;
   }
@@ -114,25 +118,41 @@ export class HomeShopPanel extends MarketPanel {
     const good = goodsOf(this.shop).find((g) => g.id === el.dataset.id);
     if (!good || this.statusOf(good) !== 'buy') return;
     const { wallet, upgrades } = this.deps;
-    const paid = batch(() => {
-      if (!wallet.spend(good.price)) return false;
-      upgrades.add(good.id);
-      return true;
-    });
-    if (!paid) {
-      this.setStatus(`${good.name}: ${good.price} coins, and you have ${wallet.coins}.`, true);
+    if (wallet.coins < good.price) {
+      this.armed = null;
+      this.setStatus(`${good.name} costs ${good.price} coins and you have ${wallet.coins}.`, true);
       return;
     }
-    playCoins(Math.min(8, Math.max(2, Math.round(good.price / 20))));
-    this.setStatus(good.id === 'cat' ? 'Adopted! The cat is waiting at home, by its bowls.' : `${good.name} bought for ${good.price} coins: it is at home already.`);
+    // A dear piece: the first click arms its button, the second (within `CONFIRM_MS`) buys.
+    if (good.price > ARM_ABOVE && !this.isArmed(good.id)) {
+      this.armed = { id: good.id, until: performance.now() + CONFIRM_MS };
+      this.refresh();
+      window.setTimeout(() => {
+        if (this.armed?.id === good.id && !this.isArmed(good.id)) {
+          this.armed = null;
+          if (this.isOpen) this.refresh();
+        }
+      }, CONFIRM_MS + 50);
+      return;
+    }
+    this.armed = null;
+    const result = new Transactions({ wallet }).buyHomeGood({ price: good.price, bought: () => upgrades.add(good.id) });
+    if (!result.ok) {
+      this.setStatus(`${good.name} costs ${good.price} coins and you have ${wallet.coins}.`, true);
+      return;
+    }
+    playCoins(purchaseClinks(good.price));
+    this.setStatus(`${good.name}: yours for ${good.price} coins. ${boughtLine(good)}`);
     this.refresh();
+  }
+
+  private isArmed(id: string): boolean {
+    return this.armed?.id === id && performance.now() < this.armed.until;
   }
 
   /** Whether `good` can be bought: 'buy', 'full' (as many at home as there is room for) or 'needs' (what it goes with first). */
   private statusOf(good: HomeGood): 'buy' | 'full' | 'needs' {
-    const { upgrades } = this.deps;
-    if (upgrades.count(good.id) >= good.max) return 'full';
-    return upgrades.canBuy(good.id) ? 'buy' : 'needs';
+    return this.deps.upgrades.status(good.id);
   }
 }
 

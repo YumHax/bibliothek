@@ -1,6 +1,5 @@
 import { deg } from './paint';
 import { BUS_STOP, COURT, FRONT_SECTION, PARK_SECTION, STREET_END, STREET_LAMPS } from '@/world/city/frontage';
-import { VEHICLES } from '@/world/city/vehicles';
 
 /**
  * The plan of the neighbourhood, the eye at the origin on a sixth floor at the corner of two
@@ -18,8 +17,10 @@ import { VEHICLES } from '@/world/city/vehicles';
 
 /*
  * The street's lines are the walkable street's (`city/frontage`, from `street/streetPlan.ts`): Front
- * Street's cross-section out of the front windows, and Park Street painted as its mirror (x = -z),
- * as every painter here assumes; the real Park Street is a little narrower and further out.
+ * Street's cross-section out of the front windows, and Park Street's far side painted as its mirror
+ * (x = -z, where the two agree: the far kerb and the hedge), as every painter here assumes. Park
+ * Street's near side (our kerb, our building line) is its own (`PARK_NEAR_KERB`, `PARK_OUR_LINE`):
+ * `frontage()` and `ground()` take it as a second offset.
  */
 /** Front Street's cross-section, metres out of the front windows (`FRONT_SECTION`). */
 export const ROAD = FRONT_SECTION;
@@ -30,6 +31,9 @@ export const KERB = ROAD.farKerb;
 /** Our own kerb; our building line (the front wall's outer face) is `OUR_LINE`, the pavement between. */
 export const NEAR_KERB = ROAD.nearKerb;
 export const OUR_LINE = ROAD.ourLine;
+/** Park Street's own near side, metres out of the left windows: our kerb, and our building line (the kitchen wing's face). */
+export const PARK_NEAR_KERB = -PARK_SECTION.nearKerb;
+export const PARK_OUR_LINE = -PARK_SECTION.ourLine;
 /**
  * Where each street ends at a building standing across it, so the view down the street closes
  * on a facade rather than running on to the horizon: Front Street at x = FRONT_END, Park Street
@@ -42,13 +46,10 @@ export const FRONT_END_FROM = Math.atan2(FRONT_END, FRONTAGE);
 export const FRONT_END_TO = Math.atan2(FRONT_END, -2);
 export const PARK_END_FROM = deg(-180) - Math.atan2(2, PARK_END);
 export const PARK_END_TO = Math.atan2(-FRONTAGE, -PARK_END);
-/** Where the parked cars stand (the near side of their boxes, the street's parked cars' middles), the far street lamps and the street trees. */
-export const CAR_LINE = ROAD.farParked - VEHICLES.car.width / 2;
+/** Where the far street lamps stand. */
 export const LAMP_LINE = STREET_LAMPS.find((lamp) => lamp.yaw === Math.PI)!.at[1];
-export const STREET_TREE_LINE = FRONTAGE - 1.6;
-/** The park's near edge is Park Street's far frontage (its hedge); its far edge is lined with mid-rise blocks. */
-export const PARK_EDGE = -PARK_SECTION.hedge;
-export const PARK_FAR = 250;
+/** The park (`city/park`): its near edge is Park Street's hedge, its far edge lined with mid-rise blocks. */
+export { FOUNTAIN, PARK_EDGE, PARK_FAR, PARK_PATHS, POND } from '@/world/city/park';
 /** The bus shelter on Front Street's far pavement (its middle), and where the bus in `Life` pulls up (x). */
 export const BUS_SHELTER = { x: BUS_STOP.shelter[0], z: BUS_STOP.shelter[1] };
 export const BUS_STOP_X = BUS_STOP.stop[0];
@@ -63,6 +64,12 @@ export const BUS_STOP_X = BUS_STOP.stop[0];
  */
 export const NEAR_LANE = ROAD.nearLane;
 export const FAR_LANE = ROAD.farLane;
+/**
+ * The centre of the turn at the corner: arcs about it take Front Street's near lane onto Park
+ * Street's (the walkable street's, `PARK_SECTION.nearLane`); the far lane's arc, concentric, lands
+ * within half a metre of Park Street's far lane, and the cycle routes turn about it too.
+ */
+export const TURN_CENTRE: [number, number] = [NEAR_LANE - NEAR_KERB + PARK_SECTION.nearLane, NEAR_KERB];
 /** The cycle routes: the outer lanes, a little to the kerb side of the cars. */
 export const CYCLE_NEAR = ROAD.nearCycle;
 export const CYCLE_FAR = ROAD.farCycle;
@@ -101,17 +108,6 @@ export function nearestLamp(x: number, z: number): PaintedLamp {
   return best;
 }
 
-/** The pond: an ellipse on the lawn, metres from the eye. */
-export const POND = { x: -115, z: -25, rx: 40, rz: 26 };
-/** The fountain in the middle of the pond (`Life` animates its plume). */
-export const FOUNTAIN = { x: POND.x, z: POND.z };
-/** Gravel paths across the lawn, as polylines from the park gates (the walkers of `Life` follow them). */
-export const PARK_PATHS: [number, number][][] = [
-  [[-PARK_EDGE, -10], [-70, -30], [-110, -72], [-160, -62], [-210, -20], [-PARK_FAR, 0]],
-  [[-PARK_EDGE, 30], [-60, 45], [-85, 40], [-120, 15], [-150, 40], [-200, 80], [-PARK_FAR, 90]],
-  [[-PARK_EDGE, -60], [-55, -90], [-90, -130], [-140, -170], [-200, -200]],
-];
-
 /** Azimuth of the street corner: Front Street's facades run right of it, the park lies left of it. */
 export const CORNER = deg(-45);
 /** Azimuth range the park is painted over (it is hidden behind Front Street's block right of the corner). */
@@ -120,11 +116,12 @@ export const PARK_TO = deg(-20);
 
 /**
  * Distance along azimuth `a` to a line running `offset` metres beyond the eye on the far side of
- * the nearer street: z = offset ahead, x = -offset to the left, both receding to the horizon.
- * The 0.06 floor keeps the unseen back of the room at a finite distance.
+ * the nearer street: z = offset ahead, x = -`parkOffset` to the left (the same, but on Park Street's
+ * near side), both receding to the horizon. The 0.06 floor keeps the unseen back of the room at a
+ * finite distance.
  */
-export function frontage(a: number, offset = FRONTAGE): number {
-  return offset / Math.max(Math.cos(a), -Math.sin(a), 0.06);
+export function frontage(a: number, offset = FRONTAGE, parkOffset = offset): number {
+  return 1 / Math.max(Math.cos(a) / offset, -Math.sin(a) / parkOffset, 0.06 / offset);
 }
 
 /** Distance along azimuth `a` to the building closing the end of a street, or Infinity where there is none. */
@@ -136,8 +133,8 @@ export function streetEnd(a: number): number {
 }
 
 /** `frontage()` stopped at the end buildings: where the ground `offset` out along the streets ends. */
-export function ground(a: number, offset: number): number {
-  return Math.min(frontage(a, offset), streetEnd(a));
+export function ground(a: number, offset: number, parkOffset = offset): number {
+  return Math.min(frontage(a, offset, parkOffset), streetEnd(a));
 }
 
 /** Distance along azimuth `a` to the line x = -offset (a line parallel to Park Street inside the park). */

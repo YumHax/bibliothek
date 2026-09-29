@@ -78,7 +78,7 @@ export class WallShelf extends Prop {
   }
 
   private jars(y: number, width: number, depth: number, random: () => number): void {
-    const glass = standard({ color: 0xe8f0f2, roughness: 0.05, metalness: 0.1, transparent: true, opacity: 0.35, side: THREE.DoubleSide });
+    const glass = standard({ color: 0xe8f0f2, roughness: 0.05, metalness: 0, transparent: true, opacity: 0.35, side: THREE.DoubleSide });
     const lid = timber(0xb98a58, 0.6);
     let x = -width / 2 + 0.06;
     while (x < width / 2 - 0.06) {

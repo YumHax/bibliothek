@@ -6,6 +6,8 @@ import type { SkyState } from '../props/DayNight';
 import type { Outdoors } from '../props/outdoors/Outdoors';
 import { Prop } from '../props/Prop';
 import { RENDER_ORDER } from '../surface/layers';
+import { ShadowRefresh } from '../lighting/shadowRefresh';
+import { normalBiasAt, snapDirection, texelAngle } from '../props/shadowTexels';
 
 export interface OpenAirOptions {
   /** Radius of the surround the view is shown on: clear of everything built nearby. */
@@ -31,8 +33,13 @@ export class OpenAir extends Prop implements Updatable, OccupancyAware {
   readonly contactShadow = false;
 
   private readonly sun: THREE.SpotLight;
+  /** The sun's regular shadow refresh while the player is out here in the sun. */
+  private readonly sunShadow: ShadowRefresh;
   private readonly sky: THREE.HemisphereLight;
   private readonly direction = new THREE.Vector3();
+  /** `direction` snapped to whole shadow texels: where the sun's spot actually stands. */
+  private readonly aim = new THREE.Vector3();
+  private readonly halfAngle: number;
   private readonly worldQuaternion = new THREE.Quaternion();
   private readonly unsubscribe: () => void;
   private state: SkyState | null = null;
@@ -53,6 +60,7 @@ export class OpenAir extends Prop implements Updatable, OccupancyAware {
       side: THREE.BackSide,
       depthWrite: false,
     });
+    view.onBeforeRender = outdoors.markDrawn;
     const surround = new THREE.Mesh(new THREE.SphereGeometry(options.radius, 48, 24), view);
     surround.frustumCulled = false;
     // Drawn after everything opaque: the depth test then skips every pixel something nearer covers,
@@ -62,14 +70,17 @@ export class OpenAir extends Prop implements Updatable, OccupancyAware {
     surround.receiveShadow = false;
     this.add(surround);
 
-    this.sun = new THREE.SpotLight(0xffffff, 0, 0, Math.atan2(options.sunRadius, options.sunDistance) * 1.3, 0.4, 0);
+    this.halfAngle = Math.atan2(options.sunRadius, options.sunDistance) * 1.3;
+    this.sun = new THREE.SpotLight(0xffffff, 0, 0, this.halfAngle, 0.4, 0);
     this.sun.castShadow = true;
-    this.sun.shadow.mapSize.setScalar(QUALITY.shadowMapSize);
+    this.sun.shadow.mapSize.setScalar(QUALITY.sunShadowMapSize);
     this.sun.shadow.camera.near = options.sunDistance - 4;
     this.sun.shadow.camera.far = options.sunDistance + 6;
     this.sun.shadow.bias = -0.0004;
-    this.sun.shadow.normalBias = 0.02;
+    // In texels of the map, at the far side of the lit disc.
+    this.sun.shadow.normalBias = normalBiasAt(options.sunDistance + options.sunRadius, this.halfAngle, QUALITY.sunShadowMapSize);
     this.add(this.sun, this.sun.target);
+    this.sunShadow = new ShadowRefresh(this.sun);
 
     this.sky = new THREE.HemisphereLight(0xffffff, GROUND, 0);
     this.add(this.sky);
@@ -82,6 +93,7 @@ export class OpenAir extends Prop implements Updatable, OccupancyAware {
   }
 
   update(dt: number): void {
+    this.sunShadow.update(dt);
     if (this.occupied || this.sun.intensity <= 0) return;
     this.shadowTimer += dt;
     if (this.shadowTimer < IDLE_SHADOW_INTERVAL) return;
@@ -98,11 +110,13 @@ export class OpenAir extends Prop implements Updatable, OccupancyAware {
     // The panorama's light direction, in this object's frame (the first call runs before `place()`).
     this.getWorldQuaternion(this.worldQuaternion).invert();
     this.outdoors.lightDirection(state, this.direction).applyQuaternion(this.worldQuaternion);
-    this.sun.position.copy(this.direction).multiplyScalar(this.options.sunDistance);
+    // Whole texels at a time as the sun crosses the sky, so the shadows' edges hop instead of crawling.
+    snapDirection(this.direction, texelAngle(this.halfAngle, this.sun.shadow.mapSize.x), this.aim);
+    this.sun.position.copy(this.aim).multiplyScalar(this.options.sunDistance);
     this.sun.color.copy(state.lightColor);
     // Behind the building (local -z) the balcony is in the building's shade.
     this.sun.intensity = this.direction.y > 0 && this.direction.z > 0 ? state.lightIntensity : 0;
-    this.sun.shadow.autoUpdate = this.occupied && this.sun.intensity > 0;
+    this.sunShadow.setLive(this.occupied && this.sun.intensity > 0);
     this.sky.color.copy(state.ambient);
     this.sky.intensity = this.occupied ? THREE.MathUtils.lerp(AMBIENT[0], AMBIENT[1], state.daylight) : 0;
   }

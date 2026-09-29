@@ -62,6 +62,12 @@ export class PrizeShelf extends Prop {
         const geometry = (obj as THREE.Mesh).geometry;
         if (geometry && !isShared(geometry)) geometry.dispose(); // the models' boxes and cylinders are shared (`boxMesh`)
       });
+      // A card's material and its painted texture are its own (the models' are the palette's, shared).
+      if (child.userData.ownMaterial) {
+        const material = (child as THREE.Mesh<THREE.BufferGeometry, THREE.MeshStandardMaterial>).material;
+        material.map?.dispose();
+        material.dispose();
+      }
     }
     const { width, tiers, gap } = this.options;
     const perTier = Math.floor((width - 0.04) / SLOT);
@@ -85,9 +91,9 @@ export class PrizeShelf extends Prop {
     if (!owned.length) this.shown.add(this.emptyCard());
   }
 
-  /** A folded card at the end of the top board: "+N more in the drawer". */
+  /** A folded card at the end of the top board: "+N more in the box" (the prizes that no longer fit, boxed up). */
   private moreCard(extra: number): THREE.Mesh {
-    return this.card(`+${extra} more`, 'in the drawer');
+    return this.card(`+${extra} more`, 'boxed up');
   }
 
   /** On an empty shelf: what it is for. */
@@ -112,6 +118,7 @@ export class PrizeShelf extends Prop {
     const { width, tiers, gap } = this.options;
     card.position.set(width / 2 - 0.08, (tiers - 1) * gap + 0.03, DEPTH * 0.6);
     card.rotation.x = -0.25;
+    card.userData.ownMaterial = true;
     return card;
   }
 }

@@ -6,6 +6,7 @@ import { FACING_OUT, eyePoseAt, invisibleHitbox } from '../meshUtils';
 import { part } from '../props/Prop';
 import { actionKeyLabel } from '@/ui/keys';
 import { timber, cloth as paletteCloth } from '@/world/materials/palette';
+import { HoverGlint } from '../props/hoverGlint';
 
 export interface BedOptions {
   /** Width of the frame across the room (a double is 1.6). */
@@ -68,6 +69,7 @@ export class Bed extends THREE.Group implements Furniture, Interactable {
   private readonly catSpot: THREE.Vector3;
   private readonly catApproach: THREE.Vector3;
   /** The bedding as the day leaves it: made (duvet squared, pillows up, the throw folded), and slept in. */
+  private readonly glint = HoverGlint.fittings(this);
   private readonly made = new THREE.Group();
   private readonly rumpled = new THREE.Group();
   private isMade = true;
@@ -102,8 +104,8 @@ export class Bed extends THREE.Group implements Furniture, Interactable {
 
     // The bedding comes in two states, one shown at a time (`setMade`): made, and slept in.
     this.add(this.made, this.rumpled);
-    this.buildMade(width, length, mw, top, duvet, throwCloth);
-    this.buildRumpled(width, length, mw, top, duvet, throwCloth);
+    this.buildMade(width, length, mw, top, duvet, throwCloth, framed);
+    this.buildRumpled(width, length, mw, top, duvet, throwCloth, framed);
     this.rumpled.visible = false;
 
     // The slippers on the floor by the side.
@@ -146,7 +148,7 @@ export class Bed extends THREE.Group implements Furniture, Interactable {
    * sides, its turned-back edge a thicker roll; two pillows leaning on the headboard, one plumper
    * than the other; a throw folded in three across the foot.
    */
-  private buildMade(width: number, length: number, mw: number, top: number, duvet: THREE.Material, throwCloth: THREE.Material): void {
+  private buildMade(width: number, length: number, mw: number, top: number, duvet: THREE.Material, throwCloth: THREE.Material, framed: boolean): void {
     const g = this.made;
     const duvetFrom = DUVET_FOLD;
     const duvetLen = length - duvetFrom + 0.05;
@@ -159,8 +161,11 @@ export class Bed extends THREE.Group implements Furniture, Interactable {
       [-width / 4, 0.32, 1],
       [width / 4, 0.42, 0.85],
     ] as const) {
-      const pillow = part(g, PILLOW_W, PILLOW_H * squash, PILLOW_D, LINEN, { x: dx, y: top + 0.12, z: HEADBOARD_T + 0.2 });
-      pillow.rotation.x = -tilt;
+      // Against the headboard; a mattress on the floor has none, so they lie nearly flat by the wall.
+      const pillow = framed
+        ? part(g, PILLOW_W, PILLOW_H * squash, PILLOW_D, LINEN, { x: dx, y: top + 0.12, z: HEADBOARD_T + 0.2 })
+        : part(g, PILLOW_W, PILLOW_H * squash, PILLOW_D, LINEN, { x: dx, y: top + (PILLOW_H * squash) / 2 + 0.01, z: HEADBOARD_T + 0.16 });
+      pillow.rotation.x = framed ? -tilt : -0.1;
     }
 
     part(g, mw * 0.8, 0.045, 0.4, throwCloth, { y: top + DUVET_H + 0.022, z: length - 0.3 });
@@ -173,7 +178,7 @@ export class Bed extends THREE.Group implements Furniture, Interactable {
    * there; one pillow squashed flat and turned, the other slumped against the headboard; the
    * throw slid half off the foot.
    */
-  private buildRumpled(width: number, length: number, mw: number, top: number, duvet: THREE.Material, throwCloth: THREE.Material): void {
+  private buildRumpled(width: number, length: number, mw: number, top: number, duvet: THREE.Material, throwCloth: THREE.Material, framed: boolean): void {
     const g = this.rumpled;
     const from = DUVET_FOLD + 0.25;
     const duvetLen = length - from + 0.05;
@@ -202,14 +207,20 @@ export class Bed extends THREE.Group implements Furniture, Interactable {
     // Pillows: the sleeper's flat and turned half across the bed, the other slumped over sideways.
     const flat = part(g, PILLOW_W, PILLOW_H * 0.6, PILLOW_D, LINEN, { x: -width / 4 + 0.06, y: top + PILLOW_H * 0.3, z: HEADBOARD_T + 0.3 });
     flat.rotation.set(0.04, -0.35, 0.02);
-    const slumped = part(g, PILLOW_W, PILLOW_H * 0.85, PILLOW_D, LINEN, { x: width / 4 + 0.03, y: top + 0.1, z: HEADBOARD_T + 0.2 });
-    slumped.rotation.set(-0.3, 0.12, 0.22);
+    const slumped = framed
+      ? part(g, PILLOW_W, PILLOW_H * 0.85, PILLOW_D, LINEN, { x: width / 4 + 0.03, y: top + 0.1, z: HEADBOARD_T + 0.2 })
+      : part(g, PILLOW_W, PILLOW_H * 0.85, PILLOW_D, LINEN, { x: width / 4 + 0.03, y: top + PILLOW_H * 0.425 + 0.015, z: HEADBOARD_T + 0.18 });
+    if (framed) slumped.rotation.set(-0.3, 0.12, 0.22);
+    else slumped.rotation.set(-0.08, 0.12, 0.1);
 
     // The throw, half slid off the foot: a fold still on the duvet, the rest hanging down the end.
     const onBed = part(g, mw * 0.6, 0.03, 0.3, throwCloth, { x: 0.15, y: top + DUVET_H * 0.9 + 0.015, z: length - 0.2 });
     onBed.rotation.y = -0.18;
-    const hanging = part(g, mw * 0.6, 0.3, 0.03, throwCloth, { x: 0.2, y: top - 0.1, z: length + 0.04 });
-    hanging.rotation.set(0.12, -0.18, 0);
+    // Down the end of the frame; from a mattress on the floor it only reaches the floor, where it gathers.
+    const drop = framed ? 0.3 : top - 0.012;
+    const hanging = part(g, mw * 0.6, drop, 0.03, throwCloth, { x: 0.2, y: framed ? top - 0.1 : 0.006 + drop / 2, z: length + 0.04 });
+    hanging.rotation.set(framed ? 0.12 : 0.04, -0.18, 0);
+    if (!framed) part(g, mw * 0.6, 0.025, 0.12, throwCloth, { x: 0.21, y: 0.0125, z: length + 0.1 }).rotation.y = -0.18;
   }
 
   /** World-space eye and camera yaw of someone sitting up in bed, facing the foot (+z). */
@@ -228,10 +239,13 @@ export class Bed extends THREE.Group implements Furniture, Interactable {
 
   // --- Interactable -------------------------------------------------------------------------
 
-  setHovered(_hovered: boolean): void {}
+  /** Its small parts (the legs, the slippers by it) catch the light, never the bedding. */
+  setHovered(hovered: boolean): void {
+    this.glint.set(hovered);
+  }
 
   label(player: PlayerState): string {
-    return player.seatedIn === this ? 'Click to sleep until morning' : 'Click to get into bed';
+    return player.seatedIn === this ? 'Bed · sleep until morning' : 'Bed · get in';
   }
 
   /** Out of bed, a click gets in (up from any other seat first); in bed, it sleeps (moving or E gets up, as from any seat). */

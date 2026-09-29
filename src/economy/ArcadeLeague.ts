@@ -134,6 +134,23 @@ export class ArcadeLeague {
     return { days: this.state.streak, bonus };
   }
 
+  /**
+   * Tickets won at the arcade outside a play's own settling (the arcade tee's, a tournament round's): they count in
+   * the week like every other ticket, with no streak of their own.
+   */
+  count(tickets: number): void {
+    if (tickets <= 0) return;
+    this.rollOver();
+    this.state = { ...this.state, tickets: this.state.tickets + tickets };
+    this.commit();
+  }
+
+  /** Last week's result still to announce (the board shows it, the next ticket play settles it), without taking it. */
+  get lastWeek(): WeekResult | null {
+    this.rollOver();
+    return this.state.pending ?? null;
+  }
+
   /** Last week's result, once (then forgotten); null when there is none to announce. A win adds a pennant. */
   takeWeekResult(): WeekResult | null {
     this.rollOver();

@@ -26,9 +26,19 @@ export interface ShopperOptions {
   claims?: Set<BrowseSpot>;
   seed?: number;
   look?: PersonLook;
+  /**
+   * The way out of the hall: through the gap between two stalls nearest them (`gaps`, x) past the row (`rowZ`),
+   * then `out` to the door (its last point). With it, a shopper sent home walks out and fades at the door, and
+   * comes back in by it (while the player is not looking that way); without it they blink out and in.
+   */
+  exit?: { gaps: readonly number[]; rowZ: number; out: readonly [x: number, z: number][] };
 }
 
-type State = { kind: 'walk'; path: THREE.Vector3[]; then: BrowseSpot | null } | { kind: 'browse'; spot: BrowseSpot; left: number } | { kind: 'linger'; left: number };
+type State = { kind: 'walk'; path: THREE.Vector3[]; then: BrowseSpot | null } | { kind: 'browse'; spot: BrowseSpot; left: number } | { kind: 'linger'; left: number }
+  /** Walking out (`exit`), then fading at the door; waiting outside to be let back in; walking back in. */
+  | { kind: 'exit'; path: THREE.Vector3[] }
+  | { kind: 'gone' }
+  | { kind: 'enter'; path: THREE.Vector3[] };
 
 /** How fast the body turns towards its heading, per second. */
 const TURN_RATE = 4;
@@ -43,6 +53,12 @@ const YIELD_PATIENCE = 2.5;
 /** What the arms do in front of a table, and while waiting in the aisle. */
 const BROWSE_POSES: Pose[] = ['think', 'think', 'stand', 'pockets', 'crossed'];
 const LINGER_POSES: Pose[] = ['pockets', 'crossed', 'hips', 'stand'];
+/** Seconds to get up to walking speed from standing. */
+const ACCEL_S = 0.3;
+/** Seconds of a fade at the door. */
+const DOOR_FADE_S = 0.7;
+/** The player looking this close to the door (cosine) keeps anyone from popping in or out under their nose. */
+const DOOR_UNSEEN_COS = 0.5;
 
 /**
  * Someone browsing the market: walks the aisle from stall to stall, stops in front of one to look
@@ -51,7 +67,8 @@ const LINGER_POSES: Pose[] = ['pockets', 'crossed', 'hips', 'stand'];
  * glances at the player brushing past. Paths follow the aisle, keeping right of its centre line so
  * nobody cuts through a stall or walks through someone coming the other way; a browse spot taken
  * by another shopper (`claims`) is left alone; a walker stops for the player standing in the way.
- * `setPresent(false)` sends them home (the market at night). Origin on the floor; the group moves
+ * `setPresent(false)` sends them home (the market at night): out through the door with `exit`, fading there, and
+ * back in by it (unseen) on `setPresent(true)`. Origin on the floor; the group moves
  * itself in zone-local coordinates. Never collides: a moving collider is more trouble than a body
  * the player walks through.
  */
@@ -63,6 +80,8 @@ export class Shopper extends THREE.Group implements Furniture, Updatable {
   private readonly spots: readonly BrowseSpot[];
   private readonly aisle: ShopperOptions['aisle'];
   private readonly speed: number;
+  /** The speed they walk at right now (m/s), up from 0 on setting off. */
+  private current = 0;
   private readonly claims: Set<BrowseSpot>;
   private claimed: BrowseSpot | null = null;
   private waited = 0;
@@ -75,6 +94,10 @@ export class Shopper extends THREE.Group implements Furniture, Updatable {
   private readonly viewerPos = new THREE.Vector3();
   private readonly gazePoint = new THREE.Vector3();
   private readonly mine = new THREE.Vector3();
+  private readonly exit: ShopperOptions['exit'];
+  private readonly blob: THREE.Mesh | null;
+  private fade = 1;
+  private fadeTo = 1;
 
   constructor(options: ShopperOptions) {
     super();
@@ -89,6 +112,9 @@ export class Shopper extends THREE.Group implements Furniture, Updatable {
     this.add(this.model);
     const blob = blobShadow(0.55, 0.5);
     if (blob) this.add(blob);
+    this.blob = blob;
+    this.exit = options.exit;
+    if (this.exit) this.model.enableFade();
     // Everyone starts somewhere different along the aisle, already walking.
     this.state = { kind: 'linger', left: 0.5 + (seed % 5) };
   }
@@ -110,18 +136,54 @@ export class Shopper extends THREE.Group implements Furniture, Updatable {
   }
 
   /** Out of the hall (hidden, their spot given up) or back in it. */
-  setPresent(present: boolean): void {
+  /** `instant`: at once where they are, no walk to the door (the hall just built, nobody saw them go). */
+  setPresent(present: boolean, instant = false): void {
     if (present === this.present) return;
     this.present = present;
-    this.visible = present;
-    if (!present) {
-      this.release();
-      this.state = { kind: 'linger', left: 1 + Math.random() * 3 };
+    if (!this.exit || instant) {
+      this.visible = present;
+      if (this.exit) {
+        this.fade = this.fadeTo = present ? 1 : 0;
+        this.model.setOpacity(this.fade);
+        this.model.visible = present;
+        if (this.blob) this.blob.visible = present;
+      }
+      if (!present) {
+        this.release();
+        this.state = { kind: 'linger', left: 1 + Math.random() * 3 };
+      }
+      return;
     }
+    this.release();
+    // Sent home: out by the door. Asked back while still inside (walking out): they turn round at once.
+    if (!present) this.state = this.visible ? { kind: 'exit', path: this.pathOut() } : { kind: 'gone' };
+    else if (this.visible && this.fadeTo > 0) this.setOff();
+    else this.state = { kind: 'gone' };
   }
 
   update(dt: number): void {
+    this.stepFade(dt);
+    if (this.state.kind === 'exit') {
+      this.walkDoor(dt, this.state.path, () => {
+        this.fadeTo = 0;
+        this.state = { kind: 'gone' };
+      });
+      this.model.update(dt);
+      return;
+    }
     if (!this.present) return;
+    if (this.state.kind === 'gone') {
+      // Back in by the door once the player is not looking at it.
+      if (this.fadeTo === 0 && this.fade > 0) return;
+      if (this.doorInView()) return;
+      this.comeIn();
+      return;
+    }
+    if (this.state.kind === 'enter') {
+      this.walkDoor(dt, this.state.path, () => this.setOff());
+      this.model.update(dt);
+      return;
+    }
     // The builder set the way we face when it placed us; turn from there, not from +z.
     if (Number.isNaN(this.heading)) this.heading = this.rotation.y;
     switch (this.state.kind) {
@@ -148,22 +210,95 @@ export class Shopper extends THREE.Group implements Furniture, Updatable {
   private walk(dt: number, state: { path: THREE.Vector3[]; then: BrowseSpot | null }): void {
     const leg = nextLeg(this.position, state.path, ARRIVE, this.leg);
     if (leg === 'done') {
+      this.current = 0;
       this.state = state.then ? { kind: 'browse', spot: state.then, left: 4 + Math.random() * 7 } : { kind: 'linger', left: 1.5 + Math.random() * 3 };
       const poses = state.then ? BROWSE_POSES : LINGER_POSES;
       this.model.setPose(poses[Math.floor(Math.random() * poses.length)]!);
       return;
     }
-    if (leg === 'reached') return;
+    // Past a point of the path: on to the next in the same frame (no halt at every point).
+    if (leg === 'reached') return this.walk(dt, state);
     const { dx, dz, dist } = this.leg;
     if (this.blocked(dx / dist, dz / dist, dt)) {
+      this.current = 0;
       this.model.setSpeed(0);
       this.idleGaze(dt);
       return;
     }
-    stepAlong(this.position, this.leg, this.speed * dt);
+    stepAlong(this.position, this.leg, this.pace(dt) * dt);
     this.face(Math.atan2(dx, dz), dt);
-    this.model.setSpeed(this.speed);
+    this.model.setSpeed(this.current);
     this.idleGaze(dt);
+  }
+
+  /** Their speed this frame: up from standing over `ACCEL_S`, then their own. */
+  private pace(dt: number): number {
+    this.current = Math.min(this.speed, this.current + (this.speed / ACCEL_S) * dt);
+    return this.current;
+  }
+
+  /** The door's fade in or out: hidden once it reaches 0. */
+  private stepFade(dt: number): void {
+    if (this.fade === this.fadeTo) return;
+    const step = dt / DOOR_FADE_S;
+    this.fade = this.fadeTo > this.fade ? Math.min(this.fadeTo, this.fade + step) : Math.max(this.fadeTo, this.fade - step);
+    this.model.setOpacity(this.fade);
+    this.model.visible = this.fade > 0.01;
+    if (this.blob) this.blob.visible = this.fade > 0.5;
+    if (this.fade === 0) this.visible = false;
+  }
+
+  /** From here along the aisle to the nearest gap between stalls, past the row, out to the door (`exit`). */
+  private pathOut(): THREE.Vector3[] {
+    const { gaps, rowZ, out } = this.exit!;
+    const here = this.position;
+    const gap = gaps.reduce((best, x) => (Math.abs(x - here.x) < Math.abs(best - here.x) ? x : best), gaps[0] ?? 0);
+    const lane = this.aisle.z + (gap >= here.x ? LANE : -LANE);
+    return [new THREE.Vector3(here.x, 0, lane), new THREE.Vector3(gap, 0, lane), new THREE.Vector3(gap, 0, rowZ), ...out.map(([x, z]) => new THREE.Vector3(x, 0, z))];
+  }
+
+  /** Steps in at the door, fading in, and walks back to the aisle by a gap; then off to a stall. */
+  private comeIn(): void {
+    const { gaps, rowZ, out } = this.exit!;
+    const door = out[out.length - 1] ?? [0, 0];
+    const gap = gaps[Math.floor(Math.random() * gaps.length)] ?? 0;
+    this.position.set(door[0], 0, door[1]);
+    this.heading = Math.PI;
+    this.rotation.y = Math.PI;
+    this.visible = true;
+    this.fade = 0;
+    this.fadeTo = 1;
+    this.model.setOpacity(0);
+    const path = [...out.slice(0, -1).reverse().map(([x, z]) => new THREE.Vector3(x, 0, z)), new THREE.Vector3(gap, 0, rowZ), new THREE.Vector3(gap, 0, this.aisle.z - LANE)];
+    this.state = { kind: 'enter', path };
+    this.model.setPose('stand');
+  }
+
+  /** Walks `path` (to or from the door: nobody browses on the way), then `then`. */
+  private walkDoor(dt: number, path: THREE.Vector3[], then: () => void): void {
+    const leg = nextLeg(this.position, path, ARRIVE, this.leg);
+    if (leg === 'done') {
+      this.current = 0;
+      this.model.setSpeed(0);
+      then();
+      return;
+    }
+    if (leg === 'reached') return this.walkDoor(dt, path, then);
+    const { dx, dz } = this.leg;
+    stepAlong(this.position, this.leg, this.pace(dt) * dt);
+    this.face(Math.atan2(dx, dz), dt);
+    this.model.setSpeed(this.current);
+    this.idleGaze(dt);
+  }
+
+  /** Whether the player is looking towards the door. */
+  private doorInView(): boolean {
+    const out = this.exit!.out;
+    const [x, z] = out[out.length - 1] ?? [0, 0];
+    const door = this.parent ? this.parent.localToWorld(this.gazePoint.set(x, 1.2, z)) : this.gazePoint.set(x, 1.2, z);
+    this.viewer.getWorldPosition(this.viewerPos);
+    const look = this.viewer.getWorldDirection(this.mine).setY(0).normalize();
+    return look.dot(door.sub(this.viewerPos).setY(0).normalize()) > DOOR_UNSEEN_COS;
   }
 
   /** Pick the next free spot (or a pause in the aisle) and route there along the aisle, keeping right. */

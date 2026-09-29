@@ -14,6 +14,30 @@ export interface JobLot {
   /** What they would cost one by one on the stalls. */
   worth: number;
   price: number;
+  /** Each game's part of `price` (by what it would fetch alone), in the order of `games`. */
+  shares?: number[];
+  /** Some game's fame was unknown when it was priced (priced as a legend): drawn again next time. */
+  provisional?: boolean;
+}
+
+/** Monthly views priced as the top of the fame curve (`pricing.ts` FAME_CURVE), for a game whose fame is unknown. */
+const LEGEND_VIEWS = 200_000;
+
+/**
+ * What the lot costs the player now: the games they do not own yet at their part of the price (a
+ * game bought elsewhere since the crate was drawn is taken out of it, and out of the price).
+ */
+export function lotOffer(lot: JobLot, owns: (id: string) => boolean): { games: Game[]; prices: number[]; price: number } {
+  const even = lot.price / Math.max(1, lot.games.length);
+  const games: Game[] = [];
+  const prices: number[] = [];
+  lot.games.forEach((game, i) => {
+    if (owns(game.id)) return;
+    games.push(game);
+    prices.push(lot.shares?.[i] ?? even);
+  });
+  const price = games.length === lot.games.length ? lot.price : games.length ? Math.max(1, Math.round(prices.reduce((a, b) => a + b, 0))) : 0;
+  return { games, prices: prices.map((p) => Math.max(0, Math.round(p))), price };
 }
 
 export interface JobLotDeps {
@@ -39,7 +63,13 @@ export class JobLotDraw {
   /** Today's lot (the same all day). */
   today(): Promise<JobLot> {
     const day = this.deps.today.gameDay;
-    if (!this.cache || this.cache.day !== day) this.cache = { day, lot: this.draw(day) };
+    if (!this.cache || this.cache.day !== day) {
+      const lot = this.draw(day);
+      const entry = { day, lot };
+      this.cache = entry;
+      // A lot priced while a fame lookup failed is priced high for safety (see `draw`): asked afresh next time.
+      void lot.then((l) => { if (l.provisional && this.cache === entry) this.cache = null; }, () => { if (this.cache === entry) this.cache = null; });
+    }
     return this.cache.lot;
   }
 
@@ -70,9 +100,12 @@ export class JobLotDraw {
       if (games.some((g) => g.id === game.id) || this.deps.collection.owns(game.id)) continue;
       games.push({ ...game, condition: condition === 'complete' ? undefined : condition });
     }
-    // Priced once every lookup is back (a failed one leaves its game ordinary).
+    // Priced once every lookup is back. A failed one (offline, Wikipedia down) is priced as a legend, never as an
+    // ordinary title: the desk pays with the real fame later, so a lot priced low would be a way to print coins.
     const views = await Promise.all(games.map((g) => this.deps.fame.lookup(g)));
-    const worth = games.reduce((sum, g, i) => sum + marketPrice(g, views[i], g.condition ?? 'complete', (MARKET_DISCOUNT.min + MARKET_DISCOUNT.max) / 2), 0);
-    return { games, worth, price: Math.max(1, Math.round(worth * JOB_LOT.share)) };
+    const provisional = views.some((v) => v === undefined);
+    const each = games.map((g, i) => marketPrice(g, views[i] === undefined ? LEGEND_VIEWS : views[i], g.condition ?? 'complete', (MARKET_DISCOUNT.min + MARKET_DISCOUNT.max) / 2));
+    const worth = each.reduce((sum, p) => sum + p, 0);
+    return { games, worth, price: Math.max(1, Math.round(worth * JOB_LOT.share)), shares: each.map((p) => p * JOB_LOT.share), provisional };
   }
 }

@@ -42,7 +42,16 @@ Read this to add or change something visible in the room. The recipe is in the `
 - Their geometries are cached and shared (one per size for the page): never `translate` / `rotateX` / edit
   `mesh.geometry` in place; move the mesh, or `clone()` the geometry first.
 - Clickable: `implements Interactable` with `hitboxes` (an `invisibleHitbox` around the thing), `label(player)`, `activate(session)`.
-  A lamp: `extends SwitchableLamp`, implement `render(on, hovered)` and list `hitboxes`; `setOn(initial)` at the end of the constructor.
+  A lamp: `extends SwitchableLamp`, implement `render(level, hovered)` (`level` 0..1, eased over ~0.1 s after a switch: scale
+  the light and the glows by it; `SwitchableLamp.warmGlow` tints a bulb from an ember's orange as it warms) and list
+  `hitboxes`; `setOn(initial)` at the end of the constructor (shown at once). The `Room`'s ceiling lamp and its ambient ease the same way.
+- The hover cue is one for the whole flat: the part a hand reaches for glints (`HoverGlint` in `props/hoverGlint.ts`:
+  `HoverGlint.of(handle, knob)` or `HoverGlint.fittings(root)`, the small metal parts found on first hover), never a whole
+  material (a dark shade or a fabric seat lit up). `SwingLeaf`, `SlideDrawer`, `DropDoor` and `SwitchableLamp` do it for you;
+  every door does it too (the travel and street doors' push bars and handles, the neighbours' doors, the sas's handles).
+- Furniture is heard: `src/audio/furnitureSounds.ts` has the one-shots (latch, hinge creak, wood knock, soft thud, fridge
+  seal, rocker click, plastic lid click, curtain rings, intercom line). `LidMotion(angle, seconds, onSettle)` calls
+  `onSettle(open)` at the end of each travel (a door's latch, a box lid's click); `SwingLeaf({ seal: true })` is a fridge door.
 - A door that opens (fridge, wardrobe, cupboard): a `SwingLeaf` per door. The host builds the face into `leaf.panel`
   (`leaf.edge(d)` is the x at `d` from the hinge), sets the leaf's `position` / `rotation.y` in its own space (hinge line at
   the bottom of the leaf's back face) and exposes `leaves`; the builder calls `placeLeaves(zone, host)` (`zone/attach.ts`),
@@ -74,7 +83,8 @@ Read this to add or change something visible in the room. The recipe is in the `
 - **Materials: the palette** (`world/materials/palette.ts`). `paint(color, roughness)` (the shared twin of `matte()`),
   `timber()` (of `wood()`), `standard({...})` / `basic({...})` (any parameters: identical ones anywhere are the same
   material), `METAL.brass()` / `agedBrass()` / `steel()` / `satinSteel()` / `chrome()`, `shared(key, make)` for anything
-  else (a `fabric()`, a patched shader). One material per look for the page, marked shared so no zone's unload frees it,
+  else (a `fabric()`, a patched shader). Metalness is 0 or 1: raw metal 1 (the roughness tells the finish), painted,
+  enamelled or blackened metal, glass and plastic 0 (docs/graphics.md). One material per look for the page, marked shared so no zone's unload frees it,
   so looks alike batch and never recompile. Never mutate a palette material. A module-level material must be one of them
   (or `markShared`): `npm run typecheck` refuses a bare one.
 - **Joints** (`world/props/joinery.ts`): two parts never share a face. Pick per joint: *buried* (`INSET`, 1 mm into the
@@ -102,8 +112,8 @@ Read this to add or change something visible in the room. The recipe is in the `
 | kind | options | notes |
 | --- | --- | --- |
 | `plant` | `kind: yucca/fig/small/monstera/hanging`, `pot: ceramic/terracotta`, `seed`, `scale`, `collides` | floor plants collide at the pot; `hanging` goes on a `ceiling`/`hung` placement |
-| `rug` | `width`, `depth`, `field`, `border`, `motif` (colours) | flat slab, never collides |
-| `pictureFrame` | `motif: mountains/sunset/abstract`, `seed`, `width`, `height`, `frameColor`, `frameWidth`, `matWidth` | wall placement |
+| `rug` | `width`, `depth`, `field`, `border`, `motif` (colours) | flat slab with rounded corners and a fringe past both short ends (x); never collides; a room builder's `surfaceAt: rugsUnderfoot(zone)` (`build/rugsUnderfoot.ts`) makes the footsteps soft over it (kilims too) |
+| `pictureFrame` | `motif: mountains/sunset/abstract/roofs/botanical`, `seed`, `width`, `height`, `frameColor`, `frameWidth`, `matWidth` | wall placement; give each print of the flat its own motif and frame colour (no motif more than twice) |
 | `floorLamp` | `poleHeight`, `intensity`, `on` | clickable switch, own PointLight |
 | `sideTable` | `radius`, `height`, `wood`, `mug` | collides |
 | `garland` | `style: bulbs/bunting`, `length`, `height`, `sag`, `spacing`, `colors`, `seed` | a slack string from the origin along local +x; `floor` placement + `height`; no light, bulbs only glow |
@@ -114,7 +124,7 @@ Read this to add or change something visible in the room. The recipe is in the `
 | `neonSign` | `text`, `color`, `width`, `height`, `intensity`, `flicker`, `font`, `seed` | wall placement; glass-tube lettering on a black panel, own coloured PointLight (`intensity: 0` for none), stutters now and then |
 | `neonTube` | `length`, `color`, `radius`, `intensity`, `standoff` | wall placement; a straight tube along local x on brackets (cove light along a wall top); glows, lights only with `intensity` |
 | `cushion` | `width`, `depth`, `thickness`, `color`, `tilt` | a floor cushion (the same class a `Seat` mounts); never collides |
-| `speaker` | `height`, `wood` | slim hi-fi floor-stander, baffle facing local +z; collides |
+| `speaker` | `height`, `wood` | slim hi-fi floor-stander, baffle facing local +z; collides; LED and woofer follow `screen/nowPlaying` |
 | `sideboard` | `width`, `depth`, `height`, `wood`, `turntable`, `records` | low cabinet, turntable + record pile on top; `wall` placement with `y: 0`; collides |
 | `smokeDetector` | `period` | `ceiling` placement; white puck, LED blinks red every `period` s (Updatable) |
 | `umbrellaStand` | `color`, `umbrellas` | open tube with furled umbrellas; collides |
@@ -148,7 +158,8 @@ Read this to add or change something visible in the room. The recipe is in the `
 | `radiator` | `style: column/panel/towel`, `width`, `height`, `lift`, `color`, `valve`, `standoff`, `catCradle` | `wall` placement with `y: 0` (`offset` over tiles); body on brackets, pipes into the floor, a TRV; merged meshes, collides; the builder's `tickRadiators` gives each its ticking `PointSound`; with `catCradle` a fleece sling the cat naps in (a `CatPerch`) |
 
 Clickable fittings (bathroom): `Washbasin({ onTap })` runs a `WaterStream` from its mixer; `Bathtub({ onWater })` fills
-and drains (its `plugSpot` is a `ClickSpot`, a second click target placed with `placeWith`); `Toilet({ onFlush })` flushes
+and drains (its `plugSpot` is a `ClickSpot`, a second click target placed with `placeWith`; its water drifts a ripple
+normal map, `WaterRipples` rings spread under the running spout, a full bath steams with a slow `Steam`); `Toilet({ onFlush })` flushes
 once per `flushSeconds` and lifts its lid through `lidSpot`; `MirrorCabinet` has a mirrored `SwingLeaf` door. The builder
 turns the callbacks into `RunningWater` / `ToiletFlush` voices (`src/audio/water.ts`) on `PointSound`s. A room floor can
 be tiled: `finish: { floor: 'tiles', floorTiles: { pattern: 'square' | 'checker' | 'hex', size, tile, alt, grout } }`.
@@ -166,18 +177,21 @@ putting it down sends it home.
 
 Working appliances (kitchen): `Kettle` (boils: `Steam` puffs from the spout, one alpha-safe `Points` call), `Toaster`
 (lever down, ticks, pops) and `Radio` (on/off, the `RadioTune` stream) each expose `sound`, a voice from
-`src/audio/kitchenSounds.ts` the builder puts on a `PointSound` with `placeWith`.
+`src/audio/kitchenSounds.ts` the builder puts on a `PointSound` with `placeWith`. The fridge's bulb and the oven's lamp
+are `PooledLight`s inside what their doors hide: the kitchen's one-light `LightPool` lends them a real light while a door is open.
 
 Wired classes: `Seat` (+ `Cushion` via `mountCushion`), `Television(cssLayer, listener)`, `Projector(cssLayer, { pictureWidth, listener })`,
-`RoomWindow(outdoors, { width, height, drivesClock, sunlight, curtains, blind, onCurtainsChange })` (`blind`: a `RollerBlind` that stops at the glass, for a window over a sink), `Poster(width, height, painter)` with
-`Poster.bibliothek()` / `Poster.platform()` / `shopPoster()`, `WallClock(dayNight)` (click says the time, a second click within 2 s sets an alarm an hour on), `PendantLamp({ onSwitch })`, `FlushLamp({ onSwitch, on })`,
+`RoomWindow(outdoors, { width, height, drivesClock, sunlight, curtains, blind, onCurtainsChange })` (`blind`: a `RollerBlind` that stops at the glass, for a window over a sink; the `Curtains` are sheets folded in real pleats, deeper as they gather, weave mapped in metres, the hem swinging after a pull; the sun spot re-aims in whole shadow texels), `Poster(width, height, painter)` with
+`Poster.bibliothek()` / `Poster.platform()` / `shopPoster()`, `WallClock(dayNight, { onSecond })` (click says the time, a second click within 2 s sets an alarm an hour on; a red second hand steps each real second and `onSecond` strikes the `ClockTick` with it, `build/roomParts.placeClock`), `PendantLamp({ onSwitch })`, `FlushLamp({ onSwitch, on })`,
 `WallSwitch({ lamp })` (a rocker by the door that toggles the room's pendant / flush lamp; every room plan has a `lightSwitch` spot),
 `Door(doorway, { collisions, leafColor })` (hung by `furnishShell`), `ConsoleStand` + `Console(slotWidth, onSelectPlatform)` (one style per
-platform in `consoleStyles.ts`). Placed by the room builders without wiring: `ShutDoor({ style })` (a door that never opens),
+platform in `consoleStyles.ts`). Placed by the room builders without wiring: `ShutDoor({ style, leafColor, matColor })` (a door that never opens; its
+`leaf` group is hinged on the left edge, so a subclass may swing it ajar, as `TravelDoor` does under the curtain),
 `HallConsole({ width, mirror, keys })` (+ its `bowl` spot for the hallway's clickable `HouseKeys`, which the front door's `TravelDoor({ guard })` asks for), `MailDrop` (flyers on the doormat, `deliver()` on the way home), `CoatRack({ shoeRack })`, and each room's own furniture classes. The arcade's machines are wired by
 `furnishArcade` (see docs/economy.md, "The arcade"); the bedroom's `PrizeShelf({ prizes })` follows the prize store; its `Phone` and `NightLight` glow after dark
-(`setNight`, emissive only), the `Bed` swaps made / slept-in bedding (`setMade`), the `BedroomChair` heaps the day's clothes
-(`setDay`), all from the clock in `furnishBedroom`, and a `ReadingLamp` (shadow-less, limited reach) stands on the side table. People:
+(`setDark(duskDarkness(sunHeight))`, emissive only, eased through the dusk), the `Bed` swaps made / slept-in bedding (`setMade`), the `BedroomChair` heaps the day's clothes
+(`setDay`), all from the clock in `furnishBedroom`; the bed and the chair change only unseen (`UnseenSwap`: at once while the
+player is elsewhere, else once they are out of the view's frustum), and a `ReadingLamp` (shadow-less, limited reach) stands on the side table. People:
 `Vendor({ viewer, lines, seed, label, focus })` stands still and talks (a stallholder, an attendant), `Shopper({ viewer, spots, aisle })`
 wanders, `Walker({ viewer, seed, lines })` goes where it is told (`walk(path, then)`, `stand(yaw, pose, focus, hands, lean)`, `say(text)`). `PersonModel.reach([a, b])` puts the hands on two world points (a
 two-bone arm solver, elbows out and down) and `lean(angle)` bends the upper body: a machine's `Station.handsAt()` / `lean`
@@ -191,10 +205,15 @@ placed at the zone's origin with `zone.place(x, new THREE.Vector3())`: `TiledWai
 (`options.finish` picks the surfaces: `floor: 'parquet' | 'concrete' | 'carpet'` (`Parquet.ts`, `Concrete.ts`, the arcade's neon-confetti `Carpet.ts`),
 `walls` / `ceiling` / `trim` colours, `moulding: false` for a hall),
 an invisible shadow caster outside each `opaqueWalls` wall (keeps the lamps in), the hemisphere ambient (on only while
-`setOccupied(true)`) and the shadow-casting ceiling lamp. `furnishShell(zone, sky, options, { leafColor })` places it,
+`setOccupied(true)`, easing in and out over ~0.4 s) and the shadow-casting ceiling lamp (its normal bias in texels of its
+map, `props/shadowTexels.ts`; the ceiling's fake bounce falls off from over the lamp towards the walls). `furnishShell(zone, sky, options, { leafColor })` places it,
 follows the sky and hangs a `Door` in each doorway with `door !== false` (`hinge` picks the side). The collection room is
 `DEFAULT_ROOM` 6 x 6 x 2.8 m with `FRONT_DOOR` on the back wall at x -1.5 (`DOOR_LEAF` 0.83 x 2.04), the hallway zone behind it;
 shelving fills the back wall from `ROOM_PLAN.shelving.backWallMinX` then the right wall, skipping the projector picture;
-what does not fit goes to its `overflow`, shown by the bedroom's bought bookcases (`BEDROOM_PLAN.bookcase`, a `Shelving`
+a bookcase (`Shelf`) stands on a recessed plinth, with a hardboard back, an overhanging top and banded edges, merged
+into three draws; the last box of a partly filled row leans on its neighbour. A re-sort that leaves every bookcase's rows
+as they are slides the boxes to their new spots (`Shelving.reorder`, ticked by a `BoxMotion`, which also eases the hover
+pop); wishlist games are a gap holding a handwritten `WishCard`, the box shows (ghosted) only in hand.
+What does not fit goes to its `overflow`, shown by the bedroom's bought bookcases (`BEDROOM_PLAN.bookcase`, a `Shelving`
 with an explicit `layout`, `capacity` = bookcases bought, no ceiling spots). The other rooms' shells are in their plan
 files; the flat's map is in `worldPlan.ts`.

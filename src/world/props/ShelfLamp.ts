@@ -5,6 +5,7 @@ import { cylinderMesh, invisibleHitbox } from '../meshUtils';
 import type { DrawnAware } from '../zone/Zone';
 import { PROUD } from './joinery';
 import { SwitchableLamp } from './SwitchableLamp';
+import { LAMP_GLOW, LAMP_LIGHT } from '../lighting/lampColours';
 
 export interface ShelfLampOptions {
   /** Horizontal distance from the fixture to the bookcase face (m); the bookcase lies along local -z. */
@@ -25,7 +26,6 @@ const STEM_LENGTH = 0.1;
 const CAN_RADIUS = 0.045;
 const CAN_LENGTH = 0.14;
 const LENS_GLOW = 2.5;
-const HOVER_GLOW = 0.35;
 
 /**
  * A ceiling spot for one bookcase: a dark canopy and stem hanging from the ceiling, and a can
@@ -58,7 +58,8 @@ export class ShelfLamp extends SwitchableLamp implements Updatable, OccupancyAwa
     this.options = { intensity: 25, on: true, ...options };
     const { throwDistance, aimHeight, ceilingHeight, intensity } = this.options;
 
-    this.metal = new THREE.MeshStandardMaterial({ color: METAL, roughness: 0.4, metalness: 0.7, emissive: 0x6a6258, emissiveIntensity: 0 });
+    // Blackened metal (METAL is near black): a dark finish, so a dielectric.
+    this.metal = new THREE.MeshStandardMaterial({ color: METAL, roughness: 0.4, metalness: 0 });
 
     const canopy = cylinderMesh(CANOPY_RADIUS, 0.015, this.metal, { y: -0.0075 }, { segments: 24 });
     const stem = cylinderMesh(0.008, STEM_LENGTH, this.metal, { y: -0.015 - STEM_LENGTH / 2 }, { segments: 10 });
@@ -72,14 +73,14 @@ export class ShelfLamp extends SwitchableLamp implements Updatable, OccupancyAwa
     can.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), direction); // can's local +z looks at the target
     const body = cylinderMesh(CAN_RADIUS, CAN_LENGTH, this.metal, { z: CAN_LENGTH / 2 - 0.02 }, { radiusBottom: CAN_RADIUS * 0.85, segments: 24 });
     body.rotation.x = Math.PI / 2;
-    this.lens = new THREE.MeshStandardMaterial({ color: 0xfff3dc, emissive: 0xffe2b0, emissiveIntensity: LENS_GLOW, roughness: 0.3 });
+    this.lens = new THREE.MeshStandardMaterial({ color: 0xfff3dc, emissive: LAMP_GLOW.led, emissiveIntensity: LENS_GLOW, roughness: 0.3 });
     const lens = new THREE.Mesh(new THREE.CircleGeometry(CAN_RADIUS * 0.8, 24), this.lens);
     lens.position.z = CAN_LENGTH - 0.02 + PROUD;
     lens.castShadow = false;
     can.add(body, lens);
 
     // Same beam as the room's former automatic shelf spots: it covers the whole bookcase face.
-    this.light = new THREE.SpotLight(0xfff1dc, intensity, 6, Math.PI / 5, 0.5, 1.5);
+    this.light = new THREE.SpotLight(LAMP_LIGHT.led, intensity, 6, Math.PI / 5, 0.5, 1.5);
     this.light.position.copy(pivot).addScaledVector(direction, CAN_LENGTH);
     this.light.target.position.copy(aim);
     // Shadowless: every slot of every room's shelving has a spot (parked ones included, so the light count never
@@ -103,7 +104,7 @@ export class ShelfLamp extends SwitchableLamp implements Updatable, OccupancyAwa
     this.parked = parked;
     this.fixture.visible = !parked;
     for (const hitbox of this.hitboxes) hitbox.layers[parked ? 'disable' : 'enable'](0);
-    this.setOn(this.isOn);
+    this.refresh();
   }
 
   setOccupied(occupied: boolean): void {
@@ -118,7 +119,8 @@ export class ShelfLamp extends SwitchableLamp implements Updatable, OccupancyAwa
   }
 
   /** Unoccupied and lit: refresh the shadow map now and then instead of every frame. */
-  update(dt: number): void {
+  override update(dt: number): void {
+    super.update(dt);
     if (this.occupied || !this.zoneDrawn || this.light.intensity <= 0) return;
     this.shadowTimer += dt;
     if (this.shadowTimer < IDLE_SHADOW_INTERVAL) return;
@@ -126,11 +128,11 @@ export class ShelfLamp extends SwitchableLamp implements Updatable, OccupancyAwa
     this.light.shadow.needsUpdate = true;
   }
 
-  protected render(on: boolean, hovered: boolean): void {
-    const lit = on && !this.parked;
-    this.light.intensity = lit ? this.options.intensity : 0;
-    this.lens.emissiveIntensity = lit ? LENS_GLOW : 0;
-    this.metal.emissiveIntensity = hovered ? HOVER_GLOW : 0;
+  /** Hover glints the can and its stem (the base class: they are the lamp's small metal parts). */
+  protected render(level: number): void {
+    const lit = this.parked ? 0 : level;
+    this.light.intensity = lit * this.options.intensity;
+    this.lens.emissiveIntensity = lit * LENS_GLOW;
     this.syncShadow();
   }
 

@@ -6,6 +6,7 @@ import { wakefulnessAt } from '@/time/wakefulness';
 import { proximityVolume } from '@/video/proximityVolume';
 import { audioBus, audioContext } from './audioContext';
 import { brownNoise, whiteNoise } from './noise';
+import { ringTheHour } from './churchBells';
 import { birdNote, horn, sirenVoice, twoTone } from './street/streetVoices';
 import { BUS_STOP } from '@/world/city/frontage';
 
@@ -24,6 +25,13 @@ export interface StreetAmbienceOptions {
   openings?: () => readonly StreetOpening[];
   /** Whether the listener is out in the open (on the balcony): the street at its full level, no glass between. */
   outside?: () => boolean;
+  /**
+   * Whether the listener is out in the open elsewhere (the walkable street, which has its own sound):
+   * only the thunder is heard from here, at the open air's level.
+   */
+  open?: () => boolean;
+  /** Whether the listener is under a roof that lets the thunder through like a pane (the flea market's hall). */
+  underRoof?: () => boolean;
 }
 
 /** A door to the open air: where it is, and how open (0 shut .. 1). */
@@ -57,9 +65,8 @@ const BUS_REACH = 14 / (14 + Math.hypot(BUS_STOP.stop[0], BUS_STOP.stop[1], EAR_
 /** The siren's two tones (hi-lo) and how long each is held. */
 const SIREN_TONES: [number, number] = [880, 660];
 const SIREN_STEP = 0.65;
-/** Church bells strike the hour between these hours only, this many seconds apart. */
+/** Church bells strike the hour between these hours only. */
 const BELL_HOURS: [number, number] = [8, 21];
-const BELL_SPACING = 1.8;
 
 /**
  * The sound of the street through the windows, synthesised (no recordings, no network): a low
@@ -160,7 +167,9 @@ export class StreetAmbience implements Updatable {
       this.listenClock = 0;
       this.level = this.loudness();
       master.gain.setTargetAtTime(this.level, now, FOLLOW);
-      loud.gain.setTargetAtTime(Math.max(this.level, THUNDER_FLOOR * LEVEL), now, FOLLOW);
+      // Thunder: in the open at full level, under a hall's roof as through a pane, anywhere else never below its floor.
+      const thunder = this.options.open?.() ? LEVEL : this.options.underRoof?.() ? THROUGH_GLASS * LEVEL : THUNDER_FLOOR * LEVEL;
+      loud.gain.setTargetAtTime(Math.max(this.level, thunder), now, FOLLOW);
     }
     // Thunder: heard wherever the listener is, so noticed before the silence check.
     if (this.strikes >= 0 && sky.strikes !== this.strikes) this.thunder(ctx, loud, sky.strikeDistance);
@@ -391,34 +400,22 @@ export class StreetAmbience implements Updatable {
     this.burst(ctx, out, this.filter(ctx, 'lowpass', 90 + 180 * near, 0.9), envelope, length + 0.1, delay);
   }
 
-  /** The church across the rooftops strikes the hour by day: as many strokes as the hour, a bell fading long. */
+  /**
+   * The church across the rooftops strikes the hour by day: the same tower as out on Front Street (`ringTheHour`: the
+   * quarter chime, then the hour's strokes), heard from the flat through the glass, dull and far.
+   */
   private bells(ctx: AudioContext, out: AudioNode, hours: number, audible: boolean): void {
     const hour = Math.floor(hours);
     const last = this.hour;
     this.hour = hour;
     if (last < 0 || hour === last || !audible || hour < BELL_HOURS[0] || hour > BELL_HOURS[1]) return;
-    const strokes = hour % 12 || 12;
     const tone = this.filter(ctx, 'lowpass', 1800);
     const gain = ctx.createGain();
-    gain.gain.value = 0.02;
+    gain.gain.value = 0.4;
     tone.connect(gain).connect(out);
-    const t0 = ctx.currentTime + 0.3;
-    for (let i = 0; i < strokes; i++) {
-      const t = t0 + i * BELL_SPACING;
-      // A bell's partials: hum, prime, minor third, fifth, octave and up, each dying at its own rate.
-      for (const [ratio, level, decay] of [[0.5, 0.6, 4], [1, 1, 3], [1.19, 0.5, 2.2], [1.5, 0.35, 1.8], [2, 0.4, 1.5], [2.74, 0.2, 1]] as const) {
-        const osc = ctx.createOscillator();
-        osc.type = 'sine';
-        osc.frequency.value = 392 * ratio;
-        const g = ctx.createGain();
-        g.gain.setValueAtTime(0, t);
-        g.gain.linearRampToValueAtTime(level, t + 0.01);
-        g.gain.exponentialRampToValueAtTime(0.0005, t + decay);
-        osc.connect(g).connect(tone);
-        osc.start(t);
-        osc.stop(t + decay + 0.05);
-      }
-    }
+    const done = ringTheHour(ctx, tone, ctx.currentTime + 0.3, hour, 0.05);
+    // Let the nodes go once the last stroke has died away.
+    window.setTimeout(() => gain.disconnect(), (done - ctx.currentTime + 8) * 1000);
   }
 
   /** Reacts to what the street's life did since the last frame (sounds only when the street is heard); keeps the siren and the dustcart going. */

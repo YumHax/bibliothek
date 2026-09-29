@@ -25,6 +25,8 @@ export interface TitleInfo {
   pointsPerTicket: number;
   medals?: MedalBook;
   challenge?: () => TodaysChallenge | null;
+  /** What a play costs right now, for the card's foot: "1 COIN PER PLAY", "FREE PLAY". */
+  price?: () => { free: boolean; text: string };
 }
 
 /**
@@ -58,9 +60,10 @@ export class CabinetScreens {
     const canvas = createCanvas(SCREEN_W, SCREEN_H)[0];
     this.ctx = canvas.getContext('2d')!;
     this.texture = toTexture(canvas);
+    // Crisp pixels up close; mipmapped from across the hall, so the glass does not shimmer.
     this.texture.magFilter = THREE.NearestFilter;
-    this.texture.minFilter = THREE.LinearFilter;
-    this.texture.generateMipmaps = false;
+    this.texture.minFilter = THREE.LinearMipmapLinearFilter;
+    this.texture.generateMipmaps = true;
     this.screen = new THREE.Mesh(new THREE.PlaneGeometry(SCREEN_WIDTH, SCREEN_HEIGHT), crtScreenMaterial(this.texture, { lines: SCREEN_H }));
     this.screen.position.set(0, SCREEN_Y, SCREEN_Z);
     this.screen.rotation.x = -SCREEN_TILT;
@@ -106,7 +109,9 @@ export class CabinetScreens {
       drawText(ctx, challenge.done ? 'BEATEN! COME BACK TOMORROW' : `SCORE ${challenge.target.toLocaleString('en-US')} · +${challenge.reward} TIX`, SCREEN_W / 2, 156, 8, challenge.done ? '#7ee787' : '#fff2a8');
     }
     if (phase % 2 === 0) drawText(ctx, 'INSERT COIN', SCREEN_W / 2, 186, 12, '#ff8a80');
-    drawText(ctx, `1 COIN PER PLAY · ${pointsPerTicket} PTS = 1 TICKET`, SCREEN_W / 2, 218, 7, '#7a7a90');
+    const price = this.info.price?.();
+    const cost = !price ? '1 COIN PER PLAY' : price.free ? 'FREE PLAY' : `${price.text.toUpperCase()} PER PLAY`;
+    drawText(ctx, `${cost} · ${pointsPerTicket} PTS = 1 TICKET`, SCREEN_W / 2, 218, 7, '#7a7a90');
     this.texture.needsUpdate = true;
   }
 
@@ -143,24 +148,38 @@ export class CabinetScreens {
     this.texture.needsUpdate = true;
   }
 
-  /** Over the game's frozen last frame: the score, the tickets counting up, the table place, and what going again costs. */
+  /**
+   * Over the game's frozen last frame: the score, the tickets counting up, then each bonus
+   * ("+60 CHALLENGE") landing under it, the table place, and what going again costs (once it is
+   * all counted and fire can replay).
+   */
   drawGameOver(run: MachineRun): void {
     const { ctx } = this;
-    const { last, lastRank, overClock } = run;
+    const { last, lastRank, overClock, bonuses } = run;
     this.game.draw(ctx);
-    const tickets = run.tickets(last.score);
-    const shown = run.shownTickets;
+    const total = run.tickets(last.score) + bonuses.reduce((sum, b) => sum + b.tickets, 0);
+    const shown = run.shownTotal;
     const done = run.countUp >= 1;
+    const counted = run.countDone;
     ctx.fillStyle = 'rgba(5,5,10,0.88)';
     ctx.fillRect(16, 40, SCREEN_W - 32, 166);
-    drawText(ctx, `SCORE ${last.score.toLocaleString('en-US')}`, SCREEN_W / 2, 62, 12, '#fff2a8');
-    drawText(ctx, `${shown}`, SCREEN_W / 2, 100, done ? 30 : 26, done ? '#ffd23a' : '#ffe9a0');
-    drawText(ctx, tickets === 1 ? 'TICKET' : 'TICKETS', SCREEN_W / 2, 126, 9, '#ffd23a');
+    drawText(ctx, `SCORE ${last.score.toLocaleString('en-US')}`, SCREEN_W / 2, 58, 12, '#fff2a8');
+    drawText(ctx, `${shown}`, SCREEN_W / 2, 90, counted ? 28 : 24, counted ? '#ffd23a' : '#ffe9a0');
+    drawText(ctx, total === 1 ? 'TICKET' : 'TICKETS', SCREEN_W / 2, 112, 9, '#ffd23a');
+    // The bonuses, a line each as it lands (at most three fit; the rest add up on the last).
+    const lines = bonuses.length > 3 ? [...bonuses.slice(0, 2), { label: 'MORE BONUSES', tickets: bonuses.slice(2).reduce((sum, b) => sum + b.tickets, 0) }] : bonuses;
+    lines.forEach((bonus, i) => {
+      const t = run.bonusCountUp(lines === bonuses || i < 2 ? i : bonuses.length - 1);
+      if (t <= 0) return;
+      drawText(ctx, `+${Math.floor(bonus.tickets * t)} ${bonus.label}`, SCREEN_W / 2, 128 + i * 11, 7, t >= 1 ? '#7ee787' : '#c9f5d0');
+    });
     const blink = Math.floor(overClock * 4) % 2 === 0;
-    if (done && lastRank !== null) drawText(ctx, `${ordinal(lastRank + 1)} ON THE BOARD!`, SCREEN_W / 2, 148, 10, blink ? '#7ee787' : '#ffffff');
-    else if (done && last.best) drawText(ctx, 'NEW BEST!', SCREEN_W / 2, 148, 11, blink ? '#7ee787' : '#ffffff');
-    if (done && Math.floor(overClock * 2) % 2 === 0) drawText(ctx, `${actionKeyLabel('fire').toUpperCase()} · PLAY AGAIN`, SCREEN_W / 2, 174, 8, '#ff8a80');
-    if (done) drawText(ctx, run.free ? 'FREE PLAY: ON THE HOUSE' : `${run.priceText().toUpperCase()} · ${actionKeyLabel('walkAway').toUpperCase()} TO WALK AWAY`, SCREEN_W / 2, 192, 7, '#9a96c0');
+    const markY = 128 + lines.length * 11 + 6;
+    if (done && lastRank !== null) drawText(ctx, `${ordinal(lastRank + 1)} ON THE BOARD!`, SCREEN_W / 2, markY, 10, blink ? '#7ee787' : '#ffffff');
+    else if (done && last.best) drawText(ctx, 'NEW BEST!', SCREEN_W / 2, markY, 11, blink ? '#7ee787' : '#ffffff');
+    else if (done && last.first) drawText(ctx, 'FIRST SCORE ON THE BOARD', SCREEN_W / 2, markY, 8, '#c9c4ff');
+    if (run.canReplay && Math.floor(overClock * 2) % 2 === 0) drawText(ctx, `${actionKeyLabel('fire').toUpperCase()} · PLAY AGAIN`, SCREEN_W / 2, 180, 8, '#ff8a80');
+    if (counted) drawText(ctx, run.free ? 'FREE PLAY: ON THE HOUSE' : `${run.priceText().toUpperCase()} · ${actionKeyLabel('walkAway').toUpperCase()} TO WALK AWAY`, SCREEN_W / 2, 196, 7, '#9a96c0');
     this.texture.needsUpdate = true;
   }
 

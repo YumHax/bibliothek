@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import type { Updatable } from '@/core/Engine';
 import type { Input } from '@/core/Input';
 import type { Interactable, LabelPlacement } from '@/interaction/Interactable';
-import type { ArcadeMachineLike, ArcadeResult, SessionActions } from '@/game/SessionActions';
+import type { ArcadeBonus, ArcadeMachineLike, ArcadeResult, SessionActions } from '@/game/SessionActions';
 import type { ChipSpeaker } from '@/audio/ChipSpeaker';
 import type { Furniture } from '../Furniture';
 import type { ArcadeControls } from './games/ArcadeGame';
@@ -107,6 +107,18 @@ export abstract class TicketMachine extends THREE.Group implements Furniture, In
     return this.localToWorld(this.focus.clone());
   }
 
+  get canReplay(): boolean {
+    return this.run.canReplay;
+  }
+
+  pause(paused: boolean): void {
+    this.run.setPaused(paused);
+  }
+
+  showBonus(bonuses: readonly ArcadeBonus[]): void {
+    this.run.showBonus(bonuses);
+  }
+
   start(onOver: (result: ArcadeResult) => void): void {
     this.run.start(onOver);
     this.newGame();
@@ -140,8 +152,10 @@ export abstract class TicketMachine extends THREE.Group implements Furniture, In
   }
 
   update(dt: number): void {
-    this.clock += dt;
     this.speaker.follow();
+    // The pointer went free mid-play: everything holds still until it is locked again.
+    if (this.run.paused) return;
+    this.clock += dt;
     this.strip.update(dt);
     const { run } = this;
     run.update(dt);
@@ -187,6 +201,11 @@ export abstract class TicketMachine extends THREE.Group implements Furniture, In
   /** The count-up's progress on the end card, 0..1. */
   protected get countUp(): number {
     return this.run.countUp;
+  }
+
+  /** Every ticket the end card has counted so far, the bonuses' (challenge, medal...) too. */
+  protected get shownTotal(): number {
+    return this.run.shownTotal;
   }
 
   protected ticketsOf(score: number): number {

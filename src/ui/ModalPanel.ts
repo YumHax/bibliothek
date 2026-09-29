@@ -1,5 +1,12 @@
 import { registerPanel } from './menu/MenuNav';
+import { fadeIn, fadeOut } from './fade';
 import './menu/menu.css';
+
+/** What Tab can land on. */
+const FOCUSABLE = 'a[href], button, input, select, textarea, [tabindex]:not([tabindex="-1"])';
+
+/** The panel's fade-out before it hides (`ui-modal--closing`, menu.css). */
+const CLOSE_MS = 150;
 
 export interface ModalPanelOptions {
   /** Classes of the root after `ui-modal` (the layer): a layout (`ui-modal--sheet` / `ui-modal--centre`) and the panel's own. */
@@ -22,6 +29,9 @@ export interface ModalPanelOptions {
  *
  * `open(...args)` passes its arguments to `onOpened`; a panel opened with arguments overrides
  * `toggle` (the Session only ever closes it).
+ *
+ * It comes in with the shared `ui-modal-in` (a fade, a small rise) and goes with a short fade: `isOpen`
+ * turns false at once, the root hides once the fade is over.
  */
 export abstract class ModalPanel<OpenArgs extends unknown[] = []> {
   protected readonly root: HTMLElement;
@@ -29,6 +39,7 @@ export abstract class ModalPanel<OpenArgs extends unknown[] = []> {
   /** Assigned by the Session so closing from the panel's own UI re-enters the room. */
   onOpenChange?: (open: boolean) => void;
   private readonly openListeners = new Set<(open: boolean) => void>();
+  private opened = false;
 
   constructor(container: HTMLElement, options: ModalPanelOptions) {
     this.root = document.createElement('section');
@@ -45,16 +56,34 @@ export abstract class ModalPanel<OpenArgs extends unknown[] = []> {
       if (e.code === 'Escape') return;
       e.stopPropagation();
       this.onKey(e);
+      if (e.code === 'Tab' && !e.defaultPrevented && this.isOpen) this.keepTabInside(e);
     });
   }
 
+  /** Tab and Shift+Tab go round the panel's own controls: the focus never falls out to the page (where Tab, E, O are game keys). */
+  private keepTabInside(e: KeyboardEvent): void {
+    const stops = [...this.root.querySelectorAll<HTMLElement>(FOCUSABLE)].filter((el) => !el.matches(':disabled') && el.offsetParent !== null);
+    if (!stops.length) {
+      e.preventDefault();
+      return;
+    }
+    const at = stops.indexOf(document.activeElement as HTMLElement);
+    const next = e.shiftKey ? (at <= 0 ? stops.length - 1 : at - 1) : at === -1 || at === stops.length - 1 ? 0 : at + 1;
+    // Only at the ends (or from outside): between them the browser's own order is kept.
+    if (at === -1 || (e.shiftKey ? at === 0 : at === stops.length - 1)) {
+      e.preventDefault();
+      stops[next]!.focus();
+    }
+  }
+
   get isOpen(): boolean {
-    return !this.root.hidden;
+    return this.opened;
   }
 
   open(...args: OpenArgs): void {
     if (this.isOpen) return;
-    this.root.hidden = false;
+    this.opened = true;
+    fadeIn(this.root, 'ui-modal--closing');
     this.onOpened(...args);
     this.focusTarget()?.focus();
     this.emitOpenChange(true);
@@ -62,7 +91,9 @@ export abstract class ModalPanel<OpenArgs extends unknown[] = []> {
 
   close(): void {
     if (!this.isOpen) return;
-    this.root.hidden = true;
+    this.opened = false;
+    if (this.root.contains(document.activeElement)) (document.activeElement as HTMLElement).blur();
+    fadeOut(this.root, 'ui-modal--closing', CLOSE_MS);
     this.onClosed();
     this.emitOpenChange(false);
   }

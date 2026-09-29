@@ -9,6 +9,13 @@ export const VOLUME_CHANNELS: readonly VolumeChannel[] = ['master', 'screens', '
 export type UiScale = 'small' | 'normal' | 'large';
 export const UI_SCALES: readonly UiScale[] = ['small', 'normal', 'large'];
 
+/** Settings > Controls: sprint on a double tap of forward, or while Shift is held (the crouch then moves to Z). */
+export type SprintMode = 'doubleTap' | 'hold';
+export const SPRINT_MODES: readonly SprintMode[] = ['doubleTap', 'hold'];
+/** Settings > Controls: crouch while the key is held, or a press to crouch and another to stand. */
+export type CrouchMode = 'hold' | 'toggle';
+export const CROUCH_MODES: readonly CrouchMode[] = ['hold', 'toggle'];
+
 /** The player's preferences: how the view feels, what is heard, what the HUD shows, which key does what. */
 export interface GameSettings {
   /** Multiplier of the mouse look (1 = three.js's default 0.002 rad per pixel). */
@@ -26,8 +33,16 @@ export interface GameSettings {
   /** The caption naming what the crosshair is on. */
   hoverLabel: boolean;
   uiScale: UiScale;
-  /** Cuts the menus' and panels' animations, whatever the system says. */
+  /** Cuts the menus' and panels' animations, whatever the system says (and the head bob, the eased sit, the flash: `settings/motion`). */
   reduceMotion: boolean;
+  sprintMode: SprintMode;
+  crouchMode: CrouchMode;
+  /** A few millimetres of bob with the stride. */
+  headBob: boolean;
+  /** The size of the speech bubbles and subtitles, over the interface's text size. */
+  speechSize: UiScale;
+  /** The "how to" tips top left (the first day's to-do list included). */
+  showTips: boolean;
   /** Rebound keys, physical `KeyboardEvent.code` -> the code the game reads (see `Input.setBindings`). */
   bindings: Record<string, string>;
 }
@@ -43,25 +58,36 @@ export const DEFAULT_SETTINGS: Readonly<GameSettings> = {
   hoverLabel: true,
   uiScale: 'normal',
   reduceMotion: false,
+  sprintMode: 'doubleTap',
+  crouchMode: 'hold',
+  headBob: true,
+  speechSize: 'normal',
+  showTips: true,
   bindings: {},
 };
 
 export const SENSITIVITY_RANGE = { min: 0.2, max: 3 } as const;
 export const FOV_RANGE = { min: 55, max: 100 } as const;
 
+/** A slider dragged writes the settings once it rests this long (ms), not on every step. */
+const SAVE_DEBOUNCE_MS = 400;
+
 /**
- * The player's settings, persisted (`KEYS.settings`, a preference: a new game keeps it). Every change is saved and told to the
- * subscribers, which apply it live (the camera, the mixer, the HUD, the key bindings).
+ * The player's settings, persisted (`KEYS.settings`, a preference: a new game keeps it). Every change is told to the
+ * subscribers at once, which apply it live (the camera, the mixer, the HUD, the key bindings), and saved a moment
+ * later (a slider's drag is one write; leaving the page writes what is pending).
  */
 export class SettingsStore {
   private current: GameSettings;
   private readonly listeners = new Set<(settings: GameSettings) => void>();
   private readonly store: PersistedStore<GameSettings>;
+  private saveTimer: ReturnType<typeof setTimeout> | undefined;
 
   constructor(key: string = SETTINGS_STORAGE_KEY) {
     // Version 1: the settings object (bare JSON before versions were kept); a missing field takes its default.
     this.store = new PersistedStore<GameSettings>({ key, version: 1, defaults: () => structuredClone(DEFAULT_SETTINGS) as GameSettings, read: readSettings });
     this.current = this.store.load();
+    if (typeof window !== 'undefined') window.addEventListener('pagehide', () => this.flush());
   }
 
   get settings(): Readonly<GameSettings> {
@@ -91,6 +117,15 @@ export class SettingsStore {
   }
 
   private save(): void {
+    clearTimeout(this.saveTimer);
+    this.saveTimer = setTimeout(() => this.flush(), SAVE_DEBOUNCE_MS);
+  }
+
+  /** Writes a pending change now. */
+  flush(): void {
+    if (this.saveTimer === undefined) return;
+    clearTimeout(this.saveTimer);
+    this.saveTimer = undefined;
     this.store.save(this.current);
   }
 }
@@ -125,6 +160,11 @@ function sanitize(s: GameSettings): GameSettings {
     hoverLabel: s.hoverLabel !== false,
     uiScale: UI_SCALES.includes(s.uiScale) ? s.uiScale : d.uiScale,
     reduceMotion: s.reduceMotion === true,
+    sprintMode: SPRINT_MODES.includes(s.sprintMode) ? s.sprintMode : d.sprintMode,
+    crouchMode: CROUCH_MODES.includes(s.crouchMode) ? s.crouchMode : d.crouchMode,
+    headBob: s.headBob !== false,
+    speechSize: UI_SCALES.includes(s.speechSize) ? s.speechSize : d.speechSize,
+    showTips: s.showTips !== false,
     bindings,
   };
 }

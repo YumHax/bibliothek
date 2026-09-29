@@ -25,6 +25,23 @@ export function afterChunk(source: string, chunk: string, code: string): string 
   return source.replace(include, `${include}\n${code}`);
 }
 
+/** Inserts `code` right before `#include <chunk>` in `source` (throws if the chunk is missing). */
+export function beforeChunk(source: string, chunk: string, code: string): string {
+  const include = `#include <${chunk}>`;
+  if (!source.includes(include)) throw new Error(`[shaderPatch] no ${include}`);
+  return source.replace(include, `${code}\n${include}`);
+}
+
+/**
+ * Replaces `#include <chunk>` in `source` by `code` (throws if the chunk is missing). Only for a
+ * chunk no other patch anchors on (`afterChunk` on it would then throw).
+ */
+export function replaceChunk(source: string, chunk: string, code: string): string {
+  const include = `#include <${chunk}>`;
+  if (!source.includes(include)) throw new Error(`[shaderPatch] no ${include}`);
+  return source.replace(include, code);
+}
+
 /** Cheap 2D value noise for fragment shaders (0..1), prepended where a patch needs it (guarded: two patches may both prepend it). */
 export const VALUE_NOISE = /* glsl */ `
 #ifndef PATCH_VALUE_NOISE

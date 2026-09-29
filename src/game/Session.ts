@@ -19,6 +19,7 @@ import { Purchases } from './Purchases';
 import { Browse } from './Browse';
 import { CatCare } from './CatCare';
 import { PhotoControl } from './PhotoControl';
+import { isAction } from '@/input/actions';
 
 export type { SessionParts } from './SessionParts';
 
@@ -83,13 +84,16 @@ export class Session implements SessionActions, SessionHost {
     interactor.onSelect((item) => item.activate(this));
     inspector.onLookEnabledChange((enabled) => (player.controls.enabled = enabled));
     player.controls.addEventListener('unlock', () => {
-      // A haggle or a swap panel takes the mouse with the copy still in hand.
-      if (inspector.isActive && !this.modals.holdingThrough) this.putBack();
-      this.stand();
+      // A panel needs the hands (a haggle or a swap panel works on the copy still in hand); the pause menu leaves the box held.
+      if (inspector.isActive && this.modals.active && !this.modals.holdingThrough) this.putBack();
+      inspector.stopRotating(); // a right button held through the unlock must not leave the look frozen
+      // A paid arcade play holds still (it goes on once the pointer is locked again) instead of being lost.
+      if (!this.arcade.hold()) this.stand();
       // Esc under pointer lock is eaten by the browser and unlocks instead: treat it as "close search / stay here".
       search?.close();
       this.goingOut.onUnlock();
     });
+    player.controls.addEventListener('lock', () => this.arcade.resume());
   }
 
   get held(): GameBox | null {
@@ -102,6 +106,14 @@ export class Session implements SessionActions, SessionHost {
 
   get seated(): boolean {
     return this.parts.player.isSeated;
+  }
+
+  /** What the hands are on (a machine, a market copy, a box, a seat, nothing): the touch bar shows what works there. */
+  get handsContext(): 'arcade' | 'market' | 'held' | 'seated' | 'room' {
+    if (this.arcade.current) return 'arcade';
+    if (this.counter.holding) return 'market';
+    if (this.hands.held) return 'held';
+    return this.parts.player.isSeated ? 'seated' : 'room';
   }
 
   /** True while a DOM overlay (search bar, collection editor, catalogue) owns the keyboard. */
@@ -119,6 +131,8 @@ export class Session implements SessionActions, SessionHost {
     // Right-click drag rotates the held box; the browser menu would steal the mouse.
     doc.addEventListener('contextmenu', (e) => e.preventDefault());
     input.onPress((code, e) => {
+      // The collection opened from the pause menu (the box stayed held there): the hands empty first, as for any panel.
+      if (isAction(code, 'collection') && !this.modals.active) this.putBack();
       for (const route of this.routes) if (route.onKey(code, e)) return;
     });
   }
@@ -237,7 +251,20 @@ export class Session implements SessionActions, SessionHost {
     this.modals.open(modal);
   }
 
+  /** What the crosshair is on, and the timer that re-reads its caption while it stays there. */
+  private hovered: Interactable | null = null;
+  private hoverTimer: number | undefined;
+
+  /** A caption can change while looked at (a lamp switched, a price paid): it is re-read 4 times a second. */
   private onHover(item: Interactable | null): void {
+    this.hovered = item;
+    window.clearInterval(this.hoverTimer);
+    this.hoverTimer = item ? window.setInterval(() => this.showHoverLabel(), 250) : undefined;
+    this.showHoverLabel();
+  }
+
+  private showHoverLabel(): void {
+    const item = this.hovered;
     this.parts.overlay.setHoverLabel(item?.label(this) ?? null, item?.labelPlacement?.() ?? 'crosshair');
   }
 }

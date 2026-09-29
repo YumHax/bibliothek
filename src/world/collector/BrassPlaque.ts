@@ -33,8 +33,8 @@ export class BrassPlaque extends Prop implements Interactable {
     super();
     this.name = 'BrassPlaque';
     part(this, BASE_W, BASE_H, BASE_D, WALNUT, { y: BASE_H / 2 });
-    this.face = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.32, metalness: 0.85 });
-    const edge = standard({ color: 0xa87a22, roughness: 0.3, metalness: 0.9 });
+    this.face = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.32, metalness: 1 });
+    const edge = standard({ color: 0xa87a22, roughness: 0.3, metalness: 1 });
     const plate = new THREE.Group();
     plate.position.set(0, BASE_H, 0.006);
     plate.rotation.x = -LEAN;

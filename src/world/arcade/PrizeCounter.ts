@@ -63,7 +63,7 @@ export class PrizeCounter extends THREE.Group implements Furniture, Interactable
     this.add(boxMesh(WIDTH - 0.1, 0.006, DEPTH * 0.4, GLASS, { y: 0.12 + 0.35, z: DEPTH * 0.28 }));
     // A bowl of coins on the top.
     const bowl = cylinderMesh(0.09, 0.04, paint(0x2a2a30, 0.4), { x: 0.5, y: HEIGHT + 0.02, z: 0.05 }, { radiusBottom: 0.06, segments: 20 });
-    const coins = cylinderMesh(0.08, 0.01, standard({ color: 0xd4a52a, metalness: 0.8, roughness: 0.3 }), { x: 0.5, y: HEIGHT + 0.04, z: 0.05 }, { segments: 20 });
+    const coins = cylinderMesh(0.08, 0.01, standard({ color: 0xd4a52a, metalness: 1, roughness: 0.3 }), { x: 0.5, y: HEIGHT + 0.04, z: 0.05 }, { segments: 20 });
     this.add(bowl, coins);
 
     // Lit sign on the wall behind (a hair off it, whatever the gap to the counter), hung from two rods.
@@ -88,7 +88,7 @@ export class PrizeCounter extends THREE.Group implements Furniture, Interactable
   }
 
   label(): string {
-    return `Prize counter — click for prizes, or tickets for coins (${this.rate} tickets = 1 coin)`;
+    return `Prize counter · swap tickets for prizes or coins (${this.rate} tickets = 1 coin)`;
   }
 
   activate(session: SessionActions): void {

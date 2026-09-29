@@ -6,6 +6,14 @@ import { onKeyLabelsChange, renderKeys } from './keys';
 import { ControlsScreen } from './menu/ControlsScreen';
 import { isField, moveFocus, navItems, panelOpen } from './menu/MenuNav';
 import './menu/menu.css';
+import { onWorldLoad } from './worldLoad';
+import { fadeIn, fadeOut } from './fade';
+import { parseCaption } from './hoverCaption';
+import { hudSlot } from './hudSlot';
+import { lastDevice, onDeviceChange } from '@/input/lastDevice';
+
+/** The world is slow to load: past this (ms) the waiting button says it is still at it. */
+const STILL_LOADING_MS = 10_000;
 
 type Screen = 'main' | 'settings' | 'controls' | 'confirm';
 
@@ -44,7 +52,18 @@ export interface OverlayOptions {
   onNewGame?: () => void;
   /** Shown small under the title screen. */
   version?: string;
+  /**
+   * Settings > Display > Text size, also right on the touch start card: a phone cannot pinch-zoom the page
+   * (the 3D view needs every gesture), so the size is one tap away before the first entry.
+   */
+  textSize?: { get(): 'small' | 'normal' | 'large'; set(size: 'small' | 'normal' | 'large'): void };
 }
+
+const TEXT_SIZES = [
+  { id: 'small', label: 'Small' },
+  { id: 'normal', label: 'Normal' },
+  { id: 'large', label: 'Large' },
+] as const;
 
 const START_FOOT = 'Click, press <kbd>Enter</kbd> or a controller button to start';
 const RESUME_FOOT = '<kbd>Enter</kbd> or click outside to resume · <kbd>Start</kbd> on a controller';
@@ -83,10 +102,23 @@ export class Overlay {
   private modal = false;
   /** The last press the menu consumed, read once by `wasHandled`. */
   private handledCode: string | null = null;
-  /** What the player last used, for the Controls screen and the foot line. */
-  private device: ControlDevice = matchMedia('(pointer: coarse)').matches ? 'touch' : 'keyboard';
+  /** What the player last used (`input/lastDevice`), for the Controls screen, the foot line and the caption's key cap. */
+  private device: ControlDevice = lastDevice();
   private hud = { crosshair: true, hoverLabel: true };
   private hoverText: string | null = null;
+  private hoverPlacement: 'crosshair' | 'edge' = 'crosshair';
+  /** The caption's pending hide (a short delay, so sweeping across two things does not blink it). */
+  private hoverHide: number | undefined;
+  /** The menu is up (it fades out before `hidden`, so `root.hidden` lags behind). */
+  private shown = true;
+  /** A panel closed without a gesture: the card only asks for the click the mouse lock needs (`promptReturn`). */
+  private returning = false;
+  /** The world is not ready yet: the primary button waits ("Opening the door…"). */
+  private loading = true;
+  /** The "still loading" line's timer, while the world loads. */
+  private loadingSlow: number | undefined;
+  /** The mouse lock is being asked for again after the browser's cooldown (`setResuming`): the card waits, quietly. */
+  private resuming = false;
   /** The pause menu's added buttons (`addPauseButton`), by their `data-action`. */
   private readonly pauseActions = new Map<string, () => void>();
 
@@ -97,6 +129,7 @@ export class Overlay {
     this.root.innerHTML = `
       <div class="menu__card ui-card" role="dialog" aria-modal="true" aria-label="Menu">
         <section class="menu__screen" data-screen="main">
+          <p class="menu__return" data-role="return" role="button" tabindex="0" hidden>Click or press Enter to return to the room</p>
           <p class="menu__kicker" data-role="kicker" hidden>Paused</p>
           <h1>Bibliothek</h1>
           <p class="menu__tagline" data-role="tagline">A video game collection, one box at a time</p>
@@ -110,6 +143,7 @@ export class Overlay {
             <button type="button" class="ui-btn" data-nav data-action="controls">Controls</button>
           </nav>
           <ul class="menu__essentials" data-role="essentials"></ul>
+          ${options.textSize ? `<div class="menu__text-size" data-role="text-size" role="radiogroup" aria-label="Text size" hidden><span>Text size</span>${TEXT_SIZES.map((t) => `<button type="button" class="ui-btn" role="radio" data-nav data-text-size="${t.id}">${t.label}</button>`).join('')}</div>` : ''}
           <p class="menu__foot" data-role="foot"></p>
           ${options.version ? `<p class="menu__version" data-role="version">v${escapeHtml(options.version)} · progress saves automatically</p>` : ''}
         </section>
@@ -142,12 +176,22 @@ export class Overlay {
 
     // The backdrop resumes the game with a mouse (a stray tap on a phone should not); clicks inside the card only do what they hit.
     this.root.addEventListener('click', (e) => {
-      if (e.target === this.root && this.device !== 'touch' && this.screen === 'main') onStart();
+      if (this.returning) {
+        onStart();
+        return;
+      }
+      if (e.target === this.root && this.device !== 'touch' && this.screen === 'main' && !this.loading) onStart();
     });
     this.card.addEventListener('click', (e) => {
       const target = e.target as HTMLElement;
       const tab = target.closest<HTMLElement>('[data-tab]')?.dataset.tab as SettingsTab | undefined;
       if (tab) this.selectSettingsTab(tab);
+      const size = target.closest<HTMLElement>('[data-text-size]')?.dataset.textSize as 'small' | 'normal' | 'large' | undefined;
+      if (size && options.textSize) {
+        options.textSize.set(size);
+        playUiSound('pick');
+        this.renderTextSize();
+      }
       const action = target.closest<HTMLElement>('[data-action]')?.dataset.action;
       if (!action) return;
       playUiSound(action === 'back' || action === 'confirm-no' ? 'back' : 'pick');
@@ -166,8 +210,8 @@ export class Overlay {
       }
     });
     input.onPress((code, e) => this.onPress(code, e));
-    // The device last used decides what the Controls screen shows first and whether the backdrop resumes.
-    window.addEventListener('pointerdown', (e) => this.setDevice(e.pointerType === 'touch' || e.pointerType === 'pen' ? 'touch' : 'keyboard'), true);
+    // The device last used decides what the Controls screen shows first, whether the backdrop resumes and the caption's key cap.
+    onDeviceChange((device) => this.setDevice(device));
     onKeyLabelsChange(() => this.renderKeys());
     container.appendChild(this.root);
     this.renderMain();
@@ -178,10 +222,89 @@ export class Overlay {
     this.crosshair.hidden = true;
     container.appendChild(this.crosshair);
 
+    // First in the column under the crosshair (`hudSlot`): the click's reaction and the touch badge stack under it.
     this.label = document.createElement('div');
     this.label.className = 'hover-label';
     this.label.hidden = true;
-    container.appendChild(this.label);
+    hudSlot(container, 'crosshair').appendChild(this.label);
+
+    document.body.classList.add('menu-open');
+    // The primary button waits for the world (the first zone loaded); a failure is the bootstrap's alert.
+    onWorldLoad((state) => this.setLoading(state !== 'ready'));
+  }
+
+  /** While the world loads the primary button is disabled and says so; the backdrop and Enter wait too. */
+  private setLoading(loading: boolean): void {
+    this.loading = loading;
+    const primary = this.primary;
+    primary.toggleAttribute('disabled', loading);
+    primary.setAttribute('aria-busy', String(loading));
+    window.clearTimeout(this.loadingSlow);
+    if (loading) {
+      // The ellipsis ticks (`menu__dots`); a slow connection is told the door is still being opened.
+      primary.innerHTML = 'Opening the door<span class="menu__dots" aria-hidden="true"></span>';
+      primary.setAttribute('aria-label', 'Opening the door');
+      this.loadingSlow = window.setTimeout(() => {
+        if (!this.loading) return;
+        primary.innerHTML = 'Opening the door, still loading<span class="menu__dots" aria-hidden="true"></span>';
+        primary.setAttribute('aria-label', 'Opening the door, still loading');
+      }, STILL_LOADING_MS);
+    } else {
+      primary.removeAttribute('aria-label');
+      this.renderPrimary();
+      if (this.visible && (document.activeElement === document.body || document.activeElement === null)) primary.focus({ preventScroll: true });
+    }
+  }
+
+  /**
+   * The browser refused the mouse lock (its cooldown after Esc) and it is being asked for again: the
+   * card stays up, its button (or the return line) says "Resuming…" and waits. Off: back to its word.
+   */
+  setResuming(resuming: boolean): void {
+    if (resuming === this.resuming) return;
+    this.resuming = resuming;
+    const primary = this.primary;
+    const line = this.screens.main.querySelector<HTMLElement>('[data-role="return"]')!;
+    primary.toggleAttribute('disabled', resuming || this.loading);
+    primary.setAttribute('aria-busy', String(resuming || this.loading));
+    if (resuming) {
+      primary.innerHTML = 'Resuming<span class="menu__dots" aria-hidden="true"></span>';
+      line.innerHTML = 'Resuming<span class="menu__dots" aria-hidden="true"></span>';
+    } else {
+      line.textContent = 'Click or press Enter to return to the room';
+      this.renderPrimary();
+    }
+  }
+
+  /** The world is ready to walk into (the start card's button is live). */
+  get ready(): boolean {
+    return !this.loading;
+  }
+
+  /** The primary button's word: Enter the room, Continue over a save, Resume once started. */
+  private renderPrimary(): void {
+    if (this.loading || this.resuming) return;
+    this.primary.textContent = this.started ? 'Resume' : this.options.hasProgress ? 'Continue' : 'Enter the room';
+  }
+
+  /**
+   * A panel closed without a gesture (Esc is not one), so the browser would refuse the mouse lock: the
+   * card shows only "Click to return to the room" until the click (or Enter) that it needs; Esc shows
+   * the whole pause menu instead.
+   */
+  promptReturn(): void {
+    this.returning = true;
+    this.playing = false;
+    this.apply();
+    this.renderReturn();
+    this.screens.main.querySelector<HTMLElement>('[data-role="return"]')!.focus({ preventScroll: true });
+  }
+
+  private renderReturn(): void {
+    const line = this.screens.main.querySelector<HTMLElement>('[data-role="return"]')!;
+    line.hidden = !this.returning;
+    this.card.classList.toggle('menu__card--return', this.returning);
+    this.root.classList.toggle('menu--return', this.returning);
   }
 
   /**
@@ -237,13 +360,20 @@ export class Overlay {
   setHud(hud: { crosshair: boolean; hoverLabel: boolean }): void {
     this.hud = hud;
     this.apply();
-    this.setHoverLabel(this.hoverText, this.label.classList.contains('hover-label--edge') ? 'edge' : 'crosshair');
+    const text = this.hoverText;
+    this.hoverText = null; // redraw
+    this.setHoverLabel(text, this.hoverPlacement);
   }
 
   /** Hide the menu and show the crosshair (or the reverse). */
   setPlaying(playing: boolean): void {
     if (playing && !this.started) this.started = true;
+    if (playing && this.returning) {
+      this.returning = false;
+      this.renderReturn();
+    }
     this.playing = playing;
+    if (!playing) this.setHoverLabel(null); // out of the room nothing is looked at (the caption must not linger over the menu)
     this.apply();
   }
 
@@ -275,15 +405,22 @@ export class Overlay {
   }
 
   private get visible(): boolean {
-    return !this.root.hidden;
+    return this.shown;
   }
 
   private apply(): void {
     const wasVisible = this.visible;
-    this.root.hidden = this.playing || this.modal;
-    this.crosshair.hidden = !this.playing || this.modal || !this.hud.crosshair;
+    this.shown = !(this.playing || this.modal);
+    // In quickly (the CSS entrance), out with a short fade: resuming does not cut the card away.
+    if (this.shown) fadeIn(this.root, 'menu--closing');
+    else fadeOut(this.root, 'menu--closing', 150);
+    document.body.classList.toggle('menu-open', this.shown);
+    // The crosshair fades in and out (100 ms) rather than blinking.
+    if (this.playing && !this.modal && this.hud.crosshair) fadeIn(this.crosshair, 'crosshair--out');
+    else fadeOut(this.crosshair, 'crosshair--out', 100);
     if (this.visible && !wasVisible) {
       this.renderMain();
+      this.renderReturn();
       this.show('main');
       this.primary.focus({ preventScroll: true });
     } else if (!this.visible && this.card.contains(document.activeElement)) {
@@ -299,6 +436,8 @@ export class Overlay {
     if (device === this.device) return;
     this.device = device;
     if (this.visible) this.renderFoot();
+    // The caption up now gets the new device's key cap.
+    if (this.hoverText && !this.label.hidden) this.renderCaption(this.hoverText);
   }
 
   private renderMain(): void {
@@ -309,7 +448,7 @@ export class Overlay {
     q('tagline').hidden = paused;
     const version = this.screens.main.querySelector<HTMLElement>('[data-role="version"]');
     if (version) version.hidden = paused;
-    if (paused) this.primary.textContent = 'Resume';
+    this.renderPrimary();
     const button = (action: string) => this.screens.main.querySelector<HTMLElement>(`[data-action="${action}"]`);
     const newGame = button('new-game');
     if (newGame) newGame.hidden = paused;
@@ -326,9 +465,19 @@ export class Overlay {
     this.renderFoot();
   }
 
+  /** The touch start card's text size row: up before the first entry on a touchscreen, the size in use checked. */
+  private renderTextSize(): void {
+    const row = this.screens.main.querySelector<HTMLElement>('[data-role="text-size"]');
+    if (!row || !this.options.textSize) return;
+    row.hidden = this.started || this.device !== 'touch';
+    const now = this.options.textSize.get();
+    for (const button of row.querySelectorAll<HTMLElement>('[data-text-size]')) button.setAttribute('aria-checked', String(button.dataset.textSize === now));
+  }
+
   private renderFoot(): void {
     const foot = this.screens.main.querySelector<HTMLElement>('[data-role="foot"]')!;
     foot.innerHTML = this.device === 'touch' ? TOUCH_FOOT : this.started ? RESUME_FOOT : START_FOOT;
+    this.renderTextSize();
   }
 
   /** Everything showing a key name, re-rendered when the bindings or the layout change. */
@@ -336,7 +485,7 @@ export class Overlay {
     const essentials = CONTROLS.filter((c) => c.essential);
     this.screens.main.querySelector<HTMLElement>('[data-role="essentials"]')!.innerHTML = essentials
       .map((c) => {
-        const keys = this.device === 'touch' ? c.touch : c.keys;
+        const keys = this.device === 'gamepad' ? c.pad : this.device === 'touch' ? c.touch : c.keys;
         return keys === undefined ? '' : `<li>${renderKeys(keys)} <span>${escapeHtml(c.action.toLowerCase())}</span></li>`;
       })
       .join('');
@@ -389,19 +538,22 @@ export class Overlay {
     (target && target.offsetParent !== null ? target : navItems(this.screens[screen])[0])?.focus({ preventScroll: true });
   }
 
-  /** One step of a range input (Left / Right, the D-pad), firing `input` like a drag would. */
+  /** One step of a range input (Left / Right, the D-pad), firing `input` and `change` like a drag and its release would. */
   private nudge(range: HTMLInputElement, direction: 1 | -1): void {
     if (direction > 0) range.stepUp();
     else range.stepDown();
     range.dispatchEvent(new Event('input', { bubbles: true }));
+    range.dispatchEvent(new Event('change', { bubbles: true }));
     playUiSound('move');
   }
 
   private onPress(code: string, e: KeyboardEvent): void {
     if (!this.visible) return;
-    this.setDevice(code.startsWith('Gamepad') ? 'gamepad' : 'keyboard');
     const focused = document.activeElement;
     const inCard = focused instanceof HTMLElement && this.card.contains(focused);
+    // An alert's button (Retry) is part of the menu's walk: Up from the first item reaches it, Enter / A presses it.
+    const alertButton = document.querySelector<HTMLElement>('.alert-bar:not([hidden]) .alert-bar__action');
+    const inAlert = !!alertButton && focused === alertButton;
     const handled = () => {
       this.handledCode = code;
       e.preventDefault();
@@ -415,6 +567,11 @@ export class Overlay {
       case 'ArrowUp':
       case 'GamepadUp':
         if (code === 'ArrowUp' && focused instanceof HTMLSelectElement) return; // the select's own options
+        if (alertButton && !inAlert && navItems(this.screens[this.screen])[0] === focused) {
+          alertButton.focus();
+          playUiSound('move');
+          return handled();
+        }
         moveFocus(this.screens[this.screen], -1);
         return handled();
       case 'ArrowLeft':
@@ -436,6 +593,13 @@ export class Overlay {
       }
       case 'Escape':
       case 'GamepadB':
+        if (this.returning) {
+          // The whole pause menu, instead of the one line.
+          this.returning = false;
+          this.renderReturn();
+          this.primary.focus({ preventScroll: true });
+          return handled();
+        }
         if (this.screen !== 'main') {
           playUiSound('back');
           this.show(this.screen === 'confirm' ? this.confirmFrom : 'main');
@@ -445,8 +609,10 @@ export class Overlay {
       case 'NumpadEnter':
         if (isField(focused)) return; // typing the cat's name
         e.preventDefault();
-        if (inCard && focused instanceof HTMLButtonElement) focused.click();
-        else if (this.screen === 'main') this.onStart();
+        if (inAlert) alertButton.click();
+        else if (this.returning) this.onStart();
+        else if (inCard && focused instanceof HTMLButtonElement) focused.click();
+        else if (this.screen === 'main' && !this.loading) this.onStart();
         return;
       case 'Space':
         // Only the focused button: a stray Space must never start or resume the game.
@@ -455,6 +621,10 @@ export class Overlay {
         if (inCard && focused instanceof HTMLButtonElement && focused !== this.primary) focused.click();
         return;
       case 'GamepadA':
+        if (inAlert) {
+          alertButton.click();
+          return handled();
+        }
         // On the primary button the press enters the room (the PointerLockFlow's controller mode).
         if (!inCard || focused === this.primary || !(focused instanceof HTMLButtonElement)) return;
         focused.click();
@@ -462,11 +632,53 @@ export class Overlay {
     }
   }
 
-  /** Small caption naming the object being looked at: under the crosshair, or along the top edge so it never covers a playing screen. */
+  /**
+   * Small caption naming the object being looked at: under the crosshair, or along the top edge so it
+   * never covers a playing screen. `Name · verb` (the repo's convention) shows the name, then a key cap
+   * for the device in hand (the mouse, the controller's A, a fingertip) and the verb; a legacy
+   * "…click to verb" caption is read the same way. It fades in, and waits a moment before hiding. The
+   * crosshair itself brightens while there is something to use (`crosshair--active`). Asked again
+   * with the same text (the Session re-reads it a few times a second), nothing is redrawn.
+   */
   setHoverLabel(text: string | null, placement: 'crosshair' | 'edge' = 'crosshair'): void {
+    if (this.modal || !this.playing) text = null; // a panel or the menu is up: nothing is looked at (the Session re-reads it meanwhile)
+    const changed = text !== this.hoverText || placement !== this.hoverPlacement;
     this.hoverText = text;
-    this.label.hidden = !text || !this.hud.hoverLabel;
-    if (text) this.label.textContent = text;
-    this.label.classList.toggle('hover-label--edge', placement === 'edge');
+    this.hoverPlacement = placement;
+    this.crosshair.classList.toggle('crosshair--active', !!text);
+    const label = this.label;
+    if (!text || !this.hud.hoverLabel) {
+      if (label.hidden || this.hoverHide !== undefined) return;
+      this.hoverHide = window.setTimeout(() => {
+        this.hoverHide = undefined;
+        label.classList.remove('hover-label--in');
+        fadeOut(label, 'hover-label--out', 120);
+      }, 80);
+      return;
+    }
+    window.clearTimeout(this.hoverHide);
+    this.hoverHide = undefined;
+    if (!changed && !label.hidden && label.classList.contains('hover-label--in')) return;
+    this.renderCaption(text);
+    label.classList.toggle('hover-label--edge', placement === 'edge');
+    const wasHidden = label.hidden;
+    fadeIn(label, 'hover-label--out');
+    if (wasHidden) void label.offsetWidth; // start the fade from transparent
+    label.classList.add('hover-label--in');
+  }
+
+  /** The caption's markup: the name, and the verb behind the device's key cap. */
+  private renderCaption(text: string): void {
+    const { name, verb } = parseCaption(text);
+    const nameHtml = name ? `<span class="hover-label__name">${escapeHtml(name)}</span>` : '';
+    const verbHtml = verb ? `<span class="hover-label__verb">${this.capHtml()}${escapeHtml(verb)}</span>` : '';
+    this.label.innerHTML = nameHtml + verbHtml;
+  }
+
+  /** The key cap for the device last used (`input/lastDevice`, not how the room was entered): the mouse (default), the controller's A, a finger. */
+  private capHtml(): string {
+    if (this.device === 'gamepad') return '<span class="hover-label__cap hover-label__cap--pad" aria-label="A">A</span>';
+    if (this.device === 'touch') return '<span class="hover-label__cap hover-label__cap--touch" aria-label="Tap"></span>';
+    return '<span class="hover-label__cap hover-label__cap--mouse" aria-label="Click"></span>';
   }
 }

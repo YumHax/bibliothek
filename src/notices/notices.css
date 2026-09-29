@@ -60,23 +60,30 @@
 }
 .speech__name {
   display: block;
-  margin-bottom: 0.1rem;
+  margin-bottom: 0.15rem;
   font-family: var(--ui-font-display);
-  font-size: 0.7rem;
+  font-size: 0.8rem;
   letter-spacing: 0.04em;
-  color: #9a6d08;
+  /* Dark enough on the cream bubble (about 7:1). */
+  color: #6b4a05;
   text-transform: uppercase;
 }
 /* A word in passing: small, comic, no name. */
 .speech--passing {
   padding: 0.3rem 0.7rem;
-  font-family: 'Comic Sans MS', 'Chalkboard SE', system-ui, sans-serif;
+  font-family: var(--ui-font-comic);
   font-weight: 700;
   font-size: 0.92rem;
   text-align: center;
   opacity: 0.94;
 }
 .speech--out { opacity: 0; }
+/* Settings > Display > Speech text size, over the interface's own size. */
+html.speech-small .speech { font-size: 0.9rem; }
+html.speech-small .speech.speech--subtitle { font-size: 0.95rem; }
+html.speech-large .speech { font-size: 1.25rem; }
+html.speech-large .speech.speech--subtitle { font-size: 1.3rem; }
+html.speech-large .speech__name { font-size: 0.92rem; }
 @keyframes speech-in {
   from { opacity: 0; translate: 0 8px; }
   to   { opacity: 1; translate: 0 0; }
@@ -121,11 +128,9 @@
 
 /* --- the crosshair's line -------------------------------------------------------------------- */
 
+/* In the column under the crosshair (`hud-slot--crosshair`), after the caption. */
 .reaction {
-  position: fixed;
-  left: 50%;
-  top: calc(50% + 3.4rem);
-  transform: translateX(-50%);
+  order: 1;
   max-width: min(30rem, 80vw);
   padding: 0.5rem 1rem;
   border-radius: var(--ui-radius-sm);
@@ -168,10 +173,9 @@
 
 /* --- tips ------------------------------------------------------------------------------------ */
 
+/* In the top-left column (`hud-slot--top-left`), under the wallet chip. */
 .tip-board {
-  position: fixed;
-  top: 3.8rem;
-  left: 1rem;
+  order: 1;
   width: min(21rem, 42vw);
   display: flex;
   flex-direction: column;
@@ -182,7 +186,7 @@
   border-radius: var(--ui-radius);
   background: var(--ui-panel);
   border: 1px solid var(--ui-border);
-  border-left: 4px solid #5fb3e6;
+  border-left: 4px solid var(--ui-info);
   color: var(--ui-text);
   box-shadow: var(--ui-shadow);
   animation: tip-in 380ms var(--ui-ease);
@@ -190,10 +194,10 @@
 }
 .tip__head {
   font-family: var(--ui-font-display);
-  font-size: 0.68rem;
+  font-size: max(0.68rem, 11px);
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: #5fb3e6;
+  color: var(--ui-info);
 }
 .tip__text {
   margin-top: 0.15rem;
@@ -204,8 +208,28 @@
 .tip--out { opacity: 0; translate: -1rem 0; }
 @keyframes tip-in {
   0%   { opacity: 0; translate: -2rem 0; }
-  60%  { opacity: 1; translate: 0.3rem 0; box-shadow: 0 0 0 3px rgba(95, 179, 230, 0.55), var(--ui-shadow); }
+  60%  { opacity: 1; translate: 0.3rem 0; box-shadow: 0 0 0 3px var(--ui-info-glow), var(--ui-shadow); }
   100% { translate: 0 0; }
+}
+/* The first day's steps: a slip of squared paper in felt pen, like the to-do list. */
+.tip.tip--note {
+  border: none;
+  border-radius: 2px;
+  color: #1d3557;
+  font-family: var(--ui-font-hand);
+  rotate: -0.6deg;
+  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.5);
+  background:
+    repeating-linear-gradient(0deg, transparent 0, transparent 15px, rgba(80, 120, 170, 0.18) 15px, rgba(80, 120, 170, 0.18) 16px),
+    repeating-linear-gradient(90deg, transparent 0, transparent 15px, rgba(80, 120, 170, 0.18) 15px, rgba(80, 120, 170, 0.18) 16px),
+    #fdfcf7;
+  animation: tip-note-in 380ms var(--ui-ease);
+}
+.tip--note .tip__head { font-family: var(--ui-font-hand); font-size: 0.8rem; letter-spacing: 0.02em; text-transform: none; color: #9b3d33; text-decoration: underline; }
+.tip--note .tip__text { font-size: 0.98rem; }
+@keyframes tip-note-in {
+  from { opacity: 0; translate: -2rem 0; rotate: -3deg; }
+  to   { opacity: 1; translate: 0 0; rotate: -0.6deg; }
 }
 
 /* --- the card to read ------------------------------------------------------------------------ */
@@ -214,11 +238,15 @@
   position: fixed;
   left: 50%;
   bottom: 6.5rem;
+  transition: bottom 260ms var(--ui-ease);
   transform: translateX(-50%);
   width: min(34rem, 88vw);
   display: flex;
   justify-content: center;
 }
+/* Subtitles up (a radio's news, a voice): the card rises over their lines instead of covering them. */
+body:has(.subtitles > :nth-child(2)) .reading-stage { bottom: 9.5rem; }
+body:has(.subtitles > :nth-child(3)) .reading-stage { bottom: 12.5rem; }
 .reading {
   --paper: #f4ecd8;
   --ink: #2b2418;
@@ -230,7 +258,7 @@
   background: var(--paper);
   color: var(--ink);
   box-shadow: 0 10px 34px rgba(0, 0, 0, 0.55);
-  font-family: Georgia, 'Iowan Old Style', 'Times New Roman', serif;
+  font-family: var(--ui-font-serif);
   rotate: -0.6deg;
   animation: reading-in 360ms var(--ui-ease);
   transition: opacity 320ms ease, translate 320ms ease;
@@ -255,12 +283,14 @@
   margin: 0.6rem 0 0;
   padding-top: 0.45rem;
   border-top: 1px dashed var(--rule);
-  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font-family: var(--ui-font-body);
   font-size: 0.95rem;
   font-weight: 700;
   white-space: pre-line;
 }
 .reading__effect::before { content: '→ '; }
+/* The overflow of a busy moment: "…and 2 more notes" under the last card (`ReadingCard`). */
+.reading__more { margin: 0.55rem 0 0; font-size: 0.85rem; font-style: italic; opacity: 0.75; }
 .reading[data-look='letter'] { --paper: #fdfcf8; --ink: #1f2430; rotate: 0.5deg; }
 .reading[data-look='radio'] {
   --paper: #1b1a17;
@@ -292,6 +322,8 @@
   position: fixed;
   left: 50%;
   top: 16vh;
+  /* Touch: under the action bar, however many rows it wraps to. */
+  top: max(16vh, calc(var(--touch-bar-bottom, 0px) + 0.75rem));
   transform: translateX(-50%);
   width: min(34rem, 90vw);
   display: flex;
@@ -382,6 +414,9 @@
   to   { opacity: 1; scale: 1; }
 }
 @keyframes rays-spin { to { rotate: 360deg; } }
+/* Reduced motion (`html.reduce-motion`, the setting or the system's): the rays stand still, the banner arrives without its overshoot (`reward--calm`). */
+.reduce-motion .reward__rays { animation: none; }
+.reward--calm, .reward--calm .reward__chip { animation-timing-function: ease-out; }
 
 /* --- alerts ---------------------------------------------------------------------------------- */
 
@@ -405,4 +440,8 @@
   transition: opacity 300ms ease;
 }
 .alert-bar::before { content: '⚠ '; color: #ffb3a8; }
+/* Touch, in the room: under the action bar, so the Menu button stays in reach. */
+body.input-touch .alert-bar { top: calc(var(--touch-bar-bottom, 0px) + 0.5rem); }
+.alert-bar--action { pointer-events: auto; }
+.alert-bar__action { margin-left: 0.6rem; padding: 0.2em 0.8em; font-size: 0.9rem; border-color: rgba(255, 255, 255, 0.5); }
 .alert-bar--out { opacity: 0; }

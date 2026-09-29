@@ -2,6 +2,7 @@ import type { Game } from '@/catalog/types';
 import { getPlatform } from '@/catalog/platforms';
 import type { CollectionStore } from '@/collection/CollectionStore';
 import type { JobLot, MarketStock } from '@/economy/MarketStock';
+import { lotOffer } from '@/economy/JobLot';
 import type { Transactions } from '@/economy/Transactions';
 import { describeCondition } from '@/economy/pricing';
 import { playCoins } from '@/audio/coins';
@@ -9,8 +10,8 @@ import { MarketPanel, coinsHtml, escapeHtml } from './MarketPanel';
 
 /**
  * The day's job lot, a crate of a few games from anywhere sold as one: what is in it (and in what
- * state), what it would all cost one by one, the lot's price, one button. Games already in the
- * collection stay in the crate (the price does not change: that is a lot for you). Bought, the
+ * state), what it would all cost one by one, the lot's price, one button. A game the player has
+ * bought since the crate was drawn is taken out, and its part out of the price. Bought, the
  * rest goes to the parcel and the crate reads SOLD for the day (`onBought`).
  */
 export class JobLotPanel extends MarketPanel {
@@ -53,13 +54,16 @@ export class JobLotPanel extends MarketPanel {
           <span class="catalogue__meta">${escapeHtml(getPlatform(game.platform).shortName)}</span>
         </div>`;
     }).join('');
-    const affordable = this.deps.wallet.coins >= lot.price;
+    const offer = lotOffer(lot, (id) => this.deps.collection.owns(id));
+    const taken = lot.games.length - offer.games.length;
+    const affordable = this.deps.wallet.coins >= offer.price;
+    const none = offer.games.length === 0;
     this.body.innerHTML = `
       ${rows}
       <div class="catalogue__row joblot__total">
-        <span class="catalogue__title"><b>${lot.games.length} games</b> <span class="catalogue__meta">worth about ${lot.worth} one by one</span></span>
-        ${coinsHtml(lot.price)}
-        <button type="button" class="ui-btn ui-btn--primary" data-action="buy" data-autofocus ${sold || !affordable ? 'disabled' : ''}>${sold ? 'Sold' : affordable ? 'Buy the lot' : 'Too dear'}</button>
+        <span class="catalogue__title"><b>${offer.games.length} game${offer.games.length === 1 ? '' : 's'}</b> <span class="catalogue__meta">${taken ? `${taken} already yours, taken out of the price · ` : ''}worth about ${lot.worth} one by one</span></span>
+        ${coinsHtml(offer.price)}
+        <button type="button" class="ui-btn ui-btn--primary" data-action="buy" data-autofocus ${sold || none || !affordable ? 'disabled' : ''}>${sold ? 'Sold' : none ? 'All yours already' : affordable ? 'Buy the lot' : 'Too dear'}</button>
       </div>`;
   }
 
@@ -68,7 +72,8 @@ export class JobLotPanel extends MarketPanel {
     if (this.deps.market.lot.sold) return 'SOLD';
     const lot = await this.deps.market.lot.today();
     this.lot ??= lot;
-    return `${lot.games.length} games · ${lot.price} coins`;
+    const offer = lotOffer(lot, (id) => this.deps.collection.owns(id));
+    return `${offer.games.length} games · ${offer.price} coins`;
   }
 
   protected onAction(action: string): void {
@@ -76,14 +81,15 @@ export class JobLotPanel extends MarketPanel {
     const { market, wallet, tx } = this.deps;
     const lot = this.lot;
     if (!lot || market.lot.sold) return;
+    const price = lotOffer(lot, (id) => this.deps.collection.owns(id)).price;
     const bought = tx.buyLot(lot);
     if (!bought.ok) {
-      if (bought.reason === 'short') this.setStatus(`The lot is ${lot.price} coins and you have ${wallet.coins}.`, true);
+      if (bought.reason === 'short') this.setStatus(`The lot is ${price} coins and you have ${wallet.coins}.`, true);
       return;
     }
     const fresh = bought.games.length;
     playCoins(6);
-    this.setStatus(`Bought the lot for ${lot.price} coins: ${fresh} new game${fresh === 1 ? '' : 's'} in a parcel in the hallway.`);
+    this.setStatus(`Bought the lot for ${price} coins: ${fresh} new game${fresh === 1 ? '' : 's'} in a parcel in the hallway.`);
     this.onBought?.();
     this.refresh();
   }

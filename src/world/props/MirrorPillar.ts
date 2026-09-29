@@ -13,7 +13,7 @@ export interface MirrorPillarOptions {
 }
 
 const BASE_H = 0.12;
-const FRAME = standard({ color: 0xb9bcc0, metalness: 0.7, roughness: 0.3 });
+const FRAME = standard({ color: 0xb9bcc0, metalness: 1, roughness: 0.35 });
 const MIRROR = standard({ color: 0xc8d0dc, metalness: 1, roughness: 0.04 });
 
 /**

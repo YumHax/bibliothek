@@ -5,7 +5,20 @@ import type { CatBody, CatPose, CoatKind } from './types';
 import { QUALITY } from '@/graphics/quality';
 import { fabric } from '@/world/materials/finishes';
 import { CatFur } from './CatFur';
-import { JOINT_KEYS, POSES, ROOT_STAND_Y, STAND, TAIL_SWAY, type JointAngles, type LowerKey, type UpperKey } from './catPoses';
+import {
+  GROOM_PHASES,
+  JOINT_KEYS,
+  JOINT_TAU,
+  POSES,
+  ROOT_STAND_Y,
+  STAND,
+  TAIL_SWAY,
+  mirrored,
+  type GroomPhase,
+  type JointAngles,
+  type LowerKey,
+  type UpperKey,
+} from './catPoses';
 
 /*
  * The procedural cat body: primitives on a small rig of pivots, posed by a table of joint angles
@@ -27,10 +40,13 @@ import { JOINT_KEYS, POSES, ROOT_STAND_Y, STAND, TAIL_SWAY, type JointAngles, ty
  *                               segment i's pivot is the child of segment i-1's
  *
  * A pose is a `JointAngles` record (the table is in `catPoses.ts`); `setPose` chooses the target and `update` eases the current
- * angles towards it (~0.4 s). On top of the blended pose, `update` layers the gait (leg swing,
- * body and head bob), the pose's own periodic motion (grooming bob, scratching paws, lapping),
- * the gaze, blinking, ear twitches, breathing, purring tremble, tail sway and flicks, then writes
- * the result into the pivots. Nothing allocates per frame.
+ * angles towards it, each joint at its own pace (`JOINT_TAU`: the head leads, the tail trails). A
+ * wash cycles through its phases (paw, face, flank) with either paw. On top of the blended pose,
+ * `update` layers the gait (walk blending into trot with the speed: leg swing, body and head bob),
+ * the pose's own periodic motion (grooming, scratching or kneading paws, lapping), the gaze (quick
+ * saccades, slow settling), blinks (now and then a double one, a slow one on request), ear twitches
+ * and pricks, breathing, purring tremble, the landing squash, and the tail's sway and flicks as
+ * waves running to its tip, then writes the result into the pivots. Nothing allocates per frame.
  */
 
 /** Nose to rump, tail excluded. */
@@ -51,12 +67,44 @@ const EYE_R = 0.009;
 const TAIL_PIVOT = { x: 0, y: 0.02, z: -0.17 };
 const TAIL_SEGMENTS = 6;
 const TAIL_SEG_LEN = 0.047;
-/** Pose blend time constant: 3τ ≈ 0.4 s to settle. */
-const POSE_TAU = 0.13;
 const GAZE_YAW_MAX = THREE.MathUtils.degToRad(70);
 const GAZE_PITCH_MAX = THREE.MathUtils.degToRad(35);
+/** A gaze target further round than this (behind the cat) is not followed. */
+const GAZE_DROP = THREE.MathUtils.degToRad(110);
 const HOVER_EMISSIVE = 0x1a1410;
 const FLICK_DURATION = 0.6;
+const PRICK_DURATION = 0.9;
+const SLOW_BLINK_S = 0.8;
+/** Chance that a blink comes as a pair, and how soon the second follows the first. */
+const DOUBLE_BLINK = { chance: 0.2, after: 0.28 };
+/** How long a wash stays on one phase (s). */
+const GROOM_PHASE_S = { min: 2.5, max: 5 };
+/** Walk and trot speeds (m/s): the gait blends from one to the other between them. */
+const GAIT_SPEEDS = { walk: 0.45, trot: 1.1 };
+/** A change of the hips' height this big (m) or more eases this much slower (share of its pace)... */
+const BIG_LIFT_M = 0.08;
+const BIG_LIFT_SLOWER = 0.6;
+/** ...and the legs get there in this share of the hips' time. */
+const LEGS_LEAD = 0.7;
+const LEG_KEYS: ReadonlySet<string> = new Set(['flUpper', 'flLower', 'frUpper', 'frLower', 'hlUpper', 'hlLower', 'hrUpper', 'hrLower']);
+/** The legs' swing either side of upright (rad) at a walk and at a trot. */
+const GAIT_SWING = { walk: 0.5, trot: 0.62 };
+/**
+ * How far the body moves in one gait cycle, over how far a planted paw sweeps under it
+ * (2 × leg × sin swing): a little over 1, so the paws keep their grip on the floor instead of skating.
+ */
+const STRIDE_OVER_SWEEP = 1.1;
+/** Delay (s) of the tail's sway from one segment to the next, and phase step of its lash: the wave travels to the tip. */
+const TAIL_LAG_S = 0.12;
+const LASH_STEP = 0.9;
+
+/** Every wash phase for either paw: `right` as in the table, `left` mirrored. */
+const GROOM_SIDES: Record<'right' | 'left', Record<GroomPhase, JointAngles>> = {
+  right: GROOM_PHASES,
+  left: { paw: mirrored(GROOM_PHASES.paw), face: mirrored(GROOM_PHASES.face), flank: mirrored(GROOM_PHASES.flank) },
+};
+/** What each wash phase may be followed by. */
+const GROOM_NEXT: Record<GroomPhase, readonly GroomPhase[]> = { paw: ['face', 'flank', 'face'], face: ['paw'], flank: ['paw', 'flank'] };
 
 interface Leg {
   hip: THREE.Group;
@@ -134,10 +182,23 @@ export class CatModel extends THREE.Group implements CatBody {
   private purring = false;
   private purrWeight = 0;
   private flickLeft = 0;
+  private prickLeft = 0;
+  /** Landing squash, 0..1, dying away. */
+  private squash = 0;
+
+  private groomSide: 'right' | 'left' = 'right';
+  private groomPhase: GroomPhase = 'paw';
+  private groomLeft = 0;
+  /** Extra angle per leg joint this frame from the pose's own motion (reset every frame). */
+  private readonly legMods: Record<UpperKey | LowerKey, number> = {
+    flUpper: 0, flLower: 0, frUpper: 0, frLower: 0, hlUpper: 0, hlLower: 0, hrUpper: 0, hrLower: 0,
+  };
 
   private eyeOpen = 1;
   private blinkIn = 3;
   private blinkLeft = 0;
+  private doubleIn = -1;
+  private slowBlinkLeft = 0;
   private twitchIn = 6;
   private twitchSide = 0;
   private twitchAmount = 0;
@@ -156,7 +217,7 @@ export class CatModel extends THREE.Group implements CatBody {
     this.pawMaterial = fabric({ color: palette.paws, roughness: 0.95, sheenTint });
     this.earInnerMaterial = new THREE.MeshStandardMaterial({ color: palette.earInner, roughness: 0.8 });
     this.noseMaterial = new THREE.MeshStandardMaterial({ color: palette.nose, roughness: 0.4 });
-    this.eyeMaterial = new THREE.MeshStandardMaterial({ map: this.textures.eye, roughness: 0.15, metalness: 0.1 });
+    this.eyeMaterial = new THREE.MeshStandardMaterial({ map: this.textures.eye, roughness: 0.15, metalness: 0 });
     this.furMaterials = [this.bodyMaterial, this.tailMaterial, this.furMaterial, this.muzzleMaterial, this.pawMaterial];
 
     this.add(this.root);
@@ -299,11 +360,22 @@ export class CatModel extends THREE.Group implements CatBody {
 
   // ---------------------------------------------------------------- CatBody API
 
+  get pose(): CatPose {
+    return this.currentPose;
+  }
+
   setPose(pose: CatPose): void {
     if (pose === this.currentPose) return;
     this.currentPose = pose;
     this.target = POSES[pose];
     this.poseTime = 0;
+    if (pose === 'groom') {
+      // Either paw, starting on it.
+      this.groomSide = Math.random() < 0.5 ? 'right' : 'left';
+      this.groomPhase = 'paw';
+      this.groomLeft = THREE.MathUtils.randFloat(GROOM_PHASE_S.min, GROOM_PHASE_S.max);
+      this.target = GROOM_SIDES[this.groomSide].paw;
+    }
   }
 
   setSpeed(mps: number): void {
@@ -327,6 +399,18 @@ export class CatModel extends THREE.Group implements CatBody {
     this.flickLeft = FLICK_DURATION;
   }
 
+  prick(): void {
+    this.prickLeft = PRICK_DURATION;
+  }
+
+  slowBlink(): void {
+    if (this.current.eyes > 0.3 && this.slowBlinkLeft <= 0) this.slowBlinkLeft = SLOW_BLINK_S;
+  }
+
+  land(strength: number): void {
+    this.squash = Math.max(this.squash, THREE.MathUtils.clamp(strength, 0, 1));
+  }
+
   setCoat(coat: CoatKind): void {
     const palette = COAT_PALETTES[coat];
     this.textures.paint(coat);
@@ -348,14 +432,25 @@ export class CatModel extends THREE.Group implements CatBody {
     this.time += dt;
     this.poseTime += dt;
 
-    // Ease every joint towards the pose.
-    const blend = 1 - Math.exp(-dt / POSE_TAU);
+    if (this.currentPose === 'groom') this.updateGroom(dt);
+
+    // Ease every joint towards the pose, each at its own pace. A big change of height (curled up to
+    // standing, or down again) is slower, and the legs lead the body through it: they unfold before the
+    // hips rise and fold before they sink, so no paw passes through the floor on the way.
     const cur = this.current;
     const tgt = this.target;
-    for (const key of JOINT_KEYS) cur[key] += (tgt[key] - cur[key]) * blend;
+    const lift = Math.min(1, Math.abs(tgt.rootY - cur.rootY) / BIG_LIFT_M);
+    const rootTau = JOINT_TAU.rootY * (1 + BIG_LIFT_SLOWER * lift);
+    for (const key of JOINT_KEYS) {
+      let tau = key === 'rootY' ? rootTau : JOINT_TAU[key];
+      if (LEG_KEYS.has(key)) tau = Math.min(tau, rootTau * LEGS_LEAD);
+      cur[key] += (tgt[key] - cur[key]) * (1 - Math.exp(-dt / tau));
+    }
 
     this.purrWeight += ((this.purring ? 1 : 0) - this.purrWeight) * Math.min(1, dt * 4);
     if (this.flickLeft > 0) this.flickLeft = Math.max(0, this.flickLeft - dt);
+    if (this.prickLeft > 0) this.prickLeft = Math.max(0, this.prickLeft - dt);
+    this.squash *= Math.exp(-dt * 7);
     this.updateGait(dt);
     this.updateGaze(dt);
     this.updateEyes(dt);
@@ -365,11 +460,27 @@ export class CatModel extends THREE.Group implements CatBody {
 
   // ---------------------------------------------------------------- per-frame pieces
 
+  /** The wash moves on to its next phase now and then. */
+  private updateGroom(dt: number): void {
+    this.groomLeft -= dt;
+    if (this.groomLeft > 0) return;
+    const next = GROOM_NEXT[this.groomPhase];
+    this.groomPhase = next[Math.floor(Math.random() * next.length)];
+    this.groomLeft = THREE.MathUtils.randFloat(GROOM_PHASE_S.min, GROOM_PHASE_S.max);
+    this.target = GROOM_SIDES[this.groomSide][this.groomPhase];
+  }
+
+  /** 0 at a walk .. 1 at a trot, eased between the two speeds. */
+  private get trotWeight(): number {
+    return THREE.MathUtils.smoothstep(this.speed, GAIT_SPEEDS.walk, GAIT_SPEEDS.trot);
+  }
+
   private updateGait(dt: number): void {
     const walking = this.speed > 0 && (this.currentPose === 'stand' || this.currentPose === 'crouch');
     this.gaitWeight += ((walking ? 1 : 0) - this.gaitWeight) * Math.min(1, dt * 8);
     if (walking) {
-      const stride = this.speed > 0.8 ? 0.35 : 0.25;
+      const swing = THREE.MathUtils.lerp(GAIT_SWING.walk, GAIT_SWING.trot, this.trotWeight);
+      const stride = 2 * (UPPER_LEN + LOWER_LEN) * Math.sin(swing) * STRIDE_OVER_SWEEP;
       this.gaitPhase = (this.gaitPhase + (this.speed * dt) / stride) % 1;
     }
   }
@@ -384,12 +495,17 @@ export class CatModel extends THREE.Group implements CatBody {
       tmpB.copy(this.gazeTarget);
       this.root.worldToLocal(tmpB).sub(tmpA);
       const horizontal = Math.hypot(tmpB.x, tmpB.z);
-      if (horizontal > 1e-4 || Math.abs(tmpB.y) > 1e-4) {
-        yaw = THREE.MathUtils.clamp(Math.atan2(tmpB.x, tmpB.z), -GAZE_YAW_MAX, GAZE_YAW_MAX);
+      const raw = Math.atan2(tmpB.x, tmpB.z);
+      // Something well behind it is let go (the head settles to the pose's) rather than followed to
+      // the clamp: a point passing behind would otherwise snap the head from one shoulder to the other.
+      if ((horizontal > 1e-4 || Math.abs(tmpB.y) > 1e-4) && Math.abs(raw) < GAZE_DROP) {
+        yaw = THREE.MathUtils.clamp(raw, -GAZE_YAW_MAX, GAZE_YAW_MAX);
         pitch = THREE.MathUtils.clamp(-Math.atan2(tmpB.y, horizontal), -GAZE_PITCH_MAX, GAZE_PITCH_MAX) - this.current.neck;
       }
     }
-    const k = Math.min(1, dt * 6);
+    // A saccade: quick while far off the target, settling slowly onto it.
+    const off = Math.max(Math.abs(yaw - this.headYaw), Math.abs(pitch - this.headPitch));
+    const k = Math.min(1, dt * (5 + 14 * Math.min(1, off / 0.5)));
     this.headYaw += (yaw - this.headYaw) * k;
     this.headPitch += (pitch - this.headPitch) * k;
   }
@@ -402,11 +518,25 @@ export class CatModel extends THREE.Group implements CatBody {
       this.blinkIn -= dt;
       if (this.blinkIn <= 0) {
         this.blinkIn = 3 + Math.random() * 4;
-        if (this.current.eyes > 0.3) this.blinkLeft = 0.12;
+        if (this.current.eyes > 0.3) {
+          this.blinkLeft = 0.12;
+          if (Math.random() < DOUBLE_BLINK.chance) this.doubleIn = DOUBLE_BLINK.after;
+        }
       }
+    }
+    if (this.doubleIn > 0) {
+      this.doubleIn -= dt;
+      if (this.doubleIn <= 0 && this.blinkLeft <= 0) this.blinkLeft = 0.12;
     }
     let open = this.current.eyes;
     open = THREE.MathUtils.lerp(open, Math.min(open, 0.4), this.purrWeight);
+    if (this.slowBlinkLeft > 0) {
+      // Slow blink: lids down over 0.4 of it, held, then up again.
+      this.slowBlinkLeft = Math.max(0, this.slowBlinkLeft - dt);
+      const u = 1 - this.slowBlinkLeft / SLOW_BLINK_S;
+      const shut = u < 0.4 ? THREE.MathUtils.smoothstep(u, 0, 0.4) : u < 0.6 ? 1 : 1 - THREE.MathUtils.smoothstep(u, 0.6, 1);
+      open *= 1 - shut;
+    }
     if (this.blinkLeft > 0) open = 0;
     this.eyeOpen += (open - this.eyeOpen) * Math.min(1, dt * 30);
   }
@@ -430,26 +560,47 @@ export class CatModel extends THREE.Group implements CatBody {
     // Full strength at once (startled), eased out over the last tenth of a second.
     const flick = Math.min(1, this.flickLeft / 0.1);
 
-    // Gait: diagonal pairs swing, knees fold on the forward swing, the body bobs twice a cycle.
-    const trot = this.speed > 0.8;
+    // Gait: diagonal pairs swing, knees fold on the forward swing, the body bobs twice a cycle; all wider at a trot.
+    const trot = this.trotWeight;
     const cycle = this.gaitPhase * Math.PI * 2;
-    const swing = (trot ? 0.55 : 0.4) * this.gaitWeight;
-    const fold = (trot ? 0.7 : 0.5) * this.gaitWeight;
-    const bob = Math.sin(cycle * 2) * (trot ? 0.008 : 0.004) * this.gaitWeight;
-    let neckMod = -Math.sin(cycle * 2) * (trot ? 0.06 : 0.035) * this.gaitWeight;
+    const swing = THREE.MathUtils.lerp(GAIT_SWING.walk, GAIT_SWING.trot, trot) * this.gaitWeight;
+    const fold = THREE.MathUtils.lerp(0.5, 0.7, trot) * this.gaitWeight;
+    const bob = Math.sin(cycle * 2) * THREE.MathUtils.lerp(0.004, 0.008, trot) * this.gaitWeight;
+    let neckMod = -Math.sin(cycle * 2) * THREE.MathUtils.lerp(0.035, 0.06, trot) * this.gaitWeight;
 
     // The pose's own periodic motion.
     const pt = this.poseTime * Math.PI * 2;
-    let frLowerMod = 0;
-    let flUpperMod = 0;
-    let frUpperMod = 0;
+    const mods = this.legMods;
+    for (const key in mods) mods[key as UpperKey | LowerKey] = 0;
     if (pose === 'groom') {
-      neckMod += Math.sin(pt * 1.3) * 0.12;
-      frLowerMod = Math.sin(pt * 1.3 + 0.5) * 0.15;
+      // The working paw: the right one, or the left when mirrored.
+      const upper: UpperKey = this.groomSide === 'right' ? 'frUpper' : 'flUpper';
+      const lower: LowerKey = this.groomSide === 'right' ? 'frLower' : 'flLower';
+      if (this.groomPhase === 'paw') {
+        neckMod += Math.sin(pt * 1.3) * 0.12;
+        mods[lower] = Math.sin(pt * 1.3 + 0.5) * 0.15;
+      } else if (this.groomPhase === 'face') {
+        // Paw wiped down over the ear and cheek, head leaning into it.
+        mods[upper] = Math.sin(pt * 1.6) * 0.22;
+        mods[lower] = Math.sin(pt * 1.6 + 0.6) * 0.18;
+        neckMod += Math.sin(pt * 1.6 + 0.4) * 0.08;
+      } else {
+        neckMod += Math.sin(pt * 2.2) * 0.1;
+      }
     } else if (pose === 'scratch') {
       const alternate = Math.sin(pt * 1.1) * 0.3;
-      flUpperMod = alternate;
-      frUpperMod = -alternate;
+      mods.flUpper = alternate;
+      mods.frUpper = -alternate;
+    } else if (pose === 'knead') {
+      // Treading: one front paw lifts and presses down, then the other.
+      const tread = Math.sin(pt * 1.4);
+      const left = Math.max(0, tread);
+      const right = Math.max(0, -tread);
+      mods.flUpper = -0.22 * left;
+      mods.flLower = 0.55 * left;
+      mods.frUpper = -0.22 * right;
+      mods.frLower = 0.55 * right;
+      neckMod += Math.sin(pt * 2.8) * 0.03;
     } else if (pose === 'eat') {
       neckMod += Math.max(0, Math.sin(pt * 2)) * 0.06;
     } else if (pose === 'drink') {
@@ -458,21 +609,25 @@ export class CatModel extends THREE.Group implements CatBody {
 
     // Root: height, pitch, roll, the purring tremble.
     const tremble = Math.sin(t * Math.PI * 2 * 25) * 0.0006 * purr;
-    this.root.position.y = cur.rootY + bob + tremble;
+    const squash = this.squash;
+    neckMod += 0.18 * squash;
+    this.root.position.y = cur.rootY + bob + tremble - 0.03 * squash;
     this.root.rotation.x = cur.pitch;
     this.root.rotation.z = cur.roll;
 
     // Breathing.
     const breathRate = pose === 'sleep' ? 0.3 : 0.5;
-    this.torso.scale.y = 1 + Math.sin(t * Math.PI * 2 * breathRate) * 0.015;
+    this.torso.scale.y = (1 + Math.sin(t * Math.PI * 2 * breathRate) * 0.015) * (1 - 0.1 * squash);
+    this.torso.scale.z = 1 + 0.05 * squash;
 
     // Head.
     this.neckPivot.rotation.x = cur.neck + neckMod;
     this.head.rotation.y = this.headYaw;
     this.head.rotation.x = this.headPitch;
 
-    // Ears: pose angle, relaxed while purring, pinned back on a flick, one twitching now and then.
-    const earBase = cur.ears - 0.15 * purr - 0.9 * flick;
+    // Ears: pose angle, relaxed while purring, pricked forward at something, pinned back on a flick, one twitching now and then.
+    const prick = Math.min(1, this.prickLeft / 0.3) * Math.min(1, (PRICK_DURATION - this.prickLeft) / 0.08);
+    const earBase = cur.ears - 0.15 * purr + 0.35 * prick - 0.9 * flick;
     for (let i = 0; i < this.ears.length; i++) {
       this.ears[i].rotation.x = earBase - (i === this.twitchSide ? this.twitchAmount : 0);
     }
@@ -488,27 +643,22 @@ export class CatModel extends THREE.Group implements CatBody {
     // Legs.
     for (const leg of this.legs) {
       const angle = cycle + leg.phase * Math.PI * 2;
-      let upper = cur[leg.upper] + Math.sin(angle) * swing;
-      let lower = cur[leg.lower] + Math.max(0, -Math.cos(angle)) * fold;
-      if (leg.upper === 'flUpper') upper += flUpperMod;
-      else if (leg.upper === 'frUpper') {
-        upper += frUpperMod;
-        lower += frLowerMod;
-      }
-      leg.hip.rotation.x = upper;
-      leg.knee.rotation.x = lower;
+      leg.hip.rotation.x = cur[leg.upper] + Math.sin(angle) * swing + mods[leg.upper];
+      leg.knee.rotation.x = cur[leg.lower] + Math.max(0, -Math.cos(angle)) * fold + mods[leg.lower];
     }
 
-    // Tail: pose curl, idle sway (two sines, wider and slower while purring), walking sway, flick lash.
+    // Tail: pose curl, idle sway (two sines, wider and slower while purring), walking sway, flick lash;
+    // each segment a little behind the one before, so the motion travels as a wave to the tip.
     const restAmp = TAIL_SWAY[pose];
     const swayAmp = THREE.MathUtils.lerp(restAmp, Math.max(restAmp, 0.35), purr);
     const f1 = THREE.MathUtils.lerp(0.9, 0.5, purr);
     const f2 = THREE.MathUtils.lerp(1.7, 0.95, purr);
-    const sway = (Math.sin(t * f1) + Math.sin(t * f2 + 1.3) * 0.5) * swayAmp + Math.sin(cycle) * 0.12 * this.gaitWeight;
-    const lash = Math.sin(t * 24) * 0.45 * flick;
     for (let i = 0; i < this.tail.length; i++) {
       const pivot = this.tail[i];
       const weight = (i + 1) / TAIL_SEGMENTS;
+      const lagged = t - i * TAIL_LAG_S;
+      const sway = (Math.sin(lagged * f1) + Math.sin(lagged * f2 + 1.3) * 0.5) * swayAmp + Math.sin(cycle - i * 0.5) * 0.12 * this.gaitWeight;
+      const lash = Math.sin(t * 24 - i * LASH_STEP) * 0.45 * flick;
       const wave = (sway + lash) * weight * 0.6;
       if (i === 0) {
         pivot.rotation.x = cur.tailBase + 0.25 * flick;

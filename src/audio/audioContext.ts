@@ -114,13 +114,144 @@ function applyMuffle(instant: boolean): void {
   }
 }
 
-/** Creates the context on the page's first click or key press, so ambient sounds can start then. Call once. */
+/**
+ * Creates the context on the page's first click or key press, so ambient sounds can start then. Call once.
+ * It keeps listening afterwards, doing nothing while the context runs: one the browser suspended later
+ * (Safari's "interrupted" on a call or a device change, a tab left in the background) is resumed on the
+ * next gesture, and tried again as the page comes back into view, instead of the room staying mute.
+ */
 export function unlockAudioOnFirstGesture(target: EventTarget = window): void {
   const unlock = (): void => {
+    if (context?.state === 'running') return;
     audioContext();
-    target.removeEventListener('pointerdown', unlock, true);
-    target.removeEventListener('keydown', unlock, true);
   };
   target.addEventListener('pointerdown', unlock, true);
   target.addEventListener('keydown', unlock, true);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && context && context.state !== 'running' && context.state !== 'closed') void context.resume().catch(() => undefined);
+  });
+}
+
+/** Between the room's buses (all but the UI's) and the master: what a travel's curtain fades (`duckScene`). */
+let scene: GainNode | null = null;
+
+/**
+ * The room's own air: how long a sound rings on (s) and how much of it comes back (`wet`), by what
+ * the room is made of. Tiles and bare concrete ring, a carpeted room swallows it, the street has only
+ * its facades. Kept low: a hint of the space, never an echo chamber.
+ */
+export type RoomAir = 'wood' | 'carpet' | 'tiles' | 'concrete' | 'outdoors';
+const AIR: Record<RoomAir, { seconds: number; wet: number; damp: number }> = {
+  wood: { seconds: 0.35, wet: 0.1, damp: 0.5 },
+  carpet: { seconds: 0.2, wet: 0.06, damp: 0.7 },
+  tiles: { seconds: 0.7, wet: 0.18, damp: 0.25 },
+  concrete: { seconds: 1.6, wet: 0.2, damp: 0.35 },
+  outdoors: { seconds: 0.3, wet: 0.04, damp: 0.6 },
+};
+/** A change of room crossfades from one space to the next over about this long (s). */
+const AIR_FADE_S = 0.3;
+/** The world bus's send into the room's air, the two convolvers it crossfades between, and their return. */
+let air: { send: GainNode; ret: GainNode; legs: { conv: ConvolverNode; gain: GainNode }[]; live: number; kind: RoomAir | null } | null = null;
+const impulses = new Map<RoomAir, AudioBuffer>();
+
+/** A synthetic impulse response: stereo noise under an exponential fall, its highs dying first (`damp`). */
+function impulse(ctx: AudioContext, kind: RoomAir): AudioBuffer {
+  const cached = impulses.get(kind);
+  if (cached) return cached;
+  const { seconds, damp } = AIR[kind];
+  const length = Math.ceil(ctx.sampleRate * seconds);
+  const buffer = ctx.createBuffer(2, length, ctx.sampleRate);
+  for (let c = 0; c < 2; c++) {
+    const data = buffer.getChannelData(c);
+    let low = 0;
+    for (let i = 0; i < length; i++) {
+      const t = i / length;
+      // A one-pole low-pass whose smoothing grows along the tail: bright at first, duller as it dies.
+      const k = 1 - damp * t;
+      low += (Math.random() * 2 - 1 - low) * Math.max(0.05, k);
+      data[i] = low * Math.pow(1 - t, 3);
+    }
+  }
+  impulses.set(kind, buffer);
+  return buffer;
+}
+
+/**
+ * Sets the air of the room the listener is in (from what is underfoot: `Footsteps`): the world bus's
+ * sounds ring on a little in it. Crossfades between two convolvers; the one faded out is let go.
+ * Ignored until a gesture started the audio.
+ */
+export function setRoomAir(kind: RoomAir): void {
+  const ctx = context;
+  const world = gains.get('world');
+  const master = gains.get('master');
+  if (!ctx || ctx.state !== 'running' || !world || !master) return;
+  if (!air) {
+    const send = ctx.createGain();
+    send.gain.value = 1;
+    world.connect(send);
+    const ret = ctx.createGain();
+    ret.connect(scene ?? master);
+    const legs = [0, 1].map(() => {
+      const conv = ctx.createConvolver();
+      const gain = ctx.createGain();
+      gain.gain.value = 0;
+      conv.connect(gain).connect(ret);
+      return { conv, gain };
+    });
+    air = { send, ret, legs, live: 0, kind: null };
+  }
+  if (air.kind === kind) return;
+  const t = ctx.currentTime;
+  const out = air.legs[air.live];
+  const next = air.legs[1 - air.live];
+  out.gain.gain.setTargetAtTime(0, t, AIR_FADE_S / 3);
+  const leaving = out;
+  window.setTimeout(() => {
+    if (air && air.legs[air.live] !== leaving) {
+      try {
+        air.send.disconnect(leaving.conv);
+      } catch {
+        // not connected
+      }
+    }
+  }, AIR_FADE_S * 4000);
+  next.conv.buffer = impulse(ctx, kind);
+  try {
+    air.send.disconnect(next.conv);
+  } catch {
+    // not connected
+  }
+  air.send.connect(next.conv);
+  next.gain.gain.cancelScheduledValues(t);
+  next.gain.gain.setValueAtTime(0, t);
+  next.gain.gain.setTargetAtTime(AIR[kind].wet, t, AIR_FADE_S / 3);
+  air.live = 1 - air.live;
+  air.kind = kind;
+}
+
+/**
+ * Fades the room's sounds (the world, the screens, the arcade; not the UI) to `level` (0..1) over
+ * about `seconds`, and back with `level` 1: a travel crossfades one zone's sound into the next under
+ * its curtain (`world/travel`). The mixer's own volumes are untouched.
+ */
+export function duckScene(level: number, seconds: number): void {
+  const master = gains.get('master');
+  if (!context || !master) return;
+  if (!scene) {
+    scene = context.createGain();
+    scene.connect(master);
+    for (const bus of ['world', 'screens', 'arcade'] as const) {
+      const gain = gains.get(bus);
+      if (!gain) continue;
+      gain.disconnect(master);
+      gain.connect(scene);
+    }
+    // The room's air fades with the room.
+    if (air) {
+      air.ret.disconnect(master);
+      air.ret.connect(scene);
+    }
+  }
+  scene.gain.setTargetAtTime(Math.min(1, Math.max(0, level)), context.currentTime, Math.max(0.01, seconds / 3));
 }

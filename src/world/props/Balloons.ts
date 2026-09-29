@@ -43,7 +43,7 @@ export class Balloons extends Prop implements Updatable {
     for (let i = 0; i < count; i++) {
       const a = (i / count) * Math.PI * 2 + random();
       const top = new THREE.Vector3(Math.cos(a) * 0.18, height + (random() - 0.5) * 0.25, Math.sin(a) * 0.18);
-      const balloon = new THREE.Mesh(geometry, standard({ color: colors[i % colors.length]!, roughness: 0.25, metalness: 0.4 }));
+      const balloon = new THREE.Mesh(geometry, standard({ color: colors[i % colors.length]!, roughness: 0.3, metalness: 0 }));
       balloon.castShadow = false;
       balloon.position.copy(top).add(new THREE.Vector3(0, 0.15, 0));
       this.add(balloon);

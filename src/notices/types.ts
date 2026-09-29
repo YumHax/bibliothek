@@ -46,6 +46,8 @@ export interface TipOptions {
   id?: string;
   /** The card's heading. Default "Tip"; the first day's are "To do". */
   head?: string;
+  /** `note`: a handwritten slip like the to-do list (default for a "To do" head); `card`: the blue tip card. */
+  look?: 'card' | 'note';
   /** Asked every frame: true takes the tip down (the thing was done). */
   until?: () => boolean;
   /** Takes it down after this long, counted while playing. Default: twice its reading time, at least 12 s. */

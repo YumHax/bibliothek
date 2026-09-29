@@ -3,6 +3,7 @@ import type { FirstPersonController } from './FirstPersonController';
 import type { Overlay } from '@/ui/Overlay';
 import type { Input } from '@/core/Input';
 import { isTouchDevice } from '@/input/deviceDetect';
+import { lastDevice } from '@/input/lastDevice';
 import { isAction } from '@/input/actions';
 import type { PadButton } from '@/input/padButtons';
 
@@ -42,6 +43,8 @@ export class PointerLockFlow {
   /** The mode the player was last in the room with, for `resume`. */
   private lastMode: RoomMode | null = null;
   private pendingVirtual: RoomMode | null = null;
+  /** The controller mode's keys have been shown this session (once is enough). */
+  private controllerTipShown = false;
 
   /**
    * `input` is optional for backwards compatibility; without it gamepad Start / Esc cannot
@@ -59,6 +62,9 @@ export class PointerLockFlow {
       const mode: RoomMode = player.hasPointerLock ? 'pointer' : (this.pendingVirtual ?? 'gamepad');
       this.pendingVirtual = null;
       this.setMode(mode);
+      // The menu goes once the lock is really there (a refused one keeps it up, saying "Resuming…").
+      overlay.setResuming(false);
+      overlay.setPlaying(true);
     });
     player.controls.addEventListener('unlock', () => {
       overlay.setPlaying(false);
@@ -83,6 +89,20 @@ export class PointerLockFlow {
       );
     }
 
+    // In controller mode, a real mouse button on the 3D view takes the mouse back: out of the virtual lock and
+    // into a pointer lock (the press is a gesture, so the browser allows it). It does nothing else.
+    window.addEventListener(
+      'pointerdown',
+      (e) => {
+        if (!e.isTrusted || e.pointerType !== 'mouse' || this._mode !== 'gamepad' || e.target !== canvas) return;
+        e.stopImmediatePropagation();
+        e.preventDefault();
+        this.player.exitVirtual();
+        void this.enter('pointer');
+      },
+      true,
+    );
+
     input?.onPress((code) => this.onPress(code));
   }
 
@@ -96,21 +116,34 @@ export class PointerLockFlow {
    * else asks the browser for a pointer lock.
    */
   async enter(mode?: RoomMode): Promise<void> {
+    if (!this.overlay.ready) return; // the world is still loading: the start card says so
     const attempt = ++this.attempt;
+    this.overlay.setResuming(false); // a newer try takes over from one still waiting
     const chosen = mode ?? (isTouchDevice() ? 'touch' : 'pointer');
     if (chosen !== 'pointer') {
       this.enterVirtual(chosen);
       return;
     }
-    this.overlay.setPlaying(true);
+    // No gesture behind this (a panel closed with Esc, which is not one): the browser would refuse the
+    // lock, so ask quietly for the click that it needs instead of trying and failing out loud. A panel
+    // closed from the controller (its B) goes back in the controller's way, which needs no gesture.
+    if (!hasUserGesture()) {
+      if (lastDevice() === 'gamepad') this.enterVirtual('gamepad');
+      else this.overlay.promptReturn();
+      return;
+    }
+    // The menu stays until the lock is there (the `lock` listener hides it).
     if (await this.player.lock()) return;
     if (attempt !== this.attempt) return; // superseded by a newer click
-    this.notices?.alert('Mouse lock refused by the browser, retrying…', 2500);
+    // Refused, most likely Chrome's cooldown after Esc: the card says "Resuming…" and asks once more, quietly.
+    this.overlay.setResuming(true);
     await new Promise((r) => setTimeout(r, LOCK_RETRY_MS));
     if (attempt !== this.attempt || this.player.isLocked) return;
     if (!(await this.player.lock())) {
+      if (attempt !== this.attempt) return;
+      this.overlay.setResuming(false);
       this.overlay.setPlaying(false);
-      this.notices?.alert('Pointer lock unavailable. Click again, or check the page is not inside an iframe.');
+      this.notices?.alert('The browser would not lock the mouse. Click the room to try again.');
     }
   }
 
@@ -133,7 +166,10 @@ export class PointerLockFlow {
     this.pendingVirtual = mode;
     this.overlay.setPlaying(true);
     this.player.enterVirtual();
-    if (mode === 'gamepad') this.notices?.tip('Controller mode: press Start or Esc to return to the menu.', { id: 'controller-mode', ms: 8000 });
+    if (mode === 'gamepad' && !this.controllerTipShown) {
+      this.controllerTipShown = true;
+      this.notices?.tip('Controller mode: press Start or Esc for the menu.', { id: 'controller-mode', ms: 8000 });
+    }
   }
 
   private onPress(code: string): void {
@@ -164,4 +200,13 @@ export class PointerLockFlow {
       if (mode !== 'pointer') classes.add(VIRTUAL_CLASS);
     }
   }
+}
+
+/**
+ * Whether the page is handling a user gesture now (a click, a key other than Esc), which a pointer
+ * lock needs. Unknown (an older browser without `navigator.userActivation`): assume yes and try.
+ */
+function hasUserGesture(): boolean {
+  const activation = (navigator as Navigator & { userActivation?: { isActive: boolean } }).userActivation;
+  return activation ? activation.isActive : true;
 }

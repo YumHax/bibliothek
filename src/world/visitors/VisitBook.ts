@@ -1,4 +1,5 @@
 import { KEYS, PersistedStore, safeStorage } from '@/persistence';
+import { canonicalGameId } from '@/catalog';
 import { hash01, seeded } from '@/economy/seeded';
 import { FRIENDS, VISIT_RULES, type FriendPlan } from './friendsPlan';
 
@@ -26,9 +27,13 @@ interface BookState {
   loans: Loan[];
   /** A friend asked round on the phone: who, on which in-game day, from what hour (`household/`). */
   invited: { friendId: string; day: number; hour: number } | null;
+  /** The last line said from each bucket of lines (`friendLines.LinePicker`): never twice in a row, across visits. */
+  said: Record<string, string>;
+  /** Each bucket's shuffle bag: the lines not said yet this round (every line once before any comes back). */
+  bags: Record<string, string[]>;
 }
 
-const fresh = (): BookState => ({ lastDay: -99, visits: {}, loans: [], invited: null });
+const fresh = (): BookState => ({ lastDay: -99, visits: {}, loans: [], invited: null, said: {}, bags: {} });
 
 /**
  * The flat's visitors' book: which in-game day brings which friend (deterministic, so a reload
@@ -127,6 +132,34 @@ export class VisitBook {
     return invited && invited.day === day ? invited.friendId : null;
   }
 
+  /** The last line said from `bucket`, if any. */
+  lastSaid(bucket: string): string | null {
+    return this.state.said[bucket] ?? null;
+  }
+
+  /** `line` was just said from `bucket`. */
+  said(bucket: string, line: string): void {
+    if (this.state.said[bucket] === line) return;
+    this.state.said = { ...this.state.said, [bucket]: line };
+    this.save();
+  }
+
+  /**
+   * A line of `bucket` from its shuffle bag: every line of `lines` comes once, in a random order, before
+   * any comes again (a new round never opens with the one just said), across visits.
+   */
+  draw(bucket: string, lines: readonly string[], random: () => number): string {
+    if (!lines.length) return '';
+    const last = this.lastSaid(bucket);
+    let bag = (this.state.bags[bucket] ?? []).filter((line) => lines.includes(line));
+    if (!bag.length) bag = lines.length > 1 ? lines.filter((line) => line !== last) : [...lines];
+    const line = bag[Math.floor(random() * bag.length)] ?? lines[0]!;
+    this.state.bags = { ...this.state.bags, [bucket]: bag.filter((l) => l !== line) };
+    this.state.said = { ...this.state.said, [bucket]: line };
+    this.save();
+    return line;
+  }
+
   /** Loans kept `postAfter` days past their due day: they come back by post. */
   overdue(day: number): Loan[] {
     return this.state.loans.filter((loan) => day >= loan.dueDay + VISIT_RULES.postAfter);
@@ -142,10 +175,17 @@ function readBook(data: unknown): BookState | null {
   if (typeof raw !== 'object' || raw === null) return null;
   const visits: Record<string, number> = {};
   for (const [id, n] of Object.entries(raw.visits ?? {})) if (typeof n === 'number') visits[id] = n;
-  const loans = (Array.isArray(raw.loans) ? raw.loans : []).filter(
-    (l): l is Loan => typeof l === 'object' && l !== null && typeof l.friendId === 'string' && typeof l.gameId === 'string' && typeof l.title === 'string' && typeof l.lentDay === 'number' && typeof l.dueDay === 'number',
-  );
+  // Game ids as every store keeps them: an old hand-made id of the built-in lists becomes its canonical one.
+  const loans = (Array.isArray(raw.loans) ? raw.loans : [])
+    .filter(
+      (l): l is Loan => typeof l === 'object' && l !== null && typeof l.friendId === 'string' && typeof l.gameId === 'string' && typeof l.title === 'string' && typeof l.lentDay === 'number' && typeof l.dueDay === 'number',
+    )
+    .map((l) => ({ ...l, gameId: canonicalGameId(l.gameId) }));
   const inv = raw.invited as Partial<NonNullable<BookState['invited']>> | null | undefined;
   const invited = inv && typeof inv.friendId === 'string' && typeof inv.day === 'number' && typeof inv.hour === 'number' ? { friendId: inv.friendId, day: inv.day, hour: inv.hour } : null;
-  return { lastDay: typeof raw.lastDay === 'number' ? raw.lastDay : -99, visits, loans, invited };
+  const said: Record<string, string> = {};
+  for (const [bucket, line] of Object.entries(raw.said ?? {})) if (typeof line === 'string') said[bucket] = line;
+  const bags: Record<string, string[]> = {};
+  for (const [bucket, bag] of Object.entries(raw.bags ?? {})) if (Array.isArray(bag)) bags[bucket] = bag.filter((l): l is string => typeof l === 'string');
+  return { lastDay: typeof raw.lastDay === 'number' ? raw.lastDay : -99, visits, loans, invited, said, bags };
 }

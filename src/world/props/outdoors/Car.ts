@@ -39,11 +39,16 @@ function profile(length: number, drawnAt: number, u: Pick<VehicleBody, 'cab0' | 
   return { cab0: u.cab0 * k, roof0: u.roof0 * k, roof1: u.roof1 * k, cab1: u.cab1 * k, wheelIn: u.wheelIn * k };
 }
 
-const { car: CAR, bus: BUS, van: VAN, lorry: LORRY } = VEHICLES;
-/** A small hatchback, the street's (`city/vehicles`). */
+const { car: CAR, saloon: SALOON, bus: BUS, van: VAN, lorry: LORRY } = VEHICLES;
+/** A small hatchback, the street's (`city/vehicles`): its nose at u = length (the headlights' end), a short hatch behind. */
 export const CAR_BODY: VehicleBody = {
   length: CAR.length, width: CAR.width, height: CAR.height, body: 0.85, floor: 0.3, inset: 0.15, wheel: CAR.wheelRadius, pillars: 1,
-  ...profile(CAR.length, 4.4, { cab0: 1.1, roof0: 1.75, roof1: 3.35, cab1: 3.9, wheelIn: 0.85 }),
+  ...profile(CAR.length, 4.4, { cab0: 0.5, roof0: 1.05, roof1: 2.65, cab1: 3.3, wheelIn: 0.85 }),
+};
+/** A saloon, the hatchback's profile stretched to its length (the street parks some). */
+export const SALOON_BODY: VehicleBody = {
+  length: SALOON.length, width: SALOON.width, height: SALOON.height, body: 0.85, floor: 0.3, inset: 0.15, wheel: SALOON.wheelRadius, pillars: 1,
+  ...profile(SALOON.length, 4.4, { cab0: 0.65, roof0: 1.2, roof1: 2.6, cab1: 3.2, wheelIn: 0.85 }),
 };
 /** A city bus: a long box, nearly all window above the waist, the windscreen almost upright. */
 export const BUS_BODY: VehicleBody = { length: BUS.length, width: BUS.width, height: BUS.height, body: 1.15, floor: 0.35, cab0: 0.05, roof0: 0.3, roof1: BUS.length - 0.25, cab1: BUS.length - 0.1, inset: 0.06, wheel: BUS.wheelRadius, wheelIn: 2.4, pillars: 7 };

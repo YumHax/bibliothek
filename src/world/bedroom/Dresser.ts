@@ -24,7 +24,7 @@ const OFF_WALL = 0.015;
 const WALNUT = timber(0x5e412b, 0.5);
 const DARK_WALNUT = timber(0x4a3221, 0.55);
 const BRASS = METAL.brass();
-const GLASS = standard({ color: 0xcfe0e6, roughness: 0.1, metalness: 0.1, transparent: true, opacity: 0.7 });
+const GLASS = standard({ color: 0xcfe0e6, roughness: 0.1, metalness: 0, transparent: true, opacity: 0.7 });
 const PAGES = paint(0xf0e9d8, 0.9);
 
 /**

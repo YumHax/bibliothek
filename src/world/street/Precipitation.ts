@@ -14,6 +14,10 @@ const FLAKES = 5000;
 const SPLASHES = 900;
 const SPLASH_BOX = 22;
 const SPLASH_SECONDS = 0.45;
+/** Spring petals: how many at most, the box they fill (lower: they drift down from the trees), the share shown in a calm. */
+const PETALS = 600;
+const PETAL_BOX = new THREE.Vector3(30, 9, 30);
+const PETAL_SHARE = 0.35;
 
 /*
  * Both shaders place every particle in world space from its seed and the time, wrapped into the
@@ -21,11 +25,22 @@ const SPLASH_SECONDS = 0.45;
  * vertex is ever touched on the CPU. A particle whose threshold is above the current amount is
  * thrown out of the clip volume. No backtick in these strings.
  */
-/** A box no particle falls into (world space; empty by default): the building's sas, open on the street. */
+/** At most this many shelters (boxes nothing falls into). */
+const MAX_SHELTERS = 32;
+/**
+ * Boxes no particle falls into (world space; unused slots empty): the building's sas open on the
+ * street, the shops' awnings, the bus shelter, the kiosk.
+ */
 const SHELTER = /* glsl */ `
-uniform vec3 shelterMin;
-uniform vec3 shelterMax;
-bool sheltered(vec3 p) { return all(greaterThan(p, shelterMin)) && all(lessThan(p, shelterMax)); }
+#define SHELTERS ${MAX_SHELTERS}
+uniform vec3 shelterMin[SHELTERS];
+uniform vec3 shelterMax[SHELTERS];
+bool sheltered(vec3 p) {
+  for (int i = 0; i < SHELTERS; i++) {
+    if (all(greaterThan(p, shelterMin[i])) && all(lessThan(p, shelterMax[i]))) return true;
+  }
+  return false;
+}
 `;
 
 const RAIN_VERTEX = /* glsl */ `
@@ -198,17 +213,23 @@ export class Precipitation extends THREE.Group implements Furniture, Updatable {
   private readonly splash: THREE.Points;
   private readonly splashUniforms: Record<string, THREE.IUniform>;
   private time = 0;
-  /** The sheltered box, zone-local (empty: none), and the world-space corners the shaders read. */
-  private readonly shelter: THREE.Box3;
-  private readonly shelterMin = new THREE.Vector3(1, 1, 1);
-  private readonly shelterMax = new THREE.Vector3(-1, -1, -1);
+  /** The sheltered boxes, zone-local, and the world-space corners the shaders read (unused slots inside out: empty). */
+  private readonly shelters: THREE.Box3[];
+  private readonly shelterMin = Array.from({ length: MAX_SHELTERS }, () => new THREE.Vector3(1, 1, 1));
+  private readonly shelterMax = Array.from({ length: MAX_SHELTERS }, () => new THREE.Vector3(-1, -1, -1));
   private readonly shelterWorld = new THREE.Box3();
+  private readonly petals: THREE.Points | null = null;
+  private readonly petalUniforms: Record<string, THREE.IUniform> | null = null;
 
-  /** `shelter`: a box (zone-local) nothing falls into, the building's sas seen through its open street door. */
-  constructor(private readonly dayNight: DayNight, options: { shelter?: THREE.Box3 } = {}) {
+  /**
+   * `shelters`: boxes (zone-local) nothing falls into: the building's sas seen through its open street
+   * door, the awnings, the bus shelter, the kiosk (the first `MAX_SHELTERS`). `petals`: spring blossom
+   * blows about in dry weather (the trees are in flower).
+   */
+  constructor(private readonly dayNight: DayNight, options: { shelters?: readonly THREE.Box3[]; petals?: boolean } = {}) {
     super();
     this.name = 'Precipitation';
-    this.shelter = options.shelter?.clone() ?? new THREE.Box3();
+    this.shelters = (options.shelters ?? []).slice(0, MAX_SHELTERS).map((box) => box.clone());
     const shelterUniforms = (): Record<string, THREE.IUniform> => ({ shelterMin: { value: this.shelterMin }, shelterMax: { value: this.shelterMax } });
     this.rainUniforms = {
       time: { value: 0 },
@@ -245,7 +266,20 @@ export class Precipitation extends THREE.Group implements Furniture, Updatable {
       ...shelterUniforms(),
     };
     this.splash = new THREE.Points(particles(SPLASHES, 1, 79), overlay(new THREE.ShaderMaterial({ uniforms: this.splashUniforms, vertexShader: SPLASH_VERTEX, fragmentShader: SPLASH_FRAGMENT })));
-    for (const mesh of [this.rain, this.snow, this.splash]) {
+    if (options.petals) {
+      this.petalUniforms = {
+        time: { value: 0 },
+        amount: { value: 0 },
+        box: { value: PETAL_BOX },
+        velocity: { value: new THREE.Vector3(0.8, -0.45, 0.2) },
+        size: { value: 26 },
+        color: { value: new THREE.Color(0xf6c9d6) },
+        opacity: { value: 0.9 },
+        ...shelterUniforms(),
+      };
+      this.petals = new THREE.Points(particles(PETALS, 1, 83), overlay(new THREE.ShaderMaterial({ uniforms: this.petalUniforms, vertexShader: SNOW_VERTEX, fragmentShader: SNOW_FRAGMENT })));
+    }
+    for (const mesh of [this.rain, this.snow, this.splash, ...(this.petals ? [this.petals] : [])]) {
       mesh.frustumCulled = false;
       mesh.castShadow = false;
       mesh.renderOrder = RENDER_ORDER.particles;
@@ -260,10 +294,10 @@ export class Precipitation extends THREE.Group implements Furniture, Updatable {
 
   update(dt: number): void {
     const s = this.dayNight.state;
-    if (!this.shelter.isEmpty()) {
-      const world = this.shelterWorld.copy(this.shelter).applyMatrix4(this.matrixWorld);
-      this.shelterMin.copy(world.min);
-      this.shelterMax.copy(world.max);
+    for (let i = 0; i < this.shelters.length; i++) {
+      const world = this.shelterWorld.copy(this.shelters[i]!).applyMatrix4(this.matrixWorld);
+      this.shelterMin[i]!.copy(world.min);
+      this.shelterMax[i]!.copy(world.max);
     }
     this.time = (this.time + dt) % 600;
     const light = 0.25 + 0.75 * s.daylight + s.lightning;
@@ -292,6 +326,18 @@ export class Precipitation extends THREE.Group implements Furniture, Updatable {
       u.amount!.value = s.snow;
       (u.velocity!.value as THREE.Vector3).set(windX * 0.4, -1.1, windX * 0.15);
       (u.color!.value as THREE.Color).setRGB(1, 1, 1).multiplyScalar(0.4 + 0.6 * light);
+    }
+    // Blossom on the breeze: a few petals in still air, more as it blows, none in the rain or at night.
+    if (this.petals && this.petalUniforms) {
+      const amount = s.rain < 0.05 && s.snow < 0.02 ? PETAL_SHARE * (0.25 + s.wind) * Math.min(1, s.daylight * 3) : 0;
+      this.petals.visible = amount > 0.01;
+      if (this.petals.visible) {
+        const u = this.petalUniforms;
+        u.time!.value = this.time;
+        u.amount!.value = amount;
+        (u.velocity!.value as THREE.Vector3).set(0.5 + windX * 0.9, -0.45, windX * 0.3);
+        (u.color!.value as THREE.Color).setRGB(0.96, 0.79, 0.84).multiplyScalar(0.35 + 0.65 * light);
+      }
     }
   }
 }

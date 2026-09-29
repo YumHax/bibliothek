@@ -5,6 +5,7 @@ import { Room, type Doorway, type RoomOptions } from './Room';
 import { resolvePlacement } from './Placement';
 import { Door } from './props/Door';
 import { followDaylight } from './build/follow';
+import { reportFlatRoom } from './city/flatWindows';
 
 export interface ShellOptions {
   /** Colour of the painted leaves of the doors this zone hangs. Default the `Door`'s slate green. */
@@ -31,6 +32,8 @@ const PORTAL_HALF_DEPTH = 0.15;
 export function furnishShell(zone: Zone, sky: Sky, options: RoomOptions, { leafColor, fixedDaylight }: ShellOptions = {}): Room {
   const room = zone.place(new Room(options), new THREE.Vector3());
   shareShadowCaster(room);
+  // The street's facade shows the flat's rooms lit as they were left (`city/flatWindows`).
+  reportFlatRoom(zone.id, room);
   if (fixedDaylight !== undefined) room.setDaylight(fixedDaylight);
   else followDaylight(zone, sky, room);
   for (const doorway of options.doorways ?? []) {

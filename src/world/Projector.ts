@@ -1,13 +1,19 @@
 import * as THREE from 'three';
+import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import type { Updatable } from '@/core/Engine';
 import type { CssLayer } from '@/core/CssLayer';
+import { unplayableWhy } from './box/unplayable';
 import type { Interactable, LabelPlacement } from '@/interaction/Interactable';
 import type { PlayerState, SessionActions } from '@/game/SessionActions';
 import type { VideoInfo } from '@/video/VideoProvider';
+import { ProjectorFan } from '@/audio/ProjectorFan';
+import { playRockerClick } from '@/audio/furnitureSounds';
 import type { ActivityAware, Furniture } from './Furniture';
 import { boxMesh } from './meshUtils';
 import type { SoundOcclusion } from './acoustics/SoundOcclusion';
+import { PointSound } from './acoustics/PointSound';
 import { VideoSurface, type ScreenState, type ScreenStateListener, type VideoScreen } from './screen';
+import { HueDrift } from './screen/HueDrift';
 import { paint, standard } from './materials/palette';
 import { RENDER_ORDER } from './surface/layers';
 
@@ -26,14 +32,48 @@ const BEAM_PLAYING = 22;
 const BEAM_MESSAGE = 8;
 /** Bounce light in front of the wall so the picture lights the room like the TV does. */
 const SPILL_PLAYING = 5;
-/** Opacity of the visible light cone while playing (dust in the beam). */
-const CONE_OPACITY = 0.05;
+/** Brightness of the visible light cone while playing (dust in the beam). */
+const CONE_STRENGTH = 0.05;
+/** The lamp stays mostly white: the picture's drifting hue only tints it by this much. */
+const HUE_TINT = 0.45;
+/** Dust motes drifting in the beam. */
+const MOTES = 60;
+/** Standby LED colours: red standby, amber while looking for a source (blinking) or without one, green on. */
+const LED_STANDBY = new THREE.Color(0xff2a1a).multiplyScalar(0.8);
+const LED_AMBER = new THREE.Color(0xffa01a).multiplyScalar(1.2);
+const LED_ON = new THREE.Color(0x2aff5a).multiplyScalar(1.2);
+const LED_BLINK_HZ = 1.6;
+/**
+ * A projector's black is never black: the lamp leaks a faint cool grey over the whole picture, a touch brighter
+ * at its centre (the hot spot), so the letterbox bars read as projected light on the wall, not paint (linear).
+ */
+const BLACK_LEVEL = new THREE.Color(0x10131a).convertSRGBToLinear();
+const HOT_SPOT = 0.012;
+/** In front of the picture's plane, towards the lens (m): the veil draws over the video cut-out. */
+const VEIL_LIFT = 0.003;
+
+/**
+ * Additive with the canvas's alpha left alone (docs/graphics.md): the beam is light over the
+ * scene and over the video cut-out, never a veil.
+ */
+function additive<M extends THREE.Material>(material: M): M {
+  material.transparent = true;
+  material.depthWrite = false;
+  material.blending = THREE.CustomBlending;
+  material.blendEquation = THREE.AddEquation;
+  material.blendSrc = THREE.SrcAlphaFactor;
+  material.blendDst = THREE.OneFactor;
+  material.blendSrcAlpha = THREE.ZeroFactor;
+  material.blendDstAlpha = THREE.OneFactor;
+  return material;
+}
 
 /**
  * A projector hung from the ceiling on a short pole, throwing a big picture on a bare wall.
  * Local +z is the throw direction, y = 0 the ceiling. The picture (a `VideoSurface`) is a child
- * placed by `aimAt()` at the wall, so the beam (a spot light and a translucent frustum) follows
- * wherever the projector is placed. Clicking the unit or the lit wall behaves like the TV.
+ * placed by `aimAt()` at the wall, so the beam (a spot light, a frustum of light fading along its
+ * length and at its edges, dust drifting in it) follows wherever the projector is placed. Its fan
+ * hums while the lamp is on and winds down after. Clicking the unit or the lit wall behaves like the TV.
  */
 export class Projector extends THREE.Group implements Furniture, Updatable, Interactable, VideoScreen, ActivityAware {
   readonly hitboxes: THREE.Object3D[];
@@ -44,15 +84,33 @@ export class Projector extends THREE.Group implements Furniture, Updatable, Inte
   private readonly lens: THREE.Object3D;
   private readonly beam: THREE.SpotLight;
   private readonly spill: THREE.PointLight;
-  private readonly cone: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
+  private readonly cone: THREE.Mesh<THREE.BufferGeometry, THREE.ShaderMaterial>;
+  private readonly motes: THREE.Points<THREE.BufferGeometry, THREE.ShaderMaterial>;
+  /** The lamp's own light over the running picture: its black level and hot spot (additive). */
+  private readonly veil: THREE.Mesh<THREE.PlaneGeometry, THREE.ShaderMaterial>;
+  private readonly veilLevel = { value: 0 };
+  /** The cone's and the motes' shared uniforms. */
+  private readonly uniforms = {
+    color: { value: new THREE.Color(BEAM_COLOR) },
+    strength: { value: 0 },
+    time: { value: 0 },
+    apex: { value: new THREE.Vector3() },
+    centre: { value: new THREE.Vector3() },
+    size: { value: new THREE.Vector2(1, 1) },
+    pixelRatio: { value: Math.min(window.devicePixelRatio, 1.5) },
+  };
   private readonly standby: THREE.MeshStandardMaterial;
-  private beamTime = 0;
+  private readonly hue = new HueDrift();
+  private readonly lampColor = new THREE.Color(BEAM_COLOR);
+  private readonly fan = new ProjectorFan();
+  private readonly fanSound: PointSound | null = null;
+  private ledTime = 0;
 
   constructor(cssLayer: CssLayer, options: ProjectorOptions = {}) {
     super();
     this.name = 'Projector';
 
-    // Ceiling plate and pole, then the unit hanging under it.
+    // Ceiling plate and pole, then the unit hanging under it: a rounded shell, vents, the lens in its focus ring.
     const dark = paint(0x2b2b30, 0.6);
     this.unitMaterial = new THREE.MeshStandardMaterial({ color: 0xe6e6e2, roughness: 0.45 });
     const poleLength = 0.3;
@@ -63,19 +121,33 @@ export class Projector extends THREE.Group implements Furniture, Updatable, Inte
     const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, poleLength, 12), dark);
     pole.position.y = -poleLength / 2;
     const unitY = -poleLength - unitH / 2;
-    const unit = boxMesh(unitW, unitH, unitD, this.unitMaterial, { y: unitY });
-    const lensRing = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.03, 0.03, 20), dark);
-    lensRing.rotation.x = Math.PI / 2;
-    lensRing.position.set(unitW * 0.2, unitY, unitD / 2 + 0.015);
-    const glassMat = standard({ color: 0x0a0f1a, roughness: 0.1, metalness: 0.3 });
+    const unit = new THREE.Mesh(new RoundedBoxGeometry(unitW, unitH, unitD, 3, 0.022), this.unitMaterial);
+    unit.position.y = unitY;
+    const lensX = unitW * 0.2;
+    const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.03, 0.03, 24), dark);
+    barrel.rotation.x = Math.PI / 2;
+    barrel.position.set(lensX, unitY, unitD / 2 + 0.015);
+    const rubber = paint(0x17171a, 0.85);
+    const focusRing = new THREE.Mesh(new THREE.CylinderGeometry(0.039, 0.039, 0.012, 24), rubber);
+    focusRing.rotation.x = Math.PI / 2;
+    focusRing.position.set(lensX, unitY, unitD / 2 + 0.012);
+    const glassMat = standard({ color: 0x0a0f1a, roughness: 0.1, metalness: 0 });
     const lensGlass = new THREE.Mesh(new THREE.CircleGeometry(0.028, 20), glassMat);
-    lensGlass.position.set(lensRing.position.x, unitY, unitD / 2 + 0.031);
-    this.standby = new THREE.MeshStandardMaterial({ color: 0x220000, emissive: 0xff2a1a, emissiveIntensity: 1.2 });
+    lensGlass.position.set(lensX, unitY, unitD / 2 + 0.031);
+    this.standby = new THREE.MeshStandardMaterial({ color: 0x220000, emissive: LED_STANDBY.clone(), emissiveIntensity: 1 });
     const led = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.006, 0.004), this.standby);
     led.position.set(-unitW * 0.35, unitY - unitH * 0.2, unitD / 2 + 0.002);
+    // Vent slots: on the front beside the lens, and down both sides where the fan breathes.
+    const vent = paint(0x1a1a1e, 0.8);
+    const vents: THREE.Mesh[] = [];
+    for (let i = 0; i < 5; i++) {
+      vents.push(boxMesh(0.07, 0.004, 0.002, vent, { x: -unitW * 0.12, y: unitY + unitH * (0.22 - i * 0.11), z: unitD / 2 + 0.001 }));
+      for (const side of [-1, 1]) vents.push(boxMesh(0.002, 0.004, 0.12, vent, { x: side * (unitW / 2 + 0.001), y: unitY + unitH * (0.22 - i * 0.11), z: -unitD * 0.08 }));
+    }
     // Overhead, right next to the ceiling lamp: a shadow from here would smear across a wall.
-    for (const mesh of [plate, pole, unit, lensRing, lensGlass, led]) mesh.castShadow = false;
-    this.add(plate, pole, unit, lensRing, lensGlass, led);
+    const parts = [plate, pole, unit, barrel, focusRing, lensGlass, led, ...vents];
+    for (const mesh of parts) mesh.castShadow = false;
+    this.add(...parts);
 
     this.lens = new THREE.Object3D();
     this.lens.position.copy(lensGlass.position);
@@ -86,13 +158,20 @@ export class Projector extends THREE.Group implements Furniture, Updatable, Inte
       listener: options.listener,
       occlusion: options.occlusion,
       idle: 'nothing',
-      message: { background: '#000000', ink: '#e8ecf5' },
+      signal: 'slate',
       volume: { referenceDistance: 2.5, rolloff: 1.2, maxDistance: 14, rearGain: 0.6 },
     });
     // Until `aimAt()` runs, throw straight ahead onto an imaginary wall 3 m away.
     this.surface.position.set(0, -1, 3);
     this.surface.rotation.y = Math.PI; // the picture faces the projector
     this.add(this.surface);
+    this.surface.onStateChange((state) => this.fan.setRunning(state !== 'off'));
+
+    if (options.listener) {
+      this.fanSound = new PointSound(this.fan, { listener: options.listener, ...(options.occlusion ? { occlusion: options.occlusion } : {}), volume: { referenceDistance: 0.8, rolloff: 1.4, maxDistance: 6 } });
+      this.fanSound.position.set(0, unitY, 0);
+      this.add(this.fanSound);
+    }
 
     this.beam = new THREE.SpotLight(BEAM_COLOR, 0, 0, Math.PI / 8, 0.4, 1.2);
     this.beam.position.copy(this.lens.position);
@@ -103,18 +182,49 @@ export class Projector extends THREE.Group implements Furniture, Updatable, Inte
 
     this.cone = new THREE.Mesh(
       new THREE.BufferGeometry(),
-      new THREE.MeshBasicMaterial({
-        color: BEAM_COLOR,
-        transparent: true,
-        opacity: 0,
-        blending: THREE.AdditiveBlending,
-        depthWrite: false,
-        side: THREE.DoubleSide,
-        toneMapped: false,
-      }),
+      additive(new THREE.ShaderMaterial({ uniforms: this.uniforms, vertexShader: CONE_VERTEX, fragmentShader: CONE_FRAGMENT, side: THREE.DoubleSide })),
     );
     this.cone.renderOrder = RENDER_ORDER.overlay;
+    this.cone.frustumCulled = false;
     this.add(this.cone);
+
+    // Dust: fixed seeds (across the picture, along the throw), placed in the frustum by the shader.
+    const seeds = new Float32Array(MOTES * 3);
+    const phases = new Float32Array(MOTES);
+    for (let i = 0; i < MOTES; i++) {
+      seeds[i * 3] = Math.random() - 0.5;
+      seeds[i * 3 + 1] = Math.random() - 0.5;
+      seeds[i * 3 + 2] = 0.08 + 0.9 * Math.random();
+      phases[i] = Math.random() * 100;
+    }
+    const moteGeometry = new THREE.BufferGeometry();
+    moteGeometry.setAttribute('position', new THREE.BufferAttribute(seeds, 3));
+    moteGeometry.setAttribute('phase', new THREE.BufferAttribute(phases, 1));
+    this.motes = new THREE.Points(moteGeometry, additive(new THREE.ShaderMaterial({ uniforms: this.uniforms, vertexShader: MOTE_VERTEX, fragmentShader: MOTE_FRAGMENT })));
+    this.motes.renderOrder = RENDER_ORDER.overlay;
+    this.motes.frustumCulled = false;
+    this.add(this.motes);
+    for (const object of [this.cone, this.motes]) {
+      object.castShadow = false;
+      object.receiveShadow = false;
+      object.visible = false;
+    }
+
+    const { width, height } = this.surface;
+    this.veil = new THREE.Mesh(
+      new THREE.PlaneGeometry(width, height),
+      additive(new THREE.ShaderMaterial({
+        uniforms: { level: this.veilLevel, black: { value: BLACK_LEVEL }, hot: { value: HOT_SPOT }, aspect: { value: height / width } },
+        vertexShader: VEIL_VERTEX,
+        fragmentShader: VEIL_FRAGMENT,
+      })),
+    );
+    this.veil.position.z = VEIL_LIFT;
+    this.veil.renderOrder = RENDER_ORDER.overlay;
+    this.veil.castShadow = false;
+    this.veil.receiveShadow = false;
+    this.veil.visible = false;
+    this.surface.add(this.veil);
 
     this.hitboxes = [unit, this.surface.glass];
     this.aimAt(this.surface.position.clone());
@@ -138,9 +248,15 @@ export class Projector extends THREE.Group implements Furniture, Updatable, Inte
     const { width, height } = this.surface;
     const throwDistance = Math.max(0.1, centre.z - this.lens.position.z);
     this.beam.distance = throwDistance + 1;
-    this.beam.angle = Math.atan(Math.hypot(width, height) / 2 / throwDistance);
+    // The cone spans the picture's width, soft at its edge: it does not spill round the corners onto the shelving beside it.
+    this.beam.angle = Math.atan(width / 2 / throwDistance);
+    this.beam.penumbra = 0.3;
+    this.uniforms.apex.value.copy(this.lens.position);
+    this.uniforms.centre.value.copy(centre);
+    this.uniforms.size.value.set(width, height);
 
-    // Frustum: apex at the lens, base = the picture rectangle.
+    // Frustum: apex at the lens, base = the picture rectangle. Each side carries how far along the
+    // throw (0 lens .. 1 wall) and how far across the side (0 .. 1) a point is, for the fades.
     const a = this.lens.position;
     const corners = [
       [-width / 2, height / 2],
@@ -149,13 +265,20 @@ export class Projector extends THREE.Group implements Furniture, Updatable, Inte
       [-width / 2, -height / 2],
     ].map(([x, y]) => new THREE.Vector3(centre.x + x, centre.y + y, centre.z));
     const positions: number[] = [];
+    const along: number[] = [];
+    const across: number[] = [];
     for (let i = 0; i < 4; i++) {
       const c0 = corners[i]!;
       const c1 = corners[(i + 1) % 4]!;
       positions.push(a.x, a.y, a.z, c0.x, c0.y, c0.z, c1.x, c1.y, c1.z);
+      along.push(0, 1, 1);
+      across.push(0.5, 0, 1);
     }
     this.cone.geometry.dispose();
-    this.cone.geometry = new THREE.BufferGeometry().setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    this.cone.geometry = new THREE.BufferGeometry()
+      .setAttribute('position', new THREE.Float32BufferAttribute(positions, 3))
+      .setAttribute('along', new THREE.Float32BufferAttribute(along, 1))
+      .setAttribute('across', new THREE.Float32BufferAttribute(across, 1));
   }
 
   get state(): ScreenState {
@@ -177,20 +300,28 @@ export class Projector extends THREE.Group implements Furniture, Updatable, Inte
   }
 
   label(player: PlayerState): string | null {
-    if (player.held) return `Play ${player.held.game.title} on the projector`;
-    return this.isPlaying ? 'Click to turn the projector off' : 'Projector';
+    if (player.held) return player.held.playable ? `Projector · play ${player.held.game.title}` : `Projector · can’t play it, ${unplayableWhy(player.held)}`;
+    if (this.state === 'searching') return `Projector · looking for a longplay of ${this.surface.searchingFor ?? 'the game'}…`;
+    if (this.surface.tuning) return 'Projector · tuning in…';
+    if (this.state === 'error') return 'Projector, no longplay found · switch off';
+    return this.state !== 'off' ? 'Projector · switch off' : 'Projector · bring a game box';
   }
 
   labelPlacement(): LabelPlacement {
     return this.isPlaying ? 'edge' : 'crosshair';
   }
 
+  /** With a box in hand, plays its longplay; otherwise switches the lamp off, even while it is still looking for a source. */
   activate(session: SessionActions): void {
     const box = session.held;
-    if (box) {
+    if (box && !box.playable) {
+      session.refuse(`${box.game.title} is ${unplayableWhy(box)}: no cartridge to put in.`);
+    } else if (box) {
+      if (this.state === 'off') playRockerClick(); // the lamp's switch
       session.putBack();
       void session.playOn(this, box);
-    } else if (this.state === 'playing' || this.state === 'error') {
+    } else if (this.state !== 'off') {
+      playRockerClick();
       session.stopScreen(this);
     }
   }
@@ -201,8 +332,8 @@ export class Projector extends THREE.Group implements Furniture, Updatable, Inte
     this.surface.searching(title);
   }
 
-  play(video: VideoInfo, startSeconds: number): void {
-    this.surface.play(video, startSeconds);
+  play(video: VideoInfo, startSeconds: number, onRejected?: (videoId: string) => void): void {
+    this.surface.play(video, startSeconds, onRejected);
   }
 
   fail(message: string): void {
@@ -213,42 +344,156 @@ export class Projector extends THREE.Group implements Furniture, Updatable, Inte
     this.surface.stop();
   }
 
-  /** Dormant zone: the picture lets its video go, and comes back with the zone (see `VideoSurface.setZoneActive`). */
+  /** Dormant zone: the picture lets its video go and the fan falls silent; both come back with the zone (see `VideoSurface.setZoneActive`). */
   setZoneActive(active: boolean): void {
     this.surface.setZoneActive(active);
+    this.fanSound?.setZoneActive(active);
   }
 
-  /** Zone unload: the iframe leaves the page. */
+  /** Zone unload: the iframe leaves the page, the fan's sound stops. */
   dispose(): void {
     this.surface.dispose();
+    this.fanSound?.dispose();
   }
 
   update(dt: number): void {
     this.updateBeam(dt);
-    this.surface.update();
+    this.surface.update(dt);
+    this.fanSound?.update(dt);
   }
 
-  /** Lamp: full beam with a faint flicker while playing, dimmer while a message is on the wall, off otherwise. */
+  /** Lamp: full beam tinted by the picture's drifting hue while playing, dimmer while a slate is on the wall, off otherwise. */
   private updateBeam(dt: number): void {
     let beam = 0;
     let spill = 0;
     if (this.state === 'playing') {
-      this.beamTime += dt;
-      const t = this.beamTime;
-      const flicker = 0.5 * Math.sin(t * 9.7) + 0.3 * Math.sin(t * 5.3) + 0.2 * Math.sin(t * 1.9);
-      beam = BEAM_PLAYING * (0.9 + 0.1 * flicker);
-      spill = SPILL_PLAYING * (0.85 + 0.15 * flicker);
-    } else if (this.state !== 'off') {
-      beam = BEAM_MESSAGE;
-      spill = SPILL_PLAYING * 0.25;
+      beam = BEAM_PLAYING;
+      spill = SPILL_PLAYING;
+      this.lampColor.set(BEAM_COLOR);
+      const color = this.hue.update(dt, this.lampColor, 1 - HUE_TINT);
+      this.beam.color.copy(color);
+      this.spill.color.copy(color);
+    } else {
+      if (this.state !== 'off') {
+        beam = BEAM_MESSAGE;
+        spill = SPILL_PLAYING * 0.25;
+      }
+      this.beam.color.lerp(this.lampColor.set(BEAM_COLOR), Math.min(1, dt * 2));
+      this.spill.color.copy(this.beam.color);
     }
     const ease = Math.min(1, dt * 5);
     this.beam.intensity += (beam - this.beam.intensity) * ease;
     this.spill.intensity += (spill - this.spill.intensity) * ease;
-    const coneTarget = beam > 0 ? CONE_OPACITY * (beam / BEAM_PLAYING) : 0;
-    this.cone.material.opacity += (coneTarget - this.cone.material.opacity) * ease;
-    this.cone.visible = this.cone.material.opacity > 0.002;
-    // Standby LED: red when off, green while running.
-    this.standby.emissive.setHex(this.state === 'off' ? 0xff2a1a : 0x2aff5a);
+    const coneTarget = beam > 0 ? CONE_STRENGTH * (beam / BEAM_PLAYING) : 0;
+    const uniforms = this.uniforms;
+    uniforms.strength.value += (coneTarget - uniforms.strength.value) * ease;
+    uniforms.color.value.copy(this.beam.color);
+    uniforms.time.value += dt;
+    const shown = uniforms.strength.value > 0.002;
+    this.cone.visible = shown;
+    this.motes.visible = shown;
+    // Over the running picture only (the slate and the static bring their own light).
+    const running = this.state === 'playing' && !this.surface.tuning;
+    this.veilLevel.value += ((running ? 1 : 0) - this.veilLevel.value) * ease;
+    this.veil.visible = this.veilLevel.value > 0.01;
+    this.updateLed(dt);
+  }
+
+  /** Standby LED: red when off, amber blinking while searching (steady without a source), green while playing; eased. */
+  private updateLed(dt: number): void {
+    this.ledTime += dt;
+    let target = LED_STANDBY;
+    let level = 1;
+    if (this.state === 'playing') target = LED_ON;
+    else if (this.state !== 'off') {
+      target = LED_AMBER;
+      if (this.state === 'searching') level = 0.15 + 0.85 * (0.5 + 0.5 * Math.cos(this.ledTime * LED_BLINK_HZ * Math.PI * 2));
+    }
+    this.standby.emissive.lerp(target, Math.min(1, dt * 10));
+    this.standby.emissiveIntensity += (level - this.standby.emissiveIntensity) * Math.min(1, dt * 12);
   }
 }
+
+const VEIL_VERTEX = /* glsl */ `
+varying vec2 vUv;
+void main() {
+  vUv = uv;
+  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+}
+`;
+
+const VEIL_FRAGMENT = /* glsl */ `
+uniform float level;
+uniform vec3 black;
+uniform float hot;
+uniform float aspect;
+varying vec2 vUv;
+void main() {
+  vec2 p = (vUv - 0.5) * vec2(1.0, aspect);
+  float centre = 1.0 - smoothstep(0.0, 0.6, length(p));
+  gl_FragColor = vec4((black + vec3(hot * centre * centre)) * level, 1.0);
+  #include <colorspace_fragment>
+}
+`;
+
+const CONE_VERTEX = /* glsl */ `
+attribute float along;
+attribute float across;
+varying float vAlong;
+varying float vAcross;
+void main() {
+  vAlong = along;
+  vAcross = across;
+  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+}
+`;
+
+const CONE_FRAGMENT = /* glsl */ `
+uniform vec3 color;
+uniform float strength;
+varying float vAlong;
+varying float vAcross;
+void main() {
+  // Across the side, 0..1 at any distance from the lens (the side narrows to the apex).
+  float s = vAlong > 0.001 ? (vAcross - 0.5) / vAlong + 0.5 : 0.5;
+  float edge = smoothstep(0.0, 0.3, s) * smoothstep(1.0, 0.7, s);
+  // Brightest out of the lens, thinning towards the wall.
+  float fade = mix(1.0, 0.2, vAlong);
+  gl_FragColor = vec4(color * strength * edge * fade, 1.0);
+  #include <tonemapping_fragment>
+  #include <colorspace_fragment>
+}
+`;
+
+const MOTE_VERTEX = /* glsl */ `
+uniform float time;
+uniform vec3 apex;
+uniform vec3 centre;
+uniform vec2 size;
+uniform float pixelRatio;
+attribute float phase;
+varying float vFade;
+void main() {
+  // Seeded point in the frustum: across the picture, then back towards the lens; drifting on slow sines.
+  vec3 base = centre + vec3(position.xy * size * 0.8, 0.0);
+  vec3 p = mix(apex, base, position.z);
+  p += vec3(sin(time * 0.13 + phase), sin(time * 0.09 + phase * 1.7) - 0.3 * fract(time * 0.004 + phase), cos(time * 0.11 + phase * 0.6)) * 0.05 * (0.3 + position.z);
+  vFade = (1.0 - smoothstep(0.6, 1.0, position.z)) * (0.4 + 0.6 * abs(sin(time * 0.7 + phase * 3.1)));
+  vec4 view = modelViewMatrix * vec4(p, 1.0);
+  gl_Position = projectionMatrix * view;
+  gl_PointSize = clamp(2.2 * pixelRatio * (1.5 / -view.z), 1.0, 4.0);
+}
+`;
+
+const MOTE_FRAGMENT = /* glsl */ `
+uniform vec3 color;
+uniform float strength;
+varying float vFade;
+void main() {
+  float d = length(gl_PointCoord - 0.5);
+  float a = (1.0 - smoothstep(0.1, 0.5, d)) * vFade;
+  gl_FragColor = vec4(color * strength * 14.0, a);
+  #include <tonemapping_fragment>
+  #include <colorspace_fragment>
+}
+`;

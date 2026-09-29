@@ -6,8 +6,9 @@ import { GameList } from '@/collection/GameList';
 import type { RoomOptions } from '../Room';
 import type { Furniture } from '../Furniture';
 import { GameBox } from '../GameBox';
-import { Shelf } from '../Shelf';
+import { PLINTH, Shelf } from '../Shelf';
 import { ShelfLamp } from '../props/ShelfLamp';
+import { BoxMotion } from './BoxMotion';
 import { planShelving, type BookcaseSpec } from './plan';
 import { computeSlots, type Slot, type ZRange } from './slots';
 import { nextSortMode, rowGroupKey, sortGames, type SortMode } from './sort';
@@ -43,6 +44,8 @@ export interface ShelvingOptions {
   lamps?: boolean;
   /** Where the games that do not fit are written (another Shelving's source); a fresh list by default. */
   overflow?: GameList;
+  /** A card on the first bookcase while it holds only a few games (the bare flat's start): what it is for. */
+  starterCard?: { title: string; line: string; upTo: number };
 }
 
 /** How many bookcases `options` has room for (its `layout`'s slots, or the collection room's run along its walls). */
@@ -54,10 +57,13 @@ export function slotCount(options: Pick<ShelvingOptions, 'room' | 'backWallMinX'
 
 /** Horizontal distance from a bookcase face to its ceiling spot (m). */
 const SPOT_THROW = 1.4;
+/** A re-sort slides the boxes to their new spots one after another: the last sets off this long (s) after the first. */
+const SORT_STAGGER = 0.35;
 
 const DEFAULT_SPEC: Omit<BookcaseSpec, 'width' | 'rows'> = {
   depth: 0.3,
-  height: 1.9,
+  // Five rows of about 29 cm for boxes of 18 to 20: a hand's height of air over the tallest, not a void.
+  height: 1.7,
   boardThickness: 0.025,
   gap: 0.02,
   headroom: 0.04,
@@ -89,10 +95,13 @@ export class Shelving {
   private minBookcases: number;
   private capacity: number;
   private readonly lamps: boolean;
+  private readonly starterCard: ShelvingOptions['starterCard'];
   /** What the last full rebuild laid out: its games in shelf order, the settings, the ids that did not fit. */
   private laidOut: { games: readonly Game[]; settings: string; leftover: ReadonlySet<string> } | null = null;
   /** The games that did not fit, in shelf order; another Shelving can take them as its source. */
   readonly overflow: GameList;
+  /** Ticks the boxes while they move (a hover, a slide after a sort). */
+  private readonly motion = new BoxMotion();
 
   constructor(
     private readonly host: ShelvingHost,
@@ -103,6 +112,7 @@ export class Shelving {
     this.mode = options.sort ?? 'platform';
     this.minBookcases = options.minBookcases ?? 0;
     this.lamps = options.lamps ?? true;
+    this.starterCard = options.starterCard;
     this.overflow = options.overflow ?? new GameList();
     this.ceiling = options.room.height;
     const partial = { ...DEFAULT_SPEC, ...options.bookcase };
@@ -111,6 +121,7 @@ export class Shelving {
     this.capacity = Math.min(options.capacity ?? slots.length, slots.length);
     this.spec = { ...partial, width };
     this.unsubscribe = source.subscribe(() => this.rebuild());
+    host.place(this.motion, new THREE.Vector3());
     this.rebuild();
   }
 
@@ -147,6 +158,16 @@ export class Shelving {
     this.rebuild();
   }
 
+  /** Takes `mode` for its next rebuild without rebuilding now (a group sorting all its members at once). */
+  presetSort(mode: SortMode): void {
+    this.mode = mode;
+  }
+
+  /** The sort the boxes stand in now (null before the first layout). */
+  get sortShown(): SortMode | null {
+    return this.laidOut ? (this.laidOut.settings.slice(0, this.laidOut.settings.indexOf('|')) as SortMode) : null;
+  }
+
   cycleSort(): SortMode {
     this.setSort(nextSortMode(this.mode));
     return this.mode;
@@ -162,6 +183,7 @@ export class Shelving {
     this.ordered = [];
     for (const ghost of this.ghosts) this.host.scene.remove(ghost);
     this.ghosts = [];
+    this.host.remove(this.motion);
     this.host.boxesChanged([], shown);
   }
 
@@ -173,6 +195,8 @@ export class Shelving {
       this.restyle(games, this.laidOut.leftover);
       return;
     }
+    // Only the order changed (a new sort) and the bookcases would come out the same: the boxes slide.
+    if (this.reorder(games, settings)) return;
 
     const previouslyShown = new Set(this.ordered);
     const dropped = this.reconcile(games);
@@ -180,7 +204,7 @@ export class Shelving {
     for (const box of dropped) this.disposeBox(box);
 
     const boxes = games.map((g) => this.boxById.get(g.id)!);
-    const spec: BookcaseSpec = { ...this.spec, rows: this.rowsFor(boxes) };
+    const spec: BookcaseSpec = { ...this.spec, height: this.spec.height - PLINTH, rows: this.rowsFor(boxes) };
     const plan = planShelving<GameBox>({
       items: boxes,
       dimensions: (box) => box.dimensions,
@@ -193,7 +217,7 @@ export class Shelving {
     plan.bookcases.forEach((planned, i) => {
       const slot = this.slots[i];
       const shelf = this.host.place(
-        new Shelf({ width: spec.width, depth: spec.depth, rowHeights: planned.rowHeights, gap: spec.gap, boardThickness: spec.boardThickness }),
+        new Shelf({ width: spec.width, depth: spec.depth, rowHeights: planned.rowHeights, gap: spec.gap, boardThickness: spec.boardThickness }, this.motion),
         slot.position,
         slot.rotationY,
       );
@@ -222,6 +246,7 @@ export class Shelving {
     }
 
     this.ordered = plan.bookcases.flatMap((b) => b.rows.flatMap((r) => r.items));
+    this.placeStarterCard();
     // Status comes from the fresh Game object: a reused box still holds the one it was built with.
     games.forEach((game, i) => boxes[i]!.setStatusStyle(game.status));
 
@@ -233,6 +258,59 @@ export class Shelving {
     const leftover = new Set(plan.leftover.map((box) => box.game.id));
     this.laidOut = { games, settings, leftover };
     this.overflow.set(games.filter((g) => leftover.has(g.id)));
+  }
+
+  /**
+   * A re-sort that leaves every bookcase as it stands (the same games, the same count of bookcases
+   * with the same rows, the same games left over, none in the player's hand): the shelves stay,
+   * each box slides from where it stood to its new spot, one after another. False when it would
+   * not (the caller rebuilds everything).
+   */
+  private reorder(games: readonly Game[], settings: string): boolean {
+    const before = this.laidOut;
+    if (!before || withoutMode(before.settings) !== withoutMode(settings) || !sameGames(before.games, games)) return false;
+    const boxes = games.map((g) => this.boxById.get(g.id));
+    if (boxes.some((box) => !box || (box.parent !== null && !(box.parent instanceof Shelf)))) return false;
+    const all = boxes as GameBox[];
+    const spec: BookcaseSpec = { ...this.spec, height: this.spec.height - PLINTH, rows: this.rowsFor(all) };
+    const plan = planShelving<GameBox>({
+      items: all,
+      dimensions: (box) => box.dimensions,
+      groupKey: (box) => rowGroupKey(box.game, this.mode),
+      spec,
+      maxBookcases: this.capacity,
+      minBookcases: this.minBookcases,
+    });
+    if (plan.bookcases.length !== this.shelves.length) return false;
+    if (!plan.bookcases.every((planned, i) => sameNumbers(planned.rowHeights, this.shelves[i]!.options.rowHeights))) return false;
+    const leftover = new Set(plan.leftover.map((box) => box.game.id));
+    if (leftover.size !== before.leftover.size || [...leftover].some((id) => !before.leftover.has(id))) return false;
+
+    const ordered = plan.bookcases.flatMap((b) => b.rows.flatMap((r) => r.items));
+    const order = new Map(ordered.map((box, i) => [box, i]));
+    const last = Math.max(1, ordered.length - 1);
+    plan.bookcases.forEach((planned, i) => {
+      const shelf = this.shelves[i]!;
+      planned.rows.forEach((row, r) => {
+        shelf.placeRow(r, row.items, (box) => (order.get(box)! / last) * SORT_STAGGER);
+        for (const box of row.items) this.homeOf.set(box, shelf);
+      });
+      shelf.updateShadowProxy(); // the proxy stands at the new rest poses
+    });
+    this.ordered = ordered;
+    games.forEach((game, i) => all[i]!.setStatusStyle(game.status));
+    this.laidOut = { games, settings, leftover };
+    this.overflow.set(games.filter((g) => leftover.has(g.id)));
+    return true;
+  }
+
+  /** The starter card on the first bookcase's top row, right of its few boxes, while there are few enough of them. */
+  private placeStarterCard(): void {
+    const card = this.starterCard;
+    const shelf = this.shelves[0];
+    if (!card || !shelf) return;
+    const few = this.ordered.length <= card.upTo;
+    shelf.setCard(few ? card : null, 0, shelf.options.width / 2 - shelf.options.boardThickness - 0.12);
   }
 
   /** Same games in the same order as the last rebuild: only their status (the ghost, the lent tag) can have changed. */
@@ -316,7 +394,8 @@ export class Shelving {
   private rowsFor(boxes: readonly GameBox[]): number {
     const tallest = boxes.reduce((h, b) => Math.max(h, b.dimensions.height), 0) + this.spec.headroom;
     const { height, boardThickness } = this.spec;
-    const clearance = (rows: number) => (height - (rows + 1) * boardThickness) / rows;
+    // The rows share what the plinth leaves of the bookcase's height (`Shelf` stands them on it).
+    const clearance = (rows: number) => (height - PLINTH - (rows + 1) * boardThickness) / rows;
     return clearance(5) >= tallest ? 5 : 4;
   }
 }
@@ -350,6 +429,25 @@ function signature(game: Game): string {
 /** A status change alone must not rebuild the box (its textures would be refetched). */
 function sameExceptStatus(a: Game, b: Game): boolean {
   return a === b || (a.id === b.id && signature(a) === signature(b));
+}
+
+/** The same games (but maybe their status), in any order. */
+function sameGames(a: readonly Game[], b: readonly Game[]): boolean {
+  if (a.length !== b.length) return false;
+  const byId = new Map(a.map((game) => [game.id, game]));
+  return b.every((game) => {
+    const other = byId.get(game.id);
+    return other !== undefined && sameExceptStatus(other, game);
+  });
+}
+
+/** The settings but the sort mode (its first field). */
+function withoutMode(settings: string): string {
+  return settings.slice(settings.indexOf('|'));
+}
+
+function sameNumbers(a: readonly number[], b: readonly number[]): boolean {
+  return a.length === b.length && a.every((x, i) => Math.abs(x - b[i]!) < 1e-6);
 }
 
 /** The same games (but maybe their status) in the same order. */

@@ -4,6 +4,7 @@ import { cylinderMesh } from '../meshUtils';
 import { Prop } from '../props/Prop';
 import { paint } from '../materials/palette';
 import { STREET_SNOW } from './snowCover';
+import { outOfSight } from './life/sight';
 
 const SNOW = paint(0xf2f4f8, 0.95);
 const COAL = paint(0x151515, 0.8);
@@ -13,14 +14,28 @@ const SCARF = paint(0xc8243a, 0.8);
 /** It is built once this much snow lies, and gone (melted, or kicked over) once it is under the second. */
 const BUILT_AT = 0.45;
 const GONE_AT = 0.2;
+/** Melting (the cover under `BUILT_AT`) it sags to this much of its size by the time it is gone. */
+const MELTED = 0.72;
+
+export interface SnowmanOptions {
+  /** The camera: it is built and melts away only while nobody is looking. */
+  viewer: THREE.Object3D;
+  /** The zone's collision set (world boxes): a small collider round its base while it stands. */
+  collisions?: { add(box: THREE.Box3): void; remove(box: THREE.Box3): void };
+}
 
 /**
  * A snowman someone built on the pavement, there only while the snow lies (`STREET_SNOW`, the
  * street's cover): three balls, coal eyes and buttons, a carrot, twig arms and a red scarf.
- * Standing on its base at local y = 0, facing +z. Decoration: never collides.
+ * Standing on its base at local y = 0, facing +z. It turns up and goes only while out of the
+ * player's sight (`outOfSight`), sagging as the snow melts; a small collider round its base while it stands.
  */
 export class Snowman extends Prop implements Updatable {
-  constructor() {
+  private collider: THREE.Box3 | null = null;
+  private fresh = true;
+  private readonly here = new THREE.Vector3();
+
+  constructor(private readonly options: SnowmanOptions) {
     super();
     this.name = 'Snowman';
     const balls = [0.3, 0.22, 0.15];
@@ -63,12 +78,32 @@ export class Snowman extends Prop implements Updatable {
     tail.position.set(0.08, head - headR * 0.75 - 0.1, headR * 0.7);
     tail.rotation.z = 0.2;
     this.add(scarf, tail);
-    this.visible = STREET_SNOW.value >= BUILT_AT;
+    this.visible = false;
+  }
+
+  setZoneActive(active: boolean): void {
+    if (active) this.fresh = true;
+  }
+
+  dispose(): void {
+    if (this.collider && this.visible) this.options.collisions?.remove(this.collider);
   }
 
   update(): void {
     const snow = STREET_SNOW.value;
-    if (!this.visible && snow >= BUILT_AT) this.visible = true;
-    else if (this.visible && snow < GONE_AT) this.visible = false;
+    if (!this.collider) {
+      this.updateWorldMatrix(true, false);
+      this.collider = new THREE.Box3(new THREE.Vector3(-0.3, 0, -0.3), new THREE.Vector3(0.3, 1.2, 0.3)).applyMatrix4(this.matrixWorld);
+    }
+    const want = this.visible ? snow >= GONE_AT : snow >= BUILT_AT;
+    if (want !== this.visible && (this.fresh || outOfSight(this.options.viewer, this.getWorldPosition(this.here)))) {
+      this.visible = want;
+      if (want) this.options.collisions?.add(this.collider);
+      else this.options.collisions?.remove(this.collider);
+    }
+    this.fresh = false;
+    // Sagging as it melts.
+    const melt = THREE.MathUtils.clamp((BUILT_AT - snow) / (BUILT_AT - GONE_AT), 0, 1);
+    this.scale.set(1 + melt * 0.08, 1 - melt * (1 - MELTED), 1 + melt * 0.08);
   }
 }

@@ -25,6 +25,11 @@ import { StairwellSounds } from '@/audio/flatSounds';
 import { HALLWAY_PLAN } from './hallwayPlan';
 import { Notebook } from './Notebook';
 import { StickyNote, ToDoNote } from '@/onboarding';
+import { rugsUnderfoot } from '../build/rugsUnderfoot';
+import { useVerbOn } from '@/ui/verb';
+
+/** Coming home, "keys back in the bowl" is said this many times a session; the keys' jingle says it after that. */
+const KEYS_SAID_TIMES = 2;
 
 /**
  * Builds the flat's hallway into its zone from `HALLWAY_PLAN`: the corridor shell with its doors
@@ -53,6 +58,7 @@ export function furnishHallway(zone: Zone, ctx: BuildContext): ZoneHandle {
   if (building) zone.onUnload(building.doorstep.onNote((piece) => mail.deliver([piece])));
   const [ax, az] = plan.arrival.at;
   const entrance = plan.room.doorways!.find((d) => d.wall === 'right')!;
+  let homecomings = 0;
   const homecoming = zone.place(
     new Homecoming({
       listener,
@@ -60,15 +66,17 @@ export function furnishHallway(zone: Zone, ctx: BuildContext): ZoneHandle {
       door: zone.toWorld(new THREE.Vector3(plan.room.width / 2, 0, entrance.along)),
       onHome: (session) => {
         keys.setInPocket(false);
+        keys.jingle();
         if (today.gameDay !== lastMailDay) {
           lastMailDay = today.gameDay;
           mail.deliver(mailFor(today.gameDay, { arcadeDaily, market, marketDay }));
         }
         // A mail order whose round came while the player was out: the concierge took it in.
         const posted = building?.post?.deliver().length ?? 0;
-        session.react('Home: keys back in the bowl');
+        // Said the first times only (the keys' jingle says it after that), or when something waits in the hall.
+        if (++homecomings <= KEYS_SAID_TIMES || posted || mail.count) session.react('Home: keys back in the bowl');
         if (posted) session.reward({ title: 'A parcel came', detail: 'The concierge took it in while you were out: it is under the hall console.' });
-        if (mail.count) session.tip('There is mail on the mat by the door: click it to read.', { id: 'mail', until: () => mail.count === 0 });
+        if (mail.count) session.tip(`There is mail on the mat by the door: ${useVerbOn()} to read.`, { id: 'mail', until: () => mail.count === 0 });
       },
     }),
     new THREE.Vector3(),
@@ -79,7 +87,7 @@ export function furnishHallway(zone: Zone, ctx: BuildContext): ZoneHandle {
       collisions: zone.collisions,
       leafColor: plan.frontDoorColor,
       viewer: listener,
-      guard: () => (keys.inPocket ? null : { label: 'The front door (you need your keys)', hint: 'Your keys are still in the bowl on the console' }),
+      guard: () => (keys.inPocket ? null : { label: 'Front door · you need your keys', hint: 'Your keys are still in the bowl on the console' }),
       onOpen: (session) => homecoming.wentOut(session),
     }),
     plan.entrance,
@@ -119,7 +127,7 @@ export function furnishHallway(zone: Zone, ctx: BuildContext): ZoneHandle {
   // The building beyond the front door: the stairs, the lift, the neighbours' doors, now and then.
   const [sx, sy, sz] = plan.stairwell;
   zone.place(pointSound(ctx, new StairwellSounds(), { referenceDistance: 1.5, maxDistance: 9 }), new THREE.Vector3(sx, sy, sz));
-  return { room, catVisits: floorPointsToWorld(zone, plan.catVisits) };
+  return { room, catVisits: floorPointsToWorld(zone, plan.catVisits), surfaceAt: rugsUnderfoot(zone) };
 }
 
 /** World-space box of the front door's opening through the right wall (x = `x`, local). */

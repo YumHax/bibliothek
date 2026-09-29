@@ -4,6 +4,7 @@ import type { DisplaySlot, StallLike } from './stallTypes';
 import { boxMesh, cylinderMesh } from '../meshUtils';
 import { Crate } from '../props/Crate';
 import { paint, timber } from '../materials/palette';
+import { QUALITY } from '@/graphics/quality';
 
 export interface MarketStallOptions {
   /** Text on the sign hung from the awning (a platform's name). */
@@ -221,6 +222,7 @@ export class MarketStall extends THREE.Group implements StallLike {
     const valanceMat = tiled(paintStripes(cloth, true), canopyW / (2 * STRIPE_W), 1);
     valanceMat.transparent = true;
     valanceMat.alphaTest = 0.5;
+    valanceMat.alphaToCoverage = QUALITY.msaa > 0;
     valanceMat.side = THREE.DoubleSide;
     const valance = new THREE.Mesh(new THREE.PlaneGeometry(canopyW, VALANCE_H), valanceMat);
     valance.position.set(0, frontEdgeY - VALANCE_H / 2, pz + OVERHANG + 0.006);

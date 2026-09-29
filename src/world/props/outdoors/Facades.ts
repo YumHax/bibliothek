@@ -1,98 +1,20 @@
 import { type LightKind, Polygon, Sheet, type Rng } from './Sheet';
 import { between, deg, integer, mixHex, pick, shade } from './paint';
-import { CORNER, FRONTAGE, FRONT_END, FRONT_END_FROM, FRONT_END_TO, PARK_END, PARK_END_FROM, PARK_END_TO, PARK_FAR, PARK_FROM, PARK_TO, frontage, parkLine } from './plan';
+import { CORNER, FRONTAGE, FRONT_END, FRONT_END_FROM, FRONT_END_TO, PARK_EDGE, PARK_END, PARK_END_FROM, PARK_END_TO, PARK_FAR, PARK_FROM, PARK_TO, frontage, parkLine } from './plan';
 import { FacadeFrame } from './FacadeFrame';
-import { BLINDS, CHIMNEY_POT, CURTAINS, DISH, POT_LEAVES, TERRACOTTA, WINDOW_FRAME, WINDOW_GLASS } from './palette';
+import { BLINDS, CHIMNEY_POT, CURTAINS, DISH, POT_LEAVES, TERRACOTTA, WINDOW_GLASS } from './palette';
 import { RETRO_GAMES, type PlannedShop, type Storefront, paintShopfronts } from './Shopfront';
-import { FACADES, FLAT_IN_STREET, FRONT } from '../../street/streetPlan';
+import { FACADES, FLAT_IN_STREET, FRONT, GROUND_FLOOR, STOREY, type FacadeSpec } from '../../street/streetPlan';
+import { BRICKS, FACADE_WINDOW, balconyRows, facadeBays, facadeStyle, onBalcony, type FacadeStyle } from '@/world/city/facadeStyle';
 import { holidayBetween, paintPumpkin, wantsPumpkin } from './Holiday';
 import { currentHoliday } from '@/time/season';
 
-/**
- * The architecture of one building: its wall, the stone of its trims, how its windows are dressed
- * and what hangs off them. Picked per building so that no two neighbours look alike.
- */
-interface Architecture {
-  wall: string;
-  trim: string;
-  /** Mortar courses and odd bricks over the wall. */
-  brick: boolean;
-  window: 'plain' | 'lintel' | 'arched' | 'pediment';
-  /** Window frames and bars. */
-  frame: string;
-  /** Colour of the open shutters either side of the windows, or none. */
-  shutters: string | null;
-  /** Share of the windows with a flower box on the sill. */
-  flowers: number;
-  /** Few: the odd balcony across a floor; haussmann: wrought-iron balconies along the second and top floors. */
-  balconies: 'none' | 'few' | 'haussmann';
-  /** Grooved stone ground floor, a stone band at every floor, stone blocks up the corners. */
-  rusticated: boolean;
-  courses: boolean;
-  quoins: boolean;
-  roof: 'mansard' | 'flat' | 'pitched';
-}
-
-const BRICKS = ['#b8654b', '#a86a52', '#9c6b55', '#8e4f3c', '#b0735a'];
-const RENDERS = ['#c9a583', '#b99b6d', '#cdb79b', '#d8b49a', '#c8c2a8', '#e2cf9e', '#b9c2b0', '#8f8a80', '#d9b8b0'];
-const STONES = ['#d9ccb4', '#e0d5c1', '#d4c6a8', '#cfc4b0'];
-const SHUTTERS = ['#4f6b5a', '#5a7189', '#8c3b2e', '#e6dfcf', '#6b6f4a', '#3f4f6a'];
+/** How deep Front Street's far block is: the next street's facades stand this far behind its building line. */
+const BEHIND_BLOCK = 42;
 const FLOWERS = ['#d9383a', '#e0567a', '#f0f0e8', '#b04ac0', '#f09a3a', '#e8d040'];
-/** Ground floor height and floor-to-floor height, in metres. */
-export const GROUND = 4.2;
-const FLOOR = 3.1;
-
-function architecture(random: Rng, stoneShare: number): Architecture {
-  const r = random();
-  if (r < stoneShare) {
-    // Dressed stone: carved window heads, iron balconies, a slate mansard.
-    return {
-      wall: pick(random, STONES),
-      trim: '#ece4d2',
-      brick: false,
-      window: random() < 0.6 ? 'pediment' : 'lintel',
-      frame: '#ece8e0',
-      shutters: null,
-      flowers: 0.12,
-      balconies: 'haussmann',
-      rusticated: true,
-      courses: true,
-      quoins: false,
-      roof: 'mansard',
-    };
-  }
-  if (r < stoneShare + (1 - stoneShare) * 0.45) {
-    return {
-      wall: pick(random, BRICKS),
-      trim: pick(random, ['#e0d6c2', '#d8cdb5', '#c9bda5']),
-      brick: true,
-      window: random() < 0.55 ? 'arched' : 'lintel',
-      frame: random() < 0.7 ? '#e6e1d8' : '#2e3a34',
-      shutters: null,
-      flowers: 0.2,
-      balconies: random() < 0.5 ? 'few' : 'none',
-      rusticated: false,
-      courses: random() < 0.6,
-      quoins: random() < 0.4,
-      roof: pick(random, ['flat', 'pitched', 'mansard'] as const),
-    };
-  }
-  const wall = pick(random, RENDERS);
-  return {
-    wall,
-    trim: shade(wall, 1.28),
-    brick: false,
-    window: random() < 0.7 ? 'plain' : 'lintel',
-    frame: random() < 0.75 ? WINDOW_FRAME : '#3a3a3c',
-    shutters: random() < 0.55 ? pick(random, SHUTTERS) : null,
-    flowers: 0.3,
-    balconies: random() < 0.5 ? 'few' : 'none',
-    rusticated: false,
-    courses: random() < 0.5,
-    quoins: random() < 0.3,
-    roof: pick(random, ['flat', 'flat', 'pitched', 'mansard'] as const),
-  };
-}
+/** Ground floor height and floor-to-floor height, in metres (the walkable street's). */
+export const GROUND = GROUND_FLOOR;
+const FLOOR = STOREY;
 
 export interface BuildingSpec {
   /** Azimuth range of the facade. */
@@ -109,6 +31,14 @@ export interface BuildingSpec {
   landmark?: boolean;
   /** The walkable street's shops on it, where the plan has them (then no lots are drawn for the ground floor). */
   planned?: readonly PlannedShop[];
+  /** Its look, when the plan names the building (`city/facadeStyle`, as the walkable street paints it); a lot draws its own. */
+  style?: FacadeStyle;
+  /** Window bays per storey, when not one per 2.7 m (the plan's). */
+  bays?: number;
+  /** Its residential door, along from its left end; the middle of a front without shops when absent. */
+  door?: number;
+  /** Its plan counts along from the other end (the balcony rows are mirrored). */
+  mirrored?: boolean;
 }
 
 /** Paints buildings shoulder to shoulder along `line` from azimuth `from` to `to`, `widths` metres each; returns their shops. */
@@ -149,6 +79,11 @@ export function paintBackdrops(sheet: Sheet, random: Rng): void {
     const w = between(random, 18, 40);
     paintBuilding(sheet, random, { a0: Math.atan2(x0, z), a1: Math.atan2(x0 + w, z), line: (a) => z / Math.max(Math.cos(a), 0.06), floors: integer(random, 9, 18), stoneShare: 0.1 });
   }
+  // The next street behind Front Street's block, shoulder to shoulder from the park's edge round to the
+  // side street: from the sixth floor the eye sees over the lower roofs across the road, and never
+  // down to an empty horizon, whatever the lots beyond it draw.
+  const behind = FRONTAGE + BEHIND_BLOCK;
+  paintFacadeRow(sheet, random, Math.atan2(-PARK_EDGE, behind), deg(75), (a) => behind / Math.max(Math.cos(a), 0.06), [6, 9], [12, 22], 0.3);
 }
 
 /**
@@ -170,7 +105,7 @@ export function paintFrontBlock(sheet: Sheet, random: Rng): Storefront[] {
     const width = x1 - x0;
     // The plan measures along from the facade's +x end (its left seen from the street); the eye's frame starts at -x.
     const planned = spec.shops.map((shop) => ({ s0: width - shop.to, s1: width - shop.from, kind: shop.kind, name: shop.name }));
-    shops.push(...paintBuilding(sheet, random, { a0: at(x0), a1: at(x1), line, floors: spec.storeys, shops: true, landmark: spec.shops.some((shop) => shop.kind === 'retro'), planned }));
+    shops.push(...paintBuilding(sheet, random, { a0: at(x0), a1: at(x1), line, floors: spec.storeys, shops: true, landmark: spec.shops.some((shop) => shop.kind === 'retro'), planned, ...planLook(spec, width) }));
   }
   const end = row.length ? at(row[row.length - 1]!.x1) : CORNER;
   shops.push(...paintFacadeRow(sheet, random, end, deg(180), line, [5, 6]));
@@ -178,21 +113,40 @@ export function paintFrontBlock(sheet: Sheet, random: Rng): Storefront[] {
 }
 
 /**
- * The buildings standing across the far ends of both streets, facing down them: the view along
- * Front Street and along Park Street closes on a facade instead of running on to the horizon.
+ * The buildings standing across the far ends of both streets, facing down them (the walkable
+ * street's `frontEnd` and `parkSouth`): the view along Front Street and along Park Street closes
+ * on a facade instead of running on to the horizon.
  * Painted after Front Street's block (they stand in front of its far end) and before the street,
  * whose ground stops at their foot (`ground()`).
  */
 export function paintStreetEnds(sheet: Sheet, random: Rng): void {
-  const ends: [number, number, (a: number) => number][] = [
-    [FRONT_END_FROM, FRONT_END_TO, (a) => FRONT_END / Math.max(Math.sin(a), 0.06)],
-    [PARK_END_FROM, PARK_END_TO, (a) => PARK_END / Math.max(-Math.cos(a), 0.06)],
+  const ends: [number, number, (a: number) => number, FacadeSpec][] = [
+    [FRONT_END_FROM, FRONT_END_TO, (a) => FRONT_END / Math.max(Math.sin(a), 0.06), endFacade('frontEnd')],
+    [PARK_END_FROM, PARK_END_TO, (a) => PARK_END / Math.max(-Math.cos(a), 0.06), endFacade('parkSouth')],
   ];
-  // Two buildings across each end, exactly filling it: one more would stand in the park or the block beside.
-  for (const [from, to, line] of ends) {
-    const mid = from + (to - from) * between(random, 0.4, 0.6);
-    for (const [a0, a1] of [[from, mid], [mid, to]] as const) paintBuilding(sheet, random, { a0, a1, line, floors: integer(random, 6, 8), stoneShare: 0.4 });
-  }
+  // The walkable street's building across each end, as it paints it (both are counted from the other end).
+  for (const [a0, a1, line, spec] of ends) paintBuilding(sheet, random, { a0, a1, line, floors: spec.storeys, ...planLook(spec) });
+}
+
+/** A building of the walkable street's plan by its id. */
+function endFacade(id: string): FacadeSpec {
+  const spec = FACADES.find((facade) => facade.id === id);
+  if (!spec) throw new Error(`[outdoors] no facade ${id} in the street's plan`);
+  return spec;
+}
+
+/**
+ * How a building the walkable street's plan names looks here: its style, its bays and its door (both
+ * counted from its +x end, mirrored to the eye's frame; the bays only when the painted width matches).
+ */
+function planLook(spec: FacadeSpec, width?: number): Pick<BuildingSpec, 'style' | 'bays' | 'door' | 'mirrored'> {
+  const planWidth = Math.hypot(spec.to[0] - spec.from[0], spec.to[1] - spec.from[1]);
+  return {
+    style: facadeStyle(spec.seed),
+    bays: width === undefined ? undefined : facadeBays(planWidth, spec.bays),
+    door: width === undefined || spec.door === undefined ? undefined : width - spec.door,
+    mirrored: true,
+  };
 }
 
 /**
@@ -205,11 +159,15 @@ export function paintBuilding(sheet: Sheet, random: Rng, spec: BuildingSpec): St
   const { floors } = spec;
   const f = new FacadeFrame(sheet, spec.a0, spec.a1, spec.line);
   const { d, w, fine } = f;
-  const arch = architecture(random, spec.stoneShare ?? 0.25);
+  // A building the plan names looks as the walkable street paints it; a lot draws its own look from the sequence.
+  const arch = spec.style ?? facadeStyle(integer(random, 1, 999999), spec.stoneShare ?? 0.25, random);
   const h = GROUND + (floors - 1) * FLOOR + 0.5;
-  const cols = Math.max(1, Math.floor(w / 2.7));
+  const cols = facadeBays(w, spec.bays);
   const pitch = w / cols;
-  const winW = Math.min(1.35, pitch * 0.55);
+  const winW = Math.min(FACADE_WINDOW.maxWidth, pitch * FACADE_WINDOW.share);
+  // The style's balcony rows count bays from the building's left end seen from the street; ours from the eye's -x end.
+  const balconies = balconyRows(arch, floors, cols).map((row) => (spec.mirrored ? { ...row, from: cols - 1 - row.to, to: cols - 1 - row.from } : row));
+  const door = spec.door ?? w / 2;
   let shops: Storefront[] = [];
 
   sheet.begin(d, 0.05);
@@ -220,36 +178,40 @@ export function paintBuilding(sheet: Sheet, random: Rng, spec: BuildingSpec): St
     if (fine) paintWallTexture(f, random, arch, h);
     f.detail(body, f.vertical(0, h, [[0, 'rgba(255,255,255,0.05)'], [0.55, 'rgba(0,0,0,0.04)'], [1, 'rgba(0,0,0,0.3)']]));
 
-    // Street level: shops, or a residential entrance between windows.
+    // Street level: shops (and the residents' door where the plan has one), or a residential entrance between windows.
     if (spec.planned ? spec.planned.length > 0 : spec.landmark || (spec.shops && fine && random() < 0.72)) {
       shops = paintShopfronts(f, random, arch.wall, spec.landmark ? RETRO_GAMES : undefined, spec.planned);
+      if (fine && spec.door !== undefined) paintEntrance(f, random, arch, door);
     } else {
       sheet.path(f.strip(0, w, -1.5, GROUND - 0.5), arch.rusticated ? shade(arch.wall, 0.95) : shade(arch.wall, 0.82));
       if (fine) {
         if (arch.rusticated) paintGrooves(f, 0, GROUND - 0.5);
-        paintEntrance(f, random, arch, w / 2);
+        paintEntrance(f, random, arch, door);
       }
       for (let c = 0; c < cols; c++) {
         const s0 = c * pitch + (pitch - winW) / 2;
-        if (Math.abs(s0 + winW / 2 - w / 2) < 1.4) continue; // the door is there
+        if (Math.abs(s0 + winW / 2 - door) < 1.4) continue; // the door is there
         paintWindow(f, random, arch, s0, s0 + winW, 1.1, 3.0, 0.3, false);
       }
     }
-    if (fine && arch.courses) f.detail(f.strip(0, w, GROUND - 0.5, GROUND - 0.25), shade(arch.trim, 0.95));
+    // The course under the first floor: over the shops' fascias (up to 3.6) and awnings (3.7), under the first floor's sills.
+    if (fine && arch.courses) f.detail(f.strip(0, w, GROUND - 0.25, GROUND), shade(arch.trim, 0.95));
 
-    // Upper floors.
+    // Upper floors, the windows where the walkable street has them (`FACADE_WINDOW`).
     for (let fl = 1; fl < floors; fl++) {
-      const hb = GROUND + (fl - 1) * FLOOR + 0.55;
-      const ht = hb + 1.95;
-      const haussmann = arch.balconies === 'haussmann' && (fl === 1 || fl === floors - 1);
-      const balcony = fine && (haussmann || (arch.balconies === 'few' && random() < 0.25));
-      if (fine && arch.courses && fl > 1) f.detail(f.strip(0, w, hb - 0.6, hb - 0.45), shade(arch.trim, 0.9));
+      const hb = GROUND + (fl - 1) * FLOOR + FACADE_WINDOW.sill;
+      const ht = hb + FACADE_WINDOW.height;
+      if (fine && arch.courses && fl > 1) f.detail(f.strip(0, w, hb - 0.95, hb - 0.8), shade(arch.trim, 0.9));
       for (let c = 0; c < cols; c++) {
         const s0 = c * pitch + (pitch - winW) / 2;
         // Tall French windows onto the balconies.
+        const balcony = fine && onBalcony(balconies, fl, c);
         paintWindow(f, random, arch, s0, s0 + winW, balcony ? hb - 0.4 : hb, ht, 0.34, fl === 1 && !balcony);
       }
-      if (balcony) paintBalcony(f, random, arch, haussmann ? 0.1 : between(random, 0.2, w * 0.3), haussmann ? w - 0.1 : between(random, w * 0.7, w - 0.2), hb - 0.45, haussmann);
+      if (!fine) continue;
+      for (const row of balconies) {
+        if (row.floor === fl) paintBalcony(f, random, arch, row.from * pitch + pitch * 0.08, (row.to + 1) * pitch - pitch * 0.08, hb - 0.45, arch.balconies === 'haussmann');
+      }
     }
     if (fine && arch.quoins) paintQuoins(f, arch, h);
     if (fine && random() < 0.6) {
@@ -266,10 +228,10 @@ export function paintBuilding(sheet: Sheet, random: Rng, spec: BuildingSpec): St
 }
 
 /** Brick courses or weathered render over the wall. */
-function paintWallTexture(f: FacadeFrame, random: Rng, arch: Architecture, h: number): void {
+function paintWallTexture(f: FacadeFrame, random: Rng, arch: FacadeStyle, h: number): void {
   const ctx = f.sheet.color;
   const { y: pxY } = f.pxPerMetre;
-  if (arch.brick) {
+  if (arch.kind === 'brick') {
     // Mortar every few courses, and bricks a shade off here and there.
     const step = Math.max(0.3, 2.2 / pxY);
     for (let y = 0.2; y < h; y += step) f.detail(f.strip(0, f.w, y, y + Math.min(0.05, step * 0.3)), 'rgba(235,225,210,0.08)');
@@ -308,7 +270,7 @@ function paintGrooves(f: FacadeFrame, hB: number, hT: number): void {
 }
 
 /** Stone blocks up both corners, long and short in turn. */
-function paintQuoins(f: FacadeFrame, arch: Architecture, h: number): void {
+function paintQuoins(f: FacadeFrame, arch: FacadeStyle, h: number): void {
   let long = true;
   const stone = mixHex(arch.wall, arch.trim, 0.6);
   for (let y = 0.3; y < h - 0.6; y += 0.62) {
@@ -320,7 +282,7 @@ function paintQuoins(f: FacadeFrame, arch: Architecture, h: number): void {
 }
 
 /** A residential entrance at `s`: steps, a panelled door under a fanlight, a house number lamp. */
-function paintEntrance(f: FacadeFrame, random: Rng, arch: Architecture, s: number): void {
+function paintEntrance(f: FacadeFrame, random: Rng, arch: FacadeStyle, s: number): void {
   const door = pick(random, ['#2c2622', '#3a2418', '#1f3a34', '#2a3450', '#5a1f1f']);
   f.detail(f.quad(s - 0.95, s + 0.95, 0, 3.35), arch.trim);
   f.detail(f.quad(s - 0.75, s + 0.75, 0.15, 2.55), door);
@@ -342,7 +304,7 @@ function paintEntrance(f: FacadeFrame, random: Rng, arch: Architecture, s: numbe
  * architecture has them; at night it may light up, with the furniture and curtains in it dimmer
  * than the bare glass.
  */
-function paintWindow(f: FacadeFrame, random: Rng, arch: Architecture, s0: number, s1: number, hb: number, ht: number, litShare: number, nobile: boolean): void {
+function paintWindow(f: FacadeFrame, random: Rng, arch: FacadeStyle, s0: number, s1: number, hb: number, ht: number, litShare: number, nobile: boolean): void {
   const { sheet, d, fine } = f;
   const winW = s1 - s0;
   const arched = arch.window === 'arched';
@@ -489,7 +451,7 @@ function paintFlowerBox(f: FacadeFrame, random: Rng, s0: number, s1: number, hb:
  * seen from above, its edge from the front), a wrought-iron railing and, now and then, pots and a
  * little table behind it. Haussmann balconies are shallower, with a denser, patterned railing.
  */
-function paintBalcony(f: FacadeFrame, random: Rng, arch: Architecture, s0: number, s1: number, hb: number, haussmann: boolean): void {
+function paintBalcony(f: FacadeFrame, random: Rng, arch: FacadeStyle, s0: number, s1: number, hb: number, haussmann: boolean): void {
   const { sheet, d } = f;
   const depth = haussmann ? 0.6 : 1.1;
   const iron = '#1f2224';
@@ -524,10 +486,10 @@ function paintBalcony(f: FacadeFrame, random: Rng, arch: Architecture, s0: numbe
 }
 
 /** Cornice, then a slate mansard with dormers, a tiled pitched roof or a flat roof with its clutter; chimney stacks with pots on top. */
-function paintRoof(f: FacadeFrame, random: Rng, arch: Architecture, h: number, cols: number, pitch: number, winW: number): void {
+function paintRoof(f: FacadeFrame, random: Rng, arch: FacadeStyle, h: number, cols: number, pitch: number, winW: number): void {
   const { sheet, d, w, fine } = f;
   sheet.begin(d, 0.05);
-  sheet.path(f.strip(-0.15, w + 0.15, h, h + 0.55), shade(arch.trim, arch.brick ? 1 : 1.02));
+  sheet.path(f.strip(-0.15, w + 0.15, h, h + 0.55), shade(arch.trim, arch.kind === 'brick' ? 1 : 1.02));
   f.detail(f.strip(-0.15, w + 0.15, h + 0.4, h + 0.55), 'rgba(255,255,255,0.12)');
   if (fine) {
     // Brackets (modillions) under the cornice.
@@ -549,7 +511,7 @@ function paintRoof(f: FacadeFrame, random: Rng, arch: Architecture, h: number, c
     p.lineTo(x2, y2);
     p.lineTo(x3, y3);
     p.closePath();
-    const slate = mansard ? pick(random, ['#4a4f58', '#545a63', '#3f454e']) : pick(random, ['#9a5a3d', '#8a4a32', '#a8664a']);
+    const slate = arch.roofColor;
     sheet.begin(d, mansard ? 0.15 : 0.05, { wet: 0.3, snow: 0.8 });
     sheet.path(p, slate);
     if (fine) {
@@ -648,7 +610,7 @@ function paintRoof(f: FacadeFrame, random: Rng, arch: Architecture, h: number, c
     const s = between(random, 0.8, Math.max(1, w - 1.8));
     const cw = between(random, 0.8, 1.6);
     const ch = roofTop + between(random, 0.8, 1.6);
-    const stack = arch.brick || random() < 0.5 ? mixHex(pick(random, BRICKS), '#000000', 0.1) : shade(arch.wall, 0.85);
+    const stack = arch.kind === 'brick' || random() < 0.5 ? mixHex(pick(random, BRICKS), '#000000', 0.1) : shade(arch.wall, 0.85);
     sheet.path(f.quad(s, s + cw, roofTop - 1, ch), stack);
     sheet.path(f.quad(s - 0.06, s + cw + 0.06, ch, ch + 0.15), shade(stack, 1.2));
     if (fine) {

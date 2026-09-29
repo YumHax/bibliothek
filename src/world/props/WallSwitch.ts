@@ -5,6 +5,8 @@ import { invisibleHitbox } from '../meshUtils';
 import { paint } from '../materials/palette';
 import { Prop, part } from './Prop';
 import type { SwitchableLamp } from './SwitchableLamp';
+import { HoverGlint } from './hoverGlint';
+import { playRockerClick } from '@/audio/furnitureSounds';
 
 export interface WallSwitchOptions {
   /** The lamp this switch drives (the room's pendant or flush light): clicking the switch toggles it. */
@@ -19,7 +21,6 @@ const ROCKER = 0.05;
 const ROCKER_DEPTH = 0.007;
 /** Tilt of the rocker about its horizontal axis: top pressed in when on, bottom when off. */
 const ROCKER_TILT = 0.14;
-const HOVER_GLOW = 0.25;
 
 /**
  * A rocker light switch on a wall, by a door, at hand height: the everyday way to switch a room's
@@ -32,7 +33,8 @@ export class WallSwitch extends Prop implements Interactable {
   readonly hitboxes: THREE.Object3D[];
   private readonly lamp: SwitchableLamp;
   private readonly rocker: THREE.Mesh;
-  private readonly rockerMat: THREE.MeshStandardMaterial;
+  /** The rocker is what glints on hover. */
+  private readonly glint: HoverGlint;
 
   constructor(options: WallSwitchOptions) {
     super();
@@ -40,8 +42,8 @@ export class WallSwitch extends Prop implements Interactable {
     this.lamp = options.lamp;
     const plate = paint(options.plateColor ?? 0xf1ede6, 0.5);
     part(this, PLATE, PLATE, PLATE_DEPTH, plate, { z: PLATE_DEPTH / 2 }).castShadow = false;
-    this.rockerMat = new THREE.MeshStandardMaterial({ color: 0xf6f3ee, roughness: 0.35, emissive: 0xfff1d6, emissiveIntensity: 0 });
-    this.rocker = part(this, ROCKER, ROCKER, ROCKER_DEPTH, this.rockerMat, {});
+    this.rocker = part(this, ROCKER, ROCKER, ROCKER_DEPTH, paint(0xf6f3ee, 0.35), {});
+    this.glint = HoverGlint.of(this.rocker);
     this.rocker.castShadow = false;
     this.rocker.position.z = PLATE_DEPTH + ROCKER_DEPTH / 2;
     // Two screw heads either side of the rocker.
@@ -59,16 +61,17 @@ export class WallSwitch extends Prop implements Interactable {
   }
 
   setHovered(hovered: boolean): void {
-    this.rockerMat.emissiveIntensity = hovered ? HOVER_GLOW : 0;
+    this.glint.set(hovered);
     this.sync();
   }
 
   label(): string {
     this.sync();
-    return this.lamp.isOn ? 'Click to switch the light off' : 'Click to switch the light on';
+    return `Light switch · switch ${this.lamp.isOn ? 'off' : 'on'}`;
   }
 
   activate(_session: SessionActions): void {
+    playRockerClick();
     this.lamp.toggle();
     this.sync();
   }

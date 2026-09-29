@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { isShared } from '../materials/sharedResources';
+import { isShared, markShared } from '../materials/sharedResources';
 
 /**
  * Everything flat that lies on, or hangs against, another surface: one table, so two things never
@@ -104,12 +104,34 @@ export const FACADE = {
  * palette material (which must not change for every other prop using it).
  */
 export function onSurface<M extends THREE.Material>(given: M, layer: SurfaceLayer, { depthWrite = given.depthWrite }: { depthWrite?: boolean } = {}): M {
-  const material = isShared(given) ? (given.clone() as M) : given;
+  const material = isShared(given) ? (sharedCopy(given, layer, depthWrite) as M) : given;
   material.polygonOffset = true;
   material.polygonOffsetFactor = -1;
   material.polygonOffsetUnits = -layer.rank;
   material.depthWrite = depthWrite;
   return material;
+}
+
+/** The layered copies of shared materials, one per (material, layer, depth write): shared in turn. */
+const copies = new WeakMap<THREE.Material, Map<string, THREE.Material>>();
+
+/**
+ * The copy of a shared `given` that draws as `layer`: made once and shared like its source (it
+ * holds the source's textures, which no zone may free). `clone()` drops a shader patch
+ * (`patchShader`), so the copy takes the source's.
+ */
+function sharedCopy(given: THREE.Material, layer: SurfaceLayer, depthWrite: boolean): THREE.Material {
+  let byLayer = copies.get(given);
+  if (!byLayer) copies.set(given, (byLayer = new Map()));
+  const key = `${layer.rank}|${depthWrite}`;
+  let copy = byLayer.get(key);
+  if (!copy) {
+    copy = given.clone();
+    copy.onBeforeCompile = given.onBeforeCompile;
+    copy.customProgramCacheKey = given.customProgramCacheKey;
+    byLayer.set(key, markShared(copy));
+  }
+  return copy;
 }
 
 /**
@@ -134,8 +156,6 @@ export function decal(width: number, height: number, material: THREE.Material, l
  * geometry is `opaque`; everything transparent picks a band here, never a bare number.
  */
 export const RENDER_ORDER = {
-  /** The street's sky dome: behind everything. */
-  sky: -1000,
   /** Contact shadows: under whatever stands in them. */
   contactShadow: -1,
   opaque: 0,
@@ -148,6 +168,6 @@ export const RENDER_ORDER = {
   particles: 3,
   /** Labels floating over a surface (a price scan label). */
   label: 9,
-  /** Drawn last: speech bubbles, the projector's cone, the balcony's surround. */
+  /** Drawn last: speech bubbles, the projector's cone, the balcony's surround, the street's sky dome (opaque, depth-tested on the far plane). */
   overlay: 10,
 } as const;

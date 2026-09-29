@@ -1,17 +1,19 @@
 import { audioBus, audioContext } from './audioContext';
+import { spatialInput, type Spatial } from './spatial';
 
 /** Partials of a struck coin (Hz): inharmonic, bright, short. */
 const PARTIALS = [2350, 3900, 5600];
 
 /**
  * A few coins changing hands: `count` metallic clinks a little apart, each a handful of decaying
- * inharmonic partials. Called at the moment of a sale (a click started the audio already).
+ * inharmonic partials. Called at the moment of a sale (a click started the audio already); `spatial`
+ * places them (a friend's tip, from where they stand).
  */
-export function playCoins(count = 3, level = 0.12): void {
+export function playCoins(count = 3, level = 0.12, spatial?: Spatial): void {
   const ctx = audioContext();
   const out = ctx.createGain();
   out.gain.value = level;
-  out.connect(audioBus(ctx, 'world'));
+  out.connect(spatialInput(ctx, audioBus(ctx, 'world'), spatial, 1.5));
   let t = ctx.currentTime + 0.01;
   for (let i = 0; i < count; i++) {
     const pitch = 0.9 + Math.random() * 0.25;

@@ -3,6 +3,7 @@ import { type ArcadeControls, type ArcadeGame, type RunContext, SCREEN_H, SCREEN
 import { seededRandom } from '@/covers/generated/canvasUtils';
 import { Fx } from './Fx';
 import { KeyEdges } from './KeyEdges';
+import { POINTS_PER_TICKET } from '@/economy/pricing';
 
 /** The HUD strip across the top; the playfield starts at `PLAY_TOP`. */
 export const PLAY_TOP = 22;
@@ -15,7 +16,7 @@ const LOW_TIME = 5;
 export const COMBO_COLORS = ['#c9c4ff', '#c9c4ff', '#7ee787', '#ffe066', '#ffb347', '#ff5f5f'];
 
 /**
- * The run every cabinet game shares, so each game is only its rules (a play is a 10-15 second
+ * The run every cabinet game shares, so each game is only its rules (a play is a 12-30 second
  * burst that skill stretches: every game hands out seconds and gets harder stage by stage, so a
  * run is unbounded in theory and short in practice). A READY / GO countdown, an
  * optional clock with a time bar (games can add seconds), a combo multiplier that decays, score
@@ -38,7 +39,7 @@ export abstract class BaseGame implements ArcadeGame {
   protected timeLeft = Infinity;
   protected elapsed = 0;
   private best = 0;
-  private pointsPerTicket = 50;
+  private pointsPerTicket = POINTS_PER_TICKET;
   private intro = 0;
   private outro = 0;
   private endReason = '';
@@ -173,9 +174,10 @@ export abstract class BaseGame implements ArcadeGame {
 
   /** One more step on the multiplier, kept for `hold` seconds since the last step. */
   protected bumpCombo(hold = 2.5): void {
+    const before = this.combo;
     this.combo = Math.min(COMBO_MAX, this.combo + 1);
     this.comboTimer = hold;
-    if (this.combo === COMBO_MAX && this.comboTimer === hold) this.fx.shake(1.5, 0.1);
+    if (before < COMBO_MAX && this.combo === COMBO_MAX) this.fx.shake(1.5, 0.1);
   }
 
   protected breakCombo(): void {
@@ -236,6 +238,12 @@ export abstract class BaseGame implements ArcadeGame {
       ctx.fillRect(0, PLAY_TOP - 3, SCREEN_W, 3);
       ctx.fillStyle = low ? '#ff5f5f' : '#63b3ff';
       ctx.fillRect(0, PLAY_TOP - 3, SCREEN_W * frac, 3);
+      // Seconds banked over the limit: a second colour over the full bar, so earned time shows.
+      const banked = Math.min(1, Math.max(0, this.timeLeft - total) / total);
+      if (banked > 0) {
+        ctx.fillStyle = '#7ee787';
+        ctx.fillRect(0, PLAY_TOP - 3, SCREEN_W * banked, 3);
+      }
     } else if (this.best > 0) {
       drawText(ctx, `BEST ${this.best}`, SCREEN_W - 6, 10, 8, '#c9c4ff', 'right');
     }

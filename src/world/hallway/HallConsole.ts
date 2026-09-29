@@ -17,6 +17,8 @@ export interface HallConsoleOptions {
 
 const DEPTH = 0.24;
 const TOP_Y = 0.82;
+/** The console's top over the floor: what stands on it is placed there (`hallwayPlan`). */
+export const HALL_CONSOLE_TOP = TOP_Y;
 /** How far the console stands off the wall (its back legs). */
 const OFF_WALL = 0.01;
 const MIRROR_W = 0.55;
@@ -25,7 +27,8 @@ const MIRROR_Y = 1.55;
 
 const WALNUT = timber(0x5e412b, 0.5);
 const BRASS = METAL.brass();
-const GLASS = standard({ color: 0xb8c4cc, roughness: 0.08, metalness: 0.2 });
+// A mirror: silvered glass, so raw metal (metalness 1), its tint the silver's.
+const GLASS = standard({ color: 0xc8ccd0, roughness: 0.05, metalness: 1 });
 
 /**
  * A narrow walnut console against a wall: a key bowl, the mail in a small pile, a plant at the

@@ -1,6 +1,8 @@
 import * as THREE from 'three';
+import { QUALITY } from '@/graphics/quality';
 import { createCanvas, seededRandom, toTexture } from '@/covers/generated/canvasUtils';
 import { paintOnce } from './materials/paintedTiles';
+import { afterChunk, patchShader, VALUE_NOISE } from './materials/shaderPatch';
 
 /** A tiled floor's look (`RoomFinish.floorTiles`); every field has a default. */
 export interface FloorTiles {
@@ -41,7 +43,36 @@ export function tiledFloorMaterial(floorWidth: number, floorDepth: number, optio
     // A joint on the room's centre lines: the pattern starts at the origin.
     t.offset.set(-floorWidth / regionX / 2, -floorDepth / regionY / 2);
   }
-  return new THREE.MeshStandardMaterial({ map, bumpMap, bumpScale: 0.5, roughness: roughness ?? 0.35, metalness: 0 });
+  const material = new THREE.MeshStandardMaterial({ map, bumpMap, bumpScale: 0.5, roughness: roughness ?? 0.35, metalness: 0 });
+  return shadePerTile(material, look);
+}
+
+/**
+ * The painted region repeats every metre or so, and with it each tile's shade: across a bathroom
+ * the grid of repeats shows. Square and checker tiles also get a shade and a sheen of their own
+ * from a hash of their index on the floor (no map: the floors are at their texture units' limit),
+ * so no two regions look alike. The hexagon mosaic is small enough not to show its repeat.
+ */
+function shadePerTile(material: THREE.MeshStandardMaterial, look: FloorTiles): THREE.MeshStandardMaterial {
+  const { pattern, size, regionX, regionY } = region(look);
+  if (pattern === 'hex') return material;
+  const variance = (look.variance ?? 0.03) * 1.5;
+  return patchShader(material, `tileShade${pattern}`, (shader) => {
+    shader.uniforms.tileRegion = { value: new THREE.Vector2(regionX / size, regionY / size) };
+    shader.uniforms.tileVariance = { value: variance };
+    shader.fragmentShader = `uniform vec2 tileRegion;\nuniform float tileVariance;\n${VALUE_NOISE}\n` + afterChunk(shader.fragmentShader, 'map_fragment', /* glsl */ `
+      #ifdef USE_MAP
+        vec2 tileIndex = floor(vMapUv * tileRegion);
+        float tileHash = patchHash(tileIndex + 17.0);
+        diffuseColor.rgb *= 1.0 + tileVariance * (2.0 * tileHash - 1.0);
+      #endif
+    `);
+    shader.fragmentShader = afterChunk(shader.fragmentShader, 'roughnessmap_fragment', /* glsl */ `
+      #ifdef USE_MAP
+        roughnessFactor = clamp(roughnessFactor * (1.0 + 0.18 * (2.0 * patchHash(tileIndex + 41.0) - 1.0)), 0.0, 1.0);
+      #endif
+    `);
+  });
 }
 
 /** The pattern and tile size of `options`, with the region the texture covers: whole periods of the pattern, about `REGION_M` each way. */
@@ -128,10 +159,10 @@ function paintTiles(options: FloorTiles): [THREE.Texture, THREE.Texture] {
     }
   }
 
-  const map = toTexture(colorCanvas, 8);
+  const map = toTexture(colorCanvas);
   // The bump map is data, not colour: no sRGB decoding.
   const bumpMap = new THREE.CanvasTexture(bumpCanvas);
-  bumpMap.anisotropy = 4;
+  bumpMap.anisotropy = QUALITY.anisotropy;
   for (const t of [map, bumpMap]) t.wrapS = t.wrapT = THREE.RepeatWrapping;
   return [map, bumpMap];
 }

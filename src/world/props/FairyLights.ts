@@ -25,6 +25,8 @@ export interface FairyLightsOptions {
 const WIRE = standard({ color: 0x1a2a1a, roughness: 0.7 });
 const COLORS = [0xff3a2a, 0xffd23a, 0x3aff6a, 0x4a8aff, 0xfff4e0];
 const TWINKLE_SECONDS = 0.5;
+/** Scratch colour of a twinkle (one for every string: filled and copied into the instance buffer at once). */
+const TWINKLE_COLOR = new THREE.Color();
 
 /** The wire's sagging line, for its tube. */
 class PointCurve extends THREE.Curve<THREE.Vector3> {
@@ -90,7 +92,7 @@ export class FairyLights extends Prop implements Updatable {
     this.clock += dt;
     if (this.clock < TWINKLE_SECONDS) return;
     this.clock = 0;
-    const c = new THREE.Color();
+    const c = TWINKLE_COLOR;
     for (let i = 0; i < this.colors.length; i++) this.bulbs.setColorAt(i, c.copy(this.colors[i]!).multiplyScalar(this.random() < 0.2 ? 0.3 : 1.2));
     if (this.bulbs.instanceColor) this.bulbs.instanceColor.needsUpdate = true;
   }

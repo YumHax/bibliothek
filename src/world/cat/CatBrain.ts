@@ -5,8 +5,9 @@ import type { CatNav } from './CatNav';
 import type { CatMotion } from './CatMotion';
 import type { CatPerch, WindowLookout } from './spots';
 import { CatMind } from './CatMind';
-import { STATES, type CatState } from './catStates';
+import { CAT_TIMING, STATES, type CatState } from './catStates';
 import { chance } from './random';
+import { placeForMorning } from './morning';
 
 export type { CatState } from './catStates';
 
@@ -57,6 +58,26 @@ const PET_WINDOW_S = 10;
 const PETS_BEFORE_ANNOYED = 4;
 const ANNOYED_S = 30;
 const LAP_AFTER_S = 20;
+/**
+ * The clock jumping this far ahead in one frame (in-game hours), from bedtime hours, is a sleep (by
+ * day only a pastime leaps, under `NIGHT_H`): a frame's own tick is a few thousandths of an hour. A leap of `NIGHT_H` or more
+ * is a night (it wakes hungry); any leap into the morning hours puts the cat where a cat is at breakfast.
+ */
+const TIME_SKIP_H = 0.5;
+const NIGHT_H = 3;
+/** The hours the bed sends the player to sleep in (`game/Sleep`'s `SLEEPY`): a short leap counts as a sleep only from these. */
+const BEDTIME = { from: 20, until: 5 };
+/** Fed up, it grumbles at most this often (s); strokes in between only get a flick of the tail. */
+const GRUMBLE_EVERY_S = 4;
+/** Asleep this long (s) before the breathing turns into a snore, and only one nap in `SNORE_CHANCE`. */
+const SNORE_AFTER_S = [20, 40] as const;
+const SNORE_CHANCE = 0.5;
+/** A refilled bowl fetches a cat this hungry from this near (m, floor distance), at a trot. */
+const REFILL_CALLS = { hunger: 0.45, distance: 6 };
+/** Busy at something of its own: a stroke gets a purr and a slow blink, and it carries on. */
+const CARRIES_ON: readonly CatState[] = ['eat', 'drink', 'scratch'];
+/** States a refilled bowl does not interrupt: asleep, busy with the player, in flight, already at the bowl. */
+const DEAF_TO_BOWL: readonly CatState[] = ['sleep', 'halfWake', 'lap', 'petted', 'startle', 'flee', 'hop', 'mount', 'mountLap', 'begin', 'eat', 'beg', 'treat'];
 
 /**
  * The cat's behaviour: a state machine with needs (hunger, thirst, grooming) and a daily rhythm
@@ -74,6 +95,13 @@ export class CatBrain {
   private attendFor = 0;
   private readonly petTimes: number[] = [];
   private playerSeatedFor = 0;
+  private lastHours = NaN;
+  private lastBowl = NaN;
+  /** Petted while busy: the purr stops after this long. */
+  private purrFor = 0;
+  private lastGrumble = -Infinity;
+  /** This nap's snore: from how far into it (s; Infinity: a quiet nap). */
+  private snoreAfter = Infinity;
 
   constructor(private readonly ctx: CatBrainContext) {
     this.mind = new CatMind(ctx);
@@ -105,14 +133,28 @@ export class CatBrain {
     mind.startleCooldown -= dt;
     this.attendFor -= dt;
     if (mind.playerSeat) this.playerSeatedFor += dt;
+    if (this.purrFor > 0) {
+      this.purrFor -= dt;
+      // (On the lap or being stroked, those states own the purr.)
+      if (this.purrFor <= 0 && mind.state !== 'lap' && mind.state !== 'petted') mind.setPurr(false);
+    }
 
     this.ctx.player.getEyePosition(mind.eye);
     mind.playerDistance = Math.hypot(mind.eye.x - this.ctx.cat.position.x, mind.eye.z - this.ctx.cat.position.z);
 
     mind.hasGaze = false;
+    this.noticeTimeSkip();
+    this.noticeRefill();
     this.observePlayer(dt);
     this.tick(dt);
     this.applyGaze();
+    if (mind.state !== 'sleep') this.snoreAfter = Math.random() < SNORE_CHANCE ? SNORE_AFTER_S[0] + Math.random() * (SNORE_AFTER_S[1] - SNORE_AFTER_S[0]) : Infinity;
+    this.ctx.voice?.setSnoring(mind.state === 'sleep' && this.ctx.body.pose === 'sleep' && mind.age > this.snoreAfter);
+  }
+
+  /** The fly it is chasing (a point in its parent's frame), or null. */
+  get fly(): THREE.Vector3 | null {
+    return this.mind.flying ? this.mind.lookPoint : null;
   }
 
   /** The player strokes the cat. */
@@ -123,15 +165,16 @@ export class CatBrain {
     while (this.petTimes.length && this.now - this.petTimes[0] > PET_WINDOW_S) this.petTimes.shift();
     if (this.annoyedFor > 0) {
       this.ctx.body.flick();
+      this.grumble();
       return 'annoyed';
     }
     if (this.petTimes.length >= PETS_BEFORE_ANNOYED) {
       this.petTimes.length = 0;
       this.annoyedFor = ANNOYED_S;
       this.ctx.body.flick();
-      this.ctx.voice?.meow('grumble');
+      this.grumble();
       mind.setPurr(false);
-      if (mind.state === 'lap') this.lapCooldown = 90;
+      if (mind.state === 'lap') this.lapCooldown = CAT_TIMING.lapCooldownAnnoyed;
       mind.startActivity('fleeMild');
       return 'annoyed';
     }
@@ -143,16 +186,36 @@ export class CatBrain {
       mind.setPurr(true);
       return 'purr';
     }
+    if (CARRIES_ON.includes(mind.state)) {
+      mind.setPurr(true);
+      this.ctx.body.slowBlink();
+      this.purrFor = CAT_TIMING.purrWhileBusy;
+      return 'purr';
+    }
     mind.enter('petted');
     return 'purr';
   }
 
-  /** The player calls the cat. */
-  call(): CallOutcome {
+  /** A grumble, unless it grumbled a moment ago (the flick of the tail says enough then). */
+  private grumble(): void {
+    if (this.now - this.lastGrumble < GRUMBLE_EVERY_S) return;
+    this.lastGrumble = this.now;
+    this.ctx.voice?.meow('grumble');
+  }
+
+  /** The player calls the cat; `treats` (the jar rattled) always fetches an awake cat that is free to come. */
+  call(treats = false): CallOutcome {
     const state = this.mind.state;
     if (state === 'sleep' || state === 'halfWake') {
       this.ctx.body.flick();
       return 'asleep';
+    }
+    if (treats) {
+      // Nothing but being mid-leap (or already at it) keeps a cat from a treat, not even a grudge.
+      if (state === 'startle' || state === 'hop' || state === 'treat') return 'ignored';
+      this.ctx.body.prick();
+      this.mind.startActivity('treat');
+      return 'coming';
     }
     const busy = state === 'lap' || state === 'petted' || state === 'startle' || state === 'flee' || state === 'hop' || state === 'called';
     if (this.annoyedFor > 0 || busy) return 'ignored';
@@ -180,7 +243,7 @@ export class CatBrain {
       }
     } else if (wasOnLap) {
       mind.setPurr(false);
-      this.lapCooldown = 60;
+      this.lapCooldown = CAT_TIMING.lapCooldownStood;
       mind.startActivity('none');
     }
   }
@@ -201,25 +264,61 @@ export class CatBrain {
 
   // --- reactions ------------------------------------------------------------------------------
 
+  /** The clock leapt forward (a night in bed): come the morning, the cat is wherever a cat would be by then. */
+  private noticeTimeSkip(): void {
+    const hours = this.ctx.clock.state.hours;
+    const last = this.lastHours;
+    this.lastHours = hours;
+    if (Number.isNaN(last)) return;
+    const ahead = (((hours - last) % 24) + 24) % 24;
+    // A pastime winds the clock on too (under 3 h, `HOUSEHOLD.pastimeMaxMinutes`), by day: only a leap from
+    // bedtime hours (`game/Sleep`'s evening and small hours) is a short night; any other leap must be a night's length.
+    const fromBedtime = last >= BEDTIME.from || last < BEDTIME.until;
+    if (ahead < (fromBedtime ? TIME_SKIP_H : NIGHT_H)) return;
+    this.petTimes.length = 0;
+    this.annoyedFor = 0;
+    this.lapCooldown = 0;
+    placeForMorning(this.mind, ahead >= NIGHT_H);
+  }
+
+  /** The bowl was just filled: a hungry cat nearby trots over. */
+  private noticeRefill(): void {
+    const mind = this.mind;
+    const level = this.ctx.bowl.level;
+    const last = this.lastBowl;
+    this.lastBowl = level;
+    if (Number.isNaN(last) || level <= last + 0.2) return;
+    if (mind.hunger < REFILL_CALLS.hunger || DEAF_TO_BOWL.includes(mind.state)) return;
+    this.ctx.bowl.getWorldPosition(mind.tmp);
+    const cat = this.ctx.cat.position;
+    if (Math.hypot(mind.tmp.x - cat.x, mind.tmp.z - cat.z) > REFILL_CALLS.distance) return;
+    this.ctx.body.prick();
+    this.ctx.voice?.meow('chirp');
+    mind.startActivity('rushToBowl');
+  }
+
   private observePlayer(dt: number): void {
     const mind = this.mind;
     const d = mind.playerDistance;
     if (mind.state === 'sleep') {
-      if (d < 0.6 && chance(0.15 * dt)) {
+      if (d < CAT_TIMING.halfWakeWithin && chance(CAT_TIMING.halfWakeChance * dt)) {
         mind.sleepRemaining = mind.timer;
         mind.enter('halfWake');
       }
       return;
     }
-    if (mind.startleCooldown <= 0 && STATES[mind.state].startles !== false) {
+    const def = STATES[mind.state];
+    if (mind.startleCooldown <= 0 && def.startles !== false) {
       const sprinting = this.ctx.player.isSprinting && d < SPRINT_SCARE;
-      const crowded = d < PLAYER_TOO_CLOSE && mind.state !== 'called';
+      // Settled, it lets a walking player come close enough to stroke it: only a sprint startles it.
+      const crowded = d < PLAYER_TOO_CLOSE && mind.state !== 'called' && !def.calm;
       if (sprinting || crowded) {
+        mind.startledBy = sprinting ? 'sprint' : 'crowd';
         mind.enter('startle');
         return;
       }
     }
-    if (mind.playerSeat && !mind.perch && this.lapCooldown <= 0 && this.playerSeatedFor > LAP_AFTER_S && STATES[mind.state].invitable && chance(0.03 * dt)) {
+    if (mind.playerSeat && !mind.perch && this.lapCooldown <= 0 && this.playerSeatedFor > LAP_AFTER_S && def.invitable && chance(CAT_TIMING.lapInvite * dt)) {
       mind.startActivity('lap');
     }
   }

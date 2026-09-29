@@ -65,14 +65,18 @@ Content work stays in the first two layers; the engine is never touched for cont
   on GPU load: the `Engine` gates rendering on a GPU fence and caps the pixel ratio. Measure with `?stats` + `bibliothek.bisect()`.
 - Every shadow-casting light is one texture unit in every lit shader of the scene (the flat: ~10 of 16, the material's
   own maps take the rest). One too many and every lit program fails to link: walls, floor and furniture go black while
-  unlit things (outdoors, whiskers) still show. `World.prime` logs `[world] N shadow maps`; new lamps stay shadowless.
+  unlit things (outdoors, whiskers) still show. `World.prime` logs `[world] N shadow maps`; new lamps stay shadowless. The parquet and tiled floors sit at exactly
+  16 units on high (10 shadow, env, 2 area-light, map, bump, wear): no new map on a floor.
 - `outdoors/shader.ts` is a template literal: a backtick in a GLSL comment ends it (typecheck fails with `',' expected`).
 - The canvas's alpha is the video cut-out: every post pass and additive effect must keep it (see `docs/graphics.md`).
+- `visible` on point, spot and hemisphere lights belongs to the `LightCuller` (fixed count per kind, `QUALITY.lights`):
+  dim a light with `intensity`; live shadow maps go through `lighting/shadowRefresh`, never `shadow.autoUpdate = true`.
 - Lights ignore wall planes: a room's lamp shines into the next room unless the wall is in `RoomOptions.opaqueWalls`; a
   `HemisphereLight` lights the whole scene, so only the occupied `Room` runs its ambient (`setOccupied`, wired in `bootstrap/world.ts`).
 - Z-fighting comes back whenever two faces share a plane: take materials from `world/materials/palette`, join parts per
   `world/props/joinery`, lift flat things by a layer of `world/surface/layers`, then check `bibliothek.zfight()` (`?debug`).
 - `boxMesh` / `part` / `cylinderMesh` geometries are cached and shared, palette materials too: never edit either in place.
 - Days: `ctx.today.gameDay` (the market calendar) or the real date through `time/daily`; never `new Date()` for a draw.
-- The floor is at world y 0 everywhere but the stairwell: the eye is the feet's height (`FirstPersonController.setGround`,
-  the stairwell's `ground`) plus eye height, collision probes follow the feet, and `Travel` passes the arrival's y.
+- The floor is at world y 0 everywhere but the stairwell and the street's carriageway (−0.12, `street/relief/ground`
+  `groundHeight`, dropped kerbs at the crossings): the eye is the feet's height (`FirstPersonController.setGround`, both
+  grounds composed in `bootstrap/world.ts`) plus eye height, collision probes follow the feet, and `Travel` passes the arrival's y.

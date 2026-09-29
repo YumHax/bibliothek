@@ -1,5 +1,6 @@
 import { audioBus, audioContext, type AudioChannel } from './audioContext';
 import { whiteNoise } from './noise';
+import { SpatialOut } from './spatial';
 
 /**
  * A small sound a room makes on its own (the fridge's hum, a clock's tick, a dripping tap),
@@ -18,6 +19,8 @@ export interface AmbientVoice {
    * set to level 0 by its `PointSound` instead.
    */
   setZoneActive?(active: boolean): void;
+  /** Where it is heard from (`spatial.ts`): the side, and the walls in between (a low-pass). Set by its `PointSound`. */
+  setSpatial?(pan: number, walls: number, rear?: number): void;
 }
 
 export interface VoiceOptions {
@@ -70,6 +73,9 @@ export abstract class Voice implements AmbientVoice {
   private watchdog: ReturnType<typeof setInterval> | null = null;
   /** False while its zone is dormant: silent whatever `level` says (see `setZoneActive`). */
   private zoneActive = true;
+  /** The side and the walls it is heard from, and the filter and panner applying them (built with the graph). */
+  private readonly spatial = { pan: 0, walls: 0, rear: 0 };
+  private spatialOut: SpatialOut | null = null;
 
   constructor(
     private readonly peak: number,
@@ -109,6 +115,13 @@ export abstract class Voice implements AmbientVoice {
       this.ensure();
     }
     this.applyLevel(active ? this.follow : Math.min(this.follow, DORMANT_FADE));
+  }
+
+  setSpatial(pan: number, walls: number, rear = 0): void {
+    this.spatial.pan = pan;
+    this.spatial.walls = walls;
+    this.spatial.rear = rear;
+    this.spatialOut?.set(pan, walls, false, rear);
   }
 
   /** What is heard: the level, or nothing while the zone is dormant. */
@@ -162,7 +175,8 @@ export abstract class Voice implements AmbientVoice {
       this.ctx = ctx;
       this.master = ctx.createGain();
       this.master.gain.value = 0;
-      this.master.connect(audioBus(ctx, this.bus));
+      this.spatialOut = new SpatialOut(ctx, audioBus(ctx, this.bus), this.spatial);
+      this.master.connect(this.spatialOut.input);
       this.build(ctx, this.master);
       this.lastHeard = performance.now();
       if (this.watch || this.sources.length > 0) this.watchdog = setInterval(() => this.check(), STALE_MS);
@@ -197,6 +211,8 @@ export abstract class Voice implements AmbientVoice {
     this.sources = [];
     this.master?.disconnect();
     this.master = null;
+    this.spatialOut?.disconnect();
+    this.spatialOut = null;
     this.ctx = null;
   }
 }
@@ -250,27 +266,48 @@ export class FridgeHum extends Voice {
   }
 }
 
-/** A wall clock's escapement: a tick every second, the tock a little lower. */
+/**
+ * A wall clock's escapement: a tick every second, the tock a little lower. Keeps its own second
+ * unless a clock drives it (`strike` on each step of its second hand): then the two stay in step.
+ */
 export class ClockTick extends Voice {
   private untilNext = Math.random();
   private tock = false;
   private burst: AudioBuffer | null = null;
+  /** A clock strikes each tick itself: the voice's own second stops. */
+  private driven = false;
 
   constructor() {
     super(0.35);
   }
 
+  /** One tick now (heard if the voice is), in step with a second hand that just moved. */
+  strike(): void {
+    this.driven = true;
+    if (!this.ctx || !this.burst || !this.master || this.level <= 0) return;
+    this.tock = !this.tock;
+    this.escapement(this.ctx, this.master, this.burst);
+  }
+
   protected build(ctx: AudioContext): void {
-    this.burst = this.noise(ctx, 0.02);
+    // Longer than one tick: each takes its 20 ms from somewhere else in it (`click`), no two alike.
+    this.burst = this.noise(ctx, 0.3);
+  }
+
+  /** Tick or tock, never twice the same: a few per cent off in pitch and loudness, like a real escapement. */
+  private escapement(ctx: AudioContext, out: AudioNode, burst: AudioBuffer): void {
+    const hz = (this.tock ? 2600 : 3400) * rand(0.96, 1.04);
+    click(ctx, out, hz, 0.5 * rand(0.9, 1.1), burst);
   }
 
   protected tick(ctx: AudioContext, dt: number): void {
+    if (this.driven) return;
     this.untilNext -= dt;
     if (this.untilNext > 0 || !this.burst || !this.master) return;
     this.untilNext += 1;
     if (this.untilNext < 0) this.untilNext = 1; // the tab slept: no burst of catch-up ticks
     this.tock = !this.tock;
-    click(ctx, this.master, this.tock ? 2600 : 3400, 0.5, this.burst);
+    this.escapement(ctx, this.master, this.burst);
   }
 }
 
@@ -317,8 +354,14 @@ function click(ctx: AudioContext, out: AudioNode, frequency: number, level: numb
   gain.gain.setValueAtTime(level, now);
   gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.018);
   source.connect(band).connect(gain).connect(out);
-  source.start(now);
+  // A burst longer than a click gives each one its own stretch of noise.
+  const spare = burst.duration - CLICK_S;
+  if (spare > 0.005) source.start(now, Math.random() * spare, CLICK_S);
+  else source.start(now);
 }
+
+/** How much of the burst a click plays (s). */
+const CLICK_S = 0.02;
 
 /** Whether the page has had a gesture, so an AudioContext may start (`navigator.userActivation`, where the browser has it). */
 function userHasInteracted(): boolean {

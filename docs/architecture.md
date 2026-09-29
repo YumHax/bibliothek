@@ -37,7 +37,8 @@ src/player/             FirstPersonController (yaw/pitch, sliding collisions aga
                         (start card <-> lock; modes pointer | gamepad | touch), PositionMemory (zone + spot + look saved across reloads)
 src/input/              actions (ACTIONS: every keyed action -> codes, gamepad alias, touch button, Settings row, context; `isAction`,
                         markup / alias / touch-bar derivations), padButtons, Gamepad (standard mapping -> virtual keys + synthetic mouse),
-                        TouchControls, SyntheticMouse, deviceDetect
+                        TouchControls (the bar shows what works where the hands are: `setContext`), SyntheticMouse, deviceDetect,
+                        lastDevice (the device last used, whatever the room's entry mode: key caps, "click / press A / tap", hints)
 src/game/               Session (thin router: builds the controllers, key route order, SessionActions facade), SessionHost (what a
                         controller may ask of the Session + KeyRoute), SessionParts (structural interfaces + CoreParts + the union of every
                         controller's parts), SessionActions (what an Interactable may ask). Controllers: ModalStack (the one open panel,
@@ -128,7 +129,7 @@ src/world/street/       streetPlan (Front Street's map and every spot, `shopDoor
                         (StreetDetails, LampBuzz), shops/ (shopHours, shopPlan, ShopEntrance, scratchCard, DroppedCoins, GiveawayBox,
                         Trader), audio/ (ShopSounds, streetSurface). See docs/zones.md
 src/world/shop/         shopPlan (`SHOP_PLANS`: the walk-in shops' rooms, displays, fixtures) + furnishShop (one builder for the four
-                        `shop` zones): ForSale (a piece + its PriceTag, a click buys it), displayPieces (`buildPiece` / `displayPiece`:
+                        `shop` zones): ForSale (a piece + its PriceTag, a first click arms it, the second buys it), ShopClerk, ShopCustomer, ShopWindow, shopSounds, displayPieces (`buildPiece` / `displayPiece`:
                         the flat's pieces as shown, lights stripped), shopModels (PortableTv, ShopProjector, CatBallBasket),
                         ShopCounter (the till: the HomeShopPanel), DisplayTable, GoodsShelf, TvWall + snowScreen, FishTank,
                         FlowerStand. See docs/economy.md ("The bare flat")
@@ -152,8 +153,10 @@ src/world/surface/      layers (FLOOR / GROUND / WALL: every flat thing's lift a
                         zfight (`findZFighting`: the coplanar overlapping faces of a subtree; `bibliothek.zfight()` under ?debug)
 src/world/lighting/     lightBudget (LightMonitor: shadow maps vs texture units, changes of the drawn lights), LightPool + PooledLight
                         (a few real lights lent to the nearest decorative glows), keepLights (`setShownKeepingLights`)
-src/world/screen/       VideoScreen (interface the Session drives), VideoSurface (message glass or CSS3D iframe cut-out, proximity volume
-                        damped per wall in between)
+src/world/screen/       VideoScreen (interface the Session drives), VideoSurface (no-picture glass or CSS3D iframe cut-out, proximity volume
+                        damped per wall in between), SignalCanvas (its one reused canvas: CRT snow + OSD channel / "NO SIGNAL", the
+                        projector's blue "Source search" / "No signal" slate), CrtGlass (scan lines, bulge, power-on line / power-off
+                        dot + afterglow), HueDrift (the playing glow's hue), nowPlaying (platform + loudness for console LEDs, speakers)
 src/world/acoustics/    SoundOcclusion (walls between the listener and a screen: a ray against the world's occluders, i.e. every loaded
                         room's walls and the door leaves; `proximityVolume` keeps `wallGain` of the volume per wall), PointSound (a
                         room's own sound: distance + walls -> an `AmbientVoice`'s level)
@@ -183,7 +186,8 @@ src/world/visitors/     Friends who ring, come in, borrow and return games: Visi
 src/world/weather/      Weather (spells of clear/cloudy/rain/snow in game hours, seeded by the date; wet and snowy ground). See docs/outdoors.md.
 src/world/cat/          The cat: model, brain, nav, bowls, bed, scratcher, toy, settings. See docs/cat.md.
 src/persistence/        One storage layer: safeStorage, KEYS (every key; `?debug` saves under `bibliothek.debug.`), PersistedStore
-                        (`{ version, data }`, migrate chain, validate, defaults; unreadable data copied to `bibliothek.corrupt.*`),
+                        (`{ version, data }`, migrate chain, validate, defaults; unreadable data copied to `bibliothek.corrupt.<key>.<time>`,
+                        the last 3 per key kept; a newer build's save copied once per version to `…<key>.newer-v<n>`),
                         batch (writes held and flushed together, put back on failure), onWriteFailure / onCorruptSave (emit only,
                         for the alert bar), onOtherTab (BroadcastChannel + `storage` event), BrowserCache (LRU + TTL, one key). See docs/economy.md.
 src/household/          What the kitchen, bathroom and bedroom are for: Household (persisted), HomeLife (the rules their furniture
@@ -240,7 +244,9 @@ src/covers/             CoverArtProvider chain, LibretroCoverProvider (via /api/
                         priorities, re-sorted by `setPriorityOrigin`), generated/ (faces, BoxAtlas)
 src/video/              VideoProvider, YouTubeSearchProvider (/api/youtube/search, cached in `bibliothek.cache.longplay.v1`), YouTubePlayer, proximityVolume, randomStart
 src/settings/           SettingsStore (`bibliothek.settings.v1`: look sensitivity per device, invert Y, FOV, mixer volumes, HUD aids, text
-                        size, reduce motion, key bindings), apply (pushes every setting to the camera, devices, mixer, HUD, Input), bindings
+                        size, speech size, reduce motion, head bob, sprint double-tap / hold Shift, crouch hold / toggle, show tips, key
+                        bindings; saved debounced, flushed on pagehide), apply (pushes every setting to the player's feel and FOV, the
+                        Inspector, devices, mixer, HUD, tips, Input), motion (`reduceMotion()` for code: the setting or the system's), bindings
                         (rebinding = swapping two physical keys), saveData (hasProgress / eraseProgress: `saveKeys()`, the save's keys but the preferences, caches and corrupt copies)
 src/ui/                 Overlay (title: Continue / New game; pause: status, Go home, Collection; Settings in tabs via `addSetting(tab, …)`;
                         Controls by group and device; `confirm()` yes / no in the card), menu/ (menu.css: `.ui-btn`, `.ui-card`, fields;
@@ -248,7 +254,12 @@ src/ui/                 Overlay (title: Continue / New game; pause: status, Go h
                         settings/ (GameSettingsForm, KeyBindingsForm, fields), keys (key names from the bindings and the keyboard layout,
                         `renderKeys('{KeyW} [Click]')`), GamePanel, SearchBar, CollectionEditor (Tab; `canAdd` only with ?debug),
                         CataloguePanel (mail order, a modal like the editor), SellPanel (the WE BUY desk), PrizePanel (the arcade's prize counter drawn as one: shelves by ticket band, photos, the ticket muncher; the mystery game), HomeShopPanel (a Front Street shop's leaflet, paper per shop via `data-shop`), ArcadeScreenPanel (LexiPunk's
-                        big frame, its score by postMessage), PayoutOverlay (`?payout`), TravelMenu ("Where to?", digits / click), WalletHud, Fader,
+                        big frame, its score by postMessage), PayoutOverlay (`?payout`), TravelMenu ("Where to?", digits / click), WalletHud (up in
+                        the arcade / market / shops and under the pause menu, else a few seconds when money moves; rolls the count, floats the
+                        difference), money (`formatCount` / `formatCoins`: the one way amounts read), fade (`fadeIn` / `fadeOut`: a closing class,
+                        then `hidden`), hoverCaption (`Name · verb`, legacy "click to …" read too), coverPlaceholder (a made-up box for art that
+                        does not load), worldLoad (the start button waits for the first zone; a failure alerts with Retry), fonts.css (self-hosted
+                        faces from public/fonts), Fader,
                         NewsPanel (the newsstand's paper), ScratchCardPanel (the newsagent's scratch card), JournalPanel (the notebook's
                         pages: today's sums and lines, the challenge, what is coming, the days before), ToDoNotePanel (the first day's
                         list, ticked), Overlay `addPauseButton(id, label, run)` (Journal, …), collector/ (CollectorBookPanel:
@@ -285,6 +296,9 @@ api/                    Vercel functions wrapping the server handlers; vercel.js
   press virtual key codes on `Input` and dispatch synthetic mouse events, so `Session.bindInput` is the single router.
   Which code does what is one table, `src/input/actions.ts` (`ACTIONS`): controllers test `isAction(code, 'buy')`, the gamepad
   aliases, the touch bar, the Settings rows and the help's keys come from it; text naming a key uses `actionKeyLabel(id)`.
+  A tip or caption that says how to use something reads the device in hand: `ui/verb` (`useVerb()` click / press A / tap,
+  `useVerbOn('the TV')`, `keyOrUse(key)`), never a hard-coded "click". The controller's spare buttons: right stick click calls
+  the cat, Select held (`padHold`) opens the journal; the pause menu has Journal, Photo mode and Search for pad and touch.
 - **Optional features** reach the `Session` through structural interfaces in `SessionParts.ts`; `bootstrap/session.ts` passes the concrete object.
   The Session is a router: each feature is a controller in `src/game/` with its own parts interface (added once to
   `SessionParts`), the `SessionHost` for shared moves, and an `onKey(code): boolean` registered in `Session.routes`, whose
@@ -301,7 +315,14 @@ api/                    Vercel functions wrapping the server handlers; vercel.js
 - **The collection is a `GameSource`** (`games` + `subscribe`). `Shelving` rebuilds on change (reusing `GameBox` by id;
   same games in the same order only restyles: status), the layout refreshes consoles and posters, the `CollectionEditor` mutates the `CollectionStore`.
 - **Screens**: a `VideoSurface` cut-out mesh (alpha 0, `NoBlending`) over a `CSS3DObject` iframe in `CssLayer`, which sits
-  behind the WebGL canvas (`alpha: true`). The Session only knows `VideoScreen`; one plays at a time.
+  behind the WebGL canvas (`alpha: true`). The Session only knows `VideoScreen`; one plays at a time. The glass shows static
+  (or the projector's additive slate, light only, alpha untouched) until the embed reports its first frame; the embed
+  autoplays muted and is unmuted, the volume ramp starting on the first PLAYING (or the reveal), never over the static;
+  without a state message the picture is revealed after 6 s only if the player answered, an embed silent for 15 s is
+  "no signal". While searching the hover says "looking for a longplay of X…"; an empty or failed search also gets one
+  `notices.react`; an embed error tries the search's next hit (`VideoInfo.fallbacks`,
+  `VideoProvider.reject` updates the cache), the end of a longplay switches the set off. Messages on screen stay
+  diegetic ("NO SIGNAL"); the reason goes to the console. Switching off fades the sound 0.3 s under the tube's collapse.
 - **Box art**: providers return per-face URLs, the resolver merges (first URL wins), `BoxArtLoader` generates missing faces.
   `GameBox` material order is BoxGeometry's `[+x, -x, +y, -y, +z front, -z back]`. A resting box is a `ClosedBox` (front +
   spines in one atlas, 1 draw); `Inspector` calls `GameBox.setInHand` to swap in the openable shell and draw the back, cartridge
@@ -322,8 +343,13 @@ api/                    Vercel functions wrapping the server handlers; vercel.js
 - **Menus and panels.** Every DOM panel uses the tokens, `.ui-card` / `.ui-btn`, a focusable Close button and
   `registerPanel(root, { isOpen })` so the arrows and a controller walk it (A picks, B = Escape). A full-screen panel
   extends `ui/ModalPanel` (root `.ui-modal` + `--sheet` / `--centre`, open / close / toggle, `onOpenChange` + `addOpenListener`,
+  the shared `ui-modal-in` entrance and a 150 ms `--closing` fade: `isOpen` is false at once, `hidden` follows,
   keys kept from the window but Esc, `[data-autofocus]`, `registerPanel`; hooks `onOpened` / `onClosed` / `onKey` / `onSide`);
-  stacking is the `--z-*` tokens in `styles.css`, never a raw number. Key names are never
+  stacking is the `--z-*` tokens in `styles.css`, never a raw number; fonts are the `--ui-font-*` tokens (body, display,
+  marker, led, print, serif, hand, comic), the tips' blue is `--ui-info`. Motion in code asks `settings/motion.reduceMotion()`.
+  Hover captions are `Name` or `Name · verb` (lowercase verb, never "Click to"): the Overlay adds the device's key cap. HUD
+  things that share a place stack in one flex column (`ui/hudSlot`: under the crosshair, top left), never by hand-set offsets;
+  reduced motion is the one selector `.reduce-motion` (on <html> for the setting or the system's), no media query of its own. Key names are never
   hard-coded: write `{KeyB}` through `renderKeys`, it follows the player's bindings and layout. Sounds connect to
   `ctx.destination` (the mixer's `world` bus) or `audioBus(ctx, 'screens' | 'arcade' | 'ui')`; a YouTube player is scaled
   by `channelVolume('screens')`.

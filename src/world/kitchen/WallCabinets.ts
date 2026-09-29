@@ -36,10 +36,10 @@ const CANOPY_DEPTH = 0.48;
 const CHIMNEY = 0.3;
 
 const CARCASS = paint(0xe9e4da, 0.8);
-const STEEL = standard({ color: 0xbfc2c6, metalness: 0.7, roughness: 0.35 });
-const FILTER = standard({ color: 0x8e9296, metalness: 0.6, roughness: 0.6 });
+const STEEL = standard({ color: 0xbfc2c6, metalness: 1, roughness: 0.4 });
+const FILTER = standard({ color: 0x8e9296, metalness: 1, roughness: 0.6 });
 const CROCKERY = paint(0xf4f1ea, 0.3);
-const GLASS = standard({ color: 0xe8f0f2, roughness: 0.05, metalness: 0.1, transparent: true, opacity: 0.35, side: THREE.DoubleSide });
+const GLASS = standard({ color: 0xe8f0f2, roughness: 0.05, metalness: 0, transparent: true, opacity: 0.35, side: THREE.DoubleSide });
 const HOOD_LIGHT = standard({ color: 0xfff4dc, emissive: 0xfff0d0, emissiveIntensity: 0.35, roughness: 0.6 });
 
 /**

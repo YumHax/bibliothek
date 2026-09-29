@@ -7,7 +7,7 @@
  * bend (x) and then swing across (y).
  */
 
-export type Pose = 'stand' | 'crossed' | 'hips' | 'think' | 'pockets' | 'play' | 'cheer' | 'phone' | 'lead' | 'lap';
+export type Pose = 'stand' | 'crossed' | 'hips' | 'think' | 'pockets' | 'play' | 'cheer' | 'phone' | 'lead' | 'lap' | 'read';
 
 export interface ArmAngles {
   ux: number;
@@ -65,6 +65,11 @@ export const POSES: Record<Pose, PoseAngles> = {
   lead: {
     left: HANG(-1),
     right: { ux: -0.5, uz: 0.14, lx: -0.55, ly: -0.1, lz: 0 },
+  },
+  // Reading: both forearms up in front of the chest, the hands together holding a book (`PersonModel.hold('book')`).
+  read: {
+    left: { ux: -0.4, uz: -0.12, lx: -1.35, ly: 0.55, lz: 0 },
+    right: { ux: -0.4, uz: 0.12, lx: -1.35, ly: -0.55, lz: 0 },
   },
   // Seated: the upper arms by the sides, forearms forward, hands resting on the thighs.
   lap: {

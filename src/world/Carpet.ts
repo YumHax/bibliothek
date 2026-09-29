@@ -61,11 +61,16 @@ function paintCarpet(): [THREE.Texture] {
     const size = 18 + random() * 40;
     const color = pick();
     const kind = random();
+    // Drawn before `wrapped`: the nine copies of a shape must be the same shape (a draw inside would
+    // give each its own width or fill, and the tile's seams would show where a shape crosses them).
+    const lineWidth = 5 + random() * 4;
+    const filled = random() < 0.5;
+    const crossed = random() < 0.4;
     wrapped(() => {
       ctx.rotate(angle);
       ctx.strokeStyle = color;
       ctx.fillStyle = color;
-      ctx.lineWidth = 5 + random() * 4;
+      ctx.lineWidth = lineWidth;
       if (kind < 0.22) {
         // A triangle, outlined or filled.
         ctx.beginPath();
@@ -73,7 +78,7 @@ function paintCarpet(): [THREE.Texture] {
         ctx.lineTo(size / 2, size / 3);
         ctx.lineTo(0, -size / 1.6);
         ctx.closePath();
-        if (random() < 0.5) ctx.fill();
+        if (filled) ctx.fill();
         else ctx.stroke();
       } else if (kind < 0.42) {
         // A squiggle: a wavy stroke.
@@ -90,7 +95,7 @@ function paintCarpet(): [THREE.Texture] {
       } else if (kind < 0.76) {
         // A short bar, or two crossing.
         ctx.fillRect(-size, -4, size * 2, 8);
-        if (random() < 0.4) ctx.fillRect(-4, -size * 0.7, 8, size * 1.4);
+        if (crossed) ctx.fillRect(-4, -size * 0.7, 8, size * 1.4);
       } else if (kind < 0.9) {
         // A sparkle: four thin points.
         for (let k = 0; k < 4; k++) {
@@ -119,15 +124,9 @@ function paintCarpet(): [THREE.Texture] {
       ctx.fillRect(-2, -2, 4, 4);
     }, x, y);
   }
-  // Wear: a dull tread down the middle where everyone walks, the pattern half rubbed away.
-  const wear = ctx.createLinearGradient(0, 0, 0, TILE_PX);
-  wear.addColorStop(0, 'rgba(20,17,31,0)');
-  wear.addColorStop(0.5, 'rgba(20,17,31,0.25)');
-  wear.addColorStop(1, 'rgba(20,17,31,0)');
-  ctx.fillStyle = wear;
-  ctx.fillRect(0, 0, TILE_PX, TILE_PX);
+  // No wear painted in: the tile repeats every 3 m, and a tread in it would stripe the whole hall.
 
-  const map = toTexture(canvas, 8);
+  const map = toTexture(canvas);
   map.wrapS = map.wrapT = THREE.RepeatWrapping;
   return [map];
 }

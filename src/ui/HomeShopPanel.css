@@ -191,6 +191,8 @@
 }
 .shop__btn:hover:not(:disabled) { background: var(--shop-accent); }
 .shop__btn:active:not(:disabled) { transform: translateY(1px); }
+/* Armed: a dear piece's first click; the second buys. */
+.shop__btn.sell__armed { background: rgba(200, 68, 58, 0.85); }
 .shop__btn:disabled { color: var(--shop-ink-soft); background: transparent; box-shadow: inset 0 0 0 1px var(--shop-rule); cursor: default; font-weight: 600; letter-spacing: 0.03em; text-transform: none; font-size: 0.8rem; }
 .home-shop .shop__btn:focus-visible,
 .home-shop .catalogue__actions .ui-btn:focus-visible { outline: 2px solid var(--shop-accent); outline-offset: 2px; }
@@ -201,8 +203,5 @@
 }
 @media (pointer: coarse) {
   .shop__btn { min-height: 44px; }
-}
-@media (prefers-reduced-motion: reduce) {
-  .shop__photo::after { animation: none !important; }
 }
 .reduce-motion .shop__photo::after { animation: none !important; }

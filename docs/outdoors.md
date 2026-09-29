@@ -16,21 +16,38 @@ or heard through the windows.
   per strip, too coarse for that (from the balcony the strips shift apart in slices and the cars hop across them): there
   the step meets the plane exactly instead. Anything painted on the ground straight onto `sheet.color` keeps the flag. Sky gradient, sunset glow, sun tint, night darkness, lights, sun,
   moon, clouds and weather are uniforms: nothing repaints after start. Everything is true perspective from `EYE_HEIGHT`.
-- `plan.ts` is the neighbourhood as the window sees it, derived from `src/world/city/` (the one data model the painted
-  view and the walkable street share: `frontage` (the road's cross-section `ROAD`, kerbs, lanes, `OUR_LINE`, the bus stop,
-  the ends, from `STREET_PLAN` + `FLAT_IN_STREET`), `vehicles` (every body's size), `traffic` (cruise speeds, the bus's
-  dwell, the bin round's hours), `shopLooks` (each kind of shop's colours)): never retype a street value here, derive it.
-  Front Street ahead with mid-rise facades, Park Street to the left with the park, our own
-  pavement (`NEAR_KERB`) under the windows; `frontage()` / `parkLine()` give distances. Both streets end at a building
-  standing across them (`FRONT_END`, `PARK_END`, painted by `paintStreetEnds`); `ground(a, offset)` is `frontage()` stopped
+- **One neighbourhood, two pictures.** `src/world/city/` is the data model the painted view and the walkable street
+  share, all derived from `street/streetPlan.ts` (`FLAT_IN_STREET` turns street-local points into the flat's frame):
+  `frontage` (both streets' cross-sections `FRONT_SECTION` / `PARK_SECTION` with their lanes, kerbs, the bus stop, the
+  crossings, lamps, bins, racks, benches, the newsstand, terraces, `STREET_DETAILS` (manholes, hydrants, bollards, the
+  Morris column), `ROADWORKS`, the ends), `facadeStyle` (a planned building's look from its `seed`: wall, trims, window
+  heads, `balconyRows`, roof; `FACADE_WINDOW` and `facadeBays` place the windows), `trees` (`STREET_TREES`,
+  `PARK_TREES` with their sizes, `TREE_FORM`), `park` (pond, bandstand, playground, beds, willows, paths, the gate),
+  `parkedCars` (each bay's shape and paint), `skyline` (the towers, `towerTop`), `vehicles`, `traffic`, `shopLooks`.
+  Never retype a street value in a painter: add it to the street's plan and derive it here. What the painted view
+  still draws on its own is only what the walkable street never reaches: the lots beyond the planned rows, the backdrops,
+  the park past `STREET_PLAN.park`'s rectangle (and its paths, beds, pond, lamps and picnics), the courtyard's detail.
+- `plan.ts` is the neighbourhood as the window sees it, derived from `city/`. Front Street ahead with the planned row
+  across it, Park Street to the left with the park, our own pavement (`NEAR_KERB`) under the windows; `frontage()` /
+  `parkLine()` give distances. Park Street's far side is painted as Front Street's mirror (x = -z: its far kerb and hedge
+  agree), its near side is its own: `frontage(a, offset, parkOffset)` / `ground()` take `PARK_NEAR_KERB` /
+  `PARK_OUR_LINE` as a second offset. Both streets end at a building standing across them (`FRONT_END`, `PARK_END`,
+  the plan's `frontEnd` and `parkSouth`, painted by `paintStreetEnds`); `ground(a, offset)` is `frontage()` stopped
   at those, and every ground band, line and row of street furniture must stop there too. It also holds what the painters
-  and `Life` share: `BUS_SHELTER` / `BUS_STOP_X`, `LAMPS` (the street's own lamp posts), `POND` / `FOUNTAIN`, `PARK_PATHS`, the traffic and cycle lanes (`NEAR_LANE`, `FAR_LANE`,
-  `CYCLE_NEAR`, `CYCLE_FAR`), `WALK_LINE` and `LIFE_REACH` (62 m: how far out along both streets what moves is
+  and `Life` share: `BUS_SHELTER` / `BUS_STOP_X`, `LAMPS` (the street's own lamp posts), the park's (`city/park`), the
+  traffic and cycle lanes (`NEAR_LANE`, `FAR_LANE`, `CYCLE_NEAR`, `CYCLE_FAR`) and `TURN_CENTRE` (the corner's arcs land
+  on Park Street's real lanes), `WALK_LINE` and `LIFE_REACH` (62 m: how far out along both streets what moves is
   simulated; not `FRONT_END`, the end building). Behind the room (x > 0, z < 0,
   azimuth +90°..180°, `COURT_*`) is our own block's courtyard: no street painter belongs there, the seam at ±180° is our
   side wall's plane (Park Street on one side, the courtyard on the other).
 - `paintView()` (in `Outdoors.ts`) runs the painters in order and is what the headless check calls.
-- `Sheet`: five 4096 x 1344 canvases in azimuth x elevation band space (+40° down to -80°, the pavement under the window).
+- **One sky.** `city/skyGlsl` (`SKY_CHUNK`) is the GLSL both pictures share: the sun's halo and disc colour, the
+  moon's crescent (`MOON_SHADOW_OFFSET`, in moon radii) and halo, the overcast's cover curve (`skyCloudSheet`). The
+  panes and the street's dome (`street/skyDomeShader`, smaller discs) include it; change the sky there.
+- `Sheet`: five 4096 x 1344 canvases in azimuth x elevation band space (+40° down to -80°, the pavement under the window);
+  on high quality (and a GPU taking 8192-wide textures, `sceneColorScale`) the day colours are painted twice as fine
+  (`Sheet.colorScale`: the context is scaled once, painters keep scene texels; a pixel copy, `getImageData`, multiplies
+  by it). Anisotropy is `QUALITY.anisotropy`. The lights stay nearest (hand-filtered after switching), so do curfew and fx.
   `begin(distance, glass, surface)` then `rect` / `path` stamp colour, haze, glass and the weather masks at once;
   `lit(path, kind, strength, curfew, animated)` / `glow(..., curfew?)` add night lights; `dim()` darkens light already lit
   (goods in a shop window, a figure in a room); `shadow()` / `shadowFill()` cast shadows. `finish()` packs the scene texture
@@ -48,20 +65,27 @@ or heard through the windows.
 - Window life (shader, `lightTexel`): a lit window with a curfew (homes, shops; not lamps or signs) now and then has a figure
   cross it (a dark band sliding over the light, 23 s slots hashed from the curfew), and a quarter of them lower their blinds
   (dimmer, slatted) between 21 h and 22 h (`wakefulness` 0.84-0.99).
-- Shadows are painted straight under what casts them, never offset, and the shader scales them by `sunShadow` (sun height x
+- Shadows are painted straight under what casts them, never offset; on the street's plane (fx A) the shader reads them
+  from a point towards the sun (`SHADOW_CASTER` 1.4 m high, at most `SHADOW_REACH_MAX`), so they fall away from the sun
+  as the walkable street's do. The shader scales them by `sunShadow` (sun height x
   clear sky), so they never point the wrong way and vanish under cloud. Balcony and awning shadows on walls stay in the colour.
-- Painters, far to near: `Skyline` (towers, beacons on the tallest), `Facades` (a random `Architecture` per building; roofs
-  with skylights, AC units, dishes; windows lit warm/neutral/TV, curtains drawn, silhouettes; backdrops; street ends), `Park`,
-  `Street` (both pavements, road with repairs/cracks/drip lines/arrows, then everything standing on the pavements sorted far
-  to near, shop light spilling out until closing), `Courtyard` (last, over the street bands in its quarter: rear facades at
+- Painters, far to near: `Skyline` (`city/SKYLINE`'s towers, beacons on the tallest), `Facades` (backdrops: the park's
+  far side, taller blocks by lot, then a continuous row one block behind Front Street (`BEHIND_BLOCK`) so the eye never
+  sees an empty horizon over the low roofs across the road; a planned building in
+  its `facadeStyle`, a lot in one drawn from the sequence; roofs with skylights, AC units, dishes; windows lit
+  warm/neutral/TV, curtains drawn, silhouettes; backdrops; street ends), `Park` (the walkable street's trees inside
+  `STREET_PLAN.park`, its own beyond), `Street` (both pavements, road with repairs/cracks/drip lines, the walkable
+  street's markings, then everything standing on the pavements where the street's plan has it, sorted far to near, the
+  roadworks, the parked cars, shop light spilling out until closing), `Courtyard` (last, over the street bands in its quarter: rear facades at
   15-28 m in true perspective via its own `CourtWall` frame, stacked balconies with washing, stairwell timer lights, TVs;
   roofs and chimneys; setts, lawn, tree, bins, bikes, shed; nothing may reach x < 0), `Tree`, `Car` (`VehicleBody`: `CAR_BODY`, `TAXI_BODY`, `BUS_BODY`, `VAN_BODY`, `AMBULANCE_BODY`, `TRUCK_BODY`; `cargo` adds a load box behind the cab), `SkyDetail`,
   `shader.ts` (GLSL), `paint.ts`.
-- Helpers: `FacadeFrame`, `Shopfront` (shop types, lettering, displays; `Storefront` carries its light, closing curfew and
+- Helpers: `FacadeFrame`, `Shopfront` (shop types, lettering; `Storefront` carries its light, closing curfew and
   `goods` boxes; `RETRO_GAMES` and its neighbours across the street are where the walkable street has them:
   `paintFrontBlock` paints that row from `street/streetPlan.FACADES`, x shifted by `FLAT_IN_STREET`, storeys and
   shops by kind and name as `PlannedShop`s; the rest of the block beyond is drawn by lots), `StreetFurniture` (lamps with ground pool, small
-  halo and wall wash; benches, bins, bikes, planters, scooters, newsstand, bus shelter...), `ParkFeatures`, `Solid`.
+  halo and wall wash; benches, bins, bikes, bollards, hydrants, newsstand, bus shelter, terraces, hoardings, barriers,
+  cones...), `ParkFeatures`, `Solid`.
 - `Holiday.ts` (`currentHoliday()`, `holidayOf(date)`, `?holiday=christmas|halloween|none`): at Christmas (1 Dec - 6 Jan)
   strings of fairy lights slung across Front Street where the walkable street has them (pieces sorted in with the
   street's furniture), bulbs in the street trees, a lit fir with a star in the park (sorted in with the park); at Halloween
@@ -134,8 +158,8 @@ a cornice and two bays of windows per storey lit by the same curfew rules. Rays 
   double-parking by a shop on the far side (`VAN_OFFSET` out of lane: others pass it, it pulls out when clear) with its
   hazards blinking; a rare ambulance, fast, blue lights, cars ahead pulling over (`YIELD_OFFSET`) and crawling, cars near
   it on the other side braking. Vehicle stops are a generic `Stop[]` queue per vehicle.
-- `Cyclists` (`LifeVehicles.ts`): the cycle lane under our windows and along the far parked cars, more by day and dry,
-  front and rear lamps, swinging out round the double-parked van (`Traffic.obstacles`, handed to it at construction).
+- `Cyclists` (`LifeVehicles.ts`, solids like the vehicles): the cycle lane under our windows and along the far parked
+  cars, more by day and dry, front and rear lamps, swinging out round the double-parked van (`Traffic.obstacles`, handed to it at construction).
 - `Pedestrians`: walkers on the pavements (`WALK_LINE`) and park paths (`PARK_PATHS`), some with a dog, umbrellas up in the
   rain (the fair-weather half stays in); `Birds`: a flock of pigeons by day in dry weather; `Fountain`: the plume (off in
   deep snow).
@@ -147,17 +171,34 @@ a cornice and two bays of windows per storey lit by the same curfew rules. Rays 
   ~0.75 m coarse and stamped with the building's middle distance); at the retro games shop the keeper sweeping (7.5-9),
   the games rack (the shop's `SHOP_HOURS`, 8-23, the street's) and `Life.setShopQueue(n)` people queueing, seen from behind. The shop's span comes from its
   window goods via `Life.placeShop(shopGoods)` (called in the `Outdoors` constructor).
-- All are sprites the shader composites over the scenery: `SPRITE_COUNT` (56: three vec4 uniforms each, under WebGL's 224
-  guaranteed) slots (band rect, atlas rect, alpha/distance/lod/packed tint), hidden where the scenery depth (lights.a) is
-  nearer; over open sky nothing hides them. Push order is the priority when slots run out (vehicles first, spray last).
-  Blinking lights are separate small `pushFlash` sprites (a bright core by day, a glow halo at night), not atlas copies.
-- The atlas (2048 x 4096, ~3700 rows used, glow copy at half size on an opaque black canvas): car every 10° at 2 distances
-  (tinted), taxi/bus/dustcart/van/ambulance every 20° at one distance in livery (`VEHICLE_LOOKS`), then people, dogs,
-  birds, spray, flashes, cyclists, critters, folk. A new sprite kind must fit: `Life` warns `[outdoors] sprite atlas
+- **Vehicles and cyclists are solids, not sprites** (`vehicleShader.ts`): per pixel the pane shader intersects the ray
+  with each vehicle's volumes (body box, cabin with sloping screens, load box, taxi sign, wheel cylinders; a cyclist's
+  spoked wheels, frame, legs, jersey, arms, head and lamps in `bikeHit`, kind `BIKE_KIND`), `Car.ts`'s box models
+  written into the GLSL (`shapeOf`, kinds in `VEHICLE_KINDS` order, livery bands `VEHICLE_LOOKS.stripe`), lit by
+  `sunDir`/`sceneTint`, glass mirroring the sky, lamps lit by `lightsOn`; the shadow on the road and the headlight beam
+  come from the same loop (ground pixels: `fx` alpha). `Traffic.vehicles` and `Cyclists.poses` give each one's pose,
+  paint and fade; `Life.vehiclePose` / `vehicleLook` (`VEHICLE_COUNT` 20, two vec4 each) carry them. They are exact from any eye: the
+  sprite cars they replace were pictures painted per 10-20° of viewing angle and stretched to their place, and slid
+  off the road by up to 3° between two pictures (the "wobble"). A ray-sphere test skips vehicles the pixel is not near.
+  Car profiles have the nose at u = length (headlights there), the short hatch at u = 0.
+- The rest are sprites the shader composites over the scenery: `SPRITE_COUNT` (42: three vec4 uniforms each; with the
+  vehicles' 40 under WebGL's 224 guaranteed) slots (band rect, atlas rect, alpha/distance/lod/packed tint), hidden where
+  the scenery or a vehicle is nearer; over open sky nothing hides them. Layers push bounds as the painting's eye sees
+  them; `Life.seenFromEye` moves each to where the camera sees it (`OutdoorsOptions.viewer`, wired from `Sky`), and the
+  shader matches them against the camera ray's own direction (`band(d)`), not the parallax-corrected scenery uv.
+  Push order is the priority when slots run out. Blinking lights (hazards, beacons, the ambulance's blues) are small
+  `pushFlash` sprites at their own point, a little in front of the vehicle's surface.
+- The atlas (2048 x 512, ~260 rows used, glow copy at half size on an opaque black canvas): people, dogs, birds, spray,
+  flashes, critters, folk. A new sprite kind must fit: `Life` warns `[outdoors] sprite atlas
   overflow` (`life.atlasUsed` gives the rows). Shared helpers in `sprites.ts` (`Cell`, `Push`, `LifeLayer`,
   `pushStanding`, `glowDot`). How people look is `figures.ts`: the palettes (`SHIRTS`, `FOLK_SHIRTS`, `TROUSERS`, `SKINS`,
   `HAIRS`), `Look`, `figurePen` (the sprite figures) and `paintSeated(sheet, random, x, z, pose)` for the seated figures
   painted into the scenery (picnics `ON_THE_GRASS`, terraces `ON_A_CHAIR`).
+- **Cost.** The pane shader runs on every pixel of every window and of the balcony's sky: on low quality it compiles with
+  fewer parallax steps (`PARALLAX_STEPS` 3), cloud octaves (3), sprite slots (`SPRITE_COUNT` 16) and vehicles
+  (`VEHICLE_COUNT` 8, the nearest), as defines, not uniforms. `Outdoors.update` moves `Life` every frame only while a
+  pane or the open air was drawn (`markDrawn`, the materials' `onBeforeRender`); unseen, every `UNSEEN_LIFE_STEP`
+  (0.2 s), the traffic and the riders sub-stepping so they keep their pace for the street's sound.
 - `Life.update(dt, nightness, wakefulness, weather)`: `weather` is the `SkyState` (rain, snow, `hours`, wind). Spawns
   divide by wakefulness; night owls fade below their `homeAt`. `Outdoors.update(dt)` also advances `time` and the clouds.
 - `Life.events` (`lifeEvents.ts`) is what the sound reads: counters (`busStops`, `busDepartures`, `barks`) that only go up,
@@ -176,13 +217,82 @@ pull-away at the bus stop, barks, the two-tone siren with a doppler shift, the d
 clatter, the fountain faintly when the nearest pane is on the park side. Distances go through `reach(x, z)` (ears 18 m
 up). Starts on the first click or key press.
 
+## The walkable street, in step with the view (`src/world/street/`)
+
+- Same day, same things: parked cars are drawn per real day (`city/parkedCars`, `time/daily`, a gap or two some
+  days; the stray cat's roof bay is never empty nor a van); `RETRO_NEWS` (written by `RetroShopLure`) drives the
+  street's `RetroLure` (NEW IN banner, the queue at `STREET_PLAN.retroLure`, the window restocked on a new market day
+  via `Buildings.repaintGoods` / `ShopInteriors.repaintGoods`); `PARK_FIR` (`city/park`) is the view's fir and the
+  street's (`StreetChristmas`, with bulbs in the street trees at Christmas); the park's paths and near beds
+  (`StreetPark`) and a stroller or two (`life/ParkStrollers`) come from `city/park`; spring petals blow in
+  `Precipitation` (`petals`); the sky dome draws the panes' bolt and blinks the towers' beacons (`SkylineSilhouette` B/A).
+- Window life on the walkable facades: the night map is opaque (`fillRect`, at `nightScale`: 0.5 of the atlas on
+  high, 0.25 else) and each light's id is in its own nearest, mip-less texture (`windowIds`: R the id, G how far up its
+  window, B our flat's window index); the patch flickers TVs, slides figures across lit windows and lowers a quarter of
+  the blinds 21-22 h from each window's head, above the ground floor only. The glass mask (`glassMask`, from the
+  painter's `GlassPane`s) gives the panes low roughness, a stronger env reflection and a reveal in parallax (`REVEAL`).
+- Our flat seen from the street: its windows (`FlatFront.windows[].room`) are lit as their room was left, the lamp
+  dimmed by drawn curtains (`city/flatWindows`: `furnishShell` reports each room, `Buildings` reads `lampShown` and
+  `curtainsOpen` into `flatLevels`); before a room is built they follow the curfew.
+- Nothing pops in view: the busker, the trader and the snowman switch only `outOfSight` (`life/sight.ts`) or on the
+  first update after activation, and their colliders come and go with them (`zone.collisions`); terraces, pigeons,
+  standing people, the crowd and the cars take the clock's state straight away on activation (the crowd and the cars
+  pre-warm a couple mid-route). Street lamps' real lights fade out, move and fade in (`HANDOVER`).
+- People: the eyes and inner ears dither out between 14 and 16 m (alpha hash on their own materials); the crowd is a
+  pool of one person per look (`crowd.seeds`, up to `count + 2`), whoever has been away longest goes out next;
+  pigeons take off for walkers as for the player; the stray cat skips a perch whose bench or bin is in use (`on`);
+  the far pavement's routes pass behind the bus shelter and bend round the terraces and the snowman, as does the
+  alighting passenger (`standing.busStop.alight`). `PersonModel.hold('phone' | 'book' | 'umbrella')` and `setHood` (`people/held.ts`); walkers round corners
+  (`Walker` `corners`, `roundCorners`) and step down kerbs eased over 0.3 m; strangers caption only within 4 m
+  (`labelWithin`); the crowd thins and hurries in rain (umbrellas for half), hoods in snow. The phone caller and the
+  reader take turns (20-60 game min). The stray cat keeps to `life/catPaths` (pavement lanes, crossings, corners).
+- Ground: asphalt and slabs are 1024 px tiles (512 below high) with a height map (aggregate proud, joints and seams sunk) and a
+  roughness map (`groundTextures`, `Tile.bump` / `roughness`); the markings wear away in patches, grains and the wheel
+  tracks (`wornPaint`). `StreetGround` breaks the tiling with a zone-local macro patch (patches; oil in the parking lanes; tyre
+  tracks) and `STREET_PLAN.roadPatches`. Rain and snow skip `Precipitation` shelters (the sas, `awningShelters`, the
+  bus shelter, the kiosk; at most 32).
+- Light: the sun's shadow fades out over the outer 15 % of its map (`shadowFade`, patched on the street's own
+  materials; palette ones are shared with the flat and keep their edge). The street reflects its own sky: `SkyDome`
+  hands `Environment` a `SkyReflection` (the dome prefiltered every 20 s, `setReflectionSource`) while occupied. The
+  far towers (`SkylineSilhouette`, 4096 columns) are read linearly and smoothed over a pixel, re-baked every 0.5 m.
+  Street lamps are sodium (`lighting/lampColours`): each photocell switches at its own point of the dusk and strikes
+  pink, warming to amber in 7-12 s; the wet road's streaks take the same colour.
+- Props: bare metal is `street/metals` `bareMetal` (metalness 1, roughness broken by world-space noise), painted
+  metal is paint (0); the shelter, benches, bins and kiosk are rounded boxes, the hedge a lumpy clipped run, the cars'
+  bodies 3-step bevels with creased normals on 20-segment lathe tyres (`carModel`).
+- Traffic: driving cars throw a headlight pool on the road at night (additive, alpha kept) and their lamps streak the
+  wet road (`WetGround` `cars`). Cars and riders by quality (`carsByQuality`, `ridersByQuality`), 18 % taxis (`city/traffic` `TAXI`, lit
+  roof sign), now and then an `Ambulance` (`STREET_PLAN.ambulance`). Sound: `StreetSound` has the wind band and
+  whistle; `audio/StreetCues` plays wings (pigeons), barks (the crowd's dog), the crossing's beeper, shutter rattles
+  and the ambulance's siren; `StreetAmbience` hears thunder at the open air's level in the street (`open`) and as
+  through a pane in the market hall (`underRoof`).
+
+## Views onto the street (`src/world/outlook/`)
+
+The painted panorama is right only near the flat's own windows: from the stairwell (up to 16 m lower, 8 m back) or
+from a shop (a room far off in the world) it tore apart. Those windows look onto the walkable street itself instead,
+built again behind the glass: an `OutlookView` is a portal, its own `THREE.Scene` in the street's frame, lit by its own
+sun, sky and lamps (the room's lights, shadow texture units and light count are never touched), rendered in a pane's
+`onBeforeRender` (as three's `Reflector` does) from the main camera carried into that frame (`toOutlook`: `frames.ts`,
+`flatToStreet` for the stairwell, `shopToStreet` for a shop's front wall laid on its facade), clipped at the pane's
+plane, scissored to the pane's rectangle, into a half-float picture the pane samples in screen space. Only the main
+camera's pass renders (a glossy floor's mirror pass reuses the picture). What is out there (`streetOutlook`, in its own
+chunk with the street's classes) is the street's own: `StreetLighting` (occupied), `SkyDome` (its prefiltered sky as the
+scene's environment, never `setOccupied`/`dispose`: both hand the global reflection back), `StreetGround`, `StreetPark`,
+`Buildings` for the facades within 110 m that face the window (less the one it is in; the near ones painted finer),
+their relief, shutters and shop glow, the lamps, trees, parked and passing cars, furniture, the rain, and the courtyard
+the street never reaches (`Courtyard`, `COURTYARD_YARD` in `outlookPlan.ts`: setts, lawn and chestnut, the workshop's
+back, bins, shed, rack, sandpit, bikes). No people, doors or sounds. It is built at the next idle moment once the
+player walks into the room (`prefetch`, from `setOccupied`) or a pane is first drawn, compiled out of sight, and ticked
+only while a pane was drawn in the last 1.5 s; the glass shows a pale sky until then.
+
 ## Headless check (no browser)
 
 Bundle `paintView` (and `Life`) with esbuild (`--alias:@=./src --external:three`), run it in Node with `@napi-rs/canvas`
 shimming `document.createElement('canvas')` and `Path2D`, then save `sheet.color.canvas` as PNG, or reproject a view from it,
 and look at it (the `fx` channel too: trees should show their sway gradient and margin, shop fronts their shutter curfew).
 To check the parallax, reproject from a camera away from `center` (the kitchen windows) with the same fixed-point steps.
-The shader's uniforms sit near WebGL's guaranteed 224 fragment vectors (the sprite arrays are 168 of them): pack any new
+The shader's uniforms sit near WebGL's guaranteed 224 fragment vectors (the sprite arrays are 126 of them, the vehicles 40): pack any new
 scalar into an existing vec4 rather than adding one. Screen right is decreasing azimuth in the game (the lettering is painted mirrored for that). Validate the
 pane shader by dumping `fragmentShader` behind a GLSL ES 3.0 prefix (`#define texture2D texture`, `texture2DLodEXT
 textureLod`, PI/PI2/PI_HALF, `cameraPosition`) into `glslangValidator -S frag`: a GLSL error is a black pane otherwise.

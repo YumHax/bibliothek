@@ -17,7 +17,8 @@ export interface LeaningMirrorOptions {
 
 const FRAME = 0.035;
 const FRAME_DEPTH = 0.03;
-const GLASS = standard({ color: 0xb8c4cc, roughness: 0.08, metalness: 0.2 });
+// Silvered glass: raw metal (metalness 1), its tint the silver's.
+const GLASS = standard({ color: 0xc8ccd0, roughness: 0.05, metalness: 1 });
 
 /**
  * A full-length mirror standing on the floor, leaning back against a wall: its foot a little way

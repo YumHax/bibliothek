@@ -7,12 +7,16 @@ import { wakefulnessAt } from '@/time/wakefulness';
 import { CAR_SIZES, carGeometries, type CarModelId } from './carModel';
 import { nightnessOf } from './streetAir';
 import { snowCovered } from './snowCover';
+import { CAR_PAINTS, VAN_PAINTS, type ParkedCar } from '../city/parkedCars';
 import type { Vec2 } from './streetPlan';
 import { Horn, ROAD_Y, allowedSpeed, approach, corneringSpeed, placeOnRoute, sampleRoute, type Route } from './traffic/driving';
 import type { RoadVehicle, StreetTraffic } from './traffic/StreetTraffic';
+import { TAXI } from '../city/traffic';
+import { createCanvas } from '@/covers/generated/canvasUtils';
+import { GROUND, RENDER_ORDER, onSurface } from '../surface/layers';
 
 export interface StreetCarsOptions {
-  parked: readonly { at: Vec2; yaw: number }[];
+  parked: readonly ParkedCar[];
   routes: readonly (readonly Vec2[])[];
   /** Cruising speed (m/s), seconds between two cars (scaled by how awake the city is), how many can drive at once. */
   speed: number;
@@ -41,10 +45,24 @@ export interface CarVoice {
   readonly kind: VehicleKind;
 }
 
-const PAINTS = [0xb8322a, 0x2a4f8a, 0xe8e6e0, 0x2a2c30, 0x8a9096, 0x3f6b4f, 0xd9b44a, 0x6a2a4a, 0x9aa8b4, 0x1f3040];
-const VAN_PAINTS = [0xe8e6e0, 0xe8e6e0, 0x9aa8b4, 0x2a4f8a, 0xd9b44a];
+const PAINTS = CAR_PAINTS;
 const HIDDEN = new THREE.Matrix4().makeScale(0, 0, 0);
 const MODELS: readonly CarModelId[] = ['hatch', 'saloon', 'van'];
+/** A taxi's roof sign: size (along, up, across) and where it sits (along from the middle, over the roof). */
+const TAXI_SIGN = { size: [0.2, 0.14, 0.55] as const, along: -0.25, lift: 0.07 };
+/** The pool of the headlights on the road ahead of a driving car at night: how far it reaches, how wide it spreads, how bright. */
+const BEAM = { length: 9, width: 4.6, strength: 0.55 };
+
+/** A driving car's pose, for what lights up round it (the wet road's streaks, `relief/WetGround`). */
+export interface MovingLamp {
+  readonly position: THREE.Vector3;
+  readonly yaw: number;
+  readonly active: boolean;
+  readonly length: number;
+}
+
+/** Cars already on their way when the player arrives: this many, somewhere between these shares of their route. */
+const PREWARM = { cars: 2, from: 0.3, to: 0.65 };
 
 /** One car shape's instanced meshes (body, glass, tyres, lamps) and how many slots are taken. */
 interface ModelSet {
@@ -63,6 +81,8 @@ class Driver implements CarVoice, RoadVehicle {
   distance = 0;
   speed = 0;
   yaw = 0;
+  /** This time round it is a taxi (yellow, its sign lit). */
+  taxi = false;
   constructor(
     readonly model: CarModelId,
     readonly slot: number,
@@ -105,21 +125,29 @@ export class StreetCars extends THREE.Group implements Furniture, Updatable {
   private spawnClock = 2;
   private nextRoute = 0;
   private readonly scratch = new THREE.Matrix4();
+  private readonly lift = new THREE.Matrix4();
   private readonly eye = new THREE.Vector3();
+  /** The model sets moved this frame (reused: no set a frame). */
+  private readonly touched = new Set<ModelSet>();
+  /** The taxis' roof signs, one slot per driving car, and their lit material. */
+  private readonly signs: THREE.InstancedMesh;
+  private readonly signMaterial = new THREE.MeshBasicMaterial({ color: 0xf2d27a });
+  /** The next update puts a couple of cars mid-route (the street is never empty on arrival). */
+  private prewarm = true;
+  /** The headlights' pools on the road, one slot per driving car (additive, the canvas alpha kept). */
+  private readonly beams: THREE.InstancedMesh;
+  private readonly beamMaterial: THREE.MeshBasicMaterial;
+  private readonly beamLocal = new THREE.Matrix4();
 
   constructor(private readonly dayNight: DayNight, private readonly options: StreetCarsOptions) {
     super();
     this.name = 'StreetCars';
-    // Which shape each parked car is (seeded, so the street looks the same each visit), and the driving ones'.
-    const pick = seededRandom(4711);
-    const parkedModels = options.parked.map((): CarModelId => {
-      const r = pick();
-      return r < 0.45 ? 'hatch' : r < 0.85 ? 'saloon' : 'van';
-    });
+    // Which shape each parked car is (`city/parkedCars`: the window view parks the same), and the driving ones'.
+    const parkedModels = options.parked.map(({ shape }): CarModelId => shape);
     const drivingModels = Array.from({ length: options.cars }, (_, i): CarModelId => (i % 3 === 1 ? 'saloon' : i % 5 === 4 ? 'van' : 'hatch'));
 
-    const body = snowCovered(new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.35, metalness: 0.4, flatShading: true }));
-    const glass = snowCovered(new THREE.MeshStandardMaterial({ color: 0x1a232b, roughness: 0.12, metalness: 0.6, flatShading: true }));
+    const body = snowCovered(new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.3 }));
+    const glass = snowCovered(new THREE.MeshStandardMaterial({ color: 0x1a232b, roughness: 0.06 }));
     // Its own, not the palette's: an instanced mesh sharing a material with plain meshes (the bus's wheels) switches programs every draw.
     const tyres = new THREE.MeshStandardMaterial({ color: 0x151515, roughness: 0.85 });
     this.lampMaterial = new THREE.MeshBasicMaterial({ vertexColors: true, color: 0x666666 });
@@ -147,13 +175,11 @@ export class StreetCars extends THREE.Group implements Furniture, Updatable {
       this.sets.set(model, set);
     }
 
-    const paint = seededRandom(9001);
-    options.parked.forEach(({ at, yaw }, i) => {
+    options.parked.forEach(({ at, yaw, paint }, i) => {
       const model = parkedModels[i]!;
       const set = this.sets.get(model)!;
       const slot = set.used++;
-      const palette = model === 'van' ? VAN_PAINTS : PAINTS;
-      set.body.setColorAt(slot, this.color.setHex(palette[Math.floor(paint() * palette.length)]!));
+      set.body.setColorAt(slot, this.color.setHex(paint));
       this.setInstance(model, slot, at[0], at[1], yaw);
     });
     drivingModels.forEach((model, i) => {
@@ -168,6 +194,36 @@ export class StreetCars extends THREE.Group implements Furniture, Updatable {
       this.flag(set);
     }
     this.routes = options.routes.map((points) => sampleRoute(points));
+    this.signs = new THREE.InstancedMesh(new THREE.BoxGeometry(...TAXI_SIGN.size), this.signMaterial, Math.max(1, this.drivers.length));
+    this.signs.frustumCulled = false;
+    this.signs.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    for (let i = 0; i < this.signs.count; i++) this.signs.setMatrixAt(i, HIDDEN);
+    this.add(this.signs);
+    this.beamMaterial = onSurface(
+      new THREE.MeshBasicMaterial({
+        map: beamTexture(),
+        color: 0x000000,
+        transparent: true,
+        blending: THREE.CustomBlending,
+        blendSrc: THREE.SrcAlphaFactor,
+        blendDst: THREE.OneFactor,
+        blendSrcAlpha: THREE.ZeroFactor,
+        blendDstAlpha: THREE.OneFactor,
+        fog: true,
+      }),
+      GROUND.lampPool,
+      { depthWrite: false },
+    );
+    // Flat on the road, u forward from just behind the nose.
+    this.beams = new THREE.InstancedMesh(new THREE.PlaneGeometry(BEAM.length, BEAM.width).rotateX(-Math.PI / 2), this.beamMaterial, Math.max(1, this.drivers.length));
+    this.beams.frustumCulled = false;
+    this.beams.castShadow = false;
+    this.beams.receiveShadow = false;
+    this.beams.renderOrder = RENDER_ORDER.groundGlow;
+    this.beams.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    for (let i = 0; i < this.beams.count; i++) this.beams.setMatrixAt(i, HIDDEN);
+    this.beams.visible = false;
+    this.add(this.beams);
     this.colliders = options.parked.map(({ at, yaw }, i) => {
       const size = CAR_SIZES[parkedModels[i]!];
       const along = Math.abs(Math.cos(yaw)) > 0.5;
@@ -181,6 +237,11 @@ export class StreetCars extends THREE.Group implements Furniture, Updatable {
     return new THREE.Box3();
   }
 
+  /** The driving cars' poses, for the wet road's streaks of their lamps. */
+  get lamps(): readonly MovingLamp[] {
+    return this.drivers;
+  }
+
   /** The driving cars, for the street's sound. */
   get voices(): readonly CarVoice[] {
     return this.drivers;
@@ -190,12 +251,27 @@ export class StreetCars extends THREE.Group implements Furniture, Updatable {
     for (const d of this.drivers) this.options.traffic.vehicles.delete(d);
   }
 
+  setZoneActive(active: boolean): void {
+    if (active) this.prewarm = true;
+  }
+
   update(dt: number): void {
     const s = this.dayNight.state;
     const night = THREE.MathUtils.smoothstep(nightnessOf(s), 0.2, 0.6);
     this.lampMaterial.color.setScalar(0.35 + 2.4 * night);
+    this.signMaterial.color.setRGB(0.9 + 1.6 * night, 0.75 + 1.3 * night, 0.35 + 0.6 * night);
+    this.beamMaterial.color.setRGB(1, 0.94, 0.82).multiplyScalar(BEAM.strength * night);
+    const beams = night > 0.02;
+    this.beams.visible = beams;
     this.options.viewer.getWorldPosition(this.eye);
     this.worldToLocal(this.eye);
+    if (this.prewarm) {
+      this.prewarm = false;
+      for (let i = 0; i < PREWARM.cars; i++) {
+        const route = i % this.routes.length;
+        this.spawn(route, this.routes[route]!.length * (PREWARM.from + this.random() * (PREWARM.to - PREWARM.from)));
+      }
+    }
 
     this.spawnClock -= dt;
     if (this.spawnClock <= 0) {
@@ -203,35 +279,55 @@ export class StreetCars extends THREE.Group implements Furniture, Updatable {
       this.spawnClock = (a + this.random() * (b - a)) / Math.max(0.12, wakefulnessAt(s.hours));
       this.spawn();
     }
-    const touched = new Set<ModelSet>();
-    for (const driver of this.drivers) {
+    const touched = this.touched;
+    touched.clear();
+    let signs = false;
+    for (let i = 0; i < this.drivers.length; i++) {
+      const driver = this.drivers[i]!;
       if (!driver.active) continue;
       this.drive(driver, dt);
       if (!driver.active) this.setInstance(driver.model, driver.slot, 0, 0, 0, true);
       else this.setInstance(driver.model, driver.slot, driver.position.x, driver.position.z, driver.yaw, false, true);
       touched.add(this.sets.get(driver.model)!);
+      // The pool ahead of the nose, in the car's frame (`scratch` holds its pose), just over the asphalt.
+      if (driver.active) this.beamLocal.makeTranslation(driver.length / 2 - 0.2 + BEAM.length / 2, GROUND.lampPool.lift, 0).premultiply(this.scratch);
+      this.beams.setMatrixAt(i, driver.active ? this.beamLocal : HIDDEN);
+      if (driver.taxi) {
+        // The sign rides on the roof, in the car's frame (`scratch` still holds its pose).
+        if (driver.active) this.lift.makeTranslation(TAXI_SIGN.along, CAR_SIZES[driver.model].height + TAXI_SIGN.lift, 0).premultiply(this.scratch);
+        this.signs.setMatrixAt(i, driver.active ? this.lift : HIDDEN);
+        signs = true;
+      }
     }
     for (const set of touched) this.flag(set);
+    this.beams.instanceMatrix.needsUpdate = true;
+    if (signs) this.signs.instanceMatrix.needsUpdate = true;
   }
 
-  /** A car sets off at the start of a route, unless the one before it has not cleared the start yet. */
-  private spawn(): void {
-    const free = this.drivers.filter((d) => !d.active);
-    const driver = free[Math.floor(this.random() * free.length)];
+  /**
+   * A car sets off at the start of a route (the next in turn), unless the one before it has not
+   * cleared the start yet; or, arriving, already `from` metres along route `forced`.
+   */
+  private spawn(forced?: number, from = 0): void {
+    let free = 0;
+    for (const d of this.drivers) if (!d.active) free++;
+    let pick = Math.floor(this.random() * free);
+    const driver = this.drivers.find((d) => !d.active && pick-- === 0);
     if (!driver) return;
-    const route = this.nextRoute;
-    this.nextRoute = (this.nextRoute + 1) % this.routes.length;
-    if (this.drivers.some((d) => d.active && d.route === route && d.distance < 12)) return;
+    const route = forced ?? this.nextRoute;
+    if (forced === undefined) this.nextRoute = (this.nextRoute + 1) % this.routes.length;
+    if (this.drivers.some((d) => d.active && d.route === route && Math.abs(d.distance - from) < 12)) return;
     driver.active = true;
     driver.route = route;
-    driver.distance = 0;
+    driver.distance = from;
     driver.speed = this.options.speed;
-    // A new car each time: a fresh coat of paint.
+    // A new car each time: a fresh coat of paint, now and then a taxi's.
+    driver.taxi = driver.model !== 'van' && this.random() < TAXI.share;
     const palette = driver.model === 'van' ? VAN_PAINTS : PAINTS;
     const set = this.sets.get(driver.model)!;
-    set.body.setColorAt(driver.slot, this.color.setHex(palette[Math.floor(this.random() * palette.length)]!));
+    set.body.setColorAt(driver.slot, this.color.setHex(driver.taxi ? TAXI.paint : palette[Math.floor(this.random() * palette.length)]!));
     if (set.body.instanceColor) set.body.instanceColor.needsUpdate = true;
-    driver.yaw = placeOnRoute(this.routes[route]!, 0, driver.position);
+    driver.yaw = placeOnRoute(this.routes[route]!, from, driver.position);
   }
 
   private drive(driver: Driver, dt: number): void {
@@ -264,4 +360,33 @@ export class StreetCars extends THREE.Group implements Furniture, Updatable {
   private flag(set: ModelSet): void {
     for (const mesh of [set.body, set.glass, set.wheels, set.lamps]) mesh.instanceMatrix.needsUpdate = true;
   }
+}
+
+/**
+ * A headlights' pool seen from above, u forward from the nose: two lamps' cones merging, brightest
+ * a few metres ahead, spreading and fading out towards the far end, soft at the sides.
+ */
+function beamTexture(): THREE.CanvasTexture {
+  const [w, h] = [256, 128];
+  const [canvas, ctx] = createCanvas(w, h);
+  const image = ctx.createImageData(w, h);
+  for (let x = 0; x < w; x++) {
+    const t = x / (w - 1);
+    const along = THREE.MathUtils.smoothstep(t, 0.0, 0.12) * (1 - t) ** 1.6;
+    const half = 0.18 + 0.32 * t;
+    for (let y = 0; y < h; y++) {
+      const across = Math.abs(y / (h - 1) - 0.5);
+      const side = 1 - THREE.MathUtils.smoothstep(across, half * 0.55, half);
+      const v = Math.round(255 * along * side);
+      const k = (y * w + x) * 4;
+      image.data[k] = 255;
+      image.data[k + 1] = 255;
+      image.data[k + 2] = 255;
+      image.data[k + 3] = v;
+    }
+  }
+  ctx.putImageData(image, 0, 0);
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  return texture;
 }

@@ -98,7 +98,8 @@ export function createServices(container: HTMLElement) {
 
   // One sky for every zone (see docs/zones.md). `?season=winter` (or `autumn:0.9`) and `?weather=rain` override the
   // calendar and the forecast, `?lat=48.85` the latitude the sun rises and sets for (see docs/outdoors.md).
-  const sky = new Sky({ sunRotationY: SUN_ROTATION_Y, nearWall: KITCHEN_WING, season: parseSeason(params.get('season')), holiday: parseHoliday(params.get('holiday')), newYear: parseNewYear(params.get('holiday')), weather: parseWeather(params.get('weather')), latitude: parseLatitude(params.get('lat')) });
+  // The clock starts where it was left (a reload the same real day), else in the morning (`MarketCalendar.savedHours`).
+  const sky = new Sky({ hours: MarketCalendar.savedHours() ?? undefined, sunRotationY: SUN_ROTATION_Y, nearWall: KITCHEN_WING, viewer: engine.camera, season: parseSeason(params.get('season')), holiday: parseHoliday(params.get('holiday')), newYear: parseNewYear(params.get('holiday')), weather: parseWeather(params.get('weather')), latitude: parseLatitude(params.get('lat')) });
   // The market restocks every morning of the game's clock; haggles, holds, orders and games sold to it are
   // remembered, and so is how well it knows the player (reputation, regulars at each stall).
   const ledger = new MarketLedger();
@@ -126,7 +127,7 @@ export function createServices(container: HTMLElement) {
   // The guided first day (a new game only) and the daily journal, which fills itself from the stores.
   const firstDay = new FirstDay({ returningPlayer, enabled: !debug });
   const journal = new Journal();
-  watchForJournal(journal, { wallet, collection, deliveries, prizes, medals });
+  watchForJournal(journal, { wallet, collection, deliveries, prizes, medals, home: upgrades, league });
   // What the kitchen, the bathroom and the bedroom are for (docs/household.md): what was done at home, its rules,
   // and what it sends the player out with (the market's haggles, the arcade's tickets).
   const hours = () => sky.dayNight.state.hours;
@@ -135,6 +136,7 @@ export function createServices(container: HTMLElement) {
     household, collection, shelved: strays, purse: wallet, hours,
     marketOpen: () => isShopOpen('retro', hours() % 24),
     todays: () => market.todays(),
+    journal,
   });
   const perks = new Perks({
     household,

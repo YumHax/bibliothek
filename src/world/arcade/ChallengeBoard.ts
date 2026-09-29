@@ -6,6 +6,7 @@ import { Prop } from '../props/Prop';
 import { paint } from '../materials/palette';
 import { drawText } from './games/ArcadeGame';
 import type { TodaysChallenge } from './scoreTable';
+import { QUALITY } from '@/graphics/quality';
 
 export interface ChallengeBoardOptions {
   /** Today's challenge, read again every second (it changes when paid, and at midnight). */
@@ -46,7 +47,7 @@ export class ChallengeBoard extends Prop implements Updatable {
     this.ctx = this.canvas.getContext('2d')!;
     this.texture = new THREE.CanvasTexture(this.canvas);
     this.texture.colorSpace = THREE.SRGBColorSpace;
-    this.texture.anisotropy = 4;
+    this.texture.anisotropy = QUALITY.anisotropy;
     const face = new THREE.Mesh(new THREE.PlaneGeometry(width, height), new THREE.MeshBasicMaterial({ map: this.texture, toneMapped: false, color: 0xd8d8d8 }));
     face.position.z = 0.042;
     this.add(face);
@@ -86,7 +87,7 @@ export class ChallengeBoard extends Prop implements Updatable {
     drawText(ctx, this.options.titleOf(c.gameId), W / 2, H * 0.36, Math.round(H * 0.11), '#ffffff');
     drawText(ctx, `SCORE ${c.target.toLocaleString('en-US')}`, W / 2, H * 0.54, Math.round(H * 0.085), '#9ad6ff');
     drawText(ctx, `+${c.reward} TICKETS ON TOP`, W / 2, H * 0.7, Math.round(H * 0.07), '#7ee787');
-    drawText(ctx, 'ONE PRIZE A DAY · NEW ONE AT MIDNIGHT', W / 2, H * 0.84, Math.round(H * 0.04), '#b09ac0');
+    drawText(ctx, 'ONE PRIZE A DAY · NEW ONE AT MIDNIGHT, YOUR TIME', W / 2, H * 0.84, Math.round(H * 0.04), '#b09ac0');
     if (c.done) {
       ctx.save();
       ctx.translate(W / 2, H * 0.5);

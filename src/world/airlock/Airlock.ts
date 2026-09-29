@@ -34,8 +34,8 @@ const INSIDE_MARGIN = 0.12;
 
 /** The captions, by twin: the live door, the far door, the door release. */
 const LABELS: Record<TwinId, { live: [open: string, shut: string]; far: string; button: string }> = {
-  hall: { live: ['Click to close the glass door', 'Click to open the glass door'], far: 'Click to go out onto Front Street', button: 'Door release · click to go out' },
-  street: { live: ['Click to close the door', 'Click to open the door (home is five floors up)'], far: 'Click to go in (home is five floors up)', button: 'Door release' },
+  hall: { live: ['The glass door · close', 'The glass door · open'], far: 'Front Street · go out', button: 'Door release · go out' },
+  street: { live: ['The door · close', 'The door · open (home is five floors up)'], far: 'Home · go in (five floors up)', button: 'Door release' },
 };
 
 /**

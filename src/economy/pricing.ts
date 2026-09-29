@@ -11,8 +11,11 @@ export { hash01 } from './seeded';
  * see `Fame`), times a small deterministic jitter from the game's id so two classics differ.
  */
 
-/** Coins in a brand-new wallet: enough for a few arcade plays, not for a game. */
-export const STARTING_COINS = 10;
+/**
+ * Coins in a brand-new wallet: a first round of arcade plays with enough left over that the first
+ * bargain-bin game (`BARGAIN_PRICE`) is a few good plays away, not an evening's.
+ */
+export const STARTING_COINS = 20;
 /** One arcade play. */
 export const PLAY_COST = 1;
 /** The prize counter's rate. */
@@ -23,24 +26,25 @@ export const POINTS_PER_TICKET = 50;
 /**
  * Points per ticket, per arcade game (by the id its machine reports). The games score on very
  * different scales (a pinball ball is worth tens of thousands, a roll up the alley a few hundred)
- * and last differently long (BRICK STORM runs 30 s, the others 15, a pinball game a minute or
- * two), so each rate is set for a decent play to pay about the same tickets per minute: roughly
- * 35-40 tickets for a decent 15-second cabinet play. First estimates: retune a rate when one game
- * turns out to be the obvious earner (see docs/economy.md).
+ * and last differently long (BRICK STORM and the hoops run 30 s, PADDLE WARS and STEP BEAT 20, the
+ * others 12-15, a pinball game a minute or so), so each rate is set for a decent play (the table's
+ * fourth regular, `rivals.ts`) to pay about the same tickets per minute: roughly 35-40 tickets for
+ * a decent 15-second cabinet play, about 50 for a 20-second one, 70-80 for a 30-second one. Retune a rate when one game turns out to be the obvious
+ * earner (`?payout` shows the real plays; see docs/economy.md).
  */
 export const PAYOUT: Readonly<Record<string, number>> = {
-  breakout: 70,
+  breakout: 40,
   invaders: 40,
   stacker: 50,
   arrows: 32,
   snake: 40,
-  comets: 40,
+  comets: 28,
   pinball: 200,
   alley: 6,
-  duel: 15,
-  stepbeat: 120,
+  duel: 13,
+  stepbeat: 95,
   sheriff: 120,
-  hoops: 6,
+  hoops: 5,
   /** LexiPunk's scale is its own: a first guess until the site's scores are seen. */
   lexipunk: 50,
   /** The ticket wheel's score is the tickets it landed on. */
@@ -58,11 +62,17 @@ export function ticketsFor(gameId: string, score: number): number {
 }
 
 /**
+ * Beginner's luck: the first `plays` ticket plays on each machine pay at least `tickets` (about the coin they
+ * cost and a little more), so a newcomer learning a short cabinet is not out of pocket while they learn it.
+ */
+export const BEGINNER = { plays: 3, tickets: 12 } as const;
+
+/**
  * Broke, and not even a coin's worth of tickets: the house stands the play (ticket machines only),
  * so the loop never dead-ends.
  */
 export function playIsFree(wallet: { readonly coins: number; readonly tickets: number }): boolean {
-  return wallet.coins === 0 && wallet.tickets < TICKETS_PER_COIN;
+  return wallet.coins < PLAY_COST && wallet.tickets < TICKETS_PER_COIN * PLAY_COST;
 }
 
 /** What the change machine coughs up on a day it works: coins, and how often a day it works. */
@@ -70,14 +80,27 @@ export const CHANGE_MACHINE = { minCoins: 1, maxCoins: 3, workingOdds: 0.25 };
 
 /** The daily challenge's reward range in tickets (the day picks one in it). */
 export const CHALLENGE_REWARD = { min: 50, max: 90 };
+/**
+ * Where the daily challenge's target falls on a game's starting table (`rivals.ts`, 0-based ranks,
+ * best first): between the `low` rank's score and the `high` one's. Most games aim between the
+ * fourth and the second score; the pinball's table was measured higher (its fourth is the upper
+ * quartile of a real game, the median about 10 000), so it aims between the fifth and the third.
+ */
+export const CHALLENGE_BAND: Readonly<Record<string, { low: number; high: number }>> & { default: { low: number; high: number } } = {
+  default: { low: 3, high: 1 },
+  pinball: { low: 4, high: 2 },
+};
 
 /** How often a day has an arcade machine out of order. */
 export const OUT_OF_ORDER_ODDS = 0.35;
 
 /**
  * Shop price of an ordinary game per platform, before the fame factor. Calibrated against the
- * arcade: a good player makes ~20 coins a minute there, so an ordinary market copy (about half the
- * shop price) is 4-5 minutes of play, a famous shop title 20-40.
+ * arcade: a decent play pays 35-40 tickets and, with the countdown, the end card and the next coin,
+ * takes about 19 s, so a good player makes about 11-12 coins a minute there, some 8-9 once the
+ * coin each play costs is paid (more on a challenge or a medal); an ordinary market copy (about
+ * 0.7 of the shop price: a NES one about 110) is 12-14 minutes of play, a famous shop title an
+ * hour or more, a bargain-bin game three.
  */
 const BASE_PRICE: Record<PlatformId, number> = { nes: 160, snes: 240, gb: 120, megadrive: 200, n64: 280, ps1: 200 };
 
@@ -100,6 +123,14 @@ export const MARKET_DISCOUNT = { min: 0.55, max: 0.85 };
 
 /** Everything in the bargain bin goes at this flat price, whatever it is (worn copies; the odd gem is the point). */
 export const BARGAIN_PRICE = 25;
+/** How a bargain-bin copy's receipt names where it came from (`Acquisition.where`). */
+export const BIN_WHERE = 'the bargain bin';
+/** The street's flat-price copies' receipts (a garage sale, the box of cast-offs): capped at the desk like the bin's. */
+export const GARAGE_WHERE = 'a garage sale on Front Street';
+export const GIVEAWAY_WHERE = 'a box of cast-offs on Front Street';
+const FLAT_PRICE_WHERES: ReadonlySet<string> = new Set([BIN_WHERE, GARAGE_WHERE, GIVEAWAY_WHERE]);
+/** How the mystery game's receipt names where it came from (paid in tickets: its price on the receipt is 0). */
+export const PRIZE_WHERE = 'the prize counter';
 
 /**
  * What the WE BUY desk pays for a game from the collection, as a share of its shop price (then the
@@ -120,7 +151,7 @@ export const BUY_BACK_SHARE = 0.3;
  * costs an extra point of patience and sours the stall's mood for the day.
  */
 export const NEGOTIATION = {
-  offers: { cheeky: 0.65, fair: 0.8, polite: 0.9 },
+  offers: { cheeky: 0.72, fair: 0.8, polite: 0.9 },
   /** The lowest share of the tag the stallholder will take, drawn per copy and day in this range. */
   floor: {
     ordinary: [0.72, 0.9],
@@ -130,10 +161,16 @@ export const NEGOTIATION = {
   patience: 3,
   /**
    * Whatever sways them, no stallholder goes under this share of the tag: with the day's deepest
-   * discount and a fair's 10 % off it stays above what the WE BUY desk pays at the top reputation,
+   * discount and the Flea Fair's 5 % off (`BROCANTE.priceFactor`) it stays above what the WE BUY desk pays at the top reputation,
    * so buying to sell back never pays.
    */
   lowest: 0.7,
+  /**
+   * A worn copy's stallholder is keener: its lowest share. Still above the desk: the day's deepest
+   * discount (0.55) at the Flea Fair (0.95) times this is over the top desk share (0.34), both
+   * sides times the worn factor.
+   */
+  lowestWorn: 0.66,
   /** An offer this far (share of the tag) under the lowest price is an insult. */
   insult: 0.12,
   /** Each soured mood point today raises the lowest price by this share (and costs a point of patience). */
@@ -144,6 +181,11 @@ export const NEGOTIATION = {
   rain: -0.03,
   /** Per loyalty tier with that stall. */
   loyalty: -0.03,
+  /**
+   * Everything that sways a stallholder down (loyalty, a coffee, the rain, the player's perks: `household/perks`) adds up
+   * to this share of the tag at most, so each still counts and a cheeky offer is not always taken.
+   */
+  maxSway: 0.1,
 } as const;
 
 /** How a copy's printing moves its price, and how often a stall copy is a first print or a budget re-release. */
@@ -200,7 +242,7 @@ export const JOB_LOT = { min: 4, max: 6, share: 0.55 };
 export const TRADE_SHARE = 0.42;
 
 /** The notice board: collectors pay this share of a game's shop price (drawn in the range), for this many market days. */
-export const WANTED_AD = { perDay: 3, share: [0.62, 0.8] as [number, number], days: 3 };
+export const WANTED_AD = { perDay: 3, share: [0.62, 0.8] as [number, number], days: 3, premium: 1.15 };
 /**
  * Private sellers' cards: this many a day, at this share of the shop price, delivered to the parcel;
  * `completeOdds` of them complete (the rest without the manual, at `noManualFactor` of the price).
@@ -210,8 +252,50 @@ export const FOR_SALE_AD = { perDay: 2, share: [0.45, 0.6] as [number, number], 
 /** A coffee from the cart. */
 export const COFFEE_PRICE = 2;
 
-/** Changing one's mind after buying: within this many seconds, for this share back. */
+// --- Front Street and the landing: the street's prices, the collector's markup, the neighbours' swaps ---
+
+/** The bakery's croissant and the bar's lemonade (for the pleasure of it), coins. */
+export const STREET_TREATS = { croissant: 1, lemonade: 2 } as const;
+
+/**
+ * The newsagent's PIXEL SCRATCH card (`street/shops/scratchCard.ts`): its price, how many one player
+ * may buy in a real day, what three of each symbol pay (cherries, pads, cartridges, stars, sevens) and
+ * the odds of each outcome (a loss, then three of `prizes[i]`): 1.35 coins paid out a card on average,
+ * under its price (the house wins).
+ */
+export const SCRATCH = {
+  price: 2,
+  perDay: 5,
+  prizes: [2, 3, 5, 10, 25],
+  odds: { lose: 0.62, win: [0.2, 0.09, 0.06, 0.025, 0.005] },
+} as const;
+
+/** The collector outside RETRO GAMES (`street/shops/Trader.ts`) sells what he took off the stalls at this times their price. */
+export const TRADER_MARKUP = 1.25;
+
+/**
+ * The neighbours' swaps (`NeighbourTrades`): the share of market days a resident slips a note under the
+ * door (`odds`), the market days an offer stands (`lasts`), the owned games before anyone asks
+ * (`minOwned`), the resident's games considered (`candidates`), and what they give against what they
+ * get (`fair`: its worth over the player's game's, within the range, nearest `ideal`).
+ */
+export const NEIGHBOUR_SWAPS = { odds: 0.35, lasts: 3, minOwned: 3, candidates: 10, fair: [0.8, 1.35] as readonly [number, number], ideal: 1.05 } as const;
+
+/**
+ * Changing one's mind after buying: within this many seconds, for this share of the full price back
+ * (the price less the rest, rounded: a 1-coin copy comes back whole); a held copy goes back on hold
+ * with its deposit, which stays paid down.
+ */
 export const UNDO_PURCHASE = { seconds: 8, refund: 0.9 };
+
+/** A deliberate second click: a first click arms a sale (a row, a tag, a button) for this long, the second within it goes through. */
+export const CONFIRM_MS = 4000;
+/** Something for the flat dearer than this (coins) asks for that second click wherever it is bought (a shop's tag or till, the household stall, the bookcase kit). */
+export const ARM_ABOVE = 30;
+/** How many coin clinks a purchase of `price` coins makes (the same everywhere something is bought on the spot). */
+export function purchaseClinks(price: number): number {
+  return Math.min(8, Math.max(2, Math.round(price / 20)));
+}
 
 /** Other shoppers buy too: one purchase every so many seconds on average while someone browses, never more than this share of the day's stall stock. */
 export const RIVAL_BUYING = { meanSeconds: 55, maxShare: 0.25 };
@@ -267,34 +351,103 @@ export function marketPrice(game: Pick<Game, 'id' | 'platform'>, views: Views, c
   return Math.max(1, Math.round(shopPrice(game, views) * discount * CONDITION_FACTOR[condition] * EDITION_FACTOR[edition]));
 }
 
+/** What a dealer reads off a copy: `Game` minus what does not move its price. */
+export type DealtCopy = Pick<Game, 'id' | 'platform' | 'condition' | 'edition' | 'repro' | 'restored' | 'sticker' | 'region' | 'acquired'>;
+
 /**
- * What the WE BUY desk offers for `game` (its condition and edition; a reproduction fetches
- * `REPRO_BUY_BACK`), integer coins, at least 1. `bonus` is the player's reputation share on top.
+ * What the WE BUY desk offers for `game` (its condition, edition, a Japanese import's lower price;
+ * a reproduction fetches `REPRO_BUY_BACK`), integer coins, at least 1. `bonus` is the player's
+ * reputation share on top. A bargain-bin copy never fetches more than the bin asked for it.
  */
-export function buyBackPrice(game: Pick<Game, 'id' | 'platform' | 'condition' | 'edition' | 'repro' | 'restored' | 'sticker'>, views: Views, bonus = 0): number {
+export function buyBackPrice(game: DealtCopy, views: Views, bonus = 0): number {
   if (game.repro) return REPRO_BUY_BACK;
-  return Math.max(1, Math.round(shopPrice(game, views) * (BUY_BACK_SHARE + bonus) * dealerFactor(game) * EDITION_FACTOR[game.edition ?? 'standard']));
+  const offer = Math.max(1, Math.round(shopPrice(game, views) * (BUY_BACK_SHARE + bonus) * dealerFactor(game) * EDITION_FACTOR[game.edition ?? 'standard']));
+  return Math.min(offer, receiptCap(game));
 }
 
-/** What `game` counts for in a swap at a stall (a reproduction nearly nothing), integer coins. */
-export function tradeValue(game: Pick<Game, 'id' | 'platform' | 'condition' | 'edition' | 'repro' | 'restored' | 'sticker'>, views: Views): number {
+/** What `game` counts for in a swap at a stall (a reproduction nearly nothing), integer coins; a bargain-bin copy at most what it cost. */
+export function tradeValue(game: DealtCopy, views: Views): number {
   if (game.repro) return REPRO_BUY_BACK;
-  return Math.max(1, Math.round(shopPrice(game, views) * TRADE_SHARE * dealerFactor(game) * EDITION_FACTOR[game.edition ?? 'standard']));
+  const value = Math.max(1, Math.round(shopPrice(game, views) * TRADE_SHARE * dealerFactor(game) * EDITION_FACTOR[game.edition ?? 'standard']));
+  return Math.min(value, receiptCap(game), paidCap(game));
+}
+
+/**
+ * A copy bought at a price counts in a swap for no more than was paid for it: `TRADE_SHARE` is over what the
+ * cheapest stall copy goes for, so without this a clearance buy swapped straight back would be credit for nothing.
+ */
+function paidCap(game: Pick<Game, 'acquired'>): number {
+  const paid = boughtFor(game);
+  return paid > 0 ? paid : Infinity;
+}
+
+/**
+ * What a copy was bought for, when its receipt says so; 0 for a gift, a prize, a swap (its receipt holds only the
+ * coins added, not what the copy was worth) or no receipt at all.
+ */
+function boughtFor(game: Pick<Game, 'acquired'>): number {
+  const receipt = game.acquired;
+  if (!receipt || receipt.where.startsWith(SWAP_WHERE_PREFIX)) return 0;
+  return receipt.price;
+}
+
+/** How a swapped-in copy's receipt starts (`Transactions.swap`: "a swap at the NES stall"). */
+export const SWAP_WHERE_PREFIX = 'a swap at ';
+
+/**
+ * What a collector answering a WANTED card pays for `copy`, the card offering `base` for a complete
+ * copy: the copy's state as a dealer counts it and its printing move it like at the desk, a
+ * reproduction fetches `REPRO_BUY_BACK`, and a flat-price copy (the bin, the mystery game) never more
+ * than its receipt allows.
+ */
+export function wantedPay(base: number, copy: DealtCopy): number {
+  if (copy.repro) return REPRO_BUY_BACK;
+  const pay = Math.max(1, Math.round(base * dealerFactor(copy) * EDITION_FACTOR[copy.edition ?? 'standard']));
+  return Math.min(pay, receiptCap(copy), wantedCap(copy));
+}
+
+/**
+ * A collector pays a finder's premium over what the copy cost (`WANTED_AD.premium`), not a share of the shop price
+ * whatever it cost: otherwise a copy bought off the stall that morning and handed over at noon is a sure profit.
+ */
+function wantedCap(copy: Pick<Game, 'acquired'>): number {
+  const paid = boughtFor(copy);
+  return paid > 0 ? Math.max(paid + 1, Math.round(paid * WANTED_AD.premium)) : Infinity;
+}
+
+/** A Japanese import (the stall's odd find: its box and manual are in Japanese). */
+export function isImport(game: Pick<Game, 'region'>): boolean {
+  return game.region === 'Japan';
+}
+
+/**
+ * The most a dealer gives for a copy by its receipt: a flat-price copy (the bin, a garage sale, the cast-offs) what it cost,
+ * the mystery game what its tickets were worth in coins (`MYSTERY_GAME_VALUE`), so none of them is a way to print coins
+ * at the desk; anything else no cap.
+ */
+export function receiptCap(game: Pick<Game, 'acquired'>): number {
+  const receipt = game.acquired;
+  if (!receipt) return Infinity;
+  if (receipt.where === PRIZE_WHERE) return MYSTERY_GAME_VALUE;
+  return FLAT_PRICE_WHERES.has(receipt.where) ? Math.max(1, receipt.price) : Infinity;
 }
 
 /**
  * The state of a copy as a dealer counts it (the WE BUY desk, a swap): its condition, a worn copy
  * cleaned at home still counted as worn (so a cheap worn copy bought, cleaned and sold back never
- * pays), less an old price sticker left on the cover.
+ * pays), less an old price sticker left on the cover, less again for a Japanese import (the stall
+ * sold it at `IMPORT.price`, so must the desk).
  */
-function dealerFactor(game: Pick<Game, 'condition' | 'restored' | 'sticker'>): number {
+function dealerFactor(game: Pick<Game, 'condition' | 'restored' | 'sticker' | 'region'>): number {
   const condition = game.restored ? 'worn' : game.condition ?? 'complete';
-  return CONDITION_FACTOR[condition] * (game.sticker ? STICKER.factor : 1);
+  return CONDITION_FACTOR[condition] * (game.sticker ? STICKER.factor : 1) * (isImport(game) ? IMPORT.price : 1);
 }
 
 /**
  * An old shop's price sticker on some second-hand covers (`odds` of a stall copy): the copy goes at
- * `factor` of its price, and is worth that much less (value, desk, swap) until it is peeled off at home.
+ * `factor` of its price, and is worth that much less (value, desk, swap) until it is peeled off at
+ * home. A haggle over a stickered copy stops at the lowest price an unstickered one would (the
+ * negotiation divides its lowest share by `factor`), so buying, peeling and selling back never pays.
  */
 export const STICKER = { odds: 0.12, factor: 0.85 } as const;
 
@@ -319,7 +472,7 @@ export function describeCondition(condition: BoxCondition | undefined): string {
 
 /**
  * A bookcase (about 40 NES boxes): the collection room starts with one, those bought stand along its
- * walls, then in the bedroom. A bit over ten minutes at the cabinets, dearer than any ordinary copy.
+ * walls, then in the bedroom. About half an hour at the cabinets (net of the plays), dearer than any ordinary copy.
  */
 export const BOOKCASE_PRICE = 250;
 
@@ -339,43 +492,50 @@ export const STREAK = { perDay: 10, maxDays: 7 } as const;
  * regulars'. Their totals grow through the week from a base drawn per week in `rivalWeek`
  * (tickets); first place on Sunday night takes the league pennant home.
  */
-export const LEAGUE = { rivalWeek: { min: 250, max: 1400 }, rivals: 5 } as const;
+export const LEAGUE = { rivalWeek: { min: 1500, max: 6000 }, rivals: 5 } as const;
 
 /**
  * The Saturday tournament: `entry` coins to sign the sheet (once a Saturday), then three rounds on
  * the day's cabinet, each a normal paid play that must beat the opponent's score. `reward[n]` is
  * the tickets for going out after winning n rounds (3: the champion, who also takes the cup home).
  */
-export const TOURNAMENT = { entry: 3, reward: [0, 40, 120, 300], prize: 'saturdayCup' } as const;
+export const TOURNAMENT = { entry: 3, reward: [0, 60, 180, 450], prize: 'saturdayCup' } as const;
 
 /**
  * The ticket wheel: what each slice pays and how wide it is (weights, so the slices are drawn to
- * their odds). Expected about 12 tickets a spin, well under a decent skill play (35-40): the wheel
- * is for the thrill. `JACKPOT` is progressive: it starts at `start`, grows by `perSpin` every spin
+ * their odds). Expected about 9.4 tickets a spin at the jackpot's start (10 with it at 450), under a
+ * coin's worth and well under a decent skill play (35-40): the wheel is for the thrill. `JACKPOT` is progressive: it starts at `start`, grows by `perSpin` every spin
  * anyone takes, and goes back to `start` when someone hits it.
  */
 export const WHEEL_SLICES: readonly { tickets: number | 'jackpot'; weight: number }[] = [
-  { tickets: 4, weight: 12 },
-  { tickets: 20, weight: 6 },
-  { tickets: 6, weight: 12 },
-  { tickets: 50, weight: 2 },
+  { tickets: 4, weight: 14 },
+  { tickets: 20, weight: 3.5 },
+  { tickets: 6, weight: 13 },
+  { tickets: 50, weight: 1 },
   { tickets: 8, weight: 11 },
-  { tickets: 15, weight: 7 },
-  { tickets: 5, weight: 12 },
-  { tickets: 'jackpot', weight: 0.6 },
-  { tickets: 10, weight: 10 },
-  { tickets: 30, weight: 4 },
-  { tickets: 6, weight: 12 },
-  { tickets: 100, weight: 1 },
+  { tickets: 15, weight: 5 },
+  { tickets: 5, weight: 14 },
+  { tickets: 'jackpot', weight: 0.35 },
+  { tickets: 10, weight: 9 },
+  { tickets: 30, weight: 1.5 },
+  { tickets: 6, weight: 13 },
+  { tickets: 100, weight: 0.4 },
   { tickets: 8, weight: 11 },
-  { tickets: 25, weight: 5 },
-  { tickets: 5, weight: 12 },
-  { tickets: 12, weight: 9 },
+  { tickets: 25, weight: 2.5 },
+  { tickets: 5, weight: 14 },
+  { tickets: 12, weight: 8 },
 ];
 export const JACKPOT = { start: 250, perSpin: 3 } as const;
 
 /** A random game for the collection from the prize counter: the dearest thing on the list. */
 export const MYSTERY_GAME_TICKETS = 900;
+/**
+ * The mystery game is never a grail, nor anything whose shop price is over this (coins): 900 tickets
+ * are 90 coins, so it may be a pleasant surprise (a good shop title), never a jackpot to sell on.
+ */
+export const MYSTERY_GAME_MAX_PRICE = 320;
+/** What the mystery game counts for at the WE BUY desk and in a swap, at most: its tickets' worth in coins (90). */
+export const MYSTERY_GAME_VALUE = Math.round(MYSTERY_GAME_TICKETS / TICKETS_PER_COIN);
 
 /** The prize counter's list, in tickets, by prize id (`Prizes.ts` has what each one is). */
 export const PRIZE_TICKETS = {
@@ -397,9 +557,9 @@ export const PRIZE_TICKETS = {
 
 /**
  * What the flat's furniture costs, in coins (the bookcase is `BOOKCASE_PRICE`; `homeGoods.ts` has the list, who sells
- * what and how many). The flat starts bare (a bookcase, the TV, a mattress): at ~20 coins a minute at the cabinets a
- * print or a plant is under a minute, an armchair or a lamp a few, a bed or a dresser about five, the projector the
- * long goal (about half an hour). First guesses.
+ * what and how many). The flat starts bare (a bookcase, the TV, a mattress): at some 8-9 coins a minute at the cabinets
+ * (net of the plays) a print or a plant is a couple of minutes, an armchair or a lamp seven to ten, a bed or a dresser
+ * about a quarter of an hour, the projector the long goal (about an hour). The whole flat is some eight hours.
  */
 export const HOME_GOOD_PRICES = {
   // The market's household stall.
@@ -420,10 +580,11 @@ export const HOME_GOOD_PRICES = {
 
 /**
  * The grails (`grails.ts`): one comes to the market every `every` market days from day `offset`
- * (an in-game day is ten minutes, so a little over an hour apart), talked about `rumourDays`
- * days before. A haggle over one never goes under `floor` of its tag.
+ * (an in-game day is ten minutes, so a little over an hour apart) and stays `stays` market days
+ * (the market is open about six real minutes a day: one day was too short to catch), talked about
+ * `rumourDays` days before. A haggle over one never goes under `floor` of its tag.
  */
-export const GRAIL = { every: 8, offset: 5, rumourDays: 3, floor: 0.92 } as const;
+export const GRAIL = { every: 8, offset: 5, stays: 2, rumourDays: 3, floor: 0.92 } as const;
 
 /**
  * The Grand Flea Fair: once a market "month" (`month` days, from day `offset`; it falls on the week
@@ -442,7 +603,8 @@ export const BROCANTE = { month: 28, offset: 13, extraCopies: 4, bin: { size: 2.
  */
 export const SALES = {
   catalogue: { every: 6, offset: 3, factor: 0.8 },
-  clearance: { odds: 0.2, factor: 0.65 },
+  /** 0.66, not less: at the day's deepest discount on a Flea Fair day it still stays over the top desk share (see the check at the end). */
+  clearance: { odds: 0.2, factor: 0.66 },
 } as const;
 
 // --- The collector's book: milestones (see `milestoneList.ts`) ---
@@ -471,3 +633,39 @@ export const MILESTONE_REWARD: Readonly<Record<string, { coins?: number; tickets
   'value-5000': { coins: 200 },
   'grail-1': { coins: 100 },
 };
+
+// --- The one rule every number above must keep: buying to sell back never pays -------------------
+
+/**
+ * Checked once when the module loads (a constant check, so it either always holds or a retune broke
+ * it): the cheapest a stall copy can ever go (the day's deepest discount, the Flea Fair's cut, a
+ * stallholder's lowest share, a worn copy's lower one, a clearance with no haggle, a stickered copy's
+ * haggle, which stops where an unstickered one's would) must stay over what the WE BUY desk pays at the
+ * top reputation, both sides times the same condition factor. So must every other way a copy comes in
+ * for coins: the job lot, a private seller's card, a mail order. A swap and a WANTED card are capped by
+ * what the copy cost (`paidCap`, `wantedCap`), checked here too. The margin is thin (`lowestWorn`:
+ * about 0.345 against 0.34), so a retune of any of these trips it.
+ */
+function assertBuyingToSellNeverPays(): void {
+  const topDesk = BUY_BACK_SHARE + REPUTATION.buyBackBonus * (REPUTATION.levels.length - 1);
+  const deepest = MARKET_DISCOUNT.min * BROCANTE.priceFactor;
+  const ways: Record<string, number> = {
+    haggle: deepest * NEGOTIATION.lowest,
+    worn: deepest * NEGOTIATION.lowestWorn,
+    clearance: deepest * SALES.clearance.factor,
+    // A stickered copy's haggle stops at `lowest / STICKER.factor` of its already-cut tag (`haggle.ts`); clearance stalls carry no sticker.
+    sticker: deepest * STICKER.factor * Math.min(1, NEGOTIATION.lowest / STICKER.factor),
+    // The job lot is priced at the day's middle discount (`JobLot.ts`).
+    lot: ((MARKET_DISCOUNT.min + MARKET_DISCOUNT.max) / 2) * JOB_LOT.share,
+    forSale: FOR_SALE_AD.share[0] * FOR_SALE_AD.noManualFactor / CONDITION_FACTOR.noManual,
+    order: MARKET_ORDER.share * SALES.catalogue.factor,
+  };
+  for (const [way, share] of Object.entries(ways)) {
+    if (share <= topDesk) {
+      console.error(`[pricing] buying to sell back pays (${way}): a copy can come in at ${share.toFixed(3)} of the shop price, the WE BUY desk pays up to ${topDesk.toFixed(3)}. Retune NEGOTIATION, MARKET_DISCOUNT, BROCANTE.priceFactor, SALES, JOB_LOT, FOR_SALE_AD, MARKET_ORDER or REPUTATION.buyBackBonus.`);
+    }
+  }
+  // A swap counts a copy for at most what it cost, a WANTED card pays at most its premium over that: neither is a press.
+  if (!(TRADE_SHARE < 1) || !(WANTED_AD.premium < 1.5)) console.error('[pricing] TRADE_SHARE or WANTED_AD.premium out of range.');
+}
+assertBuyingToSellNeverPays();

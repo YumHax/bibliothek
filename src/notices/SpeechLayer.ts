@@ -8,6 +8,8 @@ export interface SpeechOptions {
   name?: string;
   /** How long a line in passing stays (s); a line to the player stays its reading time. */
   seconds?: number;
+  /** Called when the line actually shows (after the lines queued before it): the speaker's murmur and nod start then. */
+  onShow?: () => void;
 }
 
 interface Line {
@@ -15,6 +17,7 @@ interface Line {
   name?: string;
   addressed: boolean;
   ms: number;
+  onShow?: () => void;
 }
 
 interface Bubble {
@@ -26,6 +29,9 @@ interface Bubble {
   left: number;
   /** 'world': over the head; 'subtitle': in the strip at the bottom; 'hidden': out of view, in passing. */
   place: 'world' | 'subtitle' | 'hidden';
+  /** A wall between the eye and the speaker, checked every `SIGHT_S` (a bubble is not drawn over a wall). */
+  hiddenByWall: boolean;
+  sightAge: number;
 }
 
 /** Past this, a line in passing is not heard (m). */
@@ -40,6 +46,10 @@ const QUEUE_MAX = 4;
 /** Lines queued for one voice beyond this many are dropped oldest first; a subtitle strip holds at most this many voices. */
 const SUBTITLES_MAX = 3;
 const FADE_MS = 260;
+/** A bubble over a head leaves for the subtitles this much further out than it came in (px), so it does not flicker at the edge. */
+const EDGE_HYSTERESIS = 30;
+/** How often a bubble checks for a wall between the eye and the speaker (s). */
+const SIGHT_S = 0.2;
 
 const world = new THREE.Vector3();
 const view = new THREE.Vector3();
@@ -56,6 +66,9 @@ export class SpeechLayer {
   private readonly layer: HTMLDivElement;
   private readonly subtitles: HTMLDivElement;
   private readonly bubbles = new Map<THREE.Object3D | string, Bubble>();
+  /** True when a wall stands between the eye and a point (world); none set: nothing hides a speaker. */
+  private blocked: ((from: THREE.Vector3, to: THREE.Vector3) => boolean) | null = null;
+  private readonly eye = new THREE.Vector3();
 
   constructor(container: HTMLElement, private readonly camera: THREE.Camera) {
     this.layer = document.createElement('div');
@@ -64,7 +77,9 @@ export class SpeechLayer {
     this.subtitles.className = 'subtitles';
     this.subtitles.setAttribute('role', 'log');
     this.subtitles.setAttribute('aria-live', 'polite');
-    container.append(this.layer, this.subtitles);
+    // The bubbles go first in the page: the crosshair's caption and reaction (same layer, later) draw over them.
+    container.prepend(this.layer);
+    container.append(this.subtitles);
   }
 
   /** `anchor` says `text`: a point over a head, followed while the line lasts. */
@@ -75,6 +90,11 @@ export class SpeechLayer {
   /** A voice without a body: `name` on the subtitle. */
   voice(text: string, name?: string): void {
     this.enqueue(null, text, { addressed: true, name });
+  }
+
+  /** What hides a speaker behind a wall (the interactor's occluders). */
+  setLineOfSight(blocked: (from: THREE.Vector3, to: THREE.Vector3) => boolean): void {
+    this.blocked = blocked;
   }
 
   update(dt: number, attending: boolean): void {
@@ -89,6 +109,7 @@ export class SpeechLayer {
         this.next(key, bubble);
         continue;
       }
+      bubble.sightAge += dt;
       this.place(bubble, line, w, h);
     }
   }
@@ -97,12 +118,12 @@ export class SpeechLayer {
     if (!text) return;
     const addressed = options.addressed === true;
     const key = anchor ?? `voice:${options.name ?? ''}`;
-    const line: Line = { text, name: options.name, addressed, ms: addressed ? readMs(text) : Math.max((options.seconds ?? 2.2) * 1000, readMs(text) * 0.7) };
+    const line: Line = { text, name: options.name, addressed, ms: addressed ? readMs(text) : Math.max((options.seconds ?? 2.2) * 1000, readMs(text) * 0.7), onShow: options.onShow };
     let bubble = this.bubbles.get(key);
     if (!bubble) {
       const el = document.createElement('div');
       el.className = 'speech';
-      bubble = { anchor, el, current: null, queue: [], left: 0, place: 'hidden' };
+      bubble = { anchor, el, current: null, queue: [], left: 0, place: 'hidden', hiddenByWall: false, sightAge: Infinity };
       this.bubbles.set(key, bubble);
     }
     if (bubble.current?.addressed) {
@@ -118,6 +139,7 @@ export class SpeechLayer {
   private show(bubble: Bubble, line: Line): void {
     bubble.current = line;
     bubble.left = line.ms;
+    line.onShow?.();
     const { el } = bubble;
     el.replaceChildren();
     el.className = `speech${line.addressed ? ' speech--addressed' : ' speech--passing'}`;
@@ -136,6 +158,7 @@ export class SpeechLayer {
     void el.offsetWidth;
     el.style.animation = '';
     bubble.place = 'hidden';
+    bubble.sightAge = Infinity;
     const w = window.innerWidth;
     const h = window.innerHeight;
     this.place(bubble, line, w, h);
@@ -170,7 +193,16 @@ export class SpeechLayer {
         world.project(this.camera);
         x = ((world.x + 1) / 2) * w;
         y = ((1 - world.y) / 2) * h;
-        if (x > MARGIN_X && x < w - MARGIN_X && y > MARGIN_TOP && y < h - MARGIN_BOTTOM) {
+        // Already over the head, it stays a little further out than it came in.
+        const slack = bubble.place === 'world' ? EDGE_HYSTERESIS : 0;
+        const inView = x > MARGIN_X - slack && x < w - MARGIN_X + slack && y > MARGIN_TOP - slack && y < h - MARGIN_BOTTOM + slack;
+        if (inView && this.blocked && bubble.sightAge >= SIGHT_S) {
+          bubble.sightAge = 0;
+          anchor.getWorldPosition(world);
+          this.camera.getWorldPosition(this.eye);
+          bubble.hiddenByWall = this.blocked(this.eye, world);
+        }
+        if (inView && !bubble.hiddenByWall) {
           where = 'world';
           scale = Math.min(1.05, Math.max(0.72, 3.5 / distance));
         }
@@ -181,11 +213,21 @@ export class SpeechLayer {
       const el = bubble.el;
       el.classList.toggle('speech--subtitle', where === 'subtitle');
       if (where === 'world') {
+        // Back from the subtitles while its old strip place was fading: it shows again.
+        el.classList.remove('speech--leaving', 'speech--out');
         this.layer.appendChild(el);
       } else if (where === 'subtitle') {
         el.style.transform = '';
+        if (el.classList.contains('speech--leaving')) el.classList.remove('speech--leaving', 'speech--out');
         this.subtitles.appendChild(el);
-        while (this.subtitles.children.length > SUBTITLES_MAX) this.subtitles.firstElementChild?.remove();
+        // Past the strip's lines, the oldest fades out (not cut) to make room.
+        const staying = [...this.subtitles.children].filter((child) => !child.classList.contains('speech--leaving'));
+        for (const old of staying.slice(0, Math.max(0, staying.length - SUBTITLES_MAX))) {
+          old.classList.add('speech--leaving', 'speech--out');
+          window.setTimeout(() => {
+            if (old.classList.contains('speech--leaving')) old.remove();
+          }, FADE_MS);
+        }
       } else {
         el.remove();
       }

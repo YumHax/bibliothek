@@ -60,7 +60,7 @@ export class FacadeRelief extends THREE.Group implements Furniture {
     const materials: [TriBuilder, THREE.MeshStandardMaterial][] = [
       [canvas, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.92 })],
       [stone, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85 })],
-      [iron, new THREE.MeshStandardMaterial({ color: IRON, roughness: 0.5, metalness: 0.55 })],
+      [iron, new THREE.MeshStandardMaterial({ color: IRON, roughness: 0.5 })],
       [props, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.75 })],
     ];
     for (const [builder, material] of materials) {
@@ -78,6 +78,27 @@ export class FacadeRelief extends THREE.Group implements Furniture {
   get footprint(): THREE.Box3 {
     return new THREE.Box3();
   }
+}
+
+/**
+ * The dry space under every awning of `fronts` nearer than `within` metres (along x) to the walkable
+ * street's middle (zone-local boxes, from the wall out to the valance, the pavement up to the canvas):
+ * where the rain and snow do not fall (`Precipitation`).
+ */
+export function awningShelters(fronts: readonly PaintedFront[], within = 45): THREE.Box3[] {
+  const boxes: THREE.Box3[] = [];
+  const a = new THREE.Vector3();
+  const b = new THREE.Vector3();
+  for (const front of fronts) {
+    const frame = new FacadeFrame(front.spec);
+    for (const awning of front.features.awnings) {
+      frame.point(awning.s0, -0.5, 0, a);
+      frame.point(awning.s1, AWNING.top, AWNING.reach, b);
+      const box = new THREE.Box3().setFromPoints([a, b]);
+      if (Math.abs((box.min.x + box.max.x) / 2) < within) boxes.push(box);
+    }
+  }
+  return boxes;
 }
 
 /**

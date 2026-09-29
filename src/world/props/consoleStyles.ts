@@ -3,6 +3,7 @@ import type { Platform } from '@/catalog/types';
 import { part, matte } from './Prop';
 import { cylinderMesh, type MeshPosition } from '../meshUtils';
 import { paint } from '../materials/palette';
+import { nowPlaying } from '../screen/nowPlaying';
 
 /** A built console (and its controller) with the materials to tint on hover and its overall size. */
 export interface ConsoleVisual {
@@ -35,6 +36,20 @@ function tinted(v: ConsoleVisual, color: number, roughness = 0.55): THREE.MeshSt
   const m = matte(color, roughness);
   v.hover.push(m);
   return m;
+}
+
+/**
+ * A power LED of the console's own: dark paint until a longplay of `platform` is on a screen,
+ * then lit (read from `screen/nowPlaying` just before the mesh is drawn, so nothing ticks).
+ */
+function powerLed(parent: THREE.Object3D, platform: Platform, color: number, size: [number, number, number], pos: MeshPosition): THREE.Mesh {
+  const material = new THREE.MeshStandardMaterial({ color, roughness: 0.4, emissive: color, emissiveIntensity: 0 });
+  const mesh = part(parent, size[0], size[1], size[2], material, pos);
+  mesh.castShadow = false;
+  mesh.onBeforeRender = () => {
+    material.emissiveIntensity = nowPlaying.platform === platform.id ? 1.8 : 0;
+  };
+  return mesh;
 }
 
 function cylinder(parent: THREE.Object3D, radius: number, height: number, material: THREE.Material, pos: MeshPosition): THREE.Mesh {
@@ -97,7 +112,7 @@ function body(v: ConsoleVisual, w: number, h: number, d: number): THREE.Group {
 }
 
 const SHAPES: Record<string, Shape> = {
-  nes(_p, v) {
+  nes(p, v) {
     const g = body(v, 0.255, 0.089, 0.203);
     const grey = tinted(v, 0xbdbdb8);
     const dark = paint(0x3e3e42, 0.6);
@@ -110,6 +125,7 @@ const SHAPES: Record<string, Shape> = {
     part(g, w * 0.62 - 0.004, 0.004, 0.004, red, { x: -w * 0.19, y: 0.085, z: d * 0.5 - 0.001 }); // red pinstripe, 1 mm proud of the dark panel
     part(g, 0.022, 0.006, 0.012, red, { x: w * 0.22, y: 0.092, z: d * 0.3 }); // power
     part(g, 0.022, 0.006, 0.012, dark, { x: w * 0.36, y: 0.092, z: d * 0.3 }); // reset
+    powerLed(g, p, 0xd0281c, [0.006, 0.004, 0.002], { x: -w * 0.4, y: 0.03, z: d / 2 + 0.001 }); // power LED, front left
     pad(v, { color: 0xb3b3ae, buttons: [[0.02, 0.008, 0xb01c1c], [0.038, 0.008, 0xb01c1c]] });
   },
   snes(_p, v) {
@@ -152,7 +168,7 @@ const SHAPES: Record<string, Shape> = {
       b.rotation.x = Math.PI / 2;
     }
   },
-  megadrive(_p, v) {
+  megadrive(p, v) {
     const g = body(v, 0.28, 0.07, 0.212);
     const black = tinted(v, 0x1c1c1e, 0.5);
     const { w, d } = v.size;
@@ -161,10 +177,10 @@ const SHAPES: Record<string, Shape> = {
     cylinder(g, 0.05, 0.008, paint(0x2c2c30, 0.5), { x: -w * 0.18, y: 0.054 });
     cylinder(g, 0.022, 0.004, paint(0x111114, 0.5), { x: -w * 0.18, y: 0.06 });
     part(g, 0.05, 0.002, 0.012, paint(0xb8962e, 0.4), { x: -w * 0.3, y: 0.051, z: d * 0.38 }); // "16-bit" badge
-    part(g, 0.012, 0.005, 0.006, paint(0xc0392b, 0.4), { x: w * 0.35, y: 0.0525, z: d * 0.4 }); // power LED
+    powerLed(g, p, 0xc0392b, [0.012, 0.005, 0.006], { x: w * 0.35, y: 0.0525, z: d * 0.4 }); // power LED
     pad(v, { color: 0x222226, buttons: [[0.018, 0.012, 0x4a4a50], [0.032, 0.006, 0x4a4a50], [0.046, 0.0, 0x4a4a50]] });
   },
-  n64(_p, v) {
+  n64(p, v) {
     const g = body(v, 0.26, 0.073, 0.19);
     const charcoal = tinted(v, 0x3b3b43, 0.6);
     const { w, d } = v.size;
@@ -172,7 +188,7 @@ const SHAPES: Record<string, Shape> = {
     part(g, w * 0.36, 0.028, d * 0.86, charcoal, { y: 0.059 });
     for (const sx of [-1, 1]) part(g, w * 0.26, 0.014, d * 0.8, tinted(v, 0x34343b, 0.6), { x: sx * w * 0.33, y: 0.052 });
     part(g, w * 0.26, 0.004, 0.014, paint(0x1a1a1e), { y: 0.074, z: -d * 0.1 }); // cartridge slot
-    part(g, 0.018, 0.005, 0.01, paint(0xc0392b, 0.4), { x: -w * 0.3, y: 0.061, z: d * 0.25 }); // power
+    powerLed(g, p, 0xc0392b, [0.018, 0.005, 0.01], { x: -w * 0.3, y: 0.061, z: d * 0.25 }); // power LED
     pad(v, {
       color: 0x8d8d95,
       trident: true,
@@ -187,7 +203,7 @@ const SHAPES: Record<string, Shape> = {
       ],
     });
   },
-  ps1(_p, v) {
+  ps1(p, v) {
     const g = body(v, 0.26, 0.06, 0.185);
     const grey = tinted(v, 0xbfbdb5, 0.55);
     const { w, d } = v.size;
@@ -195,7 +211,7 @@ const SHAPES: Record<string, Shape> = {
     cylinder(g, 0.055, 0.012, tinted(v, 0xc6c4bc, 0.55), { x: -w * 0.08, y: 0.051, z: -d * 0.05 });
     part(g, 0.024, 0.008, 0.016, grey, { x: w * 0.36, y: 0.049, z: -d * 0.1 }); // power button
     part(g, 0.024, 0.008, 0.016, grey, { x: w * 0.36, y: 0.049, z: d * 0.15 }); // open button
-    part(g, 0.006, 0.003, 0.006, paint(0x3fa85c, 0.4), { x: w * 0.42, y: 0.046, z: d * 0.38 }); // LED
+    powerLed(g, p, 0x3fa85c, [0.006, 0.003, 0.006], { x: w * 0.42, y: 0.046, z: d * 0.38 }); // power LED
     for (const x of [-w * 0.32, -w * 0.16]) part(g, 0.02, 0.012, 0.004, paint(0x2a2a2e), { x, y: 0.02, z: d / 2 + 0.002 });
     pad(v, {
       color: 0x8f8d88,
@@ -218,7 +234,7 @@ function generic(p: Platform, v: ConsoleVisual): void {
   const { w, d } = v.size;
   part(g, w, 0.045, d, main, { y: 0.0225 });
   part(g, w * 0.6, 0.015, d * 0.7, tinted(v, accent.clone().multiplyScalar(0.7).getHex(), 0.55), { y: 0.0525 });
-  part(g, 0.02, 0.005, 0.01, paint(0xc0392b, 0.4), { x: w * 0.35, y: 0.0475, z: d * 0.3 });
+  powerLed(g, p, 0xc0392b, [0.02, 0.005, 0.01], { x: w * 0.35, y: 0.0475, z: d * 0.3 }); // power LED
   pad(v, { color: accent.clone().multiplyScalar(0.85).getHex(), buttons: [[0.024, 0.006, 0x2a2a2e], [0.04, 0.006, 0x2a2a2e]] });
 }
 

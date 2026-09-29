@@ -141,6 +141,12 @@ export class CatNav {
     return this.collisions.intersectsSphere(this.probe, 0.01);
   }
 
+  /** True when a small sphere (a head, a tail tip) at (`x`, `y`, `z`) would be inside a collider right now. */
+  reachBlocked(x: number, z: number, y: number, radius: number): boolean {
+    this.probe.set(x, y, z);
+    return this.collisions.intersectsSphere(this.probe, radius);
+  }
+
   /** True when the straight floor segment from `a` to `b` crosses no blocked cell. */
   segmentFree(a: THREE.Vector3, b: THREE.Vector3): boolean {
     const dx = b.x - a.x;

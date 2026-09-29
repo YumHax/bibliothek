@@ -5,8 +5,8 @@ import { HOUSEHOLD } from './rules';
 
 /**
  * What the cat will leave by its kitchen bowl after a treat on market day `day`, or null: now and
- * then the booklet of a game on the shelves that lacks one (it was behind the sofa all along),
- * else a few coins from under the cushions. Seeded by the day, so a reload does not reroll it.
+ * then the booklet of a game on the shelves that lacks one (it was under the bed all along),
+ * else a few coins from under the armchair. Seeded by the day, so a reload does not reroll it.
  */
 export function drawCatGift(day: number, shelved: readonly Game[]): CatGift | null {
   const random = seeded(`catGift:${day}`);

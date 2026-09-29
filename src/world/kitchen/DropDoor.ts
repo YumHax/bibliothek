@@ -4,6 +4,9 @@ import type { Interactable } from '@/interaction/Interactable';
 import type { SessionActions } from '@/game/SessionActions';
 import { invisibleHitbox } from '../meshUtils';
 import { Prop } from '../props/Prop';
+import { HoverGlint } from '../props/hoverGlint';
+import { captionName } from '../props/SwingLeaf';
+import { playLatchClick, playSoftThud } from '@/audio/furnitureSounds';
 
 export interface DropDoorOptions {
   width: number;
@@ -37,6 +40,8 @@ export class DropDoor extends Prop implements Interactable, Updatable {
   private readonly seconds: number;
   private target = 0;
   private openness = 0;
+  /** The handle bar (the panel's small fittings) glints on hover; found on first hover, once the host has built it. */
+  private readonly glint = HoverGlint.fittings(this.panel);
 
   constructor(private readonly options: DropDoorOptions) {
     super();
@@ -61,14 +66,21 @@ export class DropDoor extends Prop implements Interactable, Updatable {
     // A positive turn about +x brings the top edge (+y) forward (+z).
     this.panel.rotation.x = this.maxAngle * THREE.MathUtils.smoothstep(this.openness, 0, 1);
     this.options.onOpenness?.(this.openness);
+    // Down onto its stays with a soft thud; shut, the catch clicks.
+    if (this.openness === this.target) {
+      if (this.target > 0) playSoftThud(0.08);
+      else playLatchClick(0.08);
+    }
   }
 
   // --- Interactable -------------------------------------------------------------------------
 
-  setHovered(_hovered: boolean): void {}
+  setHovered(hovered: boolean): void {
+    this.glint.set(hovered);
+  }
 
   label(): string {
-    return this.isOpen ? `Click to close the ${this.options.noun}` : `Click to open the ${this.options.noun}`;
+    return `${captionName(this.options.noun)} · ${this.isOpen ? 'close' : 'open'}`;
   }
 
   activate(_session: SessionActions): void {

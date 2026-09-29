@@ -64,7 +64,7 @@ export class KitchenTable extends THREE.Group implements Furniture {
     const ceramic = paint(0xf4f1ea, 0.4);
     const plate = cylinderMesh(0.11, 0.012, ceramic, { x: -width * 0.18, y: y + 0.006, z: depth * 0.05 }, { radiusBottom: 0.08, segments: 28 });
     this.add(plate);
-    const knife = part(this, 0.16, 0.004, 0.016, standard({ color: 0xc8cbd0, metalness: 0.8, roughness: 0.3 }), { x: -width * 0.18, y: y + 0.014, z: depth * 0.05 + 0.03 });
+    const knife = part(this, 0.16, 0.004, 0.016, standard({ color: 0xc8cbd0, metalness: 1, roughness: 0.3 }), { x: -width * 0.18, y: y + 0.014, z: depth * 0.05 + 0.03 });
     knife.rotation.y = 0.5;
     knife.castShadow = false;
     const mug = cylinderMesh(0.04, 0.09, paint(0x3b5a7c, 0.4), { x: width * 0.15, y: y + 0.045, z: -depth * 0.1 }, { radiusBottom: 0.036, segments: 20 });

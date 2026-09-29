@@ -1,6 +1,10 @@
 import { Polygon, Sheet, type Rng, azimuthOf, azimuthX, groundSquash, heightY, sizePx, worldPoint } from './Sheet';
 import { between, mixHex, pick } from './paint';
-import { CORNER, PARK_EDGE, PARK_FAR, PARK_FROM, PARK_PATHS, PARK_TO, POND, frontage, parkLine } from './plan';
+import { CORNER, PARK_FROM, PARK_TO, frontage, parkLine } from './plan';
+import { BANDSTAND as KIOSK, FLOWER_BEDS as BEDS, PARK_EDGE, PARK_FAR, PARK_PATHS, PATH_WIDTH, PLAYGROUND, POND, WILLOWS, insidePond, onLawn } from '@/world/city/park';
+import { PARK_TREES, TREE_FORM, treeHeight } from '@/world/city/trees';
+import { inFlatFrame } from '@/world/city/frontage';
+import { STREET_PLAN } from '@/world/street/streetPlan';
 import { paintGroundBand } from './Street';
 import { paintBench, paintBin, paintLamp } from './StreetFurniture';
 import { CONIFER_STYLE, TREE_STYLES, type TreeForm, WILLOW_STYLE, paintTree } from './Tree';
@@ -19,25 +23,13 @@ const WATER = '#7b9bb6';
 const WATER_DEEP = '#56788f';
 const SAND = '#c9bda0';
 
-const KIOSK = { x: -88, z: 54, width: 6 };
-const PLAYGROUND = { x: -55, z: -48, radius: 13 };
-/** Round flower beds: centre and radius, metres. */
-const BEDS: [number, number, number][] = [[-37, 10, 3], [-41, -37, 2.5], [-63, 17, 3.5], [-48, 63, 3], [-90, 12, 2.5], [-33, 46, 2]];
-/** Weeping willows leaning over the pond's banks. */
-const WILLOWS: [number, number][] = [[-74, -36], [-121, 5], [-150, -38]];
-
-function insidePond(x: number, z: number, margin: number): boolean {
-  const dx = (x - POND.x) / (POND.rx + margin);
-  const dz = (z - POND.z) / (POND.rz + margin);
-  return dx * dx + dz * dz < 1;
-}
-
-/** Whether (x, z) is free lawn, `margin` metres clear of the pond, the bandstand, the playground and the beds. */
-function onLawn(x: number, z: number, margin: number): boolean {
-  if (insidePond(x, z, margin) || Math.hypot(x - KIOSK.x, z - KIOSK.z) < 5 + margin) return false;
-  if (Math.hypot(x - PLAYGROUND.x, z - PLAYGROUND.z) < PLAYGROUND.radius + margin) return false;
-  return BEDS.every(([bx, bz, r]) => Math.hypot(x - bx, z - bz) > r + margin);
-}
+/** The walkable street's park (`STREET_PLAN.park`) in the eye's frame: its trees are the street's (`PARK_TREES`), none drawn here. */
+const WALKABLE_PARK = (() => {
+  const [x0, z0] = inFlatFrame(STREET_PLAN.park.from);
+  const [x1, z1] = inFlatFrame(STREET_PLAN.park.to);
+  return { minX: Math.min(x0, x1), maxX: Math.max(x0, x1), minZ: Math.min(z0, z1), maxZ: Math.max(z0, z1) };
+})();
+const inWalkablePark = (x: number, z: number): boolean => x >= WALKABLE_PARK.minX && x <= WALKABLE_PARK.maxX && z >= WALKABLE_PARK.minZ && z <= WALKABLE_PARK.maxZ;
 
 /** Points every `step` metres along a polyline. */
 export function resample(line: [number, number][], step: number): [number, number][] {
@@ -138,9 +130,9 @@ function paintKiosk(sheet: Sheet): void {
   sheet.path(quad(a - 0.1 / d, a + 0.1 / d, 5.5, 6.3), '#d8c88a');
 }
 
-/** The hedge along Park Street's far pavement, broken by a gate where each path enters the park. */
+/** The hedge along Park Street's far pavement, broken by a gate where a path enters the park from the street. */
 function paintHedge(sheet: Sheet, random: Rng): void {
-  const gates = PARK_PATHS.map((path) => azimuthOf(-PARK_EDGE, path[0][1]));
+  const gates = PARK_PATHS.filter((path) => path[0][0] === -PARK_EDGE).map((path) => azimuthOf(-PARK_EDGE, path[0][1]));
   const ranges: [number, number][] = [];
   let start = PARK_FROM;
   for (const gate of [...gates].sort((p, q) => p - q)) {
@@ -268,7 +260,7 @@ export function paintPark(sheet: Sheet, random: Rng): void {
     }, PARK_FROM, PARK_TO, 0, { wet: 0.1, snow: 1 });
   }
   paintGrass(sheet, random);
-  for (const path of PARK_PATHS) paintPath(sheet, path, 3);
+  for (const path of PARK_PATHS) paintPath(sheet, path, PATH_WIDTH);
   paintPond(sheet, random);
   for (const [x, z, r] of BEDS) paintFlowerBed(sheet, random, x, z, r);
 
@@ -278,17 +270,22 @@ export function paintPark(sheet: Sheet, random: Rng): void {
   };
   add(KIOSK.x, KIOSK.z, () => paintKiosk(sheet));
   add(PLAYGROUND.x, PLAYGROUND.z + 9, () => paintPlayground(sheet, PLAYGROUND.x, PLAYGROUND.z));
+  // The trees the walkable street plants behind the hedge, at their size; the rest of the park draws its own.
+  for (const { at, scale } of PARK_TREES) {
+    const [x, z] = inFlatFrame(at);
+    add(x, z, () => paintTree(sheet, random, { x, z, height: treeHeight(scale), radius: TREE_FORM.crown * scale, style: pick(random, TREE_STYLES), form: 'round' }));
+  }
   for (let i = 0; i < 150; i++) {
     const x = between(random, -PARK_FAR + 8, -PARK_EDGE - 5);
     const z = between(random, -230, 150);
-    if (!onLawn(x, z, 4)) continue;
+    if (!onLawn(x, z, 4) || inWalkablePark(x, z)) continue;
     const form = parkForm(random);
     const height = form === 'poplar' ? between(random, 16, 24) : between(random, 9, 20);
     const radius = form === 'poplar' ? between(random, 2, 3) : Math.min(height * 0.36, between(random, 3, 6.5));
     const style = form === 'conifer' ? CONIFER_STYLE : pick(random, TREE_STYLES);
     add(x, z, () => paintTree(sheet, random, { x, z, height, radius, style, form }));
   }
-  for (const [x, z] of WILLOWS) add(x, z, () => paintTree(sheet, random, { x, z, height: 12, radius: 7, style: WILLOW_STYLE, form: 'willow' }));
+  for (const [x, z] of WILLOWS) if (!inWalkablePark(x, z)) add(x, z, () => paintTree(sheet, random, { x, z, height: 12, radius: 7, style: WILLOW_STYLE, form: 'willow' }));
   for (let i = 0; i < 14; i++) {
     const x = between(random, -130, -40);
     const z = between(random, -90, 90);

@@ -7,23 +7,35 @@ import type { GameSource } from '@/collection/GameSource';
 import type { SessionActions } from '@/game/SessionActions';
 import { seeded } from '@/economy/seeded';
 import { BorrowPanel } from '@/ui/BorrowPanel';
-import { playDoorbell } from '@/audio/doorbell';
+import { playDoorbell, playDoorShut } from '@/audio/doorbell';
+import { playFootfall } from '@/audio/footfall';
+import type { FootSurface } from '@/audio/footSurface';
+import { audioBus, startedAudioContext } from '@/audio/audioContext';
+import { spatialInput, spatialOf } from '@/audio/spatial';
+import { playCoins } from '@/audio/coins';
+import { playMurmur } from '@/audio/murmur';
 import { proximityVolume } from '@/video/proximityVolume';
+import type { BoxArtLoader } from '@/covers/BoxArtLoader';
+import { GameBox } from '../GameBox';
+import { STAIRWELL_PLAN, STOREY, landingY } from '../stairwell/stairwellPlan';
 import type { ActivityAware } from '../zone/lifecycle';
 import type { Zone } from '../zone/Zone';
 import { Prop } from '../props/Prop';
+import { nowPlaying } from '../screen/nowPlaying';
 import type { DoorCaller } from '../hallway/FrontDoor';
 import { HALLWAY_PLAN } from '../hallway/hallwayPlan';
 import { ROOM_PLAN } from '../roomPlan';
 import { Friend } from './Friend';
-import { FRIENDS, SHARED_LINES, VISIT_RULES, type FriendPlan } from './friendsPlan';
-import { borrowPick, fill, pickLine, shelfComment, tasteScore, yearOf } from './friendLines';
-import { Visit, type DoorLike, type RouteSeat, type VisitRoute, type VisitScript } from './Visit';
+import { FRIENDS, SHARED_LINES, VISIT_RULES, WORDS, type FriendPlan, type Word } from './friendsPlan';
+import { borrowPick, fill, lookPick, shelfComment, tasteScore, yearOf, type LinePicker } from './friendLines';
+import { Visit, type DoorLike, type HeldBox, type RouteSeat, type VisitRoute, type VisitScript } from './Visit';
 import { VisitBook, type Loan, type PlannedVisit } from './VisitBook';
 import { HOUSEHOLD } from '@/household/rules';
 
-/** Real ms between a friend's hello and their word on the cake, so the two bubbles do not collide. */
-const CAKE_LINE_DELAY_MS = 3000;
+/** Seconds (the visit's clock) between a friend's hello and their word on the cake, so the two bubbles do not collide. */
+const CAKE_LINE_DELAY = 3;
+/** Daylight (0..1, `SkyState.daylight`) under which the night's lines are said. */
+const NIGHT_BELOW = 0.3;
 
 /** The collection as the visitors need it: what is in it, and marking a copy lent or back. */
 export interface VisitorsCollection extends GameSource {
@@ -38,6 +50,10 @@ export interface VisitorSeat {
   approachPoint(out: THREE.Vector3): THREE.Vector3;
   localToWorld(point: THREE.Vector3): THREE.Vector3;
   getWorldDirection(out: THREE.Vector3): THREE.Vector3;
+  /** Its seat's height (m). */
+  readonly sittingHeight: number;
+  /** The guest sitting in it (or heading for it), whom the cat and the player leave it to. */
+  guest: string | null;
 }
 
 export interface VisitorsOptions {
@@ -52,8 +68,8 @@ export interface VisitorsOptions {
   shelved: GameSource;
   /** The in-game day (`MarketStock.day`): visits and loans count in it. */
   day: () => number;
-  /** The in-game clock: the bell rings in the afternoon or the evening. */
-  clock: { readonly state: { readonly hours: number } };
+  /** The in-game clock: the bell rings in the afternoon or the evening; after dark, the night's lines. */
+  clock: { readonly state: { readonly hours: number; readonly daylight?: number } };
   /** The player is in the flat (not on the stairs, not out). */
   atHome: () => boolean;
   /** The player cannot answer now (asleep, travelling). */
@@ -69,8 +85,20 @@ export interface VisitorsOptions {
   frontDoor: DoorLike | null;
   /** Someone else is at the door (the postman, `Doorstep.waiting`): a friend waits for the landing to clear. */
   doorTaken?: () => boolean;
-  /** Walls between the listener and the bell. */
+  /** Walls between the listener and the bell (or a friend's footsteps); a sidestep only goes where none stands. */
   acoustics?: { wallsBetween(a: THREE.Vector3, b: THREE.Vector3): number };
+  /** The furniture (the world's colliders): a sidestep, or a shortcut from shelf to shelf, only goes where none stands. */
+  collisions?: { intersectsSphere(point: THREE.Vector3, radius: number): boolean };
+  /** The day's journal: who came round, what went on loan and came back. */
+  journal?: { note(kind: string, text: string): void };
+  /** What is underfoot at a world point (their footsteps' sound); parquet when not given. */
+  surfaceAt?: (world: THREE.Vector3) => FootSurface;
+  /** The box art: a game handed back is held out as its box. */
+  covers?: BoxArtLoader;
+  /** The boxes on the flat's shelves: a browsing friend looks at one on the bookcase in front of them. */
+  shelfBoxes?: () => readonly GameBox[];
+  /** The screen playing a longplay (world, its middle), or null: a seated friend watches it. */
+  watch?: () => THREE.Vector3 | null;
   /** The collection room's door onto the hallway, opened by a friend if it is shut. */
   livingDoor: DoorLike | null;
   /** Where the borrow panel goes (the game's container). */
@@ -94,6 +122,9 @@ export interface VisitorsOptions {
 
 const eye = new THREE.Vector3();
 const tmp = new THREE.Vector3();
+const probe = new THREE.Vector3();
+/** The straight-way probe: a body-wide sphere (m) at these heights over the floor, every `step` m. */
+const WALK_PROBE = { radius: 0.2, heights: [0.35, 1.0], step: 0.12 };
 /**
  * Friends who drop by: decides the day and the hour (`VisitBook`), rings the bell with a friend
  * waiting on the landing, tells the front door who is there (a `DoorCaller`, chained behind the
@@ -121,6 +152,10 @@ export class Visitors extends Prop implements Updatable, ActivityAware, DoorCall
   private forced: boolean;
   /** This visit's friend had some of the cake. */
   private caked = false;
+  /** A game handed back, held out: its loan closes (it goes back on its shelf) when they let go. */
+  private returning: { loan: Loan; box: GameBox | null } | null = null;
+  /** The box a browsing friend looks at, for their comment. */
+  private looked: Game | null = null;
 
   constructor(private readonly options: VisitorsOptions) {
     super();
@@ -131,8 +166,18 @@ export class Visitors extends Prop implements Updatable, ActivityAware, DoorCall
     const room = (p: readonly [number, number]) => new THREE.Vector3(p[0], 0, p[1]);
     const hp = HALLWAY_PLAN.visitor;
     const rp = ROOM_PLAN.visitor;
+    // Down the stairwell's flight A from our landing (k 0): its top tread's edge, and `stairs.treads` treads down.
+    const sw = STAIRWELL_PLAN;
+    const run = (sw.halfLanding.z1 - sw.floorLanding.z0) / sw.treads;
+    const flightX = (sw.flightA.x0 + sw.flightA.x1) / 2;
+    const down = VISIT_RULES.stairs.treads;
+    const stairwell = (x: number, y: number, z: number) => living.toLocal(new THREE.Vector3(sw.origin[0] + x, sw.origin[1] + y, sw.origin[2] + z));
     this.route = {
       stairs: hall(hp.stairs),
+      flight: {
+        top: stairwell(flightX, landingY(0), sw.floorLanding.z0),
+        bottom: stairwell(flightX, landingY(0) - (down / sw.treads) * (STOREY / 2), sw.floorLanding.z0 + run * down),
+      },
       landing: hall(hp.landing),
       inside: hall(hp.inside),
       hallDoor: hall(hp.livingDoor),
@@ -167,14 +212,14 @@ export class Visitors extends Prop implements Updatable, ActivityAware, DoorCall
     if (!visit?.atDoor) return;
     const plan = visit.friend.plan;
     this.book.cameIn(plan.id);
-    const random = Math.random;
-    this.say(plan, pickLine(plan.lines.greet, random), 'Hi!', true);
+    this.say(plan, this.line(`${plan.id}:greet`, plan.lines.greet), 'hi', true);
+    this.options.journal?.note('visit', `${plan.name} came round`);
     visit.letIn();
     const hosting = this.options.hosting;
     if (hosting?.cakeOut()) {
       this.caked = true;
       hosting.eatCake();
-      window.setTimeout(() => this.say(plan, pickLine(SHARED_LINES.cake, Math.random), 'Cake!', true), CAKE_LINE_DELAY_MS);
+      visit.after(CAKE_LINE_DELAY, () => this.say(plan, this.line('cake', SHARED_LINES.cake), 'cake', true));
     }
   }
 
@@ -237,12 +282,21 @@ export class Visitors extends Prop implements Updatable, ActivityAware, DoorCall
     if (!friend) return;
     this.ringing = { since: -1, rings: 0 };
     this.awayFor = 0;
-    friend.chat = () => this.chatLine(friend.plan);
+    friend.chat = () => {
+      this.visit?.faceViewer();
+      return this.chatLine(friend.plan);
+    };
+    // Whatever they say is heard, faintly, from where they stand.
+    friend.voice = (text) => this.murmur(friend, text);
     this.caked = false;
+    this.returning = null;
+    const acoustics = options.acoustics;
     this.visit = new Visit(friend, this.route, options.viewer, { front: door, living: options.livingDoor }, this.script(friend.plan, plan.loan), {
       returning: plan.loan !== null,
       cat: () => options.cat?.()?.at ?? null,
       linger: () => (this.caked ? HOUSEHOLD.cake.linger : 1),
+      watch: options.watch,
+      clear: acoustics ? (a, b) => acoustics.wallsBetween(a, b) === 0 && this.walkable(a, b) : undefined,
     });
     this.visit.start();
   }
@@ -272,7 +326,6 @@ export class Visitors extends Prop implements Updatable, ActivityAware, DoorCall
   // --- the visit's script ---------------------------------------------------------------------------
 
   private script(plan: FriendPlan, loan: Loan | null): VisitScript {
-    const random = Math.random;
     return {
       say: (line, word) => this.say(plan, line, word),
       arrived: () => {
@@ -280,22 +333,70 @@ export class Visitors extends Prop implements Updatable, ActivityAware, DoorCall
         this.ringing = { since: this.clock, rings: 1 };
         this.ring();
       },
-      handBack: () => {
-        if (loan) this.handBack(plan, loan);
-      },
-      comment: (kind) => (kind === 'window' ? pickLine(SHARED_LINES.window, random) : shelfComment(plan, this.options.shelved.games, random, this.options.viewsOf)),
+      enterLine: () => this.enterLine(plan),
+      handBack: () => (loan ? this.handBack(plan, loan) : null),
+      shelve: () => this.shelveReturned(),
+      browse: (kind, at, yaw) => this.browse(plan, kind, at, yaw),
       ask: () => this.ask(plan),
       greetCat: () => {
         const cat = this.options.cat?.();
-        return cat ? fill(pickLine(SHARED_LINES.cat, random), { cat: cat.name }) : null;
+        return cat ? fill(this.line('cat', SHARED_LINES.cat), { cat: cat.name }) : null;
       },
-      sitLine: () => pickLine(SHARED_LINES.sit, random),
-      leaveLine: () => pickLine(SHARED_LINES.leave, random),
+      sitLine: () => (this.options.watch?.() ? this.line('sitTv', SHARED_LINES.sitTv) : this.line('sit', SHARED_LINES.sit)),
+      leaveLine: () => (this.night ? this.line('leaveNight', SHARED_LINES.leaveNight) : this.line('leave', SHARED_LINES.leave)),
+      excuse: () => this.line('excuse', SHARED_LINES.excuse),
+      step: (at) => this.footstep(at),
+      shutFront: () => this.soundAt(this.doorPoint, (level, spatial) => playDoorShut(level * DOOR_LEVEL, spatial)),
       left: () => this.ended(),
     };
   }
 
+  /**
+   * At a stop: at the window, the street and a word on it (the night's, after dark); at a shelf, a box on the
+   * bookcase in front of them (their taste weighs) and a word on that game.
+   */
+  private browse(plan: FriendPlan, kind: 'shelf' | 'window', at: THREE.Vector3, yaw: number): { look: THREE.Vector3 | null; line: string | null } {
+    const forward = new THREE.Vector3(Math.sin(yaw), 0, Math.cos(yaw));
+    if (kind === 'window') {
+      const line = this.night ? this.line('windowNight', SHARED_LINES.windowNight) : this.line('window', SHARED_LINES.window);
+      return { look: at.clone().addScaledVector(forward, 4).setY(at.y + 1.3), line };
+    }
+    const games = this.options.shelved.games;
+    const onShelves = new Set(games.map((g) => g.id));
+    const near: GameBox[] = [];
+    for (const box of this.options.shelfBoxes?.() ?? []) {
+      if (!onShelves.has(box.game.id)) continue;
+      box.getWorldPosition(tmp);
+      const dx = tmp.x - at.x;
+      const dz = tmp.z - at.z;
+      const d = Math.hypot(dx, dz);
+      if (d < VISIT_RULES.lookWithin && d > 0.05 && (dx * forward.x + dz * forward.z) / d > 0.35) near.push(box);
+    }
+    const game = lookPick(plan, near.map((b) => b.game), Math.random);
+    const box = game ? near.find((b) => b.game === game) : undefined;
+    this.looked = game;
+    const line = shelfComment(plan, games, Math.random, { viewsOf: this.options.viewsOf, focus: game, pick: this.picker });
+    return { look: box ? box.getWorldPosition(new THREE.Vector3()) : null, line };
+  }
+
+  /** A friend's footfall at `at`: its loudness by distance, muffled and panned by where it is, the floor's own sound. */
+  private footstep(at: THREE.Vector3): void {
+    const { steps } = VISIT_RULES;
+    const surface = this.options.surfaceAt?.(at) ?? 'wood';
+    this.soundAt(tmp.copy(at).setY(at.y + 0.3), (level, spatial) => {
+      const ctx = startedAudioContext();
+      if (!ctx || level * steps.level < 0.003) return;
+      const out = ctx.createGain();
+      out.gain.value = level * steps.level;
+      out.connect(spatialInput(ctx, audioBus(ctx, 'world'), spatial, 1));
+      playFootfall(ctx, out, surface, { force: 0.85 });
+      window.setTimeout(() => out.disconnect(), 900);
+    }, { referenceDistance: 1, rolloff: 1.2, maxDistance: steps.maxDistance, wallGain: 0.45 });
+  }
+
   private ended(): void {
+    this.shelveReturned();
+    this.looked = null;
     const visit = this.visit;
     this.visit = null;
     if (visit) {
@@ -317,12 +418,13 @@ export class Visitors extends Prop implements Updatable, ActivityAware, DoorCall
     const gift = random() < giftChance ? unowned[Math.floor(random() * unowned.length)] : undefined;
     if (gift) {
       collection.add({ ...gift, status: 'owned', condition: 'noManual', acquired: { price: 0, where: `a gift from ${plan.name}`, day } });
-      this.say(plan, fill(pickLine(SHARED_LINES.cakeGift, random), { title: gift.title }), 'Here!', true);
-      notices?.reward({ title: `A gift: ${gift.title}`, detail: `From ${plan.name}, for the cake. It is on your shelves.` });
+      this.say(plan, fill(this.line('cakeGift', SHARED_LINES.cakeGift), { title: gift.title }), 'here', true);
+      notices?.reward({ title: `A gift: ${gift.title}`, detail: `From ${plan.name}, for the cake. It waits in your parcel in the hall.` });
     } else if (purse) {
       const coins = tip[0] + Math.floor(random() * (tip[1] - tip[0] + 1));
       purse.earnCoins(coins);
-      this.say(plan, fill(pickLine(SHARED_LINES.cakeTip, random), { coins }), 'Here!', true);
+      this.coinsFrom(plan, coins);
+      this.say(plan, fill(this.line('cakeTip', SHARED_LINES.cakeTip), { coins }), 'here', true);
       notices?.reward({ title: `${plan.name} says thanks`, detail: 'For the cake.', coins });
     }
   }
@@ -347,10 +449,10 @@ export class Visitors extends Prop implements Updatable, ActivityAware, DoorCall
     const day = this.options.day();
     if (!plan) return { ok: false, line: 'Wrong number.' };
     if (this.visit || this.book.rangOn(day)) return { ok: false, line: 'You have had a visitor today already. Another day.' };
-    if (hour >= VISIT_RULES.hours.latest) return { ok: false, line: `${plan.name}: “Bit late now, isn't it? Another day.”` };
+    if (hour >= VISIT_RULES.hours.latest) return { ok: false, line: `${plan.name}: “Bit late now, isn’t it? Another day.”` };
     if (!this.book.invite(friendId, day, hour)) return { ok: false, line: 'Someone is coming round today already.' };
     const at = `${Math.floor(hour)}:${String(Math.round((hour % 1) * 60)).padStart(2, '0')}`;
-    return { ok: true, line: `${plan.name}: “${fill(pickLine(SHARED_LINES.invited, Math.random), { hour: at })}”` };
+    return { ok: true, line: `${plan.name}: “${fill(this.line('invited', SHARED_LINES.invited), { hour: at })}”` };
   }
 
   /** At the second shelf: the game they would most like to borrow, if any suits them and they feel like asking. */
@@ -360,15 +462,18 @@ export class Visitors extends Prop implements Updatable, ActivityAware, DoorCall
     const day = this.options.day();
     const random = seeded(`borrow:${plan.id}:${day}`);
     if (random() >= plan.borrowChance) return;
-    const candidates = this.options.shelved.games.filter((g) => (g.status ?? 'owned') === 'owned' && !this.book.lentTo(g.id));
+    // Not the game on the screen right now: its box is in the console.
+    const candidates = this.options.shelved.games.filter((g) => (g.status ?? 'owned') === 'owned' && !this.book.lentTo(g.id) && g.id !== nowPlaying.gameId);
+    // Nobody asks for the only games on a near-empty shelf.
+    if (candidates.length < VISIT_RULES.borrowMinShelved) return;
     const game = borrowPick(plan, candidates, random);
     if (!game) return;
     const [min, max] = VISIT_RULES.loanDays;
     const days = min + Math.floor(seeded(`loan:${plan.id}:${game.id}:${day}`)() * (max - min + 1));
     this.askedAt = this.clock;
-    this.say(plan, fill(pickLine(SHARED_LINES.ask, random), { title: game.title, days }), '?');
+    this.say(plan, fill(this.line('ask', SHARED_LINES.ask), { title: game.title, days }), 'ask');
     friend.request = {
-      label: `Click to answer ${plan.name}: borrow ${game.title}?`,
+      label: `${plan.name} · answer (borrow ${game.title}?)`,
       answer: (session: SessionActions) => {
         this.panel.show({
           friend: plan.name,
@@ -376,10 +481,11 @@ export class Visitors extends Prop implements Updatable, ActivityAware, DoorCall
           detail: [getPlatform(game.platform).name, yearOf(game)].filter(Boolean).join(', '),
           days,
           cover: this.options.coverUrl?.(game),
+          game,
           lend: () => this.lend(plan, game),
           refuse: () => {
             friend.request = null;
-            this.say(plan, pickLine(SHARED_LINES.refused, Math.random), 'OK');
+            this.say(plan, this.line('refused', SHARED_LINES.refused), 'ok');
           },
         });
         session.openPanel(this.panel);
@@ -394,36 +500,45 @@ export class Visitors extends Prop implements Updatable, ActivityAware, DoorCall
     if (!current || (current.status ?? 'owned') !== 'owned') return;
     this.book.lend(plan.id, game, this.options.day());
     this.options.collection.setStatus(game.id, 'lent');
-    this.say(plan, pickLine(SHARED_LINES.lent, Math.random), 'Yay!');
+    this.say(plan, this.line('lent', SHARED_LINES.lent), 'yay');
+    this.options.journal?.note('visit', `Lent ${game.title} to ${plan.name}`);
   }
 
-  /** A return visit, just inside the door: the game back on its shelf, a tip or a game they no longer want, sometimes. */
-  private handBack(plan: FriendPlan, loan: Loan): void {
-    const { collection, day: dayOf, purse, giftPool } = this.options;
+  /**
+   * A return visit, just inside the door: the game held out (its box, back on its shelf when they let go:
+   * `shelveReturned`), a tip or a game they no longer want, sometimes (that one waits in the parcel).
+   */
+  private handBack(plan: FriendPlan, loan: Loan): HeldBox | null {
+    const { collection, day: dayOf, purse, giftPool, covers } = this.options;
     const day = dayOf();
-    this.closeLoan(loan);
+    const copy = collection.find(loan.gameId);
+    const box = copy && covers ? new GameBox(copy, covers) : null;
+    this.returning = { loan, box };
     const random = seeded(`thanks:${plan.id}:${loan.gameId}:${loan.lentDay}`);
-    const lines = [fill(pickLine(SHARED_LINES.returned, random), { title: loan.title })];
+    const lines = [fill(this.line('returned', SHARED_LINES.returned), { title: loan.title })];
     let coins = 0;
     let gifted: string | null = null;
-    if (day > loan.dueDay) lines.push(fill(pickLine(SHARED_LINES.late, random), { title: loan.title }));
+    if (day > loan.dueDay) lines.push(fill(this.line('late', SHARED_LINES.late), { title: loan.title }));
     const { tipChance, tip, giftChance } = VISIT_RULES.thanks;
     if (purse && random() < tipChance) {
       coins = tip[0] + Math.floor(random() * (tip[1] - tip[0] + 1));
       purse.earnCoins(coins);
-      lines.push(fill(pickLine(SHARED_LINES.tip, random), { coins }));
+      this.coinsFrom(plan, coins);
+      lines.push(fill(this.line('tip', SHARED_LINES.tip), { coins }));
     }
     if (giftPool && random() < giftChance) {
       const unowned = giftPool.filter((g) => !collection.owns(g.id) && tasteScore(plan.taste, g) >= 2);
       const gift = unowned[Math.floor(random() * unowned.length)];
       if (gift) {
         collection.add({ ...gift, status: 'owned', condition: 'noManual', acquired: { price: 0, where: `a gift from ${plan.name}`, day } });
-        lines.push(fill(pickLine(SHARED_LINES.gift, random), { title: gift.title }));
+        lines.push(fill(this.line('gift', SHARED_LINES.gift), { title: gift.title }));
         gifted = gift.title;
       }
     }
-    this.say(plan, lines.join(' '), 'Here!', true);
-    if (coins || gifted) this.options.notices?.reward({ title: gifted ? `A gift: ${gifted}` : `${plan.name} says thanks`, detail: `${loan.title} is back on its shelf.${gifted ? ` ${gifted} joins it, from ${plan.name}.` : ''}`, coins: coins || undefined });
+    this.say(plan, lines.join(' '), 'here', true);
+    this.options.journal?.note('visit', `${plan.name} brought ${loan.title} back`);
+    if (coins || gifted) this.options.notices?.reward({ title: gifted ? `A gift: ${gifted}` : `${plan.name} says thanks`, detail: `${loan.title} is back.${gifted ? ` ${gifted}, from ${plan.name}, waits in your parcel in the hall.` : ''}`, coins: coins || undefined });
+    return box ? { box, width: box.dimensions.width } : null;
   }
 
   /** A loan whose game is gone from the collection (or no longer marked lent) is over; one long overdue comes back by post. */
@@ -437,9 +552,20 @@ export class Visitors extends Prop implements Updatable, ActivityAware, DoorCall
       if (this.book.overdue(day).includes(loan) && this.visit?.friend.plan.id !== loan.friendId) {
         this.closeLoan(loan);
         const name = FRIENDS.find((f) => f.id === loan.friendId)?.name ?? 'A friend';
-        this.options.notices?.read({ title: `${loan.title} came back by post`, text: `A padded envelope from ${name}, and a note: "Sorry! Thanks for the loan."`, effect: `${loan.title} is back on its shelf.`, look: 'letter' });
+        this.options.notices?.read({ title: `${loan.title} came back by post`, text: `A padded envelope from ${name}, and a note: “Sorry! Thanks for the loan.”`, effect: `${loan.title} is back on its shelf.`, look: 'letter' });
+        this.options.journal?.note('visit', `${loan.title} came back by post from ${name}`);
       }
     }
+  }
+
+  /** The game handed back goes back on its shelf: the loan closes, the box they held is let go. */
+  private shelveReturned(): void {
+    const returning = this.returning;
+    if (!returning) return;
+    this.returning = null;
+    this.closeLoan(returning.loan);
+    returning.box?.removeFromParent();
+    returning.box?.dispose();
   }
 
   private closeLoan(loan: Loan): void {
@@ -448,12 +574,79 @@ export class Visitors extends Prop implements Updatable, ActivityAware, DoorCall
     this.book.close(loan);
   }
 
-  /** The bell, heard through the flat (fainter rooms away, never silent). */
+  /** The bell, heard through the flat (fainter and duller rooms away, never silent), from the front door's side. */
   private ring(): void {
-    this.options.viewer.getWorldPosition(eye);
-    const walls = this.options.acoustics?.wallsBetween(eye, this.doorPoint) ?? 0;
-    const level = BELL_LEVEL * proximityVolume(eye.distanceTo(this.doorPoint), { referenceDistance: 2, maxDistance: 40, walls, wallGain: 0.6 });
-    playDoorbell(Math.max(BELL_FLOOR, level));
+    this.soundAt(this.doorPoint, (level, spatial) => playDoorbell(Math.max(BELL_FLOOR, BELL_LEVEL * level), spatial), { referenceDistance: 2, maxDistance: 40, wallGain: 0.6 });
+  }
+
+  /**
+   * A sound at `at` (world) as the player hears it: `play` gets its loudness (0..1, by distance and walls) and
+   * where it comes from (`spatial.ts`: the side by the player's yaw, a low-pass per wall).
+   */
+  private soundAt(at: THREE.Vector3, play: (level: number, spatial: { pan: number; walls: number }) => void, volume: { referenceDistance: number; maxDistance: number; wallGain: number; rolloff?: number } = { referenceDistance: 1.5, maxDistance: 20, wallGain: 0.5 }): void {
+    const { viewer, acoustics } = this.options;
+    viewer.getWorldPosition(eye);
+    const distance = eye.distanceTo(at);
+    if (distance >= volume.maxDistance) return play(0, { pan: 0, walls: 0 });
+    const walls = acoustics?.wallsBetween(eye, at) ?? 0;
+    play(proximityVolume(distance, { ...volume, walls }) / 100, spatialOf(viewer, at, walls));
+  }
+
+  // --- lines ----------------------------------------------------------------------------------------
+
+  /** A line of `bucket` from its shuffle bag (every line once before any again, across visits: the `VisitBook` keeps it). */
+  private line(bucket: string, lines: readonly string[]): string {
+    return this.book.draw(bucket, lines, Math.random);
+  }
+
+  /** Just inside the front door: a word for a first visit, a regular's, or the evening's. */
+  private enterLine(plan: FriendPlan): string {
+    const visits = this.book.visitsOf(plan.id);
+    if (visits <= 1) return this.line('enterFirst', SHARED_LINES.enterFirst);
+    if (this.night) return this.line('enterNight', SHARED_LINES.enterNight);
+    if (visits > VISIT_RULES.regularAfter && Math.random() < 0.5) return this.line('enterRegular', SHARED_LINES.enterRegular);
+    return this.line('enter', SHARED_LINES.enter);
+  }
+
+  /** Their tip changing hands, from where they stand. */
+  private coinsFrom(plan: FriendPlan, coins: number): void {
+    const friend = this.friends.get(plan.id);
+    if (!friend) return;
+    friend.getWorldPosition(tmp).setY(tmp.y + 1.1);
+    this.soundAt(tmp, (level, spatial) => {
+      if (level > 0) playCoins(Math.min(5, Math.max(2, Math.round(coins / 2))), 0.12 * level, spatial);
+    }, { referenceDistance: 1.2, maxDistance: 12, wallGain: 0.4 });
+  }
+
+  /** A murmur at their mouth for what they say, by distance, walls and side. */
+  private murmur(friend: Friend, text: string): void {
+    const { murmur } = VISIT_RULES;
+    friend.getWorldPosition(tmp).setY(tmp.y + 1.6);
+    this.soundAt(tmp, (level, spatial) => playMurmur(text, murmur.level * level, spatial, friend.plan.voice.pitch), { referenceDistance: 1, maxDistance: murmur.maxDistance, wallGain: 0.4 });
+  }
+
+  /** No furniture on the straight way from `a` to `b` (world, at hip and chest height): a friend could walk it. */
+  private walkable(a: THREE.Vector3, b: THREE.Vector3): boolean {
+    const collisions = this.options.collisions;
+    if (!collisions) return true;
+    const length = Math.hypot(b.x - a.x, b.z - a.z);
+    const steps = Math.max(1, Math.ceil(length / WALK_PROBE.step));
+    for (let i = 1; i <= steps; i++) {
+      const t = i / steps;
+      for (const y of WALK_PROBE.heights) {
+        probe.set(a.x + (b.x - a.x) * t, a.y - 1 + y, a.z + (b.z - a.z) * t);
+        if (collisions.intersectsSphere(probe, WALK_PROBE.radius)) return false;
+      }
+    }
+    return true;
+  }
+
+  private readonly picker: LinePicker = (bucket, lines) => this.line(bucket, lines);
+
+  /** After dark on the in-game clock: the night's lines. */
+  private get night(): boolean {
+    const { daylight, hours } = this.options.clock.state;
+    return daylight !== undefined ? daylight < NIGHT_BELOW : hours >= 20 || hours < 6;
   }
 
   // --- speaking -------------------------------------------------------------------------------------
@@ -462,18 +655,22 @@ export class Visitors extends Prop implements Updatable, ActivityAware, DoorCall
    * The line itself, over their head with their name, for a player in earshot (or always, for what matters: a
    * greeting, a hand-back: out of view it goes to the subtitles); out of earshot, a word in passing.
    */
-  private say(plan: FriendPlan, line: string, word: string, always = false): void {
+  private say(plan: FriendPlan, line: string, word: Word, always = false): void {
     const friend = this.friends.get(plan.id);
     if (!friend || !line) return;
     this.options.viewer.getWorldPosition(eye);
     friend.getWorldPosition(tmp);
     if (always || Math.hypot(eye.x - tmp.x, eye.z - tmp.z) < VISIT_RULES.earshot) friend.speak(line, plan.name);
-    else friend.say(word);
+    else friend.say(this.line(`word:${word}`, WORDS[word]));
   }
 
+  /** A click to chat: small talk, or a word on the shelves (on the box they just looked at, once: then any other). */
   private chatLine(plan: FriendPlan): string {
     const random = Math.random;
-    return random() < 0.5 ? pickLine(plan.lines.smalltalk, random) : shelfComment(plan, this.options.shelved.games, random, this.options.viewsOf);
+    if (random() < 0.5) return this.line(`${plan.id}:smalltalk`, plan.lines.smalltalk);
+    const focus = this.looked;
+    this.looked = null;
+    return shelfComment(plan, this.options.shelved.games, random, { viewsOf: this.options.viewsOf, focus, pick: this.picker });
   }
 
   private routeSeat(seat: VisitorSeat, via: THREE.Vector3[]): RouteSeat {
@@ -487,11 +684,17 @@ export class Visitors extends Prop implements Updatable, ActivityAware, DoorCall
       approach,
       at,
       yaw: Math.atan2(forward.x, forward.z),
+      height: seat.sittingHeight,
       free: () => {
         if (standing && !standing.includes(seat)) return false;
         viewer.getWorldPosition(eye);
         const catAt = cat?.()?.at;
+        const mine = this.visit?.friend.plan.name ?? null;
+        if (seat.guest && seat.guest !== mine) return false;
         return Math.hypot(eye.x - world.x, eye.z - world.z) > 0.9 && (!catAt || Math.hypot(catAt.x - world.x, catAt.z - world.z) > 0.7);
+      },
+      claim: (guest) => {
+        seat.guest = guest;
       },
     };
   }
@@ -500,3 +703,5 @@ export class Visitors extends Prop implements Updatable, ActivityAware, DoorCall
 /** The bell's loudness by the door, and at least this anywhere in the flat (as the postman's). */
 const BELL_LEVEL = 0.22;
 const BELL_FLOOR = 0.035;
+/** The front door pulled shut, right by it. */
+const DOOR_LEVEL = 0.35;

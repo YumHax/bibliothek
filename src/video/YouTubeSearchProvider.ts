@@ -66,6 +66,15 @@ export class YouTubeSearchProvider implements VideoProvider {
     return best;
   }
 
+  /** The embed refused `videoId`: the cached answer moves on to its next hit, or becomes a miss (retried after `MISS_TTL_MS`). */
+  reject(game: Game, videoId: string): void {
+    const cached = this.readCache(game.id);
+    if (!cached) return;
+    const chain = [cached, ...(cached.fallbacks ?? [])].filter((v) => v.videoId !== videoId);
+    const [next, ...rest] = chain;
+    this.writeCache(game.id, next ? { ...next, fallbacks: rest } : null);
+  }
+
   private readCache(gameId: string): Answer | undefined {
     return this.cache.get(gameId);
   }
@@ -106,12 +115,17 @@ function isAnswer(value: unknown): value is Answer {
   return typeof v === 'object' && typeof v.videoId === 'string' && typeof v.title === 'string' && typeof v.durationSeconds === 'number';
 }
 
+/** How many next-best hits are kept behind the chosen one, for when the embed refuses it. */
+const MAX_FALLBACKS = 4;
+
 /**
  * The server already sorted by relevance; take the best hit that is long enough to be a whole
- * game, otherwise the best positively-scored one. Nothing plausible means "no longplay".
+ * game, otherwise the best positively-scored one. Nothing plausible means "no longplay". The other
+ * plausible hits follow in the same order as its `fallbacks`.
  */
 function pickBest(results: RankedVideo[]): VideoInfo | null {
-  const chosen = results.find((r) => r.durationSeconds >= MIN_LONGPLAY_SECONDS) ?? results.find((r) => r.score > 0) ?? null;
+  const plausible = [...results.filter((r) => r.durationSeconds >= MIN_LONGPLAY_SECONDS), ...results.filter((r) => r.durationSeconds < MIN_LONGPLAY_SECONDS && r.score > 0)];
+  const [chosen, ...rest] = plausible.map(({ videoId, title, durationSeconds }) => ({ videoId, title, durationSeconds }));
   if (!chosen) return null;
-  return { videoId: chosen.videoId, title: chosen.title, durationSeconds: chosen.durationSeconds };
+  return { ...chosen, fallbacks: rest.slice(0, MAX_FALLBACKS) };
 }

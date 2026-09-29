@@ -7,8 +7,10 @@ import { KEYS } from '@/persistence';
 import { DailyList } from '@/time/DailyList';
 import { dailyRandom, isEventDay } from '@/time/daily';
 import type { Furniture } from '../Furniture';
-import { paint, standard } from '../materials/palette';
+import { paint, shared } from '../materials/palette';
+import { bareMetal } from './metals';
 import { ForSaleBox } from '../market/ForSaleBox';
+import { GARAGE_WHERE } from '@/economy/pricing';
 
 /** Where the sale's boxes go: the zone (they must be placed to be clickable). */
 export interface GarageSaleHost {
@@ -60,7 +62,7 @@ export class GarageSale extends THREE.Group implements Furniture, Updatable {
     super();
     this.name = 'GarageSale';
     const { width, depth, height } = TABLE;
-    const legs = standard({ color: 0x9aa0a6, roughness: 0.4, metalness: 0.6 });
+    const legs = shared('street|trestle-legs', () => bareMetal({ color: 0x9aa0a6, roughness: 0.4 }));
     for (const x of [-width / 2 + 0.1, width / 2 - 0.1]) {
       for (const z of [-1, 1]) {
         const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, height * 1.05, 6), legs);
@@ -122,7 +124,7 @@ export class GarageSale extends THREE.Group implements Furniture, Updatable {
       const box = new ForSaleBox(item, covers, {
         pose: { kind: 'flat' },
         wallet,
-        where: 'a garage sale on Front Street',
+        where: GARAGE_WHERE,
         isWanted: () => isWanted(item.game.id),
         thanks: () => THANKS[Math.floor(Math.random() * THANKS.length)]!,
       });

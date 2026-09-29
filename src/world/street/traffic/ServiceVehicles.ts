@@ -81,8 +81,8 @@ export class DeliveryVan extends ScriptedVehicle {
     this.lamps = lampMaterial();
     this.hazard = new THREE.MeshBasicMaterial({ color: 0x331800 });
     this.add(
-      shade(new THREE.Mesh(g.body, snowCovered(new THREE.MeshStandardMaterial({ color: 0xeeeae2, roughness: 0.4, metalness: 0.3, flatShading: true })))),
-      shade(new THREE.Mesh(g.glass, standard({ color: 0x1a232b, roughness: 0.12, metalness: 0.6, flatShading: true }))),
+      shade(new THREE.Mesh(g.body, snowCovered(new THREE.MeshStandardMaterial({ color: 0xeeeae2, roughness: 0.35 })))),
+      shade(new THREE.Mesh(g.glass, standard({ color: 0x1a232b, roughness: 0.06 }))),
       shade(new THREE.Mesh(g.wheels, paint(0x151515, 0.85))),
       new THREE.Mesh(g.lamps, this.lamps),
     );
@@ -102,7 +102,7 @@ export class DeliveryVan extends ScriptedVehicle {
       this.add(band);
     }
     // Rear doors, hinged at the back corners.
-    const doorMaterial = standard({ color: 0xe6e2da, roughness: 0.45, metalness: 0.3 });
+    const doorMaterial = standard({ color: 0xe6e2da, roughness: 0.4 });
     for (const side of [-1, 1]) {
       const pivot = new THREE.Mesh(new THREE.BoxGeometry(0.04, 1.8, width / 2 - 0.06).translate(0, 0, (-side * (width / 2 - 0.06)) / 2), doorMaterial);
       pivot.position.set(-length / 2 - 0.07, 1.25, side * (width / 2 - 0.04));
@@ -236,8 +236,8 @@ export class BinLorry extends ScriptedVehicle {
     this.lamps = lampMaterial();
     this.beacon = new THREE.MeshBasicMaterial({ color: 0x331800 });
     this.add(
-      shade(new THREE.Mesh(g.body, snowCovered(new THREE.MeshStandardMaterial({ color: 0x3f7a4f, roughness: 0.5, metalness: 0.2, flatShading: true })))),
-      shade(new THREE.Mesh(g.glass, standard({ color: 0x1a232b, roughness: 0.12, metalness: 0.6 }))),
+      shade(new THREE.Mesh(g.body, snowCovered(new THREE.MeshStandardMaterial({ color: 0x3f7a4f, roughness: 0.45 })))),
+      shade(new THREE.Mesh(g.glass, standard({ color: 0x1a232b, roughness: 0.06 }))),
       shade(new THREE.Mesh(g.wheels, paint(0x151515, 0.85))),
       new THREE.Mesh(g.lamps, this.lamps),
       new THREE.Mesh(g.beacon, this.beacon),

@@ -37,27 +37,28 @@ export function startPerfLog(engine: Engine, hooks: PerfLogHooks = {}): { bisect
   const gpu = debugInfo ? (gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL) as string) : 'unknown GPU';
   console.log(`[stats] ${gpu} | depth ${depthBits} bits | pixel ratio ${renderer.getPixelRatio()} | ${innerWidth}x${innerHeight} | F9 = bisection`);
 
-  let frames = 0;
   let last = performance.now();
   let renderedAtLast = engine.renderedFrames;
-  engine.addUpdatable({ update: () => void frames++ });
+  let ticksAtLast = engine.ticks;
   const profile = new Map<Updatable, number>();
   engine.profile = profile;
   setInterval(() => {
     const now = performance.now();
-    const fps = (frames * 1000) / (now - last);
+    const fps = ((engine.ticks - ticksAtLast) * 1000) / (now - last);
     const rendered = ((engine.renderedFrames - renderedAtLast) * 1000) / (now - last);
-    const ticks = frames;
-    frames = 0;
+    // The updatables tick once per rendered frame.
+    const ticks = engine.renderedFrames - renderedAtLast;
     last = now;
     renderedAtLast = engine.renderedFrames;
+    ticksAtLast = engine.ticks;
 
     let lights = 0;
     let shadowed = 0;
     let perFrame = 0;
     scene.traverse((obj) => {
       const light = obj as THREE.Light & { isHemisphereLight?: boolean; shadow?: THREE.LightShadow };
-      if (!light.isLight || light.isHemisphereLight) return;
+      // Hidden ones (the light culler's) are not drawn.
+      if (!light.isLight || light.isHemisphereLight || !light.visible) return;
       lights++;
       if (!light.castShadow || !light.shadow) return;
       shadowed++;
@@ -65,7 +66,7 @@ export function startPerfLog(engine: Engine, hooks: PerfLogHooks = {}): { bisect
     });
     const { render, programs } = renderer.info;
     console.log(
-      `[stats] ${fps.toFixed(0)} loop ticks/s, ${rendered.toFixed(0)} rendered/s | ${render.calls} draw calls | ${render.triangles} tris | ${programs?.length ?? 0} programs | ${lights} lights, ${shadowed} with shadows, ${perFrame} re-rendering their shadow map every frame`,
+      `[stats] ${fps.toFixed(0)} display callbacks/s, ${rendered.toFixed(0)} rendered/s at pixel ratio ${engine.pixelRatio} | ${render.calls} draw calls | ${render.triangles} tris | ${programs?.length ?? 0} programs | ${lights} lights, ${shadowed} with shadows, ${perFrame} re-rendering their shadow map every frame`,
     );
     // JavaScript: what the updatables cost per tick, and the dearest of them.
     let total = 0;

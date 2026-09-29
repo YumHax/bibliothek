@@ -4,6 +4,8 @@ import { BaseGame, PLAY_TOP } from './BaseGame';
 const ROUND_SECONDS = 15;
 const LANES = ['left', 'down', 'up', 'right'] as const;
 type Lane = (typeof LANES)[number];
+/** Each lane's tone, a major chord up the lanes (the speaker's `lane` note at 440 Hz times this). */
+const LANE_PITCH: Record<Lane, number> = { left: 1, down: 1.26, up: 1.5, right: 2 };
 const LANE_W = 44;
 const LANES_X = (SCREEN_W - LANES.length * LANE_W) / 2;
 const TARGET_Y = SCREEN_H - 34;
@@ -94,6 +96,7 @@ export class ArrowRush extends BaseGame {
     for (const lane of LANES) {
       if (!this.keys.pressed(controls, lane)) continue;
       this.flashLane[lane] = 0.12;
+      this.sound('lane', LANE_PITCH[lane]);
       // The arrow in this lane nearest the line decides the judgement.
       let nearest: Arrow | null = null;
       for (const a of this.arrows) if (a.lane === lane && (!nearest || Math.abs(a.y - TARGET_Y) < Math.abs(nearest.y - TARGET_Y))) nearest = a;
@@ -114,9 +117,11 @@ export class ArrowRush extends BaseGame {
       if (off <= PERFECT_WINDOW) {
         this.addScore(PERFECT_POINTS, x, TARGET_Y - 24, '#7ee787');
         this.fx.pop('PERFECT', x, TARGET_Y - 40, '#7ee787', 7);
+        this.sound('perfect');
       } else {
         this.addScore(GOOD_POINTS, x, TARGET_Y - 24, '#ffe066');
         this.fx.pop('GOOD', x, TARGET_Y - 40, '#ffe066', 7);
+        this.sound('good');
       }
       this.fx.flash(LANE_COLORS[lane], 0.04);
     }
@@ -176,6 +181,7 @@ export class ArrowRush extends BaseGame {
 
   private miss(lane: Lane): void {
     this.breakCombo();
+    this.sound('miss');
     this.fx.pop('MISS', this.laneX(lane) + LANE_W / 2, TARGET_Y - 24, '#ff5f5f', 8);
     this.addTime(-MISS_SECONDS, this.laneX(lane) + LANE_W / 2, TARGET_Y - 40);
     this.fx.shake(1.5, 0.1);
