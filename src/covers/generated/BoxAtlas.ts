@@ -16,13 +16,17 @@ export interface AtlasColumn {
   width: number;
 }
 
-/** Where each face of a closed box is painted: the printed ones, then two plain colours (top / bottom flaps, the back). */
+/**
+ * Where each face of a closed box is painted: the printed ones, then two plain colours (top / bottom
+ * flaps, the back). A landscape box also prints its `top` (its spine runs there, top and bottom).
+ */
 export interface BoxAtlasLayout {
   width: number;
   height: number;
   front: AtlasColumn;
   left: AtlasColumn;
   right: AtlasColumn;
+  top: AtlasColumn | null;
   flap: AtlasColumn;
   back: AtlasColumn;
 }
@@ -32,13 +36,15 @@ export interface BoxAtlasFaces {
   front: CanvasImageSource | null;
   left: CanvasImageSource | null;
   right: CanvasImageSource | null;
+  /** A landscape box's top and bottom (its spine); ignored when the layout has no `top`. */
+  top?: CanvasImageSource | null;
   flap: THREE.Color;
   back: THREE.Color;
   /** Multiplies the printed faces (a worn copy). */
   tint: THREE.Color | null;
 }
 
-export function boxAtlasLayout(dims: BoxDimensions): BoxAtlasLayout {
+export function boxAtlasLayout(dims: BoxDimensions, printedTop = false): BoxAtlasLayout {
   const scale = FRONT_PX / Math.max(dims.width, dims.height);
   const height = Math.round(dims.height * scale);
   const spine = Math.max(MIN_SPINE_PX, Math.round(dims.depth * scale));
@@ -56,9 +62,11 @@ export function boxAtlasLayout(dims: BoxDimensions): BoxAtlasLayout {
   const front = printed(Math.round(dims.width * scale));
   const left = printed(spine);
   const right = printed(spine);
+  // The top is drawn across a column like the others (its uvs stretch it back): as wide as the front, it keeps its pixels.
+  const top = printedTop ? printed(Math.round(dims.width * scale)) : null;
   const flap = solid();
   const back = solid();
-  return { width: x, height, front, left, right, flap, back };
+  return { width: x, height, front, left, right, top, flap, back };
 }
 
 /**
@@ -82,6 +90,7 @@ export function paintBoxAtlas(texture: THREE.CanvasTexture, layout: BoxAtlasLayo
     [layout.front, faces.front],
     [layout.left, faces.left],
     [layout.right, faces.right],
+    ...(layout.top ? [[layout.top, faces.top ?? null] as [AtlasColumn, CanvasImageSource | null]] : []),
   ];
   for (const [column, image] of printed) {
     if (image) {

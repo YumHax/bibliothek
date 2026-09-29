@@ -46,3 +46,13 @@ const FORBIDDEN = /[&*\/:`<>?\\|]/g;
 export function sanitizeLibretroName(name: string): string {
   return name.replace(FORBIDDEN, '_');
 }
+
+/**
+ * The same image straight from GitHub, for an address on the art proxy (`/api/art/<repo>/<folder>/<file>`):
+ * tried when the proxy fails (a dev server without its API, a function down). Anything else has no mirror.
+ */
+export function libretroMirrors(url: string, proxy: string = DEFAULT_ART_PROXY): readonly string[] {
+  if (!url.startsWith(`${proxy}/`)) return [];
+  const [repo, folder, file] = url.slice(proxy.length + 1).split('/');
+  return repo && folder && file ? [`${GITHUB_URL}/${repo}/master/${folder}/${file}`] : [];
+}

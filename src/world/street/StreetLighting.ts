@@ -129,6 +129,8 @@ export class StreetLighting extends THREE.Group implements Furniture, Updatable,
     this.sun.position.copy(this.eye).addScaledVector(this.dir, SUN_DISTANCE);
     this.sun.color.copy(s.lightColor);
     this.sun.intensity = s.lightIntensity * SUN_SHARE;
+    // No sun through the cloud (rain, overcast, fog): its shadow map is not re-rendered for nothing.
+    this.sunShadow.setLive(this.occupied && this.sun.intensity > 0);
 
     // The sky's ambient: its hue, brighter by day, a moonlit trace at night; a flash in a storm (at once).
     const ease = 1 - Math.exp(-SKY_RATE * dt);

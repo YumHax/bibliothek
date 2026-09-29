@@ -20,11 +20,20 @@ const MINOR_BONUS = 300;
 const JACKPOT_BONUS = 1500;
 const POINTS_PER_ROW = 25;
 const PERFECT_BONUS = 40;
+/** Clean landings in a row multiply the rows' points, to this (x5 made a clean tower a jackpot on its own). */
+const STACK_COMBO_MAX = 3;
 const SETTLE = 0.22;
 /** Cells per second on row 1, and the increase per row. */
 const BASE_SPEED = 4.5;
 const SPEED_PER_ROW = 0.6;
 const ROW_COLORS = ['#63b3ff', '#7ee787', '#ffe066', '#ffb347', '#ff5f5f', '#ff7ad9'];
+
+/** Set bits of a row mask: its cells. */
+function bits(mask: number): number {
+  let n = 0;
+  for (let m = mask; m; m &= m - 1) n += 1;
+  return n;
+}
 
 /** How wide the sliding block is on a given row (0-based). */
 function widthFor(row: number): number {
@@ -57,7 +66,7 @@ export class Stacker extends BaseGame {
   private lastLanded: { row: number; kept: number; cut: number } | null = null;
 
   constructor() {
-    super(START_SECONDS);
+    super(START_SECONDS, STACK_COMBO_MAX);
   }
 
   protected begin(): void {
@@ -86,19 +95,32 @@ export class Stacker extends BaseGame {
     if (controls.firePressed) this.drop();
   }
 
-  /** Drops when the block sits square on the row below; a lesser player now and then goes a step early or late. */
+  /**
+   * Drops on the first square pass, now and then a step late (more often up the tower, where the
+   * block is fast and thin: a late drop there is a miss), as a person's thumb is.
+   */
   autopilot(skill: number): ArcadeControls {
     const idle = { left: false, right: false, up: false, down: false, fire: false, firePressed: false };
     if (this.settle > 0 || !this.live) return idle;
+    const turn = this.tower * ROWS + this.row;
+    if (this.pilotTurn !== turn) {
+      this.pilotTurn = turn;
+      this.pilotLate = this.row > 0 && Math.random() < 0.08 + (1 - skill) * 0.3 + this.row * 0.02 + this.tower * 0.1;
+      this.pilotWasSquare = false;
+    }
     const width = widthFor(this.row);
     const block = this.mask(this.position, width);
     const below = this.row === 0 ? (1 << COLS) - 1 : this.rows[this.row - 1]!;
-    const square = (block & below) === block;
-    const overlapping = (block & below) !== 0;
-    // Waiting costs seconds: a good player takes the first square pass, a lesser one sometimes a sloppy one.
-    const drop = square ? Math.random() < 0.25 + skill * 0.5 : overlapping && Math.random() < (1 - skill) * 0.05;
+    // Square: as much of the block over the row below as can be (all of it, or all of a narrower row).
+    const square = bits(block & below) >= Math.min(width, bits(below));
+    const drop = this.pilotLate ? this.pilotWasSquare && !square : square;
+    this.pilotWasSquare = square;
     return { ...idle, fire: drop, firePressed: drop };
   }
+
+  private pilotTurn = -1;
+  private pilotLate = false;
+  private pilotWasSquare = false;
 
   protected paint(ctx: CanvasRenderingContext2D): void {
     ctx.fillStyle = '#0a0f1e';

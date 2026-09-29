@@ -134,12 +134,20 @@ a cornice and two bays of windows per storey lit by the same curfew rules. Rays 
   `lightning` flashes twice in half a second (sky, clouds, the scenery and, through `daylight`, the room), `strikes` counts
   them, `strikeDistance` (0.4-5 km) sets the bolt (drawn below the clouds towards a random azimuth when nearer than ~3 km)
   and the thunder's delay.
-- `DayNight.setWeather()`: cloud greys the zenith/horizon, smothers the sunset glow, dims `lightIntensity` (the sun through
-  the windows) and `daylight`. `SkyState` carries `cloudCover`, `rain`, `snow`, `wetness`, `snowCover`, `wind`, `fog`,
-  `lightning`, `strikes`, `strikeDistance` to everyone. A frozen clock (`dayLength` 0) still recomputes for the weather.
+- `DayNight.setWeather()`: cloud greys the zenith/horizon, smothers the sunset glow, dims `daylight`. Direct sun (and moon)
+  is `sunThrough`: 1 under a clear or fair sky, about half through a cloudy one, 0 under an overcast, in fog, or as soon
+  as rain or snow falls. It scales `lightIntensity` (every sun: the windows' patch and dust shaft, the street, the
+  balcony; `sunSpotOnFloor` needs a real patch, so the cat does not bask in the rain), `moonVisibility`, the drawn sun
+  (`sunVisibility` / the dome's `sunVisible`) and the view's sunlit walls and shadows (`sunShadow`). Anything new that
+  shows sunlight reads `sunThrough`, never its own `cloudCover` curve. `SkyState` carries `cloudCover`, `sunThrough`,
+  `rain`, `snow`, `wetness`, `snowCover`, `wind`, `fog`, `lightning`, `strikes`, `strikeDistance` to everyone. A frozen
+  clock (`dayLength` 0) still recomputes for the weather. `HEAVY_RAIN` (0.45, `Weather.ts`) is the one "rainy day"
+  threshold for people (market shoppers, haggling, street talk): a shower's drizzle stays under it.
 - Pane shader: an fbm overcast sheet and the drifting cumulus (`cloudDrift`), the sun and moon veiled by them; wet ground
   darker and mirroring the sky, lights streaking down a wet road at night; snow whitening what the ground mask allows; haze
-  thicker in rain; falling rain streaks and snowflakes; drops beading on the glass in the pane's own plane (`paneWet`).
+  thicker in rain; falling rain streaks and snowflakes; drops beading on the glass in the pane's own plane (`paneWet`; not
+  on the balcony's surround, `OPEN_AIR`). The balcony has its own `Precipitation` (sheltered behind the building's front,
+  no splashes: the slab hangs over the street).
 
 ## Life (what moves)
 

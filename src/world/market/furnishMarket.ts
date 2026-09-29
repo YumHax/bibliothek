@@ -103,7 +103,7 @@ export function furnishMarket(zone: Zone, context: BuildContext): ZoneHandle {
   if (radioStall) zone.place(new TransistorRadio({ listener, color: plan.radio.color }), onTop(radioStall, radioStall.crateTop(plan.radio.x)), radioStall.rotation.y);
   const tellyStall = stalls[plan.telly.stall]?.stall;
   if (tellyStall) zone.place(new DemoTelly({ title: plan.telly.title }), onTop(tellyStall, tellyStall.crateTop(plan.telly.x)), tellyStall.rotation.y);
-  const crowdSound = zone.place(new CrowdSound(), new THREE.Vector3());
+  const crowdSound = zone.place(new CrowdSound({ listener, sources: stalls.map((s) => s.stall) }), new THREE.Vector3());
   zone.place(new RoofRain(() => sky.weather.state.rain), new THREE.Vector3());
 
   furnishHousehold(zone, context);

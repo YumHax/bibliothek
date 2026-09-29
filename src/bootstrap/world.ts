@@ -108,7 +108,7 @@ export function buildWorld(services: Services, parts: { world: GameWorld; player
   // The retro games shop shows the day's stock; on a new market day, until the player has been, a banner and a queue.
   new RetroShopLure(sky.outdoors, market, {
     colorOf: (platform) => `#${getPlatform(platform as PlatformId).accentColor.toString(16).padStart(6, '0')}`,
-    here: () => zones.get().current.id,
+    here: () => (zones.isSet ? zones.get().current.id : ''),
   });
   // The box in hand: the view focuses on it (ticked with the interaction, `bootstrap/interaction`).
   const inspector = new Inspector<GameBox>(engine.camera, engine.scene, () => world.occluders);

@@ -1,0 +1,608 @@
+{
+ "version": 1,
+ "games": {
+  "nes/Super Mario Bros. (World)": {
+   "dir": "nes/super-mario-bros-world",
+   "files": [
+    "back",
+    "cart",
+    "front",
+    "spine"
+   ]
+  },
+  "nes/Legend of Zelda, The (USA)": {
+   "dir": "nes/legend-of-zelda-the-usa",
+   "files": [
+    "back",
+    "cart",
+    "front",
+    "spine"
+   ]
+  },
+  "nes/Metroid (USA)": {
+   "dir": "nes/metroid-usa",
+   "files": [
+    "back",
+    "cart",
+    "front",
+    "spine"
+   ]
+  },
+  "nes/Mega Man 2 (USA)": {
+   "dir": "nes/mega-man-2-usa",
+   "files": [
+    "back",
+    "cart",
+    "front",
+    "spine"
+   ]
+  },
+  "nes/Castlevania (USA)": {
+   "dir": "nes/castlevania-usa",
+   "files": [
+    "back",
+    "cart",
+    "front",
+    "spine"
+   ]
+  },
+  "nes/Contra (USA)": {
+   "dir": "nes/contra-usa",
+   "files": [
+    "back",
+    "cart",
+    "front",
+    "spine"
+   ]
+  },
+  "nes/Kirby's Adventure (USA)": {
+   "dir": "nes/kirby-s-adventure-usa",
+   "files": [
+    "back",
+    "cart",
+    "front",
+    "spine"
+   ]
+  },
+  "nes/Super Mario Bros. 3 (USA)": {
+   "dir": "nes/super-mario-bros-3-usa",
+   "files": [
+    "back",
+    "cart",
+    "front",
+    "spine"
+   ]
+  },
+  "nes/Punch-Out!! (USA)": {
+   "dir": "nes/punch-out-usa",
+   "files": [
+    "cart",
+    "front"
+   ]
+  },
+  "nes/Duck Hunt (World)": {
+   "dir": "nes/duck-hunt-world",
+   "files": [
+    "back",
+    "cart",
+    "front",
+    "spine"
+   ]
+  },
+  "nes/Kid Icarus (USA, Europe)": {
+   "dir": "nes/kid-icarus-usa-europe",
+   "files": [
+    "back",
+    "cart",
+    "front",
+    "spine"
+   ]
+  },
+  "nes/Ninja Gaiden (USA)": {
+   "dir": "nes/ninja-gaiden-usa",
+   "files": [
+    "back",
+    "cart",
+    "front",
+    "spine"
+   ]
+  },
+  "nes/Mega Man (USA)": {
+   "dir": "nes/mega-man-usa",
+   "files": [
+    "back",
+    "cart",
+    "front",
+    "spine"
+   ]
+  },
+  "nes/Mega Man 3 (USA)": {
+   "dir": "nes/mega-man-3-usa",
+   "files": [
+    "back",
+    "cart",
+    "front",
+    "spine"
+   ]
+  },
+  "nes/Castlevania III - Dracula's Curse (USA)": {
+   "dir": "nes/castlevania-iii-dracula-s-curse-usa",
+   "files": [
+    "back",
+    "cart",
+    "front",
+    "spine"
+   ]
+  },
+  "nes/Super Mario Bros. 2 (USA)": {
+   "dir": "nes/super-mario-bros-2-usa",
+   "files": [
+    "back",
+    "cart",
+    "front",
+    "spine"
+   ]
+  },
+  "nes/Zelda II - The Adventure of Link (USA)": {
+   "dir": "nes/zelda-ii-the-adventure-of-link-usa",
+   "files": [
+    "back",
+    "cart",
+    "front",
+    "spine"
+   ]
+  },
+  "nes/Dr. Mario (Japan, USA)": {
+   "dir": "nes/dr-mario-japan-usa",
+   "files": [
+    "back",
+    "cart",
+    "front"
+   ]
+  },
+  "nes/Tetris (USA)": {
+   "dir": "nes/tetris-usa",
+   "files": [
+    "back",
+    "cart",
+    "front",
+    "spine"
+   ]
+  },
+  "nes/DuckTales (USA)": {
+   "dir": "nes/ducktales-usa",
+   "files": [
+    "back",
+    "cart",
+    "front",
+    "spine"
+   ]
+  },
+  "nes/Chip 'n Dale - Rescue Rangers (USA)": {
+   "dir": "nes/chip-n-dale-rescue-rangers-usa",
+   "files": [
+    "back",
+    "cart",
+    "front",
+    "spine"
+   ]
+  },
+  "nes/Teenage Mutant Ninja Turtles (USA)": {
+   "dir": "nes/teenage-mutant-ninja-turtles-usa",
+   "files": [
+    "back",
+    "cart",
+    "front",
+    "spine"
+   ]
+  },
+  "nes/Double Dragon (USA)": {
+   "dir": "nes/double-dragon-usa",
+   "files": [
+    "back",
+    "cart",
+    "front",
+    "spine"
+   ]
+  },
+  "nes/Final Fantasy (USA)": {
+   "dir": "nes/final-fantasy-usa",
+   "files": [
+    "back",
+    "cart",
+    "front",
+    "spine"
+   ]
+  },
+  "nes/Dragon Warrior (USA)": {
+   "dir": "nes/dragon-warrior-usa",
+   "files": [
+    "back",
+    "cart",
+    "front",
+    "spine"
+   ]
+  },
+  "nes/River City Ransom (USA)": {
+   "dir": "nes/river-city-ransom-usa",
+   "files": [
+    "back",
+    "cart",
+    "front",
+    "spine"
+   ]
+  },
+  "nes/Battletoads (USA)": {
+   "dir": "nes/battletoads-usa",
+   "files": [
+    "back",
+    "cart",
+    "front",
+    "spine"
+   ]
+  },
+  "nes/Crystalis (USA)": {
+   "dir": "nes/crystalis-usa",
+   "files": [
+    "back",
+    "cart",
+    "front",
+    "spine"
+   ]
+  },
+  "snes/Super Mario World (USA)": {
+   "dir": "snes/super-mario-world-usa",
+   "files": [
+    "back",
+    "cart",
+    "front",
+    "spine"
+   ]
+  },
+  "snes/Legend of Zelda, The - A Link to the Past (USA)": {
+   "dir": "snes/legend-of-zelda-the-a-link-to-the-past-usa",
+   "files": [
+    "back",
+    "cart",
+    "front",
+    "spine"
+   ]
+  },
+  "snes/Super Metroid (Japan, USA) (En,Ja)": {
+   "dir": "snes/super-metroid-japan-usa-en-ja",
+   "files": [
+    "back",
+    "cart",
+    "front"
+   ]
+  },
+  "snes/Chrono Trigger (USA)": {
+   "dir": "snes/chrono-trigger-usa",
+   "files": [
+    "back",
+    "cart",
+    "front",
+    "spine"
+   ]
+  },
+  "snes/Donkey Kong Country (USA)": {
+   "dir": "snes/donkey-kong-country-usa",
+   "files": [
+    "back",
+    "cart",
+    "front",
+    "spine"
+   ]
+  },
+  "snes/Super Mario Kart (USA)": {
+   "dir": "snes/super-mario-kart-usa",
+   "files": [
+    "back",
+    "cart",
+    "front",
+    "spine"
+   ]
+  },
+  "snes/Final Fantasy III (USA)": {
+   "dir": "snes/final-fantasy-iii-usa",
+   "files": [
+    "back",
+    "cart",
+    "front",
+    "spine"
+   ]
+  },
+  "snes/EarthBound (USA)": {
+   "dir": "snes/earthbound-usa",
+   "files": [
+    "back",
+    "cart",
+    "front"
+   ]
+  },
+  "gb/Tetris (World) (Rev 1)": {
+   "dir": "gb/tetris-world-rev-1",
+   "files": [
+    "back",
+    "cart",
+    "front"
+   ]
+  },
+  "gb/Super Mario Land (World)": {
+   "dir": "gb/super-mario-land-world",
+   "files": [
+    "back",
+    "cart",
+    "front",
+    "spine"
+   ]
+  },
+  "gb/Pokemon - Red Version (USA, Europe) (SGB Enhanced)": {
+   "dir": "gb/pokemon-red-version-usa-europe-sgb-enhanced",
+   "files": [
+    "back",
+    "cart",
+    "front",
+    "spine"
+   ]
+  },
+  "gb/Legend of Zelda, The - Link's Awakening (USA, Europe)": {
+   "dir": "gb/legend-of-zelda-the-link-s-awakening-usa-europe",
+   "files": [
+    "back",
+    "cart",
+    "front",
+    "spine"
+   ]
+  },
+  "gb/Kirby's Dream Land (USA, Europe)": {
+   "dir": "gb/kirby-s-dream-land-usa-europe",
+   "files": [
+    "back",
+    "cart",
+    "front",
+    "spine"
+   ]
+  },
+  "gb/Metroid II - Return of Samus (World)": {
+   "dir": "gb/metroid-ii-return-of-samus-world",
+   "files": [
+    "back",
+    "cart",
+    "front"
+   ]
+  },
+  "gb/Wario Land - Super Mario Land 3 (World)": {
+   "dir": "gb/wario-land-super-mario-land-3-world",
+   "files": [
+    "back",
+    "cart",
+    "front",
+    "spine"
+   ]
+  },
+  "gb/Super Mario Land 2 - 6 Golden Coins (USA, Europe)": {
+   "dir": "gb/super-mario-land-2-6-golden-coins-usa-europe",
+   "files": [
+    "back",
+    "cart",
+    "front",
+    "spine"
+   ]
+  },
+  "megadrive/Sonic The Hedgehog (USA, Europe)": {
+   "dir": "megadrive/sonic-the-hedgehog-usa-europe",
+   "files": [
+    "back",
+    "cart",
+    "front",
+    "spine"
+   ]
+  },
+  "megadrive/Sonic The Hedgehog 2 (World)": {
+   "dir": "megadrive/sonic-the-hedgehog-2-world",
+   "files": [
+    "back",
+    "cart",
+    "front",
+    "spine"
+   ]
+  },
+  "megadrive/Streets of Rage 2 (USA)": {
+   "dir": "megadrive/streets-of-rage-2-usa",
+   "files": [
+    "back",
+    "cart",
+    "front",
+    "spine"
+   ]
+  },
+  "megadrive/Gunstar Heroes (USA)": {
+   "dir": "megadrive/gunstar-heroes-usa",
+   "files": [
+    "back",
+    "cart",
+    "front",
+    "spine"
+   ]
+  },
+  "megadrive/Phantasy Star IV (USA)": {
+   "dir": "megadrive/phantasy-star-iv-usa",
+   "files": [
+    "back",
+    "cart",
+    "front",
+    "spine"
+   ]
+  },
+  "megadrive/Shining Force II (USA)": {
+   "dir": "megadrive/shining-force-ii-usa",
+   "files": [
+    "back",
+    "cart",
+    "front",
+    "spine"
+   ]
+  },
+  "megadrive/Castlevania - Bloodlines (USA)": {
+   "dir": "megadrive/castlevania-bloodlines-usa",
+   "files": [
+    "back",
+    "cart",
+    "front",
+    "spine"
+   ]
+  },
+  "megadrive/Comix Zone (USA)": {
+   "dir": "megadrive/comix-zone-usa",
+   "files": [
+    "back",
+    "cart",
+    "disc",
+    "front",
+    "spine"
+   ]
+  },
+  "n64/Super Mario 64 (USA)": {
+   "dir": "n64/super-mario-64-usa",
+   "files": [
+    "back",
+    "cart",
+    "front",
+    "spine"
+   ]
+  },
+  "n64/Legend of Zelda, The - Ocarina of Time (USA)": {
+   "dir": "n64/legend-of-zelda-the-ocarina-of-time-usa",
+   "files": [
+    "back",
+    "cart",
+    "front",
+    "spine"
+   ]
+  },
+  "n64/Legend of Zelda, The - Majora's Mask (USA)": {
+   "dir": "n64/legend-of-zelda-the-majora-s-mask-usa",
+   "files": [
+    "back",
+    "cart",
+    "front",
+    "spine"
+   ]
+  },
+  "n64/GoldenEye 007 (USA)": {
+   "dir": "n64/goldeneye-007-usa",
+   "files": [
+    "back",
+    "cart",
+    "front",
+    "spine"
+   ]
+  },
+  "n64/Mario Kart 64 (USA)": {
+   "dir": "n64/mario-kart-64-usa",
+   "files": [
+    "back",
+    "cart",
+    "front",
+    "spine"
+   ]
+  },
+  "n64/Banjo-Kazooie (USA)": {
+   "dir": "n64/banjo-kazooie-usa",
+   "files": [
+    "back",
+    "cart",
+    "front",
+    "spine"
+   ]
+  },
+  "n64/Star Fox 64 (USA)": {
+   "dir": "n64/star-fox-64-usa",
+   "files": [
+    "back",
+    "cart",
+    "front",
+    "spine"
+   ]
+  },
+  "n64/Paper Mario (USA)": {
+   "dir": "n64/paper-mario-usa",
+   "files": [
+    "back",
+    "cart",
+    "front",
+    "spine"
+   ]
+  },
+  "ps1/Final Fantasy VII (USA)": {
+   "dir": "ps1/final-fantasy-vii-usa",
+   "files": [
+    "back",
+    "disc",
+    "front",
+    "spine"
+   ]
+  },
+  "ps1/Metal Gear Solid (USA)": {
+   "dir": "ps1/metal-gear-solid-usa",
+   "files": [
+    "back",
+    "disc",
+    "front",
+    "spine"
+   ]
+  },
+  "ps1/Castlevania - Symphony of the Night (USA)": {
+   "dir": "ps1/castlevania-symphony-of-the-night-usa",
+   "files": [
+    "back",
+    "disc",
+    "front",
+    "spine"
+   ]
+  },
+  "ps1/Crash Bandicoot (USA)": {
+   "dir": "ps1/crash-bandicoot-usa",
+   "files": [
+    "back",
+    "disc",
+    "front",
+    "spine"
+   ]
+  },
+  "ps1/Resident Evil (USA)": {
+   "dir": "ps1/resident-evil-usa",
+   "files": [
+    "back",
+    "disc",
+    "front"
+   ]
+  },
+  "ps1/Tekken 3 (USA)": {
+   "dir": "ps1/tekken-3-usa",
+   "files": [
+    "back",
+    "front",
+    "spine"
+   ]
+  },
+  "ps1/Gran Turismo (USA)": {
+   "dir": "ps1/gran-turismo-usa",
+   "files": [
+    "back",
+    "disc",
+    "front",
+    "spine"
+   ]
+  },
+  "ps1/Spyro the Dragon (USA)": {
+   "dir": "ps1/spyro-the-dragon-usa",
+   "files": [
+    "back",
+    "disc",
+    "front"
+   ]
+  }
+ }
+}

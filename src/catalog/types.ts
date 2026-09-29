@@ -37,6 +37,7 @@ export interface Platform {
   id: PlatformId;
   name: string;
   shortName: string;
+  /** The North American box (`catalog/media`): a copy's own box is `boxDimensionsOf(game)`, by region. */
   boxDimensions: BoxDimensions;
   /** Accent colour used for spines / placeholders. */
   accentColor: number;

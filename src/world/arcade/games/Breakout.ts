@@ -23,8 +23,8 @@ const BRICK_GAP = 2;
 const BRICK_TOP = PLAY_TOP + 16;
 const ROW_POINTS = [100, 80, 60, 40, 30, 30];
 const ROW_COLORS = ['#ff5f5f', '#ffb347', '#ffe066', '#7ee787', '#63b3ff', '#c98cff'];
-const LOST_SECONDS = 2;
-const SERVE_DELAY = 0.35;
+const LOST_SECONDS = 3;
+const SERVE_DELAY = 0.8;
 /** Every this many bricks, one more ball joins from the paddle. */
 const BALL_EVERY = 5;
 const MAX_BALLS = 4;
@@ -117,8 +117,9 @@ export class Breakout extends BaseGame {
 
     const before = this.balls.length;
     this.balls = this.balls.filter((b) => b.y <= SCREEN_H + BALL_R);
+    // Any ball lost breaks the chain; the last one costs seconds too.
+    if (this.balls.length < before) this.breakCombo();
     if (before && !this.balls.length) {
-      this.breakCombo();
       this.addTime(-LOST_SECONDS, this.paddleX, PADDLE_Y - 20);
       this.fx.shake(3, 0.2);
       this.fx.flash('#ff5f5f', 0.1);

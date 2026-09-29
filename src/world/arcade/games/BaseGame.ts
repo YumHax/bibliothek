@@ -49,8 +49,14 @@ export abstract class BaseGame implements ArcadeGame {
   private sounds: SfxEvent[] = [];
   private rng: () => number = Math.random;
 
-  /** `timeLimit` in seconds, or null for a play that only ends by the game's own rules. */
-  protected constructor(private readonly timeLimit: number | null) {}
+  /**
+   * `timeLimit` in seconds, or null for a play that only ends by the game's own rules; `comboMax`
+   * the highest multiplier (a game whose every step chains keeps it lower, or the best runs explode).
+   */
+  protected constructor(
+    private readonly timeLimit: number | null,
+    private readonly comboMax = COMBO_MAX,
+  ) {}
 
   takeSounds(): SfxEvent[] {
     const sounds = this.sounds;
@@ -175,9 +181,9 @@ export abstract class BaseGame implements ArcadeGame {
   /** One more step on the multiplier, kept for `hold` seconds since the last step. */
   protected bumpCombo(hold = 2.5): void {
     const before = this.combo;
-    this.combo = Math.min(COMBO_MAX, this.combo + 1);
+    this.combo = Math.min(this.comboMax, this.combo + 1);
     this.comboTimer = hold;
-    if (before < COMBO_MAX && this.combo === COMBO_MAX) this.fx.shake(1.5, 0.1);
+    if (before < this.comboMax && this.combo === this.comboMax) this.fx.shake(1.5, 0.1);
   }
 
   protected breakCombo(): void {

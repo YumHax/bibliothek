@@ -46,6 +46,7 @@ import { version } from '../../package.json';
 import { late as lateBound, type Late } from './late';
 import type { Services } from './services';
 import { installPayoutTable } from './debug';
+import { installMoneyCheat } from '@/cheats/moneyCheat';
 import { NewsPanel } from '@/ui/NewsPanel';
 import { ScratchCardPanel } from '@/ui/ScratchCardPanel';
 import { HomeShopPanel } from '@/ui/HomeShopPanel';
@@ -187,6 +188,8 @@ export function createUi(services: Services, player: FirstPersonController, late
   // The wallet chip: up where money is the point, under the pause menu, and a few seconds after money moves elsewhere.
   const walletHud = new WalletHud(container, wallet, { moneyHere: () => late.zones.isSet && MONEY_ZONES.has(here()) });
   engine.addUpdatable(walletHud);
+  // Typing 5000 (or `bibliothek.coins()` in the console): 5000 coins.
+  installMoneyCheat(input, wallet, notices);
   // Sounds nobody clicked for (the arcade's machines and hum) wait for the first gesture to start the audio.
   unlockAudioOnFirstGesture();
   let entered = false;

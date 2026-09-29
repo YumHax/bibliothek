@@ -118,7 +118,7 @@ export class SkyDome extends THREE.Mesh implements Furniture, Updatable, Occupan
     skyDirection(s.moonElevation + MOON_SHADOW_OFFSET.pitch * DOME_MOON_RADIUS, s.moonAzimuth + MOON_SHADOW_OFFSET.yaw * DOME_MOON_RADIUS, u.moonShadowDir!.value as THREE.Vector3);
     u.sunLow!.value = 1 - THREE.MathUtils.smoothstep(s.sunHeight, 0, 0.3);
     (u.sunColor!.value as THREE.Color).copy(s.night ? GLOW : s.lightColor);
-    u.sunVisible!.value = THREE.MathUtils.smoothstep(s.sunHeight, -0.1, 0.02);
+    u.sunVisible!.value = THREE.MathUtils.smoothstep(s.sunHeight, -0.1, 0.02) * s.sunThrough;
     u.moonVisibility!.value = s.moonVisibility;
     const skyNight = 1 - THREE.MathUtils.smoothstep(s.sunHeight, -0.12, 0.3);
     u.starAlpha!.value = skyNight > 0.05 ? skyNight * skyNight * 0.9 : 0;

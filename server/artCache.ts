@@ -2,12 +2,22 @@ import { createHash } from 'node:crypto';
 import { type ApiRequest, type ApiResponse, empty, json } from './http';
 import { type ArtStore, type StoredArt } from './artStore';
 import { shrinkArt } from './imageProcessing';
+import { PoliteFetcher, UpstreamPaused } from './politeFetch';
 
 const UPSTREAM = 'https://raw.githubusercontent.com/libretro-thumbnails';
 const FOLDERS = new Set(['Named_Boxarts', 'Named_Snaps', 'Named_Titles']);
-const SEGMENT = /^[A-Za-z0-9_.,'!()+ -]+$/; // No-Intro names after libretro sanitising; no slashes, no "..".
+const SEGMENT = /^[\p{L}\p{N}_.,'!()+ \[\]~%#&;@=$-]+$/u; // No-Intro names after libretro sanitising; no slashes, no "..".
 const MISS_TTL_MS = 7 * 24 * 3600 * 1000;
-const UPSTREAM_TIMEOUT_MS = 15_000;
+/** GitHub's raw host is a CDN: several at once, a short gap, a pause when it keeps refusing. */
+const GITHUB = new PoliteFetcher({
+  gapMs: 40,
+  concurrency: 6,
+  timeoutMs: 15_000,
+  retryDelaysMs: [1000, 3000],
+  breakAfter: 8,
+  pauseMs: 2 * 60_000,
+  userAgent: 'bibliothek (game collection room; box art cache)',
+});
 
 /** Immutable art: a year on browsers and on the CDN (`s-maxage`). Misses are re-checked daily. */
 const HIT_CACHE_CONTROL = 'public, max-age=31536000, s-maxage=31536000, immutable';
@@ -71,9 +81,7 @@ export class ArtCache {
     const missAge = await this.store.missAge(key);
     if (missAge !== null && missAge < MISS_TTL_MS) return { status: 404 };
 
-    const upstream = await fetch(`${UPSTREAM}/${req.repo}/master/${req.folder}/${encodeURIComponent(req.file)}`, {
-      signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
-    });
+    const upstream = await GITHUB.fetch(`${UPSTREAM}/${req.repo}/master/${req.folder}/${encodeURIComponent(req.file)}`);
     if (upstream.status === 404) {
       await this.store.markMissing(key);
       return { status: 404 };
@@ -106,9 +114,22 @@ export async function handleArtRequest(cache: ArtCache, req: ApiRequest): Promis
   if (!parsed) {
     return json(400, { error: 'expected /api/art/<repo>/<Named_Boxarts|Named_Snaps|Named_Titles>/<file>.png' });
   }
-  const art = await cache.get(parsed);
-  if (art.status === 404) return empty(404, { 'Cache-Control': MISS_CACHE_CONTROL });
+  try {
+    return artResponse(await cache.get(parsed), req);
+  } catch (err) {
+    if (err instanceof UpstreamPaused) return pausedResponse(err);
+    throw err;
+  }
+}
 
+/** The upstream is being left alone: a quick 503 the client waits out (or tries its mirror). */
+export function pausedResponse(err: UpstreamPaused): ApiResponse {
+  return json(503, { error: err.message }, { 'Retry-After': String(Math.ceil(err.retryAfterMs / 1000)), 'Cache-Control': 'no-store' });
+}
+
+/** An image answer: a year of cache for a hit, a day for a miss, 304 when the browser has it already. */
+export function artResponse(art: ArtResult, req: ApiRequest): ApiResponse {
+  if (art.status === 404) return empty(404, { 'Cache-Control': MISS_CACHE_CONTROL });
   const headers = { ETag: art.etag, 'Cache-Control': HIT_CACHE_CONTROL, 'Access-Control-Allow-Origin': '*' };
   if (req.headers['if-none-match'] === art.etag) return empty(304, headers);
   return {
@@ -118,7 +139,7 @@ export async function handleArtRequest(cache: ArtCache, req: ApiRequest): Promis
   };
 }
 
-function hit(art: StoredArt): ArtResult {
+export function hit(art: StoredArt): ArtResult {
   const etag = `"${createHash('sha1').update(art.body).digest('hex')}"`;
   return { status: 200, etag, ...art };
 }

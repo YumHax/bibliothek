@@ -38,8 +38,6 @@ export const PLINTH = 0.07;
 const KICK_RECESS = 0.02;
 /** How far the top board overhangs the sides and the front. */
 const TOP_OVERHANG = 0.012;
-/** A partly filled row leans its last box against its neighbour (radians at most), when there is room for it. */
-const LEAN_MAX = THREE.MathUtils.degToRad(11);
 /** Boxes stand this far behind the boards' front edge (m), where the light reaches their covers. */
 const FRONT_SET = 0.035;
 /** Out of the row, a box clears the front edge by this much before it flies to the hand (m). */
@@ -47,9 +45,8 @@ const EDGE_CLEAR = 0.02;
 /** Mid-span sag of a loaded board 0.8 m long (metres); it grows with the square of the span, up to `MAX_SAG`. */
 const SAG_AT_80CM = 0.0022;
 const MAX_SAG = 0.005;
-/** How untidily the boxes stand: yaw and roll (radians), and how far one may be pushed back or pulled out. */
+/** How untidily the boxes stand: a turn (radians), and how far one may be pushed back or pulled out. */
 const BOX_YAW = THREE.MathUtils.degToRad(1.4);
-const BOX_ROLL = THREE.MathUtils.degToRad(0.7);
 const BOX_PUSH = 0.014;
 const BOX_PULL = 0.008;
 /** What stands in for the boxes in the shadow maps: a plain unit box per box, scaled, all in one instanced draw. */
@@ -140,23 +137,18 @@ export class Shelf extends THREE.Group {
 
     const inner = width / 2 - boardThickness;
     let cursorX = -inner;
-    boxes.forEach((box, i) => {
+    boxes.forEach((box) => {
       const { width: bw, height: bh, depth: bd } = box.dimensions;
       const carried = box.parent !== null && !(box.parent instanceof Shelf);
-      // Real shelves are not tidy: each box a touch askew, some pushed back or pulled out, all
-      // following the board's sag. Seeded by the game, so a box always stands the same way.
+      // Real shelves are not tidy: each box a touch turned, some pushed back or pulled out, all
+      // following the board's sag, but every one stands flat on its bottom (a box balanced on a
+      // corner looks wrong). Seeded by the game, so a box always stands the same way.
       const x = cursorX + bw / 2;
-      const [yaw, roll, push] = untidiness(box.game.id);
+      const [yaw, push] = untidiness(box.game.id);
       const z = depth / 2 - bd / 2 - FRONT_SET + push;
       box.slideOut = depth / 2 - (z + bd / 2) + EDGE_CLEAR;
-      const lean = i === boxes.length - 1 ? this.leanOf(boxes[i - 1] ?? null, box, cursorX, inner) : null;
-      if (lean) {
-        box.restPosition.set(lean.x, top + lean.lift - this.sagAt(row, lean.x), z);
-        box.restQuaternion.setFromEuler(new THREE.Euler(0, yaw, lean.angle));
-      } else {
-        box.restPosition.set(x, top + bh / 2 - this.sagAt(row, x), z);
-        box.restQuaternion.setFromEuler(new THREE.Euler(0, yaw, roll));
-      }
+      box.restPosition.set(x, top + bh / 2 - this.sagAt(row, x), z);
+      box.restQuaternion.setFromEuler(new THREE.Euler(0, yaw, 0));
       if (!carried) {
         if (slide && box.parent && box.parent !== this) this.attach(box); // keeps where it stands, in this shelf's frame
         else if (box.parent !== this) this.add(box);
@@ -168,33 +160,6 @@ export class Shelf extends THREE.Group {
       }
       cursorX += bw + gap;
     });
-  }
-
-  /**
-   * The last box of a partly filled row, leaning back against the one before it (or the side of
-   * the bookcase, alone on its row) on its far bottom corner: its centre x, the lift of its centre
-   * over the board and the roll. Null when the row is full enough that it stands upright (or the
-   * quality keeps things tidy).
-   */
-  private leanOf(before: GameBox | null, box: GameBox, from: number, inner: number): { x: number; lift: number; angle: number } | null {
-    if (!QUALITY.detailedMaterials) return null;
-    const { width: w, height: h } = box.dimensions;
-    // Where the one before ends (the row's cursor has already stepped past the gap), and how tall it stands.
-    const edge = before ? from - this.options.gap : from;
-    // Alone on its row it rests its top corner against the bookcase's side: only the first term counts.
-    const leanOn = before ? before.dimensions.height : 0;
-    const slack = inner - edge - w;
-    if (slack < w * 0.4) return null;
-    for (let angle = LEAN_MAX; angle > LEAN_MAX / 3; angle *= 0.8) {
-      const c = Math.cos(angle);
-      const s = Math.sin(angle);
-      // Top tipped towards -x: it rests on its bottom corner there, its side against the neighbour's
-      // top corner (or its own top corner against a taller neighbour, or the bookcase's side).
-      const x = edge + Math.max(w / 2 * c + h / 2 * s, leanOn * Math.tan(angle) + w / 2 * c - h / 2 * s);
-      if (x + w / 2 * c + h / 2 * s > inner) continue;
-      return { x, lift: w / 2 * s + h / 2 * c, angle };
-    }
-    return null;
   }
 
   /**
@@ -364,8 +329,8 @@ function bow(geometry: THREE.BufferGeometry, span: number, sag: number): void {
   geometry.computeBoundingSphere();
 }
 
-/** Yaw, roll and depth offset of a box on the shelf, from its game id (the same every time). */
-function untidiness(id: string): [yaw: number, roll: number, push: number] {
+/** Yaw and depth offset of a box on the shelf, from its game id (the same every time). */
+function untidiness(id: string): [yaw: number, push: number] {
   let hash = 2166136261;
   for (let i = 0; i < id.length; i++) hash = Math.imul(hash ^ id.charCodeAt(i), 16777619);
   const next = (): number => {
@@ -373,10 +338,9 @@ function untidiness(id: string): [yaw: number, roll: number, push: number] {
     hash = Math.imul(hash ^ (hash >>> 13), 3266489909);
     return ((hash ^= hash >>> 16) >>> 0) / 4294967296;
   };
-  if (!QUALITY.detailedMaterials) return [0, 0, 0];
+  if (!QUALITY.detailedMaterials) return [0, 0];
   const yaw = (next() * 2 - 1) * BOX_YAW;
-  const roll = next() < 0.3 ? (next() * 2 - 1) * BOX_ROLL : 0;
   const r = next();
   const push = r < 0.18 ? -next() * BOX_PUSH : r > 0.9 ? next() * BOX_PULL : 0;
-  return [yaw, roll, push];
+  return [yaw, push];
 }

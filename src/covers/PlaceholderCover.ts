@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import type { Game } from '@/catalog/types';
 import { getPlatform } from '@/catalog/platforms';
+import { boxDimensionsOf } from '@/catalog/media';
 import { createCanvas, toTexture, wrapLines, FONT } from './generated/canvasUtils';
 import { css } from './generated/palette';
 
@@ -8,7 +9,8 @@ import { css } from './generated/palette';
 export function createPlaceholderTexture(game: Game): THREE.CanvasTexture {
   const platform = getPlatform(game.platform);
   const w = 256;
-  const h = Math.round((w * platform.boxDimensions.height) / platform.boxDimensions.width);
+  const dims = boxDimensionsOf(game);
+  const h = Math.round((w * dims.height) / dims.width);
   const [canvas, ctx] = createCanvas(w, h);
 
   ctx.fillStyle = css(new THREE.Color(platform.accentColor));

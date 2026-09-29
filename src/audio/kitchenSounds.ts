@@ -138,7 +138,7 @@ export class ToasterSound extends Voice {
 const RADIO_STALE_MS = 500;
 
 /**
- * A kitchen radio: the `RadioTune` stream of forgettable pop, levelled like any room sound. The
+ * A kitchen radio: the `RadioTune` easy-listening station, levelled like any room sound. The
  * set switches it with `setOn` (a click, so the audio context may start); the `PointSound` sets
  * the level from the distance and the walls.
  */

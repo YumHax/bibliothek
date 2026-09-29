@@ -1,22 +1,26 @@
 import * as THREE from 'three';
-import type { Game, GameStatus } from '@/catalog/types';
+import type { BoxDimensions, Game, GameStatus } from '@/catalog/types';
 import { getPlatform } from '@/catalog/platforms';
+import { boxDimensionsOf, caseOf, mediaOf, type CaseKind, type MediaSpec } from '@/catalog/media';
 import type { BoxArt, BoxArtLoader, BoxArtOptions, BoxDetails } from '@/covers/BoxArtLoader';
 import { imageSourceOf } from '@/covers/generated/canvasUtils';
 import { createBackTexture } from '@/covers/generated/BackTexture';
 import { createCartridgeLabelTexture } from '@/covers/generated/CartridgeLabel';
+import { createDiscPrintTexture } from '@/covers/generated/DiscPrint';
 import { createManualCoverTexture } from '@/covers/generated/ManualCover';
 import type { Interactable } from '@/interaction/Interactable';
 import type { Carriable } from '@/interaction/Carriable';
 import type { SessionActions } from '@/game/SessionActions';
 import { BoxShell, SHELL_MATERIAL_ORDER, type ShellMaterials } from './box/BoxShell';
-import { Cartridge } from './box/Cartridge';
 import { ClosedBox } from './box/ClosedBox';
 import { LentTag } from './box/LentTag';
 import { LidMotion } from './box/LidMotion';
 import { Manual } from './box/Manual';
 import { computeShellLayout, type ShellLayout } from './box/shellLayout';
 import { slabSize } from './box/slabs';
+import { createMediaModel } from './media/createMediaModel';
+import type { MediaModel } from './media/MediaModel';
+import { paint } from './materials/palette';
 import { WishCard } from './box/WishCard';
 import { plastic } from './materials/finishes';
 import { printGlow } from './materials/printGlow';
@@ -46,13 +50,32 @@ const HITBOX_INDEX = SHELL_MATERIAL_ORDER.length;
 /** The openable box: built the first time the box is taken in hand, kept (off the GPU) afterwards. */
 interface OpenableParts {
   shell: BoxShell;
-  cartridge: Cartridge;
-  manual: Manual;
+  /** The cartridge or the disc, at real size. */
+  media: MediaModel;
+  /** The booklet, when the case has one of its own and the copy still has it. */
+  manual: Manual | null;
+  /** A jewel case's hub, the disc's rosette. */
+  hub: THREE.Mesh | null;
 }
 
+/** The inside of a case: raw grey card, a clamshell's black plastic, a jewel case's black tray. */
+const INTERIOR: Record<CaseKind, number> = { cardboard: 0x8e8576, clamshell: 0x151517, jewel: 0x0f0f11 };
+/** The edges of a plastic case (a cardboard box's flaps are printed in the cover's accent instead). */
+const PLASTIC_EDGE: Record<Exclude<CaseKind, 'cardboard'>, number> = { clamshell: 0x161618, jewel: 0x1c1d20 };
+/** How the print looks: a satin varnish on card, a sleeve under a clamshell's clear plastic, a booklet under a jewel case's. */
+const GLOSS: Record<CaseKind, { roughness: number; clearcoat: number }> = {
+  cardboard: { roughness: 0.55, clearcoat: 0.25 },
+  clamshell: { roughness: 0.5, clearcoat: 0.75 },
+  jewel: { roughness: 0.45, clearcoat: 1 },
+};
+/** Contents rising out of an opened cardboard box start once the flap is this far open (0..1). */
+const RISE_FROM = 0.3;
+
 /**
- * A physical game box that opens like a clamshell: a hollow cardboard tray, a front lid hinged on
- * the left (-x) edge, and inside it the cartridge and the manual.
+ * A physical game box at its real size (`catalog/media`, by platform and region) that opens as the
+ * real one does: a cardboard box by its top flap, its cartridge and manual rising out of it; a
+ * Mega Drive clamshell or a jewel case like a book, the cartridge (or the disc on its hub) in the
+ * tray and the manual under the lid's tabs.
  *
  * The mesh itself is only the hit volume of the closed box (it draws nothing); the visible parts
  * are children. Wherever it rests (a shelf, a stall) it is a `ClosedBox`, one mesh and one atlas;
@@ -73,6 +96,9 @@ export class GameBox extends THREE.Mesh<THREE.BoxGeometry, THREE.Material[]> imp
   slideOut = SLIDE_OUT;
   onDisposed: (() => void) | null = null;
 
+  private readonly dims: BoxDimensions;
+  private readonly kind: CaseKind;
+  private readonly mediaSpec: MediaSpec;
   private readonly art: BoxArtLoader;
   private readonly artOptions: BoxArtOptions;
   private readonly faces: ShellMaterials;
@@ -100,11 +126,13 @@ export class GameBox extends THREE.Mesh<THREE.BoxGeometry, THREE.Material[]> imp
   /** False for a copy sold without its booklet (or a worn one). */
   private readonly hasManual: boolean;
   private inHand = false;
+  /** Its cartridge (or disc) is in a console: the box opens empty. */
+  private mediaAway = false;
   /** A shelf casts this box's shadow with its proxy (see `Shelf`), so the closed box does not. */
   private shadowProxied = false;
   /** The latest art set, and the faces the closed box's atlas was painted from. */
   private current: BoxArt | null = null;
-  private painted: Pick<BoxArt, 'front' | 'left' | 'right'> | null = null;
+  private painted: Pick<BoxArt, 'front' | 'left' | 'right' | 'top'> | null = null;
   private details: BoxDetails | null = null;
   private detailsAsked = false;
   /** Whether the back, the label and the manual cover are drawn for the current art. */
@@ -114,29 +142,34 @@ export class GameBox extends THREE.Mesh<THREE.BoxGeometry, THREE.Material[]> imp
   private sharedBeforeHand = false;
 
   constructor(game: Game, art: BoxArtLoader) {
-    const platform = getPlatform(game.platform);
-    const { width, height, depth } = platform.boxDimensions;
-    const accent = new THREE.Color(platform.accentColor);
+    const dims = boxDimensionsOf(game);
+    const { width, height, depth } = dims;
+    const kind = caseOf(game).kind;
+    const mediaSpec = mediaOf(game);
 
-    // The shell is printed card under a clear plastic sleeve: a clearcoat over the print (high quality).
-    const side = () => plastic({ color: 0x0d0d0f, roughness: 0.7 }, 0.5);
+    // Printed card with a satin varnish; a plastic case's sleeve and a jewel case's inlay shine through clear plastic (a clearcoat, high quality).
+    const gloss = GLOSS[kind];
+    const side = () => plastic({ color: 0x0d0d0f, roughness: gloss.roughness + 0.15 }, gloss.clearcoat * 0.7);
     const faces: ShellMaterials = {
       right: side(),
       left: side(),
       top: side(),
       bottom: side(),
-      front: printGlow(plastic({ map: art.placeholder(game), roughness: 0.5 }, 0.7)),
+      front: printGlow(plastic({ map: art.placeholder(game), roughness: gloss.roughness }, gloss.clearcoat)),
       back: side(),
-      interior: new THREE.MeshStandardMaterial({ color: interiorColor(accent), roughness: 0.95 }),
+      interior: new THREE.MeshStandardMaterial({ color: INTERIOR[kind], roughness: kind === 'cardboard' ? 0.95 : 0.4 }),
     };
 
-    const layout = computeShellLayout(platform.boxDimensions, game.platform);
-    const closed = new ClosedBox(platform.boxDimensions, layout.hinge);
+    const layout = computeShellLayout(dims, kind, mediaSpec);
+    const closed = new ClosedBox(dims, layout.cover.origin, gloss);
     const hitVolume = new THREE.BoxGeometry(width, height, depth);
     for (const group of hitVolume.groups) group.materialIndex = HITBOX_INDEX;
     super(hitVolume, [...SHELL_MATERIAL_ORDER.map((name) => faces[name]), new THREE.MeshBasicMaterial({ visible: false }), closed.material]);
 
     this.game = game;
+    this.dims = dims;
+    this.kind = kind;
+    this.mediaSpec = mediaSpec;
     this.art = art;
     this.faces = faces;
     this.layout = layout;
@@ -165,18 +198,22 @@ export class GameBox extends THREE.Mesh<THREE.BoxGeometry, THREE.Material[]> imp
     this.closed.dispose();
     if (this.parts) {
       this.parts.shell.dispose();
-      this.parts.cartridge.dispose();
-      this.parts.manual.dispose();
+      this.parts.media.dispose();
+      this.parts.manual?.dispose();
+      this.parts.hub?.geometry.dispose();
     }
     for (const name of SHELL_MATERIAL_ORDER) {
       this.faces[name].map?.dispose();
       this.faces[name].dispose();
     }
     this.details?.back?.dispose();
+    this.details?.cart?.dispose();
+    this.details?.disc?.dispose();
   }
 
-  get dimensions() {
-    return getPlatform(this.game.platform).boxDimensions;
+  /** The copy's own box: its platform's, as sold in its region (`catalog/media`). */
+  get dimensions(): BoxDimensions {
+    return this.dims;
   }
 
   /** False for a wishlist ghost: a shelf leaves it out of its shadow proxy. */
@@ -191,7 +228,8 @@ export class GameBox extends THREE.Mesh<THREE.BoxGeometry, THREE.Material[]> imp
   }
 
   setHovered(hovered: boolean): void {
-    if (this.hovered === hovered) return;
+    // In hand it is parented to the scene: its rest pose (local to its shelf or stall) would throw it across the world.
+    if (this.inHand || this.hovered === hovered) return;
     this.hovered = hovered;
     if (this.restless) return this.restless(this);
     this.pop = hovered ? 1 : 0;
@@ -199,7 +237,8 @@ export class GameBox extends THREE.Mesh<THREE.BoxGeometry, THREE.Material[]> imp
   }
 
   label(): string {
-    const note = this.status === 'wishlist' ? ', on your wishlist' : this.status === 'lent' ? ', lent out' : '';
+    const away = this.mediaAway ? `, in the ${getPlatform(this.game.platform).shortName}` : '';
+    const note = this.status === 'wishlist' ? ', on your wishlist' : this.status === 'lent' ? ', lent out' : away;
     return `${this.game.title}${note} · pick up`;
   }
 
@@ -295,8 +334,11 @@ export class GameBox extends THREE.Mesh<THREE.BoxGeometry, THREE.Material[]> imp
       const parts = (this.parts ??= this.buildParts());
       this.remove(this.closed);
       this.showWish();
-      this.add(parts.shell, parts.cartridge, parts.manual);
-      if (this.lentTag) parts.shell.lid.add(this.lentTag);
+      this.add(parts.shell, parts.media);
+      if (parts.hub) this.add(parts.hub);
+      if (parts.manual && !this.layout.manualOnLid) this.add(parts.manual); // one on the lid rides with the shell
+      if (this.lentTag) parts.shell.cover.add(this.lentTag);
+      this.placeContents();
       this.showContents(this.lid.openness > 0);
       if (!this.detailsPainted) this.paintDetails();
       this.askDetails();
@@ -304,9 +346,13 @@ export class GameBox extends THREE.Mesh<THREE.BoxGeometry, THREE.Material[]> imp
       this.sharedBeforeHand = this.layers.isEnabled(SHARED_SHADOW_LAYER);
       this.traverse((obj) => obj.layers.enable(SHARED_SHADOW_LAYER));
     } else if (this.parts) {
-      const { shell, cartridge, manual } = this.parts;
-      this.remove(shell, cartridge, manual);
-      for (const mesh of [shell.tray, shell.lid, cartridge, manual]) mesh.geometry.dispose(); // off the GPU, uploaded again next time
+      const { shell, media, manual, hub } = this.parts;
+      this.remove(shell, media);
+      if (manual && manual.parent === this) this.remove(manual);
+      if (hub) this.remove(hub);
+      // Off the GPU, uploaded again next time.
+      for (const mesh of [shell.tray, shell.lid, manual, hub]) mesh?.geometry.dispose();
+      media.freeGpu();
       this.add(this.closed);
       if (this.lentTag) this.closed.lidAnchor.add(this.lentTag);
       this.dropDetails();
@@ -360,14 +406,83 @@ export class GameBox extends THREE.Mesh<THREE.BoxGeometry, THREE.Material[]> imp
   tick(dt: number): void {
     if (!this.lid.tick(dt)) return;
     this.parts?.shell.setOpenAngle(this.lid.angle);
+    this.placeContents();
     this.showContents(this.lid.openness > 0);
+  }
+
+  /** Where the hand holds the opened box instead (see `Carriable.openShift`): to the right of a book-like case's spread, lower under a box's rising contents. */
+  get openShift(): { x: number; y: number } {
+    const rise = this.layout.rise.media * 0.6;
+    return this.layout.opening === 'side' ? { x: this.dims.width * 0.5, y: 0 } : this.layout.opening === 'end' ? { x: -rise, y: 0 } : { x: 0, y: -rise };
   }
 
   /** Cartridge and manual are drawn (and cast shadows) only while the lid is off the tray. */
   private showContents(shown: boolean): void {
     if (!this.parts) return;
-    this.parts.cartridge.visible = shown;
-    this.parts.manual.visible = shown && this.hasManual;
+    this.parts.media.visible = shown && !this.mediaAway;
+    if (this.parts.manual) this.parts.manual.visible = shown;
+    if (this.parts.hub) this.parts.hub.visible = shown;
+  }
+
+  /** Out of an opened cardboard box the cartridge slides (the manual behind it a little less), up or out of its end; in a plastic case it stays in its tray. */
+  private placeContents(): void {
+    const parts = this.parts;
+    if (!parts) return;
+    const out = THREE.MathUtils.smoothstep(this.lid.openness, RISE_FROM, 1);
+    const axis = this.layout.opening === 'end' ? 'x' : 'y';
+    parts.media.position.copy(this.layout.media.centre);
+    parts.media.position[axis] += this.layout.rise.media * out;
+    parts.media.rotation.z = this.layout.media.sideways ? Math.PI / 2 : 0;
+    const manual = this.layout.manual;
+    if (parts.manual && manual && !this.layout.manualOnLid) parts.manual.position[axis] = (manual[axis].min + manual[axis].max) / 2 + this.layout.rise.manual * out;
+  }
+
+  // --- Media ----------------------------------------------------------------------------------
+
+  /** Freed (its shelf rebuilt it, it was sold): nothing may be flown back to it. */
+  get isDisposed(): boolean {
+    return this.disposed;
+  }
+
+  /** Whether its cartridge (or disc) is in a console just now. */
+  get mediaOut(): boolean {
+    return this.mediaAway;
+  }
+
+  /** Its cartridge went into a console (the box opens empty) or came back. */
+  setMediaOut(out: boolean): void {
+    if (this.mediaAway === out) return;
+    this.mediaAway = out;
+    this.showContents(this.lid.openness > 0);
+  }
+
+  /**
+   * A new model of the box's media with its label printed (and the real one's photo when there is
+   * one), in world space where the one in the box is (the box's middle while it is shut): what a
+   * console takes. The caller adds it where it wants it (`attach` keeps the pose) and owns it.
+   */
+  takeMedia(): MediaModel {
+    const model = createMediaModel(this.mediaSpec);
+    const accent = this.current?.accent ?? new THREE.Color(getPlatform(this.game.platform).accentColor);
+    model.setPrint(this.printFor(model, accent));
+    const photo = this.mediaSpec.shape === 'disc' ? this.details?.disc : this.details?.cart;
+    if (photo) {
+      const copy = photo.clone();
+      copy.needsUpdate = true;
+      model.setPhoto(copy);
+    }
+    const inBox = this.parts && this.inHand && this.lid.openness > 0 && !this.mediaAway ? this.parts.media : this;
+    inBox.updateWorldMatrix(true, false);
+    inBox.matrixWorld.decompose(model.position, model.quaternion, new THREE.Vector3());
+    model.traverse((obj) => (obj.layers.mask = this.layers.mask));
+    return model;
+  }
+
+  private printFor(model: MediaModel, accent: THREE.Color): THREE.Texture {
+    const cover = imageSourceOf(this.faces.front.map);
+    return this.mediaSpec.shape === 'disc'
+      ? createDiscPrintTexture(this.game, accent, cover, this.anisotropy)
+      : createCartridgeLabelTexture(this.game, accent, cover, this.anisotropy, model.printAspect, model.printFold);
   }
 
   // --- Status ---------------------------------------------------------------------------------
@@ -393,10 +508,10 @@ export class GameBox extends THREE.Mesh<THREE.BoxGeometry, THREE.Material[]> imp
     this.showWish();
 
     if (next === 'lent' && !this.lentTag) {
-      const lidSize = slabSize(this.layout.lidSlab);
-      this.lentTag = new LentTag(lidSize.x, lidSize.y, lidSize.z, this.anisotropy);
+      const { width, height, thickness } = this.layout.cover;
+      this.lentTag = new LentTag(width, height, thickness, this.anisotropy);
       this.lentTag.layers.mask = this.layers.mask;
-      (this.inHand && this.parts ? this.parts.shell.lid : this.closed.lidAnchor).add(this.lentTag);
+      (this.inHand && this.parts ? this.parts.shell.cover : this.closed.lidAnchor).add(this.lentTag);
     } else if (next !== 'lent' && this.lentTag) {
       this.lentTag.removeFromParent();
       this.lentTag.dispose();
@@ -436,7 +551,7 @@ export class GameBox extends THREE.Mesh<THREE.BoxGeometry, THREE.Material[]> imp
     const ghost = !this.castsShadow;
     this.closed.castShadow = !ghost && !this.shadowProxied;
     if (this.parts) {
-      for (const mesh of [this.parts.shell.tray, this.parts.shell.lid, this.parts.cartridge, this.parts.manual]) mesh.castShadow = !ghost;
+      for (const mesh of [this.parts.shell.tray, this.parts.shell.lid, this.parts.manual]) if (mesh) mesh.castShadow = !ghost;
     }
     if (this.lentTag) this.lentTag.castShadow = !ghost && (this.inHand || !this.shadowProxied);
   }
@@ -449,11 +564,16 @@ export class GameBox extends THREE.Mesh<THREE.BoxGeometry, THREE.Material[]> imp
     this.swap(this.faces.front, set.front);
     this.swap(this.faces.left, set.left);
     this.swap(this.faces.right, set.right);
-    // Top and bottom flaps: plain, tinted by the cover's accent so the box reads as one object.
-    const flap = set.accent.clone().multiplyScalar(0.35);
-    this.faces.top.color.copy(flap);
-    this.faces.bottom.color.copy(flap);
-    this.faces.interior.color.copy(interiorColor(set.accent));
+    if (set.top) {
+      this.swap(this.faces.top, set.top);
+      this.swap(this.faces.bottom, set.top);
+    }
+    // Top and bottom: a box's flaps tinted by the cover's accent so it reads as one object; a case's plain plastic.
+    if (!set.top) {
+      const flap = this.flapColour(set.accent);
+      this.faces.top.color.copy(flap);
+      this.faces.bottom.color.copy(flap);
+    }
     this.anisotropy = Math.max(1, set.front.anisotropy);
     this.paintClosed(set);
 
@@ -472,14 +592,15 @@ export class GameBox extends THREE.Mesh<THREE.BoxGeometry, THREE.Material[]> imp
 
   /** The closed box's atlas, from the art set (null: the placeholder front, dark spines, the platform's accent). */
   private paintClosed(set: BoxArt | null): void {
-    if (set && this.painted && this.painted.front === set.front && this.painted.left === set.left && this.painted.right === set.right) return;
+    if (set && this.painted && this.painted.front === set.front && this.painted.left === set.left && this.painted.right === set.right && this.painted.top === set.top) return;
     const accent = set?.accent ?? new THREE.Color(getPlatform(this.game.platform).accentColor);
     this.closed.paint(
       {
         front: imageSourceOf(set?.front ?? this.faces.front.map),
         left: imageSourceOf(set?.left),
         right: imageSourceOf(set?.right),
-        flap: accent.clone().multiplyScalar(0.35),
+        top: imageSourceOf(set?.top),
+        flap: this.flapColour(accent),
         back: accent.clone().multiplyScalar(0.2), // the generated back's ground
         tint: this.worn ? new THREE.Color(WORN_TINT) : null,
       },
@@ -488,17 +609,24 @@ export class GameBox extends THREE.Mesh<THREE.BoxGeometry, THREE.Material[]> imp
     this.painted = set;
   }
 
-  /** The back (scanned, or generated with a screenshot once `details` has one), the cartridge label and the manual cover. */
+  private flapColour(accent: THREE.Color): THREE.Color {
+    return this.kind === 'cardboard' ? accent.clone().multiplyScalar(0.35) : new THREE.Color(PLASTIC_EDGE[this.kind]);
+  }
+
+  /** The back (scanned, or generated with a screenshot once `details` has one), the media's label (or its photo) and the manual cover. */
   private paintDetails(): void {
     const parts = this.parts;
     if (!parts) return;
     const accent = this.current?.accent ?? new THREE.Color(getPlatform(this.game.platform).accentColor);
     const cover = imageSourceOf(this.faces.front.map);
     this.swap(this.faces.back, this.details?.back ?? createBackTexture(this.game, accent, this.details?.screenshot ?? null, this.anisotropy));
-    const cart = slabSize(this.layout.cartridge);
-    parts.cartridge.setLabel(createCartridgeLabelTexture(this.game, accent, cover, this.anisotropy, cart.x / cart.y));
-    const manual = slabSize(this.layout.manual);
-    parts.manual.setCover(createManualCoverTexture(this.game, accent, cover, this.anisotropy, manual.x / manual.y));
+    parts.media.setPrint(this.printFor(parts.media, accent));
+    const photo = this.mediaSpec.shape === 'disc' ? this.details?.disc : this.details?.cart;
+    if (photo) parts.media.setPhoto(photo); // a scan stays in `details`, off the GPU when put down
+    if (parts.manual && this.layout.manual) {
+      const manual = slabSize(this.layout.manual);
+      parts.manual.setCover(createManualCoverTexture(this.game, accent, cover, this.anisotropy, manual.x / manual.y));
+    }
     this.detailsPainted = true;
   }
 
@@ -509,10 +637,12 @@ export class GameBox extends THREE.Mesh<THREE.BoxGeometry, THREE.Material[]> imp
     void this.art.details(this.game).then((details) => {
       if (this.disposed) {
         details.back?.dispose();
+        details.cart?.dispose();
+        details.disc?.dispose();
         return;
       }
       this.details = details;
-      if (!details.back && !details.screenshot) return;
+      if (!details.back && !details.screenshot && !details.cart && !details.disc) return;
       this.detailsPainted = false;
       if (this.inHand) this.paintDetails();
     });
@@ -524,9 +654,10 @@ export class GameBox extends THREE.Mesh<THREE.BoxGeometry, THREE.Material[]> imp
     this.faces.back.map = null;
     this.faces.back.needsUpdate = true;
     back?.dispose(); // a scanned back stays in `details`, off the GPU
-    this.parts?.cartridge.setLabel(null);
-    this.parts?.manual.setCover(null);
-    for (const name of ['front', 'left', 'right'] as const) this.faces[name].map?.dispose();
+    this.parts?.media.setPhoto(null);
+    this.parts?.media.setPrint(null);
+    this.parts?.manual?.setCover(null);
+    for (const name of ['front', 'left', 'right', 'top', 'bottom'] as const) this.faces[name].map?.dispose();
     this.detailsPainted = false;
   }
 
@@ -547,30 +678,50 @@ export class GameBox extends THREE.Mesh<THREE.BoxGeometry, THREE.Material[]> imp
         return [name, material];
       }),
     ) as unknown as ShellMaterials;
-    const cartridge = new Cartridge(this.layout.cartridge);
-    cartridge.setLabel(map);
-    const manual = new Manual(this.layout.manual);
-    manual.setCover(map);
+    const media = createMediaModel(this.mediaSpec);
+    media.setPrint(map);
     const root = new THREE.Group();
-    root.add(new BoxShell(this.layout, faces), cartridge, manual);
+    root.add(new BoxShell(this.layout, faces), media);
+    if (this.layout.manual) {
+      const manual = new Manual(this.layout.manual);
+      manual.setCover(map);
+      root.add(manual);
+    }
     return root;
   }
 
   private buildParts(): OpenableParts {
-    const parts: OpenableParts = {
-      shell: new BoxShell(this.layout, this.faces),
-      cartridge: new Cartridge(this.layout.cartridge),
-      manual: new Manual(this.layout.manual),
-    };
+    const layout = this.layout;
+    const shell = new BoxShell(layout, this.faces);
+    const media = createMediaModel(this.mediaSpec);
+    let manual: Manual | null = null;
+    if (layout.manual && this.hasManual) {
+      manual = new Manual(layout.manual);
+      if (layout.manualOnLid) {
+        // Under the lid's tabs, in its hinge space, the cover turned to face in: it shows as the lid swings open.
+        manual.position.sub(layout.hinge);
+        manual.rotation.set(0, Math.PI, 0.015);
+        shell.lid.add(manual);
+      } else {
+        manual.rotation.set(0, 0, 0); // stood upright behind the cartridge, no room to lean
+      }
+    }
+    let hub: THREE.Mesh | null = null;
+    if (layout.kind === 'jewel') {
+      hub = new THREE.Mesh(new THREE.CylinderGeometry(0.0145, 0.0145, 0.0016, 24), paint(0x141416, 0.45));
+      hub.rotation.x = Math.PI / 2;
+      hub.position.set(layout.media.centre.x, layout.media.centre.y, layout.cavity.z.min + 0.0008);
+    }
+    const parts: OpenableParts = { shell, media, manual, hub };
     // The layers the closed box was given (the zone's shadow layer, see `Zone.adopt`).
-    for (const root of [parts.shell, parts.cartridge, parts.manual]) root.traverse((obj) => (obj.layers.mask = this.layers.mask));
-    this.styleMaterials([...parts.cartridge.material, ...parts.manual.material]);
+    for (const root of [shell, media, manual, hub]) root?.traverse((obj) => (obj.layers.mask = this.layers.mask));
+    this.styleMaterials([...media.materials, ...(manual?.material ?? [])]);
     return parts;
   }
 
-  /** Every material that actually draws something (closed box, shell, cartridge, manual). */
+  /** Every material that actually draws something (closed box, shell, media, manual). */
   private visibleMaterials(): THREE.Material[] {
-    const contents = this.parts ? [...this.parts.cartridge.material, ...this.parts.manual.material] : [];
+    const contents = this.parts ? [...this.parts.media.materials, ...(this.parts.manual?.material ?? [])] : [];
     return [...SHELL_MATERIAL_ORDER.map((name) => this.faces[name]), this.closed.material, ...contents];
   }
 }
@@ -580,7 +731,3 @@ function easeInOut(t: number): number {
   return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
 }
 
-/** Darker shade of the accent for the inside of the box, lifted a little so black covers do not give a black hole. */
-function interiorColor(accent: THREE.Color): THREE.Color {
-  return accent.clone().lerp(new THREE.Color(0x808080), 0.15).multiplyScalar(0.3);
-}

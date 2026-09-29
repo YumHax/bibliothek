@@ -31,6 +31,7 @@ export const KEYS = {
   settings: pref('settings.v1'),
   quality: pref('quality'),
   cat: pref('cat.v1'),
+  marketRadio: pref('marketRadio.v1'),
   // Progress.
   collection: save('collection.v1'),
   deliveries: save('deliveries.v1'),
@@ -71,12 +72,15 @@ export const KEYS = {
   // Caches.
   longplayCache: `${CACHE_PREFIX}longplay.v1`,
   fameCache: `${CACHE_PREFIX}fame.v1`,
+  /** The LaunchBox scans found per game (backs, spines, cartridges, discs), and the art addresses answered 404 lately. */
+  scanCache: `${CACHE_PREFIX}scans.v1`,
+  artMisses: `${CACHE_PREFIX}artMisses.v1`,
 } as const;
 
 export type StorageKey = (typeof KEYS)[keyof typeof KEYS];
 
 /** Preferences, not progress: a new game keeps them. */
-export const PREFERENCE_KEYS: readonly string[] = [KEYS.settings, KEYS.quality, KEYS.cat];
+export const PREFERENCE_KEYS: readonly string[] = [KEYS.settings, KEYS.quality, KEYS.cat, KEYS.marketRadio];
 
 /** Keys that exist once anything was played (the wallet is written on the first coin spent or won). */
 export const PROGRESS_MARKERS: readonly string[] = [KEYS.wallet, KEYS.collection, KEYS.market, KEYS.arcadeScores];

@@ -19,8 +19,8 @@ export interface ArtStore {
   markMissing(key: string): Promise<void>;
 }
 
-const EXTENSION_BY_TYPE: Record<string, string> = { 'image/webp': '.webp', 'image/png': '.png' };
-const TYPE_BY_EXTENSION: Record<string, string> = { '.webp': 'image/webp', '.png': 'image/png' };
+const EXTENSION_BY_TYPE: Record<string, string> = { 'image/webp': '.webp', 'image/png': '.png', 'image/jpeg': '.jpg' };
+const TYPE_BY_EXTENSION: Record<string, string> = { '.webp': 'image/webp', '.png': 'image/png', '.jpg': 'image/jpeg' };
 
 /**
  * Files under `dir`, mirroring the libretro path. A processed image is stored with its own
@@ -30,7 +30,7 @@ export class DiskArtStore implements ArtStore {
   constructor(private readonly dir: string) {}
 
   async read(key: string): Promise<StoredArt | null> {
-    for (const ext of ['.webp', '.png']) {
+    for (const ext of Object.keys(TYPE_BY_EXTENSION)) {
       const body = await readIfExists(this.path(key, ext));
       if (body) return { body, contentType: TYPE_BY_EXTENSION[ext] };
     }

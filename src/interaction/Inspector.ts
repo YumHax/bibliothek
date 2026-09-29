@@ -292,9 +292,11 @@ export class Inspector<Box extends Carriable = Carriable> implements Updatable {
   private handPose(box: Box): void {
     this.camera.getWorldPosition(this.eye);
     this.camera.getWorldQuaternion(this.tmpQuat);
-    // The lid swings out to the left; shift the box right as it opens so the spread stays centred.
+    // A lid swings out to the left (the box shifts right so the spread stays centred), or the contents rise out of the top (it drops).
     this.tmpOffset.copy(this.handOffset);
-    this.tmpOffset.x += box.openness * box.dimensions.width * 0.5;
+    const shift = box.openShift;
+    this.tmpOffset.x += box.openness * (shift ? shift.x : box.dimensions.width * 0.5);
+    this.tmpOffset.y += box.openness * (shift?.y ?? 0);
     const walls = this.walls?.();
     if (walls?.length) {
       const reach = this.tmpOffset.length();

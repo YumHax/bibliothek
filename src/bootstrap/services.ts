@@ -7,9 +7,8 @@ import { CollectionStore } from '@/collection/CollectionStore';
 import { Deliveries } from '@/collection/Deliveries';
 import { GameList } from '@/collection/GameList';
 import { LibretroIndex } from '@/collection/LibretroIndex';
-import { CoverArtResolver } from '@/covers/CoverArtProvider';
 import { LibretroCoverProvider } from '@/covers/LibretroCoverProvider';
-import { BoxArtLoader } from '@/covers/BoxArtLoader';
+import { createBoxArtLoader } from '@/covers/createBoxArtLoader';
 import { YouTubeSearchProvider } from '@/video/YouTubeSearchProvider';
 import { Today } from '@/time/Today';
 import { MarketDay } from '@/economy/MarketDay';
@@ -27,6 +26,7 @@ import { HomeUpgrades } from '@/economy/HomeUpgrades';
 import { ARCADE_PLAN, TICKET_GAMES } from '@/world/arcade/arcadePlan';
 import { StrayGames } from '@/world/strays/StrayGames';
 import { Sky } from '@/world/Sky';
+import { HEAVY_RAIN } from '@/world/weather/Weather';
 import { KITCHEN_WING, SUN_ROTATION_Y } from '@/world/worldPlan';
 import { parseHoliday, parseNewYear, parseSeason } from '@/time/season';
 import { parseLatitude } from '@/world/props/solar';
@@ -87,13 +87,12 @@ export function createServices(container: HTMLElement) {
   const index = new LibretroIndex();
   const fame = new Fame();
 
-  // Box art: chain of providers, first URL per face wins; missing faces are generated. Add IGDB/ScreenScraper here later.
-  // Art goes through `/api/art` (disk cache in dev, serverless function in production).
+  // Box art: the baked files, then libretro fronts through `/api/art` and LaunchBox scans through `/api/launchbox`
+  // (disk caches in dev, serverless functions in production); missing faces are generated (see `createBoxArtLoader`).
   const libretroCovers = new LibretroCoverProvider({ proxy: '/api/art' });
-  const coverResolver = new CoverArtResolver([libretroCovers]);
   /** A front cover for the DOM panels' thumbnails (the catalogue, the WE BUY desk). */
   const coverUrl = (game: Game) => libretroCovers.getBoxArt(game).front;
-  const covers = new BoxArtLoader(coverResolver, engine.renderer.capabilities.getMaxAnisotropy());
+  const covers = createBoxArtLoader(libretroCovers, engine.renderer.capabilities.getMaxAnisotropy());
   const videos = new YouTubeSearchProvider();
 
   // One sky for every zone (see docs/zones.md). `?season=winter` (or `autumn:0.9`) and `?weather=rain` override the
@@ -107,7 +106,7 @@ export function createServices(container: HTMLElement) {
   // The one "today" (the game day and the real date, see `time/Today`), and what kind of market day it is.
   const today = new Today(new MarketCalendar(sky.dayNight));
   const marketDay = new MarketDay(today, (id) => collection.owns(id));
-  const market = new MarketStock({ index, collection, fame, today, ledger, standing, raining: () => sky.weather.state.rain >= 0.45 });
+  const market = new MarketStock({ index, collection, fame, today, ledger, standing, raining: () => sky.weather.state.rain >= HEAVY_RAIN });
   engine.addUpdatable(sky);
   // Every exchange of money for games the panels make: checked first, then its saves written as one.
   const tx = new Transactions({ wallet, collection, market, ledger, standing, prizes });

@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import type { Updatable } from '@/core/Engine';
 import type { Interactable } from '@/interaction/Interactable';
 import { RadioTune } from '@/audio/RadioTune';
+import { KEYS, PersistedStore } from '@/persistence';
 import { createCanvas, toTexture } from '@/covers/generated/canvasUtils';
 import type { Furniture, OccupancyAware } from '../Furniture';
 import { boxMesh, cylinderMesh, invisibleHitbox } from '../meshUtils';
@@ -19,15 +20,23 @@ const W = 0.2;
 const H = 0.12;
 const D = 0.06;
 /** Heard up to this far (m); full volume within `NEAR`. */
-const FAR = 9;
+const FAR = 7;
 const NEAR = 0.8;
+
+/** Version 1: whether the player left the radio on (true) or switched it off. */
+const store = new PersistedStore<boolean>({
+  key: KEYS.marketRadio,
+  version: 1,
+  defaults: () => true,
+  read: (data) => (typeof data === 'boolean' ? data : null),
+});
 
 const CHROME = standard({ color: 0xc8c8c8, roughness: 0.2, metalness: 1 });
 
 /**
- * A stallholder's transistor radio, playing a generated pop station (`RadioTune`) for the whole
- * hall, louder as the player comes near. On when the market is entered; clicking it switches it
- * off and on. Silent when the player is not in the hall (`setOccupied`). Origin under its centre,
+ * A stallholder's transistor radio, playing a generated easy-listening station (`RadioTune`) for
+ * the aisle around it, louder as the player comes near. Clicking it switches it off and on, and the
+ * choice is kept for the next visits (on the first). Silent when the player is not in the hall (`setOccupied`). Origin under its centre,
  * +z the grille. Never collides (it stands on a stall's crates).
  */
 export class TransistorRadio extends THREE.Group implements Furniture, Updatable, Interactable, OccupancyAware {
@@ -38,7 +47,7 @@ export class TransistorRadio extends THREE.Group implements Furniture, Updatable
   private readonly dial: THREE.MeshStandardMaterial;
   private readonly here = new THREE.Vector3();
   private readonly ear = new THREE.Vector3();
-  private wanted = true;
+  private wanted = store.load();
   private occupied = false;
 
   constructor(options: TransistorRadioOptions) {
@@ -102,6 +111,7 @@ export class TransistorRadio extends THREE.Group implements Furniture, Updatable
 
   activate(): void {
     this.wanted = !this.wanted;
+    store.save(this.wanted);
     this.apply();
   }
 

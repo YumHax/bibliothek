@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { seededRandom } from '@/covers/generated/canvasUtils';
+import { dailyRandom } from '@/time/daily';
 import type { SeasonName } from '@/time/season';
 
 /** The kinds of weather a spell can bring. */
@@ -41,6 +41,13 @@ const TARGETS: Record<WeatherKind, { cloudCover: number; rain: number; snow: num
   storm: { cloudCover: 1, rain: 1, snow: 0, wind: 0.95, fog: 0 },
   snow: { cloudCover: 0.95, rain: 0, snow: 0.8, wind: 0.35, fog: 0.2 },
 };
+
+/**
+ * Rain at least this hard (`WeatherState.rain`) is a rainy day to the people out there: half the
+ * market's shoppers stay home, the stallholders haggle more readily, the neighbours talk about it.
+ * A shower's drizzle (about 0.4 once settled) does not count.
+ */
+export const HEAVY_RAIN = 0.45;
 
 /** How likely each kind is to come next, per season (snow only falls in winter, storms mostly in summer, fog in autumn and winter). */
 const ODDS: Record<SeasonName, Partial<Record<WeatherKind, number>>> = {
@@ -114,9 +121,10 @@ export class Weather {
 
   constructor(
     private readonly season: SeasonName,
-    date = new Date(),
+    /** The real day the spells are drawn for (default today, see `time/daily`). */
+    date?: Date,
   ) {
-    this.random = seededRandom(date.getFullYear() * 400 + date.getMonth() * 32 + date.getDate());
+    this.random = dailyRandom('weather', date);
     for (let i = 0; i < 4; i++) this.random();
     this.mistiness = THREE.MathUtils.smoothstep(this.random(), 0.35, 0.8);
     this.state.kind = this.draw();

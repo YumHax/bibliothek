@@ -166,13 +166,19 @@ src/world/shelving/     Shelving (bookcases sized from the collection, `minBookc
 src/world/materials/    palette (the shared materials: paint, timber, cloth, standard, basic, METAL, shared), sharedResources
                         (markShared / isShared / disposeTree), shaderPatch (onBeforeCompile helpers), finishes (wood, fabric, plastic,
                         scuffed), surfaces (walls, floor and ceiling edges, floor wear), paintedTiles (paintOnce), GlossyFloor
-src/world/box/          ClosedBox (a resting box: one mesh, one atlas), BoxShell, Cartridge, Manual (the openable box, built in hand), LentTag,
-                        LidMotion, shellLayout, slabs
+src/world/box/          ClosedBox (a resting box: one mesh, one atlas; a landscape box prints its top), BoxShell + shellLayout (the
+                        openable box, built in hand: a cardboard box by its top or end flap, contents sliding out; a clamshell or jewel
+                        case like a book), Manual, LentTag, LidMotion, slabs. See docs/media.md
+src/world/media/        The game's media at real size: MediaModel (+ createMediaModel), CartridgeModel (extruded from `outline`: one
+                        outline per shell family, grip ribs, label + end fold, a real photo over the face when there is one), DiscModel;
+                        MediaDeck (a console as the TV sees it), insertion (seat poses, the moves in and out) over a Timeline.
+                        See docs/media.md
 src/world/props/        The props any room may use (a prop only one room has lives in that room's folder: world/bedroom/Bed,
                         world/kitchen/Fridge, world/hallway/CoatRack...): Prop (base: empty footprint; part, matte), joinery (SEAM /
                         INSET / PROUD: how parts meet), decor (DECOR_KINDS registry + placeDecor), wallMount, SwitchableLamp (base of the
                         lamps), Door (hinged either side, swings out of the hanging room), ShutDoor (decorative), Window (+Curtains),
-                        DayNight, Poster, PictureFrame, WallClock, WallSwitch, Rug, ConsoleStand, Console (+consoleStyles), Plant,
+                        DayNight, Poster, PictureFrame, WallClock, WallSwitch, Rug, ConsoleStand, Console (+consoleStyles: each
+                        console's `MediaSlot`; takes the game in hand's cartridge, plays it on the TV, ejects it), Plant,
                         SideTable, Cushion, Speaker, Sideboard, SwingLeaf and SlideDrawer (doors and drawers that open on a
                         click), MirrorGlass, Parcel (bought games waiting in the hallway). See docs/props.md.
 src/world/props/outdoors/ The painted 360° view outside every window (its plan derived from world/city). See docs/outdoors.md.
@@ -205,6 +211,7 @@ src/notices/            What the game tells the player, by kind (docs/notices.md
                         strip out of view), speech (`bindSpeech`: where `people/SpeechBubble` sends its lines), CrosshairLine (react /
                         refuse), RewardBanner (queued, big ones with rays), TipBoard (pinned, `until`), ReadingCard (paper card, stays its
                         reading time), AlertBar (save problems, the mouse lock), saveNotices, readingTime (`readMs`), types (NoticeActions)
+src/cheats/             moneyCheat (typing 5 0 0 0 on the top row, or `bibliothek.coins(n)` in the console: +5000 coins, a reward banner).
 src/photo/              PhotoMode (free camera on a leash, lens via `PostFx.setLens`, grades over the zone's look, guides, PNG capture;
                         `toggle` / `capture` / `handleKey`), PhotoHud (guides, card, flash; `body.photo-mode` hides the HUD), photoLooks,
                         frames, savePhoto. See docs/graphics.md ("Photo mode").
@@ -228,20 +235,24 @@ src/economy/            Wallet (coins + tickets), pricing (every tunable number,
                         `bibliothek.home.v1`), homeGoods (HOME_GOODS: what the market's household stall sells; slots in the flat's plans)
 src/audio/              audioContext (one lazy AudioContext; `startedAudioContext` for sounds nobody clicked for, `unlockAudioOnFirstGesture`),
                         ChipSpeaker (an arcade machine's chip sounds, level and pan following the camera), CrtSpeaker (old TV speaker bed following the video's loudness), CatVoice,
-                        CrowdMurmur (the market hall's chatter), RadioTune (a generated pop station), JukeboxTune (the arcade jukebox's
+                        CrowdMurmur (the market hall's chatter), RadioTune (a generated easy-listening station), JukeboxTune (the arcade jukebox's
                         four generated stations), coins (a sale's clink),
                         ambient (AmbientVoice: FridgeHum, ClockTick, TapDrip), water (tap, flush, bath), kitchenSounds (kettle, toaster),
                         flatSounds (neighbours, stairwell, radiator ticks), alarm (the wall clock's beep), StreetAmbience (the street heard through the windows), street/streetVoices (horn, siren, two-tone, bird
                         notes: shared by StreetAmbience and the walkable street's StreetSound),
                         Footsteps (+ footSurface: a step by surface, wet and snowy outside), churchBells (the hour struck in the street)
-src/catalog/            types (Game, Platform, GameStatus), platforms (6: sizes, accent, libretro repo), seed data per platform -> SEED_GAMES
+src/catalog/            types (Game, Platform, GameStatus), platforms (6: accent, libretro repo), media (by platform and region: the
+                        case, its size, the cartridge shell or disc: `boxDimensionsOf`, `caseOf`, `mediaOf`, `regionOf`), seed data per platform -> SEED_GAMES
                         (ids made canonical with `gameIdFor`; `canonicalGameId` maps the old hand-made ones), validate (isGame, readGame)
 src/collection/         GameSource interface, CollectionStore (seed + `bibliothek.collection.v1`, import/export, addMany, lastChange), LibretroIndex,
                         Deliveries (games bought while out wait in the hallway's parcel; `shelved` = the collection less the parcel,
                         `bibliothek.deliveries.v1`), GameList (a GameSource somebody fills: the shelving overflow)
-src/covers/             CoverArtProvider chain, LibretroCoverProvider (via /api/art), BoxArtLoader (generated first, real art nearest-first,
-                        `load`/`release` refcount + the last 24 idle games kept, back sources only via `details()`), LoadQueue (cached
-                        priorities, re-sorted by `setPriorityOrigin`), generated/ (faces, BoxAtlas)
+src/covers/             CoverArtProvider chain, StaticArtProvider (public/boxart, baked by `npm run bake-art`), LibretroCoverProvider (via
+                        /api/art, `libretroMirrors`: GitHub direct), LaunchBoxProvider (scans via /api/launchbox, cached in the browser),
+                        createBoxArtLoader (the wiring), BoxArtLoader (generated first, real fronts nearest-first, then scanned spines,
+                        `load`/`release` refcount + the last 24 idle games kept, back / cartridge / disc only via `details()`), ImageFetch
+                        (fetch-based: 404 remembered, retries, mirrors, a failing origin paused), scanFaces (spine sides, trimmed
+                        cartridge photo, square disc), LoadQueue (cached priorities, re-sorted by `setPriorityOrigin`), generated/ (faces, BoxAtlas)
 src/video/              VideoProvider, YouTubeSearchProvider (/api/youtube/search, cached in `bibliothek.cache.longplay.v1`), YouTubePlayer, proximityVolume, randomStart
 src/settings/           SettingsStore (`bibliothek.settings.v1`: look sensitivity per device, invert Y, FOV, mixer volumes, HUD aids, text
                         size, speech size, reduce motion, head bob, sprint double-tap / hold Shift, crouch hold / toggle, show tips, key
@@ -326,8 +337,11 @@ api/                    Vercel functions wrapping the server handlers; vercel.js
 - **Box art**: providers return per-face URLs, the resolver merges (first URL wins), `BoxArtLoader` generates missing faces.
   `GameBox` material order is BoxGeometry's `[+x, -x, +y, -y, +z front, -z back]`. A resting box is a `ClosedBox` (front +
   spines in one atlas, 1 draw); `Inspector` calls `GameBox.setInHand` to swap in the openable shell and draw the back, cartridge
-  label and manual cover (freed when put back). Boxes on a `Shelf` cast no shadow: the shelf's instanced proxy does, on the
-  zone's shadow layer only.
+  label (or its photo) and manual cover (freed when put back). Boxes on a `Shelf` cast no shadow: the shelf's instanced proxy does, on the
+  zone's shadow layer only. Sizes are per copy (`catalog/media`, platform and region), never `platform.boxDimensions`.
+- **Media goes into its console**: a box in hand clicked on its console (or on the TV, which asks its `MediaDecks`) gives
+  up a copy of its media (`GameBox.takeMedia`), goes back to its shelf, and the media flies into the console's `MediaSlot`;
+  once seated the console plays it on the TV. It stays in (the box opens empty, `setMediaOut`) until ejected or replaced.
 - **Lights are switched by clicking them** (`SwitchableLamp`); playing a video never touches them. The drawn light count
   never changes within a set of zones (hide a lamp with `setShownKeepingLights`); decorative glows are `PooledLight`s.
 - **No z-fighting by construction**: materials from the palette, parts meeting by the joinery rules, flat things on a
@@ -356,10 +370,18 @@ api/                    Vercel functions wrapping the server handlers; vercel.js
 
 ## Data sources (key-less only)
 
-- libretro-thumbnails (GitHub raw, CORS `*`): `Named_Boxarts` (front), `Named_Snaps`, `Named_Titles`. No back or spine
-  exists anywhere key-less; they are generated. Filenames are No-Intro names with the characters `& * / : \` < > ? \ |`
+- libretro-thumbnails (GitHub raw, CORS `*`): `Named_Boxarts` (front), `Named_Snaps`, `Named_Titles`. Backs and
+  spines come from LaunchBox (below) and are generated when it has none. Filenames are No-Intro names with the characters `& * / : \` < > ? \ |`
   replaced by `_`; stored in `externalIds.libretroName`. Dev goes through `/api/art/<repo>/<folder>/<file>.png`
   (`server/artCache.ts`, disk cache `.cache/art/`, 404s as `.missing` markers for a week; delete the folder to refetch).
+- LaunchBox Games Database (key-less, no API: its search and images pages are parsed in `server/launchbox.ts`):
+  box backs, spines, cartridge photos and PS1 discs, picked by the copy's region (`catalog/media` `regionOf`; a back
+  or spine from its region, else North America <-> Europe, never across Japan; a cartridge or disc from anywhere
+  last). `/api/launchbox/<platform>/<name>?region=` answers a manifest of `/api/scan/<kind>/<uuid>.<ext>` URLs (our
+  proxy, `server/scanCache.ts`, WebP with alpha, backs and spines 1024 px). LaunchBox is asked one page a second
+  (`server/politeFetch`: retries, a circuit breaker answering 503 + Retry-After), lookups cached on disk
+  `.cache/launchbox/` a month (no match a week, stale served on error), images under `.cache/scans/`. The seed games'
+  art is baked into `public/boxart/` by `npm run bake-art` (same server code, same caches) and read first.
 - YouTube, no API key: `server/youtubeSearch.ts` fetches the public results page with a consent cookie and regex-parses
   `ytInitialData`. Fragile; keep all parsing in that one file.
 - Wikipedia (search API + Wikimedia pageviews, key-less, identifying User-Agent required): `server/fame.ts` turns a

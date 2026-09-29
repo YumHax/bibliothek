@@ -79,8 +79,9 @@ editor's "add" pane). Games are bought with coins; coins are won at the arcade:
    come from their table (`stallTalk`: the pride of the stall, the cheapest, a missing manual, a wishlist game, a
    sale just made, night), a clerk behind each desk, shoppers who never share a browse spot, keep right in the
    aisle and wait for the player in their way. After dark (the sky's `night`) all but `nightShoppers` go home (they walk
-   out by the door and fade there, `crowd.exit`; back in by it while the player looks elsewhere) and the murmur drops. Sound: `CrowdSound` (generated chatter, only while the player is in the hall), a
-   `TransistorRadio` on one stall (a generated pop station, louder up close, click to switch off), coins on a sale.
+   out by the door and fade there, `crowd.exit`; back in by it while the player looks elsewhere) and the murmur drops. Sound: `CrowdSound` (generated chatter plus a bustle from the stalls: crates rummaged, coins, a crate dragged,
+   `audio/marketBustle`; only while the player is in the hall, as busy as the crowd), a `TransistorRadio` on one stall
+   (a generated easy-listening station, louder up close, click to switch off, remembered: `KEYS.marketRadio`), coins on a sale.
 
 ## Numbers (`src/economy/pricing.ts`)
 

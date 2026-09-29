@@ -45,6 +45,13 @@ export interface SkyState {
   night: boolean;
   /** The weather (see `Weather`), 0..1 each: cloud over the sky, rain and snow falling, the ground wet or white. */
   cloudCover: number;
+  /**
+   * How much of the direct sun (or moon) gets through the weather, 0..1: all of it under a clear or
+   * fair sky, some through a cloudy one's gaps, none under an overcast, in fog, or while rain or snow
+   * falls. `lightIntensity` already carries it; the drawn sun and moon, the sunlit walls of the view
+   * and every sun patch follow it too, so a rainy day throws no sunlight anywhere.
+   */
+  sunThrough: number;
   rain: number;
   snow: number;
   wetness: number;
@@ -127,8 +134,23 @@ const FOG_NIGHT = new THREE.Color(0x2c2c30);
 const FLASH = new THREE.Color(0xe8eeff);
 const FLASH_SKY = new THREE.Color(0xb8c4ee);
 
+/**
+ * Where the direct sun gives out (`SkyState.sunThrough`): the cloud cover it starts to be hidden at
+ * and the one that closes the sky (a cloudy spell's 0.62 keeps about half, an overcast's 0.9 none),
+ * the rain or snow that puts it out, the fog that swallows it.
+ */
+const SUN_THROUGH = { cloud: [0.45, 0.85], fall: [0.02, 0.15], fog: [0.2, 0.7] } as const;
+
 const scratchA = new THREE.Color();
 const scratchB = new THREE.Color();
+
+/** How much of the direct sun the weather in `s` lets through, 0..1 (see `SkyState.sunThrough`). */
+function sunThroughOf(s: SkyState): number {
+  const cloud = 1 - THREE.MathUtils.smoothstep(s.cloudCover, SUN_THROUGH.cloud[0], SUN_THROUGH.cloud[1]);
+  const fall = 1 - THREE.MathUtils.smoothstep(Math.max(s.rain, s.snow), SUN_THROUGH.fall[0], SUN_THROUGH.fall[1]);
+  const fog = 1 - THREE.MathUtils.smoothstep(s.fog, SUN_THROUGH.fog[0], SUN_THROUGH.fog[1]);
+  return cloud * fall * fog;
+}
 
 function sampleStops(sunHeight: number, key: 'zenith' | 'horizon', out: THREE.Color): THREE.Color {
   const h = THREE.MathUtils.clamp(sunHeight, -1, 1);
@@ -173,6 +195,7 @@ export class DayNight implements Updatable {
     lightIntensity: 0,
     night: false,
     cloudCover: 0,
+    sunThrough: 1,
     rain: 0,
     snow: 0,
     wetness: 0,
@@ -323,6 +346,7 @@ export class DayNight implements Updatable {
     s.lightning = w?.lightning ?? 0;
     s.strikes = w?.strikes ?? 0;
     s.strikeDistance = w?.strikeDistance ?? 1000;
+    s.sunThrough = 1;
     if (!w) return;
     const grey = Math.pow(s.cloudCover, 1.3) * 0.85;
     const dark = 1 - 0.3 * Math.max(s.rain, s.snow * 0.6);
@@ -334,14 +358,17 @@ export class DayNight implements Updatable {
     s.horizonGlow *= 1 - 0.8 * s.cloudCover;
     s.daylight *= 1 - 0.25 * s.cloudCover * dark;
     s.ambient.lerp(GREY, 0.5 * grey);
-    s.lightIntensity *= 1 - 0.8 * Math.pow(s.cloudCover, 1.5);
-    // Fog washes the sky towards its own grey and softens the sun further.
+    // The sun's beams need a gap in the cloud: a closed sky, falling rain or snow, or thick fog let
+    // none through (no sun patch, no dust in the air, no shadows), a thin cloud dims them a little.
+    s.sunThrough = sunThroughOf(s);
+    s.lightIntensity *= s.sunThrough * (1 - 0.3 * s.cloudCover);
+    s.moonVisibility *= s.sunThrough;
+    // Fog washes the sky towards its own grey.
     if (s.fog > 0.01) {
       scratchA.lerpColors(FOG_NIGHT, FOG_DAY, dayness);
       s.horizon.lerp(scratchA, 0.8 * s.fog);
       s.zenith.lerp(scratchA, 0.45 * s.fog);
       s.horizonGlow *= 1 - 0.7 * s.fog;
-      s.lightIntensity *= 1 - 0.6 * s.fog;
       s.ambient.lerp(GREY, 0.4 * s.fog);
     }
     // A lightning flash lights the whole sky and, through the windows, the room.

@@ -23,7 +23,10 @@ const TOWNSFOLK_SECONDS = 2;
 const BADGE_SECONDS = 3;
 /** Bandits per stage; a stage pays seconds and speeds the town up. */
 const BANDITS_PER_STAGE = 8;
+/** What a stage pays, less by `STAGE_FADE` a stage after the first (never under `STAGE_MIN`): the town wins in the end. */
 const STAGE_SECONDS = 2;
+const STAGE_FADE = 0.25;
+const STAGE_MIN = 0.5;
 
 interface Target {
   spot: number;
@@ -40,8 +43,8 @@ interface Target {
  * the barrels; shoot them before they draw (a slow one pays 50, a quick one 80, chaining the
  * combo), or they fire back and a second goes. Townsfolk wander into the line of fire too:
  * shooting one costs two seconds and the combo. Bottles pay a little, the sheriff's star three
- * seconds. Six shots, then shoot off the screen to reload. Every eight bandits is a stage: two
- * seconds, faster draws, more of them at once. The gun aims where the player looks (the cabinet
+ * seconds. Six shots, then shoot off the screen to reload. Every eight bandits is a stage: seconds
+ * (two, a quarter less each stage after), faster draws, more of them at once. The gun aims where the player looks (the cabinet
  * fills `controls.aim`); Space or a click on the glass is the trigger.
  */
 export class NeonSheriff extends BaseGame {
@@ -215,7 +218,7 @@ export class NeonSheriff extends BaseGame {
     const spot = free[Math.floor(this.rand() * free.length)]!;
     const roll = this.rand();
     const kind: Kind = roll < 0.05 ? 'badge' : roll < 0.2 ? 'townsfolk' : roll < 0.3 ? 'bottle' : roll < 0.3 + Math.min(0.3, stage * 0.06) ? 'quick' : 'bandit';
-    const draw = Math.max(0.7, DRAW_TIME - (stage - 1) * 0.1) * (kind === 'quick' ? 0.65 : 1);
+    const draw = Math.max(0.55, DRAW_TIME - (stage - 1) * 0.1) * (kind === 'quick' ? 0.65 : 1);
     const life = kind === 'bandit' || kind === 'quick' ? draw : kind === 'badge' ? 1.1 : 1.6;
     this.targets.push({ spot, kind, age: 0, life, down: 0 });
   }
@@ -254,7 +257,7 @@ export class NeonSheriff extends BaseGame {
         this.bandits += 1;
         if (this.bandits % BANDITS_PER_STAGE === 0) {
           this.fx.pop(`STAGE ${this.stage}`, SCREEN_W / 2, SCREEN_H / 2 - 24, '#ffffff', 12);
-          this.addTime(STAGE_SECONDS, SCREEN_W / 2, SCREEN_H / 2);
+          this.addTime(Math.max(STAGE_MIN, STAGE_SECONDS - STAGE_FADE * (this.stage - 2)), SCREEN_W / 2, SCREEN_H / 2);
         }
       }
     }

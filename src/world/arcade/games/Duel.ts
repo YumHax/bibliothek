@@ -13,18 +13,18 @@ const SPEED_PER_SET = 0.12;
 const RALLY_SPEEDUP = 1.045;
 const MAX_RALLY_SPEED = 1.9;
 const RETURN_POINTS = 10;
-const GOAL_POINTS = 100;
+const GOAL_POINTS = 150;
 const GOAL_SECONDS = 3;
 const CONCEDE_SECONDS = 2;
 /** Goals per set; a new set pays seconds and speeds everything up. */
 const GOALS_PER_SET = 3;
 const SET_SECONDS = 2;
 /** The machine's (or the partner's) paddle: how fast it may move, how late it reacts, how far off it aims. */
-const OPPONENT = { speed: 140, speedPerSet: 12, error: 22 };
+const OPPONENT = { speed: 105, speedPerSet: 10, error: 24 };
 /** Player two only goes for the ball once it has crossed this far (a fraction of the court), else drifts back to the middle. */
-const OPPONENT_REACTS = 0.42;
+const OPPONENT_REACTS = 0.5;
 /** A return with fire held: a smash, faster and worth a little more. */
-const SMASH_SPEED = 1.3;
+const SMASH_SPEED = 1.35;
 const SMASH_POINTS = 10;
 const SERVE_DELAY = 0.8;
 
@@ -204,7 +204,7 @@ export class Duel extends BaseGame {
     const off = clamp((b.y - paddleY) / (PADDLE_H / 2), -1, 1);
     this.rally = Math.min(MAX_RALLY_SPEED, this.rally * RALLY_SPEEDUP);
     const speed = this.serveSpeed * this.rally * boost;
-    const angle = off * 0.9;
+    const angle = off * 1.0;
     b.vx = Math.cos(angle) * speed * dir;
     b.vy = Math.sin(angle) * speed;
     b.x = dir > 0 ? PADDLE_X + PADDLE_W + BALL / 2 + 0.5 : SCREEN_W - PADDLE_X - PADDLE_W - BALL / 2 - 0.5;

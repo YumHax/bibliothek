@@ -15,6 +15,7 @@ import { HueDrift } from './screen/HueDrift';
 import { QUALITY } from '@/graphics/quality';
 import { paint, timber } from '@/world/materials/palette';
 import { PROUD } from './props/joinery';
+import type { MediaDecks } from './media/MediaDeck';
 
 /** Height of the built-in cabinet the CRT sits on when nothing else carries it (see `mountOn`). */
 const OWN_CABINET_HEIGHT = 0.55;
@@ -77,6 +78,8 @@ export class Television extends THREE.Group implements Furniture, Updatable, Int
   private readonly glowScale: number;
   /** Whether the tube is lit (anything but off): the power-on and power-off animations run on its changes. */
   private powered = false;
+  /** The consoles under the set: a game goes into its console, not into the TV. */
+  private decks: MediaDecks | null = null;
 
   constructor(cssLayer: CssLayer, { listener, occlusion, screenWidth = 0.56 }: TelevisionOptions = {}) {
     super();
@@ -187,28 +190,51 @@ export class Television extends THREE.Group implements Furniture, Updatable, Int
     this.buttonMaterial.emissive.setHex(hovered ? 0x4a4a52 : 0x000000);
   }
 
+  /** The consoles plugged into it (the stand under it): a box in hand goes into its console, an empty hand switches on the last one in. */
+  setDecks(decks: MediaDecks): void {
+    this.decks = decks;
+  }
+
   label(player: PlayerState): string | null {
-    if (player.held) return player.held.playable ? `TV · play ${player.held.game.title}` : `TV · can’t play it, ${unplayableWhy(player.held)}`;
+    const held = player.held;
+    if (held) {
+      if (!held.playable) return `TV · can’t play it, ${unplayableWhy(held)}`;
+      const deck = this.decks?.forPlatform(held.game.platform);
+      if (deck?.busy) return `TV · the ${deck.deckName} is busy…`;
+      if (deck && deck.loaded?.game.id !== held.game.id) return `TV · put ${held.game.title} in the ${deck.deckName}`;
+      return `TV · play ${held.game.title}`;
+    }
     if (this.state === 'searching') return `TV · looking for a longplay of ${this.surface.searchingFor ?? 'the game'}…`;
     if (this.surface.tuning) return 'TV · tuning in…';
     if (this.state === 'error') return 'TV, no longplay found · switch off';
-    return this.state !== 'off' ? 'TV · switch off' : 'TV · bring a game box';
+    if (this.state !== 'off') return 'TV · switch off';
+    const last = this.decks?.lastLoaded()?.loaded;
+    return last ? `TV · switch on, ${last.game.title}` : 'TV · bring a game box';
   }
 
   labelPlacement(): LabelPlacement {
     return this.isPlaying ? 'edge' : 'crosshair';
   }
 
-  /** With a box in hand, plays its longplay; otherwise switches the set off, even while it is still searching. */
+  /**
+   * With a box in hand, its cartridge goes into its console under the set, which plays it (straight
+   * on the TV when no console takes it); with empty hands, switches the set off, even while it is
+   * still searching, or on again with the game last put in.
+   */
   activate(session: SessionActions): void {
     const box = session.held;
     if (box && !box.playable) {
       session.refuse(`${box.game.title} is ${unplayableWhy(box)}: no cartridge to put in.`);
     } else if (box) {
+      const deck = this.decks?.forPlatform(box.game.platform);
+      if (deck) return deck.insert(session, box);
       session.putBack();
       void session.playOn(this, box);
     } else if (this.state !== 'off') {
       session.stopScreen(this);
+    } else {
+      const last = this.decks?.lastLoaded()?.loaded;
+      if (last) void session.playOn(this, last);
     }
   }
 

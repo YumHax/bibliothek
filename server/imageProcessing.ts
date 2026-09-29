@@ -19,16 +19,16 @@ function loadSharp(): Promise<Sharp | null> {
 }
 
 /**
- * Downscales to at most `MAX_ART_SIZE` px and re-encodes as WebP, typically 5–10x smaller than
+ * Downscales to at most `maxSize` px (`MAX_ART_SIZE` by default) and re-encodes as WebP (alpha kept), typically 5–10x smaller than
  * the libretro PNG. Falls back to the untouched bytes when sharp is missing or the image is odd.
  */
-export async function shrinkArt(png: Buffer): Promise<StoredArt> {
-  const original: StoredArt = { body: png, contentType: 'image/png' };
+export async function shrinkArt(png: Buffer, maxSize = MAX_ART_SIZE): Promise<StoredArt> {
+  const original: StoredArt = { body: png, contentType: sniffType(png) };
   const sharp = await loadSharp();
   if (!sharp) return original;
   try {
     const body = await sharp(png)
-      .resize({ width: MAX_ART_SIZE, height: MAX_ART_SIZE, fit: 'inside', withoutEnlargement: true })
+      .resize({ width: maxSize, height: maxSize, fit: 'inside', withoutEnlargement: true })
       .webp({ quality: WEBP_QUALITY })
       .toBuffer();
     return { body, contentType: 'image/webp' };
@@ -36,4 +36,9 @@ export async function shrinkArt(png: Buffer): Promise<StoredArt> {
     console.warn('[art] could not process image, serving original:', err instanceof Error ? err.message : err);
     return original;
   }
+}
+
+/** PNG or JPEG, from the file's first bytes (a scan may be either). */
+export function sniffType(bytes: Buffer): string {
+  return bytes[0] === 0xff && bytes[1] === 0xd8 ? 'image/jpeg' : 'image/png';
 }

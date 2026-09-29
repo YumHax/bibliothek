@@ -220,14 +220,17 @@ export class Precipitation extends THREE.Group implements Furniture, Updatable {
   private readonly shelterWorld = new THREE.Box3();
   private readonly petals: THREE.Points | null = null;
   private readonly petalUniforms: Record<string, THREE.IUniform> | null = null;
+  private readonly splashes: boolean;
 
   /**
    * `shelters`: boxes (zone-local) nothing falls into: the building's sas seen through its open street
    * door, the awnings, the bus shelter, the kiosk (the first `MAX_SHELTERS`). `petals`: spring blossom
-   * blows about in dry weather (the trees are in flower).
+   * blows about in dry weather (the trees are in flower). `splashes`: false where the ground is not
+   * the zone's floor all round (a balcony high over the street: the rings would hang in the air).
    */
-  constructor(private readonly dayNight: DayNight, options: { shelters?: readonly THREE.Box3[]; petals?: boolean } = {}) {
+  constructor(private readonly dayNight: DayNight, options: { shelters?: readonly THREE.Box3[]; petals?: boolean; splashes?: boolean } = {}) {
     super();
+    this.splashes = options.splashes ?? true;
     this.name = 'Precipitation';
     this.shelters = (options.shelters ?? []).slice(0, MAX_SHELTERS).map((box) => box.clone());
     const shelterUniforms = (): Record<string, THREE.IUniform> => ({ shelterMin: { value: this.shelterMin }, shelterMax: { value: this.shelterMax } });
@@ -311,7 +314,7 @@ export class Precipitation extends THREE.Group implements Furniture, Updatable {
       (u.velocity!.value as THREE.Vector3).set(windX, -11, windX * 0.3);
       (u.color!.value as THREE.Color).setRGB(0.75, 0.79, 0.84).multiplyScalar(light);
     }
-    this.splash.visible = rainAmount > 0.05 && s.snowCover < 0.5;
+    this.splash.visible = this.splashes && rainAmount > 0.05 && s.snowCover < 0.5;
     if (this.splash.visible) {
       const u = this.splashUniforms;
       u.time!.value = this.time;

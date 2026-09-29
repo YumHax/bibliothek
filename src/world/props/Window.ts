@@ -59,6 +59,8 @@ const LIGHT_DISTANCE = 9;
 const LIGHT_HALF_ANGLE = THREE.MathUtils.degToRad(9.5);
 /** How far the sun's direction leans out of the wall's plane (sine of the angle) before it lights the room fully. */
 const SUN_GRAZE = 0.12;
+/** The weakest sun that still makes a patch worth lying in (the sun is 5 at its height; cloud and a low sun dim it). */
+const SUN_SPOT_MIN = 0.6;
 /** Soft light of the sky through the glass (a rect area light, `QUALITY.areaLights`): its brightness in full daylight. */
 const SKY_PANEL_INTENSITY = 1.6;
 /** Local z of the pane's reflection: just in front of the pane, behind the mullions' faces and any curtain. */
@@ -283,11 +285,11 @@ export class RoomWindow extends Prop implements Updatable, Interactable, Occupan
 
   /**
    * Where this window's sun patch lands on the floor (world), or null when it throws no sun right
-   * now (no sun light, sun behind the wall, curtains drawn, night) or the patch would fall more
+   * now (no sun light, sun behind the wall or clouds, curtains drawn, night) or the patch would fall more
    * than 3 m from the window. The caller checks the point against the room and its furniture.
    */
   sunSpotOnFloor(out: THREE.Vector3): THREE.Vector3 | null {
-    if (!this.light || !this.sky || this.sky.night || this.light.intensity <= 0) return null;
+    if (!this.light || !this.sky || this.sky.night || this.light.intensity < SUN_SPOT_MIN) return null;
     // `lightDir` points from the glass towards the sun (local frame); the rays travel the other way.
     const dir = this.lightDir;
     if (dir.y <= 0.02) return null;

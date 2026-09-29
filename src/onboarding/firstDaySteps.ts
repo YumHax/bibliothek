@@ -91,7 +91,7 @@ export const FIRST_DAY_STEPS: readonly FirstDayStep[] = [
   {
     id: 'shelf',
     todo: 'Find it on the shelf, watch it on the TV',
-    tips: { living: () => `It is on the shelf now. Pick it up, bring it to the TV and ${useVerbOn('the TV')} to watch it played.` },
+    tips: { living: () => `It is on the shelf now. Pick it up, bring it to its console under the TV and ${useVerbOn('the console')} to put it in.` },
   },
 ];
 

@@ -8,21 +8,26 @@ const ROWS = Math.floor((SCREEN_H - PLAY_TOP) / CELL);
 const TOP = SCREEN_H - ROWS * CELL;
 const START_LENGTH = 4;
 /** Cells per second at the start, and what every stage adds. */
-const START_SPEED = 9;
-const SPEED_PER_STAGE = 1.2;
-const MAX_SPEED = 20;
+const START_SPEED = 8;
+const SPEED_PER_STAGE = 0.9;
+const MAX_SPEED = 17;
+/** Pellets on the board at once: the next one is never across the whole board. */
+const PELLETS = 2;
+/** A crash: the seconds it costs, and how long the snake blinks before it sets off again, short. */
+const CRASH_SECONDS = 3;
+const CRASH_PAUSE = 0.7;
 /** Pellets per stage: a stage is faster and pays seconds. */
 const PELLETS_PER_STAGE = 6;
 const STAGE_SECONDS = 2;
 const PELLET_POINTS = 20;
-const PELLET_SECONDS = 0.6;
+const PELLET_SECONDS = 0.4;
 /** Every this many pellets a gold one shows up for a while: points and seconds. */
 const GOLD_EVERY = 5;
 const GOLD_POINTS = 100;
-const GOLD_SECONDS = 3;
+const GOLD_SECONDS = 2;
 const GOLD_LIFE = 4;
 /** Pellets eaten this close together keep the chain going. */
-const CHAIN_HOLD = 2.2;
+const CHAIN_HOLD = 2.5;
 const BODY = ['#39ff9e', '#2fe0c0', '#33c0ff', '#7a8cff', '#c98cff'];
 
 type Dir = 'left' | 'right' | 'up' | 'down';
@@ -35,23 +40,26 @@ interface Cell {
 }
 
 /**
- * NEON SNAKE: fifteen seconds and a snake that grows. Steer onto the pellets; each one pays
- * points and a little time, pellets eaten in quick succession chain the combo, a gold one now
- * and then pays three seconds before it fades. Every six pellets the snake speeds up and the
- * clock gets two seconds. Hitting a wall or yourself ends the play.
+ * NEON SNAKE: fifteen seconds and a snake that grows. Steer onto the pellets (two on the board at
+ * once); each one pays points and a little time, pellets eaten in quick succession chain the
+ * combo, a gold one now and then pays two seconds before it fades. Every six pellets the snake
+ * speeds up and the clock gets two seconds. Hitting a wall or yourself costs three seconds and the
+ * combo, and the snake starts again short from the middle: only the clock ends the play.
  */
 export class Snake extends BaseGame {
   readonly id = 'snake';
   readonly title = 'NEON SNAKE';
   readonly hint = 'WASD or arrows steer · eat the pellets, miss the walls';
-  readonly summary = '15 SEC · CHAIN PELLETS · GOLD = +3S';
+  readonly summary = '15 SEC · CHAIN PELLETS · CRASH = -3S';
 
   private body: Cell[] = [];
   private dir: Dir = 'right';
   private queued: Dir[] = [];
   private grow = 0;
   private stepTimer = 0;
-  private pellet: Cell = { x: 0, y: 0 };
+  private pellets: Cell[] = [];
+  /** Seconds the snake still blinks after a crash before it moves again. */
+  private crashed = 0;
   private gold: (Cell & { life: number }) | null = null;
   private eaten = 0;
 
@@ -60,6 +68,16 @@ export class Snake extends BaseGame {
   }
 
   protected begin(): void {
+    this.eaten = 0;
+    this.gold = null;
+    this.crashed = 0;
+    this.pellets = [];
+    this.startSnake();
+    while (this.pellets.length < PELLETS) this.pellets.push(this.freeCell());
+  }
+
+  /** A short snake in the middle row, heading right from the left third (the start, and after a crash). */
+  private startSnake(): void {
     const y = Math.floor(ROWS / 2);
     this.body = [];
     for (let i = 0; i < START_LENGTH; i++) this.body.push({ x: 8 - i, y });
@@ -67,9 +85,6 @@ export class Snake extends BaseGame {
     this.queued = [];
     this.grow = 0;
     this.stepTimer = 0;
-    this.eaten = 0;
-    this.gold = null;
-    this.pellet = this.freeCell();
   }
 
   protected tick(dt: number, controls: ArcadeControls): void {
@@ -84,8 +99,13 @@ export class Snake extends BaseGame {
       this.gold.life -= dt;
       if (this.gold.life <= 0) this.gold = null;
     }
+    if (this.crashed > 0) {
+      this.crashed -= dt;
+      if (this.crashed <= 0) this.startSnake();
+      return;
+    }
     this.stepTimer -= dt;
-    while (this.stepTimer <= 0 && this.live) {
+    while (this.stepTimer <= 0 && this.live && this.crashed <= 0) {
       this.stepTimer += 1 / this.speed;
       this.step();
     }
@@ -102,13 +122,14 @@ export class Snake extends BaseGame {
     // The pellet pulses; the gold one blinks as it runs out.
     const pulse = 2 + Math.sin(this.elapsed * 10);
     ctx.fillStyle = '#ff5fb0';
-    ctx.fillRect(this.pellet.x * CELL + 3 - pulse / 2, TOP + this.pellet.y * CELL + 3 - pulse / 2, 4 + pulse, 4 + pulse);
+    for (const p of this.pellets) ctx.fillRect(p.x * CELL + 3 - pulse / 2, TOP + p.y * CELL + 3 - pulse / 2, 4 + pulse, 4 + pulse);
     if (this.gold && (this.gold.life > 1.2 || Math.floor(this.gold.life * 8) % 2 === 0)) {
       ctx.fillStyle = '#ffd23a';
       ctx.fillRect(this.gold.x * CELL + 1, TOP + this.gold.y * CELL + 1, CELL - 2, CELL - 2);
     }
-    this.body.forEach((c, i) => {
-      ctx.fillStyle = i === 0 ? '#ffffff' : BODY[Math.floor(i / 3) % BODY.length]!;
+    const blink = this.crashed > 0 && Math.floor(this.crashed * 10) % 2 === 0;
+    if (!blink) this.body.forEach((c, i) => {
+      ctx.fillStyle = this.crashed > 0 ? '#ff5f5f' : i === 0 ? '#ffffff' : BODY[Math.floor(i / 3) % BODY.length]!;
       ctx.fillRect(c.x * CELL + 1, TOP + c.y * CELL + 1, CELL - 2, CELL - 2);
     });
     this.drawStage(ctx, `STAGE ${this.stage}`);
@@ -117,10 +138,10 @@ export class Snake extends BaseGame {
   /** Shortest safe path to the gold, else the pellet (breadth-first over the board); a lesser player strays. */
   autopilot(skill: number): ArcadeControls {
     const out = { left: false, right: false, up: false, down: false, fire: false, firePressed: false };
-    if (!this.live || this.queued.length) return out;
+    if (!this.live || this.queued.length || this.crashed > 0) return out;
     const head = this.body[0]!;
     const blocked = new Set(this.body.slice(0, -1).map((c) => c.y * COLS + c.x));
-    const goal = this.gold && skill > 0.5 ? this.gold : this.pellet;
+    const goal = this.gold && skill > 0.5 ? this.gold : this.nearestPellet(head);
     const first = this.firstStepTowards(head, goal, blocked);
     let pick: Dir | null = first;
     if (!pick || Math.random() > 0.9 + skill * 0.1) {
@@ -148,8 +169,7 @@ export class Snake extends BaseGame {
     const tailMoves = this.grow === 0;
     const hitsSelf = this.body.some((c, i) => c.x === cell.x && c.y === cell.y && !(tailMoves && i === this.body.length - 1));
     if (cell.x < 0 || cell.y < 0 || cell.x >= COLS || cell.y >= ROWS || hitsSelf) {
-      this.fx.flash('#ff5f5f', 0.15);
-      this.end('CRASH!');
+      this.crash();
       return;
     }
     this.body.unshift(cell);
@@ -158,7 +178,8 @@ export class Snake extends BaseGame {
 
     const px = cell.x * CELL + CELL / 2;
     const py = TOP + cell.y * CELL;
-    if (cell.x === this.pellet.x && cell.y === this.pellet.y) {
+    const eatenAt = this.pellets.findIndex((p) => p.x === cell.x && p.y === cell.y);
+    if (eatenAt >= 0) {
       this.grow += 2;
       this.eaten += 1;
       this.bumpCombo(CHAIN_HOLD);
@@ -170,7 +191,8 @@ export class Snake extends BaseGame {
         this.addTime(STAGE_SECONDS, SCREEN_W / 2, SCREEN_H / 2);
       }
       if (this.eaten % GOLD_EVERY === 0 && !this.gold) this.gold = { ...this.freeCell(), life: GOLD_LIFE };
-      this.pellet = this.freeCell();
+      this.pellets.splice(eatenAt, 1);
+      this.pellets.push(this.freeCell());
     } else if (this.gold && cell.x === this.gold.x && cell.y === this.gold.y) {
       this.gold = null;
       this.grow += 1;
@@ -184,9 +206,25 @@ export class Snake extends BaseGame {
   private freeCell(): Cell {
     for (let tries = 0; tries < 200; tries++) {
       const cell = { x: 1 + Math.floor(this.rand() * (COLS - 2)), y: 1 + Math.floor(this.rand() * (ROWS - 2)) };
-      if (!this.body.some((c) => c.x === cell.x && c.y === cell.y) && !(this.pellet && cell.x === this.pellet.x && cell.y === this.pellet.y)) return cell;
+      if (!this.body.some((c) => c.x === cell.x && c.y === cell.y) && !this.pellets.some((p) => p.x === cell.x && p.y === cell.y)) return cell;
     }
     return { x: 1, y: 1 };
+  }
+
+  /** A wall or the tail: seconds and the combo go, and the snake starts again short once it has blinked. */
+  private crash(): void {
+    this.crashed = CRASH_PAUSE;
+    this.breakCombo();
+    this.fx.flash('#ff5f5f', 0.15);
+    this.fx.shake(3, 0.2);
+    this.fx.pop('CRASH!', SCREEN_W / 2, SCREEN_H / 2 - 20, '#ff5f5f', 12);
+    this.addTime(-CRASH_SECONDS, SCREEN_W / 2, SCREEN_H / 2);
+  }
+
+  private nearestPellet(from: Cell): Cell {
+    let best = this.pellets[0]!;
+    for (const p of this.pellets) if (Math.abs(p.x - from.x) + Math.abs(p.y - from.y) < Math.abs(best.x - from.x) + Math.abs(best.y - from.y)) best = p;
+    return best;
   }
 
   private free(x: number, y: number, blocked: Set<number>): boolean {

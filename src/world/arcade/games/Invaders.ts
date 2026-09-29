@@ -16,8 +16,8 @@ const SHIP_H = 8;
 const SHIP_Y = SCREEN_H - 16;
 const SHIP_SPEED = 220;
 const SHOT_SPEED = 340;
-const FIRE_INTERVAL = 0.14;
-const MAX_SHOTS = 4;
+const FIRE_INTERVAL = 0.22;
+const MAX_SHOTS = 2;
 const ROW_POINTS = [25, 20, 15, 10, 5];
 const ROW_COLORS = ['#ff5f5f', '#ff7ad9', '#ffb347', '#7ee787', '#63b3ff'];
 const DIVER_POINTS = 100;
@@ -29,8 +29,8 @@ const SAUCER_POINTS = 100;
 const SAUCER_SECONDS = 3;
 const SAUCER_SPEED = 110;
 const SAUCER_EVERY = 6;
-/** Kills this close together keep the chain going. */
-const CHAIN_HOLD = 0.5;
+/** Kills this close together keep the chain going; a shot that hits nothing breaks it. */
+const CHAIN_HOLD = 1.5;
 
 interface Alien {
   col: number;
@@ -223,7 +223,10 @@ export class Invaders extends BaseGame {
   private updateShots(dt: number, alive: Alien[]): void {
     for (const shot of this.shots) shot.y -= SHOT_SPEED * dt;
     this.shots = this.shots.filter((shot) => {
-      if (shot.y < PLAY_TOP - 6) return false;
+      if (shot.y < PLAY_TOP - 6) {
+        this.breakCombo();
+        return false;
+      }
       if (this.saucer && Math.abs(shot.x - this.saucer.x) <= 10 && Math.abs(shot.y - this.saucer.y) <= 5) {
         this.bumpCombo(CHAIN_HOLD);
         this.addScore(SAUCER_POINTS, this.saucer.x, this.saucer.y + 10, '#ff5f5f');

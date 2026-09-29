@@ -1,6 +1,7 @@
 import type * as THREE from 'three';
 import type { Game } from '@/catalog/types';
 import { getPlatform } from '@/catalog/platforms';
+import { boxDimensionsOf } from '@/catalog/media';
 import { createCanvas, drawBarcode, drawImageCover, drawSeal, fitFontSize, roundRect, toTexture, wrapLines, FONT } from './canvasUtils';
 import { contrastText, css } from './palette';
 
@@ -29,7 +30,7 @@ export function createBackTexture(
   titleScreen: CanvasImageSource | null = null,
 ): THREE.CanvasTexture {
   const platform = getPlatform(game.platform);
-  const { width, height } = platform.boxDimensions;
+  const { width, height } = boxDimensionsOf(game);
   const w = WIDTH_PX;
   const h = Math.round((w * height) / width);
   const scale = Math.min(1, HEIGHT_PX / h);

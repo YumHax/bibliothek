@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import type { Zone } from '../zone/Zone';
 import type { BuildContext } from '../buildContext';
 import type { Platform, PlatformId } from '@/catalog/types';
-import { getPlatform } from '@/catalog/platforms';
+import { widestCaseOf } from '@/catalog/media';
 import type { StockItem } from '@/economy/StockItem';
 import type { MarketNews } from '@/economy/marketEvents';
 import type { MarketDayTheme } from '@/economy/marketDays';
@@ -11,6 +11,7 @@ import { BIN_WHERE, RIVAL_BUYING } from '@/economy/pricing';
 import type { SaleReaction } from '@/game/SessionActions';
 import { playBoxClack } from '@/audio/boxClack';
 import type { SkyState } from '../props/DayNight';
+import { HEAVY_RAIN } from '../weather/Weather';
 import type { Vendor } from '../people/Vendor';
 import type { BrowseSpot, Shopper } from '../people/Shopper';
 import { ForSaleBox } from './ForSaleBox';
@@ -59,8 +60,6 @@ export interface MarketFloorOptions {
 
 /** How loud the hall's murmur is by day and after dark (0..1). */
 const CROWD_LEVEL = { day: 1, night: 0.3, bigDay: 1.35 };
-/** Rain this hard keeps half the shoppers at home. */
-const RAIN_KEEPS_AWAY = 0.45;
 /** How keen the other shoppers are to buy, by day, in the rain, at night. */
 const KEENNESS = { day: 1, rain: 0.5, night: 0.3 };
 /** Chance a stallholder says something when a box of theirs is picked up (every other move always gets a word). */
@@ -100,7 +99,7 @@ export class MarketFloor {
     this.news = marketDay.news();
     this.heard = this.news.filter((n) => n.inDays > 0 || n.kind !== 'clearance');
     // The stock is drawn to fit: never a copy on sale that is not on a table.
-    market.fitTo((id) => this.stallOf(id).stall.capacityFor(getPlatform(id).boxDimensions.width), BargainBin.capacity * options.bins.length);
+    market.fitTo((id) => this.stallOf(id).stall.capacityFor(widestCaseOf(id).width), BargainBin.capacity * options.bins.length);
 
     // The sky: after dark (and in heavy rain) shoppers go home and the murmur drops.
     this.wet = this.raining();
@@ -247,7 +246,7 @@ export class MarketFloor {
   }
 
   private raining(): boolean {
-    return this.options.context.sky.weather.state.rain >= RAIN_KEEPS_AWAY;
+    return this.options.context.sky.weather.state.rain >= HEAVY_RAIN;
   }
 
   private stallOf(platform: PlatformId): FloorStall {
@@ -276,7 +275,7 @@ export class MarketFloor {
     for (const entry of stalls) {
       const { platform, stall } = entry;
       const onTable = items.filter((item) => item.source !== 'bin' && item.game.platform === platform.id);
-      const slots = stall.layout(platform.boxDimensions.width, onTable.length);
+      const slots = stall.layout(widestCaseOf(platform.id).width, onTable.length);
       if (slots.length < onTable.length) console.warn(`[market] ${onTable.length - slots.length} ${platform.shortName} copies do not fit the stall`);
       slots.forEach((slot, i) => this.display(onTable[i]!, slot, entry));
       this.stallStock += slots.length;

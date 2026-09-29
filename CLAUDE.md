@@ -35,6 +35,7 @@ npm run build       # typecheck + production bundle
 | --- | --- |
 | Add / move a plant, lamp, rug, picture, table, new prop | skill `add-decor` (+ `docs/props.md`) |
 | Add games or a platform | skill `add-games` |
+| Box sizes, cases, cartridges and discs, how boxes open, putting a game in its console | `docs/media.md` |
 | New key, click behaviour, feature, HUD element | skill `add-interaction` |
 | A new room, corridor, the outside (zones, loading/unloading) | skill `add-room` (+ `docs/zones.md`) |
 | Money, prices, arcade cabinets and their games, market stalls, going out (teleport) | `docs/economy.md` |

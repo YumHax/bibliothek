@@ -389,9 +389,9 @@ export class Outdoors {
     const brightness = THREE.MathUtils.lerp(0.6, 1, THREE.MathUtils.smoothstep(sky.sunHeight, -0.05, 0.25)) * (1 - 0.22 * sky.cloudCover);
     (u.sceneTint.value as THREE.Color)
       .setHex(0xffffff)
-      .lerp(sky.lightColor, sky.night ? 0 : 0.45 * sunLow * (1 - sky.cloudCover))
+      .lerp(sky.lightColor, sky.night ? 0 : 0.45 * sunLow * sky.sunThrough)
       .multiplyScalar(brightness);
-    u.sunShadow.value = THREE.MathUtils.smoothstep(sky.sunHeight, 0, 0.2) * (1 - 0.9 * sky.cloudCover);
+    u.sunShadow.value = THREE.MathUtils.smoothstep(sky.sunHeight, 0, 0.2) * sky.sunThrough;
     u.wetness.value = sky.wetness;
     u.snowCover.value = sky.snowCover;
     u.rain.value = sky.rain;
@@ -420,7 +420,8 @@ export class Outdoors {
     (u.sunColor.value as THREE.Color).copy(sky.lightColor);
     if (sky.night) (u.sunColor.value as THREE.Color).setHex(0xff6a26);
     u.sunLow.value = sunLow;
-    u.sunVisibility.value = THREE.MathUtils.smoothstep(sky.sunHeight, -0.16, -0.06);
+    // Behind a closed sky the sun is not drawn at all, not even as a glow (`SkyState.sunThrough`).
+    u.sunVisibility.value = THREE.MathUtils.smoothstep(sky.sunHeight, -0.16, -0.06) * sky.sunThrough;
     this.direction(sky.moonElevation, sky.moonAzimuth, u.moonDir.value as THREE.Vector3);
     this.direction(sky.moonElevation + MOON_SHADOW_OFFSET.pitch, sky.moonAzimuth + MOON_SHADOW_OFFSET.yaw, u.moonShadowDir.value as THREE.Vector3);
     u.moonVisibility.value = sky.moonVisibility;

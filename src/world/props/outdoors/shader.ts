@@ -639,11 +639,14 @@ export const fragmentShader = /* glsl */ `
     if (snow > 0.01) color = mix(color, mix(SNOW * sceneTint, SNOW * 0.3, nightness), snowFlakes(d) * 0.85 * snow);
     float petalFall = petals * smoothstep(0.1, 0.5, wind) * (1.0 - rain) * (1.0 - nightness);
     if (petalFall > 0.01) color = mix(color, vec3(0.98, 0.78, 0.84) * sceneTint, petalFlakes(d) * 0.9 * petalFall);
+    // No glass in the open air (the balcony's surround, OPEN_AIR): no drops on it either.
+    #ifndef OPEN_AIR
     if (paneWet > 0.01) {
       vec2 drop = paneDrops(vWorld);
       color = mix(color, color * 0.72 + airLight * 0.25, drop.x * 0.8);
       color += airLight * drop.y * 0.6;
     }
+    #endif
 
     gl_FragColor = vec4(color, 1.0);
     #include <tonemapping_fragment>

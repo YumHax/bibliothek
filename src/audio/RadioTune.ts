@@ -3,34 +3,51 @@ import { whiteNoise } from './noise';
 import { SpatialOut } from './spatial';
 
 /** Loudness at volume 1, right next to the set (linear). */
-const MASTER = 0.16;
+const MASTER = 0.13;
 /** How far ahead notes are put on the audio clock (s); `update` must run more often than that. */
 const LOOKAHEAD = 0.3;
-/** Chord progressions, as semitones above the key's root, one chord per bar. */
-const PROGRESSIONS = [
-  [[0, 4, 7], [9, 12, 16], [5, 9, 12], [7, 11, 14]],
-  [[0, 4, 7], [7, 11, 14], [9, 12, 16], [5, 9, 12]],
-  [[9, 12, 16], [5, 9, 12], [0, 4, 7], [7, 11, 14]],
-  [[0, 4, 7], [5, 9, 12], [0, 4, 7], [7, 11, 14]],
-  [[0, 4, 7], [4, 7, 11], [5, 9, 12], [7, 11, 14]],
-  [[5, 9, 12], [7, 11, 14], [4, 7, 11], [9, 12, 16]],
-  [[0, 4, 7], [2, 5, 9], [5, 9, 12], [7, 11, 14]],
+
+/** A chord: its bass (semitones above the key's root) and a rootless four-note voicing above it (a jazz pianist's left hand). */
+interface Chord {
+  bass: number;
+  notes: number[];
+}
+const I: Chord = { bass: 0, notes: [4, 7, 11, 14] }; // maj9
+const II: Chord = { bass: 2, notes: [5, 9, 12, 16] }; // m9
+const III: Chord = { bass: 4, notes: [2, 7, 11, 14] }; // m7
+const IV: Chord = { bass: 5, notes: [4, 7, 9, 12] }; // maj9
+const V: Chord = { bass: 7, notes: [5, 9, 11, 16] }; // 13
+const VI: Chord = { bass: 9, notes: [7, 11, 12, 16] }; // m9
+/** Progressions, one chord per bar, each leading back to its start. */
+const PROGRESSIONS: Chord[][] = [
+  [I, VI, II, V],
+  [II, V, I, VI],
+  [IV, III, II, V],
+  [I, IV, III, VI],
+  [VI, II, V, I],
+  [IV, V, III, VI],
 ];
-/** Major pentatonic, for the tune's passing notes. */
-const PENTATONIC = [0, 2, 4, 7, 9, 12, 14, 16];
+/** The major scale over an octave and a half, for the vibraphone's tune. */
+const SCALE = [0, 2, 4, 5, 7, 9, 11, 12, 14, 16, 17, 19];
 const BARS_PER_SONG = 16;
+/** Tempo range (bpm) of the station: easy listening, never a dance floor. */
+const BPM = { min: 78, max: 100 };
+/** How late the offbeat eighths fall (share of an eighth): a light swing. */
+const SWING = 0.16;
 /** Between two songs: the last one fades over its final quarter bar, then half a bar of hiss only (eighth notes). */
 const GAP_STEPS = 4;
-/** Each song's hook: a two-bar motif (eighth notes) heard on the first two bars of every four. */
+/** Each song's hook: a two-bar phrase (eighth notes), played on the first two bars of every four; the other two breathe. */
 const MOTIF_STEPS = 16;
-/** Share of the eighth notes that carry a tune note. */
-const NOTE_CHANCE = 0.72;
+/** Share of the hook's eighths that carry a note. */
+const NOTE_CHANCE = 0.42;
+/** The vibraphone's tremolo: its rate (Hz) and depth (share of the level). */
+const TREMOLO = { hz: 5.2, depth: 0.28 };
 
-/** One eighth of the tune: a pentatonic degree held short or long, or a rest (null). */
+/** One eighth of the tune: a scale degree held short or long, or a rest (null). */
 type TuneNote = { degree: number; long: boolean } | null;
-/** A tiny speaker: no lows, no highs. */
-const BAND = { low: 380, high: 2800 };
-const HISS = 0.02;
+/** A small speaker: not much low end, no highs. */
+const BAND = { low: 200, high: 3600 };
+const HISS = 0.012;
 /** How far the music dips under the announcer (dB), and how fast it goes down and comes back (s). */
 const DUCK_DB = 8;
 const DUCK_FALL = 0.25;
@@ -40,11 +57,12 @@ const JINGLE = [72, 76, 79, 84];
 const JINGLE_STEP = 0.14;
 
 /**
- * A cheap transistor radio playing an endless stream of forgettable pop: a square-wave tune over
- * chords, a bass and a drum machine, all generated and squeezed through a tinny band with some
- * hiss. A new "song" (key, tempo, progression, a two-bar hook it keeps coming back to) every sixteen
- * bars, with a short fade and half a bar of hiss between two. The owner sets `setVolume`
- * from the listener's distance and calls `update` every frame to keep the notes coming.
+ * A cheap transistor radio on an easy-listening station: a lounge combo of electric piano chords
+ * (jazzy, rootless voicings), a walking bass, brushes on a snare and a vibraphone tune, all
+ * generated and heard through a small speaker with a little hiss. A new "song" (key, tempo,
+ * progression, a two-bar hook it keeps coming back to) every sixteen bars, with a short fade and
+ * half a bar of hiss between two. The owner sets `setVolume` from the listener's distance and
+ * calls `update` every frame to keep the notes coming.
  */
 export class RadioTune {
   private ctx: AudioContext | null = null;
@@ -52,6 +70,9 @@ export class RadioTune {
   /** The music's own gain under the announcer (`duck`), and the jingle's way in, past it. */
   private music: GainNode | null = null;
   private voiceIn: GainNode | null = null;
+  /** The vibraphone's way into the song, through its tremolo. */
+  private vibes: GainNode | null = null;
+  private tremolo: OscillatorNode | null = null;
   private spatialOut: SpatialOut | null = null;
   private readonly spatial = { pan: 0, walls: 0 };
   private hiss: AudioBufferSourceNode | null = null;
@@ -60,8 +81,7 @@ export class RadioTune {
   private volume = 0;
   private next = 0;
   private step = 0;
-  private song = { root: 57, step: 0.28, progression: PROGRESSIONS[0]!, bars: 0, motif: makeMotif() };
-  private note = 4;
+  private song = { root: 53, step: 60 / 88 / 2, progression: PROGRESSIONS[0]!, bars: 0, motif: makeMotif() };
   /** The song's own gain, ahead of `music`: faded out at a song's end, back up after the gap. */
   private songGain: GainNode | null = null;
   /** Eighth notes of silence left before the next song starts. */
@@ -167,6 +187,9 @@ export class RadioTune {
     this.on = false;
     this.hiss?.stop();
     this.hiss = null;
+    this.tremolo?.stop();
+    this.tremolo = null;
+    this.vibes = null;
     this.out?.disconnect();
     this.out = null;
     this.music = null;
@@ -184,8 +207,8 @@ export class RadioTune {
 
   private newSong(): void {
     this.song = {
-      root: 55 + Math.floor(Math.random() * 7),
-      step: 60 / (92 + Math.random() * 40) / 2,
+      root: 50 + Math.floor(Math.random() * 8),
+      step: 60 / (BPM.min + Math.random() * (BPM.max - BPM.min)) / 2,
       progression: PROGRESSIONS[Math.floor(Math.random() * PROGRESSIONS.length)]!,
       bars: 0,
       motif: makeMotif(),
@@ -193,32 +216,47 @@ export class RadioTune {
     this.step = 0;
   }
 
-  /** One eighth note: drums, bass on the beat, the tune (with rests), a chord stab on the offbeats. */
-  private playStep(ctx: AudioContext, out: AudioNode, t: number): void {
+  /**
+   * One eighth note (the offbeats a touch late): brushes on every eighth, a soft kick, a rim click,
+   * the bass walking the chord, the piano on the bar's first beat and pushed before the third, the
+   * vibraphone's hook on the first two bars of every four.
+   */
+  private playStep(ctx: AudioContext, out: AudioNode, t0: number): void {
     const inBar = this.step % 8;
-    const chord = this.song.progression[Math.floor(this.step / 8) % this.song.progression.length]!;
-    const { root, step } = this.song;
-    if (inBar % 4 === 0) this.kick(ctx, out, t);
-    if (inBar % 4 === 2) this.noiseHit(ctx, out, t, 1800, 0.12, 0.35);
-    this.noiseHit(ctx, out, t + (inBar % 2 ? 0 : step / 2), 7000, 0.03, 0.08);
-    if (inBar % 2 === 0) this.tone(ctx, out, 'triangle', midi(root - 24 + chord[0]! + (inBar === 6 ? 7 : 0)), t, step * 1.8, 0.5);
-    else for (const n of chord) this.tone(ctx, out, 'sawtooth', midi(root + n), t, step * 0.5, 0.05);
-    // The hook on the first two bars of every four, a random walk on the others.
-    const hook = this.song.bars % 4 < 2;
-    let note: TuneNote;
-    if (hook) note = this.song.motif[(this.song.bars % 2) * 8 + inBar] ?? null;
-    else {
-      this.note = walk(this.note);
-      note = Math.random() < NOTE_CHANCE ? { degree: this.note, long: Math.random() < 0.3 } : null;
-    }
-    if (note) {
-      let pitch = PENTATONIC[note.degree]!;
-      // Pulled towards the chord on the beat, so the hook still fits when the chord under it changes.
-      if (inBar % 4 === 0) pitch = chord.reduce((best, c) => (Math.abs(c - pitch) < Math.abs(best - pitch) ? c : best), chord[0]!);
-      this.tone(ctx, out, 'square', midi(root + 12 + pitch), t, step * (note.long ? 1.9 : 0.9), 0.12);
-    }
+    const bar = Math.floor(this.step / 8);
+    const { root, step, progression } = this.song;
+    const chord = progression[bar % progression.length]!;
+    const nextChord = progression[(bar + 1) % progression.length]!;
+    const t = inBar % 2 ? t0 + step * SWING : t0;
+
+    // Brushes: a swish on each eighth, leaned on the backbeat; a soft kick and a rim click.
+    const backbeat = inBar === 2 || inBar === 6;
+    this.noiseHit(ctx, out, t, 4200, backbeat ? 0.2 : 0.09, backbeat ? 0.09 : inBar % 2 ? 0.035 : 0.05, 0.012);
+    if (inBar === 0 || inBar === 3) this.kick(ctx, out, t, inBar === 0 ? 0.32 : 0.2);
+    if (inBar === 6 && Math.random() < 0.6) this.noiseHit(ctx, out, t, 1900, 0.025, 0.07, 0);
+
+    // The bass: the root, the fifth on the third beat, sometimes a step into the next chord.
+    const bassNote = root - 12;
+    if (inBar === 0) this.pluck(ctx, out, 'triangle', midi(bassNote + chord.bass), t, step * 3.2, 0.34);
+    else if (inBar === 4) this.pluck(ctx, out, 'triangle', midi(bassNote + chord.bass + (Math.random() < 0.7 ? 7 : 12)), t, step * 2.6, 0.28);
+    else if (inBar === 7 && Math.random() < 0.45) this.pluck(ctx, out, 'triangle', midi(bassNote + nextChord.bass - 1), t, step * 0.9, 0.22);
+
+    // The piano: the chord on one, pushed again on the and of two now and then.
+    if (inBar === 0) for (const n of chord.notes) this.electricPiano(ctx, out, midi(root + n), t + Math.random() * 0.012, step * 5, 0.05);
+    else if (inBar === 3 && Math.random() < 0.5) for (const n of chord.notes) this.electricPiano(ctx, out, midi(root + n), t + Math.random() * 0.01, step * 2, 0.032);
+
+    // The vibraphone: the hook on the first two bars of every four, the others left to the piano.
+    const vibes = this.vibes;
+    if (!vibes || this.song.bars % 4 >= 2) return;
+    const note = this.song.motif[(this.song.bars % 2) * 8 + inBar] ?? null;
+    if (!note) return;
+    let pitch = SCALE[note.degree]! + 12;
+    // Pulled to the chord on the beat, so the hook still fits when the chord under it changes.
+    if (inBar % 2 === 0) pitch = nearestChordTone(pitch, chord);
+    this.vibraphone(ctx, vibes, midi(root + pitch), t, step * (note.long ? 4 : 2), 0.13);
   }
 
+  /** A sustained tone (the jingle's bells): up in 10 ms, held, let go. */
   private tone(ctx: AudioContext, out: AudioNode, type: OscillatorType, frequency: number, t: number, length: number, level: number): void {
     const osc = ctx.createOscillator();
     osc.type = type;
@@ -232,32 +270,96 @@ export class RadioTune {
     osc.stop(t + length * 1.6);
   }
 
-  private kick(ctx: AudioContext, out: AudioNode, t: number): void {
+  /** A plucked note (the bass): a quick attack, then a fall over `length`. */
+  private pluck(ctx: AudioContext, out: AudioNode, type: OscillatorType, frequency: number, t: number, length: number, level: number): void {
     const osc = ctx.createOscillator();
-    osc.frequency.setValueAtTime(160, t);
-    osc.frequency.exponentialRampToValueAtTime(50, t + 0.12);
+    osc.type = type;
+    osc.frequency.value = frequency;
     const env = ctx.createGain();
-    env.gain.setValueAtTime(0.9, t);
-    env.gain.exponentialRampToValueAtTime(0.001, t + 0.18);
+    env.gain.setValueAtTime(0, t);
+    env.gain.linearRampToValueAtTime(level, t + 0.012);
+    env.gain.setTargetAtTime(0, t + 0.012, length * 0.35);
+    osc.connect(env).connect(out);
+    osc.start(t);
+    osc.stop(t + length * 1.5);
+  }
+
+  /** An electric piano's note: a sine frequency-modulated by its own pitch, bright on the strike and mellowing as it rings. */
+  private electricPiano(ctx: AudioContext, out: AudioNode, frequency: number, t: number, length: number, level: number): void {
+    const carrier = ctx.createOscillator();
+    carrier.frequency.value = frequency;
+    const modulator = ctx.createOscillator();
+    modulator.frequency.value = frequency;
+    const index = ctx.createGain();
+    index.gain.setValueAtTime(frequency * 1.4, t);
+    index.gain.setTargetAtTime(frequency * 0.15, t, 0.12);
+    modulator.connect(index).connect(carrier.frequency);
+    const env = ctx.createGain();
+    env.gain.setValueAtTime(0, t);
+    env.gain.linearRampToValueAtTime(level, t + 0.006);
+    env.gain.setTargetAtTime(level * 0.45, t + 0.006, 0.25);
+    env.gain.setTargetAtTime(0, t + length * 0.8, length * 0.15);
+    carrier.connect(env).connect(out);
+    const stop = t + length * 1.4;
+    carrier.start(t);
+    modulator.start(t);
+    carrier.stop(stop);
+    modulator.stop(stop);
+  }
+
+  /** A vibraphone's bar: a pure tone with a faint fourth partial that dies first, ringing out long. */
+  private vibraphone(ctx: AudioContext, out: AudioNode, frequency: number, t: number, length: number, level: number): void {
+    const env = ctx.createGain();
+    env.gain.setValueAtTime(0, t);
+    env.gain.linearRampToValueAtTime(level, t + 0.004);
+    env.gain.setTargetAtTime(0, t + 0.004, length * 0.4);
+    env.connect(out);
+    const stop = t + length * 1.8;
+    const body = ctx.createOscillator();
+    body.frequency.value = frequency;
+    body.connect(env);
+    body.start(t);
+    body.stop(stop);
+    const partial = ctx.createOscillator();
+    partial.frequency.value = frequency * 4;
+    const partialGain = ctx.createGain();
+    partialGain.gain.setValueAtTime(0.25, t);
+    partialGain.gain.setTargetAtTime(0, t, 0.05);
+    partial.connect(partialGain).connect(env);
+    partial.start(t);
+    partial.stop(t + 0.4);
+  }
+
+  private kick(ctx: AudioContext, out: AudioNode, t: number, level: number): void {
+    const osc = ctx.createOscillator();
+    osc.frequency.setValueAtTime(110, t);
+    osc.frequency.exponentialRampToValueAtTime(48, t + 0.1);
+    const env = ctx.createGain();
+    env.gain.setValueAtTime(level, t);
+    env.gain.exponentialRampToValueAtTime(0.001, t + 0.16);
     osc.connect(env).connect(out);
     osc.start(t);
     osc.stop(t + 0.2);
   }
 
-  private noiseHit(ctx: AudioContext, out: AudioNode, t: number, frequency: number, length: number, level: number): void {
+  /** A burst of band-passed noise: a brush's swish (with an `attack`, s) or a rim's click (none). */
+  private noiseHit(ctx: AudioContext, out: AudioNode, t: number, frequency: number, length: number, level: number, attack: number): void {
     if (!this.noise) return;
     const source = ctx.createBufferSource();
     source.buffer = this.noise;
     const band = ctx.createBiquadFilter();
     band.type = 'bandpass';
     band.frequency.value = frequency;
-    band.Q.value = 0.8;
+    band.Q.value = attack > 0 ? 0.7 : 5;
     const env = ctx.createGain();
-    env.gain.setValueAtTime(level, t);
-    env.gain.exponentialRampToValueAtTime(0.001, t + length);
+    if (attack > 0) {
+      env.gain.setValueAtTime(0.0001, t);
+      env.gain.exponentialRampToValueAtTime(level, t + attack);
+    } else env.gain.setValueAtTime(level, t);
+    env.gain.exponentialRampToValueAtTime(0.0001, t + attack + length);
     source.connect(band).connect(env).connect(out);
     source.start(t, Math.random() * 0.5);
-    source.stop(t + length + 0.02);
+    source.stop(t + attack + length + 0.02);
   }
 
   private build(): AudioContext {
@@ -266,7 +368,7 @@ export class RadioTune {
     this.ctx = ctx;
     const out = ctx.createGain();
     out.gain.value = 0;
-    // The speaker: band-limited and a little driven.
+    // The speaker: band-limited and barely driven.
     const high = ctx.createBiquadFilter();
     high.type = 'highpass';
     high.frequency.value = BAND.low;
@@ -290,6 +392,19 @@ export class RadioTune {
     this.music = music;
     this.voiceIn = voiceIn;
 
+    // The vibraphone's tremolo: its gain wobbled around 1 by a slow sine.
+    const vibes = ctx.createGain();
+    vibes.gain.value = 1 - TREMOLO.depth / 2;
+    const tremolo = ctx.createOscillator();
+    tremolo.frequency.value = TREMOLO.hz;
+    const depth = ctx.createGain();
+    depth.gain.value = TREMOLO.depth / 2;
+    tremolo.connect(depth).connect(vibes.gain);
+    tremolo.start();
+    vibes.connect(songGain);
+    this.vibes = vibes;
+    this.tremolo = tremolo;
+
     this.noise = whiteNoise(ctx, 1);
     const hiss = ctx.createBufferSource();
     hiss.buffer = this.noise;
@@ -303,20 +418,40 @@ export class RadioTune {
   }
 }
 
-/** One step of the tune's random walk on the scale. */
+/** One step of the tune's random walk on the scale: mostly a step, sometimes a leap, never off the ends. */
 function walk(degree: number): number {
-  return Math.max(0, Math.min(PENTATONIC.length - 1, degree + Math.round((Math.random() - 0.5) * 3)));
+  const move = Math.random() < 0.75 ? (Math.random() < 0.5 ? -1 : 1) : Math.round((Math.random() - 0.5) * 6);
+  return Math.max(0, Math.min(SCALE.length - 1, degree + move));
 }
 
-/** A song's two-bar hook: the same random walk, drawn once and repeated. */
+/** A song's two-bar hook: a phrase that starts on the beat, walks the scale and ends on a long note. */
 function makeMotif(): TuneNote[] {
   const motif: TuneNote[] = [];
-  let degree = 2 + Math.floor(Math.random() * 4);
+  let degree = 2 + Math.floor(Math.random() * 5);
   for (let i = 0; i < MOTIF_STEPS; i++) {
     degree = walk(degree);
-    motif.push(Math.random() < NOTE_CHANCE || i % 8 === 0 ? { degree, long: Math.random() < 0.3 } : null);
+    const sounded = i === 0 || (i < MOTIF_STEPS - 4 && Math.random() < NOTE_CHANCE);
+    motif.push(sounded ? { degree, long: Math.random() < 0.35 } : null);
   }
+  // The phrase comes to rest on the second bar's third beat, held.
+  motif[MOTIF_STEPS - 4] = { degree: [0, 2, 4, 7][Math.floor(Math.random() * 4)]!, long: true };
   return motif;
+}
+
+/** The note of `chord` (its voicing or its bass, in any octave) nearest to `pitch` (semitones above the root). */
+function nearestChordTone(pitch: number, chord: Chord): number {
+  let best = pitch;
+  let distance = Infinity;
+  for (const tone of [chord.bass, ...chord.notes]) {
+    const pc = tone % 12;
+    const candidate = pc + 12 * Math.round((pitch - pc) / 12);
+    const d = Math.abs(candidate - pitch);
+    if (d < distance) {
+      distance = d;
+      best = candidate;
+    }
+  }
+  return best;
 }
 
 function midi(note: number): number {
@@ -328,7 +463,7 @@ function softClip(): Float32Array<ArrayBuffer> {
   const curve = new Float32Array(n);
   for (let i = 0; i < n; i++) {
     const x = (i / (n - 1)) * 2 - 1;
-    curve[i] = Math.tanh(2 * x) / Math.tanh(2);
+    curve[i] = Math.tanh(1.3 * x) / Math.tanh(1.3);
   }
   return curve;
 }

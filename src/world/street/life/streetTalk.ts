@@ -3,6 +3,7 @@ import type { StockItem } from '@/economy/StockItem';
 import type { MarketDayTheme } from '@/economy/marketDays';
 import type { ScoreEntry } from '@/economy/rivals';
 import type { SkyState } from '../../props/DayNight';
+import { HEAVY_RAIN } from '../../weather/Weather';
 
 export interface StreetTalkOptions {
   /** The sky right now: the time, the weather. */
@@ -61,7 +62,7 @@ function candidates({ sky, market, marketDay, games, scores }: StreetTalkOptions
   else if (s.hours < 19) lines.push('The kids come out of school soon: the arcade fills up.', 'Afternoon! Busy day?');
   else lines.push('Evening. The bars are filling up.', 'The shops shut soon, mind.');
   // The weather.
-  if (s.rain > 0.4) lines.push('Some weather, eh? Forgot my umbrella again.', 'The flea market gets the dealers on rainy days: they hate getting wet.');
+  if (s.rain >= HEAVY_RAIN) lines.push('Some weather, eh? Forgot my umbrella again.', 'The flea market gets the dealers on rainy days: they hate getting wet.');
   else if (s.rain > 0.05) lines.push('Only a drizzle. It never stops the market.');
   if (s.snow > 0.1 || s.snowCover > 0.3) lines.push('Snow! Mind the pavement, it’s slippery.', 'Perfect weather to stay in with a longplay.');
   if (s.fog > 0.4) lines.push('Can’t see the end of the street in this fog.');

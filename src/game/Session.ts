@@ -79,7 +79,11 @@ export class Session implements SessionActions, SessionHost {
     this.routes = [this.modals, deaf, this.arcade, photo, this.counter, this.hands, this.browse, new CatCare(parts, this), this.seating];
 
     const { interactor, inspector, player, search } = parts;
-    interactor.ignore = (item) => item === inspector.current; // the carried box must not block the ray
+    // The carried box must not block the ray, nor its wrapper (a market copy's `ForSaleBox` owns the box's hitbox).
+    interactor.ignore = (item) => {
+      const held = inspector.current;
+      return held !== null && (item === held || item.hitboxes.includes(held));
+    };
     interactor.onHoverChange((item) => this.onHover(item));
     interactor.onSelect((item) => item.activate(this));
     inspector.onLookEnabledChange((enabled) => (player.controls.enabled = enabled));

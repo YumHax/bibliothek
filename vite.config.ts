@@ -4,9 +4,10 @@ import { youtubeSearchApi } from './server/youtubeSearchPlugin';
 import { artCacheApi } from './server/artCachePlugin';
 import { libretroIndexApi } from './server/libretroIndexPlugin';
 import { fameApi } from './server/famePlugin';
+import { launchBoxApi } from './server/launchboxPlugin';
 
 export default defineConfig({
-  plugins: [youtubeSearchApi(), artCacheApi(), libretroIndexApi(), fameApi()],
+  plugins: [youtubeSearchApi(), artCacheApi(), libretroIndexApi(), fameApi(), launchBoxApi()],
   resolve: {
     alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) },
   },

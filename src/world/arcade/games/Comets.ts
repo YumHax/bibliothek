@@ -4,10 +4,10 @@ import { BaseGame, PLAY_TOP } from './BaseGame';
 const ROUND_SECONDS = 15;
 const SHIP_Y = SCREEN_H - 20;
 const SHIP_W = 16;
-const SHIP_SPEED = 230;
+const SHIP_SPEED = 260;
 const STAR_POINTS = 30;
 /** Every this many stars caught, a stage: faster rocks, more of them, two seconds. */
-const STARS_PER_STAGE = 8;
+const STARS_PER_STAGE = 12;
 const STAGE_SECONDS = 2;
 const CLOCK_SECONDS = 2;
 /** One falling thing in this many is a clock. */
@@ -16,8 +16,21 @@ const HIT_SECONDS = 2;
 const INVULNERABLE = 1;
 /** Stars caught this close together keep the chain going. */
 const CHAIN_HOLD = 2;
+/** A star now and then leads a trail: this many more behind it, this far apart (seconds), for a chain to follow. */
+const TRAIL_ODDS = 0.25;
+const TRAIL_STARS = 2;
+const TRAIL_GAP = 0.14;
+/** Stars and clocks are caught this much wider than they are drawn (rocks are not: a graze is no hit). */
+const CATCH_REACH = 5;
 
 type Kind = 'rock' | 'star' | 'clock';
+
+interface Trail {
+  x: number;
+  vy: number;
+  left: number;
+  next: number;
+}
 
 interface Faller {
   kind: Kind;
@@ -30,9 +43,9 @@ interface Faller {
 
 /**
  * COMET DASH: fifteen seconds under a meteor shower. Slide the ship left and right: catch the
- * stars (points; caught in quick succession they chain the combo), catch the odd clock (two
- * seconds), dodge the rocks (a hit costs two seconds and the combo, then a moment's shield).
- * Every eight stars is a stage: faster and thicker rocks, two seconds.
+ * stars (points; caught in quick succession they chain the combo, and some come in a trail of three
+ * to follow down), catch the odd clock (two seconds), dodge the rocks (a hit costs two seconds and the combo, then a moment's shield).
+ * Every twelve stars is a stage: faster and thicker rocks, two seconds.
  */
 export class Comets extends BaseGame {
   readonly id = 'comets';
@@ -42,6 +55,7 @@ export class Comets extends BaseGame {
 
   private shipX = SCREEN_W / 2;
   private fallers: Faller[] = [];
+  private trails: Trail[] = [];
   private spawnTimer = 0;
   private spawned = 0;
   private caught = 0;
@@ -54,6 +68,7 @@ export class Comets extends BaseGame {
   protected begin(): void {
     this.shipX = SCREEN_W / 2;
     this.fallers = [];
+    this.trails = [];
     this.spawnTimer = 0.3;
     this.spawned = 0;
     this.caught = 0;
@@ -71,8 +86,18 @@ export class Comets extends BaseGame {
       this.spawned += 1;
       const kind: Kind = this.spawned % CLOCK_EVERY === 0 ? 'clock' : this.rand() < 0.45 ? 'star' : 'rock';
       const speed = 90 + (this.stage - 1) * 16 + this.rand() * 50;
-      this.fallers.push({ kind, x: 10 + this.rand() * (SCREEN_W - 20), y: PLAY_TOP - 10, r: kind === 'rock' ? 7 + this.rand() * 6 : 6, vy: speed, spin: this.rand() * 6 });
+      const x = 10 + this.rand() * (SCREEN_W - 20);
+      this.fallers.push({ kind, x, y: PLAY_TOP - 10, r: kind === 'rock' ? 7 + this.rand() * 6 : 6, vy: speed, spin: this.rand() * 6 });
+      if (kind === 'star' && this.rand() < TRAIL_ODDS) this.trails.push({ x, vy: speed, left: TRAIL_STARS, next: TRAIL_GAP });
     }
+    for (const trail of this.trails) {
+      trail.next -= dt;
+      if (trail.next > 0) continue;
+      trail.next = TRAIL_GAP;
+      trail.left -= 1;
+      this.fallers.push({ kind: 'star', x: trail.x, y: PLAY_TOP - 10, r: 6, vy: trail.vy, spin: 0 });
+    }
+    this.trails = this.trails.filter((t) => t.left > 0);
 
     for (const f of this.fallers) {
       f.y += f.vy * dt;
@@ -80,7 +105,8 @@ export class Comets extends BaseGame {
     }
     this.fallers = this.fallers.filter((f) => {
       if (f.y - f.r > SCREEN_H) return false;
-      const touching = Math.abs(f.x - this.shipX) < f.r + SHIP_W / 2 - 2 && Math.abs(f.y - SHIP_Y) < f.r + 5;
+      const reach = f.kind === 'rock' ? -2 : CATCH_REACH;
+      const touching = Math.abs(f.x - this.shipX) < f.r + SHIP_W / 2 + reach && Math.abs(f.y - SHIP_Y) < f.r + 5 + Math.max(0, reach);
       if (!touching) return true;
       if (f.kind === 'rock') {
         if (this.shield > 0) return true;

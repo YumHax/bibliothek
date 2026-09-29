@@ -5,13 +5,45 @@ import { cylinderMesh, type MeshPosition } from '../meshUtils';
 import { paint } from '../materials/palette';
 import { nowPlaying } from '../screen/nowPlaying';
 
+/**
+ * Where a console takes its game, in the space of `parent` (the console's body): the middle of the
+ * slot's mouth, the way in, and how the media is turned once in (its label +z and top +y turned
+ * by `rotation`). A cartridge goes in contacts first as deep as its spec's `insert`; a disc is laid
+ * on the spindle at `mouth`. `press` is a last push once in (the NES's press down); `door`, what
+ * swings open first (the NES's flap, the PlayStation's lid) about its pivot's x axis.
+ */
+export interface MediaSlot {
+  parent: THREE.Object3D;
+  mouth: THREE.Vector3;
+  /** Unit vector pointing into the console. */
+  inward: THREE.Vector3;
+  rotation: THREE.Quaternion;
+  press?: THREE.Vector3;
+  door?: { pivot: THREE.Object3D; angle: number };
+  /** How far out of the slot a cartridge lines up before going in, when less than its whole length (a shelf too close above). */
+  lineUp?: number;
+  /** The whole cartridge goes in, whatever its shell (the NES's bay; a Famicom cart pushed in on an adapter). */
+  swallows?: boolean;
+}
+
 /** A built console (and its controller) with the materials to tint on hover and its overall size. */
 export interface ConsoleVisual {
   group: THREE.Group;
   hover: THREE.MeshStandardMaterial[];
   /** Console body size (metres): width, height, depth. */
   size: { w: number; h: number; d: number };
+  /** Where its game goes in; absent on a console that takes none (the generic box). */
+  slot?: MediaSlot;
 }
+
+const DOWN = new THREE.Vector3(0, -1, 0);
+const BACK = new THREE.Vector3(0, 0, -1);
+/** Media turned so: label up, top towards the player (a cartridge pushed in flat, contacts first, into the NES). */
+const LABEL_UP_TOP_OUT = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(new THREE.Vector3(-1, 0, 0), new THREE.Vector3(0, 0, 1), new THREE.Vector3(0, 1, 0)));
+/** A disc lying label up. */
+const FACE_UP = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -Math.PI / 2);
+/** Label towards the back (the Game Boy's slot is behind its screen). */
+const LABEL_BACK = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI);
 
 type Shape = (platform: Platform, v: ConsoleVisual) => void;
 
@@ -126,17 +158,27 @@ const SHAPES: Record<string, Shape> = {
     part(g, 0.022, 0.006, 0.012, red, { x: w * 0.22, y: 0.092, z: d * 0.3 }); // power
     part(g, 0.022, 0.006, 0.012, dark, { x: w * 0.36, y: 0.092, z: d * 0.3 }); // reset
     powerLed(g, p, 0xd0281c, [0.006, 0.004, 0.002], { x: -w * 0.4, y: 0.03, z: d / 2 + 0.001 }); // power LED, front left
+    // The flap over the cartridge bay, hinged along its top: it swings in as the cartridge is pushed through.
+    const doorW = 0.132;
+    const doorH = 0.032;
+    const pivot = new THREE.Group();
+    pivot.position.set(-w * 0.19, 0.084, d / 2 + 0.0025);
+    part(pivot, doorW, doorH, 0.003, grey, { y: -doorH / 2 });
+    g.add(pivot);
+    v.slot = { parent: g, mouth: new THREE.Vector3(-w * 0.19, 0.069, d / 2), inward: BACK.clone(), rotation: LABEL_UP_TOP_OUT.clone(), press: new THREE.Vector3(0, -0.012, 0), door: { pivot, angle: 1.35 }, swallows: true };
     pad(v, { color: 0xb3b3ae, buttons: [[0.02, 0.008, 0xb01c1c], [0.038, 0.008, 0xb01c1c]] });
   },
   snes(_p, v) {
-    const g = body(v, 0.2, 0.072, 0.19);
+    const g = body(v, 0.2, 0.072, 0.242);
     const grey = tinted(v, 0xc9c9cf);
     const purple = paint(0x5b4b9e, 0.5);
     const { w, d } = v.size;
     part(g, w, 0.05, d, grey, { y: 0.025 });
-    part(g, w * 0.5, 0.022, d * 0.72, tinted(v, 0xb9b9c2), { y: 0.061, z: -d * 0.05 });
-    part(g, w * 0.34, 0.004, 0.012, paint(0x2a2a30), { y: 0.052, z: -d * 0.3 }); // cartridge slot
-    for (const x of [-0.03, 0.03]) part(g, 0.028, 0.006, 0.014, purple, { x, y: 0.053, z: d * 0.32 });
+    part(g, w * 0.8, 0.022, d * 0.62, tinted(v, 0xb9b9c2), { y: 0.061, z: -d * 0.08 });
+    part(g, 0.142, 0.001, 0.024, paint(0x1c1c20), { y: 0.0725, z: -d * 0.12 }); // the slot's spring flaps
+    part(g, 0.016, 0.006, 0.02, purple, { y: 0.0745, z: d * 0.08 }); // eject lever
+    for (const x of [-0.06, 0.06]) part(g, 0.028, 0.006, 0.014, purple, { x, y: 0.053, z: d * 0.36 });
+    v.slot = { parent: g, mouth: new THREE.Vector3(0, 0.072, -d * 0.12), inward: DOWN.clone(), rotation: new THREE.Quaternion() };
     pad(v, {
       color: 0xc9c9cf,
       buttons: [
@@ -156,6 +198,8 @@ const SHAPES: Record<string, Shape> = {
     const bezel = paint(0x3f3f4a, 0.5);
     const { w, h, d } = v.size;
     part(g, w, h, d, shell, { y: h / 2 });
+    // The cartridge goes in at the back of the top edge, label out the back; about 12 mm shows.
+    v.slot = { parent: g, mouth: new THREE.Vector3(0, h, -d / 2 + 0.0055), inward: DOWN.clone(), rotation: LABEL_BACK.clone(), lineUp: 0.03 };
     part(g, w * 0.84, h * 0.42, 0.002, bezel, { y: h * 0.72, z: d / 2 + 0.001 });
     part(g, w * 0.5, h * 0.27, 0.002, paint(0x8fa860, 0.9), { y: h * 0.72, z: d / 2 + 0.0025 });
     cross(g, 0.02, 0.007, 0.003, paint(0x2a2a2e), { x: -w * 0.25, y: h * 0.32, z: d / 2 + 0.001 });
@@ -178,6 +222,8 @@ const SHAPES: Record<string, Shape> = {
     cylinder(g, 0.022, 0.004, paint(0x111114, 0.5), { x: -w * 0.18, y: 0.06 });
     part(g, 0.05, 0.002, 0.012, paint(0xb8962e, 0.4), { x: -w * 0.3, y: 0.051, z: d * 0.38 }); // "16-bit" badge
     powerLed(g, p, 0xc0392b, [0.012, 0.005, 0.006], { x: w * 0.35, y: 0.0525, z: d * 0.4 }); // power LED
+    part(g, 0.112, 0.001, 0.022, paint(0x0c0c0e, 0.6), { x: w * 0.15, y: 0.0685, z: -d * 0.12 }); // the slot's dust flaps
+    v.slot = { parent: g, mouth: new THREE.Vector3(w * 0.15, 0.068, -d * 0.12), inward: DOWN.clone(), rotation: new THREE.Quaternion() };
     pad(v, { color: 0x222226, buttons: [[0.018, 0.012, 0x4a4a50], [0.032, 0.006, 0x4a4a50], [0.046, 0.0, 0x4a4a50]] });
   },
   n64(p, v) {
@@ -185,9 +231,10 @@ const SHAPES: Record<string, Shape> = {
     const charcoal = tinted(v, 0x3b3b43, 0.6);
     const { w, d } = v.size;
     part(g, w, 0.045, d, charcoal, { y: 0.0225 });
-    part(g, w * 0.36, 0.028, d * 0.86, charcoal, { y: 0.059 });
-    for (const sx of [-1, 1]) part(g, w * 0.26, 0.014, d * 0.8, tinted(v, 0x34343b, 0.6), { x: sx * w * 0.33, y: 0.052 });
-    part(g, w * 0.26, 0.004, 0.014, paint(0x1a1a1e), { y: 0.074, z: -d * 0.1 }); // cartridge slot
+    part(g, w * 0.56, 0.028, d * 0.86, charcoal, { y: 0.059 });
+    for (const sx of [-1, 1]) part(g, w * 0.2, 0.014, d * 0.8, tinted(v, 0x34343b, 0.6), { x: sx * w * 0.38, y: 0.052 });
+    part(g, 0.122, 0.001, 0.022, paint(0x1a1a1e), { y: 0.0735, z: -d * 0.1 }); // the slot's spring flaps
+    v.slot = { parent: g, mouth: new THREE.Vector3(0, 0.073, -d * 0.1), inward: DOWN.clone(), rotation: new THREE.Quaternion() };
     powerLed(g, p, 0xc0392b, [0.018, 0.005, 0.01], { x: -w * 0.3, y: 0.061, z: d * 0.25 }); // power LED
     pad(v, {
       color: 0x8d8d95,
@@ -204,11 +251,20 @@ const SHAPES: Record<string, Shape> = {
     });
   },
   ps1(p, v) {
-    const g = body(v, 0.26, 0.06, 0.185);
+    const g = body(v, 0.27, 0.06, 0.188);
     const grey = tinted(v, 0xbfbdb5, 0.55);
     const { w, d } = v.size;
     part(g, w, 0.045, d, grey, { y: 0.0225 });
-    cylinder(g, 0.055, 0.012, tinted(v, 0xc6c4bc, 0.55), { x: -w * 0.08, y: 0.051, z: -d * 0.05 });
+    // The round lid, hinged at its back: it lifts, the disc goes on the spindle, it shuts.
+    const lidR = 0.066;
+    const lidX = -w * 0.08;
+    const lidZ = -d * 0.05;
+    const pivot = new THREE.Group();
+    pivot.position.set(lidX, 0.057, lidZ - lidR);
+    cylinder(pivot, lidR, 0.012, tinted(v, 0xc6c4bc, 0.55), { y: -0.006, z: lidR });
+    g.add(pivot);
+    cylinder(g, 0.006, 0.004, paint(0x3a3a3e, 0.5), { x: lidX, y: 0.047, z: lidZ }); // the spindle, under the lid
+    v.slot = { parent: g, mouth: new THREE.Vector3(lidX, 0.0496, lidZ), inward: DOWN.clone(), rotation: FACE_UP.clone(), door: { pivot, angle: -1.2 } };
     part(g, 0.024, 0.008, 0.016, grey, { x: w * 0.36, y: 0.049, z: -d * 0.1 }); // power button
     part(g, 0.024, 0.008, 0.016, grey, { x: w * 0.36, y: 0.049, z: d * 0.15 }); // open button
     powerLed(g, p, 0x3fa85c, [0.006, 0.003, 0.006], { x: w * 0.42, y: 0.046, z: d * 0.38 }); // power LED

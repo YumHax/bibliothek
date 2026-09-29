@@ -14,8 +14,10 @@ export interface Carriable extends THREE.Object3D {
   /** Set by the Inspector while it carries the object: called when the object is disposed under it (its shelf rebuilt). */
   onDisposed: (() => void) | null;
   readonly isOpen: boolean;
-  /** 0 shut .. 1 open: the hand shifts right as it opens so the spread stays in view. */
+  /** 0 shut .. 1 open: the hand shifts as it opens so what it shows stays in view. */
   readonly openness: number;
+  /** How far the hand moves (camera metres, x right, y up) once it is fully open; absent: right by half its width (a book-like spread). */
+  readonly openShift?: { readonly x: number; readonly y: number };
   readonly dimensions: { readonly width: number };
   setHovered(hovered: boolean): void;
   /** In hand: the openable version (back, cartridge, manual); out of it, the resting one. */

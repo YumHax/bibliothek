@@ -11,6 +11,7 @@ import { BalconyDoor } from './BalconyDoor';
 import { BuildingFront } from './BuildingFront';
 import { BistroSet } from './BistroSet';
 import { OpenAir } from './OpenAir';
+import { Precipitation } from '../street/Precipitation';
 
 /** Always open to the eye: the door is glazed, so the room and the balcony see each other shut or open. */
 const GLAZED = { openness: 1 };
@@ -63,8 +64,16 @@ export function furnishBalcony(zone: Zone, { sky, home: { upgrades } }: BuildCon
   zone.group.traverse((obj) => {
     if (obj instanceof Plant) obj.setWind(wind);
   });
+  // The rain and snow fall on the balcony as on the street, but not through the building's front behind it
+  // (the box of drops follows the eye, into the room too while this zone is loaded).
+  zone.place(new Precipitation(sky.dayNight, { shelters: [behindFront(depth)], splashes: false }), new THREE.Vector3());
   const air = zone.place(new OpenAir(sky.outdoors, { radius: plan.surround, sunDistance: plan.sun.distance, sunRadius: plan.sun.radius }), new THREE.Vector3(0, 1, 0));
   return { lightLevel: () => air.lightLevel };
+}
+
+/** Zone-local box of everything behind the building's front (the flat, the neighbours): nothing falls in it. */
+function behindFront(depth: number): THREE.Box3 {
+  return new THREE.Box3(new THREE.Vector3(-1000, -1000, -1000), new THREE.Vector3(1000, 1000, -depth / 2));
 }
 
 /** World-space box of the doorway's opening through the building's front (the balcony's back side). */

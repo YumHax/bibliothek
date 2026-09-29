@@ -1,7 +1,7 @@
 import type { ArcadeGame } from './ArcadeGame';
 import { Breakout } from './Breakout';
 import { Invaders } from './Invaders';
-import { ArrowRush } from './ArrowRush';
+import { LeapFrog } from './LeapFrog';
 import { Stacker } from './Stacker';
 import { Snake } from './Snake';
 import { Comets } from './Comets';
@@ -24,7 +24,7 @@ export const ARCADE_GAMES = {
   breakout: () => new Breakout(),
   invaders: () => new Invaders(),
   stacker: () => new Stacker(),
-  arrows: () => new ArrowRush(),
+  frog: () => new LeapFrog(),
   snake: () => new Snake(),
   comets: () => new Comets(),
   duel: () => new Duel(),

@@ -24,6 +24,8 @@ export const HOOP = { x: 0, y: 2.0, z: -0.98, r: 0.21, tube: 0.012 };
 export const BOARD = { z: -1.18, w: 0.8, h: 0.55, y: 2.12 };
 const GRAVITY = 9.81;
 const SUBSTEP = 1 / 240;
+/** What the roof net leaves of a ball's speed along it when the ball hits it. */
+const ROOF_DRAG = 0.35;
 /** Where the ball leaves the hand, machine-local, and how the throw works: speed from the meter, a lift above the look. */
 export const RELEASE = new THREE.Vector3(0.08, 1.45, 0.62);
 const THROW_SPEED: [number, number] = [3.2, 7.4];
@@ -238,6 +240,9 @@ export class HoopSim {
         if (b.pos.y + BALL_R > CAGE_H) {
           b.pos.y = CAGE_H - BALL_R;
           b.vel.y = -Math.abs(b.vel.y) * 0.3;
+          // The roof net gives and drags: a throw too hard drops short instead of sliding along it into the hoop.
+          b.vel.x *= ROOF_DRAG;
+          b.vel.z *= ROOF_DRAG;
         }
         // Through the ring, coming down.
         const dx = b.pos.x - this.hoopX;

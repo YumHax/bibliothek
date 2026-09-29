@@ -2,9 +2,10 @@ import type { Game } from '@/catalog/types';
 
 /**
  * Image kinds a provider may know about. `front`/`back`/`spine` are box faces;
- * `snap` (in-game screenshot) and `title` (title screen) feed the generated back cover.
+ * `snap` (in-game screenshot) and `title` (title screen) feed the generated back cover;
+ * `cart` is a photo of the cartridge's front, `disc` of a CD's printed side.
  */
-export type BoxArtKind = 'front' | 'back' | 'spine' | 'snap' | 'title';
+export type BoxArtKind = 'front' | 'back' | 'spine' | 'snap' | 'title' | 'cart' | 'disc';
 export type BoxArtUrls = Partial<Record<BoxArtKind, string>>;
 
 /**

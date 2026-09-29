@@ -76,17 +76,21 @@ export function furnishRoom(zone: Zone, ctx: BuildContext): RoomHandle {
   const projector = placerFor(zone, upgrades, plan.projectorUpgrade).placeAt(new Projector(cssLayer, { pictureWidth: plan.projectorPicture.width, ...heardBy(ctx) }), plan.projector);
   projector.aimAt(projector.worldToLocal(zone.toWorld(new THREE.Vector3(width / 2 - 0.005, plan.projectorPicture.centreY, 0))));
   const armchairs: Seat[] = [];
-  const seats = plan.seats.map(({ at, cushion, upgrade }) => {
+  const placed = plan.seats.map(({ at, cushion, upgrade }) => {
     const seat = new Seat();
     seat.mountCushion(new Cushion(cushion));
     const placer = placerFor(zone, upgrades, upgrade);
     placer.placeAt(seat, at);
+    return { seat, placer };
+  });
+  const seats = placed.map(({ seat }) => seat);
+  // After `seats` exists: `onOwned` runs at once for an armchair already bought.
+  for (const { seat, placer } of placed) {
     placer.onOwned(() => {
       armchairs.push(seat);
       armchairs.sort((a, b) => seats.indexOf(a) - seats.indexOf(b));
     });
-    return seat;
-  });
+  }
 
   // 3. Windows. Every window throws the sun (one shadow map each) while the sun is on its side; all
   //    panes show the sky's `Outdoors`. Clicking a window draws its curtains; the skylight follows how many are open.
@@ -102,6 +106,12 @@ export function furnishRoom(zone: Zone, ctx: BuildContext): RoomHandle {
   const stand = zone.place(new ConsoleStand(), tv.position.clone(), tv.rotation.y);
   tv.mountOn(stand.topHeight);
   const consoles = stand.slotAnchors().map((anchor) => zone.place(new Console(stand.slotWidth, onSelectPlatform), zone.toLocal(stand.localToWorld(anchor)), tv.rotation.y));
+  // The consoles feed the TV: a game goes into its console, which plays it on the set.
+  for (const deck of consoles) deck.setScreen(tv);
+  tv.setDecks({
+    forPlatform: (id) => consoles.find((c) => c.platformId === id) ?? null,
+    lastLoaded: () => consoles.reduce<Console | null>((last, c) => (c.loaded && (!last || c.loadedAt > last.loadedAt) ? c : last), null),
+  });
   const { width: pw, height: ph } = plan.posters.size;
   const platformsOf = (): PlatformId[] => [...new Set(games.games.map((g) => g.platform))];
   const collectionPoster = zone.placeAt(new Poster(pw, ph, Poster.bibliothek(games.games.length, platformsOf().map(getPlatform))), plan.posters.collection);

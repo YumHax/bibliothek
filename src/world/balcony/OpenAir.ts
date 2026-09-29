@@ -52,8 +52,10 @@ export class OpenAir extends Prop implements Updatable, OccupancyAware {
   ) {
     super();
     this.name = 'OpenAir';
-    // The view: the panes' shader, seen from inside a sphere (its own material object sharing the uniforms).
+    // The view: the panes' shader, seen from inside a sphere (its own material object sharing the uniforms),
+    // without the drops on the glass: there is none out here.
     const view = new THREE.ShaderMaterial({
+      defines: { OPEN_AIR: '' },
       uniforms: outdoors.material.uniforms,
       vertexShader: outdoors.material.vertexShader,
       fragmentShader: outdoors.material.fragmentShader,
