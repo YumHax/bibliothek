@@ -8,6 +8,7 @@ import { SHOPS } from '../facadePainter';
 import { isShopOpen } from '../shops/shopHours';
 import type { ShopKind } from '../streetPlan';
 import { FacadeFrame } from './facadeFrame';
+import { WALK_IN_ROOM_WALLS, WALK_IN_WALLS } from './walkInInteriors';
 import { FACADE, onSurface } from '../../surface/layers';
 
 /** How deep the rooms behind the windows are, how high their ceilings, and the metres of back wall one art tile covers. */
@@ -225,7 +226,9 @@ function paneGeometry(fronts: readonly PaintedFront[]): { geometry: THREE.Buffer
       const k = KINDS.indexOf(kind);
       const origin = [(k % COLUMNS) / COLUMNS, 1 - (Math.floor(k / COLUMNS) + 1) / ROWS];
       lightColor.set(w.light);
-      wallColor.set(SHOPS[kind].front).lerp(new THREE.Color(0xe8dcc8), 0.45);
+      const own = WALK_IN_ROOM_WALLS[kind as keyof typeof WALK_IN_ROOM_WALLS];
+      if (own) wallColor.set(own).multiplyScalar(0.9);
+      else wallColor.set(SHOPS[kind].front).lerp(new THREE.Color(0xe8dcc8), 0.45);
       for (const [a, b] of [[0, 0], [1, 0], [1, 1], [0, 1]] as const) {
         frame.point(w.s0 + a * width, w.y0 + b * height, FACADE.shopInterior.lift, p);
         position.push(p.x, p.y, p.z);
@@ -352,7 +355,6 @@ function paintBackWall(ctx: CanvasRenderingContext2D, kind: Kind, palette: reado
       ctx.fillRect(X(0.93), Y(2.83), X(0.6), Y(2.57) - Y(2.83));
       break;
     case 'grocer':
-    case 'florist':
       for (const h of [0.5, 1.1, 1.7]) {
         for (let px = 4; px < S - 30; px += 34) {
           ctx.fillStyle = kind === 'grocer' ? '#8a6a44' : '#5a6a72';
@@ -360,7 +362,7 @@ function paintBackWall(ctx: CanvasRenderingContext2D, kind: Kind, palette: reado
           for (let i = 0; i < 7; i++) {
             ctx.fillStyle = pick(random, palette);
             ctx.beginPath();
-            ctx.arc(px + 4 + random() * 22, Y(h) - 16 - random() * (kind === 'florist' ? 14 : 5), kind === 'florist' ? 4 : 5, 0, Math.PI * 2);
+            ctx.arc(px + 4 + random() * 22, Y(h) - 16 - random() * 5, 5, 0, Math.PI * 2);
             ctx.fill();
           }
         }
@@ -422,52 +424,11 @@ function paintBackWall(ctx: CanvasRenderingContext2D, kind: Kind, palette: reado
       }
       break;
     case 'furniture':
-      // Framed pictures up the wall, armchairs and a standard lamp on the floor.
-      for (let px = 10; px < S - 30; px += 46) {
-        ctx.fillStyle = '#6a4a30';
-        ctx.fillRect(px, Y(2.6), 30, Y(2.05) - Y(2.6));
-        ctx.fillStyle = pick(random, palette);
-        ctx.fillRect(px + 3, Y(2.55), 24, Y(2.1) - Y(2.55));
-      }
-      for (let px = 6; px < S - 50; px += 64) {
-        ctx.fillStyle = pick(random, palette);
-        ctx.fillRect(px, Y(0.9), 48, Y(0.4) - Y(0.9));
-        ctx.fillRect(px, Y(0.45), 48, Y(0.1) - Y(0.45));
-        ctx.fillRect(px - 4, Y(0.7), 8, Y(0.1) - Y(0.7));
-        ctx.fillRect(px + 44, Y(0.7), 8, Y(0.1) - Y(0.7));
-        ctx.fillStyle = '#3a2a1e';
-        ctx.fillRect(px + 58, Y(1.6), 3, Y(0) - Y(1.6));
-        ctx.fillStyle = '#efe0b8';
-        ctx.fillRect(px + 50, Y(1.85), 19, Y(1.55) - Y(1.85));
-      }
-      break;
     case 'electronics':
-      // Shelves of television sets, their screens lit.
-      shelves([0.5, 1.1, 1.7, 2.3], (px, base) => {
-        const w = 22 + random() * 10;
-        ctx.fillStyle = pick(random, ['#2a2a2e', '#4a4a52', '#5a4a3a']);
-        ctx.fillRect(px, base - 22, w, 22);
-        ctx.fillStyle = pick(random, ['#9ab8c8', '#6fa0c8', '#c8d8e0', '#8fc0a0']);
-        ctx.fillRect(px + 3, base - 19, w - 9, 16);
-        return w + 3;
-      });
-      break;
     case 'pets':
-      // Fish tanks on a stand, cages and sacks of food on shelves.
-      ctx.fillStyle = '#2f3a3a';
-      ctx.fillRect(0, Y(0.8), S, Y(0) - Y(0.8));
-      for (let px = 6; px < S - 50; px += 60) {
-        ctx.fillStyle = 'rgba(80,150,190,0.85)';
-        ctx.fillRect(px, Y(1.5), 52, Y(0.8) - Y(1.5));
-        ctx.fillStyle = '#e0a040';
-        ctx.fillRect(px + 10 + random() * 30, Y(1.2), 6, 3);
-      }
-      shelves([1.9, 2.5], (px, base) => {
-        const w = 14 + random() * 10;
-        ctx.fillStyle = pick(random, palette);
-        ctx.fillRect(px, base - 18, w, 18);
-        return w + 3;
-      });
+    case 'florist':
+      // The walk-in shops: their back wall as their room has it (`world/shop/shopPlan`).
+      WALK_IN_WALLS[kind](ctx, { S, X, Y }, palette, random);
       break;
     case 'arcade':
       for (let px = 8; px < S - 30; px += 42) {
@@ -493,6 +454,8 @@ function paintBackWall(ctx: CanvasRenderingContext2D, kind: Kind, palette: reado
 /** What stands just behind the glass: a table, a case, a rack; transparent above it. */
 function paintDisplay(ctx: CanvasRenderingContext2D, kind: Kind, front: string, palette: readonly string[], random: () => number): void {
   ctx.clearRect(0, 0, S, S);
+  // The walk-in shops' displays stand in 3D in front of the pane (`shopfronts/`).
+  if (kind in WALK_IN_WALLS) return;
   const top = kind === 'arcade' ? 0 : kind === 'bar' || kind === 'cafe' ? 0.75 : 0.8;
   if (kind === 'arcade') return;
   // The table or case itself.

@@ -167,6 +167,8 @@ export function buildWorld(services: Services, parts: { world: GameWorld; player
     building,
   };
   for (const plan of WORLD_PLAN.zones) world.addZone(plan, bindBuilder(plan.kind, context));
+  // Before the first builder runs: a piece the player carried to another room is put back there on load.
+  services.furnishings.setZones((id) => world.zones.find((zone) => zone.id === id));
   world.zone(WORLD_PLAN.start).activate();
   // The collection room: the cat's home, its shelves and screens.
   const home = world.build('living');

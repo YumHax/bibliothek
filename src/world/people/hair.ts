@@ -84,7 +84,7 @@ export function hairMaterial(look: PersonLook): THREE.MeshStandardMaterial {
 }
 
 /** The hair and beard for `look`, added to the head's parts. */
-export function addHair(parts: Parts, look: PersonLook, shape: FaceShape, material: THREE.Material): void {
+export function addHair(parts: Parts, look: PersonLook, shape: FaceShape, material: THREE.Material, tail?: Parts): void {
   const style = look.hairStyle;
   const thickness = (d: THREE.Vector3): number => hairThickness(d, style, !!look.hat);
   const shell = shellGeometry(shape, 112, 84, (d) => hairCover(d, look), thickness);
@@ -95,7 +95,21 @@ export function addHair(parts: Parts, look: PersonLook, shape: FaceShape, materi
   }
   if (style === 'long') parts.add(curtainGeometry(shape, thickness), material);
   if (style === 'bun' && !look.hat) parts.add(bunGeometry(shape), material);
-  if (style === 'ponytail') parts.add(ponytailGeometry(shape), material);
+  if (style === 'ponytail') {
+    // On its own parts (a bone of its own, so it can swing) about where it is tied, or with the rest.
+    const geometry = ponytailGeometry(shape);
+    if (tail) {
+      const anchor = ponytailAnchor(shape);
+      geometry.translate(-anchor.x, -anchor.y, -anchor.z);
+      tail.add(geometry, material);
+    } else parts.add(geometry, material);
+  }
+}
+
+/** Where a ponytail is tied, in the head's frame: it swings about there. */
+export function ponytailAnchor(shape: FaceShape): THREE.Vector3 {
+  const d = new THREE.Vector3(0, 0.12, -1).normalize();
+  return d.multiplyScalar(headRadius(d, shape) - 0.004);
 }
 
 /** How much of the direction `d` the hair covers, 0 to 1. */
@@ -255,8 +269,7 @@ function bunGeometry(shape: FaceShape): THREE.BufferGeometry {
 
 /** Gathered at the back of the head, bushing out below the tie and tapering to the tip. */
 function ponytailGeometry(shape: FaceShape): THREE.BufferGeometry {
-  const d = new THREE.Vector3(0, 0.12, -1).normalize();
-  const base = d.clone().multiplyScalar(headRadius(d, shape) - 0.004);
+  const base = ponytailAnchor(shape);
   const curve = new THREE.CatmullRomCurve3([
     base,
     base.clone().add(new THREE.Vector3(0, -0.02, -0.04)),

@@ -22,10 +22,13 @@ const CLOCK_TICK_AT = new THREE.Vector3(0, 0, 0.03);
 /**
  * The room's ceiling light: the visible fixture (a `PendantLamp`, or a `FlushLamp` where a pendant
  * would hang in the way) switching the `Room`'s own lamp, and the wall switch by the door driving
- * the same lamp, so either works. Returns the fixture.
+ * the same lamp, so either works; `also` hears every switch too (a shop's other fittings). Returns the fixture.
  */
-export function placeRoomLight(zone: Zone, room: Room, kind: 'pendant' | 'flush', at: Placement, switchAt: Placement): SwitchableLamp {
-  const onSwitch = (on: boolean): void => room.setLampOn(on);
+export function placeRoomLight(zone: Zone, room: Room, kind: 'pendant' | 'flush', at: Placement, switchAt: Placement, also?: (on: boolean) => void): SwitchableLamp {
+  const onSwitch = (on: boolean): void => {
+    room.setLampOn(on);
+    also?.(on);
+  };
   const lamp = zone.placeAt(kind === 'pendant' ? new PendantLamp({ onSwitch }) : new FlushLamp({ onSwitch }), at);
   zone.placeAt(new WallSwitch({ lamp }), switchAt);
   return lamp;

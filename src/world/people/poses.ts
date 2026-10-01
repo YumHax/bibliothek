@@ -15,6 +15,11 @@ export interface ArmAngles {
   lx: number;
   ly: number;
   lz: number;
+  /** The wrist bent towards the palm (+) or back (-), and the forearm turned palm-up (+, supination) or palm-down (-). */
+  wf?: number;
+  tw?: number;
+  /** The hand: > 0 curls towards a fist (1), < 0 opens flat and spread (-1); 0 at rest, fingers gently in. */
+  curl?: number;
 }
 
 export interface PoseAngles {

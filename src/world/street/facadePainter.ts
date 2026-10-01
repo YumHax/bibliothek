@@ -90,6 +90,8 @@ export interface ShopLook {
   late: boolean;
   /** Its name glows all night (a neon, a lightbox). */
   neon?: string;
+  /** Its name is a sign of its own over the fascia (`STREET_PLAN.signs`): the board is painted bare. */
+  signed?: boolean;
 }
 
 /**
@@ -107,7 +109,7 @@ export const SHOPS: Record<Exclude<ShopKind, 'shut'>, ShopLook> = {
   bar: { ...SHOP_LOOKS.bar, light: '#ffb060', neon: '#ffc060' },
   butcher: { ...SHOP_LOOKS.butcher, light: '#f0f4ff' },
   furniture: { ...SHOP_LOOKS.furniture, light: '#ffd49a' },
-  electronics: { ...SHOP_LOOKS.electronics, light: '#d8e8ff', neon: '#5fd0ff' },
+  electronics: { ...SHOP_LOOKS.electronics, light: '#d8e8ff', neon: '#5fd0ff', signed: true },
   pets: { ...SHOP_LOOKS.pets, light: '#ffe8c0' },
   laundry: { ...SHOP_LOOKS.laundry, light: '#e8f4ff' },
   retro: { ...SHOP_LOOKS.retro, name: '', light: '#c8e0ff' },
@@ -142,7 +144,7 @@ export function paintFacade(ctx: CanvasRenderingContext2D, spec: FacadeSpec, wid
   // The building's look is the neighbourhood's (`city/facadeStyle`): the window view paints the same front.
   const style = facadeStyle(spec.seed);
   const height = facadeHeight(spec.storeys);
-  const p = new Brush(ctx, slot, height);
+  const p = new Brush(ctx, slot, height, spec.seed);
   p.features.wall = style.wall;
   p.features.trim = style.trim;
 
@@ -291,12 +293,17 @@ class Brush {
   readonly lights: NightLight[] = [];
   readonly panes: GlassPane[] = [];
   readonly features: FacadeFeatures = { wall: '#888888', trim: '#dddddd', awnings: [], balconies: [], sills: [], windows: [], doors: [], shopfronts: [] };
+  /** The weather's marks (rain run off the sills): a draw of their own, so the facade's other details stay where they were. */
+  readonly weather: () => number;
 
   constructor(
     readonly ctx: CanvasRenderingContext2D,
     readonly slot: AtlasSlot,
     private readonly height: number,
-  ) {}
+    seed = 1,
+  ) {
+    this.weather = seededRandom(seed * 104729 + 17);
+  }
 
   x(s: number): number {
     return this.slot.x + s * this.slot.k;
@@ -358,6 +365,7 @@ function paintWindow(p: Brush, style: FacadeStyle, random: () => number, s0: num
   // Sill and head (the sill also stands out in 3D on the near facades).
   p.rect(s0 - 0.1, y0 - 0.08, s1 + 0.1, y0, style.trim);
   p.features.sills.push({ s0: s0 - 0.1, s1: s1 + 0.1, y: y0 });
+  paintStreaks(p, s0, s1, y0 - 0.08);
   if (style.window === 'lintel' || style.window === 'pediment') p.rect(s0 - 0.12, y1 + 0.02, s1 + 0.12, y1 + 0.2, style.trim);
   if (style.window === 'pediment' && nobile) {
     // A carved head over the first floor's windows: a pediment stepped up to its point.
@@ -393,7 +401,7 @@ function paintShop(p: Brush, random: () => number, shop: ShopSpec, goods: readon
   p.rect(s0, 3.05, s1, 3.75, look.fascia);
   // Its own name when the plan gives one ('SUNNY SIDE CAFE'), else its trade's.
   const name = shop.name ?? look.name;
-  if (name) {
+  if (name && !look.signed) {
     const size = Math.min(0.5, (width * 0.9) / (name.length * 0.62));
     p.text(name, (s0 + s1) / 2, 3.4, size, look.letters);
     if (look.neon) p.light(s0 + width * 0.15, 3.15, s1 - width * 0.15, 3.65, look.neon, 0.02, 0);
@@ -445,6 +453,24 @@ function paintShop(p: Brush, random: () => number, shop: ShopSpec, goods: readon
       p.rect(s, 1.2, s + 0.5, 1.6, color);
       p.light(s, 1.2, s + 0.5, 1.6, color, 0, 0);
     }
+  }
+}
+
+/** Rain run off a sill: a few faint streaks down the wall from `y`, fading as they go (`Brush.weather`'s draw). */
+function paintStreaks(p: Brush, s0: number, s1: number, y: number): void {
+  if (p.slot.k < 12) return;
+  const random = p.weather;
+  const { ctx } = p;
+  for (let i = 1 + Math.floor(random() * 3); i > 0; i--) {
+    const s = s0 + random() * (s1 - s0);
+    const w = 0.04 + random() * 0.1;
+    const length = 0.25 + random() * 0.9;
+    const top = p.y(y);
+    const streak = ctx.createLinearGradient(0, top, 0, p.y(y - length));
+    streak.addColorStop(0, `rgba(40, 36, 30, ${0.05 + random() * 0.07})`);
+    streak.addColorStop(1, 'rgba(40, 36, 30, 0)');
+    ctx.fillStyle = streak;
+    ctx.fillRect(p.x(s - w / 2), top, w * p.slot.k, length * p.slot.k);
   }
 }
 

@@ -64,10 +64,17 @@ export class Glance {
   }
 }
 
-/** Walking or standing about: somewhere ahead, a little to one side, for 2 to 6 seconds. */
+/**
+ * Walking or standing about: mostly the way ahead, a few metres off and a little down (where people
+ * look), for 2.5 to 6.5 seconds; once in four a shorter look aside.
+ */
 export function idleGlance(point: THREE.Vector3): number {
-  point.set((Math.random() - 0.5) * 4, 1.2 + Math.random() * 0.6, 2.5);
-  return 2 + Math.random() * 4;
+  if (Math.random() < 0.25) {
+    point.set((Math.random() < 0.5 ? -1 : 1) * (1.2 + Math.random() * 1.6), 1.2 + Math.random() * 0.5, 2.2);
+    return 1.2 + Math.random() * 1.6;
+  }
+  point.set((Math.random() - 0.5) * 1.4, 0.95 + Math.random() * 0.6, 3 + Math.random() * 2);
+  return 2.5 + Math.random() * 4;
 }
 
 /** Whether `viewer` stands within `range` of `self` on the floor; its world position is left in `viewerPos`. */

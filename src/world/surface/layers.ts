@@ -31,6 +31,8 @@ export const FLOOR = {
   gloss: { lift: 0.0015, rank: 1 },
   /** A rug's fringe, the loose warp ends lying past its edge. */
   fringe: { lift: 0.002, rank: 1.5 },
+  /** Scuffs, heel marks and grime worn into a shop's floor (see-through, no depth write). */
+  scuff: { lift: 0.003, rank: 1.8 },
   /** A painted border band round a carpet. */
   border: { lift: 0.004, rank: 2 },
   /** A blanket spread on the floor (a car-boot pitch at the market). */
@@ -47,6 +49,8 @@ export const FLOOR = {
   contactShadow: { lift: 0.015, rank: 6 },
   /** A doormat: its top (a thick coir mat). */
   mat: { lift: 0.018, rank: 7 },
+  /** The placement grid and footprint shown while a piece of furniture is carried (over every rug and mat). */
+  placement: { lift: 0.021, rank: 8 },
 } as const satisfies Record<string, SurfaceLayer>;
 
 /** The street's ground (lifts over the asphalt or the pavement right under it). */
@@ -89,6 +93,8 @@ export const WALL = {
   flyer: { lift: 0.004, rank: 6 },
   /** A roof light's frosted pane, under the ceiling it is set in (lifts down, out of the ceiling). */
   rooflight: { lift: 0.01, rank: 7 },
+  /** The placement grid and footprint shown on a wall (or the ceiling) while a picture or a hung plant is carried. */
+  placement: { lift: 0.012, rank: 8 },
 } as const satisfies Record<string, SurfaceLayer>;
 
 /** A street building's painted facade (lifts out of the painted wall along its normal). */

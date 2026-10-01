@@ -82,6 +82,11 @@ export class AlleySim {
     return this.currentPhase;
   }
 
+  /** Seconds into the current phase. */
+  get phaseTime(): number {
+    return this.phaseClock;
+  }
+
   /** The sounds of this frame, oldest first. */
   takeSounds(): SfxEvent[] {
     const sounds = this.sounds;

@@ -102,22 +102,29 @@ src/world/market/       marketPlan + furnishMarket (wiring) + MarketFloor (the m
                         ForSaleBox (GameBox + price tag, owns the click: hands the box over for inspection), BargainBin, OrderCounter (opens
                         the catalogue), BuyBackDesk (opens the sell panel), TransistorRadio, CrowdSound, stallTalk (stallholders' lines
                         from their table), HallRoof (iron trusses + roof light following the sky). See docs/economy.md
-src/world/people/       PersonModel (the rig at real scale: hips/knees/ankles, waist, shoulders/elbows, neck; gait, breathing, arm
-                        poses, head + eye gaze, blinking; each bone's pieces merged per material by `geometry.Parts`; LOD past
-                        16 m (back under 14, scaled by the camera's zoom): no eyes or inner ears, the rig at 15 Hz), textureCache
-                        (the painted canvases cached by the look values each painter reads, shared), locomotion (turning,
-                        legs, glances: shared by Walker and Shopper), body
-                        (proportions, the trunk as superellipse rings following `TRUNK` for build and figure, tapered limbs,
-                        hands with fingers), head (`headRadius(d)`: the skull and face sculpted radially, so hair and paint can
-                        ask where the skin is; ears, hats, glasses), eyes (balls that turn, lids that blink), hair (shells over
-                        the skin that feather at the hairline, long hair, bun, ponytail, full beard), shoes, faceTexture (the
-                        head's canvas: flush, shade, stubble, brows, lips) and clothTexture (the trunk's canvas: trousers,
-                        tee/stripes/flannel/hoodie/jacket/shirt, apron, weave; `paintCloth` for sleeves and legs), looks (seeded
-                        looks by role: `randomLook(seed, 'vendor' | 'shopper')`), poses (arm angles: stand, crossed, hips,
-                        think, pockets, play, cheer, phone, lead, lap), `PersonModel.sit` / `enableFade` / `setOpacity`, Vendor (stands behind a stall, changes stance, meets the player's eye, clickable for a
-                        line), Shopper (walks the aisle between `BrowseSpot`s, browses hand-at-chin, lingers; no collider), Walker
-                        (walks a path it is given, stands or sits in a pose looking at a point, says a word in a SpeechBubble,
-                        `fade` and `talk` options; the arcade's people, directed by `ArcadeCrowd`, and the street's).
+src/world/people/       PersonModel (the body in motion, in layers: planted feet that step, a heel-to-toe gait, legs by IK, the
+                        lean spread down the back, arms on springs to a pose / a reached point / a gesture's keys, the head a
+                        damped spring onto the gaze, the face, what swings; LOD past 16 m: no eyes or inner ears, the rig at
+                        15 Hz), rig (the skeleton and the meshes on each bone: pelvis, lower back and chest bending the one-piece
+                        trunk in its shader, collarbones, wrists, hands with fist / open morphs, the face's expression morphs,
+                        ponytail and bag bones), motion/ (springs, ik, gait, footing, spineSkin, gestures: the keyframed
+                        library, repertoire: fidgets and `Reaction`s, temperament: each person's tempo and manner, face:
+                        expressions, speech, blinks), performer (`Performer`: a body a machine directs move by move, and
+                        `Reaction`), textureCache (the painted canvases cached by the look values each painter reads, shared),
+                        locomotion (turning, legs, glances: shared by Walker and Shopper), attention (how anyone looks at the
+                        player: on noticing them, a nod sometimes, then now and then, sooner away when stared at or crowded,
+                        mostly on them in conversation (`engage`, `Walker` focus `'viewer'`); a walker looks at someone coming,
+                        then ahead before passing), body (proportions, the trunk as superellipse rings following `TRUNK` for
+                        build and figure, its baked occlusion, tapered limbs, hands), head (`headRadius(d)`: the skull and face
+                        sculpted radially, so hair and paint can ask where the skin is; the face's morphs; ears, hats, glasses),
+                        eyes (wet balls that turn, lids that blink and squint), hair (shells over the skin that feather at the
+                        hairline, long hair, bun, ponytail, full beard), shoes, faceTexture and clothTexture (the painted
+                        canvases), looks (seeded looks by role: `randomLook(seed, 'vendor' | 'shopper')`), poses (arm angles),
+                        Vendor (stands behind a stall, changes stance, meets the player's eye, clickable for a line), Shopper
+                        (walks the aisle between `BrowseSpot`s, browses hand-at-chin, lingers; no collider), Walker (walks a
+                        path it is given, stands or sits in a pose looking at a point, says a word in a SpeechBubble, `react` /
+                        `gesture` / `performer`; the arcade's people, directed by `ArcadeCrowd`, and the street's). See
+                        docs/people.md.
                         
                         Placed by `furnishMarket` / `furnishArcade` from their plans; the camera (`BuildContext.listener`) is
                         the viewer.
@@ -128,14 +135,16 @@ src/world/street/       streetPlan (Front Street's map and every spot, `shopDoor
                         Newsstand (+ gamingWeekly), Busker, GarageSale, StreetCrowd, Precipitation (+ splashes), StreetSound (horns,
                         sirens, bells), snowCover (`snowCovered()`); traffic/ (StreetTraffic, driving, ScriptedVehicle, StreetBus,
                         ServiceVehicles, Bikes, SignalHeads, Spray), life/ (streetTalk, StandingPeople, Terraces, Pigeons, StrayCat,
-                        Dog, Figure, fade), relief/ (FacadeRelief, ShopInteriors, Shutters, ShopGlow, WetGround, Leaves), details/
+                        Dog, Figure, fade), relief/ (FacadeRelief, ShopInteriors + walkInInteriors, Shutters, ShopGlow, WetGround,
+                        Leaves), shopfronts/ (the walk-in shops' fronts: shopfrontPlan, ShopfrontRelief, frontJoinery,
+                        windowDisplays, shopfrontCanvas, ShopSpill + spillPieces), details/
                         (StreetDetails, LampBuzz), shops/ (shopHours, shopPlan, ShopEntrance, scratchCard, DroppedCoins, GiveawayBox,
                         Trader), audio/ (ShopSounds, streetSurface). See docs/zones.md
 src/world/shop/         shopPlan (`SHOP_PLANS`: the walk-in shops' rooms, displays, fixtures) + furnishShop (one builder for the four
                         `shop` zones): ForSale (a piece + its PriceTag, a first click arms it, the second buys it), ShopClerk, ShopCustomer, ShopWindow, shopSounds, displayPieces (`buildPiece` / `displayPiece`:
                         the flat's pieces as shown, lights stripped), shopModels (PortableTv, ShopProjector, CatBallBasket),
-                        ShopCounter (the till: the HomeShopPanel), DisplayTable, GoodsShelf, TvWall + snowScreen, FishTank,
-                        FlowerStand. See docs/economy.md ("The bare flat")
+                        ShopCounter (the till: the HomeShopPanel), DisplayTable, GoodsShelf, TvWall + snowScreen, FlowerStand,
+                        the per-shop props (common/, tv/, pets/, florist/, furniture/, plans/). See docs/shops.md, docs/economy.md ("The bare flat")
 src/world/stairwell/    stairwellPlan + furnishStairwell: the building's stairs from our landing to the entrance hall (Staircase with
                         `floorAt`, Lift, StairLights; the sas at the street door). See docs/zones.md
 src/world/airlock/      the sas at the building's street door, built twice (the hall's, the street's): airlockPlan (SAS, TWINS), SasShell

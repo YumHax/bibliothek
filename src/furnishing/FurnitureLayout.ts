@@ -1,14 +1,18 @@
 import { KEYS, PersistedStore, safeStorage } from '@/persistence';
 
-/** Where a piece was set down, in its zone's local frame: position (m) and yaw (radians). */
+/** Where a piece was set down, in the frame of the zone it stands in: position (m) and yaw (radians). */
 export interface SavedPose {
   x: number;
   y: number;
   z: number;
   yaw: number;
+  /** The room it was carried to (a zone id), when not the one that places it. */
+  in?: string;
+  /** Put away: out of sight until taken out again. */
+  stored?: boolean;
 }
 
-/** Zone id -> piece key -> pose. The zone is kept so a piece may one day be carried to another room. */
+/** The id of the zone whose builder places a piece -> piece key -> pose (in `pose.in`'s frame when set). */
 type Saved = Record<string, Record<string, SavedPose>>;
 
 /**
@@ -32,6 +36,14 @@ export class FurnitureLayout {
     this.state = { ...this.state, [zone]: { ...this.state[zone], [key]: { ...pose } } };
     this.store.save(this.state);
   }
+
+  /** The piece stands where its plan puts it again: no entry. */
+  delete(zone: string, key: string): void {
+    if (!this.state[zone]?.[key]) return;
+    const { [key]: _gone, ...rest } = this.state[zone];
+    this.state = { ...this.state, [zone]: rest };
+    this.store.save(this.state);
+  }
 }
 
 function readSaved(data: unknown): Saved | null {
@@ -42,7 +54,8 @@ function readSaved(data: unknown): Saved | null {
     const clean: Record<string, SavedPose> = {};
     for (const [key, pose] of Object.entries(pieces as Record<string, unknown>)) {
       const p = pose as Partial<SavedPose> | null;
-      if (p && [p.x, p.y, p.z, p.yaw].every((n) => typeof n === 'number' && Number.isFinite(n))) clean[key] = { x: p.x!, y: p.y!, z: p.z!, yaw: p.yaw! };
+      if (!p || ![p.x, p.y, p.z, p.yaw].every((n) => typeof n === 'number' && Number.isFinite(n))) continue;
+      clean[key] = { x: p.x!, y: p.y!, z: p.z!, yaw: p.yaw!, ...(typeof p.in === 'string' ? { in: p.in } : {}), ...(p.stored === true ? { stored: true } : {}) };
     }
     saved[zone] = clean;
   }

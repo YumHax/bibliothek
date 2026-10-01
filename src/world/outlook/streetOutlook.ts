@@ -13,6 +13,7 @@ import { Buildings } from '../street/Buildings';
 import { FacadeRelief } from '../street/relief/FacadeRelief';
 import { Shutters } from '../street/relief/Shutters';
 import { ShopGlow } from '../street/relief/ShopGlow';
+import { ShopfrontRelief } from '../street/shopfronts/ShopfrontRelief';
 import { StreetLamps } from '../street/StreetLamps';
 import { StreetTrees } from '../street/StreetTrees';
 import { StreetCars } from '../street/StreetCars';
@@ -50,7 +51,7 @@ const REFLECT_EVERY = 20;
  * again in a scene of their own, its frame the street's zone-local one, lit by its own sun and sky (`StreetLighting`,
  * occupied: its shadow live, its ambient on) under its own dome, with the air's haze as fog, what the sky dome
  * reflects as the scene's environment. The ground, the park's paths and beds, the facades within reach that face the
- * window with their relief, shutters and the shops' spill of light, the lamps, the trees, the parked and passing cars,
+ * window with their relief (the walk-in shops' fronts and window displays too), shutters and the shops' spill of light, the lamps, the trees, the parked and passing cars,
  * the benches, bins, the shelter, hedge and railings, the rain and snow, and the courtyard behind our building
  * (`Courtyard`, its chestnut planted with the street's trees). What only matters to someone standing in the street
  * (the people, the doors, the sounds, the shops' insides) is left out. Loaded in the street's chunk (a dynamic import).
@@ -76,6 +77,7 @@ export function buildStreetOutlook(camera: THREE.Camera, options: StreetOutlookO
   const buildings = add(new Buildings(facadesInView(eye, without), dayNight, { detailScale: QUALITY.level === 'low' ? 0.6 : 1, anisotropy: ANISOTROPY, shopGoods: null, nightScale: QUALITY.level === 'high' ? 0.5 : 0.25 }));
   const fronts = buildings.fronts;
   add(new FacadeRelief(fronts));
+  add(new ShopfrontRelief(fronts, dayNight));
   add(new Shutters(fronts, dayNight));
   add(new ShopGlow(fronts, dayNight));
   const plan = STREET_PLAN;

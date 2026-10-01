@@ -4,6 +4,7 @@ import { boxMesh, cylinderMesh } from '../meshUtils';
 import { markShared } from '../props/Prop';
 import { paint, standard } from '../materials/palette';
 import type { AttachmentFrame, CabinetAttachment } from './CabinetAttachment';
+import type { Performer } from '../people/performer';
 
 type Lane = 'left' | 'down' | 'up' | 'right';
 
@@ -30,8 +31,13 @@ const PLATE = paint(0x1c1c22, 0.5);
  * left, right) round a plain centre plate, and a bar along each side to hold. A panel sinks and
  * lights up in its colour while its direction is held, and glows with the game's beat. The player
  * stands on it to play (their eye over the middle of the pad), a regular too, hands on the side
- * bars. A `CabinetAttachment` for `ArcadeCabinet`; the pad itself is not solid (it is stood on).
+ * bars and feet on the arrows: each arrow the game steps on takes the foot on its side (up and down
+ * whichever is free), which stays there until it is wanted elsewhere or the music leaves it idle.
+ * A `CabinetAttachment` for `ArcadeCabinet`; the pad itself is not solid (it is stood on).
  */
+
+/** A foot left on an arrow this long (s) with nothing to step comes back to the middle. */
+const FOOT_IDLE = 0.7;
 export class DancePad implements CabinetAttachment {
   readonly object = new THREE.Group();
   readonly eye: THREE.Vector3;
@@ -40,6 +46,11 @@ export class DancePad implements CabinetAttachment {
   private readonly panels = new Map<Lane, { mesh: THREE.Mesh; material: THREE.MeshStandardMaterial; press: number }>();
   private readonly centreZ: number;
   private readonly glow: ((lane: Lane) => number) | undefined;
+  /** The regular dancing (their body), the arrow each foot is on and for how long it has had nothing to do. */
+  private performer: Performer | null = null;
+  private readonly feet: [Lane | null, Lane | null] = [null, null];
+  private readonly idle = [0, 0];
+  private readonly footPoint = new THREE.Vector3();
 
   constructor(options: DancePadOptions = {}) {
     this.centreZ = options.centreZ ?? 1.0;
@@ -78,7 +89,15 @@ export class DancePad implements CabinetAttachment {
     });
   }
 
+  perform(performer: Performer | null): void {
+    if (this.performer && !performer) this.performer.release();
+    this.performer = performer;
+    this.feet[0] = this.feet[1] = null;
+    performer?.standOn(HEIGHT);
+  }
+
   update(dt: number, frame: AttachmentFrame): void {
+    if (this.performer && frame.who === 'regular') this.dance(dt, frame);
     const ease = Math.min(1, dt * 20);
     for (const [lane, panel] of this.panels) {
       const held = frame.controls[lane] ? 1 : 0;
@@ -87,6 +106,39 @@ export class DancePad implements CabinetAttachment {
       const beat = frame.who ? (this.glow?.(lane) ?? 0) : 0;
       panel.material.emissiveIntensity = 0.15 + Math.max(panel.press, beat) * 1.4;
     }
+  }
+
+  /** The regular's feet onto the arrows being stepped on: a lane's own side's foot, up and down whichever is free. */
+  private dance(dt: number, frame: AttachmentFrame): void {
+    const body = this.performer!;
+    const cabinet = this.object.parent;
+    if (!cabinet) return;
+    for (const lane of Object.keys(GRID) as Lane[]) {
+      if (!frame.controls[lane] || this.feet.includes(lane)) continue;
+      // Facing the screen the dancer's +x is the cabinet's -x: the left arrow is under their +x foot.
+      const own: 0 | 1 | null = lane === 'left' ? 1 : lane === 'right' ? 0 : null;
+      const busy = (i: 0 | 1): boolean => this.feet[i] !== null && !!frame.controls[this.feet[i]!];
+      let foot: 0 | 1;
+      if (own !== null && !busy(own)) foot = own;
+      else if (!busy(0) && (busy(1) || this.idle[0]! >= this.idle[1]!)) foot = 0;
+      else if (!busy(1)) foot = 1;
+      else foot = own ?? 0;
+      this.feet[foot] = lane;
+      this.idle[foot] = 0;
+      const [cx, cz] = GRID[lane];
+      body.footAt(foot, cabinet.localToWorld(this.footPoint.set(cx * (PANEL + 0.02), 0, this.centreZ + cz * (PANEL + 0.02))));
+    }
+    for (let i = 0; i < 2; i++) {
+      const lane = this.feet[i];
+      if (!lane) continue;
+      if (frame.controls[lane]) this.idle[i] = 0;
+      else this.idle[i]! += dt;
+      if (this.idle[i]! > FOOT_IDLE) {
+        this.feet[i] = null;
+        body.footAt(i as 0 | 1, null);
+      }
+    }
+    body.crouch(this.feet.some((lane) => lane && frame.controls[lane]) ? 0.08 : 0.04);
   }
 
   /** Hands on the side bars, either side of the dancer. */

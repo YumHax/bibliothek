@@ -245,6 +245,8 @@ export class Pinball extends THREE.Group implements Furniture, Interactable, Upd
       if (mesh.isMesh && mesh !== this.ball) mesh.receiveShadow = true;
     });
     this.speaker = new ChipSpeaker(backglass, wiring.listener);
+    // Every sound it makes is news to whoever plays or watches it.
+    this.speaker.onPlay = (sfx) => this.stationEvents.onSound?.(sfx);
     this.run = new MachineRun({
       game: this.game,
       input: wiring.input,

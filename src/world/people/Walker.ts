@@ -7,8 +7,11 @@ import { angleBetween, Glance, idleGlance, nextLeg, roundCorners, stepAlong, tur
 import { PersonModel } from './PersonModel';
 import { randomLook, type PersonLook } from './looks';
 import type { Pose } from './poses';
+import type { Performer, Reaction } from './performer';
+import type { GestureName } from './motion/gestures';
 import type { Held } from './held';
 import { SpeechBubble } from './SpeechBubble';
+import { Attention, STANDING, WALKING } from './attention';
 import { blobShadow } from '../zone/ContactShadows';
 
 export interface WalkerOptions {
@@ -36,11 +39,10 @@ export interface WalkerOptions {
   yields?: boolean;
 }
 
-/** How fast the body turns towards its heading, per second. */
+/** How fast the body turns towards its heading, per second, walking; standing, a turn is slower (the feet step it round). */
 const TURN_RATE = 5;
+const STAND_TURN_RATE = 2.6;
 const ARRIVE = 0.04;
-/** A player nearer than this gets a look. */
-const NOTICE_RANGE = 1.6;
 /** The bubble's height over the floor. */
 const BUBBLE_Y = 2.05;
 /** How much slower a rounded corner is walked. */
@@ -51,10 +53,6 @@ const AWAY_Y = -50;
 const ACCEL_S = 0.3;
 /** The slowest the last steps into a stop are walked (m/s), so the end is always reached. */
 const ARRIVE_SPEED = 0.15;
-/** Standing, a turn wider than this (radians) is shuffled round on the feet rather than swivelled. */
-const SHUFFLE_ABOVE = 0.3;
-/** Chance per second, with the player near and a focus of their own, of a glance at the player. */
-const GLANCE_RATE = 0.6;
 /**
  * Making way: the player within `ahead` m in front and `wide` m either side of the way slows them; nearer than
  * `stop` m they stop, for `patience` s at most (then go on through, as before); meanwhile they edge aside at
@@ -63,11 +61,16 @@ const GLANCE_RATE = 0.6;
 const YIELD = { ahead: 1, wide: 0.5, stop: 0.55, patience: 1.8, side: 0.45, sideMax: 0.3 };
 
 type State = { kind: 'walk'; path: THREE.Vector3[]; then: (() => void) | null } | { kind: 'stand'; yaw: number };
+/** What they keep their eyes on: a world point, the player (in conversation: mostly on them, a glance aside now and then), or nothing (their own glances). */
+export type Focus = THREE.Vector3 | 'viewer' | null;
+/** Seconds they keep their eyes on the player after a line said to them, beyond its own length. */
+const LINE_ATTENTION = 3;
 
 /**
  * Someone the hall directs: walks a path of floor points (zone-local), then stands facing a
  * given way in a given pose, eyes on a given point (a screen, the player's play) or wandering, and
- * glances at the player brushing past. Says a word in a `SpeechBubble` when told to, and a line
+ * looks at the player as people do (`Attention`: on noticing them, now and then, never a stare;
+ * mostly at them while talking to them). Says a word in a `SpeechBubble` when told to, and a line
  * when clicked. `setPresent(false)` takes them out of the hall (walked out of the door). Who goes
  * where is decided outside (the arcade's `ArcadeCrowd`); this class only walks and stands: setting
  * off and stopping over a moment, shuffling round a wide turn, and making way for the player in front
@@ -108,7 +111,8 @@ export class Walker extends THREE.Group implements Furniture, Updatable, Interac
   private state: State = { kind: 'stand', yaw: 0 };
   private heading = NaN;
   private present = true;
-  private focus: THREE.Vector3 | null = null;
+  private focus: Focus = null;
+  private readonly attention: Attention;
   private hands: (() => readonly [THREE.Vector3, THREE.Vector3]) | null = null;
   private readonly glance = new Glance();
   private readonly leg: Leg = { dx: 0, dz: 0, dist: 0 };
@@ -122,7 +126,7 @@ export class Walker extends THREE.Group implements Furniture, Updatable, Interac
     this.viewer = options.viewer;
     this.speed = options.speed ?? 0.8;
     const seed = options.seed ?? 1;
-    this.model = new PersonModel(options.look ?? randomLook(seed + 200, 'shopper'), this.viewer);
+    this.model = new PersonModel(options.look ?? randomLook(seed + 200, 'shopper'), this.viewer, seed + 200);
     this.add(this.model);
     const blob = blobShadow(0.55, 0.5);
     if (blob) this.add(blob);
@@ -139,6 +143,7 @@ export class Walker extends THREE.Group implements Furniture, Updatable, Interac
     this.corners = options.corners ?? 0;
     this.yields = options.yields ?? true;
     this.nextLine = seed;
+    this.attention = new Attention(seed);
   }
 
   get footprint(): THREE.Box3 {
@@ -151,6 +156,21 @@ export class Walker extends THREE.Group implements Furniture, Updatable, Interac
 
   get isWalking(): boolean {
     return this.state.kind === 'walk';
+  }
+
+  /** Their body, for a machine that directs it move by move (the hoops, the dance pad). */
+  get performer(): Performer {
+    return this.model;
+  }
+
+  /** Something happened to them (a point, a record, a miss): they show it their own way. */
+  react(reaction: Reaction): void {
+    this.model.react(reaction);
+  }
+
+  /** A gesture now (a wave, a coin put in). */
+  gesture(name: GestureName): void {
+    this.model.gesture(name);
   }
 
   /** How many points of the path last given to `walk` they have got past so far. */
@@ -187,7 +207,7 @@ export class Walker extends THREE.Group implements Furniture, Updatable, Interac
   }
 
   /** Sits down where they are, on a seat `height` metres high, facing `yaw`, arms in `pose`, eyes on `focus` or wandering. */
-  sit(yaw: number, height: number, pose: Pose = 'lap', focus: THREE.Vector3 | null = null): void {
+  sit(yaw: number, height: number, pose: Pose = 'lap', focus: Focus = null): void {
     this.stand(yaw, pose, focus);
     this.seated = true;
     this.model.sit(height);
@@ -212,6 +232,7 @@ export class Walker extends THREE.Group implements Furniture, Updatable, Interac
     this.state = { kind: 'walk', path: points, then: then ?? null };
     this.focus = null;
     this.hands = null;
+    this.model.release();
     this.model.setPose('stand');
     this.model.reach(null);
     this.model.lean(0);
@@ -222,7 +243,7 @@ export class Walker extends THREE.Group implements Furniture, Updatable, Interac
    * or wandering. At a machine: `hands` gives the world points the hands stay on (read every frame,
    * so they follow a joystick), `lean` bends the upper body over it.
    */
-  stand(yaw: number, pose: Pose, focus: THREE.Vector3 | null = null, hands: (() => readonly [THREE.Vector3, THREE.Vector3]) | null = null, lean = 0): void {
+  stand(yaw: number, pose: Pose, focus: Focus = null, hands: (() => readonly [THREE.Vector3, THREE.Vector3]) | null = null, lean = 0): void {
     this.state = { kind: 'stand', yaw };
     this.seated = false;
     this.current = 0;
@@ -254,7 +275,7 @@ export class Walker extends THREE.Group implements Furniture, Updatable, Interac
     this.model.setHood(up);
   }
 
-  setFocus(focus: THREE.Vector3 | null): void {
+  setFocus(focus: Focus): void {
     this.focus = focus;
   }
 
@@ -270,12 +291,20 @@ export class Walker extends THREE.Group implements Furniture, Updatable, Interac
 
   /** A line to the player, over their head with their name (or in the subtitles, out of view); `name` overrides theirs. */
   speak(text: string, name = this.speaker): void {
-    this.bubble.speak(text, name, () => this.lineShown(text));
+    this.bubble.speak(text, name, () => {
+      this.lineShown(text);
+      this.attention.engage(this.lineSeconds(text) + LINE_ATTENTION);
+    });
   }
 
   /** A line of theirs just showed (a queued one, after those before it): they nod along while it would take to say. */
   protected lineShown(text: string): void {
-    this.model.talk(Math.min(3.5, 0.5 + text.length * 0.045));
+    this.model.talk(this.lineSeconds(text));
+  }
+
+  /** About how long `text` takes to say (s). */
+  private lineSeconds(text: string): number {
+    return Math.min(3.5, 0.5 + text.length * 0.045);
   }
 
   update(dt: number): void {
@@ -283,10 +312,9 @@ export class Walker extends THREE.Group implements Furniture, Updatable, Interac
     if (Number.isNaN(this.heading)) this.heading = this.rotation.y;
     if (this.state.kind === 'walk') this.step(dt, this.state);
     else {
-      // A wide turn standing: the feet shuffle round with it (a seated body only turns its head).
-      const gap = Math.abs(angleBetween(this.heading, this.state.yaw));
-      this.face(this.state.yaw, dt);
-      this.model.setSpeed(!this.seated && gap > SHUFFLE_ABOVE ? Math.min(0.4, gap * TURN_RATE * 0.1) : 0);
+      // Turning on the spot, slower than walking: the planted feet step round with it (`PersonModel`).
+      this.face(this.state.yaw, dt, this.seated ? TURN_RATE : STAND_TURN_RATE);
+      this.model.setSpeed(0);
       // Hands on the controls once turned to them (reaching while still turning would twist the arms).
       if (this.hands) this.model.reach(this.facing(this.state.yaw) ? this.hands() : null);
       this.look(dt);
@@ -401,19 +429,27 @@ export class Walker extends THREE.Group implements Furniture, Updatable, Interac
     return Math.abs(angleBetween(this.heading, yaw)) < 0.25;
   }
 
-  private face(yaw: number, dt: number): void {
-    this.heading = turnTowards(this.heading, yaw, dt, TURN_RATE);
+  private face(yaw: number, dt: number, rate = TURN_RATE): void {
+    this.heading = turnTowards(this.heading, yaw, dt, rate);
     this.rotation.y = this.heading;
   }
 
-  /** The player close by gets a look; else the focus, else a glance about now and then. */
+  /**
+   * The player when `Attention` says so (on noticing them, a nod sometimes; now and then after; mostly while
+   * talking with them); else the focus, else a glance about now and then. Playing a machine, they keep their
+   * eyes on it unless spoken to.
+   */
   private look(dt: number): void {
-    const near = viewerWithin(this, this.viewer, NOTICE_RANGE, this.viewerPos, this.here);
-    if (near && (!this.focus || Math.random() < GLANCE_RATE * dt)) {
+    if (this.focus === 'viewer') this.attention.engage(1);
+    const walking = this.state.kind === 'walk';
+    const busy = this.hands !== null && !this.attention.inConversation;
+    const atPlayer = this.attention.update(dt, this, this.viewer, walking ? WALKING : STANDING, this.viewerPos) && !busy;
+    if (this.attention.takeNotice() && !busy) this.model.nod();
+    if (atPlayer) {
       this.model.gaze(this.viewerPos);
       return;
     }
-    if (this.focus) {
+    if (this.focus instanceof THREE.Vector3) {
       this.model.gaze(this.focus);
       return;
     }

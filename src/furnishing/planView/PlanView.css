@@ -1,0 +1,65 @@
+/* The planning view: the game's HUD out of the way, a strip of keys and a cursor above the canvas. */
+body.plan-view .crosshair,
+body.plan-view .hover-label,
+body.plan-view .speech-layer,
+body.plan-view .reaction,
+body.plan-view .reading-stage,
+body.plan-view .reward-stage,
+body.plan-view .touch-stick,
+body.plan-view .touch-badge {
+  visibility: hidden;
+}
+
+.plan-view-hud,
+.plan-view-cursor {
+  z-index: var(--z-hud);
+}
+
+.plan-view-hud {
+  position: absolute;
+  top: 1rem;
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: calc(100vw - 2rem);
+  padding: 0.55rem 0.9rem;
+  box-sizing: border-box;
+  color: #f2f2f2;
+  font-size: 0.8rem;
+  line-height: 1.45;
+  text-align: center;
+  background: rgba(10, 10, 14, 0.66);
+  border-radius: 8px;
+  pointer-events: none;
+}
+
+.plan-view-hud strong {
+  font-weight: 600;
+}
+
+.plan-view-status {
+  display: block;
+  margin-top: 0.2rem;
+  color: #cfe9d4;
+}
+
+.plan-view-status[data-fits='false'] {
+  color: #ffb3aa;
+}
+
+.plan-view-cursor {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 18px;
+  height: 18px;
+  margin: -9px 0 0 -9px;
+  border: 2px solid rgba(255, 255, 255, 0.9);
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.45);
+  pointer-events: none;
+}
+
+.plan-view-cursor[data-over='true'] {
+  border-color: #fff2d0;
+  background: rgba(255, 242, 208, 0.25);
+}

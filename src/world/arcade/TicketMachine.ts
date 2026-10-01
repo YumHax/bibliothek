@@ -9,6 +9,7 @@ import type { ArcadeControls } from './games/ArcadeGame';
 import type { InitialsEntry } from './InitialsEntry';
 import type { TicketStrip } from './TicketStrip';
 import type { Occupant, Station, StationEvents } from './Station';
+import type { Performer } from '../people/performer';
 import type { ScoreTable } from './scoreTable';
 import { MachineRun, type MachineRunOptions, type MachineState } from './MachineRun';
 
@@ -53,6 +54,8 @@ export abstract class TicketMachine extends THREE.Group implements Furniture, In
   /** The out-of-order note on its display, when it has one. */
   protected note: THREE.Object3D | null = null;
   private machineRun: MachineRun | null = null;
+  /** The regular on it, when their body is the machine's to direct (`occupy`). */
+  protected performer: Performer | null = null;
 
   protected constructor(protected readonly wiring: TicketMachineWiring) {
     super();
@@ -129,14 +132,19 @@ export abstract class TicketMachine extends THREE.Group implements Furniture, In
     this.newGame();
   }
 
-  occupy(): boolean {
+  occupy(performer?: Performer): boolean {
     if (!this.run.occupy()) return false;
+    this.performer = performer ?? null;
     this.newGame();
+    this.performerChanged();
     return true;
   }
 
   release(): void {
-    if (this.run.release()) this.newGame();
+    if (!this.run.release()) return;
+    this.performerChanged();
+    this.performer = null;
+    this.newGame();
   }
 
   label(): string {
@@ -152,6 +160,8 @@ export abstract class TicketMachine extends THREE.Group implements Furniture, In
   }
 
   update(dt: number): void {
+    // Every sound it makes is news to whoever plays or watches it.
+    this.speaker.onPlay ??= (sfx) => this.stationEvents.onSound?.(sfx);
     this.speaker.follow();
     // The pointer went free mid-play: everything holds still until it is locked again.
     if (this.run.paused) return;
@@ -163,6 +173,7 @@ export abstract class TicketMachine extends THREE.Group implements Furniture, In
       if (this.play(dt, run.readControls())) this.finished(run.finish(this.score));
     } else if (run.state === 'demo') {
       if (run.regularDone) {
+        this.betweenGames(dt);
         if (run.regularPause(dt, REGULAR_PAUSE)) this.newGame();
       } else if (this.play(dt, this.demoControls(dt))) {
         run.regularResult(this.score);
@@ -232,6 +243,12 @@ export abstract class TicketMachine extends THREE.Group implements Furniture, In
   protected clickWhilePlaying(): boolean {
     return false;
   }
+
+  /** A regular came (`performer` set) or went (still set, for the last time): the machine may direct their body. */
+  protected performerChanged(): void {}
+
+  /** A frame of the pause between a regular's games. */
+  protected betweenGames(_dt: number): void {}
 
   /** The player's play ended (the alley sighs or cheers). */
   protected finished(_result: ArcadeResult): void {}

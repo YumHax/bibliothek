@@ -11,7 +11,7 @@ import { furnishDecor, placeRoomLight, placeStrayBox } from '../build/roomParts'
 import { heardBy, pointSound } from '../build/hearing';
 import { followDaylight, followUpgrades } from '../build/follow';
 import { placerFor } from '../build/owned';
-import { bookcasesIn } from '../build/bookcases';
+import { bookcasesIn, movableBookcases } from '../build/bookcases';
 import type { CatPerch } from '../cat/spots';
 import { Bed } from './Bed';
 import { Nightstand } from './Nightstand';
@@ -164,7 +164,7 @@ export function furnishBedroom(zone: Zone, ctx: BuildContext): BedroomHandle {
     }),
   );
 
-  const shelving = overflow && upgrades ? furnishBookcases(zone, covers, overflow, upgrades, ctx.collection) : null;
+  const shelving = overflow && upgrades ? furnishBookcases(zone, covers, overflow, upgrades, ctx.collection, furnishings) : null;
   // What the arcade paid out, on the bare right wall.
   if (prizes) zone.placeAt(new PrizeShelf({ prizes, width: plan.prizeShelf.width }), plan.prizeShelf.at);
   // Prizes that live at home, hidden until won: the arcade poster on the wall, the mood lamp on the dresser's books.
@@ -197,6 +197,7 @@ function furnishBookcases(
   overflow: NonNullable<CollectionContext['overflow']>,
   upgrades: NonNullable<HomeContext['upgrades']>,
   { arrangement, boxes, shelved }: Pick<CollectionContext, 'arrangement' | 'boxes' | 'shelved'>,
+  furnishings: HomeContext['furnishings'],
 ): Shelving {
   const plan = BEDROOM_PLAN;
   const { position, rotationY } = resolvePlacement(plan.room, plan.bookcase.at);
@@ -205,6 +206,7 @@ function furnishBookcases(
   const here = (bought = upgrades.count('bookcase')) => bookcasesIn(bought).bedroom;
   const shelving = new Shelving(zone, covers, overflow, {
     id: 'bedroom',
+    ...movableBookcases(zone, furnishings),
     ...(arrangement ? { arrangement } : {}),
     ...(boxes ? { pool: boxes } : {}),
     ...(shelved ? { rowsFrom: shelved } : {}),

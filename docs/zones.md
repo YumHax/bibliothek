@@ -272,6 +272,15 @@ RETRO GAMES keeps `SHOP_HOURS`).
   `QUALITY.reflections`, a masked `Reflector` hidden while dry (`WetGround`), autumn leaves (`Leaves`), manholes,
   hydrants, bollards, a Morris column and the roadworks (`StreetDetails`), the flickering lamp's buzz (`LampBuzz`).
   `snowCovered()` (`snowCover.ts`, uniform written by `StreetGround`) whitens up-facing faces of everything.
+- **The walk-in shops' fronts** (`shopfronts/`, data in `shopfrontPlan`): their display windows stand 0.45 m out of
+  the wall on stall risers (tiles, panels, enamel), the door set back between them on a mosaic step, pilasters, head and
+  fascia mouldings per kind, a sign on a bracket, lines lettered on the glass, window displays behind it (TV sets in
+  snow, the cat asleep, bouquets, an armchair under a lit lamp: `windowDisplays`), the door's OPEN / CLOSED card turned
+  with `SHOP_HOURS` (`ShopfrontRelief`, colliding, also in the outlook). No shutter (`Shutters` skips them): the displays
+  stay softly lit after closing. Through the glass `ShopInteriors` paints their real rooms (`relief/walkInInteriors`).
+  What they put out on the pavement while open (`STREET_PLAN.shopSpill`, `ShopSpill`) collides only while out; keep it
+  and the fronts clear of the crowd's lanes (SECOND HOME's moved the far lane to z 11.2). TV REPAIR's name is a neon
+  (`STREET_PLAN.signs`; its board is painted bare: `ShopLook.signed`).
 - **Shops** (`shops/`): `ShopEntrance` on every shop door along the walkable pavements (caption, `SHOP_HOURS`, a word,
   or an offer: the café's coffee = the market's coffee of the day plus the barista's tip, the newsagent's scratch cards in
   `ui/ScratchCardPanel`, a croissant, a lemonade and gossip); the furniture shop, the TV repair shop, the pet shop and

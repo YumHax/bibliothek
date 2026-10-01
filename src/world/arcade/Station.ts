@@ -1,5 +1,7 @@
 import type * as THREE from 'three';
 import type { ArcadeResult } from '@/game/SessionActions';
+import type { Sfx } from '@/audio/ChipSpeaker';
+import type { Performer } from '../people/performer';
 
 /** Who is at a machine: the player, one of the hall's regulars, or nobody. */
 export type Occupant = 'player' | 'regular' | null;
@@ -11,6 +13,8 @@ export interface StationEvents {
   onPlayerLeave?: () => void;
   /** A regular's game on it ended with this score (the crowd may put it on the hall of fame under their initials). */
   onRegularResult?: (score: number) => void;
+  /** It made a sound (a point, a bonus, a life lost, the game over), whoever plays: the people at it and round it react. */
+  onSound?: (sfx: Sfx) => void;
 }
 
 /** The second player's place at a two-player machine: where they stand and hold the controls (machine-local), and who they are. */
@@ -36,8 +40,13 @@ export interface Station extends THREE.Object3D {
   handsAt(): readonly [THREE.Vector3, THREE.Vector3];
   /** How far a player leans in over it (radians): a little over a panel, a lot over a pinball. */
   readonly lean: number;
-  /** A regular steps up: the machine plays itself until `release`. False (nothing changes) when it is taken. */
-  occupy(): boolean;
+  /**
+   * A regular steps up: the machine plays itself until `release`. False (nothing changes) when it is
+   * taken. With `performer` (their body), a machine that plays by the body (the hoops, the dance pad) directs it.
+   */
+  occupy(performer?: Performer): boolean;
+  /** It directs the body of whoever plays it (`occupy` with a performer): their hands are its business, not the controls'. */
+  readonly directs?: boolean;
   release(): void;
   /** Out of order today: nobody plays it (the crowd walks past). */
   readonly outOfOrder?: boolean;

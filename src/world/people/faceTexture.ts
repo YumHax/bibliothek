@@ -10,8 +10,8 @@ import { cachedTexture } from './textureCache';
  * geometry (`radialSurface`): x is the azimuth with the face in the middle and +x to the right, y
  * the polar angle from the crown (top) to under the chin (bottom), 1 radian = W / 2pi pixels both
  * ways. Painted in the same angles the head is sculpted in (`au`, `fv`): the flush of the cheeks
- * and nose, shade in the eye sockets and under the jaw, stubble, freckles, then the brows, the lips
- * and the nostrils.
+ * and nose, shade in the eye sockets and under the jaw, stubble, freckles, then the eyes as seen
+ * from afar, the brows, the lips and the nostrils.
  */
 
 const W = 1024;
@@ -21,7 +21,7 @@ type RGB = [number, number, number];
 
 /** The head's skin for `look`, shared by every look with the same values for it (`cachedTexture`). */
 export function paintFace(look: PersonLook): THREE.CanvasTexture {
-  const key = ['face', look.skin, look.hair, Math.round(look.nose * 100), look.beard ?? '', look.freckles, look.brows, look.smile].join('|');
+  const key = ['face', look.skin, look.hair, Math.round(look.nose * 100), look.beard ?? '', look.freckles, look.brows, look.smile, look.eyes].join('|');
   return cachedTexture(key, () => paint(look));
 }
 
@@ -105,6 +105,7 @@ function paint(look: PersonLook): THREE.CanvasTexture {
     }
   }
 
+  farEyes(ctx, look, skin);
   brows(ctx, look, hair, random);
   lips(ctx, look, skin);
   // Nostrils, on the underside of the tip.
@@ -120,6 +121,25 @@ function paint(look: PersonLook): THREE.CanvasTexture {
 /** Canvas pixel of the face angles (`u` across, +x to the right; `v` up). */
 function P(u: number, v: number): [number, number] {
   return [W * (0.5 + u / (2 * Math.PI)), H * (0.5 - v / Math.PI)];
+}
+
+/**
+ * The eyes as seen from afar, painted where the eyeballs sit: a dark almond with the iris in it.
+ * The balls and lids hide it close up; past the distance where they dither out (`PersonModel`'s
+ * details) it keeps the face from going blank.
+ */
+function farEyes(ctx: CanvasRenderingContext2D, look: PersonLook, skin: RGB): void {
+  for (const side of [-1, 1]) {
+    const [x, y] = P(side * 0.39, 0.148);
+    ctx.fillStyle = css(mix(skin, [48, 34, 30], 0.5));
+    ctx.beginPath();
+    ctx.ellipse(x, y, 20, 6, side * -0.08, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = css(mix(rgb(look.eyes), [12, 10, 9], 0.5), 0.9);
+    ctx.beginPath();
+    ctx.arc(x, y, 5.5, 0, Math.PI * 2);
+    ctx.fill();
+  }
 }
 
 /** Each brow: a tapering band arching over the eye, then hairs combed up and out. */
@@ -185,10 +205,15 @@ function lips(ctx: CanvasRenderingContext2D, look: PersonLook, skin: RGB): void 
   ctx.beginPath();
   ctx.ellipse(...P(0, -0.64), 10, 3, 0, 0, Math.PI * 2);
   ctx.fill();
-  // The line between them, deepest at the corners.
-  ctx.strokeStyle = css(mix(base, [20, 8, 8], 0.6));
-  ctx.lineWidth = 2;
+  // The line between them, deepest at the corners: a soft shadow, then the dark parting (the jaw stretches it open, `addJaw`).
   ctx.lineCap = 'round';
+  ctx.strokeStyle = css(mix(base, [20, 8, 8], 0.45), 0.5);
+  ctx.lineWidth = 4;
+  ctx.beginPath();
+  mouth();
+  ctx.stroke();
+  ctx.strokeStyle = css(mix(base, [20, 8, 8], 0.7));
+  ctx.lineWidth = 2.2;
   ctx.beginPath();
   mouth();
   ctx.stroke();

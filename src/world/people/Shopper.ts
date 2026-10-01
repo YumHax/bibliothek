@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import type { Updatable } from '@/core/Engine';
 import type { Furniture } from '../Furniture';
-import { Glance, idleGlance, nextLeg, stepAlong, turnTowards, viewerWithin, type Leg } from './locomotion';
+import { Glance, idleGlance, nextLeg, stepAlong, turnTowards, type Leg } from './locomotion';
+import { Attention, STANDING, WALKING } from './attention';
 import { PersonModel } from './PersonModel';
 import { randomLook, type PersonLook } from './looks';
 import type { Pose } from './poses';
@@ -43,8 +44,6 @@ type State = { kind: 'walk'; path: THREE.Vector3[]; then: BrowseSpot | null } | 
 /** How fast the body turns towards its heading, per second. */
 const TURN_RATE = 4;
 const ARRIVE = 0.05;
-/** A player nearer than this gets a look. */
-const NOTICE_RANGE = 1.8;
 /** Walkers keep to the right of the aisle's centre line by this much, so two never walk through each other. */
 const LANE = 0.28;
 /** A player this close ahead of a walker makes them stop and wait (up to `YIELD_PATIENCE` seconds, then they squeeze past). */
@@ -98,6 +97,7 @@ export class Shopper extends THREE.Group implements Furniture, Updatable {
   private readonly blob: THREE.Mesh | null;
   private fade = 1;
   private fadeTo = 1;
+  private readonly attention: Attention;
 
   constructor(options: ShopperOptions) {
     super();
@@ -108,13 +108,14 @@ export class Shopper extends THREE.Group implements Furniture, Updatable {
     this.speed = options.speed ?? 0.75;
     this.claims = options.claims ?? new Set();
     const seed = options.seed ?? 1;
-    this.model = new PersonModel(options.look ?? randomLook(seed + 100, 'shopper'), this.viewer);
+    this.model = new PersonModel(options.look ?? randomLook(seed + 100, 'shopper'), this.viewer, seed + 100);
     this.add(this.model);
     const blob = blobShadow(0.55, 0.5);
     if (blob) this.add(blob);
     this.blob = blob;
     this.exit = options.exit;
     if (this.exit) this.model.enableFade();
+    this.attention = new Attention(seed + 100);
     // Everyone starts somewhere different along the aisle, already walking.
     this.state = { kind: 'linger', left: 0.5 + (seed % 5) };
   }
@@ -131,7 +132,7 @@ export class Shopper extends THREE.Group implements Furniture, Updatable {
   /** They make up their mind and buy something: a cheer, and they move on a little later. */
   buy(): void {
     if (this.state.kind !== 'browse') return;
-    this.model.setPose('cheer');
+    this.model.react('great');
     this.state.left = Math.min(this.state.left, 1.8);
   }
 
@@ -349,13 +350,13 @@ export class Shopper extends THREE.Group implements Furniture, Updatable {
 
   /** Browsing: eyes on the table ahead, wandering along it, an occasional look up. */
   private browseGaze(dt: number): void {
-    if (this.playerGlance()) return;
+    if (this.playerGlance(dt)) return;
     this.gazeAt(this.glance.update(dt, browseGlance));
   }
 
   /** Walking or lingering: ahead, with the odd look aside. */
   private idleGaze(dt: number): void {
-    if (this.playerGlance()) return;
+    if (this.playerGlance(dt)) return;
     this.gazeAt(this.glance.update(dt, idleGlance));
   }
 
@@ -364,9 +365,11 @@ export class Shopper extends THREE.Group implements Furniture, Updatable {
     this.model.gaze(this.localToWorld(this.gazePoint.copy(point)));
   }
 
-  /** The player close by gets looked at; true when that is what the head is doing. */
-  private playerGlance(): boolean {
-    if (!viewerWithin(this, this.viewer, NOTICE_RANGE, this.viewerPos, this.mine)) return false;
+  /** The player looked at when `Attention` says so (on noticing them, a nod sometimes; now and then after); true when that is what the head is doing. */
+  private playerGlance(dt: number): boolean {
+    const looking = this.attention.update(dt, this, this.viewer, this.state.kind === 'browse' || this.state.kind === 'linger' ? STANDING : WALKING, this.viewerPos);
+    if (this.attention.takeNotice()) this.model.nod();
+    if (!looking) return false;
     this.model.gaze(this.viewerPos);
     return true;
   }

@@ -6,6 +6,7 @@ import type { FlatFront } from '../streetPlan';
 import { snowCovered } from '../snowCover';
 import { FacadeFrame } from './facadeFrame';
 import { TriBuilder } from './TriBuilder';
+import { hasShopfront } from '../shopfronts/shopfrontPlan';
 
 /** An awning: fixed to the wall at `top`, reaching `reach` out and down to `edge`, a valance `valance` deep, stripes `stripe` wide. */
 const AWNING = { top: 3.0, reach: 1.05, edge: 2.48, valance: 0.2, scallop: 0.07, stripe: 0.35 };
@@ -52,6 +53,8 @@ export class FacadeRelief extends THREE.Group implements Furniture {
       for (const door of features.doors) {
         // A door under an awning keeps flat: its shutter and the awning leave no room for a surround.
         if (door.shop && awnings.some((f) => door.s > f.s0 && door.s < f.s1)) continue;
+        // A walk-in shop's door is set back between its windows' returns (`shopfronts/`).
+        if (door.shop && features.shopfronts.some((f) => hasShopfront(f.kind) && door.s > f.s0 && door.s < f.s1)) continue;
         surround(stone, m, door.s, door.width, door.height, door.shop ? door.color : features.trim);
       }
       if (front.spec.flat?.balcony) flatBalcony(stone, iron, props, m, front.spec.flat.floorY, front.spec.flat.balcony, slab);

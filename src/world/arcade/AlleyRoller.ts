@@ -23,6 +23,8 @@ export interface AlleyRollerOptions {
 export type AlleyWiring = TicketMachineWiring & { scores: ScoreTable };
 
 const STAND_Z = 1.45;
+/** How long a regular's hand goes on with the ball as it leaves (s). */
+const FOLLOW_THROUGH = 0.18;
 /** Where a regular's feet go: close enough to reach the ball in hand, bending over the lane's end. */
 const PERSON_Z = 1.3;
 
@@ -72,11 +74,15 @@ export class AlleyRoller extends TicketMachine {
     return new THREE.Box3(new THREE.Vector3(-WIDTH / 2, 0, BACK_Z - 0.03), new THREE.Vector3(WIDTH / 2, BACK_H, LANE_NEAR.z + 0.18));
   }
 
-  /** The left hand on the rail, the right on the ball in hand while aiming (else resting on the lane's end). */
+  /**
+   * The left hand on the rail, the right on the ball in hand while aiming, pushing it on up the lane
+   * for the first moment of its roll (the follow-through), else resting on the lane's end.
+   */
   handsAt(): readonly [THREE.Vector3, THREE.Vector3] {
     const { ball } = this.model;
     this.localToWorld(this.hands[0].set(-(WIDTH / 2 - 0.1), LANE_NEAR.y + 0.13, LANE_NEAR.z + 0.04));
-    if (this.sim.phase === 'aim' && ball.visible) this.localToWorld(this.hands[1].copy(ball.position).setY(ball.position.y + BALL_R * 0.8));
+    const pushing = this.sim.phase === 'roll' && this.sim.phaseTime < FOLLOW_THROUGH;
+    if ((this.sim.phase === 'aim' || pushing) && ball.visible) this.localToWorld(this.hands[1].copy(ball.position).setY(ball.position.y + BALL_R * 0.8));
     else this.localToWorld(this.hands[1].set(0.12, LANE_NEAR.y + 0.06, LANE_NEAR.z + 0.12));
     return this.hands;
   }

@@ -18,9 +18,9 @@ const STEM = 0x4a7a3a;
 
 /**
  * The florist's stepped stand of cut flowers: three wooden treads rising to the wall, galvanised buckets along each,
- * every bucket a bunch of one colour (tulips, roses, daisies...). The shop's, not for the flat: the flat's plants are
- * the potted ones on the tables. Static: its parts merge. Wall-hung with `y: 0`: origin on the floor at the wall, +z
- * into the room. Collides as its box.
+ * every bucket a bunch of one colour (tulips, roses, daisies...), a price card on a stick in some. The shop's, not
+ * for the flat: the flat's plants are the potted ones on the tables. Static: its parts merge. Wall-hung with `y: 0`:
+ * origin on the floor at the wall, +z into the room. Collides as its box.
  */
 export class FlowerStand extends THREE.Group implements Furniture {
   readonly footprint: THREE.Box3;
@@ -33,6 +33,8 @@ export class FlowerStand extends THREE.Group implements Furniture {
     const wood = timber(0x9a7048, 0.7);
     const zinc = METAL.satinSteel();
     const stem = paint(STEM, 0.7);
+    const stick = paint(0x6a5a3a, 0.8);
+    const card = paint(0xf4f0e4, 0.8);
     // One unit sphere for every head (scaled): the merge still makes one draw per colour.
     const headShape = new THREE.SphereGeometry(1, 10, 8);
     for (const [y, z] of STEPS) {
@@ -57,6 +59,12 @@ export class FlowerStand extends THREE.Group implements Furniture {
           head.scale.set(size, size * 0.8, size);
           head.castShadow = true;
           this.add(head);
+        }
+        // A price card on a stick in some of them, turned to the room.
+        if (random() < 0.45) {
+          const cz = z + TREAD / 2 + r * 0.7;
+          part(this, 0.003, 0.26, 0.003, stick, { x: x + r * 0.4, y: y + 0.13 + 0.12, z: cz });
+          part(this, 0.055, 0.038, 0.003, card, { x: x + r * 0.4, y: y + 0.4, z: cz + 0.003 });
         }
         x += r * 2 + 0.06;
       }

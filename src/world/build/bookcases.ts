@@ -1,3 +1,5 @@
+import type { Furnishings } from '@/furnishing/Furnishings';
+import type { Zone } from '../zone/Zone';
 import type { ShelvingOptions } from '../shelving/Shelving';
 import { slotCount } from '../shelving/Shelving';
 import { ROOM_PLAN } from '../roomPlan';
@@ -19,4 +21,18 @@ export function bookcasesIn(bought: number): { living: number; bedroom: number }
   livingSlots ??= slotCount(livingShelvingOptions());
   const living = Math.min(livingSlots, 1 + bought);
   return { living, bedroom: Math.max(0, 1 + bought - living) };
+}
+
+/**
+ * A shelving's `onBookcase` making each of its bookcases a movable piece of `zone` (keyed by slot, `bookcase:0`...:
+ * a rebuild puts the new one where the player moved the old), or nothing without the flat's furnishings.
+ */
+export function movableBookcases(zone: Zone, furnishings: Furnishings | undefined): Pick<ShelvingOptions, 'onBookcase'> {
+  if (!furnishings) return {};
+  return {
+    onBookcase: (shelf, index) => {
+      furnishings.register(zone, shelf, { key: `bookcase:${index}`, name: 'Bookcase', keepsRoom: true });
+      return () => furnishings.unregister(shelf);
+    },
+  };
 }

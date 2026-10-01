@@ -12,7 +12,9 @@ import { PAD_LABELS, type PadButton } from './padButtons';
  * Shared keys are settled by the Session's route order (`Session.routes`), never here:
  * - `KeyE`: `walkAway` (arcade, first) > `putBackPiece` (furniture carried) > `putBack` (a box in hand) > `standUp` (seated, last);
  * - `KeyM`: `setDown` (furniture carried) > `putHere` (a shelf box in hand, aimed at a shelf) > `moveFurniture` (hands free);
- * - `KeyR`: `turnPiece` (furniture carried) first;
+ *   the right mouse button does the same (`Session.bindInput`: a tap with a box in hand, a press otherwise);
+ * - `KeyR`: `turnPiece` (furniture carried) first; `KeyQ`: `turnPieceBack` (furniture carried) > `readStalls` (market);
+ * - `KeyG`: `gridSnap` (furniture carried); `KeyU`: `handBack` (market copy in hand) > `undoMove` (hands free);
  * - `KeyO`: `lookInside` (a market copy: finds out a fake, lets the key go on) then `openBox`;
  * - `KeyR`: `holdCopy` (a market copy in hand) > `randomPick` (Browse skips it while holding);
  * - `Space` / `Enter`: `fire` (the arcade replays on its end card) > `pickUpFound` (Browse);
@@ -87,13 +89,13 @@ export const ACTIONS = {
   },
   lookInside: { codes: ['KeyO'], context: 'market', hint: 'open a market copy: a fake shows inside (shares openBox’s key)' },
 
-  // --- M: moving things about the flat (docs/furnishing.md) ----------------------------------------------
+  // --- Moving things about the flat (docs/furnishing.md): right-click takes, M does the same ----------------------
   moveFurniture: {
-    codes: ['KeyM'], context: 'room', hint: 'pick up the piece of furniture looked at, to move it', padHold: 'GamepadX',
-    touch: { label: 'Move', title: 'Move the furniture you look at', slot: 8 }, rebind: 'Move furniture / put the box here',
+    codes: ['KeyM'], context: 'room', hint: 'pick up the piece of furniture looked at, to move it (a right-click does too)', padHold: 'GamepadX',
+    touch: { label: 'Move', title: 'Move the furniture you look at (or hold a finger on it)', slot: 8 }, rebind: 'Move furniture / put the box here',
   },
   putHere: {
-    codes: ['KeyM'], context: 'held', hint: 'put the box in hand where you aim on a shelf (shares moveFurniture’s key)',
+    codes: ['KeyM'], context: 'held', hint: 'put the box in hand where you aim on a shelf (a right-click tap does too; shares moveFurniture’s key)',
     touch: { label: 'Put here', title: 'Put the box where you aim on a shelf', slot: 8 },
   },
   setDown: {
@@ -101,12 +103,30 @@ export const ACTIONS = {
     touch: { label: 'Set down', title: 'Set the piece down here', slot: 1 },
   },
   turnPiece: {
-    codes: ['KeyR'], context: 'furnishing', hint: 'turn the carried piece (the mouse wheel turns it finer)',
+    codes: ['KeyR'], context: 'furnishing', hint: 'turn the carried piece a quarter clockwise (the wheel turns it an eighth)',
     touch: { label: 'Turn', title: 'Turn the piece', slot: 2 },
   },
+  turnPieceBack: {
+    codes: ['KeyQ'], context: 'furnishing', hint: 'turn the carried piece a quarter the other way (shares readStalls’s key)',
+    touch: { label: 'Turn back', title: 'Turn the piece the other way', slot: 5 },
+  },
+  gridSnap: {
+    codes: ['KeyG'], context: 'furnishing', hint: 'snap the carried piece to the grid, or let it go free', rebind: 'Grid on / off',
+    touch: { label: 'Grid', title: 'Snap to the grid, or place freely', slot: 4 },
+  },
   putBackPiece: {
-    codes: ['KeyE'], context: 'furnishing', hint: 'put the carried piece back where it was',
+    codes: ['KeyE'], context: 'furnishing', hint: 'put the carried piece back where it was (a right-click does too)',
     touch: { label: 'Put back', title: 'Put the piece back where it was', slot: 3 },
+  },
+  storePiece: {
+    codes: ['KeyX'], context: 'furnishing', hint: 'put the carried piece away (the pause menu takes it out again, in any room; shares swap’s key)',
+    touch: { label: 'Put away', title: 'Put the piece away, out of sight', slot: 6 },
+  },
+  planView: {
+    codes: ['KeyL'], context: 'room', hint: 'plan the room from above: move the furniture with the mouse (again: back)', rebind: 'Plan the room',
+  },
+  undoMove: {
+    codes: ['KeyU'], context: 'room', hint: 'undo the last piece of furniture moved (hands free; shares handBack’s key)', rebind: 'Undo a move / hand back',
   },
 
   // --- browsing the room -------------------------------------------------------------------------------
@@ -132,8 +152,8 @@ export const ACTIONS = {
   },
   holdCopy: { codes: ['KeyR'], context: 'market', hint: 'hold it for the day (shares randomPick’s key)' },
   swap: { codes: ['KeyX'], context: 'market', hint: 'swap one of yours for it', rebind: 'Swap' },
-  handBack: { codes: ['KeyU'], context: 'market', hint: 'hand back what was just bought', rebind: 'Hand back' },
-  readStalls: { codes: ['KeyQ'], context: 'market', hint: 'hold to read titles and prices from the aisle', rebind: 'Read the stalls' },
+  handBack: { codes: ['KeyU'], context: 'market', hint: 'hand back what was just bought' },
+  readStalls: { codes: ['KeyQ'], context: 'market', hint: 'hold to read titles and prices from the aisle', rebind: 'Read the stalls / turn a piece back' },
 
   // --- found box, panels -------------------------------------------------------------------------------
   pickUpFound: { codes: ['Enter', 'NumpadEnter'], context: 'room', hint: 'pick up the box the search / random pick found' },

@@ -8,6 +8,7 @@ import { randomLook, type PersonLook } from './looks';
 import type { Pose } from './poses';
 import { blobShadow } from '../zone/ContactShadows';
 import { SpeechBubble } from './SpeechBubble';
+import { Attention, type AttentionRange } from './attention';
 
 export interface VendorOptions {
   /** Whose gaze to meet: the camera. */
@@ -27,8 +28,13 @@ export interface VendorOptions {
   speaker?: string;
 }
 
-/** A player nearer than this, in front of the stall, gets looked at. */
+/** A player nearer than this, in front of the stall, is noticed (and called out to). */
 const NOTICE_RANGE = 4.5;
+/** Who they notice: anyone within `NOTICE_RANGE` round the front of the stall. */
+const ATTENTION: AttentionRange = { range: NOTICE_RANGE, cone: 1.3 };
+/** Seconds they keep their eyes on the player after a line said to them, beyond its own length; after a word or a cry. */
+const LINE_ATTENTION = 3;
+const WORD_ATTENTION = 1.5;
 /** Where the stall's wares are, from where the vendor stands: a little ahead and down, for the idle glance at the table. */
 const TABLE_POINT = new THREE.Vector3(0, 0.85, 0.8);
 /** The speech bubble's height over the floor. */
@@ -40,8 +46,9 @@ const STANCES: Pose[] = ['stand', 'crossed', 'hips', 'pockets', 'crossed'];
 
 /**
  * The stallholder: stands behind the table facing the aisle, shifts their weight, looks over
- * their wares, folds their arms or puts their hands on their hips for a while, and turns to the
- * player when they come up to the stall. Clicking them gets a line, said over their head
+ * their wares, folds their arms or puts their hands on their hips for a while, and looks up at the
+ * player coming to the stall (a nod sometimes, unfolding their arms), then now and then
+ * (`Attention`), and mostly at them while talking to them. Clicking them gets a line, said over their head
  * (`speak`). Origin on the floor, faces local +z like the stall. Collides (a
  * standing person is not walked through), but never moves.
  */
@@ -64,6 +71,8 @@ export class Vendor extends THREE.Group implements Furniture, Interactable, Upda
   private callOutTimer: number;
   private readonly viewerPos = new THREE.Vector3();
   private readonly local = new THREE.Vector3();
+  private readonly attention: Attention;
+  private stance: Pose;
 
   constructor(options: VendorOptions) {
     super();
@@ -76,7 +85,7 @@ export class Vendor extends THREE.Group implements Furniture, Interactable, Upda
     this.focus = options.focus ? new THREE.Vector3(...options.focus) : TABLE_POINT.clone();
     const seed = options.seed ?? 1;
     this.nextLine = seed;
-    this.model = new PersonModel(options.look ?? randomLook(seed, 'vendor'), this.viewer);
+    this.model = new PersonModel(options.look ?? randomLook(seed, 'vendor'), this.viewer, seed);
     this.add(this.model);
     const blob = blobShadow(0.55, 0.5);
     if (blob) this.add(blob);
@@ -86,7 +95,9 @@ export class Vendor extends THREE.Group implements Furniture, Interactable, Upda
     this.callOuts = options.callOuts ?? [];
     this.callOutTimer = CALL_OUT_EVERY[0] * (0.3 + (seed % 5) * 0.2);
     this.pickGlance();
-    this.model.setPose(STANCES[seed % STANCES.length]!);
+    this.attention = new Attention(seed + 500);
+    this.stance = STANCES[seed % STANCES.length]!;
+    this.model.setPose(this.stance);
     this.stanceTimer = 8 + (seed % 7) * 3;
   }
 
@@ -95,7 +106,12 @@ export class Vendor extends THREE.Group implements Furniture, Interactable, Upda
   }
 
   update(dt: number): void {
-    this.viewer.getWorldPosition(this.viewerPos);
+    const looking = this.attention.update(dt, this, this.viewer, ATTENTION, this.viewerPos);
+    // Noticing the player: a nod sometimes, and folded arms come undone.
+    if (this.attention.takeNotice()) {
+      this.model.nod();
+      this.unfold();
+    }
     this.local.copy(this.viewerPos);
     this.worldToLocal(this.local);
     const near = this.local.z > 0.3 && Math.hypot(this.local.x, this.local.z) < NOTICE_RANGE;
@@ -106,7 +122,7 @@ export class Vendor extends THREE.Group implements Furniture, Interactable, Upda
         this.say(this.callOuts[Math.floor(Math.random() * this.callOuts.length)]!);
       }
     }
-    if (near) {
+    if (looking) {
       this.model.gaze(this.viewerPos);
     } else {
       this.glanceTimer -= dt;
@@ -116,25 +132,43 @@ export class Vendor extends THREE.Group implements Furniture, Interactable, Upda
     this.stanceTimer -= dt;
     if (this.stanceTimer <= 0) {
       this.stanceTimer = 12 + Math.random() * 25;
-      this.model.setPose(STANCES[Math.floor(Math.random() * STANCES.length)]!);
+      // Talking with the player, nobody folds their arms.
+      const stances = this.attention.inConversation ? STANCES.filter((pose) => pose !== 'crossed') : STANCES;
+      this.stance = stances[Math.floor(Math.random() * stances.length)]!;
+      this.model.setPose(this.stance);
     }
     this.model.update(dt);
   }
 
   /** A word or two in a bubble over their head ("Sold!", "Good eye!"). */
   say(text: string, seconds?: number): void {
-    this.bubble.say(text, seconds);
+    this.bubble.say(text, seconds, () => {
+      this.model.talk(lineSeconds(text));
+      this.attention.engage(WORD_ATTENTION);
+    });
   }
 
-  /** A line to the player, over their head with their name (or in the subtitles, out of view). */
+  /** A line to the player, over their head with their name (or in the subtitles, out of view): they talk it, eyes on the player. */
   speak(text: string): void {
-    this.bubble.speak(text, this.speaker);
+    this.bubble.speak(text, this.speaker, () => {
+      this.model.talk(lineSeconds(text));
+      this.attention.engage(lineSeconds(text) + LINE_ATTENTION);
+      this.unfold();
+    });
   }
 
   /** Strikes a pose for a moment (a shrug, a wave), then goes back to waiting. */
   gesture(pose: Pose, seconds = 2.5): void {
     this.model.setPose(pose);
     this.stanceTimer = seconds;
+  }
+
+  /** Arms folded come down (to the sides, the talking hands free). */
+  private unfold(): void {
+    if (this.stance !== 'crossed') return;
+    this.stance = 'stand';
+    this.model.setPose('stand');
+    this.stanceTimer = Math.max(this.stanceTimer, 10);
   }
 
   setHovered(): void {
@@ -160,4 +194,9 @@ export class Vendor extends THREE.Group implements Furniture, Interactable, Upda
     else if (roll < 0.85) this.glance.set((Math.random() - 0.5) * 6, 1.6, 3 + Math.random() * 3);
     else this.glance.set((Math.random() - 0.5) * 3, 1.5, -2);
   }
+}
+
+/** About how long `text` takes to say (s). */
+function lineSeconds(text: string): number {
+  return Math.min(3.5, 0.5 + text.length * 0.045);
 }

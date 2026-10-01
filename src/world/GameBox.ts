@@ -32,6 +32,9 @@ import { playPlasticClick } from '@/audio/furnitureSounds';
 const HOVER_POP_OUT = 0.02;
 const HOVER_SECONDS = 0.08;
 const HOVER_GLOW = 0.16;
+/** How fast a box parts along its row to show where the box in hand would go (1/s), and when it is there (m). */
+const PART_RATE = 14;
+const PART_DONE = 1e-4;
 /** Off a stall (no shelf to clear): how far the box slides out along its front before it flies to the hand (m). */
 const SLIDE_OUT = 0.05;
 /** A box moving to another spot on the shelves (the sort changed) takes this long (s). */
@@ -111,6 +114,9 @@ export class GameBox extends THREE.Mesh<THREE.BoxGeometry, THREE.Material[]> imp
   private hovered = false;
   /** How far out of the row the hover has brought it, 0..1 (eased by `settle`). */
   private pop = 0;
+  /** How far along its row the box stands aside (m, shelf-local x) for the box in hand, and how far it is going (`setParted`). */
+  private part = 0;
+  private partTarget = 0;
   /** A move to a new rest pose under way: where it started, how far along (0..1), the wait before it sets off. */
   private slide: { from: THREE.Vector3; fromQuaternion: THREE.Quaternion; t: number; delay: number; around: boolean } | null = null;
   /**
@@ -238,6 +244,23 @@ export class GameBox extends THREE.Mesh<THREE.BoxGeometry, THREE.Material[]> imp
     this.applyPose();
   }
 
+  /**
+   * Stands the box `dx` metres aside along its row (0: back at its rest pose), eased: where it would slide to were
+   * the box in hand put in the gap aimed at (`ShelfPlacing`). Its rest pose is untouched.
+   */
+  setParted(dx: number): void {
+    if (this.inHand || this.partTarget === dx) return;
+    this.partTarget = dx;
+    if (this.restless) return this.restless(this);
+    this.part = dx;
+    this.applyPose();
+  }
+
+  /** Where `setParted` is taking the box along its row (m): the row as the crosshair sees it. */
+  get parted(): number {
+    return this.partTarget;
+  }
+
   label(): string {
     const away = this.mediaAway ? `, in the ${getPlatform(this.game.platform).shortName}` : '';
     const note = this.status === 'wishlist' ? ', on your wishlist' : this.status === 'lent' ? ', lent out' : away;
@@ -280,19 +303,24 @@ export class GameBox extends THREE.Mesh<THREE.BoxGeometry, THREE.Material[]> imp
   settle(dt: number): boolean {
     const want = this.hovered ? 1 : 0;
     if (this.pop !== want) this.pop = want > this.pop ? Math.min(1, this.pop + dt / HOVER_SECONDS) : Math.max(0, this.pop - dt / HOVER_SECONDS);
+    if (this.part !== this.partTarget) {
+      this.part += (this.partTarget - this.part) * Math.min(1, dt * PART_RATE);
+      if (Math.abs(this.partTarget - this.part) < PART_DONE) this.part = this.partTarget;
+    }
     if (this.slide) {
       if (this.slide.delay > 0) this.slide.delay -= dt;
       else this.slide.t = Math.min(1, this.slide.t + dt / (this.slide.around ? ROUND_SLIDE_SECONDS : SLIDE_SECONDS));
     }
     this.applyPose();
     if (this.slide && this.slide.t >= 1) this.slide = null;
-    return this.pop !== want || this.slide !== null;
+    return this.pop !== want || this.slide !== null || this.part !== this.partTarget;
   }
 
   /** Off its shelf (taken in hand): the pop, the glow and any slide end here; `toRest` also puts it at its rest pose. */
   stopSettling(toRest = false): void {
     this.slide = null;
     this.pop = 0;
+    this.part = this.partTarget = 0;
     this.setGlow(0);
     if (toRest) this.applyPose();
   }
@@ -317,6 +345,7 @@ export class GameBox extends THREE.Mesh<THREE.BoxGeometry, THREE.Material[]> imp
       this.quaternion.copy(this.restQuaternion);
     }
     this.position.z += eased * HOVER_POP_OUT;
+    this.position.x += this.part;
     this.setGlow(eased);
   }
 

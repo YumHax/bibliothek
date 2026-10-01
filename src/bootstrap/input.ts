@@ -1,4 +1,4 @@
-import type * as THREE from 'three';
+import { Vector3 } from 'three';
 import { Interactor } from '@/interaction/Interactor';
 import { Highlighter } from '@/game/Highlighter';
 import { GamepadInput, TouchControls, SyntheticMouse, PAD_ALIASES } from '@/input';
@@ -13,8 +13,10 @@ import type { NoticeActions } from '@/notices';
 import type { SpeechLayer } from '@/notices/SpeechLayer';
 import { PhotoMode } from '@/photo';
 import { LOOKS } from '@/graphics';
-import { zonePlan } from '@/world/worldPlan';
+import { inFlat, zonePlan } from '@/world/worldPlan';
 import { FurnitureCarrier } from '@/furnishing/FurnitureCarrier';
+import { PlanView } from '@/furnishing/planView/PlanView';
+import { friendsIn } from '@/furnishing/friendsIn';
 import { ShelfPlacing } from '@/world/shelving/ShelfPlacing';
 
 export type Interaction = ReturnType<typeof createInteraction>;
@@ -46,11 +48,26 @@ export function createInteraction(services: Services, parts: { world: GameWorld;
   // The crosshair aims from the steady eye (not the walk's bob), and a speech bubble is not drawn over a wall.
   interactor.eyeSway = player.eyeSway;
   notices.speech.setLineOfSight((from, to) => interactor.blocked(from, to));
-  // Moving things about the flat (M, docs/furnishing.md): the box in hand into any shelf's gap, the furniture about its room.
-  const blocked = (from: THREE.Vector3, to: THREE.Vector3) => interactor.blocked(from, to);
+  // Moving things about the flat (right-click or M, docs/furnishing.md): the box in hand into any shelf's gap, the furniture about its room.
+  const blocked = (from: Vector3, to: Vector3) => interactor.blocked(from, to);
   const shelfPlacing = new ShelfPlacing(engine.camera, engine.scene, built.shelves, inspector, blocked);
   engine.addUpdatable(shelfPlacing);
-  const furniture = new FurnitureCarrier(engine.camera, services.furnishings, blocked);
+  const friends = friendsIn(world.zones.filter((zone) => inFlat(zone.id)));
+  const furniture = new FurnitureCarrier(engine.camera, services.furnishings, {
+    blocked,
+    scene: engine.scene,
+    handsFree: () => player.isLocked && !inspector.current && !player.isSeated,
+    // The flat's rooms (not the stairwell): a piece carried through a doorway follows, one put away comes out there.
+    roomHere: () => {
+      const here = zones.current;
+      return inFlat(here.id) && here.id !== 'stairwell' ? here : null;
+    },
+    // Nothing is set down on the cat nor on a friend visiting (the player's own feet the carrier minds itself).
+    occupants: () => [
+      ...(built.cat.adopted ? [{ at: built.cat.getWorldPosition(new Vector3()), radius: 0.3, height: 0.35, name: services.catSettings.settings.name }] : []),
+      ...friends.around().map((friend) => ({ at: friend.getWorldPosition(new Vector3()), radius: 0.3, height: 1.75, name: friend.name })),
+    ],
+  });
   engine.addUpdatable(furniture);
 
   // Controller and touch feed the same key / mouse channels the session already listens to.
@@ -85,10 +102,25 @@ export function createInteraction(services: Services, parts: { world: GameWorld;
     setLook: (look, snap) => graphics.setLook(look, snap),
     container,
     interactor,
-    blocked: () => (inspector.isActive ? 'Put the game down first' : moves.travel.isTravelling || moves.sleep.isAsleep || built.pastimes.isBusy ? 'Not now' : null),
+    blocked: (): string | null => (inspector.isActive ? 'Put the game down first' : furniture.piece || planView.isOpen ? 'Set the furniture down first' : moves.travel.isTravelling || moves.sleep.isAsleep || built.pastimes.isBusy ? 'Not now' : null),
     say: (text) => notices.refuse(text),
   });
   engine.addUpdatable(photo);
 
-  return { inspector, highlighter, interactor, photo, touch, shelfPlacing, furniture };
+  // The room from above (L, docs/furnishing.md): its furniture moved with the mouse on the same grid.
+  const planView = new PlanView({
+    camera: engine.camera,
+    canvas: engine.renderer.domElement,
+    container,
+    scene: engine.scene,
+    player,
+    carrier: furniture,
+    zone: () => zones.current,
+    interactor,
+    blocked: (): string | null => (inspector.isActive ? 'Put the game down first' : photo.isActive ? 'Not in photo mode' : moves.travel.isTravelling || moves.sleep.isAsleep || built.pastimes.isBusy ? 'Not now' : null),
+    say: (text) => notices.refuse(text),
+  });
+  engine.addUpdatable(planView);
+
+  return { inspector, highlighter, interactor, photo, touch, shelfPlacing, furniture, planView };
 }

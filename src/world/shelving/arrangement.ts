@@ -98,11 +98,37 @@ export function arrange(
   while (bookcase.length <= to.row) bookcase.push([]);
   const row = bookcase[to.row]!;
   row.splice(Math.max(0, Math.min(to.index, row.length)), 0, gameId);
-  // The hidden ids come back where they were: after the shown box they followed in the old rows.
+  return withHidden(result, previous, visible, [gameId]);
+}
+
+/**
+ * The shelves as `shown`, `a` and `b` (both shown) in each other's places, the games not on the shelves today
+ * (`previous`) kept where they were, as `arrange` keeps them.
+ */
+export function swapped(
+  shown: Readonly<Record<string, ShelvingRows>>,
+  previous: Readonly<Record<string, ShelvingRows>>,
+  a: string,
+  b: string,
+): Record<string, ShelvingRows> {
+  const visible = new Set<string>();
+  for (const rows of Object.values(shown)) for (const bookcase of rows) for (const row of bookcase) for (const id of row) visible.add(id);
+  const result: Record<string, ShelvingRows> = {};
+  for (const [shelving, rows] of Object.entries(shown)) result[shelving] = rows.map((bookcase) => bookcase.map((row) => row.map((id) => (id === a ? b : id === b ? a : id))));
+  return withHidden(result, previous, visible, [a, b]);
+}
+
+/** `result` with the ids of `previous` that are not `visible` (nor `moved`) put back after the shown box they followed in the old rows. */
+function withHidden(
+  result: Record<string, ShelvingRows>,
+  previous: Readonly<Record<string, ShelvingRows>>,
+  visible: ReadonlySet<string>,
+  moved: readonly string[],
+): Record<string, ShelvingRows> {
   for (const [shelving, rows] of Object.entries(previous)) {
     rows.forEach((oldBookcase, b) =>
       oldBookcase.forEach((oldRow, r) => {
-        const hidden = oldRow.filter((id) => !visible.has(id) && id !== gameId);
+        const hidden = oldRow.filter((id) => !visible.has(id) && !moved.includes(id));
         if (!hidden.length) return;
         const rowsHere = (result[shelving] ??= []);
         while (rowsHere.length <= b) rowsHere.push([]);

@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { cylinderMesh } from '../meshUtils';
 import { Prop, part } from '../props/Prop';
 import { paint, standard, timber, METAL } from '../materials/palette';
-import { snowScreen } from './snowScreen';
+import { snowScreen, stillScreen, type ScreenLook } from './snowScreen';
 
 export interface PortableTvOptions {
   /** Width of the case (the screen is about two thirds of it). */
@@ -11,6 +11,10 @@ export interface PortableTvOptions {
   case: number;
   /** Showing the snow of an untuned channel (the TV wall), or dark. Default dark. */
   snow?: boolean;
+  /** What the screen shows (`snowScreen`): wins over `snow`. */
+  screen?: ScreenLook;
+  /** The telescopic aerial on top. Default true (not on a set with another stacked on it). */
+  aerial?: boolean;
 }
 
 const DARK = paint(0x151515, 0.6);
@@ -23,7 +27,7 @@ const CHROME = standard({ color: 0xc8c8c8, roughness: 0.2, metalness: 1 });
  * on the surface under it, the screen facing +z. Decoration (the shop's `ForSale` or the TV wall holds it).
  */
 export class PortableTv extends Prop {
-  constructor({ width: W, case: color, snow = false }: PortableTvOptions) {
+  constructor({ width: W, case: color, snow = false, screen: look = snow ? 'snow' : 'dark', aerial = true }: PortableTvOptions) {
     super();
     this.name = 'PortableTv';
     const H = W * 0.84;
@@ -31,7 +35,7 @@ export class PortableTv extends Prop {
     const plastic = paint(color, 0.5);
     part(this, W, H, D * 0.7, plastic, { y: H / 2, z: D * 0.15 });
     part(this, W * 0.7, H * 0.75, D * 0.3, plastic, { y: H * 0.42, z: -D * 0.35 });
-    const screen = new THREE.Mesh(new THREE.PlaneGeometry(W * 0.62, H * 0.62), snow ? snowScreen() : GLASS);
+    const screen = new THREE.Mesh(new THREE.PlaneGeometry(W * 0.62, H * 0.62), look === 'snow' ? snowScreen() : look === 'dark' ? GLASS : stillScreen(look));
     screen.position.set(-W * 0.1, H * 0.54, D * 0.5 + 0.002);
     this.add(screen);
     for (const y of [H * 0.7, H * 0.45]) {
@@ -41,11 +45,13 @@ export class PortableTv extends Prop {
     }
     part(this, W * 0.55, W * 0.05, W * 0.075, DARK, { y: H + W * 0.1, z: D * 0.15 });
     for (const x of [-W * 0.27, W * 0.27]) part(this, W * 0.06, W * 0.11, W * 0.075, DARK, { x, y: H + W * 0.05, z: D * 0.15 });
-    const mast = new THREE.Group();
-    mast.position.set(W / 2 - W * 0.12, H, -D * 0.1);
-    mast.rotation.z = -0.5;
-    mast.add(cylinderMesh(0.0025, W * 1.1, CHROME, { y: W * 0.55 }, { segments: 6 }));
-    this.add(mast);
+    if (aerial) {
+      const mast = new THREE.Group();
+      mast.position.set(W / 2 - W * 0.12, H, -D * 0.1);
+      mast.rotation.z = -0.5;
+      mast.add(cylinderMesh(0.0025, W * 1.1, CHROME, { y: W * 0.55 }, { segments: 6 }));
+      this.add(mast);
+    }
   }
 }
 

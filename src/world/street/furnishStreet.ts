@@ -39,6 +39,8 @@ import { FacadeRelief, awningShelters } from './relief/FacadeRelief';
 import { ShopInteriors } from './relief/ShopInteriors';
 import { Shutters } from './relief/Shutters';
 import { ShopGlow } from './relief/ShopGlow';
+import { ShopfrontRelief } from './shopfronts/ShopfrontRelief';
+import { ShopSpill } from './shopfronts/ShopSpill';
 import { WetGround } from './relief/WetGround';
 import { Leaves } from './relief/Leaves';
 import { StreetDetails } from './details/StreetDetails';
@@ -213,6 +215,8 @@ export function furnishStreet(zone: Zone, { sky, listener, covers, today, panels
   // the roller shutters; the light the shops spill on the pavement; the wet ground; autumn's leaves; the small print.
   const fronts = buildings.fronts;
   zone.place(new FacadeRelief(fronts), origin);
+  // The walk-in shops' fronts in 3D: display windows standing out on their risers, the displays, signs, the door's card.
+  const shopfronts = zone.place(new ShopfrontRelief(fronts, dayNight), origin);
   const interiors = QUALITY.level !== 'low' ? zone.place(new ShopInteriors(fronts, dayNight, shopGoods), origin) : null;
   // RETRO GAMES on a new market day, as seen from the flat: the NEW IN banner, the queue; its window restocked each market day.
   const onStock = (colors: readonly string[]): void => {
@@ -222,6 +226,8 @@ export function furnishStreet(zone: Zone, { sky, listener, covers, today, panels
   zone.place(new RetroLure({ ...plan.retroLure, queue: fewer ? plan.retroLure.queue.slice(0, 3) : plan.retroLure.queue, door: plan.doors.market.at, viewer: listener, place: placeWalker, talk, ...seen, onStock }), origin);
   zone.place(new Shutters(fronts, dayNight, (spot) => cues.rattle(spot)), origin);
   zone.place(new ShopGlow(fronts, dayNight), origin);
+  // What they put out on the pavement while open.
+  zone.place(new ShopSpill(dayNight, { spots: plan.shopSpill, board: plan.chalkBoard, collisions: zone.collisions }), origin);
   zone.place(new WetGround(dayNight, { fronts, lamps: lamps.headPoints, viewer: listener, mirror: QUALITY.reflections, cars: cars.lamps }), origin);
   const season = currentSeason();
   if (season.name === 'autumn') zone.place(new Leaves(dayNight, plan.trees, season), origin);
@@ -266,10 +272,10 @@ export function furnishStreet(zone: Zone, { sky, listener, covers, today, panels
   // At Christmas the street trees wear bulbs and the park's fir is lit, as seen from the flat.
   if (currentHoliday() === 'christmas') zone.place(new StreetChristmas(dayNight, { trees: STREET_TREES }), origin);
   zone.place(new Snowman({ viewer: listener, collisions: zone.collisions }), at(plan.snowman.at), plan.snowman.yaw);
-  // Nothing falls in the sas, under the awnings, the bus shelter's roof or the kiosk's; petals blow about while the trees flower.
+  // Nothing falls in the sas, under the awnings, the bus shelter's roof or the kiosk's, behind the walk-in shops' glass; petals blow about while the trees flower.
   const roof = shelterRoof(plan.shelter.length);
   const kiosk = NEWSSTAND_ROOF;
-  const shelters = [sas, standingBox(plan.shelter.at, plan.shelter.yaw, roof.length, roof.depth, roof.height), standingBox(plan.kiosk.at, plan.kiosk.yaw, kiosk.width, kiosk.depth, kiosk.height), ...awningShelters(fronts)];
+  const shelters = [sas, standingBox(plan.shelter.at, plan.shelter.yaw, roof.length, roof.depth, roof.height), standingBox(plan.kiosk.at, plan.kiosk.yaw, kiosk.width, kiosk.depth, kiosk.height), ...awningShelters(fronts), ...shopfronts.colliders];
   zone.place(new Precipitation(dayNight, { shelters, petals: season.name === 'spring' && season.depth < 0.6 }), origin);
   zone.place(new StreetSound(dayNight, { listener, cars: voices }), origin);
   zone.place(new StreetBounds(FACADES, [...StreetLamps.colliders(plan.lamps), ...StreetTrees.colliders(plan.trees)]), origin);

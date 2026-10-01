@@ -194,6 +194,7 @@ export class OutlookView extends THREE.Group implements Updatable {
     renderer.shadowMap.autoUpdate = autoUpdate;
     renderer.clippingPlanes = clipping;
     renderer.setRenderTarget(previous);
+    if (ready) resetClipping(renderer, camera);
   }
 
   /** The picture at a share of the drawing buffer, in its proportions (the pane samples it in screen space). */
@@ -268,6 +269,25 @@ export class OutlookView extends THREE.Group implements Updatable {
     const plane = this.clipPlanes[0]!;
     plane.setFromNormalAndCoplanarPoint(NORMAL, CORNER).applyMatrix4(this.options.toOutlook());
   }
+}
+
+/** Nothing, rendered to put the renderer's clipping back (`resetClipping`). */
+const NOTHING = new THREE.Scene();
+
+/**
+ * The picture is rendered from inside the room's own render (a pane's `onBeforeRender`), and three.js does not hand the
+ * clipping back when a nested render ends: the outlook's plane stays the global one, projected into the room's camera,
+ * for everything the room draws after the pane (which depends on the view: things vanishing as the player turns). An
+ * empty render with the room's planes starts the clipping afresh from them; it draws and clears nothing.
+ */
+function resetClipping(renderer: THREE.WebGLRenderer, camera: THREE.Camera): void {
+  const autoClear = renderer.autoClear;
+  const autoUpdate = renderer.shadowMap.autoUpdate;
+  renderer.autoClear = false;
+  renderer.shadowMap.autoUpdate = false;
+  renderer.render(NOTHING, camera);
+  renderer.autoClear = autoClear;
+  renderer.shadowMap.autoUpdate = autoUpdate;
 }
 
 const DRAWING_BUFFER = new THREE.Vector2();

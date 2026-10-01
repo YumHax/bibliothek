@@ -10,6 +10,7 @@ import { GameBox } from '../GameBox';
 import { PLINTH, Shelf } from '../Shelf';
 import { ShelfLamp } from '../props/ShelfLamp';
 import { BoxMotion } from './BoxMotion';
+import { LampFollow } from './LampFollow';
 import { planArranged, planShelving, type BookcaseSpec, type ShelvingPlan } from './plan';
 import { computeSlots, type Slot, type ZRange } from './slots';
 import { nextSortMode, rowGroupKey, sortGames, type SortMode } from './sort';
@@ -22,6 +23,8 @@ export interface ShelvingHost {
   readonly scene: THREE.Object3D;
   place<T extends Furniture>(item: T, position: THREE.Vector3, rotationY?: number): T;
   remove(item: Furniture): void;
+  /** Moves a placed item (a bookcase's spot following the bookcase the player moved); without it the spots stay put. */
+  move?(item: Furniture, position: THREE.Vector3, rotationY: number): void;
   /**
    * Boxes that entered / left the room, so the host can update its interactables. `handedOver` left it for another
    * shelving that shows them now (it may have taken them first): forgotten here, but still clickable.
@@ -63,6 +66,12 @@ export interface ShelvingOptions {
    * this shelving's own: every shelving keeps its rows, so no arranged row vanishes when a tall box comes to one.
    */
   rowsFrom?: GameSource;
+  /**
+   * Each bookcase as it is set up, by slot (`index`): the flat makes it movable (`furnishing/Furnishings`, which puts
+   * it back where the player moved it). What it returns is called when that bookcase is taken down (a rebuild whose
+   * bookcases come out otherwise, `dispose`); a bookcase kept by a rebuild stays registered, where it stands.
+   */
+  onBookcase?: (shelf: Shelf, index: number) => () => void;
 }
 
 /** How many bookcases `options` has room for (its `layout`'s slots, or the collection room's run along its walls). */
@@ -130,6 +139,11 @@ export class Shelving {
   readonly overflow: GameList;
   /** Ticks the boxes while they move (a hover, a slide after a sort). */
   private readonly motion = new BoxMotion();
+  /** Keeps each spot in front of its bookcase when the player moves it (null without lamps or a host that moves things). */
+  private readonly lampFollow: LampFollow | null;
+  private readonly onBookcase: ShelvingOptions['onBookcase'];
+  /** What undoes `onBookcase` for each bookcase standing now. */
+  private unregisters: (() => void)[] = [];
 
   constructor(
     private readonly host: ShelvingHost,
@@ -153,8 +167,12 @@ export class Shelving {
     this.slots = slots;
     this.capacity = Math.min(options.capacity ?? slots.length, slots.length);
     this.spec = { ...partial, width };
+    this.onBookcase = options.onBookcase;
+    const move = host.move?.bind(host);
+    this.lampFollow = this.lamps && move ? new LampFollow(move, SPOT_THROW, this.ceiling, options.room.width / 2, options.room.depth / 2) : null;
     this.unsubscribe = source.subscribe(() => this.rebuild());
     host.place(this.motion, new THREE.Vector3());
+    if (this.lampFollow) host.place(this.lampFollow, new THREE.Vector3());
     this.rebuild();
   }
 
@@ -225,6 +243,7 @@ export class Shelving {
     this.shown.clear();
     this.ordered = [];
     this.host.remove(this.motion);
+    if (this.lampFollow) this.host.remove(this.lampFollow);
     this.host.boxesChanged([], shown);
   }
 
@@ -266,6 +285,8 @@ export class Shelving {
         this.shelves.push(shelf);
         this.fillShelf(shelf, planned.rows.map((row) => row.items.map(boxOf)));
       });
+      // Movable, each put back where the player moved it (after its boxes are on it: they are its children and move with it).
+      if (this.onBookcase) this.unregisters = this.shelves.map((shelf, i) => this.onBookcase!(shelf, i));
       // A spot hangs from the ceiling `SPOT_THROW` m in front of every slot, looking back at it (local -z):
       // lit over a bookcase, parked over an empty slot, so the scene's light count never follows the
       // collection (a light added or removed recompiles every shader).
@@ -275,6 +296,7 @@ export class Shelving {
           lamp.setParked(i >= plan.bookcases.length);
           this.placedLamps.push(this.host.place(lamp, slot.position.clone().addScaledVector(slot.facing, SPOT_THROW).setY(this.ceiling), slot.rotationY));
         });
+        this.lampFollow?.set(this.shelves.map((shelf, i) => ({ shelf, lamp: this.placedLamps[i]! })));
       }
     }
 
@@ -371,6 +393,9 @@ export class Shelving {
 
   /** Removes shelves and their lights, leaving boxes parentless (or in the player's hand, the shelf they belong on gone). */
   private tearDown(): void {
+    for (const unregister of this.unregisters) unregister();
+    this.unregisters = [];
+    this.lampFollow?.set([]);
     for (const shelf of this.shelves) {
       for (const child of [...shelf.children]) if (child instanceof GameBox) shelf.remove(child);
       this.host.remove(shelf);

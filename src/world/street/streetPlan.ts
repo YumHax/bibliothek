@@ -31,6 +31,7 @@ import type { DecorEntry } from '../props/decor';
 import { SAS } from '../airlock/airlockPlan';
 import type { ZoneId } from '../zoneIds';
 import type { ShopZoneId } from '../shop/shopPlan';
+import type { SpillSpot } from './shopfronts/ShopSpill';
 
 export type Vec2 = [x: number, z: number];
 
@@ -305,12 +306,13 @@ export interface StrayCatPerch {
 /** The park's gate in the railings on Park Street (its middle). */
 const PARK_GATE: Vec2 = [-39.75, -30];
 /**
- * The far pavement walked west, from behind the bus shelter (its back at z 10.7; people pass behind it, not
- * through it) to Park Street's far kerb: the lane is z 10.1, bent to 9.6-9.85 past the terraces' chairs (z
- * 10.5-11.3) and the snowman (x -33.5), and back up past the street trees' pits (z up to 9.7).
+ * The far pavement walked west, from behind the bus shelter (its back at z 10.7; people pass behind it at z 11.05,
+ * not through it, midway to SECOND HOME's pilaster plinths standing out to z 11.43 and its display windows to 11.55)
+ * to Park Street's far kerb: the lane is z 10.1, bent to 9.6-9.85 past the terraces' chairs (z 10.5-11.3) and the
+ * snowman (x -33.5), and back up past the street trees' pits (z up to 9.7).
  */
 const FAR_WEST: Vec2[] = [
-  [25.3, 11.3], [24.4, 10.1], [16.4, 10.1], [15.9, 9.6], [10.6, 9.6], [10.1, 10.1],
+  [25.3, 11.05], [24.4, 10.1], [16.4, 10.1], [15.9, 9.6], [10.6, 9.6], [10.1, 10.1],
   [-9.4, 10.1], [-9.9, 9.85], [-15.2, 9.85], [-15.7, 10.1], [-31.9, 10.1], [-32.4, 9.6], [-34.6, 9.6], [-35.1, 10.1], [-38.2, 10.1],
 ];
 
@@ -337,6 +339,8 @@ export const STREET_PLAN = {
   signs: [
     { text: 'ARCADE', color: 0xff2fa0, at: [8, 3.42, -11.93] as [number, number, number], yaw: 0, width: 3.6, seed: 5 },
     { text: 'RETRO GAMES', color: 0x5fe6ff, at: [4, 3.42, 11.93] as [number, number, number], yaw: Math.PI, width: 4.2, seed: 9 },
+    // TV REPAIR on Park Street (courtWorkshop, its fascia's middle 4 m along from z -39.3), standing on its shopfront's head (`shopfronts/`).
+    { text: 'TV REPAIR', color: 0x5fd0ff, at: [PARK_STREET.line - 0.07, 3.47, COURTYARD.far + 4] as [number, number, number], yaw: -Math.PI / 2, width: 3.4, seed: 13 },
   ],
   /** Street lamps on the kerbs: position and the way the arm reaches (yaw of the arm, 0 = +z). `flicker`: the one that buzzes. */
   lamps: [
@@ -483,14 +487,14 @@ export const STREET_PLAN = {
       { path: [[33.4, -12], [33.4, -10.3], [17.4, -10.3], [17, -9.6], [14, -9.6], [13.6, -10.3], [-21.4, -10.3], [-21.4, -27.8], [PARK_STREET.line, -27.8]] },
       // East along the far pavement: z 10.4, down to 10.15 / 9.95 past the terraces' chairs.
       { path: [[-32, 12], [-32, 10.4], [-15.7, 10.4], [-15.3, 10.15], [-9.8, 10.15], [-9.4, 10.4], [10.3, 10.4], [10.7, 9.95], [15.8, 9.95], [16.4, 10.4], [18.9, 10.4], [18.9, 12]] },
-      { path: [[32.5, 12], [32.5, 11.3], ...FAR_WEST, [-38.2, PARK_GATE[1]], PARK_GATE] },
+      { path: [[32.5, 12], [32.5, 11.05], ...FAR_WEST, [-38.2, PARK_GATE[1]], PARK_GATE] },
     ] as { path: Vec2[]; crossing?: number }[],
   },
   /** People standing about: on the phone, waiting for the bus, on a bench. */
   standing: {
     phone: { at: [-2.4, -10.9], yaw: Math.PI * 0.85, hours: [8, 21] as [number, number] },
     /** The one waiting in the shelter, and where someone who got off walks to: out behind the shelter, along the far pavement, into the park by its gate. */
-    busStop: { at: [28.6, 10.35], yaw: Math.PI, alight: [[31, 10.2], [30.9, 11.3], ...FAR_WEST, [-38.2, PARK_GATE[1]], PARK_GATE] as Vec2[] },
+    busStop: { at: [28.6, 10.35], yaw: Math.PI, alight: [[31, 10.2], [30.9, 11.05], ...FAR_WEST, [-38.2, PARK_GATE[1]], PARK_GATE] as Vec2[] },
     bench: { at: [-10.5, -11.3], yaw: 0, hours: [9, 19] as [number, number] },
   },
   /** The café's, the bars' terraces: along a stretch of pavement in front of them, how many tables, when they are out. */
@@ -520,6 +524,25 @@ export const STREET_PLAN = {
     banner: { at: [6, 2.45, 11.94] as [number, number, number], yaw: Math.PI, width: 1.7, height: 0.48 },
     queue: [[3.9, 11.2], [4.6, 11.28], [5.3, 11.2], [6.0, 11.28], [6.7, 11.2], [7.4, 11.28]] as Vec2[],
   },
+  /**
+   * What the walk-in shops put out on the pavement while open (`shopfronts/ShopSpill`), in front of their display
+   * windows (which stand out 0.45 m, `shopfronts/shopfrontPlan`), clear of their doors and of the passers-by's lanes.
+   */
+  shopSpill: [
+    // The florist (n3, x 20.2..25.6, door x 22.9; the lanes at z -10.6 and -10.3): buckets and the chalk board by the left window, the stand of pots by the right.
+    { piece: 'flowerBuckets', shop: 'florist', at: [20.85, -11.3], yaw: 0 },
+    { piece: 'aBoard', shop: 'florist', at: [21.62, -11.2], yaw: 0.25 },
+    { piece: 'flowerTiers', shop: 'florist', at: [24.55, -11.25], yaw: 0 },
+    // SECOND HOME (f4, x 22.4..28.6, door x 25.5): its bench for sale right of the door, between the busker (x 22.6) and the lane's bend.
+    { piece: 'saleBench', shop: 'furniture', at: [24.05, 11.3], yaw: Math.PI },
+    // PAWS & CLAWS (fB, x -28.6..-22.8, door x -25.7; the lanes at z 10.1..10.4): the dogs' water and a sack of kibble.
+    { piece: 'dogBowls', shop: 'pets', at: [-24.35, 11.3], yaw: Math.PI },
+    { piece: 'kibbleSack', shop: 'pets', at: [-26.85, 11.35], yaw: Math.PI + 0.3 },
+    // TV REPAIR (courtWorkshop on Park Street, facing -x, door z -35.3; the lanes at x -20.8..-21): a dead set out by the right window.
+    { piece: 'brokenTv', shop: 'electronics', at: [-19.98, -34.0], yaw: -Math.PI / 2 - 0.2 },
+  ] as SpillSpot[],
+  /** The florist's chalk board out on the pavement. */
+  chalkBoard: ['TULIPS', '3 for 2'] as [string, string],
   /** Where the church clock the bells ring from is (far off, beyond the park), for the sound's side. */
   church: [-160, 60] as Vec2,
   /** A snowman on the far pavement near the park, there while the snow lies. */

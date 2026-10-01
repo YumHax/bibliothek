@@ -123,6 +123,8 @@ export class ChipSpeaker {
   private readonly ear = new THREE.Vector3();
   /** Scales every sound (a machine playing itself is quieter than one the player plays). */
   level = 1;
+  /** Told of every sound asked for, heard or not (the audio may not have started): the people at the machine react to them. */
+  onPlay: ((sfx: Sfx) => void) | null = null;
 
   constructor(
     private readonly anchor: THREE.Object3D,
@@ -134,6 +136,7 @@ export class ChipSpeaker {
   }
 
   play(sfx: Sfx, pitch = 1): void {
+    this.onPlay?.(sfx);
     const ctx = this.build();
     if (!ctx || !this.out) return;
     pitch *= 1 + (Math.random() * 2 - 1) * PITCH_JITTER;

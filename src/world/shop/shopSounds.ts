@@ -97,12 +97,9 @@ export class SnowHiss extends Voice {
   }
 }
 
-/** The pet shop's cages: budgies chattering in bursts, and now and then a hamster's wheel squeaking round. */
+/** The pet shop's budgies, chattering in bursts (the hamster's wheel is its own cage's: `pets/hamsterSounds`). */
 export class PetShopNoises extends Voice {
   private untilChirp = rand(1, 4);
-  private untilWheel = rand(20, 50);
-  private wheelLeft = 0;
-  private untilSqueak = 0;
 
   constructor() {
     super(0.3);
@@ -117,19 +114,6 @@ export class PetShopNoises extends Voice {
       this.untilChirp = rand(1.5, 7);
       this.chatter(ctx, this.master);
     }
-    if (this.wheelLeft > 0) {
-      this.wheelLeft -= dt;
-      this.untilSqueak -= dt;
-      if (this.untilSqueak <= 0) {
-        this.untilSqueak = rand(0.34, 0.42);
-        this.squeak(ctx, this.master);
-      }
-      return;
-    }
-    this.untilWheel -= dt;
-    if (this.untilWheel > 0) return;
-    this.untilWheel = rand(40, 90);
-    this.wheelLeft = rand(4, 10);
   }
 
   /** A budgie's burst: three to eight quick warbled notes, high and bright. */
@@ -142,22 +126,6 @@ export class PetShopNoises extends Voice {
       birdNote(ctx, out, { at, from, to: from * rand(0.7, 1.35), sweep: length * 0.8, attack: 0.008, length, level: rand(0.12, 0.28) });
       at += length + rand(0.02, 0.09);
     }
-  }
-
-  /** The wheel's axle: a short dry squeak, a little pitch bend. */
-  private squeak(ctx: AudioContext, out: AudioNode): void {
-    const now = ctx.currentTime;
-    const osc = ctx.createOscillator();
-    osc.type = 'triangle';
-    osc.frequency.setValueAtTime(rand(1900, 2200), now);
-    osc.frequency.linearRampToValueAtTime(rand(2300, 2600), now + 0.07);
-    const env = ctx.createGain();
-    env.gain.setValueAtTime(0.0001, now);
-    env.gain.exponentialRampToValueAtTime(0.07, now + 0.01);
-    env.gain.exponentialRampToValueAtTime(0.0001, now + 0.09);
-    osc.connect(env).connect(out);
-    osc.start(now);
-    osc.stop(now + 0.1);
   }
 }
 
@@ -349,6 +317,58 @@ function noiseBurst(ctx: AudioContext, out: AudioNode, at: number, band: number,
   source.connect(filter).connect(env).connect(out);
   source.start(at);
   source.stop(at + decay + 0.02);
+}
+
+/**
+ * A fluorescent tube's ballast (`common/TubeBatten`): a thin mains hum, 100 Hz and its harmonics through a band, and a
+ * tick of crackle when the tube stutters. Silent while the tubes are off (`setLit`).
+ */
+export class TubeHum extends Voice {
+  private gate: GainNode | null = null;
+  private lit = true;
+  private crackles = 0;
+
+  constructor() {
+    super(0.05);
+  }
+
+  setLit(on: boolean): void {
+    this.lit = on;
+    if (this.ctx && this.gate) this.gate.gain.setTargetAtTime(on ? 1 : 0, this.ctx.currentTime, 0.02);
+  }
+
+  /** The tube drops out for a moment: a few ticks of crackle. */
+  stutter(): void {
+    if (this.lit) this.crackles = 3 + Math.floor(Math.random() * 4);
+  }
+
+  protected build(ctx: AudioContext, out: GainNode): void {
+    this.gate = ctx.createGain();
+    this.gate.gain.value = this.lit ? 1 : 0;
+    const band = ctx.createBiquadFilter();
+    band.type = 'bandpass';
+    band.frequency.value = 240;
+    band.Q.value = 0.8;
+    for (const [frequency, level] of [
+      [100, 0.5],
+      [200, 0.35],
+      [300, 0.18],
+      [400, 0.08],
+    ] as const) {
+      const osc = this.keep(ctx.createOscillator());
+      osc.frequency.value = frequency * rand(0.998, 1.002);
+      const gain = ctx.createGain();
+      gain.gain.value = level;
+      osc.connect(gain).connect(band);
+    }
+    band.connect(this.gate).connect(out);
+  }
+
+  protected tick(ctx: AudioContext): void {
+    if (this.crackles <= 0 || !this.master || Math.random() > 0.3) return;
+    this.crackles--;
+    noiseBurst(ctx, this.master, ctx.currentTime, rand(2500, 4500), 4, rand(0.3, 0.6), 0.03);
+  }
 }
 
 function rand(min: number, max: number): number {

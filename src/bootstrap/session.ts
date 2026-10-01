@@ -56,6 +56,7 @@ export function createSession(services: Services, parts: { player: FirstPersonCo
     photo: interaction.photo,
     furniture: interaction.furniture,
     shelfPlacing: interaction.shelfPlacing,
+    planView: interaction.planView,
     journalPanel: ui.journalPanel,
     shelfRoom: () => shelfRoomNote(overflow.games.length, bookcasesIn(upgrades.count('bookcase')).bedroom, !upgrades.canBuy('bookcase')),
     // What the flat sends the player out with, and a night's dream on waking (docs/household.md).

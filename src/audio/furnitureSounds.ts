@@ -124,6 +124,35 @@ export function playSoftThud(level = 0.1): boolean {
 }
 
 /**
+ * A piece of furniture set down: a light one (`weight` near 0: a plant, a stool) taps, a heavy one (near 1: a bed,
+ * a sofa) thumps low and long, with a creak of the boards under it.
+ */
+export function playSetDown(weight: number, level = 0.1): boolean {
+  const w = Math.min(1, Math.max(0, weight));
+  const played = oneShot(level * (0.7 + 0.6 * w), 0.1 + 0.2 * w, (ctx, out, t) => {
+    thump(ctx, out, t, vary(170 - 90 * w), 45 + 20 * (1 - w), 0.9, 0.08 + 0.16 * w);
+    burst(ctx, out, t, vary(700 - 350 * w), 1, 0.3, 0.04 + 0.04 * w);
+  });
+  if (w > 0.5) playFloorCreak(0.015 * w);
+  return played;
+}
+
+/** A carried piece that may not go where it is aimed, tried anyway: a dull knock against something. */
+export function playBump(level = 0.07): boolean {
+  return oneShot(level, 0.12, (ctx, out, t) => {
+    thump(ctx, out, t, vary(95), 55, 0.8, 0.09);
+    burst(ctx, out, t + 0.03, vary(260), 2, 0.35, 0.05);
+  });
+}
+
+/** A carried piece clicking onto the next grid step or turn: a faint wooden tick. */
+export function playGridTick(level = 0.02): boolean {
+  return oneShot(level, 0.03, (ctx, out, t) => {
+    burst(ctx, out, t, vary(2400, 0.15), 6, 0.8, 0.012);
+  });
+}
+
+/**
  * A fridge door's rubber seal: the dull "thup" of it letting go (`open`) or sucking shut. Opening,
  * the compressor's hum swells for a moment too, as a warm draught reaches the thermostat.
  */

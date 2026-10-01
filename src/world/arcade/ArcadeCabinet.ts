@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import type { Performer } from '../people/performer';
 import type { Updatable } from '@/core/Engine';
 import type { Input } from '@/core/Input';
 import type { Interactable, LabelPlacement } from '@/interaction/Interactable';
@@ -168,6 +169,8 @@ export class ArcadeCabinet extends THREE.Group implements Furniture, Interactabl
     });
 
     this.speaker = new ChipSpeaker(screen, options.listener);
+    // Every sound it makes is news to whoever plays or watches it.
+    this.speaker.onPlay = (sfx) => this.stationEvents.onSound?.(sfx);
     this.run = new MachineRun({
       game,
       input,
@@ -259,15 +262,18 @@ export class ArcadeCabinet extends THREE.Group implements Furniture, Interactabl
     this.attract.enter();
   }
 
-  occupy(): boolean {
+  occupy(performer?: Performer): boolean {
     if (this.game.demoable === false || !this.run.occupy()) return false;
     this.speaker.play('coin');
     this.resetDemo();
+    this.options.attachment?.perform?.(performer ?? null);
     return true;
   }
 
   release(): void {
-    if (this.run.release()) this.attract.enter();
+    if (!this.run.release()) return;
+    this.options.attachment?.perform?.(null);
+    this.attract.enter();
   }
 
   /** A hand on the joystick's knob (it follows the stick as it leans), the other on the first button; or where the attachment says. */

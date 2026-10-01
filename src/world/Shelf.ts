@@ -25,7 +25,17 @@ export interface ShelfSpot {
   gap: THREE.Vector3;
   /** The box's height. */
   height: number;
+  /** Aimed at the middle of another box: the box in hand takes its place, and it the one in hand's (see `ShelvingGroup.swapBoxes`). */
+  swap?: GameBox;
+  /** Where the box in hand would stand (its centre, local to the bookcase) and how big it is: the ghost `ShelfPlacing` shows. */
+  centre: THREE.Vector3;
+  size: THREE.Vector3;
+  /** How far each box of the row would slide along it (m, local x) to make room: they part to show it. Empty for a swap or no room. */
+  parting: readonly (readonly [box: GameBox, dx: number])[];
 }
+
+/** Aimed within this share of a box's width either side of its middle, the box in hand swaps with it rather than going beside it. */
+const SWAP_SPAN = 0.25;
 
 export interface ShelfOptions {
   width: number;
@@ -202,14 +212,61 @@ export class Shelf extends THREE.Group {
     const row = this.boardTops.findIndex((top, r) => at.y >= top - t - 0.005 && at.y <= top + rowHeights[r]!);
     if (row < 0) return null;
     const boxes = (this.rowBoxes[row] ?? []).filter((box) => box !== held);
-    const index = boxes.filter((box) => box.restPosition.x < at.x).length;
-    const used = boxes.reduce((sum, box) => sum + box.dimensions.width, 0) + boxes.length * gap;
-    const fits = used + held.dimensions.width <= 2 * inner + 1e-6;
-    const before = boxes[index - 1];
-    const after = boxes[index];
-    const x = before ? before.restPosition.x + before.dimensions.width / 2 + gap / 2 : after ? after.restPosition.x - after.dimensions.width / 2 - gap / 2 : -inner + gap / 2;
+    // The row as it is drawn: boxes parted for the box in hand stand aside, and the crosshair aims at them there.
+    const shownX = (box: GameBox) => box.restPosition.x + box.parted;
+    const index = boxes.filter((box) => shownX(box) < at.x).length;
     const top = this.boardTops[row]!;
-    return { row, index, fits, gap: new THREE.Vector3(THREE.MathUtils.clamp(x, -inner, inner), top - this.sagAt(row, x), depth / 2 - FRONT_SET + 0.004), height: held.dimensions.height };
+    const { width: hw, height: hh, depth: hd } = held.dimensions;
+    const standZ = (d: number) => depth / 2 - d / 2 - FRONT_SET;
+    const swap = boxes.find((box) => Math.abs(at.x - shownX(box)) <= box.dimensions.width * SWAP_SPAN);
+    if (swap) {
+      // The box in hand's own row may be this one (a swap along the row always fits); the other end is the group's to check.
+      const fits = (this.rowBoxes[row] ?? []).includes(held) || this.roomFor(row, swap, held);
+      const { width: sw, height: sh, depth: sd } = swap.dimensions;
+      const size = new THREE.Vector3(Math.max(hw, sw), Math.max(hh, sh), Math.max(hd, sd)).addScalar(0.006);
+      // Wrapped round the box it would swap with, standing where that one stands (its own push and pull).
+      const { x, y: sy, z } = swap.restPosition;
+      const centre = new THREE.Vector3(x, sy - sh / 2 + size.y / 2 - 0.003, z);
+      return { row, index: boxes.indexOf(swap), fits, gap: new THREE.Vector3(x, top - this.sagAt(row, x), depth / 2 - FRONT_SET + 0.004), height: hh, swap, centre, size, parting: [] };
+    }
+    const used = boxes.reduce((sum, box) => sum + box.dimensions.width, 0) + boxes.length * gap;
+    const fits = used + hw <= 2 * inner + 1e-6;
+    // Where the row would stand with the box in: packed from the left like `placeRow`, the box in hand at `index`.
+    const parting: [GameBox, number][] = [];
+    let cursor = -inner;
+    let x = -inner + hw / 2;
+    boxes.forEach((box, i) => {
+      if (i === index) {
+        x = cursor + hw / 2;
+        cursor += hw + gap;
+      }
+      const bw = box.dimensions.width;
+      if (fits) parting.push([box, cursor + bw / 2 - box.restPosition.x]);
+      cursor += bw + gap;
+    });
+    if (index >= boxes.length) x = cursor + hw / 2;
+    if (!fits) {
+      // No room: nothing parts; the ghost stands in the gap as it is, overlapping its neighbours.
+      const before = boxes[index - 1];
+      const after = boxes[index];
+      x = before ? before.restPosition.x + before.dimensions.width / 2 + gap / 2 + hw / 2 : after ? after.restPosition.x - after.dimensions.width / 2 - gap / 2 - hw / 2 : -inner + hw / 2;
+    }
+    x = THREE.MathUtils.clamp(x, -inner + hw / 2, inner - hw / 2);
+    const centre = new THREE.Vector3(x, top - this.sagAt(row, x) + hh / 2, standZ(hd));
+    return { row, index, fits, gap: new THREE.Vector3(x - hw / 2, top - this.sagAt(row, x), depth / 2 - FRONT_SET + 0.004), height: hh, centre, size: new THREE.Vector3(hw, hh, hd), parting };
+  }
+
+  /** The row `box` stands on here (in hand, the row it came from), or -1. */
+  rowOf(box: GameBox): number {
+    return this.rowBoxes.findIndex((boxes) => boxes?.includes(box));
+  }
+
+  /** Whether row `row` has room for `coming` once `leaving` (on it) is gone. */
+  roomFor(row: number, leaving: GameBox, coming: GameBox): boolean {
+    const { width, gap, boardThickness } = this.options;
+    const boxes = (this.rowBoxes[row] ?? []).filter((box) => box !== leaving && box !== coming);
+    const used = boxes.reduce((sum, box) => sum + box.dimensions.width, 0) + boxes.length * gap;
+    return used + coming.dimensions.width <= width - 2 * boardThickness + 1e-6;
   }
 
   /**

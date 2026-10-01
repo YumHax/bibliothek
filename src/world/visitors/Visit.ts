@@ -146,8 +146,9 @@ export class Visit {
   private turnedAway = false;
   private throughFront = false;
   private seated = false;
-  /** What a seated friend watches (the TV playing, else the player), kept up to date every frame. */
+  /** What a seated friend watches (the TV playing), kept up to date every frame; whether there is one (else they look about, and at the player now and then). */
   private readonly gaze = new THREE.Vector3();
+  private watching = false;
   private held: HeldBox | null = null;
   /** The armchair claimed for the sit, let go when they get up or the visit ends. */
   private claimed: RouteSeat | null = null;
@@ -219,14 +220,23 @@ export class Visit {
     this.pause(seconds).then(then, () => undefined);
   }
 
-  /** Clicked to chat: they turn to face the player (seated or walking, they only look). */
+  /** Clicked to chat: they turn to face the player (seated or walking, they only look; seated, their line to the player does that). */
   faceViewer(): void {
-    this.viewer.getWorldPosition(eye);
-    if (this.seated || this.friend.isWalking || this.held) {
-      this.friend.setFocus(this.seated ? this.gaze.copy(eye) : eye.clone());
+    if (this.seated) return;
+    if (this.friend.isWalking || this.held) {
+      this.friend.setFocus('viewer');
       return;
     }
-    this.friend.stand(this.yawToViewer(), 'stand', eye.clone());
+    this.friend.stand(this.yawToViewer(), 'stand', 'viewer');
+  }
+
+  /** Seated: eyes on the screen while a longplay plays (followed), else their own glances; a look at the cat is left alone. */
+  private watchScreen(): void {
+    const screen = this.options.watch?.();
+    if (screen) this.gaze.copy(screen);
+    if (!!screen === this.watching) return;
+    this.watching = !!screen;
+    this.friend.setFocus(screen ? this.gaze : null);
   }
 
   /** Ends the visit on the spot: the friend is gone. */
@@ -264,7 +274,7 @@ export class Visit {
     this.friend.position.y = Math.abs(floor - y) > 0.5 ? floor : y + (floor - y) * Math.min(1, dt * TREAD_RATE);
     this.footsteps();
     this.viewer.getWorldPosition(eye);
-    if (this.seated) this.gaze.copy(this.options.watch?.() ?? eye);
+    if (this.seated) this.watchScreen();
     // The camera never ends up inside them: close enough, they thin out.
     this.friend.getWorldPosition(scratch);
     const near = Math.hypot(eye.x - scratch.x, eye.z - scratch.z) < VISIT_RULES.blocked.through && Math.abs(eye.y - scratch.y - 1.6) < 1;
@@ -364,11 +374,12 @@ export class Visit {
     this.friend.stand(seat.yaw, 'stand');
     await this.until(() => Math.abs(angleDelta(seat.yaw, this.friend.rotation.y)) < 0.25, VISIT_RULES.sitTurnFor);
     this.seated = true;
-    this.viewer.getWorldPosition(eye);
-    this.gaze.copy(this.options.watch?.() ?? eye);
+    const screen = this.options.watch?.();
+    this.watching = !!screen;
+    if (screen) this.gaze.copy(screen);
     // Down into it leaning forward, then back in the chair.
     const { sitLean, settleAfter, riseLean, riseFor } = VISIT_RULES.sitting;
-    this.friend.sit(seat.yaw, seat.height, 'lap', this.gaze);
+    this.friend.sit(seat.yaw, seat.height, 'lap', screen ? this.gaze : null);
     this.friend.setLean(sitLean);
     this.after(settleAfter, () => {
       if (this.seated) this.friend.setLean(0);
@@ -640,8 +651,7 @@ export class Visit {
     const { excuseAfter, sidestepAfter, sidestep } = VISIT_RULES.blocked;
     if (!this.excused && this.blockedFor > excuseAfter) {
       this.excused = true;
-      this.viewer.getWorldPosition(eye);
-      this.friend.setFocus(eye.clone());
+      this.friend.setFocus('viewer');
       this.script.say(this.script.excuse(), 'sorry');
     }
     if (this.sidestepped || this.blockedFor <= sidestepAfter) return;

@@ -96,7 +96,7 @@ export class TiledWainscot extends Prop {
 }
 
 /** Where a wall's face group stands and how it is turned so that its local +x runs along the wall and +z faces the room (as the `Room`'s wall planes). */
-function wallFrame(room: RoomOptions, wall: Wall): { position: THREE.Vector3; rotationY: number } {
+export function wallFrame(room: RoomOptions, wall: Wall): { position: THREE.Vector3; rotationY: number } {
   const halfW = room.width / 2;
   const halfD = room.depth / 2;
   switch (wall) {
@@ -112,12 +112,12 @@ function wallFrame(room: RoomOptions, wall: Wall): { position: THREE.Vector3; ro
 }
 
 /** A doorway's world coordinate along a wall as the local x of that wall's face (mirrors the `Room`'s wall planes). */
-function wallLocalX(wall: Wall, along: number): number {
+export function wallLocalX(wall: Wall, along: number): number {
   return wall === 'front' || wall === 'left' ? -along : along;
 }
 
 /** The stretches of a wall of `length` (centred on 0) left once the `gaps` are taken out. */
-function segmentsBetween(length: number, gaps: { centre: number; width: number }[]): { centre: number; length: number }[] {
+export function segmentsBetween(length: number, gaps: { centre: number; width: number }[]): { centre: number; length: number }[] {
   const cuts = gaps.map((g) => [g.centre - g.width / 2, g.centre + g.width / 2] as const).sort((a, b) => a[0] - b[0]);
   const segments: { centre: number; length: number }[] = [];
   let from = -length / 2;

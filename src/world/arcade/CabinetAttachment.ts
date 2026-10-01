@@ -1,6 +1,7 @@
 import type * as THREE from 'three';
 import type { ArcadeControls } from './games/ArcadeGame';
 import type { Occupant } from './Station';
+import type { Performer } from '../people/performer';
 
 /** What an attachment learns every frame: the controls in effect, who is playing, and where a light gun points. */
 export interface AttachmentFrame {
@@ -25,6 +26,8 @@ export interface CabinetAttachment {
   /** How far a regular leans in (radians), when not the usual. */
   readonly lean?: number;
   update(dt: number, frame: AttachmentFrame): void;
+  /** A regular's body to direct while they play (the dance pad puts their feet on its arrows), or null when they leave. */
+  perform?(performer: Performer | null): void;
   /** Where a regular's hands go (world points), or false to keep the cabinet's joystick and button. */
   handsAt?(hands: [THREE.Vector3, THREE.Vector3]): boolean;
   dispose?(): void;

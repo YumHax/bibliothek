@@ -40,6 +40,13 @@ const WALLS: readonly { wall: Wall; normal: THREE.Vector3; yaw: number }[] = [
   { wall: 'right', normal: new THREE.Vector3(-1, 0, 0), yaw: -Math.PI / 2 },
 ];
 
+/** The inward normal of the wall a hung piece turned `yaw` faces the room from. */
+export function wallNormal(yaw: number): THREE.Vector3 {
+  let best = WALLS[0]!;
+  for (const w of WALLS) if (Math.abs(angleBetween(yaw, w.yaw)) < Math.abs(angleBetween(yaw, best.yaw))) best = w;
+  return best.normal;
+}
+
 /**
  * Where `ray` (zone-local) puts a piece of `surface` with local bounds `bounds`, turned `yaw` (floor and ceiling;
  * a wall sets its own): on the floor or the ceiling where the ray meets it, on the nearest wall it meets. Kept

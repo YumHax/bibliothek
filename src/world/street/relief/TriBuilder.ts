@@ -60,6 +60,22 @@ export class TriBuilder {
     return this;
   }
 
+  /** Any geometry (a sphere, a cylinder, a torus) placed by `matrix`, in `color`: its triangles are copied in, the geometry is left as it was. */
+  geometry(matrix: THREE.Matrix4, geometry: THREE.BufferGeometry, color: THREE.ColorRepresentation): this {
+    this.color.set(color);
+    normalMatrix.getNormalMatrix(matrix);
+    const source = geometry.index ? geometry.toNonIndexed() : geometry;
+    const position = source.getAttribute('position');
+    const normal = source.getAttribute('normal');
+    for (let i = 0; i < position.count; i++) {
+      v.fromBufferAttribute(position, i).applyMatrix4(matrix);
+      nrm.fromBufferAttribute(normal, i).applyMatrix3(normalMatrix).normalize();
+      this.push(v, nrm);
+    }
+    if (source !== geometry) source.dispose();
+    return this;
+  }
+
   build(): THREE.BufferGeometry {
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.Float32BufferAttribute(this.positions, 3));

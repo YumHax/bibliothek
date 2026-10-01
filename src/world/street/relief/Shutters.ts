@@ -9,6 +9,7 @@ import { isShopOpen } from '../shops/shopHours';
 import type { ShopKind, Vec2 } from '../streetPlan';
 import { snowCovered } from '../snowCover';
 import { FacadeFrame } from './facadeFrame';
+import { hasShopfront } from '../shopfronts/shopfrontPlan';
 
 /** The shutter's box under the fascia (bottom, top, depth out of the wall), the curtain's plane, its foot. */
 const BOX = { bottom: 2.8, top: 2.93, depth: 0.1 };
@@ -36,7 +37,8 @@ interface Shutter {
  * The shops' roller shutters: a steel box under each shopfront's fascia and the slatted curtain
  * that rolls down out of it when the shop shuts (`SHOP_HOURS`, via `isShopOpen`) and back up
  * when it opens, over a few seconds, the slats keeping their size as it unrolls. A few are
- * tagged. Shops that have shut for good are painted shut already; the arcade never shuts. All
+ * tagged. Shops that have shut for good are painted shut already; the arcade never shuts, and the walk-in shops
+ * keep none (their windows stand out of the wall, lit after closing: `shopfronts/`). All
  * curtains are one mesh whose four corners per shop move (only while one is rolling); the boxes
  * are another. Snow settles on the boxes.
  */
@@ -64,7 +66,8 @@ export class Shutters extends THREE.Group implements Furniture, Updatable {
     for (const front of fronts) {
       const frame = new FacadeFrame(front.spec);
       for (const shop of front.features.shopfronts) {
-        if (shop.kind === 'arcade') continue;
+        // The arcade never shuts; the walk-in shops' windows stay lit behind their glass (`shopfronts/`).
+        if (shop.kind === 'arcade' || hasShopfront(shop.kind)) continue;
         const first = position.length / 3;
         for (let i = 0; i < 4; i++) {
           position.push(0, 0, 0);

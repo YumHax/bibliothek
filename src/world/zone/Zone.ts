@@ -444,6 +444,17 @@ export class Zone<Id extends string = string> implements ShelvingHost {
     list.set(rider, new THREE.Matrix4().copy(host.matrixWorld).invert().multiply(rider.matrixWorld));
   }
 
+  /** `rider` stands on nothing any more (taken off the table it stood on): moving that host leaves it. */
+  unride(rider: Furniture): void {
+    for (const list of this.riders.values()) list.delete(rider);
+  }
+
+  /** What `rider` stands on (`ride`), if anything. */
+  hostOf(rider: Furniture): THREE.Object3D | null {
+    for (const [host, list] of this.riders) if (list.has(rider)) return host;
+    return null;
+  }
+
   /** What rides `host` (`ride`), directly. */
   ridersOf(host: THREE.Object3D): Furniture[] {
     return [...(this.riders.get(host)?.keys() ?? [])];
@@ -504,6 +515,38 @@ export class Zone<Id extends string = string> implements ShelvingHost {
       this.contactShadows.add(item);
     }
     for (const rider of this.ridersOf(item)) this.setDown(rider);
+  }
+
+  /**
+   * Hands `item` (placed here) and what rides it to zone `to`, standing where it stands now in the world: out of this
+   * zone's group, colliders, ticks, culling and shadow layer, into `to`'s (the player carried it through a doorway,
+   * or took it out of storage in another room). Lifted, it stays lifted there; it rides nothing any more. For the
+   * flat's zones, which are never unloaded (the item is disposed with the zone that holds it then).
+   */
+  handOver(item: Furniture, to: Zone): void {
+    if (to === this || !this.items.has(item)) return;
+    const lifted = this.lifted.has(item);
+    const riders = this.riders.get(item);
+    item.updateWorldMatrix(true, false);
+    const world = item.matrixWorld.clone();
+    // What culling hid of it here comes back (`to` hides it again if it is not drawn).
+    this.reveal(item);
+    this.remove(item);
+    this.kept.delete(item);
+    this.riders.delete(item);
+    for (const list of this.riders.values()) list.delete(item);
+    item.traverse((obj) => obj.layers.disable(this.shadowLayer));
+    const at = new THREE.Vector3();
+    const turn = new THREE.Quaternion();
+    to.group.updateMatrixWorld();
+    new THREE.Matrix4().copy(to.group.matrixWorld).invert().multiply(world).decompose(at, turn, new THREE.Vector3());
+    // Its riders go too, keeping their pose on it; recorded on `to` before it is placed, so a lift there reaches them.
+    if (riders) {
+      to.riders.set(item, riders);
+      for (const rider of riders.keys()) this.handOver(rider, to);
+    }
+    to.place(item, at, new THREE.Euler().setFromQuaternion(turn, 'YXZ').y);
+    if (lifted) to.lift(item);
   }
 
   /**

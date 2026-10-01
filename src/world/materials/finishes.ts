@@ -184,6 +184,34 @@ export function foliage(parameters: THREE.MeshStandardMaterialParameters): THREE
   });
 }
 
+/** How far the light wraps past the terminator per channel on skin (red scatters deepest under it). */
+const SKIN_WRAP = 'vec3(0.42, 0.2, 0.14)';
+
+/**
+ * Skin: with `QUALITY.detailedMaterials`, the light scattered under the skin wraps a little past the
+ * terminator, reddest there, so a face turned from a lamp shades into warm flesh instead of grey
+ * plaster (the cheap stand-in for subsurface scattering). Per light, inside three's own lighting
+ * loop (shadows included); a new material per call.
+ */
+export function skin(parameters: THREE.MeshStandardMaterialParameters): THREE.MeshStandardMaterial {
+  const material = new THREE.MeshStandardMaterial(parameters);
+  if (!QUALITY.detailedMaterials) return material;
+  return patchShader(material, 'skin', (shader) => {
+    shader.fragmentShader = afterChunk(
+      shader.fragmentShader,
+      'lights_physical_pars_fragment',
+      `void RE_Direct_Skin(const in IncidentLight directLight, const in vec3 geometryPosition, const in vec3 geometryNormal, const in vec3 geometryViewDir, const in vec3 geometryClearcoatNormal, const in PhysicalMaterial material, inout ReflectedLight reflectedLight) {
+        RE_Direct_Physical(directLight, geometryPosition, geometryNormal, geometryViewDir, geometryClearcoatNormal, material, reflectedLight);
+        float facing = dot(geometryNormal, directLight.direction);
+        vec3 wrap = saturate((vec3(facing) + ${SKIN_WRAP}) / (vec3(1.0) + ${SKIN_WRAP})) - vec3(saturate(facing));
+        reflectedLight.directDiffuse += directLight.color * BRDF_Lambert(material.diffuseColor) * wrap;
+      }
+      #undef RE_Direct
+      #define RE_Direct RE_Direct_Skin`,
+    );
+  });
+}
+
 /**
  * Printed or moulded plastic (a game box's sleeve, a console): with `QUALITY.physicalMaterials`
  * a clearcoat catches the reflections over the print, the base keeps its own roughness.

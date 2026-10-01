@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import type { GameBox } from '../GameBox';
 import type { Shelf, ShelfSpot } from '../Shelf';
 import type { Shelving } from './Shelving';
-import { arrange, type ShelfAddress, type ShelfArrangement } from './arrangement';
+import { arrange, swapped, type ShelfAddress, type ShelfArrangement } from './arrangement';
 import { nextSortMode, type SortMode } from './sort';
 
 /** A spot on one of the flat's bookcases for the box in hand (`ShelvingGroup.spotAt`). */
@@ -62,6 +62,8 @@ export class ShelvingGroup {
         if (!hit || (best && hit.distance >= best.distance)) return;
         const spot = shelf.spotAt(shelf.worldToLocal(this.local.copy(hit.point)), held);
         if (!spot) return;
+        // A swap sends the other box to the row the one in hand came from: that row must have room for it.
+        if (spot.swap && spot.fits && shelf.rowOf(held) !== spot.row) spot.fits = this.originHasRoom(held, spot.swap);
         best = { shelving: shelving.id, bookcase, row: spot.row, index: spot.index, shelf, spot, point: hit.point.clone(), distance: hit.distance };
       });
     }
@@ -79,6 +81,30 @@ export class ShelvingGroup {
     this.arrangement.setArrangement(arrange(shown, this.arrangement.all(), box.game.id, to));
     for (const shelving of this.members) shelving.arranged();
     this.sortAll('custom');
+  }
+
+  /**
+   * Swaps `held` (in hand) with `other` (on a shelf): each takes the other's place, the rest of the shelves as they
+   * stand becoming the player's arrangement, as `moveBox` does. The caller then lets the box in hand go.
+   */
+  swapBoxes(held: GameBox, other: GameBox): void {
+    if (!this.arrangement) return;
+    const shown = Object.fromEntries(this.members.map((shelving) => [shelving.id, shelving.rows()]));
+    this.arrangement.setArrangement(swapped(shown, this.arrangement.all(), held.game.id, other.game.id));
+    for (const shelving of this.members) shelving.arranged();
+    this.sortAll('custom');
+  }
+
+  /** Whether the row `held` came from (it counts there while in hand) has room for `other` in its place. */
+  private originHasRoom(held: GameBox, other: GameBox): boolean {
+    const home = held.home;
+    for (const shelving of this.members) {
+      const shelf = shelving.bookcases.find((b) => b === home);
+      if (!shelf) continue;
+      const row = shelf.rowOf(held);
+      return row >= 0 && shelf.roomFor(row, held, other);
+    }
+    return false;
   }
 
   /** Every shelving takes `mode`, the leader first (its overflow feeds the next); the mode is remembered. */

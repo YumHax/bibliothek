@@ -2,6 +2,8 @@ import * as THREE from 'three';
 import type { Updatable } from '@/core/Engine';
 import { Timers } from '@/core/Timers';
 import type { ArcadeResult } from '@/game/SessionActions';
+import type { Sfx } from '@/audio/ChipSpeaker';
+import type { Reaction } from '../people/performer';
 import type { Walker } from '../people/Walker';
 import type { Station } from './Station';
 import { Prop } from '../props/Prop';
@@ -81,6 +83,35 @@ const WATCH_SECONDS: [number, number] = [45, 120];
 const WATCH_CHATTER = ['Who is next?', 'My money is on the new one.', 'Quarter-finals already.', 'I got knocked out by a kid once.', 'Shh, they are playing.', 'Tournament day. Best day.'];
 const WATCH_ODDS = 0.7;
 
+/** What a machine's sounds mean to the people at it and round it. */
+const REACTION_OF: Partial<Record<Sfx, Reaction>> = {
+  score: 'good',
+  eat: 'good',
+  perfect: 'good',
+  swish: 'good',
+  bonus: 'great',
+  jackpot: 'great',
+  win: 'great',
+  stage: 'great',
+  best: 'record',
+  lose: 'fail',
+  drain: 'fail',
+  penalty: 'fail',
+  tilt: 'fail',
+  crunch: 'fail',
+  miss: 'fail',
+};
+/** Seconds before the same person reacts again, by how much it matters (a record always shows), and how often a small one shows at all. */
+const REACT_GAP: Record<Reaction, number> = { good: 3, great: 1.5, record: 0, fail: 1.6, near: 1.2, over: 0, ready: 0 };
+const GOOD_ODDS = 0.45;
+/** What the kid says, now and then, watching a game go well or badly. */
+const KID_OOH = ['Ooh!', 'Nooo...', 'Ouch!'];
+const KID_NICE = ['Nice!', 'Whoa!', 'Yes!'];
+/** How long after a regular's game ends they put the next coin in (s): before the machine starts it. */
+const NEXT_COIN_AFTER = 1.4;
+/** A regular at the pinball nudges it this often (per second). */
+const NUDGE_RATE = 0.12;
+
 type KidState =
   | { kind: 'hanging'; left: number }
   | { kind: 'walking' }
@@ -109,6 +140,9 @@ export class ArcadeCrowd extends Prop implements Updatable {
   private readonly claimed = new Set<CrowdStation>();
   private readonly scratch = new THREE.Vector3();
   private readonly forward = new THREE.Vector3();
+  /** When each person last reacted (the hall's clock), so nobody twitches at every point. */
+  private readonly reacted = new Map<Walker, number>();
+  private clock = 0;
 
   constructor(options: ArcadeCrowdOptions) {
     super();
@@ -122,6 +156,7 @@ export class ArcadeCrowd extends Prop implements Updatable {
       cs.station.stationEvents.onPlayerResult = (result) => this.playerResult(cs, result);
       cs.station.stationEvents.onPlayerLeave = () => this.playerLeft(cs);
       cs.station.stationEvents.onRegularResult = (score) => this.regularResult(cs, score);
+      cs.station.stationEvents.onSound = (sfx) => this.sound(cs, sfx);
     }
   }
 
@@ -129,7 +164,7 @@ export class ArcadeCrowd extends Prop implements Updatable {
   seat(regular: number, station: number): void {
     const r = this.regulars[regular];
     const cs = this.options.stations[station];
-    if (!r || !cs || !cs.station.occupy()) return;
+    if (!r || !cs || !cs.station.occupy(r.walker.performer)) return;
     r.walker.setPresent(true, this.standSpot(cs));
     r.walker.rotation.y = this.standYaw(cs);
     this.standAtMachine(r.walker, cs);
@@ -137,6 +172,7 @@ export class ArcadeCrowd extends Prop implements Updatable {
   }
 
   update(dt: number): void {
+    this.clock += dt;
     this.timers.update(dt);
     for (const r of this.regulars) this.updateRegular(r, dt);
     this.updateKid(dt);
@@ -189,6 +225,8 @@ export class ArcadeCrowd extends Prop implements Updatable {
           s.chatter = 12 + Math.random() * 20;
           r.walker.say(REGULAR_CHATTER[Math.floor(Math.random() * REGULAR_CHATTER.length)]!, 1.6);
         }
+        // Pinball players bump the table with their hips now and then.
+        if (s.at.station.name === 'Pinball' && Math.random() < dt * NUDGE_RATE) r.walker.gesture('nudge');
         // Time to go, or the hall is emptying out for the night.
         if (s.left > 0 && this.inside <= this.options.maxInside() + 1) return;
         s.at.station.release();
@@ -214,13 +252,15 @@ export class ArcadeCrowd extends Prop implements Updatable {
     r.walker.walk(this.route(r.walker.position, this.standSpot(target)), () => {
       this.claimed.delete(target);
       // Taken meanwhile (the player got there first): try another, or give up.
-      if (!target.station.occupy()) {
+      if (!target.station.occupy(r.walker.performer)) {
         const other = this.freeStation();
         if (other) this.goTo(r, other);
         else this.leave(r);
         return;
       }
       this.standAtMachine(r.walker, target);
+      // A coin in first.
+      r.walker.gesture('insertCoin');
       r.state = { kind: 'playing', at: target, left: rand(PLAY_SECONDS), chatter: 4 + Math.random() * 8 };
     });
   }
@@ -233,9 +273,9 @@ export class ArcadeCrowd extends Prop implements Updatable {
     });
   }
 
-  /** At the controls: facing the machine, bent over it as it asks, hands on its controls, eyes on its screen. */
+  /** At the controls: facing the machine, bent over it as it asks, hands on its controls (or the machine directing them), eyes on its screen. */
   private standAtMachine(walker: Walker, cs: CrowdStation): void {
-    walker.stand(this.standYaw(cs), 'play', this.focusOf(cs), () => cs.station.handsAt(), cs.station.lean);
+    walker.stand(this.standYaw(cs), 'play', this.focusOf(cs), cs.station.directs ? null : () => cs.station.handsAt(), cs.station.lean);
   }
 
   private freeStation(): CrowdStation | null {
@@ -285,9 +325,7 @@ export class ArcadeCrowd extends Prop implements Updatable {
         this.timers.after(0.3 + i * 0.45, () => {
           if (r.state.kind !== 'watching') return;
           r.walker.say(lines[Math.floor(Math.random() * lines.length)]!, 2.4);
-          if (!cheer) return;
-          r.walker.setPose('cheer');
-          this.timers.after(1.6, () => r.state.kind === 'watching' && r.walker.setPose('crossed'));
+          r.walker.react(cheer ? 'great' : 'fail');
         });
       });
   }
@@ -374,6 +412,7 @@ export class ArcadeCrowd extends Prop implements Updatable {
     if (kid && s.kind === 'partner' && s.at === cs) {
       const lines = result.best || result.score > 0 ? PARTNER_RESULTS.won : PARTNER_RESULTS.lost;
       kid.say(lines[Math.floor(Math.random() * lines.length)]!, 2.4);
+      kid.react(lines === PARTNER_RESULTS.won ? 'fail' : 'great');
       return;
     }
     if (!kid || s.kind !== 'watching' || s.at !== cs) return;
@@ -393,10 +432,7 @@ export class ArcadeCrowd extends Prop implements Updatable {
       line = ['Nice one!', 'Not bad!', 'Aww...', 'So close!', 'Again! Again!'][Math.floor(Math.random() * 5)]!;
     }
     kid.say(line, 2.4);
-    if (cheer) {
-      kid.setPose('cheer');
-      this.timers.after(1.8, () => kid.setPose('crossed'));
-    }
+    kid.react(cheer ? 'record' : result.score === 0 ? 'fail' : 'good');
   }
 
   private playerLeft(cs: CrowdStation): void {
@@ -412,12 +448,43 @@ export class ArcadeCrowd extends Prop implements Updatable {
     const line = this.options.onRegularScore?.(cs.station, score, r.name);
     if (line) {
       r.walker.say(line, 2.6);
-      r.walker.setPose('cheer');
-      // Then back to the controls, if still at them.
-      this.timers.after(1.5, () => {
-        if (r.state.kind === 'playing' && r.state.at === cs) this.standAtMachine(r.walker, cs);
-      });
+      r.walker.react('record');
+    } else r.walker.react('over');
+    this.reacted.set(r.walker, this.clock);
+    // Then the next coin, if they are staying on.
+    this.timers.after(NEXT_COIN_AFTER + Math.random() * 0.6, () => {
+      if (r.state.kind === 'playing' && r.state.at === cs && !r.walker.performer.gesturing) r.walker.gesture('insertCoin');
+    });
+  }
+
+  /**
+   * A machine made a sound that means something (a point, a bonus, a life lost, a record): whoever
+   * plays it reacts (unless the machine directs their body and shows it itself), and the kid if
+   * watching it, now and then with a word.
+   */
+  private sound(cs: CrowdStation, sfx: Sfx): void {
+    const reaction = REACTION_OF[sfx];
+    if (!reaction) return;
+    if (cs.station.occupant === 'regular' && !cs.station.directs) {
+      const r = this.regulars.find((o) => o.state.kind === 'playing' && o.state.at === cs);
+      if (r) this.reactOnce(r.walker, reaction);
     }
+    const kid = this.options.kid;
+    const s = this.kidState;
+    if (kid && (s.kind === 'watching' || s.kind === 'partner') && s.at === cs && this.reactOnce(kid, reaction) && Math.random() < 0.3) {
+      if (reaction === 'fail') kid.say(KID_OOH[Math.floor(Math.random() * KID_OOH.length)]!, 1.4);
+      else if (reaction === 'great' || reaction === 'record') kid.say(KID_NICE[Math.floor(Math.random() * KID_NICE.length)]!, 1.4);
+    }
+  }
+
+  /** `walker` reacts, unless they did a moment ago (a record always shows; a small one only sometimes). True when they did. */
+  private reactOnce(walker: Walker, reaction: Reaction): boolean {
+    const last = this.reacted.get(walker) ?? -Infinity;
+    if (this.clock - last < REACT_GAP[reaction]) return false;
+    if (reaction === 'good' && Math.random() > GOOD_ODDS) return false;
+    this.reacted.set(walker, this.clock);
+    walker.react(reaction);
+    return true;
   }
 
   // --- Geometry ---------------------------------------------------------------------------------

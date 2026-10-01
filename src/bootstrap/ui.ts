@@ -51,6 +51,7 @@ import { NewsPanel } from '@/ui/NewsPanel';
 import { ScratchCardPanel } from '@/ui/ScratchCardPanel';
 import { HomeShopPanel } from '@/ui/HomeShopPanel';
 import { ToDoNotePanel } from '@/ui/ToDoNotePanel';
+import { StoragePanel } from '@/ui/StoragePanel';
 import type { WorldPanels } from '@/world/buildContext';
 
 export type Ui = ReturnType<typeof createUi>;
@@ -132,11 +133,12 @@ export function createUi(services: Services, player: FirstPersonController, late
   });
   overlay.addPauseButton('journal', 'Journal', () => late.session.get().openPanel(journalPanel));
   // Photo mode and the search from the pause menu (a controller or a touchscreen has no P or F): back in the room, then the key.
-  const inRoomThen = (code: string) => {
+  const inRoomThen = (code: string) => inRoomThenRun(() => input.pressVirtual(code));
+  const inRoomThenRun = (run: () => void) => {
     const press = () => {
       window.clearTimeout(giveUp);
       player.controls.removeEventListener('lock', press);
-      input.pressVirtual(code);
+      run();
     };
     // Once the room is entered; a lock that never comes (the return card) forgets the press rather than firing it later.
     const giveUp = window.setTimeout(() => player.controls.removeEventListener('lock', press), 4000);
@@ -145,6 +147,42 @@ export function createUi(services: Services, player: FirstPersonController, late
   };
   overlay.addPauseButton('photo', 'Photo mode', () => inRoomThen(primaryCode('photoMode')));
   overlay.addPauseButton('search', 'Search a game', () => inRoomThen(primaryCode('search')));
+  // The room from above, for a controller or a touchscreen (L on the keyboard): at home only.
+  overlay.addPauseButton('plan-room', 'Plan the room', () => inRoomThen(primaryCode('planView')), () => late.zones.isSet && inFlat(here()) && here() !== 'stairwell');
+  // The room's furniture back where it came (docs/furnishing.md): only once something in it was moved, after a yes.
+  const movedHere = () => (late.zones.isSet ? services.furnishings.piecesIn(late.zones.get().current).filter((piece) => services.furnishings.moved(piece)) : []);
+  overlay.addPauseButton(
+    'reset-furniture',
+    'Put the furniture back',
+    () => {
+      const moved = movedHere();
+      overlay.confirm({
+        title: 'Put this room back as it was?',
+        message: `${moved.length === 1 ? `The ${moved[0]!.name.toLowerCase()} goes` : `The ${moved.length} pieces you moved go`} back where they stood when they came. The shelves are not touched.`,
+        yes: 'Put it back',
+        onYes: () => services.furnishings.sendAllHome(movedHere()),
+      });
+    },
+    () => movedHere().length > 0,
+  );
+  // The furniture put away (X while carrying), taken out in front of the player in the room they are in.
+  const storagePanel = new StoragePanel(container);
+  overlay.addPauseButton(
+    'stored-furniture',
+    'Stored furniture',
+    () => {
+      const stored = services.furnishings.storedPieces();
+      storagePanel.show(
+        stored.map((piece) => ({ name: piece.name, room: zoneName(piece.zone.id as ZoneId) })),
+        (index) => {
+          const piece = stored[index];
+          if (piece) inRoomThenRun(() => late.session.get().takeOutStored(piece));
+        },
+      );
+      late.session.get().openPanel(storagePanel);
+    },
+    () => services.furnishings.storedPieces().length > 0,
+  );
   const neighbourTradePanel = new NeighbourTradePanel(container, wallet, { trades: neighbourTrades, tx, collection }, coverUrl);
   // What the street's shops and the hall console open: made once here, handed to their builders (`BuildContext.panels`).
   const panels: WorldPanels = {

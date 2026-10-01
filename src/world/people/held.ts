@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { bareMetal } from '../street/metals';
-import { FOREARM_L, HEAD_Y, NECK_PIVOT } from './body';
+import { HEAD_Y, NECK_PIVOT } from './body';
 import type { ArmAngles } from './poses';
 
 /*
@@ -19,19 +19,19 @@ const CANOPIES = [0x1c1e24, 0x2a3f6a, 0x7a1d24, 0x2f5a3a, 0xd8b23a, 0x5a2a5e];
  * swing): the upper arm a little forward, the forearm bent up and in.
  */
 export const UMBRELLA_ARM: ArmAngles = { ux: -0.3, uz: 0.05, lx: -1.25, ly: -0.45, lz: 0 };
-/** Where the shaft stands, in the torso's frame (the hand's grip at its foot), and how tall it is. */
+/** Where the shaft stands, in the torso's frame (the chest's, from the waist; the hand's grip at its foot), and how tall it is. */
 const SHAFT = { x: 0.07, z: 0.3, bottom: 0.12, top: 1.24 };
 const CANOPY = { radius: 0.55, rise: 0.2, ribs: 8 };
 
-/** A phone in the hand (the hand's frame: the elbow's, down the forearm). */
+/** A phone in the hand (the wrist's frame, the hand hanging down from it). */
 export function phoneMesh(): THREE.Object3D {
   const body = new THREE.Mesh(new THREE.BoxGeometry(0.072, 0.145, 0.009), new THREE.MeshStandardMaterial({ color: 0x141518, roughness: 0.25 }));
-  body.position.set(0, -FOREARM_L - 0.05, 0.03);
+  body.position.set(0, -0.05, 0.03);
   body.rotation.x = 0.2;
   return body;
 }
 
-/** An open paperback held in the right hand, pages up, tilted towards the eyes. */
+/** An open paperback held in the right hand, pages up, tilted towards the eyes (the wrist's frame). */
 export function bookMesh(seed: number): THREE.Object3D {
   const group = new THREE.Group();
   const cover = new THREE.MeshStandardMaterial({ color: [0x8a2a2a, 0x2a4a7a, 0x3a5a2a, 0xc8a040][seed % 4]!, roughness: 0.8 });
@@ -47,7 +47,7 @@ export function bookMesh(seed: number): THREE.Object3D {
     group.add(half);
   }
   // In the palm: flat across the hand, spine along the forearm's end.
-  group.position.set(-0.04, -FOREARM_L - 0.05, 0.05);
+  group.position.set(-0.04, -0.05, 0.05);
   group.rotation.set(-1.1, 0, 0);
   return group;
 }

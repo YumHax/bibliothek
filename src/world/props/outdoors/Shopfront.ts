@@ -45,12 +45,14 @@ interface ShopType {
   display: ShopDisplay;
   /** Lettering that glows at night (a neon or a lightbox), all night long. */
   neon?: 'warm' | 'cool';
-  /** A lit sign on a bracket: the pharmacy's cross, the tobacconist's diamond. */
-  bracket?: 'cross' | 'diamond';
+  /** A lit sign on a bracket: the pharmacy's cross, the tobacconist's diamond; a painted board (the walk-in shops'). */
+  bracket?: 'cross' | 'diamond' | 'board';
+  /** No roller shutter: its windows stay lit behind their glass after closing (the walk-in shops, `street/shopfronts/`). */
+  unshuttered?: boolean;
 }
 
 /** A kind's colours (`city/shopLooks`, shared with the walkable street) with how the painted front lights up and dresses the pavement. */
-function look(kind: keyof typeof SHOP_LOOKS, painted: Pick<ShopType, 'light' | 'display'> & Partial<Pick<ShopType, 'neon' | 'bracket'>>): ShopType {
+function look(kind: keyof typeof SHOP_LOOKS, painted: Pick<ShopType, 'light' | 'display'> & Partial<Pick<ShopType, 'neon' | 'bracket' | 'unshuttered'>>): ShopType {
   return { ...SHOP_LOOKS[kind], ...painted };
 }
 
@@ -61,7 +63,7 @@ const SHOPS: readonly ShopType[] = [
   look('pharmacy', { light: 'cool', display: 'none', bracket: 'cross' }),
   look('books', { light: 'warm', display: 'board' }),
   look('grocer', { light: 'warm', display: 'crates' }),
-  look('florist', { light: 'warm', display: 'buckets' }),
+  look('florist', { light: 'warm', display: 'buckets', unshuttered: true }),
   look('tabac', { light: 'warm', display: 'none', neon: 'warm', bracket: 'diamond' }),
   look('bar', { light: 'warm', display: 'terrace', neon: 'warm' }),
   look('butcher', { light: 'cool', display: 'none' }),
@@ -69,9 +71,9 @@ const SHOPS: readonly ShopType[] = [
 ];
 /** Kinds only the walkable street's plan puts somewhere (`plannedType`), never drawn by lot. */
 const PLANNED_SHOPS: readonly ShopType[] = [
-  look('furniture', { light: 'warm', display: 'none' }),
-  look('pets', { light: 'warm', display: 'none' }),
-  look('electronics', { light: 'cool', display: 'none', neon: 'cool' }),
+  look('furniture', { light: 'warm', display: 'none', bracket: 'board', unshuttered: true }),
+  look('pets', { light: 'warm', display: 'none', bracket: 'board', unshuttered: true }),
+  look('electronics', { light: 'cool', display: 'none', neon: 'cool', bracket: 'board', unshuttered: true }),
 ];
 /** The shop across the street the collector surely haunts. */
 export const RETRO_GAMES: ShopType = look('retro', { light: 'cool', display: 'board', neon: 'cool' });
@@ -218,9 +220,9 @@ function paintShop(f: FacadeFrame, random: Rng, type: ShopType, s0: number, s1: 
   }
 
   // The roller shutter comes down over the front when the shop shuts, and stays down until it opens.
-  sheet.shutter(f.quad(s0 + 0.1, s1 - 0.1, 0, 3.0), closing);
+  if (!type.unshuttered) sheet.shutter(f.quad(s0 + 0.1, s1 - 0.1, 0, 3.0), closing);
   if (type.awning && random() < 0.8) paintAwning(f, type.awning, s0 + 0.1, s1 - 0.1);
-  if (type.bracket) paintBracketSign(f, type.bracket, random() < 0.5 ? s0 + 0.5 : s1 - 0.5);
+  if (type.bracket) paintBracketSign(f, type.bracket, random() < 0.5 ? s0 + 0.5 : s1 - 0.5, type);
   return { closing, goods };
 }
 
@@ -291,8 +293,8 @@ function paintAwning(f: FacadeFrame, [color, stripe]: [string, string], s0: numb
   f.detail(f.strip(s0, s1, front - 0.02, front + 0.06, out), 'rgba(0,0,0,0.2)');
 }
 
-/** A lit sign on a bracket out from the wall: the pharmacy's green cross or the tobacconist's red diamond. */
-function paintBracketSign(f: FacadeFrame, kind: 'cross' | 'diamond', s: number): void {
+/** A sign on a bracket out from the wall: the pharmacy's green cross or the tobacconist's red diamond, lit; a walk-in shop's board in its colours. */
+function paintBracketSign(f: FacadeFrame, kind: NonNullable<ShopType['bracket']>, s: number, type: ShopType): void {
   const { sheet, d } = f;
   const out = 0.7;
   const h = 4.6;
@@ -305,6 +307,11 @@ function paintBracketSign(f: FacadeFrame, kind: 'cross' | 'diamond', s: number):
       sheet.path(shape, '#2fa84a');
       sheet.lit(shape, 'cool', 1);
     }
+  } else if (kind === 'board') {
+    // An octagonal board in the shop's joinery colour, its lettering's colour inside (the street's own is painted with a picture).
+    const ring = (r: number): Polygon => new Polygon(Array.from({ length: 8 }, (_, i): [number, number] => f.P(s + Math.cos((i + 0.5) * (Math.PI / 4)) * r * 0.6, h - 0.35 + Math.sin((i + 0.5) * (Math.PI / 4)) * r, out)));
+    sheet.path(ring(0.36), type.front);
+    sheet.path(ring(0.24), type.letters);
   } else {
     const p: [number, number][] = [f.P(s, h - 0.55, out), f.P(s + 0.28, h, out), f.P(s, h + 0.55, out), f.P(s - 0.28, h, out)];
     const diamond = new Polygon(p);

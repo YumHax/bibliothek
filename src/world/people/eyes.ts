@@ -3,6 +3,8 @@ import { createCanvas, toTexture } from '@/covers/generated/canvasUtils';
 import { EYE_DIRECTION, headPoint, type FaceShape } from './head';
 import type { PersonLook } from './looks';
 import { cachedTexture } from './textureCache';
+import { skin as skinMaterial } from '../materials/finishes';
+import { QUALITY } from '@/graphics/quality';
 
 /*
  * Eyes at real scale, set into the sockets of the head: an eyeball (a glossy sphere painted with
@@ -26,11 +28,14 @@ export interface Eye {
   ball: THREE.Mesh;
   /** Turns down to blink and a little with the gaze. */
   upperLid: THREE.Mesh;
+  /** Rides up a little in a squint or a real smile. */
+  lowerLid: THREE.Mesh;
 }
 
 export function buildEyes(look: PersonLook, shape: FaceShape): [Eye, Eye] {
-  const ballMaterial = new THREE.MeshStandardMaterial({ map: cachedTexture(`eye|${look.eyes}`, () => eyeTexture(look.eyes)), roughness: 0.12 });
-  const lidMaterial = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.6 });
+  // A wet eye: the lights and the room shine sharp on the cornea's coat, over the iris's own softer sheen.
+  const ballMaterial = wetEye({ map: cachedTexture(`eye|${look.eyes}`, () => eyeTexture(look.eyes)), roughness: 0.2 });
+  const lidMaterial = skinMaterial({ vertexColors: true, roughness: 0.66 });
   const skin = new THREE.Color(look.skin);
   const lash = new THREE.Color(0x17110e).lerp(new THREE.Color(look.hair), 0.2);
   const surface = headPoint(EYE_DIRECTION, shape);
@@ -39,9 +44,11 @@ export function buildEyes(look: PersonLook, shape: FaceShape): [Eye, Eye] {
     group.position.set(side * surface.x, surface.y, surface.z - 0.0085);
     const ball = new THREE.Mesh(ballGeometry(), ballMaterial);
     const upperLid = new THREE.Mesh(lidGeometry(0, UPPER_EDGE, skin, lash, 'bottom'), lidMaterial);
-    const lowerLid = new THREE.Mesh(lidGeometry(LOWER_EDGE, Math.PI - LOWER_EDGE, skin.clone().lerp(new THREE.Color(0xc07a70), 0.12), lash, 'top'), lidMaterial);
+    // A smile reaches the eyes: the lower lids ride a little higher.
+    const lowerEdge = look.smile ? LOWER_EDGE - 0.05 : LOWER_EDGE;
+    const lowerLid = new THREE.Mesh(lidGeometry(lowerEdge, Math.PI - lowerEdge,skin.clone().lerp(new THREE.Color(0xc07a70), 0.12), lash, 'top'), lidMaterial);
     group.add(ball, upperLid, lowerLid);
-    return { group, ball, upperLid };
+    return { group, ball, upperLid, lowerLid };
   };
   return [make(-1), make(1)];
 }
@@ -81,12 +88,12 @@ function lidGeometry(thetaStart: number, thetaLength: number, skin: THREE.Color,
 function eyeTexture(irisColor: number): THREE.CanvasTexture {
   const S = 128;
   const [canvas, ctx] = createCanvas(S, S);
-  ctx.fillStyle = '#e9e2d8';
+  // Never paper white: an off-white that greys and warms towards the corners.
+  ctx.fillStyle = '#dcd3c7';
   ctx.fillRect(0, 0, S, S);
-  // The white greys and warms towards the corners.
-  const shade = ctx.createRadialGradient(S / 2, S / 2, S * 0.2, S / 2, S / 2, S * 0.5);
+  const shade = ctx.createRadialGradient(S / 2, S / 2, S * 0.18, S / 2, S / 2, S * 0.5);
   shade.addColorStop(0, 'rgba(0,0,0,0)');
-  shade.addColorStop(1, 'rgba(120,70,60,0.35)');
+  shade.addColorStop(1, 'rgba(120,70,60,0.45)');
   ctx.fillStyle = shade;
   ctx.fillRect(0, 0, S, S);
 
@@ -125,9 +132,22 @@ function eyeTexture(irisColor: number): THREE.CanvasTexture {
   ctx.beginPath();
   ctx.arc(c, c, S * 0.085, 0, Math.PI * 2);
   ctx.fill();
-  ctx.fillStyle = 'rgba(255,255,255,0.55)';
+  // Only a faint painted catchlight: the cornea's coat reflects the real lights.
+  ctx.fillStyle = 'rgba(255,255,255,0.12)';
   ctx.beginPath();
   ctx.arc(c + iris * 0.35, c - iris * 0.35, S * 0.025, 0, Math.PI * 2);
   ctx.fill();
+  // The upper lid and lashes shade the top of the ball (it turns only a little, so the shade stays about under them).
+  const lid = ctx.createLinearGradient(0, S * 0.12, 0, S * 0.46);
+  lid.addColorStop(0, 'rgba(40,26,22,0.55)');
+  lid.addColorStop(1, 'rgba(40,26,22,0)');
+  ctx.fillStyle = lid;
+  ctx.fillRect(0, 0, S, S * 0.46);
   return toTexture(canvas, 2);
+}
+
+/** The eyeball's material: a clear coat over the painted ball where the renderer affords it (`QUALITY.physicalMaterials`). */
+function wetEye(parameters: THREE.MeshStandardMaterialParameters): THREE.MeshStandardMaterial {
+  if (!QUALITY.physicalMaterials) return new THREE.MeshStandardMaterial({ ...parameters, roughness: 0.12 });
+  return new THREE.MeshPhysicalMaterial({ ...parameters, clearcoat: 1, clearcoatRoughness: 0.04 });
 }

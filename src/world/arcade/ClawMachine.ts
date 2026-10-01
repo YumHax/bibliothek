@@ -73,6 +73,8 @@ export class ClawMachine extends THREE.Group implements Furniture, Interactable,
     this.hitboxes = [this.model.hitbox];
     this.placeClaw();
     this.speaker = new ChipSpeaker(this.model.carriage, wiring.listener, { volume: 0.18 });
+    // Every sound it makes is news to whoever plays or watches it.
+    this.speaker.onPlay = (sfx) => this.stationEvents.onSound?.(sfx);
     this.run = new MachineRun({
       game: this.game,
       input: wiring.input,

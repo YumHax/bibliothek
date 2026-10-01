@@ -121,6 +121,8 @@ export class Overlay {
   private resuming = false;
   /** The pause menu's added buttons (`addPauseButton`), by their `data-action`. */
   private readonly pauseActions = new Map<string, () => void>();
+  /** The pause buttons shown only when their predicate holds (read each time the menu opens). */
+  private readonly pauseShown = new Map<string, () => boolean>();
 
   constructor(container: HTMLElement, input: Input, private readonly onStart: () => void, private readonly options: OverlayOptions = {}) {
     const resuming = options.hasProgress === true;
@@ -309,11 +311,12 @@ export class Overlay {
 
   /**
    * Adds a button to the pause menu, before Settings (the journal, the collector's book...): shown
-   * only once the game has started. `id` names it (unique); `run` is called on a click or Enter.
+   * only once the game has started, and while `shown` says so. `id` names it (unique); `run` is called on a click or Enter.
    */
-  addPauseButton(id: string, label: string, run: () => void): void {
+  addPauseButton(id: string, label: string, run: () => void, shown?: () => boolean): void {
     const action = `pause-${id}`;
     this.pauseActions.set(action, run);
+    if (shown) this.pauseShown.set(action, shown);
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'ui-btn';
@@ -456,7 +459,7 @@ export class Overlay {
     if (collection) collection.hidden = !paused;
     const home = button('home');
     if (home) home.hidden = !paused || !this.options.goHome?.available();
-    for (const extra of this.screens.main.querySelectorAll<HTMLElement>('[data-pause]')) extra.hidden = !paused;
+    for (const extra of this.screens.main.querySelectorAll<HTMLElement>('[data-pause]')) extra.hidden = !paused || !(this.pauseShown.get(extra.dataset.action ?? '')?.() ?? true);
     const status = q('status');
     const rows = paused ? (this.options.status?.() ?? []) : [];
     status.hidden = rows.length === 0;

@@ -2,11 +2,12 @@ import * as THREE from 'three';
 import { ChipSpeaker } from '@/audio/ChipSpeaker';
 import { eyePoseAt } from '../meshUtils';
 import { actionKeyLabel } from '@/ui/keys';
-import { type ArcadeControls, drawText } from './games/ArcadeGame';
+import { type ArcadeControls, NO_CONTROLS, drawText } from './games/ArcadeGame';
 import { TicketMachine, type TicketMachineWiring } from './TicketMachine';
 import type { TicketStrip } from './TicketStrip';
 import { BACK_Z, CAGE_H, FINAL_SECONDS, FRONT_Z, HOOP, HoopSim, RELEASE, STREAK_MAX, WIDTH } from './hoop/HoopSim';
 import { type HoopModel, buildHoopModel } from './hoop/hoopModel';
+import { HoopThrower } from './hoop/HoopThrower';
 
 export interface HoopShotOptions {
   title?: string;
@@ -23,8 +24,10 @@ const STAND_Z = 1.3;
  * run. After ten baskets the hoop starts to slide; after twenty it slides faster. The rules and
  * the balls' physics are the `HoopSim`'s (so a ball can rattle round the rim and out), the cage
  * `hoop/hoopModel`'s; this class hands the sim the player's look, moves the balls and the hoop,
- * plays the sounds and paints the scoreboard. Regulars throw well-aimed shots with a little
- * error. Pays tickets from a slot at the front; keeps a table. Origin on the floor under the
+ * plays the sounds and paints the scoreboard. A regular's body is the machine's to direct
+ * (`HoopThrower`: every ball picked up from the gutter, set, shot from the hands and followed
+ * through; well aimed, with a little error); a regular without one throws from a fixed point.
+ * Pays tickets from a slot at the front; keeps a table. Origin on the floor under the
  * middle of the cage, +z the player's end. Collides.
  */
 export class HoopShot extends TicketMachine {
@@ -33,6 +36,7 @@ export class HoopShot extends TicketMachine {
   readonly standAt = new THREE.Vector3(0, 0, STAND_Z - 0.15);
   readonly focus = new THREE.Vector3(HOOP.x, HOOP.y, HOOP.z);
   readonly lean = 0.05;
+  readonly directs = true;
   protected readonly speaker: ChipSpeaker;
   protected readonly strip: TicketStrip;
 
@@ -41,6 +45,7 @@ export class HoopShot extends TicketMachine {
   private readonly hands: [THREE.Vector3, THREE.Vector3] = [new THREE.Vector3(), new THREE.Vector3()];
   private readonly look = new THREE.Vector3();
   private readonly camQuat = new THREE.Quaternion();
+  private thrower: HoopThrower | null = null;
   private flashClock = 0;
   private flashText = '';
   private displayClock = 0;
@@ -83,7 +88,18 @@ export class HoopShot extends TicketMachine {
 
   protected newGame(): void {
     this.sim.newGame();
+    this.thrower?.reset();
     this.placeBalls();
+  }
+
+  protected performerChanged(): void {
+    this.thrower?.stop();
+    this.thrower = this.performer && this.who === 'regular' ? new HoopThrower(this.sim, this, this.performer) : null;
+  }
+
+  protected betweenGames(dt: number): void {
+    this.thrower?.update(dt, false);
+    this.sim.takeOutcomes();
   }
 
   protected attractLabel(price: string): string {
@@ -96,6 +112,8 @@ export class HoopShot extends TicketMachine {
 
   protected play(dt: number, controls: ArcadeControls): boolean {
     const over = this.sim.play(dt, controls, this.who === 'player', () => this.lookDirection());
+    if (this.thrower) this.thrower.update(dt, this.sim.timeLeft > 0);
+    else this.sim.takeOutcomes();
     this.model.hoop.position.x = this.sim.hoopX;
     for (const { sfx, pitch } of this.sim.takeSounds()) this.speaker.play(sfx, pitch);
     const flash = this.sim.takeFlash();
@@ -107,7 +125,8 @@ export class HoopShot extends TicketMachine {
   }
 
   protected demoControls(dt: number): ArcadeControls {
-    return this.sim.autopilot(dt);
+    // A regular with a body throws with it; without one, the machine throws for them.
+    return this.thrower ? NO_CONTROLS : this.sim.autopilot(dt);
   }
 
   protected paint(dt: number): void {

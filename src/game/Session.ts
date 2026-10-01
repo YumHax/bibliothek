@@ -19,10 +19,14 @@ import { Purchases } from './Purchases';
 import { Browse } from './Browse';
 import { CatCare } from './CatCare';
 import { PhotoControl } from './PhotoControl';
-import { Rearranging } from './Rearranging';
+import { Rearranging, type PieceLike } from './Rearranging';
 import { isAction } from '@/input/actions';
 
 export type { SessionParts } from './SessionParts';
+
+/** A right-button press with a box in hand shorter than this (ms) and moving the mouse less (px) is a tap, not a turn of the box. */
+const RIGHT_TAP_MS = 280;
+const RIGHT_TAP_MOVE = 10;
 
 /**
  * Game rules: what happens when the player clicks something, presses a key or leaves the room.
@@ -44,7 +48,7 @@ export class Session implements SessionActions, SessionHost {
   private readonly counter: MarketCounter;
   private readonly purchases: Purchases;
   private readonly browse: Browse;
-  /** Moving things about the flat: a box into any shelf's gap, the furniture about its room (M). */
+  /** Moving things about the flat: a box into any shelf's gap, the furniture about it (right-click, M). */
   private readonly rearranging: Rearranging;
   /**
    * Who hears a key, in this order; the first to take it ends the routing. The order is the rules (the
@@ -54,8 +58,9 @@ export class Session implements SessionActions, SessionHost {
    *    travel menu reads its digits, or the player sleeps;
    * 3. at an arcade machine every key is the game's (E walks away, fire replays on the end card);
    *    then photo mode: while it is on every key is its own; P enters it, J opens the journal;
-   *    then moving things: while a piece of furniture is carried M / R / E are its; M puts the shelf box in hand
-   *    where it is aimed, M on a bought piece picks it up;
+   *    then moving things (docs/furnishing.md): from above (L) every key is the planning view's; while a piece is
+   *    carried M / R / Q / G / X / E are its; M puts the shelf box in hand where it is aimed, M on a piece takes it,
+   *    U (hands free, at home) undoes the last move; the right mouse button does the same (`bindInput`);
    * 4. a market copy in hand: U (just bought), B, H, R, X; O finds out a fake and goes on to 5;
    * 5. a box in hand: E puts it back, O opens it;
    * 6. browsing: F / Slash search, T sorts, N night, R random pick (not while holding), Enter picks up the found box;
@@ -122,7 +127,7 @@ export class Session implements SessionActions, SessionHost {
   /** What the hands are on (a machine, a market copy, a box, a seat, nothing): the touch bar shows what works there. */
   get handsContext(): 'arcade' | 'market' | 'held' | 'seated' | 'room' | 'furnishing' {
     if (this.arcade.current) return 'arcade';
-    if (this.rearranging.carrying) return 'furnishing';
+    if (this.rearranging.carrying || this.rearranging.planning) return 'furnishing';
     if (this.counter.holding) return 'market';
     if (this.hands.held) return 'held';
     return this.parts.player.isSeated ? 'seated' : 'room';
@@ -136,10 +141,29 @@ export class Session implements SessionActions, SessionHost {
   /** Routes clicks and key presses to the rules. Call once. */
   bindInput(input: Input, doc: Document = document): void {
     const { player, interactor, inspector } = this.parts;
+    // The right button (docs/furnishing.md): pressed with free hands it takes the piece of furniture aimed at, while
+    // carrying it puts it back; with a box in hand a drag turns the box (`Inspector`), a tap puts it in the shelf's gap aimed at.
+    let rightTap: { at: number; moved: number } | null = null;
     doc.addEventListener('mousedown', (e) => {
-      if (this.modalOpen || !player.isLocked || e.button !== 0) return;
+      if (this.modalOpen || !player.isLocked) return;
+      if (e.button === 2) {
+        rightTap = inspector.current ? { at: performance.now(), moved: 0 } : null;
+        if (!inspector.current) this.rearranging.grab();
+        return;
+      }
+      if (e.button !== 0) return;
       if (this.rearranging.click()) return; // sets the carried piece down
       if (!interactor.select() && inspector.isActive) this.putBack(); // clicked at nothing while holding
+    });
+    doc.addEventListener('mousemove', (e) => {
+      if (rightTap) rightTap.moved += Math.abs(e.movementX) + Math.abs(e.movementY);
+    });
+    doc.addEventListener('mouseup', (e) => {
+      if (e.button !== 2 || !rightTap) return;
+      const tap = rightTap;
+      rightTap = null;
+      if (this.modalOpen || !player.isLocked) return;
+      if (performance.now() - tap.at < RIGHT_TAP_MS && tap.moved < RIGHT_TAP_MOVE) this.rearranging.tapWithBox();
     });
     // Right-click drag rotates the held box; the browser menu would steal the mouse.
     doc.addEventListener('contextmenu', (e) => e.preventDefault());
@@ -221,6 +245,11 @@ export class Session implements SessionActions, SessionHost {
     this.openModal(this.parts.sellDesk);
   }
 
+  /** Takes a piece of furniture out of storage, in front of the player, into the hands (the Stored furniture panel). */
+  takeOutStored(piece: PieceLike): void {
+    this.rearranging.takeOut(piece);
+  }
+
   openPanel(panel: ModalLike): void {
     this.openModal(panel);
   }
@@ -274,7 +303,8 @@ export class Session implements SessionActions, SessionHost {
     this.hovered = item;
     window.clearInterval(this.hoverTimer);
     // A piece of furniture being carried (the crosshair picks nothing then) says whether it fits where it is aimed.
-    this.hoverTimer = item || this.rearranging.carrying ? window.setInterval(() => this.showHoverLabel(), 250) : undefined;
+    const reread = item || this.rearranging.carrying || this.rearranging.hovering;
+    this.hoverTimer = reread ? window.setInterval(() => this.showHoverLabel(), 250) : undefined;
     this.showHoverLabel();
   }
 
@@ -282,10 +312,14 @@ export class Session implements SessionActions, SessionHost {
     const carried = this.rearranging.caption();
     if (carried) return this.parts.overlay.setHoverLabel(carried, 'crosshair');
     const item = this.hovered;
-    if (!item) {
+    // A movable piece under the crosshair says it can be taken (after what a click on it does, a seat's "sit").
+    const movable = this.rearranging.hoverHint();
+    if (!item && !movable) {
       window.clearInterval(this.hoverTimer); // set down with nothing under the crosshair: nothing more to re-read
       this.hoverTimer = undefined;
     }
-    this.parts.overlay.setHoverLabel(item?.label(this) ?? null, item?.labelPlacement?.() ?? 'crosshair');
+    const label = item?.label(this) ?? null;
+    const text = label && movable ? `${label} · ${movable.toLowerCase()}` : label ?? movable;
+    this.parts.overlay.setHoverLabel(text, item?.labelPlacement?.() ?? 'crosshair');
   }
 }

@@ -87,6 +87,123 @@ export function headGeometry(shape: FaceShape): THREE.BufferGeometry {
   return radialSurface((d) => headRadius(d, shape), 112, 84, true);
 }
 
+/** How far the jaw drops fully open (radians about its hinge): a few millimetres at the lips. */
+const JAW_OPEN = 0.04;
+/** The jaw's hinge, in front of the ears and a little below their middle (the head's frame). */
+const JAW_HINGE_Y = -0.012;
+const JAW_HINGE_Z = 0.005;
+
+/**
+ * The morph target (for `addFaceMorphs`) that opens the mouth: everything below the
+ * line between the painted lips (following the `smile`, see `faceTexture`) turns down about the
+ * hinge, easing out up the cheeks and into the throat, so the dark line between the lips stretches
+ * open. Influence 0 closed .. 1 open. Not under a full beard (its shell would stay put).
+ */
+function jawTarget(geometry: THREE.BufferGeometry, smile: boolean): THREE.BufferAttribute {
+  const position = geometry.getAttribute('position');
+  const moved = new Float32Array(position.count * 3);
+  const d = new THREE.Vector3();
+  const corner = smile ? -0.55 : -0.578;
+  const middle = smile ? -0.595 : -0.58;
+  const cu = smile ? 0.28 : 0.26;
+  for (let i = 0; i < position.count; i++) {
+    const x = position.getX(i);
+    const y = position.getY(i);
+    const z = position.getZ(i);
+    d.set(x, y, z).normalize();
+    const au = Math.abs(Math.atan2(d.x, d.z));
+    const fv = Math.asin(THREE.MathUtils.clamp(d.y, -1, 1));
+    // The parting: the painted line between the lips, then up the cheek towards the hinge, softer there.
+    const line = au <= cu ? middle + (corner - middle) * (au / cu) ** 2 : corner + (-0.1 - corner) * ramp(au, cu, 1.45);
+    const soft = 0.012 + 0.1 * ramp(au, cu, 1.2);
+    const w = ramp(fv, line + soft * 0.4, line - soft) * ramp(au, 1.75, 1.4) * ramp(fv, -1.5, -1.15);
+    const angle = JAW_OPEN * w;
+    const cy = y - JAW_HINGE_Y;
+    const cz = z - JAW_HINGE_Z;
+    const cos = Math.cos(angle);
+    const sin = Math.sin(angle);
+    moved[i * 3] = x;
+    moved[i * 3 + 1] = JAW_HINGE_Y + cy * cos - cz * sin;
+    moved[i * 3 + 2] = JAW_HINGE_Z + cy * sin + cz * cos;
+  }
+  return new THREE.Float32BufferAttribute(moved, 3);
+}
+
+/** Which morph target of the face does what (-1: this face has none: nothing moves under a full beard's shell). */
+export interface FaceMorphs {
+  jaw: number;
+  browsUp: number;
+  frown: number;
+  smile: number;
+  pucker: number;
+}
+
+/**
+ * Gives the head's skin (`headGeometry`) its expressions as morph targets, each a few millimetres
+ * of the skin moved over the skull (the painted face moves with it: raised brows lift the painted
+ * brows): the jaw (`jawTarget`), the brows raised (the inner ends more, the forehead with them),
+ * the brows drawn down and together, a smile (the mouth's corners up and back, the cheeks up and
+ * full) and the lips pushed forward and in (an "oo", for speech). A full beard keeps its lower face
+ * still (its shell would not follow): the brows only.
+ */
+export function addFaceMorphs(geometry: THREE.BufferGeometry, look: PersonLook): FaceMorphs {
+  const position = geometry.getAttribute('position');
+  const targets: THREE.BufferAttribute[] = [];
+  const morphs: FaceMorphs = { jaw: -1, browsUp: -1, frown: -1, smile: -1, pucker: -1 };
+  const lower = look.beard !== 'full';
+  if (lower) {
+    morphs.jaw = targets.length;
+    targets.push(jawTarget(geometry, look.smile));
+  }
+  const d = new THREE.Vector3();
+  const up = new THREE.Vector3();
+  const across = new THREE.Vector3();
+  const shift = new THREE.Vector3();
+  const target = (move: (u: number, v: number, au: number, sign: number, out: THREE.Vector3) => void): number => {
+    const moved = new Float32Array(position.count * 3);
+    for (let i = 0; i < position.count; i++) {
+      d.set(position.getX(i), position.getY(i), position.getZ(i));
+      const length = d.length();
+      d.divideScalar(length || 1);
+      const u = Math.atan2(d.x, d.z);
+      const v = Math.asin(THREE.MathUtils.clamp(d.y, -1, 1));
+      // The surface's own directions there: up it (growing v) and across it (growing u), and out of it (d).
+      up.set(-Math.sin(v) * Math.sin(u), Math.cos(v), -Math.sin(v) * Math.cos(u));
+      across.set(Math.cos(u), 0, -Math.sin(u));
+      shift.set(0, 0, 0);
+      move(u, v, Math.abs(u), Math.sign(u) || 1, shift);
+      moved[i * 3] = position.getX(i) + shift.x;
+      moved[i * 3 + 1] = position.getY(i) + shift.y;
+      moved[i * 3 + 2] = position.getZ(i) + shift.z;
+    }
+    targets.push(new THREE.Float32BufferAttribute(moved, 3));
+    return targets.length - 1;
+  };
+  const brows = (au: number): number => ramp(au, 0.02, 0.12) * ramp(au, 0.8, 0.62);
+  morphs.browsUp = target((_u, v, au, _s, out) => {
+    const w = brows(au) * (bump(v, 0.36, 0.08) + 0.45 * bump(v, 0.52, 0.12) * ramp(au, 0.7, 0.4));
+    out.addScaledVector(up, (0.0035 + 0.0022 * (1 - ramp(au, 0.12, 0.5))) * w);
+  });
+  morphs.frown = target((_u, v, au, sign, out) => {
+    const w = bump(v, 0.34, 0.075) * bump(au, 0.2, 0.16) * ramp(au, 0.02, 0.08);
+    out.addScaledVector(up, -0.0028 * w).addScaledVector(across, -sign * 0.0016 * w).addScaledVector(d, 0.0008 * w);
+  });
+  if (lower) {
+    morphs.smile = target((_u, v, au, sign, out) => {
+      const corner = bump(au, 0.28, 0.1) * bump(v, -0.56, 0.08);
+      out.addScaledVector(up, 0.003 * corner).addScaledVector(across, sign * 0.0016 * corner).addScaledVector(d, -0.001 * corner);
+      const cheek = bump(au, 0.46, 0.16) * bump(v, -0.3, 0.13);
+      out.addScaledVector(up, 0.0022 * cheek).addScaledVector(d, 0.0013 * cheek);
+    });
+    morphs.pucker = target((_u, v, au, sign, out) => {
+      const w = bump(v, -0.58, 0.065) * ramp(au, 0.42, 0.26);
+      out.addScaledVector(across, -sign * 0.0045 * w * Math.min(1, au / 0.3)).addScaledVector(d, 0.0025 * w);
+    });
+  }
+  geometry.morphAttributes.position = targets;
+  return morphs;
+}
+
 /** Ears, flat against the sides with the bowl in a darker skin; left out under long hair. */
 export function addEars(parts: Parts, look: PersonLook, shape: FaceShape, skin: THREE.Material, inner: THREE.Material): void {
   if (look.hairStyle === 'long') return;

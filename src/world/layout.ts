@@ -33,7 +33,7 @@ import { ownedKey } from '@/furnishing/Furnishings';
 import { heardBy } from './build/hearing';
 import { curtainsToSkylight } from './build/follow';
 import { placerFor } from './build/owned';
-import { bookcasesIn, livingShelvingOptions } from './build/bookcases';
+import { bookcasesIn, livingShelvingOptions, movableBookcases } from './build/bookcases';
 import { resolvePlacement } from './Placement';
 import { furnishCollectorCorner, placeCollectorsBook } from './collector/furnishCollector';
 import { rugsUnderfoot } from './build/rugsUnderfoot';
@@ -71,7 +71,7 @@ export function furnishRoom(zone: Zone, ctx: BuildContext): RoomHandle {
   // 1. Shelving along the back wall then the right one (clear of the projector picture): the one bookcase the flat
   //    starts with and those bought (`bookcasesIn`); what does not fit goes to `overflow`, for the bedroom's bookcases.
   const standing = (): number => (upgrades ? bookcasesIn(upgrades.count('bookcase')).living : slotCount(livingShelvingOptions()));
-  const shelving = new Shelving(zone, covers, shelved ?? games, { ...livingShelvingOptions(), id: 'living', overflow, ...(arrangement ? { arrangement } : {}), ...(boxes ? { pool: boxes } : {}), ...(upgrades ? { capacity: standing(), minBookcases: standing() } : {}) });
+  const shelving = new Shelving(zone, covers, shelved ?? games, { ...livingShelvingOptions(), id: 'living', overflow, ...movableBookcases(zone, furnishings), ...(arrangement ? { arrangement } : {}), ...(boxes ? { pool: boxes } : {}), ...(upgrades ? { capacity: standing(), minBookcases: standing() } : {}) });
   zone.onUnload(() => shelving.dispose());
   if (upgrades) zone.onUnload(upgrades.subscribe(() => shelving.setCapacity(standing())));
 

@@ -40,12 +40,14 @@ npm run balance     # the arcade's machines played headless by simulated people:
 | New key, click behaviour, feature, HUD element | skill `add-interaction` |
 | A new room, corridor, the outside (zones, loading/unloading) | skill `add-room` (+ `docs/zones.md`) |
 | Money, prices, arcade cabinets and their games, market stalls, going out (teleport) | `docs/economy.md` |
+| Dressing a walk-in shop's interior (plans per shop, props by name, signs, lights, budgets) | `docs/shops.md` |
 | Anything else: folder map, layers, key patterns, data sources | `docs/architecture.md` |
 | The view outside the windows | `docs/outdoors.md` |
 | The cat | `docs/cat.md` |
+| People's bodies and motion (rig, gait, feet, IK, gestures, reactions, faces, a machine directing a body) | `docs/people.md` |
 | Friends who visit, borrow and return games | `docs/visitors.md` |
 | What the kitchen, bathroom and bedroom are for (cleaning boxes, the bath, cake, radio, manuals, outfits, phone, dreams) | `docs/household.md` |
-| Moving boxes to any shelf spot, moving the flat's furniture (M), the player's shelf arrangement, making a piece movable | `docs/furnishing.md` |
+| Moving boxes to any shelf spot, moving the flat's furniture (right-click, grid, planning view, storage), the player's shelf arrangement, making a piece movable | `docs/furnishing.md` |
 | Telling the player something (speech bubbles, reactions, rewards, tips, cards to read); no toasts | `docs/notices.md` |
 | Post-processing, quality levels, looks, material helpers (wood, fabric, plaster), reflections | `docs/graphics.md` |
 | Materials, how parts meet, anything flat on a surface (z-fighting), hiding lamps | `docs/props.md` "Materials, joints and layers" |
@@ -70,6 +72,8 @@ Content work stays in the first two layers; the engine is never touched for cont
   own maps take the rest). One too many and every lit program fails to link: walls, floor and furniture go black while
   unlit things (outdoors, whiskers) still show. `World.prime` logs `[world] N shadow maps`; new lamps stay shadowless. The parquet and tiled floors sit at exactly
   16 units on high (10 shadow, env, 2 area-light, map, bump, wear): no new map on a floor.
+- A render nested in the main one (the outlook panes' `onBeforeRender`) leaves its `clippingPlanes` as the global clip for
+  the rest of the frame (three.js never re-inits clipping): things vanish depending on the view. `OutlookView.resetClipping` undoes it.
 - `outdoors/shader.ts` is a template literal: a backtick in a GLSL comment ends it (typecheck fails with `',' expected`).
 - The canvas's alpha is the video cut-out: every post pass and additive effect must keep it (see `docs/graphics.md`).
 - `visible` on point, spot and hemisphere lights belongs to the `LightCuller` (fixed count per kind, `QUALITY.lights`):

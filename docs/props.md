@@ -193,7 +193,7 @@ platform in `consoleStyles.ts`). Placed by the room builders without wiring: `Sh
 (`setDay`), all from the clock in `furnishBedroom`; the bed and the chair change only unseen (`UnseenSwap`: at once while the
 player is elsewhere, else once they are out of the view's frustum), and a `ReadingLamp` (shadow-less, limited reach) stands on the side table. People:
 `Vendor({ viewer, lines, seed, label, focus })` stands still and talks (a stallholder, an attendant), `Shopper({ viewer, spots, aisle })`
-wanders, `Walker({ viewer, seed, lines })` goes where it is told (`walk(path, then)`, `stand(yaw, pose, focus, hands, lean)`, `say(text)`). `PersonModel.reach([a, b])` puts the hands on two world points (a
+wanders, `Walker({ viewer, seed, lines })` goes where it is told (`walk(path, then)`, `stand(yaw, pose, focus, hands, lean)`, `say(text)`; a focus of `'viewer'` is a conversation, never a stare). All three look at the player through `people/attention` only: nobody gazes at the camera directly. `PersonModel.reach([a, b])` puts the hands on two world points (a
 two-bone arm solver, elbows out and down) and `lean(angle)` bends the upper body: a machine's `Station.handsAt()` / `lean`
 drive them for whoever plays it. Two wrap the whole shell and are
 placed at the zone's origin with `zone.place(x, new THREE.Vector3())`: `TiledWainscot(room, options)` (metro tiles, or bricks with
