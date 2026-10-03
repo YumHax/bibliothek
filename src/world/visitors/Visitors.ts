@@ -27,11 +27,14 @@ import { HALLWAY_PLAN } from '../hallway/hallwayPlan';
 import { ROOM_PLAN } from '../roomPlan';
 import { Friend } from './Friend';
 import { FRIENDS, SHARED_LINES, VISIT_RULES, WORDS, type FriendPlan, type Word } from './friendsPlan';
-import { borrowPick, fill, lookPick, shelfComment, tasteScore, yearOf, type LinePicker } from './friendLines';
+import { borrowPick, fill, lookPick, pickLine, shelfComment, tasteScore, yearOf, type LinePicker } from './friendLines';
+import { SHOWCASE_LINES } from '../showcase/showcaseLines';
 import { Visit, type DoorLike, type HeldBox, type RouteSeat, type VisitRoute, type VisitScript } from './Visit';
 import { VisitBook, type Loan, type PlannedVisit } from './VisitBook';
 import { HOUSEHOLD } from '@/household/rules';
 import { FloorNav, PERSON_WALKER } from '../nav/FloorNav';
+import { CLUB_VISITOR, GUESTS } from './gathering/gatheringPlan';
+import type { Occasion, VisitHost } from './gathering/host';
 
 /** Seconds (the visit's clock) between a friend's hello and their word on the cake, so the two bubbles do not collide. */
 const CAKE_LINE_DELAY = 3;
@@ -98,6 +101,11 @@ export interface VisitorsOptions {
   covers?: BoxArtLoader;
   /** The boxes on the flat's shelves: a browsing friend looks at one on the bookcase in front of them. */
   shelfBoxes?: () => readonly GameBox[];
+  /**
+   * The flat's displays (`showcase/Showcases`): each one with something in it is a stop of the round (they look at
+   * what is on show and say a word on it); their boxes come through `shelfBoxes` too.
+   */
+  showcases?: { stops(): readonly { at: THREE.Vector3; yaw: number }[]; isShown(gameId: string): boolean; standOf?(gameId: string): string | null };
   /** The screen playing a longplay (world, its middle), or null: a seated friend watches it. */
   watch?: () => THREE.Vector3 | null;
   /** The collection room's door onto the hallway, opened by a friend if it is shut. */
@@ -119,6 +127,8 @@ export interface VisitorsOptions {
   force?: boolean;
   /** A cake on the kitchen table (docs/household.md): a friend has a slice, stays longer, and leaves a thank-you. */
   hosting?: { cakeOut(): boolean; eatCake(): void };
+  /** Asked first on a click to chat, by the friend's id: a line of a story the player follows (`src/story`), else null. */
+  talk?: (friendId: string) => string | null;
 }
 
 const eye = new THREE.Vector3();
@@ -164,6 +174,8 @@ export class Visitors extends Prop implements Updatable, ActivityAware, DoorCall
   private returning: { loan: Loan; box: GameBox | null } | null = null;
   /** The box a browsing friend looks at, for their comment. */
   private looked: Game | null = null;
+  /** A gathering under way or planned today (`gathering/`): it holds the day and the door. */
+  private occasion: Occasion | null = null;
 
   constructor(private readonly options: VisitorsOptions) {
     super();
@@ -192,6 +204,8 @@ export class Visitors extends Prop implements Updatable, ActivityAware, DoorCall
       roomDoor: room(rp.door),
       hub: room(rp.hub),
       browse: rp.browse.map((b) => ({ at: room(b.at), yaw: b.yaw, kind: b.kind, via: (b.via ?? []).map(room) })),
+      // The displays the player filled, wherever they stand now (read when the visit draws its stops).
+      featured: () => (options.showcases?.stops() ?? []).map((stop) => ({ at: living.toLocal(stop.at.clone()).setY(0), yaw: stop.yaw, kind: 'shelf' as const, via: [] })),
       seats: rp.seats.flatMap(({ seat: index, via }) => {
         const seat = options.seats[index];
         return seat ? [this.routeSeat(seat, via.map(room))] : [];
@@ -200,7 +214,8 @@ export class Visitors extends Prop implements Updatable, ActivityAware, DoorCall
     // The bell hangs inside, over the front door.
     this.doorPoint = hallway.toWorld(new THREE.Vector3(HALLWAY_PLAN.room.width / 2 - 0.1, 2.1, 0));
     this.panel = new BorrowPanel(options.container);
-    for (const plan of FRIENDS) {
+    // The friends, and the gatherings' guests (`gathering/`): an open house's strangers, the collectors' club's visitor.
+    for (const plan of [...FRIENDS, ...GUESTS, CLUB_VISITOR]) {
       const friend = living.place(new Friend(plan, options.viewer), this.route.stairs.clone());
       friend.setPresent(false);
       // Drawn (under the floor) until the first frame, so the start-up `prime()` compiles their materials.
@@ -212,12 +227,15 @@ export class Visitors extends Prop implements Updatable, ActivityAware, DoorCall
   // --- DoorCaller -------------------------------------------------------------------------------
 
   caller(): string | null {
-    return this.visit?.atDoor ? this.visit.friend.plan.name : null;
+    return this.visit?.atDoor ? this.visit.friend.plan.name : (this.occasion?.caller() ?? null);
   }
 
   answered(): void {
     const visit = this.visit;
-    if (!visit?.atDoor) return;
+    if (!visit?.atDoor) {
+      this.occasion?.answered();
+      return;
+    }
     const plan = visit.friend.plan;
     this.book.cameIn(plan.id);
     this.say(plan, this.line(`${plan.id}:greet`, plan.lines.greet), 'hi', true);
@@ -232,7 +250,7 @@ export class Visitors extends Prop implements Updatable, ActivityAware, DoorCall
   }
 
   passing(): boolean {
-    return this.visit?.passingFront ?? false;
+    return (this.visit?.passingFront ?? false) || (this.occasion?.passing() ?? false);
   }
 
   // --- the frame ----------------------------------------------------------------------------------
@@ -280,6 +298,7 @@ export class Visitors extends Prop implements Updatable, ActivityAware, DoorCall
     const { options } = this;
     const door = options.frontDoor;
     if (!options.atHome() || options.busy?.() || options.doorTaken?.() || (door && door.isOpen)) return;
+    if (this.occasion?.holds(day)) return;
     let plan = this.book.plan(day);
     const hours = options.clock.state.hours;
     if (this.forced && !plan) plan = this.forcedPlan();
@@ -292,7 +311,7 @@ export class Visitors extends Prop implements Updatable, ActivityAware, DoorCall
     this.awayFor = 0;
     friend.chat = () => {
       this.visit?.faceViewer();
-      return this.chatLine(friend.plan);
+      return this.options.talk?.(friend.plan.id) ?? this.chatLine(friend.plan);
     };
     // Whatever they say is heard, faintly, from where they stand.
     friend.voice = (text) => this.murmur(friend, text);
@@ -372,9 +391,10 @@ export class Visitors extends Prop implements Updatable, ActivityAware, DoorCall
     }
     const games = this.options.shelved.games;
     const onShelves = new Set(games.map((g) => g.id));
+    const shown = this.options.showcases;
     const near: GameBox[] = [];
     for (const box of this.options.shelfBoxes?.() ?? []) {
-      if (!onShelves.has(box.game.id)) continue;
+      if (!onShelves.has(box.game.id) && !shown?.isShown(box.game.id)) continue;
       box.getWorldPosition(tmp);
       const dx = tmp.x - at.x;
       const dz = tmp.z - at.z;
@@ -384,7 +404,9 @@ export class Visitors extends Prop implements Updatable, ActivityAware, DoorCall
     const game = lookPick(plan, near.map((b) => b.game), Math.random);
     const box = game ? near.find((b) => b.game === game) : undefined;
     this.looked = game;
-    const line = shelfComment(plan, games, Math.random, { viewsOf: this.options.viewsOf, focus: game, pick: this.picker });
+    // A box on show gets a word of its own (the display it stands in), else the shelf's usual comment.
+    const stand = game && shown?.isShown(game.id) ? (shown.standOf?.(game.id) ?? 'display') : null;
+    const line = game && stand ? fill(pickLine(SHOWCASE_LINES, Math.random), { title: game.title, stand }) : shelfComment(plan, games, Math.random, { viewsOf: this.options.viewsOf, focus: game, pick: this.picker });
     return { look: box ? box.getWorldPosition(new THREE.Vector3()) : null, line };
   }
 
@@ -438,13 +460,73 @@ export class Visitors extends Prop implements Updatable, ActivityAware, DoorCall
     }
   }
 
+  // --- gatherings -----------------------------------------------------------------------------------
+
+  private hostKit: VisitHost | null = null;
+
+  /** What a gathering borrows of the director (`gathering/host.ts`): the round, the bodies, the voices and the sounds. */
+  get host(): VisitHost {
+    return (this.hostKit ??= this.makeHost());
+  }
+
+  private makeHost(): VisitHost {
+    const director = this;
+    const { options } = this;
+    return {
+      options,
+      route: this.route,
+      get night() {
+        return director.night;
+      },
+      get visiting() {
+        return director.visit !== null;
+      },
+      person: (plan) => {
+        const friend = this.friends.get(plan.id);
+        if (!friend) throw new Error(`[visitors] nobody called ${plan.id} was placed`);
+        friend.voice = (text) => this.murmur(friend, text);
+        return friend;
+      },
+      rang: (day) => this.book.rang(day),
+      rangOn: (day) => this.book.rangOn(day),
+      say: (plan, line, word, always) => this.say(plan, line, word, always),
+      line: (bucket, lines) => this.line(bucket, lines),
+      browse: (plan, kind, at, yaw) => {
+        this.looked = null;
+        const seen = this.browse(plan, kind, at, yaw);
+        return { ...seen, game: this.looked };
+      },
+      greetCat: () => {
+        const cat = options.cat?.();
+        return cat ? fill(this.line('cat', SHARED_LINES.cat), { cat: cat.name }) : null;
+      },
+      excuse: () => this.line('excuse', SHARED_LINES.excuse),
+      footstep: (at) => this.footstep(at),
+      shutFront: () => this.soundAt(this.doorPoint, (level, spatial) => playDoorShut(level * DOOR_LEVEL, spatial)),
+      ring: () => this.ring(),
+      coinsFrom: (plan, coins) => this.coinsFrom(plan, coins),
+      visitOptions: () => {
+        const acoustics = options.acoustics;
+        return {
+          cat: () => options.cat?.()?.at ?? null,
+          watch: options.watch,
+          clear: acoustics ? (a, b) => acoustics.wallsBetween(a, b) === 0 && this.walkable(a, b) : undefined,
+          detour: acoustics && options.collisions ? (a, b) => this.detour(a, b) : undefined,
+        };
+      },
+      attach: (occasion) => {
+        this.occasion = occasion;
+      },
+    };
+  }
+
   // --- the phone ------------------------------------------------------------------------------------
 
   /** The friends as the phone lists them: whether each could be asked round today, and a word on them. */
   phoneBook(): { id: string; name: string; note: string; free: boolean }[] {
     const day = this.options.day();
     const invited = this.book.invitedOn(day);
-    const taken = this.visit !== null || invited !== null || this.book.rangOn(day);
+    const taken = this.visit !== null || invited !== null || this.book.rangOn(day) || (this.occasion?.holds(day) ?? false);
     return FRIENDS.map((f) => {
       const loan = this.book.loans.find((l) => l.friendId === f.id);
       const note = invited === f.id ? 'coming today' : loan ? `has your ${loan.title}` : this.book.visitsOf(f.id) ? `${this.book.visitsOf(f.id)} visits` : 'never been round';
@@ -458,6 +540,7 @@ export class Visitors extends Prop implements Updatable, ActivityAware, DoorCall
     const day = this.options.day();
     if (!plan) return { ok: false, line: 'Wrong number.' };
     if (this.visit || this.book.rangOn(day)) return { ok: false, line: 'You have had a visitor today already. Another day.' };
+    if (this.occasion?.holds(day)) return { ok: false, line: 'Not today: you have people coming round already.' };
     if (hour >= VISIT_RULES.hours.latest) return { ok: false, line: `${plan.name}: “Bit late now, isn’t it? Another day.”` };
     if (!this.book.invite(friendId, day, hour)) return { ok: false, line: 'Someone is coming round today already.' };
     const at = `${Math.floor(hour)}:${String(Math.round((hour % 1) * 60)).padStart(2, '0')}`;
@@ -728,12 +811,12 @@ export class Visitors extends Prop implements Updatable, ActivityAware, DoorCall
         return Math.atan2(forward.x, forward.z);
       },
       height: seat.sittingHeight,
-      free: () => {
+      free: (guest) => {
         seat.localToWorld(world.set(0, 0, 0));
         if (standing && !standing.includes(seat)) return false;
         viewer.getWorldPosition(eye);
         const catAt = cat?.()?.at;
-        const mine = this.visit?.friend.plan.name ?? null;
+        const mine = guest ?? this.visit?.friend.plan.name ?? null;
         if (seat.guest && seat.guest !== mine) return false;
         return Math.hypot(eye.x - world.x, eye.z - world.z) > 0.9 && (!catAt || Math.hypot(catAt.x - world.x, catAt.z - world.z) > 0.7);
       },

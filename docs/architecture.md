@@ -101,7 +101,10 @@ src/world/market/       marketPlan + furnishMarket (wiring) + MarketFloor (the m
                         the stallholders' reactions, pennants, boards, crowd; disposed on unload), furnishHousehold, furnishCoffee, MarketStall (trestle table under a striped awning, `layout()`: a leaning row + a lying row),
                         ForSaleBox (GameBox + price tag, owns the click: hands the box over for inspection), BargainBin, OrderCounter (opens
                         the catalogue), BuyBackDesk (opens the sell panel), TransistorRadio, CrowdSound, stallTalk (stallholders' lines
-                        from their table), HallRoof (iron trusses + roof light following the sky). See docs/economy.md
+                        from their table), HallRoof (iron trusses + roof light following the sky), CartonCorner + furnishCarton
+                        (the sealed carton of the day), RivalInHall (the rival collector's hunt). See docs/economy.md
+src/world/saleroom/     saleroomPlan + furnishSaleroom (wiring) + Saleroom (runs the sale: lots, bids, the hammer), Rostrum,
+                        LotStand, SaleBoard, SaleChair. Rules in economy/auction.ts, AuctionHouse; docs/economy.md "The saleroom"
 src/world/people/       PersonModel (the body in motion, in layers: planted feet that step, a heel-to-toe gait, legs by IK, the
                         lean spread down the back, arms on springs to a pose / a reached point / a gesture's keys, the head a
                         damped spring onto the gaze, the face, what swings; LOD past 16 m: no eyes or inner ears, the rig at
@@ -170,7 +173,12 @@ src/world/lighting/     lightBudget (LightMonitor: shadow maps vs texture units,
 src/world/screen/       VideoScreen (interface the Session drives), VideoSurface (no-picture glass or CSS3D iframe cut-out, proximity volume
                         damped per wall in between), SignalCanvas (its one reused canvas: CRT snow + OSD channel / "NO SIGNAL", the
                         projector's blue "Source search" / "No signal" slate), CrtGlass (scan lines, bulge, power-on line / power-off
-                        dot + afterglow), HueDrift (the playing glow's hue), nowPlaying (platform + loudness for console LEDs, speakers)
+                        dot + afterglow), HueDrift (the playing glow's hue), nowPlaying (platform + loudness for console LEDs, speakers);
+                        `showFeed(texture)` (a page-painted picture on the glass, as `playing`: a program's canvas, docs/media.md)
+src/world/homeArcade/   The home arcade cabinet (bedroom, bought at TV REPAIR): HomeArcadeGames (a 7-in-1 menu board over the hall's own
+                        games), HomeScores (its own table), placeHomeArcade (an `atHome` ArcadeCabinet: no coin, no ticket), homeArcadeModel
+src/world/vinyl/        RecordPlayer (the sideboard's turntable, working: platter, tonearm, `RecordTune` from the sideboard), RecordCrate
+                        (the flea market's crate of soundtrack LPs, by the household stall)
 src/world/acoustics/    SoundOcclusion (walls between the listener and a screen: a ray against the world's occluders, i.e. every loaded
                         room's walls and the door leaves; `proximityVolume` keeps `wallGain` of the volume per wall), PointSound (a
                         room's own sound: distance + walls -> an `AmbientVoice`'s level)
@@ -180,7 +188,14 @@ src/world/shelving/     Shelving (bookcases sized from the collection, `minBookc
                         boxes slide), BoxPool (the flat's GameBoxes shared by its shelvings: a game passing from one to the next keeps its
                         box), arrangement (ShelfArrangement: the sort shown and the player's own 'custom' rows, persisted), ShelvingGroup
                         (the collection room's and the bedroom's shelvings as one for the Session; `spotAt`, `moveBox`), ShelfPlacing (the
-                        gap marker with a shelf box in hand), plan (`planShelving`, `planArranged`), slots, sort
+                        gap marker with a shelf box in hand, or a display's slot), BoxTipping (Q held: the box looked at tips half
+                        out), plan (`planShelving`, `planArranged`), slots, sort
+src/world/showcase/     Showcases (the flat's displays: which game in which slot, saved; a GameSource filter the strays and shelves
+                        read through, like StrayGames), stand (StandSlot / ShowcaseStand, `restInSlot`), DisplayColumn and Pedestal
+                        (bought at SECOND HOME), furnishShowcases (the collection room's, from `ROOM_PLAN.showcase`), glow, showcaseLines
+src/world/labels/       ShelfLabels (labels on the shelves' edges, saved by shelving / bookcase slot / row; one canvas atlas, one material),
+                        labelTape (the embossed tape painted), labelledBookcases (a shelving's `onBookcase` sticking them), labelMaker
+                        (K's side for `game/Labelling`), LabelMakerModel (the shop's model)
 src/world/materials/    palette (the shared materials: paint, timber, cloth, standard, basic, METAL, shared), sharedResources
                         (markShared / isShared / disposeTree), shaderPatch (onBeforeCompile helpers), finishes (wood, fabric, plastic,
                         scuffed), surfaces (walls, floor and ceiling edges, floor wear), paintedTiles (paintOnce), GlossyFloor
@@ -207,6 +222,9 @@ src/world/balcony/      balconyPlan + furnishBalcony: the balcony off the living
                         BuildingFront it stands on, OpenAir: the sun and sky light outside). See docs/zones.md.
 src/world/visitors/     Friends who ring, come in, borrow and return games: Visitors (the rules), Visit, VisitBook (who came, lent
                         what, invited when), Friend (the walker), friendsPlan, friendLines. See docs/visitors.md.
+  gathering/            Several round at once: Party (visits played together, one door), GamesNight (PADDLE WARS on the
+                        TV), OpenHouse (strangers in waves, the paper), ClubVisit (an honour's neon), Gatherings (the
+                        director, the phone's rows), GatheringBook, NightPhotos. docs/visitors.md "Gatherings".
 src/world/weather/      Weather (spells of clear/cloudy/rain/snow in game hours, seeded by the date; wet and snowy ground). See docs/outdoors.md.
 src/world/cat/          The cat: model, brain, bowls, bed, scratcher, toy, settings. See docs/cat.md.
 src/world/nav/          FloorNav (an occupancy grid over the collision world, A*, string pulling; `CAT_WALKER` the cat's, `PERSON_WALKER`
@@ -235,6 +253,15 @@ src/notices/            What the game tells the player, by kind (docs/notices.md
                         strip out of view), speech (`bindSpeech`: where `people/SpeechBubble` sends its lines), CrosshairLine (react /
                         refuse), RewardBanner (queued, big ones with rays), TipBoard (pinned, `until`), ReadingCard (paper card, stays its
                         reading time), AlertBar (save problems, the mouse lock), saveNotices, readingTime (`readMs`), types (NoticeActions)
+src/story/              The lost prototype (docs/story.md): PrototypeStory (the trail's stages, its channels `mail` / `atStall` / `onRadio`
+                        / `atArcadeCounter` / `atTrader` / `atFriend`, the journal's file), prototype (the fiction's words, the cart's
+                        `Game`, `STORY_RULES`), prototypeArt (the painted box and cart), moonpost/ (MoonpostDemo, its sound, the
+                        `ScreenProgram`), index (`StoryChannels`, `registerPrototype`)
+src/reviews/            Reviews (`ReviewSource`: `/api/reviews` client, cached a month, `override` for a fictional game), reviewCard
+                        (the game panel's clipping: score badges, a quoted line, the Wikipedia credit and link)
+src/share/              The collection to share: collectionSummary (games, per platform, worth, the three proudest), collectionCard
+                        (a PNG drawn on a canvas, covers through the art proxy), collectionPage (a standalone HTML page, covers from
+                        GitHub), download. Settings' Game tab, `ui/settings/SaveFileSettings` (with the save file, `settings/saveFile`)
 src/cheats/             moneyCheat (typing 5 0 0 0 on the top row, or `bibliothek.coins(n)` in the console: +5000 coins, a reward banner).
 src/photo/              PhotoMode (free camera on a leash, lens via `PostFx.setLens`, grades over the zone's look, guides, PNG capture;
                         `toggle` / `capture` / `handleKey`), PhotoHud (guides, card, flash; `body.photo-mode` hides the HUD), photoLooks,
@@ -246,10 +273,14 @@ src/thumbnails/         ThumbnailStudio (`studio.shoot(key, build, view)`: a pro
 src/time/               Today (the one "today": `gameDay`, the market calendar's count, and `realDay`; in BuildContext), daily
                         (`dailySeed` / `isEventDay` / `dailyRandom` / `gameDayRandom`: every day-seeded draw), DailyList and DailyTally
                         (per-real-day saved lists and counts), season (the real calendar's season and holidays), wakefulness (how busy the
-                        town is by the hour)
+                        town is by the hour; `streetBusyAt` / `rushAt` / `weekdayOf` for the street's rushes and weekdays)
+src/errands/            What the player buys over a Front Street counter to carry and give later (errands: `ErrandId` croissant,
+                        scrap, treats, bunch, with price, portions, per-day cap, the season's flowers; buy: `buyErrand` through
+                        `SessionActions.pay`; pocket: what is carried now, saved)
 src/economy/            Wallet (coins + tickets), pricing (every tunable number, deterministic prices), Transactions (every buy / sell /
                         swap / lot / prize: validate, then apply and save together), calendar (local day keys), seeded (the RNG), MarketStock (the day's
-                        stalls and bargain bin, seeded per platform and slot; `lot`: JobLot, `orders`: MarketOrders; stockDraws),
+                        stalls and bargain bin, seeded per platform and slot; `lot`: JobLot, `orders`: MarketOrders; stockDraws;
+                        copyTraits: `dressCopy` / `drawBootleg`, a copy's variant and past; regionLock: Japanese copies and their converters),
                         MarketDay (what kind of market day: theme, events, news), StockItem (a copy: price settling, haggle), MarketCalendar
                         (in-game days), MarketLedger (haggles, games sold to the market), haggle, ArcadeScores (the player's bests,
                         the top-five tables and initials, the regulars' entries), rivals (the tables' starting names), ArcadeDaily (the
@@ -267,7 +298,8 @@ src/audio/              audioContext (one lazy AudioContext; `startedAudioContex
                         Footsteps (+ footSurface: a step by surface, wet and snowy outside), churchBells (the hour struck in the street)
 src/catalog/            types (Game, Platform, GameStatus), platforms (6: accent, libretro repo), media (by platform and region: the
                         case, its size, the cartridge shell or disc: `boxDimensionsOf`, `caseOf`, `mediaOf`, `regionOf`), seed data per platform -> SEED_GAMES
-                        (ids made canonical with `gameIdFor`; `canonicalGameId` maps the old hand-made ones), validate (isGame, readGame)
+                        (ids made canonical with `gameIdFor`; `canonicalGameId` maps the old hand-made ones), validate (isGame, readGame),
+                        bootlegs (unlicensed curiosities, `bootleg-<platform>-<slug>`)
 src/collection/         GameSource interface, CollectionStore (seed + `bibliothek.collection.v1`, import/export, addMany, lastChange), LibretroIndex,
                         Deliveries (games bought while out wait in the hallway's parcel; `shelved` = the collection less the parcel,
                         `bibliothek.deliveries.v1`), GameList (a GameSource somebody fills: the shelving overflow)
@@ -277,12 +309,22 @@ src/covers/             CoverArtProvider chain, StaticArtProvider (public/boxart
                         `load`/`release` refcount + the last 24 idle games kept, back / cartridge / disc only via `details()`), ImageFetch
                         (fetch-based: 404 remembered, retries, mirrors, a failing origin paused), scanFaces (spine sides, trimmed
                         cartridge photo, square disc), LoadQueue (cached priorities, re-sorted by `setPriorityOrigin`), generated/ (faces, BoxAtlas)
+src/onscreen/           Programs on the flat's screens instead of a longplay (docs/media.md "Programs on the screen"): ScreenProgram (a
+                        canvas, two pads, its own sound), programs (`registerProgram` / `programFor`, asked by `game/Screens.playOn`),
+                        ProgramRunner (one at a time: the feed on the glass, the set's level and pan, the pads, pause; ticked by the engine);
+                        `game/ProgramPlay` is the Session's route while the player holds the pad
+src/emulator/           NesProgram (jsnes, Apache-2.0, as a ScreenProgram), homebrew (HOMEBREW_CARTS: freely licensed NES homebrew,
+                        ROMs + licences in `public/roms/`), register (`registerHomebrew`, from `bootstrap/session`)
+src/vinyl/              records (RECORDS: the soundtrack LPs, invented), RecordTune (an ambient Voice: crackle, needle drop, each track
+                        made up from the record and its number in its console's style)
 src/video/              VideoProvider, YouTubeSearchProvider (/api/youtube/search, cached in `bibliothek.cache.longplay.v1`), YouTubePlayer, proximityVolume, randomStart
 src/settings/           SettingsStore (`bibliothek.settings.v1`: look sensitivity per device, invert Y, FOV, mixer volumes, HUD aids, text
                         size, speech size, reduce motion, head bob, sprint double-tap / hold Shift, crouch hold / toggle, show tips, key
                         bindings; saved debounced, flushed on pagehide), apply (pushes every setting to the player's feel and FOV, the
                         Inspector, devices, mixer, HUD, tips, Input), motion (`reduceMotion()` for code: the setting or the system's), bindings
-                        (rebinding = swapping two physical keys), saveData (hasProgress / eraseProgress: `saveKeys()`, the save's keys but the preferences, caches and corrupt copies)
+                        (rebinding = swapping two physical keys), saveData (hasProgress / eraseProgress: `saveKeys()`, the save's keys but the preferences, caches and corrupt copies),
+                        saveFile (the save as a JSON file and back: `saveKeys()` + the cat, relative to the save's prefix; loading
+                        replaces this browser's progress and reloads, its keys written again on `pagehide`)
 src/ui/                 Overlay (title: Continue / New game; pause: status, Go home, Collection; Settings in tabs via `addSetting(tab, …)`;
                         Controls by group and device; `confirm()` yes / no in the card), menu/ (menu.css: `.ui-btn`, `.ui-card`, fields;
                         MenuNav: arrows / D-pad for the menu, `registerPanel()` for every DOM panel, `initPanelNav`; ControlsScreen; zoneNames),
@@ -411,3 +453,11 @@ api/                    Vercel functions wrapping the server handlers; vercel.js
 - Wikipedia (search API + Wikimedia pageviews, key-less, identifying User-Agent required): `server/fame.ts` turns a
   game title into its article's monthly page views, the market's measure of fame for pricing (see `docs/economy.md`).
   `/api/fame`, disk cache `.cache/fame/` for a month.
+- Wikipedia again for the press at the time: `server/reviews.ts` finds the article by exact title first ("<title> (<year>
+  video game)", "<title> (video game)", "<title>": a search ranks remakes first), else as the fame does, reads its wikitext
+  (parse API), takes every `{{Video game reviews}}` box's scores (aggregates first, `_PS`-style per-platform keys, a
+  reviewers' panel summed: "35/40") and one quoted line from the Reception section with the publication it names. Only
+  a line is quoted, always credited and linked (CC BY-SA). `/api/reviews?title&platform&year`, `.cache/reviews/` a month.
+- NES homebrew ROMs (not fetched at run time: bundled unmodified in `public/roms/`, each with `<file>.LICENSE.txt`
+  naming its author, release, source and licence; credits in docs/media.md "Homebrew carts"). The emulator is jsnes
+  (npm, Apache-2.0). Only freely licensed homebrew goes there, never a commercial game's ROM.

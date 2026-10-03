@@ -1,10 +1,11 @@
 import { BOOKCASE_PRICE, HOME_GOOD_PRICES } from './pricing';
+import { RECORDS } from '@/vinyl/records';
 
 /**
  * Where a piece for the flat is sold: the flea market's household stall, and the shops of Front Street (the
  * second-hand furniture shop, the TV repair shop, the florist, the pet shop).
  */
-export type HomeShop = 'market' | 'furniture' | 'electronics' | 'florist' | 'pets';
+export type HomeShop = 'market' | 'furniture' | 'electronics' | 'florist' | 'pets' | 'agent';
 
 /** One piece the flat can be sold: what a shop lists, and what the flat shows once bought. */
 export interface HomeGood {
@@ -20,6 +21,8 @@ export interface HomeGood {
   repeatable: boolean;
   /** Bought only once this is owned (the cat's scratching post needs the cat, the bedroom's TV the dresser it stands on). */
   requires?: HomeUpgrade;
+  /** Without `upgrade` owned, at most `max` of it (the bookcases: more once Mrs Roux's two rooms are the flat's). */
+  until?: { upgrade: HomeUpgrade; max: number };
 }
 
 /** Every framed print the flat has a nail for (`framedPrint`'s `nth` in the plans: the living room's three, the hallway's two, the bedroom's two, the kitchen's one). */
@@ -33,6 +36,8 @@ const BALCONY_POTS = 5;
  * start, so four more there, then the bedroom's one slot.
  */
 const BOOKCASES = 5;
+/** Mrs Roux's two rooms, joined to the flat (`world/annex`): the living room gives up its front-right slot, the annex has six. */
+const ANNEX_BOOKCASES = 5;
 
 type GoodLine = Omit<HomeGood, 'repeatable' | 'max'> & { max?: number };
 
@@ -44,10 +49,12 @@ type GoodLine = Omit<HomeGood, 'repeatable' | 'max'> & { max?: number };
  */
 const LINES: readonly GoodLine[] = [
   // The flea market's household stall (it keeps its own display, `market/HomeGoodsDisplay`).
-  { id: 'bookcase', name: 'Bookcase', price: BOOKCASE_PRICE, blurb: 'Flat-pack pine, 40 boxes. The living room first, then the bedroom.', shop: 'market', max: BOOKCASES },
+  { id: 'bookcase', name: 'Bookcase', price: BOOKCASE_PRICE, blurb: 'Flat-pack pine, 40 boxes. The living room first, then the bedroom, then the rooms next door once they are yours.', shop: 'market', max: BOOKCASES + ANNEX_BOOKCASES, until: { upgrade: 'annex', max: BOOKCASES } },
   { id: 'rug', name: 'Kilim rug', price: HOME_GOOD_PRICES.rug, blurb: 'Hand-woven, a little faded. For the hallway.', shop: 'market' },
   { id: 'lamp', name: 'Lava lamp', price: HOME_GOOD_PRICES.lamp, blurb: 'Orange wax, warms up slowly. Sits on the side table by the TV.', shop: 'market', requires: 'sideTable' },
   { id: 'poster', name: 'Framed game poster', price: HOME_GOOD_PRICES.poster, blurb: 'A shop display poster from the nineties, for the hallway.', shop: 'market' },
+  // The crate of soundtrack LPs by the household stall (`world/vinyl/RecordCrate`): the nth bought is `RECORDS[n]`.
+  { id: 'record', name: 'Soundtrack LP', price: HOME_GOOD_PRICES.record, blurb: 'A video-game soundtrack on vinyl, side A. For the sideboard’s turntable.', shop: 'market', max: RECORDS.length, requires: 'sideboard' },
   // The second-hand furniture shop.
   { id: 'armchair', name: 'Armchair', price: HOME_GOOD_PRICES.armchair, blurb: 'Deep, a little sagging. One faces the TV, the second the projector wall.', shop: 'furniture', max: 2 },
   { id: 'floorLamp', name: 'Floor lamp', price: HOME_GOOD_PRICES.floorLamp, blurb: 'Brass stem, linen shade. One by each armchair.', shop: 'furniture', max: 2 },
@@ -67,6 +74,9 @@ const LINES: readonly GoodLine[] = [
   { id: 'bathMat', name: 'Bath mat', price: HOME_GOOD_PRICES.bathMat, blurb: 'Cotton, for the bathroom.', shop: 'furniture' },
   { id: 'hallStand', name: 'Shoe rack and umbrella stand', price: HOME_GOOD_PRICES.hallStand, blurb: 'For the hallway, by the front door.', shop: 'furniture' },
   { id: 'bistroSet', name: 'Bistro set', price: HOME_GOOD_PRICES.bistroSet, blurb: 'A folding table and two chairs for the balcony.', shop: 'furniture' },
+  { id: 'displayCase', name: 'Display case', price: HOME_GOOD_PRICES.displayCase, blurb: 'Narrow, glazed, edge-lit glass shelves: five of your best boxes on show, face out. By the living room door.', shop: 'furniture' },
+  { id: 'pedestal', name: 'Pedestal', price: HOME_GOOD_PRICES.pedestal, blurb: 'A gallery plinth with an easel and a warm glow: one grail, on show in the middle of the room.', shop: 'furniture' },
+  { id: 'labelMaker', name: 'Label maker', price: HOME_GOOD_PRICES.labelMaker, blurb: 'An embossing label maker and five tapes: aim at a shelf’s edge and press K to label it.', shop: 'furniture' },
   // The TV repair shop.
   { id: 'crt', name: 'Portable CRT', price: HOME_GOOD_PRICES.crt, blurb: 'A 14-inch set for the kitchen: longplays while the kettle boils.', shop: 'electronics' },
   { id: 'projector', name: 'Projector', price: HOME_GOOD_PRICES.projector, blurb: 'Ceiling-mounted, throws a 2-metre picture on the right wall.', shop: 'electronics' },
@@ -74,6 +84,13 @@ const LINES: readonly GoodLine[] = [
   { id: 'bedroomTv', name: 'Small TV', price: HOME_GOOD_PRICES.bedroomTv, blurb: 'A portable set for the bedroom dresser.', shop: 'electronics', requires: 'dresser' },
   { id: 'radio', name: 'Kitchen radio', price: HOME_GOOD_PRICES.radio, blurb: 'Two bands and a dial that sticks. On in the morning, it has the market’s news.', shop: 'electronics' },
   { id: 'appliances', name: 'Kettle and toaster', price: HOME_GOOD_PRICES.appliances, blurb: 'For the kitchen worktop.', shop: 'electronics' },
+  { id: 'homeArcade', name: 'Arcade cabinet', price: HOME_GOOD_PRICES.homeArcade, blurb: 'A 7-in-1 board in a restored upright: the arcade’s own games, free play, for fun. In the bedroom by the door.', shop: 'electronics' },
+  // Region converters (`economy/regionLock`): a Japanese copy of that platform plays at home. The Game Boy needs none.
+  { id: 'famicomAdapter', name: 'Famicom adapter', price: HOME_GOOD_PRICES.famicomAdapter, blurb: '60 pins to 72: a Japanese Famicom cartridge plays in the NES.', shop: 'electronics' },
+  { id: 'superFamicomAdapter', name: 'Super Famicom converter', price: HOME_GOOD_PRICES.superFamicomAdapter, blurb: 'A pass-through cartridge: Japanese Super Famicom games play on the SNES.', shop: 'electronics' },
+  { id: 'megaDriveConverter', name: 'Mega Drive converter', price: HOME_GOOD_PRICES.megaDriveConverter, blurb: 'Japanese Mega Drive cartridges fit and play, region switch included.', shop: 'electronics' },
+  { id: 'n64Passthrough', name: 'N64 passthrough', price: HOME_GOOD_PRICES.n64Passthrough, blurb: 'Gets a Japanese N64 cartridge past the console’s tabs and its lockout chip.', shop: 'electronics' },
+  { id: 'ps1ModChip', name: 'PlayStation mod chip', price: HOME_GOOD_PRICES.ps1ModChip, blurb: 'Soldered in by the repairer: Japanese PlayStation discs boot.', shop: 'electronics' },
   // The florist.
   { id: 'houseplant', name: 'Houseplant', price: HOME_GOOD_PRICES.houseplant, blurb: 'A fig, a yucca, a monstera, trailing pots... one spot at a time.', shop: 'florist', max: HOUSEPLANT_SPOTS },
   { id: 'plant', name: 'Balcony pot', price: HOME_GOOD_PRICES.plant, blurb: 'A potted plant for the balcony.', shop: 'florist', max: BALCONY_POTS },
@@ -81,17 +98,21 @@ const LINES: readonly GoodLine[] = [
   { id: 'cat', name: 'Adopt a cat', price: HOME_GOOD_PRICES.cat, blurb: 'A rescue, with its bowls and its bed. It moves in at once.', shop: 'pets' },
   { id: 'scratcher', name: 'Scratching post', price: HOME_GOOD_PRICES.scratcher, blurb: 'Sisal, for the living room. The armchairs will thank you.', shop: 'pets', requires: 'cat' },
   { id: 'catToy', name: 'Cat ball', price: HOME_GOOD_PRICES.catToy, blurb: 'A jingly ball, for the rug in front of the TV.', shop: 'pets', requires: 'cat' },
+  // Mrs Roux's flat next door, sold through the agency's sign on her door (`building/rouxMove`, `world/annex`).
+  { id: 'annex', name: 'Mrs Roux’s flat', price: HOME_GOOD_PRICES.annex, blurb: 'Two rooms on the street behind the living room’s right wall. The wall comes down the day after she leaves.', shop: 'agent' },
 ];
 
 /** The ids of everything that can be bought for the flat, in `HOME_GOODS` order. */
 export const HOME_UPGRADES = [
-  'bookcase', 'rug', 'lamp', 'poster',
+  'bookcase', 'rug', 'lamp', 'poster', 'record',
   'armchair', 'floorLamp', 'sideTable', 'livingRug', 'floorCushions', 'sideboard', 'framedPrint',
   'bed', 'nightstands', 'dresser', 'readingCorner', 'bedroomRug', 'mirror',
-  'kitchenTable', 'kitchenRug', 'bathMat', 'hallStand', 'bistroSet',
-  'crt', 'projector', 'speakers', 'bedroomTv', 'radio', 'appliances',
+  'kitchenTable', 'kitchenRug', 'bathMat', 'hallStand', 'bistroSet', 'displayCase', 'pedestal', 'labelMaker',
+  'crt', 'projector', 'speakers', 'bedroomTv', 'radio', 'appliances', 'homeArcade',
+  'famicomAdapter', 'superFamicomAdapter', 'megaDriveConverter', 'n64Passthrough', 'ps1ModChip',
   'houseplant', 'plant',
   'cat', 'scratcher', 'catToy',
+  'annex',
 ] as const;
 
 export type HomeUpgrade = (typeof HOME_UPGRADES)[number];

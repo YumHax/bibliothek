@@ -72,7 +72,7 @@ const PIECES: Record<SpillPiece, Builder> = {
     solid.box(m, 0, 0.87, 0, 0.5, 0.03, 0.05, '#3a2616');
     return { width: 0.55, depth: 0.4 };
   },
-  // A slatted bench from the shop with its SALE tag on a string.
+  // A slatted bench from the shop with its TRY ME tag on a string.
   saleBench: (solid, quads, atlas, m) => {
     const w = 1.0;
     const wood = '#9a6a3a';

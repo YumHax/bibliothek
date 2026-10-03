@@ -48,6 +48,13 @@ export interface PersonLook {
   bag?: 'tote' | 'backpack';
   bagColor?: number;
 
+  /** A scarf round the neck (in the cold), in this colour. */
+  scarf?: number;
+  /** A child or someone old; an adult when absent (`Dress.age`). */
+  age?: Age;
+  /** The head's size against the body's (a child's head is big for its body). Default 1. */
+  headScale?: number;
+
   /** Standing height in metres. Default 1.72. */
   height: number;
   /** Width of the body, 0.85 (slight) to 1.2 (broad). */
@@ -71,11 +78,91 @@ const HAIR_STYLES: Record<Figure, HairStyle[]> = {
 };
 const TOP_KINDS: TopKind[] = ['tee', 'tee', 'stripes', 'flannel', 'hoodie', 'jacket', 'shirt'];
 
+export type Age = 'child' | 'adult' | 'elder';
+
+/** What a look is drawn for, beyond the person: the season they dress for, and how old they are. */
+export interface Dress {
+  season?: 'spring' | 'summer' | 'autumn' | 'winter';
+  age?: Age;
+}
+
+const SCARVES = [0x8f2a2a, 0x2a3f6a, 0xd8b23a, 0x3a5a3a, 0xe8e2d6, 0x5a2a5e, 0x2a2a2a];
+
 /**
  * A look drawn from the palettes, fixed by `seed`. Stallholders get an apron half the time and
- * never a bag; shoppers carry one half the time.
+ * never a bag; shoppers carry one half the time. With a `dress`, the same person dressed for the
+ * season (coats and scarves in winter, shorts and tees in summer) and made a child or someone old;
+ * without one, the look is what it always was for that seed.
  */
-export function randomLook(seed: number, role: 'vendor' | 'shopper' = 'shopper'): PersonLook {
+export function randomLook(seed: number, role: 'vendor' | 'shopper' = 'shopper', dress?: Dress): PersonLook {
+  const look = baseLook(seed, role);
+  return dress ? dressed(look, seed, dress) : look;
+}
+
+/** `look` dressed for `dress`: drawn from its own stream, so the base look stays the seed's. */
+function dressed(look: PersonLook, seed: number, { season, age }: Dress): PersonLook {
+  const random = seededRandom(seed * 3266489917 + 7);
+  const chance = (p: number): boolean => random() < p;
+  const pick = <T>(list: readonly T[]): T => list[Math.floor(random() * list.length)]!;
+  const out = { ...look };
+  if (season === 'winter') {
+    // A coat or a hoodie, long sleeves, trousers; a scarf, a beanie, boots more often.
+    if (out.top !== 'jacket' && out.top !== 'hoodie') out.top = chance(0.7) ? 'jacket' : chance(0.5) ? 'hoodie' : 'flannel';
+    out.longSleeves = true;
+    out.shorts = false;
+    if (chance(0.65)) out.scarf = pick(SCARVES);
+    if (!out.hat && chance(0.4)) {
+      out.hat = 'beanie';
+      out.hatColor = pick(SCARVES);
+    }
+    if (out.shoes === 'sneaker' && chance(0.5)) out.shoes = 'boot';
+  } else if (season === 'autumn' || season === 'spring') {
+    if (out.top === 'tee' && chance(0.45)) out.top = chance(0.5) ? 'jacket' : 'flannel';
+    if (out.top === 'jacket' || out.top === 'flannel') out.longSleeves = true;
+    if (out.shorts && chance(0.7)) out.shorts = false;
+    if (season === 'autumn' && chance(0.15)) out.scarf = pick(SCARVES);
+  } else if (season === 'summer') {
+    // Tees and shorts; no woolly hats.
+    if ((out.top === 'jacket' || out.top === 'hoodie' || out.top === 'flannel') && chance(0.7)) out.top = chance(0.6) ? 'tee' : 'shirt';
+    if (out.top === 'tee') out.longSleeves = false;
+    else if (out.top === 'shirt') out.longSleeves = chance(0.3);
+    out.shorts = out.top !== 'jacket' && out.top !== 'hoodie' && chance(0.4);
+    if (out.hat === 'beanie') out.hat = chance(0.5) ? 'cap' : undefined;
+  }
+  if (age === 'child') {
+    out.age = 'child';
+    out.height = 1.05 + random() * 0.4;
+    out.headScale = 1.22 - (out.height - 1.05) * 0.3;
+    out.build = 0.86 + random() * 0.12;
+    out.beard = undefined;
+    out.glasses = chance(0.12) ? 0x2a3f6a : undefined;
+    out.bag = chance(0.6) ? 'backpack' : undefined;
+    out.bagColor = pick(SCARVES);
+    out.hat = out.hat === 'cap' || chance(0.2) ? out.hat : undefined;
+    out.shoes = 'sneaker';
+    out.apron = undefined;
+    out.freckles = out.freckles || chance(0.2);
+    out.jaw = 0.85 + random() * 0.08;
+    out.smile = chance(0.7);
+  } else if (age === 'elder') {
+    out.age = 'elder';
+    // Grey or white, thinner; glasses and a hat more often; never a hoodie or a backpack.
+    out.hair = chance(0.6) ? 0xd9d3c8 : 0x8e8a86;
+    if (out.hairStyle === 'ponytail' || out.hairStyle === 'long') out.hairStyle = chance(0.5) ? 'bun' : 'short';
+    if (out.hairStyle === 'buzz' && chance(0.5)) out.hairStyle = 'bald';
+    out.glasses = out.glasses ?? (chance(0.6) ? 0x6b4a2a : undefined);
+    if (out.top === 'hoodie' || out.top === 'tee') out.top = chance(0.6) ? 'jacket' : 'shirt';
+    out.longSleeves = true;
+    out.shorts = false;
+    out.shoes = 'loafer';
+    if (out.bag === 'backpack') out.bag = 'tote';
+    if (!out.hat && chance(0.3)) out.hat = 'cap';
+    out.height = Math.max(1.5, out.height - 0.04 - random() * 0.05);
+  }
+  return out;
+}
+
+function baseLook(seed: number, role: 'vendor' | 'shopper'): PersonLook {
   const random = seededRandom(seed * 2246822519);
   const pick = <T>(list: readonly T[]): T => list[Math.floor(random() * list.length)]!;
   const chance = (p: number): boolean => random() < p;

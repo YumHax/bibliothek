@@ -8,7 +8,9 @@ import { type ApiRequest, type ApiResponse, errorMessage, json } from './http';
  * Game Boy puzzle a few hundred, and most catalogue filler has no article at all. The market prices
  * games from this (see src/economy/pricing.ts).
  *
- * Lookup: one Wikipedia search ("<title> <platform> video game") whose top hits come back with
+ * Lookup: first the article named after the game itself (`exactArticle`: "<title> (video game)", then
+ * "<title>", described as a video game), since a search ranks a remake or a sequel of the same name
+ * first; else one Wikipedia search ("<title> <platform> video game") whose top hits come back with
  * their Wikidata short description; the first hit that reads like a video game and whose title
  * shares the game's words is the article (a second search on the main title, before the colon,
  * catches "Solstice: The Quest for..." filed as "Solstice (video game)"). Then one pageviews call
@@ -140,9 +142,48 @@ export async function handleFame(index: FameIndex, req: ApiRequest): Promise<Api
 
 /** `deadline` (epoch ms) bounds every Wikimedia call the lookup makes. */
 async function lookupFame(title: string, platform: string, deadline: number): Promise<Fame> {
-  const article = (await findArticle(title, platform, deadline)) ?? (await findArticle(mainTitle(title), platform, deadline, title));
+  const article = (await exactArticle(title, '', deadline)) ?? (await findGameArticle(title, platform, deadline));
   if (!article) return { views: null };
   return { views: await monthlyViews(article, deadline), article };
+}
+
+/**
+ * The article named after the game itself, asked by exact title in one call: "<title> (<year> video game)" (with a
+ * year), "<title> (video game)", then "<title>", the first that exists (redirects followed) and is described as a
+ * video game, of the release year when both are known. A search ranks a recent remake or a sequel of the same name
+ * first ("Super Mario Bros. Wonder" for "Super Mario Bros."); the exact title does not. A board or card game of the
+ * same name ("Monopoly") is no video game: the search then decides. Shared with server/reviews.ts.
+ */
+export async function exactArticle(title: string, year: string, deadline: number): Promise<string | null> {
+  const tries = [...(year ? [`${title} (${year} video game)`] : []), `${title} (video game)`, title];
+  const url = new URL(WIKI_API);
+  url.search = new URLSearchParams({ action: 'query', titles: tries.join('|'), redirects: '1', prop: 'description', format: 'json', formatversion: '2' }).toString();
+  const data = (await wikimedia(url, deadline)) as {
+    query?: { pages?: { title: string; missing?: boolean; description?: string }[]; redirects?: { from: string; to: string }[]; normalized?: { from: string; to: string }[] };
+  };
+  const pages = data.query?.pages ?? [];
+  const renamed = new Map<string, string>();
+  for (const r of [...(data.query?.normalized ?? []), ...(data.query?.redirects ?? [])]) renamed.set(r.from, renamed.get(r.to) ?? r.to);
+  const resolve = (t: string): string => {
+    let at = t;
+    for (let i = 0; i < 3 && renamed.has(at); i++) at = renamed.get(at)!;
+    return at;
+  };
+  for (const tried of tries) {
+    const page = pages.find((p) => p.title === resolve(tried));
+    if (!page || page.missing) continue;
+    const description = page.description ?? '';
+    if (!/\bvideo ?games?\b/i.test(description) || NOT_A_GAME.test(description)) continue;
+    const years = description.match(/\b(19|20)\d{2}\b/g);
+    if (year && years && !years.includes(year)) continue;
+    return page.title;
+  }
+  return null;
+}
+
+/** The game's English article, or null: its title as given, then its main title (before a subtitle). Shared with server/reviews.ts. */
+export async function findGameArticle(title: string, platform: string, deadline: number): Promise<string | null> {
+  return (await findArticle(title, platform, deadline)) ?? (await findArticle(mainTitle(title), platform, deadline, title));
 }
 
 /** The article for `title`, or null. `unless` is a title already searched: the same query is not run twice. */
@@ -231,8 +272,8 @@ export function lastFullMonths(now: Date, count: number): { start: string; end: 
 /** Requests to Wikimedia run one at a time, `REQUEST_GAP_MS` apart, whatever the number of games being priced. */
 let queue: Promise<unknown> = Promise.resolve();
 
-/** A Wikimedia call through the queue, given up (and skipped when its turn comes) once `deadline` is past. */
-function wikimedia(url: URL, deadline: number): Promise<unknown> {
+/** A Wikimedia call through the queue, given up (and skipped when its turn comes) once `deadline` is past. Shared with server/reviews.ts. */
+export function wikimedia(url: URL, deadline: number): Promise<unknown> {
   const turn = queue.then(() => {
     if (deadline - Date.now() < MIN_REQUEST_MS) throw outOfTime();
     return fetchWikimedia(url, deadline);

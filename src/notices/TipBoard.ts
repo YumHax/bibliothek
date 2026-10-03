@@ -2,6 +2,7 @@ import { playNoticeSound } from '@/audio/noticeSounds';
 import { readMs } from './readingTime';
 import type { TipOptions } from './types';
 import { hudSlot } from '@/ui/hudSlot';
+import { closeOnPress } from './dismissHint';
 
 const MIN_MS = 12000;
 const MAX_TIPS = 3;
@@ -68,10 +69,19 @@ export class TipBoard {
     el.append(head, body);
     this.root.appendChild(el);
     const tip: Tip = { id, el, until: options.until, left: options.ms ?? Math.max(MIN_MS, readMs(text) * 2) };
+    closeOnPress(el, () => this.remove(tip));
     this.tips.push(tip);
     while (this.tips.length > MAX_TIPS) this.remove(this.tips[0]!, true);
     playNoticeSound('tip');
     return () => this.remove(tip);
+  }
+
+  /** Put away by hand (docs/notices.md): the newest tip, or with `all` every one. False when none was up. */
+  dismiss(all = false): boolean {
+    if (!this.tips.length) return false;
+    if (all) for (const tip of [...this.tips]) this.remove(tip);
+    else this.remove(this.tips[this.tips.length - 1]!);
+    return true;
   }
 
   update(dt: number, attending: boolean): void {

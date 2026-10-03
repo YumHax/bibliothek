@@ -17,6 +17,15 @@ const NAMES: Readonly<Record<string, string>> = {
   tvShop: 'TV Repair',
   petShop: 'Paws & Claws',
   flowerShop: 'The florist',
+  annex: 'The new room',
+  annexStudy: 'The study',
+  neighbourFlat: 'A neighbour’s flat',
+  courtyard: 'The courtyard',
+  saleroom: 'The saleroom',
+  sellerFlat: 'A seller’s flat',
+  cellar: 'The cellars',
+  attic: 'The attic',
+  roof: 'The roof',
 } satisfies Record<ZoneId, string>;
 
 export function zoneName(id: string): string {

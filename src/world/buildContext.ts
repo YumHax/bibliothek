@@ -1,3 +1,5 @@
+import type { Showcases } from './showcase/Showcases';
+import type { ShelfLabels } from './labels/ShelfLabels';
 import type * as THREE from 'three';
 import type { CssLayer } from '@/core/CssLayer';
 import type { Input } from '@/core/Input';
@@ -40,10 +42,19 @@ import type { Pastimes } from '@/household/pastime';
 import type { GameBox } from './GameBox';
 import type { Today } from '@/time/Today';
 import type { MarketDay } from '@/economy/MarketDay';
+import type { AuctionHouse } from '@/economy/AuctionHouse';
+import type { SealedLots } from '@/economy/SealedLots';
+import type { RivalCollector } from '@/economy/rivalCollector';
+import type { Transactions } from '@/economy/Transactions';
 import type { NewsPanel } from '@/ui/NewsPanel';
 import type { ScratchCardPanel } from '@/ui/ScratchCardPanel';
 import type { HomeShopPanel } from '@/ui/HomeShopPanel';
 import type { ToDoNotePanel } from '@/ui/ToDoNotePanel';
+import type { Classifieds } from '@/classifieds/Classifieds';
+import type { Ad } from '@/classifieds/ads';
+import type { SellerLot } from '@/classifieds/sellerLot';
+import type { HomeConsole, Workshop } from '@/repair/Workshop';
+import type { StoryChannels } from '@/story';
 
 /*
  * What every zone builder is handed (`BuildContext`) and what it hands back (`ZoneHandle`). Kept
@@ -71,6 +82,8 @@ export interface CollectionContext {
   arrangement?: ShelfArrangement;
   /** The flat's shelf boxes, shared by its shelvings (a game passing from one room's shelves to the other keeps its box). */
   boxes?: BoxPool;
+  /** The flat's displays (the display case, the pedestal): what is on show, off its shelf; the shelves read `shelved` through it. */
+  showcases?: Showcases;
 }
 
 /** The flat's own: what was bought for it, what its furniture reports or asks for. */
@@ -79,6 +92,8 @@ export interface HomeContext {
   upgrades?: HomeUpgrades;
   /** What the player may move about the flat (M): builders register the bought pieces they place. */
   furnishings?: Furnishings;
+  /** The labels stuck on the shelves' edges (the label maker): every shelving's bookcases wear theirs (`labelledBookcases`). */
+  shelfLabels?: ShelfLabels;
   /** Clicking a console on the TV stand reports its platform. */
   onSelectPlatform?: PlatformSelectHandler;
   /** Calls the cat over (the feather wand won at the arcade), and says how that went. */
@@ -159,6 +174,20 @@ export interface MarketContext {
   day: MarketDay;
   /** The panels its hall opens (notice board, job lot), how the market knows the player. */
   hall?: MarketHallServices;
+  /** The saleroom, the sealed cartons and the rival collector (docs/economy.md "The saleroom"); none: none of them. */
+  lots?: LotServices;
+}
+
+/** What the saleroom, the sealed cartons and the rival collector run on. */
+export interface LotServices {
+  /** The sale days, their lots, how each went. */
+  auction: AuctionHouse;
+  /** Cartons bought, waiting at home; the market's carton of the day. */
+  sealed: SealedLots;
+  /** The rival collector's side of the story (the street's trader, the hall, the saleroom). */
+  rival: RivalCollector;
+  /** The money side: the hammer, a carton bought, a thing out of a carton. */
+  tx: Transactions;
 }
 
 /**
@@ -171,6 +200,8 @@ export interface WorldPanels {
   scratch: ScratchCardPanel;
   homeShop: HomeShopPanel;
   toDo?: ToDoNotePanel;
+  /** The residents' table at the neighbours' party in the courtyard: they buy games off the player (`building/neighboursParty`). */
+  partySale?: ModalLike;
 }
 
 /** The shared services every zone builder may draw on; `src/bootstrap/world.ts` assembles it once. */
@@ -196,6 +227,24 @@ export interface BuildContext {
   market: MarketContext;
   /** The building's life the hallway and the stairs share: the doorstep, the post, the neighbours' swaps (`stairwell/building.ts`). */
   building?: BuildingServices;
+  /** The lost prototype's trail (`src/story`): the mail, the stallholders, the radio, the arcade's counter, the collector and the friends ask it first. */
+  story?: StoryChannels;
+  /** The paper's small ads, the sellers' flats and the consoles mended at home (`src/classifieds`, `src/repair`). */
+  classifieds?: ClassifiedsContext;
+}
+
+/** The small ads and the consoles (docs/economy.md "Small ads and the seller's flat", docs/household.md "Repairing a console"). */
+export interface ClassifiedsContext {
+  /** The ads, the visit booked or under way, what was bought from whom. */
+  book: Classifieds;
+  /** What an ad's seller has out (drawn once per ad). */
+  lot(ad: Ad): Promise<SellerLot>;
+  /** The consoles bought broken, mended or not. */
+  workshop: Workshop;
+  /** The kitchen table's repair, for one console (`ui/repair/RepairPanel`). */
+  repairPanel: ModalLike & { prepare(console: HomeConsole): void };
+  /** TV REPAIR's counter: working consoles bought back. */
+  consoleDesk: ModalLike;
 }
 
 /** What every zone builder returns: its `Room`, or for a zone without one (the street) how lit it is. */

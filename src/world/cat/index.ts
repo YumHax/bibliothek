@@ -26,6 +26,7 @@ export { Scratcher } from './Scratcher';
 export { CatToy } from './CatToy';
 export { CatSettingsStore, CAT_STORAGE_KEY } from './catSettings';
 export { catPlacers, followAdoption } from './adoption';
+export { placeCatEscapes, addCatFind, type CatFind } from './escapes';
 export * from './types';
 
 export interface CatFurnishOptions {

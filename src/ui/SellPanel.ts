@@ -2,7 +2,7 @@ import type { Game } from '@/catalog/types';
 import { getPlatform } from '@/catalog/platforms';
 import type { CollectionStore } from '@/collection/CollectionStore';
 import type { Fame } from '@/economy/Fame';
-import type { Transactions } from '@/economy/Transactions';
+import { isKeepsake, type Transactions } from '@/economy/Transactions';
 import type { Wallet } from '@/economy/Wallet';
 import { CONFIRM_MS, buyBackPrice, describeCondition } from '@/economy/pricing';
 import { playCoins } from '@/audio/coins';
@@ -17,6 +17,17 @@ export interface SellPanelOptions {
   coverUrl?: (game: Game) => string | undefined;
   /** How the market knows the player: its reputation adds to the offers (each sale counts towards it: `Transactions.sellToDesk`). */
   standing?: { readonly buyBackBonus: number };
+  /**
+   * Someone else buying than the market's desk (the neighbours' party): its heading and blurb, the share added to every
+   * offer instead of the reputation's, the sale itself, and the line said after one. Default: the WE BUY desk.
+   */
+  buyer?: {
+    heading: string;
+    blurb: string;
+    bonus: number;
+    sell: (game: Game, offer: number) => { ok: boolean };
+    soldLine: (game: Game, offer: number) => string;
+  };
 }
 
 /**
@@ -44,14 +55,16 @@ export class SellPanel extends ModalPanel {
     private readonly tx: Transactions,
     private readonly options: SellPanelOptions = {},
   ) {
-    super(container, { className: 'ui-modal--sheet catalogue sell', label: 'We buy' });
+    const heading = options.buyer?.heading ?? 'We buy';
+    const blurb = options.buyer?.blurb ?? 'Cash on the spot for your games, a fraction of what they sell for. Whatever you sell goes out on the stalls tomorrow, if you want it back.';
+    super(container, { className: 'ui-modal--sheet catalogue sell', label: heading });
     this.root.innerHTML = `
       <header class="catalogue__header">
-        <h2>We buy</h2>
+        <h2>${escapeHtml(heading)}</h2>
         <span class="catalogue__wallet"></span>
         <div class="catalogue__actions"><button type="button" class="ui-btn" data-action="close" aria-label="Close">Close</button></div>
       </header>
-      <p class="catalogue__blurb">Cash on the spot for your games, a fraction of what they sell for. Whatever you sell goes out on the stalls tomorrow, if you want it back.</p>
+      <p class="catalogue__blurb">${escapeHtml(blurb)}</p>
       <div class="catalogue__search"><input type="search" placeholder="Filter your collection…" autocomplete="off" spellcheck="false" data-autofocus /></div>
       <div class="catalogue__status"></div>
       <div class="catalogue__scroll ui-card" data-role="list"></div>`;
@@ -127,9 +140,9 @@ export class SellPanel extends ModalPanel {
 
   private priceAndButton(game: Game): string {
     const known = this.fame.peek(game) !== undefined;
-    const offer = buyBackPrice(game, this.fame.peek(game), this.options.standing?.buyBackBonus ?? 0);
+    const offer = buyBackPrice(game, this.fame.peek(game), this.bonus);
     const armed = this.isArmed(game.id);
-    const [label, enabled] = game.status === 'lent' ? ['Lent out', false] : !known ? ['Pricing…', false] : armed ? [`Sure? +${offer}`, true] : ['Sell', true];
+    const [label, enabled] = game.status === 'lent' ? ['Lent out', false] : isKeepsake(game) ? ['Not for sale', false] : !known ? ['Pricing…', false] : armed ? [`Sure? +${offer}`, true] : ['Sell', true];
     return `
       <span class="catalogue__price${known ? '' : ' catalogue__price--pending'}">${offer} <span class="catalogue__coin"></span></span>
       <button type="button" class="ui-btn${armed ? ' sell__armed' : ''}" data-action="sell" data-id="${escapeHtml(game.id)}" ${enabled ? '' : 'disabled'}>${escapeHtml(label)}</button>`;
@@ -152,6 +165,10 @@ export class SellPanel extends ModalPanel {
   private sell(id: string): void {
     const game = this.store.find(id);
     if (!game || game.status === 'wishlist' || game.status === 'lent') return;
+    if (isKeepsake(game)) {
+      this.setStatus('“The only one there is? Keep it. Nobody here could put a price on that.”');
+      return;
+    }
     if (this.fame.peek(game) === undefined) return;
     if (!this.isArmed(id)) {
       const previous = this.armed?.id;
@@ -167,11 +184,17 @@ export class SellPanel extends ModalPanel {
       return;
     }
     this.armed = null;
-    const offer = buyBackPrice(game, this.fame.peek(game), this.options.standing?.buyBackBonus ?? 0);
-    if (!this.tx.sellToDesk(game, offer).ok) return;
+    const offer = buyBackPrice(game, this.fame.peek(game), this.bonus);
+    const { buyer } = this.options;
+    if (!(buyer ? buyer.sell(game, offer) : this.tx.sellToDesk(game, offer)).ok) return;
     playCoins(4);
     const fake = game.repro ? ' “A reproduction, I’m afraid: that’s all it’s worth.”' : '';
-    this.setStatus(`Sold "${game.title}" for ${offer} coins.${fake} It goes out on the ${getPlatform(game.platform).shortName} stall tomorrow.`);
+    this.setStatus(buyer ? `${buyer.soldLine(game, offer)}${fake}` : `Sold "${game.title}" for ${offer} coins.${fake} It goes out on the ${getPlatform(game.platform).shortName} stall tomorrow.`);
+  }
+
+  /** The share added to every offer: the buyer's own, or the market's reputation. */
+  private get bonus(): number {
+    return this.options.buyer?.bonus ?? this.options.standing?.buyBackBonus ?? 0;
   }
 
   private setStatus(message: string, isError = false): void {

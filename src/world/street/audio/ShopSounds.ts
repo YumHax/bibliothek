@@ -1,14 +1,21 @@
 import * as THREE from 'three';
 import type { Updatable } from '@/core/Engine';
-import { outdoorsInput, startedAudioContext } from '@/audio/audioContext';
+import type { SpatialOut } from '@/audio/spatial';
 import type { Furniture, OccupancyAware } from '../../Furniture';
+import type { ActivityAware } from '../../zone/lifecycle';
 import type { DayNight } from '../../props/DayNight';
+import { terraceOut, type SeatedCount } from '../life/terraceWeather';
 import { isShopOpen } from '../shops/shopHours';
-import { STREET_PLAN, WALKABLE, shopDoors, type ShopKind, type Vec2 } from '../streetPlan';
+import { STREET_PLAN, WALKABLE, shopDoors, type ShopDoor, type ShopKind, type Vec2 } from '../streetPlan';
+import { BarMusic } from './BarMusic';
+import { SoundGraph } from './soundGraph';
+import { StreetEar } from './streetEar';
 
 export interface ShopSoundsOptions {
   /** The ears (the camera). */
   listener: THREE.Object3D;
+  /** How many sit at each terrace (`Terraces`): the chatter follows who is there; else the plan's count while the weather and hours say it is out. */
+  seated?: SeatedCount;
 }
 
 const MASTER = 0.6;
@@ -16,6 +23,13 @@ const MASTER = 0.6;
 const HEARD_BEYOND = 6;
 /** Speech bands the chatter's voices talk in (noise through each, switched on in phrases). */
 const FORMANTS = [460, 640, 820, 1050, 1300];
+/** A door spot this close to a shop's door is that shop's (its bell); further, a house door or the park's gate. */
+const SHOP_DOOR_WITHIN = 1.6;
+/** Kinds with no bell over the door: the arcade's swings, a shut shop's is shut. */
+const NO_BELL: ReadonlySet<ShopKind> = new Set(['arcade', 'shut']);
+/** The bars' music: from this hour (game) till they close; how much of it comes through the door. */
+const MUSIC_FROM = 18;
+const MUSIC_LEVEL = 0.5;
 
 type SourceKind = 'arcade' | 'chatter' | 'laundry';
 
@@ -35,8 +49,12 @@ interface Source {
   /** Loudness at 1 m and how far it carries (the distance at which it has halved). */
   loudness: number;
   reach: number;
+  /** A bar's jukebox, heard through its door in the evening. */
+  music: BarMusic | null;
+  musicLevel: () => number;
   gain?: GainNode;
-  pan?: StereoPannerNode;
+  musicGain?: GainNode;
+  leg?: SpatialOut;
   voices: Voice[];
   /** Seconds to the next clink (a glass, a cup) or bleep (a cabinet). */
   next: number;
@@ -45,50 +63,56 @@ interface Source {
 
 /**
  * What comes out of the shops onto the pavement (synthesised, positional: louder near, to the side
- * it is on): the arcade's cabinets bleeping and its crowd murmuring through the door at every
- * hour; the chatter and the clink of cups and glasses from the cafés and bars while they are open
- * (`isShopOpen`), from their terraces too when those are out and it is dry, the bars livelier in
- * the evening; the laundry's machines humming; and a shop bell over a door when someone goes in or
- * out (`ring`). Only while the player is in the street (`setOccupied`); nothing before the page's
- * first gesture started the audio.
+ * it is on, duller behind): the arcade's cabinets bleeping and its crowd murmuring through the
+ * door at every hour; the chatter and the clink of cups and glasses from the cafés and bars while
+ * they are open (`isShopOpen`), from their terraces too while their tables are out (the same rule
+ * as the tables, `life/terraceWeather`, and as many voices as sit there), the bars livelier in the
+ * evening with their jukebox's bass and kick through the door (`BarMusic`); the laundry's machines
+ * humming; and a door when someone goes in or out (`ring`): a shop's bell, else a house door's
+ * latch and thud. Only while the player is in the street (`setOccupied`); nothing before the page's
+ * first gesture started the audio; let go while the zone is dormant.
  */
-export class ShopSounds extends THREE.Group implements Furniture, Updatable, OccupancyAware {
+export class ShopSounds extends THREE.Group implements Furniture, Updatable, OccupancyAware, ActivityAware {
   readonly contactShadow = false;
-  private ctx: AudioContext | null = null;
-  private master: GainNode | null = null;
-  private noise: AudioBuffer | null = null;
+  private graph: SoundGraph | null = null;
   private readonly sources: Source[] = [];
+  private readonly doors: ShopDoor[];
   private occupied = false;
-  private readonly ear = new THREE.Vector3();
-  private readonly facing = new THREE.Vector3();
+  private active = true;
+  private readonly ear: StreetEar;
   private readonly spot = new THREE.Vector3();
 
   constructor(private readonly dayNight: DayNight, private readonly options: ShopSoundsOptions) {
     super();
     this.name = 'ShopSounds';
+    this.ear = new StreetEar(options.listener);
+    this.doors = shopDoors();
     const hours = (): number => this.dayNight.state.hours;
     const out = (at: Vec2, yaw: number, by = 0.6): THREE.Vector3 => new THREE.Vector3(at[0] + Math.sin(yaw) * by, 1.4, at[1] + Math.cos(yaw) * by);
-    for (const door of shopDoors()) {
+    for (const [i, door] of this.doors.entries()) {
       if (door.at[0] > WALKABLE.maxX + HEARD_BEYOND || door.at[0] < WALKABLE.minX - HEARD_BEYOND) continue;
       const kind: ShopKind = door.shop.kind;
       if (kind === 'arcade') {
         this.sources.push(source('arcade', out(door.at, door.yaw, 0.3), () => 1, 0.5, 5));
       } else if (kind === 'cafe' || kind === 'bar') {
         const bar = kind === 'bar';
-        this.sources.push(source('chatter', out(door.at, door.yaw), () => (isShopOpen(kind, hours()) ? liveliness(bar, hours()) : 0), 0.35, 3.5));
+        const open = (): boolean => isShopOpen(kind, hours());
+        const s = source('chatter', out(door.at, door.yaw), () => (open() ? liveliness(bar, hours()) : 0), 0.35, 3.5);
+        if (bar) {
+          s.music = new BarMusic(1000 + i * 37);
+          s.musicLevel = () => (open() && (hours() >= MUSIC_FROM || hours() < 6) ? MUSIC_LEVEL : 0);
+        }
+        this.sources.push(s);
       } else if (kind === 'laundry') {
         this.sources.push(source('laundry', out(door.at, door.yaw, 0.3), () => (isShopOpen(kind, hours()) ? 1 : 0), 0.25, 3));
       }
     }
-    // The terraces: out in the dry, while their hours say so.
-    for (const terrace of STREET_PLAN.terraces) {
-      const [open, close] = terrace.hours;
+    // The terraces: as many voices as customers sit there.
+    for (const [i, terrace] of STREET_PLAN.terraces.entries()) {
       const mid = new THREE.Vector3((terrace.from[0] + terrace.to[0]) / 2, 1.1, (terrace.from[1] + terrace.to[1]) / 2);
       const level = (): number => {
-        const s = this.dayNight.state;
-        const h = s.hours < open && s.hours + 24 < close ? s.hours + 24 : s.hours;
-        const out = h >= open && h < close && s.rain < 0.15 && s.snow < 0.15;
-        return out ? 0.35 + 0.15 * terrace.customers : 0;
+        const seated = this.options.seated ? this.options.seated(i) : terraceOut(terrace.hours, this.dayNight.state) ? terrace.customers : 0;
+        return seated > 0 ? 0.35 + 0.15 * seated : 0;
       };
       this.sources.push(source('chatter', mid, level, 0.3, 3));
     }
@@ -100,153 +124,169 @@ export class ShopSounds extends THREE.Group implements Furniture, Updatable, Occ
 
   setOccupied(occupied: boolean): void {
     this.occupied = occupied;
-    if (this.ctx && this.master) this.master.gain.setTargetAtTime(occupied ? MASTER : 0, this.ctx.currentTime, 0.5);
+    this.graph?.setLevel(occupied ? MASTER : 0, 0.5);
+  }
+
+  setZoneActive(active: boolean): void {
+    this.active = active;
+    if (!active) this.teardown();
   }
 
   dispose(): void {
-    this.master?.disconnect();
-    this.ctx = null;
+    this.teardown();
   }
 
-  /** A shop bell over a door (zone-local floor point): someone went in or came out. */
+  /** A door (zone-local floor point) someone went in or came out of: a shop's bell over it, or a house door's latch and thud. */
   ring(at: Vec2): void {
-    const ctx = this.ctx;
-    if (!ctx || !this.master || !this.occupied) return;
-    const where = this.spot.set(at[0], 2.3, at[1]);
-    const { gain, pan } = this.placeFor(where, 0.5, 4);
+    const g = this.graph;
+    if (!g || !this.occupied) return;
+    this.ear.update();
+    this.localToWorld(this.spot.set(at[0], 2.3, at[1]));
+    const d = this.ear.distance(this.spot);
+    const gain = 0.5 / (1 + (d / 4) ** 2);
     if (gain < 0.004) return;
-    const panner = ctx.createStereoPanner();
-    panner.pan.value = pan;
-    panner.connect(this.master);
-    const t = ctx.currentTime + 0.01;
+    const out = g.shot(this.ear.spatial(this.spot), 1.5);
+    const t = g.now + 0.01;
+    const door = this.doorAt(at);
+    if (!door || NO_BELL.has(door.shop.kind)) {
+      // A house door: the latch, then the door pulled to.
+      g.burst(latch(g, out), t, 0.03, gain * 0.25);
+      g.burst(thud(g, out), t + 0.5 + Math.random() * 0.3, 0.16, gain * 0.6);
+      return;
+    }
     // Two strikes of a little brass bell: a bright partial and a lower one, each ringing out.
     for (const [i, delay] of [0, 0.16].entries()) {
       for (const [f, level, decay] of [[2350, 1, 0.9], [3720, 0.5, 0.5], [5480, 0.25, 0.3]] as const) {
-        const osc = ctx.createOscillator();
+        const osc = g.ctx.createOscillator();
         osc.frequency.value = f * (i ? 1.01 : 1);
-        const env = ctx.createGain();
+        const env = g.gain();
         env.gain.setValueAtTime(0, t + delay);
         env.gain.linearRampToValueAtTime(gain * level * 0.12 * (i ? 0.7 : 1), t + delay + 0.004);
         env.gain.exponentialRampToValueAtTime(0.0001, t + delay + decay);
-        osc.connect(env).connect(panner);
+        osc.connect(env).connect(out);
         osc.start(t + delay);
         osc.stop(t + delay + decay + 0.05);
       }
     }
-    window.setTimeout(() => panner.disconnect(), 1500);
   }
 
   update(dt: number): void {
-    const ctx = this.ctx ?? this.build();
-    if (!ctx || !this.master || !this.occupied) return;
-    const now = ctx.currentTime;
-    this.options.listener.getWorldPosition(this.ear);
-    this.options.listener.getWorldDirection(this.facing);
+    if (!this.active) return;
+    const g = this.graph ?? this.build();
+    if (!g || !this.occupied) return;
+    const now = g.now;
+    this.ear.update();
     for (const s of this.sources) {
-      if (!s.gain || !s.pan) continue;
+      if (!s.gain || !s.leg) continue;
       const level = s.level();
       this.localToWorld(this.spot.copy(s.at));
-      const { gain, pan } = this.placeFor(this.spot, s.loudness, s.reach, true);
-      s.now = gain * level;
+      const d = this.ear.distance(this.spot);
+      const near = d > s.reach * 8 ? 0 : 1 / (1 + (d * d) / (s.reach * s.reach));
+      s.now = s.loudness * near * level;
       s.gain.gain.setTargetAtTime(s.now, now, 0.3);
-      s.pan.pan.setTargetAtTime(pan, now, 0.1);
+      const side = this.ear.spatial(this.spot);
+      s.leg.set(side.pan * 1.05, 0, false, side.rear ?? 0);
+      if (s.music && s.musicGain) {
+        const music = s.musicLevel() * near;
+        s.musicGain.gain.setTargetAtTime(music, now, 0.5);
+        s.music.update(dt, g, s.musicGain, music);
+      }
       if (s.now < 0.003) continue;
-      this.talk(ctx, s, dt);
+      this.talk(g, s, dt);
       s.next -= dt;
       if (s.next > 0) continue;
       if (s.kind === 'chatter') {
         s.next = 0.8 + Math.random() * 3.5 / Math.max(0.3, level);
-        this.clink(ctx, s);
+        this.clink(g, s);
       } else if (s.kind === 'arcade') {
         s.next = 0.12 + Math.random() * 0.6;
-        this.bleep(ctx, s);
+        this.bleep(g, s);
       }
     }
   }
 
-  /** Gain and pan of a sound at `world` for the listener: `loudness` at 1 m, halved at `reach`; silent past ~8 reaches. */
-  private placeFor(world: THREE.Vector3, loudness: number, reach: number, alreadyWorld = false): { gain: number; pan: number } {
-    if (!alreadyWorld) this.localToWorld(world);
-    const dx = world.x - this.ear.x;
-    const dz = world.z - this.ear.z;
-    const d = Math.hypot(dx, dz) || 1;
-    if (d > reach * 8) return { gain: 0, pan: 0 };
-    const rightX = -this.facing.z;
-    const rightZ = this.facing.x;
-    const len = Math.hypot(rightX, rightZ) || 1;
-    return { gain: loudness / (1 + (d * d) / (reach * reach)), pan: ((dx * rightX + dz * rightZ) / (d * len)) * 0.8 };
+  /** The shop whose door is at `at`, if any. */
+  private doorAt([x, z]: Vec2): ShopDoor | null {
+    let best: ShopDoor | null = null;
+    let bestD = SHOP_DOOR_WITHIN;
+    for (const door of this.doors) {
+      const d = Math.hypot(door.at[0] - x, door.at[1] - z);
+      if (d < bestD) {
+        bestD = d;
+        best = door;
+      }
+    }
+    return best;
   }
 
-  private build(): AudioContext | null {
-    const ctx = startedAudioContext();
-    if (!ctx) return null;
-    this.ctx = ctx;
-    this.master = ctx.createGain();
-    this.master.gain.value = 0;
-    this.master.gain.setTargetAtTime(this.occupied ? MASTER : 0, ctx.currentTime, 0.6);
-    this.master.connect(outdoorsInput(ctx)); // muffled from the building's sas (`world/airlock`)
-    this.noise = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate);
-    const white = this.noise.getChannelData(0);
-    for (let i = 0; i < white.length; i++) white[i] = Math.random() * 2 - 1;
-
+  private teardown(): void {
+    this.graph?.stop();
+    this.graph = null;
     for (const s of this.sources) {
-      s.gain = ctx.createGain();
-      s.gain.gain.value = 0;
-      s.pan = ctx.createStereoPanner();
-      s.gain.connect(s.pan).connect(this.master);
-      if (s.kind === 'laundry') this.hum(ctx, s.gain);
+      s.gain = undefined;
+      s.musicGain = undefined;
+      s.leg = undefined;
+      s.voices = [];
+    }
+  }
+
+  private build(): SoundGraph | null {
+    const g = SoundGraph.create(this.occupied ? MASTER : 0);
+    if (!g) return null;
+    this.graph = g;
+    for (const s of this.sources) {
+      s.leg = g.leg();
+      s.gain = g.gain();
+      s.gain.connect(s.leg.input);
+      if (s.music) {
+        // Through the door and the glass: the lows come through, the rest is a murmur.
+        s.musicGain = g.gain();
+        s.musicGain.connect(g.filter('lowpass', 520, 0.7)).connect(s.leg.input);
+      }
+      if (s.kind === 'laundry') this.hum(g, s.gain);
       else {
         // Voices talking over each other (the arcade's crowd is fewer and further in).
         const count = s.kind === 'arcade' ? 2 : 3;
         for (let i = 0; i < count; i++) {
-          const band = ctx.createBiquadFilter();
-          band.type = 'bandpass';
-          band.frequency.value = FORMANTS[Math.floor(Math.random() * FORMANTS.length)]! * (0.9 + Math.random() * 0.2);
-          band.Q.value = 3;
-          const gain = ctx.createGain();
-          gain.gain.value = 0;
-          this.loop(ctx, this.noise).connect(band).connect(gain).connect(s.gain);
+          const band = g.filter('bandpass', FORMANTS[Math.floor(Math.random() * FORMANTS.length)]! * (0.9 + Math.random() * 0.2), 3);
+          const gain = g.gain();
+          g.loop().connect(band).connect(gain).connect(s.gain);
           s.voices.push({ gain, talking: false, phrase: Math.random() * 2, syllable: 0 });
         }
         // A low bed of room noise under the voices.
-        const low = ctx.createBiquadFilter();
-        low.type = 'lowpass';
-        low.frequency.value = 300;
-        const bed = ctx.createGain();
-        bed.gain.value = 0.25;
-        this.loop(ctx, this.noise).connect(low).connect(bed).connect(s.gain);
+        g.loop().connect(g.filter('lowpass', 300)).connect(g.gain(0.25)).connect(s.gain);
       }
     }
-    return ctx;
+    return g;
   }
 
   /** The chatter's phrases and syllables (as `CrowdMurmur` does): each voice talks a while, pauses, talks again. */
-  private talk(ctx: AudioContext, s: Source, dt: number): void {
+  private talk(g: SoundGraph, s: Source, dt: number): void {
     for (const voice of s.voices) {
       voice.phrase -= dt;
       if (voice.phrase <= 0) {
         voice.talking = !voice.talking;
         voice.phrase = voice.talking ? 0.7 + Math.random() * 2.4 : 0.5 + Math.random() * 2.5;
-        if (!voice.talking) voice.gain.gain.setTargetAtTime(0, ctx.currentTime, 0.08);
+        if (!voice.talking) voice.gain.gain.setTargetAtTime(0, g.now, 0.08);
       }
       if (!voice.talking) continue;
       voice.syllable -= dt;
       if (voice.syllable <= 0) {
         voice.syllable = 0.09 + Math.random() * 0.15;
-        voice.gain.gain.setTargetAtTime(0.3 + Math.random() * 0.7, ctx.currentTime, 0.03);
+        voice.gain.gain.setTargetAtTime(0.3 + Math.random() * 0.7, g.now, 0.03);
       }
     }
   }
 
   /** A cup on a saucer, a glass on a glass: two quick inharmonic pings. */
-  private clink(ctx: AudioContext, s: Source): void {
+  private clink(g: SoundGraph, s: Source): void {
     if (!s.gain) return;
-    const t = ctx.currentTime + 0.01;
+    const t = g.now + 0.01;
     const f = 2600 + Math.random() * 1800;
     for (const [ratio, level] of [[1, 1], [2.76, 0.4]] as const) {
-      const osc = ctx.createOscillator();
+      const osc = g.ctx.createOscillator();
       osc.frequency.value = f * ratio;
-      const env = ctx.createGain();
+      const env = g.gain();
       env.gain.setValueAtTime(0, t);
       env.gain.linearRampToValueAtTime(0.12 * level, t + 0.002);
       env.gain.exponentialRampToValueAtTime(0.0001, t + 0.18);
@@ -257,17 +297,17 @@ export class ShopSounds extends THREE.Group implements Furniture, Updatable, Occ
   }
 
   /** A cabinet's blip, a short square-wave arpeggio up or down. */
-  private bleep(ctx: AudioContext, s: Source): void {
+  private bleep(g: SoundGraph, s: Source): void {
     if (!s.gain) return;
-    const t = ctx.currentTime + 0.01;
+    const t = g.now + 0.01;
     const notes = 1 + Math.floor(Math.random() * 3);
     const base = 330 * 2 ** (Math.floor(Math.random() * 12) / 12);
     const up = Math.random() < 0.5;
     for (let i = 0; i < notes; i++) {
-      const osc = ctx.createOscillator();
+      const osc = g.ctx.createOscillator();
       osc.type = Math.random() < 0.6 ? 'square' : 'triangle';
       osc.frequency.value = base * 2 ** (((up ? 1 : -1) * i * 4) / 12);
-      const env = ctx.createGain();
+      const env = g.gain();
       const at = t + i * 0.07;
       env.gain.setValueAtTime(0.05, at);
       env.gain.exponentialRampToValueAtTime(0.0001, at + 0.065);
@@ -278,43 +318,31 @@ export class ShopSounds extends THREE.Group implements Furniture, Updatable, Occ
   }
 
   /** The laundry's machines: a low motor hum and the drum's slow slosh. */
-  private hum(ctx: AudioContext, out: GainNode): void {
-    const motor = ctx.createOscillator();
-    motor.type = 'sawtooth';
-    motor.frequency.value = 98;
-    const motorLow = ctx.createBiquadFilter();
-    motorLow.type = 'lowpass';
-    motorLow.frequency.value = 260;
-    const motorGain = ctx.createGain();
-    motorGain.gain.value = 0.25;
-    motor.connect(motorLow).connect(motorGain).connect(out);
-    motor.start();
-    const slosh = ctx.createBiquadFilter();
-    slosh.type = 'bandpass';
-    slosh.frequency.value = 500;
-    slosh.Q.value = 0.8;
-    const sloshGain = ctx.createGain();
-    sloshGain.gain.value = 0.3;
-    const wobble = ctx.createOscillator();
-    wobble.frequency.value = 0.7;
-    const depth = ctx.createGain();
-    depth.gain.value = 0.25;
-    wobble.connect(depth).connect(sloshGain.gain);
-    wobble.start();
-    if (this.noise) this.loop(ctx, this.noise).connect(slosh).connect(sloshGain).connect(out);
-  }
-
-  private loop(ctx: AudioContext, buffer: AudioBuffer): AudioBufferSourceNode {
-    const node = ctx.createBufferSource();
-    node.buffer = buffer;
-    node.loop = true;
-    node.start(0, Math.random() * buffer.duration);
-    return node;
+  private hum(g: SoundGraph, out: GainNode): void {
+    g.oscillator('sawtooth', 98).connect(g.filter('lowpass', 260)).connect(g.gain(0.25)).connect(out);
+    const sloshGain = g.gain(0.3);
+    const wobble = g.oscillator('sine', 0.7);
+    wobble.connect(g.gain(0.25)).connect(sloshGain.gain);
+    g.loop().connect(g.filter('bandpass', 500, 0.8)).connect(sloshGain).connect(out);
   }
 }
 
 function source(kind: SourceKind, at: THREE.Vector3, level: () => number, loudness: number, reach: number): Source {
-  return { kind, at, level, loudness, reach, voices: [], next: Math.random() * 2, now: 0 };
+  return { kind, at, level, loudness, reach, music: null, musicLevel: () => 0, voices: [], next: Math.random() * 2, now: 0 };
+}
+
+/** A door latch's click: a bright, short band. */
+function latch(g: SoundGraph, out: AudioNode): AudioNode {
+  const f = g.filter('bandpass', 2600, 4);
+  f.connect(out);
+  return f;
+}
+
+/** A door pulled to: a dull wooden thud. */
+function thud(g: SoundGraph, out: AudioNode): AudioNode {
+  const f = g.filter('lowpass', 240, 0.8);
+  f.connect(out);
+  return f;
 }
 
 /** How busy a café or bar sounds at `hours`: cafés at breakfast and lunch, bars in the evening and late. */

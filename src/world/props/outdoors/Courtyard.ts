@@ -1,9 +1,11 @@
 import { type LightKind, Polygon, Sheet, type Rng, type Surface, groundSquash, sizePx, worldPoint } from './Sheet';
 import { between, integer, mixHex, pick, shade } from './paint';
 import { COURT_BACK, COURT_EAST, COURT_FROM, COURT_TO } from './plan';
+import { inFlatFrame } from '@/world/city/frontage';
+import { COURTYARD_YARD } from '@/world/outlook/outlookPlan';
 import { paintGroundBand } from './Street';
 import { TREE_STYLES, paintTree } from './Tree';
-import { paintBicycle } from './StreetFurniture';
+import { paintBicycle } from './paintedFurniture';
 import { type Footprint, paintBox, paintGroundShadow, paintPost } from './Solid';
 import { groundEllipse } from './ParkFeatures';
 import { currentSeason } from '@/time/season';
@@ -59,7 +61,6 @@ const ZINC = '#7d848a';
 const STEEL = '#3a3e42';
 const PANELS = ['#c9c4b8', '#6f8a9a', '#a85a44', '#d8d2c0', '#5a7a5a'];
 const CLOTHES = ['#f0ede4', '#d94f3a', '#3b6fb3', '#2f2f36', '#e8d24a', '#8c4f9e', '#9ac0d8', '#e0a0b0'];
-const BINS = ['#4a4d50', '#4a4d50', '#2d5aa0', '#e0b93a', '#6b4a2e', '#3d7a45'];
 const SETTS = '#8a867e';
 /** How the courtyard takes the weather: the setts puddle, the lawn soaks it up, snow lies on both. */
 const SETT_SURFACE: Surface = { wet: 0.7, snow: 1 };
@@ -527,13 +528,21 @@ function courtFootprint(x: number, z: number, alongX: boolean): Footprint {
   return { x, z, along: alongX ? [1, 0] : [0, 1] };
 }
 
+/** A point of the walkable street's plan (`outlook/outlookPlan` `COURTYARD_YARD`) in the window view's frame. */
+const yardPoint = (at: readonly [number, number]): [number, number] => inFlatFrame(at);
+/** A colour of the plan (a hex number) as a CSS colour. */
+const css = (color: number): string => `#${color.toString(16).padStart(6, '0')}`;
+
 /**
- * What is in the courtyard: first what lies flat (the lawn with its kerb, the sandpit, a drain),
- * then what stands, far to near: the trees, the shed, the bins by the side wing, bikes against the
- * rear building, a bench, the carpet-beating rack.
+ * What is in the courtyard, where the stairwell's windows and the courtyard itself have it (`COURTYARD_YARD`): first
+ * what lies flat (the lawn with its kerb, the sandpit, a drain), then what stands, far to near: the chestnut, the
+ * shed against the wing, the bins along the rear building, the bikes against the wing, the carpet-beating rack.
  */
 function paintCourtFloor(sheet: Sheet, random: Rng): void {
-  const lawnD = Math.hypot(8, -13);
+  const yard = COURTYARD_YARD;
+  const [lx0, lz0] = yardPoint([yard.lawn.x0, yard.lawn.z1]);
+  const [lx1, lz1] = yardPoint([yard.lawn.x1, yard.lawn.z0]);
+  const lawnD = Math.hypot((lx0 + lx1) / 2, (lz0 + lz1) / 2);
   // The lawn: a kerbed rectangle, trodden bare along one edge.
   const lawn = (x0: number, z0: number, x1: number, z1: number): Path2D => {
     const p = new Path2D();
@@ -547,24 +556,27 @@ function paintCourtFloor(sheet: Sheet, random: Rng): void {
     return p;
   };
   sheet.begin(lawnD, 0, SETT_SURFACE);
-  sheet.path(lawn(4.2, -7.7, 11.8, -18.3), '#b8b2a4');
+  sheet.path(lawn(lx0, lz0, lx1, lz1), '#b8b2a4');
   sheet.begin(lawnD, 0, LAWN_SURFACE);
   const grass = seasonalLawn('#6f9a48');
-  sheet.path(lawn(4.4, -7.9, 11.6, -18.1), grass);
+  sheet.path(lawn(lx0 + 0.2, lz0 - 0.2, lx1 - 0.2, lz1 + 0.2), grass);
   const ctx = sheet.color;
   for (let i = 0; i < 900; i++) {
-    const [x, y] = worldPoint(between(random, 4.5, 11.5), -between(random, 8, 18), 0);
+    const [x, y] = worldPoint(between(random, lx0 + 0.3, lx1 - 0.3), between(random, lz1 + 0.3, lz0 - 0.3), 0);
     ctx.fillStyle = random() < 0.5 ? shade(grass, 0.82) : shade(grass, 1.15);
     ctx.fillRect(x, y, 2, 1);
   }
+  // Trodden bare along the edge nearest our door.
   ctx.fillStyle = 'rgba(150,130,100,0.35)';
-  ctx.fill(lawn(4.4, -7.9, 11.6, -8.6));
+  ctx.fill(lawn(lx0 + 0.2, lz0 - 0.2, lx1 - 0.2, lz0 - 0.9));
   // The sandpit with its wooden border.
-  sheet.begin(Math.hypot(2.6, -16), 0, SETT_SURFACE);
-  sheet.path(lawn(1.2, -14.5, 3.8, -17.5), '#8a6a44');
-  sheet.path(lawn(1.4, -14.7, 3.6, -17.3), '#d8c8a0');
+  const [sx0, sz0] = yardPoint([yard.sandpit.x0, yard.sandpit.z1]);
+  const [sx1, sz1] = yardPoint([yard.sandpit.x1, yard.sandpit.z0]);
+  sheet.begin(Math.hypot((sx0 + sx1) / 2, (sz0 + sz1) / 2), 0, SETT_SURFACE);
+  sheet.path(lawn(sx0, sz0, sx1, sz1), '#8a6a44');
+  sheet.path(lawn(sx0 + 0.1, sz0 - 0.1, sx1 - 0.1, sz1 + 0.1), '#d8c8a0');
   ctx.fillStyle = 'rgba(0,0,0,0.08)';
-  ctx.fill(groundEllipse(2.4, -16.2, 0.5, 0.4, 12));
+  ctx.fill(groundEllipse((sx0 + sx1) / 2, (sz0 + sz1) / 2, 0.5, 0.4, 12));
   // A drain in the setts.
   ctx.fillStyle = '#3a3a3a';
   ctx.fill(groundEllipse(6, -4, 0.25, 0.25, 12));
@@ -573,56 +585,53 @@ function paintCourtFloor(sheet: Sheet, random: Rng): void {
   const add = (x: number, z: number, draw: () => void): void => {
     items.push({ d: Math.hypot(x, z), draw });
   };
-  add(8, -13.2, () => paintTree(sheet, random, { x: 8, z: -13.2, height: 15, radius: 4.6, style: TREE_STYLES[0], form: 'round' }));
-  add(12.6, -3.5, () => paintTree(sheet, random, { x: 12.6, z: -3.5, height: 8, radius: 2, style: TREE_STYLES[2], form: 'oval' }));
-  // The shed in the back corner: planks, a tarred pent roof, its door.
-  const shed = courtFootprint(12.9, -21.4, false);
+  const [cx, cz] = yardPoint(yard.chestnut.at);
+  add(cx, cz, () => paintTree(sheet, random, { x: cx, z: cz, height: 12.5 * yard.chestnut.scale, radius: 3.8 * yard.chestnut.scale, style: TREE_STYLES[0], form: 'round' }));
+  // The shed against the wing: planks, a tarred pent roof, its door on the yard's side.
+  const [hx0, hz0] = yardPoint([yard.shed.x0, yard.shed.z0]);
+  const [hx1, hz1] = yardPoint([yard.shed.x1, yard.shed.z1]);
+  const shed = courtFootprint((hx0 + hx1) / 2, (hz0 + hz1) / 2, false);
+  const shedW = hx1 - hx0;
+  const shedD = hz1 - hz0;
+  const shedH = (yard.shed.height + yard.shed.low) / 2;
   add(shed.x, shed.z, () => {
-    paintGroundShadow(sheet, shed.x, shed.z, 2, 2.6, 0.25);
-    paintBox(sheet, shed, 3.8, 2.8, 0, 2.2, '#7a5a3c');
-    paintBox(sheet, shed, 4.1, 3.1, 2.2, 2.35, TAR);
-    const d = Math.hypot(shed.x - 1.4, shed.z);
-    const [x0, y0] = worldPoint(shed.x - 1.41, shed.z + 0.2, 1.9);
-    const [x1, y1] = worldPoint(shed.x - 1.41, shed.z + 1.1, 0);
+    paintGroundShadow(sheet, shed.x, shed.z, shedW * 0.55, shedD * 0.55, 0.25);
+    paintBox(sheet, shed, shedD, shedW, 0, shedH, '#7a5a3c');
+    paintBox(sheet, shed, shedD + 0.3, shedW + 0.3, shedH, shedH + 0.12, TAR);
+    const d = Math.hypot(hx0, shed.z);
+    const [x0, y0] = worldPoint(hx0 - 0.01, shed.z - 0.4, 1.85);
+    const [x1, y1] = worldPoint(hx0 - 0.01, shed.z + 0.4, 0);
     sheet.begin(d);
     sheet.color.fillStyle = '#5a4230';
     sheet.color.fillRect(Math.min(x0, x1), y0, Math.abs(x1 - x0), y1 - y0);
   });
-  // Wheelie bins lined up along the side wing, lids down.
-  for (let i = 0; i < 6; i++) {
-    const z = -1.8 - i * 0.72;
-    const color = pick(random, BINS);
-    add(COURT_EAST - 0.55, z, () => {
-      const f = courtFootprint(COURT_EAST - 0.55, z, false);
-      paintGroundShadow(sheet, f.x, f.z, 0.4, 0.35, 0.2);
-      paintBox(sheet, f, 0.6, 0.72, 0, 1.0, color);
-      paintBox(sheet, f, 0.64, 0.78, 1.0, 1.06, shade(color, 0.8));
+  // Wheelie bins lined up along the rear building, lids down.
+  for (const bin of yard.bins) {
+    const [x, z] = yardPoint(bin.at);
+    add(x, z, () => {
+      const f = courtFootprint(x, z, true);
+      paintGroundShadow(sheet, f.x, f.z, 0.35, 0.4, 0.2);
+      paintBox(sheet, f, 0.58, 0.72, 0, 1.0, '#3a3c3e');
+      paintBox(sheet, f, 0.62, 0.76, 1.0, 1.06, css(bin.color));
     });
   }
-  // Bikes against the rear building, a hoop or two.
-  for (let x = 1.4; x < 6.2; x += between(random, 0.6, 0.9)) {
-    if (random() < 0.25) continue;
-    add(x, -COURT_BACK + 0.9, () => paintBicycle(sheet, random, { x, z: -COURT_BACK + 0.9, along: [0, 1] }));
+  // Bikes leaned on the wing's wall.
+  for (const bike of yard.bikes) {
+    const [x, z] = yardPoint(bike.at);
+    add(x, z, () => paintBicycle(sheet, random, { x, z, along: [0, 1] }, css(bike.color)));
   }
-  // A bench at the lawn's edge, a carpet-beating rack, a pot by the side wing's door.
-  add(7.5, -7.3, () => {
-    const f = courtFootprint(7.5, -7.3, true);
-    paintGroundShadow(sheet, f.x, f.z, 0.9, 0.4, 0.2);
-    paintBox(sheet, f, 1.8, 0.45, 0.42, 0.47, '#8a5a36');
-    paintBox(sheet, f, 1.8, 0.06, 0.5, 0.9, '#8a5a36', 0, 0, -0.22);
-    for (const u of [-0.75, 0.75]) paintPost(sheet, f.x + u, f.z, 0, 0.42, 0.06, STEEL);
-  });
-  add(2.2, -9.5, () => {
-    for (const z of [-8.5, -10.5]) paintPost(sheet, 2.2, z, 0, 1.8, 0.07, STEEL);
-    const d = Math.hypot(2.2, -9.5);
+  // The carpet-beating rack: two steel posts and the bar between them.
+  const [rx, rz] = yardPoint(yard.rack.at);
+  add(rx, rz, () => {
+    const { width, height } = yard.rack;
+    for (const x of [rx - width / 2, rx + width / 2]) paintPost(sheet, x, rz, 0, height, 0.07, STEEL);
+    const d = Math.hypot(rx, rz);
     sheet.begin(d);
     const p = new Path2D();
-    const a = worldPoint(2.2, -8.5, 1.8);
-    const b = worldPoint(2.2, -10.5, 1.8);
     sheet.color.strokeStyle = STEEL;
     sheet.color.lineWidth = Math.max(1, sizePx(0.06, d));
-    p.moveTo(...a);
-    p.lineTo(...b);
+    p.moveTo(...worldPoint(rx - width / 2, rz, height));
+    p.lineTo(...worldPoint(rx + width / 2, rz, height));
     sheet.color.stroke(p);
   });
   items.sort((p, q) => q.d - p.d);

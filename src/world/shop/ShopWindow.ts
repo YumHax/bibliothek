@@ -3,6 +3,7 @@ import type { Updatable } from '@/core/Engine';
 import type { Furniture, OccupancyAware } from '../Furniture';
 import type { DayNight, SkyState } from '../props/DayNight';
 import type { Outdoors } from '../props/outdoors/Outdoors';
+import type { HomeUpgrades } from '@/economy/HomeUpgrades';
 import { part } from '../props/Prop';
 import { paint } from '../materials/palette';
 import { WALL, decal } from '../surface/layers';
@@ -28,6 +29,8 @@ export interface ShopWindowOptions {
   zoneFrame: THREE.Object3D;
   dayNight: DayNight;
   outdoors: Outdoors;
+  /** What the flat has bought: our balcony across the street is dressed as it is (none: fully dressed). */
+  upgrades?: HomeUpgrades;
   /** The main camera, the view through the glass is rendered from. */
   viewer: THREE.Camera;
 }
@@ -70,7 +73,7 @@ export class ShopWindow extends THREE.Group implements Furniture, Updatable, Occ
         if (!door) return Promise.reject(new Error(`[shop] ${options.name} has no door on the street to look out of`));
         const eye = new THREE.Vector3(options.along, 0, options.front).applyMatrix4(shopFrame);
         return import('../outlook/streetOutlook').then(({ buildStreetOutlook }) =>
-          buildStreetOutlook(camera, { dayNight, lightDirection: (out) => outdoors.lightDirection(dayNight.state, out), eye: [eye.x, eye.z], without: [door.facade.id] }),
+          buildStreetOutlook(camera, { dayNight, lightDirection: (out) => outdoors.lightDirection(dayNight.state, out), eye: [eye.x, eye.z], without: [door.facade.id], ...(options.upgrades ? { upgrades: options.upgrades } : {}) }),
         );
       },
       waiting: () => waiting.copy(dayNight.state.horizon).multiplyScalar(0.3 + 0.7 * dayNight.state.daylight),

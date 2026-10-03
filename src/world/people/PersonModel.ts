@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { ANKLE_Y, HEAD_Y, NECK_PIVOT, PELVIS_Y, SHIN_L, THIGH_L } from './body';
 import { POSES, type ArmAngles, type Pose } from './poses';
-import { bookMesh, hoodMesh, phoneMesh, umbrellaMesh, UMBRELLA_ARM, type Held } from './held';
+import { heldMesh, hoodMesh, UMBRELLA_ARM, type Held } from './held';
 import type { PersonLook } from './looks';
 import type { Performer, Reaction } from './performer';
 import { buildRig, type ArmBones, type Rig } from './rig';
@@ -370,7 +370,7 @@ export class PersonModel extends THREE.Group implements Performer {
     let mesh = this.heldMeshes.get(item);
     if (!mesh) {
       const seed = Math.round(this.look.height * 1000);
-      mesh = item === 'phone' ? phoneMesh() : item === 'book' ? bookMesh(seed) : umbrellaMesh(seed);
+      mesh = heldMesh(item, seed);
       (item === 'umbrella' ? this.rig.torso : this.rig.arms[1].wrist).add(mesh);
       this.adoptFade(mesh);
       this.heldMeshes.set(item, mesh);
@@ -695,13 +695,13 @@ export class PersonModel extends THREE.Group implements Performer {
   private moveArm(i: number, arm: ArmBones, dt: number, t: number, w: number, moving: boolean, standing: boolean, talk: number, tempo: number): void {
     const side = i ? 1 : -1;
     const g = this.gestures.frame.arms[i];
-    const holding = i === 1 && (this.held === 'umbrella' || (moving && this.held === 'phone'));
+    const holding = i === 1 && (this.held === 'umbrella' || (moving && (this.held === 'phone' || this.held === 'book')));
     const reachPoint = moving ? null : this.reachTargets[i];
     const pose = POSES[moving ? 'stand' : this.pose];
     const target = this.armTarget;
     let stiff = false;
     if (g) Object.assign(target, g);
-    else if (holding) Object.assign(target, { wf: 0, tw: 0, curl: 0.6 }, this.held === 'phone' ? POSES.phone.right : UMBRELLA_ARM);
+    else if (holding) Object.assign(target, { wf: 0, tw: 0, curl: 0.6 }, this.held === 'phone' ? POSES.phone.right : this.held === 'book' ? POSES.read.right : UMBRELLA_ARM);
     else if (reachPoint) {
       // The arm solved to the point from where the collarbone is (it follows the reach, below).
       const s = solveArm(arm.shoulder, side, reachPoint, this.rig.palm, this.solution);

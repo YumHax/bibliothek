@@ -168,6 +168,8 @@ export function buildRig(look: PersonLook): Rig {
   head.position.set(NECK_PIVOT.x, NECK_PIVOT.y - TORSO_PIVOT_Y, NECK_PIVOT.z);
   head.rotation.order = 'YXZ';
   const built = buildHead(head, look, skin);
+  // A child's head is big for its body (the whole person is then scaled to their height).
+  if (look.headScale) head.scale.setScalar(look.headScale);
   torso.add(head);
 
   const scale = look.height / REFERENCE_HEIGHT;
@@ -332,6 +334,12 @@ function neckwear(parts: Parts, look: PersonLook, build: number, sleeve: THREE.M
   if (look.top === 'hoodie') {
     const hood = new THREE.SphereGeometry(0.1, 22, 12, Math.PI, Math.PI, Math.PI * 0.3, Math.PI * 0.5);
     parts.add(hood, sleeve, at(0, neckBase - 0.02, -0.045, [0, 0, 0], [1.15 * build, 0.75, 1]));
+  }
+  if (look.scarf !== undefined) {
+    // Wound round the neck, one end hanging down the chest.
+    const wool = new THREE.MeshStandardMaterial({ color: look.scarf, roughness: 0.95 });
+    parts.add(new THREE.TorusGeometry(0.068, 0.026, 8, 20), wool, at(NECK_PIVOT.x, neckBase + 0.02, NECK_PIVOT.z + 0.004, [Math.PI / 2, 0, 0], [1.05 * build, 1.15, 1]));
+    parts.add(new THREE.BoxGeometry(0.075, 0.26, 0.022), wool, at(NECK_PIVOT.x + 0.035, neckBase - 0.11, NECK_PIVOT.z + 0.1 + 0.02 * build, [-0.22, 0, 0.06]));
   }
 }
 

@@ -1,8 +1,10 @@
 import * as THREE from 'three';
+import { poweredAt } from '@/building/mains';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import type { Updatable } from '@/core/Engine';
 import type { CssLayer } from '@/core/CssLayer';
 import { unplayableWhy } from './box/unplayable';
+import type { RegionLock } from '@/economy/regionLock';
 import type { Interactable, LabelPlacement } from '@/interaction/Interactable';
 import type { PlayerState, SessionActions } from '@/game/SessionActions';
 import type { VideoInfo } from '@/video/VideoProvider';
@@ -12,7 +14,7 @@ import type { ActivityAware, Furniture } from './Furniture';
 import { boxMesh } from './meshUtils';
 import type { SoundOcclusion } from './acoustics/SoundOcclusion';
 import { PointSound } from './acoustics/PointSound';
-import { VideoSurface, type ScreenState, type ScreenStateListener, type VideoScreen } from './screen';
+import { VideoSurface, type ScreenFeed, type ScreenState, type ScreenStateListener, type VideoScreen } from './screen';
 import { HueDrift } from './screen/HueDrift';
 import { paint, standard } from './materials/palette';
 import { RENDER_ORDER } from './surface/layers';
@@ -79,6 +81,8 @@ export class Projector extends THREE.Group implements Furniture, Updatable, Inte
   readonly hitboxes: THREE.Object3D[];
   readonly screenName = 'projector';
 
+  /** Whether a copy plays here at all (a Japanese one needs its converter, `economy/regionLock`); set by the room's builder. */
+  regionLock: RegionLock | null = null;
   private readonly surface: VideoSurface;
   private readonly unitMaterial: THREE.MeshStandardMaterial;
   private readonly lens: THREE.Object3D;
@@ -313,10 +317,13 @@ export class Projector extends THREE.Group implements Furniture, Updatable, Inte
 
   /** With a box in hand, plays its longplay; otherwise switches the lamp off, even while it is still looking for a source. */
   activate(session: SessionActions): void {
+    if (!poweredAt(this)) return session.refuse('No power: the whole building is dark.');
     const box = session.held;
     if (box && !box.playable) {
       session.refuse(`${box.game.title} is ${unplayableWhy(box)}: no cartridge to put in.`);
     } else if (box) {
+      const locked = this.regionLock?.(box.game);
+      if (locked) return session.refuse(locked);
       if (this.state === 'off') playRockerClick(); // the lamp's switch
       session.putBack();
       void session.playOn(this, box);
@@ -344,6 +351,11 @@ export class Projector extends THREE.Group implements Furniture, Updatable, Inte
     this.surface.stop();
   }
 
+  /** A program's canvas thrown on the wall (docs/media.md "Programs on the screen"). */
+  showFeed(feed: THREE.Texture): ScreenFeed {
+    return this.surface.showFeed(feed);
+  }
+
   /** Dormant zone: the picture lets its video go and the fan falls silent; both come back with the zone (see `VideoSurface.setZoneActive`). */
   setZoneActive(active: boolean): void {
     this.surface.setZoneActive(active);
@@ -357,6 +369,8 @@ export class Projector extends THREE.Group implements Furniture, Updatable, Inte
   }
 
   update(dt: number): void {
+    // A power cut in the building (`building/mains`): the picture goes at once.
+    if (this.state !== 'off' && !poweredAt(this)) this.stop();
     this.updateBeam(dt);
     this.surface.update(dt);
     this.fanSound?.update(dt);

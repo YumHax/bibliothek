@@ -9,6 +9,10 @@ import { invisibleHitbox } from '../../meshUtils';
 import type { RoadObstacle, StreetTraffic } from '../traffic/StreetTraffic';
 import { FRONT, KERB_HEIGHT, PARK_STREET, type StrayCatPerch } from '../streetPlan';
 import { catRoute } from './catPaths';
+import { CatVoice } from '@/audio/CatVoice';
+import { dayKey } from '@/economy/calendar';
+import { KEYS, PersistedStore } from '@/persistence';
+import { pocket } from '@/errands/pocket';
 
 export interface StrayCatOptions {
   /** Where it likes to sit: a spot on the ground, how high the perch is (a car roof, a bench, a bin), the way it faces. */
@@ -18,10 +22,17 @@ export interface StrayCatOptions {
   viewer: THREE.Object3D;
   /** Drivers stop for it while it crosses the road. */
   traffic: StreetTraffic;
+  /** Where a coin he brings goes (a friend of his, once a day). */
+  purse?: { earnCoins(coins: number): void };
 }
 
-/** It gets up and goes when the player comes this close. */
-const WARY = 2.2;
+/**
+ * He gets up and goes when the player comes this close, by how far he trusts them (`TRUST`): wary at first, then
+ * letting them nearer each day they feed him, at last not moving at all (the click reaches 3 m).
+ */
+const WARY = [2.2, 1.8, 1.4, 0.9, 0, 0, 0];
+/** Trust he can reach, a step each real day the player feeds him; from `STROKE` he is stroked, from `FINDS` he brings a coin a day. */
+const TRUST = { max: 6, stroke: 3, finds: 5 } as const;
 const WALK = 1.7;
 const JUMP = 0.45;
 const TURN_RATE = 7;
@@ -32,6 +43,35 @@ const LINES = [
   'He looks at you as if you owed him a sardine.',
   'The laundry lady calls him Mistigri. The butcher calls him Trouble.',
 ];
+/** Fed, by how far he trusts the player now. */
+const FED = [
+  'He snatches it and backs off to eat it, watching you.',
+  'He eats it a step away, one eye on you.',
+  'He eats it at your feet and licks his chops.',
+  'He eats from your hand and headbutts your knuckles.',
+  'He eats, then winds round your ankles, purring.',
+  'He eats, purrs, and sits on your foot as if it were his.',
+  'He eats like a king and blinks slowly at his servant.',
+];
+const STROKED = ['He arches into your hand, purring like an engine.', 'He rolls over on the warm slabs. A trap, surely. No: a belly rub.', 'He purrs and kneads the air.'];
+
+/** How the stray knows the player, across reloads: trust (0..`TRUST.max`), the real day he was last fed, and last brought a coin. */
+interface Bond {
+  trust: number;
+  fed: string;
+  found: string;
+}
+const bonds = new PersistedStore<Bond>({
+  key: KEYS.strayCat,
+  version: 1,
+  defaults: () => ({ trust: 0, fed: '', found: '' }),
+  read: (data) => {
+    if (typeof data !== 'object' || data === null) return null;
+    const o = data as Partial<Bond>;
+    const trust = typeof o.trust === 'number' && Number.isFinite(o.trust) ? Math.max(0, Math.min(TRUST.max, Math.floor(o.trust))) : 0;
+    return { trust, fed: typeof o.fed === 'string' ? o.fed : '', found: typeof o.found === 'string' ? o.found : '' };
+  },
+});
 
 /** On the way: one leg `from` -> `to`; a walk goes on through `rest` (the pavements and crossings, `catRoute`). */
 type State = { kind: 'perched'; since: number } | { kind: 'down' | 'walk' | 'up'; t: number; from: THREE.Vector3; to: THREE.Vector3; rest: THREE.Vector3[] };
@@ -71,6 +111,10 @@ export class StrayCat extends THREE.Group implements Furniture, Updatable, Inter
   private stare = 0;
   private line = 0;
   private started = false;
+  /** His voice: a chirp when fed, a purr when stroked, a hiss at a stranger too close. */
+  private readonly voice = new CatVoice();
+  private purrFor = 0;
+  private bond: Bond = bonds.load();
 
   constructor(private readonly options: StrayCatOptions) {
     super();
@@ -114,6 +158,8 @@ export class StrayCat extends THREE.Group implements Furniture, Updatable, Inter
     });
     this.perch = Math.floor(Math.random() * options.perches.length);
     options.traffic.obstacles.add(this.obstacle);
+    // A tom: lower than the flat's cat.
+    this.voice.setPitch(0.86);
   }
 
   get footprint(): THREE.Box3 {
@@ -122,6 +168,14 @@ export class StrayCat extends THREE.Group implements Furniture, Updatable, Inter
 
   dispose(): void {
     this.options.traffic.obstacles.delete(this.obstacle);
+    this.voice.dispose();
+  }
+
+  /** A dormant street is not updated: a purr going then would never be told to stop. */
+  setZoneActive(active: boolean): void {
+    if (active) return;
+    this.purrFor = 0;
+    this.voice.setPurring(false);
   }
 
   setHovered(): void {
@@ -129,12 +183,48 @@ export class StrayCat extends THREE.Group implements Furniture, Updatable, Inter
   }
 
   label(): string {
-    return 'Stray cat · talk';
+    const fedToday = this.bond.fed === dayKey();
+    if (!fedToday && (pocket.count('scrap') > 0 || pocket.count('treats') > 0)) return 'Stray cat · give him a treat';
+    return this.bond.trust >= TRUST.stroke ? 'Stray cat · stroke him' : 'Stray cat · talk';
   }
 
+  /**
+   * A treat from the pocket (the butcher's scrap, the pet shop's treats) once a real day: he trusts the player a step
+   * more. Trusted enough he is stroked (and purrs); a good friend now and then brings a coin he found in the gutter.
+   */
   activate(session: SessionActions): void {
     this.stare = 3;
+    const today = dayKey();
+    if (this.bond.fed !== today) {
+      const food = pocket.take('scrap', 'treats');
+      if (food) {
+        const trust = Math.min(TRUST.max, this.bond.trust + 1);
+        this.save({ ...this.bond, trust, fed: today });
+        this.voice.meow('chirp');
+        this.purrFor = trust >= TRUST.stroke ? 4 : 0;
+        session.react(FED[trust]!);
+        return;
+      }
+    }
+    if (this.bond.trust >= TRUST.stroke) {
+      this.purrFor = 5;
+      if (this.bond.trust >= TRUST.finds && this.bond.found !== today && this.options.purse) {
+        this.save({ ...this.bond, found: today });
+        this.options.purse.earnCoins(1);
+        this.voice.meow('trill');
+        session.react('He trots off and comes back with something in his mouth: a coin from the gutter, dropped at your feet.');
+        return;
+      }
+      session.react(STROKED[this.line++ % STROKED.length]!);
+      return;
+    }
+    this.voice.meow(this.bond.trust > 0 ? 'greet' : 'grumble');
     session.react(LINES[this.line++ % LINES.length]!);
+  }
+
+  private save(bond: Bond): void {
+    this.bond = bond;
+    bonds.save(bond);
   }
 
   update(dt: number): void {
@@ -150,10 +240,21 @@ export class StrayCat extends THREE.Group implements Furniture, Updatable, Inter
     if (this.parent) this.parent.worldToLocal(this.eye);
     const near = Math.hypot(this.eye.x - this.position.x, this.eye.z - this.position.z);
     const state = this.state;
+    const wary = WARY[this.bond.trust] ?? 0;
     if (state.kind === 'perched') {
       state.since += dt;
-      if ((near < WARY || this.isTaken(this.perch)) && state.since > 1.5) this.leave();
+      const crowded = near < wary;
+      if ((crowded || this.isTaken(this.perch)) && state.since > 1.5) {
+        // A stranger right on top of him gets a hiss on the way.
+        if (crowded && this.bond.trust === 0 && near < wary * 0.6) this.voice.meow('hiss');
+        this.leave();
+      }
     } else this.move(state, dt);
+    // His voice from where he is; purring a while after a stroke.
+    this.purrFor = Math.max(0, this.purrFor - dt);
+    this.voice.setPurring(this.purrFor > 0);
+    this.voice.setDistance(near);
+    this.voice.update(dt);
     this.animate(dt);
     this.obstacle.position.copy(this.position);
     this.obstacle.active = this.state.kind !== 'perched' && Math.abs(this.position.z) < FRONT.farKerb + 0.2;

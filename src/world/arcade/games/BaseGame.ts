@@ -222,8 +222,9 @@ export abstract class BaseGame implements ArcadeGame {
     return this.intro > 0;
   }
 
-  private get tickets(): number {
-    return Math.floor(this.score / this.pointsPerTicket);
+  /** The play's tickets so far; null on a run that pays none (`pointsPerTicket` 0: a cabinet at home). */
+  private get tickets(): number | null {
+    return this.pointsPerTicket > 0 ? Math.floor(this.score / this.pointsPerTicket) : null;
   }
 
   // --- Overlays -------------------------------------------------------------------------------
@@ -233,7 +234,7 @@ export abstract class BaseGame implements ArcadeGame {
     ctx.fillRect(0, 0, SCREEN_W, PLAY_TOP - 3);
     drawText(ctx, `${this.score}`, 6, 10, 10, '#ffffff', 'left');
     if (this.combo > 1) drawText(ctx, `x${this.combo}`, 6 + ctx.measureText(`${this.score}`).width + 8, 10, 9, COMBO_COLORS[this.combo] ?? '#ffe066', 'left');
-    drawText(ctx, `${this.tickets} TIX`, SCREEN_W / 2, 10, 9, '#ffd23a');
+    if (this.tickets !== null) drawText(ctx, `${this.tickets} TIX`, SCREEN_W / 2, 10, 9, '#ffd23a');
     if (Number.isFinite(this.timeLeft)) {
       const low = this.timeLeft <= LOW_TIME && this.live;
       const blink = low && Math.floor(this.timeLeft * 4) % 2 === 0;
@@ -272,6 +273,6 @@ export abstract class BaseGame implements ArcadeGame {
     ctx.fillStyle = 'rgba(0,0,0,0.6)';
     ctx.fillRect(0, SCREEN_H / 2 - 30, SCREEN_W, 60);
     drawText(ctx, this.endReason, SCREEN_W / 2, SCREEN_H / 2 - 8, 18, '#ff8a80');
-    drawText(ctx, `${this.score} PTS  ${this.tickets} TICKETS`, SCREEN_W / 2, SCREEN_H / 2 + 16, 9, '#ffd23a');
+    drawText(ctx, this.tickets === null ? `${this.score} PTS` : `${this.score} PTS  ${this.tickets} TICKETS`, SCREEN_W / 2, SCREEN_H / 2 + 16, 9, '#ffd23a');
   }
 }

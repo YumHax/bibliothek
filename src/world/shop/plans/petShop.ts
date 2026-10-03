@@ -134,4 +134,6 @@ export const PET_SHOP: ShopPlan = {
     { good: 'scratcher', at: { floor: [0.6, 0.1] } },
     { good: 'catToy', on: 'toys', spot: [0, 0], collides: false },
   ],
+  // The pouches of fish treats on the counter, between the biscuit jar and the tin: for the street's stray as much as a cat at home.
+  errands: [{ errand: 'treats', on: 'counter', spot: [0.32, 0.12] }],
 };

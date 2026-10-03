@@ -34,6 +34,8 @@ export interface AttractParts {
   seed: number;
   /** Back on the title card (the cabinet gives the second stick back to whoever holds it). */
   onTitle?: () => void;
+  /** Never sings its jingle (a cabinet at home: heard through the flat's walls every minute, it would nag). */
+  quiet?: boolean;
 }
 
 /**
@@ -86,6 +88,7 @@ export class AttractLoop {
     this.modeClock += dt;
     if (this.mode === 'title') {
       this.jingleIn -= dt;
+      if (this.jingleIn <= 0 && this.parts.quiet) this.jingleIn = Infinity;
       if (this.jingleIn <= 0) {
         this.jingleIn = JINGLE_EVERY[0] + Math.random() * (JINGLE_EVERY[1] - JINGLE_EVERY[0]);
         speaker.level = 0.35;

@@ -13,6 +13,8 @@ export interface MailSources {
   };
   /** What is coming up at the market (a grail, the Flea Fair, a sale): `MarketDay.news`. */
   marketDay?: { news(): readonly MarketNews[] };
+  /** A story the player follows (`src/story`): its clipping, or the clue a missed channel sent by post; asked once a day. */
+  story?: { mail(day: number): MailPiece | null };
 }
 
 /** Whatever the day, one of these can come through the door. */
@@ -37,10 +39,12 @@ export function mailFor(day: number, sources: MailSources): MailPiece[] {
   const random = seededRandom(day * 7349 + 13);
   const roll = random();
   const rumour = rumourFlyer(sources);
+  // A story's letter comes first, whatever else the day brings (it is asked once: the story moves on as it is posted).
+  const letter = sources.story?.mail(day) ?? null;
   // Talk of the market (a grail, the Flea Fair, a sale) always finds its way through the door.
-  const count = Math.max(rumour ? 1 : 0, roll < NONE ? 0 : roll < ONE ? 1 : 2);
+  const count = Math.max(letter ? 1 : 0, rumour ? 1 : 0, roll < NONE ? 0 : roll < ONE ? 1 : 2);
   if (!count) return [];
-  const topical = [rumour, challengeFlyer(sources), tomorrowFlyer(day), dealFlyer(sources, random)].filter((p): p is MailPiece => p !== null);
+  const topical = [letter, rumour, challengeFlyer(sources), tomorrowFlyer(day), dealFlyer(sources, random)].filter((p): p is MailPiece => p !== null);
   const everyday = [...EVERYDAY].sort(() => random() - 0.5);
   return [...topical, ...everyday].slice(0, count).map((piece, i) => ({ ...piece, seed: day * 3 + i }));
 }

@@ -11,6 +11,8 @@ import { HoverGlint } from '../props/hoverGlint';
 import { METAL, paint } from '../materials/palette';
 import { invisibleHitbox } from '../meshUtils';
 import { Staircase } from './Staircase';
+import { placeHallLife } from './hall/hallLife';
+import { coproChoice } from '@/building/coproState';
 import { Lift } from './Lift';
 import { StairLights } from './StairLights';
 import { STAIRWELL_PLAN as plan, STOREYS, landingY } from './stairwellPlan';
@@ -26,12 +28,33 @@ import type { AmbientVoice } from '@/audio/ambient';
 import { proximityVolume } from '@/video/proximityVolume';
 import { pointSound } from '../build/hearing';
 import { StairWindows } from './StairWindows';
+import { OurMailbox } from './hall/OurMailbox';
+import { mailFor } from '../hallway/mail';
 import { wakefulnessAt } from '@/time/wakefulness';
 import { DoorDog, DoorPiano, DoorTelevision, HallTone, StreetBehindDoor, playNeighbourDoor, whileHome } from './stairSounds';
+import { placeRouxLanding } from '../annex/RouxLanding';
+import { movedOut, movingLine, rouxPhase } from '@/building/rouxMove';
+import { RemovalLift, removalHours } from './RemovalLift';
+import { huntSays } from '@/building/hunt/huntSays';
+import { doorVisit, type DoorVisit } from '../neighbourFlat/visits';
+import { placeEstateSale } from '../estateSale/placeEstateSale';
+import { placeNoiseAndCatWays, type StairLife } from './noiseAndCat';
+import { befriend } from '@/building/friendship';
+import { buildingWindowLife, followRival } from '@/building/rearWindows';
+import { placeCourtyardDoor } from '../courtyard/courtyardDoor';
+import { placeDownAndDark, type DownAndDark } from './downAndDark';
+import { cellarDoor } from '../cellar/CellarDoor';
+
+/** A chat with a resident on the stairs counts this much for the friendship (once a game day). */
+const STAIR_CHAT_FRIENDSHIP = 10;
 
 /** What the stairwell tells the rest: how lit it is, what the feet walk on, and the floor's height anywhere (world). */
 export interface StairwellHandle extends ZoneHandle {
   ground: (x: number, z: number, feet: number) => number;
+  /** What the cat's outings need of the stairs (`noiseAndCat`); null without the building's doorstep. */
+  life: StairLife | null;
+  /** How the endless stairs move the player up a storey (`downAndDark`, wired in `bootstrap/world.ts`). */
+  connectPlayer: DownAndDark['connectPlayer'];
 }
 
 type DoorLife = (typeof plan.doors)[number][number];
@@ -61,14 +84,23 @@ function voiceOf(sound: NonNullable<DoorLife['sound']>): AmbientVoice {
  * player walks the stairs on (`FirstPersonController.setGround`), the light level and the stone
  * under the feet.
  */
-export function furnishStairwell(zone: Zone, { sky, listener, acoustics, building, home }: BuildContext): StairwellHandle {
+export function furnishStairwell(zone: Zone, { sky, listener, acoustics, building, home, today, covers, money, collection, market, arcade, story }: BuildContext): StairwellHandle {
   const ctxHearing = { listener, acoustics };
   const origin = new THREE.Vector3();
-  const stairs = zone.place(new Staircase(), origin);
+  const stairs = zone.place(new Staircase(coproChoice('paint')), origin);
   const lift = zone.place(new Lift({ collisions: zone.collisions, listener }), origin);
   for (const button of lift.buttons) zone.place(button, button.position.clone(), button.rotation.y);
   const lights = zone.place(new StairLights(sky.dayNight, { viewer: listener }), origin);
-  zone.place(new StairWindows({ dayNight: sky.dayNight, outdoors: sky.outdoors, viewer: listener as THREE.Camera }), origin);
+  // Through the courtyard windows, the building's lit windows follow its residents and the lives across the yard (`building/rearWindows`).
+  const windowLife = buildingWindowLife({ day: () => today.gameDay, hours: () => sky.dayNight.state.hours });
+  // The trader's window across the courtyard follows what he really took (`economy/rivalCollector`, read only).
+  const rival = market.lots?.rival;
+  if (rival) followRival(() => rival.view().took);
+  zone.place(new StairWindows({ dayNight: sky.dayNight, outdoors: sky.outdoors, viewer: listener as THREE.Camera, windowLife }), origin);
+  // Mrs Roux's move: the agency's sign on her door, the removal men's boxes on our landing (`world/annex`).
+  placeRouxLanding(zone, { today, home, building });
+  // Her removal men take the lift down and up on her moving day, in their hours: it is busy now and then.
+  zone.place(new RemovalLift({ lift, atWork: () => rouxPhase(today.gameDay) === 'moving' && removalHours(sky.dayNight.state.hours) }), origin);
 
   // The landings: the floor's name by the stairs, the neighbours' doors on the north wall (on ours, one: the other is the flat's).
   const { shaft, floorLanding, frontDoor, strip } = plan;
@@ -82,7 +114,8 @@ export function furnishStairwell(zone: Zone, { sky, listener, acoustics, buildin
     if (k === 0) zone.place(name, new THREE.Vector3(plan.ourFloorNameX, y + plan.floorNameY, shaft.z1 - 0.01), Math.PI);
     else zone.place(name, new THREE.Vector3(shaft.x0 + 0.01, y + plan.floorNameY, (floorLanding.z0 + floorLanding.z1) / 2), Math.PI / 2);
     if (k === STOREYS) {
-      const cellar = new NeighbourDoor({ caption: `${plan.cellar.label} · try the door`, answer: () => plan.cellar.line });
+      // The cellars: locked until the concierge gives the key (`building/keys`), then the way down (`world/cellar`).
+      const cellar = cellarDoor({ label: plan.cellar.label, locked: 'Locked. The concierge keeps the key.' });
       zone.place(cellar, new THREE.Vector3(plan.doorX[0], y, floorLanding.z1 - 0.005), Math.PI);
       continue;
     }
@@ -97,7 +130,9 @@ export function furnishStairwell(zone: Zone, { sky, listener, acoustics, buildin
         const { sound } = life;
         return sound && !(hours() >= sound.from && hours() < sound.to) ? plan.knock.quiet : life.line;
       };
-      const door = new NeighbourDoor({ caption: `${name}, ${plan.floorNames[k]} floor · knock`, answer, look: { color: life.color, mat: life.mat, plate: name }, resident: { key, building } });
+      // A neighbour who knows the player well enough asks them in (`neighbourFlat/visits`).
+      const visit = doorVisit(k, i, { isHome: () => isHome(key), hours, day: () => today.gameDay });
+      const door = new NeighbourDoor({ caption: `${name}, ${plan.floorNames[k]} floor · knock`, answer, look: { color: life.color, mat: life.mat, plate: name }, resident: { key, building }, visit });
       zone.place(door, new THREE.Vector3(x, y, floorLanding.z1 - 0.005), Math.PI);
       behindDoors.push({ key, k, x, life });
     });
@@ -114,8 +149,12 @@ export function furnishStairwell(zone: Zone, { sky, listener, acoustics, buildin
     listener.getWorldPosition(ear);
     playNeighbourDoor((0.3 * proximityVolume(ear.distanceTo(at), { referenceDistance: 1.5, rolloff: 1, maxDistance: 16 })) / 100);
   };
-  const neighbours = zone.place(new Neighbours({ viewer: listener, hours, ground: walkOn, trades: building?.trades, lift, door: doorSound, catHome: () => home.upgrades?.has('cat') ?? true }), origin);
+  // The power cut's part of the stairs (placed below, once the residents are): whoever it strands in the lift is not home.
+  let dark: DownAndDark | null = null;
+  const neighbours = zone.place(new Neighbours({ viewer: listener, hours, ground: walkOn, trades: building?.trades, lift, door: doorSound, catHome: () => home.upgrades?.has('cat') ?? true, gone: (key) => movedOut(key) || key === dark?.strandedDoor(), says: (key) => huntSays(key) ?? movingLine(key), onChat: (key) => void befriend(key, STAIR_CHAT_FRIENDSHIP, 'chat', today.gameDay) }), origin);
   for (const walker of neighbours.walkers) zone.place(walker, walker.position.clone());
+  // The flat and the stairs hearing each other, the neighbours through the floor, the noise after ten, who brings the cat back.
+  const life = placeNoiseAndCatWays(zone, { sky, listener, acoustics, building, home, today }, { ground: walkOn, isHome: (key) => neighbours.isHome(key) });
   isHome = (key) => neighbours.isHome(key);
   // Behind their doors, faint through the wood and the wall, the neighbours who are in: a TV, a piano, a dog.
   const { behindDoor, hallTone, streetBehind } = plan;
@@ -137,8 +176,12 @@ export function furnishStairwell(zone: Zone, { sky, listener, acoustics, buildin
     zone.place(postman.walker, postman.walker.position.clone());
     walkers.push(postman.walker);
   }
+  // The hall's life: the notice board, the co-owners' meeting, the concierge, the timer buttons (`hallLife`).
+  walkers.push(...placeHallLife(zone, { listener, today, sky, building, money }, { stairs, lights, ground: walkOn }));
   // The landings' sensors see the residents and the postman go by too, not only the player.
   lights.watch(walkers);
+  // The power cut of a storm's evening, the meters cupboard, the endless stairs of some nights.
+  dark = placeDownAndDark(zone, { sky, listener, today, home }, { stairs, lift, lights, walkers });
   // The step that creaks.
   zone.place(new CreakingStep(stairs, listener), origin);
   // A neighbour's swap comes as a note under the flat's door.
@@ -149,7 +192,24 @@ export function furnishStairwell(zone: Zone, { sky, listener, acoustics, buildin
   // and going through it is walked, not travelled (`world/airlock`).
   const { streetDoor, mailboxes } = plan;
   zone.place(new Mailboxes(), new THREE.Vector3(mailboxes.x, mailboxes.y, mailboxes.z), Math.PI / 2);
+  // Our flap, first of the top row: the day's post, taken on the way past (or found on the mat at home: whichever first).
+  const box = mailboxGrid();
+  const flap = new THREE.Vector3(-box.width / 2 + box.flap.width / 2, box.height / 2 - box.flap.height / 2, box.depth + 0.002);
+  zone.place(
+    new OurMailbox({
+      day: () => today.gameDay,
+      post: (day) => mailFor(day, { arcadeDaily: arcade.daily, market: market.stock, marketDay: market.day, story }),
+      width: box.flap.width * 0.9,
+      height: box.flap.height * 0.9,
+    }),
+    new THREE.Vector3(mailboxes.x + flap.z, mailboxes.y + flap.y, mailboxes.z - flap.x),
+    Math.PI / 2,
+  );
+  // The late Mr Lambert's estate sale, on its days, along the wall in front of them (`world/estateSale`).
+  placeEstateSale(zone, { covers, money, collection, market, listener, today, sky });
   placeAirlock(zone, new THREE.Vector3(streetDoor.at[0], 0, streetDoor.at[1]), 0, { twin: 'hall', collisions: zone.collisions, viewer: listener });
+  // The door out to the courtyard at the foot of the stairs (`world/courtyard`), and the party's poster on the board.
+  placeCourtyardDoor(zone, today);
 
   // The portal back into the flat through its front door (the hallway hangs the door; seen through, it is always drawn).
   const top0 = landingY(0);
@@ -163,6 +223,8 @@ export function furnishStairwell(zone: Zone, { sky, listener, acoustics, buildin
   const local = new THREE.Vector3();
   const floorY = zone.group.position.y;
   return {
+    life,
+    connectPlayer: dark.connectPlayer,
     lightLevel: () => lights.lightLevel(),
     // Tiles in the entrance hall (and the sas, which says so itself: its twin's floor), hard stone on the landings and flights.
     surfaceAt: (at) => (at.y < plan.hall.height && inHall(at.x, at.z) ? 'tiles' : 'concrete'),
@@ -192,6 +254,8 @@ interface NeighbourDoorOptions {
   look?: { color: number; mat: number | null; plate: string };
   /** Whose door it is to the swaps (`doorKey`), and the building's services the swap goes through. */
   resident?: { key: string; building?: BuildingServices };
+  /** The neighbour behind it asks the player in, once they know them (`neighbourFlat/visits`). */
+  visit?: DoorVisit;
 }
 
 /** The name plate's size on the leaf, and its height (under the peephole). */
@@ -222,12 +286,14 @@ class NeighbourDoor extends ShutDoor implements Interactable {
   }
 
   label(): string {
-    return this.offer() ? `${this.options.caption} (the swap)` : this.options.caption;
+    return this.offer() ? `${this.options.caption} (the swap)` : (this.options.visit?.label() ?? this.options.caption);
   }
 
   activate(session: SessionActions): void {
     playKnock(3, 0.35);
     const offer = this.offer();
+    // No swap to see to: a friend lets the player in (else the door answers as it always did).
+    if (!offer && this.options.visit?.knock(session)) return;
     const panel = this.options.resident?.building?.tradePanel;
     if (!offer) {
       session.react(this.options.answer());
@@ -337,8 +403,7 @@ class Mailboxes extends Prop {
     super();
     this.name = 'Mailboxes';
     const { rows, columns } = plan.mailboxes;
-    const w = columns * 0.22;
-    const h = rows * 0.24;
+    const { width: w, height: h } = mailboxGrid();
     // Painted at two pixels a millimetre-ish (128 x 140 a flap), so the names read from the hall.
     const cw = 128;
     const ch = 140;
@@ -377,6 +442,12 @@ class Mailboxes extends Prop {
   }
 }
 
+/** The mailboxes' cabinet: its size (m), the depth of its face off the wall, one flap's size. */
+function mailboxGrid(): { width: number; height: number; depth: number; flap: { width: number; height: number } } {
+  const { rows, columns } = plan.mailboxes;
+  return { width: columns * 0.22, height: rows * 0.24, depth: 0.12, flap: { width: 0.22, height: 0.24 } };
+}
+
 /**
  * The names on the flaps, `count` of them: ours first, then the residents' surnames floor by floor from ours down, the
  * concierge's, blanks for the rest (the flats nobody on the stairs lives in).
@@ -388,6 +459,7 @@ function mailboxNames(count: number): string[] {
     // "The Nguyens": the family's name on the box.
     return (who.startsWith('The ') && last.endsWith('s') ? last.slice(0, -1) : last).toUpperCase();
   };
-  const names = [mailboxes.ours, surname(ourNeighbour), ...neighbours.flat().map(surname), mailboxes.concierge];
+  // The late Mr Lambert's box keeps his name (`world/estateSale`).
+  const names = [mailboxes.ours, surname(ourNeighbour), ...neighbours.flat().map(surname), plan.estateSale.mailbox, mailboxes.concierge];
   return Array.from({ length: count }, (_, i) => names[i] ?? '');
 }

@@ -5,10 +5,14 @@ import type { DayNight } from '../props/DayNight';
 import type { Outdoors } from '../props/outdoors/Outdoors';
 import { part } from '../props/Prop';
 import { paint } from '../materials/palette';
+import { WALL, onSurface } from '../surface/layers';
 import { OutlookView } from '../outlook/OutlookView';
 import { flatToStreet } from '../outlook/frames';
+import type { WindowLife } from '../street/windowLife';
 import { STAIRWELL_PLAN as plan, STOREY, STOREYS, landingY } from './stairwellPlan';
 
+/** How many of the landings' panes show the courtyard at once (the nearest to the eye). */
+const LIVE = 2;
 const FRAME = 0.05;
 const FRAME_PAINT = paint(0xe6ddc8, 0.6);
 const SILL = paint(0xb8ae9c, 0.7);
@@ -20,6 +24,8 @@ export interface StairWindowsOptions {
   outdoors: Outdoors;
   /** The main camera, the view through the glass is rendered from. */
   viewer: THREE.Camera;
+  /** The lives behind the windows across the courtyard (`building/rearWindows`); none: the curfews. */
+  windowLife?: WindowLife;
 }
 
 /**
@@ -34,8 +40,15 @@ export class StairWindows extends THREE.Group implements Furniture, Updatable, O
   readonly contactShadow = false;
   readonly footprint = new THREE.Box3();
   private readonly view: OutlookView;
+  /** Every landing's pane: the nearest `LIVE` show the courtyard (each a render of it), the rest frosted glass. */
+  private readonly panes: THREE.Mesh[] = [];
+  private readonly frosted: THREE.MeshBasicMaterial;
+  private readonly live: THREE.Material;
+  private readonly sky: () => THREE.Color;
+  private readonly eye = new THREE.Vector3();
+  private readonly viewer: THREE.Camera;
 
-  constructor({ dayNight, outdoors, viewer }: StairWindowsOptions) {
+  constructor({ dayNight, outdoors, viewer, windowLife }: StairWindowsOptions) {
     super();
     this.name = 'StairWindows';
     const { x, width, height, sill } = plan.courtyardWindow;
@@ -50,17 +63,20 @@ export class StairWindows extends THREE.Group implements Furniture, Updatable, O
       toOutlook: () => toStreet,
       build: (camera) =>
         import('../outlook/streetOutlook').then(({ buildStreetOutlook }) =>
-          buildStreetOutlook(camera, { dayNight, lightDirection: (out) => outdoors.lightDirection(dayNight.state, out), eye: [eye.x, eye.z], without: OUR_BACK }),
+          buildStreetOutlook(camera, { dayNight, lightDirection: (out) => outdoors.lightDirection(dayNight.state, out), eye: [eye.x, eye.z], without: OUR_BACK, ...(windowLife ? { windowLife } : {}) }),
         ),
       waiting: () => waiting.copy(dayNight.state.horizon).multiplyScalar(0.25 + 0.6 * dayNight.state.daylight),
     });
     this.add(this.view);
+    this.sky = () => waiting.copy(dayNight.state.horizon).multiplyScalar(0.5 + 0.9 * dayNight.state.daylight);
+    this.frosted = onSurface(new THREE.MeshBasicMaterial({ color: 0x8a9096, fog: false }), WALL.paper);
     for (let k = 0; k < STOREYS; k++) {
       const floor = landingY(k) - STOREY / 2;
       const y = floor + sill + height / 2;
       const pane = this.view.pane(width, height);
       pane.position.set(x, y, z + 0.004);
       this.add(pane);
+      this.panes.push(pane);
       part(this, FRAME, height + 2 * FRAME, 0.05, FRAME_PAINT, { x: x - width / 2 - FRAME / 2, y, z: z + 0.025 });
       part(this, FRAME, height + 2 * FRAME, 0.05, FRAME_PAINT, { x: x + width / 2 + FRAME / 2, y, z: z + 0.025 });
       part(this, width, FRAME, 0.05, FRAME_PAINT, { x, y: y + height / 2 + FRAME / 2, z: z + 0.025 });
@@ -71,6 +87,10 @@ export class StairWindows extends THREE.Group implements Furniture, Updatable, O
     this.traverse((obj) => {
       if ((obj as THREE.Mesh).isMesh) obj.castShadow = false;
     });
+    this.live = this.panes[0]!.material as THREE.Material;
+    // Both materials are in the scene from the start, so `World.prime` compiles both.
+    this.panes.forEach((pane, i) => (pane.material = i < LIVE ? this.live : this.frosted));
+    this.viewer = viewer;
   }
 
   /** The player walked in: what is out there is built now, at the next idle moment (`OutlookView.prefetch`). */
@@ -80,6 +100,22 @@ export class StairWindows extends THREE.Group implements Furniture, Updatable, O
 
   update(dt: number): void {
     this.view.update(dt);
+    // Only the panes nearest the eye render the courtyard (each visible one is a whole render of it, and through the
+    // well up to five can be in view at once); the others, glimpsed storeys away, are frosted glass in the sky's colour.
+    this.viewer.getWorldPosition(this.eye);
+    this.worldToLocal(this.eye);
+    // A pane's rank is how many panes are nearer the eye (ties to the lower index); no allocation, every frame.
+    const eyeY = this.eye.y;
+    for (let i = 0; i < this.panes.length; i++) {
+      const d = Math.abs(this.panes[i]!.position.y - eyeY);
+      let rank = 0;
+      for (let j = 0; j < this.panes.length; j++) {
+        const e = Math.abs(this.panes[j]!.position.y - eyeY);
+        if (e < d || (e === d && j < i)) rank++;
+      }
+      this.panes[i]!.material = rank < LIVE ? this.live : this.frosted;
+    }
+    this.frosted.color.copy(this.sky());
   }
 
   dispose(): void {

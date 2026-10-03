@@ -10,16 +10,20 @@ import type { ModalLike, SessionParts } from './SessionParts';
 import type { KeyRoute, SessionHost } from './SessionHost';
 import { ModalStack } from './ModalStack';
 import { Hands } from './Hands';
+import { CopyOpening } from './CopyOpening';
 import { Seating } from './Seating';
 import { Screens } from './Screens';
 import { GoingOut } from './GoingOut';
 import { ArcadePlay } from './ArcadePlay';
+import { ProgramPlay } from './ProgramPlay';
 import { MarketCounter } from './MarketCounter';
 import { Purchases } from './Purchases';
 import { Browse } from './Browse';
 import { CatCare } from './CatCare';
+import { NoticeDismiss } from './NoticeDismiss';
 import { PhotoControl } from './PhotoControl';
 import { Rearranging, type PieceLike } from './Rearranging';
+import { Labelling } from './Labelling';
 import { isAction } from '@/input/actions';
 
 export type { SessionParts } from './SessionParts';
@@ -44,6 +48,8 @@ export class Session implements SessionActions, SessionHost {
   private readonly screens: Screens;
   private readonly goingOut: GoingOut;
   private readonly arcade: ArcadePlay;
+  /** Holding the pad of a program on the TV (the emulator, a canvas game: `src/onscreen`). */
+  private readonly programPlay: ProgramPlay;
   /** The flea market's rules for the copy in hand (buy, haggle, hold, swap, hand back). */
   private readonly counter: MarketCounter;
   private readonly purchases: Purchases;
@@ -61,10 +67,12 @@ export class Session implements SessionActions, SessionHost {
    *    then moving things (docs/furnishing.md): from above (L) every key is the planning view's; while a piece is
    *    carried M / R / Q / G / X / E are its; M puts the shelf box in hand where it is aimed, M on a piece takes it,
    *    U (hands free, at home) undoes the last move; the right mouse button does the same (`bindInput`);
-   * 4. a market copy in hand: U (just bought), B, H, R, X; O finds out a fake and goes on to 5;
+   * 4. a box in hand, O: a sealed copy stays shut at a stall (and asks twice at home), a copy's past shows (`CopyOpening`);
+   *    then a market copy in hand: U (just bought), B, H, R, X; O finds out a fake and goes on to 5;
    * 5. a box in hand: E puts it back, O opens it;
    * 6. browsing: F / Slash search, T sorts, N night, R random pick (not while holding), Enter picks up the found box;
-   * 7. C calls the cat;
+   *    then K, the label maker, at home with free hands (`Labelling`);
+   * 7. X puts down the card being read, the tips, the banner (`NoticeDismiss`); C calls the cat;
    * 8. seated: a movement key or E stands up.
    */
   private readonly routes: readonly KeyRoute[];
@@ -83,11 +91,14 @@ export class Session implements SessionActions, SessionHost {
     this.screens = new Screens(parts);
     this.goingOut = new GoingOut(parts, this, this.screens);
     this.arcade = new ArcadePlay(parts, this);
+    this.programPlay = new ProgramPlay(parts, this);
     this.purchases = new Purchases(parts, this);
     this.rearranging = new Rearranging(parts, this, () => this.onHover(this.hovered));
     const deaf: KeyRoute = { onKey: () => this.modalOpen || !parts.player.isLocked || this.goingOut.menuOpen || this.seating.asleep };
     const photo = new PhotoControl(parts, (panel) => this.openPanel(panel));
-    this.routes = [this.modals, deaf, this.arcade, photo, this.rearranging, this.counter, this.hands, this.browse, new CatCare(parts, this), this.seating];
+    // O on a box in hand asks the copy first (a seal, a past: `CopyOpening`), then the market, then the hands open it.
+    const opening = new CopyOpening(parts, () => this.counter.holding);
+    this.routes = [this.modals, deaf, this.arcade, this.programPlay, photo, this.rearranging, opening, this.counter, this.hands, this.browse, new Labelling(parts, this, (panel) => this.openPanel(panel), () => this.rearranging.carrying), new NoticeDismiss(parts), new CatCare(parts, this), this.seating];
 
     const { interactor, inspector, player, search } = parts;
     // The carried box must not block the ray, nor its wrapper (a market copy's `ForSaleBox` owns the box's hitbox).
@@ -104,12 +115,15 @@ export class Session implements SessionActions, SessionHost {
       inspector.stopRotating(); // a right button held through the unlock must not leave the look frozen
       this.rearranging.cancel(); // a piece being carried goes back where it was
       // A paid arcade play holds still (it goes on once the pointer is locked again) instead of being lost.
-      if (!this.arcade.hold()) this.stand();
+      if (!this.arcade.hold() && !this.programPlay.hold()) this.stand();
       // Esc under pointer lock is eaten by the browser and unlocks instead: treat it as "close search / stay here".
       search?.close();
       this.goingOut.onUnlock();
     });
-    player.controls.addEventListener('lock', () => this.arcade.resume());
+    player.controls.addEventListener('lock', () => {
+      this.arcade.resume();
+      this.programPlay.resume();
+    });
   }
 
   get held(): GameBox | null {
@@ -126,7 +140,7 @@ export class Session implements SessionActions, SessionHost {
 
   /** What the hands are on (a machine, a market copy, a box, a seat, nothing): the touch bar shows what works there. */
   get handsContext(): 'arcade' | 'market' | 'held' | 'seated' | 'room' | 'furnishing' {
-    if (this.arcade.current) return 'arcade';
+    if (this.arcade.current || this.programPlay.holding) return 'arcade';
     if (this.rearranging.carrying || this.rearranging.planning) return 'furnishing';
     if (this.counter.holding) return 'market';
     if (this.hands.held) return 'held';
@@ -194,14 +208,14 @@ export class Session implements SessionActions, SessionHost {
   }
 
   stand(): void {
-    if (!this.arcade.leave()) this.seating.stand();
+    if (!this.arcade.leave() && !this.programPlay.leave()) this.seating.stand();
   }
 
   sleep(): void {
     this.seating.sleep();
   }
 
-  playOn(screen: VideoScreen, box: GameBox): Promise<void> {
+  playOn(screen: VideoScreen, box: Pick<GameBox, 'game'>): Promise<void> {
     return this.screens.playOn(screen, box);
   }
 

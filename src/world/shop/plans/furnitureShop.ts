@@ -145,5 +145,10 @@ export const FURNITURE_SHOP: ShopPlan = {
     { good: 'bathMat', at: { floor: [-4.1, 1.7] }, collides: false, tag: 'card' },
     // Clear of the window's display bed (0.8 deep).
     { good: 'bistroSet', at: { floor: [-3.6, 2.35] } },
+    // The collector's corner: the display case against the left wall past the prints, the pedestal in the open floor
+    // between the living room and the sideboard, the label maker on the counter by the swatch book.
+    { good: 'displayCase', at: { wall: 'left', along: -0.5, y: 0 } },
+    { good: 'pedestal', at: { floor: [1.4, -1.5], rotationY: 0.4 } },
+    { good: 'labelMaker', on: 'counter', spot: [0.02, -0.06], yaw: 0.35 },
   ],
 };

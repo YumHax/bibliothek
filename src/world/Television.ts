@@ -1,15 +1,17 @@
 import * as THREE from 'three';
+import { poweredAt } from '@/building/mains';
 import type { Updatable } from '@/core/Engine';
 import type { CssLayer } from '@/core/CssLayer';
 import type { Interactable, LabelPlacement } from '@/interaction/Interactable';
 import type { PlayerState, SessionActions } from '@/game/SessionActions';
 import type { VideoInfo } from '@/video/VideoProvider';
 import { unplayableWhy } from './box/unplayable';
+import type { RegionLock } from '@/economy/regionLock';
 import { CrtSpeaker } from '@/audio/CrtSpeaker';
 import type { ActivityAware, Furniture } from './Furniture';
 import { boxMesh, cylinderMesh } from './meshUtils';
 import type { SoundOcclusion } from './acoustics/SoundOcclusion';
-import { VideoSurface, type ScreenState, type ScreenStateListener, type VideoScreen } from './screen';
+import { VideoSurface, type ScreenFeed, type ScreenState, type ScreenStateListener, type VideoScreen } from './screen';
 import { CrtGlass } from './screen/CrtGlass';
 import { HueDrift } from './screen/HueDrift';
 import { QUALITY } from '@/graphics/quality';
@@ -56,6 +58,8 @@ export class Television extends THREE.Group implements Furniture, Updatable, Int
   readonly hitboxes: THREE.Object3D[];
   readonly screenName = 'TV';
 
+  /** Whether a copy plays here at all (a Japanese one needs its converter, `economy/regionLock`); set by the room's builder. */
+  regionLock: RegionLock | null = null;
   private readonly screenWidth: number;
   /** Size of the set, for the collider. */
   private readonly bodySize: THREE.Vector3;
@@ -222,12 +226,15 @@ export class Television extends THREE.Group implements Furniture, Updatable, Int
    * still searching, or on again with the game last put in.
    */
   activate(session: SessionActions): void {
+    if (!poweredAt(this)) return session.refuse('No power: the whole building is dark.');
     const box = session.held;
     if (box && !box.playable) {
       session.refuse(`${box.game.title} is ${unplayableWhy(box)}: no cartridge to put in.`);
     } else if (box) {
       const deck = this.decks?.forPlatform(box.game.platform);
       if (deck) return deck.insert(session, box);
+      const locked = this.regionLock?.(box.game);
+      if (locked) return session.refuse(locked);
       session.putBack();
       void session.playOn(this, box);
     } else if (this.state !== 'off') {
@@ -256,6 +263,11 @@ export class Television extends THREE.Group implements Furniture, Updatable, Int
     this.surface.stop();
   }
 
+  /** A program's canvas on the glass (docs/media.md "Programs on the screen"). */
+  showFeed(feed: THREE.Texture): ScreenFeed {
+    return this.surface.showFeed(feed);
+  }
+
   /** Dormant zone: the picture lets its video go and the speaker's bed falls silent; both come back with the zone. */
   setZoneActive(active: boolean): void {
     this.surface.setZoneActive(active);
@@ -269,6 +281,8 @@ export class Television extends THREE.Group implements Furniture, Updatable, Int
   }
 
   update(dt: number): void {
+    // A power cut in the building (`building/mains`): the picture goes at once.
+    if (this.state !== 'off' && !poweredAt(this)) this.stop();
     this.updateGlow(dt);
     this.surface.update(dt);
     this.glass.update(dt);

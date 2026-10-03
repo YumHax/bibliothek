@@ -57,6 +57,53 @@ the media is turned once in, an optional `press` (NES) and `door` (the NES's fla
 
 Sizes checked (all fit their boxes, entry poses clear the stand's shelf above, 197 mm).
 
+A Japanese copy is refused by a console, a direct-play TV and the projector until its converter is bought
+(`regionLock`, set by the room builders: docs/economy.md "Copies"). A copy's variant shows on its box
+(`box/copyLook`): a sealed one under its shrink-wrap (its own clearcoat turned up, no new map or program; `unseal`
+takes it off), a crushed one with a corner pushed in (the closed box's and the shell's own geometry, dented at the
+closed pose before the manual rides on the lid).
+
+## Programs on the screen (`src/onscreen/`)
+
+A game can run on a screen of the flat instead of its longplay: `game/Screens.playOn` asks `programFor(game)`
+(`onscreen/programs`, the providers `registerProgram` added at start-up) before searching; one that answers is run by
+the `ProgramRunner` (made in `bootstrap/session`, ticked by the engine, `SessionParts.programs`):
+
+- a `ScreenProgram` draws on a canvas of its own size (`width` x `height`), reads two `Pad`s a frame (d-pad, A, B,
+  Start, Select), makes its own sound into `ProgramContext.audio.out` and ends itself with `over`. No DOM, no keys of its own;
+- the picture goes on the glass through `VideoScreen.showFeed(texture)` (Television, Projector: `VideoSurface` lights the
+  texture as `playing`, untinted, no iframe); the handle (`ScreenFeed`) gives the set's level and pan where the listener
+  stands, which the runner puts on the program's sound (the `screens` bus); the set switched off (its button, an eject,
+  another game, a travel) switches the program off;
+- the player picks the pad up when it comes on (`game/ProgramPlay`, a route right after the arcade's) where they are
+  (the armchair, or standing: the walk and the crosshair frozen, `setFrozen`); every key is the program's (the arcade stick's keys are the d-pad, A
+  `K` / Space, B `J` / Shift, Start Enter, Select `H` / Backspace, `input/actions` padA..padSelect; a controller's d-pad and
+  stick, bottom button B, right button A, Y Start, LB Select, since its own Start pauses the room and X walks away);
+  walk-away twice puts the pad down and switches it off; the pointer unlocked holds it still, a dormant zone too;
+- pad two is `ProgramRunner.setSecondPad(source)` (a guest's hands, a CPU), read when `players` is 2.
+
+## Homebrew carts (`src/emulator/`)
+
+The NES really plays: `NesProgram` is the jsnes emulator (npm `jsnes`, Apache-2.0) as a `ScreenProgram`, stepped at
+60.1 Hz from the frame clock (at most three frames caught up a tick), its APU through a short ring into the set. Only
+freely licensed homebrew runs, never a commercial ROM: `HOMEBREW_CARTS` (`emulator/homebrew`) lists them as NES games
+by "Homebrew" (generated covers, carts like any), their unmodified release ROMs in `public/roms/` with the licence next
+to each (`<file>.LICENSE.txt`: author, release, source, licence). One is on the NES stall some market days
+(`HOMEBREW` in pricing: odds, a flat price; `economy/MarketStock`); `?debug` owns them all. Put in the NES (or played
+on a set without a console) it boots instead of a longplay (`registerHomebrew`, from `bootstrap/session`).
+
+Credits (each checked against its repository's licence, 2026-10-01):
+- **Thwaite** v0.04, Damian Yerrick: GPL-3.0-or-later (source github.com/pinobatch/thwaite-nes). 1-2 players.
+- **Concentration Room** v0.02a, Damian Yerrick: GPL-3.0-or-later, with the author's exception allowing exact copies of
+  the ROM without source (github.com/pinobatch/croom-nes). 1-2 players.
+- **robotfindskitten** v0.10, NES port by Damian Yerrick of Leonard Richardson's game: zlib (github.com/pinobatch/rfk-nes). 2 players.
+- **Nova the Squirrel** v1.0.6a, NovaSquirrel: code GPL-3.0-or-later, assets CC BY-NC-SA 4.0 (non-commercial: this
+  project is; github.com/NovaSquirrel/NovaTheSquirrel).
+
+A new cart: its ROM and licence file in `public/roms/`, a `cart(...)` line in `HOMEBREW_CARTS` (mapper 0, 1, 2, 3, 4, 7
+and a few more run in jsnes: check the iNES header). Other programs (a canvas game for two, a prototype's demo) register
+their own provider the same way.
+
 ## Sources
 
 ConsoleMods "Dimensions for Game Cartridges" and "Cart Labels"; NESdev "NES cartridge dimensions";

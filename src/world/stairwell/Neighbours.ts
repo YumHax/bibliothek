@@ -5,6 +5,9 @@ import type { OccupancyAware } from '../Furniture';
 import type { NeighbourTrades } from '@/economy/NeighbourTrades';
 import { randomLook } from '../people/looks';
 import { Prop } from '../props/Prop';
+import { mainsOn } from '@/building/mains';
+import { COLD, friendship } from '@/building/friendship';
+import { NEIGHBOUR_NOISE } from '@/building/neighbourNoisePlan';
 import { StairWalker } from './StairWalker';
 import { doorKey } from './building';
 import { doorSpot, liftGate, liftToStreet, routeDown, routeUp, streetDoorSpot, toLiftGate } from './stairRoutes';
@@ -48,6 +51,12 @@ export interface NeighboursOptions {
   door?: (k: number, i: number) => void;
   /** Whether a cat lives in the flat (their word on it waits till then); always, when not given. */
   catHome?: () => boolean;
+  /** Whether whoever lives behind door `key` has moved out of the building (Mrs Roux, `building/rouxMove`): never met, never in. */
+  gone?: (key: string) => boolean;
+  /** What the resident behind door `key` has to say of the moment before their own lines (her move), or null. */
+  says?: (key: string) => string | null;
+  /** The player chatted with the resident behind door `key` (a friendship's worth, `building/friendship`). */
+  onChat?: (key: string) => void;
 }
 
 /** Nearer than this (m, level and across) and a resident says hello. */
@@ -135,6 +144,7 @@ export class Neighbours extends Prop implements Updatable, OccupancyAware {
     const hours = this.options.hours();
     this.options.viewer.getWorldPosition(this.eye);
     for (const r of this.residents) {
+      if (this.options.gone?.(r.door)) continue;
       if (!r.going) {
         // Home at any hour; out only by day.
         const due = this.expected(r, hours);
@@ -164,8 +174,9 @@ export class Neighbours extends Prop implements Updatable, OccupancyAware {
     return hours >= r.plan.out && hours < r.plan.back ? 'out' : 'home';
   }
 
+  /** Nobody sets off: at night, and in a power cut (they are out on the landings with candles: `powerCut/`). */
   private quiet(hours: number): boolean {
-    return hours >= QUIET.from || hours < QUIET.to;
+    return hours >= QUIET.from || hours < QUIET.to || !mainsOn();
   }
 
   /** The player just came onto the stairs: someone whose hour it is may be on their way, or out on an errand. */
@@ -173,14 +184,15 @@ export class Neighbours extends Prop implements Updatable, OccupancyAware {
     const hours = this.options.hours();
     if (this.quiet(hours)) return;
     const near = (a: number) => Math.abs(hours - a) <= RUSH_WINDOW;
-    const rush = this.residents.filter((r) => (r.at === 'home' && near(r.plan.out)) || (r.at === 'out' && near(r.plan.back)));
+    const here = this.residents.filter((r) => !this.options.gone?.(r.door));
+    const rush = here.filter((r) => (r.at === 'home' && near(r.plan.out)) || (r.at === 'out' && near(r.plan.back)));
     if (rush.length && Math.random() < RUSH_ODDS) {
       const r = rush[Math.floor(Math.random() * rush.length)]!;
       this.startTrip(r, r.at === 'home' ? 'out' : 'home', hours + RUSH_WINDOW + 0.5);
       return;
     }
     if (Math.random() >= ERRAND_ODDS) return;
-    const home = this.residents.filter((r) => r.at === 'home');
+    const home = here.filter((r) => r.at === 'home');
     const r = home[Math.floor(Math.random() * home.length)];
     if (!r) return;
     this.startTrip(r, 'out', hours + 1 + Math.random() * 1.5);
@@ -188,6 +200,7 @@ export class Neighbours extends Prop implements Updatable, OccupancyAware {
 
   /** Whether whoever lives behind door `key` is in (no resident on the stairs lives there: someone always is). */
   isHome(key: string): boolean {
+    if (this.options.gone?.(key)) return false;
     const r = this.residents.find((resident) => resident.door === key);
     return !r || (r.going === null && r.at === 'home');
   }
@@ -275,6 +288,8 @@ export class Neighbours extends Prop implements Updatable, OccupancyAware {
 
   /** Their hellos in turn, the time of day's among them. */
   private hello(r: Resident, hours: number): string {
+    // Cross with the player (the noise after ten, `building/noiseComplaints`): a curt word, no more.
+    if (friendship(r.door) <= COLD) return NEIGHBOUR_NOISE.coldHellos[r.nextHello++ % NEIGHBOUR_NOISE.coldHellos.length]!;
     const pool = [hours < 12 ? 'Good morning!' : hours < 18 ? 'Hello!' : 'Good evening!', ...r.plan.hello];
     const line = pool[r.nextHello % pool.length]!;
     r.nextHello++;
@@ -284,8 +299,9 @@ export class Neighbours extends Prop implements Updatable, OccupancyAware {
   /** A click: their swap if they have one going, else the next of their lines that fits the hour (and the cat). */
   private chat(r: Resident): string {
     const offer = this.options.trades?.offerAt(r.door);
-    const text = offer ? `Did you get my note? I’d swap my ${offer.gives.title} for your ${offer.wants.title}. Knock on my door, ${offer.floor}.` : this.nextLine(r);
+    const text = offer ? `Did you get my note? I’d swap my ${offer.gives.title} for your ${offer.wants.title}. Knock on my door, ${offer.floor}.` : (this.options.says?.(r.door) ?? this.nextLine(r));
     this.murmur(r, text);
+    this.options.onChat?.(r.door);
     return `${r.who}: “${text}”`;
   }
 

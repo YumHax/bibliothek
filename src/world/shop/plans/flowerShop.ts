@@ -124,4 +124,6 @@ export const FLOWER_SHOP: ShopPlan = {
     { good: 'plant', variant: 0, on: 'pots', spot: [0.05, 0], collides: false },
     { good: 'plant', variant: 1, on: 'pots', spot: [0.5, 0.05], collides: false },
   ],
+  // The season's cut flowers lying on the counter in brown paper, in front of the radio (three bunches for two: the board outside).
+  errands: [{ errand: 'bunch', on: 'counter', spot: [-0.05, 0.14] }],
 };

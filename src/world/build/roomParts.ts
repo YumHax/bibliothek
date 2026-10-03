@@ -14,6 +14,7 @@ import type { Radiator } from '../props/Radiator';
 import { tickRadiators } from '../acoustics/radiatorTicks';
 import { StrayBox } from '../strays/StrayBox';
 import { ClockTick } from '@/audio/ambient';
+import { mainsOn, onMains, zoneOnCircuit } from '@/building/mains';
 import { type Hearing, heardBy, pointSound } from './hearing';
 
 /** Where a clock's tick sits: just proud of its face. */
@@ -25,12 +26,15 @@ const CLOCK_TICK_AT = new THREE.Vector3(0, 0, 0.03);
  * the same lamp, so either works; `also` hears every switch too (a shop's other fittings). Returns the fixture.
  */
 export function placeRoomLight(zone: Zone, room: Room, kind: 'pendant' | 'flush', at: Placement, switchAt: Placement, also?: (on: boolean) => void): SwitchableLamp {
+  // The room's light follows the lamp, and the building's power (a power cut darkens it, `building/mains`).
+  const powered = (): boolean => mainsOn() || !zoneOnCircuit(zone.id);
   const onSwitch = (on: boolean): void => {
-    room.setLampOn(on);
+    room.setLampOn(on && powered());
     also?.(on);
   };
   const lamp = zone.placeAt(kind === 'pendant' ? new PendantLamp({ onSwitch }) : new FlushLamp({ onSwitch }), at);
   zone.placeAt(new WallSwitch({ lamp }), switchAt);
+  zone.onUnload(onMains(() => room.setLampOn(lamp.isOn && powered())));
   return lamp;
 }
 

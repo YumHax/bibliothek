@@ -1,4 +1,5 @@
-import { COURTYARD, FLAT_IN_STREET, FRONT, KERB_HEIGHT, PARK_PARKING, PARK_STREET, STREET_ENDS, STREET_PLAN, WORKS, type Vec2 } from '../street/streetPlan';
+import { COURTYARD, FLAT_IN_STREET, FRONT, KERB_HEIGHT, PARK_PARKING, PARK_STREET, STREET_ENDS, STREET_PLAN, WORKS, WORKS_LIFT, type Vec2 } from '../street/streetPlan';
+import { frontWorksMoved } from '../street/details/roadworks';
 
 /*
  * The neighbourhood's ground plan in the flat's frame: metres from the collection room's floor
@@ -98,7 +99,7 @@ export const STREET_BINS = STREET_PLAN.bins.map(inFlatFrame);
 export const BIKE_RACKS = STREET_PLAN.bikes.racks.map((rack) => ({ at: inFlatFrame(rack.at), yaw: rack.yaw, bikes: rack.bikes }));
 
 /** The street lamps, and the way each arm reaches (0 = +z: our side's, which reach out over the road). */
-export const STREET_LAMPS = STREET_PLAN.lamps.map((lamp) => ({ at: inFlatFrame(lamp.at), yaw: lamp.yaw }));
+export const STREET_LAMPS = STREET_PLAN.lamps.map((lamp) => ({ at: inFlatFrame(lamp.at), yaw: lamp.yaw, design: lamp.design ?? ('arm' as const) }));
 /** The lamp heads' height over the pavement. */
 export const LAMP_HEIGHT = STREET_PLAN.lampHeight;
 
@@ -145,19 +146,22 @@ export type Span = readonly [number, number];
 const span = (a: number, b: number): Span => [Math.min(a, b), Math.max(a, b)];
 
 /**
- * The two roadworks closing the walkable street (`street/details/roadworks`): across Front Street at
- * x `front.x` (spans in z), across Park Street at z `park.z` (spans in x); a hoarding over each
- * pavement, barriers over the parking lanes, the traffic lanes between them open to a roadworker.
+ * The two roadworks closing the walkable street now (`street/details/roadworks` `closures()`: Front Street's move on
+ * past the first stretch after a fortnight of market days): across Front Street at x `front.x` (spans in z), across
+ * Park Street at z `park.z` (spans in x); a hoarding over each pavement, barriers over the parking lanes, the traffic
+ * lanes between them open to a roadworker.
  */
-export const ROADWORKS = {
-  front: {
-    x: along(WORKS.front),
-    pavements: [span(out(FRONT.ourLine), out(FRONT.nearKerb)), span(out(FRONT.farKerb), out(FRONT.farLine))],
-    parking: [span(out(FRONT.nearKerb), out(-STREET_PLAN.parkingLine)), span(out(STREET_PLAN.parkingLine), out(FRONT.farKerb))],
-  },
-  park: {
-    z: out(WORKS.park),
-    pavements: [span(along(PARK_STREET.line), along(PARK_STREET.nearKerb)), span(along(PARK_STREET.farKerb), along(PARK_STREET.hedge))],
-    parking: [span(along(PARK_STREET.nearKerb), along(PARK_STREET.nearKerb - PARK_PARKING)), span(along(PARK_STREET.farKerb + PARK_PARKING), along(PARK_STREET.farKerb))],
-  },
-} as const;
+export function roadworks() {
+  return {
+    front: {
+      x: along(frontWorksMoved() ? WORKS_LIFT.front : WORKS.front),
+      pavements: [span(out(FRONT.ourLine), out(FRONT.nearKerb)), span(out(FRONT.farKerb), out(FRONT.farLine))],
+      parking: [span(out(FRONT.nearKerb), out(-STREET_PLAN.parkingLine)), span(out(STREET_PLAN.parkingLine), out(FRONT.farKerb))],
+    },
+    park: {
+      z: out(WORKS.park),
+      pavements: [span(along(PARK_STREET.line), along(PARK_STREET.nearKerb)), span(along(PARK_STREET.farKerb), along(PARK_STREET.hedge))],
+      parking: [span(along(PARK_STREET.nearKerb), along(PARK_STREET.nearKerb - PARK_PARKING)), span(along(PARK_STREET.farKerb + PARK_PARKING), along(PARK_STREET.farKerb))],
+    },
+  } as const;
+}

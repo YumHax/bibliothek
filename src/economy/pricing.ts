@@ -1,4 +1,4 @@
-import type { BoxCondition, Edition, Game, PlatformId } from '@/catalog/types';
+import type { BoxCondition, CopyVariant, Edition, Game, PlatformId } from '@/catalog/types';
 import type { Views } from './Fame';
 import { hash01 } from './seeded';
 
@@ -128,7 +128,9 @@ export const BIN_WHERE = 'the bargain bin';
 /** The street's flat-price copies' receipts (a garage sale, the box of cast-offs): capped at the desk like the bin's. */
 export const GARAGE_WHERE = 'a garage sale on Front Street';
 export const GIVEAWAY_WHERE = 'a box of cast-offs on Front Street';
-const FLAT_PRICE_WHERES: ReadonlySet<string> = new Set([BIN_WHERE, GARAGE_WHERE, GIVEAWAY_WHERE]);
+/** A game out of a sealed box lot (`economy/boxLots.ts`): its receipt is its share of the carton's price, capped at the desk like the bin's. */
+export const SEALED_WHERE = 'a sealed box lot';
+const FLAT_PRICE_WHERES: ReadonlySet<string> = new Set([BIN_WHERE, GARAGE_WHERE, GIVEAWAY_WHERE, SEALED_WHERE]);
 /** How the mystery game's receipt names where it came from (paid in tickets: its price on the receipt is 0). */
 export const PRIZE_WHERE = 'the prize counter';
 
@@ -192,6 +194,39 @@ export const NEGOTIATION = {
 export const EDITION_FACTOR = { firstPrint: 1.45, standard: 1, budget: 0.75 } as const;
 export const EDITION_ODDS = { firstPrint: 0.08, budget: 0.18 };
 /** What each platform's budget re-release line was called. */
+/**
+ * What sets a copy apart (`economy/copyTraits`): how often an ordinary stall copy is one, and what it does to its
+ * price, everywhere alike (the stall, the WE BUY desk, a swap, a WANTED card, the collection's value), so buying to
+ * sell back still never pays. `sealed` only on a complete, genuine copy (never opened: the stallholder will not let it
+ * be, and the seal broken at home it is worth its ordinary price); `crushed` is commoner in the bargain bin.
+ * `showpieceBoost` multiplies the sealed odds on a collector's piece (a showpiece, an estate sale).
+ */
+export const VARIANT = {
+  sealed: { odds: 0.025, factor: 2.2 },
+  misprint: { odds: 0.012, factor: 2.6 },
+  crushed: { odds: 0.07, binOdds: 0.25, factor: 0.75 },
+  showpieceBoost: 4,
+} as const satisfies Record<CopyVariant, { odds: number; factor: number; binOdds?: number }> & { showpieceBoost: number };
+
+/** How a copy's variant moves its price (1 for none). */
+export function variantFactor(game: Pick<Game, 'variant'>): number {
+  // A save from another build may name a variant this one does not know: no factor, never a throw.
+  const known: { factor: number } | undefined = game.variant ? VARIANT[game.variant] : undefined;
+  return known?.factor ?? 1;
+}
+
+/**
+ * A copy's past (`copyTraits`): the share of second-hand copies that carry one (a name in marker, a save, a note...),
+ * found on opening the box. Flavour only: it moves no price.
+ */
+export const PAST_ODDS = 0.3;
+
+/**
+ * Unlicensed cartridges (`catalog/bootlegs`): the chance a market day's bargain bin holds one, and that an ordinary
+ * stall find on a cartridge platform is one instead. Priced like any game no article knows (fame "none").
+ */
+export const BOOTLEG = { binOdds: 0.45, stallOdds: 0.02 } as const;
+
 export const BUDGET_LABEL: Record<PlatformId, string> = {
   nes: 'Classic Series',
   snes: "Player's Choice",
@@ -212,6 +247,11 @@ export const CONDITION_ODDS = { worn: 0.1, noManual: 0.2 } as const;
 
 /** Share of a stall's ordinary finds that are Japanese imports, and their price against a western copy's. */
 export const IMPORT = { odds: 0.07, price: 0.7 };
+/**
+ * A homebrew NES cart (`emulator/homebrew`: plays for real on the TV) on the NES stall: the share of market days one
+ * is there (one the player does not own yet), and its price (coins: new, from a small run, whatever its fame).
+ */
+export const HOMEBREW = { odds: 0.45, price: 90 };
 /** Chance a market day that one stall has a first print of a game the player owns in an ordinary printing. */
 export const UPGRADE_ODDS = 0.5;
 
@@ -254,8 +294,14 @@ export const COFFEE_PRICE = 2;
 
 // --- Front Street and the landing: the street's prices, the collector's markup, the neighbours' swaps ---
 
-/** The bakery's croissant and the bar's lemonade (for the pleasure of it), coins. */
-export const STREET_TREATS = { croissant: 1, lemonade: 2 } as const;
+/**
+ * What the shops along Front Street sell over the counter to be used up (`errands/`), coins: the bakery's croissant,
+ * the bar's lemonade, the butcher's scrap for the stray, the pet shop's pouch of treats (three portions), the florist's
+ * bunch of the season's flowers.
+ */
+export const STREET_TREATS = { croissant: 1, lemonade: 2, scrap: 1, treats: 2, bunch: 2 } as const;
+/** How many of each a real day a shop will sell (the rest: "that's enough for today"). */
+export const STREET_TREATS_PER_DAY = { croissant: 2, lemonade: 3, scrap: 2, treats: 1, bunch: 2 } as const;
 
 /**
  * The newsagent's PIXEL SCRATCH card (`street/shops/scratchCard.ts`): its price, how many one player
@@ -274,12 +320,60 @@ export const SCRATCH = {
 export const TRADER_MARKUP = 1.25;
 
 /**
+ * The saleroom behind the flea market (`economy/auction.ts`, `AuctionHouse`): a sale every `every` market days from
+ * `offset` (a quiet day of the week round, the first one three days into a new game), `lots.games` games and `lots.sealed` sealed cartons, called between
+ * game hours `hours`. A lot opens at `reserve` of its shop price (times its condition and printing, like the stalls:
+ * over the WE BUY desk's top share, so a lot nobody else wants is a bargain, never a press); the room expects it to
+ * fetch about `estimate` of that. Silence after a bid: `call` seconds to "going once", as much to "twice", as much to
+ * the hammer; a lot nobody opens in `openSilence` seconds is passed. `pause` between two lots.
+ */
+export const AUCTION = {
+  every: 7,
+  offset: 3,
+  lots: { games: 4, sealed: 2 },
+  hours: [9, 22] as readonly [number, number],
+  reserve: 0.36,
+  estimate: [0.68, 0.95] as readonly [number, number],
+  firstPrintOdds: 0.25,
+  call: 2.6,
+  openSilence: 7,
+  pause: 5,
+} as const;
+
+/**
+ * Sealed box lots (`economy/boxLots.ts`): a taped carton bought blind, unpacked at home one thing at a time.
+ * `items` things in it, each a game with `gameOdds` (else junk: cables, a magazine, now and then loose coins);
+ * a game is now and then (`bootlegOdds`) an unlicensed cartridge; one carton in `gemOdds` hides a well-known title. Priced by weight: `perItem` coins a thing, so a heavy carton costs
+ * more and says so, not what is in it. The flea market sells `perDay` by the job lot (`marketShare` of that price);
+ * the saleroom puts `AUCTION.lots.sealed` under the hammer. A game the player has already counts `duplicateShare` of
+ * its share of the price in coins (the buyer takes it off them).
+ */
+export const SEALED_LOT = { items: [3, 7] as readonly [number, number], gameOdds: 0.5, bootlegOdds: 0.12, gemOdds: 0.16, perItem: 34, marketShare: 1, perDay: 1, duplicateShare: 0.6, coinsOdds: 0.25, coins: [1, 4] as readonly [number, number] } as const;
+
+/**
+ * The rival collector (`economy/rivalCollector.ts`): at the flea market on `marketOdds` of market days between
+ * `hall.hours`, after the priciest copy on the stalls; he says which and where, browses `hall.browse` seconds first
+ * (the player's head start), then takes it if it is still there. His takes wait in his suitcase on Front Street for
+ * `haulDays` market days at `TRADER_MARKUP`. In the saleroom he bids hardest on the star lot, a little harder each
+ * time the player beat him (`keenness`: per win, capped).
+ */
+export const RIVAL = { marketOdds: 0.45, hall: { hours: [9, 17] as readonly [number, number], arrive: 9, browse: 55, look: 4 }, haulDays: 3, keenness: { perWin: 0.04, max: 0.2 } } as const;
+
+/**
  * The neighbours' swaps (`NeighbourTrades`): the share of market days a resident slips a note under the
  * door (`odds`), the market days an offer stands (`lasts`), the owned games before anyone asks
  * (`minOwned`), the resident's games considered (`candidates`), and what they give against what they
  * get (`fair`: its worth over the player's game's, within the range, nearest `ideal`).
  */
 export const NEIGHBOUR_SWAPS = { odds: 0.35, lasts: 3, minOwned: 3, candidates: 10, fair: [0.8, 1.35] as readonly [number, number], ideal: 1.05 } as const;
+
+/**
+ * The estate sale in the entrance hall (`building/estateSale`): once, from game day `fromDay` (or `notice` days after
+ * a save first looks), for `days` days. `copies` games on the tables, at `discount` of the shop price (a family
+ * clearing a flat, haggled like a stall); a grail at the bottom of the crate at `grailShare` of its own price (they
+ * do not know what it is).
+ */
+export const ESTATE_SALE = { fromDay: 25, notice: 3, mourning: 5, days: 3, copies: 9, discount: 0.62, grailShare: 0.3 } as const;
 
 /**
  * Changing one's mind after buying: within this many seconds, for this share of the full price back
@@ -305,7 +399,8 @@ export const RIVAL_BUYING = { meanSeconds: 55, maxShare: 0.25 };
  * reach. Level 2 opens the glass case; every level adds to what the WE BUY desk pays.
  */
 export const REPUTATION = {
-  points: { buy: 1, sell: 1, deal: 1, swap: 1, lot: 2, wanted: 3, set: 10 },
+  // `openHouse`: an open house the paper wrote up (`visitors/gathering/OpenHouse`).
+  points: { buy: 1, sell: 1, deal: 1, swap: 1, lot: 2, wanted: 3, set: 10, openHouse: 5 },
   levels: [
     { at: 0, name: 'Newcomer' },
     { at: 10, name: 'Regular' },
@@ -347,12 +442,12 @@ export function shopPrice(game: Pick<Game, 'id' | 'platform'>, views: Views): nu
 }
 
 /** What the market asks for a copy in `condition` (and `edition`), given its fame and the day's discount in [MARKET_DISCOUNT.min, max]. */
-export function marketPrice(game: Pick<Game, 'id' | 'platform'>, views: Views, condition: BoxCondition, discount: number, edition: Edition = 'standard'): number {
-  return Math.max(1, Math.round(shopPrice(game, views) * discount * CONDITION_FACTOR[condition] * EDITION_FACTOR[edition]));
+export function marketPrice(game: Pick<Game, 'id' | 'platform' | 'variant'>, views: Views, condition: BoxCondition, discount: number, edition: Edition = 'standard'): number {
+  return Math.max(1, Math.round(shopPrice(game, views) * discount * CONDITION_FACTOR[condition] * EDITION_FACTOR[edition] * variantFactor(game)));
 }
 
 /** What a dealer reads off a copy: `Game` minus what does not move its price. */
-export type DealtCopy = Pick<Game, 'id' | 'platform' | 'condition' | 'edition' | 'repro' | 'restored' | 'sticker' | 'region' | 'acquired'>;
+export type DealtCopy = Pick<Game, 'id' | 'platform' | 'condition' | 'edition' | 'repro' | 'restored' | 'sticker' | 'region' | 'acquired' | 'variant'>;
 
 /**
  * What the WE BUY desk offers for `game` (its condition, edition, a Japanese import's lower price;
@@ -438,9 +533,9 @@ export function receiptCap(game: Pick<Game, 'acquired'>): number {
  * pays), less an old price sticker left on the cover, less again for a Japanese import (the stall
  * sold it at `IMPORT.price`, so must the desk).
  */
-function dealerFactor(game: Pick<Game, 'condition' | 'restored' | 'sticker' | 'region'>): number {
+function dealerFactor(game: Pick<Game, 'condition' | 'restored' | 'sticker' | 'region' | 'variant'>): number {
   const condition = game.restored ? 'worn' : game.condition ?? 'complete';
-  return CONDITION_FACTOR[condition] * (game.sticker ? STICKER.factor : 1) * (isImport(game) ? IMPORT.price : 1);
+  return CONDITION_FACTOR[condition] * (game.sticker ? STICKER.factor : 1) * (isImport(game) ? IMPORT.price : 1) * variantFactor(game);
 }
 
 /**
@@ -563,17 +658,23 @@ export const PRIZE_TICKETS = {
  */
 export const HOME_GOOD_PRICES = {
   // The market's household stall.
-  rug: 120, lamp: 90, poster: 60,
+  rug: 120, lamp: 90, poster: 60, record: 25,
   // The furniture shop.
   armchair: 70, floorLamp: 55, sideTable: 30, livingRug: 45, floorCushions: 20, sideboard: 110, framedPrint: 15,
   bed: 120, nightstands: 50, dresser: 90, readingCorner: 80, bedroomRug: 35, mirror: 30,
   kitchenTable: 70, kitchenRug: 20, bathMat: 10, hallStand: 30, bistroSet: 60,
+  // The displays for the collection's showpieces, and the label maker for the shelves (`world/showcase`, `world/labels`).
+  displayCase: 95, pedestal: 65, labelMaker: 8,
   // The TV repair shop.
-  crt: 300, projector: 550, speakers: 120, bedroomTv: 150, radio: 40, appliances: 45,
+  crt: 300, projector: 550, speakers: 120, bedroomTv: 150, radio: 40, appliances: 45, homeArcade: 420,
+  // The TV repair shop's region converters (`economy/regionLock`): a Japanese copy runs at home with its platform's.
+  famicomAdapter: 35, superFamicomAdapter: 45, megaDriveConverter: 35, n64Passthrough: 50, ps1ModChip: 60,
   // The florist.
   houseplant: 14, plant: 12,
   // The pet shop.
   cat: 60, scratcher: 25, catToy: 5,
+  // Mrs Roux's two rooms next door (the agency's sign on her door): the endgame's goal, near three projectors.
+  annex: 1500,
 } as const;
 
 // --- The market's calendar of events: grails, the monthly big market, sales (see `marketEvents.ts`) ---
@@ -659,6 +760,10 @@ function assertBuyingToSellNeverPays(): void {
     lot: ((MARKET_DISCOUNT.min + MARKET_DISCOUNT.max) / 2) * JOB_LOT.share,
     forSale: FOR_SALE_AD.share[0] * FOR_SALE_AD.noManualFactor / CONDITION_FACTOR.noManual,
     order: MARKET_ORDER.share * SALES.catalogue.factor,
+    // The saleroom's opening bid (a lot nobody else wants goes at it); a sealed lot's games are capped at their share.
+    auction: AUCTION.reserve,
+    // The building's own seller: the estate sale's tables (a family's haggle). A neighbour's shelf sells nothing.
+    estate: ESTATE_SALE.discount * NEGOTIATION.lowestWorn,
   };
   for (const [way, share] of Object.entries(ways)) {
     if (share <= topDesk) {

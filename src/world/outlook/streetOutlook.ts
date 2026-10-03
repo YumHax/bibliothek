@@ -2,29 +2,20 @@ import * as THREE from 'three';
 import { isUpdatable, type Updatable } from '@/core/Engine';
 import { QUALITY } from '@/graphics/quality';
 import type { DayNight } from '../props/DayNight';
-import { PARK_TREES, STREET_TREES } from '../city/trees';
-import { PARKED_CARS } from '../city/parkedCars';
 import { StreetLighting } from '../street/StreetLighting';
 import { SkyDome } from '../street/SkyDome';
 import { SkyReflection } from '../street/SkyReflection';
-import { LAWN_REACH, LAWN_Y, StreetGround } from '../street/StreetGround';
-import { StreetPark } from '../street/StreetPark';
-import { Buildings } from '../street/Buildings';
-import { FacadeRelief } from '../street/relief/FacadeRelief';
-import { Shutters } from '../street/relief/Shutters';
-import { ShopGlow } from '../street/relief/ShopGlow';
-import { ShopfrontRelief } from '../street/shopfronts/ShopfrontRelief';
-import { StreetLamps } from '../street/StreetLamps';
-import { StreetTrees } from '../street/StreetTrees';
-import { StreetCars } from '../street/StreetCars';
 import { StreetTraffic } from '../street/traffic/StreetTraffic';
-import { StreetFurniture } from '../street/StreetFurniture';
 import { Precipitation } from '../street/Precipitation';
+import { buildStreetBase, buildStreetFixtures, buildStreetFronts, sceneryAnisotropy } from '../street/streetScenery';
 import { airColor, airDensity } from '../street/streetAir';
-import { FACADES, STREET_PLAN, type FacadeSpec, type Vec2 } from '../street/streetPlan';
+import { fadeSunShadowEdges } from '../street/shadowFade';
+import { FACADES, type FacadeSpec, type Vec2 } from '../street/streetPlan';
+import type { WindowLife } from '../street/windowLife';
 import { Courtyard } from './Courtyard';
 import { COURTYARD_YARD } from './outlookPlan';
 import { disposeOutlookScene, type OutlookContents } from './OutlookView';
+import type { HomeUpgrades } from '@/economy/HomeUpgrades';
 
 export interface StreetOutlookOptions {
   dayNight: DayNight;
@@ -34,9 +25,12 @@ export interface StreetOutlookOptions {
   eye: Vec2;
   /** Facades not built: the one the window is in (its back would stand between the eye and the view). */
   without: readonly string[];
+  /** Whose homes the lit windows are and the stories behind them (`building/rearWindows`); none: the curfews. */
+  windowLife?: WindowLife;
+  /** What the flat has bought: our balcony's plants and bistro set show as in the street (none: all shown). */
+  upgrades?: HomeUpgrades;
 }
 
-const ANISOTROPY = 8;
 /** How far from the window a facade is built (m), and within what distance it is painted at the street's finest. */
 const REACH = 110;
 const FINE_WITHIN = 35;
@@ -57,7 +51,7 @@ const REFLECT_EVERY = 20;
  * (the people, the doors, the sounds, the shops' insides) is left out. Loaded in the street's chunk (a dynamic import).
  */
 export function buildStreetOutlook(camera: THREE.Camera, options: StreetOutlookOptions): OutlookContents {
-  const { dayNight, lightDirection, eye, without } = options;
+  const { dayNight, lightDirection, eye, without, windowLife, upgrades } = options;
   const scene = new THREE.Scene();
   scene.name = 'StreetOutlook';
   const fog = new THREE.FogExp2(0x000000, 0);
@@ -72,24 +66,18 @@ export function buildStreetOutlook(camera: THREE.Camera, options: StreetOutlookO
   const lighting = add(new StreetLighting(dayNight, camera, lightDirection, { shadowMapSize: QUALITY.level === 'high' ? 2048 : 1024, shadowReach: 32 }));
   lighting.setOccupied(true);
   const dome = add(new SkyDome(dayNight, camera));
-  add(new StreetGround(dayNight, ANISOTROPY));
-  add(new StreetPark({ anisotropy: ANISOTROPY, lawnY: LAWN_Y, reach: LAWN_REACH.x }));
-  const buildings = add(new Buildings(facadesInView(eye, without), dayNight, { detailScale: QUALITY.level === 'low' ? 0.6 : 1, anisotropy: ANISOTROPY, shopGoods: null, nightScale: QUALITY.level === 'high' ? 0.5 : 0.25 }));
-  const fronts = buildings.fronts;
-  add(new FacadeRelief(fronts));
-  add(new ShopfrontRelief(fronts, dayNight));
-  add(new Shutters(fronts, dayNight));
-  add(new ShopGlow(fronts, dayNight));
-  const plan = STREET_PLAN;
-  add(new StreetLamps(dayNight, { lamps: plan.lamps, height: plan.lampHeight, lights: LAMP_LIGHTS[QUALITY.level], viewer: camera }));
-  add(new StreetTrees(dayNight, [...STREET_TREES, ...PARK_TREES, COURTYARD_YARD.chestnut]));
+  // The street's own scenery (`street/streetScenery`): ground, park, the facades facing the window with their relief,
+  // lamps, trees (the courtyard's chestnut among them), parked and passing cars, furniture. No colliders, no manoeuvres.
+  const detailScale = QUALITY.level === 'low' ? 0.6 : 1;
+  const { buildings } = buildStreetBase(add, { dayNight, facades: facadesInView(eye, without), detailScale, shopGoods: null, ...(windowLife ? { windowLife } : {}) });
+  buildStreetFronts(add, buildings.fronts, dayNight, upgrades ? { upgrades } : {});
   const traffic = add(new StreetTraffic());
-  add(new StreetCars(dayNight, { parked: PARKED_CARS, ...plan.traffic, cars: plan.traffic.carsByQuality[QUALITY.level], viewer: camera, traffic }));
-  add(
-    new StreetFurniture({ shelter: plan.shelter, benches: plan.benches, bins: plan.bins, hedge: plan.hedge, railings: plan.railings, gate: { z: plan.parkGate.at[1], width: plan.parkGate.width }, anisotropy: ANISOTROPY, dayNight }),
-  );
+  buildStreetFixtures(add, { dayNight, viewer: camera, traffic, lampLights: LAMP_LIGHTS[QUALITY.level], moreTrees: [COURTYARD_YARD.chestnut] });
   add(new Precipitation(dayNight));
-  add(new Courtyard(dayNight, ANISOTROPY));
+  add(new Courtyard(dayNight, sceneryAnisotropy()));
+
+  // The sun's shadow fades out at its map's edge into the rows' far shadow, as in the street itself.
+  fadeSunShadowEdges(scene, lighting.far);
 
   const updatables: Updatable[] = items.filter((item): item is THREE.Object3D & Updatable => isUpdatable(item));
   // The air: the street's haze, as its lighting hands it to the street's own scene.
@@ -128,7 +116,7 @@ export function buildStreetOutlook(camera: THREE.Camera, options: StreetOutlookO
  * The facades seen from `eye`: within `REACH` of it, their face turned towards it, less `without`; the near ones
  * painted as finely as the street's nearest (a courtyard's rear building is seen from 15 m, not from the far pavement).
  */
-function facadesInView(eye: Vec2, without: readonly string[]): FacadeSpec[] {
+export function facadesInView(eye: Vec2, without: readonly string[]): FacadeSpec[] {
   const [ex, ez] = eye;
   const seen: FacadeSpec[] = [];
   for (const spec of FACADES) {

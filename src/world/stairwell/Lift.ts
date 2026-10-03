@@ -1,19 +1,17 @@
 import * as THREE from 'three';
 import type { Updatable } from '@/core/Engine';
 import type { Collisions } from '@/core/Collider';
-import type { Interactable } from '@/interaction/Interactable';
 import type { SessionActions } from '@/game/SessionActions';
 import { audioBus, startedAudioContext } from '@/audio/audioContext';
-import { QUALITY } from '@/graphics/quality';
-import { createCanvas, toTexture } from '@/covers/generated/canvasUtils';
-import { boxMesh, invisibleHitbox } from '../meshUtils';
-import { markShared } from '../materials/sharedResources';
 import { Prop } from '../props/Prop';
-import { PROUD } from '../props/joinery';
-import { coverageKeepsAlpha, paint, standard } from '../materials/palette';
 import type { OccupancyAware } from '../Furniture';
 import { STAIRWELL_PLAN as plan, STOREYS, landingY } from './stairwellPlan';
 import { liftGate } from './stairRoutes';
+import { mainsOn } from '@/building/mains';
+import { coproChoice } from '@/building/coproState';
+import { AtticRide, type LiftCarState, type LiftPhase } from './liftAttic';
+import { CAGE, GATE_HEIGHT, STOPS, buildCage, buildCar, panelY, panelZ } from './liftBody';
+import { LiftButton, PANEL_BUTTON } from './LiftButton';
 
 export interface LiftOptions {
   /** The zone's collision set: the gates' boxes come and go as they open and shut (world space). */
@@ -21,8 +19,6 @@ export interface LiftOptions {
   /** The ears (the camera): the motor and the gates are heard from where it is. */
   listener: THREE.Object3D;
 }
-
-type Phase = 'shut' | 'opening' | 'open' | 'closing' | 'moving';
 
 /** What a rider's trip in the lift hooks into (`Lift.carry`): all optional. */
 export interface LiftRide {
@@ -39,14 +35,11 @@ export interface LiftRides {
   carry(from: number, to: number, ride: LiftRide): boolean;
 }
 
-/** The floors it stops at: every landing, ours (0) down to the entrance hall's (`STOREYS`). */
-const STOPS = Array.from({ length: STOREYS + 1 }, (_, k) => k);
 /** The two ends of its run, the only floors it comes to and sets off from by itself. */
 const isEnd = (k: number): boolean => k === 0 || k === STOREYS;
-/** The car's panel: one button a floor, this far apart (m), round this height in the car. */
-const PANEL_PITCH = 0.075;
-const PANEL_Y = 1.2;
 const GATE_SECONDS = 0.45;
+/** The car's speed once the co-ownership voted its overhaul, times `liftSpeed`. */
+const OVERHAULED_SPEED = 1.5;
 /** Standing in the car this long with its gate open sends it to the other stop (s). */
 const DEPART_AFTER = 0.6;
 /** The gate folds open by itself for anyone this close to it with the car behind it (m). */
@@ -57,14 +50,6 @@ const BOARD_S = 1.1;
 const RIDE_GIVE_UP_S = 45;
 /** The eye over the feet (the player's), to know which landing they stand on. */
 const EYE = 1.7;
-const GATE_HEIGHT = 2.15;
-const CAGE = { x0: plan.car.x0 - 0.05, x1: plan.car.x1 + 0.05, z0: plan.car.z0 - 0.05, z1: plan.car.z1 + 0.05 };
-const TOP = landingY(0) + 2.8;
-const WOOD = paint(0x5a3120, 0.45);
-/** The lift's brass (each button lights a copy of its own on hover): kept across the stairwell's unloads. */
-const BRASS = markShared(new THREE.MeshStandardMaterial({ color: 0xc9a75b, metalness: 1, roughness: 0.32, emissive: 0xffb050, emissiveIntensity: 0 }));
-// Painted wrought iron: a dielectric (metalness 0).
-const IRON = standard({ color: 0x1c1d20, roughness: 0.45, metalness: 0 });
 
 /**
  * The old lift in the stairwell's well: an iron cage the full height of the building, a wooden car
@@ -83,13 +68,10 @@ export class Lift extends Prop implements Updatable, OccupancyAware, LiftRides {
   /** The panel's buttons, one a floor, and the floor each sends the car to. */
   private readonly panel: { button: LiftButton; k: number }[] = [];
   private readonly car = new THREE.Group();
-  private readonly gates = new Map<number, THREE.Mesh>();
+  private readonly gates: Map<number, THREE.Mesh>;
   private readonly lamp: THREE.MeshBasicMaterial;
-  private phase: Phase = 'shut';
-  private stop = 0;
-  private target = 0;
-  private y = landingY(0);
-  private gate = 0;
+  /** The car: its height (local), the stop it is at or left, the one it goes to, its gate (0 shut .. 1 open), what it is doing. */
+  private readonly state: LiftCarState = { y: landingY(0), stop: 0, target: 0, gate: 0, phase: 'shut' };
   /** World boxes: the gate at each stop, and the car's open front while it moves. */
   private gateBoxes = new Map<number, THREE.Box3>();
   private readonly frontBox = new THREE.Box3();
@@ -115,13 +97,54 @@ export class Lift extends Prop implements Updatable, OccupancyAware, LiftRides {
   private playerAboard = false;
   /** A resident's ride under way (`carry`). */
   private errand: (LiftRide & { from: number; to: number; stage: 'fetch' | 'board' | 'ride'; wait: number; left: number }) | null = null;
+  private clock = 0;
+  /** The code's ride past our landing to the attic, and the car kept for the player while they are up there. */
+  private readonly attic = new AtticRide({
+    car: this.state,
+    send: (k) => this.send(k, false),
+    settle: () => {
+      this.render();
+      this.syncColliders();
+    },
+  });
+
+  private get phase(): LiftPhase {
+    return this.state.phase;
+  }
+  private set phase(phase: LiftPhase) {
+    this.state.phase = phase;
+  }
+  private get stop(): number {
+    return this.state.stop;
+  }
+  private set stop(k: number) {
+    this.state.stop = k;
+  }
+  private get target(): number {
+    return this.state.target;
+  }
+  private set target(k: number) {
+    this.state.target = k;
+  }
+  private get y(): number {
+    return this.state.y;
+  }
+  private set y(y: number) {
+    this.state.y = y;
+  }
+  private get gate(): number {
+    return this.state.gate;
+  }
+  private set gate(open: number) {
+    this.state.gate = open;
+  }
 
   constructor(private readonly options: LiftOptions) {
     super();
     this.name = 'Lift';
-    this.buildCage();
+    this.gates = buildCage(this);
     this.lamp = new THREE.MeshBasicMaterial({ color: 0xffe2b0 });
-    this.buildCar();
+    buildCar(this.car, this.lamp);
     this.add(this.car);
     // The buttons are placed in the zone on their own (to be clickable); the one in the car rides with it (`render`).
     for (const k of STOPS) {
@@ -161,6 +184,9 @@ export class Lift extends Prop implements Updatable, OccupancyAware, LiftRides {
   setOccupied(occupied: boolean): void {
     this.occupied = occupied;
     if (!occupied) this.hum?.gain.gain.setTargetAtTime(0, this.hum.ctx.currentTime, 0.2);
+    // Gone up to the attic: the car is back on our landing, shut, for whoever comes down (the attic's car brings them).
+    if (!occupied) this.attic.left();
+    if (occupied && this.attic.cameBack()) this.phase = 'opening';
   }
 
   dispose(): void {
@@ -178,15 +204,61 @@ export class Lift extends Prop implements Updatable, OccupancyAware, LiftRides {
    * still run, so nobody is left waiting at a gate.
    */
   carry(from: number, to: number, ride: LiftRide): boolean {
-    if (this.errand || from === to || this.phase === 'moving' || this.target !== this.stop || this.playerAboard) return false;
+    if (!mainsOn()) return false;
+    if (this.errand || this.attic.active || from === to || this.running || this.target !== this.stop || this.playerAboard) return false;
     this.errand = { ...ride, from, to, stage: 'fetch', wait: 0, left: RIDE_GIVE_UP_S };
     if (this.stop !== from) this.send(from, false);
     else if (this.phase === 'shut' || this.phase === 'closing') this.phase = 'opening';
     return true;
   }
 
+  /** The car's floor height now (local): between two landings while it is stuck. */
+  get carFloor(): number {
+    return this.y;
+  }
+
+  /** Whether the car stands between two landings (a power cut caught it on its way). */
+  get isBetweenFloors(): boolean {
+    return this.phase === 'moving';
+  }
+
+  /** Kept for the player: up in the attic (they come back down in this car, on our landing) or on the code's ride. */
+  get isHeldForPlayer(): boolean {
+    return this.attic.held;
+  }
+
+  /**
+   * A power cut catches the car on its way from landing `k` down to `k + 1`, half way, gate shut, nobody's ride under
+   * way: it stays there until the power comes back, then goes on down (`building/blackout`).
+   */
+  strand(k: number): void {
+    this.errand = null;
+    this.stop = k;
+    this.target = Math.min(STOREYS, k + 1);
+    this.y = (landingY(k) + landingY(this.target)) / 2;
+    this.gate = 0;
+    this.phase = 'moving';
+    this.autoDeparture = false;
+    this.render();
+  }
+
   update(dt: number): void {
+    this.clock += dt;
     if (!this.laidOut) this.layOut();
+    // A power cut (`building/mains`): the car stays where it is, between two floors if it was moving, its gate as it was.
+    // Except on the climb to the attic: that old motor was never on the building's circuit, and it never stops halfway.
+    if (!mainsOn()) {
+      if (this.phase === 'climbing') this.attic.climb(dt);
+      // A gate already folding open goes on by hand (the player back down from the attic in the dark, never shut in).
+      if (this.phase === 'opening') {
+        this.gate = Math.min(1, this.gate + dt / GATE_SECONDS);
+        if (this.gate >= 1) this.phase = 'open';
+      }
+      this.render();
+      this.syncColliders();
+      this.sound();
+      return;
+    }
     this.autoPilot(dt);
     this.runErrand(dt);
     switch (this.phase) {
@@ -207,7 +279,7 @@ export class Lift extends Prop implements Updatable, OccupancyAware, LiftRides {
         this.gate = Math.max(0, this.gate - dt / GATE_SECONDS);
         if (this.gate <= 0) {
           this.clank();
-          this.phase = this.target === this.stop ? 'shut' : 'moving';
+          this.phase = this.target === this.stop ? this.attic.restAt('shut') : 'moving';
         }
         break;
       case 'moving': {
@@ -216,17 +288,21 @@ export class Lift extends Prop implements Updatable, OccupancyAware, LiftRides {
         const left = Math.abs(goal - this.y);
         const done = Math.abs(from - this.y);
         // Easing off near either end (the last 1.6 m), a lift's gentle start and stop.
-        const speed = plan.liftSpeed * Math.min(1, 0.2 + Math.min(left, done) / 2);
+        // Overhauled by the co-ownership (`building/coproState`): new cables and motor, a faster car.
+        const speed = plan.liftSpeed * (coproChoice('lift') === 'overhaul' ? OVERHAULED_SPEED : 1) * Math.min(1, 0.2 + Math.min(left, done) / 2);
         const step = Math.min(left, speed * dt);
         this.y += Math.sign(goal - this.y) * step;
         if (left - step < 0.002) {
           this.y = goal;
           this.stop = this.target;
-          this.phase = 'opening';
+          this.phase = this.attic.restAt('opening');
           this.clank();
         }
         break;
       }
+      case 'climbing':
+        this.attic.climb(dt);
+        break;
       default:
         break;
     }
@@ -235,22 +311,29 @@ export class Lift extends Prop implements Updatable, OccupancyAware, LiftRides {
     this.sound();
   }
 
+  /** Moving between floors or climbing to the attic. */
+  private get running(): boolean {
+    return this.phase === 'moving' || this.phase === 'climbing';
+  }
+
   private callLabel(k: number): string {
-    if (this.target === k && (this.phase === 'moving' || this.target !== this.stop)) return 'The lift is on its way';
-    if (this.phase === 'moving' || this.target !== this.stop) return 'The lift is busy';
+    if (this.target === k && (this.running || this.target !== this.stop)) return 'The lift is on its way';
+    if (this.running || this.target !== this.stop) return 'The lift is busy';
     if (this.stop === k) return 'The lift is here';
     return 'The lift · call';
   }
 
   private rideLabel(k: number): string {
     const floor = floorName(k);
-    if (this.target === k && (this.phase === 'moving' || this.target !== this.stop)) return `Going to ${floor}…`;
-    if (this.stop === k && this.phase !== 'moving') return `This is ${floor}`;
+    if (this.attic.active) return 'Going up…';
+    if (this.target === k && (this.running || this.target !== this.stop)) return `Going to ${floor}…`;
+    if (this.stop === k && !this.running) return `This is ${floor}`;
     return `${floor[0]!.toUpperCase()}${floor.slice(1)} · go`;
   }
 
   private call(k: number, session: SessionActions): void {
-    if (this.phase === 'moving') {
+    if (!mainsOn()) return session.refuse('Nothing: no power in the building.');
+    if (this.running || this.attic.active) {
       session.react(this.target === k ? 'The lift is on its way.' : `The lift is busy, off to ${floorName(this.target)}.`);
       return;
     }
@@ -266,8 +349,12 @@ export class Lift extends Prop implements Updatable, OccupancyAware, LiftRides {
 
   /** The panel in the car: off to floor `k` at once, even on the way elsewhere (then it turns there). */
   private ride(k: number, session: SessionActions): void {
+    if (!mainsOn()) return session.refuse('The button stays dark: no power.');
+    if (this.attic.active) return;
     this.armed = false;
     this.autoDeparture = false;
+    // The old code, pressed floor by floor from inside the car: it goes up past our landing, to the attic.
+    if (this.playerAboard && this.attic.pressed(k, this.clock, session)) return;
     if (this.phase === 'moving') {
       if (this.target === k) return;
       this.target = k;
@@ -345,6 +432,7 @@ export class Lift extends Prop implements Updatable, OccupancyAware, LiftRides {
       this.insideFor = 0;
     }
     const at = inCar ? null : this.landingOf(this.eye.x, this.eye.z, feet);
+    if (this.attic.active) return;
     if (this.target !== this.stop) {
       // Leaving by itself, and the rider stepped back out onto the landing: it stays for them.
       if (this.autoDeparture && at === this.stop && (this.phase === 'open' || this.phase === 'closing')) {
@@ -395,7 +483,9 @@ export class Lift extends Prop implements Updatable, OccupancyAware, LiftRides {
       // The lattice folds towards its west post.
       gate.scale.x = 1 - 0.85 * open;
     }
-    this.lamp.color.setScalar(this.phase === 'moving' ? 0.95 : 1);
+    // Climbing to the attic, the car's lamp stutters.
+    const stutter = Math.sin(this.clock * 37) > 0.55 || Math.sin(this.clock * 11.3) > 0.8 ? 0.25 : 0.85;
+    this.lamp.color.setScalar(!mainsOn() ? 0.04 : this.phase === 'moving' ? 0.95 : this.phase === 'climbing' ? stutter : 1);
   }
 
   /** The gate boxes in world space, once placed. */
@@ -421,7 +511,7 @@ export class Lift extends Prop implements Updatable, OccupancyAware, LiftRides {
   private syncColliders(): void {
     const want = new Set<THREE.Box3>();
     for (const [k, box] of this.gateBoxes) if (!(k === this.stop && this.phase === 'open')) want.add(box);
-    if (this.phase === 'moving' || this.phase === 'closing') {
+    if (this.running || this.phase === 'closing') {
       // One box moved in place with the car (the collision set holds it by reference).
       this.frontBox.set(this.scratchMin.set(plan.car.x0, this.y, plan.car.z1 - 0.12), this.scratchMax.set(plan.car.x1, this.y + GATE_HEIGHT, plan.car.z1 - 0.04)).applyMatrix4(this.matrixWorld);
       want.add(this.frontBox);
@@ -459,15 +549,16 @@ export class Lift extends Prop implements Updatable, OccupancyAware, LiftRides {
     this.options.listener.getWorldPosition(this.ear);
     this.car.getWorldPosition(this.here);
     const d = this.ear.distanceTo(this.here);
-    const level = this.occupied && this.phase === 'moving' ? 0.05 / (1 + (d * d) / 20) : 0;
+    const level = this.occupied && this.running && mainsOn() ? 0.05 / (1 + (d * d) / 20) : 0;
     this.hum.gain.gain.setTargetAtTime(level, ctx.currentTime, 0.3);
-    this.hum.osc.frequency.setTargetAtTime(this.phase === 'moving' ? 55 : 45, ctx.currentTime, 0.4);
+    // The climb past the top: the motor labours, lower.
+    this.hum.osc.frequency.setTargetAtTime(this.phase === 'climbing' ? 38 : this.phase === 'moving' ? 55 : 45, ctx.currentTime, 0.4);
   }
 
-  /** A gate folding shut or open: an iron clack. */
+  /** A gate folding shut or open: an iron clack (none once overhauled: new runners, oiled). */
   private clank(): void {
     const ctx = startedAudioContext();
-    if (!ctx || !this.occupied) return;
+    if (!ctx || !this.occupied || coproChoice('lift') === 'overhaul') return;
     this.options.listener.getWorldPosition(this.ear);
     this.car.getWorldPosition(this.here);
     const d = this.ear.distanceTo(this.here);
@@ -483,181 +574,9 @@ export class Lift extends Prop implements Updatable, OccupancyAware, LiftRides {
     osc.start(t);
     osc.stop(t + 0.18);
   }
-
-  /** The iron cage the full height of the shaft: four posts, lattice on three sides, a gate on every landing and lattice between. */
-  private buildCage(): void {
-    const height = TOP;
-    for (const x of [CAGE.x0, CAGE.x1]) {
-      for (const z of [CAGE.z0, CAGE.z1]) {
-        this.add(boxMesh(0.05, height, 0.05, IRON, { x, y: height / 2, z }));
-      }
-    }
-    const lattice = coverageKeepsAlpha(new THREE.MeshStandardMaterial({ map: latticeTexture(), color: 0x2a2b2e, metalness: 0, roughness: 0.5, alphaTest: 0.5, alphaToCoverage: QUALITY.msaa > 0, side: THREE.DoubleSide }));
-    const panel = (width: number, h: number): THREE.PlaneGeometry => {
-      const g = new THREE.PlaneGeometry(width, h);
-      const uv = g.getAttribute('uv') as THREE.BufferAttribute;
-      for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * width * 4, uv.getY(i) * h * 4);
-      return g;
-    };
-    const w = CAGE.x1 - CAGE.x0;
-    const d = CAGE.z1 - CAGE.z0;
-    const sides: [THREE.PlaneGeometry, number, number, number][] = [
-      [panel(d, height), CAGE.x0, (CAGE.z0 + CAGE.z1) / 2, Math.PI / 2],
-      [panel(d, height), CAGE.x1, (CAGE.z0 + CAGE.z1) / 2, Math.PI / 2],
-      [panel(w, height), (CAGE.x0 + CAGE.x1) / 2, CAGE.z0, 0],
-    ];
-    for (const [g, x, z, yaw] of sides) {
-      const mesh = new THREE.Mesh(g, lattice);
-      mesh.position.set(x, height / 2, z);
-      mesh.rotation.y = yaw;
-      this.add(mesh);
-    }
-    // The front: a gate on every landing, lattice between.
-    for (let k = 0; k <= STOREYS; k++) {
-      const y = landingY(k);
-      const g = panel(w - 0.1, GATE_HEIGHT);
-      // Pivot on the west post, so scaling in x folds it towards there.
-      g.translate((w - 0.1) / 2, GATE_HEIGHT / 2, 0);
-      const gate = new THREE.Mesh(g, lattice);
-      gate.position.set(CAGE.x0 + 0.05, y, plan.car.z1 + 0.04);
-      this.add(gate);
-      this.gates.set(k, gate);
-      const above = k === 0 ? TOP - (y + GATE_HEIGHT) : landingY(k - 1) - (y + GATE_HEIGHT);
-      if (above > 0.05) {
-        const fill = new THREE.Mesh(panel(w, above), lattice);
-        fill.position.set((CAGE.x0 + CAGE.x1) / 2, y + GATE_HEIGHT + above / 2, plan.car.z1 + 0.05);
-        this.add(fill);
-      }
-    }
-  }
-
-  /** The car: floor, wooden walls on three sides, a mirror, the ceiling and its lamp, the button panel. */
-  private buildCar(): void {
-    const { car } = plan;
-    const w = car.x1 - car.x0;
-    const d = car.z1 - car.z0;
-    const cx = (car.x0 + car.x1) / 2;
-    const cz = (car.z0 + car.z1) / 2;
-    const add = (g: THREE.BufferGeometry, material: THREE.Material | THREE.Material[], x: number, y: number, z: number): THREE.Mesh => {
-      const mesh = new THREE.Mesh(g, material);
-      mesh.position.set(x, y, z);
-      mesh.castShadow = true;
-      mesh.receiveShadow = true;
-      this.car.add(mesh);
-      return mesh;
-    };
-    // The floor stands PROUD of the floor it stops at: at the bottom, the hall's stone runs under the car.
-    // The wooden boxes, bevelled on the better qualities (`boxMesh`): their edges catch the car's lamp.
-    const board = (bw: number, bh: number, bd: number, x: number, y: number, z: number): void => {
-      const mesh = boxMesh(bw, bh, bd, WOOD, { x, y, z });
-      mesh.castShadow = true;
-      this.car.add(mesh);
-    };
-    board(w, 0.08, d, cx, -0.04 + PROUD, cz);
-    board(0.03, car.height, d, car.x0 + 0.015, car.height / 2, cz);
-    board(0.03, car.height, d, car.x1 - 0.015, car.height / 2, cz);
-    board(w, car.height, 0.03, cx, car.height / 2, car.z0 + 0.015);
-    board(w, 0.06, d, cx, car.height + 0.03, cz);
-    add(new THREE.PlaneGeometry(w * 0.6, 1.1), standard({ color: 0xc8d2d8, metalness: 1, roughness: 0.06 }), cx, 1.35, car.z0 + 0.03 + PROUD); // the mirror, on the back panel's face
-    const lamp = add(new THREE.CylinderGeometry(0.12, 0.12, 0.04, 16), this.lamp, cx, car.height - 0.02, cz);
-    lamp.castShadow = false;
-    const plate = new THREE.MeshStandardMaterial({ map: panelTexture(), metalness: 1, roughness: 0.4 });
-    add(new THREE.BoxGeometry(0.02, PANEL_H, PANEL_D), [BRASS, plate, BRASS, BRASS, BRASS, BRASS], car.x1 - 0.035, PANEL_Y, cz);
-  }
 }
-
-/** A brass button (the call button on a landing, the panel in the car): a caption and a click. */
-export class LiftButton extends Prop implements Interactable {
-  readonly contactShadow = false;
-  readonly hitboxes: THREE.Object3D[];
-  private readonly brass = BRASS.clone();
-
-  constructor(private readonly caption: () => string, private readonly press: (session: SessionActions) => void, size: ButtonSize = CALL_BUTTON) {
-    super();
-    this.name = 'LiftButton';
-    const plate = boxMesh(size.plate[0], size.plate[1], 0.02, this.brass);
-    plate.castShadow = true;
-    this.add(plate);
-    const hitbox = invisibleHitbox(...size.hit);
-    this.hitboxes = [hitbox];
-    this.add(hitbox);
-  }
-
-  setHovered(hovered: boolean): void {
-    this.brass.emissiveIntensity = hovered ? 0.5 : 0;
-  }
-
-  label(): string {
-    return this.caption();
-  }
-
-  activate(session: SessionActions): void {
-    this.press(session);
-  }
-}
-
-/** A button's plate (width, height) and the box it is clicked in (width, height, depth), local. */
-interface ButtonSize {
-  plate: [number, number];
-  hit: [number, number, number];
-}
-
-/** The call button on a landing's cage post; one of the car panel's, small enough for a row a floor. */
-const CALL_BUTTON: ButtonSize = { plate: [0.1, 0.16], hit: [0.22, 0.3, 0.2] };
-const PANEL_BUTTON: ButtonSize = { plate: [0.04, 0.04], hit: [0.07, PANEL_PITCH, 0.08] };
-/** The panel's brass plate on the car's east wall (height, depth along the wall). */
-const PANEL_H = PANEL_PITCH * (STOREYS + 1) + 0.05;
-const PANEL_D = 0.16;
 
 /** "the 3rd floor", "the ground floor". */
 function floorName(k: number): string {
   return k === STOREYS ? 'the ground floor' : `the ${plan.floorNames[k]!} floor`;
-}
-
-/** Floor `k`'s button on the panel, over the car's floor: ours at the top, the hall's at the bottom. */
-function panelY(k: number): number {
-  return PANEL_Y + (STOREYS / 2 - k) * PANEL_PITCH;
-}
-
-/** A point `along` the panel from its middle, towards the car's gate (+z), local z. */
-function panelZ(along: number): number {
-  return (plan.car.z0 + plan.car.z1) / 2 + along;
-}
-
-/** The panel's face: each floor's name engraved left of its button (the face looks -x: its left is -z). */
-function panelTexture(): THREE.CanvasTexture {
-  const px = 400;
-  const [canvas, ctx] = createCanvas(Math.round((PANEL_D / PANEL_H) * px), px);
-  ctx.fillStyle = '#c9a75b';
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-  ctx.fillStyle = '#3a2a14';
-  ctx.font = 'bold 22px Georgia, serif';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  for (const k of STOPS) {
-    const top = PANEL_Y + PANEL_H / 2 - panelY(k);
-    ctx.fillText(plan.floorNames[k]!, canvas.width * 0.28, (top / PANEL_H) * px, canvas.width * 0.5);
-  }
-  return toTexture(canvas, 4);
-}
-
-/** Diamond lattice of flat iron: an open pattern (alpha) that tiles. */
-function latticeTexture(): THREE.CanvasTexture {
-  const size = 64;
-  const [canvas, ctx] = createCanvas(size, size);
-  ctx.clearRect(0, 0, size, size);
-  ctx.strokeStyle = '#ffffff';
-  ctx.lineWidth = 4;
-  ctx.beginPath();
-  ctx.moveTo(0, 0);
-  ctx.lineTo(size, size);
-  ctx.moveTo(size, 0);
-  ctx.lineTo(0, size);
-  ctx.stroke();
-  ctx.fillStyle = '#ffffff';
-  ctx.fillRect(0, 0, size, 3);
-  const texture = toTexture(canvas, 4);
-  texture.wrapS = THREE.RepeatWrapping;
-  texture.wrapT = THREE.RepeatWrapping;
-  return texture;
 }

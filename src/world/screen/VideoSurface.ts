@@ -8,7 +8,7 @@ import { proximityVolume, type ProximityVolumeOptions } from '@/video/proximityV
 import type { SoundOcclusion } from '../acoustics/SoundOcclusion';
 import { stereoPan } from '@/audio/spatial';
 import { RENDER_ORDER } from '../surface/layers';
-import type { ScreenState, ScreenStateListener } from './VideoScreen';
+import type { ScreenFeed, ScreenState, ScreenStateListener } from './VideoScreen';
 import { SignalCanvas, type SignalLook } from './SignalCanvas';
 import { nowPlaying } from './nowPlaying';
 
@@ -16,6 +16,8 @@ import { nowPlaying } from './nowPlaying';
 export const SURFACE_PX_W = 640;
 export const SURFACE_PX_H = 480;
 
+/** A feed's picture is shown as painted (no slate tint). */
+const WHITE = new THREE.Color(0xffffff);
 /** A switched-off tube: dark grey-green glass, not black. */
 const IDLE_GLASS = '#1a1f1c';
 /** Switching off, the sound fades over this long before the video is let go (the tube collapses meanwhile). */
@@ -96,6 +98,12 @@ export class VideoSurface extends THREE.Object3D {
   private generation = 0;
   /** False while the zone holding the screen is dormant (see `setZoneActive`). */
   private zoneActive = true;
+  /** A picture painted in the page (`showFeed`: a program's canvas) on the glass instead of the iframe; null otherwise. */
+  private feed: THREE.Texture | null = null;
+  /** Bumped by every `showFeed`: a handle from an earlier one is stale. */
+  private feedToken = 0;
+  /** The slate's tint, put back once a feed (shown untinted) is off. */
+  private readonly slateTint = new THREE.Color();
   private readonly stateListeners = new Set<ScreenStateListener>();
   private readonly dropSource: () => void;
   private readonly worldPos = new THREE.Vector3();
@@ -142,7 +150,8 @@ export class VideoSurface extends THREE.Object3D {
     this.cssObject.scale.setScalar(this.width / SURFACE_PX_W);
     this.cssObject.visible = false;
     this.cssLayer.scene.add(this.cssObject);
-    this.dropSource = nowPlaying.addSource(() => (this._state === 'playing' && this.cutout.visible ? this._loudness : 0));
+    this.slateTint.copy(this.glass.material.color);
+    this.dropSource = nowPlaying.addSource(() => (this._state === 'playing' && (this.cutout.visible || this.feed) ? this._loudness : 0));
 
     this.showSignal();
   }
@@ -195,10 +204,43 @@ export class VideoSurface extends THREE.Object3D {
 
   play(video: VideoInfo, startSeconds: number, onRejected?: (videoId: string) => void): void {
     this.cancelPicture();
+    this.feed = null;
     this.setState('playing');
     this.showing = { video, startSeconds, since: performance.now(), onRejected };
     this.showSignal(); // static until the first frame
     if (this.zoneActive) this.load();
+  }
+
+  /**
+   * A picture painted in the page (a `ScreenProgram`'s canvas, docs/media.md "Programs on the screen") lit on the
+   * glass, as `playing`, until `stop` or anything else is shown. The handle tells the program where the set is heard.
+   */
+  showFeed(feed: THREE.Texture): ScreenFeed {
+    this.cancelPicture();
+    this.showing = null;
+    this.setState('playing');
+    this.feed = feed;
+    const token = ++this.feedToken;
+    this.showSignal();
+    const live = (): boolean => this.feedToken === token && this.feed !== null;
+    const surface = this; // the handle's getters read it live
+    return {
+      get loudness() {
+        return live() ? surface._loudness : 0;
+      },
+      get pan() {
+        return surface._pan;
+      },
+      get zoneActive() {
+        return surface.zoneActive;
+      },
+      get live() {
+        return live();
+      },
+      stop: () => {
+        if (live()) this.stop();
+      },
+    };
   }
 
   fail(message: string): void {
@@ -309,10 +351,22 @@ export class VideoSurface extends THREE.Object3D {
 
   /** The glass shows what the state calls for (dark while off, static or a slate otherwise). */
   private showSignal(): void {
+    const material = this.glass.material;
+    // A feed (a program's canvas) is the picture itself, lit and untinted.
+    const map = this.feed ?? this.signal.texture;
+    if (material.map !== map) {
+      material.map = map;
+      if (material instanceof THREE.MeshStandardMaterial) material.emissiveMap = map;
+      material.color.copy(this.feed ? WHITE : this.slateTint);
+    }
+    if (this.feed) {
+      this.glass.visible = true;
+      if (material instanceof THREE.MeshStandardMaterial) material.emissive.setHex(0xffffff);
+      return;
+    }
     const scene = this._state === 'off' ? 'idle' : this._state === 'error' ? 'nosignal' : 'search';
     if (scene !== this.signal.current) this.signal.show(scene);
     this.glass.visible = scene !== 'idle' || this.idle === 'glass';
-    const material = this.glass.material;
     if (material instanceof THREE.MeshStandardMaterial) material.emissive.setHex(scene === 'idle' ? 0x000000 : 0xffffff);
   }
 
@@ -349,7 +403,10 @@ export class VideoSurface extends THREE.Object3D {
     if (next === this._state) return;
     this._state = next;
     if (next !== 'error') this.sleepBy = 0;
-    if (next !== 'playing') this.showing = null;
+    if (next !== 'playing') {
+      this.showing = null;
+      this.feed = null;
+    }
     if (next === 'off') this._loudness = 0;
     for (const listener of this.stateListeners) listener(next);
   }

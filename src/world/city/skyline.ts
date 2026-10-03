@@ -1,4 +1,6 @@
 import { seededRandom } from '@/covers/generated/canvasUtils';
+import { FLAT_IN_STREET, FRONT, PARK_STREET } from '../street/streetPlan';
+import { PARK_FAR } from './park';
 
 /*
  * The towers of the far city, in the flat's frame: a dense cluster behind Front Street's block, a
@@ -89,3 +91,72 @@ export function towerTop(tower: SkylineTower, u: number): number {
       return h;
   }
 }
+
+/**
+ * A mid-rise block of the neighbourhood beyond the walkable street's own rows, in the flat's frame:
+ * its footprint (x0, z0, x1, z1), its roof's height and which of `BACKDROP_WALLS` it is faced in.
+ */
+export interface BackdropBlock {
+  x0: number;
+  z0: number;
+  x1: number;
+  z1: number;
+  height: number;
+  wall: number;
+}
+
+/** What the backdrop blocks are faced in: stone, render, brick, darker brick, pale render, grey. */
+export const BACKDROP_WALLS = ['#b9ab94', '#cfc3ac', '#9c6a52', '#7e5646', '#d8d2c4', '#8f9296'] as const;
+
+/** The flat's frame: Front Street's far building line, the park's hedge and its far side, as the window view has them. */
+const FAR_LINE = FRONT.farLine - FLAT_IN_STREET.z;
+const PARK_HEDGE_X = PARK_STREET.hedge - FLAT_IN_STREET.x;
+const PARK_FAR_X = -PARK_FAR;
+
+/**
+ * The neighbourhood's blocks past the walkable street's facades (the window view paints its own
+ * `paintBackdrops`; these stand where those do): the mid-rise row along the park's far side, the
+ * next street behind Front Street's block shoulder to shoulder, taller blocks a few streets
+ * further, a row behind our own block and the courtyard, and blocks past the far ends of Front
+ * Street and Park Street. The street's sky dome draws them (`street/skyDomeShader`), ray-cast from
+ * wherever the player stands, so they stand still against the roofs as one walks.
+ */
+export const BACKDROP_BLOCKS: readonly BackdropBlock[] = (() => {
+  const random = seededRandom(70321);
+  const between = (a: number, b: number): number => a + random() * (b - a);
+  const floors = (lo: number, hi: number): number => (lo + Math.floor(random() * (hi - lo + 1))) * 3.1 + 2.2;
+  const blocks: BackdropBlock[] = [];
+  const wall = (): number => Math.floor(random() * BACKDROP_WALLS.length);
+  // A row of blocks along x from `from` to `to`, their fronts on z = `line` (depth towards +z if `deep` > 0).
+  const rowAlongX = (from: number, to: number, line: number, deep: number, width: [number, number], storeys: [number, number]): void => {
+    for (let x = from; x < to; ) {
+      const w = between(...width);
+      blocks.push({ x0: x, x1: x + w, z0: Math.min(line, line + deep), z1: Math.max(line, line + deep), height: floors(...storeys), wall: wall() });
+      x += w + (random() < 0.15 ? between(4, 10) : 0);
+    }
+  };
+  const rowAlongZ = (from: number, to: number, line: number, deep: number, width: [number, number], storeys: [number, number]): void => {
+    for (let z = from; z < to; ) {
+      const w = between(...width);
+      blocks.push({ z0: z, z1: z + w, x0: Math.min(line, line + deep), x1: Math.max(line, line + deep), height: floors(...storeys), wall: wall() });
+      z += w + (random() < 0.15 ? between(4, 10) : 0);
+    }
+  };
+  // The park's far side.
+  rowAlongZ(-240, 240, PARK_FAR_X, -14, [16, 30], [7, 11]);
+  // The next street behind Front Street's block, from the park's corner round to past the side street.
+  rowAlongX(PARK_HEDGE_X, 260, FAR_LINE + 42, 15, [12, 22], [6, 9]);
+  // Taller blocks a few streets further.
+  for (let i = 0; i < 22; i++) {
+    const z = between(115, 240);
+    const x = between(-160, 380);
+    const w = between(18, 40);
+    blocks.push({ x0: x, x1: x + w, z0: z, z1: z + between(16, 26), height: floors(9, 16), wall: wall() });
+  }
+  // Behind our block and its courtyard (the flat's back is about z -9: the courtyard runs to -24, the rear building beyond).
+  rowAlongX(-5, 240, -62, -16, [14, 24], [6, 8]);
+  // Past the end of Front Street (the street's x 136 is the flat's 148.7) and of Park Street (its south end, the flat's z -80.7).
+  rowAlongZ(-70, 70, 176, 18, [16, 26], [7, 10]);
+  rowAlongX(-70, -10, -112, -16, [14, 22], [6, 9]);
+  return blocks;
+})();

@@ -1,9 +1,11 @@
 /** A framing guide, and the part of the view a photo taken with it keeps. */
 export interface PhotoFrame {
-  id: 'none' | 'thirds' | 'letterbox' | 'square';
+  id: 'none' | 'thirds' | 'letterbox' | 'square' | 'binoculars';
   name: string;
   /** Width over height of what is kept, or null: the whole view. */
   aspect: number | null;
+  /** How far the wheel may zoom in with it (degrees of view); default the camera's own limit. */
+  minFov?: number;
 }
 
 export const PHOTO_FRAMES: readonly PhotoFrame[] = [
@@ -11,6 +13,8 @@ export const PHOTO_FRAMES: readonly PhotoFrame[] = [
   { id: 'thirds', name: 'Rule of thirds', aspect: null },
   { id: 'letterbox', name: 'Cinema 2.39 : 1', aspect: 2.39 },
   { id: 'square', name: 'Square', aspect: 1 },
+  // The rear window's: two round eyepieces over the view and a far stronger zoom, for the windows across the courtyard.
+  { id: 'binoculars', name: 'Binoculars', aspect: null, minFov: 3.5 },
 ];
 
 /** The centred rectangle of a `width` x `height` view that `frame` keeps (whole pixels). */

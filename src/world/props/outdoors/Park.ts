@@ -6,7 +6,7 @@ import { PARK_TREES, TREE_FORM, treeHeight } from '@/world/city/trees';
 import { inFlatFrame } from '@/world/city/frontage';
 import { STREET_PLAN } from '@/world/street/streetPlan';
 import { paintGroundBand } from './Street';
-import { paintBench, paintBin, paintLamp } from './StreetFurniture';
+import { paintBench, paintBin, paintLamp } from './paintedFurniture';
 import { CONIFER_STYLE, TREE_STYLES, type TreeForm, WILLOW_STYLE, paintTree } from './Tree';
 import { seasonalLawn } from './paint';
 import { holidayParkItems } from './Holiday';

@@ -10,8 +10,8 @@ export interface StreetAheadOptions {
   here: () => string;
   /** Whether the street's zone is built yet (built: dormant or active). */
   built: (id: string) => boolean;
-  /** Builds and compiles a zone out of the scene (`World.prepareZone`). */
-  prepare: (id: string) => Promise<void>;
+  /** Builds and compiles a zone out of the scene (`World.prepareZone`), awaiting `between` before each step. */
+  prepare: (id: string, between: () => Promise<void>) => Promise<void>;
   /** Keeps it loaded while dormant, or lets it go (`ZoneManager.hold`). */
   hold: (id: string, held: boolean) => void;
 }
@@ -29,7 +29,7 @@ const STREET = TWINS.street.zone;
 /**
  * Gets the street ready before the sas is crossed: its first crossing of a visit built the whole street while the
  * buzzer sounded, a freeze of a second or more in the shut box. Once the player is on the way down (`LOW`), the street is built dormant and compiled out of the scene (`World.prepareZone`), at the browser's next
- * idle moment, and held loaded (`ZoneManager.hold`) while they stay down there; climbing back up or going through
+ * idle moment (a zone per idle slice: the street, then each of its neighbours), and held loaded (`ZoneManager.hold`) while they stay down there; climbing back up or going through
  * lets it go (the street then unloads after the usual wait, or is the current zone). The crossing then only switches.
  */
 export class StreetAhead implements Updatable {
@@ -54,7 +54,7 @@ export class StreetAhead implements Updatable {
     if (!low || this.preparing || this.failed || built(STREET)) return;
     this.preparing = true;
     idle(() => {
-      prepare(STREET)
+      prepare(STREET, idleMoment)
         .catch((error: unknown) => {
           this.failed = true;
           console.error('[airlock] the street failed to get ready (the sas will build it)', error);
@@ -62,6 +62,11 @@ export class StreetAhead implements Updatable {
         .finally(() => (this.preparing = false));
     });
   }
+}
+
+/** The browser's next idle moment: the street and each of its neighbours are built one per idle slice, not all in one freeze. */
+function idleMoment(): Promise<void> {
+  return new Promise((resolve) => idle(resolve));
 }
 
 function idle(run: () => void): void {

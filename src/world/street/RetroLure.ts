@@ -20,6 +20,11 @@ export interface RetroLureOptions {
   fade: number;
   /** Today's stock colours changed (a new market day): repaint the shop's window and shelves. */
   onStock: (colors: readonly string[]) => void;
+  /**
+   * What kind of day the market has: how big a crowd its theme draws (`MarketDayTheme.crowd`, 1 ordinary, more on the
+   * Grand Flea Fair) and whether a grail is on a stall today. A longer queue then, and it stays all day.
+   */
+  day?: () => { crowd: number; grail: boolean };
 }
 
 /** Seconds between two looks at the news. */
@@ -88,7 +93,11 @@ export class RetroLure extends THREE.Group implements Furniture, Updatable {
       this.options.onStock(news.colors);
     }
     this.banner.visible = news.fresh;
-    const want = news.fresh ? Math.min(this.people.length, Math.max(1, news.queue)) : 0;
+    const day = this.options.day?.() ?? { crowd: 1, grail: false };
+    // A big day (the Fair, a grail on a stall) queues longer, and still queues after the player has been in.
+    const big = day.crowd > 1.15 || day.grail;
+    const base = Math.round(news.queue * day.crowd) + (day.grail ? 2 : 0);
+    const want = news.fresh || big ? Math.min(this.people.length, Math.max(big ? 3 : 1, base)) : 0;
     if (want === this.queued) return;
     const { queue, door } = this.options;
     // Newcomers join at the back; when it is over, everyone files in through the door.

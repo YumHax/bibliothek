@@ -69,8 +69,10 @@ export class StockItem {
     this.gem = traits.gem ?? false;
     this.sale = traits.sale ?? 1;
     this.sticker = traits.sticker ?? false;
-    // A real copy, whatever the source entry was (a wishlist entry would draw as a ghost box).
-    this.game = { ...game, condition, status: 'owned', edition: this.edition === 'standard' ? undefined : this.edition, repro: this.repro || undefined, sticker: this.sticker || undefined };
+    // A real copy, whatever the source entry was (a wishlist entry would draw as a ghost box). A seal holds only on a
+    // complete genuine copy (a street table re-dealing a stall's copy in a worse state breaks it).
+    const sealBroken = game.variant === 'sealed' && (condition !== 'complete' || this.repro);
+    this.game = { ...game, condition, status: 'owned', edition: this.edition === 'standard' ? undefined : this.edition, repro: this.repro || undefined, sticker: this.sticker || undefined, ...(sealBroken ? { variant: undefined } : {}) };
     const stickered = (list: number) => (this.sticker ? Math.max(1, Math.round(list * STICKER.factor)) : list);
     this.listPrice = stickered(price.list);
     this.isPriced = price.final || !price.settle;
@@ -127,6 +129,11 @@ export class StockItem {
     if (factor === this.factor) return;
     this.factor = factor;
     this.notify();
+  }
+
+  /** Still in its shrink-wrap: the stallholder will not have it opened (`game/CopyOpening`). */
+  get sealed(): boolean {
+    return this.game.variant === 'sealed';
   }
 
   /** A fake the player found out: true once `expose` was called. */

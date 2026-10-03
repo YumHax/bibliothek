@@ -7,6 +7,7 @@ import type { MarketStanding } from './MarketStanding';
 import { JOB_LOT, MARKET_DISCOUNT, marketPrice } from './pricing';
 import { seeded } from './seeded';
 import { drawCondition, gameFrom } from './stockDraws';
+import { dressCopy } from './copyTraits';
 
 /** The day's job lot: a few games sold together, cheaper than one by one. */
 export interface JobLot {
@@ -98,7 +99,8 @@ export class JobLotDraw {
       const game = gameFrom(entry, platform);
       const condition = drawCondition(conditionRoll);
       if (games.some((g) => g.id === game.id) || this.deps.collection.owns(game.id)) continue;
-      games.push({ ...game, condition: condition === 'complete' ? undefined : condition });
+      // Each copy dressed from a stream of its own (`copyTraits`): its variant priced in, its past found at home.
+      games.push(dressCopy(seeded(`${day}:lot:dress:${i}`), { ...game, condition: condition === 'complete' ? undefined : condition }, { condition }));
     }
     // Priced once every lookup is back. A failed one (offline, Wikipedia down) is priced as a legend, never as an
     // ordinary title: the desk pays with the real fame later, so a lot priced low would be a way to print coins.

@@ -46,7 +46,7 @@ export function furnishBalcony(zone: Zone, { sky, home: { upgrades, furnishings 
       pitch: f.pitch,
       door: { x: doorway.along, width: doorway.width, height: doorway.height },
       ourWindows: f.ourWindows.map((w) => ({ ...w, x: w.x - origin.x })),
-      ours: [-3 - origin.x, 3 - origin.x],
+      ours: [f.ours[0] - origin.x, f.ours[1] - origin.x],
     }),
     new THREE.Vector3(0, 0, -depth / 2),
   );

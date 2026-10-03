@@ -218,6 +218,24 @@ export class MarketFloor {
     return true;
   }
 
+  /** The stalls as the hall keeps them (the rival collector picks his copy from them). */
+  get stalls(): readonly FloorStall[] {
+    return this.options.stalls;
+  }
+
+  /**
+   * The rival collector takes `box` off its stall (`market/RivalInHall`): sold to a rival like any other shopper's
+   * buy, the stallholder's "Sold!". False when it is gone already, or in the player's hand or held for them.
+   */
+  takeForRival(box: ForSaleBox): boolean {
+    if (!this.displayed.has(box) || box.isHeld || box.item.reserved) return false;
+    const entry = this.options.stalls.find((e) => e.boxes.has(box));
+    this.options.context.market.stock.soldToRival(box.item);
+    entry?.vendor.say(REACTIONS.bought[Math.floor(Math.random() * REACTIONS.bought.length)]!);
+    this.takeOff(box);
+    return true;
+  }
+
   /** The notice board's cards: today's ads, a rumour pinned up, the collectors' club. */
   refreshNotices(): void {
     const { noticeBoard, context } = this.options;

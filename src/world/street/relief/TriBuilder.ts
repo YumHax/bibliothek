@@ -28,6 +28,11 @@ export class TriBuilder {
     return this.positions.length === 0;
   }
 
+  /** How many vertices are in so far (three per triangle): where the next thing's start. */
+  get vertexCount(): number {
+    return this.positions.length / 3;
+  }
+
   /** A box `w` x `h` x `d` centred at (x, y, z) in the frame `matrix` places, in `color`. */
   box(matrix: THREE.Matrix4, x: number, y: number, z: number, w: number, h: number, d: number, color: THREE.ColorRepresentation): this {
     this.color.set(color);

@@ -106,8 +106,13 @@ export interface ZoneHost {
   occluderRemoved(object: THREE.Object3D): void;
 }
 
-/** Builds a zone's content into it (a room shell, furniture...) and returns whatever the caller wants to keep. */
-export type ZoneBuilder = (zone: Zone) => unknown;
+/**
+ * Builds a zone's content into it (a room shell, furniture...) and returns whatever the caller wants to keep. A builder
+ * may also come `sliced`: the same build as steps (a generator yielding between its sections, returning the handle),
+ * which `Zone.buildSliced` runs with a pause between steps (the street, built ahead at idle moments, never freezes
+ * the stairs); a plain `build()` runs them all at once.
+ */
+export type ZoneBuilder = ((zone: Zone) => unknown) & { readonly sliced?: (zone: Zone) => Iterator<void, unknown, void> };
 
 /**
  * A builder whose module is fetched on demand (a dynamic `import()`, its own chunk): the zones
@@ -223,6 +228,8 @@ export class Zone<Id extends string = string> implements ShelvingHost {
   private builder: ZoneBuilder | null;
   private readonly lazy: LazyZoneBuilder | null;
   private loading: Promise<void> | null = null;
+  /** A sliced build under way (`buildSliced`): its remaining steps, run at once by a `build()` that cannot wait. */
+  private building: Iterator<void, unknown, void> | null = null;
 
   constructor(
     readonly spec: ZoneSpec<Id>,
@@ -630,10 +637,42 @@ export class Zone<Id extends string = string> implements ShelvingHost {
   build(): unknown {
     if (this.state === 'empty') {
       if (!this.builder) throw new Error(`[zone] ${this.id} cannot be built before its module is loaded (await zone.load() first)`);
-      this.handle = this.builder(this);
+      if (this.building) {
+        // A sliced build was under way: its remaining steps now, in one go.
+        let step = this.building.next();
+        while (!step.done) step = this.building.next();
+        this.building = null;
+        this.handle = step.value;
+      } else {
+        this.handle = this.builder(this);
+      }
       this.state = 'dormant';
     }
     return this.handle;
+  }
+
+  /**
+   * Builds as `build()` does, but a `sliced` builder's steps one at a time, awaiting `between` after each (the browser's
+   * next idle moment): a long build spread over several. A `build()` or `activate()` meanwhile finishes it at once.
+   */
+  async buildSliced(between: () => Promise<void>): Promise<unknown> {
+    if (this.state !== 'empty') return this.handle;
+    if (!this.builder) throw new Error(`[zone] ${this.id} cannot be built before its module is loaded (await zone.load() first)`);
+    if (!this.builder.sliced) return this.build();
+    this.building ??= this.builder.sliced(this);
+    for (;;) {
+      const steps = this.building;
+      // Finished meanwhile (`build()` ran the rest), or unloaded.
+      if (this.state !== 'empty' || !steps) return this.handle;
+      const step = steps.next();
+      if (step.done) {
+        this.building = null;
+        this.handle = step.value;
+        this.state = 'dormant';
+        return this.handle;
+      }
+      await between();
+    }
   }
 
   /** Builds if needed and plugs everything into the scene, the collision world and the loop. */
@@ -663,6 +702,8 @@ export class Zone<Id extends string = string> implements ShelvingHost {
   unload(): void {
     if (this.spec.persistent) throw new Error(`[zone] ${this.id} is persistent`);
     this.deactivate();
+    // Half built (a sliced build under way): finished first, so what its steps placed is freed with the rest.
+    if (this.building) this.build();
     if (this.state === 'empty') return;
     for (const dispose of this.disposers.splice(0)) dispose();
     for (const item of this.items.keys()) item.dispose?.();

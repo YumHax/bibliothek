@@ -29,6 +29,15 @@ export interface NoticeActions {
   read(card: ReadingNotice): void;
 }
 
+/**
+ * What the player can put away by hand (the `dismissNotice` key, X): the card being read at once (`all`: every waiting
+ * card too), else the reward banner, else the tips (newest first; `all`: every one); the subtitles go with any press.
+ * Never the alerts (they have their own button). False when there was nothing to put away.
+ */
+export interface NoticeDismissing {
+  dismiss(all?: boolean): boolean;
+}
+
 export interface RewardNotice {
   /** Short: "Bought Chrono Trigger", "Milestone reached". */
   title: string;

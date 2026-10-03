@@ -1,6 +1,7 @@
 import type { RoomOptions } from '../Room';
 import type { Placement } from '../Placement';
 import type { HomeShop } from '@/economy/homeGoods';
+import type { ErrandId } from '@/errands/errands';
 import type { HomeUpgrade } from '@/economy/HomeUpgrades';
 import type { TagStyle } from './PriceTag';
 import type { TvWallOptions } from './TvWall';
@@ -90,7 +91,7 @@ export type ShopDisplay = {
 
 export interface ShopPlan {
   /** Whose goods (`HOME_GOODS`) it sells. */
-  shop: Exclude<HomeShop, 'market'>;
+  shop: Exclude<HomeShop, 'market' | 'agent'>;
   /** The shop's colour: its counter, the band across its price tags (its joinery in the street, `SHOP_LOOKS`). */
   accent: number;
   room: RoomOptions;
@@ -126,6 +127,8 @@ export interface ShopPlan {
   fixtures: readonly ShopFixture[];
   sounds?: readonly ShopSound[];
   displays: readonly ShopDisplay[];
+  /** What is sold over the counter to be used up, not for the flat (`errands/`, `CounterErrand`): the treats, the bunches. */
+  errands?: readonly ({ errand: ErrandId } & OnSurface)[];
 }
 
 export const SHOP_PLANS: Record<ShopZoneId, ShopPlan> = {

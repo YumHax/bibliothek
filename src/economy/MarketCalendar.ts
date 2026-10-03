@@ -36,6 +36,15 @@ export class MarketCalendar {
     return saved && saved.date === today && saved.hours !== undefined ? saved.hours : null;
   }
 
+  /**
+   * The market day the calendar will open on (the saved count, a day on if the real date moved on; 1 with nothing
+   * saved): for what is painted before the calendar is made (the window view's roadworks, `syncWorks`).
+   */
+  static savedDay(storage: Storage | null = safeStorage(), key: string = CALENDAR_STORAGE_KEY, today: string = dayKey()): number {
+    const saved = new PersistedStore<CalendarFile | null>({ key, version: 2, storage, defaults: () => null, read: readCalendar }).tryLoad();
+    return saved ? saved.day + (saved.date === today ? 0 : 1) : 1;
+  }
+
   private state: CalendarFile;
   private lastHours: number | null = null;
   private readonly listeners = new Set<(day: number) => void>();

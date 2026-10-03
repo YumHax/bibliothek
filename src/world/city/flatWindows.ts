@@ -1,7 +1,7 @@
 import type { ZoneId } from '../zoneIds';
 
-/** The flat's rooms whose windows the street sees (the collection room's front, its bay, the kitchen, the bedroom, the bathroom). */
-export type FlatRoomId = Extract<ZoneId, 'living' | 'kitchen' | 'bedroom' | 'bathroom'>;
+/** The flat's rooms whose windows the street sees (the collection room's front, its bay, the kitchen, the bedroom, the bathroom, Mrs Roux's front room). */
+export type FlatRoomId = Extract<ZoneId, 'living' | 'kitchen' | 'bedroom' | 'bathroom' | 'annex'>;
 
 /** What the street sees of a room of the flat at night: its lamp's level (0..1) and how open its curtains are (0..1). */
 export interface FlatRoomLight {
@@ -9,7 +9,7 @@ export interface FlatRoomLight {
   readonly curtainsOpen: number;
 }
 
-const FLAT_ROOMS: readonly string[] = ['living', 'kitchen', 'bedroom', 'bathroom'] satisfies readonly FlatRoomId[];
+const FLAT_ROOMS: readonly string[] = ['living', 'kitchen', 'bedroom', 'bathroom', 'annex'] satisfies readonly FlatRoomId[];
 const rooms = new Map<FlatRoomId, FlatRoomLight>();
 
 /**

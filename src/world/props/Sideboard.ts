@@ -41,6 +41,12 @@ export class Sideboard extends THREE.Group implements Furniture {
   readonly footprint: THREE.Box3;
   /** Height of the top surface: where things stand. */
   readonly topHeight: number;
+  /**
+   * The turntable on its top, in the sideboard's frame (null without one): the platter's centre on its surface, the
+   * tonearm's pivot at the arm's height, the plinth (its bottom centre and size), and the still record, label and arm, which a working
+   * turntable (`world/vinyl/RecordPlayer`) hides behind its own.
+   */
+  turntable: { centre: THREE.Vector3; pivot: THREE.Vector3; plinth: { at: THREE.Vector3; size: THREE.Vector3 }; still: THREE.Object3D[] } | null = null;
 
   constructor(options: SideboardOptions = {}) {
     super();
@@ -112,6 +118,12 @@ export class Sideboard extends THREE.Group implements Furniture {
     const arm = part(this, 0.008, 0.006, 0.2, STEEL, { x: pivotX - 0.03, y: platterY + 0.038, z: pivotZ + 0.1 });
     arm.rotation.y = 0.25;
     arm.castShadow = false;
+    this.turntable = {
+      centre: new THREE.Vector3(x - 0.03, platterY + 0.012, z),
+      pivot: new THREE.Vector3(pivotX, platterY + 0.038, pivotZ),
+      plinth: { at: new THREE.Vector3(x, top, z), size: new THREE.Vector3(plinthW, plinthH, plinthD) },
+      still: [record, label, arm],
+    };
     // The dust lid, down over the deck and just lifted off it at the front: stood up open it would reach into
     // a projected picture above the sideboard (docs: the picture's bottom edge is at 0.63 m).
     const lid = new THREE.Mesh(

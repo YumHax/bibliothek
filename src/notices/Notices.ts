@@ -8,7 +8,7 @@ import { RewardBanner } from './RewardBanner';
 import { SpeechLayer } from './SpeechLayer';
 import { bindSpeech } from './speech';
 import { TipBoard } from './TipBoard';
-import type { NoticeActions, ReadingNotice, RewardNotice, TipOptions } from './types';
+import type { NoticeActions, NoticeDismissing, ReadingNotice, RewardNotice, TipOptions } from './types';
 import './notices.css';
 
 export interface NoticesOptions {
@@ -24,7 +24,7 @@ export interface NoticesOptions {
  * tips, the card to read, the alert bar. Made once by `bootstrap/ui.ts`, ticked by the engine; binds
  * the people's speech bubbles to its speech layer, and announces save problems as alerts.
  */
-export class Notices implements NoticeActions, Updatable {
+export class Notices implements NoticeActions, NoticeDismissing, Updatable {
   readonly speech: SpeechLayer;
   private readonly line: CrosshairLine;
   private readonly rewards: RewardBanner;
@@ -70,6 +70,19 @@ export class Notices implements NoticeActions, Updatable {
   /** The game's own trouble (a save lost, the mouse lock refused): the red bar at the top; with `action`, a button (Retry) it waits for. */
   alert(text: string, ms?: number, action?: AlertAction): void {
     this.alerts.show(text, ms, action);
+  }
+
+  /**
+   * The player puts away what is on screen (the `dismissNotice` key, X): the card being read first (with `all`, every
+   * waiting card too), else the reward banner up and the newest tip (`all`: every waiting banner, every tip). Any
+   * press also clears the subtitle strip. The alerts stay: they have their own button.
+   */
+  dismiss(all = false): boolean {
+    const subtitles = this.speech.clearSubtitles();
+    if (this.reading.dismiss(all)) return true;
+    const reward = this.rewards.dismiss(all);
+    const tip = this.tips.dismiss(all);
+    return reward || tip || subtitles;
   }
 
   /** Settings > Game: the tips top left shown or not (a tip asked for while off is dropped). */

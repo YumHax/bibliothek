@@ -3,6 +3,7 @@ import { seededRandom } from '@/covers/generated/canvasUtils';
 import type { StockItem } from '@/economy/StockItem';
 import type { MarketNews } from '@/economy/marketEvents';
 import { paperRumour } from '@/economy/rumours';
+import { SELLERS_BUILDING, type Ad } from '@/classifieds/ads';
 
 /** One issue of the newsstand's paper: its masthead line, the day's lead and three or four tips. */
 export interface WeeklyIssue {
@@ -13,6 +14,8 @@ export interface WeeklyIssue {
   hints: string[];
   /** "Prices today: 18 to 540 coins", or null when nobody has been to the market yet. */
   prices: string | null;
+  /** The small ads (private sellers: `classifieds/`), as printed: who, where, the ad's words. */
+  classifieds: { head: string; text: string }[];
 }
 
 export interface WeeklySources {
@@ -26,6 +29,10 @@ export interface WeeklySources {
   wanted: (id: string) => boolean;
   /** What is coming up at the market (`MarketStock.news`): a grail's rumour leads the tips, a sale follows. */
   news?: readonly MarketNews[];
+  /** The small ads running today (`Classifieds.inPaper`). */
+  classifieds?: readonly Ad[];
+  /** What is on along Front Street today and tomorrow (`shops/streetNews`): the most pressing makes the tips. */
+  street?: readonly string[];
 }
 
 const RUMOURS = [
@@ -50,7 +57,7 @@ const QUIET = [
  * paper reads the same all day. Before anybody has been to the market (the stock is not drawn
  * yet) it prints general tips instead.
  */
-export function writeWeekly({ stock, day, theme, wanted, news = [] }: WeeklySources): WeeklyIssue {
+export function writeWeekly({ stock, day, theme, wanted, news = [], classifieds = [], street = [] }: WeeklySources): WeeklyIssue {
   const random = seededRandom(day * 131 + 7);
   const date = new Date();
   const dateline = `Issue ${day + 1} · ${date.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })}`;
@@ -60,10 +67,11 @@ export function writeWeekly({ stock, day, theme, wanted, news = [] }: WeeklySour
     ? { masthead: 'THE GAMING WEEKLY', dateline, headline: `GRAIL ALERT: ${grailToday.title} at the market`, blurb: grailToday.lore }
     : { masthead: 'THE GAMING WEEKLY', dateline, headline: `Today at the market: ${theme.title}`, blurb: theme.blurb };
   // The talk of the market leads the tips, drawn or not.
-  const talk = news.filter((n) => !(n.kind === 'grail' && n.inDays === 0)).slice(0, 2).map(paperRumour);
+  const small = classifieds.map((ad) => ({ head: `${ad.name.toUpperCase()}, ${ad.flat}, ${SELLERS_BUILDING}`, text: ad.text }));
+  const talk = [...news.filter((n) => !(n.kind === 'grail' && n.inDays === 0)).slice(0, 2).map(paperRumour), ...street.slice(0, 1).map((line) => `On Front Street: ${line}`)];
   if (!stock || stock.length === 0) {
     const hints = [...talk, ...[...QUIET].sort(() => random() - 0.5)].slice(0, 3);
-    return { ...base, hints, prices: null };
+    return { ...base, hints, prices: null, classifieds: small };
   }
 
   const name = (item: StockItem): [string, string] => [item.game.title, getPlatform(item.game.platform).shortName];
@@ -86,5 +94,5 @@ export function writeWeekly({ stock, day, theme, wanted, news = [] }: WeeklySour
   }
   while (hints.length < 3) hints.push(QUIET[Math.floor(random() * QUIET.length)]!);
   const prices = priced.length ? priced.map((i) => i.price) : stock.map((i) => i.price);
-  return { ...base, hints: hints.slice(0, 4), prices: `Prices today: ${Math.min(...prices)} to ${Math.max(...prices)} coins.` };
+  return { ...base, hints: hints.slice(0, 5), prices: `Prices today: ${Math.min(...prices)} to ${Math.max(...prices)} coins.`, classifieds: small };
 }

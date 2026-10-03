@@ -176,6 +176,11 @@ export class PhotoMode implements Updatable {
     } else if (isAction(code, 'photoFrame')) {
       this.frameIndex = (this.frameIndex + 1) % PHOTO_FRAMES.length;
       this.hud.setFrame(PHOTO_FRAMES[this.frameIndex]!);
+      // Out of the binoculars, the zoom comes back within the camera's own range.
+      if (this.deps.camera.fov < this.minFov) {
+        this.deps.camera.fov = this.minFov;
+        this.deps.camera.updateProjectionMatrix();
+      }
     } else if (isAction(code, 'photoHelp')) this.hud.toggleHelp();
     else if (isAction(code, 'photoReset')) {
       this.focus = FOCUS.start;
@@ -234,9 +239,14 @@ export class PhotoMode implements Updatable {
     if (!this.active) return;
     e.preventDefault();
     const camera = this.deps.camera;
-    camera.fov = THREE.MathUtils.clamp(camera.fov * Math.exp(Math.sign(e.deltaY) * 0.08), FOV.min, FOV.max);
+    camera.fov = THREE.MathUtils.clamp(camera.fov * Math.exp(Math.sign(e.deltaY) * 0.08), this.minFov, FOV.max);
     camera.updateProjectionMatrix();
     this.refresh();
+  }
+
+  /** How far the wheel zooms in with the frame on (the binoculars go much further). */
+  private get minFov(): number {
+    return PHOTO_FRAMES[this.frameIndex]!.minFov ?? FOV.min;
   }
 
   private applyLens(): void {

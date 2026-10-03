@@ -4,6 +4,7 @@ import type { ZoneId } from '../zoneIds';
 import { duckScene } from '@/audio/audioContext';
 import { zonePlan } from '../worldPlan';
 import { playDoorShut, playLatch, playShopBell } from './travelSounds';
+import { takeArrival } from './nextArrival';
 
 /** A place a door can take the player to: a zone's arrival spot (world space) and the way to face. */
 export interface TravelStop extends TravelChoice<ZoneId> {
@@ -13,6 +14,8 @@ export interface TravelStop extends TravelChoice<ZoneId> {
   yaw: number;
   /** Other arrival spots by the zone the player comes from (the street: in front of the door they came out of). */
   from?: Readonly<Partial<Record<ZoneId, { position: THREE.Vector3; yaw: number }>>>;
+  /** Reached only through its own door (a neighbour's flat): never offered by the travel menu. */
+  unlisted?: boolean;
 }
 
 export interface Traveller {
@@ -70,7 +73,7 @@ export class Travel {
   /** Everywhere but here. */
   choices(): TravelChoice<ZoneId>[] {
     const current = this.here();
-    return this.stops.filter((s) => s.id !== current).map(({ id, label }) => ({ id, label }));
+    return this.stops.filter((s) => s.id !== current && !s.unlisted).map(({ id, label }) => ({ id, label }));
   }
 
   get isTravelling(): boolean {
@@ -84,7 +87,8 @@ export class Travel {
     const couldMove = this.player.movementEnabled;
     this.player.movementEnabled = false;
     try {
-      const spot = stop.from?.[this.here()] ?? stop;
+      // A door with a spot of its own on the other side (a neighbour's flat and back: `nextArrival`) wins.
+      const spot = takeArrival(stop.id) ?? stop.from?.[this.here()] ?? stop;
       const loaded = this.load(stop.id).then(
         () => true,
         (error: unknown) => {

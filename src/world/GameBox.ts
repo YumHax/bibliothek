@@ -22,6 +22,7 @@ import { createMediaModel } from './media/createMediaModel';
 import type { MediaModel } from './media/MediaModel';
 import { paint } from './materials/palette';
 import { WishCard } from './box/WishCard';
+import { dentGeometry, dentObject, dentedCorner, setWrapped } from './box/copyLook';
 import { plastic } from './materials/finishes';
 import { printGlow } from './materials/printGlow';
 import { SHARED_SHADOW_LAYER } from './zone/Zone';
@@ -32,6 +33,10 @@ import { playPlasticClick } from '@/audio/furnitureSounds';
 const HOVER_POP_OUT = 0.02;
 const HOVER_SECONDS = 0.08;
 const HOVER_GLOW = 0.16;
+/** Tipped out of its row to be looked at (`setTipped`): pulled this far out, its top this far towards the eye (radians), over this long (s). */
+const TIP_OUT = 0.035;
+const TIP_ANGLE = THREE.MathUtils.degToRad(24);
+const TIP_SECONDS = 0.22;
 /** How fast a box parts along its row to show where the box in hand would go (1/s), and when it is there (m). */
 const PART_RATE = 14;
 const PART_DONE = 1e-4;
@@ -114,6 +119,9 @@ export class GameBox extends THREE.Mesh<THREE.BoxGeometry, THREE.Material[]> imp
   private hovered = false;
   /** How far out of the row the hover has brought it, 0..1 (eased by `settle`). */
   private pop = 0;
+  /** How far it is tipped out of its row, 0..1, and whether it is asked to be (`setTipped`). */
+  private tip = 0;
+  private tipped = false;
   /** How far along its row the box stands aside (m, shelf-local x) for the box in hand, and how far it is going (`setParted`). */
   private part = 0;
   private partTarget = 0;
@@ -133,6 +141,8 @@ export class GameBox extends THREE.Mesh<THREE.BoxGeometry, THREE.Material[]> imp
   private readonly worn: boolean;
   /** False for a copy sold without its booklet (or a worn one). */
   private readonly hasManual: boolean;
+  /** Still in its shrink-wrap (`unseal` takes it off in hand, the copy's seal broken). */
+  private sealed = false;
   private inHand = false;
   /** Its cartridge (or disc) is in a console: the box opens empty. */
   private mediaAway = false;
@@ -188,6 +198,10 @@ export class GameBox extends THREE.Mesh<THREE.BoxGeometry, THREE.Material[]> imp
     this.worn = game.condition === 'worn';
     this.hasManual = !(game.condition === 'noManual' || this.worn);
     this.paintClosed(null);
+    // The copy's variant (`box/copyLook`): a sealed box under its shrink-wrap, a crushed one with a corner pushed in.
+    this.sealed = game.variant === 'sealed';
+    if (this.sealed) setWrapped(this.wrappable(), true);
+    if (game.variant === 'crushed') dentGeometry(closed.geometry, dentedCorner(game, dims), dims);
 
     // Progressive: generated faces first, the real cover when it arrives (nearest boxes first).
     this.artOptions = { onUpdate: (set) => this.applyArt(set), anchor: this };
@@ -261,9 +275,22 @@ export class GameBox extends THREE.Mesh<THREE.BoxGeometry, THREE.Material[]> imp
     return this.partTarget;
   }
 
+  /**
+   * Tips the box half out of its row, its top towards the eye, to look at it without taking it (`shelving/BoxTipping`,
+   * Q held), or lets it back; eased by its shelf's ticks. Its rest pose is untouched.
+   */
+  setTipped(tipped: boolean): void {
+    if (this.inHand || this.tipped === tipped) return;
+    this.tipped = tipped;
+    if (this.restless) return this.restless(this);
+    this.tip = tipped ? 1 : 0;
+    this.applyPose();
+  }
+
   label(): string {
     const away = this.mediaAway ? `, in the ${getPlatform(this.game.platform).shortName}` : '';
     const note = this.status === 'wishlist' ? ', on your wishlist' : this.status === 'lent' ? ', lent out' : away;
+    if (this.tipped) return `${tippedCaption(this.game)}${note} · pick up`;
     return `${this.game.title}${note} · pick up`;
   }
 
@@ -279,7 +306,8 @@ export class GameBox extends THREE.Mesh<THREE.BoxGeometry, THREE.Material[]> imp
 
   /** On the wishlist (a ghost in the gap) or lent to a friend: not a copy the TV can play. */
   get playable(): boolean {
-    return this.status !== 'wishlist' && this.status !== 'lent';
+    // A sealed copy's cartridge is under the wrap: the seal is broken first (O, `game/CopyOpening`), never by a console.
+    return this.status !== 'wishlist' && this.status !== 'lent' && !this.sealed;
   }
 
   get statusStyle(): GameStatus {
@@ -311,15 +339,19 @@ export class GameBox extends THREE.Mesh<THREE.BoxGeometry, THREE.Material[]> imp
       if (this.slide.delay > 0) this.slide.delay -= dt;
       else this.slide.t = Math.min(1, this.slide.t + dt / (this.slide.around ? ROUND_SLIDE_SECONDS : SLIDE_SECONDS));
     }
+    const tipWant = this.tipped ? 1 : 0;
+    if (this.tip !== tipWant) this.tip = tipWant > this.tip ? Math.min(1, this.tip + dt / TIP_SECONDS) : Math.max(0, this.tip - dt / TIP_SECONDS);
     this.applyPose();
     if (this.slide && this.slide.t >= 1) this.slide = null;
-    return this.pop !== want || this.slide !== null || this.part !== this.partTarget;
+    return this.pop !== want || this.slide !== null || this.part !== this.partTarget || this.tip !== tipWant;
   }
 
-  /** Off its shelf (taken in hand): the pop, the glow and any slide end here; `toRest` also puts it at its rest pose. */
+  /** Off its shelf (taken in hand): the pop, the glow, the tip and any slide end here; `toRest` also puts it at its rest pose. */
   stopSettling(toRest = false): void {
     this.slide = null;
     this.pop = 0;
+    this.tip = 0;
+    this.tipped = false;
     this.part = this.partTarget = 0;
     this.setGlow(0);
     if (toRest) this.applyPose();
@@ -346,7 +378,18 @@ export class GameBox extends THREE.Mesh<THREE.BoxGeometry, THREE.Material[]> imp
     }
     this.position.z += eased * HOVER_POP_OUT;
     this.position.x += this.part;
-    this.setGlow(eased);
+    const tip = THREE.MathUtils.smoothstep(this.tip, 0, 1);
+    if (tip > 0) {
+      // About its bottom front edge, the top coming out towards the eye, the whole box pulled out along its front.
+      const { height, depth } = this.dims;
+      TIP_TURN.setFromAxisAngle(X_AXIS, TIP_ANGLE * tip);
+      TIP_PIVOT.set(0, -height / 2, depth / 2);
+      TIP_SHIFT.copy(TIP_PIVOT).applyQuaternion(TIP_TURN).negate().add(TIP_PIVOT);
+      TIP_SHIFT.z += TIP_OUT * tip;
+      this.position.add(TIP_SHIFT.applyQuaternion(this.quaternion));
+      this.quaternion.multiply(TIP_TURN);
+    }
+    this.setGlow(Math.max(eased, tip));
   }
 
   private setGlow(amount: number): void {
@@ -424,6 +467,23 @@ export class GameBox extends THREE.Mesh<THREE.BoxGeometry, THREE.Material[]> imp
 
   toggleOpen(): void {
     this.lid.toggle();
+  }
+
+  /** Whether the box still wears its shrink-wrap. */
+  get isSealed(): boolean {
+    return this.sealed;
+  }
+
+  /** The shrink-wrap comes off (the seal broken at home, `game/CopyOpening`): the ordinary finish from now on. */
+  unseal(): void {
+    if (!this.sealed) return;
+    this.sealed = false;
+    setWrapped(this.wrappable(), false);
+  }
+
+  /** The printed outside: what the shrink-wrap covers. */
+  private wrappable(): THREE.MeshStandardMaterial[] {
+    return [this.faces.front, this.faces.back, this.faces.left, this.faces.right, this.faces.top, this.faces.bottom, this.closed.material];
   }
 
   /** Slams the lid shut without animating (used when the box lands back on its shelf). */
@@ -724,6 +784,8 @@ export class GameBox extends THREE.Mesh<THREE.BoxGeometry, THREE.Material[]> imp
   private buildParts(): OpenableParts {
     const layout = this.layout;
     const shell = new BoxShell(layout, this.faces);
+    // Dented at its closed pose before anything rides on it (the manual on a lid stays as it is).
+    if (this.game.variant === 'crushed') dentObject(shell, dentedCorner(this.game, this.dims), this.dims);
     const media = createMediaModel(this.mediaSpec);
     let manual: Manual | null = null;
     if (layout.manual && this.hasManual) {
@@ -760,5 +822,26 @@ export class GameBox extends THREE.Mesh<THREE.BoxGeometry, THREE.Material[]> imp
 /** Slow start, slow finish: a box eased out of its row and into its new place. */
 function easeInOut(t: number): number {
   return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+}
+
+/** Scratch for the tip (`applyPose`), one box at a time. */
+const X_AXIS = new THREE.Vector3(1, 0, 0);
+const TIP_TURN = new THREE.Quaternion();
+const TIP_PIVOT = new THREE.Vector3();
+const TIP_SHIFT = new THREE.Vector3();
+
+const CONDITION_WORDS = { complete: 'complete', noManual: 'no manual', worn: 'worn' } as const;
+const EDITION_WORDS = { firstPrint: 'first print', standard: '', budget: 'budget re-release' } as const;
+
+/** A tipped box's caption: what a look at the box itself tells (the year, the platform, the copy's edition and state). */
+function tippedCaption(game: Game): string {
+  const year = game.releaseDate?.slice(0, 4);
+  const facts = [
+    year && /^\d{4}$/.test(year) ? year : '',
+    getPlatform(game.platform).shortName,
+    game.edition ? EDITION_WORDS[game.edition] : '',
+    game.condition ? CONDITION_WORDS[game.condition] : '',
+  ].filter(Boolean);
+  return `${game.title} (${facts.join(', ')})`;
 }
 

@@ -15,33 +15,40 @@ import { setEars } from '@/audio/spatial';
 import { RetroShopLure } from '@/world/props/outdoors/RetroShopLure';
 import { ZoneManager, PortalCuller } from '@/world/zone';
 import { StreetAhead } from '@/world/airlock/StreetAhead';
+import { ClosingTime } from '@/world/shop/ClosingTime';
 import { groundHeight } from '@/world/street/relief/ground';
 import { FLAT, WORLD_PLAN, inFlat, zonePlan } from '@/world/worldPlan';
 import type { ZoneId } from '@/world/zoneIds';
 import { bindBuilder, type ZoneHandleById } from '@/world/layout';
-import type { BuildContext, MarketHallServices, WorldPanels } from '@/world/buildContext';
+import type { BuildContext, ClassifiedsContext, MarketHallServices, WorldPanels } from '@/world/buildContext';
 import type { ModalLike } from '@/game/SessionParts';
 import { MailPost } from '@/collection/MailPost';
 import { Doorstep } from '@/world/hallway/Doorstep';
-import type { BuildingServices, TradePanelLike } from '@/world/stairwell/building';
+import type { BuildingServices, CoproPanelLike, TradePanelLike } from '@/world/stairwell/building';
 import { furnishVisitors } from '@/world/visitors';
-import type { PhoneFriends } from '@/ui/household/PhonePanel';
+import type { PhoneEvents, PhoneFriends } from '@/ui/household/PhonePanel';
+import { furnishGatherings } from '@/world/visitors/gathering';
+import type { ProgramRunner } from '@/onscreen';
+import { isGrail } from '@/economy/grails';
 import { HOUSEHOLD, Pastimes, type PastimeCurtain } from '@/household';
 import type { DoorLike } from '@/world/visitors/Visit';
 import { SEED_GAMES } from '@/catalog';
 import type { PlayerMoves } from './player';
 import type { Notices } from '@/notices';
 import { lightLevelOf, surfaceUnderfoot } from '@/world/zoneHandle';
-import { catPlacers, followAdoption, furnishCat, type Cat } from '@/world/cat';
+import { catPlacers, followAdoption, furnishCat, placeCatEscapes, type Cat } from '@/world/cat';
+import { placeHunt } from '@/world/hunt/placeHunt';
 import { ShelvingGroup } from '@/world/shelving/ShelvingGroup';
 import { late, type Late } from './late';
 import type { Services } from './services';
-import { installStats, installZFight } from './debug';
+import { installBuildingDebug, installStats, installZFight } from './debug';
 import { trackWorldLoad } from '@/ui/worldLoad';
 import { BalconyDoor } from '@/world/balcony/BalconyDoor';
 
 /** Where the TV a seated friend watches stands (read every frame, copied by the visit). */
 const tvAt = new Vector3();
+/** Monthly Wikipedia views from which an open house's guest gasps at a copy (a household name). */
+const RARE_VIEWS = 40_000;
 
 /** The world of zones, every zone id typed with what its builder returns. */
 export type GameWorld = World<ZoneHandleById>;
@@ -71,14 +78,19 @@ export interface FlatPanels {
   collectorBook: ModalLike;
   journalPanel: ModalLike;
   neighbourTradePanel: TradePanelLike;
+  /** The co-owners' postal vote, opened by the hall's ballot box. */
+  coproPanel?: CoproPanelLike;
   notices: Notices;
   /** The bedroom's phone (it reaches the friends once they exist, here) and wardrobe (docs/household.md). */
-  phone: ModalLike & { setFriends(friends: PhoneFriends): void };
+  phone: ModalLike & { setFriends(friends: PhoneFriends): void; setEvents(events: PhoneEvents): void };
   wardrobe: ModalLike;
   /** What the street's shops and the hall console open (`BuildContext.panels`). */
   panels: WorldPanels;
   /** The teleport's curtain: the household's long jobs fade to black behind it (`household/pastime.ts`). */
   fader: PastimeCurtain;
+  /** The kitchen table's console repair and TV REPAIR's counter for working consoles (`BuildContext.classifieds`). */
+  repairPanel?: ClassifiedsContext['repairPanel'];
+  consoleDesk?: ModalLike;
 }
 
 export function buildWorld(services: Services, parts: { world: GameWorld; player: FirstPersonController; marketHall: MarketHallServices; flat: FlatPanels; session: Late<Session>; moves: Late<PlayerMoves> }) {
@@ -127,6 +139,7 @@ export function buildWorld(services: Services, parts: { world: GameWorld; player
     post: new MailPost({ collection, deliveries, calendar: market, hours: () => sky.dayNight.state.hours, home: () => inFlat(zones.get().current.id) }),
     trades: services.neighbourTrades,
     tradePanel: flat.neighbourTradePanel,
+    copro: flat.coproPanel,
   };
 
   // Every zone is declared now and built from its plan on first activation (see docs/zones.md).
@@ -137,14 +150,15 @@ export function buildWorld(services: Services, parts: { world: GameWorld; player
     input,
     sky,
     covers,
-    collection: { games: collection, owns: (id) => collection.owns(id), isWanted: (id) => collection.isWanted(id), shelved: strays, strays, deliveries, overflow, arrangement, boxes: boxPool },
+    collection: { games: collection, owns: (id) => collection.owns(id), isWanted: (id) => collection.isWanted(id), shelved: strays, strays, deliveries, overflow, arrangement, boxes: boxPool, showcases: services.showcases },
     home: {
       upgrades,
       furnishings: services.furnishings,
+      shelfLabels: services.shelfLabels,
       onSelectPlatform: (id) => session.get().focusPlatform(id),
       // The feather wand (an arcade prize) calls the cat over; the cat exists by the time anyone can click it.
       callCat: () => (cat.get().adopted ? callCat(cat.get(), 'feathers') : 'The feathers swish. No cat lives here yet: the pet shop on Front Street has some to adopt.'),
-      collector: { book: flat.collectorBook, milestones, watch: collectorWatch },
+      collector: { book: flat.collectorBook, milestones, watch: collectorWatch, honours: services.honours },
       firstDay,
       journalPanel: flat.journalPanel,
       // What the kitchen, the bathroom and the bedroom are for (docs/household.md).
@@ -161,10 +175,15 @@ export function buildWorld(services: Services, parts: { world: GameWorld; player
     },
     money: { wallet, purse: wallet },
     arcade: { scores, daily: arcadeDaily, prizes, medals, league, screen: arcadeScreen, tournament, jackpot, replays },
-    market: { stock: market, day: services.marketDay, hall: marketHall },
+    market: { stock: market, day: services.marketDay, hall: marketHall, lots: services.lots },
     today: services.today,
     panels: flat.panels,
     building,
+    story: services.story,
+    // The paper's small ads and the sellers' flats, the consoles mended at home (docs/economy.md, docs/household.md).
+    classifieds: flat.repairPanel && flat.consoleDesk
+      ? { book: services.classifieds, lot: (ad) => services.sellerLots.lotFor(ad), workshop: services.workshop, repairPanel: flat.repairPanel, consoleDesk: flat.consoleDesk }
+      : undefined,
   };
   for (const plan of WORLD_PLAN.zones) world.addZone(plan, bindBuilder(plan.kind, context));
   // Before the first builder runs: a piece the player carried to another room is put back there on load.
@@ -201,12 +220,21 @@ export function buildWorld(services: Services, parts: { world: GameWorld; player
     viewer: engine.camera,
     here: () => manager.current.id,
     built: (id) => manager.zone(id)?.status !== 'empty',
-    prepare: (id) => world.prepareZone(id),
+    prepare: (id, between) => world.prepareZone(id, between),
     hold: (id, held) => manager.hold(id, held),
+  }));
+  // Closing time in the walk-in shops and the flea market: the clerk says so, then sees the player out onto Front Street.
+  engine.addUpdatable(new ClosingTime({
+    here: () => manager.current.id,
+    hours: () => sky.dayNight.state.hours,
+    busy: () => !session.isSet || pastimes.isBusy || (moves.isSet && (moves.get().travel.isTravelling || moves.get().sleep.isAsleep)),
+    say: (line, who) => flat.notices.say(line, who),
+    putOut: () => session.get().travel('street'),
   }));
   if (params.has('stats')) installStats({ engine, world, zones: manager, player, graphics });
   if (params.has('stats') || params.has('debug')) {
     installZFight({ world, zones: manager });
+    installBuildingDebug();
     world.lights.verbose = true;
   }
 
@@ -218,10 +246,18 @@ export function buildWorld(services: Services, parts: { world: GameWorld; player
   // The stairwell's stairs and lift are the player's ground (flights stack: the one under the feet), and out on Front Street
   // the road a kerb below the pavements (the feet step down off it as the passers-by do); the cat stays in the flat.
   const onStairs = world.build('stairwell').ground;
+  // The endless stairs of some nights move the player up a storey on the same tread (`stairwell/endless`).
+  world.build('stairwell').connectPlayer((dy) => player.shiftVertically(dy));
   const streetGroup = world.zone('street').group;
   const streetLocal = new Vector3();
+  const streetFloor = world.zone('street').floorBounds;
   player.setGround((x, z, feet) => {
-    if (manager.current.id !== 'street') return onStairs(x, z, feet);
+    // Only the stairwell's stairs and lift car are its floor: the attic and the roof stand over its shaft, and Mrs
+    // Roux's rooms over its entrance hall (whose tiles would drop the feet 16 m); everywhere else the feet stay put.
+    const here = manager.current.id;
+    if (here === 'stairwell') return onStairs(x, z, feet);
+    // On Front Street (not the frame the sas's twin crossing has just set them down in, before the zone switches).
+    if (here !== 'street' || x < streetFloor.min.x || x > streetFloor.max.x || z < streetFloor.min.y || z > streetFloor.max.y) return feet;
     streetGroup.worldToLocal(streetLocal.set(x, feet, z));
     return streetGroup.position.y + groundHeight(streetLocal.x, streetLocal.z);
   });
@@ -245,6 +281,10 @@ export function buildWorld(services: Services, parts: { world: GameWorld; player
   const living = world.zone(WORLD_PLAN.start);
   const hallway = world.zone('hallway');
   const doorTo = (zone: typeof living, to: ZoneId) => (zone.portals.find((p) => p.to === to)?.door as DoorLike | undefined) ?? null;
+  // The front door left open a while, the cat may slip out onto the stairs (docs/cat.md "Out on the stairs").
+  placeCatEscapes(world.zone('stairwell'), { cat: cat.get(), stairs: world.build('stairwell'), door: doorTo(hallway, 'stairwell'), eye: engine.camera, day: () => services.today.gameDay, doorstep: building.doorstep, notices: flat.notices });
+  // The building's treasure hunt, the sixth floor: its clues round the building (docs/zones.md "The sixth floor").
+  placeHunt({ today: services.today, journal: services.journal, notices: flat.notices, slipNote: (piece) => building.doorstep.slipNote(piece), stairwell: world.zone('stairwell') });
   const visitors = furnishVisitors({
     living,
     hallway,
@@ -274,15 +314,39 @@ export function buildWorld(services: Services, parts: { world: GameWorld; player
     // is held out as its box; browsing, they look at a box on the shelves; seated, at the TV if it plays.
     surfaceAt: (at) => surfaceUnderfoot(flatZones.find((zone) => zone.contains(at)) ?? living, at),
     covers,
-    shelfBoxes: () => shelves.boxes,
+    shelfBoxes: () => [...shelves.boxes, ...services.showcases.boxes()],
+    // What stands in the displays: a friend comes to look, and says so.
+    showcases: services.showcases,
     watch: () => (home.tv.isPlaying ? home.tv.getWorldPosition(tvAt).setY(0.9) : null),
     doorTaken: () => building.doorstep.waiting !== null,
     // `?visit`: a friend rings as soon as the player is home (testing).
     force: params.has('visit'),
     // A cake on the kitchen table: a slice, a longer stay, a thank-you (docs/household.md).
     hosting: { cakeOut: () => services.household.cakeOut, eatCake: () => services.household.eatCake() },
+    // The lost prototype's trail: a friend chatted to may know where the grey cart is (src/story).
+    talk: (friendId) => services.story.atFriend(friendId),
   });
   building.doorstep.also(visitors);
+  // More than one round at once (docs/visitors.md "Gatherings"): games nights, open houses, the collectors' club's visit.
+  // The program runner (a games night's match on the TV) is made with the Session: `session.ts` sets it.
+  const programs = late<ProgramRunner>('the program runner');
+  const gatherings = furnishGatherings({
+    host: visitors.host,
+    hallway,
+    tv: home.tv,
+    programs: () => (programs.isSet ? programs.get() : null),
+    standing: services.standing,
+    honours: services.honours,
+    collectionSize: () => collection.games.filter((g) => g.status !== 'wishlist').length,
+    isRare: (game) => isGrail(game.id) || game.edition === 'firstPrint' || (fame.peek(game) ?? 0) >= RARE_VIEWS,
+    showpiece: () => collectorWatch.showpieces(1, strays.games.filter((g) => g.status !== 'lent'))[0]?.game ?? null,
+    // The displays with something in them: an open house's guests stop at them.
+    showcases: () => services.showcases.stops(),
+    honourAt: (id) => living.group.getObjectByName(`Honour:${id}`)?.getWorldPosition(new Vector3()) ?? null,
+    // `?gamesnight`, `?openhouse`, `?clubvisit`: that gathering as soon as the player is home (testing).
+    force: params.has('gamesnight') ? 'night' : params.has('openhouse') ? 'house' : params.has('clubvisit') ? 'club' : undefined,
+  });
+  flat.phone.setEvents({ list: () => gatherings.phoneRows(), call: (id) => gatherings.call(id as 'gamesNight' | 'openHouse') });
   // The bedroom's phone asks a friend round (once a market day, if nobody came yet), `inHours` from now.
   flat.phone.setFriends({
     list: () => visitors.phoneBook(),
@@ -304,6 +368,8 @@ export function buildWorld(services: Services, parts: { world: GameWorld; player
 
   // The shelves of every zone of the flat (the collection room's, the bedroom's bought bookcases), searched and sorted as one.
   const shelves = new ShelvingGroup(flatHandles.map((handle) => handle.shelving), arrangement);
+  // A box on display is found there too (search, the random pick, the box in hand aimed at a shelf).
+  shelves.alsoIn((gameId) => services.showcases.findBox(gameId));
   // A stray game picked up becomes its shelf's own box (shown even if its room is out of view), which goes home when put down.
   strays.homeBox = (gameId) => {
     const box = shelves.findBox(gameId);
@@ -311,7 +377,7 @@ export function buildWorld(services: Services, parts: { world: GameWorld; player
     return box;
   };
 
-  return { zones: manager, graphics, inspector, cat: cat.get(), shelves, pastimes };
+  return { zones: manager, graphics, inspector, cat: cat.get(), shelves, pastimes, programs };
 }
 
 /** The balcony doors in the scene (the street is heard through them, full once open). */

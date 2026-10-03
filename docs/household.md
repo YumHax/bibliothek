@@ -21,6 +21,7 @@ friend coming round), never a daily chore. What is worn or set stays so (saved) 
 | Market, before `firstSale.before` | The morning's first stall purchase | "The first sale brings luck": the haggle opens lower (`firstSale.floor`) | `Perks.firstSale` |
 | Bedroom phone | Call a stall where the player is a regular (`phone.regularFrom`) in market hours | It reads out today's table and puts a copy aside for the hold deposit, as if held at the stall | `PhonePanel`, `Transactions.holdCopy` |
 | Bedroom phone | Ask a friend round, once a market day before `phone.friendsUntil` | They come `phone.inHours` later (a visit on demand: loans, tips, the cake) | `Visitors.invite`, `VisitBook.invite` |
+| Bedroom phone | Have everyone round tonight; ring THE GAMING WEEKLY for an open house | A games night (PADDLE WARS on the TV, a photo), an open house two days on (coins at the door, the paper's article) | `Gatherings.phoneRows`, `call` (docs/visitors.md "Gatherings") |
 | Market stalls | Some ordinary copies carry an old price sticker (`STICKER.odds`) | Sold at `STICKER.factor`: a bargain once peeled off at home | `MarketStock.priced` (its own hash) |
 | Bedroom wardrobe (door open) | Choose an outfit | Arcade tee: +10 % tickets. Bargain hunter's jacket: every haggle opens lower. Sunday best: the glass case opens whatever the reputation. Each is earned (a trophy, reputation, 25 games) | `outfits.ts`, `WardrobePanel` |
 
@@ -42,8 +43,40 @@ or the dryer with nothing in hand says what to bring (a reaction, not the refusa
 few per kind of copy, drawn from the market day.
 The kitchen radio ducks its music `DUCK_DB` under a jingle while the chronicle's card is up (`RadioVoice.announce`).
 
+### Playing at home
+
+- **The turntable** (`world/vinyl/RecordPlayer`, on the sideboard's turntable, riding it): a click with free hands puts on
+  the next soundtrack LP owned (`record` home goods, bought one at a time from the crate by the flea market's household
+  stall, `world/vinyl/RecordCrate`: the nth bought is `vinyl/records` `RECORDS[n]`, the turntable's `KEYS.turntable`
+  remembers the last played); the platter spins up, the arm swings in and drops, side A plays from the sideboard through
+  the walls (`vinyl/RecordTune`, an ambient `Voice` behind a `PointSound`: crackle and pops, the needle's thump, four
+  tracks made up from the record and the track number in its console's style, an NES's pulses to a PS1's breakbeats;
+  the same tune every time). A click while it plays lifts the needle; at the side's end the arm returns by itself.
+  Original music only, invented sleeves.
+- **The home arcade cabinet** (`world/homeArcade`, the bedroom by the door, `homeArcade` from TV REPAIR): the hall's own
+  `ArcadeCabinet` around a 7-in-1 board (`HomeArcadeGames`: a menu, then the game picked), `atHome` (no coin, no
+  ticket, no medal, league or challenge), its scores on a table of its own (`HomeScores`, `KEYS.homeArcade`). No light
+  of its own (a glow pool only). A guest takes stick two (`cabinet.partner.setPartner(name)`, `games.pick('duel')`).
+- **The NES on the TV** plays the homebrew carts for real (docs/media.md "Homebrew carts").
+
 Every number is in `household/rules.ts` (`HOUSEHOLD`) or at the top of `outfits.ts`; the sticker's in `pricing.ts`
 (`STICKER`). All first guesses.
+
+## Repairing a console (`src/repair/`, `ui/repair/`, `world/repair/`)
+
+A console bought broken (from a small ad's seller, docs/economy.md "Small ads and the seller's flat", or TV REPAIR's
+crate of spares-or-repair inside its door, one on `REPAIR.crateOdds` of game days) goes into the `Workshop`
+(`KEYS.workshop`) with its fault (`consoles.FAULTS` by platform: bent 72-pin connector, dirty contacts, a leaky
+capacitor, a blown fuse, corroded battery terminals, a dusty lens, a loose screen ribbon). It waits on the kitchen's
+right-hand chair (`REPAIR_PLAN.kitchenChair`, once the table is bought: the table is the bench) with a TO FIX tag; a
+click opens the repair on the table (`RepairPanel`, a drawing of the console from above): the shell's screws out one
+by one, the shell lifted, the fault found on the board (a healthy part only "looks fine"), the right tool from the
+tray (a wrong one is a word), the fix by hand (scrub: hold the pointer down on it and work it clean; swap: the old part
+out, the new one seated; solder: each joint touched, a capacitor out on two legs and in on two more), the shell back,
+screwed shut, the power switch: the light, the chime, `Workshop.fix`. Shut halfway, nothing changes (it starts over).
+A mended console waits on the chair (WORKS!) until sold at TV REPAIR's counter (the WE BUY card, `ConsoleDeskPanel`,
+two clicks) for `REPAIR.resaleShare` of its value (`CONSOLES`). Bonus only: a broken console waits as long as it likes.
+Not kept to play: the TV stand already shows a console for every platform owned. Numbers in `repair/consoles.ts`.
 
 ## Files
 

@@ -1,8 +1,10 @@
-import { Polygon, type Rng } from './Sheet';
+import { Polygon, type Rng, type ShopCurfew } from './Sheet';
 import { between, integer, pick, shade } from './paint';
 import { FacadeFrame } from './FacadeFrame';
-import { SHOP_LOOKS } from '@/world/city/shopLooks';
-import { GROUND_FLOOR } from '@/world/street/streetPlan';
+import { SHOP_LOOKS, letteringFont } from '@/world/city/shopLooks';
+import { GROUND_FLOOR, type ShopKind } from '@/world/street/streetPlan';
+import { SHOP_HOURS } from '@/world/street/shops/shopHours';
+import { hasShopfront } from '@/world/street/shopfronts/shopfrontPlan';
 
 /** What a shop puts out on the pavement in front of it. */
 export type ShopDisplay = 'terrace' | 'crates' | 'buckets' | 'board' | 'none';
@@ -22,38 +24,45 @@ export interface Storefront {
   display: ShopDisplay;
   /** The retro games shop: nothing may stand in front of it. */
   landmark: boolean;
-  /** The colour of its light and the wakefulness at which it shuts (its curfew), for the light it spills outside. */
+  /** The colour of its light and its opening hours (the walkable street's `SHOP_HOURS`), for the light it spills outside. */
   light: 'warm' | 'cool';
-  closing: number;
+  closing: ShopCurfew;
   /** The boxes on its display shelves (the retro games shop's show the day's market stock, see `Outdoors.showShopStock`). */
   goods: GoodsRect[];
 }
 
 interface ShopType {
+  /** Its kind in the walkable street's plan: its opening hours are that kind's (`SHOP_HOURS`). */
+  kind: Exclude<ShopKind, 'shut'>;
   name: string;
   /** Shopfront joinery, the fascia board and its lettering. */
   front: string;
   fascia: string;
   letters: string;
+  /** Its lettering (`city/shopLooks` `LETTERING`). */
+  font: string;
   /** Awning stripes (colour, then the stripe between), or no awning. */
   awning: [string, string] | null;
   /** Colours of what fills the window display. */
   goods: string[];
   light: 'warm' | 'cool';
-  /** Bars and tobacconists keep going until one or two in the morning. */
+  /** Bars and tobacconists keep going into the night (their hours are `SHOP_HOURS`'). */
   late: boolean;
   display: ShopDisplay;
   /** Lettering that glows at night (a neon or a lightbox), all night long. */
   neon?: 'warm' | 'cool';
   /** A lit sign on a bracket: the pharmacy's cross, the tobacconist's diamond; a painted board (the walk-in shops'). */
   bracket?: 'cross' | 'diamond' | 'board';
-  /** No roller shutter: its windows stay lit behind their glass after closing (the walk-in shops, `street/shopfronts/`). */
-  unshuttered?: boolean;
 }
 
 /** A kind's colours (`city/shopLooks`, shared with the walkable street) with how the painted front lights up and dresses the pavement. */
-function look(kind: keyof typeof SHOP_LOOKS, painted: Pick<ShopType, 'light' | 'display'> & Partial<Pick<ShopType, 'neon' | 'bracket' | 'unshuttered'>>): ShopType {
-  return { ...SHOP_LOOKS[kind], ...painted };
+function look(kind: keyof typeof SHOP_LOOKS, painted: Pick<ShopType, 'light' | 'display'> & Partial<Pick<ShopType, 'neon' | 'bracket'>>): ShopType {
+  return { kind, ...SHOP_LOOKS[kind], ...painted };
+}
+
+/** When a kind of shop is open (the walkable street's `SHOP_HOURS`; a shop that never shuts burns all night). */
+function hoursOf(type: ShopType): ShopCurfew {
+  return SHOP_HOURS[type.kind] ?? { open: 0, close: 24 };
 }
 
 /** The shops the facades draw lots from (their order is the draw's: a new kind goes in `PLANNED_SHOPS`, never here). */
@@ -63,7 +72,7 @@ const SHOPS: readonly ShopType[] = [
   look('pharmacy', { light: 'cool', display: 'none', bracket: 'cross' }),
   look('books', { light: 'warm', display: 'board' }),
   look('grocer', { light: 'warm', display: 'crates' }),
-  look('florist', { light: 'warm', display: 'buckets', unshuttered: true }),
+  look('florist', { light: 'warm', display: 'buckets' }),
   look('tabac', { light: 'warm', display: 'none', neon: 'warm', bracket: 'diamond' }),
   look('bar', { light: 'warm', display: 'terrace', neon: 'warm' }),
   look('butcher', { light: 'cool', display: 'none' }),
@@ -71,13 +80,12 @@ const SHOPS: readonly ShopType[] = [
 ];
 /** Kinds only the walkable street's plan puts somewhere (`plannedType`), never drawn by lot. */
 const PLANNED_SHOPS: readonly ShopType[] = [
-  look('furniture', { light: 'warm', display: 'none', bracket: 'board', unshuttered: true }),
-  look('pets', { light: 'warm', display: 'none', bracket: 'board', unshuttered: true }),
-  look('electronics', { light: 'cool', display: 'none', neon: 'cool', bracket: 'board', unshuttered: true }),
+  look('furniture', { light: 'warm', display: 'none', bracket: 'board' }),
+  look('pets', { light: 'warm', display: 'none', bracket: 'board' }),
+  look('electronics', { light: 'cool', display: 'none', neon: 'cool', bracket: 'board' }),
 ];
 /** The shop across the street the collector surely haunts. */
 export const RETRO_GAMES: ShopType = look('retro', { light: 'cool', display: 'board', neon: 'cool' });
-const LETTER_FONT = 'Georgia, "Times New Roman", serif';
 const GLASS = '#26313d';
 
 /**
@@ -94,11 +102,7 @@ export interface PlannedShop {
 
 /** The painted look of a plan's kind of shop ('shut' is a roller shutter, the arcade is not painted). */
 function plannedType(kind: string, name?: string): ShopType | null {
-  const byKind: Record<string, string> = {
-    cafe: 'CAFE', bakery: 'BAKERY', pharmacy: 'PHARMACY', books: 'BOOKSHOP', grocer: 'GREENGROCER', florist: 'FLOWERS', tabac: 'NEWSAGENT', bar: 'BAR', butcher: 'BUTCHER', laundry: 'LAUNDERETTE',
-    furniture: 'FURNITURE', pets: 'PET SHOP', electronics: 'TV REPAIR',
-  };
-  const type = kind === 'retro' ? RETRO_GAMES : [...SHOPS, ...PLANNED_SHOPS].find((shop) => shop.name === byKind[kind]);
+  const type = kind === 'retro' ? RETRO_GAMES : [...SHOPS, ...PLANNED_SHOPS].find((shop) => shop.kind === kind);
   if (!type) return null;
   return name && type !== RETRO_GAMES ? { ...type, name } : type;
 }
@@ -144,12 +148,12 @@ export function paintShopfronts(f: FacadeFrame, random: Rng, wall: string, landm
   return out;
 }
 
-/** One shop from `s0` to `s1` along the facade; returns its curfew (when it shuts, see `wakefulnessAt`) and the goods in its windows. */
-function paintShop(f: FacadeFrame, random: Rng, type: ShopType, s0: number, s1: number, units: number): { closing: number; goods: GoodsRect[] } {
+/** One shop from `s0` to `s1` along the facade; returns its opening hours (its lights and shutter keep them) and the goods in its windows. */
+function paintShop(f: FacadeFrame, random: Rng, type: ShopType, s0: number, s1: number, units: number): { closing: ShopCurfew; goods: GoodsRect[] } {
   const { sheet, d } = f;
   const ctx = sheet.color;
-  // Shops shut around eleven (the late ones at one or two): see `wakefulnessAt`.
-  const closing = type.late ? between(random, 0.15, 0.3) : between(random, 0.55, 0.85);
+  // The walkable street's hours, so a shop the window shows lit is open down there.
+  const closing = hoursOf(type);
   sheet.path(f.quad(s0 + 0.1, s1 - 0.1, 0, 3.6), type.front);
   f.detail(f.quad(s0 + 0.1, s1 - 0.1, 0, 0.55), shade(type.front, 0.7));
   const unit = (s1 - s0) / units;
@@ -198,7 +202,7 @@ function paintShop(f: FacadeFrame, random: Rng, type: ShopType, s0: number, s1: 
     const { x: pxX, y: pxY } = f.pxPerMetre;
     const size = 0.34 * pxY;
     ctx.save();
-    ctx.font = `bold ${size}px ${LETTER_FONT}`;
+    ctx.font = letteringFont(type.font, size);
     const squeeze = Math.min(pxX / pxY, ((s1 - s0 - 0.6) * pxX) / Math.max(1, ctx.measureText(type.name).width));
     // The fascia runs aslant across the panorama (its far end is lower or higher): the lettering is
     // sheared to run along it, not level with the texture.
@@ -215,19 +219,20 @@ function paintShop(f: FacadeFrame, random: Rng, type: ShopType, s0: number, s1: 
     ctx.fillStyle = type.letters;
     ctx.fillText(type.name, 0, 0);
     ctx.restore();
-    if (type.neon) sheet.sign(type.name, cx, cy, size, -squeeze, `bold ${LETTER_FONT}`, type.neon, 0.85, slant);
+    if (type.neon) sheet.sign(type.name, cx, cy, size, -squeeze, type.font, type.neon, 0.85, slant);
     else if (random() < 0.5) sheet.lit(fascia, type.light, 0.35, closing);
   }
 
   // The roller shutter comes down over the front when the shop shuts, and stays down until it opens.
-  if (!type.unshuttered) sheet.shutter(f.quad(s0 + 0.1, s1 - 0.1, 0, 3.0), closing);
+  // The walk-in shops (`street/shopfronts/`) keep none: their windows stay lit behind the glass after closing.
+  if (!hasShopfront(type.kind)) sheet.shutter(f.quad(s0 + 0.1, s1 - 0.1, 0, 3.0), closing);
   if (type.awning && random() < 0.8) paintAwning(f, type.awning, s0 + 0.1, s1 - 0.1);
   if (type.bracket) paintBracketSign(f, type.bracket, random() < 0.5 ? s0 + 0.5 : s1 - 0.5, type);
   return { closing, goods };
 }
 
 /** Shelves of goods behind the glass: loaves, books, fruit, bottles, game boxes, all as little blocks of colour. */
-function paintGoods(f: FacadeFrame, random: Rng, type: ShopType, g0: number, g1: number, closing: number): GoodsRect[] {
+function paintGoods(f: FacadeFrame, random: Rng, type: ShopType, g0: number, g1: number, closing: ShopCurfew): GoodsRect[] {
   const goods: GoodsRect[] = [];
   if (!f.fine) return goods;
   const ctx = f.sheet.color;

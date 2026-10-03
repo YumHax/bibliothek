@@ -31,6 +31,11 @@ export interface PositionMemoryOptions {
   floorOf: (zone: string) => THREE.Box2 | null;
   /** True while the player is not standing somewhere of their own accord (a travel, a sleep): nothing is saved then. */
   busy?: () => boolean;
+  /**
+   * Where to put the player instead of the saved spot, or null to go back there: a shop or the flea market shut since
+   * (a reload never lands past a door's hours), outside on the pavement in front of its door. World floor point.
+   */
+  instead?: (saved: SavedPosition) => SavedPosition | null;
   storage?: Storage | null;
 }
 
@@ -72,13 +77,17 @@ export class PositionMemory implements Updatable {
   /** Puts the player where they were last time; false (nothing moved) when there is nothing valid to go back to. */
   restore(): boolean {
     if (new URLSearchParams(location.search).has('fresh')) return false;
-    const saved = this.load();
-    if (!saved) return false;
+    const stored = this.load();
+    if (!stored) return false;
+    const saved = this.options.instead?.(stored) ?? stored;
     const floor = this.options.floorOf(saved.zone);
     if (!floor) return false;
     const x = THREE.MathUtils.clamp(saved.x, floor.min.x + MARGIN, floor.max.x - MARGIN);
     const z = THREE.MathUtils.clamp(saved.z, floor.min.y + MARGIN, floor.max.y - MARGIN);
     if (!Number.isFinite(x) || !Number.isFinite(z)) return false;
+    // A spot well outside its zone's floor was saved where the zone used to stand (the walk-in shops moved): clamped,
+    // it would land against a wall; the default spawn instead.
+    if (Math.hypot(saved.x - x, saved.z - z) > 2) return false;
     this.options.player.setPosition(x, z);
     this.options.player.setLook(saved.yaw, saved.pitch);
     this.last = { ...saved, x, z };

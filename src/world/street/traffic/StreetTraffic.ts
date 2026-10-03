@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import type { Updatable } from '@/core/Engine';
 import type { Furniture } from '../../Furniture';
+import type { DayNight } from '../../props/DayNight';
 import { FRONT, STREET_PLAN } from '../streetPlan';
 
 /** Where the signalled crossing's cycle is: cars go, amber, all red, walkers go, walkers' flashing man, all red again. */
@@ -34,6 +35,14 @@ export interface RoadVehicle {
   readonly width: number;
 }
 
+/** An emergency vehicle: the others pull over while its siren is on (`driving.allowedSpeed`). */
+export interface SirenVehicle extends RoadVehicle {
+  readonly sirenOn: boolean;
+}
+
+/** How much grip the road has, wet and under snow (1 dry): braking takes that much longer. */
+const GRIP = { wet: 0.3, snow: 0.5, least: 0.4 };
+
 type Crossing = (typeof STREET_PLAN.crossings)[number];
 
 const ORDER: readonly SignalPhase[] = ['carsGreen', 'amber', 'clearForWalkers', 'walkersGreen', 'walkersFlash', 'clearForCars'];
@@ -49,12 +58,17 @@ export class StreetTraffic extends THREE.Group implements Furniture, Updatable {
   readonly obstacles = new Set<RoadObstacle>();
   /** Everything driving (cars, the bus, the van, the lorry, bikes), for the queues. */
   readonly vehicles = new Set<RoadVehicle>();
+  /** The emergency vehicles (whether or not they are out): drivers make way for one with its siren on. */
+  readonly sirens = new Set<SirenVehicle>();
   /** Set by the bus while it stands at the stop with its doors open. */
   busAtStop = false;
+  /** How well tyres grip the road now (1 dry; less wet, least on snow): drivers brake gentler, stop longer. */
+  grip = 1;
   private phaseIndex = 0;
   private phaseTime = 0;
 
-  constructor() {
+  /** `dayNight`: the weather the road's grip follows (none: always dry). */
+  constructor(private readonly dayNight?: DayNight) {
     super();
     this.name = 'StreetTraffic';
     // Start somewhere in the cycle, so two visits do not look alike.
@@ -92,7 +106,17 @@ export class StreetTraffic extends THREE.Group implements Furniture, Updatable {
     return this.phase === 'walkersFlash';
   }
 
+  /** Whether an emergency vehicle is out with its siren on (one call at a time). */
+  get sirenOut(): boolean {
+    for (const s of this.sirens) if (s.active && s.sirenOn) return true;
+    return false;
+  }
+
   update(dt: number): void {
+    if (this.dayNight) {
+      const s = this.dayNight.state;
+      this.grip = Math.max(GRIP.least, 1 - GRIP.wet * s.wetness - GRIP.snow * s.snowCover);
+    }
     this.phaseTime += dt;
     while (this.phaseTime >= this.durationOf(this.phase)) {
       this.phaseTime -= this.durationOf(this.phase);

@@ -59,7 +59,7 @@ export const fragmentShader = /* glsl */ `
   uniform vec3 cloudTint;
   uniform float cloudAlpha;
   uniform float cloudCover;
-  uniform vec2 cloudDrift;
+  uniform vec4 cloudDrift; // xy the clouds' drift, z the game hour (the shops' opening hours)
   uniform float cityGlow;
   uniform float litAlpha;
   uniform float wakefulness;
@@ -200,11 +200,20 @@ export const fragmentShader = /* glsl */ `
   // with the bulb painted under it (fairy comes back 1). Every other window with someone home
   // (a curfew above zero: lamps and signs have none) lives a little: now and then a figure crosses
   // the room, a dark band sliding over the light, and later in the evening some blinds come down.
+  // Whether a shop open from open to close (game hours; a close past 24 is after midnight) is open now.
+  float shopOpen(float open, float close) {
+    float h = cloudDrift.z;
+    return max(step(open, h) * step(h, close), step(h + 24.0, close));
+  }
   vec4 lightTexel(vec2 uv, out float fairy) {
     vec4 li = texture2D(lights, uv);
-    float cf = texture2D(curfew, uv).r;
-    float on = step(1.0 - litAlpha, fract(cf * 7.0)) * step(cf, wakefulness);
+    vec3 cfs = texture2D(curfew, uv).rgb;
+    float cf = cfs.r;
     float code = mod(floor(cf * 255.0 + 0.5), 8.0);
+    // A shop's light (code 5): G its opening hour (of 24), B its closing hour (of 26).
+    float shop = step(4.5, code) * step(code, 5.5);
+    float kept = mix(step(cf, wakefulness), shopOpen(cfs.g * 24.0, cfs.b * 26.0), shop);
+    float on = step(1.0 - litAlpha, fract(cf * 7.0)) * kept;
     float animated = step(6.5, code);
     fairy = step(5.5, code) * (1.0 - animated);
     float screen = 0.45 + 0.55 * valueNoise(vec2(time * 3.0, cf * 97.0)) * (0.7 + 0.3 * step(0.5, fract(time * 0.23 + cf * 5.0)));
@@ -213,7 +222,7 @@ export const fragmentShader = /* glsl */ `
     float twinkle = 0.3 + 0.7 * smoothstep(0.3, 0.6, valueNoise(vec2(time * 1.7, texel.x * 0.37 + texel.y * 1.73)));
     li.r *= mix(1.0, beacon, animated) * mix(1.0, twinkle, fairy);
     li.g *= mix(1.0, screen, animated);
-    float home = step(0.02, cf) * (1.0 - animated) * (1.0 - fairy);
+    float home = step(0.02, cf) * (1.0 - animated) * (1.0 - fairy) * (1.0 - shop);
     if (home > 0.5 && li.r + li.g > 0.0) {
       float h = fract(cf * 91.7);
       float slot = floor(time / 23.0 + h * 17.0);
@@ -306,7 +315,7 @@ export const fragmentShader = /* glsl */ `
     vec3 clouds = texture2D(sky, eq + vec2(cloudDrift.x, 0.0)).rgb;
     vec3 color = addCityGlow(horizonGlow(skyGradient(d), d), d);
     // The overcast: a sheet of cloud over the whole sky, thicker the more the sky is covered.
-    vec2 sp = d.xz / max(d.y + 0.12, 0.05) * 1.4 + cloudDrift * 60.0;
+    vec2 sp = d.xz / max(d.y + 0.12, 0.05) * 1.4 + cloudDrift.xy * 60.0;
     float n = fbm(sp);
     float sheet = skyCloudSheet(n, cloudCover) * smoothstep(-0.03, 0.08, d.y);
     // Stars only through the gaps.
@@ -466,9 +475,9 @@ export const fragmentShader = /* glsl */ `
     }
     float cov = sc.a * step(uv.y, 1.0);
     float sceneDist = -DEPTH_SCALE * log(1.0 - min(li.a, 0.996));
-    // A shop shut behind its roller shutter (fx B is the shop's curfew): ribbed grey, unlit, not glass.
-    float shutterCf = fx0.b;
-    float shut = step(0.002, shutterCf) * step(wakefulness, shutterCf);
+    // A shop shut behind its roller shutter (fx B its opening hours, Sheet.shutterByte): ribbed grey, unlit, not glass.
+    float shutterCode = floor(fx0.b * 255.0 + 0.5) - 1.0;
+    float shut = step(-0.5, shutterCode) * (1.0 - shopOpen(5.0 + floor(shutterCode / 16.0) * 0.5, 17.0 + mod(shutterCode, 16.0) * (11.0 / 15.0)));
     if (shut > 0.5) {
       float ribs = 0.82 + 0.18 * step(0.5, fract(floor(uv.y / SCENE_TEXEL.y) / 3.0));
       sc = vec4(SHUTTER * ribs, 1.0);

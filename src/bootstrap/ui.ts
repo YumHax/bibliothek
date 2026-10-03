@@ -19,6 +19,7 @@ import { CollectionEditor } from '@/ui/CollectionEditor';
 import { CatSettingsForm } from '@/ui/CatSettings';
 import { CataloguePanel } from '@/ui/CataloguePanel';
 import { SellPanel } from '@/ui/SellPanel';
+import { PARTY, partySold } from '@/building/neighboursParty';
 import { HagglePanel } from '@/ui/market/HagglePanel';
 import { TradePanel } from '@/ui/market/TradePanel';
 import { NoticeBoardPanel } from '@/ui/market/NoticeBoardPanel';
@@ -27,7 +28,10 @@ import { PrizePanel } from '@/ui/PrizePanel';
 import { CollectorBookPanel } from '@/ui/collector/CollectorBookPanel';
 import { JournalPanel } from '@/ui/JournalPanel';
 import { NeighbourTradePanel } from '@/ui/NeighbourTradePanel';
+import { CoproPanel } from '@/ui/CoproPanel';
 import { PhonePanel } from '@/ui/household/PhonePanel';
+import { phoneAds } from '@/ui/household/phoneAds';
+import { ConsoleDeskPanel, RepairPanel } from '@/ui/repair';
 import { WardrobePanel } from '@/ui/household/WardrobePanel';
 import { DreamCard } from '@/ui/household/DreamCard';
 import { HOUSEHOLD } from '@/household';
@@ -41,6 +45,10 @@ import { onWorldLoad } from '@/ui/worldLoad';
 import { Fader } from '@/ui/Fader';
 import { QualityPicker } from '@/ui/QualityPicker';
 import { addGameSettings } from '@/ui/settings/GameSettingsForm';
+import { addSaveFileSettings } from '@/ui/settings/SaveFileSettings';
+import { summarise } from '@/share/collectionSummary';
+import { LibretroCoverProvider } from '@/covers/LibretroCoverProvider';
+import { isPrototype } from '@/story';
 import { controlsGroupOf, zoneName } from '@/ui/menu/zoneNames';
 import { version } from '../../package.json';
 import { late as lateBound, type Late } from './late';
@@ -53,11 +61,12 @@ import { HomeShopPanel } from '@/ui/HomeShopPanel';
 import { ToDoNotePanel } from '@/ui/ToDoNotePanel';
 import { StoragePanel } from '@/ui/StoragePanel';
 import type { WorldPanels } from '@/world/buildContext';
+import { huntFile } from '@/building/hunt/BuildingHunt';
 
 export type Ui = ReturnType<typeof createUi>;
 
 /** Where the wallet chip stays up: the places money changes hands. */
-const MONEY_ZONES: ReadonlySet<ZoneId> = new Set<ZoneId>(['arcade', 'market', 'furnitureShop', 'tvShop', 'petShop', 'flowerShop']);
+const MONEY_ZONES: ReadonlySet<ZoneId> = new Set<ZoneId>(['arcade', 'market', 'furnitureShop', 'tvShop', 'petShop', 'flowerShop', 'sellerFlat']);
 
 /** What the menus read of things made after them: where the player is, the rules. */
 export interface UiLate {
@@ -106,10 +115,21 @@ export function createUi(services: Services, player: FirstPersonController, late
   overlay.addSetting('display', 'Graphics', new QualityPicker((options) => overlay.confirm(options)).element, QualityPicker.NOTE);
   addGameSettings(overlay, settings, { onEraseProgress: eraseProgress, version });
   overlay.addSetting('game', 'Cat', new CatSettingsForm(catSettings).element);
+  // The save as a file and back, and the collection to share (a picture, a page with covers straight from GitHub).
+  const githubCovers = new LibretroCoverProvider({ proxy: null });
+  addSaveFileSettings(overlay, {
+    version,
+    summary: () => summarise(collection.games, (game) => fame.peek(game)),
+    coverUrl,
+    publicCoverUrl: (game) => (isPrototype(game) ? undefined : githubCovers.getBoxArt(game).front),
+  });
 
   // A thumbnail whose art does not load becomes a made-up box (platform colour, title) in every panel.
   installCoverPlaceholders(container);
   const panel = new GamePanel(container);
+  // The press at the time (Wikipedia), under the details of the game in hand; the lost prototype's trail tells the player its finds.
+  panel.setReviews(services.reviews);
+  services.story.setNotices(notices);
   const search = new SearchBar(container);
   const editor = new CollectionEditor(container, collection, index, { canAdd: debug });
   const catalogue = new CataloguePanel(container, collection, index, wallet, fame, tx, { market, coverUrl });
@@ -130,6 +150,8 @@ export function createUi(services: Services, player: FirstPersonController, late
   const journalPanel = new JournalPanel(container, journal, {
     challenge: () => arcadeDaily.challenge(),
     upcoming: () => upcomingMarketDays(market.day),
+    file: () => services.story.file(),
+    files: [huntFile],
   });
   overlay.addPauseButton('journal', 'Journal', () => late.session.get().openPanel(journalPanel));
   // Photo mode and the search from the pause menu (a controller or a touchscreen has no P or F): back in the room, then the key.
@@ -184,12 +206,24 @@ export function createUi(services: Services, player: FirstPersonController, late
     () => services.furnishings.storedPieces().length > 0,
   );
   const neighbourTradePanel = new NeighbourTradePanel(container, wallet, { trades: neighbourTrades, tx, collection }, coverUrl);
+  // The co-owners' postal vote, opened by the ballot box in the stairwell's hall (`building/coproMeeting`).
+  const coproPanel = new CoproPanel(container);
   // What the street's shops and the hall console open: made once here, handed to their builders (`BuildContext.panels`).
   const panels: WorldPanels = {
     news: new NewsPanel(container),
     scratch: new ScratchCardPanel(container),
     homeShop: new HomeShopPanel(container, { wallet, upgrades: services.upgrades }),
     toDo: services.firstDay ? new ToDoNotePanel(container, services.firstDay) : undefined,
+    partySale: new SellPanel(container, collection, wallet, fame, tx, {
+      coverUrl,
+      buyer: {
+        heading: 'The residents’ table',
+        blurb: 'The neighbours buy games off you at a fair price, cash from the party’s tin. What you sell goes home with them.',
+        bonus: PARTY.saleBonus,
+        sell: (game, offer) => tx.sellToNeighbour(game, offer),
+        soldLine: (game, offer) => partySold(game, offer, services.today.gameDay),
+      },
+    }),
   };
   // What the bedroom opens (docs/household.md): the phone on the nightstand, the wardrobe's rail; and the dream on waking.
   const retro = SHOP_HOURS.retro!;
@@ -206,7 +240,12 @@ export function createUi(services: Services, player: FirstPersonController, late
       if (result.ok) return null;
       return result.reason === 'short' ? `“That’s a ${result.needed}-coin deposit, and you’ve got ${result.have}.”` : '“Hm, I can’t put that one by. Come and see.”';
     },
+    // The Gaming Weekly's small ads read at the newsstand: a ring agrees a visit (docs/economy.md "Small ads and the seller's flat").
+    ads: phoneAds(services.classifieds),
   });
+  // The kitchen table's console repair and TV REPAIR's counter that buys working ones back (docs/household.md "Repairing a console").
+  const repairPanel = new RepairPanel(container, { workshop: services.workshop, notices });
+  const consoleDesk = new ConsoleDeskPanel(container, { workshop: services.workshop, wallet, notices });
   const wardrobe = new WardrobePanel(container, {
     facts: () => perks.facts,
     worn: () => perks.outfit.id,
@@ -249,5 +288,5 @@ export function createUi(services: Services, player: FirstPersonController, late
   const fader = new Fader(container);
   const travelMenu = new TravelMenu<ZoneId>(container, input);
 
-  return { overlay, lockFlow, panel, notices, search, editor, catalogue, sellDesk, haggle, trade, marketHall, prizeCounter, walletHud, fader, travelMenu, collectorBook, journalPanel, neighbourTradePanel, phone, wardrobe, dreamCard, panels };
+  return { overlay, lockFlow, panel, notices, search, editor, catalogue, sellDesk, haggle, trade, marketHall, prizeCounter, walletHud, fader, travelMenu, collectorBook, journalPanel, neighbourTradePanel, coproPanel, phone, wardrobe, dreamCard, panels, repairPanel, consoleDesk };
 }

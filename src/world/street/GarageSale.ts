@@ -1,5 +1,8 @@
 import * as THREE from 'three';
 import type { Updatable } from '@/core/Engine';
+import type { Interactable } from '@/interaction/Interactable';
+import type { SessionActions } from '@/game/SessionActions';
+import { invisibleHitbox } from '../meshUtils';
 import type { BoxArtLoader } from '@/covers/BoxArtLoader';
 import { createCanvas, toTexture } from '@/covers/generated/canvasUtils';
 import { StockItem } from '@/economy/StockItem';
@@ -53,8 +56,11 @@ export function isGarageSaleDay(oneDayIn: number, date = new Date()): boolean {
  * across the street, where there is more inside. Origin on the pavement at the table's centre,
  * +z is the buyer's side.
  */
-export class GarageSale extends THREE.Group implements Furniture, Updatable {
+export class GarageSale extends THREE.Group implements Furniture, Updatable, Interactable {
+  readonly hitboxes: THREE.Object3D[];
   private readonly boxes: ForSaleBox[] = [];
+  /** The games still on the table (bought ones leave it). */
+  private onTable = 0;
   private filled = false;
   private lookClock = LOOK_EVERY;
 
@@ -83,6 +89,26 @@ export class GarageSale extends THREE.Group implements Furniture, Updatable {
       mesh.receiveShadow = true;
       this.add(mesh);
     }
+    // The table itself answers a click (the games on it are their own `ForSaleBox`es, hit first when looked at).
+    const hitbox = invisibleHitbox(width, height, depth, { y: height / 2 });
+    this.hitboxes = [hitbox];
+    this.add(hitbox);
+  }
+
+  setHovered(): void {
+    // A trestle table does not glow.
+  }
+
+  label(): string {
+    return 'Garage sale · have a look';
+  }
+
+  /** What the table holds now: loft games at the flat price, nothing yet (the stock not drawn), or picked clean. */
+  activate(session: SessionActions): void {
+    const price = this.options.price();
+    if (!this.filled) session.react(`“Still unpacking, love. Games ${price} coins each, the rest is at the flea market in RETRO GAMES.”`);
+    else if (this.onTable > 0) session.react(`Loft finds, ${price} coins each, no haggling. Pick one up to look at it.`);
+    else session.react('Picked clean. A box of cables and a broken joypad are all that is left.');
   }
 
   get footprint(): THREE.Box3 {
@@ -135,13 +161,16 @@ export class GarageSale extends THREE.Group implements Furniture, Updatable {
       box.onSold = () => {
         host.remove(box);
         sales.add(item.game.id);
+        this.onTable--;
       };
       box.restock = () => {
         place();
         sales.remove(item.game.id);
+        this.onTable++;
       };
       place();
       this.boxes.push(box);
+      this.onTable++;
     });
   }
 }

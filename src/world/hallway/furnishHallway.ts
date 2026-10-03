@@ -21,9 +21,11 @@ import { Poster } from '../props/Poster';
 import { shopPoster } from './shopPoster';
 import { Homecoming } from './Homecoming';
 import { mailFor } from './mail';
+import { collectPost } from '@/building/postCollected';
 import { StairwellSounds } from '@/audio/flatSounds';
 import { HALLWAY_PLAN } from './hallwayPlan';
 import { Notebook } from './Notebook';
+import { CartonAtHome } from './CartonAtHome';
 import { StickyNote, ToDoNote } from '@/onboarding';
 import { rugsUnderfoot } from '../build/rugsUnderfoot';
 import { useVerbOn } from '@/ui/verb';
@@ -47,13 +49,14 @@ export function furnishHallway(zone: Zone, ctx: BuildContext): ZoneHandle {
   const hallConsole = zone.placeAt(new HallConsole({ width: 0.8 }), plan.console);
   zone.placeAt(new CoatRack({ shoeRack: false }), plan.coatRack);
   if (deliveries) zone.placeAt(new Parcel(deliveries), plan.parcel);
+  // A sealed carton from the flea market or the saleroom, opened here one thing at a time.
+  if (ctx.market.lots) zone.placeAt(new CartonAtHome({ sealed: ctx.market.lots.sealed, tx: ctx.market.lots.tx }), plan.carton);
 
   // Going out takes the keys from the bowl; coming home (set down on the arrival spot) drops them
   // back in it, and some days a flyer or two waits on the mat (at most one delivery per in-game day).
   const keys = placeWith(zone, hallConsole, new HouseKeys(), hallConsole.bowl);
   const doormat = zone.placeAt(new Doormat({ width: plan.doormat.width, depth: plan.doormat.depth }), plan.doormat.at);
   const mail = placeWith(zone, doormat, new MailDrop(), new THREE.Vector3(0, DOORMAT_THICKNESS, 0));
-  let lastMailDay = -1;
   // Notes slipped under the door (a neighbour's swap, the postman's card) land on the mat too.
   if (building) zone.onUnload(building.doorstep.onNote((piece) => mail.deliver([piece])));
   const [ax, az] = plan.arrival.at;
@@ -67,9 +70,9 @@ export function furnishHallway(zone: Zone, ctx: BuildContext): ZoneHandle {
       onHome: (session) => {
         keys.setInPocket(false);
         keys.jingle();
-        if (today.gameDay !== lastMailDay) {
-          lastMailDay = today.gameDay;
-          mail.deliver(mailFor(today.gameDay, { arcadeDaily, market, marketDay }));
+        // Unless it was taken from our flap in the entrance hall on the way up (`building/postCollected`).
+        if (collectPost(today.gameDay)) {
+          mail.deliver(mailFor(today.gameDay, { arcadeDaily, market, marketDay, story: ctx.story }));
         }
         // A mail order whose round came while the player was out: the concierge took it in.
         const posted = building?.post?.deliver().length ?? 0;

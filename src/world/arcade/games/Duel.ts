@@ -75,6 +75,11 @@ export class Duel extends BaseGame {
     this.fx.pop(joining ? `${name} JOINS!` : 'CPU TAKES OVER', SCREEN_W * 0.75, PLAY_TOP + 40, '#63b3ff', 8);
   }
 
+  /** The goals so far, the player's and player two's (a games night's friends cheer each one). */
+  get tally(): { you: number; them: number } {
+    return { you: this.you, them: this.them };
+  }
+
   opponentControls(): ArcadeControls {
     return { ...NO_CONTROLS, up: this.p2Dir < 0, down: this.p2Dir > 0 };
   }

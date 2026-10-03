@@ -17,12 +17,15 @@ import type { SeatingParts } from './Seating';
 import type { ScreenParts } from './Screens';
 import type { TravelParts } from './GoingOut';
 import type { ArcadeParts } from './ArcadePlay';
+import type { ProgramParts } from './ProgramPlay';
 import type { MarketCounterParts } from './MarketCounter';
 import type { PurchaseParts } from './Purchases';
 import type { BrowseParts } from './Browse';
 import type { CatParts } from './CatCare';
 import type { PhotoParts } from './PhotoControl';
 import type { RearrangingParts } from './Rearranging';
+import type { LabellingParts } from './Labelling';
+import type { NoticeDismissParts } from './NoticeDismiss';
 
 /*
  * Minimal shapes of the optional features the session routes keys to. They are defined here (not
@@ -64,8 +67,8 @@ export interface CatLike {
   readonly settings: { readonly name: string };
   /** False while no cat lives in the flat (it is adopted at the pet shop on Front Street): C does nothing then. */
   readonly adopted?: boolean;
-  /** The player calls it: it comes, ignores the call, or is asleep (`how`: by name, the feather wand, the treat jar). */
-  call(how?: 'voice' | 'feathers' | 'treats'): 'coming' | 'ignored' | 'asleep';
+  /** The player calls it: it comes, ignores the call, is asleep, or is out on the stairs and miaows back (`how`: by name, the feather wand, the treat jar). */
+  call(how?: 'voice' | 'feathers' | 'treats'): 'coming' | 'ignored' | 'asleep' | 'out';
   setPlayerSeat?(seat: Seat | null): void;
 }
 
@@ -234,4 +237,4 @@ export interface CoreParts {
  * part is silently skipped when absent.
  */
 export interface SessionParts
-  extends CoreParts, ModalParts, HandsParts, SeatingParts, ScreenParts, TravelParts, ArcadeParts, MarketCounterParts, PurchaseParts, BrowseParts, CatParts, PhotoParts, RearrangingParts {}
+  extends CoreParts, ModalParts, HandsParts, SeatingParts, ScreenParts, TravelParts, ArcadeParts, ProgramParts, MarketCounterParts, PurchaseParts, BrowseParts, CatParts, PhotoParts, RearrangingParts, LabellingParts, NoticeDismissParts {}

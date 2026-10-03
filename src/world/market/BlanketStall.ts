@@ -131,8 +131,13 @@ export class BlanketStall extends THREE.Group implements StallLike {
     return new THREE.Box3(new THREE.Vector3(-BLANKET_W / 2, 0, SUIT_BACK - 0.05), new THREE.Vector3(BLANKET_W / 2, 0.3, BLANKET_D / 2));
   }
 
-  capacityFor(boxWidth: number): number {
+  /** Boxes `boxWidth` wide on the whole stall (before one is built: the street draws the day's stock to fit). */
+  static capacity(boxWidth: number): number {
     return BlanketStall.leanPerRow(boxWidth) + FLAT_ZS.length * BlanketStall.flatPerRow(boxWidth);
+  }
+
+  capacityFor(boxWidth: number): number {
+    return BlanketStall.capacity(boxWidth);
   }
 
   /**

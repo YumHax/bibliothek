@@ -97,6 +97,18 @@ export class SpeechLayer {
     this.blocked = blocked;
   }
 
+  /** The subtitle strip cleared by hand (docs/notices.md): the lines in it and those waiting behind them go. False when it was empty. */
+  clearSubtitles(): boolean {
+    let cleared = false;
+    for (const [key, bubble] of this.bubbles) {
+      if (bubble.place !== 'subtitle' || !bubble.current) continue;
+      bubble.queue.length = 0;
+      this.next(key, bubble);
+      cleared = true;
+    }
+    return cleared;
+  }
+
   update(dt: number, attending: boolean): void {
     const ms = attending ? dt * 1000 : 0;
     const w = window.innerWidth;

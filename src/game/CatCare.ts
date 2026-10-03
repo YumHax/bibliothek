@@ -16,17 +16,20 @@ const LINES: Record<CatCall, Record<Outcome, (name: string) => string>> = {
     coming: (name) => `${name} is coming`,
     asleep: (name) => `${name} is fast asleep`,
     ignored: (name) => `${name} looks at you… and looks away`,
+    out: (name) => `${name} miaows back, from somewhere down the stairs`,
   },
   feathers: {
     coming: (name) => `${name} comes running for the feathers!`,
     ignored: (name) => `${name} watches the feathers swish, and decides against it.`,
     asleep: (name) => `${name} is asleep. The feathers can wait.`,
+    out: (name) => `${name} is out on the stairs: the feathers swish for nobody.`,
   },
   treats: {
     coming: (name) => `${name} comes running from the other end of the flat. Crunch.`,
     // Not coming means no treat given: the jar keeps today's (`HomeLife.giveTreat`).
     ignored: (name) => `${name} is too busy to notice the jar. The treat can wait.`,
     asleep: (name) => `${name} is asleep. The jar goes back on the shelf till it wakes.`,
+    out: (name) => `No ${name} at the jar: a faint miaow comes up the stairwell.`,
   },
 };
 

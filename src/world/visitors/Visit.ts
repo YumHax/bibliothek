@@ -25,8 +25,8 @@ export interface RouteSeat {
   yaw: number;
   /** How high its seat is (m): where they sit down to. */
   height: number;
-  /** Nobody (the player, the cat, another guest) is in it right now. */
-  free: () => boolean;
+  /** Nobody (the player, the cat, another guest than `guest`) is in it right now. */
+  free: (guest?: string) => boolean;
   /** Marks it theirs from the moment they head for it until they get up (null): the cat and the player keep off. */
   claim: (guest: string | null) => void;
 }
@@ -45,6 +45,8 @@ export interface VisitRoute {
   roomDoor: THREE.Vector3;
   hub: THREE.Vector3;
   browse: { at: THREE.Vector3; yaw: number; kind: 'shelf' | 'window'; via: THREE.Vector3[] }[];
+  /** Stops made whenever there are any (a display the player filled, `showcase/`): one of them on every round. */
+  featured?: () => VisitRoute['browse'];
   seats: RouteSeat[];
 }
 
@@ -176,6 +178,14 @@ export class Visit {
        * the points to walk through, ending at `to` (or the nearest free spot to it); null to walk straight.
        */
       detour?: (from: THREE.Vector3, to: THREE.Vector3) => THREE.Vector3[] | null;
+      /** A gathering's member (`gathering/`): the stops they make, given (else drawn from the route's). */
+      stops?: () => VisitRoute['browse'];
+      /** False: no sit at all (an open house's guest only looks round). Default true. */
+      sits?: boolean;
+      /** No armchair free: where they stand instead (zone-local floor point, facing `yaw`), or null to skip the sit. */
+      standIn?: () => { at: THREE.Vector3; yaw: number } | null;
+      /** Seated (or standing in), they stay until `done()` holds, `max` s at most, instead of the usual linger. */
+      stayUntil?: { done: () => boolean; max: number };
     },
   ) {}
 
@@ -358,18 +368,19 @@ export class Visit {
    */
   private async sitAWhile(): Promise<void> {
     const r = this.route;
-    if (this.options.returning) return;
-    let seat = r.seats.find((s) => s.free());
+    if (this.options.returning || this.options.sits === false) return;
+    const me = this.friend.plan.name;
+    let seat = r.seats.find((s) => s.free(me));
     while (seat) {
       this.claim(seat);
       await this.walk([...seat.via.map((at) => ({ at })), { at: seat.approach }]);
-      if (seat.free()) break;
+      if (seat.free(me)) break;
       this.release();
       const back = seat;
       await this.walk([...[...back.via].reverse().map((at) => ({ at })), { at: r.hub }]);
-      seat = r.seats.find((s) => s !== back && s.free());
+      seat = r.seats.find((s) => s !== back && s.free(me));
     }
-    if (!seat) return;
+    if (!seat) return this.standAWhile();
     await this.walk([{ at: seat.at, direct: true }]);
     this.friend.stand(seat.yaw, 'stand');
     await this.until(() => Math.abs(angleDelta(seat.yaw, this.friend.rotation.y)) < 0.25, VISIT_RULES.sitTurnFor);
@@ -385,12 +396,16 @@ export class Visit {
       if (this.seated) this.friend.setLean(0);
     });
     this.script.say(this.script.sitLine(), 'ahh');
-    const stay = between(VISIT_RULES.linger.seat) * (this.options.linger?.() ?? 1);
+    const stayUntil = this.options.stayUntil;
+    const stay = stayUntil ? stayUntil.max : between(VISIT_RULES.linger.seat) * (this.options.linger?.() ?? 1);
     // Watching a longplay: a word at the screen, some way into it.
-    this.after(stay * between(VISIT_RULES.sitting.tvWordAt), () => {
-      if (this.seated && this.options.watch?.()) this.friend.say(pick(WORDS.ooh));
-    });
-    await this.pause(stay);
+    if (!stayUntil) {
+      this.after(stay * between(VISIT_RULES.sitting.tvWordAt), () => {
+        if (this.seated && this.options.watch?.()) this.friend.say(pick(WORDS.ooh));
+      });
+    }
+    if (stayUntil) await this.until(stayUntil.done, stay);
+    else await this.pause(stay);
     this.seated = false;
     // Up out of the chair: lean forward, push up, and only then walk.
     this.friend.stand(seat.yaw, 'stand');
@@ -400,6 +415,28 @@ export class Visit {
     await this.walk([{ at: seat.approach, direct: true }]);
     this.release();
     await this.walk([...[...seat.via].reverse().map((at) => ({ at })), { at: r.hub }]);
+  }
+
+  /**
+   * No armchair for them (a gathering's third guest): they stand at their spot (`standIn`) facing the room, eyes on
+   * the screen while it plays, as long as a seat would have kept them; no spot, no stay.
+   */
+  private async standAWhile(): Promise<void> {
+    const spot = this.options.standIn?.();
+    if (!spot) return;
+    const r = this.route;
+    await this.walk([{ at: spot.at }]);
+    const screen = this.options.watch?.();
+    this.watching = !!screen;
+    if (screen) this.gaze.copy(screen);
+    this.friend.stand(spot.yaw, 'pockets', screen ? this.gaze : null);
+    this.seated = true;
+    this.script.say(this.script.sitLine(), 'ahh');
+    const stayUntil = this.options.stayUntil;
+    if (stayUntil) await this.until(stayUntil.done, stayUntil.max);
+    else await this.pause(between(VISIT_RULES.linger.seat) * (this.options.linger?.() ?? 1));
+    this.seated = false;
+    await this.walk([{ at: r.hub }]);
   }
 
   private claim(seat: RouteSeat): void {
@@ -473,10 +510,14 @@ export class Visit {
    * hub, one to the next), then the window maybe; fewer when returning a game.
    */
   private pickStops(): VisitRoute['browse'] {
+    const given = this.options.stops?.();
+    if (given) return given;
     const shelves = this.route.browse.filter((b) => b.kind === 'shelf');
     const others = this.route.browse.filter((b) => b.kind !== 'shelf');
     const count = this.options.returning ? 2 : VISIT_RULES.browseStops;
-    const drawn = shuffle(shelves).slice(0, Math.max(1, count - (others.length ? 1 : 0)));
+    // A display the player filled is always one of the stops, walked nearest first with the shelves.
+    const featured = shuffle(this.route.featured?.() ?? []).slice(0, 1);
+    const drawn = [...shuffle(shelves).slice(0, Math.max(1, count - featured.length - (others.length ? 1 : 0))), ...featured];
     const picked: VisitRoute['browse'] = [];
     let at = this.route.hub;
     while (drawn.length) {

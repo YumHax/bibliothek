@@ -1,5 +1,8 @@
 import * as THREE from 'three';
 import { seededRandom } from '@/covers/generated/canvasUtils';
+import { RegionUploader } from '@/world/city/regionUpload';
+import { syncWorks } from '@/world/street/details/roadworks';
+import { MarketCalendar } from '@/economy/MarketCalendar';
 import type { DayNight, SkyState } from '../DayNight';
 import { type Rng, SCENE_WIDTH, Sheet } from './Sheet';
 import { QUALITY } from '@/graphics/quality';
@@ -139,6 +142,7 @@ export class Outdoors {
   private readonly primaryQuaternion: THREE.Quaternion;
   private readonly scratchColor = new THREE.Color();
   private readonly scene: THREE.CanvasTexture;
+  private readonly sceneUpload: RegionUploader;
   private readonly shopGoods: GoodsRect[];
   private sky: SkyState;
   private strikes = 0;
@@ -162,6 +166,8 @@ export class Outdoors {
     const random = seededRandom(1987);
 
     const season = options.season ?? seasonOf(new Date());
+    // The roadworks where the market's calendar has them today (the street syncs them again as it is built).
+    syncWorks(MarketCalendar.savedDay());
     const { sheet, shopGoods } = paintView(random, season, options.holiday === undefined ? holidayOf(new Date()) : options.holiday, sceneColorScale());
     this.shopGoods = shopGoods;
     this.colorScale = sheet.colorScale;
@@ -203,9 +209,9 @@ export class Outdoors {
         starAlpha: { value: 0 },
         cloudTint: { value: new THREE.Color(0xffffff) },
         cloudAlpha: { value: 0 },
-        /** How much of the sky is under cloud (the overcast sheet), and how far the clouds have drifted. */
+        /** How much of the sky is under cloud (the overcast sheet), and how far the clouds have drifted (xy; z the game hour, for the shops' hours). */
         cloudCover: { value: 0 },
-        cloudDrift: { value: new THREE.Vector2() },
+        cloudDrift: { value: new THREE.Vector4() },
         /** The city's orange glow on the night sky, stronger under cloud. */
         cityGlow: { value: 0 },
         litAlpha: { value: 0 },
@@ -251,6 +257,9 @@ export class Outdoors {
       fragmentShader,
     });
     this.material.onBeforeRender = this.markDrawn;
+    // The shop's restocked window and its banner go up alone, not the whole scenery.
+    this.sceneUpload = new RegionUploader(scene);
+    this.sceneUpload.attach(this.material);
 
     this.dayNight.onChange((state) => this.apply(state));
   }
@@ -267,7 +276,7 @@ export class Outdoors {
   update(dt: number): void {
     const u = this.material.uniforms;
     u.time.value = ((u.time.value as number) + dt) % 3600;
-    const drift = u.cloudDrift.value as THREE.Vector2;
+    const drift = u.cloudDrift.value as THREE.Vector4;
     drift.x = (drift.x + dt * CLOUD_DRIFT * (0.6 + this.sky.cloudCover)) % 1;
     drift.y = (drift.y + dt * CLOUD_DRIFT * 0.3) % 1;
     // Unseen (the street, the arcade, a room without a window), the traffic and the walkers still go
@@ -284,7 +293,7 @@ export class Outdoors {
   /**
    * Fills the retro games shop's display shelves across the street with `colors` (one box each, in
    * order, repeating if there are more boxes than colours): the day's market stock seen from the
-   * window. Repaints those few texels and re-uploads the scenery texture once.
+   * window. Repaints those few texels and uploads their rect alone.
    */
   showShopStock(colors: readonly string[]): void {
     if (colors.length === 0 || this.shopGoods.length === 0) return;
@@ -294,7 +303,17 @@ export class Outdoors {
       ctx.fillStyle = colors[i % colors.length];
       ctx.fillRect(box.x, box.y, box.w, box.h);
     });
-    this.scene.needsUpdate = true;
+    this.markGoods(0);
+  }
+
+  /** The shop's goods' rect (with `above` texels over it: the banner) uploaded alone, in the canvas's own texels. */
+  private markGoods(above: number): void {
+    const k = this.colorScale;
+    const x0 = Math.min(...this.shopGoods.map((g) => g.x));
+    const x1 = Math.max(...this.shopGoods.map((g) => g.x + g.w));
+    const y0 = Math.min(...this.shopGoods.map((g) => g.y)) - above;
+    const y1 = Math.max(...this.shopGoods.map((g) => g.y + g.h));
+    this.sceneUpload.mark(x0 * k - 1, y0 * k - 1, (x1 - x0) * k + 2, (y1 - y0) * k + 2);
   }
 
   /**
@@ -334,7 +353,7 @@ export class Outdoors {
       ctx.fillText(text, 0, 0);
       ctx.restore();
     }
-    this.scene.needsUpdate = true;
+    this.markGoods(y0 - top);
   }
 
   /** Every window pane under `root` that shows this view (the street is heard through them). */
@@ -384,6 +403,7 @@ export class Outdoors {
     u.litAlpha.value = THREE.MathUtils.smoothstep(nightness, 0.15, 0.7);
     u.lightsOn.value = 0.03 + 0.97 * THREE.MathUtils.smoothstep(nightness, 0.1, 0.5);
     u.wakefulness.value = wakefulnessAt(sky.hours);
+    (u.cloudDrift.value as THREE.Vector4).z = sky.hours;
     const sunLow = 1 - THREE.MathUtils.smoothstep(sky.sunHeight, 0, 0.3);
     // Under cloud the light is flatter and a little dimmer.
     const brightness = THREE.MathUtils.lerp(0.6, 1, THREE.MathUtils.smoothstep(sky.sunHeight, -0.05, 0.25)) * (1 - 0.22 * sky.cloudCover);

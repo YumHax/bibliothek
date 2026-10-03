@@ -4,6 +4,7 @@ import type { GameSource } from '@/collection/GameSource';
 import type { ModalLike } from '@/game/SessionParts';
 import type { Milestones } from '@/economy/Milestones';
 import type { CollectorWatch } from '@/economy/CollectorWatch';
+import type { Honours } from '@/economy/Honours';
 import { plaqueTier } from '@/economy/milestoneList';
 import type { Zone } from '../zone/Zone';
 import type { Placement } from '../Placement';
@@ -11,6 +12,7 @@ import { ROOM_PLAN } from '../roomPlan';
 import { CollectorsBook } from './CollectorsBook';
 import { BrassPlaque } from './BrassPlaque';
 import { HomeVitrine, VITRINE_CAPACITY } from './HomeVitrine';
+import { furnishHonours } from './HonourNeons';
 
 /** The collector's book's services, as the collection room shows them (`BuildContext.collector`, assembled in `main.ts`). */
 export interface CollectorHome {
@@ -18,6 +20,8 @@ export interface CollectorHome {
   book: ModalLike;
   milestones: Milestones;
   watch: CollectorWatch;
+  /** The sets and consoles completed: a neon each over the bookcases (`HonourNeons`). */
+  honours?: Honours;
 }
 
 export interface CollectorCornerOptions {
@@ -84,6 +88,7 @@ export function furnishCollectorCorner(zone: Zone, home: CollectorHome, options:
     fill();
   };
   follow();
+  if (home.honours) furnishHonours(zone, home.honours);
   zone.onUnload(milestones.subscribe(follow));
   zone.onUnload(watch.subscribe(fill));
   zone.onUnload(options.shelved.subscribe(fill));

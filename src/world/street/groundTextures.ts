@@ -178,17 +178,138 @@ export function pavingTile(anisotropy: number): Tile {
   return tiling(canvas, 2.4, anisotropy, bumpCanvas, roughCanvas);
 }
 
-/** Granite kerb stones: light speckled grey, a joint every metre. 1 m a tile (u along the kerb, v up its face). */
+/**
+ * Granite kerb stones: light speckled grey, a joint every metre. 1 m a tile (u along the kerb, v up
+ * its face). The height map sinks the joint and chips the arris here and there; the roughness map
+ * has the crystals catching the light and the joint's mortar dull.
+ */
 export function kerbTile(anisotropy: number): Tile {
   const size = 256;
   const [canvas, ctx] = createCanvas(size, size);
+  const [bumpCanvas, bump] = createCanvas(size, size);
+  const [roughCanvas, rough] = createCanvas(size, size);
   const random = seededRandom(99);
   ctx.fillStyle = '#9c9a95';
   ctx.fillRect(0, 0, size, size);
+  bump.fillStyle = grey(150);
+  bump.fillRect(0, 0, size, size);
+  rough.fillStyle = grey(190);
+  rough.fillRect(0, 0, size, size);
   grit(ctx, size, random, 3000, 'rgba(220,218,214,0.6)', 'rgba(50,50,52,0.5)');
+  grit(bump, size, random, 2200, grey(185, 0.5), grey(115, 0.5));
+  // The crystals: a few polished flecks.
+  grit(rough, size, random, 900, grey(90, 0.7), grey(215, 0.4));
+  // The joint: dark, sunk, dull mortar.
   ctx.fillStyle = 'rgba(40,40,40,0.6)';
   ctx.fillRect(0, 0, 3, size);
-  return tiling(canvas, 1, anisotropy);
+  bump.fillStyle = grey(40);
+  bump.fillRect(0, 0, 4, size);
+  rough.fillStyle = grey(250);
+  rough.fillRect(0, 0, 4, size);
+  // Chips out of the arris (the top edge, v = 1 at the canvas top), sunk and a shade lighter.
+  for (let i = 0; i < 6; i++) {
+    const x = random() * size;
+    const w = 6 + random() * 18;
+    const h = 3 + random() * 7;
+    ctx.fillStyle = 'rgba(190,188,182,0.5)';
+    ctx.fillRect(x, 0, w, h);
+    bump.fillStyle = grey(90, 0.8);
+    bump.fillRect(x, 0, w, h);
+  }
+  return tiling(canvas, 1, anisotropy, bumpCanvas, roughCanvas);
+}
+
+/**
+ * Granite setts, the old paving left in the corner bay: small grey and pinkish blocks 0.1 by 0.2 m
+ * in bonded rows, dark sandy joints. 1.2 m a tile. Each sett is domed and worn smooth on top in the
+ * height and roughness maps, the joints sunk and rough.
+ */
+export function settsTile(anisotropy: number): Tile {
+  const size = QUALITY.level === 'high' ? 1024 : 512;
+  const metres = 1.2;
+  const px = size / metres;
+  const [canvas, ctx] = createCanvas(size, size);
+  const [bumpCanvas, bump] = createCanvas(size, size);
+  const [roughCanvas, rough] = createCanvas(size, size);
+  const random = seededRandom(2828);
+  ctx.fillStyle = '#4c4842';
+  ctx.fillRect(0, 0, size, size);
+  bump.fillStyle = grey(40);
+  bump.fillRect(0, 0, size, size);
+  rough.fillStyle = grey(250);
+  rough.fillRect(0, 0, size, size);
+  const rowH = 0.1 * px;
+  const settW = 0.2 * px;
+  const joint = 0.012 * px;
+  for (let row = 0; row * rowH < size; row++) {
+    const offset = row % 2 === 0 ? 0 : settW / 2;
+    for (let x = -offset; x < size; x += settW) {
+      const w = settW - joint;
+      const h = rowH - joint;
+      const y = row * rowH;
+      const g = 112 + Math.floor(random() * 40);
+      const pink = random() < 0.3 ? 14 : 0;
+      ctx.fillStyle = `rgb(${g + pink}, ${g - 2}, ${g - 6 - pink / 2})`;
+      ctx.fillRect(x, y, w, h);
+      // Domed: brighter in the middle of the height, falling to the joints.
+      const dome = bump.createRadialGradient(x + w / 2, y + h / 2, 0, x + w / 2, y + h / 2, w * 0.6);
+      const top = 175 + Math.floor(random() * 50);
+      dome.addColorStop(0, grey(top));
+      dome.addColorStop(1, grey(top - 70));
+      bump.fillStyle = dome;
+      bump.fillRect(x, y, w, h);
+      rough.fillStyle = grey(140 + Math.floor(random() * 60));
+      rough.fillRect(x + w * 0.15, y + h * 0.2, w * 0.7, h * 0.6);
+    }
+  }
+  grit(ctx, size, random, 6000 * (size / 512) ** 2, 'rgba(200,196,190,0.35)', 'rgba(30,28,26,0.35)', size / 512);
+  // Wrap the bond: the rows must tile, so the canvas height holds a whole number of rows (12 at 0.1 m).
+  return tiling(canvas, metres, anisotropy, bumpCanvas, roughCanvas);
+}
+
+/**
+ * Blister paving, laid where the kerb is dropped at a crossing: buff slabs 0.4 m square studded with
+ * rows of flat-topped domes (the cane and the foot find them). 0.8 m a tile, the domes proud in the height map.
+ */
+export function tactileTile(anisotropy: number): Tile {
+  const size = 256;
+  const [canvas, ctx] = createCanvas(size, size);
+  const [bumpCanvas, bump] = createCanvas(size, size);
+  const random = seededRandom(616);
+  ctx.fillStyle = '#c7a67a';
+  ctx.fillRect(0, 0, size, size);
+  bump.fillStyle = grey(70);
+  bump.fillRect(0, 0, size, size);
+  const slab = size / 2;
+  for (let i = 0; i < 2; i++) {
+    for (let j = 0; j < 2; j++) {
+      const g = random() * 16 - 8;
+      ctx.fillStyle = `rgb(${200 + g}, ${167 + g}, ${122 + g})`;
+      ctx.fillRect(i * slab + 1.5, j * slab + 1.5, slab - 3, slab - 3);
+      bump.fillStyle = grey(110);
+      bump.fillRect(i * slab + 1.5, j * slab + 1.5, slab - 3, slab - 3);
+      for (let u = 0; u < 6; u++) {
+        for (let v = 0; v < 6; v++) {
+          const cx = i * slab + (u + 0.5) * (slab / 6);
+          const cy = j * slab + (v + 0.5) * (slab / 6);
+          ctx.fillStyle = 'rgba(255,240,215,0.25)';
+          ctx.beginPath();
+          ctx.arc(cx, cy, slab / 22, 0, Math.PI * 2);
+          ctx.fill();
+          const dome = bump.createRadialGradient(cx, cy, 0, cx, cy, slab / 15);
+          dome.addColorStop(0, grey(235));
+          dome.addColorStop(0.6, grey(220));
+          dome.addColorStop(1, grey(110));
+          bump.fillStyle = dome;
+          bump.beginPath();
+          bump.arc(cx, cy, slab / 15, 0, Math.PI * 2);
+          bump.fill();
+        }
+      }
+    }
+  }
+  grit(ctx, size, random, 1500, 'rgba(240,225,200,0.3)', 'rgba(110,90,60,0.3)');
+  return tiling(canvas, 0.8, anisotropy, bumpCanvas);
 }
 
 /** Lawn: mottled grass in `color`, a few clover patches and bare spots. 3 m a tile. */

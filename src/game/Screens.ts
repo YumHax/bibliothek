@@ -3,6 +3,7 @@ import { randomStartSeconds } from '@/video/randomStart';
 import type { VideoProvider } from '@/video/VideoProvider';
 import type { GameBox } from '@/world/GameBox';
 import { nowPlaying, type VideoScreen } from '@/world/screen';
+import { programFor, type ProgramRunner } from '@/onscreen';
 
 export interface ScreenParts {
   videos: VideoProvider;
@@ -10,6 +11,8 @@ export interface ScreenParts {
   notices: NoticeActions;
   /** A longplay came on (once per play): the first day's last step is watching one. */
   onScreenPlaying?: () => void;
+  /** Runs the games that are programs (a homebrew cart in the emulator...) instead of their longplay (`src/onscreen`). */
+  programs?: ProgramRunner;
 }
 
 /** The TV and the projector: one plays at a time, so two longplays never talk over each other. */
@@ -24,10 +27,22 @@ export class Screens {
    * off. What goes wrong is said on the screen ("no signal"), once in a reaction in plain words, and
    * explained in the console only.
    */
-  async playOn(screen: VideoScreen, box: GameBox): Promise<void> {
+  async playOn(screen: VideoScreen, box: Pick<GameBox, 'game'>): Promise<void> {
     if (this.active && this.active !== screen) this.active.stop();
     this.active = screen;
     const { game } = box;
+    // A game that is a program (`onscreen/programs`: the emulator's homebrew carts, a canvas game) runs instead.
+    const make = this.parts.programs && screen.showFeed ? programFor(game) : null;
+    if (make && this.parts.programs?.run(screen, make(), game)) {
+      nowPlaying.setPlatform(game.platform, game.id);
+      this.parts.onScreenPlaying?.();
+      const off = screen.onStateChange((state) => {
+        if (state === 'playing') return;
+        off();
+        if (nowPlaying.gameId === game.id) nowPlaying.setPlatform(null);
+      });
+      return;
+    }
     screen.searching(game.title);
     try {
       const video = await this.parts.videos.findLongplay(game);

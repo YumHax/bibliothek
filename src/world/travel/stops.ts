@@ -19,6 +19,6 @@ export function travelStops(world: ZonePlacer): TravelStop[] {
     const [x, z] = plan.travel.arrival;
     // The street sets the player down in front of the door they came out of (keyed by the zone left).
     const from: TravelStop['from'] = Object.fromEntries(Object.entries(plan.travel.arrivals ?? {}).map(([id, { at, yaw }]) => [id, { position: zone.toWorld(new Vector3(at[0], 0, at[1])), yaw }]));
-    return [{ id: plan.id, label: plan.travel.label, position: zone.toWorld(new Vector3(x, 0, z)), yaw: plan.travel.yaw, from }];
+    return [{ id: plan.id, label: plan.travel.label, position: zone.toWorld(new Vector3(x, 0, z)), yaw: plan.travel.yaw, from, unlisted: plan.travel.unlisted }];
   });
 }

@@ -8,6 +8,8 @@ import { Vendor } from '../people/Vendor';
 import { MarketStall } from './MarketStall';
 import { homeGoodsItems, type HomeGoodsItem } from './HomeGoodsDisplay';
 import { MARKET_PLAN } from './marketPlan';
+import { RecordCrate } from '../vinyl/RecordCrate';
+import { RECORDS } from '@/vinyl/records';
 
 /**
  * The household stall: furniture for the flat (`HOME_GOODS`), bought like anywhere else (`SessionActions.buyUpgrade`:
@@ -56,4 +58,30 @@ export function furnishHousehold(zone: Zone, { listener, home: { upgrades } }: B
   followUpgrades(zone, upgrades, () => {
     for (const item of items) item.setAvailable(status(item.goodsId) !== 'full');
   });
+  furnishRecordCrate(zone, stall, upgrades);
+}
+
+/** The crate of soundtrack LPs by the stall: the next record for the flat's turntable, one click each (`world/vinyl`). */
+function furnishRecordCrate(zone: Zone, stall: MarketStall, upgrades: NonNullable<BuildContext['home']['upgrades']>): void {
+  const good = HOME_GOODS.find((g) => g.id === 'record');
+  if (!good) return;
+  const nextRecord = () => RECORDS[upgrades.count('record')] ?? null;
+  const crate = new RecordCrate({
+    label: () => {
+      const status = upgrades.status('record');
+      if (status === 'full') return 'Soundtrack LPs · you have every one they had';
+      const next = nextRecord();
+      const head = `${next?.title ?? good.name} (${next?.artist ?? 'LP'}) · ${good.price} coins`;
+      return status === 'needs' ? `${head} · needs a sideboard and its turntable first` : `${head} · buy`;
+    },
+    onActivate: (session) => {
+      const refusal = refusalFor(good, upgrades.status('record'));
+      if (refusal) return session.refuse(refusal);
+      const next = nextRecord();
+      session.buyUpgrade({ title: next ? `${next.title} (LP)` : good.name, price: good.price, detail: 'It is at home by the turntable. Click the turntable to put it on.', bought: () => upgrades.add('record') });
+    },
+  });
+  const [x, z] = MARKET_PLAN.household.recordCrate;
+  zone.place(crate, zone.toLocal(stall.localToWorld(new THREE.Vector3(x, 0, z))), stall.rotation.y);
+  followUpgrades(zone, upgrades, () => crate.show(nextRecord()));
 }

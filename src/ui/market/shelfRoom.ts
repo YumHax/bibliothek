@@ -14,5 +14,5 @@ export function shelfRoomNote(overflow: number, bookcases: number, maxed = false
   if (full && maxed) return 'Every bookcase is full: it stays in the collection (Tab), boxed away until a shelf has room';
   if (bookcases === 0) return 'Shelves full: it stays boxed until you buy a bookcase (household stall)';
   if (full) return 'Bookcases full too: time for another one (household stall)';
-  return 'Living-room shelves full: it goes on a bedroom bookcase';
+  return 'Living-room shelves full: it goes on a bookcase in another room';
 }

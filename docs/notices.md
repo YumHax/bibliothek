@@ -13,8 +13,15 @@ its own look and its own way of being sure it is read. The API is `NoticeActions
 | Refusal | `refuse(text)` | Same place, red, ✕, shake, buzz | Seen and heard. |
 | Reward | `reward({ title, detail, coins, tickets, big })` | Banner in the upper middle, display font, coin / ticket chips, arpeggio; `big`: rays + fanfare | Exuberant; queued one at a time, never dropped (past 4 waiting they merge into "…and N more"). Over the panels too. |
 | Tip | `tip(text, { id, head, until, ms, look })` | Card pinned top left under the wallet (one column with the chip: no gap when it hides), chime, slide-in; a "To do" head (or `look: 'note'`) is a handwritten slip like the to-do list | Stays until `until()` is true (the thing was done), replaced by the same `id`, or long after (default: 2× its reading time, 12 s at least). Max 3. Settings > Game > Show tips off drops them. |
-| Card to read | `read({ title, text, effect, look })` | Paper card in the lower middle (`note`, `letter`, `radio`, `plaque`), rustle | Stays at least its reading time whatever the player does; then walking 1.2 m away puts it down, or 2.2× its reading time. Queued (past 3 waiting, the last says "…and N more notes"). |
+| Card to read | `read({ title, text, effect, look })` | Paper card in the lower middle (`note`, `letter`, `radio`, `plaque`), rustle | Stays at least its reading time unless put down by hand (X, a click, a tap); then walking 1.2 m away puts it down, or 2.2× its reading time. Queued (past 3 waiting, the last says "…and N more notes"). |
 | Alert | `Notices.alert(text, ms?, { label, run }?)` | Red bar at the top, over everything; with an action, a button (Retry) it waits for, focused under the pause menu (Up / Enter / A reach it); one waiting for its button comes back silently | The game's own trouble (save failed or saved by a newer version, in the player's words: "your wallet"; other tab; mouse lock; the world not loading); real time. |
+
+Putting things away by hand (`NoticeDismiss`, the `dismissNotice` key: X; a controller holds Y; touch taps): a press
+puts down the card being read at once, read or not, and the next waiting one comes out; a second press within 0.45 s
+puts every waiting card away too. With no card up, a press skips the reward banner and takes the newest tip down (twice:
+every tip, every waiting banner). Any press clears the subtitle strip. Alerts never go this way (their button). A card
+shows how ("✕ X put down", for the device in hand: `dismissHint`); a click (the pointer free) or a tap on a card or a tip
+puts it away as well. X goes to a piece of furniture carried (put away) and to a market copy in hand (swap) first.
 
 Timing: `readMs(text)` = 1.2 s + 62 ms per character, 2.2 s to 15 s. Every clock but the alert's counts only while
 the player is in front of the game (`attending`: not under the pause menu, tab visible); a panel open over the room

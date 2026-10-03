@@ -36,18 +36,20 @@ npm run balance     # the arcade's machines played headless by simulated people:
 | --- | --- |
 | Add / move a plant, lamp, rug, picture, table, new prop | skill `add-decor` (+ `docs/props.md`) |
 | Add games or a platform | skill `add-games` |
-| Box sizes, cases, cartridges and discs, how boxes open, putting a game in its console | `docs/media.md` |
+| Box sizes, cases, cartridges and discs, how boxes open, putting a game in its console, programs on the TV (`src/onscreen/`, the NES emulator, homebrew carts) | `docs/media.md` |
 | New key, click behaviour, feature, HUD element | skill `add-interaction` |
 | A new room, corridor, the outside (zones, loading/unloading) | skill `add-room` (+ `docs/zones.md`) |
-| Money, prices, arcade cabinets and their games, market stalls, going out (teleport) | `docs/economy.md` |
+| Money, prices, arcade cabinets and their games, market stalls, going out (teleport); copies (variants, provenance, bootlegs, region lock), the saleroom, sealed cartons, the rival collector, small ads and the seller's flat | `docs/economy.md` |
 | Dressing a walk-in shop's interior (plans per shop, props by name, signs, lights, budgets) | `docs/shops.md` |
 | Anything else: folder map, layers, key patterns, data sources | `docs/architecture.md` |
 | The view outside the windows | `docs/outdoors.md` |
 | The cat | `docs/cat.md` |
 | People's bodies and motion (rig, gait, feet, IK, gestures, reactions, faces, a machine directing a body) | `docs/people.md` |
-| Friends who visit, borrow and return games | `docs/visitors.md` |
-| What the kitchen, bathroom and bedroom are for (cleaning boxes, the bath, cake, radio, manuals, outfits, phone, dreams) | `docs/household.md` |
-| Moving boxes to any shelf spot, moving the flat's furniture (right-click, grid, planning view, storage), the player's shelf arrangement, making a piece movable | `docs/furnishing.md` |
+| Friends who visit, borrow and return games; games nights, open houses, the collectors' club's visit (gatherings) | `docs/visitors.md` |
+| The building's life (neighbours, friendship, notice board, concierge, co-owners' vote, power cut, noise, Mrs Roux's move, estate sale, party, treasure hunt) | `docs/building.md` (+ `docs/zones.md` for its places) |
+| The lost prototype's trail (clues by channel, the grey cart, its demo on the TV), the press reviews card, sharing the collection, the save file | `docs/story.md` (+ `docs/architecture.md` data sources) |
+| What the kitchen, bathroom and bedroom are for (cleaning boxes, the bath, cake, radio, manuals, outfits, phone, dreams); the home arcade, the turntable, repairing a console | `docs/household.md` |
+| Moving boxes to any shelf spot, moving the flat's furniture (right-click, grid, planning view, storage), the player's shelf arrangement, making a piece movable; displays (case, pedestal), shelf labels, tipping a box out | `docs/furnishing.md` |
 | Telling the player something (speech bubbles, reactions, rewards, tips, cards to read); no toasts | `docs/notices.md` |
 | Post-processing, quality levels, looks, material helpers (wood, fabric, plaster), reflections | `docs/graphics.md` |
 | Materials, how parts meet, anything flat on a surface (z-fighting), hiding lamps | `docs/props.md` "Materials, joints and layers" |
@@ -75,6 +77,8 @@ Content work stays in the first two layers; the engine is never touched for cont
 - A render nested in the main one (the outlook panes' `onBeforeRender`) leaves its `clippingPlanes` as the global clip for
   the rest of the frame (three.js never re-inits clipping): things vanish depending on the view. `OutlookView.resetClipping` undoes it.
 - `outdoors/shader.ts` is a template literal: a backtick in a GLSL comment ends it (typecheck fails with `',' expected`).
+- A `patchShader` whose source holds a variable array size (`uniform vec4 x[${n}]`) needs `n` in its key, or two
+  materials share one program and three.js reads past the shorter array (`array[i] is undefined` in `setValueV4fArray`).
 - The canvas's alpha is the video cut-out: every post pass and additive effect must keep it (see `docs/graphics.md`).
 - `visible` on point, spot and hemisphere lights belongs to the `LightCuller` (fixed count per kind, `QUALITY.lights`):
   dim a light with `intensity`; live shadow maps go through `lighting/shadowRefresh`, never `shadow.autoUpdate = true`.

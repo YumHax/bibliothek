@@ -6,6 +6,7 @@ import type { DayNight } from '../props/DayNight';
 import { airColor, airDensity } from './streetAir';
 import { ShadowRefresh } from '../lighting/shadowRefresh';
 import { snapDirection } from '../props/shadowTexels';
+import { farShadowUniforms, type FarShadowUniforms } from './shadowFade';
 
 export interface StreetLightingOptions {
   /** Shadow map size of the sun (square). */
@@ -29,6 +30,11 @@ const SKY_RATE = 3;
  * of the sky (the edges of every shadow would creep along the pavement).
  */
 const CASTER_HEIGHT = 8;
+/**
+ * The shadow's square is laid this share of its half-side ahead of the player, the way they look: the
+ * shadows reach further down the street they see (behind them, only the square's back part).
+ */
+const LOOK_AHEAD = 0.55;
 
 /**
  * The outdoor lighting rig, instead of a `Room`'s: a shadow-casting `DirectionalLight` for the sun
@@ -57,6 +63,12 @@ export class StreetLighting extends THREE.Group implements Furniture, Updatable,
   private readonly lightUp = new THREE.Vector3();
   private readonly forward = new THREE.Vector3();
   private readonly airTint = new THREE.Color();
+  private readonly look = new THREE.Vector3();
+  /**
+   * What the street's materials read for the shadow past the map's edge (`shadowFade`): the sun's
+   * direction (zone-local, towards it) and the zone's world position. Hand it to `fadeSunShadowEdges`.
+   */
+  readonly far: FarShadowUniforms = farShadowUniforms();
   /** The scene's haze, found the first time the street is occupied (null outside a scene with one). */
   private haze: Haze | null = null;
 
@@ -122,9 +134,16 @@ export class StreetLighting extends THREE.Group implements Furniture, Updatable,
     const texel = (2 * this.reach) / this.sun.shadow.mapSize.x;
     snapDirection(this.rawDir, texel / CASTER_HEIGHT, this.dir);
     this.camera.getWorldPosition(this.eye);
-    if (this.parent) this.parent.worldToLocal(this.eye);
+    this.camera.getWorldDirection(this.look);
+    if (this.parent) {
+      this.parent.worldToLocal(this.eye);
+      this.parent.getWorldPosition(this.far.farOrigin.value);
+    }
+    this.look.y = 0;
+    if (this.look.lengthSq() > 1e-6) this.eye.addScaledVector(this.look.normalize(), this.reach * LOOK_AHEAD);
     this.eye.y = 0;
     this.snapToTexels(this.eye);
+    this.far.farSun.value.copy(this.dir).normalize();
     this.target.position.copy(this.eye);
     this.sun.position.copy(this.eye).addScaledVector(this.dir, SUN_DISTANCE);
     this.sun.color.copy(s.lightColor);

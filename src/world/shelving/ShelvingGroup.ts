@@ -36,12 +36,25 @@ export class ShelvingGroup {
     return this.members.flatMap((s) => s.boxes);
   }
 
+  /** A game's box wherever it stands in the flat: on a shelf, or in a display (`alsoIn`). */
   findBox(gameId: string): GameBox | undefined {
     for (const shelving of this.members) {
       const box = shelving.findBox(gameId);
       if (box) return box;
     }
-    return undefined;
+    return this.elsewhere?.(gameId);
+  }
+
+  /** Where else a game's box may stand (the flat's displays, `showcase/Showcases`): search and the random pick find it there. */
+  alsoIn(find: (gameId: string) => GameBox | undefined): void {
+    this.elsewhere = find;
+  }
+
+  private elsewhere: ((gameId: string) => GameBox | undefined) | null = null;
+
+  /** Every bookcase standing, with its shelving's id and its slot (what a shelf label is stuck by). */
+  bookcaseList(): { shelving: string; index: number; shelf: Shelf }[] {
+    return this.members.flatMap((shelving) => shelving.bookcases.map((shelf, index) => ({ shelving: shelving.id, index, shelf })));
   }
 
   cycleSort(): SortMode {

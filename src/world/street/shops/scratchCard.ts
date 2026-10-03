@@ -8,8 +8,7 @@ import { SCRATCH } from '@/economy/pricing';
  * average: the house wins), then the symbols are laid to show it.
  */
 
-/** What a card costs, and how many the tabac sells one player in a (real) day (`SCRATCH` in pricing.ts). */
-export const SCRATCH_PRICE = SCRATCH.price;
+/** How many cards the tabac sells one player in a (real) day (`SCRATCH` in pricing.ts; the price is the tabac's offer). */
 export const SCRATCH_PER_DAY = SCRATCH.perDay;
 
 /** A symbol and the coins three of them pay. */

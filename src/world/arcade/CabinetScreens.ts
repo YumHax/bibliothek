@@ -27,6 +27,8 @@ export interface TitleInfo {
   challenge?: () => TodaysChallenge | null;
   /** What a play costs right now, for the card's foot: "1 COIN PER PLAY", "FREE PLAY". */
   price?: () => { free: boolean; text: string };
+  /** A cabinet at home: no coin asked, no tickets on the cards. */
+  home?: boolean;
 }
 
 /**
@@ -96,9 +98,11 @@ export class CabinetScreens {
     drawText(ctx, game.title, SCREEN_W / 2, 40, 20, '#fff2a8');
     drawText(ctx, game.summary, SCREEN_W / 2, 64, 7, '#9ad6ff');
     const top = scores.topOf(game.id);
-    drawText(ctx, `HI ${top.name}  ${top.score.toLocaleString('en-US')}`, SCREEN_W / 2, 88, 10, top.you ? '#7ee787' : '#c9c4ff');
+    if (!this.info.home || top.score > 0) drawText(ctx, `HI ${top.name}  ${top.score.toLocaleString('en-US')}`, SCREEN_W / 2, 88, 10, top.you ? '#7ee787' : '#c9c4ff');
     const best = scores.bestOf(game.id);
-    drawText(ctx, best > 0 ? `YOUR BEST ${best.toLocaleString('en-US')}  (${Math.floor(best / pointsPerTicket)} TIX)` : 'NO SCORE OF YOURS YET', SCREEN_W / 2, 106, 7, '#8a86b0');
+    const home = this.info.home === true;
+    const bestLine = home ? `YOUR BEST ${best.toLocaleString('en-US')}` : `YOUR BEST ${best.toLocaleString('en-US')}  (${Math.floor(best / pointsPerTicket)} TIX)`;
+    if (!home || best > 0) drawText(ctx, best > 0 ? bestLine : 'NO SCORE OF YOURS YET', SCREEN_W / 2, 106, 7, '#8a86b0');
     const medal = this.nextMedal();
     if (medal) drawText(ctx, medal, SCREEN_W / 2, 122, 7, '#e0995a');
     const challenge = this.info.challenge?.();
@@ -108,10 +112,10 @@ export class CabinetScreens {
       drawText(ctx, "TODAY'S CHALLENGE", SCREEN_W / 2, 142, 7, '#ffd23a');
       drawText(ctx, challenge.done ? 'BEATEN! COME BACK TOMORROW' : `SCORE ${challenge.target.toLocaleString('en-US')} · +${challenge.reward} TIX`, SCREEN_W / 2, 156, 8, challenge.done ? '#7ee787' : '#fff2a8');
     }
-    if (phase % 2 === 0) drawText(ctx, 'INSERT COIN', SCREEN_W / 2, 186, 12, '#ff8a80');
+    if (phase % 2 === 0) drawText(ctx, home ? 'PRESS FIRE' : 'INSERT COIN', SCREEN_W / 2, 186, 12, '#ff8a80');
     const price = this.info.price?.();
     const cost = !price ? '1 COIN PER PLAY' : price.free ? 'FREE PLAY' : `${price.text.toUpperCase()} PER PLAY`;
-    drawText(ctx, `${cost} · ${pointsPerTicket} PTS = 1 TICKET`, SCREEN_W / 2, 218, 7, '#7a7a90');
+    drawText(ctx, home ? 'FREE PLAY · FOR FUN' : `${cost} · ${pointsPerTicket} PTS = 1 TICKET`, SCREEN_W / 2, 218, 7, '#7a7a90');
     this.texture.needsUpdate = true;
   }
 
@@ -122,7 +126,7 @@ export class CabinetScreens {
     ctx.fillRect(0, SCREEN_H - 26, SCREEN_W, 26);
     if (replay) drawText(ctx, `YOUR BEST RUN · ${replay.initials} ${replay.score.toLocaleString('en-US')}`, SCREEN_W / 2, SCREEN_H - 17, 7, '#7ee787');
     else drawText(ctx, 'DEMO PLAY', SCREEN_W / 2, SCREEN_H - 17, 7, '#9ad6ff');
-    if (Math.floor(clock * 2) % 2 === 0) drawText(ctx, 'INSERT COIN', SCREEN_W / 2, SCREEN_H - 7, 7, '#ff8a80');
+    if (Math.floor(clock * 2) % 2 === 0) drawText(ctx, this.info.home ? 'PRESS FIRE' : 'INSERT COIN', SCREEN_W / 2, SCREEN_H - 7, 7, '#ff8a80');
   }
 
   /** A dead tube: snow and a rolling bar (the note on the glass says the rest). */
@@ -163,9 +167,15 @@ export class CabinetScreens {
     const counted = run.countDone;
     ctx.fillStyle = 'rgba(5,5,10,0.88)';
     ctx.fillRect(16, 40, SCREEN_W - 32, 166);
-    drawText(ctx, `SCORE ${last.score.toLocaleString('en-US')}`, SCREEN_W / 2, 58, 12, '#fff2a8');
-    drawText(ctx, `${shown}`, SCREEN_W / 2, 90, counted ? 28 : 24, counted ? '#ffd23a' : '#ffe9a0');
-    drawText(ctx, total === 1 ? 'TICKET' : 'TICKETS', SCREEN_W / 2, 112, 9, '#ffd23a');
+    if (this.info.home) {
+      // At home: the score is the whole card.
+      drawText(ctx, 'SCORE', SCREEN_W / 2, 62, 9, '#fff2a8');
+      drawText(ctx, last.score.toLocaleString('en-US'), SCREEN_W / 2, 92, 24, '#ffd23a');
+    } else {
+      drawText(ctx, `SCORE ${last.score.toLocaleString('en-US')}`, SCREEN_W / 2, 58, 12, '#fff2a8');
+      drawText(ctx, `${shown}`, SCREEN_W / 2, 90, counted ? 28 : 24, counted ? '#ffd23a' : '#ffe9a0');
+      drawText(ctx, total === 1 ? 'TICKET' : 'TICKETS', SCREEN_W / 2, 112, 9, '#ffd23a');
+    }
     // The bonuses, a line each as it lands (at most three fit; the rest add up on the last).
     const lines = bonuses.length > 3 ? [...bonuses.slice(0, 2), { label: 'MORE BONUSES', tickets: bonuses.slice(2).reduce((sum, b) => sum + b.tickets, 0) }] : bonuses;
     lines.forEach((bonus, i) => {
@@ -179,7 +189,8 @@ export class CabinetScreens {
     else if (done && last.best) drawText(ctx, 'NEW BEST!', SCREEN_W / 2, markY, 11, blink ? '#7ee787' : '#ffffff');
     else if (done && last.first) drawText(ctx, 'FIRST SCORE ON THE BOARD', SCREEN_W / 2, markY, 8, '#c9c4ff');
     if (run.canReplay && Math.floor(overClock * 2) % 2 === 0) drawText(ctx, `${actionKeyLabel('fire').toUpperCase()} · PLAY AGAIN`, SCREEN_W / 2, 180, 8, '#ff8a80');
-    if (counted) drawText(ctx, run.free ? 'FREE PLAY: ON THE HOUSE' : `${run.priceText().toUpperCase()} · ${actionKeyLabel('walkAway').toUpperCase()} TO WALK AWAY`, SCREEN_W / 2, 196, 7, '#9a96c0');
+    if (counted && this.info.home) drawText(ctx, `${actionKeyLabel('walkAway').toUpperCase()} TO WALK AWAY`, SCREEN_W / 2, 196, 7, '#9a96c0');
+    else if (counted) drawText(ctx, run.free ? 'FREE PLAY: ON THE HOUSE' : `${run.priceText().toUpperCase()} · ${actionKeyLabel('walkAway').toUpperCase()} TO WALK AWAY`, SCREEN_W / 2, 196, 7, '#9a96c0');
     this.texture.needsUpdate = true;
   }
 

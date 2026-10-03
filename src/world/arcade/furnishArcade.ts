@@ -49,7 +49,7 @@ import { LightPool } from '../lighting/LightPool';
  * attendant's news) are the `ArcadeHall`'s; the long-lived stores come from the context
  * (`hallStores`). Wiring only.
  */
-export function furnishArcade(zone: Zone, { sky, input, listener, money: { wallet }, arcade }: BuildContext): ZoneHandle {
+export function furnishArcade(zone: Zone, { sky, input, listener, money: { wallet }, arcade, story }: BuildContext): ZoneHandle {
   const { scores, daily: arcadeDaily, medals: arcadeMedals, league: arcadeLeague, screen: arcadeScreen } = arcade;
   const { tournament, jackpot, replays } = hallStores(arcade);
   const plan = ARCADE_PLAN;
@@ -155,7 +155,12 @@ export function furnishArcade(zone: Zone, { sky, input, listener, money: { walle
   const forSale = PRIZES.filter((p) => p.tickets !== null).map((p) => ({ kind: p.kind, color: p.color }));
   const counter = zone.placeAt(new PrizeCounter({ ticketsPerCoin: TICKETS_PER_COIN, wallBehind: plan.counter.wallBehind, prizes: forSale }), plan.counter.at);
   const behind = counter.localToWorld(new THREE.Vector3(crowd.attendant.at[0], 0, crowd.attendant.at[1]));
-  const attendantLines = hall.attendantLines(crowd.attendant.lines, titleOf, tabled);
+  const hallLines = hall.attendantLines(crowd.attendant.lines, titleOf, tabled);
+  // A story the player follows (the lost prototype) is asked first: the attendant knows who signs HAB.
+  const attendantLines = (): readonly string[] => {
+    const told = story?.atArcadeCounter();
+    return told ? [told] : hallLines();
+  };
   zone.place(new Vendor({ viewer: listener, lines: attendantLines, seed: crowd.attendant.seed, label: 'The attendant · chat', focus: crowd.attendant.focus }), zone.toLocal(behind), counter.rotation.y);
 
   zone.placeAt(new ChangeMachine({ working: arcadeDaily?.changeMachineWorks ?? false, waiting: () => arcadeDaily?.changeWaiting ?? false }), plan.changeMachine);

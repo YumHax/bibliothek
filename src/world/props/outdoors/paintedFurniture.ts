@@ -2,10 +2,11 @@ import { Polygon, Sheet, type Rng, azimuthOf, azimuthX, groundSquash, heightY, o
 import { between, pick, shade } from './paint';
 import { type Footprint, footPoint, paintBox, paintGroundShadow, paintPost } from './Solid';
 import { type SeatedPose, paintSeated } from './figures';
+import type { LampDesign } from '@/world/street/streetPlan';
 
 /**
- * The things that stand on the pavements and in the park, each painted at a ground point (metres
- * from the eye) in true perspective: lamp posts, benches, bins, bicycles, bollards, traffic lights,
+ * The window view's street furniture (the walkable street's own, in 3D, is `street/StreetFurniture`): the things
+ * that stand on the pavements and in the park, each painted at a ground point (metres from the eye) in true perspective: lamp posts, benches, bins, bicycles, bollards, traffic lights,
  * a bus shelter, an advertising column, hydrants, café terraces, the roadworks' hoardings,
  * barriers and cones.
  */
@@ -15,54 +16,74 @@ const IRON = '#23292a';
 const ON_A_CHAIR: SeatedPose = { width: 0.42, seat: 0.48, shoulders: 1.05, torso: 1, neck: 1.1, minWidth: 0, minHead: 0 };
 
 /**
- * A lamp post: a cast-iron post on a fluted base, a lantern at the top that glows warm at night,
- * the pool of light it casts on the ground `reach` metres around and, when a facade stands `wall`
- * metres behind it, the wash of light up that wall.
+ * A street lamp of its kind (`design`, the walkable street's `LAMP_DESIGNS`), its lens `height` over the pavement: a
+ * cast-iron post with a lantern on top ('post'), a column with the lantern hung from a crook ('crook'), or the modern
+ * grey pole with its head on an arm ('arm'); the head glows warm at night, with the pool of light it casts on the
+ * ground `reach` metres around and, when a facade stands `wall` metres behind it, the wash of light up that wall.
  */
-export function paintLamp(sheet: Sheet, x: number, z: number, height: number, reach: number, wall = 0): void {
+export function paintLamp(sheet: Sheet, x: number, z: number, height: number, reach: number, wall = 0, design: LampDesign = 'post'): void {
   const d = Math.hypot(x, z);
   const cx = azimuthX(azimuthOf(x, z));
   const baseY = heightY(0, d);
   const headY = heightY(height, d);
-  const postW = Math.max(1, sizePx(0.14, d));
+  const postW = Math.max(1, sizePx(design === 'arm' ? 0.12 : 0.14, d));
   const footW = Math.max(1, sizePx(0.34, d));
   const lanternW = Math.max(1.5, sizePx(0.42, d));
   const lanternH = Math.max(1.5, sizePx(0.6, d));
+  // Where the head hangs: over the post, or out on its crook or arm.
+  const reachOut = design === 'crook' ? sizePx(0.66, d) : design === 'arm' ? sizePx(1.3, d) : 0;
+  const hx = cx + reachOut;
   const rx = sizePx(reach, d);
+  const metal = design === 'arm' ? '#5e6266' : IRON;
   sheet.begin(d);
-  sheet.wrapped(cx - rx, cx + rx, () => {
+  sheet.wrapped(cx - rx, cx + rx + reachOut, () => {
     if (wall > 0) {
       const dw = d + wall;
-      sheet.glow(cx, heightY(height * 0.6, dw), sizePx(3.2, dw), sizePx(4.5, dw), 0.1);
+      sheet.glow(hx, heightY(height * 0.6, dw), sizePx(3.2, dw), sizePx(4.5, dw), 0.1);
     }
-    sheet.glow(cx, baseY, rx, rx * groundSquash(d), 0.32);
-    // A small halo round the lantern, the air lit only close to the glass.
+    sheet.glow(hx, baseY, rx, rx * groundSquash(d), 0.32);
+    // A small halo round the head, the air lit only close to the glass.
     const halo = Math.max(1.5, sizePx(0.9, d));
-    sheet.glow(cx, headY, halo, halo, 0.35);
-    sheet.rect(cx - postW / 2, headY, postW, baseY - headY, IRON);
-    sheet.rect(cx - footW / 2, heightY(1.1, d), footW, baseY - heightY(1.1, d), IRON);
+    sheet.glow(hx, headY, halo, halo, 0.35);
+    const postTop = design === 'post' ? headY : heightY(height + (design === 'crook' ? 0.55 : 0.1), d);
+    sheet.rect(cx - postW / 2, postTop, postW, baseY - postTop, metal);
+    if (design !== 'arm') sheet.rect(cx - footW / 2, heightY(1.1, d), footW, baseY - heightY(1.1, d), IRON);
+    if (reachOut > 0) {
+      // The crook curling over, or the arm reaching out straight.
+      sheet.rect(Math.min(cx, hx), postTop, Math.abs(hx - cx), Math.max(1, postW * 0.6), metal);
+      if (design === 'crook') sheet.rect(hx - postW * 0.3, postTop, postW * 0.6, Math.max(1, headY - lanternH * 0.5 - postTop), metal);
+    }
+    if (design === 'arm') {
+      // A flat head, lit from under it.
+      const w = Math.max(1.5, sizePx(0.6, d));
+      const h = Math.max(1, sizePx(0.12, d));
+      sheet.rect(hx - w / 2, postTop, w, h * 1.4, '#3a3e42');
+      sheet.rect(hx - w * 0.4, postTop + h * 1.2, w * 0.8, Math.max(1, h * 0.6), '#e8e4d8');
+      sheet.litRect(hx - w * 0.4, postTop + h * 1.2, w * 0.8, Math.max(1, h * 0.6), 'warm', 1);
+      return;
+    }
     if (lanternH >= 4) {
       // The lantern: a tapering glass box under a cap and a finial.
       const top = headY - lanternH * 0.5;
       const lantern = new Polygon([
-        [cx - lanternW * 0.35, headY + lanternH * 0.5],
-        [cx + lanternW * 0.35, headY + lanternH * 0.5],
-        [cx + lanternW * 0.5, top],
-        [cx - lanternW * 0.5, top],
+        [hx - lanternW * 0.35, headY + lanternH * 0.5],
+        [hx + lanternW * 0.35, headY + lanternH * 0.5],
+        [hx + lanternW * 0.5, top],
+        [hx - lanternW * 0.5, top],
       ]);
       sheet.path(lantern, '#e0dccf');
       sheet.lit(lantern, 'warm', 1);
       const cap = new Path2D();
-      cap.moveTo(cx - lanternW * 0.62, top);
-      cap.lineTo(cx + lanternW * 0.62, top);
-      cap.lineTo(cx, top - lanternH * 0.4);
+      cap.moveTo(hx - lanternW * 0.62, top);
+      cap.lineTo(hx + lanternW * 0.62, top);
+      cap.lineTo(hx, top - lanternH * 0.4);
       cap.closePath();
       sheet.path(cap, IRON);
-      sheet.rect(cx - postW * 0.4, top - lanternH * 0.6, postW * 0.8, lanternH * 0.25, IRON);
-      sheet.rect(cx - lanternW * 0.4, headY + lanternH * 0.45, lanternW * 0.8, Math.max(1, lanternH * 0.1), IRON);
+      sheet.rect(hx - postW * 0.4, top - lanternH * 0.6, postW * 0.8, lanternH * 0.25, IRON);
+      sheet.rect(hx - lanternW * 0.4, headY + lanternH * 0.45, lanternW * 0.8, Math.max(1, lanternH * 0.1), IRON);
     } else {
-      sheet.rect(cx - lanternW / 2, headY - lanternH / 2, lanternW, lanternH, '#d8d4c8');
-      sheet.litRect(cx - lanternW / 2, headY - lanternH / 2, lanternW, lanternH, 'warm', 1);
+      sheet.rect(hx - lanternW / 2, headY - lanternH / 2, lanternW, lanternH, '#d8d4c8');
+      sheet.litRect(hx - lanternW / 2, headY - lanternH / 2, lanternW, lanternH, 'warm', 1);
     }
   });
 }
@@ -96,13 +117,13 @@ export function paintBin(sheet: Sheet, x: number, z: number): void {
   sheet.color.fillRect(cx - r, cy - r * 0.3, r * 2, r * 0.6);
 }
 
-/** A bicycle standing along `along`: two wheels, the frame, bars and saddle, all in thin strokes. */
-export function paintBicycle(sheet: Sheet, random: Rng, f: Footprint): void {
+/** A bicycle standing along `along`: two wheels, the frame (in `color`, else drawn), bars and saddle, all in thin strokes. */
+export function paintBicycle(sheet: Sheet, random: Rng, f: Footprint, color?: string): void {
   const d = Math.hypot(f.x, f.z);
   const px = sizePx(1, d);
   if (px < 6) return;
   const ctx = sheet.color;
-  const frame = pick(random, ['#b8302a', '#2a4a8a', '#1c1c1e', '#e8e2d2', '#3f6b4f', '#d9a03a']);
+  const frame = color ?? pick(random, ['#b8302a', '#2a4a8a', '#1c1c1e', '#e8e2d2', '#3f6b4f', '#d9a03a']);
   const P = (u: number, h: number): [number, number] => footPoint(f, u, 0, h);
   ctx.lineWidth = Math.max(0.8, 0.04 * px);
   ctx.strokeStyle = '#141414';

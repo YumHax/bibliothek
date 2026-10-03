@@ -31,6 +31,16 @@ const SIZE_SHARE = { high: 0.85, medium: 0.6, low: 0.5 } as const;
 const MAX_SIDE_PX = 1920;
 /** Seconds after the last pane was drawn that what is out there keeps moving (a glance away and back finds it going). */
 const LIVE_AFTER_DRAWN = 1.5;
+/**
+ * Seconds without a pane drawn after which what is out there is freed (its scene, its picture), to be built again
+ * next time (`prefetch` on walking in): a persistent room's view (the stairwell's) would otherwise hold a whole street.
+ */
+const FREE_AFTER_UNDRAWN = 90;
+/**
+ * Panes in one plane drawn in the same frame share one render of the picture over their rectangles' union, unless
+ * the union is this many times their own areas (two panes far apart on screen: two small renders cost fewer pixels).
+ */
+const UNION_MAX_SPREAD = 2.5;
 /** Pixels round a pane's projected corners kept in the scissor (its edge filtering, a frame's lag). */
 const SCISSOR_PAD = 3;
 /** How much of the outlook's light the glass lets through, and how much grey it adds (dust, the pane's own reflection). */
@@ -57,6 +67,12 @@ export class OutlookView extends THREE.Group implements Updatable {
   private renderer: THREE.WebGLRenderer | null = null;
   private sinceDrawn = Infinity;
   private disposed = false;
+  /** Every pane made (`pane`): the ones sharing a frame's render are picked among them. */
+  private readonly panes: THREE.Mesh[] = [];
+  /** The panes the picture already covers this frame, and the renderer's frame count once it was rendered. */
+  private readonly covered = new Set<THREE.Mesh>();
+  private coveredFrame = -1;
+  private coveredBy: THREE.Camera | null = null;
 
   constructor(private readonly options: OutlookViewOptions) {
     super();
@@ -86,6 +102,7 @@ export class OutlookView extends THREE.Group implements Updatable {
     mesh.castShadow = false;
     mesh.receiveShadow = false;
     mesh.onBeforeRender = (renderer, _scene, camera) => this.draw(mesh, renderer, camera);
+    this.panes.push(mesh);
     return mesh;
   }
 
@@ -103,6 +120,7 @@ export class OutlookView extends THREE.Group implements Updatable {
 
   update(dt: number): void {
     this.sinceDrawn += dt;
+    if (this.state === 'ready' && this.contents && this.sinceDrawn > FREE_AFTER_UNDRAWN) this.free();
     const drawnLately = this.sinceDrawn < LIVE_AFTER_DRAWN;
     if (this.state === 'idle' && drawnLately) {
       this.state = 'building';
@@ -121,6 +139,16 @@ export class OutlookView extends THREE.Group implements Updatable {
     this.contents = null;
     this.target.dispose();
     this.material.dispose();
+  }
+
+  /** Long out of sight: the scene and its picture go (the GPU memory with them), back to `idle` to be built again when needed. */
+  private free(): void {
+    this.contents?.dispose();
+    this.contents = null;
+    this.state = 'idle';
+    this.covered.clear();
+    this.coveredFrame = -1;
+    this.target.setSize(16, 16);
   }
 
   private startBuilding(): void {
@@ -170,6 +198,8 @@ export class OutlookView extends THREE.Group implements Updatable {
     if (camera !== this.options.viewer) return;
     this.renderer = renderer;
     this.sinceDrawn = 0;
+    // Another pane's render this frame already covered this one (the renderer's frame count has not moved since).
+    if (camera === this.coveredBy && renderer.info.render.frame === this.coveredFrame && this.covered.has(pane)) return;
     this.fitTarget(renderer);
     const previous = renderer.getRenderTarget();
     const ready = this.state === 'ready' && this.contents;
@@ -195,6 +225,9 @@ export class OutlookView extends THREE.Group implements Updatable {
     renderer.clippingPlanes = clipping;
     renderer.setRenderTarget(previous);
     if (ready) resetClipping(renderer, camera);
+    // The panes this render covered skip theirs until the renderer's next render (the frame count moves on).
+    this.coveredFrame = renderer.info.render.frame;
+    this.coveredBy = camera;
   }
 
   /** The picture at a share of the drawing buffer, in its proportions (the pane samples it in screen space). */
@@ -226,39 +259,74 @@ export class OutlookView extends THREE.Group implements Updatable {
     c.layers.mask = camera.layers.mask;
   }
 
-  /** Only the pane's rectangle of the picture is rendered (the whole of it when a corner is behind the eye). */
+  /**
+   * Only the pane's rectangle of the picture is rendered (the whole of it when a corner is behind the eye), stretched
+   * over the other panes of this view in its plane that are on screen this frame, when that costs few extra pixels:
+   * those are then `covered`, and their own draw skips the render (the stairwell's panes, a storey apart up the well).
+   */
   private scissorTo(pane: THREE.Mesh, camera: THREE.Camera): void {
+    const target = this.target;
+    target.scissorTest = true;
+    this.covered.clear();
+    this.covered.add(pane);
+    if (!this.rectOf(pane, camera, RECT)) {
+      target.scissor.set(0, 0, target.width, target.height);
+      for (const other of this.panes) if (other !== pane && this.sharesPlane(other, pane)) this.covered.add(other);
+      return;
+    }
+    UNION.copy(RECT);
+    let own = area(RECT);
+    for (const other of this.panes) {
+      if (other === pane || !this.sharesPlane(other, pane) || !this.rectOf(other, camera, OTHER)) continue;
+      if (OTHER.z <= 0 || OTHER.w <= 0) continue;
+      const x0 = Math.min(UNION.x, OTHER.x);
+      const y0 = Math.min(UNION.y, OTHER.y);
+      const x1 = Math.max(UNION.x + UNION.z, OTHER.x + OTHER.z);
+      const y1 = Math.max(UNION.y + UNION.w, OTHER.y + OTHER.w);
+      const both = own + area(OTHER);
+      if ((x1 - x0) * (y1 - y0) > UNION_MAX_SPREAD * both) continue;
+      UNION.set(x0, y0, x1 - x0, y1 - y0);
+      own = both;
+      this.covered.add(other);
+    }
+    target.scissor.copy(UNION);
+  }
+
+  /** The pane's rectangle of the picture in pixels (x, y, width, height), clamped to it; false when a corner is behind the eye. */
+  private rectOf(pane: THREE.Mesh, camera: THREE.Camera, out: THREE.Vector4): boolean {
     const geometry = pane.geometry as THREE.PlaneGeometry;
     const { width, height } = geometry.parameters;
     let x0 = Infinity;
     let y0 = Infinity;
     let x1 = -Infinity;
     let y1 = -Infinity;
-    let behind = false;
     for (const [sx, sy] of CORNERS) {
       CORNER.set((sx * width) / 2, (sy * height) / 2, 0).applyMatrix4(pane.matrixWorld);
       CLIP.set(CORNER.x, CORNER.y, CORNER.z, 1).applyMatrix4(camera.matrixWorldInverse).applyMatrix4(camera.projectionMatrix);
-      if (CLIP.w <= 0.01) {
-        behind = true;
-        break;
-      }
+      if (CLIP.w <= 0.01) return false;
       x0 = Math.min(x0, CLIP.x / CLIP.w);
       x1 = Math.max(x1, CLIP.x / CLIP.w);
       y0 = Math.min(y0, CLIP.y / CLIP.w);
       y1 = Math.max(y1, CLIP.y / CLIP.w);
     }
     const { width: tw, height: th } = this.target;
-    const target = this.target;
-    target.scissorTest = true;
-    if (behind) {
-      target.scissor.set(0, 0, tw, th);
-      return;
-    }
     const px0 = THREE.MathUtils.clamp(Math.floor(((x0 + 1) / 2) * tw) - SCISSOR_PAD, 0, tw);
     const px1 = THREE.MathUtils.clamp(Math.ceil(((x1 + 1) / 2) * tw) + SCISSOR_PAD, 0, tw);
     const py0 = THREE.MathUtils.clamp(Math.floor(((y0 + 1) / 2) * th) - SCISSOR_PAD, 0, th);
     const py1 = THREE.MathUtils.clamp(Math.ceil(((y1 + 1) / 2) * th) + SCISSOR_PAD, 0, th);
-    target.scissor.set(px0, py0, Math.max(0, px1 - px0), Math.max(0, py1 - py0));
+    out.set(px0, py0, Math.max(0, px1 - px0), Math.max(0, py1 - py0));
+    return true;
+  }
+
+  /** Whether `other` shows this view's picture now (its owner may have swapped its material) and lies in `pane`'s plane (one clip plane serves both). */
+  private sharesPlane(other: THREE.Mesh, pane: THREE.Mesh): boolean {
+    if (other.material !== this.material || !shown(other)) return false;
+    NORMAL.set(0, 0, 1).transformDirection(pane.matrixWorld);
+    OTHER_NORMAL.set(0, 0, 1).transformDirection(other.matrixWorld);
+    if (NORMAL.dot(OTHER_NORMAL) < 0.999) return false;
+    pane.getWorldPosition(CORNER);
+    other.getWorldPosition(OTHER_CORNER);
+    return Math.abs(OTHER_CORNER.sub(CORNER).dot(NORMAL)) < 0.01;
   }
 
   /** Nothing on the room's side of the pane is drawn: the plane through it, facing out, in the outlook's frame. */
@@ -299,8 +367,24 @@ const CORNERS: readonly [number, number][] = [
   [-1, 1],
 ];
 const CORNER = new THREE.Vector3();
+const OTHER_CORNER = new THREE.Vector3();
 const CLIP = new THREE.Vector4();
 const NORMAL = new THREE.Vector3();
+const OTHER_NORMAL = new THREE.Vector3();
+const RECT = new THREE.Vector4();
+const OTHER = new THREE.Vector4();
+const UNION = new THREE.Vector4();
+
+/** A pixel rectangle's area (x, y, width, height). */
+function area(rect: THREE.Vector4): number {
+  return rect.z * rect.w;
+}
+
+/** Whether `object` and all its parents are visible (a hidden window's pane is never drawn). */
+function shown(object: THREE.Object3D): boolean {
+  for (let o: THREE.Object3D | null = object; o; o = o.parent) if (!o.visible) return false;
+  return true;
+}
 
 /** Frees an outlook's scene: every mesh's own geometry and materials (the shared caches are left alone). */
 export function disposeOutlookScene(scene: THREE.Scene): void {

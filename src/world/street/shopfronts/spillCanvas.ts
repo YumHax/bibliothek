@@ -4,7 +4,7 @@ import type { UvRect } from './TexQuads';
 
 /*
  * What the walk-in shops put out on the pavement, painted: the florist's chalk board (two lines of the plan's), the
- * furniture shop's SALE tag, the pet shop's card by the dogs' water, the TV repair shop's FREE note and the dead set's
+ * furniture shop's TRY ME tag, the pet shop's card by the dogs' water, the TV repair shop's FREE note and the dead set's
  * cracked screen. One small atlas, tiles of 256 px.
  */
 
@@ -81,7 +81,7 @@ const PAINTERS: Record<SpillTile, (ctx: CanvasRenderingContext2D, board: readonl
     ctx.lineTo(128, 244);
     ctx.stroke();
   },
-  // A buff luggage tag: SALE in red, a price struck through and a lower one.
+  // A buff luggage tag: TRY ME in red, and where the rest is (the bench is the shop's to sit on, not for sale out here).
   sale: (ctx) => {
     ctx.fillStyle = '#e8d8b0';
     ctx.beginPath();
@@ -97,15 +97,9 @@ const PAINTERS: Record<SpillTile, (ctx: CanvasRenderingContext2D, board: readonl
     ctx.beginPath();
     ctx.arc(128, 48, 10, 0, Math.PI * 2);
     ctx.fill();
-    text(ctx, 'SALE', 112, 64, '#b8302a', SANS);
-    text(ctx, '£40', 168, 34, '#5a4a3a', HAND);
-    ctx.strokeStyle = '#5a4a3a';
-    ctx.lineWidth = 4;
-    ctx.beginPath();
-    ctx.moveTo(90, 170);
-    ctx.lineTo(166, 166);
-    ctx.stroke();
-    text(ctx, '£25!', 212, 40, '#b8302a', HAND);
+    text(ctx, 'TRY ME', 112, 52, '#b8302a', SANS);
+    text(ctx, 'sit a while,', 168, 30, '#5a4a3a', HAND);
+    text(ctx, 'more inside!', 212, 30, '#b8302a', HAND);
   },
   // DOGS WELCOME: a bone and the line about the water.
   dogs: (ctx) => {

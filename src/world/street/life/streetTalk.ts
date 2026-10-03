@@ -4,6 +4,7 @@ import type { MarketDayTheme } from '@/economy/marketDays';
 import type { ScoreEntry } from '@/economy/rivals';
 import type { SkyState } from '../../props/DayNight';
 import { HEAVY_RAIN } from '../../weather/Weather';
+import { ARCADE_TITLES } from '../arcadeTitles';
 
 export interface StreetTalkOptions {
   /** The sky right now: the time, the weather. */
@@ -18,38 +19,89 @@ export interface StreetTalkOptions {
   scores?: { table(gameId: string): ScoreEntry[] };
 }
 
-/** The arcade's cabinets as the street calls them (ids as in `ARCADE_GAMES`). */
-const ARCADE: readonly [id: string, title: string][] = [
-  ['breakout', 'BRICK STORM'], ['invaders', 'STAR RAID'], ['stacker', 'SKY STACK'], ['frog', 'LEAP FROG'], ['snake', 'NEON SNAKE'],
-  ['comets', 'COMET DASH'], ['duel', 'PADDLE WARS'], ['stepbeat', 'STEP BEAT'], ['sheriff', 'NEON SHERIFF'],
-];
+/** The arcade's cabinets as the street calls them, LexiPunk aside (it plays free: nobody talks of its tables). */
+const ARCADE = Object.entries(ARCADE_TITLES).filter(([id]) => id !== 'lexipunk');
 
 const ANY_TIME = [
   'Mind the bikes, they come down here like it is a race.',
-  'Sorry, in a hurry!',
-  'The busker was here yesterday too. Same tune.',
   'That arcade still eats my coins.',
   'Have you seen the ginger cat? It sleeps on car roofs.',
 ];
+/** Said only while the busker plays (`STREET_PLAN.busker.hours`, by day and dry). */
+const BUSKER_LINES = ['The busker was here yesterday too. Same tune.', 'That busker only knows game music. Not that I mind.'];
 
 function pick<T>(items: readonly T[]): T {
   return items[Math.floor(Math.random() * items.length)]!;
 }
 
 /**
- * What a passer-by says when clicked, worked out afresh each time from what is going on: the
- * weather and the hour, the flea market's theme and whether a game on the player's wishlist is on
- * a stall today, who tops the arcade's tables (the player included), plus a few stock lines. The
- * line said last is not said again straight away. Returns the talker.
+ * Who is talking, for what they would say: a passer-by (the news of the street), someone in a hurry (a word over
+ * the shoulder), a child, an old regular, someone interrupted on the phone, a reader on the bench, someone waiting
+ * for the bus, a customer at a café table, one of the queue at RETRO GAMES or at the bakery, a smoker outside a bar.
  */
-export function streetTalk(options: StreetTalkOptions): () => string {
+export type TalkRole = 'passer' | 'commuter' | 'child' | 'elder' | 'phone' | 'reader' | 'bus' | 'terrace' | 'queue' | 'bakery' | 'smoker' | 'chatting';
+
+/**
+ * What someone in the street says when clicked, worked out afresh each time from what is going on: the
+ * weather and the hour, the flea market's theme and whether a game on the player's wishlist is on
+ * a stall today, who tops the arcade's tables (the player included), plus a few stock lines; and
+ * from who they are (`role`): the caller asks for a minute, the reader is in a good bit, the bus
+ * stop's passenger has been waiting ages. The line said last is not said again straight away.
+ * Returns the talker (a passer-by's when called without a role).
+ */
+export function streetTalk(options: StreetTalkOptions): (role?: TalkRole) => string {
   let last = '';
-  return () => {
-    const lines = candidates(options);
+  return (role = 'passer') => {
+    const own = roleLines(role, options);
+    // Their own lines mostly, the news of the street now and then; a passer-by has only the news.
+    const lines = !own.length ? candidates(options) : Math.random() < 0.7 ? own : [...own, ...candidates(options)];
     const fresh = lines.filter((line) => line !== last);
     last = pick(fresh.length ? fresh : lines);
     return `“${last}”`;
   };
+}
+
+/** What only someone in `role` would say, now. */
+function roleLines(role: TalkRole, { sky, market }: StreetTalkOptions): string[] {
+  const s = sky();
+  const wet = s.rain > 0.05;
+  switch (role) {
+    case 'commuter':
+      return s.hours < 12
+        ? ['Sorry, can’t stop, I’m late!', 'Train in four minutes. Bye!', 'Monday again, is it? Feels like it.']
+        : ['Home at last. Well, nearly.', 'Long day. Mind out!', 'Sorry, in a hurry!'];
+    case 'child':
+      return ['Have you got a Game Boy? My brother has one.', 'Mum says no arcade till my homework’s done.', 'I can do the whole first level without dying.', 'Are those games in your bag?'];
+    case 'elder':
+      return [
+        'This street had a cinema once, you know. Where the arcade is.',
+        'We had pinball, in my day. Real bells.',
+        wet ? 'My knee said it would rain. It always knows.' : 'Lovely to get a bit of air.',
+        'Young people and their games. My grandson is the same.',
+      ];
+    case 'phone':
+      return ['Sorry, I’m on the phone. Two minutes!', '“No, I’m outside the grocer’s.” Sorry, not you.', 'Hang on, someone’s talking to me. Yes?', 'Can it wait? It’s my mother.'];
+    case 'reader':
+      return ['Shh, it’s just getting good.', 'Nothing beats a bench and a book.', 'A detective story. I think it was the butler.', 'One more chapter and I’ll go home. That was three chapters ago.'];
+    case 'bus':
+      return ['The 38 should be along any minute. Should.', 'You’d think they’d run more of them.', 'Off to the station. You?', wet ? 'At least the shelter keeps the rain off.' : 'Not a bad day to wait in.'];
+    case 'terrace':
+      return ['Best coffee on the street, this.', 'I come here every day. Same table.', 'Sit down, there’s a free chair.', s.hours >= 18 ? 'One more and then home.' : 'Just the one, then back to work.'];
+    case 'queue': {
+      const stock = market.peekToday();
+      return stock?.length
+        ? [`They say there’s a ${pick(stock).game.title} in today.`, 'New stock day. I’m not missing it this time.', 'Don’t push in, I was here first!']
+        : ['New stock day. I’m not missing it this time.', 'Don’t push in, I was here first!', 'Is this the queue for RETRO GAMES?'];
+    }
+    case 'bakery':
+      return ['The croissants go by nine.', 'Two baguettes, always. One never makes it home.', 'Smells good, doesn’t it?'];
+    case 'smoker':
+      return ['Just the one, then back in.', 'It’s louder in there than you’d think.', 'Quiz night. We’re losing.', 'Got a light? No? Never mind.'];
+    case 'chatting':
+      return ['Sorry, we were just catching up.', 'Have you heard about the flat on the third floor?', 'We’ve known each other since school.'];
+    case 'passer':
+      return [];
+  }
 }
 
 function candidates({ sky, market, marketDay, games, scores }: StreetTalkOptions): string[] {
@@ -91,5 +143,6 @@ function candidates({ sky, market, marketDay, games, scores }: StreetTalkOptions
     else if (top) lines.push(`${top.name} still holds ${title} at the arcade. ${top.score.toLocaleString('en')} points, can you believe it.`);
   }
   lines.push(...ANY_TIME);
+  if (s.hours >= 9 && s.hours < 21.5 && s.rain < 0.3) lines.push(...BUSKER_LINES);
   return lines;
 }

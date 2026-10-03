@@ -1,10 +1,11 @@
 import { Sheet, type Rng, type Fill, type Surface, SCENE_HEIGHT, azimuthX, heightY, outline, sizePx, worldPoint } from './Sheet';
 import { between, integer, pick, shade } from './paint';
 import { BUS_SHELTER, CYCLE_NEAR, FAR_LANE, FRONTAGE, FRONT_END, KERB, LAMPS, LAMP_LINE, NEAR_KERB, NEAR_LANE, OUR_LINE, PARK_END, PARK_NEAR_KERB, PARK_OUR_LINE, ROAD, frontage, ground, streetEnd } from './plan';
-import { BENCHES, BIKE_RACKS, BUS_STOP, CROSSINGS, KIOSK, LAMP_HEIGHT, PARK_SECTION, ROADWORKS, SIGNAL_POSTS, STOP_LINE, STREET_BINS, STREET_DETAILS, TERRACES, inFlatFrame } from '@/world/city/frontage';
+import { BENCHES, BIKE_RACKS, BUS_STOP, CROSSINGS, KIOSK, LAMP_HEIGHT, PARK_SECTION, SIGNAL_POSTS, STOP_LINE, STREET_BINS, STREET_DETAILS, TERRACES, inFlatFrame, roadworks } from '@/world/city/frontage';
 import { STREET_TREES, TREE_FORM, treeHeight } from '@/world/city/trees';
 import { PARKED_CARS, type ParkedShape } from '@/world/city/parkedCars';
 import { FRONT, STREET_ENDS, STREET_PLAN } from '@/world/street/streetPlan';
+import { LAMP_DESIGNS } from '@/world/street/StreetLamps';
 import { TREE_STYLES, paintTree } from './Tree';
 import { holidayStreetItems, paintTreeLights } from './Holiday';
 import { CAR_BODY, SALOON_BODY, VAN_BODY, type CarFrame, type VehicleBody, paintCar } from './Car';
@@ -27,7 +28,7 @@ import {
   paintTerrace,
   paintTrafficLight,
   paintTreeGrate,
-} from './StreetFurniture';
+} from './paintedFurniture';
 
 const ASPHALT = '#4a4c50';
 /** How the ground takes the weather: the road puddles most, the flags a little less; snow settles on both. */
@@ -373,7 +374,8 @@ export function paintStreet(sheet: Sheet, random: Rng, shops: readonly Storefron
     });
   }
   // Lamp posts; the far ones wash the facade behind them.
-  for (const { x, z, far } of LAMPS) add(x, z, () => paintLamp(sheet, x, z, LAMP_HEIGHT, 4.5, far ? FRONTAGE - LAMP_LINE : 0));
+  // Each of its kind, its lens at the walkable street's height (`LAMP_DESIGNS`).
+  for (const { x, z, far, design } of LAMPS) add(x, z, () => paintLamp(sheet, x, z, LAMP_DESIGNS[design].lens ?? LAMP_HEIGHT, LAMP_DESIGNS[design].pool * 0.7, far ? FRONTAGE - LAMP_LINE : 0, design));
   for (const { at: [x, z], yaw } of BENCHES) add(x, z, () => paintBench(sheet, { x, z, along: facing(yaw) }));
   for (const [x, z] of STREET_BINS) add(x, z, () => paintBin(sheet, x, z));
   // Bikes stand across their rack, whichever pavement it is on.
@@ -417,13 +419,13 @@ export function paintStreet(sheet: Sheet, random: Rng, shops: readonly Storefron
 }
 
 /**
- * The roadworks closing the walkable street (`ROADWORKS`): across Front Street and across Park
+ * The roadworks closing the walkable street (`roadworks()`, where they stand today): across Front Street and across Park
  * Street, a hoarding over each pavement, barriers over the parking lanes, a line of cones past them
  * where the traffic lanes open.
  */
 function paintRoadworks(sheet: Sheet, random: Rng, add: (x: number, z: number, draw: () => void) => void): void {
   const { height } = STREET_PLAN.roadworks;
-  const { front, park } = ROADWORKS;
+  const { front, park } = roadworks();
   for (const [z0, z1] of front.pavements) add(front.x, (z0 + z1) / 2, () => paintHoarding(sheet, random, front.x, z0, front.x, z1, height));
   for (const [z0, z1] of front.parking) add(front.x, (z0 + z1) / 2, () => paintBarriers(sheet, front.x, z0, front.x, z1));
   for (const [x0, x1] of park.pavements) add((x0 + x1) / 2, park.z, () => paintHoarding(sheet, random, x0, park.z, x1, park.z, height));

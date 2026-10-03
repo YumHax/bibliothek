@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { createCanvas } from '@/covers/generated/canvasUtils';
 import { QUALITY } from '@/graphics/quality';
+import { letteringFont } from '@/world/city/shopLooks';
 
 /**
  * Scenery texture size. The panorama covers 360° across but only the `ELEVATION_MIN..MAX` band
@@ -25,6 +26,15 @@ export const DEPTH_SCALE = 160;
 export type Rng = () => number;
 /** What lights up at night: tungsten (warm), fluorescent and screens (cool), or a whiter mix of both. */
 export type LightKind = 'warm' | 'cool' | 'neutral';
+
+/** A shop's opening hours, in game hours (past 24: after midnight), as `street/shops/shopHours` keeps them. */
+export interface ShopCurfew {
+  open: number;
+  close: number;
+}
+
+/** When a light goes out: a wakefulness (0..1, see `Sheet.lit`), or a shop's opening hours (it is lit only while the shop is open). */
+export type Curfew = number | ShopCurfew;
 
 /**
  * How a surface takes the weather, 0..1 each: `wet` how much it mirrors the sky once rain has
@@ -117,13 +127,14 @@ export function encodeDepth(distance: number): number {
  *    rasterised onto exactly the same texels, without anti-aliasing on either canvas (`lit()`), and the
  *    shader switches each texel before filtering. A texel that carries light but no stamp (a lamp's `glow`)
  *    reads 0: it burns all night. A light whose curfew byte is 7 mod 8 is animated by the shader: a cool
- *    one flickers like a television, a warm one blinks like a beacon (see `lit()`'s `animated`);
+ *    one flickers like a television, a warm one blinks like a beacon (see `lit()`'s `animated`). One
+ *    whose byte is 5 mod 8 is a shop's light: G and B hold its opening and closing hours (`ShopCurfew`);
  *  - `ground`: R the cast shadows (drawn straight under what casts them, so they never point the wrong
  *    way; the shader fades them with the sun), G how wet a surface gets, B how much snow it catches;
  *  - `fx`: what moves or changes in the painted scenery itself. R how far a texel sways in the wind (texels
  *    at full wind x 16: tree crowns, more towards the top), G its sway phase (7 bits) plus 128 on the
  *    swaying thing itself (without it, the margin around a crown the crown may sway into), B the
- *    curfew of a roller shutter that comes down over a shop front when the shop shuts (0 = none).
+ *    opening hours of a roller shutter that comes down over a shop front when the shop shuts (0 = none, `shutterByte`).
  *    Nearest-sampled like the lights. A light whose curfew byte is 6 mod 8 is a fairy light (`fairy()`):
  *    it twinkles in the colour painted under it.
  * Things are painted far to near (painter's algorithm). A thing announces its distance and glassiness with
@@ -215,15 +226,15 @@ export class Sheet {
   }
 
   /**
-   * A roller shutter over `p` (a shop front), down while the city's wakefulness is below `curfew`:
-   * the shop's closing time, and in the morning until it opens. Stamp it after the shop's own
+   * A roller shutter over `p` (a shop front), down outside the shop's opening `hours` (the shader
+   * reads the hour, `shutterByte`): from its closing time until it opens in the morning. Stamp it after the shop's own
    * silhouettes; anything painted over it later (an awning, a tree) hides it again.
    */
-  shutter(p: Path2D, curfew: number): void {
+  shutter(p: Path2D, hours: ShopCurfew): void {
     const ctx = this.fx;
     ctx.save();
     ctx.globalCompositeOperation = 'lighten';
-    ctx.fillStyle = `rgb(0,0,${Math.max(1, byte(curfew))})`;
+    ctx.fillStyle = `rgb(0,0,${shutterByte(hours)})`;
     ctx.fill(p);
     ctx.restore();
   }
@@ -282,11 +293,12 @@ export class Sheet {
   /**
    * A surface that lights up at night (a window, a shop front, a lamp head); `strength` 0..1.
    * `curfew` 0..1 is the wakefulness below which it goes out again: 0 (default) burns all night, 1
-   * goes out as soon as the evening turns; see `wakefulnessAt` for what the hours mean. `animated`
+   * goes out as soon as the evening turns; see `wakefulnessAt` for what the hours mean; a shop's
+   * opening hours (`ShopCurfew`) keep it lit only while the shop is open. `animated`
    * makes the shader move it: a cool light flickers like a television, a warm one blinks like an
    * aviation beacon.
    */
-  lit(shape: Polygon, kind: LightKind, strength = 1, curfew = 0, animated = false): void {
+  lit(shape: Polygon, kind: LightKind, strength = 1, curfew: Curfew = 0, animated = false): void {
     this.light.fillStyle = this.lightStyle(kind, strength);
     this.curfew.fillStyle = curfewStyle(curfew, animated);
     // Texel by texel, whole texels only, on both canvases at once: the light and its curfew must
@@ -335,7 +347,7 @@ export class Sheet {
    * there. With a `curfew` (a shop's light spilling on the pavement) it goes out with that light; the
    * ellipse's rim carries no light, so its hard-edged curfew stamp never shows.
    */
-  glow(x: number, y: number, rx: number, ry: number, strength: number, curfew?: number): void {
+  glow(x: number, y: number, rx: number, ry: number, strength: number, curfew?: Curfew): void {
     if (curfew !== undefined) {
       const c = this.curfew;
       c.save();
@@ -362,7 +374,8 @@ export class Sheet {
   /**
    * Neon or back-lit lettering centred on (x, y): `size` px tall, squeezed across by `squeeze` for a
    * facade seen at an angle (negative to mirror it: see the shop fascias), sheared by `slant` (texture
-   * y per x) to run along a fascia that crosses the panorama aslant. Anti-aliased, so it carries no curfew: a sign lit this way burns all night.
+   * y per x) to run along a fascia that crosses the panorama aslant; `font` a CSS font without its size ('bold Georgia').
+   * Anti-aliased, so it carries no curfew: a sign lit this way burns all night.
    */
   sign(text: string, x: number, y: number, size: number, squeeze: number, font: string, kind: 'warm' | 'cool', strength: number, slant = 0): void {
     const ctx = this.light;
@@ -371,7 +384,7 @@ export class Sheet {
     ctx.translate(x, y);
     ctx.transform(1, slant, 0, 1, 0, 0);
     ctx.scale(squeeze, 1);
-    ctx.font = `${Math.round(size * 10) / 10}px ${font}`;
+    ctx.font = letteringFont(font, Math.round(size * 10) / 10);
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     const v = Math.round(THREE.MathUtils.clamp(strength, 0, 1) * 255);
@@ -491,12 +504,31 @@ function shadowStyle(strength: number): string {
  * The curfew byte of a light. Animated lights (televisions, beacons) are those whose byte is 7
  * mod 8, fairy lights 6 mod 8, so every other light steers clear of those residues.
  */
-function curfewStyle(curfew: number, animated: boolean | 'fairy'): string {
+function curfewStyle(curfew: Curfew, animated: boolean | 'fairy'): string {
+  if (typeof curfew !== 'number') {
+    // A shop's light: on in its opening hours (G the opening hour, B the closing hour), its dusk order hashed from them.
+    const order = Math.round(40 + ((curfew.open * 37 + curfew.close * 11) % 23) * 8);
+    const v = (order & ~7) | SHOP_CODE;
+    return `rgb(${v},${byte(curfew.open / 24)},${byte(curfew.close / 26)})`;
+  }
   let v = byte(curfew);
   if (animated === 'fairy') v = Math.min(254, (v & ~7) | 6);
   else if (animated) v = Math.min(255, (v & ~7) | 7);
-  else if (v % 8 >= 6) v -= (v % 8) - 5;
+  else if (v % 8 >= SHOP_CODE) v -= (v % 8) - (SHOP_CODE - 1);
   return `rgb(${v},${v},${v})`;
+}
+
+/** A curfew byte of this value mod 8 is a shop's light, kept by its opening hours (`ShopCurfew`), not by the wakefulness. */
+const SHOP_CODE = 5;
+
+/**
+ * A shop's opening hours, for the shutter's byte in fx B: the opening hour in half hours from 5:00 (0..15) and the
+ * closing hour in steps of 11/15 h from 17:00 (0..15), plus 1 (0 = no shutter). The shader decodes it the same way.
+ */
+function shutterByte(hours: ShopCurfew): number {
+  const open = THREE.MathUtils.clamp(Math.round((hours.open - 5) / 0.5), 0, 15);
+  const close = THREE.MathUtils.clamp(Math.round((hours.close - 17) / (11 / 15)), 0, 15);
+  return 1 + open * 16 + close;
 }
 
 /**

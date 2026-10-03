@@ -127,6 +127,12 @@ export const BEDROOM_PLAN = {
   arcadePoster: { at: { wall: 'right', along: -0.8, y: 1.5 } as Placement, width: 0.44, height: 0.62 },
   /** The arcade's mood lamp once won: on the dresser's pile of books (dresser-local x, height above its top). */
   moodLamp: { along: 0.23, above: 0.06 },
+  /**
+   * The home arcade cabinet once bought (`world/homeArcade`, the TV repair shop): against the front wall between the
+   * doorway (x -1.515..-0.685, the leaf's swing) and the dresser (from x 0.2), its screen to the bed; 0.66 x 0.78 m, its
+   * origin the base's centre. Played standing at the rug's edge.
+   */
+  homeArcade: { floor: [-0.25, 1.39], rotationY: Math.PI } as Placement,
 
   /**
    * What stands only once bought (`economy/homeGoods.ts`; `build/owned.ts`). Before the bed, a mattress lies on the floor
@@ -139,6 +145,7 @@ export const BEDROOM_PLAN = {
     dresser: 'dresser' as Owned,
     tv: ['bedroomTv', 'dresser'] as Owned,
     readingCorner: 'readingCorner' as Owned,
+    homeArcade: 'homeArcade' as Owned,
   },
 
   decor: [

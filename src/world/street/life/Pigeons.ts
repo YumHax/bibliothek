@@ -3,7 +3,7 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import type { Updatable } from '@/core/Engine';
 import type { Furniture } from '../../Furniture';
 import type { DayNight } from '../../props/DayNight';
-import type { Vec2 } from '../streetPlan';
+import { WALKABLE, type Vec2 } from '../streetPlan';
 
 export interface PigeonsOptions {
   /** The flocks: where each pecks about and how many birds it has. */
@@ -15,6 +15,10 @@ export interface PigeonsOptions {
   onTakeOff?: (at: Vec2) => void;
   /** Everyone else in the street (zone-local, a live list): those on the move scare the birds as the player does (not someone sitting or standing). */
   walkers?: readonly { readonly position: THREE.Vector3; readonly isPresent: boolean; readonly isWalking: boolean }[];
+  /** The dogs out on their leads (zone-local, a live list): they scare the birds walking or not. */
+  dogs?: readonly { readonly position: THREE.Vector3; readonly visible: boolean }[];
+  /** A pigeon of a flock pecking on the ground at `at` coos (now and then, by day). */
+  onCoo?: (at: Vec2) => void;
 }
 
 /** A pigeon takes off when the player (or a passer-by) comes this close; its flockmates this close to it follow. */
@@ -31,6 +35,10 @@ const HIDDEN = new THREE.Matrix4().makeScale(0, 0, 0);
 const ROOST_BELOW = 0.12;
 /** Where they roost: this high, on the building line over their pavement, spread along it. */
 const ROOST = { y: 15.5, line: 12.4, spread: 6 };
+/** A flock on the ground coos every this many seconds or so. */
+const COO_EVERY = [5, 16] as const;
+/** Where a flock may land along its pavement (x): inside the walkable street, short of its ends. */
+const LAND_X = [WALKABLE.minX + 1.5, WALKABLE.maxX - 2] as const;
 
 interface Bird {
   flock: number;
@@ -70,6 +78,11 @@ export class Pigeons extends THREE.Group implements Furniture, Updatable {
   private readonly bodies: THREE.InstancedMesh;
   private readonly wings: THREE.InstancedMesh;
   private readonly spots: THREE.Vector3[];
+  private readonly grounded: THREE.Vector3[] = [];
+  /** Per flock: seconds to its next coo. */
+  private readonly coos: number[];
+  /** Round every bird, drawn or not (the meshes' bounds for culling): recomputed each frame from the birds. */
+  private readonly bounds = new THREE.Box3();
   private readonly eye = new THREE.Vector3();
   /** This frame's scarers (the player's eye first, then every present walker), x and z pairs: filled once a frame. */
   private readonly scarers: number[] = [];
@@ -91,6 +104,7 @@ export class Pigeons extends THREE.Group implements Furniture, Updatable {
     this.name = 'Pigeons';
     const share = options.share ?? 1;
     this.spots = options.flocks.map(({ at }) => new THREE.Vector3(at[0], 0, at[1]));
+    this.coos = options.flocks.map(() => COO_EVERY[0] + Math.random() * (COO_EVERY[1] - COO_EVERY[0]));
     options.flocks.forEach(({ at, count }, flock) => {
       for (let i = 0; i < Math.max(1, Math.round(count * share)); i++) {
         const [x, z] = [at[0] + (Math.random() - 0.5) * 2 * FORAGE, at[1] + (Math.random() - 0.5) * FORAGE];
@@ -109,7 +123,8 @@ export class Pigeons extends THREE.Group implements Furniture, Updatable {
       this.bodies.setColorAt(i, color);
     });
     for (const mesh of [this.bodies, this.wings]) {
-      mesh.frustumCulled = false;
+      // Culled by a sphere round all the birds, kept up to date as they fly (`draw`).
+      mesh.boundingSphere = new THREE.Sphere();
       mesh.castShadow = false;
       mesh.receiveShadow = true;
       mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
@@ -150,6 +165,8 @@ export class Pigeons extends THREE.Group implements Furniture, Updatable {
     this.scarers.length = 0;
     this.scarers.push(this.eye.x, this.eye.z);
     for (const walker of this.options.walkers ?? []) if (walker.isPresent && walker.isWalking) this.scarers.push(walker.position.x, walker.position.z);
+    for (const dog of this.options.dogs ?? []) if (dog.visible) this.scarers.push(dog.position.x, dog.position.z);
+    this.coo(dt);
     for (const bird of this.birds) {
       if (bird.gone) continue;
       if (bird.flying) this.fly(bird, dt);
@@ -265,7 +282,7 @@ export class Pigeons extends THREE.Group implements Furniture, Updatable {
     if (spot.distanceTo(this.eye) < LAND_MIN || !this.birds.some((b) => b.flock === bird.flock && b.flying)) {
       const away = Math.sign(spot.x - this.eye.x) || 1;
       spot.x += away * (LAND_MIN + Math.random() * (LAND_MAX - LAND_MIN));
-      spot.x = THREE.MathUtils.clamp(spot.x, -38, 36);
+      spot.x = THREE.MathUtils.clamp(spot.x, LAND_X[0], LAND_X[1]);
       if (Math.abs(spot.x - this.eye.x) < LAND_MIN) spot.x = this.eye.x - away * LAND_MIN;
       this.options.onTakeOff?.([bird.x, bird.z]);
     }
@@ -297,8 +314,30 @@ export class Pigeons extends THREE.Group implements Furniture, Updatable {
     }
   }
 
+  /** Where the flocks peck about now, those with a bird on the ground (zone-local): what a dog on a lead pulls towards. */
+  onTheGround(): readonly THREE.Vector3[] {
+    this.grounded.length = 0;
+    if (this.roosted || !this.visible) return this.grounded;
+    for (let f = 0; f < this.spots.length; f++) if (this.birds.some((b) => b.flock === f && !b.flying && !b.gone)) this.grounded.push(this.spots[f]!);
+    return this.grounded;
+  }
+
+  /** Now and then one of a flock on the ground coos (not while it is up on the roofs, not at night). */
+  private coo(dt: number): void {
+    if (!this.options.onCoo || this.roosted) return;
+    for (let f = 0; f < this.coos.length; f++) {
+      this.coos[f]! -= dt;
+      if (this.coos[f]! > 0) continue;
+      this.coos[f] = COO_EVERY[0] + Math.random() * (COO_EVERY[1] - COO_EVERY[0]);
+      const bird = this.birds.find((b) => b.flock === f && !b.flying && !b.gone);
+      if (bird) this.options.onCoo([bird.x, bird.z]);
+    }
+  }
+
   private draw(): void {
-    this.birds.forEach((bird, i) => {
+    this.bounds.makeEmpty();
+    for (let i = 0; i < this.birds.length; i++) {
+      const bird = this.birds[i]!;
       // Pecking pitches the body forward in quick dips; in flight it is level and the wings beat.
       const peck = bird.flying ? 0 : Math.max(0, Math.sin(bird.peck * 5 + i)) ** 6 * 0.7;
       this.euler.set(peck, bird.yaw, 0);
@@ -307,10 +346,11 @@ export class Pigeons extends THREE.Group implements Furniture, Updatable {
       this.pose.compose(this.spot, this.turn, this.unit);
       if (bird.gone) this.pose.copy(HIDDEN);
       this.bodies.setMatrixAt(i, this.pose);
+      if (!bird.gone) this.bounds.expandByPoint(this.spot);
       if (!bird.flying || bird.gone) {
         this.wings.setMatrixAt(2 * i, HIDDEN);
         this.wings.setMatrixAt(2 * i + 1, HIDDEN);
-        return;
+        continue;
       }
       const beat = Math.sin(this.time * 24 + i) * 0.9;
       for (const side of [-1, 1] as const) {
@@ -318,7 +358,14 @@ export class Pigeons extends THREE.Group implements Furniture, Updatable {
         if (side < 0) this.wingOffset.multiply(MIRROR);
         this.wings.setMatrixAt(2 * i + (side > 0 ? 1 : 0), this.wingOffset.premultiply(this.pose));
       }
-    });
+    }
+    // The bounds the renderer culls by: round the birds, plus a wing's span.
+    if (!this.bounds.isEmpty()) {
+      for (const mesh of [this.bodies, this.wings]) {
+        this.bounds.getBoundingSphere(mesh.boundingSphere!);
+        mesh.boundingSphere!.radius += 0.4;
+      }
+    }
     this.bodies.instanceMatrix.needsUpdate = true;
     this.wings.instanceMatrix.needsUpdate = true;
   }

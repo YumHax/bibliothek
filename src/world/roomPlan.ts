@@ -25,10 +25,17 @@ export const FRONT_DOOR: Doorway = { wall: 'back', along: -1.5, ...DOOR_LEAF, to
 export const BALCONY_DOORWAY: Doorway = { wall: 'front', along: 2.0, ...BALCONY_DOOR, door: false, to: 'balcony' };
 
 /**
+ * The opening to Mrs Roux's two rooms (`world/annex`): right wall, its front end (clear of the projector picture), where
+ * the two flats were one before the war. Condemned (plastered over, `annex/AnnexOpening`) until the day after her move;
+ * no leaf either side, the portal shut till then. Its bookcase slot (the right wall's front one) goes to the annex.
+ */
+export const ANNEX_DOORWAY: Doorway = { wall: 'right', along: 2.3, width: 1.1, height: 2.2, door: false, to: 'annex' };
+
+/**
  * The room shell everything else is laid out in: 6 x 6 m, 2.8 m under the ceiling, one door. The
  * back wall (hallway behind) and the right wall have no window and keep the light in.
  */
-export const DEFAULT_ROOM: RoomOptions = { width: 6, depth: 6, height: 2.8, doorways: [FRONT_DOOR, BALCONY_DOORWAY], opaqueWalls: ['back', 'right'] };
+export const DEFAULT_ROOM: RoomOptions = { width: 6, depth: 6, height: 2.8, doorways: [FRONT_DOOR, BALCONY_DOORWAY, ANNEX_DOORWAY], opaqueWalls: ['back', 'right'] };
 
 export interface WindowPlan {
   wall: Wall;
@@ -125,6 +132,17 @@ export const ROOM_PLAN = {
   },
 
   /**
+   * The displays SECOND HOME sells (`world/showcase/`, the player fills them with any box): the narrow display case in
+   * the gap between the door's latch-side architrave (x -1.015) and the first bookcase (from x -0.65), 34 cm wide;
+   * the pedestal in the open floor of the front-right quarter, clear of the projector rug's cushions (z <= 0.9), the
+   * Christmas tree (x <= 1.5 from z 1.8) and the way to the annex's opening (x >= 2.1), its easel facing the armchairs.
+   */
+  showcase: {
+    displayCase: { at: { wall: 'back', along: -0.833, y: 0 } as Placement, upgrade: 'displayCase' as Owned },
+    pedestal: { at: { floor: [1.7, 1.3], rotationY: -2.35 } as Placement, upgrade: 'pedestal' as Owned },
+  },
+
+  /**
    * A visiting friend's round (`src/world/visitors/`), floor points: just inside the door from the hallway, a hub in the
    * open floor by the bookcases every leg goes through, the spots they browse (facing `yaw`: 0 = +z, pi = the back wall's
    * shelves, pi/2 = the right wall's), and the armchairs they may sit in (`seat`: index in `seats`), each reached from
@@ -143,6 +161,29 @@ export const ROOM_PLAN = {
       { seat: 0, via: [[-1.9, -1.4]] },
       { seat: 1, via: [[1.3, -1.3]] },
     ] as { seat: number; via: [number, number][] }[],
+    /**
+     * A games night (`visitors/gathering/`): the TV armchair is the player's, so the friends stand round it facing the
+     * set, player two by its side table end (x -1.6 z 1.2, clear of the table at z 0.72 and of the window's curtain),
+     * the others behind the chair's back (x -0.35, between the two armchairs and clear of the floor lamps at z -0.76).
+     * Each yaw faces the TV (x -2.7, z 0).
+     */
+    party: [
+      { at: [-1.6, 1.2], yaw: -2.4 },
+      { at: [-0.35, 0.45], yaw: -Math.PI / 2 - 0.15 },
+      { at: [-0.35, -0.45], yaw: -Math.PI / 2 + 0.15 },
+    ] as { at: [number, number]; yaw: number }[],
+  },
+
+  /**
+   * The honours (`collector/honours`): a completed set of the collectors' club lights a small neon of its name over the
+   * back wall's bookcases (two rows of five, filled in the order they were completed, clear of the clock over the door at
+   * x -1.5 and of the ceiling spots, which hang off the ceiling in front of the cases); a console's whole built-in list
+   * lights its name bigger over the right wall's (above the projector picture, whose top is at 2.07 m). No light of their
+   * own: each is placed once earned and never costs a recompile.
+   */
+  honours: {
+    sets: { wall: 'back' as const, along: [-0.55, 0.17, 0.89, 1.61, 2.33], y: [2.12, 2.46], width: 0.6, height: 0.13 },
+    consoles: { wall: 'right' as const, along: [-2.45, -1.47, -0.49, 0.49, 1.47, 2.45], y: 2.42, width: 0.76, height: 0.16 },
   },
 
   /** Everything else: plants, rug, pictures, lamps, tables. One line each; see `props/decor.ts` for the kinds. */

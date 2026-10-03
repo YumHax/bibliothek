@@ -36,7 +36,26 @@ export interface FacadeStyle {
   roof: RoofKind;
   /** Slate or tile. */
   roofColor: string;
+  /** The upper floors' windows: how far over the floor the sill is, how tall, how wide at most (or this share of a bay). */
+  windows: WindowSize;
+  /** How far under the facade's top its cornice runs (the parapet's height over it), metres. */
+  parapet: number;
+  /** The residents' door: its paint, the house number over it. */
+  door: string;
+  number: number;
+  /** Which end of the front its downpipe runs down from the gutter, if any. */
+  downpipe: 'left' | 'right' | null;
 }
+
+export interface WindowSize {
+  sill: number;
+  height: number;
+  maxWidth: number;
+  share: number;
+}
+
+/** The residents' doors' paints (both pictures paint them). */
+export const DOORS = ['#2c2622', '#3a2418', '#1f3a34', '#2a3450', '#5a1f1f'];
 
 export const BRICKS = ['#b8654b', '#a86a52', '#9c6b55', '#8e4f3c', '#b0735a'];
 export const RENDERS = ['#c9a583', '#b99b6d', '#cdb79b', '#d8b49a', '#c8c2a8', '#e2cf9e', '#b9c2b0', '#8f8a80', '#d9b8b0'];
@@ -52,8 +71,15 @@ export const ROOF_SLOPE: Record<Exclude<RoofKind, 'flat'>, { rise: number; run: 
   pitched: { rise: 2.6, run: 3.6 },
 };
 
-/** The upper floors' windows: how far over the floor the sill is, how tall, and how wide at most (or this share of a bay). */
-export const FACADE_WINDOW = { sill: 0.9, height: 1.65, maxWidth: 1.15, share: 0.5 } as const;
+/** The upper floors' windows of a plain front (a style's own `windows` vary round these): sill over the floor, height, width at most, share of a bay. */
+export const FACADE_WINDOW: WindowSize = { sill: 0.9, height: 1.65, maxWidth: 1.15, share: 0.5 };
+/** The parapet over the cornice when a style does not say (`facadePainter.PARAPET` is the most a style takes). */
+export const BASE_PARAPET = 1.1;
+
+/** How wide a style's upper windows are in a bay `bay` metres wide. */
+export function windowWidth(style: FacadeStyle, bay: number): number {
+  return Math.min(style.windows.maxWidth, bay * style.windows.share);
+}
 
 /** How many window bays a storey of a facade `width` long has (`bays`: the plan's own count). */
 export function facadeBays(width: number, bays?: number): number {
@@ -76,6 +102,27 @@ function lighten(hex: string, k: number): string {
  * window view's unplanned buildings, from its shared sequence).
  */
 export function facadeStyle(seed: number, stoneShare = 0.25, random: () => number = seededRandom(seed * 7919 + 17)): FacadeStyle {
+  const base = baseStyle(seed, stoneShare, random);
+  // The finer points from a draw of their own, so the main draw (and every lot drawn after it) is as it was.
+  const more = seededRandom(seed * 6151 + 29);
+  const grand = base.kind === 'stone';
+  const windows: WindowSize = {
+    sill: grand ? 0.75 + more() * 0.1 : 0.82 + more() * 0.18,
+    height: grand ? 1.85 + more() * 0.1 : 1.5 + more() * 0.28,
+    maxWidth: grand ? 1.2 : 1.0 + more() * 0.2,
+    share: grand ? 0.52 : 0.42 + more() * 0.16,
+  };
+  const parapet = grand ? 0.9 : 0.85 + more() * 0.25;
+  const door = DOORS[Math.floor(more() * DOORS.length)]!;
+  const number = 1 + Math.floor(more() * 58);
+  const pipe = more();
+  const downpipe = pipe < 0.3 ? 'left' : pipe < 0.6 ? 'right' : null;
+  return { ...base, windows, parapet, door, number, downpipe };
+}
+
+type BaseStyle = Omit<FacadeStyle, 'windows' | 'parapet' | 'door' | 'number' | 'downpipe'>;
+
+function baseStyle(seed: number, stoneShare: number, random: () => number): BaseStyle {
   const r = random();
   if (r < stoneShare) {
     // Dressed stone: carved window heads, iron balconies, a slate mansard.

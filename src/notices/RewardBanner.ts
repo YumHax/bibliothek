@@ -44,6 +44,14 @@ export class RewardBanner {
     this.open(reward);
   }
 
+  /** Skipped by hand (docs/notices.md): the banner up goes now and the next waiting one comes; `all` drops those too. */
+  dismiss(all = false): boolean {
+    if (!this.current) return false;
+    if (all) this.queue.length = 0;
+    this.left = 0;
+    return true;
+  }
+
   update(dt: number, attending: boolean): void {
     if (!this.current) return;
     if (attending) this.left -= dt * 1000;

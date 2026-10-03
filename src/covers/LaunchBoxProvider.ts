@@ -26,6 +26,7 @@ export class LaunchBoxProvider implements CoverArtProvider {
   private warned = false;
 
   getBoxArt(game: Game): Promise<BoxArtUrls | null> {
+    if (game.bootleg) return Promise.resolve(null); // an unlicensed cartridge has no scan: its art is generated
     const name = game.externalIds?.libretroName ?? game.title;
     const region = regionOf(game);
     const key = `${game.platform}/${name}/${region}`;

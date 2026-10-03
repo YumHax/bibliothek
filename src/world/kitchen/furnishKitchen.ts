@@ -31,9 +31,14 @@ import { boxJob } from '../build/boxJob';
 import { playCleaning, playJarRattle, playOven, playPaperRustle, playWhisk } from '@/audio/householdSounds';
 import { playCoins } from '@/audio/coins';
 import { rugsUnderfoot } from '../build/rugsUnderfoot';
+import { addFlatNoise } from '@/building/flatNoise';
+import { regionLockFor } from '@/economy/regionLock';
+import { furnishKitchenRepair } from '../repair/furnishRepair';
 
 /** The chronicle's card comes up this long after the jingle starts (ms). */
 const CHRONICLE_AFTER_MS = 1500;
+/** The radio on, as noise for the neighbours (`building/flatNoise`: a longplay is 0.7). */
+const RADIO_NOISE = 0.45;
 
 /**
  * Builds the kitchen into its zone from `KITCHEN_PLAN`: shell (the hallway hangs the door), the
@@ -72,7 +77,11 @@ export function furnishKitchen(zone: Zone, ctx: BuildContext): ZoneHandle {
   // Moved by the player once bought (M): what is left on the table rides along.
   const furnishings = ctx.home.furnishings;
   furnishings?.register(zone, table, { key: 'kitchenTable', at: plan.table, owned: plan.upgrades.table });
-  plan.chairs.forEach((at, i) => furnishings?.register(zone, furnished.placeAt(new Chair(), at), { key: `kitchenChair#${i}`, at, owned: plan.upgrades.table, name: 'Chair' }));
+  const chairs = plan.chairs.map((at, i) => {
+    const chair = furnished.placeAt(new Chair(), at);
+    furnishings?.register(zone, chair, { key: `kitchenChair#${i}`, at, owned: plan.upgrades.table, name: 'Chair' });
+    return chair;
+  });
   // A game from the shelves left on the table, a different one each day.
   furnished.onOwned(() => placeStrayBox(zone, ctx, 'kitchenTable', table, plan.strayBox));
 
@@ -85,6 +94,8 @@ export function furnishKitchen(zone: Zone, ctx: BuildContext): ZoneHandle {
   const tuner = placerFor(zone, upgrades, plan.upgrades.radio);
   const radio = tuner.placeAt(new Radio(), plan.radio);
   tuner.placeWith(radio, pointSound(ctx, radio.sound, { maxDistance: 9 }), new THREE.Vector3(-0.05, 0.08, 0.04));
+  // On late, downstairs hears it (`building/noiseComplaints`).
+  zone.onUnload(addFlatNoise('radio', () => (radio.sound.isOn ? RADIO_NOISE : 0)));
   zone.placeAt(new ChoppingBoard(), plan.choppingBoard);
   zone.placeAt(new FruitBowl(), plan.fruitBowl);
   zone.placeAt(new StorageJars(), plan.storageJars);
@@ -102,12 +113,15 @@ export function furnishKitchen(zone: Zone, ctx: BuildContext): ZoneHandle {
   // 7. Home goods: the portable CRT on the fridge once bought. Its glow is a light: staged from the first frame
   //    (`build/owned.ts`), drawn, clickable and colliding only once bought.
   const crt = new Television(cssLayer, { ...heardBy(ctx), screenWidth: plan.homeGoods.crt.screenWidth });
+  crt.regionLock = regionLockFor(ctx.home.upgrades); // a Japanese copy needs its converter (`economy/regionLock`)
   crt.mountOn(0);
   const top = new THREE.Vector3(0, fridge.footprint.max.y, fridge.footprint.max.z - 0.05 - plan.homeGoods.crt.setBack);
   placerFor(zone, upgrades, plan.upgrades.crt).place(crt, zone.toLocal(fridge.localToWorld(top)), fridge.rotation.y);
 
   // 8. What the kitchen is used for (docs/household.md): the cleaning kit, a cake, the cat's treats, the radio's chronicle.
   if (ctx.home.household) furnishKitchenLife(zone, ctx, ctx.home.household, { table, furnished, catThings, radio });
+  // A console bought broken waits on the right-hand chair, to be mended on the table (docs/household.md "Repairing a console").
+  if (ctx.classifieds && chairs.length) furnishKitchenRepair(zone, ctx.classifieds, { chair: chairs[chairs.length - 1]!, furnished });
 
   return { room, catVisits: floorPointsToWorld(zone, plan.catVisits), catWaters: [water], surfaceAt: rugsUnderfoot(zone) };
 }
@@ -217,7 +231,9 @@ function furnishKitchenLife(zone: Zone, ctx: BuildContext, householdCtx: Househo
   onRise(zone, () => radio.sound.isOn && life.chronicleDue && inEarshot(), () => {
     const lines = life.chronicle();
     if (!lines) return;
-    const text = lines.join('\n');
+    // A caller about a story the player follows (the lost prototype), when the trail has reached the radio.
+    const caller = ctx.story?.onRadio();
+    const text = (caller ? [...lines.filter((l) => !l.includes('Nothing on the grapevine')), caller] : lines).join('\n');
     radio.sound.announce((CHRONICLE_AFTER_MS + readMs(text)) / 1000);
     window.setTimeout(() => notices.read({ title: 'Radio Brocante · the morning chronicle', text, look: 'radio' }), CHRONICLE_AFTER_MS);
   });

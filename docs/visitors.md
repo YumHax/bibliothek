@@ -17,7 +17,7 @@ Their footsteps are the player's own synthesis (`audio/footfall.ts`) at their fe
 panned. A player in their way makes them stop, say "Excuse me" (`excuseAfter`), step 0.4 m aside where no wall and no
 furniture is (`sidestepAfter`, checked with the acoustics' ray and the world's colliders: `VisitorsOptions.collisions`),
 and only after `waitFor` pass through fading. The cat just ahead makes them stop and let it pass (`catAhead`, `catFor`).
-The shelves are walked nearest first, straight from one to the next when nothing stands between (else by the hub). An
+The shelves are walked nearest first, straight from one to the next when nothing stands between (else by the hub). A display the player filled (`showcase/`, docs/furnishing.md "Displays") is always one of the stops (`VisitRoute.featured`): they look at a box on show and say a word on it. An
 armchair is claimed (`Seat.guest`: the cat keeps off it, the player's click is told who sits there) from the moment they
 head for it; taken on the way, they try another or skip the sit; they turn to face the room before sitting down to its
 `sittingHeight`. What they say is heard as a faint murmur at their mouth (`audio/murmur.ts`, via `Friend.voice`), a tip's
@@ -75,3 +75,41 @@ a cake on the kitchen table gets a slice, a longer stay and a thank-you (`Visito
 are drawn under the floor until the first frame so their fade shaders compile with the flat's lights). `?visit` makes a
 friend ring as soon as the player is home (whoever has a loan out comes to return it). A zone deactivation of the flat
 (the player travelled out) ends a visit; so does the player staying out of the flat `aloneFor` seconds.
+
+## Gatherings (`src/world/visitors/gathering/`)
+
+More than one person round at once, each a `Visit` played by the director's own rules. `Visitors.host` (`host.ts`
+`VisitHost`) lends the round, the bodies (the friends, the six open-house `GUESTS` and the club's `CLUB_VISITOR`, all
+placed hidden at start-up for the shader prime), the voices, the bell and the footsteps; `Party` runs several visits:
+`add(plan, delay, behind)` (behind: up the stairs `delay` s after the one before is let in), the first on the landing
+rings (again after `ringAgainAfter`, gone after `giveUpAfter`), a second waiting stands a step down, an open front door
+lets whoever arrives in. A member's visit takes `stops` (given), `sits`, `standIn` (a spot when no armchair is free:
+they stand facing the room, eyes on the TV) and `stayUntil` (stay until the gathering says so). `Gatherings` (a prop in
+the collection room's zone, an `Occasion` the director hands its door to: `host.attach`) starts one at a time, never
+on a day a friend already came (`VisitBook.rang`), and holds the day it plans (no solo visit). Rules and lines:
+`gatheringPlan.ts`; the book (`GatheringBook`, `KEYS.gatherings`): the night and the open house planned, the last ones
+held, the paper's account, the photos.
+
+- **Games night** (`GamesNight`): the phone's "Have everyone round tonight" (before `callUntil`, every `everyDays`,
+  not on a day someone came). From `from` (or `inHours` after the call) the three friends come, one behind the other;
+  one shelf each, then they stand at `ROOM_PLAN.visitor.party` round the TV armchair (the player's: the route's seats
+  are emptied). Player two (the one who rang) offers PADDLE WARS (`offerAfter`, again every `offerAgain`, three times
+  unanswered at most); a click on them runs `PaddleWarsProgram` (the arcade's `Duel` as a `ScreenProgram`) on the TV
+  through the `ProgramRunner` (`built.programs`, set in `bootstrap/session`), the player picks the pad up where they
+  are (`ProgramPlay`). Goals and the score get reactions and lines; after `matches` matches (and `minStay` s) or
+  `stay` s they leave a few seconds apart. An evening with a match adds a polaroid to `NightPhotos` on the hallway's
+  far wall (`HALLWAY_PLAN.nightPhotos`, up to `photos`) and one friend leaves a game they no longer play
+  (`giftChance`) or a tip. Nothing happens to a player who never hosts.
+- **Open house** (`OpenHouse`): the phone's "Ring THE GAMING WEEKLY", from `minGames` games, every `everyDays`, for
+  `aheadDays` later; that morning at home a word says it is today. From `from` to `until`, `waves` waves of
+  `perWave` strangers (never more than `inFlat` in the flat, the next once the last is in and the player is home):
+  each drops `entry` coins at the door, makes `stops` stops (the shelves, the window, the displays with something in
+  them: `Showcases.stops`), gasps at a rare copy (`isRare`: a grail, a first print, 40 000 monthly views), goes. The
+  account (`OpenHouseAccount`) is read the next day at home as THE GAMING WEEKLY's article, and the market records an
+  `openHouse` deed (`REPUTATION.points`).
+- **The collectors' club** (`ClubVisit`): an honour completed (`economy/Honours`: a club set, or every game of a
+  console's built-in list) lights its neon over the bookcases (`collector/HonourNeons`, `ROOM_PLAN.honours`); from the
+  day after, in the afternoon (`club.from`..`until`), Mrs Albers rings, stands at the shelf under it, looks up at it
+  (`Honour:<id>` in the room's zone), says a word, leaves `club.gift` coins. Unanswered, she comes another day.
+
+Testing: `?gamesnight`, `?openhouse`, `?clubvisit` start that gathering as soon as the player is home.

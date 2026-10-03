@@ -78,7 +78,16 @@ export class StreetBikes extends THREE.Group implements Furniture, Updatable {
   private readonly eye = new THREE.Vector3();
   private readonly bike = new THREE.Matrix4();
   private readonly part = new THREE.Matrix4();
+  private readonly stretch = new THREE.Vector3();
+  /** The pedalling's working points (reused every frame). */
+  private readonly hip: [number, number] = [BIKE.hip.x, BIKE.hip.y];
+  private readonly pedal: [number, number] = [0, 0];
+  private readonly knee: [number, number] = [0, 0];
   private readonly color = new THREE.Color();
+  /** One sphere round the racks and the riders, shared by the meshes (culled as one, kept up to date as they ride). */
+  private readonly bounds = new THREE.Sphere();
+  private readonly box = new THREE.Box3();
+  private readonly racksBox = new THREE.Box3();
 
   constructor(private readonly dayNight: DayNight, private readonly options: StreetBikesOptions) {
     super();
@@ -125,13 +134,15 @@ export class StreetBikes extends THREE.Group implements Furniture, Updatable {
       const [hx, hz] = along ? [long, 0.45] : [0.45, long];
       this.colliders.push(new THREE.Box3(new THREE.Vector3(at[0] - hx, 0, at[1] - hz), new THREE.Vector3(at[0] + hx, 0.9, at[1] + hz)));
     }
+    for (const c of this.colliders) this.racksBox.union(c);
     const stands = new THREE.Mesh(mergeGeometries(hoops)!, bareMetal({ color: 0x9a9fa4, roughness: 0.45 }));
     for (const g of hoops) g.dispose();
     stands.castShadow = true;
     stands.receiveShadow = true;
 
+    this.updateBounds();
     for (const mesh of [this.frames, this.bodies, this.skin, this.legs]) {
-      mesh.frustumCulled = false; // the riders move out of any bounds computed now
+      mesh.boundingSphere = this.bounds;
       mesh.castShadow = true;
       mesh.receiveShadow = true;
       mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
@@ -165,13 +176,28 @@ export class StreetBikes extends THREE.Group implements Furniture, Updatable {
       if (weather > 0) this.spawn();
     }
     let moved = false;
-    this.riders.forEach((rider, i) => {
-      if (!rider.active) return;
+    for (let i = 0; i < this.riders.length; i++) {
+      const rider = this.riders[i]!;
+      if (!rider.active) continue;
       this.ride(rider, dt);
       this.pose(rider, i);
       moved = true;
-    });
-    if (moved) for (const mesh of [this.frames, this.bodies, this.skin, this.legs]) mesh.instanceMatrix.needsUpdate = true;
+    }
+    if (!moved) return;
+    this.frames.instanceMatrix.needsUpdate = true;
+    this.bodies.instanceMatrix.needsUpdate = true;
+    this.skin.instanceMatrix.needsUpdate = true;
+    this.legs.instanceMatrix.needsUpdate = true;
+    this.updateBounds();
+  }
+
+  /** The shared sphere round the racks and every rider on the road. */
+  private updateBounds(): void {
+    this.box.copy(this.racksBox);
+    for (const r of this.riders) if (r.active) this.box.expandByPoint(r.position);
+    if (this.box.isEmpty()) this.box.expandByPoint(this.stretch.set(0, 0, 0));
+    this.box.getBoundingSphere(this.bounds);
+    this.bounds.radius += 2.5;
   }
 
   private spawn(): void {
@@ -198,7 +224,7 @@ export class StreetBikes extends THREE.Group implements Furniture, Updatable {
     if (rider.blocked > 0.8) rider.swerveTo = -SWERVE;
     else if (rider.clear > 2.2) rider.swerveTo = 0;
     rider.swerve += THREE.MathUtils.clamp(rider.swerveTo - rider.swerve, -dt * 1.1, dt * 1.1);
-    rider.speed = approach(rider.speed, target, dt, 1.5);
+    rider.speed = approach(rider.speed, target, dt, 1.5, this.options.traffic.grip);
     rider.distance += rider.speed * dt;
     rider.crank += (rider.speed / BIKE.wheelRadius / 2.6) * dt;
     if (rider.distance >= route.length) {
@@ -223,13 +249,15 @@ export class StreetBikes extends THREE.Group implements Furniture, Updatable {
     this.frames.setMatrixAt(i, this.bike);
     this.bodies.setMatrixAt(i, this.bike);
     this.skin.setMatrixAt(i, this.bike);
-    const { crank, hip } = BIKE;
+    const { crank } = BIKE;
     for (let leg = 0; leg < 2; leg++) {
       const a = rider.crank + leg * Math.PI;
-      const pedal: [number, number] = [crank.x + Math.cos(a) * crank.radius, crank.y + Math.sin(a) * crank.radius];
-      const knee = reach([hip.x, hip.y], pedal, THIGH, SHIN);
+      const pedal = this.pedal;
+      pedal[0] = crank.x + Math.cos(a) * crank.radius;
+      pedal[1] = crank.y + Math.sin(a) * crank.radius;
+      const knee = reach(this.hip, pedal, THIGH, SHIN, this.knee);
       const z = leg ? 0.1 : -0.1;
-      this.legs.setMatrixAt(i * 4 + leg * 2, this.segment([hip.x, hip.y], knee, z, 0.13));
+      this.legs.setMatrixAt(i * 4 + leg * 2, this.segment(this.hip, knee, z, 0.13));
       this.legs.setMatrixAt(i * 4 + leg * 2 + 1, this.segment(knee, pedal, z, 0.1));
     }
   }
@@ -239,22 +267,24 @@ export class StreetBikes extends THREE.Group implements Furniture, Updatable {
     const dx = b[0] - a[0];
     const dy = b[1] - a[1];
     this.part.makeRotationZ(Math.atan2(dy, dx));
-    this.part.scale(new THREE.Vector3(Math.hypot(dx, dy), thick, thick));
+    this.part.scale(this.stretch.set(Math.hypot(dx, dy), thick, thick));
     this.part.setPosition((a[0] + b[0]) / 2, (a[1] + b[1]) / 2, z);
     return this.part.premultiply(this.bike);
   }
 }
 
 /** Where the knee is for a hip and a foot a thigh and a shin apart: bent forwards (towards +x). */
-function reach(hip: readonly [number, number], foot: readonly [number, number], upper: number, lower: number): [number, number] {
+function reach(hip: readonly [number, number], foot: readonly [number, number], upper: number, lower: number, out: [number, number]): [number, number] {
   const dx = foot[0] - hip[0];
   const dy = foot[1] - hip[1];
   const d = THREE.MathUtils.clamp(Math.hypot(dx, dy), 0.1, upper + lower - 0.005);
   const base = Math.atan2(dy, dx);
   const bend = Math.acos(THREE.MathUtils.clamp((upper * upper + d * d - lower * lower) / (2 * upper * d), -1, 1));
-  const k1: [number, number] = [hip[0] + Math.cos(base + bend) * upper, hip[1] + Math.sin(base + bend) * upper];
-  const k2: [number, number] = [hip[0] + Math.cos(base - bend) * upper, hip[1] + Math.sin(base - bend) * upper];
-  return k1[0] > k2[0] ? k1 : k2;
+  // Of the two knees, the one further forward.
+  const a = Math.cos(base + bend) > Math.cos(base - bend) ? base + bend : base - bend;
+  out[0] = hip[0] + Math.cos(a) * upper;
+  out[1] = hip[1] + Math.sin(a) * upper;
+  return out;
 }
 
 /** A box from `a` to `b` in the bike's plane, `thick` along the travel and `wide` across it. */

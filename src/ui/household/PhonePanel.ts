@@ -22,12 +22,31 @@ export interface PhoneDeps {
   hold(item: StockItem): string | null;
   /** The friends, and asking one round: the line said. Absent (until `setFriends`): no friends' page. */
   friends?: PhoneFriends;
+  /** The small ads read in the paper (`classifieds/`): ringing one agrees a visit. Absent: no page. */
+  ads?: PhoneAds;
+}
+
+/** The Gaming Weekly's small ads as the phone reaches them. */
+export interface PhoneAds {
+  /** The ads read (newest first): who, their words, and the visit agreed with them if any ("today 18:00–22:00"). */
+  list(): readonly { id: string; who: string; text: string; booked: string | null }[];
+  /** Rings the seller: what they say (a visit agreed). */
+  ring(id: string): string;
+  /** What to say when no ad was read yet. */
+  hint: string;
 }
 
 /** The friends as the phone reaches them (the flat's `Visitors`, made after the panels). */
 export interface PhoneFriends {
   list(): readonly { id: string; name: string; note: string; free: boolean }[];
   invite(id: string): string;
+}
+
+/** What else the phone books (the flat's gatherings: everyone round tonight, the paper for an open house). */
+export interface PhoneEvents {
+  list(): readonly { id: string; label: string; note: string; enabled: boolean }[];
+  /** Asks for it: the line said. */
+  call(id: string): string;
 }
 
 /** How long a stall on the line waits for its prices to settle before reading its table out, ms. */
@@ -48,6 +67,7 @@ export class PhonePanel extends ModalPanel {
   private items: readonly StockItem[] = [];
   private message = '';
   private friends: PhoneFriends | undefined;
+  private events: PhoneEvents | undefined;
 
   constructor(container: HTMLElement, private readonly deps: PhoneDeps) {
     super(container, { className: 'ui-modal--centre household-panel' });
@@ -64,12 +84,25 @@ export class PhonePanel extends ModalPanel {
       else if (action === 'back') this.showHome();
       else if (action === 'hold' && id) this.hold(id);
       else if (action === 'invite' && id) this.invite(id);
+      else if (action === 'ad' && id && this.deps.ads) {
+        this.message = this.deps.ads.ring(id);
+        this.showHome();
+      }
+      else if (action === 'event' && id && this.events) {
+        this.message = this.events.call(id);
+        this.showHome();
+      }
     });
   }
 
   /** The friends' page, once the flat's visitors exist. */
   setFriends(friends: PhoneFriends): void {
     this.friends = friends;
+  }
+
+  /** The gatherings' lines, once the flat's visitors exist. */
+  setEvents(events: PhoneEvents): void {
+    this.events = events;
   }
 
   protected onOpened(): void {
@@ -91,7 +124,17 @@ export class PhonePanel extends ModalPanel {
     const people = this.friends
       ? `<h3>Friends</h3><div class="household-panel__list">${friends.map((f) => `<button type="button" class="ui-btn" data-action="invite" data-id="${escapeHtml(f.id)}" ${f.free ? '' : 'disabled'}>Ask ${escapeHtml(f.name)} round <span class="household-panel__tag">${escapeHtml(f.note)}</span></button>`).join('')}</div>`
       : '';
-    this.paint(`<h3>The market</h3>${market}${people}`);
+    const rows = this.events?.list() ?? [];
+    const gatherings = rows.length
+      ? `<h3>Have people round</h3><div class="household-panel__list">${rows.map((r) => `<button type="button" class="ui-btn" data-action="event" data-id="${escapeHtml(r.id)}" ${r.enabled ? '' : 'disabled'}>${escapeHtml(r.label)} <span class="household-panel__tag">${escapeHtml(r.note)}</span></button>`).join('')}</div>`
+      : '';
+    const ads = this.deps.ads;
+    const adRows = ads?.list() ?? [];
+    const small = !ads ? ''
+      : adRows.length
+        ? `<h3>Small ads</h3><ul class="household-panel__rows">${adRows.map((ad) => `<li><span>${escapeHtml(ad.who)}<small>${escapeHtml(ad.booked ? `Expecting you ${ad.booked}` : ad.text)}</small></span><button type="button" class="ui-btn" data-action="ad" data-id="${escapeHtml(ad.id)}">${ad.booked ? 'Ring again' : 'Ring'}</button></li>`).join('')}</ul>`
+        : `<h3>Small ads</h3><p class="household-panel__dim">${escapeHtml(ads.hint)}</p>`;
+    this.paint(`<h3>The market</h3>${market}${people}${gatherings}${small}`);
   }
 
   /** A stall picks up: what is on its table today that it could put aside. */

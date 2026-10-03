@@ -18,6 +18,8 @@ import { FurnitureCarrier } from '@/furnishing/FurnitureCarrier';
 import { PlanView } from '@/furnishing/planView/PlanView';
 import { friendsIn } from '@/furnishing/friendsIn';
 import { ShelfPlacing } from '@/world/shelving/ShelfPlacing';
+import { BoxTipping } from '@/world/shelving/BoxTipping';
+import { primaryCode } from '@/input/actions';
 
 export type Interaction = ReturnType<typeof createInteraction>;
 
@@ -50,7 +52,7 @@ export function createInteraction(services: Services, parts: { world: GameWorld;
   notices.speech.setLineOfSight((from, to) => interactor.blocked(from, to));
   // Moving things about the flat (right-click or M, docs/furnishing.md): the box in hand into any shelf's gap, the furniture about its room.
   const blocked = (from: Vector3, to: Vector3) => interactor.blocked(from, to);
-  const shelfPlacing = new ShelfPlacing(engine.camera, engine.scene, built.shelves, inspector, blocked);
+  const shelfPlacing = new ShelfPlacing(engine.camera, engine.scene, built.shelves, inspector, blocked, services.showcases);
   engine.addUpdatable(shelfPlacing);
   const friends = friendsIn(world.zones.filter((zone) => inFlat(zone.id)));
   const furniture = new FurnitureCarrier(engine.camera, services.furnishings, {
@@ -69,6 +71,16 @@ export function createInteraction(services: Services, parts: { world: GameWorld;
     ],
   });
   engine.addUpdatable(furniture);
+  // Q held at home with free hands: the box looked at tips half out of its row to be read (docs/furnishing.md "Tipping a box out").
+  engine.addUpdatable(new BoxTipping({
+    input,
+    key: primaryCode('tipBox'),
+    camera: engine.camera,
+    boxes: () => [...built.shelves.boxes, ...services.showcases.boxes()],
+    // Not while frozen (a program's pad in hand standing up, an arcade play): Q is no pad key, but nothing moves then.
+    allowed: () => player.isLocked && player.movementEnabled && !inspector.current && !player.isSeated && !furniture.piece && inFlat(zones.current.id),
+    blocked,
+  }));
 
   // Controller and touch feed the same key / mouse channels the session already listens to.
   const syntheticMouse = new SyntheticMouse(engine.renderer.domElement);

@@ -1,5 +1,9 @@
 import * as THREE from 'three';
 import { createCanvas, toTexture } from '@/covers/generated/canvasUtils';
+import type { Interactable } from '@/interaction/Interactable';
+import type { SessionActions } from '@/game/SessionActions';
+import type { ZoneId } from '../../zoneIds';
+import { invisibleHitbox } from '../../meshUtils';
 import type { DayNight } from '../../props/DayNight';
 import { BUS, busGeometries } from '../carModel';
 import { nightnessOf } from '../streetAir';
@@ -23,6 +27,16 @@ export interface StreetBusOptions {
   line: string;
   stopFor: number;
   collisions?: CollisionSet;
+  /**
+   * Riding it (`STREET_PLAN.busRide`): the fare, and where it takes the player today (null: nowhere, it is not
+   * offered). Without, the bus is only seen (the views of the street).
+   */
+  ride?: {
+    fare: number;
+    destination: () => { to: ZoneId; label: string } | null;
+    /** Why there is nowhere to ride to now (the market shut for the night, and when it opens), for the caption. */
+    closed?: () => string | null;
+  };
 }
 
 /** Never closer than this (real seconds) between two buses, whatever the timetable says: a game day is only ten minutes. */
@@ -45,9 +59,11 @@ const STRIPE = 0x2f7a4a;
  * and after `dwell` seconds it closes up, indicates and pulls out, on towards the side street.
  * One every `every` game minutes by day, `nightEvery` at night (never closer than a minute and
  * a bit in real time). A single mesh set of its own (body with its livery stripe, glass, tyres,
- * lamps, the two door leaves, the lit destination board), solid while it stands.
+ * lamps, the two door leaves, the lit destination board), solid while it stands. While its doors
+ * stand open the player can get on (`ride`: the fare paid, then the trip there).
  */
-export class StreetBus extends ScriptedVehicle {
+export class StreetBus extends ScriptedVehicle implements Interactable {
+  readonly hitboxes: THREE.Object3D[];
   private readonly lampMaterial: THREE.MeshBasicMaterial;
   private readonly indicatorMaterial: THREE.MeshBasicMaterial;
   private readonly signMaterial: THREE.MeshBasicMaterial;
@@ -100,6 +116,15 @@ export class StreetBus extends ScriptedVehicle {
       }
     }
 
+    // Getting on: a box along the kerb side, where the doors are.
+    const board = invisibleHitbox(BUS.length * 0.8, BUS.doorHeight, 0.5, { y: 0.45 + BUS.doorHeight / 2, z: BUS.width / 2 });
+    // Only there for the crosshair while it has something to say (a bus driving past never swallows a click behind it).
+    board.raycast = (raycaster, hits) => {
+      if (this.label()) THREE.Mesh.prototype.raycast.call(board, raycaster, hits);
+    };
+    this.add(board);
+    this.hitboxes = [board];
+
     // The destination board over the windscreen, front and back.
     this.signMaterial = new THREE.MeshBasicMaterial({ map: signTexture(bus.line), color: 0x999999 });
     const { y, width, height } = BUS.sign;
@@ -109,6 +134,46 @@ export class StreetBus extends ScriptedVehicle {
       sign.position.set(facing * (BUS.length / 2 + 0.035), y, 0);
       this.add(sign);
     }
+  }
+
+  /** Whether its doors stand open at the stop: the player may get on. */
+  get boarding(): boolean {
+    return this.state === 'stopped' && this.doorOpen >= 1;
+  }
+
+  /** Real seconds until the next bus stands at the stop (0 while one does), roughly: its wait plus the drive there. */
+  get dueIn(): number {
+    if (this.state === 'stopped') return 0;
+    if (this.state === 'driving') return Math.max(0, this.toNextStop) / CRUISE;
+    return Math.max(0, this.waitClock) + (this.stopDistances[0] ?? 0) / CRUISE;
+  }
+
+  setHovered(): void {
+    // A bus does not glow; the caption says it.
+  }
+
+  label(): string | null {
+    const ride = this.bus.ride;
+    if (!ride || !this.boarding) return null;
+    const where = ride.destination();
+    if (!where) {
+      const why = ride.closed?.();
+      return why ? `Bus ${this.bus.line} · ${why}` : null;
+    }
+    return `Bus ${this.bus.line} · get on to ${where.label} (${ride.fare} coins)`;
+  }
+
+  activate(session: SessionActions): void {
+    const ride = this.bus.ride;
+    const where = ride?.destination();
+    if (!ride || !where || !this.boarding) return;
+    session.pay({
+      price: ride.fare,
+      paid: () => {
+        session.travel(where.to);
+        return `You pay the driver and take a seat to ${where.label}.`;
+      },
+    });
   }
 
   protected schedule(dt: number): void {

@@ -132,6 +132,14 @@ export class MarketCounter implements KeyRoute {
     return new Transactions({ wallet, collection, market, standing });
   }
 
+  /** The money moves of a sale: the market's, or a private seller's (no stall, no standing: `ForSaleLike.dealer`). */
+  private txFor(sale: ForSaleLike): Transactions {
+    const { dealer } = sale;
+    if (!dealer) return this.transactions;
+    const { wallet, collection } = this.host.parts;
+    return new Transactions({ wallet, collection, market: { day: dealer.day, sold: (item) => dealer.sold(item), consign: () => undefined } });
+  }
+
   /** B: pay what is due, and the box goes into the bag (then off the stall). */
   private buy(): void {
     const sale = this.sale?.item;
@@ -139,7 +147,7 @@ export class MarketCounter implements KeyRoute {
     if (!sale || !wallet || !collection) return;
     const { item } = sale;
     const { game } = item;
-    const result = this.transactions.buyCopy(item, sale.where);
+    const result = this.txFor(sale).buyCopy(item, sale.where);
     if (!result.ok) {
       if (result.reason === 'pricing') this.host.notices.refuse('The stallholder is still working out the price. Give it a moment.');
       else if (result.reason === 'owned') this.host.notices.refuse(`You already own ${game.title}`);
@@ -182,7 +190,8 @@ export class MarketCounter implements KeyRoute {
     const refund = Math.max(0, last.paid - keep);
     const hold = last.deposit > 0 ? { item: last.sale.item, deposit: last.deposit } : undefined;
     const givePerkBack = last.usedPerk && perks?.unbought ? () => perks.unbought!() : undefined;
-    if (!this.transactions.undoPurchase(last.game, refund, hold, givePerkBack).ok) return false;
+    if (!this.txFor(last.sale).undoPurchase(last.game, refund, hold, givePerkBack).ok) return false;
+    last.sale.dealer?.unsold?.(last.sale.item);
     last.sale.restock();
     this.speak(last.sale, 'Changed your mind? No harm done.');
     const held = hold ? ` Still on hold for you: ${last.sale.item.due} coins to go.` : '';
@@ -193,7 +202,9 @@ export class MarketCounter implements KeyRoute {
   /** H: open the haggle over the copy in hand (once per copy per day). */
   private haggle(): void {
     const sale = this.sale?.item;
-    const { market, haggle } = this.host.parts;
+    const { haggle } = this.host.parts;
+    // A private seller haggles on their own terms (`ForSaleLike.dealer`), the stalls on the market's.
+    const market = sale?.dealer ?? this.host.parts.market;
     if (!sale || !market) return;
     // Flat-price copies (the bin, a garage sale on the street) are never haggled over.
     if (sale.item.source === 'bin') {
@@ -230,6 +241,10 @@ export class MarketCounter implements KeyRoute {
     const { market, wallet } = this.host.parts;
     if (!sale || !market || !wallet) return;
     const { item } = sale;
+    if (sale.dealer) {
+      this.speak(sale, sale.dealer.noHold);
+      return;
+    }
     if (item.source === 'bin') {
       this.speak(sale, `No holds at ${sale.where}. Grab it or leave it.`);
       return;
@@ -260,6 +275,10 @@ export class MarketCounter implements KeyRoute {
     const { trade, market } = this.host.parts;
     if (!sale || !trade || !market) return;
     const { item } = sale;
+    if (sale.dealer) {
+      this.speak(sale, sale.dealer.noSwap);
+      return;
+    }
     if (item.source === 'bin' || item.source === 'ordered' || item.source === 'upgrade') {
       this.speak(sale, item.source === 'bin' ? `No swaps at ${sale.where}, friend.` : item.source === 'upgrade' ? 'Your old copy is part of the deal already. Coins for the rest.' : `That’s your order: coins, please.`);
       return;
@@ -327,7 +346,7 @@ export class MarketCounter implements KeyRoute {
     if (luck) rows.push(['This morning', luck]);
     const edition = describeEdition(item.edition, item.game.platform);
     if (edition) rows.push(['Edition', edition[0]!.toUpperCase() + edition.slice(1)]);
-    const loyalty = item.source !== 'bin' ? standing?.loyaltyName(item.game.platform) : '';
+    const loyalty = item.source !== 'bin' && !sale.dealer ? standing?.loyaltyName(item.game.platform) : '';
     if (loyalty) rows.push(['You are', `${loyalty} at this stall`]);
     const room = this.host.parts.shelfRoom?.();
     if (room) rows.push(['At home', room]);
@@ -345,10 +364,14 @@ export class MarketCounter implements KeyRoute {
       : item.source === 'showpiece' || item.source === 'estate' ? 'The pride of the stall.' : undefined;
     // H shows only when a haggle would open (not on a clearance, an order, a copy already haggled over today).
     const { market } = this.host.parts;
-    const canHaggle = market?.canNegotiate?.(item) ?? true;
+    const canHaggle = (sale.dealer ?? market)?.canNegotiate?.(item) ?? true;
+    // A sealed copy is not opened at a stall (`CopyOpening`).
+    const open = item.sealed ? '' : `${keyMarkup('lookInside')} open the box`;
     const keys = item.source === 'bin'
-      ? [`${keyMarkup('buy')} buy`, `${keyMarkup('lookInside')} open the box`]
-      : [`${keyMarkup('buy')} buy`, canHaggle ? `${keyMarkup('haggle')} haggle` : '', item.reserved ? '' : `${keyMarkup('holdCopy')} hold for the day`, item.source === 'ordered' || item.source === 'upgrade' ? '' : `${keyMarkup('swap')} swap a game`, `${keyMarkup('lookInside')} open the box`];
+      ? [`${keyMarkup('buy')} buy`, open]
+      : sale.dealer
+        ? [`${keyMarkup('buy')} buy`, canHaggle ? `${keyMarkup('haggle')} haggle` : '', open]
+        : [`${keyMarkup('buy')} buy`, canHaggle ? `${keyMarkup('haggle')} haggle` : '', item.reserved ? '' : `${keyMarkup('holdCopy')} hold for the day`, item.source === 'ordered' || item.source === 'upgrade' ? '' : `${keyMarkup('swap')} swap a game`, open];
     const hints = [...keys.filter(Boolean), `${keyMarkup('putBack')} or [Click] elsewhere to put it back`].map(renderKeys).join(' · ');
     this.host.parts.panel.show(item.game, { rows, note, hints });
   }

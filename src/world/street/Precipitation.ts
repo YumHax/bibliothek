@@ -4,6 +4,7 @@ import { seededRandom } from '@/covers/generated/canvasUtils';
 import type { Furniture } from '../Furniture';
 import type { DayNight } from '../props/DayNight';
 import { KERB_HEIGHT } from './streetPlan';
+import { roadGlsl } from './relief/ground';
 import { RENDER_ORDER } from '../surface/layers';
 
 /** The box of air around the eye the drops and flakes fill (metres), and how many there can be at most. */
@@ -25,8 +26,12 @@ const PETAL_SHARE = 0.35;
  * vertex is ever touched on the CPU. A particle whose threshold is above the current amount is
  * thrown out of the clip volume. No backtick in these strings.
  */
-/** At most this many shelters (boxes nothing falls into). */
+/**
+ * At most this many shelters (boxes nothing falls into) in the shaders at once: of all the street's,
+ * the ones nearest the eye (the particles only fill `BOX` round it), chosen again every `RESELECT` metres walked.
+ */
 const MAX_SHELTERS = 32;
+const RESELECT = 2;
 /**
  * Boxes no particle falls into (world space; unused slots empty): the building's sas open on the
  * street, the shops' awnings, the bus shelter, the kiosk.
@@ -124,11 +129,7 @@ uniform float roadY;
 varying float vAge;
 varying float vSquash;
 float hash(float n) { return fract(sin(n) * 43758.5453); }
-bool onRoad(vec2 p) {
-  if (p.x >= -36.0 && p.x <= 136.0 && abs(p.y) <= 8.0) return true;
-  if (p.x >= -36.0 && p.x <= -20.0 && p.y <= -8.0) return true;
-  return p.x >= 114.0 && p.x <= 118.0 && p.y <= -8.0 && p.y >= -60.0;
-}
+${roadGlsl()}
 void main() {
   float phase = time / period + extra.x;
   float cycle = floor(phase);
@@ -213,18 +214,24 @@ export class Precipitation extends THREE.Group implements Furniture, Updatable {
   private readonly splash: THREE.Points;
   private readonly splashUniforms: Record<string, THREE.IUniform>;
   private time = 0;
-  /** The sheltered boxes, zone-local, and the world-space corners the shaders read (unused slots inside out: empty). */
+  /** Every sheltered box, zone-local, and in world space once the zone has been placed (`placeShelters`). */
   private readonly shelters: THREE.Box3[];
+  private readonly shelterWorld: THREE.Box3[];
+  /** The world-space corners the shaders read: the nearest `MAX_SHELTERS` (unused slots inside out: empty). */
   private readonly shelterMin = Array.from({ length: MAX_SHELTERS }, () => new THREE.Vector3(1, 1, 1));
   private readonly shelterMax = Array.from({ length: MAX_SHELTERS }, () => new THREE.Vector3(-1, -1, -1));
-  private readonly shelterWorld = new THREE.Box3();
+  /** The zone's world matrix the world boxes were worked out for, and where the eye stood at the last choice. */
+  private readonly placedFor = new THREE.Matrix4().set(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+  private readonly chosenAt = new THREE.Vector3(Infinity, 0, 0);
+  private readonly shelterOrder: number[];
+  private readonly shelterDistance: Float32Array;
   private readonly petals: THREE.Points | null = null;
   private readonly petalUniforms: Record<string, THREE.IUniform> | null = null;
   private readonly splashes: boolean;
 
   /**
    * `shelters`: boxes (zone-local) nothing falls into: the building's sas seen through its open street
-   * door, the awnings, the bus shelter, the kiosk (the first `MAX_SHELTERS`). `petals`: spring blossom
+   * door, the awnings, the bus shelter, the kiosk (any number: the nearest `MAX_SHELTERS` are used). `petals`: spring blossom
    * blows about in dry weather (the trees are in flower). `splashes`: false where the ground is not
    * the zone's floor all round (a balcony high over the street: the rings would hang in the air).
    */
@@ -232,7 +239,10 @@ export class Precipitation extends THREE.Group implements Furniture, Updatable {
     super();
     this.splashes = options.splashes ?? true;
     this.name = 'Precipitation';
-    this.shelters = (options.shelters ?? []).slice(0, MAX_SHELTERS).map((box) => box.clone());
+    this.shelters = (options.shelters ?? []).map((box) => box.clone());
+    this.shelterWorld = this.shelters.map((box) => box.clone());
+    this.shelterOrder = this.shelters.map((_, i) => i);
+    this.shelterDistance = new Float32Array(this.shelters.length);
     const shelterUniforms = (): Record<string, THREE.IUniform> => ({ shelterMin: { value: this.shelterMin }, shelterMax: { value: this.shelterMax } });
     this.rainUniforms = {
       time: { value: 0 },
@@ -287,7 +297,50 @@ export class Precipitation extends THREE.Group implements Furniture, Updatable {
       mesh.castShadow = false;
       mesh.renderOrder = RENDER_ORDER.particles;
       mesh.visible = false;
+      // The shelters round whichever camera draws it (the player's, or a window's onto the street).
+      mesh.onBeforeRender = (_renderer, _scene, camera) => this.chooseShelters(camera);
       this.add(mesh);
+    }
+  }
+
+  /**
+   * The world boxes again only when the zone has moved (never, once placed), and the nearest
+   * `MAX_SHELTERS` of them to `camera` into the shaders' slots once it has walked `RESELECT` metres.
+   */
+  private chooseShelters(camera: THREE.Camera): void {
+    const n = this.shelters.length;
+    if (n === 0) return;
+    let moved = false;
+    if (!this.placedFor.equals(this.matrixWorld)) {
+      this.placedFor.copy(this.matrixWorld);
+      for (let i = 0; i < n; i++) this.shelterWorld[i]!.copy(this.shelters[i]!).applyMatrix4(this.matrixWorld);
+      moved = true;
+    }
+    const eye = camera.matrixWorld.elements;
+    const ex = eye[12]!;
+    const ez = eye[14]!;
+    const dx = ex - this.chosenAt.x;
+    const dz = ez - this.chosenAt.z;
+    if (!moved && dx * dx + dz * dz < RESELECT * RESELECT) return;
+    this.chosenAt.set(ex, 0, ez);
+    const order = this.shelterOrder;
+    const distance = this.shelterDistance;
+    for (let i = 0; i < n; i++) {
+      const box = this.shelterWorld[i]!;
+      const cx = Math.max(box.min.x - ex, 0, ex - box.max.x);
+      const cz = Math.max(box.min.z - ez, 0, ez - box.max.z);
+      distance[i] = cx * cx + cz * cz;
+    }
+    if (n > MAX_SHELTERS) order.sort((a, b) => distance[a]! - distance[b]!);
+    for (let k = 0; k < MAX_SHELTERS; k++) {
+      if (k < n) {
+        const box = this.shelterWorld[order[k]!]!;
+        this.shelterMin[k]!.copy(box.min);
+        this.shelterMax[k]!.copy(box.max);
+      } else {
+        this.shelterMin[k]!.set(1, 1, 1);
+        this.shelterMax[k]!.set(-1, -1, -1);
+      }
     }
   }
 
@@ -297,11 +350,6 @@ export class Precipitation extends THREE.Group implements Furniture, Updatable {
 
   update(dt: number): void {
     const s = this.dayNight.state;
-    for (let i = 0; i < this.shelters.length; i++) {
-      const world = this.shelterWorld.copy(this.shelters[i]!).applyMatrix4(this.matrixWorld);
-      this.shelterMin[i]!.copy(world.min);
-      this.shelterMax[i]!.copy(world.max);
-    }
     this.time = (this.time + dt) % 600;
     const light = 0.25 + 0.75 * s.daylight + s.lightning;
     const windX = s.wind * 4.5;

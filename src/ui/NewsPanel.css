@@ -78,3 +78,30 @@
   outline: 2px solid var(--ui-accent);
   outline-offset: 2px;
 }
+/* The small ads: a ruled-off column of private sellers in small print. */
+.news-panel__ads {
+  margin-top: 0.9rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid #1f1b16;
+  font-size: 0.85rem;
+  line-height: 1.35;
+}
+.news-panel__ads h4 {
+  margin: 0 0 0.35rem;
+  font-family: var(--ui-font-display);
+  font-weight: 400;
+  font-size: 0.95rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.news-panel__ads p {
+  margin: 0 0 0.4rem;
+}
+.news-panel__ads b {
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+}
+.news-panel__ads-note {
+  font-style: italic;
+  opacity: 0.7;
+}

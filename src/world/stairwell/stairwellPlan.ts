@@ -142,6 +142,13 @@ export const STAIRWELL_PLAN = {
   knock: { nobody: 'Nobody answers.', quiet: 'Footsteps behind the door, then nothing.' },
   /** The cellar door at the foot of the stairs, off the hall. */
   cellar: { label: 'The cellars', line: 'Locked. It always is.' },
+  /**
+   * The door out to the courtyard (`world/courtyard`, a travel door: the passage behind it runs down the shaft's east
+   * side to our back wall), at the foot of the stairs on the shaft's east wall, across the ground floor's landing
+   * (`at` local x, z; yaw faces it west onto the landing). `arrival`: where the player comes back in, facing the stairs
+   * (`worldPlan`'s stairwell travel arrivals).
+   */
+  courtyardDoor: { at: [2.995, -1.11] as [number, number], yaw: -Math.PI / 2, width: 0.85, height: 2.05, arrival: { at: [2.35, -1.11] as [number, number], yaw: Math.PI / 2 } },
   /** Behind a neighbour's door, how far into their flat and how high its sound comes from (m off the door, over the landing). */
   behindDoor: { z: 1.2, y: 1.2 },
   /** The floor's name, this high on the wall over its landing. */
@@ -207,7 +214,7 @@ export const STAIRWELL_PLAN = {
     {
       k: 3, i: 0, out: 10, back: 20, lift: false, seed: 41, voice: { pitch: 0.28 },
       hello: ['Hello, neighbour.', 'Ah, the collector.', 'Hello again.'],
-      lines: ['Hello, neighbour.', 'The flea market had a lot of cartridges this week.', 'If you ever want to swap games, knock on my door.'],
+      lines: ['Hello, neighbour.', 'The flea market had a lot of cartridges this week.', 'If you ever want to swap games, knock on my door.', 'Old Vasseur used to say the lift went higher than the 5th, if you asked it nicely. He scratched something in the car, I think.'],
     },
     {
       k: 4, i: 1, out: 8.5, back: 18, lift: false, seed: 59, voice: { pitch: 0.86 },
@@ -217,4 +224,102 @@ export const STAIRWELL_PLAN = {
   ] as ResidentOnStairs[],
   /** The postman on our landing, waiting by the front door clear of its leaf's swing (local x, z; yaw towards the door). */
   postman: { at: [-2.4, -0.72] as [number, number], yaw: -Math.PI / 2, seed: 77 },
+  /**
+   * The estate sale on its days (`world/estateSale`, `building/estateSale`): the trestle table along the hall's west
+   * wall in front of the mailboxes (its middle, turned so the buyers stand on the hall's side), the crate past it, the
+   * late Mr Lambert's niece by the table's stairs end; the hours it is laid out. His name stays on a mailbox.
+   */
+  estateSale: {
+    table: { at: [0.97, 2.7] as [number, number], yaw: Math.PI / 2 },
+    crate: { at: [0.88, 3.85] as [number, number], yaw: Math.PI / 2 },
+    seller: { at: [1.1, 1.62] as [number, number], yaw: Math.PI * 0.6, seed: 113 },
+    hours: [9, 20] as [number, number],
+    mailbox: 'LAMBERT',
+  },
+  /**
+   * The hall's west wall (x 0.6, facing +x), from the stairs: the ballot box of the co-owners' meeting (`ballot`, its
+   * middle's z and height), the building's notice board over it (`board`: middle, size), the mailboxes past them.
+   */
+  board: { z: 0.95, y: 1.55, width: 0.95, height: 0.7 },
+  ballot: { z: 0.95, y: 1.0 },
+  /**
+   * The concierge's lodge, behind the hall's east wall (x 3.6, facing -x): its glazed door (`door`: the middle's z),
+   * the window she is seen through (`window`: z of its middle, width, sill and height, the lace curtain's share of it),
+   * the room behind (local x, z, its height), where she stands at the glass, the Christmas box on the sill.
+   */
+  lodge: {
+    door: { z: 2.0 },
+    window: { z: 3.3, width: 1.1, sill: 1.0, height: 1.25, curtain: 0.55 },
+    room: { x0: 3.6, x1: 5.3, z0: 1.5, z1: 4.1, height: 2.7 },
+    stand: [4.1, 3.3] as [number, number],
+    tipBox: { z: 3.7, price: 10 },
+  },
+  /**
+   * Mme Pereira, the concierge: behind her glass in her hours, some mornings mopping a landing instead (`mop`: the
+   * share of mornings, its hours, where on the landing); the errand she asks before handing over the cellar key (the
+   * timer buttons of the floors `errandFloors` tried, one of them sticky), her lines.
+   */
+  concierge: {
+    name: 'Mme Pereira',
+    seed: 97,
+    voice: { pitch: 0.38 },
+    hours: [
+      [8, 12],
+      [15, 19],
+    ] as [number, number][],
+    mop: { share: 0.35, from: 9, to: 11, at: [0.9, -1.0] as [number, number], yaw: Math.PI },
+    errandFloors: [1, 2, 3, 4],
+    /** The floor whose button sticks. */
+    sticky: 3,
+    hello: 'Ah, you are the new one on the fifth. Pereira, the concierge. The lodge is open mornings and afternoons.',
+    lines: [
+      'Parcels go to your door now. The postman takes the lift, the lazy thing.',
+      'The light on the stairs is on a timer. Press the button, it stays on for a while.',
+      'Mrs Dubois watered my plants once. Once.',
+      'The rear building has no lift. They complain at every meeting.',
+      'Wipe your feet. I have just done the hall.',
+    ],
+    askKey: 'Your cellar? Number five. I keep the keys. Do me a favour first: the electrician says one of the timer buttons sticks, and my knees are not what they were. Try the button on every floor, the first to the fourth, and tell me which one.',
+    stillAsking: 'The timer buttons, first to fourth floor. Which one sticks?',
+    given: 'The third floor\u2019s sticks? I knew it. Here: your cellar key. Number five, at the end on the left. Mind the step.',
+    after: 'The cellars? Take a torch. The light in there is older than me.',
+    tipThanks: 'For the Christmas box? You are a dear.',
+    tipKey: 'Oh, you are a dear. Here, take your cellar key, and do not tell the syndic.',
+    closed: { lunch: 'Back at 3 pm', night: 'Closed', stairs: 'On the stairs' },
+  },
+  /** The timer buttons: on every floor landing's north wall at this x (clear of the doors), this high. */
+  timerButton: { x: 0.15, y: 1.2 },
+  /**
+   * What the co-owners' votes change (`stairwell/coproLook`): the runner on the flights (its width), the plants under the
+   * courtyard windows (local x, z off the half landing), the bikes along the hall's east wall (z each), the mirror on the
+   * hall's east wall, the doormat in the sas (z), the fibre's junction box (hall, by the opening), the lift's plaque.
+   */
+  coproLook: {
+    runner: { width: 0.72 },
+    plant: { x: 2.65, z: -5.45 },
+    /** Along the hall's east wall, before the lodge's door: each bike's middle (x, z). */
+    bikes: [
+      [3.32, 0.45],
+      [3.08, 0.75],
+    ] as [number, number][],
+    /** On the hall's west wall, past the mailboxes (x 0.6, facing +x). */
+    mirror: { z: 3.75, y: 1.55, width: 0.62, height: 1.35 },
+    /** In front of the sas's glass door. */
+    doormat: { z: 3.95 },
+    fibre: { z: -0.15, y: 2.25 },
+    /** On the shaft's north wall by the lift, at the foot (x, height). */
+    liftPlaque: { x: 0.3, y: 1.65 },
+  },
+  /** The co-owners' meeting in the hall on its day (`building/coproMeeting`): the syndic's place, the folding chairs' (x, z), facing him. */
+  meeting: {
+    syndic: [2.1, 0.35] as [number, number],
+    chairs: [
+      [1.5, 1.4],
+      [2.1, 1.4],
+      [2.7, 1.4],
+      [1.5, 2.1],
+      [2.1, 2.1],
+      [2.7, 2.1],
+    ] as [number, number][],
+  },
 };

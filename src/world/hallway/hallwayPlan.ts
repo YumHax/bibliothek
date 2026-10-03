@@ -68,6 +68,11 @@ export const HALLWAY_PLAN = {
   wreath: { along: 0.415, y: 1.5 },
   /** Games bought while out wait in a parcel on the floor under the console, until unpacked. */
   parcel: { wall: 'back', along: 1.45, y: 0, offset: 0.02 } as Placement,
+  /**
+   * A sealed carton bought at the market or the saleroom waits on the floor against our wall, between the collection
+   * room's door (its latch side ends at x -0.09) and the coat corner (from x 0.95), until it is unpacked.
+   */
+  carton: { wall: 'front', along: 0.45, y: 0, offset: 0.01 } as Placement,
 
   /** The flat's front door at the right end, onto our landing (the stairwell zone): it swings out onto the landing. */
   entrance: { wall: 'right', along: 0, y: 0 } as Placement,
@@ -108,6 +113,12 @@ export const HALLWAY_PLAN = {
    * kilim, once bought, takes its place.
    */
   runner: { at: { floor: [-0.675, 0] } as Placement, options: { width: 1.55, depth: 0.7, field: 0x9c6a5a, border: 0x6b2f2a, motif: 0x7a4a40 } },
+
+  /**
+   * The games nights' photos (`visitors/gathering/NightPhotos`), pegged on a string on the far wall between the bathroom
+   * door (to x -0.69) and the bedroom door (from x 0.08); it goes up with the first one.
+   */
+  nightPhotos: { wall: 'back', along: -0.3, y: 1.62 } as Placement,
 
   /** Where the market's home goods for the hallway (`economy/homeGoods.ts`) go once bought; nothing shows there before. */
   homeGoods: {

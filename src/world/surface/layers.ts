@@ -61,6 +61,8 @@ export const GROUND = {
   grate: { lift: 0.005, rank: 2 },
   /** Standing water. */
   puddle: { lift: 0.006, rank: 3 },
+  /** The soft dark under a car, parked or driving (no sky reaches under it). */
+  carShade: { lift: 0.0065, rank: 3.5 },
   /** Fallen leaves, lowest (each leaf lies between this and `leafTop`). */
   leaf: { lift: 0.007, rank: 4 },
   /** Wet streaks of light reflected down the road. */

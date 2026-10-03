@@ -7,6 +7,8 @@ import { Travel, travelStops } from '@/world/travel';
 import { isZoneId } from '@/world/worldPlan';
 import { surfaceUnderfoot } from '@/world/zoneHandle';
 import { airlockLink } from '@/world/airlock';
+import { outsideIfShut } from '@/world/shop/ClosingTime';
+import * as THREE from 'three';
 import type { Services } from './services';
 import type { BuiltWorld, GameWorld } from './world';
 
@@ -52,8 +54,18 @@ export function createPlayerMoves(services: Services, parts: { world: GameWorld;
     player,
     currentZone: () => zones.current.id,
     // Not on the stairs: a floor plan cannot say which flight the player stood on (they wake up at home instead).
-    floorOf: (id) => (id !== 'stairwell' && isZoneId(id) ? world.zone(id).floorBounds : null),
+    // Not onto the stairs (which flight?), nor up in the attic or on the roof (the restore sets the feet at 0: the flat under them).
+    floorOf: (id) => (id !== 'stairwell' && id !== 'attic' && id !== 'roof' && isZoneId(id) ? world.zone(id).floorBounds : null),
     busy: () => travel.isTravelling || sleep.isAsleep || built.pastimes.isBusy || airlockLink.isCrossing,
+    // Left in a shop or the flea market that has shut since: out on Front Street in front of its door.
+    instead: (saved) => {
+      const spot = outsideIfShut(saved.zone, sky.dayNight.state.hours);
+      if (!spot) return null;
+      const street = world.zone('street');
+      street.group.updateWorldMatrix(true, false);
+      const at = street.toWorld(new THREE.Vector3(spot.at[0], 0, spot.at[1]));
+      return { zone: 'street', x: at.x, z: at.z, yaw: spot.yaw, pitch: 0 };
+    },
   });
   positionMemory.restore();
   engine.addUpdatable(positionMemory);

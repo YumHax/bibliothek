@@ -48,6 +48,23 @@ body.photo-mode .touch-badge {
   outline: 1px solid rgba(255, 255, 255, 0.35);
 }
 
+/* Binoculars: two round eyepieces side by side, the rest dark (dark where both masks are: outside both circles). */
+.photo-guides[data-frame='binoculars']::before {
+  --eyepiece: min(27vw, 42vh);
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.94);
+  -webkit-mask-image:
+    radial-gradient(circle at 36% 50%, transparent var(--eyepiece), #000 calc(var(--eyepiece) + 2px)),
+    radial-gradient(circle at 64% 50%, transparent var(--eyepiece), #000 calc(var(--eyepiece) + 2px));
+  mask-image:
+    radial-gradient(circle at 36% 50%, transparent var(--eyepiece), #000 calc(var(--eyepiece) + 2px)),
+    radial-gradient(circle at 64% 50%, transparent var(--eyepiece), #000 calc(var(--eyepiece) + 2px));
+  -webkit-mask-composite: source-in;
+  mask-composite: intersect;
+}
+
 .photo-card {
   position: absolute;
   top: 1rem;

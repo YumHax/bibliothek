@@ -4,7 +4,15 @@ import { basic } from '@/world/materials/palette';
 import { markShared } from '@/world/materials/sharedResources';
 import { RENDER_ORDER } from '@/world/surface/layers';
 import type { GameBox } from '../GameBox';
+import type { Showcases, ShowcaseTarget } from '../showcase/Showcases';
 import type { ShelfTarget, ShelvingGroup } from './ShelvingGroup';
+
+/** What the box in hand is aimed at: a spot on a shelf, or a slot of a display (`Showcases`). */
+export interface PlacingTarget {
+  readonly spot: { readonly fits: boolean; readonly swap?: GameBox };
+  /** Why it does not go there, when that is not a full row (a box too big for the display's slot). */
+  readonly refusal?: string;
+}
 
 /** How far away a shelf spot can be aimed at with a box in hand (m). */
 const REACH = 2.6;
@@ -46,6 +54,8 @@ export interface HandLike {
  */
 export class ShelfPlacing implements Updatable {
   private spot: ShelfTarget | null = null;
+  /** The display's slot aimed at instead of a shelf (the nearer of the two wins). */
+  private slot: ShowcaseTarget | null = null;
   private readonly ghost = new THREE.Group();
   private readonly fill: THREE.Mesh;
   private readonly edges: THREE.LineSegments;
@@ -54,13 +64,14 @@ export class ShelfPlacing implements Updatable {
   private readonly raycaster = new THREE.Raycaster();
   private readonly centre = new THREE.Vector2(0, 0);
 
-  /** `blocked(from, to)`: a wall stands between two world points. */
+  /** `blocked(from, to)`: a wall stands between two world points; `showcases`: the flat's displays, aimed at like the shelves. */
   constructor(
     private readonly camera: THREE.Camera,
     scene: THREE.Object3D,
     private readonly shelves: ShelvingGroup,
     private readonly hand: HandLike,
     private readonly blocked: (from: THREE.Vector3, to: THREE.Vector3) => boolean,
+    private readonly showcases: Showcases | null = null,
   ) {
     this.fill = new THREE.Mesh(UNIT_BOX, FILLS.room);
     this.edges = new THREE.LineSegments(UNIT_EDGES, EDGES.room);
@@ -77,30 +88,46 @@ export class ShelfPlacing implements Updatable {
     scene.add(this.ghost);
   }
 
-  /** Whether one of the flat's shelf boxes is in hand (not a market copy, not a stray's own box). */
+  /** Whether one of the flat's boxes is in hand, from a shelf or a display (not a market copy, not a stray's own box). */
   get active(): boolean {
     const box = this.hand.current;
-    return box !== null && this.hand.focusDistance !== null && this.shelves.findBox(box.game.id) === box;
+    return box !== null && this.hand.focusDistance !== null && (this.shelves.findBox(box.game.id) === box || (this.showcases?.holds(box) ?? false));
   }
 
-  /** The spot aimed at with a shelf box in hand, if any (`spot.fits` says whether its row has room). */
-  get target(): ShelfTarget | null {
+  /** The spot aimed at with a shelf box in hand, if any (`spot.fits` says whether its row, or the display's slot, has room). */
+  get target(): PlacingTarget | null {
+    if (this.slot) return { spot: this.slot, ...(this.slot.fits ? {} : { refusal: `Too big for the ${this.slot.stand.standName}.` }) };
     return this.spot;
   }
 
   /** Whether the spot aimed at swaps the box in hand with the one there (rather than putting it in a gap). */
   get swapping(): boolean {
-    return this.spot?.spot.swap !== undefined;
+    return (this.slot ? this.slot.swap : this.spot?.spot.swap) !== undefined;
   }
 
-  /** Puts the box in hand at the aimed spot (the neighbours slide to make room, or the two swap); false when there is none or no room. */
+  /**
+   * Puts the box in hand at the aimed spot (the neighbours slide to make room, or the two swap), or in the display's
+   * slot aimed at (what stood there goes where the box in hand came from); false when there is none or no room.
+   */
   place(): boolean {
     const box = this.hand.current;
+    const slot = this.slot;
+    if (box && slot && this.showcases) {
+      if (!slot.fits) return false;
+      this.part([]);
+      this.showcases.put(box, slot);
+      this.hide();
+      return true;
+    }
     const spot = this.spot;
     if (!box || !spot?.spot.fits) return false;
     // Back to their rest poses first: the rebuild slides every box from where it stands now.
     this.part([]);
-    if (spot.spot.swap) this.shelves.swapBoxes(box, spot.spot.swap);
+    const swap = spot.spot.swap;
+    if (this.showcases?.holds(box)) {
+      // Off its display first; the shelves then stand with it, and it goes where it was aimed (the box there, if any, takes its slot).
+      this.showcases.toShelves(box, () => this.shelves.moveBox(box, spot), swap);
+    } else if (swap) this.shelves.swapBoxes(box, swap);
     else this.shelves.moveBox(box, spot);
     this.hide();
     return true;
@@ -111,8 +138,18 @@ export class ShelfPlacing implements Updatable {
     if (!box || !this.active) return this.hide();
     this.raycaster.setFromCamera(this.centre, this.camera);
     const ray = this.raycaster.ray;
-    const hit = this.shelves.spotAt(ray, box, REACH);
-    if (!hit || this.blocked(ray.origin, hit.point)) return this.hide();
+    let hit = this.shelves.spotAt(ray, box, REACH);
+    if (hit && this.blocked(ray.origin, hit.point)) hit = null;
+    let slot = this.showcases?.spotAt(ray, box, REACH) ?? null;
+    if (slot && this.blocked(ray.origin, slot.centre)) slot = null;
+    if (slot && hit && hit.point.distanceTo(ray.origin) < slot.distance) slot = null;
+    if (slot) return this.showSlot(slot);
+    this.slot = null;
+    if (!hit) return this.hide();
+    if (this.showcases?.holds(box) && hit.spot.swap) {
+      // From a display, the box it swaps with takes the display's slot: only the row's room counts.
+      hit.spot.fits = hit.shelf.roomFor(hit.spot.row, hit.spot.swap, box);
+    }
     this.spot = hit;
     const { shelf, spot } = hit;
     shelf.updateWorldMatrix(true, false);
@@ -137,8 +174,23 @@ export class ShelfPlacing implements Updatable {
     this.parted = now;
   }
 
+  /** The ghost in a display's slot: where the box in hand would lean (nothing parts there). */
+  private showSlot(slot: ShowcaseTarget): void {
+    this.spot = null;
+    this.slot = slot;
+    this.ghost.position.copy(slot.centre);
+    this.ghost.quaternion.copy(slot.quaternion);
+    this.ghost.scale.copy(slot.size);
+    const look: Look = !slot.fits ? 'full' : slot.swap ? 'swap' : 'room';
+    this.fill.material = FILLS[look];
+    this.edges.material = EDGES[look];
+    this.ghost.visible = true;
+    if (this.parted.size) this.part([]);
+  }
+
   private hide(): void {
     this.spot = null;
+    this.slot = null;
     this.ghost.visible = false;
     if (this.parted.size) this.part([]);
   }

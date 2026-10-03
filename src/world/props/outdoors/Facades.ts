@@ -1,16 +1,16 @@
 import { type LightKind, Polygon, Sheet, type Rng } from './Sheet';
 import { between, deg, integer, mixHex, pick, shade } from './paint';
-import { CORNER, FRONTAGE, FRONT_END, FRONT_END_FROM, FRONT_END_TO, PARK_EDGE, PARK_END, PARK_END_FROM, PARK_END_TO, PARK_FAR, PARK_FROM, PARK_TO, frontage, parkLine } from './plan';
+import { CORNER, FRONTAGE, FRONT_END, FRONT_END_FROM, FRONT_END_TO, PARK_END, PARK_END_FROM, PARK_END_TO, frontage } from './plan';
 import { FacadeFrame } from './FacadeFrame';
 import { BLINDS, CHIMNEY_POT, CURTAINS, DISH, POT_LEAVES, TERRACOTTA, WINDOW_GLASS } from './palette';
 import { RETRO_GAMES, type PlannedShop, type Storefront, paintShopfronts } from './Shopfront';
 import { FACADES, FLAT_IN_STREET, FRONT, GROUND_FLOOR, STOREY, type FacadeSpec } from '../../street/streetPlan';
-import { BRICKS, FACADE_WINDOW, balconyRows, facadeBays, facadeStyle, onBalcony, type FacadeStyle } from '@/world/city/facadeStyle';
+import { BRICKS, balconyRows, facadeBays, facadeStyle, onBalcony, windowWidth, type FacadeStyle } from '@/world/city/facadeStyle';
+import { roofFurniture } from '@/world/city/roofFurniture';
+import { BACKDROP_BLOCKS, BACKDROP_WALLS, type BackdropBlock } from '@/world/city/skyline';
 import { holidayBetween, paintPumpkin, wantsPumpkin } from './Holiday';
 import { currentHoliday } from '@/time/season';
 
-/** How deep Front Street's far block is: the next street's facades stand this far behind its building line. */
-const BEHIND_BLOCK = 42;
 const FLOWERS = ['#d9383a', '#e0567a', '#f0f0e8', '#b04ac0', '#f09a3a', '#e8d040'];
 /** Ground floor height and floor-to-floor height, in metres (the walkable street's). */
 export const GROUND = GROUND_FLOOR;
@@ -67,23 +67,42 @@ export function paintFacadeRow(
 }
 
 /**
- * The far backdrops: the mid-rise blocks lining the far side of the park, and taller blocks a
- * few streets behind Front Street whose upper floors peek over its roofs. Painted before the park
- * and the street.
+ * The far backdrops, where the walkable street's sky dome stands them (`city/skyline` `BACKDROP_BLOCKS`, faced in
+ * their `BACKDROP_WALLS`): the mid-rise blocks lining the far side of the park, the next street behind Front Street's
+ * block, taller blocks a few streets further whose upper floors peek over its roofs, the blocks past both streets'
+ * far ends. Each painted on the face it turns to the eye (the row behind our own block is the courtyard's to paint),
+ * far to near, before the park and the street.
  */
 export function paintBackdrops(sheet: Sheet, random: Rng): void {
-  paintFacadeRow(sheet, random, PARK_FROM, PARK_TO, (a) => parkLine(a, PARK_FAR), [7, 11], [14, 26], 0.45);
-  for (let i = 0; i < 26; i++) {
-    const z = between(random, 110, 260);
-    const x0 = between(random, -180, 420);
-    const w = between(random, 18, 40);
-    paintBuilding(sheet, random, { a0: Math.atan2(x0, z), a1: Math.atan2(x0 + w, z), line: (a) => z / Math.max(Math.cos(a), 0.06), floors: integer(random, 9, 18), stoneShare: 0.1 });
+  const fronts = BACKDROP_BLOCKS.flatMap((block, i) => {
+    const face = backdropFace(block);
+    return face ? [{ block, face, seed: 50000 + i }] : [];
+  }).sort((p, q) => q.face.d - p.face.d);
+  for (const { block, face, seed } of fronts) {
+    const kind = block.wall === 0 ? 'stone' : block.wall === 2 || block.wall === 3 ? 'brick' : 'render';
+    const style = { ...facadeStyle(seed, kind === 'stone' ? 1 : 0), kind, wall: BACKDROP_WALLS[block.wall]! } as FacadeStyle;
+    const floors = Math.max(2, Math.round((block.height - 2.2) / FLOOR) + 1);
+    paintBuilding(sheet, random, { a0: face.a0, a1: face.a1, line: face.line, floors, style, shops: face.d < 110 });
   }
-  // The next street behind Front Street's block, shoulder to shoulder from the park's edge round to the
-  // side street: from the sixth floor the eye sees over the lower roofs across the road, and never
-  // down to an empty horizon, whatever the lots beyond it draw.
-  const behind = FRONTAGE + BEHIND_BLOCK;
-  paintFacadeRow(sheet, random, Math.atan2(-PARK_EDGE, behind), deg(75), (a) => behind / Math.max(Math.cos(a), 0.06), [6, 9], [12, 22], 0.3);
+}
+
+/**
+ * The face a backdrop block turns to the eye (at the origin): the one whose plane is nearest, as an azimuth range and
+ * the distance along each azimuth. None for the blocks behind our own (the courtyard's rear buildings hide them).
+ */
+function backdropFace(b: BackdropBlock): { a0: number; a1: number; line: (a: number) => number; d: number } | null {
+  const faces: { a0: number; a1: number; line: (a: number) => number; d: number }[] = [];
+  // Across Front Street's way (+z), facing back at the eye.
+  if (b.z0 > 0) faces.push({ a0: Math.atan2(b.x0, b.z0), a1: Math.atan2(b.x1, b.z0), line: (a) => b.z0 / Math.max(Math.cos(a), 0.06), d: b.z0 });
+  // Out of the left windows (-x): the park's far side.
+  if (b.x1 < 0) faces.push({ a0: Math.atan2(b.x1, b.z0), a1: Math.atan2(b.x1, b.z1), line: (a) => -b.x1 / Math.max(-Math.sin(a), 0.06), d: -b.x1 });
+  // Down Front Street's far end (+x).
+  if (b.x0 > 0 && b.z0 <= 0) faces.push({ a0: Math.atan2(b.x0, b.z1), a1: Math.atan2(b.x0, b.z0), line: (a) => b.x0 / Math.max(Math.sin(a), 0.06), d: b.x0 });
+  // Down Park Street's far end (-z), on the left of the seam behind the room.
+  if (b.z1 < 0 && b.x1 < 0) faces.push({ a0: Math.atan2(b.x1, b.z1), a1: Math.atan2(b.x0, b.z1), line: (a) => -b.z1 / Math.max(-Math.cos(a), 0.06), d: -b.z1 });
+  if (!faces.length) return null;
+  const face = faces.reduce((p, q) => (q.d < p.d ? q : p));
+  return face.a1 > face.a0 ? face : { ...face, a0: face.a1, a1: face.a0 };
 }
 
 /**
@@ -164,7 +183,7 @@ export function paintBuilding(sheet: Sheet, random: Rng, spec: BuildingSpec): St
   const h = GROUND + (floors - 1) * FLOOR + 0.5;
   const cols = facadeBays(w, spec.bays);
   const pitch = w / cols;
-  const winW = Math.min(FACADE_WINDOW.maxWidth, pitch * FACADE_WINDOW.share);
+  const winW = windowWidth(arch, pitch);
   // The style's balcony rows count bays from the building's left end seen from the street; ours from the eye's -x end.
   const balconies = balconyRows(arch, floors, cols).map((row) => (spec.mirrored ? { ...row, from: cols - 1 - row.to, to: cols - 1 - row.from } : row));
   const door = spec.door ?? w / 2;
@@ -197,10 +216,10 @@ export function paintBuilding(sheet: Sheet, random: Rng, spec: BuildingSpec): St
     // The course under the first floor: over the shops' fascias (up to 3.6) and awnings (3.7), under the first floor's sills.
     if (fine && arch.courses) f.detail(f.strip(0, w, GROUND - 0.25, GROUND), shade(arch.trim, 0.95));
 
-    // Upper floors, the windows where the walkable street has them (`FACADE_WINDOW`).
+    // Upper floors, the windows where the walkable street has them (the style's `windows`).
     for (let fl = 1; fl < floors; fl++) {
-      const hb = GROUND + (fl - 1) * FLOOR + FACADE_WINDOW.sill;
-      const ht = hb + FACADE_WINDOW.height;
+      const hb = GROUND + (fl - 1) * FLOOR + arch.windows.sill;
+      const ht = hb + arch.windows.height;
       if (fine && arch.courses && fl > 1) f.detail(f.strip(0, w, hb - 0.95, hb - 0.8), shade(arch.trim, 0.9));
       for (let c = 0; c < cols; c++) {
         const s0 = c * pitch + (pitch - winW) / 2;
@@ -214,15 +233,15 @@ export function paintBuilding(sheet: Sheet, random: Rng, spec: BuildingSpec): St
       }
     }
     if (fine && arch.quoins) paintQuoins(f, arch, h);
-    if (fine && random() < 0.6) {
-      // A downpipe from the gutter, darker than the wall.
-      const s = random() < 0.5 ? 0.3 : w - 0.4;
+    if (fine && arch.downpipe) {
+      // A downpipe from the gutter, darker than the wall, at the end the walkable street has it.
+      const s = (arch.downpipe === 'left') !== !!spec.mirrored ? 0.3 : w - 0.4;
       f.detail(f.quad(s, s + 0.12, 0, h), shade(arch.wall, 0.5));
     }
     // Party wall: a shadow line along the left edge.
     f.detail(f.quad(0, Math.min(0.15, w * 0.02), -1.5, h + 0.6), 'rgba(0,0,0,0.35)');
 
-    paintRoof(f, random, arch, h, cols, pitch, winW);
+    paintRoof(f, random, arch, h, cols, winW, !!spec.mirrored);
   });
   return shops;
 }
@@ -283,7 +302,7 @@ function paintQuoins(f: FacadeFrame, arch: FacadeStyle, h: number): void {
 
 /** A residential entrance at `s`: steps, a panelled door under a fanlight, a house number lamp. */
 function paintEntrance(f: FacadeFrame, random: Rng, arch: FacadeStyle, s: number): void {
-  const door = pick(random, ['#2c2622', '#3a2418', '#1f3a34', '#2a3450', '#5a1f1f']);
+  const door = arch.door;
   f.detail(f.quad(s - 0.95, s + 0.95, 0, 3.35), arch.trim);
   f.detail(f.quad(s - 0.75, s + 0.75, 0.15, 2.55), door);
   f.detail(f.quad(s - 0.02, s + 0.02, 0.15, 2.55), 'rgba(0,0,0,0.4)');
@@ -485,9 +504,16 @@ function paintBalcony(f: FacadeFrame, random: Rng, arch: FacadeStyle, s0: number
   if (haussmann) sheet.path(f.strip(s0, s1, hb + 0.62, hb + 0.7, depth), iron);
 }
 
-/** Cornice, then a slate mansard with dormers, a tiled pitched roof or a flat roof with its clutter; chimney stacks with pots on top. */
-function paintRoof(f: FacadeFrame, random: Rng, arch: FacadeStyle, h: number, cols: number, pitch: number, winW: number): void {
+/**
+ * Cornice, then a slate mansard with dormers, a tiled pitched roof or a flat roof with its clutter; chimney stacks with
+ * pots on top. What stands on it is the walkable street's (`city/roofFurniture`), mirrored to the eye's frame when
+ * the plan names the building.
+ */
+function paintRoof(f: FacadeFrame, random: Rng, arch: FacadeStyle, h: number, cols: number, winW: number, mirrored: boolean): void {
   const { sheet, d, w, fine } = f;
+  const things = roofFurniture(arch, w, cols, winW);
+  // A span along the front from the street's left end, in the frame's own s.
+  const span = (s0: number, s1: number): [number, number] => (mirrored ? [w - s1, w - s0] : [s0, s1]);
   sheet.begin(d, 0.05);
   sheet.path(f.strip(-0.15, w + 0.15, h, h + 0.55), shade(arch.trim, arch.kind === 'brick' ? 1 : 1.02));
   f.detail(f.strip(-0.15, w + 0.15, h + 0.4, h + 0.55), 'rgba(255,255,255,0.12)');
@@ -526,23 +552,22 @@ function paintRoof(f: FacadeFrame, random: Rng, arch: FacadeStyle, h: number, co
       }
       if (!mansard) {
         // Roof windows set in the slope, and the ridge tiles along the top.
-        for (let i = random() < 0.5 ? integer(random, 1, 2) : 0; i > 0; i--) {
-          const s = between(random, inset + 0.8, w - inset - 1.8);
-          const pane = f.quad(s, s + 0.8, base + 0.8, base + 1.9);
+        for (const window of things.roofWindows) {
+          const [s0, s1] = span(window.s, window.s + 0.8);
+          const pane = f.quad(s0, s1, base + 0.8, base + 1.9);
           sheet.begin(d, 0.35);
-          sheet.path(f.quad(s - 0.08, s + 0.88, base + 0.72, base + 1.98), '#6a6e72');
+          sheet.path(f.quad(s0 - 0.08, s1 + 0.08, base + 0.72, base + 1.98), '#6a6e72');
           sheet.path(pane, WINDOW_GLASS);
           sheet.begin(d, 0.05, { wet: 0.3, snow: 0.8 });
-          if (random() < 0.4) sheet.lit(pane, 'warm', 0.8, random());
+          if (window.lit) sheet.lit(pane, 'warm', 0.8, window.lit);
         }
         f.detail(f.quad(inset, w - inset, top - 0.08, top + 0.1), shade(slate, 0.75));
       }
     }
     f.detail(f.quad(inset, w - inset, top - 0.18, top), mansard ? '#6b717c' : '#b9755a');
     if (fine && mansard) {
-      for (let c = 0; c < cols; c++) {
-        const s0 = c * pitch + (pitch - winW * 0.7) / 2;
-        const s1 = s0 + winW * 0.7;
+      for (const dormer of things.dormers) {
+        const [s0, s1] = span(dormer.s - dormer.width / 2, dormer.s + dormer.width / 2);
         // Dormer: cheeks, a little pediment, the pane.
         f.detail(f.quad(s0 - 0.15, s1 + 0.15, base + 0.5, base + 2.1), arch.trim);
         const cap = new Path2D();
@@ -556,41 +581,27 @@ function paintRoof(f: FacadeFrame, random: Rng, arch: FacadeStyle, h: number, co
         const pane = f.quad(s0, s1, base + 0.7, base + 1.9);
         f.detail(pane, WINDOW_GLASS);
         f.detail(f.quad((s0 + s1) / 2 - 0.03, (s0 + s1) / 2 + 0.03, base + 0.7, base + 1.9), arch.frame);
-        if (random() < 0.3) sheet.lit(pane, 'warm', between(random, 0.7, 1), random());
+        if (dormer.lit) sheet.lit(pane, 'warm', 0.85, dormer.lit);
       }
     }
   } else {
     // Parapet, then the clutter of a flat roof: lift housing, a water tank, an aerial.
     sheet.path(f.strip(0, w, base, base + 0.7), shade(arch.wall, 0.9));
     f.detail(f.strip(0, w, base + 0.6, base + 0.7), shade(arch.trim, 0.95));
-    for (let i = integer(random, 0, 2); i > 0; i--) {
-      const s = between(random, 1, Math.max(1.5, w - 3));
-      sheet.path(f.quad(s, s + between(random, 1.2, 2.4), base, base + between(random, 1.2, 2.2)), shade(arch.wall, 0.7));
-    }
     if (fine) {
-      // Air-conditioning units and vent stacks along the parapet, a satellite dish on a bracket.
-      for (let i = integer(random, 0, 3); i > 0; i--) {
-        const s = between(random, 0.6, Math.max(1, w - 1.6));
-        const unit = f.quad(s, s + 0.9, base + 0.7, base + 1.35, -0.4);
-        sheet.path(unit, '#b8bcbe');
-        f.detail(f.quad(s + 0.1, s + 0.55, base + 0.8, base + 1.25, -0.4), 'rgba(0,0,0,0.25)');
+      // Air-conditioning units and vent stacks along the parapet.
+      for (const unit of things.units) {
+        const [s0, s1] = span(unit.s, unit.s + 0.9);
+        sheet.path(f.quad(s0, s1, base + 0.7, base + 1.35, -0.4), '#b8bcbe');
+        f.detail(f.quad(s0 + 0.1, s0 + 0.55, base + 0.8, base + 1.25, -0.4), 'rgba(0,0,0,0.25)');
       }
-      for (let i = integer(random, 0, 3); i > 0; i--) {
-        const s = between(random, 0.5, Math.max(1, w - 0.5));
-        sheet.path(f.quad(s, s + 0.14, base + 0.7, base + between(random, 1.1, 1.8), -0.8), '#6a6c6e');
-      }
-      if (random() < 0.4) {
-        const s = between(random, 0.8, Math.max(1, w - 1.2));
-        const [cx, cy] = f.P(s, base + 1.4, -0.5);
-        const { x: px, y: py } = f.pxPerMetre;
-        const dish = new Path2D();
-        dish.ellipse(cx, cy, Math.max(1, px * 0.35), Math.max(1, py * 0.4), -0.4, 0, Math.PI * 2);
-        sheet.path(f.quad(s - 0.03, s + 0.03, base + 0.7, base + 1.3, -0.5), '#8a8c8e');
-        sheet.path(dish, DISH);
+      for (const vent of things.vents) {
+        const [s0, s1] = span(vent.s, vent.s + 0.14);
+        sheet.path(f.quad(s0, s1, base + 0.7, base + 0.7 + vent.height, -0.8), '#6a6c6e');
       }
     }
-    if (fine && random() < 0.18) {
-      const s = between(random, 1, Math.max(2, w - 3.5));
+    if (fine && things.tank) {
+      const [s] = span(things.tank.s, things.tank.s + 2.4);
       sheet.path(f.quad(s + 0.3, s + 0.5, base, base + 1.6), '#2a2724');
       sheet.path(f.quad(s + 1.9, s + 2.1, base, base + 1.6), '#2a2724');
       sheet.path(f.quad(s, s + 2.4, base + 1.6, base + 4.0), '#5a4a3c');
@@ -603,25 +614,35 @@ function paintRoof(f: FacadeFrame, random: Rng, arch: FacadeStyle, h: number, co
       sheet.path(cone, '#4a3c30');
     }
   }
+  // A satellite dish on its bracket.
+  if (fine && things.dish) {
+    const [s] = span(things.dish.s, things.dish.s);
+    const [cx, cy] = f.P(s, base + 1.4, -0.5);
+    const { x: px, y: py } = f.pxPerMetre;
+    const dish = new Path2D();
+    dish.ellipse(cx, cy, Math.max(1, px * 0.35), Math.max(1, py * 0.4), -0.4, 0, Math.PI * 2);
+    sheet.path(f.quad(s - 0.03, s + 0.03, base + 0.7, base + 1.3, -0.5), '#8a8c8e');
+    sheet.path(dish, DISH);
+  }
   // Chimney stacks, with their pots, standing up from the roof ridge.
   const roofTop = base + (arch.roof === 'mansard' ? 3.2 : arch.roof === 'pitched' ? 2.6 : 0.7);
   sheet.begin(d, 0.05);
-  for (let i = integer(random, 1, 3); i > 0; i--) {
-    const s = between(random, 0.8, Math.max(1, w - 1.8));
-    const cw = between(random, 0.8, 1.6);
-    const ch = roofTop + between(random, 0.8, 1.6);
-    const stack = arch.kind === 'brick' || random() < 0.5 ? mixHex(pick(random, BRICKS), '#000000', 0.1) : shade(arch.wall, 0.85);
+  for (const chimney of things.chimneys) {
+    const [s, s1] = span(chimney.s, chimney.s + chimney.width);
+    const cw = s1 - s;
+    const ch = roofTop + chimney.rise;
+    const stack = chimney.brick ? mixHex(BRICKS[Math.floor(chimney.s * 7) % BRICKS.length]!, '#000000', 0.1) : shade(arch.wall, 0.85);
     sheet.path(f.quad(s, s + cw, roofTop - 1, ch), stack);
     sheet.path(f.quad(s - 0.06, s + cw + 0.06, ch, ch + 0.15), shade(stack, 1.2));
     if (fine) {
       f.detail(f.quad(s + cw * 0.6, s + cw, roofTop - 1, ch), 'rgba(0,0,0,0.2)');
-      for (let k = 0; k < Math.floor(cw / 0.35); k++) sheet.path(f.quad(s + 0.1 + k * 0.35, s + 0.3 + k * 0.35, ch + 0.15, ch + 0.5), CHIMNEY_POT);
+      for (let k = 0; k < chimney.pots; k++) sheet.path(f.quad(s + 0.1 + k * 0.35, s + 0.3 + k * 0.35, ch + 0.15, ch + 0.5), CHIMNEY_POT);
     }
   }
-  if (fine && random() < 0.35) {
+  if (fine && things.aerial) {
     // A television aerial on a mast.
-    const s = between(random, 1, Math.max(1.5, w - 1));
+    const [s] = span(things.aerial.s, things.aerial.s + 0.05);
     sheet.path(f.quad(s, s + 0.05, roofTop, roofTop + 2.4), '#2a2a2c');
-    for (const [y, span] of [[2.2, 0.9], [1.8, 0.7], [1.4, 0.5]] as const) sheet.path(f.quad(s - span / 2, s + span / 2, roofTop + y, roofTop + y + 0.04), '#2a2a2c');
+    for (const [y, sp] of [[2.2, 0.9], [1.8, 0.7], [1.4, 0.5]] as const) sheet.path(f.quad(s - sp / 2, s + sp / 2, roofTop + y, roofTop + y + 0.04), '#2a2a2c');
   }
 }

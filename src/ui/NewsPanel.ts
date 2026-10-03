@@ -10,6 +10,8 @@ export interface NewsIssue {
   blurb: string;
   hints: readonly string[];
   prices: string | null;
+  /** The small ads: who and where, then the ad's words (none: no column). */
+  classifieds?: readonly { head: string; text: string }[];
 }
 
 /**
@@ -42,6 +44,7 @@ export class NewsPanel extends ModalPanel {
       <p class="news-panel__blurb">${escapeHtml(issue.blurb)}</p>
       <ul>${issue.hints.map((hint) => `<li>${escapeHtml(hint)}</li>`).join('')}</ul>
       ${issue.prices ? `<p class="news-panel__prices">${escapeHtml(issue.prices)}</p>` : ''}
+      ${issue.classifieds?.length ? `<section class="news-panel__ads"><h4>Small ads</h4>${issue.classifieds.map((ad) => `<p><b>${escapeHtml(ad.head)}</b> ${escapeHtml(ad.text)}</p>`).join('')}<p class="news-panel__ads-note">Ring from your phone at home.</p></section>` : ''}
       <footer><button type="button" data-action="close" aria-label="Close">Put it back</button></footer>`;
   }
 

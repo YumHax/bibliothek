@@ -18,7 +18,7 @@ let plasterBump: THREE.CanvasTexture | null = null;
  * trowel undulations, seamless (every stamp wraps round the edges). Painted once, shared by
  * every wall; the walls' uvs are in metres (see `Room`'s `wallGeometry`).
  */
-function plasterBumpMap(): THREE.CanvasTexture {
+export function plasterBumpMap(): THREE.CanvasTexture {
   if (plasterBump) return plasterBump;
   const [canvas, ctx] = createCanvas(PLASTER_PX, PLASTER_PX);
   const random = seededRandom(0x91a57e);

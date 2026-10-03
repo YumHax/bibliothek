@@ -62,7 +62,7 @@ its plan spot (`Furnishings.checkSaved`, logged `[furnishing]`).
 ## The shelves: the player's arrangement
 
 `src/world/shelving/arrangement.ts` (`ShelfArrangement`, saved under `KEYS.shelves`) holds the sort the shelves stand in
-and the player's own rows: per shelving id (`'living'`, `'bedroom'`), bookcase, row (top first), game ids left to right.
+and the player's own rows: per shelving id (`'living'`, `'bedroom'`, Mrs Roux's `'annex'` and `'annexStudy'` once joined), bookcase, row (top first), game ids left to right.
 
 - Moving a box (`ShelvingGroup.moveBox`) takes the shelves as they stand (`Shelving.rows()`, a box in hand counting on
   its row), moves the box, and saves that as the arrangement (`arrange()`); the sort becomes `'custom'`. Games that are
@@ -97,6 +97,52 @@ and the player's own rows: per shelving id (`'living'`, `'bedroom'`), bookcase, 
   bookcase stands (slots only decide where a new one first goes). A bookcase's ceiling spot follows it
   (`shelving/LampFollow`, through the host's `move`), kept inside the room. The friends' browse spots
   (`ROOM_PLAN.visitor.browse`) are fixed points in front of the slots: a friend there with no bookcase near looks at nothing.
+
+## Displays (`src/world/showcase/`)
+
+The display case (by the living room's door, five tiers of one box) and the pedestal (one box on an easel, in the open
+floor), bought at SECOND HOME (`displayCase`, `pedestal`; `ROOM_PLAN.showcase`), hold any box of the collection face out.
+
+- **Putting a box in**: with a box in hand (from a shelf or another display) aimed at a display, the ghost leans in the
+  slot aimed at (`ShelfPlacing` asks `Showcases.spotAt`; the nearer of a shelf spot and a slot wins); a right-click tap
+  or M puts it there (`Showcases.put`). A box in the slot trades places with it: into the slot the box in hand came from
+  (if it fits there), or back on the shelves. Red: too big for that slot ("Too big for the pedestal").
+- **Taking one out**: click it like a shelf box; E puts it back in its slot, aimed at a shelf it goes in the gap
+  (`Showcases.toShelves`, then `ShelvingGroup.moveBox`) or swaps with the box there (which takes the slot).
+- **Off its shelf meanwhile**: `Showcases` is a `GameSource` filter between `Deliveries.shelved` and `StrayGames`: a game
+  on display is neither on the shelves, nor lent (the borrow panel reads the shelves), nor left lying about; its place
+  in the player's arrangement is kept and it goes back there. Its box is the flat's own (`BoxPool`, owned by
+  `Showcases` while on show), registered with the display's zone (`Zone.boxesChanged`), ticked by the display's
+  `BoxMotion` (hover, tip). Search and the random pick find it (`ShelvingGroup.alsoIn`). A game sold, or turned into a
+  wish in the editor, leaves its slot. Saved: `KEYS.showcases`, slot by slot per `<zone>/<key>`.
+- **Moving a display** carries its boxes (they are its holders' children); it stays in its room and is never put away
+  (`keepsRoom`: its boxes are registered with its zone).
+- **Friends**: a display with something in it is always one of a visiting friend's stops (`VisitRoute.featured`, from
+  `Showcases.stops`: in front of it wherever it stands now); they look at a box on show and say a word on it
+  (`showcaseLines`). The collector's book's vitrine (50 games, the most valuable copies) is separate and not curated.
+- **Light**: warm strips and edge-lit glass shelves are emissive; their glow is painted (`glow.bakedGlow`): no light.
+
+## Shelf labels (`src/world/labels/`)
+
+The label maker (SECOND HOME, `labelMaker`): at home with free hands, K aimed at a shelf's front edge (or a box on that
+row) opens the label panel (`ui/LabelPanel`): up to sixteen capitals, five tapes, a preview; Print sticks it on the
+board's front edge under that row, centred where aimed (kept on the edge, never over another label: refused). K on a
+label offers Peel off, or prints a new one in its place. `game/Labelling` is the route (after browsing), `labelMaker`
+its world side (the aim through `ShelvingGroup.bookcaseList`, walls checked).
+
+- Saved by shelving id, bookcase slot, row (top first) and x along the edge (`KEYS.shelfLabels`): labels stay put
+  whatever the boxes do, ride a bookcase the player moves, and a rebuild sticks them on the new bookcase
+  (`labelledBookcases` wraps the shelving's `onBookcase`; a row gone when the bookcases drop to four rows takes the
+  last row). A new shelving with bookcases wraps its `onBookcase` the same way.
+- One canvas atlas (1024 x 1024, cells of 512 x 40 px: `MAX_LABELS` 50), one texture, one material on `WALL.print`
+  over the banding (`Shelf.edgeOf`); each label a plane with its cell's UVs.
+
+## Tipping a box out (`shelving/BoxTipping`)
+
+Q held at home with free hands (the market's "read the stalls" key): the box under the crosshair, on a shelf or a
+display, tips half out of its row (its top 24° towards the eye, 3.5 cm out, `GameBox.setTipped`, eased by its shelf's
+ticks) and its caption says its year, platform, edition and state. Let go or looked away, it slides back. Nothing moves
+for good.
 
 ## Furniture: registering a piece
 

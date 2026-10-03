@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { mergeGeometries, toCreasedNormals } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { VEHICLES } from '../city/vehicles';
+import { LAMP_ROLE } from './traffic/lampMaterial';
 
 /** A small hatchback at real scale (`city/vehicles`), nose to +x, wheels on y = 0, centred. */
 export const CAR = VEHICLES.car;
@@ -27,9 +28,12 @@ export interface CarGeometries {
   body: THREE.BufferGeometry;
   /** The glasshouse. */
   glass: THREE.BufferGeometry;
-  /** Tyres and the dark underbody. */
+  /**
+   * Tyres with their spoked rims (turning about their axles: `traffic/wheelSpin`), the dark
+   * underbody, the bumpers and the cabin seen through the glass, as vertex colours.
+   */
   wheels: THREE.BufferGeometry;
-  /** Headlamps (white) and tail lamps (red), as vertex colours. */
+  /** Head, tail, indicator and reversing lamps, the plates and the grille, as vertex colours with their `LAMP_ROLE` (`traffic/lampMaterial`). */
   lamps: THREE.BufferGeometry;
 }
 
@@ -39,6 +43,8 @@ const BEVEL_SEGMENTS = 3;
 const CREASE = THREE.MathUtils.degToRad(38);
 /** Round a tyre: enough that its silhouette reads round from a pavement away. */
 const TYRE_SEGMENTS = 20;
+/** Spokes of a wheel's rim, proud of its dark disc: what shows a wheel turning. */
+const SPOKES = 5;
 
 function prism(points: [number, number][], width: number, bevel: number): THREE.BufferGeometry {
   const shape = new THREE.Shape(points.map(([x, y]) => new THREE.Vector2(x, y)));
@@ -48,7 +54,7 @@ function prism(points: [number, number][], width: number, bevel: number): THREE.
   return g;
 }
 
-function plain(g: THREE.BufferGeometry): THREE.BufferGeometry {
+export function plain(g: THREE.BufferGeometry): THREE.BufferGeometry {
   const out = g.index ? g.toNonIndexed() : g;
   if (out !== g) g.dispose();
   out.deleteAttribute('uv');
@@ -57,15 +63,33 @@ function plain(g: THREE.BufferGeometry): THREE.BufferGeometry {
 }
 
 /** A box, uv-less and non-indexed, centred at (x, y, z). */
-function block(w: number, h: number, d: number, x: number, y: number, z: number): THREE.BufferGeometry {
+export function block(w: number, h: number, d: number, x: number, y: number, z: number): THREE.BufferGeometry {
   return plain(new THREE.BoxGeometry(w, h, d).translate(x, y, z));
+}
+
+/** Colour (vertex colours, linear) and `wheelHub` (the axle a part turns about, or none) on a part of the wheels' mesh. */
+export function trimPart(g: THREE.BufferGeometry, color: THREE.Color, hub: readonly [number, number] | null = null): THREE.BufferGeometry {
+  const count = g.getAttribute('position').count;
+  const colors = new Float32Array(count * 3);
+  const hubs = new Float32Array(count * 3);
+  for (let i = 0; i < count; i++) {
+    color.toArray(colors, i * 3);
+    if (hub) {
+      hubs[i * 3] = hub[0];
+      hubs[i * 3 + 1] = hub[1];
+      hubs[i * 3 + 2] = 1;
+    }
+  }
+  g.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+  g.setAttribute('wheelHub', new THREE.BufferAttribute(hubs, 3));
+  return g;
 }
 
 /**
  * A tyre turned on a lathe, axis along z: tread, rounded shoulders into the sidewalls, and the
  * sidewall running in to the rim, with a recessed dark wheel disc. Keeps its own smooth normals.
  */
-function tyre(radius: number, width: number): THREE.BufferGeometry {
+export function tyre(radius: number, width: number): THREE.BufferGeometry {
   const half = width / 2;
   const fillet = Math.min(0.045, width * 0.22, radius * 0.18);
   const rim = radius * 0.64;
@@ -85,32 +109,93 @@ function tyre(radius: number, width: number): THREE.BufferGeometry {
   return mergeGeometries([plain(lathe), plain(disc)])!;
 }
 
-/** Four (or more) tyres at `axles` (x), `track` apart, and the dark underbody between them. */
-function tyres(axles: readonly number[], track: number, radius: number, length: number, width: number, tyreWidth = 0.22): THREE.BufferGeometry {
+/** A rim's spokes and its centre cap on the disc's outer face (`side` +1: the +z face), centred on the axle. */
+export function spokes(radius: number, width: number, side: 1 | -1): THREE.BufferGeometry {
+  const rim = radius * 0.64;
+  const z = side * ((width - 0.05) / 2 + 0.006);
+  const parts: THREE.BufferGeometry[] = [];
+  for (let i = 0; i < SPOKES; i++) {
+    const a = (i / SPOKES) * Math.PI * 2;
+    const length = rim * 0.86;
+    parts.push(plain(new THREE.BoxGeometry(length, rim * 0.2, 0.014).translate(length / 2, 0, 0).rotateZ(a).translate(0, 0, z)));
+  }
+  parts.push(plain(new THREE.CylinderGeometry(rim * 0.24, rim * 0.24, 0.02, 10).rotateX(Math.PI / 2).translate(0, 0, z)));
+  const g = mergeGeometries(parts)!;
+  for (const p of parts) p.dispose();
+  return g;
+}
+
+const TYRE = new THREE.Color(0x151515);
+const RIM = new THREE.Color(0x8d939a);
+const UNDERBODY = new THREE.Color(0x101112);
+/** Black plastic: bumpers, mirror stalks' bases. */
+const PLASTIC = new THREE.Color(0x26272a);
+/** The cabin seen through the glass: seats, headrests, the dashboard. */
+const CABIN = new THREE.Color(0x1d1e21);
+
+/**
+ * Tyres at `axles` (x), `track` apart, each with its spoked rim on the outer face (turning about
+ * its axle: `wheelHub`), the dark underbody between them, and any `trim` (bumpers, the cabin), all
+ * one geometry with vertex colours: one draw call for everything dark on a vehicle.
+ */
+function tyres(axles: readonly number[], track: number, radius: number, length: number, width: number, tyreWidth = 0.22, trim: readonly THREE.BufferGeometry[] = []): THREE.BufferGeometry {
   const parts: THREE.BufferGeometry[] = [];
   const one = tyre(radius, tyreWidth);
+  const outer = spokes(radius, tyreWidth, 1);
+  const inner = spokes(radius, tyreWidth, -1);
   for (const x of axles) {
-    for (const z of [-1, 1]) parts.push(one.clone().translate(x, radius, (z * track) / 2));
+    for (const side of [-1, 1] as const) {
+      const z = (side * track) / 2;
+      parts.push(trimPart(one.clone().translate(x, radius, z), TYRE, [x, radius]));
+      parts.push(trimPart((side > 0 ? outer : inner).clone().translate(x, radius, z), RIM, [x, radius]));
+    }
   }
   one.dispose();
-  parts.push(block(length - 0.5, 0.16, width - 0.3, 0, radius - 0.02, 0));
-  return mergeGeometries(parts)!;
+  outer.dispose();
+  inner.dispose();
+  parts.push(trimPart(block(length - 0.5, 0.16, width - 0.3, 0, radius - 0.02, 0), UNDERBODY));
+  parts.push(...trim);
+  const g = mergeGeometries(parts)!;
+  for (const p of parts) p.dispose();
+  return g;
 }
 
 const WHITE = new THREE.Color(1, 0.95, 0.85);
 const RED = new THREE.Color(0.9, 0.05, 0.04);
 const AMBER = new THREE.Color(1, 0.55, 0.05);
+/** The front plate (white), the back one (yellow), their letters, the grille. */
+const PLATE_FRONT = new THREE.Color(0.86, 0.86, 0.84);
+const PLATE_BACK = new THREE.Color(0.9, 0.72, 0.12);
+const LETTERS = new THREE.Color(0.02, 0.02, 0.025);
+const GRILLE = new THREE.Color(0.012, 0.013, 0.014);
 
-/** Lamp faces (quads facing ±x) with their colour as vertex colours, merged. */
-class LampSet {
+/** Lamp faces (quads facing ±x) with their colour as vertex colours and their `LAMP_ROLE`, merged. */
+export class LampSet {
   private readonly parts: THREE.BufferGeometry[] = [];
 
-  add(x: number, y: number, z: number, facing: 1 | -1, color: THREE.Color, w = 0.3, h = 0.12): this {
+  add(x: number, y: number, z: number, facing: 1 | -1, color: THREE.Color, w = 0.3, h = 0.12, role: number = facing > 0 ? LAMP_ROLE.head : LAMP_ROLE.tail): this {
     const g = plain(new THREE.PlaneGeometry(w, h).rotateY((facing * Math.PI) / 2).translate(x, y, z));
-    const colors = new Float32Array(g.getAttribute('position').count * 3);
+    const count = g.getAttribute('position').count;
+    const colors = new Float32Array(count * 3);
     for (let i = 0; i < colors.length; i += 3) color.toArray(colors, i);
     g.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    g.setAttribute('lampRole', new THREE.BufferAttribute(new Float32Array(count).fill(role), 1));
     this.parts.push(g);
+    return this;
+  }
+
+  /** A number plate on the face at `x` (facing ±x), its seven letters printed proud of it. */
+  plate(x: number, y: number, facing: 1 | -1, color: THREE.Color): this {
+    this.add(x, y, 0, facing, color, 0.52, 0.11, LAMP_ROLE.plate);
+    for (let i = 0; i < 7; i++) this.add(x + facing * 0.008, y, (i - 3) * 0.064 + (i > 3 ? 0.02 : 0) - 0.01, facing, LETTERS, 0.04, 0.07, LAMP_ROLE.plate);
+    return this;
+  }
+
+  /** The indicators at the four corners (`front` and `back` x, `y`, `z` out from the middle), on their sides. */
+  indicators(front: number, back: number, y: number, z: number, backY = y): this {
+    for (const [side, role] of [[-1, LAMP_ROLE.left], [1, LAMP_ROLE.right]] as const) {
+      this.add(front, y, side * z, 1, AMBER, 0.1, 0.08, role).add(back, backY, side * z, -1, AMBER, 0.1, 0.08, role);
+    }
     return this;
   }
 
@@ -129,22 +214,82 @@ function finish(out: CarGeometries): CarGeometries {
   return { ...out, body: creased(out.body), glass: creased(out.glass), lamps: creased(out.lamps) };
 }
 
+/** What every car shape has round its body, by the shape's measurements. */
+interface Dressing {
+  length: number;
+  width: number;
+  /** Front and back faces (x, the bevel's outside), the bumpers' height (centre). */
+  front: number;
+  back: number;
+  bumperY: number;
+  /** The door mirrors: x (the windscreen's foot), y. */
+  mirror: readonly [number, number];
+  /** The seat rows' backs (x), the belt line under the glass (y) and the dashboard's x. */
+  seats: readonly number[];
+  belt: number;
+  dash: number;
+  /** The plates' heights at the front and the back. */
+  plates: readonly [number, number];
+}
+
+/** Bumpers, the cabin (seats and headrests over the belt line, the dashboard), for the dark mesh. */
+function trimOf(d: Dressing): THREE.BufferGeometry[] {
+  const parts = [
+    trimPart(block(0.12, 0.16, d.width - 0.02, d.front - 0.04, d.bumperY, 0), PLASTIC),
+    trimPart(block(0.12, 0.16, d.width - 0.02, d.back + 0.04, d.bumperY + 0.04, 0), PLASTIC),
+    trimPart(block(0.3, 0.1, d.width - 0.4, d.dash, d.belt + 0.04, 0), CABIN),
+  ];
+  // The front seats, then a bench behind; a headrest over each outer place.
+  d.seats.forEach((x, row) => {
+    if (row > 0) parts.push(trimPart(block(0.14, 0.42, d.width - 0.5, x, d.belt + 0.08, 0), CABIN));
+    for (const z of [-0.38, 0.38]) {
+      if (row === 0) parts.push(trimPart(block(0.14, 0.42, 0.46, x, d.belt + 0.08, z), CABIN));
+      parts.push(trimPart(block(0.1, 0.17, 0.24, x - 0.02, d.belt + 0.35, z), CABIN));
+    }
+  });
+  return parts;
+}
+
+/** The door mirrors, in the body's paint: a stalk out of the door and the housing. */
+function mirrors(d: Dressing): THREE.BufferGeometry[] {
+  const [x, y] = d.mirror;
+  return [-1, 1].flatMap((side) => [block(0.06, 0.05, 0.12, x, y, side * (d.width / 2 + 0.03)), block(0.1, 0.11, 0.17, x - 0.02, y + 0.03, side * (d.width / 2 + 0.13))]);
+}
+
+/** Plates, the grille between the headlamps, the indicators and the reversing lamps, added to a shape's lamps. */
+function dress(lamps: LampSet, d: Dressing, lampY: number, tailY: number, grille: readonly [number, number]): LampSet {
+  const [gw, gh] = grille;
+  lamps.add(d.front + 0.025, lampY - 0.04, 0, 1, GRILLE, gw, gh, LAMP_ROLE.plate);
+  lamps.plate(d.front + 0.03, d.plates[0], 1, PLATE_FRONT).plate(d.back - 0.03, d.plates[1], -1, PLATE_BACK);
+  lamps.indicators(d.front + 0.03, d.back - 0.01, lampY, d.width / 2 - 0.09, tailY);
+  for (const z of [-0.28, 0.28]) lamps.add(d.back - 0.01, tailY - 0.02, z, -1, WHITE, 0.12, 0.08, LAMP_ROLE.reverse);
+  return lamps;
+}
+
+/** Where a driver sits in each shape (left-hand drive: the -z side), for the figure seen through the glass: the seat's x, the belt line. */
+export const DRIVER_SEAT: Record<CarModelId, { x: number; belt: number; z: number }> = {
+  hatch: { x: -0.42, belt: 0.95, z: -0.38 },
+  saloon: { x: -0.3, belt: 0.92, z: -0.38 },
+  van: { x: 0.55, belt: 1.2, z: -0.38 },
+};
+
 /** Builds a car shape's geometries once; every car of that shape (parked or driving) instances them. */
 export function carGeometries(model: CarModelId = 'hatch'): CarGeometries {
   if (model === 'saloon') return saloon();
   if (model === 'van') return van();
   const half = CAR.length / 2;
+  const d: Dressing = { length: CAR.length, width: CAR.width, front: half + 0.05, back: -half - 0.05, bumperY: 0.4, mirror: [0.82, 1.0], seats: [DRIVER_SEAT.hatch.x, -1.25], belt: DRIVER_SEAT.hatch.belt, dash: 0.62, plates: [0.4, 0.62] };
   const body = prism([[-half, 0.3], [half, 0.3], [half + 0.02, 0.7], [half - 0.18, 0.84], [0.9, 0.96], [-1.78, 1.0], [-half, 0.94]], CAR.width, 0.05);
   const roof = prism([[0.2, 1.38], [-1.14, 1.38], [-1.14, CAR.height], [0.12, CAR.height]], CAR.width - 0.24, 0.02);
   const glass = prism([[0.92, 0.95], [0.2, 1.4], [-1.12, 1.4], [-1.8, 0.98]], CAR.width - 0.18, 0);
   const lamps = new LampSet();
   // The bevel pushes the body 5 cm out: the lamps sit about a centimetre proud of it.
-  for (const z of [-0.58, 0.58]) lamps.add(half + 0.08, 0.66, z, 1, WHITE).add(-half - 0.06, 0.66, z, -1, RED);
+  for (const z of [-0.58, 0.58]) lamps.add(half + 0.08, 0.66, z, 1, WHITE).add(-half - 0.06, 0.78, z, -1, RED);
   return finish({
-    body: mergeGeometries([plain(body), plain(roof)])!,
+    body: mergeGeometries([plain(body), plain(roof), ...mirrors(d)])!,
     glass: plain(glass),
-    wheels: tyres([-1.34, 1.36], CAR.width - 0.26, CAR.wheelRadius, CAR.length, CAR.width),
-    lamps: lamps.build(),
+    wheels: tyres([-1.34, 1.36], CAR.width - 0.26, CAR.wheelRadius, CAR.length, CAR.width, 0.22, trimOf(d)),
+    lamps: dress(lamps, d, 0.66, 0.78, [0.5, 0.12]).build(),
   });
 }
 
@@ -152,16 +297,17 @@ export function carGeometries(model: CarModelId = 'hatch'): CarGeometries {
 function saloon(): CarGeometries {
   const { length, width, height } = CAR_SIZES.saloon;
   const half = length / 2;
+  const d: Dressing = { length, width, front: half + 0.05, back: -half - 0.05, bumperY: 0.4, mirror: [0.92, 0.98], seats: [DRIVER_SEAT.saloon.x, -1.1], belt: DRIVER_SEAT.saloon.belt, dash: 0.7, plates: [0.4, 0.6] };
   const body = prism([[-half, 0.3], [half, 0.3], [half + 0.02, 0.66], [half - 0.22, 0.8], [0.95, 0.9], [-1.5, 0.95], [-half + 0.08, 0.96], [-half, 0.88]], width, 0.05);
   const roof = prism([[0.4, 1.36], [-1.0, 1.36], [-1.0, height], [0.3, height]], width - 0.26, 0.02);
   const glass = prism([[1.0, 0.89], [0.35, 1.38], [-1.02, 1.38], [-1.55, 0.94]], width - 0.2, 0);
   const lamps = new LampSet();
   for (const z of [-0.6, 0.6]) lamps.add(half + 0.08, 0.64, z, 1, WHITE, 0.34, 0.1).add(-half - 0.06, 0.78, z, -1, RED, 0.36, 0.12);
   return finish({
-    body: mergeGeometries([plain(body), plain(roof)])!,
+    body: mergeGeometries([plain(body), plain(roof), ...mirrors(d)])!,
     glass: plain(glass),
-    wheels: tyres([-1.45, 1.42], width - 0.28, VEHICLES.saloon.wheelRadius, length, width),
-    lamps: lamps.build(),
+    wheels: tyres([-1.45, 1.42], width - 0.28, VEHICLES.saloon.wheelRadius, length, width, 0.22, trimOf(d)),
+    lamps: dress(lamps, d, 0.64, 0.78, [0.6, 0.1]).build(),
   });
 }
 
@@ -169,6 +315,7 @@ function saloon(): CarGeometries {
 function van(): CarGeometries {
   const { length, width, height } = CAR_SIZES.van;
   const half = length / 2;
+  const d: Dressing = { length, width, front: half + 0.05, back: -half - 0.05, bumperY: 0.44, mirror: [1.25, 1.45], seats: [DRIVER_SEAT.van.x], belt: DRIVER_SEAT.van.belt, dash: 1.35, plates: [0.46, 0.55] };
   const body = prism([[-half, 0.34], [half, 0.34], [half + 0.02, 0.82], [half - 0.3, 1.06], [1.55, 1.22], [1.2, height], [-half, height]], width, 0.05);
   const glass = mergeGeometries([
     plain(prism([[1.6, 1.2], [1.24, 2.02], [1.1, 2.02], [1.1, 1.2]], width - 0.12, 0)),
@@ -178,10 +325,10 @@ function van(): CarGeometries {
   const lamps = new LampSet();
   for (const z of [-0.66, 0.66]) lamps.add(half + 0.08, 0.72, z, 1, WHITE, 0.3, 0.14).add(-half - 0.06, 0.9, z, -1, RED, 0.14, 0.34);
   return finish({
-    body: plain(body),
+    body: mergeGeometries([plain(body), ...mirrors(d)])!,
     glass,
-    wheels: tyres([-1.6, 1.55], width - 0.3, VEHICLES.van.wheelRadius, length, width),
-    lamps: lamps.build(),
+    wheels: tyres([-1.6, 1.55], width - 0.3, VEHICLES.van.wheelRadius, length, width, 0.22, trimOf(d)),
+    lamps: dress(lamps, d, 0.72, 0.9, [0.62, 0.16]).build(),
   });
 }
 

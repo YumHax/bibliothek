@@ -2,6 +2,7 @@ import type * as THREE from 'three';
 import type { GameBox } from '@/world/GameBox';
 import type { VideoScreen } from '@/world/screen';
 import type { StockItem } from '@/economy/StockItem';
+import type { Negotiation } from '@/economy/haggle';
 import type { ZoneId } from '@/world/zoneIds';
 import type { NoticeActions } from '@/notices';
 import type { ModalLike } from './SessionParts';
@@ -46,6 +47,11 @@ export interface ArcadeMachineLike {
   readonly luck?: boolean;
   /** Plays cost no coin (LexiPunk, until its page reports scores). */
   readonly freePlay?: boolean;
+  /**
+   * Played at home for fun (a games night's match on the TV, a cabinet of one's own): no coin taken, nothing paid
+   * out, no medal, league or challenge; the end card is the whole of it.
+   */
+  readonly atHome?: boolean;
   eyePose(): { position: THREE.Vector3; yaw: number };
   /** World point the camera looks at while playing. */
   screenCentre(): THREE.Vector3;
@@ -82,6 +88,21 @@ export interface ForSaleLike {
   speak?(line: string): void;
   /** Puts the copy back on its stall after it was sold (a purchase handed back at once). */
   restock?(): void;
+  /** A seller with rules of their own (a private seller in their flat, `classifieds/dealer`): the haggle and the sale go through them, not the market. */
+  readonly dealer?: SaleDealer;
+}
+
+/** A seller outside the market (`ForSaleLike.dealer`): their haggle, their sale; no holds, no swaps (their lines say why). */
+export interface SaleDealer {
+  readonly day: number;
+  negotiate(item: StockItem): Negotiation | { line: string };
+  canNegotiate(item: StockItem): boolean;
+  settle(item: StockItem, negotiation: Negotiation, insults: number): void;
+  /** `item` was paid for; `unsold` it was handed back at once (U). */
+  sold(item: StockItem): void;
+  unsold?(item: StockItem): void;
+  readonly noHold: string;
+  readonly noSwap: string;
 }
 
 /** Anything the player can sit (or lie) in: an armchair, the bed. `eyePose` is where the camera goes. */
@@ -120,7 +141,7 @@ export interface SessionActions extends PlayerState, NoticeActions {
   /** Lying in bed: sleep until the next morning (the view fades out and back, the clock winds on). */
   sleep(): void;
   /** Shows the game's longplay on `screen` (TV, projector…); any other screen that was on is switched off. */
-  playOn(screen: VideoScreen, box: GameBox): Promise<void>;
+  playOn(screen: VideoScreen, box: Pick<GameBox, 'game'>): Promise<void>;
   stopScreen(screen: VideoScreen): void;
   /** A door that leads elsewhere was clicked: teleport to `to`, or offer the destinations when it names none. */
   travel(to?: ZoneId): void;

@@ -16,6 +16,10 @@ export interface JournalPanelOptions {
   titleOf?: (gameId: string) => string;
   /** Lines about what is coming (tomorrow's market day, an event this week): the market and the calendar say. */
   upcoming?: () => readonly string[];
+  /** A trail the player follows (the lost prototype, `story/`): its clues so far and the next lead; null before it starts. */
+  file?: () => { title: string; clues: readonly string[]; next?: string } | null;
+  /** More trails, each its own page after `file`'s (the building's sixth floor, `building/hunt`). */
+  files?: readonly (() => { title: string; clues: readonly string[]; next?: string } | null)[];
 }
 
 /** Older days listed under today's page. */
@@ -31,6 +35,8 @@ const BULLETS: Record<string, string> = {
   visit: '☺',
   gift: '✦',
   home: '⌂',
+  story: '✎',
+  hunt: '⌕',
 };
 
 /**
@@ -63,6 +69,7 @@ export class JournalPanel extends ModalPanel {
       ${this.totals(today)}
       ${today.entries.length ? `<ul class="journal-panel__lines">${today.entries.map(line).join('')}</ul>` : '<p class="journal-panel__empty">Nothing written yet today.</p>'}
       ${this.ahead()}
+      ${[this.options.file, ...(this.options.files ?? [])].map((f) => this.file(f?.() ?? null)).join('')}
       ${past.length ? `<h3>Before</h3>${past.map((d) => this.pastDay(d)).join('')}` : ''}
       <footer><button type="button" data-action="close" data-autofocus aria-label="Close">Close the book</button></footer>`;
   }
@@ -89,6 +96,13 @@ export class JournalPanel extends ModalPanel {
     lines.push(...(this.options.upcoming?.() ?? []));
     if (!lines.length) return '';
     return `<h3>To do, to watch</h3><ul class="journal-panel__ahead">${lines.map((l) => `<li>${escapeHtml(l)}</li>`).join('')}</ul>`;
+  }
+
+  /** A trail's page: what was found, in the player's own words, and where to look next. */
+  private file(file: { title: string; clues: readonly string[]; next?: string } | null): string {
+    if (!file) return '';
+    const clues = file.clues.map((c) => `<li>${escapeHtml(c)}</li>`).join('');
+    return `<h3>${escapeHtml(file.title)}</h3><ol class="journal-panel__ahead journal-panel__file">${clues}</ol>${file.next ? `<p class="journal-panel__empty">Next: ${escapeHtml(file.next)}</p>` : ''}`;
   }
 
   private pastDay(day: JournalDay): string {

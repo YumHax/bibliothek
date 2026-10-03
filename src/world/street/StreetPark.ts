@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { seededRandom } from '@/covers/generated/canvasUtils';
+import type { Updatable } from '@/core/Engine';
 import type { Furniture } from '../Furniture';
 import { currentSeason } from '@/time/season';
 import { FLOWER_BEDS, PARK_PATHS, PATH_WIDTH } from '../city/park';
@@ -7,12 +8,15 @@ import { gravelTile } from './groundTextures';
 import { snowCovered } from './snowCover';
 import { FLAT_IN_STREET, PARK_STREET, STREET_ENDS, type Vec2 } from './streetPlan';
 import { GROUND, onSurface } from '../surface/layers';
+import { buildParkFeatures, type ParkFeatures } from './StreetParkFeatures';
 
 export interface StreetParkOptions {
   anisotropy: number;
   /** The lawn's height (a little under the pavement) and how far out it runs (x). */
   lawnY: number;
   reach: number;
+  /** The walkable street's own park: its walked gardens' fence, trees and playground collide (`StreetParkFeatures`). */
+  walkable?: boolean;
 }
 
 /** Flowers per square metre of bed, their colours; how high they stand. */
@@ -30,10 +34,14 @@ function inStreet([x, z]: readonly [number, number]): Vec2 {
  * gravel paths (`PARK_PATHS`, `PATH_WIDTH` wide) laid on the lawn from the gate and the corner,
  * as far as the lawn runs; the round flower beds (`FLOWER_BEDS`), dug soil with flowers in season
  * (spring and summer; a few in early autumn; bare in winter). Flat things on the lawn (`GROUND.marking`),
- * one mesh each plus the flowers instanced. Decoration: nothing here collides (the hedge keeps the player out).
+ * one mesh each plus the flowers instanced; and the park's things in 3D (`buildParkFeatures`: the pond and its
+ * fountain, the bandstand, the playground, the willows, the far shrubbery). Seen from elsewhere (the views of the
+ * street, the roof) nothing collides; the walkable street's (`walkable`) has the gardens behind the gate fenced in.
  */
-export class StreetPark extends THREE.Group implements Furniture {
+export class StreetPark extends THREE.Group implements Furniture, Updatable {
   readonly contactShadow = false;
+  readonly colliders: THREE.Box3[];
+  private readonly features: ParkFeatures;
 
   constructor(options: StreetParkOptions) {
     super();
@@ -121,6 +129,13 @@ export class StreetPark extends THREE.Group implements Furniture {
         this.add(m);
       }
     }
+
+    this.features = buildParkFeatures(this, options.lawnY, options.walkable ?? false);
+    this.colliders = this.features.colliders;
+  }
+
+  update(dt: number): void {
+    this.features.update(dt);
   }
 
   get footprint(): THREE.Box3 {

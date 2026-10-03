@@ -132,8 +132,13 @@ export class RiserStall extends THREE.Group implements StallLike {
     return new THREE.Box3(new THREE.Vector3(POLE_X - POLE_R - 0.02, 0, -DEPTH / 2 - 0.01), new THREE.Vector3(WIDTH / 2 + 0.02, TOP_HEIGHT + 0.3, DEPTH / 2 + 0.02));
   }
 
-  capacityFor(boxWidth: number): number {
+  /** Boxes `boxWidth` wide on the whole stall (before one is built: the street draws the day's stock to fit). */
+  static capacity(boxWidth: number): number {
     return STEPS * RiserStall.perRow(boxWidth);
+  }
+
+  capacityFor(boxWidth: number): number {
+    return RiserStall.capacity(boxWidth);
   }
 
   /**

@@ -473,6 +473,16 @@ export class FirstPersonController implements Updatable {
     this.camera.position.set(x, this.feet + this.height, z);
   }
 
+  /**
+   * Moves the player `dy` straight up or down without a jolt: the walk, the bob and the ground's easing go on as if
+   * nothing happened (a seamless wrap, the stairwell's endless stairs: the same flight a storey higher).
+   */
+  shiftVertically(dy: number): void {
+    this.feet += dy;
+    this.lastFloor += dy;
+    this.camera.position.y += dy;
+  }
+
   // --- Movement ---------------------------------------------------------------------------------
 
   update(dt: number): void {

@@ -51,7 +51,7 @@ export const FIRST_DAY_STEPS: readonly FirstDayStep[] = [
     todo: 'Find the arcade on Front Street',
     tips: {
       stairwell: 'Down the stairs (or the lift): the street door is in the entrance hall.',
-      street: 'The arcade is on this street, look for the neon. It never closes.',
+      street: 'The arcade is on our side of the street, a few doors along from ours, under the neon. It never closes. The fingerpost by our door and the street plan on the wall point the way to everything.',
     },
   },
   {
@@ -77,7 +77,7 @@ export const FIRST_DAY_STEPS: readonly FirstDayStep[] = [
     todo: 'Buy a first game!',
     tips: {
       market: () => `The bargain bin: anything in it for ${BARGAIN_PRICE} coins. ${useVerbOnCap('a game')} to look closer: ${actionKeyLabel('buy')} buys it, ${actionKeyLabel('haggle')} haggles (not in the bin). What you buy is sent home.`,
-      street: `The flat is bare: the furniture shop, the TV repair shop, the florist and the pet shop are on this street too, open ${FLAT_SHOPS_HOURS}. A houseplant is ${HOME_GOOD_PRICES.houseplant} coins.`,
+      street: `The flat is bare: SECOND HOME (furniture), the florist and the pet shop are along Front Street, TV REPAIR round the corner on Park Street, open ${FLAT_SHOPS_HOURS}. A houseplant is ${HOME_GOOD_PRICES.houseplant} coins.`,
     },
   },
   {

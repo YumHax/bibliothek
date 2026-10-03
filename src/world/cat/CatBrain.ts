@@ -74,6 +74,10 @@ const SNORE_AFTER_S = [20, 40] as const;
 const SNORE_CHANCE = 0.5;
 /** A refilled bowl fetches a cat this hungry from this near (m, floor distance), at a trot. */
 const REFILL_CALLS = { hunger: 0.45, distance: 6 };
+/** Up and about, at nothing it would mind dropping: an open front door may tempt it out (`CatOuting`). */
+const ROAMING: readonly CatState[] = ['idle', 'lookAround', 'walk', 'rub', 'groom', 'stretch'];
+/** Back in from the stairs, it stays home a while before wandering off round the flat again (s). */
+const BACK_INDOORS_EXPLORE_S = 60;
 /** Busy at something of its own: a stroke gets a purr and a slow blink, and it carries on. */
 const CARRIES_ON: readonly CatState[] = ['eat', 'drink', 'scratch'];
 /** States a refilled bowl does not interrupt: asleep, busy with the player, in flight, already at the bowl. */
@@ -250,6 +254,22 @@ export class CatBrain {
 
   get isAsleep(): boolean {
     return this.mind.state === 'sleep' || this.mind.state === 'halfWake';
+  }
+
+  /** Up and about on the floor, at nothing it would not drop (`CatOuting`: free to slip out of an open front door). */
+  get roaming(): boolean {
+    return this.mind.perch === null && ROAMING.includes(this.mind.state);
+  }
+
+  /** Back from outside (`CatOuting`): no perch, no errand, a fresh look round. */
+  resume(): void {
+    const mind = this.mind;
+    mind.perch = null;
+    mind.spot = null;
+    mind.pending = 'none';
+    mind.setPurr(false);
+    mind.exploreCooldown = BACK_INDOORS_EXPLORE_S;
+    mind.enter('idle');
   }
 
   get isPurring(): boolean {

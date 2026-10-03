@@ -7,6 +7,8 @@ import type { FirstPersonController } from '@/player/FirstPersonController';
 import type { PayoutStats } from '@/economy';
 import { PayoutOverlay } from '@/ui/PayoutOverlay';
 import { findZFighting, type ZFightOptions } from '@/world/surface/zfight';
+import { forceBlackout } from '@/building/blackout';
+import { forceEndlessStairs } from '@/world/stairwell/downAndDark';
 
 /** Every light (every shadow-casting one with `shadowed`) in the zones but `current`, for the F9 bisection. */
 function lightsOutside(zones: readonly { readonly group: THREE.Object3D }[], current: object, shadowed: boolean): THREE.Light[] {
@@ -34,6 +36,11 @@ export function installStats(parts: { engine: Engine; world: { readonly zones: r
     lightsOutsideCurrentZone: () => lightsOutside(world.zones, zones.current, false),
   });
   exposeDebug({ engine, world, player, zones, graphics, bisect: perf.bisect });
+}
+
+/** `?debug`: `bibliothek.blackout()` cuts the building's power (the next fuse reset brings it back), `bibliothek.endlessStairs()` makes tonight an endless night. */
+export function installBuildingDebug(): void {
+  exposeDebug({ blackout: forceBlackout, endlessStairs: forceEndlessStairs });
 }
 
 /** Adds `entries` to the console's `bibliothek` handle (each installer adds its own). */

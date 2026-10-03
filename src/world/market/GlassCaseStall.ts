@@ -138,8 +138,13 @@ export class GlassCaseStall extends THREE.Group implements StallLike {
     return new THREE.Box3(new THREE.Vector3(-WIDTH / 2 - 0.01, 0, -DEPTH / 2 - 0.01), new THREE.Vector3(WIDTH / 2 + 0.01, TOP + 0.05, DEPTH / 2 + 0.01));
   }
 
-  capacityFor(boxWidth: number): number {
+  /** Boxes `boxWidth` wide in the whole case (before one is built: the street draws the day's stock to fit). */
+  static capacity(boxWidth: number): number {
     return 2 * GlassCaseStall.perRow(boxWidth);
+  }
+
+  capacityFor(boxWidth: number): number {
+    return GlassCaseStall.capacity(boxWidth);
   }
 
   /**

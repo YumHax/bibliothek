@@ -105,6 +105,18 @@ export const COLLECTOR_SETS: readonly CollectorSet[] = [
       p('ps1', 'Symphony of the Night', 'castlevania symphony of the night'),
     ],
   },
+  {
+    // The bootlegs (`catalog/bootlegs`): curiosities the club collects too, found in the bargain bin.
+    id: 'bootlegs',
+    name: 'Pirates of the nineties',
+    reward: 90,
+    pieces: [
+      p('nes', 'Kart Fighter', 'kart fighter'),
+      p('nes', 'Somari', 'somari'),
+      p('gb', 'Sonic 3D Blast 5', 'sonic 3d blast 5'),
+      p('megadrive', 'Pocket Monster', 'pocket monster'),
+    ],
+  },
 ];
 
 /** Lower case, accents off, anything but letters and digits a single space. */

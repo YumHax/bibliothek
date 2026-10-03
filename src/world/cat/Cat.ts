@@ -13,6 +13,8 @@ import { CatBrain, type CatScreen } from './CatBrain';
 import type { CatPerch, WindowLookout } from './spots';
 import { blobShadow } from '../zone/ContactShadows';
 import { CatFly } from './CatFly';
+import { CatOuting, type OutingEnd, type OutingWorld } from './CatOuting';
+import { CAT_OUTING, type HideSpot } from './catOutingPlan';
 
 export interface CatOptions {
   settings: CatSettings;
@@ -100,6 +102,8 @@ export class Cat extends THREE.Group implements Furniture, Interactable, Updatab
   private hovered = false;
   private hoveredFor = 0;
   private gazeBlinkIn = 0;
+  /** Out in the stairwell (or on its way to the open front door): the brain waits meanwhile. */
+  private outing: CatOuting | null = null;
 
   constructor(
     private readonly body: CatBody,
@@ -170,13 +174,20 @@ export class Cat extends THREE.Group implements Furniture, Interactable, Updatab
     this.body.setHovered(hovered);
   }
 
-  label(): string {
+  label(): string | null {
+    // In at a neighbour's, out of sight: nothing to point at.
+    if (this.outing?.isVisiting) return null;
+    if (this.outing?.isOut) return `${this.settings.name} ${this.outing.describe()}`;
     return `${this.settings.name} ${this.brain.describe()}`;
   }
 
-  /** A click strokes the cat. */
+  /** A click strokes the cat; out on the stairs, it is found and goes home. */
   activate(session: SessionActions): void {
     const name = this.settings.name;
+    if (this.outing?.isOut) {
+      if (this.outing.takeHome()) session.react(`${name} trots back up the stairs, tail high`);
+      return;
+    }
     switch (this.brain.pet()) {
       case 'purr':
         session.react(`${name} purrs`);
@@ -196,8 +207,33 @@ export class Cat extends THREE.Group implements Furniture, Interactable, Updatab
   // --- for the session / UI ---------------------------------------------------------------------
 
   /** The player calls the cat: it comes and sits in front of them (or ignores them, cat-style; never the treat jar). */
-  call(how: CatCallHow = 'voice'): 'coming' | 'ignored' | 'asleep' {
+  call(how: CatCallHow = 'voice'): 'coming' | 'ignored' | 'asleep' | 'out' {
+    if (this.outing?.isOut) return this.outing.called() ? 'coming' : 'out';
     return this.brain.call(how === 'treats');
+  }
+
+  // --- out of the flat (`CatOuting`, `escapes`) -----------------------------------------------
+
+  /** Whether it would slip out of a door left open now: adopted, up and about on the floor, not out already. */
+  get mayGoOut(): boolean {
+    return this.adopted && !this.outing && this.brain.roaming;
+  }
+
+  /** The outing under way, if any. */
+  get out(): CatOuting | null {
+    return this.outing;
+  }
+
+  /** Off to the open front door and out to `spot` in the stairwell; false when it cannot (no way to the door). */
+  goOut(building: OutingWorld, spot: HideSpot, ended: (how: OutingEnd, found: boolean) => void): boolean {
+    if (!this.mayGoOut) return false;
+    const outing = new CatOuting({ group: this, body: this.body, motion: this.motion, brain: this.brain, voice: this.voice }, building, spot, (how, found) => {
+      if (this.outing === outing) this.outing = null;
+      ended(how, found);
+    });
+    if (!outing.active) return false;
+    this.outing = outing;
+    return true;
   }
 
   /** Something bought for it after it moved in (the scratching post, the ball): from now on it may go to it. */
@@ -243,8 +279,15 @@ export class Cat extends THREE.Group implements Furniture, Interactable, Updatab
 
   update(dt: number): void {
     this.nav.tick(dt);
-    this.brain.update(dt);
-    this.motion.update(dt);
+    const outing = this.outing;
+    if (outing) {
+      // Out (or heading out): the outing moves it; the flat's walk only while it crosses the flat to the door.
+      outing.update(dt);
+      if (!outing.isOut) this.motion.update(dt);
+    } else {
+      this.brain.update(dt);
+      this.motion.update(dt);
+    }
     this.body.update(dt);
     this.fly.update(dt, this.brain.fly, this);
     this.voice?.setBuzzing?.(this.fly.visible);
@@ -257,6 +300,8 @@ export class Cat extends THREE.Group implements Furniture, Interactable, Updatab
   private updateBlob(): void {
     const blob = this.blob;
     if (!blob) return;
+    // On the stairs the blob would cut the treads: only where it sits on a floor.
+    blob.visible = !this.outing?.isOut || this.outing.resting;
     const lift = this.motion.lift;
     const fade = 1 / (1 + lift * BLOB.shrink);
     blob.position.y = this.blobY - lift;
@@ -282,7 +327,8 @@ export class Cat extends THREE.Group implements Furniture, Interactable, Updatab
     this.player.getEyePosition(this.eye);
     this.getWorldPosition(this.here);
     this.here.y += VOICE_HEIGHT;
-    const distance = this.eye.distanceTo(this.here);
+    // Out in the stairwell its voice carries down the stone: heard from further than indoors.
+    const distance = this.eye.distanceTo(this.here) * (this.outing?.isOut ? CAT_OUTING.carry : 1);
     // The side it is heard from and the walls between: the flat's shared rule (`audio/spatial.ts`).
     const pan = this.listener ? stereoPan(this.listener, this.here) : 0;
     this.wallsIn -= dt;

@@ -14,6 +14,12 @@ import { SHOP_HOURS, clockTime, isShopOpen } from './shopHours';
 import { BAR_GOSSIP, SHOP_TALK, shopName, type ShopOffer } from './shopPlan';
 import { seededRandom } from '@/graphics/canvas';
 import { SCRATCH_PER_DAY, cardInProgress, cardsToday, drawCard, keepCardInProgress, recordCard, type CardInProgress } from './scratchCard';
+import { STREET_TREATS_PER_DAY } from '@/economy/pricing';
+import { currentSeason } from '@/time/season';
+import { errandOf } from '@/errands/errands';
+import { buyErrand } from '@/errands/buy';
+import { pocket } from '@/errands/pocket';
+import type { ShopKind } from '../streetPlan';
 
 /** What the shops draw on: the clock, the coins, the flea market (the café's tips and coffee), the tabac's card. */
 export interface ShopServices {
@@ -24,7 +30,12 @@ export interface ShopServices {
   marketDay: { readonly theme: MarketDayTheme; news(): readonly MarketNews[] };
   isWanted: (id: string) => boolean;
   scratch: ScratchCardPanel;
+  /** What is on along the street today and tomorrow (`streetNews`): the bar's regulars pass it on. */
+  streetNews: () => readonly string[];
 }
+
+/** Which line each shop said last, across the street's rebuilds this page (a look in goes on to the next line). */
+const looked = new Map<ShopKind, number>();
 
 /**
  * A shop's door on Front Street, as the player meets it: the caption says whose it is and what it
@@ -40,7 +51,6 @@ export class ShopEntrance extends THREE.Group implements Furniture, Interactable
   readonly contactShadow = false;
   readonly hitboxes: THREE.Object3D[];
   private readonly shopName: string;
-  private looked = 0;
 
   constructor(private readonly door: ShopDoor, private readonly services: ShopServices) {
     super();
@@ -66,11 +76,27 @@ export class ShopEntrance extends THREE.Group implements Furniture, Interactable
     if (kind === 'shut') return `${name} · shut for good`;
     if (SHOP_TALK[kind].offer?.id === 'scratch' && cardInProgress()) return `${name} · finish your scratch card`;
     if (!this.isOpen) return `${name} · closed, opens at ${clockTime(SHOP_HOURS[kind]?.open ?? 8)}`;
+    const till = this.closesAt();
     const offer = SHOP_TALK[kind].offer;
-    if (!offer) return `${name} · look in`;
+    if (!offer) return `${name} · look in${till}`;
     if (offer.id === 'coffee' && this.services.market.hadCoffee) return `${name} · a word with the barista (you have had your coffee today)`;
     if (offer.id === 'scratch' && cardsToday() >= SCRATCH_PER_DAY) return `${name} · “That’s enough cards for today, love.”`;
-    return `${name} · buy ${offer.title} (${offer.price} coin${offer.price > 1 ? 's' : ''})`;
+    if (this.soldOut(offer)) return `${name} · a word (no more ${offer.id === 'drink' ? 'lemonade' : offer.id} today)`;
+    return `${name} · buy ${offer.title} (${offer.price} coin${offer.price > 1 ? 's' : ''})${till}`;
+  }
+
+  /** " · till 19:30": when the shop shuts (nothing for one open past midnight's small hours, or never shut). */
+  private closesAt(): string {
+    const hours = SHOP_HOURS[this.door.shop.kind];
+    if (!hours || hours.close - hours.open >= 24) return '';
+    return ` · till ${clockTime(hours.close)}`;
+  }
+
+  /** The croissants, lemonades and scraps a real day are counted (`errands/pocket`). */
+  private soldOut(offer: ShopOffer): boolean {
+    if (offer.id === 'drink') return pocket.boughtToday('lemonade') >= STREET_TREATS_PER_DAY.lemonade;
+    if (offer.id === 'croissant' || offer.id === 'scrap') return pocket.boughtToday(offer.id) >= STREET_TREATS_PER_DAY[offer.id];
+    return false;
   }
 
   activate(session: SessionActions): void {
@@ -87,11 +113,19 @@ export class ShopEntrance extends THREE.Group implements Furniture, Interactable
       session.refuse(`${capitalise(this.shopName)} is closed. ${talk.closed} Opens at ${clockTime(SHOP_HOURS[kind]?.open ?? 8)}.`);
       return;
     }
-    if (talk.offer) {
+    if (talk.offer && !this.soldOut(talk.offer)) {
       this.sell(session, talk.offer);
       return;
     }
-    session.react(talk.looks[this.looked++ % talk.looks.length] ?? '');
+    session.react(this.nextLook(kind));
+  }
+
+  /** The shop's next line (one after the other, carried across the street's rebuilds). */
+  private nextLook(kind: ShopKind): string {
+    const lines = SHOP_TALK[kind].looks;
+    const n = looked.get(kind) ?? 0;
+    looked.set(kind, n + 1);
+    return lines[n % lines.length] ?? '';
   }
 
   private get isOpen(): boolean {
@@ -131,12 +165,28 @@ export class ShopEntrance extends THREE.Group implements Furniture, Interactable
         session.openPanel(this.services.scratch);
         return;
       case 'croissant':
-        session.pay({ price: offer.price, paid: () => 'A warm croissant in a paper bag. The pigeons watch you eat it.' });
+      case 'scrap':
+        buyErrand(session, errandOf(offer.id, currentSeason().name), offer.id === 'croissant' ? '“Last batch is gone, love.”' : '“That’s all the scraps I’ve got.”');
         return;
       case 'drink':
-        session.pay({ price: offer.price, paid: () => `A lemonade at the bar. ${BAR_GOSSIP[this.looked++ % BAR_GOSSIP.length]}` });
+        session.pay({
+          price: offer.price,
+          paid: () => {
+            pocket.recordBuy('lemonade');
+            return `A lemonade at the bar. ${this.gossip()}`;
+          },
+        });
         return;
     }
+  }
+
+  /** What the regulars go on about: what is on along the street (the collector, a garage sale, the arcade), else their old lines. */
+  private gossip(): string {
+    const news = this.services.streetNews();
+    const n = looked.get('bar') ?? 0;
+    looked.set('bar', n + 1);
+    if (news.length && n % 3 !== 2) return `“${news[n % news.length]}”`;
+    return BAR_GOSSIP[n % BAR_GOSSIP.length]!;
   }
 
   /** Lays a new card on the tabac's panel (paid for already); "Another" buys the next one from the panel. */

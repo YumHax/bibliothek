@@ -2,11 +2,15 @@ import type { Game } from '@/catalog/types';
 import { getPlatform } from '@/catalog/platforms';
 import { formatReleaseDate } from '@/catalog/format';
 import { describeEdition } from '@/economy/pricing';
+import { describeVariant } from '@/economy/copyTraits';
+import { CONVERTER_OF } from '@/economy/regionLock';
 import { CONTROLS } from './controls';
 import { escapeHtml } from './html';
 import { renderKeys } from './keys';
 import { fadeIn, fadeOut } from './fade';
 import { lastDevice } from '@/input/lastDevice';
+import type { ReviewSource } from '@/reviews/Reviews';
+import { reviewCardHtml } from '@/reviews/reviewCard';
 
 /** Built on each show, for the device last used (the controller's buttons, the touch bar's, or the keys as bound and printed). */
 const holdingHints = (): string => {
@@ -31,12 +35,21 @@ export interface PanelExtra {
 /** Side panel with the details of the game currently held by the Inspector. */
 export class GamePanel {
   private readonly root: HTMLElement;
+  /** The press at the time (`reviews/`): its card is added under the details once the game's reviews come in. */
+  private reviews: ReviewSource | null = null;
+  /** The game shown, so reviews arriving for the one put down are dropped. */
+  private shown: string | null = null;
 
   constructor(container: HTMLElement) {
     this.root = document.createElement('aside');
     this.root.className = 'game-panel';
     this.root.hidden = true;
     container.appendChild(this.root);
+  }
+
+  /** Shows each game's reviews too, once known (`/api/reviews`). */
+  setReviews(reviews: ReviewSource): void {
+    this.reviews = reviews;
   }
 
   show(game: Game, extra: PanelExtra = {}): void {
@@ -49,6 +62,10 @@ export class GamePanel {
     const rows: Array<[string, string | undefined]> = [
       ...(extra.rows ?? []),
       ['Edition', edition ? edition[0]!.toUpperCase() + edition.slice(1) : undefined],
+      // What sets this copy apart (sealed, a misprint, a crushed box), shown on a stall's copy too; what was found inside it.
+      ['Copy', describeVariant(game)],
+      ['Bootleg', game.bootleg ? 'An unlicensed cartridge: a curiosity, never a fake' : undefined],
+      ['Inside', game.past?.found ? game.past.text : undefined],
       // What the flat can do for it (docs/household.md): a worn box cleaned at the kitchen table, a sticker lifted with warm air.
       ['State', own ? ownState(game) : undefined],
       ['Sticker', own && game.sticker ? 'An old shop’s price sticker on the cover (warm air lifts it off)' : undefined],
@@ -58,7 +75,7 @@ export class GamePanel {
       ['Developer', game.developer],
       ['Publisher', game.publisher],
       ['Genre', game.genre],
-      ['Region', game.region],
+      ['Region', game.region === 'Japan' && CONVERTER_OF[game.platform] ? 'Japan (a western console needs a converter: TV REPAIR)' : game.region],
     ];
     this.root.innerHTML = `
       <h2>${escapeHtml(game.title)}</h2>
@@ -70,12 +87,33 @@ export class GamePanel {
       </dl>
       ${note ? `<p class="game-panel__note">${escapeHtml(note)}</p>` : ''}
       ${game.description ? `<p>${escapeHtml(game.description)}</p>` : ''}
+      <section class="review-card" hidden></section>
       <footer>${extra.hints ?? holdingHints()}</footer>`;
     fadeIn(this.root, 'game-panel--closing');
+    this.shown = game.id;
+    this.showReviews(game);
+  }
+
+  /** The reviews' card, at once when known, else when the lookup answers (if the game is still the one shown). */
+  private showReviews(game: Game): void {
+    const reviews = this.reviews;
+    if (!reviews) return;
+    const fill = (found: Parameters<typeof reviewCardHtml>[0] | null | undefined): void => {
+      const card = this.root.querySelector<HTMLElement>('.review-card');
+      if (!found || !card || this.shown !== game.id) return;
+      const html = reviewCardHtml(found);
+      if (!html) return;
+      card.innerHTML = html;
+      card.hidden = false;
+    };
+    const known = reviews.peek(game);
+    if (known) fill(known);
+    else void reviews.lookup(game).then(fill);
   }
 
   /** Put down: a short fade, then hidden. */
   hide(): void {
+    this.shown = null;
     fadeOut(this.root, 'game-panel--closing', 150);
   }
 }

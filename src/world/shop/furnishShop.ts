@@ -18,6 +18,7 @@ import { Radio } from '../kitchen/Radio';
 import { Birdcage } from './Birdcage';
 import { shopDoorOf, streetOf } from './shopOutlook';
 import { ShopCounter } from './ShopCounter';
+import { CounterErrand } from './CounterErrand';
 import { ForSale } from './ForSale';
 import { buildPiece } from './displayPieces';
 import { DisplayTable } from './DisplayTable';
@@ -36,6 +37,7 @@ import { makeShopProp, type ShopContext } from './shopProps';
 import { PetShopNoises, ShopRadio, ShopRoomTone, SnowHiss, playTill } from './shopSounds';
 import { SHOP_DOOR, SHOP_PLANS, type OnSurface, type ShopFixture, type ShopPlan, type ShopSound, type ShopZoneId } from './shopPlan';
 import { surfaceOfRoom } from '@/audio/footSurface';
+import { furnishRepairCorner } from '../repair/furnishRepair';
 
 /**
  * The shop's daylight: the sky's through its one window, never darker than this (the back of a shop is lit by its
@@ -92,7 +94,7 @@ export function furnishShop(zone: Zone, ctx: BuildContext): ZoneHandle {
   const accent = `#${plan.accent.toString(16).padStart(6, '0')}`;
   const { along, width, height } = plan.window;
   const window = zone.placeAt(
-    new ShopWindow({ width, height, name, letters: look.letters, door, along, front: plan.room.depth / 2, zoneFrame: zone.group, dayNight: sky.dayNight, outdoors: sky.outdoors, viewer: listener as THREE.Camera }),
+    new ShopWindow({ width, height, name, letters: look.letters, door, along, front: plan.room.depth / 2, zoneFrame: zone.group, dayNight: sky.dayNight, outdoors: sky.outdoors, viewer: listener as THREE.Camera, ...(upgrades ? { upgrades } : {}) }),
     { wall: 'front', along, y: 0 },
   );
   zone.onUnload(
@@ -139,6 +141,8 @@ export function furnishShop(zone: Zone, ctx: BuildContext): ZoneHandle {
     }),
     plan.counter.at,
   );
+  // TV REPAIR buys working consoles over its counter and sells broken ones from a crate (docs/household.md "Repairing a console").
+  if (plan.shop === 'electronics') furnishRepairCorner(zone, ctx, counter);
   const home = zone.toLocal(counter.localToWorld(CLERK_AT.clone()));
   const { seed, lines, callOuts, thanks, chores } = plan.clerk;
   const clerk = zone.place(new ShopClerk({ viewer: listener, seed, lines, callOuts, thanks, chores, home: { at: home.clone(), yaw: counter.rotation.y }, label: 'The shopkeeper · chat' }), home, counter.rotation.y);
@@ -172,6 +176,8 @@ export function furnishShop(zone: Zone, ctx: BuildContext): ZoneHandle {
       placed.push(placeOn(makeShopProp(fixture.prop, fixture.options, { ...shop, seed: index + 1 }), fixture));
     }
   });
+  // What is sold over the counter to be used up (the pet shop's treats, the florist's bunches: `errands/`).
+  for (const shown of plan.errands ?? []) placeOn(new CounterErrand(shown.errand, sold), shown);
   // The fittings, now all there, lit as the switch is; the props' sounds at their places.
   for (const item of placed) {
     if (isShopFitting(item)) {

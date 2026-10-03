@@ -1,0 +1,124 @@
+/* The kitchen table's console repair and TV REPAIR's counter (`ui/repair/`): a card over the view (`.ui-modal--centre`). */
+.repair-panel {
+  padding: 1.2rem;
+  background: var(--ui-backdrop);
+}
+.repair {
+  width: min(44rem, 100%);
+  max-height: 100%;
+  overflow-y: auto;
+  padding: 1rem 1.2rem 0.9rem;
+  box-sizing: border-box;
+}
+.repair h2 {
+  margin: 0 0 0.25rem;
+  font-family: var(--ui-font-display);
+  font-weight: 400;
+  font-size: 1.2rem;
+}
+.repair__job {
+  margin: 0 0 0.6rem;
+  font-size: 0.85rem;
+  font-style: italic;
+  color: var(--ui-text-dim);
+}
+.repair__bench {
+  border-radius: var(--ui-radius-sm);
+  overflow: hidden;
+  touch-action: none;
+  user-select: none;
+}
+.repair__svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.repair__svg [data-hit] {
+  cursor: pointer;
+}
+.repair__svg--finding .repair__part:hover {
+  filter: drop-shadow(0 0 6px #f0d070);
+}
+.repair__shell {
+  transition: opacity 0.25s ease;
+}
+.repair__shell--ghost {
+  opacity: 0.35;
+}
+.repair__shell--ghost:hover {
+  opacity: 0.55;
+}
+.repair__screw:hover circle {
+  stroke: #f0d070;
+}
+.repair__screw--out {
+  cursor: default;
+}
+.repair__power:hover rect {
+  fill: #3a3a40;
+}
+.repair__led--on {
+  filter: drop-shadow(0 0 8px #ff3a2a);
+}
+.repair__step {
+  min-height: 2.6em;
+  margin: 0.6rem 0 0.5rem;
+  font-size: 0.92rem;
+}
+.repair__tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+.repair__tool {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.35rem 0.6rem;
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius-sm);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+.repair__tool:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+.repair__tool:not(:disabled):hover {
+  border-color: #f0d070;
+}
+.repair__tool--in-hand {
+  opacity: 1 !important;
+  border-color: #f0d070;
+}
+.repair footer {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 0.8rem;
+}
+.console-desk__rows {
+  list-style: none;
+  margin: 0.4rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.console-desk__rows li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.8rem;
+}
+.console-desk__rows small {
+  display: block;
+  font-size: 0.8rem;
+  color: var(--ui-text-dim);
+}
+.console-desk__dim {
+  font-size: 0.9rem;
+  color: var(--ui-text-dim);
+}

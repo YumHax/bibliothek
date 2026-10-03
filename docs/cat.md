@@ -92,6 +92,29 @@ render their own zone's layer).
 - `CatFly.ts`: the speck the cat chases (`flyStalk` watches, `flyPounce` leaps under it); `CatBrain.fly` is its point
   (`CatMind.flying`, set on entering either state). The ball is batted on along the cat-to-ball direction.
 
+## Out on the stairs
+
+The cat may slip out of the flat's front door into the stairwell (`escapes.ts`, `CatOuting.ts`, data in `catOutingPlan.ts`).
+- **When**: the front door stands open `doorOpenS` (3 s) while the cat is adopted, on the floor and free (`CatBrain.roaming`:
+  idle, looking round, walking, rubbing, washing, stretching) within `reach` (7 m) of it. Then `chance` (0.3), and never two
+  game days running (`everyDays`, `KEYS.catOutings`). `CatEscapes` (an empty prop in the stairwell's zone, wired by
+  `placeCatEscapes` in `bootstrap/world.ts`) decides.
+- **How**: `Cat.goOut` hands the cat to a `CatOuting` while the brain waits. It crosses the flat on its own grid to just inside
+  the door (`CatMotion`; the door shut first, or 20 s, and it forgets it), then follows the residents' ways (`stairRoutes`)
+  with its feet on the treads (`StairwellHandle.ground`, eased per riser like a `StairWalker`) to a `spots` entry: a landing's
+  doormat, the lift's car (it rides with it; the car elsewhere, it waits by the gate), the hall's mailboxes, or in at
+  Mrs Dubois' (3:1, only while she is in: the cat goes out of sight). Nothing collides; no blob shadow on the flights.
+- **Found**: hiding, it miaows down the well every 7-14 s, its voice carried (heard at `carry` 0.5 of the distance, the
+  walls from the flat's route round the front door). A click, or C within `comesWithin` (4.5 m), sends it trotting back up
+  (`takeHome`). C from further gets a miaow back (`call` returns `'out'`, worded in `game/CatCare`). It waits on our mat
+  while the door is shut and walks in when it opens. `CatBrain.resume` then gives the brain the cat back where it stands.
+- **At Mrs Dubois'**: after 70-150 s she comes up and knocks (`stairwell/DoorVisitor`, one person, one visit at a time,
+  through the `Doorstep`). Answered, she says her line and the cat appears on the mat (`returned`) with a friendship nudge
+  (`building/friendship`). Unanswered, she leaves it there with a note under the door.
+- **Brings back**: walked home by itself, `bringsBack` (0.3) of the time it drops something at the player's feet (a read
+  card). `addCatFind` (exported from `cat/index.ts`) lets another feature hand it something first (the treasure hunt's clue).
+- A tip says it is out until it is back. A reload finds it at home (the outing is not saved).
+
 ## Time, treats and the bowl
 
 - `sleepDrive` is a smoothstep curve over hour knots (`SLEEP_CURVE` in `CatMind.ts`), no steps.

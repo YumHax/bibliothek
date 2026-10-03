@@ -64,12 +64,18 @@ export class HomeUpgrades {
   /** Whether one more of `upgrade` can be bought: under its `max`, and what it needs is owned. */
   canBuy(upgrade: HomeUpgrade): boolean {
     const good = homeGood(upgrade);
-    return this.count(upgrade) < good.max && (!good.requires || this.has(good.requires));
+    return this.count(upgrade) < this.limit(upgrade) && (!good.requires || this.has(good.requires));
+  }
+
+  /** How many of `upgrade` the flat has room for now: its `max`, or its `until.max` while what lifts it is not owned. */
+  limit(upgrade: HomeUpgrade): number {
+    const { max, until } = homeGood(upgrade);
+    return until && !this.has(until.upgrade) ? until.max : max;
   }
 
   /** `buy`, `full` (as many at home as it has spots) or `needs` (what it goes with is not bought yet): the one rule every counter shows. */
   status(upgrade: HomeUpgrade): HomeGoodStatus {
-    if (this.count(upgrade) >= homeGood(upgrade).max) return 'full';
+    if (this.count(upgrade) >= this.limit(upgrade)) return 'full';
     return this.canBuy(upgrade) ? 'buy' : 'needs';
   }
 
@@ -86,7 +92,7 @@ export class HomeUpgrades {
     // Nothing saved yet with games already owned: a save from before that never bought anything for the flat.
     if (!this.state.shelvesOwed && this.store.exists) return;
     const needed = Math.max(0, Math.ceil(games / BOXES_PER_BOOKCASE) - 1);
-    const bookcases = Math.min(homeGood('bookcase').max, this.state.counts.bookcase + needed);
+    const bookcases = Math.min(this.limit('bookcase'), this.state.counts.bookcase + needed);
     this.set({ counts: { ...this.state.counts, bookcase: bookcases }, shelvesOwed: false });
   }
 

@@ -85,6 +85,14 @@ export type TxFailure = 'unavailable' | 'pricing' | 'owned' | 'notOwned' | 'shor
 
 export type TxResult<T extends object = object> = ({ ok: true } & T) | { ok: false; reason: TxFailure; needed?: number; have?: number };
 
+/**
+ * A one-of-a-kind story item (the lost prototype, `story/prototype.PROTOTYPE_ID`, ids prefixed `proto:`): never sold,
+ * swapped or traded away; every desk and stall refuses it (`notOwned`, the panels say why).
+ */
+export function isKeepsake(game: Pick<Game, 'id'>): boolean {
+  return game.id.startsWith('proto:');
+}
+
 const fail = (reason: TxFailure, needed?: number, have?: number): { ok: false; reason: TxFailure; needed?: number; have?: number } => ({
   ok: false, reason, ...(needed !== undefined ? { needed } : {}), ...(have !== undefined ? { have } : {}),
 });
@@ -120,7 +128,7 @@ export class Transactions {
         const old = collection.find(item.game.id);
         if (old) market?.consign({ ...old, addedAt: undefined });
         // The first print is a fresh copy: nothing of the old one's state (cleaned, stickered, an import) carries over.
-        collection.update(item.game.id, { edition: 'firstPrint', condition: undefined, repro: undefined, restored: undefined, sticker: undefined, region: item.game.region, acquired: game.acquired });
+        collection.update(item.game.id, { edition: 'firstPrint', condition: undefined, repro: undefined, restored: undefined, sticker: undefined, variant: item.game.variant, variantNote: item.game.variantNote, past: item.game.past, region: item.game.region, acquired: game.acquired });
       } else {
         collection.add(game);
       }
@@ -200,7 +208,7 @@ export class Transactions {
     if (!wallet || !collection?.remove || !market) return fail('unavailable');
     if (!item.priced) return fail('pricing');
     // A game lent to a friend is not on the shelf to hand over (the panel hides it; this keeps it so).
-    if (!collection.owns(mine.id) || mine.status === 'lent') return fail('notOwned');
+    if (!collection.owns(mine.id) || mine.status === 'lent' || isKeepsake(mine)) return fail('notOwned');
     if (collection.owns(item.game.id)) return fail('owned');
     const topUp = Math.max(0, item.due - value);
     if (wallet.coins < topUp) return fail('short', topUp, wallet.coins);
@@ -220,12 +228,24 @@ export class Transactions {
   sellToDesk(game: Game, offer: number): TxResult {
     const { wallet, collection, market, standing } = this.deps;
     if (!wallet || !collection?.remove || !market) return fail('unavailable');
-    if (!collection.owns(game.id) || game.status === 'lent') return fail('notOwned');
+    if (!collection.owns(game.id) || game.status === 'lent' || isKeepsake(game)) return fail('notOwned');
     batch(() => {
       market.consign({ ...game, status: 'owned', addedAt: undefined });
       wallet.earnCoins(offer);
       collection.remove!(game.id);
       standing?.record('sell');
+    });
+    return { ok: true };
+  }
+
+  /** The neighbours' party (`building/neighboursParty`): a resident buys `game` for `offer` coins and takes it home (not to the market). */
+  sellToNeighbour(game: Game, offer: number): TxResult {
+    const { wallet, collection } = this.deps;
+    if (!wallet || !collection?.remove) return fail('unavailable');
+    if (!collection.owns(game.id) || game.status === 'lent' || isKeepsake(game)) return fail('notOwned');
+    batch(() => {
+      wallet.earnCoins(offer);
+      collection.remove!(game.id);
     });
     return { ok: true };
   }
@@ -356,7 +376,7 @@ export class Transactions {
     const { collection, market } = this.deps;
     if (!collection?.remove || !collection.find) return fail('unavailable');
     const mine = collection.find(give.id);
-    if (!mine || mine.status === 'lent' || mine.status === 'wishlist') return fail('notOwned');
+    if (!mine || mine.status === 'lent' || mine.status === 'wishlist' || isKeepsake(mine)) return fail('notOwned');
     if (collection.owns(get.id)) return fail('owned');
     const game = bought(get, 0, who, market?.day ?? 0);
     batch(() => {
@@ -365,5 +385,71 @@ export class Transactions {
       alsoDo?.();
     });
     return { ok: true, game };
+  }
+
+  /** The saleroom's hammer fell for the player: `price` for a game lot, into the parcel; `alsoDo` (the lot's result) in the same save. */
+  winAuctionLot(lotGame: Game, price: number, where: string, alsoDo?: () => void): TxResult<{ game: Game }> {
+    const { wallet, collection, market, standing } = this.deps;
+    if (!wallet || !collection) return fail('unavailable');
+    if (collection.owns(lotGame.id)) return fail('owned');
+    if (wallet.coins < price) return fail('short', price, wallet.coins);
+    const game = bought(lotGame, price, where, market?.day ?? 0);
+    batch(() => {
+      wallet.spend(price);
+      collection.add(game);
+      standing?.record('buy', lotGame.platform);
+      alsoDo?.();
+    });
+    return { ok: true, game };
+  }
+
+  /** A sealed carton bought (the market's corner, the saleroom's hammer): the coins go, `takeHome` puts it in the hallway, in one save. */
+  buySealedLot(price: number, takeHome: () => void): TxResult<{ paid: number }> {
+    const { wallet } = this.deps;
+    if (!wallet) return fail('unavailable');
+    if (wallet.coins < price) return fail('short', price, wallet.coins);
+    batch(() => {
+      wallet.spend(price);
+      takeHome();
+    });
+    return { ok: true, paid: price };
+  }
+
+  /**
+   * The next thing out of a sealed carton at home (`take`: `SealedLots.takeNext`): a game into the collection with its
+   * share of the carton's price on the receipt (one the player has already: `duplicateCoins` for it instead), loose
+   * coins pocketed, junk just looked at; all in one save.
+   */
+  unpackCarton<T extends { item: { kind: 'game'; game: Game } | { kind: 'junk'; coins: number } }>(
+    take: () => T | null,
+    receipt: (carton: T) => { price: number; where: string },
+    duplicateCoins: (game: Game, carton: T) => number,
+  ): TxResult<{ taken: T; game?: Game; coins: number; duplicate: boolean }> {
+    const { wallet, collection, market } = this.deps;
+    if (!wallet || !collection) return fail('unavailable');
+    type Unpacked = { taken: T; game?: Game; coins: number; duplicate: boolean };
+    // Set inside the batch (`as`: not narrowed to null by the assignment).
+    let out = null as Unpacked | null;
+    batch(() => {
+      const taken = take();
+      if (!taken) return;
+      const { item } = taken;
+      if (item.kind === 'junk') {
+        if (item.coins > 0) wallet.earnCoins(item.coins);
+        out = { taken, coins: item.coins, duplicate: false };
+        return;
+      }
+      if (collection.owns(item.game.id)) {
+        const coins = Math.max(1, duplicateCoins(item.game, taken));
+        wallet.earnCoins(coins);
+        out = { taken, coins, duplicate: true };
+        return;
+      }
+      const { price, where } = receipt(taken);
+      const game = bought(item.game, price, where, market?.day ?? 0);
+      collection.add(game);
+      out = { taken, game, coins: 0, duplicate: false };
+    });
+    return out ? { ok: true, ...out } : fail('done');
   }
 }

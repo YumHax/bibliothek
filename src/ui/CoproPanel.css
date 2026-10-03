@@ -1,0 +1,72 @@
+/* The co-owners' postal vote: a card over the view (`.ui-modal--centre`). */
+.copro-panel {
+  padding: 1.5rem;
+  background: var(--ui-backdrop);
+}
+.copro-panel__card {
+  width: min(34rem, 100%);
+  max-height: 100%;
+  overflow-y: auto;
+  padding: 1.1rem 1.2rem 1rem;
+  box-sizing: border-box;
+}
+.copro-panel__card h2 {
+  margin: 0 0 0.3rem;
+  font-family: var(--ui-font-display);
+  font-weight: 400;
+  font-size: 1.25rem;
+}
+.copro-panel__item {
+  margin-top: 0.9rem;
+  padding-top: 0.7rem;
+  border-top: 1px solid var(--ui-border);
+}
+.copro-panel__item h3 {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+}
+.copro-panel__dim {
+  margin: 0.2rem 0 0;
+  font-size: 0.85rem;
+  color: var(--ui-text-dim);
+}
+.copro-panel__options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.5rem;
+}
+.copro-panel__option {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  text-align: left;
+}
+.copro-panel__who,
+.copro-panel__now {
+  font-size: 0.75rem;
+  color: var(--ui-text-dim);
+}
+.copro-panel__buy {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-top: 0.5rem;
+  font-size: 0.85rem;
+}
+.copro-panel__buy span {
+  flex: 1;
+}
+.copro-panel__status {
+  min-height: 1.2em;
+  margin: 0.8rem 0 0;
+  font-size: 0.85rem;
+  color: var(--ui-danger, #d55);
+}
+.copro-panel__card footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.6rem;
+}

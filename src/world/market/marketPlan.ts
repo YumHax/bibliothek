@@ -44,6 +44,8 @@ const DESK_OFF_WALL = 0.85;
 /** Where a clerk stands, desk-local: between the desk and the wall. */
 const CLERK_AT: [number, number] = [0, -0.58];
 const HALF_DEPTH = MARKET_ROOM.depth / 2;
+/** The saleroom's door in the back wall (x), as big as the one on the saleroom's side. */
+const SALEROOM_DOOR = { along: -3.65, width: 0.95, height: 2.2 };
 
 export const MARKET_PLAN = {
   room: MARKET_ROOM,
@@ -67,7 +69,7 @@ export const MARKET_PLAN = {
     bevel: false,
     variance: 0.03,
     roughness: 0.85,
-    openings: [{ wall: 'front', along: 0, width: 1.4 + 2 * 0.07 + 0.04 }],
+    openings: [{ wall: 'front', along: 0, width: 1.4 + 2 * 0.07 + 0.04 }, { wall: 'back', along: SALEROOM_DOOR.along, width: SALEROOM_DOOR.width + 2 * 0.07 + 0.04 }],
   } as TiledWainscotOptions,
 
   /** Iron trusses across the hall and a roof light down the aisle. */
@@ -99,7 +101,11 @@ export const MARKET_PLAN = {
   telly: { stall: 3, x: -0.5, title: 'SUPER QUEST' },
 
   /** The household stall by the way in, turned to face the hall: furniture for the flat (`HOME_GOODS`), one piece per click. */
-  household: { at: { floor: [-3.3, HALF_DEPTH - 0.95], rotationY: Math.PI } as Placement, sign: 'HOUSEHOLD', cloth: 0x4a4a3a },
+  household: {
+    at: { floor: [-3.3, HALF_DEPTH - 0.95], rotationY: Math.PI } as Placement, sign: 'HOUSEHOLD', cloth: 0x4a4a3a,
+    /** The crate of soundtrack LPs on the floor past the table's far end (1.6 m long), on the buyers' side (stall-local x, z). */
+    recordCrate: [1.12, 0.3] as [number, number],
+  },
   /** The coffee cart against the right wall, facing the hall, its barista behind it. */
   coffee: {
     at: { floor: [3.95, 3.2], rotationY: -Math.PI / 2 } as Placement,
@@ -109,6 +115,18 @@ export const MARKET_PLAN = {
   noticeBoard: { wall: 'front', along: -1.6, y: 1.6 } as Placement,
   /** The day's job lot in a crate on the floor, next to the bargain bin. */
   lot: { floor: [1.9, HALF_DEPTH - 0.6], rotationY: Math.PI } as Placement,
+  /** The sealed carton of the day (`economy/boxLots.ts`) on its pallet against the left wall by the way in, facing the hall. */
+  carton: { floor: [-4.4, 3], rotationY: Math.PI / 2 } as Placement,
+
+  /**
+   * The saleroom's door in the back wall's left end (`world/saleroom/`), between the corner's palm and the crates, and
+   * where coming back from it sets the player down: in front of it, facing the hall.
+   */
+  saleroom: {
+    door: { at: { wall: 'back', along: SALEROOM_DOOR.along, y: 0 } as Placement, width: SALEROOM_DOOR.width, height: SALEROOM_DOOR.height },
+    arrival: { at: [SALEROOM_DOOR.along, -HALF_DEPTH + 0.85] as [number, number], yaw: Math.PI },
+    sign: { wall: 'back', along: SALEROOM_DOOR.along, y: 2.6 } as Placement,
+  },
   /** Two boards either side of the way in: where each platform's stall is, and the week's market days. */
   directory: { floor: [-1.25, HALF_DEPTH - 1.45], rotationY: -0.3 } as Placement,
   program: { floor: [1.25, HALF_DEPTH - 1.45], rotationY: 0.3 } as Placement,

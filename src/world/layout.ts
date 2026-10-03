@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import type { PlatformId } from '@/catalog/types';
 import { getPlatform } from '@/catalog/platforms';
-import type { Zone } from './zone/Zone';
+import type { LazyZoneBuilder, Zone, ZoneBuilder } from './zone/Zone';
 import { Television } from './Television';
 import { Projector } from './Projector';
 import { Seat } from './Seat';
@@ -34,9 +34,18 @@ import { heardBy } from './build/hearing';
 import { curtainsToSkylight } from './build/follow';
 import { placerFor } from './build/owned';
 import { bookcasesIn, livingShelvingOptions, movableBookcases } from './build/bookcases';
+import { labelledBookcases } from './labels/labelledBookcases';
+import { furnishShowcases } from './showcase/furnishShowcases';
 import { resolvePlacement } from './Placement';
 import { furnishCollectorCorner, placeCollectorsBook } from './collector/furnishCollector';
 import { rugsUnderfoot } from './build/rugsUnderfoot';
+import { ChannelDial } from './roof/ChannelDial';
+import { RecordPlayer } from './vinyl/RecordPlayer';
+import { placeAnnexOpening } from './annex/AnnexOpening';
+import { furnishAnnex } from './annex/furnishAnnex';
+import { furnishStudy } from './annex/furnishStudy';
+import { onRouxPhase } from '@/building/rouxMove';
+import { regionLockFor } from '@/economy/regionLock';
 
 // The builders' shared types live in `buildContext.ts`; re-exported for the code that imported them from here.
 export type { BuildContext, ZoneHandle, MarketHallServices, CollectionContext, HomeContext, MoneyContext, ArcadeContext, MarketContext } from './buildContext';
@@ -67,18 +76,29 @@ export function furnishRoom(zone: Zone, ctx: BuildContext): RoomHandle {
   // 0. The shell: floor, walls (cut by the doorways), ceiling, base lighting following the sky, and
   //    the door to the hallway hung in its doorway (the leaf moves its own collider through the zone's scoped set).
   const room = furnishShell(zone, sky, plan.room);
+  // The opening in the right wall to Mrs Roux's rooms (walled up till they are the flat's); first, so the shelving
+  // below knows whether its front-right slot is still there (`bookcasesIn`).
+  placeAnnexOpening(zone, ctx);
 
   // 1. Shelving along the back wall then the right one (clear of the projector picture): the one bookcase the flat
   //    starts with and those bought (`bookcasesIn`); what does not fit goes to `overflow`, for the bedroom's bookcases.
   const standing = (): number => (upgrades ? bookcasesIn(upgrades.count('bookcase')).living : slotCount(livingShelvingOptions()));
-  const shelving = new Shelving(zone, covers, shelved ?? games, { ...livingShelvingOptions(), id: 'living', overflow, ...movableBookcases(zone, furnishings), ...(arrangement ? { arrangement } : {}), ...(boxes ? { pool: boxes } : {}), ...(upgrades ? { capacity: standing(), minBookcases: standing() } : {}) });
+  const shelving = new Shelving(zone, covers, shelved ?? games, { ...livingShelvingOptions(), id: 'living', overflow, ...labelledBookcases(movableBookcases(zone, furnishings), ctx.home.shelfLabels, 'living'), ...(arrangement ? { arrangement } : {}), ...(boxes ? { pool: boxes } : {}), ...(upgrades ? { capacity: standing(), minBookcases: standing() } : {}) });
   zone.onUnload(() => shelving.dispose());
   if (upgrades) zone.onUnload(upgrades.subscribe(() => shelving.setCapacity(standing())));
+  // The wall knocked through: the front-right slot is the opening's now, its bookcase goes next door.
+  if (upgrades) zone.onUnload(onRouxPhase(() => shelving.setCapacity(standing())));
+  // The display case and the pedestal, once bought: what the player puts on show stands there, off its shelf.
+  furnishShowcases(zone, ctx);
 
   // 2. Screens and seats: the TV from the start; the projector and the armchairs once bought (staged till then, see
   //    `build/owned.ts`). `armchairs` lists the seats that stand, as they come (the cat's laps).
   const tv = zone.placeAt(new Television(cssLayer, heardBy(ctx)), plan.tv);
   const projector = placerFor(zone, upgrades, plan.projectorUpgrade).placeAt(new Projector(cssLayer, { pictureWidth: plan.projectorPicture.width, ...heardBy(ctx) }), plan.projector);
+  // A Japanese copy plays only with its platform's converter bought (`economy/regionLock`).
+  const regionLock = regionLockFor(upgrades);
+  tv.regionLock = regionLock;
+  projector.regionLock = regionLock;
   projector.aimAt(projector.worldToLocal(zone.toWorld(new THREE.Vector3(width / 2 - 0.005, plan.projectorPicture.centreY, 0))));
   const armchairs: Seat[] = [];
   const seatKeys = new Map<string, number>();
@@ -113,7 +133,10 @@ export function furnishRoom(zone: Zone, ctx: BuildContext): RoomHandle {
   // 4. Console stand under the TV with one console per platform, and the two posters; both follow the collection.
   const stand = zone.place(new ConsoleStand(), tv.position.clone(), tv.rotation.y);
   tv.mountOn(stand.topHeight);
+  // The old tuner beside the set, once the roof's aerial (or the fibre) brought a channel in (`roof/channels`).
+  zone.place(new ChannelDial({ tv, day: () => ctx.today.gameDay, hours: () => sky.dayNight.state.hours }), zone.toLocal(stand.localToWorld(new THREE.Vector3(0.53, stand.topHeight, 0.08))), tv.rotation.y);
   const consoles = stand.slotAnchors().map((anchor) => zone.place(new Console(stand.slotWidth, onSelectPlatform), zone.toLocal(stand.localToWorld(anchor)), tv.rotation.y));
+  for (const deck of consoles) deck.regionLock = regionLock;
   // The consoles feed the TV: a game goes into its console, which plays it on the set.
   for (const deck of consoles) deck.setScreen(tv);
   tv.setDecks({
@@ -163,6 +186,12 @@ export function furnishRoom(zone: Zone, ctx: BuildContext): RoomHandle {
     lampPlacer.place(lamp, lampAt.position, lampAt.rotationY);
   }
 
+  // 7b. The sideboard's turntable plays the soundtrack LPs bought at the flea market (`world/vinyl`), riding the sideboard.
+  if (sideboard?.turntable && upgrades) {
+    const turntable = new RecordPlayer({ turntable: sideboard.turntable, owned: () => upgrades.count('record'), ...heardBy(ctx) });
+    placerFor(zone, upgrades, 'sideboard').placeWith(sideboard, turntable, new THREE.Vector3());
+  }
+
   // 8. The arcade's feather wand, once won: on the projector rug (on its pile once the rug is bought), waved for the cat.
   if (prizes) {
     const wand = zone.placeAt(new FeatherWand({ prizes, ...(callCat ? { callCat } : {}) }), plan.featherWand.at);
@@ -184,8 +213,13 @@ export function furnishRoom(zone: Zone, ctx: BuildContext): RoomHandle {
   return { room, shelving, tv, seats, armchairs, windows, catPerches: radiators, surfaceAt: rugsUnderfoot(zone) };
 }
 
-/** A zone builder, as `ZONE_BUILDERS` lists it: bound to the `BuildContext` by `bindBuilder`. */
-export type ContextBuilder<H extends ZoneHandle = ZoneHandle> = (zone: Zone, ctx: BuildContext) => H;
+/**
+ * A zone builder, as `ZONE_BUILDERS` lists it: bound to the `BuildContext` by `bindBuilder`. `sliced`, if it has one, is
+ * the same build as steps, run over several idle moments when the zone is got ready ahead (`Zone.buildSliced`).
+ */
+export type ContextBuilder<H extends ZoneHandle = ZoneHandle> = ((zone: Zone, ctx: BuildContext) => H) & {
+  readonly sliced?: (zone: Zone, ctx: BuildContext) => Iterator<void, H, void>;
+};
 
 /** A builder in a chunk of its own, fetched on demand (`import()`): the zones reached by travel, far from the flat. */
 export interface LazyContextBuilder<H extends ZoneHandle = ZoneHandle> {
@@ -213,10 +247,19 @@ export const ZONE_BUILDERS = {
   kitchen: furnishKitchen,
   balcony: furnishBalcony,
   stairwell: furnishStairwell,
+  annex: furnishAnnex,
+  annexStudy: furnishStudy,
   arcade: lazy(() => import('./arcade/furnishArcade').then((m) => m.furnishArcade)),
   market: lazy(() => import('./market/furnishMarket').then((m) => m.furnishMarket)),
   street: lazy(() => import('./street/furnishStreet').then((m) => m.furnishStreet)),
   shop: lazy(() => import('./shop/furnishShop').then((m) => m.furnishShop)),
+  neighbourFlat: lazy(() => import('./neighbourFlat/furnishNeighbourFlat').then((m) => m.furnishNeighbourFlat)),
+  courtyard: lazy(() => import('./courtyard/furnishCourtyard').then((m) => m.furnishCourtyard)),
+  saleroom: lazy(() => import('./saleroom/furnishSaleroom').then((m) => m.furnishSaleroom)),
+  sellerFlat: lazy(() => import('./sellerFlat/furnishSellerFlat').then((m) => m.furnishSellerFlat)),
+  cellar: lazy(() => import('./cellar/furnishCellar').then((m) => m.furnishCellar)),
+  attic: lazy(() => import('./attic/furnishAttic').then((m) => m.furnishAttic)),
+  roof: lazy(() => import('./roof/furnishRoof').then((m) => m.furnishRoof)),
 } satisfies { [K in ZoneKind]: ContextBuilder | LazyContextBuilder };
 
 /** What a `ZONE_BUILDERS` entry builds. */
@@ -229,8 +272,12 @@ export type ZoneHandles = { [K in ZoneKind]: BuiltBy<(typeof ZONE_BUILDERS)[K]> 
 export type ZoneHandleById = { [Id in ZoneId]: ZoneHandles[ZoneKindOf<Id>] };
 
 /** `ZONE_BUILDERS[kind]` bound to `ctx`, as the `World` takes a zone's builder (a lazy one stays lazy). */
-export function bindBuilder(kind: ZoneKind, ctx: BuildContext): ((zone: Zone) => ZoneHandle) | { load(): Promise<(zone: Zone) => ZoneHandle> } {
+export function bindBuilder(kind: ZoneKind, ctx: BuildContext): ZoneBuilder | LazyZoneBuilder {
   const entry: ContextBuilder | LazyContextBuilder = ZONE_BUILDERS[kind];
-  if (typeof entry === 'function') return (zone) => entry(zone, ctx);
-  return { load: () => entry.load().then((build) => (zone: Zone) => build(zone, ctx)) };
+  const bind = (build: ContextBuilder): ZoneBuilder => {
+    const { sliced } = build;
+    return Object.assign((zone: Zone) => build(zone, ctx), sliced ? { sliced: (zone: Zone) => sliced(zone, ctx) } : {});
+  };
+  if (typeof entry === 'function') return bind(entry);
+  return { load: () => entry.load().then(bind) };
 }

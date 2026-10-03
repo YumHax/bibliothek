@@ -11,6 +11,9 @@ import { DOME_MOON_RADIUS, SKY_DOME_FRAGMENT, SKY_DOME_VERTEX } from './skyDomeS
 import { MOON_SHADOW_OFFSET } from '../city/skyGlsl';
 import { RENDER_ORDER } from '../surface/layers';
 import { SKYLINE_COLUMNS, SKYLINE_TOP, SkylineSilhouette } from './SkylineSilhouette';
+import { BACKDROP_BLOCKS, BACKDROP_WALLS } from '../city/skyline';
+import { FLAT_IN_STREET } from './streetPlan';
+import { markShared } from '../materials/sharedResources';
 
 /** Inside the camera's far plane (100 m). */
 const RADIUS = 90;
@@ -71,10 +74,13 @@ export class SkyDome extends THREE.Mesh implements Furniture, Updatable, Occupan
       boltDir: { value: new THREE.Vector3(0, 0, 1) },
       boltSeed: { value: 0 },
       boltReach: { value: 0 },
+      blocks: { value: backdropTexture() },
+      blockEye: { value: new THREE.Vector3() },
+      blockWalls: { value: BACKDROP_WALLS.map((hex) => new THREE.Color(hex)) },
     };
     super(
       new THREE.SphereGeometry(RADIUS, 48, 24),
-      new THREE.ShaderMaterial({ uniforms, defines: { SKYLINE_COLUMNS: SKYLINE_COLUMNS.toFixed(1) }, vertexShader: SKY_DOME_VERTEX, fragmentShader: SKY_DOME_FRAGMENT, side: THREE.BackSide, depthWrite: false, fog: false }),
+      new THREE.ShaderMaterial({ uniforms, defines: { SKYLINE_COLUMNS: SKYLINE_COLUMNS.toFixed(1), BLOCKS: String(BACKDROP_BLOCKS.length) }, vertexShader: SKY_DOME_VERTEX, fragmentShader: SKY_DOME_FRAGMENT, side: THREE.BackSide, depthWrite: false, fog: false }),
     );
     this.uniforms = uniforms;
     uniforms.skyline!.value = this.skyline.texture;
@@ -105,6 +111,7 @@ export class SkyDome extends THREE.Mesh implements Furniture, Updatable, Occupan
     if (this.parent) this.parent.worldToLocal(this.eye);
     this.position.copy(this.eye);
     this.skyline.update(this.eye);
+    (this.uniforms.blockEye!.value as THREE.Vector3).copy(this.eye);
 
     const s = this.dayNight.state;
     const u = this.uniforms;
@@ -155,4 +162,28 @@ export class SkyDome extends THREE.Mesh implements Furniture, Updatable, Occupan
     this.reflection.dispose();
     this.skyline.dispose();
   }
+}
+
+let backdrop: THREE.DataTexture | null = null;
+
+/**
+ * The backdrop blocks (`city/skyline` BACKDROP_BLOCKS) for the dome's shader, in the street's frame: a
+ * float texture two rows high, a column a block (row 0 its footprint x0, z0, x1, z1; row 1 its height,
+ * its facing, a seed for its windows). Built once, shared by every dome (the street's, the windows').
+ */
+function backdropTexture(): THREE.DataTexture {
+  if (backdrop) return backdrop;
+  const n = BACKDROP_BLOCKS.length;
+  const data = new Float32Array(n * 2 * 4);
+  BACKDROP_BLOCKS.forEach((b, i) => {
+    data.set([b.x0 + FLAT_IN_STREET.x, b.z0 + FLAT_IN_STREET.z, b.x1 + FLAT_IN_STREET.x, b.z1 + FLAT_IN_STREET.z], i * 4);
+    data.set([b.height, b.wall, i * 13.7 + 3, 0], (n + i) * 4);
+  });
+  const texture = new THREE.DataTexture(data, n, 2, THREE.RGBAFormat, THREE.FloatType);
+  texture.magFilter = THREE.NearestFilter;
+  texture.minFilter = THREE.NearestFilter;
+  texture.generateMipmaps = false;
+  texture.needsUpdate = true;
+  backdrop = markShared(texture);
+  return backdrop;
 }

@@ -6,6 +6,7 @@ import { getPlatform } from '@/catalog/platforms';
 import { createCanvas, toTexture } from '@/covers/generated/canvasUtils';
 import type { StockItem } from '@/economy/StockItem';
 import { BUDGET_LABEL, describeCondition, describeEdition } from '@/economy/pricing';
+import { variantTag } from '@/economy/copyTraits';
 import { playCoins } from '@/audio/coins';
 import type { Furniture } from '../Furniture';
 import { GameBox } from '../GameBox';
@@ -243,7 +244,9 @@ export class ForSaleBox extends THREE.Group implements Furniture, Interactable {
     const what = `${game.title} (${platform}${state ? `, ${state}` : ''})`;
     if (!priced) return `${what} — being priced… look closer`;
     const coins = this.wallet.coins;
-    const edition = describeEdition(this.item.edition, game.platform);
+    const printing = describeEdition(this.item.edition, game.platform);
+    const variant = variantTag(game).toLowerCase();
+    const edition = [printing, variant].filter(Boolean).join(', ');
     const was = this.item.beforeSale;
     const cost = `${price} coin${price > 1 ? 's' : ''}${this.item.haggled ? ' (haggled)' : was !== undefined ? ` (clearance, was ${was})` : ''}${this.item.source === 'grail' ? ' · a grail' : ''}`;
     const due = this.item.due;
@@ -335,9 +338,13 @@ function tagBand(item: StockItem): { text: string; color: string } | null {
   if (item.source === 'upgrade') return { text: 'UPGRADE YOUR COPY', color: '#8a2a1a' };
   if (item.source === 'grail') return { text: '★ GRAIL ★', color: '#6b1f5a' };
   if (item.sale < 1) return { text: `CLEARANCE −${Math.round((1 - item.sale) * 100)}%`, color: '#c8342a' };
+  if (item.game.variant === 'sealed') return { text: 'SEALED', color: '#1f5f7a' };
+  if (item.game.variant === 'misprint') return { text: 'MISPRINT', color: '#7a1f6b' };
   if (item.source === 'showpiece' || item.source === 'estate') return { text: 'COLLECTOR’S PIECE', color: '#b8892a' };
   if (item.edition === 'firstPrint') return { text: 'FIRST PRINT', color: '#8a2a1a' };
   if (item.edition === 'budget') return { text: BUDGET_LABEL[item.game.platform].toUpperCase(), color: '#c8443a' };
+  if (item.game.bootleg) return { text: 'BOOTLEG', color: '#3f6a2a' };
   if (item.game.region?.includes('Japan')) return { text: 'JAPANESE IMPORT', color: '#2a2a3a' };
+  if (item.game.variant === 'crushed') return { text: variantTag(item.game), color: '#6a5a4a' };
   return null;
 }

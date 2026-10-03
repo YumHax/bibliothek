@@ -41,7 +41,14 @@ export const BALCONY_PLAN = {
     top: 3.6,
     storey: STOREY,
     groundFloor: GROUND_FLOOR,
-    ourWindows: [{ x: 0.3, width: 1.2, bottom: 0.1, top: 2.5 }],
+    // The collection room's front window, then Mrs Roux's two (`world/annex`: the flat's once her rooms are joined to it).
+    ourWindows: [
+      { x: 0.3, width: 1.2, bottom: 0.1, top: 2.5 },
+      { x: 4.3, width: 1.2, bottom: 0.1, top: 2.5 },
+      { x: 6.9, width: 1.2, bottom: 0.1, top: 2.5 },
+    ],
+    /** World x range of our floor's own front (the collection room's and hers): the neighbours' windows start past it. */
+    ours: [-3, 7.96] as [number, number],
     /** Window pitch along the neighbours' part and the lower floors. */
     pitch: 2.6,
   },

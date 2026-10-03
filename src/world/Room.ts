@@ -207,6 +207,11 @@ export class Room extends THREE.Group implements Updatable, OccupancyAware, Draw
     this.applyLighting();
   }
 
+  /** Repaints the four walls (one shell dressed for whoever lives there: the neighbours' flat). */
+  paintWalls(color: number): void {
+    for (const wall of this.walls) (wall.material as THREE.MeshStandardMaterial).color.setHex(color);
+  }
+
   /** 1 = curtains open, 0 = every curtain drawn. Scales the part of the ambient that comes in through the windows. */
   setSkylight(openness: number): void {
     this.skylightOpen = THREE.MathUtils.clamp(openness, 0, 1);

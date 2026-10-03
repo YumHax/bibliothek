@@ -13,6 +13,7 @@ import { KEYS as SAVE_KEYS } from '@/persistence';
 import { DailyTally } from '@/time/DailyTally';
 import { Timers } from '@/core/Timers';
 import { outOfSight } from './life/sight';
+import { pocket } from '@/errands/pocket';
 
 export interface BuskerOptions {
   /** The ears (the camera): the tune's level and side follow it. */
@@ -30,10 +31,18 @@ export interface BuskerOptions {
 
 const LINES = [
   'This one is from a game you never finished.',
-  'Requests? I only know the overworld themes.',
+  'Requests? A coin in the case and I’ll play you another overworld.',
   'The kiosk says the market had a good week.',
   'I learnt this on a cartridge with a dead save battery.',
+  'Rain? I pack up. Synths and puddles don’t mix.',
+  'The collector with the suitcase never tips. Never.',
 ];
+/** What they play on request, one after another: each a tune of its own (`BuskerTune`'s seed). */
+const REQUESTS = ['the castle theme', 'a boss tune, slowed down', 'the game over jingle, as a waltz', 'a racing game’s menu music', 'the first level, but sad'];
+/** After a word, this long (s) for a click to tip a coin for a request. */
+const ASK_WINDOW = 6;
+/** Beyond this the busker is not drawn nor posed (the tune still carries). */
+const DRAW_DISTANCE = 40;
 /** Tips given today, saved so the daily limit holds across reloads. */
 const tips = new DailyTally(SAVE_KEYS.busker, 'tips');
 const THANKS = ['Cheers! This one is for you.', 'Thank you kindly!', 'You are a legend.'];
@@ -45,8 +54,10 @@ const KEYS = { y: 0.93, z: 0.42, spread: 0.17 };
  * keyboard on a stand, the case open on the pavement for coins) playing a synthesised chiptune
  * (`BuskerTune`) that carries a street's width, louder and to one side as the player comes
  * near. They play by day and into the evening, not in the rain or snow (then they have packed up
- * and gone). Clicking tips a coin (`SessionActions.pay`): a thank-you in a bubble and a flourish,
- * a few tips a day at most (remembered across reloads), then a nod.
+ * and gone). A click gets a word (free); clicked again while they wait, a coin in the case
+ * (`SessionActions.pay`) buys a request: a thank-you in a bubble, a flourish and the next tune of
+ * their book, a few tips a day at most (remembered across reloads). A croissant or a bunch of
+ * flowers from the pocket (`errands/`) buys a request too. Not drawn beyond `DRAW_DISTANCE`.
  */
 export class Busker extends THREE.Group implements Furniture, Updatable, Interactable {
   /** The pose back to playing after a thank-you: on the street's own time. */
@@ -54,7 +65,12 @@ export class Busker extends THREE.Group implements Furniture, Updatable, Interac
   readonly contactShadow = false;
   readonly hitboxes: THREE.Object3D[];
   private readonly person: Walker;
-  private readonly tune: BuskerTune;
+  private tune: BuskerTune;
+  /** Seconds left in which a click tips for a request (set by a word). */
+  private asking = 0;
+  private requestIndex = 0;
+  /** Between two songs (`BuskerTune.betweenSongs`): hands off the keys, arms crossed, a word free. */
+  private resting = false;
   private readonly kit = new THREE.Group();
   private present = true;
   private beat = 0;
@@ -101,32 +117,59 @@ export class Busker extends THREE.Group implements Furniture, Updatable, Interac
 
   label(): string | null {
     if (!this.present) return null;
-    return this.tipsToday() >= this.options.tipsPerDay ? 'Busker' : 'Busker · tip';
+    if (pocket.count('croissant') > 0 || pocket.count('bunch') > 0) return 'Busker · give them something for a request';
+    if (this.asking > 0 && this.tipsToday() < this.options.tipsPerDay) return 'Busker · tip a coin for a request';
+    return 'Busker · chat';
   }
 
+  /**
+   * A word first (free); clicked again while they wait for an answer, a coin in the case for a request (a few a day).
+   * A croissant or a bunch of flowers from the pocket buys a request too, any time.
+   */
   activate(session: SessionActions): void {
     if (!this.present) return;
-    if (this.tipsToday() >= this.options.tipsPerDay) {
-      this.person.speak(LINES[this.lineIndex++ % LINES.length]!, 'Busker');
+    const gift = pocket.take('croissant', 'bunch');
+    if (gift) {
+      this.playRequest(gift === 'croissant' ? 'Half a croissant? You’re a saint.' : 'Flowers! Nobody ever gives a busker flowers.');
+      session.react(gift === 'croissant' ? 'You hand over the croissant. They play your request.' : 'You hand over a bunch. They play your request.');
       return;
     }
+    if (this.asking <= 0 || this.tipsToday() >= this.options.tipsPerDay) {
+      const line = this.resting ? 'Taking five between songs. Got a request for the next one?' : LINES[this.lineIndex++ % LINES.length]!;
+      this.person.speak(line, 'Busker');
+      this.asking = this.tipsToday() < this.options.tipsPerDay ? ASK_WINDOW : 0;
+      return;
+    }
+    this.asking = 0;
     session.pay({
       price: 1,
       paid: () => {
         this.recordTip();
         playCoins();
-        this.tune.flourish();
-        const thanks = THANKS[Math.floor(Math.random() * THANKS.length)]!;
-        this.person.speak(thanks, 'Busker');
-        this.person.setPose('cheer');
-        this.timers.after(1.4, () => this.person.setPose('play'));
+        this.playRequest(THANKS[Math.floor(Math.random() * THANKS.length)]!);
         return 'You drop a coin in the keyboard case.';
       },
     });
   }
 
+  /** A flourish, a cheer, then the next tune of their book (a request), their word over it. */
+  private playRequest(thanks: string): void {
+    const request = REQUESTS[this.requestIndex % REQUESTS.length]!;
+    this.requestIndex++;
+    this.tune.flourish();
+    this.person.speak(`${thanks} Here’s ${request}.`, 'Busker');
+    this.person.setPose('cheer');
+    this.timers.after(1.4, () => {
+      this.person.setPose(this.resting ? 'crossed' : 'play');
+      // The next tune of their book: another seed, another chiptune.
+      this.tune.dispose();
+      this.tune = new BuskerTune((this.options.seed ?? 77) + 101 * this.requestIndex);
+    });
+  }
+
   update(dt: number): void {
     this.timers.update(dt);
+    this.asking = Math.max(0, this.asking - dt);
     const s = this.dayNight.state;
     const [from, to] = this.options.hours;
     const present = s.hours >= from && s.hours < to && s.rain < 0.08 && s.snow < 0.15;
@@ -148,11 +191,20 @@ export class Busker extends THREE.Group implements Furniture, Updatable, Interac
     let level = 0;
     if (this.present) {
       this.beat += dt;
-      this.person.update(dt);
       // The tune: fainter with distance, to the side it is on.
       this.options.viewer.getWorldPosition(this.ear);
       this.getWorldPosition(this.here);
       const distance = this.ear.distanceTo(this.here);
+      // Far off they are not drawn nor posed (no one tells a busker's fingers at 40 m); the tune carries on.
+      const near = distance < DRAW_DISTANCE;
+      this.person.visible = near;
+      // Between two songs the hands come off the keys (back on them for the next).
+      const resting = this.tune.betweenSongs;
+      if (resting !== this.resting) {
+        this.resting = resting;
+        this.person.setPose(resting ? 'crossed' : 'play');
+      }
+      if (near) this.person.update(dt);
       level = Math.max(0, 1 - distance / this.options.reach) ** 2;
       this.options.viewer.getWorldDirection(this.facing);
       this.toMe.copy(this.here).sub(this.ear).setY(0).normalize();

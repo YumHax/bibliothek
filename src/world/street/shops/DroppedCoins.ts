@@ -4,10 +4,10 @@ import type { Interactable } from '@/interaction/Interactable';
 import type { SessionActions } from '@/game/SessionActions';
 import { playCoins } from '@/audio/coins';
 import { fromUnpaddedDayKey } from '@/economy/calendar';
-import { KEYS } from '@/persistence';
+import { KEYS, PersistedStore } from '@/persistence';
 import { withDay } from '@/time/DailyTally';
 import { DailyList } from '@/time/DailyList';
-import { dailyRandom } from '@/time/daily';
+import { dailyRandom, gameDayRandom } from '@/time/daily';
 import { shared } from '../../materials/palette';
 import { bareMetal } from '../metals';
 import { markShared } from '../../materials/sharedResources';
@@ -25,6 +25,8 @@ export interface DroppedCoinsOptions {
   purse: { earnCoins(coins: number): void };
   /** The eye: a coin glints when the player is near enough to notice it. */
   viewer: THREE.Object3D;
+  /** The game's days: one more coin lies about each market day (on a spot of its own), picked once per day. */
+  today?: { readonly gameDay: number; onNewGameDay(cb: (day: number) => void): () => void };
 }
 
 /** A coin glints for the player within this distance. */
@@ -44,15 +46,29 @@ const picks = new DailyList<number>({
   migrate: { 1: (data) => withDay(data, fromUnpaddedDayKey) },
 });
 
+/** The last game day whose coin was picked up (`-1`: none yet). */
+const gameDayPick = new PersistedStore<{ day: number }>({
+  key: KEYS.gameDayFinds,
+  version: 1,
+  defaults: () => ({ day: -1 }),
+  read: (data) => (typeof data === 'object' && data !== null && typeof (data as { day?: unknown }).day === 'number' ? { day: (data as { day: number }).day } : null),
+});
+
 /**
- * The coins people drop on Front Street: a few a (real) day at spots drawn from the date, each a
- * small worn disc on the slabs that glints now and then when the player is near (a star of light,
- * additive, alpha kept). Clicking one pockets it (a coin in the wallet, the clink); a picked spot
- * stays empty till tomorrow, reloads included.
+ * The coins people drop on Front Street: a few a (real) day at spots drawn from the date, and one
+ * more each market day (the game's) on a spot of its own, each a small worn disc on the slabs that
+ * glints now and then when the player is near (a star of light, additive, alpha kept). Clicking one
+ * pockets it (a coin in the wallet, the clink); a picked spot stays empty till tomorrow (the market
+ * day's till the next market day), reloads included.
  */
 export class DroppedCoins extends THREE.Group implements Furniture, Updatable {
   readonly contactShadow = false;
   private readonly coins: DroppedCoin[] = [];
+  /** The real day's spots (the market day's coin goes elsewhere). */
+  private readonly layout: number[];
+  /** The market day's coin, while it lies there. */
+  private dayCoin: DroppedCoin | null = null;
+  private readonly unsubscribe: (() => void) | null;
 
   constructor(private readonly options: DroppedCoinsOptions) {
     super();
@@ -61,6 +77,7 @@ export class DroppedCoins extends THREE.Group implements Furniture, Updatable {
     const picked = new Set(picks.today());
     const order = options.spots.map((_, i) => i).sort(() => random() - 0.5);
     const layout = order.slice(0, options.perDay);
+    this.layout = layout;
     // Picks off another layout (drawn under the old day format, or before `spots` changed) still count against today's few.
     let owed = [...picked].filter((spot) => !layout.includes(spot)).length;
     for (const spot of layout) {
@@ -74,10 +91,40 @@ export class DroppedCoins extends THREE.Group implements Furniture, Updatable {
       options.host.place(coin, new THREE.Vector3(x, 0, z), random() * Math.PI * 2);
       this.coins.push(coin);
     }
+    const today = options.today;
+    this.unsubscribe = today ? today.onNewGameDay((day) => this.layDayCoin(day)) : null;
+    if (today) this.layDayCoin(today.gameDay);
   }
 
   get footprint(): THREE.Box3 {
     return new THREE.Box3();
+  }
+
+  dispose(): void {
+    this.unsubscribe?.();
+  }
+
+  /** Market day `day`'s coin, on a spot the real day's leave free, unless it was picked already; yesterday's goes. */
+  private layDayCoin(day: number): void {
+    if (this.dayCoin) {
+      this.coins.splice(this.coins.indexOf(this.dayCoin), 1);
+      this.options.host.remove(this.dayCoin);
+      this.dayCoin = null;
+    }
+    if (gameDayPick.load().day === day) return;
+    const free = this.options.spots.map((_, i) => i).filter((i) => !this.layout.includes(i));
+    if (!free.length) return;
+    const random = gameDayRandom('coins', day);
+    const spot = free[Math.floor(random() * free.length)]!;
+    const [x, z] = this.options.spots[spot]!;
+    const coin: DroppedCoin = new DroppedCoin(random() * 10, (): string => {
+      gameDayPick.save({ day });
+      this.dayCoin = null;
+      return this.pocket(coin, spot);
+    });
+    this.options.host.place(coin, new THREE.Vector3(x, 0, z), random() * Math.PI * 2);
+    this.coins.push(coin);
+    this.dayCoin = coin;
   }
 
   update(dt: number): void {
@@ -86,6 +133,11 @@ export class DroppedCoins extends THREE.Group implements Furniture, Updatable {
 
   private pick(coin: DroppedCoin, spot: number): string {
     picks.add(spot);
+    return this.pocket(coin, spot);
+  }
+
+  /** The coin goes in the wallet, off the pavement. */
+  private pocket(coin: DroppedCoin, spot: number): string {
     this.options.purse.earnCoins(1);
     playCoins(1, 0.1);
     this.coins.splice(this.coins.indexOf(coin), 1);

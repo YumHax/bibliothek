@@ -65,9 +65,14 @@ export class BoxPool {
   }
 }
 
-/** Everything about a game but its status, as a string; computed once per Game object. */
+/**
+ * Everything about a game but its status, as a string; computed once per Game object. A copy's past (found on
+ * opening it) and its variant (the seal broken in hand: the box takes its wrap off itself, `GameBox.unseal`) change
+ * while the box is open in the player's hand: they keep the box too.
+ */
 const signatures = new WeakMap<Game, string>();
-const withoutStatus = (key: string, value: unknown) => (key === 'status' ? undefined : value);
+const LIVE_KEYS = new Set(['status', 'past', 'variant']);
+const withoutStatus = (key: string, value: unknown) => (LIVE_KEYS.has(key) ? undefined : value);
 
 function signature(game: Game): string {
   let sig = signatures.get(game);

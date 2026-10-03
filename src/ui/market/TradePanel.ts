@@ -5,6 +5,7 @@ import type { Fame } from '@/economy/Fame';
 import type { StockItem } from '@/economy/StockItem';
 import { CONFIRM_MS, describeCondition, tradeValue } from '@/economy/pricing';
 import { MarketPanel, coinsHtml, escapeHtml, type PanelWallet } from './MarketPanel';
+import { isKeepsake } from '@/economy/Transactions';
 
 /**
  * A swap at a stall: the player's games (not lent out, not on the wishlist) with what each counts
@@ -42,7 +43,7 @@ export class TradePanel extends MarketPanel {
     const item = this.item;
     if (!item) return;
     const games = this.collection.games
-      .filter((g) => (g.status ?? 'owned') === 'owned' && g.id !== item.game.id && (!this.filter || g.title.toLowerCase().includes(this.filter)))
+      .filter((g) => (g.status ?? 'owned') === 'owned' && !isKeepsake(g) && g.id !== item.game.id && (!this.filter || g.title.toLowerCase().includes(this.filter)))
       .sort((a, b) => a.title.localeCompare(b.title));
     if (!games.length) {
       this.body.innerHTML = `<p class="catalogue__empty">${this.filter ? 'Nothing by that name in your collection.' : 'Nothing to swap: bring some games of your own.'}</p>`;

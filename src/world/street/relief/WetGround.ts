@@ -7,7 +7,7 @@ import type { DayNight, SkyState } from '../../props/DayNight';
 import type { PaintedFront } from '../Buildings';
 import { isShopOpen } from '../shops/shopHours';
 import { nightnessOf } from '../streetAir';
-import { FRONT, KERB_HEIGHT, PARK_STREET, STREET_PLAN, type ShopKind, type Vec2 } from '../streetPlan';
+import { FRONT, KERB_HEIGHT, PARK_STREET, STREET_PLAN, WALKABLE, type ShopKind, type Vec2 } from '../streetPlan';
 import { FacadeFrame } from './facadeFrame';
 import { groundHeight } from './ground';
 import { GROUND, RENDER_ORDER, onSurface } from '../../surface/layers';
@@ -25,6 +25,11 @@ export interface WetGroundOptions {
   mirror: boolean;
   /** The driving cars: their headlamps and tail lamps streak the wet road too, following them. */
   cars?: readonly MovingLamp[];
+  /**
+   * What the mirror leaves out (people, birds, small props: hidden for its render only), read each time it
+   * renders. The puddles show the facades, lamps, sky and cars; a passer-by's ~33 draw calls a second time are not worth it.
+   */
+  unmirrored?: () => readonly THREE.Object3D[];
 }
 
 /** A car's lamps as streak sources: the pair of headlamps (as one, at the nose) and the tail lamps (at the back), their height. */
@@ -37,11 +42,16 @@ const STREAK_MAX = 11;
 const EYE = 1.7;
 const LAMP_COLOR = LAMP_LIGHT.sodium.clone();
 const WEATHER_EVERY = 0.5;
-/** The stretch of road the mirror covers (the walkable part of Front Street), zone-local. */
-const MIRROR = { x0: PARK_STREET.farKerb, x1: 40, z0: FRONT.nearKerb, z1: FRONT.farKerb };
+/**
+ * The stretch of road the mirror covers (the walkable part of Front Street, a little past the works), zone-local: read
+ * when the street is built, after the works have been placed for the day (`syncWorks` moves `WALKABLE.maxX`).
+ */
+const mirrorArea = (): { x0: number; x1: number; z0: number; z1: number } => ({ x0: PARK_STREET.farKerb, x1: WALKABLE.maxX + 2, z0: FRONT.nearKerb, z1: FRONT.farKerb });
 const MIRROR_TEXTURE = 512;
+/** The mirror renders every other frame, unless the view has turned more than this (cos of the angle) since its last render. */
+const MIRROR_TURN = Math.cos(THREE.MathUtils.degToRad(0.6));
 
-type Source = { kind: 'lamp' | 'neon' | 'shop' | 'car'; top: THREE.Vector3; foot: THREE.Vector3; color: THREE.Color; width: number; shop?: ShopKind };
+type Source = { kind: 'lamp' | 'neon' | 'shop' | 'car'; top: THREE.Vector3; foot: THREE.Vector3; color: THREE.Color; width: number; shop?: ShopKind; car?: MovingLamp };
 
 interface Puddle {
   at: Vec2;
@@ -82,6 +92,12 @@ export class WetGround extends THREE.Group implements Furniture, Updatable {
   private weatherClock = WEATHER_EVERY;
   private wet = 0;
   private hours = 12;
+  /** Frames counted (the mirror's every other one), where the view looked at its last render, whether it has one yet. */
+  private frame = 0;
+  private readonly look = new THREE.Vector3();
+  private readonly lastLook = new THREE.Vector3();
+  private mirrorFresh = false;
+  private readonly hidden: THREE.Object3D[] = [];
 
   constructor(private readonly dayNight: DayNight, private readonly options: WetGroundOptions) {
     super();
@@ -96,8 +112,8 @@ export class WetGround extends THREE.Group implements Furniture, Updatable {
     }
     // Two sources a car (head, tail), moved with it every frame (`layStreaks`).
     this.carSources = (options.cars ?? []).map((car) => {
-      const head: Source = { kind: 'car', top: new THREE.Vector3(), foot: new THREE.Vector3(), color: CAR_LAMPS.head, width: CAR_LAMPS.width };
-      const tail: Source = { kind: 'car', top: new THREE.Vector3(), foot: new THREE.Vector3(), color: CAR_LAMPS.tail, width: CAR_LAMPS.width * 0.8 };
+      const head: Source = { kind: 'car', top: new THREE.Vector3(), foot: new THREE.Vector3(), color: CAR_LAMPS.head, width: CAR_LAMPS.width, car };
+      const tail: Source = { kind: 'car', top: new THREE.Vector3(), foot: new THREE.Vector3(), color: CAR_LAMPS.tail, width: CAR_LAMPS.width * 0.8, car };
       this.sources.push(head, tail);
       return { car, head, tail };
     });
@@ -172,6 +188,7 @@ export class WetGround extends THREE.Group implements Furniture, Updatable {
 
   update(dt: number): void {
     const s = this.dayNight.state;
+    this.frame++;
     this.weatherClock += dt;
     if (this.weatherClock >= WEATHER_EVERY) {
       this.weatherClock = 0;
@@ -185,18 +202,15 @@ export class WetGround extends THREE.Group implements Furniture, Updatable {
         if (this.puddles.visible) this.layPuddles(0.35 + 0.65 * grow);
         if (this.mirror) {
           this.mirrorStrength.value = 0.55 * THREE.MathUtils.smoothstep(wet, 0.25, 0.85);
-          this.mirror.visible = this.mirrorStrength.value > 0.02;
+          const shown = this.mirrorStrength.value > 0.02;
+          if (shown && !this.mirror.visible) this.mirrorFresh = false;
+          this.mirror.visible = shown;
         }
       }
     }
     this.layStreaks(s);
   }
 
-  /** Whether a car source's car is on the road. */
-  private carLit(src: Source): boolean {
-    for (const c of this.carSources) if (c.head === src || c.tail === src) return c.car.active;
-    return false;
-  }
 
   /** Every light near enough: a streak from its foot towards the eye, centred on where its mirror image lies. */
   private layStreaks(s: SkyState): void {
@@ -216,17 +230,18 @@ export class WetGround extends THREE.Group implements Furniture, Updatable {
       head.top.copy(head.foot).setY(head.foot.y + CAR_LAMPS.height);
       tail.top.copy(tail.foot).setY(tail.foot.y + CAR_LAMPS.height + 0.1);
     }
-    this.sources.forEach((src, i) => {
+    for (let i = 0; i < this.sources.length; i++) {
+      const src = this.sources[i]!;
       this.dir.set(this.eye.x - src.foot.x, 0, this.eye.z - src.foot.z);
       const distance = this.dir.length();
       let level = 0;
       if (distance < STREAK_RANGE && distance > 0.5) {
-        level = src.kind === 'lamp' ? 1.1 * lampNight : src.kind === 'neon' ? 0.9 * (0.3 + 0.7 * night) : src.kind === 'car' ? (this.carLit(src) ? 0.9 * lampNight : 0) : src.shop && isShopOpen(src.shop, this.hours) ? 0.6 * night : 0;
+        level = src.kind === 'lamp' ? 1.1 * lampNight : src.kind === 'neon' ? 0.9 * (0.3 + 0.7 * night) : src.kind === 'car' ? (src.car?.active ? 0.9 * lampNight : 0) : src.shop && isShopOpen(src.shop, this.hours) ? 0.6 * night : 0;
       }
       if (level <= 0) {
         this.m.makeScale(0, 0, 0);
         this.streaks.setMatrixAt(i, this.m);
-        return;
+        continue;
       }
       this.dir.divideScalar(distance);
       // The mirror point: where the eye sees the light reflected, a share of the way from the foot.
@@ -241,7 +256,7 @@ export class WetGround extends THREE.Group implements Furniture, Updatable {
       this.m.compose(this.spot, this.q, this.stretch);
       this.streaks.setMatrixAt(i, this.m);
       this.streaks.setColorAt(i, this.color.copy(src.color).multiplyScalar(level * strength));
-    });
+    }
     this.streaks.instanceMatrix.needsUpdate = true;
     if (this.streaks.instanceColor) this.streaks.instanceColor.needsUpdate = true;
   }
@@ -260,8 +275,9 @@ export class WetGround extends THREE.Group implements Furniture, Updatable {
 
   /** The road's mirror: a `Reflector` over the walkable stretch of Front Street, shown only through the puddles' mask. */
   private buildMirror(): Reflector {
-    const { x0, x1, z0, z1 } = MIRROR;
-    const mask = puddleMask(this.puddleSpots);
+    const area = mirrorArea();
+    const { x0, x1, z0, z1 } = area;
+    const mask = puddleMask(this.puddleSpots, area);
     const mirror = new Reflector(new THREE.PlaneGeometry(x1 - x0, z1 - z0), {
       textureWidth: MIRROR_TEXTURE,
       textureHeight: MIRROR_TEXTURE / 2,
@@ -286,6 +302,24 @@ export class WetGround extends THREE.Group implements Furniture, Updatable {
     mirror.castShadow = false;
     mirror.renderOrder = RENDER_ORDER.sheen;
     mirror.visible = false;
+    // Every other frame (the picture is blurred: a frame old does not show), unless the view turned; without the people.
+    const render = mirror.onBeforeRender.bind(mirror);
+    mirror.onBeforeRender = (renderer, scene, camera, geometry, material, group) => {
+      camera.getWorldDirection(this.look);
+      if (this.mirrorFresh && this.frame % 2 === 1 && this.look.dot(this.lastLook) > MIRROR_TURN) return;
+      this.mirrorFresh = true;
+      this.lastLook.copy(this.look);
+      const hidden = this.hidden;
+      hidden.length = 0;
+      for (const object of this.options.unmirrored?.() ?? []) {
+        if (!object.visible) continue;
+        object.visible = false;
+        hidden.push(object);
+      }
+      render(renderer, scene, camera, geometry, material, group);
+      for (const object of hidden) object.visible = true;
+      hidden.length = 0;
+    };
     this.add(mirror);
     return mirror;
   }
@@ -312,13 +346,13 @@ function puddleSpots(): Puddle[] {
 }
 
 /** The mirror's mask: the road's puddles painted white where they lie, as the mirror's uvs see the road. */
-function puddleMask(puddles: readonly Puddle[]): THREE.CanvasTexture {
+function puddleMask(puddles: readonly Puddle[], area: ReturnType<typeof mirrorArea>): THREE.CanvasTexture {
   const w = 1024;
   const h = 256;
   const [canvas, ctx] = createCanvas(w, h);
   ctx.fillStyle = '#000';
   ctx.fillRect(0, 0, w, h);
-  const { x0, x1, z0, z1 } = MIRROR;
+  const { x0, x1, z0, z1 } = area;
   for (const p of puddles) {
     const [x, z] = p.at;
     if (x < x0 || x > x1 || z < z0 || z > z1) continue;

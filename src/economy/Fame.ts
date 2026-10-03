@@ -1,5 +1,6 @@
 import type { Game } from '@/catalog/types';
 import { getPlatform } from '@/catalog/platforms';
+import { isBootlegId } from '@/catalog/bootlegs';
 import { BrowserCache, KEYS } from '@/persistence';
 
 /** Page views move slowly: an answer is good for a month ("no article" for a week: one may be written). */
@@ -35,11 +36,14 @@ export class Fame {
 
   /** The views if already looked up (including "no article" as null), else undefined. */
   peek(game: Pick<Game, 'id'>): Views {
+    // An unlicensed cartridge (`catalog/bootlegs`) has no article: priced at once, nothing asked.
+    if (isBootlegId(game.id)) return null;
     return this.known.get(game.id);
   }
 
   /** Looks the game up; resolves to undefined (never rejects) when the server or Wikipedia is unavailable. */
   lookup(game: Pick<Game, 'id' | 'title' | 'platform'>): Promise<Views> {
+    if (isBootlegId(game.id)) return Promise.resolve(null);
     const cached = this.known.get(game.id);
     if (cached !== undefined) return Promise.resolve(cached);
     let pending = this.pending.get(game.id);

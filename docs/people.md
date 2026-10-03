@@ -23,6 +23,16 @@ root (scaled to look.height) > pelvis > hips (2) > knees > ankles (shoes)
   They move the painted skin, so raised brows lift the painted brows. Under a full beard only the brows move.
   All morph targets share one texture unit (the face sits at about 15 of 16 in the flat: no new map on it).
 - Eyes have a clear coat (`QUALITY.physicalMaterials`), and the lower lids ride up in a squint or a smile.
+- Ages and seasons (`looks.randomLook(seed, role, dress)`): a `dress` redresses the seed's look from a stream of its own
+  (no dress: the look it always had): winter coats, scarves (`look.scarf`, a torus and a tail on the chest) and beanies,
+  summer tees and shorts; a child is short with a bigger head (`look.headScale` scales the neck pivot's group), someone
+  old grey-haired, in glasses and loafers.
+- In the hand (`held.ts`, `heldMesh`): a phone (at the ear while walking), a book (held up to read while walking), an
+  umbrella, a shopping bag, a bag with a baguette, a bouquet, a cigarette (its tip glowing).
+- `Walker` in a crowd: given `crowd` (the others), it keeps right to pass someone coming the other way and slows behind
+  someone slower (never its `partner`); past its patience with the player in the way it steps round them;
+  `stopsToTalk` stops it for a line said to the player; `setAllowance` is a people budget's share (times its fade), and
+  a walker faded right out is not posed.
 
 ## How it moves (`PersonModel.animate`, in layers)
 

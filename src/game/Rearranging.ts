@@ -61,7 +61,7 @@ export interface FurnitureCarrierLike {
 export interface ShelfPlacingLike {
   /** One of the flat's shelf boxes is in hand (not a market copy). */
   readonly active: boolean;
-  readonly target: { readonly spot: { readonly fits: boolean; readonly swap?: { readonly game: { readonly title: string } } } } | null;
+  readonly target: { readonly spot: { readonly fits: boolean; readonly swap?: { readonly game: { readonly title: string } } }; readonly refusal?: string } | null;
   /** The target is another box to swap with. */
   readonly swapping: boolean;
   place(): boolean;
@@ -232,7 +232,7 @@ export class Rearranging implements KeyRoute {
     const shelfPlacing = this.parts.shelfPlacing!;
     const target = shelfPlacing.target;
     if (!target) this.host.react(`Aim at a gap on a shelf, then ${grabVerb()} or press ${actionKeyLabel('putHere')}`);
-    else if (!target.spot.fits) this.host.refuse(shelfPlacing.swapping ? 'No room for the other box on that row.' : 'No room on that shelf.');
+    else if (!target.spot.fits) this.host.refuse(target.refusal ?? (shelfPlacing.swapping ? 'No room for the other box on that row.' : 'No room on that shelf.'));
     else if (shelfPlacing.place()) this.host.putBack(); // it flies to its new spot
   }
 

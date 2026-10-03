@@ -27,6 +27,7 @@ export class LibretroCoverProvider implements CoverArtProvider {
   constructor(private readonly options: LibretroCoverOptions = {}) {}
 
   getBoxArt(game: Game): BoxArtUrls {
+    if (game.bootleg) return {}; // an unlicensed cartridge has no scan: its art is generated
     const name = game.externalIds?.libretroName ?? game.title;
     const repo = getPlatform(game.platform).libretroRepo;
     const file = encodeURIComponent(sanitizeLibretroName(name)) + '.png';

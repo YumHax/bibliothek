@@ -5,9 +5,10 @@ import { artCacheApi } from './server/artCachePlugin';
 import { libretroIndexApi } from './server/libretroIndexPlugin';
 import { fameApi } from './server/famePlugin';
 import { launchBoxApi } from './server/launchboxPlugin';
+import { reviewsApi } from './server/reviewsPlugin';
 
 export default defineConfig({
-  plugins: [youtubeSearchApi(), artCacheApi(), libretroIndexApi(), fameApi(), launchBoxApi()],
+  plugins: [youtubeSearchApi(), artCacheApi(), libretroIndexApi(), fameApi(), launchBoxApi(), reviewsApi()],
   resolve: {
     alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) },
   },

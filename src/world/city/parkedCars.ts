@@ -21,6 +21,11 @@ export interface ParkedCar {
   paint: number;
 }
 
+/** Whether the stray cat perches on the roof of the car in the bay at `at` (`STREET_PLAN.strayCat`): that car never leaves. */
+export function catBay(at: Vec2): boolean {
+  return STREET_PLAN.strayCat.perches.some((p) => p.y > 0.5 && Math.hypot(p.at[0] - at[0], p.at[1] - at[1]) < 1.5);
+}
+
 /** On some days a bay or two stands empty (someone drove off): how many at most, and how often any is. */
 const GAPS = { most: 2, oneDayIn: 0.6 };
 
@@ -38,7 +43,7 @@ export const PARKED_CARS: readonly ParkedCar[] = (() => {
   });
   const paint = dailyRandom('parked-paints');
   const gaps = new Set<number>();
-  const perched = (at: Vec2): boolean => STREET_PLAN.strayCat.perches.some((p) => p.y > 0.5 && Math.hypot(p.at[0] - at[0], p.at[1] - at[1]) < 1.5);
+  const perched = catBay;
   const gapDraw = dailyRandom('parked-gaps');
   if (gapDraw() < GAPS.oneDayIn) {
     const count = 1 + Math.floor(gapDraw() * GAPS.most);

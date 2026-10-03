@@ -1,9 +1,10 @@
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import type { Updatable } from '@/core/Engine';
 import { seededRandom } from '@/covers/generated/canvasUtils';
 import type { Furniture } from '../Furniture';
 import type { DayNight } from '../props/DayNight';
-import { instancedBasic, paint } from '../materials/palette';
+import { instancedBasic } from '../materials/palette';
 import { BULBS } from '../props/outdoors/Holiday';
 import { PARK_FIR } from '../city/park';
 import { TREE_FORM, type PlantedTree } from '../city/trees';
@@ -60,20 +61,13 @@ export class StreetChristmas extends THREE.Group implements Furniture, Updatable
     const fx = PARK_FIR.x + FLAT_IN_STREET.x;
     const fz = PARK_FIR.z + FLAT_IN_STREET.z;
     const { height, radius } = PARK_FIR;
-    const needles = snowCovered(new THREE.MeshStandardMaterial({ color: 0x1f3a26, roughness: 0.9, flatShading: true }));
-    const tiers = 4;
-    for (let t = 0; t < tiers; t++) {
-      const h = (height * 0.9) / tiers + 1.4;
-      const r = radius * (1 - t / (tiers + 0.6));
-      const cone = new THREE.Mesh(new THREE.ConeGeometry(r, h, 10), needles);
-      cone.position.set(fx, 1.2 + t * ((height * 0.82) / tiers) + h / 2, fz);
-      cone.castShadow = true;
-      cone.receiveShadow = true;
-      this.add(cone);
-    }
-    const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.28, 1.6, 8), paint(0x4a3422, 0.9));
-    trunk.position.set(fx, 0.8, fz);
-    this.add(trunk);
+    // The fir: whorls of drooping sprays round a tapering trunk, wider and further apart towards the foot, one merged mesh.
+    const needles = snowCovered(new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9, flatShading: true, vertexColors: true }));
+    const fir = new THREE.Mesh(firGeometry(height, radius, random), needles);
+    fir.position.set(fx, 0, fz);
+    fir.castShadow = true;
+    fir.receiveShadow = true;
+    this.add(fir);
     for (let i = 0; i < FIR_BULBS; i++) {
       const u = i / FIR_BULBS;
       const y = 1.4 + u * (height - 2);
@@ -106,6 +100,14 @@ export class StreetChristmas extends THREE.Group implements Furniture, Updatable
     return new THREE.Box3();
   }
 
+  /** The fir stands in the walked gardens (`PARK_WALK`): its lowest whorl is walked round, not through. */
+  get colliders(): readonly THREE.Box3[] {
+    const x = PARK_FIR.x + FLAT_IN_STREET.x;
+    const z = PARK_FIR.z + FLAT_IN_STREET.z;
+    const r = PARK_FIR.radius * 0.6;
+    return [new THREE.Box3(new THREE.Vector3(x - r, 0, z - r), new THREE.Vector3(x + r, 2.2, z + r))];
+  }
+
   update(dt: number): void {
     this.clock += dt;
     if (this.clock < TWINKLE_SECONDS) return;
@@ -118,4 +120,62 @@ export class StreetChristmas extends THREE.Group implements Furniture, Updatable
     if (this.bulbs.instanceColor) this.bulbs.instanceColor.needsUpdate = true;
     this.star.color.setHex(0xffe07a).multiplyScalar(0.6 + 1.2 * night);
   }
+}
+
+/**
+ * The park's fir: a tapering trunk and whorls of sprays (flattened cones reaching out and drooping
+ * at the tips), each whorl turned a little from the last, the sprays' tips paler (new growth) and
+ * their roots dark. Its foot at the origin; `radius` at the lowest whorl, narrowing to the leader.
+ */
+function firGeometry(height: number, radius: number, random: () => number): THREE.BufferGeometry {
+  const parts: THREE.BufferGeometry[] = [];
+  const trunk = new THREE.CylinderGeometry(0.06, 0.28, height, 8).translate(0, height / 2, 0);
+  parts.push(tinted(trunk.toNonIndexed(), 0.28, 0.2, 0.14));
+  trunk.dispose();
+  const whorls = 14;
+  const lowest = 1.3;
+  for (let w = 0; w < whorls; w++) {
+    const t = w / (whorls - 1);
+    const y = lowest + (height - 1.2 - lowest) * Math.pow(t, 0.9);
+    const reach = radius * Math.pow(1 - t, 0.95) + 0.35;
+    const sprays = Math.max(5, Math.round(6 + reach * 2.2));
+    const turn = random() * Math.PI;
+    for (let i = 0; i < sprays; i++) {
+      const a = turn + (i / sprays) * Math.PI * 2 + (random() - 0.5) * 0.3;
+      const length = reach * (0.85 + random() * 0.25);
+      // A cone along +y, laid out along +x (its tip outwards), flattened, drooping, turned round the trunk.
+      const spray = new THREE.ConeGeometry(0.22 + length * 0.2, length, 5, 1, true)
+        .translate(0, length / 2, 0)
+        .rotateZ(-Math.PI / 2 - 0.28 - random() * 0.12)
+        .scale(1, 0.42, 1)
+        .rotateY(a)
+        .translate(0, y, 0);
+      const g = spray.toNonIndexed();
+      spray.dispose();
+      const pos = g.getAttribute('position') as THREE.BufferAttribute;
+      const colors = new Float32Array(pos.count * 3);
+      for (let k = 0; k < pos.count; k++) {
+        const out = Math.min(1, Math.hypot(pos.getX(k), pos.getZ(k)) / Math.max(0.01, length));
+        colors.set([0.07 + 0.08 * out, 0.16 + 0.14 * out, 0.1 + 0.06 * out], k * 3);
+      }
+      g.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+      parts.push(g);
+    }
+  }
+  // The leader at the top.
+  const leader = new THREE.ConeGeometry(0.35, 1.6, 6, 1, true).translate(0, height - 0.6, 0);
+  parts.push(tinted(leader.toNonIndexed(), 0.12, 0.24, 0.14));
+  leader.dispose();
+  const merged = mergeGeometries(parts);
+  for (const g of parts) g.dispose();
+  return merged;
+}
+
+/** A geometry with every vertex the one colour (for merging with vertex-coloured parts). */
+function tinted(g: THREE.BufferGeometry, r: number, gr: number, b: number): THREE.BufferGeometry {
+  const count = g.getAttribute('position').count;
+  const colors = new Float32Array(count * 3);
+  for (let k = 0; k < count; k++) colors.set([r, gr, b], k * 3);
+  g.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+  return g;
 }

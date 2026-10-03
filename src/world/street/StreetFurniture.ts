@@ -18,11 +18,21 @@ export interface StreetFurnitureOptions {
   bins: readonly Vec2[];
   hedge: { x: number; from: number; to: number; height: number; depth: number };
   railings: { x: number; from: number; to: number; height: number };
-  /** The park's gate (its middle z along the railings, and width): a gap in the hedge, taller piers, the gate shut. */
-  gate: { z: number; width: number };
+  /**
+   * The park's gate (its middle z along the railings, and width): a gap in the hedge, taller piers, two leaves. With
+   * `hours` it opens in them (the leaves swing in towards the park) and its collider leaves `collisions` meanwhile,
+   * never shutting on the `viewer` still inside the park; without, it stays shut (the views of the street).
+   */
+  gate: { z: number; width: number; hours?: readonly [number, number] };
   anisotropy: number;
-  /** The clock: the advertising panel lights up at night. */
+  /** The clock: the advertising panel lights up at night, the gate keeps its hours. */
   dayNight: DayNight;
+  /** The zone's live colliders (world space): the shut gate's box comes and goes there. */
+  collisions?: { add(box: THREE.Box3): void; remove(box: THREE.Box3): void };
+  /** The camera: whether the player is in the park (the gate waits for them to come out). */
+  viewer?: THREE.Object3D;
+  /** The shelter's poster, when the street paints a live one (`events/WhatsOn`); else its games fair ad. */
+  ad?: THREE.Texture;
 }
 
 type Finish = 'metal' | 'wood' | 'glass' | 'hedge' | 'bin';
@@ -38,6 +48,9 @@ export function shelterRoof(length: number): { length: number; depth: number; he
 const EDGE = 0.008;
 /** Parts thinner than this stay sharp boxes (glass, bars): a bevel there is below a pixel. */
 const EDGE_MIN_SIDE = 0.03;
+/** The gate's leaves swing this far open (radians) over `GATE_SWING_S` seconds. */
+const GATE_OPEN = Math.PI * 0.45;
+const GATE_SWING_S = 2.5;
 /** Lumps in the hedge's clipped top and sides: how far they bulge, and how long a lump runs. */
 const HEDGE_LUMP = { up: 0.07, out: 0.035, every: 0.55 };
 
@@ -56,11 +69,19 @@ export class StreetFurniture extends THREE.Group implements Furniture, Updatable
   private readonly scratch = new THREE.Matrix4();
   private readonly ad: THREE.MeshStandardMaterial;
   private readonly dayNight: DayNight;
+  private readonly options: StreetFurnitureOptions;
+  /** The gate's two leaves (pivoting on their hinges at the piers), how open they are 0..1, its box while shut. */
+  private readonly leaves: THREE.Object3D[] = [];
+  private gateOpen = 0;
+  private gateBox: THREE.Box3 | null = null;
+  private gateShut = true;
+  private readonly eye = new THREE.Vector3();
 
   constructor(options: StreetFurnitureOptions) {
     super();
     this.name = 'StreetFurniture';
     this.dayNight = options.dayNight;
+    this.options = options;
     this.shelter(options.shelter);
     for (const bench of options.benches) this.bench(bench.at, bench.yaw);
     for (const bin of options.bins) this.bin(bin);
@@ -82,10 +103,11 @@ export class StreetFurniture extends THREE.Group implements Furniture, Updatable
       if (finish === 'glass') mesh.renderOrder = RENDER_ORDER.sheen;
       this.add(mesh);
     }
-    for (const [finish, material] of Object.entries(materials)) if (!this.parts.has(finish as Finish) && !isShared(material)) material.dispose();
+    this.gateLeaves(options.railings, options.gate, materials.metal);
+    for (const [finish, material] of Object.entries(materials)) if (!this.parts.has(finish as Finish) && finish !== 'metal' && !isShared(material)) material.dispose();
 
     // The shelter's advertising panel, lit from inside at night.
-    const poster = adTexture();
+    const poster = options.ad ?? adTexture();
     this.ad = new THREE.MeshStandardMaterial({ map: poster, emissiveMap: poster, emissive: 0xffffff, emissiveIntensity: 0.2, roughness: 0.3 });
     const panel = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 1.75), this.ad);
     const { at, yaw, length } = options.shelter;
@@ -98,9 +120,47 @@ export class StreetFurniture extends THREE.Group implements Furniture, Updatable
     return new THREE.Box3();
   }
 
-  /** The advertising panel's light follows the night. */
-  update(): void {
+  /** The advertising panel's light follows the night; the gate opens and shuts with the park's hours. */
+  update(dt: number): void {
     this.ad.emissiveIntensity = 0.15 + 1.1 * THREE.MathUtils.smoothstep(nightnessOf(this.dayNight.state), 0.2, 0.6);
+    this.updateGate(dt);
+  }
+
+  /** Whether the park's gate stands open (its gardens walked). */
+  get parkOpen(): boolean {
+    return !this.gateShut;
+  }
+
+  private updateGate(dt: number): void {
+    const { gate, collisions, viewer, railings } = this.options;
+    if (!gate.hours) return;
+    const h = this.dayNight.state.hours;
+    let open = h >= gate.hours[0] && h < gate.hours[1];
+    if (!open && viewer) {
+      // Never shut on someone still in the park: it waits for them to come out.
+      this.worldToLocal(viewer.getWorldPosition(this.eye));
+      // In the gateway too (its box reaches 0.08 m street side of the railings, plus the player's radius).
+      if (this.eye.x < railings.x + 0.6) open = true;
+    }
+    if (!this.gateBox) {
+      const half = gate.width / 2 + 0.3;
+      this.gateBox = new THREE.Box3(new THREE.Vector3(railings.x - 1.1, 0, gate.z - half), new THREE.Vector3(railings.x + 0.08, 3, gate.z + half)).applyMatrix4(this.matrixWorld);
+      collisions?.add(this.gateBox);
+    }
+    if (open === this.gateShut) {
+      this.gateShut = !open;
+      if (this.gateShut) collisions?.add(this.gateBox);
+      else collisions?.remove(this.gateBox);
+    }
+    const target = this.gateShut ? 0 : 1;
+    if (this.gateOpen === target) return;
+    this.gateOpen = THREE.MathUtils.clamp(this.gateOpen + (target > this.gateOpen ? dt : -dt) / GATE_SWING_S, 0, 1);
+    const swing = GATE_OPEN * THREE.MathUtils.smootherstep(this.gateOpen, 0, 1);
+    for (const [i, leaf] of this.leaves.entries()) leaf.rotation.y = (i === 0 ? -1 : 1) * swing;
+  }
+
+  dispose(): void {
+    if (this.gateBox && this.gateShut) this.options.collisions?.remove(this.gateBox);
   }
 
   private put(finish: Finish, geometry: THREE.BufferGeometry, at: Vec2, yaw: number, local: [number, number, number]): void {
@@ -184,19 +244,20 @@ export class StreetFurniture extends THREE.Group implements Furniture, Updatable
    * gate between two taller piers with ball finials, its two leaves shut. They are the street's edge (`colliders`).
    */
   private railings({ x, from, to, height }: StreetFurnitureOptions['railings'], gate: StreetFurnitureOptions['gate']): void {
-    const length = to - from;
-    const mid: Vec2 = [x, (from + to) / 2];
-    this.box('metal', 0.04, 0.04, length, mid, 0, [0, height - 0.08, 0]);
-    this.box('metal', 0.04, 0.04, length, mid, 0, [0, 0.12, 0]);
     const half = gate.width / 2;
     const inGate = (z: number): boolean => Math.abs(z - gate.z) < half + 0.25;
+    // The top and bottom rails in two runs, either side of the gate's piers.
+    const runs = [[from, gate.z - half - 0.12], [gate.z + half + 0.12, to]] as const;
+    for (const [z0, z1] of runs) {
+      const mid: Vec2 = [x, (z0 + z1) / 2];
+      this.box('metal', 0.04, 0.04, z1 - z0, mid, 0, [0, height - 0.08, 0]);
+      this.box('metal', 0.04, 0.04, z1 - z0, mid, 0, [0, 0.12, 0]);
+    }
     const bars: THREE.BufferGeometry[] = [];
     for (let z = from; z <= to; z += 0.14) if (!inGate(z)) bars.push(new THREE.BoxGeometry(0.018, height, 0.018).translate(x, height / 2, z));
     for (let z = from; z <= to; z += 2.5) if (!inGate(z)) bars.push(new THREE.BoxGeometry(0.06, height + 0.12, 0.06).translate(x, (height + 0.12) / 2, z));
-    // The gate: the leaves' bars go up to a higher rail, a pier either side.
+    // The piers either side of the gate, with ball finials (the leaves are `gateLeaves`).
     const gateHeight = height + 0.45;
-    for (let z = gate.z - half + 0.07; z < gate.z + half; z += 0.14) bars.push(new THREE.BoxGeometry(0.02, gateHeight, 0.02).translate(x, gateHeight / 2, z));
-    bars.push(new THREE.BoxGeometry(0.05, 0.05, gate.width).translate(x, gateHeight - 0.1, gate.z));
     for (const side of [-1, 1]) {
       const z = gate.z + side * (half + 0.12);
       bars.push(new THREE.BoxGeometry(0.2, gateHeight + 0.2, 0.2).translate(x, (gateHeight + 0.2) / 2, z));
@@ -205,7 +266,30 @@ export class StreetFurniture extends THREE.Group implements Furniture, Updatable
     const merged = mergeGeometries(bars.map((b) => (b.index ? b.toNonIndexed() : b)))!;
     for (const b of bars) b.dispose();
     this.put('metal', merged, [0, 0], 0, [0, 0, 0]);
-    this.colliders.push(new THREE.Box3(new THREE.Vector3(x - 1.1, 0, from), new THREE.Vector3(x + 0.08, 3, to)));
+    // The street's edge either side of the gate; the gate's own box comes and goes with its hours (`updateGate`), or
+    // stands for good when it keeps none.
+    for (const [z0, z1] of runs) this.colliders.push(new THREE.Box3(new THREE.Vector3(x - 1.1, 0, z0), new THREE.Vector3(x + 0.08, 3, z1)));
+    if (!gate.hours) this.colliders.push(new THREE.Box3(new THREE.Vector3(x - 1.1, 0, gate.z - half - 0.12), new THREE.Vector3(x + 0.08, 3, gate.z + half + 0.12)));
+  }
+
+  /** The gate's two leaves, each hinged at its pier (bars up to a higher rail, a rail along the top), shut to begin with. */
+  private gateLeaves({ x, height }: StreetFurnitureOptions['railings'], gate: StreetFurnitureOptions['gate'], metal: THREE.Material): void {
+    const half = gate.width / 2;
+    const gateHeight = height + 0.45;
+    for (const side of [-1, 1]) {
+      const bars: THREE.BufferGeometry[] = [];
+      // Leaf-local: z from the hinge (0) towards the gate's middle (`side` * -1).
+      for (let d = 0.07; d < half; d += 0.14) bars.push(new THREE.BoxGeometry(0.02, gateHeight, 0.02).translate(0, gateHeight / 2, -side * d));
+      for (const y of [0.15, gateHeight - 0.1]) bars.push(new THREE.BoxGeometry(0.05, 0.05, half - 0.01).translate(0, y, (-side * half) / 2));
+      const geometry = mergeGeometries(bars.map((b) => (b.index ? b.toNonIndexed() : b)))!;
+      for (const b of bars) b.dispose();
+      const leaf = new THREE.Mesh(geometry, metal);
+      leaf.castShadow = true;
+      leaf.receiveShadow = true;
+      leaf.position.set(x, 0, gate.z + side * half);
+      this.add(leaf);
+      this.leaves.push(leaf);
+    }
   }
 }
 

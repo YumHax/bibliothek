@@ -101,14 +101,14 @@ export class ArcadePlay implements KeyRoute {
     const { wallet, player } = this.parts;
     if (!wallet) return;
     // Broke, and not even a coin's worth of tickets: the house stands a ticket machine's play, so the loop never dead-ends.
-    const onTheHouse = !machine.freePlay && machine.freeWhenBroke && playIsFree(wallet);
-    if (machine.freePlay) {
+    const onTheHouse = !machine.freePlay && !machine.atHome && machine.freeWhenBroke && playIsFree(wallet);
+    if (machine.freePlay || machine.atHome) {
       // Nothing to pay (and nothing paid out while its page sends no score).
     } else if (onTheHouse) {
       if (this.housePlays++ === 0) this.host.reward({ title: 'On the house!', detail: 'Out of coins? This play is free. Win some tickets!' });
       else this.host.react('On the house again.');
     } else if (!this.pay(wallet, machine)) return;
-    this.paid = !onTheHouse && !machine.freePlay;
+    this.paid = !onTheHouse && !machine.freePlay && !machine.atHome;
     if (!replay) {
       this.host.putBack();
       this.host.stand();
@@ -244,6 +244,11 @@ export class ArcadePlay implements KeyRoute {
    */
   private over(machine: ArcadeMachineLike, result: ArcadeResult): void {
     const { wallet, prizes, arcadeDaily, medals, league, payoutStats, tournament, perks } = this.parts;
+    // At home, for fun: the end card says how it went, nothing is paid or counted.
+    if (machine.atHome) {
+      this.endTip(machine);
+      return;
+    }
     // Nothing came back (LexiPunk's page sent no score): the coin goes back, nothing else is settled.
     if (result.refund) {
       if (this.paid) wallet?.earnCoins(PLAY_COST);

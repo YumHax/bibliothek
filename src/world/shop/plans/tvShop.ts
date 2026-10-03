@@ -78,10 +78,10 @@ export const TV_SHOP: ShopPlan = {
       { lines: ['Collect Fri', 'Mrs Lind', 'colour ok now'] },
       { lines: ['Aerials', 'fitted', 'ask inside'] },
     ] }, at: { wall: 'left', along: -2.05, y: 1.6 } },
-    { kind: 'prop', prop: 'notice', options: { lines: ['REPAIRS: 3 DAYS', 'No fix, no fee.', 'Parts extra.'], width: 0.24, height: 0.18, hand: 'print', fixing: 'pin' }, at: { wall: 'left', along: -1.25, y: 1.58 } },
+    { kind: 'prop', prop: 'notice', options: { lines: ['SPARES OR REPAIR', 'fix it at home,', 'advice is free.'], width: 0.24, height: 0.18, hand: 'print', fixing: 'pin' }, at: { wall: 'left', along: -1.25, y: 1.58 } },
     { kind: 'prop', prop: 'notice', options: { lines: ['PLEASE DO NOT', 'tap the sets.', 'He does that.'] }, at: { wall: 'left', along: -0.6, y: 1.5 } },
     { kind: 'goodsShelf', at: { wall: 'left', along: 0.6, y: 0 }, options: { width: 1.4, stock: 'spares', seed: 4 } },
-    { kind: 'prop', prop: 'notice', options: { lines: ['WE BUY', 'broken sets', 'cash, no questions'], paper: 0xf0e0a0 }, at: { wall: 'left', along: 1.95, y: 1.5 } },
+    { kind: 'prop', prop: 'notice', options: { lines: ['WE BUY', 'working consoles', 'ask at the counter'], paper: 0xf0e0a0 }, at: { wall: 'left', along: 1.95, y: 1.5 } },
     // The front wall by the door: the maker's poster.
     { kind: 'prop', prop: 'notice', options: { lines: ['LUMINA', 'See it in colour', 'Authorised service agent'], width: 0.42, height: 0.6, hand: 'poster', fixing: 'frame', accent: 0x2e5a8a }, at: { wall: 'front', along: -2.1, y: 1.6 } },
     // The floor: heel marks at the counter, the trodden aisle, grit where the repairer stands at the bench.
@@ -116,5 +116,7 @@ export const TV_SHOP: ShopPlan = {
     { good: 'radio', on: 'kitchen', spot: [-0.28, 0], collides: false },
     { good: 'appliances', on: 'kitchen', spot: [0.22, 0], collides: false },
     { good: 'speakers', at: { floor: [-2.2, 1.7] } },
+    // The restored upright by the window, its glass to the aisle: clear of the window's plinth (z 2) and the repairs shelf.
+    { good: 'homeArcade', at: { floor: [1.75, 1.4], rotationY: -Math.PI / 2 } },
   ],
 };

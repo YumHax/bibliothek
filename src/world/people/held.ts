@@ -9,7 +9,77 @@ import type { ArmAngles } from './poses';
  * for, each with its own materials (so a faded person fades them too).
  */
 
-export type Held = 'phone' | 'book' | 'umbrella';
+export type Held = 'phone' | 'book' | 'umbrella' | 'shopping' | 'baguette' | 'flowers' | 'cigarette';
+
+/** The mesh of `item`, `seed` picking its colours; the umbrella goes on the torso, the rest in the right hand (`HELD_ON`). */
+export function heldMesh(item: Held, seed: number): THREE.Object3D {
+  switch (item) {
+    case 'phone':
+      return phoneMesh();
+    case 'book':
+      return bookMesh(seed);
+    case 'umbrella':
+      return umbrellaMesh(seed);
+    case 'shopping':
+      return paperBagMesh(seed, false);
+    case 'baguette':
+      return paperBagMesh(seed, true);
+    case 'flowers':
+      return bouquetMesh(seed);
+    case 'cigarette':
+      return cigaretteMesh();
+  }
+}
+
+const BAG_PAPERS = [0xc9a878, 0xe8e2d4, 0x9a6a3a, 0x2f4a3a];
+
+/** A paper carrier bag hanging from the hand by its handles (the wrist's frame); a baguette sticking out of it. */
+export function paperBagMesh(seed: number, baguette: boolean): THREE.Object3D {
+  const group = new THREE.Group();
+  const paper = new THREE.MeshStandardMaterial({ color: BAG_PAPERS[seed % BAG_PAPERS.length]!, roughness: 0.9 });
+  const bag = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.28, 0.24), paper);
+  bag.position.set(0, -0.25, 0.01);
+  const handle = new THREE.Mesh(new THREE.TorusGeometry(0.04, 0.006, 4, 10, Math.PI), paper);
+  handle.position.set(0, -0.11, 0.01);
+  handle.rotation.y = Math.PI / 2;
+  group.add(bag, handle);
+  if (baguette) {
+    const crust = new THREE.MeshStandardMaterial({ color: 0xc8883a, roughness: 0.8 });
+    const loaf = new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.03, 0.5, 8), crust);
+    loaf.position.set(0, -0.12, 0.07);
+    loaf.rotation.x = 0.25;
+    group.add(loaf);
+  }
+  return group;
+}
+
+/** A bunch of flowers wrapped in paper, carried along the forearm, blooms forward (the wrist's frame). */
+export function bouquetMesh(seed: number): THREE.Object3D {
+  const group = new THREE.Group();
+  const wrap = new THREE.MeshStandardMaterial({ color: 0xe8e4d8, roughness: 0.85, side: THREE.DoubleSide });
+  const cone = new THREE.Mesh(new THREE.ConeGeometry(0.07, 0.3, 10, 1, true), wrap);
+  cone.rotation.x = -Math.PI / 2;
+  cone.position.set(0, -0.05, 0.1);
+  const blooms = new THREE.Mesh(
+    new THREE.IcosahedronGeometry(0.075, 0),
+    new THREE.MeshStandardMaterial({ color: [0xd8344a, 0xf2c23a, 0xe86aa0, 0xf0ece0][seed % 4]!, roughness: 0.8, flatShading: true }),
+  );
+  blooms.position.set(0, -0.05, 0.27);
+  group.add(cone, blooms);
+  return group;
+}
+
+/** A cigarette between the fingers, its tip glowing (the wrist's frame). */
+export function cigaretteMesh(): THREE.Object3D {
+  const group = new THREE.Group();
+  const stick = new THREE.Mesh(new THREE.CylinderGeometry(0.004, 0.004, 0.07, 5), new THREE.MeshStandardMaterial({ color: 0xf2efe8, roughness: 0.7 }));
+  stick.rotation.x = Math.PI / 2;
+  stick.position.set(0.02, -0.075, 0.05);
+  const ember = new THREE.Mesh(new THREE.SphereGeometry(0.0045, 5, 4), new THREE.MeshStandardMaterial({ color: 0x3a1a0a, emissive: 0xff5a1a, emissiveIntensity: 2.5 }));
+  ember.position.set(0.02, -0.075, 0.087);
+  group.add(stick, ember);
+  return group;
+}
 
 /** Umbrella colours, picked by the person's seed. */
 const CANOPIES = [0x1c1e24, 0x2a3f6a, 0x7a1d24, 0x2f5a3a, 0xd8b23a, 0x5a2a5e];

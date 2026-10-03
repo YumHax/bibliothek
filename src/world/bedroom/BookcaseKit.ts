@@ -10,6 +10,9 @@ export interface BookcaseKitOptions {
   price: number;
   /** Called once the kit is paid for: the bookcase goes up where the kit stood. */
   onBought: () => void;
+  /** Where it is for, if not the bedroom (Mrs Roux's rooms, `world/annex`): its purchase's title, and who it shelves. */
+  title?: string;
+  for?: string;
 }
 
 const WIDTH = 0.62;
@@ -29,7 +32,7 @@ const STRAP = paint(0xe8e2d4, 0.5);
  * with `y: 0`: origin on the floor at the wall, +z into the room. Decoration: never collides.
  */
 export class BookcaseKit extends Prop implements Interactable, UpgradeOfferLike {
-  readonly title = 'A bookcase for the bedroom';
+  readonly title: string;
   readonly detail = 'It stands where the kit leaned: the games waiting for a shelf go up on it.';
   readonly hitboxes: THREE.Object3D[];
   readonly price: number;
@@ -39,6 +42,7 @@ export class BookcaseKit extends Prop implements Interactable, UpgradeOfferLike 
     super();
     this.name = 'BookcaseKit';
     this.price = options.price;
+    this.title = options.title ?? 'A bookcase for the bedroom';
     // Stands on its bottom edge a box's thickness out from the wall and leans back onto it.
     const box = new THREE.Group();
     box.position.z = THICKNESS + Math.sin(LEAN) * HEIGHT;
@@ -81,7 +85,7 @@ export class BookcaseKit extends Prop implements Interactable, UpgradeOfferLike 
   }
 
   label(): string | null {
-    return this.visible ? `Bookcase kit (${this.price} coins, for the games the living room has no room left for) · buy` : null;
+    return this.visible ? `Bookcase kit (${this.price} coins, for the games ${this.options.for ?? 'the living room'} has no room left for) · buy` : null;
   }
 
   activate(session: SessionActions): void {

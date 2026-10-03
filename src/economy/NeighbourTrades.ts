@@ -3,6 +3,10 @@ import { KEYS, PersistedStore, safeStorage } from '@/persistence';
 import type { Views } from './Fame';
 import { NEIGHBOUR_SWAPS, shopPrice } from './pricing';
 import { seeded } from './seeded';
+import { befriend } from '@/building/friendship';
+
+/** How much a swap done counts for the friendship with that neighbour. */
+const SWAP_FRIENDSHIP = 15;
 
 /** Who lives behind a door on the stairs: the door's key (`landing:index`), the name, the floor's name. */
 export interface Resident {
@@ -41,6 +45,8 @@ export interface NeighbourTradesOptions {
   market: { randomGames(seed: string, count: number): Promise<Game[]> };
   fame: { lookup(game: Pick<Game, 'id' | 'title' | 'platform'>): Promise<Views> };
   residents: readonly Resident[];
+  /** Whether the resident behind `door` still lives here (Mrs Roux moves away: `building/rouxMove`); default yes. */
+  present?: (door: string) => boolean;
   storage?: Storage | null;
 }
 
@@ -69,6 +75,8 @@ export class NeighbourTrades {
   get offer(): TradeOffer | null {
     const offer = this.state.offer;
     if (!offer || this.state.done.includes(offer.id) || offer.until < this.options.today.gameDay) return null;
+    // Their offer goes with them when they move out.
+    if (this.options.present && !this.options.present(offer.door)) return null;
     return offer;
   }
 
@@ -118,6 +126,8 @@ export class NeighbourTrades {
   /** The swap was made (call inside the swap's save: `Transactions.swapWithNeighbour`'s `alsoDo`). */
   complete(offer: TradeOffer): void {
     this.close(offer);
+    // A swap done is a favour between neighbours (`building/friendship`): they ask the player in sooner.
+    befriend(offer.door, SWAP_FRIENDSHIP, 'swap', offer.day);
   }
 
   /** The player said no: the neighbour asks someone else. */
@@ -137,6 +147,8 @@ export class NeighbourTrades {
     if (owned.length < MIN_OWNED || !residents.length) return null;
     const wants = owned[Math.floor(random() * owned.length)]!;
     const resident = residents[Math.floor(random() * residents.length)]!;
+    // Drawn from them all, so the days' draws stay as they were: a neighbour who moved away makes no offer that day.
+    if (this.options.present && !this.options.present(resident.door)) return null;
     const worth = shopPrice(wants, await fame.lookup(wants));
     const candidates = (await market.randomGames(`neighbours:${day}:${resident.door}`, CANDIDATES)).filter((g) => g.id !== wants.id && !collection.owns(g.id));
     let best: { game: Game; score: number } | null = null;

@@ -12,6 +12,7 @@ import { heardBy, pointSound } from '../build/hearing';
 import { followDaylight, followUpgrades } from '../build/follow';
 import { placerFor } from '../build/owned';
 import { bookcasesIn, movableBookcases } from '../build/bookcases';
+import { labelledBookcases } from '../labels/labelledBookcases';
 import type { CatPerch } from '../cat/spots';
 import { Bed } from './Bed';
 import { Nightstand } from './Nightstand';
@@ -28,6 +29,8 @@ import { placeLeaves, placeWith, floorPointsToWorld } from '../zone/attach';
 import { Television } from '../Television';
 import { FrostedWindow } from '../props/FrostedWindow';
 import { BookcaseKit } from './BookcaseKit';
+import { ANNEX_OVERFLOW } from '../annex/annexShelves';
+import { onRouxPhase } from '@/building/rouxMove';
 import { Shelving } from '../shelving/Shelving';
 import { tellOutcome } from '@/household/tellOutcome';
 import { playAlarmButton, playHangers } from '@/audio/householdSounds';
@@ -40,7 +43,9 @@ import { ArcadePoster } from '../prizes/ArcadePoster';
 import { MoodLamp } from '../prizes/MoodLamp';
 import { NeighbourVoices } from '@/audio/flatSounds';
 import { BEDROOM_PLAN } from './bedroomPlan';
+import { placeHomeArcade, type HomeArcade } from '../homeArcade/placeHomeArcade';
 import { rugsUnderfoot } from '../build/rugsUnderfoot';
+import { regionLockFor } from '@/economy/regionLock';
 
 /** What the bedroom built that the rest of the game needs: its screen, the bed (a cat's napping spot), the overflow shelving. */
 export interface BedroomHandle extends ZoneHandle {
@@ -49,6 +54,8 @@ export interface BedroomHandle extends ZoneHandle {
   bed: CatPerch;
   /** The bought bookcases; null when the build has no collection overflow to show. */
   shelving: Shelving | null;
+  /** The home arcade cabinet (staged till bought): a games night hands its stick two to a guest. */
+  homeArcade: HomeArcade;
 }
 
 /**
@@ -111,6 +118,7 @@ export function furnishBedroom(zone: Zone, ctx: BuildContext): BedroomHandle {
   const dresser = drawers.placeAt(new Dresser({ width: plan.dresser.width, tray: false }), plan.dresser.at);
   furnishings?.register(zone, dresser, { key: 'dresser', at: plan.dresser.at, owned: own.dresser });
   const tv = new Television(cssLayer, { ...heardBy(ctx), screenWidth: plan.tv.screenWidth });
+  tv.regionLock = regionLockFor(upgrades); // a Japanese copy needs its converter (`economy/regionLock`)
   tv.position.set(plan.tv.along, dresser.topHeight, dresser.topCentreZ);
   tv.mountOn(0);
   placerFor(zone, upgrades, own.tv).placeWith(dresser, tv);
@@ -164,7 +172,7 @@ export function furnishBedroom(zone: Zone, ctx: BuildContext): BedroomHandle {
     }),
   );
 
-  const shelving = overflow && upgrades ? furnishBookcases(zone, covers, overflow, upgrades, ctx.collection, furnishings) : null;
+  const shelving = overflow && upgrades ? furnishBookcases(zone, covers, overflow, upgrades, ctx.collection, furnishings, ctx.home.shelfLabels) : null;
   // What the arcade paid out, on the bare right wall.
   if (prizes) zone.placeAt(new PrizeShelf({ prizes, width: plan.prizeShelf.width }), plan.prizeShelf.at);
   // Prizes that live at home, hidden until won: the arcade poster on the wall, the mood lamp on the dresser's books.
@@ -184,7 +192,9 @@ export function furnishBedroom(zone: Zone, ctx: BuildContext): BedroomHandle {
     restingSpot: (out) => (mattress ?? bed).restingSpot(out),
     approachPoint: (out) => (mattress ?? bed).approachPoint(out),
   };
-  return { room, tv, bed: sleeper, shelving, catVisits: floorPointsToWorld(zone, plan.catVisits), surfaceAt: rugsUnderfoot(zone) };
+  // The home arcade cabinet by the door, once bought (`world/homeArcade`).
+  const homeArcade = placeHomeArcade(zone, ctx, plan.homeArcade, own.homeArcade);
+  return { room, tv, bed: sleeper, shelving, homeArcade, catVisits: floorPointsToWorld(zone, plan.catVisits), surfaceAt: rugsUnderfoot(zone) };
 }
 
 /**
@@ -198,6 +208,7 @@ function furnishBookcases(
   upgrades: NonNullable<HomeContext['upgrades']>,
   { arrangement, boxes, shelved }: Pick<CollectionContext, 'arrangement' | 'boxes' | 'shelved'>,
   furnishings: HomeContext['furnishings'],
+  labels: HomeContext['shelfLabels'],
 ): Shelving {
   const plan = BEDROOM_PLAN;
   const { position, rotationY } = resolvePlacement(plan.room, plan.bookcase.at);
@@ -206,7 +217,9 @@ function furnishBookcases(
   const here = (bought = upgrades.count('bookcase')) => bookcasesIn(bought).bedroom;
   const shelving = new Shelving(zone, covers, overflow, {
     id: 'bedroom',
-    ...movableBookcases(zone, furnishings),
+    // What this one has no room for goes next door once Mrs Roux's rooms are the flat's (`world/annex`).
+    overflow: ANNEX_OVERFLOW,
+    ...labelledBookcases(movableBookcases(zone, furnishings), labels, 'bedroom'),
     ...(arrangement ? { arrangement } : {}),
     ...(boxes ? { pool: boxes } : {}),
     ...(shelved ? { rowsFrom: shelved } : {}),
@@ -220,10 +233,13 @@ function furnishBookcases(
   zone.onUnload(() => shelving.dispose());
   // The kit leans there once the next bookcase bought would stand in here.
   const kit = zone.placeAt(new BookcaseKit({ price: BOOKCASE_PRICE, onBought: () => upgrades.add('bookcase') }), plan.bookcaseKit);
-  followUpgrades(zone, upgrades, () => {
+  const refresh = (): void => {
     shelving.setCapacity(here());
     kit.setAvailable(here() < 1 && here(upgrades.count('bookcase') + 1) > 0);
-  });
+  };
+  followUpgrades(zone, upgrades, refresh);
+  // The wall to Mrs Roux's rooms knocked through: the bookcases shift along (`bookcasesIn`).
+  zone.onUnload(onRouxPhase(refresh));
   return shelving;
 }
 

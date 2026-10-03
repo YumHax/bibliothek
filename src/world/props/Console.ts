@@ -8,6 +8,7 @@ import type { PlayerState, SessionActions } from '@/game/SessionActions';
 import { playPlasticClick } from '@/audio/furnitureSounds';
 import type { GameBox } from '../GameBox';
 import { unplayableWhy } from '../box/unplayable';
+import type { RegionLock } from '@/economy/regionLock';
 import type { VideoScreen } from '../screen';
 import { nowPlaying } from '../screen/nowPlaying';
 import type { MediaDeck } from '../media/MediaDeck';
@@ -45,6 +46,8 @@ interface Loaded {
  */
 export class Console extends Prop implements Interactable, Updatable, MediaDeck {
   readonly hitboxes: THREE.Object3D[];
+  /** Whether a copy goes in at all (a Japanese one needs its converter, `economy/regionLock`); set by the room's builder. */
+  regionLock: RegionLock | null = null;
 
   private platform: Platform | null = null;
   private visual: THREE.Group | null = null;
@@ -168,6 +171,11 @@ export class Console extends Prop implements Interactable, Updatable, MediaDeck 
     }
     if (!box.playable) {
       session.refuse(`${box.game.title} is ${unplayableWhy(box)}: no ${mediaWord(box)} to put in.`);
+      return;
+    }
+    const locked = this.regionLock?.(box.game);
+    if (locked) {
+      session.refuse(locked);
       return;
     }
     // Already in: just play it (the box in hand may be a new one of the same copy, its shelf rebuilt).

@@ -6,6 +6,7 @@ import type { DayNight, SkyState } from '../props/DayNight';
 import { STAIRWELL_PLAN as plan, STOREY, STOREYS, landingY } from './stairwellPlan';
 import { playRelay } from './stairSounds';
 import { LAMP_GLOW, LAMP_LIGHT } from '../lighting/lampColours';
+import { mainsOn } from '@/building/mains';
 
 export interface StairLightsOptions {
   /** The eye: the sensors see it, and the real lights follow the lit globes nearest to it. */
@@ -35,6 +36,11 @@ const GLOBE_Y = 2.35;
 const EYE = 1.7;
 /** The sky through the roof light, by weather: an overcast's grey, the white of snow lying on the glass. */
 const OVERCAST = new THREE.Color(0x9aa2aa);
+/** A power cut's candles (`setCandles`): the two real lights move to the nearest flames, this bright, this colour. */
+const CANDLE_INTENSITY = 1.6;
+const CANDLE = new THREE.Color(0xff9a48);
+/** The endless stairs' globes (`setHaunted`): a faint, unsteady glow, whatever the sensors see. */
+const HAUNT_GLOW = 0.18;
 const SNOW_GLASS = new THREE.Color(0xe8eef2);
 
 interface Slot {
@@ -84,6 +90,13 @@ export class StairLights extends THREE.Group implements Furniture, Updatable, Oc
   /** 0 .. 1: the stairwell's real lights allowed on (the player in it), eased. */
   private on = 0;
   private chooseClock = 0;
+  /** The flames a power cut lit on the landings (zone-local), the real lights' places while the mains are off. */
+  private candles: readonly THREE.Vector3[] = [];
+  private candleTime = 0;
+  /** The endless stairs: the globes only flicker. */
+  private haunted = false;
+  /** Whether the last frame was in a power cut. */
+  private cut = false;
 
   constructor(private readonly dayNight: DayNight, private readonly options: StairLightsOptions) {
     super();
@@ -138,9 +151,38 @@ export class StairLights extends THREE.Group implements Furniture, Updatable, Oc
     this.occupied = occupied;
   }
 
+  /**
+   * A timer button pressed (`TimerButton`, on every landing): the old minuterie, every globe of the building on for
+   * the timer's time at once (each relay clacks as it switches), over the sensors. Returns false when nothing lit
+   * (no power).
+   */
+  pressTimer(): boolean {
+    if (!mainsOn()) return false;
+    this.slots.forEach((slot) => {
+      if (slot.left <= 0) this.relay(slot, true);
+      slot.left = Math.max(slot.left, LIT_S);
+    });
+    return true;
+  }
+
+  /** How lit floor landing `k`'s globe is now, 0 .. 1 (its timer button's pilot glows while it is dark). */
+  landingGlow(k: number): number {
+    return this.slots[k]?.glow ?? 0;
+  }
+
   /** How lit the stairwell is where the player is, 0 dark .. 1 bright: the lit globes near them, a little daylight from the roof. */
   lightLevel(): number {
     return THREE.MathUtils.clamp(0.25 + 0.5 * this.litNear() + 0.25 * this.dayNight.state.daylight, 0, 1);
+  }
+
+  /** A power cut's flames on the landings (zone-local; none: the power is back): the real lights go to the nearest. */
+  setCandles(spots: readonly THREE.Vector3[]): void {
+    this.candles = spots;
+  }
+
+  /** The endless stairs (`endless/EndlessStairs`): the globes no longer answer the sensors, they flicker faintly. */
+  setHaunted(haunted: boolean): void {
+    this.haunted = haunted;
   }
 
   update(dt: number): void {
@@ -149,6 +191,16 @@ export class StairLights extends THREE.Group implements Furniture, Updatable, Oc
     this.eye.copy(this.ear);
     this.worldToLocal(this.eye);
     this.sensors(dt);
+    if (!mainsOn()) {
+      this.byCandlelight(dt);
+      this.cut = true;
+      return;
+    }
+    if (this.cut) {
+      // The power is back: the real lights leave the flames for their globes.
+      this.cut = false;
+      for (const bulb of this.bulbs) bulb.light.position.copy(this.slots[bulb.slot]!.at);
+    }
     this.chooseClock -= dt;
     if (this.chooseClock <= 0 && this.occupied) {
       this.chooseClock = 0.25;
@@ -164,6 +216,7 @@ export class StairLights extends THREE.Group implements Furniture, Updatable, Oc
       } else {
         bulb.fade = Math.min(1, bulb.fade + dt / SLOT_FADE_S);
       }
+      bulb.light.color.copy(WARM);
       bulb.light.intensity = INTENSITY * this.on * bulb.fade * this.slots[bulb.slot]!.glow;
     }
     const lit = this.litNear();
@@ -176,7 +229,18 @@ export class StairLights extends THREE.Group implements Furniture, Updatable, Oc
   private sensors(dt: number): void {
     const feet = this.eye.y - EYE;
     let changed = false;
+    // No power: every globe goes out (no relay heard, there is nothing to switch). Haunted: they only flicker.
+    const powered = mainsOn();
     this.slots.forEach((slot, i) => {
+      if (!powered || this.haunted) {
+        slot.left = 0;
+        const target = powered && Math.random() < 0.92 ? HAUNT_GLOW * (0.6 + 0.4 * Math.random()) : 0;
+        if (Math.abs(slot.glow - target) < 1e-3) return;
+        slot.glow = THREE.MathUtils.clamp(slot.glow + THREE.MathUtils.clamp(target - slot.glow, -dt / COOL_S, dt / WARM_UP_S), 0, 1);
+        this.globes.setColorAt(i, this.colour.copy(WARM).multiplyScalar(0.12 + 1.6 * slot.glow));
+        changed = true;
+        return;
+      }
       const seen = this.occupied && (sees(slot, this.eye.x, this.eye.z, feet) || this.walkers.some((w) => w.isPresent && sees(slot, w.position.x, w.position.z, w.position.y)));
       if (seen) {
         if (slot.left <= 0) this.relay(slot, true);
@@ -205,6 +269,29 @@ export class StairLights extends THREE.Group implements Furniture, Updatable, Oc
       const next = free.shift();
       if (next !== undefined) bulb.next = next;
     }
+  }
+
+  /**
+   * The power is off: the two real lights stand over the flames nearest the player, a candle's dim orange that
+   * wavers; none lit, they are dark. The hemisphere keeps only what comes down from the roof light.
+   */
+  private byCandlelight(dt: number): void {
+    this.candleTime += dt;
+    const nearest = [...this.candles].sort((a, b) => a.distanceToSquared(this.eye) - b.distanceToSquared(this.eye));
+    this.bulbs.forEach((bulb, i) => {
+      const flame = nearest[i];
+      if (!flame) {
+        bulb.light.intensity = 0;
+        return;
+      }
+      bulb.light.position.copy(flame);
+      bulb.light.color.copy(CANDLE);
+      const flicker = 0.82 + 0.1 * Math.sin(this.candleTime * 11 + i * 2.1) + 0.08 * Math.sin(this.candleTime * 23.7 + i);
+      bulb.light.intensity = CANDLE_INTENSITY * this.on * flicker;
+    });
+    const s = this.dayNight.state;
+    this.ambient.intensity = this.occupied ? 0.04 + 0.12 * s.daylight : 0;
+    this.paintSky(s);
   }
 
   /** The glow the player stands in: the brightest real light's globe, as lit as it is. */

@@ -42,6 +42,11 @@ export interface WindowOptions {
   blind?: boolean;
   /** Called while the curtains move with how open they are (1 open, 0 drawn): the room dims its skylight from it. */
   onCurtainsChange?: (openness: number) => void;
+  /**
+   * What is seen through the glass instead of the shared panorama: e.g. an `OutlookView`'s panes, for a room far from
+   * where the panorama's eye is (a neighbour's flat). Laid flush with the pane, local +z into the room.
+   */
+  glass?: THREE.Object3D;
 }
 
 /** Height of the steel kick rail between the floor and the glass (hides the baseboard). */
@@ -85,7 +90,7 @@ const HEM_CLEARANCE = 0.015;
  * with them) and report their openness through `onCurtainsChange` so the room's skylight follows.
  */
 export class RoomWindow extends Prop implements Updatable, Interactable, OccupancyAware, DrawnAware {
-  readonly options: Required<Omit<WindowOptions, 'onCurtainsChange'>> & Pick<WindowOptions, 'onCurtainsChange'>;
+  readonly options: Required<Omit<WindowOptions, 'onCurtainsChange' | 'glass'>> & Pick<WindowOptions, 'onCurtainsChange' | 'glass'>;
   /** Local y of the floor (the bottom of the kick rail). */
   readonly floorY: number;
   private readonly unsubscribe: () => void;
@@ -129,10 +134,13 @@ export class RoomWindow extends Prop implements Updatable, Interactable, Occupan
     const { width: w, height: h } = this.options;
     this.floorY = -h / 2 - KICK;
 
-    // The pane, flush with the wall: the outside, seen through it.
+    // The pane, flush with the wall: the outside, seen through it (the panorama, or the caller's own view).
     const pane = new THREE.Mesh(new THREE.PlaneGeometry(w, h), outdoors.material);
     pane.position.z = 0.004;
-    this.add(pane);
+    if (options.glass) {
+      options.glass.position.z = 0.004;
+      this.add(options.glass);
+    } else this.add(pane);
     // Over it, the room given back by the glass: faint by day, the lit room in the dark pane at night.
     const reflection = new THREE.Mesh(pane.geometry, this.reflection.material);
     reflection.position.z = PANE_REFLECTION_Z;

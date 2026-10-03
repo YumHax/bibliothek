@@ -13,9 +13,12 @@ import { PAD_LABELS, type PadButton } from './padButtons';
  * - `KeyE`: `walkAway` (arcade, first) > `putBackPiece` (furniture carried) > `putBack` (a box in hand) > `standUp` (seated, last);
  * - `KeyM`: `setDown` (furniture carried) > `putHere` (a shelf box in hand, aimed at a shelf) > `moveFurniture` (hands free);
  *   the right mouse button does the same (`Session.bindInput`: a tap with a box in hand, a press otherwise);
- * - `KeyR`: `turnPiece` (furniture carried) first; `KeyQ`: `turnPieceBack` (furniture carried) > `readStalls` (market);
+ * - `KeyR`: `turnPiece` (furniture carried) first; `KeyQ`: `turnPieceBack` (furniture carried) > `readStalls` (market) >
+ *   `tipBox` (held at home, hands free: read as a held key by `shelving/BoxTipping`, like `readStalls`);
+ * - `KeyK`: `padA` (at a program on the TV) > `labelShelf` (at home, the label maker bought);
  * - `KeyG`: `gridSnap` (furniture carried); `KeyU`: `handBack` (market copy in hand) > `undoMove` (hands free);
  * - `KeyO`: `lookInside` (a market copy: finds out a fake, lets the key go on) then `openBox`;
+ * - `KeyX`: `storePiece` (furniture carried) > `swap` (a market copy in hand) > `dismissNotice` (anywhere else in a room);
  * - `KeyR`: `holdCopy` (a market copy in hand) > `randomPick` (Browse skips it while holding);
  * - `Space` / `Enter`: `fire` (the arcade replays on its end card) > `pickUpFound` (Browse);
  * - movement keys: walking, the arcade stick while at a machine, `standUp` when seated.
@@ -140,6 +143,12 @@ export const ACTIONS = {
   callCat: { codes: ['KeyC'], context: 'room', hint: 'call the cat', pad: 'GamepadRS', rebind: 'Call the cat' },
   journal: { codes: ['KeyJ'], context: 'room', hint: 'open the journal: today, the days before', padHold: 'GamepadSelect', rebind: 'Journal' },
   photoMode: { codes: ['KeyP'], context: 'room', hint: 'photo mode (again: leave it)', rebind: 'Photo mode' },
+  tipBox: { codes: ['KeyQ'], context: 'room', hint: 'hold to tip the box looked at half out of its row and read it, at home (shares readStalls’s key)' },
+  labelShelf: { codes: ['KeyK'], context: 'room', hint: 'print a label for the shelf edge looked at, or peel one off (the label maker, at home)' },
+  dismissNotice: {
+    codes: ['KeyX'], context: 'room', hint: 'put down the card being read (twice quickly: every waiting card), else the tips, the reward banner, the subtitles (shares swap’s key)',
+    padHold: 'GamepadY',
+  },
 
   // --- a market copy in hand ---------------------------------------------------------------------------
   buy: {
@@ -151,9 +160,9 @@ export const ACTIONS = {
     touch: { label: 'Haggle', title: 'Make the stallholder an offer', slot: 4 }, rebind: 'Haggle',
   },
   holdCopy: { codes: ['KeyR'], context: 'market', hint: 'hold it for the day (shares randomPick’s key)' },
-  swap: { codes: ['KeyX'], context: 'market', hint: 'swap one of yours for it', rebind: 'Swap' },
+  swap: { codes: ['KeyX'], context: 'market', hint: 'swap one of yours for it', rebind: 'Swap / put a card down' },
   handBack: { codes: ['KeyU'], context: 'market', hint: 'hand back what was just bought' },
-  readStalls: { codes: ['KeyQ'], context: 'market', hint: 'hold to read titles and prices from the aisle', rebind: 'Read the stalls / turn a piece back' },
+  readStalls: { codes: ['KeyQ'], context: 'market', hint: 'hold to read titles and prices from the aisle', rebind: 'Read the stalls / tip a box / turn a piece back' },
 
   // --- found box, panels -------------------------------------------------------------------------------
   pickUpFound: { codes: ['Enter', 'NumpadEnter'], context: 'room', hint: 'pick up the box the search / random pick found' },
@@ -172,6 +181,11 @@ export const ACTIONS = {
   stickUp: { codes: ['KeyW', 'ArrowUp'], context: 'arcade', hint: 'the stick, up' },
   stickDown: { codes: ['KeyS', 'ArrowDown'], context: 'arcade', hint: 'the stick, down' },
   fire: { codes: ['Space', 'Enter', 'NumpadEnter'], context: 'arcade', hint: 'fire; on the end card, play again' },
+  // --- holding a pad at a screen program (`onscreen/ProgramRunner`: the stick keys are the d-pad; every key is the program's) ---
+  padA: { codes: ['KeyK', 'Space'], context: 'arcade', hint: 'the pad’s A button, at a program on the TV (the emulator)' },
+  padB: { codes: ['KeyJ', 'ShiftLeft'], context: 'arcade', hint: 'the pad’s B button, at a program on the TV' },
+  padStart: { codes: ['Enter', 'NumpadEnter'], context: 'arcade', hint: 'the pad’s Start, at a program on the TV' },
+  padSelect: { codes: ['KeyH', 'Backspace'], context: 'arcade', hint: 'the pad’s Select, at a program on the TV' },
 
   // --- photo mode (`src/photo`: the walking keys fly the camera; the held ones are read each frame) ------
   photoCapture: { codes: ['Enter', 'NumpadEnter'], context: 'photo', hint: 'take the photo (a click does too)' },

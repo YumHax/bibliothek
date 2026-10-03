@@ -5,18 +5,40 @@ import { QUALITY } from '@/graphics/quality';
 import { createCanvas, toTexture } from '@/covers/generated/canvasUtils';
 import { Prop } from '../props/Prop';
 import { INSET } from '../props/joinery';
-import { paint, standard } from '../materials/palette';
+import { instancedStandard, paint, standard } from '../materials/palette';
 import { isShared } from '../materials/sharedResources';
+import { plasterBumpMap } from '../materials/surfaces';
 import { STAIRWELL_PLAN as plan, STOREY, STOREYS, landingY, type Rect } from './stairwellPlan';
+import { flightTreads } from './flights';
+import { STAIR_ATTRIBUTE, stairFloors, stairWalls, type StairFloors, type StairWalls } from './stairFinish';
 
-type Finish = 'stone' | 'plaster' | 'iron' | 'wood' | 'hall' | 'tread';
+/** `wall`: the painted walls (dado, creases: `stairFinish`); `plaster`: the ceilings, soffits and cornices. */
+type Finish = 'stone' | 'plaster' | 'wall' | 'iron' | 'wood' | 'hall' | 'tread';
+
+/** Which floor lines a wall stands over (see `stairWalls`): the stair's sides, the landings' walls, the hall's. */
+type WallProfile = 'west' | 'east' | 'north' | 'south' | 'strip' | 'hall';
 
 /** How high a step up the feet may take in one go (a stair's riser, with room to spare). */
 const STEP_UP = 0.45;
 const SLAB = 0.18;
 const RAIL_HEIGHT = 0.95;
-const BAR = 0.016;
 const BAR_SPACING = 0.12;
+/** A cast-iron baluster, turned: (radius, height) up its profile, for a 0.95 m rail. */
+const BALUSTER: readonly [number, number][] = [
+  [0.014, 0],
+  [0.014, 0.04],
+  [0.008, 0.07],
+  [0.016, 0.2],
+  [0.008, 0.33],
+  [0.006, 0.6],
+  [0.011, 0.78],
+  [0.006, 0.84],
+  [0.006, 0.95],
+];
+/** The cornice round each landing's ceiling: its height down the wall, how far it stands out. */
+const CORNICE = { drop: 0.07, out: 0.05 };
+/** The skylight's iron: its frame round the glass, the bars between the panes. */
+const SKYLIGHT = { width: 2.6, depth: 3.4, panesX: 4, panesZ: 6, frame: 0.1, bar: 0.03 };
 /** The treads' nosings, rounded this much (with `QUALITY.bevels`) so each step catches the light. */
 const NOSING = 0.008;
 /** The shaft's walls and our strip's run up to here (the roof over our landing). */
@@ -40,10 +62,14 @@ export class Staircase extends Prop {
   readonly contactShadow = false;
   readonly colliders: THREE.Box3[] = [];
   private readonly parts = new Map<Finish, THREE.BufferGeometry[]>();
+  private readonly balusters: THREE.Matrix4[] = [];
   private readonly flightRun = plan.treads * 0.28;
   private readonly half = STOREY / 2;
+  private readonly walls: StairWalls;
+  private readonly floors: StairFloors[] = [];
 
-  constructor() {
+  /** `paint`: the walls' colours as the co-owners voted them (`STAIR_PAINTS`). */
+  constructor(wallPaint = 'cream') {
     super();
     this.name = 'Staircase';
     this.buildWalls();
@@ -55,24 +81,57 @@ export class Staircase extends Prop {
       this.buildRails(k);
     }
     this.buildHall();
+    this.buildNewel();
+    this.buildCornices();
+    this.buildSkylight();
     this.buildColliders();
 
+    this.walls = stairWalls(wallPaint);
+    const stone = new THREE.MeshStandardMaterial({ color: 0xcfc8ba, roughness: 0.75 });
+    const tread = new THREE.MeshStandardMaterial({ map: treadTexture(), roughness: 0.6 });
+    const hall = new THREE.MeshStandardMaterial({ map: cabochonTexture(), roughness: 0.35 });
+    this.floors = [stairFloors(stone, 'stone'), stairFloors(tread, 'tread'), stairFloors(hall, 'hall')];
+    const plaster = new THREE.MeshStandardMaterial({ color: 0xe9e0cc, roughness: 0.95 });
+    if (QUALITY.detailedMaterials) {
+      plaster.bumpMap = plasterBumpMap();
+      plaster.bumpScale = 0.3;
+    }
     const materials: Record<Finish, THREE.Material> = {
-      stone: paint(0xcfc8ba, 0.75),
-      tread: new THREE.MeshStandardMaterial({ map: treadTexture(), roughness: 0.6 }),
-      plaster: paint(0xe6dcc6, 0.95),
+      stone,
+      tread,
+      plaster,
+      wall: this.walls.material,
       iron: standard({ color: 0x1c1d20, roughness: 0.45, metalness: 0 }),
       wood: paint(0x4a2c1c, 0.5),
-      hall: new THREE.MeshStandardMaterial({ map: cabochonTexture(), roughness: 0.35 }),
+      hall,
     };
     for (const [finish, geometries] of this.parts) {
       const mesh = new THREE.Mesh(mergeGeometries(geometries)!, materials[finish]);
       for (const g of geometries) g.dispose();
       mesh.receiveShadow = true;
-      mesh.castShadow = finish !== 'plaster';
+      mesh.castShadow = finish !== 'plaster' && finish !== 'wall';
       this.add(mesh);
     }
     for (const [finish, material] of Object.entries(materials)) if (!this.parts.has(finish as Finish) && !isShared(material)) material.dispose();
+
+    // The balusters, one turned cast-iron bar instanced all the way down (one draw).
+    const lathe = new THREE.LatheGeometry(BALUSTER.map(([r, y]) => new THREE.Vector2(r, y)), 6);
+    const bars = new THREE.InstancedMesh(lathe, instancedStandard({ color: 0x1c1d20, roughness: 0.45, metalness: 0 }), this.balusters.length);
+    this.balusters.forEach((m, i) => bars.setMatrixAt(i, m));
+    bars.castShadow = false;
+    bars.receiveShadow = true;
+    bars.computeBoundingSphere();
+    this.add(bars);
+  }
+
+  /** Repaints the walls (a key of `STAIR_PAINTS`: the co-owners' vote). */
+  setPaint(id: string): void {
+    this.walls.setPaint(id);
+  }
+
+  /** Whether a runner covers the flights (the stone's wear shows only without one). */
+  setRunner(on: boolean): void {
+    for (const f of this.floors) f.setRunner(on);
   }
 
   /**
@@ -157,14 +216,34 @@ export class Staircase extends Prop {
     this.put('tread', g.translate((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2));
   }
 
-  /** A wall face from (ax, az) to (bx, bz), y0 to y1, facing the left-hand normal (-dz, dx); uvs in metres. */
-  private wall(finish: Finish, ax: number, az: number, bx: number, bz: number, y0: number, y1: number): void {
-    const length = Math.hypot(bx - ax, bz - az);
-    const g = new THREE.PlaneGeometry(length, y1 - y0);
-    // A plane faces +z; turn it to face (-dz, dx).
-    g.rotateY(Math.atan2(-(bz - az), bx - ax));
-    g.translate((ax + bx) / 2, (y0 + y1) / 2, (az + bz) / 2);
-    this.put(finish, g);
+  /**
+   * A painted wall face from (ax, az) to (bx, bz), y0 to y1, facing the left-hand normal (-dz, dx); uvs in metres.
+   * Cut where the stair breaks along it (a flight's head and foot), each piece carrying the floor lines it stands
+   * over (`STAIR_ATTRIBUTE`, see `stairWalls`).
+   */
+  private wall(ax: number, az: number, bx: number, bz: number, y0: number, y1: number): void {
+    const profile = wallProfile(ax, az, bx, bz);
+    const cuts = profile === 'west' || profile === 'east' ? [plan.halfLanding.z1, plan.floorLanding.z0] : [];
+    const along = (t: number): [number, number] => [ax + (bx - ax) * t, az + (bz - az) * t];
+    const ts = [0, ...cuts.map((z) => (bz === az ? -1 : (z - az) / (bz - az))).filter((t) => t > 1e-4 && t < 1 - 1e-4), 1].sort((a, b) => a - b);
+    for (let i = 0; i + 1 < ts.length; i++) {
+      const [x0, z0] = along(ts[i]!);
+      const [x1, z1] = along(ts[i + 1]!);
+      const length = Math.hypot(x1 - x0, z1 - z0);
+      const g = new THREE.PlaneGeometry(length, y1 - y0);
+      // A plane faces +z; turn it to face (-dz, dx).
+      g.rotateY(Math.atan2(-(bz - az), bx - ax));
+      g.translate((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2);
+      const n = floorLines(profile, (z0 + z1) / 2).n;
+      const pos = g.getAttribute('position');
+      const stair = new Float32Array(pos.count * 2);
+      for (let v = 0; v < pos.count; v++) {
+        stair[v * 2] = floorLines(profile, pos.getZ(v)).p;
+        stair[v * 2 + 1] = n;
+      }
+      g.setAttribute(STAIR_ATTRIBUTE, new THREE.BufferAttribute(stair, 2));
+      this.put('wall', g);
+    }
   }
 
   /** A horizontal quad over a rectangle at height y, facing up (or down). */
@@ -178,28 +257,28 @@ export class Staircase extends Prop {
     const { shaft, strip, opening, frontDoor, flightA, floorLanding } = plan;
     const top0 = landingY(0);
     // The shaft, all the way up: west (facing +x; open onto our strip at the top), east, south, north (open onto the hall at the bottom).
-    this.wall('plaster', shaft.x0, shaft.z1, shaft.x0, strip.z0, 0, top0);
-    this.wall('plaster', shaft.x0, shaft.z1, shaft.x0, strip.z0, top0 + strip.ceiling, TOP);
-    this.wall('plaster', shaft.x0, strip.z0, shaft.x0, shaft.z0, 0, TOP);
-    this.wall('plaster', shaft.x1, shaft.z0, shaft.x1, shaft.z1, 0, TOP);
-    this.wall('plaster', shaft.x0, shaft.z0, shaft.x1, shaft.z0, 0, TOP);
-    this.wall('plaster', shaft.x1, shaft.z1, opening.x0, shaft.z1, opening.height, TOP);
-    this.wall('plaster', opening.x0, shaft.z1, shaft.x0, shaft.z1, 0, TOP);
+    this.wall(shaft.x0, shaft.z1, shaft.x0, strip.z0, 0, top0);
+    this.wall(shaft.x0, shaft.z1, shaft.x0, strip.z0, top0 + strip.ceiling, TOP);
+    this.wall(shaft.x0, strip.z0, shaft.x0, shaft.z0, 0, TOP);
+    this.wall(shaft.x1, shaft.z0, shaft.x1, shaft.z1, 0, TOP);
+    this.wall(shaft.x0, shaft.z0, shaft.x1, shaft.z0, 0, TOP);
+    this.wall(shaft.x1, shaft.z1, opening.x0, shaft.z1, opening.height, TOP);
+    this.wall(opening.x0, shaft.z1, shaft.x0, shaft.z1, 0, TOP);
     // The roof over the shaft (the lights lay a skylight on it), the stone floor at its foot.
     this.flat('plaster', shaft, TOP, true);
     this.flat('stone', { x0: shaft.x0, x1: shaft.x1, z0: shaft.z0, z1: floorLanding.z0 }, 0);
     // The cupboard under flight A's foot, off the hall's landing.
-    this.wall('plaster', flightA.x0, floorLanding.z0, flightA.x1, floorLanding.z0, 0, 2.2);
+    this.wall(flightA.x0, floorLanding.z0, flightA.x1, floorLanding.z0, 0, 2.2);
     // Our strip: floor, ceiling, its two long walls, and its west end round the flat's front door.
     this.flat('tread', strip, top0);
     this.flat('plaster', strip, top0 + strip.ceiling, true);
-    this.wall('plaster', strip.x1, strip.z1, strip.x0, strip.z1, top0, top0 + strip.ceiling);
-    this.wall('plaster', strip.x0, strip.z0, strip.x1, strip.z0, top0, top0 + strip.ceiling);
+    this.wall(strip.x1, strip.z1, strip.x0, strip.z1, top0, top0 + strip.ceiling);
+    this.wall(strip.x0, strip.z0, strip.x1, strip.z0, top0, top0 + strip.ceiling);
     const d0 = frontDoor.z - frontDoor.width / 2 - 0.07;
     const d1 = frontDoor.z + frontDoor.width / 2 + 0.07;
-    this.wall('plaster', strip.x0, strip.z1, strip.x0, d1, top0, top0 + strip.ceiling);
-    this.wall('plaster', strip.x0, d0, strip.x0, strip.z0, top0, top0 + strip.ceiling);
-    this.wall('plaster', strip.x0, d1, strip.x0, d0, top0 + frontDoor.height + 0.07, top0 + strip.ceiling);
+    this.wall(strip.x0, strip.z1, strip.x0, d1, top0, top0 + strip.ceiling);
+    this.wall(strip.x0, d0, strip.x0, strip.z0, top0, top0 + strip.ceiling);
+    this.wall(strip.x0, d1, strip.x0, d0, top0 + frontDoor.height + 0.07, top0 + strip.ceiling);
   }
 
   private buildFloorLanding(k: number): void {
@@ -225,19 +304,11 @@ export class Staircase extends Prop {
 
   /** Nine steps from the floor landing down to the half landing (A, south), or from there to the next floor (B, north); the stone soffit under them. */
   private buildFlight(k: number, which: 'A' | 'B'): void {
-    const { floorLanding, halfLanding, treads } = plan;
+    const { floorLanding, halfLanding } = plan;
     const lane = which === 'A' ? plan.flightA : plan.flightB;
-    const rise = this.half / treads;
-    const depth = this.flightRun / treads;
     const top = which === 'A' ? landingY(k) : landingY(k) - this.half;
-    for (let i = 1; i <= treads; i++) {
-      const y = top - i * rise;
-      // Flight A runs south (-z) from the floor landing; flight B north (+z) from the half landing.
-      const z0 = which === 'A' ? floorLanding.z0 - i * depth : halfLanding.z1 + (i - 1) * depth;
-      const z1 = z0 + depth;
-      // The last tread is level with the landing below it; at the foot of the building's last flight the shaft's stone floor is that tread.
-      if (i < treads || which === 'A' || k < STOREYS - 1) this.tread(lane.x0, y - rise - 0.02, z0, lane.x1, y, z1);
-    }
+    // The last tread is level with the landing below it; at the foot of the building's last flight the shaft's stone floor is that tread.
+    for (const t of flightTreads(k, which)) if (!t.floor) this.tread(t.x0, t.bottom, t.z0, t.x1, t.top, t.z1);
     // The soffit: a slab along the slope, under the steps.
     const zTop = which === 'A' ? floorLanding.z0 : halfLanding.z1;
     const zBottom = which === 'A' ? halfLanding.z1 : floorLanding.z0;
@@ -281,7 +352,7 @@ export class Staircase extends Prop {
       const x = ax + (bx - ax) * t;
       const z = az + (bz - az) * t;
       const y = ay + (by - ay) * t;
-      this.put('iron', new THREE.BoxGeometry(BAR, RAIL_HEIGHT, BAR).translate(x, y + RAIL_HEIGHT / 2, z));
+      this.balusters.push(new THREE.Matrix4().makeTranslation(x, y, z));
     }
     const drop = by - ay;
     const run = Math.hypot(length, drop);
@@ -301,13 +372,95 @@ export class Staircase extends Prop {
     const { hall, shaft } = plan;
     this.flat('hall', hall, 0.001);
     this.flat('plaster', hall, hall.height, true);
-    this.wall('plaster', hall.x0, hall.z1, hall.x0, hall.z0, 0, hall.height);
-    this.wall('plaster', hall.x1, hall.z0, hall.x1, hall.z1, 0, hall.height);
-    this.wall('plaster', hall.x1, hall.z1, hall.x0, hall.z1, 0, hall.height);
-    this.wall('plaster', shaft.x1, hall.z0, hall.x1, hall.z0, 0, hall.height);
+    this.wall(hall.x0, hall.z1, hall.x0, hall.z0, 0, hall.height);
+    // The east wall, round the concierge's lodge window (`STAIRWELL_PLAN.lodge`).
+    const { window: pane } = plan.lodge;
+    const w0 = pane.z - pane.width / 2;
+    const w1 = pane.z + pane.width / 2;
+    this.wall(hall.x1, hall.z0, hall.x1, w0, 0, hall.height);
+    this.wall(hall.x1, w0, hall.x1, w1, 0, pane.sill);
+    this.wall(hall.x1, w0, hall.x1, w1, pane.sill + pane.height, hall.height);
+    this.wall(hall.x1, w1, hall.x1, hall.z1, 0, hall.height);
+    this.wall(hall.x1, hall.z1, hall.x0, hall.z1, 0, hall.height);
+    this.wall(shaft.x1, hall.z0, hall.x1, hall.z0, 0, hall.height);
     // A marble dado round the hall, knee high.
     this.box('stone', hall.x0, 0, hall.z0, hall.x0 + 0.02, 1.0, hall.z1);
     this.box('stone', hall.x1 - 0.02, 0, hall.z0, hall.x1, 1.0, hall.z1);
+  }
+
+  /** The newel post at the foot of the balustrade in the hall: a turned oak post, the handrail curling round its top in a volute. */
+  private buildNewel(): void {
+    const { well, floorLanding } = plan;
+    const post = new THREE.LatheGeometry(
+      [
+        [0.05, 0],
+        [0.05, 0.08],
+        [0.035, 0.12],
+        [0.03, 0.75],
+        [0.045, 0.82],
+        [0.03, 0.9],
+        [0.0, 0.9],
+      ].map(([r, y]) => new THREE.Vector2(r, y)),
+      10,
+    );
+    this.put('wood', post.translate(well.x1, 0, floorLanding.z0));
+    const volute = new THREE.TorusGeometry(0.075, 0.026, 6, 18, Math.PI * 1.6).rotateX(Math.PI / 2);
+    this.put('wood', volute.translate(well.x1, RAIL_HEIGHT - 0.01, floorLanding.z0));
+    this.put('iron', new THREE.SphereGeometry(0.035, 10, 6).translate(well.x1, 0.94, floorLanding.z0));
+  }
+
+  /** A stepped plaster cornice under every landing's ceiling (the slab above), round the shaft's top and the hall's. */
+  private buildCornices(): void {
+    const { shaft, floorLanding, halfLanding, hall } = plan;
+    for (let k = 1; k <= STOREYS; k++) {
+      const floor = landingY(k - 1) - SLAB;
+      this.cornice(floor, { x0: shaft.x0, x1: shaft.x1, z0: floorLanding.z0, z1: shaft.z1 }, ['n', 'w', 'e']);
+      if (k < STOREYS) this.cornice(floor - this.half, { x0: shaft.x0, x1: shaft.x1, z0: shaft.z0, z1: halfLanding.z1 }, ['s', 'w', 'e']);
+    }
+    this.cornice(TOP, { x0: shaft.x0, x1: shaft.x1, z0: shaft.z0, z1: shaft.z1 }, ['n', 's', 'w', 'e']);
+    this.cornice(hall.height, { x0: hall.x0, x1: hall.x1, z0: hall.z0, z1: hall.z1 }, ['n', 'w', 'e']);
+  }
+
+  /** The cornice under a ceiling at `y` along the named sides of `r` (n: +z, s: -z, w: -x, e: +x), standing into it. */
+  private cornice(y: number, r: Rect, sides: readonly ('n' | 's' | 'w' | 'e')[]): void {
+    const { drop, out } = CORNICE;
+    // Two steps: the deep upper one, a thinner lip under it; a millimetre into the wall and the ceiling.
+    for (const [d, o] of [[drop / 2, out], [drop, out * 0.45]] as const) {
+      const y0 = y - d;
+      const y1 = y + 0.001;
+      for (const side of sides) {
+        if (side === 'n') this.box('plaster', r.x0, y0, r.z1 - o, r.x1, y1, r.z1 + 0.001);
+        if (side === 's') this.box('plaster', r.x0, y0, r.z0 - 0.001, r.x1, y1, r.z0 + o);
+        if (side === 'w') this.box('plaster', r.x0 - 0.001, y0, r.z0, r.x0 + o, y1, r.z1);
+        if (side === 'e') this.box('plaster', r.x1 - o, y0, r.z0, r.x1 + 0.001, y1, r.z1);
+      }
+    }
+  }
+
+  /** The skylight's cast iron under the roof's glass (its glow is `StairLights`'): a frame and the glazing bars between the panes. */
+  private buildSkylight(): void {
+    const { well } = plan;
+    const { width, depth, panesX, panesZ, frame, bar } = SKYLIGHT;
+    const cx = (well.x0 + well.x1) / 2;
+    const cz = (well.z0 + well.z1) / 2;
+    const x0 = cx - width / 2;
+    const x1 = cx + width / 2;
+    const z0 = cz - depth / 2;
+    const z1 = cz + depth / 2;
+    const y0 = TOP - 0.06;
+    const y1 = TOP - 0.012;
+    this.box('iron', x0 - frame, y0, z0 - frame, x1 + frame, y1, z0);
+    this.box('iron', x0 - frame, y0, z1, x1 + frame, y1, z1 + frame);
+    this.box('iron', x0 - frame, y0, z0, x0, y1, z1);
+    this.box('iron', x1, y0, z0, x1 + frame, y1, z1);
+    for (let i = 1; i < panesX; i++) {
+      const x = x0 + (i * width) / panesX;
+      this.box('iron', x - bar / 2, y0 + 0.01, z0, x + bar / 2, y1, z1);
+    }
+    for (let j = 1; j < panesZ; j++) {
+      const z = z0 + (j * depth) / panesZ;
+      this.box('iron', x0, y0 + 0.015, z - bar / 2, x1, y1, z + bar / 2);
+    }
   }
 
   /** The walls (world-facing boxes, zone-local), the well's sides and the gaps no flight fills. */
@@ -340,6 +493,49 @@ export class Staircase extends Prop {
     // No flight up from our landing (over flight B's head), no flight down from the hall (under flight A's foot: a cupboard).
     box(flightB.x0, top0, floorLanding.z0 - T, flightB.x1, top0 + 1.1, floorLanding.z0);
     box(flightA.x0, 0, floorLanding.z0 - T, flightA.x1, 2.2, floorLanding.z0);
+  }
+}
+
+/** Which floor lines the wall from (ax, az) to (bx, bz) stands over: the shaft's four sides, our strip, or the hall's (and the cupboard's) floor. */
+function wallProfile(ax: number, az: number, bx: number, bz: number): WallProfile {
+  const { shaft, strip } = plan;
+  const near = (a: number, b: number): boolean => Math.abs(a - b) < 1e-4;
+  const inShaftZ = (z: number): boolean => z >= shaft.z0 - 1e-4 && z <= shaft.z1 + 1e-4;
+  const inShaftX = (x: number): boolean => x >= shaft.x0 - 1e-4 && x <= shaft.x1 + 1e-4;
+  if (near(ax, bx)) {
+    if (near(ax, shaft.x0) && inShaftZ(az) && inShaftZ(bz)) return 'west';
+    if (near(ax, shaft.x1) && inShaftZ(az) && inShaftZ(bz)) return 'east';
+    return near(ax, strip.x0) ? 'strip' : 'hall';
+  }
+  if (near(az, shaft.z0)) return 'south';
+  if (near(az, shaft.z1) && inShaftX(ax) && inShaftX(bx)) return 'north';
+  return ax < shaft.x0 - 1e-4 || bx < shaft.x0 - 1e-4 ? 'strip' : 'hall';
+}
+
+/**
+ * The floor lines under a wall of `profile` at `z`: p + i·STOREY for i = 0 .. n (the floor never below 0). Up the
+ * west wall they follow flight A (the half landing, the slope, the floor landing); up the east wall flight B; the
+ * north wall stands over the floor landings, the south over the half landings; our strip over our landing alone, the
+ * hall over its floor.
+ */
+function floorLines(profile: WallProfile, z: number): { p: number; n: number } {
+  const half = STOREY / 2;
+  const { halfLanding, floorLanding } = plan;
+  // 0 at the half landing's edge .. 1 at the floor landing's, along a flight.
+  const s = THREE.MathUtils.clamp((z - halfLanding.z1) / (floorLanding.z0 - halfLanding.z1), 0, 1) * half;
+  switch (profile) {
+    case 'west':
+      return { p: s - half, n: STOREYS };
+    case 'east':
+      // Over the floor landings the east wall also stands over ours, which has no flight B up from it.
+      return { p: -half - s, n: z > floorLanding.z0 + 1e-4 ? STOREYS + 1 : STOREYS };
+    case 'north':
+    case 'strip':
+      return { p: 0, n: STOREYS };
+    case 'south':
+      return { p: -half, n: STOREYS };
+    case 'hall':
+      return { p: 0, n: 0 };
   }
 }
 

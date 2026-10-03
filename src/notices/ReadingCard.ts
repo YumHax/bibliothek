@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { playNoticeSound } from '@/audio/noticeSounds';
 import { readMs } from './readingTime';
 import type { ReadingNotice } from './types';
+import { closeOnPress, dismissHint, followDismissHints } from './dismissHint';
 
 /** Once read, walking this far from where it was opened puts the card away (m). */
 const WALK_AWAY = 1.2;
@@ -26,6 +27,8 @@ export class ReadingCard {
   private current: HTMLElement | null = null;
   /** Between a card put away and the next one out. */
   private opening = false;
+  /** The timer bringing the next card out (0: none). */
+  private pending = 0;
   private shownFor = 0;
   private needed = 0;
   private readonly from = { x: 0, z: 0 };
@@ -34,6 +37,29 @@ export class ReadingCard {
     this.root = document.createElement('div');
     this.root.className = 'reading-stage';
     container.appendChild(this.root);
+    followDismissHints(this.root);
+  }
+
+  /** A card up, or one on its way. */
+  get isUp(): boolean {
+    return this.current !== null || this.opening || this.queue.length > 0;
+  }
+
+  /**
+   * Put down by hand (docs/notices.md): the card up goes at once, read or not, and the next waiting one comes out;
+   * `all` takes the waiting ones too. False when there was no card.
+   */
+  dismiss(all = false): boolean {
+    if (!this.isUp) return false;
+    if (all) {
+      this.queue.length = 0;
+      // The next card was already on its way out: it stays in.
+      if (this.pending) window.clearTimeout(this.pending);
+      this.pending = 0;
+      this.opening = false;
+    }
+    if (this.current) this.close();
+    return true;
   }
 
   show(card: ReadingNotice): void {
@@ -86,6 +112,10 @@ export class ReadingCard {
       more.textContent = `…and ${card.more} more note${card.more === 1 ? '' : 's'}`;
       el.appendChild(more);
     }
+    el.appendChild(dismissHint());
+    closeOnPress(el, () => {
+      if (this.current === el) this.close();
+    });
     this.root.appendChild(el);
     this.current = el;
     this.shownFor = 0;
@@ -105,8 +135,9 @@ export class ReadingCard {
     const next = this.queue.shift();
     if (!next) return;
     this.opening = true;
-    window.setTimeout(() => {
+    this.pending = window.setTimeout(() => {
       this.opening = false;
+      this.pending = 0;
       this.open(next);
     }, FADE_MS);
   }

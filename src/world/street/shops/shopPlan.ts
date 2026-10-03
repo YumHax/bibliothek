@@ -1,9 +1,9 @@
 import { COFFEE_PRICE, SCRATCH, STREET_TREATS } from '@/economy/pricing';
 import type { ShopKind, ShopSpec } from '../streetPlan';
 
-/** Something a shop sells over the counter: the coffee, a croissant, a scratch card, a drink. */
+/** Something a shop sells over the counter: the coffee, a croissant, a scratch card, a drink, a scrap for the stray. */
 export interface ShopOffer {
-  id: 'coffee' | 'croissant' | 'scratch' | 'drink';
+  id: 'coffee' | 'croissant' | 'scratch' | 'drink' | 'scrap';
   /** As the caption says it: "a coffee at the counter". */
   title: string;
   price: number;
@@ -29,7 +29,7 @@ export interface ShopTalk {
  */
 export const SHOP_TALK: Record<ShopKind, ShopTalk> = {
   cafe: {
-    looks: ['“Sit anywhere, love.”'],
+    looks: ['“Sit anywhere, love.”', 'The milk steamer shrieks. Somebody at the window is reading THE GAMING WEEKLY.', '“Same as yesterday?” The barista remembers you.'],
     closed: 'The chairs are up on the tables.',
     offer: { id: 'coffee', title: 'a coffee at the counter', price: COFFEE_PRICE },
   },
@@ -39,7 +39,7 @@ export const SHOP_TALK: Record<ShopKind, ShopTalk> = {
     offer: { id: 'croissant', title: 'a croissant', price: STREET_TREATS.croissant },
   },
   pharmacy: {
-    looks: ['The pharmacist asks after the cat.', 'A poster about screen time. You look away.', 'The green cross blinks on its bracket.'],
+    looks: ['The pharmacist asks if you are sleeping enough. You say yes.', 'A poster about screen time. You look away.', 'The green cross blinks on its bracket.', '“Thumb strain? Ice, and fewer boss fights.”'],
     closed: 'The duty chemist is two streets away tonight.',
   },
   books: {
@@ -47,7 +47,7 @@ export const SHOP_TALK: Record<ShopKind, ShopTalk> = {
     closed: 'A cat asleep in the window display. Not yours.',
   },
   grocer: {
-    looks: ['Apples, leeks, a crate of clementines. No cartridges.', '“Nothing for a cat here, sorry.”'],
+    looks: ['Apples, leeks, a crate of clementines. No cartridges.', '“Nothing for a cat here, sorry. The butcher’s your man.”', 'The grocer is arguing with the radio about the football.'],
     closed: 'The crates are in for the night.',
   },
   florist: { looks: [], closed: 'The buckets are in, the shutter half down.' },
@@ -62,8 +62,9 @@ export const SHOP_TALK: Record<ShopKind, ShopTalk> = {
     offer: { id: 'drink', title: 'a lemonade at the bar', price: STREET_TREATS.lemonade },
   },
   butcher: {
-    looks: ['The butcher waves a cleaver in greeting.', '“For the cat?” A scrap wrapped in paper. You say you will think about it.'],
+    looks: ['The butcher waves a cleaver in greeting.'],
     closed: 'The hooks are empty, the counter scrubbed.',
+    offer: { id: 'scrap', title: 'a scrap for the stray cat', price: STREET_TREATS.scrap },
   },
   laundry: {
     looks: ['Machine 4 is out of order. Machine 4 is always out of order.', 'Somebody’s socks go round and round.', 'The dryers hum. It is warm in there.'],

@@ -49,6 +49,9 @@ uniform float lightning;
 uniform vec3 boltDir;
 uniform float boltSeed;
 uniform float boltReach;
+uniform sampler2D blocks;
+uniform vec3 blockEye;
+uniform vec3 blockWalls[6];
 varying vec3 vDir;
 const vec3 FLASH = vec3(0.78, 0.84, 1.0);
 ${SKY_CHUNK}
@@ -185,6 +188,45 @@ void main() {
   if (towerId.b > 0.5 && abs(h - towerTop) < 0.0022 && nightness > 0.05) {
     float blink = step(0.5, fract(beaconTime * 0.5 + towerId.a * 3.1));
     col = mix(col, vec3(2.2, 0.25, 0.18), blink * smoothstep(0.05, 0.4, nightness));
+  }
+
+  // The neighbourhood's blocks past the street's own rows (city/skyline BACKDROP_BLOCKS), in front of the far city:
+  // the nearest one the ray from the eye meets below its roof, its face lit by the sun and sky, its windows lit at night.
+  if (h < 0.45) {
+    float nearest = 1e6;
+    vec3 blockCol = vec3(0.0);
+    for (int i = 0; i < BLOCKS; i++) {
+      vec4 rect = texelFetch(blocks, ivec2(i, 0), 0);
+      vec4 info = texelFetch(blocks, ivec2(i, 1), 0);
+      vec2 inv = 1.0 / vec2(abs(d.x) > 1e-5 ? d.x : 1e-5, abs(d.z) > 1e-5 ? d.z : 1e-5);
+      vec2 t0 = (rect.xy - blockEye.xz) * inv;
+      vec2 t1 = (rect.zw - blockEye.xz) * inv;
+      vec2 tNear = min(t0, t1);
+      vec2 tFar = max(t0, t1);
+      float tIn = max(tNear.x, tNear.y);
+      float tOut = min(tFar.x, tFar.y);
+      if (tIn <= 0.0 || tIn > tOut || tIn >= nearest) continue;
+      float y = blockEye.y + tIn * d.y;
+      if (y > info.x || y < -1.0) continue;
+      nearest = tIn;
+      bool xFace = tNear.x > tNear.y;
+      vec3 n = xFace ? vec3(-sign(d.x), 0.0, 0.0) : vec3(0.0, 0.0, -sign(d.z));
+      vec3 wall = blockWalls[int(info.y)];
+      float sun = max(dot(n, sunDir), 0.0) * sunVisible * (1.0 - 0.85 * cloudCover);
+      vec3 lit = wall * (mix(horizon, zenith, 0.4) * 0.75 + sunColor * sun * 0.55) * mix(1.0, 0.25, nightness);
+      // Windows: storeys of 3.1 m over a ground floor, bays of 2.8 m along the face.
+      vec2 hit = blockEye.xz + d.xz * tIn;
+      vec2 cellUv = vec2((xFace ? hit.y : hit.x) / 2.8, (y - 1.0) / 3.1);
+      vec2 cell = floor(cellUv);
+      vec2 inCell = fract(cellUv);
+      float pane = step(0.3, inCell.x) * step(inCell.x, 0.75) * step(0.3, inCell.y) * step(inCell.y, 0.8) * step(1.0, cell.y) * step(y, info.x - 1.2);
+      float on = step(hash3(vec3(cell, info.z)), 0.32) * step(hash3(vec3(cell, info.z + 7.0)), wakefulness);
+      lit = mix(lit, lit * 0.55 + vec3(0.03, 0.035, 0.045), pane * (1.0 - nightness));
+      lit += vec3(1.0, 0.72, 0.42) * pane * on * nightness * 0.6;
+      // Hazed by the distance, more in fog and rain.
+      blockCol = mix(lit, fogColor, 1.0 - exp(-tIn * (0.0035 + fog * 0.03)));
+    }
+    if (nearest < 1e5) col = blockCol;
   }
 
   // Haze and fog wash the low sky (and the far city) towards the air's colour.

@@ -30,10 +30,16 @@ export class CollisionWorld implements Collisions {
     this.boxes.delete(box);
   }
 
-  /** True if a sphere of `radius` centred on `point` touches any registered box. */
+  /**
+   * True if a sphere of `radius` centred on `point` touches any registered box. Empty boxes (a footprint with nothing in
+   * it yet, a collider grown later in place) are passed over without the sphere test.
+   */
   intersectsSphere(point: THREE.Vector3, radius: number): boolean {
     this.sphere.set(point, radius);
-    for (const box of this.boxes) if (box.intersectsSphere(this.sphere)) return true;
+    for (const box of this.boxes) {
+      if (box.isEmpty()) continue;
+      if (box.intersectsSphere(this.sphere)) return true;
+    }
     return false;
   }
 }

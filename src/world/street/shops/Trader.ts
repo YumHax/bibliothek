@@ -9,7 +9,8 @@ import { createCanvas, toTexture } from '@/covers/generated/canvasUtils';
 import { StockItem } from '@/economy/StockItem';
 import { TRADER_MARKUP } from '@/economy/pricing';
 import { KEYS, PersistedStore } from '@/persistence';
-import { gameDayRandom, isEventDay } from '@/time/daily';
+import { gameDayRandom } from '@/time/daily';
+import { RIVAL_COLLECTOR, rivalOnFrontStreet, type RivalCollector } from '@/economy/rivalCollector';
 import type { Today } from '@/time/Today';
 import { standard } from '../../materials/palette';
 import type { DayNight } from '../../props/DayNight';
@@ -34,11 +35,15 @@ export interface TraderOptions {
   viewer: THREE.Object3D;
   /** The zone's collision set (world boxes): his stand collides only while he is there. */
   collisions?: { add(box: THREE.Box3): void; remove(box: THREE.Box3): void };
+  /** Asked first when he is clicked: a line of a story the player follows (`src/story`), else null. */
+  talk?: () => string | null;
+  /** Who he is to the player (`economy/rivalCollector`): what he won at the flea market and the saleroom joins his suitcase. */
+  rival?: RivalCollector;
 }
 
 /** Whether today (the real date) the collector sets up on Front Street: about one day in `oneDayIn` (phase 1 of the cycle). */
 export function isTraderDay(oneDayIn: number, date = new Date()): boolean {
-  return isEventDay('trader', oneDayIn, { date, phase: 1 });
+  return rivalOnFrontStreet(date, oneDayIn);
 }
 
 /** What he adds to what the stall asked him (`TRADER_MARKUP` in pricing.ts). */
@@ -84,6 +89,9 @@ export class Trader extends THREE.Group implements Furniture, Updatable, Interac
   /** Puts a copy back on the suitcase (after he packed up, or a purchase handed back). */
   private readonly placers = new Map<ForSaleBox, () => void>();
   private filled = false;
+  private greeted = false;
+  /** The games in his suitcase that he won off the player's nose (his haul). */
+  private readonly haulIds = new Set<string>();
   private present = false;
   private lookClock = LOOK_EVERY;
   private line = 0;
@@ -96,7 +104,7 @@ export class Trader extends THREE.Group implements Furniture, Updatable, Interac
   constructor(private readonly dayNight: DayNight, private readonly options: TraderOptions) {
     super();
     this.name = 'Trader';
-    this.person = new Walker({ viewer: options.viewer, seed: 911, label: 'The collector · chat' });
+    this.person = new Walker({ viewer: options.viewer, seed: RIVAL_COLLECTOR.seed, label: `${RIVAL_COLLECTOR.label} · chat`, speaker: RIVAL_COLLECTOR.short, fade: true });
     this.person.traverse((o) => {
       o.castShadow = false;
     });
@@ -123,14 +131,33 @@ export class Trader extends THREE.Group implements Furniture, Updatable, Interac
   }
 
   label(): string | null {
-    return this.present ? 'The collector · chat' : null;
+    return this.present ? `${RIVAL_COLLECTOR.label} · chat` : null;
   }
 
   activate(_session: SessionActions): void {
     if (!this.present) return;
+    const told = this.options.talk?.();
+    if (told) {
+      this.person.speak(told);
+      return;
+    }
+    // The first word is how things stand between them (the hall, the saleroom); then his patter.
+    const { rival } = this.options;
+    if (rival && !this.greeted) {
+      this.greeted = true;
+      const haul = this.boxes.some((b) => this.haulIds.has(b.item.game.id));
+      this.person.speak(haul ? `${rival.greeting()} And yes, that's the one I beat you to. Still for sale.` : rival.greeting());
+      rival.meet();
+      return;
+    }
     const lines = this.boxes.length ? LINES : EMPTY_LINES;
     const line = lines[this.line++ % lines.length]!;
-    this.person.speak(line, 'The collector');
+    this.person.speak(line);
+  }
+
+  /** Him, for the street's people budget (`life/PeopleBudget`): drawn only while among the nearest few. */
+  get figure(): Walker {
+    return this.person;
   }
 
   dispose(): void {
@@ -198,11 +225,14 @@ export class Trader extends THREE.Group implements Furniture, Updatable, Interac
     return pick;
   }
 
-  /** His copies, leaning in the open suitcase. */
+  /** His copies, leaning in the open suitcase: what he won lately first (the flea market, the saleroom), then today's pick. */
   private lay({ games, prices }: { games: Game[]; prices: number[] }): void {
     this.filled = true;
-    const { host, covers, wallet, isWanted, owns } = this.options;
-    const left = games.map((game, i) => ({ game, price: prices[i]! })).filter(({ game }) => !owns(game.id));
+    const { host, covers, wallet, isWanted, owns, rival, today } = this.options;
+    const haul = (rival?.haulOn(today.gameDay) ?? []).map((h) => ({ game: h.game, price: Math.max(2, Math.round(h.price * MARKUP)) }));
+    for (const h of haul) this.haulIds.add(h.game.id);
+    const picked = games.map((game, i) => ({ game, price: prices[i]! })).filter(({ game }) => !this.haulIds.has(game.id));
+    const left = [...haul, ...picked].filter(({ game }) => !owns(game.id)).slice(0, COPIES + 2);
     const spacing = SUITCASE.width / (left.length + 1);
     left.forEach(({ game, price }, i) => {
       const item = new StockItem(game, game.condition ?? 'complete', 'stall', { list: price, final: true });
@@ -220,6 +250,8 @@ export class Trader extends THREE.Group implements Furniture, Updatable, Interac
       box.onSold = () => {
         host.remove(box);
         this.boxes.splice(this.boxes.indexOf(box), 1);
+        // Bought back off him: out of his haul.
+        if (this.haulIds.has(game.id)) rival?.sold(game.id);
       };
       box.restock = () => {
         place();

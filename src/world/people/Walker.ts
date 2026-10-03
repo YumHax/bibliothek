@@ -37,6 +37,13 @@ export interface WalkerOptions {
   corners?: number;
   /** Makes way for the player: slows, stops a moment and edges aside when they stand in the way (default true; a friend's `Visit` does its own). */
   yields?: boolean;
+  /**
+   * The others walking about (a street's crowd, a live list): coming the other way, both keep to their right and
+   * pass; behind someone slower, they slow down. Their `partner` (walking with them) is left alone. None by default.
+   */
+  crowd?: () => readonly Walker[];
+  /** Clicked while walking, they stop for what they say, facing the player, then walk on (default: they talk walking). */
+  stopsToTalk?: boolean;
 }
 
 /** How fast the body turns towards its heading, per second, walking; standing, a turn is slower (the feet step it round). */
@@ -59,6 +66,14 @@ const ARRIVE_SPEED = 0.15;
  * `side` m/s, `sideMax` m at most per leg, away from the player.
  */
 const YIELD = { ahead: 1, wide: 0.5, stop: 0.55, patience: 1.8, side: 0.45, sideMax: 0.3 };
+/** Past their patience they step round the player: further aside, this far at most, slowly. */
+const GO_ROUND = { sideMax: 0.75, pace: 0.45 };
+/**
+ * Passing others (`crowd`): someone coming the other way within `ahead` m and `wide` m either side of the way: both
+ * edge right at `side` m/s, `sideMax` m at most per leg, a little slower; someone ahead going the same way, slower,
+ * within `follow` m: they slow to that pace.
+ */
+const PASS = { ahead: 2.2, wide: 0.7, side: 0.55, sideMax: 0.4, pace: 0.85, follow: 1.1 };
 
 type State = { kind: 'walk'; path: THREE.Vector3[]; then: (() => void) | null } | { kind: 'stand'; yaw: number };
 /** What they keep their eyes on: a world point, the player (in conversation: mostly on them, a glance aside now and then), or nothing (their own glances). */
@@ -73,9 +88,10 @@ const LINE_ATTENTION = 3;
  * mostly at them while talking to them). Says a word in a `SpeechBubble` when told to, and a line
  * when clicked. `setPresent(false)` takes them out of the hall (walked out of the door). Who goes
  * where is decided outside (the arcade's `ArcadeCrowd`); this class only walks and stands: setting
- * off and stopping over a moment, shuffling round a wide turn, and making way for the player in front
- * (slowing, a moment's stop, a little aside). Origin on the floor; the group moves itself in
- * zone-local coordinates. Never collides.
+ * off and stopping over a moment, shuffling round a wide turn, making way for the player in front
+ * (slowing, a moment's stop, a little aside, then round them) and, given the others (`crowd`),
+ * keeping right to pass them. Origin on the floor; the group moves itself in zone-local
+ * coordinates. Never collides. Faded right out, the body is not posed (it costs nothing).
  */
 export class Walker extends THREE.Group implements Furniture, Updatable, Interactable {
   readonly contactShadow = false;
@@ -92,6 +108,17 @@ export class Walker extends THREE.Group implements Furniture, Updatable, Interac
   private readonly labelWithin: number;
   private readonly corners: number;
   private readonly yields: boolean;
+  private readonly crowd: (() => readonly Walker[]) | null;
+  private readonly stopsToTalk: boolean;
+  private readonly fades: boolean;
+  /** Who walks with them (a friend, a parent): not someone to make way for. */
+  partner: Walker | null = null;
+  /** The street's people budget's share of them (0..1, times the fade asked for: `setAllowance`). */
+  private allowance = 1;
+  /** Seconds they stand still for a line said to the player (`stopsToTalk`). */
+  private halted = 0;
+  /** How far they have edged right on this leg to pass someone. */
+  private passed = 0;
   /** Points of the current path on a rounded corner (walked at `CORNER_PACE`). */
   private arcs: Set<THREE.Vector3> | null = null;
   /** For each point of the current path, the index of the given point it stands for (a rounded corner is several). */
@@ -142,6 +169,9 @@ export class Walker extends THREE.Group implements Furniture, Updatable, Interac
     this.labelWithin = options.labelWithin ?? Infinity;
     this.corners = options.corners ?? 0;
     this.yields = options.yields ?? true;
+    this.crowd = options.crowd ?? null;
+    this.stopsToTalk = options.stopsToTalk ?? false;
+    this.fades = options.fade ?? false;
     this.nextLine = seed;
     this.attention = new Attention(seed);
   }
@@ -156,6 +186,46 @@ export class Walker extends THREE.Group implements Furniture, Updatable, Interac
 
   get isWalking(): boolean {
     return this.state.kind === 'walk';
+  }
+
+  /** The way they face (yaw, 0 = +z). */
+  get facingYaw(): number {
+    return Number.isNaN(this.heading) ? this.rotation.y : this.heading;
+  }
+
+  /** How fast they are walking right now (m/s). */
+  get currentSpeed(): number {
+    return this.state.kind === 'walk' ? this.current : 0;
+  }
+
+  /** Whether they can be faded (made with `fade`): only those join a people budget. */
+  get canFade(): boolean {
+    return this.fades;
+  }
+
+  /** Whether they would show now if nothing held them back: present and faded in at all. */
+  get wantsShown(): boolean {
+    return this.present && this.fadeAmount > 0.01;
+  }
+
+  /** The share a people budget lets show (1 without one): what goes with them (a dog, its lead) fades by it too. */
+  get shownShare(): number {
+    return this.allowance;
+  }
+
+  /** Whether any of them is drawn now. */
+  get drawn(): boolean {
+    return this.present && this.model.visible;
+  }
+
+  /**
+   * The share of them a people budget lets show (0..1), times the fade their owner asks for (`setFade`): the
+   * street draws only the nearest few, the rest faded out. Needs `fade` in the options.
+   */
+  setAllowance(amount: number): void {
+    if (amount === this.allowance) return;
+    this.allowance = amount;
+    this.applyFade();
   }
 
   /** Their body, for a machine that directs it move by move (the hoops, the dance pad). */
@@ -194,6 +264,11 @@ export class Walker extends THREE.Group implements Furniture, Updatable, Interac
    */
   setFade(amount: number): void {
     this.fadeAmount = amount;
+    this.applyFade();
+  }
+
+  private applyFade(): void {
+    const amount = this.fadeAmount * this.allowance;
     this.model.setOpacity(amount);
     this.model.visible = amount > 0.01;
     if (this.blob) this.blob.visible = amount > 0.5 && !this.blobHidden;
@@ -203,7 +278,12 @@ export class Walker extends THREE.Group implements Furniture, Updatable, Interac
   protected setBlobShown(shown: boolean): void {
     if (this.blobHidden === !shown) return;
     this.blobHidden = !shown;
-    if (this.blob) this.blob.visible = this.fadeAmount > 0.5 && shown;
+    if (this.blob) this.blob.visible = this.fadeAmount * this.allowance > 0.5 && shown;
+  }
+
+  /** Talking with whoever walks with them (no words shown): the mouth and hands going for `seconds`. */
+  talkAlong(seconds: number): void {
+    this.model.talk(seconds);
   }
 
   /** Sits down where they are, on a seat `height` metres high, facing `yaw`, arms in `pose`, eyes on `focus` or wandering. */
@@ -229,6 +309,8 @@ export class Walker extends THREE.Group implements Furniture, Updatable, Interac
     this.passedPoints = 0;
     this.yielding = 0;
     this.edged = 0;
+    this.passed = 0;
+    this.halted = 0;
     this.state = { kind: 'walk', path: points, then: then ?? null };
     this.focus = null;
     this.hands = null;
@@ -310,16 +392,19 @@ export class Walker extends THREE.Group implements Furniture, Updatable, Interac
   update(dt: number): void {
     if (!this.present) return;
     if (Number.isNaN(this.heading)) this.heading = this.rotation.y;
-    if (this.state.kind === 'walk') this.step(dt, this.state);
+    // Faded right out (beyond sight, through a door, held back by a budget): they still go where they go, but
+    // their body is not posed, nor their eyes moved, until it shows again.
+    const drawn = this.model.visible;
+    if (this.state.kind === 'walk') this.step(dt, this.state, drawn);
     else {
       // Turning on the spot, slower than walking: the planted feet step round with it (`PersonModel`).
       this.face(this.state.yaw, dt, this.seated ? TURN_RATE : STAND_TURN_RATE);
       this.model.setSpeed(0);
       // Hands on the controls once turned to them (reaching while still turning would twist the arms).
       if (this.hands) this.model.reach(this.facing(this.state.yaw) ? this.hands() : null);
-      this.look(dt);
+      if (drawn) this.look(dt);
     }
-    this.model.update(dt);
+    if (drawn) this.model.update(dt);
   }
 
   setHovered(): void {
@@ -333,13 +418,14 @@ export class Walker extends THREE.Group implements Furniture, Updatable, Interac
   }
 
   activate(_session: SessionActions): void {
-    if (this.talk) {
-      this.speak(this.talk());
-      return;
-    }
-    if (!this.lines.length) return;
-    this.speak(this.lines[this.nextLine % this.lines.length]!);
-    this.nextLine++;
+    let line: string;
+    if (this.talk) line = this.talk();
+    else if (this.lines.length) {
+      line = this.lines[this.nextLine % this.lines.length]!;
+      this.nextLine++;
+    } else return;
+    if (this.stopsToTalk && this.state.kind === 'walk') this.halted = this.lineSeconds(line) + LINE_ATTENTION * 0.5;
+    this.speak(line);
   }
 
   /**
@@ -347,16 +433,35 @@ export class Walker extends THREE.Group implements Furniture, Updatable, Interac
    * pace), slower round a rounded corner, making way for the player in front; the distance of the frame carries
    * on past a point of the path into the next, so nobody halts a frame at every point.
    */
-  private step(dt: number, state: { path: THREE.Vector3[]; then: (() => void) | null }): void {
+  private step(dt: number, state: { path: THREE.Vector3[]; then: (() => void) | null }, drawn = true): void {
     const own = this.speed * this.pace;
     const first = state.path[0];
     if (!first) return this.arrive(state);
+    if (this.halted > 0) {
+      // Stopped for a word with the player: brought to a stop, turned to them, then on again.
+      this.halted -= dt;
+      this.current = Math.max(0, this.current - (own / ACCEL_S) * dt * 2);
+      this.leg.dx = first.x - this.position.x;
+      this.leg.dz = first.z - this.position.z;
+      this.leg.dist = Math.hypot(this.leg.dx, this.leg.dz);
+      if (this.leg.dist > 1e-3) stepAlong(this.position, this.leg, this.current * dt);
+      this.viewer.getWorldPosition(this.viewerPos);
+      const parent = this.parent;
+      if (parent) {
+        const player = parent.worldToLocal(this.viewerPos);
+        this.face(Math.atan2(player.x - this.position.x, player.z - this.position.z), dt, STAND_TURN_RATE);
+      }
+      this.model.setSpeed(this.current);
+      if (drawn) this.look(dt);
+      return;
+    }
     let goal = own * (this.arcs?.has(first) ? CORNER_PACE : 1);
     // Braking into the last point: the speed from which `ACCEL_S`'s deceleration stops just there.
     let left = Math.hypot(first.x - this.position.x, first.z - this.position.z);
     for (let i = 1; i < state.path.length; i++) left += state.path[i]!.distanceTo(state.path[i - 1]!);
     goal = Math.min(goal, Math.max(ARRIVE_SPEED, Math.sqrt((2 * own * left) / ACCEL_S)));
     if (this.yields) goal = this.makeWay(dt, first, goal);
+    if (this.crowd) goal = this.passOthers(dt, first, goal);
     const accel = (own / ACCEL_S) * dt;
     this.current = this.current < goal ? Math.min(goal, this.current + accel) : Math.max(goal, this.current - accel * 2);
     let move = this.current * dt;
@@ -368,6 +473,7 @@ export class Walker extends THREE.Group implements Furniture, Updatable, Interac
         if (this.owners[0] !== owner) {
           this.passedPoints = owner + 1;
           this.edged = 0;
+          this.passed = 0;
         }
         continue;
       }
@@ -379,7 +485,7 @@ export class Walker extends THREE.Group implements Furniture, Updatable, Interac
     }
     if (this.leg.dist > 1e-4) this.face(Math.atan2(this.leg.dx, this.leg.dz), dt);
     this.model.setSpeed(this.current);
-    this.look(dt);
+    if (drawn) this.look(dt);
   }
 
   private arrive(state: { then: (() => void) | null }): void {
@@ -411,17 +517,62 @@ export class Walker extends THREE.Group implements Furniture, Updatable, Interac
       return goal;
     }
     this.yielding += dt;
-    if (this.yielding > YIELD.patience) return goal;
+    // Past their patience they step round: further aside, slowly on (not through the player).
+    const round = this.yielding > YIELD.patience;
+    const sideMax = round ? GO_ROUND.sideMax : YIELD.sideMax;
     // Edge aside, away from the player's side of the way.
-    if (this.edged < YIELD.sideMax) {
-      const shift = Math.min(YIELD.sideMax - this.edged, YIELD.side * dt);
+    if (this.edged < sideMax) {
+      const shift = Math.min(sideMax - this.edged, YIELD.side * dt);
       const away = side > 0 ? -1 : 1;
       this.position.x += (hz / h) * shift * away;
       this.position.z += (-hx / h) * shift * away;
       this.edged += shift;
     }
+    if (round) return Math.abs(side) > YIELD.wide * 0.8 || this.edged >= sideMax ? goal * GO_ROUND.pace : 0;
     if (along < YIELD.stop) return 0;
     return goal * THREE.MathUtils.smoothstep(along, YIELD.stop, YIELD.ahead);
+  }
+
+  /**
+   * Others on the move (`crowd`), not their partner: coming the other way close to their line, both keep to their
+   * right (each edges right, a little slower) and pass; someone going the same way just ahead, slower, sets the pace.
+   * Returns the speed to walk at.
+   */
+  private passOthers(dt: number, next: THREE.Vector3, goal: number): number {
+    const hx = next.x - this.position.x;
+    const hz = next.z - this.position.z;
+    const h = Math.hypot(hx, hz);
+    if (h < 1e-3) return goal;
+    const fx = hx / h;
+    const fz = hz / h;
+    let speed = goal;
+    let meeting = false;
+    for (const other of this.crowd!()) {
+      if (other === this || other === this.partner || !other.present || other.parent !== this.parent || !other.wantsShown) continue;
+      const dx = other.position.x - this.position.x;
+      const dz = other.position.z - this.position.z;
+      const along = dx * fx + dz * fz;
+      if (along <= 0 || along > PASS.ahead) continue;
+      // Positive: they are on our left.
+      const side = dx * fz - dz * fx;
+      if (Math.abs(side) > PASS.wide) continue;
+      const oyaw = other.facingYaw;
+      const facing = Math.sin(oyaw) * fx + Math.cos(oyaw) * fz;
+      if (facing < -0.3 && other.isWalking) meeting = true;
+      else if (facing > 0.5 && along < PASS.follow && other.currentSpeed < speed) speed = Math.max(other.currentSpeed, 0.25);
+      else if (!other.isWalking && along < 0.9) meeting = true;
+    }
+    if (meeting) {
+      // Keep right: (fz, -fx) is our left, so step the other way.
+      if (this.passed < PASS.sideMax) {
+        const shift = Math.min(PASS.sideMax - this.passed, PASS.side * dt);
+        this.position.x -= fz * shift;
+        this.position.z += fx * shift;
+        this.passed += shift;
+      }
+      speed = Math.min(speed, goal * PASS.pace);
+    }
+    return speed;
   }
 
   /** Whether the body has (nearly) finished turning to `yaw`. */

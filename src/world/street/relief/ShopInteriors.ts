@@ -18,8 +18,14 @@ const CHECK_EVERY = 1;
 const TILE_PX = 256;
 type Kind = Exclude<ShopKind, 'shut'>;
 const KINDS: readonly Kind[] = ['cafe', 'bakery', 'pharmacy', 'books', 'grocer', 'florist', 'tabac', 'bar', 'butcher', 'laundry', 'retro', 'arcade', 'furniture', 'electronics', 'pets'];
+/** Two looks of each kind's room (a shop picks one from its facade), two tiles each, two looks to a row of the atlas. */
+const VARIANTS = 2;
 const COLUMNS = 2;
-const ROWS = 8;
+const ROWS = Math.ceil((KINDS.length * VARIANTS) / COLUMNS);
+/** Someone in the shop: how often a window shows them, how far behind the glass they stand, how far they wander along. */
+const PEOPLE = { share: 0.55, depth: [1.0, 1.9] as const, wander: 0.35 };
+const CLOTHES = [0x3a4a6a, 0x6a3a3a, 0x2f2f33, 0xd8d0c0, 0x4a6a4a, 0x8a6a4a, 0x2a4a5a, 0xa04a5a];
+const SKINS = [0xe0b8a0, 0xc8946e, 0x8a5a3e, 0xf0d0b8, 0x5a3a2a];
 
 const VERTEX = /* glsl */ `
 attribute vec2 aLocal;
@@ -29,6 +35,12 @@ attribute vec2 aTile;
 attribute vec3 aLight;
 attribute vec3 aWall;
 attribute float aOpen;
+attribute vec4 aPerson;
+attribute vec3 aCloth;
+attribute vec3 aSkin;
+varying vec4 vPerson;
+varying vec3 vCloth;
+varying vec3 vSkin;
 varying vec2 vLocal;
 varying vec4 vRoom;
 varying vec3 vDir;
@@ -49,6 +61,9 @@ void main() {
   vLight = aLight;
   vWall = aWall;
   vOpen = aOpen;
+  vPerson = aPerson;
+  vCloth = aCloth;
+  vSkin = aSkin;
   vec4 mvPosition = viewMatrix * world;
   gl_Position = projectionMatrix * mvPosition;
   #include <fog_vertex>
@@ -64,6 +79,10 @@ uniform vec3 sky;
 uniform float depth;
 uniform float tileMetres;
 uniform float displayDepth;
+uniform float time;
+varying vec4 vPerson;
+varying vec3 vCloth;
+varying vec3 vSkin;
 varying vec2 vLocal;
 varying vec4 vRoom;
 varying vec3 vDir;
@@ -102,6 +121,22 @@ void main() {
     float lamp = exp(-dot(vec2(h.x - vRoom.x * 0.5, h.z + depth * 0.5), vec2(h.x - vRoom.x * 0.5, h.z + depth * 0.5)) * 0.8);
     col = vWall * (0.85 + 0.9 * lamp * vOpen);
   }
+  #ifndef CHEAP
+  // Someone in the shop while it is open (aPerson: where along the window, how deep, a phase, 1 if anyone):
+  // a flat figure facing the street, drifting along the counter now and then.
+  if (vPerson.w > 0.5 && vOpen > 0.5) {
+    float tP = (-vPerson.y - o.z) / d.z;
+    if (tP > 0.0 && tP < tHit) {
+      vec3 q = o + d * tP;
+      float px = vPerson.x + ${PEOPLE.wander.toFixed(2)} * sin(time * 0.11 + vPerson.z * 6.28);
+      float hy = q.y - vRoom.z;
+      float dx = abs(q.x - px);
+      float body = step(0.0, hy) * step(hy, 1.45) * step(dx, mix(0.16, 0.22, smoothstep(0.85, 1.3, hy)) * (1.0 - 0.35 * smoothstep(1.32, 1.45, hy)));
+      float head = step(length(vec2(dx * 1.1, hy - 1.6)), 0.11);
+      if (head > 0.5) { col = vSkin; tHit = tP; }
+      else if (body > 0.5) { col = vCloth * (0.85 + 0.15 * smoothstep(0.9, 1.4, hy)); tHit = tP; }
+    }
+  }
   // The display in front: things on a table or in a case, just behind the glass.
   float tFront = (-displayDepth - o.z) / d.z;
   if (tFront < tHit) {
@@ -109,6 +144,7 @@ void main() {
     vec4 shown = art(1.0, vec2((p.x + vRoom.y) / tileMetres, (p.y - vRoom.z) / wallH));
     if (shown.a > 0.5) col = shown.rgb;
   }
+  #endif
   // Lit by the shop's lamps while open, and by what daylight comes through the glass; deeper is darker.
   float fall = 1.0 - 0.3 * clamp(-h.z / depth, 0.0, 1.0);
   vec3 lit = col * (vLight * (0.04 + 1.15 * vOpen) + vec3(0.3 * daylight)) * fall;
@@ -136,7 +172,10 @@ interface Pane {
  * today's stock colours, the arcade's cabinets), the display just behind the glass, side walls, a
  * tiled floor and a lit ceiling, all moving with parallax as the player walks by. Lit by the shop's
  * own light while it is open (`isShopOpen`), by daylight through the glass otherwise, and
- * reflecting the sky, far more at a grazing angle. One draw call; not built on low quality.
+ * reflecting the sky, far more at a grazing angle. Each kind's room comes in two looks (a shop picks
+ * one from its facade), and while it is open someone is often in it, behind the counter or browsing,
+ * drifting along now and then. One draw call; `cheap` (low quality) keeps the room and drops the
+ * display and the people.
  */
 export class ShopInteriors extends THREE.Mesh implements Furniture, Updatable {
   readonly contactShadow = false;
@@ -145,7 +184,7 @@ export class ShopInteriors extends THREE.Mesh implements Furniture, Updatable {
   private readonly uniforms: Record<string, THREE.IUniform>;
   private clock = CHECK_EVERY;
 
-  constructor(fronts: readonly PaintedFront[], private readonly dayNight: DayNight, shopGoods: readonly string[] | null) {
+  constructor(fronts: readonly PaintedFront[], private readonly dayNight: DayNight, shopGoods: readonly string[] | null, options: { cheap?: boolean } = {}) {
     const atlas = paintAtlas(shopGoods);
     const uniforms: Record<string, THREE.IUniform> = {
       ...THREE.UniformsUtils.clone(THREE.UniformsLib.fog),
@@ -156,9 +195,10 @@ export class ShopInteriors extends THREE.Mesh implements Furniture, Updatable {
       depth: { value: ROOM.depth },
       tileMetres: { value: ROOM.tile },
       displayDepth: { value: ROOM.display },
+      time: { value: 0 },
     };
     // The glass stands `FACADE.shopInterior` in front of the painted wall.
-    const material = onSurface(new THREE.ShaderMaterial({ uniforms, vertexShader: VERTEX, fragmentShader: FRAGMENT, fog: true }), FACADE.shopInterior);
+    const material = onSurface(new THREE.ShaderMaterial({ uniforms, vertexShader: VERTEX, fragmentShader: FRAGMENT, fog: true, defines: options.cheap ? { CHEAP: '' } : {} }), FACADE.shopInterior);
     const { geometry, panes } = paneGeometry(fronts);
     super(geometry, material);
     this.name = 'ShopInteriors';
@@ -183,6 +223,7 @@ export class ShopInteriors extends THREE.Mesh implements Furniture, Updatable {
   update(dt: number): void {
     const s = this.dayNight.state;
     this.uniforms.daylight!.value = s.daylight;
+    this.uniforms.time!.value = ((this.uniforms.time!.value as number) + dt) % 3600;
     (this.uniforms.sky!.value as THREE.Color).copy(s.horizon).lerp(s.zenith, 0.35).multiplyScalar(0.25 + 0.75 * s.daylight);
     this.clock += dt;
     if (this.clock < CHECK_EVERY) return;
@@ -207,6 +248,9 @@ function paneGeometry(fronts: readonly PaintedFront[]): { geometry: THREE.Buffer
   const room: number[] = [];
   const tangent: number[] = [];
   const tile: number[] = [];
+  const person: number[] = [];
+  const cloth: number[] = [];
+  const skin: number[] = [];
   const light: number[] = [];
   const wall: number[] = [];
   const open: number[] = [];
@@ -215,16 +259,26 @@ function paneGeometry(fronts: readonly PaintedFront[]): { geometry: THREE.Buffer
   const p = new THREE.Vector3();
   const lightColor = new THREE.Color();
   const wallColor = new THREE.Color();
+  const clothColor = new THREE.Color();
+  const skinColor = new THREE.Color();
   for (const front of fronts) {
     const frame = new FacadeFrame(front.spec);
+    const random = seededRandom(front.spec.seed * 977 + 3);
     for (const w of front.features.windows) {
       if (w.kind === 'shut') continue;
       const kind = w.kind;
       const first = position.length / 3;
       const width = w.s1 - w.s0;
       const height = w.y1 - w.y0;
-      const k = KINDS.indexOf(kind);
-      const origin = [(k % COLUMNS) / COLUMNS, 1 - (Math.floor(k / COLUMNS) + 1) / ROWS];
+      // Each shop's look of its kind's room: the same for all its windows (drawn from where the shop starts).
+      const variant = Math.floor(Math.abs(Math.sin(front.spec.seed * 12.9898 + Math.round(w.s0 / 6) * 78.233)) * 43758.5453) % VARIANTS;
+      const t = KINDS.indexOf(kind) * VARIANTS + variant;
+      const origin = [(t % COLUMNS) / COLUMNS, 1 - (Math.floor(t / COLUMNS) + 1) / ROWS];
+      // Someone inside, now and then (not in a door's narrow pane, nor the walk-in shops: theirs are their own rooms).
+      const anyone = width > 1.2 && !(kind in WALK_IN_WALLS) && random() < PEOPLE.share;
+      const personAt = [0.35 + random() * Math.max(0, width - 0.7), PEOPLE.depth[0] + random() * (PEOPLE.depth[1] - PEOPLE.depth[0]), random(), anyone ? 1 : 0];
+      clothColor.setHex(CLOTHES[Math.floor(random() * CLOTHES.length)]!);
+      skinColor.setHex(SKINS[Math.floor(random() * SKINS.length)]!);
       lightColor.set(w.light);
       const own = WALK_IN_ROOM_WALLS[kind as keyof typeof WALK_IN_ROOM_WALLS];
       if (own) wallColor.set(own).multiplyScalar(0.9);
@@ -238,6 +292,9 @@ function paneGeometry(fronts: readonly PaintedFront[]): { geometry: THREE.Buffer
         // Width, where the window starts along the facade (the art runs on across windows), floor and ceiling in window metres.
         room.push(width, w.s0, -w.y0, ROOM.ceiling - w.y0);
         tile.push(origin[0]!, origin[1]!);
+        person.push(personAt[0]!, personAt[1]!, personAt[2]!, personAt[3]!);
+        cloth.push(clothColor.r, clothColor.g, clothColor.b);
+        skin.push(skinColor.r, skinColor.g, skinColor.b);
         light.push(lightColor.r, lightColor.g, lightColor.b);
         wall.push(wallColor.r, wallColor.g, wallColor.b);
         open.push(0);
@@ -253,6 +310,9 @@ function paneGeometry(fronts: readonly PaintedFront[]): { geometry: THREE.Buffer
   g.setAttribute('aLocal', new THREE.Float32BufferAttribute(local, 2));
   g.setAttribute('aRoom', new THREE.Float32BufferAttribute(room, 4));
   g.setAttribute('aTile', new THREE.Float32BufferAttribute(tile, 2));
+  g.setAttribute('aPerson', new THREE.Float32BufferAttribute(person, 4));
+  g.setAttribute('aCloth', new THREE.Float32BufferAttribute(cloth, 3));
+  g.setAttribute('aSkin', new THREE.Float32BufferAttribute(skin, 3));
   g.setAttribute('aLight', new THREE.Float32BufferAttribute(light, 3));
   g.setAttribute('aWall', new THREE.Float32BufferAttribute(wall, 3));
   const openAttribute = new THREE.Float32BufferAttribute(open, 1);
@@ -273,17 +333,20 @@ function paintAtlas(shopGoods: readonly string[] | null): THREE.CanvasTexture {
   const [canvas, ctx] = createCanvas(TILE_PX * 2 * COLUMNS, TILE_PX * ROWS);
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   KINDS.forEach((kind, k) => {
-    const x = (k % COLUMNS) * TILE_PX * 2;
-    const y = Math.floor(k / COLUMNS) * TILE_PX;
-    const look = SHOPS[kind];
-    const palette = kind === 'retro' && shopGoods?.length ? shopGoods : look.goods;
-    const random = seededRandom(1000 + k * 37);
-    ctx.save();
-    ctx.translate(x, y);
-    paintBackWall(ctx, kind, palette, random);
-    ctx.translate(TILE_PX, 0);
-    paintDisplay(ctx, kind, look.front, palette, random);
-    ctx.restore();
+    for (let variant = 0; variant < VARIANTS; variant++) {
+      const t = k * VARIANTS + variant;
+      const x = (t % COLUMNS) * TILE_PX * 2;
+      const y = Math.floor(t / COLUMNS) * TILE_PX;
+      const look = SHOPS[kind];
+      const palette = kind === 'retro' && shopGoods?.length ? shopGoods : look.goods;
+      const random = seededRandom(1000 + k * 37 + variant * 7919);
+      ctx.save();
+      ctx.translate(x, y);
+      paintBackWall(ctx, kind, palette, random, variant);
+      ctx.translate(TILE_PX, 0);
+      paintDisplay(ctx, kind, look.front, palette, random);
+      ctx.restore();
+    }
   });
   const texture = toTexture(canvas, 4);
   texture.wrapS = THREE.ClampToEdgeWrapping;
@@ -300,8 +363,10 @@ function pick<T>(random: () => number, items: readonly T[]): T {
   return items[Math.floor(random() * items.length)]!;
 }
 
-function paintBackWall(ctx: CanvasRenderingContext2D, kind: Kind, palette: readonly string[], random: () => number): void {
-  const wall = kind === 'butcher' || kind === 'pharmacy' || kind === 'laundry' ? '#e8ebe8' : kind === 'bar' || kind === 'arcade' || kind === 'retro' ? '#2a2230' : '#d8c8ac';
+function paintBackWall(ctx: CanvasRenderingContext2D, kind: Kind, palette: readonly string[], random: () => number, variant: number): void {
+  // The second look of a room is painted another colour (a dark green, a pale blue...), and hangs a picture or a poster.
+  const walls = kind === 'butcher' || kind === 'pharmacy' || kind === 'laundry' ? ['#e8ebe8', '#dce8ec'] : kind === 'bar' || kind === 'arcade' || kind === 'retro' ? ['#2a2230', '#1e2a2c'] : ['#d8c8ac', '#b8c4b0'];
+  const wall = walls[variant % walls.length]!;
   ctx.fillStyle = wall;
   ctx.fillRect(0, 0, S, S);
   const shelf = (h: number): void => {
@@ -440,6 +505,19 @@ function paintBackWall(ctx: CanvasRenderingContext2D, kind: Kind, palette: reado
         ctx.fillRect(px + 5, Y(1.82), 24, 5);
       }
       break;
+  }
+  if (variant > 0 && kind !== 'arcade' && !(kind in WALK_IN_WALLS)) {
+    // A framed picture or a poster high on the wall, a clock beside it.
+    ctx.fillStyle = '#3a2a1a';
+    ctx.fillRect(X(0.25), Y(3.1), X(0.55), Y(2.65) - Y(3.1));
+    ctx.fillStyle = pick(random, ['#6a8aa8', '#c8a060', '#8a5a6a', '#5a7a5a']);
+    ctx.fillRect(X(0.29), Y(3.06), X(0.47), Y(2.69) - Y(3.06));
+    ctx.fillStyle = '#f0ece0';
+    ctx.beginPath();
+    ctx.arc(X(1.9), Y(2.9), 7, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#2a2a2a';
+    ctx.fillRect(X(1.9) - 0.5, Y(2.9) - 5, 1, 5);
   }
   // A little shade near the floor and the ceiling.
   const g = ctx.createLinearGradient(0, 0, 0, S);

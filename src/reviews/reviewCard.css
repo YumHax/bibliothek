@@ -1,0 +1,47 @@
+/* The press at the time (`reviewCard.ts`): a newsprint clipping inside the game panel. */
+.review-card {
+  margin-top: 1rem;
+  padding: 0.7rem 0.85rem 0.6rem;
+  border-radius: var(--ui-radius-sm);
+  background: #efe8d8;
+  color: #2a2620;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
+  transform: rotate(-0.6deg);
+  animation: review-card-in 260ms var(--ui-ease);
+}
+@keyframes review-card-in {
+  from { opacity: 0; transform: rotate(-0.6deg) translateY(0.4rem); }
+  to   { opacity: 1; transform: rotate(-0.6deg); }
+}
+.reduce-motion .review-card { animation: none; }
+.review-card__head {
+  margin: 0 0 0.45rem;
+  font: 0.68rem/1 var(--ui-font-body);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #6b6152;
+  border-bottom: 1px solid rgba(42, 38, 32, 0.25);
+  padding-bottom: 0.35rem;
+}
+.review-card__scores { display: flex; flex-wrap: wrap; gap: 0.35rem; margin: 0 0 0.45rem; padding: 0; list-style: none; }
+.review-card__score {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 3.4rem;
+  padding: 0.25rem 0.4rem 0.2rem;
+  border: 1.5px solid #2a2620;
+  border-radius: 4px;
+  background: #fbf7ee;
+}
+.review-card__score b { font: 1rem/1.1 var(--ui-font-print); }
+.review-card__score span { font-size: 0.6rem; line-height: 1.15; text-align: center; max-width: 5.5rem; color: #5a5144; }
+.review-card__score--aggregate { background: var(--ui-accent); border-color: #6b4e0c; }
+.review-card__score--aggregate span { color: #3a2a05; }
+.game-panel .review-card p,
+.review-card__quote { margin: 0.2rem 0 0.35rem; font: italic 0.88rem/1.4 var(--ui-font-serif); opacity: 1; }
+.review-card__quote cite { display: block; margin-top: 0.2rem; font: normal 0.72rem/1.2 var(--ui-font-body); color: #5a5144; }
+.review-card__quote cite::before { content: '— '; }
+.review-card__credit { margin: 0.35rem 0 0; font-size: 0.62rem; color: #7a7062; }
+.review-card__credit a { color: inherit; }
+.game-panel .review-card footer { margin-top: 0.35rem; font-size: 0.62rem; color: #7a7062; }

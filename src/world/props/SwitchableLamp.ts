@@ -5,6 +5,7 @@ import type { SessionActions } from '@/game/SessionActions';
 import { playRockerClick } from '@/audio/furnitureSounds';
 import { Prop } from './Prop';
 import { HoverGlint } from './hoverGlint';
+import { poweredAt } from '@/building/mains';
 
 /** Seconds a switched lamp takes to come up (a filament warming) and to go dark (it cools a touch faster). */
 const WARM_SECONDS = 0.14;
@@ -51,12 +52,12 @@ export abstract class SwitchableLamp extends Prop implements Interactable, Updat
     this.setOn(!this.on);
   }
 
-  /** Eases the level towards the switch; `render` runs only while it moves. */
+  /** Eases the level towards the switch (dark while the building's power is cut, `building/mains`); `render` runs only while it moves. */
   update(dt: number): void {
-    const target = this.on ? 1 : 0;
+    const target = this.on && poweredAt(this) ? 1 : 0;
     if (this.level === null || this.level === target) return;
-    const step = dt / (this.on ? WARM_SECONDS : COOL_SECONDS);
-    this.level = this.on ? Math.min(1, this.level + step) : Math.max(0, this.level - step);
+    const step = dt / (target ? WARM_SECONDS : COOL_SECONDS);
+    this.level = target ? Math.min(1, this.level + step) : Math.max(0, this.level - step);
     this.render(this.level, this.hovered);
   }
 
@@ -77,9 +78,10 @@ export abstract class SwitchableLamp extends Prop implements Interactable, Updat
     return `${this.what[0]!.toUpperCase()}${this.what.slice(1)} · switch ${this.on ? 'off' : 'on'}`;
   }
 
-  activate(_session: SessionActions): void {
+  activate(session: SessionActions): void {
     playRockerClick();
     this.toggle();
+    if (this.on && !poweredAt(this)) session.react('Click. Nothing: the power is off in the whole building.');
   }
 
   /**

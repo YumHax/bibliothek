@@ -16,6 +16,25 @@ export type BoxCondition = 'complete' | 'noManual' | 'worn';
  */
 export type Edition = 'firstPrint' | 'standard' | 'budget';
 
+/**
+ * What sets one copy apart from another of the same printing (`economy/copyTraits`): still `sealed` in its
+ * shrink-wrap (complete, never opened: worth far more until the seal is broken), a `misprint` (a printing error
+ * collectors chase), or a `crushed` box (a dented corner, a cracked case: cheaper). Absent means none.
+ */
+export type CopyVariant = 'sealed' | 'misprint' | 'crushed';
+
+/** What a previous owner left on or in a copy: a name in marker, a battery save, pencil in the manual, a receipt, a note. */
+export type CopyPastKind = 'name' | 'save' | 'notes' | 'receipt' | 'note';
+
+/** A copy's past (`economy/copyTraits.dressCopy`), found when its box is first opened. Moves no price. */
+export interface CopyPast {
+  kind: CopyPastKind;
+  /** One line, as the card reads it. */
+  text: string;
+  /** True once the player opened the box and found it. */
+  found?: boolean;
+}
+
 /** The receipt kept with a game: what it cost, where it came from, and on which market day. */
 export interface Acquisition {
   /** Coins paid (0 for a swap with nothing added, a prize...). */
@@ -66,6 +85,14 @@ export interface Game {
   edition?: Edition;
   /** True for a reproduction sold as the real thing (the market's fakes): worth next to nothing. */
   repro?: boolean;
+  /** What sets this copy apart (sealed, a misprint, a crushed box); absent = none. */
+  variant?: CopyVariant;
+  /** A misprint's error, in plain words ("the cartridge label is printed upside down"). */
+  variantNote?: string;
+  /** What a previous owner left with it, found on opening the box. */
+  past?: CopyPast;
+  /** An unlicensed cartridge (`catalog/bootlegs`): an honest curiosity, not a fake of a real game. */
+  bootleg?: boolean;
   /**
    * A worn copy cleaned up at home (`household/`): it reads as `noManual` on the shelf and in the
    * collection's value, but the WE BUY desk and a swap still count it as worn.

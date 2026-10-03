@@ -60,6 +60,10 @@
 .journal-panel__ahead li::before {
   content: '→ ';
 }
+/* The trail's page (the lost prototype): its clues numbered, in the hand of the notes. */
+.journal-panel__file { counter-reset: clue; margin-bottom: 0.4rem; }
+.journal-panel__file li { counter-increment: clue; margin-bottom: 0.25rem; }
+.journal-panel__file li::before { content: counter(clue) '. '; }
 .journal-panel__lines time {
   font-size: 0.78rem;
   opacity: 0.6;

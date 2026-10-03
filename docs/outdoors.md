@@ -20,12 +20,19 @@ or heard through the windows.
   share, all derived from `street/streetPlan.ts` (`FLAT_IN_STREET` turns street-local points into the flat's frame):
   `frontage` (both streets' cross-sections `FRONT_SECTION` / `PARK_SECTION` with their lanes, kerbs, the bus stop, the
   crossings, lamps, bins, racks, benches, the newsstand, terraces, `STREET_DETAILS` (manholes, hydrants, bollards, the
-  Morris column), `ROADWORKS`, the ends), `facadeStyle` (a planned building's look from its `seed`: wall, trims, window
-  heads, `balconyRows`, roof; `FACADE_WINDOW` and `facadeBays` place the windows), `trees` (`STREET_TREES`,
+  Morris column), `roadworks()` (where the works stand today: `street/details/roadworks`, synced from the saved market
+  day before painting), the ends), `facadeStyle` (a planned building's look from its `seed`: wall, trims, window
+  heads, `balconyRows`, roof, its `windows` size, parapet, door and number, downpipe; `windowWidth` and `facadeBays`
+  place the windows), `roofFurniture` (chimneys, dormers, roof windows, aerials, dishes, flat-roof clutter, the same
+  in both pictures), `regionUpload` (a repainted rect of a canvas texture uploaded alone), `trees` (`STREET_TREES`,
   `PARK_TREES` with their sizes, `TREE_FORM`), `park` (pond, bandstand, playground, beds, willows, paths, the gate),
-  `parkedCars` (each bay's shape and paint), `skyline` (the towers, `towerTop`), `vehicles`, `traffic`, `shopLooks`.
+  `parkedCars` (each bay's shape and paint), `skyline` (the towers, `towerTop`, the `BACKDROP_BLOCKS` both pictures
+  stand past the streets), `vehicles`, `traffic`, `shopLooks` (with each kind's `LETTERING`). A painted shop keeps
+  its kind's `SHOP_HOURS`: its lights carry curfew code 5 mod 8 with the opening and closing hours in G and B, its
+  shutter the hours in fx B (`Sheet.shutterByte`), the pane shader reads the hour from `cloudDrift.z`; the walk-in
+  kinds (`hasShopfront`) keep no shutter. The lamps are painted in their `LAMP_DESIGNS`.
   Never retype a street value in a painter: add it to the street's plan and derive it here. What the painted view
-  still draws on its own is only what the walkable street never reaches: the lots beyond the planned rows, the backdrops,
+  still draws on its own is only what the walkable street never reaches: the lots beyond the planned rows,
   the park past `STREET_PLAN.park`'s rectangle (and its paths, beds, pond, lamps and picnics), the courtyard's detail.
 - `plan.ts` is the neighbourhood as the window sees it, derived from `city/`. Front Street ahead with the planned row
   across it, Park Street to the left with the park, our own pavement (`NEAR_KERB`) under the windows; `frontage()` /
@@ -83,7 +90,7 @@ or heard through the windows.
 - Helpers: `FacadeFrame`, `Shopfront` (shop types, lettering; `Storefront` carries its light, closing curfew and
   `goods` boxes; `RETRO_GAMES` and its neighbours across the street are where the walkable street has them:
   `paintFrontBlock` paints that row from `street/streetPlan.FACADES`, x shifted by `FLAT_IN_STREET`, storeys and
-  shops by kind and name as `PlannedShop`s; the rest of the block beyond is drawn by lots), `StreetFurniture` (lamps with ground pool, small
+  shops by kind and name as `PlannedShop`s; the rest of the block beyond is drawn by lots), `paintedFurniture` (lamps with ground pool, small
   halo and wall wash; benches, bins, bikes, bollards, hydrants, newsstand, bus shelter, terraces, hoardings, barriers,
   cones...), `ParkFeatures`, `Solid`.
 - `Holiday.ts` (`currentHoliday()`, `holidayOf(date)`, `?holiday=christmas|halloween|none`): at Christmas (1 Dec - 6 Jan)
@@ -237,8 +244,13 @@ up). Starts on the first click or key press.
 - Window life on the walkable facades: the night map is opaque (`fillRect`, at `nightScale`: 0.5 of the atlas on
   high, 0.25 else) and each light's id is in its own nearest, mip-less texture (`windowIds`: R the id, G how far up its
   window, B our flat's window index); the patch flickers TVs, slides figures across lit windows and lowers a quarter of
-  the blinds 21-22 h from each window's head, above the ground floor only. The glass mask (`glassMask`, from the
-  painter's `GlassPane`s) gives the panes low roughness, a stronger env reflection and a reveal in parallax (`REVEAL`).
+  the blinds 21-22 h from each window's head, above the ground floor only. Each light is painted with its room behind
+  it (`LightInside`: curtains, a blind, furniture, someone standing, an arch's dark corners) and repainted alone when
+  it switches. The surface mask (`surfaceTexture`, the `roughnessMap`: R a pane or a brick wall, G the roughness, B the
+  painter's `ReliefRect`s) gives the panes low roughness, a stronger env reflection and a reveal in parallax
+  (`REVEAL`), lays brick courses in world metres on brick fronts (fading where they would shimmer), tilts the normal
+  with the relief (sills, cornices, quoins, grooves catch a low sun), and darkens, glosses and snows the walls with the
+  weather (`facadeWeather`).
 - Our flat seen from the street: its windows (`FlatFront.windows[].room`) are lit as their room was left, the lamp
   dimmed by drawn curtains (`city/flatWindows`: `furnishShell` reports each room, `Buildings` reads `lampShown` and
   `curtainsOpen` into `flatLevels`); before a room is built they follow the curfew.
@@ -247,20 +259,38 @@ up). Starts on the first click or key press.
   standing people, the crowd and the cars take the clock's state straight away on activation (the crowd and the cars
   pre-warm a couple mid-route). Street lamps' real lights fade out, move and fade in (`HANDOVER`).
 - People: the eyes and inner ears dither out between 14 and 16 m (alpha hash on their own materials); the crowd is a
-  pool of one person per look (`crowd.seeds`, up to `count + 2`), whoever has been away longest goes out next;
+  cast drawn per street build (`life/crowdCast`), whoever has been away longest goes out next;
   pigeons take off for walkers as for the player; the stray cat skips a perch whose bench or bin is in use (`on`);
   the far pavement's routes pass behind the bus shelter and bend round the terraces and the snowman, as does the
-  alighting passenger (`standing.busStop.alight`). `PersonModel.hold('phone' | 'book' | 'umbrella')` and `setHood` (`people/held.ts`); walkers round corners
+  alighting passenger (`standing.busStop.alight`). `PersonModel.hold('phone' | 'book' | 'umbrella' | 'shopping' | 'baguette' | 'flowers' | 'cigarette')` and `setHood` (`people/held.ts`); walkers round corners
   (`Walker` `corners`, `roundCorners`) and step down kerbs eased over 0.3 m; strangers caption only within 4 m
-  (`labelWithin`); the crowd thins and hurries in rain (umbrellas for half), hoods in snow. The phone caller and the
+  (`labelWithin`); the crowd thins and hurries in rain (umbrellas for half, up as soon as it starts), hoods in snow. The phone caller and the
   reader take turns (20-60 game min). The stray cat keeps to `life/catPaths` (pavement lanes, crossings, corners).
 - Ground: asphalt and slabs are 1024 px tiles (512 below high) with a height map (aggregate proud, joints and seams sunk) and a
   roughness map (`groundTextures`, `Tile.bump` / `roughness`); the markings wear away in patches, grains and the wheel
   tracks (`wornPaint`). `StreetGround` breaks the tiling with a zone-local macro patch (patches; oil in the parking lanes; tyre
-  tracks) and `STREET_PLAN.roadPatches`. Rain and snow skip `Precipitation` shelters (the sas, `awningShelters`, the
-  bus shelter, the kiosk; at most 32).
-- Light: the sun's shadow fades out over the outer 15 % of its map (`shadowFade`, patched on the street's own
-  materials; palette ones are shared with the flat and keep their edge). The street reflects its own sky: `SkyDome`
+  tracks; cracks and sealed cracks in tired stretches, `ROAD_WEAR.potholes` holding water when wet; the walls' feet
+  darkened) and `STREET_PLAN.roadPatches`. The corner bay keeps granite setts, every street door a granite sill, every
+  dropped kerb blister paving (`GROUND.marking`, where no paint lies); kerbs have height and roughness maps and turn
+  round `relief/ground` `KERB_CORNERS` (`KERB_RADIUS`: `isRoad`, `groundHeight` and the rain's `roadGlsl()` agree).
+  Markings: lane arrows, Park Street's bays and its give-way (dashes and triangle). Snow is laid in the road's and
+  pavement's shaders: tyre tracks and trodden paths cleared, banks along the kerbs and the walls, slush while wet.
+  Rain and snow skip `Precipitation` shelters (the sas, `awningShelters`, the bus shelter, the kiosk, the shopfronts:
+  any number, the 32 nearest the camera chosen every 2 m). `clutter/StreetClutter`: bags and wheelie bins out by the
+  residents' doors from the evening before the bin round, the day's litter, spring's settled petals (`GROUND.leaf`).
+- Weather on things: `snowCovered()` (`snowCover.ts`) lays both snow (`STREET_SNOW`) and the rain's wet (`STREET_WET`:
+  darker, glossier on top) on whatever uses it (cars, furniture, relief, lamps, trees); `wetCovered()` is the wet alone (walls).
+- Light: the sun's shadow map is a square laid ahead of where the player looks (`LOOK_AHEAD`) and fades out over its
+  outer 15 % (`shadowFade`) into the rows' far shadow: each point's ray to the sun against the roofline of our row,
+  the far row and Park Street's (a 1D texture from `FACADES`), so the buildings' shadows run to the end of the street.
+  Patched on every lit street material, the shared palette ones swapped for street copies (the flat's keep their
+  edges), in the windows' views too (`streetOutlook`). Lamps come in three kinds (`LAMP_DESIGNS`, `design` per
+  `STREET_PLAN.lamps`: the arm, Park Street's cast-iron crook lanterns, a post-top one), drawn per kind and per stretch
+  of street (`STRETCH_EDGES`, culled out of view, as the trees are), with a soft halo per lit head where there is no
+  bloom (low). The trees branch (limbs, branches, twigs: bare in winter) under crowns of clumps; the Christmas fir is
+  whorls of sprays. The sky dome ray-casts `city/skyline` `BACKDROP_BLOCKS` (the neighbourhood's mid-rise blocks past
+  the street's rows, the park's far side) in front of the far city, lit and windowed. The wet mirror (`WetGround`)
+  renders every other frame (unless the view turned) and leaves out `unmirrored` (the people). The street reflects its own sky: `SkyDome`
   hands `Environment` a `SkyReflection` (the dome prefiltered every 20 s, `setReflectionSource`) while occupied. The
   far towers (`SkylineSilhouette`, 4096 columns) are read linearly and smoothed over a pixel, re-baked every 0.5 m.
   Street lamps are sodium (`lighting/lampColours`): each photocell switches at its own point of the dusk and strikes
@@ -269,11 +299,15 @@ up). Starts on the first click or key press.
   metal is paint (0); the shelter, benches, bins and kiosk are rounded boxes, the hedge a lumpy clipped run, the cars'
   bodies 3-step bevels with creased normals on 20-segment lathe tyres (`carModel`).
 - Traffic: driving cars throw a headlight pool on the road at night (additive, alpha kept) and their lamps streak the
-  wet road (`WetGround` `cars`). Cars and riders by quality (`carsByQuality`, `ridersByQuality`), 18 % taxis (`city/traffic` `TAXI`, lit
-  roof sign), now and then an `Ambulance` (`STREET_PLAN.ambulance`). Sound: `StreetSound` has the wind band and
-  whistle; `audio/StreetCues` plays wings (pigeons), barks (the crowd's dog), the crossing's beeper, shutter rattles
-  and the ambulance's siren; `StreetAmbience` hears thunder at the open air's level in the street (`open`) and as
-  through a pane in the market hall (`underRoof`).
+  wet road (`WetGround` `cars`). Cars and riders by quality (`carsByQuality`, `ridersByQuality`, `twoWheelers`), 18 % taxis (`city/traffic` `TAXI`, lit
+  roof sign), busier in the rush hours (`city/traffic` `rushAt`; the window view's traffic does not read it yet), now and
+  then an ambulance, a police car or a fire engine (`STREET_PLAN.ambulance`, `police`, `fireEngine`) that the cars pull
+  over for. Parked cars pull out and drivers park in the walkable street only: the window view keeps `PARKED_CARS`. Sound (docs/zones.md "The street"): what the
+  panes hear of the street is heard down there too, where it happens: the bus's air brakes and doors, the lorry's
+  compactor and bins (`street/audio/VehicleVoice`), blackbirds and the dawn chorus (`StreetBirds`); `StreetSound` has the
+  wind band and whistle; `audio/StreetCues` plays wings and coos (pigeons), barks (the crowd's dog), the crossing's
+  beeper, shutter rattles and the sirens; `StreetAmbience` hears thunder at the open air's level in the street (`open`)
+  and as through a pane in the market hall (`underRoof`).
 
 ## Views onto the street (`src/world/outlook/`)
 
@@ -283,16 +317,42 @@ built again behind the glass: an `OutlookView` is a portal, its own `THREE.Scene
 sun, sky and lamps (the room's lights, shadow texture units and light count are never touched), rendered in a pane's
 `onBeforeRender` (as three's `Reflector` does) from the main camera carried into that frame (`toOutlook`: `frames.ts`,
 `flatToStreet` for the stairwell, `shopToStreet` for a shop's front wall laid on its facade), clipped at the pane's
-plane, scissored to the pane's rectangle, into a half-float picture the pane samples in screen space. Only the main
-camera's pass renders (a glossy floor's mirror pass reuses the picture). What is out there (`streetOutlook`, in its own
+plane, scissored to the pane's rectangle, into a half-float picture the pane samples in screen space. Panes of one view
+in one plane share a frame's render: the first drawn scissors to the union of those on screen (unless the union is over
+`UNION_MAX_SPREAD` times their areas) and the others skip theirs that frame (`covered`, by the renderer's frame count;
+the stairwell's panes a storey apart up the well). Only the main camera's pass renders (a glossy floor's mirror pass
+reuses the picture). After `FREE_AFTER_UNDRAWN` (90 s) with no pane drawn, the view frees its scene and shrinks its
+picture (the stairwell is persistent: it would hold a whole street for good), and is built again on the next
+`prefetch` or draw. What is out there (`streetOutlook`, in its own
 chunk with the street's classes) is the street's own: `StreetLighting` (occupied), `SkyDome` (its prefiltered sky as the
 scene's environment, never `setOccupied`/`dispose`: both hand the global reflection back), `StreetGround`, `StreetPark`,
 `Buildings` for the facades within 110 m that face the window (less the one it is in; the near ones painted finer),
-their relief, shutters and shop glow, the lamps, trees, parked and passing cars, furniture, the rain, and the courtyard
+their relief, shutters and shop glow, the lamps, trees, parked and passing cars, furniture (all of these by the same
+calls as the street's own, `street/streetScenery`: only the options differ), the rain, and the courtyard
 the street never reaches (`Courtyard`, `COURTYARD_YARD` in `outlookPlan.ts`: setts, lawn and chestnut, the workshop's
 back, bins, shed, rack, sandpit, bikes). No people, doors or sounds. It is built at the next idle moment once the
 player walks into the room (`prefetch`, from `setOccupied`) or a pane is first drawn, compiled out of sight, and ticked
 only while a pane was drawn in the last 1.5 s; the glass shows a pale sky until then.
+
+## Lives behind the windows (`building/rearWindows`, `street/windowLife.ts`)
+
+A `Buildings` may be given a `windowLife` (`BuildingsOptions.windowLife`): every lit window it painted is offered to
+it once (`claim`, facade metres and floor) and may come back claimed, lit by its claim instead of its curfew, and with
+a story drawn over its light. `building/rearWindows` (data in `rearWindowsPlan.ts`) is the one in use, handed to the
+street's own facades, the stairwell's outlook and the walked courtyard:
+- **Our building follows its residents.** The windows of the flats behind each landing's doors (`residents`: stretches
+  of `ours` and `oursBack` by floor, floor 5 Mrs Roux's) are lit while that resident is home and up (their day from
+  `STAIRWELL_PLAN.residents`, a bedtime each); the stairwell's own windows on our back come on and off with its timer.
+- **Stories across the courtyard.** Eight windows of `courtRear` and `courtEast` (`stories`: facade, floor, the
+  window nearest a spot) each have a life that goes on from one game day to the next (`storyNow`): a couple's dinner
+  then reading, a painter whose canvas fills up (a new one every `painterCanvas` days), squats, a party night one day
+  in seven, a tenancy that ends in boxes under a bare bulb, stands empty and dark, and a new tenant moving in (with a
+  cat every other time), a cat lady, a night owl at a blue monitor, and **the trader's shelves** (the street's
+  collector lives across the yard: `traderShelves(day)`, filling up over `trader.fillDays`). Drawn in the facades'
+  shader (`street/windowStoryGlsl.ts`): flat silhouettes and tinted light in the window's own frame (the id texture's
+  B is 128 + the story slot; `storyAxis` / `storyBand` uniforms, up to `STORY_WINDOWS`), no geometry, no texture.
+- **Binoculars.** Photo mode's frame key cycles to `Binoculars` (`photo/frames.ts`): two eyepieces over the view and
+  the wheel's zoom down to 3.5°, for the windows across the yard from the stairwell's half landings or the courtyard.
 
 ## Headless check (no browser)
 

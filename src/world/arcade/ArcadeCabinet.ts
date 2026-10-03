@@ -53,6 +53,11 @@ export interface ArcadeCabinetOptions {
   wear?: number;
   /** Plays cost nothing and pay no tickets (LexiPunk, until its page reports scores). */
   freePlay?: boolean;
+  /**
+   * A cabinet in the flat (`world/homeArcade`): played for fun, no coin, no ticket, nothing counted at the arcade
+   * (`ArcadeMachineLike.atHome`); its screens say so (no INSERT COIN, no tickets on the cards).
+   */
+  atHome?: boolean;
 }
 
 /** Where the player's eye goes while playing: standing at the control panel. */
@@ -92,6 +97,11 @@ export class ArcadeCabinet extends THREE.Group implements Furniture, Interactabl
   /** Plays cost nothing (LexiPunk, until its page reports scores). */
   get freePlay(): boolean {
     return this.options.freePlay === true;
+  }
+
+  /** A cabinet at home: nothing paid, nothing counted (`ArcadePlay`). */
+  get atHome(): boolean {
+    return this.options.atHome === true;
   }
   /** Where a regular stands: closer than the player's eye (`PLAY_DISTANCE`), so their hands reach the panel. */
   readonly standAt: THREE.Vector3;
@@ -136,7 +146,7 @@ export class ArcadeCabinet extends THREE.Group implements Furniture, Interactabl
     // The controls: one joystick and two buttons, or a set for each player on a two-player game.
     this.controls = new CabinetControls(this, twoPlayer);
     const price = (): { free: boolean; text: string } => ({ free: this.run.free, text: this.run.priceText() });
-    const info = { scores: options.scores, pointsPerTicket: options.pointsPerTicket, price, ...(options.medals ? { medals: options.medals } : {}), ...(options.challenge ? { challenge: options.challenge } : {}) };
+    const info = { scores: options.scores, pointsPerTicket: options.pointsPerTicket, price, ...(options.atHome ? { home: true } : {}), ...(options.medals ? { medals: options.medals } : {}), ...(options.challenge ? { challenge: options.challenge } : {}) };
     this.screens = new CabinetScreens(game, info, options.listener, this);
     const { screen } = this.screens;
     this.add(screen);
@@ -199,6 +209,7 @@ export class ArcadeCabinet extends THREE.Group implements Furniture, Interactabl
       pointsPerTicket: options.pointsPerTicket,
       ...(options.replays ? { replays: options.replays } : {}),
       seed: color ^ glowColor,
+      quiet: options.atHome === true,
       onTitle: () => {
         if (this.partner) this.game.setOpponent?.(this.partnerName ?? 'CPU', this.partnerName ? 0.55 : 0.7);
       },
@@ -301,7 +312,7 @@ export class ArcadeCabinet extends THREE.Group implements Furniture, Interactabl
   }
 
   label(_player: PlayerState): string {
-    const attract = `${this.game.title} · insert a coin (${this.run.priceText()})`;
+    const attract = this.atHome ? `${this.game.title} · play` : `${this.game.title} · insert a coin (${this.run.priceText()})`;
     return this.run.label(this.game.gun ? { attract, playing: `${this.game.title} (${actionKeyLabel('walkAway')}: walk away) · shoot` } : { attract });
   }
 

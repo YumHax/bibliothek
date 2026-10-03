@@ -19,6 +19,8 @@ const SHOP_TITLES: Record<HomeShop, { title: string; blurb: string }> = {
   electronics: { title: 'TV repair', blurb: 'Screens, speakers and the odd appliance, tested on the bench and delivered today.' },
   florist: { title: 'The florist', blurb: 'Plants for every room, and pots for the balcony.' },
   pets: { title: 'The pet shop', blurb: 'A rescue cat looking for a home, and what it needs.' },
+  // Never opened: Mrs Roux's flat is sold through the agency's sign on her door (`world/annex/RouxLanding`).
+  agent: { title: 'Duval & Fils, estate agents', blurb: 'Flats in the neighbourhood.' },
 };
 
 /**
@@ -90,7 +92,7 @@ export class HomeShopPanel extends MarketPanel {
         <div class="shop__text">
           <h3>${escapeHtml(good.name)}</h3>
           <p>${escapeHtml(good.blurb)}</p>
-          ${good.max > 1 ? spotsHtml(owned, good.max) : ''}
+          ${good.max > 1 ? spotsHtml(owned, upgrades.limit(good.id)) : ''}
         </div>
         <div class="shop__buy">
           <span class="shop__tag">${good.price}<span class="shop__coin" aria-label="coins"></span></span>

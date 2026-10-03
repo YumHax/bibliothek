@@ -3,6 +3,8 @@ import type { Zone } from '../zone/Zone';
 import type { ShelvingOptions } from '../shelving/Shelving';
 import { slotCount } from '../shelving/Shelving';
 import { ROOM_PLAN } from '../roomPlan';
+import { annexJoined } from '@/building/rouxMove';
+import { ANNEX_PLAN } from '../annex/annexPlan';
 
 /** The collection room's shelving, as `layout.ts` builds it (bar the overflow list): the run along the back and right walls. */
 export function livingShelvingOptions(): Omit<ShelvingOptions, 'overflow'> {
@@ -15,12 +17,17 @@ let livingSlots: number | null = null;
 
 /**
  * Where the bookcases stand, with `bought` of them bought (`HomeUpgrades` 'bookcase'): the collection room has one from
- * the start and takes the bought ones along its walls until they are full, the bedroom's slot the rest.
+ * the start and takes the bought ones along its walls until they are full, the bedroom's slot the next, and once Mrs
+ * Roux's two rooms are the flat's (`joined`: the wall knocked through) the annex's run the rest. The opening takes the
+ * collection room's last slot (the right wall's front one): its bookcase goes to the annex then.
  */
-export function bookcasesIn(bought: number): { living: number; bedroom: number } {
+export function bookcasesIn(bought: number, joined: boolean = annexJoined()): { living: number; bedroom: number; annex: number } {
   livingSlots ??= slotCount(livingShelvingOptions());
-  const living = Math.min(livingSlots, 1 + bought);
-  return { living, bedroom: Math.max(0, 1 + bought - living) };
+  const total = 1 + bought;
+  const living = Math.min(joined ? livingSlots - 1 : livingSlots, total);
+  const bedroom = Math.min(1, total - living);
+  const annex = joined ? Math.min(ANNEX_PLAN.shelving.slots.length, total - living - bedroom) : 0;
+  return { living, bedroom, annex };
 }
 
 /**

@@ -1,5 +1,6 @@
 import { deg } from './paint';
 import { BUS_STOP, COURT, FRONT_SECTION, PARK_SECTION, STREET_END, STREET_LAMPS } from '@/world/city/frontage';
+import type { LampDesign } from '@/world/street/streetPlan';
 
 /**
  * The plan of the neighbourhood, the eye at the origin on a sixth floor at the corner of two
@@ -86,6 +87,8 @@ export interface PaintedLamp {
   x: number;
   z: number;
   far: boolean;
+  /** Its kind, the walkable street's (`street/StreetLamps` `LAMP_DESIGNS`). */
+  design: LampDesign;
 }
 
 /**
@@ -94,10 +97,10 @@ export interface PaintedLamp {
  */
 export const LAMPS: readonly PaintedLamp[] = (() => {
   const ours = STREET_LAMPS.find((lamp) => lamp.yaw === 0)!.at[1];
-  return STREET_LAMPS.map(({ at: [x, z], yaw }): PaintedLamp => {
-    if (yaw === 0) return { x, z, far: false };
-    if (yaw === -Math.PI / 2) return { x: -ours, z, far: false };
-    return { x, z, far: true };
+  return STREET_LAMPS.map(({ at: [x, z], yaw, design }): PaintedLamp => {
+    if (yaw === 0) return { x, z, far: false, design };
+    if (yaw === -Math.PI / 2) return { x: -ours, z, far: false, design };
+    return { x, z, far: true, design };
   });
 })();
 

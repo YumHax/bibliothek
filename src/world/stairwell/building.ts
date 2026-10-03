@@ -2,11 +2,17 @@ import type { ModalLike } from '@/game/SessionParts';
 import type { MailPost } from '@/collection/MailPost';
 import type { NeighbourTrades, Resident, TradeOffer } from '@/economy/NeighbourTrades';
 import type { Doorstep } from '../hallway/Doorstep';
+import type { CoproBallotSource } from '@/ui/CoproPanel';
 import { STAIRWELL_PLAN, STOREYS } from './stairwellPlan';
 
 /** The neighbour's swap panel as a door opens it: shown the offer, then opened by the Session. */
 export interface TradePanelLike extends ModalLike {
   prepare(offer: TradeOffer): void;
+}
+
+/** The co-owners' postal vote as the hall's ballot box opens it: dealt the ballot, then opened by the Session. */
+export interface CoproPanelLike extends ModalLike {
+  prepare(source: CoproBallotSource): void;
 }
 
 /**
@@ -20,6 +26,8 @@ export interface BuildingServices {
   post?: MailPost;
   trades?: NeighbourTrades;
   tradePanel?: TradePanelLike;
+  /** The co-owners' postal vote (the ballot box by the hall's board). */
+  copro?: CoproPanelLike;
 }
 
 /** The key of the neighbour's door `i` on landing `k` (`NeighbourTrades` and the doors agree on it). */

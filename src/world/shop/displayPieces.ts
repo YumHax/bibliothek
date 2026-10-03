@@ -24,11 +24,16 @@ import { Chair } from '../kitchen/Chair';
 import { Radio } from '../kitchen/Radio';
 import { Kettle } from '../kitchen/Kettle';
 import { Toaster } from '../kitchen/Toaster';
+import { RegionConverter } from '../props/RegionConverter';
 import { BistroSet } from '../balcony/BistroSet';
+import { homeArcadeModel } from '../homeArcade/homeArcadeModel';
 import { Scratcher } from '../cat/Scratcher';
 import { CatBed } from '../cat/CatBed';
 import { CatModel } from '../cat/CatModel';
 import { PortableTv, ShopProjector, CatBallBasket } from './shopModels';
+import { DisplayColumn } from '../showcase/DisplayColumn';
+import { Pedestal } from '../showcase/Pedestal';
+import { LabelMakerModel } from '../labels/LabelMakerModel';
 
 /**
  * A piece of the flat on show in a shop: `object` is what stands there (the real class the flat builds, or a model of
@@ -140,6 +145,9 @@ const PIECES: Partial<Record<HomeUpgrade, PieceBuilder>> = {
   bathMat: () => still(new Rug({ width: 0.68, depth: 0.42, field: 0x8fa3ad, border: 0x8fa3ad, motif: 0x8fa3ad })),
   hallStand: () => still(group([new ShoeRack(), 0, 0, 0], [new UmbrellaStand(), 0.62, 0, 0.18])),
   bistroSet: () => still(new BistroSet()),
+  displayCase: () => still(new DisplayColumn()),
+  pedestal: () => still(new Pedestal()),
+  labelMaker: () => still(new LabelMakerModel()),
   // The TV repair shop.
   crt: () => still(new PortableTv({ width: 0.34, case: 0x5a5a5e })),
   bedroomTv: () => still(new PortableTv({ width: 0.26, case: 0xd8d2c4 })),
@@ -147,6 +155,12 @@ const PIECES: Partial<Record<HomeUpgrade, PieceBuilder>> = {
   speakers: () => still(group([new Speaker(), -0.2, 0, 0], [new Speaker(), 0.2, 0, 0])),
   radio: () => still(new Radio()),
   appliances: () => still(group([new Kettle(), -0.14, 0, 0], [new Toaster(), 0.16, 0, 0])),
+  homeArcade: () => still(homeArcadeModel()),
+  famicomAdapter: () => still(new RegionConverter({ width: 0.12, height: 0.045, body: 0x8a8d92, label: 0xb02a24 })),
+  superFamicomAdapter: () => still(new RegionConverter({ width: 0.14, height: 0.06, body: 0x9a9aa4, label: 0x5a3d8c })),
+  megaDriveConverter: () => still(new RegionConverter({ width: 0.11, height: 0.05, body: 0x1d1d20, label: 0xc8342a })),
+  n64Passthrough: () => still(new RegionConverter({ width: 0.13, height: 0.07, body: 0x2a2b2f, label: 0x2f8a3a })),
+  ps1ModChip: () => still(new RegionConverter({ width: 0.04, height: 0.006, depth: 0.03, body: 0x1f6b3a, label: 0xd8c27a })),
   // The florist.
   houseplant: (variant) => {
     const look = PLANT_VARIANTS[variant % PLANT_VARIANTS.length]!;

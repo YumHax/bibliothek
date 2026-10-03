@@ -33,6 +33,8 @@ import { callOuts } from './stallTalk';
 import { MarketFloor, type FloorStall } from './MarketFloor';
 import { furnishHousehold } from './furnishHousehold';
 import { furnishCoffee } from './furnishCoffee';
+import { furnishCarton } from './furnishCarton';
+import { RivalInHall } from './RivalInHall';
 import { MARKET_PLAN } from './marketPlan';
 import { primaryCode } from '@/input/actions';
 
@@ -80,6 +82,10 @@ export function furnishMarket(zone: Zone, context: BuildContext): ZoneHandle {
   zone.place(new Vendor({ viewer: listener, seed: 37, ...plan.clerks.buyBack, focus: [0.3, 1.05, 0.4] }), behind(buyBack, plan.buyBack.clerkAt), buyBack.rotation.y);
 
   zone.placeAt(new TravelDoor({ style: 'glazed', shopfront: true, ...plan.door, label: 'Front Street · go out', to: 'street' }), plan.exit);
+  // The saleroom behind the hall: its door at the back, a sign over it (the auctions, docs/economy.md "The saleroom").
+  const { saleroom } = plan;
+  zone.placeAt(new TravelDoor({ style: 'panelled', leafColor: 0x4a2a1a, width: saleroom.door.width, height: saleroom.door.height, label: 'The saleroom · go in (the weekly auction, lots on view)', to: 'saleroom' }), saleroom.door.at);
+  placeDecor(zone, [{ kind: 'flyer', at: saleroom.sign, options: { title: 'SALEROOM', lines: ['weekly auction', 'lots on view'], accent: 0x6b1f2a, seed: 6 } }]);
   placeDecor(zone, plan.decor);
   const bin = zone.placeAt(new BargainBin({ price: market.binPrice }), plan.bin);
 
@@ -92,7 +98,12 @@ export function furnishMarket(zone: Zone, context: BuildContext): ZoneHandle {
   const stalls: FloorStall[] = PLATFORM_LIST.map((platform, i) => {
     const spot = plan.stalls[i]!;
     const stall = zone.placeAt(buildStall(spot.style, { sign: platform.name, cloth: spot.cloth, accent: platform.accentColor, seed: i + 1 }), spot.at);
-    const vendor = zone.place(new Vendor({ viewer: listener, lines: () => floor.linesAt(entry), seed: i + 1, callOuts: callOuts(platform.shortName), label: 'The stallholder · chat' }), behind(stall, stall.vendorAt), stall.rotation.y);
+    // A story the player follows (the lost prototype) is asked first: its clue, when this stallholder has it.
+    const talk = (): readonly string[] => {
+      const told = context.story?.atStall(platform.id);
+      return told ? [told] : floor.linesAt(entry);
+    };
+    const vendor = zone.place(new Vendor({ viewer: listener, lines: talk, seed: i + 1, callOuts: callOuts(platform.shortName), label: 'The stallholder · chat' }), behind(stall, stall.vendorAt), stall.rotation.y);
     const pennant = stall.pennantAt ? zone.place(new WishPennant(i + 1), onTop(stall, stall.pennantAt), stall.rotation.y) : null;
     if (pennant) pennant.visible = false;
     const entry: FloorStall = { index: i, platform, stall, vendor, boxes: new Set(), sold: 0, pennant };
@@ -137,6 +148,10 @@ export function furnishMarket(zone: Zone, context: BuildContext): ZoneHandle {
     onActivate: (session) => session.openPanel(marketHall.lot),
   }), plan.lot) : null;
 
+  // The sealed carton of the day by the way in (sold as seen, opened at home).
+  const lots = context.market.lots;
+  if (lots) furnishCarton(zone, context, lots);
+
   // The day on the floor: the stock laid out, sold, reacted to; the pennants, the boards and the crowd follow it.
   const floor = new MarketFloor({ zone, context, stalls, bins, shoppers, nightShoppers: crowd.nightShoppers, crowdSound, directory, program, noticeBoard, lotCrate });
   zone.onUnload(() => floor.dispose());
@@ -149,6 +164,25 @@ export function furnishMarket(zone: Zone, context: BuildContext): ZoneHandle {
     mayBuy: () => floor.rivalMayBuy(),
     buyAt: (spot) => floor.rivalBuysAt(spot),
   }), new THREE.Vector3());
+
+  // The rival collector, some days: after the priciest copy on the stalls, and he says so (docs/economy.md "The rival collector").
+  if (lots) {
+    const rival = zone.place(new RivalInHall({
+      viewer: listener,
+      floor,
+      rival: lots.rival,
+      dayNight: sky.dayNight,
+      day: () => context.today.gameDay,
+      owns: (id) => context.collection.owns(id),
+      entrance: [...crowd.exit.out].reverse(),
+      gaps: crowd.exit.gaps,
+      rowZ: crowd.exit.rowZ,
+      aisleZ: crowd.aisle.z,
+      spots: crowd.browseSpots,
+      claims,
+    }), new THREE.Vector3());
+    rival.placeIn(zone);
+  }
 
   // Q held: the titles and prices float over the boxes in front of the player.
   zone.place(new PriceScanner({ input, key: SCAN_KEY, viewer: listener, boxes: () => floor.displayed }), new THREE.Vector3());

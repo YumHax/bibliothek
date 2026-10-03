@@ -256,6 +256,29 @@ export class Shelf extends THREE.Group {
     return { row, index, fits, gap: new THREE.Vector3(x - hw / 2, top - this.sagAt(row, x), depth / 2 - FRONT_SET + 0.004), height: hh, centre, size: new THREE.Vector3(hw, hh, hd), parting };
   }
 
+  /**
+   * The front edge of the board row `row` stands on, at local `x`: the middle of its banding's face (local y, z) and
+   * its height (m). What a shelf label is stuck on (`labels/ShelfLabels`).
+   */
+  edgeOf(row: number, x: number): { y: number; z: number; height: number } | null {
+    const top = this.boardTops[row];
+    if (top === undefined) return null;
+    const t = this.options.boardThickness;
+    return { y: top - t / 2 - this.sagAt(row, x), z: this.options.depth / 2 + PROUD, height: t };
+  }
+
+  /** The row whose board edge or space a local point is on (0 = top), or -1: what a label aimed there goes under. */
+  rowAt(at: THREE.Vector3): number {
+    const { width, boardThickness: t, rowHeights } = this.options;
+    if (Math.abs(at.x) > width / 2 + 0.01) return -1;
+    return this.boardTops.findIndex((top, r) => at.y >= top - t - 0.02 && at.y <= top + rowHeights[r]!);
+  }
+
+  /** How far from its middle a label may stand along row `row`'s edge (m), for a label `width` long. */
+  edgeReach(width: number): number {
+    return Math.max(0, this.options.width / 2 - this.options.boardThickness - width / 2 - 0.005);
+  }
+
   /** The row `box` stands on here (in hand, the row it came from), or -1. */
   rowOf(box: GameBox): number {
     return this.rowBoxes.findIndex((boxes) => boxes?.includes(box));

@@ -3,8 +3,10 @@ import { Engine } from '@/core/Engine';
 import { Input } from '@/core/Input';
 import { CssLayer } from '@/core/CssLayer';
 import { SEED_GAMES, STARTER_GAMES } from '@/catalog';
+import { HOMEBREW_CARTS } from '@/emulator/homebrew';
 import { CollectionStore } from '@/collection/CollectionStore';
 import { Deliveries } from '@/collection/Deliveries';
+import { movedOut } from '@/building/rouxMove';
 import { GameList } from '@/collection/GameList';
 import { LibretroIndex } from '@/collection/LibretroIndex';
 import { LibretroCoverProvider } from '@/covers/LibretroCoverProvider';
@@ -17,14 +19,22 @@ import { ArcadeTournament } from '@/economy/ArcadeTournament';
 import { Jackpot } from '@/economy/Jackpot';
 import { ReplayStore } from '@/world/arcade/replay/ReplayStore';
 import { NeighbourTrades } from '@/economy/NeighbourTrades';
+import { AuctionHouse } from '@/economy/AuctionHouse';
+import { SealedLots } from '@/economy/SealedLots';
+import { RivalCollector } from '@/economy/rivalCollector';
+import { Honours } from '@/economy/Honours';
 import { FirstDay } from '@/onboarding';
 import { Journal, watchForJournal } from '@/journal';
 import { HomeLife, Household, Perks } from '@/household';
+import { Classifieds, SellerLots } from '@/classifieds';
+import { Workshop } from '@/repair';
 import { isShopOpen } from '@/world/street/shops/shopHours';
 import { stairwellResidents } from '@/world/stairwell/building';
 import { HomeUpgrades } from '@/economy/HomeUpgrades';
 import { ARCADE_PLAN, TICKET_GAMES } from '@/world/arcade/arcadePlan';
 import { StrayGames } from '@/world/strays/StrayGames';
+import { Showcases } from '@/world/showcase/Showcases';
+import { ShelfLabels } from '@/world/labels/ShelfLabels';
 import { ShelfArrangement } from '@/world/shelving/arrangement';
 import { BoxPool } from '@/world/shelving/BoxPool';
 import { ROOM_PLAN } from '@/world/roomPlan';
@@ -41,6 +51,8 @@ import { ArcadeScreenPanel } from '@/ui/ArcadeScreenPanel';
 import { SettingsStore, hasProgress } from '@/settings';
 import { initKeyLabels } from '@/ui/keys';
 import { initPanelNav } from '@/ui/menu/MenuNav';
+import { ReviewSource } from '@/reviews/Reviews';
+import { PrototypeStory } from '@/story';
 
 /** The engine and every store and data source: nothing in the world, no panel but the arcade's big frame. */
 export type Services = ReturnType<typeof createServices>;
@@ -69,11 +81,16 @@ export function createServices(container: HTMLElement) {
   // The collection starts with one game (`STARTER_GAMES`, its console under the TV): the rest are bought at the market
   // with coins won at the arcade. Whatever the player owns is persisted in localStorage; an exported collection can
   // still be imported (Tab).
-  const collection = new CollectionStore(debug ? SEED_GAMES : STARTER_GAMES);
+  // `?debug` has the homebrew carts too (they really play on the TV, docs/media.md "Homebrew carts").
+  const collection = new CollectionStore(debug ? [...SEED_GAMES, ...HOMEBREW_CARTS.map((c) => c.game)] : STARTER_GAMES);
   // Games bought while out wait in a parcel in the hallway until unpacked; the shelves show the rest.
   const deliveries = new Deliveries(collection);
   // A game or two left lying about the flat each day (the kitchen table, a nightstand): off their shelves until picked up.
-  const strays = new StrayGames(deliveries.shelved);
+  // What the player put on show in the flat's displays (the display case, the pedestal): off its shelf meanwhile.
+  const showcases = new Showcases(deliveries.shelved);
+  const strays = new StrayGames(showcases);
+  // The labels printed with the label maker, stuck on the shelves' edges.
+  const shelfLabels = new ShelfLabels();
   // What has been bought for the flat (it starts bare: a bookcase, the TV, a mattress; `?debug` has it all). A save from
   // before the bare flat is given the bookcases its games need, once.
   const upgrades = new HomeUpgrades(undefined, undefined, { furnished: debug });
@@ -119,6 +136,14 @@ export function createServices(container: HTMLElement) {
   engine.addUpdatable(sky);
   // Every exchange of money for games the panels make: checked first, then its saves written as one.
   const tx = new Transactions({ wallet, collection, market, ledger, standing, prizes });
+  // The saleroom behind the flea market, the sealed cartons, and the rival collector who turns up at all three of
+  // Front Street, the hall and the saleroom (docs/economy.md "The saleroom, sealed cartons, the rival collector").
+  const lots = {
+    auction: new AuctionHouse({ randomGames: (seed, count) => market.randomGames(seed, count), fame }),
+    sealed: new SealedLots(),
+    rival: new RivalCollector(),
+    tx,
+  };
   // The cat's name and coat, kept next to the collection (the Settings' Cat tab edits them).
   const catSettings = new CatSettingsStore();
   // The Saturday tournament at the arcade: the hall shows its bracket, the Session's arcade play settles its rounds.
@@ -130,11 +155,17 @@ export function createServices(container: HTMLElement) {
   const milestones = new Milestones();
   const valueHistory = new ValueHistory();
   const collectorWatch = new CollectorWatch({ collection, fame, medals, standing, league, milestones, history: valueHistory });
+  // The sets and consoles completed for good: a neon each over the living room's bookcases, the club's visit (docs/visitors.md "Gatherings").
+  const honours = new Honours(collection, () => today.gameDay);
   // The neighbours' swaps, slipped under the door some market days (the post and the doorstep are the world's: `bootstrap/world`).
-  const neighbourTrades = new NeighbourTrades({ collection, today, market, fame, residents: stairwellResidents() });
+  const neighbourTrades = new NeighbourTrades({ collection, today, market, fame, residents: stairwellResidents(), present: (door) => !movedOut(door) });
   // The guided first day (a new game only) and the daily journal, which fills itself from the stores.
   const firstDay = new FirstDay({ returningPlayer, enabled: !debug });
   const journal = new Journal();
+  // The lost prototype's trail, followed through the mail, the market, the radio, the arcade and the friends (src/story).
+  const story = new PrototypeStory({ today, collection, journal });
+  // The press at the time, from each game's Wikipedia article: the game panel's clipping (src/reviews).
+  const reviews = new ReviewSource();
   watchForJournal(journal, { wallet, collection, deliveries, prizes, medals, home: upgrades, league });
   // What the kitchen, the bathroom and the bedroom are for (docs/household.md): what was done at home, its rules,
   // and what it sends the player out with (the market's haggles, the arcade's tickets).
@@ -152,13 +183,22 @@ export function createServices(container: HTMLElement) {
     facts: () => ({ ownsPrize: (id) => prizes.owns(id), reputationLevel: standing.reputation.level, gamesOwned: collection.games.filter((g) => g.status !== 'wishlist').length }),
   });
 
+  // The paper's small ads, the sellers' lots, and the consoles bought broken to mend at home (docs/economy.md "Small ads
+  // and the seller's flat", docs/household.md "Repairing a console").
+  const classifieds = new Classifieds({ day: () => today.gameDay, hours });
+  // The prototype's trail puts Hana's landlady's ad in the paper and hears when the player goes round.
+  story.linkAds(classifieds);
+  const sellerLots = new SellerLots({ book: classifieds, releases: (platform) => market.releases(platform), fame, owns: (id) => collection.owns(id) });
+  const workshop = new Workshop();
+
   return {
     container, params, debug, engine, input, settings, cssLayer,
-    collection, deliveries, strays, upgrades, overflow, arrangement, boxPool: new BoxPool(covers), furnishings, wallet,
+    collection, deliveries, strays, showcases, shelfLabels, upgrades, overflow, arrangement, boxPool: new BoxPool(covers), furnishings, wallet,
     scores, arcadeDaily, prizes, medals, league, payoutStats, arcadeScreen,
     index, fame, coverUrl, covers, videos,
-    sky, today, marketDay, ledger, standing, market, tx, catSettings,
-    tournament, jackpot, replays, milestones, valueHistory, collectorWatch, neighbourTrades, firstDay, journal,
-    household, homeLife, perks,
+    sky, today, marketDay, ledger, standing, market, tx, lots, catSettings,
+    tournament, jackpot, replays, milestones, valueHistory, collectorWatch, honours, neighbourTrades, firstDay, journal,
+    household, homeLife, perks, story, reviews,
+    classifieds, sellerLots, workshop,
   };
 }

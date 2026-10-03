@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { FRONT, PARK_PARKING, PARK_STREET, STREET_PLAN, WORKS } from '../streetPlan';
+import { FRONT, PARK_PARKING, PARK_STREET, STREET_PLAN, WORKS, WORKS_LIFT, setFrontStreetEnd } from '../streetPlan';
 
 /** A span across a street (zone-local metres on the across axis), low to high. */
 export type Span = readonly [number, number];
@@ -27,17 +27,19 @@ export interface Closure {
 
 const span = (a: number, b: number): Span => [Math.min(a, b), Math.max(a, b)];
 
-/** Across Front Street at x `WORKS.front`: past it (+x) the road runs on to the side street. */
-const FRONT_WORKS: Closure = {
-  id: 'front',
-  frame: new THREE.Matrix4().makeTranslation(WORKS.front, 0, 0),
-  rotation: 0,
-  pavements: [span(FRONT.ourLine, FRONT.nearKerb), span(FRONT.farKerb, FRONT.farLine)],
-  parking: [span(FRONT.nearKerb, -STREET_PLAN.parkingLine), span(STREET_PLAN.parkingLine, FRONT.farKerb)],
-  lanes: span(-STREET_PLAN.parkingLine, STREET_PLAN.parkingLine),
-  coneLines: [-STREET_PLAN.parkingLine - 0.05, STREET_PLAN.parkingLine + 0.05],
-  carLines: [-1.6, 1.6],
-};
+/** Across Front Street at x `x` (`WORKS.front`, or `WORKS_LIFT.front` once the works moved on): past it (+x) the road runs on to the side street. */
+function frontWorks(x: number): Closure {
+  return {
+    id: 'front',
+    frame: new THREE.Matrix4().makeTranslation(x, 0, 0),
+    rotation: 0,
+    pavements: [span(FRONT.ourLine, FRONT.nearKerb), span(FRONT.farKerb, FRONT.farLine)],
+    parking: [span(FRONT.nearKerb, -STREET_PLAN.parkingLine), span(STREET_PLAN.parkingLine, FRONT.farKerb)],
+    lanes: span(-STREET_PLAN.parkingLine, STREET_PLAN.parkingLine),
+    coneLines: [-STREET_PLAN.parkingLine - 0.05, STREET_PLAN.parkingLine + 0.05],
+    carLines: [-1.6, 1.6],
+  };
+}
 
 /** Across Park Street at z `WORKS.park`: past it (-z) the street runs on south. Local +x is zone -z, local z is zone x. */
 const PARK_WORKS: Closure = {
@@ -51,7 +53,32 @@ const PARK_WORKS: Closure = {
   carLines: [-31, -27.4],
 };
 
-export const CLOSURES: readonly Closure[] = [FRONT_WORKS, PARK_WORKS];
+let frontX: number = WORKS.front;
+let current: readonly Closure[] = [frontWorks(frontX), PARK_WORKS];
+
+/**
+ * Where the works stand on market day `gameDay`: Front Street's moves on to `WORKS_LIFT.front` from
+ * `WORKS_LIFT.afterGameDay`, and the walkable street's end with it (`setFrontStreetEnd`). Called before the street (or
+ * a view of it) is built; the works never move back.
+ */
+export function syncWorks(gameDay: number): void {
+  const x = gameDay >= WORKS_LIFT.afterGameDay ? WORKS_LIFT.front : WORKS.front;
+  if (x !== frontX) {
+    frontX = x;
+    current = [frontWorks(x), PARK_WORKS];
+  }
+  setFrontStreetEnd(x);
+}
+
+/** Whether Front Street's works have moved on past the first stretch (its doors walked to). */
+export function frontWorksMoved(): boolean {
+  return frontX !== WORKS.front;
+}
+
+/** The roadworks closing the walkable street now: across Front Street, then across Park Street. */
+export function closures(): readonly Closure[] {
+  return current;
+}
 
 /** The zone-local box of a local box (x0..x1 along, z0..z1 across, y0..y1 up) in a closure's frame. */
 export function closureBox(closure: Closure, x0: number, x1: number, z0: number, z1: number, y0: number, y1: number): THREE.Box3 {

@@ -164,13 +164,23 @@ export class World<Handles extends object = Record<string, unknown>> implements 
    * environment; uploads their textures and waits for the driver (at most `PRIME_WAIT_MS`). The
    * groups leave the stand-in afterwards. Programs stay cached per material, so the lights changing
    * back on the way home compile nothing. Meant for a set that is all dormant (an active zone's
-   * lights are not in the stand-in).
+   * lights are not in the stand-in). `between`, when given, is awaited before each zone's build and
+   * before the upload (an idle moment: `StreetAhead` spreads the work over several frames instead
+   * of one freeze); without it, everything is done at once (the sas, behind its buzzer).
    */
-  async prepareZone(id: string): Promise<void> {
+  async prepareZone(id: string, between?: () => Promise<void>): Promise<void> {
     const target = this.find(id);
     const set = [target, ...target.spec.neighbours.map((other) => this.find(other))];
     await Promise.all(set.map((zone) => zone.load()));
-    for (const zone of set) zone.build();
+    for (const zone of set) {
+      if (between && zone.status === 'empty') {
+        await between();
+        // A sliced builder (the street's) is spread over several idle moments.
+        await zone.buildSliced(between);
+      }
+      zone.build();
+    }
+    if (between) await between();
     const dormant = set.filter((zone) => !zone.isActive);
     if (!dormant.length) return;
     const { scene } = this.engine;
