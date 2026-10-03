@@ -1,8 +1,8 @@
 import * as THREE from 'three';
-import { createCanvas, toTexture } from '@/covers/generated/canvasUtils';
+import { createCanvas, toTexture, repeatTexture } from '@/covers/generated/canvasUtils';
 import { boxMesh, cylinderMesh, invisibleHitbox } from '../../meshUtils';
 import { paint, standard } from '../../materials/palette';
-import { WALL } from '../../surface/layers';
+import { layMesh, WALL } from '../../surface/layers';
 import { TicketStrip } from '../TicketStrip';
 import { type MachineDisplay, displayScreen, outOfOrderNote, paintMarquee } from '../machineParts';
 import { BACK_Z, BALLS, BALL_R, BOARD, CAGE_H, FRONT_Z, GUTTER_Z, HOOP, RAMP, WIDTH } from './HoopSim';
@@ -66,13 +66,15 @@ export function buildHoopModel(root: THREE.Group, color: number, title: string):
   root.add(boxMesh(BOARD.w + 0.03, BOARD.h + 0.03, 0.02, steel, { y: BOARD.y, z: BOARD.z - 0.012 }));
   for (const sx of [-1, 1]) root.add(boxMesh(0.03, 0.03, BOARD.z - BACK_Z, steel, { x: sx * 0.3, y: BOARD.y, z: (BOARD.z + BACK_Z) / 2 }));
   const marqueeMap = paintMarquee(title, { stops: ['#ff5a1a', '#ffd23a'], ink: '#1a0c04', size: 40 });
-  const marqueeMat = new THREE.MeshBasicMaterial({ map: marqueeMap, toneMapped: false, color: 0xdddddd });
+  const marqueeMat = new THREE.MeshBasicMaterial({ map: marqueeMap, color: 0xdddddd });
   const marquee = new THREE.Mesh(new THREE.PlaneGeometry(WIDTH - 0.06, 0.2), marqueeMat);
   marquee.position.set(0, CAGE_H + 0.03, BACK_Z + WALL.notice.lift);
+  layMesh(marquee, WALL.notice);
   root.add(marquee);
   const display = displayScreen([256, 96], [0.5, 0.19]);
   const screen = display.mesh;
   screen.position.set(0, BOARD.y + BOARD.h / 2 + 0.12, BOARD.z + WALL.notice.lift);
+  layMesh(screen, WALL.notice);
   root.add(screen);
   const note = outOfOrderNote(0.26);
   note.position.z = WALL.flyer.lift;
@@ -123,7 +125,7 @@ function netTexture(): THREE.Texture {
     ctx.stroke();
   }
   const texture = toTexture(canvas);
-  texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+  repeatTexture(texture);
   texture.repeat.set(3, 2);
   return texture;
 }
@@ -136,7 +138,7 @@ function boardTexture(): THREE.Texture {
   ctx.lineWidth = 8;
   ctx.strokeRect(6, 6, 308, 208);
   ctx.strokeRect(110, 100, 100, 76);
-  return toTexture(canvas, 4);
+  return toTexture(canvas, 'facing');
 }
 
 function ballTexture(): THREE.Texture {
@@ -155,5 +157,5 @@ function ballTexture(): THREE.Texture {
   ctx.moveTo(0, 32);
   ctx.lineTo(128, 32);
   ctx.stroke();
-  return toTexture(canvas, 2);
+  return toTexture(canvas, 'facing');
 }

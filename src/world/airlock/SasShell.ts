@@ -3,7 +3,7 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import { Prop } from '../props/Prop';
 import { SAS } from './airlockPlan';
 import { bake, sasFinish } from './sasFinish';
-import { WALL } from '../surface/layers';
+import { onSurface, WALL } from '../surface/layers';
 
 /** Subdivide the baked surfaces this finely (metres), so the globe's light grades smoothly across them. */
 const CELL = 0.15;
@@ -131,7 +131,8 @@ export class SasShell extends Prop {
     const frame = (w: number, h: number, z: number, out: number): void => {
       const t = 0.07;
       const d = 0.02;
-      for (const side of [-1, 1]) trims.box(v(side * (w / 2 + t / 2), (h + t) / 2, z + (out * d) / 2), v(t, h + t, d));
+      // The jambs stop under the head, which spans them (the corners would be both).
+      for (const side of [-1, 1]) trims.box(v(side * (w / 2 + t / 2), h / 2, z + (out * d) / 2), v(t, h, d));
       trims.box(v(0, h + t / 2, z + (out * d) / 2), v(w + 2 * t, t, d));
     };
     frame(od.width, od.height, zf, -1);
@@ -144,7 +145,7 @@ export class SasShell extends Prop {
     this.mesh(mat, f.mat);
     const notice = new Surfaces();
     notice.quad(v(x0 + WALL.sign.lift, SAS.notice.y - 0.16, SAS.notice.z - 0.12), v(0, 0, 0.24), v(0, 0.32, 0), X, (p) => [1 - (p.z - (SAS.notice.z - 0.12)) / 0.24, (p.y - (SAS.notice.y - 0.16)) / 0.32]);
-    this.mesh(notice, f.notice);
+    this.mesh(notice, onSurface(f.notice, WALL.sign));
 
     const globe = new THREE.Mesh(new THREE.SphereGeometry(0.12, 20, 14), f.globe);
     globe.position.set(...SAS.lamp);

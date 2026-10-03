@@ -6,7 +6,7 @@ import { BuskerTune } from '@/audio/BuskerTune';
 import { playCoins } from '@/audio/coins';
 import { createCanvas, toTexture } from '@/covers/generated/canvasUtils';
 import type { Furniture } from '../Furniture';
-import { paint, standard } from '../materials/palette';
+import { snowPaint, snowStandard } from './snowCover';
 import type { DayNight } from '../props/DayNight';
 import { Walker } from '../people/Walker';
 import { KEYS as SAVE_KEYS } from '@/persistence';
@@ -230,7 +230,7 @@ export class Busker extends THREE.Group implements Furniture, Updatable, Interac
   }
 
   private buildKit(): void {
-    const metal = standard({ color: 0x222428, roughness: 0.45 });
+    const metal = snowStandard({ color: 0x222428, roughness: 0.45 });
     // The X-stand and the keyboard on it.
     for (const side of [-1, 1]) {
       const leg = new THREE.Mesh(new THREE.BoxGeometry(0.025, 1.05, 0.025), metal);
@@ -240,12 +240,12 @@ export class Busker extends THREE.Group implements Furniture, Updatable, Interac
       leg2.rotation.x = -0.5;
       this.kit.add(leg, leg2);
     }
-    const body = new THREE.Mesh(new THREE.BoxGeometry(0.82, 0.06, 0.28), paint(0xd8342a, 0.35));
+    const body = new THREE.Mesh(new THREE.BoxGeometry(0.82, 0.06, 0.28), snowPaint(0xd8342a, 0.35));
     body.position.set(0, KEYS.y - 0.05, KEYS.z + 0.04);
     const keys = new THREE.Mesh(new THREE.PlaneGeometry(0.74, 0.14).rotateX(-Math.PI / 2), new THREE.MeshStandardMaterial({ map: keysTexture(), roughness: 0.5 }));
     keys.position.set(0, KEYS.y - 0.018, KEYS.z - 0.02);
     // The open case on the pavement, a few coins in it, and the sign.
-    const caseMesh = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.08, 0.32), paint(0x5a1a2a, 0.9));
+    const caseMesh = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.08, 0.32), snowPaint(0x5a1a2a, 0.9));
     caseMesh.position.set(0.1, 0.04, 1.0);
     const sign = new THREE.Mesh(new THREE.PlaneGeometry(0.4, 0.26), new THREE.MeshStandardMaterial({ map: signTexture(), roughness: 0.9 }));
     sign.position.set(0.1, 0.18, 1.14);
@@ -277,7 +277,7 @@ function keysTexture(): THREE.CanvasTexture {
   for (let octave = 0; octave < 3; octave++) {
     for (const b of black) ctx.fillRect((octave * 7 + b + 0.65) * (256 / 21), 0, 7, 28);
   }
-  return toTexture(canvas, 2);
+  return toTexture(canvas, 'facing');
 }
 
 function signTexture(): THREE.CanvasTexture {
@@ -290,5 +290,5 @@ function signTexture(): THREE.CanvasTexture {
   ctx.fillText('TIPS ♪', 80, 46);
   ctx.font = '18px "Comic Sans MS", "Chalkboard SE", sans-serif';
   ctx.fillText('8-bit covers', 80, 80);
-  return toTexture(canvas, 2);
+  return toTexture(canvas, 'facing');
 }

@@ -1,7 +1,7 @@
 import * as THREE from 'three';
-import { markShared } from '../props/Prop';
 import { FLOOR, RENDER_ORDER, onSurface } from '../surface/layers';
-import { createCanvas } from '@/covers/generated/canvasUtils';
+import { radialGlow } from '@/world/materials/glowTextures';
+import { additive } from '@/world/materials/blend';
 
 /** How bright the pool is at level 1 (additive, so small numbers go a long way on a dark carpet). */
 const STRENGTH = 0.32;
@@ -16,13 +16,8 @@ const STRENGTH = 0.32;
  */
 export class GlowPool extends THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial> {
   constructor(color: number, width: number, depth: number) {
-    const material = new THREE.MeshBasicMaterial({ map: radialTexture(), color, transparent: true, depthWrite: false, toneMapped: false, opacity: STRENGTH * 0.6 });
-    material.blending = THREE.CustomBlending;
-    material.blendEquation = THREE.AddEquation;
-    material.blendSrc = THREE.SrcAlphaFactor;
-    material.blendDst = THREE.OneFactor;
-    material.blendSrcAlpha = THREE.ZeroFactor;
-    material.blendDstAlpha = THREE.OneFactor;
+    const material = new THREE.MeshBasicMaterial({ map: radialGlow({ width: 128, height: 128, stops: [[0, 1], [0.35, 0.55], [1, 0]] }), color, transparent: true, depthWrite: false, opacity: STRENGTH * 0.6 });
+    additive(material);
     super(new THREE.PlaneGeometry(width, depth), onSurface(material, FLOOR.glowPool));
     this.name = 'GlowPool';
     this.rotation.x = -Math.PI / 2;
@@ -34,19 +29,4 @@ export class GlowPool extends THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMat
   setLevel(level: number): void {
     this.material.opacity = STRENGTH * THREE.MathUtils.clamp(level, 0, 1.4);
   }
-}
-
-let texture: THREE.CanvasTexture | null = null;
-function radialTexture(): THREE.CanvasTexture {
-  if (texture) return texture;
-  const [canvas, ctx] = createCanvas(128, 128);
-  const g = ctx.createRadialGradient(64, 64, 0, 64, 64, 64);
-  g.addColorStop(0, 'rgba(255,255,255,1)');
-  g.addColorStop(0.35, 'rgba(255,255,255,0.55)');
-  g.addColorStop(1, 'rgba(255,255,255,0)');
-  ctx.fillStyle = g;
-  ctx.fillRect(0, 0, 128, 128);
-  texture = markShared(new THREE.CanvasTexture(canvas));
-  texture.colorSpace = THREE.SRGBColorSpace;
-  return texture;
 }

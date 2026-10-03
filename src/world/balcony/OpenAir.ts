@@ -8,6 +8,7 @@ import { Prop } from '../props/Prop';
 import { RENDER_ORDER } from '../surface/layers';
 import { ShadowRefresh } from '../lighting/shadowRefresh';
 import { normalBiasAt, snapDirection, texelAngle } from '../props/shadowTexels';
+import { homeOutlook, type OutlookLease } from '../outlook/sharedOutlook';
 
 export interface OpenAirOptions {
   /** Radius of the surround the view is shown on: clear of everything built nearby. */
@@ -22,9 +23,10 @@ const GROUND = new THREE.Color(0x4a443c);
 const AMBIENT: [night: number, day: number] = [0.12, 1.25];
 
 /**
- * The open air round an outdoor spot (the balcony): the painted view on a sphere all round it,
- * rendered from the inside with the panes' own shader (same uniforms, so the same sky, weather and
- * life, in true parallax from wherever the camera stands), the sun (or the moon) as a narrow
+ * The open air round an outdoor spot (the balcony): on a sphere all round it, the street itself as the flat's windows
+ * show it (medium, high: the view from our building, `sharedOutlook`, unclipped), else the painted view rendered
+ * from the inside with the panes' own shader (same uniforms, so the same sky, weather and life, in true parallax
+ * from wherever the camera stands); the sun (or the moon) as a narrow
  * shadow-casting spot aimed at the spot, and the sky's ambient while the player is out here.
  * Lights are never added or removed (that would recompile every shader): the ambient drops to 0
  * while the player is indoors and the sun's shadow map is only refreshed now and then.
@@ -42,6 +44,9 @@ export class OpenAir extends Prop implements Updatable, OccupancyAware {
   private readonly halfAngle: number;
   private readonly worldQuaternion = new THREE.Quaternion();
   private readonly unsubscribe: () => void;
+  /** The street's 3D view, and its surround; null on low (the painted view). */
+  private readonly outlook: OutlookLease | null;
+  private readonly surround: THREE.Mesh;
   private state: SkyState | null = null;
   private occupied = false;
   private shadowTimer = 0;
@@ -52,18 +57,26 @@ export class OpenAir extends Prop implements Updatable, OccupancyAware {
   ) {
     super();
     this.name = 'OpenAir';
-    // The view: the panes' shader, seen from inside a sphere (its own material object sharing the uniforms),
-    // without the drops on the glass: there is none out here.
-    const view = new THREE.ShaderMaterial({
-      defines: { OPEN_AIR: '' },
-      uniforms: outdoors.material.uniforms,
-      vertexShader: outdoors.material.vertexShader,
-      fragmentShader: outdoors.material.fragmentShader,
-      side: THREE.BackSide,
-      depthWrite: false,
-    });
-    view.onBeforeRender = outdoors.markDrawn;
-    const surround = new THREE.Mesh(new THREE.SphereGeometry(options.radius, 48, 24), view);
+    const sphere = new THREE.SphereGeometry(options.radius, 48, 24);
+    this.outlook = homeOutlook(outdoors);
+    let surround: THREE.Mesh;
+    if (this.outlook) {
+      surround = this.outlook.view.surround(sphere, this.outlook.toOutlook);
+    } else {
+      // The view: the panes' shader, seen from inside a sphere (its own material object sharing the uniforms),
+      // without the drops on the glass: there is none out here.
+      const view = new THREE.ShaderMaterial({
+        defines: { OPEN_AIR: '' },
+        uniforms: outdoors.material.uniforms,
+        vertexShader: outdoors.material.vertexShader,
+        fragmentShader: outdoors.material.fragmentShader,
+        side: THREE.BackSide,
+        depthWrite: false,
+      });
+      view.onBeforeRender = outdoors.markDrawn;
+      surround = new THREE.Mesh(sphere, view);
+    }
+    this.surround = surround;
     surround.frustumCulled = false;
     // Drawn after everything opaque: the depth test then skips every pixel something nearer covers,
     // so the costly view shader only runs where the open air is actually seen.
@@ -92,9 +105,11 @@ export class OpenAir extends Prop implements Updatable, OccupancyAware {
   setOccupied(occupied: boolean): void {
     this.occupied = occupied;
     if (this.state) this.apply(this.state);
+    if (occupied) this.outlook?.view.prefetch();
   }
 
   update(dt: number): void {
+    this.outlook?.view.update(dt);
     this.sunShadow.update(dt);
     if (this.occupied || this.sun.intensity <= 0) return;
     this.shadowTimer += dt;
@@ -105,6 +120,10 @@ export class OpenAir extends Prop implements Updatable, OccupancyAware {
 
   dispose(): void {
     this.unsubscribe();
+    if (this.outlook) {
+      this.outlook.view.release(this.surround);
+      this.outlook.release();
+    }
   }
 
   private apply(state: SkyState): void {

@@ -15,12 +15,12 @@ const MAX_RALLY_SPEED = 1.9;
 const RETURN_POINTS = 10;
 const GOAL_POINTS = 150;
 const GOAL_SECONDS = 3;
-const CONCEDE_SECONDS = 2;
+const CONCEDE_SECONDS = 1.5;
 /** Goals per set; a new set pays seconds and speeds everything up. */
 const GOALS_PER_SET = 3;
 const SET_SECONDS = 2;
 /** The machine's (or the partner's) paddle: how fast it may move, how late it reacts, how far off it aims. */
-const OPPONENT = { speed: 105, speedPerSet: 10, error: 24 };
+const OPPONENT = { speed: 105, speedPerSet: 10, error: 30 };
 /** Player two only goes for the ball once it has crossed this far (a fraction of the court), else drifts back to the middle. */
 const OPPONENT_REACTS = 0.5;
 /** A return with fire held: a smash, faster and worth a little more. */
@@ -39,7 +39,7 @@ interface Ball {
  * PADDLE WARS: table tennis on a screen against whoever holds the second stick (the machine, or
  * the kid when they come over; they play the same, only the name on the screen changes, so a run
  * replays exactly). Twenty seconds; every return chains the combo, a goal pays points and three
- * seconds, one conceded costs two and the combo. Every three goals is a set: faster ball, sharper
+ * seconds, one conceded costs a second and a half and the combo. Every three goals is a set: faster ball, sharper
  * opponent, two more seconds. W / S move; the ball comes back off the paddle at an angle that
  * depends on where it hits (the edges send it steep, which player two struggles to follow), and
  * holding Space as it comes back smashes it.

@@ -132,7 +132,8 @@ const DISPLAYS: Record<DisplayId, Builder> = {
     // The aquarium: a stand, the water lit from its hood, gravel, a weed and two fish.
     const ax = Math.min(half - 0.2, 0.5);
     solid.box(m, ax, 0.14, 0.22, 0.4, 0.28, 0.3, '#2f3a3a');
-    lit.box(m, ax, 0.42, 0.22, 0.36, 0.24, 0.26, '#3a9ab0');
+    // The water from the gravel's top up (not down inside it, its bottom in a plane with something there).
+    lit.box(m, ax, 0.425, 0.22, 0.36, 0.23, 0.26, '#3a9ab0');
     solid.box(m, ax, 0.295, 0.22, 0.36, 0.03, 0.26, '#c8b890');
     solid.box(m, ax, 0.56, 0.22, 0.4, 0.04, 0.3, '#1e2626');
     for (const s of [-1, 1]) solid.box(m, ax + s * 0.19, 0.42, 0.22, 0.02, 0.28, 0.3, '#1e2626');

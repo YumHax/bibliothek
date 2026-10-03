@@ -1,6 +1,5 @@
 import * as THREE from 'three';
-import { QUALITY } from '@/graphics/quality';
-import { createCanvas, seededRandom, toTexture } from '@/covers/generated/canvasUtils';
+import { createCanvas, seededRandom, toTexture, canvasTexture, repeatTexture } from '@/covers/generated/canvasUtils';
 import { paintOnce } from './materials/paintedTiles';
 import { afterChunk, patchShader, VALUE_NOISE } from './materials/shaderPatch';
 
@@ -161,8 +160,7 @@ function paintTiles(options: FloorTiles): [THREE.Texture, THREE.Texture] {
 
   const map = toTexture(colorCanvas);
   // The bump map is data, not colour: no sRGB decoding.
-  const bumpMap = new THREE.CanvasTexture(bumpCanvas);
-  bumpMap.anisotropy = QUALITY.anisotropy;
-  for (const t of [map, bumpMap]) t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  const bumpMap = canvasTexture(bumpCanvas, { data: true, repeat: true });
+  repeatTexture(map);
   return [map, bumpMap];
 }

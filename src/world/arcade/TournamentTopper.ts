@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { Updatable } from '@/core/Engine';
-import { createCanvas } from '@/covers/generated/canvasUtils';
+import { createCanvas, toTexture } from '@/covers/generated/canvasUtils';
 import { boxMesh } from '../meshUtils';
 import { Prop } from '../props/Prop';
 import { paint } from '../materials/palette';
@@ -30,9 +30,8 @@ export class TournamentTopper extends Prop implements Updatable {
     this.add(boxMesh(width + 0.03, height + 0.03, 0.03, STAND, { y: height / 2 + 0.015 }));
     const [canvas, ctx] = createCanvas(384, 102);
     this.ctx = ctx;
-    this.texture = new THREE.CanvasTexture(canvas);
-    this.texture.colorSpace = THREE.SRGBColorSpace;
-    const face = new THREE.Mesh(new THREE.PlaneGeometry(width, height), new THREE.MeshBasicMaterial({ map: this.texture, toneMapped: false }));
+    this.texture = toTexture(canvas, 'facing');
+    const face = new THREE.Mesh(new THREE.PlaneGeometry(width, height), new THREE.MeshBasicMaterial({ map: this.texture }));
     face.position.set(0, height / 2 + 0.015, 0.016);
     this.add(face);
     this.visible = on();

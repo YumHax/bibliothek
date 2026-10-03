@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { canvasTexture, type CanvasTextureOptions } from '@/graphics/canvas';
 
 /** Materials, textures and geometries that outlive any one zone (module-level caches): `disposeTree` leaves them alone. */
 const sharedResources = new WeakSet<object>();
@@ -15,6 +16,23 @@ export function markShared<T extends THREE.Material | THREE.Texture | THREE.Buff
 
 export function isShared(resource: object): boolean {
   return sharedResources.has(resource);
+}
+
+const sharedCanvases = new Map<string, THREE.CanvasTexture>();
+
+/**
+ * A canvas texture painted once for the page under `key` (`paint` returns the canvas), made by
+ * `canvasTexture` with `options` and marked shared: every user and every rebuilt zone gets the same
+ * upload, which no zone's unload frees. For what is the same everywhere (a glass smudge, a ripple map,
+ * a plaque); a texture whose look varies takes the varying part in its key.
+ */
+export function sharedCanvasTexture(key: string, paint: () => HTMLCanvasElement, options?: CanvasTextureOptions): THREE.CanvasTexture {
+  let texture = sharedCanvases.get(key);
+  if (!texture) {
+    texture = markShared(canvasTexture(paint(), options));
+    sharedCanvases.set(key, texture);
+  }
+  return texture;
 }
 
 /**

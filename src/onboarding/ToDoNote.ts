@@ -38,7 +38,7 @@ function face(): THREE.CanvasTexture {
     for (let x = 56; x < 200 - i * 18; x += 12) ctx.lineTo(x + 6, y + (x % 24 ? -3 : 2));
     ctx.stroke();
   }
-  faceTexture = markShared(toTexture(canvas, 4));
+  faceTexture = markShared(toTexture(canvas, 'facing'));
   return faceTexture;
 }
 

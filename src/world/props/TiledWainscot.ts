@@ -168,5 +168,5 @@ function paintTiles(lengthM: number, heightM: number, colours: { tile: number; g
       ctx.fillRect(x + tw - GROUT_PX / 2 - 3, y + GROUT_PX / 2, 3, th - GROUT_PX);
     }
   }
-  return toTexture(canvas, 4);
+  return toTexture(canvas, 'grazing');
 }

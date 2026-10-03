@@ -14,7 +14,7 @@ import { airlockLink, type AirlockLink } from './AirlockLink';
 import { SasDoor } from './SasDoor';
 import { SasShell } from './SasShell';
 import { bake, sasFinish } from './sasFinish';
-import { WALL } from '../surface/layers';
+import { layMesh, WALL } from '../surface/layers';
 
 export interface AirlockOptions {
   twin: TwinId;
@@ -184,13 +184,13 @@ class DoorRelease extends Prop implements Interactable {
   ) {
     super();
     this.name = 'DoorRelease';
-    const x = SAS.width / 2 - WALL.flyer.lift; // the plate, on the right wall
+    const x = SAS.width / 2 - WALL.flyer.lift; // the plate, on the right wall (drawn as that layer, below)
     const { z, y } = SAS.button;
     const plate = new THREE.PlaneGeometry(0.1, 0.15);
     const at = new THREE.Matrix4().makeTranslation(x, y, z).multiply(new THREE.Matrix4().makeRotationY(-Math.PI / 2));
     plate.applyMatrix4(at);
     bake(plate);
-    this.add(new THREE.Mesh(plate, sasFinish().plate));
+    this.add(layMesh(new THREE.Mesh(plate, sasFinish().plate), WALL.flyer));
     const hitbox = invisibleHitbox(0.16, 0.22, 0.08);
     hitbox.position.set(x - 0.03, y, z);
     hitbox.rotation.y = -Math.PI / 2;

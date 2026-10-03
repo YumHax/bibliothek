@@ -7,7 +7,7 @@ import { basic, timber } from '@/world/materials/palette';
 import { INSET, PROUD } from './props/joinery';
 import { mergeStaticParts } from './zone/mergeStatic';
 import type { BoxMotion } from './shelving/BoxMotion';
-import { createCanvas } from '@/covers/generated/canvasUtils';
+import { createCanvas, toTexture } from '@/covers/generated/canvasUtils';
 
 /** A folded card standing on a board (`Shelf.setCard`): its size (m) and how far it leans back. */
 const CARD_W = 0.13;
@@ -319,8 +319,7 @@ export class Shelf extends THREE.Group {
     ctx.fillText(text.title, 130, 60, 230);
     ctx.font = 'italic 24px Georgia, serif';
     ctx.fillText(text.line, 130, 100, 230);
-    const texture = new THREE.CanvasTexture(canvas);
-    texture.colorSpace = THREE.SRGBColorSpace;
+    const texture = toTexture(canvas, 'facing');
     // Its origin at its foot, on the board.
     const card = new THREE.Mesh(new THREE.PlaneGeometry(CARD_W, CARD_H).translate(0, CARD_H / 2, 0), new THREE.MeshStandardMaterial({ map: texture, roughness: 0.85 }));
     card.position.set(x, top + 0.001, this.options.depth / 2 - FRONT_SET - 0.02);

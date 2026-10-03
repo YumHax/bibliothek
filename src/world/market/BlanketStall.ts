@@ -5,7 +5,7 @@ import { boxMesh, cylinderMesh } from '../meshUtils';
 import { fabric } from '@/world/materials/finishes';
 import { METAL, paint, standard, timber } from '../materials/palette';
 import { PROUD, proud } from '../props/joinery';
-import { FLOOR } from '../surface/layers';
+import { FLOOR, layMesh } from '../surface/layers';
 import { centreOutRow, evenRow, fitInRow, plainCloth } from './stallPaint';
 
 export interface BlanketStallOptions {
@@ -211,6 +211,7 @@ function blanket(cloth: THREE.Color, accent: THREE.Color): THREE.Mesh {
   const mesh = new THREE.Mesh(geometry, fabric({ map: paintBlanket(cloth, accent), roughness: 1 }));
   mesh.rotation.x = -Math.PI / 2;
   mesh.position.y = BLANKET_Y;
+  layMesh(mesh, FLOOR.blanket);
   mesh.castShadow = false;
   return mesh;
 }
@@ -251,7 +252,7 @@ function paintBlanket(cloth: THREE.Color, accent: THREE.Color): THREE.Texture {
   // Fringes along the short ends.
   ctx.fillStyle = dark;
   for (const x0 of [0, W - 10]) for (let y = 0; y < H; y += 5) ctx.fillRect(x0, y, 10, 2);
-  return toTexture(canvas, 4);
+  return toTexture(canvas, 'facing');
 }
 
 /** A sheet of box cardboard, the text scrawled in black marker and underlined in the accent colour. */
@@ -286,7 +287,7 @@ function paintCardboard(text: string, accent: THREE.Color, random: () => number)
   ctx.font = `${Math.round(size * 0.42)}px "Marker Felt", "Comic Sans MS", ${FONT}`;
   ctx.fillText('all tested!', 0, size * 1.1);
   ctx.restore();
-  return toTexture(canvas, 4);
+  return toTexture(canvas, 'facing');
 }
 
 /** A folding camping stool: two crossed pairs of aluminium legs and a canvas seat. */

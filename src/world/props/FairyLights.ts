@@ -69,7 +69,7 @@ export class FairyLights extends Prop implements Updatable {
 
     const count = Math.max(1, Math.floor(length / spacing) - 1);
     const palette = options.colors ?? COLORS;
-    this.bulbs = new THREE.InstancedMesh(new THREE.SphereGeometry(options.bulb ?? 0.014, 6, 5), instancedBasic({ toneMapped: false }), count);
+    this.bulbs = new THREE.InstancedMesh(new THREE.SphereGeometry(options.bulb ?? 0.014, 6, 5), instancedBasic({}), count);
     this.bulbs.castShadow = false;
     const m = new THREE.Matrix4();
     const p = new THREE.Vector3();

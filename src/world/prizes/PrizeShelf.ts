@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { getPrize, type OwnedPrize } from '@/economy/Prizes';
-import { createCanvas } from '@/covers/generated/canvasUtils';
+import { createCanvas, toTexture } from '@/covers/generated/canvasUtils';
 import { boxMesh } from '../meshUtils';
 import { Prop } from '../props/Prop';
 import { paint, timber } from '../materials/palette';
@@ -112,8 +112,7 @@ export class PrizeShelf extends Prop {
     ctx.fillText(title, 80, 34);
     ctx.font = '16px sans-serif';
     ctx.fillText(line, 80, 62);
-    const texture = new THREE.CanvasTexture(canvas);
-    texture.colorSpace = THREE.SRGBColorSpace;
+    const texture = toTexture(canvas, 'facing');
     const card = new THREE.Mesh(new THREE.PlaneGeometry(0.1, 0.056), new THREE.MeshStandardMaterial({ map: texture, roughness: 0.8 }));
     const { width, tiers, gap } = this.options;
     card.position.set(width / 2 - 0.08, (tiers - 1) * gap + 0.03, DEPTH * 0.6);

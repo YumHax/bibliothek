@@ -328,8 +328,8 @@ function strandTexture(color: number, curly: boolean, seed: number): THREE.Canva
       ctx.stroke();
     }
   }
-  const texture = toTexture(canvas, 4);
-  texture.wrapS = THREE.RepeatWrapping;
+  const texture = toTexture(canvas, 'facing');
+  texture.wrapS = THREE.RepeatWrapping; // convention-ok: wraps one way only
   texture.repeat.set(3, 1);
   return texture;
 }

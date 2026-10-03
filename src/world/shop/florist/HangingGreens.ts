@@ -61,7 +61,8 @@ export class HangingGreens extends Prop {
         stem(g, new THREE.Vector3(0, y, 0), new THREE.Vector3(Math.cos(a) * r, y - 0.2, Math.sin(a) * r), TWINE, 0.006);
       }
       const rim = y - 0.2;
-      g.add(cylinderMesh(r, 0.14, BASKET, { y: rim - 0.07 }, { radiusBottom: r * 0.7, segments: 16 }));
+      // The basket ends under its rim (its top would lie in the rim's).
+      g.add(cylinderMesh(r, 0.12, BASKET, { y: rim - 0.08 }, { radiusBottom: r * 0.7, segments: 16 }));
       g.add(cylinderMesh(r * 1.04, 0.02, BASKET_RIM, { y: rim - 0.01 }, { segments: 16 }));
       // A mound of leaves over the rim, then the vines.
       const greens = random() < 0.5 ? LEAF_GREENS.lime : LEAF_GREENS.classic;

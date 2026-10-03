@@ -85,7 +85,7 @@ export class Vectrex extends Prop implements Interactable {
     for (const [x, y] of [[22, 24], [100, 52], [30, 70], [96, 110], [58, 18]]) ctx.fillRect(x!, y!, 2, 2);
     const screen = new THREE.Mesh(
       new THREE.PlaneGeometry(0.19, 0.24),
-      new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0xffffff, emissiveMap: toTexture(canvas, 2), emissiveIntensity: 1.4, roughness: 0.2 }),
+      new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0xffffff, emissiveMap: toTexture(canvas, 'facing'), emissiveIntensity: 1.4, roughness: 0.2 }),
     );
     screen.position.set(0, 0.715 + 0.19, 0.091);
     this.add(screen);

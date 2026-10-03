@@ -3,7 +3,7 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import type { DayNight } from '../../props/DayNight';
 import type { VehicleSize } from '../carModel';
 import { nightnessOf } from '../streetAir';
-import { paint } from '../../materials/palette';
+import { snowPaint } from '../snowCover';
 import type { VehicleKind } from '../StreetCars';
 import type { Vec2 } from '../streetPlan';
 import { ScriptedVehicle, type CollisionSet } from './ScriptedVehicle';
@@ -99,7 +99,7 @@ export abstract class EmergencyVehicle extends ScriptedVehicle implements SirenV
 
   /** The light bar: a dark bar `width` across at (x, y), a blue lamp at each end. */
   protected lightBar(x: number, y: number, width: number): void {
-    const bar = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.08, width), paint(0x202226, 0.5));
+    const bar = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.08, width), snowPaint(0x202226, 0.5));
     bar.position.set(x, y, 0);
     this.add(bar);
     for (const [i, side] of [-1, 1].entries()) {

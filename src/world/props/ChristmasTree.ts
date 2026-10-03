@@ -25,7 +25,7 @@ const TRUNK = paint(0x5a3a22, 0.9);
 const POT = paint(0x8a1f1f, 0.5);
 // Mirrored glass baubles: metal-like (metalness 1), the instance colour their tint.
 const BAUBLE = instancedStandard({ roughness: 0.2, metalness: 1 });
-const STAR = basic({ color: 0xffe07a, toneMapped: false });
+const STAR = basic({ color: 0xffe07a });
 const RIBBON = paint(0xf1e1b4, 0.6);
 const BAUBLE_COLORS = [0xc8243a, 0xd4a52a, 0x2a5ac8, 0xe8e8f0];
 const LIGHT_COLORS = [0xffc46e, 0xff4a3a, 0x3aff6a, 0x4a8aff, 0xffe07a];
@@ -109,7 +109,7 @@ export class ChristmasTree extends THREE.Group implements Furniture, Updatable {
     // The fairy lights: a spiral from the bottom tier to the top, a bulb every few centimetres.
     const lightColors = options.lights ?? LIGHT_COLORS;
     const bulbCount = 60;
-    this.bulbs = new THREE.InstancedMesh(new THREE.SphereGeometry(0.012, 6, 5), instancedBasic({ toneMapped: false }), bulbCount);
+    this.bulbs = new THREE.InstancedMesh(new THREE.SphereGeometry(0.012, 6, 5), instancedBasic({}), bulbCount);
     this.bulbColors = [];
     for (let i = 0; i < bulbCount; i++) {
       const t = i / bulbCount;

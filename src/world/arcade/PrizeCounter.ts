@@ -68,7 +68,7 @@ export class PrizeCounter extends THREE.Group implements Furniture, Interactable
 
     // Lit sign on the wall behind (a hair off it, whatever the gap to the counter), hung from two rods.
     const signZ = -DEPTH / 2 - wallBehind + 0.04;
-    this.sign = new THREE.MeshBasicMaterial({ map: this.paintSign(), toneMapped: false });
+    this.sign = new THREE.MeshBasicMaterial({ map: this.paintSign() });
     const sign = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 0.3), this.sign);
     sign.position.set(0, SIGN_Y, signZ);
     this.add(sign);
@@ -104,6 +104,6 @@ export class PrizeCounter extends THREE.Group implements Furniture, Interactable
     ctx.strokeRect(12, 12, 1000, 232);
     drawText(ctx, 'PRIZES', 512, 95, 90, '#ffd23a');
     drawText(ctx, `${this.rate} TICKETS = 1 COIN`, 512, 190, 40, '#c9c4ff');
-    return toTexture(canvas, 4);
+    return toTexture(canvas, 'facing');
   }
 }

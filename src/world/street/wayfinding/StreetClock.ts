@@ -7,7 +7,7 @@ import type { Furniture } from '../../Furniture';
 import type { DayNight } from '../../props/DayNight';
 import { invisibleHitbox } from '../../meshUtils';
 import { paint } from '../../materials/palette';
-import { snowCovered } from '../snowCover';
+import { snowPaint } from '../snowCover';
 import { nightnessOf } from '../streetAir';
 import { clockTime } from '../shops/shopHours';
 
@@ -33,7 +33,7 @@ export class StreetClock extends THREE.Group implements Furniture, Interactable,
   constructor(private readonly dayNight: DayNight, height: number, private readonly closingSoon: (hours: number) => string | null) {
     super();
     this.name = 'StreetClock';
-    const green = snowCovered(paint(0x24392e, 0.45));
+    const green = snowPaint(0x24392e, 0.45);
     const post = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.09, height - HEAD.radius, 10).translate(0, (height - HEAD.radius) / 2, 0), green);
     const base = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.2, 0.4, 10).translate(0, 0.2, 0), green);
     const y = height;
@@ -127,5 +127,5 @@ function dialTexture(): THREE.CanvasTexture {
     const a = (i / 12) * Math.PI * 2;
     ctx.fillText(String(i), c + Math.sin(a) * (c - 48), c - Math.cos(a) * (c - 48));
   }
-  return toTexture(canvas, 4);
+  return toTexture(canvas, 'facing');
 }

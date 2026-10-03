@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { createCanvas, toTexture, seededRandom } from '@/covers/generated/canvasUtils';
 import { paint, timber } from '@/world/materials/palette';
-import { WALL } from '@/world/surface/layers';
+import { layMesh, WALL } from '@/world/surface/layers';
 import { Prop, part } from './Prop';
 
 /**
@@ -63,6 +63,7 @@ export class PictureFrame extends Prop {
       new THREE.MeshStandardMaterial({ map: this.paint(innerW, innerH), roughness: 0.85 }),
     );
     picture.position.z = BOARD_DEPTH + WALL.paper.lift;
+    layMesh(picture, WALL.paper);
     picture.receiveShadow = true;
     this.add(picture);
   }
@@ -100,7 +101,7 @@ export class PictureFrame extends Prop {
       ctx.fillStyle = `rgba(${random() < 0.5 ? '0,0,0' : '255,255,255'},${(random() * 0.05).toFixed(3)})`;
       ctx.fillRect(random() * W, random() * H, 2, 2);
     }
-    return toTexture(canvas, 4);
+    return toTexture(canvas, 'facing');
   }
 }
 

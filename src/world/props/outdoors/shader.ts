@@ -1,6 +1,7 @@
 import { DEPTH_SCALE, ELEVATION_MAX, ELEVATION_MIN, EYE_HEIGHT, SCENE_HEIGHT, SCENE_WIDTH } from './Sheet';
 import { SPRITE_COUNT } from './Life';
 import { QUALITY } from '@/graphics/quality';
+import { FRACT_HASH, SINE_HASH, fbm2, valueNoise2 } from '@/graphics/glslNoise';
 import { VEHICLE_FUNCTIONS, VEHICLE_UNIFORMS } from './vehicleShader';
 import { SKY_CHUNK } from '../../city/skyGlsl';
 
@@ -134,27 +135,10 @@ export const fragmentShader = /* glsl */ `
   float angleBetween(vec3 a, vec3 b) {
     return acos(clamp(dot(a, b), -1.0, 1.0));
   }
-  float hash21(vec2 p) {
-    p = fract(p * vec2(123.34, 456.21));
-    p += dot(p, p + 45.32);
-    return fract(p.x * p.y);
-  }
-  float valueNoise(vec2 p) {
-    vec2 i = floor(p);
-    vec2 f = fract(p);
-    vec2 u = f * f * (3.0 - 2.0 * f);
-    return mix(mix(hash21(i), hash21(i + vec2(1.0, 0.0)), u.x), mix(hash21(i + vec2(0.0, 1.0)), hash21(i + vec2(1.0, 1.0)), u.x), u.y);
-  }
-  float fbm(vec2 p) {
-    float v = 0.0;
-    float a = 0.5;
-    for (int i = 0; i < ${CLOUD_OCTAVES}; i++) {
-      v += a * valueNoise(p);
-      p = p * 2.03 + vec2(17.1, 9.2);
-      a *= 0.5;
-    }
-    return v;
-  }
+  ${SINE_HASH}
+  ${FRACT_HASH}
+  ${valueNoise2('valueNoise', 'fractHash')}
+  ${fbm2('fbm', 'valueNoise', CLOUD_OCTAVES, [17.1, 9.2])}
   // Sky gradient: zenith colour at the top, the horizon colour taking over in the last third.
   vec3 skyGradient(vec3 d) {
     float t = 1.0 - clamp(asin(clamp(d.y, 0.0, 1.0)) / PI_HALF, 0.0, 1.0);
@@ -226,7 +210,7 @@ export const fragmentShader = /* glsl */ `
     if (home > 0.5 && li.r + li.g > 0.0) {
       float h = fract(cf * 91.7);
       float slot = floor(time / 23.0 + h * 17.0);
-      float moving = step(0.62, fract(sin(slot * 12.9898 + cf * 78.233) * 43758.5453)) * step(h, 0.7);
+      float moving = step(0.62, sineHash(slot * 12.9898 + cf * 78.233)) * step(h, 0.7);
       float dir = h < 0.35 ? 1.0 : -1.0;
       float across = abs(fract((texel.x - dir * time * (1.5 + 2.5 * fract(cf * 37.1))) / 36.0 + h) - 0.5) * 36.0;
       float figure = moving * (1.0 - step(1.4, across));
@@ -252,7 +236,7 @@ export const fragmentShader = /* glsl */ `
   }
   // Hash of a window of the near wall (storey, bay) to a curfew, like the painted windows'.
   float wallCurfew(float storey, float bay) {
-    return fract(sin(storey * 12.9898 + bay * 78.233) * 43758.5453);
+    return sineHash(storey * 12.9898 + bay * 78.233);
   }
   // The near wall where the eye ray meets it at p: rendered plaster in daylight, a string course
   // at every floor, a cornice under the roof, and on the floors below the flat's two windows per
@@ -309,10 +293,12 @@ export const fragmentShader = /* glsl */ `
     return core + glow + fork;
   }
   // The whole sky along d: gradient, glow, stars, the drifting cumulus and the overcast, the sun and the moon.
-  vec3 skyAlong(vec3 d) {
+  // gx, gy: the sky map's derivatives along the screen, taken in main (here the call may be in a branch, and the
+  // azimuth's wrap behind the viewer would pick the blurriest mip: a seam).
+  vec3 skyAlong(vec3 d, vec2 gx, vec2 gy) {
     vec2 eq = equirect(d);
-    vec3 detail = texture2D(sky, eq).rgb;
-    vec3 clouds = texture2D(sky, eq + vec2(cloudDrift.x, 0.0)).rgb;
+    vec3 detail = texture2DGradEXT(sky, eq, gx, gy).rgb;
+    vec3 clouds = texture2DGradEXT(sky, eq + vec2(cloudDrift.x, 0.0), gx, gy).rgb;
     vec3 color = addCityGlow(horizonGlow(skyGradient(d), d), d);
     // The overcast: a sheet of cloud over the whole sky, thicker the more the sky is covered.
     vec2 sp = d.xz / max(d.y + 0.12, 0.05) * 1.4 + cloudDrift.xy * 60.0;
@@ -346,7 +332,7 @@ export const fragmentShader = /* glsl */ `
       vec2 p = vec2((az + el * (0.12 + 0.6 * wind)) * scale, el * scale * 0.08 + time * (i == 0 ? 9.0 : 6.0));
       vec2 cell = floor(p);
       vec2 f = fract(p);
-      float h = hash21(cell + float(i) * 13.0);
+      float h = fractHash(cell + float(i) * 13.0);
       float x = abs(f.x - h);
       streak += step(h, 0.28) * smoothstep(0.08, 0.0, x) * smoothstep(0.0, 0.3, f.y) * smoothstep(1.0, 0.6, f.y);
     }
@@ -362,9 +348,9 @@ export const fragmentShader = /* glsl */ `
       vec2 p = vec2(az * scale + sin(time * 0.7 + float(i) * 2.0 + el * 20.0) * (0.4 + wind) + time * wind * 1.5, el * scale + time * (0.9 - float(i) * 0.2));
       vec2 cell = floor(p);
       vec2 f = fract(p) - 0.5;
-      vec2 o = vec2(hash21(cell + float(i) * 7.0), hash21(cell + float(i) * 11.0 + 3.0)) - 0.5;
-      float r = 0.07 + 0.05 * hash21(cell + 5.0);
-      flakes += step(0.55, hash21(cell * 1.7 + float(i))) * smoothstep(r, r * 0.3, length(f - o * 0.6));
+      vec2 o = vec2(fractHash(cell + float(i) * 7.0), fractHash(cell + float(i) * 11.0 + 3.0)) - 0.5;
+      float r = 0.07 + 0.05 * fractHash(cell + 5.0);
+      flakes += step(0.55, fractHash(cell * 1.7 + float(i))) * smoothstep(r, r * 0.3, length(f - o * 0.6));
     }
     return min(flakes, 1.0);
   }
@@ -378,11 +364,11 @@ export const fragmentShader = /* glsl */ `
       vec2 p = vec2(az * scale + time * (0.6 + 2.5 * wind) + sin(time * 1.3 + el * 30.0 + float(i)) * 0.5, el * scale + time * (0.45 - float(i) * 0.1));
       vec2 cell = floor(p);
       vec2 f = fract(p) - 0.5;
-      vec2 o = vec2(hash21(cell + float(i) * 5.0), hash21(cell + float(i) * 9.0 + 1.0)) - 0.5;
-      float spin = sin(time * 3.0 + hash21(cell) * 6.0);
+      vec2 o = vec2(fractHash(cell + float(i) * 5.0), fractHash(cell + float(i) * 9.0 + 1.0)) - 0.5;
+      float spin = sin(time * 3.0 + fractHash(cell) * 6.0);
       vec2 q = f - o * 0.6;
       q.x /= 0.35 + 0.65 * abs(spin);
-      flakes += step(0.86, hash21(cell * 1.3 + float(i))) * (1.0 - smoothstep(0.03, 0.06, length(q)));
+      flakes += step(0.86, fractHash(cell * 1.3 + float(i))) * (1.0 - smoothstep(0.03, 0.06, length(q)));
     }
     return min(flakes, 1.0);
   }
@@ -399,10 +385,10 @@ export const fragmentShader = /* glsl */ `
     vec2 q = vec2(p.x + p.z, p.y) * 45.0;
     vec2 cell = floor(q);
     vec2 f = fract(q) - 0.5;
-    float h = hash21(cell);
+    float h = fractHash(cell);
     float life = fract(time * 0.12 + h * 7.0);
-    vec2 o = vec2(hash21(cell + 1.7), hash21(cell + 3.1)) - 0.5;
-    float r = (0.12 + 0.22 * hash21(cell + 9.0)) * smoothstep(0.0, 0.1, life) * smoothstep(1.0, 0.8, life);
+    vec2 o = vec2(fractHash(cell + 1.7), fractHash(cell + 3.1)) - 0.5;
+    float r = (0.12 + 0.22 * fractHash(cell + 9.0)) * smoothstep(0.0, 0.1, life) * smoothstep(1.0, 0.8, life);
     float drop = step(1.0 - paneWet * 0.85, h) * smoothstep(r, r * 0.6, length(f - o * 0.5));
     // A bright glint on each drop's upper side.
     float glint = drop * smoothstep(r * 0.55, 0.0, length(f - o * 0.5 - vec2(-0.25, 0.3) * r));
@@ -410,6 +396,11 @@ export const fragmentShader = /* glsl */ `
   }
   void main() {
     vec3 d = normalize(vWorld - cameraPosition);
+    vec2 skyUv = equirect(d);
+    vec2 skyGx = dFdx(skyUv);
+    vec2 skyGy = dFdy(skyUv);
+    skyGx.x -= floor(skyGx.x + 0.5);
+    skyGy.x -= floor(skyGy.x + 0.5);
 
     // Where the eye ray meets the scenery. The panorama was painted from one eye (center); a
     // camera away from it sees each thing along another direction, the nearer the more. Start from a
@@ -460,6 +451,9 @@ export const fragmentShader = /* glsl */ `
     gradX.x -= floor(gradX.x + 0.5);
     gradY.x -= floor(gradY.x + 0.5);
     vec4 sc = texture2DGradEXT(scene, suv, gradX, gradY); // premultiplied by coverage
+    // The browser premultiplies the sRGB bytes on upload, before the hardware decodes them: an edge texel half covered
+    // comes out as a^2.2 c, not a c (a dark fringe round every roof and tree against the sky). Undone here, near enough.
+    if (sc.a > 0.004 && sc.a < 0.996) sc.rgb = min(sc.rgb / pow(sc.a, 1.2), vec3(sc.a));
     float fairy;
     vec4 li = sampleLights(suv, fairy); // warm, cool (already switched on or off), glass, depth
     vec4 gr = texture2DGradEXT(ground, suv, gradX, gradY); // cast shadow, wet, snow
@@ -470,7 +464,7 @@ export const fragmentShader = /* glsl */ `
     if (fx0.a > 0.5 && d.y < -0.001 && sunDir.y > 0.04) {
       vec3 toSun = normalize(vec3(sunDir.x, 0.0, sunDir.z) + vec3(1e-5, 0.0, 0.0));
       float reach = min(SHADOW_REACH_MAX, SHADOW_CASTER / max(tan(asin(clamp(sunDir.y, 0.0, 1.0))), 0.05));
-      float fallen = texture2D(ground, band(normalize(o + t * d + toSun * reach))).r;
+      float fallen = texture2DGradEXT(ground, band(normalize(o + t * d + toSun * reach)), gradX, gradY).r;
       gr.r = max(gr.r * 0.3, fallen);
     }
     float cov = sc.a * step(uv.y, 1.0);
@@ -639,7 +633,7 @@ export const fragmentShader = /* glsl */ `
     }
 
     vec3 color = base;
-    if (cov < 0.999) color += skyAlong(d) * (1.0 - cov);
+    if (cov < 0.999) color += skyAlong(d, skyGx, skyGy) * (1.0 - cov);
 
     // The weather between the window and the view: rain streaks lit by the day (or the city at
     // night), snowflakes, then the drops on the glass itself.

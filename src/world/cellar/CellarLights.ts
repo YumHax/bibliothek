@@ -9,7 +9,7 @@ import { LAMP_LIGHT } from '../lighting/lampColours';
 import { basic, paint } from '../materials/palette';
 import { boxMesh, cylinderMesh, invisibleHitbox } from '../meshUtils';
 import { Prop } from '../props/Prop';
-import { CELL, CELLAR_PLAN as plan, CROWN, cellAt, cellCentre, isOpen } from './cellarPlan';
+import { CELL, CELLAR_PLAN as plan, CELL_SIDES, CELL_STEP, CROWN, brickSides, cellCentre, isOpen, type CellSide } from './cellarPlan';
 
 /** The bare bulbs: how far under the crown, how bright the two real lights over the lit ones are, how far they reach. */
 const BULB_DROP = 0.32;
@@ -155,21 +155,29 @@ export class CellarLights extends Prop implements Updatable, OccupancyAware {
   }
 }
 
-/** Where a bulb's timer button goes: on the first wall of its cell (a solid neighbour), its middle and yaw facing in. */
+/** On each side's wall: the button's offset from the cell's middle (its back on the brick) and its yaw facing in. */
+const MOUNT: Record<CellSide, [ox: number, oz: number, yaw: number]> = {
+  north: [0.35, CELL / 2, Math.PI],
+  east: [CELL / 2, 0.35, -Math.PI / 2],
+  south: [-0.35, -CELL / 2, 0],
+  west: [-CELL / 2, -0.35, Math.PI / 2],
+};
+
+/**
+ * Where a bulb's timer button goes: on a brick wall (`brickSides`, the walls the vaults are built from) of its cell,
+ * else of the nearest open cell next to it (a cell between passages and a box's slats has none). Never in the air:
+ * a bulb with no wall within a cell is a plan error.
+ */
 function wallFor([c, r]: [number, number]): { x: number; z: number; yaw: number } {
-  const [x, z] = cellCentre(c, r);
-  const h = CELL / 2 - 0.012;
-  const sides: [number, number, number, number, number][] = [
-    [0, 1, 0.35, h, Math.PI],
-    [1, 0, h, 0.35, -Math.PI / 2],
-    [0, -1, -0.35, -h, 0],
-    [-1, 0, -h, -0.35, Math.PI / 2],
-  ];
-  for (const [dc, dr, ox, oz, yaw] of sides) {
-    const n = cellAt(c + dc, r + dr);
-    if (!isOpen(c + dc, r + dr) && !/\d/.test(n)) return { x: x + ox, z: z + oz, yaw };
+  const cells: [number, number][] = [[c, r], ...CELL_SIDES.map((s): [number, number] => [c + CELL_STEP[s][0], r + CELL_STEP[s][1]]).filter(([nc, nr]) => isOpen(nc, nr))];
+  for (const [cc, cr] of cells) {
+    const side = (['north', 'east', 'south', 'west'] as const).find((s) => brickSides(cc, cr).includes(s));
+    if (!side) continue;
+    const [x, z] = cellCentre(cc, cr);
+    const [ox, oz, yaw] = MOUNT[side];
+    return { x: x + ox, z: z + oz, yaw };
   }
-  return { x, z, yaw: 0 };
+  throw new Error(`[cellar] no brick wall for the timer button of the bulb in cell ${c}, ${r}`);
 }
 
 /**

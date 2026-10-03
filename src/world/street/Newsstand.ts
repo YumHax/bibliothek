@@ -8,7 +8,9 @@ import type { ModalLike } from '@/game/SessionParts';
 import { createCanvas, seededRandom, toTexture } from '@/covers/generated/canvasUtils';
 import { invisibleHitbox } from '../meshUtils';
 import type { Furniture } from '../Furniture';
-import { coverageKeepsAlpha, paint, standard } from '../materials/palette';
+import { coverageKeepsAlpha } from '../materials/palette';
+import { WALL, onSurface } from '../surface/layers';
+import { snowPaint, snowStandard } from './snowCover';
 import type { WeeklyIssue } from './gamingWeekly';
 
 export interface NewsstandOptions {
@@ -52,18 +54,18 @@ export class Newsstand extends THREE.Group implements Furniture, Interactable {
       rounded(0.2, 1.0, 0.4, -width / 2 + 0.1, 1.4, depth / 2 - 0.2),
       rounded(0.2, 1.0, 0.4, width / 2 - 0.1, 1.4, depth / 2 - 0.2),
     ])!;
-    const green = standard({ color: GREEN, roughness: 0.5 });
+    const green = snowStandard({ color: GREEN, roughness: 0.5 });
     const shell = new THREE.Mesh(body, green);
-    const roof = new THREE.Mesh(rounded(NEWSSTAND_ROOF.width, ROOF.thick, NEWSSTAND_ROOF.depth, 0, height + ROOF.thick / 2, ROOF.forward), paint(0x1f2a26, 0.6));
-    const counter = new THREE.Mesh(rounded(width - 0.3, 0.05, 0.45, 0, 0.92, depth / 2 + 0.1), paint(0x6a4a32, 0.7));
+    const roof = new THREE.Mesh(rounded(NEWSSTAND_ROOF.width, ROOF.thick, NEWSSTAND_ROOF.depth, 0, height + ROOF.thick / 2, ROOF.forward), snowPaint(0x1f2a26, 0.6));
+    const counter = new THREE.Mesh(rounded(width - 0.3, 0.05, 0.45, 0, 0.92, depth / 2 + 0.1), snowPaint(0x6a4a32, 0.7));
     for (const mesh of [shell, roof, counter]) {
       mesh.castShadow = true;
       mesh.receiveShadow = true;
       this.add(mesh);
     }
     // The papers pegged round the hatch and the fascia's PRESSE: one painted board on the front.
-    const board = new THREE.Mesh(new THREE.PlaneGeometry(width, height), coverageKeepsAlpha(new THREE.MeshStandardMaterial({ map: paintFront(width, height), alphaTest: 0.5, alphaToCoverage: QUALITY.msaa > 0, roughness: 0.8 })));
-    board.position.set(0, height / 2, depth / 2 + 0.005);
+    const board = new THREE.Mesh(new THREE.PlaneGeometry(width, height), onSurface(coverageKeepsAlpha(new THREE.MeshStandardMaterial({ map: paintFront(width, height), alphaTest: 0.5, alphaToCoverage: QUALITY.msaa > 0, roughness: 0.8 })), WALL.sign));
+    board.position.set(0, height / 2, depth / 2 + WALL.sign.lift);
     this.add(board);
 
     const hitbox = invisibleHitbox(width + 0.2, height, depth + 0.4, { y: height / 2, z: 0.1 });
@@ -123,5 +125,5 @@ function paintFront(width: number, height: number): THREE.CanvasTexture {
   peg(0.02, 1.9, width - 0.02, height - 0.47);
   // The hatch itself (1.0 to 1.9 m, between the side posts) stays open: fully transparent.
   ctx.clearRect(0.2 * k, y(1.9), (width - 0.4) * k, 0.9 * k);
-  return toTexture(canvas, 4);
+  return toTexture(canvas, 'facing');
 }

@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { createCanvas } from '@/graphics/canvas';
+import { createCanvas, canvasTexture } from '@/graphics/canvas';
 import { markShared } from '../props/Prop';
 import type { Updatable } from '@/core/Engine';
 import type { Furniture } from '../Furniture';
@@ -24,8 +24,7 @@ const stills = new Map<Exclude<ScreenLook, 'snow' | 'dark'>, THREE.MeshBasicMate
 export function snowScreen(): THREE.MeshBasicMaterial {
   if (!screen) {
     const [canvas, ctx] = createCanvas(W, H);
-    const texture = markShared(new THREE.CanvasTexture(canvas));
-    texture.colorSpace = THREE.SRGBColorSpace;
+    const texture = markShared(canvasTexture(canvas, { anisotropy: 'facing', mipmaps: false }));
     texture.magFilter = THREE.NearestFilter;
     const material = markShared(new THREE.MeshBasicMaterial({ map: texture, color: 0xc8d4e0 }));
     screen = { material, texture, ctx, image: ctx.createImageData(W, H) };
@@ -46,9 +45,8 @@ export function stillScreen(look: Exclude<ScreenLook, 'snow' | 'dark'>): THREE.M
     if (look === 'testCard') paintTestCard(ctx, 160, 120);
     else if (look === 'bars') paintBars(ctx, 160, 120);
     else paintPicture(ctx, W * 2, H * 2);
-    const texture = markShared(new THREE.CanvasTexture(canvas));
-    texture.colorSpace = THREE.SRGBColorSpace;
-    if (look === 'rolling') texture.wrapT = THREE.RepeatWrapping;
+    const texture = markShared(canvasTexture(canvas, { anisotropy: 'facing' }));
+    if (look === 'rolling') texture.wrapT = THREE.RepeatWrapping; // convention-ok: the picture rolls vertically only
     material = markShared(new THREE.MeshBasicMaterial({ map: texture, color: look === 'rolling' ? 0xb8c0c8 : 0xd4d4d4 }));
     stills.set(look, material);
   }
@@ -71,8 +69,11 @@ function paintSnow(): void {
 
 const BARS = ['#c0c0c0', '#c0c000', '#00c0c0', '#00c000', '#c000c0', '#c00000', '#0000c0'];
 
-/** The test card: a grey grid, the big circle, the colour bars across it, a greyscale step, a caption box. */
-function paintTestCard(ctx: CanvasRenderingContext2D, w: number, h: number): void {
+/**
+ * The test card: a grey grid, the big circle, the colour bars across it, a greyscale step, a caption box. The one
+ * TV REPAIR's sets show inside and the set in its window shows the street (`street/shopfronts`' atlas).
+ */
+export function paintTestCard(ctx: CanvasRenderingContext2D, w: number, h: number): void {
   ctx.fillStyle = '#6a6a6a';
   ctx.fillRect(0, 0, w, h);
   ctx.strokeStyle = '#e8e8e8';

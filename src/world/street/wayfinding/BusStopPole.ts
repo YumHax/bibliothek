@@ -6,7 +6,7 @@ import type { Furniture } from '../../Furniture';
 import type { DayNight } from '../../props/DayNight';
 import { invisibleHitbox } from '../../meshUtils';
 import { paint } from '../../materials/palette';
-import { snowCovered } from '../snowCover';
+import { snowPaint } from '../snowCover';
 
 export interface BusStopPoleOptions {
   line: string;
@@ -40,7 +40,7 @@ export class BusStopPole extends THREE.Group implements Furniture, Interactable 
   constructor(private readonly options: BusStopPoleOptions) {
     super();
     this.name = 'BusStopPole';
-    const metal = snowCovered(paint(0x6a6e72, 0.4));
+    const metal = snowPaint(0x6a6e72, 0.4);
     const pole = new THREE.Mesh(new THREE.CylinderGeometry(POLE.radius, POLE.radius, POLE.height, 10).translate(0, POLE.height / 2, 0), metal);
     pole.castShadow = true;
     const flagMap = flagTexture(options.line);
@@ -104,7 +104,7 @@ function flagTexture(line: string): THREE.CanvasTexture {
   ctx.fillStyle = '#1a1a1a';
   ctx.font = 'bold 20px sans-serif';
   ctx.fillText(line, 64, 100);
-  return toTexture(canvas, 4);
+  return toTexture(canvas, 'facing');
 }
 
 /** The timetable in its case: the line, its stops, how often. */
@@ -131,5 +131,5 @@ function tableTexture({ line, towards, stops, every, nightEvery, fare }: BusStop
     ctx.lineTo(180, y);
     ctx.stroke();
   }
-  return toTexture(canvas, 4);
+  return toTexture(canvas, 'facing');
 }

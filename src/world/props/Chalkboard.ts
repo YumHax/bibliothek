@@ -110,5 +110,5 @@ function paintSlate(wM: number, hM: number, lines: string[], slate: number, rand
     }
     ctx.restore();
   });
-  return toTexture(canvas, 4);
+  return toTexture(canvas, 'facing');
 }

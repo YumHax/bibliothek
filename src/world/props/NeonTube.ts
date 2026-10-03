@@ -33,7 +33,7 @@ export class NeonTube extends Prop {
     const radius = options.radius ?? 0.015;
     const standoff = options.standoff ?? 0.06;
 
-    const glass = standard({ color: color.clone().multiplyScalar(0.3), emissive: color, emissiveIntensity: 2.4, roughness: 0.3, toneMapped: false });
+    const glass = standard({ color: color.clone().multiplyScalar(0.3), emissive: color, emissiveIntensity: 2.4, roughness: 0.3 });
     const tube = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius, length, 10), glass);
     tube.rotation.z = Math.PI / 2;
     tube.position.z = standoff;
@@ -43,7 +43,7 @@ export class NeonTube extends Prop {
     // A faint outer halo: a wider, translucent tube around the glass.
     const halo = new THREE.Mesh(
       new THREE.CylinderGeometry(radius * 2.6, radius * 2.6, length, 10),
-      basic({ color, transparent: true, opacity: 0.14, toneMapped: false, depthWrite: false }),
+      basic({ color, transparent: true, opacity: 0.14, depthWrite: false }),
     );
     halo.rotation.z = Math.PI / 2;
     halo.position.z = standoff;

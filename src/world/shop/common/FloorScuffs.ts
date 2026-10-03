@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { createCanvas, seededRandom, toTexture } from '@/covers/generated/canvasUtils';
 import { Prop } from '../../props/Prop';
 import { FLOOR, RENDER_ORDER, onSurface } from '../../surface/layers';
+import { overKeepingAlpha } from '@/world/materials/blend';
 
 export interface FloorScuffsOptions {
   /** The patch's size along local x and z. Default 1.4 x 0.9. */
@@ -30,11 +31,7 @@ export class FloorScuffs extends Prop {
     const depth = options.depth ?? 0.9;
     const material = onSurface(new THREE.MeshStandardMaterial({ map: paint(width, depth, options), roughness: 0.9, transparent: true }), FLOOR.scuff, { depthWrite: false });
     // Blend the colour only: the alpha stays what the floor wrote.
-    material.blending = THREE.CustomBlending;
-    material.blendSrc = THREE.SrcAlphaFactor;
-    material.blendDst = THREE.OneMinusSrcAlphaFactor;
-    material.blendSrcAlpha = THREE.ZeroFactor;
-    material.blendDstAlpha = THREE.OneFactor;
+    overKeepingAlpha(material);
     const mesh = new THREE.Mesh(new THREE.PlaneGeometry(width, depth), material);
     mesh.rotation.x = -Math.PI / 2;
     mesh.position.y = FLOOR.scuff.lift;

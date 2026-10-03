@@ -6,7 +6,7 @@ import type { Zone } from '@/world/zone';
 import type { FirstPersonController } from '@/player/FirstPersonController';
 import type { PayoutStats } from '@/economy';
 import { PayoutOverlay } from '@/ui/PayoutOverlay';
-import { findZFighting, type ZFightOptions } from '@/world/surface/zfight';
+import { findZFighting, zfightRoots, type ZFightOptions } from '@/world/surface/zfight';
 import { forceBlackout } from '@/building/blackout';
 import { forceEndlessStairs } from '@/world/stairwell/downAndDark';
 
@@ -49,19 +49,32 @@ function exposeDebug(entries: Record<string, unknown>): void {
   global.bibliothek = { ...global.bibliothek, ...entries };
 }
 
+/** The farthest anything is seen from (m): Front Street's facades, down the street from where the player can walk. */
+const FARTHEST = 140;
+
 /**
  * `?debug` / `?stats`: `bibliothek.zfight(zoneId?, options?)` lists the overlapping coplanar faces
  * of a zone (the player's by default) that z-fight, and each zone logs its count the first time the
- * player enters it once built (see `world/surface/zfight`).
+ * player enters it once built (see `world/surface/zfight`). A zone is judged as far as it can be seen
+ * across (most of its diagonal, at most `FARTHEST`: Front Street's far end). The subtrees outside any zone
+ * (`registerZfightRoot`: a window's street) are checked with the first zone, or by name:
+ * `bibliothek.zfight('outlook:stairwell')`.
  */
 export function installZFight(parts: { world: { readonly zones: readonly Zone[] }; zones: { readonly current: Zone; onZoneChange(listener: (zone: Zone) => void): () => void } }): void {
   const { world, zones } = parts;
   const run = (zone: Zone, options?: ZFightOptions): ReturnType<typeof findZFighting> => {
     const diagonal = zone.bounds.getSize(new THREE.Vector3()).length();
-    const pairs = findZFighting(zone.group, { viewDistance: Math.min(40, Math.max(6, diagonal * 0.6)), ...options });
-    console.log(`[zfight] ${zone.id}: ${pairs.length} pair${pairs.length === 1 ? '' : 's'}${pairs.length ? ' (bibliothek.zfight() lists them)' : ''}`);
+    return report(zone.id, findZFighting(zone.group, { viewDistance: Math.min(FARTHEST, Math.max(6, diagonal * 0.8)), ...options }));
+  };
+  const report = (name: string, pairs: ReturnType<typeof findZFighting>): ReturnType<typeof findZFighting> => {
+    console.log(`[zfight] ${name}: ${pairs.length} pair${pairs.length === 1 ? '' : 's'}${pairs.length ? ` (bibliothek.zfight('${name}') lists them)` : ''}`);
     return pairs;
   };
+  const runRoot = (name: string, options?: ZFightOptions): ReturnType<typeof findZFighting> | null => {
+    const entry = zfightRoots().get(name);
+    return entry ? report(name, findZFighting(entry.root, { viewDistance: entry.viewDistance, ...options })) : null;
+  };
+  const rootsChecked = new WeakSet<THREE.Object3D>();
   const checked = new WeakSet<THREE.Object3D>();
   const materialsChecked = new WeakSet<THREE.Object3D>();
   const check = (zone: Zone): void => {
@@ -70,6 +83,11 @@ export function installZFight(parts: { world: { readonly zones: readonly Zone[] 
     // After the frame that shows it: the zone's own `activate` may still be placing things.
     setTimeout(() => {
       run(zone);
+      for (const [name, entry] of zfightRoots()) {
+        if (rootsChecked.has(entry.root)) continue;
+        rootsChecked.add(entry.root);
+        runRoot(name);
+      }
       if (!materialsChecked.has(zone.group)) {
         materialsChecked.add(zone.group);
         reportMixedInstancing(zone);
@@ -81,8 +99,8 @@ export function installZFight(parts: { world: { readonly zones: readonly Zone[] 
   exposeDebug({
     zfight: (id?: string, options?: ZFightOptions) => {
       const zone = id ? world.zones.find((z) => z.id === id) : zones.current;
-      if (!zone) return console.warn(`[zfight] no zone ${id}`);
-      const pairs = run(zone, options);
+      const pairs = zone ? run(zone, options) : id ? runRoot(id, options) : null;
+      if (!pairs) return console.warn(`[zfight] no zone or registered root ${id} (roots: ${[...zfightRoots().keys()].join(', ') || 'none'})`);
       console.table(pairs.slice(0, 60));
       return pairs;
     },

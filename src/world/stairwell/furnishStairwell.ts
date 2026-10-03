@@ -111,8 +111,8 @@ export function furnishStairwell(zone: Zone, { sky, listener, acoustics, buildin
   for (let k = 0; k <= STOREYS; k++) {
     const y = landingY(k);
     const name = new FloorName(plan.floorNames[k]!);
-    if (k === 0) zone.place(name, new THREE.Vector3(plan.ourFloorNameX, y + plan.floorNameY, shaft.z1 - 0.01), Math.PI);
-    else zone.place(name, new THREE.Vector3(shaft.x0 + 0.01, y + plan.floorNameY, (floorLanding.z0 + floorLanding.z1) / 2), Math.PI / 2);
+    if (k === 0) zone.place(name, new THREE.Vector3(plan.ourFloorNameX, y + plan.floorNameY, shaft.z1 - plan.floorNameOff), Math.PI);
+    else zone.place(name, new THREE.Vector3(shaft.x0 + plan.floorNameOff, y + plan.floorNameY, (floorLanding.z0 + floorLanding.z1) / 2), Math.PI / 2);
     if (k === STOREYS) {
       // The cellars: locked until the concierge gives the key (`building/keys`), then the way down (`world/cellar`).
       const cellar = cellarDoor({ label: plan.cellar.label, locked: 'Locked. The concierge keeps the key.' });
@@ -327,7 +327,7 @@ function namePlate(name: string): THREE.Mesh {
   ctx.textBaseline = 'middle';
   ctx.fillText(name, 150, 42, 270);
   const brass = METAL.brass();
-  const material = new THREE.MeshStandardMaterial({ map: toTexture(canvas, 4), metalness: brass.metalness, roughness: brass.roughness });
+  const material = new THREE.MeshStandardMaterial({ map: toTexture(canvas, 'facing'), metalness: brass.metalness, roughness: brass.roughness });
   const plate = new THREE.Mesh(new THREE.BoxGeometry(PLATE.width, PLATE.height, 0.004), [brass, brass, brass, brass, material, brass]);
   // On the leaf's face (16 mm), clear of the raised panels' 2 mm.
   plate.position.set(0, PLATE.y, 0.016 + 0.004 + 0.002);
@@ -390,7 +390,7 @@ class FloorName extends Prop {
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText(name, 64, 52, 116);
-    const plate = new THREE.Mesh(new THREE.PlaneGeometry(0.32, 0.24), new THREE.MeshStandardMaterial({ map: toTexture(canvas, 2), roughness: 0.9 }));
+    const plate = new THREE.Mesh(new THREE.PlaneGeometry(0.32, 0.24), new THREE.MeshStandardMaterial({ map: toTexture(canvas, 'facing'), roughness: 0.9 }));
     this.add(plate);
   }
 }
@@ -432,7 +432,7 @@ class Mailboxes extends Prop {
         ctx.fillText(name, x + 54, y + 86, 78);
       }
     }
-    const face = new THREE.MeshStandardMaterial({ map: toTexture(canvas, 4), roughness: 0.6 });
+    const face = new THREE.MeshStandardMaterial({ map: toTexture(canvas, 'facing'), roughness: 0.6 });
     const wood = paint(0x4a2c1c, 0.6);
     const cabinet = new THREE.Mesh(new THREE.BoxGeometry(w, h, 0.12), [wood, wood, wood, wood, face, wood]);
     cabinet.position.z = 0.06;

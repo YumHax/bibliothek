@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { createCanvas, toTexture } from '@/covers/generated/canvasUtils';
+import { createCanvas, toTexture, canvasTexture, repeatTexture } from '@/covers/generated/canvasUtils';
 import { part } from './Prop';
 import { standard } from '../materials/palette';
 import { fabric } from '@/world/materials/finishes';
@@ -235,8 +235,7 @@ function wovenFabric(): THREE.MeshStandardMaterial {
   for (let i = 0; i < 24; i++) ctx.fillRect((i * 53) % W, (i * 29) % W, 6 + (i % 5), 1);
 
   const map = toTexture(canvas);
-  map.wrapS = map.wrapT = THREE.RepeatWrapping;
-  const bump = new THREE.CanvasTexture(canvas);
-  bump.wrapS = bump.wrapT = THREE.RepeatWrapping;
+  repeatTexture(map);
+  const bump = canvasTexture(canvas, { data: true, repeat: true });
   return fabric({ map, bumpMap: bump, bumpScale: 0.004, roughness: 1, side: THREE.DoubleSide, sheenTint: 0x9a968e });
 }

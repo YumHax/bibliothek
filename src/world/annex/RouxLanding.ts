@@ -175,7 +175,7 @@ export function placeRouxLanding(zone: Zone, { today, home, building }: Pick<Bui
     },
   }));
   // On her door's leaf (the doors stand 5 mm off the landing's north wall, facing the landing: yaw π).
-  zone.place(sign, new THREE.Vector3(STAIRWELL_PLAN.ourNeighbourX, y, STAIRWELL_PLAN.floorLanding.z1 - 0.005 - WALL.sign.lift), Math.PI);
+  zone.place(sign, new THREE.Vector3(STAIRWELL_PLAN.ourNeighbourX, y, STAIRWELL_PLAN.floorLanding.z1 - 0.005 - WALL.sign.lift), Math.PI); // convention-ok: a solid board off the door
   const boxes = zone.place(new RemovalBoxes(), new THREE.Vector3(ROUX_LANDING.boxes.x, y, ROUX_LANDING.boxes.z), 0);
   const show = (phase: RouxPhase): void => {
     sign.show(phase);

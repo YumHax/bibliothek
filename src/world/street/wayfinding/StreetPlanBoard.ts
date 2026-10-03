@@ -4,7 +4,7 @@ import type { Interactable } from '@/interaction/Interactable';
 import type { SessionActions } from '@/game/SessionActions';
 import type { Furniture } from '../../Furniture';
 import { invisibleHitbox } from '../../meshUtils';
-import { paint } from '../../materials/palette';
+import { snowPaint } from '../snowCover';
 import { HoverGlint } from '../../props/hoverGlint';
 import { WALL, onSurface } from '../../surface/layers';
 import { SHOP_HOURS, clockTime } from '../shops/shopHours';
@@ -51,7 +51,7 @@ export class StreetPlanBoard extends THREE.Group implements Furniture, Interacta
     super();
     this.name = 'StreetPlanBoard';
     const { width, height } = options;
-    const frame = paint(0x1f3a2c, 0.5);
+    const frame = snowPaint(0x1f3a2c, 0.5);
     const box = new THREE.Mesh(new THREE.BoxGeometry(width + 2 * CASE.frame, height + 2 * CASE.frame, CASE.depth), frame);
     box.position.z = CASE.depth / 2;
     box.castShadow = true;

@@ -150,5 +150,5 @@ export function scratchedCodeTexture(): THREE.CanvasTexture {
   ctx.moveTo(10, 70);
   ctx.lineTo(370, 58);
   ctx.stroke();
-  return toTexture(canvas, 4);
+  return toTexture(canvas, 'facing');
 }

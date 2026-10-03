@@ -7,7 +7,7 @@ import { createCanvas, toTexture } from '@/covers/generated/canvasUtils';
 import type { Furniture, OccupancyAware } from '../Furniture';
 import { boxMesh, cylinderMesh, invisibleHitbox } from '../meshUtils';
 import { paint, standard } from '../materials/palette';
-import { WALL } from '../surface/layers';
+import { layMesh, WALL } from '../surface/layers';
 
 export interface TransistorRadioOptions {
   /** Whose distance sets the volume: the camera. */
@@ -58,10 +58,12 @@ export class TransistorRadio extends THREE.Group implements Furniture, Updatable
     this.add(boxMesh(W, H, D, body, { y: H / 2 }));
     const grille = new THREE.Mesh(new THREE.PlaneGeometry(W * 0.55, H * 0.7), new THREE.MeshStandardMaterial({ map: paintGrille(), roughness: 0.6, metalness: 0 }));
     grille.position.set(-W * 0.17, H / 2, D / 2 + WALL.framed.lift);
+    layMesh(grille, WALL.framed);
     this.add(grille);
     this.dial = new THREE.MeshStandardMaterial({ color: 0xf1e8d6, roughness: 0.5, emissive: 0xffb050, emissiveIntensity: 0 });
     const dial = new THREE.Mesh(new THREE.CircleGeometry(0.025, 20), this.dial);
     dial.position.set(W * 0.3, H / 2 + 0.01, D / 2 + WALL.framed.lift);
+    layMesh(dial, WALL.framed);
     this.add(dial);
     this.add(cylinderMesh(0.008, 0.012, CHROME, { x: W * 0.3, y: H * 0.18, z: D / 2 + 0.004 }, { segments: 10 }).rotateX(Math.PI / 2));
     // The handle and the telescopic aerial.
@@ -132,5 +134,5 @@ function paintGrille(): THREE.Texture {
   ctx.fillRect(0, 0, 128, 96);
   ctx.fillStyle = '#2a2a2a';
   for (let y = 6; y < 96; y += 8) for (let x = 6 + ((y / 8) % 2) * 4; x < 128; x += 8) ctx.fillRect(x, y, 3, 3);
-  return toTexture(canvas, 2);
+  return toTexture(canvas, 'facing');
 }

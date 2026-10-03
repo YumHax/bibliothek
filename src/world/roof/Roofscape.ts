@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { createCanvas, seededRandom, toTexture } from '@/covers/generated/canvasUtils';
+import { createCanvas, seededRandom, toTexture, repeatTexture } from '@/covers/generated/canvasUtils';
 import { facadeHeight } from '../street/facadePainter';
 import { FACADES } from '../street/streetPlan';
 import { Prop } from '../props/Prop';
@@ -68,8 +68,7 @@ function roofsTexture(): THREE.CanvasTexture {
     ctx.fillStyle = 'rgba(160, 190, 210, 0.6)';
     ctx.fillRect(random() * px, random() * px, 9, 12);
   }
-  const texture = toTexture(canvas, 4);
-  texture.wrapS = THREE.RepeatWrapping;
-  texture.wrapT = THREE.RepeatWrapping;
+  const texture = toTexture(canvas, 'grazing');
+  repeatTexture(texture);
   return texture;
 }

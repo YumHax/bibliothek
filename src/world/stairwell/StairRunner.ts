@@ -82,7 +82,7 @@ function runnerTexture(): THREE.CanvasTexture {
   ctx.fillStyle = 'rgba(255,240,200,0.9)';
   ctx.fillRect(w * 0.11, 0, w * 0.025, h);
   ctx.fillRect(w * 0.865, 0, w * 0.025, h);
-  const texture = toTexture(canvas, 4);
-  texture.wrapT = THREE.RepeatWrapping;
+  const texture = toTexture(canvas, 'grazing');
+  texture.wrapT = THREE.RepeatWrapping; // convention-ok: wraps one way only
   return texture;
 }

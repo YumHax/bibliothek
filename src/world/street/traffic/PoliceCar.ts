@@ -1,8 +1,8 @@
 import * as THREE from 'three';
 import type { DayNight } from '../../props/DayNight';
-import { CAR_SIZES, carGeometries } from '../carModel';
+import { CAR_SIZES, carGeometries, vehicleGlass } from '../carModel';
 import { snowCovered } from '../snowCover';
-import { paint, standard } from '../../materials/palette';
+import { paint } from '../../materials/palette';
 import { EmergencyVehicle, chequers, shade, type EmergencyOptions } from './Emergency';
 import { LampMaterial } from './lampMaterial';
 import { WheelMaterial } from './wheelSpin';
@@ -28,7 +28,7 @@ export class PoliceCar extends EmergencyVehicle {
     this.wheelFace = { material: wheels, radius: VEHICLES.saloon.wheelRadius };
     this.add(
       shade(new THREE.Mesh(g.body, snowCovered(new THREE.MeshStandardMaterial({ color: 0xf0f0ec, roughness: 0.3 })))),
-      shade(new THREE.Mesh(g.glass, standard({ color: 0x1a232b, roughness: 0.06 }))),
+      shade(new THREE.Mesh(g.glass, vehicleGlass())),
       shade(new THREE.Mesh(g.wheels, wheels)),
       new THREE.Mesh(g.lamps, lamps),
     );

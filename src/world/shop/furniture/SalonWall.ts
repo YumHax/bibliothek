@@ -1,14 +1,14 @@
 import * as THREE from 'three';
 import { cylinderMesh } from '../../meshUtils';
 import { Prop, part } from '../../props/Prop';
-import { paint, standard, timber, METAL } from '../../materials/palette';
+import { paint, timber, METAL } from '../../materials/palette';
+import { GLASS } from '../../materials/glass';
 import { seededRandom } from '@/graphics/canvas';
 
 export interface SalonWallOptions {
   seed?: number;
 }
 
-const GLASS = standard({ color: 0xdfe6ea, roughness: 0.04, metalness: 1 });
 const GILT = METAL.brass();
 const DARK_WOOD = timber(0x3a2a1e, 0.5);
 const BLACK = paint(0x1c1a18, 0.5);
@@ -37,10 +37,10 @@ export class SalonWall extends Prop {
     const random = seededRandom(options.seed ?? 13);
     // The round mirror in the middle, a little high.
     disc(this, 0.3, 0.035, GILT, 0, 0.12);
-    disc(this, 0.26, 0.012, GLASS, 0, 0.12, 0.035);
+    disc(this, 0.26, 0.012, GLASS.mirror, 0, 0.12, 0.035);
     // The oval, in dark wood, left of it.
     disc(this, 0.2, 0.03, DARK_WOOD, -0.62, 0.02, 0, 0.7);
-    disc(this, 0.17, 0.01, GLASS, -0.62, 0.02, 0.03, 0.7);
+    disc(this, 0.17, 0.01, GLASS.mirror, -0.62, 0.02, 0.03, 0.7);
     // The sunburst clock, up right.
     sunburst(this, 0.62, 0.3, random);
     // The school clock, below it.

@@ -7,7 +7,7 @@ import { ChipSpeaker, type Sfx } from '@/audio/ChipSpeaker';
 import { createCanvas, seededRandom, toTexture } from '@/covers/generated/canvasUtils';
 import type { Furniture } from '../Furniture';
 import { boxMesh, cylinderMesh, eyePoseAt, invisibleHitbox } from '../meshUtils';
-import { WALL } from '../surface/layers';
+import { layMesh, WALL } from '../surface/layers';
 import { paint, standard } from '../materials/palette';
 import { drawText } from './games/ArcadeGame';
 import { ordinal } from './InitialsEntry';
@@ -17,7 +17,6 @@ import type { ScoreTable } from './scoreTable';
 import type { TicketMachineWiring } from './TicketMachine';
 import { MachineRun, type MachineState } from './MachineRun';
 import { CHROME, type MachineDisplay, displayScreen, outOfOrderNote } from './machineParts';
-import { QUALITY } from '@/graphics/quality';
 
 export interface PinballOptions {
   /** The table's name, on the backglass. Default METEOR ALLEY. */
@@ -157,7 +156,7 @@ export class Pinball extends THREE.Group implements Furniture, Interactable, Upd
     const stripe = paint(accent, 0.5);
     for (const sx of [-1, 1]) deck.add(boxMesh(0.004, 0.05, BODY_L - 0.1, stripe, { x: sx * (BODY_W / 2 + 0.002), y: 0.02 }));
     // Playfield under glass: the sim's walls, lanes and targets painted once on the table's art.
-    const field = new THREE.Mesh(new THREE.PlaneGeometry(FIELD_W, FIELD_L), new THREE.MeshBasicMaterial({ map: this.paintPlayfield(color, accent, random), toneMapped: false, color: 0x9a9a9a }));
+    const field = new THREE.Mesh(new THREE.PlaneGeometry(FIELD_W, FIELD_L), new THREE.MeshBasicMaterial({ map: this.paintPlayfield(color, accent, random), color: 0x9a9a9a }));
     field.rotation.x = -Math.PI / 2;
     field.position.set(0, FIELD_Y, 0.01);
     deck.add(field);
@@ -228,9 +227,10 @@ export class Pinball extends THREE.Group implements Furniture, Interactable, Upd
     // The backbox standing on the back end, its lit backglass facing the player.
     const backTop = FRONT_TOP + RISE;
     this.add(boxMesh(BODY_W, BACKBOX_H, BACKBOX_D, body, { y: backTop + BACKBOX_H / 2, z: -BODY_L / 2 + BACKBOX_D / 2 }));
-    this.backglass = displayScreen([448, 512], [BODY_W - 0.06, BACKBOX_H - 0.08], { anisotropy: QUALITY.anisotropy, color: 0xcccccc });
+    this.backglass = displayScreen([448, 512], [BODY_W - 0.06, BACKBOX_H - 0.08], { anisotropy: 'grazing', color: 0xcccccc });
     const backglass = this.backglass.mesh;
     backglass.position.set(0, backTop + BACKBOX_H / 2, -BODY_L / 2 + BACKBOX_D + WALL.notice.lift);
+    layMesh(backglass, WALL.notice);
     this.add(backglass);
     // Out of order: a note over the score display.
     const note = outOfOrderNote();
@@ -570,7 +570,7 @@ export class Pinball extends THREE.Group implements Furniture, Interactable, Upd
       ctx.stroke();
     }
     drawText(ctx, this.title, 0.45 * W, 0.47 * W, 16, '#ffe680');
-    return toTexture(canvas, 8);
+    return toTexture(canvas, 'grazing');
   }
 }
 

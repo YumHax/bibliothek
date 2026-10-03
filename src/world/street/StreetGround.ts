@@ -303,16 +303,15 @@ export class StreetGround extends THREE.Group implements Furniture, Updatable {
     return mesh;
   }
 
-  /** The road's patched repairs (`STREET_PLAN.roadPatches`): newer, darker asphalt over whatever lines were there (`GROUND.grate`). */
+  /** The road's patched repairs (`STREET_PLAN.roadPatches`): newer, darker asphalt over whatever lines were there (`GROUND.patch`, a rank over the paint). */
   private addRepairs(asphalt: Tile): void {
     const q = new QuadBuilder(1);
-    const y = -KERB_HEIGHT + GROUND.grate.lift;
+    const y = -KERB_HEIGHT + GROUND.patch.lift;
     for (const [x0, z0, x1, z1] of STREET_PLAN.roadPatches) q.floor(x0, z0, x1, z1, y);
     if (q.isEmpty) return;
     // The road's own maps (clones share the image: one upload), newer and so a touch rougher.
     const map = asphalt.texture.clone();
-    map.anisotropy = 1;
-    const material = onSurface(new THREE.MeshStandardMaterial({ map, color: 0x8c8c90, roughness: 0.9 }), GROUND.grate);
+    const material = onSurface(new THREE.MeshStandardMaterial({ map, color: 0x8c8c90, roughness: 0.9 }), GROUND.patch);
     if (asphalt.bump) {
       material.bumpMap = asphalt.bump;
       material.bumpScale = BUMP.asphalt;
@@ -365,7 +364,8 @@ export class StreetGround extends THREE.Group implements Furniture, Updatable {
       sill(door.facade, along);
     }
     for (const facade of FACADES) if (facade.door !== undefined) sill(facade, facade.door);
-    if (!sills.isEmpty) onSurface(this.addSurface(sills.build(), kerb, 0.7, 0.6, 0xc9c6bf, BUMP.kerb).material as THREE.MeshStandardMaterial, GROUND.marking);
+    // Over the kerb tops where a door stands near the corner (a rank up: in theirs, the two stones would fight).
+    if (!sills.isEmpty) onSurface(this.addSurface(sills.build(), kerb, 0.7, 0.6, 0xc9c6bf, BUMP.kerb).material as THREE.MeshStandardMaterial, GROUND.patch);
   }
 
   /**
@@ -419,9 +419,9 @@ export class StreetGround extends THREE.Group implements Furniture, Updatable {
       const edge = kerb + inward * PARK_PARKING;
       const [e0, e1] = [Math.min(edge, edge + inward * 0.1), Math.max(edge, edge + inward * 0.1)];
       white.floor(e0, STREET_ENDS.south, e1, parkTop - 1, y);
-      // A tick across the lane at every bay's end.
-      const [t0, t1] = [Math.min(kerb, edge), Math.max(kerb, edge)];
-      for (let z = parkTop - 1; z > STREET_ENDS.south; z -= ROAD_WEAR.parkBay) white.floor(t0 + 0.2, z - 0.05, t1, z + 0.05, y);
+      // A tick across the lane at every bay's end, stopping short of the kerb (its gutter) on either side.
+      const [t0, t1] = kerb < edge ? [kerb + 0.2, edge] : [edge, kerb - 0.2];
+      for (let z = parkTop - 1; z > STREET_ENDS.south; z -= ROAD_WEAR.parkBay) white.floor(t0, z - 0.05, t1, z + 0.05, y);
     }
     // The give-way where Park Street's northbound lane (west of its middle: right-hand traffic) meets Front Street:
     // two lines of short dashes across the lane at the mouth, the triangle before them.

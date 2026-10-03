@@ -62,7 +62,7 @@ function numberPlate(n: number): THREE.Mesh {
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillText(String(n), 64, 52);
-  const plate = new THREE.Mesh(new THREE.PlaneGeometry(0.1, 0.075), new THREE.MeshStandardMaterial({ map: toTexture(canvas, 4), roughness: 0.3, transparent: true }));
+  const plate = new THREE.Mesh(new THREE.PlaneGeometry(0.1, 0.075), new THREE.MeshStandardMaterial({ map: toTexture(canvas, 'facing'), roughness: 0.3, transparent: true }));
   // On the leaf's face (16 mm), clear of the raised panels' 2 mm.
   plate.position.set(0, 1.6, 0.016 + 0.003);
   plate.castShadow = false;

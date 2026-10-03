@@ -258,7 +258,7 @@ export class ArcadePlay implements KeyRoute {
       return;
     }
     const beginner = this.habits.plays(machine.game.id) <= BEGINNER.plays;
-    const payout = arcadePayout(machine, { ...result, beginner }, { daily: arcadeDaily, medals, league });
+    const payout = arcadePayout(machine, { ...result, beginner, paid: this.paid }, { daily: arcadeDaily, medals, league });
     // The arcade tee: the regulars nod the player through, a few tickets on top of the play's own.
     const tee = payout.tickets ? perks?.arcadeBonus(payout.tickets.paid) ?? 0 : 0;
     if (tee) payout.lines.push(`Arcade tee: +${tee} tickets`);

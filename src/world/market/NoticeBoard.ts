@@ -5,7 +5,7 @@ import { createCanvas, fitFontSize, seededRandom, toTexture, wrapLines, FONT } f
 import { boxMesh, invisibleHitbox } from '../meshUtils';
 import { Prop } from '../props/Prop';
 import { timber } from '../materials/palette';
-import { WALL } from '../surface/layers';
+import { layMesh, WALL } from '../surface/layers';
 
 /** One card pinned on the board. */
 export interface NoticeCard {
@@ -67,10 +67,11 @@ export class NoticeBoard extends Prop implements Interactable {
     const inner = { w: WIDTH - 2 * FRAME, h: HEIGHT - 2 * FRAME };
     this.add(boxMesh(inner.w, inner.h, BACKING_T, frame, { z: BACKING_T / 2 }));
     [this.canvas, this.ctx] = createCanvas(Math.round(inner.w * PX_PER_M), Math.round(inner.h * PX_PER_M));
-    this.texture = toTexture(this.canvas, 4);
+    this.texture = toTexture(this.canvas, 'facing');
     const face = new THREE.Mesh(new THREE.PlaneGeometry(inner.w, inner.h), new THREE.MeshStandardMaterial({ map: this.texture, roughness: 0.95 }));
     // A notice's lift off the backing: it does not z-fight with it when the board is read from across the hall.
     face.position.z = BACKING_T + WALL.notice.lift;
+    layMesh(face, WALL.notice);
     face.castShadow = false;
     face.receiveShadow = true;
     this.add(face);

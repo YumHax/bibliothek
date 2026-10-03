@@ -11,11 +11,17 @@ import { QUALITY } from '@/graphics/quality';
  */
 export class ShadowRefresh {
   private live = false;
-  private readonly period = QUALITY.shadowRefreshHz > 0 ? 1 / QUALITY.shadowRefreshHz : 0;
+  private readonly period: number;
   /** Starts at a random phase so several live lights do not all redraw on the same frame. */
-  private timer = Math.random() * this.period;
+  private timer: number;
 
-  constructor(private readonly light: THREE.Light & { shadow: THREE.LightShadow }) {
+  /** `hz`: refreshes a second while live (0: every frame); default `QUALITY.shadowRefreshHz`. */
+  constructor(
+    private readonly light: THREE.Light & { shadow: THREE.LightShadow },
+    hz = QUALITY.shadowRefreshHz,
+  ) {
+    this.period = hz > 0 ? 1 / hz : 0;
+    this.timer = Math.random() * this.period;
     light.shadow.autoUpdate = false;
   }
 

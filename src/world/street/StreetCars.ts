@@ -1,10 +1,10 @@
 import * as THREE from 'three';
 import type { Updatable } from '@/core/Engine';
-import { seededRandom } from '@/covers/generated/canvasUtils';
+import { seededRandom, canvasTexture, toTexture } from '@/covers/generated/canvasUtils';
 import type { Furniture } from '../Furniture';
 import type { DayNight } from '../props/DayNight';
 import { wakefulnessAt } from '@/time/wakefulness';
-import { CAR_SIZES, DRIVER_SEAT, carGeometries, type CarModelId } from './carModel';
+import { CAR_SIZES, DRIVER_SEAT, VEHICLE_GLASS, carGeometries, type CarModelId } from './carModel';
 import { nightnessOf } from './streetAir';
 import { snowCovered } from './snowCover';
 import { CAR_PAINTS, VAN_PAINTS, catBay, type ParkedCar } from '../city/parkedCars';
@@ -21,6 +21,7 @@ import { createCanvas } from '@/covers/generated/canvasUtils';
 import { GROUND, RENDER_ORDER, onSurface } from '../surface/layers';
 import { SpeechBubble } from '../people/SpeechBubble';
 import { Walker } from '../people/Walker';
+import { additive } from '@/world/materials/blend';
 
 /** A taxi stand at the kerb: where the taxi stands (its middle, heading), the kerb its fare steps onto, the door they come from or go to. */
 export interface TaxiStop {
@@ -367,7 +368,8 @@ export class StreetCars extends THREE.Group implements Furniture, Updatable {
 
     const body = snowCovered(new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.3 }));
     // Tinted, see-through: the seats and the driver show behind it.
-    const glass = snowCovered(new THREE.MeshStandardMaterial({ color: 0x1a232b, roughness: 0.06, transparent: true, opacity: 0.66, depthWrite: false }));
+    // Over the body's panels as `carModel.VEHICLE_GLASS`.
+    const glass = onSurface(snowCovered(new THREE.MeshStandardMaterial({ color: 0x1a232b, roughness: 0.06, transparent: true, opacity: 0.66 })), VEHICLE_GLASS, { depthWrite: false });
     // Its own, not the palette's: an instanced mesh sharing a material with plain meshes (the bus's wheels) switches programs every draw.
     const tyres = new WheelMaterial(true);
     for (const model of MODELS) {
@@ -450,21 +452,17 @@ export class StreetCars extends THREE.Group implements Furniture, Updatable {
     const n = this.cars.length;
     this.signs = this.instanced(new THREE.BoxGeometry(...TAXI_SIGN.size), this.signMaterial, n);
     this.heads = this.instanced(new THREE.SphereGeometry(0.1, 10, 8).translate(0.04, 0.38, 0), new THREE.MeshStandardMaterial({ color: 0xc99b7c, roughness: 0.7 }), n);
-    this.shoulders = this.instanced(new THREE.BoxGeometry(0.24, 0.3, 0.42).translate(-0.02, 0.14, 0), new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.85 }), n);
+    // Shoulders a little under the seat back's top (`carModel`'s cabin: level with it, the two would fight).
+    this.shoulders = this.instanced(new THREE.BoxGeometry(0.24, 0.27, 0.42).translate(-0.02, 0.125, 0), new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.85 }), n);
     const clothes = seededRandom(311);
     for (let i = 0; i < n; i++) this.shoulders.setColorAt(i, this.color.setHSL(clothes(), 0.25, 0.18 + 0.3 * clothes()));
     this.beamMaterial = onSurface(
-      new THREE.MeshBasicMaterial({
+      additive(new THREE.MeshBasicMaterial({
         map: beamTexture(),
         color: 0x000000,
         transparent: true,
-        blending: THREE.CustomBlending,
-        blendSrc: THREE.SrcAlphaFactor,
-        blendDst: THREE.OneFactor,
-        blendSrcAlpha: THREE.ZeroFactor,
-        blendDstAlpha: THREE.OneFactor,
         fog: true,
-      }),
+      })),
       GROUND.lampPool,
       { depthWrite: false },
     );
@@ -1160,7 +1158,7 @@ function shadeTexture(): THREE.CanvasTexture {
     }
   }
   ctx.putImageData(image, 0, 0);
-  return new THREE.CanvasTexture(canvas);
+  return canvasTexture(canvas, { data: true });
 }
 
 function beamTexture(): THREE.CanvasTexture {
@@ -1183,7 +1181,5 @@ function beamTexture(): THREE.CanvasTexture {
     }
   }
   ctx.putImageData(image, 0, 0);
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.colorSpace = THREE.SRGBColorSpace;
-  return texture;
+  return toTexture(canvas);
 }

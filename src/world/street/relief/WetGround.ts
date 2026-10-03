@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { Reflector } from 'three/examples/jsm/objects/Reflector.js';
 import type { Updatable } from '@/core/Engine';
-import { createCanvas, seededRandom } from '@/covers/generated/canvasUtils';
+import { createCanvas, seededRandom, canvasTexture } from '@/covers/generated/canvasUtils';
 import type { Furniture } from '../../Furniture';
 import type { DayNight, SkyState } from '../../props/DayNight';
 import type { PaintedFront } from '../Buildings';
@@ -14,6 +14,7 @@ import { GROUND, RENDER_ORDER, onSurface } from '../../surface/layers';
 import { LAMP_LIGHT } from '../../lighting/lampColours';
 import { envBoost } from '../../materials/envBoost';
 import type { MovingLamp } from '../StreetCars';
+import { additive, additiveOne } from '@/world/materials/blend';
 
 export interface WetGroundOptions {
   fronts: readonly PaintedFront[];
@@ -129,16 +130,11 @@ export class WetGround extends THREE.Group implements Furniture, Updatable {
     }
 
     const streakMaterial = onSurface(
-      new THREE.MeshBasicMaterial({
+      additive(new THREE.MeshBasicMaterial({
         map: streakTexture(),
         transparent: true,
-        blending: THREE.CustomBlending,
-        blendSrc: THREE.SrcAlphaFactor,
-        blendDst: THREE.OneFactor,
-        blendSrcAlpha: THREE.ZeroFactor,
-        blendDstAlpha: THREE.OneFactor,
         fog: true,
-      }),
+      })),
       GROUND.streak,
       { depthWrite: false },
     );
@@ -292,12 +288,7 @@ export class WetGround extends THREE.Group implements Furniture, Updatable {
     material.uniforms.strength = this.mirrorStrength;
     material.uniforms.mask!.value = mask;
     material.transparent = true;
-    material.blending = THREE.CustomBlending;
-    material.blendEquation = THREE.AddEquation;
-    material.blendSrc = THREE.OneFactor;
-    material.blendDst = THREE.OneFactor;
-    material.blendSrcAlpha = THREE.ZeroFactor;
-    material.blendDstAlpha = THREE.OneFactor;
+    additiveOne(material);
     mirror.receiveShadow = false;
     mirror.castShadow = false;
     mirror.renderOrder = RENDER_ORDER.sheen;
@@ -373,8 +364,7 @@ function puddleMask(puddles: readonly Puddle[], area: ReturnType<typeof mirrorAr
   // A thin sheen of water everywhere, so the wettest road still mirrors a little outside the puddles.
   ctx.fillStyle = 'rgba(255,255,255,0.12)';
   ctx.fillRect(0, 0, w, h);
-  const texture = new THREE.CanvasTexture(canvas);
-  return texture;
+  return canvasTexture(canvas, { data: true });
 }
 
 /** The Reflector's shader: the mirrored street, blurred a little, through the puddle mask, stronger at a grazing angle. Added light only. */
@@ -446,9 +436,8 @@ function streakTexture(): THREE.CanvasTexture {
     }
   }
   ctx.putImageData(image, 0, 0);
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.colorSpace = THREE.SRGBColorSpace;
-  return texture;
+  // White, its shape in alpha: a mask (the decode would change nothing in the white anyway).
+  return canvasTexture(canvas, { data: true });
 }
 
 /** A puddle's soft irregular outline (the alpha map reads green). */
@@ -471,5 +460,5 @@ function blobTexture(): THREE.CanvasTexture {
     ctx.arc(x, y, r, 0, Math.PI * 2);
     ctx.fill();
   }
-  return new THREE.CanvasTexture(canvas);
+  return canvasTexture(canvas, { data: true });
 }

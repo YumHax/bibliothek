@@ -5,7 +5,8 @@ import { fabric } from '../materials/finishes';
 import { METAL, shared, timber } from '../materials/palette';
 import { INSET, PROUD } from '../props/joinery';
 import { FLOOR, WALL, onSurface } from '../surface/layers';
-import { CLEAR_GLASS, EDGE_LIGHT, SHELF_GLASS, WARM_STRIP, asGlass, bakedGlow, poolTexture, washTexture } from './glow';
+import { EDGE_LIGHT, WARM_STRIP, bakedGlow, poolTexture, washTexture } from './glow';
+import { GLASS, asGlass } from '../materials/glass';
 import type { ShowcaseStand, StandSlot } from './stand';
 
 /** Narrow enough for the gap between the living room's door and its first bookcase (`ROOM_PLAN.showcase`). */
@@ -76,10 +77,14 @@ export class DisplayColumn extends THREE.Group implements Furniture, ShowcaseSta
     this.add(strip);
     // Glass: the sides, from the lining to the front posts, and the four shelves, each with a lit front edge.
     const sideD = front - POST - backFace;
-    for (const sx of [-1, 1]) this.add(asGlass(boxMesh(GLASS_T, bodyH - BOTTOM_T, sideD, CLEAR_GLASS, { x: sx * (WIDTH / 2 - GLASS_T / 2 - 0.004), y: PLINTH_H + BOTTOM_T + (bodyH - BOTTOM_T) / 2, z: backFace + sideD / 2 })));
+    // Their ends a hair into the boards they meet (the bottom board's top is an `INSET` down): seen through, glass
+    // flush on wood fights.
+    const sideBottom = PLINTH_H + BOTTOM_T - 2 * INSET;
+    const sideH = HEIGHT - TOP_T + INSET - sideBottom;
+    for (const sx of [-1, 1]) this.add(asGlass(boxMesh(GLASS_T, sideH, sideD, GLASS.clear, { x: sx * (WIDTH / 2 - GLASS_T / 2 - 0.004), y: sideBottom + sideH / 2, z: backFace + sideD / 2 })));
     const shelfD = front - 0.006 - backFace;
     for (const top of SHELVES) {
-      this.add(asGlass(boxMesh(INNER_W - 2 * GLASS_T - 0.01, SHELF_T, shelfD, SHELF_GLASS, { y: top - SHELF_T / 2, z: backFace + shelfD / 2 })));
+      this.add(asGlass(boxMesh(INNER_W - 2 * GLASS_T - 0.01, SHELF_T, shelfD, GLASS.shelf, { y: top - SHELF_T / 2, z: backFace + shelfD / 2 })));
       const edge = boxMesh(INNER_W - 2 * GLASS_T - 0.012, SHELF_T - 0.002, 0.002, EDGE_LIGHT, { y: top - SHELF_T / 2, z: backFace + shelfD + 0.001 + PROUD / 2 });
       edge.castShadow = false;
       edge.raycast = () => {};
@@ -87,7 +92,7 @@ export class DisplayColumn extends THREE.Group implements Furniture, ShowcaseSta
     }
     this.traverse((obj) => {
       const mesh = obj as THREE.Mesh;
-      if (mesh.isMesh && mesh.material !== CLEAR_GLASS && mesh.material !== SHELF_GLASS) mesh.receiveShadow = true;
+      if (mesh.isMesh && mesh.material !== GLASS.clear && mesh.material !== GLASS.shelf) mesh.receiveShadow = true;
     });
     this.bakeStripLight(backFace, shelfD);
 

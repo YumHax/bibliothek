@@ -45,7 +45,7 @@ export class WhatsOnBills extends THREE.Group implements Furniture, Interactable
     this.billCanvas = billCanvas;
     this.adCanvas = adCanvas;
     this.bill = toTexture(billCanvas, options.anisotropy);
-    this.ad = toTexture(adCanvas, 2);
+    this.ad = toTexture(adCanvas, 'facing');
     // The bill: a strip of the drum a hair out from it, centred on the side facing the road.
     const strip = new THREE.CylinderGeometry(options.radius + 0.004, options.radius + 0.004, BILL.top - BILL.bottom, 24, 1, true, Math.PI - BILL.wrap / 2, BILL.wrap).translate(0, (BILL.top + BILL.bottom) / 2, 0);
     const mesh = new THREE.Mesh(strip, snowCovered(new THREE.MeshStandardMaterial({ map: this.bill, roughness: 0.8 })));

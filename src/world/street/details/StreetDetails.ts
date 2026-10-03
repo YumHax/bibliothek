@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import type { Updatable } from '@/core/Engine';
 import { bareMetal } from '../metals';
-import { createCanvas, seededRandom, toTexture } from '@/covers/generated/canvasUtils';
+import { createCanvas, seededRandom, toTexture, repeatTexture } from '@/covers/generated/canvasUtils';
 import type { Furniture } from '../../Furniture';
 import type { DayNight } from '../../props/DayNight';
 import { snowCovered } from '../snowCover';
@@ -29,6 +29,8 @@ const CONE = { foot: 0.38, height: 0.5, base: 0.15, tip: 0.025 };
 const WORKS_SITE = { trench: { from: 1.2, to: 8, inset: 2.1, width: 1 }, plates: [5, 7.5], spoil: 9.4, generator: 11.2, fence: { from: 0.8, panel: 3.4, height: 2, gap: 0.25 } };
 /** The amber lamps on the barriers and the fence ends: how fast they blink (s a cycle), how bright at night (HDR, unlit). */
 const BLINK = { period: 1.1, glow: 2.6 };
+/** A road plate's length along the trench. */
+const PLATE_LENGTH = 2.4;
 const AMBER = new THREE.Color(0xffa020);
 
 /**
@@ -53,8 +55,9 @@ export class StreetDetails extends THREE.Group implements Furniture, Updatable {
     super();
     this.name = 'StreetDetails';
     const random = seededRandom(2718);
-    const painted = new TriBuilder();
-    const iron = new TriBuilder();
+    // Standing on the pavement: their bottoms are never seen.
+    const painted = new TriBuilder().hideGround();
+    const iron = new TriBuilder().hideGround();
 
     // Manholes and drains: textured discs and grates on the ground (`GROUND.grate`), one textured mesh; the
     // manholes' cast frames stand round them, a centimetre proud.
@@ -267,17 +270,19 @@ export class StreetDetails extends THREE.Group implements Furniture, Updatable {
     const zB = across(trench.inset + trench.width);
     const tz0 = Math.min(zA, zB);
     const tz1 = Math.max(zA, zB);
-    const length = trench.to - trench.from;
-    // The pit: a dark floor a hand under the slabs' top, walls down to it; its lips of churned earth.
+    // The pit: a dark floor a hand under the slabs' top, walls down to it; its lips of churned earth. Only where it
+    // is open: under the plates it would lie in the plates' plane but for their thickness (a fight down the street).
+    const open = Math.min(trench.to, ...plates.map((x, i) => x + i * 0.05 - PLATE_LENGTH / 2));
     const pit = new THREE.MeshStandardMaterial({ color: 0x17120e, roughness: 1 });
-    const floor = new THREE.Mesh(new THREE.PlaneGeometry(length, tz1 - tz0).rotateX(-Math.PI / 2).translate((trench.from + trench.to) / 2, GROUND.marking.lift, (tz0 + tz1) / 2).applyMatrix4(frame), onSurface(pit, GROUND.marking));
+    const floor = new THREE.Mesh(new THREE.PlaneGeometry(open - trench.from, tz1 - tz0).rotateX(-Math.PI / 2).translate((trench.from + open) / 2, GROUND.marking.lift, (tz0 + tz1) / 2).applyMatrix4(frame), onSurface(pit, GROUND.marking));
     floor.receiveShadow = true;
     this.add(floor);
     for (let x = trench.from; x < trench.to; x += 0.45) {
-      for (const z of [tz0 - 0.08, tz1 + 0.08]) painted.box(frame, x + 0.22, 0.03, z, 0.46 + random() * 0.1, 0.04 + random() * 0.04, 0.14 + random() * 0.06, random() < 0.5 ? '#4a3a2c' : '#5a4836');
+      // Clods a little narrower than their spacing: overlapping, two of them would put faces in one plane by chance.
+      for (const z of [tz0 - 0.08, tz1 + 0.08]) painted.box(frame, x + 0.22, 0.03, z, 0.4 + random() * 0.04, 0.04 + random() * 0.04, 0.14 + random() * 0.06, random() < 0.5 ? '#4a3a2c' : '#5a4836');
     }
     // Steel plates over the trench's far half: thick, dull, their edges standing up a little from the slabs.
-    for (const [i, x] of plates.entries()) painted.box(frame, x + i * 0.05, 0.015, (tz0 + tz1) / 2, 2.4, 0.03, tz1 - tz0 + 0.5, i % 2 ? '#4e5054' : '#5a5c60');
+    for (const [i, x] of plates.entries()) painted.box(frame, x + i * 0.05, 0.015, (tz0 + tz1) / 2, PLATE_LENGTH, 0.03, tz1 - tz0 + 0.5, i % 2 ? '#4e5054' : '#5a5c60');
     // The spoil: a lumpy heap of earth and broken slab beyond the trench.
     const heap = new THREE.SphereGeometry(1, 12, 6, 0, Math.PI * 2, 0, Math.PI / 2);
     const pos = heap.getAttribute('position') as THREE.BufferAttribute;
@@ -333,8 +338,7 @@ function fenceMesh(anisotropy: number): THREE.MeshStandardMaterial {
     ctx.stroke();
   }
   const texture = toTexture(canvas, anisotropy);
-  texture.wrapS = THREE.RepeatWrapping;
-  texture.wrapT = THREE.RepeatWrapping;
+  repeatTexture(texture);
   texture.repeat.set(14, 8);
   return new THREE.MeshStandardMaterial({ map: texture, alphaTest: 0.4, transparent: false, side: THREE.DoubleSide, roughness: 0.5, metalness: 0.4 });
 }

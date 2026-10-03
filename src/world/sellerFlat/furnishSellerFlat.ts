@@ -18,6 +18,9 @@ import { placeDecor } from '../props/decor';
 import { Prop, disposeTree } from '../props/Prop';
 import { TravelDoor } from '../travel/TravelDoor';
 import { RoomWindow } from '../props/Window';
+import { leaseOutlookFrom } from '../outlook/sharedOutlook';
+import { facadesInView } from '../outlook/inView';
+import { GROUND_FLOOR, STOREY } from '../street/streetPlan';
 import { KitchenTable } from '../kitchen/KitchenTable';
 import { Chair } from '../kitchen/Chair';
 import { Seat } from '../Seat';
@@ -56,7 +59,13 @@ export function furnishSellerFlat(zone: Zone, ctx: BuildContext): ZoneHandle {
   zone.placeAt(new TravelDoor({ style: 'panelled', label: 'Front Street · go out', to: 'street', leafColor: 0x5a3a2a }), PLAN.exit);
   const windows: RoomWindow[] = [];
   const { wall, along, width, height } = PLAN.window;
-  windows.push(zone.placeAt(new RoomWindow(sky.outdoors, { width, height, sunlight: false, onCurtainsChange: curtainsToSkylight(room, windows) }), { wall, along, y: RoomWindow.mountY(height) }));
+  // The window looks out from where the flat really is (`PLAN.outlook`): the shared panorama's eye is our living room, 520 m off.
+  const { at, storey, without } = PLAN.outlook;
+  const glassAt = new THREE.Matrix4().setPosition(at[0], GROUND_FLOOR + (storey - 1) * STOREY + RoomWindow.mountY(height), at[1]);
+  const outlook = sky.outdoors.viewer
+    ? leaseOutlookFrom({ dayNight: sky.dayNight, outdoors: sky.outdoors, viewer: sky.outdoors.viewer as THREE.Camera, key: 'seller', facades: () => facadesInView(at, without) }, glassAt)
+    : null;
+  windows.push(zone.placeAt(new RoomWindow(sky.outdoors, { width, height, sunlight: false, outlook, onCurtainsChange: curtainsToSkylight(room, windows) }), { wall, along, y: RoomWindow.mountY(height) }));
 
   // The living corner: two armchairs facing the set on the sideboard.
   const sideboard = zone.placeAt(new Sideboard({ width: 1.4 }), PLAN.sideboard.at);

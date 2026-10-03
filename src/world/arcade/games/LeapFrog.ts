@@ -20,8 +20,8 @@ const CROSS_POINTS = 100;
 const CROSS_SECONDS = 5;
 const CROSS_FADE = 0.6;
 const CROSS_MIN = 2;
-/** Run over, drowned or carried off the screen: seconds lost, and the frog waits this long before it is back on the kerb. */
-const DEATH_SECONDS = 2;
+/** Run over, drowned or carried off the screen: seconds lost, and the frog waits this long before it is back on the kerb (or the verge, once past it). */
+const DEATH_SECONDS = 1.5;
 const RESPAWN = 0.5;
 /** Every crossing the traffic and the river run this much faster. */
 const SPEED_PER_LEVEL = 0.14;
@@ -66,8 +66,8 @@ const STEP: Record<Dir, [dx: number, dRow: number]> = { up: [0, 1], down: [0, -1
  * river it has to land on a log and ride it (off the edge of the screen is a swim too). A hop onto
  * a row not reached yet on this crossing pays and chains the combo, as long as the hops keep
  * coming; the far bank pays a crossing (times the chain) and seconds, and everything runs faster
- * the next time over. Run over or drowned costs two seconds and the combo, and the frog starts
- * again from the kerb. The lanes are laid from the run's seed, so a run replays exactly.
+ * the next time over. Run over or drowned costs a second and a half and the combo, and the frog starts
+ * again from the kerb (from the verge once it got that far). The lanes are laid from the run's seed, so a run replays exactly.
  */
 export class LeapFrog extends BaseGame {
   readonly id = 'frog';
@@ -116,7 +116,7 @@ export class LeapFrog extends BaseGame {
     if (this.dead > 0) {
       this.dead -= dt;
       this.queued = null;
-      if (this.dead <= 0) this.toKerb();
+      if (this.dead <= 0) this.toKerb(this.reached >= VERGE);
       return;
     }
 
@@ -235,12 +235,13 @@ export class LeapFrog extends BaseGame {
     return SCREEN_H - (row + 1) * CELL;
   }
 
-  private toKerb(): void {
+  /** Back to the start; after a death past the verge, back to the verge (the road stays crossed, its hops paid). */
+  private toKerb(verge = false): void {
     this.frogX = START_X;
-    this.frogRow = 0;
+    this.frogRow = verge ? VERGE : 0;
     this.hop = null;
     this.queued = null;
-    this.reached = 0;
+    this.reached = verge ? VERGE : 0;
   }
 
   /** The hop's end: a new row pays (the far bank a whole crossing), then whatever is there decides. */

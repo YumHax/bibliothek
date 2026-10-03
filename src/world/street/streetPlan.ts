@@ -202,9 +202,14 @@ export interface FlatFront {
   balcony?: { at: number; width: number; depth: number; door: { width: number; height: number } };
 }
 
-const NEAR = 34;
-const MID = 22;
-const FAR = 14;
+/*
+ * Facade atlas densities (px/m, scaled by quality in `furnishStreet`): the near and middle rows also have their windows
+ * built in 3D (`Buildings`' `FRAMED_DETAIL`), so their paint is wall, glass and the shops' fronts; the far rows, seen
+ * from 20 m and more, give up a little so the near ones fit the 4096 atlas finer (54 px/m on high).
+ */
+const NEAR = 40;
+const MID = 24;
+const FAR = 12;
 
 /**
  * Every building face in view. The near and far rows first, then the side streets and the street ends.

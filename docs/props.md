@@ -36,8 +36,8 @@ Read this to add or change something visible in the room. The recipe is in the `
 
 - Decoration: `extends Prop` (empty footprint, never collides). Real furniture: `extends THREE.Group implements Furniture`
   with a `footprint: Box3` in local space (+ optional `colliders` list for L-shapes).
-- Build with `part()` / `boxMesh` / `cylinderMesh` (shadow-casting); textures via `createCanvas` + `toTexture` from
-  `covers/generated/canvasUtils`. See "Materials, joints and layers" below: they are what keeps z-fighting and
+- Build with `part()` / `boxMesh` / `cylinderMesh` (shadow-casting); textures via `createCanvas` (or `canvasFor`) + `toTexture` /
+  `canvasTexture` from `covers/generated/canvasUtils` (docs/graphics.md "Textures": anisotropy by intent, density). See "Materials, joints and layers" below: they are what keeps z-fighting and
   recompiles away.
 - Their geometries are cached and shared (one per size for the page): never `translate` / `rotateX` / edit
   `mesh.geometry` in place; move the mesh, or `clone()` the geometry first.
@@ -86,19 +86,54 @@ Read this to add or change something visible in the room. The recipe is in the `
   else (a `fabric()`, a patched shader). Metalness is 0 or 1: raw metal 1 (the roughness tells the finish), painted,
   enamelled or blackened metal, glass and plastic 0 (docs/graphics.md). One material per look for the page, marked shared so no zone's unload frees it,
   so looks alike batch and never recompile. Never mutate a palette material. A module-level material must be one of them
-  (or `markShared`): `npm run typecheck` refuses a bare one.
+  (or `markShared`): `npm run typecheck` refuses a bare one. Glass is `world/materials/glass`: `GLASS.clear` (a case's
+  pane), `.pane` (a door's, a lodge's), `.shelf`, `.screen` (shower screen, bathroom shelves), `.ware` (jars, glasses),
+  `.mirror`; `asGlass(mesh)` puts a see-through pane in the glass band (no shadow, clicked through). Roof and frosted
+  glass lit by the sky: `skyGlassColour` / `daylitGlass` + `lightDaylitGlass`, one formula for every such pane.
 - **Joints** (`world/props/joinery.ts`): two parts never share a face. Pick per joint: *buried* (`INSET`, 1 mm into the
   other), *proud* (`PROUD`, 2 mm out: a top over its carcass, a rim over a body), *apart* (`SEAM`, 0.5 mm: two fronts side
-  by side); `inset()`, `proud()`, `topOf(mesh)`, `partOn(parent, below, ...)` (a part resting on another, a seam above).
-- **Layers** (`world/surface/layers.ts`): anything flat on a floor, the ground or a wall takes its height from the
-  `FLOOR` / `GROUND` / `WALL` table (rug, mat, glow pool, contact shadow; marking, puddle, leaves; paper, print, notice,
-  flyer...) and its material from `onSurface(material, layer)` (a polygon offset by rank; it copies a palette material
-  rather than change it), or is made by `decal(w, h, material, layer)`. A new kind of flat thing adds a named layer to its
-  table, its lift between its neighbours'. Transparent things draw in a `RENDER_ORDER` band, never a bare number (the
-  typecheck refuses one).
+  by side); `inset()`, `proud()`, `topOf(mesh)`, `partOn(parent, below, ...)` (a part resting on another, a seam above),
+  `capOn(parent, below, height, material)` (a top `PROUD` out on all four sides of its carcass, a seam above) and
+  `bandAround(parent, body, y, height, material)` (a strap, a sash, a label band `PROUD` round a box part): never type a
+  second part with the same width or depth as the one it sits on or wraps,
+  `frontOf(mesh)` and `faceOn(face, backing, layer)` (a board's printed or lit face on the front of its frame, never a
+  hand-set z). A window's pane sits `WALL.pane` over its wall, its reflection (`PaneReflection.over`) `WALL.paneReflection`.
+- **Layers** (`world/surface/layers.ts`): anything flat on a floor, the ground, a wall or a street facade takes its
+  height from the `FLOOR` / `GROUND` / `WALL` / `FACADE` table (rug, mat, glow pool, contact shadow; marking, patch,
+  grate, puddle, leaves; paper, print, notice, flyer; a facade's pane, lettering, card, trim...) and draws as that layer:
+  `layMesh(mesh, layer)` for a mesh already built (a printed panel, a screen, a marquee `layer.lift` off a face),
+  `onSurface(material, layer)` for a material (a polygon offset of 4 units per rank, which is what holds at any distance;
+  it copies a palette material rather than change it), or `decal(w, h, material, layer)`. A bare `X.y.lift` in a file
+  that never does one of those fails the typecheck; a solid slab whose top is the layer (a rug, a doormat) says so with
+  `// convention-ok: <why>`. A new kind of flat thing adds a named layer to its table, with the next integer rank where
+  its lift falls (ranks follow the lifts). Things scattered at random heights get a band of their own (the leaves'
+  `leaf`..`leafTop`), never a random lift across other layers. Inside one merged mesh, where no offset applies, two
+  parallel faces stand `gapAt(distance)` apart. Transparent things draw in a `RENDER_ORDER` band, never a bare number
+  (the typecheck refuses one). Hand-picked millimetre offsets are counted per file against
+  `scripts/offset-baseline.json`: the count may only go down.
+- **Check, headless**: `npm run zfight` (also the last step of `npm run typecheck`, about 3 s) builds every decor kind,
+  shop prop and named piece on its own, each room as its plan lays it out (shell, decor, a shop's fixtures) and the
+  street's built parts, in Node at high quality (`world/surface/zfightCatalogue.ts`, `scripts/zfight.mjs`), and runs
+  the same detector. A pair not in `scripts/zfight-baseline.json` fails it; `--list` prints every pair, `--only <name>`
+  one subject, `--write-baseline` accepts what is there (only for a pair that can never be seen). A new kind of
+  piece the plans do not name goes in the catalogue's `PIECES`. What needs the running game (shelves of boxes, seats in
+  place, people, traffic, the market's stock) is still the browser's check below.
 - **Check**: `?debug` (or `?stats`) logs `[zfight] <zone>: N pairs` the first time each zone is shown, and
   `bibliothek.zfight()` in the console lists the overlapping coplanar faces of the player's zone (paths, gap, area,
-  where). Run it after adding a prop.
+  out to how far it holds, where); `bibliothek.zfight('<zone or registered root>')` another. Under `?debug` the street's
+  builders also warn about their own coplanar faces as they build. Run it after adding a prop. What it leaves out on
+  purpose (`world/surface/zfight.ts`): two plain materials that look the same, two that both skip the depth write, a
+  face pressed against (or sunk up to 3 mm into) another solid's opposite face, an overlap too thin to show 1.5 px wide at the distance judged,
+  the inside of a closed double-sided solid (a glass box, a full-turn lathe), a mesh flagged `userData.zfightIgnore`
+  (shells the shader pushes out: the cat's fur) and the back of a double-sided material flagged
+  `userData.zfightFrontOnly` (a room's walls: nobody stands behind them). A new false positive is a rule there, never
+  a flag on the one prop.
+- **Contact**: a piece stood against a wall runs through the skirting (`mouldings.ts` `SKIRTING`: 8 cm tall, 2 cm proud)
+  and a wainscot; that is an intersection, not a fight. What fights is a face that lands on theirs by chance: a plinth
+  top at exactly the skirting's height, a front 2 cm off the wall below it. Keep such heights off `SKIRTING.height` (the
+  check finds them). A street builder (`TriBuilder`) leaves out the faces nobody sees: `hideGround(y)` (bottoms on the
+  pavement), `hideAgainst(normal, point, bounds)` (backs against a facade, `FacadeFrame.wall(top)`; a balcony slab, a
+  display floor). It also saves the triangles.
 - **Lights**: never hide a light or a subtree holding one with `visible` (the light count changes, every lit shader
   recompiles): `setShownKeepingLights(root, shown)` (`world/lighting/keepLights.ts`), or `intensity = 0`. A glow that
   lights only its surroundings (a screen, a neon's spill) is a `PooledLight` (`world/lighting/LightPool.ts`): its zone's

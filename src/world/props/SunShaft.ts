@@ -1,5 +1,8 @@
 import * as THREE from 'three';
+import { IQ_HASH, SINE_HASH, valueNoise3 } from '@/graphics/glslNoise';
 import { RENDER_ORDER } from '@/world/surface/layers';
+import { POINT_SCALE, scalesPoints } from '@/world/particles/pointScale';
+import { additive } from '@/world/materials/blend';
 
 export interface SunShaftOptions {
   /** Glazed opening, metres (the shaft's section at the glass). */
@@ -20,16 +23,9 @@ const MOTES = 180;
 const MOTE_STRENGTH = 0.9;
 
 /** Adds colour without touching the alpha: a beam across a playing video lights it instead of blacking it out. */
-function additive(material: THREE.ShaderMaterial): THREE.ShaderMaterial {
-  material.transparent = true;
+function glowing(material: THREE.ShaderMaterial): THREE.ShaderMaterial {
   material.depthWrite = false;
-  material.blending = THREE.CustomBlending;
-  material.blendEquation = THREE.AddEquation;
-  material.blendSrc = THREE.SrcAlphaFactor;
-  material.blendDst = THREE.OneFactor;
-  material.blendSrcAlpha = THREE.ZeroFactor;
-  material.blendDstAlpha = THREE.OneFactor;
-  return material;
+  return additive(material);
 }
 
 /**
@@ -74,7 +70,7 @@ export class SunShaft extends THREE.Group {
     beamGeometry.setIndex([0, 1, 2, 0, 2, 3, 4, 6, 5, 4, 7, 6, 0, 4, 5, 0, 5, 1, 1, 5, 6, 1, 6, 2, 2, 6, 7, 2, 7, 3, 3, 7, 4, 3, 4, 0]);
     this.beam = new THREE.Mesh(
       beamGeometry,
-      additive(
+      glowing(
         new THREE.ShaderMaterial({
           uniforms: this.uniforms,
           vertexShader: BEAM_VERTEX,
@@ -104,9 +100,9 @@ export class SunShaft extends THREE.Group {
     moteGeometry.setAttribute('phase', new THREE.BufferAttribute(phases, 1));
     this.motes = new THREE.Points(
       moteGeometry,
-      additive(
+      glowing(
         new THREE.ShaderMaterial({
-          uniforms: { ...this.uniforms, moteStrength: { value: MOTE_STRENGTH }, pixelRatio: { value: Math.min(window.devicePixelRatio, 1.5) } },
+          uniforms: { ...this.uniforms, moteStrength: { value: MOTE_STRENGTH }, pointScale: POINT_SCALE },
           vertexShader: MOTE_VERTEX,
           fragmentShader: MOTE_FRAGMENT,
         }),
@@ -114,6 +110,7 @@ export class SunShaft extends THREE.Group {
     );
     this.motes.frustumCulled = false;
     this.motes.renderOrder = RENDER_ORDER.sheen;
+    scalesPoints(this.motes);
 
     for (const object of [this.beam, this.motes]) {
       object.castShadow = false;
@@ -175,6 +172,7 @@ void main() {
  * air moving). Far side only, so the camera may stand inside the beam.
  */
 const BEAM_FRAGMENT = /* glsl */ `
+${SINE_HASH}
 uniform float time;
 uniform vec3 rayDir;
 uniform vec3 color;
@@ -184,18 +182,8 @@ uniform vec4 opening;
 uniform vec3 eye;
 varying vec3 vLocal;
 
-float hash(vec3 p) {
-  p = fract(p * 0.3183099 + 0.1);
-  p *= 17.0;
-  return fract(p.x * p.y * p.z * (p.x + p.y + p.z));
-}
-float noise(vec3 x) {
-  vec3 i = floor(x);
-  vec3 f = fract(x);
-  f = f * f * (3.0 - 2.0 * f);
-  return mix(mix(mix(hash(i), hash(i + vec3(1, 0, 0)), f.x), mix(hash(i + vec3(0, 1, 0)), hash(i + vec3(1, 1, 0)), f.x), f.y),
-             mix(mix(hash(i + vec3(0, 0, 1)), hash(i + vec3(1, 0, 1)), f.x), mix(hash(i + vec3(0, 1, 1)), hash(i + vec3(1, 1, 1)), f.x), f.y), f.z);
-}
+${IQ_HASH}
+${valueNoise3('noise', 'iqHash')}
 
 /** 1 in the sun at window-local point p, 0 behind a mullion or outside the opening. */
 float lit(vec3 p) {
@@ -218,7 +206,7 @@ void main() {
   float start = max(0.0, total - beamLength * 2.0);
   float light = 0.0;
   const int STEPS = 10;
-  float jitter = fract(sin(dot(gl_FragCoord.xy, vec2(12.9898, 78.233))) * 43758.5453);
+  float jitter = sineHash(dot(gl_FragCoord.xy, vec2(12.9898, 78.233)));
   for (int i = 0; i < STEPS; i++) {
     float s = mix(start, total, (float(i) + jitter) / float(STEPS));
     vec3 p = eye + dir * s;
@@ -236,7 +224,7 @@ uniform float time;
 uniform vec3 rayDir;
 uniform float beamLength;
 uniform vec4 opening;
-uniform float pixelRatio;
+uniform float pointScale;
 attribute float phase;
 varying float vFade;
 void main() {
@@ -247,7 +235,7 @@ void main() {
   vFade = (1.0 - smoothstep(0.5, 1.0, position.z)) * (0.4 + 0.6 * abs(sin(time * 0.7 + phase * 3.1)));
   vec4 view = modelViewMatrix * vec4(p, 1.0);
   gl_Position = projectionMatrix * view;
-  gl_PointSize = clamp(2.2 * pixelRatio * (1.5 / -view.z), 1.0, 4.0);
+  gl_PointSize = clamp(3.3 * pointScale * (1.5 / -view.z), 1.0, 4.0 * pointScale);
 }
 `;
 

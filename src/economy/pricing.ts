@@ -27,26 +27,26 @@ export const POINTS_PER_TICKET = 50;
  * Points per ticket, per arcade game (by the id its machine reports). The games score on very
  * different scales (a pinball ball is worth tens of thousands, a roll up the alley a few hundred)
  * and last differently long, so each rate is set on what an ordinary player nets there a minute,
- * the coin each play costs paid: about 50 tickets (5 coins) a minute on every machine, some 20 a
- * play on a short one, 35-45 on a long one; a first-timer clears the coin, a good player makes
- * two or three times as much. The plays are measured by `npm run balance` (scripts/arcade-balance.mjs:
+ * the coin each play costs paid: about 60 tickets (6 coins) a minute on every machine, some 25-30 a
+ * play on a short one, 40-50 on a long one; a first-timer nets 20-55 (`COIN_BACK` keeps a flop from
+ * costing the coin), a good player one and a half to two times the ordinary one. The plays are measured by `npm run balance` (scripts/arcade-balance.mjs:
  * every cabinet game and the alley, hoops and pinball played headless by simulated people, a novice,
  * an ordinary player and a good one: their reactions, their timing, their slips); retune a rate
  * from its table, and check the real plays with `?payout` (see docs/economy.md).
  */
 export const PAYOUT: Readonly<Record<string, number>> = {
-  breakout: 70,
-  invaders: 75,
-  stacker: 135,
-  frog: 80,
-  snake: 14,
+  breakout: 57,
+  invaders: 65,
+  stacker: 134,
+  frog: 78,
+  snake: 12,
   comets: 47,
-  pinball: 320,
-  alley: 12,
-  duel: 16,
-  stepbeat: 175,
+  pinball: 240,
+  alley: 10,
+  duel: 18,
+  stepbeat: 195,
   sheriff: 100,
-  hoops: 16,
+  hoops: 14,
   /** LexiPunk's scale is its own: a first guess until the site's scores are seen. */
   lexipunk: 50,
   /** The ticket wheel's score is the tickets it landed on. */
@@ -64,10 +64,17 @@ export function ticketsFor(gameId: string, score: number): number {
 }
 
 /**
- * Beginner's luck: the first `plays` ticket plays on each machine pay at least `tickets` (about the coin they
- * cost and a little more), so a newcomer learning a short cabinet is not out of pocket while they learn it.
+ * Beginner's luck: the first `plays` ticket plays on each machine pay at least `tickets` (twice the coin they
+ * cost), so learning a cabinet is already a profit and the first minutes in the hall feel like winning.
  */
-export const BEGINNER = { plays: 3, tickets: 12 } as const;
+export const BEGINNER = { plays: 3, tickets: 20 } as const;
+
+/**
+ * Coin back: however badly it went, a paid ticket play pays at least the coin it cost, in tickets. A flop costs
+ * only the time, so trying a new machine or a risky run never hurts; skill is all profit on top. Not on the
+ * wheel (pure luck) nor a play the house stood or the cabinet gave free (nothing was paid to give back).
+ */
+export const COIN_BACK = TICKETS_PER_COIN * PLAY_COST;
 
 /**
  * Broke, and not even a coin's worth of tickets: the house stands the play (ticket machines only),
@@ -97,10 +104,10 @@ export const OUT_OF_ORDER_ODDS = 0.35;
 
 /**
  * Shop price of an ordinary game per platform, before the fame factor. Calibrated against the
- * arcade (`PAYOUT`): an ordinary player nets about 5 coins a minute there once the coin each play
- * costs is paid, a good one 7-9 (more on a challenge or a medal); for a good player an ordinary
+ * arcade (`PAYOUT`): an ordinary player nets about 6 coins a minute there once the coin each play
+ * costs is paid, a good one 8-10 (more on a challenge or a medal); for a good player an ordinary
  * market copy (about 0.7 of the shop price: a NES one about 110) is 12-15 minutes of play, a famous
- * shop title an hour or more, a bargain-bin game three (twice that for an ordinary player).
+ * shop title an hour or more, a bargain-bin game three (four for an ordinary player).
  */
 const BASE_PRICE: Record<PlatformId, number> = { nes: 160, snes: 240, gb: 120, megadrive: 200, n64: 280, ps1: 200 };
 
@@ -574,7 +581,7 @@ export const BOOKCASE_PRICE = 250;
 // --- The arcade's extras: medals, streaks, the weekly league, the wheel, the mystery game -------
 
 /** Tickets a medal pays, once, the first time a machine's bronze, silver or gold score is reached. */
-export const MEDAL_REWARD = { bronze: 15, silver: 40, gold: 100 } as const;
+export const MEDAL_REWARD = { bronze: 25, silver: 60, gold: 150 } as const;
 
 /**
  * Coming back day after day: the first ticket play of a day pays `perDay` tickets for every day of
@@ -599,7 +606,7 @@ export const TOURNAMENT = { entry: 3, reward: [0, 60, 180, 450], prize: 'saturda
 /**
  * The ticket wheel: what each slice pays and how wide it is (weights, so the slices are drawn to
  * their odds). Expected about 9.4 tickets a spin at the jackpot's start (10 with it at 450), under a
- * coin's worth and well under an ordinary skill play (20-45): the wheel is for the thrill, and worth a spin when the jackpot has grown. `JACKPOT` is progressive: it starts at `start`, grows by `perSpin` every spin
+ * coin's worth and well under an ordinary skill play (25-50): the wheel is for the thrill, and worth a spin when the jackpot has grown. `JACKPOT` is progressive: it starts at `start`, grows by `perSpin` every spin
  * anyone takes, and goes back to `start` when someone hits it.
  */
 export const WHEEL_SLICES: readonly { tickets: number | 'jackpot'; weight: number }[] = [
@@ -652,8 +659,8 @@ export const PRIZE_TICKETS = {
 
 /**
  * What the flat's furniture costs, in coins (the bookcase is `BOOKCASE_PRICE`; `homeGoods.ts` has the list, who sells
- * what and how many). The flat starts bare (a bookcase, the TV, a mattress): at a good player's 7-9 coins a minute at the
- * cabinets (net of the plays; an ordinary player's 5) a print or a plant is a couple of minutes, an armchair or a lamp seven to ten, a bed or a dresser
+ * what and how many). The flat starts bare (a bookcase, the TV, a mattress): at a good player's 8-10 coins a minute at the
+ * cabinets (net of the plays; an ordinary player's 6) a print or a plant is a couple of minutes, an armchair or a lamp seven to ten, a bed or a dresser
  * about a quarter of an hour, the projector the long goal (about an hour). The whole flat is some eight hours.
  */
 export const HOME_GOOD_PRICES = {

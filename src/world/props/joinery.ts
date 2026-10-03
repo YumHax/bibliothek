@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { part } from './Prop';
 import type { MeshPosition } from '../meshUtils';
+import { layMesh, type SurfaceLayer } from '../surface/layers';
 
 /*
  * How the parts of a prop meet, so no two of them ever share a face (two faces in one plane
@@ -34,6 +35,49 @@ export function topOf(mesh: THREE.Mesh): number {
   const geometry = mesh.geometry;
   if (!geometry.boundingBox) geometry.computeBoundingBox();
   return mesh.position.y + geometry.boundingBox!.max.y * mesh.scale.y;
+}
+
+/** The front (+z) face of a part made by `part` / `boxMesh` (its local z + half its depth), in its parent's space. */
+export function frontOf(mesh: THREE.Mesh): number {
+  const geometry = mesh.geometry;
+  if (!geometry.boundingBox) geometry.computeBoundingBox();
+  return mesh.position.z + geometry.boundingBox!.max.z * mesh.scale.z;
+}
+
+/**
+ * A flat `face` (a board's printed or lit face, a screen) laid on the front of `backing` (both children
+ * of one parent): `layer`'s lift out from it, with the layer's offset (`surface/layers`). Never a hand-set z.
+ */
+export function faceOn<T extends THREE.Mesh>(face: T, backing: THREE.Mesh, layer: SurfaceLayer): T {
+  face.position.z = frontOf(backing) + layer.lift;
+  return layMesh(face, layer);
+}
+
+/** A box part's own size (its geometry's bounds times its scale): what `capOn` and `bandAround` grow. */
+function sizeOf(mesh: THREE.Mesh): THREE.Vector3 {
+  const geometry = mesh.geometry;
+  if (!geometry.boundingBox) geometry.computeBoundingBox();
+  return geometry.boundingBox!.getSize(new THREE.Vector3()).multiply(mesh.scale);
+}
+
+/**
+ * A top `height` thick over `below` (an unrotated box part, both children of `parent`): `PROUD` out on all four
+ * sides and `SEAM` above it, so none of its faces can lie in the carcass's. A worktop, a lid, a cap on a post, a
+ * marquee on its cabinet. Never type the same width and depth for both by hand.
+ */
+export function capOn(parent: THREE.Object3D, below: THREE.Mesh, height: number, material: THREE.Material): THREE.Mesh {
+  const size = sizeOf(below);
+  return part(parent, proud(size.x), height, proud(size.z), material, { x: below.position.x, y: topOf(below) + SEAM + height / 2, z: below.position.z });
+}
+
+/**
+ * A band `height` tall round `body` (an unrotated box part, both children of `parent`), its middle at `y`:
+ * `PROUD` out of all four sides, so its faces never lie in the body's. A strap round a carton, a sash on a
+ * throw, a label round a crate.
+ */
+export function bandAround(parent: THREE.Object3D, body: THREE.Mesh, y: number, height: number, material: THREE.Material): THREE.Mesh {
+  const size = sizeOf(body);
+  return part(parent, proud(size.x), height, proud(size.z), material, { x: body.position.x, y, z: body.position.z });
 }
 
 /**

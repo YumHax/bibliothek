@@ -46,6 +46,15 @@ export function instancedStandard(parameters: THREE.MeshStandardMaterialParamete
   return shared(`instanced|standard|${keyOf(parameters)}`, () => standardMaterial(parameters));
 }
 
+/**
+ * A shared look made from `standard(parameters)` by `finish` (a weather patch: `street/snowCover`'s
+ * `snowPaint`): its own material under `variant`, never the palette's plain one, since patching that
+ * would change every prop of that colour (and stack the patch again at each rebuild).
+ */
+export function standardVariant(variant: string, parameters: THREE.MeshStandardMaterialParameters, finish: (material: THREE.MeshStandardMaterial) => THREE.MeshStandardMaterial): THREE.MeshStandardMaterial {
+  return shared(`${variant}|standard|${keyOf(parameters)}`, () => finish(standardMaterial(parameters)));
+}
+
 /** `envMapIntensity` is ignored by three under a scene environment: honoured through `envBoost`. */
 function standardMaterial(parameters: THREE.MeshStandardMaterialParameters): THREE.MeshStandardMaterial {
   return envBoost(new THREE.MeshStandardMaterial(parameters), parameters.envMapIntensity ?? 1);

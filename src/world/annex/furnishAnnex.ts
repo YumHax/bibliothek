@@ -8,6 +8,7 @@ import { furnishShell } from '../shell';
 import { furnishDecor, placeRoomLight } from '../build/roomParts';
 import { curtainsToSkylight } from '../build/follow';
 import { RoomWindow } from '../props/Window';
+import { homeOutlook } from '../outlook/sharedOutlook';
 import { reportFlatRoom } from '../city/flatWindows';
 import { floorPointsToWorld } from '../zone/attach';
 import { resolvePlacement } from '../Placement';
@@ -46,7 +47,7 @@ export function furnishAnnex(zone: Zone, ctx: BuildContext): AnnexHandle {
   const { size, along } = plan.windows;
   const windows: RoomWindow[] = [];
   const onCurtainsChange = curtainsToSkylight(room, windows);
-  for (const x of along) windows.push(zone.placeAt(new RoomWindow(sky.outdoors, { ...size, onCurtainsChange }), { wall: 'front', along: x, y: RoomWindow.mountY(size.height) }));
+  for (const x of along) windows.push(zone.placeAt(new RoomWindow(sky.outdoors, { ...size, onCurtainsChange, outlook: homeOutlook(sky.outdoors) }), { wall: 'front', along: x, y: RoomWindow.mountY(size.height) }));
 
   zone.placeAt(
     new Fireplace(

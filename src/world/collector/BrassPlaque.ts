@@ -107,5 +107,5 @@ function paintPlate(games: number, since: string): THREE.CanvasTexture {
     ctx.fillStyle = '#3d2a08';
     ctx.fillText(text, w / 2, y);
   }
-  return toTexture(canvas, 4);
+  return toTexture(canvas, 'facing');
 }

@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { Reflector } from 'three/examples/jsm/objects/Reflector.js';
-import { FLOOR } from '../surface/layers';
+import { FLOOR, onSurface } from '../surface/layers';
+import { additiveOne } from '@/world/materials/blend';
 
 /**
  * Reflection texture size: half the drawing buffer's (the reflection is blurred anyway), with the
@@ -31,16 +32,11 @@ export function glossyFloor(width: number, depth: number, strength: number): THR
   floor.name = 'GlossyFloor';
   floor.rotation.x = -Math.PI / 2;
   floor.position.y = FLOOR.gloss.lift;
-  const material = floor.material as THREE.ShaderMaterial;
+  const material = onSurface(floor.material as THREE.ShaderMaterial, FLOOR.gloss, { depthWrite: false });
   material.uniforms.strength.value = strength;
   material.transparent = true;
   material.depthWrite = false;
-  material.blending = THREE.CustomBlending;
-  material.blendEquation = THREE.AddEquation;
-  material.blendSrc = THREE.OneFactor;
-  material.blendDst = THREE.OneFactor;
-  material.blendSrcAlpha = THREE.ZeroFactor;
-  material.blendDstAlpha = THREE.OneFactor;
+  additiveOne(material);
   floor.receiveShadow = false;
   floor.castShadow = false;
   const reflect = floor.onBeforeRender.bind(floor);

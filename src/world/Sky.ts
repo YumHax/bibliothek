@@ -5,6 +5,7 @@ import { localPlace } from './props/solar';
 import { Outdoors, type NearWall } from './props/outdoors/Outdoors';
 import { type Festivity, type Holiday, type Season, festivitiesOf, holidayOf, seasonOf, useFestivities } from '@/time/season';
 import { Weather, type WeatherKind } from './weather/Weather';
+import { streetWindows } from './outlook/sharedOutlook';
 
 export interface SkyOptions {
   /** Initial time of day (hours). Default 8, a sunny morning. */
@@ -53,7 +54,8 @@ export class Sky implements Updatable {
       this.weather.settle();
     }
     this.dayNight.setWeather(this.weather.state);
-    this.outdoors = new Outdoors(this.dayNight, { primaryRotationY: options.sunRotationY, nearWall: options.nearWall, season, holiday: options.holiday, viewer: options.viewer });
+    // Where the windows show the street's 3D view, the painted one waits for a pane to draw it (perhaps never).
+    this.outdoors = new Outdoors(this.dayNight, { primaryRotationY: options.sunRotationY, nearWall: options.nearWall, season, holiday: options.holiday, viewer: options.viewer, paintOnFirstDraw: streetWindows() });
   }
 
   update(dt: number): void {

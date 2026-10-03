@@ -1,9 +1,9 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import type { DayNight } from '../../props/DayNight';
-import { LORRY, lorryGeometries } from '../carModel';
+import { LORRY, lorryGeometries, vehicleGlass } from '../carModel';
 import { snowCovered } from '../snowCover';
-import { paint, standard } from '../../materials/palette';
+import { paint } from '../../materials/palette';
 import { bareMetal } from '../metals';
 import { EmergencyVehicle, shade, type EmergencyOptions } from './Emergency';
 import { LampMaterial } from './lampMaterial';
@@ -34,7 +34,7 @@ export class FireEngine extends EmergencyVehicle {
     g.beacon.dispose();
     this.add(
       shade(new THREE.Mesh(g.body, snowCovered(new THREE.MeshStandardMaterial({ color: 0xb3221c, roughness: 0.35 })))),
-      shade(new THREE.Mesh(g.glass, standard({ color: 0x1a232b, roughness: 0.06 }))),
+      shade(new THREE.Mesh(g.glass, vehicleGlass())),
       shade(new THREE.Mesh(g.wheels, wheels)),
       new THREE.Mesh(g.lamps, lamps),
     );

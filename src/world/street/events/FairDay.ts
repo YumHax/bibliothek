@@ -137,7 +137,7 @@ function bannerTexture(): THREE.CanvasTexture {
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillText('GRAND FLEA FAIR TODAY', 512, 44, 980);
-  return toTexture(canvas, 4);
+  return toTexture(canvas, 'facing');
 }
 
 /** The A-board's face: the Fair, through RETRO GAMES to the hall. */
@@ -159,5 +159,5 @@ function boardTexture(): THREE.CanvasTexture {
   ctx.fillText('RETRO GAMES', 96, 200, 180);
   ctx.font = 'bold 34px sans-serif';
   ctx.fillText('→', 96, 246);
-  return toTexture(canvas, 4);
+  return toTexture(canvas, 'facing');
 }

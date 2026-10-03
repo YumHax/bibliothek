@@ -26,8 +26,10 @@ editor's "add" pane). Games are bought with coins; coins are won at the arcade:
    on the day's first ticket play, the streak's bonus (`ArcadeLeague`), and counts it all in the weekly league
    (`record`; the arcade tee's and a tournament round's tickets count too, `ArcadeLeague.count`; a finished week is
    announced once, on the next ticket play, a won one bringing the pennant home, and until then the league board and the
-   attendant say how it went, `lastWeek`). A machine's first `BEGINNER.plays` (3) plays pay at least `BEGINNER.tickets` (12,
-   "+N BEGINNER" on the end card), so learning a short cabinet does not cost coins. LexiPunk plays free
+   attendant say how it went, `lastWeek`). A machine's first `BEGINNER.plays` (3) plays pay at least `BEGINNER.tickets` (20,
+   "+N BEGINNER" on the end card), so learning a cabinet is already a profit; after that every paid ticket play pays
+   at least its coin back (`COIN_BACK`, 10 tickets, "+N COIN BACK" on the end card, no banner): a flop costs only
+   the time, skill is all profit on top (not the wheel, nor a play the house stood or a free one). LexiPunk plays free
    (`freePlay` in its plan entry: FREE PLAY on its card, no coin taken or returned) until its page reports scores. A score that makes the hall of fame asks for
    initials first (the machine is still `isPlaying` until they are signed). The end card counts the score's tickets
    up (`MachineRun`, 1.2 s), then each bonus under it ("+60 CHALLENGE", "+15 BRONZE MEDAL", "+30 DAY 3 STREAK",
@@ -104,28 +106,33 @@ copy bought off a stall that morning is never a sure profit at noon. The job lot
 whose fame is unknown (offline), and asked again next time. A price is `BASE_PRICE[platform] x
 fameFactor(views) x jitter(id)`: no real price source exists key-less, so fame stands in for value (see below).
 Calibration: `PAYOUT` sets each machine's points per ticket so that an ordinary player nets about the same there,
-the coin each play costs paid: some 50 tickets (5 coins) a minute whatever the machine (a short play of 10-20 s about
-20-35 tickets, a 30-second one 40-45); a first-timer still clears the coin on every machine (SKY STACK and NEON SNAKE
-only just), a good player nets 7-9 coins a minute (NEON SNAKE and SKY STACK pay skill most), more on a challenge or a
-medal. The plays are measured by **`npm run balance`** (`scripts/arcade-balance.mjs`): every cabinet game, the hoops,
+the coin each play costs paid: some 60 tickets (6 coins) a minute whatever the machine (a short play of 10-20 s about
+25-35 tickets, a 30-second one 45-50); a first-timer nets 20-55 a minute (NEON SNAKE, SKY STACK, STEP BEAT and NEON
+SHERIFF are the skill machines, 20-25; the coin back means a flop never loses), a good player 8-10 coins a minute
+(NEON SNAKE and SKY STACK pay skill most), more on a challenge or a medal. The plays are measured by **`npm run balance`** (`scripts/arcade-balance.mjs`): every cabinet game, the hoops,
 the alley and the pinball played headless at the machines' own step by simulated people (a novice, an ordinary
 player, a good one: reaction time, the spread of a timed press, slips; on the pinball the machine's flipper timing
 made late, the plunger pulled a different way each ball) and by a regular's autopilot, printing per profile the
-points, seconds, tickets and net tickets a minute, and the rate that would net `--net` a minute for the ordinary
-player. The people are models: compare the machines with each other, then check real plays with `?payout`
+points, seconds, tickets (the coin back counted) and net tickets a minute, the share of plays whose score paid under
+the coin, and the rate that would net `--net` (60) a minute for the ordinary player. The people are models: compare the machines with each other, then check real plays with `?payout`
 (`PayoutStats`, `PayoutOverlay`; `simulatePayouts()` in the console runs the cabinets' autopilots in the browser).
 `rivals.ts` holds each game's starting table, set from the same runs (the fifth an ordinary player's usual play, the
 fourth their good one, the third a good player's usual, the second a good player's best in ten, the first beyond),
 and the daily challenge aims between its fourth and second (`CHALLENGE_BAND`). When a game's scoring changes, rerun
 the balance, move its rate and table, and bump its `SCORE_RULES` (`rivals.ts`): `ArcadeScores` then drops that game's
 saved best and table entries once (a best made under easier rules would wall the table off; medals paid stay paid,
-replays that no longer end on their score are dropped anyway). The September 2026 pass found an ordinary play paying
+replays that no longer end on their score are dropped anyway; a game made easier needs no bump: its old bests
+are lower, they wall nothing off). The October 2026 pass (the arcade had to feel rewarding, not hard) raised the
+target from 50 to 60, added `COIN_BACK`, doubled `BEGINNER`, raised `MEDAL_REWARD` and softened seven cabinets
+(cheaper crashes and misses, wider STEP BEAT windows and FEVER at 16, a slower first SKY STACK row, slower bandits,
+a sloppier PADDLE WARS opponent, LEAP FROG's verge checkpoint): first-timers had lost the coin on a third of their
+NEON SNAKE and SKY STACK plays and netted 8-15 a minute on four machines. The September 2026 pass found an ordinary play paying
 from 7-11 tickets (NEON SNAKE, PADDLE WARS, COMET DASH: under the coin, close to impossible to profit) to over a
 hundred (STAR RAID's four shots in the air, the hoops' roof net sliding every hard throw in); LexiPunk's rate is a guess until the site's scores are
 seen. The extras have their numbers there too: `MEDAL_REWARD`, `STREAK`, `LEAGUE`,
 `WHEEL_SLICES` and `JACKPOT` (the wheel pays about 9.4 tickets a spin on average at the jackpot's start, 10 with it at
 450: under a coin's worth, a thrill, not an earner), `MYSTERY_GAME_TICKETS` and `MYSTERY_GAME_MAX_PRICE`. Base prices
-are set against that rate (net, a good player; an ordinary one takes about half again as long):
+are set against that rate (net, a good player; an ordinary one takes about 40% longer):
 
 | Buy | Coins | Plays | Time |
 | --- | --- | --- | --- |
@@ -136,7 +143,7 @@ are set against that rate (net, a good player; an ordinary one takes about half 
 | A bookcase | 250 | ~93 | ~30 min |
 | The projector | 550 | ~204 | ~65 min |
 | A grail | 800-2 400 | | 1.5-4.5 h |
-| The whole flat | ~4 250 | ~1 570 | ~8 h (a novice about 20) |
+| The whole flat | ~4 250 | ~1 570 | ~8 h (a novice about 18) |
 | Mrs Roux's flat next door | 1 500 | ~560 | ~3 h |
 
 A worn cheap copy is 2-4 minutes, a legend on a stall (Ocarina of Time about 600) over an hour. `STARTING_COINS` is 20: the first
@@ -538,20 +545,20 @@ Nothing costs the play except the clock or the game's own single rule; mistakes 
 | --- | --- | --- | --- | --- |
 | `Breakout` BRICK STORM | 30 s | clock bricks +3 s, wall clear +5 s (and +300) | last ball lost -3 s (any ball lost breaks the chain) | per wall: ball +10%, paddle -5 px (to 52), a row more every 2 walls (to 6), a clock brick fewer every 2 walls (to 1) |
 | `Invaders` STAR RAID | 15 s | saucer +3 s (and 100), wave clear +5 s (and +200) | a diver getting past -1 s (two shots in the air; one that hits nothing breaks the chain) | per wave: march faster, a row more every 3 waves (to 5), divers quicker, saucer +15% speed and 0.5 s rarer |
-| `Stacker` SKY STACK | 12 s | every landed row +1.5 s, a clean one +1 s more, minor prize (row 10) +5 s, jackpot (row 15) +10 s | a landing that lost cells +1 s less (net +0.5 s) | per row: faster block, narrower (3 / 2 / 1 cells); each tower after a jackpot +25% speed; a miss ends it |
-| `LeapFrog` LEAP FROG | 15 s | each crossing +5 s, 0.6 s less each crossing after (to 2) | run over, drowned or carried off the screen -2 s (and the combo), back on the kerb | per crossing: traffic and logs +14% |
-| `Snake` NEON SNAKE | 15 s | every pellet +0.4 s, gold pellet +2 s (every 5th, for 4 s), every 6 pellets a stage +2 s | a wall or your own tail -3 s (and the combo), the snake starts again short | per stage: +0.9 cells/s (from 7.5, to 17) |
-| `Comets` COMET DASH | 15 s | clocks +2 s (one faller in 9), every 12 stars a stage +2 s | a rock -2 s (and the combo), then 1 s of shield | per stage: rocks faster, spawns denser |
-| `Duel` PADDLE WARS | 20 s | a goal +3 s (and 150), every 3 goals a set +2 s | a goal conceded -2 s (and the combo) | per set: ball +12%, player two faster (it reacts once the ball crosses half the court, aims up to 24 px off, 105 px/s and +10 a set) |
-| `StepBeat` STEP BEAT | 20 s | FEVER (24 clean steps) +2 s and x2 for 4 s, every 20 steps a stage +2 s | a late arrow or a step on nothing -1 s | per stage: +8 BPM (to 176), denser charts, jumps from stage 2 |
-| `NeonSheriff` NEON SHERIFF | 15 s | the sheriff's star +3 s, every 8 bandits a stage +2 s (a quarter less each stage after, to 0.5) | a bandit who draws first -1 s, shooting townsfolk -2 s (and the combo) | per stage: faster draws, more at once (to 5) |
+| `Stacker` SKY STACK | 12 s | every landed row +1.5 s, a clean one +1 s more, minor prize (row 10) +5 s, jackpot (row 15) +10 s | a landing that lost cells +1 s less (net +0.5 s) | per row: faster block (4 cells/s on row 1, +0.6 a row), narrower (3 / 2 / 1 cells); each tower after a jackpot +25% speed; a miss ends it |
+| `LeapFrog` LEAP FROG | 15 s | each crossing +5 s, 0.6 s less each crossing after (to 2) | run over, drowned or carried off the screen -1.5 s (and the combo), back on the kerb (on the verge once past it) | per crossing: traffic and logs +14% |
+| `Snake` NEON SNAKE | 15 s | every pellet +0.4 s, gold pellet +2 s (every 5th, for 4 s), every 6 pellets a stage +2 s | a wall or your own tail -2 s (and the combo), the snake starts again short | per stage: +0.9 cells/s (from 7.5, to 17) |
+| `Comets` COMET DASH | 15 s | clocks +2 s (one faller in 9), every 12 stars a stage +2 s | a rock -1.5 s (and the combo), then 1 s of shield | per stage: rocks faster, spawns denser |
+| `Duel` PADDLE WARS | 20 s | a goal +3 s (and 150), every 3 goals a set +2 s | a goal conceded -1.5 s (and the combo) | per set: ball +12%, player two faster (it reacts once the ball crosses half the court, aims up to 30 px off, 105 px/s and +10 a set) |
+| `StepBeat` STEP BEAT | 20 s | FEVER (16 clean steps) +2 s and x2 for 4 s, every 20 steps a stage +2 s | a late arrow or a step on nothing -0.6 s | per stage: +8 BPM (to 176), denser charts, jumps from stage 2 |
+| `NeonSheriff` NEON SHERIFF | 15 s | the sheriff's star +3 s, every 8 bandits a stage +2 s (a quarter less each stage after, to 0.5) | a bandit who draws first (1.8 s at first) -1 s, shooting townsfolk -2 s (and the combo) | per stage: faster draws, more at once (to 5) |
 
 Scoring: bricks 30-100 (chain within 1.2 s, broken by a ball lost), aliens 5-25, divers 100 and the saucer 100
 (chain within 1.5 s, broken by a shot that hits nothing), stack row *n* pays 25*n* (+40 and chain when clean, +300
 minor, +1500 jackpot), a hop onto a row not reached yet this crossing 10 and the far bank 100 (chain within 1.4 s,
 broken by dying), pellets 20 and gold 100 (two pellets on the board; chain within 2.5 s), stars 30 (some in a trail of
 three; caught 5 px wider than drawn; chain within 2 s), returns 10 (+10 smashed with Space held; chain within 3 s) and
-goals 150, steps MARVELOUS 30 / GREAT 20 / GOOD 10 per panel
+goals 150, steps MARVELOUS 30 / GREAT 20 / GOOD 10 per panel (within 50 / 100 / 160 ms)
 (every step chains), bandits 50, quick ones 80 (+20 before they reach for the gun; chain within 1.6 s), bottles 30. Every
 game is unbounded in theory: the seconds it hands out are enough to keep going at the pace a very good player
 sets, and the difficulty ramp is what ends the run.

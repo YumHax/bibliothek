@@ -1,8 +1,9 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { createCanvas, seededRandom, toTexture } from '@/covers/generated/canvasUtils';
+import { createCanvas, seededRandom, toTexture, repeatTexture } from '@/covers/generated/canvasUtils';
 import { Prop } from '../props/Prop';
 import { ROOF_PLAN as plan } from './roofPlan';
+import { paintOnce } from '../materials/paintedTiles';
 
 type Finish = 'zinc' | 'iron' | 'brick' | 'pot' | 'boards' | 'gable';
 
@@ -69,9 +70,9 @@ export class RoofTop extends Prop {
 
   private build(): void {
     const materials: Record<Finish, THREE.Material> = {
-      zinc: new THREE.MeshStandardMaterial({ map: zincTexture(), color: 0xb8bcc0, roughness: 0.55, metalness: 0.35 }),
+      zinc: new THREE.MeshStandardMaterial({ map: paintOnce('roof:zinc', () => [zincTexture()] as const)[0], color: 0xb8bcc0, roughness: 0.55, metalness: 0.35 }),
       iron: new THREE.MeshStandardMaterial({ color: 0x24262a, roughness: 0.5 }),
-      brick: new THREE.MeshStandardMaterial({ map: brickTexture(), roughness: 0.9 }),
+      brick: new THREE.MeshStandardMaterial({ map: paintOnce('roof:brick', () => [brickTexture()] as const)[0], roughness: 0.9 }),
       pot: new THREE.MeshStandardMaterial({ color: 0xa8583a, roughness: 0.85, side: THREE.DoubleSide }),
       boards: new THREE.MeshStandardMaterial({ color: 0x7a6a56, roughness: 0.9 }),
       gable: new THREE.MeshStandardMaterial({ color: 0xcfc4ae, roughness: 0.92 }),
@@ -136,9 +137,8 @@ function zincTexture(): THREE.CanvasTexture {
     ctx.fillStyle = 'rgba(30,34,40,0.4)';
     ctx.fillRect(x + 3, 0, 2, px);
   }
-  const texture = toTexture(canvas, 8);
-  texture.wrapS = THREE.RepeatWrapping;
-  texture.wrapT = THREE.RepeatWrapping;
+  const texture = toTexture(canvas, 'grazing');
+  repeatTexture(texture);
   return texture;
 }
 
@@ -165,8 +165,7 @@ function brickTexture(): THREE.CanvasTexture {
   g.addColorStop(1, 'rgba(20,16,14,0.05)');
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, px, px);
-  const texture = toTexture(canvas, 4);
-  texture.wrapS = THREE.RepeatWrapping;
-  texture.wrapT = THREE.RepeatWrapping;
+  const texture = toTexture(canvas, 'grazing');
+  repeatTexture(texture);
   return texture;
 }

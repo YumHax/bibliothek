@@ -117,5 +117,5 @@ function paintBoard(wM: number, hM: number, notes: string[], random: () => numbe
       ctx.fillText(words.slice(half).join(' '), nw / 2, nw * 0.64);
     }, i + 2);
   });
-  return toTexture(canvas, 4);
+  return toTexture(canvas, 'facing');
 }

@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { anisotropyFor } from '@/graphics/canvas';
 import { QUALITY } from '@/graphics/quality';
 import type { Zone } from '../zone/Zone';
 import type { BuildContext, ZoneHandle } from '../buildContext';
@@ -22,7 +23,8 @@ import { RoofPigeons } from './RoofPigeons';
 import { Fireworks } from './Fireworks';
 import { RoofWind } from './RoofWind';
 
-const ANISOTROPY = 8;
+// The facades and the yard are walked past at a slant.
+const ANISOTROPY = anisotropyFor('grazing');
 
 /**
  * Builds the roof from `ROOF_PLAN`: the zinc top of our mansard with its railing, chimney stacks,

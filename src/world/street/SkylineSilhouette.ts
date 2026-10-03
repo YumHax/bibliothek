@@ -33,7 +33,7 @@ export class SkylineSilhouette {
     // reads the cladding and the beacons (G, B, A) at the column's centre, where linear is exact.
     this.texture.magFilter = THREE.LinearFilter;
     this.texture.minFilter = THREE.LinearFilter;
-    this.texture.wrapS = THREE.RepeatWrapping;
+    this.texture.wrapS = THREE.RepeatWrapping; // convention-ok: wraps one way only
     this.texture.generateMipmaps = false;
   }
 

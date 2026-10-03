@@ -1,15 +1,11 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { createCanvas, seededRandom, toTexture } from '@/covers/generated/canvasUtils';
+import { createCanvas, seededRandom, toTexture, repeatTexture } from '@/covers/generated/canvasUtils';
 import { Prop } from '../props/Prop';
-import { CELL, CELLAR_PLAN as plan, COLUMNS, CROWN, ROWS, SPRING, cellAt, cellCentre, isOpen } from './cellarPlan';
+import { CELL, CELLAR_PLAN as plan, COLUMNS, CROWN, ROWS, SPRING, brickSides, cellAt, cellCentre, type CellSide } from './cellarPlan';
+import { paintOnce } from '../materials/paintedTiles';
 
 type Finish = 'brick' | 'floor';
-type Side = 'north' | 'south' | 'east' | 'west';
-
-/** Each side's step on the grid: north is +z (row + 1). */
-const STEP: Record<Side, [dc: number, dr: number]> = { north: [0, 1], south: [0, -1], east: [1, 0], west: [-1, 0] };
-const SIDES: Side[] = ['north', 'south', 'east', 'west'];
 /** The colliders' thickness behind a wall face (m). */
 const T = 0.12;
 /** The brick tile's size in the world (m): four bricks across, eight courses up. */
@@ -47,8 +43,8 @@ export class CellarVaults extends Prop {
     this.door = stairs.door;
     this.stairsBox = stairs.box;
     const materials: Record<Finish, THREE.Material> = {
-      brick: new THREE.MeshStandardMaterial({ map: brickTexture(), roughness: 0.95, vertexColors: true }),
-      floor: new THREE.MeshStandardMaterial({ map: flagTexture(), roughness: 0.9, vertexColors: true }),
+      brick: new THREE.MeshStandardMaterial({ map: paintOnce('cellar:brick', () => [brickTexture()] as const)[0], roughness: 0.95, vertexColors: true }),
+      floor: new THREE.MeshStandardMaterial({ map: paintOnce('cellar:flags', () => [flagTexture()] as const)[0], roughness: 0.9, vertexColors: true }),
     };
     for (const [finish, geometries] of this.parts) {
       const mesh = new THREE.Mesh(mergeGeometries(geometries)!, materials[finish]);
@@ -63,30 +59,15 @@ export class CellarVaults extends Prop {
   private buildCell(c: number, r: number): void {
     const [x, z] = cellCentre(c, r);
     const h = CELL / 2;
-    const here = cellAt(c, r);
-    const box = /\d/.test(here) ? plan.boxes.find((b) => String(b.n) === here) : undefined;
     this.put('floor', quadFlat(x - h, x + h, z - h, z + h, 0));
-    for (const side of SIDES) {
-      const [dc, dr] = STEP[side];
-      const nc = c + dc;
-      const nr = r + dr;
-      // Passage to passage: open. A box's front: its slats. The stairs' mouth: the tunnel.
-      if (isOpen(c, r) && isOpen(nc, nr)) continue;
-      if (box && box.faces === side) continue;
-      const neighbour = cellAt(nc, nr);
-      const faced = plan.boxes.find((b) => String(b.n) === neighbour);
-      if (isOpen(c, r) && faced && STEP[faced.faces][0] === -dc && STEP[faced.faces][1] === -dr) continue;
-      if (here === 'S' && side === 'north') {
-        this.buildMouth(x, z + h);
-        continue;
-      }
-      this.wallFacing(x, z, side);
-    }
+    // Brick where `brickSides` says (the same answer the timer buttons are hung by); the stairs' mouth: the tunnel.
+    for (const side of brickSides(c, r)) this.wallFacing(x, z, side);
+    if (cellAt(c, r) === 'S') this.buildMouth(x, z + h);
     this.vault(x, z);
   }
 
   /** The wall on `side` of the cell centred (x, z), facing into it, and its collider just behind. */
-  private wallFacing(x: number, z: number, side: Side): void {
+  private wallFacing(x: number, z: number, side: CellSide): void {
     const h = CELL / 2;
     switch (side) {
       case 'north':
@@ -268,8 +249,8 @@ function brickTexture(): THREE.CanvasTexture {
     ctx.fillStyle = random() < 0.5 ? 'rgba(20, 12, 8, 0.18)' : 'rgba(240, 220, 200, 0.08)';
     ctx.fillRect(random() * 512, random() * 320, 2, 2);
   }
-  const texture = toTexture(canvas, 4);
-  texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+  const texture = toTexture(canvas, 'grazing');
+  repeatTexture(texture);
   return texture;
 }
 
@@ -294,7 +275,7 @@ function flagTexture(): THREE.CanvasTexture {
     ctx.arc(random() * 512, random() * 512, 20 + random() * 60, 0, Math.PI * 2);
     ctx.fill();
   }
-  const texture = toTexture(canvas, 4);
-  texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+  const texture = toTexture(canvas, 'grazing');
+  repeatTexture(texture);
   return texture;
 }

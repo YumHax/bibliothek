@@ -110,5 +110,5 @@ function signTexture(): THREE.Texture {
   ctx.fillText('your old games!', 310, 210);
   ctx.font = 'italic 34px Georgia, serif';
   ctx.fillText('— the residents', 330, 290);
-  return toTexture(canvas, 4);
+  return toTexture(canvas, 'facing');
 }

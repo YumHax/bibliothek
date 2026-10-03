@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { canvasTexture } from '@/graphics/canvas';
 
 /** Past this many rects waiting, the whole canvas goes up once instead. */
 const MAX_REGIONS = 96;
@@ -18,7 +19,8 @@ export class RegionUploader {
   constructor(private readonly texture: THREE.Texture) {
     const canvas = document.createElement('canvas');
     this.ctx = canvas.getContext('2d')!;
-    this.scratch = new THREE.CanvasTexture(canvas);
+    // Only its pixels are copied (into the target's own format): never sampled, so no colour space.
+    this.scratch = canvasTexture(canvas, { data: true, mipmaps: false });
   }
 
   /** The rect (canvas pixels, y down) was repainted: it goes up at the next draw. */

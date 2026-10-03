@@ -43,8 +43,10 @@ room's plan; edit the entry.
 3. Register it: one line in `DECOR_KINDS` (`src/world/props/decor.ts`): `myThing: (o: MyThingOptions = {}) => new MyThing(o),`
    (there is no barrel file: import the class by its path).
 4. Add its plan line(s) to the room's `decor`; add a row to the kinds table in `docs/props.md`.
-5. `npm run typecheck && npm run build` (the typecheck also runs the convention checks). Tell the user to look at it
-   with `?debug`: the console's `[zfight]` line for the room, or `bibliothek.zfight()`, lists faces that fight.
+5. `npm run typecheck && npm run build` (the typecheck also runs the convention checks and `npm run zfight`, which
+   builds the new kind headless and fails on two of its faces in one plane: `npm run zfight -- --only prop:myThing --list`).
+   Fix a pair with `PROUD` / `INSET` / `capOn` / `bandAround`, never by accepting it into the baseline. For what only the
+   running room shows, tell the user to look with `?debug`: `bibliothek.zfight()` lists faces that fight.
 
 ## Props that need wiring (a callback, the clock, the collection) or exist once (a bed, a bathtub)
 

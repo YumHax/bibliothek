@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import type { Updatable } from '@/core/Engine';
 import type { Furniture } from '@/world/Furniture';
 import { boxMesh, cylinderMesh } from '@/world/meshUtils';
-import { createCanvas, toTexture } from '@/covers/generated/canvasUtils';
+import { createCanvas, toTexture, repeatTexture } from '@/covers/generated/canvasUtils';
 import type { ScratcherLike } from './types';
 import { paint, timber } from '@/world/materials/palette';
 
@@ -144,9 +144,8 @@ function sisalTexture(): THREE.CanvasTexture {
       ctx.fillRect(x, y + 1 + ((k * 17 + i * 5) % (band - 3)), 3, 1);
     }
   }
-  const texture = toTexture(canvas, 4);
-  texture.wrapS = THREE.RepeatWrapping;
-  texture.wrapT = THREE.RepeatWrapping;
+  const texture = toTexture(canvas, 'facing');
+  repeatTexture(texture);
   // 32 turns per 512 px; the post's 0.62 m wants ~70 turns of ~9 mm rope.
   texture.repeat.set(1, 2.2);
   return texture;

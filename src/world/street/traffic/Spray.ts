@@ -6,6 +6,8 @@ import type { DayNight } from '../../props/DayNight';
 import { ROAD_Y } from './driving';
 import type { StreetTraffic } from './StreetTraffic';
 import { RENDER_ORDER } from '../../surface/layers';
+import { POINT_SCALE, scalesPoints } from '../../particles/pointScale';
+import { overKeepingAlpha } from '@/world/materials/blend';
 
 /** How long a droplet flies (s), gravity on it, and how wet the road must be before anything throws spray. */
 const LIFE = 0.9;
@@ -21,6 +23,7 @@ const VERTEX = /* glsl */ `
   attribute float birth;
   uniform float time;
   uniform float size;
+  uniform float pointScale;
   varying float vAge;
   void main() {
     float t = time - birth;
@@ -30,7 +33,7 @@ const VERTEX = /* glsl */ `
     vec4 mv = modelViewMatrix * vec4(p, 1.0);
     gl_Position = projectionMatrix * mv;
     float alive = step(0.0, t) * step(vAge, 1.0);
-    gl_PointSize = alive * min(48.0, size * (0.6 + vAge * 1.6) * 500.0 / max(0.5, -mv.z));
+    gl_PointSize = alive * pointScale * min(48.0, size * (0.6 + vAge * 1.6) * 500.0 / max(0.5, -mv.z));
   }
 `;
 
@@ -82,19 +85,15 @@ export class Spray extends THREE.Group implements Furniture, Updatable {
     this.material = new THREE.ShaderMaterial({
       vertexShader: VERTEX,
       fragmentShader: FRAGMENT,
-      uniforms: { time: { value: 0 }, size: { value: 0.22 }, tint: { value: new THREE.Color(0.8, 0.82, 0.85) }, strength: { value: 0 } },
-      transparent: true,
+      uniforms: { time: { value: 0 }, size: { value: 0.22 }, tint: { value: new THREE.Color(0.8, 0.82, 0.85) }, strength: { value: 0 }, pointScale: POINT_SCALE },
       depthWrite: false,
-      blending: THREE.CustomBlending,
-      blendSrc: THREE.SrcAlphaFactor,
-      blendDst: THREE.OneMinusSrcAlphaFactor,
-      blendSrcAlpha: THREE.ZeroFactor,
-      blendDstAlpha: THREE.OneFactor,
     });
+    overKeepingAlpha(this.material);
     this.points = new THREE.Points(geometry, this.material);
     this.points.frustumCulled = false;
     this.points.renderOrder = RENDER_ORDER.particles;
     this.points.visible = false;
+    scalesPoints(this.points);
     this.add(this.points);
   }
 

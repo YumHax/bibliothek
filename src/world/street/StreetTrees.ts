@@ -276,5 +276,5 @@ function grateTexture(): THREE.CanvasTexture {
   ctx.beginPath();
   ctx.arc(c, c, 13, 0, Math.PI * 2);
   ctx.fill();
-  return toTexture(canvas, 4);
+  return toTexture(canvas, 'facing');
 }

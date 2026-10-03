@@ -3,7 +3,7 @@ import type { Platform } from '@/catalog/types';
 import { createCanvas, toTexture, fitFontSize, wrapLines, FONT } from '@/covers/generated/canvasUtils';
 import { contrastText, css } from '@/covers/generated/palette';
 import { paint } from '@/world/materials/palette';
-import { WALL } from '@/world/surface/layers';
+import { layMesh, WALL } from '@/world/surface/layers';
 import { Prop, part } from './Prop';
 
 /** Draws a poster on a canvas of `w` x `h` pixels. */
@@ -33,10 +33,12 @@ export class Poster extends Prop {
     part(this, width + 0.05, height + 0.05, FRAME_DEPTH, paint(0x1e1a18, 0.5), { z: FRAME_DEPTH / 2 });
     const mat = new THREE.Mesh(new THREE.PlaneGeometry(width + 0.03, height + 0.03), paint(0xf4f1ea, 0.9));
     mat.position.z = FRAME_DEPTH + WALL.paper.lift;
+    layMesh(mat, WALL.paper);
     mat.receiveShadow = true;
     // Its own material: `repaint()` swaps the map. The print lies over the mount.
     this.picture = new THREE.Mesh(new THREE.PlaneGeometry(width, height), new THREE.MeshStandardMaterial({ roughness: 0.75 }));
     this.picture.position.z = mat.position.z + WALL.overlay.lift;
+    layMesh(this.picture, WALL.overlay);
     this.picture.receiveShadow = true;
     this.add(mat, this.picture);
     this.repaint(painter);
@@ -46,7 +48,7 @@ export class Poster extends Prop {
     const [canvas, ctx] = createCanvas(CANVAS_W, this.canvasH);
     painter(ctx, CANVAS_W, this.canvasH);
     const previous = this.picture.material.map;
-    this.picture.material.map = toTexture(canvas, 4);
+    this.picture.material.map = toTexture(canvas, 'facing');
     this.picture.material.needsUpdate = true;
     previous?.dispose();
   }

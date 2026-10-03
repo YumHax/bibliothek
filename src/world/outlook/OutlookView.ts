@@ -4,6 +4,8 @@ import { QUALITY } from '@/graphics/quality';
 import { disposeTree } from '../props/Prop';
 import { patchShader } from '../materials/shaderPatch';
 import { WALL, onSurface } from '../surface/layers';
+import { registerZfightRoot } from '../surface/zfight';
+import { markGlass, unmarkGlass } from '@/graphics/glassMask';
 
 /** What is out there: its own scene (lit by its own sun and sky, never the room's lamps), what moves in it, how to free it. */
 export interface OutlookContents {
@@ -15,20 +17,34 @@ export interface OutlookContents {
   dispose(): void;
 }
 
+/** World (the room's scene) to the outlook's own frame (e.g. the street's zone-local metres), for one of its panes. */
+export type ToOutlook = (pane: THREE.Mesh) => THREE.Matrix4;
+
 export interface OutlookViewOptions {
   /** The main camera: only its view is rendered (a mirror's pass through the room reuses the last picture). */
   viewer: THREE.Camera;
-  /** World (the room's scene) to the outlook's own frame, e.g. the street's zone-local metres. */
-  toOutlook: () => THREE.Matrix4;
+  /** World to the outlook's frame for the panes made without their own (`pane`). */
+  toOutlook?: () => THREE.Matrix4;
   /** Builds what is out there, handed the camera it is seen from (the sky dome and the sun follow it). */
   build: (camera: THREE.Camera) => Promise<OutlookContents>;
   /** The glass's colour until the view is built and compiled (a pale sky). */
   waiting: () => THREE.Color;
+  /** Its name for the z-fight check once built: `bibliothek.zfight('outlook:<name>')` (default `view<n>`). */
+  name?: string;
 }
 
 /** The view's picture: this share of the drawing buffer (it only covers the panes: see the scissor), its long side capped. */
-const SIZE_SHARE = { high: 0.85, medium: 0.6, low: 0.5 } as const;
+const SIZE_SHARE = { high: 0.75, medium: 0.6, low: 0.5 } as const;
 const MAX_SIDE_PX = 1920;
+/** MSAA samples of the picture: its roofs and wires against the sky step without them (the room's own MSAA never reaches it). */
+const SAMPLES = { high: 4, medium: 0, low: 0 } as const;
+/**
+ * Seconds a pane's picture is kept while the eye is still (same camera, same pane, nothing rendered over its
+ * rectangle since): what is out there then moves at this rate (20 Hz), not the screen's, for a fraction of the cost.
+ */
+const REUSE_FOR = 1 / 20;
+/** How many of the last renders are remembered, to tell whether one of them painted over a pane's kept picture. */
+const RECENT = 8;
 /** Seconds after the last pane was drawn that what is out there keeps moving (a glance away and back finds it going). */
 const LIVE_AFTER_DRAWN = 1.5;
 /**
@@ -46,6 +62,10 @@ const SCISSOR_PAD = 3;
 /** How much of the outlook's light the glass lets through, and how much grey it adds (dust, the pane's own reflection). */
 const TRANSMISSION = 0.9;
 const GLASS_GREY = 0.012;
+/** How far the z-fight check judges an outlook's scene from (m): a street is seen down its length. */
+const ZFIGHT_DISTANCE = 140;
+/** Views made without a name, counted for theirs. */
+let views = 0;
 
 /**
  * The view through a window onto a place built elsewhere (`outlook/`): its own `THREE.Scene`, lit by its own sun,
@@ -61,14 +81,26 @@ export class OutlookView extends THREE.Group implements Updatable {
   private readonly camera = new THREE.PerspectiveCamera();
   private readonly target: THREE.WebGLRenderTarget;
   private readonly material: THREE.MeshBasicMaterial;
+  /** The same picture on the inside of a sphere round an open-air spot (`surround`), made on first use. */
+  private surroundMaterial: THREE.MeshBasicMaterial | null = null;
   private readonly clipPlanes = [new THREE.Plane()];
   private contents: OutlookContents | null = null;
+  /** Its scene in the z-fight check while built (`registerZfightRoot`). */
+  private readonly zfightName: string;
+  private unregisterZfight: () => void = () => {};
   private state: 'idle' | 'building' | 'compiling' | 'ready' | 'failed' = 'idle';
   private renderer: THREE.WebGLRenderer | null = null;
   private sinceDrawn = Infinity;
   private disposed = false;
   /** Every pane made (`pane`): the ones sharing a frame's render are picked among them. */
   private readonly panes: THREE.Mesh[] = [];
+  /** Each pane's way into the outlook's frame and what its last render was (see `reusable`). */
+  private readonly records = new Map<THREE.Mesh, PaneRecord>();
+  /** The last renders (their sequence number and rectangle), newest last. */
+  private readonly recent: { seq: number; rect: THREE.Vector4 }[] = [];
+  private seq = 0;
+  /** The renderer's frame count at the last tick: every owner of a shared view ticks it, it moves on once a frame. */
+  private tickedFrame = -1;
   /** The panes the picture already covers this frame, and the renderer's frame count once it was rendered. */
   private readonly covered = new Set<THREE.Mesh>();
   private coveredFrame = -1;
@@ -77,33 +109,59 @@ export class OutlookView extends THREE.Group implements Updatable {
   constructor(private readonly options: OutlookViewOptions) {
     super();
     this.name = 'OutlookView';
-    this.target = new THREE.WebGLRenderTarget(16, 16, { type: THREE.HalfFloatType, depthBuffer: true, samples: 0 });
+    this.zfightName = `outlook:${options.name ?? `view${++views}`}`;
+    this.target = new THREE.WebGLRenderTarget(16, 16, { type: THREE.HalfFloatType, depthBuffer: true, samples: SAMPLES[QUALITY.level] });
     this.target.texture.generateMipmaps = false;
     this.camera.matrixAutoUpdate = false;
-    this.material = new THREE.MeshBasicMaterial({ map: this.target.texture, color: new THREE.Color(TRANSMISSION, TRANSMISSION, TRANSMISSION), fog: false });
-    // The picture is looked up where the fragment lies on screen: the pane's own clip position (the portal's camera is
-    // the main one carried into the outlook, so a point of the pane lands on the picture where it lands on screen).
-    patchShader(this.material, 'outlookPane', (shader) => {
-      shader.vertexShader = shader.vertexShader.replace('#include <project_vertex>', '#include <project_vertex>\nvOutlookClip = gl_Position;');
-      shader.vertexShader = 'varying vec4 vOutlookClip;\n' + shader.vertexShader;
-      shader.fragmentShader = shader.fragmentShader.replace(
-        '#include <map_fragment>',
-        `vec4 sampledDiffuseColor = texture2D(map, vOutlookClip.xy / vOutlookClip.w * 0.5 + 0.5);\ndiffuseColor.rgb *= sampledDiffuseColor.rgb;\ndiffuseColor.rgb += ${GLASS_GREY.toFixed(3)};`,
-      );
-      shader.fragmentShader = 'varying vec4 vOutlookClip;\n' + shader.fragmentShader;
-    });
+    this.material = screenSampled(new THREE.MeshBasicMaterial({ map: this.target.texture, color: new THREE.Color(TRANSMISSION, TRANSMISSION, TRANSMISSION), fog: false }), GLASS_GREY);
   }
 
-  /** A pane of this view, `width` x `height`, facing local +z (the room), for the caller to place in its window (on its wall: `WALL.paper`'s lift). */
-  pane(width: number, height: number): THREE.Mesh {
-    onSurface(this.material, WALL.paper);
+  /**
+   * A pane of this view, `width` x `height`, facing local +z (the room), for the caller to place in its window (on its
+   * wall: `WALL.paper`'s lift). `toOutlook`: how the world maps into the outlook for this pane (several rooms, or
+   * several flats of one building, share one view: `sharedOutlook`); default the view's own.
+   */
+  pane(width: number, height: number, toOutlook?: ToOutlook): THREE.Mesh {
+    onSurface(this.material, WALL.pane);
     const mesh = new THREE.Mesh(new THREE.PlaneGeometry(width, height), this.material);
     mesh.name = 'OutlookPane';
     mesh.castShadow = false;
     mesh.receiveShadow = false;
     mesh.onBeforeRender = (renderer, _scene, camera) => this.draw(mesh, renderer, camera);
+    const own = this.options.toOutlook;
+    const map = toOutlook ?? (own ? () => own() : null);
+    if (!map) throw new Error('[outlook] a pane needs a way into the outlook (`toOutlook`)');
     this.panes.push(mesh);
+    this.records.set(mesh, { toOutlook: map, surround: false, seq: -1, renderedAt: -Infinity, rect: new THREE.Vector4(), viewer: new THREE.Matrix4(), projection: new THREE.Matrix4(), outlook: new THREE.Matrix4() });
+    markGlass(mesh);
     return mesh;
+  }
+
+  /**
+   * The open air round a spot outside (the balcony): `geometry` (a sphere round it, seen from inside) shows the whole
+   * view, unclipped and without glass, drawn after everything opaque and writing no depth (`OpenAir`).
+   */
+  surround(geometry: THREE.BufferGeometry, toOutlook?: ToOutlook): THREE.Mesh {
+    this.surroundMaterial ??= screenSampled(new THREE.MeshBasicMaterial({ map: this.target.texture, fog: false, side: THREE.BackSide, depthWrite: false }), 0);
+    const mesh = this.pane(1, 1, toOutlook);
+    mesh.geometry.dispose();
+    mesh.geometry = geometry;
+    mesh.material = this.surroundMaterial;
+    mesh.name = 'OutlookSurround';
+    mesh.frustumCulled = false;
+    this.records.get(mesh)!.surround = true;
+    unmarkGlass(mesh);
+    return mesh;
+  }
+
+  /** The pane's room is gone (its zone unloaded): it is no longer drawn nor counted. */
+  release(pane: THREE.Mesh): void {
+    const i = this.panes.indexOf(pane);
+    if (i >= 0) this.panes.splice(i, 1);
+    this.records.delete(pane);
+    this.covered.delete(pane);
+    unmarkGlass(pane);
+    pane.geometry.dispose();
   }
 
   /**
@@ -119,6 +177,12 @@ export class OutlookView extends THREE.Group implements Updatable {
   }
 
   update(dt: number): void {
+    // A view shared by several rooms is ticked by each of their windows: once a frame.
+    if (this.renderer) {
+      const frame = this.renderer.info.render.frame;
+      if (frame === this.tickedFrame) return;
+      this.tickedFrame = frame;
+    }
     this.sinceDrawn += dt;
     if (this.state === 'ready' && this.contents && this.sinceDrawn > FREE_AFTER_UNDRAWN) this.free();
     const drawnLately = this.sinceDrawn < LIVE_AFTER_DRAWN;
@@ -135,19 +199,24 @@ export class OutlookView extends THREE.Group implements Updatable {
 
   dispose(): void {
     this.disposed = true;
+    this.unregisterZfight();
     this.contents?.dispose();
     this.contents = null;
     this.target.dispose();
     this.material.dispose();
+    this.surroundMaterial?.dispose();
+    for (const pane of this.panes) unmarkGlass(pane);
   }
 
   /** Long out of sight: the scene and its picture go (the GPU memory with them), back to `idle` to be built again when needed. */
   private free(): void {
+    this.unregisterZfight();
     this.contents?.dispose();
     this.contents = null;
     this.state = 'idle';
     this.covered.clear();
     this.coveredFrame = -1;
+    this.recent.length = 0;
     this.target.setSize(16, 16);
   }
 
@@ -161,6 +230,7 @@ export class OutlookView extends THREE.Group implements Updatable {
           return;
         }
         this.contents = contents;
+        this.unregisterZfight = registerZfightRoot(this.zfightName, contents.scene, ZFIGHT_DISTANCE);
       })
       .catch((error: unknown) => {
         this.state = 'failed';
@@ -195,17 +265,25 @@ export class OutlookView extends THREE.Group implements Updatable {
 
   /** As a pane is drawn by the main camera: its rectangle of the picture rendered afresh (or the glass's colour while waiting). */
   private draw(pane: THREE.Mesh, renderer: THREE.WebGLRenderer, camera: THREE.Camera): void {
-    if (camera !== this.options.viewer) return;
+    const record = this.records.get(pane);
+    // Not the main camera (a mirror's pass), or the pane's owner shows something else on it now (frosted glass).
+    if (!record || camera !== this.options.viewer || pane.material !== (record.surround ? this.surroundMaterial : this.material)) return;
     this.renderer = renderer;
     this.sinceDrawn = 0;
     // Another pane's render this frame already covered this one (the renderer's frame count has not moved since).
     if (camera === this.coveredBy && renderer.info.render.frame === this.coveredFrame && this.covered.has(pane)) return;
     this.fitTarget(renderer);
-    const previous = renderer.getRenderTarget();
     const ready = this.state === 'ready' && this.contents;
-    this.placeCamera(camera as THREE.PerspectiveCamera);
-    this.scissorTo(pane, camera);
-    if (ready) this.clipAt(pane);
+    const toOutlook = record.toOutlook(pane);
+    if (ready && this.reusable(record, camera, toOutlook)) {
+      STATS.reused++;
+      return;
+    }
+    const started = STATS.on ? performance.now() : 0;
+    const previous = renderer.getRenderTarget();
+    this.placeCamera(camera as THREE.PerspectiveCamera, toOutlook);
+    this.scissorTo(pane, camera, record);
+    if (ready) this.clipAt(pane, toOutlook, record.surround);
     const clipping = renderer.clippingPlanes;
     const autoUpdate = renderer.shadowMap.autoUpdate;
     const clearColor = renderer.getClearColor(CLEAR);
@@ -213,9 +291,10 @@ export class OutlookView extends THREE.Group implements Updatable {
     renderer.setRenderTarget(this.target);
     if (ready) {
       renderer.clippingPlanes = this.clipPlanes;
-      // The outlook's sun refreshes its own map (`ShadowRefresh`); the room's were drawn at the start of its frame.
+      // The outlook's sun refreshes its own map (`ShadowRefresh`, a few times a second); the room's were drawn at the start of its frame.
       renderer.shadowMap.autoUpdate = true;
       renderer.render(this.contents!.scene, this.camera);
+      STATS.calls += renderer.info.render.calls;
     } else {
       renderer.setClearColor(this.options.waiting(), 1);
       renderer.clear(true, true, false);
@@ -228,6 +307,44 @@ export class OutlookView extends THREE.Group implements Updatable {
     // The panes this render covered skip theirs until the renderer's next render (the frame count moves on).
     this.coveredFrame = renderer.info.render.frame;
     this.coveredBy = camera;
+    if (ready) this.remember(camera, toOutlook);
+    if (STATS.on && ready) {
+      STATS.renders++;
+      STATS.ms += performance.now() - started;
+    }
+  }
+
+  /**
+   * Whether the pane's picture from its last render still stands: rendered for this very camera (not moved, same lens)
+   * and this mapping into the outlook, less than `REUSE_FOR` ago, at this size, and nothing rendered over its rectangle
+   * since (another pane of the view, in another plane, shares the picture).
+   */
+  private reusable(record: PaneRecord, camera: THREE.Camera, toOutlook: THREE.Matrix4): boolean {
+    if (record.seq < 0 || performance.now() - record.renderedAt > REUSE_FOR * 1000) return false;
+    if (!record.viewer.equals(camera.matrixWorld) || !record.projection.equals(camera.projectionMatrix) || !record.outlook.equals(toOutlook)) return false;
+    const oldest = this.recent[0];
+    if (!oldest || record.seq < oldest.seq) return false;
+    for (const render of this.recent) if (render.seq > record.seq && overlaps(render.rect, record.rect)) return false;
+    return true;
+  }
+
+  /** The render just made: every pane it covered keeps it (see `reusable`). */
+  private remember(camera: THREE.Camera, toOutlook: THREE.Matrix4): void {
+    const seq = ++this.seq;
+    const rect = this.target.scissor.clone();
+    this.recent.push({ seq, rect });
+    if (this.recent.length > RECENT) this.recent.shift();
+    const now = performance.now();
+    for (const pane of this.covered) {
+      const record = this.records.get(pane);
+      if (!record) continue;
+      record.seq = seq;
+      record.renderedAt = now;
+      record.rect.copy(rect);
+      record.viewer.copy(camera.matrixWorld);
+      record.projection.copy(camera.projectionMatrix);
+      record.outlook.copy(toOutlook);
+    }
   }
 
   /** The picture at a share of the drawing buffer, in its proportions (the pane samples it in screen space). */
@@ -242,13 +359,16 @@ export class OutlookView extends THREE.Group implements Updatable {
     }
     const width = Math.max(16, Math.round(w));
     const height = Math.max(16, Math.round(h));
-    if (this.target.width !== width || this.target.height !== height) this.target.setSize(width, height);
+    if (this.target.width === width && this.target.height === height) return;
+    this.target.setSize(width, height);
+    // A new size: nothing kept is the right size any more.
+    this.recent.length = 0;
   }
 
   /** The main camera, carried into the outlook's frame: same lens, same place relative to the window. */
-  private placeCamera(camera: THREE.PerspectiveCamera): void {
+  private placeCamera(camera: THREE.PerspectiveCamera, toOutlook: THREE.Matrix4): void {
     const c = this.camera;
-    c.matrixWorld.multiplyMatrices(this.options.toOutlook(), camera.matrixWorld);
+    c.matrixWorld.multiplyMatrices(toOutlook, camera.matrixWorld);
     c.matrixWorld.decompose(c.position, c.quaternion, c.scale);
     c.matrix.copy(c.matrixWorld);
     c.matrixWorldInverse.copy(c.matrixWorld).invert();
@@ -264,20 +384,26 @@ export class OutlookView extends THREE.Group implements Updatable {
    * over the other panes of this view in its plane that are on screen this frame, when that costs few extra pixels:
    * those are then `covered`, and their own draw skips the render (the stairwell's panes, a storey apart up the well).
    */
-  private scissorTo(pane: THREE.Mesh, camera: THREE.Camera): void {
+  private scissorTo(pane: THREE.Mesh, camera: THREE.Camera, record: PaneRecord): void {
     const target = this.target;
     target.scissorTest = true;
     this.covered.clear();
     this.covered.add(pane);
+    // Only panes seeing the outlook through the same mapping can share a render (one camera placed for all of them).
+    const sameWay = (other: THREE.Mesh): boolean => this.records.get(other)?.toOutlook === record.toOutlook;
+    if (record.surround) {
+      target.scissor.set(0, 0, target.width, target.height);
+      return;
+    }
     if (!this.rectOf(pane, camera, RECT)) {
       target.scissor.set(0, 0, target.width, target.height);
-      for (const other of this.panes) if (other !== pane && this.sharesPlane(other, pane)) this.covered.add(other);
+      for (const other of this.panes) if (other !== pane && sameWay(other) && this.sharesPlane(other, pane)) this.covered.add(other);
       return;
     }
     UNION.copy(RECT);
     let own = area(RECT);
     for (const other of this.panes) {
-      if (other === pane || !this.sharesPlane(other, pane) || !this.rectOf(other, camera, OTHER)) continue;
+      if (other === pane || !sameWay(other) || !this.sharesPlane(other, pane) || !this.rectOf(other, camera, OTHER)) continue;
       if (OTHER.z <= 0 || OTHER.w <= 0) continue;
       const x0 = Math.min(UNION.x, OTHER.x);
       const y0 = Math.min(UNION.y, OTHER.y);
@@ -330,13 +456,36 @@ export class OutlookView extends THREE.Group implements Updatable {
   }
 
   /** Nothing on the room's side of the pane is drawn: the plane through it, facing out, in the outlook's frame. */
-  private clipAt(pane: THREE.Mesh): void {
+  private clipAt(pane: THREE.Mesh, toOutlook: THREE.Matrix4, open: boolean): void {
+    const plane = this.clipPlanes[0]!;
+    // Out in the open: nothing to clip (a plane far behind the eye, so the programs stay the ones with a clip plane).
+    if (open) {
+      plane.set(NORMAL.set(0, 1, 0), 1e6);
+      return;
+    }
     // The pane faces the room (+z local): the outside is along its -z.
     NORMAL.set(0, 0, -1).transformDirection(pane.matrixWorld);
     pane.getWorldPosition(CORNER);
-    const plane = this.clipPlanes[0]!;
-    plane.setFromNormalAndCoplanarPoint(NORMAL, CORNER).applyMatrix4(this.options.toOutlook());
+    plane.setFromNormalAndCoplanarPoint(NORMAL, CORNER).applyMatrix4(toOutlook);
   }
+}
+
+/**
+ * `material` looks its map up where the fragment lies on screen: its own clip position (the portal's camera is the
+ * main one carried into the outlook, so a point of the pane lands on the picture where it lands on screen), plus
+ * `grey` (the glass's dust and own reflection).
+ */
+function screenSampled(material: THREE.MeshBasicMaterial, grey: number): THREE.MeshBasicMaterial {
+  patchShader(material, grey > 0 ? 'outlookPane' : 'outlookOpen', (shader) => {
+    shader.vertexShader = shader.vertexShader.replace('#include <project_vertex>', '#include <project_vertex>\nvOutlookClip = gl_Position;');
+    shader.vertexShader = 'varying vec4 vOutlookClip;\n' + shader.vertexShader;
+    shader.fragmentShader = shader.fragmentShader.replace(
+      '#include <map_fragment>',
+      `vec4 sampledDiffuseColor = texture2D(map, vOutlookClip.xy / vOutlookClip.w * 0.5 + 0.5);\ndiffuseColor.rgb *= sampledDiffuseColor.rgb;\ndiffuseColor.rgb += ${grey.toFixed(3)};`,
+    );
+    shader.fragmentShader = 'varying vec4 vOutlookClip;\n' + shader.fragmentShader;
+  });
+  return material;
 }
 
 /** Nothing, rendered to put the renderer's clipping back (`resetClipping`). */
@@ -374,6 +523,38 @@ const OTHER_NORMAL = new THREE.Vector3();
 const RECT = new THREE.Vector4();
 const OTHER = new THREE.Vector4();
 const UNION = new THREE.Vector4();
+
+interface PaneRecord {
+  toOutlook: ToOutlook;
+  /** An open-air surround (`surround`): the whole picture, unclipped. */
+  surround: boolean;
+  /** The render its picture comes from (-1: none yet), when, over what rectangle, from where and through what mapping. */
+  seq: number;
+  renderedAt: number;
+  rect: THREE.Vector4;
+  viewer: THREE.Matrix4;
+  projection: THREE.Matrix4;
+  outlook: THREE.Matrix4;
+}
+
+/** Whether two pixel rectangles (x, y, width, height) share any pixel. */
+function overlaps(a: THREE.Vector4, b: THREE.Vector4): boolean {
+  return a.x < b.x + b.z && b.x < a.x + a.z && a.y < b.y + b.w && b.y < a.y + a.w;
+}
+
+/**
+ * `?stats`: what the views through the windows cost, every 2 s on the console next to the frame's own line: the
+ * renders a second, their draw calls and CPU time each, and how many pane draws reused a kept picture.
+ */
+const STATS = { on: new URLSearchParams(location.search).has('stats'), renders: 0, calls: 0, ms: 0, reused: 0 };
+if (STATS.on) {
+  setInterval(() => {
+    if (STATS.renders + STATS.reused === 0) return;
+    const per = Math.max(1, STATS.renders);
+    console.log(`[stats] outlook ${(STATS.renders / 2).toFixed(0)} renders/s | ${(STATS.calls / per).toFixed(0)} draw calls and ${(STATS.ms / per).toFixed(2)} ms CPU each | ${(STATS.reused / 2).toFixed(0)} reused/s`);
+    STATS.renders = STATS.calls = STATS.ms = STATS.reused = 0;
+  }, 2000);
+}
 
 /** A pixel rectangle's area (x, y, width, height). */
 function area(rect: THREE.Vector4): number {

@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { cylinderMesh } from '../meshUtils';
 import { Prop, part } from '../props/Prop';
 import { paint, standard, timber } from '../materials/palette';
+import { GLASS } from '../materials/glass';
 
 /*
  * The small things that live on a kitchen worktop. Each is a `Prop` (never collides) standing on
@@ -13,7 +14,6 @@ import { paint, standard, timber } from '../materials/palette';
 const STEEL = standard({ color: 0xc4c7cb, metalness: 1, roughness: 0.4 });
 const BLACK = paint(0x1e1f22, 0.6);
 const CERAMIC = standard({ color: 0xf2eee6, roughness: 0.35, side: THREE.DoubleSide });
-const GLASS = standard({ color: 0xe8f0f2, roughness: 0.05, metalness: 0, transparent: true, opacity: 0.35, side: THREE.DoubleSide });
 const WATER = standard({ color: 0xcfd8dc, roughness: 0.02, metalness: 0, transparent: true, opacity: 0.25 });
 
 export interface FruitBowlOptions {
@@ -182,10 +182,10 @@ export class DishRack extends Prop {
       stick.rotation.z = tilt;
       stick.castShadow = false;
     }
-    const glass = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.034, 0.1, 18, 1, true), GLASS);
+    const glass = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.034, 0.1, 18, 1, true), GLASS.ware);
     glass.position.set(w / 2 + 0.05, 0.05, 0.06);
     this.add(glass);
     // Its base, a little inside the wall so the two glass surfaces do not coincide.
-    this.add(cylinderMesh(0.0285, 0.004, GLASS, { x: w / 2 + 0.05, y: 0.098, z: 0.06 }, { segments: 18 }));
+    this.add(cylinderMesh(0.0285, 0.004, GLASS.ware, { x: w / 2 + 0.05, y: 0.098, z: 0.06 }, { segments: 18 }));
   }
 }

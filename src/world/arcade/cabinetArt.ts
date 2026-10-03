@@ -111,7 +111,7 @@ export function paintSideArt(color: number, glow: number, part: 'base' | 'upper'
   rub.addColorStop(1, 'rgba(255,255,255,0)');
   ctx.fillStyle = rub;
   ctx.fillRect(0, 0, W, H);
-  return toTexture(canvas, 4);
+  return toTexture(canvas, 'facing');
 }
 
 /** One sticker at (x, y), `r` its half size, turned by `angle`; `peeled` folds a corner back. */
@@ -220,5 +220,5 @@ export function paintPanel(seed: number, wear: number): THREE.CanvasTexture {
     ctx.lineTo(x + (random() - 0.5) * 40, y + (random() - 0.5) * 12);
     ctx.stroke();
   }
-  return toTexture(canvas, 4);
+  return toTexture(canvas, 'facing');
 }

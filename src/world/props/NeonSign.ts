@@ -71,7 +71,7 @@ export class NeonSign extends Prop implements Updatable {
       }
     }
 
-    this.tubes = new THREE.MeshBasicMaterial({ map: paintTubes(text, width, height, color, options.font), transparent: true, toneMapped: false, depthWrite: false });
+    this.tubes = new THREE.MeshBasicMaterial({ map: paintTubes(text, width, height, color, options.font), transparent: true, depthWrite: false });
     const lettering = new THREE.Mesh(new THREE.PlaneGeometry(width, height), this.tubes);
     lettering.position.z = PANEL_T + STANDOFF;
     lettering.castShadow = false;
@@ -154,5 +154,5 @@ function paintTubes(text: string, wM: number, hM: number, color: THREE.Color, fo
   ctx.strokeStyle = `#${core.getHexString()}`;
   ctx.lineWidth = px * 0.035;
   ctx.strokeText(text, x, y);
-  return toTexture(canvas, 4);
+  return toTexture(canvas, 'facing');
 }

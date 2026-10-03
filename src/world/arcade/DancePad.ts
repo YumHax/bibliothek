@@ -172,6 +172,6 @@ function arrowTexture(): THREE.Texture {
   ctx.strokeStyle = 'rgba(0,0,0,0.35)';
   ctx.lineWidth = 4;
   ctx.strokeRect(2, 2, 124, 124);
-  arrow = markShared(toTexture(canvas, 4));
+  arrow = markShared(toTexture(canvas, 'facing'));
   return arrow;
 }

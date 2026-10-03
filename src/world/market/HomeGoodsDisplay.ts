@@ -5,7 +5,7 @@ import { createCanvas, fitFontSize, toTexture, FONT } from '@/covers/generated/c
 import { cylinderMesh, invisibleHitbox } from '../meshUtils';
 import { Prop, part, matte } from '../props/Prop';
 import { fabric, wood as woodMaterial } from '@/world/materials/finishes';
-import { proud } from '../props/joinery';
+import { bandAround } from '../props/joinery';
 
 /** The five things a household stall sells. */
 export type HomeGoodsId = 'bookcase' | 'rug' | 'lamp' | 'poster' | 'crt';
@@ -136,7 +136,7 @@ const BUILDERS: Record<HomeGoodsId, Builder> = {
     slab.receiveShadow = true;
     box.add(slab);
     const strap = matte(0xe8e2d4, 0.5);
-    for (const y of [0.1, 0.34]) part(box, proud(W), 0.018, proud(T), strap, { y, z: -T / 2 }).castShadow = false;
+    for (const y of [0.1, 0.34]) bandAround(box, slab, y, 0.018, strap).castShadow = false;
     return { w: W + 0.04, h: H + 0.02, d: 0.24, z: -0.04 };
   },
   /** A rug rolled up along z, a stripe pattern on the roll, a spiral on its ends, two string ties. */
@@ -265,7 +265,7 @@ function paintFlatPack(): THREE.Texture {
   ctx.fillText('BÖKSHELF', W / 2, 46);
   ctx.font = `20px ${FONT}`;
   ctx.fillText('flat-pack · easy assembly', W / 2, 408);
-  return toTexture(canvas, 2);
+  return toTexture(canvas, 'facing');
 }
 
 /** The rolled rug's outside: bands of red, cream and blue with a fringe-like dash. */
@@ -278,7 +278,7 @@ function paintRugRoll(): THREE.Texture {
   });
   ctx.fillStyle = 'rgba(0,0,0,0.12)';
   for (let x = 0; x < 256; x += 6) ctx.fillRect(x, 0, 2, 128);
-  return toTexture(canvas, 2);
+  return toTexture(canvas, 'facing');
 }
 
 /** The roll's end: a spiral of the rug's layers. */
@@ -297,7 +297,7 @@ function paintRugEnd(): THREE.Texture {
     else ctx.lineTo(x, y);
   }
   ctx.stroke();
-  return toTexture(canvas, 2);
+  return toTexture(canvas, 'facing');
 }
 
 /** The framed print: a sunset over a grid, "PLAY" across it. */
@@ -340,5 +340,5 @@ function paintPrint(): THREE.Texture {
   ctx.strokeStyle = '#f4f0e6';
   ctx.lineWidth = 12;
   ctx.strokeRect(0, 0, W, H);
-  return toTexture(canvas, 2);
+  return toTexture(canvas, 'facing');
 }

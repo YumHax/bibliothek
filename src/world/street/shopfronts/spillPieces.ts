@@ -32,7 +32,8 @@ const PIECES: Record<SpillPiece, Builder> = {
   // Three zinc buckets of cut flowers and a potted fern, bunched by the window.
   flowerBuckets: (solid, _quads, _atlas, m, random) => {
     for (const [x, z, h] of [[-0.2, -0.04, 0.34], [0.12, -0.08, 0.3], [0.02, 0.14, 0.26]] as const) {
-      cylinder(solid, m, x, 0, z, 0.12, 0.095, h, ZINC, 14);
+      // The pail ends under its rim (its top would lie in the rim's).
+      cylinder(solid, m, x, 0, z, 0.12, 0.095, h - 0.02, ZINC, 14);
       cylinder(solid, m, x, h - 0.02, z, 0.125, 0.125, 0.02, '#7a8488', 14);
       bunch(solid, m, x, h, z, 0.1, pick(random, BLOOMS), random);
     }

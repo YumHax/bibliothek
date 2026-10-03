@@ -212,7 +212,7 @@ function paintLabel(record: Soundtrack | null): THREE.Texture {
   ctx.beginPath();
   ctx.arc(S / 2, S / 2, 3, 0, Math.PI * 2);
   ctx.fill();
-  return toTexture(canvas, 2);
+  return toTexture(canvas, 'facing');
 }
 
 /**

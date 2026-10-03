@@ -2,16 +2,19 @@ import * as THREE from 'three';
 import { createCanvas, toTexture } from '@/graphics/canvas';
 import { SHOPFRONTS, type CardId, type FrontKind } from './shopfrontPlan';
 import type { UvRect } from './TexQuads';
+import { DOOR_CARD_LOOK, paintDoorCard } from '../../shop/common/doorCard';
+import { paintGildedLine } from '../../shop/common/gildedLettering';
+import { paintTestCard } from '../../shop/snowScreen';
 
 /*
  * The walk-in shops' fronts, painted: one canvas atlas for all of them. Across the top the hanging signs (a board
  * per kind, cut to its shape: an armchair on a gilt-edged board, a television, a paw on a disc, a flower on a
  * scalloped oval), under them the lines lettered on the display glass (gold with a dark edge), then the cards that
- * stand in the windows, the door's OPEN and CLOSED, and the test card on a set in TV REPAIR's window.
+ * stand in the windows, each shop's door card (OPEN and CLOSED, painted as the card inside: `shop/common/doorCard`),
+ * and the test card on a set in TV REPAIR's window.
  */
 
 const W = 1024;
-const H = 1088;
 const SIGN_PX = 256;
 const STRIP_H = 64;
 const STRIPS_Y = 256;
@@ -20,8 +23,11 @@ const CARD_H = 160;
 const CARDS_Y = STRIPS_Y + 8 * STRIP_H;
 
 const KINDS: readonly FrontKind[] = ['furniture', 'electronics', 'pets', 'florist'];
-type Tile = CardId | 'testcard' | 'open' | 'closed';
-const TILES: readonly Tile[] = ['repairs', 'tested', 'adopt', 'paws', 'fresh', 'delivered', 'testcard', 'open', 'closed'];
+/** A card, the test card, or a shop's door card (each its own: its accent, its hours). */
+type Tile = CardId | 'testcard' | `open:${FrontKind}` | `closed:${FrontKind}`;
+const TILES: readonly Tile[] = ['repairs', 'tested', 'adopt', 'paws', 'fresh', 'delivered', 'testcard', ...KINDS.flatMap((k) => [`open:${k}`, `closed:${k}`] as const)];
+/** Four tiles a row, as many rows as the tiles need. */
+const H = CARDS_Y + Math.ceil(TILES.length / 4) * CARD_H;
 
 const SERIF = 'Georgia, "Times New Roman", serif';
 const HAND = '"Comic Sans MS", "Marker Felt", "Segoe Print", cursive';
@@ -52,18 +58,20 @@ export function paintShopfrontAtlas(): ShopfrontAtlas {
     ctx.translate(i * SIGN_PX, 0);
     SIGN_PAINTERS[kind](ctx);
     ctx.restore();
-    SHOPFRONTS[kind].glass.forEach((line, j) => paintGlassLine(ctx, line, STRIPS_Y + (i * 2 + j) * STRIP_H));
+    SHOPFRONTS[kind].glass.forEach((line, j) => paintGildedLine(ctx, line, 0, STRIPS_Y + (i * 2 + j) * STRIP_H, W, STRIP_H));
   });
   TILES.forEach((id, i) => {
     const [x, y] = tileAt(i);
     ctx.save();
     ctx.translate(x, y);
-    if (id === 'testcard') paintTestCard(ctx);
-    else if (id === 'open' || id === 'closed') paintDoorCard(ctx, id);
-    else paintCard(ctx, id);
+    if (id === 'testcard') paintTestCard(ctx, CARD_W, CARD_H);
+    else if (id.includes(':')) {
+      const [side, kind] = id.split(':') as ['open' | 'closed', FrontKind];
+      paintDoorCard(ctx, CARD_W, CARD_H, side, kind, { ...DOOR_CARD_LOOK, ink: SHOPFRONTS[kind].accent });
+    } else paintCard(ctx, id as CardId);
     ctx.restore();
   });
-  const texture = toTexture(canvas, 8);
+  const texture = toTexture(canvas, 'grazing');
   return {
     texture,
     sign: (kind) => uv(KINDS.indexOf(kind) * SIGN_PX + 2, 2, SIGN_PX - 4, SIGN_PX - 4),
@@ -215,28 +223,6 @@ function word(ctx: CanvasRenderingContext2D, text: string, x: number, y: number,
   ctx.fillText(text, x, y);
 }
 
-/** A line on the glass: gold leaf shaded top to bottom, outlined dark, fitted to the strip. */
-function paintGlassLine(ctx: CanvasRenderingContext2D, text: string, y: number): void {
-  let px = 46;
-  ctx.font = `italic bold ${px}px ${SERIF}`;
-  while (px > 18 && ctx.measureText(text).width > W * 0.94) {
-    px -= 2;
-    ctx.font = `italic bold ${px}px ${SERIF}`;
-  }
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.lineJoin = 'round';
-  ctx.lineWidth = 5;
-  ctx.strokeStyle = '#2a1e0c';
-  ctx.strokeText(text, W / 2, y + STRIP_H / 2);
-  const gold = ctx.createLinearGradient(0, y + 10, 0, y + STRIP_H - 10);
-  gold.addColorStop(0, '#fbe7a8');
-  gold.addColorStop(0.5, '#d9a94a');
-  gold.addColorStop(1, '#a8782a');
-  ctx.fillStyle = gold;
-  ctx.fillText(text, W / 2, y + STRIP_H / 2);
-}
-
 const CARD_TEXT: Record<CardId, { lines: [string, string]; accent: string; small?: string }> = {
   repairs: { lines: ['REPAIRS', 'while you wait*'], accent: '#b8302a', small: '*mostly' },
   tested: { lines: ['ALL SETS', 'TESTED'], accent: '#2e5a8a' },
@@ -261,40 +247,3 @@ function paintCard(ctx: CanvasRenderingContext2D, id: CardId): void {
   if (small) word(ctx, small, CARD_W - 40, CARD_H - 24, 18, INK, HAND);
 }
 
-/** The door's card on its string: OPEN in green, CLOSED in red, "come in" and the hours under. */
-function paintDoorCard(ctx: CanvasRenderingContext2D, id: 'open' | 'closed'): void {
-  const open = id === 'open';
-  ctx.fillStyle = open ? '#f2f0e6' : '#f2ece6';
-  roundRect(ctx, 6, 6, CARD_W - 12, CARD_H - 12, 14);
-  ctx.fill();
-  ctx.lineWidth = 6;
-  ctx.strokeStyle = open ? '#2f7a4a' : '#a82a2a';
-  roundRect(ctx, 14, 14, CARD_W - 28, CARD_H - 28, 10);
-  ctx.stroke();
-  word(ctx, open ? 'OPEN' : 'CLOSED', CARD_W / 2, 70, open ? 64 : 52, open ? '#2f7a4a' : '#a82a2a', 'Arial, Helvetica, sans-serif');
-  word(ctx, open ? 'come in' : 'open 9 – 21', CARD_W / 2, 118, 26, INK, HAND);
-}
-
-/** The test card: colour bars, a grey scale, a circle and a cross. */
-function paintTestCard(ctx: CanvasRenderingContext2D): void {
-  const bars = ['#f0f0f0', '#f0f040', '#40f0f0', '#40f040', '#f040f0', '#f04040', '#4040f0', '#202020'];
-  const bw = CARD_W / bars.length;
-  bars.forEach((c, i) => {
-    ctx.fillStyle = c;
-    ctx.fillRect(i * bw, 0, bw + 1, CARD_H * 0.7);
-  });
-  for (let i = 0; i < 8; i++) {
-    const g = Math.round((i / 7) * 230);
-    ctx.fillStyle = `rgb(${g},${g},${g})`;
-    ctx.fillRect(i * bw, CARD_H * 0.7, bw + 1, CARD_H * 0.3);
-  }
-  ctx.strokeStyle = '#ffffff';
-  ctx.lineWidth = 4;
-  ctx.beginPath();
-  ctx.arc(CARD_W / 2, CARD_H / 2, CARD_H * 0.38, 0, Math.PI * 2);
-  ctx.moveTo(CARD_W / 2 - 30, CARD_H / 2);
-  ctx.lineTo(CARD_W / 2 + 30, CARD_H / 2);
-  ctx.moveTo(CARD_W / 2, CARD_H / 2 - 30);
-  ctx.lineTo(CARD_W / 2, CARD_H / 2 + 30);
-  ctx.stroke();
-}

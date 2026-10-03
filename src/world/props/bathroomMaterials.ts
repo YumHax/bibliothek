@@ -1,4 +1,3 @@
-import * as THREE from 'three';
 import { paint, standard } from '../materials/palette';
 
 /*
@@ -23,15 +22,5 @@ export const STILL_WATER = standard({
   metalness: 0,
   transparent: true,
   opacity: 0.6,
-  depthWrite: false,
-});
-/** Clear glass of shower screens and shelves: see-through, never a shadow caster. */
-export const CLEAR_GLASS = standard({
-  color: 0xdff0f0,
-  roughness: 0.05,
-  metalness: 0,
-  transparent: true,
-  opacity: 0.28,
-  side: THREE.DoubleSide,
   depthWrite: false,
 });

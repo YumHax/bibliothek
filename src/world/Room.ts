@@ -16,7 +16,7 @@ import { LAMP_BOUNCE, LAMP_LIGHT } from './lighting/lampColours';
 import { floorBounce } from './lighting/floorBounce';
 import { setContactShadowStrength } from './zone/ContactShadows';
 import { CUBE_FACE_HALF_ANGLE, normalBiasAt } from './props/shadowTexels';
-import { createCanvas } from '@/covers/generated/canvasUtils';
+import { createCanvas, toTexture } from '@/covers/generated/canvasUtils';
 import { patchShader, replaceChunk } from './materials/shaderPatch';
 import type { ZoneId } from './zoneIds';
 
@@ -634,9 +634,7 @@ function bounceFalloff(width: number, depth: number): THREE.CanvasTexture {
   glow.addColorStop(1, `rgb(${edge},${edge},${edge})`);
   ctx.fillStyle = glow;
   ctx.fillRect(-width / 2, -depth / 2, width, depth);
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.colorSpace = THREE.SRGBColorSpace;
-  return texture;
+  return toTexture(canvas);
 }
 
 /**

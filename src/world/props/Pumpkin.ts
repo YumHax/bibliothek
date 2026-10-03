@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { Updatable } from '@/core/Engine';
-import { createCanvas, seededRandom } from '@/covers/generated/canvasUtils';
+import { createCanvas, seededRandom, toTexture } from '@/covers/generated/canvasUtils';
 import { cylinderMesh } from '../meshUtils';
 import { paint, standard } from '../materials/palette';
 import { Prop } from './Prop';
@@ -50,7 +50,7 @@ export class Pumpkin extends Prop implements Updatable {
 
     if (options.carved ?? true) {
       const face = new THREE.SphereGeometry(radius * 1.004, 20, 12, Math.PI / 2 - 0.75, 1.5, Math.PI * 0.26, Math.PI * 0.5);
-      this.glow = new THREE.MeshBasicMaterial({ map: carving(options.seed ?? 31), transparent: true, toneMapped: false, depthWrite: false });
+      this.glow = new THREE.MeshBasicMaterial({ map: carving(options.seed ?? 31), transparent: true, depthWrite: false });
       const mask = new THREE.Mesh(ribbed(face, radius), this.glow);
       mask.scale.y = squash;
       mask.position.y = body.position.y;
@@ -120,7 +120,5 @@ function carving(seed: number): THREE.CanvasTexture {
   }
   ctx.quadraticCurveTo(W / 2, H * 1.02, left, H * 0.64);
   ctx.fill();
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.colorSpace = THREE.SRGBColorSpace;
-  return texture;
+  return toTexture(canvas, 'facing');
 }

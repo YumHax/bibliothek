@@ -99,5 +99,5 @@ function paintSign(): THREE.Texture {
   ctx.fillText('WE BUY', 600, 160);
   ctx.font = 'italic 56px Georgia, serif';
   ctx.fillText('your old games · cash paid on the spot', 600, 300);
-  return toTexture(canvas, 4);
+  return toTexture(canvas, 'facing');
 }

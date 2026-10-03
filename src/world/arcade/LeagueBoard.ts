@@ -1,11 +1,12 @@
 import * as THREE from 'three';
 import type { Updatable } from '@/core/Engine';
-import { createCanvas } from '@/covers/generated/canvasUtils';
+import { createCanvas, toTexture } from '@/covers/generated/canvasUtils';
 import { boxMesh } from '../meshUtils';
 import { Prop } from '../props/Prop';
+import { faceOn } from '../props/joinery';
+import { WALL } from '../surface/layers';
 import { paint } from '../materials/palette';
 import { drawText } from './games/ArcadeGame';
-import { QUALITY } from '@/graphics/quality';
 
 /** The league as the board reads it (the concrete `ArcadeLeague` lives in `economy/`). */
 export interface LeagueSource {
@@ -60,17 +61,15 @@ export class LeagueBoard extends Prop implements Updatable {
     this.league = options.league;
     const width = options.width ?? 1.1;
     const height = options.height ?? 0.9;
-    this.add(boxMesh(width + 0.06, height + 0.06, 0.04, FRAME, { z: 0.02 }));
+    const frame = boxMesh(width + 0.06, height + 0.06, 0.04, FRAME, { z: 0.02 });
+    this.add(frame);
     const [canvas, ctx] = createCanvas(Math.round(width * PX_PER_M), Math.round(height * PX_PER_M));
     this.ctx = ctx;
     this.W = canvas.width;
     this.H = canvas.height;
-    this.texture = new THREE.CanvasTexture(canvas);
-    this.texture.colorSpace = THREE.SRGBColorSpace;
-    this.texture.anisotropy = QUALITY.anisotropy;
-    const face = new THREE.Mesh(new THREE.PlaneGeometry(width, height), new THREE.MeshBasicMaterial({ map: this.texture, toneMapped: false, color: 0xd0d0d0 }));
-    face.position.z = 0.042;
-    this.add(face);
+    this.texture = toTexture(canvas);
+    const face = new THREE.Mesh(new THREE.PlaneGeometry(width, height), new THREE.MeshBasicMaterial({ map: this.texture, color: 0xd0d0d0 }));
+    this.add(faceOn(face, frame, WALL.notice));
     this.unsubscribe = options.league.subscribe(() => (this.dirty = true));
   }
 

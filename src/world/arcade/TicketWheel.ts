@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { ChipSpeaker } from '@/audio/ChipSpeaker';
 import { createCanvas, toTexture } from '@/covers/generated/canvasUtils';
 import { boxMesh, cylinderMesh, eyePoseAt, invisibleHitbox } from '../meshUtils';
-import { WALL } from '../surface/layers';
+import { layMesh, WALL } from '../surface/layers';
 import { basic, paint, standard } from '../materials/palette';
 import { actionKeyLabel } from '@/ui/keys';
 import { keyOrUse } from '@/ui/verb';
@@ -99,8 +99,9 @@ export class TicketWheel extends TicketMachine {
     // The backboard with the marquee on top.
     this.add(boxMesh(BOARD_W, BOARD_H, 0.06, body, { y: BOARD_H / 2 + 0.3, z: 0.03 }));
     const marqueeMap = paintMarquee(title, { stops: ['#ff2fa0', '#ffd23a'], ink: '#2a0f24', size: 40 });
-    const marquee = new THREE.Mesh(new THREE.PlaneGeometry(BOARD_W - 0.1, 0.24), new THREE.MeshBasicMaterial({ map: marqueeMap, toneMapped: false }));
+    const marquee = new THREE.Mesh(new THREE.PlaneGeometry(BOARD_W - 0.1, 0.24), new THREE.MeshBasicMaterial({ map: marqueeMap }));
     marquee.position.set(0, BOARD_H + 0.3 - 0.18, 0.06 + WALL.notice.lift);
+    layMesh(marquee, WALL.notice);
     this.add(marquee);
     // The wheel: a painted disc on a hub, pegs at the slice edges, a gold rim.
     this.wheel = new THREE.Group();
@@ -147,6 +148,7 @@ export class TicketWheel extends TicketMachine {
     this.display = displayScreen([256, 96], [0.4, 0.15]);
     const screen = this.display.mesh;
     screen.position.set(0, PODIUM.h - 0.14, PODIUM.z + PODIUM.d / 2 + WALL.notice.lift);
+    layMesh(screen, WALL.notice);
     this.add(screen);
     this.note = outOfOrderNote(0.24);
     this.note.position.z = WALL.flyer.lift;
@@ -355,9 +357,9 @@ export class TicketWheel extends TicketMachine {
     ctx.beginPath();
     ctx.arc(c, c, c * 0.18, 0, Math.PI * 2);
     ctx.fill();
-    return toTexture(canvas, 8);
+    return toTexture(canvas, 'grazing');
   }
 }
 
-const BULB_ON = basic({ color: 0xfff1b0, toneMapped: false });
+const BULB_ON = basic({ color: 0xfff1b0 });
 const BULB_OFF = paint(0x6a5a30, 0.4);

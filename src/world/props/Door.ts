@@ -123,7 +123,7 @@ export class Door extends Prop implements Updatable, Interactable {
 
     // The doormat, just inside: a thin one, its top at the floor's `threshold` layer (a runner laid over it stays on top).
     if (options.mat !== false) {
-      const mat = part(this, width * 0.8, FLOOR.threshold.lift, 0.42, paintMaterial(0x4a4038, 1), { y: FLOOR.threshold.lift / 2, z: 0.3 });
+      const mat = part(this, width * 0.8, FLOOR.threshold.lift, 0.42, paintMaterial(0x4a4038, 1), { y: FLOOR.threshold.lift / 2, z: 0.3 }); // convention-ok: a slab, its top at the layer
       mat.castShadow = false;
     }
 

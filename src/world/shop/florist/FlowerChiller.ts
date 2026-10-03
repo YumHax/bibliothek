@@ -58,15 +58,19 @@ export class FlowerChiller extends THREE.Group implements Furniture, ShopVoiced 
     // The carcass: sides, top, the back, the plinth with its grille, the header over the doors.
     for (const x of [-1, 1]) part(this, wall, H, D, BODY, { x: (x * (W - wall)) / 2, y: H / 2, z: D / 2 });
     part(this, W, wall, D, BODY, { y: H - wall / 2, z: D / 2 });
-    part(this, W - 2 * wall, H, wall, INSIDE, { y: H / 2, z: wall / 2 });
-    part(this, W, plinth, D - 0.04, PLINTH, { y: plinth / 2, z: (D - 0.04) / 2 });
+    // The back and the plinth fit between the sides and under the top (run through them, their faces would lie in theirs).
+    part(this, W - 2 * wall, H - wall, wall, INSIDE, { y: (H - wall) / 2, z: wall / 2 });
+    // The plinth from the back panel's face forward (from the wall, its back would lie in the panel's).
+    part(this, W - 2 * wall, plinth, D - 0.04 - wall, PLINTH, { y: plinth / 2, z: wall + (D - 0.04 - wall) / 2 });
     for (let i = 0; i < 9; i++) part(this, W * 0.6, 0.008, 0.004, GRILLE, { y: 0.035 + i * 0.011, z: D - 0.038 });
     part(this, W - 2 * wall, header, 0.03, BODY, { y: H - header / 2, z: D - 0.015 });
     // The header's lit strip, and the glowing back panel behind the flowers.
     const strip = this.glows.add({ color: 0xf6fbff, emissive: COLD, strength: 1.4, roughness: 0.3 });
     part(this, W - 0.2, 0.05, 0.006, strip, { y: H - header / 2, z: D + 0.001 });
     const back = this.glows.add({ color: 0xe8f0f4, emissive: COLD, strength: 0.55, roughness: 0.5 });
-    part(this, inner.x1 - inner.x0, inner.y1 - inner.y0, 0.006, back, { y: (inner.y0 + inner.y1) / 2, z: wall + 0.004 });
+    // Standing on the cabinet's floor (from the plinth, its foot would lie in the floor's underside).
+    const backFoot = inner.y0 + 0.02;
+    part(this, inner.x1 - inner.x0, inner.y1 - backFoot, 0.006, back, { y: (backFoot + inner.y1) / 2, z: wall + 0.004 });
     this.glows.set(1);
 
     // Two wire shelves (a frame and bars), buckets of bunches on each and on the floor of the cabinet.

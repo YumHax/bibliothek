@@ -81,5 +81,5 @@ function stencil(text: string): THREE.CanvasTexture {
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillText(text, 128, 26, 240);
-  return toTexture(canvas, 2);
+  return toTexture(canvas, 'facing');
 }

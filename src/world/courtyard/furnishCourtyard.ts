@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { anisotropyFor } from '@/graphics/canvas';
 import { QUALITY } from '@/graphics/quality';
 import { CrowdMurmur } from '@/audio/CrowdMurmur';
 import { pointsPerTicket } from '@/economy/pricing';
@@ -36,7 +37,8 @@ import { NeighboursParty } from './NeighboursParty';
 import { YardBounds, binBags } from './YardBounds';
 import { courtyardDressers } from './huntHook';
 
-const ANISOTROPY = 8;
+// The facades and the yard are walked past at a slant.
+const ANISOTROPY = anisotropyFor('grazing');
 /** The facades round the yard (`streetPlan`'s ids): our back and its light well, the rear building, the neighbour's wing. */
 const AROUND = ['oursBack', 'oursBackW', 'oursWell', 'oursWellE', 'oursWellW', 'courtRear', 'courtEast'];
 /** What the residents' chat raises their friendship by, once a party. */

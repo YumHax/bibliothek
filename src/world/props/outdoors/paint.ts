@@ -5,14 +5,8 @@ import type { Rng } from './Sheet';
 const scratchA = new THREE.Color();
 const scratchB = new THREE.Color();
 
-/** `hex` darkened (k < 1) or lightened (k > 1) in linear light, back as a CSS colour. */
-export function shade(hex: string, k: number): string {
-  scratchA.set(hex).multiplyScalar(k);
-  scratchA.r = Math.min(1, scratchA.r);
-  scratchA.g = Math.min(1, scratchA.g);
-  scratchA.b = Math.min(1, scratchA.b);
-  return `#${scratchA.getHexString()}`;
-}
+/** `hex` darkened (k < 1) or lightened (k > 1): the street's own formula (`city/colour`), so both pictures agree. */
+export { shade } from '../../city/colour';
 
 /** Blend of two CSS colours, `t` = 0 all `a` .. 1 all `b`. */
 export function mixHex(a: string, b: string, t: number): string {

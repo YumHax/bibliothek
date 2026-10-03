@@ -3,6 +3,7 @@ import type { Furniture } from '../../Furniture';
 import { cylinderMesh } from '../../meshUtils';
 import { part } from '../../props/Prop';
 import { METAL, paint, standard, timber } from '../../materials/palette';
+import { GLASS, asGlass } from '../../materials/glass';
 import { PooledLight } from '../../lighting/LightPool';
 import { seededRandom } from '@/graphics/canvas';
 import { Glows } from '../common/fitting';
@@ -17,7 +18,6 @@ const DEPTH = 0.42;
 const CABINET = 0.7;
 const TANK = 0.42;
 const SAND = paint(0xd8b878, 1);
-const GLASS = standard({ color: 0xe0ecea, roughness: 0.05, transparent: true, opacity: 0.14, depthWrite: false });
 
 /**
  * A glass terrarium on a low cabinet, a heat lamp in its dome clamped over the mesh lid glowing orange: sand, a slab of
@@ -51,7 +51,10 @@ export class Terrarium extends THREE.Group implements Furniture {
     part(this, tw, 0.03, td, trim, { y: bottom + 0.015, z: zc });
     for (const sx of [-1, 1]) for (const sz of [-1, 1]) part(this, 0.014, TANK, 0.014, trim, { x: (sx * (tw - 0.014)) / 2, y: bottom + TANK / 2, z: zc + (sz * (td - 0.014)) / 2 });
     part(this, tw - 0.02, 0.05, td - 0.02, SAND, { y: bottom + 0.055, z: zc });
-    part(this, tw - 0.02, TANK - 0.1, 0.01, paint(0x8a6a4a, 0.95), { y: bottom + TANK / 2 + 0.02, z: zc - td / 2 + 0.015 });
+    // The backdrop stands on the sand (sunk into it, its back and sides would lie in the sand's).
+    const sandTop = bottom + 0.08;
+    const backdropTop = bottom + TANK - 0.03;
+    part(this, tw - 0.02, backdropTop - sandTop, 0.01, paint(0x8a6a4a, 0.95), { y: (sandTop + backdropTop) / 2, z: zc - td / 2 + 0.015 });
     const rock = paint(0x7a6a5a, 0.95);
     part(this, 0.22, 0.05, 0.14, rock, { x: -tw * 0.18, y: bottom + 0.1, z: zc - 0.04 });
     part(this, 0.12, 0.08, 0.1, rock, { x: -tw * 0.32, y: bottom + 0.12, z: zc - 0.08 });
@@ -81,11 +84,9 @@ export class Terrarium extends THREE.Group implements Furniture {
     }
     this.add(shell);
     // The glass and the mesh lid.
-    const glass = new THREE.Mesh(new THREE.BoxGeometry(tw - 0.006, TANK, td - 0.006), GLASS);
+    const glass = new THREE.Mesh(new THREE.BoxGeometry(tw - 0.006, TANK, td - 0.006), GLASS.pane);
     glass.position.set(0, bottom + TANK / 2, zc);
-    glass.castShadow = false;
-    glass.receiveShadow = false;
-    this.add(glass);
+    this.add(asGlass(glass));
     part(this, tw, 0.012, td, paint(0x2a2a2c, 0.6), { y: bottom + TANK + 0.006, z: zc });
     // The heat lamp: an aluminium dome on the lid over the slab, its bulb glowing, the thermometer on the glass.
     const glows = new Glows();

@@ -16,7 +16,7 @@ export interface RugOptions {
 }
 
 /** The slab's height: its top is the floor's `rug` layer. */
-const THICKNESS = FLOOR.rug.lift;
+const THICKNESS = FLOOR.rug.lift; // convention-ok: a slab this thick, its top at the layer
 /** Its corners are rounded off this much (a rug is not cut with a saw), and its fringes are this long. */
 const CORNER = 0.05;
 const FRINGE = 0.07;
@@ -120,7 +120,7 @@ export class Rug extends Prop {
       ctx.fillStyle = `rgba(${Math.random() < 0.5 ? '0,0,0' : '255,255,255'},${(Math.random() * 0.08).toFixed(3)})`;
       ctx.fillRect(Math.random() * W, Math.random() * H, 2, 2);
     }
-    return toTexture(canvas, 4);
+    return toTexture(canvas, 'grazing');
   }
 }
 

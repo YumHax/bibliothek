@@ -47,6 +47,28 @@ export function isOpen(c: number, r: number): boolean {
   return cell === '.' || cell === 'S';
 }
 
+export type CellSide = 'north' | 'south' | 'east' | 'west';
+export const CELL_SIDES: readonly CellSide[] = ['north', 'south', 'east', 'west'];
+export const CELL_STEP: Record<CellSide, [dc: number, dr: number]> = { north: [0, 1], south: [0, -1], east: [1, 0], west: [-1, 0] };
+
+/**
+ * The sides of cell (c, r) that are brick (`CellarVaults` builds them, anything hung on a wall goes on one): not
+ * towards an open cell from an open one, not a box's own slatted front, not the box front an open cell faces, not
+ * the stairs' mouth (the S cell's north). The one answer to "is there a wall here", so nothing hangs in the air.
+ */
+export function brickSides(c: number, r: number): CellSide[] {
+  const here = cellAt(c, r);
+  const box = /\d/.test(here) ? CELLAR_PLAN.boxes.find((b) => String(b.n) === here) : undefined;
+  return CELL_SIDES.filter((side) => {
+    const [dc, dr] = CELL_STEP[side];
+    if (isOpen(c, r) && isOpen(c + dc, r + dr)) return false;
+    if (box && box.faces === side) return false;
+    const faced = CELLAR_PLAN.boxes.find((b) => String(b.n) === cellAt(c + dc, r + dr));
+    if (isOpen(c, r) && faced && CELL_STEP[faced.faces][0] === -dc && CELL_STEP[faced.faces][1] === -dr) return false;
+    return !(here === 'S' && side === 'north');
+  });
+}
+
 /**
  * A storage box: its number on the map, the side its slatted front is on (towards the open cell it faces), the name
  * on its tag, and what it holds: `ours` (the flat's, No 5: the key opens its padlock), `open` (abandoned, its door

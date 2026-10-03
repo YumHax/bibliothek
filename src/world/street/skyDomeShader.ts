@@ -1,3 +1,4 @@
+import { SINE_HASH, fbm2, valueNoise2 } from '@/graphics/glslNoise';
 import { SKY_CHUNK } from '../city/skyGlsl';
 
 /** Angular radii of the sun's and the moon's discs over the street (the window view's are drawn larger). */
@@ -56,28 +57,10 @@ varying vec3 vDir;
 const vec3 FLASH = vec3(0.78, 0.84, 1.0);
 ${SKY_CHUNK}
 
-float hash1(float n) { return fract(sin(n * 127.1) * 43758.5453); }
-float hash3(vec3 p) { return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453); }
-float noise2(vec2 p) {
-  vec2 i = floor(p);
-  vec2 f = fract(p);
-  vec2 u = f * f * (3.0 - 2.0 * f);
-  float a = fract(sin(dot(i, vec2(127.1, 311.7))) * 43758.5453);
-  float b = fract(sin(dot(i + vec2(1.0, 0.0), vec2(127.1, 311.7))) * 43758.5453);
-  float c = fract(sin(dot(i + vec2(0.0, 1.0), vec2(127.1, 311.7))) * 43758.5453);
-  float d = fract(sin(dot(i + vec2(1.0, 1.0), vec2(127.1, 311.7))) * 43758.5453);
-  return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
-}
-float fbm(vec2 p) {
-  float v = 0.0;
-  float a = 0.5;
-  for (int i = 0; i < 5; i++) {
-    v += a * noise2(p);
-    p = p * 2.03 + vec2(17.0, 9.0);
-    a *= 0.5;
-  }
-  return v;
-}
+${SINE_HASH}
+float hash1(float n) { return sineHash(n * 127.1); }
+${valueNoise2('noise2', 'sineHash')}
+${fbm2('fbm', 'noise2', 5, [17, 9])}
 
 // A lightning bolt under the clouds towards boltDir, as the window panes draw it (props/outdoors/shader):
 // a jagged stroke from the cloud base down to the horizon with one fork, reseeded each strike; 0 away from it.
@@ -122,8 +105,8 @@ void main() {
   // Stars, veiled by cloud.
   if (starAlpha > 0.0 && h > 0.0) {
     vec3 cell = floor(d * 260.0);
-    float r = hash3(cell);
-    float star = step(0.9965, r) * (0.4 + 0.6 * hash3(cell + 7.0));
+    float r = sineHash(cell);
+    float star = step(0.9965, r) * (0.4 + 0.6 * sineHash(cell + 7.0));
     col += vec3(star * starAlpha * (1.0 - cloudCover) * smoothstep(0.02, 0.2, h));
   }
 
@@ -180,7 +163,7 @@ void main() {
     vec2 cell = floor(grid);
     vec2 inCell = fract(grid);
     float window = step(0.35, inCell.x) * step(0.4, inCell.y) * step(h, roof - 0.004) * step(-0.08, h);
-    float lit = step(hash3(vec3(cell, 3.0)), 0.3) * step(hash3(vec3(cell, 5.0)), wakefulness);
+    float lit = step(sineHash(vec3(cell, 3.0)), 0.3) * step(sineHash(vec3(cell, 5.0)), wakefulness);
     far += vec3(1.0, 0.72, 0.42) * window * lit * nightness * 0.5;
     col = mix(col, far, cityCover);
   }
@@ -220,7 +203,7 @@ void main() {
       vec2 cell = floor(cellUv);
       vec2 inCell = fract(cellUv);
       float pane = step(0.3, inCell.x) * step(inCell.x, 0.75) * step(0.3, inCell.y) * step(inCell.y, 0.8) * step(1.0, cell.y) * step(y, info.x - 1.2);
-      float on = step(hash3(vec3(cell, info.z)), 0.32) * step(hash3(vec3(cell, info.z + 7.0)), wakefulness);
+      float on = step(sineHash(vec3(cell, info.z)), 0.32) * step(sineHash(vec3(cell, info.z + 7.0)), wakefulness);
       lit = mix(lit, lit * 0.55 + vec3(0.03, 0.035, 0.045), pane * (1.0 - nightness));
       lit += vec3(1.0, 0.72, 0.42) * pane * on * nightness * 0.6;
       // Hazed by the distance, more in fog and rain.

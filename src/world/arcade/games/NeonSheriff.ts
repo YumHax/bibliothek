@@ -17,7 +17,7 @@ const SPOTS: { x: number; y: number; w: number; h: number }[] = [
 type Kind = 'bandit' | 'quick' | 'townsfolk' | 'bottle' | 'badge';
 const POINTS: Record<Kind, number> = { bandit: 50, quick: 80, townsfolk: 0, bottle: 30, badge: 0 };
 /** A bandit left standing this long fires back (seconds, at the first stage; shorter later). */
-const DRAW_TIME = 1.5;
+const DRAW_TIME = 1.8;
 const HIT_SECONDS = 1;
 const TOWNSFOLK_SECONDS = 2;
 const BADGE_SECONDS = 3;

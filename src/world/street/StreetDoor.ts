@@ -3,7 +3,8 @@ import type { Updatable } from '@/core/Engine';
 import type { Interactable } from '@/interaction/Interactable';
 import type { SessionActions } from '@/game/SessionActions';
 import { cylinderMesh, invisibleHitbox } from '../meshUtils';
-import { METAL, paint } from '../materials/palette';
+import { METAL } from '../materials/palette';
+import { snowPaint } from './snowCover';
 import { part } from '../props/Prop';
 import { HoverGlint } from '../props/hoverGlint';
 import { DoorSwing } from '../travel/doorSwing';
@@ -65,7 +66,7 @@ export class StreetDoor extends THREE.Group implements Furniture, Interactable, 
     const face = new THREE.Group();
     face.position.x = LEAF.width / 2;
     leaf.add(face);
-    const frame = paint(joineryOf(options.to), 0.5);
+    const frame = snowPaint(joineryOf(options.to), 0.5);
     const { width, bottom, top, stile, bottomRail, topRail, depth } = LEAF;
     const height = top - bottom;
     const z = depth / 2;

@@ -18,6 +18,8 @@ import { VideoSurface, type ScreenFeed, type ScreenState, type ScreenStateListen
 import { HueDrift } from './screen/HueDrift';
 import { paint, standard } from './materials/palette';
 import { RENDER_ORDER } from './surface/layers';
+import { POINT_SCALE, scalesPoints } from './particles/pointScale';
+import { additive } from '@/world/materials/blend';
 
 export interface ProjectorOptions {
   /** Width of the picture on the wall (metres). */
@@ -58,16 +60,9 @@ const VEIL_LIFT = 0.003;
  * Additive with the canvas's alpha left alone (docs/graphics.md): the beam is light over the
  * scene and over the video cut-out, never a veil.
  */
-function additive<M extends THREE.Material>(material: M): M {
-  material.transparent = true;
+function glowing<M extends THREE.Material>(material: M): M {
   material.depthWrite = false;
-  material.blending = THREE.CustomBlending;
-  material.blendEquation = THREE.AddEquation;
-  material.blendSrc = THREE.SrcAlphaFactor;
-  material.blendDst = THREE.OneFactor;
-  material.blendSrcAlpha = THREE.ZeroFactor;
-  material.blendDstAlpha = THREE.OneFactor;
-  return material;
+  return additive(material);
 }
 
 /**
@@ -101,7 +96,7 @@ export class Projector extends THREE.Group implements Furniture, Updatable, Inte
     apex: { value: new THREE.Vector3() },
     centre: { value: new THREE.Vector3() },
     size: { value: new THREE.Vector2(1, 1) },
-    pixelRatio: { value: Math.min(window.devicePixelRatio, 1.5) },
+    pointScale: POINT_SCALE,
   };
   private readonly standby: THREE.MeshStandardMaterial;
   private readonly hue = new HueDrift();
@@ -186,7 +181,7 @@ export class Projector extends THREE.Group implements Furniture, Updatable, Inte
 
     this.cone = new THREE.Mesh(
       new THREE.BufferGeometry(),
-      additive(new THREE.ShaderMaterial({ uniforms: this.uniforms, vertexShader: CONE_VERTEX, fragmentShader: CONE_FRAGMENT, side: THREE.DoubleSide })),
+      glowing(new THREE.ShaderMaterial({ uniforms: this.uniforms, vertexShader: CONE_VERTEX, fragmentShader: CONE_FRAGMENT, side: THREE.DoubleSide })),
     );
     this.cone.renderOrder = RENDER_ORDER.overlay;
     this.cone.frustumCulled = false;
@@ -204,9 +199,10 @@ export class Projector extends THREE.Group implements Furniture, Updatable, Inte
     const moteGeometry = new THREE.BufferGeometry();
     moteGeometry.setAttribute('position', new THREE.BufferAttribute(seeds, 3));
     moteGeometry.setAttribute('phase', new THREE.BufferAttribute(phases, 1));
-    this.motes = new THREE.Points(moteGeometry, additive(new THREE.ShaderMaterial({ uniforms: this.uniforms, vertexShader: MOTE_VERTEX, fragmentShader: MOTE_FRAGMENT })));
+    this.motes = new THREE.Points(moteGeometry, glowing(new THREE.ShaderMaterial({ uniforms: this.uniforms, vertexShader: MOTE_VERTEX, fragmentShader: MOTE_FRAGMENT })));
     this.motes.renderOrder = RENDER_ORDER.overlay;
     this.motes.frustumCulled = false;
+    scalesPoints(this.motes);
     this.add(this.motes);
     for (const object of [this.cone, this.motes]) {
       object.castShadow = false;
@@ -217,7 +213,7 @@ export class Projector extends THREE.Group implements Furniture, Updatable, Inte
     const { width, height } = this.surface;
     this.veil = new THREE.Mesh(
       new THREE.PlaneGeometry(width, height),
-      additive(new THREE.ShaderMaterial({
+      glowing(new THREE.ShaderMaterial({
         uniforms: { level: this.veilLevel, black: { value: BLACK_LEVEL }, hot: { value: HOT_SPOT }, aspect: { value: height / width } },
         vertexShader: VEIL_VERTEX,
         fragmentShader: VEIL_FRAGMENT,
@@ -484,7 +480,7 @@ uniform float time;
 uniform vec3 apex;
 uniform vec3 centre;
 uniform vec2 size;
-uniform float pixelRatio;
+uniform float pointScale;
 attribute float phase;
 varying float vFade;
 void main() {
@@ -495,7 +491,7 @@ void main() {
   vFade = (1.0 - smoothstep(0.6, 1.0, position.z)) * (0.4 + 0.6 * abs(sin(time * 0.7 + phase * 3.1)));
   vec4 view = modelViewMatrix * vec4(p, 1.0);
   gl_Position = projectionMatrix * view;
-  gl_PointSize = clamp(2.2 * pixelRatio * (1.5 / -view.z), 1.0, 4.0);
+  gl_PointSize = clamp(3.3 * pointScale * (1.5 / -view.z), 1.0, 4.0 * pointScale);
 }
 `;
 

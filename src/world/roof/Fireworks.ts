@@ -3,6 +3,7 @@ import type { Updatable } from '@/core/Engine';
 import type { DayNight } from '../props/DayNight';
 import { audioBus, startedAudioContext } from '@/audio/audioContext';
 import { whiteNoise } from '@/audio/noise';
+import { additive } from '@/world/materials/blend';
 
 /** Bursts in the air at once, the sparks each throws, how long a spark lives (s). */
 const BURSTS = 6;
@@ -42,13 +43,8 @@ export class Fireworks extends THREE.Points implements Updatable {
     const geometry = new THREE.BufferGeometry();
     geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(count * 3), 3));
     geometry.setAttribute('color', new THREE.BufferAttribute(new Float32Array(count * 3), 3));
-    const material = new THREE.PointsMaterial({ size: 0.9, vertexColors: true, transparent: true, depthWrite: false, toneMapped: false, sizeAttenuation: true });
-    material.blending = THREE.CustomBlending;
-    material.blendEquation = THREE.AddEquation;
-    material.blendSrc = THREE.SrcAlphaFactor;
-    material.blendDst = THREE.OneFactor;
-    material.blendSrcAlpha = THREE.ZeroFactor;
-    material.blendDstAlpha = THREE.OneFactor;
+    const material = new THREE.PointsMaterial({ size: 0.9, vertexColors: true, transparent: true, depthWrite: false, sizeAttenuation: true });
+    additive(material);
     super(geometry, material);
     this.name = 'Fireworks';
     this.frustumCulled = false;

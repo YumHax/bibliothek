@@ -1,9 +1,10 @@
 import * as THREE from 'three';
 import type { DisplaySlot, StallLike } from './stallTypes';
 import { boxMesh, cylinderMesh } from '../meshUtils';
-import { METAL, paint, standard, timber } from '../materials/palette';
+import { METAL, paint, timber } from '../materials/palette';
+import { GLASS, asGlass } from '../materials/glass';
 import { PROUD, proud } from '../props/joinery';
-import { centreOutRow, fitInRow, paintStallSign, plainCloth, unclickable } from './stallPaint';
+import { centreOutRow, fitInRow, paintStallSign, plainCloth } from './stallPaint';
 
 export interface GlassCaseStallOptions {
   /** Text on the little sign on its post (a platform's name). */
@@ -48,8 +49,6 @@ const SIGN_PX_PER_M = 1600;
 const WOOD = timber(0x3a2418, 0.45);
 const PLINTH = timber(0x24160e, 0.55);
 const BRASS = METAL.agedBrass();
-/** The glass: front, sides and top, see-through to the eye and to the crosshair. */
-const GLASS = standard({ color: 0xe8f4f4, roughness: 0.05, metalness: 0, transparent: true, opacity: 0.12, depthWrite: false, side: THREE.DoubleSide });
 
 /**
  * A collector's glass display case: a dark wooden base on a recessed plinth, and on it a glazed
@@ -103,18 +102,14 @@ export class GlassCaseStall extends THREE.Group implements StallLike {
     this.add(boxMesh(INNER_W - 0.01, STEP_H, STEP_FRONT - BACK_FACE, velvet, { y: FLOOR_Y + STEP_H / 2, z: (STEP_FRONT + BACK_FACE) / 2 }));
 
     // The glass: front, sides and top, see-through to the eye and to the crosshair.
-    const glass = GLASS;
+    const glass = GLASS.clear;
     const panes = [
       boxMesh(WIDTH - 2 * FRAME, glassH - FRAME, GLASS_T, glass, { y: BODY_TOP + (glassH - FRAME) / 2, z: DEPTH / 2 - FRAME / 2 }),
       boxMesh(GLASS_T, glassH - FRAME, DEPTH - 2 * FRAME, glass, { x: -WIDTH / 2 + FRAME / 2, y: BODY_TOP + (glassH - FRAME) / 2 }),
       boxMesh(GLASS_T, glassH - FRAME, DEPTH - 2 * FRAME, glass, { x: WIDTH / 2 - FRAME / 2, y: BODY_TOP + (glassH - FRAME) / 2 }),
       boxMesh(WIDTH - 2 * FRAME, GLASS_T, DEPTH - 2 * FRAME, glass, { y: TOP - GLASS_T / 2 }),
     ];
-    for (const pane of panes) {
-      pane.castShadow = false;
-      pane.receiveShadow = false;
-      this.add(unclickable(pane));
-    }
+    for (const pane of panes) this.add(asGlass(pane));
 
     // The sign: a brass rod at the back right corner, an arm off its top, the sign hanging from it (painted both sides).
     this.add(cylinderMesh(0.008, POST_TOP - TOP, BRASS, { x: POST_X, y: (TOP + POST_TOP) / 2, z: POST_Z }, { segments: 8 }));

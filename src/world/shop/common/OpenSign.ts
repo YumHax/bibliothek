@@ -6,8 +6,9 @@ import { Prop, part } from '../../props/Prop';
 import { paint } from '../../materials/palette';
 import type { DayNight } from '../../props/DayNight';
 import type { ShopKind } from '../../street/streetPlan';
-import { SHOP_HOURS, clockTime, isShopOpen } from '../../street/shops/shopHours';
-import { HAND, POSTER, hex, setLines } from './lettering';
+import { isShopOpen } from '../../street/shops/shopHours';
+import { hex } from './lettering';
+import { DOOR_CARD_LOOK, paintDoorCard, type DoorCardLook } from './doorCard';
 
 export interface OpenSignOptions {
   /** The card's colour and the OPEN side's lettering. Default cream and the shop's accent. */
@@ -53,13 +54,12 @@ export class OpenSign extends Prop implements Updatable {
   ) {
     super();
     this.name = 'OpenSign';
-    const card = hex(options.card ?? 0xf4eedc);
-    const hours = SHOP_HOURS[kind];
-    const note = hours ? `open ${clockTime(hours.open)} – ${clockTime(hours.close % 24)}` : '';
-    this.faces = {
-      open: paintFace(card, hex(options.ink ?? accent), ['OPEN', 'come in!'], POSTER),
-      closed: paintFace(card, hex(options.closedInk ?? 0x9a2a22), ['SORRY', "WE'RE CLOSED", note], HAND),
+    const look = {
+      card: options.card === undefined ? DOOR_CARD_LOOK.card : hex(options.card),
+      ink: hex(options.ink ?? accent),
+      closedInk: options.closedInk === undefined ? DOOR_CARD_LOOK.closedInk : hex(options.closedInk),
     };
+    this.faces = { open: paintFace(kind, 'open', look), closed: paintFace(kind, 'closed', look) };
     const sucker = cylinderMesh(0.018, 0.008, SUCKER, { z: 0.004 }, { segments: 14 });
     sucker.rotation.x = Math.PI / 2;
     this.add(sucker);
@@ -111,15 +111,9 @@ export class OpenSign extends Prop implements Updatable {
   }
 }
 
-function paintFace(card: string, ink: string, lines: string[], family: string): THREE.Texture {
-  const w = Math.round(W * PX);
-  const h = Math.round(H * PX);
-  const [canvas, ctx] = createCanvas(w, h);
-  ctx.fillStyle = card;
-  ctx.fillRect(0, 0, w, h);
-  ctx.strokeStyle = ink;
-  ctx.lineWidth = h * 0.04;
-  ctx.strokeRect(h * 0.06, h * 0.06, w - h * 0.12, h - h * 0.12);
-  setLines(ctx, { lines: lines.filter(Boolean), x: w * 0.08, y: h * 0.12, w: w * 0.84, h: h * 0.76, family, color: ink, weight: '800', firstScale: lines.length > 2 ? 1.2 : 2.2 });
+/** One side of the card, painted as the street's atlas paints it (`common/doorCard`). */
+function paintFace(kind: ShopKind, side: 'open' | 'closed', look: DoorCardLook): THREE.Texture {
+  const [canvas, ctx] = createCanvas(Math.round(W * PX), Math.round(H * PX));
+  paintDoorCard(ctx, canvas.width, canvas.height, side, kind, look);
   return toTexture(canvas);
 }

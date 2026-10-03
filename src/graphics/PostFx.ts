@@ -5,6 +5,7 @@ import type { FramePipeline, Updatable } from '@/core/Engine';
 import type { QualitySettings } from './quality';
 import { NEUTRAL_LOOK, displayColor, type Look } from './grade';
 import { whiteBalance } from './whiteBalance';
+import { GlassMask } from './glassMask';
 import { AO_FRAGMENT, AO_BLUR_FRAGMENT, DOF_FRAGMENT, LUMINANCE_FRAGMENT, METER_DOWNSAMPLE_FRAGMENT, OUTPUT_FRAGMENT, QUAD_VERTEX } from './postFxShaders';
 
 export interface PostFxOptions {
@@ -21,6 +22,9 @@ export interface PhotoLens {
 
 /** Bloom: only what is brighter than this (linear, before tone mapping) glows: lamps, neon, screens, the sun on white. */
 const BLOOM_THRESHOLD = 0.85;
+/** The output's sharpen (CAS, 0..1): a touch against the FXAA's softening, more per unit the frame is stretched to the screen. */
+const SHARPEN_AFTER_FXAA = 0.25;
+const SHARPEN_PER_STRETCH = 0.8;
 /**
  * The bloom's first level is half the frame (it was a quarter: small lamps and neon letters
  * shimmered as they crossed its texels), so its narrowest glow is half as wide as before; a larger
@@ -90,6 +94,8 @@ export class PostFx implements FramePipeline, Updatable {
   private readonly colorTarget: THREE.WebGLRenderTarget;
   private readonly aoTarget: THREE.WebGLRenderTarget | null = null;
   private readonly aoBlurTarget: THREE.WebGLRenderTarget | null = null;
+  /** Where the window panes show (the occlusion spares them), at the occlusion's size. */
+  private readonly glass: GlassMask | null = null;
   private readonly meterTarget: THREE.WebGLRenderTarget | null = null;
   /** The meter's area average: the frame at a quarter, then a sixteenth of its size (log luminance, weight). */
   private readonly meterQuarter: THREE.WebGLRenderTarget | null = null;
@@ -164,6 +170,7 @@ export class PostFx implements FramePipeline, Updatable {
         amount: { value: 0 },
         maxRadius: { value: DOF_MAX_RADIUS },
         tAO: { value: null },
+        tGlass: { value: null },
         aoTexel: { value: new THREE.Vector2() },
         fogDensity: { value: 0 },
         uvScale: { value: this.uvScale },
@@ -205,6 +212,8 @@ export class PostFx implements FramePipeline, Updatable {
       });
       // The occlusion darkens the working copy (the prep pass), before the bloom.
       this.prepMaterial.uniforms.tAO.value = this.aoBlurTarget.texture;
+      this.glass = new GlassMask(this.sceneTarget.depthTexture!, aoSize.w, aoSize.h);
+      this.prepMaterial.uniforms.tGlass.value = this.glass.texture;
       this.prepMaterial.uniforms.aoTexel.value.set(1 / aoSize.w, 1 / aoSize.h);
     }
 
@@ -265,6 +274,7 @@ export class PostFx implements FramePipeline, Updatable {
         highlights: { value: this.lookColors.highlights.setRGB(1, 1, 1) },
         vignette: { value: 0 },
         grain: { value: 0 },
+        sharpen: { value: 0 },
       } satisfies Record<string, THREE.IUniform> & LookUniforms,
     });
     // Tone mapping and sRGB are done by the output shader itself, after the HDR passes.
@@ -348,6 +358,7 @@ export class PostFx implements FramePipeline, Updatable {
     if (this.aoMaterial && this.aoBlurMaterial && this.aoTarget && this.aoBlurTarget) {
       this.pass(this.aoMaterial, this.aoTarget);
       this.pass(this.aoBlurMaterial, this.aoBlurTarget);
+      if (this.glass && this.camera) this.glass.render(renderer, scene, this.camera, this.aoTarget.viewport);
     }
 
     // The scene's MSAA buffer is resolved and gone: everything after works on this copy (occluded, maybe blurred).
@@ -377,6 +388,9 @@ export class PostFx implements FramePipeline, Updatable {
 
     const out = this.outputMaterial.uniforms;
     out.exposure.value = exposure;
+    // How much the frame is stretched to the screen: the pixel ratio's cap (a Retina screen at 1.5) and the adaptive scale.
+    const stretch = window.devicePixelRatio / Math.max(0.1, renderer.getPixelRatio() * this.renderScale);
+    out.sharpen.value = THREE.MathUtils.clamp((this.quality.fxaa ? SHARPEN_AFTER_FXAA : 0) + Math.max(0, stretch - 1) * SHARPEN_PER_STRETCH, 0, 1);
     out.time.value = this.time;
     renderer.setRenderTarget(null);
     this.quad.material = this.outputMaterial;
@@ -444,6 +458,7 @@ export class PostFx implements FramePipeline, Updatable {
       const ah = Math.max(1, Math.round(h / 2));
       this.aoTarget.setSize(aw, ah);
       this.aoBlurTarget.setSize(aw, ah);
+      this.glass?.setSize(aw, ah);
       this.aoMaterial.uniforms.depthTexel.value.set(1 / w, 1 / h);
       this.aoMaterial.uniforms.aspect.value = w / h;
       this.aoBlurMaterial.uniforms.aoTexel.value.set(1 / aw, 1 / ah);

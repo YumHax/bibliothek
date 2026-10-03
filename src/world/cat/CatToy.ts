@@ -175,7 +175,7 @@ function stripesTexture(a: number, b: number): THREE.CanvasTexture {
   // Thin seams between the panels.
   ctx.fillStyle = 'rgba(40, 30, 30, 0.35)';
   for (let i = 0; i < stripes; i++) ctx.fillRect(Math.floor(i * stripeW), 0, 2, height);
-  const texture = toTexture(canvas, 4);
-  texture.wrapS = THREE.RepeatWrapping;
+  const texture = toTexture(canvas, 'facing');
+  texture.wrapS = THREE.RepeatWrapping; // convention-ok: wraps one way only
   return texture;
 }

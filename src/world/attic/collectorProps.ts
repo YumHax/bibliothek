@@ -8,6 +8,7 @@ import { playWoodKnock } from '@/audio/furnitureSounds';
 import { boxMesh, invisibleHitbox } from '../meshUtils';
 import { cloth, paint, timber } from '../materials/palette';
 import { Prop } from '../props/Prop';
+import { additive } from '@/world/materials/blend';
 
 /** The dust sheets: an old linen gone grey. */
 const SHEET = cloth(0xcfc8ba, 1);
@@ -121,7 +122,7 @@ function coverTexture(seed: number): THREE.CanvasTexture {
   // Thirty years of sun through the roof window.
   ctx.fillStyle = 'rgba(240, 220, 170, 0.25)';
   ctx.fillRect(0, 0, 300, 400);
-  return toTexture(canvas, 4);
+  return toTexture(canvas, 'facing');
 }
 
 /**
@@ -178,7 +179,7 @@ function notebookTexture(): THREE.CanvasTexture {
   const random = seededRandom(31);
   for (let y = 36; y < 230; y += 14) ctx.fillRect(14, y - 6, 120 + random() * 190, 1.5);
   ctx.fillText('A. Vasseur', 14, 18);
-  return toTexture(canvas, 4);
+  return toTexture(canvas, 'facing');
 }
 
 /**
@@ -267,13 +268,8 @@ export class DustMotes extends THREE.Points implements Updatable {
     }
     const geometry = new THREE.BufferGeometry();
     geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-    const material = new THREE.PointsMaterial({ color: 0xfff0d0, size: 0.012, transparent: true, opacity: 0.55, depthWrite: false, toneMapped: false });
-    material.blending = THREE.CustomBlending;
-    material.blendEquation = THREE.AddEquation;
-    material.blendSrc = THREE.SrcAlphaFactor;
-    material.blendDst = THREE.OneFactor;
-    material.blendSrcAlpha = THREE.ZeroFactor;
-    material.blendDstAlpha = THREE.OneFactor;
+    const material = new THREE.PointsMaterial({ color: 0xfff0d0, size: 0.012, transparent: true, opacity: 0.55, depthWrite: false });
+    additive(material);
     super(geometry, material);
     this.name = 'DustMotes';
     this.speeds = speeds;

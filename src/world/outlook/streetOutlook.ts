@@ -10,7 +10,9 @@ import { Precipitation } from '../street/Precipitation';
 import { buildStreetBase, buildStreetFixtures, buildStreetFronts, sceneryAnisotropy } from '../street/streetScenery';
 import { airColor, airDensity } from '../street/streetAir';
 import { fadeSunShadowEdges } from '../street/shadowFade';
-import { FACADES, type FacadeSpec, type Vec2 } from '../street/streetPlan';
+import { STREET_PLAN, type FacadeSpec } from '../street/streetPlan';
+import { RetroLure } from '../street/RetroLure';
+import { RETRO_NEWS } from '../props/outdoors/RetroShopLure';
 import type { WindowLife } from '../street/windowLife';
 import { Courtyard } from './Courtyard';
 import { COURTYARD_YARD } from './outlookPlan';
@@ -21,24 +23,25 @@ export interface StreetOutlookOptions {
   dayNight: DayNight;
   /** Where the sun (the moon) is, as the window view has it (`Outdoors.lightDirection`). */
   lightDirection: (out: THREE.Vector3) => THREE.Vector3;
-  /** Where the window is in the street's frame: the facades within reach of it, facing it, are built. */
-  eye: Vec2;
-  /** Facades not built: the one the window is in (its back would stand between the eye and the view). */
-  without: readonly string[];
+  /**
+   * The facades built: those seen from one window (`facadesInView`), or from every window of our building
+   * (`homeFacades`, the view shared by the flat, the stairwell and the neighbours' flats).
+   */
+  facades: readonly FacadeSpec[];
   /** Whose homes the lit windows are and the stories behind them (`building/rearWindows`); none: the curfews. */
   windowLife?: WindowLife;
   /** What the flat has bought: our balcony's plants and bistro set show as in the street (none: all shown). */
   upgrades?: HomeUpgrades;
 }
 
-/** How far from the window a facade is built (m), and within what distance it is painted at the street's finest. */
-const REACH = 110;
-const FINE_WITHIN = 35;
-const FINE_DETAIL = 34;
 /** Real lights among the street lamps, following the ones nearest the window (none on low). */
 const LAMP_LIGHTS = { high: 2, medium: 2, low: 0 } as const;
 /** Real seconds between two prefilters of the sky for what the view's glass and paint reflect. */
 const REFLECT_EVERY = 20;
+/** The view's sun redraws its shadow this many times a second (the cars' shadows move on; the rest barely does). */
+const SHADOW_HZ = 5;
+/** The facades' paint, finer on high as in the street itself (`furnishStreet`): from the flat they are 20-30 m off. */
+const DETAIL_SCALE = { high: 1.35, medium: 1, low: 0.6 } as const;
 
 /**
  * Front Street and our courtyard as seen through a window from inside (`OutlookView`): the street's own pieces built
@@ -51,7 +54,7 @@ const REFLECT_EVERY = 20;
  * (the people, the doors, the sounds, the shops' insides) is left out. Loaded in the street's chunk (a dynamic import).
  */
 export function buildStreetOutlook(camera: THREE.Camera, options: StreetOutlookOptions): OutlookContents {
-  const { dayNight, lightDirection, eye, without, windowLife, upgrades } = options;
+  const { dayNight, lightDirection, facades, windowLife, upgrades } = options;
   const scene = new THREE.Scene();
   scene.name = 'StreetOutlook';
   const fog = new THREE.FogExp2(0x000000, 0);
@@ -63,17 +66,22 @@ export function buildStreetOutlook(camera: THREE.Camera, options: StreetOutlookO
     return item;
   };
 
-  const lighting = add(new StreetLighting(dayNight, camera, lightDirection, { shadowMapSize: QUALITY.level === 'high' ? 2048 : 1024, shadowReach: 32 }));
+  const lighting = add(new StreetLighting(dayNight, camera, lightDirection, { shadowMapSize: QUALITY.level === 'high' ? 2048 : 1024, shadowReach: 32, shadowRefreshHz: SHADOW_HZ }));
   lighting.setOccupied(true);
   const dome = add(new SkyDome(dayNight, camera));
   // The street's own scenery (`street/streetScenery`): ground, park, the facades facing the window with their relief,
   // lamps, trees (the courtyard's chestnut among them), parked and passing cars, furniture. No colliders, no manoeuvres.
-  const detailScale = QUALITY.level === 'low' ? 0.6 : 1;
-  const { buildings } = buildStreetBase(add, { dayNight, facades: facadesInView(eye, without), detailScale, shopGoods: null, ...(windowLife ? { windowLife } : {}) });
+  // RETRO GAMES' shelves in today's stock, as the street has them (`RetroLure`'s news), once drawn.
+  const shopGoods = RETRO_NEWS.colors ? [...RETRO_NEWS.colors] : null;
+  const { buildings } = buildStreetBase(add, { dayNight, facades: [...facades], detailScale: DETAIL_SCALE[QUALITY.level], shopGoods, ...(windowLife ? { windowLife } : {}) });
   buildStreetFronts(add, buildings.fronts, dayNight, upgrades ? { upgrades } : {});
   const traffic = add(new StreetTraffic());
   buildStreetFixtures(add, { dayNight, viewer: camera, traffic, lampLights: LAMP_LIGHTS[QUALITY.level], moreTrees: [COURTYARD_YARD.chestnut] });
   add(new Precipitation(dayNight));
+  // RETRO GAMES' NEW IN banner on a fresh market day, seen from the flat (the street's own; the queue is people: not here).
+  if (facades.some((spec) => spec.id === 'retro')) {
+    add(new RetroLure({ ...STREET_PLAN.retroLure, queue: [], door: STREET_PLAN.doors.market.at, viewer: camera, place: () => {}, talk: () => '', drawDistance: 0, fade: 0, onStock: () => {} }));
+  }
   add(new Courtyard(dayNight, sceneryAnisotropy()));
 
   // The sun's shadow fades out at its map's edge into the rows' far shadow, as in the street itself.
@@ -110,27 +118,4 @@ export function buildStreetOutlook(camera: THREE.Camera, options: StreetOutlookO
       disposeOutlookScene(scene);
     },
   };
-}
-
-/**
- * The facades seen from `eye`: within `REACH` of it, their face turned towards it, less `without`; the near ones
- * painted as finely as the street's nearest (a courtyard's rear building is seen from 15 m, not from the far pavement).
- */
-export function facadesInView(eye: Vec2, without: readonly string[]): FacadeSpec[] {
-  const [ex, ez] = eye;
-  const seen: FacadeSpec[] = [];
-  for (const spec of FACADES) {
-    if (without.includes(spec.id)) continue;
-    const [ax, az] = spec.from;
-    const dx = spec.to[0] - ax;
-    const dz = spec.to[1] - az;
-    const length = Math.hypot(dx, dz);
-    // Its face is the left-hand normal of from -> to.
-    if (-dz * (ex - ax) + dx * (ez - az) <= 0) continue;
-    const t = THREE.MathUtils.clamp(((ex - ax) * dx + (ez - az) * dz) / (length * length), 0, 1);
-    const distance = Math.hypot(ax + dx * t - ex, az + dz * t - ez);
-    if (distance > REACH) continue;
-    seen.push(distance < FINE_WITHIN ? { ...spec, detail: Math.max(spec.detail, FINE_DETAIL) } : spec);
-  }
-  return seen;
 }

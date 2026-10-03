@@ -57,7 +57,7 @@ export class InfoBoard extends Prop {
       this.add(boxMesh(LEG + 0.01, 0.04, FOOT_D, wood, { x: sx * postX, y: 0.02 }));
     }
     [this.canvas, this.ctx] = createCanvas(Math.round(BOARD_W * PX_PER_M), Math.round(BOARD_H * PX_PER_M));
-    this.texture = toTexture(this.canvas, 4);
+    this.texture = toTexture(this.canvas, 'facing');
     const face = new THREE.MeshStandardMaterial({ map: this.texture, roughness: 0.85 });
     // BoxGeometry material order: +x, -x, +y, -y, +z, -z: the painted face on both broad sides.
     const board = new THREE.Mesh(new THREE.BoxGeometry(BOARD_W, BOARD_H, BOARD_T), [wood, wood, wood, wood, face, face]);

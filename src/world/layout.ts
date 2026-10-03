@@ -18,6 +18,7 @@ import { furnishKitchen } from './kitchen/furnishKitchen';
 import { furnishBalcony } from './balcony/furnishBalcony';
 import { furnishStairwell } from './stairwell/furnishStairwell';
 import { RoomWindow } from './props/Window';
+import { homeOutlook } from './outlook/sharedOutlook';
 import { Poster } from './props/Poster';
 import { FeatherWand } from './prizes/FeatherWand';
 import { ConsoleStand } from './props/ConsoleStand';
@@ -121,13 +122,13 @@ export function furnishRoom(zone: Zone, ctx: BuildContext): RoomHandle {
   }
 
   // 3. Windows. Every window throws the sun (one shadow map each) while the sun is on its side; all
-  //    panes show the sky's `Outdoors`. Clicking a window draws its curtains; the skylight follows how many are open.
+  //    panes show the street (`homeOutlook`: its 3D view; on low the sky's painted `Outdoors`). Clicking a window draws its curtains; the skylight follows how many are open.
   const { size: windowSize, list: windowPlans } = plan.windows;
   const mountY = RoomWindow.mountY(windowSize.height);
   const windows: RoomWindow[] = [];
   const onCurtainsChange = curtainsToSkylight(room, windows);
   for (const w of windowPlans) {
-    windows.push(zone.placeAt(new RoomWindow(sky.outdoors, { ...windowSize, onCurtainsChange }), { wall: w.wall, along: w.along, y: mountY }));
+    windows.push(zone.placeAt(new RoomWindow(sky.outdoors, { ...windowSize, onCurtainsChange, outlook: homeOutlook(sky.outdoors) }), { wall: w.wall, along: w.along, y: mountY }));
   }
 
   // 4. Console stand under the TV with one console per platform, and the two posters; both follow the collection.

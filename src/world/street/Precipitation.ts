@@ -5,7 +5,10 @@ import type { Furniture } from '../Furniture';
 import type { DayNight } from '../props/DayNight';
 import { KERB_HEIGHT } from './streetPlan';
 import { roadGlsl } from './relief/ground';
+import { SINE_HASH } from '@/graphics/glslNoise';
 import { RENDER_ORDER } from '../surface/layers';
+import { POINT_SCALE, scalesPoints } from '../particles/pointScale';
+import { overKeepingAlpha } from '@/world/materials/blend';
 
 /** The box of air around the eye the drops and flakes fill (metres), and how many there can be at most. */
 const BOX = new THREE.Vector3(34, 16, 34);
@@ -85,6 +88,7 @@ uniform float amount;
 uniform vec3 box;
 uniform vec3 velocity;
 uniform float size;
+uniform float pointScale;
 void main() {
   vec3 p = position * box + velocity * time;
   p.x += sin(time * 0.9 + position.y * 40.0) * 0.6;
@@ -93,7 +97,7 @@ void main() {
   vec3 w = origin + mod(p - origin, box);
   vec4 view = viewMatrix * vec4(w, 1.0);
   gl_Position = projectionMatrix * view;
-  gl_PointSize = size * (0.6 + 0.8 * extra.x) / max(-view.z, 0.5);
+  gl_PointSize = size * pointScale * (0.6 + 0.8 * extra.x) / max(-view.z, 0.5);
   if (extra.y > amount || sheltered(w)) gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
 }
 `;
@@ -124,17 +128,18 @@ uniform float amount;
 uniform float box;
 uniform float period;
 uniform float size;
+uniform float pointScale;
 uniform vec3 origin;
 uniform float roadY;
 varying float vAge;
 varying float vSquash;
-float hash(float n) { return fract(sin(n) * 43758.5453); }
+${SINE_HASH}
 ${roadGlsl()}
 void main() {
   float phase = time / period + extra.x;
   float cycle = floor(phase);
   vAge = fract(phase);
-  vec2 seed = position.xz + vec2(hash(cycle + extra.x * 91.0), hash(cycle * 1.7 + extra.x * 57.0));
+  vec2 seed = position.xz + vec2(sineHash(cycle + extra.x * 91.0), sineHash(cycle * 1.7 + extra.x * 57.0));
   vec2 corner = cameraPosition.xz - vec2(box * 0.5);
   vec2 w = corner + mod(seed * box - corner, vec2(box));
   vec2 local = w - origin.xz;
@@ -143,7 +148,7 @@ void main() {
   gl_Position = projectionMatrix * view;
   vec3 toEye = normalize(cameraPosition - vec3(w.x, y, w.y));
   vSquash = max(abs(toEye.y), 0.12);
-  gl_PointSize = size / max(-view.z, 0.5);
+  gl_PointSize = size * pointScale / max(-view.z, 0.5);
   if (extra.y > amount || sheltered(vec3(w.x, y, w.y))) gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
 }
 `;
@@ -165,14 +170,8 @@ void main() {
 
 /** Blends over the scene but keeps the canvas alpha (the video cut-out rule, docs/graphics.md). */
 function overlay(material: THREE.ShaderMaterial): THREE.ShaderMaterial {
-  material.transparent = true;
   material.depthWrite = false;
-  material.blending = THREE.CustomBlending;
-  material.blendSrc = THREE.SrcAlphaFactor;
-  material.blendDst = THREE.OneMinusSrcAlphaFactor;
-  material.blendSrcAlpha = THREE.ZeroFactor;
-  material.blendDstAlpha = THREE.OneFactor;
-  return material;
+  return overKeepingAlpha(material);
 }
 
 function particles(count: number, verticesEach: number, seed: number): THREE.BufferGeometry {
@@ -260,6 +259,7 @@ export class Precipitation extends THREE.Group implements Furniture, Updatable {
       box: { value: BOX },
       velocity: { value: new THREE.Vector3(0, -1.1, 0) },
       size: { value: 60 },
+      pointScale: POINT_SCALE,
       color: { value: new THREE.Color(0xffffff) },
       opacity: { value: 0.85 },
       ...shelterUniforms(),
@@ -272,6 +272,7 @@ export class Precipitation extends THREE.Group implements Furniture, Updatable {
       box: { value: SPLASH_BOX },
       period: { value: SPLASH_SECONDS },
       size: { value: 16 },
+      pointScale: POINT_SCALE,
       origin: { value: new THREE.Vector3() },
       roadY: { value: -KERB_HEIGHT },
       color: { value: new THREE.Color(0xd0d8e0) },
@@ -286,6 +287,7 @@ export class Precipitation extends THREE.Group implements Furniture, Updatable {
         box: { value: PETAL_BOX },
         velocity: { value: new THREE.Vector3(0.8, -0.45, 0.2) },
         size: { value: 26 },
+        pointScale: POINT_SCALE,
         color: { value: new THREE.Color(0xf6c9d6) },
         opacity: { value: 0.9 },
         ...shelterUniforms(),
@@ -299,6 +301,7 @@ export class Precipitation extends THREE.Group implements Furniture, Updatable {
       mesh.visible = false;
       // The shelters round whichever camera draws it (the player's, or a window's onto the street).
       mesh.onBeforeRender = (_renderer, _scene, camera) => this.chooseShelters(camera);
+      if ((mesh as THREE.Points).isPoints) scalesPoints(mesh);
       this.add(mesh);
     }
   }

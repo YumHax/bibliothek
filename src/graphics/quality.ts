@@ -48,9 +48,11 @@ export interface QualitySettings {
   /**
    * Anisotropic filtering of the textures seen at a grazing angle (floors, walls, labels, signs):
    * the default of `toTexture` and the floor and wall finishes. three.js caps it at the GPU's own
-   * maximum (`capabilities.getMaxAnisotropy()`).
+   * maximum (`capabilities.getMaxAnisotropy()`). Never a number per prop: `graphics/canvas` `Anisotropy`.
    */
   anisotropy: number;
+  /** Scale of the texel densities canvases are painted at (`graphics/canvas` `canvasFor`, `DENSITY`). */
+  canvasScale: number;
   /**
    * How often a lit lamp or sun of the player's room re-renders its shadow map (per second; 0 = every
    * frame). Each refresh redraws the room from the light (six times for a lamp).
@@ -102,6 +104,7 @@ const PRESETS: Record<QualityLevel, Omit<QualitySettings, 'level'>> = {
     shadowMapSize: 512,
     sunShadowMapSize: 512,
     anisotropy: 2,
+    canvasScale: 0.75,
     shadowRefreshHz: 15,
     minShadowCaster: 0.15,
     lights: { point: 5, pointShadows: 2, spot: 6, spotShadows: 3, hemisphere: 2 },
@@ -130,6 +133,7 @@ const PRESETS: Record<QualityLevel, Omit<QualitySettings, 'level'>> = {
     shadowMapSize: 1024,
     sunShadowMapSize: 1024,
     anisotropy: 4,
+    canvasScale: 1,
     shadowRefreshHz: 30,
     minShadowCaster: 0.08,
     lights: { point: 8, pointShadows: 3, spot: 10, spotShadows: 4, hemisphere: 2 },
@@ -158,6 +162,7 @@ const PRESETS: Record<QualityLevel, Omit<QualitySettings, 'level'>> = {
     shadowMapSize: 1024,
     sunShadowMapSize: 2048,
     anisotropy: 8,
+    canvasScale: 1.25,
     shadowRefreshHz: 0,
     minShadowCaster: 0.04,
     lights: { point: 12, pointShadows: 5, spot: 16, spotShadows: 5, hemisphere: 2 },

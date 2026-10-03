@@ -13,13 +13,13 @@ const ARROW = 14;
 const LEAD = 1.6;
 /** Judgement windows, seconds either side of the beat, and what each pays. */
 const WINDOWS: { within: number; label: string; points: number; color: string }[] = [
-  { within: 0.045, label: 'MARVELOUS', points: 30, color: '#ffffff' },
-  { within: 0.09, label: 'GREAT', points: 20, color: '#7ee787' },
-  { within: 0.14, label: 'GOOD', points: 10, color: '#ffe066' },
+  { within: 0.05, label: 'MARVELOUS', points: 30, color: '#ffffff' },
+  { within: 0.1, label: 'GREAT', points: 20, color: '#7ee787' },
+  { within: 0.16, label: 'GOOD', points: 10, color: '#ffe066' },
 ];
-const MISS_SECONDS = 1;
+const MISS_SECONDS = 0.6;
 /** Clean steps in a row that light the FEVER (double points for a while, and seconds). */
-const FEVER_AFTER = 24;
+const FEVER_AFTER = 16;
 const FEVER_SECONDS = 4;
 const FEVER_BONUS_TIME = 2;
 /** Steps hit per stage; a stage speeds the song up and pays seconds. */
@@ -43,7 +43,7 @@ interface Note {
  * STEP BEAT: the dance cabinet. Arrows rise up four lanes on the beat of a drum machine and have
  * to be stepped on (the pad's panels, or WASD / arrows) as they reach the receptors: MARVELOUS,
  * GREAT or GOOD by how close to the beat, chaining the combo; a late arrow or a step on nothing
- * costs a second. From the second stage on, some beats are jumps (two panels at once). Twenty-four
+ * costs a little time. From the second stage on, some beats are jumps (two panels at once). Sixteen
  * clean steps in a row light the FEVER: double points for a few seconds and two more on the
  * clock. Every twenty steps is a stage: the song speeds up and two seconds come back. The charts
  * are drawn from the run's seed, so a run replays exactly.

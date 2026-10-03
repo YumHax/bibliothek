@@ -11,23 +11,20 @@ import { homeGood } from '@/economy/homeGoods';
 import type { AmbientVoice } from '@/audio/ambient';
 import type { FootSurface } from '@/audio/footSurface';
 import { CatSettingsStore } from '../cat/catSettings';
-import { SHOP_LOOKS } from '../city/shopLooks';
+import { SHOP_LOOKS, letteringFamily } from '../city/shopLooks';
 import { LightPool } from '../lighting/LightPool';
 import { Rug } from '../props/Rug';
 import { Radio } from '../kitchen/Radio';
 import { Birdcage } from './Birdcage';
 import { shopDoorOf, streetOf } from './shopOutlook';
+import { SHOPFRONTS, hasShopfront } from '../street/shopfronts/shopfrontPlan';
 import { ShopCounter } from './ShopCounter';
 import { CounterErrand } from './CounterErrand';
 import { ForSale } from './ForSale';
 import { buildPiece } from './displayPieces';
 import { DisplayTable } from './DisplayTable';
-import { TvWall } from './TvWall';
-import { GoodsShelf } from './GoodsShelf';
-import { FlowerStand } from './FlowerStand';
+import { buildFixture } from './buildFixture';
 import { SnowTicker } from './snowScreen';
-import { RugRolls } from './RugRolls';
-import { DeliveryTrolley } from './DeliveryTrolley';
 import { ShopWindow, SILL } from './ShopWindow';
 import { ShopClerk } from './ShopClerk';
 import { ShopCustomer } from './ShopCustomer';
@@ -35,7 +32,7 @@ import { WindowDisplay } from './common/WindowDisplay';
 import { isShopFitting, isShopVoiced, type ShopFitting } from './common/fitting';
 import { makeShopProp, type ShopContext } from './shopProps';
 import { PetShopNoises, ShopRadio, ShopRoomTone, SnowHiss, playTill } from './shopSounds';
-import { SHOP_DOOR, SHOP_PLANS, type OnSurface, type ShopFixture, type ShopPlan, type ShopSound, type ShopZoneId } from './shopPlan';
+import { SHOP_DOOR, SHOP_PLANS, type OnSurface, type ShopPlan, type ShopSound, type ShopZoneId } from './shopPlan';
 import { surfaceOfRoom } from '@/audio/footSurface';
 import { furnishRepairCorner } from '../repair/furnishRepair';
 
@@ -94,7 +91,7 @@ export function furnishShop(zone: Zone, ctx: BuildContext): ZoneHandle {
   const accent = `#${plan.accent.toString(16).padStart(6, '0')}`;
   const { along, width, height } = plan.window;
   const window = zone.placeAt(
-    new ShopWindow({ width, height, name, letters: look.letters, door, along, front: plan.room.depth / 2, zoneFrame: zone.group, dayNight: sky.dayNight, outdoors: sky.outdoors, viewer: listener as THREE.Camera, ...(upgrades ? { upgrades } : {}) }),
+    new ShopWindow({ width, height, name: hasShopfront(plan.shop) ? SHOPFRONTS[plan.shop].glass[0] : name, door, along, front: plan.room.depth / 2, zoneFrame: zone.group, dayNight: sky.dayNight, outdoors: sky.outdoors, viewer: listener as THREE.Camera, ...(upgrades ? { upgrades } : {}) }),
     { wall: 'front', along, y: 0 },
   );
   zone.onUnload(
@@ -115,6 +112,7 @@ export function furnishShop(zone: Zone, ctx: BuildContext): ZoneHandle {
     accent: plan.accent,
     fascia: Number.parseInt(look.fascia.slice(1), 16),
     letters: look.letters,
+    font: letteringFamily(look.font),
     kind: plan.shop,
     dayNight: sky.dayNight,
     room: plan.room,
@@ -280,25 +278,6 @@ function placeFixtures(zone: Zone, fixtures: ShopPlan['fixtures'], hearing: Hear
   // The TV wall's sets stay static (their parts merge); one ticker repaints the snow they share.
   if (snow) zone.place(new SnowTicker(), new THREE.Vector3());
   return tables;
-}
-
-function buildFixture(fixture: Exclude<ShopFixture, { kind: 'clock' | 'radio' | 'prop' }>): Furniture {
-  switch (fixture.kind) {
-    case 'tvWall':
-      return new TvWall(fixture.options);
-    case 'goodsShelf':
-      return new GoodsShelf(fixture.options);
-    case 'flowerStand':
-      return new FlowerStand(fixture.options);
-    case 'table':
-      return new DisplayTable(fixture.options);
-    case 'rugRolls':
-      return new RugRolls(fixture.options);
-    case 'trolley':
-      return new DeliveryTrolley();
-    case 'birdcage':
-      return new Birdcage();
-  }
 }
 
 /** The voice of one of the shop's own sounds. */

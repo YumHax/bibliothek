@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { Updatable } from '@/core/Engine';
-import { createCanvas, seededRandom } from '@/covers/generated/canvasUtils';
+import { createCanvas, seededRandom, toTexture } from '@/covers/generated/canvasUtils';
 import { cylinderMesh } from '../meshUtils';
 import { Prop } from './Prop';
 import { paint, standard } from '../materials/palette';
@@ -58,7 +58,5 @@ function paintGlints(seed: number): THREE.CanvasTexture {
     ctx.fillRect(random() * 128, random() * 64, 2, 2);
   }
   ctx.globalAlpha = 1;
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.colorSpace = THREE.SRGBColorSpace;
-  return texture;
+  return toTexture(canvas, 'facing');
 }

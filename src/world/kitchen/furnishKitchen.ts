@@ -9,6 +9,7 @@ import { heardBy, pointSound } from '../build/hearing';
 import { curtainsToSkylight } from '../build/follow';
 import { isOwned, placerFor, type Placer } from '../build/owned';
 import { RoomWindow } from '../props/Window';
+import { homeOutlook } from '../outlook/sharedOutlook';
 import { KitchenRun } from './KitchenRun';
 import { WallCabinets } from './WallCabinets';
 import { Fridge } from './Fridge';
@@ -69,7 +70,7 @@ export function furnishKitchen(zone: Zone, ctx: BuildContext): ZoneHandle {
   // 2. The window over the sink: the one sunlit window of the room, a roller blind instead of curtains (the skylight follows it).
   const { wall, along, width, height, sill, blind } = plan.window;
   const windows: RoomWindow[] = [];
-  windows.push(zone.placeAt(new RoomWindow(sky.outdoors, { width, height, blind, onCurtainsChange: curtainsToSkylight(room, windows) }), { wall, along, y: RoomWindow.mountY(height) + sill }));
+  windows.push(zone.placeAt(new RoomWindow(sky.outdoors, { width, height, blind, onCurtainsChange: curtainsToSkylight(room, windows), outlook: homeOutlook(sky.outdoors) }), { wall, along, y: RoomWindow.mountY(height) + sill }));
 
   // 3. Breakfast table and its two chairs, once bought (`build/owned.ts`: staged till then).
   const furnished = placerFor(zone, upgrades, plan.upgrades.table);

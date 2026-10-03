@@ -30,7 +30,7 @@ const MOULDING_WOOD = timber(0x6a4a30, 0.5);
  * centre on the wall, +z into the room. Decoration: never collides.
  */
 export class NameBoard extends Prop {
-  constructor(options: NameBoardOptions & { lines: string[]; color: number; letters: string }) {
+  constructor(options: NameBoardOptions & { lines: string[]; color: number; letters: string; family?: string }) {
     super();
     this.name = 'NameBoard';
     const width = options.width ?? 1.6;
@@ -49,7 +49,7 @@ export class NameBoard extends Prop {
   }
 }
 
-function paintFace(wM: number, hM: number, options: NameBoardOptions & { lines: string[]; color: number; letters: string }, enamel: boolean): THREE.Texture {
+function paintFace(wM: number, hM: number, options: NameBoardOptions & { lines: string[]; color: number; letters: string; family?: string }, enamel: boolean): THREE.Texture {
   const W = Math.round(wM * PX_PER_M);
   const H = Math.round(hM * PX_PER_M);
   const [canvas, ctx] = createCanvas(W, H);
@@ -72,7 +72,7 @@ function paintFace(wM: number, hM: number, options: NameBoardOptions & { lines: 
   ctx.strokeStyle = edge;
   ctx.lineWidth = Math.max(2, H * 0.025);
   ctx.strokeRect(inset, inset, W - inset * 2, H - inset * 2);
-  const block = { lines: options.lines, x: inset * 2, y: inset * 1.4, w: W - inset * 4, h: H - inset * 2.8, family: SIGNWRITER, weight: '700', firstScale: 1.8 };
+  const block = { lines: options.lines, x: inset * 2, y: inset * 1.4, w: W - inset * 4, h: H - inset * 2.8, family: options.family ?? SIGNWRITER, weight: '700', firstScale: 1.8 };
   // The signwriter's drop shadow, then the letters.
   if (!enamel) {
     ctx.save();

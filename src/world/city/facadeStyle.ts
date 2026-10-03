@@ -1,4 +1,5 @@
 import { seededRandom } from '@/covers/generated/canvasUtils';
+import { shade } from './colour';
 
 /*
  * How a building of the neighbourhood looks, drawn from its plan's `seed` (`street/streetPlan.FACADES`):
@@ -90,12 +91,6 @@ function pick<T>(random: () => number, items: readonly T[]): T {
   return items[Math.floor(random() * items.length)]!;
 }
 
-function lighten(hex: string, k: number): string {
-  const n = parseInt(hex.slice(1), 16);
-  const c = (v: number): string => Math.max(0, Math.min(255, Math.round(v * k))).toString(16).padStart(2, '0');
-  return `#${c((n >> 16) & 255)}${c((n >> 8) & 255)}${c(n & 255)}`;
-}
-
 /**
  * A building's look from its seed (`stoneShare`: the chance of a dressed stone front). The same seed
  * always gives the same building, whichever renderer asks. `random` draws a lot's look instead (the
@@ -149,7 +144,7 @@ function baseStyle(seed: number, stoneShare: number, random: () => number): Base
   const quoins = random() < 0.3;
   const roof = pick(random, ['flat', 'flat', 'pitched', 'mansard'] as const);
   return {
-    seed, kind: 'render', wall, trim: lighten(wall, 1.28), frame, shutters, window, balconies, flowers: 0.3,
+    seed, kind: 'render', wall, trim: shade(wall, 1.28), frame, shutters, window, balconies, flowers: 0.3,
     rusticated: false, courses, quoins, roof, roofColor: pick(random, roof === 'mansard' ? SLATES : TILES),
   };
 }

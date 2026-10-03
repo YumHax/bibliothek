@@ -348,7 +348,7 @@ function paintAtlas(shopGoods: readonly string[] | null): THREE.CanvasTexture {
       ctx.restore();
     }
   });
-  const texture = toTexture(canvas, 4);
+  const texture = toTexture(canvas, 'grazing');
   texture.wrapS = THREE.ClampToEdgeWrapping;
   return texture;
 }

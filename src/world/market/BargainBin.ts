@@ -114,5 +114,5 @@ function paintCard(price: number): THREE.Texture {
   ctx.fillStyle = '#2a1a10';
   ctx.font = '26px "Comic Sans MS", "Marker Felt", system-ui, sans-serif';
   ctx.fillText('as seen · no haggling', 170, 185);
-  return toTexture(canvas, 4);
+  return toTexture(canvas, 'facing');
 }

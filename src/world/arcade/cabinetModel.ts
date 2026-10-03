@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { boxMesh, type MeshPosition } from '../meshUtils';
-import { WALL } from '../surface/layers';
+import { layMesh, WALL } from '../surface/layers';
 import { matte } from '../props/Prop';
 import { proud } from '../props/joinery';
 import { METAL, paint as paintOf } from '../materials/palette';
@@ -88,6 +88,7 @@ export function buildCabinetBody(cabinet: THREE.Group, spec: CabinetBodySpec): C
   const marquee = new THREE.MeshBasicMaterial({ map: paintCabinetMarquee(spec.title, color, glow), toneMapped: false, color: 0xcccccc });
   const marqueeMesh = new THREE.Mesh(new THREE.PlaneGeometry(WIDTH - 0.04, 0.16), marquee);
   marqueeMesh.position.set(0, TOTAL_H - 0.1, -0.11 + UPPER_DEPTH / 2 + WALL.notice.lift);
+  layMesh(marqueeMesh, WALL.notice);
   cabinet.add(marqueeMesh);
   return { body: [paint, baseArt, upperArt], marquee, marqueeMesh };
 }

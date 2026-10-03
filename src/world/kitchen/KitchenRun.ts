@@ -469,7 +469,7 @@ function tileTexture(width: number, height: number): THREE.CanvasTexture {
       ctx.fillRect(x + joint / 2, y + joint / 2, tileW - joint, 3);
     }
   }
-  return toTexture(canvas, 4);
+  return toTexture(canvas, 'grazing');
 }
 
 /** Deterministic 0..1 noise from an integer, so the tiles look the same every build. */

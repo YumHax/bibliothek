@@ -5,7 +5,8 @@ import type { Interactable } from '@/interaction/Interactable';
 import type { SessionActions } from '@/game/SessionActions';
 import { cylinderMesh, invisibleHitbox } from '../meshUtils';
 import { part } from '../props/Prop';
-import { CERAMIC, CHROME, CLEAR_GLASS } from '../props/bathroomMaterials';
+import { CERAMIC, CHROME } from '../props/bathroomMaterials';
+import { GLASS } from '../materials/glass';
 import { paint, standard, timber } from '../materials/palette';
 import { mirrorGlass } from '../props/MirrorGlass';
 import { WaterStream } from './WaterStream';
@@ -188,7 +189,7 @@ export class Washbasin extends THREE.Group implements Furniture, Interactable, U
   /** A glass shelf on two chrome brackets, with a jar and three bottles on it. */
   private buildShelf(x: number): void {
     const depth = 0.13;
-    const shelf = part(this, SHELF_W, 0.008, depth, CLEAR_GLASS, { x, y: SHELF_Y, z: depth / 2 });
+    const shelf = part(this, SHELF_W, 0.008, depth, GLASS.screen, { x, y: SHELF_Y, z: depth / 2 });
     shelf.castShadow = false;
     for (const dx of [-SHELF_W / 2 + 0.04, SHELF_W / 2 - 0.04]) {
       part(this, 0.03, 0.03, 0.012, CHROME, { x: x + dx, y: SHELF_Y - 0.02, z: 0.006 });

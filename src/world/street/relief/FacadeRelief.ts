@@ -6,14 +6,17 @@ import type { HomeUpgrades } from '@/economy/HomeUpgrades';
 import type { Furniture } from '../../Furniture';
 import type { DayNight } from '../../props/DayNight';
 import type { PaintedFront } from '../Buildings';
-import type { FlatFront } from '../streetPlan';
+import type { FlatFront, ShopKind } from '../streetPlan';
 import { snowCovered } from '../snowCover';
 import { isShopOpen } from '../shops/shopHours';
 import { afterChunk, patchShader } from '../../materials/shaderPatch';
 import { BALCONY_PLAN } from '../../balcony/balconyPlan';
+import { BISTRO } from '../../balcony/BistroSet';
+import { facadeHeight } from '../facadePainter';
 import { FacadeFrame } from './facadeFrame';
 import { TriBuilder } from './TriBuilder';
-import { hasShopfront } from '../shopfronts/shopfrontPlan';
+import { frontVariant } from '../shopfronts/shopfrontPlan';
+import { gapAt } from '../../surface/layers';
 
 /** An awning: fixed to the wall at `top`, reaching `reach` out and down to `edge`, a valance `valance` deep, stripes `stripe` wide. */
 const AWNING = { top: 3.0, reach: 1.05, edge: 2.48, valance: 0.2, scallop: 0.07, stripe: 0.35 };
@@ -28,7 +31,7 @@ const SURROUND = { width: 0.12, depth: 0.08, head: 0.14 };
 const STEP = { height: 0.14, depth: 0.32, wider: 0.5 };
 /** A downpipe: its radius, how far off the wall, the brackets' spacing. */
 const DOWNPIPE = { radius: 0.05, out: 0.08, bracket: 1.8 };
-/** Facades painted at least this finely (px per metre) get the small relief (sills, fine bars, things on the balconies). */
+/** Facades painted at least this finely (px per metre) get the small relief (fine bars, things on the balconies). */
 const FINE = 20;
 const IRON = 0x23262a;
 const PIPE = '#3e4244';
@@ -50,7 +53,7 @@ export interface FacadeReliefOptions {
  * whole street): the shops' striped awnings (canvas both sides, a scalloped valance, casting their
  * shade on the pavement; let down while the shop is open by day, wound up into their cassettes at
  * closing and at night), the balcony rows' stone slabs and wrought-iron rails with the residents'
- * pots, a chair, a table, the window sills on the near facades, stone surrounds that set the doors
+ * pots, a chair, a table (the windows of the near facades are `Buildings`' own, `facadeWindows/`), stone surrounds that set the doors
  * back into the wall and the step before the residents' doors, the downpipes from the gutters, and
  * our own flat's balcony on the top floor of our building, with the plants and the bistro set once
  * they are bought, so the player looking up from the street finds home as they left it. Snow
@@ -72,40 +75,47 @@ export class FacadeRelief extends THREE.Group implements Furniture, Updatable {
     this.name = 'FacadeRelief';
     this.upgrades = options.upgrades;
     this.dayNight = options.dayNight;
-    const awnings: { geometry: THREE.BufferGeometry; frame: FacadeFrame }[] = [];
+    const awnings: { geometry: THREE.BufferGeometry; frame: FacadeFrame; out: number }[] = [];
     const stone = new TriBuilder();
     const iron = new TriBuilder();
     const props = new TriBuilder();
     const plants = new TriBuilder();
     const bistro = new TriBuilder();
     const plantEnds: number[] = [];
+    // What stands on the pavement or against a wall loses the faces pressed on them (never seen). Not our balcony's
+    // plants: they show one by one by their vertex ranges (`plantEnds`), which leaving faces out would shift.
+    const culled = [stone, iron, props, bistro];
+    for (const builder of culled) builder.hideGround();
     for (const front of fronts) {
       const frame = new FacadeFrame(front.spec);
       const fine = front.spec.detail >= FINE;
       const m = frame.matrix(0, 0);
       const { features } = front;
+      const wall = frame.wall(facadeHeight(front.spec.storeys));
+      for (const builder of culled) builder.hideAgainst(...wall);
       for (const a of features.awnings) {
         const canvas = new TriBuilder();
-        awning(canvas, m, a.s0, a.s1, a.colors);
-        awnings.push({ geometry: canvas.build(), frame });
+        const out = a.out ?? 0;
+        awning(canvas, out ? frame.matrix(0, 0, out) : m, a.s0, a.s1, a.colors);
+        awnings.push({ geometry: canvas.build(), frame, out });
         this.awnings.push({ kind: a.kind, out: 1 });
       }
       const slab = new THREE.Color(features.trim).multiplyScalar(0.86);
       const random = seededRandom(front.spec.seed * 613 + 5);
       for (const b of features.balconies) {
         balcony(stone, iron, m, b.s0, b.s1, b.y, BALCONY.depth, slab, fine ? BALCONY.bar : BALCONY.farBar);
+        // What stands on its slab loses its foot (pressed on the slab, never seen).
+        props.hideAgainst(new THREE.Vector3(0, 1, 0), frame.point(b.s0, b.y), new THREE.Box3().setFromPoints([frame.point(b.s0, b.y, 0), frame.point(b.s1, b.y, BALCONY.depth)]));
         if (fine) dressBalcony(props, m, b.s0, b.s1, b.y, random);
-      }
-      if (fine) {
-        for (const s of features.sills) stone.box(m, (s.s0 + s.s1) / 2, s.y - 0.045, 0.05, s.s1 - s.s0, 0.07, 0.1, features.trim);
       }
       const shaded = features.shopfronts.filter((f) => f.awning);
       for (const door of features.doors) {
         if (door.step) stone.box(m, door.s, STEP.height / 2, STEP.depth / 2, door.width + STEP.wider, STEP.height, STEP.depth, new THREE.Color(features.trim).multiplyScalar(0.82));
         // A door under an awning keeps flat: its shutter and the awning leave no room for a surround.
         if (door.shop && shaded.some((f) => door.s > f.s0 && door.s < f.s1)) continue;
-        // A walk-in shop's door is set back between its windows' returns (`shopfronts/`).
-        if (door.shop && features.shopfronts.some((f) => hasShopfront(f.kind) && door.s > f.s0 && door.s < f.s1)) continue;
+        // A front built in 3D frames its own door (`shopfronts/`): set back between a walk-in shop's windows' returns,
+        // in a plain front's surround.
+        if (door.shop && features.shopfronts.some((f) => isFramed(front.spec.detail, f.kind) && door.s > f.s0 && door.s < f.s1)) continue;
         surround(stone, m, door.s, door.width, door.height, door.shop ? door.color : features.trim);
       }
       if (features.downpipe !== null) downpipe(props, m, features.downpipe, features.cornice);
@@ -161,10 +171,10 @@ export class FacadeRelief extends THREE.Group implements Furniture, Updatable {
    * Every awning in one mesh, each folding towards its fixing on the wall (`aPivot`, the top's line right behind each
    * corner) by its own share (`awningOut`, four to a vector), in its shadow too.
    */
-  private awningMesh(awnings: readonly { geometry: THREE.BufferGeometry; frame: FacadeFrame }[]): THREE.Mesh {
+  private awningMesh(awnings: readonly { geometry: THREE.BufferGeometry; frame: FacadeFrame; out: number }[]): THREE.Mesh {
     const p = new THREE.Vector3();
     const pivot = new THREE.Vector3();
-    awnings.forEach(({ geometry, frame }, i) => {
+    awnings.forEach(({ geometry, frame, out }, i) => {
       const position = geometry.getAttribute('position');
       const pivots = new Float32Array(position.count * 3);
       const index = new Float32Array(position.count).fill(i);
@@ -172,7 +182,7 @@ export class FacadeRelief extends THREE.Group implements Furniture, Updatable {
       for (let v = 0; v < position.count; v++) {
         p.fromBufferAttribute(position, v);
         const s = (p.x - ax) * frame.u.x + (p.z - az) * frame.u.y;
-        frame.point(s, AWNING.top, 0, pivot);
+        frame.point(s, AWNING.top, out, pivot);
         pivots.set([pivot.x, pivot.y, pivot.z], v * 3);
       }
       geometry.setAttribute('aPivot', new THREE.BufferAttribute(pivots, 3));
@@ -213,7 +223,7 @@ export function awningShelters(fronts: readonly PaintedFront[], within = 45): TH
     const frame = new FacadeFrame(front.spec);
     for (const awning of front.features.awnings) {
       frame.point(awning.s0, -0.5, 0, a);
-      frame.point(awning.s1, AWNING.top, AWNING.reach, b);
+      frame.point(awning.s1, AWNING.top, (awning.out ?? 0) + AWNING.reach, b);
       const box = new THREE.Box3().setFromPoints([a, b]);
       if (Math.abs((box.min.x + box.max.x) / 2) < within) boxes.push(box);
     }
@@ -260,30 +270,76 @@ function balcony(stone: TriBuilder, iron: TriBuilder, m: THREE.Matrix4, s0: numb
   railing(iron, m, [s1, front], [s1, 0], y, rail, pitch);
 }
 
+/** How far apart two faces of a heap of boxes stay (a balcony's pots and leaves, seen from across the street). */
+const HEAP_GAP = gapAt(60);
+
+/**
+ * Boxes heaped at random (a plant's leaves, a balcony's pots): a box whose faces would lie within `HEAP_GAP` of
+ * another's, the same way, is grown on that axis until clear (one mesh: two faces in a plane would fight). What stands
+ * on the `floor` keeps its foot there (pressed on the floor, never seen).
+ */
+class Heap {
+  /** Per axis (s, y, out), the planes of the boxes' low and high faces so far. */
+  private readonly planes: [number[], number[]][] = [[[], []], [[], []], [[], []]];
+
+  constructor(
+    readonly b: TriBuilder,
+    private readonly floor: number,
+  ) {}
+
+  box(m: THREE.Matrix4, x: number, y: number, z: number, w: number, h: number, d: number, color: THREE.ColorRepresentation): void {
+    const centre = [x, y, z];
+    const size = [w, h, d];
+    for (let axis = 0; axis < 3; axis++) {
+      const [low, high] = this.planes[axis]!;
+      const foot = (p: number): boolean => axis === 1 && Math.abs(p - this.floor) < HEAP_GAP;
+      const clashes = (): boolean => {
+        const [a, b] = [centre[axis]! - size[axis]! / 2, centre[axis]! + size[axis]! / 2];
+        return (!foot(a) && low.some((p) => Math.abs(p - a) < HEAP_GAP)) || high.some((p) => Math.abs(p - b) < HEAP_GAP);
+      };
+      for (let tries = 0; tries < 4 && clashes(); tries++) {
+        // Grown about its middle, or upwards from a foot on the floor.
+        if (foot(centre[axis]! - size[axis]! / 2)) centre[axis]! += HEAP_GAP;
+        size[axis]! += 2 * HEAP_GAP;
+      }
+      low.push(centre[axis]! - size[axis]! / 2);
+      high.push(centre[axis]! + size[axis]! / 2);
+    }
+    this.b.box(m, centre[0]!, centre[1]!, centre[2]!, size[0]!, size[1]!, size[2]!, color);
+  }
+}
+
 /** What the residents keep on a balcony: a few pots of greenery, now and then a folding chair or a little table. */
 function dressBalcony(props: TriBuilder, m: THREE.Matrix4, s0: number, s1: number, y: number, random: () => number): void {
   if (random() < 0.4) return;
+  const heap = new Heap(props, y);
   for (let i = 1 + Math.floor(random() * 3); i > 0; i--) {
     const s = s0 + 0.25 + random() * Math.max(0.1, s1 - s0 - 0.5);
-    plant(props, m, s, y, 0.2 + random() * 0.12, POTS[Math.floor(random() * POTS.length)]!, random, 0.18 + random() * 0.1);
+    plant(heap, m, s, y, 0.2 + random() * 0.12, POTS[Math.floor(random() * POTS.length)]!, random, 0.18 + random() * 0.1);
   }
   if (random() < 0.3) {
     const s = s0 + 0.5 + random() * Math.max(0.1, s1 - s0 - 1);
     const paint = random() < 0.5 ? '#2f4a3e' : '#e8e4dc';
-    props.box(m, s, y + 0.44, 0.27, 0.36, 0.03, 0.32, paint);
-    props.box(m, s, y + 0.7, 0.1, 0.36, 0.42, 0.03, paint);
-    for (const [ds, dz] of [[-0.15, 0.12], [0.15, 0.12], [-0.15, 0.42], [0.15, 0.42]] as const) props.box(m, s + ds, y + 0.22, dz, 0.025, 0.44, 0.025, paint);
+    heap.box(m, s, y + 0.44, 0.27, 0.36, 0.03, 0.32, paint);
+    heap.box(m, s, y + 0.7, 0.1, 0.36, 0.42, 0.03, paint);
+    for (const [ds, dz] of [[-0.15, 0.12], [0.15, 0.12], [-0.15, 0.42], [0.15, 0.42]] as const) heap.box(m, s + ds, y + 0.22, dz, 0.025, 0.44, 0.025, paint);
   }
 }
 
 /** A pot (a box `size` across, of `color`) with leaves heaped over it, at s on a floor at y, `out` from the wall. */
-function plant(b: TriBuilder, m: THREE.Matrix4, s: number, y: number, out: number, color: string, random: () => number, size = 0.26): void {
+function plant(b: Heap, m: THREE.Matrix4, s: number, y: number, out: number, color: string, random: () => number, size = 0.26): void {
   b.box(m, s, y + size * 0.55, out, size, size * 1.1, size, color);
   for (let i = 0; i < 5; i++) {
     const g = new THREE.Color().setHSL(0.26 + random() * 0.08, 0.45, 0.26 + random() * 0.12);
-    b.box(m, s + (random() - 0.5) * size * 0.85, y + size * 1.4 + random() * size, out + (random() - 0.5) * size * 0.85, size * (0.6 + random() * 0.3), size * 0.75, size * (0.6 + random() * 0.3), g);
+    const [ls, ly, lo] = [s + (random() - 0.5) * size * 0.85, y + size * 1.4 + random() * size, out + (random() - 0.5) * size * 0.85];
+    const [w, h, d] = [size * (0.6 + random() * 0.3), size * 0.75, size * (0.6 + random() * 0.3)];
+    // Each clump turned and tipped its own way: no two leaves' faces parallel, so none in one plane (and less boxy).
+    leaf.makeRotationFromEuler(tilt.set(((i % 3) - 1) * 0.16, i * 1.37 + size * 9 + s * 5, ((i % 2) - 0.5) * 0.2)).setPosition(ls, ly, lo).premultiply(m);
+    b.b.box(leaf, 0, 0, 0, w, h, d, g);
   }
 }
+const leaf = new THREE.Matrix4();
+const tilt = new THREE.Euler();
 
 /** A wrought-iron rail from a to b (facade (s, out) points) over a floor at `y`: top and bottom rails, bars every `pitch`. */
 function railing(iron: TriBuilder, m: THREE.Matrix4, a: readonly [number, number], b: readonly [number, number], y: number, height: number, pitch: number): void {
@@ -321,7 +377,8 @@ function downpipe(props: TriBuilder, m: THREE.Matrix4, s: number, top: number): 
   props.geometry(moved, PIPE_GEOMETRY, PIPE);
   // The hopper head under the gutter, the shoe turned out at the foot.
   props.box(m, s, top - 0.2, out, 0.2, 0.22, 0.18, PIPE);
-  props.box(m, s, bottom + 0.04, out + 0.05, radius * 2.2, 0.12, radius * 3.2, PIPE);
+  // (Its top 2 cm over a shop's plinth's, where the pipe comes down by a front: never in one plane with it.)
+  props.box(m, s, bottom + 0.05, out + 0.05, radius * 2.2, 0.14, radius * 3.2, PIPE);
   for (let y = bottom + 0.6; y < top - 0.4; y += bracket) props.box(m, s, y, out / 2, radius * 2.6, 0.05, out, PIPE);
 }
 
@@ -334,10 +391,12 @@ function downpipe(props: TriBuilder, m: THREE.Matrix4, s: number, top: number): 
 function flatBalcony(stone: TriBuilder, iron: TriBuilder, plants: TriBuilder, ends: number[], bistro: TriBuilder, m: THREE.Matrix4, y: number, b: NonNullable<FlatFront['balcony']>, slab: THREE.Color): void {
   const s0 = b.at - b.width / 2;
   const s1 = b.at + b.width / 2;
-  stone.box(m, b.at, y - 0.09, (b.depth + 0.06) / 2, b.width + 0.12, 0.18, b.depth + 0.06, slab);
-  railing(iron, m, [s0, b.depth], [s1, b.depth], y, 1.02, 0.11);
-  railing(iron, m, [s0, 0], [s0, b.depth], y, 1.02, 0.11);
-  railing(iron, m, [s1, b.depth], [s1, 0], y, 1.02, 0.11);
+  const { thickness, lip } = BALCONY_PLAN.slab;
+  const { height: rail, barSpacing } = BALCONY_PLAN.railing;
+  stone.box(m, b.at, y - thickness / 2, (b.depth + lip) / 2, b.width + 2 * lip, thickness, b.depth + lip, slab);
+  railing(iron, m, [s0, b.depth], [s1, b.depth], y, rail, barSpacing);
+  railing(iron, m, [s0, 0], [s0, b.depth], y, rail, barSpacing);
+  railing(iron, m, [s1, b.depth], [s1, 0], y, rail, barSpacing);
   const random = seededRandom(2121);
   // Balcony-local (x, z) -> facade (s, out): z is measured from the slab's middle.
   const at = (x: number, z: number): [number, number] => [b.at + x, b.depth / 2 + z];
@@ -350,21 +409,29 @@ function flatBalcony(stone: TriBuilder, iron: TriBuilder, plants: TriBuilder, en
       return [{ floor, pot: (entry.options as { pot?: string } | undefined)?.pot === 'terracotta' ? '#b8643a' : '#e8e2d8' }];
     }),
   ];
+  const heap = new Heap(plants, y);
   for (const spot of spots) {
     const [s, o] = at(spot.floor[0], spot.floor[1]);
-    plant(plants, m, s, y, o, spot.pot, random);
+    plant(heap, m, s, y, o, spot.pot, random);
     ends.push(plants.vertexCount);
   }
   // The bistro set: a round-ish table on its stem, a chair either side.
   const [ts, to] = at(...BALCONY_PLAN.bistro.floor);
-  const green = '#2f4a3e';
-  bistro.box(m, ts, y + 0.71, to, 0.56, 0.03, 0.56, green);
+  const green = `#${BISTRO.color.toString(16).padStart(6, '0')}`;
+  const top = BISTRO.topRadius * 1.86;
+  bistro.box(m, ts, y + BISTRO.topHeight, to, top, 0.02, top, green);
   bistro.box(m, ts, y + 0.36, to, 0.04, 0.7, 0.04, green);
   bistro.box(m, ts, y + 0.015, to, 0.36, 0.03, 0.36, green);
   for (const side of [-1, 1]) {
-    const cs = ts + side * 0.5;
+    const cs = ts + side * BISTRO.chairX;
     bistro.box(m, cs, y + 0.45, to, 0.38, 0.03, 0.38, green);
     bistro.box(m, cs + side * 0.18, y + 0.68, to, 0.03, 0.46, 0.36, green);
     for (const [dx, dz] of [[-0.16, -0.16], [0.16, -0.16], [-0.16, 0.16], [0.16, 0.16]] as const) bistro.box(m, cs + dx, y + 0.22, to + dz, 0.025, 0.44, 0.025, green);
   }
+}
+
+/** Whether a shop's front is built with its door framed in it (a plain front, a walk-in shop's). */
+function isFramed(detail: number, kind: ShopKind): boolean {
+  const variant = frontVariant(detail, kind);
+  return variant === 'plain' || variant === 'walkIn';
 }

@@ -30,6 +30,12 @@ export const SELLER_FLAT_PLAN = {
   lightSwitch: { wall: 'back', along: -1.0, y: 1.1 } as Placement,
   /** One window on the street, its curtains half drawn (no sun of its own: no shadow map). */
   window: { wall: 'front' as const, along: 0.8, width: 1.3, height: 1.45 },
+  /**
+   * Where that window really is, in the street's frame (`outlook/frames`): in Park Corner Mansions (facade `fA`, its
+   * face at z 12 towards Front Street), over PARK FRUIT & VEG, on the first floor (`storey` 2); its glass's middle
+   * 3 m along the facade and the wall's thickness in. The view through it is Front Street from there, built in 3D.
+   */
+  outlook: { at: [-32, 12.3] as [number, number], storey: 2, without: ['fA'] },
 
   /** The dining table the lot is laid out on, its long side (+z of the boxes) towards the room's door side. */
   table: { at: { floor: [0.9, 0.0], rotationY: Math.PI } as Placement, width: 1.4, depth: 0.8 },

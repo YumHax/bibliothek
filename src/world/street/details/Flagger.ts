@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import type { Updatable } from '@/core/Engine';
 import { createCanvas, toTexture } from '@/covers/generated/canvasUtils';
 import type { Furniture } from '../../Furniture';
-import { paint, standard } from '../../materials/palette';
+import { snowPaint, snowStandard } from '../snowCover';
 import { Walker } from '../../people/Walker';
 import { randomLook } from '../../people/looks';
 import type { DayNight } from '../../props/DayNight';
@@ -84,12 +84,12 @@ export class Flagger extends THREE.Group implements Furniture, Updatable {
 
     // The STOP / GO board on its pole, beside him on the far side of the centre line.
     const board = new THREE.Group();
-    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 1.7, 8), standard({ color: 0x2a2a2e, roughness: 0.5 }));
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 1.7, 8), snowStandard({ color: 0x2a2a2e, roughness: 0.5 }));
     pole.position.y = 0.85;
-    const foot = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.2, 0.06, 12), paint(0x1a1a1a, 0.9));
+    const foot = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.2, 0.06, 12), snowPaint(0x1a1a1a, 0.9));
     foot.position.y = 0.03;
     const sign = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.24, 0.02, 32).rotateZ(Math.PI / 2), [
-      paint(0xe8e8e2, 0.6),
+      snowPaint(0xe8e8e2, 0.6),
       new THREE.MeshStandardMaterial({ map: boardTexture('STOP', '#c8201a'), roughness: 0.5 }),
       new THREE.MeshStandardMaterial({ map: boardTexture('GO', '#1f8a3a'), roughness: 0.5 }),
     ]);
@@ -106,7 +106,7 @@ export class Flagger extends THREE.Group implements Furniture, Updatable {
     // Gone home: a ROAD CLOSED A-board on the centre line, a portable signal either side of it showing red.
     this.signalLamp = new THREE.MeshBasicMaterial({ color: new THREE.Color(0xff2a1a).multiplyScalar(SIGNAL_GLOW) });
     const closed = new THREE.MeshStandardMaterial({ map: closedTexture(), roughness: 0.6 });
-    const frame = paint(0x2a2a2e, 0.6);
+    const frame = snowPaint(0x2a2a2e, 0.6);
     for (const side of [-1, 1]) {
       const leaf = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.7, 0.03), [frame, frame, frame, frame, closed, closed]);
       leaf.position.set(0, 0.42, side * 0.16);
@@ -116,11 +116,11 @@ export class Flagger extends THREE.Group implements Furniture, Updatable {
     }
     for (const side of [-1, 1]) {
       const unit = new THREE.Group();
-      const post = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 2.1, 8), standard({ color: 0xe8e4d8, roughness: 0.5 }));
+      const post = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 2.1, 8), snowStandard({ color: 0xe8e4d8, roughness: 0.5 }));
       post.position.y = 1.05;
-      const base = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.22, 0.55), paint(0x2a2d33, 0.8));
+      const base = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.22, 0.55), snowPaint(0x2a2d33, 0.8));
       base.position.y = 0.11;
-      const head = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.62, 0.18), paint(0x1a1a1a, 0.7));
+      const head = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.62, 0.18), snowPaint(0x1a1a1a, 0.7));
       head.position.y = 2.2;
       const lamp = new THREE.Mesh(new THREE.CircleGeometry(0.075, 16), this.signalLamp);
       lamp.position.set(0, 2.38, 0.095);
@@ -181,7 +181,7 @@ function closedTexture(): THREE.CanvasTexture {
   ctx.fillText('CLOSED', 128, 122, 220);
   ctx.font = 'bold 20px sans-serif';
   ctx.fillText('NO PEDESTRIANS', 128, 168);
-  return toTexture(canvas, 4);
+  return toTexture(canvas, 'facing');
 }
 
 /** One face of the board: a coloured disc with its word in white. */
@@ -199,5 +199,5 @@ function boardTexture(word: string, color: string): THREE.CanvasTexture {
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillText(word, size / 2, size / 2 + 2);
-  return toTexture(canvas, 4);
+  return toTexture(canvas, 'facing');
 }

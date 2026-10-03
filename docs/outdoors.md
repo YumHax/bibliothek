@@ -2,13 +2,20 @@
 
 The 360° view outside the windows, painted once at start from a sixth-floor street corner, plus the weather over it
 (`src/world/weather/`) and the street's sound (`src/audio/StreetAmbience.ts`). Read this only when touching what is seen
-or heard through the windows.
+or heard through the windows. On medium and high the flat's windows and the balcony show the 3D street instead
+("Views onto the street" below): the painted panorama is what they show on `low`, and `Life` still runs on it for the
+street's sound (buses, sirens, the dustcart) whatever the quality. There the painting itself waits for the first draw
+of a pane or of the balcony's open air (`OutdoorsOptions.paintOnFirstDraw`, set by `Sky` from `streetWindows()`), which
+may never come: no main-thread paint at start, no canvases kept (~210 MB on high). The season and holiday are still set at
+construction, the life runs from its own seed (`LIFE_SEED`), and the shop's stock and banner asked for meanwhile are put
+up as it is painted (`adopt`), from the same seed as on `low`.
 
 ## Model
 
 - `Outdoors.material` is shared by every pane (and the balcony's surround, `balcony/OpenAir.ts`, a BackSide sphere with its
   own material object on the same uniforms): the sky at infinity, then the scenery where the eye ray really meets it. The
-  painting was made from one eye (`center`); from anywhere else the shader starts on a 40 m sphere and takes
+  painting was made from one eye (`center`, 1.7 m over the flat's floor: `EYE_HEIGHT` over the street less
+  `FLAT_IN_STREET.height`, so the painted street lies where the 3D one does); from anywhere else the shader starts on a 40 m sphere and takes
   `PARALLAX_STEPS` (6) fixed-point steps: read the painted depth along the current direction, move to the point of the ray
   that far from the painting's eye. So every window (the kitchen's too, the balcony) sees the near pavement shift more than
   the skyline; a thin sliver where something nearer uncovers what it hid is stretched from its neighbour. Ground on the
@@ -23,7 +30,8 @@ or heard through the windows.
   Morris column), `roadworks()` (where the works stand today: `street/details/roadworks`, synced from the saved market
   day before painting), the ends), `facadeStyle` (a planned building's look from its `seed`: wall, trims, window
   heads, `balconyRows`, roof, its `windows` size, parapet, door and number, downpipe; `windowWidth` and `facadeBays`
-  place the windows), `roofFurniture` (chimneys, dormers, roof windows, aerials, dishes, flat-roof clutter, the same
+  place the windows; every painter darkens and lightens through `city/colour`'s `shade`, so a wall's trim is the same
+  shade in both pictures), `roofFurniture` (chimneys, dormers, roof windows, aerials, dishes, flat-roof clutter, the same
   in both pictures), `regionUpload` (a repainted rect of a canvas texture uploaded alone), `trees` (`STREET_TREES`,
   `PARK_TREES` with their sizes, `TREE_FORM`), `park` (pond, bandstand, playground, beds, willows, paths, the gate),
   `parkedCars` (each bay's shape and paint), `skyline` (the towers, `towerTop`, the `BACKDROP_BLOCKS` both pictures
@@ -58,7 +66,9 @@ or heard through the windows.
   `begin(distance, glass, surface)` then `rect` / `path` stamp colour, haze, glass and the weather masks at once;
   `lit(path, kind, strength, curfew, animated)` / `glow(..., curfew?)` add night lights; `dim()` darkens light already lit
   (goods in a shop window, a figure in a room); `shadow()` / `shadowFill()` cast shadows. `finish()` packs the scene texture
-  (premultiplied day colours), the lights DataTexture (R warm, G cool, B glass, A depth via `encodeDepth`), the curfew R8
+  (premultiplied day colours: the browser premultiplies the sRGB bytes before the GPU decodes them, so a half-covered
+  edge texel reads a^2.2 c; the shader divides by a^1.2 to undo it, else every roof and tree has a dark fringe against
+  the sky), the lights DataTexture (R warm, G cool, B glass, A depth via `encodeDepth`), the curfew R8
   texture (nearest, no mips: one byte per light = the wakefulness below which it goes out, 0 = burns all night) and the ground
   texture (R cast shadow, G how wet the surface gets, B how much snow it catches), and the `fx` texture (nearest): R how many
   texels a thing sways at full wind x 16, G its sway phase + 128 on the thing itself (without: the margin it sways into),
@@ -246,11 +256,21 @@ up). Starts on the first click or key press.
   window, B our flat's window index); the patch flickers TVs, slides figures across lit windows and lowers a quarter of
   the blinds 21-22 h from each window's head, above the ground floor only. Each light is painted with its room behind
   it (`LightInside`: curtains, a blind, furniture, someone standing, an arch's dark corners) and repainted alone when
-  it switches. The surface mask (`surfaceTexture`, the `roughnessMap`: R a pane or a brick wall, G the roughness, B the
-  painter's `ReliefRect`s) gives the panes low roughness, a stronger env reflection and a reveal in parallax
-  (`REVEAL`), lays brick courses in world metres on brick fronts (fading where they would shimmer), tilts the normal
-  with the relief (sills, cornices, quoins, grooves catch a low sun), and darkens, glosses and snows the walls with the
-  weather (`facadeWeather`).
+  it switches. The surface mask (`surfaceTexture`, the `roughnessMap`, at `SURFACE_SCALE`: 0.5 of the atlas on every
+  quality: R a pane or a brick wall, G the roughness, B the painter's `ReliefRect`s) gives the panes low roughness, a
+  stronger env reflection and a reveal in parallax (`REVEAL`), lays brick courses in world metres on brick fronts
+  (fading where they would shimmer), tilts the normal with the relief (cornices, quoins, grooves catch a low sun), and
+  darkens, glosses and snows the walls with the weather (`facadeWeather`).
+- **Windows in 3D on the near and middle facades** (`facadeWindows/`): a facade whose plan `detail` is at least
+  `FRAMED_DETAIL` (20 px/m: `NEAR` 40, `MID` 24; `FAR` 12 stays painted) is painted `framed` (`paintFacade`): only the
+  glass, its sky reflection, curtains and blind are painted; each window is recorded as a `Casement` (opening, glazing,
+  head, sill, shutters, flower box, paints) and built by `FacadeWindows`, a child mesh of `Buildings` (one draw call,
+  vertex colours, ~51k triangles for ~305 windows), so the street, the window views, the roof and the courtyard all
+  have them. The facade's quad is the glass's plane; the surround (a render band or stone jambs), frame, glazing bars,
+  sill, lintel / pediment on its cornice / ring of voussoirs and keystone, louvred shutters and flower box stand in front
+  of it, each part's face a multiple of `gapAt(80)` out and its back buried at a depth of its own (`casementParts`), so
+  no two faces share a plane. `Buildings.windowFrames: false` (`buildStreetBase` passes it) paints them flat instead.
+  The night map, the window ids and the stories are untouched: the lights stay painted behind the 3D frames.
 - Our flat seen from the street: its windows (`FlatFront.windows[].room`) are lit as their room was left, the lamp
   dimmed by drawn curtains (`city/flatWindows`: `furnishShell` reports each room, `Buildings` reads `lampShown` and
   `curtainsOpen` into `flatLevels`); before a room is built they follow the curfew.
@@ -326,13 +346,35 @@ picture (the stairwell is persistent: it would hold a whole street for good), an
 `prefetch` or draw. What is out there (`streetOutlook`, in its own
 chunk with the street's classes) is the street's own: `StreetLighting` (occupied), `SkyDome` (its prefiltered sky as the
 scene's environment, never `setOccupied`/`dispose`: both hand the global reflection back), `StreetGround`, `StreetPark`,
-`Buildings` for the facades within 110 m that face the window (less the one it is in; the near ones painted finer),
+`Buildings` for the facades within 150 m that face the window (`outlook/inView`: `facadesInView` from one window, less
+the one it is in; `homeFacades` for our building; the near ones painted finer, and everything at the street's own
+`detailScale` per quality), RETRO GAMES' NEW IN banner on a fresh market day (`RetroLure` with no queue: the shelves in
+today's stock),
 their relief, shutters and shop glow, the lamps, trees, parked and passing cars, furniture (all of these by the same
 calls as the street's own, `street/streetScenery`: only the options differ), the rain, and the courtyard
 the street never reaches (`Courtyard`, `COURTYARD_YARD` in `outlookPlan.ts`: setts, lawn and chestnut, the workshop's
 back, bins, shed, rack, sandpit, bikes). No people, doors or sounds. It is built at the next idle moment once the
 player walks into the room (`prefetch`, from `setOccupied`) or a pane is first drawn, compiled out of sight, and ticked
 only while a pane was drawn in the last 1.5 s; the glass shows a pale sky until then.
+
+**One view per building, leased** (`sharedOutlook`). Every window looking out of our building shares the view
+`'home'` (`leaseHomeOutlook`): the flat's rooms (`RoomWindow`'s `outlook: homeOutlook(sky.outdoors)` in `layout.ts`,
+`furnishKitchen`, `furnishAnnex`; null on `low`, the panorama), the balcony's open air (`OpenAir`: the picture on the
+inside of its sphere, unclipped, `OutlookView.surround`), the stairwell's landings and the neighbours' flats
+(`FlatOutlook`: each side's pane laid on its real window, `windowAt`). It builds `homeFacades` (every facade facing our
+building, less our own but its kitchen wing `oursWing`), so it is built once whoever asks first. Each pane carries its
+own `toOutlook` (the flat and the stairwell: `flatToStreet`; a zone elsewhere: `windowAt(frame)`); only panes with the
+same mapping and plane share a render. A lease is released with its window (`dispose`), the view with its last lease.
+The seller's flat has its own (`leaseOutlookFrom`, key `'seller'`, `SELLER_FLAT_PLAN.outlook`: Park Corner Mansions on
+the first floor). Shops keep one view each (`ShopWindow`). Outlook panes are flagged `userData.streetPane` so the street
+is heard through them (`Outdoors.panesIn`).
+
+**Its cost.** The picture is 0.75 of the drawing buffer on high (4x MSAA: roofs and wires against the sky), 0.6 on
+medium. A pane keeps its picture while the camera is still (same camera, lens and mapping, under `REUSE_FOR`, 1/20 s,
+and no later render over its rectangle): out there then moves at 20 Hz. The view's sun redraws its shadow 5 times a
+second (`StreetLighting`'s `shadowRefreshHz`). A view is ticked once a frame however many windows tick it (the
+renderer's frame count). `?stats` logs `[stats] outlook N renders/s | draw calls and ms CPU each | reused/s`. The
+panes are window glass for the occlusion (`graphics/glassMask`): no dark halos round the mullions.
 
 ## Lives behind the windows (`building/rearWindows`, `street/windowLife.ts`)
 

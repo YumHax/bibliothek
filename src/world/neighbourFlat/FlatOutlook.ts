@@ -4,7 +4,7 @@ import type { Furniture, OccupancyAware } from '../Furniture';
 import type { DayNight } from '../props/DayNight';
 import type { Outdoors } from '../props/outdoors/Outdoors';
 import type { WindowLife } from '../street/windowLife';
-import { OutlookView } from '../outlook/OutlookView';
+import { leaseHomeOutlook, windowAt, type OutlookLease } from '../outlook/sharedOutlook';
 import { RoomWindow } from '../props/Window';
 import { landingY } from '../stairwell/stairwellPlan';
 import { currentHost, onHostChange } from './visits';
@@ -26,19 +26,19 @@ export interface FlatOutlookOptions {
  * (`landingY(k)`), on their side of it (`NeighbourHost.side`: the courtyard, or Front Street), built in 3D through the
  * glass like the stairwell's windows (`outlook/`). The zone is far out along +x and shared by six flats, so the
  * shared panorama (whose eye is our living room) would show nonsense: the window's `glass` is this one's panes
- * instead. One view a side (each built from where its window is, only once its pane is seen), one pane each, the
- * host's side's shown; a change of host (`onHostChange`) moves the eye to their floor. Placed at the zone's origin,
- * ticks the views; `glass` goes to the `RoomWindow`.
+ * instead, on the view from our building the flat and the stairwell share (`sharedOutlook`, built once). One pane a
+ * side, each laid on its real window, the host's side's shown; a change of host (`onHostChange`) moves it to their
+ * floor. Placed at the zone's origin, ticks the view; `glass` goes to the `RoomWindow`.
  */
 export class FlatOutlook extends THREE.Group implements Furniture, Updatable, OccupancyAware {
   readonly contactShadow = false;
   readonly footprint = new THREE.Box3();
   /** The panes, for the window (`RoomWindow`'s `glass`): one a side, only the host's shown. */
   readonly glass = new THREE.Group();
-  private readonly views = {} as Record<Side, { view: OutlookView; pane: THREE.Mesh }>;
-  /** The real window's frame in the street's (its glass's middle, +z into the flat), for the host now. */
-  private readonly target = new THREE.Matrix4();
-  private readonly toStreet = new THREE.Matrix4();
+  /** The view from our building, shared (`sharedOutlook`). */
+  private readonly lease: OutlookLease;
+  /** Each side's pane and where its real window is in the street's frame (its glass's middle, +z into the flat), for the host now. */
+  private readonly sides = {} as Record<Side, { pane: THREE.Mesh; target: THREE.Matrix4 }>;
   private side: Side = 'courtyard';
   private occupied = false;
   private readonly unsubscribe: () => void;
@@ -47,53 +47,43 @@ export class FlatOutlook extends THREE.Group implements Furniture, Updatable, Oc
     super();
     this.name = 'FlatOutlook';
     const { width, height } = plan.window;
-    const waiting = new THREE.Color();
+    this.lease = leaseHomeOutlook({ dayNight, outdoors, viewer, ...(windowLife ? { windowLife } : {}) });
     for (const side of Object.keys(plan.outlook) as Side[]) {
-      const { at, without } = plan.outlook[side];
-      const view = new OutlookView({
-        viewer,
-        // World to the street: back through the glass (the window in the zone), out of the real one.
-        toOutlook: () => this.toStreet.copy(this.glass.matrixWorld).invert().premultiply(this.target),
-        build: (camera) =>
-          import('../outlook/streetOutlook').then(({ buildStreetOutlook }) =>
-            buildStreetOutlook(camera, { dayNight, lightDirection: (out) => outdoors.lightDirection(dayNight.state, out), eye: at, without, ...(windowLife ? { windowLife } : {}) }),
-          ),
-        waiting: () => waiting.copy(dayNight.state.horizon).multiplyScalar(0.25 + 0.6 * dayNight.state.daylight),
-      });
-      this.add(view);
-      const pane = view.pane(width, height);
+      const target = new THREE.Matrix4();
+      // World to the street: back through the glass (the window in the zone), out of the real one.
+      const pane = this.lease.view.pane(width, height, windowAt(target));
       this.glass.add(pane);
-      this.views[side] = { view, pane };
+      this.sides[side] = { pane, target };
     }
     this.lookFrom(currentHost());
     this.unsubscribe = onHostChange((host) => this.lookFrom(host));
   }
 
-  /** The host's window: their side's pane shown, the eye at their floor. */
+  /** The host's window: their side's pane shown, laid on their floor's real window. */
   private lookFrom(host: NeighbourHost): void {
     this.side = host.side ?? 'courtyard';
     const { at, out } = plan.outlook[this.side];
     // The glass's middle stands as high over their floor as over this flat's (the zone's floor is at its origin).
     const y = landingY(host.k) + RoomWindow.mountY(plan.window.height);
     // +z into the flat: away from the courtyard (out -z), or turned round on the street side (out +z).
-    this.target.makeRotationY(out > 0 ? Math.PI : 0).setPosition(at[0], y, at[1]);
-    for (const side of Object.keys(this.views) as Side[]) this.views[side].pane.visible = side === this.side;
-    if (this.occupied) this.views[this.side].view.prefetch();
+    this.sides[this.side].target.makeRotationY(out > 0 ? Math.PI : 0).setPosition(at[0], y, at[1]);
+    for (const side of Object.keys(this.sides) as Side[]) this.sides[side].pane.visible = side === this.side;
+    if (this.occupied) this.lease.view.prefetch();
   }
 
-  /** The player walked in: the host's view is built now, at the next idle moment (`OutlookView.prefetch`). */
+  /** The player walked in: the view is built now, at the next idle moment (`OutlookView.prefetch`). */
   setOccupied(occupied: boolean): void {
     this.occupied = occupied;
-    if (occupied) this.views[this.side].view.prefetch();
+    if (occupied) this.lease.view.prefetch();
   }
 
   update(dt: number): void {
-    // The other side's view is idle unless it was drawn lately (a change of host): its update frees it in time.
-    for (const side of Object.keys(this.views) as Side[]) this.views[side].view.update(dt);
+    this.lease.view.update(dt);
   }
 
   dispose(): void {
     this.unsubscribe();
-    for (const side of Object.keys(this.views) as Side[]) this.views[side].view.dispose();
+    for (const side of Object.keys(this.sides) as Side[]) this.lease.view.release(this.sides[side].pane);
+    this.lease.release();
   }
 }

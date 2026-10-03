@@ -11,6 +11,7 @@ import { RENDER_ORDER } from '../surface/layers';
 import type { ScreenFeed, ScreenState, ScreenStateListener } from './VideoScreen';
 import { SignalCanvas, type SignalLook } from './SignalCanvas';
 import { nowPlaying } from './nowPlaying';
+import { additiveOne } from '@/world/materials/blend';
 
 /** Pixel size of the embedded player; 4:3 like the longplays of the consoles on the shelves. */
 export const SURFACE_PX_W = 640;
@@ -450,11 +451,6 @@ function glassMaterial(map: THREE.Texture): THREE.MeshStandardMaterial {
  */
 function slateMaterial(map: THREE.Texture): THREE.MeshBasicMaterial {
   const material = new THREE.MeshBasicMaterial({ map, color: 0xb8c4dc, transparent: true, depthWrite: false, fog: false });
-  material.blending = THREE.CustomBlending;
-  material.blendEquation = THREE.AddEquation;
-  material.blendSrc = THREE.OneFactor;
-  material.blendDst = THREE.OneFactor;
-  material.blendSrcAlpha = THREE.ZeroFactor;
-  material.blendDstAlpha = THREE.OneFactor;
+  additiveOne(material);
   return material;
 }

@@ -28,9 +28,14 @@ export const LETTERING = {
   slab: 'bold Rockwell, "Roboto Slab", "Courier New", serif',
 } as const;
 
+/** `font`'s family alone, without its weight and style (for a painter that sets its own). */
+export function letteringFamily(font: string): string {
+  return font.replace(/^(?:(?:italic|bold|\d00)\s+)+/, '');
+}
+
 /** `font` at `px` pixels tall, for a canvas: the size goes after the weight and style. */
 export function letteringFont(font: string, px: number): string {
-  const family = font.replace(/^(?:(?:italic|bold|\d00)\s+)+/, '');
+  const family = letteringFamily(font);
   return `${font.slice(0, font.length - family.length)}${px}px ${family}`;
 }
 

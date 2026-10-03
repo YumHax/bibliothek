@@ -161,5 +161,5 @@ function tagTexture(box: StorageBox): THREE.CanvasTexture {
   ctx.fillText(`No ${box.n}`, 100, 36);
   ctx.font = '20px Georgia, serif';
   ctx.fillText(box.tag, 100, 68, 190);
-  return toTexture(canvas, 2);
+  return toTexture(canvas, 'facing');
 }

@@ -1,15 +1,27 @@
 import * as THREE from 'three';
+import { centroid, clipTriangle, planeAxes, polygonArea, pressed, sampleAt, visibleTo, type P2 } from './coplanar';
+import { depthStep, UNITS_PER_RANK } from './layers';
 
 /**
  * Dev-time z-fighting finder (`?debug` / `?stats`: `bibliothek.zfight()` in the console, and a
  * `[zfight]` line each time a zone is built). Walks a subtree's drawn meshes, puts every triangle
- * in world space, and reports pairs from different meshes (or different materials of one mesh)
- * that face the same way in (nearly) the same plane and overlap: what flickers in play.
+ * in world space, and reports pairs that face the same way in (nearly) the same plane and overlap:
+ * what flickers in play. Pairs from different meshes or materials, and pairs inside one mesh and
+ * material whose vertex colours or uvs differ where they overlap (the street's merged builders).
  *
- * "Nearly": closer than a few depth steps at `viewDistance`, a step being about
- * `z² / (near · 2²⁴)` metres at distance `z` (24-bit depth). Pairs whose materials have different
- * polygon offsets are taken as settled (a `surface/layers` layer over its surface), and so are
- * pairs where either side draws nothing (a hitbox).
+ * A pair is settled when the two faces stay at least `MIN_STEPS` depth steps apart at `viewDistance`,
+ * counting both what parts them: the real gap (in steps of the 24-bit depth buffer there, `depthStep`)
+ * and the difference of their polygon offsets' units (steps at any distance: `surface/layers` ranks),
+ * signed, so an offset pulling the farther face forward counts against the gap. Each pair says how far
+ * it holds (`holdsToM`: 0 when it never does).
+ *
+ * A pair is judged no farther than its overlap still shows `MIN_PIXELS` wide (on a 1440-pixel frame): a 2 cm
+ * trim fights past 60 m only as a sub-pixel shimmer (`coplanar.visibleTo`).
+ *
+ * Not reported: two plain materials that look alike (same colour, no texture: whichever wins, the
+ * pixel is the same), two that both skip the depth write (they blend), a mesh flagged
+ * `userData.zfightIgnore` (shells the shader pushes out), and the back of a double-sided material
+ * flagged `userData.zfightFrontOnly` (a room's walls: nobody stands behind them).
  */
 export interface ZFightPair {
   a: string;
@@ -18,6 +30,8 @@ export interface ZFightPair {
   gapMm: number;
   /** Overlapping area (cm²). */
   areaCm2: number;
+  /** Out to how many metres the pair still holds (0: fights even up close). */
+  holdsToM: number;
   /** Where the overlap is, in world space. */
   at: string;
 }
@@ -25,39 +39,76 @@ export interface ZFightPair {
 export interface ZFightOptions {
   /** Distance the pairs are judged at (m): the farther, the wider the gap that still fights. Default 10. */
   viewDistance?: number;
-  /** The camera's near plane (m). Default 0.1. */
-  near?: number;
   /** Smallest overlap worth reporting (m²). Default 1 cm². */
   minArea?: number;
   /** Stop after this many triangles (a whole street is millions). Default 3 million. */
   maxTriangles?: number;
 }
 
+interface Owner {
+  object: THREE.Object3D;
+  color: THREE.BufferAttribute | null;
+  uv: THREE.BufferAttribute | null;
+}
+
 interface Tri {
   /** Index of the mesh in `owners`, and the material this triangle is drawn with. */
   owner: number;
   material: THREE.Material;
+  /** Its corners' indices in the geometry's attributes. */
+  corners: [number, number, number];
   /** World centre. */
   centre: THREE.Vector3;
+  /** The bucket's normal and the plane's axes `p` is laid on. */
+  axis: THREE.Vector3;
+  u: THREE.Vector3;
+  v: THREE.Vector3;
   /** Plane distance along the bucket's normal. */
   d: number;
   /** 2D projection on the plane (u, v per vertex) and its bounds. */
-  p: [number, number][];
+  p: [P2, P2, P2];
   minU: number;
   maxU: number;
   minV: number;
   maxV: number;
 }
 
-const DEPTH_STEPS = 4;
+/** Depth steps two overlapping faces must stay apart (rounding in the rasteriser and the interpolation take the rest). */
+const MIN_STEPS = 2;
+/** A face this close in front of another solid's, facing it, is in contact: the gap cannot be seen into (a chiller's back on the wall). */
+const CONTACT = 0.003;
+/** Two values of a vertex colour or uv closer than this show the same. */
+const SAME = 0.02;
+/** The camera's near plane (as `depthStep` takes it). */
+const NEAR = 0.1;
+
+/**
+ * Subtrees that are not under any zone's group (a window's own street scene, `world/outlook`), checked
+ * with the zones: `registerZfightRoot` adds one under a name, the returned function removes it.
+ */
+const extraRoots = new Map<string, { root: THREE.Object3D; viewDistance: number }>();
+
+export function registerZfightRoot(name: string, root: THREE.Object3D, viewDistance: number): () => void {
+  extraRoots.set(name, { root, viewDistance });
+  return () => {
+    if (extraRoots.get(name)?.root === root) extraRoots.delete(name);
+  };
+}
+
+/** The registered subtrees, by name (`registerZfightRoot`). */
+export function zfightRoots(): ReadonlyMap<string, { root: THREE.Object3D; viewDistance: number }> {
+  return extraRoots;
+}
 
 export function findZFighting(root: THREE.Object3D, options: ZFightOptions = {}): ZFightPair[] {
-  const { viewDistance = 10, near = 0.1, minArea = 1e-4, maxTriangles = 3_000_000 } = options;
-  const step = (viewDistance * viewDistance) / (near * 2 ** 24);
-  const tolerance = Math.max(2e-5, DEPTH_STEPS * step);
+  const { viewDistance = 10, minArea = 1e-4, maxTriangles = 3_000_000 } = options;
+  const step = depthStep(viewDistance);
+  // Candidates: planes closer than this (buckets this wide and their neighbours). Past it the gap holds unless an
+  // offset more than two ranks deep pulls the farther face through the nearer one, which is not looked for.
+  const tolerance = Math.max(2e-5, (MIN_STEPS + 2 * UNITS_PER_RANK) * step);
   root.updateWorldMatrix(true, true);
 
-  const owners: THREE.Object3D[] = [];
+  const owners: Owner[] = [];
   const buckets = new Map<string, Tri[]>();
   let triangles = 0;
   const va = new THREE.Vector3();
@@ -69,7 +120,7 @@ export function findZFighting(root: THREE.Object3D, options: ZFightOptions = {})
   const instance = new THREE.Matrix4();
   const world = new THREE.Matrix4();
 
-  const addTriangle = (owner: number, material: THREE.Material, a: THREE.Vector3, b: THREE.Vector3, c: THREE.Vector3, doubleSided: boolean): void => {
+  const addTriangle = (owner: number, material: THREE.Material, corners: [number, number, number], a: THREE.Vector3, b: THREE.Vector3, c: THREE.Vector3, doubleSided: boolean): void => {
     e1.subVectors(b, a);
     e2.subVectors(c, a);
     normal.crossVectors(e1, e2);
@@ -84,17 +135,21 @@ export function findZFighting(root: THREE.Object3D, options: ZFightOptions = {})
       const d = n.dot(a);
       const bin = Math.floor(d / tolerance);
       const [u, v] = planeAxes(n);
-      const p = [a, b, c].map((q): [number, number] => [u.dot(q), v.dot(q)]);
+      const p = [a, b, c].map((q): P2 => [u.dot(q), v.dot(q)]) as [P2, P2, P2];
       const tri: Tri = {
         owner,
         material,
+        corners,
         centre: a.clone().add(b).add(c).divideScalar(3),
+        axis: n,
+        u,
+        v,
         d,
         p,
-        minU: Math.min(p[0]![0], p[1]![0], p[2]![0]),
-        maxU: Math.max(p[0]![0], p[1]![0], p[2]![0]),
-        minV: Math.min(p[0]![1], p[1]![1], p[2]![1]),
-        maxV: Math.max(p[0]![1], p[1]![1], p[2]![1]),
+        minU: Math.min(p[0][0], p[1][0], p[2][0]),
+        maxU: Math.max(p[0][0], p[1][0], p[2][0]),
+        minV: Math.min(p[0][1], p[1][1], p[2][1]),
+        maxV: Math.max(p[0][1], p[1][1], p[2][1]),
       };
       const key = `${nx},${ny},${nz}|${bin}`;
       let list = buckets.get(key);
@@ -106,12 +161,18 @@ export function findZFighting(root: THREE.Object3D, options: ZFightOptions = {})
   root.traverseVisible((obj) => {
     if (triangles > maxTriangles) return;
     const mesh = obj as THREE.Mesh;
-    if (!mesh.isMesh || (obj as THREE.SkinnedMesh).isSkinnedMesh) return;
+    // Not what the camera never draws (a shadow-only proxy, off layer 0).
+    if (!mesh.isMesh || (obj as THREE.SkinnedMesh).isSkinnedMesh || obj.userData.zfightIgnore || !obj.layers.isEnabled(0)) return;
     const geometry = mesh.geometry;
     const position = geometry.getAttribute('position') as THREE.BufferAttribute | undefined;
     if (!position) return;
     const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
-    const owner = owners.push(obj) - 1;
+    const owner =
+      owners.push({
+        object: obj,
+        color: (geometry.getAttribute('color') as THREE.BufferAttribute | undefined) ?? null,
+        uv: (geometry.getAttribute('uv') as THREE.BufferAttribute | undefined) ?? null,
+      }) - 1;
     const index = geometry.index;
     const count = index ? index.count : position.count;
     const groups = geometry.groups.length > 0 && Array.isArray(mesh.material) ? geometry.groups : [{ start: 0, count, materialIndex: 0 }];
@@ -127,7 +188,8 @@ export function findZFighting(root: THREE.Object3D, options: ZFightOptions = {})
       for (const group of groups) {
         const material = materials[group.materialIndex ?? 0];
         if (!material || !material.visible || !material.colorWrite || !material.depthTest) continue;
-        const doubleSided = material.side === THREE.DoubleSide;
+        // The inner side of a closed solid (a double-sided glass box) is only seen from inside it: judged outside only.
+        const doubleSided = material.side === THREE.DoubleSide && !material.userData.zfightFrontOnly && !closedSolid(geometry);
         const end = Math.min(count, group.start + group.count);
         for (let i = group.start; i + 2 < end; i += 3) {
           const i0 = index ? index.getX(i) : i;
@@ -136,22 +198,47 @@ export function findZFighting(root: THREE.Object3D, options: ZFightOptions = {})
           va.fromBufferAttribute(position, i0).applyMatrix4(world);
           vb.fromBufferAttribute(position, i1).applyMatrix4(world);
           vc.fromBufferAttribute(position, i2).applyMatrix4(world);
-          addTriangle(owner, material, va, vb, vc, doubleSided);
+          addTriangle(owner, material, [i0, i1, i2], va, vb, vc, doubleSided);
           triangles++;
         }
       }
     }
   });
 
+  /** Inside one mesh and material: only where the two show something different (a colour, a bit of texture). */
+  const differ = (s: Tri, t: Tri, q: P2): boolean => {
+    const { color, uv } = owners[s.owner]!;
+    // Only what the material reads: vertex colours it is told to use, uvs it samples a map with.
+    for (const attribute of [readsColors(s.material) ? color : null, readsUvs(s.material) ? uv : null]) {
+      if (!attribute) continue;
+      for (let k = 0; k < attribute.itemSize; k++) {
+        if (Math.abs(sampleAt(attribute, s.corners, s.p, q, k) - sampleAt(attribute, t.corners, t.p, q, k)) > SAME) return true;
+      }
+    }
+    return false;
+  };
+
   const found = new Map<string, ZFightPair>();
+  const middle = new THREE.Vector3();
   const test = (s: Tri, t: Tri): void => {
-    if (s.owner === t.owner && s.material === t.material) return;
     if (s.maxV <= t.minV || t.maxV <= s.minV) return;
-    const gap = Math.abs(s.d - t.d);
-    if (gap > tolerance) return;
-    if (settledByOffset(s.material, t.material)) return;
-    const overlap = overlapArea(s.p, t.p);
+    // How far `s` stands in front of `t`, in depth steps at `viewDistance`: its gap along the shared normal, plus
+    // how much more its polygon offset pulls it forward (more negative units: nearer).
+    const lead = (s.d - t.d) / step + (units(t.material) - units(s.material));
+    if (Math.abs(lead) >= MIN_STEPS) return;
+    const polygon = clipTriangle(s.p, t.p);
+    const overlap = polygonArea(polygon);
     if (overlap < minArea) return;
+    // Judged only as far as the overlap still shows `MIN_PIXELS` across (a trim's sliver past 60 m is under a pixel).
+    const seen = Math.min(viewDistance, visibleTo(polygon, overlap));
+    if (Math.abs((s.d - t.d) / depthStep(seen) + (units(t.material) - units(s.material))) >= MIN_STEPS) return;
+    if (bothBlend(s.material, t.material)) return;
+    const one = s.owner === t.owner && s.material === t.material;
+    if (one && !differ(s, t, centroid(polygon))) return;
+    if (!one && lookAlike(s.material, t.material) && !owners[s.owner]!.color && !owners[t.owner]!.color) return;
+    // Both pressed on another solid's face (a box's bottom on the shelf, a frame's back on the wall): neither is seen.
+    const [qu, qv] = centroid(polygon);
+    if (pressed(buckets, tolerance, middle.copy(s.axis).multiplyScalar(s.d).addScaledVector(s.u, qu).addScaledVector(s.v, qv), s.axis, [s, t], CONTACT)) return;
     const key = `${Math.min(s.owner, t.owner)}|${Math.max(s.owner, t.owner)}|${s.material.id}|${t.material.id}`;
     const previous = found.get(key);
     const areaCm2 = overlap * 1e4;
@@ -159,8 +246,16 @@ export function findZFighting(root: THREE.Object3D, options: ZFightOptions = {})
       previous.areaCm2 += areaCm2;
       return;
     }
+    const gap = s.d - t.d;
     const c = s.centre;
-    found.set(key, { a: pathOf(owners[s.owner]!, root), b: pathOf(owners[t.owner]!, root), gapMm: gap * 1000, areaCm2, at: `${c.x.toFixed(2)}, ${c.y.toFixed(3)}, ${c.z.toFixed(2)}` });
+    found.set(key, {
+      a: pathOf(owners[s.owner]!.object, root),
+      b: pathOf(owners[t.owner]!.object, root),
+      gapMm: Math.abs(gap) * 1000,
+      areaCm2,
+      holdsToM: holdsTo(gap, units(t.material) - units(s.material)),
+      at: `${c.x.toFixed(2)}, ${c.y.toFixed(3)}, ${c.z.toFixed(2)}`,
+    });
   };
   /** Sweep and prune along u: only triangles whose u ranges overlap are tested (a merged facade has thousands in one plane). */
   const sweep = (list: Tri[], other: Tri[] | null): void => {
@@ -188,65 +283,79 @@ export function findZFighting(root: THREE.Object3D, options: ZFightOptions = {})
   return pairs;
 }
 
+/** Whether `m` takes its vertex colours (a shader of its own may: assumed so). */
+function readsColors(m: THREE.Material): boolean {
+  return m.vertexColors || (m as THREE.ShaderMaterial).isShaderMaterial === true;
+}
+
+/** Whether `m` samples anything with its uvs (a shader of its own may: assumed so). */
+function readsUvs(m: THREE.Material): boolean {
+  if ((m as THREE.ShaderMaterial).isShaderMaterial) return true;
+  const maps = m as THREE.MeshStandardMaterial & Partial<THREE.MeshPhysicalMaterial>;
+  return !!(maps.map || maps.alphaMap || maps.bumpMap || maps.normalMap || maps.roughnessMap || maps.metalnessMap || maps.aoMap || maps.emissiveMap || maps.lightMap || maps.displacementMap);
+}
+
+/** A geometry that encloses its volume (three's boxes, spheres, capsules, closed cylinders): its faces' backs are inside it. */
+function closedSolid(geometry: THREE.BufferGeometry): boolean {
+  switch (geometry.type) {
+    case 'BoxGeometry':
+    case 'SphereGeometry':
+    case 'CapsuleGeometry':
+    case 'DodecahedronGeometry':
+    case 'IcosahedronGeometry':
+    case 'OctahedronGeometry':
+      return true;
+    case 'CylinderGeometry':
+      return !(geometry as THREE.CylinderGeometry).parameters.openEnded;
+    case 'LatheGeometry': {
+      // A full turn of a profile that starts and ends on the axis (a dish, a vase).
+      const { points, phiLength } = (geometry as THREE.LatheGeometry).parameters;
+      const first = points[0];
+      const last = points[points.length - 1];
+      return phiLength >= Math.PI * 2 - 1e-6 && !!first && !!last && first.x === 0 && last.x === 0;
+    }
+    default:
+      return false;
+  }
+}
+
+/** Neither writes depth: they blend in draw order, nothing to fight over. */
+function bothBlend(a: THREE.Material, b: THREE.Material): boolean {
+  return !a.depthWrite && !b.depthWrite;
+}
+
+/** Plain materials of one colour, untextured and opaque: whichever wins, the pixel is the same. */
+function lookAlike(a: THREE.Material, b: THREE.Material): boolean {
+  if (a.type !== b.type || a.transparent || b.transparent) return false;
+  const ma = a as THREE.MeshStandardMaterial;
+  const mb = b as THREE.MeshStandardMaterial;
+  if (ma.map || mb.map || ma.alphaMap || mb.alphaMap || !ma.color || !mb.color) return false;
+  if (!ma.color.equals(mb.color) || ma.roughness !== mb.roughness || ma.metalness !== mb.metalness) return false;
+  return !ma.emissive || !mb.emissive || ma.emissive.equals(mb.emissive);
+}
+
+/** A material's polygon offset in units (depth steps; the slope factor is the same -1 for every layer, it cancels). */
+function units(m: THREE.Material): number {
+  return m.polygonOffset ? m.polygonOffsetUnits : 0;
+}
+
+/**
+ * Out to where a pair `gap` metres apart (signed: + when the first is in front) and `leadUnits` apart in
+ * offsets (+ when they pull the first forward) stays `MIN_STEPS` apart: 0 when never, Infinity when always.
+ */
+function holdsTo(gap: number, leadUnits: number): number {
+  // Lead = gap / step(z) + leadUnits, either sign: |lead| >= MIN_STEPS.
+  const sign = gap === 0 ? Math.sign(leadUnits) || 1 : Math.sign(gap);
+  const offset = sign * leadUnits;
+  if (offset >= MIN_STEPS) return Infinity;
+  const need = MIN_STEPS - offset;
+  if (Math.abs(gap) === 0) return 0;
+  // |gap| / step(z) >= need, step(z) = z² / (near · 2²⁴).
+  return Number(Math.sqrt((Math.abs(gap) * NEAR * 2 ** 24) / need).toFixed(1));
+}
+
 function round(x: number): number {
   return Math.round(x * 100) / 100;
-}
-
-/** Two unit axes spanning the plane of normal `n`. */
-function planeAxes(n: THREE.Vector3): [THREE.Vector3, THREE.Vector3] {
-  const helper = Math.abs(n.y) < 0.9 ? new THREE.Vector3(0, 1, 0) : new THREE.Vector3(1, 0, 0);
-  const u = new THREE.Vector3().crossVectors(helper, n).normalize();
-  const v = new THREE.Vector3().crossVectors(n, u);
-  return [u, v];
-}
-
-function settledByOffset(a: THREE.Material, b: THREE.Material): boolean {
-  const offset = (m: THREE.Material): number => (m.polygonOffset ? m.polygonOffsetUnits + m.polygonOffsetFactor * 1000 : 0);
-  return offset(a) !== offset(b);
-}
-
-/** Area of the intersection of two 2D triangles (Sutherland-Hodgman: clip one by the other's edges). */
-function overlapArea(subject: [number, number][], clip: [number, number][]): number {
-  let polygon = subject;
-  const orientation = Math.sign(cross(clip[0]!, clip[1]!, clip[2]!)) || 1;
-  for (let i = 0; i < 3 && polygon.length > 0; i++) {
-    const p = clip[i]!;
-    const q = clip[(i + 1) % 3]!;
-    const inside = (r: [number, number]): boolean => cross(p, q, r) * orientation > 0;
-    const next: [number, number][] = [];
-    for (let j = 0; j < polygon.length; j++) {
-      const cur = polygon[j]!;
-      const prev = polygon[(j + polygon.length - 1) % polygon.length]!;
-      const curIn = inside(cur);
-      const prevIn = inside(prev);
-      if (curIn !== prevIn) next.push(intersect(prev, cur, p, q));
-      if (curIn) next.push(cur);
-    }
-    polygon = next;
-  }
-  let area = 0;
-  for (let i = 0; i < polygon.length; i++) {
-    const [x1, y1] = polygon[i]!;
-    const [x2, y2] = polygon[(i + 1) % polygon.length]!;
-    area += x1 * y2 - x2 * y1;
-  }
-  return Math.abs(area) / 2;
-}
-
-function cross(o: [number, number], a: [number, number], b: [number, number]): number {
-  return (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
-}
-
-function intersect(a: [number, number], b: [number, number], p: [number, number], q: [number, number]): [number, number] {
-  const a1 = b[1] - a[1];
-  const b1 = a[0] - b[0];
-  const c1 = a1 * a[0] + b1 * a[1];
-  const a2 = q[1] - p[1];
-  const b2 = p[0] - q[0];
-  const c2 = a2 * p[0] + b2 * p[1];
-  const det = a1 * b2 - a2 * b1;
-  if (Math.abs(det) < 1e-12) return a;
-  return [(b2 * c1 - b1 * c2) / det, (a1 * c2 - a2 * c1) / det];
 }
 
 /** A readable path from `root` down to `obj`: names where set, class names otherwise. */

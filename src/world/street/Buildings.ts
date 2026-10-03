@@ -17,6 +17,7 @@ import { flatRoomLight, type FlatRoomId } from '../city/flatWindows';
 import { STORY_WINDOWS, type FacadeWindow, type WindowLife, type WindowStory } from './windowLife';
 import { WINDOW_STORY_GLSL } from './windowStoryGlsl';
 import { RoofClutter, type DressedRoof } from './RoofClutter';
+import { FacadeWindows } from './facadeWindows/FacadeWindows';
 
 export interface BuildingsOptions {
   /** Scales every facade's `detail` (lower on low quality). */
@@ -24,8 +25,15 @@ export interface BuildingsOptions {
   anisotropy: number;
   /** The retro games shop's display colours (today's market stock), if known. */
   shopGoods: readonly string[] | null;
-  /** The night map's and the surface mask's resolution, as a share of the colour atlas's (0.5 on high quality, 0.25 else). */
+  /** The night map's resolution, as a share of the colour atlas's (0.5 on high quality, 0.25 else). */
   nightScale: number;
+  /** The surface mask's (glass, brick, relief), as a share of the colour atlas's: `SURFACE_SCALE` unless given. */
+  surfaceScale?: number;
+  /**
+   * Whether the windows of the facades painted at least `FRAMED_DETAIL` px/m are built in 3D (`facadeWindows/`) rather
+   * than painted: true unless given (a view that only sees the street from afar may save their triangles).
+   */
+  windowFrames?: boolean;
   /** Whose home a lit window is and what story plays in it (`windowLife.ts`); none: every window keeps its curfew. */
   windowLife?: WindowLife;
 }
@@ -47,6 +55,16 @@ const CHECK_EVERY = 1;
 const FLAT_WINDOWS = 8;
 /** How deep the panes sit behind the facade's face (the reveal the parallax shows), metres. */
 const REVEAL = 0.14;
+/**
+ * Facades painted at least this finely (the plan's `detail`, px/m: the near and middle rows) have their windows built
+ * in 3D: frames, bars, sills, heads, shutters, flower boxes (`facadeWindows/`); only their glass is painted.
+ */
+const FRAMED_DETAIL = 20;
+/**
+ * The surface mask's share of the colour atlas on every quality (the glass's edge, the relief's shading and the
+ * brick flag read it): half, 4 cm texels on the near facades, whatever the night map's share.
+ */
+const SURFACE_SCALE = 0.5;
 /** The walls' roughness in the surface mask (G), the material's roughness being 1. */
 const WALL_ROUGHNESS = 0.88;
 /** The glass's reflection, over the walls' `envMapIntensity`. */
@@ -91,13 +109,13 @@ const WINDOW_LIFE = /* glsl */ `
     totalEmissiveRadiance *= level;
   } else if (lifeLit > 0.02 && lifeId > 0.002 && vLifePos.y > ${GROUND_FLOOR.toFixed(2)}) {
     float t = windowLife.x;
-    float h1 = fract(sin(lifeId * 311.7) * 43758.5453);
+    float h1 = sineHash(lifeId * 311.7);
     if (emissiveColor.b > emissiveColor.r * 1.25) {
       float k = floor(t * 7.0 + lifeId * 97.0);
-      totalEmissiveRadiance *= 0.55 + 0.45 * fract(sin(k * 12.9898 + lifeId * 78.233) * 43758.5453);
+      totalEmissiveRadiance *= 0.55 + 0.45 * sineHash(k * 12.9898 + lifeId * 78.233);
     }
     float slot = t / 23.0 + h1 * 7.0;
-    if (fract(sin(floor(slot) * 91.7 + lifeId * 53.1) * 43758.5453) < 0.2) {
+    if (sineHash(floor(slot) * 91.7 + lifeId * 53.1) < 0.2) {
       float along = vLifePos.x + vLifePos.z;
       float band = fract((along - t * 0.55) / 3.7 + h1);
       totalEmissiveRadiance *= mix(1.0, 0.28, smoothstep(0.0, 0.03, band) * (1.0 - smoothstep(0.1, 0.13, band)));
@@ -212,6 +230,9 @@ interface Party {
   /** From the lower neighbour's cornice up to the taller one's top. */
   y0: number;
   y1: number;
+  /** How far back from the corner the taller one's roof gable stands on it, from `foot` up (0: a flat roof). */
+  gable: number;
+  foot: number;
   seed: number;
 }
 
@@ -295,13 +316,14 @@ function paintLight(ctx: CanvasRenderingContext2D, light: NightLight, k: number,
  * cornice ledge along its roofline, a roof with its back and gables, the blind party walls over lower
  * neighbours) whose painted facade (`paintFacade`) sits in a shared canvas atlas, shelf-packed. A
  * second, smaller atlas (`nightScale`) holds the lit windows for the night (`emissiveMap`, opaque: no
- * alpha to premultiply) with their rooms behind them, with their ids beside it (`windowIds`) and the
- * walls' surface (`roughnessMap`: the glass with its reveal in parallax and stronger reflection, brick,
- * the relief, see `SURFACE`): each light comes on at its own point of dusk and goes out when the city's
- * wakefulness drops below its curfew (a shop's in its closing hour, `SHOP_HOURS`), as in the painted
- * view; only the lights that changed are repainted and uploaded (`RegionUploader`). What stands on the
- * roofs is a child mesh (`RoofClutter`). Two draw calls for the whole street's architecture (four with
- * the sun's shadow).
+ * alpha to premultiply) with their rooms behind them, with their ids beside it (`windowIds`); a third
+ * (`SURFACE_SCALE`) the walls' surface (`roughnessMap`: the glass with its reveal in parallax and
+ * stronger reflection, brick, the relief, see `SURFACE`). Each light comes on at its own point of dusk
+ * and goes out when the city's wakefulness drops below its curfew (a shop's in its closing hour,
+ * `SHOP_HOURS`), as in the painted view; only the lights that changed are repainted and uploaded
+ * (`RegionUploader`). Child meshes: what stands on the roofs (`RoofClutter`) and the near facades'
+ * windows (`FacadeWindows`, `FRAMED_DETAIL`). Four draw calls for the whole street's architecture
+ * (eight with the sun's shadow).
  */
 export class Buildings extends THREE.Mesh implements Furniture, Updatable {
   readonly contactShadow = false;
@@ -330,6 +352,7 @@ export class Buildings extends THREE.Mesh implements Furniture, Updatable {
       atlasHeight = atlasHeightOf(placed);
     }
     const [canvas, ctx] = createCanvas(ATLAS_WIDTH, atlasHeight);
+    const framed = (spec: FacadeSpec): boolean => options.windowFrames !== false && spec.detail >= FRAMED_DETAIL;
     const nightScale = options.nightScale;
     const [nightCanvas, night] = createCanvas(Math.round(ATLAS_WIDTH * nightScale), Math.round(atlasHeight * nightScale));
     night.fillStyle = '#000';
@@ -354,7 +377,7 @@ export class Buildings extends THREE.Mesh implements Furniture, Updatable {
       const roofLights: NightLight[] = [];
       if (p.roof > 0) paintRoof(ctx, p.style, p.width, p.roof, p.slot, things, roofLights);
       const top = p.slot.y + p.roof * p.slot.k;
-      const painted = paintFacade(ctx, p.spec, p.width, { ...p.slot, y: top }, options.shopGoods);
+      const painted = paintFacade(ctx, p.spec, p.width, { ...p.slot, y: top }, options.shopGoods, framed(p.spec));
       for (const l of [...painted.lights, ...roofLights]) {
         lights.push(l);
         windows.push(facadeWindow(p, top, l));
@@ -377,7 +400,8 @@ export class Buildings extends THREE.Mesh implements Furniture, Updatable {
     const map = toTexture(canvas, options.anisotropy);
     const nightTexture = toTexture(nightCanvas, options.anisotropy);
     const ids = windowIdTexture(lights, nightCanvas.width, nightCanvas.height, nightScale, storyOf);
-    const surface = surfaceTexture(surfaces, panes, nightCanvas.width, nightCanvas.height, nightScale, options.anisotropy);
+    const surfaceScale = options.surfaceScale ?? SURFACE_SCALE;
+    const surface = surfaceTexture(surfaces, panes, Math.round(ATLAS_WIDTH * surfaceScale), Math.round(atlasHeight * surfaceScale), surfaceScale, options.anisotropy);
     const material = new THREE.MeshStandardMaterial({ map, emissiveMap: nightTexture, emissive: 0xffffff, emissiveIntensity: 0, roughness: 1, roughnessMap: surface });
     const life = { value: new THREE.Vector2() };
     const weather = { value: new THREE.Vector2() };
@@ -451,10 +475,14 @@ export class Buildings extends THREE.Mesh implements Furniture, Updatable {
     this.atlas.upload.attach(this);
     this.idTexture = ids;
     this.add(new RoofClutter(roofs));
+    this.framed = framed;
+    if (fronts.some((f) => f.features.casements.length)) this.add(new FacadeWindows(fronts));
   }
 
   /** The window ids live only in the patched shader's uniforms, where `disposeTree` never looks: freed here, with the uploaders' scratch. */
   private readonly idTexture: THREE.Texture;
+  /** Whether a facade's windows are built rather than painted (a repaint must paint it the same way). */
+  private readonly framed: (spec: FacadeSpec) => boolean;
 
   dispose(): void {
     this.idTexture.dispose();
@@ -477,7 +505,7 @@ export class Buildings extends THREE.Mesh implements Furniture, Updatable {
     for (const p of placed) {
       if (p.party || !p.spec.shops.some((shop) => shop.kind === 'retro')) continue;
       const top = p.slot.y + p.roof * p.slot.k;
-      paintFacade(ctx, p.spec, p.width, { ...p.slot, y: top }, goods);
+      paintFacade(ctx, p.spec, p.width, { ...p.slot, y: top }, goods, this.framed(p.spec));
       upload.mark(p.slot.x, top, p.width * p.slot.k, p.height * p.slot.k);
     }
   }
@@ -659,19 +687,47 @@ function partyWalls(facades: readonly FacadeSpec[]): Party[] {
       const tall = ah > bh ? a : b;
       const low = tall === a ? b : a;
       const lowStyle = facadeStyle(low.seed);
+      // A face that turns the corner into the block there (the courtyard's) already stands where the wall would:
+      // two faces in one plane. It shows the wall's height of its own, or the wall shows only over it.
+      const turning = turningFace(facades, [a.to[0], a.to[1]], [uz, -ux], [a, b]);
+      const covered = turning ? facadeHeight(turning.storeys) : 0;
+      if (covered >= facadeHeight(tall.storeys) - 0.2) continue;
       parties.push({
         spec: tall,
         style: facadeStyle(tall.seed),
         at: [a.to[0], a.to[1]],
         along: [ux, uz],
         facing: tall === a ? 1 : -1,
-        y0: facadeHeight(low.storeys) - lowStyle.parapet,
+        y0: Math.max(facadeHeight(low.storeys) - lowStyle.parapet, covered),
         y1: facadeHeight(tall.storeys),
+        gable: gableDepth(tall, facadeStyle(tall.seed)),
+        foot: facadeHeight(tall.storeys) - ROOF_FOOT,
         seed: tall.seed * 13 + low.seed,
       });
     }
   }
   return parties;
+}
+
+/** How far back into the block a face's roof gables run (as `buildingGeometry` builds them): 0 for a flat roof. */
+function gableDepth(spec: FacadeSpec, style: FacadeStyle): number {
+  if (style.roof === 'flat') return 0;
+  const { run } = ROOF_SLOPE[style.roof];
+  if (spec.id.startsWith(OURS)) return run;
+  return style.roof === 'pitched' ? 2 * run : PARTY_WALL_DEPTH;
+}
+
+/** The face (other than `skip`) with an end at `corner` that runs from it along `inward` (unit, into the block), if any. */
+function turningFace(facades: readonly FacadeSpec[], corner: [number, number], inward: [number, number], skip: readonly FacadeSpec[]): FacadeSpec | null {
+  for (const c of facades) {
+    if (skip.includes(c)) continue;
+    for (const [end, other] of [[c.from, c.to], [c.to, c.from]] as const) {
+      if (Math.hypot(end[0] - corner[0], end[1] - corner[1]) > 0.05) continue;
+      const len = Math.hypot(other[0] - end[0], other[1] - end[1]);
+      if (len > 0 && ((other[0] - end[0]) * inward[0] + (other[1] - end[1]) * inward[1]) / len > 0.99) return c;
+    }
+  }
+  return null;
 }
 
 /** Places every facade and party wall in the atlas: tallest first, left to right in shelves. */
@@ -713,6 +769,7 @@ function pack(facades: readonly FacadeSpec[], parties: readonly Party[], detailS
  * mansard's) closing it, a gable at each end; the party walls take their own painted slots.
  */
 function facadeGeometry(placed: readonly Placed[], atlasW: number, atlasH: number): THREE.BufferGeometry {
+  const faces = placed.filter((p) => !p.party).map((p) => p.spec);
   const positions: number[] = [];
   const normals: number[] = [];
   const uvs: number[] = [];
@@ -792,8 +849,17 @@ function facadeGeometry(placed: readonly Placed[], atlasW: number, atlasH: numbe
       const gable = [u0, wallTexel, u0, wallTexel, u0, wallTexel, u0, wallTexel];
       if (spec.id.startsWith(OURS)) {
         // Our own roof is the roof zone's (`world/roof`): only its street slope and its ends here, as before.
-        quad([ax, foot, az, afx, foot + rise, afz, afx, foot, afz, afx, foot, afz], [-ux, 0, -uz], gable);
-        quad([bx, foot, bz, bfx, foot, bfz, bfx, foot + rise, bfz, bfx, foot + rise, bfz], [ux, 0, uz], gable);
+        // Each end from over a face turning the corner into the block there (as the gables below).
+        const end = (x: number, z: number): [number[], number[], number[]] | null => {
+          const turning = turningFace(faces, [x, z], [-nx, -nz], [spec]);
+          const base = Math.max(foot, turning ? facadeHeight(turning.storeys) : 0);
+          if (base >= foot + rise) return null;
+          const at = (t: number, y: number): number[] => [x - nx * t, y, z - nz * t];
+          return [at((run * (base - foot)) / rise, base), at(run, foot + rise), at(run, base)];
+        };
+        const [ea, eb] = [end(ax, az), end(bx, bz)];
+        if (ea) quad([...ea[0], ...ea[1], ...ea[2], ...ea[2]], [-ux, 0, -uz], gable);
+        if (eb) quad([...eb[0], ...eb[2], ...eb[1], ...eb[1]], [ux, 0, uz], gable);
         continue;
       }
       // The back: a pitched roof falls again to its foot; a mansard runs flat to its back slope.
@@ -809,7 +875,13 @@ function facadeGeometry(placed: readonly Placed[], atlasW: number, atlasH: numbe
       // The gables: the profile at each end (foot, up the front slope, along the top, down the back).
       const profile = (x: number, z: number, sign: 1 | -1): void => {
         const at = (t: number, y: number): number[] => [x - nx * t, y, z - nz * t];
-        const [p0, p1, p2, p3] = [at(0, foot), at(run, foot + rise), at(depth - run, foot + rise), at(depth, foot)] as [number[], number[], number[], number[]];
+        // Where a face turns the corner into the block there (the courtyard's), it stands in the gable's plane up to
+        // its own top: the gable starts over it.
+        const turning = turningFace(faces, [x, z], [-nx, -nz], [spec]);
+        const base = Math.max(foot, turning ? facadeHeight(turning.storeys) : 0);
+        if (base >= foot + rise) return;
+        const t = (run * (base - foot)) / rise;
+        const [p0, p1, p2, p3] = [at(t, base), at(run, foot + rise), at(depth - run, foot + rise), at(depth - t, base)] as [number[], number[], number[], number[]];
         // Counter-clockwise seen from outside that end: the street's side is on the right at the left end, on the left at the right end.
         const corners = sign > 0 ? [...p3, ...p2, ...p1, ...p0] : [...p0, ...p1, ...p2, ...p3];
         quad(corners, [sign * ux, 0, sign * uz], gable);
@@ -829,18 +901,23 @@ function facadeGeometry(placed: readonly Placed[], atlasW: number, atlasH: numbe
   return geometry;
 }
 
-/** A party wall's quad, in its painted slot: from the corner on the street back into the block, the slot's left edge on the viewer's left. */
+/** A party wall's quads, in its painted slot: from the corner on the street back into the block (against the faces' normal (-uz, ux)), the slot's left edge on the viewer's left. */
 function partyQuad(quad: (corners: number[], normal: [number, number, number], uv: number[]) => void, party: Party, slot: AtlasSlot, atlasW: number, atlasH: number): void {
   const [px, pz] = party.at;
   const [ux, uz] = party.along;
-  // Back into the block: against the faces' normal (-uz, ux).
-  const [qx, qz] = [px + uz * PARTY_WALL_DEPTH, pz - ux * PARTY_WALL_DEPTH];
   const { y0, y1 } = party;
-  const u0 = slot.x / atlasW;
-  const u1 = (slot.x + PARTY_WALL_DEPTH * slot.k) / atlasW;
-  const vTop = 1 - slot.y / atlasH;
-  const vBottom = 1 - (slot.y + (y1 - y0) * slot.k) / atlasH;
-  const uv = [u0, vBottom, u1, vBottom, u1, vTop, u0, vTop];
-  if (party.facing > 0) quad([px, y0, pz, qx, y0, qz, qx, y1, qz, px, y1, pz], [ux, 0, uz], uv);
-  else quad([qx, y0, qz, px, y0, pz, px, y1, pz, qx, y1, qz], [-ux, 0, -uz], uv);
+  const v = (y: number): number => 1 - (slot.y + (y1 - y) * slot.k) / atlasH;
+  // From `t0` to `t1` metres back into the block, `y0` up to `top`.
+  const part = (t0: number, t1: number, top: number): void => {
+    if (t1 - t0 < 1e-3 || top - y0 < 1e-3) return;
+    const [ax, az, bx, bz] = [px + uz * t0, pz - ux * t0, px + uz * t1, pz - ux * t1];
+    // The slot's left edge on the viewer's left: at the corner when it looks along the street, at the back when it looks back.
+    const u = (t: number): number => (slot.x + (party.facing > 0 ? t : PARTY_WALL_DEPTH - t) * slot.k) / atlasW;
+    if (party.facing > 0) quad([ax, y0, az, bx, y0, bz, bx, top, bz, ax, top, az], [ux, 0, uz], [u(t0), v(y0), u(t1), v(y0), u(t1), v(top), u(t0), v(top)]);
+    else quad([bx, y0, bz, ax, y0, az, ax, top, az, bx, top, bz], [-ux, 0, -uz], [u(t1), v(y0), u(t0), v(y0), u(t0), v(top), u(t1), v(top)]);
+  };
+  // Under the taller one's gable the wall stops at the roof's foot (the gable goes on from there), else at its top.
+  const gable = Math.min(party.gable, PARTY_WALL_DEPTH);
+  part(0, gable, Math.min(y1, party.foot));
+  part(gable, PARTY_WALL_DEPTH, y1);
 }

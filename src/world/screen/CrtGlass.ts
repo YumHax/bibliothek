@@ -1,6 +1,7 @@
 import * as THREE from 'three';
-import { createCanvas, seededRandom } from '@/covers/generated/canvasUtils';
+import { createCanvas, seededRandom, canvasTexture } from '@/covers/generated/canvasUtils';
 import { RENDER_ORDER } from '../surface/layers';
+import { markShared } from '@/world/materials/sharedResources';
 
 /** Visible scan lines over the picture (a 480-line set seen up close). */
 const SCAN_LINES = 240;
@@ -32,8 +33,7 @@ function smudges(): THREE.CanvasTexture {
     ctx.fill();
     ctx.restore();
   }
-  smudgeTexture = new THREE.CanvasTexture(canvas);
-  smudgeTexture.colorSpace = THREE.NoColorSpace;
+  smudgeTexture = markShared(canvasTexture(canvas, { data: true, anisotropy: 'facing' }));
   return smudgeTexture;
 }
 

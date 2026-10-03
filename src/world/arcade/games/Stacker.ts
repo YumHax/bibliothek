@@ -24,7 +24,7 @@ const PERFECT_BONUS = 40;
 const STACK_COMBO_MAX = 3;
 const SETTLE = 0.22;
 /** Cells per second on row 1, and the increase per row. */
-const BASE_SPEED = 4.5;
+const BASE_SPEED = 4;
 const SPEED_PER_ROW = 0.6;
 const ROW_COLORS = ['#63b3ff', '#7ee787', '#ffe066', '#ffb347', '#ff5f5f', '#ff7ad9'];
 

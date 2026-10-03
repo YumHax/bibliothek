@@ -1,6 +1,5 @@
 import * as THREE from 'three';
-import { QUALITY } from '@/graphics/quality';
-import { createCanvas, seededRandom, toTexture } from '@/covers/generated/canvasUtils';
+import { createCanvas, seededRandom, canvasTexture } from '@/covers/generated/canvasUtils';
 import { paintOnce } from './materials/paintedTiles';
 import { beforeChunk, afterChunk, patchShader, replaceChunk, VALUE_NOISE } from './materials/shaderPatch';
 
@@ -143,10 +142,8 @@ function paintParquet(): [THREE.Texture, THREE.Texture] {
     }
   }
 
-  const map = toTexture(colorCanvas);
-  const bumpMap = new THREE.CanvasTexture(bumpCanvas);
-  bumpMap.anisotropy = QUALITY.anisotropy;
-  for (const tex of [map, bumpMap]) tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  const map = canvasTexture(colorCanvas, { repeat: true });
+  const bumpMap = canvasTexture(bumpCanvas, { data: true, repeat: true });
   return [map, bumpMap];
 }
 

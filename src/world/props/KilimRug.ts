@@ -3,7 +3,7 @@ import { createCanvas, seededRandom, toTexture } from '@/covers/generated/canvas
 import { Prop } from './Prop';
 import { fabric } from '@/world/materials/finishes';
 import { cloth as paletteCloth, coverageKeepsAlpha } from '@/world/materials/palette';
-import { FLOOR } from '@/world/surface/layers';
+import { FLOOR, layMesh } from '@/world/surface/layers';
 import { QUALITY } from '@/graphics/quality';
 
 export interface KilimRugOptions {
@@ -16,7 +16,7 @@ export interface KilimRugOptions {
 }
 
 /** The slab's height: its top is the floor's `kilim` layer. */
-const THICKNESS = FLOOR.kilim.lift;
+const THICKNESS = FLOOR.kilim.lift; // convention-ok: a slab this thick, its top at the layer
 const FRINGE = 0.06;
 const PX_PER_M = 700;
 
@@ -62,6 +62,7 @@ export function addFringes(parent: THREE.Object3D, width: number, depth: number,
     const fringe = new THREE.Mesh(new THREE.PlaneGeometry(length, depth), tassels);
     fringe.rotation.set(-Math.PI / 2, 0, sx > 0 ? 0 : Math.PI);
     fringe.position.set(sx * (width / 2 + length / 2 - 0.004), FLOOR.fringe.lift, 0);
+    layMesh(fringe, FLOOR.fringe);
     fringe.receiveShadow = true;
     parent.add(fringe);
   }
@@ -135,7 +136,7 @@ function paintKilim(wM: number, dM: number, [field, dark, light, accent]: [numbe
   fade.addColorStop(1, 'rgba(255,245,230,0.16)');
   ctx.fillStyle = fade;
   ctx.fillRect(0, 0, W, H);
-  return toTexture(canvas, 4);
+  return toTexture(canvas, 'grazing');
 }
 
 /** Cotton warp ends knotted in groups: ivory strands on transparent. */
@@ -151,5 +152,5 @@ function paintFringe(dM: number, random: () => number): THREE.Texture {
     ctx.lineTo(W * (0.7 + random() * 0.3), y + (random() - 0.5) * 3);
     ctx.stroke();
   }
-  return toTexture(canvas, 4);
+  return toTexture(canvas, 'grazing');
 }

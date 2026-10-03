@@ -174,9 +174,8 @@ export class ForSaleBox extends THREE.Group implements Furniture, Interactable {
     if (!this.scanLabel) {
       const [w, h] = SCAN_PX;
       const [canvas] = createCanvas(w, h);
-      const texture = new THREE.CanvasTexture(canvas);
-      texture.colorSpace = THREE.SRGBColorSpace;
-      this.scanLabel = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, transparent: true, depthWrite: false, toneMapped: false }));
+      const texture = toTexture(canvas, 'facing');
+      this.scanLabel = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, transparent: true, depthWrite: false }));
       this.scanLabel.scale.set(SCAN_W, (SCAN_W * h) / w, 1);
       this.scanLabel.position.set(0, this.box.dimensions.height + 0.1, 0.02);
       this.scanLabel.renderOrder = RENDER_ORDER.label;
@@ -301,7 +300,7 @@ export class ForSaleBox extends THREE.Group implements Furniture, Interactable {
       ctx.fillStyle = FADED_INK;
       ctx.font = 'bold 64px system-ui, sans-serif';
       ctx.fillText('…', 100, y - 8);
-      return toTexture(canvas, 2);
+      return toTexture(canvas, 'facing');
     }
     ctx.fillStyle = faded ? FADED_INK : INK;
     // The old price struck out: before a haggle, or before a clearance's cut.
@@ -326,7 +325,7 @@ export class ForSaleBox extends THREE.Group implements Furniture, Interactable {
       ctx.font = 'bold 34px system-ui, sans-serif';
       ctx.fillText('★', 180, band ? 42 : 24);
     }
-    return toTexture(canvas, 2);
+    return toTexture(canvas, 'facing');
   }
 }
 

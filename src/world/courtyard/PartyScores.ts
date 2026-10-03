@@ -50,7 +50,8 @@ export class PartyScores implements ScoreTable {
     this.sort();
     const rank = this.entries.indexOf(entry);
     for (const cb of this.listeners) cb();
-    return { best, rank: rank < LINES ? rank + 1 : null };
+    // 0-based, like `ArcadeScores.submit`: the end screens add the 1.
+    return { best, rank: rank < LINES ? rank : null };
   }
 
   subscribe(cb: () => void): () => void {

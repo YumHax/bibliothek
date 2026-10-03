@@ -41,5 +41,5 @@ function titleCard(): THREE.Texture {
   ctx.fillStyle = '#ff8a80';
   ctx.font = `bold 12px ${PIXEL_FONT}`;
   ctx.fillText('PRESS FIRE', W / 2, 180);
-  return toTexture(canvas, 2);
+  return toTexture(canvas, 'facing');
 }

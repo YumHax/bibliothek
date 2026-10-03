@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { createCanvas } from '@/covers/generated/canvasUtils';
+import { createCanvas, canvasTexture } from '@/covers/generated/canvasUtils';
 import { QUALITY } from '@/graphics/quality';
 import { type Rng, ELEVATION_MAX, ELEVATION_MIN, EYE_HEIGHT, SCENE_HEIGHT, SCENE_WIDTH, azimuthX, elevationY } from './Sheet';
 import type { GoodsRect } from './Shopfront';
@@ -124,11 +124,9 @@ export class Life {
     glow.scale(GLOW_SCALE, GLOW_SCALE);
     // The atlas keeps its packing: the blinking lights come after the spray, the self-painting layers last.
     this.paintAtlas(color, glow, [traffic, pedestrians, birds, fountain, traffic.flashes, cyclists, critters, this.folk]);
-    this.atlas = new THREE.CanvasTexture(colorCanvas);
-    this.atlas.colorSpace = THREE.SRGBColorSpace;
+    this.atlas = canvasTexture(colorCanvas, { anisotropy: 'facing' });
     this.atlas.premultiplyAlpha = true;
-    this.glow = new THREE.CanvasTexture(glowCanvas);
-    this.glow.colorSpace = THREE.NoColorSpace;
+    this.glow = canvasTexture(glowCanvas, { data: true, anisotropy: 'facing' });
     for (const layer of [traffic, birds, pedestrians]) layer.populate();
   }
 

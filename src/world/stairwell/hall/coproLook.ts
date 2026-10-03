@@ -103,7 +103,7 @@ class Plaque extends Prop {
     ctx.fillText(line, 160, 56, 290);
     ctx.font = 'italic 22px Georgia, serif';
     ctx.fillText(under, 160, 92, 290);
-    const plate = new THREE.Mesh(new THREE.PlaneGeometry(0.24, 0.09), new THREE.MeshStandardMaterial({ map: toTexture(canvas, 2), metalness: 0.6, roughness: 0.35 }));
+    const plate = new THREE.Mesh(new THREE.PlaneGeometry(0.24, 0.09), new THREE.MeshStandardMaterial({ map: toTexture(canvas, 'facing'), metalness: 0.6, roughness: 0.35 }));
     this.add(plate);
   }
 }
@@ -118,5 +118,5 @@ function textTexture(text: string, ground: string, ink: string): THREE.CanvasTex
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillText(text, 80, 27, 150);
-  return toTexture(canvas, 2);
+  return toTexture(canvas, 'facing');
 }

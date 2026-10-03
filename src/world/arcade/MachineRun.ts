@@ -252,7 +252,10 @@ export class MachineRun {
     this.bonusTicked = 0;
     this.fireReleased = false;
     if (scores?.qualifies(game.id, score)) {
-      const rank = Math.max(0, scores.table(game.id).findIndex((e) => score > e.score));
+      // Under every entry of a table not yet full: the last place, not the first.
+      const table = scores.table(game.id);
+      const above = table.findIndex((e) => score > e.score);
+      const rank = above < 0 ? table.length : above;
       this.initials = new InitialsEntry(scores.initials, rank, score);
       this.current = 'initials';
     } else {

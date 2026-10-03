@@ -5,6 +5,7 @@ import type { FacadeSpec } from './streetPlan';
 import { FacadeFrame } from './relief/facadeFrame';
 import { TriBuilder } from './relief/TriBuilder';
 import { snowCovered } from './snowCover';
+import { gapAt } from '../surface/layers';
 
 /** A roof to dress: its facade, the facade's look and size, what stands on it (`city/roofFurniture`). */
 export interface DressedRoof {
@@ -22,6 +23,8 @@ const ZINC = '#8a9094';
 const UNIT = '#b8bcbe';
 const GLASS = '#26313d';
 const DISH = '#d8d8d4';
+/** A dormer's glass in front of its face (one mesh: a real gap), holding as far as the roofs are seen from. */
+const PANE = gapAt(100);
 
 const POT_GEOMETRY = new THREE.CylinderGeometry(0.085, 0.1, 0.36, 8);
 const VENT_GEOMETRY = new THREE.CylinderGeometry(0.07, 0.07, 1, 8);
@@ -84,8 +87,8 @@ function dress(b: TriBuilder, { spec, style, height, foot, things }: DressedRoof
       const depth = front - back;
       b.box(m, dormer.s, (y0 + y1) / 2, (front + back) / 2, w + 0.3, y1 - y0, depth, style.trim);
       // The pane and its bar, on the dormer's face.
-      b.quad(m, [dormer.s - w / 2, footY + 0.7, front + 0.006], [dormer.s + w / 2, footY + 0.7, front + 0.006], [dormer.s + w / 2, footY + 1.9, front + 0.006], [dormer.s - w / 2, footY + 1.9, front + 0.006], GLASS);
-      b.box(m, dormer.s, footY + 1.3, front + 0.012, 0.05, 1.2, 0.01, style.frame);
+      b.quad(m, [dormer.s - w / 2, footY + 0.7, front + PANE], [dormer.s + w / 2, footY + 0.7, front + PANE], [dormer.s + w / 2, footY + 1.9, front + PANE], [dormer.s - w / 2, footY + 1.9, front + PANE], GLASS);
+      b.box(m, dormer.s, footY + 1.3, front + PANE + 0.015, 0.05, 1.2, 0.02, style.frame);
       // Its pediment: a triangle at the front and back, two slopes between.
       const cap0 = y1;
       const apex = y1 + 0.45;

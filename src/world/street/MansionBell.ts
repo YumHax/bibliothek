@@ -7,7 +7,8 @@ import { createCanvas, toTexture, FONT } from '@/covers/generated/canvasUtils';
 import { playIntercomLine } from '@/audio/furnitureSounds';
 import { playDoorbell } from '@/audio/doorbell';
 import { invisibleHitbox } from '../meshUtils';
-import { METAL, paint } from '../materials/palette';
+import { METAL } from '../materials/palette';
+import { snowPaint } from './snowCover';
 import { Prop, part } from '../props/Prop';
 import { HoverGlint } from '../props/hoverGlint';
 
@@ -53,7 +54,7 @@ export class MansionBell extends Prop implements Interactable {
       const y = PLATE.h * 0.06 + (PLATE.h * 0.72) * (0.5 - (row + 0.5) / ROWS);
       pushes.push(part(this, 0.014, 0.014, 0.008, METAL.brass(), { x: col * PLATE.w * 0.4, y, z: PLATE.d + 0.003 }));
     }
-    const dark = paint(0x2a2622, 0.7);
+    const dark = snowPaint(0x2a2622, 0.7);
     for (let i = 0; i < 4; i++) part(this, PLATE.w * 0.5, 0.004, 0.002, dark, { y: -PLATE.h * 0.4 + i * 0.012, z: PLATE.d + 0.0005 });
     this.glint = HoverGlint.of(...pushes);
     const hitbox = invisibleHitbox(PLATE.w + 0.06, PLATE.h + 0.06, 0.08, { z: 0.04 });

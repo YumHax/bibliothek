@@ -31,7 +31,7 @@ export function paintSpillAtlas(board: readonly [string, string]): SpillAtlas {
     PAINTERS[id](ctx, board);
     ctx.restore();
   });
-  const texture = toTexture(canvas, 8);
+  const texture = toTexture(canvas, 'grazing');
   const w = canvas.width;
   const h = canvas.height;
   return {

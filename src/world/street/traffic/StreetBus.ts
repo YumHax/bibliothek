@@ -5,7 +5,7 @@ import type { SessionActions } from '@/game/SessionActions';
 import type { ZoneId } from '../../zoneIds';
 import { invisibleHitbox } from '../../meshUtils';
 import type { DayNight } from '../../props/DayNight';
-import { BUS, busGeometries } from '../carModel';
+import { BUS, busGeometries, vehicleGlass } from '../carModel';
 import { nightnessOf } from '../streetAir';
 import { snowCovered } from '../snowCover';
 import { paint, standard } from '../../materials/palette';
@@ -91,7 +91,7 @@ export class StreetBus extends ScriptedVehicle implements Interactable {
     const g = busGeometries();
     const body = new THREE.Mesh(g.body, snowCovered(new THREE.MeshStandardMaterial({ color: LIVERY, roughness: 0.35 })));
     const stripe = new THREE.Mesh(g.stripe, standard({ color: STRIPE, roughness: 0.4 }));
-    const glass = new THREE.Mesh(g.glass, standard({ color: 0x18222a, roughness: 0.06 }));
+    const glass = new THREE.Mesh(g.glass, vehicleGlass(0x18222a));
     const wheels = new THREE.Mesh(g.wheels, paint(0x151515, 0.85));
     this.lampMaterial = new THREE.MeshBasicMaterial({ vertexColors: true, color: 0x666666 });
     this.indicatorMaterial = new THREE.MeshBasicMaterial({ vertexColors: true, color: 0x222222 });
@@ -261,5 +261,5 @@ function signTexture(line: string): THREE.CanvasTexture {
   ctx.fillStyle = 'rgba(0,0,0,0.45)';
   for (let x = 0; x < 256; x += 3) ctx.fillRect(x, 0, 1, 36);
   for (let y = 0; y < 36; y += 3) ctx.fillRect(0, y, 256, 1);
-  return toTexture(canvas, 2);
+  return toTexture(canvas, 'facing');
 }

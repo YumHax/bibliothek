@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { cylinderMesh } from '../meshUtils';
 import { Prop, part } from '../props/Prop';
 import { paint, standard } from '../materials/palette';
+import { GLASS } from '../materials/glass';
 import { SwingLeaf, revealWhileOpen } from '../props/SwingLeaf';
 
 /** One bay of the row, left to right as seen from the room: a cupboard (one door under 0.5 m, two above) or the extractor hood over the hob. */
@@ -39,7 +40,6 @@ const CARCASS = paint(0xe9e4da, 0.8);
 const STEEL = standard({ color: 0xbfc2c6, metalness: 1, roughness: 0.4 });
 const FILTER = standard({ color: 0x8e9296, metalness: 1, roughness: 0.6 });
 const CROCKERY = paint(0xf4f1ea, 0.3);
-const GLASS = standard({ color: 0xe8f0f2, roughness: 0.05, metalness: 0, transparent: true, opacity: 0.35, side: THREE.DoubleSide });
 const HOOD_LIGHT = standard({ color: 0xfff4dc, emissive: 0xfff0d0, emissiveIntensity: 0.35, roughness: 0.6 });
 
 /**
@@ -134,11 +134,11 @@ export class WallCabinets extends Prop {
     // Glasses upside down at the back of the top shelf, bowls stacked beside the plates.
     for (let i = 0; i < 3; i++) {
       const x = cx - inner / 2 + 0.06 + i * 0.075;
-      const glass = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.034, 0.11, 16, 1, true), GLASS);
+      const glass = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.034, 0.11, 16, 1, true), GLASS.ware);
       glass.position.set(x, shelfY + 0.0075 + 0.055, z - 0.09);
       interior.add(glass);
       // The base, a little inside the wall so the two glass surfaces do not coincide.
-      interior.add(cylinderMesh(0.0285, 0.004, GLASS, { x, y: shelfY + 0.0075 + 0.108, z: z - 0.09 }, { segments: 16 }));
+      interior.add(cylinderMesh(0.0285, 0.004, GLASS.ware, { x, y: shelfY + 0.0075 + 0.108, z: z - 0.09 }, { segments: 16 }));
     }
     for (let i = 0; i < 3; i++) interior.add(cylinderMesh(0.07, 0.04, paint(0x9fb7c9, 0.3), { x: cx + inner / 4, y: floor + 0.07 + 0.02 + i * 0.03, z }, { radiusBottom: 0.045, segments: 16 }));
   }

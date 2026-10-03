@@ -1,5 +1,7 @@
 import * as THREE from 'three';
 import { RENDER_ORDER } from '../surface/layers';
+import { viewScale } from '../particles/pointScale';
+import { overKeepingAlpha } from '@/world/materials/blend';
 
 export interface SteamOptions {
   /** Puffs alive at once at full rate. Default 24. */
@@ -46,12 +48,7 @@ export class Steam extends THREE.Points {
     const uniforms = { viewScale: { value: 800 }, startSize: { value: settings.startSize }, endSize: { value: settings.endSize }, opacity: { value: settings.opacity } };
     const material = new THREE.ShaderMaterial({ uniforms, vertexShader: VERTEX, fragmentShader: FRAGMENT, transparent: true, depthWrite: false });
     // Over the colour, never over the alpha.
-    material.blending = THREE.CustomBlending;
-    material.blendEquation = THREE.AddEquation;
-    material.blendSrc = THREE.SrcAlphaFactor;
-    material.blendDst = THREE.OneMinusSrcAlphaFactor;
-    material.blendSrcAlpha = THREE.ZeroFactor;
-    material.blendDstAlpha = THREE.OneFactor;
+    overKeepingAlpha(material);
     super(geometry, material);
     this.name = 'Steam';
     this.settings = settings;
@@ -69,10 +66,8 @@ export class Steam extends THREE.Points {
     // viewport's, not the drawing buffer's: the post chain may render at a share of it (adaptive
     // resolution), a mirror at its own size.
     this.onBeforeRender = (renderer, _scene, camera) => {
-      const perspective = camera as THREE.PerspectiveCamera;
-      if (!perspective.isPerspectiveCamera) return;
-      const height = renderer.getCurrentViewport(VIEWPORT).w;
-      this.uniforms.viewScale.value = height / (2 * Math.tan(THREE.MathUtils.degToRad(perspective.fov) / 2));
+      const scale = viewScale(renderer, camera);
+      if (scale !== null) this.uniforms.viewScale.value = scale;
     };
   }
 
@@ -119,8 +114,6 @@ export class Steam extends THREE.Points {
     this.lives.setX(i, 0);
   }
 }
-
-const VIEWPORT = new THREE.Vector4();
 
 const VERTEX = /* glsl */ `
 uniform float viewScale;

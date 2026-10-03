@@ -25,7 +25,9 @@ const TIERS: readonly { y: number; count: number; height: number; depth: number 
   { y: 0.64, count: 2, height: 0.45, depth: 0.36 },
   { y: 1.24, count: 3, height: 0.32, depth: 0.3 },
 ];
-const HOOD = 0.04;
+/** (Not 4 cm: the lower tanks' hoods would end level with the tiled wainscot's cap behind them, 1.13 m.) */
+const HOOD = 0.045;
+const PLINTH = 0.09;
 const GRAVEL = 0.035;
 const FRAME = paint(0x1c1d20, 0.45);
 const RACK_PAINT = paint(0x2a2d30, 0.5);
@@ -88,11 +90,12 @@ export class AquariumWall extends THREE.Group implements Furniture, Updatable, S
 
     // The rack: four posts, the plinth, the cupboards under the big tanks, the two shelves.
     for (const x of [-W / 2 + POST / 2, W / 2 - POST / 2]) for (const z of [POST / 2, DEPTH - POST / 2]) part(still, POST, RACK, POST, RACK_PAINT, { x, y: RACK / 2, z });
-    part(still, W, 0.08, DEPTH, RACK_PAINT, { y: 0.04, z: DEPTH / 2 });
+    // The plinth over the skirting's 8 cm (it stands against the wall: level, their tops would fight).
+    part(still, W, PLINTH, DEPTH, RACK_PAINT, { y: PLINTH / 2, z: DEPTH / 2 });
     const doors = 3;
     const doorW = (W - 2 * POST) / doors;
     for (let i = 0; i < doors; i++) {
-      part(still, doorW - 0.012, TIERS[0]!.y - 0.12, 0.018, DOORS, { x: -W / 2 + POST + doorW * (i + 0.5), y: 0.08 + (TIERS[0]!.y - 0.12) / 2, z: DEPTH - 0.012 });
+      part(still, doorW - 0.012, TIERS[0]!.y - 0.04 - PLINTH, 0.018, DOORS, { x: -W / 2 + POST + doorW * (i + 0.5), y: PLINTH + (TIERS[0]!.y - 0.04 - PLINTH) / 2, z: DEPTH - 0.012 });
       part(still, 0.012, 0.08, 0.02, paint(0xc8c0a8, 0.4), { x: -W / 2 + POST + doorW * (i + 0.5) + doorW * 0.36, y: TIERS[0]!.y * 0.62, z: DEPTH + 0.004 });
     }
     for (const tier of TIERS) part(still, W, 0.03, DEPTH, RACK_PAINT, { y: tier.y - 0.015, z: DEPTH / 2 });

@@ -14,7 +14,7 @@ const MAX_SPEED = 17;
 /** Pellets on the board at once: the next one is never across the whole board. */
 const PELLETS = 2;
 /** A crash: the seconds it costs, and how long the snake blinks before it sets off again, short. */
-const CRASH_SECONDS = 3;
+const CRASH_SECONDS = 2;
 const CRASH_PAUSE = 0.7;
 /** Pellets per stage: a stage is faster and pays seconds. */
 const PELLETS_PER_STAGE = 6;
@@ -45,14 +45,14 @@ interface Cell {
  * NEON SNAKE: fifteen seconds and a snake that grows. Steer onto the pellets (two on the board at
  * once); each one pays points and a little time, pellets eaten in quick succession chain the
  * combo, a gold one now and then pays two seconds before it fades. Every six pellets the snake
- * speeds up and the clock gets two seconds. Hitting a wall or yourself costs three seconds and the
+ * speeds up and the clock gets two seconds. Hitting a wall or yourself costs two seconds and the
  * combo, and the snake starts again short from the middle: only the clock ends the play.
  */
 export class Snake extends BaseGame {
   readonly id = 'snake';
   readonly title = 'NEON SNAKE';
   readonly hint = 'WASD or arrows steer · eat the pellets, miss the walls';
-  readonly summary = '15 SEC · CHAIN PELLETS · CRASH = -3S';
+  readonly summary = '15 SEC · CHAIN PELLETS · CRASH = -2S';
 
   private body: Cell[] = [];
   private dir: Dir = 'right';

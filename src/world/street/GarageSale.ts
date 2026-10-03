@@ -10,7 +10,8 @@ import { KEYS } from '@/persistence';
 import { DailyList } from '@/time/DailyList';
 import { dailyRandom, isEventDay } from '@/time/daily';
 import type { Furniture } from '../Furniture';
-import { paint, shared } from '../materials/palette';
+import { shared } from '../materials/palette';
+import { snowPaint } from './snowCover';
 import { bareMetal } from './metals';
 import { ForSaleBox } from '../market/ForSaleBox';
 import { GARAGE_WHERE } from '@/economy/pricing';
@@ -77,9 +78,9 @@ export class GarageSale extends THREE.Group implements Furniture, Updatable, Int
         this.add(leg);
       }
     }
-    const top = new THREE.Mesh(new THREE.BoxGeometry(width, 0.03, depth), paint(0xe8dcc6, 0.8));
+    const top = new THREE.Mesh(new THREE.BoxGeometry(width, 0.03, depth), snowPaint(0xe8dcc6, 0.8));
     top.position.y = height;
-    const cloth = new THREE.Mesh(new THREE.BoxGeometry(width + 0.04, 0.26, depth + 0.04), paint(0x3a6a8a, 0.95));
+    const cloth = new THREE.Mesh(new THREE.BoxGeometry(width + 0.04, 0.26, depth + 0.04), snowPaint(0x3a6a8a, 0.95));
     cloth.position.y = height - 0.12;
     const sign = new THREE.Mesh(new THREE.PlaneGeometry(0.62, 0.44), new THREE.MeshStandardMaterial({ map: signTexture(options.price()), roughness: 0.9 }));
     sign.position.set(-width / 2 + 0.35, height + 0.22, -depth / 2 + 0.1);
@@ -200,5 +201,5 @@ function signTexture(price: number): THREE.CanvasTexture {
   ctx.font = '22px "Comic Sans MS", "Chalkboard SE", sans-serif';
   ctx.fillText('more inside RETRO GAMES ➜', 160, 170);
   ctx.fillText('(the flea market, at the back)', 160, 200);
-  return toTexture(canvas, 2);
+  return toTexture(canvas, 'facing');
 }

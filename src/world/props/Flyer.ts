@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { createCanvas, fitFontSize, seededRandom, toTexture, FONT } from '@/covers/generated/canvasUtils';
-import { WALL } from '@/world/surface/layers';
+import { layMesh, WALL } from '@/world/surface/layers';
 import { QUALITY } from '@/graphics/quality';
 import { coverageKeepsAlpha } from '@/world/materials/palette';
 import { Prop } from './Prop';
@@ -51,6 +51,7 @@ export class Flyer extends Prop {
     const material = coverageKeepsAlpha(new THREE.MeshStandardMaterial({ map, roughness: 0.95, alphaTest: 0.5, alphaToCoverage: QUALITY.msaa > 0 }));
     const sheet = new THREE.Mesh(new THREE.PlaneGeometry(width, height), material);
     sheet.position.z = WALL.flyer.lift;
+    layMesh(sheet, WALL.flyer);
     sheet.rotation.z = options.tilt ?? (style === 'paper' ? (random() - 0.5) * 0.09 : 0);
     sheet.castShadow = false;
     sheet.receiveShadow = true;
@@ -137,7 +138,7 @@ function paintPaper(wM: number, hM: number, text: Text, colours: Colours, random
     ctx.arc(px - W * 0.006, py - W * 0.006, W * 0.006, 0, Math.PI * 2);
     ctx.fill();
   }
-  return toTexture(canvas, 4);
+  return toTexture(canvas, 'facing');
 }
 
 /** A cloth banner: the accent colour, hem stripes top and bottom, the title big in the paper colour, eyelets along the top. */
@@ -173,5 +174,5 @@ function paintCloth(wM: number, hM: number, text: Text, colours: Colours): THREE
     ctx.arc(x, hem * 0.5, hem * 0.28, 0, Math.PI * 2);
     ctx.fill();
   }
-  return toTexture(canvas, 4);
+  return toTexture(canvas, 'facing');
 }

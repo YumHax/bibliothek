@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { QUALITY } from '@/graphics/quality';
-import { createCanvas, toTexture } from '@/covers/generated/canvasUtils';
+import { createCanvas, toTexture, repeatTexture } from '@/covers/generated/canvasUtils';
 import { boxMesh } from '../meshUtils';
 import { markShared } from '../materials/sharedResources';
 import { PROUD } from '../props/joinery';
@@ -144,7 +144,7 @@ function panelTexture(): THREE.CanvasTexture {
     const top = PANEL_Y + PANEL_H / 2 - panelY(k);
     ctx.fillText(plan.floorNames[k]!, canvas.width * 0.28, (top / PANEL_H) * px, canvas.width * 0.5);
   }
-  return toTexture(canvas, 4);
+  return toTexture(canvas, 'facing');
 }
 
 /** Diamond lattice of flat iron: an open pattern (alpha) that tiles. */
@@ -162,8 +162,7 @@ function latticeTexture(): THREE.CanvasTexture {
   ctx.stroke();
   ctx.fillStyle = '#ffffff';
   ctx.fillRect(0, 0, size, 3);
-  const texture = toTexture(canvas, 4);
-  texture.wrapS = THREE.RepeatWrapping;
-  texture.wrapT = THREE.RepeatWrapping;
+  const texture = toTexture(canvas, 'facing');
+  repeatTexture(texture);
   return texture;
 }

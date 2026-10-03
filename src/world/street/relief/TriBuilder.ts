@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { warnCoplanar } from '../../surface/coplanar';
 
 /** A unit box's 36 corners and normals (centred, side 1), turned into boxes of any size by `TriBuilder.box`. */
 const UNIT = (() => {
@@ -12,6 +13,16 @@ const v = new THREE.Vector3();
 const nrm = new THREE.Vector3();
 const normalMatrix = new THREE.Matrix3();
 
+/** How close to a solid surface a face facing into it must lie to be out of sight (a slit no eye looks through). */
+const HIDDEN_GAP = 0.01;
+
+/** A solid surface things are built against (`TriBuilder.hideAgainst`): its outward normal, its plane's constant, where it is. */
+interface Hider {
+  normal: THREE.Vector3;
+  constant: number;
+  bounds: THREE.Box3 | null;
+}
+
 /**
  * Collects coloured triangles (non-indexed, vertex colours, a normal each) into one geometry: the
  * street's relief is thousands of little boxes and quads (balcony bars, sills, awning stripes)
@@ -23,6 +34,25 @@ export class TriBuilder {
   private readonly normals: number[] = [];
   private readonly colors: number[] = [];
   private readonly color = new THREE.Color();
+  private readonly hiders: Hider[] = [];
+
+  /**
+   * A solid surface the things are built against, `normal` outward through `point` (the pavement, a facade's
+   * wall), within `bounds` (everywhere by default): faces lying on it (within a centimetre) and facing into it
+   * are never seen, and `build` leaves them out. Boxes stood on the pavement or set against a wall lose their
+   * bottoms and backs: fewer triangles, and no hidden faces flush with each other for the z-fight checks. Not on a
+   * builder whose `vertexCount`s are kept as ranges: leaving faces out shifts them.
+   */
+  hideAgainst(normal: THREE.Vector3, point: THREE.Vector3, bounds: THREE.Box3 | null = null): this {
+    const n = normal.clone().normalize();
+    this.hiders.push({ normal: n, constant: -n.dot(point), bounds: bounds?.clone().expandByScalar(HIDDEN_GAP) ?? null });
+    return this;
+  }
+
+  /** `hideAgainst` the ground at height `y` (default the pavement's 0), everywhere. */
+  hideGround(y = 0): this {
+    return this.hideAgainst(new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, y, 0));
+  }
 
   get isEmpty(): boolean {
     return this.positions.length === 0;
@@ -82,13 +112,57 @@ export class TriBuilder {
   }
 
   build(): THREE.BufferGeometry {
+    if (this.hiders.length) this.dropHidden();
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.Float32BufferAttribute(this.positions, 3));
     g.setAttribute('normal', new THREE.Float32BufferAttribute(this.normals, 3));
     g.setAttribute('color', new THREE.Float32BufferAttribute(this.colors, 3));
     g.computeBoundingBox();
     g.computeBoundingSphere();
+    // `?debug` only: faces of different colours overlapping in one plane fight, and no polygon offset can part them.
+    warnCoplanar(g, 'color');
     return g;
+  }
+
+  /** Leaves out the triangles lying on a `hideAgainst` surface and facing into it. */
+  private dropHidden(): void {
+    const { positions, normals, colors } = this;
+    const a = new THREE.Vector3();
+    const b = new THREE.Vector3();
+    const c = new THREE.Vector3();
+    const centre = new THREE.Vector3();
+    const face = new THREE.Vector3();
+    let kept = 0;
+    for (let t = 0; t < positions.length; t += 9) {
+      a.fromArray(positions, t);
+      b.fromArray(positions, t + 3);
+      c.fromArray(positions, t + 6);
+      face.subVectors(b, a).cross(centre.subVectors(c, a));
+      const length = face.length();
+      let hidden = false;
+      if (length > 1e-12) {
+        face.divideScalar(length);
+        centre.copy(a).add(b).add(c).divideScalar(3);
+        hidden = this.hiders.some(
+          (h) =>
+            face.dot(h.normal) < -0.99 &&
+            [a, b, c].every((p) => Math.abs(h.normal.dot(p) + h.constant) <= HIDDEN_GAP) &&
+            (!h.bounds || h.bounds.containsPoint(centre)),
+        );
+      }
+      if (hidden) continue;
+      if (kept !== t) {
+        for (let k = 0; k < 9; k++) {
+          positions[kept + k] = positions[t + k]!;
+          normals[kept + k] = normals[t + k]!;
+          colors[kept + k] = colors[t + k]!;
+        }
+      }
+      kept += 9;
+    }
+    positions.length = kept;
+    normals.length = kept;
+    colors.length = kept;
   }
 
   private push(p: THREE.Vector3, n: THREE.Vector3): void {

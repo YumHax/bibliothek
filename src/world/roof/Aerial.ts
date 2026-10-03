@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import type { Interactable } from '@/interaction/Interactable';
 import type { SessionActions } from '@/game/SessionActions';
 import type { Updatable } from '@/core/Engine';
-import { createCanvas } from '@/covers/generated/canvasUtils';
+import { createCanvas, toTexture } from '@/covers/generated/canvasUtils';
 import { audioBus, startedAudioContext } from '@/audio/audioContext';
 import { whiteNoise } from '@/audio/noise';
 import { boxMesh, cylinderMesh, invisibleHitbox } from '../meshUtils';
@@ -55,7 +55,7 @@ export class Aerial extends Prop implements Interactable, Updatable {
     const box = boxMesh(0.26, 0.2, 0.12, standard({ color: 0x6a6e70, roughness: 0.6 }), { x: 0.42, y: 0.32, z: 0 });
     this.add(box);
     this.add(cylinderMesh(0.02, 0.32, STEEL, { x: 0.42, y: 0.11 }, { segments: 6 }));
-    const dial = new THREE.Mesh(new THREE.PlaneGeometry(0.2, 0.13), new THREE.MeshBasicMaterial({ map: meterTexture(), toneMapped: false }));
+    const dial = new THREE.Mesh(new THREE.PlaneGeometry(0.2, 0.13), new THREE.MeshBasicMaterial({ map: meterTexture() }));
     dial.position.set(0.42, 0.33, 0.061);
     this.add(dial);
     // Pivoting on its foot: the plane moved up its own length.
@@ -133,9 +133,7 @@ function meterTexture(): THREE.CanvasTexture {
   ctx.fillText('CLEAR', 140, 60);
   ctx.font = '11px sans-serif';
   ctx.fillText('SIGNAL', 78, 112);
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.colorSpace = THREE.SRGBColorSpace;
-  return texture;
+  return toTexture(canvas, 'facing');
 }
 
 /** The aerial's rusty bearing turning: a short squeal of filtered noise. */

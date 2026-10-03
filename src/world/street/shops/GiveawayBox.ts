@@ -185,5 +185,5 @@ function flapTexture(): THREE.CanvasTexture {
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillText('FREE TO TAKE', 128, 44, 240);
-  return toTexture(canvas, 2);
+  return toTexture(canvas, 'facing');
 }

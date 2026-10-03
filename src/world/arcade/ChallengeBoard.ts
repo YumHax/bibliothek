@@ -1,12 +1,13 @@
 import * as THREE from 'three';
 import type { Updatable } from '@/core/Engine';
-import { createCanvas } from '@/covers/generated/canvasUtils';
+import { createCanvas, toTexture } from '@/covers/generated/canvasUtils';
 import { boxMesh } from '../meshUtils';
 import { Prop } from '../props/Prop';
+import { faceOn } from '../props/joinery';
+import { WALL } from '../surface/layers';
 import { paint } from '../materials/palette';
 import { drawText } from './games/ArcadeGame';
 import type { TodaysChallenge } from './scoreTable';
-import { QUALITY } from '@/graphics/quality';
 
 export interface ChallengeBoardOptions {
   /** Today's challenge, read again every second (it changes when paid, and at midnight). */
@@ -45,12 +46,9 @@ export class ChallengeBoard extends Prop implements Updatable {
     this.add(frame);
     this.canvas = createCanvas(Math.round(width * PX_PER_M), Math.round(height * PX_PER_M))[0];
     this.ctx = this.canvas.getContext('2d')!;
-    this.texture = new THREE.CanvasTexture(this.canvas);
-    this.texture.colorSpace = THREE.SRGBColorSpace;
-    this.texture.anisotropy = QUALITY.anisotropy;
-    const face = new THREE.Mesh(new THREE.PlaneGeometry(width, height), new THREE.MeshBasicMaterial({ map: this.texture, toneMapped: false, color: 0xd8d8d8 }));
-    face.position.z = 0.042;
-    this.add(face);
+    this.texture = toTexture(this.canvas);
+    const face = new THREE.Mesh(new THREE.PlaneGeometry(width, height), new THREE.MeshBasicMaterial({ map: this.texture, color: 0xd8d8d8 }));
+    this.add(faceOn(face, frame, WALL.notice));
     this.repaint();
   }
 

@@ -8,7 +8,7 @@ import { part } from '../props/Prop';
 import { paint } from '../materials/palette';
 import { WALL, decal } from '../surface/layers';
 import { createCanvas, toTexture } from '@/graphics/canvas';
-import { FONT } from '@/covers/generated/canvasUtils';
+import { paintGildedLine } from './common/gildedLettering';
 import type { ShopDoor } from '../street/streetPlan';
 import { OutlookView } from '../outlook/OutlookView';
 import { shopToStreet } from '../outlook/frames';
@@ -16,10 +16,8 @@ import { shopToStreet } from '../outlook/frames';
 export interface ShopWindowOptions {
   width: number;
   height: number;
-  /** The shop's name, painted on the glass (read backwards from inside). */
+  /** What is lettered in gold on the glass, read backwards from inside: the line the street sees on it (`SHOPFRONTS`), else the shop's name. */
   name: string;
-  /** The lettering's colour (the shop's fascia lettering in the street, `SHOP_LOOKS`). */
-  letters: string;
   /** The shop's door on the street (`shopOutlook.shopDoorOf`): the view is the street's from there. Null: the glass stays a pale sky. */
   door: ShopDoor | null;
   /** Where the window is: `along` the front wall from the exit (room x), the front wall's inner face (room z). */
@@ -72,8 +70,8 @@ export class ShopWindow extends THREE.Group implements Furniture, Updatable, Occ
       build: (camera) => {
         if (!door) return Promise.reject(new Error(`[shop] ${options.name} has no door on the street to look out of`));
         const eye = new THREE.Vector3(options.along, 0, options.front).applyMatrix4(shopFrame);
-        return import('../outlook/streetOutlook').then(({ buildStreetOutlook }) =>
-          buildStreetOutlook(camera, { dayNight, lightDirection: (out) => outdoors.lightDirection(dayNight.state, out), eye: [eye.x, eye.z], without: [door.facade.id], ...(options.upgrades ? { upgrades: options.upgrades } : {}) }),
+        return Promise.all([import('../outlook/streetOutlook'), import('../outlook/inView')]).then(([{ buildStreetOutlook }, { facadesInView }]) =>
+          buildStreetOutlook(camera, { dayNight, lightDirection: (out) => outdoors.lightDirection(dayNight.state, out), facades: facadesInView([eye.x, eye.z], [door.facade.id]), ...(options.upgrades ? { upgrades: options.upgrades } : {}) }),
         );
       },
       waiting: () => waiting.copy(dayNight.state.horizon).multiplyScalar(0.3 + 0.7 * dayNight.state.daylight),
@@ -82,7 +80,7 @@ export class ShopWindow extends THREE.Group implements Furniture, Updatable, Occ
     const glass = this.view.pane(w, h);
     glass.position.set(0, SILL + h / 2, WALL.paper.lift);
     this.add(glass);
-    this.letters = new THREE.MeshBasicMaterial({ map: toTexture(paintLetters(Math.round(w * PX), Math.round(h * PX), options), 2), transparent: true, depthWrite: false });
+    this.letters = new THREE.MeshBasicMaterial({ map: toTexture(paintLetters(Math.round(w * PX), Math.round(h * PX), options), 'facing'), transparent: true, depthWrite: false });
     const lettering = decal(w, h, this.letters, WALL.sign);
     lettering.position.y = SILL + h / 2;
     lettering.receiveShadow = false;
@@ -120,21 +118,10 @@ export class ShopWindow extends THREE.Group implements Furniture, Updatable, Occ
 
 const WHITE = new THREE.Color(0xffffff);
 
-/** The shop's name on the glass, backwards from in here, in gilt letters over the top of the window. */
+/** The lettering on the glass, backwards from in here, in gilt letters over the top of the window (as the street paints it). */
 function paintLetters(w: number, h: number, options: ShopWindowOptions): HTMLCanvasElement {
   const [canvas, ctx] = createCanvas(w, h);
   ctx.clearRect(0, 0, w, h);
-  ctx.save();
-  ctx.translate(w / 2, h * 0.12);
-  ctx.scale(-1, 1);
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.font = `bold ${Math.round(h * 0.09)}px Georgia, ${FONT}`;
-  ctx.fillStyle = options.letters;
-  ctx.strokeStyle = 'rgba(255, 240, 200, 0.8)';
-  ctx.lineWidth = 2;
-  ctx.strokeText(options.name, 0, 0, w * 0.86);
-  ctx.fillText(options.name, 0, 0, w * 0.86);
-  ctx.restore();
+  paintGildedLine(ctx, options.name, w * 0.07, h * 0.06, w * 0.86, h * 0.12, true);
   return canvas;
 }

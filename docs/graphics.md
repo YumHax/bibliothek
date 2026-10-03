@@ -33,9 +33,11 @@ at 4x the texels while the sun is live (every frame on high); the lamps stay at 
   `toneMapped: false` included (screens, neon, marquees, fairy lights). With `PostFx` a material cannot opt out (the
   output pass tone-maps every pixel; the alpha, the only spare channel, is the video cut-out), so on `low` the flag is
   made meaningless too (`Material.prototype.toneMapped` always reads true): a sign looks the same on every level.
-  Tune a glow's colour and `emissiveIntensity` for ACES; the flag may stay, it does nothing.
-- `toTexture` defaults to `QUALITY.anisotropy`; the floor and wall finishes (`Parquet`, `TiledFloor`, `Concrete`,
-  plaster, wood grain) use it too. Pass a number only for a texture never seen at an angle.
+  Tune a glow's colour and `emissiveIntensity` for ACES, and leave the flag out: it does nothing in the game and only
+  splits the palette's cache keys. It still counts where a renderer draws straight to a canvas with tone mapping on
+  (the thumbnail studio's photos of `prizeModel`, `homeArcadeModel` and `cabinetModel`'s marquee; the furnishing
+  previews; `graphics/` and `core/`), so it stays there.
+- Textures from canvases: see "Textures" below (anisotropy by intent, never a number per prop).
 
 ## Frame budget (what keeps the cost down whatever the scene holds)
 
@@ -80,19 +82,32 @@ blur -> prep copy (the AO applied with a depth-weighted upsample, so no halo at 
 the fact; depth of field while `Inspector.focusDistance` is set: a spiral rotated per pixel, 16 taps, 32 past 6 px) ->
 `UnrealBloomPass` (first level at half the frame, soft knee `smoothWidth` 0.15) blended into the copy -> every 0.25 s
 the light meter: the copy averaged to a quarter then a sixteenth (log luminance, weighted by alpha), a 16 x 16 map read
-back asynchronously -> output shader: FXAA (medium, high: on Karis-compressed HDR, alpha blended too), white balance
+back asynchronously -> output shader: FXAA (medium, high: on Karis-compressed HDR, alpha blended too), a
+contrast-adaptive sharpen (CAS, 4 taps, skipped across the video cut-out's border: `sharpen` 0.25 after FXAA plus 0.8
+per unit the frame is stretched to the screen, `devicePixelRatio / (pixel ratio x adaptive scale)`), white balance
 (the look's `temperature` as a von Kries / Bradford matrix built on the CPU, `graphics/whiteBalance.ts`, applied in
 linear HDR before tone mapping; 60 mireds per unit, luminance kept), exposure, ACES (three.js's fit), sRGB, grade
 (lift / gain, contrast, saturation), vignette, grain, straight to the canvas.
 
-- The AO spares glowing pixels (`mix(ao, 1, smoothstep(1, 3, luma))`: a lamp or a screen is light, not a crease) and
+- The AO spares glowing pixels (`mix(ao, 1, smoothstep(1, 3, luma))`: a lamp or a screen is light, not a crease), the
+  window panes (`graphics/glassMask`: panes register with `markGlass`, `RoomWindow` and `OutlookView` do; a proxy of
+  each shown pane is drawn at the AO's resolution where its depth matches the scene's, so a mullion or curtain in front
+  keeps its occlusion; the view behind the glass gets no dark halo round the frame) and
   thins with the haze (`1 - exp(-(density z)^2)`, the `FogExp2` density handed to the prep pass each frame).
 - The camera's far plane is 220 m (Front Street runs to x 136 from a walkable -39.5); the sky dome sits on the far
   plane in its vertex shader, so its radius only has to stay inside it.
 
 - **Alpha is sacred.** The canvas is transparent where a video plays (cut-out over the CSS layer). Every pass keeps
   the alpha; additive effects (bloom, sun shafts, the glossy floor) use `CustomBlending` with `ZeroFactor/OneFactor` on
-  alpha. The output is premultiplied (`rgb <= alpha`); the vignette is a black veil so it darkens the video too.
+  alpha. In the scene that is `world/materials/blend`: `additive` (glows, pools, beams, sparks), `additiveOne`
+  (reflections rendered on black), `overKeepingAlpha` (rain, steam, scuffs); never three's own blendings, which
+  write their alpha. Their masks come from `world/materials/glowTextures` (`radialGlow`, `verticalGlow`, `spillGlow`:
+  painted once per shape, shared, data maps). The output is premultiplied (`rgb <= alpha`); the vignette is a black
+  veil so it darkens the video too.
+- **GLSL noise** comes from `graphics/glslNoise`: guarded hash chunks (`SINE_HASH`, `HOSKINS_HASH`, `FRACT_HASH`,
+  `IQ_HASH`) and builders (`valueNoise2`, `valueNoise3`, `fbm2`) that name the function and its hash, so each shader
+  keeps the hash its look was tuned on. `shaderPatch`'s `VALUE_NOISE` is built from them. Never paste a hash into a
+  shader again (a backtick in a GLSL comment ends the template literal).
 - Tone mapping happens in the output shader only: rendering to a target skips three's tone mapping, so custom
   `ShaderMaterial`s should still `#include <tonemapping_fragment>` + `<colorspace_fragment>` (no-ops off-screen,
   correct on `low`).
@@ -136,13 +151,31 @@ scene (density 0 in the flat, so no recompile at doorways), its colour scaled by
 ## Depth and z-fighting
 
 - The camera's near plane is 0.1 m (`core/Engine`), the scene target's depth 24 bits: a depth step is about
-  `z² / (near · 2²⁴)` m at distance `z` (0.1 mm at 12 m, 0.5 mm at 30 m, 2 mm at 60 m). Offsets below that fight.
-- Flat things on a surface take a layer of `world/surface/layers.ts` (`FLOOR`, `GROUND`, `WALL`: a lift in metres and a
-  rank turned into a polygon offset by `onSurface`); transparent things a `RENDER_ORDER` band. Parts of a prop never
-  share a face (`world/props/joinery.ts`). `bibliothek.zfight()` (`?debug`) finds what still fights.
+  `z² / (near · 2²⁴)` m at distance `z` (0.24 mm at 20 m, 2 mm at 60 m, 13 mm at 150 m; `depthStep` in
+  `world/surface/layers`). A millimetre offset holds in a room and fights down the street.
+- Flat things on a surface take a layer of `world/surface/layers.ts` (`FLOOR`, `GROUND`, `WALL`, `FACADE`) through
+  `onSurface` / `layMesh` / `decal`. What parts two layers is their **rank**: `UNITS_PER_RANK` (4) polygon-offset units per
+  rank, and units are depth steps, so neighbouring layers stay 4 steps apart at 2 m and at 140 m alike. The lift in
+  metres only keeps a layer clear of its surface's bumps. Inside one merged mesh (the street's `TriBuilder` /
+  `QuadBuilder` / `TexQuads`) there is no offset between faces: a sill, a pane, a trim on a trim stands off by a real
+  `gapAt(distance)` (1 mm at 20 m, 9 mm at 60 m, 4.7 cm at 140 m) for the farthest it is seen from.
+- Transparent things draw in a `RENDER_ORDER` band. Parts of a prop never share a face (`world/props/joinery.ts`).
+- The checks: `bibliothek.zfight()` (`?debug`) judges each zone at the distance it is seen across (the street at 140 m)
+  and counts a pair as settled only when gap and offsets together keep it 2 steps apart there (each pair says how far it
+  holds); it also compares faces inside one mesh whose colours or uvs differ, and walks the subtrees registered with
+  `registerZfightRoot` (a window's own street). Under `?debug` every `TriBuilder` / `QuadBuilder` build warns about its
+  own overlapping coplanar faces (`world/surface/coplanar.ts`). Both skip what cannot show: faces pressed back to back,
+  overlaps under 1.5 px at the judged distance, look-alike or depth-less pairs, the inside of closed solids, and the
+  `userData.zfightIgnore` / material `userData.zfightFrontOnly` flags (docs/props.md "Check"). The builders drop faces
+  nobody sees before they are merged (`TriBuilder.hideGround` / `hideAgainst`). Without a browser, `npm run typecheck` refuses a layer's
+  lift used without its offset, a random lift, and more hand-picked millimetre offsets in a file than
+  `scripts/offset-baseline.json` allows (the ratchet; `node scripts/check-conventions.mjs --write-baseline` after a
+  cleanup).
 - Not used, on purpose: `logarithmicDepthBuffer` (writes `gl_FragDepth`, so no early-Z, and PostFx decodes depth
-  linearly); reversed-Z (r169's is experimental: `perspectiveDepthToViewZ`, the AO's inverse projection, the polygon
-  offsets' sign and the `Reflector`s' oblique clipping would all need changing; worth it only with a three.js upgrade).
+  linearly); reversed-Z with a float depth buffer (it would make precision nearly even with distance, but r169's is
+  experimental: `perspectiveDepthToViewZ`, the AO's inverse projection, the polygon offsets' sign and the `Reflector`s'
+  oblique clipping would all need changing, worth it only with a three.js upgrade). Ranks in units give the same
+  guarantee between layers today, whatever the distance.
 
 ## Lighting helpers
 
@@ -182,6 +215,39 @@ scene (density 0 in the flat, so no recompile at doorways), its colour scaled by
   shell (tray, lid, cartridge, manual) and the textures only it shows exist while it is in hand. Generated spines are
   drawn at 512 px, backs at 512 px tall (layouts in their original units, `ctx.scale`).
 
+## Textures (`graphics/canvas.ts`)
+
+- **One way to make one.** `canvasTexture(canvas, { data?, anisotropy?, repeat?, mipmaps?, pixelated? })` is the only
+  place a `THREE.CanvasTexture` is made (`check-conventions`: "canvas texture"); `toTexture(canvas, intent)` is its
+  shorthand for a plain colour map. Both are re-exported by `covers/generated/canvasUtils`.
+  - `data: true` for anything whose bytes are values, not colours (bump, roughness, normals, alpha and glow masks,
+    packed flags): `NoColorSpace`. Otherwise sRGB.
+  - `repeat: true` tiles both ways (or `[x, y]` sets the count); `repeatTexture(t, x?, y?)` does it to a clone or a loaded
+    image. A texture that wraps one way only (round the horizon, along a ticket strip) sets that axis by hand with
+    `// convention-ok` ("texture tiling").
+  - `mipmaps: false` for a canvas repainted every few frames at its own size; `pixelated` for pixel art.
+- **Anisotropy by intent** (`Anisotropy`, "anisotropy number"): `'grazing'` (the default: floors, rugs, walls, stair
+  treads, shelf labels, everything along a street) is `QUALITY.anisotropy` (2 / 4 / 8); `'facing'` (screens, posters,
+  cards, sprites, things held up) is at most 4, all a near-square footprint ever uses. A number needs its reason in
+  a `// convention-ok`.
+- **Density** (`DENSITY`, `canvasFor(widthM, heightM, class)`): a new canvas is sized in metres, by how close what it
+  carries is read, times `QUALITY.canvasScale` (0.75 / 1 / 1.25), at most 4096 a side; `k` comes back to paint in
+  metres. The screen needs H / (1.4 d) px per metre at d metres (H the frame's height: 1440 on a large screen), so:
+
+  | Class | Read at | px/m |
+  | --- | --- | --- |
+  | `print` (a box's back, a manual, a letter) | ~0.6 m, in the hand | 1600 |
+  | `label` (price tags, shelf labels, cards) | ~1 m | 1000 |
+  | `sign` (posters, menus, notices, a screen across a room) | ~2 m | 640 |
+  | `board` (shop names, scoreboards, banners) | 3-5 m | 340 |
+  | `grain` (wood, plaster, fabric, paving: seen, never read) | any | 256 |
+
+  The existing painters keep their pixel layouts (most sit at or above their class); new ones use `canvasFor`.
+- **Kept for the page.** A texture the same everywhere (a smudge, a ripple map, a plaque) is made once:
+  `sharedCanvasTexture(key, paint, options)` (`materials/sharedResources`), or `markShared` on a module cache, so no
+  zone's unload frees it under the others. A painter several zones or rebuilds call (the attic, stair, roof and cellar
+  shells, the floors) goes through `paintOnce(key, paint)` (`materials/paintedTiles`): painted once, a clone per use.
+
 ## Material helpers (`src/world/materials/`)
 
 - `palette.ts`: the shared materials (`paint`, `timber`, `standard`, `basic`, `METAL`, `shared`, `invisible`), one per
@@ -189,7 +255,9 @@ scene (density 0 in the flat, so no recompile at doorways), its colour scaled by
   stays its own. See docs/props.md "Materials, joints and layers".
 
 - `patchShader(material, key, patch)` / `afterChunk(source, chunk, code)`: `onBeforeCompile` patches that chain and
-  share one program per key. `afterChunk` throws on a missing chunk so a three.js upgrade fails loudly.
+  share one program per key. `afterChunk` throws on a missing chunk so a three.js upgrade fails loudly. A key is
+  applied once per material (a second call is a no-op: it would declare its uniforms twice), and patching a shared
+  material warns: patch inside the `make` of `shared(...)`, or use a variant (`standardVariant`).
 - **Metalness is 0 or 1.** Raw metal (steel, brass, chrome, a mirror's silvering) is `metalness: 1`, its colour the
   reflectance, its roughness the finish (chrome ~0.15, brass ~0.3-0.45, brushed steel ~0.4, galvanised ~0.5); painted,
   enamelled or blackened metal, glass, plastic, water are `metalness: 0`. An in-between value reads as murky plastic.
@@ -223,7 +291,14 @@ scene (density 0 in the flat, so no recompile at doorways), its colour scaled by
 
 - `snowCovered(material)` (`snowCover.ts`, patch key `streetSnow`): whitens up-facing faces by their world normal
   (instancing included), rougher, not metallic, times the one `STREET_SNOW` uniform `StreetGround` writes from
-  `SkyState.snowCover`. On everything that stands in the street.
+  `SkyState.snowCover`. On everything that stands in the street. It throws on a palette material (the snow would
+  fall on every room's prop of that look): take `snowPaint(color, roughness)` / `snowStandard(parameters)`, the
+  street's shared snowy twins (`palette.standardVariant`).
+- Point sprites (rain, snow, splashes, petals, leaves, spray, the sunbeam's and the projector's dust) size by the one
+  `POINT_SCALE` uniform (`world/particles/pointScale`, kept current by `scalesPoints(points)` per draw): sizes are
+  pixels at 1 m on the 1350-pixel frame they were tuned on, so they hold their size in the world through the
+  adaptive resolution's steps, a window's view or a mirror. `viewScale(renderer, camera)` gives the raw pixels per
+  metre (the kitchen's steam).
 - `relief/ShopInteriors`: interior mapping, a ray-box trace per fragment of the "room" behind each shop window (walls,
   floor, ceiling and back wall painted per kind on an atlas, lit while the shop is open), one draw call; off on low.
 - `relief/WetGround`: light streaks under lamps, neon and lit windows, and puddle decals, additive, keeping the canvas

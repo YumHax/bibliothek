@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { createCanvas, toTexture, seededRandom } from '@/covers/generated/canvasUtils';
+import { createCanvas, toTexture, seededRandom, repeatTexture } from '@/covers/generated/canvasUtils';
 import type { DisplaySlot, StallLike } from './stallTypes';
 import { boxMesh, cylinderMesh } from '../meshUtils';
 import { Crate } from '../props/Crate';
@@ -235,7 +235,7 @@ export class MarketStall extends THREE.Group implements StallLike {
 /** A material carrying `map` repeated `u` x `v` times over its face (its own clone, so each face repeats differently). */
 function tiled(map: THREE.Texture, u: number, v: number): THREE.MeshStandardMaterial {
   const tex = map.clone();
-  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  repeatTexture(tex);
   tex.repeat.set(u, v);
   tex.needsUpdate = true;
   return new THREE.MeshStandardMaterial({ map: tex, roughness: 0.95 });
@@ -256,7 +256,7 @@ function paintCheck(cloth: THREE.Color): THREE.Texture {
   // Weave: fine threads.
   ctx.fillStyle = 'rgba(0,0,0,0.07)';
   for (let y = 0; y < S; y += 3) ctx.fillRect(0, y, S, 1);
-  return toTexture(canvas, 4);
+  return toTexture(canvas, 'facing');
 }
 
 /** Two awning stripes (cloth colour, cream) per tile; `scalloped` cuts the bottom edge into half-discs for the valance. */
@@ -284,7 +284,7 @@ function paintStripes(cloth: THREE.Color, scalloped: boolean): THREE.Texture {
     }
     ctx.globalCompositeOperation = 'source-over';
   }
-  return toTexture(canvas, 4);
+  return toTexture(canvas, 'facing');
 }
 
 /** The sign, as wide as its text needs at one readable size (a long platform name gets a long sign). Returns the texture and the sign's width in metres. */
@@ -305,5 +305,5 @@ function paintSign(text: string, accent: number): { map: THREE.Texture; width: n
   ctx.textBaseline = 'middle';
   ctx.font = `bold ${SIGN_FONT_PX}px Georgia, serif`;
   ctx.fillText(text, W / 2, H / 2);
-  return { map: toTexture(canvas, 4), width: W / SIGN_PX_PER_M };
+  return { map: toTexture(canvas, 'facing'), width: W / SIGN_PX_PER_M };
 }

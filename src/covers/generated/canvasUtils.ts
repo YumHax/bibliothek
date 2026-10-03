@@ -2,7 +2,7 @@ import type * as THREE from 'three';
 import { hashString, seededRandom } from '@/graphics/canvas';
 
 // The generic helpers live in `graphics/canvas`; re-exported so every drawing module keeps importing from here.
-export { createCanvas, hashString, seededRandom, toTexture } from '@/graphics/canvas';
+export { canvasTexture, canvasFor, createCanvas, hashString, repeatTexture, seededRandom, toTexture } from '@/graphics/canvas';
 
 /** Word-wraps `text` and returns the lines that fit; the last line is ellipsised if `maxLines` is hit. */
 export function wrapLines(ctx: CanvasRenderingContext2D, text: string, maxWidth: number, maxLines = Infinity): string[] {

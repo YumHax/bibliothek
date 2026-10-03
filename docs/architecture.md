@@ -139,8 +139,8 @@ src/world/street/       streetPlan (Front Street's map and every spot, `shopDoor
                         sirens, bells), snowCover (`snowCovered()`); traffic/ (StreetTraffic, driving, ScriptedVehicle, StreetBus,
                         ServiceVehicles, Bikes, SignalHeads, Spray), life/ (streetTalk, StandingPeople, Terraces, Pigeons, StrayCat,
                         Dog, Figure, fade), relief/ (FacadeRelief, ShopInteriors + walkInInteriors, Shutters, ShopGlow, WetGround,
-                        Leaves), shopfronts/ (the walk-in shops' fronts: shopfrontPlan, ShopfrontRelief, frontJoinery,
-                        windowDisplays, shopfrontCanvas, ShopSpill + spillPieces), details/
+                        Leaves), facadeWindows/ (FacadeWindows + casementParts: the near facades' windows in 3D), shopfronts/ (the shopfront kit: shopfrontPlan, Shopfronts, plainFront, frontJoinery,
+                        landmarkFront, fasciaLettering, windowDisplays, shopfrontCanvas, ShopSpill + spillPieces), details/
                         (StreetDetails, LampBuzz), shops/ (shopHours, shopPlan, ShopEntrance, scratchCard, DroppedCoins, GiveawayBox,
                         Trader), audio/ (ShopSounds, streetSurface). See docs/zones.md
 src/world/shop/         shopPlan (`SHOP_PLANS`: the walk-in shops' rooms, displays, fixtures) + furnishShop (one builder for the four

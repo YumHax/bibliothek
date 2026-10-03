@@ -234,7 +234,7 @@ function paintMenu(price: number): THREE.Texture {
   ctx.fillStyle = 'rgba(190,230,255,0.85)';
   fitFontSize(ctx, 'freshly brewed', W * 0.86, 24, 12, hand, 'normal');
   ctx.fillText('freshly brewed', W / 2, 264);
-  return toTexture(canvas, 4);
+  return toTexture(canvas, 'facing');
 }
 
 /** Alternating cream and red panels round the cone (the cone's u runs round it), a scalloped darker hem. */
@@ -249,5 +249,5 @@ function paintParasol(): THREE.Texture {
   }
   ctx.fillStyle = 'rgba(0,0,0,0.15)';
   ctx.fillRect(0, H - 10, W, 10);
-  return toTexture(canvas, 4);
+  return toTexture(canvas, 'facing');
 }

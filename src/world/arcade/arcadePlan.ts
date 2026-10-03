@@ -308,7 +308,8 @@ export const ARCADE_PLAN = {
   decor: [
     // Neon: the hall's name over the cabinets, INSERT COIN over the way out, tubes along the tops of the walls.
     { kind: 'neonSign', at: { wall: 'back', along: 0, y: 2.5 }, options: { text: 'ARCADE', color: 0xff2fa0, width: 2.6, height: 0.55, intensity: 4, seed: 1 } },
-    { kind: 'neonSign', at: { wall: 'front', along: 0, y: 2.72 }, options: { text: 'INSERT COIN', color: 0x33e0ff, width: 1.5, height: 0.34, intensity: 2.5, seed: 2 } },
+    // Over the exit door's architrave (its top 2.57 m), its panel clear of it and of the 3 m ceiling.
+    { kind: 'neonSign', at: { wall: 'front', along: 0, y: 2.79 }, options: { text: 'INSERT COIN', color: 0x33e0ff, width: 1.5, height: 0.3, intensity: 2.5, seed: 2 } },
     { kind: 'neonTube', at: { wall: 'left', along: 0, y: 2.9 }, options: { length: 7.6, color: 0xff2fa0, intensity: 3 } },
     { kind: 'neonTube', at: { wall: 'right', along: 0, y: 2.9 }, options: { length: 7.6, color: 0x33e0ff, intensity: 3 } },
     { kind: 'neonTube', at: { wall: 'back', along: 0, y: 2.92 }, options: { length: 11.6, color: 0xb05cff } },

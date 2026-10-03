@@ -600,19 +600,29 @@ RETRO GAMES keeps `SHOP_HOURS`).
   `Pigeons` that take off (for dogs too) and coo; the dogs pull towards them and the `StrayCat` and bark.
 - **Facades in relief** (`relief/`, `details/`): `Buildings.fronts` feeds 3D awnings (wound up at closing and at
   night: each folds towards its fixing in the vertex shader, its shadow too), balconies with the residents' pots and
-  chairs, sills, door surrounds, the steps before the residents' doors, the downpipes and our balcony as bought
-  (`FacadeRelief`, `HomeUpgrades`), the pharmacy's cross and the newsagent's diamond on brackets (`BladeSigns`), RETRO
-  GAMES' and the arcade's fronts flush in relief (`shopfronts/LandmarkFronts`), interior-mapped shop windows
+  chairs, door surrounds, the steps before the residents' doors, the downpipes and our balcony as bought
+  (`FacadeRelief`, `HomeUpgrades`), the near facades' windows whole (frames, sills, heads, shutters: `facadeWindows/`), the pharmacy's cross and the newsagent's diamond on brackets (`BladeSigns`), the
+  shopfronts (`shopfronts/Shopfronts`, below), interior-mapped shop windows
   (`ShopInteriors`: two looks per kind, someone inside while open; rooms only on low), roller shutters that roll down at
   closing (`Shutters`), light pools in front of open shops (`ShopGlow`), wet streaks, puddles and, on
   `QUALITY.reflections`, a masked `Reflector` hidden while dry (`WetGround`), autumn leaves (`Leaves`), manholes,
   hydrants, bollards, a Morris column and the roadworks (`StreetDetails`), the flickering lamp's buzz (`LampBuzz`).
   `snowCovered()` (`snowCover.ts`, uniform written by `StreetGround`) whitens up-facing faces of everything.
-- **The walk-in shops' fronts** (`shopfronts/`, data in `shopfrontPlan`): their display windows stand 0.45 m out of
+- **The shopfront kit** (`shopfronts/Shopfronts`, data in `shopfrontPlan`): every shop on a near or mid facade
+  (`FacadeSpec.detail >= KIT_DETAIL`) is built in 3D, one of three variants (`frontVariant`). `plain` (`plainFront`,
+  measures in `PLAIN`): pilasters and consoles, the fascia board under a cornice, the door and display windows set back
+  in a surround, sills, panelled risers, transoms; the awning hangs from its head (`FacadeFeatures.awnings[].out`) and
+  the shutter runs between its pilasters (`pilasterWidth`). `landmark` (`landmarkFront`): RETRO GAMES and the arcade,
+  flush, enamel, chrome and the arcade's neon tubes. `walkIn`: below. Every name on a built front's fascia is lettered
+  sharp at 256 px/m out of the facade atlas (`fasciaLettering`, from `FacadeFeatures.signs`; a neon name glows in its
+  neon's colour at night); the far facades keep their names painted. The joinery of every front is one draw call.
+  Parallel faces of the kit stand 1.5 cm apart at least, and a part ending against another ends inside it (the dev
+  coplanar check in `TriBuilder` warns otherwise).
+- **The walk-in shops' fronts** (the kit's `walkIn` variant, `SHOPFRONTS`): their display windows stand 0.45 m out of
   the wall on stall risers (tiles, panels, enamel), the door set back between them on a mosaic step, pilasters, head and
   fascia mouldings per kind, a sign on a bracket, lines lettered on the glass, window displays behind it (TV sets in
   snow, the cat asleep, bouquets, an armchair under a lit lamp: `windowDisplays`), the door's OPEN / CLOSED card turned
-  with `SHOP_HOURS` (`ShopfrontRelief`, colliding, also in the outlook). No shutter (`Shutters` skips them): the displays
+  with `SHOP_HOURS` (`Shopfronts`, colliding, also in the outlook). No shutter (`Shutters` skips them): the displays
   stay softly lit after closing. Through the glass `ShopInteriors` paints their real rooms (`relief/walkInInteriors`).
   What they put out on the pavement while open (`STREET_PLAN.shopSpill`, `ShopSpill`) collides only while out; keep it
   and the fronts clear of the crowd's lanes (SECOND HOME's moved the far lane to z 11.2). TV REPAIR's name is a neon

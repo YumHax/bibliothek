@@ -44,20 +44,22 @@ export function buildJoinery(b: TriBuilder, m: THREE.Matrix4, layout: FrontLayou
     const w = g1 - g0;
     const mid = (g0 + g1) / 2;
     riser(b, m, g0, g1, look.riser);
-    b.box(m, mid, sill + 0.006, D / 2 - 0.01, w, 0.012, D - 0.02, '#5a4a3a');
+    // The display's floor stops at the sill's back (its top would lie 6 mm over the sill's: they would fight far off).
+    b.box(m, mid, sill + 0.006, (D - 0.035) / 2, w, 0.012, D - 0.035, '#5a4a3a');
     b.box(m, mid, sill - 0.012, D + 0.005, w + 0.06, 0.035, 0.07, trim);
     for (const s of [g0 - RETURN / 2, g1 + RETURN / 2]) b.box(m, s, glassTop / 2, (D + 0.02) / 2, RETURN, glassTop, D + 0.02, front);
     b.box(m, mid, glassTop - 0.02, D - 0.005, w, 0.04, 0.05, trim);
   }
-  // The pilasters, their plinths and capitals.
+  // The pilasters, their plinths and capitals; each pilaster ends inside the head's trim (no top of its own in the trim's plane).
   for (const s of [s0 + PILASTER.width / 2, s1 - PILASTER.width / 2]) {
-    b.box(m, s, headTop / 2, PILASTER.out / 2, PILASTER.width, headTop, PILASTER.out, front);
+    b.box(m, s, (headTop - 0.015) / 2, PILASTER.out / 2, PILASTER.width, headTop - 0.015, PILASTER.out, front);
     b.box(m, s, 0.16, (PILASTER.out + 0.04) / 2, PILASTER.width + 0.04, 0.32, PILASTER.out + 0.04, trim);
     b.box(m, s, glassTop - 0.08, (PILASTER.out + 0.03) / 2, PILASTER.width + 0.03, 0.06, PILASTER.out + 0.03, trim);
   }
-  // The head over windows and door alike.
-  b.box(m, (s0 + s1) / 2, (glassTop + headTop) / 2, (D + 0.05) / 2, s1 - s0 - 0.02, headTop - glassTop, D + 0.05, front);
-  b.box(m, (s0 + s1) / 2, headTop - 0.015, (D + 0.09) / 2, s1 - s0, 0.03, D + 0.09, trim);
+  // The head over windows and door alike, capped by its trim, a little wider than the front (the head and the pilasters
+  // stop inside it: no two faces share its top or its ends).
+  b.box(m, (s0 + s1) / 2, (glassTop + headTop - 0.015) / 2, (D + 0.05) / 2, s1 - s0 - 0.02, headTop - 0.015 - glassTop, D + 0.05, front);
+  b.box(m, (s0 + s1) / 2, headTop - 0.015, (D + 0.09) / 2, s1 - s0 + 0.02, 0.03, D + 0.09, trim);
   fascia(b, m, s0, s1, headTop, fasciaTop, look.fascia, paint);
   mosaic(b, m, layout, look.mosaic);
   const sign = look.sign.end === 'right' ? s1 - 0.42 : s0 + 0.42;
@@ -118,7 +120,7 @@ function fascia(b: TriBuilder, m: THREE.Matrix4, s0: number, s1: number, bottom:
       b.box(m, mid, top - 0.02, 0.08, w + 0.04, 0.05, 0.16, shade(paint.front, 0.7));
       for (const s of [s0 + PILASTER.width / 2, s1 - PILASTER.width / 2]) {
         b.box(m, s, (bottom + top) / 2, 0.1, 0.2, top - bottom, 0.2, paint.front);
-        b.box(m, s, top - 0.08, 0.24, 0.2, 0.14, 0.1, trim);
+        b.box(m, s, top - 0.08, 0.24, 0.21, 0.14, 0.1, trim);
         b.box(m, s, top - 0.2, 0.2, 0.16, 0.1, 0.08, trim);
         b.box(m, s, bottom + 0.08, (PILASTER.out + 0.06) / 2, 0.22, 0.16, PILASTER.out + 0.06, trim);
       }
@@ -127,7 +129,7 @@ function fascia(b: TriBuilder, m: THREE.Matrix4, s0: number, s1: number, bottom:
       // A cornice with a row of dentils under it, a bead along the board's foot.
       b.box(m, mid, top + 0.055, 0.09, w + 0.1, 0.11, 0.18, trim);
       for (let s = s0 + 0.06; s < s1 - 0.04; s += 0.11) b.box(m, s, top - 0.025, 0.05, 0.05, 0.05, 0.06, trim);
-      b.box(m, mid, bottom + 0.02, (FRONT.depth + 0.1) / 2, w, 0.04, FRONT.depth + 0.1, shade(paint.front, 0.7));
+      b.box(m, mid, bottom + 0.02, (FRONT.depth + 0.1) / 2, w + 0.04, 0.04, FRONT.depth + 0.1, shade(paint.front, 0.7));
       for (const s of [s0 + 0.05, s1 - 0.05]) b.box(m, s, (bottom + top) / 2, 0.05, 0.1, top - bottom, 0.1, trim);
       break;
     }
@@ -146,7 +148,11 @@ function fascia(b: TriBuilder, m: THREE.Matrix4, s0: number, s1: number, bottom:
   }
 }
 
-/** The door's step between the windows' returns: a mosaic, its border in one colour, a diamond in the middle. */
+/**
+ * The door's step between the windows' returns: a mosaic, its border in one colour, a diamond in the middle in the
+ * other, ringed in the first. All of it one flat top, the pieces side by side (never one laid over another: a
+ * millimetre's inlay fights its ground from across the street).
+ */
 function mosaic(b: TriBuilder, m: THREE.Matrix4, layout: FrontLayout, [field, border]: [string, string]): void {
   const left = Math.max(layout.s0 + PILASTER.width, ...layout.units.filter((u) => u.g1 < layout.door).map((u) => u.g1 + RETURN));
   const right = Math.min(layout.s1 - PILASTER.width, ...layout.units.filter((u) => u.g0 > layout.door).map((u) => u.g0 - RETURN));
@@ -154,14 +160,39 @@ function mosaic(b: TriBuilder, m: THREE.Matrix4, layout: FrontLayout, [field, bo
   const mid = (left + right) / 2;
   const D = FRONT.depth + 0.04;
   const top = 0.03;
-  b.box(m, mid, (top - 0.02) / 2, D / 2, w, top + 0.02, D, border);
-  b.box(m, mid, top + 0.001, D / 2, w - 0.08, 0.002, D - 0.08, field);
-  // Each layer 3 mm over the one under it (flat faces closer than that shimmer at a distance).
-  // The diamond, turned a quarter about the vertical.
-  const turn = m.clone().multiply(new THREE.Matrix4().makeTranslation(mid, top + 0.002, D / 2)).multiply(new THREE.Matrix4().makeRotationY(Math.PI / 4));
-  const side = Math.min(w, D) * 0.42;
-  b.box(turn, 0, 0.004, 0, side, 0.002, side, border);
-  b.box(turn, 0, 0.007, 0, side * 0.55, 0.002, side * 0.55, field);
+  // The step's front and ends in the border's colour (no top of its own under the mosaic's).
+  const foot = -0.02;
+  b.quad(m, [left, foot, D], [right, foot, D], [right, top, D], [left, top, D], border);
+  b.quad(m, [left, foot, 0], [left, foot, D], [left, top, D], [left, top, 0], border);
+  b.quad(m, [right, foot, D], [right, foot, 0], [right, top, 0], [right, top, D], border);
+  // The top: the border round the field, the field round the diamond, the diamond's ring, its heart.
+  const rim = 0.04;
+  const cz = D / 2;
+  const half = Math.min(w, D) * 0.42 * Math.SQRT1_2;
+  const inner = half * 0.55;
+  const flat = (points: readonly [number, number][], color: string): void => {
+    for (let i = 1; i + 1 < points.length; i++) b.triangle(m, [points[0]![0], top, points[0]![1]], [points[i + 1]![0], top, points[i + 1]![1]], [points[i]![0], top, points[i]![1]], color);
+  };
+  /** The ring between two convex outlines of four corners each (`outer`, `hole`, in the same turn). */
+  const ring = (outer: readonly [number, number][], hole: readonly [number, number][], color: string): void => {
+    for (let i = 0; i < 4; i++) flat([outer[i]!, outer[(i + 1) % 4]!, hole[(i + 1) % 4]!, hole[i]!], color);
+  };
+  const box = (s0: number, z0: number, s1: number, z1: number): [number, number][] => [[s0, z0], [s1, z0], [s1, z1], [s0, z1]];
+  const diamond = (r: number): [number, number][] => [[mid, cz - r], [mid + r, cz], [mid, cz + r], [mid - r, cz]];
+  ring(box(left, 0, right, D), box(left + rim, rim, right - rim, D - rim), border);
+  // The field round the diamond: from each side of the field's box to the diamond's corner facing it.
+  const f = box(left + rim, rim, right - rim, D - rim);
+  const d = diamond(half);
+  flat([f[0]!, f[1]!, d[0]!], field);
+  flat([f[1]!, f[2]!, d[1]!], field);
+  flat([f[2]!, f[3]!, d[2]!], field);
+  flat([f[3]!, f[0]!, d[3]!], field);
+  flat([f[1]!, d[1]!, d[0]!], field);
+  flat([f[2]!, d[2]!, d[1]!], field);
+  flat([f[3]!, d[3]!, d[2]!], field);
+  flat([f[0]!, d[0]!, d[3]!], field);
+  ring(d, diamond(inner), border);
+  flat(diamond(inner), field);
 }
 
 /** The sign's wrought-iron bracket at `s`: a wall plate, the arm out over the pavement, a brace and a scroll, the two hangers. */

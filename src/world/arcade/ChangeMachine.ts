@@ -5,7 +5,7 @@ import type { SessionActions } from '@/game/SessionActions';
 import { createCanvas, toTexture, FONT } from '@/covers/generated/canvasUtils';
 import type { Furniture } from '../Furniture';
 import { boxMesh, cylinderMesh, invisibleHitbox } from '../meshUtils';
-import { WALL } from '../surface/layers';
+import { layMesh, WALL } from '../surface/layers';
 import { drawText } from './games/ArcadeGame';
 
 export interface ChangeMachineOptions {
@@ -53,10 +53,11 @@ export class ChangeMachine extends THREE.Group implements Furniture, Interactabl
     const panelH = HEIGHT - PLINTH_H - HEADER_H - 0.04;
     const panel = new THREE.Mesh(new THREE.PlaneGeometry(WIDTH - 0.04, panelH), new THREE.MeshStandardMaterial({ map: paintPanel(WIDTH - 0.04, panelH, this.working), roughness: 0.5, metalness: 0 }));
     panel.position.set(0, PLINTH_H + panelH / 2 + 0.01, DEPTH / 2 + WALL.notice.lift);
+    layMesh(panel, WALL.notice);
     panel.receiveShadow = true;
     this.add(panel);
     // The lit header.
-    this.header = new THREE.MeshBasicMaterial({ map: paintHeader(), toneMapped: false, color: 0xdddddd });
+    this.header = new THREE.MeshBasicMaterial({ map: paintHeader(), color: 0xdddddd });
     const header = new THREE.Mesh(new THREE.PlaneGeometry(WIDTH - 0.06, HEADER_H - 0.04), this.header);
     header.position.set(0, HEIGHT - 0.02 - HEADER_H / 2, DEPTH / 2 + 0.004);
     this.add(header);
@@ -106,7 +107,7 @@ function paintHeader(): THREE.Texture {
   ctx.strokeRect(10, 10, 492, 160);
   drawText(ctx, 'CHANGE', 256, 78, 62, '#ffe680');
   drawText(ctx, 'TOKENS · COINS', 256, 140, 18, '#ffd6d6');
-  return toTexture(canvas, 4);
+  return toTexture(canvas, 'facing');
 }
 
 /** The steel front: a note acceptor, a coin slot, arrows and instructions, a coin-return legend, and the taped note. */
@@ -199,5 +200,5 @@ function paintPanel(wM: number, hM: number, working: boolean): THREE.Texture {
     ctx.arc(x, y, 6, 0, Math.PI * 2);
     ctx.fill();
   }
-  return toTexture(canvas, 4);
+  return toTexture(canvas, 'facing');
 }

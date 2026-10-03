@@ -12,7 +12,7 @@ import { KEYS, PersistedStore } from '@/persistence';
 import { gameDayRandom } from '@/time/daily';
 import { RIVAL_COLLECTOR, rivalOnFrontStreet, type RivalCollector } from '@/economy/rivalCollector';
 import type { Today } from '@/time/Today';
-import { standard } from '../../materials/palette';
+import { snowStandard } from '../snowCover';
 import type { DayNight } from '../../props/DayNight';
 import type { Furniture } from '../../Furniture';
 import { ForSaleBox } from '../../market/ForSaleBox';
@@ -265,7 +265,7 @@ export class Trader extends THREE.Group implements Furniture, Updatable, Interac
 
   private buildKit(): void {
     const { width, depth, height } = SUITCASE;
-    const metal = standard({ color: 0x2a2c30, roughness: 0.45 });
+    const metal = snowStandard({ color: 0x2a2c30, roughness: 0.45 });
     // The folding stand: two crossed frames.
     for (const side of [-1, 1]) {
       for (const tilt of [-0.45, 0.45]) {
@@ -276,7 +276,7 @@ export class Trader extends THREE.Group implements Furniture, Updatable, Interac
       }
     }
     // The suitcase, open: its base on the stand, its lid standing up behind with the sign.
-    const leather = standard({ color: 0x5a3422, roughness: 0.7 });
+    const leather = snowStandard({ color: 0x5a3422, roughness: 0.7 });
     const base = new THREE.Mesh(new THREE.BoxGeometry(width, 0.1, depth), leather);
     base.position.set(0, height + 0.05, 0.5);
     const lid = new THREE.Mesh(new THREE.BoxGeometry(width, depth, 0.06), leather);
@@ -340,5 +340,5 @@ function signTexture(): THREE.CanvasTexture {
   ctx.fillText('BUY · SELL · SWAP', 128, 94);
   ctx.font = 'italic 18px Georgia, serif';
   ctx.fillText('rare finds, fair-ish prices', 128, 128);
-  return toTexture(canvas, 2);
+  return toTexture(canvas, 'facing');
 }

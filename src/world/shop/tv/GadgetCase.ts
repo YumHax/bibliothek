@@ -3,7 +3,9 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import type { Furniture } from '../../Furniture';
 import { cylinderMesh } from '../../meshUtils';
 import { Prop, part } from '../../props/Prop';
-import { paint, standard, timber, METAL } from '../../materials/palette';
+import { INSET } from '../../props/joinery';
+import { paint, timber, METAL } from '../../materials/palette';
+import { GLASS } from '../../materials/glass';
 import { labelSheet, typed, type Label } from './labels';
 import { RENDER_ORDER, WALL } from '../../surface/layers';
 
@@ -15,7 +17,6 @@ export interface GadgetCaseOptions {
 
 const DEPTH = 0.45;
 const GLASS_H = 0.36;
-const GLASS = standard({ color: 0xe8f4f4, roughness: 0.03, metalness: 0, transparent: true, opacity: 0.12, depthWrite: false, side: THREE.DoubleSide, envMapIntensity: 2.4 });
 const FELT = paint(0x2a3a5a, 1);
 const BLACK = paint(0x1e1e20, 0.5);
 const GREY = paint(0xb8b4ac, 0.5);
@@ -42,17 +43,19 @@ export class GadgetCase extends Prop implements Furniture {
     part(this, W - 0.02, 0.006, DEPTH - 0.02, FELT, { y: floor + 0.003 });
     const shelfY = floor + GLASS_H * 0.5;
     for (const s of [-1, 1]) part(this, 0.012, 0.012, DEPTH - 0.04, METAL.agedBrass(), { x: (s * (W - 0.04)) / 2, y: shelfY - 0.01, z: 0 });
-    // The glass: front, sides, top and the back's sliding panes, and the shelf, as one mesh.
+    // The glass: front, sides, top and the back's sliding panes, and the shelf, as one mesh. The walls' feet a hair
+    // into the wood (seen through, glass flush on it fights).
     const T = 0.006;
+    const wallY = floor - INSET + GLASS_H / 2;
     const panes = [
-      new THREE.BoxGeometry(W, GLASS_H, T).translate(0, floor + GLASS_H / 2, DEPTH / 2 - T / 2),
-      new THREE.BoxGeometry(W, GLASS_H, T).translate(0, floor + GLASS_H / 2, -DEPTH / 2 + T / 2),
-      new THREE.BoxGeometry(T, GLASS_H, DEPTH - 2 * T).translate(-W / 2 + T / 2, floor + GLASS_H / 2, 0),
-      new THREE.BoxGeometry(T, GLASS_H, DEPTH - 2 * T).translate(W / 2 - T / 2, floor + GLASS_H / 2, 0),
+      new THREE.BoxGeometry(W, GLASS_H, T).translate(0, wallY, DEPTH / 2 - T / 2),
+      new THREE.BoxGeometry(W, GLASS_H, T).translate(0, wallY, -DEPTH / 2 + T / 2),
+      new THREE.BoxGeometry(T, GLASS_H, DEPTH - 2 * T).translate(-W / 2 + T / 2, wallY, 0),
+      new THREE.BoxGeometry(T, GLASS_H, DEPTH - 2 * T).translate(W / 2 - T / 2, wallY, 0),
       new THREE.BoxGeometry(W, T, DEPTH).translate(0, floor + GLASS_H + T / 2, 0),
       new THREE.BoxGeometry(W - 0.03, T, DEPTH - 0.04).translate(0, shelfY, 0),
     ];
-    const glass = new THREE.Mesh(mergeGeometries(panes), GLASS);
+    const glass = new THREE.Mesh(mergeGeometries(panes), GLASS.clear);
     for (const pane of panes) pane.dispose();
     glass.renderOrder = RENDER_ORDER.glass;
     this.add(glass);
@@ -92,7 +95,8 @@ export class GadgetCase extends Prop implements Furniture {
     part(this, 0.07, 0.035, 0.002, paint(0x8a8a8a, 0.4), { x: W * 0.3, y: low + 0.03, z: 0.016 });
     price(W * 0.3, low + 0.001, 0.12, '6');
     // The glass shelf: remotes side by side, a stack of cassettes, a calculator.
-    const up = shelfY + 0.003;
+    // A hair over the glass (seen through it from below, a bottom flush on it fights).
+    const up = shelfY + T / 2 + INSET;
     for (let i = 0; i < 3; i++) {
       const remote = part(this, 0.045, 0.018, 0.17, i === 1 ? GREY : BLACK, { x: -W * 0.32 + i * 0.06, y: up + 0.009, z: 0 });
       remote.rotation.y = (i - 1) * 0.08;

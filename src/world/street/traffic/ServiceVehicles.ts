@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import type { DayNight } from '../../props/DayNight';
 import { Walker } from '../../people/Walker';
-import { CAR_SIZES, LORRY, carGeometries, lorryGeometries } from '../carModel';
+import { CAR_SIZES, LORRY, carGeometries, lorryGeometries, vehicleGlass } from '../carModel';
 import { nightnessOf } from '../streetAir';
 import { snowCovered } from '../snowCover';
 import { paint, standard } from '../../materials/palette';
@@ -93,7 +93,7 @@ export class DeliveryVan extends ScriptedVehicle {
     this.hazard = new THREE.MeshBasicMaterial({ color: 0x331800 });
     this.add(
       shade(new THREE.Mesh(g.body, snowCovered(new THREE.MeshStandardMaterial({ color: this.cargo.body, roughness: 0.35 })))),
-      shade(new THREE.Mesh(g.glass, standard({ color: 0x1a232b, roughness: 0.06 }))),
+      shade(new THREE.Mesh(g.glass, vehicleGlass())),
       shade(new THREE.Mesh(g.wheels, wheels)),
       new THREE.Mesh(g.lamps, this.lamps),
     );
@@ -256,7 +256,7 @@ export class BinLorry extends ScriptedVehicle {
     this.beacon = new THREE.MeshBasicMaterial({ color: 0x331800 });
     this.add(
       shade(new THREE.Mesh(g.body, snowCovered(new THREE.MeshStandardMaterial({ color: 0x3f7a4f, roughness: 0.45 })))),
-      shade(new THREE.Mesh(g.glass, standard({ color: 0x1a232b, roughness: 0.06 }))),
+      shade(new THREE.Mesh(g.glass, vehicleGlass())),
       shade(new THREE.Mesh(g.wheels, wheels)),
       new THREE.Mesh(g.lamps, this.lamps),
       new THREE.Mesh(g.beacon, this.beacon),

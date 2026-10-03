@@ -2,12 +2,13 @@ import * as THREE from 'three';
 import type { Updatable } from '@/core/Engine';
 import type { Interactable } from '@/interaction/Interactable';
 import type { SessionActions } from '@/game/SessionActions';
-import { createCanvas } from '@/covers/generated/canvasUtils';
+import { createCanvas, toTexture } from '@/covers/generated/canvasUtils';
 import { boxMesh, invisibleHitbox } from '../meshUtils';
 import { Prop } from '../props/Prop';
+import { faceOn } from '../props/joinery';
+import { WALL } from '../surface/layers';
 import { paint, standard } from '../materials/palette';
 import { drawText } from './games/ArcadeGame';
-import { QUALITY } from '@/graphics/quality';
 
 /** One match as the board draws it (the concrete bracket is `economy/ArcadeTournament`'s). */
 interface BoardMatch {
@@ -91,12 +92,9 @@ export class TournamentBoard extends Prop implements Updatable, Interactable {
     this.ctx = ctx;
     this.W = canvas.width;
     this.H = canvas.height;
-    this.texture = new THREE.CanvasTexture(canvas);
-    this.texture.colorSpace = THREE.SRGBColorSpace;
-    this.texture.anisotropy = QUALITY.anisotropy;
-    const face = new THREE.Mesh(new THREE.PlaneGeometry(width, height), new THREE.MeshBasicMaterial({ map: this.texture, toneMapped: false, color: 0xd8d8d8 }));
-    face.position.z = 0.042;
-    this.add(face);
+    this.texture = toTexture(canvas);
+    const face = new THREE.Mesh(new THREE.PlaneGeometry(width, height), new THREE.MeshBasicMaterial({ map: this.texture, color: 0xd8d8d8 }));
+    this.add(faceOn(face, frame, WALL.notice));
 
     // The sign-up sheet on its clipboard, hung on a nail right of the board.
     const clipW = 0.23;
@@ -109,8 +107,7 @@ export class TournamentBoard extends Prop implements Updatable, Interactable {
     clip.castShadow = false;
     const [sheetCanvas, sheetCtx] = createCanvas(200, 256);
     this.sheetCtx = sheetCtx;
-    this.sheetTexture = new THREE.CanvasTexture(sheetCanvas);
-    this.sheetTexture.colorSpace = THREE.SRGBColorSpace;
+    this.sheetTexture = toTexture(sheetCanvas, 'facing');
     const paper = new THREE.Mesh(new THREE.PlaneGeometry(clipW - 0.03, clipH - 0.05), new THREE.MeshStandardMaterial({ map: this.sheetTexture, roughness: 0.9 }));
     paper.position.set(clipX, clipY - 0.012, 0.0086);
     this.add(board, paper, clip);

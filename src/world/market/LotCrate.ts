@@ -186,7 +186,7 @@ function paintCard(text: string): THREE.Texture {
     fitFontSize(ctx, text, W * 0.88, 40, 12, HAND, 'bold');
     ctx.fillText(text, W / 2, H * 0.72);
   }
-  return toTexture(canvas, 4);
+  return toTexture(canvas, 'facing');
 }
 
 /** A marker scrawl on the box's side (transparent round it). */
@@ -202,7 +202,7 @@ function paintScrawl(): THREE.Texture {
   ctx.fillText('GAMES', 0, 0);
   ctx.fillRect(-110, 32, 220, 4);
   ctx.restore();
-  return toTexture(canvas, 2);
+  return toTexture(canvas, 'facing');
 }
 
 /** A generic cover: a coloured sleeve, a white stripe with a dark title bar, a picture window. */
@@ -221,7 +221,7 @@ function paintCover(base: string, random: () => number): THREE.Texture {
   ctx.fillRect(12, 56, 104, 94);
   ctx.fillStyle = 'rgba(255,255,255,0.8)';
   ctx.fillRect(12, 160, 40, 8);
-  return toTexture(canvas, 2);
+  return toTexture(canvas, 'facing');
 }
 
 /** The front of a console's box: a dark sleeve, a grey console drawn on it, a coloured band. */
@@ -243,5 +243,5 @@ function paintConsoleBox(): THREE.Texture {
   ctx.fillRect(90, 110, 90, 12);
   ctx.fillStyle = '#c8342a';
   ctx.fillRect(200, 112, 30, 8);
-  return toTexture(canvas, 2);
+  return toTexture(canvas, 'facing');
 }

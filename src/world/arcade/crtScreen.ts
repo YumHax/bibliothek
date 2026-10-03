@@ -18,7 +18,7 @@ export interface CrtScreenOptions {
  * map sampling patched; opaque, so the canvas's alpha stays 1 (see docs/graphics.md).
  */
 export function crtScreenMaterial(map: THREE.Texture, options: CrtScreenOptions = {}): THREE.MeshBasicMaterial {
-  const material = new THREE.MeshBasicMaterial({ map, toneMapped: false });
+  const material = new THREE.MeshBasicMaterial({ map });
   const uniforms = {
     crtLines: { value: options.lines ?? 240 },
     crtBend: { value: options.bend ?? 0.06 },

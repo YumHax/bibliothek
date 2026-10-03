@@ -9,7 +9,8 @@ import { isShopOpen } from '../shops/shopHours';
 import type { ShopKind, Vec2 } from '../streetPlan';
 import { snowCovered } from '../snowCover';
 import { FacadeFrame } from './facadeFrame';
-import { hasShopfront } from '../shopfronts/shopfrontPlan';
+import { INSET } from '../../props/joinery';
+import { frontVariant, hasShopfront, pilasterWidth } from '../shopfronts/shopfrontPlan';
 
 /** The shutter's box under the fascia (bottom, top, depth out of the wall), the curtain's plane, its foot. */
 const BOX = { bottom: 2.8, top: 2.93, depth: 0.1 };
@@ -68,6 +69,10 @@ export class Shutters extends THREE.Group implements Furniture, Updatable {
       for (const shop of front.features.shopfronts) {
         // The arcade never shuts; the walk-in shops' windows stay lit behind their glass (`shopfronts/`).
         if (shop.kind === 'arcade' || hasShopfront(shop.kind)) continue;
+        // A front built in 3D: the shutter runs between its pilasters.
+        const inset = pilasterWidth(frontVariant(front.spec.detail, shop.kind));
+        const s0 = shop.s0 + inset;
+        const s1 = shop.s1 - inset;
         const first = position.length / 3;
         for (let i = 0; i < 4; i++) {
           position.push(0, 0, 0);
@@ -75,10 +80,10 @@ export class Shutters extends THREE.Group implements Furniture, Updatable {
           uv.push(0, 0);
         }
         index.push(first, first + 1, first + 2, first, first + 2, first + 3);
-        this.shutters.push({ kind: shop.kind, first, frame, s0: shop.s0, s1: shop.s1, down: 0, target: 0, tagged: random() < 0.3 });
-        const w = shop.s1 - shop.s0;
-        const g = new THREE.BoxGeometry(w, BOX.top - BOX.bottom, BOX.depth);
-        g.applyMatrix4(frame.matrix((shop.s0 + shop.s1) / 2, (BOX.top + BOX.bottom) / 2, BOX.depth / 2, box));
+        this.shutters.push({ kind: shop.kind, first, frame, s0, s1, down: 0, target: 0, tagged: random() < 0.3 });
+        // The box's ends buried an `INSET` in the pilasters (ending on their faces, they would lie in the joinery's planes).
+        const g = new THREE.BoxGeometry(s1 - s0 + (inset > 0 ? 2 * INSET : 0), BOX.top - BOX.bottom, BOX.depth);
+        g.applyMatrix4(frame.matrix((s0 + s1) / 2, (BOX.top + BOX.bottom) / 2, BOX.depth / 2, box));
         boxes.push(g.toNonIndexed());
         g.dispose();
       }
@@ -93,7 +98,7 @@ export class Shutters extends THREE.Group implements Furniture, Updatable {
     geometry.setAttribute('uv', this.uvs);
     geometry.setIndex(index);
     const texture = shutterTexture();
-    texture.wrapT = THREE.RepeatWrapping;
+    texture.wrapT = THREE.RepeatWrapping; // convention-ok: wraps one way only
     this.curtain = new THREE.Mesh(geometry, new THREE.MeshStandardMaterial({ map: texture, roughness: 0.5, side: THREE.DoubleSide }));
     this.curtain.castShadow = false;
     this.curtain.receiveShadow = true;
@@ -226,5 +231,5 @@ function shutterTexture(): THREE.CanvasTexture {
   ctx.fillRect(w / 2 + 150, 40, 60, 80);
   ctx.fillStyle = '#1a1a22';
   ctx.fillRect(w / 2 + 156, 48, 48, 18);
-  return toTexture(canvas, 4);
+  return toTexture(canvas, 'grazing');
 }

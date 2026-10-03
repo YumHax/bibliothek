@@ -1,10 +1,10 @@
 import * as THREE from 'three';
-import { createCanvas, toTexture } from '@/covers/generated/canvasUtils';
+import { createCanvas, toTexture, repeatTexture } from '@/covers/generated/canvasUtils';
 import { boxMesh, cylinderMesh, invisibleHitbox } from '../../meshUtils';
 import { paint } from '../../materials/palette';
 import { drawText } from '../games/ArcadeGame';
 import { TicketStrip } from '../TicketStrip';
-import { WALL } from '../../surface/layers';
+import { layMesh, WALL } from '../../surface/layers';
 import { CHROME, type MachineDisplay, displayScreen, outOfOrderNote, paintMarquee } from '../machineParts';
 import { BALLS, BALL_R, BOARD_BACK, BOARD_FRONT, BOARD_V, BOARD_W, LANE_FAR, LANE_NEAR, LANE_W, POCKETS, POCKET_R, RINGS, RING_CENTRE } from './AlleySim';
 
@@ -73,13 +73,15 @@ export function buildAlleyModel(root: THREE.Group, color: number, title: string)
   // The backboard: marquee, the score display, and a mesh screen in front of the rings.
   root.add(boxMesh(WIDTH, BACK_H - BOARD_BACK.y, 0.06, body, { y: BOARD_BACK.y + (BACK_H - BOARD_BACK.y) / 2, z: BACK_Z }));
   const marqueeMap = paintMarquee(title, { height: 128, stops: ['#ffd23a', '#ff7a33'], ink: '#3a0f10', size: 52, textY: 70, decorate: notches });
-  const marqueeMat = new THREE.MeshBasicMaterial({ map: marqueeMap, toneMapped: false, color: 0xdddddd });
+  const marqueeMat = new THREE.MeshBasicMaterial({ map: marqueeMap, color: 0xdddddd });
   const marquee = new THREE.Mesh(new THREE.PlaneGeometry(WIDTH - 0.06, 0.2), marqueeMat);
   marquee.position.set(0, BACK_H - 0.14, BACK_Z + 0.03 + WALL.notice.lift);
+  layMesh(marquee, WALL.notice);
   root.add(marquee);
   const display = displayScreen([320, 200], [0.56, 0.35]);
   const screen = display.mesh;
   screen.position.set(0, BACK_H - 0.47, BACK_Z + 0.03 + WALL.notice.lift);
+  layMesh(screen, WALL.notice);
   root.add(screen);
   const note = outOfOrderNote();
   note.position.set(0.02, -0.02, WALL.flyer.lift);
@@ -151,7 +153,7 @@ function paintBoard(): THREE.Texture {
     drawText(ctx, '100', px, py - POCKET_R * PX - 16, 16, '#ffd23a');
   }
   drawText(ctx, '10', W / 2, H - 22, 18, '#e8e2d0');
-  return toTexture(canvas, 4);
+  return toTexture(canvas, 'facing');
 }
 
 /** The marquee's top edge: dark notches, like a fairground booth's. */
@@ -175,7 +177,7 @@ function paintNet(): THREE.Texture {
     ctx.stroke();
   }
   const texture = toTexture(canvas);
-  texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+  repeatTexture(texture);
   texture.repeat.set(2, 3);
   return texture;
 }

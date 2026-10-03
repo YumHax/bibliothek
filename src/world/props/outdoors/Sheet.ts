@@ -1,6 +1,5 @@
 import * as THREE from 'three';
-import { createCanvas } from '@/covers/generated/canvasUtils';
-import { QUALITY } from '@/graphics/quality';
+import { createCanvas, canvasTexture } from '@/covers/generated/canvasUtils';
 import { letteringFont } from '@/world/city/shopLooks';
 
 /**
@@ -412,11 +411,9 @@ export class Sheet {
   /** Packs the canvases into the three scenery textures the pane shader samples. */
   finish(): { scene: THREE.CanvasTexture; lights: THREE.DataTexture; curfew: THREE.DataTexture; ground: THREE.CanvasTexture; fx: THREE.DataTexture } {
     // Day colours, premultiplied by coverage so that mip levels blend cleanly into the sky.
-    const scene = new THREE.CanvasTexture(this.color.canvas);
-    scene.colorSpace = THREE.SRGBColorSpace;
+    const scene = canvasTexture(this.color.canvas);
     scene.premultiplyAlpha = true;
-    scene.anisotropy = QUALITY.anisotropy;
-    scene.wrapS = THREE.RepeatWrapping;
+    scene.wrapS = THREE.RepeatWrapping; // convention-ok: wraps round the horizon only
     scene.wrapT = THREE.ClampToEdgeWrapping;
 
     // Lights and glass in RGB, the depth in alpha: linear masks, not colours. Rows are flipped
@@ -442,7 +439,7 @@ export class Sheet {
     lights.generateMipmaps = false;
     lights.minFilter = THREE.NearestFilter;
     lights.magFilter = THREE.NearestFilter;
-    lights.wrapS = THREE.RepeatWrapping;
+    lights.wrapS = THREE.RepeatWrapping; // convention-ok: wraps one way only
     lights.wrapT = THREE.ClampToEdgeWrapping;
     lights.needsUpdate = true;
 
@@ -460,14 +457,13 @@ export class Sheet {
     curfew.generateMipmaps = false;
     curfew.minFilter = THREE.NearestFilter;
     curfew.magFilter = THREE.NearestFilter;
-    curfew.wrapS = THREE.RepeatWrapping;
+    curfew.wrapS = THREE.RepeatWrapping; // convention-ok: wraps one way only
     curfew.wrapT = THREE.ClampToEdgeWrapping;
     curfew.needsUpdate = true;
 
     // Shadows and the weather masks: soft, filtered and mipmapped like the day colours.
-    const ground = new THREE.CanvasTexture(this.ground.canvas);
-    ground.colorSpace = THREE.NoColorSpace;
-    ground.wrapS = THREE.RepeatWrapping;
+    const ground = canvasTexture(this.ground.canvas, { data: true });
+    ground.wrapS = THREE.RepeatWrapping; // convention-ok: wraps round the horizon only
     ground.wrapT = THREE.ClampToEdgeWrapping;
 
     // Sway and shutters, flipped like the lights; nearest: a blend of two trees' phases is neither.
@@ -485,7 +481,7 @@ export class Sheet {
     fx.generateMipmaps = false;
     fx.minFilter = THREE.NearestFilter;
     fx.magFilter = THREE.NearestFilter;
-    fx.wrapS = THREE.RepeatWrapping;
+    fx.wrapS = THREE.RepeatWrapping; // convention-ok: wraps one way only
     fx.wrapT = THREE.ClampToEdgeWrapping;
     fx.needsUpdate = true;
     return { scene, lights, curfew, ground, fx };

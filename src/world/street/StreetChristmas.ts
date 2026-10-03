@@ -75,13 +75,13 @@ export class StreetChristmas extends THREE.Group implements Furniture, Updatable
       const a = u * FIR_TURNS * Math.PI * 2;
       points.push(new THREE.Vector3(fx + Math.cos(a) * r, y, fz + Math.sin(a) * r));
     }
-    this.star = new THREE.MeshBasicMaterial({ color: 0xffe07a, toneMapped: false });
+    this.star = new THREE.MeshBasicMaterial({ color: 0xffe07a });
     const star = new THREE.Mesh(new THREE.OctahedronGeometry(0.45, 0), this.star);
     star.position.set(fx, height + 0.4, fz);
     star.scale.set(1, 1.3, 0.35);
     this.add(star);
 
-    this.bulbs = new THREE.InstancedMesh(new THREE.SphereGeometry(BULB, 6, 5), instancedBasic({ toneMapped: false }), points.length);
+    this.bulbs = new THREE.InstancedMesh(new THREE.SphereGeometry(BULB, 6, 5), instancedBasic({}), points.length);
     this.bulbs.castShadow = false;
     const m = new THREE.Matrix4();
     points.forEach((p, i) => {

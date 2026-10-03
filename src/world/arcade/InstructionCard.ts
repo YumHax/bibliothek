@@ -62,5 +62,5 @@ function paintCard(options: InstructionCardOptions, width: number, height: numbe
     drawText(ctx, line, W / 2, H * 0.3 + rowH * (i + 0.5), size, '#2a2230');
   });
   drawText(ctx, 'INSERT 1 COIN', W / 2, H * 0.94, Math.round(H * 0.06), '#6a5a70');
-  return toTexture(canvas, 4);
+  return toTexture(canvas, 'facing');
 }

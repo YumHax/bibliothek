@@ -1,8 +1,9 @@
 import * as THREE from 'three';
 import { createCanvas, toTexture } from '@/covers/generated/canvasUtils';
+import type { Anisotropy } from '@/graphics/canvas';
 import { standard } from '../materials/palette';
 import { drawText } from './games/ArcadeGame';
-import { QUALITY } from '@/graphics/quality';
+import { onSurface, WALL } from '../surface/layers';
 
 /** The polished steel of the physical machines' rails, legs, posts and plunger rods. */
 export const CHROME = standard({ color: 0xc4c7cc, metalness: 1, roughness: 0.2 });
@@ -20,8 +21,8 @@ export interface MarqueeStyle {
   textY?: number;
   /** Paint between the gradient and the title: the alley's notches, the claw's starburst, a cabinet's bands. */
   decorate?: (ctx: CanvasRenderingContext2D, width: number, height: number) => void;
-  /** Default 4. */
-  anisotropy?: number;
+  /** Default `grazing` (`Anisotropy`). */
+  anisotropy?: Anisotropy;
 }
 
 /** A machine's lit title strip: `title` in pixel type over a gradient. */
@@ -34,7 +35,7 @@ export function paintMarquee(title: string, style: MarqueeStyle): THREE.CanvasTe
   ctx.fillRect(0, 0, width, height);
   style.decorate?.(ctx, width, height);
   drawText(ctx, title, width / 2, style.textY ?? height / 2 + 2, style.size, style.ink);
-  return toTexture(canvas, style.anisotropy ?? QUALITY.anisotropy);
+  return toTexture(canvas, style.anisotropy ?? 'grazing');
 }
 
 /** A machine's lit display: a canvas to paint and the plane showing it (unlit, so it reads as lit). */
@@ -47,10 +48,10 @@ export interface MachineDisplay {
 }
 
 /** A `pixels`-sized canvas on a `size`-metre plane facing +z; `color` dims it (a hover brightens it back). */
-export function displayScreen(pixels: [width: number, height: number], size: [width: number, height: number], { anisotropy = 1, color }: { anisotropy?: number; color?: number } = {}): MachineDisplay {
+export function displayScreen(pixels: [width: number, height: number], size: [width: number, height: number], { anisotropy = 1, color }: { anisotropy?: Anisotropy; color?: number } = {}): MachineDisplay { // convention-ok: a live screen faces the player, repainted often
   const [canvas, ctx] = createCanvas(...pixels);
   const texture = toTexture(canvas, anisotropy);
-  const material = new THREE.MeshBasicMaterial({ map: texture, toneMapped: false, ...(color !== undefined ? { color } : {}) });
+  const material = new THREE.MeshBasicMaterial({ map: texture, ...(color !== undefined ? { color } : {}) });
   const mesh = new THREE.Mesh(new THREE.PlaneGeometry(...size), material);
   return { canvas, ctx, texture, material, mesh };
 }
@@ -58,10 +59,10 @@ export function displayScreen(pixels: [width: number, height: number], size: [wi
 /**
  * The note taped over a machine's glass on a day it is out of order: "OUT OF ORDER" in marker on
  * a sheet of paper, `width` metres across, a little askew. Hidden until the day says so (the
- * machine's `MachineRun` shows it); the caller puts it on the glass, a few mm proud.
+ * machine's `MachineRun` shows it); the caller puts it on the glass, `WALL.flyer.lift` proud (it draws as that layer).
  */
 export function outOfOrderNote(width = 0.3): THREE.Mesh {
-  const note = new THREE.Mesh(new THREE.PlaneGeometry(width, (width * 16) / 30), new THREE.MeshStandardMaterial({ map: paintNote(), roughness: 0.8 }));
+  const note = new THREE.Mesh(new THREE.PlaneGeometry(width, (width * 16) / 30), onSurface(new THREE.MeshStandardMaterial({ map: paintNote(), roughness: 0.8 }), WALL.flyer));
   note.rotation.z = -0.06;
   note.visible = false;
   return note;
@@ -87,5 +88,5 @@ function paintNote(): THREE.CanvasTexture {
   ctx.font = '16px "Comic Sans MS", "Marker Felt", cursive';
   ctx.textAlign = 'center';
   ctx.fillText('sorry — the mgmt', 150, 140);
-  return toTexture(canvas, 4);
+  return toTexture(canvas, 'facing');
 }

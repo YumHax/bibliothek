@@ -3,7 +3,8 @@ import type { RoomOptions } from '../Room';
 import { boxMesh } from '../meshUtils';
 import { Prop } from '../props/Prop';
 import { standard } from '../materials/palette';
-import { WALL } from '../surface/layers';
+import { daylitGlass, lightDaylitGlass } from '../materials/glass';
+import { layMesh, WALL } from '../surface/layers';
 
 export interface HallRoofOptions {
   /** Distance between two trusses along the hall's depth. Default 2. */
@@ -14,10 +15,6 @@ export interface HallRoofOptions {
   skylight?: { width?: number; margin?: number } | false;
 }
 
-/** Glow of the frosted glass at night (the town's glow) and in full day. */
-const NIGHT_GLOW = 0.05;
-const DAY_GLOW = 1.0;
-const DAY_WHITE = new THREE.Color(0xfff8ee);
 const CHORD = 0.08;
 const WEB = 0.05;
 
@@ -78,11 +75,12 @@ export class HallRoof extends Prop {
       const margin = options.skylight?.margin ?? 1.2;
       const glazedL = depth - 2 * margin;
       // Its own material: it follows the sky.
-      this.glass = new THREE.MeshStandardMaterial({ color: 0xe6ecee, roughness: 0.6, emissive: DAY_WHITE, emissiveIntensity: NIGHT_GLOW });
+      this.glass = daylitGlass(0.6);
       // The glass runs the hall's depth (z) down the middle, just under the ceiling, facing down.
       const pane = new THREE.Mesh(new THREE.PlaneGeometry(glazedW, glazedL), this.glass);
       pane.rotation.x = Math.PI / 2;
       pane.position.y = height - WALL.rooflight.lift;
+      layMesh(pane, WALL.rooflight);
       pane.receiveShadow = false;
       this.add(pane);
       // Frame and glazing bars.
@@ -104,9 +102,6 @@ export class HallRoof extends Prop {
   /** 0 = night, 1 = full day; `skyHue` tints the glow (warm by day, blue at night, orange at sunset). */
   setDaylight(daylight: number, skyHue?: THREE.Color): void {
     if (!this.glass) return;
-    const t = THREE.MathUtils.clamp(daylight, 0, 1);
-    this.glass.emissiveIntensity = THREE.MathUtils.lerp(NIGHT_GLOW, DAY_GLOW, t);
-    this.glass.emissive.copy(DAY_WHITE);
-    if (skyHue) this.glass.emissive.lerp(skyHue, 0.6);
+    lightDaylitGlass(this.glass, daylight, skyHue);
   }
 }

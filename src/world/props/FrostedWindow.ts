@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { Prop, part } from './Prop';
 import { paint } from '../materials/palette';
+import { daylitGlass, lightDaylitGlass } from '../materials/glass';
 
 export interface FrostedWindowOptions {
   /** Size of the glazed opening. Default 0.6 x 0.5. */
@@ -13,10 +14,6 @@ const FRAME = 0.05;
 const MULLION = 0.03;
 const FRAME_DEPTH = 0.05;
 const SILL_DEPTH = 0.07;
-/** Glow of the frosted glass at night and in full day (the sky behind it, nothing else). */
-const NIGHT_GLOW = 0.06;
-const DAY_GLOW = 0.9;
-const DAY_WHITE = new THREE.Color(0xfff8ee);
 
 const PAINT = paint(0xf6f3ee, 0.7);
 
@@ -44,7 +41,7 @@ export class FrostedWindow extends Prop {
     part(this, MULLION, h, FRAME_DEPTH - 0.01, PAINT, { z: z - 0.005 });
     part(this, w + 2 * FRAME + 0.04, 0.03, SILL_DEPTH, PAINT, { y: -h / 2 - FRAME - 0.015, z: SILL_DEPTH / 2 });
 
-    this.glass = new THREE.MeshStandardMaterial({ color: 0xe6ecee, roughness: 0.55, emissive: DAY_WHITE, emissiveIntensity: NIGHT_GLOW });
+    this.glass = daylitGlass(0.55);
     const pane = part(this, w, h, 0.006, this.glass, { z: 0.008 });
     pane.castShadow = false;
 
@@ -56,9 +53,6 @@ export class FrostedWindow extends Prop {
 
   /** 0 = night, 1 = full day; `skyHue` tints the glow (warm by day, blue at night, orange at sunset). */
   setDaylight(daylight: number, skyHue?: THREE.Color): void {
-    const t = THREE.MathUtils.clamp(daylight, 0, 1);
-    this.glass.emissiveIntensity = THREE.MathUtils.lerp(NIGHT_GLOW, DAY_GLOW, t);
-    this.glass.emissive.copy(DAY_WHITE);
-    if (skyHue) this.glass.emissive.lerp(skyHue, 0.6);
+    lightDaylitGlass(this.glass, daylight, skyHue);
   }
 }

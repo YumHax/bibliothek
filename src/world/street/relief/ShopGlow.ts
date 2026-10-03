@@ -1,6 +1,5 @@
 import * as THREE from 'three';
 import type { Updatable } from '@/core/Engine';
-import { createCanvas } from '@/covers/generated/canvasUtils';
 import type { Furniture } from '../../Furniture';
 import type { DayNight } from '../../props/DayNight';
 import type { PaintedFront } from '../Buildings';
@@ -9,6 +8,8 @@ import { nightnessOf } from '../streetAir';
 import type { ShopKind } from '../streetPlan';
 import { FacadeFrame } from './facadeFrame';
 import { GROUND, RENDER_ORDER, onSurface } from '../../surface/layers';
+import { additive } from '@/world/materials/blend';
+import { spillGlow } from '@/world/materials/glowTextures';
 
 /** How far the light reaches out over the pavement and how strong it is at full night (it lies at `GROUND.shopGlow`). */
 const REACH = 2.8;
@@ -45,16 +46,12 @@ export class ShopGlow extends THREE.InstancedMesh implements Furniture, Updatabl
       }
     }
     const material = onSurface(
-      new THREE.MeshBasicMaterial({
-        map: glowTexture(),
+      additive(new THREE.MeshBasicMaterial({
+        // Bright along the window's edge (the canvas's top: the plane's -z edge, the wall), fading to the kerb and at both ends.
+        map: spillGlow(128, 64, 1.8, 0.4),
         transparent: true,
-        blending: THREE.CustomBlending,
-        blendSrc: THREE.SrcAlphaFactor,
-        blendDst: THREE.OneFactor,
-        blendSrcAlpha: THREE.ZeroFactor,
-        blendDstAlpha: THREE.OneFactor,
         fog: true,
-      }),
+      })),
       GROUND.shopGlow,
       { depthWrite: false },
     );
@@ -92,31 +89,4 @@ export class ShopGlow extends THREE.InstancedMesh implements Furniture, Updatabl
     });
     if (this.instanceColor) this.instanceColor.needsUpdate = true;
   }
-}
-
-/** Bright along the window's edge (the plane's far side, -z before turning: the wall), fading out to the kerb and at both ends. */
-function glowTexture(): THREE.CanvasTexture {
-  const w = 128;
-  const h = 64;
-  const [canvas, ctx] = createCanvas(w, h);
-  const image = ctx.createImageData(w, h);
-  for (let y = 0; y < h; y++) {
-    // Canvas top (y = 0) is uv v = 1, the plane's -z edge: the wall.
-    const out = y / (h - 1);
-    const fade = Math.pow(1 - out, 1.8);
-    for (let x = 0; x < w; x++) {
-      const across = Math.abs(x / (w - 1) - 0.5) * 2;
-      const side = 1 - THREE.MathUtils.smoothstep(across, 0.6, 1);
-      const a = Math.round(255 * fade * side);
-      const k = (y * w + x) * 4;
-      image.data[k] = 255;
-      image.data[k + 1] = 255;
-      image.data[k + 2] = 255;
-      image.data[k + 3] = a;
-    }
-  }
-  ctx.putImageData(image, 0, 0);
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.colorSpace = THREE.SRGBColorSpace;
-  return texture;
 }

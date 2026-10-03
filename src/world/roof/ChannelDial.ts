@@ -102,5 +102,5 @@ function dialTexture(channel: Channel | null): THREE.CanvasTexture {
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillText(channel ? `CH ${channel.number}` : '--', 64, 31);
-  return toTexture(canvas, 2);
+  return toTexture(canvas, 'facing');
 }

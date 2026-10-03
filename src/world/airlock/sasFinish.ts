@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { createCanvas, seededRandom, toTexture } from '@/graphics/canvas';
+import { createCanvas, seededRandom, toTexture, repeatTexture } from '@/graphics/canvas';
 import { markShared } from '../materials/sharedResources';
 import { METAL, basic, paint, standard } from '../materials/palette';
 import { SAS } from './airlockPlan';
@@ -78,8 +78,8 @@ function baked(map: THREE.Texture | null, color = 0xffffff): THREE.MeshBasicMate
 }
 
 function shared(canvas: HTMLCanvasElement, repeat = false): THREE.CanvasTexture {
-  const texture = toTexture(canvas, 4);
-  if (repeat) texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+  const texture = toTexture(canvas, 'grazing');
+  if (repeat) repeatTexture(texture);
   return markShared(texture);
 }
 

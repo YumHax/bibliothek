@@ -1,6 +1,5 @@
 import * as THREE from 'three';
-import { QUALITY } from '@/graphics/quality';
-import { createCanvas, seededRandom } from '@/covers/generated/canvasUtils';
+import { createCanvas, seededRandom, canvasTexture, toTexture } from '@/covers/generated/canvasUtils';
 import type { SkyState } from '../props/DayNight';
 import { wakefulnessAt } from '@/time/wakefulness';
 import { Prop } from '../props/Prop';
@@ -74,12 +73,9 @@ export class BuildingFront extends Prop {
     this.paint(color, rough, W, H);
     this.paintLights(lightCanvas.width, lightCanvas.height, 0);
 
-    const map = new THREE.CanvasTexture(colorCanvas);
-    map.colorSpace = THREE.SRGBColorSpace;
-    map.anisotropy = QUALITY.anisotropy;
-    const roughness = new THREE.CanvasTexture(roughCanvas);
-    this.lightTexture = new THREE.CanvasTexture(lightCanvas);
-    this.lightTexture.colorSpace = THREE.SRGBColorSpace;
+    const map = toTexture(colorCanvas);
+    const roughness = canvasTexture(roughCanvas, { data: true });
+    this.lightTexture = toTexture(lightCanvas);
     // Roughness from G, metalness from B (the glass catches the sky, the plaster does not). The
     // metalness is read from the roughness map's own sampler: a `metalnessMap` would be one more
     // texture unit, and beside the flat's shadow maps the lit program would no longer link.

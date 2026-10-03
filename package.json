@@ -12,7 +12,8 @@
     "preview": "vite preview",
     "bake-art": "node scripts/bake-box-art.mjs",
     "balance": "node scripts/arcade-balance.mjs",
-    "typecheck": "tsc --noEmit && tsc --noEmit -p api && node scripts/check-conventions.mjs"
+    "zfight": "node scripts/zfight.mjs",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p api && node scripts/check-conventions.mjs && node scripts/zfight.mjs"
   },
   "dependencies": {
     "jsnes": "^2.1.0",

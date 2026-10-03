@@ -1,4 +1,4 @@
-import { BEGINNER, ticketsFor } from './pricing';
+import { BEGINNER, COIN_BACK, ticketsFor } from './pricing';
 import { getPrize } from './Prizes';
 
 /** The machine a play was on, as the payout reads it. */
@@ -16,8 +16,10 @@ export interface PayoutPlay {
   readonly best: boolean;
   readonly first?: boolean;
   readonly prize?: string;
-  /** One of the player's first plays on this machine (`BEGINNER`): a poor score still pays about its coin back. */
+  /** One of the player's first plays on this machine (`BEGINNER`): a poor score still pays twice its coin. */
   readonly beginner?: boolean;
+  /** The play cost a coin (`COIN_BACK`: a poor score still pays it back). */
+  readonly paid?: boolean;
 }
 
 /**
@@ -74,6 +76,11 @@ export function arcadePayout(machine: PayoutMachine, play: PayoutPlay, books: Pa
     paid += luck;
     lines.push(`Beginner’s luck: +${luck} tickets while you learn this one.`);
     bonuses.push({ label: 'BEGINNER', tickets: luck });
+  } else if (play.paid && !machine.luck && earned < COIN_BACK) {
+    const back = COIN_BACK - earned;
+    paid += back;
+    lines.push(`Coin back: +${back} tickets, try again!`);
+    bonuses.push({ label: 'COIN BACK', tickets: back });
   }
   const challenge = daily?.challenge();
   if (challenge && !challenge.done && challenge.gameId === machine.game.id && play.score >= challenge.target && daily?.claimChallenge()) {
@@ -99,7 +106,8 @@ export function arcadePayout(machine: PayoutMachine, play: PayoutPlay, books: Pa
   } else if (week) {
     lines.push(`Last week's league: you came ${ordinalOf(week.rank + 1)} with ${week.tickets} tickets.`);
   }
-  return { prizes, tickets: { earned, paid }, lines, bonuses, notable: bonuses.length > 0 || Boolean(week) };
+  // The coin back is a floor, not news: the end card counts it up, no banner.
+  return { prizes, tickets: { earned, paid }, lines, bonuses, notable: bonuses.some((b) => b.label !== 'COIN BACK') || Boolean(week) };
 }
 
 /** 1st, 2nd, 3rd, 4th… */

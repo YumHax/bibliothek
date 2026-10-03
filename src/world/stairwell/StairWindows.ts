@@ -6,8 +6,8 @@ import type { Outdoors } from '../props/outdoors/Outdoors';
 import { part } from '../props/Prop';
 import { paint } from '../materials/palette';
 import { WALL, onSurface } from '../surface/layers';
-import { OutlookView } from '../outlook/OutlookView';
-import { flatToStreet } from '../outlook/frames';
+import { PaneReflection } from '../materials/paneReflection';
+import { leaseHomeOutlook, type OutlookLease } from '../outlook/sharedOutlook';
 import type { WindowLife } from '../street/windowLife';
 import { STAIRWELL_PLAN as plan, STOREY, STOREYS, landingY } from './stairwellPlan';
 
@@ -16,8 +16,6 @@ const LIVE = 2;
 const FRAME = 0.05;
 const FRAME_PAINT = paint(0xe6ddc8, 0.6);
 const SILL = paint(0xb8ae9c, 0.7);
-/** The facades of our own building's back, which the windows are in (`streetPlan`): never built in their view. */
-const OUR_BACK = ['oursBack', 'oursBackW', 'oursWell', 'oursWellE', 'oursWellW'];
 
 export interface StairWindowsOptions {
   dayNight: DayNight;
@@ -39,7 +37,8 @@ export interface StairWindowsOptions {
 export class StairWindows extends THREE.Group implements Furniture, Updatable, OccupancyAware {
   readonly contactShadow = false;
   readonly footprint = new THREE.Box3();
-  private readonly view: OutlookView;
+  /** The view from our building (`sharedOutlook`), shared with the flat's windows and the neighbours'. */
+  private readonly lease: OutlookLease;
   /** Every landing's pane: the nearest `LIVE` show the courtyard (each a render of it), the rest frosted glass. */
   private readonly panes: THREE.Mesh[] = [];
   private readonly frosted: THREE.MeshBasicMaterial;
@@ -47,36 +46,31 @@ export class StairWindows extends THREE.Group implements Furniture, Updatable, O
   private readonly sky: () => THREE.Color;
   private readonly eye = new THREE.Vector3();
   private readonly viewer: THREE.Camera;
+  /** The stairwell given back by the glass, over every pane (as the flat's windows have it). */
+  private readonly reflection = new PaneReflection();
+  private readonly dayNight: DayNight;
 
   constructor({ dayNight, outdoors, viewer, windowLife }: StairWindowsOptions) {
     super();
     this.name = 'StairWindows';
     const { x, width, height, sill } = plan.courtyardWindow;
     const z = plan.shaft.z0;
-    const toStreet = flatToStreet();
-    // The window's middle in the street's frame (every landing's is above the same spot): what is built round it.
-    const [ox, , oz] = plan.origin;
-    const eye = new THREE.Vector3(ox + x, 0, oz + z).applyMatrix4(toStreet);
+    // The stairwell is where the street has it (`flatToStreet`, the view's default frame).
+    this.lease = leaseHomeOutlook({ dayNight, outdoors, viewer, ...(windowLife ? { windowLife } : {}) });
     const waiting = new THREE.Color();
-    this.view = new OutlookView({
-      viewer,
-      toOutlook: () => toStreet,
-      build: (camera) =>
-        import('../outlook/streetOutlook').then(({ buildStreetOutlook }) =>
-          buildStreetOutlook(camera, { dayNight, lightDirection: (out) => outdoors.lightDirection(dayNight.state, out), eye: [eye.x, eye.z], without: OUR_BACK, ...(windowLife ? { windowLife } : {}) }),
-        ),
-      waiting: () => waiting.copy(dayNight.state.horizon).multiplyScalar(0.25 + 0.6 * dayNight.state.daylight),
-    });
-    this.add(this.view);
     this.sky = () => waiting.copy(dayNight.state.horizon).multiplyScalar(0.5 + 0.9 * dayNight.state.daylight);
     this.frosted = onSurface(new THREE.MeshBasicMaterial({ color: 0x8a9096, fog: false }), WALL.paper);
     for (let k = 0; k < STOREYS; k++) {
       const floor = landingY(k) - STOREY / 2;
       const y = floor + sill + height / 2;
-      const pane = this.view.pane(width, height);
-      pane.position.set(x, y, z + 0.004);
+      const pane = this.lease.view.pane(width, height, this.lease.toOutlook);
+      pane.position.set(x, y, z + WALL.pane.lift);
       this.add(pane);
       this.panes.push(pane);
+      const reflection = this.reflection.over(pane.geometry, z + WALL.pane.lift);
+      reflection.position.x = x;
+      reflection.position.y = y;
+      this.add(reflection);
       part(this, FRAME, height + 2 * FRAME, 0.05, FRAME_PAINT, { x: x - width / 2 - FRAME / 2, y, z: z + 0.025 });
       part(this, FRAME, height + 2 * FRAME, 0.05, FRAME_PAINT, { x: x + width / 2 + FRAME / 2, y, z: z + 0.025 });
       part(this, width, FRAME, 0.05, FRAME_PAINT, { x, y: y + height / 2 + FRAME / 2, z: z + 0.025 });
@@ -91,15 +85,16 @@ export class StairWindows extends THREE.Group implements Furniture, Updatable, O
     // Both materials are in the scene from the start, so `World.prime` compiles both.
     this.panes.forEach((pane, i) => (pane.material = i < LIVE ? this.live : this.frosted));
     this.viewer = viewer;
+    this.dayNight = dayNight;
   }
 
   /** The player walked in: what is out there is built now, at the next idle moment (`OutlookView.prefetch`). */
   setOccupied(occupied: boolean): void {
-    if (occupied) this.view.prefetch();
+    if (occupied) this.lease.view.prefetch();
   }
 
   update(dt: number): void {
-    this.view.update(dt);
+    this.lease.view.update(dt);
     // Only the panes nearest the eye render the courtyard (each visible one is a whole render of it, and through the
     // well up to five can be in view at once); the others, glimpsed storeys away, are frosted glass in the sky's colour.
     this.viewer.getWorldPosition(this.eye);
@@ -116,9 +111,11 @@ export class StairWindows extends THREE.Group implements Furniture, Updatable, O
       this.panes[i]!.material = rank < LIVE ? this.live : this.frosted;
     }
     this.frosted.color.copy(this.sky());
+    this.reflection.set(this.dayNight.state.daylight);
   }
 
   dispose(): void {
-    this.view.dispose();
+    for (const pane of this.panes) this.lease.view.release(pane);
+    this.lease.release();
   }
 }

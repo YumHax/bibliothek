@@ -1,10 +1,11 @@
 import * as THREE from 'three';
 import type { Interactable } from '@/interaction/Interactable';
 import type { SessionActions } from '@/game/SessionActions';
-import { createCanvas, toTexture } from '@/graphics/canvas';
+import { createCanvas, toTexture, repeatTexture } from '@/graphics/canvas';
 import { Prop, part } from '../../props/Prop';
 import { ShutDoor } from '../../props/ShutDoor';
-import { METAL, basic, paint, standard } from '../../materials/palette';
+import { METAL, basic, paint } from '../../materials/palette';
+import { GLASS } from '../../materials/glass';
 import { invisibleHitbox } from '../../meshUtils';
 import { RENDER_ORDER } from '../../surface/layers';
 import { STAIRWELL_PLAN as plan } from '../stairwellPlan';
@@ -17,7 +18,6 @@ const FLOOR = paint(0x6b4a3a, 0.5);
 const CEILING = paint(0xeee6d4, 0.95);
 const FRAME = paint(0x4a2c1c, 0.55);
 const SILL = paint(0xcfc8ba, 0.6);
-const GLASS = standard({ color: 0xdfe8e4, roughness: 0.05, metalness: 0, transparent: true, opacity: 0.12, depthWrite: false });
 const WOOD = paint(0x6a4428, 0.55);
 const DARK = paint(0x222226, 0.4);
 /** The reveal of the window and the door through the wall (m). */
@@ -81,7 +81,7 @@ export class Lodge extends Prop {
     part(this, 0.05, pane.height, 0.05, FRAME, { x: fx, y: pane.sill + pane.height / 2, z: w0 + 0.025 });
     part(this, 0.05, pane.height, 0.05, FRAME, { x: fx, y: pane.sill + pane.height / 2, z: w1 - 0.025 });
     part(this, 0.04, pane.height, 0.03, FRAME, { x: fx, y: pane.sill + pane.height / 2, z: pane.z });
-    const glass = new THREE.Mesh(new THREE.PlaneGeometry(pane.width - 0.1, pane.height - 0.1), GLASS);
+    const glass = new THREE.Mesh(new THREE.PlaneGeometry(pane.width - 0.1, pane.height - 0.1), GLASS.pane);
     glass.position.set(fx, pane.sill + pane.height / 2, pane.z);
     glass.rotation.y = -Math.PI / 2;
     glass.renderOrder = RENDER_ORDER.glass;
@@ -193,7 +193,7 @@ function plateTexture(text: string, ground = '#c9a75b', ink = '#3a2812'): THREE.
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillText(text, 128, 38, 230);
-  return toTexture(canvas, 2);
+  return toTexture(canvas, 'facing');
 }
 
 /** The card hung on her door: handwritten. */
@@ -209,7 +209,7 @@ function signTexture(text: string): THREE.CanvasTexture {
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillText(text, 128, 66, 236);
-  return toTexture(canvas, 2);
+  return toTexture(canvas, 'facing');
 }
 
 /** A lace net: rows of little flowers and holes, cut out by its alpha. */
@@ -242,8 +242,8 @@ function laceTexture(): THREE.CanvasTexture {
     ctx.lineTo(i, size);
     ctx.stroke();
   }
-  const texture = toTexture(canvas, 2);
-  texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+  const texture = toTexture(canvas, 'facing');
+  repeatTexture(texture);
   texture.repeat.set(4, 2);
   return texture;
 }

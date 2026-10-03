@@ -44,7 +44,8 @@ export class KibblePallet extends THREE.Group implements Furniture {
       // Two rows on the pallet, the front one only on top of them.
       for (let i = 0; i < 2; i++) {
         const brand = Math.floor(random() * BRANDS.length);
-        const x = (i - 0.5) * (SACK.width + 0.01) + (random() - 0.5) * 0.02;
+        // Spaced so two turned sacks and their bulging sides never overlap (their tops in one plane would fight).
+        const x = (i - 0.5) * (SACK.width + 0.05) + (random() - 0.5) * 0.02;
         const z = layer === 0 ? 0.13 : 0.14;
         this.sack(x, top, z, brand, labels, (random() - 0.5) * 0.06, random);
         if (layer === 0) this.sack(x, top, -0.14, Math.floor(random() * BRANDS.length), labels, (random() - 0.5) * 0.06, random);

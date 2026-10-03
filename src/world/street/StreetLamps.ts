@@ -1,7 +1,6 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import type { Updatable } from '@/core/Engine';
-import { createCanvas } from '@/covers/generated/canvasUtils';
 import { QUALITY } from '@/graphics/quality';
 import type { Furniture, OccupancyAware } from '../Furniture';
 import type { DayNight } from '../props/DayNight';
@@ -11,6 +10,8 @@ import { nightnessOf } from './streetAir';
 import type { LampDesign, Vec2 } from './streetPlan';
 import { GROUND, RENDER_ORDER, onSurface } from '../surface/layers';
 import { LAMP_GLOW, LAMP_LIGHT } from '../lighting/lampColours';
+import { additive, additiveOne } from '@/world/materials/blend';
+import { radialGlow } from '@/world/materials/glowTextures';
 
 export interface StreetLampsOptions {
   lamps: readonly { at: Vec2; yaw: number; design?: LampDesign }[];
@@ -137,19 +138,15 @@ export class StreetLamps extends THREE.Group implements Furniture, Updatable, Oc
     const iron = snowCovered(new THREE.MeshStandardMaterial({ color: 0x1d2420, roughness: 0.42, metalness: 0.15 }));
     const heads = new THREE.MeshBasicMaterial({ color: GLOW.clone().multiplyScalar(HEAD_LIT) });
     this.pools = onSurface(
-      new THREE.MeshBasicMaterial({
-        map: poolTexture(),
-        color: WARM.clone(),
-        transparent: true,
-        // Per lamp, instance colours carry how warmed up it is (0 off).
-        blending: THREE.CustomBlending,
-        blendSrc: THREE.SrcAlphaFactor,
-        blendDst: THREE.OneFactor,
-        blendSrcAlpha: THREE.ZeroFactor,
-        blendDstAlpha: THREE.OneFactor,
-        opacity: 0,
-        fog: true,
-      }),
+      // Per lamp, instance colours carry how warmed up it is (0 off).
+      additive(
+        new THREE.MeshBasicMaterial({
+          map: radialGlow({ width: 128, height: 128, stops: [[0, 0.9], [0.35, 0.45], [0.7, 0.12], [1, 0]] }),
+          color: WARM.clone(),
+          opacity: 0,
+          fog: true,
+        }),
+      ),
       GROUND.lampPool,
       { depthWrite: false },
     );
@@ -507,7 +504,7 @@ function postLamp(): { metal: THREE.BufferGeometry; lens: THREE.BufferGeometry }
  * alpha kept (docs/graphics.md).
  */
 function haloShader(): THREE.ShaderMaterial {
-  return new THREE.ShaderMaterial({
+  return additiveOne(new THREE.ShaderMaterial({
     vertexShader: /* glsl */ `
       varying vec2 vUv;
       varying vec3 vHalo;
@@ -532,29 +529,8 @@ function haloShader(): THREE.ShaderMaterial {
         #include <tonemapping_fragment>
         #include <colorspace_fragment>
       }`,
-    transparent: true,
     depthWrite: false,
-    blending: THREE.CustomBlending,
-    blendSrc: THREE.OneFactor,
-    blendDst: THREE.OneFactor,
-    blendSrcAlpha: THREE.ZeroFactor,
-    blendDstAlpha: THREE.OneFactor,
     fog: false,
-  });
+  }));
 }
 
-/** A soft round pool: bright under the lamp, fading out to nothing at the rim. */
-function poolTexture(): THREE.CanvasTexture {
-  const size = 128;
-  const [canvas, ctx] = createCanvas(size, size);
-  const g = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
-  g.addColorStop(0, 'rgba(255,255,255,0.9)');
-  g.addColorStop(0.35, 'rgba(255,255,255,0.45)');
-  g.addColorStop(0.7, 'rgba(255,255,255,0.12)');
-  g.addColorStop(1, 'rgba(255,255,255,0)');
-  ctx.fillStyle = g;
-  ctx.fillRect(0, 0, size, size);
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.colorSpace = THREE.SRGBColorSpace;
-  return texture;
-}

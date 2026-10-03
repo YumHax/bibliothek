@@ -6,7 +6,8 @@ import type { SessionActions } from '@/game/SessionActions';
 import { LidMotion } from '../box/LidMotion';
 import { playLatchClick, playWoodKnock } from '@/audio/furnitureSounds';
 import { cylinderMesh, invisibleHitbox } from '../meshUtils';
-import { paint, standard } from '../materials/palette';
+import { paint } from '../materials/palette';
+import { GLASS } from '../materials/glass';
 import { Prop, part } from '../props/Prop';
 import { RENDER_ORDER } from '../surface/layers';
 
@@ -29,7 +30,6 @@ const SWING_SECONDS = 1.2;
 const BLOCKER_SWAP = 0.5;
 
 const PAINT = paint(0xf2efe8, 0.55);
-const GLASS = standard({ color: 0xd8e6ee, roughness: 0.04, metalness: 0, transparent: true, opacity: 0.14, depthWrite: false });
 const BRASS = new THREE.MeshStandardMaterial({ color: 0xc9a75b, metalness: 1, roughness: 0.32, emissive: 0xc9a75b, emissiveIntensity: 0 }); // convention-ok: a template, cloned per door (its handle glows on hover)
 
 /**
@@ -83,7 +83,7 @@ export class BalconyDoor extends Prop implements Updatable, Interactable {
     const gx1 = leafW - STILE;
     const gy0 = 0.22;
     const gy1 = leafH - STILE;
-    const glass = at(gx0, gy0, gx1 - gx0, gy1 - gy0, GLASS, 0.008);
+    const glass = at(gx0, gy0, gx1 - gx0, gy1 - gy0, GLASS.pane, 0.008);
     glass.castShadow = false;
     glass.renderOrder = RENDER_ORDER.glass;
     at((gx0 + gx1) / 2 - BAR / 2, gy0, BAR, gy1 - gy0, PAINT, LEAF_THICKNESS * 0.6);

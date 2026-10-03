@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { createCanvas, seededRandom, toTexture } from '@/covers/generated/canvasUtils';
+import { canvasTexture, createCanvas, seededRandom } from '@/covers/generated/canvasUtils';
 import { QUALITY } from '@/graphics/quality';
 
 /**
@@ -14,19 +14,9 @@ export interface Tile {
   roughness?: THREE.CanvasTexture;
 }
 
-function repeating(texture: THREE.CanvasTexture): THREE.CanvasTexture {
-  texture.wrapS = THREE.RepeatWrapping;
-  texture.wrapT = THREE.RepeatWrapping;
-  return texture;
-}
-
 function tiling(canvas: HTMLCanvasElement, metres: number, anisotropy: number, bump?: HTMLCanvasElement, roughness?: HTMLCanvasElement): Tile {
-  const data = (c: HTMLCanvasElement): THREE.CanvasTexture => {
-    const t = repeating(toTexture(c, anisotropy));
-    t.colorSpace = THREE.NoColorSpace;
-    return t;
-  };
-  return { texture: repeating(toTexture(canvas, anisotropy)), metres, bump: bump && data(bump), roughness: roughness && data(roughness) };
+  const data = (c: HTMLCanvasElement): THREE.CanvasTexture => canvasTexture(c, { data: true, anisotropy, repeat: true });
+  return { texture: canvasTexture(canvas, { anisotropy, repeat: true }), metres, bump: bump && data(bump), roughness: roughness && data(roughness) };
 }
 
 /** Speckles of lighter and darker grit over what is painted. */

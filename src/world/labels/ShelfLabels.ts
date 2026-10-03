@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { KEYS, PersistedStore, safeStorage } from '@/persistence';
-import { createCanvas } from '@/covers/generated/canvasUtils';
+import { createCanvas, toTexture } from '@/covers/generated/canvasUtils';
 import { markShared } from '../materials/sharedResources';
 import { WALL, onSurface } from '../surface/layers';
 import type { Shelf } from '../Shelf';
@@ -78,9 +78,7 @@ export class ShelfLabels {
     this.state = this.store.load();
     const [canvas, ctx] = createCanvas(ATLAS_W, ATLAS_H);
     this.ctx = ctx;
-    this.texture = markShared(new THREE.CanvasTexture(canvas));
-    this.texture.colorSpace = THREE.SRGBColorSpace;
-    this.texture.anisotropy = 4;
+    this.texture = markShared(toTexture(canvas, 'grazing'));
     // The cut ends see-through (alpha test, no sorting); the vinyl's gloss.
     this.material = markShared(onSurface(new THREE.MeshStandardMaterial({ map: this.texture, roughness: 0.32, alphaTest: 0.5 }), WALL.print));
     this.state.labels.forEach((label) => this.paint(label));

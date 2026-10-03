@@ -1,9 +1,11 @@
 import { seededRandom } from '@/covers/generated/canvasUtils';
 import { GROUND_FLOOR, STOREY, type FacadeSpec, type FlatFront, type ShopKind, type ShopSpec } from './streetPlan';
 import { LETTERING, SHOP_LOOKS, letteringFont } from '../city/shopLooks';
-import { balconyRows, facadeBays, facadeStyle, onBalcony, windowWidth, type FacadeStyle } from '../city/facadeStyle';
+import { balconyRows, facadeBays, facadeStyle, onBalcony, windowWidth, type FacadeStyle, type WindowHead } from '../city/facadeStyle';
 import type { RoofFurniture } from '../city/roofFurniture';
+import { shade } from '../city/colour';
 import type { FlatRoomId } from '../city/flatWindows';
+import { awningOut, frontVariant, pilasterWidth } from './shopfronts/shopfrontPlan';
 
 /** What a lit window shows of its room at night, drawn on the night map over its light (`Buildings`). Shares of the light's rect. */
 export interface LightInside {
@@ -67,24 +69,56 @@ export const RELIEF = { joint: 0.3, door: 0.25, wall: 0.5, shutter: 0.55, joiner
 /**
  * What the painter leaves for the 3D relief (`relief/`) to build in front of the painted wall, in
  * facade metres (s along from the left end, y up from the pavement): the awnings (no longer
- * painted), the balcony rows (slab and rail, no longer painted), the window sills, the display
- * windows and doors of the shops (glass for the interiors, surrounds), the shopfronts (shutters,
- * glow), the wall's and trim's colours, the downpipe and the cornice's line.
+ * painted), the balcony rows (slab and rail, no longer painted), the windows of a framed facade
+ * (`Casement`: built whole in 3D, `facadeWindows/`), the display windows and doors of the shops
+ * (glass for the interiors, surrounds), the shopfronts (shutters, glow), the wall's and trim's
+ * colours, the downpipe and the cornice's line.
  */
 export interface FacadeFeatures {
   wall: string;
   trim: string;
-  awnings: { s0: number; s1: number; colors: [string, string]; kind: ShopKind }[];
+  /** `out`: fixed that far out of the wall (to a built front's head), else on it. */
+  awnings: { s0: number; s1: number; colors: [string, string]; kind: ShopKind; out?: number }[];
   balconies: { s0: number; s1: number; y: number }[];
-  sills: { s0: number; s1: number; y: number }[];
+  casements: Casement[];
   windows: { s0: number; s1: number; y0: number; y1: number; kind: ShopKind; light: string; palette: readonly string[] }[];
   /** `step`: a stone step before a residents' door. */
   doors: { s: number; width: number; height: number; color: string; shop: boolean; step?: boolean }[];
   shopfronts: { s0: number; s1: number; kind: ShopKind; light: string; awning: boolean; name?: string }[];
+  /**
+   * The names on the fascias of the fronts built in 3D (`shopfronts/fasciaLettering`: sharp, not in the atlas): the
+   * middle of the lettering (s, y), its height (metres), the words, ink and font, the neon colour it burns in at night.
+   */
+  signs?: { s: number; y: number; size: number; text: string; color: string; font: string; neon?: string }[];
   /** Where the downpipe runs down from the gutter (along), if it has one. */
   downpipe: number | null;
   /** The cornice's underside over the street. */
   cornice: number;
+}
+
+/**
+ * A window of a framed facade, built in 3D in front of its painted glass (`facadeWindows/`): the opening (facade
+ * metres; `y1` the head's top, an arch's crown), how it is glazed (`sash`: a mullion and a transom; `tall`: a French
+ * window, a mullion and two transoms; `frosted`: no bars), its head (an arch's `rise` over its springing), the sill,
+ * the open shutters' paint and the flower box's flowers, if any. Only its glass, curtains and blind are painted.
+ */
+export interface Casement {
+  s0: number;
+  s1: number;
+  y0: number;
+  y1: number;
+  glazing: 'sash' | 'tall' | 'frosted';
+  head: WindowHead;
+  rise: number;
+  /** A carved pediment over its lintel (the first floor of a grand front). */
+  pediment: boolean;
+  sill: boolean;
+  frame: string;
+  trim: string;
+  /** The wall's paint, for a plain opening's surround. */
+  wall: string;
+  shutters: string | null;
+  flowers: string[] | null;
 }
 
 /** One painted facade: its night lights, its panes of glass, its relief, what stands out of it, and whether its wall is brick. */
@@ -111,6 +145,8 @@ const FROSTED_GLASS = 0.35;
 const ROUGH = { paint: 0.55, stone: 0.86, enamel: 0.3, metal: 0.4 } as const;
 /** The band over the top floor's windows, metres: the facade's top (each style's cornice runs `style.parapet` under it). */
 export const PARAPET = 1.1;
+/** The narrowest face that hangs balconies (m): a light well's are too close to the next wall. */
+const MIN_BALCONY_FRONT = 3;
 
 /** The height of a facade of `storeys` (ground floor included), parapet on top. */
 export function facadeHeight(storeys: number): number {
@@ -169,11 +205,6 @@ function pick<T>(random: () => number, items: readonly T[]): T {
   return items[Math.floor(random() * items.length)]!;
 }
 
-function shade(hex: string, k: number): string {
-  const n = parseInt(hex.slice(1), 16);
-  const c = (v: number) => Math.max(0, Math.min(255, Math.round(v * k)));
-  return `rgb(${c((n >> 16) & 255)}, ${c((n >> 8) & 255)}, ${c(n & 255)})`;
-}
 
 /**
  * Paints one facade into the colour atlas (`ctx`, at `slot`) and returns the lights it holds for
@@ -186,14 +217,17 @@ function shade(hex: string, k: number): string {
  * residents' door (its colour, number, bell panel and letterbox), ground-floor windows where there is
  * no shop, posters and tags on bare wall, the street's name plate on a corner. Each feature's relief
  * goes with it. `goods` colours the retro games shop's display (the day's market stock), when known.
+ * `framed`: the windows are built in 3D (`features.casements`): only their glass, curtains and blinds
+ * are painted, the frames, bars, sills, heads, shutters and flower boxes are the geometry's.
  */
-export function paintFacade(ctx: CanvasRenderingContext2D, spec: FacadeSpec, width: number, slot: AtlasSlot, goods: readonly string[] | null): PaintedFacade {
+export function paintFacade(ctx: CanvasRenderingContext2D, spec: FacadeSpec, width: number, slot: AtlasSlot, goods: readonly string[] | null, framed = false): PaintedFacade {
   const random = seededRandom(spec.seed * 7919);
   // The building's look is the neighbourhood's (`city/facadeStyle`): the window view paints the same front.
   const style = facadeStyle(spec.seed);
   const height = facadeHeight(spec.storeys);
   const cornice = height - style.parapet;
   const p = new Brush(ctx, slot, height, spec.seed);
+  p.framed = framed;
   p.features.wall = style.wall;
   p.features.trim = style.trim;
   p.features.cornice = cornice - 0.16;
@@ -238,7 +272,8 @@ export function paintFacade(ctx: CanvasRenderingContext2D, spec: FacadeSpec, wid
   const bays = facadeBays(width, spec.bays);
   const bay = width / bays;
   const winW = windowWidth(style, bay);
-  const balconies = balconyRows(style, spec.storeys, bays);
+  // None in a light well (a face a bay or two wide): they would run into the next wall's.
+  const balconies = width < MIN_BALCONY_FRONT ? [] : balconyRows(style, spec.storeys, bays);
   for (let storey = 1; storey < spec.storeys; storey++) {
     const floorY = GROUND_FLOOR + (storey - 1) * STOREY;
     // A string course at the floor, where the front has them.
@@ -263,12 +298,21 @@ export function paintFacade(ctx: CanvasRenderingContext2D, spec: FacadeSpec, wid
       const s0 = cx - winW / 2;
       const s1 = cx + winW / 2;
       const balcony = onBalcony(balconies, storey, b);
-      const inside = paintWindow(p, style, random, s0, y0, s1, y1, storey === 1 && !balcony);
-      if (style.shutters && !balcony) paintShutters(p, style, s0, y0, s1, y1, winW);
+      const inside = paintWindow(p, style, random, s0, y0, s1, y1, storey === 1 && !balcony, balcony);
+      // A framed facade's window was just recorded: its shutters and flower box are built with it.
+      const built = p.framed ? p.features.casements[p.features.casements.length - 1] : undefined;
+      if (style.shutters && !balcony) {
+        if (built) built.shutters = style.shutters;
+        else paintShutters(p, style, s0, y0, s1, y1, winW);
+      }
       if (!balcony && random() < style.flowers) {
-        p.rect(s0 - 0.05, y0 - 0.02, s1 + 0.05, y0 + 0.2, '#6a4a32');
-        for (let i = 0; i < 6; i++) p.rect(s0 + (i / 6) * winW, y0 + 0.15, s0 + ((i + 0.8) / 6) * winW, y0 + 0.32, pick(random, FLOWERS));
-        p.relief(s0 - 0.05, y0 - 0.02, s1 + 0.05, y0 + 0.32, RELIEF.sill, ROUGH.paint);
+        const flowers = Array.from({ length: 6 }, () => pick(random, FLOWERS));
+        if (built) built.flowers = flowers;
+        else {
+          p.rect(s0 - 0.05, y0 - 0.02, s1 + 0.05, y0 + 0.2, '#6a4a32');
+          flowers.forEach((flower, i) => p.rect(s0 + (i / 6) * winW, y0 + 0.15, s0 + ((i + 0.8) / 6) * winW, y0 + 0.32, flower));
+          p.relief(s0 - 0.05, y0 - 0.02, s1 + 0.05, y0 + 0.32, RELIEF.sill, ROUGH.paint);
+        }
       }
       // Its light at night: a home, now and then a TV, some empty all night.
       if (random() < 0.72) {
@@ -292,7 +336,7 @@ export function paintFacade(ctx: CanvasRenderingContext2D, spec: FacadeSpec, wid
   }
   p.rect(0, GROUND_FLOOR - 0.12, width, GROUND_FLOOR, style.trim);
   p.relief(0, GROUND_FLOOR - 0.12, width, GROUND_FLOOR, RELIEF.trim, ROUGH.stone);
-  for (const shop of spec.shops) paintShop(p, random, shop, goods);
+  for (const shop of spec.shops) paintShop(p, random, shop, goods, spec.detail);
   if (spec.door !== undefined) paintEntrance(p, style, spec.door);
   if (spec.shops.length === 0 && !spec.flat) paintGroundWindows(p, style, random, width, bays, spec.door);
   paintBareWall(p, random, spec, width);
@@ -329,10 +373,14 @@ function paintFlat(p: Brush, style: FacadeStyle, flat: FlatFront): void {
 
 /** A small obscured pane (a bathroom's, a bedroom's on the courtyard): reveal, milky glass, frame, a sill under it. */
 function paintFrostedGlass(p: Brush, style: FacadeStyle, s0: number, y0: number, s1: number, y1: number): void {
-  p.rect(s0 - 0.06, y0 - 0.03, s1 + 0.06, y1 + 0.04, 'rgba(0,0,0,0.3)');
+  if (!p.framed) p.rect(s0 - 0.06, y0 - 0.03, s1 + 0.06, y1 + 0.04, 'rgba(0,0,0,0.3)');
   p.rect(s0, y0, s1, y1, '#b9c2c4');
   p.glass(s0, y0, s1, y1, FROSTED_GLASS);
   p.rect(s0, y0 + (y1 - y0) * 0.55, s1, y1, 'rgba(235,240,242,0.35)');
+  if (p.framed) {
+    casement(p, style, { s0, s1, y0, y1, glazing: 'frosted', head: 'plain', rise: 0, pediment: false, sill: true });
+    return;
+  }
   const bar = Math.max(0.03, 1.5 / p.slot.k);
   p.rect(s0, y0, s1, y0 + bar, style.frame);
   p.rect(s0, y1 - bar, s1, y1, style.frame);
@@ -344,10 +392,14 @@ function paintFrostedGlass(p: Brush, style: FacadeStyle, s0: number, y0: number,
 
 /** A tall pane (a French window, a glazed door): reveal, glass, sky reflection, frame and bars, a head over it. */
 function paintTallGlass(p: Brush, style: FacadeStyle, s0: number, y0: number, s1: number, y1: number): void {
-  p.rect(s0 - 0.08, y0 - 0.04, s1 + 0.08, y1 + 0.06, 'rgba(0,0,0,0.32)');
+  if (!p.framed) p.rect(s0 - 0.08, y0 - 0.04, s1 + 0.08, y1 + 0.06, 'rgba(0,0,0,0.32)');
   p.rect(s0, y0, s1, y1, GLASS);
   p.glass(s0, y0, s1, y1, CLEAR_GLASS);
   p.rect(s0, y1 - (y1 - y0) * 0.3, s1, y1, 'rgba(160,185,210,0.22)');
+  if (p.framed) {
+    casement(p, style, { s0, s1, y0, y1, glazing: 'tall', head: 'lintel', rise: 0, pediment: false, sill: false });
+    return;
+  }
   const bar = Math.max(0.035, 1.5 / p.slot.k);
   p.rect(s0, y0, s1, y0 + bar, style.frame);
   p.rect(s0, y1 - bar, s1, y1, style.frame);
@@ -364,9 +416,11 @@ class Brush {
   readonly lights: NightLight[] = [];
   readonly panes: GlassPane[] = [];
   readonly reliefs: ReliefRect[] = [];
-  readonly features: FacadeFeatures = { wall: '#888888', trim: '#dddddd', awnings: [], balconies: [], sills: [], windows: [], doors: [], shopfronts: [], downpipe: null, cornice: 0 };
+  readonly features: FacadeFeatures = { wall: '#888888', trim: '#dddddd', awnings: [], balconies: [], casements: [], windows: [], doors: [], shopfronts: [], downpipe: null, cornice: 0 };
   /** The weather's marks (rain run off the sills): a draw of their own, so the facade's other details stay where they were. */
   readonly weather: () => number;
+  /** The windows are built in 3D (`Casement`): only their glass and what hangs behind it is painted. */
+  framed = false;
 
   constructor(
     readonly ctx: CanvasRenderingContext2D,
@@ -432,9 +486,10 @@ class Brush {
 /**
  * One window and its dressing: reveal, glass with the sky's reflection, curtains or a blind, frame and glazing bars,
  * sill and head (a lintel, a true segmental arch on its keystone, a triangular pediment over the main floor). Returns
- * what its room shows at night (`LightInside`).
+ * what its room shows at night (`LightInside`). On a framed facade only the glass and what hangs behind it are
+ * painted; the rest is recorded (`Casement`) for the 3D window. `balcony`: it opens onto one (no sill, the slab's there).
  */
-function paintWindow(p: Brush, style: FacadeStyle, random: () => number, s0: number, y0: number, s1: number, y1: number, nobile: boolean): LightInside {
+function paintWindow(p: Brush, style: FacadeStyle, random: () => number, s0: number, y0: number, s1: number, y1: number, nobile: boolean, balcony = false): LightInside {
   const w = s1 - s0;
   const mid = (s0 + s1) / 2;
   const arched = style.window === 'arched';
@@ -443,12 +498,12 @@ function paintWindow(p: Brush, style: FacadeStyle, random: () => number, s0: num
   const spring = y1 - rise;
   const arc = (r0: number, r1: number, ys: number, up: number, n = 8): [number, number][] =>
     Array.from({ length: n + 1 }, (_, i): [number, number] => [r1 - ((r1 - r0) * i) / n, ys + up * Math.sin((Math.PI * i) / n)]);
-  // Reveal, glass with the sky's reflection fading down.
+  // Reveal (the 3D surround's, on a framed facade), glass with the sky's reflection fading down.
   if (arched) {
-    p.poly([[s0 - 0.08, y0 - 0.06], [s1 + 0.08, y0 - 0.06], ...arc(s0 - 0.08, s1 + 0.08, spring, rise + 0.06)], 'rgba(0,0,0,0.3)');
+    if (!p.framed) p.poly([[s0 - 0.08, y0 - 0.06], [s1 + 0.08, y0 - 0.06], ...arc(s0 - 0.08, s1 + 0.08, spring, rise + 0.06)], 'rgba(0,0,0,0.3)');
     p.poly([[s0, y0], [s1, y0], ...arc(s0, s1, spring, rise)], GLASS);
   } else {
-    p.rect(s0 - 0.08, y0 - 0.06, s1 + 0.08, y1 + 0.06, 'rgba(0,0,0,0.3)');
+    if (!p.framed) p.rect(s0 - 0.08, y0 - 0.06, s1 + 0.08, y1 + 0.06, 'rgba(0,0,0,0.3)');
     p.rect(s0, y0, s1, y1, GLASS);
   }
   p.glass(s0, y0, s1, spring + rise * 0.5, CLEAR_GLASS);
@@ -471,6 +526,11 @@ function paintWindow(p: Brush, style: FacadeStyle, random: () => number, s0: num
   }
   if (random() < 0.6) inside.furniture = [random() * 0.4, 1 - random() * 0.3, 0.2 + random() * 0.15];
   if (random() < 0.14) inside.figure = 0.3 + random() * 0.4;
+  if (p.framed) {
+    casement(p, style, { s0, s1, y0, y1, glazing: 'sash', head: style.window, rise, pediment: style.window === 'pediment' && nobile, sill: !balcony });
+    if (!balcony) paintStreaks(p, s0, s1, y0 - 0.08);
+    return inside;
+  }
   const bar = Math.max(0.035, 1.5 / p.slot.k);
   p.rect(s0, y0, s1, y0 + bar, style.frame);
   p.rect(s0, spring - bar, s1, spring, style.frame);
@@ -481,7 +541,6 @@ function paintWindow(p: Brush, style: FacadeStyle, random: () => number, s0: num
   // Sill and head (the sill also stands out in 3D on the near facades).
   p.rect(s0 - 0.1, y0 - 0.08, s1 + 0.1, y0, style.trim);
   p.relief(s0 - 0.1, y0 - 0.08, s1 + 0.1, y0, RELIEF.sill, ROUGH.stone);
-  p.features.sills.push({ s0: s0 - 0.1, s1: s1 + 0.1, y: y0 });
   paintStreaks(p, s0, s1, y0 - 0.08);
   if (style.window === 'lintel' || style.window === 'pediment') {
     p.rect(s0 - 0.12, y1 + 0.02, s1 + 0.12, y1 + 0.2, style.trim);
@@ -504,6 +563,11 @@ function paintWindow(p: Brush, style: FacadeStyle, random: () => number, s0: num
     p.relief(mid - 0.08, y1 - 0.02, mid + 0.08, y1 + 0.26, RELIEF.sill, ROUGH.stone);
   }
   return inside;
+}
+
+/** Records a framed facade's window (`Casement`) in its style's paints; its shutters and flowers are the caller's. */
+function casement(p: Brush, style: FacadeStyle, opening: Pick<Casement, 's0' | 's1' | 'y0' | 'y1' | 'glazing' | 'head' | 'rise' | 'pediment' | 'sill'>): void {
+  p.features.casements.push({ ...opening, frame: style.frame, trim: style.trim, wall: style.wall, shutters: null, flowers: null });
 }
 
 /** Open louvred shutters either side of a window. */
@@ -533,7 +597,7 @@ function paintGroundWindows(p: Brush, style: FacadeStyle, random: () => number, 
   }
 }
 
-function paintShop(p: Brush, random: () => number, shop: ShopSpec, goods: readonly string[] | null): void {
+function paintShop(p: Brush, random: () => number, shop: ShopSpec, goods: readonly string[] | null, detail: number): void {
   const { from: s0, to: s1 } = shop;
   if (shop.kind === 'shut') {
     // A shop that has shut for good: a roller shutter, tagged.
@@ -559,10 +623,15 @@ function paintShop(p: Brush, random: () => number, shop: ShopSpec, goods: readon
   p.rect(s0, 3.7, s1, 3.75, 'rgba(255,255,255,0.12)');
   // Its own name when the plan gives one ('SUNNY SIDE CAFE'), else its trade's, in its own lettering.
   const name = shop.name ?? look.name;
+  // A front built in 3D (`shopfronts/`) letters its board itself, sharp; a far one keeps its name in the paint.
+  const variant = frontVariant(detail, shop.kind);
   if (name && !look.signed) {
     const size = Math.min(0.5, (width * 0.9) / (name.length * 0.62));
-    p.text(name, (s0 + s1) / 2, 3.4, size, look.letters, look.font);
-    if (look.neon) p.light(s0 + width * 0.15, 3.15, s1 - width * 0.15, 3.65, look.neon, 0.02, 0);
+    if (variant) (p.features.signs ??= []).push({ s: (s0 + s1) / 2, y: 3.4, size, text: name, color: look.letters, font: look.font, ...(look.neon ? { neon: look.neon } : {}) });
+    else {
+      p.text(name, (s0 + s1) / 2, 3.4, size, look.letters, look.font);
+      if (look.neon) p.light(s0 + width * 0.15, 3.15, s1 - width * 0.15, 3.65, look.neon, 0.02, 0);
+    }
   }
   // The door (where the plan says, else somewhere along), display windows either side of it.
   const door = shop.door ?? s0 + 0.9 + random() * Math.max(0, width - 1.8);
@@ -600,7 +669,9 @@ function paintShop(p: Brush, random: () => number, shop: ShopSpec, goods: readon
   }
   // An awning over the windows: built in 3D (`relief/FacadeRelief`); its shade on the wall is painted.
   if (look.awning) {
-    p.features.awnings.push({ s0: s0 + 0.1, s1: s1 - 0.1, colors: look.awning, kind: shop.kind });
+    // Between a built front's pilasters, hung from its head.
+    const inset = Math.max(0.1, pilasterWidth(variant) + 0.01);
+    p.features.awnings.push({ s0: s0 + inset, s1: s1 - inset, colors: look.awning, kind: shop.kind, out: awningOut(variant) });
     p.rect(s0 + 0.1, 2.55, s1 - 0.1, 3.0, 'rgba(0,0,0,0.14)');
   }
   // The arcade: its windows glow with the cabinets' screens, day and night.

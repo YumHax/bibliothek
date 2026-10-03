@@ -49,12 +49,12 @@ export class StreetPark extends THREE.Group implements Furniture, Updatable {
     const y = options.lawnY + GROUND.marking.lift;
     const inside = (x: number, z: number): boolean => x > options.reach && x < PARK_STREET.hedge - 0.6 && z > STREET_ENDS.south;
 
-    // The paths: a quad per straight stretch, clipped to the lawn, uvs in metres along and across.
+    // The paths: a quad per straight stretch, clipped to the lawn. The uvs are the ground's own (metres in x and z,
+    // the gravel has no grain): where two stretches overlap at a bend they show the same gravel, nothing to flicker.
     const positions: number[] = [];
     const uvs: number[] = [];
     const tile = gravelTile(options.anisotropy);
     for (const path of PARK_PATHS) {
-      let run = 0;
       for (let i = 1; i < path.length; i++) {
         const a = inStreet(path[i - 1]!);
         const b = inStreet(path[i]!);
@@ -69,13 +69,12 @@ export class StreetPark extends THREE.Group implements Furniture, Updatable {
           if (!inside(...p0) || !inside(...p1)) continue;
           const nx = (-(b[1] - a[1]) / length) * (PATH_WIDTH / 2);
           const nz = ((b[0] - a[0]) / length) * (PATH_WIDTH / 2);
-          const s0 = (run + length * t0) / tile.metres;
-          const s1 = (run + length * t1) / tile.metres;
-          const w = PATH_WIDTH / tile.metres;
-          positions.push(p0[0] - nx, y, p0[1] - nz, p1[0] - nx, y, p1[1] - nz, p1[0] + nx, y, p1[1] + nz, p0[0] - nx, y, p0[1] - nz, p1[0] + nx, y, p1[1] + nz, p0[0] + nx, y, p0[1] + nz);
-          uvs.push(s0, 0, s1, 0, s1, w, s0, 0, s1, w, s0, w);
+          const corners: Vec2[] = [[p0[0] - nx, p0[1] - nz], [p1[0] - nx, p1[1] - nz], [p1[0] + nx, p1[1] + nz], [p0[0] - nx, p0[1] - nz], [p1[0] + nx, p1[1] + nz], [p0[0] + nx, p0[1] + nz]];
+          for (const [x, z] of corners) {
+            positions.push(x, y, z);
+            uvs.push(x / tile.metres, z / tile.metres);
+          }
         }
-        run += length;
       }
     }
     if (positions.length) {
@@ -94,7 +93,8 @@ export class StreetPark extends THREE.Group implements Furniture, Updatable {
     const beds = FLOWER_BEDS.map(([x, z, r]) => ({ at: inStreet([x, z]), r })).filter(({ at: [x, z], r }) => inside(x - r, z) && inside(x + r, z));
     const season = currentSeason();
     const bloom = season.name === 'spring' ? 0.8 : season.name === 'summer' ? 1 : season.name === 'autumn' ? 0.4 * (1 - season.depth) : 0;
-    const soil = onSurface(new THREE.MeshStandardMaterial({ color: 0x4a3526, roughness: 0.98 }), GROUND.marking);
+    // Over the paths where a bed rounds a crossing of them.
+    const soil = onSurface(new THREE.MeshStandardMaterial({ color: 0x4a3526, roughness: 0.98 }), GROUND.patch);
     const random = seededRandom(707);
     const flowers: THREE.Matrix4[] = [];
     const colors: THREE.Color[] = [];

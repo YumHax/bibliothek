@@ -3,6 +3,8 @@ import { createCanvas, toTexture } from '@/graphics/canvas';
 import type { Furniture } from '../Furniture';
 import { timber } from '../materials/palette';
 import { part } from '../props/Prop';
+import { faceOn } from '../props/joinery';
+import { WALL } from '../surface/layers';
 
 /** What the board shows: the lot being called, or a notice (no sale today, the sale over). */
 export type BoardFace =
@@ -33,10 +35,8 @@ export class SaleBoard extends THREE.Group implements Furniture {
     this.texture = toTexture(this.canvas);
     // The letters are lit (a sale board's bulbs): they read across the room whatever the lamp.
     this.material = new THREE.MeshStandardMaterial({ map: this.texture, emissiveMap: this.texture, emissive: 0xffffff, emissiveIntensity: 0.55, roughness: 0.7 });
-    part(this, WIDTH + 0.08, HEIGHT + 0.08, 0.04, FRAME, { z: 0.02 });
-    const face = new THREE.Mesh(new THREE.PlaneGeometry(WIDTH, HEIGHT), this.material);
-    face.position.z = 0.042;
-    this.add(face);
+    const frame = part(this, WIDTH + 0.08, HEIGHT + 0.08, 0.04, FRAME, { z: 0.02 });
+    this.add(faceOn(new THREE.Mesh(new THREE.PlaneGeometry(WIDTH, HEIGHT), this.material), frame, WALL.notice));
     this.show({ kind: 'notice', title: 'SALEROOM', lines: ['…'] });
   }
 

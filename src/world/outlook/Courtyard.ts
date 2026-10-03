@@ -1,9 +1,10 @@
 import * as THREE from 'three';
 import type { Updatable } from '@/core/Engine';
-import { createCanvas, roundRect, seededRandom, toTexture } from '@/covers/generated/canvasUtils';
+import { createCanvas, roundRect, seededRandom, toTexture, repeatTexture } from '@/covers/generated/canvasUtils';
 import type { Furniture } from '../Furniture';
 import type { DayNight } from '../props/DayNight';
 import { part } from '../props/Prop';
+import { gapAt } from '../surface/layers';
 import { paint } from '../materials/palette';
 import { seasonalLawn } from '../props/outdoors/paint';
 import { QuadBuilder } from '../street/QuadBuilder';
@@ -55,11 +56,15 @@ export class Courtyard extends THREE.Group implements Furniture, Updatable {
 
     // The workshop's back: a rendered wall with a door and two barred windows, a tarred flat roof behind its parapet.
     const wall = paint(workshop.wall, 0.92);
-    const depthZ = workshop.z1 - workshop.z0;
+    // Its block stands back from its street front (the street's `courtWorkshop` facade is its face) and runs into the
+    // buildings either end: flush, its faces would lie in theirs, seen down the length of the yard.
+    const tuck = gapAt(140);
+    const depthZ = workshop.z1 - workshop.z0 + 2 * tuck;
     const midZ = (workshop.z0 + workshop.z1) / 2;
-    const widthX = workshop.x1 - workshop.x0;
-    part(this, widthX, WORKSHOP_HEIGHT, depthZ, wall, { x: workshop.x0 + widthX / 2, y: WORKSHOP_HEIGHT / 2, z: midZ });
-    part(this, widthX - 0.4, 0.04, depthZ - 0.4, paint(workshop.roof, 0.95), { x: workshop.x0 + widthX / 2, y: WORKSHOP_HEIGHT - 0.5, z: midZ });
+    const widthX = workshop.x1 - workshop.x0 - tuck;
+    const midX = workshop.x1 - widthX / 2;
+    part(this, widthX, WORKSHOP_HEIGHT, depthZ, wall, { x: midX, y: WORKSHOP_HEIGHT / 2, z: midZ });
+    part(this, widthX - 0.4, 0.04, depthZ - 0.4, paint(workshop.roof, 0.95), { x: midX, y: WORKSHOP_HEIGHT - 0.5, z: midZ });
     part(this, 0.12, 0.08, depthZ + 0.1, paint(0x8a8680, 0.8), { x: workshop.x1 + 0.02, y: WORKSHOP_HEIGHT + 0.04, z: midZ });
     const face = workshop.x1 + 0.012;
     part(this, 0.03, 2.15, 1.0, paint(0x3a3430, 0.7), { x: face, y: 1.075, z: workshop.door });
@@ -96,8 +101,7 @@ export class Courtyard extends THREE.Group implements Furniture, Updatable {
   }
 
   private surface(geometry: THREE.BufferGeometry, texture: THREE.Texture, roughness: number, soaks: number): void {
-    texture.wrapS = THREE.RepeatWrapping;
-    texture.wrapT = THREE.RepeatWrapping;
+    repeatTexture(texture);
     const material = new THREE.MeshStandardMaterial({ map: texture, roughness, envMapIntensity: 0.6 });
     this.add(new THREE.Mesh(geometry, material));
     this.surfaces.push({ material, dry: material.color.clone(), roughness, soaks });
@@ -154,8 +158,10 @@ export class Courtyard extends THREE.Group implements Furniture, Updatable {
   /** Bikes leaned on the wing's wall: two wheels and a frame each, seen side on from the yard. */
   private bikes(): void {
     const tyre = paint(0x1c1c1c, 0.8);
-    for (const { at, color } of yard.bikes) {
-      const [x, z] = at;
+    for (const [i, { at, color }] of yard.bikes.entries()) {
+      // Every other one stands a little further out, as in a rack: side by side their top tubes would run into each other.
+      const x = at[0] - (i % 2) * 0.08;
+      const z = at[1];
       const frame = paint(color, 0.45);
       for (const dz of [-0.52, 0.52]) {
         const wheel = new THREE.Mesh(WHEEL, tyre);

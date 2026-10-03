@@ -1,7 +1,7 @@
 import * as THREE from 'three';
-import { createCanvas } from '@/covers/generated/canvasUtils';
+import { createCanvas, toTexture } from '@/covers/generated/canvasUtils';
 import { fabric } from '@/world/materials/finishes';
-import { FLOOR } from '@/world/surface/layers';
+import { FLOOR, layMesh } from '@/world/surface/layers';
 import { Prop } from './Prop';
 
 export interface CarpetBorderOptions {
@@ -44,13 +44,14 @@ export class CarpetBorder extends Prop {
     ];
     for (const [x, z, length, alongX] of strips) {
       const map = texture.clone();
-      map.wrapS = THREE.RepeatWrapping;
+      map.wrapS = THREE.RepeatWrapping; // convention-ok: wraps one way only
       map.repeat.set(length / TILE_M, 1);
       const mat = fabric({ map, emissive: 0xffffff, emissiveMap: map, emissiveIntensity: 0.35, roughness: 1 });
       const strip = new THREE.Mesh(new THREE.PlaneGeometry(length, band), mat);
       strip.rotation.x = -Math.PI / 2;
       if (!alongX) strip.rotation.z = Math.PI / 2;
       strip.position.set(x, THICKNESS, z);
+      layMesh(strip, FLOOR.border);
       strip.receiveShadow = true;
       strip.castShadow = false;
       this.add(strip);
@@ -76,7 +77,5 @@ function paintBand(a: number, b: number): THREE.CanvasTexture {
     ctx.lineTo(x + 32, 40);
     ctx.stroke();
   }
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.colorSpace = THREE.SRGBColorSpace;
-  return texture;
+  return toTexture(canvas);
 }

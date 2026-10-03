@@ -109,7 +109,7 @@ function paintTop(card: THREE.Color, random: () => number): THREE.Texture {
   ctx.fillStyle = TAPE;
   ctx.fillRect(108, 0, 40, 256);
   if (random() < 0.5) ctx.fillRect(0, 100 + random() * 50, 256, 34);
-  return toTexture(canvas, 2);
+  return toTexture(canvas, 'facing');
 }
 
 function paintFront(card: THREE.Color, label: string, random: () => number): THREE.Texture {
@@ -128,5 +128,5 @@ function paintFront(card: THREE.Color, label: string, random: () => number): THR
   ctx.font = `bold 46px ${FONT}`;
   ctx.fillText(label, 0, 0, 220);
   ctx.restore();
-  return toTexture(canvas, 2);
+  return toTexture(canvas, 'facing');
 }

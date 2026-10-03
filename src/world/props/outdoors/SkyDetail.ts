@@ -1,12 +1,17 @@
 import * as THREE from 'three';
-import { createCanvas } from '@/covers/generated/canvasUtils';
+import { createCanvas, canvasTexture } from '@/covers/generated/canvasUtils';
 import { QUALITY } from '@/graphics/quality';
 import type { Rng } from './Sheet';
 import { between } from './paint';
 
-/** Equirectangular size of the sky map: 360° across, 180° down; the sky needs far less detail than the scenery. */
-const W = 2048;
-const H = 1024;
+/**
+ * Equirectangular size of the sky map: 360° across, 180° down. 2048 across is 5.7 texels a degree, three times
+ * magnified on a 1440p screen (soft cumulus, stars as blobs): twice that but on low. Everything is drawn in
+ * texels of the 2048 map times `K`, so the clouds keep their shapes at either size.
+ */
+const K = QUALITY.level === 'low' ? 1 : 2;
+const W = 2048 * K;
+const H = 1024 * K;
 const PX_PER_RAD = W / (Math.PI * 2);
 
 /** Texture y of an elevation above the horizon. */
@@ -28,7 +33,8 @@ export function paintSkyDetail(random: Rng): THREE.CanvasTexture {
     const bright = random();
     ctx.fillStyle = `rgb(${Math.round(90 + 165 * bright * bright)},0,0)`;
     ctx.beginPath();
-    ctx.arc(random() * W, random() * (H / 2 - 20), 0.5 + bright * 1.3, 0, Math.PI * 2);
+    // A star is a point: finer on the larger map, not just as big.
+    ctx.arc(random() * W, random() * (H / 2 - 20 * K), (0.5 + bright * 1.3) * Math.sqrt(K), 0, Math.PI * 2);
     ctx.fill();
   }
 
@@ -39,13 +45,13 @@ export function paintSkyDetail(random: Rng): THREE.CanvasTexture {
     const scale = 0.45 + (elevation / THREE.MathUtils.degToRad(34)) * 0.9;
     const cx = random() * W;
     const base = skyY(elevation);
-    const width = between(random, 50, 130) * scale;
+    const width = between(random, 50, 130) * scale * K;
     const height = width * between(random, 0.28, 0.45);
     const puffs = Array.from({ length: 6 + Math.floor(random() * 7) }, () => {
       const dx = (random() - 0.5) * width;
       // Taller in the middle of the heap.
       const rise = (1 - Math.abs(dx) / (width * 0.6)) * height;
-      return { dx, dy: -between(random, 0.2, 0.8) * rise, r: between(random, 0.35, 0.6) * height + 6 * scale };
+      return { dx, dy: -between(random, 0.2, 0.8) * rise, r: between(random, 0.35, 0.6) * height + 6 * scale * K };
     });
     for (const x of [cx - W, cx, cx + W]) {
       ctx.save();
@@ -72,9 +78,9 @@ export function paintSkyDetail(random: Rng): THREE.CanvasTexture {
   for (let i = 0; i < 16; i++) {
     const y = skyY(THREE.MathUtils.degToRad(between(random, 30, 65)));
     const cx = random() * W;
-    const len = between(random, 120, 320);
+    const len = between(random, 120, 320) * K;
     const tilt = between(random, -0.08, 0.08);
-    const strands = Array.from({ length: 5 }, () => ({ oy: between(random, -6, 6), alpha: between(random, 0.15, 0.35), thick: between(random, 2, 4) }));
+    const strands = Array.from({ length: 5 }, () => ({ oy: between(random, -6, 6) * K, alpha: between(random, 0.15, 0.35), thick: between(random, 2, 4) * K }));
     for (const x of [cx - W, cx, cx + W]) {
       for (const { oy, alpha, thick } of strands) {
         const g = ctx.createLinearGradient(-len / 2, 0, len / 2, 0);
@@ -85,16 +91,14 @@ export function paintSkyDetail(random: Rng): THREE.CanvasTexture {
         ctx.translate(x, y + oy);
         ctx.rotate(tilt);
         ctx.fillStyle = g;
-        ctx.fillRect(-len / 2, -1.5, len, thick);
+        ctx.fillRect(-len / 2, -1.5 * K, len, thick);
         ctx.restore();
       }
     }
   }
   ctx.globalCompositeOperation = 'source-over';
 
-  const tex = new THREE.CanvasTexture(canvas);
-  tex.colorSpace = THREE.NoColorSpace;
-  tex.anisotropy = QUALITY.anisotropy;
-  tex.wrapS = THREE.RepeatWrapping;
+  const tex = canvasTexture(canvas, { data: true });
+  tex.wrapS = THREE.RepeatWrapping; // convention-ok: wraps round the horizon only
   return tex;
 }

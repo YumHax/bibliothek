@@ -1,5 +1,7 @@
 import * as THREE from 'three';
 import { afterChunk, patchShader, VALUE_NOISE } from './shaderPatch';
+import { additiveOne } from '@/world/materials/blend';
+import { RENDER_ORDER, WALL, layMesh } from '../surface/layers';
 
 /** How strong the glass's reflection is in full day (the bright outside drowns it) and at night (the room shows in the dark pane). */
 const REFLECT_DAY = 0.6;
@@ -20,12 +22,7 @@ export class PaneReflection {
   constructor() {
     this.material = new THREE.MeshStandardMaterial({ color: 0x000000, roughness: 0.05, metalness: 0, transparent: true, depthWrite: false, fog: false });
     const m = this.material;
-    m.blending = THREE.CustomBlending;
-    m.blendEquation = THREE.AddEquation;
-    m.blendSrc = THREE.OneFactor;
-    m.blendDst = THREE.OneFactor;
-    m.blendSrcAlpha = THREE.ZeroFactor;
-    m.blendDstAlpha = THREE.OneFactor;
+    additiveOne(m);
     const uniforms = { paneStrength: this.strength };
     patchShader(m, 'paneReflection', (shader) => {
       Object.assign(shader.uniforms, uniforms);
@@ -41,6 +38,21 @@ export class PaneReflection {
           'gl_FragColor.rgb *= paneStrength * (1.0 - 0.35 * smudge);\ngl_FragColor.a = 0.0;',
         );
     });
+  }
+
+  /**
+   * The reflection over a pane of `geometry` (its own mesh, sharing the geometry), in front of it by its wall layer
+   * (`WALL.paneReflection`: behind the mullions' faces and any curtain), drawn after the glass. Any number of panes
+   * share this one material (their strength is one).
+   */
+  over(geometry: THREE.BufferGeometry, z = 0): THREE.Mesh {
+    const mesh = layMesh(new THREE.Mesh(geometry, this.material), WALL.paneReflection);
+    mesh.position.z = z + WALL.paneReflection.lift;
+    mesh.renderOrder = RENDER_ORDER.sheen;
+    mesh.castShadow = false;
+    mesh.receiveShadow = false;
+    mesh.raycast = () => {};
+    return mesh;
   }
 
   /** 0 night .. 1 full day. */

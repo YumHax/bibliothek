@@ -1,8 +1,10 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { createCanvas, seededRandom, toTexture } from '@/covers/generated/canvasUtils';
+import { createCanvas, seededRandom, toTexture, repeatTexture } from '@/covers/generated/canvasUtils';
 import { Prop } from '../props/Prop';
+import { PROUD } from '../props/joinery';
 import { ATTIC_PLAN as plan, type AtticRect } from './atticPlan';
+import { paintOnce } from '../materials/paintedTiles';
 
 type Finish = 'plaster' | 'ceiling' | 'floor' | 'boards' | 'wood';
 
@@ -23,7 +25,7 @@ const AO = { floor: 0.62, ceiling: 0.8, band: 0.35 };
 export class AtticShell extends Prop {
   readonly contactShadow = false;
   readonly colliders: THREE.Box3[] = [];
-  readonly skyGlass = new THREE.MeshBasicMaterial({ color: 0x8aa0b8, toneMapped: false });
+  readonly skyGlass = new THREE.MeshBasicMaterial({ color: 0x8aa0b8 });
   private readonly parts = new Map<Finish, THREE.BufferGeometry[]>();
 
   constructor() {
@@ -35,8 +37,8 @@ export class AtticShell extends Prop {
     const materials: Record<Finish, THREE.MeshStandardMaterial> = {
       plaster: new THREE.MeshStandardMaterial({ color: 0xd8ccb4, roughness: 0.95, vertexColors: true }),
       ceiling: new THREE.MeshStandardMaterial({ color: 0xe2d9c6, roughness: 0.95, vertexColors: true }),
-      floor: new THREE.MeshStandardMaterial({ map: tometteTexture(), roughness: 0.8, vertexColors: true }),
-      boards: new THREE.MeshStandardMaterial({ map: boardsTexture(), roughness: 0.75, vertexColors: true }),
+      floor: new THREE.MeshStandardMaterial({ map: paintOnce('attic:tomette', () => [tometteTexture()] as const)[0], roughness: 0.8, vertexColors: true }),
+      boards: new THREE.MeshStandardMaterial({ map: paintOnce('attic:boards', () => [boardsTexture()] as const)[0], roughness: 0.75, vertexColors: true }),
       wood: new THREE.MeshStandardMaterial({ color: 0x4a3524, roughness: 0.7, vertexColors: true }),
     };
     for (const [finish, geometries] of this.parts) {
@@ -88,11 +90,12 @@ export class AtticShell extends Prop {
     this.wall('plaster', east, r.z0, east, d0, 0, h);
     this.wall('plaster', east, d1, east, r.z1, 0, h);
     this.wall('plaster', east, d0, east, d1, doorway.height, h);
-    // The doorway's jambs and lintel through the partition (its door long gone).
+    // The doorway's jambs and lintel through the partition (its door long gone), proud of both its faces (flush, their
+    // sides would lie in the plaster's planes).
     const west = r.x1 + T / 2;
-    this.box('wood', east, 0, d0 - 0.05, west, doorway.height + 0.05, d0);
-    this.box('wood', east, 0, d1, west, doorway.height + 0.05, d1 + 0.05);
-    this.box('wood', east, doorway.height, d0, west, doorway.height + 0.05, d1);
+    this.box('wood', east - PROUD, 0, d0 - 0.05, west + PROUD, doorway.height + 0.05, d0);
+    this.box('wood', east - PROUD, 0, d1, west + PROUD, doorway.height + 0.05, d1 + 0.05);
+    this.box('wood', east - PROUD, doorway.height, d0, west + PROUD, doorway.height + 0.05, d1);
     // The street wall up to the slope's foot, the slope over it (the mansard's brisis) up to the ceiling.
     this.wall('plaster', east, r.z1, r.x0, r.z1, 0, slope.foot);
     this.slopePlane(r.x0, east, r.z1, slope.foot, slopeZ, h, skylights);
@@ -268,9 +271,8 @@ function tometteTexture(): THREE.CanvasTexture {
     ctx.fillStyle = random() < 0.5 ? 'rgba(230, 200, 170, 0.08)' : 'rgba(40, 20, 10, 0.1)';
     ctx.fillRect(random() * px, random() * px, 1 + random() * 3, 1 + random() * 2);
   }
-  const texture = toTexture(canvas, 8);
-  texture.wrapS = THREE.RepeatWrapping;
-  texture.wrapT = THREE.RepeatWrapping;
+  const texture = toTexture(canvas, 'grazing');
+  repeatTexture(texture);
   return texture;
 }
 
@@ -300,8 +302,7 @@ function boardsTexture(): THREE.CanvasTexture {
     ctx.fillStyle = 'rgba(225, 218, 205, 0.12)';
     ctx.fillRect(random() * px, random() * px, 2, 2);
   }
-  const texture = toTexture(canvas, 8);
-  texture.wrapS = THREE.RepeatWrapping;
-  texture.wrapT = THREE.RepeatWrapping;
+  const texture = toTexture(canvas, 'grazing');
+  repeatTexture(texture);
   return texture;
 }

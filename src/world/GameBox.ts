@@ -136,7 +136,7 @@ export class GameBox extends THREE.Mesh<THREE.BoxGeometry, THREE.Material[]> imp
   private wishCard: WishCard | null = null;
   private status: GameStatus = 'owned';
   private lentTag: LentTag | null = null;
-  private anisotropy = 1;
+  private anisotropy = 1; // convention-ok: until the art arrives, then the art set's own (the loader's GPU maximum)
   /** A `worn` copy keeps a dulled cover (see `BoxCondition`). */
   private readonly worn: boolean;
   /** False for a copy sold without its booklet (or a worn one). */

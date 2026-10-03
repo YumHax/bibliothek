@@ -15,7 +15,9 @@ import type { Outdoors } from './outdoors/Outdoors';
 import type { DrawnAware } from '../zone/Zone';
 import { ShadowRefresh } from '../lighting/shadowRefresh';
 import { PaneReflection } from '../materials/paneReflection';
-import { RENDER_ORDER } from '../surface/layers';
+import { WALL, layMesh } from '../surface/layers';
+import { markGlass, unmarkGlass } from '@/graphics/glassMask';
+import type { OutlookLease } from '../outlook/sharedOutlook';
 import { normalBiasAt, snapDirection, texelAngle } from './shadowTexels';
 
 export interface WindowOptions {
@@ -47,6 +49,12 @@ export interface WindowOptions {
    * where the panorama's eye is (a neighbour's flat). Laid flush with the pane, local +z into the room.
    */
   glass?: THREE.Object3D;
+  /**
+   * The street itself through the glass (`outlook/sharedOutlook`: `homeOutlook` for the flat's rooms on medium and
+   * high), instead of the painted panorama: a pane of that view, ticked, prefetched and released with the window.
+   * Null or absent: the panorama (or `glass`).
+   */
+  outlook?: OutlookLease | null;
 }
 
 /** Height of the steel kick rail between the floor and the glass (hides the baseboard). */
@@ -68,8 +76,6 @@ const SUN_GRAZE = 0.12;
 const SUN_SPOT_MIN = 0.6;
 /** Soft light of the sky through the glass (a rect area light, `QUALITY.areaLights`): its brightness in full daylight. */
 const SKY_PANEL_INTENSITY = 1.6;
-/** Local z of the pane's reflection: just in front of the pane, behind the mullions' faces and any curtain. */
-const PANE_REFLECTION_Z = 0.006;
 /** The curtain hem hangs this far above the floor. */
 const HEM_CLEARANCE = 0.015;
 
@@ -90,7 +96,7 @@ const HEM_CLEARANCE = 0.015;
  * with them) and report their openness through `onCurtainsChange` so the room's skylight follows.
  */
 export class RoomWindow extends Prop implements Updatable, Interactable, OccupancyAware, DrawnAware {
-  readonly options: Required<Omit<WindowOptions, 'onCurtainsChange' | 'glass'>> & Pick<WindowOptions, 'onCurtainsChange' | 'glass'>;
+  readonly options: Required<Omit<WindowOptions, 'onCurtainsChange' | 'glass' | 'outlook'>> & Pick<WindowOptions, 'onCurtainsChange' | 'glass' | 'outlook'>;
   /** Local y of the floor (the bottom of the kick rail). */
   readonly floorY: number;
   private readonly unsubscribe: () => void;
@@ -115,6 +121,9 @@ export class RoomWindow extends Prop implements Updatable, Interactable, Occupan
   private readonly reflection = new PaneReflection();
   private sky: SkyState | null = null;
   private readonly worldQuaternion = new THREE.Quaternion();
+  /** The pane of the street's 3D view (`outlook`), or of the painted panorama: one of them. */
+  private readonly outlookPane: THREE.Mesh | null = null;
+  private readonly panoramaPane: THREE.Mesh | null = null;
   private readonly lightDir = new THREE.Vector3();
   /** `lightDir` snapped to whole shadow texels: where the spot actually stands (see `apply`). */
   private readonly aimDir = new THREE.Vector3();
@@ -134,18 +143,27 @@ export class RoomWindow extends Prop implements Updatable, Interactable, Occupan
     const { width: w, height: h } = this.options;
     this.floorY = -h / 2 - KICK;
 
-    // The pane, flush with the wall: the outside, seen through it (the panorama, or the caller's own view).
-    const pane = new THREE.Mesh(new THREE.PlaneGeometry(w, h), outdoors.material);
-    pane.position.z = 0.004;
-    if (options.glass) {
-      options.glass.position.z = 0.004;
+    // The pane, flush with the wall: the outside, seen through it (the panorama, the street's 3D view, or the caller's own).
+    // The panorama's material is the panes' alone (the balcony's surround has its own on the same uniforms): its layer is theirs.
+    const pane = layMesh(new THREE.Mesh(new THREE.PlaneGeometry(w, h), outdoors.material), WALL.pane);
+    pane.position.z = WALL.pane.lift;
+    const lease = options.outlook;
+    if (lease) {
+      this.outlookPane = lease.view.pane(w, h, lease.toOutlook);
+      this.outlookPane.position.z = WALL.pane.lift;
+      // The street is heard through it (`Outdoors.panesIn`).
+      this.outlookPane.userData.streetPane = true;
+      this.add(this.outlookPane);
+    } else if (options.glass) {
+      options.glass.position.z = WALL.pane.lift;
       this.add(options.glass);
-    } else this.add(pane);
+    } else {
+      this.add(pane);
+      markGlass(pane);
+      this.panoramaPane = pane;
+    }
     // Over it, the room given back by the glass: faint by day, the lit room in the dark pane at night.
-    const reflection = new THREE.Mesh(pane.geometry, this.reflection.material);
-    reflection.position.z = PANE_REFLECTION_Z;
-    reflection.renderOrder = RENDER_ORDER.sheen;
-    this.add(reflection);
+    this.add(this.reflection.over(pane.geometry));
 
     // Black steel frame: side rails from the floor to the head, a head rail, a kick rail down to
     // the floor (tall enough to swallow the baseboard), then the grid of mullions.
@@ -223,9 +241,12 @@ export class RoomWindow extends Prop implements Updatable, Interactable, Occupan
     this.unsubscribe = this.dayNight.onChange((sky) => this.apply(sky));
   }
 
-  /** Stops following the clock (the zone unloading it calls this). */
+  /** Stops following the clock (the zone unloading it calls this), lets go of the street's view. */
   dispose(): void {
     this.unsubscribe();
+    if (this.outlookPane) this.options.outlook?.view.release(this.outlookPane);
+    this.options.outlook?.release();
+    if (this.panoramaPane) unmarkGlass(this.panoramaPane);
   }
 
   get dayNight(): DayNight {
@@ -240,6 +261,8 @@ export class RoomWindow extends Prop implements Updatable, Interactable, Occupan
   setOccupied(occupied: boolean): void {
     this.occupied = occupied;
     if (this.sky) this.apply(this.sky);
+    // Walked in: the street through the glass is built now, at the next idle moment.
+    if (occupied) this.options.outlook?.view.prefetch();
   }
 
   /** Culled from view: the idle refresh waits (the room is hidden, its map would come out empty), and runs at once when drawn again. */
@@ -257,6 +280,7 @@ export class RoomWindow extends Prop implements Updatable, Interactable, Occupan
       this.dayNight.update(dt);
       this.outdoors.update(dt);
     }
+    this.options.outlook?.view.update(dt);
     if (this.curtains?.update(dt)) {
       if (this.sky) this.apply(this.sky);
       this.options.onCurtainsChange?.(this.curtains.currentOpenness);

@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { QUALITY } from '@/graphics/quality';
-import { createCanvas, seededRandom } from '@/covers/generated/canvasUtils';
+import { createCanvas, seededRandom, canvasTexture } from '@/covers/generated/canvasUtils';
 import { afterChunk, patchShader, VALUE_NOISE } from './shaderPatch';
 import { markShared } from './sharedResources';
 
@@ -57,10 +57,7 @@ function grain(): THREE.CanvasTexture {
       ctx.stroke();
     }
   }
-  grainTexture = markShared(new THREE.CanvasTexture(canvas));
-  grainTexture.wrapS = grainTexture.wrapT = THREE.RepeatWrapping;
-  grainTexture.colorSpace = THREE.NoColorSpace;
-  grainTexture.anisotropy = QUALITY.anisotropy;
+  grainTexture = markShared(canvasTexture(canvas, { data: true, repeat: true }));
   return grainTexture;
 }
 

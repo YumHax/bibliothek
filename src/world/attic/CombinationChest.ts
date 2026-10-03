@@ -156,5 +156,5 @@ function digitsTexture(): THREE.CanvasTexture {
     ctx.fillText(String(d), 0, 2);
     ctx.restore();
   }
-  return toTexture(canvas, 4);
+  return toTexture(canvas, 'facing');
 }

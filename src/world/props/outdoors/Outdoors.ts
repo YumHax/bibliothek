@@ -4,7 +4,8 @@ import { RegionUploader } from '@/world/city/regionUpload';
 import { syncWorks } from '@/world/street/details/roadworks';
 import { MarketCalendar } from '@/economy/MarketCalendar';
 import type { DayNight, SkyState } from '../DayNight';
-import { type Rng, SCENE_WIDTH, Sheet } from './Sheet';
+import { EYE_HEIGHT, type Rng, SCENE_WIDTH, Sheet } from './Sheet';
+import { FLAT_IN_STREET } from '@/world/street/streetPlan';
 import { QUALITY } from '@/graphics/quality';
 import { paintSkyDetail } from './SkyDetail';
 import { paintSkyline } from './Skyline';
@@ -18,6 +19,9 @@ import { beginHoliday } from './Holiday';
 import { MOON_RADIUS, fragmentShader, vertexShader } from './shader';
 import { MOON_SHADOW_OFFSET as MOON_CRESCENT } from '../../city/skyGlsl';
 import { wakefulnessAt } from '@/time/wakefulness';
+
+/** The painting's eye over the flat's floor: painted `EYE_HEIGHT` over the street, whose pavement is the flat's floor's height below. */
+const EYE_HEIGHT_OVER_FLOOR = EYE_HEIGHT - FLAT_IN_STREET.height;
 import { type Holiday, type Season, holidayOf, seasonOf, useHoliday, useSeason } from '@/time/season';
 
 /**
@@ -45,7 +49,7 @@ export interface OutdoorsOptions {
    * view does. Default 40.
    */
   sceneryDistance?: number;
-  /** Centre of the scenery sphere (the room's middle). Default (0, 1.2, 0). */
+  /** Centre of the scenery sphere (the room's middle), the painting's eye: default 1.7 m over the flat's floor (`EYE_HEIGHT_OVER_FLOOR`). */
   center?: THREE.Vector3;
   /** A wall of the building standing in the view of some windows (see `NearWall`). Default none. */
   nearWall?: NearWall;
@@ -55,7 +59,29 @@ export interface OutdoorsOptions {
   holiday?: Holiday | null;
   /** The camera the view is seen from: the moving sprites are placed as it sees them (see `Life.update`). */
   viewer?: THREE.Object3D;
+  /**
+   * Leave the painting for the first draw of a pane (or of the balcony's open air): where the windows show the
+   * street's 3D view (`outlook/sharedOutlook` `streetWindows`), nothing may ever draw it, and it costs some hundreds
+   * of milliseconds at start and tens of MB. The life, the sky and the sound go on regardless. Default false.
+   */
+  paintOnFirstDraw?: boolean;
 }
+
+/** The painted view and what goes with it (`Outdoors.paint`). */
+interface Painting {
+  textures: { scene: THREE.CanvasTexture; lights: THREE.DataTexture; curfew: THREE.DataTexture; ground: THREE.CanvasTexture; fx: THREE.DataTexture; sky: THREE.Texture };
+  /** The retro games shop's display boxes, in scene texels. */
+  shopGoods: GoodsRect[];
+  /** The day colours' canvas texels per scene texel (`Sheet.colorScale`): pixel copies on it scale by it. */
+  colorScale: number;
+  /** Uploads the repainted shop window alone (`adopt`). */
+  upload: RegionUploader | null;
+}
+
+/** The painting's seed: the same view whenever it is painted. */
+const PAINT_SEED = 1987;
+/** The life's own seed when the painting waits for its first draw (painted at start, the life draws on after it). */
+const LIFE_SEED = 1988;
 
 /**
  * The day colours are painted twice as fine on high quality (8192 x 2688: about 23 texels a degree,
@@ -141,17 +167,20 @@ export class Outdoors {
 
   private readonly primaryQuaternion: THREE.Quaternion;
   private readonly scratchColor = new THREE.Color();
-  private readonly scene: THREE.CanvasTexture;
-  private readonly sceneUpload: RegionUploader;
-  private readonly shopGoods: GoodsRect[];
+  /** The painting, once done (at construction, or at the first draw with `paintOnFirstDraw`). */
+  private painting: Painting | null = null;
+  /** What `paint` paints in. */
+  private readonly season: Season;
+  private readonly holiday: Holiday | null;
+  /** The shop's stock and banner asked for before the painting was done: put up as it is. */
+  private stock: readonly string[] | null = null;
   private sky: SkyState;
   private strikes = 0;
   private bannerText: string | null = null;
   private bannerUnder: ImageData | null = null;
-  /** The day colours' canvas texels per scene texel (`Sheet.colorScale`): pixel copies on it scale by it. */
-  private readonly colorScale: number;
-  /** The camera (`OutdoorsOptions.viewer`) and where it is from the painting's eye this frame. */
-  private readonly viewer: THREE.Object3D | undefined;
+  /** The camera (`OutdoorsOptions.viewer`; the windows' 3D views are rendered from it too, `outlook/sharedOutlook`). */
+  readonly viewer: THREE.Object3D | undefined;
+  /** Where the camera is from the painting's eye this frame. */
   private readonly eye = new THREE.Vector3();
   /** Whether a pane was drawn since the last `update`, and the time the life outside has not been moved by. */
   private drawn = true;
@@ -163,30 +192,31 @@ export class Outdoors {
   ) {
     this.primaryQuaternion = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), options.primaryRotationY);
     this.viewer = options.viewer;
-    const random = seededRandom(1987);
+    const random = seededRandom(PAINT_SEED);
 
     const season = options.season ?? seasonOf(new Date());
+    this.season = season;
+    this.holiday = options.holiday === undefined ? holidayOf(new Date()) : options.holiday;
+    // Set now whether or not the view is painted yet: the street's trees, the critters and the decor read them.
+    useSeason(season);
+    useHoliday(this.holiday);
     // The roadworks where the market's calendar has them today (the street syncs them again as it is built).
     syncWorks(MarketCalendar.savedDay());
-    const { sheet, shopGoods } = paintView(random, season, options.holiday === undefined ? holidayOf(new Date()) : options.holiday, sceneColorScale());
-    this.shopGoods = shopGoods;
-    this.colorScale = sheet.colorScale;
-    const { scene, lights, curfew, ground, fx } = sheet.finish();
-    this.scene = scene;
-    const sky = paintSkyDetail(random);
-    this.life = new Life(random);
-    this.life.placeShop(shopGoods);
+    const painting = options.paintOnFirstDraw ? null : this.paint(random);
+    // Painted now, the life draws on after the painting, as it always has; later, from its own seed.
+    this.life = new Life(painting ? random : seededRandom(LIFE_SEED));
     const { nearWall } = options;
     this.sky = dayNight.state;
 
     this.material = new THREE.ShaderMaterial({
       uniforms: {
-        scene: { value: scene },
-        lights: { value: lights },
-        curfew: { value: curfew },
-        ground: { value: ground },
-        fx: { value: fx },
-        sky: { value: sky },
+        // Filled by `adopt` (the painting's textures).
+        scene: { value: null },
+        lights: { value: null },
+        curfew: { value: null },
+        ground: { value: null },
+        fx: { value: null },
+        sky: { value: null },
         sprites: { value: this.life.atlas },
         spriteGlow: { value: this.life.glow },
         spriteRect: { value: this.life.rects },
@@ -196,7 +226,7 @@ export class Outdoors {
         vehicleLook: { value: this.life.vehicleLook },
         /** Headlights and tail lights: faint by day, full after dark. */
         lightsOn: { value: 0.03 },
-        center: { value: options.center ?? new THREE.Vector3(0, 1.2, 0) },
+        center: { value: options.center ?? new THREE.Vector3(0, EYE_HEIGHT_OVER_FLOOR, 0) },
         radius: { value: options.sceneryDistance ?? 40 },
         /** The near wall's x0, x1, y0, y1 (an empty y range when there is none), its plane and its storey height. */
         nearWall: { value: nearWall ? new THREE.Vector4(nearWall.x[0], nearWall.x[1], nearWall.y[0], nearWall.y[1]) : new THREE.Vector4(0, 0, 1, 0) },
@@ -257,19 +287,43 @@ export class Outdoors {
       fragmentShader,
     });
     this.material.onBeforeRender = this.markDrawn;
-    // The shop's restocked window and its banner go up alone, not the whole scenery.
-    this.sceneUpload = new RegionUploader(scene);
-    this.sceneUpload.attach(this.material);
+    if (painting) this.adopt(painting);
 
     this.dayNight.onChange((state) => this.apply(state));
   }
 
   /**
+   * Paints the whole view (`paintView`) and the sky's detail with `random`, into textures; the shop's goods
+   * placed by `adopt`. Some hundreds of milliseconds on the main thread and tens of MB of canvases.
+   */
+  private paint(random: Rng): Painting {
+    const { sheet, shopGoods } = paintView(random, this.season, this.holiday, sceneColorScale());
+    return { textures: { ...sheet.finish(), sky: paintSkyDetail(random) }, shopGoods, colorScale: sheet.colorScale, upload: null };
+  }
+
+  /** Hands `painting`'s textures to the panes, puts the life's shop where it is painted and the stock asked for in its window. */
+  private adopt(painting: Painting): void {
+    this.painting = painting;
+    const u = this.material.uniforms;
+    for (const [name, texture] of Object.entries(painting.textures)) u[name].value = texture;
+    // The shop's restocked window and its banner go up alone, not the whole scenery.
+    painting.upload = new RegionUploader(painting.textures.scene);
+    painting.upload.attach(this.material);
+    this.life.placeShop(painting.shopGoods);
+    if (this.stock) this.showShopStock(this.stock);
+    const banner = this.bannerText;
+    this.bannerText = null;
+    if (banner) this.showShopBanner(banner);
+  }
+
+  /**
    * Called as a pane (or the balcony's open air, whose material shares these uniforms) is drawn:
-   * while none is, `update` moves the life outside only a few times a second.
+   * while none is, `update` moves the life outside only a few times a second. The first draw paints
+   * the view if it was left for then (`paintOnFirstDraw`), from the same seed as ever.
    */
   readonly markDrawn = (): void => {
     this.drawn = true;
+    if (!this.painting) this.adopt(this.paint(seededRandom(PAINT_SEED)));
   };
 
   /** Moves the traffic, the passers-by, the birds and the clouds on by `dt` seconds. */
@@ -296,24 +350,27 @@ export class Outdoors {
    * window. Repaints those few texels and uploads their rect alone.
    */
   showShopStock(colors: readonly string[]): void {
-    if (colors.length === 0 || this.shopGoods.length === 0) return;
-    const ctx = (this.scene.image as HTMLCanvasElement).getContext('2d');
+    if (colors.length === 0) return;
+    this.stock = colors;
+    const painting = this.painting;
+    if (!painting || painting.shopGoods.length === 0) return;
+    const ctx = (painting.textures.scene.image as HTMLCanvasElement).getContext('2d');
     if (!ctx) return;
-    this.shopGoods.forEach((box, i) => {
+    painting.shopGoods.forEach((box, i) => {
       ctx.fillStyle = colors[i % colors.length];
       ctx.fillRect(box.x, box.y, box.w, box.h);
     });
-    this.markGoods(0);
+    this.markGoods(painting, 0);
   }
 
   /** The shop's goods' rect (with `above` texels over it: the banner) uploaded alone, in the canvas's own texels. */
-  private markGoods(above: number): void {
-    const k = this.colorScale;
-    const x0 = Math.min(...this.shopGoods.map((g) => g.x));
-    const x1 = Math.max(...this.shopGoods.map((g) => g.x + g.w));
-    const y0 = Math.min(...this.shopGoods.map((g) => g.y)) - above;
-    const y1 = Math.max(...this.shopGoods.map((g) => g.y + g.h));
-    this.sceneUpload.mark(x0 * k - 1, y0 * k - 1, (x1 - x0) * k + 2, (y1 - y0) * k + 2);
+  private markGoods(painting: Painting, above: number): void {
+    const { shopGoods, colorScale: k } = painting;
+    const x0 = Math.min(...shopGoods.map((g) => g.x));
+    const x1 = Math.max(...shopGoods.map((g) => g.x + g.w));
+    const y0 = Math.min(...shopGoods.map((g) => g.y)) - above;
+    const y1 = Math.max(...shopGoods.map((g) => g.y + g.h));
+    painting.upload?.mark(x0 * k - 1, y0 * k - 1, (x1 - x0) * k + 2, (y1 - y0) * k + 2);
   }
 
   /**
@@ -321,18 +378,26 @@ export class Outdoors {
    * day of fresh stock), or takes it down (null). Repaints those texels and re-uploads the scenery.
    */
   showShopBanner(text: string | null): void {
-    if (this.shopGoods.length === 0 || text === this.bannerText) return;
-    const ctx = (this.scene.image as HTMLCanvasElement).getContext('2d');
+    if (text === this.bannerText) return;
+    const painting = this.painting;
+    if (!painting) {
+      // Hung once the view is painted (`adopt`).
+      this.bannerText = text;
+      return;
+    }
+    const { shopGoods } = painting;
+    if (shopGoods.length === 0) return;
+    const ctx = (painting.textures.scene.image as HTMLCanvasElement).getContext('2d');
     if (!ctx) return;
-    const x0 = Math.floor(Math.min(...this.shopGoods.map((g) => g.x)));
-    const x1 = Math.ceil(Math.max(...this.shopGoods.map((g) => g.x + g.w)));
-    const y0 = Math.floor(Math.min(...this.shopGoods.map((g) => g.y)));
-    const y1 = Math.ceil(Math.max(...this.shopGoods.map((g) => g.y + g.h)));
+    const x0 = Math.floor(Math.min(...shopGoods.map((g) => g.x)));
+    const x1 = Math.ceil(Math.max(...shopGoods.map((g) => g.x + g.w)));
+    const y0 = Math.floor(Math.min(...shopGoods.map((g) => g.y)));
+    const y1 = Math.ceil(Math.max(...shopGoods.map((g) => g.y + g.h)));
     const h = Math.max(3, Math.round((y1 - y0) * 0.28));
     const top = y0 - Math.round(h * 0.4);
     // What the banner covers, kept to take it down again.
     // Pixel copies ignore the context's scale: in the canvas's own texels.
-    const k = this.colorScale;
+    const k = painting.colorScale;
     this.bannerUnder ??= ctx.getImageData(x0 * k, top * k, (x1 - x0) * k, h * k);
     ctx.putImageData(this.bannerUnder, x0 * k, top * k);
     this.bannerText = text;
@@ -353,14 +418,17 @@ export class Outdoors {
       ctx.fillText(text, 0, 0);
       ctx.restore();
     }
-    this.markGoods(y0 - top);
+    this.markGoods(painting, y0 - top);
   }
 
-  /** Every window pane under `root` that shows this view (the street is heard through them). */
+  /**
+   * Every window pane under `root` that shows the street (the street is heard through them): this view's, and the
+   * windows' 3D views of it (`userData.streetPane`, `RoomWindow`).
+   */
   panesIn(root: THREE.Object3D): THREE.Object3D[] {
     const panes: THREE.Object3D[] = [];
     root.traverse((object) => {
-      if ((object as THREE.Mesh).material === this.material) panes.push(object);
+      if ((object as THREE.Mesh).material === this.material || object.userData.streetPane === true) panes.push(object);
     });
     return panes;
   }

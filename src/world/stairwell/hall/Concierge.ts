@@ -184,7 +184,7 @@ export class Concierge extends Prop implements Updatable, OccupancyAware {
     ctx.lineTo(42, 88);
     ctx.closePath();
     ctx.fill();
-    const face = new THREE.MeshStandardMaterial({ map: toTexture(canvas, 2), roughness: 0.5, side: THREE.DoubleSide });
+    const face = new THREE.MeshStandardMaterial({ map: toTexture(canvas, 'facing'), roughness: 0.5, side: THREE.DoubleSide });
     for (const s of [-1, 1]) {
       const board = new THREE.Mesh(new THREE.PlaneGeometry(0.3, 0.6), face);
       board.position.set(0, 0.29, s * 0.09);

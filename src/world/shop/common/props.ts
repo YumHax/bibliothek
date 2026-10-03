@@ -21,7 +21,7 @@ import { PanelledDado, type PanelledDadoOptions } from './PanelledDado';
  */
 export const COMMON_PROPS = {
   /** The shop's name on a painted board (default its name, in its fascia's colours). Wall-hung. */
-  nameBoard: (o: NameBoardOptions = {}, shop: ShopContext) => new NameBoard({ ...o, lines: o.lines ?? [shop.name], color: o.color ?? shop.fascia, letters: o.letters ?? shop.letters }),
+  nameBoard: (o: NameBoardOptions = {}, shop: ShopContext) => new NameBoard({ ...o, lines: o.lines ?? [shop.name], color: o.color ?? shop.fascia, letters: o.letters ?? shop.letters, family: shop.font }),
   /** A handwritten card, a typed notice or a printed poster, taped, pinned or framed. Wall-hung (or on any face). */
   notice: (o: ShopNoticeOptions = {}, shop: ShopContext) => new ShopNotice({ seed: shop.seed, ...o }),
   /** A cork board of cards and polaroids, with a heading. Wall-hung. */

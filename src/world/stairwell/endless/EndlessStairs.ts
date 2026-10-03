@@ -70,10 +70,10 @@ export class EndlessStairs extends Prop implements Updatable, OccupancyAware {
     const { shaft, floorLanding } = stairs;
     for (const k of [plan.upper, plan.lower]) {
       // A map from the start, so a new plate is a new texture, never a new shader at the moment of the wrap.
-      // Pulled over the real plate it covers (4 mm behind it) by a wall layer, so they never fight at a grazing angle.
+      // Over the real plate it covers, a wall layer's lift out and pulled forward by its rank: they never fight at a grazing angle.
       const material = onSurface(new THREE.MeshStandardMaterial({ roughness: 0.9, map: plateTexture('') }), WALL.overlay);
       const mesh = new THREE.Mesh(new THREE.PlaneGeometry(0.32, 0.24), material);
-      mesh.position.set(shaft.x0 + 0.014, landingY(k) + stairs.floorNameY, (floorLanding.z0 + floorLanding.z1) / 2);
+      mesh.position.set(shaft.x0 + stairs.floorNameOff + WALL.overlay.lift, landingY(k) + stairs.floorNameY, (floorLanding.z0 + floorLanding.z1) / 2);
       mesh.rotation.y = Math.PI / 2;
       mesh.visible = false;
       this.add(mesh);
@@ -217,5 +217,5 @@ function plateTexture(text: string): THREE.CanvasTexture {
     ctx.textBaseline = 'middle';
     ctx.fillText(text, 64, 52, 116);
   }
-  return toTexture(canvas, 2);
+  return toTexture(canvas, 'facing');
 }

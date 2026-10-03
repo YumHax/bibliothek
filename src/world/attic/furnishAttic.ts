@@ -5,7 +5,6 @@ import { SEED_GAMES } from '@/catalog';
 import { gameIdFor } from '@/catalog/nointro';
 import { GRAILS, grailGame } from '@/economy/grails';
 import { StockItem } from '@/economy/StockItem';
-import { pointsPerTicket } from '@/economy/pricing';
 import { MusicUpstairs } from '@/audio/throughFloor';
 import type { Zone } from '../zone/Zone';
 import type { BuildContext, ZoneHandle } from '../buildContext';
@@ -111,7 +110,8 @@ export function furnishAttic(zone: Zone, ctx: BuildContext): ZoneHandle {
       scores: table,
       nextPlayCost: () => 0,
       atHome: true,
-      pointsPerTicket: pointsPerTicket('comets'),
+      // At home it pays no tickets, so it shows none either.
+      pointsPerTicket: 0,
       listener,
       glowLight: false,
       wear: 0.85,

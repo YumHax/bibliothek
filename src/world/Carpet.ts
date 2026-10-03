@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { createCanvas, seededRandom, toTexture } from '@/covers/generated/canvasUtils';
+import { createCanvas, seededRandom, toTexture, repeatTexture } from '@/covers/generated/canvasUtils';
 import { fabric } from '@/world/materials/finishes';
 import { paintOnce } from '@/world/materials/paintedTiles';
 
@@ -127,6 +127,6 @@ function paintCarpet(): [THREE.Texture] {
   // No wear painted in: the tile repeats every 3 m, and a tread in it would stripe the whole hall.
 
   const map = toTexture(canvas);
-  map.wrapS = map.wrapT = THREE.RepeatWrapping;
+  repeatTexture(map);
   return [map];
 }

@@ -1,3 +1,5 @@
+import { SINE_HASH } from '@/graphics/glslNoise';
+
 /*
  * The stories drawn in a lit window (`windowLife.ts`, `STORY` kinds), for the facades' shader (`Buildings`): flat
  * silhouettes against the room's light, in the window's own frame (u 0..1 across, v 0..1 sill to head, scaled to its
@@ -6,6 +8,7 @@
  * Prepended to the fragment shader before `main`. A template literal: no backtick in here.
  */
 export const WINDOW_STORY_GLSL = /* glsl */ `
+${SINE_HASH}
 float stBox(vec2 p, vec2 c, vec2 h) {
   vec2 d = abs(p - c) - h;
   return 1.0 - smoothstep(0.0, 0.015, max(d.x, d.y));
@@ -14,7 +17,7 @@ float stDisc(vec2 p, vec2 c, float r) {
   return 1.0 - smoothstep(r - 0.012, r + 0.012, length(p - c));
 }
 float stHash(float n) {
-  return fract(sin(n * 127.1) * 43758.5453);
+  return sineHash(n * 127.1);
 }
 float stPerson(vec2 p, vec2 head, float s) {
   float m = stDisc(p, head, 0.065 * s);

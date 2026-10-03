@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import type { Furniture } from '../../Furniture';
 import { part } from '../../props/Prop';
+import { INSET } from '../../props/joinery';
 import { paint, timber } from '../../materials/palette';
 import { seededRandom } from '@/graphics/canvas';
 import { LeafBatch, LEAF_GREENS, headGeometry, pick, stem } from './greenery';
@@ -65,7 +66,8 @@ export class ClimbingTrellis extends THREE.Group implements Furniture {
         mesh.rotation.z = -dir * Math.PI / 4;
       }
     }
-    for (const x of [-W / 2 + 0.015, W / 2 - 0.015]) part(this, 0.03, tall, 0.03, SLAT, { x, y: bottom + tall / 2, z: z + 0.006 });
+    // The posts stand an `INSET` in from the trough's ends (flush, their outer faces would lie in the end boards').
+    for (const x of [-W / 2 + 0.015 + INSET, W / 2 - 0.015 - INSET]) part(this, 0.03, tall, 0.03, SLAT, { x, y: bottom + tall / 2, z: z + 0.006 });
     part(this, W, 0.03, 0.03, SLAT, { y: H - 0.015, z: z + 0.006 });
 
     // The vines: up from the soil, wandering from side to side, leaves in pairs, blossom in clusters.

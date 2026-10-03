@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { QUALITY } from '@/graphics/quality';
 import type { Updatable } from '@/core/Engine';
-import { createCanvas, seededRandom } from '@/covers/generated/canvasUtils';
+import { createCanvas, seededRandom, toTexture } from '@/covers/generated/canvasUtils';
 import type { Furniture } from '../../Furniture';
 import type { DayNight } from '../../props/DayNight';
 import type { Season } from '@/time/season';
@@ -9,6 +9,8 @@ import { FRONT, type Vec2 } from '../streetPlan';
 import { groundHeight } from './ground';
 import { GROUND, RENDER_ORDER, onSurface } from '../../surface/layers';
 import { coverageKeepsAlpha } from '../../materials/palette';
+import { POINT_SCALE, scalesPoints } from '../../particles/pointScale';
+import { overKeepingAlpha } from '@/world/materials/blend';
 
 const AUTUMN = ['#c9862f', '#d9a33a', '#b8562a', '#8a7a32', '#a8442a', '#e0b048', '#7a5a2a'];
 /** Fallen leaves at the season's deepest, and how many fall at once. */
@@ -24,6 +26,7 @@ attribute vec3 tint;
 uniform float time;
 uniform float wind;
 uniform float size;
+uniform float pointScale;
 varying vec3 vTint;
 varying float vSpin;
 varying float vFade;
@@ -36,7 +39,7 @@ void main() {
   p.z += wind * 1.5 * t + cos(time * 1.3 + seed.w * 23.0) * 0.4;
   vec4 view = modelViewMatrix * vec4(p, 1.0);
   gl_Position = projectionMatrix * view;
-  gl_PointSize = size / max(-view.z, 0.5);
+  gl_PointSize = size * pointScale / max(-view.z, 0.5);
   vTint = tint;
   vSpin = time * (1.5 + seed.y * 3.0) + seed.w * 6.28;
   vFade = smoothstep(0.0, 0.06, t) * (1.0 - smoothstep(0.92, 1.0, t));
@@ -105,8 +108,9 @@ export class Leaves extends THREE.Group implements Furniture, Updatable {
         x = -34 + random() * 130;
         z = (random() < 0.5 ? -1 : 1) * (FRONT.farKerb - 0.1 - Math.pow(random(), 2) * 0.6);
       }
-      // Each at its own height between the two leaf layers: over the markings, grates and puddles.
-      p.set(x, groundHeight(x, z) + GROUND.leaf.lift + random() * (GROUND.leafTop.lift - GROUND.leaf.lift), z);
+      // Each at its own height inside the leaves' own band (`GROUND.leaf`..`leafTop`): over the markings, grates,
+      // puddles and the wet road's streaks and mirror, all drawn at the leaf's rank.
+      p.set(x, groundHeight(x, z) + GROUND.leaf.lift + random() * (GROUND.leafTop.lift - GROUND.leaf.lift), z); // convention-ok: leaves heaped on leaves, inside their own band
       e.set((random() - 0.5) * 0.3, random() * Math.PI * 2, (random() - 0.5) * 0.3);
       q.setFromEuler(e);
       const k = 0.7 + random() * 0.6;
@@ -138,17 +142,14 @@ export class Leaves extends THREE.Group implements Furniture, Updatable {
     geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
     geometry.setAttribute('seed', new THREE.BufferAttribute(seeds, 4));
     geometry.setAttribute('tint', new THREE.BufferAttribute(tints, 3));
-    this.uniforms = { time: { value: 0 }, wind: { value: 0.3 }, size: { value: 70 }, light: { value: 1 } };
+    this.uniforms = { time: { value: 0 }, wind: { value: 0.3 }, size: { value: 70 }, light: { value: 1 }, pointScale: POINT_SCALE };
     const fallMaterial = new THREE.ShaderMaterial({ uniforms: this.uniforms, vertexShader: FALL_VERTEX, fragmentShader: FALL_FRAGMENT, transparent: true, depthWrite: false });
     // Blends over the scene but keeps the canvas alpha (docs/graphics.md).
-    fallMaterial.blending = THREE.CustomBlending;
-    fallMaterial.blendSrc = THREE.SrcAlphaFactor;
-    fallMaterial.blendDst = THREE.OneMinusSrcAlphaFactor;
-    fallMaterial.blendSrcAlpha = THREE.ZeroFactor;
-    fallMaterial.blendDstAlpha = THREE.OneFactor;
+    overKeepingAlpha(fallMaterial);
     const points = new THREE.Points(geometry, fallMaterial);
     points.frustumCulled = false;
     points.renderOrder = RENDER_ORDER.particles;
+    scalesPoints(points);
     this.add(points);
   }
 
@@ -183,7 +184,5 @@ function leafTexture(): THREE.CanvasTexture {
   ctx.moveTo(4, h / 2);
   ctx.lineTo(w - 6, h / 2);
   ctx.stroke();
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.colorSpace = THREE.SRGBColorSpace;
-  return texture;
+  return toTexture(canvas, 'facing');
 }

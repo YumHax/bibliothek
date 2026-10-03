@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
-import { createCanvas, seededRandom, toTexture } from '@/covers/generated/canvasUtils';
+import { createCanvas, seededRandom, toTexture, repeatTexture } from '@/covers/generated/canvasUtils';
 import type { Updatable } from '@/core/Engine';
 import type { Furniture } from '../Furniture';
 import type { DayNight } from '../props/DayNight';
@@ -344,8 +344,7 @@ function hedgeTexture(anisotropy: number): THREE.CanvasTexture {
     ctx.fill();
   }
   const texture = toTexture(canvas, anisotropy);
-  texture.wrapS = THREE.RepeatWrapping;
-  texture.wrapT = THREE.RepeatWrapping;
+  repeatTexture(texture);
   // The hedge is one long box: the leaves keep their size along its street side.
   texture.repeat.set(80, 1);
   return texture;
@@ -371,5 +370,5 @@ function adTexture(): THREE.CanvasTexture {
   ctx.fillText('Sunday, the old market hall', 128, 240);
   ctx.fillStyle = '#5fe6ff';
   for (let i = 0; i < 6; i++) ctx.fillRect(40 + i * 30, 290, 20, 34);
-  return toTexture(canvas, 2);
+  return toTexture(canvas, 'facing');
 }

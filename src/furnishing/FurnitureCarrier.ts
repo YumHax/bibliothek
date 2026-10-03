@@ -471,7 +471,7 @@ export class FurnitureCarrier implements Updatable {
       const box = turnedBounds(bounds, aimed.yaw);
       if (this.snapping) {
         snapFloor(aimed.position, box, extent);
-        guides = alignWith(aimed.position, box, neighbours, FLOOR.placement.lift + 0.003, centre);
+        guides = alignWith(aimed.position, box, neighbours, FLOOR.placement.lift + 0.003, centre); // convention-ok: the height of thin guide lines over the placement grid, not a surface
         toWalls(aimed.position, box, extent);
       } else if (!flat) snapToWall(aimed, extent, bounds);
       clampInside(aimed.position, extent, bounds, aimed.yaw); // pushed off the feet, it never goes through a wall

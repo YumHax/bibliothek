@@ -4,6 +4,7 @@ import { part } from '../props/Prop';
 import { UsableProp, type UseOptions } from '../props/UsableProp';
 import { Prop } from '../props/Prop';
 import { paint, standard } from '../materials/palette';
+import { GLASS } from '../materials/glass';
 
 /*
  * What the kitchen is used for (docs/household.md): the cleaning kit on the table, the mixing bowl
@@ -11,7 +12,6 @@ import { paint, standard } from '../materials/palette';
  * on its base at local y = 0 facing +z; the builder wires their captions and clicks to `HomeLife`.
  */
 
-const GLASS = standard({ color: 0xe8f0f2, roughness: 0.05, metalness: 0, transparent: true, opacity: 0.35, side: THREE.DoubleSide });
 const CERAMIC = standard({ color: 0xf2eee6, roughness: 0.35, side: THREE.DoubleSide });
 
 /**
@@ -27,7 +27,7 @@ export class CleaningKit extends UsableProp {
     this.add(cylinderMesh(0.024, 0.13, standard({ color: 0x9fc6e0, roughness: 0.2, transparent: true, opacity: 0.8 }), { x: -0.09, y: 0.068, z: -0.03 }, { segments: 14 }));
     this.add(cylinderMesh(0.011, 0.025, paint(0xf2f2f2, 0.5), { x: -0.09, y: 0.145, z: -0.03 }, { segments: 10 }));
     part(this, 0.04, 0.05, 0.002, paint(0xffffff, 0.8), { x: -0.09, y: 0.07, z: -0.005 }).castShadow = false; // its label
-    this.add(cylinderMesh(0.028, 0.08, GLASS, { x: 0.0, y: 0.043, z: -0.04 }, { segments: 14 }));
+    this.add(cylinderMesh(0.028, 0.08, GLASS.ware, { x: 0.0, y: 0.043, z: -0.04 }, { segments: 14 }));
     this.add(cylinderMesh(0.024, 0.07, paint(0xfafafa, 0.95), { x: 0.0, y: 0.038, z: -0.04 }, { segments: 12 }));
     part(this, 0.1, 0.012, 0.08, paint(0xe9c46a, 0.95), { x: 0.07, y: 0.009, z: 0.04 }); // the cloth
     const brush = new THREE.Group();
@@ -100,7 +100,7 @@ export class TreatJar extends UsableProp {
   constructor(use: UseOptions) {
     super(use);
     this.name = 'TreatJar';
-    this.add(cylinderMesh(0.045, 0.12, GLASS, { y: 0.06 }, { segments: 16 }));
+    this.add(cylinderMesh(0.045, 0.12, GLASS.ware, { y: 0.06 }, { segments: 16 }));
     this.add(cylinderMesh(0.041, 0.07, paint(0xb5733a, 0.9), { y: 0.037 }, { segments: 14 })); // the treats inside
     this.add(cylinderMesh(0.048, 0.02, paint(0xc9302c, 0.5), { y: 0.13 }, { segments: 16 }));
     part(this, 0.05, 0.035, 0.002, paint(0xf4e9c8, 0.8), { y: 0.075, z: 0.046 }).castShadow = false; // a paper label with a fish on it

@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { canvasTexture } from '@/graphics/canvas';
 import { QUALITY } from '@/graphics/quality';
 import type { Furniture } from '../Furniture';
 import { markShared } from '../materials/sharedResources';
@@ -53,8 +54,7 @@ function texture(): THREE.CanvasTexture {
     }
   }
   ctx.putImageData(image, 0, 0);
-  blobTexture = markShared(new THREE.CanvasTexture(canvas));
-  blobTexture.colorSpace = THREE.NoColorSpace;
+  blobTexture = markShared(canvasTexture(canvas, { data: true }));
   return blobTexture;
 }
 

@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { createCanvas, toTexture } from '@/covers/generated/canvasUtils';
+import { createCanvas, toTexture, repeatTexture } from '@/covers/generated/canvasUtils';
 import { fabric } from '@/world/materials/finishes';
 import { shared } from '../materials/palette';
 
@@ -56,7 +56,7 @@ export function paintStallSign(text: string, accent: number, options: StallSignO
   ctx.textBaseline = 'middle';
   ctx.font = `bold ${SIGN_FONT_PX}px Georgia, serif`;
   ctx.fillText(text, W / 2, H / 2);
-  return { map: toTexture(canvas, 4), width: W / pxPerMetre, height: H / pxPerMetre };
+  return { map: toTexture(canvas, 'facing'), width: W / pxPerMetre, height: H / pxPerMetre };
 }
 
 /** Gingham: the cloth colour crossed by paler bands, one tile = 0.5 m of cloth. */
@@ -73,7 +73,7 @@ export function paintGingham(cloth: THREE.Color): THREE.Texture {
   }
   ctx.fillStyle = 'rgba(0,0,0,0.07)';
   for (let y = 0; y < S; y += 3) ctx.fillRect(0, y, S, 1);
-  return toTexture(canvas, 4);
+  return toTexture(canvas, 'facing');
 }
 
 /** A plain woollen or cotton cloth of `color` (velvet lining, clothes, a stool's seat): one shared material per colour. */
@@ -84,7 +84,7 @@ export function plainCloth(color: number, roughness = 0.95): THREE.MeshStandardM
 /** A material carrying `map` repeated `u` x `v` times over its face (its own clone of the texture). */
 export function tiledMaterial(map: THREE.Texture, u: number, v: number, roughness = 0.95): THREE.MeshStandardMaterial {
   const tex = map.clone();
-  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  repeatTexture(tex);
   tex.repeat.set(u, v);
   tex.needsUpdate = true;
   return new THREE.MeshStandardMaterial({ map: tex, roughness });

@@ -24,6 +24,8 @@ export class CatFur {
     const skin = mesh.material as THREE.MeshStandardMaterial;
     const fur = new THREE.InstancedMesh(mesh.geometry, this.shellMaterialFor(skin), SHELLS);
     fur.name = 'Fur';
+    // Its shells sit on the skin until the shader pushes them out: not a z-fight.
+    fur.userData.zfightIgnore = true;
     fur.castShadow = false;
     fur.receiveShadow = true;
     // Every instance sits exactly on the skin; the shader moves each out by its index.

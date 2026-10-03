@@ -1,5 +1,7 @@
 import type * as THREE from 'three';
 import { afterChunk, patchShader } from '../materials/shaderPatch';
+import { standardVariant } from '../materials/palette';
+import { isShared } from '../materials/sharedResources';
 
 /**
  * How white the street's up-facing surfaces are (0..1): `SkyState.snowCover`, written twice a
@@ -42,7 +44,23 @@ export function wetCovered<M extends THREE.MeshStandardMaterial>(material: M): M
   return weathered(material, false);
 }
 
+/**
+ * The street's snowy twin of the palette's `paint(color, roughness)`: one material for every street prop
+ * of that look, apart from the palette's own (`snowCovered(paint(...))` would snow on every room's prop
+ * of that colour too, and refuses).
+ */
+export function snowPaint(color: THREE.ColorRepresentation, roughness = 0.6): THREE.MeshStandardMaterial {
+  return snowStandard({ color, roughness });
+}
+
+/** The street's snowy twin of the palette's `standard(parameters)` (see `snowPaint`). */
+export function snowStandard(parameters: THREE.MeshStandardMaterialParameters): THREE.MeshStandardMaterial {
+  return standardVariant('streetSnow', parameters, snowCovered);
+}
+
 function weathered<M extends THREE.MeshStandardMaterial>(material: M, snow: boolean): M {
+  // A palette material is every prop's of that look: weather its street twin instead (`snowPaint`, `snowStandard`).
+  if (isShared(material)) throw new Error('[snowCover] a shared material cannot be weathered in place: use snowPaint / snowStandard');
   return patchShader(material, snow ? 'streetSnow' : 'streetWet', (shader) => {
     shader.uniforms.snowCover = STREET_SNOW;
     shader.uniforms.streetWet = STREET_WET;

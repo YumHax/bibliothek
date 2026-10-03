@@ -1,4 +1,3 @@
-import * as THREE from 'three';
 import { seededRandom } from '@/covers/generated/canvasUtils';
 import { cylinderMesh } from '../meshUtils';
 import { paint, standard, timber } from '../materials/palette';
@@ -55,8 +54,9 @@ export class SpiceRack extends Prop {
         const x = -width / 2 + t + (i + 0.5) * pitch;
         const z = DEPTH / 2 - 0.004;
         const base = y + t;
-        const spice = cylinderMesh(JAR_RADIUS - 0.003, JAR_HEIGHT * (0.5 + random() * 0.35), paint(SPICES[Math.floor(random() * SPICES.length)]!, 0.95), { x, z }, { segments: 12 });
-        const fillH = (spice.geometry as THREE.CylinderGeometry).parameters.height;
+        // The fill's height kept here: on high the cylinder is a filleted lathe, whose parameters have none.
+        const fillH = JAR_HEIGHT * (0.5 + random() * 0.35);
+        const spice = cylinderMesh(JAR_RADIUS - 0.003, fillH, paint(SPICES[Math.floor(random() * SPICES.length)]!, 0.95), { x, z }, { segments: 12 });
         spice.position.y = base + fillH / 2 + 0.002;
         spice.castShadow = false;
         this.add(spice);
@@ -64,7 +64,7 @@ export class SpiceRack extends Prop {
         jar.castShadow = false;
         this.add(jar);
         this.add(cylinderMesh(JAR_RADIUS + 0.001, 0.016, cap, { x, y: base + JAR_HEIGHT + 0.008, z }, { segments: 12 }));
-        part(this, 0.024, 0.02, 0.001, label, { x, y: base + JAR_HEIGHT * 0.65, z: z + JAR_RADIUS + WALL.paper.lift }).castShadow = false;
+        part(this, 0.024, 0.02, 0.001, label, { x, y: base + JAR_HEIGHT * 0.65, z: z + JAR_RADIUS + WALL.paper.lift }).castShadow = false; // convention-ok: a solid label, 1 mm thick
       }
     }
   }

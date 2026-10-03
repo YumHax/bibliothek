@@ -84,6 +84,19 @@ Named with the shop's word where a clash is likely (the TV shop's all start with
   `windowVignette`, `salonWall`, `dustSheets`, `chairStack`, `foldingScreen`, `showroomPendants`, `showroomFan`,
   `armchairThrow`, `bedCushions`, `dresserTop`, `tableDressing`, `swatchBook`, `showroomPlant`, `deliveryLedger`.
 
+## The street front
+
+Outside, each walk-in shop's front is the shopfront kit's `walkIn` variant (`street/shopfronts/Shopfronts`, measures
+and looks in `shopfrontPlan`'s `FRONT` / `SHOPFRONTS`; docs/zones.md "The shopfront kit"). Its name on the fascia is
+lettered sharp by `fasciaLettering`, not painted into the facade atlas. A new kind of walk-in shop gets a
+`SHOPFRONTS` entry; its street front then needs nothing else.
+
+Painted once for both sides of the glass: the door's OPEN / CLOSED card (`common/doorCard`: the shop's `SHOPFRONTS`
+accent, its `SHOP_HOURS`; the card inside is `common/OpenSign`, the street's is a tile per shop in the atlas), the gilt
+lines on the display glass (`common/gildedLettering`: read backwards from inside by `ShopWindow`, which letters the
+street's first line), the test card (`snowScreen.paintTestCard`). The name board inside is lettered in the fascia's
+font (`ShopContext.font`, `SHOP_LOOKS[kind].font`).
+
 ## The window: inside and out
 
 The street shows each shop's window display from the pavement in 3D (`street/shopfronts/windowDisplays.ts`), and

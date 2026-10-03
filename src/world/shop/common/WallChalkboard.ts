@@ -76,5 +76,5 @@ function paintSlate(wM: number, hM: number, options: WallChalkboardOptions, slat
   ctx.moveTo(W * 0.25, pad + unit * 1.4);
   ctx.bezierCurveTo(W * 0.4, pad + unit * 1.5, W * 0.6, pad + unit * 1.3, W * 0.75, pad + unit * 1.42);
   ctx.stroke();
-  return toTexture(canvas, 4);
+  return toTexture(canvas, 'facing');
 }

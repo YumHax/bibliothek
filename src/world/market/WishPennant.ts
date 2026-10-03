@@ -75,5 +75,5 @@ function paintPennant(): THREE.Texture {
   ctx.textBaseline = 'middle';
   ctx.font = `bold 64px system-ui, sans-serif`;
   ctx.fillText('★', W / 2, H * 0.3);
-  return toTexture(canvas, 2);
+  return toTexture(canvas, 'facing');
 }

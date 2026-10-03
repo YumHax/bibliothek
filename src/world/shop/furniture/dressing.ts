@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { cylinderMesh } from '../../meshUtils';
 import { Prop, part } from '../../props/Prop';
+import { bandAround } from '../../props/joinery';
 import { Cushion } from '../../props/Cushion';
 import { cloth, paint, timber, METAL } from '../../materials/palette';
 import { seededRandom } from '@/graphics/canvas';
@@ -39,8 +40,9 @@ export class ArmchairThrow extends Prop {
     const z = 0.04;
     // Over the arm's top, down its outer face, and in onto the seat cushion.
     part(this, 0.13, T, D, wool, { x: s * 0.35, y: 0.7 + T / 2, z });
-    part(this, T, 0.33, D, wool, { x: s * (0.4 + T / 2), y: 0.7 - 0.33 / 2 + T, z });
-    part(this, T, 0.05, D, band, { x: s * (0.4 + T / 2 + 0.001), y: 0.43, z });
+    const drop = part(this, T, 0.33, D, wool, { x: s * (0.4 + T / 2), y: 0.7 - 0.33 / 2 + T, z });
+    // The band round the hanging end (`bandAround`: proud of it on every side, never in its faces).
+    bandAround(this, drop, 0.43, 0.05, band);
     part(this, T, 0.25, D - 0.04, wool, { x: s * (0.3 - T / 2), y: 0.7 - 0.25 / 2 + T, z });
     part(this, 0.1, T, D - 0.04, wool, { x: s * 0.245, y: 0.452, z }).rotation.z = s * 0.12;
     // The fringe along the hanging end.

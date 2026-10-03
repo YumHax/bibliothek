@@ -1,6 +1,8 @@
 import * as THREE from 'three';
-import { createCanvas, seededRandom } from '@/covers/generated/canvasUtils';
+import { createCanvas, seededRandom, canvasTexture } from '@/covers/generated/canvasUtils';
 import { RENDER_ORDER } from '../surface/layers';
+import { overKeepingAlpha } from '@/world/materials/blend';
+import { markShared } from '@/world/materials/sharedResources';
 
 /** Rings alive at once, how long one spreads (s), how far it gets (as a share of `reach`). */
 const RINGS = 3;
@@ -42,8 +44,7 @@ export function rippleNormals(): THREE.Texture {
       }
     }
     ctx.putImageData(image, 0, 0);
-    normals = new THREE.CanvasTexture(canvas);
-    normals.wrapS = normals.wrapT = THREE.RepeatWrapping;
+    normals = markShared(canvasTexture(canvas, { data: true, repeat: true }));
   }
   const own = normals.clone();
   own.needsUpdate = true;
@@ -69,12 +70,7 @@ export class WaterRipples extends THREE.Group {
     geometry.rotateX(-Math.PI / 2);
     for (let i = 0; i < RINGS; i++) {
       const material = new THREE.MeshBasicMaterial({ color: 0xf2fbff, transparent: true, opacity: 0, depthWrite: false });
-      material.blending = THREE.CustomBlending;
-      material.blendEquation = THREE.AddEquation;
-      material.blendSrc = THREE.SrcAlphaFactor;
-      material.blendDst = THREE.OneMinusSrcAlphaFactor;
-      material.blendSrcAlpha = THREE.ZeroFactor;
-      material.blendDstAlpha = THREE.OneFactor;
+      overKeepingAlpha(material);
       const mesh = new THREE.Mesh(geometry, material);
       mesh.position.y = LIFT;
       mesh.renderOrder = RENDER_ORDER.sheen;

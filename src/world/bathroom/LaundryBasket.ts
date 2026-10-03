@@ -32,7 +32,7 @@ export class LaundryBasket extends THREE.Group implements Furniture {
     const h = options.height ?? 0.55;
 
     const weave = new THREE.MeshStandardMaterial({ map: paintWeave(), roughness: 0.9 });
-    weave.map!.wrapS = THREE.RepeatWrapping;
+    weave.map!.wrapS = THREE.RepeatWrapping; // convention-ok: wraps one way only
     weave.map!.repeat.set(6, 1);
     const body = cylinderMesh(r, h, weave, { y: h / 2 }, { radiusBottom: r * 0.88, segments: SEGMENTS });
     this.add(body);
@@ -91,5 +91,5 @@ function paintWeave(): THREE.CanvasTexture {
       ctx.fillRect(c * colW - 1, y + strand - 4, colW + 2, 2);
     }
   }
-  return toTexture(canvas, 4);
+  return toTexture(canvas, 'facing');
 }

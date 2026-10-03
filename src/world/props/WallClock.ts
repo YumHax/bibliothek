@@ -5,7 +5,7 @@ import type { SessionActions } from '@/game/SessionActions';
 import { createCanvas, toTexture, FONT } from '@/covers/generated/canvasUtils';
 import { invisibleHitbox } from '../meshUtils';
 import { paint, standard, timber } from '../materials/palette';
-import { WALL } from '../surface/layers';
+import { layMesh, WALL } from '../surface/layers';
 import { Prop } from './Prop';
 import type { DayNight } from './DayNight';
 import { playAlarm } from '@/audio/alarm';
@@ -83,6 +83,7 @@ export class WallClock extends Prop implements Interactable, Updatable {
       new THREE.MeshStandardMaterial({ map: paintDial(), roughness: 0.9 }),
     );
     dial.position.z = faceZ + WALL.paper.lift;
+    layMesh(dial, WALL.paper);
     dial.receiveShadow = true;
     this.add(dial);
 
@@ -249,5 +250,5 @@ function paintDial(): THREE.CanvasTexture {
   ctx.fillStyle = '#6a6259';
   ctx.fillText('BIBLIOTHEK', c, c + S * 0.17);
 
-  return toTexture(canvas, 4);
+  return toTexture(canvas, 'facing');
 }

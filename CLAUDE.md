@@ -14,6 +14,7 @@ npm run dev         # Vite dev server on :5173 (also serves /api/* via Vite plug
 npm run typecheck   # tsc --noEmit (src) + tsc -p api + scripts/check-conventions.mjs — run after every change
 npm run build       # typecheck + production bundle
 npm run balance     # the arcade's machines played headless by simulated people: what each pays (docs/economy.md)
+npm run zfight      # props, rooms and the street built headless, z-fighting faces vs scripts/zfight-baseline.json (in typecheck)
 ```
 
 ## Working rules

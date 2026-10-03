@@ -36,7 +36,7 @@ export class AtticLift extends Prop implements Updatable, OccupancyAware {
   readonly colliders: THREE.Box3[] = [];
   readonly button: LiftButton;
   private readonly gate = new THREE.Group();
-  private readonly lamp = new THREE.MeshBasicMaterial({ color: 0xffe2b0, toneMapped: false });
+  private readonly lamp = new THREE.MeshBasicMaterial({ color: 0xffe2b0 });
   private phase: Phase = 'shut';
   private open = 0;
   private wait = 0;
@@ -64,7 +64,8 @@ export class AtticLift extends Prop implements Updatable, OccupancyAware {
     this.add(boxMesh(0.03, h, d, WOOD, { x: car.x0 + 0.015, y: h / 2, z: cz }));
     this.add(boxMesh(0.03, h, d, WOOD, { x: car.x1 - 0.015, y: h / 2, z: cz }));
     this.add(boxMesh(w, h, 0.03, WOOD, { x: cx, y: h / 2, z: car.z0 + 0.015 }));
-    this.add(boxMesh(w, 0.06, d, WOOD, { x: cx, y: h + 0.03, z: cz }));
+    // The roof up to the lintel's plaster (5 cm over the car, `AtticShell`), not into its plane.
+    this.add(boxMesh(w, 0.05, d, WOOD, { x: cx, y: h + 0.025, z: cz }));
     const mirror = new THREE.Mesh(new THREE.PlaneGeometry(w * 0.6, 1.1), standard({ color: 0xa8b0b4, metalness: 1, roughness: 0.25 }));
     mirror.position.set(cx, 1.35, car.z0 + 0.03 + PROUD);
     this.add(mirror);

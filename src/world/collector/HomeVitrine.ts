@@ -6,11 +6,12 @@ import type { SessionActions } from '@/game/SessionActions';
 import type { Furniture } from '../Furniture';
 import type { DrawnAware } from '../zone/lifecycle';
 import { GameBox } from '../GameBox';
-import { createCanvas } from '@/covers/generated/canvasUtils';
 import { boxMesh, invisibleHitbox } from '../meshUtils';
+import { INSET } from '../props/joinery';
 import { fabric } from '../materials/finishes';
 import { METAL, shared, standard, timber } from '../materials/palette';
 import { FLOOR, WALL, onSurface } from '../surface/layers';
+import { bakedGlow, poolTexture, washTexture } from '../showcase/glow';
 
 /** A copy on show, and what it is worth. */
 export interface Showpiece {
@@ -87,7 +88,8 @@ export class HomeVitrine extends THREE.Group implements Furniture, Interactable,
     this.add(boxMesh(WIDTH + 0.024, 0.008, 0.008, BRASS, { y: HEIGHT - TOP_T - 0.004, z: z0 + DEPTH + 0.012 }));
     // The front posts, brass-capped, and a warm strip under the top board.
     for (const sx of [-1, 1]) {
-      this.add(boxMesh(POST, HEIGHT - PLINTH_H - TOP_T, POST, WALNUT, { x: sx * (WIDTH / 2 - POST / 2), y: (PLINTH_H + HEIGHT - TOP_T) / 2, z: z0 + DEPTH - POST / 2 }));
+      // Its foot buried an `INSET` deeper in the bottom board than the brass cap's (their bottoms would share a plane).
+      this.add(boxMesh(POST, HEIGHT - PLINTH_H - TOP_T + INSET, POST, WALNUT, { x: sx * (WIDTH / 2 - POST / 2), y: (PLINTH_H - INSET + HEIGHT - TOP_T) / 2, z: z0 + DEPTH - POST / 2 }));
       this.add(boxMesh(POST + 0.004, 0.014, POST + 0.004, BRASS, { x: sx * (WIDTH / 2 - POST / 2), y: PLINTH_H + 0.007, z: z0 + DEPTH - POST / 2 }));
     }
     const strip = boxMesh(INNER_W - 0.04, 0.01, 0.02, STRIP, { y: HEIGHT - TOP_T - 0.006, z: z0 + DEPTH - 0.05 });
@@ -98,10 +100,13 @@ export class HomeVitrine extends THREE.Group implements Furniture, Interactable,
     const glass = standard({ color: 0xe8f4f4, roughness: 0.03, metalness: 0, transparent: true, opacity: 0.12, depthWrite: false, side: THREE.DoubleSide, envMapIntensity: 2.4 });
     const shelfGlass = standard({ color: 0xcfe6e2, roughness: 0.08, metalness: 0, transparent: true, opacity: 0.35, depthWrite: false, envMapIntensity: 1.8 });
     const glassH = HEIGHT - PLINTH_H - TOP_T;
+    // The sides stand on the bottom board (not down its face: their outsides in its sides' planes); the front's
+    // edges run into the posts. Every edge a hair into the board it meets: seen through, glass flush on wood fights.
+    const sideH = HEIGHT - TOP_T - TIERS[0] + 2 * INSET;
     const panes = [
-      boxMesh(INNER_W, glassH, GLASS_T, glass, { y: PLINTH_H + glassH / 2, z: z0 + DEPTH - POST / 2 }),
-      boxMesh(GLASS_T, glassH, DEPTH - BACK_T - POST, glass, { x: -WIDTH / 2 + GLASS_T / 2, y: PLINTH_H + glassH / 2, z: z0 + BACK_T + (DEPTH - BACK_T - POST) / 2 }),
-      boxMesh(GLASS_T, glassH, DEPTH - BACK_T - POST, glass, { x: WIDTH / 2 - GLASS_T / 2, y: PLINTH_H + glassH / 2, z: z0 + BACK_T + (DEPTH - BACK_T - POST) / 2 }),
+      boxMesh(INNER_W + POST, glassH + INSET, GLASS_T, glass, { y: PLINTH_H + (glassH + INSET) / 2, z: z0 + DEPTH - POST / 2 }),
+      boxMesh(GLASS_T, sideH, DEPTH - BACK_T - POST, glass, { x: -WIDTH / 2 + GLASS_T / 2, y: TIERS[0] - INSET + sideH / 2, z: z0 + BACK_T + (DEPTH - BACK_T - POST) / 2 }),
+      boxMesh(GLASS_T, sideH, DEPTH - BACK_T - POST, glass, { x: WIDTH / 2 - GLASS_T / 2, y: TIERS[0] - INSET + sideH / 2, z: z0 + BACK_T + (DEPTH - BACK_T - POST) / 2 }),
       ...TIERS.slice(1).map((y) => boxMesh(INNER_W, SHELF_T, DEPTH - BACK_T - POST, shelfGlass, { y: y - SHELF_T / 2, z: z0 + BACK_T + (DEPTH - BACK_T - POST) / 2 })),
     ];
     for (const pane of panes) {
@@ -121,8 +126,8 @@ export class HomeVitrine extends THREE.Group implements Furniture, Interactable,
 
   /** The strip's light on the velvet and the tiers, painted on (see `WASH`). */
   private bakeStripLight(z0: number): void {
-    const glow = (opacity: number, map: THREE.Texture): THREE.MeshBasicMaterial =>
-      new THREE.MeshBasicMaterial({ color: WASH.color, map, transparent: true, opacity, depthWrite: false, blending: THREE.CustomBlending, blendSrc: THREE.SrcAlphaFactor, blendDst: THREE.OneFactor, blendSrcAlpha: THREE.ZeroFactor, blendDstAlpha: THREE.OneFactor });
+    // The showcase kit's glow and masks (`showcase/glow`): the same strip light as the shop's display column.
+    const glow = (opacity: number, map: THREE.Texture): THREE.MeshBasicMaterial => bakedGlow(WASH.color, opacity, map);
     const fade = washTexture();
     const velvetH = HEIGHT - PLINTH_H - TOP_T - 0.02;
     const wash = new THREE.Mesh(new THREE.PlaneGeometry(INNER_W, velvetH), onSurface(glow(0.5, fade), WALL.overlay, { depthWrite: false }));
@@ -233,27 +238,4 @@ export class HomeVitrine extends THREE.Group implements Furniture, Interactable,
   dispose(): void {
     for (const box of this.boxes.splice(0)) box.dispose();
   }
-}
-
-/** Bright at the top (under the strip), fading down the velvet. */
-function washTexture(): THREE.CanvasTexture {
-  const [canvas, ctx] = createCanvas(8, 64);
-  const g = ctx.createLinearGradient(0, 0, 0, 64);
-  g.addColorStop(0, 'rgba(255,255,255,1)');
-  g.addColorStop(0.35, 'rgba(255,255,255,0.45)');
-  g.addColorStop(1, 'rgba(255,255,255,0.08)');
-  ctx.fillStyle = g;
-  ctx.fillRect(0, 0, 8, 64);
-  return new THREE.CanvasTexture(canvas);
-}
-
-/** A soft oval pool, brightest at the front where the strip shines down. */
-function poolTexture(): THREE.CanvasTexture {
-  const [canvas, ctx] = createCanvas(64, 32);
-  const g = ctx.createRadialGradient(32, 22, 2, 32, 22, 34);
-  g.addColorStop(0, 'rgba(255,255,255,1)');
-  g.addColorStop(1, 'rgba(255,255,255,0)');
-  ctx.fillStyle = g;
-  ctx.fillRect(0, 0, 64, 32);
-  return new THREE.CanvasTexture(canvas);
 }

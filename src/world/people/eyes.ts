@@ -143,7 +143,7 @@ function eyeTexture(irisColor: number): THREE.CanvasTexture {
   lid.addColorStop(1, 'rgba(40,26,22,0)');
   ctx.fillStyle = lid;
   ctx.fillRect(0, 0, S, S * 0.46);
-  return toTexture(canvas, 2);
+  return toTexture(canvas, 'facing');
 }
 
 /** The eyeball's material: a clear coat over the painted ball where the renderer affords it (`QUALITY.physicalMaterials`). */

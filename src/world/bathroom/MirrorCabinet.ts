@@ -4,7 +4,8 @@ import { Prop, part } from '../props/Prop';
 import { paint } from '../materials/palette';
 import { SEAM } from '../props/joinery';
 import { SwingLeaf, revealWhileOpen } from '../props/SwingLeaf';
-import { CHROME, CLEAR_GLASS } from '../props/bathroomMaterials';
+import { CHROME } from '../props/bathroomMaterials';
+import { GLASS } from '../materials/glass';
 import { mirrorGlass } from '../props/MirrorGlass';
 
 export interface MirrorCabinetOptions {
@@ -75,7 +76,7 @@ export class MirrorCabinet extends Prop {
   private buildShelves(interior: THREE.Group, inner: number, height: number, bodyD: number): void {
     const z = BOARD + (bodyD - BOARD) / 2;
     const levels = [BOARD, height * 0.36, height * 0.69];
-    for (const y of levels.slice(1)) part(interior, inner, 0.006, bodyD - BOARD - 0.01, CLEAR_GLASS, { y, z }).castShadow = false;
+    for (const y of levels.slice(1)) part(interior, inner, 0.006, bodyD - BOARD - 0.01, GLASS.screen, { y, z }).castShadow = false;
     const on = (level: number): number => levels[level] + (level === 0 ? BOARD / 2 : 0.003);
     this.bottomShelf.set(0, on(0), z);
 
@@ -98,7 +99,7 @@ export class MirrorCabinet extends Prop {
     part(interior, 0.08, 0.05, 0.05, paint(0xf2f0ea, 0.6), { x: 0.15, y: on(1) + 0.025, z });
 
     // Top: a square scent bottle, a small tin, a spare toothbrush on its side.
-    part(interior, 0.045, 0.08, 0.03, CLEAR_GLASS, { x: -0.14, y: on(2) + 0.04, z }).castShadow = false;
+    part(interior, 0.045, 0.08, 0.03, GLASS.screen, { x: -0.14, y: on(2) + 0.04, z }).castShadow = false;
     part(interior, 0.03, 0.012, 0.03, paint(0x1f1f22, 0.3), { x: -0.14, y: on(2) + 0.086, z });
     interior.add(cylinderMesh(0.035, 0.03, paint(0x3f6f5f, 0.4), { x: 0.0, y: on(2) + 0.015, z }, { segments: 16 }));
     part(interior, 0.17, 0.01, 0.012, paint(0x9ccf9a, 0.5), { x: 0.13, y: on(2) + 0.005, z: z - 0.01 });

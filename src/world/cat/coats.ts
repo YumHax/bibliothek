@@ -57,11 +57,11 @@ export class CoatTextures {
     this.bodyCtx = bodyCtx;
     this.tailCtx = tailCtx;
     this.eyeCtx = eyeCtx;
-    this.body = toTexture(bodyCanvas, 4);
-    this.body.wrapS = THREE.RepeatWrapping; // the seam is the belly line: let the filter wrap across it
-    this.tail = toTexture(tailCanvas, 2);
-    this.tail.wrapS = THREE.RepeatWrapping;
-    this.eye = toTexture(eyeCanvas, 2);
+    this.body = toTexture(bodyCanvas, 'facing');
+    this.body.wrapS = THREE.RepeatWrapping; // convention-ok: the seam is the belly line: let the filter wrap across it
+    this.tail = toTexture(tailCanvas, 'facing');
+    this.tail.wrapS = THREE.RepeatWrapping; // convention-ok: wraps one way only
+    this.eye = toTexture(eyeCanvas, 'facing');
     this.paint(coat);
   }
 

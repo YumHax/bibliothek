@@ -29,6 +29,17 @@ export class FacadeFrame {
     return target.set(ax + this.u.x * s + this.n.x * out, y, az + this.u.y * s + this.n.y * out);
   }
 
+  /**
+   * Its wall as a solid surface for `TriBuilder.hideAgainst` (outward normal, a point on it, where it stands up to
+   * `top`): what is built against it loses its backs.
+   */
+  wall(top: number): [THREE.Vector3, THREE.Vector3, THREE.Box3] {
+    const normal = new THREE.Vector3(this.n.x, 0, this.n.y);
+    const from = this.point(0, 0);
+    const bounds = new THREE.Box3().setFromPoints([from, this.point(this.length, top)]);
+    return [normal, from, bounds];
+  }
+
   /** A matrix placing an object's origin at (s, y, out), its +x along the facade and its +z out to the street. */
   matrix(s: number, y: number, out = 0, target = new THREE.Matrix4()): THREE.Matrix4 {
     const p = this.point(s, y, out);

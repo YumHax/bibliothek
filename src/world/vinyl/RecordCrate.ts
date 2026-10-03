@@ -131,5 +131,5 @@ function paintSleeve(record: Soundtrack): THREE.Texture {
   ctx.fillText(`Original soundtrack · ${record.artist}`, S / 2, 210, S - 24);
   ctx.font = '11px sans-serif';
   ctx.fillText(`${record.label} · ${record.year}`, S / 2, 234, S - 24);
-  return toTexture(canvas, 4);
+  return toTexture(canvas, 'facing');
 }

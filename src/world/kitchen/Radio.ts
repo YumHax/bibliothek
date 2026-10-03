@@ -4,6 +4,7 @@ import type { SessionActions } from '@/game/SessionActions';
 import { RadioVoice } from '@/audio/kitchenSounds';
 import { cylinderMesh, invisibleHitbox } from '../meshUtils';
 import { Prop, part } from '../props/Prop';
+import { PROUD } from '../props/joinery';
 import { paint, standard } from '../materials/palette';
 import { HoverGlint } from '../props/hoverGlint';
 
@@ -46,7 +47,8 @@ export class Radio extends Prop implements Interactable {
     const grilleW = W * 0.5;
     const gx = -W / 2 + 0.015 + grilleW / 2;
     part(this, grilleW, H - 0.035, 0.002, GRILLE, { x: gx, y: 0.008 + H / 2, z: front }).castShadow = false;
-    for (let i = 0; i < 7; i++) part(this, grilleW, 0.003, 0.004, CHROME, { x: gx, y: 0.03 + i * 0.014, z: front + 0.001 }).castShadow = false;
+    // The bars run a little past the cloth's edges (their ends in its sides' planes would fight).
+    for (let i = 0; i < 7; i++) part(this, grilleW + 2 * PROUD, 0.003, 0.004, CHROME, { x: gx, y: 0.03 + i * 0.014, z: front + 0.001 }).castShadow = false;
     // The dial: a lit strip with tick marks and a red needle, under glass.
     const dx = W / 2 - 0.015 - (W * 0.36) / 2;
     part(this, W * 0.36, 0.035, 0.002, this.dial, { x: dx, y: 0.008 + H * 0.66, z: front }).castShadow = false;

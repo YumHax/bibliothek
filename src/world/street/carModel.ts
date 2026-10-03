@@ -2,6 +2,20 @@ import * as THREE from 'three';
 import { mergeGeometries, toCreasedNormals } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { VEHICLES } from '../city/vehicles';
 import { LAMP_ROLE } from './traffic/lampMaterial';
+import { standard } from '../materials/palette';
+import { gapAt, onSurface, type SurfaceLayer } from '../surface/layers';
+
+/**
+ * A vehicle's glass over its body: a centimetre proud of the panels where it shows, up to 6 cm behind them where the
+ * doors' tops hide its edge. One rank (`UNITS_PER_RANK` steps) holds the first at any distance and keeps the second
+ * hidden out to 130 m; a deeper one would pull the hidden edge through the doors down the street.
+ */
+export const VEHICLE_GLASS: SurfaceLayer = { lift: 0.01, rank: 1 };
+
+/** A vehicle's glass material (on `glass` geometry), drawn as `VEHICLE_GLASS`. */
+export function vehicleGlass(color = 0x1a232b): THREE.MeshStandardMaterial {
+  return onSurface(standard({ color, roughness: 0.06 }), VEHICLE_GLASS);
+}
 
 /** A small hatchback at real scale (`city/vehicles`), nose to +x, wheels on y = 0, centred. */
 export const CAR = VEHICLES.car;
@@ -191,10 +205,14 @@ export class LampSet {
     return this;
   }
 
-  /** The indicators at the four corners (`front` and `back` x, `y`, `z` out from the middle), on their sides. */
+  /**
+   * The indicators at the four corners (`front` and `back` x, `y`, `z` out from the middle), on their sides: standing
+   * a real gap proud of the face, as they run onto the head and tail lamps' corners (one mesh: no offset parts them).
+   */
   indicators(front: number, back: number, y: number, z: number, backY = y): this {
+    const proud = gapAt(40);
     for (const [side, role] of [[-1, LAMP_ROLE.left], [1, LAMP_ROLE.right]] as const) {
-      this.add(front, y, side * z, 1, AMBER, 0.1, 0.08, role).add(back, backY, side * z, -1, AMBER, 0.1, 0.08, role);
+      this.add(front + proud, y, side * z, 1, AMBER, 0.1, 0.08, role).add(back - proud, backY, side * z, -1, AMBER, 0.1, 0.08, role);
     }
     return this;
   }

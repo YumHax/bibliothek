@@ -19,7 +19,7 @@ function paint(lines: readonly string[]): THREE.CanvasTexture {
     ctx.font = i === 0 ? 'bold 40px "Comic Sans MS", "Bradley Hand", cursive' : '22px "Comic Sans MS", "Bradley Hand", cursive';
     ctx.fillText(line, 80, i === 0 ? 72 : 72 + i * 30);
   });
-  return toTexture(canvas, 4);
+  return toTexture(canvas, 'facing');
 }
 
 /**

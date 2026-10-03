@@ -119,7 +119,8 @@ export function buildParkFeatures(parent: THREE.Group, lawnY: number, walkable: 
 
   // --- The playground. ---
   const [cx, cz] = parkInStreet([PLAYGROUND.x, PLAYGROUND.z]);
-  const soft = new THREE.Mesh(new THREE.CircleGeometry(PLAY.surface, 40).rotateX(-Math.PI / 2).translate(cx, lawnY + GROUND.marking.lift, cz), onSurface(standard({ color: 0x8a3a2e, roughness: 0.95 }), GROUND.marking));
+  // Laid over the paths that run to it (`GROUND.patch`, a rank over theirs).
+  const soft = new THREE.Mesh(new THREE.CircleGeometry(PLAY.surface, 40).rotateX(-Math.PI / 2).translate(cx, lawnY + GROUND.patch.lift, cz), onSurface(standard({ color: 0x8a3a2e, roughness: 0.95 }), GROUND.patch));
   soft.receiveShadow = true;
   parent.add(soft);
   const piece = ([dx, dz]: Vec2): THREE.Matrix4 => new THREE.Matrix4().makeTranslation(cx + dx, lawnY, cz + dz);

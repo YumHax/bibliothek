@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { createCanvas, hashString, roundRect, seededRandom, toTexture } from '@/covers/generated/canvasUtils';
+import { createCanvas, hashString, roundRect, seededRandom, toTexture, repeatTexture } from '@/covers/generated/canvasUtils';
 import type { PersonLook } from './looks';
 import { cachedTexture } from './textureCache';
 
@@ -203,7 +203,7 @@ function torso(look: PersonLook, waistV: number, random: () => number): THREE.Ca
   }
 
   finish(ctx, look.top === 'tee' || look.top === 'stripes', random);
-  return toTexture(canvas, 4);
+  return toTexture(canvas, 'facing');
 }
 
 /**
@@ -283,8 +283,8 @@ function cloth(color: number, accent: number, pattern: 'plain' | 'stripes' | 'ch
     data[i + 2] = Math.min(255, data[i + 2]! * k);
   }
   ctx.putImageData(image, 0, 0);
-  const texture = toTexture(canvas, 4);
-  texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+  const texture = toTexture(canvas, 'facing');
+  repeatTexture(texture);
   texture.repeat.set(3, pattern === 'plain' ? 3 : 4);
   return texture;
 }

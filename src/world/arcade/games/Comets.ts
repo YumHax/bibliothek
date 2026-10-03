@@ -12,7 +12,7 @@ const STAGE_SECONDS = 2;
 const CLOCK_SECONDS = 2;
 /** One falling thing in this many is a clock. */
 const CLOCK_EVERY = 9;
-const HIT_SECONDS = 2;
+const HIT_SECONDS = 1.5;
 const INVULNERABLE = 1;
 /** Stars caught this close together keep the chain going. */
 const CHAIN_HOLD = 2;
@@ -44,7 +44,7 @@ interface Faller {
 /**
  * COMET DASH: fifteen seconds under a meteor shower. Slide the ship left and right: catch the
  * stars (points; caught in quick succession they chain the combo, and some come in a trail of three
- * to follow down), catch the odd clock (two seconds), dodge the rocks (a hit costs two seconds and the combo, then a moment's shield).
+ * to follow down), catch the odd clock (two seconds), dodge the rocks (a hit costs a second and a half and the combo, then a moment's shield).
  * Every twelve stars is a stage: faster and thicker rocks, two seconds.
  */
 export class Comets extends BaseGame {

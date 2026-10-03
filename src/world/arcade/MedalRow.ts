@@ -53,5 +53,5 @@ export class MedalRow extends THREE.Group {
 }
 
 function litMaterial(tier: MedalTier): THREE.MeshBasicMaterial {
-  return basic({ color: LIT[tier], toneMapped: false });
+  return basic({ color: LIT[tier] });
 }

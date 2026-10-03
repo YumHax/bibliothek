@@ -1,9 +1,11 @@
 import * as THREE from 'three';
 import type { PrizeKind } from '@/economy/Prizes';
-import { createCanvas } from '@/covers/generated/canvasUtils';
+import { createCanvas, canvasTexture, toTexture } from '@/covers/generated/canvasUtils';
 import { boxMesh, cylinderMesh } from '../meshUtils';
+import { INSET, PROUD } from '../props/joinery';
 import { basic, paint, standard } from '../materials/palette';
-import { WALL } from '../surface/layers';
+import { layMesh, WALL } from '../surface/layers';
+import { markShared } from '@/world/materials/sharedResources';
 
 const CHROME = standard({ color: 0xc4c7cc, metalness: 1, roughness: 0.2 });
 const DARK = paint(0x1a1a1f, 0.5);
@@ -211,9 +213,11 @@ export function prizeModel(kind: PrizeKind, color: number): THREE.Group {
       g.add(boxMesh(w, 0.1, 0.055, coat, { y: 0.125, z: -0.0075 }));
       const screen = new THREE.Mesh(new THREE.PlaneGeometry(w * 0.8, w * 0.6), basic({ map: miniScreen(), toneMapped: false }));
       screen.position.set(0, 0.13, 0.02 + WALL.framed.lift); // off the upper box's face
+      layMesh(screen, WALL.framed);
       screen.rotation.x = -0.15;
-      g.add(screen, boxMesh(w, 0.02, 0.05, WHITE, { y: 0.17, z: -0.005 }));
-      g.add(boxMesh(w, 0.012, 0.03, DARK, { y: 0.08, z: 0.02 }));
+      // The marquee stands proud of the cabinet's face and sides, the control panel is set in from them: no shared faces.
+      g.add(screen, boxMesh(w + 2 * PROUD, 0.02, 0.05 + PROUD, WHITE, { y: 0.17, z: -0.005 + PROUD / 2 }));
+      g.add(boxMesh(w - 2 * INSET, 0.012, 0.03, DARK, { y: 0.08, z: 0.02 }));
       const stick = new THREE.Mesh(new THREE.SphereGeometry(0.004, 8, 6), paint(0xd23a3a, 0.4));
       stick.position.set(-0.015, 0.09, 0.025);
       g.add(stick);
@@ -234,8 +238,7 @@ function plateTexture(): THREE.CanvasTexture {
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillText('ARCADE CHAMPION', 64, 21);
-  plate = new THREE.CanvasTexture(canvas);
-  plate.colorSpace = THREE.SRGBColorSpace;
+  plate = markShared(toTexture(canvas, 'facing'));
   return plate;
 }
 
@@ -253,8 +256,7 @@ function miniScreen(): THREE.CanvasTexture {
   ctx.fillStyle = '#ffffff';
   ctx.fillRect(26, 40, 12, 2);
   ctx.fillRect(34, 30, 2, 2);
-  screen = new THREE.CanvasTexture(canvas);
-  screen.colorSpace = THREE.SRGBColorSpace;
+  screen = markShared(canvasTexture(canvas, { anisotropy: 'facing' }));
   screen.magFilter = THREE.NearestFilter;
   return screen;
 }

@@ -4,7 +4,7 @@ import { boxMesh, cylinderMesh, invisibleHitbox } from '../../meshUtils';
 import { matte } from '../../props/Prop';
 import { paint, standard } from '../../materials/palette';
 import { PooledLight } from '../../lighting/LightPool';
-import { WALL } from '../../surface/layers';
+import { layMesh, WALL } from '../../surface/layers';
 import { CHROME, type MachineDisplay, displayScreen, outOfOrderNote, paintMarquee } from '../machineParts';
 import { BASE_H, CARRIAGE_Y, CASE_H, type ClawPlush, DEPTH, RAIL_Y, TOP_H, TOTAL_H, WIDTH } from './ClawSim';
 
@@ -47,6 +47,7 @@ export function buildClawModel(root: THREE.Group, color: number, plush: readonly
   root.add(boxMesh(0.25, 0.25, 0.02, standard({ color: 0x8fb8d8, roughness: 0.1, transparent: true, opacity: 0.5 }), { x: -WIDTH / 2 + 0.22, y: 0.3, z: DEPTH / 2 + 0.012 }));
   const front = new THREE.Mesh(new THREE.PlaneGeometry(WIDTH - 0.04, 0.26), new THREE.MeshStandardMaterial({ map: paintFront(color), roughness: 0.6 }));
   front.position.set(0, BASE_H - 0.2, DEPTH / 2 + WALL.notice.lift);
+  layMesh(front, WALL.notice);
   root.add(front);
   const panel = boxMesh(0.4, 0.05, 0.16, BLACK, { x: 0.1, y: BASE_H + 0.02, z: DEPTH / 2 - 0.06 });
   panel.rotation.x = -0.2;
@@ -64,6 +65,7 @@ export function buildClawModel(root: THREE.Group, color: number, plush: readonly
   const display = displayScreen([128, 48], [0.12, 0.045]);
   const screen = display.mesh;
   screen.position.set(0.28, BASE_H - 0.035, DEPTH / 2 + WALL.sign.lift);
+  layMesh(screen, WALL.sign);
   root.add(screen);
 
   // The case: chrome posts at the corners, glass all round, a lit top with the marquee.
@@ -86,18 +88,20 @@ export function buildClawModel(root: THREE.Group, color: number, plush: readonly
   root.add(note);
   root.add(boxMesh(WIDTH, TOP_H, DEPTH, body, { y: BASE_H + CASE_H + TOP_H / 2 }));
   const marqueeMap = paintMarquee('GRAB A PRIZE!', { width: 768, height: 128, stops: ['#ff2fa0', '#ffe23a', '#33e0ff'], ink: '#2a0f3a', size: 48, textY: 66, decorate: starburst });
-  const marqueeMat = new THREE.MeshBasicMaterial({ map: marqueeMap, toneMapped: false, color: 0xdddddd });
+  const marqueeMat = new THREE.MeshBasicMaterial({ map: marqueeMap, color: 0xdddddd });
   const marquee = new THREE.Mesh(new THREE.PlaneGeometry(WIDTH - 0.06, TOP_H - 0.1), marqueeMat);
   marquee.position.set(0, BASE_H + CASE_H + TOP_H / 2, DEPTH / 2 + WALL.notice.lift);
+  layMesh(marquee, WALL.notice);
   root.add(marquee);
   // Chaser bulbs along the top and bottom edges of the marquee: a repeating strip whose texture slides.
   const chaser = paintChaser();
-  chaser.wrapS = THREE.RepeatWrapping;
+  chaser.wrapS = THREE.RepeatWrapping; // convention-ok: wraps one way only
   chaser.repeat.set(12, 1);
-  const chaserMat = new THREE.MeshBasicMaterial({ map: chaser, toneMapped: false });
+  const chaserMat = new THREE.MeshBasicMaterial({ map: chaser });
   for (const y of [BASE_H + CASE_H + 0.025, BASE_H + CASE_H + TOP_H - 0.025]) {
     const strip = new THREE.Mesh(new THREE.PlaneGeometry(WIDTH - 0.06, 0.04), chaserMat);
     strip.position.set(0, y, DEPTH / 2 + WALL.notice.lift);
+    layMesh(strip, WALL.notice);
     root.add(strip);
   }
   // The case is lit from the top: a strip and a small light so the plush reads through the glass.
@@ -220,5 +224,5 @@ function paintFront(color: number): THREE.Texture {
   ctx.fillText('move the claw · press to drop · every play wins*', 380, 160);
   ctx.font = `18px ${FONT}`;
   ctx.fillText('*not every play wins', 380, 200);
-  return toTexture(canvas, 4);
+  return toTexture(canvas, 'facing');
 }

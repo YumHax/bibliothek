@@ -6,7 +6,7 @@ import { JukeboxTune, STYLES } from '@/audio/JukeboxTune';
 import { createCanvas, toTexture } from '@/covers/generated/canvasUtils';
 import type { Furniture, OccupancyAware } from '../Furniture';
 import { boxMesh, cylinderMesh, invisibleHitbox } from '../meshUtils';
-import { WALL } from '../surface/layers';
+import { layMesh, WALL } from '../surface/layers';
 import { METAL, paint } from '../materials/palette';
 import { drawText } from './games/ArcadeGame';
 
@@ -73,17 +73,18 @@ export class Jukebox extends THREE.Group implements Furniture, Updatable, Intera
     this.add(halo);
     // The glass dome with the song card behind it.
     const [canvas, ctx] = createCanvas(512, 256);
-    const texture = new THREE.CanvasTexture(canvas);
-    texture.colorSpace = THREE.SRGBColorSpace;
-    const material = new THREE.MeshBasicMaterial({ map: texture, toneMapped: false });
+    const texture = toTexture(canvas, 'facing');
+    const material = new THREE.MeshBasicMaterial({ map: texture });
     this.card = { ctx, texture, material };
     const card = new THREE.Mesh(new THREE.PlaneGeometry(W - 0.2, 0.3), material);
     card.position.set(0, BODY_H + 0.05, D / 2 + WALL.notice.lift);
+    layMesh(card, WALL.notice);
     this.add(card);
     // The chrome grille and the coin panel.
     this.add(boxMesh(W - 0.2, 0.012, 0.012, CHROME, { y: BODY_H - 0.14, z: D / 2 + 0.006 }));
     const grille = new THREE.Mesh(new THREE.PlaneGeometry(W - 0.22, 0.52), new THREE.MeshStandardMaterial({ map: grilleTexture(), metalness: 1, roughness: 0.35 }));
     grille.position.set(0, 0.5, D / 2 + WALL.notice.lift);
+    layMesh(grille, WALL.notice);
     this.add(grille);
     this.add(boxMesh(W - 0.16, 0.06, 0.1, CHROME, { y: 0.86, z: D / 2 + 0.04 }));
     this.add(boxMesh(W + 0.02, 0.06, D + 0.02, paint(0x151518, 0.5), { y: 0.03 }));
@@ -195,5 +196,5 @@ function grilleTexture(): THREE.Texture {
   ctx.beginPath();
   ctx.arc(128, 80, 50, 0, Math.PI * 2);
   ctx.stroke();
-  return toTexture(canvas, 4);
+  return toTexture(canvas, 'facing');
 }

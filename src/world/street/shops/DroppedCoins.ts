@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { canvasTexture } from '@/graphics/canvas';
 import type { Updatable } from '@/core/Engine';
 import type { Interactable } from '@/interaction/Interactable';
 import type { SessionActions } from '@/game/SessionActions';
@@ -15,6 +16,7 @@ import { invisibleHitbox } from '../../meshUtils';
 import { RENDER_ORDER } from '../../surface/layers';
 import type { Furniture } from '../../Furniture';
 import type { Vec2 } from '../streetPlan';
+import { additive } from '@/world/materials/blend';
 
 export interface DroppedCoinsOptions {
   /** Where a coin may lie (zone-local), and how many lie about a day. */
@@ -165,18 +167,12 @@ class DroppedCoin extends THREE.Group implements Furniture, Interactable {
     disc.position.y = 0.0015;
     disc.rotation.x = 0.04;
     this.add(disc);
-    this.spark = new THREE.Sprite(new THREE.SpriteMaterial({
+    this.spark = new THREE.Sprite(additive(new THREE.SpriteMaterial({
       map: GLINT_TEXTURE,
       color: 0xfff2c0,
-      transparent: true,
       depthWrite: false,
-      blending: THREE.CustomBlending,
-      blendSrc: THREE.SrcAlphaFactor,
-      blendDst: THREE.OneFactor,
-      blendSrcAlpha: THREE.ZeroFactor,
-      blendDstAlpha: THREE.OneFactor,
       opacity: 0,
-    }));
+    })));
     this.spark.scale.setScalar(0.09);
     this.spark.position.y = 0.012;
     this.spark.renderOrder = RENDER_ORDER.particles;
@@ -240,7 +236,5 @@ function glintTexture(): THREE.CanvasTexture {
     ctx.lineTo(c + dx * c - dy * 2, c + dy * c - dx * 2);
   }
   ctx.fill();
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.colorSpace = THREE.SRGBColorSpace;
-  return texture;
+  return canvasTexture(canvas, { data: true, anisotropy: 'facing' });
 }

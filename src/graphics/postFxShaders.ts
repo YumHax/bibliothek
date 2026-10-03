@@ -6,6 +6,7 @@
  * at st = vUv * uvScale (texture space: the share of the texture that holds the frame) and clamps
  * its taps to uvLimit (half a texel short of the frame's edge), so nothing stale is ever read.
  */
+import { HOSKINS_HASH } from './glslNoise';
 
 export const QUAD_VERTEX = /* glsl */ `
 varying vec2 vUv;
@@ -146,7 +147,8 @@ void main() {
  * with depth: a spiral of taps rotated per pixel (no ghost copies), more of them for a wide blur
  * (photo mode). Taps closer than the pixel's own blur are weighted down so the sharp box in hand
  * never bleeds into the blur. The occlusion spares what glows (a lamp, a screen: light, not a
- * surface in a crease) and thins out with the haze, as the fog hides the crease it would darken.
+ * surface in a crease) and the window panes (`glassMask`: their view is far beyond the frame), and thins out with
+ * the haze, as the fog hides the crease it would darken.
  */
 export const DOF_FRAGMENT = /* glsl */ `
 ${LINEAR_DEPTH}
@@ -160,6 +162,7 @@ uniform vec2 uvScale;
 uniform vec2 uvLimit;
 #if USE_AO
 uniform sampler2D tAO;
+uniform sampler2D tGlass;
 uniform vec2 aoTexel;
 uniform float fogDensity;
 #endif
@@ -197,6 +200,8 @@ void main() {
   float ao = occlusionAt(st, z);
   // Bright as a lamp: light, not a surface in a crease. Far in the haze: the fog covers the crease.
   ao = mix(ao, 1.0, smoothstep(1.0, 3.0, lumaOf(centre.rgb)));
+  // A window pane: what it shows is far beyond the mullions standing proud of it (glassMask).
+  ao = mix(ao, 1.0, texture2D(tGlass, st).r);
   float fogDepth = fogDensity * z;
   ao = mix(ao, 1.0, 1.0 - exp(-fogDepth * fogDepth));
   #else
@@ -296,6 +301,10 @@ void main() {
  * taps along the edge) runs on the HDR frame compressed by x / (1 + luma) (Karis), averaged there
  * and expanded back, so a bright edge blends like a tone-mapped one; the alpha is blended with the
  * colour, so the cut-out's border is smoothed and stays premultiplied.
+ *
+ * `sharpen` (`sharpened`, CAS): the frame is drawn below the screen's resolution (the pixel ratio's cap, the
+ * adaptive resolution) and stretched back, and FXAA softens texture detail too: a light sharpen brings the lettering
+ * and the facades' paint back, stronger the more the frame is stretched.
  */
 export const OUTPUT_FRAGMENT = /* glsl */ `
 ${LUMA}
@@ -313,6 +322,7 @@ uniform vec3 shadows;
 uniform vec3 highlights;
 uniform float vignette;
 uniform float grain;
+uniform float sharpen;
 varying vec2 vUv;
 
 vec3 rrtAndOdtFit(vec3 v) {
@@ -335,19 +345,42 @@ vec3 toSRGB(vec3 c) {
   return mix(c * 12.92, 1.055 * pow(c, vec3(1.0 / 2.4)) - 0.055, step(0.0031308, c));
 }
 
-float hash(vec2 p) {
-  vec3 p3 = fract(vec3(p.xyx) * 0.1031);
-  p3 += dot(p3, p3.yzx + 33.33);
-  return fract((p3.x + p3.y) * p3.z);
-}
+${HOSKINS_HASH}
 
-#if USE_FXAA
 /** The HDR texel at uv, exposed and compressed into [0, 1) (premultiplied alpha kept). */
 vec4 compressed(vec2 uv) {
   vec4 c = texture2D(tColor, min(uv, uvLimit));
   vec3 x = c.rgb * exposure;
   return vec4(x / (1.0 + lumaOf(x)), c.a);
 }
+
+/** Back from compressed to the HDR value (unexposed). */
+vec3 expanded(vec3 t) {
+  return t / max(1.0 - lumaOf(t), 1e-3) / exposure;
+}
+
+/**
+ * Contrast-adaptive sharpening (after AMD's CAS): the cross of four neighbours, compressed like the FXAA's, pushed
+ * away from the centre by how much headroom the local contrast leaves (a soft texture sharpens, an edge already at
+ * full contrast does not ring). sharpen 0..1. Not across the video cut-out's border (it would ring the hole).
+ */
+vec4 sharpened(vec4 centre, vec2 st) {
+  vec3 x = centre.rgb * exposure;
+  vec3 m = x / (1.0 + lumaOf(x));
+  vec4 a = compressed(st + vec2(0.0, -texel.y));
+  vec4 b = compressed(st + vec2(-texel.x, 0.0));
+  vec4 d = compressed(st + vec2(texel.x, 0.0));
+  vec4 e = compressed(st + vec2(0.0, texel.y));
+  if (min(min(a.a, b.a), min(d.a, e.a)) < 0.99 || centre.a < 0.99) return centre;
+  vec3 mn = min(m, min(min(a.rgb, b.rgb), min(d.rgb, e.rgb)));
+  vec3 mx = max(m, max(max(a.rgb, b.rgb), max(d.rgb, e.rgb)));
+  vec3 amp = sqrt(clamp(min(mn, 1.0 - mx) / max(mx, vec3(1e-4)), 0.0, 1.0));
+  vec3 w = -amp * 0.2 * sharpen;
+  vec3 t = clamp((m + w * (a.rgb + b.rgb + d.rgb + e.rgb)) / (1.0 + 4.0 * w), 0.0, 0.999);
+  return vec4(expanded(t), centre.a);
+}
+
+#if USE_FXAA
 
 vec4 antialiased(vec4 centre, vec2 st) {
   vec3 m = centre.rgb * exposure;
@@ -373,7 +406,7 @@ vec4 antialiased(vec4 centre, vec2 st) {
   vec4 b = 0.5 * a + 0.25 * (compressed(st - dir * 0.5) + compressed(st + dir * 0.5));
   float lB = sqrt(lumaOf(b.rgb));
   vec4 t = (lB < lMin || lB > lMax) ? a : b;
-  return vec4(t.rgb / max(1.0 - lumaOf(t.rgb), 1e-3) / exposure, t.a);
+  return vec4(expanded(t.rgb), t.a);
 }
 #endif
 
@@ -383,6 +416,7 @@ void main() {
   #if USE_FXAA
   texel0 = antialiased(texel0, st);
   #endif
+  if (sharpen > 0.001) texel0 = sharpened(texel0, st);
   // Premultiplied: the balance scales the colour only, a cut-out stays a cut-out.
   vec3 color = toSRGB(acesFilmic(max(whiteBalance * texel0.rgb, vec3(0.0))));
 
@@ -398,7 +432,7 @@ void main() {
   float alpha = 1.0 - (1.0 - texel0.a) * veil;
   color *= veil;
 
-  float n = hash(gl_FragCoord.xy + fract(time * 7.13) * 431.0) - 0.5;
+  float n = hoskinsHash(gl_FragCoord.xy + fract(time * 7.13) * 431.0) - 0.5;
   float midtones = 1.0 - abs(luma - 0.5) * 1.2;
   color += n * (grain * midtones + 1.0 / 255.0) * alpha;
 

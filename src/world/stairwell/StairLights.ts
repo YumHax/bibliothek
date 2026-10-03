@@ -7,6 +7,7 @@ import { STAIRWELL_PLAN as plan, STOREY, STOREYS, landingY } from './stairwellPl
 import { playRelay } from './stairSounds';
 import { LAMP_GLOW, LAMP_LIGHT } from '../lighting/lampColours';
 import { mainsOn } from '@/building/mains';
+import { skyGlassColour } from '../materials/glass';
 
 export interface StairLightsOptions {
   /** The eye: the sensors see it, and the real lights follow the lit globes nearest to it. */
@@ -34,14 +35,11 @@ const SLOT_FADE_S = 0.3;
 /** The globes over each floor: 2.35 m up the wall. */
 const GLOBE_Y = 2.35;
 const EYE = 1.7;
-/** The sky through the roof light, by weather: an overcast's grey, the white of snow lying on the glass. */
-const OVERCAST = new THREE.Color(0x9aa2aa);
 /** A power cut's candles (`setCandles`): the two real lights move to the nearest flames, this bright, this colour. */
 const CANDLE_INTENSITY = 1.6;
 const CANDLE = new THREE.Color(0xff9a48);
 /** The endless stairs' globes (`setHaunted`): a faint, unsteady glow, whatever the sensors see. */
 const HAUNT_GLOW = 0.18;
-const SNOW_GLASS = new THREE.Color(0xe8eef2);
 
 interface Slot {
   at: THREE.Vector3;
@@ -82,7 +80,6 @@ export class StairLights extends THREE.Group implements Furniture, Updatable, Oc
   private readonly eye = new THREE.Vector3();
   private readonly ear = new THREE.Vector3();
   private readonly colour = new THREE.Color();
-  private readonly snowGlass = new THREE.Color();
   private readonly order: number[];
   private occupied = false;
   /** The people on the stairs the sensors see too (zone-local, feet at `position.y`), while they are about. */
@@ -310,12 +307,7 @@ export class StairLights extends THREE.Group implements Furniture, Updatable, Oc
 
   /** The roof light: the sky's colour, greyed by cloud, darkened by rain, white with snow lying on it, a lightning flash. */
   private paintSky(s: SkyState): void {
-    const c = this.colour.copy(s.zenith).lerp(s.horizon, 0.4);
-    c.lerp(OVERCAST, 0.7 * s.cloudCover);
-    c.multiplyScalar((0.25 + 1.1 * s.daylight) * (1 - 0.35 * s.rain));
-    c.lerp(this.snowGlass.copy(SNOW_GLASS).multiplyScalar(0.3 + 0.8 * s.daylight), 0.8 * s.snowCover);
-    c.addScalar(1.5 * s.lightning);
-    this.sky.color.copy(c);
+    this.sky.color.copy(skyGlassColour(this.colour, s));
   }
 }
 

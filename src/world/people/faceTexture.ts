@@ -115,7 +115,7 @@ function paint(look: PersonLook): THREE.CanvasTexture {
     ctx.ellipse(...P(side * 0.075, -0.385), 4.5, 2.2, side * 0.3, 0, Math.PI * 2);
     ctx.fill();
   }
-  return toTexture(canvas, 4);
+  return toTexture(canvas, 'facing');
 }
 
 /** Canvas pixel of the face angles (`u` across, +x to the right; `v` up). */

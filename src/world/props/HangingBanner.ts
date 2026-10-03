@@ -91,5 +91,5 @@ function paintBanner(options: HangingBannerOptions, width: number, height: numbe
     ctx.font = `bold ${Math.round(H * 0.16)}px sans-serif`;
     ctx.fillText(options.line, W / 2, H * 0.78);
   }
-  return toTexture(canvas, 4);
+  return toTexture(canvas, 'facing');
 }

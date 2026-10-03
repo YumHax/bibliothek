@@ -4,6 +4,7 @@ import type { ModalLike } from '@/game/SessionParts';
 import type { SessionActions } from '@/game/SessionActions';
 import { createCanvas, toTexture } from '@/graphics/canvas';
 import { invisibleHitbox } from '../meshUtils';
+import { PROUD } from '../props/joinery';
 import { Prop, part } from '../props/Prop';
 import { METAL, paint } from '../materials/palette';
 
@@ -45,7 +46,8 @@ export class CollectorsBook extends Prop implements Interactable {
     // BoxGeometry's faces: +x, -x, +y (the label), -y, +z, -z.
     part(this, WIDTH, BOARD, DEPTH, LEATHER, { y: THICK - BOARD / 2 }).material = [LEATHER, LEATHER, this.cover, LEATHER, LEATHER, LEATHER];
     part(this, WIDTH - SPINE - 0.006, THICK - 2 * BOARD, DEPTH - 0.012, PAGES, { x: SPINE / 2 - 0.003, y: THICK / 2 }).castShadow = false;
-    part(this, SPINE, THICK, DEPTH, LEATHER, { x: -WIDTH / 2 + SPINE / 2, y: THICK / 2 });
+    // The spine wraps the boards' back edge, standing proud of their top, ends and back (flush, they would fight).
+    part(this, SPINE + PROUD, THICK + PROUD, DEPTH + 2 * PROUD, LEATHER, { x: -WIDTH / 2 + (SPINE - PROUD) / 2, y: (THICK + PROUD) / 2 });
     // Brass guards on the two fore-edge corners of the top board.
     for (const sz of [-1, 1]) part(this, 0.03, 0.003, 0.03, BRASS, { x: WIDTH / 2 - 0.015, y: THICK + 0.0015, z: sz * (DEPTH / 2 - 0.015) }).castShadow = false;
     const hitbox = invisibleHitbox(WIDTH + 0.04, THICK + 0.04, DEPTH + 0.04, { y: THICK / 2 });

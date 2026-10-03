@@ -57,7 +57,8 @@ export class PriceTag extends THREE.Group {
       back.castShadow = false;
       this.add(back);
     } else if (style === 'stand') {
-      this.add(cylinderMesh(0.07, 0.012, STEEL, { y: 0.006 }, { segments: 16 }));
+      // Its foot thicker than a rug (12 mm): stood on one, its top would lie in the rug's.
+      this.add(cylinderMesh(0.07, 0.016, STEEL, { y: 0.008 }, { segments: 16 }));
       this.add(cylinderMesh(0.005, STICK, STEEL, { y: STICK / 2 }, { segments: 6 }));
       card.position.set(0, STICK + CARD_H / 2 - 0.01, 0.004);
       card.rotation.x = -0.5;
@@ -158,5 +159,5 @@ function paintTag(name: string, price: string, accent: string, stamp: Stamp | nu
     ctx.fillText(stamp.text, 0, 2);
     ctx.restore();
   }
-  return toTexture(canvas, 4);
+  return toTexture(canvas, 'facing');
 }

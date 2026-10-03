@@ -20,6 +20,8 @@ export interface ShopContext {
   readonly accent: number;
   readonly fascia: number;
   readonly letters: string;
+  /** The fascia's lettering family (`SHOP_LOOKS[kind].font`, CSS): the name board inside is lettered in it too. */
+  readonly font: string;
   readonly kind: Extract<ShopKind, 'furniture' | 'electronics' | 'pets' | 'florist'>;
   readonly dayNight: DayNight;
   readonly room: RoomOptions;

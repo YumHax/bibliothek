@@ -16,7 +16,7 @@ export interface DoormatOptions {
 }
 
 /** Coir is thick: a mat stands this proud of the floor (the floor's `mat` layer). */
-export const DOORMAT_THICKNESS = FLOOR.mat.lift;
+export const DOORMAT_THICKNESS = FLOOR.mat.lift; // convention-ok: a slab this thick, its top at the layer
 const PX_PER_M = 900;
 
 /**
@@ -92,5 +92,5 @@ function paintCoir(wM: number, dM: number, text: string, wear: number, random: (
     ctx.fillStyle = random() < 0.5 ? 'rgba(200,190,170,0.5)' : 'rgba(20,18,16,0.6)';
     ctx.fillRect(rim + random() * (W - 2 * rim), rim + random() * (H - 2 * rim), 2, 2);
   }
-  return toTexture(canvas, 4);
+  return toTexture(canvas, 'grazing');
 }

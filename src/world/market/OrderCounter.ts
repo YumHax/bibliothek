@@ -93,7 +93,7 @@ export class OrderCounter extends THREE.Group implements Furniture, Interactable
     ctx.fillStyle = '#9c6a5a';
     ctx.fillRect(24, 20, 60, 10);
     ctx.fillRect(236, 20, 80, 10);
-    return toTexture(canvas, 2);
+    return toTexture(canvas, 'facing');
   }
 
   private paintSign(): THREE.Texture {
@@ -110,6 +110,6 @@ export class OrderCounter extends THREE.Group implements Furniture, Interactable
     ctx.fillText('MAIL ORDER', 550, 120);
     ctx.font = '44px Georgia, serif';
     ctx.fillText('any title · new · catalogue price', 550, 215);
-    return toTexture(canvas, 4);
+    return toTexture(canvas, 'facing');
   }
 }

@@ -134,5 +134,5 @@ function bannerTexture(): THREE.CanvasTexture {
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillText('NEW IN!', 256, 76);
-  return toTexture(canvas, 4);
+  return toTexture(canvas, 'facing');
 }

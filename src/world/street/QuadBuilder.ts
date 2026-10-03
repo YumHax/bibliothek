@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { warnCoplanar } from '../surface/coplanar';
 
 /**
  * Collects axis-aligned quads (floors and upright faces) into one indexed `BufferGeometry`, with
@@ -76,6 +77,8 @@ export class QuadBuilder {
     geometry.setIndex(this.indices);
     geometry.computeBoundingBox();
     geometry.computeBoundingSphere();
+    // `?debug` only: overlapping faces in one plane showing different bits of texture fight (see `surface/coplanar`).
+    warnCoplanar(geometry, 'uv');
     return geometry;
   }
 

@@ -12,7 +12,8 @@ import { WaterStream } from './WaterStream';
 import { WaterRipples, rippleNormals } from './WaterRipples';
 import { Steam } from '../kitchen/Steam';
 import { HoverGlint } from '../props/hoverGlint';
-import { CERAMIC, CHROME, CLEAR_GLASS, STILL_WATER } from '../props/bathroomMaterials';
+import { CERAMIC, CHROME, STILL_WATER } from '../props/bathroomMaterials';
+import { GLASS, asGlass } from '../materials/glass';
 
 /** What the tub's water is doing, for the builder's sound: tap running, plug out, how full (0..1). */
 export interface BathWater {
@@ -291,8 +292,7 @@ export class Bathtub extends THREE.Group implements Furniture, Interactable, Upd
     // free edge (`PROUD`): no end face shares a plane with another (they would z-fight).
     const pane = SCREEN_LENGTH - 0.01;
     const rail = proud(pane, 1);
-    const glass = part(this, pane, SCREEN_HEIGHT, 0.006, CLEAR_GLASS, { x: end * (length / 2 - 0.01 - pane / 2), y: height + SCREEN_HEIGHT / 2, z });
-    glass.castShadow = false;
+    asGlass(part(this, pane, SCREEN_HEIGHT, 0.006, GLASS.screen, { x: end * (length / 2 - 0.01 - pane / 2), y: height + SCREEN_HEIGHT / 2, z }));
     part(this, 0.02, SCREEN_HEIGHT + 0.004, 0.03, CHROME, { x: end * (length / 2 - 0.01), y: height + SCREEN_HEIGHT / 2 + 0.002, z });
     part(this, rail, 0.012, 0.02, CHROME, { x: end * (length / 2 - 0.01 - rail / 2), y: height + 0.006, z });
   }

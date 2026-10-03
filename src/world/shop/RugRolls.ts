@@ -33,7 +33,8 @@ export class RugRolls extends THREE.Group implements Furniture {
       const h = 1.4 + random() * 0.8;
       const roll = new THREE.Group();
       roll.add(cylinderMesh(r, h, cloth(COLOURS[Math.floor(random() * COLOURS.length)]!), { y: h / 2 }, { segments: 14 }));
-      roll.add(cylinderMesh(r + 0.003, 0.1, label, { y: h * 0.62 }, { segments: 14 }));
+      // The label band stands clear of its own rounded rims (on high they curl in by a few millimetres).
+      roll.add(cylinderMesh(r + 0.006, 0.1, label, { y: h * 0.62 }, { segments: 14 }));
       // Along the wall on +x, each a little further out, leaning back into the corner.
       const along = 0.14 + i * 0.2;
       roll.position.set(along, 0, 0.12 + random() * 0.08);

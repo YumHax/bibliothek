@@ -151,8 +151,9 @@ export const STAIRWELL_PLAN = {
   courtyardDoor: { at: [2.995, -1.11] as [number, number], yaw: -Math.PI / 2, width: 0.85, height: 2.05, arrival: { at: [2.35, -1.11] as [number, number], yaw: Math.PI / 2 } },
   /** Behind a neighbour's door, how far into their flat and how high its sound comes from (m off the door, over the landing). */
   behindDoor: { z: 1.2, y: 1.2 },
-  /** The floor's name, this high on the wall over its landing. */
+  /** The floor's name, this high on the wall over its landing, this far off the wall (the endless night's plates hang over it). */
   floorNameY: 1.55,
+  floorNameOff: 0.01,
   /**
    * The stairwell's own air (`HallTone`): over every other landing (`landings`, `offset` from the landing's floor at
    * `x`, `z`) and one in the hall; the street heard behind the street door, this far in and this high.

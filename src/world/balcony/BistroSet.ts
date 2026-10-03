@@ -3,7 +3,16 @@ import { cylinderMesh } from '../meshUtils';
 import { Prop, part } from '../props/Prop';
 import { standard } from '../materials/palette';
 
-const PAINTED_STEEL = standard({ color: 0x2f5a44, roughness: 0.5, metalness: 0 });
+/** The set's measures and paint, shared with the street's low-poly copy of our balcony (`street/relief/FacadeRelief`). */
+export const BISTRO = {
+  color: 0x2f5a44,
+  /** The table top's radius and height, the chairs' distance either side of the stem. */
+  topRadius: 0.3,
+  topHeight: 0.72,
+  chairX: 0.52,
+} as const;
+
+const PAINTED_STEEL = standard({ color: BISTRO.color, roughness: 0.5, metalness: 0 });
 
 /**
  * A folding bistro table and two chairs in painted steel, the balcony's furniture: a round top on
@@ -17,11 +26,11 @@ export class BistroSet extends Prop {
   constructor() {
     super();
     this.name = 'BistroSet';
-    const top = cylinderMesh(0.3, 0.02, PAINTED_STEEL, { y: 0.72 }, { segments: 32 });
+    const top = cylinderMesh(BISTRO.topRadius, 0.02, PAINTED_STEEL, { y: BISTRO.topHeight }, { segments: 32 });
     const stem = cylinderMesh(0.025, 0.7, PAINTED_STEEL, { y: 0.36 }, { segments: 10 });
     const foot = cylinderMesh(0.2, 0.02, PAINTED_STEEL, { y: 0.01 }, { segments: 24 });
     this.add(top, stem, foot);
-    for (const side of [-1, 1]) this.add(chair(side * 0.52, side * -0.25));
+    for (const side of [-1, 1]) this.add(chair(side * BISTRO.chairX, side * -0.25));
   }
 }
 

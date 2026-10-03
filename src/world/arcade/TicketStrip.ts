@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { createCanvas } from '@/covers/generated/canvasUtils';
+import { createCanvas, canvasTexture } from '@/covers/generated/canvasUtils';
 import { boxMesh } from '../meshUtils';
 import { markShared } from '../props/Prop';
 import { METAL, paint } from '../materials/palette';
@@ -24,9 +24,8 @@ function art(): THREE.CanvasTexture {
   drawText(ctx, 'TICKET', 32, 20, 10, '#8a3a10');
   ctx.fillStyle = 'rgba(80,30,0,0.8)';
   for (let x = 0; x < 64; x += 4) ctx.fillRect(x, 0, 2, 1.5);
-  ticketArt = markShared(new THREE.CanvasTexture(canvas));
-  ticketArt.colorSpace = THREE.SRGBColorSpace;
-  ticketArt.wrapT = THREE.RepeatWrapping;
+  ticketArt = markShared(canvasTexture(canvas, { anisotropy: 'facing' }));
+  ticketArt.wrapT = THREE.RepeatWrapping; // convention-ok: tiles along the strip only
   return ticketArt;
 }
 
@@ -49,7 +48,7 @@ export class TicketStrip extends THREE.Group {
     this.add(boxMesh(0.07, 0.025, 0.01, METAL.satinSteel(), { z: 0.005 }));
     this.add(boxMesh(0.045, 0.004, 0.012, paint(0x050505, 0.8), { z: 0.006 }));
     this.texture = art().clone();
-    this.texture.wrapT = THREE.RepeatWrapping;
+    this.texture.wrapT = THREE.RepeatWrapping; // convention-ok: wraps one way only
     const geometry = new THREE.PlaneGeometry(WIDTH, 1);
     geometry.translate(0, -0.5, 0);
     this.strip = new THREE.Mesh(geometry, new THREE.MeshStandardMaterial({ map: this.texture, roughness: 0.8, side: THREE.DoubleSide }));

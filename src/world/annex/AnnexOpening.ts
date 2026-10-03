@@ -109,7 +109,7 @@ export class AnnexOpening extends Prop implements Updatable, Interactable {
     }
     hung.computeVertexNormals();
     hung.translate(0, (h + 0.12) / 2, 0);
-    const spread = box(w + 0.5, FLOOR.kilim.lift, 0.9, 0, FLOOR.kilim.lift / 2, 0.5);
+    const spread = box(w + 0.5, FLOOR.kilim.lift, 0.9, 0, FLOOR.kilim.lift / 2, 0.5); // convention-ok: a slab, its top at the layer
     this.sheet.add(merged([hung, spread], SHEET, false));
   }
 

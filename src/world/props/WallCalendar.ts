@@ -139,5 +139,5 @@ function paintPage(width: number, height: number, now: Date, seed: number, accen
       ctx.stroke();
     }
   }
-  return toTexture(canvas, 4);
+  return toTexture(canvas, 'facing');
 }

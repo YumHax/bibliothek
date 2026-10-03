@@ -3,7 +3,8 @@ import type { Furniture } from '../Furniture';
 import { cylinderMesh } from '../meshUtils';
 import { Plant } from '../props/Plant';
 import { part } from '../props/Prop';
-import { METAL, paint, standard, timber } from '@/world/materials/palette';
+import { METAL, paint, timber } from '@/world/materials/palette';
+import { GLASS } from '@/world/materials/glass';
 import { mirrorGlass } from '../props/MirrorGlass';
 
 export interface HallConsoleOptions {
@@ -28,7 +29,6 @@ const MIRROR_Y = 1.55;
 const WALNUT = timber(0x5e412b, 0.5);
 const BRASS = METAL.brass();
 // A mirror: silvered glass, so raw metal (metalness 1), its tint the silver's.
-const GLASS = standard({ color: 0xc8ccd0, roughness: 0.05, metalness: 1 });
 
 /**
  * A narrow walnut console against a wall: a key bowl, the mail in a small pile, a plant at the
@@ -65,7 +65,7 @@ export class HallConsole extends THREE.Group implements Furniture {
     if (options.mirror ?? true) {
       part(this, MIRROR_W, MIRROR_H, 0.02, WALNUT, { y: MIRROR_Y, z: 0.01 });
       // The glass on the face of the board (inside it, the board's face hid it), the silver a hair in front of the glass.
-      part(this, MIRROR_W - 0.06, MIRROR_H - 0.06, 0.008, GLASS, { y: MIRROR_Y, z: 0.024 });
+      part(this, MIRROR_W - 0.06, MIRROR_H - 0.06, 0.008, GLASS.mirror, { y: MIRROR_Y, z: 0.024 });
       const silver = mirrorGlass(MIRROR_W - 0.06, MIRROR_H - 0.06);
       silver.position.set(0, MIRROR_Y, 0.029);
       this.add(silver);

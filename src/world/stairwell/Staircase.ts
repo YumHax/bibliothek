@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import { QUALITY } from '@/graphics/quality';
-import { createCanvas, toTexture } from '@/covers/generated/canvasUtils';
+import { createCanvas, toTexture, repeatTexture } from '@/covers/generated/canvasUtils';
 import { Prop } from '../props/Prop';
 import { INSET } from '../props/joinery';
 import { instancedStandard, paint, standard } from '../materials/palette';
@@ -11,6 +11,7 @@ import { plasterBumpMap } from '../materials/surfaces';
 import { STAIRWELL_PLAN as plan, STOREY, STOREYS, landingY, type Rect } from './stairwellPlan';
 import { flightTreads } from './flights';
 import { STAIR_ATTRIBUTE, stairFloors, stairWalls, type StairFloors, type StairWalls } from './stairFinish';
+import { paintOnce } from '../materials/paintedTiles';
 
 /** `wall`: the painted walls (dado, creases: `stairFinish`); `plaster`: the ceilings, soffits and cornices. */
 type Finish = 'stone' | 'plaster' | 'wall' | 'iron' | 'wood' | 'hall' | 'tread';
@@ -88,8 +89,8 @@ export class Staircase extends Prop {
 
     this.walls = stairWalls(wallPaint);
     const stone = new THREE.MeshStandardMaterial({ color: 0xcfc8ba, roughness: 0.75 });
-    const tread = new THREE.MeshStandardMaterial({ map: treadTexture(), roughness: 0.6 });
-    const hall = new THREE.MeshStandardMaterial({ map: cabochonTexture(), roughness: 0.35 });
+    const tread = new THREE.MeshStandardMaterial({ map: paintOnce('stairwell:tread', () => [treadTexture()] as const)[0], roughness: 0.6 });
+    const hall = new THREE.MeshStandardMaterial({ map: paintOnce('stairwell:cabochon', () => [cabochonTexture()] as const)[0], roughness: 0.35 });
     this.floors = [stairFloors(stone, 'stone'), stairFloors(tread, 'tread'), stairFloors(hall, 'hall')];
     const plaster = new THREE.MeshStandardMaterial({ color: 0xe9e0cc, roughness: 0.95 });
     if (QUALITY.detailedMaterials) {
@@ -574,9 +575,8 @@ function treadTexture(): THREE.CanvasTexture {
     const s = 1 + Math.random() * 2.5;
     ctx.fillRect(Math.random() * size, Math.random() * size, s, s);
   }
-  const texture = toTexture(canvas, 4);
-  texture.wrapS = THREE.RepeatWrapping;
-  texture.wrapT = THREE.RepeatWrapping;
+  const texture = toTexture(canvas, 'grazing');
+  repeatTexture(texture);
   texture.repeat.set(2, 2); // uvs are metres: a tile every half metre
   return texture;
 }
@@ -607,9 +607,8 @@ function cabochonTexture(): THREE.CanvasTexture {
       ctx.fill();
     }
   }
-  const texture = toTexture(canvas, 4);
-  texture.wrapS = THREE.RepeatWrapping;
-  texture.wrapT = THREE.RepeatWrapping;
+  const texture = toTexture(canvas, 'grazing');
+  repeatTexture(texture);
   // uvs are metres: four octagons a metre, the same on the hall and under the last flight.
   return texture;
 }

@@ -35,7 +35,7 @@ export class MirrorPillar extends THREE.Group implements Furniture {
     this.add(boxMesh(s, h, s, paint(0x1a1720, 0.6), { y: h / 2 }));
     this.add(boxMesh(s + 0.03, BASE_H, s + 0.03, paint(0x0c0b10, 0.5), { y: BASE_H / 2 }));
     const neonColor = new THREE.Color(options.neon ?? 0xff2fa0);
-    const neon = standard({ color: neonColor.clone().multiplyScalar(0.3), emissive: neonColor, emissiveIntensity: 2.2, toneMapped: false });
+    const neon = standard({ color: neonColor.clone().multiplyScalar(0.3), emissive: neonColor, emissiveIntensity: 2.2 });
     const band = boxMesh(s + 0.02, 0.03, s + 0.02, neon, { y: 2.25 });
     band.castShadow = false;
     this.add(band);

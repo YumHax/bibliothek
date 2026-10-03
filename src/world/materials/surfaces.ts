@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { QUALITY } from '@/graphics/quality';
-import { createCanvas, seededRandom } from '@/covers/generated/canvasUtils';
+import { createCanvas, seededRandom, canvasTexture } from '@/covers/generated/canvasUtils';
 import { afterChunk, patchShader, VALUE_NOISE } from './shaderPatch';
 import { markShared } from '../props/Prop';
 
@@ -45,10 +45,7 @@ export function plasterBumpMap(): THREE.CanvasTexture {
     const v = Math.round(random() * 255);
     stamp(random() * PLASTER_PX, random() * PLASTER_PX, 0.6 + random() * 1.8, `rgba(${v},${v},${v},0.16)`);
   }
-  plasterBump = markShared(new THREE.CanvasTexture(canvas));
-  plasterBump.wrapS = plasterBump.wrapT = THREE.RepeatWrapping;
-  plasterBump.repeat.setScalar(1 / PLASTER_TILE_M);
-  plasterBump.anisotropy = QUALITY.anisotropy;
+  plasterBump = markShared(canvasTexture(canvas, { data: true, repeat: [1 / PLASTER_TILE_M, 1 / PLASTER_TILE_M] }));
   return plasterBump;
 }
 
@@ -158,6 +155,8 @@ export function avoidOnWall(material: THREE.Material, blocked: readonly WallRect
 export function wallMaterial(color: number, surface: WallSurface): THREE.MeshStandardMaterial {
   // `low` has no grain pass to break up a lamp's falloff on the plaster: the wall dithers itself (as the palette's materials do).
   const material = new THREE.MeshStandardMaterial({ color, roughness: 0.9, side: THREE.DoubleSide, dithering: !QUALITY.postFx });
+  // Its back is never seen from where things hang on it: the z-fight finder judges the room side only.
+  material.userData.zfightFrontOnly = true;
   if (!QUALITY.detailedMaterials) return material;
   material.bumpMap = plasterBumpMap();
   material.bumpScale = 0.35;
@@ -276,9 +275,7 @@ export function floorWearMap(width: number, depth: number, paths: readonly THREE
     ctx.fillStyle = `rgba(0,${g},0,0.18)`;
     ctx.fillRect(random() * px, random() * px, 1 + random() * 3, 1 + random() * 3);
   }
-  const texture = markShared(new THREE.CanvasTexture(canvas));
-  texture.anisotropy = QUALITY.anisotropy;
-  texture.colorSpace = THREE.NoColorSpace;
+  const texture = markShared(canvasTexture(canvas, { data: true }));
   wearMaps.set(key, texture);
   return texture;
 }

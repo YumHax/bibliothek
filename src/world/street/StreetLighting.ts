@@ -13,6 +13,8 @@ export interface StreetLightingOptions {
   shadowMapSize: number;
   /** Half the side of the square of street the sun's shadow map covers around the player (metres). */
   shadowReach?: number;
+  /** Refreshes of the sun's map a second while live (default `QUALITY.shadowRefreshHz`): a window's view needs few. */
+  shadowRefreshHz?: number;
 }
 
 /** The light's distance from the patch of street it shadows, and its shadow camera's depth. */
@@ -96,7 +98,7 @@ export class StreetLighting extends THREE.Group implements Furniture, Updatable,
     this.sun.shadow.normalBias = 0.05;
     this.sun.target = this.target;
     this.add(this.target, this.sun);
-    this.sunShadow = new ShadowRefresh(this.sun);
+    this.sunShadow = new ShadowRefresh(this.sun, options.shadowRefreshHz);
 
     this.sky = new THREE.HemisphereLight(0xffffff, GROUND_BOUNCE, 0);
     this.add(this.sky);

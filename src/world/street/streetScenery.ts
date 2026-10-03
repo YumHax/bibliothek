@@ -9,9 +9,8 @@ import { StreetPark } from './StreetPark';
 import { Buildings, type PaintedFront } from './Buildings';
 import type { WindowLife } from './windowLife';
 import { FacadeRelief, type FacadeReliefOptions } from './relief/FacadeRelief';
-import { LandmarkFronts } from './shopfronts/LandmarkFronts';
 import { BladeSigns } from './relief/BladeSigns';
-import { ShopfrontRelief } from './shopfronts/ShopfrontRelief';
+import { Shopfronts } from './shopfronts/Shopfronts';
 import { Shutters } from './relief/Shutters';
 import { ShopGlow } from './relief/ShopGlow';
 import { StreetLamps } from './StreetLamps';
@@ -36,7 +35,7 @@ export function sceneryAnisotropy(): number {
   return QUALITY.anisotropy;
 }
 
-/** The night map's and the surface mask's share of the facade atlas: half on high, a quarter else. */
+/** The night map's share of the facade atlas: half on high, a quarter else (the surface mask is `Buildings`' own, half on every quality). */
 function nightScale(): number {
   return QUALITY.level === 'high' ? 0.5 : 0.25;
 }
@@ -52,15 +51,17 @@ export interface StreetBaseOptions {
   windowLife?: WindowLife;
   /** The walkable street's park: its walked gardens collide. */
   walkable?: boolean;
+  /** The near facades' windows built in 3D (`Buildings.windowFrames`): yes unless false. */
+  windowFrames?: boolean;
 }
 
 /** The ground, the park's paths and beds, the facades. */
 export function buildStreetBase(add: AddScenery, options: StreetBaseOptions): { buildings: Buildings } {
-  const { dayNight, facades, detailScale, shopGoods, windowLife, walkable } = options;
+  const { dayNight, facades, detailScale, shopGoods, windowLife, walkable, windowFrames } = options;
   const anisotropy = sceneryAnisotropy();
   add(new StreetGround(dayNight, anisotropy));
   add(new StreetPark({ anisotropy, lawnY: LAWN_Y, reach: LAWN_REACH.x, ...(walkable ? { walkable } : {}) }));
-  const buildings = add(new Buildings(facades, dayNight, { detailScale, anisotropy, shopGoods, nightScale: nightScale(), ...(windowLife ? { windowLife } : {}) }));
+  const buildings = add(new Buildings(facades, dayNight, { detailScale, anisotropy, shopGoods, nightScale: nightScale(), ...(windowLife ? { windowLife } : {}), ...(windowFrames === false ? { windowFrames } : {}) }));
   return { buildings };
 }
 
@@ -70,12 +71,11 @@ export interface StreetFrontsOptions extends FacadeReliefOptions {
 }
 
 /** What stands out of the painted facades: awnings, balconies, the landmark fronts, bracket signs, the walk-in shops' fronts, shutters, the shops' glow. */
-export function buildStreetFronts(add: AddScenery, fronts: readonly PaintedFront[], dayNight: DayNight, options: StreetFrontsOptions = {}): { shopfronts: ShopfrontRelief } {
+export function buildStreetFronts(add: AddScenery, fronts: readonly PaintedFront[], dayNight: DayNight, options: StreetFrontsOptions = {}): { shopfronts: Shopfronts } {
   const { onRoll, ...relief } = options;
   add(new FacadeRelief(fronts, { dayNight, ...relief }));
-  add(new LandmarkFronts(fronts, dayNight));
   add(new BladeSigns(fronts, dayNight));
-  const shopfronts = add(new ShopfrontRelief(fronts, dayNight));
+  const shopfronts = add(new Shopfronts(fronts, dayNight));
   add(new Shutters(fronts, dayNight, onRoll));
   add(new ShopGlow(fronts, dayNight));
   return { shopfronts };
