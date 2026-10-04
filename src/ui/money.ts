@@ -2,7 +2,7 @@
  * How amounts of money read everywhere (the wallet chip, the pause menu, the reward chips): grouped
  * digits, a true minus sign, the unit pluralised. One place, so "1,250" and "−5" look the same all over.
  */
-export type MoneyUnit = 'coin' | 'ticket';
+type MoneyUnit = 'coin' | 'ticket';
 
 /** `1250` → "1,250"; `-5` → "−5" (with `sign`, `12` → "+12"). */
 export function formatCount(n: number, sign = false): string {

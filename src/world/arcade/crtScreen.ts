@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { patchShader } from '../materials/shaderPatch';
 
-export interface CrtScreenOptions {
+interface CrtScreenOptions {
   /** Scan lines across the picture (the game's line count). Default 240. */
   lines?: number;
   /** How far the picture bulges (barrel distortion), 0 = flat. Default 0.06. */

@@ -11,7 +11,7 @@ import { WORLD_PLAN } from './worldPlan';
  */
 
 /** The handle zone `zone`'s builder returned; null until it is built. */
-export function handleOf(zone: Zone): ZoneHandle | null {
+function handleOf(zone: Zone): ZoneHandle | null {
   return zone.handle as ZoneHandle | null;
 }
 

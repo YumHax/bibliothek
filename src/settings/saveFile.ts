@@ -14,7 +14,7 @@ const MAX_BYTES = 8 * 1024 * 1024;
 /** Preferences that belong with the progress: the cat is the player's. */
 const KEPT_PREFERENCES: readonly string[] = [KEYS.cat];
 
-export interface SaveFile {
+interface SaveFile {
   format: typeof FORMAT;
   version: number;
   /** ISO time it was written. */

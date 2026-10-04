@@ -47,7 +47,7 @@ export interface ShowcaseTarget extends SlotRef {
 }
 
 /** A display a friend comes to look at (`stops`): where to stand (world floor point), facing, and what is in it. */
-export interface ShowcaseStop {
+interface ShowcaseStop {
   at: THREE.Vector3;
   yaw: number;
   look: THREE.Vector3;

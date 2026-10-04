@@ -4,7 +4,7 @@ import type { SeasonName } from '@/time/season';
 
 /** The kinds of weather a spell can bring. */
 export type WeatherKind = 'clear' | 'fair' | 'cloudy' | 'overcast' | 'fog' | 'showers' | 'rain' | 'storm' | 'snow';
-export const WEATHER_KINDS: readonly WeatherKind[] = ['clear', 'fair', 'cloudy', 'overcast', 'fog', 'showers', 'rain', 'storm', 'snow'];
+const WEATHER_KINDS: readonly WeatherKind[] = ['clear', 'fair', 'cloudy', 'overcast', 'fog', 'showers', 'rain', 'storm', 'snow'];
 
 /** Everything the sky, the view and the room need to know about the weather right now, 0..1 each. */
 export interface WeatherState {
@@ -224,7 +224,8 @@ export class Weather {
       pick -= odds[kind] ?? 0;
       if (pick <= 0) return kind;
     }
-    return kinds[kinds.length - 1];
+    // Rounding left the pick past the last kind; nothing else drawable at all (a season of one weather) keeps today's.
+    return kinds[kinds.length - 1] ?? this.state.kind;
   }
 }
 

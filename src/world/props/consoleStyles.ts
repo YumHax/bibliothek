@@ -27,7 +27,7 @@ export interface MediaSlot {
 }
 
 /** A built console (and its controller) with the materials to tint on hover and its overall size. */
-export interface ConsoleVisual {
+interface ConsoleVisual {
   group: THREE.Group;
   hover: THREE.MeshStandardMaterial[];
   /** Console body size (metres): width, height, depth. */

@@ -5,7 +5,7 @@ import { MONO } from '@/covers/generated/canvasUtils';
 /** How a screen says it has no picture: a tuner's `snow` (a CRT) or a projector's blue source `slate`. */
 export type SignalLook = 'snow' | 'slate';
 /** What it shows: nothing (the set is off), looking for a signal, or none found. */
-export type SignalScene = 'idle' | 'search' | 'nosignal';
+type SignalScene = 'idle' | 'search' | 'nosignal';
 
 /** Size of the canvas: blocky on purpose, an on-screen display is not sharp. */
 const W = 320;

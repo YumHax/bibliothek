@@ -34,7 +34,7 @@ export function idleFidget(ctx: Context, random: () => number): GestureName | nu
   return pick(options, random);
 }
 
-export interface Response {
+interface Response {
   gesture: GestureName | null;
   face: FaceKey;
   /** How long the face holds the feeling (s). */

@@ -7,7 +7,7 @@ import type { ShopKind } from '../street/streetPlan';
  * then the one between) or none, the colours filling its window, and whether it keeps going into
  * the small hours. How it lights up is each picture's own.
  */
-export interface ShopColours {
+interface ShopColours {
   name: string;
   front: string;
   fascia: string;

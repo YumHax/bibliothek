@@ -2,7 +2,7 @@ import type { StockItem } from '@/economy/StockItem';
 import type { SaleReaction } from '@/game/SessionActions';
 
 /** What a stallholder knows when asked: their table right now, and the hour. */
-export interface StallState {
+interface StallState {
   /** Platform name, as on the sign. */
   platform: string;
   /** What is still on the table (not in the player's hand). */

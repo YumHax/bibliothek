@@ -7,7 +7,7 @@ import { playCrateScrape, playRummage } from '@/audio/marketBustle';
 import { rearOf, stereoPan } from '@/audio/spatial';
 import type { Furniture, OccupancyAware } from '../Furniture';
 
-export interface CrowdSoundOptions {
+interface CrowdSoundOptions {
   /** Whose distance and side place the bustle: the camera. */
   listener: THREE.Object3D;
   /** Where the bustle comes from: the stalls (their world positions are read when a sound plays). */

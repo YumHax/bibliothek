@@ -5,9 +5,9 @@ import { MoonpostProgram } from './moonpost/MoonpostProgram';
 import type { PrototypeStory } from './PrototypeStory';
 import { PROTOTYPE_ID, PROTOTYPE_REVIEWS, type StoryMail } from './prototype';
 
-export { PrototypeStory, type StoryFile } from './PrototypeStory';
-export { PROTOTYPE_ID, type StoryMail, type StoryStage } from './prototype';
-export { PrototypeArtProvider, isPrototype, skippingPrototype } from './prototypeArt';
+export { PrototypeStory,  } from './PrototypeStory';
+export {  type StoryMail,  } from './prototype';
+export {  isPrototype,  } from './prototypeArt';
 
 /**
  * What the world's people and things ask the trail (`BuildContext.story`): each returns the line to say

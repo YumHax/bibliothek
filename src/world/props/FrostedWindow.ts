@@ -3,7 +3,7 @@ import { Prop, part } from './Prop';
 import { paint } from '../materials/palette';
 import { daylitGlass, lightDaylitGlass } from '../materials/glass';
 
-export interface FrostedWindowOptions {
+interface FrostedWindowOptions {
   /** Size of the glazed opening. Default 0.6 x 0.5. */
   width?: number;
   height?: number;

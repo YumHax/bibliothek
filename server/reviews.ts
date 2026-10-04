@@ -27,14 +27,14 @@ const QUOTE = { min: 18, max: 160 };
 const SUMMARY_MAX = 240;
 
 /** One score from the reviews box: who gave it, what it reads ("9/10", "97/100", "4/5"), whether it is an aggregate. */
-export interface ReviewScore {
+interface ReviewScore {
   source: string;
   score: string;
   aggregate?: boolean;
 }
 
 /** What the API answers. `article` null: Wikipedia has no article for the game (nothing else then). */
-export interface Reviews {
+interface Reviews {
   article: string | null;
   /** The article's address, for the attribution link. */
   url?: string;
@@ -130,7 +130,7 @@ async function lookupReviews(title: string, platform: string, year: string, dead
 }
 
 /** The scores box and the quote out of an article's wikitext. Exported for a headless check. */
-export function parseReception(wikitext: string, gameTitle = ''): Omit<Reviews, 'article' | 'url'> {
+function parseReception(wikitext: string, gameTitle = ''): Omit<Reviews, 'article' | 'url'> {
   const text = wikitext.replace(/<!--[\s\S]*?-->/g, '');
   const scores = reviewBox(text);
   const section = receptionSection(text);
@@ -361,7 +361,7 @@ function cacheKey(title: string, platform: string, year: string): string {
 }
 
 /** A cached answer read back, or null when it is not one. */
-export function readReviews(data: unknown): Reviews | null {
+function readReviews(data: unknown): Reviews | null {
   if (!data || typeof data !== 'object') return null;
   const d = data as Partial<Reviews>;
   if (d.article !== null && typeof d.article !== 'string') return null;

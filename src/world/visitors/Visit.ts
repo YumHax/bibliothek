@@ -10,7 +10,7 @@ export interface DoorLike {
 }
 
 /** A floor point of the round (zone-local to the friend's zone), and the door to open before walking to it. */
-export interface Leg {
+interface Leg {
   at: THREE.Vector3;
   door?: DoorLike | null;
   /** Walked straight even when something stands in the way (the last step into an armchair: the armchair itself). */

@@ -26,8 +26,6 @@ import { Rearranging, type PieceLike } from './Rearranging';
 import { Labelling } from './Labelling';
 import { isAction } from '@/input/actions';
 
-export type { SessionParts } from './SessionParts';
-
 /** A right-button press with a box in hand shorter than this (ms) and moving the mouse less (px) is a tap, not a turn of the box. */
 const RIGHT_TAP_MS = 280;
 const RIGHT_TAP_MOVE = 10;

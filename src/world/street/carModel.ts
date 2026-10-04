@@ -18,7 +18,7 @@ export function vehicleGlass(color = 0x1a232b): THREE.MeshStandardMaterial {
 }
 
 /** A small hatchback at real scale (`city/vehicles`), nose to +x, wheels on y = 0, centred. */
-export const CAR = VEHICLES.car;
+const CAR = VEHICLES.car;
 
 /** The street's car shapes: the hatchback, a saloon with a boot, a small panel van (parked, and the delivery van). */
 export type CarModelId = 'hatch' | 'saloon' | 'van';
@@ -37,7 +37,7 @@ export const CAR_SIZES: Record<CarModelId, VehicleSize> = {
 };
 
 /** The parts of the car, one geometry per material so every car on the street shares each draw call. */
-export interface CarGeometries {
+interface CarGeometries {
   /** Painted body and roof (tinted per car). */
   body: THREE.BufferGeometry;
   /** The glasshouse. */
@@ -364,7 +364,7 @@ export const BUS = {
 } as const;
 
 /** The bus's parts: body (tinted), glass, tyres, lamps (vertex colours), and the livery stripe. */
-export interface BusGeometries extends CarGeometries {
+interface BusGeometries extends CarGeometries {
   stripe: THREE.BufferGeometry;
   /** Indicator lamps on the +z (kerb) side, front and back, lit only while blinking. */
   indicators: THREE.BufferGeometry;
@@ -395,7 +395,7 @@ export function busGeometries(): BusGeometries {
 /** The bin lorry: a cab and the compactor body behind it, three axles, nose to +x. */
 export const LORRY = VEHICLES.lorry;
 
-export interface LorryGeometries extends CarGeometries {
+interface LorryGeometries extends CarGeometries {
   /** The orange beacon on the cab's roof. */
   beacon: THREE.BufferGeometry;
 }

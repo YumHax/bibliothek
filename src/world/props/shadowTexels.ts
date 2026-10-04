@@ -7,12 +7,12 @@ import * as THREE from 'three';
  */
 
 /** Normal offset of a shadow lookup, in texels: enough to clear acne on a slope, too little to lift a contact shadow off its foot. */
-export const NORMAL_BIAS_TEXELS = 1.25;
+const NORMAL_BIAS_TEXELS = 1.25;
 /** A cube shadow's faces each see 90°: a half-angle of 45°. */
 export const CUBE_FACE_HALF_ANGLE = Math.PI / 4;
 
 /** World size (m) of one texel at `distance` from a perspective shadow camera of `halfAngle` and `mapSize` texels across. */
-export function texelAt(distance: number, halfAngle: number, mapSize: number): number {
+function texelAt(distance: number, halfAngle: number, mapSize: number): number {
   return (2 * distance * Math.tan(halfAngle)) / mapSize;
 }
 

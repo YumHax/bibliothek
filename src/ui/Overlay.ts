@@ -37,7 +37,7 @@ export interface ConfirmOptions {
   onYes(): void;
 }
 
-export interface OverlayOptions {
+interface OverlayOptions {
   /** Opens the collection (the pause menu's "Collection" button); no button without it. */
   onCollection?: () => void;
   /** The pause menu's summary: label / value pairs (coins, tickets, games, where the player is). */

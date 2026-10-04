@@ -31,4 +31,4 @@ export function matte(color: THREE.ColorRepresentation, roughness = 0.6): THREE.
   return new THREE.MeshStandardMaterial({ color, roughness });
 }
 
-export { disposeTree, isShared, markShared } from '../materials/sharedResources';
+export { disposeTree,  markShared } from '../materials/sharedResources';

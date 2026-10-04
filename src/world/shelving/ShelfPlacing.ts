@@ -8,7 +8,7 @@ import type { Showcases, ShowcaseTarget } from '../showcase/Showcases';
 import type { ShelfTarget, ShelvingGroup } from './ShelvingGroup';
 
 /** What the box in hand is aimed at: a spot on a shelf, or a slot of a display (`Showcases`). */
-export interface PlacingTarget {
+interface PlacingTarget {
   readonly spot: { readonly fits: boolean; readonly swap?: GameBox };
   /** Why it does not go there, when that is not a full row (a box too big for the display's slot). */
   readonly refusal?: string;
@@ -40,7 +40,7 @@ markShared(UNIT_BOX);
 markShared(UNIT_EDGES);
 
 /** What `ShelfPlacing` needs of the hand: the box in it, and whether it is in hand (not on its way back). */
-export interface HandLike {
+interface HandLike {
   readonly current: GameBox | null;
   /** Non-null while the box is in (or on its way to) the hand. */
   readonly focusDistance: number | null;

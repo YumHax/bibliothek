@@ -49,10 +49,9 @@ import { onRouxPhase } from '@/building/rouxMove';
 import { regionLockFor } from '@/economy/regionLock';
 
 // The builders' shared types live in `buildContext.ts`; re-exported for the code that imported them from here.
-export type { BuildContext, ZoneHandle, MarketHallServices, CollectionContext, HomeContext, MoneyContext, ArcadeContext, MarketContext } from './buildContext';
 
 /** What the collection room built that other features (the cat, the session) need to know about. */
-export interface RoomHandle extends ZoneHandle {
+interface RoomHandle extends ZoneHandle {
   shelving: Shelving;
   tv: Television;
   /** Every armchair of the plan, bought or not (`ROOM_PLAN.seats` order). */
@@ -69,7 +68,7 @@ export interface RoomHandle extends ZoneHandle {
  * Everything goes through `zone.place()` (zone-local coordinates) so it collides, ticks and is
  * clickable as its class says. Lights are switched by clicking them; playing a video never touches them.
  */
-export function furnishRoom(zone: Zone, ctx: BuildContext): RoomHandle {
+function furnishRoom(zone: Zone, ctx: BuildContext): RoomHandle {
   const { cssLayer, covers, sky, collection: { games, shelved, overflow, arrangement, boxes }, home: { onSelectPlatform, upgrades, furnishings, callCat, collector }, arcade: { prizes } } = ctx;
   const plan = ROOM_PLAN;
   const { width } = plan.room;
@@ -218,12 +217,12 @@ export function furnishRoom(zone: Zone, ctx: BuildContext): RoomHandle {
  * A zone builder, as `ZONE_BUILDERS` lists it: bound to the `BuildContext` by `bindBuilder`. `sliced`, if it has one, is
  * the same build as steps, run over several idle moments when the zone is got ready ahead (`Zone.buildSliced`).
  */
-export type ContextBuilder<H extends ZoneHandle = ZoneHandle> = ((zone: Zone, ctx: BuildContext) => H) & {
+type ContextBuilder<H extends ZoneHandle = ZoneHandle> = ((zone: Zone, ctx: BuildContext) => H) & {
   readonly sliced?: (zone: Zone, ctx: BuildContext) => Iterator<void, H, void>;
 };
 
 /** A builder in a chunk of its own, fetched on demand (`import()`): the zones reached by travel, far from the flat. */
-export interface LazyContextBuilder<H extends ZoneHandle = ZoneHandle> {
+interface LazyContextBuilder<H extends ZoneHandle = ZoneHandle> {
   load(): Promise<ContextBuilder<H>>;
 }
 
@@ -240,7 +239,7 @@ function lazy<H extends ZoneHandle>(load: () => Promise<ContextBuilder<H>>): Laz
  * neighbours) are `lazy`, each in a chunk of its own that the `ZoneManager`, a travel or the idle
  * preload at start-up fetches before the zone is built.
  */
-export const ZONE_BUILDERS = {
+const ZONE_BUILDERS = {
   collectionRoom: furnishRoom,
   hallway: furnishHallway,
   bathroom: furnishBathroom,

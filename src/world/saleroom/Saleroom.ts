@@ -17,9 +17,9 @@ import type { LotStand } from './LotStand';
 import type { SaleBoard } from './SaleBoard';
 
 /** How the receipts of what is bought here name the place. */
-export const SALEROOM_WHERE = 'the saleroom';
+const SALEROOM_WHERE = 'the saleroom';
 
-export interface SaleroomOptions {
+interface SaleroomOptions {
   lots: LotServices;
   dayNight: DayNight;
   day: () => number;

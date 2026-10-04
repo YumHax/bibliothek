@@ -3,7 +3,7 @@ import { canonicalGameId } from '@/catalog';
 import { KEYS, PersistedStore, safeStorage } from '@/persistence';
 import type { GameSource } from './GameSource';
 
-export const DELIVERIES_STORAGE_KEY = KEYS.deliveries;
+const DELIVERIES_STORAGE_KEY = KEYS.deliveries;
 
 /** For a source that does not say what its changes are: more new games than this in one change is an import (the editor), not a purchase. */
 const BULK = 5;

@@ -101,7 +101,7 @@ export type ZoneKind = 'collectionRoom' | 'hallway' | 'bathroom' | 'bedroom' | '
  * "Go home") and the entrance hall (the street's home door when the sas is not connected). `arrival` is the zone-local floor spot
  * the player is set down on, `yaw` the way they face there. The travel menu lists every such zone but the current one.
  */
-export interface TravelPlan {
+interface TravelPlan {
   label: string;
   arrival: readonly [x: number, z: number];
   yaw: number;
@@ -111,7 +111,7 @@ export interface TravelPlan {
   unlisted?: boolean;
 }
 
-export interface ZonePlan extends ZoneSpec<ZoneId> {
+interface ZonePlan extends ZoneSpec<ZoneId> {
   kind: ZoneKind;
   travel?: TravelPlan;
   /** Colour grade and haze while the player is here (`graphics/grade.ts`); default `home`. */
@@ -139,7 +139,7 @@ export const SUN_ROTATION_Y = Math.PI;
  */
 export const FLAT = ['living', 'hallway', 'bathroom', 'bedroom', 'kitchen', 'balcony', 'annex', 'annexStudy', 'stairwell'] as const satisfies readonly ZoneId[];
 /** A room of the flat. */
-export type FlatId = (typeof FLAT)[number];
+type FlatId = (typeof FLAT)[number];
 /** The rest of the flat, seen from `id`. */
 const flatBut = (id: FlatId): FlatId[] => FLAT.filter((other) => other !== id);
 

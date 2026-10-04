@@ -16,7 +16,7 @@ import { isActivityAware, isDrawnAware, isOccupancyAware } from './lifecycle';
  * How often an undrawn zone's items tick (per second): out of sight, a smooth 60 Hz buys nothing,
  * and each tick is handed the time since the last one, so clocks and walks keep their pace.
  */
-export const UNDRAWN_TICK_HZ = 20;
+const UNDRAWN_TICK_HZ = 20;
 
 /** An item's tick while its zone is undrawn: every `1 / UNDRAWN_TICK_HZ` s, with the time owed (capped like the engine's). */
 class ThrottledTick implements Updatable {
@@ -78,7 +78,7 @@ function isLive(obj: THREE.Object3D): boolean {
  * `empty`: nothing built (costs nothing). `dormant`: built and kept in memory but out of the scene,
  * not ticked, not collidable, not clickable. `active`: plugged into the engine.
  */
-export type ZoneState = 'empty' | 'dormant' | 'active';
+type ZoneState = 'empty' | 'dormant' | 'active';
 
 /** A zone's place in the world: where it sits, how big it is, who it connects to. */
 export interface ZoneSpec<Id extends string = string> {
@@ -141,7 +141,7 @@ export function shareShadowCaster(root: THREE.Object3D): void {
 export type { DrawnAware } from './lifecycle';
 
 /** A doorway into another zone: `bounds` is the opening (world space); `door` the leaf hung in it by this side, if any. */
-export interface Portal {
+interface Portal {
   to: string;
   bounds: THREE.Box3;
   door?: { readonly openness: number };

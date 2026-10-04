@@ -4,7 +4,7 @@ import type { CoreParts, ModalLike } from './SessionParts';
 import type { KeyRoute, SessionHost } from './SessionHost';
 
 /** A label stuck on a shelf edge, as the rules see it. */
-export interface LabelLike {
+interface LabelLike {
   readonly id: number;
   readonly text: string;
   readonly tape: string;

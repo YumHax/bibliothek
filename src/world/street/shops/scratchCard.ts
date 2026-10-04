@@ -18,7 +18,7 @@ export interface ScratchSymbol {
   prize: number;
 }
 
-export const SYMBOLS: readonly ScratchSymbol[] = [
+const SYMBOLS: readonly ScratchSymbol[] = [
   { glyph: '🍒', name: 'cherries', prize: SCRATCH.prizes[0] },
   { glyph: '🎮', name: 'pads', prize: SCRATCH.prizes[1] },
   { glyph: '💾', name: 'cartridges', prize: SCRATCH.prizes[2] },

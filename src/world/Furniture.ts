@@ -30,7 +30,7 @@ export interface Furniture extends THREE.Object3D {
 }
 
 /** The zone-lifecycle hooks furniture may implement (occupied / drawn / active), see `zone/lifecycle.ts`. */
-export { isOccupancyAware, isDrawnAware, isActivityAware, type OccupancyAware, type DrawnAware, type ActivityAware } from './zone/lifecycle';
+export {    type OccupancyAware,  type ActivityAware } from './zone/lifecycle';
 
 /**
  * Seconds between two renders of a shadow map whose light is in a zone the player is not in.

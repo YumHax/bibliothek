@@ -7,7 +7,7 @@ import { escapeHtml } from '../html';
 import { ModalPanel } from '../ModalPanel';
 import './repair.css';
 
-export interface RepairPanelDeps {
+interface RepairPanelDeps {
   workshop: Workshop;
   notices: NoticeActions;
 }
@@ -82,7 +82,7 @@ export class RepairPanel extends ModalPanel {
     this.console = console;
   }
 
-  protected onOpened(): void {
+  protected override onOpened(): void {
     const console = this.console;
     this.step = 'unscrew';
     this.screws = Array.from({ length: console ? CONSOLES[console.platform].screws : 4 }, () => true);

@@ -9,7 +9,7 @@ import { boxMesh, cylinderMesh, invisibleHitbox } from '../meshUtils';
 import { paint, standard } from '../materials/palette';
 import { layMesh, WALL } from '../surface/layers';
 
-export interface TransistorRadioOptions {
+interface TransistorRadioOptions {
   /** Whose distance sets the volume: the camera. */
   listener: THREE.Object3D;
   /** Case colour. */

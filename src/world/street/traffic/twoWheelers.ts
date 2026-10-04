@@ -20,7 +20,7 @@ export const TWO_WHEELERS = {
 } as const satisfies Record<TwoWheelerModel, { wheelRadius: number; axles: readonly number[]; length: number; hip: readonly [number, number]; foot: readonly [number, number]; hands: readonly [number, number]; box: readonly [number, number] }>;
 
 /** A two-wheeler's parts, one geometry per material (instanced across the street's riders). */
-export interface TwoWheelerGeometries {
+interface TwoWheelerGeometries {
   body: THREE.BufferGeometry;
   trim: THREE.BufferGeometry;
   lamps: THREE.BufferGeometry;
@@ -52,7 +52,7 @@ function wheels(radius: number, axles: readonly number[], width: number): THREE.
 }
 
 /** Where the knee is for a hip and a foot a thigh and a shin apart: bent forwards (towards +x). */
-export function knee(hip: readonly [number, number], foot: readonly [number, number], upper = THIGH, lower = SHIN): [number, number] {
+function knee(hip: readonly [number, number], foot: readonly [number, number], upper = THIGH, lower = SHIN): [number, number] {
   const dx = foot[0] - hip[0];
   const dy = foot[1] - hip[1];
   const d = THREE.MathUtils.clamp(Math.hypot(dx, dy), 0.1, upper + lower - 0.005);

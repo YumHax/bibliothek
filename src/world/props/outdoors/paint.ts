@@ -14,14 +14,9 @@ export function mixHex(a: string, b: string, t: number): string {
   return `#${scratchA.getHexString()}`;
 }
 
-/** `#rrggbb` with an alpha, as `rgba()`. */
-export function alpha(hex: string, a: number): string {
-  const n = parseInt(hex.slice(1), 16);
-  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
-}
-
+/** One of `items` at random; `items` is never empty (a palette, a table of styles). */
 export function pick<T>(random: Rng, items: readonly T[]): T {
-  return items[Math.min(items.length - 1, Math.floor(random() * items.length))];
+  return items[Math.min(items.length - 1, Math.floor(random() * items.length))]!;
 }
 
 export function between(random: Rng, min: number, max: number): number {

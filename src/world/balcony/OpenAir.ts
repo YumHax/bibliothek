@@ -10,7 +10,7 @@ import { ShadowRefresh } from '../lighting/shadowRefresh';
 import { normalBiasAt, snapDirection, texelAngle } from '../props/shadowTexels';
 import { homeOutlook, type OutlookLease } from '../outlook/sharedOutlook';
 
-export interface OpenAirOptions {
+interface OpenAirOptions {
   /** Radius of the surround the view is shown on: clear of everything built nearby. */
   radius: number;
   /** The sun's spot stands this far out, lighting a disc of `sunRadius` round the origin. */

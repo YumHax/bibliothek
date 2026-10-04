@@ -7,7 +7,7 @@ import { STAIRWELL_PLAN as stairs, landingY, STOREYS } from '../stairwell/stairw
 import { liftGate, routeDown } from '../stairwell/stairRoutes';
 
 /** The cat as its outing drives it: the group that moves, its body, its feet indoors, its voice, its mind to hand back to. */
-export interface OutingCat {
+interface OutingCat {
   readonly group: THREE.Object3D;
   readonly body: CatBody;
   readonly motion: CatMotion;

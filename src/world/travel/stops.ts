@@ -4,7 +4,7 @@ import type { ZoneId } from '../zoneIds';
 import type { TravelStop } from './Travel';
 
 /** What the stops are placed with: each zone's zone-local -> world conversion. */
-export interface ZonePlacer {
+interface ZonePlacer {
   zone(id: ZoneId): { toWorld(point: Vector3): Vector3 };
 }
 

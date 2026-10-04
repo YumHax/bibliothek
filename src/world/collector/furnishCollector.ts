@@ -24,7 +24,7 @@ export interface CollectorHome {
   honours?: Honours;
 }
 
-export interface CollectorCornerOptions {
+interface CollectorCornerOptions {
   covers: BoxArtLoader;
   /** The sideboard the plaque stands on: it rides it when the player moves it. */
   sideboard?: THREE.Object3D;

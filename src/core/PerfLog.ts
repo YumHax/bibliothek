@@ -6,7 +6,7 @@ const PERIOD = 2;
 /** Frames timed per configuration of the bisection (after a few warm-up frames). */
 const BISECT_FRAMES = 20;
 
-export interface PerfLogHooks {
+interface PerfLogHooks {
   /** Hides every zone but the player's for the "current zone only" configuration. */
   drawCurrentZoneOnly?: () => void;
   /** Undoes `drawCurrentZoneOnly` (the portal culler takes over again on the next real frame). */

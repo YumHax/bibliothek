@@ -14,7 +14,7 @@ import { STAIRWELL_PLAN as plan, STOREY, landingY } from './stairwellPlan';
  * Someone from downstairs coming up to the flat's door for a word (`DoorVisitor.come`): who, how
  * they knock, and what they do once the door is opened to them (or they are spoken to on the landing).
  */
-export interface DoorVisit {
+interface DoorVisit {
   /** Their name: the door's caption while they wait ("Front door · open to A. Leclerc") and on what they say. */
   who: string;
   /** Knocks before they give up (a knock every `KNOCK_EVERY` s). */
@@ -32,7 +32,7 @@ export interface DoorVisit {
   gone?(): void;
 }
 
-export interface DoorVisitorOptions {
+interface DoorVisitorOptions {
   viewer: THREE.Object3D;
   doorstep: Doorstep;
   ground: StairWalkerOptions['ground'];
@@ -145,6 +145,11 @@ export class DoorVisitor extends Prop implements Updatable, DoorRinger {
         break;
       case 'talking':
         if (this.timer > 0) this.leave();
+        break;
+      case 'away':
+      case 'coming':
+      case 'leaving':
+        // Nothing to time: gone, or walking (the walk's own callbacks move the state on).
         break;
     }
   }

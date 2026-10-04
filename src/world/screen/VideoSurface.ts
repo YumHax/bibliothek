@@ -14,15 +14,15 @@ import { nowPlaying } from './nowPlaying';
 import { additiveOne } from '@/world/materials/blend';
 
 /** Pixel size of the embedded player; 4:3 like the longplays of the consoles on the shelves. */
-export const SURFACE_PX_W = 640;
-export const SURFACE_PX_H = 480;
+const SURFACE_PX_W = 640;
+const SURFACE_PX_H = 480;
 
 /** A feed's picture is shown as painted (no slate tint). */
 const WHITE = new THREE.Color(0xffffff);
 /** A switched-off tube: dark grey-green glass, not black. */
 const IDLE_GLASS = '#1a1f1c';
 /** Switching off, the sound fades over this long before the video is let go (the tube collapses meanwhile). */
-export const POWER_OFF_SECONDS = 0.3;
+const POWER_OFF_SECONDS = 0.3;
 /**
  * The static stays until the video reports its first frame, or this long after the player is loaded
  * if the player at least answered (some embeds never post their state).
@@ -35,7 +35,7 @@ const NO_SIGNAL_SLEEP_MS = 8000;
 /** An embed that has not answered at all this long after loading is given up: "no signal". */
 const EMBED_TIMEOUT_MS = 15000;
 
-export interface VideoSurfaceOptions {
+interface VideoSurfaceOptions {
   /** Physical width of the picture (metres); the height follows the 4:3 iframe. */
   width: number;
   /** Object whose distance and facing drive the volume (the camera). Omit for a fixed volume. */

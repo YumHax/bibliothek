@@ -97,7 +97,7 @@ Not kept to play: the TV stand already shows a console for every platform owned.
   `world/bedroom/AlarmClock.ts`, `world/props/UsableProp.ts` (a prop with a caption and a click from the builder),
   `world/build/presence.ts` (`presentWhile`: in the zone only while a state says so; `onRise`: the radio switched on).
   Bathtub (`onSoak`) and BedroomChair (`reading`) take options. Wiring: the `furnish*Life` functions at the end of
-  `furnishKitchen/Bathroom/Bedroom.ts`, from `BuildContext.home.household` (`HouseholdContext`); positions in each
+  `furnishKitchen.ts`, `furnishBathroom.ts` and `furnishBedroom.ts`, from `BuildContext.home.household` (`HouseholdContext`); positions in each
   plan's `household` block. What stands on bought furniture goes through its placer (`build/owned.ts`).
 - Visitors: `hosting` (the cake: `Visit`'s `linger`, the slice in `answered`, the thank-you in `ended`), `phoneBook` /
   `invite` for the phone (`VisitBook.invite`: the invited friend is today's plan, whatever the draw).

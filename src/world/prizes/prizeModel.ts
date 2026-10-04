@@ -11,26 +11,6 @@ const CHROME = standard({ color: 0xc4c7cc, metalness: 1, roughness: 0.2 });
 const DARK = paint(0x1a1a1f, 0.5);
 const WHITE = paint(0xf4f1ea, 0.5);
 
-/** How tall each kind stands, metres (the shelf spaces them by it). */
-export const PRIZE_HEIGHT: Record<PrizeKind, number> = {
-  keyring: 0.05,
-  ball: 0.05,
-  yoyo: 0.06,
-  duck: 0.08,
-  bear: 0.16,
-  cat: 0.15,
-  rocket: 0.17,
-  lavaLamp: 0.2,
-  trophy: 0.19,
-  miniCabinet: 0.18,
-  plush: 0.13,
-  catToy: 0.05,
-  poster: 0.05,
-  moodLamp: 0.19,
-  pennant: 0.19,
-  mystery: 0.08,
-};
-
 /**
  * A prize as a small model, standing on its base at local y = 0, facing +z: the keyring, the
  * bouncy ball, the yo-yo, the duck, the plush bear and cat, the tin rocket, the lava lamp (its

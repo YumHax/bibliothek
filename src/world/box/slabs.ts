@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 
-export type Axis = 'x' | 'y' | 'z';
-export type Face = 'px' | 'nx' | 'py' | 'ny' | 'pz' | 'nz';
+type Axis = 'x' | 'y' | 'z';
+type Face = 'px' | 'nx' | 'py' | 'ny' | 'pz' | 'nz';
 
 export interface Range {
   min: number;

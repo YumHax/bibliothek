@@ -29,19 +29,11 @@ const WET_ROUGHNESS = 'roughnessFactor = mix(roughnessFactor, min(roughnessFacto
  * The street's weather on a material: snow laid on its up-facing faces (car roofs and bonnets, the
  * shelter's roof, bench slats, the tops of bins, hedges and awnings: the albedo goes to snow white by
  * how much the face looks up, world space, instancing included, times `STREET_SNOW`, rougher and
- * not metallic), and the rain's wet (`STREET_WET`: darker and glossier, `wetCovered`). Faces that
- * look sideways or down take no snow. Returns the material.
+ * not metallic), and the rain's wet (`STREET_WET`: darker and glossier). Faces that look sideways or
+ * down take no snow. Returns the material.
  */
 export function snowCovered<M extends THREE.MeshStandardMaterial>(material: M): M {
   return weathered(material, true);
-}
-
-/**
- * Only the rain's wet (see `snowCovered`), for what never holds snow but darkens in the rain: a
- * facade, a wall, a door. Returns the material.
- */
-export function wetCovered<M extends THREE.MeshStandardMaterial>(material: M): M {
-  return weathered(material, false);
 }
 
 /**

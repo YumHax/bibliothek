@@ -21,7 +21,7 @@ import './CataloguePanel.css';
 
 const SEARCH_DEBOUNCE_MS = 250;
 
-export interface CataloguePanelOptions {
+interface CataloguePanelOptions {
   /**
    * Today's market stock, if drawn: a row says when a stall has a (cheaper) copy. With the order
    * calls, a row also offers a second-hand copy put by for the player on its stall in a few days.
@@ -110,7 +110,7 @@ export class CataloguePanel extends ModalPanel {
     this.renderWallet();
   }
 
-  protected onOpened(): void {
+  protected override onOpened(): void {
     if (this.lastResults.length) this.renderResults(this.lastResults); // today's stalls may have changed
     const sale = catalogueSaleOn(this.day);
     if (sale) this.setStatus(`Sale today: ${Math.round((1 - sale) * 100)}% off every new copy.`);
@@ -133,7 +133,7 @@ export class CataloguePanel extends ModalPanel {
     return `${usual !== price ? `<s class="catalogue__was">${usual}</s> ` : ''}${price} <span class="catalogue__coin"></span>`;
   }
 
-  protected onClosed(): void {
+  protected override onClosed(): void {
     this.setStatus('');
   }
 

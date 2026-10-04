@@ -82,7 +82,7 @@ export class ReviewSource {
 }
 
 /** An answer read back (the API's, or the cache's), or null when it is not one. */
-export function readReviews(data: unknown): Reviews | null {
+function readReviews(data: unknown): Reviews | null {
   if (!data || typeof data !== 'object') return null;
   const d = data as Partial<Reviews>;
   if (d.article !== null && typeof d.article !== 'string') return null;

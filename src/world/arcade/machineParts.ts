@@ -8,7 +8,7 @@ import { onSurface, WALL } from '../surface/layers';
 /** The polished steel of the physical machines' rails, legs, posts and plunger rods. */
 export const CHROME = standard({ color: 0xc4c7cc, metalness: 1, roughness: 0.2 });
 
-export interface MarqueeStyle {
+interface MarqueeStyle {
   /** Canvas size in pixels. Default 512 x 96. */
   width?: number;
   height?: number;

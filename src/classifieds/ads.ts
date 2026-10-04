@@ -151,11 +151,6 @@ function pickKind(u: number): SellerKind {
   return 'clearOut';
 }
 
-/** "Mrs Ward, flat 4, Park Corner Mansions". */
-export function addressOf(ad: Pick<Ad, 'name' | 'flat'>): string {
-  return `${ad.name}, ${ad.flat}, ${SELLERS_BUILDING}`;
-}
-
 /** "18:00" for hours of the clock. */
 export function clockOf(hours: number): string {
   const h = Math.floor(hours);

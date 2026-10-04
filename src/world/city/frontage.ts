@@ -36,6 +36,7 @@ function parkLaneOf(route: readonly Vec2[]): number {
 export const CYCLE_OFFSET = 2.2;
 
 const [eastbound, westbound] = STREET_PLAN.traffic.routes as readonly Vec2[][];
+if (!eastbound || !westbound) throw new Error('[city] Front Street needs its two traffic routes (streetPlan.traffic.routes)');
 const farParked = STREET_PLAN.parked.find((car) => car.yaw === 0)!;
 const nearParked = STREET_PLAN.parked.find((car) => car.yaw === Math.PI)!;
 
@@ -117,7 +118,7 @@ export const LIGHT_STRINGS = STREET_PLAN.decor.flatMap((entry) =>
 );
 
 /** Something standing on the pavement: where, and the way it faces (yaw 0 = +z, the plan's). */
-export interface PlacedThing {
+interface PlacedThing {
   at: Vec2;
   yaw: number;
 }
@@ -142,7 +143,7 @@ export const STREET_DETAILS = {
 } as const;
 
 /** Where a span across a street runs (low, high), in the flat's frame. */
-export type Span = readonly [number, number];
+type Span = readonly [number, number];
 const span = (a: number, b: number): Span => [Math.min(a, b), Math.max(a, b)];
 
 /**

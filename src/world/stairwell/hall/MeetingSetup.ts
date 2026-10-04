@@ -35,7 +35,7 @@ function syndicLook(): PersonLook {
   };
 }
 
-export interface MeetingSetupOptions extends Omit<StairWalkerOptions, 'look' | 'seed' | 'label' | 'speaker' | 'lines'> {
+interface MeetingSetupOptions extends Omit<StairWalkerOptions, 'look' | 'seed' | 'label' | 'speaker' | 'lines'> {
   meeting: CoproMeeting;
   hours: () => number;
 }
@@ -78,7 +78,7 @@ export class MeetingSetup extends Prop implements Updatable, OccupancyAware {
     this.add(this.chairs);
   }
 
-  get footprint(): THREE.Box3 {
+  override get footprint(): THREE.Box3 {
     return new THREE.Box3();
   }
 

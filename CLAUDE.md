@@ -11,19 +11,24 @@ bare flat"). `?debug` restores the seed collection, the furnished flat and the e
 
 ```bash
 npm run dev         # Vite dev server on :5173 (also serves /api/* via Vite plugins); the user usually has it running: check `lsof -i tcp:5173`, never start a second one
-npm run typecheck   # tsc --noEmit (src) + tsc -p api + scripts/check-conventions.mjs — run after every change
-npm run build       # typecheck + production bundle
+npm run typecheck   # tsc (src + api) + the checks: conventions, imports, docs paths, data, zfight, scene-lint (~10 s) — run after every change
+npm run lint        # eslint (bug rules only) + cspell + knip (an export nobody imports fails) (~20 s) — before a commit; in build
+npm run build       # typecheck + lint + production bundle + scripts/check-bundle.mjs (chunk sizes vs scripts/bundle-baseline.json)
 npm run balance     # the arcade's machines played headless by simulated people: what each pays (docs/economy.md)
 npm run zfight      # props, rooms and the street built headless, z-fighting faces vs scripts/zfight-baseline.json (in typecheck)
+npm run scene-lint  # the same subjects: light budgets, sunk / floating / overlapping props, disposal vs scripts/scene-baseline.json (in typecheck)
 ```
 
 ## Working rules
 
 - **Browser testing only when explicitly asked.** Never open Chrome or use browser tools on your own initiative; verify with
   typecheck + build and describe what to check. No test framework either: typecheck + build is the check.
-- Strict TypeScript (`noUnusedLocals`, `noUnusedParameters`). Path alias `@/` -> `src/`. One concern per file; a new
-  concept gets its own folder under `src/`. No logic in `index.html`; `src/main.ts` only calls the
-  `src/bootstrap/*` steps, which are wiring only.
+- Strict TypeScript (`noUnusedLocals`, `noUnusedParameters`, `noUncheckedIndexedAccess`, `noImplicitOverride`,
+  `noImplicitReturns`). Path alias `@/` -> `src/`. One concern per file; a new concept gets its own folder under `src/`.
+  No logic in `index.html`; `src/main.ts` only calls the `src/bootstrap/*` steps, which are wiring only.
+- The checks are the net (docs/checks.md): the layer order is enforced on the import graph, an export nobody imports is
+  removed (not kept for later), a headless script imports through `src/headless/`, and a check that would fail on what is
+  already there takes a baseline (`--write-baseline` after a look), never a looser rule.
 - Positions and decoration are data in `src/world/roomPlan.ts` (`ROOM_PLAN`) and `src/world/<kind>/<kind>Plan.ts` for the
   other rooms; classes never hard-code where they stand.
 - Units are metres, real-world scale (NES box 0.127 x 0.178 x 0.025, eye height 1.7).
@@ -54,6 +59,7 @@ npm run zfight      # props, rooms and the street built headless, z-fighting fac
 | Telling the player something (speech bubbles, reactions, rewards, tips, cards to read); no toasts | `docs/notices.md` |
 | Post-processing, quality levels, looks, material helpers (wood, fabric, plaster), reflections | `docs/graphics.md` |
 | Materials, how parts meet, anything flat on a surface (z-fighting), hiding lamps | `docs/props.md` "Materials, joints and layers" |
+| What each check enforces (conventions, imports, docs paths, data, zfight, scene-lint, bundle, lint), its baseline and opt-out, adding a rule | `docs/checks.md` |
 
 Layer order, outermost first: `worldPlan.ts` + the plan files (data) -> `layout.ts` + `src/world/<kind>/furnish<Kind>.ts`
 (zone builders, the only wiring) -> zones (`src/world/zone/`: a room loads and unloads as one; positions are zone-local) ->

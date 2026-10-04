@@ -6,7 +6,7 @@ import { paint } from '../materials/palette';
 import { layMesh, WALL } from '../surface/layers';
 import { type OwnedPrizes, showWhenOwned } from './ownedPrize';
 
-export interface ArcadePosterOptions {
+interface ArcadePosterOptions {
   prizes: OwnedPrizes;
   /** The prize that brings it home. Default 'poster'. */
   prizeId?: string;

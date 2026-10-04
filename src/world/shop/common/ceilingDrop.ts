@@ -4,7 +4,7 @@ import { part } from '../../props/Prop';
 import { paint } from '../../materials/palette';
 
 /** What something hangs from the ceiling by: a chain, a steel rod, a cord, a jute rope (a macramé plant hanger). */
-export type DropStyle = 'chain' | 'rod' | 'cord' | 'jute';
+type DropStyle = 'chain' | 'rod' | 'cord' | 'jute';
 
 const LOOKS: Record<DropStyle, { material: THREE.Material; thick: number }> = {
   chain: { material: paint(0x8a8680, 0.35), thick: 0.008 },

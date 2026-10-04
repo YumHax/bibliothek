@@ -9,9 +9,9 @@ import { RIVAL_COLLECTOR } from './rivalCollector';
  */
 
 /** How someone bids: at once on anything they like, only at the last moment, never letting go of their platform, to a dealer's margin, the rival. */
-export type BidderStyle = 'impulsive' | 'sniper' | 'stubborn' | 'dealer' | 'rival';
+type BidderStyle = 'impulsive' | 'sniper' | 'stubborn' | 'dealer' | 'rival';
 
-export interface Bidder {
+interface Bidder {
   id: string;
   name: string;
   style: BidderStyle;
@@ -42,13 +42,13 @@ export function bidderById(id: string): Bidder | undefined {
 }
 
 /** Who wants a lot, up to how much (coins). */
-export interface LotInterest {
+interface LotInterest {
   bidder: string;
   ceiling: number;
 }
 
 /** What the interest draw needs to know of a lot. */
-export interface LotSketch {
+interface LotSketch {
   estimate: number;
   reserve: number;
   /** The game's platform (none for a sealed carton). */
@@ -87,7 +87,7 @@ export function drawInterest(lot: LotSketch, rng: () => number, keenness = 1): L
 }
 
 /** The step the auctioneer asks for over `amount` (coins). */
-export function increment(amount: number): number {
+function increment(amount: number): number {
   if (amount < 20) return 2;
   if (amount < 60) return 5;
   if (amount < 150) return 10;
@@ -96,7 +96,7 @@ export function increment(amount: number): number {
 }
 
 /** Where a lot stands: asked for, bid on, going once, twice, sold, passed (nobody opened it). */
-export type LotPhase = 'opening' | 'bidding' | 'once' | 'twice' | 'sold' | 'passed';
+type LotPhase = 'opening' | 'bidding' | 'once' | 'twice' | 'sold' | 'passed';
 
 /** What happened in a step of a run, for the scene to show and say. `by` and `to` are a bidder's id or `YOU`. */
 export type LotEvent =
@@ -110,7 +110,7 @@ export type LotEvent =
   | { kind: 'out'; by: string };
 
 /** The run's clock (seconds), `AUCTION`'s by default. */
-export interface LotTiming {
+interface LotTiming {
   call: number;
   openSilence: number;
 }

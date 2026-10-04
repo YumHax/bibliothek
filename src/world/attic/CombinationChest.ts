@@ -62,7 +62,7 @@ export class CombinationChest extends Prop implements Updatable {
     }
   }
 
-  get footprint(): THREE.Box3 {
+  override get footprint(): THREE.Box3 {
     const { width, height, depth } = SIZE;
     return new THREE.Box3(new THREE.Vector3(-width / 2, 0, -depth / 2), new THREE.Vector3(width / 2, height, depth / 2));
   }
@@ -93,7 +93,7 @@ export class CombinationChest extends Prop implements Updatable {
 }
 
 /** One number wheel of the chest's padlock: click, and it turns to the next digit. */
-export class ChestWheel extends Prop implements Interactable {
+class ChestWheel extends Prop implements Interactable {
   readonly contactShadow = false;
   readonly hitboxes: THREE.Object3D[];
   digit = 0;

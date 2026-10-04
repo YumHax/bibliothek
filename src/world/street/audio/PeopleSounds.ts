@@ -10,7 +10,7 @@ import type { Walker } from '../../people/Walker';
 import { SoundGraph } from './soundGraph';
 import { StreetEar } from './streetEar';
 
-export interface PeopleSoundsOptions {
+interface PeopleSoundsOptions {
   listener: THREE.Object3D;
   /** Everyone walking the street (a live list: the builders add to it as they place people), zone-local. */
   walkers: readonly Walker[];

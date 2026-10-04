@@ -13,7 +13,7 @@ const COMBO_MAX = 5;
 const BEST_BANNER_SECONDS = 2;
 const LOW_TIME = 5;
 
-export const COMBO_COLORS = ['#c9c4ff', '#c9c4ff', '#7ee787', '#ffe066', '#ffb347', '#ff5f5f'];
+const COMBO_COLORS = ['#c9c4ff', '#c9c4ff', '#7ee787', '#ffe066', '#ffb347', '#ff5f5f'];
 
 /**
  * The run every cabinet game shares, so each game is only its rules (a play is a 12-30 second

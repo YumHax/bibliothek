@@ -4,16 +4,16 @@ import { TOURNAMENT } from './pricing';
 import { REGULARS, rivalScore } from './rivals';
 import { seeded } from './seeded';
 
-export const ARCADE_TOURNAMENT_KEY = KEYS.arcadeTournament;
+const ARCADE_TOURNAMENT_KEY = KEYS.arcadeTournament;
 
 /** The three rounds, as the bracket board names them. */
-export const ROUND_NAMES = ['QUARTER-FINAL', 'SEMI-FINAL', 'FINAL'] as const;
+const ROUND_NAMES = ['QUARTER-FINAL', 'SEMI-FINAL', 'FINAL'] as const;
 const ROUNDS = ROUND_NAMES.length;
 /** The player's name on the bracket. */
-export const YOU = 'YOU';
+const YOU = 'YOU';
 
 /** One match of the bracket: its two entrants, their scores once played, and who went through. */
-export interface Match {
+interface Match {
   a: string;
   b: string;
   scoreA: number | null;
@@ -22,7 +22,7 @@ export interface Match {
 }
 
 /** Everything the bracket board and the Session need to know about today's tournament. */
-export interface TournamentView {
+interface TournamentView {
   /** Whether today is a tournament day (a Saturday). */
   on: boolean;
   /** The game it is played on today. */
@@ -71,7 +71,7 @@ interface TournamentFile {
   scores: number[];
 }
 
-export interface ArcadeTournamentOptions {
+interface ArcadeTournamentOptions {
   /** The cabinets the tournament may be played on. */
   games: readonly string[];
   /** Regulars who always enter (the hall's own, by initials); the rest of the eight are drawn from the other regulars. */

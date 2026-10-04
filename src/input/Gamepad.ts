@@ -6,9 +6,7 @@ import { noteDevice } from './lastDevice';
 import { GAMEPAD_BUTTON_CODES } from './padButtons';
 import type { SyntheticMouse } from './SyntheticMouse';
 
-export { GAMEPAD_BUTTON_CODES } from './padButtons';
-
-export interface GamepadOptions {
+interface GamepadOptions {
   /** Radial dead zone of both sticks, in [0, 1). */
   deadZone?: number;
   /** Look speed at full right-stick tilt, radians per second. */

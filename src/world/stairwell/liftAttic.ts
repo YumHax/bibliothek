@@ -18,7 +18,7 @@ export interface LiftCarState {
 }
 
 /** What the ride to the attic asks of the lift. */
-export interface AtticRideHost {
+interface AtticRideHost {
   readonly car: LiftCarState;
   /** Off to landing `k`, as a button would send it. */
   send(k: number): void;

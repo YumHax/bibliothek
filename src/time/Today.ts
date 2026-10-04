@@ -1,7 +1,7 @@
 import { dayKey } from '@/economy/calendar';
 
 /** The market's day count as `Today` reads it (see `economy/MarketCalendar`). */
-export interface GameCalendar {
+interface GameCalendar {
   readonly day: number;
   subscribe(cb: (day: number) => void): () => void;
 }

@@ -4,7 +4,7 @@ import type { MarketLedger } from './MarketLedger';
 import { MARKET_ORDER, shopPrice } from './pricing';
 
 /** A quote for a used copy ordered at the counter: its price, the deposit paid now, the game day it waits on its stall from. */
-export interface OrderQuote {
+interface OrderQuote {
   price: number;
   deposit: number;
   day: number;

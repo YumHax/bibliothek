@@ -15,7 +15,7 @@ import { Timers } from '@/core/Timers';
 import { outOfSight } from './life/sight';
 import { pocket } from '@/errands/pocket';
 
-export interface BuskerOptions {
+interface BuskerOptions {
   /** The ears (the camera): the tune's level and side follow it. */
   viewer: THREE.Object3D;
   /** Game hours they play between. */

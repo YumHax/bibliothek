@@ -16,7 +16,7 @@ import { STAIRWELL_PLAN as plan, STOREY, landingY } from './stairwellPlan';
 export const STAIR_ATTRIBUTE = 'aStair';
 
 /** The walls' paint, as the co-owners voted it (`building/coproPlan` "paint"): plaster above, the dado, the line between. */
-export const STAIR_PAINTS: Record<string, { upper: number; dado: number; line: number }> = {
+const STAIR_PAINTS: Record<string, { upper: number; dado: number; line: number }> = {
   cream: { upper: 0xe6dcc6, dado: 0x6e4c34, line: 0x3a2a1e },
   sage: { upper: 0xd3d9c4, dado: 0x4f6352, line: 0x2c3a2e },
   ochre: { upper: 0xead2a0, dado: 0x7c4f2c, line: 0x43291a },

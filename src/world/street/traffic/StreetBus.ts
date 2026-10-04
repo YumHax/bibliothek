@@ -14,7 +14,7 @@ import { ScriptedVehicle, type CollisionSet } from './ScriptedVehicle';
 import type { StreetTraffic } from './StreetTraffic';
 import { CRUISE as CITY_CRUISE } from '../../city/traffic';
 
-export interface StreetBusOptions {
+interface StreetBusOptions {
   traffic: StreetTraffic;
   viewer: THREE.Object3D;
   /** The line it drives (route 0 of the traffic): it pulls in to `stop` on the way. */
@@ -186,25 +186,25 @@ export class StreetBus extends ScriptedVehicle implements Interactable {
     this.depart();
   }
 
-  protected arrived(): void {
+  protected override arrived(): void {
     this.sinceLeaving = Infinity;
   }
 
-  protected leaving(): void {
+  protected override leaving(): void {
     this.sinceLeaving = 0;
     this.bus.traffic.busAtStop = false;
   }
 
-  protected finished(): void {
+  protected override finished(): void {
     this.bus.traffic.busAtStop = false;
   }
 
   /** At the stop: stay till the doors have shut again after the dwell. */
-  protected keepWaiting(index: number): boolean {
+  protected override keepWaiting(index: number): boolean {
     return super.keepWaiting(index) || this.doorOpen > 0;
   }
 
-  protected animate(dt: number): void {
+  protected override animate(dt: number): void {
     const s = this.dayNight.state;
     const night = THREE.MathUtils.smoothstep(nightnessOf(s), 0.2, 0.6);
     this.lampMaterial.color.setScalar(0.4 + 2.4 * night);

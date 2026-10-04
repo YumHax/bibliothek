@@ -55,7 +55,7 @@ export class Birds implements LifeLayer {
       const d = Math.hypot(x, z);
       const a = azimuthOf(x, z);
       const pose = Math.sin(this.clock * bird.rate + bird.phase) > 0 ? 0 : 1;
-      const cell = this.cells[pose];
+      const cell = this.cells[pose]!; // two poses, painted in `paint`
       const half = (cell.w / BIRD.scale / 2) / d;
       const tall = cell.h / BIRD.scale / 2;
       push([azimuthX(a - half), heightY(h + tall, d), azimuthX(a + half), heightY(h - tall, d)], cell, d, visible);

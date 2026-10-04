@@ -7,7 +7,7 @@ import { IMPORT, MARKET_DISCOUNT, REPRO_BUY_BACK, STICKER, buyBackPrice, isImpor
 const AVERAGE_DISCOUNT = (MARKET_DISCOUNT.min + MARKET_DISCOUNT.max) / 2;
 
 /** What a copy is worth, two ways: what a stall would ask for it on an average day, and what the WE BUY desk pays. */
-export interface CopyValue {
+interface CopyValue {
   /** The collector's estimate: the market's asking price for this very copy (its state, its printing). */
   market: number;
   /** The WE BUY desk's offer, before any reputation bonus. */
@@ -20,7 +20,7 @@ export interface CopyValue {
  * The value of one copy, from the market's own price model (`marketPrice`, `buyBackPrice`): no
  * second model. A grail is worth its grail price, a reproduction what the desk pays for a fake.
  */
-export function copyValue(game: Game, views: Views): CopyValue {
+function copyValue(game: Game, views: Views): CopyValue {
   const grail = grailById(game.id);
   if (game.repro) return { market: REPRO_BUY_BACK, desk: REPRO_BUY_BACK, priced: true };
   if (grail) return { market: grail.price, desk: buyBackPrice(game, views), priced: true };

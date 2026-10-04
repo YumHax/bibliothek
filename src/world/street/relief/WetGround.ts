@@ -16,7 +16,7 @@ import { envBoost } from '../../materials/envBoost';
 import type { MovingLamp } from '../StreetCars';
 import { additive, additiveOne } from '@/world/materials/blend';
 
-export interface WetGroundOptions {
+interface WetGroundOptions {
   fronts: readonly PaintedFront[];
   /** The lamp heads (zone-local) and their colour: what the lamps reflect from. */
   lamps: readonly THREE.Vector3[];

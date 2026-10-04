@@ -7,7 +7,7 @@ import { paint, timber } from '../materials/palette';
 import { part } from '../props/Prop';
 import { HoverGlint } from '../props/hoverGlint';
 
-export interface RostrumOptions {
+interface RostrumOptions {
   /** The caption while looked at (what a click does now: bid N, you lead...). */
   label: () => string | null;
   /** A click: a bid, when the sale is on. */

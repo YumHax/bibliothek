@@ -13,7 +13,7 @@ export type MediaRegion = 'na' | 'eu' | 'jp';
  */
 export type CaseKind = 'cardboard' | 'clamshell' | 'jewel';
 
-export interface CaseSpec {
+interface CaseSpec {
   kind: CaseKind;
   /** Outer size in metres: width and height as seen facing the front cover, depth its thickness. */
   dims: BoxDimensions;

@@ -15,7 +15,7 @@ import type { OutingEnd, OutingWorld } from './CatOuting';
 import { CAT_OUTING as plan, type HideSpot } from './catOutingPlan';
 
 /** Something the cat may bring back in its mouth from an outing (a read card). */
-export interface CatFind {
+interface CatFind {
   title: string;
   text: string;
   effect?: string;
@@ -33,7 +33,7 @@ export function addCatFind(source: () => CatFind | null): () => void {
   };
 }
 
-export interface CatEscapesOptions {
+interface CatEscapesOptions {
   cat: Cat;
   /** The building the outing goes through (the stairwell's ground, the front door, the player's eye). */
   building: OutingWorld;
@@ -60,7 +60,7 @@ interface Saved {
  * knock, her line, the cat on the mat); found and walked home, it sometimes brings something back in
  * its mouth (`addCatFind` first: the treasure hunt's clues). An empty prop; placed in the stairwell's zone.
  */
-export class CatEscapes extends Prop implements Updatable {
+class CatEscapes extends Prop implements Updatable {
   readonly contactShadow = false;
   private openFor = 0;
   private tried = false;
@@ -188,7 +188,7 @@ function readSaved(data: unknown): Saved | null {
 }
 
 /** What `placeCatEscapes` wires together (`bootstrap/world.ts`). */
-export interface CatEscapesWiring {
+interface CatEscapesWiring {
   cat: Cat;
   /** The stairwell's handle: the ground on the stairs, and its `life` (no doorstep: no outings). */
   stairs: StairwellHandle;

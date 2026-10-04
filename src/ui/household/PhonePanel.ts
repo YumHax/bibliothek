@@ -6,7 +6,7 @@ import { ModalPanel } from '../ModalPanel';
 import './household.css';
 
 /** What the phone reaches: the market's stalls (which know the player), and the friends. */
-export interface PhoneDeps {
+interface PhoneDeps {
   /** Whether the market answers now; the line when it does not ("They open at 8:00"). */
   marketOpen(): boolean;
   closedLine(): string;
@@ -105,7 +105,7 @@ export class PhonePanel extends ModalPanel {
     this.events = events;
   }
 
-  protected onOpened(): void {
+  protected override onOpened(): void {
     this.message = '';
     this.showHome();
   }

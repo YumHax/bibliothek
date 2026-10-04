@@ -3,7 +3,7 @@ import { PLATFORMS } from '@/catalog/platforms';
 import { KEYS, PersistedStore, safeStorage } from '@/persistence';
 import { LOYALTY, REPUTATION } from './pricing';
 
-export const STANDING_STORAGE_KEY = KEYS.standing;
+const STANDING_STORAGE_KEY = KEYS.standing;
 
 /** Something the player did that the market remembers (see `REPUTATION.points`). */
 export type Deed = keyof typeof REPUTATION.points;
@@ -20,7 +20,7 @@ interface StandingFile {
 }
 
 /** A reputation level as the player sees it. */
-export interface ReputationLevel {
+interface ReputationLevel {
   level: number;
   name: string;
   points: number;

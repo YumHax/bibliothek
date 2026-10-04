@@ -11,7 +11,7 @@ import { GLASS } from '../materials/glass';
 import { Prop, part } from '../props/Prop';
 import { RENDER_ORDER } from '../surface/layers';
 
-export interface BalconyDoorOptions {
+interface BalconyDoorOptions {
   width: number;
   height: number;
   /** Where the leaf's collider lives (shut: across the opening; open: against the room's wall). */

@@ -31,8 +31,3 @@ export function fadeOut(el: HTMLElement, closingClass: string, ms: number, done?
   }, reduceMotion() ? 0 : ms);
   pending.set(el, timer);
 }
-
-/** True while `el` is fading out (still on screen, already closed). */
-export function isFading(el: HTMLElement): boolean {
-  return pending.has(el);
-}

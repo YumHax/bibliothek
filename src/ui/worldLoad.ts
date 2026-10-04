@@ -3,7 +3,7 @@
  * start card's primary button waits for it ("Opening the door…"); a failure is announced with a Retry
  * (`bootstrap/ui`). One state for the page.
  */
-export type WorldLoadState = 'loading' | 'ready' | 'failed';
+type WorldLoadState = 'loading' | 'ready' | 'failed';
 
 let state: WorldLoadState = 'loading';
 let retry: (() => void) | null = null;

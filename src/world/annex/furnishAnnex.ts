@@ -18,7 +18,7 @@ import { ANNEX_OVERFLOW, STUDY_OVERFLOW, annexSplit, placeAnnexShelving } from '
 import { Fireplace } from './Fireplace';
 
 /** What the new room built that the rest of the game needs: its room, its bookcases, where the cat comes to look. */
-export interface AnnexHandle extends ZoneHandle {
+interface AnnexHandle extends ZoneHandle {
   room: Room;
   shelving: Shelving | null;
 }

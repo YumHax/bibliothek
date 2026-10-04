@@ -4,7 +4,7 @@ import type { Furniture } from '../Furniture';
 import type { LiftRides } from './Lift';
 import { STOREYS } from './stairwellPlan';
 
-export interface RemovalLiftOptions {
+interface RemovalLiftOptions {
   lift: LiftRides;
   /** Whether the removal men are at work now (Mrs Roux's moving day, in their hours: `building/rouxMove`). */
   atWork: () => boolean;

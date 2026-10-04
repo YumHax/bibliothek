@@ -6,7 +6,7 @@ import { Prop, part } from '../props/Prop';
 import { paint } from '../materials/palette';
 import { HoverGlint } from '../props/hoverGlint';
 
-export interface BookcaseKitOptions {
+interface BookcaseKitOptions {
   price: number;
   /** Called once the kit is paid for: the bookcase goes up where the kit stood. */
   onBought: () => void;

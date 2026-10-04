@@ -1,4 +1,4 @@
-export type KeyPressHandler = (code: string, event: KeyboardEvent) => void;
+type KeyPressHandler = (code: string, event: KeyboardEvent) => void;
 
 /**
  * Input state tracker. Uses `KeyboardEvent.code` so it works on AZERTY too

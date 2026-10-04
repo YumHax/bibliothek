@@ -44,7 +44,7 @@ export class Drips extends Voice {
     this.out = out;
   }
 
-  protected tick(ctx: AudioContext, dt: number): void {
+  protected override tick(ctx: AudioContext, dt: number): void {
     this.untilDrip -= dt;
     if (this.untilDrip > 0 || !this.out) return;
     this.untilDrip = Math.random() < 0.2 ? 0.25 : rand(2.5, 7);

@@ -254,7 +254,7 @@ export class Traffic implements LifeLayer {
           if (gap < ahead) ahead = gap;
         }
       }
-      const limit = route.limits[Math.min(route.limits.length - 1, Math.floor(car.s))];
+      const limit = route.limits[Math.min(route.limits.length - 1, Math.floor(car.s))]!; // a limit per point, clamped to the last
       let target = Math.min(car.cruise, car.kind === 'ambulance' ? limit * 1.6 : limit);
       if (ahead < Infinity) target = Math.min(target, Math.sqrt(Math.max(0, 2 * BRAKING * (ahead - GAP))));
       // Make way for the ambulance: pull over and crawl if it is coming up behind, brake if it is near on the other side.
@@ -297,7 +297,10 @@ export class Traffic implements LifeLayer {
       }
     }
     events.garbageWorking = events.garbage.working;
-    for (let i = this.cars.length - 1; i >= 0; i--) if (this.cars[i].s >= this.cars[i].route.points.length - 1) this.cars.splice(i, 1);
+    for (let i = this.cars.length - 1; i >= 0; i--) {
+      const car = this.cars[i]!;
+      if (car.s >= car.route.points.length - 1) this.cars.splice(i, 1);
+    }
   }
 
   /** Whether no car in its lane is coming up within `room` metres behind `car` (a parked van may pull out). */
@@ -312,12 +315,15 @@ export class Traffic implements LifeLayer {
     const i0 = Math.min(route.points.length - 1, Math.floor(car.s));
     const i1 = Math.min(route.points.length - 1, i0 + 1);
     const t = car.s - i0;
-    const h0 = route.headings[i0];
-    const h1 = route.headings[i1];
+    // Both indices are clamped to the last sample above; a heading per point.
+    const h0 = route.headings[i0]!;
+    const h1 = route.headings[i1]!;
+    const p0 = route.points[i0]!;
+    const p1 = route.points[i1]!;
     const heading = Math.atan2(THREE.MathUtils.lerp(Math.sin(h0), Math.sin(h1), t), THREE.MathUtils.lerp(Math.cos(h0), Math.cos(h1), t));
     // The offset is to the right of the heading: towards the kerb.
-    out[0] = THREE.MathUtils.lerp(route.points[i0][0], route.points[i1][0], t) - Math.cos(heading) * car.offset;
-    out[1] = THREE.MathUtils.lerp(route.points[i0][1], route.points[i1][1], t) + Math.sin(heading) * car.offset;
+    out[0] = THREE.MathUtils.lerp(p0[0], p1[0], t) - Math.cos(heading) * car.offset;
+    out[1] = THREE.MathUtils.lerp(p0[1], p1[1], t) + Math.sin(heading) * car.offset;
     out[2] = heading;
     return out;
   }
@@ -347,19 +353,20 @@ export class Traffic implements LifeLayer {
  * directions never cross. Both routes start and end far out of sight
  * (`LIFE_REACH`).
  */
-function buildRoutes(): Route[] {
+function buildRoutes(): [Route, Route] {
   const step = 0.5;
   const line = (from: [number, number], to: [number, number]): [number, number][] => resample([from, to], step);
   const make = (parts: [number, number][][], interval: number): Route => {
     const points = parts.flat();
+    // The neighbours' indices are clamped to the ends.
     const headings = points.map((_, i) => {
-      const q = points[Math.min(i + 1, points.length - 1)];
-      const o = points[Math.max(i - 1, 0)];
+      const q = points[Math.min(i + 1, points.length - 1)]!;
+      const o = points[Math.max(i - 1, 0)]!;
       return Math.atan2(q[0] - o[0], q[1] - o[1]);
     });
     // Slow through the turn: wherever the heading is changing.
     const limits = headings.map((h, i) => {
-      const turning = Math.abs(THREE.MathUtils.euclideanModulo(h - headings[Math.max(0, i - 4)] + Math.PI, Math.PI * 2) - Math.PI) > 0.02;
+      const turning = Math.abs(THREE.MathUtils.euclideanModulo(h - headings[Math.max(0, i - 4)]! + Math.PI, Math.PI * 2) - Math.PI) > 0.02;
       return turning ? TURN_SPEED : CRUISE[1];
     });
     return { points, headings, step, limits, interval, nextSpawn: 0 };

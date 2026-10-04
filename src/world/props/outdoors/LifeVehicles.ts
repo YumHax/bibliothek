@@ -27,7 +27,7 @@ export interface VehiclePose {
  * its paint (the plain car's is each car's own, `Traffic`'s tints) and the livery band along its
  * flanks, heights in metres.
  */
-export interface VehicleLook {
+interface VehicleLook {
   body: VehicleBody;
   color: string;
   stripe?: { from: number; to: number; color: string };
@@ -63,7 +63,7 @@ export function carFrameAt(x: number, z: number, heading: number, body: VehicleB
 }
 
 /** The world point (x, z) at (u, v) in a vehicle's frame. */
-export function framePoint(frame: CarFrame, u: number, v: number): [number, number] {
+function framePoint(frame: CarFrame, u: number, v: number): [number, number] {
   return [frame.x + frame.along[0] * u + frame.across[0] * v, frame.z + frame.along[1] * u + frame.across[1] * v];
 }
 
@@ -182,22 +182,23 @@ export class Cyclists implements LifeLayer {
     }
     this.poses.length = 0;
     for (let i = this.riders.length - 1; i >= 0; i--) {
-      const r = this.riders[i];
+      const r = this.riders[i]!;
       r.s += (r.speed * dt) / 0.5;
       if (r.s >= r.path.length - 1) {
         this.riders.splice(i, 1);
         continue;
       }
+      // Still short of the path's last sample (above), so i0 and its neighbour are on it.
       const i0 = Math.floor(r.s);
       const t = r.s - i0;
-      const [x0, z0] = r.path[i0];
-      const [x1, z1] = r.path[Math.min(i0 + 1, r.path.length - 1)];
+      const [x0, z0] = r.path[i0]!;
+      const [x1, z1] = r.path[Math.min(i0 + 1, r.path.length - 1)]!;
       const len = Math.hypot(x1 - x0, z1 - z0) || 1;
       const [dx, dz] = [(x1 - x0) / len, (z1 - z0) / len];
       // Swing out (to the left of the heading) while something stands in the next few metres of the path.
       const blocked = obstacles.some(([ox, oz]) => {
         for (let k = 0; k <= 16; k += 2) {
-          const p = r.path[Math.min(r.path.length - 1, i0 + k)];
+          const p = r.path[Math.min(r.path.length - 1, i0 + k)]!;
           if (Math.hypot(p[0] - ox, p[1] - oz) < 4) return true;
         }
         return false;

@@ -151,7 +151,8 @@ export class CatMotion {
     for (const p of path) this.path.push(p);
     this.after.length = this.path.length;
     this.after[this.path.length - 1] = 0;
-    for (let i = this.path.length - 2; i >= 0; i--) this.after[i] = this.after[i + 1] + this.path[i].distanceTo(this.path[i + 1]);
+    // Walked back from the goal: every index is on the path, and `after[i + 1]` was just written.
+    for (let i = this.path.length - 2; i >= 0; i--) this.after[i] = this.after[i + 1]! + this.path[i]!.distanceTo(this.path[i + 1]!);
     this.index = 0;
     this.speed = speed;
     // A re-plan mid-walk keeps its stride; from standstill it eases in.
@@ -259,7 +260,8 @@ export class CatMotion {
 
   private walk(dt: number): void {
     const position = this.cat.position;
-    let waypoint = this.path[this.index];
+    // Walking: `walkTo` set the index on a path with points, and the loop below stops at its end.
+    let waypoint = this.path[this.index]!;
     let dx = waypoint.x - position.x;
     let dz = waypoint.z - position.z;
     let distance = Math.hypot(dx, dz);
@@ -269,7 +271,7 @@ export class CatMotion {
         this.arrive(true);
         return;
       }
-      waypoint = this.path[this.index];
+      waypoint = this.path[this.index]!;
       dx = waypoint.x - position.x;
       dz = waypoint.z - position.z;
       distance = Math.hypot(dx, dz);
@@ -302,7 +304,7 @@ export class CatMotion {
     const diff = Math.abs(angleDelta(Math.atan2(dx, dz), this.cat.rotation.y));
     this.turnTowards(desiredYaw, dt, TURN);
     const factor = THREE.MathUtils.clamp(1.15 - diff / Math.PI, 0.15, 1);
-    const remaining = distance + this.after[this.index];
+    const remaining = distance + this.after[this.index]!;
     const brake = THREE.MathUtils.clamp(Math.sqrt(remaining / BRAKE_DISTANCE), BRAKE_FLOOR, 1);
     const wanted = this.speed * factor * brake;
     const accel = (this.speed / ACCEL_S) * dt;
@@ -483,7 +485,7 @@ export class CatMotion {
 }
 
 /** Signed shortest angle from `from` to `to`, in (-π, π]. */
-export function angleDelta(to: number, from: number): number {
+function angleDelta(to: number, from: number): number {
   let d = (to - from) % (Math.PI * 2);
   if (d > Math.PI) d -= Math.PI * 2;
   if (d < -Math.PI) d += Math.PI * 2;

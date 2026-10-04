@@ -17,7 +17,7 @@ export interface ShopBrowsing {
   spots: readonly { at: [x: number, z: number]; yaw: number }[];
 }
 
-export interface ShopCustomerOptions {
+interface ShopCustomerOptions {
   viewer: THREE.Object3D;
   seed: number;
   browsing: ShopBrowsing;
@@ -67,7 +67,7 @@ export class ShopCustomer extends Prop implements Updatable {
     this.state = { kind: 'out', left: 8 + (options.seed % 7) * 3 };
   }
 
-  get footprint(): THREE.Box3 {
+  override get footprint(): THREE.Box3 {
     return new THREE.Box3();
   }
 

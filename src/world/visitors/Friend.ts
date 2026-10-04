@@ -8,7 +8,7 @@ import type { FriendPlan } from './friendsPlan';
 const CORNERS = 0.25;
 
 /** Something the friend waits for the player to answer (a game they would like to borrow): the caption, and what a click does. */
-export interface FriendRequest {
+interface FriendRequest {
   label: string;
   answer(session: SessionActions): void;
 }

@@ -141,8 +141,6 @@ export const KEYS = {
   reviewsCache: `${CACHE_PREFIX}reviews.v1`,
 } as const;
 
-export type StorageKey = (typeof KEYS)[keyof typeof KEYS];
-
 /** Preferences, not progress: a new game keeps them. */
 export const PREFERENCE_KEYS: readonly string[] = [KEYS.settings, KEYS.quality, KEYS.cat, KEYS.marketRadio];
 

@@ -18,7 +18,7 @@ export interface ApiResponse {
   body?: string | Uint8Array;
 }
 
-export type ApiHandler = (req: ApiRequest) => Promise<ApiResponse>;
+type ApiHandler = (req: ApiRequest) => Promise<ApiResponse>;
 
 export function json(status: number, body: unknown, headers: Record<string, string> = {}): ApiResponse {
   return {
@@ -33,7 +33,7 @@ export function empty(status: number, headers: Record<string, string> = {}): Api
 }
 
 /** Builds an `ApiRequest` from a Node request. `pathname` overrides the path when the host already stripped or rewrote it. */
-export function fromNodeRequest(req: IncomingMessage, pathname?: string): ApiRequest {
+function fromNodeRequest(req: IncomingMessage, pathname?: string): ApiRequest {
   const url = new URL(req.url ?? '/', 'http://localhost');
   if (pathname !== undefined) url.pathname = pathname;
   const headers: Record<string, string> = {};
@@ -44,7 +44,7 @@ export function fromNodeRequest(req: IncomingMessage, pathname?: string): ApiReq
   return { method: req.method ?? 'GET', url, headers };
 }
 
-export function sendNodeResponse(res: ServerResponse, response: ApiResponse): void {
+function sendNodeResponse(res: ServerResponse, response: ApiResponse): void {
   res.statusCode = response.status;
   for (const [name, value] of Object.entries(response.headers)) res.setHeader(name, value);
   if (response.body === undefined) {

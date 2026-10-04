@@ -9,7 +9,7 @@ import { gapAt } from './layers';
  * opening the `bibliothek.zfight()` console. `zfight` uses the same geometry (`planeAxes`,
  * `clipTriangle`, `sampleAt`).
  */
-export interface CoplanarOverlap {
+interface CoplanarOverlap {
   /** Where the overlap is (its middle, in the mesh's own frame). */
   at: THREE.Vector3Tuple;
   /** The way both faces face (rounded). */
@@ -20,7 +20,7 @@ export interface CoplanarOverlap {
   area: number;
 }
 
-export interface CoplanarOptions {
+interface CoplanarOptions {
   /**
    * How far the mesh is seen from (m), default 40: two faces closer than `gapAt` there fight, unless their overlap is
    * too thin to show at that distance (`visibleTo`: then judged as far as it still shows).
@@ -55,7 +55,7 @@ interface FlatTri {
  * (vertex colours, uvs: what makes two overlapping faces look different). Without `attribute` every
  * overlap counts.
  */
-export function coplanarOverlaps(position: THREE.BufferAttribute, index: THREE.BufferAttribute | null, attribute: THREE.BufferAttribute | null, options: CoplanarOptions = {}): CoplanarOverlap[] {
+function coplanarOverlaps(position: THREE.BufferAttribute, index: THREE.BufferAttribute | null, attribute: THREE.BufferAttribute | null, options: CoplanarOptions = {}): CoplanarOverlap[] {
   const { distance = 40, minArea = 4e-4, limit = 50, same = 0.02 } = options;
   const tolerance = gapAt(distance);
   const buckets = new Map<string, FlatTri[]>();
@@ -172,7 +172,7 @@ function round3(x: number): number {
 }
 
 /** A triangle laid in its plane (`d` along its bucket's normal, its corners in the plane's axes), as both checks bucket them. */
-export interface PlaneTri {
+interface PlaneTri {
   axis: THREE.Vector3;
   u: THREE.Vector3;
   v: THREE.Vector3;

@@ -2,7 +2,7 @@ import { BEGINNER, COIN_BACK, ticketsFor } from './pricing';
 import { getPrize } from './Prizes';
 
 /** The machine a play was on, as the payout reads it. */
-export interface PayoutMachine {
+interface PayoutMachine {
   readonly game: { readonly id: string; readonly title: string };
   /** A ticket machine (the claw is not: it pays a prize or nothing). */
   readonly freeWhenBroke: boolean;
@@ -11,7 +11,7 @@ export interface PayoutMachine {
 }
 
 /** How the play went: the score, whether it beat the player's best (or was their first score there), a prize won (the claw). */
-export interface PayoutPlay {
+interface PayoutPlay {
   readonly score: number;
   readonly best: boolean;
   readonly first?: boolean;
@@ -26,7 +26,7 @@ export interface PayoutPlay {
  * The arcade's books a play is settled against (`ArcadeDaily`, `ArcadeMedals`, `ArcadeLeague`):
  * each claim is made once, here, so a challenge or a medal is never paid twice.
  */
-export interface PayoutBooks {
+interface PayoutBooks {
   daily?: {
     challenge(): { gameId: string; target: number; reward: number; done: boolean };
     claimChallenge(): boolean;
@@ -39,7 +39,7 @@ export interface PayoutBooks {
 }
 
 /** What a play pays and how it is announced; the Session hands it over (wallet, prize shelf, balance table, toast). */
-export interface ArcadePayout {
+interface ArcadePayout {
   /** Prize ids to take home: the claw's plush, a won week's pennant. */
   prizes: string[];
   /** A ticket play: what the score earned on its own (the balance table's figure) and everything paid with the extras. */

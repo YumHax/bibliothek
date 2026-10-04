@@ -10,7 +10,7 @@ import { cloth, timber } from '../materials/palette';
 import { part } from '../props/Prop';
 import { SealedCartonModel } from '../props/SealedCartonModel';
 
-export interface LotStandOptions {
+interface LotStandOptions {
   covers: BoxArtLoader;
   label: () => string | null;
   /** A click: a bid on the lot shown, when it is being called. */

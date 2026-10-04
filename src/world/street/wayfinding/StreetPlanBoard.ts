@@ -11,13 +11,13 @@ import { SHOP_HOURS, clockTime } from '../shops/shopHours';
 import { FACADES, FRONT, PARK_STREET, PARK_WALK, WALKABLE_AREAS, type ShopKind, type Vec2 } from '../streetPlan';
 
 /** A place on the plan: its name, where its door is (zone-local), and its kind of shop for the hours. */
-export interface PlanPlace {
+interface PlanPlace {
   text: string;
   to: Vec2;
   kind?: ShopKind;
 }
 
-export interface StreetPlanBoardOptions {
+interface StreetPlanBoardOptions {
   /** Where the board hangs (zone-local, on the wall): the plan's "you are here". */
   at: Vec2;
   width: number;

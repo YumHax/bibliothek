@@ -14,7 +14,7 @@ import { isHomeAt, movedAway, residentAt } from './residentsHome';
  */
 
 /** What the windows read the time from: the game day (`Today.gameDay`) and the game hour. */
-export interface BuildingClock {
+interface BuildingClock {
   day(): number;
   hours(): number;
 }
@@ -36,7 +36,7 @@ export function followRival(took: () => number): void {
  * How full the trader's shelves across the courtyard are on game day `day` (0..1): filling with the days, and a shelf
  * more for every few copies he got before the player (`plan.trader.perTaken`), so his window tells the same story.
  */
-export function traderShelves(day: number): number {
+function traderShelves(day: number): number {
   const { start, fillDays, perTaken } = plan.trader;
   const days = start + (1 - start) * (1 - Math.exp(-Math.max(0, day) / fillDays));
   return Math.min(1, days + perTaken * rivalTook());
@@ -102,7 +102,7 @@ function stairsLit(floor: number, h: number): boolean {
 }
 
 /** What a story window shows now: whether it is lit, and the story (`STORY` kind, -1 just a lit room) and its parameter. */
-export function storyNow(spot: StoryWindow, day: number, h: number): WindowStory & { lit: boolean } {
+function storyNow(spot: StoryWindow, day: number, h: number): WindowStory & { lit: boolean } {
   const show = (lit: boolean, kind: number, param = 0) => ({ lit, kind, param });
   switch (spot.life) {
     case 'trader':

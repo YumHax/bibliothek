@@ -6,7 +6,7 @@ import { part } from '../props/Prop';
 import type { Furniture } from '../Furniture';
 import { paint, timber, METAL } from '../materials/palette';
 
-export interface ShopCounterOptions {
+interface ShopCounterOptions {
   /** Length along local x. Default 1.6. */
   width?: number;
   /** Paint of the front panel (the shop's colour). */

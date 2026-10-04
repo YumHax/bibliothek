@@ -8,7 +8,7 @@ import { timber } from '../materials/palette';
 import { layMesh, WALL } from '../surface/layers';
 
 /** One card pinned on the board. */
-export interface NoticeCard {
+interface NoticeCard {
   title: string;
   lines: string[];
   /** Card colour, a CSS colour (an index card's cream, a post-it's yellow). */
@@ -17,7 +17,7 @@ export interface NoticeCard {
   tilt?: number;
 }
 
-export interface NoticeBoardOptions {
+interface NoticeBoardOptions {
   /** Hover caption. */
   label: () => string;
   /** Click. */

@@ -7,7 +7,7 @@ import { boxMesh, cylinderMesh, invisibleHitbox } from '../meshUtils';
 import { paint, standard, timber } from '../materials/palette';
 import { PROUD, proud } from '../props/joinery';
 
-export interface CoffeeCartOptions {
+interface CoffeeCartOptions {
   /** Price of a cup, chalked on the menu board. */
   price: number;
   /** Hover caption. */

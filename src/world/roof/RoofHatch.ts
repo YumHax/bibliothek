@@ -43,7 +43,7 @@ export class RoofHatch extends Prop implements Interactable {
     this.add(hitbox);
   }
 
-  get footprint(): THREE.Box3 {
+  override get footprint(): THREE.Box3 {
     const s = this.size / 2;
     return new THREE.Box3(new THREE.Vector3(-s, 0, -s), new THREE.Vector3(s, 0.3, s));
   }

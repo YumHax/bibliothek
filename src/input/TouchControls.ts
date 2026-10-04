@@ -2,12 +2,11 @@ import './TouchControls.css';
 import type { Input } from '@/core/Input';
 import { SPRINT_CODE, type FirstPersonController } from '@/player/FirstPersonController';
 import { TOUCH_ACTIONS, primaryCode, type ActionContext } from './actions';
-import { hudSlot } from '@/ui/hudSlot';
 import type { SyntheticMouse } from './SyntheticMouse';
 import { isTouchDevice, watchForTouch } from './deviceDetect';
 
 /** One on-screen button: its label, the key code it presses through `Input`, and where it applies (always, without). */
-export interface TouchButton {
+interface TouchButton {
   label: string;
   code: string;
   title?: string;
@@ -15,14 +14,14 @@ export interface TouchButton {
 }
 
 /** What the player's hands are on now, for the bar (`setContext`): the Session's `handsContext`. */
-export type TouchContext = 'room' | 'held' | 'market' | 'arcade' | 'seated' | 'furnishing';
+type TouchContext = 'room' | 'held' | 'market' | 'arcade' | 'seated' | 'furnishing';
 
 /**
  * Default action bar: the action table's `touch` entries (`input/actions`), in slot order. Only the
  * buttons that do something where the player is show (`setContext`); `KeyE` is named for what it does
  * there: put back, walk away (a machine), stand up (a seat).
  */
-export const DEFAULT_TOUCH_BUTTONS: TouchButton[] = TOUCH_ACTIONS.map((button) => ({ ...button }));
+const DEFAULT_TOUCH_BUTTONS: TouchButton[] = TOUCH_ACTIONS.map((button) => ({ ...button }));
 
 /** Which buttons show in each context, by their action's context (`panels`: everywhere). */
 const SHOWN_IN: Record<TouchContext, ReadonlySet<ActionContext>> = {
@@ -42,7 +41,7 @@ const E_LABELS: Partial<Record<TouchContext, { label: string; title: string }>> 
 /** How often the bar re-reads the context while in the room (ms). */
 const CONTEXT_POLL_MS = 200;
 
-export interface TouchControlsOptions {
+interface TouchControlsOptions {
   buttons?: TouchButton[];
   /** Radians of camera turn per CSS pixel of drag. */
   lookSensitivity?: number;
@@ -58,6 +57,11 @@ export interface TouchControlsOptions {
   longPressMs?: number;
   /** Fraction of the screen width, from the left, that spawns the joystick; the rest is the look zone. */
   moveZone?: number;
+  /**
+   * Where the "rotating" badge goes: the HUD's column under the crosshair (`ui/hudSlot`, handed in by the wiring:
+   * the input layer knows no HUD), last in it, below the caption and the reaction; `container` when absent.
+   */
+  badgeHome?: HTMLElement;
 }
 
 interface StickPointer {
@@ -95,7 +99,7 @@ export class TouchControls {
   private active = false;
   private stick: StickPointer | null = null;
   private look: LookPointer | null = null;
-  private readonly opts: Required<TouchControlsOptions>;
+  private readonly opts: Required<Omit<TouchControlsOptions, 'badgeHome'>>;
   /** Settings > Look: a multiplier of `lookSensitivity`, and pushing up looks down. */
   private lookScale = 1;
   private invertY = false;
@@ -156,8 +160,8 @@ export class TouchControls {
     container.append(this.stickEl, this.barEl);
     // Where the bar ends (it wraps to two rows on a phone): the HUD along the top sits under it (`--touch-bar-bottom`, styles.css).
     if (typeof ResizeObserver === 'function') new ResizeObserver(() => this.publishBarBottom()).observe(this.barEl);
-    // Last in the column under the crosshair (`hudSlot`), below the caption and the reaction.
-    hudSlot(container, 'crosshair').appendChild(this.badgeEl);
+    // Last in the column under the crosshair (`badgeHome`, the wiring's `hudSlot`), below the caption and the reaction.
+    (options.badgeHome ?? container).appendChild(this.badgeEl);
 
     if (isTouchDevice()) this.activate();
     else watchForTouch(() => this.activate());

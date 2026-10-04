@@ -8,7 +8,7 @@ import { Duel } from '../../arcade/games/Duel';
 const FINAL_HOLD = 2.5;
 
 /** What a match tells the evening: a goal either way, and the final tally. */
-export interface MatchEvents {
+interface MatchEvents {
   goal(forPlayer: boolean): void;
   over(tally: { you: number; them: number }): void;
 }

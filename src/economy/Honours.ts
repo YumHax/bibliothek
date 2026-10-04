@@ -99,7 +99,7 @@ export class Honours {
 }
 
 /** The consoles whose whole built-in list is in `games`, and the club's sets they complete, as honours of `day`. */
-export function completed(games: readonly Game[], day: number): Honour[] {
+function completed(games: readonly Game[], day: number): Honour[] {
   const mine = games.filter((g) => g.status !== 'wishlist');
   const out: Honour[] = [];
   for (const set of COLLECTOR_SETS) {

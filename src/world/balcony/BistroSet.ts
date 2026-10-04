@@ -19,7 +19,7 @@ const PAINTED_STEEL = standard({ color: BISTRO.color, roughness: 0.5, metalness:
  * a single stem, the chairs either side of it facing the street. Collides at the table.
  */
 export class BistroSet extends Prop {
-  get footprint(): THREE.Box3 {
+  override get footprint(): THREE.Box3 {
     return new THREE.Box3(new THREE.Vector3(-0.3, 0, -0.3), new THREE.Vector3(0.3, 0.72, 0.3));
   }
 

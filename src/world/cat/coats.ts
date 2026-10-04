@@ -13,7 +13,7 @@ import type { CoatKind } from './types';
  * y runs along the body with the front at the top row (textures are flipped on upload).
  */
 
-export interface CoatPalette {
+interface CoatPalette {
   /** Main fur (body, head, upper legs). */
   base: string;
   /** Stripes and dark patches. */
@@ -98,7 +98,7 @@ function paintBody(ctx: CanvasRenderingContext2D, w: number, h: number, coat: Co
   for (const [x0, x1] of [
     [0, bellyWidth],
     [w, w - bellyWidth],
-  ]) {
+  ] as const) {
     const gradient = ctx.createLinearGradient(x0, 0, x1, 0);
     gradient.addColorStop(0, p.light);
     gradient.addColorStop(1, mix(p.light, p.base, 1));

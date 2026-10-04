@@ -20,7 +20,7 @@ const SHOW_FPS = 15;
 const DEMO_RANGE = 9;
 
 /** What the title card tells about the game. */
-export interface TitleInfo {
+interface TitleInfo {
   scores: ScoreTable;
   pointsPerTicket: number;
   medals?: MedalBook;

@@ -5,7 +5,7 @@ import { wakefulnessAt } from '@/time/wakefulness';
 import { Prop } from '../props/Prop';
 import { afterChunk, patchShader } from '../materials/shaderPatch';
 
-export interface BuildingFrontOptions {
+interface BuildingFrontOptions {
   /** Extent along the wall (local x) and from the street to the parapet (local y), metres. */
   x: [number, number];
   street: number;
@@ -110,8 +110,8 @@ export class BuildingFront extends Prop {
     hole.closePath();
     shape.holes.push(hole);
     const geometry = new THREE.ShapeGeometry(shape);
-    const pos = geometry.attributes.position;
-    const uv = geometry.attributes.uv;
+    const pos = geometry.getAttribute('position');
+    const uv = geometry.getAttribute('uv');
     for (let i = 0; i < pos.count; i++) uv.setXY(i, (pos.getX(i) - x[0]) / width, (pos.getY(i) - street) / height);
     uv.needsUpdate = true;
     const mesh = new THREE.Mesh(geometry, this.material);
@@ -181,7 +181,7 @@ export class BuildingFront extends Prop {
       // Curtains in some.
       if (random() < 0.45) {
         const cw = w * (0.2 + random() * 0.2);
-        const tint = ['#c8b8a0', '#9a4a3a', '#e0d8c8', '#3a4a5a'][Math.floor(random() * 4)];
+        const tint = ['#c8b8a0', '#9a4a3a', '#e0d8c8', '#3a4a5a'][Math.floor(random() * 4)]!;
         rect(color, cx - w / 2, y0, cx - w / 2 + cw, y1, tint);
         if (random() < 0.5) rect(color, cx + w / 2 - cw, y0, cx + w / 2, y1, tint);
       }
@@ -205,7 +205,7 @@ export class BuildingFront extends Prop {
       const w = 3 + random() * 3;
       rect(color, s, street + 0.3, s + w, ground - 0.5, GLASS);
       rect(rough, s, street + 0.3, s + w, ground - 0.5, 'rgb(0,30,200)');
-      rect(color, s, ground - 0.5, s + w, ground - 0.15, ['#2f4a3a', '#7a2a2a', '#2a3550', '#3a3634'][Math.floor(random() * 4)]);
+      rect(color, s, ground - 0.5, s + w, ground - 0.15, ['#2f4a3a', '#7a2a2a', '#2a3550', '#3a3634'][Math.floor(random() * 4)]!);
       this.panes.push({ x: s, y: ground - 0.5, w, h: 3.3 - 0.5, curfew: 0.55 + random() * 0.3 });
       s += w + 1 + random() * 2;
     }

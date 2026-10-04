@@ -13,7 +13,7 @@ export interface BookcaseSpec {
   headroom: number;
 }
 
-export interface PlannedRow<T> {
+interface PlannedRow<T> {
   items: T[];
   /** Inner height the row must offer (tallest box + headroom). */
   minHeight: number;
@@ -32,7 +32,7 @@ export interface ShelvingPlan<T> {
   leftover: T[];
 }
 
-export interface PlanInput<T> {
+interface PlanInput<T> {
   items: readonly T[];
   dimensions(item: T): BoxDimensions;
   /** Items with different keys never share a row. */
@@ -99,7 +99,7 @@ function distributeHeights<T>(rows: PlannedRow<T>[], rowCount: number, usable: n
   return minima.map((m) => m + extra);
 }
 
-export interface ArrangedInput<T> {
+interface ArrangedInput<T> {
   /** Everything this shelving may show, in the order the ones not arranged fill the gaps. */
   items: readonly T[];
   id(item: T): string;

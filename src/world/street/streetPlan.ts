@@ -100,7 +100,7 @@ export const ROAD_WEAR = {
 } as const;
 
 /** A rectangle of ground (zone-local). */
-export interface Area {
+interface Area {
   minX: number;
   maxX: number;
   minZ: number;
@@ -300,7 +300,7 @@ export const FACADES: readonly FacadeSpec[] = [
 ];
 
 /** A door the player can click, on a facade: where, which way it faces (yaw, 0 = its front looks +z) and where it leads. */
-export interface DoorSpec {
+interface DoorSpec {
   at: Vec2;
   yaw: number;
   width: number;
@@ -310,7 +310,7 @@ export interface DoorSpec {
 }
 
 /** An arrival spot: where the player is set down (zone-local floor point) and the way they face (0 looks down -z). */
-export interface ArrivalSpec {
+interface ArrivalSpec {
   at: Vec2;
   yaw: number;
 }

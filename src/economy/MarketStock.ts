@@ -22,10 +22,9 @@ import { drawCondition, gameFrom } from './stockDraws';
 import { HOMEBREW_CARTS } from '@/emulator/homebrew';
 import { dressCopy, drawBootleg } from './copyTraits';
 
-export { StockItem } from './StockItem';
 export type { JobLot } from './JobLot';
 
-export interface MarketStockDeps {
+interface MarketStockDeps {
   index: LibretroIndex;
   /** The collection: what the player owns (a wishlist entry is not owned) and wishes for. */
   collection: { owns(id: string): boolean; readonly games: readonly Game[] };
@@ -39,7 +38,7 @@ export interface MarketStockDeps {
   raining?: () => boolean;
 }
 
-export interface MarketStockOptions {
+interface MarketStockOptions {
   /** Ordinary copies offered per platform each day, drawn in this range (a stall may be sparse or heaped). Default `MARKET_STOCK.perPlatform`. */
   perPlatform?: { min: number; max: number };
   /** Copies in the bargain bin each day. Default `MARKET_STOCK.bin`. */

@@ -1,7 +1,7 @@
 import { KEYS, PersistedStore, safeStorage } from '@/persistence';
 
 /** Where a piece was set down, in the frame of the zone it stands in: position (m) and yaw (radians). */
-export interface SavedPose {
+interface SavedPose {
   x: number;
   y: number;
   z: number;

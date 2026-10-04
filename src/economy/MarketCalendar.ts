@@ -1,7 +1,7 @@
 import { KEYS, PersistedStore, safeStorage } from '@/persistence';
 import { dayKey, fromUtcDayKey } from './calendar';
 
-export const CALENDAR_STORAGE_KEY = KEYS.calendar;
+const CALENDAR_STORAGE_KEY = KEYS.calendar;
 
 interface CalendarFile {
   day: number;
@@ -15,7 +15,7 @@ interface CalendarFile {
 const SAVE_HOURS_STEP = 0.25;
 
 /** The in-game clock, as far as the calendar cares. */
-export interface ClockLike {
+interface ClockLike {
   onChange(listener: (state: { hours: number }) => void): () => void;
 }
 

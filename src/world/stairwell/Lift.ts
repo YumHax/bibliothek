@@ -13,7 +13,7 @@ import { AtticRide, type LiftCarState, type LiftPhase } from './liftAttic';
 import { CAGE, GATE_HEIGHT, STOPS, buildCage, buildCar, panelY, panelZ } from './liftBody';
 import { LiftButton, PANEL_BUTTON } from './LiftButton';
 
-export interface LiftOptions {
+interface LiftOptions {
   /** The zone's collision set: the gates' boxes come and go as they open and shut (world space). */
   collisions: Collisions;
   /** The ears (the camera): the motor and the gates are heard from where it is. */
@@ -163,7 +163,7 @@ export class Lift extends Prop implements Updatable, OccupancyAware, LiftRides {
     this.render();
   }
 
-  get footprint(): THREE.Box3 {
+  override get footprint(): THREE.Box3 {
     return new THREE.Box3();
   }
 

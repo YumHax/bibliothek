@@ -13,7 +13,7 @@ const KNOB = paint(0xe9e2d2, 0.4);
 /** The pilot's orange: bright while the landing is dark (to find the button by), faint once lit. */
 const PILOT = new THREE.Color(0xff8a1e);
 
-export interface TimerButtonOptions {
+interface TimerButtonOptions {
   /** The landing it is on (0 ours .. the hall's). */
   k: number;
   /** Switches the building's timer on; false when it did nothing (no power). */
@@ -58,7 +58,7 @@ export class TimerButton extends Prop implements Interactable, Updatable {
     });
   }
 
-  get footprint(): THREE.Box3 {
+  override get footprint(): THREE.Box3 {
     return new THREE.Box3();
   }
 

@@ -2,7 +2,7 @@ import { KEYS, PersistedStore } from '@/persistence';
 import { readSealedLot, type CartonItem, type SealedLot } from './boxLots';
 
 /** A carton bought, at home: what it was, where it came from, how many things are out of it already. */
-export interface CartonAtHome {
+interface CartonAtHome {
   lot: SealedLot;
   /** Where it was bought (the receipts of its games): "the flea market", "the Sunday saleroom". */
   where: string;

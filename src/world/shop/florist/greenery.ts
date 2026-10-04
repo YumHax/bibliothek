@@ -18,7 +18,7 @@ export const LEAF_GREENS = {
   sage: [0x7f9a86, 0x6f8a78],
 } as const;
 
-export function leafMaterial(color: number, roughness = 0.65): THREE.MeshStandardMaterial {
+function leafMaterial(color: number, roughness = 0.65): THREE.MeshStandardMaterial {
   return shared(`foliage|${color}|${roughness}`, () => foliage({ color, roughness }));
 }
 
@@ -95,7 +95,7 @@ export function headGeometry(): THREE.SphereGeometry {
 }
 
 /** What a bunch of cut flowers is made of. */
-export interface BunchOptions {
+interface BunchOptions {
   /** The heads' colours (a bunch of one colour: one entry). */
   colors: readonly number[];
   /** How many stems. Default 9. */

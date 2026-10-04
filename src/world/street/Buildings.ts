@@ -19,7 +19,7 @@ import { WINDOW_STORY_GLSL } from './windowStoryGlsl';
 import { RoofClutter, type DressedRoof } from './RoofClutter';
 import { FacadeWindows } from './facadeWindows/FacadeWindows';
 
-export interface BuildingsOptions {
+interface BuildingsOptions {
   /** Scales every facade's `detail` (lower on low quality). */
   detailScale: number;
   anisotropy: number;

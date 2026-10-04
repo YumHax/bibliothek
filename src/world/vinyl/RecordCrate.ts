@@ -13,7 +13,7 @@ const SLEEVE_T = 0.005;
 /** The crate, outside (m). */
 const CRATE = { w: 0.38, h: 0.26, d: 0.42, wall: 0.014 };
 
-export interface RecordCrateOptions {
+interface RecordCrateOptions {
   /** Hover caption (price, the next record, or why not). */
   label: () => string | null;
   onActivate: (session: SessionActions) => void;

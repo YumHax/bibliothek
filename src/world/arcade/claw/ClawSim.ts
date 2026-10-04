@@ -41,8 +41,8 @@ const HANG = 0.1;
 const PLUSH_COUNT = 11;
 const PASTELS = [0xffb3c6, 0xa8d8ff, 0xfff1a8, 0xc8f7c5, 0xe0c3ff, 0xffd6a8, 0xffffff];
 
-export type ClawPhase = 'aim' | 'drop' | 'lift' | 'return' | 'release' | 'rest';
-export type ClawSound = 'whir' | 'drop' | 'clunk' | 'lose' | 'thud' | 'win';
+type ClawPhase = 'aim' | 'drop' | 'lift' | 'return' | 'release' | 'rest';
+type ClawSound = 'whir' | 'drop' | 'clunk' | 'lose' | 'thud' | 'win';
 
 /** One plush in the case. */
 export interface ClawPlush {
@@ -57,7 +57,7 @@ export interface ClawPlush {
 }
 
 /** A try the player paid for, over: the prize won, if any. */
-export interface ClawOutcome {
+interface ClawOutcome {
   prize: string | undefined;
 }
 

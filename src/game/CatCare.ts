@@ -7,7 +7,7 @@ export interface CatParts {
 }
 
 /** How the cat was called: by name (C), with the feather wand (an arcade prize), or with the kitchen's treat jar. */
-export type CatCall = 'voice' | 'feathers' | 'treats';
+type CatCall = 'voice' | 'feathers' | 'treats';
 
 type Outcome = ReturnType<CatLike['call']>;
 

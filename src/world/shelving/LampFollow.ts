@@ -5,7 +5,7 @@ import type { ShelfLamp } from '../props/ShelfLamp';
 import { Prop } from '../props/Prop';
 
 /** Moves `lamp` to a zone-local pose (the shelving's host: its zone). */
-export type MoveLamp = (lamp: ShelfLamp, position: THREE.Vector3, rotationY: number) => void;
+type MoveLamp = (lamp: ShelfLamp, position: THREE.Vector3, rotationY: number) => void;
 
 /** How far inside the walls a spot keeps (m), when the bookcase it lights faces a wall close by. */
 const WALL_CLEAR = 0.15;

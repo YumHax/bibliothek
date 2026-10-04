@@ -92,12 +92,12 @@ export class HoopShot extends TicketMachine {
     this.placeBalls();
   }
 
-  protected performerChanged(): void {
+  protected override performerChanged(): void {
     this.thrower?.stop();
     this.thrower = this.performer && this.who === 'regular' ? new HoopThrower(this.sim, this, this.performer) : null;
   }
 
-  protected betweenGames(dt: number): void {
+  protected override betweenGames(dt: number): void {
     this.thrower?.update(dt, false);
     this.sim.takeOutcomes();
   }
@@ -106,7 +106,7 @@ export class HoopShot extends TicketMachine {
     return `${this.game.title} · insert a coin (${price}, thirty seconds)`;
   }
 
-  protected playingLabel(): string {
+  protected override playingLabel(): string {
     return `${this.game.title} · hold ${actionKeyLabel('fire')}, let go to throw · ${actionKeyLabel('walkAway')} walks away`;
   }
 

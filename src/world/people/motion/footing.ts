@@ -20,7 +20,7 @@ const STEP_LIFT = 0.045;
 /** Beyond this the body has been moved, not walked: the feet are put back under it at once. */
 const TELEPORT = 0.9;
 
-export interface Planted {
+interface Planted {
   /** The ankle's flat position in the root's frame this frame, lift included. */
   readonly flat: THREE.Vector3;
   pitch: number;

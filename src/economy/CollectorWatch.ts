@@ -10,7 +10,7 @@ interface Watched {
   subscribe(cb: () => void): () => void;
 }
 
-export interface CollectorWatchDeps {
+interface CollectorWatchDeps {
   /** The whole collection (owned, lent, wishlist): the parcel's games are the player's too. */
   collection: Watched & { readonly games: readonly Game[] };
   fame: { peek(game: Pick<Game, 'id'>): Views; lookup(game: Pick<Game, 'id' | 'title' | 'platform'>): Promise<Views> };

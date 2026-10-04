@@ -1,7 +1,7 @@
 import { KEYS, PersistedStore } from '@/persistence';
 
 /** What the attic remembers: its code found (the lift took the player up once), the cabinet's prize taken, the chest opened. */
-export interface AtticState {
+interface AtticState {
   found: boolean;
   prize: boolean;
   chest: boolean;

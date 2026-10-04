@@ -25,7 +25,7 @@ export interface Channel {
 /** The aerial turns a full circle in this many steps (one a click). */
 export const AERIAL_STEPS = 16;
 
-export const CHANNELS: readonly Channel[] = [
+const CHANNELS: readonly Channel[] = [
   { id: 'eightbit', number: 2, name: 'RETRO 2 · 8-bit afternoons', platforms: ['nes', 'gb'], step: 3 },
   { id: 'blast', number: 3, name: 'BLAST 3 · the Mega Drive hour', platforms: ['megadrive'], step: 7 },
   { id: 'sixteen', number: 4, name: 'CANAL 4 · 16-bit Sundays', platforms: ['snes'], step: 10 },

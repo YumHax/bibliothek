@@ -24,7 +24,7 @@ const STROKE_STEP = 1.7;
 const HOUR_BELL = 196;
 
 /** One strike of a bell tuned to `note` (Hz) at `time`, `level` loud, into `out`. */
-export function strikeBell(ctx: BaseAudioContext, out: AudioNode, time: number, note: number, level: number): void {
+function strikeBell(ctx: BaseAudioContext, out: AudioNode, time: number, note: number, level: number): void {
   for (const [ratio, partLevel, decay] of PARTIALS) {
     const osc = ctx.createOscillator();
     osc.frequency.value = note * ratio * (1 + (Math.random() - 0.5) * 0.002);

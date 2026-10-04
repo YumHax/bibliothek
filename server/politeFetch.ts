@@ -5,7 +5,7 @@
  * `pauseMs` and every call fails at once with `UpstreamPaused`, so the client falls back to its
  * generated art instead of queueing behind a dead host.
  */
-export interface PoliteOptions {
+interface PoliteOptions {
   /** Shortest time between two request starts (ms). */
   gapMs: number;
   /** Requests in flight at once. */

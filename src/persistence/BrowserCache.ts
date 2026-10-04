@@ -1,6 +1,6 @@
 import { safeStorage } from './storage';
 
-export interface BrowserCacheOptions {
+interface BrowserCacheOptions {
   /** Its one localStorage key (see `KEYS`, under `bibliothek.cache.`). */
   key: string;
   /** Beyond this many entries the least recently used go. */

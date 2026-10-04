@@ -6,7 +6,6 @@ import {
   FOREARM_L,
   handGeometry,
   HEAD_Y,
-  HIP_Y,
   limb,
   LUMBAR_Y,
   NECK_PIVOT,
@@ -200,7 +199,8 @@ export function buildRig(look: PersonLook): Rig {
 
 function leg(side: -1 | 1, look: PersonLook, girth: number, hipHalf: number, skin: THREE.Material, trousers: THREE.Material): LegBones {
   const hip = new THREE.Group();
-  hip.position.set(side * hipHalf, HIP_Y - PELVIS_Y, 0);
+  // The hip joints sit on the pelvis's own pivot line (`PELVIS_Y`): no drop from it.
+  hip.position.set(side * hipHalf, 0, 0);
   const thigh = new Parts();
   if (look.shorts) {
     thigh.add(limb('thigh', THIGH_L, girth), skin);

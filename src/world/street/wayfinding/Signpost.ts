@@ -5,7 +5,7 @@ import { TriBuilder } from '../relief/TriBuilder';
 import { snowCovered } from '../snowCover';
 import type { Vec2 } from '../streetPlan';
 
-export interface SignpostArm {
+interface SignpostArm {
   text: string;
   /** Where it points (zone-local). */
   to: Vec2;

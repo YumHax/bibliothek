@@ -8,7 +8,7 @@ import { PARK_PATHS } from '../../city/park';
 import { FLAT_IN_STREET, PARK_STREET, type Vec2 } from '../streetPlan';
 import { Figure } from './Figure';
 
-export interface ParkStrollersOptions {
+interface ParkStrollersOptions {
   viewer: THREE.Object3D;
   place: (walker: Walker, at: THREE.Vector3) => void;
   /** How many walk the paths at once (by day, dry). */

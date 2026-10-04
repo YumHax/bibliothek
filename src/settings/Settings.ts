@@ -1,10 +1,10 @@
 import { KEYS, PersistedStore } from '@/persistence';
 
-export const SETTINGS_STORAGE_KEY = KEYS.settings;
+const SETTINGS_STORAGE_KEY = KEYS.settings;
 
 /** The mixer's buses under the master volume (see `audio/mixer`). */
 export type VolumeChannel = 'master' | 'screens' | 'arcade' | 'world' | 'ui';
-export const VOLUME_CHANNELS: readonly VolumeChannel[] = ['master', 'screens', 'arcade', 'world', 'ui'];
+const VOLUME_CHANNELS: readonly VolumeChannel[] = ['master', 'screens', 'arcade', 'world', 'ui'];
 
 export type UiScale = 'small' | 'normal' | 'large';
 export const UI_SCALES: readonly UiScale[] = ['small', 'normal', 'large'];
@@ -47,7 +47,7 @@ export interface GameSettings {
   bindings: Record<string, string>;
 }
 
-export const DEFAULT_SETTINGS: Readonly<GameSettings> = {
+const DEFAULT_SETTINGS: Readonly<GameSettings> = {
   mouseSensitivity: 1,
   padSensitivity: 1,
   touchSensitivity: 1,

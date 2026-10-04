@@ -8,7 +8,7 @@ import type { Performer } from '../people/performer';
 
 type Lane = 'left' | 'down' | 'up' | 'right';
 
-export interface DancePadOptions {
+interface DancePadOptions {
   /** How far in front of the cabinet's origin the pad's centre is (cabinet-local z). Default 1.0. */
   centreZ?: number;
   /** How bright each lane's panel is this frame beyond the feet on it (the game's beat, its FEVER), 0..1. */

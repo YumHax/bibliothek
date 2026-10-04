@@ -6,7 +6,7 @@ import { VEHICLE_FUNCTIONS, VEHICLE_UNIFORMS } from './vehicleShader';
 import { SKY_CHUNK } from '../../city/skyGlsl';
 
 /** Angular radius of the sun disc and of the moon, in radians. */
-export const SUN_RADIUS = 0.05;
+const SUN_RADIUS = 0.05;
 export const MOON_RADIUS = 0.045;
 /** Angular radii of the sunrise / sunset glow along the horizon (wide) and up the sky (short). */
 const GLOW_RADIUS_X = 2.3;
@@ -17,7 +17,7 @@ const GLOW_RADIUS_Y = 0.7;
  * parallax, the near pavement most. Each step is one depth lookup. Fewer on low quality, like the
  * clouds' octaves: the pane shader runs on every pixel of every window and the balcony's sky.
  */
-export const PARALLAX_STEPS = QUALITY.level === 'low' ? 3 : 6;
+const PARALLAX_STEPS = QUALITY.level === 'low' ? 3 : 6;
 const CLOUD_OCTAVES = QUALITY.level === 'low' ? 3 : 4;
 
 export const vertexShader = /* glsl */ `

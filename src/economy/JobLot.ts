@@ -41,7 +41,7 @@ export function lotOffer(lot: JobLot, owns: (id: string) => boolean): { games: G
   return { games, prices: prices.map((p) => Math.max(0, Math.round(p))), price };
 }
 
-export interface JobLotDeps {
+interface JobLotDeps {
   /** The game day the lot is drawn for (`time/Today`). */
   today: { readonly gameDay: number };
   collection: { owns(id: string): boolean };

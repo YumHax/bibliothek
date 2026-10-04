@@ -3,7 +3,7 @@ import { RENDER_ORDER } from '../surface/layers';
 import { viewScale } from '../particles/pointScale';
 import { overKeepingAlpha } from '@/world/materials/blend';
 
-export interface SteamOptions {
+interface SteamOptions {
   /** Puffs alive at once at full rate. Default 24. */
   count?: number;
   /** Seconds a puff lives. Default 1.8. */

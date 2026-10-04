@@ -3,7 +3,7 @@ import type { Updatable } from '@/core/Engine';
 import type { Zone } from './Zone';
 
 /** What the culler asks the `ZoneManager`: the player's zone, and the zone a portal leads to. */
-export interface CurrentZone {
+interface CurrentZone {
   readonly current: Zone;
   zone(id: string): Zone | undefined;
 }

@@ -15,7 +15,7 @@ import { rememberFocus } from './rememberFocus';
 import './PrizePanel.css';
 
 /** Where the mystery game comes from: the collection it must be new to (it joins it through the parcel: `Transactions.takePrize`), and the games it is drawn from. */
-export interface MysteryGameSource {
+interface MysteryGameSource {
   collection: { owns(id: string): boolean };
   games: readonly Game[];
   /** A game's shop price: the box holds nothing dearer than `MYSTERY_GAME_MAX_PRICE` (unpriced: anything but a grail). */
@@ -23,7 +23,7 @@ export interface MysteryGameSource {
 }
 
 /** What is at home, for where a prize will go: the dresser the mood lamp stands on, the cat the wand is for. Absent: everything. */
-export interface PrizeHomeSource {
+interface PrizeHomeSource {
   has(what: 'dresser' | 'cat'): boolean;
 }
 
@@ -114,7 +114,7 @@ export class PrizePanel extends ModalPanel {
     this.render();
   }
 
-  protected onOpened(): void {
+  protected override onOpened(): void {
     this.status = { text: '', error: false, prize: null };
     this.armedAll = 0;
     this.shownTickets = this.wallet.tickets;
@@ -122,12 +122,12 @@ export class PrizePanel extends ModalPanel {
     this.loadPhotos();
   }
 
-  protected onClosed(): void {
+  protected override onClosed(): void {
     cancelAnimationFrame(this.rollFrame);
   }
 
   /** Lands on the prize shown, so the arrows start from the case. */
-  protected focusTarget(): HTMLElement | null {
+  protected override focusTarget(): HTMLElement | null {
     return this.listEl.querySelector<HTMLElement>(`[data-prize="${CSS.escape(this.selected)}"]`) ?? super.focusTarget();
   }
 

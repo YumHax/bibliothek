@@ -9,7 +9,7 @@ import { GameBox } from '../GameBox';
 /** Air between the box's top edge and the back panel it leans on. */
 const LEAN_GAP = 0.003;
 
-export interface ShelfCopyOptions {
+interface ShelfCopyOptions {
   covers: BoxArtLoader;
   /** How far it leans back on the shelf's back panel (radians). */
   lean: number;

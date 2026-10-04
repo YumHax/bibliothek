@@ -29,7 +29,7 @@ export interface SolarDay {
 }
 
 /** Latitude used when the time zone is not in `ZONES`: central Europe, about Frankfurt. */
-export const DEFAULT_LATITUDE = 50;
+const DEFAULT_LATITUDE = 50;
 /** The sun's apparent elevation at sunrise and sunset: its radius plus the refraction at the horizon. */
 const HORIZON_ELEVATION = THREE.MathUtils.degToRad(-0.833);
 

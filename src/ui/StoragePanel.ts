@@ -3,7 +3,7 @@ import { ModalPanel } from './ModalPanel';
 import './StoragePanel.css';
 
 /** A piece of furniture put away: what it is, the room it was put away in. */
-export interface StoredEntry {
+interface StoredEntry {
   name: string;
   room: string;
 }

@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { createCanvas, toTexture } from '@/covers/generated/canvasUtils';
 import { drawText } from './games/ArcadeGame';
 
-export interface InstructionCardOptions {
+interface InstructionCardOptions {
   /** The machine's name, across the top. */
   title: string;
   /** How to play: one line each, e.g. "A / D  MOVE". Split a `·`-separated hint with `hintLines`. */

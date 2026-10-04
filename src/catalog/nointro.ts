@@ -3,7 +3,7 @@
  * "Legend of Zelda, The - A Link to the Past (USA) (Rev 1)".
  */
 
-export interface ParsedNoIntroName {
+interface ParsedNoIntroName {
   /** Human title: parenthesised groups removed, ", The" moved back to the front. */
   title: string;
   /** Region group when present, e.g. "USA" or "USA, Europe". */
@@ -31,7 +31,7 @@ function moveArticleToFront(segment: string): string {
 }
 
 /** URL/id-safe slug: lower-case ASCII, hyphen-separated. */
-export function slugify(text: string): string {
+function slugify(text: string): string {
   return text
     .normalize('NFKD')
     .replace(/[̀-ͯ]/g, '')

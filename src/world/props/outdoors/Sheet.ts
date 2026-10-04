@@ -14,7 +14,7 @@ export const ELEVATION_MIN = THREE.MathUtils.degToRad(-80);
 export const ELEVATION_MAX = THREE.MathUtils.degToRad(40);
 /** Height of the eye above the street, in metres: the flat is on a sixth floor. */
 export const EYE_HEIGHT = 18;
-export const PX_PER_RAD = SCENE_WIDTH / (Math.PI * 2);
+const PX_PER_RAD = SCENE_WIDTH / (Math.PI * 2);
 /**
  * Distances are stored in a byte as `1 - exp(-d / DEPTH_SCALE)`: about half a metre per step
  * across the street, saturating around 900 m. The shader decodes it for the haze and to hide
@@ -33,7 +33,7 @@ export interface ShopCurfew {
 }
 
 /** When a light goes out: a wakefulness (0..1, see `Sheet.lit`), or a shop's opening hours (it is lit only while the shop is open). */
-export type Curfew = number | ShopCurfew;
+type Curfew = number | ShopCurfew;
 
 /**
  * How a surface takes the weather, 0..1 each: `wet` how much it mirrors the sky once rain has
@@ -107,7 +107,7 @@ export function outline(points: readonly (readonly [number, number])[]): Path2D 
 }
 
 /** Byte value the depth channel holds for a thing `distance` metres away (see `DEPTH_SCALE`). */
-export function encodeDepth(distance: number): number {
+function encodeDepth(distance: number): number {
   return Math.round(THREE.MathUtils.clamp(1 - Math.exp(-distance / DEPTH_SCALE), 0, 1) * 255);
 }
 
@@ -426,10 +426,11 @@ export class Sheet {
       const src = (SCENE_HEIGHT - 1 - y) * rowBytes;
       const dst = y * rowBytes;
       for (let i = 0; i < rowBytes; i += 4) {
-        packed[dst + i] = light[src + i];
-        packed[dst + i + 1] = light[src + i + 1];
-        packed[dst + i + 2] = light[src + i + 2];
-        packed[dst + i + 3] = haze[src + i];
+        // Same size, row by row: every index is inside both buffers.
+        packed[dst + i] = light[src + i]!;
+        packed[dst + i + 1] = light[src + i + 1]!;
+        packed[dst + i + 2] = light[src + i + 2]!;
+        packed[dst + i + 3] = haze[src + i]!;
       }
     }
     // Sampled nearest, like the curfew below: the shader filters the four texels around the eye
@@ -450,7 +451,7 @@ export class Sheet {
     for (let y = 0; y < SCENE_HEIGHT; y++) {
       const src = (SCENE_HEIGHT - 1 - y) * rowBytes;
       const dst = y * SCENE_WIDTH;
-      for (let x = 0; x < SCENE_WIDTH; x++) curfewBytes[dst + x] = curfewSrc[src + x * 4];
+      for (let x = 0; x < SCENE_WIDTH; x++) curfewBytes[dst + x] = curfewSrc[src + x * 4]!;
     }
     const curfew = new THREE.DataTexture(curfewBytes, SCENE_WIDTH, SCENE_HEIGHT, THREE.RedFormat, THREE.UnsignedByteType);
     curfew.colorSpace = THREE.NoColorSpace;
@@ -474,7 +475,7 @@ export class Sheet {
     for (let y = 0; y < SCENE_HEIGHT; y++) {
       const src = (SCENE_HEIGHT - 1 - y) * rowBytes;
       const dst = y * rowBytes;
-      for (let i = 0; i < rowBytes; i += 4) fxBytes[dst + i + 3] = haze[src + i + 1];
+      for (let i = 0; i < rowBytes; i += 4) fxBytes[dst + i + 3] = haze[src + i + 1]!;
     }
     const fx = new THREE.DataTexture(fxBytes, SCENE_WIDTH, SCENE_HEIGHT, THREE.RGBAFormat, THREE.UnsignedByteType);
     fx.colorSpace = THREE.NoColorSpace;
@@ -542,8 +543,8 @@ function texelRuns(corners: readonly (readonly [number, number])[]): [number, nu
     let left = Infinity;
     let right = -Infinity;
     for (let i = 0; i < corners.length; i++) {
-      const [x0, y0] = corners[i];
-      const [x1, y1] = corners[(i + 1) % corners.length];
+      const [x0, y0] = corners[i]!;
+      const [x1, y1] = corners[(i + 1) % corners.length]!;
       if ((y0 - cy) * (y1 - cy) > 0) continue; // the edge does not cross this row's centre line
       const x = y0 === y1 ? x0 : x0 + ((cy - y0) * (x1 - x0)) / (y1 - y0);
       left = Math.min(left, x, y0 === y1 ? x1 : x);

@@ -24,7 +24,7 @@ export const FLOWER_BEDS: readonly [number, number, number][] = [[-37, 10, 3], [
 /** Weeping willows leaning over the pond's banks. */
 export const WILLOWS: readonly [number, number][] = [[-74, -36], [-121, 5], [-150, -38]];
 /** Where the gate in the railings on Park Street is (z): the walkable street's (`STREET_PLAN.parkGate`). */
-export const PARK_GATE_Z = inFlatFrame(STREET_PLAN.parkGate.at)[1];
+const PARK_GATE_Z = inFlatFrame(STREET_PLAN.parkGate.at)[1];
 /**
  * Gravel paths across the lawn, as polylines (the walkers of `Life` follow them): one from the gate,
  * one from the far corner behind Front Street's block, and one branching off the first towards the south.

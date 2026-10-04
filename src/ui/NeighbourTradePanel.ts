@@ -53,7 +53,7 @@ export class NeighbourTradePanel extends MarketPanel {
       </div>`;
   }
 
-  protected onAction(action: string): void {
+  protected override onAction(action: string): void {
     const offer = this.offer;
     if (!offer || this.outcome) return;
     const { trades, tx, collection } = this.deps;

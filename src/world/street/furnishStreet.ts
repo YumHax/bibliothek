@@ -116,7 +116,7 @@ function gateLine([open, shut]: readonly [number, number]): string {
  * the haze) and what is underfoot. As steps: it yields between its sections, so a build got ready ahead
  * (`World.prepareZone` from the stairs) is spread over idle moments (`Zone.buildSliced`); `furnishStreet` runs them at once.
  */
-export function* furnishStreetSteps(zone: Zone, { sky, listener, covers, today, panels, money: { wallet, purse }, market: { stock: market, day: marketDay, lots }, collection, arcade: { scores, daily, tournament }, story, classifieds, home: { upgrades } }: BuildContext): Generator<void, ZoneHandle, void> {
+function* furnishStreetSteps(zone: Zone, { sky, listener, covers, today, panels, money: { wallet, purse }, market: { stock: market, day: marketDay, lots }, collection, arcade: { scores, daily, tournament }, story, classifieds, home: { upgrades } }: BuildContext): Generator<void, ZoneHandle, void> {
   const plan = STREET_PLAN;
   const { dayNight } = sky;
   const ANISOTROPY = sceneryAnisotropy();

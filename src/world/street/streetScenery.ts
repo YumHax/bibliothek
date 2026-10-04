@@ -40,7 +40,7 @@ function nightScale(): number {
   return QUALITY.level === 'high' ? 0.5 : 0.25;
 }
 
-export interface StreetBaseOptions {
+interface StreetBaseOptions {
   dayNight: DayNight;
   /** The facades built (all of them in the street; those facing the window behind one). */
   facades: readonly FacadeSpec[];
@@ -65,7 +65,7 @@ export function buildStreetBase(add: AddScenery, options: StreetBaseOptions): { 
   return { buildings };
 }
 
-export interface StreetFrontsOptions extends FacadeReliefOptions {
+interface StreetFrontsOptions extends FacadeReliefOptions {
   /** A shutter rolling (the street's rattle); none behind a window. */
   onRoll?: (at: Vec2) => void;
 }
@@ -86,7 +86,7 @@ type FurnitureExtras = Pick<StreetFurnitureOptions, 'collisions' | 'viewer' | 'a
 /** What only the walkable street gives its cars: free bays, manoeuvres, taxis, solid parked cars, drivers' words. */
 type CarExtras = Omit<Partial<StreetCarsOptions>, 'parked' | 'routes' | 'speed' | 'gap' | 'cars' | 'stopFor' | 'viewer' | 'traffic'>;
 
-export interface StreetFixturesOptions {
+interface StreetFixturesOptions {
   dayNight: DayNight;
   /** Whose position the lamps' real lights and the cars follow (the camera, or the listener on it). */
   viewer: THREE.Object3D;

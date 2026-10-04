@@ -3,7 +3,7 @@ import type { Updatable } from '@/core/Engine';
 import type { LightBudgetSettings } from '@/graphics/quality';
 
 /** What the culler asks of a zone: its group (to find a light's zone), whether it is drawn, whether the player is in it. */
-export interface CullerZone {
+interface CullerZone {
   readonly group: THREE.Object3D;
   readonly isActive: boolean;
   readonly isDrawn: boolean;

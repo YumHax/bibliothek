@@ -5,7 +5,7 @@ import { randomLook } from '../people/looks';
 import type { GestureName } from '../people/motion/gestures';
 import type { SellerTalk } from './sellerTalk';
 
-export interface SellerOptions {
+interface SellerOptions {
   viewer: THREE.Object3D;
   seed: number;
   name: string;

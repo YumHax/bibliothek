@@ -8,7 +8,7 @@ import { invisibleHitbox } from '../../meshUtils';
 import { snowCovered } from '../snowCover';
 import { whatsOn, type WhatsOnItem, type WhatsOnSources } from './whatsOnItems';
 
-export interface WhatsOnOptions extends WhatsOnSources {
+interface WhatsOnOptions extends WhatsOnSources {
   /** The Morris column it is pasted on: radius, and the drum's height (`STREET_PLAN.details.column`). */
   radius: number;
   height: number;

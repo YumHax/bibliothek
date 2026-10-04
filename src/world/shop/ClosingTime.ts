@@ -18,12 +18,12 @@ const CLOSING: Readonly<Record<string, { who: string; warn: string; out: string 
 const GRACE = 25;
 
 /** The zone's shop kind, when the zone is one that keeps shop hours. */
-export function hoursKindOf(zone: string): ShopKind | null {
+function hoursKindOf(zone: string): ShopKind | null {
   return HOURS_OF[zone] ?? null;
 }
 
 /** Whether `zone` is a place behind a street door that is shut at `hours` (a reload never puts the player back in one). */
-export function isShutPlace(zone: string, hours: number): boolean {
+function isShutPlace(zone: string, hours: number): boolean {
   const kind = hoursKindOf(zone);
   return kind !== null && !isShopOpen(kind, hours);
 }
@@ -34,7 +34,7 @@ export function outsideIfShut(zone: string, hours: number): { at: readonly [numb
   return STREET_PLAN.arrivals[zone as keyof typeof STREET_PLAN.arrivals] ?? null;
 }
 
-export interface ClosingTimeOptions {
+interface ClosingTimeOptions {
   /** The zone the player is in. */
   here: () => string;
   hours: () => number;

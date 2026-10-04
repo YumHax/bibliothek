@@ -18,7 +18,7 @@ export interface TravelStop extends TravelChoice<ZoneId> {
   unlisted?: boolean;
 }
 
-export interface Traveller {
+interface Traveller {
   /** Feet at `feet` (world floor height): the stairwell's lobby is far below the flat. */
   setPosition(x: number, z: number, feet?: number): void;
   setLook(yaw: number, pitch: number): void;
@@ -26,12 +26,12 @@ export interface Traveller {
   movementEnabled: boolean;
 }
 
-export interface Curtain {
+interface Curtain {
   out(): Promise<void>;
   in(): Promise<void>;
 }
 
-export interface TravelOptions {
+interface TravelOptions {
   stops: readonly TravelStop[];
   player: Traveller;
   curtain: Curtain;

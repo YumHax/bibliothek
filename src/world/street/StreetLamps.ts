@@ -13,7 +13,7 @@ import { LAMP_GLOW, LAMP_LIGHT } from '../lighting/lampColours';
 import { additive, additiveOne } from '@/world/materials/blend';
 import { radialGlow } from '@/world/materials/glowTextures';
 
-export interface StreetLampsOptions {
+interface StreetLampsOptions {
   lamps: readonly { at: Vec2; yaw: number; design?: LampDesign }[];
   /** Height of the modern arm lamps' heads (the cast-iron kinds stand lower: `LAMP_DESIGNS`). */
   height: number;
@@ -26,7 +26,7 @@ export interface StreetLampsOptions {
 }
 
 /** How far the modern lamp's arm reaches out over the kerb. */
-export const LAMP_ARM = 1.3;
+const LAMP_ARM = 1.3;
 
 /**
  * The lamp kinds (`LampDesign`), in the lamp's own frame (its foot at the origin, its head reached

@@ -19,7 +19,7 @@ export interface SpillSpot {
   yaw: number;
 }
 
-export interface ShopSpillOptions {
+interface ShopSpillOptions {
   spots: readonly SpillSpot[];
   /** The chalk board's two lines. */
   board: readonly [string, string];

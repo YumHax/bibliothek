@@ -57,7 +57,7 @@ export function hostKey(host: NeighbourHost): string {
 }
 
 /** What a door on the stairs needs to know of the moment: whether they are in, the hour, the game day. */
-export interface DoorMoment {
+interface DoorMoment {
   isHome: () => boolean;
   hours: () => number;
   day: () => number;

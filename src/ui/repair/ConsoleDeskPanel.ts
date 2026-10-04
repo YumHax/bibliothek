@@ -8,7 +8,7 @@ import { escapeHtml } from '../html';
 import { ModalPanel } from '../ModalPanel';
 import './repair.css';
 
-export interface ConsoleDeskDeps {
+interface ConsoleDeskDeps {
   workshop: Workshop;
   wallet: { earnCoins(coins: number): void };
   notices: NoticeActions;
@@ -39,7 +39,7 @@ export class ConsoleDeskPanel extends ModalPanel {
     });
   }
 
-  protected onOpened(): void {
+  protected override onOpened(): void {
     this.armed = null;
     this.message = '';
     this.render();

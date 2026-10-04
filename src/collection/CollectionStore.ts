@@ -4,7 +4,7 @@ import { readGame } from '@/catalog/validate';
 import { KEYS, PersistedStore, safeStorage } from '@/persistence';
 import type { GameSource } from './GameSource';
 
-export const COLLECTION_STORAGE_KEY = KEYS.collection;
+const COLLECTION_STORAGE_KEY = KEYS.collection;
 
 /** The export file's format version (`exportJson`). */
 const FORMAT_VERSION = 1;

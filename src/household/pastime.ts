@@ -8,7 +8,7 @@ export interface PastimeCurtain {
 }
 
 /** The game's clock, wound forward by what the thing took (`DayNight`). */
-export interface PastimeClock {
+interface PastimeClock {
   readonly state: { readonly hours: number };
   advanceTo(hours: number): void;
 }

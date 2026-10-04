@@ -13,7 +13,7 @@ const CELL_W = 512;
 const COLUMNS = ATLAS_W / CELL_W;
 const ROWS = Math.floor(ATLAS_H / TAPE_PX);
 /** The most labels the flat's shelves can wear. */
-export const MAX_LABELS = COLUMNS * ROWS;
+const MAX_LABELS = COLUMNS * ROWS;
 /** Two labels on one edge keep this far apart (m). */
 const APART = 0.006;
 

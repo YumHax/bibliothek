@@ -62,7 +62,8 @@ export class IndustrialPendant extends SwitchableLamp {
     const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.035, 16, 12), this.bulb);
     bulb.position.y = shadeY - SHADE_H / 2 + 0.05;
 
-    this.light = new THREE.PointLight(LAMP_LIGHT.incandescent, 0, 0, 2);
+    // A reach: with distance 0 every fragment of the scene evaluates the light (at 10 m its inverse-square light is 1 % of its intensity).
+    this.light = new THREE.PointLight(LAMP_LIGHT.incandescent, 0, 10, 2);
     this.light.position.y = bulb.position.y - 0.02;
     this.light.castShadow = false;
 

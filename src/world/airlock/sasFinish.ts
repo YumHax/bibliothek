@@ -32,7 +32,7 @@ const l = new THREE.Vector3();
  * The light on a surface at sas-local `p` facing `normal`: the globe (Lambert over a softened inverse
  * square), a glow on the ceiling round it, a warm bounce everywhere, darker into the room's corners.
  */
-export function bakedLight(p: THREE.Vector3, normal: THREE.Vector3, out: THREE.Color): THREE.Color {
+function bakedLight(p: THREE.Vector3, normal: THREE.Vector3, out: THREE.Color): THREE.Color {
   n.copy(normal).normalize();
   l.copy(LAMP).sub(p);
   const d = Math.max(l.length(), 0.05);
@@ -83,7 +83,7 @@ function shared(canvas: HTMLCanvasElement, repeat = false): THREE.CanvasTexture 
   return markShared(texture);
 }
 
-export interface SasFinish {
+interface SasFinish {
   /** Plaster over a marble dado: a 1 m wide, 3 m tall tile (u along the wall in metres, v = height / 3). */
   wall: THREE.MeshBasicMaterial;
   /** Black-and-white octagon tiles, a metre square. */

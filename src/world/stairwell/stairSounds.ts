@@ -37,7 +37,7 @@ export class HallTone extends Voice {
 }
 
 /** How the street is behind the door: how awake the city is (0 at 3 am .. 1 by day), how hard it rains (0..1). */
-export interface StreetOutside {
+interface StreetOutside {
   wakefulness: number;
   rain: number;
 }
@@ -77,7 +77,7 @@ export class StreetBehindDoor extends Voice {
     this.outsideClock = 0;
   }
 
-  protected tick(ctx: AudioContext, dt: number): void {
+  protected override tick(ctx: AudioContext, dt: number): void {
     this.outsideClock -= dt;
     if (this.outsideClock <= 0) {
       this.outsideClock = 1;
@@ -139,7 +139,7 @@ export class DoorTelevision extends Voice {
     lfo.connect(depth).connect(this.murmur.gain);
   }
 
-  protected tick(ctx: AudioContext, dt: number): void {
+  protected override tick(ctx: AudioContext, dt: number): void {
     this.untilSwell -= dt;
     if (this.untilSwell > 0 || !this.murmur || !this.door) return;
     this.untilSwell = rand(6, 18);
@@ -183,7 +183,7 @@ export class DoorPiano extends Voice {
     this.out = throughDoor(ctx, out, 1400);
   }
 
-  protected tick(ctx: AudioContext, dt: number): void {
+  protected override tick(ctx: AudioContext, dt: number): void {
     this.untilNote -= dt;
     if (this.untilNote > 0 || !this.out) return;
     if (!this.phrase.length) {
@@ -217,7 +217,7 @@ export class DoorDog extends Voice {
     this.door = throughDoor(ctx, out, 900);
   }
 
-  protected tick(ctx: AudioContext, dt: number): void {
+  protected override tick(ctx: AudioContext, dt: number): void {
     this.untilBark -= dt;
     const door = this.door;
     if (this.untilBark > 0 || !door) return;

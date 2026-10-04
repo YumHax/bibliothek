@@ -14,7 +14,7 @@ import { dayKey } from '@/economy/calendar';
 import { KEYS, PersistedStore } from '@/persistence';
 import { pocket } from '@/errands/pocket';
 
-export interface StrayCatOptions {
+interface StrayCatOptions {
   /** Where it likes to sit: a spot on the ground, how high the perch is (a car roof, a bench, a bin), the way it faces. */
   perches: readonly StrayCatPerch[];
   /** Whether what the perch is on is in use now (someone on the bench, the bin lorry on its round): he skips it, and leaves it if taken. */

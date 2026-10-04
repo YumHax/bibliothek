@@ -98,7 +98,7 @@ linear HDR before tone mapping; 60 mireds per unit, luminance kept), exposure, A
   plane in its vertex shader, so its radius only has to stay inside it.
 
 - **Alpha is sacred.** The canvas is transparent where a video plays (cut-out over the CSS layer). Every pass keeps
-  the alpha; additive effects (bloom, sun shafts, the glossy floor) use `CustomBlending` with `ZeroFactor/OneFactor` on
+  the alpha; additive effects (bloom, sun shafts, the glossy floor) use `CustomBlending` with `ZeroFactor` / `OneFactor` on
   alpha. In the scene that is `world/materials/blend`: `additive` (glows, pools, beams, sparks), `additiveOne`
   (reflections rendered on black), `overKeepingAlpha` (rain, steam, scuffs); never three's own blendings, which
   write their alpha. Their masks come from `world/materials/glowTextures` (`radialGlow`, `verticalGlow`, `spillGlow`:

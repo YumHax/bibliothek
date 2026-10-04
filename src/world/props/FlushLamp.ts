@@ -4,7 +4,7 @@ import { paint } from '../materials/palette';
 import { SwitchableLamp } from './SwitchableLamp';
 import { HoverGlint } from './hoverGlint';
 
-export interface FlushLampOptions {
+interface FlushLampOptions {
   /** Radius of the ceiling plate. Default 0.17. */
   radius?: number;
   /** Starts lit? Default true (it usually hangs where there is no window). */

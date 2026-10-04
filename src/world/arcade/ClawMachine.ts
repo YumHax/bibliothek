@@ -19,7 +19,7 @@ export interface ClawMachineOptions {
   seed?: number;
 }
 
-export interface ClawWiring {
+interface ClawWiring {
   input: Input;
   listener: THREE.Object3D;
   /** What a play costs (never free: the claw pays prizes, not tickets). */

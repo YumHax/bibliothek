@@ -54,7 +54,7 @@ function merged(geometries: THREE.BufferGeometry[], material: THREE.Material, ca
  * either face and a lining through the wall's gap, an oak threshold, nothing in the way. Wall-hung: origin on the floor
  * at the opening's middle, +z into the collection room. Both rooms see it (`seenFromNextDoor`).
  */
-export class AnnexOpening extends Prop implements Updatable, Interactable {
+class AnnexOpening extends Prop implements Updatable, Interactable {
   readonly contactShadow = false;
   readonly seenFromNextDoor = true;
   readonly hitboxes: THREE.Object3D[];

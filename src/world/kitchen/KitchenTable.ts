@@ -5,7 +5,7 @@ import { part } from '../props/Prop';
 import { paint, standard, timber } from '../materials/palette';
 import { SEAM } from '../props/joinery';
 
-export interface KitchenTableOptions {
+interface KitchenTableOptions {
   /** Top size; `width` runs along local x. Default 0.85 x 0.7. */
   width?: number;
   depth?: number;

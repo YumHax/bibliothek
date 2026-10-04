@@ -6,7 +6,7 @@ import { Crate } from '../props/Crate';
 import { paint, timber } from '../materials/palette';
 import { QUALITY } from '@/graphics/quality';
 
-export interface MarketStallOptions {
+interface MarketStallOptions {
   /** Text on the sign hung from the awning (a platform's name). */
   sign: string;
   /** Colour of the cloth over the table and of the awning's stripes. */
@@ -21,8 +21,6 @@ export interface MarketStallOptions {
   /** Varies the clutter. */
   seed?: number;
 }
-
-export type { DisplaySlot } from './stallTypes';
 
 const DEFAULT_WIDTH = 1.6;
 const DEPTH = 0.65;

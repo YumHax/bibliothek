@@ -4,26 +4,26 @@
  * three.js, no canvas; `Pinball` draws it and moves the 3D ball and flippers to match.
  */
 
-export interface Vec {
+interface Vec {
   x: number;
   y: number;
 }
 
 /** A wall: a segment the ball bounces off; `kick` walls (slingshots) throw it back hard and score. */
-export interface Wall {
+interface Wall {
   a: Vec;
   b: Vec;
   kick?: boolean;
 }
 
-export interface Bumper {
+interface Bumper {
   at: Vec;
   r: number;
   /** Seconds left of its flash after a hit. */
   flash: number;
 }
 
-export interface Flipper {
+interface Flipper {
   pivot: Vec;
   length: number;
   rest: number;
@@ -33,7 +33,7 @@ export interface Flipper {
   omega: number;
 }
 
-export interface PinballInput {
+interface PinballInput {
   left: boolean;
   right: boolean;
   /** Held: the plunger is pulled back; let go, it fires. */

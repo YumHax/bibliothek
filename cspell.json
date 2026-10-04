@@ -1,0 +1,29 @@
+{
+  "$schema": "https://raw.githubusercontent.com/streetsidesoftware/cspell/main/cspell.schema.json",
+  "version": "0.2",
+  "language": "en-GB,en-US",
+  "dictionaries": ["typescript", "node", "npm", "softwareTerms", "html", "css", "fonts", "gaming-terms", "bibliothek"],
+  "dictionaryDefinitions": [
+    {
+      "name": "bibliothek",
+      "path": "./scripts/cspell-words.txt",
+      "description": "The project's own words: game titles, French names, three.js and GLSL terms, identifiers",
+      "addWords": true
+    }
+  ],
+  "files": ["src/**/*.ts", "src/**/*.css", "docs/**/*.md", "CLAUDE.md", "README.md", ".claude/skills/**/*.md", "index.html", "scripts/*.mjs"],
+  "ignorePaths": ["node_modules", "dist", ".cache", "public", "package-lock.json", "docs/consistency-audit.md"],
+  "ignoreRegExpList": [
+    "Urls",
+    "Base64",
+    "HexValues",
+    "/#[0-9a-fA-F]{3,8}\\b/g",
+    "/data:[^'\"`\\s]+/g",
+    "/\\bfrom '[^']+'/g",
+    "/import\\('[^']+'\\)/g",
+    "/url\\([^)]*\\)/g"
+  ],
+  "minWordLength": 4,
+  "allowCompoundWords": false,
+  "caseSensitive": false
+}

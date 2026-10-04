@@ -5,7 +5,7 @@ import type { GameBox } from '../GameBox';
 /** How far away a box can be tipped out (m): arm's length and a step. */
 const REACH = 2.2;
 
-export interface BoxTippingOptions {
+interface BoxTippingOptions {
   /** The keys, read every frame (`Input.isDown`). */
   input: { isDown(...codes: string[]): boolean };
   /** Held to tip (the game's code: `primaryCode('tipBox')`). */

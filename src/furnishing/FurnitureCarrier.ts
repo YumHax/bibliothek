@@ -88,7 +88,7 @@ export interface Moved {
   readonly to: PlacedPose;
 }
 
-export interface CarrierOptions {
+interface CarrierOptions {
   /** A wall stands between two world points (the crosshair cannot reach through it). */
   blocked: (from: THREE.Vector3, to: THREE.Vector3) => boolean;
   /** Whoever stands in the room (the player's own feet are added): nothing is set down on them. */

@@ -34,7 +34,7 @@ export const SCREEN_Z = FRONT_Z + (SCREEN_HEIGHT / 2 + BEZEL_BORDER) * Math.sin(
 const BLACK = paintOf(0x16161a, 0.5);
 export const CABINET_CHROME = METAL.satinSteel();
 
-export interface CabinetBodySpec {
+interface CabinetBodySpec {
   color: number;
   glow: number;
   /** Stickers, burns and scuffs, 0..1. */
@@ -45,7 +45,7 @@ export interface CabinetBodySpec {
   twoPlayer: boolean;
 }
 
-export interface CabinetBody {
+interface CabinetBody {
   /** The body's paint and the two side-art prints; all glow a little when hovered. */
   readonly body: THREE.MeshStandardMaterial[];
   readonly marquee: THREE.MeshBasicMaterial;

@@ -7,7 +7,7 @@ import type { VideoScreen } from '../screen';
 import type { Furniture } from '../Furniture';
 import { GameBox } from '../GameBox';
 
-export interface FavouriteGameOptions {
+interface FavouriteGameOptions {
   covers: BoxArtLoader;
   /** Their TV: the longplay goes on it. */
   screen: VideoScreen;

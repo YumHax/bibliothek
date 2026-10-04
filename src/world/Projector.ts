@@ -5,23 +5,23 @@ import type { Updatable } from '@/core/Engine';
 import type { CssLayer } from '@/core/CssLayer';
 import { unplayableWhy } from './box/unplayable';
 import type { RegionLock } from '@/economy/regionLock';
-import type { Interactable, LabelPlacement } from '@/interaction/Interactable';
+import type { Interactable } from '@/interaction/Interactable';
 import type { PlayerState, SessionActions } from '@/game/SessionActions';
-import type { VideoInfo } from '@/video/VideoProvider';
 import { ProjectorFan } from '@/audio/ProjectorFan';
 import { playRockerClick } from '@/audio/furnitureSounds';
 import type { ActivityAware, Furniture } from './Furniture';
 import { boxMesh } from './meshUtils';
 import type { SoundOcclusion } from './acoustics/SoundOcclusion';
 import { PointSound } from './acoustics/PointSound';
-import { VideoSurface, type ScreenFeed, type ScreenState, type ScreenStateListener, type VideoScreen } from './screen';
+import { VideoSurface } from './screen';
+import { SurfaceScreen } from './screen/SurfaceScreen';
 import { HueDrift } from './screen/HueDrift';
 import { paint, standard } from './materials/palette';
 import { RENDER_ORDER } from './surface/layers';
 import { POINT_SCALE, scalesPoints } from './particles/pointScale';
 import { additive } from '@/world/materials/blend';
 
-export interface ProjectorOptions {
+interface ProjectorOptions {
   /** Width of the picture on the wall (metres). */
   pictureWidth?: number;
   /** Object whose distance to the picture drives the volume (the camera). */
@@ -72,13 +72,13 @@ function glowing<M extends THREE.Material>(material: M): M {
  * length and at its edges, dust drifting in it) follows wherever the projector is placed. Its fan
  * hums while the lamp is on and winds down after. Clicking the unit or the lit wall behaves like the TV.
  */
-export class Projector extends THREE.Group implements Furniture, Updatable, Interactable, VideoScreen, ActivityAware {
+export class Projector extends SurfaceScreen implements Furniture, Updatable, Interactable, ActivityAware {
   readonly hitboxes: THREE.Object3D[];
   readonly screenName = 'projector';
 
   /** Whether a copy plays here at all (a Japanese one needs its converter, `economy/regionLock`); set by the room's builder. */
   regionLock: RegionLock | null = null;
-  private readonly surface: VideoSurface;
+  protected readonly surface: VideoSurface;
   private readonly unitMaterial: THREE.MeshStandardMaterial;
   private readonly lens: THREE.Object3D;
   private readonly beam: THREE.SpotLight;
@@ -258,12 +258,14 @@ export class Projector extends THREE.Group implements Furniture, Updatable, Inte
     // Frustum: apex at the lens, base = the picture rectangle. Each side carries how far along the
     // throw (0 lens .. 1 wall) and how far across the side (0 .. 1) a point is, for the fades.
     const a = this.lens.position;
-    const corners = [
-      [-width / 2, height / 2],
-      [width / 2, height / 2],
-      [width / 2, -height / 2],
-      [-width / 2, -height / 2],
-    ].map(([x, y]) => new THREE.Vector3(centre.x + x, centre.y + y, centre.z));
+    const corners = (
+      [
+        [-width / 2, height / 2],
+        [width / 2, height / 2],
+        [width / 2, -height / 2],
+        [-width / 2, -height / 2],
+      ] as const
+    ).map(([x, y]) => new THREE.Vector3(centre.x + x, centre.y + y, centre.z));
     const positions: number[] = [];
     const along: number[] = [];
     const across: number[] = [];
@@ -281,18 +283,6 @@ export class Projector extends THREE.Group implements Furniture, Updatable, Inte
       .setAttribute('across', new THREE.Float32BufferAttribute(across, 1));
   }
 
-  get state(): ScreenState {
-    return this.surface.state;
-  }
-
-  get isPlaying(): boolean {
-    return this.surface.isPlaying;
-  }
-
-  onStateChange(listener: ScreenStateListener): () => void {
-    return this.surface.onStateChange(listener);
-  }
-
   // --- Interactable -------------------------------------------------------------------------
 
   setHovered(hovered: boolean): void {
@@ -305,10 +295,6 @@ export class Projector extends THREE.Group implements Furniture, Updatable, Inte
     if (this.surface.tuning) return 'Projector · tuning in…';
     if (this.state === 'error') return 'Projector, no longplay found · switch off';
     return this.state !== 'off' ? 'Projector · switch off' : 'Projector · bring a game box';
-  }
-
-  labelPlacement(): LabelPlacement {
-    return this.isPlaying ? 'edge' : 'crosshair';
   }
 
   /** With a box in hand, plays its longplay; otherwise switches the lamp off, even while it is still looking for a source. */
@@ -327,29 +313,6 @@ export class Projector extends THREE.Group implements Furniture, Updatable, Inte
       playRockerClick();
       session.stopScreen(this);
     }
-  }
-
-  // --- VideoScreen ----------------------------------------------------------------------------
-
-  searching(title: string): void {
-    this.surface.searching(title);
-  }
-
-  play(video: VideoInfo, startSeconds: number, onRejected?: (videoId: string) => void): void {
-    this.surface.play(video, startSeconds, onRejected);
-  }
-
-  fail(message: string): void {
-    this.surface.fail(message);
-  }
-
-  stop(): void {
-    this.surface.stop();
-  }
-
-  /** A program's canvas thrown on the wall (docs/media.md "Programs on the screen"). */
-  showFeed(feed: THREE.Texture): ScreenFeed {
-    return this.surface.showFeed(feed);
   }
 
   /** Dormant zone: the picture lets its video go and the fan falls silent; both come back with the zone (see `VideoSurface.setZoneActive`). */

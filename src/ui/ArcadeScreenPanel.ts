@@ -2,7 +2,7 @@ import { ModalPanel } from './ModalPanel';
 import './ArcadeScreenPanel.css';
 
 /** What a cabinet whose game runs in a web page needs: open it, hear its score, know when it is shut. */
-export interface RemoteScreenLike {
+interface RemoteScreenLike {
   /**
    * Shows `url` in the big frame. `onScore` hears every score the page reports (`final` when its
    * game is over); `onClose` is called once when the frame shuts, by the page's end, the Done
@@ -57,12 +57,12 @@ export class ArcadeScreenPanel extends ModalPanel<[RemoteGame]> implements Remot
   }
 
   /** A cabinet opening it while it is up (a second coin) starts afresh. */
-  open(options: RemoteGame): void {
+  override open(options: RemoteGame): void {
     if (this.isOpen) this.close();
     super.open(options);
   }
 
-  protected onOpened(options: RemoteGame): void {
+  protected override onOpened(options: RemoteGame): void {
     this.session = options;
     this.titleEl.textContent = options.title;
     this.scoreEl.textContent = 'Score: —';
@@ -75,7 +75,7 @@ export class ArcadeScreenPanel extends ModalPanel<[RemoteGame]> implements Remot
     window.setTimeout(() => this.frame.focus(), 50);
   }
 
-  protected onClosed(): void {
+  protected override onClosed(): void {
     window.clearTimeout(this.closeTimer);
     this.frame.src = 'about:blank';
     const session = this.session;
@@ -84,12 +84,12 @@ export class ArcadeScreenPanel extends ModalPanel<[RemoteGame]> implements Remot
   }
 
   /** While the game page has the focus its keys and pad are its own (B must not close it); click outside to reach Done. */
-  protected navigable(): boolean {
+  protected override navigable(): boolean {
     return this.isOpen && document.activeElement !== this.frame;
   }
 
   /** ModalLike: the Session only ever closes it (a cabinet opens it). */
-  toggle(): void {
+  override toggle(): void {
     if (this.isOpen) this.close();
   }
 

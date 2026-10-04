@@ -17,13 +17,13 @@ import { ForSaleBox } from '../market/ForSaleBox';
 import { GARAGE_WHERE } from '@/economy/pricing';
 
 /** Where the sale's boxes go: the zone (they must be placed to be clickable). */
-export interface GarageSaleHost {
+interface GarageSaleHost {
   place<F extends Furniture>(item: F, position: THREE.Vector3, rotationY?: number): F;
   remove(item: Furniture): void;
   toLocal(point: THREE.Vector3): THREE.Vector3;
 }
 
-export interface GarageSaleOptions {
+interface GarageSaleOptions {
   host: GarageSaleHost;
   covers: BoxArtLoader;
   wallet: { readonly coins: number; subscribe(cb: () => void): () => void };

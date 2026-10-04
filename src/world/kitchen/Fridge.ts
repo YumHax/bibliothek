@@ -6,7 +6,7 @@ import { paint, standard } from '../materials/palette';
 import { SwingLeaf, revealWhileOpen } from '../props/SwingLeaf';
 import { PooledLight } from '../lighting/LightPool';
 
-export interface FridgeOptions {
+interface FridgeOptions {
   /** Outer size. Default a slim 0.6 x 0.65 x 1.85 m fridge-freezer. */
   width?: number;
   depth?: number;

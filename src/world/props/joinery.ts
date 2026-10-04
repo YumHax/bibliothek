@@ -20,25 +20,20 @@ export const INSET = 0.001;
 /** How far a part stands out of the one under or behind it (m): a top over its carcass, a cap over a post. */
 export const PROUD = 0.002;
 
-/** A length shortened to stop `INSET` inside what it meets at each end (`ends` of them). */
-export function inset(length: number, ends = 2): number {
-  return length - ends * INSET;
-}
-
 /** A length grown to stand `PROUD` out on each side (`sides` of them). */
 export function proud(length: number, sides = 2): number {
   return length + sides * PROUD;
 }
 
 /** The world-free top of a part made by `part` / `boxMesh` (its local y + half its height), in its parent's space. */
-export function topOf(mesh: THREE.Mesh): number {
+function topOf(mesh: THREE.Mesh): number {
   const geometry = mesh.geometry;
   if (!geometry.boundingBox) geometry.computeBoundingBox();
   return mesh.position.y + geometry.boundingBox!.max.y * mesh.scale.y;
 }
 
 /** The front (+z) face of a part made by `part` / `boxMesh` (its local z + half its depth), in its parent's space. */
-export function frontOf(mesh: THREE.Mesh): number {
+function frontOf(mesh: THREE.Mesh): number {
   const geometry = mesh.geometry;
   if (!geometry.boundingBox) geometry.computeBoundingBox();
   return mesh.position.z + geometry.boundingBox!.max.z * mesh.scale.z;
@@ -53,21 +48,11 @@ export function faceOn<T extends THREE.Mesh>(face: T, backing: THREE.Mesh, layer
   return layMesh(face, layer);
 }
 
-/** A box part's own size (its geometry's bounds times its scale): what `capOn` and `bandAround` grow. */
+/** A box part's own size (its geometry's bounds times its scale): what `bandAround` grows. */
 function sizeOf(mesh: THREE.Mesh): THREE.Vector3 {
   const geometry = mesh.geometry;
   if (!geometry.boundingBox) geometry.computeBoundingBox();
   return geometry.boundingBox!.getSize(new THREE.Vector3()).multiply(mesh.scale);
-}
-
-/**
- * A top `height` thick over `below` (an unrotated box part, both children of `parent`): `PROUD` out on all four
- * sides and `SEAM` above it, so none of its faces can lie in the carcass's. A worktop, a lid, a cap on a post, a
- * marquee on its cabinet. Never type the same width and depth for both by hand.
- */
-export function capOn(parent: THREE.Object3D, below: THREE.Mesh, height: number, material: THREE.Material): THREE.Mesh {
-  const size = sizeOf(below);
-  return part(parent, proud(size.x), height, proud(size.z), material, { x: below.position.x, y: topOf(below) + SEAM + height / 2, z: below.position.z });
 }
 
 /**

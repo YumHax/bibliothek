@@ -50,7 +50,7 @@ export const PARK_END_TO = Math.atan2(-FRONTAGE, -PARK_END);
 /** Where the far street lamps stand. */
 export const LAMP_LINE = STREET_LAMPS.find((lamp) => lamp.yaw === Math.PI)!.at[1];
 /** The park (`city/park`): its near edge is Park Street's hedge, its far edge lined with mid-rise blocks. */
-export { FOUNTAIN, PARK_EDGE, PARK_FAR, PARK_PATHS, POND } from '@/world/city/park';
+export { FOUNTAIN, PARK_EDGE,  PARK_PATHS,  } from '@/world/city/park';
 /** The bus shelter on Front Street's far pavement (its middle), and where the bus in `Life` pulls up (x). */
 export const BUS_SHELTER = { x: BUS_STOP.shelter[0], z: BUS_STOP.shelter[1] };
 export const BUS_STOP_X = BUS_STOP.stop[0];
@@ -83,7 +83,7 @@ export const WALK_LINE = KERB + 1.6;
 export const LIFE_REACH = 62;
 
 /** A street lamp: where it stands, and whether it is on a far pavement (washing the facade behind it) or ours. */
-export interface PaintedLamp {
+interface PaintedLamp {
   x: number;
   z: number;
   far: boolean;

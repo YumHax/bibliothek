@@ -18,16 +18,13 @@ interface Standing {
 type State = Record<string, Standing>;
 
 /** The range of a standing. */
-export const FRIENDSHIP_MIN = -100;
-export const FRIENDSHIP_MAX = 100;
-/** From this standing on, a resident counts as a friend (an invitation, a kind word). */
-export const FRIENDLY = 25;
+const FRIENDSHIP_MIN = -100;
+const FRIENDSHIP_MAX = 100;
 /** At or under this standing, a resident is cross with the player (a curt hello, no invitation). */
 export const COLD = -15;
 
 let store: PersistedStore<State> | null = null;
 let state: State | null = null;
-const listeners = new Set<(key: string, value: number) => void>();
 
 function loaded(): State {
   if (state) return state;
@@ -59,11 +56,6 @@ export function friendship(key: string): number {
   return loaded()[key]?.value ?? 0;
 }
 
-/** Whether the resident behind `key` counts as a friend. */
-export function isFriend(key: string): boolean {
-  return friendship(key) >= FRIENDLY;
-}
-
 /**
  * Raises (or lowers, `amount` < 0) the standing with `key`. With `reason` and `day` (the game day),
  * the same reason counts once a day only (a dozen chats in a row are one chat). Returns whether it counted.
@@ -78,17 +70,10 @@ export function befriend(key: string, amount: number, reason?: string, day?: num
   standing.value = clamp(standing.value + amount);
   all[key] = standing;
   store!.save(all);
-  for (const cb of listeners) cb(key, standing.value);
   return true;
 }
 
 /** The game day `reason` last counted for `key`, or null. */
 export function lastCounted(key: string, reason: string): number | null {
   return loaded()[key]?.last[reason] ?? null;
-}
-
-/** Called with the door's key and its new standing on every change; returns the unsubscribe. */
-export function onFriendship(cb: (key: string, value: number) => void): () => void {
-  listeners.add(cb);
-  return () => listeners.delete(cb);
 }

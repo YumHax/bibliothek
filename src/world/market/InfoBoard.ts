@@ -11,7 +11,7 @@ export interface InfoRow {
   star?: boolean;
 }
 
-export interface InfoBoardOptions {
+interface InfoBoardOptions {
   /** Colour of the title band. */
   accent?: number;
   /** The title painted until the first `setContent()`. */

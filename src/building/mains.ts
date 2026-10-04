@@ -42,7 +42,7 @@ export function zoneOnCircuit(id: string): boolean {
 }
 
 /** Whether `object` stands in a zone on the building's circuit (its zone group is named `Zone:<id>`). */
-export function onBuildingCircuit(object: THREE.Object3D): boolean {
+function onBuildingCircuit(object: THREE.Object3D): boolean {
   const known = onCircuitCache.get(object);
   if (known !== undefined) return known;
   let found: boolean | null = null;

@@ -11,7 +11,7 @@ import type { TalkRole } from './streetTalk';
 
 type Standing = typeof STREET_PLAN.standing;
 
-export interface StandingPeopleOptions {
+interface StandingPeopleOptions {
   /** Where they stand, sit and wait (`STREET_PLAN.standing`). */
   spots: Standing;
   /** The bus stop's bus: where it stops (its doors are towards its front). */

@@ -11,7 +11,7 @@ import { Prop } from '../props/Prop';
 /** A regular's score may go on the table up to this much above the best starting rival (they play better than people). */
 const RIVAL_CAP = 1.1;
 
-export interface ArcadeHallOptions {
+interface ArcadeHallOptions {
   wallet: { readonly coins: number; readonly tickets: number };
   scores: ArcadeScores;
   daily?: ArcadeDaily;
@@ -28,7 +28,7 @@ export interface ArcadeHallOptions {
 }
 
 /** A game the hall has, by id and title. */
-export interface HallGame {
+interface HallGame {
   id: string;
   title: string;
 }

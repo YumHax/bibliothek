@@ -11,7 +11,7 @@ import { part } from '../props/Prop';
 import { HoverGlint } from '../props/hoverGlint';
 import { SealedCartonModel } from '../props/SealedCartonModel';
 
-export interface CartonCornerOptions {
+interface CartonCornerOptions {
   /** Today's carton, once drawn (null: none today, or not yet). */
   lot: Promise<SealedLot | null>;
   /** Whether today's carton is already sold (bought earlier today, a reload). */

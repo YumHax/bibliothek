@@ -9,7 +9,7 @@ import { LAMP_GLOW, LAMP_LIGHT } from '../lighting/lampColours';
 import { mainsOn } from '@/building/mains';
 import { skyGlassColour } from '../materials/glass';
 
-export interface StairLightsOptions {
+interface StairLightsOptions {
   /** The eye: the sensors see it, and the real lights follow the lit globes nearest to it. */
   viewer: THREE.Object3D;
 }

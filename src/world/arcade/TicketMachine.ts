@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import type { Updatable } from '@/core/Engine';
 import type { Input } from '@/core/Input';
 import type { Interactable, LabelPlacement } from '@/interaction/Interactable';
-import type { ArcadeBonus, ArcadeMachineLike, ArcadeResult, SessionActions } from '@/game/SessionActions';
+import type { ArcadeMachineLike, ArcadeResult, SessionActions } from '@/game/SessionActions';
 import type { ChipSpeaker } from '@/audio/ChipSpeaker';
 import type { Furniture } from '../Furniture';
 import type { ArcadeControls } from './games/ArcadeGame';
@@ -12,6 +12,7 @@ import type { Occupant, Station, StationEvents } from './Station';
 import type { Performer } from '../people/performer';
 import type { ScoreTable } from './scoreTable';
 import { MachineRun, type MachineRunOptions, type MachineState } from './MachineRun';
+import { RunMachine } from './RunMachine';
 
 /** What every physical ticket machine is wired to. */
 export interface TicketMachineWiring {
@@ -27,8 +28,6 @@ export interface TicketMachineWiring {
   outOfOrder?: () => boolean;
 }
 
-export type { MachineState } from './MachineRun';
-
 const REGULAR_PAUSE = 3;
 
 /**
@@ -39,7 +38,7 @@ const REGULAR_PAUSE = 3;
  * where people stand. Subclasses build their model, `speaker`, `strip` and `note` in their
  * constructor, before anything reads the state (the run is made on first use, from them).
  */
-export abstract class TicketMachine extends THREE.Group implements Furniture, Interactable, Updatable, ArcadeMachineLike, Station {
+export abstract class TicketMachine extends RunMachine implements Furniture, Interactable, Updatable, ArcadeMachineLike, Station {
   abstract readonly hitboxes: THREE.Object3D[];
   abstract readonly game: { readonly id: string; readonly title: string; readonly hint: string };
   abstract readonly standAt: THREE.Vector3;
@@ -94,32 +93,8 @@ export abstract class TicketMachine extends THREE.Group implements Furniture, In
     return this.machineRun;
   }
 
-  get isPlaying(): boolean {
-    return this.run.isPlaying;
-  }
-
-  get occupant(): Occupant {
-    return this.run.occupant;
-  }
-
-  get outOfOrder(): boolean {
-    return this.run.outOfOrder;
-  }
-
   screenCentre(): THREE.Vector3 {
     return this.localToWorld(this.focus.clone());
-  }
-
-  get canReplay(): boolean {
-    return this.run.canReplay;
-  }
-
-  pause(paused: boolean): void {
-    this.run.setPaused(paused);
-  }
-
-  showBonus(bonuses: readonly ArcadeBonus[]): void {
-    this.run.showBonus(bonuses);
   }
 
   start(onOver: (result: ArcadeResult) => void): void {

@@ -12,7 +12,7 @@ import { NEIGHBOUR_FLAT_PLAN as plan, type NeighbourHost } from './neighbourFlat
 
 type Side = keyof typeof plan.outlook;
 
-export interface FlatOutlookOptions {
+interface FlatOutlookOptions {
   dayNight: DayNight;
   outdoors: Outdoors;
   /** The main camera, the view through the glass is rendered from. */

@@ -5,7 +5,7 @@ import { part } from '../props/Prop';
 import { METAL, paint } from '../materials/palette';
 import { SwingLeaf, revealWhileOpen } from '../props/SwingLeaf';
 
-export interface WardrobeOptions {
+interface WardrobeOptions {
   /** Length along the wall. Default 1.2 (two doors). */
   width?: number;
   height?: number;

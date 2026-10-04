@@ -4,7 +4,7 @@ import { cylinderMesh } from '../meshUtils';
 import { part } from '../props/Prop';
 import { METAL, paint, standard, timber } from '@/world/materials/palette';
 
-export interface DresserOptions {
+interface DresserOptions {
   /** Length along the wall. Default 0.9. */
   width?: number;
   /** Drawers, top to bottom. Default 3. */

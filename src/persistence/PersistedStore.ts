@@ -6,7 +6,7 @@ import { safeStorage, storageKeys } from './storage';
 const MAX_COPIES = 3;
 
 /** How one store is kept: its key, its format version, how to read and upgrade what was saved, and where to start. */
-export interface PersistedSpec<T> {
+interface PersistedSpec<T> {
   key: string;
   /**
    * The format version written now. A value saved before versions were kept (bare JSON, no

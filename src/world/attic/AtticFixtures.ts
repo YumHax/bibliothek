@@ -29,7 +29,7 @@ export class ServiceWardrobe extends Prop implements Interactable {
     this.add(hitbox);
   }
 
-  get footprint(): THREE.Box3 {
+  override get footprint(): THREE.Box3 {
     return new THREE.Box3(new THREE.Vector3(-0.52, 0, -0.27), new THREE.Vector3(0.52, 2.13, 0.27));
   }
 
@@ -76,7 +76,7 @@ export class HatchLadder extends Prop implements Interactable {
     this.add(hitbox);
   }
 
-  get footprint(): THREE.Box3 {
+  override get footprint(): THREE.Box3 {
     return new THREE.Box3(new THREE.Vector3(-0.23, 0, 0), new THREE.Vector3(0.23, 2.4, 0.15));
   }
 

@@ -13,7 +13,7 @@ import { standard } from '@/world/materials/palette';
  * Empty footprint so the cat can reach it and the player never trips on it.
  */
 
-export interface WaterBowlOptions {
+interface WaterBowlOptions {
   finish?: 'steel' | 'ceramic';
   /** Glaze colour when `finish` is ceramic. */
   glaze?: number;

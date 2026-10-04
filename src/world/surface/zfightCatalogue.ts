@@ -37,18 +37,21 @@ import { PET_SHOP } from '../shop/plans/petShop';
 import { TV_SHOP } from '../shop/plans/tvShop';
 
 /**
- * What `npm run zfight` (scripts/zfight.mjs) builds headless and runs `findZFighting` over, never imported by the
+ * What `npm run zfight` (scripts/zfight.mjs) builds headless and runs `findZFighting` over, and what `npm run
+ * scene-lint` (scripts/scene-lint.mjs, `world/lint/`) checks for lights, placement and disposal; never imported by the
  * game: every decor kind and every shop prop on its own (each with its default options, and each shop prop again
  * with the options its shop's plan gives it), then each room as its plan lays it out: the shell (walls, floor,
  * skirting) and the plan's decor, or a shop's props, where the plan puts them. What needs the running game (the
  * shelves and their boxes, seats, screens, visitors, the street and its traffic) is checked in the browser
  * (`bibliothek.zfight()`, `?debug`).
  */
-export interface ZFightSubject {
+interface ZFightSubject {
   /** Stable name, the baseline's key: `prop:<kind>`, `shopProp:<shop>:<prop>#<n>`, `room:<plan>`. */
   name: string;
   /** Distance the pairs are judged at (m), as the browser's check judges the zone it stands in. */
   viewDistance: number;
+  /** A room subject's shell options (scene-lint judges where its plan put things against them); absent for a prop on its own. */
+  room?: RoomOptions;
   build(): THREE.Object3D;
 }
 
@@ -132,11 +135,27 @@ function roomDistance(room: RoomOptions): number {
   return Math.max(6, Math.hypot(room.width, room.depth, room.height) * 0.8);
 }
 
-function placed(group: THREE.Group, item: THREE.Object3D, room: RoomOptions, at: Placement): void {
+/**
+ * Places `item` as the plan says and labels it for scene-lint: `userData.lint` is the plan's kind and its ordinal
+ * (`plant#2`), `userData.lintAt` what the plan hung it on (`wall`, `ceiling`, else `floor`).
+ */
+function placed(group: THREE.Group, item: THREE.Object3D, room: RoomOptions, at: Placement, label: string): void {
   const { position, rotationY } = resolvePlacement(room, at);
   item.position.copy(position);
   item.rotation.y = rotationY;
+  item.userData.lint = label;
+  item.userData.lintAt = 'wall' in at ? 'wall' : 'ceiling' in at || ('corner' in at && at.hung) ? 'ceiling' : 'floor';
   group.add(item);
+}
+
+/** `kind#n`: the n-th entry of that kind in its plan, so a finding keeps its key when another kind is added. */
+function labeller(): (kind: string) => string {
+  const seen = new Map<string, number>();
+  return (kind) => {
+    const n = (seen.get(kind) ?? 0) + 1;
+    seen.set(kind, n);
+    return `${kind}#${n}`;
+  };
 }
 
 export function zfightSubjects(): ZFightSubject[] {
@@ -154,10 +173,12 @@ export function zfightSubjects(): ZFightSubject[] {
     subjects.push({
       name: `room:${name}`,
       viewDistance: roomDistance(plan.room),
+      room: plan.room,
       build: () => {
         const group = new THREE.Group();
+        const label = labeller();
         group.add(new Room(plan.room));
-        for (const entry of plan.decor) placed(group, buildDecor(entry) as unknown as THREE.Object3D, plan.room, entry.at);
+        for (const entry of plan.decor) placed(group, buildDecor(entry) as unknown as THREE.Object3D, plan.room, entry.at, label(entry.kind));
         return group;
       },
     });
@@ -166,14 +187,16 @@ export function zfightSubjects(): ZFightSubject[] {
     subjects.push({
       name: `room:${name}`,
       viewDistance: roomDistance(plan.room),
+      room: plan.room,
       build: () => {
         const group = new THREE.Group();
+        const label = labeller();
         group.add(new Room(plan.room));
         plan.fixtures.forEach((fixture, i) => {
           // As `furnishShop` places them; the clock and what stands on a surface need the running zone.
           if (fixture.kind === 'clock' || fixture.kind === 'radio' || !('at' in fixture)) return;
           const item = fixture.kind === 'prop' ? makeShopProp(fixture.prop, fixture.options as never, shopContext(plan, i + 1)) : buildFixture(fixture);
-          placed(group, item as unknown as THREE.Object3D, plan.room, fixture.at);
+          placed(group, item as unknown as THREE.Object3D, plan.room, fixture.at, label(fixture.kind === 'prop' ? fixture.prop : fixture.kind));
         });
         return group;
       },

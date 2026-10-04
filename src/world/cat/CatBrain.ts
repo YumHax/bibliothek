@@ -9,8 +9,6 @@ import { CAT_TIMING, STATES, type CatState } from './catStates';
 import { chance } from './random';
 import { placeForMorning } from './morning';
 
-export type { CatState } from './catStates';
-
 /** The screen the cat may watch (the TV): whether it is on, where to sit, and optionally what to look at. */
 export interface CatScreen {
   isPlaying(): boolean;
@@ -45,8 +43,8 @@ export interface CatBrainContext {
   perches?: readonly CatPerch[];
 }
 
-export type PetOutcome = 'purr' | 'woke' | 'annoyed' | 'busy';
-export type CallOutcome = 'coming' | 'ignored' | 'asleep';
+type PetOutcome = 'purr' | 'woke' | 'annoyed' | 'busy';
+type CallOutcome = 'coming' | 'ignored' | 'asleep';
 
 /** Real seconds of one in-game hour (a day lasts 600 s). Rhythm constants below are in real seconds. */
 const HUNGER_FULL_S = 240; // empty stomach to starving in ~10 in-game hours
@@ -166,7 +164,7 @@ export class CatBrain {
     const mind = this.mind;
     if (this.ctx.motion.hopping) return 'busy';
     this.petTimes.push(this.now);
-    while (this.petTimes.length && this.now - this.petTimes[0] > PET_WINDOW_S) this.petTimes.shift();
+    while (this.petTimes.length && this.now - this.petTimes[0]! > PET_WINDOW_S) this.petTimes.shift();
     if (this.annoyedFor > 0) {
       this.ctx.body.flick();
       this.grumble();

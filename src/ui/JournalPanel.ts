@@ -4,12 +4,12 @@ import { ModalPanel } from './ModalPanel';
 import './JournalPanel.css';
 
 /** What the panel reads: the journal's pages. `Journal` fits. */
-export interface JournalLike {
+interface JournalLike {
   readonly today: JournalDay;
   readonly history: readonly JournalDay[];
 }
 
-export interface JournalPanelOptions {
+interface JournalPanelOptions {
   /** Today's arcade challenge, if the arcade is wired: which machine, the score, the bonus, whether it is beaten. */
   challenge?: () => { gameId: string; target: number; reward: number; done: boolean };
   /** A machine's name for the challenge line (default: its id in capitals). */

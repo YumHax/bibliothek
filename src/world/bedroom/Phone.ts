@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { Prop, part } from '../props/Prop';
 import { paint, standard } from '../materials/palette';
 
-export interface PhoneOptions {
+interface PhoneOptions {
   /** Colour of the case. */
   color?: number;
   /** How far the charging cable runs back from the phone's bottom edge (-z) to the edge of what it lies on, then drops. */

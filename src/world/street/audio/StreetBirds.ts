@@ -4,7 +4,7 @@ import type { SeasonName } from '@/time/season';
 import type { SoundGraph } from './soundGraph';
 
 /** What the birds go by: the hour, how light it is, the weather, what lies on the ground. */
-export interface BirdWeather {
+interface BirdWeather {
   readonly hours: number;
   readonly daylight: number;
   readonly rain: number;

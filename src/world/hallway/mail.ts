@@ -6,7 +6,7 @@ import { ARCADE_GAMES, type ArcadeGameId } from '../arcade/games';
 import type { MailPiece } from '../props/MailDrop';
 
 /** What the flyers can advertise, read-only: today's arcade challenge, today's market stock (if drawn yet); tomorrow's market theme comes from the calendar. */
-export interface MailSources {
+interface MailSources {
   arcadeDaily?: { challenge(): { gameId: string; target: number; reward: number; done: boolean } };
   market?: {
     peekToday(): readonly { readonly game: { readonly title: string }; readonly price: number; readonly priced: boolean; readonly source: string }[] | null;

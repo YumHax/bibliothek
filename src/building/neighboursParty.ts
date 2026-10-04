@@ -66,7 +66,7 @@ function cycleParty(day: number): boolean {
 }
 
 /** Whether `date` is the last Friday of May: the Fête des voisins. */
-export function isFeteDesVoisins(date: Date): boolean {
+function isFeteDesVoisins(date: Date): boolean {
   return date.getMonth() === 4 && date.getDay() === 5 && date.getDate() + 7 > 31;
 }
 
@@ -89,7 +89,7 @@ export function tournamentGame(day: number): (typeof PARTY.tournament.games)[num
 }
 
 /** A guest of the party: the resident's door (landing, door), name, look's seed. */
-export interface PartyGuest {
+interface PartyGuest {
   k: number;
   i: number;
   name: string;
@@ -137,7 +137,7 @@ export function partyNotes(day: number, date: Date): BoardNote[] {
  * Which party a game day's tournament belongs to: the cycle's party by its game day; on the real Fête des voisins (every
  * game day of that date is a party day) the date itself, so its prize is won once that date, not once a game day.
  */
-export function partyId(day: number, date: Date): string {
+function partyId(day: number, date: Date): string {
   return !cycleParty(day) && isFeteDesVoisins(date) ? `fete:${dayKey(date)}` : `day:${day}`;
 }
 

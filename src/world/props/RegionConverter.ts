@@ -3,7 +3,7 @@ import { paint } from '../materials/palette';
 import { Prop, part } from './Prop';
 import { PROUD, partOn } from './joinery';
 
-export interface RegionConverterOptions {
+interface RegionConverterOptions {
   /** Body width, height, depth (m). */
   width?: number;
   height?: number;

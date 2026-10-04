@@ -15,7 +15,7 @@ import { ForSaleBox } from '../../market/ForSaleBox';
 import { snowCovered } from '../snowCover';
 import { GIVEAWAY_WHERE } from '@/economy/pricing';
 
-export interface GiveawayBoxOptions {
+interface GiveawayBoxOptions {
   /** The zone: the free game must be placed to be clickable. */
   host: { place<F extends Furniture>(item: F, position: THREE.Vector3, rotationY?: number): F; remove(item: Furniture): void; toLocal(point: THREE.Vector3): THREE.Vector3 };
   covers: BoxArtLoader;

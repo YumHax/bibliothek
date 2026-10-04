@@ -12,7 +12,7 @@ import { rememberFocus } from './rememberFocus';
 import './CataloguePanel.css';
 import './SellPanel.css';
 
-export interface SellPanelOptions {
+interface SellPanelOptions {
   /** Front cover image for a game (a thumbnail per row). */
   coverUrl?: (game: Game) => string | undefined;
   /** How the market knows the player: its reputation adds to the offers (each sale counts towards it: `Transactions.sellToDesk`). */
@@ -90,12 +90,12 @@ export class SellPanel extends ModalPanel {
     this.renderWallet();
   }
 
-  protected onOpened(): void {
+  protected override onOpened(): void {
     this.armed = null;
     this.render();
   }
 
-  protected onClosed(): void {
+  protected override onClosed(): void {
     this.setStatus('');
   }
 

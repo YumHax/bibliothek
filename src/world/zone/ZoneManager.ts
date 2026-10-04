@@ -3,7 +3,7 @@ import type { Updatable } from '@/core/Engine';
 import { Listeners } from '@/core/Listeners';
 import type { Zone } from './Zone';
 
-export interface ZoneManagerOptions<Id extends string = string> {
+interface ZoneManagerOptions<Id extends string = string> {
   /** Zone the player starts in; activated in the constructor. */
   start: Id;
   /** Metres the player may step outside the current zone's bounds before it stops being current (doorway thresholds). Default 0.4. */

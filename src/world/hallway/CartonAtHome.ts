@@ -12,7 +12,7 @@ import { invisibleHitbox } from '../meshUtils';
 import { HoverGlint } from '../props/hoverGlint';
 import { SealedCartonModel } from '../props/SealedCartonModel';
 
-export interface CartonAtHomeOptions {
+interface CartonAtHomeOptions {
   sealed: SealedLots;
   tx: Transactions;
 }

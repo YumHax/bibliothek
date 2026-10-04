@@ -1,9 +1,7 @@
 import * as THREE from 'three';
 import type { RoomOptions, Wall } from '../Room';
 
-export type { Wall };
-
-export interface WallMount {
+interface WallMount {
   position: THREE.Vector3;
   rotationY: number;
 }

@@ -7,7 +7,7 @@ import { cylinderMesh, invisibleHitbox } from '../meshUtils';
 import { paint } from '../materials/palette';
 import { type OwnedPrizes, showWhenOwned } from './ownedPrize';
 
-export interface FeatherWandOptions {
+interface FeatherWandOptions {
   prizes: OwnedPrizes;
   /** Waves it at the cat: calls it over, and says how that went (the cat comes, ignores it, sleeps on). */
   callCat?: () => string;

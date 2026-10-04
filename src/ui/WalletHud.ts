@@ -5,13 +5,13 @@ import { reduceMotion } from '@/settings/motion';
 import { hudSlot } from './hudSlot';
 
 /** What the HUD reads: the two balances and a way to hear about changes. */
-export interface WalletView {
+interface WalletView {
   readonly coins: number;
   readonly tickets: number;
   subscribe(cb: () => void): () => void;
 }
 
-export interface WalletHudOptions {
+interface WalletHudOptions {
   /** True where money is the point (the arcade, the market, the shops): the chip stays up there. */
   moneyHere?: () => boolean;
 }

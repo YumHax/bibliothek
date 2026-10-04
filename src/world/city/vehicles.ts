@@ -4,7 +4,7 @@
  * pictures of the street are built to: the walkable street's 3D models (`street/carModel.ts`) and
  * the boxes the window view paints (`props/outdoors/Car.ts`).
  */
-export interface VehicleDimensions {
+interface VehicleDimensions {
   readonly length: number;
   readonly width: number;
   readonly height: number;

@@ -203,8 +203,9 @@ export function setRoomAir(kind: RoomAir): void {
   }
   if (air.kind === kind) return;
   const t = ctx.currentTime;
-  const out = air.legs[air.live];
-  const next = air.legs[1 - air.live];
+  // Two legs, `live` is 0 or 1: both indices exist.
+  const out = air.legs[air.live]!;
+  const next = air.legs[1 - air.live]!;
   out.gain.gain.setTargetAtTime(0, t, AIR_FADE_S / 3);
   const leaving = out;
   window.setTimeout(() => {

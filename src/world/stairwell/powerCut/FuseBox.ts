@@ -13,7 +13,7 @@ import { HoverGlint } from '../../props/hoverGlint';
 const SIZE = { width: 0.46, height: 0.6, depth: 0.14 };
 
 /** What the box says: looked at with the power on, a reset that trips again, the power back. */
-export interface FuseLines {
+interface FuseLines {
   idle: string;
   trips: string;
   restored: string;

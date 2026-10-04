@@ -168,9 +168,10 @@ export class CatMind {
   sleepDrive(): number {
     const h = ((this.ctx.clock.state.hours % 24) + 24) % 24;
     let i = 0;
-    while (i < SLEEP_CURVE.length - 1 && SLEEP_CURVE[i + 1][0] <= h) i++;
-    const [h0, d0] = SLEEP_CURVE[i];
-    const [h1, d1] = SLEEP_CURVE[Math.min(i + 1, SLEEP_CURVE.length - 1)];
+    // Knots exist on both sides of `i`: it stops before the last one, and the index below is clamped to it.
+    while (i < SLEEP_CURVE.length - 1 && SLEEP_CURVE[i + 1]![0] <= h) i++;
+    const [h0, d0] = SLEEP_CURVE[i]!;
+    const [h1, d1] = SLEEP_CURVE[Math.min(i + 1, SLEEP_CURVE.length - 1)]!;
     return THREE.MathUtils.lerp(d0, d1, THREE.MathUtils.smoothstep(h, h0, h1));
   }
 }

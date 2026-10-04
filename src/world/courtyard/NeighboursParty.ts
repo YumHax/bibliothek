@@ -9,12 +9,12 @@ import { PARTY_TALK, partyGuests, type partyStage } from '@/building/neighboursP
 import { STAIRWELL_PLAN } from '../stairwell/stairwellPlan';
 
 /** What the party places and takes away again: the zone. */
-export interface PartyHost {
+interface PartyHost {
   place<F extends Furniture>(item: F, position: THREE.Vector3, rotationY?: number): F;
   remove(item: Furniture): void;
 }
 
-export interface NeighboursPartyOptions {
+interface NeighboursPartyOptions {
   host: PartyHost;
   /** The camera: the guests look at it. */
   viewer: THREE.Object3D;
@@ -119,7 +119,7 @@ class PartyGuest extends Vendor {
     super(options);
   }
 
-  activate(session: SessionActions): void {
+  override activate(session: SessionActions): void {
     super.activate(session);
     this.chatted();
   }

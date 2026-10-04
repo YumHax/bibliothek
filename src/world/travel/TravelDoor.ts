@@ -11,7 +11,7 @@ import { ShutDoor, type ShutDoorOptions } from '../props/ShutDoor';
 import { DoorSwing, doorway } from './doorSwing';
 import type { ZoneId } from '../zoneIds';
 
-export interface TravelDoorOptions extends ShutDoorOptions {
+interface TravelDoorOptions extends ShutDoorOptions {
   /** Caption under the crosshair, e.g. "Front Street · go out". */
   label: string;
   /**

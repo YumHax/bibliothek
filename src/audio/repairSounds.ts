@@ -1,5 +1,5 @@
-import { audioBus, audioContext } from './audioContext';
 import { whiteNoise } from './noise';
+import { burst, oneShot, ping, rand } from './oneShot';
 
 /*
  * The kitchen table's console repair (`ui/repair/RepairPanel`): a screw turning out or in, a brush scrubbing, a part
@@ -7,50 +7,8 @@ import { whiteNoise } from './noise';
  * clicks in a panel, so on the UI bus, no distance model; synthesised on the spot and gone after.
  */
 
-const rand = (min: number, max: number): number => min + Math.random() * (max - min);
-
-function output(level: number, seconds: number): { ctx: AudioContext; out: GainNode; t: number } | null {
-  let ctx: AudioContext;
-  try {
-    ctx = audioContext();
-  } catch {
-    return null;
-  }
-  const out = ctx.createGain();
-  out.gain.value = level;
-  out.connect(audioBus(ctx, 'ui'));
-  window.setTimeout(() => out.disconnect(), (seconds + 0.5) * 1000);
-  return { ctx, out, t: ctx.currentTime + 0.01 };
-}
-
-function burst(ctx: AudioContext, out: AudioNode, t: number, band: number, q: number, level: number, length: number): void {
-  const source = ctx.createBufferSource();
-  source.buffer = whiteNoise(ctx, 1);
-  const filter = ctx.createBiquadFilter();
-  filter.type = 'bandpass';
-  filter.frequency.value = band;
-  filter.Q.value = q;
-  const env = ctx.createGain();
-  env.gain.setValueAtTime(0, t);
-  env.gain.linearRampToValueAtTime(level, t + Math.min(0.01, length * 0.3));
-  env.gain.exponentialRampToValueAtTime(0.0005, t + length);
-  source.connect(filter).connect(env).connect(out);
-  source.start(t, Math.random() * 0.5);
-  source.stop(t + length + 0.02);
-}
-
-function ping(ctx: AudioContext, out: AudioNode, t: number, frequency: number, level: number, decay: number, type: OscillatorType = 'sine'): void {
-  const osc = ctx.createOscillator();
-  osc.type = type;
-  osc.frequency.value = frequency;
-  const env = ctx.createGain();
-  env.gain.setValueAtTime(0, t);
-  env.gain.linearRampToValueAtTime(level, t + 0.003);
-  env.gain.exponentialRampToValueAtTime(0.0005, t + decay);
-  osc.connect(env).connect(out);
-  osc.start(t);
-  osc.stop(t + decay + 0.02);
-}
+/** The panel's sounds all go on the UI bus, 10 ms ahead of the click that asked for them (`oneShot`). */
+const output = (level: number, seconds: number) => oneShot(level, seconds, 'ui', 0.01);
 
 /** A screw turned out (or in): the bit's ticks against its head, then the little metal clink (or the last snug turn). */
 export function playScrew(tighten = false, level = 0.25): void {

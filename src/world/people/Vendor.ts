@@ -10,7 +10,7 @@ import { blobShadow } from '../zone/ContactShadows';
 import { SpeechBubble } from './SpeechBubble';
 import { Attention, type AttentionRange } from './attention';
 
-export interface VendorOptions {
+interface VendorOptions {
   /** Whose gaze to meet: the camera. */
   viewer: THREE.Object3D;
   /** What they say when clicked, one line at a time, round and round; a function is asked afresh at every click (a stallholder talking about their table). */

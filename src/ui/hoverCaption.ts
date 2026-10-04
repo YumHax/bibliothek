@@ -5,7 +5,7 @@
  * pet" is "The cat is sleeping" and "pet"; "Door release · click to go out" is "Door release" and "go
  * out". A caption the reading cannot split cleanly ("Space or click to spin") is shown as it is.
  */
-export interface Caption {
+interface Caption {
   name: string;
   verb: string | null;
 }

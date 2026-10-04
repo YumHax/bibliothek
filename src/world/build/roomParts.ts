@@ -56,7 +56,7 @@ export function furnishDecor(zone: Zone, ctx: Hearing & { home?: Pick<BuildConte
 }
 
 /** A spot on a surface for a `StrayBox`: `at` is `[x, z]` on the host's top, `yaw` about its local y. */
-export interface StraySpot {
+interface StraySpot {
   readonly at: readonly [number, number];
   readonly yaw: number;
   /** How far off square and off the spot the box may lie (radians, m): less than the default on a small top. */

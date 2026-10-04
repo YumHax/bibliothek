@@ -9,7 +9,7 @@ import type { BrowseSpot } from '../people/Shopper';
 import type { ForSaleBox } from './ForSaleBox';
 import type { MarketFloor } from './MarketFloor';
 
-export interface RivalInHallOptions {
+interface RivalInHallOptions {
   viewer: THREE.Object3D;
   floor: MarketFloor;
   rival: RivalCollector;

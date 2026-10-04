@@ -7,7 +7,7 @@ import { Door } from './props/Door';
 import { followDaylight } from './build/follow';
 import { reportFlatRoom } from './city/flatWindows';
 
-export interface ShellOptions {
+interface ShellOptions {
   /** Colour of the painted leaves of the doors this zone hangs. Default the `Door`'s slate green. */
   leafColor?: number;
   /**

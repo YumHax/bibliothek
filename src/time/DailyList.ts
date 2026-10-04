@@ -2,7 +2,7 @@ import { PersistedStore } from '@/persistence';
 import { dayKey } from '@/economy/calendar';
 
 /** How a `DailyList` is saved: its key and format version, the field its items go under, and the upgrades of older saves. */
-export interface DailyListSpec<T> {
+interface DailyListSpec<T> {
   key: string;
   version: number;
   /** The saved object's field holding the items (`{ day, [field]: T[] }`). */

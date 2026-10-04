@@ -14,23 +14,33 @@ export interface OutlookContents {
   updatables: readonly Updatable[];
   /** Before the scene is compiled, and now and then after (the sky's reflection): may render with `renderer`. */
   prepare?(renderer: THREE.WebGLRenderer, dt: number): void;
+  /** The scene's children compiled one by one over idle moments (default: the whole scene at once). */
+  parts?: readonly THREE.Object3D[];
   dispose(): void;
 }
 
 /** World (the room's scene) to the outlook's own frame (e.g. the street's zone-local metres), for one of its panes. */
 export type ToOutlook = (pane: THREE.Mesh) => THREE.Matrix4;
 
-export interface OutlookViewOptions {
+interface OutlookViewOptions {
   /** The main camera: only its view is rendered (a mirror's pass through the room reuses the last picture). */
   viewer: THREE.Camera;
   /** World to the outlook's frame for the panes made without their own (`pane`). */
   toOutlook?: () => THREE.Matrix4;
-  /** Builds what is out there, handed the camera it is seen from (the sky dome and the sun follow it). */
-  build: (camera: THREE.Camera) => Promise<OutlookContents>;
+  /**
+   * Builds what is out there, handed the camera it is seen from (the sky dome and the sun follow it) and `between`, the
+   * browser's next idle moment, to await between steps (a whole street built in one go is a freeze).
+   */
+  build: (camera: THREE.Camera, between: () => Promise<void>) => Promise<OutlookContents>;
   /** The glass's colour until the view is built and compiled (a pale sky). */
   waiting: () => THREE.Color;
   /** Its name for the z-fight check once built: `bibliothek.zfight('outlook:<name>')` (default `view<n>`). */
   name?: string;
+  /**
+   * Kept while out of sight, never freed by `FREE_AFTER_UNDRAWN` (the home view: a window of the flat is always a
+   * doorway away, and building it again when one comes into view froze the corridor); it goes with `dispose`.
+   */
+  keep?: boolean;
 }
 
 /** The view's picture: this share of the drawing buffer (it only covers the panes: see the scissor), its long side capped. */
@@ -49,9 +59,11 @@ const RECENT = 8;
 const LIVE_AFTER_DRAWN = 1.5;
 /**
  * Seconds without a pane drawn after which what is out there is freed (its scene, its picture), to be built again
- * next time (`prefetch` on walking in): a persistent room's view (the stairwell's) would otherwise hold a whole street.
+ * next time (`prefetch` on walking in), unless the view is kept (`keep`: the home view).
  */
 const FREE_AFTER_UNDRAWN = 90;
+/** Milliseconds of compiling (`compileInSlices`) before waiting for the browser's next idle moment. */
+const COMPILE_SLICE_MS = 8;
 /**
  * Panes in one plane drawn in the same frame share one render of the picture over their rectangles' union, unless
  * the union is this many times their own areas (two panes far apart on screen: two small renders cost fewer pixels).
@@ -67,6 +79,22 @@ const ZFIGHT_DISTANCE = 140;
 /** Views made without a name, counted for theirs. */
 let views = 0;
 
+/** What three keeps of a material's linked program (`renderer.properties`): enough to wait for the link. */
+interface CompiledProgram {
+  isReady(): boolean;
+  getUniforms(): unknown;
+}
+
+function idle(run: () => void): void {
+  if ('requestIdleCallback' in window) window.requestIdleCallback(run, { timeout: 1500 });
+  else setTimeout(run, 200);
+}
+
+/** The browser's next idle moment: a view's build and compile are spread over several, not one freeze. */
+function idleMoment(): Promise<void> {
+  return new Promise((resolve) => idle(resolve));
+}
+
 /**
  * The view through a window onto a place built elsewhere (`outlook/`): its own `THREE.Scene`, lit by its own sun,
  * rendered each frame one of its panes is drawn from the main camera carried into its frame (`toOutlook`), clipped
@@ -75,7 +103,8 @@ let views = 0;
  * happens in the pane's `onBeforeRender`, like three's `Reflector`: the room's scene and its lights are never
  * touched, so neither its shadow texture units nor its light count change. The contents are built lazily (`build`,
  * the street's classes in their own chunk) when the room is walked into (`prefetch`) or a pane is first drawn, then
- * compiled out of sight; until then the glass shows `waiting`. An `Updatable`: its owner in the zone ticks it.
+ * compiled out of sight, both spread over idle moments; until then the glass shows `waiting`. An `Updatable`: its
+ * owner in the zone ticks it.
  */
 export class OutlookView extends THREE.Group implements Updatable {
   private readonly camera = new THREE.PerspectiveCamera();
@@ -171,9 +200,7 @@ export class OutlookView extends THREE.Group implements Updatable {
   prefetch(): void {
     if (this.state !== 'idle') return;
     this.state = 'building';
-    const run = (): void => this.startBuilding();
-    if ('requestIdleCallback' in window) window.requestIdleCallback(run, { timeout: 1500 });
-    else setTimeout(run, 200);
+    idle(() => this.startBuilding());
   }
 
   update(dt: number): void {
@@ -184,7 +211,7 @@ export class OutlookView extends THREE.Group implements Updatable {
       this.tickedFrame = frame;
     }
     this.sinceDrawn += dt;
-    if (this.state === 'ready' && this.contents && this.sinceDrawn > FREE_AFTER_UNDRAWN) this.free();
+    if (this.state === 'ready' && this.contents && !this.options.keep && this.sinceDrawn > FREE_AFTER_UNDRAWN) this.free();
     const drawnLately = this.sinceDrawn < LIVE_AFTER_DRAWN;
     if (this.state === 'idle' && drawnLately) {
       this.state = 'building';
@@ -223,7 +250,7 @@ export class OutlookView extends THREE.Group implements Updatable {
   private startBuilding(): void {
     if (this.disposed) return;
     this.options
-      .build(this.camera)
+      .build(this.camera, idleMoment)
       .then((contents) => {
         if (this.disposed) {
           contents.dispose();
@@ -242,25 +269,82 @@ export class OutlookView extends THREE.Group implements Updatable {
   private compile(renderer: THREE.WebGLRenderer, contents: OutlookContents): void {
     this.state = 'compiling';
     contents.prepare?.(renderer, 0);
-    const previous = renderer.getRenderTarget();
-    const clipping = renderer.clippingPlanes;
-    renderer.setRenderTarget(this.target);
-    renderer.clippingPlanes = this.clipPlanes;
-    let compiled: Promise<unknown>;
-    try {
-      compiled = renderer.compileAsync(contents.scene, this.camera);
-    } finally {
-      renderer.clippingPlanes = clipping;
-      renderer.setRenderTarget(previous);
-    }
+    const compiled = contents.parts ? this.compileInSlices(renderer, contents) : this.compileSome(renderer, contents.scene, null);
     compiled
       .then(() => {
-        if (!this.disposed) this.state = 'ready';
+        if (!this.disposed && this.contents === contents) this.state = 'ready';
       })
       .catch((error: unknown) => {
         this.state = 'failed';
         console.error('[outlook] the view failed to compile', error);
       });
+  }
+
+  /**
+   * `contents.parts` compiled a few at a time, an idle moment between (`COMPILE_SLICE_MS`): a street's hundred-odd
+   * programs linked in one go froze the room for a second or more where the driver cannot link in parallel (Firefox).
+   * Each part is taken out of the scene while it compiles, so its own lights count once and the others' come from the
+   * scene. A last pass over the whole scene links anything the parts missed (cached programs cost nothing).
+   */
+  private async compileInSlices(renderer: THREE.WebGLRenderer, contents: OutlookContents): Promise<void> {
+    const { scene } = contents;
+    let sliceStarted = performance.now();
+    const linked: Promise<void>[] = [];
+    for (const part of contents.parts ?? []) {
+      if (performance.now() - sliceStarted > COMPILE_SLICE_MS) {
+        await idleMoment();
+        sliceStarted = performance.now();
+      }
+      if (this.disposed || this.contents !== contents) return;
+      if (part.parent !== scene) continue;
+      const at = scene.children.indexOf(part);
+      scene.remove(part);
+      try {
+        linked.push(this.compileSome(renderer, part, scene));
+      } finally {
+        // Back where it was among the scene's children.
+        scene.add(part);
+        scene.children.pop();
+        scene.children.splice(at, 0, part);
+      }
+    }
+    await Promise.all(linked);
+    if (this.disposed || this.contents !== contents) return;
+    await idleMoment();
+    await this.compileSome(renderer, scene, null);
+  }
+
+  /**
+   * `root`'s programs compiled as the picture's target binds them (no tone mapping, a clip plane), with the lights of
+   * `lightsFrom` as well when given; resolves once linked. Without the driver's parallel compile three only links a
+   * program on its first draw (`isReady` is true at once): its uniforms are read here instead, so the wait is now.
+   */
+  private compileSome(renderer: THREE.WebGLRenderer, root: THREE.Object3D, lightsFrom: THREE.Scene | null): Promise<void> {
+    const previous = renderer.getRenderTarget();
+    const clipping = renderer.clippingPlanes;
+    renderer.setRenderTarget(this.target);
+    renderer.clippingPlanes = this.clipPlanes;
+    let materials: Set<THREE.Material>;
+    try {
+      materials = renderer.compile(root, this.camera, lightsFrom);
+    } finally {
+      renderer.clippingPlanes = clipping;
+      renderer.setRenderTarget(previous);
+    }
+    const programOf = (material: THREE.Material): CompiledProgram | undefined =>
+      (renderer.properties.get(material) as { currentProgram?: CompiledProgram } | undefined)?.currentProgram;
+    if (!renderer.extensions.has('KHR_parallel_shader_compile')) {
+      for (const material of materials) programOf(material)?.getUniforms();
+      return Promise.resolve();
+    }
+    return new Promise((resolve) => {
+      const check = (): void => {
+        for (const material of materials) if (programOf(material)?.isReady() !== false) materials.delete(material);
+        if (materials.size === 0) resolve();
+        else setTimeout(check, 10);
+      };
+      check();
+    });
   }
 
   /** As a pane is drawn by the main camera: its rectangle of the picture rendered afresh (or the glass's colour while waiting). */

@@ -11,7 +11,7 @@ import { distanceFade } from '../life/fade';
 import { outOfSight } from '../life/sight';
 import { closureBox, type Closure } from './roadworks';
 
-export interface FlaggerOptions {
+interface FlaggerOptions {
   closure: Closure;
   seed: number;
   /** The camera: someone walking up the road to him gets told. */

@@ -6,7 +6,7 @@
  */
 
 /** A filter over a whole voice. */
-export interface VoiceFilter {
+interface VoiceFilter {
   type: BiquadFilterType;
   frequency: number;
   /** Default 1 (WebAudio's). */
@@ -14,7 +14,7 @@ export interface VoiceFilter {
 }
 
 /** A horn: square waves at `pitches` sounding together, `blasts` times. */
-export interface HornSpec {
+interface HornSpec {
   pitches: readonly number[];
   /** Up to this many Hz added to each pitch at random (a horn is never quite in tune). */
   detune?: number;
@@ -30,7 +30,7 @@ export interface HornSpec {
 }
 
 /** A filter node for `spec`. */
-export function voiceFilter(ctx: BaseAudioContext, spec: VoiceFilter): BiquadFilterNode {
+function voiceFilter(ctx: BaseAudioContext, spec: VoiceFilter): BiquadFilterNode {
   const f = ctx.createBiquadFilter();
   f.type = spec.type;
   f.frequency.value = spec.frequency;
@@ -81,7 +81,7 @@ export function twoTone(tones: readonly [number, number], step: number, time: nu
 }
 
 /** One note of a bird: a sine sliding from `from` to `to` Hz over `sweep` seconds, rising to `level` over `attack`, silent at `length`. */
-export interface BirdNote {
+interface BirdNote {
   at: number;
   from: number;
   to: number;

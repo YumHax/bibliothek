@@ -16,7 +16,7 @@ import { TimerButton } from './TimerButton';
 import { placeCoproLook } from './coproLook';
 import { STAIRWELL_PLAN as plan, STOREYS, landingY } from '../stairwellPlan';
 
-export interface HallLifeParts {
+interface HallLifeParts {
   stairs: Staircase;
   lights: StairLights;
   /** The staircase's floor under (x, z) for feet at `feet`, zone-local (the walkers' ground). */

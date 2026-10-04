@@ -23,7 +23,7 @@ export interface TxWallet {
   spendTickets?(tickets: number): boolean;
 }
 
-export interface TxCollection {
+interface TxCollection {
   owns(id: string): boolean;
   add(game: Game): void;
   addMany?(games: readonly Game[]): void;
@@ -33,7 +33,7 @@ export interface TxCollection {
   readonly games?: readonly Game[];
 }
 
-export interface TxMarket {
+interface TxMarket {
   readonly day: number;
   /** `item` changed hands: holds, orders and loyalty are brought up to date. */
   sold(item: StockItem): void;
@@ -48,25 +48,25 @@ export interface TxMarket {
   readonly orders?: { place(game: Game, quote: { price: number; deposit: number; day: number }): void };
 }
 
-export interface TxStanding {
+interface TxStanding {
   record(deed: Deed, platform?: PlatformId): void;
   undo?(deed: 'buy', platform: PlatformId): void;
   claimSet?(setId: string): boolean;
   hasClaimed?(setId: string): boolean;
 }
 
-export interface TxLedger {
+interface TxLedger {
   cardDone(id: string): boolean;
   recordCard(day: number, id: string): void;
   /** Holds of a day gone by, never collected: taken off the ledger (their deposits are owed back). */
   takeLapsedHolds?(day: number): { title: string; deposit: number }[];
 }
 
-export interface TxPrizes {
+interface TxPrizes {
   add(id: string): void;
 }
 
-export interface TransactionDeps {
+interface TransactionDeps {
   wallet?: TxWallet;
   collection?: TxCollection;
   market?: TxMarket;

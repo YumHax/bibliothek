@@ -52,7 +52,7 @@ export function isElevated(spot: RestingSpot): boolean {
   return spot.position.y > 0.05;
 }
 
-export interface RestingSpotSources {
+interface RestingSpotSources {
   nav: FloorNav;
   bounds: THREE.Box2;
   seats: readonly Seat[];

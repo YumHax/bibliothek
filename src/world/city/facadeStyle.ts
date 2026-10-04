@@ -56,12 +56,12 @@ export interface WindowSize {
 }
 
 /** The residents' doors' paints (both pictures paint them). */
-export const DOORS = ['#2c2622', '#3a2418', '#1f3a34', '#2a3450', '#5a1f1f'];
+const DOORS = ['#2c2622', '#3a2418', '#1f3a34', '#2a3450', '#5a1f1f'];
 
 export const BRICKS = ['#b8654b', '#a86a52', '#9c6b55', '#8e4f3c', '#b0735a'];
-export const RENDERS = ['#c9a583', '#b99b6d', '#cdb79b', '#d8b49a', '#c8c2a8', '#e2cf9e', '#b9c2b0', '#8f8a80', '#d9b8b0'];
-export const STONES = ['#d9ccb4', '#e0d5c1', '#d4c6a8', '#cfc4b0'];
-export const SHUTTERS = ['#4f6b5a', '#5a7189', '#8c3b2e', '#e6dfcf', '#6b6f4a', '#3f4f6a'];
+const RENDERS = ['#c9a583', '#b99b6d', '#cdb79b', '#d8b49a', '#c8c2a8', '#e2cf9e', '#b9c2b0', '#8f8a80', '#d9b8b0'];
+const STONES = ['#d9ccb4', '#e0d5c1', '#d4c6a8', '#cfc4b0'];
+const SHUTTERS = ['#4f6b5a', '#5a7189', '#8c3b2e', '#e6dfcf', '#6b6f4a', '#3f4f6a'];
 const SLATES = ['#4a4f58', '#545a63', '#3f454e'];
 const TILES = ['#9a5a3d', '#8a4a32', '#a8664a'];
 const WINDOW_FRAME = '#e8e4dc';
@@ -71,11 +71,6 @@ export const ROOF_SLOPE: Record<Exclude<RoofKind, 'flat'>, { rise: number; run: 
   mansard: { rise: 3.2, run: 1.4 },
   pitched: { rise: 2.6, run: 3.6 },
 };
-
-/** The upper floors' windows of a plain front (a style's own `windows` vary round these): sill over the floor, height, width at most, share of a bay. */
-export const FACADE_WINDOW: WindowSize = { sill: 0.9, height: 1.65, maxWidth: 1.15, share: 0.5 };
-/** The parapet over the cornice when a style does not say (`facadePainter.PARAPET` is the most a style takes). */
-export const BASE_PARAPET = 1.1;
 
 /** How wide a style's upper windows are in a bay `bay` metres wide. */
 export function windowWidth(style: FacadeStyle, bay: number): number {
@@ -150,7 +145,7 @@ function baseStyle(seed: number, stoneShare: number, random: () => number): Base
 }
 
 /** A row of balconies: on which floor (1 = the first over the ground floor) and across which bays (first and last, included). */
-export interface BalconyRow {
+interface BalconyRow {
   floor: number;
   from: number;
   to: number;

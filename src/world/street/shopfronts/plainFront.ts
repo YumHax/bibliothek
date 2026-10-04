@@ -3,7 +3,7 @@ import type { TriBuilder } from '../relief/TriBuilder';
 import { PLAIN } from './shopfrontPlan';
 
 /** A plain front's openings (facade metres): the door's leaf, the display windows' glass. */
-export interface PlainLayout {
+interface PlainLayout {
   s0: number;
   s1: number;
   /** The door's middle and the leaf's half width and top (`facadePainter` paints it, `ShopInteriors` shows through its glass). */
@@ -12,7 +12,7 @@ export interface PlainLayout {
 }
 
 /** The shop's paint (`SHOPS`): joinery and fascia board. */
-export interface PlainPaint {
+interface PlainPaint {
   front: string;
   fascia: string;
 }

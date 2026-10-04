@@ -6,7 +6,7 @@ import { fabric } from '@/world/materials/finishes';
 import { Backlight } from '../materials/backlight';
 import { playCurtainRings } from '@/audio/furnitureSounds';
 
-export interface CurtainsOptions {
+interface CurtainsOptions {
   /** Size of the opening the curtains flank, in metres. */
   width: number;
   height: number;

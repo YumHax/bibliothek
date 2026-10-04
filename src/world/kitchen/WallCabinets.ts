@@ -20,7 +20,7 @@ export interface WallCabinetsOptions {
 }
 
 /** The row hangs with its underside this high, leaving a tiled band over the worktop. */
-export const WALL_CABINET_BOTTOM = 1.45;
+const WALL_CABINET_BOTTOM = 1.45;
 const HEIGHT = 0.7;
 const DEPTH = 0.35;
 const DOOR_THICKNESS = 0.018;

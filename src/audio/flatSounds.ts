@@ -28,7 +28,7 @@ export class RadiatorTick extends Voice {
     this.gurgle = this.noise(ctx, 1.6);
   }
 
-  protected tick(ctx: AudioContext, dt: number): void {
+  protected override tick(ctx: AudioContext, dt: number): void {
     if (!this.master || !this.burst) return;
     if (this.ticksLeft > 0) {
       this.untilTick -= dt;
@@ -66,7 +66,7 @@ export class RadiatorTick extends Voice {
   }
 }
 
-export interface NeighbourVoicesOptions {
+interface NeighbourVoicesOptions {
   /** Whether it is night: they talk less, and later on not at all. */
   night?: () => boolean;
 }
@@ -138,7 +138,7 @@ export class NeighbourVoices extends Voice {
     noise.connect(band).connect(this.murmur).connect(wall);
   }
 
-  protected tick(ctx: AudioContext, dt: number): void {
+  protected override tick(ctx: AudioContext, dt: number): void {
     if (!this.osc || !this.f1 || !this.f2 || !this.envelope || !this.murmur) return;
     const now = ctx.currentTime;
     if (this.talkLeft <= 0) {
@@ -224,7 +224,7 @@ export class StairwellSounds extends Voice {
     this.out = door;
   }
 
-  protected tick(ctx: AudioContext, dt: number): void {
+  protected override tick(ctx: AudioContext, dt: number): void {
     if (!this.out || !this.burst) return;
     if (this.stepIndex < this.steps) {
       this.untilStep -= dt;

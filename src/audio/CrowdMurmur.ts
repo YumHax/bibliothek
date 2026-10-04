@@ -63,7 +63,7 @@ export class CrowdMurmur extends Voice {
     }
   }
 
-  protected tick(ctx: AudioContext, dt: number): void {
+  protected override tick(ctx: AudioContext, dt: number): void {
     for (const talker of this.talkers) {
       talker.phrase -= dt;
       if (talker.phrase <= 0) {

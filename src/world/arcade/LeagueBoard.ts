@@ -9,7 +9,7 @@ import { paint } from '../materials/palette';
 import { drawText } from './games/ArcadeGame';
 
 /** The league as the board reads it (the concrete `ArcadeLeague` lives in `economy/`). */
-export interface LeagueSource {
+interface LeagueSource {
   standings(): readonly { name: string; tickets: number; you?: boolean }[];
   readonly week: { label: string; daysLeft: number };
   readonly streakDays: number;
@@ -21,7 +21,7 @@ export interface LeagueSource {
   subscribe(cb: () => void): () => void;
 }
 
-export interface LeagueBoardOptions {
+interface LeagueBoardOptions {
   league: LeagueSource;
   width?: number;
   height?: number;

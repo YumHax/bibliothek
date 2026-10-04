@@ -5,7 +5,7 @@ import { ModalPanel } from './ModalPanel';
 import './BorrowPanel.css';
 
 /** A friend's request: who asks for what, for how long, and what each answer does. */
-export interface BorrowRequest {
+interface BorrowRequest {
   friend: string;
   title: string;
   /** "SNES, 1995": what the card says under the title. */

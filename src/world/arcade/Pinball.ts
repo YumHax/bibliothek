@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import type { Updatable } from '@/core/Engine';
 import type { Interactable, LabelPlacement } from '@/interaction/Interactable';
-import type { ArcadeBonus, ArcadeMachineLike, ArcadeResult, SessionActions } from '@/game/SessionActions';
+import type { ArcadeMachineLike, ArcadeResult, SessionActions } from '@/game/SessionActions';
 import { actionKeyLabel } from '@/ui/keys';
 import { ChipSpeaker, type Sfx } from '@/audio/ChipSpeaker';
 import { createCanvas, seededRandom, toTexture } from '@/covers/generated/canvasUtils';
@@ -12,10 +12,11 @@ import { paint, standard } from '../materials/palette';
 import { drawText } from './games/ArcadeGame';
 import { ordinal } from './InitialsEntry';
 import { BALL_R, type PinballEvent, PinballSim } from './pinball/PinballSim';
-import type { Occupant, Station, StationEvents } from './Station';
+import type { Station, StationEvents } from './Station';
 import type { ScoreTable } from './scoreTable';
 import type { TicketMachineWiring } from './TicketMachine';
 import { MachineRun, type MachineState } from './MachineRun';
+import { RunMachine } from './RunMachine';
 import { CHROME, type MachineDisplay, displayScreen, outOfOrderNote } from './machineParts';
 
 export interface PinballOptions {
@@ -29,7 +30,7 @@ export interface PinballOptions {
 }
 
 /** The pinball keeps a table: its backglass shows the top score. */
-export type PinballWiring = TicketMachineWiring & { scores: ScoreTable };
+type PinballWiring = TicketMachineWiring & { scores: ScoreTable };
 
 const BODY_W = 0.56;
 const BODY_L = 1.3;
@@ -83,7 +84,7 @@ const SOUNDS: Partial<Record<PinballEvent, Sfx>> = {
  * result pays tickets and a score good enough asks for initials on the backglass. A regular can
  * take it (`occupy`) and play it themselves; some days it is out of order. Origin on the floor under the middle of the cabinet, +z towards the player's end. Collides.
  */
-export class Pinball extends THREE.Group implements Furniture, Interactable, Updatable, ArcadeMachineLike, Station {
+export class Pinball extends RunMachine implements Furniture, Interactable, Updatable, ArcadeMachineLike, Station {
   readonly hitboxes: THREE.Object3D[];
   readonly standAt = new THREE.Vector3(0, 0, STAND_Z);
   /** A pinball is played bent well over the glass. */
@@ -95,7 +96,7 @@ export class Pinball extends THREE.Group implements Furniture, Interactable, Upd
 
   private readonly sim = new PinballSim(FIELD_L / FIELD_W);
   private readonly wiring: PinballWiring;
-  private readonly run: MachineRun;
+  protected readonly run: MachineRun;
   private readonly deck: THREE.Group;
   private readonly hands: [THREE.Vector3, THREE.Vector3] = [new THREE.Vector3(), new THREE.Vector3()];
   private readonly ball: THREE.Mesh;
@@ -264,30 +265,6 @@ export class Pinball extends THREE.Group implements Furniture, Interactable, Upd
 
   get footprint(): THREE.Box3 {
     return new THREE.Box3(new THREE.Vector3(-BODY_W / 2 - 0.03, 0, -BODY_L / 2 - 0.02), new THREE.Vector3(BODY_W / 2 + 0.03, FRONT_TOP + RISE + BACKBOX_H, BODY_L / 2 + 0.16));
-  }
-
-  get isPlaying(): boolean {
-    return this.run.isPlaying;
-  }
-
-  get occupant(): Occupant {
-    return this.run.occupant;
-  }
-
-  get outOfOrder(): boolean {
-    return this.run.outOfOrder;
-  }
-
-  get canReplay(): boolean {
-    return this.run.canReplay;
-  }
-
-  pause(paused: boolean): void {
-    this.run.setPaused(paused);
-  }
-
-  showBonus(bonuses: readonly ArcadeBonus[]): void {
-    this.run.showBonus(bonuses);
   }
 
   start(onOver: (result: ArcadeResult) => void): void {

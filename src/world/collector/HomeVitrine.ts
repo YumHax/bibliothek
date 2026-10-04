@@ -14,7 +14,7 @@ import { FLOOR, WALL, onSurface } from '../surface/layers';
 import { bakedGlow, poolTexture, washTexture } from '../showcase/glow';
 
 /** A copy on show, and what it is worth. */
-export interface Showpiece {
+interface Showpiece {
   game: Game;
   value: number;
 }
@@ -49,7 +49,7 @@ const STRIP = standard({ color: 0xfff1d0, emissive: 0xffe2a8, emissiveIntensity:
  */
 const WASH = { color: 0xffd9a0, opacity: [0.34, 0.22, 0.14] as const };
 
-export interface HomeVitrineOptions {
+interface HomeVitrineOptions {
   covers: BoxArtLoader;
 }
 

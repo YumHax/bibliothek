@@ -6,7 +6,7 @@ import type { Household } from './Household';
 import { HOUSEHOLD } from './rules';
 import { ARCADE_TEE_BONUS, HUNTER_JACKET_FLOOR, outfitById, type Outfit, type OutfitFacts } from './outfits';
 
-export interface PerkDeps {
+interface PerkDeps {
   household: Household;
   /** The game's clock, hours. */
   hours: () => number;
@@ -15,7 +15,7 @@ export interface PerkDeps {
 }
 
 /** How far the player's know-how of a platform goes: 'eye' spots a fake's print, 'respect' also eases the haggles. */
-export type KnowHow = 'none' | 'eye' | 'respect';
+type KnowHow = 'none' | 'eye' | 'respect';
 
 export function knowHowOf(manualsRead: number): KnowHow {
   if (manualsRead >= HOUSEHOLD.knowHow.respect) return 'respect';

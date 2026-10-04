@@ -18,7 +18,7 @@ export interface WeeklyIssue {
   classifieds: { head: string; text: string }[];
 }
 
-export interface WeeklySources {
+interface WeeklySources {
   /** Today's market stock if it has been drawn (`MarketStock.peekToday()`), else null. */
   stock: readonly StockItem[] | null;
   /** The market day (issues change with it). */

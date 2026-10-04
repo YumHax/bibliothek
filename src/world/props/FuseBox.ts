@@ -7,6 +7,8 @@ export interface FuseBoxOptions {
   height?: number;
   /** Breakers in the row. Default 9. */
   breakers?: number;
+  /** Length of the conduit rising from the box's top (m). Default 0.3: set it so the conduit meets the ceiling, not goes through it. */
+  conduit?: number;
 }
 
 const DEPTH = 0.085;
@@ -43,7 +45,8 @@ export class FuseBox extends Prop {
     // The label strip, the cover over it all, and the conduit carrying the cables up.
     part(this, width - 0.06, 0.02, 0.002, paint(0xf1e6c8, 0.8), { y: -0.055, z: DEPTH + 0.001 });
     part(this, width - 0.03, height - 0.06, 0.004, SMOKED, { y: 0, z: DEPTH + 0.02 });
-    part(this, 0.04, 0.3, 0.03, CASE, { x: width * 0.3, y: height / 2 + 0.15, z: 0.015 });
+    const conduit = options.conduit ?? 0.3;
+    part(this, 0.04, conduit, 0.03, CASE, { x: width * 0.3, y: height / 2 + conduit / 2, z: 0.015 });
     this.traverse((o) => (o.castShadow = false));
   }
 }

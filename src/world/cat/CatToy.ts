@@ -15,7 +15,7 @@ import { standard } from '../materials/palette';
  * player kicks through it, the cat walks up to it.
  */
 
-export interface CatToyOptions {
+interface CatToyOptions {
   /** Room floor rectangle the ball stays inside: `x` -> world x, `y` -> world z. */
   bounds: THREE.Box2;
   /** Furniture and walls the ball bounces off. */
@@ -169,7 +169,7 @@ function stripesTexture(a: number, b: number): THREE.CanvasTexture {
   const stripes = 6;
   const stripeW = width / stripes;
   for (let i = 0; i < stripes; i++) {
-    ctx.fillStyle = colors[i % 2];
+    ctx.fillStyle = colors[i % 2]!;
     ctx.fillRect(Math.floor(i * stripeW), 0, Math.ceil(stripeW), height);
   }
   // Thin seams between the panels.

@@ -20,7 +20,7 @@ export interface AlleyRollerOptions {
 }
 
 /** The alley keeps a table: its backboard shows the top score. */
-export type AlleyWiring = TicketMachineWiring & { scores: ScoreTable };
+type AlleyWiring = TicketMachineWiring & { scores: ScoreTable };
 
 const STAND_Z = 1.45;
 /** How long a regular's hand goes on with the ball as it leaves (s). */
@@ -104,11 +104,11 @@ export class AlleyRoller extends TicketMachine {
   }
 
   /** The Space (or click) that started the play counts only once it has been let go. */
-  protected runOptions(): Pick<MachineRunOptions, 'fireAfterRelease'> {
+  protected override runOptions(): Pick<MachineRunOptions, 'fireAfterRelease'> {
     return { fireAfterRelease: true };
   }
 
-  protected finished(result: ArcadeResult): void {
+  protected override finished(result: ArcadeResult): void {
     this.speaker.play(result.best ? 'best' : 'over');
   }
 

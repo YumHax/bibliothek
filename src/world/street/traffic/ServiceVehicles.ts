@@ -41,7 +41,7 @@ function shade(mesh: THREE.Mesh): THREE.Mesh {
   return mesh;
 }
 
-export interface DeliveryVanOptions extends Common {
+interface DeliveryVanOptions extends Common {
   /** Where it double-parks (outside the bakery), facing +x; the shop door the crates go in by; the game hours it comes in, and any later rounds. */
   at: Vec2;
   door: Vec2;
@@ -148,20 +148,20 @@ export class DeliveryVan extends ScriptedVehicle {
     this.lastWindow = window;
   }
 
-  protected arrived(): void {
+  protected override arrived(): void {
     this.job = 'none';
     this.jobClock = 0;
   }
 
-  protected keepWaiting(): boolean {
+  protected override keepWaiting(): boolean {
     return this.job !== 'done' || this.doorsOpen > 0;
   }
 
-  protected leaving(): void {
+  protected override leaving(): void {
     this.driver.setPresent(false);
   }
 
-  protected animate(dt: number): void {
+  protected override animate(dt: number): void {
     const night = THREE.MathUtils.smoothstep(nightnessOf(this.dayNight.state), 0.2, 0.6);
     this.lamps.setNight(night);
     const standing = this.state === 'stopped';
@@ -218,7 +218,7 @@ export class DeliveryVan extends ScriptedVehicle {
   }
 }
 
-export interface BinLorryOptions extends Common {
+interface BinLorryOptions extends Common {
   /** The litter bins it empties (it pauses level with each). */
   bins: readonly Vec2[];
   /** The game hours of its morning round, and any later ones (the recycling). */
@@ -273,7 +273,7 @@ export class BinLorry extends ScriptedVehicle {
     this.lastWindow = window;
   }
 
-  protected animate(dt: number): void {
+  protected override animate(dt: number): void {
     const night = THREE.MathUtils.smoothstep(nightnessOf(this.dayNight.state), 0.2, 0.6);
     this.lamps.setNight(night);
     // The beacon turns: a flash twice a second.

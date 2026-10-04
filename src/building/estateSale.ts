@@ -16,7 +16,7 @@ import { pinSource, refreshBoard, type BoardNote } from './boardNotes';
  */
 
 /** Where the sale stands on a game day. */
-export type EstatePhase = 'none' | 'mourning' | 'notice' | 'on' | 'over';
+type EstatePhase = 'none' | 'mourning' | 'notice' | 'on' | 'over';
 
 interface State {
   /** The sale's first game day, once decided. */
@@ -69,7 +69,7 @@ export function estateSold(id: string): boolean {
 }
 
 /** The player bought `id` (handed back: `sold` false). */
-export function markEstateSold(id: string, sold = true): void {
+function markEstateSold(id: string, sold = true): void {
   const has = state.sold.includes(id);
   if (sold === has) return;
   state = { ...state, sold: sold ? [...state.sold, id] : state.sold.filter((s) => s !== id) };

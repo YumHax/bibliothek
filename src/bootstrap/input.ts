@@ -5,6 +5,7 @@ import { GamepadInput, TouchControls, SyntheticMouse, PAD_ALIASES } from '@/inpu
 import type { FirstPersonController } from '@/player/FirstPersonController';
 import { applySettings } from '@/settings/apply';
 import { keyLabelsChanged } from '@/ui/keys';
+import { hudSlot } from '@/ui/hudSlot';
 import type { Overlay } from '@/ui/Overlay';
 import type { Services } from './services';
 import type { BuiltWorld, GameWorld } from './world';
@@ -99,7 +100,8 @@ export function createInteraction(services: Services, parts: { world: GameWorld;
     },
   });
   engine.addUpdatable(gamepad);
-  const touch = new TouchControls(container, engine.renderer.domElement, input, player, syntheticMouse);
+  // The "rotating" badge joins the HUD's column under the crosshair (the input layer knows no HUD: the slot is handed in).
+  const touch = new TouchControls(container, engine.renderer.domElement, input, player, syntheticMouse, { badgeHome: hudSlot(container, 'crosshair') });
   applySettings(settings, { input, mouse: player, player, inspector, notices, gamepad, touch, hud: overlay, onBindingsChange: keyLabelsChanged });
 
   // Photo mode (P): the HUD away, a free camera on a leash, the lens and the grade, a PNG of the frame (docs/graphics.md).

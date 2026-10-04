@@ -3,7 +3,7 @@ import type { OccupancyAware } from '../Furniture';
 import type { SessionActions } from '@/game/SessionActions';
 import { Prop } from '../props/Prop';
 
-export interface HomecomingOptions {
+interface HomecomingOptions {
   /** The camera: where the player stands when the hallway becomes theirs again. */
   listener: THREE.Object3D;
   /** World floor point the travel sets the player down on when they come home. */

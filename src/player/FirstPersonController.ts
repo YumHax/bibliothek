@@ -11,13 +11,13 @@ export const SPRINT_CODE = 'Sprint';
 /** Virtual code other input devices hold to crouch (the gamepad's LB), whichever key the keyboard crouches on. */
 export const CROUCH_VIRTUAL = 'Crouch';
 /** Keys held to crouch (Shift); while Shift sprints (`sprint: 'hold'`) the crouch moves to `crouchAlt`. */
-export const CROUCH_CODES = ACTIONS.crouch.codes;
+const CROUCH_CODES = ACTIONS.crouch.codes;
 const CROUCH_ALT_CODES = ACTIONS.crouchAlt.codes;
 /** Physical key whose double tap starts a sprint. */
 const FORWARD_CODE = ACTIONS.forward.codes[0];
 
 /** Settings > Controls: how the walk feels. */
-export interface WalkFeel {
+interface WalkFeel {
   /** `doubleTap`: double-tap forward and keep it held; `hold`: hold Shift (the crouch then moves to `crouchAlt`). */
   sprint: 'doubleTap' | 'hold';
   /** `hold`: crouched while the key is down; `toggle`: a press crouches, the next stands. */
@@ -46,7 +46,7 @@ const DIP_RECOVER = 9;
 /** Sitting down and standing up: an eased move rather than a cut (s). */
 const SEAT_MOVE_S = 0.42;
 
-export interface FirstPersonOptions {
+interface FirstPersonOptions {
   eyeHeight?: number;
   /** Eye height while crouching (metres). */
   crouchHeight?: number;
@@ -66,7 +66,7 @@ const MOUSE_RADIANS_PER_PIXEL = 0.002;
  * The height of the floor under (x, z), world metres, given where the feet are now: stairs stack
  * flight over flight, so the surface is the one just under the feet (a step up is allowed).
  */
-export type GroundHeight = (x: number, z: number, feet: number) => number;
+type GroundHeight = (x: number, z: number, feet: number) => number;
 /** A drop or rise bigger than this in one frame is a teleport, not a step: the feet go straight there. */
 const SNAP = 1.2;
 

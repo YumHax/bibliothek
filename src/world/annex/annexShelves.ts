@@ -27,7 +27,7 @@ export function annexSplit(bought: number): { room: number; study: number } {
   return { room, study: annex - room };
 }
 
-export interface AnnexShelvingSpec {
+interface AnnexShelvingSpec {
   /** Its name in the player's arrangement. */
   id: 'annex' | 'annexStudy';
   room: RoomOptions;

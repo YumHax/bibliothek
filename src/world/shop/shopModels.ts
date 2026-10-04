@@ -4,7 +4,7 @@ import { Prop, part } from '../props/Prop';
 import { paint, standard, timber, METAL } from '../materials/palette';
 import { snowScreen, stillScreen, type ScreenLook } from './snowScreen';
 
-export interface PortableTvOptions {
+interface PortableTvOptions {
   /** Width of the case (the screen is about two thirds of it). */
   width: number;
   /** Colour of the plastic case. */

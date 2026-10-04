@@ -9,48 +9,48 @@ import type { Journal } from './Journal';
  * `subscribe`): each change is compared with the last one seen, so no store knows the journal.
  */
 
-export interface WatchedWallet {
+interface WatchedWallet {
   readonly coins: number;
   readonly tickets: number;
   subscribe(cb: () => void): () => void;
 }
 
-export interface WatchedCollection {
+interface WatchedCollection {
   readonly games: readonly Game[];
   /** 'import': a file was loaded (one line for it, not one per game). */
   readonly lastChange?: 'import' | 'edit';
   subscribe(cb: () => void): () => void;
 }
 
-export interface WatchedParcel {
+interface WatchedParcel {
   isPending(id: string): boolean;
   readonly pending: readonly Game[];
   subscribe(cb: () => void): () => void;
 }
 
-export interface WatchedPrizes {
+interface WatchedPrizes {
   readonly owned: readonly { id: string }[];
   subscribe(cb: () => void): () => void;
 }
 
-export interface WatchedMedals {
+interface WatchedMedals {
   readonly total: number;
   subscribe(cb: () => void): () => void;
 }
 
-export interface WatchedHome {
+interface WatchedHome {
   count(id: (typeof HOME_GOODS)[number]['id']): number;
   subscribe(cb: () => void): () => void;
 }
 
-export interface WatchedLeague {
+interface WatchedLeague {
   readonly playedToday: boolean;
   readonly streakDays: number;
   readonly pennants: number;
   subscribe(cb: () => void): () => void;
 }
 
-export interface JournalSources {
+interface JournalSources {
   /** What the flat has been bought (`HomeUpgrades`): a line for each piece. */
   home?: WatchedHome;
   /** The arcade's week (`ArcadeLeague`): the day's first play, a won pennant. */

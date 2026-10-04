@@ -17,9 +17,7 @@ import type { RoadObstacle, StreetTraffic } from './traffic/StreetTraffic';
 import { FRONT, KERB_HEIGHT, PARK_STREET, STREET_PLAN, shopDoors, type ShopDoor, type ShopKind, type Vec2 } from './streetPlan';
 import { atCrossing, groundHeight } from './relief/ground';
 
-export type { CrowdRoute } from './life/crowdTrips';
-
-export interface StreetCrowdOptions {
+interface StreetCrowdOptions {
   /** Where the passers-by go: they appear at a route's first point and vanish at its last. */
   routes: readonly CrowdRoute[];
   /** Who walks (`life/crowdCast`): made only when first sent out. */

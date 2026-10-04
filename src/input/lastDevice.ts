@@ -1,7 +1,7 @@
 import { Listeners } from '@/core/Listeners';
 
 /** The device the player's hands are on: the keyboard and mouse, a controller, a touchscreen. */
-export type InputDevice = 'keyboard' | 'gamepad' | 'touch';
+type InputDevice = 'keyboard' | 'gamepad' | 'touch';
 
 const coarse = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
 let device: InputDevice = coarse ? 'touch' : 'keyboard';

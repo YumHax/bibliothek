@@ -7,7 +7,7 @@ import { boxMesh, cylinderMesh, invisibleHitbox } from '../meshUtils';
 import { coverageKeepsAlpha, paint } from '../materials/palette';
 import { QUALITY } from '@/graphics/quality';
 
-export interface LotCrateOptions {
+interface LotCrateOptions {
   /** Hover caption. */
   label: () => string;
   /** Click: buy the lot. */

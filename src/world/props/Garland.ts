@@ -56,6 +56,9 @@ class Slack extends THREE.Curve<THREE.Vector3> {
  * its own (the bulbs only glow). Decoration: never collides, casts nothing.
  */
 export class Garland extends Prop {
+  /** Strung overhead, not on the floor: no contact shadow under it. */
+  readonly contactShadow = false;
+
   constructor(options: GarlandOptions = {}) {
     super();
     const style = options.style ?? 'bulbs';

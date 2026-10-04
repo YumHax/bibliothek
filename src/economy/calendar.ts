@@ -13,13 +13,8 @@ export function dayKey(date: Date = new Date()): string {
  * The key the economy used before it settled on local time: the UTC date (YYYY-MM-DD). Only for
  * reading old saves: a claim saved under today's UTC date was a claim made today.
  */
-export function utcDayKey(date: Date = new Date()): string {
+function utcDayKey(date: Date = new Date()): string {
   return date.toISOString().slice(0, 10);
-}
-
-/** Days since 1970-01-01 of the local date (whole days, whatever the time of day or the clock change). */
-export function dayNumber(date: Date = new Date()): number {
-  return Math.round(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()) / 86_400_000);
 }
 
 /** `date` moved by `days` calendar days (local), same time of day. */

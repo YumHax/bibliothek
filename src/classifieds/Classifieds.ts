@@ -3,13 +3,13 @@ import { SELLERS_BUILDING, adsPostedOn, clockOf, scriptedAd, type Ad, type Scrip
 import { CLASSIFIEDS, SELLERS } from './rules';
 
 /** A visit agreed on the phone: whose ad, on which game day (their window that day, `Ad.hours`). */
-export interface Booking {
+interface Booking {
   adId: string;
   day: number;
 }
 
 /** What the mansion block's door says now: let up to a seller, too early, or nobody expecting the player. */
-export type DoorState =
+type DoorState =
   | { kind: 'open'; ad: Ad }
   | { kind: 'early'; ad: Ad; from: number }
   | { kind: 'none' };

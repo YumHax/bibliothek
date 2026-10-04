@@ -14,7 +14,7 @@ const FLAT_SHOPS_HOURS = `${clockTime(SHOP_HOURS.furniture?.open ?? 9)} to ${clo
 
 export type FirstDayStepId = 'note' | 'out' | 'arcade' | 'play' | 'redeem' | 'market' | 'buy' | 'unpack' | 'shelf';
 
-export interface FirstDayStep {
+interface FirstDayStep {
   id: FirstDayStepId;
   /** The line on the to-do list, in the player's own hand. */
   todo: string;

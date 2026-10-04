@@ -19,13 +19,13 @@ import { boxMesh } from '../meshUtils';
 import { paint, timber } from '../materials/palette';
 
 /** Where the sale's things go: the stairwell's zone (they must be placed to be clickable, and to collide). */
-export interface EstateHost {
+interface EstateHost {
   place<F extends Furniture>(item: F, position: THREE.Vector3, rotationY?: number): F;
   remove(item: Furniture): void;
 }
 
 /** Where the table, the crate and the family's niece stand in the hall (zone-local), as `STAIRWELL_PLAN.estateSale` says. */
-export interface EstateSpots {
+interface EstateSpots {
   table: { at: [x: number, z: number]; yaw: number };
   crate: { at: [x: number, z: number]; yaw: number };
   seller: { at: [x: number, z: number]; yaw: number; seed: number };
@@ -33,7 +33,7 @@ export interface EstateSpots {
   hours: [number, number];
 }
 
-export interface EstateSaleOptions {
+interface EstateSaleOptions {
   host: EstateHost;
   spots: EstateSpots;
   covers: BoxArtLoader;

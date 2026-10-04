@@ -12,7 +12,7 @@ import { FLOOR } from '../surface/layers';
 import { playHingeCreak, playLatchClick, playWoodKnock } from '@/audio/furnitureSounds';
 import { earsAt, heardAt } from '@/audio/spatial';
 
-export interface DoorOptions {
+interface DoorOptions {
   /** Colour of the painted leaf. Default a deep slate green. */
   leafColor?: number;
   /**

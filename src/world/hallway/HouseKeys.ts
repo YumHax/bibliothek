@@ -6,7 +6,7 @@ import { invisibleHitbox } from '../meshUtils';
 import { Prop, part } from '../props/Prop';
 import { METAL, standard } from '../materials/palette';
 
-export interface HouseKeysOptions {
+interface HouseKeysOptions {
   /** Called on every change: true once the keys are in the player's pocket. */
   onChange?: (inPocket: boolean) => void;
 }

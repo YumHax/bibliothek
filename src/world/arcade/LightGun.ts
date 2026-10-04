@@ -3,7 +3,7 @@ import { boxMesh, cylinderMesh } from '../meshUtils';
 import { paint } from '../materials/palette';
 import type { AttachmentFrame, CabinetAttachment } from './CabinetAttachment';
 
-export interface LightGunOptions {
+interface LightGunOptions {
   /** The camera: the player's gun is held just below and right of it. */
   listener: THREE.Object3D;
   /** Body colour. Default a toy-gun orange. */

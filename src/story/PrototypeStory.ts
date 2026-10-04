@@ -8,7 +8,7 @@ import { CLUE_NOTES, KEEPER, LANDLADY_AD, LINES, NEXT_LEADS, PROTOTYPE_ID, STORY
 const ORDER: readonly StoryStage[] = ['waiting', 'clipping', 'stall', 'radio', 'arcade', 'trader', 'found', 'ended'];
 
 /** What the trail reads of the rest of the game. */
-export interface StoryDeps {
+interface StoryDeps {
   /** The game's day (`Today.gameDay`): every gate counts in it. */
   today: { readonly gameDay: number };
   /** The collection: whether the player has started one, and where the found cart goes (the parcel in the hall). */
@@ -18,13 +18,13 @@ export interface StoryDeps {
 }
 
 /** The paper's small ads (`Classifieds`): the trail puts Hana's landlady's ad in, and hears when the player goes round. */
-export interface StoryAds {
+interface StoryAds {
   inject(spec: ScriptedAd): void;
   onVisit(cb: (ad: Ad) => void): () => void;
 }
 
 /** The journal's page about it: the clues so far, and where to look next. */
-export interface StoryFile {
+interface StoryFile {
   title: string;
   clues: string[];
   next?: string;

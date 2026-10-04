@@ -29,6 +29,9 @@ export interface ArmchairThrowOptions {
  * armchair stands, turned as it is.
  */
 export class ArmchairThrow extends Prop {
+  /** On the chair, not the floor: no contact shadow under it. */
+  readonly contactShadow = false;
+
   constructor(options: ArmchairThrowOptions = {}) {
     super();
     this.name = 'ArmchairThrow';
@@ -59,6 +62,9 @@ export interface BedCushionsOptions {
  * about 0.47 from the headboard). In the bed's frame: place it where the bed stands.
  */
 export class BedCushions extends Prop {
+  /** On the bed, not the floor: no contact shadow under them. */
+  readonly contactShadow = false;
+
   constructor(options: BedCushionsOptions = {}) {
     super();
     this.name = 'BedCushions';
@@ -80,6 +86,9 @@ export class BedCushions extends Prop {
  * frame (wall-hung with `y: 0`): place it where the dresser stands.
  */
 export class DresserTop extends Prop {
+  /** On the dresser, not the floor: no contact shadow under it. */
+  readonly contactShadow = false;
+
   constructor(seed = 5) {
     super();
     this.name = 'DresserTop';
@@ -118,6 +127,9 @@ export class DresserTop extends Prop {
  * down its length, a jug of garden flowers, a bowl of fruit. In the table's frame: place it where the table stands.
  */
 export class TableDressing extends Prop {
+  /** On the table, not the floor: no contact shadow under it. */
+  readonly contactShadow = false;
+
   constructor(seed = 9) {
     super();
     this.name = 'TableDressing';

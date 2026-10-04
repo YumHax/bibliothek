@@ -41,7 +41,7 @@ export function paintFlowerBed(sheet: Sheet, random: Rng, x: number, z: number, 
     const r = Math.sqrt(random()) * radius * 0.95;
     const ring = Math.min(2, Math.floor((r / radius) * 3));
     const [px, py] = worldPoint(x + Math.cos(t) * r, z + Math.sin(t) * r, 0.2);
-    ctx.fillStyle = random() < 0.25 ? '#3f6b33' : colors[2 - ring];
+    ctx.fillStyle = random() < 0.25 ? '#3f6b33' : colors[2 - ring]!; // three rings, three colours
     ctx.fillRect(px, py, dot, dot * 0.8);
   }
   const [cx, cy] = worldPoint(x, z, 0.6);

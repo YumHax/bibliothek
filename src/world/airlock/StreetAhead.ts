@@ -3,7 +3,7 @@ import type { Updatable } from '@/core/Engine';
 import { STAIRWELL_PLAN, STOREY, landingY } from '../stairwell/stairwellPlan';
 import { TWINS } from './airlockPlan';
 
-export interface StreetAheadOptions {
+interface StreetAheadOptions {
   /** The player's eye (world). */
   viewer: THREE.Object3D;
   /** The zone the player is in. */

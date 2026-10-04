@@ -341,9 +341,9 @@ plane, scissored to the pane's rectangle, into a half-float picture the pane sam
 in one plane share a frame's render: the first drawn scissors to the union of those on screen (unless the union is over
 `UNION_MAX_SPREAD` times their areas) and the others skip theirs that frame (`covered`, by the renderer's frame count;
 the stairwell's panes a storey apart up the well). Only the main camera's pass renders (a glossy floor's mirror pass
-reuses the picture). After `FREE_AFTER_UNDRAWN` (90 s) with no pane drawn, the view frees its scene and shrinks its
-picture (the stairwell is persistent: it would hold a whole street for good), and is built again on the next
-`prefetch` or draw. What is out there (`streetOutlook`, in its own
+reuses the picture). After `FREE_AFTER_UNDRAWN` (90 s) with no pane drawn, a view frees its scene and shrinks its
+picture, and is built again on the next `prefetch` or draw; not the home view (`keep`): a window of the flat is always
+a doorway away, and rebuilding it when one came back into view froze the corridor, so it is built once a session. What is out there (`streetOutlook`, in its own
 chunk with the street's classes) is the street's own: `StreetLighting` (occupied), `SkyDome` (its prefiltered sky as the
 scene's environment, never `setOccupied`/`dispose`: both hand the global reflection back), `StreetGround`, `StreetPark`,
 `Buildings` for the facades within 150 m that face the window (`outlook/inView`: `facadesInView` from one window, less
@@ -354,8 +354,11 @@ their relief, shutters and shop glow, the lamps, trees, parked and passing cars,
 calls as the street's own, `street/streetScenery`: only the options differ), the rain, and the courtyard
 the street never reaches (`Courtyard`, `COURTYARD_YARD` in `outlookPlan.ts`: setts, lawn and chestnut, the workshop's
 back, bins, shed, rack, sandpit, bikes). No people, doors or sounds. It is built at the next idle moment once the
-player walks into the room (`prefetch`, from `setOccupied`) or a pane is first drawn, compiled out of sight, and ticked
-only while a pane was drawn in the last 1.5 s; the glass shows a pale sky until then.
+player walks into the room (`prefetch`, from `setOccupied`) or a pane is first drawn, a step per idle moment (`between`:
+the ground and park, the facades, the fronts, the fixtures, the rest), compiled out of sight a few pieces per idle
+moment (`OutlookContents.parts`, `COMPILE_SLICE_MS`; without the driver's parallel compile each slice's programs are
+linked there and then, not on the first draw), and ticked only while a pane was drawn in the last 1.5 s; the glass
+shows a pale sky until then.
 
 **One view per building, leased** (`sharedOutlook`). Every window looking out of our building shares the view
 `'home'` (`leaseHomeOutlook`): the flat's rooms (`RoomWindow`'s `outlook: homeOutlook(sky.outdoors)` in `layout.ts`,

@@ -11,7 +11,7 @@ import type { LabelSpot, ShelfLabels } from './ShelfLabels';
 /** How far a shelf edge can be labelled from (m). */
 const REACH = 2.2;
 
-export interface LabelMakerOptions {
+interface LabelMakerOptions {
   labels: ShelfLabels;
   panel: LabelPanel;
   shelves: ShelvingGroup;

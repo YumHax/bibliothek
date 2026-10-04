@@ -4,13 +4,13 @@ import type { Furniture } from '../Furniture';
 import { boxMesh, cylinderMesh } from '../meshUtils';
 import { paint, timber } from '../materials/palette';
 
-export interface BargainBinOptions {
+interface BargainBinOptions {
   /** The flat price painted on the card. */
   price: number;
 }
 
 /** Where one box stands in the bin (bin-local): a `ForSaleBox` origin, leaning back by `angle`. */
-export interface BinSlot {
+interface BinSlot {
   position: THREE.Vector3;
   angle: number;
 }

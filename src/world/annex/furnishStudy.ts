@@ -10,7 +10,7 @@ import { STUDY_OVERFLOW, annexSplit, placeAnnexShelving } from './annexShelves';
 import { OldFrontDoor } from './OldFrontDoor';
 
 /** What the study built: its room, its two bookcases. */
-export interface StudyHandle extends ZoneHandle {
+interface StudyHandle extends ZoneHandle {
   room: Room;
   shelving: Shelving | null;
 }

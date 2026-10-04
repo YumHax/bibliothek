@@ -84,11 +84,6 @@ export function displayPiece(id: HomeUpgrade): THREE.Object3D | null {
   return buildPiece(id)?.object ?? null;
 }
 
-/** Every id `displayPiece` has a model for. */
-export function displayedGoods(): HomeUpgrade[] {
-  return Object.keys(PIECES) as HomeUpgrade[];
-}
-
 type PieceBuilder = (variant: number, coat: CoatKind) => DisplayPiece;
 
 const still = (object: THREE.Object3D): DisplayPiece => ({ object });

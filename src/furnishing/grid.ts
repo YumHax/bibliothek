@@ -28,17 +28,6 @@ export function nextAngle(yaw: number, direction: number, step: number): number 
   return n * step;
 }
 
-/** `yaw` rounded onto the grid of `step`s. */
-export function snapAngle(yaw: number, step: number): number {
-  return Math.round(yaw / step) * step;
-}
-
-/** Whether `yaw` is square to the room (a multiple of 90°, to a hair). */
-export function isSquare(yaw: number): boolean {
-  const q = yaw / (Math.PI / 2);
-  return Math.abs(q - Math.round(q)) < 1e-3;
-}
-
 /** `value` such that `value + min` lands on the grid counted from `origin`. */
 function onLine(value: number, min: number, origin: number): number {
   const edge = value + min;

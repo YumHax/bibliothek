@@ -14,7 +14,7 @@ import { ROAD_Y, allowedSpeed, approach, corneringSpeed, placeOnRoute, sampleRou
 import type { RoadVehicle, StreetTraffic } from './StreetTraffic';
 import { CYCLE_OFFSET } from '../../city/frontage';
 
-export interface StreetBikesOptions {
+interface StreetBikesOptions {
   traffic: StreetTraffic;
   /** The player (the camera): riders stop for them. */
   viewer: THREE.Object3D;

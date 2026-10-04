@@ -6,7 +6,7 @@ import type { Game } from '@/catalog/types';
  * the licence). Sold at the NES stall now and then (`economy/MarketStock`), played on the TV once in the NES
  * (docs/media.md "Homebrew carts").
  */
-export interface HomebrewCart {
+interface HomebrewCart {
   game: Game;
   /** Where the ROM is served. */
   rom: string;
@@ -17,7 +17,7 @@ export interface HomebrewCart {
 }
 
 /** The maker every homebrew cart is published under: the box and the panel say "Homebrew". */
-export const HOMEBREW_PUBLISHER = 'Homebrew';
+const HOMEBREW_PUBLISHER = 'Homebrew';
 
 const cart = (id: string, rom: string, players: 1 | 2, hint: string, game: Omit<Game, 'id' | 'platform' | 'publisher'>): HomebrewCart => ({
   game: { id: `nes-homebrew-${id}`, platform: 'nes', publisher: HOMEBREW_PUBLISHER, ...game },

@@ -11,7 +11,7 @@ const CELL_PX = 96;
 const COIN = 13;
 
 /** What the panel is dealt with a card: what to do once all is showing, and whether another card may be bought from it. */
-export interface ScratchDeal {
+interface ScratchDeal {
   card: ScratchCard;
   /** Every cell is showing: pays out (or not) and returns the line to print under the card. */
   done: (win: ScratchSymbol | null) => string;
@@ -101,14 +101,14 @@ export class ScratchCardPanel extends ModalPanel {
     if (this.cells.every((c) => c.revealed)) this.finish();
   }
 
-  close(): void {
+  override close(): void {
     // Walking off with a half-scratched card: it is scratched anyway, and paid.
     if (this.isOpen) this.revealAll();
     super.close();
   }
 
   /** Enter or Space (off a button) scratches the next cell. */
-  protected onKey(e: KeyboardEvent): void {
+  protected override onKey(e: KeyboardEvent): void {
     if ((e.code === 'Enter' || e.code === 'Space') && !(e.target instanceof HTMLButtonElement)) {
       e.preventDefault();
       this.revealNext();

@@ -8,7 +8,7 @@ import { ShadowRefresh } from '../lighting/shadowRefresh';
 import { snapDirection } from '../props/shadowTexels';
 import { farShadowUniforms, type FarShadowUniforms } from './shadowFade';
 
-export interface StreetLightingOptions {
+interface StreetLightingOptions {
   /** Shadow map size of the sun (square). */
   shadowMapSize: number;
   /** Half the side of the square of street the sun's shadow map covers around the player (metres). */

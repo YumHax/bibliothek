@@ -33,7 +33,7 @@ export function glossyFloor(width: number, depth: number, strength: number): THR
   floor.rotation.x = -Math.PI / 2;
   floor.position.y = FLOOR.gloss.lift;
   const material = onSurface(floor.material as THREE.ShaderMaterial, FLOOR.gloss, { depthWrite: false });
-  material.uniforms.strength.value = strength;
+  material.uniforms.strength!.value = strength; // declared by GLOSSY_SHADER below
   material.transparent = true;
   material.depthWrite = false;
   additiveOne(material);

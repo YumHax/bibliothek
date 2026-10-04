@@ -8,7 +8,7 @@ import { PROUD, proud } from '../props/joinery';
 import { FLOOR, layMesh } from '../surface/layers';
 import { centreOutRow, evenRow, fitInRow, plainCloth } from './stallPaint';
 
-export interface BlanketStallOptions {
+interface BlanketStallOptions {
   /** What is scrawled on the cardboard sign (a platform's name). */
   sign: string;
   /** Main colour of the woollen blanket. */

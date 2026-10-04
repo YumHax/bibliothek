@@ -5,7 +5,7 @@ import { part } from '../props/Prop';
 import { SlideDrawer } from '../props/SlideDrawer';
 import { METAL, paint, standard, timber } from '@/world/materials/palette';
 
-export interface NightstandOptions {
+interface NightstandOptions {
   /** Cover colours of the books stacked on the open shelf, bottom first. */
   books?: number[];
   /** A pair of reading glasses folded on the top. Default true. */

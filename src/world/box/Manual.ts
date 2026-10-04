@@ -28,7 +28,8 @@ export class Manual extends THREE.Mesh<THREE.BufferGeometry, THREE.MeshStandardM
 
   /** Frees the previous cover; null leaves plain paper. */
   setCover(texture: THREE.Texture | null): void {
-    const mat = this.material[COVER];
+    // The constructor's two materials: the paper, then the cover.
+    const mat = this.material[COVER]!;
     mat.map?.dispose();
     mat.map = texture;
     mat.color.setHex(texture ? 0xffffff : 0xe6e1d3);

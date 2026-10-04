@@ -1,7 +1,7 @@
 import { KEYS, PersistedStore, safeStorage } from '@/persistence';
 import type { Replay } from './Replay';
 
-export const REPLAYS_KEY = KEYS.arcadeReplays;
+const REPLAYS_KEY = KEYS.arcadeReplays;
 
 /** Where a cabinet keeps and finds the player's best run on its game. */
 export interface ReplayShelf {

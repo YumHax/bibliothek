@@ -2,7 +2,7 @@ import type * as THREE from 'three';
 import { hashString, seededRandom } from '@/graphics/canvas';
 
 // The generic helpers live in `graphics/canvas`; re-exported so every drawing module keeps importing from here.
-export { canvasTexture, canvasFor, createCanvas, hashString, repeatTexture, seededRandom, toTexture } from '@/graphics/canvas';
+export { canvasTexture,  createCanvas, hashString, repeatTexture, seededRandom, toTexture } from '@/graphics/canvas';
 
 /** Word-wraps `text` and returns the lines that fit; the last line is ellipsised if `maxLines` is hit. */
 export function wrapLines(ctx: CanvasRenderingContext2D, text: string, maxWidth: number, maxLines = Infinity): string[] {
@@ -21,7 +21,8 @@ export function wrapLines(ctx: CanvasRenderingContext2D, text: string, maxWidth:
   if (current) lines.push(current);
   if (lines.length > maxLines) {
     const kept = lines.slice(0, maxLines);
-    let last = kept[maxLines - 1];
+    // `kept` holds exactly `maxLines` lines (there were more).
+    let last = kept[maxLines - 1]!;
     while (ctx.measureText(last + '…').width > maxWidth && last.length > 0) last = last.slice(0, -1);
     kept[maxLines - 1] = last.trimEnd() + '…';
     return kept;
@@ -81,7 +82,7 @@ export function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w
 }
 
 /** Pixel size of a drawable image source, or null when unknown (e.g. an image still loading). */
-export function imageSize(img: CanvasImageSource): { width: number; height: number } | null {
+function imageSize(img: CanvasImageSource): { width: number; height: number } | null {
   if (img instanceof HTMLImageElement) return img.naturalWidth > 0 ? { width: img.naturalWidth, height: img.naturalHeight } : null;
   if (img instanceof HTMLVideoElement) return img.videoWidth > 0 ? { width: img.videoWidth, height: img.videoHeight } : null;
   const { width, height } = img as { width: number | SVGAnimatedLength; height: number | SVGAnimatedLength };
@@ -147,9 +148,12 @@ export function drawBarcode(ctx: CanvasRenderingContext2D, x: number, y: number,
   ctx.textAlign = 'center';
   ctx.textBaseline = 'alphabetic';
   // Leading digit in the left padding, then one group under each half of the bars.
-  const groups = [digits.slice(0, 1), digits.slice(1, 7), digits.slice(7, 13)];
-  const centres = [x + pad * 0.5, x + pad + module * 24, x + pad + module * 70];
-  groups.forEach((g, i) => ctx.fillText(g, centres[i], y + h - pad * 0.6));
+  const groups: [text: string, centre: number][] = [
+    [digits.slice(0, 1), x + pad * 0.5],
+    [digits.slice(1, 7), x + pad + module * 24],
+    [digits.slice(7, 13), x + pad + module * 70],
+  ];
+  for (const [g, centre] of groups) ctx.fillText(g, centre, y + h - pad * 0.6);
   ctx.restore();
 }
 

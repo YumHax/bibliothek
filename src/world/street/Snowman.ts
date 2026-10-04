@@ -17,7 +17,7 @@ const GONE_AT = 0.2;
 /** Melting (the cover under `BUILT_AT`) it sags to this much of its size by the time it is gone. */
 const MELTED = 0.72;
 
-export interface SnowmanOptions {
+interface SnowmanOptions {
   /** The camera: it is built and melts away only while nobody is looking. */
   viewer: THREE.Object3D;
   /** The zone's collision set (world boxes): a small collider round its base while it stands. */

@@ -6,7 +6,7 @@ import { Prop } from '../../props/Prop';
 import { invisibleHitbox } from '../../meshUtils';
 import type { MailPiece } from '../../props/MailDrop';
 
-export interface OurMailboxOptions {
+interface OurMailboxOptions {
   /** The game's day now (the post is one round a day). */
   day: () => number;
   /** The day's post (`hallway/mail`'s `mailFor`, with the flyers' sources). */

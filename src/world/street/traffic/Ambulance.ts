@@ -8,7 +8,7 @@ import { LampMaterial } from './lampMaterial';
 import { WheelMaterial } from './wheelSpin';
 import { VEHICLES } from '../../city/vehicles';
 
-export type AmbulanceOptions = EmergencyOptions;
+type AmbulanceOptions = EmergencyOptions;
 
 /**
  * Now and then an ambulance comes through (as the window view sees one pass): a white van-bodied

@@ -43,7 +43,7 @@ export class TankBubbler extends Voice {
     churn.connect(band).connect(gain).connect(out);
   }
 
-  protected tick(ctx: AudioContext, dt: number): void {
+  protected override tick(ctx: AudioContext, dt: number): void {
     this.untilBubble -= dt;
     if (this.untilBubble > 0 || !this.master) return;
     this.untilBubble = rand(0.04, 0.16);
@@ -82,7 +82,7 @@ export class SnowHiss extends Voice {
     hiss.connect(high).connect(tinny).connect(out);
   }
 
-  protected tick(ctx: AudioContext, dt: number): void {
+  protected override tick(ctx: AudioContext, dt: number): void {
     this.untilCrackle -= dt;
     if (this.untilCrackle > 0 || !this.master) return;
     this.untilCrackle = rand(0.8, 5);
@@ -107,7 +107,7 @@ export class PetShopNoises extends Voice {
 
   protected build(): void {}
 
-  protected tick(ctx: AudioContext, dt: number): void {
+  protected override tick(ctx: AudioContext, dt: number): void {
     if (!this.master) return;
     this.untilChirp -= dt;
     if (this.untilChirp <= 0) {
@@ -155,7 +155,7 @@ export class ShopRoomTone extends Voice {
     hum.connect(humGain).connect(out);
   }
 
-  protected tick(ctx: AudioContext, dt: number): void {
+  protected override tick(ctx: AudioContext, dt: number): void {
     this.untilCar -= dt;
     if (this.untilCar > 0 || !this.master) return;
     this.untilCar = rand(6, 22);
@@ -364,7 +364,7 @@ export class TubeHum extends Voice {
     band.connect(this.gate).connect(out);
   }
 
-  protected tick(ctx: AudioContext): void {
+  protected override tick(ctx: AudioContext): void {
     if (this.crackles <= 0 || !this.master || Math.random() > 0.3) return;
     this.crackles--;
     noiseBurst(ctx, this.master, ctx.currentTime, rand(2500, 4500), 4, rand(0.3, 0.6), 0.03);

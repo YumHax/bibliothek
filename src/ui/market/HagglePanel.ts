@@ -6,7 +6,7 @@ import { actionKeyLabel } from '@/ui/keys';
 import { MarketPanel, coinsHtml, escapeHtml, type PanelWallet } from './MarketPanel';
 
 /** How a haggle ended, as the Session hears it. */
-export type HaggleOutcome = 'deal' | 'walk' | 'stopped' | 'none';
+type HaggleOutcome = 'deal' | 'walk' | 'stopped' | 'none';
 
 interface Exchange {
   who: 'you' | 'them';
@@ -88,12 +88,12 @@ export class HagglePanel extends MarketPanel {
     if (logEl) logEl.scrollTop = logEl.scrollHeight;
   }
 
-  protected onAction(action: string, el: HTMLElement): void {
+  protected override onAction(action: string, el: HTMLElement): void {
     if (action === 'offer' && el.dataset.kind) this.offer(el.dataset.kind as OfferKind);
     else if (action === 'take') this.take();
   }
 
-  protected onKey(e: KeyboardEvent): void {
+  protected override onKey(e: KeyboardEvent): void {
     const i = ['Digit1', 'Digit2', 'Digit3', 'Numpad1', 'Numpad2', 'Numpad3'].indexOf(e.code);
     if (i >= 0) this.offer(OFFER_KINDS[i % 3]!);
     else if (e.code === 'Enter' || e.code === 'NumpadEnter') {
@@ -103,7 +103,7 @@ export class HagglePanel extends MarketPanel {
     }
   }
 
-  protected onClosed(): void {
+  protected override onClosed(): void {
     const n = this.negotiation;
     if (n && !n.done && this.outcome !== 'none') {
       n.abandon();

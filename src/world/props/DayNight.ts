@@ -65,7 +65,7 @@ export interface SkyState {
   strikeDistance: number;
 }
 
-export interface DayNightOptions {
+interface DayNightOptions {
   /** Initial time of day in hours. Default 8 (morning). */
   hours?: number;
   /** Real seconds one full 24 h cycle takes; 0 freezes the clock. Default 600 (ten minutes). */
@@ -76,10 +76,10 @@ export interface DayNightOptions {
   date?: Date;
 }
 
-export type SkyListener = (state: SkyState) => void;
+type SkyListener = (state: SkyState) => void;
 
 /** The default: a whole day in ten minutes. */
-export const DEFAULT_DAY_LENGTH_S = 600;
+const DEFAULT_DAY_LENGTH_S = 600;
 const DEFAULT_HOURS = 8;
 /**
  * The sun elevation that counts as a full `sunHeight` of 1: a high summer sun in Europe. A winter
@@ -155,14 +155,15 @@ function sunThroughOf(s: SkyState): number {
 function sampleStops(sunHeight: number, key: 'zenith' | 'horizon', out: THREE.Color): THREE.Color {
   const h = THREE.MathUtils.clamp(sunHeight, -1, 1);
   for (let i = 1; i < SKY_STOPS.length; i++) {
-    const a = SKY_STOPS[i - 1];
-    const b = SKY_STOPS[i];
+    const a = SKY_STOPS[i - 1]!;
+    const b = SKY_STOPS[i]!;
     if (h <= b.at) {
       const t = (h - a.at) / (b.at - a.at);
       return out.lerpColors(scratchA.setHex(a[key]), scratchB.setHex(b[key]), t);
     }
   }
-  return out.setHex(SKY_STOPS[SKY_STOPS.length - 1][key]);
+  // Past the last stop (the table ends at the zenith, so only by rounding).
+  return out.setHex(SKY_STOPS[SKY_STOPS.length - 1]![key]);
 }
 
 

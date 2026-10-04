@@ -4,7 +4,7 @@ import { MAX_LETTERS, TAPES, TAPE_COLOURS, labelText, type TapeColour } from '@/
 import './LabelPanel.css';
 
 /** What the panel does with what was typed: print it (a refusal comes back when it cannot be stuck there), or peel the label off. */
-export interface LabelPanelRequest {
+interface LabelPanelRequest {
   /** The label stuck where the player aims, when there is one: it may be peeled off, or printed again. */
   existing: { text: string; tape: TapeColour } | null;
   /** Draws a label of `text` on `tape` in `canvas` (`ShelfLabels.preview`). */

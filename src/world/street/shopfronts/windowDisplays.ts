@@ -6,7 +6,7 @@ import { at, ball, cylinder, pick } from './shapes';
 import type { CardId, DisplayId } from './shopfrontPlan';
 
 /** Where a window display's pieces go: what the street's light falls on, what has its own light, the screens, the cards. */
-export interface DisplayParts {
+interface DisplayParts {
   /** Lit by the scene (and softly by the shop at night). */
   solid: TriBuilder;
   /** Lamp shades and aquarium water: their own light. */

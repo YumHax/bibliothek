@@ -6,7 +6,7 @@
  * - `top-left`: the wallet chip, then the tips.
  * Made on first use, in `container`.
  */
-export type HudSlot = 'crosshair' | 'top-left';
+type HudSlot = 'crosshair' | 'top-left';
 
 const slots = new Map<HudSlot, HTMLDivElement>();
 

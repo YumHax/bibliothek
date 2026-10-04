@@ -10,7 +10,7 @@ import { StepBeat } from './StepBeat';
 import { NeonSheriff } from './NeonSheriff';
 import { LexiPunk, type RemoteScreen } from './LexiPunk';
 
-export type { ArcadeGame, ArcadeControls, RunContext } from './ArcadeGame';
+export type { ArcadeGame,   } from './ArcadeGame';
 export type { RemoteScreen } from './LexiPunk';
 export { StepBeat } from './StepBeat';
 

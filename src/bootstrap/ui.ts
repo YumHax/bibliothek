@@ -69,7 +69,7 @@ export type Ui = ReturnType<typeof createUi>;
 const MONEY_ZONES: ReadonlySet<ZoneId> = new Set<ZoneId>(['arcade', 'market', 'furnitureShop', 'tvShop', 'petShop', 'flowerShop', 'sellerFlat']);
 
 /** What the menus read of things made after them: where the player is, the rules. */
-export interface UiLate {
+interface UiLate {
   zones: Late<ZoneManager<ZoneId>>;
   session: Late<Session>;
 }

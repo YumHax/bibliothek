@@ -9,7 +9,7 @@ const WET = 0.3;
 /** The collector does not stand in rain over this (`Trader`'s own rule). */
 const TRADER_RAIN = 0.3;
 
-export interface StreetNewsSources {
+interface StreetNewsSources {
   /** Rain and snow now (0..1). */
   weather: () => { rain: number; snow: number };
   /** The arcade's challenge of the day, if the arcade keeps one. */

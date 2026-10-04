@@ -37,7 +37,7 @@ interface Resident {
   nextLine: number;
 }
 
-export interface NeighboursOptions {
+interface NeighboursOptions {
   viewer: THREE.Object3D;
   /** The game clock's hour, 0..24. */
   hours: () => number;

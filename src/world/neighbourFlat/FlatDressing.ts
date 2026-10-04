@@ -37,7 +37,7 @@ interface Dressed {
 }
 
 /** What the dressing dresses round: the shell's parts that stay (the room, the vestibule, the favourite game's spot, the TV). */
-export interface FlatDressingParts {
+interface FlatDressingParts {
   room: Room;
   vestibule: Vestibule;
   favourite: FavouriteGame;
@@ -219,7 +219,7 @@ class HostWalker extends Walker {
     this.next = host.seed % host.lines.length;
   }
 
-  activate(session: SessionActions): void {
+  override activate(session: SessionActions): void {
     const key = hostKey(this.host);
     befriend(key, FRIENDSHIP_NUDGES.visit, 'chat', this.ctx.today.gameDay);
     const offer = this.ctx.building?.trades?.offerAt(key);

@@ -4,7 +4,7 @@ import { part } from '../../props/Prop';
 import { paint, timber } from '../../materials/palette';
 import { SILL } from '../ShopWindow';
 
-export interface WindowDisplayOptions {
+interface WindowDisplayOptions {
   /** Along the window (local x): the glass's width, between the frame's posts. */
   width: number;
   /** Out from the glass into the shop. Default 0.5. */

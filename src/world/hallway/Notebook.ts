@@ -6,7 +6,7 @@ import { invisibleHitbox } from '../meshUtils';
 import { Prop, part, matte } from '../props/Prop';
 import { paint } from '../materials/palette';
 
-export interface NotebookOptions {
+interface NotebookOptions {
   /** The panel it opens, asked at click time (it may be made after the room is built); none: the pages are blank. */
   panel: () => ModalLike | undefined;
   /** Cover colour. Default a worn oxblood. */

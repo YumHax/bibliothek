@@ -37,7 +37,7 @@ export interface ShelfSpot {
 /** Aimed within this share of a box's width either side of its middle, the box in hand swaps with it rather than going beside it. */
 const SWAP_SPAN = 0.25;
 
-export interface ShelfOptions {
+interface ShelfOptions {
   width: number;
   depth: number;
   /**

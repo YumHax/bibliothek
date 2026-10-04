@@ -11,7 +11,7 @@ import { Figure } from './Figure';
 import type { TalkRole } from './streetTalk';
 
 /** A queue outside a shop (`STREET_PLAN.shopQueues`). */
-export interface ShopQueueSpec {
+interface ShopQueueSpec {
   /** Near the shop's door (the painted one is found from it). */
   door: Vec2;
   /** The way the queue runs from the door along the wall (-1: towards -x). */
@@ -24,7 +24,7 @@ export interface ShopQueueSpec {
   every: readonly [number, number];
 }
 
-export interface ShopQueueOptions {
+interface ShopQueueOptions {
   queues: readonly ShopQueueSpec[];
   viewer: THREE.Object3D;
   place: (walker: Walker, at: THREE.Vector3) => void;

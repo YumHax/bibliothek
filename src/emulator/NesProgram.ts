@@ -27,7 +27,7 @@ const BUTTONS: readonly [keyof Pad, ButtonKey][] = [
   ['right', 7],
 ];
 
-export interface NesProgramOptions {
+interface NesProgramOptions {
   title: string;
   /** Where the ROM is served (`public/roms/...`), or its bytes. */
   rom: string | Uint8Array;
@@ -130,7 +130,8 @@ export class NesProgram implements ScreenProgram {
 
   /** The pad's buttons down and up as they change (jsnes keeps the state per controller). */
   private press(nes: NES, controller: 1 | 2, pad: Pad): void {
-    const held = this.held[controller - 1];
+    // One set per controller, 1 and 2.
+    const held = this.held[controller - 1]!;
     for (const [name, button] of BUTTONS) {
       if (pad[name] === held.has(button)) continue;
       if (pad[name]) {

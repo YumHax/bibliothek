@@ -390,6 +390,11 @@ export class Room extends THREE.Group implements Updatable, OccupancyAware, Draw
           return new THREE.Vector2(-width / 2 + inset, d.along);
         case 'right':
           return new THREE.Vector2(width / 2 - inset, d.along);
+        default: {
+          // Every wall is a case above; this says so to the array-callback-return rule (and fails loudly if one is added).
+          const wall: never = d.wall;
+          throw new Error(`doorway on an unknown wall: ${String(wall)}`);
+        }
       }
     });
   }
@@ -641,7 +646,7 @@ function bounceFalloff(width: number, depth: number): THREE.CanvasTexture {
  * Local x, on a wall's plane, of the world coordinate `along` the wall (x for front/back, z for
  * left/right): the planes of the front and left walls are turned so their +x runs against it.
  */
-export function wallLocalX(wall: Wall, along: number): number {
+function wallLocalX(wall: Wall, along: number): number {
   return wall === 'back' || wall === 'right' ? along : -along;
 }
 

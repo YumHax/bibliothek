@@ -18,7 +18,7 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'standing', label: 'You & the market' },
 ];
 
-export interface NoticeBoardDeps {
+interface NoticeBoardDeps {
   wallet: { readonly coins: number; spend(coins: number): boolean; earnCoins(coins: number): void; subscribe(cb: () => void): () => void };
   collection: CollectionStore;
   market: MarketStock;
@@ -72,7 +72,7 @@ export class NoticeBoardPanel extends MarketPanel {
   }
 
   /** D-pad left / right (or the arrow keys) flip through the tabs, the focus following the one shown. */
-  protected onSide(direction: 1 | -1): boolean {
+  protected override onSide(direction: 1 | -1): boolean {
     const at = TABS.findIndex((t) => t.id === this.tab);
     this.showTab(TABS[(at + direction + TABS.length) % TABS.length]!.id);
     this.body.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]')?.focus();
@@ -84,7 +84,7 @@ export class NoticeBoardPanel extends MarketPanel {
     this.refresh();
   }
 
-  protected onAction(action: string, el: HTMLElement): void {
+  protected override onAction(action: string, el: HTMLElement): void {
     if (action === 'tab' && el.dataset.tab) this.showTab(el.dataset.tab as Tab);
     else if (action === 'answer' && el.dataset.id) this.answer(el.dataset.id);
     else if (action === 'buy' && el.dataset.id) this.buy(el.dataset.id);

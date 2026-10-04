@@ -16,7 +16,7 @@ import { WheelMaterial, rollAngle, wheelAngles } from './wheelSpin';
 import { TWO_WHEELERS, courierBox, twoWheelerGeometries, type TwoWheelerModel } from './twoWheelers';
 import { rushAt } from '../../city/traffic';
 
-export interface MotorbikesOptions {
+interface MotorbikesOptions {
   traffic: StreetTraffic;
   /** The player (the camera): riders stop for them. */
   viewer: THREE.Object3D;

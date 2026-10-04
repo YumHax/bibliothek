@@ -42,7 +42,7 @@ export type CatState =
  * the next meow, the length of the meal): made fresh by `memo` on every `enter`, handed to
  * `enter` and `tick`, gone when the state is left.
  */
-export interface StateDef<M = unknown> {
+interface StateDef<M = unknown> {
   memo?(): M;
   /** Sets the state up (pose, `timer`, facing); may hand over to another state at once. */
   enter?(mind: CatMind, memo: M): void;

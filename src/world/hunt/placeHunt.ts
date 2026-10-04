@@ -16,7 +16,7 @@ import { STAIRWELL_PLAN } from '../stairwell/stairwellPlan';
 import { ClueMark } from './ClueMark';
 import { CARVING, CHALK, MAILBOX_CARD } from './clueLooks';
 
-export interface HuntWiring {
+interface HuntWiring {
   today: Today;
   journal?: { note(kind: string, text: string): void };
   notices?: NoticeActions;

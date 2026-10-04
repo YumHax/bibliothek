@@ -1,7 +1,7 @@
 import type { StoredArt } from './artStore';
 
 /** Longest side of a served cover; box faces are a few hundred pixels on screen at most. */
-export const MAX_ART_SIZE = 512;
+const MAX_ART_SIZE = 512;
 const WEBP_QUALITY = 82;
 
 type Sharp = typeof import('sharp');
@@ -39,6 +39,6 @@ export async function shrinkArt(png: Buffer, maxSize = MAX_ART_SIZE): Promise<St
 }
 
 /** PNG or JPEG, from the file's first bytes (a scan may be either). */
-export function sniffType(bytes: Buffer): string {
+function sniffType(bytes: Buffer): string {
   return bytes[0] === 0xff && bytes[1] === 0xd8 ? 'image/jpeg' : 'image/png';
 }

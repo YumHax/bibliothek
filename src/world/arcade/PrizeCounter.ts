@@ -9,7 +9,7 @@ import { paint, standard, timber } from '@/world/materials/palette';
 import type { PrizeKind } from '@/economy/Prizes';
 import { prizeModel } from '../prizes/prizeModel';
 
-export interface PrizeCounterOptions {
+interface PrizeCounterOptions {
   /** Tickets one coin is worth, written on the sign. */
   ticketsPerCoin: number;
   /** What the glass case shows: the prizes on sale, left to right. */

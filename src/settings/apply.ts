@@ -3,7 +3,7 @@ import type { GameSettings, SettingsStore } from './Settings';
 import { setReduceMotion } from './motion';
 
 /** What the settings reach, structurally (main passes the real ones). */
-export interface SettingsTargets {
+interface SettingsTargets {
   input: { setBindings(bindings: Readonly<Record<string, string>>): void };
   mouse: { setMouseLook(options: { sensitivity: number; invertY: boolean }): void };
   /** The walk's feel: the sprint and crouch keys, the head bob, the field of view (the sprint widens it over this). */

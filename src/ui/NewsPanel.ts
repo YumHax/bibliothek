@@ -3,7 +3,7 @@ import { ModalPanel } from './ModalPanel';
 import './NewsPanel.css';
 
 /** What the panel prints: the paper's masthead, dateline, lead and tips (see `street/gamingWeekly`). */
-export interface NewsIssue {
+interface NewsIssue {
   masthead: string;
   dateline: string;
   headline: string;

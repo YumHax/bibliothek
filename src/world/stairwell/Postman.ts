@@ -14,7 +14,7 @@ import { liftGate } from './stairRoutes';
 import { STAIRWELL_PLAN as plan, STOREYS, landingY } from './stairwellPlan';
 import type { LiftRides } from './Lift';
 
-export interface PostmanOptions {
+interface PostmanOptions {
   viewer: THREE.Object3D;
   post: MailPost;
   doorstep: Doorstep;

@@ -29,7 +29,7 @@ export interface HangoutSpot {
   look?: [x: number, y: number, z: number];
 }
 
-export interface ArcadeCrowdOptions {
+interface ArcadeCrowdOptions {
   /** The hall's walkable graph; every station's stand spot and every hangout is reached from its nearest node. */
   nav: NavNode[];
   /** The node at the door: regulars come in and go out there. */

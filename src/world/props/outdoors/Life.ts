@@ -3,7 +3,7 @@ import { createCanvas, canvasTexture } from '@/covers/generated/canvasUtils';
 import { QUALITY } from '@/graphics/quality';
 import { type Rng, ELEVATION_MAX, ELEVATION_MIN, EYE_HEIGHT, SCENE_HEIGHT, SCENE_WIDTH, azimuthX, elevationY } from './Sheet';
 import type { GoodsRect } from './Shopfront';
-import { type AtlasPens, type Cell, type LifeEnv, type LifeLayer, WHITE_TINT } from './sprites';
+import { type AtlasPens, type Bounds, type Cell, type LifeEnv, type LifeLayer, WHITE_TINT } from './sprites';
 import { Traffic } from './LifeTraffic';
 import { VEHICLE_COUNT } from './vehicleShader';
 import { Cyclists, type VehiclePose } from './LifeVehicles';
@@ -13,9 +13,6 @@ import { Fountain } from './LifeFountain';
 import { Critters } from './LifeCritters';
 import { Folk, MAX_QUEUE } from './LifeFolk';
 import { type LifeEvents, quietStreet } from './lifeEvents';
-
-export { carFrameAt } from './LifeVehicles';
-export type { LifeEvents } from './lifeEvents';
 
 /**
  * How many moving things the pane shader looks up per pixel as sprites; the arrays below have this
@@ -34,7 +31,7 @@ const ATLAS_H = 512;
 const GLOW_SCALE = 0.5;
 
 /** What `Life.update` reads of the sky (a `SkyState` will do): falling rain and snow, the game hour, the wind. */
-export interface LifeWeather {
+interface LifeWeather {
   rain: number;
   snow: number;
   hours?: number;
@@ -99,8 +96,8 @@ export class Life {
   private readonly env: LifeEnv = { hours: 12, nightness: 0, dusk: 0, wakefulness: 1, rain: 0, snow: 0, wet: 0, wind: 0 };
   /** Where the camera is, metres from the painting's eye (see `update`), and a scratch for `seenFromEye`. */
   private readonly eye = new THREE.Vector3();
-  private readonly scratch = [0, 0, 0, 0];
-  private readonly push = (bounds: number[], cell: Cell, d: number, alpha: number, tint = WHITE_TINT): void => this.pushSprite(bounds, cell, d, alpha, tint);
+  private readonly scratch: Bounds = [0, 0, 0, 0];
+  private readonly push = (bounds: Bounds, cell: Cell, d: number, alpha: number, tint = WHITE_TINT): void => this.pushSprite(bounds, cell, d, alpha, tint);
 
   constructor(random: Rng) {
     // Everything draws from the one shared random in a fixed order: the animals' and the folk's
@@ -185,10 +182,10 @@ export class Life {
    * (which slides with the depth of whatever the sprite passes over, and made it wobble), so a car
    * driving straight stays on its line from any window, the balcony included.
    */
-  private pushSprite(bounds: number[], cell: Cell, d: number, alpha: number, tint: number): void {
+  private pushSprite(bounds: Bounds, cell: Cell, d: number, alpha: number, tint: number): void {
     if (this.slots.length >= SPRITE_COUNT || alpha <= 0.01) return;
     const [left, top, right, bottom] = this.seenFromEye(bounds, d);
-    const slot = this.pool[this.slots.length];
+    const slot = this.pool[this.slots.length]!; // the pool holds SPRITE_COUNT, checked above
     slot.d = d;
     slot.alpha = alpha;
     slot.lod = Math.max(0, Math.log2(cell.h / Math.max(1, bottom - top)));
@@ -229,7 +226,7 @@ export class Life {
   }
 
   /** Bounds from the painting's eye turned into bounds from the camera (`eye`), for a sprite `d` metres out on the ground. */
-  private seenFromEye(bounds: number[], d: number): number[] {
+  private seenFromEye(bounds: Bounds, d: number): Bounds {
     const { x: ox, y: oy, z: oz } = this.eye;
     if (ox === 0 && oy === 0 && oz === 0) return bounds;
     const [left, top, right, bottom] = bounds;

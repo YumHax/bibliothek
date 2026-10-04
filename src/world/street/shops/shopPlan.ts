@@ -13,7 +13,7 @@ export interface ShopOffer {
  * What a shop says: a line when the player looks in (one after the other), what the door says when it is shut, what it
  * sells. The shops one walks into (`SHOP_ZONE_OF`) only use `closed`: their clerk talks inside (`world/shop/shopPlan`).
  */
-export interface ShopTalk {
+interface ShopTalk {
   looks: readonly string[];
   closed: string;
   offer?: ShopOffer;

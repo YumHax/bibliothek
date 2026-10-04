@@ -827,6 +827,7 @@ export class CatVoice implements CatVoiceLike, Updatable {
   /** Runs `param` through `keyframes` (scaled by `scale`) over `duration` seconds from `start`. */
   private sweep(param: AudioParam, keyframes: Keyframe[], start: number, duration: number, scale: number): void {
     const [first, ...rest] = keyframes;
+    if (!first) return;
     param.setValueAtTime(first.hz * scale, start + first.at * duration);
     for (const frame of rest) param.exponentialRampToValueAtTime(frame.hz * scale, start + frame.at * duration);
   }

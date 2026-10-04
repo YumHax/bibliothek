@@ -1,4 +1,4 @@
-export type MouseButton = 0 | 2;
+type MouseButton = 0 | 2;
 
 /**
  * Replays gamepad / touch gestures as the DOM mouse events the rest of the app already handles

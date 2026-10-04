@@ -96,10 +96,10 @@ export function hasShopfront(kind: ShopKind): kind is FrontKind {
  * - `landmark`: RETRO GAMES and the arcade, flush, in enamel and chrome (the arcade's edged in neon).
  * The far facades (painted coarser than `KIT_DETAIL`) keep their painted fronts: seen from 15 m and more.
  */
-export type FrontVariant = 'plain' | 'walkIn' | 'landmark';
+type FrontVariant = 'plain' | 'walkIn' | 'landmark';
 
 /** The painted detail (px per metre, `FacadeSpec.detail`) from which a facade's ordinary shops are built in 3D. */
-export const KIT_DETAIL = 20;
+const KIT_DETAIL = 20;
 
 /**
  * The plain front's measures (metres; `out` from the wall). Everything between the pilasters stays behind the

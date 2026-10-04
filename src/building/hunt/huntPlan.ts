@@ -16,7 +16,7 @@ import { ATTIC_PLAN } from '@/world/attic/atticPlan';
 export type ClueId = 'letter' | 'chalk' | 'mailbox' | 'board' | 'chestnut' | 'memory' | 'cat' | 'attic' | 'aerial' | 'chest';
 
 /** A clue: what must be found first, what the player reads there, and what the journal's file says of it. */
-export interface Clue {
+interface Clue {
   needs: readonly ClueId[];
   /** The card's title and text, read where it is found. */
   title: string;

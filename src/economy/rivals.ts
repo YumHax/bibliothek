@@ -47,7 +47,7 @@ const RIVAL_SCORES: Readonly<Record<string, readonly number[]>> = {
  * off). `ArcadeScores` then drops that game's saved best and table entries once; medals already
  * paid stay paid. A game missing here is at 1.
  */
-export const SCORE_RULES: Readonly<Record<string, number>> = {
+const SCORE_RULES: Readonly<Record<string, number>> = {
   breakout: 2,
   invaders: 2,
   stacker: 2,

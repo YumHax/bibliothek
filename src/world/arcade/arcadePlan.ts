@@ -29,7 +29,7 @@ import type { HangoutSpot, NavNode } from './ArcadeCrowd';
  * evening); a kid watches, and takes player two when the player sits at PADDLE WARS.
  */
 
-export interface CabinetPlan {
+interface CabinetPlan {
   at: Placement;
   game: ArcadeGameId;
   color: number;
@@ -47,7 +47,7 @@ export interface CabinetPlan {
 }
 
 /** A printed card on a machine that is not a cabinet (the cabinets carry their own): machine-local, facing +z; titled with the game's title unless `title` says otherwise. */
-export interface CardPlan {
+interface CardPlan {
   at: [x: number, y: number, z: number];
   lines: string[];
   title?: string;
@@ -70,7 +70,7 @@ interface MachineExtras {
 }
 
 /** A physical machine (not a cabinet): a `MACHINE_KINDS` kind (also its game id), its options, where it stands and what the hall adds to it. */
-export type MachinePlan = { [K in MachineKind]: MachineExtras & { kind: K; options: MachineOptionsOf<K> } }[MachineKind];
+type MachinePlan = { [K in MachineKind]: MachineExtras & { kind: K; options: MachineOptionsOf<K> } }[MachineKind];
 
 /** 12 x 8 m under a 3 m ceiling, no windows, no doorways: the only way in or out is the teleport. */
 export const ARCADE_ROOM: RoomOptions = {
@@ -357,7 +357,7 @@ export const ARCADE_PLAN = {
 };
 
 /** Cabinets whose game can play itself (not LexiPunk, which runs in its frame): what a regular may take. */
-export const DEMO_CABINETS: readonly string[] = ARCADE_PLAN.cabinets.map((c) => c.game).filter((g) => g !== 'lexipunk');
+const DEMO_CABINETS: readonly string[] = ARCADE_PLAN.cabinets.map((c) => c.game).filter((g) => g !== 'lexipunk');
 
 /** The games that pay tickets and keep a table (every cabinet but LexiPunk, the machines with a `table`): what a daily challenge may be set on. */
 export const TICKET_GAMES: readonly string[] = [...DEMO_CABINETS, ...ARCADE_PLAN.machines.filter((m) => m.table).map((m) => m.kind)];

@@ -19,7 +19,7 @@ const BLINK_OPEN = 0.15;
 /** How fast expressions come and go (rad/s of their springs). */
 const EXPRESSION_OMEGA = 9;
 
-export type Expression = Required<FaceKey>;
+type Expression = Required<FaceKey>;
 
 /** Mouth shapes of speech: the jaw's opening and the lips' "oo" and "ee" (a smile's corners). */
 const VOWELS: readonly (readonly [jaw: number, pucker: number, ee: number])[] = [

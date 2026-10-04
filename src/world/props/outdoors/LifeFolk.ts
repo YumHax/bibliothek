@@ -107,14 +107,14 @@ export class Folk implements LifeLayer {
       this.smokerCells.push(
         [0, 1].map((pose) => {
           const cell = place(56, h);
-          paintSmoker(color, glow, cell, looks[v + 2], pose);
+          paintSmoker(color, glow, cell, looks[v + 2]!, pose); // a look per FOLK_SHIRTS entry: eight
           return cell;
         }),
       );
       this.watererCells.push(
         [0, 1].map((pose) => {
           const cell = place(64, h);
-          paintWaterer(color, cell, looks[(v + 5) % looks.length], pose);
+          paintWaterer(color, cell, looks[(v + 5) % looks.length]!, pose);
           return cell;
         }),
       );
@@ -140,7 +140,7 @@ export class Folk implements LifeLayer {
       const z = FRONTAGE - BALCONY_OUT;
       const lift = GROUND + 0.1 + (f.floor - 1) * FLOOR;
       const pose = f.kind === 'smoker' ? (Math.sin(f.clock * 0.45) > 0.75 ? 0 : 1) : Math.sin(f.clock * 0.3) > -0.2 ? 0 : 1;
-      const cell = (f.kind === 'smoker' ? this.smokerCells : this.watererCells)[f.variant][pose];
+      const cell = (f.kind === 'smoker' ? this.smokerCells : this.watererCells)[f.variant]![pose]!; // three variants x two poses, painted in `paint`
       pushStanding(push, cell, SCALE, MARGIN, f.x, z, f.out, lift, Math.hypot(f.x, z) - BALCONY_DEPTH_MARGIN);
     }
 
@@ -153,8 +153,8 @@ export class Folk implements LifeLayer {
       s.clock += dt;
       s.x += s.dir * 0.35 * dt;
       if (s.x > Math.min(x1, mid + 2.5) || s.x < Math.max(x0, mid - 2.5)) s.dir = -s.dir as 1 | -1;
-      const pose = [0, 1, 2, 1][Math.floor(s.clock / 0.28) % 4];
-      pushStanding(push, this.sweeperCells[pose], SCALE, MARGIN, s.x, FRONTAGE - 1.5, sweeping);
+      const pose = [0, 1, 2, 1][Math.floor(s.clock / 0.28) % 4]!;
+      pushStanding(push, this.sweeperCells[pose]!, SCALE, MARGIN, s.x, FRONTAGE - 1.5, sweeping); // three poses, painted in `paint`
     }
     // Opening hours: the rack of games out on the pavement, and whoever is queueing.
     const open = hoursRamp(env.hours, SHOP_OPEN[0], SHOP_OPEN[1], 0.1);
@@ -170,7 +170,7 @@ export class Folk implements LifeLayer {
       const x = mid + 0.4 + i * QUEUE_SPACING;
       const z = FRONTAGE - QUEUE_OUT - q.jitter;
       const pose = Math.sin(q.phase * 0.7) > 0 ? 0 : 1;
-      pushStanding(push, this.queueCells[q.variant][pose], SCALE, MARGIN, x, z, q.alpha);
+      pushStanding(push, this.queueCells[q.variant]![pose]!, SCALE, MARGIN, x, z, q.alpha); // a look per variant x two poses, painted in `paint`
     });
   }
 }

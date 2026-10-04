@@ -7,7 +7,7 @@ import type { RoomWindow } from '../props/Window';
 import { setShownKeepingLights } from '../lighting/keepLights';
 
 /** Anything lit by the time of day: a `Room`, a frosted pane. */
-export interface DaylightFollower {
+interface DaylightFollower {
   setDaylight(daylight: number, skyHue?: THREE.Color): void;
 }
 

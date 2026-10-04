@@ -4,10 +4,10 @@ import { CHALLENGE_BAND, CHALLENGE_REWARD, CHANGE_MACHINE, OUT_OF_ORDER_ODDS } f
 import { rivalScore } from './rivals';
 import { seeded } from './seeded';
 
-export const ARCADE_DAILY_KEY = KEYS.arcadeDaily;
+const ARCADE_DAILY_KEY = KEYS.arcadeDaily;
 
 /** Today's challenge: one game, a score to reach, what it pays, and whether it has been paid. */
-export interface Challenge {
+interface Challenge {
   gameId: string;
   target: number;
   /** Bonus tickets on top of the play's own. */
@@ -21,7 +21,7 @@ interface DailyFile {
   change?: string;
 }
 
-export interface ArcadeDailyOptions {
+interface ArcadeDailyOptions {
   /** The games a challenge may be set on (the arcade's machines that pay tickets). */
   games: readonly string[];
   /** Today's local date as YYYY-MM-DD (`dayKey`); injectable for a fixed day. */

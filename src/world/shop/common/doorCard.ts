@@ -19,7 +19,7 @@ export interface DoorCardLook {
 export const DOOR_CARD_LOOK = { card: '#f4eedc', closedInk: '#9a2a22' } as const;
 
 /** The CLOSED side's small print: the hours the shop keeps, or nothing for a shop that never shuts. */
-export function hoursNote(kind: ShopKind): string {
+function hoursNote(kind: ShopKind): string {
   const hours = SHOP_HOURS[kind];
   return hours ? `open ${clockTime(hours.open)} – ${clockTime(hours.close % 24)}` : '';
 }

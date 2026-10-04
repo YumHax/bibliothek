@@ -68,7 +68,7 @@ export class Aerial extends Prop implements Interactable, Updatable {
     this.add(hitbox);
   }
 
-  get footprint(): THREE.Box3 {
+  override get footprint(): THREE.Box3 {
     return new THREE.Box3(new THREE.Vector3(-0.35, 0, -0.35), new THREE.Vector3(0.58, 1.0, 0.35));
   }
 

@@ -19,10 +19,10 @@ import type { Owned } from './build/owned';
 export const DOOR_LEAF = { width: 0.83, height: 2.04 };
 
 /** The door to the hallway: back wall, in the shelf-free stretch left of the bookcases; this room hangs the leaf. */
-export const FRONT_DOOR: Doorway = { wall: 'back', along: -1.5, ...DOOR_LEAF, to: 'hallway' };
+const FRONT_DOOR: Doorway = { wall: 'back', along: -1.5, ...DOOR_LEAF, to: 'hallway' };
 
 /** The glazed door onto the balcony: front wall, where the right-hand loft window was; the balcony hangs it (it opens in). */
-export const BALCONY_DOORWAY: Doorway = { wall: 'front', along: 2.0, ...BALCONY_DOOR, door: false, to: 'balcony' };
+const BALCONY_DOORWAY: Doorway = { wall: 'front', along: 2.0, ...BALCONY_DOOR, door: false, to: 'balcony' };
 
 /**
  * The opening to Mrs Roux's two rooms (`world/annex`): right wall, its front end (clear of the projector picture), where
@@ -37,12 +37,12 @@ export const ANNEX_DOORWAY: Doorway = { wall: 'right', along: 2.3, width: 1.1, h
  */
 export const DEFAULT_ROOM: RoomOptions = { width: 6, depth: 6, height: 2.8, doorways: [FRONT_DOOR, BALCONY_DOORWAY, ANNEX_DOORWAY], opaqueWalls: ['back', 'right'] };
 
-export interface WindowPlan {
+interface WindowPlan {
   wall: Wall;
   along: number;
 }
 
-export interface SeatPlan {
+interface SeatPlan {
   at: Placement;
   cushion: CushionOptions;
   /** What must be bought for it to stand (see `build/owned.ts`). */

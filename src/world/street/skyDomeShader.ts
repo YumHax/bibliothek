@@ -2,7 +2,7 @@ import { SINE_HASH, fbm2, valueNoise2 } from '@/graphics/glslNoise';
 import { SKY_CHUNK } from '../city/skyGlsl';
 
 /** Angular radii of the sun's and the moon's discs over the street (the window view's are drawn larger). */
-export const DOME_SUN_RADIUS = 0.02;
+const DOME_SUN_RADIUS = 0.02;
 export const DOME_MOON_RADIUS = 0.024;
 
 /*

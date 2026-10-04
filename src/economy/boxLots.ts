@@ -103,18 +103,13 @@ export function drawSealedLot(seed: string, pool: readonly Game[], owns: (id: st
   return { id: seed, label, hint, price: items.length * SEALED_LOT.perItem, items };
 }
 
-/** The games in a carton (each one's share of its price is what its receipt says). */
-export function gamesIn(lot: SealedLot): Game[] {
-  return lot.items.flatMap((i) => (i.kind === 'game' ? [i.game] : []));
-}
-
 /** What each game of `lot` cost, its share of the price. */
 export function shareOf(lot: Pick<SealedLot, 'price' | 'items'>): number {
   const games = lot.items.filter((i) => i.kind === 'game').length;
   return games ? Math.max(1, Math.round(lot.price / games)) : 0;
 }
 
-export function readCartonItem(value: unknown): CartonItem | null {
+function readCartonItem(value: unknown): CartonItem | null {
   if (typeof value !== 'object' || value === null) return null;
   const v = value as Record<string, unknown>;
   if (v.kind === 'game') {

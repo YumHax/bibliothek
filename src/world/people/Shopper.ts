@@ -14,7 +14,7 @@ export interface BrowseSpot {
   yaw: number;
 }
 
-export interface ShopperOptions {
+interface ShopperOptions {
   /** Whose passing to notice: the camera. */
   viewer: THREE.Object3D;
   /** Where they stop to look at the wares. */

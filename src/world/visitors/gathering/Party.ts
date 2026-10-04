@@ -25,7 +25,7 @@ export interface PartyMember {
 }
 
 /** What a gathering's own rules answer for each member (the rest of a visit's script is the host's). */
-export interface PartyScript {
+interface PartyScript {
   /** Just inside the front door, after their hello: a line (an open house's guest pays here). */
   enterLine(member: PartyMember): string;
   /** At a stop: what they look at and say. */

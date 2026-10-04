@@ -3,7 +3,7 @@ import { KEYS, PersistedStore, safeStorage } from '@/persistence';
 import type { GameSource } from './GameSource';
 
 /** The postman's rounds, in hours of the game's clock. */
-export const POST_ROUNDS = [10, 15];
+const POST_ROUNDS = [10, 15];
 /** An order takes at least this long (game hours) to come: the next round after that brings it. */
 const LEAD_HOURS = 2;
 /** Never further off than this (game hours): a clock put back on a reload must not lose a parcel for days. */
@@ -18,13 +18,13 @@ interface Posted {
 }
 
 /** What the post needs of the parcel: which games wait, and a word when the post brings some. */
-export interface PostDeliveries {
+interface PostDeliveries {
   isPending(id: string): boolean;
   setInPost(test: (id: string) => boolean): void;
   postChanged(): void;
 }
 
-export interface MailPostOptions {
+interface MailPostOptions {
   collection: GameSource;
   deliveries: PostDeliveries;
   /** The market calendar's in-game day (a day starts at midnight on the game's clock). */

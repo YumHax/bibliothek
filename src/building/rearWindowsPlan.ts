@@ -1,5 +1,3 @@
-import type { STORY } from '@/world/street/windowLife';
-
 /*
  * The building's windows at night, as data (`rearWindows.ts` plays them): which of our building's facades hold the
  * residents' flats (floor by floor, door by door along the face, `STAIRWELL_PLAN`'s landings: floor 5 is ours and Mrs
@@ -9,15 +7,13 @@ import type { STORY } from '@/world/street/windowLife';
  */
 
 /** A stretch of one facade whose windows are the flat behind door `i` (of every landing, by floor). */
-export interface ResidentStretch {
+interface ResidentStretch {
   facade: string;
   along: readonly [number, number];
   i: number;
   /** Floors it holds (1 the first .. 5 ours): the flats under ours have no door of the plan. */
   floors: readonly number[];
 }
-
-export type StoryName = keyof typeof STORY;
 
 /** A window across the courtyard with a life of its own: on `facade`, `floor`, the window nearest `at` (0..1 along the face). */
 export interface StoryWindow {

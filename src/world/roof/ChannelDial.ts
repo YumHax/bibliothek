@@ -10,7 +10,7 @@ import { Prop } from '../props/Prop';
 import { foundChannels, onChannels, showOn, type Channel } from './channels';
 import { onCoproChange } from '@/building/coproState';
 
-export interface ChannelDialOptions {
+interface ChannelDialOptions {
   /** The set it tunes (the collection room's TV). */
   tv: VideoScreen;
   /** The game day and the hour: what each channel shows now. */

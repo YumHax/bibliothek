@@ -188,7 +188,7 @@ export class TicketWheel extends TicketMachine {
     (this.button.material as THREE.MeshStandardMaterial).emissiveIntensity = hovered ? 0.8 : 0.3;
   }
 
-  dispose(): void {
+  override dispose(): void {
     super.dispose();
     this.unsubscribe();
   }
@@ -210,12 +210,12 @@ export class TicketWheel extends TicketMachine {
     return `${this.game.title} · insert a coin (${price}) · jackpot ${this.options.jackpot.value} tickets`;
   }
 
-  protected playingLabel(): string {
+  protected override playingLabel(): string {
     return this.spinning || this.landed !== null ? 'Round and round it goes…' : `${this.game.title} · ${keyOrUse(actionKeyLabel('fire'))} to spin · ${actionKeyLabel('walkAway')} walks away`;
   }
 
   /** A click on the wheel mid-play pulls it. */
-  protected clickWhilePlaying(): boolean {
+  protected override clickWhilePlaying(): boolean {
     if (!this.spinning && this.landed === null) this.fling();
     return true;
   }
@@ -249,7 +249,7 @@ export class TicketWheel extends TicketMachine {
   }
 
   /** A regular hit the jackpot: it is theirs, and it starts again. */
-  protected regularFinished(): void {
+  protected override regularFinished(): void {
     if (this.landed !== null && this.options.slices[this.landed]!.tickets === 'jackpot') this.options.jackpot.hit();
   }
 

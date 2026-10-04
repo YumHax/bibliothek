@@ -6,7 +6,7 @@ import type { Furniture } from '../Furniture';
 import { boxMesh, cylinderMesh, invisibleHitbox } from '../meshUtils';
 import { paint, standard, timber } from '../materials/palette';
 
-export interface BuyBackDeskOptions {
+interface BuyBackDeskOptions {
   /** Distance from the origin back to the wall the sign hangs on (room for the clerk in between). */
   wallBehind?: number;
 }

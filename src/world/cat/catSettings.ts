@@ -1,7 +1,7 @@
 import { KEYS, PersistedStore } from '@/persistence';
 import { COATS, DEFAULT_CAT_SETTINGS, type CatSettings, type CoatKind } from './types';
 
-export const CAT_STORAGE_KEY = KEYS.cat;
+const CAT_STORAGE_KEY = KEYS.cat;
 const NAME_MAX = 24;
 
 /**

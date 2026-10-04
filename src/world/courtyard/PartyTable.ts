@@ -12,7 +12,7 @@ const TABLE = { width: 2.0, depth: 0.8, height: 0.74 };
 const BOARD = timber(0x9a7a56, 0.7);
 const TRESTLE = timber(0x6a4e34, 0.75);
 
-export interface PartyTableOptions {
+interface PartyTableOptions {
   /** The tablecloth's colour; none: bare boards. */
   cloth?: number;
   /** Dishes on it (a dish each: its colour), along the table. */
@@ -54,7 +54,7 @@ export class PartyTable extends THREE.Group implements Furniture {
   }
 }
 
-export interface PartySaleTableOptions {
+interface PartySaleTableOptions {
   /** The panel the table opens (`WorldPanels.partySale`); none: nobody is buying. */
   panel?: ModalLike;
 }

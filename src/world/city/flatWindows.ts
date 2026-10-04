@@ -4,7 +4,7 @@ import type { ZoneId } from '../zoneIds';
 export type FlatRoomId = Extract<ZoneId, 'living' | 'kitchen' | 'bedroom' | 'bathroom' | 'annex'>;
 
 /** What the street sees of a room of the flat at night: its lamp's level (0..1) and how open its curtains are (0..1). */
-export interface FlatRoomLight {
+interface FlatRoomLight {
   readonly lampShown: number;
   readonly curtainsOpen: number;
 }

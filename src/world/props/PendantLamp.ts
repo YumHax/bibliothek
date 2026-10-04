@@ -4,7 +4,7 @@ import { paint, standard } from '../materials/palette';
 import { SwitchableLamp } from './SwitchableLamp';
 import { LAMP_GLOW } from '../lighting/lampColours';
 
-export interface PendantLampOptions {
+interface PendantLampOptions {
   /** Total hang from the ceiling to the bottom rim of the shade (m). */
   dropLength?: number;
   /** Starts lit? */

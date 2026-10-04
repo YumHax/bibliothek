@@ -25,7 +25,7 @@ type IdOf<Handles> = Extract<keyof Handles, string>;
  * throwaway copy of that later look for `World.prime` to compile with the scene's lights. The copy
  * is dropped, never disposed: disposing its materials would free the programs they linked.
  */
-export interface ShaderPrimer {
+interface ShaderPrimer {
   primeShaders(): THREE.Object3D;
 }
 

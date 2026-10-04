@@ -11,7 +11,7 @@ const STATE_PLAYING = 1;
 const STATE_BUFFERING = 3;
 
 /** What the embed tells its owner. */
-export interface YouTubeEvents {
+interface YouTubeEvents {
   /** The picture is running (first frame, or again after buffering). */
   onPlaying?(): void;
   /** The picture stalled to buffer (YouTube would show its spinner): the owner may cover it. */

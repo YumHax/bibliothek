@@ -154,7 +154,7 @@ export class ContactShadows {
     if (index === undefined) return;
     // The last blob moves into the freed slot.
     const lastIndex = this.owners.length - 1;
-    const last = this.owners[lastIndex];
+    const last = this.owners[lastIndex]!; // `item` holds a slot, so there is at least one owner
     if (index !== lastIndex) {
       this.mesh.getMatrixAt(lastIndex, this.matrix);
       this.mesh.setMatrixAt(index, this.matrix);

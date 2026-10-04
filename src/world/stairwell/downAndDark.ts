@@ -18,7 +18,7 @@ import { POWER_CUT_PLAN } from './powerCut/powerCutPlan';
 const ALSO_ON_CIRCUIT = ['annex', 'annexStudy', 'neighbourFlat', 'cellar', 'attic'];
 
 /** What the stairwell hands over: its parts, and the people on the stairs (the residents, the postman). */
-export interface StairParts {
+interface StairParts {
   stairs: Staircase;
   lift: Lift;
   lights: StairLights;

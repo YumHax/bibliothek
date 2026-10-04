@@ -27,7 +27,7 @@ export class RoofWind extends Voice {
     source.connect(this.band).connect(this.gust).connect(out);
   }
 
-  protected tick(ctx: AudioContext): void {
+  protected override tick(ctx: AudioContext): void {
     if (!this.band || !this.gust) return;
     const w = Math.max(0, Math.min(1, this.wind()));
     this.gust.gain.setTargetAtTime(CALM + (1 - CALM) * w, ctx.currentTime, 0.8);

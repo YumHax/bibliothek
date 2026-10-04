@@ -19,7 +19,7 @@ import { COURTYARD_YARD } from './outlookPlan';
 import { disposeOutlookScene, type OutlookContents } from './OutlookView';
 import type { HomeUpgrades } from '@/economy/HomeUpgrades';
 
-export interface StreetOutlookOptions {
+interface StreetOutlookOptions {
   dayNight: DayNight;
   /** Where the sun (the moon) is, as the window view has it (`Outdoors.lightDirection`). */
   lightDirection: (out: THREE.Vector3) => THREE.Vector3;
@@ -32,6 +32,8 @@ export interface StreetOutlookOptions {
   windowLife?: WindowLife;
   /** What the flat has bought: our balcony's plants and bistro set show as in the street (none: all shown). */
   upgrades?: HomeUpgrades;
+  /** Awaited between the build's steps (`OutlookView`'s idle moment): the street is not built in one freeze. */
+  between?: () => Promise<void>;
 }
 
 /** Real lights among the street lamps, following the ones nearest the window (none on low). */
@@ -53,8 +55,9 @@ const DETAIL_SCALE = { high: 1.35, medium: 1, low: 0.6 } as const;
  * (`Courtyard`, its chestnut planted with the street's trees). What only matters to someone standing in the street
  * (the people, the doors, the sounds, the shops' insides) is left out. Loaded in the street's chunk (a dynamic import).
  */
-export function buildStreetOutlook(camera: THREE.Camera, options: StreetOutlookOptions): OutlookContents {
+export async function buildStreetOutlook(camera: THREE.Camera, options: StreetOutlookOptions): Promise<OutlookContents> {
   const { dayNight, lightDirection, facades, windowLife, upgrades } = options;
+  const between = options.between ?? (() => Promise.resolve());
   const scene = new THREE.Scene();
   scene.name = 'StreetOutlook';
   const fog = new THREE.FogExp2(0x000000, 0);
@@ -73,10 +76,14 @@ export function buildStreetOutlook(camera: THREE.Camera, options: StreetOutlookO
   // lamps, trees (the courtyard's chestnut among them), parked and passing cars, furniture. No colliders, no manoeuvres.
   // RETRO GAMES' shelves in today's stock, as the street has them (`RetroLure`'s news), once drawn.
   const shopGoods = RETRO_NEWS.colors ? [...RETRO_NEWS.colors] : null;
+  await between();
   const { buildings } = buildStreetBase(add, { dayNight, facades: [...facades], detailScale: DETAIL_SCALE[QUALITY.level], shopGoods, ...(windowLife ? { windowLife } : {}) });
+  await between();
   buildStreetFronts(add, buildings.fronts, dayNight, upgrades ? { upgrades } : {});
+  await between();
   const traffic = add(new StreetTraffic());
   buildStreetFixtures(add, { dayNight, viewer: camera, traffic, lampLights: LAMP_LIGHTS[QUALITY.level], moreTrees: [COURTYARD_YARD.chestnut] });
+  await between();
   add(new Precipitation(dayNight));
   // RETRO GAMES' NEW IN banner on a fresh market day, seen from the flat (the street's own; the queue is people: not here).
   if (facades.some((spec) => spec.id === 'retro')) {
@@ -103,6 +110,7 @@ export function buildStreetOutlook(camera: THREE.Camera, options: StreetOutlookO
   return {
     scene,
     updatables,
+    parts: items,
     prepare(renderer, dt) {
       sinceReflected += dt;
       if (scene.environment && sinceReflected < REFLECT_EVERY) return;

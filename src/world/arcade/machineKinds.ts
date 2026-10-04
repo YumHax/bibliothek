@@ -30,7 +30,7 @@ export interface MachineContext {
 }
 
 /** A machine the player plays standing at it, that the crowd's regulars take too. */
-export type PhysicalMachine = Furniture & Station & ArcadeMachineLike;
+type PhysicalMachine = Furniture & Station & ArcadeMachineLike;
 
 /** The wiring of a ticket machine playing game `id`: its payout rate and its out-of-order days go by the id. */
 function ticketWiring(ctx: MachineContext, id: string): TicketMachineWiring {

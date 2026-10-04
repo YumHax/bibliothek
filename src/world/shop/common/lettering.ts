@@ -16,7 +16,7 @@ export const PRINT = FONT;
 /** A poster's bold condensed headline. */
 export const POSTER = `Impact, "Arial Narrow Bold", "Arial Narrow", ${FONT}`;
 
-export interface TextBlock {
+interface TextBlock {
   /** The lines, top first; the first may be set bigger (`firstScale`). */
   lines: readonly string[];
   x: number;

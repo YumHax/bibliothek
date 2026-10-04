@@ -8,7 +8,7 @@ import { HoverGlint } from './hoverGlint';
 import { captionName } from './SwingLeaf';
 import { playWoodKnock } from '@/audio/furnitureSounds';
 
-export interface SlideDrawerOptions {
+interface SlideDrawerOptions {
   /** Size of the drawer front. */
   width: number;
   height: number;

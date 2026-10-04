@@ -16,7 +16,7 @@ export const DEMO_W = 256;
 export const DEMO_H = 240;
 
 /** What the demo reads each frame (the pad, mapped by `MoonpostProgram`). */
-export interface DemoControls {
+interface DemoControls {
   left: boolean;
   right: boolean;
   up: boolean;

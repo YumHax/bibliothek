@@ -8,7 +8,7 @@ import type { StockItem } from './StockItem';
 import { CARD_MEMORY_DAYS, FOR_SALE_AD, WANTED_AD, shopPrice } from './pricing';
 import { seeded } from './seeded';
 
-export const NOTICES_STORAGE_KEY = KEYS.notices;
+const NOTICES_STORAGE_KEY = KEYS.notices;
 
 /** A collector's card: they want `game` and pay `pay` coins for it, until the card comes down. */
 export interface WantedAd {

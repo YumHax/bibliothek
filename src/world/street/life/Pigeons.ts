@@ -5,7 +5,7 @@ import type { Furniture } from '../../Furniture';
 import type { DayNight } from '../../props/DayNight';
 import { WALKABLE, type Vec2 } from '../streetPlan';
 
-export interface PigeonsOptions {
+interface PigeonsOptions {
   /** The flocks: where each pecks about and how many birds it has. */
   flocks: readonly { at: Vec2; count: number }[];
   viewer: THREE.Object3D;

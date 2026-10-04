@@ -20,7 +20,7 @@ interface BoardMatch {
 }
 
 /** The tournament as the board reads it. */
-export interface TournamentSource {
+interface TournamentSource {
   view(): {
     on: boolean;
     gameId: string;
@@ -36,7 +36,7 @@ export interface TournamentSource {
   subscribe(cb: () => void): () => void;
 }
 
-export interface TournamentBoardOptions {
+interface TournamentBoardOptions {
   tournament: TournamentSource;
   /** Coins to sign the sheet. */
   entry: number;

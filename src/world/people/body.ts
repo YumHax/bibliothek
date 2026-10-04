@@ -14,7 +14,6 @@ import type { PersonLook } from './looks';
  */
 
 export const REFERENCE_HEIGHT = 1.72;
-export const HIP_Y = 0.9;
 export const THIGH_L = 0.42;
 export const SHIN_L = 0.4;
 /** Torso pivot (the waist) and the span of the trunk. */
@@ -33,16 +32,15 @@ export const NECK_PIVOT = new THREE.Vector3(0, 1.55, -0.012);
 /** Floor below the ankle joint. */
 export const ANKLE_Y = 0.08;
 /**
- * The bones the body bends at, over the floor: the pelvis turns about the hip joints' line, the
- * lower back above the waist, the chest at the ribs (the trunk bends between them, `SpineSkin`).
+ * The bones the body bends at, over the floor: the pelvis turns about the hip joints' line (the hip
+ * joints themselves sit on it, `rig.ts`), the lower back above the waist, the chest at the ribs (the
+ * trunk bends between them, `SpineSkin`).
  */
-export const PELVIS_Y = HIP_Y;
+export const PELVIS_Y = 0.9;
 export const LUMBAR_Y = 1.0;
 export const CHEST_Y = 1.2;
 /** Where a collarbone turns (the top of the breastbone, a little to its side), from the centre line. */
 export const CLAVICLE = { x: 0.03, y: SHOULDER_Y + 0.025, z: 0.025 } as const;
-/** From the wrist to the middle of the palm (the point a hand is put on), times the hand's size. */
-export const PALM_REACH = 0.05;
 /** The shoe, from the ankle joint: the heel's back edge and the ball of the foot (where it rolls), ahead (+z). */
 export const HEEL_Z = -0.06;
 export const BALL_Z = 0.14;
@@ -73,7 +71,7 @@ const BACK: Keys = TRUNK.map(([y, , , b]) => [y, b]);
 /** Superellipse exponent of the trunk's rings: a little squarer than an ellipse. */
 const RING = 2.4;
 
-export interface TrunkSection {
+interface TrunkSection {
   halfWidth: number;
   front: number;
   back: number;

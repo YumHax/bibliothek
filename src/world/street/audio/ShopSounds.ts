@@ -11,7 +11,7 @@ import { BarMusic } from './BarMusic';
 import { SoundGraph } from './soundGraph';
 import { StreetEar } from './streetEar';
 
-export interface ShopSoundsOptions {
+interface ShopSoundsOptions {
   /** The ears (the camera). */
   listener: THREE.Object3D;
   /** How many sit at each terrace (`Terraces`): the chatter follows who is there; else the plan's count while the weather and hours say it is out. */

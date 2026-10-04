@@ -4,7 +4,7 @@ import type { SessionActions } from '@/game/SessionActions';
 import type { Doorway } from '../Room';
 import { Door } from '../props/Door';
 
-export interface FrontDoorOptions {
+interface FrontDoorOptions {
   collisions: Collisions;
   leafColor?: number;
   /** Asked when the shut door is clicked from inside: why it will not open (the keys are in the bowl), or null. */

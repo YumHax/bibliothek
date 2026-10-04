@@ -33,8 +33,8 @@ export interface KitchenRunOptions {
 }
 
 /** Standard fitted-kitchen dimensions: 0.9 m worktop, 0.6 m deep, on a recessed plinth. */
-export const WORKTOP_HEIGHT = 0.9;
-export const RUN_DEPTH = 0.6;
+const WORKTOP_HEIGHT = 0.9;
+const RUN_DEPTH = 0.6;
 const WORKTOP_THICKNESS = 0.04;
 /** The worktop overhangs the doors by this much. */
 const OVERHANG = 0.02;

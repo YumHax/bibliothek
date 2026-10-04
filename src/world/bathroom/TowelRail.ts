@@ -4,7 +4,7 @@ import { paint } from '../materials/palette';
 import { CHROME } from '../props/bathroomMaterials';
 import { fabric } from '@/world/materials/finishes';
 
-export interface TowelRailOptions {
+interface TowelRailOptions {
   /** Length of the rail. Default 0.36. */
   width?: number;
   /** Colours of the towels folded over it, left to right; as many towels as colours. Default sage and terracotta. */

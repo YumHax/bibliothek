@@ -8,7 +8,7 @@ import { whiteBalance } from './whiteBalance';
 import { GlassMask } from './glassMask';
 import { AO_FRAGMENT, AO_BLUR_FRAGMENT, DOF_FRAGMENT, LUMINANCE_FRAGMENT, METER_DOWNSAMPLE_FRAGMENT, OUTPUT_FRAGMENT, QUAD_VERTEX } from './postFxShaders';
 
-export interface PostFxOptions {
+interface PostFxOptions {
   /** Distance (metres) of what the player is reading up close, or null: the background blurs beyond it. */
   focus?: () => number | null;
 }
@@ -211,18 +211,19 @@ export class PostFx implements FramePipeline, Updatable {
         },
       });
       // The occlusion darkens the working copy (the prep pass), before the bloom.
-      this.prepMaterial.uniforms.tAO.value = this.aoBlurTarget.texture;
+      // Every uniform named below is declared by the material's own table in this file: `!` says so.
+      this.prepMaterial.uniforms.tAO!.value = this.aoBlurTarget.texture;
       this.glass = new GlassMask(this.sceneTarget.depthTexture!, aoSize.w, aoSize.h);
-      this.prepMaterial.uniforms.tGlass.value = this.glass.texture;
-      this.prepMaterial.uniforms.aoTexel.value.set(1 / aoSize.w, 1 / aoSize.h);
+      this.prepMaterial.uniforms.tGlass!.value = this.glass.texture;
+      this.prepMaterial.uniforms.aoTexel!.value.set(1 / aoSize.w, 1 / aoSize.h);
     }
 
     if (quality.bloom) {
       // The pass halves the size it is given for its first level.
       this.bloom = new UnrealBloomPass(new THREE.Vector2(w, h), NEUTRAL_LOOK.bloom, BLOOM_RADIUS, BLOOM_THRESHOLD);
       const highPass = this.bloom.highPassUniforms as Record<string, THREE.IUniform<number>>;
-      highPass.smoothWidth.value = BLOOM_KNEE;
-      this.bloomThreshold = highPass.luminosityThreshold;
+      highPass.smoothWidth!.value = BLOOM_KNEE;
+      this.bloomThreshold = highPass.luminosityThreshold!;
       // Add the glow's colour but leave the alpha alone: over a cut-out (a video playing) the glow
       // lies over the picture instead of turning the hole opaque.
       const blend = this.bloom.blendMaterial;
@@ -320,7 +321,7 @@ export class PostFx implements FramePipeline, Updatable {
     const round = (v: number, step: number) => Math.round(v / step) * step;
     const parts = [`brightness(${round(Math.sqrt(exposure), 0.02).toFixed(2)})`];
     if (this.quality.grade) parts.push(`contrast(${round(this.look.contrast, 0.01).toFixed(2)})`, `saturate(${round(this.look.saturation, 0.01).toFixed(2)})`);
-    const radius = this.dofAmount < 0.01 ? 0 : this.dofAmount * (this.prepMaterial.uniforms.maxRadius.value as number);
+    const radius = this.dofAmount < 0.01 ? 0 : this.dofAmount * (this.prepMaterial.uniforms.maxRadius!.value as number);
     // A disc of radius r reads like a Gaussian of about r / 2; the canvas's pixels are CSS pixels x the ratio.
     const blur = round(radius / 2 / Math.max(pixelRatio, 0.1), 0.25);
     if (blur > 0) parts.push(`blur(${blur.toFixed(2)}px)`);
@@ -336,8 +337,8 @@ export class PostFx implements FramePipeline, Updatable {
     const wanted = lens ? (lens.blur > 0 ? 1 : 0) : focus === null ? 0 : 1;
     // A photographer's lens follows its ring at once; the reading eye eases in and out.
     this.dofAmount = lens ? wanted : this.dofAmount + (wanted - this.dofAmount) * (1 - Math.exp(-DOF_RATE * dt));
-    if (focus !== null) this.prepMaterial.uniforms.focus.value = focus;
-    this.prepMaterial.uniforms.maxRadius.value = lens && lens.blur > 0 ? lens.blur : DOF_MAX_RADIUS;
+    if (focus !== null) this.prepMaterial.uniforms.focus!.value = focus;
+    this.prepMaterial.uniforms.maxRadius!.value = lens && lens.blur > 0 ? lens.blur : DOF_MAX_RADIUS;
 
     // The eye adapts slowly, faster to glare than to the dark.
     const tau = this.targetExposure < this.exposure ? ADAPT_DARKER_S : ADAPT_BRIGHTER_S;
@@ -353,7 +354,7 @@ export class PostFx implements FramePipeline, Updatable {
     renderer.setRenderTarget(this.sceneTarget);
     renderer.render(scene, camera);
     const fog = scene.fog as THREE.FogExp2 | null;
-    this.prepMaterial.uniforms.fogDensity.value = fog && (fog as THREE.FogExp2).isFogExp2 ? fog.density : 0;
+    this.prepMaterial.uniforms.fogDensity!.value = fog && (fog as THREE.FogExp2).isFogExp2 ? fog.density : 0;
 
     if (this.aoMaterial && this.aoBlurMaterial && this.aoTarget && this.aoBlurTarget) {
       this.pass(this.aoMaterial, this.aoTarget);
@@ -363,7 +364,7 @@ export class PostFx implements FramePipeline, Updatable {
 
     // The scene's MSAA buffer is resolved and gone: everything after works on this copy (occluded, maybe blurred).
     const prep = this.prepMaterial.uniforms;
-    prep.amount.value = this.dofAmount < 0.01 ? 0 : this.dofAmount;
+    prep.amount!.value = this.dofAmount < 0.01 ? 0 : this.dofAmount;
     const colorViewport = this.colorTarget.viewport;
     if (this.renderScale < 1) {
       // The bloom works on the whole target: what lies beyond the frame's share must be black, not last frame's glow.
@@ -387,11 +388,11 @@ export class PostFx implements FramePipeline, Updatable {
     this.meter();
 
     const out = this.outputMaterial.uniforms;
-    out.exposure.value = exposure;
+    out.exposure!.value = exposure;
     // How much the frame is stretched to the screen: the pixel ratio's cap (a Retina screen at 1.5) and the adaptive scale.
     const stretch = window.devicePixelRatio / Math.max(0.1, renderer.getPixelRatio() * this.renderScale);
-    out.sharpen.value = THREE.MathUtils.clamp((this.quality.fxaa ? SHARPEN_AFTER_FXAA : 0) + Math.max(0, stretch - 1) * SHARPEN_PER_STRETCH, 0, 1);
-    out.time.value = this.time;
+    out.sharpen!.value = THREE.MathUtils.clamp((this.quality.fxaa ? SHARPEN_AFTER_FXAA : 0) + Math.max(0, stretch - 1) * SHARPEN_PER_STRETCH, 0, 1);
+    out.time!.value = this.time;
     renderer.setRenderTarget(null);
     this.quad.material = this.outputMaterial;
     this.quad.render(renderer);
@@ -444,14 +445,14 @@ export class PostFx implements FramePipeline, Updatable {
     const { x: w, y: h } = this.size;
     this.sceneTarget.setSize(w, h);
     this.colorTarget.setSize(w, h);
-    this.prepMaterial.uniforms.texel.value.set(1 / w, 1 / h);
-    this.outputMaterial.uniforms.aspect.value = w / h;
-    this.outputMaterial.uniforms.texel.value.set(1 / w, 1 / h);
+    this.prepMaterial.uniforms.texel!.value.set(1 / w, 1 / h);
+    this.outputMaterial.uniforms.aspect!.value = w / h;
+    this.outputMaterial.uniforms.texel!.value.set(1 / w, 1 / h);
     if (this.meterQuarter && this.meterSixteenth && this.meterLogMaterial && this.meterAverageMaterial) {
       this.meterQuarter.setSize(Math.max(1, Math.ceil(w / 4)), Math.max(1, Math.ceil(h / 4)));
       this.meterSixteenth.setSize(Math.max(1, Math.ceil(w / 16)), Math.max(1, Math.ceil(h / 16)));
-      this.meterLogMaterial.uniforms.sourceTexel.value.set(1 / w, 1 / h);
-      this.meterAverageMaterial.uniforms.sourceTexel.value.set(1 / this.meterQuarter.width, 1 / this.meterQuarter.height);
+      this.meterLogMaterial.uniforms.sourceTexel!.value.set(1 / w, 1 / h);
+      this.meterAverageMaterial.uniforms.sourceTexel!.value.set(1 / this.meterQuarter.width, 1 / this.meterQuarter.height);
     }
     if (this.aoTarget && this.aoBlurTarget && this.aoMaterial && this.aoBlurMaterial) {
       const aw = Math.max(1, Math.round(w / 2));
@@ -459,10 +460,10 @@ export class PostFx implements FramePipeline, Updatable {
       this.aoTarget.setSize(aw, ah);
       this.aoBlurTarget.setSize(aw, ah);
       this.glass?.setSize(aw, ah);
-      this.aoMaterial.uniforms.depthTexel.value.set(1 / w, 1 / h);
-      this.aoMaterial.uniforms.aspect.value = w / h;
-      this.aoBlurMaterial.uniforms.aoTexel.value.set(1 / aw, 1 / ah);
-      this.prepMaterial.uniforms.aoTexel.value.set(1 / aw, 1 / ah);
+      this.aoMaterial.uniforms.depthTexel!.value.set(1 / w, 1 / h);
+      this.aoMaterial.uniforms.aspect!.value = w / h;
+      this.aoBlurMaterial.uniforms.aoTexel!.value.set(1 / aw, 1 / ah);
+      this.prepMaterial.uniforms.aoTexel!.value.set(1 / aw, 1 / ah);
     }
     this.bloom?.setSize(w, h);
     // `setSize` resets each target's viewport to the whole of it.
@@ -480,12 +481,12 @@ export class PostFx implements FramePipeline, Updatable {
     if (!camera) return;
     for (const material of [this.prepMaterial, this.aoMaterial, this.aoBlurMaterial]) {
       if (!material) continue;
-      material.uniforms.cameraNear.value = camera.near;
-      material.uniforms.cameraFar.value = camera.far;
+      material.uniforms.cameraNear!.value = camera.near;
+      material.uniforms.cameraFar!.value = camera.far;
     }
     if (this.aoMaterial) {
-      this.aoMaterial.uniforms.projection.value.copy(camera.projectionMatrix);
-      this.aoMaterial.uniforms.projectionInverse.value.copy(camera.projectionMatrixInverse);
+      this.aoMaterial.uniforms.projection!.value.copy(camera.projectionMatrix);
+      this.aoMaterial.uniforms.projectionInverse!.value.copy(camera.projectionMatrixInverse);
     }
   }
 
@@ -521,9 +522,10 @@ export class PostFx implements FramePipeline, Updatable {
         // Centre-weighted, like a camera's meter; cut-out pixels (a video playing) carry no weight.
         const dx = (x + 0.5) / METER_SIZE - 0.5;
         const dy = (y + 0.5) / METER_SIZE - 0.5;
-        const w = (px[i + 1] / 255) * (1 - 1.2 * Math.hypot(dx, dy));
+        // 16 x 16 RGBA pixels: `i` stays inside the buffer.
+        const w = (px[i + 1]! / 255) * (1 - 1.2 * Math.hypot(dx, dy));
         if (w <= 0) continue;
-        sum += ((px[i] / 255) * 18 - 14) * w;
+        sum += ((px[i]! / 255) * 18 - 14) * w;
         weight += w;
       }
     }
@@ -549,15 +551,15 @@ export class PostFx implements FramePipeline, Updatable {
 
     const grade = this.quality.grade;
     const u = this.outputMaterial.uniforms;
-    u.contrast.value = grade ? look.contrast : 1;
-    u.saturation.value = grade ? look.saturation : 1;
+    u.contrast!.value = grade ? look.contrast : 1;
+    u.saturation!.value = grade ? look.saturation : 1;
     const temperature = grade ? look.temperature : 0;
     if (temperature !== this.lastTemperature) {
       this.lastTemperature = temperature;
-      whiteBalance(temperature, u.whiteBalance.value);
+      whiteBalance(temperature, u.whiteBalance!.value);
     }
-    u.vignette.value = grade ? look.vignette : 0;
-    u.grain.value = grade ? look.grain : 0;
+    u.vignette!.value = grade ? look.vignette : 0;
+    u.grain!.value = grade ? look.grain : 0;
     if (!grade) {
       this.lookColors.shadows.setRGB(0, 0, 0);
       this.lookColors.highlights.setRGB(1, 1, 1);

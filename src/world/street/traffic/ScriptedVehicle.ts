@@ -15,7 +15,7 @@ export interface CollisionSet {
   remove(box: THREE.Box3): void;
 }
 
-export interface ScriptedVehicleOptions {
+interface ScriptedVehicleOptions {
   traffic: StreetTraffic;
   /** The player (the camera): drivers stop for them. */
   viewer: THREE.Object3D;

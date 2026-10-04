@@ -19,7 +19,7 @@ import type { Updatable } from '@/core/Engine';
 export const MATERIAL_UNITS = 6;
 
 /** How many lights of each kind the scene draws (visible down their whole parent chain), and how many cast shadows. */
-export interface LightCount {
+interface LightCount {
   point: number;
   spot: number;
   directional: number;
@@ -39,7 +39,7 @@ type AnyLight = THREE.Light & {
 };
 
 /** The lights `root` draws (`traverseVisible`: a hidden parent hides its lights from the renderer too). */
-export function drawnLights(root: THREE.Object3D): THREE.Light[] {
+function drawnLights(root: THREE.Object3D): THREE.Light[] {
   const lights: THREE.Light[] = [];
   root.traverseVisible((obj) => {
     if ((obj as THREE.Light).isLight) lights.push(obj as THREE.Light);

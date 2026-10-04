@@ -1,7 +1,7 @@
 import { escapeHtml } from './html';
 
 /** Lower-case, strip diacritics and collapse whitespace so "Pokémon" matches "pokemon". */
-export function normalize(text: string): string {
+function normalize(text: string): string {
   return text
     .normalize('NFD')
     .replace(/[̀-ͯ]/g, '')
@@ -10,7 +10,7 @@ export function normalize(text: string): string {
     .trim();
 }
 
-export interface FuzzyMatch {
+interface FuzzyMatch {
   /** Higher is better; 0 means no match. */
   score: number;
   /** Indices of the matched characters in the *original* text (for highlighting). */

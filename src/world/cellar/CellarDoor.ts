@@ -8,7 +8,7 @@ import { invisibleHitbox } from '../meshUtils';
 import { Prop } from '../props/Prop';
 
 /** What the door says while the player has no key, and its caption either way. */
-export interface CellarDoorText {
+interface CellarDoorText {
   label: string;
   locked: string;
 }

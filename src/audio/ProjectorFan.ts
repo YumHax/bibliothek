@@ -29,12 +29,12 @@ export class ProjectorFan extends Voice {
     this.running = running;
   }
 
-  setLevel(level: number): void {
+  override setLevel(level: number): void {
     this.where = level;
     super.setLevel(level * this.spin);
   }
 
-  update(dt: number): void {
+  override update(dt: number): void {
     const target = this.running ? 1 : 0;
     if (this.spin !== target) {
       this.spin = this.running ? Math.min(1, this.spin + dt / SPIN_UP_S) : Math.max(0, this.spin - dt / WIND_DOWN_S);
@@ -59,7 +59,7 @@ export class ProjectorFan extends Voice {
   }
 
   /** The pitch follows the speed: a fan winding down drops as it slows. */
-  protected tick(ctx: AudioContext): void {
+  protected override tick(ctx: AudioContext): void {
     const speed = 0.35 + 0.65 * this.spin;
     this.blade?.frequency.setTargetAtTime(BLADE_HZ * speed, ctx.currentTime, 0.1);
     this.air?.frequency.setTargetAtTime(AIR_HZ * speed, ctx.currentTime, 0.1);

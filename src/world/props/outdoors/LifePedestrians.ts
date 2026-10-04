@@ -67,7 +67,8 @@ export class Pedestrians implements LifeLayer {
 
   paint({ place, color }: AtlasPens): void {
     for (let variant = 0; variant < PERSON_VARIANTS; variant++) {
-      const look: WalkerLook = { shirt: SHIRTS[variant], trousers: pick(this.random, TROUSERS), skin: pick(this.random, SKINS), hair: pick(this.random, HAIRS), umbrella: UMBRELLAS[variant] };
+      // SHIRTS and UMBRELLAS hold one entry per variant.
+      const look: WalkerLook = { shirt: SHIRTS[variant]!, trousers: pick(this.random, TROUSERS), skin: pick(this.random, SKINS), hair: pick(this.random, HAIRS), umbrella: UMBRELLAS[variant]! };
       this.personCells.push(
         [false, true].map((umbrella) =>
           [0, 1].map((pose) => {
@@ -132,10 +133,11 @@ export class Pedestrians implements LifeLayer {
           w.dir = -w.dir as 1 | -1;
           w.s = THREE.MathUtils.clamp(w.s, 0, w.path.length - 1);
         }
+        // `s` is clamped to the path above: both samples are on it.
         const i = Math.floor(w.s);
         const t = w.s - i;
-        const [x0, z0] = w.path[i];
-        const [x1, z1] = w.path[Math.min(i + 1, w.path.length - 1)];
+        const [x0, z0] = w.path[i]!;
+        const [x1, z1] = w.path[Math.min(i + 1, w.path.length - 1)]!;
         const len = Math.hypot(x1 - x0, z1 - z0) || 1;
         x = x0 + (x1 - x0) * t;
         z = z0 + (z1 - z0) * t;
@@ -169,7 +171,7 @@ export class Pedestrians implements LifeLayer {
       this.barkTimer = between(this.random, BARK_EVERY[0], BARK_EVERY[1]);
       if (this.barking > 0) {
         // `pick` over the dogs out this frame.
-        const [bx, bz] = this.dogsOut[Math.min(this.barking - 1, Math.floor(this.random() * this.barking))];
+        const [bx, bz] = this.dogsOut[Math.min(this.barking - 1, Math.floor(this.random() * this.barking))]!; // `barking` dogs are out
         this.events.bark.x = bx;
         this.events.bark.z = bz;
         this.events.barks++;
@@ -180,7 +182,7 @@ export class Pedestrians implements LifeLayer {
   /** A walker at (x, z) heading along (dx, dz) (a unit vector on the ground), with their umbrella up if it rains and their dog ahead. */
   private pushWalker(push: Push, w: Walker, x: number, z: number, alpha: number, umbrella: boolean, dx: number, dz: number): void {
     const pose = Math.floor(w.poseClock / 0.32) % 2;
-    const cell = this.personCells[w.variant][umbrella ? 1 : 0][pose];
+    const cell = this.personCells[w.variant]![umbrella ? 1 : 0]![pose]!; // a variant x umbrella or not x two poses, painted in `paint`
     const d = Math.hypot(x, z);
     const a = azimuthOf(x, z);
     const halfWidth = ((PERSON_CELL.w / FIGURE_SCALE) * 0.5) / d;
@@ -193,7 +195,7 @@ export class Pedestrians implements LifeLayer {
     const dd = Math.hypot(gx, gz);
     const da = azimuthOf(gx, gz);
     const across = dx * Math.cos(da) - dz * Math.sin(da); // > 0: moving towards +azimuth
-    const dogCell = this.dogCells[w.dog][across >= 0 ? 0 : 1][pose];
+    const dogCell = this.dogCells[w.dog]![across >= 0 ? 0 : 1]![pose]!; // a breed x two facings x two poses, painted in `paint`
     const half = (dogCell.w / DOG.scale / 2) / dd;
     const m = 2 / DOG.scale;
     push([azimuthX(da - half), heightY(DOG.height + m, dd), azimuthX(da + half), heightY(-m, dd)], dogCell, dd, alpha);

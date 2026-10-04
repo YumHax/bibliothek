@@ -4,12 +4,12 @@ import type { BrowseSpot } from '../people/Shopper';
 import type { Furniture } from '../Furniture';
 
 /** A shopper as the rivals see them: where they browse, and the moment they buy. */
-export interface RivalShopper {
+interface RivalShopper {
   readonly browsing: BrowseSpot | null;
   buy(): void;
 }
 
-export interface RivalBuyersOptions {
+interface RivalBuyersOptions {
   shoppers: readonly RivalShopper[];
   /** Seconds between two purchases on average, per shopper browsing. */
   meanSeconds: number;

@@ -17,7 +17,7 @@ const SIGN_MIN_PX = 620;
 const SIGN_PAPER = '#f4ecd8';
 const SIGN_INK = '#2a1a10';
 
-export interface StallSignOptions {
+interface StallSignOptions {
   /** Pixels per metre: the sign's size in the world (MarketStall's is 1000, a small shop card more). */
   pxPerMetre?: number;
   /** A frame all round in this colour (the glass case's brass) instead of the two accent bands only. */
@@ -25,7 +25,7 @@ export interface StallSignOptions {
 }
 
 /** A painted sign as wide as its text needs: its texture and its size in metres. */
-export interface StallSign {
+interface StallSign {
   map: THREE.Texture;
   width: number;
   height: number;
@@ -103,10 +103,4 @@ export function centreOutRow(n: number, pitch: number): number[] {
 /** `n` centres `pitch` apart about x = 0, left to right. */
 export function evenRow(n: number, pitch: number): number[] {
   return Array.from({ length: n }, (_, i) => (i - (n - 1) / 2) * pitch);
-}
-
-/** A mesh the crosshair ray passes straight through (glass in front of something clickable). */
-export function unclickable<T extends THREE.Object3D>(object: T): T {
-  object.raycast = () => {};
-  return object;
 }

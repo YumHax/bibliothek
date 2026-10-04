@@ -6,14 +6,14 @@ import { startBuzz } from './doorSounds';
 import type { Airlock } from './Airlock';
 
 /** Whoever walks through: moved to the twin (feet on its floor), turned by the twins' difference in yaw. */
-export interface AirlockTraveller {
+interface AirlockTraveller {
   setPosition(x: number, z: number, feet?: number): void;
   getLook(): { yaw: number; pitch: number };
   setLook(yaw: number, pitch: number): void;
 }
 
 /** What a crossing needs of the rest of the game (`main.ts` hands it over once, `connect`). */
-export interface AirlockDeps {
+interface AirlockDeps {
   /** The eye: where the player stands in the sas. */
   camera: THREE.Object3D;
   player: AirlockTraveller;

@@ -28,7 +28,7 @@ const IMAGES = new PoliteFetcher({
   userAgent: 'bibliothek (game collection room; box art cache)',
 });
 
-export interface ScanRequest {
+interface ScanRequest {
   kind: ScanKind;
   uuid: string;
   ext: 'png' | 'jpg';

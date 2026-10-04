@@ -1,5 +1,5 @@
 import type { RoomOptions } from '../Room';
-import { STAIRWELL_PLAN, STOREY, STOREYS, landingY } from '../stairwell/stairwellPlan';
+import { STAIRWELL_PLAN, STOREYS, landingY } from '../stairwell/stairwellPlan';
 
 /*
  * THE ATTIC: the building's sixth floor under the slate mansard (our building's roof, `facadeStyle`
@@ -136,12 +136,9 @@ export const ATTIC_PLAN = {
 };
 
 /** The floor index of a name on the panel (`STAIRWELL_PLAN.floorNames`), or -1. */
-export function floorIndex(name: string): number {
+function floorIndex(name: string): number {
   return STAIRWELL_PLAN.floorNames.indexOf(name);
 }
 
 /** The lift's code as the floors it presses (0 = our landing … `STOREYS` = the ground floor). */
 export const LIFT_CODE: readonly number[] = ATTIC_PLAN.liftCode.floors.map(floorIndex).filter((k) => k >= 0 && k <= STOREYS);
-
-/** The attic's floor height over our landing (world): the climb goes this far, but the view goes dark first. */
-export const ATTIC_RISE = STOREY;

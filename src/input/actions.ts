@@ -48,14 +48,14 @@ export type ActionContext =
   /** Carrying a piece of furniture about the room. */
   | 'furnishing';
 
-export interface TouchSpec {
+interface TouchSpec {
   label: string;
   title: string;
   /** Position in the on-screen action bar, left to right. */
   slot: number;
 }
 
-export interface ActionSpec {
+interface ActionSpec {
   codes: readonly string[];
   context: ActionContext;
   /** What it does, for whoever reads the table. */

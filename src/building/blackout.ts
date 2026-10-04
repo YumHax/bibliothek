@@ -23,7 +23,7 @@ const FUSE_HOLDS_S = 40;
 const AUTO_RESTORE_S = 420;
 
 /** What the blackout reads of the world: the weather, the clock, the day. */
-export interface BlackoutInputs {
+interface BlackoutInputs {
   weatherKind(): string;
   /** The weather's strike count: a new strike is the moment the power goes. */
   strikes(): number;
@@ -34,7 +34,7 @@ export interface BlackoutInputs {
 }
 
 /** What resetting the fuse did. */
-export type FuseOutcome = 'restored' | 'trips' | 'on';
+type FuseOutcome = 'restored' | 'trips' | 'on';
 
 const store = new PersistedStore<{ day: number }>({
   key: KEYS.blackout,

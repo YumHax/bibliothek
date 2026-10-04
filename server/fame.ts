@@ -43,7 +43,7 @@ const CACHE_CONTROL = 'public, max-age=86400, s-maxage=604800';
 const MAX_MEMORY_ENTRIES = 2000;
 
 /** What the API answers: `views` is the average monthly page views of `article`, null when Wikipedia has no article. */
-export interface Fame {
+interface Fame {
   views: number | null;
   article?: string;
 }
@@ -209,7 +209,7 @@ const NUMERAL = /^(\d+|i{1,3}|iv|vi{0,3}|ix|x{1,2})$/;
  * predecessor never stands in). Among them the closest title wins, not the search rank: Wikipedia
  * ranks "Super Mario 64 DS" above "Super Mario 64", and words the game does not have cost points.
  */
-export function pickArticle(title: string, hits: SearchPage[]): string | null {
+function pickArticle(title: string, hits: SearchPage[]): string | null {
   const wanted = significantTokens(title);
   if (wanted.length === 0) return null;
   const numerals = wanted.filter((t) => NUMERAL.test(t));
@@ -262,7 +262,7 @@ async function monthlyViews(article: string, deadline: number): Promise<number> 
 }
 
 /** `YYYYMM01` bounds of the `count` complete months before the current one. */
-export function lastFullMonths(now: Date, count: number): { start: string; end: string } {
+function lastFullMonths(now: Date, count: number): { start: string; end: string } {
   const first = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - count, 1));
   const last = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1));
   const stamp = (d: Date): string => `${d.getUTCFullYear()}${String(d.getUTCMonth() + 1).padStart(2, '0')}01`;

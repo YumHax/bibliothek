@@ -41,7 +41,7 @@ export class Piano extends Prop implements Interactable {
     this.hitboxes = [hit];
   }
 
-  get footprint(): THREE.Box3 {
+  override get footprint(): THREE.Box3 {
     return new THREE.Box3(new THREE.Vector3(-0.73, 0, 0), new THREE.Vector3(0.73, 1.22, 0.78));
   }
 
@@ -96,7 +96,7 @@ export class Vectrex extends Prop implements Interactable {
     this.hitboxes = [hit];
   }
 
-  get footprint(): THREE.Box3 {
+  override get footprint(): THREE.Box3 {
     return new THREE.Box3(new THREE.Vector3(-0.35, 0, -0.23), new THREE.Vector3(0.35, 0.75, 0.23));
   }
 
@@ -122,7 +122,7 @@ export class DogBasket extends Prop {
     this.add(cylinderMesh(0.09, 0.05, standard({ color: 0xb8bcc2, metalness: 0.6, roughness: 0.35 }), { x: 0.45, y: 0.025, z: 0.15 }, { radiusBottom: 0.07, segments: 16 }));
   }
 
-  get footprint(): THREE.Box3 {
+  override get footprint(): THREE.Box3 {
     return new THREE.Box3(new THREE.Vector3(-0.35, 0, -0.35), new THREE.Vector3(0.35, 0.15, 0.35));
   }
 }

@@ -27,7 +27,8 @@ const PORTAL_HALF_DEPTH = 0.15;
  */
 export function furnishBalcony(zone: Zone, { sky, home: { upgrades, furnishings } }: BuildContext): ZoneHandle {
   const { width, depth } = plan.room;
-  const doorway = plan.room.doorways![0];
+  const doorway = plan.room.doorways?.[0];
+  if (!doorway) throw new Error('[balcony] the plan has no doorway (the glazed door back into the flat)');
   zone.place(new BalconySlab({ width, depth, thickness: plan.slab.thickness, lip: plan.slab.lip, railHeight: plan.railing.height, barSpacing: plan.railing.barSpacing }), new THREE.Vector3());
 
   zone.placeAt(new BalconyDoor({ width: doorway.width, height: doorway.height, collisions: zone.collisions }), { wall: 'back', along: doorway.along, y: 0 });

@@ -6,7 +6,7 @@ export type OfferKind = keyof typeof NEGOTIATION.offers;
 export const OFFER_KINDS: readonly OfferKind[] = ['cheeky', 'fair', 'polite'];
 
 /** What sways the stallholder today, besides the copy itself. */
-export interface NegotiationMood {
+interface NegotiationMood {
   day: number;
   /** Insulting offers made at this stall today. */
   soured: number;

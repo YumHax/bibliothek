@@ -3,7 +3,7 @@ import { escapeHtml } from '../html';
 import { ModalPanel } from '../ModalPanel';
 import './household.css';
 
-export interface WardrobeDeps {
+interface WardrobeDeps {
   /** What the unlocks are judged on, now. */
   facts(): OutfitFacts;
   worn(): OutfitId;
@@ -33,7 +33,7 @@ export class WardrobePanel extends ModalPanel {
     });
   }
 
-  protected onOpened(): void {
+  protected override onOpened(): void {
     this.paint();
   }
 

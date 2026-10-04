@@ -12,7 +12,7 @@ import { befriend, lastCounted } from './friendship';
 import { pinSource, refreshBoard } from './boardNotes';
 import { inHours, nightOf } from './throughWalls';
 
-export interface NoiseWatchOptions {
+interface NoiseWatchOptions {
   /** The ears (the camera): the broom is heard where the player is. */
   listener: THREE.Object3D;
   inFlat: (p: THREE.Vector3) => boolean;

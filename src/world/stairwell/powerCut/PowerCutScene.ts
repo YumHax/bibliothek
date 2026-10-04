@@ -16,7 +16,7 @@ import type { StairLights } from '../StairLights';
 import { Candle, FLAME_Y } from './Candle';
 import { POWER_CUT_PLAN as plan, type CandleNeighbour } from './powerCutPlan';
 
-export interface PowerCutSceneOptions {
+interface PowerCutSceneOptions {
   viewer: THREE.Object3D;
   lights: StairLights;
   lift: Lift;

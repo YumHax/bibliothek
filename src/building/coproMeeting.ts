@@ -32,7 +32,7 @@ export interface BallotView {
   playerVotes: number;
 }
 
-export interface CoproMeetingOptions {
+interface CoproMeetingOptions {
   today: Today;
   /** How many flats the player owns, each a vote (1; 2 once Mrs Roux's is theirs). */
   playerVotes?: () => number;
@@ -48,12 +48,12 @@ export function nextMeetingDay(day: number): number {
 }
 
 /** The last meeting that sat before game day `day` (0: none yet). */
-export function lastMeetingDay(day: number): number {
+function lastMeetingDay(day: number): number {
   return Math.floor((day - 1) / plan.every) * plan.every;
 }
 
 /** The resolutions put to the meeting of `day`: a seeded draw, those never decided first. */
-export function agendaFor(day: number): Resolution[] {
+function agendaFor(day: number): Resolution[] {
   const random = gameDayRandom('copro.agenda', day);
   const weighed = RESOLUTIONS.map((r) => ({ r, key: random() + (minutesEverDecided(r.id, day) ? 1 : 0) }));
   return weighed.sort((a, b) => a.key - b.key).slice(0, plan.perAgenda).map((w) => w.r);

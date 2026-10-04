@@ -1,5 +1,5 @@
 import type { Game, PlatformId } from '@/catalog/types';
-import { PLATFORM_LIST, getPlatform } from '@/catalog/platforms';
+import { PLATFORM_LIST } from '@/catalog/platforms';
 import type { Views } from './Fame';
 import { grailGame, grailOn, isGrail, upcomingGrail, type Grail } from './grails';
 import { BROCANTE, GRAIL, SALES, shopPrice } from './pricing';
@@ -106,11 +106,6 @@ export function marketNews(day: number, owns: (id: string) => boolean = () => fa
 /** "today", "tomorrow", "in 3 days", in market days. */
 export function whenText(inDays: number): string {
   return inDays === 0 ? 'today' : inDays === 1 ? 'tomorrow' : `in ${inDays} days`;
-}
-
-/** The stall's name for a platform: "the SNES stall". */
-export function stallName(platform: PlatformId): string {
-  return `the ${getPlatform(platform).shortName} stall`;
 }
 
 const WEIGHT: Record<MarketNews['kind'], number> = { grail: 0, brocante: 1, clearance: 2, catalogueSale: 3 };

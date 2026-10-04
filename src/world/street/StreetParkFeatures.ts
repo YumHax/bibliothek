@@ -10,7 +10,7 @@ import { standard } from '../materials/palette';
 import { GROUND, onSurface } from '../surface/layers';
 
 /** A point of the park (`city/park`, the flat's frame) in the street's. */
-export function parkInStreet([x, z]: readonly [number, number]): Vec2 {
+function parkInStreet([x, z]: readonly [number, number]): Vec2 {
   return [x + FLAT_IN_STREET.x, z + FLAT_IN_STREET.z];
 }
 

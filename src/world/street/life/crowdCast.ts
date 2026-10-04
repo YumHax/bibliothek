@@ -48,7 +48,7 @@ export function residentMember(r: ResidentCast): CastMember {
   return { seed: r.seed, look, age: 'adult', speed: 0.75 + (r.seed % 5) * 0.05, dog: false, umbrella: true, companion: null, follows: false, stranger: false, resident: r };
 }
 
-export interface CastOptions {
+interface CastOptions {
   /** The regulars' seeds, the same every day. */
   regulars: readonly number[];
   /** How many strangers today, and how many of the people out walk with someone. */

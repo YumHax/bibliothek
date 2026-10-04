@@ -13,7 +13,7 @@ import { Figure } from './Figure';
 import type { TalkRole } from './streetTalk';
 import { terraceOut, terraceWeather } from './terraceWeather';
 
-export interface TerraceSpec {
+interface TerraceSpec {
   /** The stretch of pavement the tables stand along (same z at both ends). */
   from: Vec2;
   to: Vec2;
@@ -24,7 +24,7 @@ export interface TerraceSpec {
   customers: number;
 }
 
-export interface TerracesOptions {
+interface TerracesOptions {
   terraces: readonly TerraceSpec[];
   viewer: THREE.Object3D;
   /** The zone's own collision set (world boxes) and its frame: the tables' boxes follow the layout. */

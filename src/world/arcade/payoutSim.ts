@@ -3,7 +3,7 @@ import { ARCADE_GAMES, type ArcadeGame } from './games';
 import { REPLAY_STEP } from './replay/Replay';
 
 /** One game's line in a simulated balance table. */
-export interface SimulatedPayout {
+interface SimulatedPayout {
   gameId: string;
   skill: number;
   runs: number;

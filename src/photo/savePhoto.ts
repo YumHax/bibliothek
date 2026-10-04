@@ -1,5 +1,5 @@
 /** How a save went: the file's name, or why there is none. */
-export type PhotoSaved = { ok: true; name: string } | { ok: false; reason: string };
+type PhotoSaved = { ok: true; name: string } | { ok: false; reason: string };
 
 /**
  * Hands `canvas` to the browser as a PNG download, named by the date and time

@@ -43,7 +43,7 @@ function conciergeLook(): PersonLook {
 /** Where she is now: behind her glass, mopping a landing, or out of sight (her lunch, the night). */
 type Whereabouts = { at: 'lodge' } | { at: 'mop'; k: number } | { at: 'away'; sign: LodgeSign };
 
-export interface ConciergeOptions extends Omit<StairWalkerOptions, 'look' | 'seed' | 'label' | 'speaker'> {
+interface ConciergeOptions extends Omit<StairWalkerOptions, 'look' | 'seed' | 'label' | 'speaker'> {
   hours: () => number;
   day: () => number;
   lodge: Lodge;
@@ -92,7 +92,7 @@ export class Concierge extends Prop implements Updatable, OccupancyAware {
     this.mop.visible = false;
   }
 
-  get footprint(): THREE.Box3 {
+  override get footprint(): THREE.Box3 {
     return new THREE.Box3();
   }
 

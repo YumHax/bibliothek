@@ -30,9 +30,9 @@ export class DiskArtStore implements ArtStore {
   constructor(private readonly dir: string) {}
 
   async read(key: string): Promise<StoredArt | null> {
-    for (const ext of Object.keys(TYPE_BY_EXTENSION)) {
+    for (const [ext, contentType] of Object.entries(TYPE_BY_EXTENSION)) {
       const body = await readIfExists(this.path(key, ext));
-      if (body) return { body, contentType: TYPE_BY_EXTENSION[ext] };
+      if (body) return { body, contentType };
     }
     return null;
   }

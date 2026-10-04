@@ -41,12 +41,13 @@ export async function searchYouTube(query: string): Promise<VideoResult[]> {
 }
 
 /** Extracts up to `MAX_RESULTS` videos (id, title, duration) from a results page. */
-export function parseResultsPage(html: string): VideoResult[] {
+function parseResultsPage(html: string): VideoResult[] {
   const results: VideoResult[] = [];
   const seen = new Set<string>();
   for (const match of html.matchAll(RENDERER)) {
     const [, videoId, length] = match;
-    if (seen.has(videoId)) continue;
+    // Both groups are mandatory in RENDERER: the guard only tells the types so.
+    if (videoId === undefined || length === undefined || seen.has(videoId)) continue;
     seen.add(videoId);
     const title = TITLE.exec(match[0])?.[1] ?? '';
     results.push({ videoId, title: decodeJsonString(title), durationSeconds: parseDuration(length) });
@@ -55,7 +56,7 @@ export function parseResultsPage(html: string): VideoResult[] {
   return results;
 }
 
-export function parseDuration(text: string): number {
+function parseDuration(text: string): number {
   return text.split(':').reduce((acc, part) => acc * 60 + Number(part), 0);
 }
 

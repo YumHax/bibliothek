@@ -36,7 +36,7 @@ function box(w: number, h: number, d: number, x: number, y: number, z: number): 
 }
 
 /** What the fireplace says when read: Mrs Roux's note on the mantel, by the photo she left. */
-export interface FireplaceNote {
+interface FireplaceNote {
   title: string;
   text: string;
 }

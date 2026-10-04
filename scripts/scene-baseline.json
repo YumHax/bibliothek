@@ -1,0 +1,17 @@
+[
+  "room:arcade | outside | plant#1",
+  "room:flowerShop | overlap | flowerChiller#1 ~ hangingGreens#1",
+  "room:flowerShop | overlap | goodsShelf#1 ~ trailingPothos#1",
+  "room:furnitureShop | overlap | panelledDado#1 ~ goodsShelf#1",
+  "room:furnitureShop | sunk | rugRolls#1",
+  "room:kitchen | outside | plant#1",
+  "room:living | outside | plant#2",
+  "room:living | outside | plant#3",
+  "room:living | overlap | sideboard#1 ~ wallSocket#2",
+  "room:market | outside | plant#1",
+  "room:petShop | overlap | tiledWainscot#1 ~ goodsShelf#1",
+  "room:petShop | overlap | tiledWainscot#1 ~ goodsShelf#2",
+  "room:saleroom | outside | plant#1",
+  "room:saleroom | overlap | crate#1 ~ plant#1",
+  "room:sellerFlat | outside | plant#1"
+]

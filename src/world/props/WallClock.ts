@@ -11,7 +11,7 @@ import type { DayNight } from './DayNight';
 import { playAlarm } from '@/audio/alarm';
 import { useVerbOnCap } from '@/ui/verb';
 
-export interface WallClockOptions {
+interface WallClockOptions {
   /** Outer diameter of the case. Default 0.32 m. */
   diameter?: number;
   /** Colour of the case. Default dark walnut. */
@@ -192,7 +192,7 @@ export class WallClock extends Prop implements Interactable, Updatable {
 }
 
 /** "HH:MM" of a fractional hour of the day. */
-export function formatTime(hours: number): string {
+function formatTime(hours: number): string {
   const total = Math.floor((((hours % 24) + 24) % 24) * 60);
   const h = Math.floor(total / 60);
   const m = total % 60;

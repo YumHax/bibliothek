@@ -13,7 +13,7 @@ import { WALL, onSurface } from '../surface/layers';
 import { snowPaint, snowStandard } from './snowCover';
 import type { WeeklyIssue } from './gamingWeekly';
 
-export interface NewsstandOptions {
+interface NewsstandOptions {
   /** The paper's panel: printed with today's issue, then opened by the Session. */
   panel: ModalLike & { print(issue: WeeklyIssue): void };
   /** Today's issue of the paper. */

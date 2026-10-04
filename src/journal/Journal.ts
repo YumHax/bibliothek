@@ -27,7 +27,7 @@ export interface JournalTotals {
   gamesOut: number;
 }
 
-export type JournalTotal = keyof JournalTotals;
+type JournalTotal = keyof JournalTotals;
 
 /**
  * One day of the journal, keyed by the game's day (`day-00012`, see `gameDayKey`) once the game clock
@@ -44,7 +44,7 @@ const MAX_DAYS = 60;
 const MAX_ENTRIES = 80;
 
 /** The key of game day `day`: zero-padded so the keys sort in day order. */
-export const gameDayKey = (day: number): string => `day-${String(Math.max(1, Math.floor(day))).padStart(5, '0')}`;
+const gameDayKey = (day: number): string => `day-${String(Math.max(1, Math.floor(day))).padStart(5, '0')}`;
 
 /** The game day a key names, or null for a page keyed by a real date (older saves). */
 export function gameDayOf(key: string): number | null {
@@ -53,7 +53,7 @@ export function gameDayOf(key: string): number | null {
 }
 
 /** The game's clock as the journal reads it: the day count (a night's sleep starts the next) and the hour. */
-export interface JournalClock {
+interface JournalClock {
   day(): number;
   /** Hours since midnight on the game clock, fractional. */
   hours(): number;

@@ -122,7 +122,7 @@ export interface Casement {
 }
 
 /** One painted facade: its night lights, its panes of glass, its relief, what stands out of it, and whether its wall is brick. */
-export interface PaintedFacade {
+interface PaintedFacade {
   lights: NightLight[];
   glass: GlassPane[];
   relief: ReliefRect[];
@@ -144,7 +144,7 @@ const FROSTED_GLASS = 0.35;
 /** How rough painted joinery, stone trims and an enamel plate are, against the walls' (`Buildings`' `WALL_ROUGHNESS`). */
 const ROUGH = { paint: 0.55, stone: 0.86, enamel: 0.3, metal: 0.4 } as const;
 /** The band over the top floor's windows, metres: the facade's top (each style's cornice runs `style.parapet` under it). */
-export const PARAPET = 1.1;
+const PARAPET = 1.1;
 /** The narrowest face that hangs balconies (m): a light well's are too close to the next wall. */
 const MIN_BALCONY_FRONT = 3;
 
@@ -163,7 +163,7 @@ const POSTER_PAPERS = ['#f0e8d0', '#f6d23a', '#e8e8e8', '#ff6a3a', '#9ad0e8'];
 const TAG_COLORS = ['#e83a8a', '#3ae8c8', '#f0e03a', '#8a4af0'];
 
 /** How each kind of shop looks: joinery, fascia, lettering, awning, what fills the window, its light and when it shuts. */
-export interface ShopLook {
+interface ShopLook {
   name: string;
   front: string;
   fascia: string;

@@ -25,7 +25,7 @@ function help(): readonly string[] {
 }
 
 /** What the settings card shows. */
-export interface PhotoReadout {
+interface PhotoReadout {
   focus: number;
   blur: number;
   exposure: number;

@@ -21,7 +21,7 @@ export interface BoardNote {
 }
 
 /** What a feature pins: today's notes for game day `day` (none: an empty list). */
-export type BoardSource = (day: number) => BoardNote[];
+type BoardSource = (day: number) => BoardNote[];
 
 const sources = new Map<string, BoardSource>();
 const listeners = new Set<() => void>();

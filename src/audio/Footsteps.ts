@@ -6,7 +6,7 @@ import { playFootfall } from './footfall';
 import { playFloorCreak } from './furnitureSounds';
 
 /** What the footsteps need to know of the player (the `FirstPersonController`, read-only). */
-export interface Walking {
+interface Walking {
   readonly isLocked: boolean;
   readonly movementEnabled: boolean;
   readonly isSeated: boolean;
@@ -18,7 +18,7 @@ export interface Walking {
   readonly isRiding?: boolean;
 }
 
-export interface FootstepsOptions {
+interface FootstepsOptions {
   /** The camera: its horizontal movement is the walking. */
   camera: THREE.Object3D;
   player: Walking;

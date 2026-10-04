@@ -5,7 +5,7 @@ import { isShared } from './sharedResources';
 /** The patch keys already on each material (`patchShader`). */
 const applied = new WeakMap<THREE.Material, Set<string>>();
 
-export type ShaderPatch = (shader: THREE.WebGLProgramParametersWithUniforms) => void;
+type ShaderPatch = (shader: THREE.WebGLProgramParametersWithUniforms) => void;
 
 /**
  * Adds `patch` to a built-in material's shader (on top of any patch already there). `key` names

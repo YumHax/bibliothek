@@ -23,7 +23,7 @@ import { depthStep, UNITS_PER_RANK } from './layers';
  * `userData.zfightIgnore` (shells the shader pushes out), and the back of a double-sided material
  * flagged `userData.zfightFrontOnly` (a room's walls: nobody stands behind them).
  */
-export interface ZFightPair {
+interface ZFightPair {
   a: string;
   b: string;
   /** Distance between the two planes (mm). */

@@ -10,7 +10,7 @@ import { distanceFade } from '../life/fade';
 import { snowCovered } from '../snowCover';
 import { FAIR_DAY, FRONT, type Vec2 } from '../streetPlan';
 
-export interface FairDayOptions {
+interface FairDayOptions {
   /** The camera: the waiting people face and fade by it. */
   viewer: THREE.Object3D;
   /** Places a walker in the zone (ticked, clickable, seen by the pigeons), zone-local. */

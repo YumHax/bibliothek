@@ -84,7 +84,7 @@ export function currentHoliday(): Holiday | null {
 export type Festivity = Holiday | 'newyear';
 
 /** New Year's week: the 30th of December to the 3rd of January. */
-export function isNewYear(date: Date): boolean {
+function isNewYear(date: Date): boolean {
   const month = date.getMonth();
   const day = date.getDate();
   return (month === 11 && day >= 30) || (month === 0 && day <= 3);

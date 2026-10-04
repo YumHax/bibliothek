@@ -39,7 +39,7 @@ const WORKTOP = 0.9;
 const FRONT = 0x8d9c85;
 const WORKTOP_WOOD = 0x9a7248;
 
-export interface KitchenRunPlan {
+interface KitchenRunPlan {
   at: Placement;
   options: KitchenRunOptions;
 }

@@ -10,7 +10,7 @@ import { FLAT_IN_STREET, PARK_STREET, STREET_ENDS, type Vec2 } from './streetPla
 import { GROUND, onSurface } from '../surface/layers';
 import { buildParkFeatures, type ParkFeatures } from './StreetParkFeatures';
 
-export interface StreetParkOptions {
+interface StreetParkOptions {
   anisotropy: number;
   /** The lawn's height (a little under the pavement) and how far out it runs (x). */
   lawnY: number;

@@ -6,7 +6,7 @@ import { part } from './Prop';
 import { fabric } from '@/world/materials/finishes';
 import { Backlight } from '../materials/backlight';
 
-export interface RollerBlindOptions {
+interface RollerBlindOptions {
   /** Size of the opening it covers, in metres. */
   width: number;
   height: number;

@@ -13,7 +13,7 @@ const HEIGHT = 1.05;
 /** Default distance from the counter's origin to the wall behind it: the desk backs onto the wall. */
 const WALL_BEHIND = DEPTH / 2 + 0.03;
 
-export interface OrderCounterOptions {
+interface OrderCounterOptions {
   /** Distance from the origin back to the wall the sign hangs on; more than the desk's half depth leaves room for a clerk. */
   wallBehind?: number;
 }

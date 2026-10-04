@@ -1,7 +1,7 @@
 import type { Look } from '@/graphics';
 
 /** A photo mode grade: a name, and the zone's own look turned into it (the haze stays the zone's). */
-export interface PhotoLook {
+interface PhotoLook {
   name: string;
   apply(base: Look): Look;
 }

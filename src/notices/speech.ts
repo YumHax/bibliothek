@@ -2,7 +2,7 @@ import type * as THREE from 'three';
 import type { SpeechOptions } from './SpeechLayer';
 
 /** Where the people's `SpeechBubble`s send their lines. */
-export interface SpeechSink {
+interface SpeechSink {
   speak(anchor: THREE.Object3D, text: string, options?: SpeechOptions): void;
 }
 

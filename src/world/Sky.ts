@@ -7,7 +7,7 @@ import { type Festivity, type Holiday, type Season, festivitiesOf, holidayOf, se
 import { Weather, type WeatherKind } from './weather/Weather';
 import { streetWindows } from './outlook/sharedOutlook';
 
-export interface SkyOptions {
+interface SkyOptions {
   /** Initial time of day (hours). Default 8, a sunny morning. */
   hours?: number;
   /** Real seconds one full day/night cycle takes; 0 freezes the clock. Default 600 (ten minutes). */

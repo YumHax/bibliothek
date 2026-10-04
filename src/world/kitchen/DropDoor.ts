@@ -8,7 +8,7 @@ import { HoverGlint } from '../props/hoverGlint';
 import { captionName } from '../props/SwingLeaf';
 import { playLatchClick, playSoftThud } from '@/audio/furnitureSounds';
 
-export interface DropDoorOptions {
+interface DropDoorOptions {
   width: number;
   height: number;
   thickness: number;

@@ -12,7 +12,7 @@ export interface Ribs {
 }
 
 /** What a cartridge shell looks like besides its size: its outline and its ribs. */
-export interface ShellShape {
+interface ShellShape {
   outline: THREE.Shape;
   ribs: readonly Ribs[];
   /** Depth of the label's fold over the top edge (m); 0 when the end label is separate or absent. */

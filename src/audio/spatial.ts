@@ -32,7 +32,7 @@ const FOLLOW = 0.06;
 const REAR = { hz: 6000, gain: 0.8 };
 
 /** The low-pass cutoff (Hz) of a sound heard through `walls` walls. */
-export function wallCutoff(walls: number): number {
+function wallCutoff(walls: number): number {
   return walls <= 0 ? OPEN_HZ : Math.max(FLOOR_HZ, OPEN_HZ * Math.pow(PER_WALL, walls));
 }
 

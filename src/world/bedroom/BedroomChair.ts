@@ -9,7 +9,7 @@ import { fabric } from '@/world/materials/finishes';
 import { timber, cloth as paletteCloth } from '@/world/materials/palette';
 import { HoverGlint } from '../props/hoverGlint';
 
-export interface BedroomChairOptions {
+interface BedroomChairOptions {
   /** Colour of the shirt thrown over the back; `null` for a bare chair. */
   shirt?: number | null;
   /** Colour of the jeans folded on the seat; `null` for none. */

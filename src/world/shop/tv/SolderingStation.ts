@@ -13,15 +13,10 @@ const SOLDER = standard({ color: 0xb8bcc0, metalness: 1, roughness: 0.35 });
 const REEL = paint(0x3a6ab8, 0.5);
 
 /**
- * Where the iron's tip is, in the station's frame (the wisp of flux smoke rises from there: `SolderWisp`, placed by the
- * plan at the same spot plus this).
- */
-export const IRON_TIP = new THREE.Vector3(0.175, 0.115, -0.02);
-
-/**
  * The repairer's soldering station: the grey control box with its temperature dial and red lamp, the iron resting in
- * its coiled holder (its tip up over the bench, `IRON_TIP`), its cable, the damp yellow sponge in its tray, a reel of
- * solder on a spindle. Origin on the surface under the control box, its dial +z. Decoration: never collides; merges.
+ * its coiled holder (its tip up over the bench at (0.175, 0.115, -0.02) in the station's frame, where the plan puts the
+ * `SolderWisp` of flux smoke), its cable, the damp yellow sponge in its tray, a reel of solder on a spindle. Origin on
+ * the surface under the control box, its dial +z. Decoration: never collides; merges.
  */
 export class SolderingStation extends Prop {
   readonly contactShadow = false;

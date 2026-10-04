@@ -22,7 +22,7 @@ export interface ArmAngles {
   curl?: number;
 }
 
-export interface PoseAngles {
+interface PoseAngles {
   left: ArmAngles;
   right: ArmAngles;
 }

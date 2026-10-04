@@ -4,7 +4,7 @@ import { paint, standard } from '@/world/materials/palette';
 import { RENDER_ORDER } from '@/world/surface/layers';
 import { Prop } from './Prop';
 
-export interface LavaLampOptions {
+interface LavaLampOptions {
   /** Colour of the wax. Default orange. */
   wax?: number;
   /** Colour of the liquid it floats in. Default a warm amber. */

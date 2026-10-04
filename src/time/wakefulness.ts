@@ -9,15 +9,15 @@ import * as THREE from 'three';
 export function wakefulnessAt(hours: number): number {
   const h = ((hours % 24) + 24) % 24;
   let i = 0;
-  while (i < CURVE.length - 1 && CURVE[i + 1][0] <= h) i++;
-  const [h0, w0] = CURVE[i];
-  const [h1, w1] = CURVE[i + 1];
+  while (i < CURVE.length - 1 && CURVE[i + 1]![0] <= h) i++;
+  // The loop leaves i below the last knot, so both knots exist.
+  const [h0, w0] = CURVE[i]!;
+  const [h1, w1] = CURVE[i + 1]!;
   return THREE.MathUtils.lerp(w0, w1, THREE.MathUtils.smoothstep(h, h0, h1));
 }
 
 /** A day of the week, Monday 0 .. Sunday 6. */
 export type Weekday = 0 | 1 | 2 | 3 | 4 | 5 | 6;
-export const WEEKDAY_NAMES = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'] as const;
 /** The game day that is a Sunday (the saleroom's sale day, `AUCTION.offset`, every seven): the weeks hang on it. */
 const SUNDAY_DAY = 3;
 
@@ -36,9 +36,10 @@ export function streetBusyAt(hours: number, weekday: Weekday): number {
   const h = ((hours % 24) + 24) % 24;
   const curve = weekday === 6 ? SUNDAY : weekday === 5 ? SATURDAY : WEEKDAY;
   let i = 0;
-  while (i < curve.length - 1 && curve[i + 1][0] <= h) i++;
-  const [h0, w0] = curve[i];
-  const [h1, w1] = curve[i + 1];
+  while (i < curve.length - 1 && curve[i + 1]![0] <= h) i++;
+  // As in wakefulnessAt: i stays below the last knot, so both knots exist.
+  const [h0, w0] = curve[i]!;
+  const [h1, w1] = curve[i + 1]!;
   return Math.min(THREE.MathUtils.lerp(w0, w1, THREE.MathUtils.smoothstep(h, h0, h1)), 0.3 + wakefulnessAt(h));
 }
 

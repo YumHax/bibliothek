@@ -18,7 +18,7 @@ import type { Furniture } from '../../Furniture';
 import type { Vec2 } from '../streetPlan';
 import { additive } from '@/world/materials/blend';
 
-export interface DroppedCoinsOptions {
+interface DroppedCoinsOptions {
   /** Where a coin may lie (zone-local), and how many lie about a day. */
   spots: readonly Vec2[];
   perDay: number;

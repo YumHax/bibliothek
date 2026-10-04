@@ -61,7 +61,8 @@ export class LoadQueue {
     let hi = this.pending.length;
     while (lo < hi) {
       const mid = (lo + hi) >> 1;
-      if (before(this.pending[mid], job)) lo = mid + 1;
+      // lo <= mid < hi <= length.
+      if (before(this.pending[mid]!, job)) lo = mid + 1;
       else hi = mid;
     }
     this.pending.splice(lo, 0, job);

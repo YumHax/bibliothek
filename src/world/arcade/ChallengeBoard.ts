@@ -9,7 +9,7 @@ import { paint } from '../materials/palette';
 import { drawText } from './games/ArcadeGame';
 import type { TodaysChallenge } from './scoreTable';
 
-export interface ChallengeBoardOptions {
+interface ChallengeBoardOptions {
   /** Today's challenge, read again every second (it changes when paid, and at midnight). */
   challenge: () => TodaysChallenge;
   /** A machine's title by its game id, for the sign. */

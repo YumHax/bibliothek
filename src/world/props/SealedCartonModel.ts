@@ -3,7 +3,7 @@ import { createCanvas, toTexture } from '@/graphics/canvas';
 import { paint } from '../materials/palette';
 import { Prop, part } from './Prop';
 
-export interface SealedCartonModelOptions {
+interface SealedCartonModelOptions {
   /** What is written on it in marker ("ATTIC CLEAR-OUT"). */
   label: string;
   /** How many things are in it: the carton is as big as its load (3 to 7). */

@@ -7,7 +7,7 @@ import { boxMesh, cylinderMesh, invisibleHitbox } from '../meshUtils';
 import { paint, standard } from '../materials/palette';
 import { crtScreenMaterial } from '../arcade/crtScreen';
 
-export interface DemoTellyOptions {
+interface DemoTellyOptions {
   /** The game whose attract loop it shows (e.g. "SUPER GAME"). */
   title: string;
   /** Case colour: a beige or a black plastic. Default beige. */

@@ -34,14 +34,8 @@ const STEP = 1 / 120;
 const out = path.join(os.tmpdir(), `bibliothek-balance-${process.pid}.mjs`);
 await build({
   stdin: {
-    contents: `
-      export { ARCADE_GAMES } from '@/world/arcade/games';
-      export { pointsPerTicket, COIN_BACK } from '@/economy/pricing';
-      export { rivalTable } from '@/economy/rivals';
-      export { HoopSim } from '@/world/arcade/hoop/HoopSim';
-      export { AlleySim } from '@/world/arcade/alley/AlleySim';
-      export { PinballSim } from '@/world/arcade/pinball/PinballSim';
-      export * as THREE from 'three';`,
+    // What the script plays is listed in `src/headless/balance.ts` (typechecked, and knip sees it used).
+    contents: `export * from '@/headless/balance';`,
     resolveDir: ROOT,
     loader: 'ts',
   },

@@ -9,7 +9,7 @@ import type { BoxCondition } from '@/catalog/types';
 /** Who puts an ad in the paper: the parent clearing a grown-up child's games, someone moving away, a collector thinning out, a loft found full. */
 export type SellerKind = 'clearOut' | 'mover' | 'collector' | 'loft';
 
-export interface SellerProfile {
+interface SellerProfile {
   /** One platform (a child's console, a collector's speciality), or a mix. */
   platforms: 'one' | 'mixed';
   /** How many games in the lot. */

@@ -8,7 +8,7 @@ import { actionKeyLabel } from '@/ui/keys';
 import { timber, cloth as paletteCloth } from '@/world/materials/palette';
 import { HoverGlint } from '../props/hoverGlint';
 
-export interface BedOptions {
+interface BedOptions {
   /** Width of the frame across the room (a double is 1.6). */
   width?: number;
   /** Length from the headboard to the foot (2.0 for a standard double). */

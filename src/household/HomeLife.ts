@@ -8,7 +8,7 @@ import { knowHowOf } from './perks';
 import { dreamOf, type Dream } from './dreams';
 import type { StockItem } from '@/economy/StockItem';
 
-export interface HomeLifeDeps {
+interface HomeLifeDeps {
   household: Household;
   /** The collection: a copy cleaned, a sticker peeled, a booklet found change it in place. */
   collection: { find(id: string): Game | undefined; update(id: string, patch: Partial<Omit<Game, 'id'>>): void; owns(id: string): boolean };

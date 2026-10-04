@@ -184,7 +184,7 @@ function wallFor([c, r]: [number, number]): { x: number; z: number; yaw: number 
  * A timer push button on the cellar's brick: a bakelite box with a round button, an orange pilot glowing while the
  * bulbs are out. Click: the bulbs come on for a minute (no power: nothing). Origin on the wall, facing +z.
  */
-export class TimerButton extends Prop implements Interactable {
+class TimerButton extends Prop implements Interactable {
   readonly contactShadow = false;
   readonly hitboxes: THREE.Object3D[];
   private readonly pilot: THREE.MeshBasicMaterial;

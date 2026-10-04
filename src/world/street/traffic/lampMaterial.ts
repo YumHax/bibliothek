@@ -8,13 +8,12 @@ import { afterChunk, patchShader } from '../../materials/shaderPatch';
  * the daylight instead.
  */
 export const LAMP_ROLE = { head: 0, tail: 1, left: 2, right: 3, reverse: 4, plate: 5 } as const;
-export type LampRole = (typeof LAMP_ROLE)[keyof typeof LAMP_ROLE];
 
 /**
  * A vehicle's lamps at a moment: `lit` (driving: headlamps and tail lamps on), `brake`, `left` and
  * `right` (an indicator's lamp on this instant: the blink is the caller's), `reverse`.
  */
-export interface LampState {
+interface LampState {
   lit: boolean;
   brake: boolean;
   left: boolean;
@@ -23,7 +22,7 @@ export interface LampState {
 }
 
 /** Packs a state into the shader's vec4: x 0 off, 1 lit, 2 lit and reversing; y brake; z left; w right. */
-export function packLamps(state: LampState, out: THREE.Vector4): THREE.Vector4 {
+function packLamps(state: LampState, out: THREE.Vector4): THREE.Vector4 {
   return out.set(state.lit ? (state.reverse ? 2 : 1) : state.reverse ? 2 : 0, state.brake ? 1 : 0, state.left ? 1 : 0, state.right ? 1 : 0);
 }
 

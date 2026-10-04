@@ -11,7 +11,7 @@ import { ClickSpot } from '../props/ClickSpot';
 import { CERAMIC, CHROME, STILL_WATER, WHITE_PLASTIC } from '../props/bathroomMaterials';
 import { HoverGlint } from '../props/hoverGlint';
 
-export interface ToiletOptions {
+interface ToiletOptions {
   /** A roll holder on the wall beside it (local +x) and a brush on the floor on the other side. Default true. */
   accessories?: boolean;
   /** Called when a click on the button flushes (the builder plays the sound from it). */

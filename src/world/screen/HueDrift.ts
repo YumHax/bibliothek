@@ -4,7 +4,7 @@ import * as THREE from 'three';
  * The picture's light is not one colour: without access to the video's pixels (a cross-origin
  * iframe), a screen's glow drifts between the hues a longplay is made of, a new one every few seconds.
  */
-export const GLOW_HUES = [0xa9c7ff, 0xd8e4ff, 0x9fd1b8, 0xffd9b0, 0xb8a9ff, 0xcfe8ff];
+const GLOW_HUES = [0xa9c7ff, 0xd8e4ff, 0x9fd1b8, 0xffd9b0, 0xb8a9ff, 0xcfe8ff];
 const HUE_SECONDS = 3.2;
 
 /** The drifting hue of a playing screen's light (the TV's glow, the projector's beam). */

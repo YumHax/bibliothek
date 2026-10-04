@@ -10,7 +10,7 @@ export interface Field<T> {
   set(value: T): void;
 }
 
-export interface SliderOptions {
+interface SliderOptions {
   min: number;
   max: number;
   step: number;

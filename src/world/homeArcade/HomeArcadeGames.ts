@@ -7,7 +7,7 @@ import { KeyEdges } from '../arcade/games/KeyEdges';
 export const HOME_GAME_IDS: readonly ArcadeGameId[] = ['breakout', 'invaders', 'stacker', 'frog', 'snake', 'comets', 'duel'];
 
 /** The menu's id while no game is picked yet: its table stays empty. */
-export const MENU_ID = 'home-menu';
+const MENU_ID = 'home-menu';
 /** The board's name, on the marquee and the title card. */
 export const HOME_TITLE = 'ARCADE 7-IN-1';
 /** How long a demo hesitates on the menu before it picks (s). */

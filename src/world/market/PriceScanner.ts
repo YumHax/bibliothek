@@ -3,13 +3,13 @@ import type { Updatable } from '@/core/Engine';
 import type { Furniture } from '../Furniture';
 
 /** A box on sale as the scanner sees it. */
-export interface Scannable {
+interface Scannable {
   readonly isHeld: boolean;
   setScanVisible(visible: boolean): void;
   getWorldPosition(target: THREE.Vector3): THREE.Vector3;
 }
 
-export interface PriceScannerOptions {
+interface PriceScannerOptions {
   /** The keys, read every frame. */
   input: { isDown(...codes: string[]): boolean };
   /** Held to scan (physical code). */

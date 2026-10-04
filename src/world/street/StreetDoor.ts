@@ -14,7 +14,7 @@ import type { ActivityAware } from '../zone/lifecycle';
 import type { ZoneId } from '../zoneIds';
 import { SHOP_ZONE_OF, type ShopKind } from './streetPlan';
 
-export interface StreetDoorOptions {
+interface StreetDoorOptions {
   width: number;
   height: number;
   /** The zone it leads to (a `travel` zone of `WORLD_PLAN`). */

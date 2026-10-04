@@ -3,7 +3,7 @@ import type { Furniture } from '../Furniture';
 import { part } from './Prop';
 import { paint, timber } from '@/world/materials/palette';
 
-export interface ConsoleStandOptions {
+interface ConsoleStandOptions {
   width?: number;
   depth?: number;
   height?: number;
@@ -72,7 +72,7 @@ export class ConsoleStand extends THREE.Group implements Furniture {
     for (const sx of [-1, 1]) for (const sz of [-1, 1]) part(this, 0.04, feet, 0.04, dark, { x: sx * (width / 2 - 0.05), y: feet / 2, z: sz * (depth / 2 - 0.05) });
 
     // Bottom board just above the feet, one shelf halfway up.
-    const shelves = [feet, feet + (height - feet - 0.025) / 2];
+    const shelves: readonly [number, number] = [feet, feet + (height - feet - 0.025) / 2];
     for (const y of shelves) {
       part(this, width - 2 * board, board, depth - 0.012, wood, { y: y + board / 2, z: 0.006 });
     }

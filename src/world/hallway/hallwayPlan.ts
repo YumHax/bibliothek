@@ -13,7 +13,7 @@ import { HALL_CONSOLE_TOP } from './HallConsole';
  */
 
 /** The doorway shared with the collection room; the collection room hangs the leaf. */
-export const HALLWAY_LIVING_DOOR = { wall: 'front', along: -0.5, ...DOOR_LEAF, door: false, to: 'living' } as const;
+const HALLWAY_LIVING_DOOR = { wall: 'front', along: -0.5, ...DOOR_LEAF, door: false, to: 'living' } as const;
 
 export const HALLWAY_ROOM: RoomOptions = {
   width: 4,
@@ -145,9 +145,9 @@ export const HALLWAY_PLAN = {
     { kind: 'wallSconce', at: { wall: 'back', along: 1.13, y: 1.72 } },
     { kind: 'wallSconce', at: { wall: 'back', along: 1.87, y: 1.72 } },
     // By the front door on the right wall: the intercom in the strip beside it on the console's side (z -0.65..-0.485),
-    // the fuse box over the door (its architrave tops out at 2.11 m).
+    // the fuse box over the door (its architrave tops out at 2.11 m), its conduit just meeting the 2.6 m ceiling.
     { kind: 'intercom', at: { wall: 'right', along: -0.57, y: 1.35 } },
-    { kind: 'fuseBox', at: { wall: 'right', along: 0.15, y: 2.32 } },
+    { kind: 'fuseBox', at: { wall: 'right', along: 0.15, y: 2.32 }, options: { conduit: 0.15 } },
     // An oak shoe rack under the coats (x 0.9..1.6; the coat rack is built without its own wire one), clear of the umbrellas.
     // Both come from the furniture shop (`hallStand`).
     { kind: 'shoeRack', at: { wall: 'front', along: 1.25, y: 0 }, upgrade: 'hallStand' },

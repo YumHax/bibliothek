@@ -1,9 +1,9 @@
 import { KEYS, PersistedStore, safeStorage } from '@/persistence';
 
-export const PAYOUT_STATS_KEY = KEYS.payoutStats;
+const PAYOUT_STATS_KEY = KEYS.payoutStats;
 
 /** What the player's plays on one machine added up to. */
-export interface MachineStats {
+interface MachineStats {
   plays: number;
   score: number;
   tickets: number;
@@ -12,7 +12,7 @@ export interface MachineStats {
 }
 
 /** A machine's line in the balance table: the totals and the rates that matter. */
-export interface PayoutRow extends MachineStats {
+interface PayoutRow extends MachineStats {
   gameId: string;
   avgScore: number;
   avgTickets: number;

@@ -54,10 +54,5 @@ export interface Station extends THREE.Object3D {
   readonly partner?: PartnerSpot;
 }
 
-export function isStation(obj: object): obj is Station {
-  const s = obj as Partial<Station>;
-  return typeof s.occupy === 'function' && typeof s.release === 'function' && !!s.standAt;
-}
-
 /** The line a busy machine's label and click give. */
 export const TAKEN_LINE = 'Someone is playing this one. Wait your turn.';

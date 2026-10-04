@@ -18,7 +18,7 @@ interface State {
 }
 
 /** What the hunt tells: the journal's line, the "new lead" word. */
-export interface HuntOutlets {
+interface HuntOutlets {
   journal?: { note(kind: string, text: string): void };
   notices?: NoticeActions;
   day: () => number;
@@ -63,7 +63,7 @@ export function huntSince(): number {
 }
 
 /** When the "new lead" word is said: at once, a moment later (after what was said there), or not (the card read there says it). */
-export type LeadWord = 'now' | 'later' | 'never';
+type LeadWord = 'now' | 'later' | 'never';
 
 /** Seconds after which a `later` word comes. */
 const LATER_MS = 3500;
@@ -83,11 +83,6 @@ export function findClue(clue: ClueId, tell: LeadWord = 'now'): boolean {
   else if (notices && tell === 'later') window.setTimeout(() => notices.react(NEW_LEAD), LATER_MS);
   for (const cb of [...listeners]) cb();
   return true;
-}
-
-/** The notices the hunt was connected with (a card read away from any click: the aerial, the trunk). */
-export function huntNotices(): NoticeActions | null {
-  return outlets?.notices ?? null;
 }
 
 /** Calls `cb` whenever a clue is found; returns the unsubscribe. */

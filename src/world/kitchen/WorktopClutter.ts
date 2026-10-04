@@ -16,7 +16,7 @@ const BLACK = paint(0x1e1f22, 0.6);
 const CERAMIC = standard({ color: 0xf2eee6, roughness: 0.35, side: THREE.DoubleSide });
 const WATER = standard({ color: 0xcfd8dc, roughness: 0.02, metalness: 0, transparent: true, opacity: 0.25 });
 
-export interface FruitBowlOptions {
+interface FruitBowlOptions {
   /** Colour of the bowl. Default a glazed cream. */
   color?: number;
 }
@@ -82,7 +82,7 @@ export class ChoppingBoard extends Prop {
   }
 }
 
-export interface StorageJarsOptions {
+interface StorageJarsOptions {
   /** Contents colours, one jar each, left to right (default pasta, rice, coffee beans). */
   contents?: number[];
 }

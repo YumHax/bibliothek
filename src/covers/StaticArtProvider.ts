@@ -5,7 +5,7 @@ import type { BoxArtKind, BoxArtUrls, CoverArtProvider } from './CoverArtProvide
 const ROOT = '/boxart';
 
 /** `public/boxart/index.json`: per `<platform>/<libretroName>`, its folder and the faces baked there (`<kind>.webp`). */
-export interface StaticArtIndex {
+interface StaticArtIndex {
   version: 1;
   games: Record<string, { dir: string; files: BoxArtKind[] }>;
 }

@@ -42,7 +42,7 @@ export class RainOnRoof extends Voice {
     this.dropBus = drops;
   }
 
-  protected tick(ctx: AudioContext, dt: number): void {
+  protected override tick(ctx: AudioContext, dt: number): void {
     if (!this.dropBus || this.level < 0.05) return;
     this.nextDrop -= dt;
     while (this.nextDrop <= 0) {

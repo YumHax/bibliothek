@@ -11,11 +11,6 @@ export interface Footprint {
   along: [number, number];
 }
 
-/** A footprint lined up with the street at (x, z): along Front Street or along Park Street, whichever is nearer. */
-export function streetFootprint(x: number, z: number): Footprint {
-  return { x, z, along: z > -x ? [1, 0] : [0, 1] };
-}
-
 /** The ground point `u` metres along and `v` across a footprint's centre, at `h` above the street. */
 export function footPoint(f: Footprint, u: number, v: number, h: number): [number, number] {
   return worldPoint(f.x + f.along[0] * u - f.along[1] * v, f.z + f.along[1] * u + f.along[0] * v, h);

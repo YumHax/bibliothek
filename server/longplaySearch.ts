@@ -2,11 +2,11 @@ import { type ApiRequest, type ApiResponse, errorMessage, json } from './http';
 import { searchYouTube, type VideoResult } from './youtubeSearch';
 
 /** A search hit with the ranking score attached, best first. */
-export interface RankedVideo extends VideoResult {
+interface RankedVideo extends VideoResult {
   score: number;
 }
 
-export interface LongplayHints {
+interface LongplayHints {
   /** Game title, used to check the video is about the right game. */
   title?: string;
   /** Platform short name such as "NES" or "SNES". */
@@ -29,7 +29,7 @@ const MEH_WORDS = /\b(speedrun|tas|glitch|ep(isode)?\.? ?\d+|part ?\d+|#\d+)\b/i
  * Titles saying "longplay" and naming the platform win; long videos win; trailers and
  * reviews lose. Pure, so it can be unit-tested against real titles.
  */
-export function rankLongplays(results: VideoResult[], hints: LongplayHints = {}): RankedVideo[] {
+function rankLongplays(results: VideoResult[], hints: LongplayHints = {}): RankedVideo[] {
   const titleTokens = significantTokens(hints.title ?? '');
   const platform = hints.platform ? new RegExp(`(^|[^a-z0-9])${escapeRegExp(hints.platform)}([^a-z0-9]|$)`, 'i') : null;
 

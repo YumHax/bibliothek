@@ -5,7 +5,7 @@ import { cylinderMesh } from '../meshUtils';
 import { part } from '../props/Prop';
 import { paint } from '../materials/palette';
 
-export interface LaundryBasketOptions {
+interface LaundryBasketOptions {
   /** Radius at the rim and height to the rim. Default 0.19 x 0.55. */
   radius?: number;
   height?: number;

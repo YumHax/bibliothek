@@ -1,7 +1,7 @@
 import { STAIRWELL_PLAN as plan, STOREY, STOREYS, landingY } from './stairwellPlan';
 
 /** A tread of a flight (zone-local): its box, and the riser above it (the face up to the tread or landing above). */
-export interface Tread {
+interface Tread {
   /** 1 from the top of the flight. */
   i: number;
   x0: number;

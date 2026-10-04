@@ -1,7 +1,7 @@
 import { FRONT, KERB_HEIGHT, PARK_STREET, SIDE_STREET, STREET_ENDS, STREET_PLAN } from '../streetPlan';
 
 /** The road's three rectangles (zone-local x0, z0, x1, z1): Front Street, Park Street, the side street. */
-export const ROAD_RECTS: readonly (readonly [number, number, number, number])[] = [
+const ROAD_RECTS: readonly (readonly [number, number, number, number])[] = [
   [PARK_STREET.farKerb, FRONT.nearKerb, STREET_ENDS.east, FRONT.farKerb],
   [PARK_STREET.farKerb, STREET_ENDS.south, PARK_STREET.nearKerb, FRONT.nearKerb],
   [SIDE_STREET.nearKerb, STREET_ENDS.side, SIDE_STREET.farKerb, FRONT.nearKerb],

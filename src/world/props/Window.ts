@@ -20,7 +20,7 @@ import { markGlass, unmarkGlass } from '@/graphics/glassMask';
 import type { OutlookLease } from '../outlook/sharedOutlook';
 import { normalBiasAt, snapDirection, texelAngle } from './shadowTexels';
 
-export interface WindowOptions {
+interface WindowOptions {
   /** Size of the glazed opening in metres. The kick rail below it reaches the floor. */
   width?: number;
   height?: number;

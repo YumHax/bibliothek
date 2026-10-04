@@ -10,7 +10,7 @@ import type { CoproPanelLike } from '../building';
 
 const WOOD = paint(0x5a3a22, 0.5);
 
-export interface BallotBoxOptions {
+interface BallotBoxOptions {
   meeting: CoproMeeting;
   /** The postal vote's panel (none: the box only tells when the next meeting is). */
   panel?: CoproPanelLike;

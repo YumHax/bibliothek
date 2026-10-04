@@ -14,10 +14,10 @@ export interface PieceLike {
 }
 
 /** What stops a carried piece standing where it is aimed (`furnishing/fit`'s `Blocker`). */
-export type BlockerLike = BlockerWords;
+type BlockerLike = BlockerWords;
 
 /** A piece put somewhere, and where it stood before (the undo puts it back there). */
-export interface MovedLike {
+interface MovedLike {
   readonly piece: PieceLike;
   readonly from: object;
 }

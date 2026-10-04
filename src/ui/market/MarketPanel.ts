@@ -56,7 +56,7 @@ export abstract class MarketPanel extends ModalPanel {
     this.renderWallet();
   }
 
-  protected onOpened(): void {
+  protected override onOpened(): void {
     this.setStatus('');
     this.render();
   }
@@ -99,7 +99,7 @@ export abstract class MarketPanel extends ModalPanel {
   }
 
   /** Where the focus lands: the `[data-autofocus]` control if usable, else the body's first button, else Close. */
-  protected focusTarget(): HTMLElement | null {
+  protected override focusTarget(): HTMLElement | null {
     return super.focusTarget() ?? this.body.querySelector<HTMLElement>('button:not([disabled])') ?? this.root.querySelector<HTMLElement>('[data-action="close"]');
   }
 }

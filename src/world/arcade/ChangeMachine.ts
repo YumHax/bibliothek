@@ -8,7 +8,7 @@ import { boxMesh, cylinderMesh, invisibleHitbox } from '../meshUtils';
 import { layMesh, WALL } from '../surface/layers';
 import { drawText } from './games/ArcadeGame';
 
-export interface ChangeMachineOptions {
+interface ChangeMachineOptions {
   /** Whether it works today (then the OUT OF ORDER note is gone and its LED is green); the Session pays the change. */
   working?: boolean;
   /** Paint of the steel body. Default a blue-grey. */

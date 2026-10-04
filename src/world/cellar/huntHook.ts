@@ -8,10 +8,10 @@ import type { CELLAR_PLAN } from './cellarPlan';
  * cellar's chunk in.
  */
 
-export type CellarSpots = (typeof CELLAR_PLAN)['huntSpots'];
+type CellarSpots = (typeof CELLAR_PLAN)['huntSpots'];
 
 /** Builds something into the cellars' zone at its spots; anything it subscribes to goes through `zone.onUnload`. */
-export type CellarDresser = (zone: Zone, spots: CellarSpots) => void;
+type CellarDresser = (zone: Zone, spots: CellarSpots) => void;
 
 const dressers = new Set<CellarDresser>();
 

@@ -1,6 +1,6 @@
 import { KEYS, PersistedStore, safeStorage } from '@/persistence';
 
-export const ARCADE_HABITS_KEY = KEYS.arcadeHabits;
+const ARCADE_HABITS_KEY = KEYS.arcadeHabits;
 
 /** How many plays per machine the HUD keeps spelling out what the keys do next (walk away, play again). */
 export const HINTED_PLAYS = 3;

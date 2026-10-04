@@ -1,13 +1,12 @@
 import { CACHE_PREFIX, CORRUPT_PREFIX, DEBUG_SAVE, ROOT_PREFIX, SAVE_PREFIX } from './keys';
 
 /** How another tab showed itself: it is open on the same save, or it just wrote to it. */
-export type OtherTabSignal = 'open' | 'write';
+type OtherTabSignal = 'open' | 'write';
 
 type Message = { type: 'hello' | 'here'; from: string };
 
 const listeners = new Set<(signal: OtherTabSignal) => void>();
 const me = Math.random().toString(36).slice(2);
-let seen = false;
 let started = false;
 
 /**
@@ -21,14 +20,7 @@ export function onOtherTab(cb: (signal: OtherTabSignal) => void): () => void {
   return () => listeners.delete(cb);
 }
 
-/** Whether another tab on this save has shown itself since this one started. */
-export function otherTabSeen(): boolean {
-  start();
-  return seen;
-}
-
 function emit(signal: OtherTabSignal): void {
-  seen = true;
   for (const cb of [...listeners]) cb(signal);
 }
 

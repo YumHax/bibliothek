@@ -21,7 +21,7 @@ export type Placement =
   | { corner: Corner; inset: number; hung?: boolean; rotationY?: number }
   | { wall: Wall; along: number; y: number; offset?: number };
 
-export interface ResolvedPlacement {
+interface ResolvedPlacement {
   position: THREE.Vector3;
   rotationY: number;
 }

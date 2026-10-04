@@ -81,43 +81,6 @@ export function repeatTexture<T extends THREE.Texture>(texture: T, x?: number, y
   return texture;
 }
 
-/**
- * Texels per metre a canvas is painted at, by how close what it carries is looked at. The screen's need:
- * the camera's 70° field of view puts H / (1.4 d) pixels on a metre d metres away, H the frame's height
- * in pixels (1440 on a large screen at the capped pixel ratio): about 2050 px/m at half a metre, 1030 at
- * one metre, 340 at three, 170 at six. Each class is what its nearest usual distance needs, so its texels
- * are never magnified much more than a pixel each where it is read.
- *   `print` (read in the hand, ~0.6 m: a box's back, a manual's page, a letter): 1600.
- *   `label` (read up close on a shelf or a counter, ~1 m: price tags, shelf labels, a card): 1000.
- *   `sign` (read standing back, ~2 m: posters, menus, notices, a screen across a room): 640.
- *   `board` (read across a room or a street, ~3-5 m: shop names, scoreboards, banners): 340.
- *   `grain` (never read, only seen: wood, plaster, fabric, paving; mostly tiled): 256.
- */
-export const DENSITY = { print: 1600, label: 1000, sign: 640, board: 340, grain: 256 } as const;
-
-export type DensityClass = keyof typeof DENSITY;
-
-/** Largest canvas side painted (every GPU this runs on samples 4096; past it a canvas costs more than it shows). */
-const MAX_CANVAS = 4096;
-
-/** Pixels per metre for `density` at this quality level (`QUALITY.canvasScale`). */
-export function texelsPerMetre(density: DensityClass | number): number {
-  return (typeof density === 'number' ? density : DENSITY[density]) * QUALITY.canvasScale;
-}
-
-/**
- * A canvas for something `widthM` x `heightM` metres seen as `density` (`DENSITY`): its size scaled by
- * the quality level, at most `MAX_CANVAS` a side (both sides shrunk alike), at least 8. `k` is its
- * pixels per metre, for painting in metres (`ctx.scale(k, k)`, or sizes times `k`).
- */
-export function canvasFor(widthM: number, heightM: number, density: DensityClass | number): { canvas: HTMLCanvasElement; ctx: CanvasRenderingContext2D; k: number } {
-  let k = texelsPerMetre(density);
-  const longest = Math.max(widthM, heightM) * k;
-  if (longest > MAX_CANVAS) k *= MAX_CANVAS / longest;
-  const [canvas, ctx] = createCanvas(Math.max(8, Math.round(widthM * k)), Math.max(8, Math.round(heightM * k)));
-  return { canvas, ctx, k };
-}
-
 /** FNV-1a: a stable 32-bit hash so procedural details (barcodes, serials) are the same on every load. */
 export function hashString(text: string): number {
   let h = 0x811c9dc5;

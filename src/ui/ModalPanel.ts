@@ -8,7 +8,7 @@ const FOCUSABLE = 'a[href], button, input, select, textarea, [tabindex]:not([tab
 /** The panel's fade-out before it hides (`ui-modal--closing`, menu.css). */
 const CLOSE_MS = 150;
 
-export interface ModalPanelOptions {
+interface ModalPanelOptions {
   /** Classes of the root after `ui-modal` (the layer): a layout (`ui-modal--sheet` / `ui-modal--centre`) and the panel's own. */
   className: string;
   /** When given, the root is the dialog (`role="dialog"`, `aria-modal`, this label); else the panel marks an inner card itself. */

@@ -141,7 +141,7 @@ function paintStringPiece(sheet: Sheet, colors: readonly string[], a: [number, n
   const last = Math.floor((t1 * length) / BULB_SPACING - 1e-6);
   for (let i = first; i <= last; i++) {
     const [x, z, h] = at((i * BULB_SPACING) / length);
-    bulb(sheet, colors[(i + offset) % colors.length], x, z, h - 0.08, Math.hypot(x, z), 1);
+    bulb(sheet, colors[(i + offset) % colors.length]!, x, z, h - 0.08, Math.hypot(x, z), 1);
   }
 }
 
@@ -174,7 +174,7 @@ function paintChristmasTree(sheet: Sheet, x: number, z: number, height: number, 
     const off = Math.sin(angle) * r;
     const bx = x + (z / d) * off - (x / d) * Math.cos(angle) * r * 0.3;
     const bz = z - (x / d) * off - (z / d) * Math.cos(angle) * r * 0.3;
-    bulb(sheet, colors[i % colors.length], bx, bz, h, d - radius * 0.4, 1);
+    bulb(sheet, colors[i % colors.length]!, bx, bz, h, d - radius * 0.4, 1);
   }
   // The star.
   const [sx, sy] = worldPoint(x, z, height + 0.4);

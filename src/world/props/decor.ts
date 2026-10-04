@@ -120,7 +120,7 @@ export type DecorEntry = {
 }[DecorKind];
 
 /** Whether an entry is up today: always, or during its festivity. */
-export function isUp(entry: { holiday?: Festivity }): boolean {
+function isUp(entry: { holiday?: Festivity }): boolean {
   return !entry.holiday || currentFestivities().includes(entry.holiday);
 }
 

@@ -11,9 +11,9 @@ import { sharedCanvasTexture } from './sharedResources';
  */
 
 /** Where the falloff is: [offset 0..1 from the bright end, alpha 0..1], ascending offsets. */
-export type GlowStops = readonly (readonly [number, number])[];
+type GlowStops = readonly (readonly [number, number])[];
 
-export interface RadialGlow {
+interface RadialGlow {
   /** Canvas size in texels. */
   width: number;
   height: number;

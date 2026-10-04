@@ -235,7 +235,7 @@ const paintAbstract: MotifPainter = (ctx, w, h, random) => {
   ctx.fillStyle = '#f5f0e6';
   ctx.fillRect(0, 0, w, h);
   const palette = ['#f0c6b4', '#a9c6c2', '#e6d3a0', '#b8c4d9', '#d9b8c4', '#c9d3b3'];
-  const pick = () => palette[Math.floor(random() * palette.length)];
+  const pick = (): string => palette[Math.floor(random() * palette.length)]!;
 
   ctx.globalAlpha = 0.85;
   const shapes = 5 + Math.floor(random() * 3);

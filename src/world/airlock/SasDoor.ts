@@ -12,9 +12,9 @@ import { bake, sasFinish } from './sasFinish';
 import { playClack, playThud } from './doorSounds';
 
 /** `street`: the street door's two leaves, opening out onto the pavement. `inner`: the glazed door, opening into the building. */
-export type SasDoorKind = 'street' | 'inner';
+type SasDoorKind = 'street' | 'inner';
 
-export interface SasDoorOptions {
+interface SasDoorOptions {
   kind: SasDoorKind;
   /** The zone's colliders: the leaves stop the player where they stand, shut or open. */
   collisions: Collisions;

@@ -79,7 +79,8 @@ export class NeonSign extends Prop implements Updatable {
     this.add(lettering);
 
     if (this.intensity > 0) {
-      this.light = new THREE.PointLight(color, this.intensity, 0, 2);
+      // A reach: with distance 0 every fragment of the scene evaluates the light; a neon's spill is gone within a few metres.
+      this.light = new THREE.PointLight(color, this.intensity, 6, 2);
       this.light.position.set(0, 0, 0.35);
       this.light.castShadow = false;
       this.add(this.light);

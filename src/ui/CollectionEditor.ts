@@ -11,7 +11,7 @@ import './CollectionEditor.css';
 const STATUSES: GameStatus[] = ['owned', 'wishlist', 'lent'];
 const SEARCH_DEBOUNCE_MS = 250;
 
-export interface CollectionEditorOptions {
+interface CollectionEditorOptions {
   /**
    * Whether games can be added straight from the index (and the list reset to the built-in one).
    * Off in the game proper: games are bought at the market. On with `?debug` in the URL.
@@ -96,16 +96,16 @@ export class CollectionEditor extends ModalPanel {
     this.renderCollection();
   }
 
-  protected onOpened(): void {
+  protected override onOpened(): void {
     this.renderCollection();
   }
 
-  protected onClosed(): void {
+  protected override onClosed(): void {
     this.setStatus('');
   }
 
   /** Tab closes the editor from inside, as it opened it (the key stops here, so the Session never sees it). */
-  protected onKey(e: KeyboardEvent): void {
+  protected override onKey(e: KeyboardEvent): void {
     if (e.code !== 'Tab') return;
     e.preventDefault();
     if (!e.repeat) this.close(); // a Tab still held from opening it must not shut it again
@@ -136,6 +136,7 @@ export class CollectionEditor extends ModalPanel {
         case 'reset': return this.resetToSeed(button);
         case 'remove': return this.removeGame(id!);
         case 'add': return this.addResult(Number(result));
+        default: return; // a button with some other data-action is not ours
       }
     });
 

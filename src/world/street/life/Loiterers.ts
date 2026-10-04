@@ -23,7 +23,7 @@ export interface LoiterSpec {
   dry?: boolean;
 }
 
-export interface LoiterersOptions {
+interface LoiterersOptions {
   spots: readonly LoiterSpec[];
   viewer: THREE.Object3D;
   place: (walker: Walker, at: THREE.Vector3) => void;

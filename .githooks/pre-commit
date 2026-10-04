@@ -1,0 +1,9 @@
+#!/bin/sh
+# Runs the fast checks before each commit (`npm run typecheck`: tsc, the convention, import, docs and data checks,
+# the headless z-fighting and scene lints; about 10 s). Skip once with `git commit --no-verify`. Installed per
+# clone with `git config core.hooksPath .githooks` (see docs/checks.md). The slower lint (`npm run lint`: eslint,
+# cspell, knip) is not run here; uncomment the last line to add it.
+set -e
+cd "$(git rev-parse --show-toplevel)"
+npm run --silent typecheck
+# npm run --silent lint

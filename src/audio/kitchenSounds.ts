@@ -55,7 +55,7 @@ export class KettleBoil extends Voice {
     this.setBoiling(this.running, this.progress);
   }
 
-  protected tick(ctx: AudioContext, dt: number): void {
+  protected override tick(ctx: AudioContext, dt: number): void {
     if (!this.running || !this.master) return;
     this.untilBubble -= dt;
     if (this.untilBubble > 0) return;
@@ -125,7 +125,7 @@ export class ToasterSound extends Voice {
     this.burst = this.noise(ctx, 0.03);
   }
 
-  protected tick(ctx: AudioContext, dt: number): void {
+  protected override tick(ctx: AudioContext, dt: number): void {
     if (!this.ticking || !this.master || !this.burst) return;
     this.untilTick -= dt;
     if (this.untilTick > 0) return;

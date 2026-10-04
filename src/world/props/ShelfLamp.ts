@@ -7,7 +7,7 @@ import { PROUD } from './joinery';
 import { SwitchableLamp } from './SwitchableLamp';
 import { LAMP_GLOW, LAMP_LIGHT } from '../lighting/lampColours';
 
-export interface ShelfLampOptions {
+interface ShelfLampOptions {
   /** Horizontal distance from the fixture to the bookcase face (m); the bookcase lies along local -z. */
   throwDistance: number;
   /** World height of the aiming point on the bookcase face (m); the fixture hangs from the ceiling at local y = 0. */

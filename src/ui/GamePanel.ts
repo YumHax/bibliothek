@@ -24,7 +24,7 @@ const holdingHints = (): string => {
 };
 
 /** What the panel adds for a copy that is not the player's yet (a market box): rows on top, a line of text, and its own key hints. */
-export interface PanelExtra {
+interface PanelExtra {
   rows?: Array<[string, string]>;
   /** Plain text, shown highlighted under the rows. */
   note?: string;

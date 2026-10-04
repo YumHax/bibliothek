@@ -125,7 +125,7 @@ export function normaliseTitle(title: string): string {
 }
 
 /** Whether `game` is this piece of a set. */
-export function isPiece(piece: SetPiece, game: Game): boolean {
+function isPiece(piece: SetPiece, game: Game): boolean {
   if (game.platform !== piece.platform) return false;
   const title = normaliseTitle(game.title);
   return piece.titles.some((t) => (t.endsWith('*') ? title.startsWith(t.slice(0, -1).trimEnd()) : title === t));

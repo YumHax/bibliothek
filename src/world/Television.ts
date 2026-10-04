@@ -2,16 +2,16 @@ import * as THREE from 'three';
 import { poweredAt } from '@/building/mains';
 import type { Updatable } from '@/core/Engine';
 import type { CssLayer } from '@/core/CssLayer';
-import type { Interactable, LabelPlacement } from '@/interaction/Interactable';
+import type { Interactable } from '@/interaction/Interactable';
 import type { PlayerState, SessionActions } from '@/game/SessionActions';
-import type { VideoInfo } from '@/video/VideoProvider';
 import { unplayableWhy } from './box/unplayable';
 import type { RegionLock } from '@/economy/regionLock';
 import { CrtSpeaker } from '@/audio/CrtSpeaker';
 import type { ActivityAware, Furniture } from './Furniture';
 import { boxMesh, cylinderMesh } from './meshUtils';
 import type { SoundOcclusion } from './acoustics/SoundOcclusion';
-import { VideoSurface, type ScreenFeed, type ScreenState, type ScreenStateListener, type VideoScreen } from './screen';
+import { VideoSurface } from './screen';
+import { SurfaceScreen } from './screen/SurfaceScreen';
 import { CrtGlass } from './screen/CrtGlass';
 import { HueDrift } from './screen/HueDrift';
 import { QUALITY } from '@/graphics/quality';
@@ -39,7 +39,7 @@ const REAR_TAPER = { w: 0.56, h: 0.62 };
 /** How far the middle of the glass stands in front of its edges, for a 27" tube (m). */
 const GLASS_BULGE = 0.006;
 
-export interface TelevisionOptions {
+interface TelevisionOptions {
   /** Object whose distance and facing drive the volume (the camera). */
   listener?: THREE.Object3D;
   /** Walls between the listener and the screen damp the volume (see `SoundOcclusion`). */
@@ -54,7 +54,7 @@ export interface TelevisionOptions {
  * A soft point light in front of the glass flickers while playing so the room reads as "TV on",
  * and a `CrtSpeaker` bed (hum, hiss, crackle) makes the sound read as "old TV".
  */
-export class Television extends THREE.Group implements Furniture, Updatable, Interactable, VideoScreen, ActivityAware {
+export class Television extends SurfaceScreen implements Furniture, Updatable, Interactable, ActivityAware {
   readonly hitboxes: THREE.Object3D[];
   readonly screenName = 'TV';
 
@@ -66,7 +66,7 @@ export class Television extends THREE.Group implements Furniture, Updatable, Int
   /** The CRT set itself (body, screen, glow); lifted to whatever it stands on. */
   private readonly crt = new THREE.Group();
   private readonly cabinet: THREE.Mesh;
-  private readonly surface: VideoSurface;
+  protected readonly surface: VideoSurface;
   private readonly glow: THREE.PointLight;
   /** The picture as a soft area light (high quality); the point glow then only stands in for its falloff. */
   private readonly panel: THREE.RectAreaLight | null = null;
@@ -152,14 +152,6 @@ export class Television extends THREE.Group implements Furniture, Updatable, Int
     this.add(this.cabinet, this.crt);
   }
 
-  get state(): ScreenState {
-    return this.surface.state;
-  }
-
-  get isPlaying(): boolean {
-    return this.surface.isPlaying;
-  }
-
   /** Bounding box for collisions (local space): the built-in cabinet and the set on it, or the set's own size once mounted. */
   get footprint(): THREE.Box3 {
     const top = this.crt.position.y + this.bodySize.y;
@@ -180,11 +172,6 @@ export class Television extends THREE.Group implements Furniture, Updatable, Int
   mountOn(height: number): void {
     this.cabinet.visible = false;
     this.crt.position.y = height;
-  }
-
-  /** Called whenever the TV changes state (off / searching / playing / error). Returns an unsubscribe function. */
-  onStateChange(listener: ScreenStateListener): () => void {
-    return this.surface.onStateChange(listener);
   }
 
   // --- Interactable -------------------------------------------------------------------------
@@ -216,10 +203,6 @@ export class Television extends THREE.Group implements Furniture, Updatable, Int
     return last ? `TV · switch on, ${last.game.title}` : 'TV · bring a game box';
   }
 
-  labelPlacement(): LabelPlacement {
-    return this.isPlaying ? 'edge' : 'crosshair';
-  }
-
   /**
    * With a box in hand, its cartridge goes into its console under the set, which plays it (straight
    * on the TV when no console takes it); with empty hands, switches the set off, even while it is
@@ -243,29 +226,6 @@ export class Television extends THREE.Group implements Furniture, Updatable, Int
       const last = this.decks?.lastLoaded()?.loaded;
       if (last) void session.playOn(this, last);
     }
-  }
-
-  // --- VideoScreen ----------------------------------------------------------------------------
-
-  searching(title: string): void {
-    this.surface.searching(title);
-  }
-
-  play(video: VideoInfo, startSeconds: number, onRejected?: (videoId: string) => void): void {
-    this.surface.play(video, startSeconds, onRejected);
-  }
-
-  fail(message: string): void {
-    this.surface.fail(message);
-  }
-
-  stop(): void {
-    this.surface.stop();
-  }
-
-  /** A program's canvas on the glass (docs/media.md "Programs on the screen"). */
-  showFeed(feed: THREE.Texture): ScreenFeed {
-    return this.surface.showFeed(feed);
   }
 
   /** Dormant zone: the picture lets its video go and the speaker's bed falls silent; both come back with the zone. */

@@ -10,7 +10,7 @@ import { ringTheHour } from './churchBells';
 import { birdNote, horn, sirenVoice, twoTone } from './street/streetVoices';
 import { BUS_STOP } from '@/world/city/frontage';
 
-export interface StreetAmbienceOptions {
+interface StreetAmbienceOptions {
   /** Where the ears are (the camera). */
   listener: THREE.Object3D;
   /** The window panes the street is heard through, re-read now and then (rooms load and unload). */
@@ -35,7 +35,7 @@ export interface StreetAmbienceOptions {
 }
 
 /** A door to the open air: where it is, and how open (0 shut .. 1). */
-export interface StreetOpening {
+interface StreetOpening {
   getWorldPosition(target: THREE.Vector3): THREE.Vector3;
   readonly openness: number;
 }

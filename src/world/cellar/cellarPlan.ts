@@ -23,7 +23,7 @@ import type { RoomOptions } from '../Room';
 /** A grid cell's side (m). */
 export const CELL = 1.6;
 /** The grid, north row first (see above). */
-export const MAP = ['S...#1#2#', '###.#.#.#', '3.......4', '#.##5##.#', '6..#....9', '#.##7####', '8......##'];
+const MAP = ['S...#1#2#', '###.#.#.#', '3.......4', '#.##5##.#', '6..#....9', '#.##7####', '8......##'];
 export const COLUMNS = 9;
 export const ROWS = MAP.length;
 /** Heights (m): where the vaults spring from the walls, and their crown over each cell's middle. */

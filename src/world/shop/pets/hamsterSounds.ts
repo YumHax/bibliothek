@@ -22,7 +22,7 @@ export class HamsterVoice extends Voice {
 
   protected build(): void {}
 
-  protected tick(ctx: AudioContext, dt: number): void {
+  protected override tick(ctx: AudioContext, dt: number): void {
     if (!this.master) return;
     if (this.running) {
       this.untilSqueak -= dt;

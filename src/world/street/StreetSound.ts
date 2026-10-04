@@ -16,7 +16,7 @@ import { StreetBirds } from './audio/StreetBirds';
 import { StreetEar } from './audio/streetEar';
 import { VehicleVoice, type VehicleRole } from './audio/VehicleVoice';
 
-export interface StreetSoundOptions {
+interface StreetSoundOptions {
   /** The ears (the camera). */
   listener: THREE.Object3D;
   /** Everything driving through (cars, the bus, the van, the bin lorry, bikes): each one is heard where it is. */

@@ -12,11 +12,14 @@ export interface Cell {
 /** Reserves a `w` x `h` pixel cell in the atlas being painted. */
 export type Place = (w: number, h: number) => Cell;
 
+/** A sprite's bounds in scenery-texture pixels. */
+export type Bounds = [left: number, top: number, right: number, bottom: number];
+
 /**
  * Queues a sprite for this frame: `bounds` are scenery-texture pixels (left, top, right, bottom),
  * `d` the distance it is sorted and hidden by, `tint` a packed linear colour (white by default).
  */
-export type Push = (bounds: number[], cell: Cell, d: number, alpha: number, tint?: number) => void;
+export type Push = (bounds: Bounds, cell: Cell, d: number, alpha: number, tint?: number) => void;
 
 /** What the sprite painters draw on: the colour atlas and its glow copy (the same coordinates, lit at night). */
 export interface AtlasPens {
@@ -66,7 +69,7 @@ export function packTint(hex: string): number {
 }
 
 /** Scenery-texture bounds of an upright sprite standing at (x, z): `width` metres across, from height `h0` up to `h1`. */
-export function uprightBounds(x: number, z: number, width: number, h0: number, h1: number): number[] {
+export function uprightBounds(x: number, z: number, width: number, h0: number, h1: number): Bounds {
   const d = Math.hypot(x, z);
   const a = azimuthOf(x, z);
   const half = width / 2 / d;
@@ -99,11 +102,6 @@ export function glowDot(glow: CanvasRenderingContext2D, x: number, y: number, ra
   glow.fillStyle = g;
   glow.fillRect(x - radius, y - radius, radius * 2, radius * 2);
   glow.restore();
-}
-
-/** Game hours `h` inside the window [from, to) (wrapping past midnight when from > to). */
-export function inHours(h: number, from: number, to: number): boolean {
-  return from <= to ? h >= from && h < to : h >= from || h < to;
 }
 
 /** 0..1 ramp in and out of the game-hours window [from, to), easing over `fade` hours at each end. */

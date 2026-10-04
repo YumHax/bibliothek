@@ -7,7 +7,7 @@ import { Walker } from '../people/Walker';
 import { Figure } from './life/Figure';
 import type { Vec2 } from './streetPlan';
 
-export interface RetroLureOptions {
+interface RetroLureOptions {
   /** The banner: its middle on the shop window (zone-local, y up), the way it faces, its size. */
   banner: { at: readonly [number, number, number]; yaw: number; width: number; height: number };
   /** The shop's door (where the queue goes in) and the queue's spots along the pavement, nearest the door first. */

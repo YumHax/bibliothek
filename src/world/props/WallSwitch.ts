@@ -8,7 +8,7 @@ import type { SwitchableLamp } from './SwitchableLamp';
 import { HoverGlint } from './hoverGlint';
 import { playRockerClick } from '@/audio/furnitureSounds';
 
-export interface WallSwitchOptions {
+interface WallSwitchOptions {
   /** The lamp this switch drives (the room's pendant or flush light): clicking the switch toggles it. */
   lamp: SwitchableLamp;
   /** Colour of the plate. Default the doors' off-white. */

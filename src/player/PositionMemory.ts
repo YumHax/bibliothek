@@ -2,10 +2,10 @@ import * as THREE from 'three';
 import type { Updatable } from '@/core/Engine';
 import { KEYS, PersistedStore, safeStorage } from '@/persistence';
 
-export const POSITION_STORAGE_KEY = KEYS.position;
+const POSITION_STORAGE_KEY = KEYS.position;
 
 /** Where the player last stood: the zone, the world floor point, the way they looked. */
-export interface SavedPosition {
+interface SavedPosition {
   zone: string;
   x: number;
   z: number;
@@ -14,14 +14,14 @@ export interface SavedPosition {
 }
 
 /** What is read and moved of the player (the `FirstPersonController`). */
-export interface Positionable {
+interface Positionable {
   readonly isSeated: boolean;
   getLook(): { yaw: number; pitch: number };
   setPosition(x: number, z: number): void;
   setLook(yaw: number, pitch: number): void;
 }
 
-export interface PositionMemoryOptions {
+interface PositionMemoryOptions {
   /** The camera: where the player is. */
   camera: THREE.Object3D;
   player: Positionable;

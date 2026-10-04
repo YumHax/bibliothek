@@ -68,7 +68,8 @@ export class FloorLamp extends SwitchableLamp {
     const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.025, 16, 12), this.bulb);
     bulb.position.y = poleHeight + 0.04;
 
-    this.light = new THREE.PointLight(LAMP_LIGHT.incandescent, this.options.intensity, 0, 2);
+    // A reach: with distance 0 every fragment of the scene evaluates the light (at 8 m its inverse-square light is under 2 % of its intensity).
+    this.light = new THREE.PointLight(LAMP_LIGHT.incandescent, this.options.intensity, 8, 2);
     this.light.position.y = poleHeight + 0.04;
     this.light.castShadow = false;
 

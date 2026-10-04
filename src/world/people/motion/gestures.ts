@@ -46,7 +46,7 @@ interface Key {
   face?: FaceKey;
 }
 
-export interface Gesture {
+interface Gesture {
   /** Seconds (at tempo 1) until it has let go of everything. */
   readonly length: number;
   readonly keys: readonly Key[];
@@ -298,7 +298,7 @@ export const GESTURES = {
 export type GestureName = keyof typeof GESTURES;
 
 /** What a gesture asks for at a moment: arms (when it holds them) and the offsets. */
-export interface GestureFrame {
+interface GestureFrame {
   arms: [ArmAngles | null, ArmAngles | null];
   spine: number;
   twist: number;

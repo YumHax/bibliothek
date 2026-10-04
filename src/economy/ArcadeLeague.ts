@@ -4,17 +4,17 @@ import { LEAGUE, STREAK } from './pricing';
 import { REGULARS } from './rivals';
 import { seeded } from './seeded';
 
-export const ARCADE_LEAGUE_KEY = KEYS.arcadeLeague;
+const ARCADE_LEAGUE_KEY = KEYS.arcadeLeague;
 
 /** One line of the league table. */
-export interface LeagueEntry {
+interface LeagueEntry {
   name: string;
   tickets: number;
   you?: boolean;
 }
 
 /** How a finished week went for the player, handed over once (`takeWeekResult`). */
-export interface WeekResult {
+interface WeekResult {
   week: string;
   tickets: number;
   /** 0-based place on the final table. */
@@ -23,7 +23,7 @@ export interface WeekResult {
 }
 
 /** What one ticket play did to the streak: the day's streak and the bonus it paid (0 after the first play of the day). */
-export interface StreakNews {
+interface StreakNews {
   days: number;
   bonus: number;
 }
@@ -41,7 +41,7 @@ interface LeagueFile {
   pennants: number;
 }
 
-export interface ArcadeLeagueOptions {
+interface ArcadeLeagueOptions {
   storage?: Storage | null;
   /** Now; injectable for a fixed time. */
   now?: () => Date;
@@ -218,6 +218,6 @@ function readLeague(data: unknown): LeagueFile | null {
 }
 
 /** The bonus the first play of the `days`-th day in a row pays (nothing on the first day). */
-export function streakBonus(days: number): number {
+function streakBonus(days: number): number {
   return days >= 2 ? Math.min(days, STREAK.maxDays) * STREAK.perDay : 0;
 }

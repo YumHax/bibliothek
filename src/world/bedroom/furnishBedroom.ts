@@ -48,7 +48,7 @@ import { rugsUnderfoot } from '../build/rugsUnderfoot';
 import { regionLockFor } from '@/economy/regionLock';
 
 /** What the bedroom built that the rest of the game needs: its screen, the bed (a cat's napping spot), the overflow shelving. */
-export interface BedroomHandle extends ZoneHandle {
+interface BedroomHandle extends ZoneHandle {
   tv: Television;
   /** The cat's napping spot on the bed (on the mattress, before the bed is bought). */
   bed: CatPerch;

@@ -8,7 +8,7 @@ import { RESOLUTIONS, type ResolutionId } from './coproPlan';
  */
 
 /** The player's ballot for one meeting: their vote per resolution, the votes their coins bought. */
-export interface Ballot {
+interface Ballot {
   votes: Partial<Record<ResolutionId, string>>;
   bought: Partial<Record<ResolutionId, number>>;
 }

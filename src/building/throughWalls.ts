@@ -9,7 +9,7 @@ import { gameDayRandom } from '@/time/daily';
 import { NEIGHBOUR_NOISE as plan, type HourSpan, type ThroughWall } from './neighbourNoisePlan';
 
 /** What the sounds through the walls need to know. */
-export interface ThroughWallsOptions {
+interface ThroughWallsOptions {
   /** The ears (the camera). */
   listener: THREE.Object3D;
   /** Whether a world point is inside the flat (`stairwell/flatHeard.BuildingSpaces`). */

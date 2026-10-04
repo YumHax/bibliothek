@@ -465,7 +465,7 @@ export class CatModel extends THREE.Group implements CatBody {
     this.groomLeft -= dt;
     if (this.groomLeft > 0) return;
     const next = GROOM_NEXT[this.groomPhase];
-    this.groomPhase = next[Math.floor(Math.random() * next.length)];
+    this.groomPhase = next[Math.floor(Math.random() * next.length)]!;
     this.groomLeft = THREE.MathUtils.randFloat(GROOM_PHASE_S.min, GROOM_PHASE_S.max);
     this.target = GROOM_SIDES[this.groomSide][this.groomPhase];
   }
@@ -628,8 +628,8 @@ export class CatModel extends THREE.Group implements CatBody {
     // Ears: pose angle, relaxed while purring, pricked forward at something, pinned back on a flick, one twitching now and then.
     const prick = Math.min(1, this.prickLeft / 0.3) * Math.min(1, (PRICK_DURATION - this.prickLeft) / 0.08);
     const earBase = cur.ears - 0.15 * purr + 0.35 * prick - 0.9 * flick;
-    for (let i = 0; i < this.ears.length; i++) {
-      this.ears[i].rotation.x = earBase - (i === this.twitchSide ? this.twitchAmount : 0);
+    for (const [i, ear] of this.ears.entries()) {
+      ear.rotation.x = earBase - (i === this.twitchSide ? this.twitchAmount : 0);
     }
 
     // Eyes: the ball squashes, the upper lid cap rolls down over it.
@@ -653,8 +653,7 @@ export class CatModel extends THREE.Group implements CatBody {
     const swayAmp = THREE.MathUtils.lerp(restAmp, Math.max(restAmp, 0.35), purr);
     const f1 = THREE.MathUtils.lerp(0.9, 0.5, purr);
     const f2 = THREE.MathUtils.lerp(1.7, 0.95, purr);
-    for (let i = 0; i < this.tail.length; i++) {
-      const pivot = this.tail[i];
+    for (const [i, pivot] of this.tail.entries()) {
       const weight = (i + 1) / TAIL_SEGMENTS;
       const lagged = t - i * TAIL_LAG_S;
       const sway = (Math.sin(lagged * f1) + Math.sin(lagged * f2 + 1.3) * 0.5) * swayAmp + Math.sin(cycle - i * 0.5) * 0.12 * this.gaitWeight;

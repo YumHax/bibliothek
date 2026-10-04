@@ -8,7 +8,7 @@ import { invisibleHitbox } from '../../meshUtils';
 import { paint } from '../../materials/palette';
 import { snowPaint } from '../snowCover';
 
-export interface BusStopPoleOptions {
+interface BusStopPoleOptions {
   line: string;
   /** Where it goes (the destination board's words), and where the player can ride to. */
   towards: string;

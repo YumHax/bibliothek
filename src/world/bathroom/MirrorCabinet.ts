@@ -75,9 +75,9 @@ export class MirrorCabinet extends Prop {
   /** Two glass shelves: bottles and a jar of cotton buds low, a razor, a box of plasters and a scent bottle higher up. */
   private buildShelves(interior: THREE.Group, inner: number, height: number, bodyD: number): void {
     const z = BOARD + (bodyD - BOARD) / 2;
-    const levels = [BOARD, height * 0.36, height * 0.69];
+    const levels: [floor: number, lower: number, upper: number] = [BOARD, height * 0.36, height * 0.69];
     for (const y of levels.slice(1)) part(interior, inner, 0.006, bodyD - BOARD - 0.01, GLASS.screen, { y, z }).castShadow = false;
-    const on = (level: number): number => levels[level] + (level === 0 ? BOARD / 2 : 0.003);
+    const on = (level: 0 | 1 | 2): number => levels[level] + (level === 0 ? BOARD / 2 : 0.003);
     this.bottomShelf.set(0, on(0), z);
 
     // Bottom: two bottles; the cleaning kit stands in the middle until it is taken (placed by the bathroom's builder).

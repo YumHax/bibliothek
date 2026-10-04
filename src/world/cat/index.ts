@@ -18,18 +18,12 @@ import type { Placer } from '../build/owned';
 import type { Furnishings } from '@/furnishing/Furnishings';
 
 export { Cat } from './Cat';
-export { CatModel } from './CatModel';
-export { FoodBowl } from './FoodBowl';
-export { WaterBowl } from './WaterBowl';
-export { CatBed } from './CatBed';
-export { Scratcher } from './Scratcher';
-export { CatToy } from './CatToy';
-export { CatSettingsStore, CAT_STORAGE_KEY } from './catSettings';
+export { CatSettingsStore,  } from './catSettings';
 export { catPlacers, followAdoption } from './adoption';
-export { placeCatEscapes, addCatFind, type CatFind } from './escapes';
+export { placeCatEscapes,   } from './escapes';
 export * from './types';
 
-export interface CatFurnishOptions {
+interface CatFurnishOptions {
   /** Name and coat; the cat follows later changes. */
   settings: CatSettingsStore;
   player: CatPlayerView;

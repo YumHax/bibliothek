@@ -8,7 +8,7 @@ import { MarketPanel, escapeHtml } from './market/MarketPanel';
 import './HomeShopPanel.css';
 
 /** The purse a shop takes coins from. */
-export interface ShopWallet extends TxWallet {
+interface ShopWallet extends TxWallet {
   subscribe(cb: () => void): () => void;
 }
 
@@ -63,7 +63,7 @@ export class HomeShopPanel extends MarketPanel {
     return this;
   }
 
-  protected onOpened(): void {
+  protected override onOpened(): void {
     super.onOpened();
     this.loadPhotos();
   }
@@ -115,7 +115,7 @@ export class HomeShopPanel extends MarketPanel {
     }
   }
 
-  protected onAction(action: string, el: HTMLElement): void {
+  protected override onAction(action: string, el: HTMLElement): void {
     if (action !== 'buy') return;
     const good = goodsOf(this.shop).find((g) => g.id === el.dataset.id);
     if (!good || this.statusOf(good) !== 'buy') return;

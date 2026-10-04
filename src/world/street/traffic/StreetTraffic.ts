@@ -5,7 +5,7 @@ import type { DayNight } from '../../props/DayNight';
 import { FRONT, STREET_PLAN } from '../streetPlan';
 
 /** Where the signalled crossing's cycle is: cars go, amber, all red, walkers go, walkers' flashing man, all red again. */
-export type SignalPhase = 'carsGreen' | 'amber' | 'clearForWalkers' | 'walkersGreen' | 'walkersFlash' | 'clearForCars';
+type SignalPhase = 'carsGreen' | 'amber' | 'clearForWalkers' | 'walkersGreen' | 'walkersFlash' | 'clearForCars';
 
 /**
  * Something drivers must not run into (zone-local, on the ground): a passer-by on the road, the

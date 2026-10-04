@@ -6,13 +6,13 @@ import { Prop } from '../props/Prop';
 import { BRASS, PANEL_PITCH } from './liftBody';
 
 /** A button's plate (width, height) and the box it is clicked in (width, height, depth), local. */
-export interface ButtonSize {
+interface ButtonSize {
   plate: [number, number];
   hit: [number, number, number];
 }
 
 /** The call button on a landing's cage post; one of the car panel's, small enough for a row a floor. */
-export const CALL_BUTTON: ButtonSize = { plate: [0.1, 0.16], hit: [0.22, 0.3, 0.2] };
+const CALL_BUTTON: ButtonSize = { plate: [0.1, 0.16], hit: [0.22, 0.3, 0.2] };
 export const PANEL_BUTTON: ButtonSize = { plate: [0.04, 0.04], hit: [0.07, PANEL_PITCH, 0.08] };
 
 /** A brass button (the call button on a landing, the panel in the car): a caption and a click. */

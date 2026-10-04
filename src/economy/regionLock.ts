@@ -32,7 +32,7 @@ function grandfathered(game: Game): boolean {
 }
 
 /** The lock for a flat where `owns` says which converters were bought. */
-export function regionLock(owns: (upgrade: HomeUpgrade) => boolean): RegionLock {
+function regionLock(owns: (upgrade: HomeUpgrade) => boolean): RegionLock {
   return (game) => {
     if (!isImport(game) || grandfathered(game)) return null;
     const converter = CONVERTER_OF[game.platform];

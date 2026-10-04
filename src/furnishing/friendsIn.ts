@@ -7,7 +7,7 @@ const LOOK_EVERY = 1000;
 const PREFIX = 'Friend:';
 
 /** A friend visiting: their figure (its world position read live) and what the caption calls them. */
-export interface FriendHere {
+interface FriendHere {
   readonly object: THREE.Object3D;
   readonly name: string;
   getWorldPosition(target: THREE.Vector3): THREE.Vector3;

@@ -34,7 +34,7 @@ interface TurntableFile {
   last: string | null;
 }
 
-export interface RecordPlayerOptions {
+interface RecordPlayerOptions {
   /** The turntable's parts in the host's frame (`Sideboard.turntable`). */
   turntable: { centre: THREE.Vector3; pivot: THREE.Vector3; plinth: { at: THREE.Vector3; size: THREE.Vector3 }; still: THREE.Object3D[] };
   /** How many soundtrack records are owned (`HomeUpgrades.count('record')`: the first n of `RECORDS`). */

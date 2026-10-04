@@ -14,7 +14,7 @@ import { paint, timber } from '@/world/materials/palette';
  * scratches from. 0.38 x 0.68 x 0.38 m overall; a real collider (the player walks around it).
  */
 
-export interface ScratcherOptions {
+interface ScratcherOptions {
   /** Wood colour of the base. */
   wood?: number;
   /** Carpet colour of the top platform. */

@@ -22,7 +22,7 @@ const TABS: { id: Tab; label: string }[] = [
 /** How many of the most valuable copies the value page lists. */
 const TOP_COUNT = 10;
 
-export interface CollectorBookDeps {
+interface CollectorBookDeps {
   /** The purse the milestones' rewards are paid into. */
   wallet: { readonly coins: number; subscribe(cb: () => void): () => void; earnCoins(coins: number): void; addTickets(tickets: number): void };
   collection: GameSource;
@@ -55,7 +55,7 @@ export class CollectorBookPanel extends MarketPanel {
     deps.standing?.subscribe(repaint);
   }
 
-  protected onOpened(): void {
+  protected override onOpened(): void {
     this.deps.watch.refresh();
     super.onOpened();
   }
@@ -75,7 +75,7 @@ export class CollectorBookPanel extends MarketPanel {
   }
 
   /** D-pad left / right (or the arrow keys) flip through the tabs. */
-  protected onSide(direction: 1 | -1): boolean {
+  protected override onSide(direction: 1 | -1): boolean {
     const at = TABS.findIndex((t) => t.id === this.tab);
     this.tab = TABS[(at + direction + TABS.length) % TABS.length]!.id;
     this.refresh();
@@ -83,7 +83,7 @@ export class CollectorBookPanel extends MarketPanel {
     return true;
   }
 
-  protected onAction(action: string, el: HTMLElement): void {
+  protected override onAction(action: string, el: HTMLElement): void {
     if (action === 'tab' && el.dataset.tab) {
       this.tab = el.dataset.tab as Tab;
       this.refresh();

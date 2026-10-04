@@ -37,7 +37,7 @@ export interface NearWall {
   storey: number;
 }
 
-export interface OutdoorsOptions {
+interface OutdoorsOptions {
   /**
    * `rotationY` of the primary window's mount. `DayNight` expresses the sun's azimuth against that
    * window's outward normal; this turns it into a world direction every window agrees on.
@@ -118,7 +118,7 @@ const CITY_LIT_CLOUD = new THREE.Color(0x4a3e36);
  * streets themselves with everything standing on them. Returns the sheet and the retro games
  * shop's display boxes. Shared with the headless check (see `docs/outdoors.md`).
  */
-export function paintView(random: Rng, season: Season, holiday: Holiday | null = null, colorScale = 1): { sheet: Sheet; shopGoods: GoodsRect[] } {
+function paintView(random: Rng, season: Season, holiday: Holiday | null = null, colorScale = 1): { sheet: Sheet; shopGoods: GoodsRect[] } {
   useSeason(season);
   useHoliday(holiday);
   beginHoliday();
@@ -132,6 +132,91 @@ export function paintView(random: Rng, season: Season, holiday: Holiday | null =
   paintCourtyard(sheet, random);
   return { sheet, shopGoods: shops.find((shop) => shop.landmark)?.goods ?? [] };
 }
+
+/**
+ * The pane material's uniforms, by name: the painting's textures (filled by `adopt`), the life's sprite
+ * arrays, the pane's geometry and everything that changes with the time of day and the weather (`apply`).
+ * A function rather than a literal in the constructor so the class can hold them under their own type.
+ */
+function outdoorsUniforms(life: Life, options: OutdoorsOptions, season: Season) {
+  const { nearWall } = options;
+  return {
+    // Filled by `adopt` (the painting's textures).
+    scene: { value: null },
+    lights: { value: null },
+    curfew: { value: null },
+    ground: { value: null },
+    fx: { value: null },
+    sky: { value: null },
+    sprites: { value: life.atlas },
+    spriteGlow: { value: life.glow },
+    spriteRect: { value: life.rects },
+    spriteCell: { value: life.cells },
+    spriteInfo: { value: life.info },
+    vehiclePose: { value: life.vehiclePose },
+    vehicleLook: { value: life.vehicleLook },
+    /** Headlights and tail lights: faint by day, full after dark. */
+    lightsOn: { value: 0.03 },
+    center: { value: options.center ?? new THREE.Vector3(0, EYE_HEIGHT_OVER_FLOOR, 0) },
+    radius: { value: options.sceneryDistance ?? 40 },
+    /** The near wall's x0, x1, y0, y1 (an empty y range when there is none), its plane and its storey height. */
+    nearWall: { value: nearWall ? new THREE.Vector4(nearWall.x[0], nearWall.x[1], nearWall.y[0], nearWall.y[1]) : new THREE.Vector4(0, 0, 1, 0) },
+    nearWallZ: { value: nearWall?.z ?? 0 },
+    nearWallStorey: { value: nearWall?.storey ?? 3 },
+    zenith: { value: new THREE.Color() },
+    horizon: { value: new THREE.Color() },
+    /** 0 by day .. 1 at night: how far the scenery has gone dark. */
+    nightness: { value: 0 },
+    starAlpha: { value: 0 },
+    cloudTint: { value: new THREE.Color(0xffffff) },
+    cloudAlpha: { value: 0 },
+    /** How much of the sky is under cloud (the overcast sheet), and how far the clouds have drifted (xy; z the game hour, for the shops' hours). */
+    cloudCover: { value: 0 },
+    cloudDrift: { value: new THREE.Vector4() },
+    /** The city's orange glow on the night sky, stronger under cloud. */
+    cityGlow: { value: 0 },
+    litAlpha: { value: 0 },
+    /** How awake the city is, 0..1: lights whose curfew is above it are out. */
+    wakefulness: { value: 1 },
+    /** The sun's tint and brightness on the scenery by day, and how strongly it casts shadows. */
+    sceneTint: { value: new THREE.Color(0xffffff) },
+    sunShadow: { value: 1 },
+    /** The ground: how wet, how white with snow; what is falling now; drops on the glass. */
+    wetness: { value: 0 },
+    snowCover: { value: 0 },
+    rain: { value: 0 },
+    snow: { value: 0 },
+    paneWet: { value: 0 },
+    /** How hard the wind blows (the trees sway), how thick the fog is and its colour. */
+    wind: { value: 0 },
+    fog: { value: 0 },
+    fogColor: { value: new THREE.Color(0xb8bcc0) },
+    /** A lightning flash: how bright, the bolt's direction on the horizon, its shape and whether it is near enough to see. */
+    lightning: { value: 0 },
+    boltDir: { value: new THREE.Vector3(0, 0, 1) },
+    boltSeed: { value: 0 },
+    boltReach: { value: 0 },
+    /** Spring blossom blowing past on the wind (1 in spring while the trees flower, else 0). */
+    petals: { value: season.name === 'spring' && season.depth < 0.75 ? 1 : 0 },
+    hazeDistance: { value: HAZE_DISTANCE },
+    /** Seconds, for what flickers, blinks and falls. */
+    time: { value: 0 },
+    /** Direction of the point on the horizon under the sun, and the glow strength there. */
+    glowDir: { value: new THREE.Vector3(0, 0, -1) },
+    glowStrength: { value: 0 },
+    sunDir: { value: new THREE.Vector3(0, 1, 0) },
+    sunColor: { value: new THREE.Color(0xfff4e6) },
+    /** 0 high sun (small white disc) .. 1 sun on the horizon (big orange halo). */
+    sunLow: { value: 0 },
+    /** Fades the sun out once it is well below the horizon. */
+    sunVisibility: { value: 1 },
+    moonDir: { value: new THREE.Vector3(0, 1, 0) },
+    moonShadowDir: { value: new THREE.Vector3(0, 1, 0) },
+    moonVisibility: { value: 0 },
+  };
+}
+
+type OutdoorsUniforms = ReturnType<typeof outdoorsUniforms>;
 
 /**
  * The world outside the windows: one 360° view shared by every window, painted once at
@@ -162,6 +247,8 @@ export function paintView(random: Rng, season: Season, holiday: Holiday | null =
 export class Outdoors {
   /** Pane material: samples the view along the ray from the camera through the pane. */
   readonly material: THREE.ShaderMaterial;
+  /** Its uniforms by name (`outdoorsUniforms`): what `update` and `apply` write. */
+  private readonly uniforms: OutdoorsUniforms;
   /** The traffic, the passers-by and the birds. */
   readonly life: Life;
 
@@ -205,87 +292,11 @@ export class Outdoors {
     const painting = options.paintOnFirstDraw ? null : this.paint(random);
     // Painted now, the life draws on after the painting, as it always has; later, from its own seed.
     this.life = new Life(painting ? random : seededRandom(LIFE_SEED));
-    const { nearWall } = options;
     this.sky = dayNight.state;
 
-    this.material = new THREE.ShaderMaterial({
-      uniforms: {
-        // Filled by `adopt` (the painting's textures).
-        scene: { value: null },
-        lights: { value: null },
-        curfew: { value: null },
-        ground: { value: null },
-        fx: { value: null },
-        sky: { value: null },
-        sprites: { value: this.life.atlas },
-        spriteGlow: { value: this.life.glow },
-        spriteRect: { value: this.life.rects },
-        spriteCell: { value: this.life.cells },
-        spriteInfo: { value: this.life.info },
-        vehiclePose: { value: this.life.vehiclePose },
-        vehicleLook: { value: this.life.vehicleLook },
-        /** Headlights and tail lights: faint by day, full after dark. */
-        lightsOn: { value: 0.03 },
-        center: { value: options.center ?? new THREE.Vector3(0, EYE_HEIGHT_OVER_FLOOR, 0) },
-        radius: { value: options.sceneryDistance ?? 40 },
-        /** The near wall's x0, x1, y0, y1 (an empty y range when there is none), its plane and its storey height. */
-        nearWall: { value: nearWall ? new THREE.Vector4(nearWall.x[0], nearWall.x[1], nearWall.y[0], nearWall.y[1]) : new THREE.Vector4(0, 0, 1, 0) },
-        nearWallZ: { value: nearWall?.z ?? 0 },
-        nearWallStorey: { value: nearWall?.storey ?? 3 },
-        zenith: { value: new THREE.Color() },
-        horizon: { value: new THREE.Color() },
-        /** 0 by day .. 1 at night: how far the scenery has gone dark. */
-        nightness: { value: 0 },
-        starAlpha: { value: 0 },
-        cloudTint: { value: new THREE.Color(0xffffff) },
-        cloudAlpha: { value: 0 },
-        /** How much of the sky is under cloud (the overcast sheet), and how far the clouds have drifted (xy; z the game hour, for the shops' hours). */
-        cloudCover: { value: 0 },
-        cloudDrift: { value: new THREE.Vector4() },
-        /** The city's orange glow on the night sky, stronger under cloud. */
-        cityGlow: { value: 0 },
-        litAlpha: { value: 0 },
-        /** How awake the city is, 0..1: lights whose curfew is above it are out. */
-        wakefulness: { value: 1 },
-        /** The sun's tint and brightness on the scenery by day, and how strongly it casts shadows. */
-        sceneTint: { value: new THREE.Color(0xffffff) },
-        sunShadow: { value: 1 },
-        /** The ground: how wet, how white with snow; what is falling now; drops on the glass. */
-        wetness: { value: 0 },
-        snowCover: { value: 0 },
-        rain: { value: 0 },
-        snow: { value: 0 },
-        paneWet: { value: 0 },
-        /** How hard the wind blows (the trees sway), how thick the fog is and its colour. */
-        wind: { value: 0 },
-        fog: { value: 0 },
-        fogColor: { value: new THREE.Color(0xb8bcc0) },
-        /** A lightning flash: how bright, the bolt's direction on the horizon, its shape and whether it is near enough to see. */
-        lightning: { value: 0 },
-        boltDir: { value: new THREE.Vector3(0, 0, 1) },
-        boltSeed: { value: 0 },
-        boltReach: { value: 0 },
-        /** Spring blossom blowing past on the wind (1 in spring while the trees flower, else 0). */
-        petals: { value: season.name === 'spring' && season.depth < 0.75 ? 1 : 0 },
-        hazeDistance: { value: HAZE_DISTANCE },
-        /** Seconds, for what flickers, blinks and falls. */
-        time: { value: 0 },
-        /** Direction of the point on the horizon under the sun, and the glow strength there. */
-        glowDir: { value: new THREE.Vector3(0, 0, -1) },
-        glowStrength: { value: 0 },
-        sunDir: { value: new THREE.Vector3(0, 1, 0) },
-        sunColor: { value: new THREE.Color(0xfff4e6) },
-        /** 0 high sun (small white disc) .. 1 sun on the horizon (big orange halo). */
-        sunLow: { value: 0 },
-        /** Fades the sun out once it is well below the horizon. */
-        sunVisibility: { value: 1 },
-        moonDir: { value: new THREE.Vector3(0, 1, 0) },
-        moonShadowDir: { value: new THREE.Vector3(0, 1, 0) },
-        moonVisibility: { value: 0 },
-      },
-      vertexShader,
-      fragmentShader,
-    });
+    const uniforms = outdoorsUniforms(this.life, options, season);
+    this.uniforms = uniforms;
+    this.material = new THREE.ShaderMaterial({ uniforms, vertexShader, fragmentShader });
     this.material.onBeforeRender = this.markDrawn;
     if (painting) this.adopt(painting);
 
@@ -304,8 +315,8 @@ export class Outdoors {
   /** Hands `painting`'s textures to the panes, puts the life's shop where it is painted and the stock asked for in its window. */
   private adopt(painting: Painting): void {
     this.painting = painting;
-    const u = this.material.uniforms;
-    for (const [name, texture] of Object.entries(painting.textures)) u[name].value = texture;
+    // A sampler per painted texture, declared in `outdoorsUniforms` under the texture's name.
+    for (const [name, texture] of Object.entries(painting.textures)) this.material.uniforms[name]!.value = texture;
     // The shop's restocked window and its banner go up alone, not the whole scenery.
     painting.upload = new RegionUploader(painting.textures.scene);
     painting.upload.attach(this.material);
@@ -328,7 +339,7 @@ export class Outdoors {
 
   /** Moves the traffic, the passers-by, the birds and the clouds on by `dt` seconds. */
   update(dt: number): void {
-    const u = this.material.uniforms;
+    const u = this.uniforms;
     u.time.value = ((u.time.value as number) + dt) % 3600;
     const drift = u.cloudDrift.value as THREE.Vector4;
     drift.x = (drift.x + dt * CLOUD_DRIFT * (0.6 + this.sky.cloudCover)) % 1;
@@ -357,7 +368,7 @@ export class Outdoors {
     const ctx = (painting.textures.scene.image as HTMLCanvasElement).getContext('2d');
     if (!ctx) return;
     painting.shopGoods.forEach((box, i) => {
-      ctx.fillStyle = colors[i % colors.length];
+      ctx.fillStyle = colors[i % colors.length]!; // at least one colour, checked above
       ctx.fillRect(box.x, box.y, box.w, box.h);
     });
     this.markGoods(painting, 0);
@@ -449,7 +460,7 @@ export class Outdoors {
   /** Pushes the sky state into the uniforms; nothing is repainted. */
   private apply(sky: SkyState): void {
     this.sky = sky;
-    const u = this.material.uniforms;
+    const u = this.uniforms;
     // Stars follow the sun alone (the weather dims `daylight` too, and a grey noon has no stars).
     const skyNight = 1 - THREE.MathUtils.smoothstep(sky.sunHeight, -0.12, 0.3);
     (u.zenith.value as THREE.Color).copy(sky.zenith);

@@ -39,7 +39,7 @@ const AIM_MAX = LANE_W / 2 - BALL_R - 0.02;
 /** The power meter swings up and down while fire is held (a full swing in this many seconds). */
 const POWER_PERIOD = 1.1;
 
-export type AlleyPhase = 'aim' | 'roll' | 'fly' | 'sink' | 'back';
+type AlleyPhase = 'aim' | 'roll' | 'fly' | 'sink' | 'back';
 
 /**
  * ALLEY ROLL's play: nine balls; with one in hand, left / right move it across the lane and fire

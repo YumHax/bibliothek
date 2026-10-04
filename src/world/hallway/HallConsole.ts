@@ -7,7 +7,7 @@ import { METAL, paint, timber } from '@/world/materials/palette';
 import { GLASS } from '@/world/materials/glass';
 import { mirrorGlass } from '../props/MirrorGlass';
 
-export interface HallConsoleOptions {
+interface HallConsoleOptions {
   /** Length along the wall. Default 0.9. */
   width?: number;
   /** A mirror hung on the wall above it (a true reflection on high quality, see `mirrorGlass`). Default true. */

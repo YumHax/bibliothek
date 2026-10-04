@@ -9,12 +9,12 @@ import type { Zone } from '../zone/Zone';
  */
 
 /** The yard's spots, zone-local: where and which way (yaw) something of another feature goes. */
-export interface CourtyardSpots {
+interface CourtyardSpots {
   chestnut: { at: THREE.Vector3; yaw: number };
 }
 
 /** Builds something into the courtyard's zone at its spots; anything it subscribes to goes through `zone.onUnload`. */
-export type CourtyardDresser = (zone: Zone, spots: CourtyardSpots) => void;
+type CourtyardDresser = (zone: Zone, spots: CourtyardSpots) => void;
 
 const dressers = new Set<CourtyardDresser>();
 

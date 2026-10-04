@@ -72,7 +72,7 @@ export function wood(color: THREE.ColorRepresentation, roughness = 0.6): THREE.M
 }
 
 /** Adds the grain and dust of `wood()` to an existing material (whatever its colour or map). */
-export function woodGrain<M extends THREE.MeshStandardMaterial>(material: M): M {
+function woodGrain<M extends THREE.MeshStandardMaterial>(material: M): M {
   if (!QUALITY.detailedMaterials) return material;
   const uniforms = { woodGrain: { value: grain() }, grainScale: { value: new THREE.Vector2(1 / GRAIN_ALONG_M, 1 / GRAIN_ACROSS_M) } };
   return patchShader(material, 'wood', (shader) => {

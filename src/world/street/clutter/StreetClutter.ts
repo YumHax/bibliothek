@@ -12,7 +12,7 @@ import { groundHeight } from '../relief/ground';
 import { FACADES, FRONT, KERB_HEIGHT, isWalkable, type Vec2 } from '../streetPlan';
 import { GROUND, onSurface } from '../../surface/layers';
 
-export interface StreetClutterOptions {
+interface StreetClutterOptions {
   /** The pavement trees (petals settle round them in spring). */
   trees: readonly Vec2[];
   /** The street's litter bins and benches (where the litter gathers). */

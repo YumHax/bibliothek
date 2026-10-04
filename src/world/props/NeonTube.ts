@@ -58,7 +58,8 @@ export class NeonTube extends Prop {
       this.add(bracket);
     }
     if ((options.intensity ?? 0) > 0) {
-      const light = new THREE.PointLight(color, options.intensity, 0, 2);
+      // A reach: with distance 0 every fragment of the scene evaluates the light; a tube's spill is gone within a few metres.
+      const light = new THREE.PointLight(color, options.intensity, 6, 2);
       light.position.set(0, -0.05, standoff + 0.1);
       light.castShadow = false;
       this.add(light);

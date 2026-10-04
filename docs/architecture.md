@@ -243,7 +243,7 @@ src/household/          What the kitchen, bathroom and bedroom are for: Househol
                         chronicle, dreams, catGift. See docs/household.md.
 src/journal/            Journal (the day's lines and sums per local date, 60 days kept, `note(kind, text, data?)` / `tally`), journalWatch
                         (`watchForJournal`: writes it from the wallet, collection, parcel, prizes and medals by diffing their counts),
-                        upcoming (the market's round ahead). The notebook is `world/props/Notebook` on the hall console.
+                        upcoming (the market's round ahead). The notebook is `world/hallway/Notebook` on the hall console.
 src/onboarding/         FirstDay (the guided first day: steps ticked by the stores and the zones, one tip per step and zone, persisted,
                         off for a save that predates it), firstDaySteps (the steps, the to-do lines, the tips per zone), ToDoNote (the
                         folded card on the hall console), StickyNote ("KEYS!" on the front door's leaf, `Door.attachToLeaf`), context

@@ -13,7 +13,7 @@ import type { StrayGames } from './StrayGames';
 const MAX_YAW = THREE.MathUtils.degToRad(20);
 const MAX_OFFSET = 0.03;
 
-export interface StrayBoxOptions {
+interface StrayBoxOptions {
   strays: StrayGames;
   /** The slot's name, unique in the flat: with the day it seeds which game lies here. */
   slot: string;

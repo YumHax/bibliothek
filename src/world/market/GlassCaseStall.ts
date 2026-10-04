@@ -6,7 +6,7 @@ import { GLASS, asGlass } from '../materials/glass';
 import { PROUD, proud } from '../props/joinery';
 import { centreOutRow, fitInRow, paintStallSign, plainCloth } from './stallPaint';
 
-export interface GlassCaseStallOptions {
+interface GlassCaseStallOptions {
   /** Text on the little sign on its post (a platform's name). */
   sign: string;
   /** Colour of the velvet lining. */

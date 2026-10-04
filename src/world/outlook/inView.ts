@@ -12,7 +12,7 @@ const FINE_WITHIN = 35;
 const FINE_DETAIL = 34;
 
 /** The facades of our own building: the windows looking out are in them (their backs would stand in the view). */
-export const OUR_BUILDING = ['ours', 'oursBay', 'oursSide', 'oursBack', 'oursBackW', 'oursWell', 'oursWellE', 'oursWellW'];
+const OUR_BUILDING = ['ours', 'oursBay', 'oursSide', 'oursBack', 'oursBackW', 'oursWell', 'oursWellE', 'oursWellW'];
 
 /**
  * The facades seen from `eye`: within `REACH` of it, their face turned towards it, less `without`; the near ones
@@ -42,6 +42,7 @@ export function facadesInView(eye: Vec2, without: readonly string[]): FacadeSpec
  * sides): those facing a point just outside one of our own facades, within reach of it, less our building itself
  * (its kitchen wing, `oursWing`, stays: the kitchen's and the courtyard's windows see it). One view serves them all
  * (`homeOutlook`): the street is built once for the whole building.
+ * @public reached through `import('./inView')` in `sharedOutlook`, which knip does not read.
  */
 export function homeFacades(): FacadeSpec[] {
   const eyes: Vec2[] = [];

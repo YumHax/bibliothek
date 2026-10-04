@@ -8,11 +8,11 @@ import { fabric, wood as woodMaterial } from '@/world/materials/finishes';
 import { bandAround } from '../props/joinery';
 
 /** The five things a household stall sells. */
-export type HomeGoodsId = 'bookcase' | 'rug' | 'lamp' | 'poster' | 'crt';
+type HomeGoodsId = 'bookcase' | 'rug' | 'lamp' | 'poster' | 'crt';
 
-export const HOME_GOODS_IDS: readonly HomeGoodsId[] = ['bookcase', 'rug', 'lamp', 'poster', 'crt'];
+const HOME_GOODS_IDS: readonly HomeGoodsId[] = ['bookcase', 'rug', 'lamp', 'poster', 'crt'];
 
-export interface HomeGoodsOptions {
+interface HomeGoodsOptions {
   /** Click on item `id`. */
   onActivate: (id: HomeGoodsId, session: SessionActions) => void;
   /** Hover caption of item `id`. */
@@ -91,22 +91,6 @@ export class HomeGoodsItem extends Prop implements Interactable {
 /** The five items, each with its suggested `offset` from the table top's centre (spread along x within 1.5 m). */
 export function homeGoodsItems(options: HomeGoodsOptions): HomeGoodsItem[] {
   return HOME_GOODS_IDS.map((id) => new HomeGoodsItem(id, options));
-}
-
-/**
- * The household stall's goods as a set: `items` to place one by one (each at the table top's
- * centre plus its `offset`), and `setAvailable(id, …)` to take one off sale. Not an Object3D itself.
- */
-export class HomeGoodsDisplay {
-  readonly items: readonly HomeGoodsItem[];
-
-  constructor(options: HomeGoodsOptions) {
-    this.items = homeGoodsItems(options);
-  }
-
-  setAvailable(id: HomeGoodsId, available: boolean): void {
-    this.items.find((item) => item.goodsId === id)?.setAvailable(available);
-  }
 }
 
 /**

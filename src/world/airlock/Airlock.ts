@@ -16,7 +16,7 @@ import { SasShell } from './SasShell';
 import { bake, sasFinish } from './sasFinish';
 import { layMesh, WALL } from '../surface/layers';
 
-export interface AirlockOptions {
+interface AirlockOptions {
   twin: TwinId;
   /** The zone's colliders, for the doors' leaves. */
   collisions: Collisions;

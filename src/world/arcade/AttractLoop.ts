@@ -22,7 +22,7 @@ const REPLAY_MAX = 150;
 const DEMO_HOLD = 1.6;
 const DEMO_SKILL = 0.55;
 
-export interface AttractParts {
+interface AttractParts {
   game: ArcadeGame;
   runner: GameRunner;
   screens: CabinetScreens;

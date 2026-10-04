@@ -37,7 +37,7 @@ export interface BoxDetails {
   disc: THREE.Texture | null;
 }
 
-export interface BoxArtLoaderOptions {
+interface BoxArtLoaderOptions {
   /**
    * Where the scans come from (backs, spines, cartridges, discs): slow sources (LaunchBox), asked
    * only for what can wait: the spines after every front, the rest when a box is in hand.

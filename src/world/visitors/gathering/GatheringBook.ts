@@ -9,7 +9,7 @@ export interface NightPhoto {
 }
 
 /** What the paper prints the day after an open house. */
-export interface OpenHouseAccount {
+interface OpenHouseAccount {
   day: number;
   guests: number;
   coins: number;

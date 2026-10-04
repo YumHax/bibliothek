@@ -16,7 +16,8 @@ export function dominantColor(image: CanvasImageSource, fallback: THREE.Color): 
 
     let r = 0, g = 0, b = 0, weight = 0;
     for (let i = 0; i < data.length; i += 4) {
-      const [pr, pg, pb, pa] = [data[i], data[i + 1], data[i + 2], data[i + 3]];
+      // RGBA, four bytes a pixel: the loop steps by four, so all four are there.
+      const [pr, pg, pb, pa] = [data[i]!, data[i + 1]!, data[i + 2]!, data[i + 3]!];
       if (pa < 128) continue;
       const max = Math.max(pr, pg, pb);
       const min = Math.min(pr, pg, pb);

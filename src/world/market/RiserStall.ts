@@ -4,7 +4,7 @@ import { boxMesh, cylinderMesh } from '../meshUtils';
 import { paint, standard, timber } from '../materials/palette';
 import { centreOutRow, fitInRow, paintGingham, paintStallSign, tiledMaterial } from './stallPaint';
 
-export interface RiserStallOptions {
+interface RiserStallOptions {
   /** Text on the sign hanging from the pole's arm (a platform's name). */
   sign: string;
   /** Colour of the checked cloth. */

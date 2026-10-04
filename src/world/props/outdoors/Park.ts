@@ -35,12 +35,12 @@ const inWalkablePark = (x: number, z: number): boolean => x >= WALKABLE_PARK.min
 export function resample(line: [number, number][], step: number): [number, number][] {
   const out: [number, number][] = [];
   for (let i = 1; i < line.length; i++) {
-    const [x0, z0] = line[i - 1];
-    const [x1, z1] = line[i];
+    const [x0, z0] = line[i - 1]!;
+    const [x1, z1] = line[i]!;
     const n = Math.max(1, Math.ceil(Math.hypot(x1 - x0, z1 - z0) / step));
     for (let k = 0; k < n; k++) out.push([x0 + ((x1 - x0) * k) / n, z0 + ((z1 - z0) * k) / n]);
   }
-  out.push(line[line.length - 1]);
+  out.push(line[line.length - 1]!); // a polyline has its two ends at least
   return out;
 }
 
@@ -49,8 +49,8 @@ function paintPath(sheet: Sheet, line: [number, number][], width: number): void 
   const pts = resample(line, 4);
   for (const [w, fill] of [[width + 0.5, PATH_EDGE], [width, PATH]] as const) {
     for (let i = 1; i < pts.length; i++) {
-      const [x0, z0] = pts[i - 1];
-      const [x1, z1] = pts[i];
+      const [x0, z0] = pts[i - 1]!;
+      const [x1, z1] = pts[i]!;
       const len = Math.hypot(x1 - x0, z1 - z0) || 1;
       const nx = (-(z1 - z0) / len) * (w / 2);
       const nz = ((x1 - x0) / len) * (w / 2);
@@ -58,9 +58,9 @@ function paintPath(sheet: Sheet, line: [number, number][], width: number): void 
       const ex = ((x1 - x0) / len) * 0.3;
       const ez = ((z1 - z0) / len) * 0.3;
       const p = new Path2D();
-      const corners = [worldPoint(x0 + nx - ex, z0 + nz - ez, 0), worldPoint(x1 + nx + ex, z1 + nz + ez, 0), worldPoint(x1 - nx + ex, z1 - nz + ez, 0), worldPoint(x0 - nx - ex, z0 - nz - ez, 0)];
-      p.moveTo(corners[0][0], corners[0][1]);
-      for (const [x, y] of corners.slice(1)) p.lineTo(x, y);
+      const [first, ...rest] = [worldPoint(x0 + nx - ex, z0 + nz - ez, 0), worldPoint(x1 + nx + ex, z1 + nz + ez, 0), worldPoint(x1 - nx + ex, z1 - nz + ez, 0), worldPoint(x0 - nx - ex, z0 - nz - ez, 0)] as const;
+      p.moveTo(first[0], first[1]);
+      for (const [x, y] of rest) p.lineTo(x, y);
       p.closePath();
       sheet.begin(Math.hypot((x0 + x1) / 2, (z0 + z1) / 2), 0, { wet: 0.45, snow: 1, flat: true });
       sheet.path(p, fill);
@@ -132,7 +132,8 @@ function paintKiosk(sheet: Sheet): void {
 
 /** The hedge along Park Street's far pavement, broken by a gate where a path enters the park from the street. */
 function paintHedge(sheet: Sheet, random: Rng): void {
-  const gates = PARK_PATHS.filter((path) => path[0][0] === -PARK_EDGE).map((path) => azimuthOf(-PARK_EDGE, path[0][1]));
+  // A path starts somewhere: its first point is where it meets the street or not.
+  const gates = PARK_PATHS.filter((path) => path[0]![0] === -PARK_EDGE).map((path) => azimuthOf(-PARK_EDGE, path[0]![1]));
   const ranges: [number, number][] = [];
   let start = PARK_FROM;
   for (const gate of [...gates].sort((p, q) => p - q)) {
@@ -250,10 +251,12 @@ export function paintPark(sheet: Sheet, random: Rng): void {
   const edges = [PARK_EDGE, 31, 36, 43, 52, 64, 80, 100, 125, 155, 195, PARK_FAR];
   for (let i = 0; i < edges.length - 1; i++) {
     // Each band shades from its near colour into its far one, so the lawn has no seams.
+    const nearEdge = edges[i]!;
+    const farEdge = edges[i + 1]!;
     const near = seasonalLawn(mixHex(LAWN_NEAR, LAWN_FAR, i / (edges.length - 1)));
     const far = seasonalLawn(mixHex(LAWN_NEAR, LAWN_FAR, (i + 1) / (edges.length - 1)));
-    paintGroundBand(sheet, (a) => parkLine(a, edges[i + 1]), (a) => parkLine(a, edges[i]), (a) => {
-      const g = sheet.color.createLinearGradient(0, heightY(0, parkLine(a, edges[i + 1])), 0, heightY(0, parkLine(a, edges[i])));
+    paintGroundBand(sheet, (a) => parkLine(a, farEdge), (a) => parkLine(a, nearEdge), (a) => {
+      const g = sheet.color.createLinearGradient(0, heightY(0, parkLine(a, farEdge)), 0, heightY(0, parkLine(a, nearEdge)));
       g.addColorStop(0, far);
       g.addColorStop(1, near);
       return g;
@@ -296,12 +299,12 @@ export function paintPark(sheet: Sheet, random: Rng): void {
   PARK_PATHS.forEach((path, p) => {
     const pts = resample(path, 4);
     for (let i = 3; i < pts.length - 2; i += 7) {
-      const [x, z] = pts[i];
+      const [x, z] = pts[i]!;
       add(x, z + 2.2, () => paintLamp(sheet, x, z + 2.2, 4.5, 4));
     }
     for (let i = 2 + p; i < pts.length - 2; i += 5) {
-      const [x0, z0] = pts[i];
-      const [x1, z1] = pts[i + 1];
+      const [x0, z0] = pts[i]!;
+      const [x1, z1] = pts[i + 1]!;
       const len = Math.hypot(x1 - x0, z1 - z0) || 1;
       const side = i % 2 === 0 ? 1 : -1;
       const dir: [number, number] = [((x1 - x0) / len) * side, ((z1 - z0) / len) * side];

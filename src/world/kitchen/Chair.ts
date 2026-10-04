@@ -4,7 +4,7 @@ import { cylinderMesh } from '../meshUtils';
 import { part } from '../props/Prop';
 import { paint, timber } from '../materials/palette';
 
-export interface ChairOptions {
+interface ChairOptions {
   /** Wood colour. Default the pale beech of `KitchenTable`. */
   wood?: number;
   /** Colour of the tied-on seat cushion; `null` for a bare seat. Default a faded terracotta. */

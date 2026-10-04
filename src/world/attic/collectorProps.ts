@@ -45,7 +45,7 @@ export class SheetedFurniture extends Prop implements Interactable {
     this.add(hitbox);
   }
 
-  get footprint(): THREE.Box3 {
+  override get footprint(): THREE.Box3 {
     return new THREE.Box3(new THREE.Vector3(-this.size.x / 2, 0, -this.size.z / 2), new THREE.Vector3(this.size.x / 2, this.size.y, this.size.z / 2));
   }
 
@@ -153,7 +153,7 @@ export class CollectorDesk extends Prop implements Interactable {
     this.add(hitbox);
   }
 
-  get footprint(): THREE.Box3 {
+  override get footprint(): THREE.Box3 {
     return new THREE.Box3(new THREE.Vector3(-0.55, 0, -0.3), new THREE.Vector3(0.55, 0.78, 0.3));
   }
 
@@ -229,7 +229,7 @@ export class DustyShelf extends Prop implements Interactable {
     this.add(hitbox);
   }
 
-  get footprint(): THREE.Box3 {
+  override get footprint(): THREE.Box3 {
     return new THREE.Box3(new THREE.Vector3(-this.width / 2, 0, -0.15), new THREE.Vector3(this.width / 2, 1.6, 0.15));
   }
 

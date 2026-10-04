@@ -11,7 +11,7 @@ import { mergeStaticParts } from '../zone/mergeStatic';
 import type { DisplayPiece } from './displayPieces';
 import { PriceTag, type TagStyle, type TagState } from './PriceTag';
 
-export interface ForSaleOptions {
+interface ForSaleOptions {
   good: HomeGood;
   piece: DisplayPiece;
   /** What the flat has bought; without it (`?debug`, the flat furnished) nothing is sold. */

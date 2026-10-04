@@ -1,7 +1,7 @@
 import { KEYS, PersistedStore, safeStorage } from '@/persistence';
 import { JACKPOT } from './pricing';
 
-export const JACKPOT_KEY = KEYS.arcadeJackpot;
+const JACKPOT_KEY = KEYS.arcadeJackpot;
 
 /**
  * The ticket wheel's progressive jackpot, persisted: it grows with every spin anyone takes (the

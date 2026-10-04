@@ -1,7 +1,7 @@
 import { KEYS, PersistedStore, safeStorage } from '@/persistence';
 import { TABLE_SIZE, rivalTable, scoreRules, type ScoreEntry } from './rivals';
 
-export const ARCADE_SCORES_KEY = KEYS.arcadeScores;
+const ARCADE_SCORES_KEY = KEYS.arcadeScores;
 /** The first version kept only the player's best per game; it is read once and folded in. */
 const LEGACY_KEY = KEYS.arcadeScoresLegacy;
 
@@ -21,7 +21,7 @@ interface ScoresFile {
 }
 
 /** What `submit` reports: a new personal best, and where the score landed on the table (null: off it). */
-export interface SubmitResult {
+interface SubmitResult {
   best: boolean;
   rank: number | null;
 }
@@ -203,7 +203,7 @@ function dropStartingRivals(data: unknown): unknown {
 }
 
 /** Three capital letters (or digits), padded: what an arcade table takes. */
-export function sanitise(initials: string): string {
+function sanitise(initials: string): string {
   const clean = initials.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 3);
   return clean.padEnd(3, 'A');
 }

@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { Prop } from '../props/Prop';
 import { paint } from '../materials/palette';
 
-export interface NightLightOptions {
+interface NightLightOptions {
   /** Colour of the glow. Default a warm amber. */
   color?: number;
 }

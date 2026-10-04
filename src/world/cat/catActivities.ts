@@ -30,7 +30,7 @@ export type Activity =
   | 'flee'
   | 'fleeMild';
 
-export interface ActivityDef {
+interface ActivityDef {
   /** How much an idle cat wants to do it now; without one it is never chosen, only started (a call, a lap, a scare). */
   weight?(mind: CatMind): number;
   /** Sets off: walks there, or enters the state. False when impossible right now (the cat idles and thinks again shortly). */
@@ -158,7 +158,7 @@ export const ACTIVITIES: Record<Activity, ActivityDef> = {
     begin(mind) {
       const windows = mind.ctx.windows;
       if (!windows?.length) return false;
-      const window = windows[Math.floor(Math.random() * windows.length)];
+      const window = windows[Math.floor(Math.random() * windows.length)]!;
       window.lookoutSpot(mind.goal).setY(0);
       mind.setFacing(window.getWorldPosition(mind.tmp));
       mind.goTo(mind.goal, 'window');

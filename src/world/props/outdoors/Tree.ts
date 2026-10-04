@@ -2,15 +2,15 @@ import { Sheet, type Rng, azimuthOf, azimuthX, groundSquash, heightY, sizePx } f
 import { between, mixHex, pick } from './paint';
 import { currentSeason } from '@/time/season';
 
-export interface TreeStyle {
+interface TreeStyle {
   base: string;
   light: string;
   dark: string;
   trunk: string;
 }
 
-/** Summer foliage: limes and planes, oaks, a yellow-green, a blue-green and a copper beech. */
-export const TREE_STYLES: readonly TreeStyle[] = [
+/** Summer foliage: limes and planes, oaks, a yellow-green, a blue-green and a copper beech (never empty: the courtyard's chestnut takes the first). */
+export const TREE_STYLES: readonly [TreeStyle, ...TreeStyle[]] = [
   { base: '#4d8a3c', light: '#8dbb5a', dark: '#2b5a27', trunk: '#4a3a2a' },
   { base: '#3f7a41', light: '#6fa25a', dark: '#22482a', trunk: '#3e3229' },
   { base: '#5e9040', light: '#a3c463', dark: '#345e2a', trunk: '#5a4632' },
@@ -36,7 +36,7 @@ export const WILLOW_STYLE: TreeStyle = { base: '#7fa550', light: '#b7cf7a', dark
  */
 export type TreeForm = 'round' | 'oval' | 'poplar' | 'conifer' | 'willow';
 
-export interface TreeShape {
+interface TreeShape {
   /** Foot of the trunk, in metres from the eye. */
   x: number;
   z: number;

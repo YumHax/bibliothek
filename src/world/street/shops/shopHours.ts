@@ -1,7 +1,7 @@
 import type { ShopKind } from '../streetPlan';
 
 /** When a shop is open, in game hours: from `open` to `close` (past 24 means after midnight: 25 = 1:00). */
-export interface ShopHours {
+interface ShopHours {
   open: number;
   close: number;
 }

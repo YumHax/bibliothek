@@ -7,7 +7,7 @@ import type { ForSaleLike } from './SessionActions';
 import type { CollectionLike, CoreParts } from './SessionParts';
 import type { KeyRoute } from './SessionHost';
 
-export type CopyOpeningParts = Pick<CoreParts, 'inspector' | 'notices'> & { collection?: CollectionLike };
+type CopyOpeningParts = Pick<CoreParts, 'inspector' | 'notices'> & { collection?: CollectionLike };
 
 /**
  * O on a box in hand, before it opens (docs/economy.md "Copies"): a sealed copy at a stall stays shut (the stallholder

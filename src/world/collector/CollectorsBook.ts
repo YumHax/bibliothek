@@ -8,7 +8,7 @@ import { PROUD } from '../props/joinery';
 import { Prop, part } from '../props/Prop';
 import { METAL, paint } from '../materials/palette';
 
-export interface CollectorsBookOptions {
+interface CollectorsBookOptions {
   /** The collector's book panel the binder opens. */
   panel: ModalLike;
   /** Rewards reached and not yet claimed, for the caption. */

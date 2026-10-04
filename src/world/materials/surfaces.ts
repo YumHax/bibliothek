@@ -50,7 +50,7 @@ export function plasterBumpMap(): THREE.CanvasTexture {
 }
 
 /** An opening cut from the bottom edge of a wall (wall-local x of its centre, metres). */
-export interface WallOpening {
+interface WallOpening {
   x: number;
   width: number;
   height: number;
@@ -64,7 +64,7 @@ export interface WallRect {
   halfHeight: number;
 }
 
-export interface WallSurface {
+interface WallSurface {
   /** Length and height of the wall plane (metres); its geometry is centred on its origin. */
   length: number;
   height: number;

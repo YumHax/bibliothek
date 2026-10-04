@@ -20,7 +20,7 @@ import { playKibblePour } from '@/audio/catNoises';
  * `bowlMesh()` and `bowlMat()` are shared with `WaterBowl` so the two dishes match.
  */
 
-export interface FoodBowlOptions {
+interface FoodBowlOptions {
   /** Glaze colour of the ceramic. */
   glaze?: number;
   /** Draw the rubber mat under the bowl (true by default). */
@@ -32,13 +32,13 @@ export interface FoodBowlOptions {
 }
 
 /** Outer radius at the rim. */
-export const BOWL_RADIUS = 0.07;
+const BOWL_RADIUS = 0.07;
 /** Height of the rim above the floor. */
 export const BOWL_HEIGHT = 0.04;
 /** Radius of the opening inside the rim. */
 export const BOWL_INNER_RADIUS = 0.06;
 /** Height of the inside floor of the dish: a millimetre over a rug's top (`FLOOR.rug`), so a bowl on a rug never fights it. */
-export const BOWL_FLOOR = 0.013;
+const BOWL_FLOOR = 0.013;
 /** The rubber mat both bowls sit on: 0.30 x 0.20 x 0.005 m. */
 export const MAT_SIZE = { width: 0.3, height: 0.005, depth: 0.2 };
 
@@ -211,8 +211,9 @@ export class FoodBowl extends THREE.Group implements Furniture, Interactable, Up
   private layoutKibble(): void {
     const visible = Math.round(this._level * KIBBLE_COUNT);
     this.kibble.count = visible;
+    // `rest` and `spin` hold KIBBLE_COUNT entries each; `visible` never exceeds it.
     for (let i = 0; i < visible; i++) {
-      const target = this.rest[i];
+      const target = this.rest[i]!;
       scratchPosition.copy(target);
       scratchScale.copy(FULL_SCALE);
       if (this.pouring >= 0) {
@@ -222,7 +223,7 @@ export class FoodBowl extends THREE.Group implements Furniture, Interactable, Up
         if (t <= 0) scratchScale.copy(HIDDEN_SCALE);
         else if (t < 1) scratchPosition.y = target.y + DROP_HEIGHT * (1 - t * t);
       }
-      scratchMatrix.compose(scratchPosition, this.spin[i], scratchScale);
+      scratchMatrix.compose(scratchPosition, this.spin[i]!, scratchScale);
       this.kibble.setMatrixAt(i, scratchMatrix);
     }
     this.kibble.instanceMatrix.needsUpdate = true;

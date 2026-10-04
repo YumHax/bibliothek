@@ -7,7 +7,7 @@ import { paint, timber } from '../materials/palette';
 import { isShared } from '../materials/sharedResources';
 import { prizeModel } from './prizeModel';
 
-export interface PrizeShelfOptions {
+interface PrizeShelfOptions {
   /** The prizes taken home, and a way to hear about new ones. */
   prizes: { readonly owned: readonly OwnedPrize[]; subscribe(cb: () => void): () => void };
   /** Shelf length, metres. Default 0.8. */

@@ -76,7 +76,7 @@ export class JobLotPanel extends MarketPanel {
     return `${offer.games.length} games · ${offer.price} coins`;
   }
 
-  protected onAction(action: string): void {
+  protected override onAction(action: string): void {
     if (action !== 'buy') return;
     const { market, wallet, tx } = this.deps;
     const lot = this.lot;
@@ -94,7 +94,7 @@ export class JobLotPanel extends MarketPanel {
     this.refresh();
   }
 
-  protected onClosed(): void {
+  protected override onClosed(): void {
     // Asked afresh next time (the market keeps the day's lot): a new market day brings a new one.
     this.lot = null;
   }

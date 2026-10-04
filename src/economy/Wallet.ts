@@ -1,6 +1,6 @@
 import { KEYS, PersistedStore, safeStorage } from '@/persistence';
 
-export const WALLET_STORAGE_KEY = KEYS.wallet;
+const WALLET_STORAGE_KEY = KEYS.wallet;
 
 interface WalletFile {
   coins: number;

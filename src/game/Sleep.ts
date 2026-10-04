@@ -1,13 +1,13 @@
 import { duckScene } from '@/audio/audioContext';
 
 /** The clock as a night's sleep needs it: the hour now, and wind forward to an hour (days passing on the way). */
-export interface SleepClock {
+interface SleepClock {
   readonly state: { readonly hours: number };
   advanceTo(hours: number): void;
 }
 
 /** A full-screen curtain: `out()` covers the view, `in()` reveals it (the teleport's `Fader`). */
-export interface SleepCurtain {
+interface SleepCurtain {
   out(ms?: number): Promise<void>;
   in(ms?: number): Promise<void>;
 }

@@ -13,7 +13,7 @@ import { pinSource, refreshBoard, type BoardNote } from './boardNotes';
  */
 
 /** When the arc starts (game day) and when the flat goes on sale; how long her thank-you stays on the board. */
-export const ROUX_MOVE = { thinkingFrom: 15, forSaleFrom: 19, thanksDays: 4, postcardAfter: 3 } as const;
+const ROUX_MOVE = { thinkingFrom: 15, forSaleFrom: 19, thanksDays: 4, postcardAfter: 3 } as const;
 
 /**
  * Where the arc stands: `settled` (as ever), `thinking` (the stairs are hard, Lyon), `forSale` (the agency's sign on
@@ -31,14 +31,14 @@ interface State {
 }
 
 /** What the move needs of the game: the day, what was bought, the doorstep the notes go under. */
-export interface RouxMoveDeps {
+interface RouxMoveDeps {
   today: { readonly gameDay: number; onNewGameDay(cb: (day: number) => void): () => void };
   upgrades?: { has(upgrade: HomeUpgrade): boolean; subscribe(cb: () => void): () => void };
   doorstep?: { slipNote(piece: MailPiece): void };
 }
 
 /** Her door on our landing (`stairwell/building.doorKey(0, 0)`). */
-export const ROUX_DOOR = '0:0';
+const ROUX_DOOR = '0:0';
 
 const LINES: Partial<Record<RouxPhase, string[]>> = {
   thinking: [
@@ -147,7 +147,7 @@ export function markRouxBought(): void {
 }
 
 /** What Mrs Roux says of her move when chatted to on the stairs, in turn (null: her own lines). */
-export function rouxSays(): string | null {
+function rouxSays(): string | null {
   const lines = LINES[rouxPhase()];
   if (!lines) return null;
   return lines[nextLine++ % lines.length]!;

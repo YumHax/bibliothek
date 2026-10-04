@@ -13,7 +13,7 @@ const VOICE: Record<FootSurface, { thump: number; thumpLevel: number; decay: num
   grass: { thump: 70, thumpLevel: 0.12, decay: 0.05, band: 1100, q: 0.6, scuff: 0.22, length: 0.13 },
 };
 
-export interface FootfallOptions {
+interface FootfallOptions {
   /** 1 a walking step; less crouching, more sprinting. */
   force?: number;
   /** Stereo position of this foot (-1..1). */

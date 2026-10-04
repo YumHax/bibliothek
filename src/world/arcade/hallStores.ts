@@ -5,7 +5,7 @@ import { ReplayStore, type ReplayShelf } from './replay/ReplayStore';
 import { ARCADE_PLAN } from './arcadePlan';
 
 /** The stores the hall keeps across its loads: the Saturday tournament, the wheel's pot, the best runs. */
-export interface HallStores {
+interface HallStores {
   tournament: ArcadeTournament;
   jackpot: Jackpot;
   replays: ReplayShelf;

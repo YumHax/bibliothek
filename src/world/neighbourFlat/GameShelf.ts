@@ -7,13 +7,13 @@ import { ShelfCopy } from './ShelfCopy';
 import { paint, timber } from '../materials/palette';
 
 /** Where the shelf's boxes go: the zone (they must be placed to be clickable). */
-export interface ShelfHost {
+interface ShelfHost {
   place<F extends Furniture>(item: F, position: THREE.Vector3, rotationY?: number): F;
   remove(item: Furniture): void;
   toLocal(point: THREE.Vector3): THREE.Vector3;
 }
 
-export interface GameShelfOptions {
+interface GameShelfOptions {
   host: ShelfHost;
   covers: BoxArtLoader;
   /** Whose shelf: the captions' "<who>'s copy". */

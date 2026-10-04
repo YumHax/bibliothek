@@ -14,7 +14,7 @@ const START: PadButton = 'GamepadStart';
 const LOCK_RETRY_MS = 1200;
 
 /** How the player is in the room; `null` while the start card is showing. */
-export type RoomMode = 'pointer' | 'gamepad' | 'touch';
+type RoomMode = 'pointer' | 'gamepad' | 'touch';
 
 const MODE_CLASS: Record<RoomMode, string> = {
   pointer: 'input-pointer',

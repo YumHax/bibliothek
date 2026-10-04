@@ -46,8 +46,11 @@ export class FoldingScreen extends THREE.Group implements Furniture {
       const g = new THREE.Group();
       g.position.set(x, 0, i % 2 === 0 ? 0 : -Math.sin(FOLD) * leaf);
       g.rotation.y = turn;
-      // Its frame: two stiles on little feet, top and bottom rails, a rail across two thirds up.
-      for (const sx of [BAR / 2, leaf - BAR / 2]) part(g, BAR, height - 0.05, BAR, wood, { x: sx, y: 0.05 + (height - 0.05) / 2 });
+      // Its frame: two stiles on little feet (the stiles stop 5 cm up; the feet reach the floor), top and bottom rails, a rail across two thirds up.
+      for (const sx of [BAR / 2, leaf - BAR / 2]) {
+        part(g, BAR, height - 0.05, BAR, wood, { x: sx, y: 0.05 + (height - 0.05) / 2 });
+        part(g, BAR * 0.7, 0.05, BAR * 0.7, wood, { x: sx, y: 0.025 });
+      }
       for (const y of [0.18, height - BAR / 2, height * 0.66]) part(g, leaf - 2 * BAR, BAR, BAR * 0.8, wood, { x: leaf / 2, y });
       part(g, leaf - 2 * BAR, height - 0.18 - BAR - 0.02, 0.008, panel, { x: leaf / 2, y: 0.18 + (height - 0.18 - BAR) / 2 });
       part(g, leaf - 2 * BAR, 0.14, 0.008, panel, { x: leaf / 2, y: 0.09 + 0.02 });

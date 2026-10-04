@@ -12,7 +12,7 @@ import { nightnessOf } from './streetAir';
 import { snowCovered } from './snowCover';
 import { FLAT_IN_STREET } from './streetPlan';
 
-export interface StreetChristmasOptions {
+interface StreetChristmasOptions {
   /** The street trees the bulbs are wound round (not the park's). */
   trees: readonly PlantedTree[];
 }

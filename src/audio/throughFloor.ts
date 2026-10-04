@@ -105,7 +105,7 @@ export class MusicUpstairs extends Voice {
     this.out = slab;
   }
 
-  protected tick(ctx: AudioContext, dt: number): void {
+  protected override tick(ctx: AudioContext, dt: number): void {
     this.untilBeat -= dt;
     if (this.untilBeat > 0 || !this.out) return;
     this.untilBeat += MusicUpstairs.BEAT_S;

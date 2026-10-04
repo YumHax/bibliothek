@@ -14,7 +14,7 @@ import { ENDLESS_PLAN as plan } from './endlessPlan';
 import { playBackwardsPiano } from './endlessSounds';
 import { StrangeDoor } from './StrangeDoor';
 
-export interface EndlessStairsOptions {
+interface EndlessStairsOptions {
   viewer: THREE.Object3D;
   stairs: Staircase;
   lights: StairLights;

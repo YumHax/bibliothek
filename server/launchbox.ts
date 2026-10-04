@@ -15,7 +15,7 @@ const SITE = 'https://gamesdb.launchbox-app.com';
 const USER_AGENT = 'bibliothek (game collection room; box art, one request a second)';
 
 /** Our platform ids -> LaunchBox's platform names, as its search cards print them. */
-export const LAUNCHBOX_PLATFORMS: Record<string, string> = {
+const LAUNCHBOX_PLATFORMS: Record<string, string> = {
   nes: 'Nintendo Entertainment System',
   snes: 'Super Nintendo Entertainment System',
   gb: 'Nintendo Game Boy',
@@ -26,10 +26,10 @@ export const LAUNCHBOX_PLATFORMS: Record<string, string> = {
 
 export type ScanKind = 'back' | 'spine' | 'cart' | 'disc';
 export const SCAN_KINDS: readonly ScanKind[] = ['back', 'spine', 'cart', 'disc'];
-export type ScanRegion = 'na' | 'eu' | 'jp';
+type ScanRegion = 'na' | 'eu' | 'jp';
 
 /** One scan on the images page: its kind, the region printed next to it ('' when none), the file. */
-export interface ScanImage {
+interface ScanImage {
   kind: ScanKind;
   region: string;
   uuid: string;
@@ -39,14 +39,14 @@ export interface ScanImage {
 }
 
 /** What a lookup found: the LaunchBox game (null: none matched) and its scans. */
-export interface Lookup {
+interface Lookup {
   id: number | null;
   title?: string;
   images: ScanImage[];
 }
 
 /** What the client gets: one URL per kind (our `/api/scan` proxy), and the region it was printed for. */
-export type Manifest = { id: number | null; title?: string } & Partial<Record<ScanKind, string>> & Partial<Record<`${ScanKind}Region`, string>>;
+type Manifest = { id: number | null; title?: string } & Partial<Record<ScanKind, string>> & Partial<Record<`${ScanKind}Region`, string>>;
 
 /** The host is shared by everything asking: module-level, so two caches in one process still take turns. */
 const SITE_FETCHER = new PoliteFetcher({
@@ -71,13 +71,13 @@ const MISS_CACHE_CONTROL = 'public, max-age=86400, s-maxage=604800';
 
 // --- Store -----------------------------------------------------------------------------------
 
-export interface StoredLookup {
+interface StoredLookup {
   value: Lookup;
   /** When it was fetched (epoch ms). */
   at: number;
 }
 
-export interface LookupStore {
+interface LookupStore {
   read(key: string): Promise<StoredLookup | null>;
   write(key: string, entry: StoredLookup): Promise<void>;
 }
@@ -200,7 +200,7 @@ interface Candidate {
 }
 
 /** The search page's cards: `href="/games/details/<id>-slug"` ... `<h3>title</h3><p>platform</p>`. */
-export function parseSearch(html: string): Candidate[] {
+function parseSearch(html: string): Candidate[] {
   const out: Candidate[] = [];
   const card = /href="\/games\/details\/(\d+)[^"]*"[\s\S]*?<h3[^>]*>([^<]*)<\/h3>\s*<p[^>]*>([^<]*)<\/p>/g;
   for (const m of html.matchAll(card)) out.push({ id: Number(m[1]), title: decodeEntities(m[2]!.trim()), platform: decodeEntities(m[3]!.trim()) });
@@ -212,7 +212,7 @@ const IMAGE_TYPE = /(Box - Back|Box - Spine|Cart - Front|Disc)(?: Image)?(?: \((
 const KIND_OF_TYPE: Record<string, ScanKind> = { 'Box - Back': 'back', 'Box - Spine': 'spine', 'Cart - Front': 'cart', Disc: 'disc' };
 
 /** The images page's lightbox anchors: the full-size file, "<game> - <type> Image (<region>)", "800 x 1123 JPEG". */
-export function parseImages(html: string): ScanImage[] {
+function parseImages(html: string): ScanImage[] {
   const out: ScanImage[] = [];
   for (const [tag] of html.matchAll(/<a\b[^>]*data-toggle="lightbox"[^>]*>/g)) {
     const href = /href="([^"]*)"/.exec(tag)?.[1];
@@ -304,7 +304,7 @@ const REGION_PREFERENCE: Record<ScanRegion, readonly string[]> = {
  * Western one for a Japanese copy. A cartridge or a disc looks alike everywhere: any region will do
  * last. Within a region the smallest scan that is sharp enough wins (else the largest).
  */
-export function manifestFor(lookup: Lookup, region: ScanRegion): Manifest {
+function manifestFor(lookup: Lookup, region: ScanRegion): Manifest {
   const manifest: Manifest = { id: lookup.id };
   if (lookup.title) manifest.title = lookup.title;
   const western = region === 'na' ? REGION_PREFERENCE.eu : region === 'eu' ? REGION_PREFERENCE.na : [];

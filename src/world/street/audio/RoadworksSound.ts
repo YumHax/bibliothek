@@ -8,7 +8,7 @@ import { closures } from '../details/roadworks';
 import { SoundGraph } from './soundGraph';
 import { StreetEar, falloff } from './streetEar';
 
-export interface RoadworksSoundOptions {
+interface RoadworksSoundOptions {
   listener: THREE.Object3D;
   /** The day of the week, 0 Monday .. 6 Sunday (the game's calendar): no work on a Sunday, the mornings only on a Saturday. */
   weekday: () => number;

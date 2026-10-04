@@ -6,7 +6,7 @@ import { KEYS, PersistedStore } from '@/persistence';
  * for the page, made on first use (`stairwell/Concierge` reads and writes it).
  */
 
-export interface ConciergeSaved {
+interface ConciergeSaved {
   met: boolean;
   /** `asked`: she wants the timer buttons of the 1st to the 4th floor tried; `tried`: all four were (the sticky one found); `done`: she was told, the key given. */
   errand: 'none' | 'asked' | 'tried' | 'done';

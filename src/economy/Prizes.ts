@@ -1,7 +1,7 @@
 import { KEYS, PersistedStore, safeStorage } from '@/persistence';
 import { PRIZE_TICKETS } from './pricing';
 
-export const PRIZES_STORAGE_KEY = KEYS.prizes;
+const PRIZES_STORAGE_KEY = KEYS.prizes;
 
 /** What a prize looks like on the shelf at home; `world/prizes/prizeModel.ts` builds one per kind. */
 export type PrizeKind =

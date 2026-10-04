@@ -52,7 +52,7 @@ export interface AuctionLot {
 }
 
 /** How a lot went: to the player (`'you'`), to a bidder of the room (their id), or passed. */
-export interface LotResult {
+interface LotResult {
   to: string;
   price: number;
 }
@@ -62,7 +62,7 @@ interface AuctionFile {
   results: Record<number, LotResult>;
 }
 
-export interface AuctionHouseDeps {
+interface AuctionHouseDeps {
   /** The index at large (the flea market's draw): ordinary games for the lots and the cartons. */
   randomGames(seed: string, count: number): Promise<Game[]>;
   fame: { lookup(game: Pick<Game, 'id' | 'title' | 'platform'>): Promise<Views> };

@@ -9,7 +9,7 @@ import { paint } from '../materials/palette';
 import { drawText } from './games/ArcadeGame';
 import type { ScoreTable } from './scoreTable';
 
-export interface ScoreBoardOptions {
+interface ScoreBoardOptions {
   /** The hall's games, in the order they are listed. */
   games: readonly { id: string; title: string }[];
   /** The tables; the board repaints when one changes. */

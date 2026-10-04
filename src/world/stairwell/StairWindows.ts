@@ -17,7 +17,7 @@ const FRAME = 0.05;
 const FRAME_PAINT = paint(0xe6ddc8, 0.6);
 const SILL = paint(0xb8ae9c, 0.7);
 
-export interface StairWindowsOptions {
+interface StairWindowsOptions {
   dayNight: DayNight;
   outdoors: Outdoors;
   /** The main camera, the view through the glass is rendered from. */

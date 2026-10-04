@@ -16,7 +16,7 @@ import { CatFly } from './CatFly';
 import { CatOuting, type OutingEnd, type OutingWorld } from './CatOuting';
 import { CAT_OUTING, type HideSpot } from './catOutingPlan';
 
-export interface CatOptions {
+interface CatOptions {
   settings: CatSettings;
   collisions: Collisions;
   /** Room interior, XZ. */
@@ -62,7 +62,7 @@ const PITCH_SPREAD = 0.08;
 const VOICE_HEIGHT = 0.2;
 
 /** How the player called: by name (C), with the feather wand, or with the treat jar (which always works on an awake cat). */
-export type CatCallHow = 'voice' | 'feathers' | 'treats';
+type CatCallHow = 'voice' | 'feathers' | 'treats';
 
 /**
  * The cat: a procedural body (`CatBody`) driven by a behaviour (`CatBrain`) that walks it around

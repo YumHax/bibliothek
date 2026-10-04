@@ -11,7 +11,7 @@ import { TipBoard } from './TipBoard';
 import type { NoticeActions, NoticeDismissing, ReadingNotice, RewardNotice, TipOptions } from './types';
 import './notices.css';
 
-export interface NoticesOptions {
+interface NoticesOptions {
   /** The camera: where the bubbles are projected from, and where the player stands (a card to read is put down by walking away). */
   camera: THREE.Camera;
   /** The game is in front of the player (not under the pause menu, not in a hidden tab): only then do the notices' clocks run. */

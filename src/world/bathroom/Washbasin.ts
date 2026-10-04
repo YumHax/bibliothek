@@ -12,7 +12,7 @@ import { mirrorGlass } from '../props/MirrorGlass';
 import { WaterStream } from './WaterStream';
 import { HoverGlint } from '../props/hoverGlint';
 
-export interface WashbasinOptions {
+interface WashbasinOptions {
   /** Length of the cabinet along the wall. Default 0.6. */
   width?: number;
   /** Which side of the mirror (local x) the shelf with the bottles hangs on; `none` for no shelf. Default right. */

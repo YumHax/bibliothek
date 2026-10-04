@@ -3,20 +3,21 @@ import type { Performer } from '../people/performer';
 import type { Updatable } from '@/core/Engine';
 import type { Input } from '@/core/Input';
 import type { Interactable, LabelPlacement } from '@/interaction/Interactable';
-import type { ArcadeBonus, ArcadeMachineLike, ArcadeResult, PlayerState, SessionActions } from '@/game/SessionActions';
+import type { ArcadeMachineLike, ArcadeResult, PlayerState, SessionActions } from '@/game/SessionActions';
 import { ChipSpeaker } from '@/audio/ChipSpeaker';
 import { actionKeyLabel } from '@/ui/keys';
 import type { Furniture } from '../Furniture';
 import { eyePoseAt, invisibleHitbox } from '../meshUtils';
 import { type ArcadeControls, type ArcadeGame, NO_CONTROLS } from './games/ArcadeGame';
 import { TicketStrip } from './TicketStrip';
-import type { Occupant, PartnerSpot, Station, StationEvents } from './Station';
+import type { PartnerSpot, Station, StationEvents } from './Station';
 import type { MedalBook, ScoreTable, TodaysChallenge } from './scoreTable';
 import type { CabinetAttachment } from './CabinetAttachment';
 import { MedalRow } from './MedalRow';
 import { GlowPool } from './GlowPool';
 import type { ReplayShelf } from './replay/ReplayStore';
 import { MachineRun } from './MachineRun';
+import { RunMachine } from './RunMachine';
 import { GameRunner } from './GameRunner';
 import { CabinetScreens } from './CabinetScreens';
 import { AttractLoop } from './AttractLoop';
@@ -24,7 +25,7 @@ import { CabinetControls } from './CabinetControls';
 import { BEZEL_BORDER, DEPTH, FRONT_Z, SCREEN_HEIGHT, SCREEN_Y, SCREEN_Z, TOTAL_H, WIDTH, buildCabinetBody } from './cabinetModel';
 import { PooledLight } from '../lighting/LightPool';
 
-export interface ArcadeCabinetOptions {
+interface ArcadeCabinetOptions {
   /** Colour of the side panels. */
   color?: number;
   /** Colour of the marquee's glow, the light thrown on the player and the pool on the carpet. */
@@ -89,7 +90,7 @@ const SLOT = new THREE.Vector3(0.2, 0.45, -0.02 + DEPTH / 2);
  * carpet. Every sound goes through the cabinet's `ChipSpeaker`. Local +z faces the player; origin
  * on the floor at the centre of the base (the body is `cabinetModel`).
  */
-export class ArcadeCabinet extends THREE.Group implements Furniture, Interactable, Updatable, ArcadeMachineLike, Station {
+export class ArcadeCabinet extends RunMachine implements Furniture, Interactable, Updatable, ArcadeMachineLike, Station {
   readonly hitboxes: THREE.Object3D[];
   readonly game: ArcadeGame;
   readonly freeWhenBroke = true;
@@ -111,7 +112,7 @@ export class ArcadeCabinet extends THREE.Group implements Furniture, Interactabl
   readonly partner?: PartnerSpot;
 
   private readonly options: ArcadeCabinetOptions;
-  private readonly run: MachineRun;
+  protected readonly run: MachineRun;
   private readonly runner: GameRunner;
   private readonly screens: CabinetScreens;
   private readonly attract: AttractLoop;
@@ -232,31 +233,6 @@ export class ArcadeCabinet extends THREE.Group implements Furniture, Interactabl
 
   get footprint(): THREE.Box3 {
     return new THREE.Box3(new THREE.Vector3(-WIDTH / 2, 0, -DEPTH / 2), new THREE.Vector3(WIDTH / 2, TOTAL_H, DEPTH / 2));
-  }
-
-  /** From the coin to the last initial: a click or E walks away. */
-  get isPlaying(): boolean {
-    return this.run.isPlaying;
-  }
-
-  get occupant(): Occupant {
-    return this.run.occupant;
-  }
-
-  get outOfOrder(): boolean {
-    return this.run.outOfOrder;
-  }
-
-  get canReplay(): boolean {
-    return this.run.canReplay;
-  }
-
-  pause(paused: boolean): void {
-    this.run.setPaused(paused);
-  }
-
-  showBonus(bonuses: readonly ArcadeBonus[]): void {
-    this.run.showBonus(bonuses);
   }
 
   /** Starts a paid play (recorded, when the game can replay); `onOver` is told the result once. */

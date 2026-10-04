@@ -6,7 +6,7 @@ import { audioBus, startedAudioContext } from './audioContext';
  * a soft two-note chime for a new tip, a paper rustle for a card to read. Silent until a gesture
  * started the audio.
  */
-export type NoticeSound = 'deny' | 'reward' | 'fanfare' | 'tip' | 'page';
+type NoticeSound = 'deny' | 'reward' | 'fanfare' | 'tip' | 'page';
 
 interface Note {
   /** Hz. */

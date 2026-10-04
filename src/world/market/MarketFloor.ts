@@ -36,7 +36,7 @@ export interface FloorStall {
   pennant: WishPennant | null;
 }
 
-export interface MarketFloorOptions {
+interface MarketFloorOptions {
   /** The market's zone: the day's boxes are placed into it and taken out of it. */
   zone: Zone;
   context: BuildContext;

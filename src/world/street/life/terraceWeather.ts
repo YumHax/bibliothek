@@ -1,5 +1,5 @@
 /** The weather a café's terrace goes by (`DayNight.state`). */
-export interface TerraceSky {
+interface TerraceSky {
   readonly rain: number;
   readonly snow: number;
   readonly snowCover: number;
@@ -15,7 +15,7 @@ export function terraceWeather(s: TerraceSky): boolean {
 }
 
 /** Whether `hours` (game hours) fall in a terrace's opening `[from, to)`; `to` past 24 runs on after midnight. */
-export function terraceHours([from, to]: readonly [number, number], hours: number): boolean {
+function terraceHours([from, to]: readonly [number, number], hours: number): boolean {
   const h = hours < from && hours + 24 < to ? hours + 24 : hours;
   return h >= from && h < to;
 }

@@ -74,7 +74,7 @@ export type BuiltWorld = ReturnType<typeof buildWorld>;
  * hall's panels (made with the UI); the Session, made last, is only asked on a console click.
  */
 /** The flat's panels (made with the UI) its builders hand out: the book on the sideboard, the journal, a neighbour's swap. */
-export interface FlatPanels {
+interface FlatPanels {
   collectorBook: ModalLike;
   journalPanel: ModalLike;
   neighbourTradePanel: TradePanelLike;

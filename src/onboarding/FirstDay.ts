@@ -7,7 +7,7 @@ import { readMs } from '@/notices/readingTime';
 import { FIRST_DAY_DONE, FIRST_DAY_STEPS, tipText, type FirstDayStepId } from './firstDaySteps';
 
 /** What the first day watches: the stores by their counts, the player's zone, and where its tips are pinned. */
-export interface FirstDaySources {
+interface FirstDaySources {
   wallet: { readonly coins: number; readonly tickets: number; subscribe(cb: () => void): () => void };
   collection: { readonly games: readonly Game[]; subscribe(cb: () => void): () => void };
   deliveries: { readonly count: number; subscribe(cb: () => void): () => void };
@@ -18,7 +18,7 @@ export interface FirstDaySources {
   notices: Pick<NoticeActions, 'tip' | 'reward'> & { readonly tipsShown?: boolean };
 }
 
-export interface FirstDayOptions {
+interface FirstDayOptions {
   /** A save existed before this build knew about the first day: no tips, no notes. */
   returningPlayer: boolean;
   /** False plays without it altogether (`?debug`'s seed collection). Default true. */

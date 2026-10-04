@@ -7,14 +7,15 @@ import { currentSeason } from '@/time/season';
 import { type AtlasPens, type Cell, type LifeEnv, type LifeLayer, type Push, acrossSign, glowDot, hoursRamp, pushStanding } from './sprites';
 
 /** Lamp heads the bats hunt round (posts of `paintStreet` near the windows: far pavements and ours), metres; `LAMP_HEAD` up. */
-const BAT_LAMPS: [number, number][] = [
+const BAT_LAMP_SPOTS: readonly [number, number][] = [
   [10, LAMP_LINE],
   [34, LAMP_LINE],
   [-LAMP_LINE, -10],
   [10, NEAR_KERB],
   [34, NEAR_KERB],
   [-NEAR_KERB, -10],
-].map(([x, z]): [number, number] => {
+];
+const BAT_LAMPS: [number, number][] = BAT_LAMP_SPOTS.map(([x, z]): [number, number] => {
   const lamp = nearestLamp(x, z);
   return [lamp.x, lamp.z];
 });
@@ -67,7 +68,7 @@ export class Critters implements LifeLayer {
 
   constructor(private readonly random: Rng) {
     for (let i = 0; i < BATS; i++) {
-      const lamp = BAT_LAMPS[i % BAT_LAMPS.length];
+      const lamp = BAT_LAMPS[i % BAT_LAMPS.length]!;
       this.bats.push({
         lamp,
         p: new THREE.Vector3(lamp[0] + between(random, -2, 2), LAMP_HEAD + between(random, -1, 1), lamp[1] + between(random, -2, 2)),
@@ -147,7 +148,7 @@ export class Critters implements LifeLayer {
       bat.p.y = THREE.MathUtils.clamp(bat.p.y, 3.5, 11);
       const d = Math.hypot(bat.p.x, bat.p.z);
       const a = azimuthOf(bat.p.x, bat.p.z);
-      const cell = this.batCells[Math.sin(this.clock * 22 + bat.phase) > 0 ? 0 : 1];
+      const cell = this.batCells[Math.sin(this.clock * 22 + bat.phase) > 0 ? 0 : 1]!; // two poses, painted in `paint`
       const half = cell.w / BAT.scale / 2 / d;
       const tall = cell.h / BAT.scale / 2;
       push([azimuthX(a - half), heightY(bat.p.y + tall, d), azimuthX(a + half), heightY(bat.p.y - tall, d)], cell, d, visible);
@@ -166,8 +167,8 @@ export class Critters implements LifeLayer {
     }
     let rest = fox.s;
     for (let i = 1; i < fox.route.length; i++) {
-      const [x0, z0] = fox.route[i - 1];
-      const [x1, z1] = fox.route[i];
+      const [x0, z0] = fox.route[i - 1]!;
+      const [x1, z1] = fox.route[i]!;
       const len = Math.hypot(x1 - x0, z1 - z0);
       if (rest > len && i < fox.route.length - 1) {
         rest -= len;
@@ -180,11 +181,11 @@ export class Critters implements LifeLayer {
       const t = rest / len;
       const x = x0 + (x1 - x0) * t;
       const z = z0 + (z1 - z0) * t;
-      const total = fox.route.reduce((sum, p, k) => (k ? sum + Math.hypot(p[0] - fox.route[k - 1][0], p[1] - fox.route[k - 1][1]) : 0), 0);
+      const total = fox.route.reduce((sum, p, k) => (k ? sum + Math.hypot(p[0] - fox.route[k - 1]![0], p[1] - fox.route[k - 1]![1]) : 0), 0);
       const alpha = Math.min(1, fox.s / 3, (total - fox.s) / 3);
       const facing = acrossSign(x, z, x1 - x0, z1 - z0) > 0 ? 0 : 1;
       const pose = fox.pause > 0 ? 0 : Math.floor(fox.clock / 0.18) % 2;
-      pushStanding(push, this.foxCells[facing][pose], FOX.scale, 2, x, z, alpha);
+      pushStanding(push, this.foxCells[facing]![pose]!, FOX.scale, 2, x, z, alpha); // two facings x two poses, painted in `paint`
       return;
     }
   }
@@ -196,7 +197,8 @@ export class Critters implements LifeLayer {
     // The sitting one: tail swishing now and then.
     const swish = Math.sin(this.clock * 1.3) > 0.6 ? 3 : 2;
     const d0 = Math.hypot(x, sitAt);
-    pushStanding(push, this.catCells[0][1][swish], CAT.scale, 2, x, sitAt, visible, CAT.hedge, d0 - 1.2);
+    // The cells: a coat x a facing x four poses, painted in `paint`.
+    pushStanding(push, this.catCells[0]![1]![swish]!, CAT.scale, 2, x, sitAt, visible, CAT.hedge, d0 - 1.2);
     // The walker: pads along the top, sits a while, turns back at the ends.
     const cat = this.walkingCat;
     cat.clock += dt;
@@ -209,7 +211,7 @@ export class Critters implements LifeLayer {
     }
     const facing = acrossSign(x, cat.z, 0, cat.dir) > 0 ? 0 : 1;
     const pose = cat.sitting > 0 ? 2 : Math.floor(cat.clock / 0.3) % 2;
-    pushStanding(push, this.catCells[1][facing][pose], CAT.scale, 2, x, cat.z, visible, CAT.hedge, Math.hypot(x, cat.z) - 1.2);
+    pushStanding(push, this.catCells[1]![facing]![pose]!, CAT.scale, 2, x, cat.z, visible, CAT.hedge, Math.hypot(x, cat.z) - 1.2);
   }
 }
 

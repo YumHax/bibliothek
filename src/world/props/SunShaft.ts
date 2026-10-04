@@ -4,7 +4,7 @@ import { RENDER_ORDER } from '@/world/surface/layers';
 import { POINT_SCALE, scalesPoints } from '@/world/particles/pointScale';
 import { additive } from '@/world/materials/blend';
 
-export interface SunShaftOptions {
+interface SunShaftOptions {
   /** Glazed opening, metres (the shaft's section at the glass). */
   width: number;
   height: number;

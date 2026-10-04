@@ -10,7 +10,7 @@ interface MilestonesFile {
 }
 
 /** The purse a claimed reward is paid into. */
-export interface MilestonePurse {
+interface MilestonePurse {
   earnCoins(coins: number): void;
   addTickets(tickets: number): void;
 }

@@ -10,7 +10,7 @@ import { cloth as paletteCloth } from '@/world/materials/palette';
  * cat walks into it and the player steps over it.
  */
 
-export interface CatBedOptions {
+interface CatBedOptions {
   /** Fabric of the bolster ring (dusty mauve by default; 0x8a8580 is a warm grey). */
   color?: number;
   /** Fabric of the padded floor (a lighter tone of `color` by default). */

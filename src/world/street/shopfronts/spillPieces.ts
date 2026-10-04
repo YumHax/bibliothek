@@ -13,7 +13,7 @@ const ZINC = '#9aa4aa';
 const WOOD = '#8a6a44';
 
 /** A piece's footprint on the pavement (its own x across, z out to the street), for its collider. */
-export interface SpillFootprint {
+interface SpillFootprint {
   width: number;
   depth: number;
 }

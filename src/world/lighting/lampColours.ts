@@ -16,7 +16,7 @@ import { planckianXy } from '@/graphics/whiteBalance';
 export type LampKind = 'incandescent' | 'halogen' | 'led' | 'sodium';
 
 /** Colour temperature of each kind (K): a household bulb, a halogen spot, a neutral LED, a sodium street lamp. */
-export const LAMP_KELVIN: Readonly<Record<LampKind, number>> = { incandescent: 2700, halogen: 3000, led: 4000, sodium: 2000 };
+const LAMP_KELVIN: Readonly<Record<LampKind, number>> = { incandescent: 2700, halogen: 3000, led: 4000, sodium: 2000 };
 
 /** Share of the way from the black body's colour back to white the light is shown at (the eye's adaptation). */
 const ADAPTATION = 0.35;
@@ -39,7 +39,7 @@ const reference = planckianRgb(6504, new THREE.Color());
  * The linear colour of a lamp at `kelvin`, max channel 1, carried `adaptation` of the way back to
  * white (0 = the black body as is, 1 = white).
  */
-export function kelvinColour(kelvin: number, adaptation = ADAPTATION, out = new THREE.Color()): THREE.Color {
+function kelvinColour(kelvin: number, adaptation = ADAPTATION, out = new THREE.Color()): THREE.Color {
   planckianRgb(kelvin, out);
   out.setRGB(Math.max(0, out.r / reference.r), Math.max(0, out.g / reference.g), Math.max(0, out.b / reference.b), THREE.LinearSRGBColorSpace);
   const max = Math.max(out.r, out.g, out.b, 1e-6);

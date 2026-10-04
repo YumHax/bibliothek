@@ -27,7 +27,7 @@ const HOVER_EVERY = 0.06;
 const HOVER_COLOR = 0xfff2d0;
 
 /** The player as the planning view parks and frees it (`FirstPersonController` fits). */
-export interface PlanPlayer {
+interface PlanPlayer {
   readonly isLocked: boolean;
   readonly isSeated: boolean;
   sit(eyePosition: THREE.Vector3, yaw: number, instant?: boolean): void;
@@ -38,9 +38,9 @@ export interface PlanPlayer {
 }
 
 /** What the planning view uses of the carrier. */
-export type PlanCarrier = Pick<FurnitureCarrier, 'piece' | 'fits' | 'blocker' | 'aiming' | 'snapping' | 'setAim' | 'aimed' | 'take' | 'turn' | 'setDown' | 'cancel' | 'store' | 'lastMove'>;
+type PlanCarrier = Pick<FurnitureCarrier, 'piece' | 'fits' | 'blocker' | 'aiming' | 'snapping' | 'setAim' | 'aimed' | 'take' | 'turn' | 'setDown' | 'cancel' | 'store' | 'lastMove'>;
 
-export interface PlanViewDeps {
+interface PlanViewDeps {
   camera: THREE.PerspectiveCamera;
   /** The WebGL canvas: the cursor's frame. */
   canvas: HTMLCanvasElement;

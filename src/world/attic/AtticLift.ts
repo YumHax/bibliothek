@@ -99,7 +99,7 @@ export class AtticLift extends Prop implements Updatable, OccupancyAware {
     this.button.position.set(car.x1 - 0.047, 1.3, cz + 0.03);
   }
 
-  get footprint(): THREE.Box3 {
+  override get footprint(): THREE.Box3 {
     return new THREE.Box3();
   }
 

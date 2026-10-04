@@ -5,14 +5,14 @@ import type { CollisionProbe } from '@/core/Collider';
 const CELL = 0.15;
 
 /** Who walks the grid: how far from the walls they keep, and the sphere probing whether a cell is free for them. */
-export interface Walker {
+interface Walker {
   wallMargin: number;
   probeY: number;
   probeRadius: number;
 }
 
 /** The cat: a cat-sized sphere just above the floor, 15 cm off the walls. */
-export const CAT_WALKER: Walker = { wallMargin: 0.15, probeY: 0.12, probeRadius: 0.12 };
+const CAT_WALKER: Walker = { wallMargin: 0.15, probeY: 0.12, probeRadius: 0.12 };
 /** A person (a visiting friend): knee height, a body's width, a step off the walls. */
 export const PERSON_WALKER: Walker = { wallMargin: 0.25, probeY: 0.4, probeRadius: 0.24 };
 /** The blocked grid is recomputed at most this often (the shelving may be rebuilt). */
@@ -282,8 +282,9 @@ export class FloorNav {
           // No corner cutting: a diagonal step needs both orthogonal neighbours free.
           if (dr !== 0 && dc !== 0 && (blocked[row * cols + nc] || blocked[nr * cols + col])) continue;
           const step = dr !== 0 && dc !== 0 ? SQRT2 : 1;
-          const g = gCost[current] + step;
-          if (g < gCost[next]) {
+          // Both cells are within the grid (`current` came off the heap, `next` was bounds-checked above).
+          const g = gCost[current]! + step;
+          if (g < gCost[next]!) {
             gCost[next] = g;
             fCost[next] = g + heuristic(next);
             parent[next] = current;
@@ -296,12 +297,12 @@ export class FloorNav {
 
     // Cell chain goal -> start, then reversed into world points; the exact goal replaces its cell.
     const cells: number[] = [];
-    for (let cell = goal; cell !== -1; cell = parent[cell]) cells.push(cell);
+    for (let cell = goal; cell !== -1; cell = parent[cell]!) cells.push(cell);
     cells.reverse();
     const points: THREE.Vector3[] = [from.clone().setY(0)];
     // Standing on a blocked cell (dropped there, or furniture rebuilt around it): step out first.
     if (this.cellOf(from) !== start) points.push(this.cellCentre(start, new THREE.Vector3()));
-    for (let i = 1; i < cells.length - 1; i++) points.push(this.cellCentre(cells[i], new THREE.Vector3()));
+    for (let i = 1; i < cells.length - 1; i++) points.push(this.cellCentre(cells[i]!, new THREE.Vector3()));
     points.push(goalIsExact ? to.clone().setY(0) : this.cellCentre(goal, new THREE.Vector3()));
     return this.smooth(points);
   }
@@ -312,8 +313,8 @@ export class FloorNav {
     let i = 0;
     while (i < points.length - 1) {
       let j = points.length - 1;
-      while (j > i + 1 && !this.segmentFree(points[i], points[j])) j--;
-      result.push(points[j]);
+      while (j > i + 1 && !this.segmentFree(points[i]!, points[j]!)) j--;
+      result.push(points[j]!);
       i = j;
     }
     return result;
@@ -336,15 +337,16 @@ class MinHeap {
     let i = items.length - 1;
     while (i > 0) {
       const p = (i - 1) >> 1;
-      if (this.cost[items[p]] <= this.cost[items[i]]) break;
-      [items[p], items[i]] = [items[i], items[p]];
+      if (this.costAt(p) <= this.costAt(i)) break;
+      this.swap(p, i);
       i = p;
     }
   }
 
   pop(): number {
     const items = this.items;
-    const top = items[0];
+    // Callers pop only while `size` is above zero.
+    const top = items[0]!;
     const last = items.pop() as number;
     if (items.length > 0) {
       items[0] = last;
@@ -353,13 +355,25 @@ class MinHeap {
         const l = 2 * i + 1;
         const r = l + 1;
         let m = i;
-        if (l < items.length && this.cost[items[l]] < this.cost[items[m]]) m = l;
-        if (r < items.length && this.cost[items[r]] < this.cost[items[m]]) m = r;
+        if (l < items.length && this.costAt(l) < this.costAt(m)) m = l;
+        if (r < items.length && this.costAt(r) < this.costAt(m)) m = r;
         if (m === i) break;
-        [items[m], items[i]] = [items[i], items[m]];
+        this.swap(m, i);
         i = m;
       }
     }
     return top;
+  }
+
+  /** The cost of the cell at heap index `i` (within `items`; every cell is within the grid the costs cover). */
+  private costAt(i: number): number {
+    return this.cost[this.items[i]!]!;
+  }
+
+  private swap(a: number, b: number): void {
+    const items = this.items;
+    const cell = items[a]!;
+    items[a] = items[b]!;
+    items[b] = cell;
   }
 }

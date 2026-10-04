@@ -23,7 +23,7 @@ const GITHUB = new PoliteFetcher({
 const HIT_CACHE_CONTROL = 'public, max-age=31536000, s-maxage=31536000, immutable';
 const MISS_CACHE_CONTROL = 'public, max-age=86400, s-maxage=86400';
 
-export interface ArtRequest {
+interface ArtRequest {
   repo: string;
   folder: string;
   file: string;
@@ -31,7 +31,7 @@ export interface ArtRequest {
 
 export type ArtResult = ({ status: 200; etag: string } & StoredArt) | { status: 404 };
 
-export interface ArtCacheOptions {
+interface ArtCacheOptions {
   /** Downscale + WebP re-encode before storing (needs `sharp`; falls back to the original bytes). Default true. */
   shrink?: boolean;
 }
@@ -57,7 +57,8 @@ export class ArtCache {
   static parsePath(pathname: string): ArtRequest | null {
     const parts = pathname.split('/').filter(Boolean).map(safeDecode);
     if (parts.length !== 3 || parts.some((p) => p === null)) return null;
-    const [repo, folder, file] = parts as string[];
+    // Exactly three, none null: checked just above.
+    const [repo, folder, file] = parts as [string, string, string];
     if (!SEGMENT.test(repo) || repo.includes('..')) return null;
     if (!FOLDERS.has(folder)) return null;
     if (!SEGMENT.test(file) || file.includes('..') || !file.toLowerCase().endsWith('.png')) return null;

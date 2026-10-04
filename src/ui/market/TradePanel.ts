@@ -58,7 +58,7 @@ export class TradePanel extends MarketPanel {
     }
   }
 
-  protected onAction(action: string, el: HTMLElement): void {
+  protected override onAction(action: string, el: HTMLElement): void {
     if (action !== 'swap' || !el.dataset.id) return;
     const game = this.collection.games.find((g) => g.id === el.dataset.id);
     if (!game || !this.item || !this.onSwap) return;

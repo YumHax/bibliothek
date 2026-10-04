@@ -9,7 +9,7 @@ import { SoundGraph } from './soundGraph';
 import { StreetEar, falloff } from './streetEar';
 
 /** Someone on the street who barks now and then (a counter that only goes up) where they are (zone-local). */
-export interface Barker {
+interface Barker {
   readonly barks: number;
   readonly position: THREE.Vector3;
 }
@@ -23,7 +23,7 @@ export interface SirenVoice {
   readonly step?: number;
 }
 
-export interface StreetCuesOptions {
+interface StreetCuesOptions {
   listener: THREE.Object3D;
   /** The crossing's lights: the beeper sounds while the green man is lit (quicker while he flashes). */
   crossing: { readonly walkersGreen: boolean; readonly walkersFlashing: boolean };

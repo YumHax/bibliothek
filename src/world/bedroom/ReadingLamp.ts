@@ -4,7 +4,7 @@ import { SwitchableLamp } from '../props/SwitchableLamp';
 import { METAL, standard } from '../materials/palette';
 import { LAMP_GLOW, LAMP_LIGHT } from '../lighting/lampColours';
 
-export interface ReadingLampOptions {
+interface ReadingLampOptions {
   /** Light intensity when on (a reading bulb: about a bedside lamp's). */
   intensity?: number;
   /** Starts lit? */

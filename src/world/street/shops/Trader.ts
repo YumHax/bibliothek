@@ -19,7 +19,7 @@ import { ForSaleBox } from '../../market/ForSaleBox';
 import { Walker } from '../../people/Walker';
 import { outOfSight } from '../life/sight';
 
-export interface TraderOptions {
+interface TraderOptions {
   /** The zone: his games must be placed to be clickable. */
   host: { place<F extends Furniture>(item: F, position: THREE.Vector3, rotationY?: number): F; remove(item: Furniture): void; toLocal(point: THREE.Vector3): THREE.Vector3 };
   covers: BoxArtLoader;

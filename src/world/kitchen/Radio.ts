@@ -8,7 +8,7 @@ import { PROUD } from '../props/joinery';
 import { paint, standard } from '../materials/palette';
 import { HoverGlint } from '../props/hoverGlint';
 
-export interface RadioOptions {
+interface RadioOptions {
   /** Body colour. Default a cream enamel. */
   color?: number;
 }

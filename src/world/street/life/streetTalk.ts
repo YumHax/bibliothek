@@ -6,7 +6,7 @@ import type { SkyState } from '../../props/DayNight';
 import { HEAVY_RAIN } from '../../weather/Weather';
 import { ARCADE_TITLES } from '../arcadeTitles';
 
-export interface StreetTalkOptions {
+interface StreetTalkOptions {
   /** The sky right now: the time, the weather. */
   sky: () => SkyState;
   /** The flea market: today's stock once drawn. */

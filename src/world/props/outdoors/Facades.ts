@@ -16,7 +16,7 @@ const FLOWERS = ['#d9383a', '#e0567a', '#f0f0e8', '#b04ac0', '#f09a3a', '#e8d040
 export const GROUND = GROUND_FLOOR;
 const FLOOR = STOREY;
 
-export interface BuildingSpec {
+interface BuildingSpec {
   /** Azimuth range of the facade. */
   a0: number;
   a1: number;
@@ -42,7 +42,7 @@ export interface BuildingSpec {
 }
 
 /** Paints buildings shoulder to shoulder along `line` from azimuth `from` to `to`, `widths` metres each; returns their shops. */
-export function paintFacadeRow(
+function paintFacadeRow(
   sheet: Sheet,
   random: Rng,
   from: number,
@@ -174,7 +174,7 @@ function planLook(spec: FacadeSpec, width?: number): Pick<BuildingSpec, 'style' 
  * balcony), a cornice and a roof with its chimneys. Far buildings drop the fine details and keep
  * the windows as dots. Returns the shops on its ground floor.
  */
-export function paintBuilding(sheet: Sheet, random: Rng, spec: BuildingSpec): Storefront[] {
+function paintBuilding(sheet: Sheet, random: Rng, spec: BuildingSpec): Storefront[] {
   const { floors } = spec;
   const f = new FacadeFrame(sheet, spec.a0, spec.a1, spec.line);
   const { d, w, fine } = f;

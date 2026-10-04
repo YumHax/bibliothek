@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { Prop, part } from '../props/Prop';
 import { paint, standard, instancedStandard } from '../materials/palette';
 
-export interface BalconySlabOptions {
+interface BalconySlabOptions {
   width: number;
   depth: number;
   /** Stone slab under the floor, and how far it runs out past the railing. */

@@ -10,7 +10,7 @@ import { layMesh, WALL } from '../surface/layers';
 import { METAL, paint } from '../materials/palette';
 import { drawText } from './games/ArcadeGame';
 
-export interface JukeboxOptions {
+interface JukeboxOptions {
   /** Whose distance sets the volume: the camera. */
   listener: THREE.Object3D;
   /** Cabinet wood. Default a deep red-brown. */

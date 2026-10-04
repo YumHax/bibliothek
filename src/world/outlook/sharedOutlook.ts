@@ -11,8 +11,9 @@ import { flatToStreet } from './frames';
  * One street built for every window that looks onto it from the same building (`OutlookView` is the picture and
  * its contents; each window only adds its panes): the flat's rooms, the stairwell's landings and the neighbours'
  * flats all see Front Street and the courtyard from our building, so they share one view, `'home'`, counted by its
- * leases and freed with the last (a zone unloading releases its windows' leases). A view's own idle timer still frees
- * its scene while no pane of it is drawn (`FREE_AFTER_UNDRAWN`), to be built again when one is.
+ * leases and freed with the last (a zone unloading releases its windows' leases). The home view is `keep`: built once,
+ * it stays while out of sight (a window of the flat is always a doorway away; rebuilding it when one came back into
+ * view froze the corridor). Other views' idle timer frees their scene while no pane is drawn (`FREE_AFTER_UNDRAWN`).
  */
 export interface OutlookLease {
   readonly view: OutlookView;
@@ -52,7 +53,7 @@ function lease(key: string, make: () => OutlookView, toOutlook: ToOutlook): Outl
   };
 }
 
-export interface HomeOutlookOptions {
+interface HomeOutlookOptions {
   dayNight: DayNight;
   outdoors: Outdoors;
   /** The main camera, the view through the glass is rendered from. */
@@ -78,17 +79,19 @@ export function leaseHomeOutlook(options: HomeOutlookOptions, toOutlook: ToOutlo
     () =>
       new OutlookView({
         viewer,
-        build: (camera) =>
+        build: (camera, between) =>
           Promise.all([import('./streetOutlook'), import('./inView')]).then(([{ buildStreetOutlook }, { homeFacades }]) =>
             buildStreetOutlook(camera, {
               dayNight,
               lightDirection: (out) => outdoors.lightDirection(dayNight.state, out),
               facades: homeFacades(),
               ...(homeExtras.windowLife ? { windowLife: homeExtras.windowLife } : {}),
+              between,
             }),
           ),
         waiting: () => waiting.copy(dayNight.state.horizon).multiplyScalar(0.25 + 0.6 * dayNight.state.daylight),
         name: 'home',
+        keep: true,
       }),
     toOutlook,
   );
@@ -112,7 +115,7 @@ export function streetWindows(): boolean {
   return QUALITY.level !== 'low';
 }
 
-export interface ElsewhereOutlookOptions {
+interface ElsewhereOutlookOptions {
   dayNight: DayNight;
   outdoors: Outdoors;
   viewer: THREE.Camera;
@@ -134,9 +137,9 @@ export function leaseOutlookFrom(options: ElsewhereOutlookOptions, frame: THREE.
     () =>
       new OutlookView({
         viewer,
-        build: (camera) =>
+        build: (camera, between) =>
           import('./streetOutlook').then(({ buildStreetOutlook }) =>
-            buildStreetOutlook(camera, { dayNight, lightDirection: (out) => outdoors.lightDirection(dayNight.state, out), facades: facades() }),
+            buildStreetOutlook(camera, { dayNight, lightDirection: (out) => outdoors.lightDirection(dayNight.state, out), facades: facades(), between }),
           ),
         waiting: () => waiting.copy(dayNight.state.horizon).multiplyScalar(0.25 + 0.6 * dayNight.state.daylight),
         name: key,

@@ -7,7 +7,7 @@ import { Prop } from './Prop';
 import { HoverGlint } from './hoverGlint';
 import { playFridgeSeal, playHingeCreak, playWoodKnock } from '@/audio/furnitureSounds';
 
-export interface SwingLeafOptions {
+interface SwingLeafOptions {
   width: number;
   height: number;
   thickness: number;

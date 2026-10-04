@@ -1,5 +1,5 @@
-import { audioBus, audioContext } from './audioContext';
 import { whiteNoise } from './noise';
+import { burst, oneShot, ping, rand } from './oneShot';
 
 /*
  * The one-shot sounds of the flat's household uses (docs/household.md): the hair dryer, the
@@ -10,57 +10,6 @@ import { whiteNoise } from './noise';
 
 /** The pastimes' own sounds (cleaning, the dryer, the cake, the bath) go on the UI bus: the room is ducked under their fade. */
 const JOB = 'ui';
-
-const rand = (min: number, max: number): number => min + Math.random() * (max - min);
-
-/**
- * A fresh output at `level` on the world bus (or the UI's: a pastime's job sounds, heard over the
- * fade that ducks the room, `household/pastime`), let go `seconds` later.
- */
-function output(level: number, seconds: number, channel: 'world' | 'ui' = 'world'): { ctx: AudioContext; out: GainNode; t: number } | null {
-  let ctx: AudioContext;
-  try {
-    ctx = audioContext();
-  } catch {
-    return null;
-  }
-  const out = ctx.createGain();
-  out.gain.value = level;
-  out.connect(audioBus(ctx, channel));
-  window.setTimeout(() => out.disconnect(), (seconds + 0.5) * 1000);
-  return { ctx, out, t: ctx.currentTime + 0.02 };
-}
-
-/** A burst of band-passed noise (a scuff, a rub, a grain). */
-function burst(ctx: AudioContext, out: AudioNode, t: number, band: number, q: number, level: number, length: number): void {
-  const source = ctx.createBufferSource();
-  source.buffer = whiteNoise(ctx, 1);
-  const filter = ctx.createBiquadFilter();
-  filter.type = 'bandpass';
-  filter.frequency.value = band;
-  filter.Q.value = q;
-  const env = ctx.createGain();
-  env.gain.setValueAtTime(0, t);
-  env.gain.linearRampToValueAtTime(level, t + Math.min(0.01, length * 0.3));
-  env.gain.exponentialRampToValueAtTime(0.0005, t + length);
-  source.connect(filter).connect(env).connect(out);
-  source.start(t, Math.random() * 0.5);
-  source.stop(t + length + 0.02);
-}
-
-/** A struck, decaying tone (a clink, a ding, a beep). */
-function ping(ctx: AudioContext, out: AudioNode, t: number, frequency: number, level: number, decay: number, type: OscillatorType = 'sine'): void {
-  const osc = ctx.createOscillator();
-  osc.type = type;
-  osc.frequency.value = frequency;
-  const env = ctx.createGain();
-  env.gain.setValueAtTime(0, t);
-  env.gain.linearRampToValueAtTime(level, t + 0.003);
-  env.gain.exponentialRampToValueAtTime(0.0005, t + decay);
-  osc.connect(env).connect(out);
-  osc.start(t);
-  osc.stop(t + decay + 0.02);
-}
 
 /** A steady band of noise swelling in and out over `seconds` (air, water). */
 function bed(ctx: AudioContext, out: AudioNode, t: number, seconds: number, band: number, q: number, level: number, fade = 0.25): BiquadFilterNode {
@@ -84,7 +33,7 @@ function bed(ctx: AudioContext, out: AudioNode, t: number, seconds: number, band
 
 /** The hair dryer: the motor spinning up to a whine under a rush of warm air, `seconds` long, and spinning down. */
 export function playHairDryer(seconds = 2.4, level = 0.22): void {
-  const o = output(level, seconds + 0.6, JOB);
+  const o = oneShot(level, seconds + 0.6, JOB);
   if (!o) return;
   const { ctx, out, t } = o;
   const motor = ctx.createOscillator();
@@ -109,7 +58,7 @@ export function playHairDryer(seconds = 2.4, level = 0.22): void {
 
 /** The cleaning kit at work: a soft cloth rubbing in strokes, a cotton bud squeaking in the corners, the isopropyl's cap. */
 export function playCleaning(seconds = 2.6, level = 0.3): void {
-  const o = output(level, seconds, JOB);
+  const o = oneShot(level, seconds, JOB);
   if (!o) return;
   const { ctx, out, t } = o;
   ping(ctx, out, t, 2300, 0.15, 0.03, 'square'); // the cap
@@ -138,7 +87,7 @@ export function playCleaning(seconds = 2.6, level = 0.3): void {
 
 /** A whisk beating in a mixing bowl: quick metal ticks against the side, a clink of the bowl now and then. */
 export function playWhisk(seconds = 2.2, level = 0.28): void {
-  const o = output(level, seconds, JOB);
+  const o = oneShot(level, seconds, JOB);
   if (!o) return;
   const { ctx, out, t } = o;
   for (let at = t; at < t + seconds; at += rand(0.09, 0.12)) {
@@ -152,7 +101,7 @@ export function playWhisk(seconds = 2.2, level = 0.28): void {
 
 /** The oven: its door let down, the tray slid in and the door shut (a thud); `ding` its timer instead. */
 export function playOven(ding = false, level = 0.3): void {
-  const o = output(level, 2, JOB);
+  const o = oneShot(level, 2, JOB);
   if (!o) return;
   const { ctx, out, t } = o;
   if (ding) {
@@ -176,7 +125,7 @@ export function playOven(ding = false, level = 0.3): void {
 
 /** The alarm clock's button: a plastic click and the short beep it answers with. */
 export function playAlarmButton(level = 0.1): void {
-  const o = output(level, 0.4);
+  const o = oneShot(level, 0.4);
   if (!o) return;
   const { ctx, out, t } = o;
   burst(ctx, out, t, 3000, 2, 0.6, 0.02);
@@ -185,7 +134,7 @@ export function playAlarmButton(level = 0.1): void {
 
 /** The cleaning kit lifted off the cabinet's shelf: the little bottle's glass clink, the bag of cotton buds rustling. */
 export function playKitTake(level = 0.2): void {
-  const o = output(level, 0.8);
+  const o = oneShot(level, 0.8);
   if (!o) return;
   const { ctx, out, t } = o;
   ping(ctx, out, t, 3300, 0.12, 0.18);
@@ -195,7 +144,7 @@ export function playKitTake(level = 0.2): void {
 
 /** A paper booklet picked up (the manual the cat brought): a few dry rustles of its pages. */
 export function playPaperRustle(level = 0.16): void {
-  const o = output(level, 0.6);
+  const o = oneShot(level, 0.6);
   if (!o) return;
   const { ctx, out, t } = o;
   for (let i = 0; i < 4; i++) burst(ctx, out, t + i * rand(0.05, 0.1), rand(2500, 5000), 0.9, rand(0.3, 0.6), rand(0.05, 0.1));
@@ -203,7 +152,7 @@ export function playPaperRustle(level = 0.16): void {
 
 /** Hangers on the wardrobe's rail: a rattle of wire and wood as the clothes are pushed along. */
 export function playHangers(level = 0.2): void {
-  const o = output(level, 1);
+  const o = oneShot(level, 1);
   if (!o) return;
   const { ctx, out, t } = o;
   burst(ctx, out, t, 2200, 0.8, 0.25, 0.4); // the slide
@@ -217,7 +166,7 @@ export function playHangers(level = 0.2): void {
 
 /** Getting into the bath: a heavy splash, then drops falling back. */
 export function playBathSplash(level = 0.35): void {
-  const o = output(level, 1.5, JOB);
+  const o = oneShot(level, 1.5, JOB);
   if (!o) return;
   const { ctx, out, t } = o;
   const splash = bed(ctx, out, t, 0.7, 700, 0.8, 0.9, 0.03);
@@ -241,7 +190,7 @@ export function playBathSplash(level = 0.35): void {
 
 /** Water running and lapping, `seconds` long: the hot tap topped up, the water moving round a body. */
 export function playRunningWater(seconds = 2.5, level = 0.18): void {
-  const o = output(level, seconds, JOB);
+  const o = oneShot(level, seconds, JOB);
   if (!o) return;
   const { ctx, out, t } = o;
   bed(ctx, out, t, seconds, 1300, 0.6, 0.8, 0.5);
@@ -250,7 +199,7 @@ export function playRunningWater(seconds = 2.5, level = 0.18): void {
 
 /** The treat jar shaken: three shakes of dry biscuits against the plastic. */
 export function playJarRattle(level = 0.28): void {
-  const o = output(level, 1);
+  const o = oneShot(level, 1);
   if (!o) return;
   const { ctx, out, t } = o;
   for (let shake = 0; shake < 3; shake++) {

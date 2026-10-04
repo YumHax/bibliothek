@@ -9,7 +9,7 @@ import { HAND, hex, setLines } from '../common/lettering';
 const PX_PER_M = 1600;
 const STRING = paint(0xd8cbb0, 0.9);
 
-export interface TagCardOptions {
+interface TagCardOptions {
   lines: readonly string[];
   width?: number;
   height?: number;

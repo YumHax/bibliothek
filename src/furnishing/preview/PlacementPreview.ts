@@ -19,7 +19,7 @@ const HOVER_COLOR = 0xfff2d0;
 type Extent = Pick<RoomOptions, 'width' | 'depth' | 'height'>;
 
 /** What the preview shows each frame while a piece is carried (every pose zone-local). */
-export interface PreviewState {
+interface PreviewState {
   /** Where the piece would be set down, and where it is drawn now (following the aim). */
   target: Pose;
   shown: Pose;

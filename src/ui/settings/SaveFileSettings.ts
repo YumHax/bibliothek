@@ -7,7 +7,7 @@ import { download, fileDate } from '@/share/download';
 import { action, group } from './fields';
 import type { SettingsHost } from './GameSettingsForm';
 
-export interface SaveFileOptions {
+interface SaveFileOptions {
   version: string;
   /** The collection as it stands, summed up for the card and the page. */
   summary: () => CollectionSummary;

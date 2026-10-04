@@ -7,15 +7,15 @@ import { Environment } from './Environment';
 import { Haze } from './Haze';
 import { LOOKS, displayColor, type Look, type LookName } from './grade';
 
-export { QUALITY, QUALITY_LEVELS, recommendedQuality, setQuality, type QualityLevel, type QualitySettings } from './quality';
-export { LOOKS, NEUTRAL_LOOK, type Look, type LookName } from './grade';
+export { QUALITY, QUALITY_LEVELS, recommendedQuality, setQuality, type QualityLevel,  } from './quality';
+export { LOOKS,  type Look, type LookName } from './grade';
 
 /** The DOM layer behind the canvas the video cut-outs show (`core/CssLayer`): the frame's grade is mirrored onto it as a CSS filter. */
-export interface VideoLayer {
+interface VideoLayer {
   setFilter(filter: string): void;
 }
 
-export interface GraphicsOptions {
+interface GraphicsOptions {
   /** Distance of the box held up to read, or null (depth of field). */
   focus: () => number | null;
   /** How lit the player's room is, 0 dark .. 1 lamp or sun (reflections and haze follow it). */

@@ -21,7 +21,7 @@ export class Boiler extends Prop {
     for (const z of [-0.18, 0.18]) this.add(cylinderMesh(0.025, 1.4, METAL.satinSteel(), { x: 0.2, y: 0.9, z }, { segments: 8 }));
   }
 
-  get footprint(): THREE.Box3 {
+  override get footprint(): THREE.Box3 {
     return new THREE.Box3(new THREE.Vector3(-0.32, 0, -0.32), new THREE.Vector3(0.32, 1.3, 0.32));
   }
 }

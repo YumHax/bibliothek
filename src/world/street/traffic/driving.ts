@@ -3,11 +3,11 @@ import { FRONT, KERB_HEIGHT, STREET_PLAN, type Vec2 } from '../streetPlan';
 import type { RoadObstacle, RoadVehicle, StreetTraffic } from './StreetTraffic';
 
 /** Route samples every this many metres (positions and headings looked up, never computed per frame). */
-export const STEP = 0.5;
+const STEP = 0.5;
 /** The road's surface, a kerb below the pavements. */
 export const ROAD_Y = -KERB_HEIGHT;
 /** Firm braking, m/s² (what a driver plans a stop with). */
-export const BRAKE = 5;
+const BRAKE = 5;
 
 /** A route sampled every `STEP` metres: x, z, heading (yaw of the nose, 0 = +x) per sample. */
 export interface Route {
@@ -83,7 +83,7 @@ export function corneringSpeed(route: Route, distance: number, cruise: number): 
  * What a driver is waiting for, when held up: the lights (no horn for those), the player, someone or
  * something on the road, the vehicle ahead, a siren (pulling over for it, or slowing as it passes).
  */
-export type HeldBy = 'signal' | 'viewer' | 'obstacle' | 'vehicle' | 'siren' | null;
+type HeldBy = 'signal' | 'viewer' | 'obstacle' | 'vehicle' | 'siren' | null;
 
 /** The driver's view of itself, for `allowedSpeed`. */
 export interface DriverView {
@@ -100,7 +100,7 @@ export interface DriverView {
 }
 
 /** An emergency vehicle coming up behind within this many metres: the driver pulls over and crawls; one this near going by: slow down. */
-export const YIELD = { reach: 40, crawl: 1.5, near: 30, slow: 3 } as const;
+const YIELD = { reach: 40, crawl: 1.5, near: 30, slow: 3 } as const;
 /** How fast an emergency vehicle goes through a red light. */
 const THROUGH_RED = 4.5;
 

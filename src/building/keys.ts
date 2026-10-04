@@ -7,13 +7,12 @@ import { KEYS, PersistedStore } from '@/persistence';
  */
 
 /** Every key of the building that can be given. */
-export type BuildingKey = 'cellar' | 'roof' | 'lodge';
+type BuildingKey = 'cellar' | 'roof' | 'lodge';
 
 const ALL: readonly BuildingKey[] = ['cellar', 'roof', 'lodge'];
 
 let store: PersistedStore<BuildingKey[]> | null = null;
 let held: Set<BuildingKey> | null = null;
-const listeners = new Set<() => void>();
 
 function keys(): Set<BuildingKey> {
   if (held) return held;
@@ -38,12 +37,5 @@ export function giveKey(key: BuildingKey): boolean {
   if (set.has(key)) return false;
   set.add(key);
   store!.save([...set]);
-  for (const cb of listeners) cb();
   return true;
-}
-
-/** Hears every key given; returns the unsubscribe. */
-export function onKeysChange(cb: () => void): () => void {
-  listeners.add(cb);
-  return () => listeners.delete(cb);
 }

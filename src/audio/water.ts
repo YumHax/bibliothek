@@ -9,7 +9,7 @@ import { Voice } from './ambient';
 /** How long a flush lasts, rush and refill together: the WC blocks another flush for as long. */
 export const FLUSH_SECONDS = 8;
 
-export interface RunningWaterOptions {
+interface RunningWaterOptions {
   /** Shut, the tap still drips now and then (the basin's never quite closes). Default false. */
   drips?: boolean;
   /** Loudness at the fitting. Default 0.5. */
@@ -84,7 +84,7 @@ export class RunningWater extends Voice {
     rumble.connect(drainLow).connect(drainGain).connect(this.drain);
   }
 
-  protected tick(ctx: AudioContext, dt: number): void {
+  protected override tick(ctx: AudioContext, dt: number): void {
     const now = ctx.currentTime;
     if (this.running && this.splash) {
       this.untilJitter -= dt;

@@ -20,7 +20,7 @@ export interface ShopChore {
   mutter?: string;
 }
 
-export interface ShopClerkOptions {
+interface ShopClerkOptions {
   viewer: THREE.Object3D;
   seed: number;
   /** What they say when clicked, in turn. */

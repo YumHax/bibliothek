@@ -52,7 +52,7 @@ export class CrtSpeaker extends Voice implements Updatable {
     if (this.running) this.setLevel(this.loudness);
   }
 
-  protected tick(ctx: AudioContext, dt: number): void {
+  protected override tick(ctx: AudioContext, dt: number): void {
     if (!this.crackle) return;
     if (Math.random() < dt * CRACKLE.perSecond) this.crackleLevel = CRACKLE.level * (0.3 + 0.7 * Math.random());
     this.crackleLevel *= Math.exp(-CRACKLE.decayPerSecond * dt);

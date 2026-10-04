@@ -11,7 +11,7 @@ export interface FrontLayout {
 }
 
 /** The joinery's colours: the shop's paint (pilasters, returns, head) and its fascia board's. */
-export interface FrontPaint {
+interface FrontPaint {
   front: string;
   fascia: string;
 }

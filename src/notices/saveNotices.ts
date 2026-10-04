@@ -19,7 +19,7 @@ const SAVE_NAMES: Readonly<Record<string, string>> = {
 };
 
 /** `bibliothek.wallet.v1` → "your wallet" (the debug save's keys too); an unknown key is "part of your progress". */
-export function saveName(key: string): string {
+function saveName(key: string): string {
   const name = key.replace(ROOT_PREFIX, '').replace(/^debug\./, '').replace(/\.v\d+$/, '');
   return SAVE_NAMES[name] ?? 'part of your progress';
 }

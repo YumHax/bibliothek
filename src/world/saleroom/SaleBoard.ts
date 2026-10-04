@@ -7,7 +7,7 @@ import { faceOn } from '../props/joinery';
 import { WALL } from '../surface/layers';
 
 /** What the board shows: the lot being called, or a notice (no sale today, the sale over). */
-export type BoardFace =
+type BoardFace =
   | { kind: 'lot'; number: number; of: number; title: string; estimate: number; bid: number | null; leader: string | null; status: string; you: boolean }
   | { kind: 'notice'; title: string; lines: readonly string[] };
 

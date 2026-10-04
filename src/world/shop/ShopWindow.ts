@@ -13,7 +13,7 @@ import type { ShopDoor } from '../street/streetPlan';
 import { OutlookView } from '../outlook/OutlookView';
 import { shopToStreet } from '../outlook/frames';
 
-export interface ShopWindowOptions {
+interface ShopWindowOptions {
   width: number;
   height: number;
   /** What is lettered in gold on the glass, read backwards from inside: the line the street sees on it (`SHOPFRONTS`), else the shop's name. */
@@ -67,11 +67,11 @@ export class ShopWindow extends THREE.Group implements Furniture, Updatable, Occ
     this.view = new OutlookView({
       viewer: options.viewer,
       toOutlook: () => toStreet.copy(options.zoneFrame.matrixWorld).invert().premultiply(shopFrame),
-      build: (camera) => {
+      build: (camera, between) => {
         if (!door) return Promise.reject(new Error(`[shop] ${options.name} has no door on the street to look out of`));
         const eye = new THREE.Vector3(options.along, 0, options.front).applyMatrix4(shopFrame);
         return Promise.all([import('../outlook/streetOutlook'), import('../outlook/inView')]).then(([{ buildStreetOutlook }, { facadesInView }]) =>
-          buildStreetOutlook(camera, { dayNight, lightDirection: (out) => outdoors.lightDirection(dayNight.state, out), facades: facadesInView([eye.x, eye.z], [door.facade.id]), ...(options.upgrades ? { upgrades: options.upgrades } : {}) }),
+          buildStreetOutlook(camera, { dayNight, lightDirection: (out) => outdoors.lightDirection(dayNight.state, out), facades: facadesInView([eye.x, eye.z], [door.facade.id]), ...(options.upgrades ? { upgrades: options.upgrades } : {}), between }),
         );
       },
       waiting: () => waiting.copy(dayNight.state.horizon).multiplyScalar(0.3 + 0.7 * dayNight.state.daylight),

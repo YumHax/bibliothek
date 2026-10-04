@@ -2,16 +2,16 @@ import { KEYS, PersistedStore, safeStorage } from '@/persistence';
 import { MEDAL_REWARD } from './pricing';
 import { rivalScore } from './rivals';
 
-export const ARCADE_MEDALS_KEY = KEYS.arcadeMedals;
+const ARCADE_MEDALS_KEY = KEYS.arcadeMedals;
 
-export type MedalTier = 'bronze' | 'silver' | 'gold';
+type MedalTier = 'bronze' | 'silver' | 'gold';
 
 const TIERS: readonly MedalTier[] = ['bronze', 'silver', 'gold'];
 /** Which rival on a fresh table (0-based rank) each tier asks the player to match: the fifth, the third, the first. */
 const RIVAL_RANK: Record<MedalTier, number> = { bronze: 4, silver: 2, gold: 0 };
 
 /** A medal just earned, and the tickets it pays once. */
-export interface MedalAward {
+interface MedalAward {
   tier: MedalTier;
   reward: number;
 }

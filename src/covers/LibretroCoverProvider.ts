@@ -4,9 +4,9 @@ import type { BoxArtUrls, CoverArtProvider } from './CoverArtProvider';
 
 const GITHUB_URL = 'https://raw.githubusercontent.com/libretro-thumbnails';
 /** Same-origin proxy served by the Vite middleware in dev and by api/art/[...path].ts in production. */
-export const DEFAULT_ART_PROXY = '/api/art';
+const DEFAULT_ART_PROXY = '/api/art';
 
-export interface LibretroCoverOptions {
+interface LibretroCoverOptions {
   /**
    * Same-origin caching proxy (see server/artCache.ts): URLs become `<proxy>/<repo>/<folder>/<file>`.
    * Defaults to `/api/art`, which exists both in dev and on Vercel and serves 512 px WebP with a
@@ -44,7 +44,7 @@ export class LibretroCoverProvider implements CoverArtProvider {
 
 const FORBIDDEN = /[&*\/:`<>?\\|]/g;
 
-export function sanitizeLibretroName(name: string): string {
+function sanitizeLibretroName(name: string): string {
   return name.replace(FORBIDDEN, '_');
 }
 

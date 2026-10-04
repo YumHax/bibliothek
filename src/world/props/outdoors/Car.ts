@@ -64,9 +64,6 @@ export const VAN_BODY: VehicleBody = {
 export const AMBULANCE_BODY: VehicleBody = { length: 6.3, width: 2.05, height: 2.25, body: 1.1, floor: 0.35, cab0: 4.5, roof0: 4.6, roof1: 5.4, cab1: 5.95, inset: 0.08, wheel: 0.36, wheelIn: 1.05, pillars: 0, cargo: { length: 4.55, height: 2.7 } };
 /** A dustcart, the street's bin lorry: a high cab over the front wheels, the long compactor body behind. */
 export const TRUCK_BODY: VehicleBody = { length: LORRY.length, width: LORRY.width, height: 2.95, body: 1.55, floor: 0.5, cab0: 6.9, roof0: 7, roof1: 8.2, cab1: 8.85, inset: 0.06, wheel: LORRY.wheelRadius, wheelIn: 1.5, pillars: 0, cargo: { length: 6.8, height: LORRY.height } };
-export const CAR_LENGTH = CAR_BODY.length;
-export const CAR_WIDTH = CAR_BODY.width;
-export const CAR_HEIGHT = CAR_BODY.height;
 const GLASS = '#1f2a34';
 
 export const CAR_COLORS = ['#e8e8e6', '#c4c6c8', '#1c1e22', '#2f3f66', '#8a2a2a', '#5a5d62', '#3a4a3a', '#d9d4c4', '#6b3f2a', '#b8b0a0'];
@@ -84,7 +81,7 @@ export interface CarFrame {
 }
 
 /** What the car is painted with: a projection of world points and fills on some canvas. */
-export interface CarBrush {
+interface CarBrush {
   point(x: number, z: number, height: number): [number, number];
   /** A face of the car: `glass` is how much of it mirrors the sky. */
   fill(p: Path2D, fill: Fill, glass: number): void;

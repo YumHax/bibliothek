@@ -40,7 +40,7 @@ const SET_WORD: Record<string, string> = {
 };
 
 /** The name a neon of `id` hangs under in the room's zone (the club's visitor looks up at it). */
-export function honourNeonName(id: string): string {
+function honourNeonName(id: string): string {
   return `Honour:${id}`;
 }
 

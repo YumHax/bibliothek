@@ -17,7 +17,7 @@ import { RIVAL } from './pricing';
 export const RIVAL_COLLECTOR = { name: 'Victor Crane', short: 'Victor', label: 'Victor, the collector', seed: 911 } as const;
 
 /** One real day in this many he sets up on Front Street (`isEventDay('trader', …)`: phase 1, the trader's draw since day one). */
-export const RIVAL_STREET_ONE_DAY_IN = 3;
+const RIVAL_STREET_ONE_DAY_IN = 3;
 
 /** Whether today (the real date) he stands outside RETRO GAMES with his suitcase. */
 export function rivalOnFrontStreet(date = new Date(), oneDayIn = RIVAL_STREET_ONE_DAY_IN): boolean {
@@ -30,10 +30,10 @@ export function rivalAtMarket(day: number): boolean {
 }
 
 /** How he feels about the player: even, stung (beaten more often than not), smug (he has been winning). */
-export type RivalMood = 'even' | 'stung' | 'smug';
+type RivalMood = 'even' | 'stung' | 'smug';
 
 /** What anything showing him may read. */
-export interface RivalView {
+interface RivalView {
   name: string;
   /** Times the player got there first (a copy he was after, a lot he bid on). */
   beaten: number;
@@ -45,7 +45,7 @@ export interface RivalView {
 }
 
 /** His hunt at the flea market on a market day: the copy, and how it ended (none yet: on his way). */
-export interface RivalHunt {
+interface RivalHunt {
   day: number;
   gameId: string;
   title: string;
@@ -53,7 +53,7 @@ export interface RivalHunt {
 }
 
 /** A game he took (off a stall, at the saleroom) and still has: offered from his suitcase on Front Street. */
-export interface HaulEntry {
+interface HaulEntry {
   game: Game;
   /** What he paid for it (his price is that times `TRADER_MARKUP`). */
   price: number;

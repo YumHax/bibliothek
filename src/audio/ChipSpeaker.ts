@@ -20,7 +20,7 @@ export interface SfxEvent {
   pitch?: number;
 }
 
-export interface ChipSpeakerOptions {
+interface ChipSpeakerOptions {
   /** Loudness at `refDistance` and closer, linear. Default 0.22. */
   volume?: number;
   /** Metres within which it plays at full volume; it falls off as 1/distance beyond. Default 1. */

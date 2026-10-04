@@ -37,7 +37,7 @@ interface State {
   done: string[];
 }
 
-export interface NeighbourTradesOptions {
+interface NeighbourTradesOptions {
   collection: { readonly games: readonly Game[]; owns(id: string): boolean; find?(id: string): Game | undefined };
   /** The game day (`time/Today`): a note lasts some days of it. */
   today: { readonly gameDay: number };

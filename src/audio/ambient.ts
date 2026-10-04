@@ -23,7 +23,7 @@ export interface AmbientVoice {
   setSpatial?(pan: number, walls: number, rear?: number): void;
 }
 
-export interface VoiceOptions {
+interface VoiceOptions {
   /** The mixer bus it plays on. Default `world`. */
   bus?: Exclude<AudioChannel, 'master'>;
   /** Time constant (s) of the level following. Default `FOLLOW`. */
@@ -256,7 +256,7 @@ export class FridgeHum extends Voice {
     rumble.connect(low).connect(gain).connect(this.motor);
   }
 
-  protected tick(ctx: AudioContext, dt: number): void {
+  protected override tick(ctx: AudioContext, dt: number): void {
     this.cycleLeft -= dt;
     if (this.cycleLeft > 0 || !this.motor) return;
     this.running = !this.running;
@@ -300,7 +300,7 @@ export class ClockTick extends Voice {
     click(ctx, out, hz, 0.5 * rand(0.9, 1.1), burst);
   }
 
-  protected tick(ctx: AudioContext, dt: number): void {
+  protected override tick(ctx: AudioContext, dt: number): void {
     if (this.driven) return;
     this.untilNext -= dt;
     if (this.untilNext > 0 || !this.burst || !this.master) return;
@@ -308,36 +308,6 @@ export class ClockTick extends Voice {
     if (this.untilNext < 0) this.untilNext = 1; // the tab slept: no burst of catch-up ticks
     this.tock = !this.tock;
     this.escapement(ctx, this.master, this.burst);
-  }
-}
-
-/** A tap that does not quite shut: a drop into the basin every few seconds, a short rising "plink". */
-export class TapDrip extends Voice {
-  private untilNext = rand(2, 6);
-
-  constructor() {
-    super(0.3);
-  }
-
-  protected build(): void {}
-
-  protected tick(ctx: AudioContext, dt: number): void {
-    this.untilNext -= dt;
-    if (this.untilNext > 0 || !this.master) return;
-    this.untilNext = rand(3.5, 9);
-    const now = ctx.currentTime;
-    const osc = ctx.createOscillator();
-    osc.type = 'sine';
-    const pitch = rand(900, 1400);
-    osc.frequency.setValueAtTime(pitch, now);
-    osc.frequency.exponentialRampToValueAtTime(pitch * 2.2, now + 0.06);
-    const gain = ctx.createGain();
-    gain.gain.setValueAtTime(0.0001, now);
-    gain.gain.exponentialRampToValueAtTime(0.4, now + 0.004);
-    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.12);
-    osc.connect(gain).connect(this.master);
-    osc.start(now);
-    osc.stop(now + 0.15);
   }
 }
 

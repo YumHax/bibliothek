@@ -24,7 +24,7 @@ export interface MarketCounterParts extends Pick<CoreParts, 'inspector' | 'panel
 }
 
 /** What the counter needs from the session: its parts, a way to talk, and the moves it may make. */
-export interface MarketCounterHost extends Pick<SessionHost, 'pickUp' | 'putBack'> {
+interface MarketCounterHost extends Pick<SessionHost, 'pickUp' | 'putBack'> {
   readonly parts: MarketCounterParts;
   readonly notices: NoticeActions;
   /** Opens a DOM panel over the room, the copy staying in hand. */

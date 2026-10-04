@@ -3,7 +3,7 @@ import { HOME_GOODS, HOME_UPGRADES, homeGood, type HomeGoodStatus, type HomeUpgr
 
 export type { HomeUpgrade } from './homeGoods';
 
-export const HOME_UPGRADES_STORAGE_KEY = KEYS.home;
+const HOME_UPGRADES_STORAGE_KEY = KEYS.home;
 
 /** Roughly how many boxes one bookcase takes (NES-sized; bigger boxes, fewer): what a save from before the bare flat is given shelves for. */
 const BOXES_PER_BOOKCASE = 35;
@@ -19,7 +19,7 @@ interface Saved {
   shelvesOwed: boolean;
 }
 
-export interface HomeUpgradesOptions {
+interface HomeUpgradesOptions {
   /** Everything bought already, at its most (`?debug`: the furnished flat of before). */
   furnished?: boolean;
 }

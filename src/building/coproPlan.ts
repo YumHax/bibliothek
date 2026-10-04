@@ -109,7 +109,7 @@ export const RESOLUTIONS: readonly Resolution[] = [
 ];
 
 /** Someone with a vote: a flat on the stairs (by name, as `STAIRWELL_PLAN`), or the rear building's owners. */
-export interface Voter {
+interface Voter {
   who: string;
   /** How they vote on a resolution whatever happens (their nature); the rest is drawn per meeting. */
   leans: Partial<Record<ResolutionId, string>>;

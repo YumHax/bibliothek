@@ -4,7 +4,7 @@ import type { SessionActions } from '@/game/SessionActions';
 import { invisibleHitbox } from '../meshUtils';
 import { Prop } from './Prop';
 
-export interface ClickSpotOptions {
+interface ClickSpotOptions {
   /** Size of the invisible click target, centred on the spot's origin. */
   size: [width: number, height: number, depth: number];
   /** The caption while hovered, or null for none (asked every time: it can follow the host's state). */

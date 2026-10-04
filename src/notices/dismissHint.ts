@@ -7,7 +7,7 @@ import { actionKeyLabel, onKeyLabelsChange } from '@/ui/keys';
  * The small "✕ X put down" line on a card or a tip: how to put it away with the device in hand (the
  * `dismissNotice` key on the keyboard, its button held on a controller, a tap on a touchscreen).
  */
-export function fillDismissHint(el: HTMLElement): void {
+function fillDismissHint(el: HTMLElement): void {
   const device = lastDevice();
   const cap = document.createElement('kbd');
   el.replaceChildren();

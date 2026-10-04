@@ -74,7 +74,7 @@ export class Poster extends Prop {
       for (let r = 0; r < rows; r++) {
         for (let c = 0; c < cols; c++) {
           const i = r * cols + c;
-          const base = accents[i % accents.length].clone();
+          const base = accents[i % accents.length]!.clone();
           const tint = 0.75 + 0.5 * (((i * 7919) % 13) / 13);
           base.multiplyScalar(tint);
           const x = margin + c * cell + (cell - cw) / 2;

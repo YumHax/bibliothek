@@ -36,7 +36,7 @@ export class Fountain implements LifeLayer {
     const { x, z } = FOUNTAIN;
     const d = Math.hypot(x, z);
     const a = azimuthOf(x, z);
-    const cell = this.cells[Math.floor(this.clock * 8) % SPRAY.frames];
+    const cell = this.cells[Math.floor(this.clock * 8) % SPRAY.frames]!; // SPRAY.frames cells, painted in `paint`
     const half = SPRAY.width / 2 / d;
     push([azimuthX(a - half), heightY(SPRAY.height, d), azimuthX(a + half), heightY(0.2, d)], cell, d - 0.5, 0.85);
   }

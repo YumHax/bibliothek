@@ -4,7 +4,7 @@ import { cylinderMesh } from '../meshUtils';
 import { part } from '../props/Prop';
 import { METAL, paint, timber } from '@/world/materials/palette';
 
-export interface CoatRackOptions {
+interface CoatRackOptions {
   /** Two wire shelves of shoes under the coats. Default true. */
   shoeRack?: boolean;
 }

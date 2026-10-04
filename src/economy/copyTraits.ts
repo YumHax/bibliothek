@@ -11,9 +11,9 @@ import { PAST_ODDS, VARIANT } from './pricing';
  */
 
 /** Where a copy turns up: an `ordinary` stall find, a `collector`'s piece (a showpiece: sealed more often), the `bin`. */
-export type DressKind = 'ordinary' | 'collector' | 'bin';
+type DressKind = 'ordinary' | 'collector' | 'bin';
 
-export interface DressOptions {
+interface DressOptions {
   /** The copy's state (absent: complete): a sealed copy is complete, pencil notes need the manual. */
   condition?: BoxCondition;
   /** A reproduction is never sealed (the tell is inside, and a sealed box is never opened at a stall). */

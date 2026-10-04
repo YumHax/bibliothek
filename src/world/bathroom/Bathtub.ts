@@ -16,13 +16,13 @@ import { CERAMIC, CHROME, STILL_WATER } from '../props/bathroomMaterials';
 import { GLASS, asGlass } from '../materials/glass';
 
 /** What the tub's water is doing, for the builder's sound: tap running, plug out, how full (0..1). */
-export interface BathWater {
+interface BathWater {
   running: boolean;
   draining: boolean;
   depth: number;
 }
 
-export interface BathtubOptions {
+interface BathtubOptions {
   /** Outer size. Default a standard 1.7 x 0.75 m tub, 0.55 m high. */
   length?: number;
   width?: number;

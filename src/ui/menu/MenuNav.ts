@@ -37,7 +37,7 @@ export function isField(el: Element | null): boolean {
 
 // --- panels -------------------------------------------------------------------------------------------
 
-export interface PanelNavOptions {
+interface PanelNavOptions {
   /** True while the panel is up; presses are ignored otherwise. */
   isOpen(): boolean;
   /** Controller B: close the panel (or step back inside it). Default: an Escape press, which the Session closes modals on. */

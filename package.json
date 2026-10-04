@@ -8,12 +8,14 @@
   },
   "scripts": {
     "dev": "vite",
-    "build": "npm run typecheck && vite build",
+    "build": "npm run typecheck && npm run lint && vite build && node scripts/check-bundle.mjs",
     "preview": "vite preview",
     "bake-art": "node scripts/bake-box-art.mjs",
     "balance": "node scripts/arcade-balance.mjs",
     "zfight": "node scripts/zfight.mjs",
-    "typecheck": "tsc --noEmit && tsc --noEmit -p api && node scripts/check-conventions.mjs && node scripts/zfight.mjs"
+    "scene-lint": "node scripts/scene-lint.mjs",
+    "lint": "eslint src server api && cspell --no-progress && knip --no-progress",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p api && node scripts/check-conventions.mjs && node scripts/check-imports.mjs && node scripts/check-docs.mjs && node scripts/check-data.mjs && node scripts/zfight.mjs && node scripts/scene-lint.mjs"
   },
   "dependencies": {
     "jsnes": "^2.1.0",
@@ -22,8 +24,13 @@
   "devDependencies": {
     "@types/node": "^18.19.130",
     "@types/three": "^0.169.0",
+    "cspell": "^8.19.4",
+    "esbuild": "^0.21.5",
+    "eslint": "^9.39.5",
+    "knip": "^5.88.1",
     "sharp": "^0.33.5",
     "typescript": "^5.6.0",
+    "typescript-eslint": "^8.71.0",
     "vite": "^5.4.0"
   }
 }

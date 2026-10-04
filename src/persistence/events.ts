@@ -1,5 +1,5 @@
 /** A save that did not reach storage (quota full, storage blocked): the game goes on, but it will not survive a reload. */
-export interface WriteFailure {
+interface WriteFailure {
   /** The key that could not be written (the first one, for a batch). */
   key: string;
   /** Every key the failed write was about (a batch is put back as a whole). */
@@ -8,7 +8,7 @@ export interface WriteFailure {
 }
 
 /** An unreadable save was set aside (copied to `backup`) and its store started afresh. */
-export interface CorruptSave {
+interface CorruptSave {
   key: string;
   /** Where the raw text was copied, or null when even that failed. */
   backup: string | null;

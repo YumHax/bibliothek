@@ -10,7 +10,7 @@ import { playShutter } from './shutterSound';
 import { ACTIONS, isAction, type ActionId } from '@/input/actions';
 
 /** The player as photo mode parks and frees it (`FirstPersonController` fits). */
-export interface PhotoPlayer {
+interface PhotoPlayer {
   readonly isLocked: boolean;
   readonly isSeated: boolean;
   /** `instant`: no eased move (photo mode parks the camera where it is). */
@@ -20,7 +20,7 @@ export interface PhotoPlayer {
   setLook(yaw: number, pitch: number): void;
 }
 
-export interface PhotoModeDeps {
+interface PhotoModeDeps {
   camera: THREE.PerspectiveCamera;
   /** The WebGL canvas (`engine.renderer.domElement`). */
   canvas: HTMLCanvasElement;

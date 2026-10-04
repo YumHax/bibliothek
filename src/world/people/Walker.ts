@@ -77,7 +77,7 @@ const PASS = { ahead: 2.2, wide: 0.7, side: 0.55, sideMax: 0.4, pace: 0.85, foll
 
 type State = { kind: 'walk'; path: THREE.Vector3[]; then: (() => void) | null } | { kind: 'stand'; yaw: number };
 /** What they keep their eyes on: a world point, the player (in conversation: mostly on them, a glance aside now and then), or nothing (their own glances). */
-export type Focus = THREE.Vector3 | 'viewer' | null;
+type Focus = THREE.Vector3 | 'viewer' | null;
 /** Seconds they keep their eyes on the player after a line said to them, beyond its own length. */
 const LINE_ATTENTION = 3;
 

@@ -7,7 +7,7 @@ import { cylinderMesh, invisibleHitbox } from '../meshUtils';
 import { matte } from '../props/Prop';
 import { type OwnedPrizes, showWhenOwned } from './ownedPrize';
 
-export interface MoodLampOptions {
+interface MoodLampOptions {
   prizes: OwnedPrizes;
   /** The prize that brings it home. Default 'moodLamp'. */
   prizeId?: string;

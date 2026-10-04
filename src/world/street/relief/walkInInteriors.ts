@@ -7,7 +7,7 @@
  */
 
 /** The tile's scale: its size in pixels, the canvas x of metres along it, the canvas y of metres over the floor. */
-export interface WallArt {
+interface WallArt {
   S: number;
   X: (m: number) => number;
   Y: (m: number) => number;

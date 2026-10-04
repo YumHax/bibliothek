@@ -6,12 +6,10 @@ import { KEYS, PersistedStore, safeStorage } from '@/persistence';
 import { CARD_MEMORY_DAYS, CONSIGNMENT_DAYS } from './pricing';
 import type { StockSource } from './StockItem';
 
-export const LEDGER_STORAGE_KEY = KEYS.market;
-
-export { CONSIGNMENT_DAYS } from './pricing';
+const LEDGER_STORAGE_KEY = KEYS.market;
 
 /** A second-hand copy ordered at the mail-order counter: on its stall from `day`, deposit paid, the price agreed. */
-export interface MarketOrder {
+interface MarketOrder {
   game: Game;
   /** The market day it turns up (and stays on the stall from). */
   day: number;
@@ -32,7 +30,7 @@ export interface HeldCopy {
 }
 
 /** A hold: the deposit paid, and the copy (absent for holds saved before copies were kept). */
-export interface Hold {
+interface Hold {
   deposit: number;
   copy?: HeldCopy;
 }

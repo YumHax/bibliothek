@@ -4,7 +4,7 @@ import { SwitchableLamp } from '../props/SwitchableLamp';
 import { METAL, standard } from '../materials/palette';
 import { LAMP_GLOW, LAMP_LIGHT } from '../lighting/lampColours';
 
-export interface BedsideLampOptions {
+interface BedsideLampOptions {
   /** Light intensity when on (a small bulb: a fraction of a floor lamp's). */
   intensity?: number;
   /** Starts lit? */

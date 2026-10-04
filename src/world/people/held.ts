@@ -34,7 +34,7 @@ export function heldMesh(item: Held, seed: number): THREE.Object3D {
 const BAG_PAPERS = [0xc9a878, 0xe8e2d4, 0x9a6a3a, 0x2f4a3a];
 
 /** A paper carrier bag hanging from the hand by its handles (the wrist's frame); a baguette sticking out of it. */
-export function paperBagMesh(seed: number, baguette: boolean): THREE.Object3D {
+function paperBagMesh(seed: number, baguette: boolean): THREE.Object3D {
   const group = new THREE.Group();
   const paper = new THREE.MeshStandardMaterial({ color: BAG_PAPERS[seed % BAG_PAPERS.length]!, roughness: 0.9 });
   const bag = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.28, 0.24), paper);
@@ -54,7 +54,7 @@ export function paperBagMesh(seed: number, baguette: boolean): THREE.Object3D {
 }
 
 /** A bunch of flowers wrapped in paper, carried along the forearm, blooms forward (the wrist's frame). */
-export function bouquetMesh(seed: number): THREE.Object3D {
+function bouquetMesh(seed: number): THREE.Object3D {
   const group = new THREE.Group();
   const wrap = new THREE.MeshStandardMaterial({ color: 0xe8e4d8, roughness: 0.85, side: THREE.DoubleSide });
   const cone = new THREE.Mesh(new THREE.ConeGeometry(0.07, 0.3, 10, 1, true), wrap);
@@ -70,7 +70,7 @@ export function bouquetMesh(seed: number): THREE.Object3D {
 }
 
 /** A cigarette between the fingers, its tip glowing (the wrist's frame). */
-export function cigaretteMesh(): THREE.Object3D {
+function cigaretteMesh(): THREE.Object3D {
   const group = new THREE.Group();
   const stick = new THREE.Mesh(new THREE.CylinderGeometry(0.004, 0.004, 0.07, 5), new THREE.MeshStandardMaterial({ color: 0xf2efe8, roughness: 0.7 }));
   stick.rotation.x = Math.PI / 2;
@@ -94,7 +94,7 @@ const SHAFT = { x: 0.07, z: 0.3, bottom: 0.12, top: 1.24 };
 const CANOPY = { radius: 0.55, rise: 0.2, ribs: 8 };
 
 /** A phone in the hand (the wrist's frame, the hand hanging down from it). */
-export function phoneMesh(): THREE.Object3D {
+function phoneMesh(): THREE.Object3D {
   const body = new THREE.Mesh(new THREE.BoxGeometry(0.072, 0.145, 0.009), new THREE.MeshStandardMaterial({ color: 0x141518, roughness: 0.25 }));
   body.position.set(0, -0.05, 0.03);
   body.rotation.x = 0.2;
@@ -102,7 +102,7 @@ export function phoneMesh(): THREE.Object3D {
 }
 
 /** An open paperback held in the right hand, pages up, tilted towards the eyes (the wrist's frame). */
-export function bookMesh(seed: number): THREE.Object3D {
+function bookMesh(seed: number): THREE.Object3D {
   const group = new THREE.Group();
   const cover = new THREE.MeshStandardMaterial({ color: [0x8a2a2a, 0x2a4a7a, 0x3a5a2a, 0xc8a040][seed % 4]!, roughness: 0.8 });
   const pages = new THREE.MeshStandardMaterial({ color: 0xf0e8d6, roughness: 0.95 });
@@ -123,7 +123,7 @@ export function bookMesh(seed: number): THREE.Object3D {
 }
 
 /** An open umbrella, in the torso's frame: the shaft from the hand up, the ribbed canopy over the head. */
-export function umbrellaMesh(seed: number): THREE.Object3D {
+function umbrellaMesh(seed: number): THREE.Object3D {
   const group = new THREE.Group();
   const metal = bareMetal({ color: 0x6a6c70, roughness: 0.35 }, 0.1);
   const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, SHAFT.top - SHAFT.bottom, 6), metal);

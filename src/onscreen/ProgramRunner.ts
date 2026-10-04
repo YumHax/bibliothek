@@ -32,7 +32,7 @@ const STICK_PRESS = 0.5;
 const MAX_DT = 0.1;
 
 /** Something that hears when a program comes on or goes off. */
-export interface ProgramListener {
+interface ProgramListener {
   started?(program: ScreenProgram, game: Game, screen: VideoScreen): void;
   stopped?(program: ScreenProgram): void;
 }

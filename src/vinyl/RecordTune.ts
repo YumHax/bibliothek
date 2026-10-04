@@ -173,7 +173,7 @@ export class RecordTune extends Voice {
 
   private hissGain: GainNode | null = null;
 
-  protected tick(ctx: AudioContext, dt: number): void {
+  protected override tick(ctx: AudioContext, dt: number): void {
     const out = this.master;
     if (!out || !this.tone) return;
     const now = ctx.currentTime;

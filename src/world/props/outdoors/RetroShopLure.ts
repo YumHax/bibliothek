@@ -2,12 +2,12 @@ import { seededRandom } from '@/covers/generated/canvasUtils';
 import type { Outdoors } from './Outdoors';
 
 /** What the lure needs of the flea market: today's market day and its stock once drawn. */
-export interface MarketNews {
+interface MarketNews {
   readonly day: number;
   peekToday(): readonly { game: { platform: string } }[] | null;
 }
 
-export interface RetroShopLureOptions {
+interface RetroShopLureOptions {
   /** The shop's stock colour for a platform (a CSS colour). */
   colorOf: (platform: string) => string;
   /** Where the player is now (a zone id): walking into the market counts as having been. */

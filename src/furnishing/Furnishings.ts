@@ -37,7 +37,7 @@ export interface Piece {
   readonly keepsRoom: boolean;
 }
 
-export interface PieceSpec {
+interface PieceSpec {
   key: string;
   /** Where its plan puts it: says what it moves over (floor, wall, ceiling). Absent: the floor. */
   at?: Placement;

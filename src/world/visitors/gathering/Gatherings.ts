@@ -16,7 +16,7 @@ import { OpenHouse } from './OpenHouse';
 const NIGHT_LATEST = 22.5;
 
 /** A line of the phone's page for the gatherings: what it asks for, a word on it, whether it can be asked now. */
-export interface PhoneEventRow {
+interface PhoneEventRow {
   id: 'gamesNight' | 'openHouse';
   label: string;
   note: string;

@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import type { BrowserCache } from '@/persistence/BrowserCache';
 
-export interface ImageFetchOptions {
+interface ImageFetchOptions {
   /** Other addresses of the same image, tried in turn when one fails (not when it is missing): a proxy's upstream. */
   mirrors?: (url: string) => readonly string[];
   /** Addresses answered "not found" lately, kept across reloads so they are not asked again. */

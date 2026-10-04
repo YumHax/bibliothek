@@ -22,7 +22,7 @@ const WIDTH = 0.085;
 /** The feet turn out a little (radians). */
 const TOE_OUT = 0.07;
 
-export interface FootFrame {
+interface FootFrame {
   /** Where the ankle is with the foot flat (the root's frame, y the ankle's height on the floor, lift included). */
   readonly flat: THREE.Vector3;
   /** Toes down positive (heel up), toes up negative (heel strike). */
