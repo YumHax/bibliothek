@@ -366,9 +366,9 @@ function adTexture(): THREE.CanvasTexture {
   ctx.fillText('FAIR', 128, 140);
   ctx.fillStyle = '#ffffff';
   ctx.font = 'bold 22px system-ui, sans-serif';
-  ctx.fillText('RETRO · CARTS · CONSOLES', 128, 200);
+  ctx.fillText('RETRO · CARTS · CONSOLES', 128, 200, 232);
   ctx.font = '20px system-ui, sans-serif';
-  ctx.fillText('Sunday, the old market hall', 128, 240);
+  ctx.fillText('Sunday, the old market hall', 128, 240, 232);
   ctx.fillStyle = '#5fe6ff';
   for (let i = 0; i < 6; i++) ctx.fillRect(40 + i * 30, 290, 20, 34);
   return toTexture(canvas, 'facing');

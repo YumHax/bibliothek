@@ -139,6 +139,16 @@ export class Transactions {
     return { ok: true, game, paid: due, upgrade };
   }
 
+  /** B on a find (`ForSaleLike.free`): the game comes home for nothing, its receipt 0 coins at `where`; no stall, no standing. */
+  takeFind(item: StockItem, where: string): TxResult<{ game: Game }> {
+    const { collection, market } = this.deps;
+    if (!collection) return fail('unavailable');
+    if (collection.owns(item.game.id)) return fail('owned');
+    const game = bought(item.game, 0, where, market?.day ?? 0);
+    collection.add(game);
+    return { ok: true, game };
+  }
+
   /**
    * U just after a purchase: `game` goes back, `refund` coins come back, the stall forgets the sale. A copy that was
    * held (`hold`) goes back on hold with its deposit; `alsoDo` runs in the same save (a perk the purchase used, given back).

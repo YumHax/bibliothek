@@ -627,7 +627,7 @@ one shut since lands there too (`PositionMemory`'s `instead`, `outsideIfShut`).
   player a step more (0 to 6): he lets them nearer before slinking off (`WARY` by trust), from 3 is stroked (a purr,
   `CatVoice`), from 5 brings a coin from the gutter once a day. A stranger right on top of him gets a hiss.
 - **FREE TO TAKE** (`GiveawayBox`): one real day in four a box of cast-offs by a front door; once the market's stock is
-  drawn, one worn bin game lies in it for 0 coins (a `ForSaleBox`: B takes it).
+  drawn, one worn bin game lies in it, free (a `free` `ForSaleBox`: B takes it, no price, the market never hears of it).
 - **The collector** (`Trader`): one real day in three, 10:00 to 18:00, outside RETRO GAMES with three copies he took off
   the flea market's stalls once the stock is drawn (`market.soldToRival`: gone from there; one from the wishlist if the
   market had it), at `TRADER_MARKUP` (1.25) times their price. They are `'stall'` copies: B buys, H haggles, X swaps a game from the
@@ -665,7 +665,7 @@ one shut since lands there too (`PositionMemory`'s `instead`, `outsideIfShut`).
 - **The attic** (docs/zones.md "The attic"): its STARFALL cabinet is free and pays no tickets (`payout: 'none'`; a machine's
   `payout` is arcade, none or event, and the display, the strip, the screens and ArcadePlay all read it; the party cabinet is
   `event` and today pays the hall's tickets plus its kitty). Beating the
-  collector's best (3000, `ATTIC_PLAN.collector`) gives his grail once (Stadium Events, at 0). His chest gives a
+  collector's best (3000, `ATTIC_PLAN.collector`) gives his grail once (Stadium Events, free to take: B, no price). His chest gives a
   sealed Super Mario World. If the player already owns that game, the club pays `ALREADY_OWNED_COINS` instead (`furnishAttic`):
   600 coins for the prize, 300 for the chest.
 

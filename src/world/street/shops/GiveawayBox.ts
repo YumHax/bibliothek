@@ -61,8 +61,8 @@ const JUNK = [
 /**
  * A cardboard box of cast-offs left out by a front door some days, FREE TO TAKE written on its flap:
  * old magazines and cables, and once the flea market's stock is drawn (the dealers have been
- * through the lofts of the street) one worn game in it, free to a good home (`ForSaleBox` at 0
- * coins: click to look, B takes it; no haggling over a gift). Taken, the box is only junk again.
+ * through the lofts of the street) one worn game in it, free to a good home (a `free` `ForSaleBox`:
+ * click to look, B takes it). Taken, the box is only junk again.
  * Origin on the pavement at the box's centre, +z is the side it is read from.
  */
 export class GiveawayBox extends THREE.Group implements Furniture, Updatable, Interactable {
@@ -154,24 +154,17 @@ export class GiveawayBox extends THREE.Group implements Furniture, Updatable, In
       tag: false,
       wallet,
       where: GIVEAWAY_WHERE,
+      free: true,
       isWanted: () => isWanted(gift.game.id),
       thanks: () => 'Nobody minds: that is what the box is for.',
     });
     const at = host.toLocal(this.localToWorld(new THREE.Vector3(0.02, BOX.height - 0.04, 0.04)));
-    const place = (): void => {
-      host.place(box, at, this.rotation.y + 0.4);
-    };
     box.onSold = () => {
       host.remove(box);
       this.game = null;
       taken.save({ day: dayKey() });
     };
-    box.restock = () => {
-      place();
-      this.game = box;
-      taken.remove();
-    };
-    place();
+    host.place(box, at, this.rotation.y + 0.4);
     this.game = box;
   }
 }

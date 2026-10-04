@@ -129,7 +129,7 @@ export function furnishAttic(zone: Zone, ctx: Pick<BuildContext, 'sky' | 'listen
       return;
     }
     const gift = new StockItem(game, 'complete', 'grail', { list: 0, final: true });
-    const box = new ForSaleBox(gift, covers, { pose: { kind: 'flat' }, tag: false, wallet: money.wallet, where, isWanted: () => collection.isWanted(gift.game.id), thanks: () => said });
+    const box = new ForSaleBox(gift, covers, { pose: { kind: 'flat' }, tag: false, wallet: money.wallet, where, free: true, isWanted: () => collection.isWanted(gift.game.id), thanks: () => said });
     box.onSold = () => {
       zone.remove(box);
       done();

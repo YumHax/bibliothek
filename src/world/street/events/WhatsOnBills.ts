@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { Updatable } from '@/core/Engine';
-import { createCanvas, toTexture } from '@/covers/generated/canvasUtils';
+import { createCanvas, fitFontSize, fitParagraph, toTexture } from '@/covers/generated/canvasUtils';
 import type { Interactable } from '@/interaction/Interactable';
 import type { SessionActions } from '@/game/SessionActions';
 import type { Furniture } from '../../Furniture';
@@ -109,9 +109,12 @@ function paintBill(canvas: HTMLCanvasElement, items: readonly WhatsOnItem[]): vo
     ctx.fillStyle = '#ffffff';
     ctx.font = 'bold 34px sans-serif';
     ctx.fillText(item.today ? `TODAY · ${item.title}` : item.title, w / 2, y + 33, w - 70);
+    // The line under its banner, shrunk to its row (a long game title wraps to a third line).
     ctx.fillStyle = '#1a1a1a';
-    ctx.font = '22px sans-serif';
-    wrap(ctx, item.line, w / 2, y + 84, w - 80, 26);
+    const box = { top: y + 64, height: rowH - 70, width: w - 80 };
+    const { lines, lineHeight } = fitParagraph(ctx, item.line, box.width, box.height, 22, 14, 'sans-serif');
+    const first = box.top + (box.height - lines.length * lineHeight) / 2 + lineHeight / 2;
+    lines.forEach((line, l) => ctx.fillText(line, w / 2, first + l * lineHeight, box.width));
   });
 }
 
@@ -125,30 +128,23 @@ function paintAd(canvas: HTMLCanvasElement, fair: WhatsOnItem | null): void {
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, w, h);
   ctx.textAlign = 'center';
+  // The canvas is repainted every market day: the baseline left from the last paint's foot.
+  ctx.textBaseline = 'alphabetic';
   ctx.fillStyle = '#ffd23a';
   ctx.font = 'bold 40px system-ui, sans-serif';
   ctx.fillText('GRAND', w / 2, 70);
   ctx.fillText('FLEA FAIR', w / 2, 116, w - 20);
   ctx.fillStyle = '#ffffff';
-  ctx.font = 'bold 20px system-ui, sans-serif';
-  ctx.fillText('RETRO · CARTS · CONSOLES', w / 2, 170);
-  ctx.font = 'bold 24px system-ui, sans-serif';
+  fitFontSize(ctx, 'RETRO · CARTS · CONSOLES', w - 24, 20, 12, 'system-ui, sans-serif');
+  ctx.fillText('RETRO · CARTS · CONSOLES', w / 2, 170, w - 24);
+  // When and where, between the subtitle and the bars at the foot.
   ctx.fillStyle = fair?.today ? '#5fe6ff' : '#ffffff';
-  wrap(ctx, fair?.line ?? 'The Old Market Hall', w / 2, 220, w - 30, 28);
+  ctx.textBaseline = 'middle';
+  const box = { top: 192, height: 118, width: w - 30 };
+  const { lines, lineHeight } = fitParagraph(ctx, fair?.line ?? 'The Old Market Hall', box.width, box.height, 24, 14, 'system-ui, sans-serif', 'bold');
+  const first = box.top + (box.height - lines.length * lineHeight) / 2 + lineHeight / 2;
+  lines.forEach((line, l) => ctx.fillText(line, w / 2, first + l * lineHeight, box.width));
   ctx.fillStyle = '#5fe6ff';
   for (let i = 0; i < 6; i++) ctx.fillRect(40 + i * 30, 320, 20, 34);
 }
 
-/** Text wrapped to `width`, centred on x, from y down. */
-function wrap(ctx: CanvasRenderingContext2D, text: string, x: number, y: number, width: number, lineHeight: number): void {
-  let line = '';
-  for (const word of text.split(' ')) {
-    const next = line ? `${line} ${word}` : word;
-    if (ctx.measureText(next).width > width && line) {
-      ctx.fillText(line, x, y);
-      line = word;
-      y += lineHeight;
-    } else line = next;
-  }
-  if (line) ctx.fillText(line, x, y);
-}

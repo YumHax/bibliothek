@@ -70,8 +70,11 @@ export class PointerLockFlow {
       overlay.setPlaying(false);
       this.setMode(null);
     });
+    // Not while a panel is up: the click that opened it (on mousedown, under the lock) can still land its mouseup on
+    // the canvas once the lock is gone, when the panel took a while to paint (the conversation's portraits), and
+    // would lock the mouse again behind the panel.
     canvas.addEventListener('click', () => {
-      if (!player.isLocked) void this.enter();
+      if (!player.isLocked && !overlay.isModal) void this.enter();
     });
 
     // In a virtual mode the real mouse is ignored: swallow its button events aimed at the 3D view.

@@ -5,6 +5,8 @@ import { random } from '@/random';
 
 const ROUND_SECONDS = 15;
 const MAGAZINE = 6;
+/** Below this line (the strip with the magazine, under the crates) the gun is out of the play: it reloads, as off the glass. */
+const RELOAD_LINE = 214;
 /** Where targets pop up: the saloon's windows, its doors, the barrels and the crates in front. */
 const SPOTS: { x: number; y: number; w: number; h: number }[] = [
   { x: 52, y: 64, w: 34, h: 30 },
@@ -45,14 +47,15 @@ interface Target {
  * the barrels; shoot them before they draw (a slow one pays 50, a quick one 80, chaining the
  * combo), or they fire back and a second goes. Townsfolk wander into the line of fire too:
  * shooting one costs two seconds and the combo. Bottles pay a little, the sheriff's star three
- * seconds. Six shots, then shoot off the screen to reload. Every eight bandits is a stage: seconds
+ * seconds. Six shots, then point out of the play (off the glass, or down at the magazine's strip) to
+ * reload, no trigger needed. Every eight bandits is a stage: seconds
  * (two, a quarter less each stage after), faster draws, more of them at once. The gun aims where the player looks (the cabinet
  * fills `controls.aim`); Space or a click on the glass is the trigger.
  */
 export class NeonSheriff extends BaseGame {
   readonly id = 'sheriff';
   readonly title = 'NEON SHERIFF';
-  readonly hint = 'Look to aim · click or Space to shoot · shoot off the screen to reload';
+  readonly hint = 'Look to aim · click or Space to shoot · look down off the saloon to reload';
   readonly summary = '15 SEC · SHOOT THE BANDITS · SPARE THE TOWN';
   readonly gun = true;
 
@@ -104,16 +107,17 @@ export class NeonSheriff extends BaseGame {
     }
     this.targets = this.targets.filter((t) => t.down > 0 || (t.down === 0 && t.age < t.life));
 
-    if (!controls.firePressed) return;
-    if (!this.aim) {
-      // Off the screen: the classic reload.
+    if (!this.aim || this.aim.y >= RELOAD_LINE) {
+      // Out of the play: the gun reloads by itself, and a trigger there shoots nothing.
       if (this.ammo < MAGAZINE) {
         this.ammo = MAGAZINE;
+        this.reloadNag = 0;
         this.sound('reload');
         this.fx.pop('RELOADED', SCREEN_W / 2, SCREEN_H - 30, '#9ad6ff', 8);
       }
       return;
     }
+    if (!controls.firePressed) return;
     if (this.ammo <= 0) {
       this.sound('empty');
       this.reloadNag = 1;
@@ -159,7 +163,12 @@ export class NeonSheriff extends BaseGame {
       ctx.fillStyle = i < this.ammo ? '#ffd23a' : 'rgba(255,255,255,0.15)';
       ctx.fillRect(8 + i * 7, SCREEN_H - 14, 4, 9);
     }
-    if (this.ammo === 0 || this.reloadNag > 0) drawText(ctx, 'RELOAD! SHOOT OFF SCREEN', SCREEN_W / 2, SCREEN_H - 10, 8, Math.floor(this.elapsed * 6) % 2 ? '#ff5f5f' : '#ffffff');
+    if (this.ammo === 0 || this.reloadNag > 0) {
+      // The strip that reloads, lit while the gun is empty: the player looks down here.
+      ctx.fillStyle = 'rgba(154,214,255,0.12)';
+      ctx.fillRect(0, RELOAD_LINE, SCREEN_W, SCREEN_H - RELOAD_LINE);
+      drawText(ctx, 'RELOAD! AIM DOWN HERE', SCREEN_W / 2, SCREEN_H - 10, 8, Math.floor(this.elapsed * 6) % 2 ? '#ff5f5f' : '#ffffff');
+    }
     if (this.hitFlash > 0) {
       ctx.fillStyle = `rgba(255,40,40,${this.hitFlash * 0.6})`;
       ctx.fillRect(0, 0, SCREEN_W, SCREEN_H);
@@ -183,13 +192,13 @@ export class NeonSheriff extends BaseGame {
     }
   }
 
-  /** Swings the gun towards the nearest threat (a lesser shot slower and wider), fires once on it, reloads off screen when empty. */
+  /** Swings the gun towards the nearest threat (a lesser shot slower and wider), fires once on it, points off screen to reload when empty. */
   autopilot(skill: number): ArcadeControls {
     const out: ArcadeControls = { ...NO_CONTROLS, aim: { ...this.pilotAim } };
     if (this.counting) return out;
     if (this.ammo === 0) {
-      out.aim = null;
-      out.fire = out.firePressed = random() < 0.2;
+      // A regular takes a moment to notice and swing the gun away.
+      if (random() < 0.2) out.aim = null;
       return out;
     }
     const threats = this.targets.filter((t) => t.down === 0 && t.kind !== 'townsfolk');

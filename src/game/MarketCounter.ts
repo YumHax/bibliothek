@@ -52,7 +52,8 @@ interface LastPurchase {
  * receipt goes with the game), H opens the haggle panel, R holds the copy for the day against a
  * deposit, X opens the swap panel, O finds out a fake (the tell is inside the box), U within a few
  * seconds of a purchase hands it back for most of the money. The glass case is for players the
- * market trusts. Every move is answered by the stallholder (`ForSaleLike.react`).
+ * market trusts. Every move is answered by the stallholder (`ForSaleLike.react`). A find (`ForSaleLike.free`: the
+ * cellars' cartons, the collector's gifts, the box of cast-offs) is not sold: B takes it, nothing else applies.
  */
 export class MarketCounter implements KeyRoute {
   private sale: { item: ForSaleLike; unwatch: () => void } | null = null;
@@ -121,6 +122,8 @@ export class MarketCounter implements KeyRoute {
       return false; // the session still opens the box
     }
     if (isAction(code, 'buy')) this.buy();
+    // A find has nothing to haggle, hold or swap over: the keys are swallowed.
+    else if (this.sale.item.free) return isAction(code, 'haggle') || isAction(code, 'holdCopy') || isAction(code, 'swap');
     else if (isAction(code, 'haggle')) this.haggle();
     else if (isAction(code, 'holdCopy')) this.hold();
     else if (isAction(code, 'swap')) this.swap();
@@ -147,6 +150,10 @@ export class MarketCounter implements KeyRoute {
     const sale = this.sale?.item;
     const { wallet, collection, panel, inspector } = this.host.parts;
     if (!sale || !wallet || !collection) return;
+    if (sale.free) {
+      this.take(sale);
+      return;
+    }
     const { item } = sale;
     const { game } = item;
     const result = this.txFor(sale).buyCopy(item, sale.where);
@@ -175,6 +182,23 @@ export class MarketCounter implements KeyRoute {
       const last = this.last;
       this.host.notices.tip(`Changed your mind? ${actionKeyLabel('handBack')} within ${UNDO_PURCHASE.seconds} s hands it back.`, { id: 'hand-back', until: () => this.last !== last || performance.now() > (last?.until ?? 0) });
     }
+  }
+
+  /** B on a find: nothing changes hands, the box goes into the bag and the find is gone from where it lay. */
+  private take(sale: ForSaleLike): void {
+    const { panel, inspector } = this.host.parts;
+    const { game } = sale.item;
+    const result = this.transactions.takeFind(sale.item, sale.where);
+    if (!result.ok) {
+      if (result.reason === 'owned') this.host.notices.refuse(`You already own ${game.title}`);
+      return;
+    }
+    const said = sale.thanks();
+    this.end();
+    panel.hide();
+    inspector.stow(() => sale.sold());
+    this.last = null;
+    this.host.notices.reward({ title: `Found ${game.title}`, detail: `${said}\nIt comes home with you.` });
   }
 
   /**
@@ -346,6 +370,7 @@ export class MarketCounter implements KeyRoute {
       : item.haggled ? `${formatCoins(item.price)} (was ${item.tagPrice})`
       : `${formatCoins(item.price)}`;
     const state = item.condition === 'complete' ? 'Complete, with its manual' : item.condition === 'noManual' ? 'No manual' : 'Worn, no manual';
+    if (sale.free) return [['State', state]];
     const rows: [string, string][] = [['Price', price]];
     if (item.deposit) rows.push(['Still due', `${formatCoins(item.due)} (${item.deposit} paid down)`]);
     rows.push(['State', state]);
@@ -367,18 +392,20 @@ export class MarketCounter implements KeyRoute {
   /**
    * The key hints: buy; haggle only when a haggle would open (not on a clearance, an order, a copy already haggled over
    * today); at a stall, hold for the day (unless reserved) and swap a game (not an order or an upgrade); open the box
-   * unless the copy is sealed (`CopyOpening`); and put it back.
+   * unless the copy is sealed (`CopyOpening`); and put it back. A find (`ForSaleLike.free`): take it, open it, put it back.
    */
   private panelHints(sale: ForSaleLike): string {
     const { item } = sale;
     const { market } = this.host.parts;
     const canHaggle = (sale.dealer ?? market)?.canNegotiate?.(item) ?? true;
     const open = item.sealed ? '' : `${keyMarkup('lookInside')} open the box`;
-    const keys = item.source === 'bin'
-      ? [`${keyMarkup('buy')} buy`, open]
-      : sale.dealer
-        ? [`${keyMarkup('buy')} buy`, canHaggle ? `${keyMarkup('haggle')} haggle` : '', open]
-        : [`${keyMarkup('buy')} buy`, canHaggle ? `${keyMarkup('haggle')} haggle` : '', item.reserved ? '' : `${keyMarkup('holdCopy')} hold for the day`, item.source === 'ordered' || item.source === 'upgrade' ? '' : `${keyMarkup('swap')} swap a game`, open];
+    const keys = sale.free
+      ? [`${keyMarkup('buy')} take it`, open]
+      : item.source === 'bin'
+        ? [`${keyMarkup('buy')} buy`, open]
+        : sale.dealer
+          ? [`${keyMarkup('buy')} buy`, canHaggle ? `${keyMarkup('haggle')} haggle` : '', open]
+          : [`${keyMarkup('buy')} buy`, canHaggle ? `${keyMarkup('haggle')} haggle` : '', item.reserved ? '' : `${keyMarkup('holdCopy')} hold for the day`, item.source === 'ordered' || item.source === 'upgrade' ? '' : `${keyMarkup('swap')} swap a game`, open];
     return [...keys.filter(Boolean), `${keyMarkup('putBack')} or [Click] elsewhere to put it back`].map(renderKeys).join(' · ');
   }
 }
@@ -386,7 +413,8 @@ export class MarketCounter implements KeyRoute {
 /** The panel's one line about the copy: what kind of find it is, or what stands between the player and it. */
 function panelNote(sale: ForSaleLike, coins: number): string | undefined {
   const { item, wanted } = sale;
-  return !item.priced ? 'The stallholder is looking it up.'
+  return sale.free ? `Free to take.${wanted ? ' ★ On your wishlist.' : ''}`
+    : !item.priced ? 'The stallholder is looking it up.'
     : item.exposed ? 'A reproduction, found out: knocked right down.'
     : item.source === 'ordered' ? 'Your order, waiting for you.'
     : item.source === 'keptAside' ? 'Kept aside for you: a regular’s privilege.'

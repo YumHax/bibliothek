@@ -82,6 +82,11 @@ export interface ForSaleLike {
   readonly where: string;
   /** In a locked glass case: only a player the market trusts may take it in hand. */
   readonly behindGlass?: boolean;
+  /**
+   * A find, not a sale (a carton in the cellars, the collector's gift, the box of cast-offs): no price, no haggle, hold
+   * or swap; B takes it home and the market never hears of it.
+   */
+  readonly free?: boolean;
   /** Takes the copy off the stall, once paid for and put away. */
   sold(): void;
   /** The coins change hands: the stallholder's word (and the clink). */

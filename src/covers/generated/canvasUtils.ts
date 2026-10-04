@@ -41,6 +41,22 @@ export function fitFontSize(ctx: CanvasRenderingContext2D, text: string, maxWidt
   return size;
 }
 
+/**
+ * Shrinks the font (from `startPx`, a pixel at a time) until `text`, word-wrapped to `maxWidth`, fits
+ * `maxHeight` with lines `leading` × the size apart; at `minPx` the last line that fits is ellipsised.
+ * Leaves `ctx.font` set; draw each line with `maxWidth` too (a single long word is squeezed, not spilt).
+ */
+export function fitParagraph(ctx: CanvasRenderingContext2D, text: string, maxWidth: number, maxHeight: number, startPx: number, minPx: number, family: string, weight = '', leading = 1.2): { lines: string[]; lineHeight: number } {
+  for (let size = startPx; ; size--) {
+    ctx.font = `${weight ? `${weight} ` : ''}${size}px ${family}`;
+    const lineHeight = size * leading;
+    const maxLines = Math.max(1, Math.floor(maxHeight / lineHeight));
+    if (size <= minPx) return { lines: wrapLines(ctx, text, maxWidth, maxLines), lineHeight };
+    const lines = wrapLines(ctx, text, maxWidth);
+    if (lines.length <= maxLines && lines.every((line) => ctx.measureText(line).width <= maxWidth)) return { lines, lineHeight };
+  }
+}
+
 /** Gold "seal of quality" style roundel used on spine and back. `text` (words) is written inside, one per line. */
 export function drawSeal(ctx: CanvasRenderingContext2D, cx: number, cy: number, radius: number, text?: string): void {
   ctx.save();

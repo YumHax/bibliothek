@@ -51,10 +51,3 @@ export function markTaken(n: number): void {
   s.taken.push(n);
   store.save(s);
 }
-
-/** Taken back (the purchase undone: `ForSaleBox.restock`): the game is in its carton again. */
-export function unmarkTaken(n: number): void {
-  const s = load();
-  s.taken = s.taken.filter((t) => t !== n);
-  store.save(s);
-}

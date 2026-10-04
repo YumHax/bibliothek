@@ -31,6 +31,8 @@ export interface ForSaleBoxOptions {
   where: string;
   /** In a locked glass case (only a trusted player may take it in hand). */
   behindGlass?: boolean;
+  /** A find, not a sale (`ForSaleLike.free`): no price shown, B takes it, no coins clink. */
+  free?: boolean;
   /** The stallholder answers what the player does with it. */
   react?: (reaction: SaleReaction) => void;
   /** The stallholder says a line to the player (over their head); none: a subtitle. */
@@ -73,6 +75,7 @@ export class ForSaleBox extends THREE.Group implements Furniture, Interactable {
   /** Where it is sold, for the receipt. */
   readonly where: string;
   readonly behindGlass: boolean;
+  readonly free: boolean;
   private readonly reactTo?: (reaction: SaleReaction) => void;
   private scanLabel: THREE.Sprite | null = null;
   /** False when what the scan label shows has changed since it was painted. */
@@ -90,6 +93,7 @@ export class ForSaleBox extends THREE.Group implements Furniture, Interactable {
     this.thanksLine = options.thanks ?? (() => THANKS[Math.floor(random() * THANKS.length)]!);
     this.where = options.where;
     this.behindGlass = options.behindGlass ?? false;
+    this.free = options.free ?? false;
     this.reactTo = options.react;
     if (options.speak) this.speak = options.speak;
     this.affordable = this.wallet.coins >= item.price;
@@ -212,14 +216,15 @@ export class ForSaleBox extends THREE.Group implements Furniture, Interactable {
     const extra = [describeCondition(item.condition), this.wanted ? '★ wishlist' : ''].filter(Boolean).join(' · ');
     ctx.font = 'bold 34px system-ui, sans-serif';
     ctx.fillStyle = !item.priced ? FADED_INK : this.wallet.coins >= item.due ? '#f1d48a' : '#ff9a8a';
-    ctx.fillText(item.priced ? `${formatCoins(item.price)}${extra ? `  ·  ${extra}` : ''}` : 'being priced…', w / 2, 84);
+    const price = this.free ? 'free' : formatCoins(item.price);
+    ctx.fillText(item.priced ? `${price}${extra ? `  ·  ${extra}` : ''}` : 'being priced…', w / 2, 84);
     texture.needsUpdate = true;
     this.scanPainted = true;
   }
 
-  /** Coins change hands: the clink, and the stallholder's word. */
+  /** Coins change hands: the clink (none for a find), and the stallholder's word. */
   thanks(): string {
-    playCoins();
+    if (!this.free) playCoins();
     return this.thanksLine();
   }
 
@@ -243,6 +248,7 @@ export class ForSaleBox extends THREE.Group implements Furniture, Interactable {
     const state = describeCondition(condition);
     const platform = getPlatform(game.platform).shortName;
     const what = `${game.title} (${platform}${state ? `, ${state}` : ''})`;
+    if (this.free) return `${what} — free to take${this.wanted ? ' · ★ on your wishlist' : ''} · look closer`;
     if (!priced) return `${what} — being priced… look closer`;
     const coins = this.wallet.coins;
     const printing = describeEdition(this.item.edition, game.platform);

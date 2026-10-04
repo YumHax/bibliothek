@@ -311,7 +311,8 @@ Clicking the steps (`StairsUp`) goes back up and sets the player down in front o
   - Two abandoned ones hang open: No 2, and No 8, the late Mr Lambert's.
   - The rest are padlocked and say what is seen inside.
   - Each box with a `find` has a carton holding one game, drawn per box (`MarketStock.randomGames`, not owned). It is
-    free: a `ForSaleBox` at 0 coins, bought as at a stall. Taken, it is gone for good (`cellarFinds`,
+    a find, not a sale: a `free` `ForSaleBox` (`ForSaleLike.free`), looked at in hand, B takes it (no price, haggle,
+    hold or swap; the market never hears of it). Taken, it is gone for good (`cellarFinds`,
     `bibliothek.cellar.v1`).
 - **The light** (`CellarLights`):
   - The player's torch is a shadowless spot held at the right hand and aimed where they look. It is always on and on

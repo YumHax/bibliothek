@@ -47,7 +47,7 @@ export const TV_SHOP: ShopPlan = {
     spots: [
       { at: [0.8, -1.6], yaw: Math.PI },
       { at: [1.7, 0.0], yaw: Math.PI / 2 },
-      { at: [-0.8, 0.05], yaw: 0 },
+      { at: [-0.95, 0.05], yaw: 0 },
     ],
     lines: ['“He fixed my mum’s set in ten minutes. Twenty years it had been broken.”', '“Just waiting for my radio. It’s always tomorrow.”'],
   },
@@ -88,9 +88,10 @@ export const TV_SHOP: ShopPlan = {
     { kind: 'prop', prop: 'floorScuffs', options: { width: 1.5, depth: 0.5, kind: 'heels' }, at: { floor: [-1.9, -0.75] } },
     { kind: 'prop', prop: 'floorScuffs', options: { width: 0.8, depth: 2.4, kind: 'grime', amount: 0.5 }, at: { floor: [0, 0.9] } },
     { kind: 'prop', prop: 'floorScuffs', options: { width: 0.6, depth: 1.9, kind: 'sawdust', amount: 0.45 }, at: { floor: [1.85, -0.4] } },
-    // The tables of sets and kitchen things for sale, the glass case of small electronics by the till.
-    { kind: 'table', id: 'sets', at: { floor: [-0.8, 0.7] }, options: { width: 1.1, depth: 0.55 } },
-    { kind: 'table', id: 'kitchen', at: { floor: [0.8, 0.7] }, options: { width: 1.1, depth: 0.55 } },
+    // The tables of sets and kitchen things for sale, the glass case of small electronics by the till. The aisle
+    // between the tables is the way to the counter: 0.8 m, the player's body is 0.6.
+    { kind: 'table', id: 'sets', at: { floor: [-0.95, 0.7] }, options: { width: 1.1, depth: 0.55 } },
+    { kind: 'table', id: 'kitchen', at: { floor: [0.95, 0.7] }, options: { width: 1.1, depth: 0.55 } },
     { kind: 'prop', prop: 'tvGadgetCase', options: { width: 0.75 }, at: { floor: [-0.8, -1.3] } },
     // The bench, from the back of the shop to the front (its x runs along the right wall towards the window, +z
     // towards the room): the radio (never off), the set with its back off, the magnifier clamped at the back, the

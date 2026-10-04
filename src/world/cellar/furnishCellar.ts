@@ -16,10 +16,10 @@ import { StairsUp } from './CellarDoor';
 import { Rat } from './Rat';
 import { Boiler } from './Boiler';
 import { BoilerHum, Drips } from './cellarSounds';
-import { isTaken, markTaken, unmarkTaken } from './cellarFinds';
+import { isTaken, markTaken } from './cellarFinds';
 import { cellarDressers } from './huntHook';
 
-/** Where a find is sold, for the receipt: free, it is a find. */
+/** Where a find comes from, for the receipt. */
 const CELLAR_WHERE = 'a carton in the cellars';
 /** A box front's yaw by the side it faces (its passage on its +z side). */
 const FACING: Record<StorageBox['faces'], number> = { north: 0, south: Math.PI, east: Math.PI / 2, west: -Math.PI / 2 };
@@ -28,7 +28,7 @@ const STEP: Record<StorageBox['faces'], [number, number]> = { north: [0, 1], sou
 /**
  * Builds the cellars into their zone from `CELLAR_PLAN`: the vaulted brick maze (`CellarVaults`), the storage boxes'
  * slatted fronts (`CellarBox`: ours to open, two abandoned, the rest padlocked), the one-off finds in their cartons
- * (a game each, free, through the same purchase as a stall's: `ForSaleBox` at 0 coins, taken once for good), the
+ * (a game each, a `ForSaleBox` that is `free`: looked at in hand, B takes it, once for good), the
  * lights (the player's torch, the timer bulbs and their buttons), the boiler room with its boiler and the main fuse
  * board (a power cut is reset here too), the rat, the drips, the stairs back up to the hall, and whatever another
  * feature dresses the cellars with (`huntHook`). A zone reached by travel only, no `Room`: returns its light level.
@@ -94,20 +94,14 @@ async function placeFind(zone: Zone, front: CellarBox, { covers, collection, mon
     tag: false,
     wallet: money.wallet,
     where: CELLAR_WHERE,
+    free: true,
     isWanted: () => collection.isWanted(game.id),
     thanks: () => 'Nobody will miss it down here.',
   });
   const at = zone.toLocal(front.localToWorld(front.cartonTop.clone()));
-  const place = (): void => {
-    zone.place(box, at, front.rotation.y + 0.3);
-  };
   box.onSold = () => {
     zone.remove(box);
     markTaken(front.number);
   };
-  box.restock = () => {
-    place();
-    unmarkTaken(front.number);
-  };
-  place();
+  zone.place(box, at, front.rotation.y + 0.3);
 }

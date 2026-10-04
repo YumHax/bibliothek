@@ -200,11 +200,11 @@ function signTexture(price: number): THREE.CanvasTexture {
   ctx.fillStyle = '#2a2018';
   ctx.textAlign = 'center';
   ctx.font = 'bold 40px "Comic Sans MS", "Chalkboard SE", sans-serif';
-  ctx.fillText('GARAGE SALE', 160, 58);
+  ctx.fillText('GARAGE SALE', 160, 58, 296);
   ctx.font = 'bold 30px "Comic Sans MS", "Chalkboard SE", sans-serif';
   ctx.fillText(`games ${formatCoins(price)}`, 160, 112);
   ctx.font = '22px "Comic Sans MS", "Chalkboard SE", sans-serif';
-  ctx.fillText('more inside RETRO GAMES ➜', 160, 170);
-  ctx.fillText('(the flea market, at the back)', 160, 200);
+  ctx.fillText('more inside RETRO GAMES ➜', 160, 170, 296);
+  ctx.fillText('(the flea market, at the back)', 160, 200, 296);
   return toTexture(canvas, 'facing');
 }

@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import type { Updatable } from '@/core/Engine';
 import { bareMetal } from '../metals';
-import { createCanvas, toTexture, repeatTexture } from '@/covers/generated/canvasUtils';
+import { createCanvas, fitFontSize, fitParagraph, toTexture, repeatTexture } from '@/covers/generated/canvasUtils';
 import type { Furniture } from '../../Furniture';
 import type { DayNight } from '../../props/DayNight';
 import { snowCovered } from '../snowCover';
@@ -430,10 +430,12 @@ function postersTexture(anisotropy: number): THREE.CanvasTexture {
     ctx.fillRect(x, 20, pw - 12, h - 40);
     ctx.fillStyle = b.fg;
     ctx.textAlign = 'center';
-    ctx.font = 'bold 36px Georgia, serif';
-    ctx.fillText(b.title, x + (pw - 12) / 2, 110);
-    ctx.font = '18px sans-serif';
-    ctx.fillText(b.sub, x + (pw - 12) / 2, 150);
+    // Title and subtitle kept inside the bill (about 158 px wide), the subtitle on two lines at most.
+    const inner = pw - 36;
+    fitFontSize(ctx, b.title, inner, 36, 18, 'Georgia, serif');
+    ctx.fillText(b.title, x + (pw - 12) / 2, 110, inner);
+    const sub = fitParagraph(ctx, b.sub, inner, 46, 18, 13, 'sans-serif');
+    sub.lines.forEach((line, l) => ctx.fillText(line, x + (pw - 12) / 2, 150 + l * sub.lineHeight, inner));
     for (let l = 0; l < 6; l++) ctx.fillRect(x + 20, 200 + l * 32, (pw - 52) * (0.5 + random() * 0.5), 6);
     // Torn strips.
     ctx.fillStyle = 'rgba(232,220,192,0.9)';
@@ -494,7 +496,7 @@ function flyPosters(ctx: CanvasRenderingContext2D): void {
   ctx.fillStyle = '#ff4fa0';
   ctx.font = 'bold 15px sans-serif';
   ctx.textAlign = 'center';
-  ctx.fillText('CHIPTUNE', 0, -46);
+  ctx.fillText('CHIPTUNE', 0, -46, 64);
   ctx.fillText('NIGHT', 0, -28);
   ctx.fillStyle = '#39e0ff';
   ctx.beginPath();
