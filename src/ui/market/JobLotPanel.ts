@@ -6,7 +6,11 @@ import { lotOffer } from '@/economy/JobLot';
 import type { Transactions } from '@/economy/Transactions';
 import { describeCondition } from '@/economy/pricing';
 import { playCoins } from '@/audio/coins';
-import { MarketPanel, coinsHtml, escapeHtml } from './MarketPanel';
+import { MarketPanel } from './MarketPanel';
+import { attr, html, paint } from '../panel/html';
+import { coverImg, emptyState, gameRow, priceHtml } from '../panel/widgets';
+import { formatCount, plural } from '@/text/count';
+import { formatCoins } from '@/text/money';
 
 /**
  * The day's job lot, a crate of a few games from anywhere sold as one: what is in it (and in what
@@ -30,41 +34,37 @@ export class JobLotPanel extends MarketPanel {
   protected render(): void {
     const { market } = this.deps;
     if (!this.lot) {
-      this.body.innerHTML = '<p class="catalogue__empty">The stallholder is counting what is in the crate…</p>';
+      paint(this.body, emptyState('The stallholder is counting what is in the crate…'));
       void market.lot.today().then((lot) => {
         this.lot = lot;
         if (this.isOpen) this.refresh();
       }, () => {
-        this.body.innerHTML = '<p class="catalogue__empty">No job lot today.</p>';
+        paint(this.body, emptyState('No job lot today.'));
       });
       return;
     }
     const lot = this.lot;
     const sold = market.lot.sold;
-    const rows = lot.games.map((game) => {
-      const cover = this.coverUrl?.(game);
-      const state = describeCondition(game.condition);
-      const owned = this.deps.collection.owns(game.id);
-      return `
-        <div class="catalogue__row">
-          ${cover ? `<img class="catalogue__cover" src="${escapeHtml(cover)}" alt="" loading="lazy" />` : ''}
-          <span class="catalogue__title">${escapeHtml(game.title)}</span>
-          ${owned ? '<span class="catalogue__stall">already yours</span>' : ''}
-          ${state ? `<span class="catalogue__meta">${escapeHtml(state)}</span>` : ''}
-          <span class="catalogue__meta">${escapeHtml(getPlatform(game.platform).shortName)}</span>
-        </div>`;
-    }).join('');
+    const rows = lot.games.map((game) =>
+      gameRow({
+        cover: coverImg(this.coverUrl?.(game), game),
+        title: game.title,
+        metas: [this.deps.collection.owns(game.id) && html`<span class="catalogue__stall">already yours</span>`, describeCondition(game.condition), getPlatform(game.platform).shortName],
+      }),
+    );
     const offer = lotOffer(lot, (id) => this.deps.collection.owns(id));
     const taken = lot.games.length - offer.games.length;
     const affordable = this.deps.wallet.coins >= offer.price;
     const none = offer.games.length === 0;
-    this.body.innerHTML = `
-      ${rows}
+    paint(
+      this.body,
+      html`${rows}
       <div class="catalogue__row joblot__total">
-        <span class="catalogue__title"><b>${offer.games.length} game${offer.games.length === 1 ? '' : 's'}</b> <span class="catalogue__meta">${taken ? `${taken} already yours, taken out of the price · ` : ''}worth about ${lot.worth} one by one</span></span>
-        ${coinsHtml(offer.price)}
-        <button type="button" class="ui-btn ui-btn--primary" data-action="buy" data-autofocus ${sold || none || !affordable ? 'disabled' : ''}>${sold ? 'Sold' : none ? 'All yours already' : affordable ? 'Buy the lot' : 'Too dear'}</button>
-      </div>`;
+        <span class="catalogue__title"><b>${formatCount(offer.games.length, 'game')}</b> <span class="catalogue__meta">${taken ? `${taken} already yours, taken out of the price · ` : ''}worth about ${lot.worth} one by one</span></span>
+        ${priceHtml(offer.price)}
+        <button type="button" class="ui-btn ui-btn--primary" data-action="buy" data-autofocus${attr('disabled', sold || none || !affordable)}>${sold ? 'Sold' : none ? 'All yours already' : affordable ? 'Buy the lot' : 'Too dear'}</button>
+      </div>`,
+    );
   }
 
   /** The lot shown on the crate's card once known. */
@@ -73,7 +73,7 @@ export class JobLotPanel extends MarketPanel {
     const lot = await this.deps.market.lot.today();
     this.lot ??= lot;
     const offer = lotOffer(lot, (id) => this.deps.collection.owns(id));
-    return `${offer.games.length} games · ${offer.price} coins`;
+    return `${offer.games.length} games · ${formatCoins(offer.price)}`;
   }
 
   protected override onAction(action: string): void {
@@ -84,12 +84,12 @@ export class JobLotPanel extends MarketPanel {
     const price = lotOffer(lot, (id) => this.deps.collection.owns(id)).price;
     const bought = tx.buyLot(lot);
     if (!bought.ok) {
-      if (bought.reason === 'short') this.setStatus(`The lot is ${price} coins and you have ${wallet.coins}.`, true);
+      if (bought.reason === 'short') this.setStatus(`The lot is ${formatCoins(price)} and you have ${wallet.coins}.`, 'error');
       return;
     }
     const fresh = bought.games.length;
     playCoins(6);
-    this.setStatus(`Bought the lot for ${price} coins: ${fresh} new game${fresh === 1 ? '' : 's'} in a parcel in the hallway.`);
+    this.setStatus(`Bought the lot for ${formatCoins(price)}: ${fresh} new ${plural(fresh, 'game')} in a parcel in the hallway.`);
     this.onBought?.();
     this.refresh();
   }

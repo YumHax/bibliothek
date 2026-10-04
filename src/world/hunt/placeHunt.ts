@@ -97,7 +97,8 @@ export function placeHunt({ today, journal, notices, slipNote, stairwell }: Hunt
     if (state.found) findClue('attic', 'later');
     if (state.chest && findClue('chest', 'never') && notices) {
       const { title, text } = HUNT.clues.chest;
-      window.setTimeout(() => notices.read({ title, text, effect: 'The sixth floor: solved.', look: 'letter' }), CHEST_NOTE_MS);
+      // On the building's clock: the note waits while the player is away from the stairwell, and dies with it.
+      stairwell.after(CHEST_NOTE_MS / 1000, () => notices.read({ title, text, effect: 'The sixth floor: solved.', look: 'letter' }));
     }
   };
   attic();

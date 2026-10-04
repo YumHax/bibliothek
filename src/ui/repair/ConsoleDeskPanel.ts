@@ -1,11 +1,12 @@
 import { getPlatform } from '@/catalog/platforms';
-import { CONFIRM_MS } from '@/economy/pricing';
 import type { NoticeActions } from '@/notices';
 import { FAULTS, resaleOf } from '@/repair/consoles';
 import type { Workshop } from '@/repair/Workshop';
 import { playCoins } from '@/audio/coins';
-import { escapeHtml } from '../html';
-import { ModalPanel } from '../ModalPanel';
+import { Arming } from '../confirmTwice';
+import { CardPanel } from '../panel/CardPanel';
+import { html, type Html } from '../panel/html';
+import { formatCoins } from '@/text/money';
 import './repair.css';
 
 interface ConsoleDeskDeps {
@@ -16,43 +17,32 @@ interface ConsoleDeskDeps {
 
 /**
  * TV REPAIR's counter for consoles (docs/household.md "Repairing a console"): the working consoles the player mended
- * at home, with what the repairer pays for each (`resaleOf`); two clicks sell one (the first arms the row). The broken
+ * at home, with what the repairer pays for each (`resaleOf`); two clicks sell one (`confirmTwice`). The broken
  * ones still at home are listed for what they are, nothing more. A `ModalLike` opened by the card on the counter.
  */
-export class ConsoleDeskPanel extends ModalPanel {
-  private readonly card: HTMLElement;
-  private armed: { id: string; until: number } | null = null;
+export class ConsoleDeskPanel extends CardPanel {
+  private readonly arming = new Arming(() => this.refresh());
   private message = '';
 
   constructor(container: HTMLElement, private readonly deps: ConsoleDeskDeps) {
-    super(container, { className: 'ui-modal--centre repair-panel' });
-    this.root.innerHTML = '<article class="repair ui-card" role="dialog" aria-modal="true" aria-label="Consoles bought"></article>';
-    this.card = this.root.querySelector('.repair')!;
-    this.root.addEventListener('click', (e) => {
-      const target = e.target as HTMLElement;
-      if (target === this.root || target.closest('[data-action="close"]')) return this.close();
-      const id = target.closest<HTMLButtonElement>('button[data-action="sell"]')?.dataset.id;
-      if (id) this.sell(id);
-    });
+    super(container, { className: 'repair-panel', cardClass: 'repair ui-card', title: 'TV REPAIR · we buy working consoles', label: 'Consoles bought', dismissAutofocus: true });
     deps.workshop.subscribe(() => {
-      if (this.isOpen) this.render();
+      if (this.isOpen) this.refresh();
     });
   }
 
   protected override onOpened(): void {
-    this.armed = null;
+    this.arming.reset();
     this.message = '';
-    this.render();
+    super.onOpened();
+  }
+
+  protected override onAction(action: string, el: HTMLElement): void {
+    if (action === 'sell' && el.dataset.id) this.sell(el.dataset.id);
   }
 
   private sell(id: string): void {
-    const now = performance.now();
-    if (this.armed?.id !== id || now > this.armed.until) {
-      this.armed = { id, until: now + CONFIRM_MS };
-      this.render();
-      return;
-    }
-    this.armed = null;
+    if (!this.arming.press(id)) return;
     const item = this.deps.workshop.working.find((c) => c.id === id);
     const coins = this.deps.workshop.sell(id, this.deps.wallet);
     if (coins === null || !item) return;
@@ -60,29 +50,24 @@ export class ConsoleDeskPanel extends ModalPanel {
     const name = getPlatform(item.platform).shortName;
     this.message = `“A working ${name}? Lovely job. There you go.”`;
     this.deps.notices.reward({ title: `Sold the ${name}`, detail: `Mended at home, bought for ${item.paid}.`, coins });
-    this.render();
+    this.refresh();
   }
 
-  private render(): void {
+  protected render(): Html {
     const { workshop } = this.deps;
     const working = workshop.working;
     const broken = workshop.consoles.filter((c) => !c.fixed);
-    const now = performance.now();
     const rows = working.map((c) => {
       const price = resaleOf(c.platform);
-      const armed = this.armed?.id === c.id && now <= this.armed.until;
-      return `<li><span>${escapeHtml(getPlatform(c.platform).name)}<small>Mended at home · bought for ${c.paid} from ${escapeHtml(c.from)}</small></span><button type="button" class="ui-btn" data-action="sell" data-id="${escapeHtml(c.id)}">${armed ? `${price} coins?` : `Sell · ${price}`}</button></li>`;
-    }).join('');
+      const armed = this.arming.isArmed(c.id);
+      return html`<li><span>${getPlatform(c.platform).name}<small>Mended at home · bought for ${c.paid} from ${c.from}</small></span><button type="button" class="ui-btn" data-action="sell" data-id="${c.id}">${armed ? `${formatCoins(price)}?` : `Sell · ${price}`}</button></li>`;
+    });
     const waiting = broken.length
-      ? `<p class="console-desk__dim">Still broken at home: ${broken.map((c) => `a ${escapeHtml(getPlatform(c.platform).shortName)} (${escapeHtml(FAULTS[c.fault].symptom.toLowerCase().replace(/\.$/, ''))})`).join(', ')}. “Bring it in once it works.”</p>`
+      ? html`<p class="console-desk__dim">Still broken at home: ${broken.map((c) => `a ${getPlatform(c.platform).shortName} (${FAULTS[c.fault].symptom.toLowerCase().replace(/\.$/, '')})`).join(', ')}. “Bring it in once it works.”</p>`
       : '';
-    const body = rows
-      ? `<ul class="console-desk__rows">${rows}</ul>`
-      : '<p class="console-desk__dim">“I buy consoles that work. Broken ones you fix yourself, at home: the crate by the door has a few, sold as seen.”</p>';
-    this.card.innerHTML = `
-      <header><h2>TV REPAIR · we buy working consoles</h2></header>
-      ${this.message ? `<p class="repair__step">${escapeHtml(this.message)}</p>` : ''}
-      ${body}${waiting}
-      <footer><button type="button" class="ui-btn" data-action="close" data-autofocus>Close</button></footer>`;
+    const body = rows.length
+      ? html`<ul class="console-desk__rows">${rows}</ul>`
+      : html`<p class="console-desk__dim">“I buy consoles that work. Broken ones you fix yourself, at home: the crate by the door has a few, sold as seen.”</p>`;
+    return html`${this.message ? html`<p class="repair__step">${this.message}</p>` : ''}${body}${waiting}`;
   }
 }

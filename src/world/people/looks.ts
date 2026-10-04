@@ -1,4 +1,4 @@
-import { seededRandom } from '@/covers/generated/canvasUtils';
+import { chance, lcg, pick } from '@/random';
 
 /*
  * What a person looks like and wears. Colours are hex numbers; everything else picks a variant
@@ -99,116 +99,153 @@ export function randomLook(seed: number, role: 'vendor' | 'shopper' = 'shopper',
   return dress ? dressed(look, seed, dress) : look;
 }
 
-/** `look` dressed for `dress`: drawn from its own stream, so the base look stays the seed's. */
-function dressed(look: PersonLook, seed: number, { season, age }: Dress): PersonLook {
-  const random = seededRandom(seed * 3266489917 + 7);
-  const chance = (p: number): boolean => random() < p;
-  const pick = <T>(list: readonly T[]): T => list[Math.floor(random() * list.length)]!;
-  const out = { ...look };
-  if (season === 'winter') {
+/** A stream of draws (`lcg`, `random()`...). */
+type Stream = () => number;
+
+/** What a season or an age does to a look, drawing from the look's own stream. Adding one is one entry in its table. */
+type Recipe = (out: PersonLook, random: Stream) => void;
+
+/** The season's clothes: the recipe runs before the age's, so the draws stay in the order they always were. */
+const SEASON_DRESS: Record<NonNullable<Dress['season']>, Recipe> = {
+  winter: (out, random) => {
     // A coat or a hoodie, long sleeves, trousers; a scarf, a beanie, boots more often.
-    if (out.top !== 'jacket' && out.top !== 'hoodie') out.top = chance(0.7) ? 'jacket' : chance(0.5) ? 'hoodie' : 'flannel';
+    if (out.top !== 'jacket' && out.top !== 'hoodie') out.top = chance(random, 0.7) ? 'jacket' : chance(random, 0.5) ? 'hoodie' : 'flannel';
     out.longSleeves = true;
     out.shorts = false;
-    if (chance(0.65)) out.scarf = pick(SCARVES);
-    if (!out.hat && chance(0.4)) {
+    if (chance(random, 0.65)) out.scarf = pick(random, SCARVES);
+    if (!out.hat && chance(random, 0.4)) {
       out.hat = 'beanie';
-      out.hatColor = pick(SCARVES);
+      out.hatColor = pick(random, SCARVES);
     }
-    if (out.shoes === 'sneaker' && chance(0.5)) out.shoes = 'boot';
-  } else if (season === 'autumn' || season === 'spring') {
-    if (out.top === 'tee' && chance(0.45)) out.top = chance(0.5) ? 'jacket' : 'flannel';
-    if (out.top === 'jacket' || out.top === 'flannel') out.longSleeves = true;
-    if (out.shorts && chance(0.7)) out.shorts = false;
-    if (season === 'autumn' && chance(0.15)) out.scarf = pick(SCARVES);
-  } else if (season === 'summer') {
+    if (out.shoes === 'sneaker' && chance(random, 0.5)) out.shoes = 'boot';
+  },
+  autumn: (out, random) => {
+    halfSeason(out, random);
+    if (chance(random, 0.15)) out.scarf = pick(random, SCARVES);
+  },
+  spring: halfSeason,
+  summer: (out, random) => {
     // Tees and shorts; no woolly hats.
-    if ((out.top === 'jacket' || out.top === 'hoodie' || out.top === 'flannel') && chance(0.7)) out.top = chance(0.6) ? 'tee' : 'shirt';
+    if ((out.top === 'jacket' || out.top === 'hoodie' || out.top === 'flannel') && chance(random, 0.7)) out.top = chance(random, 0.6) ? 'tee' : 'shirt';
     if (out.top === 'tee') out.longSleeves = false;
-    else if (out.top === 'shirt') out.longSleeves = chance(0.3);
-    out.shorts = out.top !== 'jacket' && out.top !== 'hoodie' && chance(0.4);
-    if (out.hat === 'beanie') out.hat = chance(0.5) ? 'cap' : undefined;
-  }
-  if (age === 'child') {
+    else if (out.top === 'shirt') out.longSleeves = chance(random, 0.3);
+    out.shorts = out.top !== 'jacket' && out.top !== 'hoodie' && chance(random, 0.4);
+    if (out.hat === 'beanie') out.hat = chance(random, 0.5) ? 'cap' : undefined;
+  },
+};
+
+/** Spring and autumn: a layer over a tee now and then, trousers more often. */
+function halfSeason(out: PersonLook, random: Stream): void {
+  if (out.top === 'tee' && chance(random, 0.45)) out.top = chance(random, 0.5) ? 'jacket' : 'flannel';
+  if (out.top === 'jacket' || out.top === 'flannel') out.longSleeves = true;
+  if (out.shorts && chance(random, 0.7)) out.shorts = false;
+}
+
+/** How old they are: a child's body and school things, an elder's grey hair, glasses and loafers. An adult changes nothing. */
+const AGE_DRESS: Record<Age, Recipe> = {
+  adult: () => {},
+  child: (out, random) => {
     out.age = 'child';
     out.height = 1.05 + random() * 0.4;
     out.headScale = 1.22 - (out.height - 1.05) * 0.3;
     out.build = 0.86 + random() * 0.12;
     out.beard = undefined;
-    out.glasses = chance(0.12) ? 0x2a3f6a : undefined;
-    out.bag = chance(0.6) ? 'backpack' : undefined;
-    out.bagColor = pick(SCARVES);
-    out.hat = out.hat === 'cap' || chance(0.2) ? out.hat : undefined;
+    out.glasses = chance(random, 0.12) ? 0x2a3f6a : undefined;
+    out.bag = chance(random, 0.6) ? 'backpack' : undefined;
+    out.bagColor = pick(random, SCARVES);
+    out.hat = out.hat === 'cap' || chance(random, 0.2) ? out.hat : undefined;
     out.shoes = 'sneaker';
     out.apron = undefined;
-    out.freckles = out.freckles || chance(0.2);
+    out.freckles = out.freckles || chance(random, 0.2);
     out.jaw = 0.85 + random() * 0.08;
-    out.smile = chance(0.7);
-  } else if (age === 'elder') {
+    out.smile = chance(random, 0.7);
+  },
+  elder: (out, random) => {
     out.age = 'elder';
     // Grey or white, thinner; glasses and a hat more often; never a hoodie or a backpack.
-    out.hair = chance(0.6) ? 0xd9d3c8 : 0x8e8a86;
-    if (out.hairStyle === 'ponytail' || out.hairStyle === 'long') out.hairStyle = chance(0.5) ? 'bun' : 'short';
-    if (out.hairStyle === 'buzz' && chance(0.5)) out.hairStyle = 'bald';
-    out.glasses = out.glasses ?? (chance(0.6) ? 0x6b4a2a : undefined);
-    if (out.top === 'hoodie' || out.top === 'tee') out.top = chance(0.6) ? 'jacket' : 'shirt';
+    out.hair = chance(random, 0.6) ? 0xd9d3c8 : 0x8e8a86;
+    if (out.hairStyle === 'ponytail' || out.hairStyle === 'long') out.hairStyle = chance(random, 0.5) ? 'bun' : 'short';
+    if (out.hairStyle === 'buzz' && chance(random, 0.5)) out.hairStyle = 'bald';
+    out.glasses = out.glasses ?? (chance(random, 0.6) ? 0x6b4a2a : undefined);
+    if (out.top === 'hoodie' || out.top === 'tee') out.top = chance(random, 0.6) ? 'jacket' : 'shirt';
     out.longSleeves = true;
     out.shorts = false;
     out.shoes = 'loafer';
     if (out.bag === 'backpack') out.bag = 'tote';
-    if (!out.hat && chance(0.3)) out.hat = 'cap';
+    if (!out.hat && chance(random, 0.3)) out.hat = 'cap';
     out.height = Math.max(1.5, out.height - 0.04 - random() * 0.05);
-  }
+  },
+};
+
+/** `look` dressed for `dress`: drawn from its own stream, so the base look stays the seed's. */
+function dressed(look: PersonLook, seed: number, { season, age }: Dress): PersonLook {
+  const random = lcg(seed * 3266489917 + 7);
+  const out = { ...look };
+  if (season) SEASON_DRESS[season](out, random);
+  if (age) AGE_DRESS[age](out, random);
   return out;
 }
 
+/** The whole look a seed draws: the body's lines first, then the face, the clothes and the build, in that order of draws. */
 function baseLook(seed: number, role: 'vendor' | 'shopper'): PersonLook {
-  const random = seededRandom(seed * 2246822519);
-  const pick = <T>(list: readonly T[]): T => list[Math.floor(random() * list.length)]!;
-  const chance = (p: number): boolean => random() < p;
+  const random = lcg(seed * 2246822519);
 
-  const figure: Figure = chance(0.45) ? 'curvy' : 'straight';
-  const skin = pick(SKINS);
-  const hair = pick(HAIRS);
-  const hairStyle = pick(HAIR_STYLES[figure]);
+  const figure: Figure = chance(random, 0.45) ? 'curvy' : 'straight';
+  const skin = pick(random, SKINS);
+  const hair = pick(random, HAIRS);
+  const hairStyle = pick(random, HAIR_STYLES[figure]);
   const hatRoll = random();
-  const top = pick(TOP_KINDS);
-  const topColor = pick(TOPS);
-  let topAccent = pick(ACCENTS);
+  const top = pick(random, TOP_KINDS);
+  const topColor = pick(random, TOPS);
+  let topAccent = pick(random, ACCENTS);
   if (topAccent === topColor) topAccent = ACCENTS[0]!;
-  const shorts = top !== 'jacket' && top !== 'hoodie' && chance(0.15);
-  const shoes: ShoeKind = chance(0.6) ? 'sneaker' : chance(0.5) ? 'boot' : 'loafer';
+  const shorts = top !== 'jacket' && top !== 'hoodie' && chance(random, 0.15);
+  const shoes: ShoeKind = chance(random, 0.6) ? 'sneaker' : chance(random, 0.5) ? 'boot' : 'loafer';
   const bagRoll = random();
 
+  const face = drawFace(random, { figure, skin, hairStyle, hatRoll });
+  const clothes = drawClothes(random, { role, top, shoes, bagRoll });
   return {
     skin,
     hair,
     hairStyle,
-    hat: hatRoll < 0.22 ? 'cap' : hatRoll < 0.34 ? 'beanie' : undefined,
-    hatColor: pick(HATS),
-    eyes: pick(EYES),
-    brows: 0.6 + random() * 0.9,
-    beard: figure === 'straight' && hairStyle !== 'long' && chance(0.4) ? (chance(0.5) ? 'stubble' : 'full') : undefined,
-    glasses: chance(0.25) ? (chance(0.6) ? 0x1e1c1a : 0x6b4a2a) : undefined,
-    smile: chance(0.55),
-    jaw: figure === 'curvy' ? 0.85 + random() * 0.15 : 0.95 + random() * 0.2,
-    nose: 0.8 + random() * 0.45,
-    freckles: skin >= 0xd9a279 && chance(0.25),
-
+    ...face,
     top,
     topColor,
     topAccent,
-    longSleeves: top === 'jacket' || top === 'hoodie' || top === 'flannel' || (top === 'shirt' && chance(0.6)) || chance(0.2),
-    apron: role === 'vendor' && chance(0.5) ? pick(APRONS) : undefined,
-    trousers: pick(TROUSERS),
+    ...clothes,
     shorts,
     shoes,
-    shoeColor: shoes === 'boot' ? pick([0x2a2622, 0x4a3a2a, 0x1a1a1a]) : pick(SHOE_COLORS),
-    bag: role === 'shopper' && bagRoll < 0.5 ? (bagRoll < 0.3 ? 'tote' : 'backpack') : undefined,
-    bagColor: pick(BAGS),
-
     height: figure === 'curvy' ? 1.56 + random() * 0.2 : 1.66 + random() * 0.24,
     build: figure === 'curvy' ? 0.85 + random() * 0.25 : 0.92 + random() * 0.28,
     figure,
+  };
+}
+
+/** The head: hat, eyes, brows, beard, glasses, mouth, jaw, nose, freckles, drawn in that order. */
+function drawFace(random: Stream, { figure, skin, hairStyle, hatRoll }: { figure: Figure; skin: number; hairStyle: HairStyle; hatRoll: number }): Pick<PersonLook, 'hat' | 'hatColor' | 'eyes' | 'brows' | 'beard' | 'glasses' | 'smile' | 'jaw' | 'nose' | 'freckles'> {
+  return {
+    hat: hatRoll < 0.22 ? 'cap' : hatRoll < 0.34 ? 'beanie' : undefined,
+    hatColor: pick(random, HATS),
+    eyes: pick(random, EYES),
+    brows: 0.6 + random() * 0.9,
+    beard: figure === 'straight' && hairStyle !== 'long' && chance(random, 0.4) ? (chance(random, 0.5) ? 'stubble' : 'full') : undefined,
+    glasses: chance(random, 0.25) ? (chance(random, 0.6) ? 0x1e1c1a : 0x6b4a2a) : undefined,
+    smile: chance(random, 0.55),
+    jaw: figure === 'curvy' ? 0.85 + random() * 0.15 : 0.95 + random() * 0.2,
+    nose: 0.8 + random() * 0.45,
+    freckles: skin >= 0xd9a279 && chance(random, 0.25),
+  };
+}
+
+/** The clothes' remaining draws: sleeves, the stallholder's apron, trousers, the shoes' colour, the shopper's bag. */
+function drawClothes(random: Stream, { role, top, shoes, bagRoll }: { role: 'vendor' | 'shopper'; top: TopKind; shoes: ShoeKind; bagRoll: number }): Pick<PersonLook, 'longSleeves' | 'apron' | 'trousers' | 'shoeColor' | 'bag' | 'bagColor'> {
+  return {
+    longSleeves: top === 'jacket' || top === 'hoodie' || top === 'flannel' || (top === 'shirt' && chance(random, 0.6)) || chance(random, 0.2),
+    apron: role === 'vendor' && chance(random, 0.5) ? pick(random, APRONS) : undefined,
+    trousers: pick(random, TROUSERS),
+    shoeColor: shoes === 'boot' ? pick(random, [0x2a2622, 0x4a3a2a, 0x1a1a1a]) : pick(random, SHOE_COLORS),
+    bag: role === 'shopper' && bagRoll < 0.5 ? (bagRoll < 0.3 ? 'tote' : 'backpack') : undefined,
+    bagColor: pick(random, BAGS),
   };
 }

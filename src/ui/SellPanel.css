@@ -1,4 +1,5 @@
-/* The WE BUY desk: the catalogue's layout (CataloguePanel.css), a sell button that asks twice. */
-.sell .catalogue__row .ui-btn { min-width: 6rem; }
-.sell .sell__armed { background: rgba(200, 68, 58, 0.45); border-color: var(--ui-danger); }
-.sell .sell__armed:hover:not(:disabled) { background: rgba(200, 68, 58, 0.6); }
+/* The WE BUY desk: the catalogue's layout (CataloguePanel.css); the sell button that asks twice is `.sell__armed` (design/components.css). */
+@layer tokens, base, components, panels;
+@layer panels {
+  .sell .catalogue__row .ui-btn { min-width: 6rem; }
+}

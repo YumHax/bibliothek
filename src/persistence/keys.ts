@@ -1,3 +1,4 @@
+import { flag } from '@/settings/flags';
 import { safeStorage, storageKeys } from './storage';
 
 /** Every key the game writes starts with this. */
@@ -7,7 +8,7 @@ export const ROOT_PREFIX = 'bibliothek.';
  * `?debug` plays on a save of its own (the seed collection, the editor's add pane), so it never writes into the
  * player's real one: its keys start `bibliothek.debug.` instead of `bibliothek.`.
  */
-export const DEBUG_SAVE = typeof location !== 'undefined' && new URLSearchParams(location.search).has('debug');
+export const DEBUG_SAVE = flag('debug');
 
 /** The prefix of this session's save keys. */
 export const SAVE_PREFIX = DEBUG_SAVE ? `${ROOT_PREFIX}debug.` : ROOT_PREFIX;
@@ -59,6 +60,8 @@ export const KEYS = {
   position: save('position.v1'),
   moodLamp: save('moodLamp.v1'),
   busker: save('busker.v1'),
+  /** The busker's requests by tune and whether his record was given (`world/street/buskerBook`). */
+  buskerRequests: save('buskerRequests.v1'),
   finds: save('finds.v1'),
   giveaway: save('giveaway.v1'),
   garageSale: save('garageSale.v1'),
@@ -83,6 +86,8 @@ export const KEYS = {
   valueHistory: save('valueHistory.v1'),
   firstDay: save('firstDay.v1'),
   post: save('post.v1'),
+  /** What was done today, by name, on the game day or the real day it follows (`time/OncePerDay`). */
+  daily: save('daily.v1'),
   neighbourTrades: save('neighbourTrades.v1'),
   /** How well the player stands with each resident of the building (`building/friendship`), and their complaints. */
   neighbourFriendship: save('neighbourFriendship.v1'),
@@ -131,6 +136,20 @@ export const KEYS = {
   classifieds: save('classifieds.v1'),
   /** The consoles bought broken, mended at the kitchen table or not yet (`repair/Workshop`). */
   workshop: save('workshop.v1'),
+  /** How the player stands with everyone they know: warmth, trust, what they learned, what each remembers (`social/standing`). */
+  social: save('social.v1'),
+  /** The favours people asked and the player did, the birthdays wished, the arcs under way (`social/favours`, `social/arcs`). */
+  socialLife: save('socialLife.v1'),
+  /** The small ads' sellers met, so they stay in the People book after a reload (`social/sellers`). */
+  socialSellers: save('socialSellers.v1'),
+  /** The building's perks given once (Lucien's box, Gilles's cartridges, Théo's cart, Claire's game), the stories told, the meals had (`social/building/perkState`). */
+  buildingPerks: save('buildingPerks.v1'),
+  /** The People book's weekly digest in the journal: the warmth of everyone a week ago, the day it was taken (`social/socialJournal`). */
+  socialDigest: save('socialDigest.v1'),
+  /** What a stallholder lent the player on credit, and when it is due (`social/market`). */
+  marketCredit: save('marketCredit.v1'),
+  /** The friends' side of the social layer: games borrowed from them, Inès' postcards, a word put in (`social/friendsLife`). */
+  friendsLife: save('friendsLife.v1'),
   // Caches.
   longplayCache: `${CACHE_PREFIX}longplay.v1`,
   fameCache: `${CACHE_PREFIX}fame.v1`,

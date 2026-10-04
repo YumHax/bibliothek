@@ -3,9 +3,9 @@ import type { Furniture } from '../../Furniture';
 import { cylinderMesh } from '../../meshUtils';
 import { Prop, part } from '../../props/Prop';
 import { paint, METAL } from '../../materials/palette';
-import { seededRandom } from '@/graphics/canvas';
 import { PortableTv } from '../shopModels';
 import { labelSheet, ticket, type Label } from './labels';
+import { lcg } from '@/random';
 
 export interface RepairsShelfOptions {
   width?: number;
@@ -46,7 +46,7 @@ export class RepairsShelf extends Prop implements Furniture {
     this.name = 'RepairsShelf';
     const W = options.width ?? 1.1;
     const shelves = options.shelves ?? 3;
-    const random = seededRandom(options.seed ?? 13);
+    const random = lcg(options.seed ?? 13);
     const steel = METAL.satinSteel();
     const top = BOTTOM + (shelves - 1) * SPACING + 0.02;
     // The uprights run on past the top board to carry the card over what stands on it.

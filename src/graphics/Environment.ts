@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import type { Updatable } from '@/core/Engine';
 import type { Look } from './grade';
+import { damp } from '@/math/damp';
 
 /** Strength of the reflections in a fully lit room; the room's own lamps and hemisphere do the rest. */
 const MAX_INTENSITY = 0.24;
@@ -119,7 +120,7 @@ export class Environment implements Updatable {
     this.ownShown = own !== null;
     const room = this.target();
     const target = this.pending ? room * this.dip : room;
-    this.intensity += (target - this.intensity) * (1 - Math.exp(-(this.pending ? SWAP_RATE : RATE) * dt));
+    this.intensity = damp(this.intensity, target, this.pending ? SWAP_RATE : RATE, dt);
     // A dark room shows no reflection to swap under: at once.
     if (this.pending && (this.intensity <= room * this.below || room < MAX_INTENSITY * 0.02)) {
       this.scene.environment = this.pending;

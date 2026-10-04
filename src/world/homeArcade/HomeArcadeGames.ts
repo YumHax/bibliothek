@@ -1,7 +1,9 @@
 import type { SfxEvent } from '@/audio/ChipSpeaker';
 import { ARCADE_GAMES, type ArcadeGameId } from '../arcade/games';
 import { type ArcadeControls, type ArcadeGame, NO_CONTROLS, type RunContext, SCREEN_H, SCREEN_W, drawText } from '../arcade/games/ArcadeGame';
-import { KeyEdges } from '../arcade/games/KeyEdges';
+import { KeyEdges } from '@/input/GameInput';
+import { SoundQueue } from '../arcade/SoundQueue';
+import { formatNumber } from '@/text/count';
 
 /** The hall's cabinet games a home cabinet carries: those that need nothing bolted on (no light gun, pad or web page). */
 export const HOME_GAME_IDS: readonly ArcadeGameId[] = ['breakout', 'invaders', 'stacker', 'frog', 'snake', 'comets', 'duel'];
@@ -31,7 +33,7 @@ export class HomeArcadeGames implements ArcadeGame {
   private run: RunContext = { best: 0, pointsPerTicket: 0 };
   private readonly keys = new KeyEdges({ fire: true });
   private menuClock = 0;
-  private sounds: SfxEvent[] = [];
+  private readonly sounds = new SoundQueue();
   private opponent: { name: string; skill: number } = { name: 'CPU', skill: 0.7 };
 
   constructor(private readonly bestOf: (gameId: string) => number) {
@@ -62,7 +64,7 @@ export class HomeArcadeGames implements ArcadeGame {
     this.current = null;
     this.menuClock = 0;
     this.keys.reset();
-    this.sounds = [];
+    this.sounds.clear();
   }
 
   update(dt: number, controls: ArcadeControls): void {
@@ -76,7 +78,7 @@ export class HomeArcadeGames implements ArcadeGame {
       game.setOpponent?.(this.opponent.name, this.opponent.skill);
       game.reset({ ...this.run, best: this.bestOf(game.id) });
       this.current = game;
-      this.sounds.push({ sfx: 'confirm' });
+      this.sounds.push('confirm');
     }
   }
 
@@ -97,7 +99,7 @@ export class HomeArcadeGames implements ArcadeGame {
       }
       drawText(ctx, `${on ? '>' : ' '} ${game.title}`, 26, y, 9, on ? '#ffd23a' : '#c9c4ff', 'left');
       const best = this.bestOf(game.id);
-      drawText(ctx, best > 0 ? best.toLocaleString('en-US') : '-', SCREEN_W - 26, y, 8, on ? '#ffffff' : '#7a7a90', 'right');
+      drawText(ctx, best > 0 ? formatNumber(best) : '-', SCREEN_W - 26, y, 8, on ? '#ffffff' : '#7a7a90', 'right');
     });
     const picked = this.games[this.choice];
     if (picked) drawText(ctx, picked.summary, SCREEN_W / 2, SCREEN_H - 14, 6, '#7a7a90');
@@ -105,9 +107,7 @@ export class HomeArcadeGames implements ArcadeGame {
 
   takeSounds(): SfxEvent[] {
     if (this.current) return this.current.takeSounds();
-    const sounds = this.sounds;
-    this.sounds = [];
-    return sounds;
+    return this.sounds.take();
   }
 
   /** On the menu a demo runs down the list a little and picks; then the game plays itself. */
@@ -128,6 +128,6 @@ export class HomeArcadeGames implements ArcadeGame {
 
   private move(step: number, n: number): void {
     this.choice = (this.choice + step + n) % n;
-    this.sounds.push({ sfx: 'blip' });
+    this.sounds.push('blip');
   }
 }

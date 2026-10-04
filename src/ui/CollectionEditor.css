@@ -1,105 +1,78 @@
-/* Full-screen collection editor (`.ui-modal--sheet`, above the HUD and the start overlay). */
-.collection-editor {
-  gap: 1rem;
-  padding: 1.5rem clamp(1rem, 4vw, 3rem);
-}
+/* Full-screen collection editor (`.ui-modal--sheet`, above the HUD and the start overlay); fields, status, badges and the empty line are the kit's (design/components.css). */
+@layer tokens, base, components, panels;
+@layer panels {
+  .collection-editor {
+    gap: var(--sp-4);
+    padding: var(--sp-5) clamp(1rem, 4vw, 3rem);
+  }
+  .collection-editor .ui-btn { padding: 0.35rem 0.7rem; }
 
-/* Buttons are `.ui-btn`; the fields get the same surface. */
-.collection-editor select,
-.collection-editor input {
-  font: inherit;
-  color: inherit;
-  background: var(--ui-fill);
-  border: 1px solid var(--ui-border);
-  border-radius: var(--ui-radius-sm);
-  padding: 0.35rem 0.7rem;
-}
-.collection-editor .ui-btn { padding: 0.35rem 0.7rem; }
-.collection-editor select option { background: var(--ui-panel-solid); }
-.collection-editor input:focus-visible,
-.collection-editor select:focus-visible { outline: 2px solid var(--ui-accent); outline-offset: 1px; }
+  .collection-editor__header {
+    display: flex;
+    align-items: baseline;
+    gap: var(--sp-4);
+    flex-wrap: wrap;
+  }
+  .collection-editor__header h2 { margin: 0; font-family: var(--ui-font-display); font-weight: 400; font-size: var(--fs-t4); letter-spacing: 0.06em; }
+  .collection-editor__count { color: var(--ui-text-dim); }
+  .collection-editor__actions { margin-left: auto; display: flex; gap: var(--sp-2); flex-wrap: wrap; }
 
-.collection-editor__header {
-  display: flex;
-  align-items: baseline;
-  gap: 1rem;
-  flex-wrap: wrap;
-}
-.collection-editor__header h2 { margin: 0; font-family: var(--ui-font-display); font-weight: 400; font-size: 1.5rem; letter-spacing: 0.06em; }
-.collection-editor__count { color: var(--ui-text-dim); }
-.collection-editor__actions { margin-left: auto; display: flex; gap: 0.5rem; flex-wrap: wrap; }
+  .collection-editor__body {
+    flex: 1;
+    min-height: 0;
+    display: grid;
+    grid-template-columns: minmax(18rem, 2fr) minmax(18rem, 3fr);
+    gap: var(--sp-5);
+  }
+  @media (max-width: 800px) {
+    .collection-editor__body { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
+  }
+  /* Without the "add" pane the list takes the whole width. */
+  .collection-editor--no-add .collection-editor__body { grid-template-columns: 1fr; }
 
-.collection-editor__status {
-  min-height: 1.2em;
-  font-size: 0.85rem;
-  opacity: 0.8;
-}
-.collection-editor__status--error { color: var(--ui-danger); opacity: 1; }
+  .collection-editor__pane {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    padding: var(--sp-4) 1.25rem;
+  }
+  .collection-editor__pane h3 { margin: 0 0 var(--sp-3); font-size: var(--fs-7); opacity: 0.85; }
+  .collection-editor__scroll { flex: 1; min-height: 0; overflow-y: auto; padding-right: var(--sp-1); }
 
-.collection-editor__body {
-  flex: 1;
-  min-height: 0;
-  display: grid;
-  grid-template-columns: minmax(18rem, 2fr) minmax(18rem, 3fr);
-  gap: 1.5rem;
-}
-@media (max-width: 800px) {
-  .collection-editor__body { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
-}
-/* Without the "add" pane the list takes the whole width. */
-.collection-editor--no-add .collection-editor__body { grid-template-columns: 1fr; }
+  .collection-editor__search { display: flex; gap: var(--sp-2); margin-bottom: var(--sp-3); }
+  .collection-editor__search input { flex: 1; min-width: 0; }
 
-.collection-editor__pane {
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  padding: 1rem 1.25rem;
+  .collection-editor__group { margin-bottom: var(--sp-4); }
+  .collection-editor__group-title {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    margin: 0 0 0.35rem;
+    font-size: var(--fs-4);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    opacity: var(--ui-muted);
+  }
+  .collection-editor__swatch { width: 0.7em; height: 0.7em; border-radius: var(--ui-radius-2xs); border: 1px solid var(--ui-border-strong); }
+
+  .collection-editor__row {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.35rem 0.4rem;
+    border-radius: var(--ui-radius-sm);
+  }
+  .collection-editor__row:hover,
+  .collection-editor__row:focus-within { background: var(--ui-fill); }
+  .collection-editor__title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .collection-editor__meta { font-size: var(--fs-3); opacity: var(--ui-faint); white-space: nowrap; }
+  .collection-editor__row select { padding: 0.2rem 0.4rem; font-size: var(--fs-3); }
+  .collection-editor__row .ui-btn { padding: 0.2rem 0.55rem; font-size: var(--fs-3); }
+
+  /* The copy's state, in the badge's tone. */
+  .collection-editor__badge--owned { --tone: var(--ui-success); }
+  .collection-editor__badge--wishlist { --tone: var(--ui-accent); }
+  .collection-editor__badge--lent { --tone: var(--ui-info-text); }
+
+  .collection-editor__hint { font-size: var(--fs-3); opacity: var(--ui-faint); margin: var(--sp-2) 0 0; }
 }
-.collection-editor__pane h3 { margin: 0 0 0.75rem; font-size: 1rem; opacity: 0.85; }
-.collection-editor__scroll { flex: 1; min-height: 0; overflow-y: auto; padding-right: 0.25rem; }
-
-.collection-editor__search { display: flex; gap: 0.5rem; margin-bottom: 0.75rem; }
-.collection-editor__search input { flex: 1; min-width: 0; }
-
-.collection-editor__group { margin-bottom: 1rem; }
-.collection-editor__group-title {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  margin: 0 0 0.35rem;
-  font-size: 0.85rem;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  opacity: 0.7;
-}
-.collection-editor__swatch { width: 0.7em; height: 0.7em; border-radius: 2px; border: 1px solid var(--ui-border-strong); }
-
-.collection-editor__row {
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-  padding: 0.35rem 0.4rem;
-  border-radius: var(--ui-radius-sm);
-}
-.collection-editor__row:hover,
-.collection-editor__row:focus-within { background: var(--ui-fill); }
-.collection-editor__title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.collection-editor__meta { font-size: 0.78rem; opacity: 0.55; white-space: nowrap; }
-.collection-editor__row select { padding: 0.2rem 0.4rem; font-size: 0.82rem; }
-.collection-editor__row .ui-btn { padding: 0.2rem 0.55rem; font-size: 0.82rem; }
-
-.collection-editor__badge {
-  font-size: 0.7rem;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  padding: 0.1em 0.45em;
-  border-radius: 999px;
-  border: 1px solid currentColor;
-  opacity: 0.85;
-}
-.collection-editor__badge--owned { color: #9be59b; }
-.collection-editor__badge--wishlist { color: var(--ui-accent); }
-.collection-editor__badge--lent { color: #8fc7ff; }
-
-.collection-editor__empty { opacity: 0.55; font-style: italic; padding: 0.5rem 0.4rem; }
-.collection-editor__hint { font-size: 0.8rem; opacity: 0.55; margin: 0.5rem 0 0; }

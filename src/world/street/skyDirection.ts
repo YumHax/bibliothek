@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { SUN_ROTATION_Y } from '../worldPlan';
+import { SUN_ROTATION_Y } from '@/world/measures/street';
 
 const PRIMARY = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), SUN_ROTATION_Y);
 

@@ -1,4 +1,5 @@
 import type { SoundGraph } from './soundGraph';
+import { unitOf } from '@/random';
 
 /** Chord loops a bar's jukebox goes round (semitones from the key's root, minor for m). */
 const LOOPS: readonly (readonly [number, boolean][])[] = [
@@ -114,8 +115,7 @@ export class BarMusic {
 
   /** The bar's own draws, song after song. */
   private random(): number {
-    const x = Math.sin(this.seed * 12.9898 + this.song * 78.233 + ++this.draws * 0.37) * 43758.5453;
-    return x - Math.floor(x);
+    return unitOf(this.seed, this.song, ++this.draws);
   }
 }
 

@@ -1,13 +1,15 @@
 import * as THREE from 'three';
 import type { Updatable } from '@/core/Engine';
-import { proximityVolume } from '@/video/proximityVolume';
+import { HEARING, loudness } from '@/audio/hearing';
 import type { Furniture, OccupancyAware } from '../Furniture';
 import type { DayNight, SkyState } from '../props/DayNight';
-import { STAIRWELL_PLAN as plan, STOREY, STOREYS, landingY } from './stairwellPlan';
+import { STAIRWELL_PLAN as plan } from './stairwellPlan';
+import { STOREY, STOREYS, landingY } from '@/world/measures/building';
 import { playRelay } from './stairSounds';
 import { LAMP_GLOW, LAMP_LIGHT } from '../lighting/lampColours';
 import { mainsOn } from '@/building/mains';
 import { skyGlassColour } from '../materials/glass';
+import { random } from '@/random';
 
 interface StairLightsOptions {
   /** The eye: the sensors see it, and the real lights follow the lit globes nearest to it. */
@@ -231,7 +233,7 @@ export class StairLights extends THREE.Group implements Furniture, Updatable, Oc
     this.slots.forEach((slot, i) => {
       if (!powered || this.haunted) {
         slot.left = 0;
-        const target = powered && Math.random() < 0.92 ? HAUNT_GLOW * (0.6 + 0.4 * Math.random()) : 0;
+        const target = powered && random() < 0.92 ? HAUNT_GLOW * (0.6 + 0.4 * random()) : 0;
         if (Math.abs(slot.glow - target) < 1e-3) return;
         slot.glow = THREE.MathUtils.clamp(slot.glow + THREE.MathUtils.clamp(target - slot.glow, -dt / COOL_S, dt / WARM_UP_S), 0, 1);
         this.globes.setColorAt(i, this.colour.copy(WARM).multiplyScalar(0.12 + 1.6 * slot.glow));
@@ -302,7 +304,7 @@ export class StairLights extends THREE.Group implements Furniture, Updatable, Oc
   private relay(slot: Slot, on: boolean): void {
     if (!this.occupied) return;
     const distance = this.eye.distanceTo(slot.at);
-    playRelay((0.12 * proximityVolume(distance, { referenceDistance: 1.5, rolloff: 1, maxDistance: 14 })) / 100, on);
+    playRelay(0.12 * loudness(distance, HEARING.landing), on);
   }
 
   /** The roof light: the sky's colour, greyed by cloud, darkened by rain, white with snow lying on it, a lightning flash. */

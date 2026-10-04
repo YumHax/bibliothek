@@ -1,11 +1,12 @@
 import * as THREE from 'three';
 import type { Interactable } from '@/interaction/Interactable';
 import type { SessionActions } from '@/game/SessionActions';
-import { createCanvas, fitFontSize, seededRandom, toTexture, FONT } from '@/covers/generated/canvasUtils';
+import { createCanvas, fitFontSize, toTexture, FONT } from '@/covers/generated/canvasUtils';
 import type { Furniture } from '../Furniture';
 import { boxMesh, cylinderMesh, invisibleHitbox } from '../meshUtils';
 import { coverageKeepsAlpha, paint } from '../materials/palette';
 import { QUALITY } from '@/graphics/quality';
+import { lcg } from '@/random';
 
 interface LotCrateOptions {
   /** Hover caption. */
@@ -49,7 +50,7 @@ export class LotCrate extends THREE.Group implements Furniture, Interactable {
   constructor(private readonly options: LotCrateOptions) {
     super();
     this.name = 'LotCrate';
-    const random = seededRandom((options.seed ?? 1) * 22695477);
+    const random = lcg((options.seed ?? 1) * 22695477);
     const card = paint(new THREE.Color(0xc4a26f).multiplyScalar(0.92 + random() * 0.12), 0.95);
     const inside = paint(0x9a7a4a, 0.95);
 

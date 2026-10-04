@@ -1,5 +1,6 @@
 import { audioBus, audioContext } from './audioContext';
 import { whiteNoise } from './noise';
+import { random } from '@/random';
 
 /** Length of the clack's noise (s), and its decay: a cubic fall from full to nothing over it. */
 const CLACK_S = 0.06;
@@ -12,6 +13,7 @@ const DECAY = Float32Array.from({ length: 65 }, (_, i) => Math.pow(1 - i / 64, 3
  */
 export function playBoxClack(down = false, level = 0.1): void {
   const ctx = audioContext();
+  if (!ctx) return;
   const t = ctx.currentTime + 0.005;
   const out = ctx.createGain();
   out.gain.value = level;
@@ -24,10 +26,10 @@ export function playBoxClack(down = false, level = 0.1): void {
   shape.gain.setValueCurveAtTime(DECAY, t, CLACK_S);
   const band = ctx.createBiquadFilter();
   band.type = 'bandpass';
-  band.frequency.value = (down ? 1300 : 2100) * (0.9 + Math.random() * 0.2);
+  band.frequency.value = (down ? 1300 : 2100) * (0.9 + random() * 0.2);
   band.Q.value = 2.5;
   noise.connect(shape).connect(band).connect(out);
-  noise.start(t, Math.random() * (1 - CLACK_S), CLACK_S);
+  noise.start(t, random() * (1 - CLACK_S), CLACK_S);
 
   const knock = ctx.createOscillator();
   knock.type = 'triangle';

@@ -1,4 +1,6 @@
 import { Voice } from './ambient';
+import { noiseBurst, rand, tone } from './synth';
+import { random } from '@/random';
 
 /*
  * What the flat hears of itself and of the building, synthesised like the room's other sounds
@@ -35,15 +37,15 @@ export class RadiatorTick extends Voice {
       if (this.untilTick > 0) return;
       this.ticksLeft--;
       this.untilTick = rand(0.12, 1.4);
-      ping(ctx, this.master, rand(1900, 4200), rand(0.25, 0.7), this.burst);
+      noiseBurst(ctx, this.master, ctx.currentTime, { band: rand(1900, 4200), q: 12, level: rand(0.25, 0.7), length: 0.04, attack: 0, floor: 0.0001, noise: this.burst, offset: 0 });
       return;
     }
     this.untilRun -= dt;
     if (this.untilRun > 0) return;
     this.untilRun = rand(25, 80);
-    this.ticksLeft = 2 + Math.floor(Math.random() * 6);
+    this.ticksLeft = 2 + Math.floor(random() * 6);
     this.untilTick = 0;
-    if (Math.random() < 0.3 && this.gurgle) this.gurgleOnce(ctx);
+    if (random() < 0.3 && this.gurgle) this.gurgleOnce(ctx);
   }
 
   /** Water moving in the pipe: low band-passed noise, its centre wobbling, swelling and fading over a second. */
@@ -146,11 +148,11 @@ export class NeighbourVoices extends Voice {
       if (this.untilTalk > 0) return;
       const night = this.options.night?.() ?? false;
       // At night mostly quiet: most evenings end early next door.
-      if (night && Math.random() < 0.7) {
+      if (night && random() < 0.7) {
         this.untilTalk = rand(90, 240);
         return;
       }
-      this.tv = Math.random() < 0.3;
+      this.tv = random() < 0.3;
       this.talkLeft = rand(30, 90);
       this.phraseLeft = 0;
       if (this.tv) this.murmur.gain.setTargetAtTime(0.18, now, 1.5);
@@ -165,7 +167,7 @@ export class NeighbourVoices extends Voice {
     }
     if (this.tv) {
       // A laugh track's swell now and then over the steady murmur.
-      if (Math.random() < dt / 12) {
+      if (random() < dt / 12) {
         this.murmur.gain.setTargetAtTime(0.35, now, 0.3);
         this.murmur.gain.setTargetAtTime(0.18, now + 1.4, 0.6);
       }
@@ -175,8 +177,8 @@ export class NeighbourVoices extends Voice {
     if (this.untilSyllable > 0) return;
     if (this.phraseLeft <= 0) {
       // Between phrases a pause, often the other one answering.
-      this.phraseLeft = 3 + Math.floor(Math.random() * 10);
-      if (Math.random() < 0.6) this.speaker = 1 - this.speaker;
+      this.phraseLeft = 3 + Math.floor(random() * 10);
+      if (random() < 0.6) this.speaker = 1 - this.speaker;
       this.envelope.gain.setTargetAtTime(0, now, 0.06);
       this.untilSyllable = rand(0.4, 1.6);
       return;
@@ -232,7 +234,7 @@ export class StairwellSounds extends Voice {
       // Loudest halfway, as the climber passes the landing.
       const t = this.stepIndex / Math.max(1, this.steps - 1);
       const level = 0.25 + 0.75 * Math.sin(Math.PI * t);
-      thud(ctx, this.out, rand(90, 140), level * rand(0.7, 1), this.burst, 0.09);
+      knock(ctx, this.out, rand(90, 140), level * rand(0.7, 1), this.burst, 0.09);
       this.stepIndex++;
       this.untilStep = this.stepGap * rand(0.85, 1.15);
       return;
@@ -240,9 +242,9 @@ export class StairwellSounds extends Voice {
     this.untilEvent -= dt;
     if (this.untilEvent > 0) return;
     this.untilEvent = rand(60, 180);
-    const roll = Math.random();
+    const roll = random();
     if (roll < 0.45) {
-      this.steps = 10 + Math.floor(Math.random() * 16);
+      this.steps = 10 + Math.floor(random() * 16);
       this.stepIndex = 0;
       this.stepGap = rand(0.38, 0.6);
       this.untilStep = 0;
@@ -299,7 +301,7 @@ export class StairwellSounds extends Voice {
 
   /** A neighbour's door on the landing: a heavy thud, the latch's click a moment after. */
   private doorShut(ctx: AudioContext): void {
-    thud(ctx, this.out!, 70, 1, this.burst!, 0.25);
+    knock(ctx, this.out!, 70, 1, this.burst!, 0.25);
     const now = ctx.currentTime;
     const source = ctx.createBufferSource();
     source.buffer = this.burst;
@@ -316,49 +318,9 @@ export class StairwellSounds extends Voice {
   }
 }
 
-/** A dry metallic tick: a very short band-passed noise burst with a ringing edge. */
-function ping(ctx: AudioContext, out: AudioNode, frequency: number, level: number, burst: AudioBuffer): void {
+/** A knock through the wall: low-passed noise under a sine dropping in pitch, both swelling in 5 ms and gone in `seconds`. */
+function knock(ctx: AudioContext, out: AudioNode, frequency: number, level: number, burst: AudioBuffer, seconds: number): void {
   const now = ctx.currentTime;
-  const source = ctx.createBufferSource();
-  source.buffer = burst;
-  const band = ctx.createBiquadFilter();
-  band.type = 'bandpass';
-  band.frequency.value = frequency;
-  band.Q.value = 12;
-  const gain = ctx.createGain();
-  gain.gain.setValueAtTime(level, now);
-  gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.04);
-  source.connect(band).connect(gain).connect(out);
-  source.start(now);
-}
-
-/** A low, dull knock (a footfall, a door): low-passed noise with a quick decay over `seconds`. */
-function thud(ctx: AudioContext, out: AudioNode, frequency: number, level: number, burst: AudioBuffer, seconds: number): void {
-  const now = ctx.currentTime;
-  const source = ctx.createBufferSource();
-  source.buffer = burst;
-  const low = ctx.createBiquadFilter();
-  low.type = 'lowpass';
-  low.frequency.value = frequency * 3;
-  const gain = ctx.createGain();
-  gain.gain.setValueAtTime(0.0001, now);
-  gain.gain.exponentialRampToValueAtTime(level, now + 0.005);
-  gain.gain.exponentialRampToValueAtTime(0.0001, now + seconds);
-  source.connect(low).connect(gain).connect(out);
-  source.start(now);
-  // A body to the knock: a sine dropping in pitch.
-  const osc = ctx.createOscillator();
-  osc.frequency.setValueAtTime(frequency * 1.6, now);
-  osc.frequency.exponentialRampToValueAtTime(frequency, now + seconds);
-  const body = ctx.createGain();
-  body.gain.setValueAtTime(0.0001, now);
-  body.gain.exponentialRampToValueAtTime(level * 0.8, now + 0.005);
-  body.gain.exponentialRampToValueAtTime(0.0001, now + seconds);
-  osc.connect(body).connect(out);
-  osc.start(now);
-  osc.stop(now + seconds + 0.02);
-}
-
-function rand(min: number, max: number): number {
-  return min + Math.random() * (max - min);
+  noiseBurst(ctx, out, now, { band: frequency * 3, filter: 'lowpass', level, length: seconds, attack: 0.005, curve: 'exponential', floor: 0.0001, noise: burst, offset: 0 });
+  tone(ctx, out, now, { frequency: frequency * 1.6, to: frequency, level: level * 0.8, length: seconds, attack: 0.005, curve: 'exponential', floor: 0.0001 });
 }

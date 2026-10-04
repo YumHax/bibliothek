@@ -7,6 +7,7 @@ import type { ActivityAware, Furniture } from '../Furniture';
 import type { Seat } from '../Seat';
 import { CAT_EARSHOT, type CatBedLike, type CatBody, type CatClock, type CatPlayerView, type CatSettings, type CatToyLike, type CatVoiceLike, type FoodBowlLike, type ScratcherLike, type WaterBowlLike } from './types';
 import { rearOf, stereoPan } from '@/audio/spatial';
+import { fnv1a } from '@/random';
 import { FloorNav } from '../nav/FloorNav';
 import { CatMotion } from './CatMotion';
 import { CatBrain, type CatScreen } from './CatBrain';
@@ -15,6 +16,7 @@ import { blobShadow } from '../zone/ContactShadows';
 import { CatFly } from './CatFly';
 import { CatOuting, type OutingEnd, type OutingWorld } from './CatOuting';
 import { CAT_OUTING, type HideSpot } from './catOutingPlan';
+import { damp } from '@/math/damp';
 
 interface CatOptions {
   settings: CatSettings;
@@ -83,6 +85,8 @@ export class Cat extends THREE.Group implements Furniture, Interactable, Updatab
   private readonly fly = new CatFly();
   readonly hitboxes: THREE.Object3D[];
   readonly settings: CatSettings;
+  /** Its food bowl (a neighbour feeding it while the player is out: `social/building/catSitter`). */
+  readonly bowl: FoodBowlLike;
   /** Whether it lives in the flat yet (adopted at the pet shop): till then it waits staged, unseen (`furnishCat`'s placers). */
   adopted = true;
 
@@ -112,6 +116,7 @@ export class Cat extends THREE.Group implements Furniture, Interactable, Updatab
     super();
     this.name = 'Cat';
     this.settings = { ...options.settings };
+    this.bowl = options.bowl;
     this.voice = options.voice;
     this.voice?.setPitch?.(voicePitch(this.settings.name));
     this.player = options.player;
@@ -336,7 +341,7 @@ export class Cat extends THREE.Group implements Furniture, Interactable, Updatab
       this.wallsIn = WALLS_EVERY_S;
       this.walls = distance < CAT_EARSHOT ? this.acoustics.wallsBetween(this.eye, this.here) : 0;
     }
-    this.heardWalls = Number.isNaN(this.heardWalls) ? this.walls : this.heardWalls + (this.walls - this.heardWalls) * Math.min(1, dt * WALLS_EASE);
+    this.heardWalls = Number.isNaN(this.heardWalls) ? this.walls : damp(this.heardWalls, this.walls, WALLS_EASE, dt);
     voice.setDistance(distance, pan, this.heardWalls, this.listener ? rearOf(this.listener, this.here) : 0);
     voice.update(dt);
   }
@@ -344,7 +349,5 @@ export class Cat extends THREE.Group implements Furniture, Interactable, Updatab
 
 /** A voice of its own from the cat's name (1 ± `PITCH_SPREAD`): renamed, it sounds like another cat. */
 function voicePitch(name: string): number {
-  let hash = 2166136261;
-  for (let i = 0; i < name.length; i++) hash = Math.imul(hash ^ name.charCodeAt(i), 16777619);
-  return 1 + (((hash >>> 0) % 1000) / 999 - 0.5) * 2 * PITCH_SPREAD;
+  return 1 + ((fnv1a(name) % 1000) / 999 - 0.5) * 2 * PITCH_SPREAD;
 }

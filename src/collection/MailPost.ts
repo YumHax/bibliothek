@@ -33,6 +33,8 @@ interface MailPostOptions {
   hours: () => number;
   /** Whether the player is in the flat (or on its stairs) to hear the bell. */
   home: () => boolean;
+  /** Game hours added to every parcel's round (the concierge's goodwill: a day late when she is cross, a round sooner when she signs for them). */
+  delayHours?: () => number;
   storage?: Storage | null;
 }
 
@@ -77,7 +79,8 @@ export class MailPost {
   /** The mail orders the postman carries now (their round has come). */
   due(): Game[] {
     const now = this.now();
-    const ids = new Set(this.posted.filter((p) => p.due <= now).map((p) => p.id));
+    const delay = this.options.delayHours?.() ?? 0;
+    const ids = new Set(this.posted.filter((p) => p.due + delay <= now).map((p) => p.id));
     return this.options.collection.games.filter((g) => ids.has(g.id));
   }
 

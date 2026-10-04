@@ -1,7 +1,7 @@
 import * as THREE from 'three';
-import { seededRandom } from '@/covers/generated/canvasUtils';
 import { standard, instancedStandard } from '../materials/palette';
 import { Prop } from './Prop';
+import { lcg } from '@/random';
 
 export interface SweetsBowlOptions {
   /** Rim radius, metres. Default 0.1. */
@@ -25,7 +25,7 @@ export class SweetsBowl extends Prop {
     this.name = 'SweetsBowl';
     const radius = options.radius ?? 0.1;
     const depth = radius * 0.55;
-    const random = seededRandom(options.seed ?? 5);
+    const random = lcg(options.seed ?? 5);
     const profile = [
       new THREE.Vector2(0, 0),
       new THREE.Vector2(radius * 0.35, 0),

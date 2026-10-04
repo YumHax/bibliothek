@@ -18,6 +18,7 @@
  */
 
 import type { ZoneId } from '../zoneIds';
+import { STREET_DOOR } from '../measures/doors';
 
 export const SAS = {
   /** Inside, wall to wall (x). */
@@ -33,8 +34,8 @@ export const SAS = {
   partitionHeight: 3.1,
   /** How far the partition's building face runs either side (the entrance hall's walls, x 0.6 .. 3.6). */
   partitionReach: 1.5,
-  /** The street door's opening (the painted entrance's: `facadePainter.paintEntrance`). */
-  outerDoor: { width: 1.4, height: 2.7 },
+  /** The street door's opening (the facade's hole, `measures/doors`; the painted entrance's: `facadePainter.paintEntrance`). */
+  outerDoor: STREET_DOOR,
   /** The glazed inner door's opening, centred. */
   innerDoor: { width: 0.9, height: 2.25 },
   /** The marble dado, knee high like the hall's. */

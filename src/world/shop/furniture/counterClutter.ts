@@ -1,11 +1,12 @@
 import * as THREE from 'three';
-import { createCanvas, seededRandom, toTexture } from '@/covers/generated/canvasUtils';
+import { createCanvas, toTexture } from '@/covers/generated/canvasUtils';
 import { cylinderMesh } from '../../meshUtils';
 import { Prop, part } from '../../props/Prop';
 import { cloth, paint } from '../../materials/palette';
 import { WALL, decal } from '../../surface/layers';
 import { cutOut } from '../common/cutout';
 import { HAND, PRINT } from '../common/lettering';
+import { lcg } from '@/random';
 
 /*
  * What lies on SECOND HOME's counter beside the till: the book of upholstery swatches fanned open for a customer, and
@@ -22,7 +23,7 @@ export class SwatchBook extends Prop {
   constructor(seed = 4) {
     super();
     this.name = 'SwatchBook';
-    const random = seededRandom(seed);
+    const random = lcg(seed);
     const W = 0.12;
     const L = 0.22;
     part(this, W + 0.01, 0.012, L + 0.01, paint(0x2a2826, 0.7), { y: 0.006 });
@@ -69,7 +70,7 @@ function paintPages(seed: number): THREE.Texture {
   const W = 480;
   const H = 336;
   const [canvas, ctx] = createCanvas(W, H);
-  const random = seededRandom(seed * 17 + 3);
+  const random = lcg(seed * 17 + 3);
   ctx.clearRect(0, 0, W, H);
   ctx.strokeStyle = 'rgba(90,120,170,0.45)';
   ctx.lineWidth = 1.5;

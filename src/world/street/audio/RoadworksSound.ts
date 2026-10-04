@@ -7,6 +7,7 @@ import type { DayNight } from '../../props/DayNight';
 import { closures } from '../details/roadworks';
 import { SoundGraph } from './soundGraph';
 import { StreetEar, falloff } from './streetEar';
+import { random } from '@/random';
 
 interface RoadworksSoundOptions {
   listener: THREE.Object3D;
@@ -58,9 +59,9 @@ export class RoadworksSound extends THREE.Group implements Furniture, Updatable,
         at: new THREE.Vector3(WORK_AT, 0.8, mid).applyMatrix4(c.frame),
         leg: null,
         generator: null,
-        hammer: { left: 0, pause: 3 + Math.random() * 8, clock: 0 },
-        beeper: { left: 0, pause: 20 + Math.random() * 60, clock: 0 },
-        shovel: 4 + Math.random() * 6,
+        hammer: { left: 0, pause: 3 + random() * 8, clock: 0 },
+        beeper: { left: 0, pause: 20 + random() * 60, clock: 0 },
+        shovel: 4 + random() * 6,
       };
     });
   }
@@ -110,14 +111,14 @@ export class RoadworksSound extends THREE.Group implements Furniture, Updatable,
       this.beeper(g, site, dt, falloff(d, HALF.beeper));
       site.shovel -= dt;
       if (site.shovel <= 0) {
-        site.shovel = 5 + Math.random() * 12;
+        site.shovel = 5 + random() * 12;
         const level = falloff(d, HALF.shovel);
         if (level > 0.02 && site.leg) {
           // A spade into gravel: a gritty scrape and the stones tipped off it.
           const band = g.filter('bandpass', 1500, 1.2);
           band.connect(site.leg.input);
           g.shaped(band, now + 0.02, [[0.12, 0.12 * level], [0.35, 0.05 * level], [0.45, 0]]);
-          for (let i = 0; i < 5; i++) g.burst(band, now + 0.7 + i * 0.03 + Math.random() * 0.05, 0.02, 0.08 * level);
+          for (let i = 0; i < 5; i++) g.burst(band, now + 0.7 + i * 0.03 + random() * 0.05, 0.02, 0.08 * level);
           window.setTimeout(() => band.disconnect(), 2000);
         }
       }
@@ -130,8 +131,8 @@ export class RoadworksSound extends THREE.Group implements Furniture, Updatable,
     if (h.left <= 0) {
       h.pause -= dt;
       if (h.pause > 0) return;
-      h.left = 1.5 + Math.random() * 5;
-      h.pause = 4 + Math.random() * 18;
+      h.left = 1.5 + random() * 5;
+      h.pause = 4 + random() * 18;
     }
     h.left -= dt;
     h.clock -= dt;
@@ -159,8 +160,8 @@ export class RoadworksSound extends THREE.Group implements Furniture, Updatable,
     if (b.left <= 0) {
       b.pause -= dt;
       if (b.pause > 0) return;
-      b.left = 3 + Math.random() * 5;
-      b.pause = 35 + Math.random() * 90;
+      b.left = 3 + random() * 5;
+      b.pause = 35 + random() * 90;
     }
     b.left -= dt;
     b.clock -= dt;
@@ -198,7 +199,7 @@ export class RoadworksSound extends THREE.Group implements Furniture, Updatable,
       // The generator: a small engine's lumpy drone, a little rattle on it.
       site.generator = g.gain();
       site.generator.connect(site.leg.input);
-      const engine = g.oscillator('sawtooth', 50 + Math.random() * 6);
+      const engine = g.oscillator('sawtooth', 50 + random() * 6);
       engine.connect(g.filter('lowpass', 420, 1.2)).connect(site.generator);
       const lump = g.oscillator('sine', 6.2);
       lump.connect(g.gain(8)).connect(engine.frequency);

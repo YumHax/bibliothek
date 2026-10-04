@@ -8,6 +8,7 @@ import { drawText } from './games/ArcadeGame';
 import { paint, standard, timber } from '@/world/materials/palette';
 import type { PrizeKind } from '@/economy/Prizes';
 import { prizeModel } from '../prizes/prizeModel';
+import { formatTickets } from '@/text/money';
 
 interface PrizeCounterOptions {
   /** Tickets one coin is worth, written on the sign. */
@@ -88,7 +89,7 @@ export class PrizeCounter extends THREE.Group implements Furniture, Interactable
   }
 
   label(): string {
-    return `Prize counter · swap tickets for prizes or coins (${this.rate} tickets = 1 coin)`;
+    return `Prize counter · swap tickets for prizes or coins (${formatTickets(this.rate)} = 1 coin)`;
   }
 
   activate(session: SessionActions): void {

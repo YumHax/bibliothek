@@ -1,5 +1,7 @@
 import type * as THREE from 'three';
 import type { SoundGraph } from './soundGraph';
+import { random } from '@/random';
+import { damp } from '@/math/damp';
 
 /** Drops a second on a roof overhead at full rain; drips off its edge a second. */
 const DROPS = 28;
@@ -42,7 +44,7 @@ export class RainOnRoofs {
       if (d === 0 && ear.y < box.max.y + 0.6) inside = true;
       nearest = Math.min(nearest, d);
     }
-    this.under += ((inside ? 1 : 0) - this.under) * Math.min(1, dt * 3);
+    this.under = damp(this.under, inside ? 1 : 0, 3, dt);
     const roof = this.roof;
     if (!roof || rain < 0.02 || !Number.isFinite(nearest)) return;
     const level = rain * (inside ? 1 : 0.6 / (1 + (nearest / HALF_AT) ** 2));
@@ -50,17 +52,17 @@ export class RainOnRoofs {
     // The drops on the roof: short taps, a different pitch each (canvas thuds, glass ticks).
     const count = poisson(DROPS * rain * dt);
     for (let i = 0; i < count; i++) {
-      const at = g.now + 0.02 + Math.random() * dt;
-      g.burst(roof, at, 0.015 + Math.random() * 0.02, (0.05 + Math.random() * 0.06) * level);
+      const at = g.now + 0.02 + random() * dt;
+      g.burst(roof, at, 0.015 + random() * 0.02, (0.05 + random() * 0.06) * level);
     }
     // Drips off the edge, close by only.
     if (nearest > 3 && !inside) return;
     this.dripClock -= dt;
     if (this.dripClock > 0 || !this.drip) return;
-    this.dripClock = Math.random() * (2 / DRIPS);
+    this.dripClock = random() * (2 / DRIPS);
     const at = g.now + 0.02;
     const osc = g.ctx.createOscillator();
-    const f = 900 + Math.random() * 1400;
+    const f = 900 + random() * 1400;
     osc.frequency.setValueAtTime(f, at);
     osc.frequency.exponentialRampToValueAtTime(f * 1.8, at + 0.04);
     const env = g.gain();
@@ -83,10 +85,10 @@ function poisson(mean: number): number {
   if (mean <= 0) return 0;
   const limit = Math.exp(-mean);
   let k = 0;
-  let p = Math.random();
+  let p = random();
   while (p > limit && k < 12) {
     k++;
-    p *= Math.random();
+    p *= random();
   }
   return k;
 }

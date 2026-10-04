@@ -1,115 +1,81 @@
-/* The market's mail-order catalogue: a full-screen modal like the collection editor (`.ui-modal--sheet`). */
-.catalogue {
-  gap: 0.75rem;
-  padding: 1.5rem clamp(1rem, 6vw, 6rem);
-}
-/* Buttons are `.ui-btn`; the fields get the same surface. */
-.catalogue select,
-.catalogue input {
-  font: inherit;
-  color: inherit;
-  background: var(--ui-fill);
-  border: 1px solid var(--ui-border);
-  border-radius: var(--ui-radius-sm);
-  padding: 0.35rem 0.7rem;
-}
-.catalogue .ui-btn { padding: 0.35rem 0.7rem; }
-.catalogue select option { background: var(--ui-panel-solid); }
-.catalogue input:focus-visible,
-.catalogue select:focus-visible { outline: 2px solid var(--ui-accent); outline-offset: 1px; }
+/*
+ * The market's mail-order catalogue: a full-screen modal like the collection editor (`.ui-modal--sheet`). The list
+ * kit it set the pattern for (rows, status, chips, coins, fields) lives in design/components.css; this sheet lays
+ * the catalogue out and draws the box art.
+ */
+@layer tokens, base, components, panels;
+@layer panels {
+  .catalogue {
+    gap: var(--sp-3);
+    padding: var(--sp-5) clamp(1rem, 6vw, 6rem);
+  }
+  .catalogue .ui-btn { padding: 0.35rem 0.7rem; }
 
-.catalogue__header { display: flex; align-items: baseline; gap: 1rem; flex-wrap: wrap; }
-.catalogue__header h2 { margin: 0; font-family: var(--ui-font-display); font-weight: 400; font-size: 1.5rem; letter-spacing: 0.06em; }
-.catalogue__wallet { color: var(--ui-text-dim); }
-.catalogue__actions { margin-left: auto; }
-.catalogue__blurb { margin: 0; color: var(--ui-text-dim); font-size: 0.85rem; }
-.catalogue__search { display: flex; gap: 0.5rem; }
-.catalogue__search input { flex: 1; min-width: 0; }
-.catalogue__status { min-height: 1.2em; font-size: 0.85rem; opacity: 0.8; }
-.catalogue__status--error { color: var(--ui-danger); opacity: 1; }
-.catalogue__scroll {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  padding: 0.5rem 0.75rem;
-}
-/* A line of the list: the box, the title, its details, the price and the buttons. */
-.catalogue__row { display: flex; align-items: center; gap: 0.7rem; padding: 0.45rem 0.6rem; border-radius: var(--ui-radius-sm); }
-.catalogue__row + .catalogue__row { box-shadow: 0 -1px 0 var(--ui-border); }
-.catalogue__row:hover,
-.catalogue__row:focus-within { background: var(--ui-fill); box-shadow: none; }
-.catalogue__row:hover + .catalogue__row,
-.catalogue__row:focus-within + .catalogue__row { box-shadow: none; }
-.catalogue__title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
-.catalogue__meta { font-size: 0.78rem; opacity: 0.55; white-space: nowrap; }
-.catalogue__price--pending { opacity: 0.55; }
-.catalogue__was { opacity: 0.6; font-size: 0.85em; }
-.catalogue__price { display: inline-flex; align-items: center; gap: 0.3rem; min-width: 3.5rem; justify-content: flex-end; font-weight: 700; font-size: 1.02rem; color: #f3dfa6; font-variant-numeric: tabular-nums; }
-/* A price inside a button (the haggle's offers) takes the button's ink. */
-.ui-btn .catalogue__price { color: inherit; font-size: inherit; }
-.catalogue__coin {
-  display: inline-block;
-  width: 0.85em;
-  height: 0.85em;
-  border-radius: 50%;
-  background: radial-gradient(circle at 35% 35%, #fff1b8, var(--ui-accent) 58%, #8f6a12);
-  box-shadow: inset 0 0 0 1.5px rgba(110, 75, 0, 0.45);
-}
-.catalogue__row .ui-btn { padding: 0.2rem 0.55rem; font-size: 0.82rem; min-width: 4.5rem; }
-.catalogue__empty { opacity: 0.55; font-style: italic; padding: 0.5rem 0.4rem; }
-/* The box art, standing like the box: no frame of its own, a shadow under it. */
-.catalogue__cover {
-  width: 2.9rem;
-  height: 3.3rem;
-  object-fit: contain;
-  object-position: center bottom;
-  flex: none;
-  filter: drop-shadow(0 3px 3px rgba(0, 0, 0, 0.55));
-}
-.catalogue__cover--missing { visibility: hidden; }
-/* No art for it: a made-up box in the platform's colour, its name on a band, the title (`ui/coverPlaceholder`). */
-.catalogue__cover--placeholder {
-  --cover-colour: #5a5a66;
-  display: flex;
-  flex-direction: column;
-  box-sizing: border-box;
-  overflow: hidden;
-  border-radius: 2px;
-  background: linear-gradient(160deg, color-mix(in srgb, var(--cover-colour) 80%, #fff 20%), var(--cover-colour) 55%, color-mix(in srgb, var(--cover-colour) 70%, #000 30%));
-  color: #fff;
-  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.7);
-  filter: none;
-  box-shadow: 0 3px 5px rgba(0, 0, 0, 0.5), inset 0 0 0 1px rgba(255, 255, 255, 0.18);
-}
-.catalogue__cover-band {
-  padding: 0.1rem 0.15rem;
-  background: rgba(0, 0, 0, 0.45);
-  font-family: var(--ui-font-display);
-  font-size: 0.42rem;
-  letter-spacing: 0.04em;
-  text-align: center;
-  white-space: nowrap;
-  overflow: hidden;
-}
-.catalogue__cover-title {
-  flex: 1;
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 4;
-  overflow: hidden;
-  padding: 0.15rem 0.2rem;
-  font-size: 0.5rem;
-  font-weight: 700;
-  line-height: 1.15;
-  word-break: break-word;
-}
-/* A button asking to be clicked again to confirm (a used copy ordered). */
-.catalogue .sell__armed { background: rgba(200, 68, 58, 0.45); border-color: var(--ui-danger); }
-.catalogue__stall {
-  font-size: 0.75rem;
-  white-space: nowrap;
-  padding: 0.1rem 0.45rem;
-  border-radius: 999px;
-  background: var(--ui-accent-soft);
-  color: var(--ui-accent);
+  .catalogue__header { display: flex; align-items: baseline; gap: var(--sp-4); flex-wrap: wrap; }
+  .catalogue__header h2 { margin: 0; font-family: var(--ui-font-display); font-weight: 400; font-size: var(--fs-t4); letter-spacing: 0.06em; }
+  .catalogue__wallet { color: var(--ui-text-dim); }
+  .catalogue__actions { margin-left: auto; }
+  .catalogue__blurb { margin: 0; color: var(--ui-text-dim); font-size: var(--fs-4); }
+  .catalogue__search { display: flex; gap: var(--sp-2); }
+  .catalogue__search input { flex: 1; min-width: 0; }
+  .catalogue__scroll {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    padding: var(--sp-2) var(--sp-3);
+  }
+  .catalogue__price--pending { opacity: var(--ui-faint); }
+  .catalogue__was { opacity: 0.6; font-size: 0.85em; }
+  .catalogue__price { display: inline-flex; align-items: center; gap: 0.3rem; min-width: 3.5rem; justify-content: flex-end; font-weight: 700; font-size: var(--fs-7); color: var(--ui-money); font-variant-numeric: tabular-nums; }
+  /* A price inside a button (the haggle's offers) takes the button's ink. */
+  .ui-btn .catalogue__price { color: inherit; font-size: inherit; }
+  .catalogue__coin { width: 0.85em; height: 0.85em; }
+  .catalogue__row .ui-btn { padding: 0.2rem 0.55rem; font-size: var(--fs-3); min-width: 4.5rem; }
+  /* The box art, standing like the box: no frame of its own, a shadow under it. */
+  .catalogue__cover {
+    width: 2.9rem;
+    height: 3.3rem;
+    object-fit: contain;
+    object-position: center bottom;
+    flex: none;
+    filter: drop-shadow(0 3px 3px var(--shade-55));
+  }
+  .catalogue__cover--missing { visibility: hidden; }
+  /* No art for it: a made-up box in the platform's colour, its name on a band, the title (`ui/coverPlaceholder`). */
+  .catalogue__cover--placeholder {
+    --cover-colour: var(--ui-placeholder);
+    display: flex;
+    flex-direction: column;
+    box-sizing: border-box;
+    overflow: hidden;
+    border-radius: var(--ui-radius-2xs);
+    background: linear-gradient(160deg, color-mix(in srgb, var(--cover-colour) 80%, var(--ui-white) 20%), var(--cover-colour) 55%, color-mix(in srgb, var(--cover-colour) 70%, var(--ui-black) 30%));
+    color: var(--ui-white);
+    text-shadow: 0 1px 1px var(--shade-70);
+    filter: none;
+    box-shadow: 0 3px 5px var(--shade-45), inset 0 0 0 1px var(--tint-20);
+  }
+  .catalogue__cover-band {
+    padding: 0.1rem 0.15rem;
+    background: var(--shade-45);
+    font-family: var(--ui-font-display);
+    font-size: 0.42rem;
+    letter-spacing: 0.04em;
+    text-align: center;
+    white-space: nowrap;
+    overflow: hidden;
+  }
+  .catalogue__cover-title {
+    flex: 1;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 4;
+    overflow: hidden;
+    padding: 0.15rem 0.2rem;
+    font-size: 0.5rem;
+    font-weight: 700;
+    line-height: 1.15;
+    word-break: break-word;
+  }
+  .catalogue__stall { font-size: var(--fs-2); padding: 0.1rem 0.45rem; }
 }

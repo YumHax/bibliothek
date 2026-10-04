@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import type { SoundRoute } from '../acoustics/SoundOcclusion';
-import { STAIRWELL_PLAN as plan, STOREY, STOREYS, landingY } from './stairwellPlan';
+import { STAIRWELL_PLAN as plan } from './stairwellPlan';
+import { STOREY, STOREYS, landingY } from '@/world/measures/building';
 
 /*
  * How the flat and the stairwell hear each other. The stairwell has no `Room`, so its walls and

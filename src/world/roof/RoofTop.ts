@@ -1,9 +1,10 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { createCanvas, seededRandom, toTexture, repeatTexture } from '@/covers/generated/canvasUtils';
+import { createCanvas, toTexture, repeatTexture } from '@/covers/generated/canvasUtils';
 import { Prop } from '../props/Prop';
 import { ROOF_PLAN as plan } from './roofPlan';
 import { paintOnce } from '../materials/paintedTiles';
+import { lcg } from '@/random';
 
 type Finish = 'zinc' | 'iron' | 'brick' | 'pot' | 'boards' | 'gable';
 
@@ -46,7 +47,7 @@ export class RoofTop extends Prop {
       new THREE.Box3(new THREE.Vector3(x1, 0, z0), new THREE.Vector3(x1 + T, 2, z1)),
     );
     // The chimney stacks: brick, a stone cap, the pots.
-    const random = seededRandom(5);
+    const random = lcg(5);
     for (const c of chimneys) {
       const [cx, cz] = c.at;
       const [sx, sz] = c.size;
@@ -123,7 +124,7 @@ export class RoofTop extends Prop {
 function zincTexture(): THREE.CanvasTexture {
   const px = 256;
   const [canvas, ctx] = createCanvas(px, px);
-  const random = seededRandom(17);
+  const random = lcg(17);
   ctx.fillStyle = '#9ea3a8';
   ctx.fillRect(0, 0, px, px);
   for (let i = 0; i < 400; i++) {
@@ -146,7 +147,7 @@ function zincTexture(): THREE.CanvasTexture {
 function brickTexture(): THREE.CanvasTexture {
   const px = 256;
   const [canvas, ctx] = createCanvas(px, px);
-  const random = seededRandom(23);
+  const random = lcg(23);
   ctx.fillStyle = '#5a4a40';
   ctx.fillRect(0, 0, px, px);
   const bw = px / 4.5;

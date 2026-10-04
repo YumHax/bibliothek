@@ -1,9 +1,10 @@
 import * as THREE from 'three';
-import { createCanvas, seededRandom, toTexture } from '@/covers/generated/canvasUtils';
+import { createCanvas, toTexture } from '@/covers/generated/canvasUtils';
 import { Prop, part } from '../../props/Prop';
 import { timber } from '../../materials/palette';
 import { WALL, decal } from '../../surface/layers';
 import { HAND, PRINT, setLines } from './lettering';
+import { lcg } from '@/random';
 
 /** One thing pinned on the board: a card of words, or a photo (`photo`: a polaroid of a little painted scene, its caption under it). */
 export interface PinnedItem {
@@ -63,7 +64,7 @@ function paintBoard(wM: number, hM: number, options: CorkBoardOptions): THREE.Te
   const W = Math.round(wM * PX_PER_M);
   const H = Math.round(hM * PX_PER_M);
   const [canvas, ctx] = createCanvas(W, H);
-  const random = seededRandom((options.seed ?? 9) * 2654435 + 1);
+  const random = lcg((options.seed ?? 9) * 2654435 + 1);
   ctx.fillStyle = '#b98a58';
   ctx.fillRect(0, 0, W, H);
   for (let i = 0; i < W * H * 0.015; i++) {

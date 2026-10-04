@@ -1,3 +1,5 @@
+import { FixedStep } from '../FixedStep';
+import { random } from '@/random';
 /*
  * A pinball table as a 2D simulation, in table units: x across (0 left .. 1 right, the shooter
  * lane on the right), y down the table (0 at the top, `length` at the player's end). Pure: no
@@ -88,7 +90,7 @@ export class PinballSim {
   /** A caption on the display for a moment (BALL SAVED, LANES x2...). */
   message: { text: string; left: number } | null = null;
   private events: PinballEvent[] = [];
-  private accumulator = 0;
+  private readonly steps = new FixedStep(STEP, 0.05);
   private sinceLaunch = Infinity;
   private inLane = true;
   private laneWas = [false, false, false];
@@ -189,13 +191,11 @@ export class PinballSim {
       this.plunger = 0;
     }
     this.sinceLaunch += dt;
-    this.accumulator += Math.min(dt, 0.05);
-    while (this.accumulator >= STEP) {
-      this.accumulator -= STEP;
-      this.moveFlippers(STEP, input);
-      this.step(STEP);
-      if (this.over) break;
-    }
+    this.steps.run(dt, (h) => {
+      this.moveFlippers(h, input);
+      this.step(h);
+      return this.over;
+    });
   }
 
   /** What a decent player's hands do: flip when the ball comes down onto a flipper, fire the plunger at a random strength. */
@@ -205,7 +205,7 @@ export class PinballSim {
     // A human is late now and then: the lesser the player, the more often the ball slips by.
     if (near && !this.pilotDecided) {
       this.pilotDecided = true;
-      this.pilotReacts = Math.random() < 0.55 + skill * 0.4;
+      this.pilotReacts = random() < 0.55 + skill * 0.4;
     }
     if (!near) this.pilotDecided = false;
     // A flip is a short press: held for a moment, then let go (holding it would cradle the ball for ever).

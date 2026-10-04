@@ -14,9 +14,10 @@ import { FacadeRelief } from '../street/relief/FacadeRelief';
 import { StreetTrees } from '../street/StreetTrees';
 import { StreetBounds } from '../street/StreetBounds';
 import { Precipitation } from '../street/Precipitation';
-import { FACADES, type Vec2 } from '../street/streetPlan';
+import type { Vec2 } from '../street/streetPlan';
+import { FACADES } from '@/world/city/facades';
 import { Courtyard } from '../outlook/Courtyard';
-import { COURTYARD_YARD } from '../outlook/outlookPlan';
+import { COURTYARD_YARD } from '@/world/courtyard/courtyardPlan';
 import { TravelDoor } from '../travel/TravelDoor';
 import { Plant } from '../props/Plant';
 import { pointSound } from '../build/hearing';
@@ -54,7 +55,7 @@ const PARTY_CHAT = 6;
  * residents come down in the evening (`NeighboursParty`). The street's classes are built in the street's frame and
  * placed at `-COURTYARD_CENTRE`; the rig, the dome and the rain follow the camera from the zone's origin.
  */
-export function furnishCourtyard(zone: Zone, ctx: BuildContext): ZoneHandle {
+export function furnishCourtyard(zone: Zone, ctx: Pick<BuildContext, 'sky' | 'listener' | 'acoustics' | 'today' | 'input' | 'panels' | 'money' | 'home' | 'social' | 'building'>): ZoneHandle {
   const { sky, listener, today } = ctx;
   const { dayNight } = sky;
   const origin = new THREE.Vector3();
@@ -120,8 +121,8 @@ export function furnishCourtyard(zone: Zone, ctx: BuildContext): ZoneHandle {
 }
 
 /** The party's tables, the residents' sale, the tournament's cabinet, the bulbs, the guests, its radio and chatter: what it placed. */
-function placeParty(zone: Zone, ctx: BuildContext, day: number, at: (p: Vec2, y?: number) => THREE.Vector3): Furniture[] {
-  const { sky, listener, acoustics, today, input, panels, money, home } = ctx;
+function placeParty(zone: Zone, ctx: Pick<BuildContext, 'sky' | 'listener' | 'acoustics' | 'today' | 'input' | 'panels' | 'money' | 'home' | 'social'>, day: number, at: (p: Vec2, y?: number) => THREE.Vector3): Furniture[] {
+  const { sky, listener, acoustics, today, input, panels, money, home, social } = ctx;
   const placed: Furniture[] = [];
   const put = <F extends Furniture>(item: F, position: THREE.Vector3, yaw?: number): F => {
     placed.push(item);
@@ -143,7 +144,7 @@ function placeParty(zone: Zone, ctx: BuildContext, day: number, at: (p: Vec2, y?
   const scores = new PartyScores(game.id, residentScores(day, ppt));
   const { plays, prize } = PARTY.tournament;
   const cabinet = put(
-    new ArcadeCabinet(game, input, { color: 0x5a2a1a, glow: 0xffd27a, scores, nextPlayCost: () => 0, freePlay: true, pointsPerTicket: ppt, listener, glowLight: false, wear: 0.9, outOfOrder: () => tournamentOf(today.gameDay, today.realDate()).plays >= plays || stage() === 'none' }),
+    new ArcadeCabinet(game, input, { color: 0x5a2a1a, glow: 0xffd27a, scores, nextPlayCost: () => 0, freePlay: true, payout: 'event', pointsPerTicket: ppt, listener, glowLight: false, wear: 0.9, outOfOrder: () => tournamentOf(today.gameDay, today.realDate()).plays >= plays || stage() === 'none' }),
     at(party.cabinet.at),
     party.cabinet.yaw,
   );
@@ -174,6 +175,7 @@ function placeParty(zone: Zone, ctx: BuildContext, day: number, at: (p: Vec2, y?
         const guest = guests[i];
         if (guest) befriend(doorKey(guest.k, guest.i), PARTY_CHAT, 'partyChat', today.gameDay);
       },
+      social,
     }),
     new THREE.Vector3(),
   );

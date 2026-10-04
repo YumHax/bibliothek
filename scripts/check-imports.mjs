@@ -10,6 +10,11 @@
 // - the plans are data: no value import of three.js, the engine, the rules (game/), the HUD, the zones or the
 //   builders (layout.ts, furnish*.ts). A dimension constant from a prop module is fine.
 // - furniture (world/**) knows nothing of the session's rules: no value import of game/.
+// - furniture reads no other zone's plan and never the world plan: a zone's classes may read their own zone's plan
+//   (`world/<zone>/…` and its `<zone>Plan.ts`, the collection room's being world/roomPlan.ts), the city and the window
+//   views may read what they draw (the street's and the courtyard's plans); a dimension both sides need is a measure
+//   (world/measures/), a position comes from the builder. The zone layer, the builders' helpers (world/build/,
+//   place*.ts) and the headless checks read plans by role.
 // - no runtime import cycle (value, static edges): a module read while still initialising is `undefined` or not
 //   depending on who imported whom first, which no browser test fails twice the same way.
 //
@@ -27,14 +32,27 @@ const SRC = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'sr
 const VERBOSE = process.argv.includes('--verbose');
 
 const ENGINE = ['core/', 'player/', 'input/', 'interaction/'];
-/** What the engine may import besides itself: leaf utilities with no content of their own. */
-const ENGINE_MAY_IMPORT = [...ENGINE, 'graphics/', 'settings/', 'persistence/'];
+/** What the engine may import besides itself: leaf utilities with no content of their own (maths, random, text among them). */
+const ENGINE_MAY_IMPORT = [...ENGINE, 'graphics/', 'settings/', 'persistence/', 'math/', 'random/', 'text/'];
 /** What a plan may not import at runtime: the engine, the rules, the HUD, the zones. */
 const PLANS_MAY_NOT_IMPORT = ['game/', 'bootstrap/', 'core/', 'player/', 'input/', 'interaction/', 'ui/', 'world/zone/'];
 
 const under = (file, prefixes) => prefixes.some((prefix) => file.startsWith(prefix));
 const isPlan = (file) => file === 'world/worldPlan.ts' || file === 'world/roomPlan.ts' || /^world\/.*Plan\.ts$/.test(file);
-const isBuilder = (file) => file === 'world/layout.ts' || /(^|\/)furnish[A-Z]\w*\.ts$/.test(file);
+const isBuilder = (file) => file === 'world/layout.ts' || /(^|\/)(furnish|place)[A-Z]\w*\.ts$/.test(file);
+/**
+ * The zone a world file belongs to: its top folder under world/ (`world/stairwell/Lift.ts` is the stairwell's, a
+ * plan in a subfolder too: `world/stairwell/powerCut/powerCutPlan.ts`); a file at world's root is the collection
+ * room's (its plan is `world/roomPlan.ts`).
+ */
+const zoneOf = (file) => {
+  const match = file.match(/^world\/([^/]+)\//);
+  return match ? `world/${match[1]}/` : 'world/';
+};
+/** What reads the plans by role, not as furniture: the zone layer, the builders' helpers, the headless checks. */
+const PLAN_READERS = ['world/zone/', 'world/World.ts', 'world/Sky.ts', 'world/zoneHandle.ts', 'world/travel/', 'world/build/', 'world/buildContext.ts', 'world/surface/zfightCatalogue.ts', 'world/lint/'];
+/** Folders that draw what another zone's plan lays out: the city (the street's description shared by its two views) and the views onto the street and the courtyard. */
+const PLAN_VIEWERS = { 'world/city/': ['world/street/'], 'world/outlook/': ['world/street/', 'world/courtyard/'] };
 
 /**
  * A rule looks at one edge: `from(file)` says whether the importing file is its concern, `forbids(to, edge)` whether
@@ -73,9 +91,23 @@ const RULES = [
     forbids: (to) => to !== null && to.startsWith('game/'),
     hint: 'furniture asks the Session through an Interactable or a callback handed in by its builder, never by importing game/',
   },
+  {
+    name: 'furniture knows no other plan',
+    // A zone's own classes may read their zone's plan (it is their data); nothing reads another zone's, and nothing
+    // reads the world plan: a shared dimension is a measure (world/measures), a position comes from the builder.
+    from: (file) => file.startsWith('world/') && !isPlan(file) && !isBuilder(file) && !under(file, PLAN_READERS),
+    forbids: (to, _edge, file) => {
+      if (to === null || !isPlan(to)) return false;
+      if (to === 'world/worldPlan.ts') return true;
+      const zone = zoneOf(file);
+      const planZone = zoneOf(to);
+      return zone !== planZone && !(PLAN_VIEWERS[zone] ?? []).includes(planZone);
+    },
+    hint: "a dimension both read goes in world/measures/, a position comes as an option from the zone's builder (furnish<Kind>.ts); a class reads only its own zone's plan",
+  },
 ];
 
-const ASSET = /\.(css|png|jpg|jpeg|svg|webp|wasm|json|glsl|mp3|ogg|wav)$/;
+const ASSET = /\.(css|png|jpg|jpeg|svg|webp|wasm|json|glsl|mp3|ogg|wav)(\?\w+)?$/;
 
 /** The static import / export-from statements and `import()` calls of one file's text, comments left out. */
 function edgesOf(text) {
@@ -144,7 +176,7 @@ function analyse(files) {
       for (const rule of RULES) {
         if (!rule.from(file)) continue;
         if (edge.typeOnly && !rule.types) continue;
-        if (!rule.forbids(edge.to, edge)) continue;
+        if (!rule.forbids(edge.to, edge, file)) continue;
         fired.set(rule.name, (fired.get(rule.name) ?? 0) + 1);
         problems.push(`src/${file}:${edge.line}: ${rule.name}: ${rule.hint}\n    ${edge.text}`);
       }
@@ -252,12 +284,20 @@ function selfTest() {
     ['world/kitchen/kitchenPlan.ts', "import * as THREE from 'three';\nimport { furnishKitchen } from './furnishKitchen';\n/* a comment: import { z } from '@/game/s'; */\nimport { CISTERN_TOP } from '../bathroom/Toilet';"],
     ['world/kitchen/furnishKitchen.ts', "export const furnishKitchen = () => import('./kitchenPlan');"],
     ['world/bathroom/Toilet.ts', 'export const CISTERN_TOP = 0.8;'],
+    // The kitchen's own tap reads the kitchen's plan (its data); a generic prop reading it is the one problem here.
+    ['world/kitchen/Tap.ts', "import { furnishKitchen } from './furnishKitchen';\nimport type { Zone } from '../zone/Zone';\nexport const tap = furnishKitchen;"],
+    ['world/props/Plant.ts', "import { furnishKitchen } from '../kitchen/furnishKitchen';\nimport { CISTERN_TOP } from '../bathroom/Toilet';\nexport const plant = [furnishKitchen, CISTERN_TOP];"],
+    ['world/zone/Zone.ts', 'export type Zone = object;'],
   ]);
+  // The kitchen plan is imported by the tap (same zone, fine) and by a prop (another zone's plan: fires once).
+  tree.set('world/kitchen/Tap.ts', `${tree.get('world/kitchen/Tap.ts')}\nimport { x } from './kitchenPlan';`);
+  tree.set('world/props/Plant.ts', `${tree.get('world/props/Plant.ts')}\nimport { x } from '../kitchen/kitchenPlan';`);
   const { problems, cycles, fired } = analyse(tree);
   const missing = RULES.map((r) => r.name).filter((name) => !fired.has(name));
   const expectedCycle = cycles.length === 1 && cycles[0].join(' > ') === 'game/s.ts > world/a.ts > game/s.ts';
-  const expectedFires = fired.get('plans are data') === 2 && fired.get('furniture knows no rules') === 1 && fired.get('engine knows no content') === 1;
-  if (missing.length || !expectedCycle || !expectedFires || problems.length !== 7) {
+  const expectedFires =
+    fired.get('plans are data') === 2 && fired.get('furniture knows no rules') === 1 && fired.get('engine knows no content') === 1 && fired.get('furniture knows no other plan') === 1;
+  if (missing.length || !expectedCycle || !expectedFires || problems.length !== 8) {
     console.error(`[imports] the self-test failed: the check is blind, fix scripts/check-imports.mjs first\n  rules that did not fire: ${missing.join(', ') || 'none'}\n  cycles: ${cycles.map((c) => c.join(' > ')).join('; ') || 'none'}\n  fired: ${JSON.stringify([...fired])}\n  problems (${problems.length}):\n${problems.join('\n')}`);
     process.exit(1);
   }
@@ -282,15 +322,19 @@ const { problems, cycles, fired, edgeCount, graph } = analyse(files);
 const ms = Math.round(performance.now() - started);
 
 if (VERBOSE) {
-  // Furniture reading the plans (the layer table says it knows nothing of them): a tally, not a rule, until it is small.
-  const readers = [];
+  // The zones' classes reading their own plan (allowed), and the cross-zone reads carried by an `imports-ok` (reviewed).
+  const own = [];
+  const carried = [];
   for (const [file, edges] of graph) {
-    if (!file.startsWith('world/') || isPlan(file) || isBuilder(file) || file === 'world/buildContext.ts' || file.endsWith('zfightCatalogue.ts')) continue;
-    for (const edge of edges) if (edge.to && isPlan(edge.to) && !edge.typeOnly) readers.push(`${file} -> ${edge.to}`);
+    if (!file.startsWith('world/') || isPlan(file) || isBuilder(file) || under(file, PLAN_READERS)) continue;
+    for (const edge of edges) {
+      if (!edge.to || !isPlan(edge.to) || edge.typeOnly) continue;
+      (edge.optOut ? carried : own).push(`${file} -> ${edge.to}`);
+    }
   }
   console.log(`[imports] ${files.size} files, ${edgeCount} edges; fired: ${[...fired].map(([k, v]) => `${k} ${v}`).join(', ') || 'nothing'}`);
-  console.log(`[imports] furniture reading a plan at runtime: ${readers.length} import(s) in ${new Set(readers.map((r) => r.split(' -> ')[0])).size} file(s)`);
-  for (const reader of readers.sort()) console.log(`    ${reader}`);
+  console.log(`[imports] plans read by their own zone's classes: ${own.length} import(s); cross-zone reads carried by imports-ok: ${carried.length}`);
+  for (const reader of carried.sort()) console.log(`    ${reader}`);
 }
 if (problems.length) {
   console.error(`[imports] ${problems.length} problem${problems.length === 1 ? '' : 's'}:\n${problems.join('\n')}`);

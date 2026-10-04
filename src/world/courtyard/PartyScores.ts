@@ -1,4 +1,5 @@
 import type { ScoreTable, TableEntry } from '../arcade/scoreTable';
+import { byScore, makesTable, rankOf } from '@/economy/scoreTable';
 
 /** How many lines the party's table keeps. */
 const LINES = 8;
@@ -10,7 +11,7 @@ const LINES = 8;
  */
 export class PartyScores implements ScoreTable {
   readonly initials = 'YOU';
-  private readonly entries: TableEntry[];
+  private entries: TableEntry[];
   private readonly listeners = new Set<() => void>();
 
   constructor(
@@ -39,16 +40,15 @@ export class PartyScores implements ScoreTable {
   }
 
   qualifies(gameId: string, score: number): boolean {
-    return gameId === this.gameId && score > 0 && (this.entries.length < LINES || score > this.entries[LINES - 1]!.score);
+    return gameId === this.gameId && makesTable(this.entries.slice(0, LINES), score, LINES);
   }
 
   submit(gameId: string, score: number, initials = this.initials): { best: boolean; rank: number | null } {
     if (gameId !== this.gameId || score <= 0) return { best: false, rank: null };
     const best = score > (this.entries[0]?.score ?? 0);
     const entry: TableEntry = { name: initials, score, you: true };
-    this.entries.push(entry);
-    this.sort();
-    const rank = this.entries.indexOf(entry);
+    this.entries = byScore([...this.entries, entry]);
+    const rank = rankOf(this.entries, entry) ?? LINES;
     for (const cb of this.listeners) cb();
     // 0-based, like `ArcadeScores.submit`: the end screens add the 1.
     return { best, rank: rank < LINES ? rank : null };
@@ -60,6 +60,6 @@ export class PartyScores implements ScoreTable {
   }
 
   private sort(): void {
-    this.entries.sort((a, b) => b.score - a.score);
+    this.entries = byScore(this.entries);
   }
 }

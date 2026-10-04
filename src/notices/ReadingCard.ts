@@ -3,6 +3,7 @@ import { playNoticeSound } from '@/audio/noticeSounds';
 import { readMs } from './readingTime';
 import type { ReadingNotice } from './types';
 import { closeOnPress, dismissHint, followDismissHints } from './dismissHint';
+import { plural } from '@/text/count';
 
 /** Once read, walking this far from where it was opened puts the card away (m). */
 const WALK_AWAY = 1.2;
@@ -109,7 +110,7 @@ export class ReadingCard {
     if (card.more) {
       const more = document.createElement('p');
       more.className = 'reading__more';
-      more.textContent = `…and ${card.more} more note${card.more === 1 ? '' : 's'}`;
+      more.textContent = `…and ${card.more} more ${plural(card.more, 'note')}`;
       el.appendChild(more);
     }
     el.appendChild(dismissHint());

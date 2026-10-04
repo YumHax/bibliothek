@@ -1,3 +1,5 @@
+import { easeInOutCubic } from '@/math/easing';
+
 /** One move of a `Timeline`: how long it takes and what it does at each eased point `t` (0..1). */
 export interface Step {
   seconds: number;
@@ -32,7 +34,7 @@ export class Timeline {
       const step = this.steps[this.index]!;
       this.time += left;
       const t = step.seconds > 0 ? Math.min(1, this.time / step.seconds) : 1;
-      step.run(step.linear ? t : easeInOut(t));
+      step.run(step.linear ? t : easeInOutCubic(t));
       if (t < 1) return true;
       left = this.time - step.seconds;
       this.time = 0;
@@ -47,8 +49,4 @@ export class Timeline {
   finish(): void {
     while (!this.finished) this.tick(1e3);
   }
-}
-
-function easeInOut(t: number): number {
-  return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
 }

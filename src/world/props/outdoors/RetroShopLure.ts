@@ -1,5 +1,5 @@
-import { seededRandom } from '@/covers/generated/canvasUtils';
 import type { Outdoors } from './Outdoors';
+import { dayLcg } from '@/time/daily';
 
 /** What the lure needs of the flea market: today's market day and its stock once drawn. */
 interface MarketNews {
@@ -44,7 +44,7 @@ export class RetroShopLure {
     private readonly market: MarketNews,
     private readonly options: RetroShopLureOptions,
   ) {
-    this.timer = setInterval(() => this.look(), EVERY * 1000);
+    this.timer = setInterval(() => this.look(), EVERY * 1000); // convention-ok: a poll of where the player is, made in bootstrap with no tick of its own
   }
 
   dispose(): void {
@@ -62,7 +62,7 @@ export class RetroShopLure {
     }
     const fresh = items !== null && items.length > 0 && this.visitedDay !== day;
     this.outdoors.showShopBanner(fresh ? 'NEW IN' : null);
-    const random = seededRandom(day * 131 + 7);
+    const random = dayLcg(day * 131 + 7);
     const queue = fresh ? QUEUE[0] + Math.floor(random() * (QUEUE[1] - QUEUE[0] + 1)) : 0;
     this.outdoors.life.setShopQueue(queue);
     RETRO_NEWS.day = day;

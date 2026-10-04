@@ -5,6 +5,7 @@ import { timber } from '../materials/palette';
 import { part } from '../props/Prop';
 import { faceOn } from '../props/joinery';
 import { WALL } from '../surface/layers';
+import { formatCoins } from '@/text/money';
 
 /** What the board shows: the lot being called, or a notice (no sale today, the sale over). */
 type BoardFace =
@@ -73,7 +74,7 @@ export class SaleBoard extends THREE.Group implements Furniture {
       ctx.fillText(fit(ctx, face.title, w - 70), w / 2, 128);
       ctx.fillStyle = '#b8c8b0';
       ctx.font = '30px Georgia, serif';
-      ctx.fillText(`estimate around ${face.estimate} coins`, w / 2, 186);
+      ctx.fillText(`estimate around ${formatCoins(face.estimate)}`, w / 2, 186);
       ctx.fillStyle = face.you ? '#ffe070' : '#f4efe0';
       ctx.font = 'bold 78px Georgia, serif';
       ctx.fillText(face.bid === null ? 'NO BID YET' : `${face.bid} COINS`, w / 2, 272);

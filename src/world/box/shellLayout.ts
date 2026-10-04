@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import type { BoxDimensions } from '@/catalog/types';
 import { isLandscape, type CaseKind, type MediaSpec } from '@/catalog/media';
+import { clamp } from '@/math/scalar';
 import { slab, type Slab } from './slabs';
 
 /**
@@ -45,8 +46,6 @@ export interface ShellLayout {
   /** How far the contents slide out of a cardboard box once it is open (m): up out of the top, right out of the end. */
   rise: { media: number; manual: number };
 }
-
-const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
 
 export function computeShellLayout(dims: BoxDimensions, kind: CaseKind, media: MediaSpec): ShellLayout {
   if (kind !== 'cardboard') return sideOpening(dims, kind, media);

@@ -1,21 +1,18 @@
-import { audioBus, startedAudioContext } from '@/audio/audioContext';
+import { foregroundInput, startedAudioContext } from '@/audio/audioContext';
+import { decayingNoise } from '@/audio/noise';
 
 /**
- * The shutter: a dry mechanical click (a burst of filtered noise, then the mirror's lower slap), on
- * the `ui` bus. Silent until a gesture started the audio (a photo is always taken with one).
+ * The shutter: a dry mechanical click (a burst of filtered noise, then the mirror's lower slap), in the
+ * foreground: the player's own doing, heard over the room's duck at the world's volume. Silent until a gesture started the audio (a photo is always taken with one).
  */
 export function playShutter(): void {
   const ctx = startedAudioContext();
   if (!ctx) return;
-  const out = audioBus(ctx, 'ui');
+  const out = foregroundInput(ctx);
   const t = ctx.currentTime;
   const burst = (at: number, ms: number, hz: number, level: number) => {
-    const length = Math.ceil((ctx.sampleRate * ms) / 1000);
-    const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
-    const data = buffer.getChannelData(0);
-    for (let i = 0; i < length; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / length) ** 2;
     const source = ctx.createBufferSource();
-    source.buffer = buffer;
+    source.buffer = decayingNoise(ctx, ms / 1000, 2);
     const filter = ctx.createBiquadFilter();
     filter.type = 'bandpass';
     filter.frequency.value = hz;

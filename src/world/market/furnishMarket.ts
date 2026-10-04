@@ -9,6 +9,11 @@ import { IndustrialPendant } from '../props/IndustrialPendant';
 import { placeDecor } from '../props/decor';
 import { TravelDoor } from '../travel/TravelDoor';
 import { Vendor } from '../people/Vendor';
+import { randomLook } from '../people/looks';
+import { talkHook, vendorBody } from '../people/socialHook';
+import { rememberLook } from '@/social/lookBook';
+import { stallPerson } from '@/social/market';
+import { pick, random } from '@/random';
 import { Shopper, type BrowseSpot } from '../people/Shopper';
 import { HallRoof } from './HallRoof';
 import { MarketStall } from './MarketStall';
@@ -53,7 +58,7 @@ const SCAN_KEY = primaryCode('readStalls');
  * runs the day: sales, reactions, pennants, the boards, the crowd). Other shoppers buy copies too
  * (`RivalBuyers`); Q held reads the tables from the aisle (`PriceScanner`).
  */
-export function furnishMarket(zone: Zone, context: BuildContext): ZoneHandle {
+export function furnishMarket(zone: Zone, context: Pick<BuildContext, 'sky' | 'listener' | 'acoustics' | 'input' | 'market' | 'collection' | 'covers' | 'money' | 'social' | 'story' | 'today' | 'home'>): ZoneHandle {
   const { sky, listener, input, market: { stock: market, day: marketDay, hall: marketHall } } = context;
   const plan = MARKET_PLAN;
   if (PLATFORM_LIST.length > plan.stalls.length) {
@@ -103,7 +108,17 @@ export function furnishMarket(zone: Zone, context: BuildContext): ZoneHandle {
       const told = context.story?.atStall(platform.id);
       return told ? [told] : floor.linesAt(entry);
     };
-    const vendor = zone.place(new Vendor({ viewer: listener, lines: talk, seed: i + 1, callOuts: callOuts(platform.shortName), label: 'The stallholder · chat' }), behind(stall, stall.vendorAt), stall.rotation.y);
+    // The stallholder is someone the player knows (docs/social.md "The market"): a click opens the conversation, what is on
+    // their table one of its entries.
+    const person = stallPerson(platform.id);
+    const social = talkHook(context.social, person, () => ({
+      person,
+      place: 'market',
+      body: vendorBody(vendor),
+      extras: [{ id: 'table', group: 'talk', label: 'What’s new on the table?', run: () => ({ line: pickLine(talk()) }) }],
+    }));
+    const vendor = zone.place(new Vendor({ viewer: listener, lines: talk, seed: i + 1, callOuts: callOuts(platform.shortName), label: 'The stallholder · chat', social }), behind(stall, stall.vendorAt), stall.rotation.y);
+    rememberLook(person, randomLook(i + 1, 'vendor'));
     const pennant = stall.pennantAt ? zone.place(new WishPennant(i + 1), onTop(stall, stall.pennantAt), stall.rotation.y) : null;
     if (pennant) pennant.visible = false;
     const entry: FloorStall = { index: i, platform, stall, vendor, boxes: new Set(), sold: 0, pennant };
@@ -180,6 +195,8 @@ export function furnishMarket(zone: Zone, context: BuildContext): ZoneHandle {
       aisleZ: crowd.aisle.z,
       spots: crowd.browseSpots,
       claims,
+      isWanted: (id) => context.collection.isWanted(id),
+      social: context.social,
     }), new THREE.Vector3());
     rival.placeIn(zone);
   }
@@ -198,4 +215,9 @@ function buildStall(style: StallStyle, options: { sign: string; cloth: number; a
     case 'risers': return new RiserStall(options);
     default: return new MarketStall(options);
   }
+}
+
+/** One of a stallholder's lines about their table, or a shrug when there is nothing to say. */
+function pickLine(lines: readonly string[]): string {
+  return lines.length ? pick(random, lines) : 'Have a look, everything’s on the table.';
 }

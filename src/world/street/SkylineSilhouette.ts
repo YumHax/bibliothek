@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { SKYLINE, TOWER_STYLES, towerAt, towerTop } from '../city/skyline';
-import { FLAT_IN_STREET } from './streetPlan';
+import { FLAT_IN_STREET } from '@/world/measures/street';
 
 /** Columns round the horizon (read linearly for the height, snapped to a column for the rest: `SKYLINE_COLUMNS` in the dome's shader), and the highest elevation (sine) the texture holds. */
 export const SKYLINE_COLUMNS = 4096;

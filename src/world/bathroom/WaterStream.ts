@@ -1,6 +1,7 @@
 import * as THREE from 'three';
-import { createCanvas, seededRandom, canvasTexture } from '@/covers/generated/canvasUtils';
+import { createCanvas, canvasTexture } from '@/covers/generated/canvasUtils';
 import { markShared } from '@/world/materials/sharedResources';
+import { lcg } from '@/random';
 
 /** Scroll speed of the streaks (texture repeats per second) and how many repeats per metre of stream. */
 const FLOW = 2.4;
@@ -12,7 +13,7 @@ let streaks: THREE.CanvasTexture | null = null;
 function streakTexture(): THREE.CanvasTexture {
   if (streaks) return streaks;
   const [canvas, ctx] = createCanvas(32, 128);
-  const random = seededRandom(0x57a3e);
+  const random = lcg(0x57a3e);
   ctx.fillStyle = '#9a9a9a';
   ctx.fillRect(0, 0, 32, 128);
   for (let i = 0; i < 60; i++) {

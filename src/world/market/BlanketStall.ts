@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { createCanvas, seededRandom, toTexture, FONT } from '@/covers/generated/canvasUtils';
+import { createCanvas, toTexture, FONT } from '@/covers/generated/canvasUtils';
 import type { DisplaySlot, StallLike } from './stallTypes';
 import { boxMesh, cylinderMesh } from '../meshUtils';
 import { fabric } from '@/world/materials/finishes';
@@ -7,6 +7,7 @@ import { METAL, paint, standard, timber } from '../materials/palette';
 import { PROUD, proud } from '../props/joinery';
 import { FLOOR, layMesh } from '../surface/layers';
 import { centreOutRow, evenRow, fitInRow, plainCloth } from './stallPaint';
+import { lcg } from '@/random';
 
 interface BlanketStallOptions {
   /** What is scrawled on the cardboard sign (a platform's name). */
@@ -95,7 +96,7 @@ export class BlanketStall extends THREE.Group implements StallLike {
     super();
     this.name = 'BlanketStall';
     this.seed = options.seed ?? 1;
-    const random = seededRandom(this.seed * 69069);
+    const random = lcg(this.seed * 69069);
     const cloth = new THREE.Color(options.cloth ?? 0x3f5a3a);
     const accent = new THREE.Color(options.accent ?? 0xc8a24a);
 
@@ -148,7 +149,7 @@ export class BlanketStall extends THREE.Group implements StallLike {
     const lean = Math.min(count, BlanketStall.leanPerRow(boxWidth));
     const pitch = boxWidth + BOX_GAP;
     const slots: DisplaySlot[] = centreOutRow(lean, pitch).map((x) => ({ position: new THREE.Vector3(x, BOX_Y, LEAN_Z), pose: 'lean', yaw: 0 }));
-    const random = seededRandom(this.seed * 7919);
+    const random = lcg(this.seed * 7919);
     let left = count - lean;
     FLAT_ZS.forEach((z, row) => {
       const n = Math.min(left, BlanketStall.flatPerRow(boxWidth));
@@ -221,7 +222,7 @@ function paintBlanket(cloth: THREE.Color, accent: THREE.Color): THREE.Texture {
   const W = 512;
   const H = Math.round((W * BLANKET_D) / BLANKET_W);
   const [canvas, ctx] = createCanvas(W, H);
-  const random = seededRandom(90210);
+  const random = lcg(90210);
   ctx.fillStyle = `#${cloth.getHexString()}`;
   ctx.fillRect(0, 0, W, H);
   const dark = `#${cloth.clone().multiplyScalar(0.6).getHexString()}`;

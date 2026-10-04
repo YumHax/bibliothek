@@ -16,6 +16,18 @@ const DESC_LINE_H = 25;
 /** Fields the catalog may grow later; read without depending on them. */
 type GameExtras = { players?: string | number };
 
+type Platform = ReturnType<typeof getPlatform>;
+
+/** The page the back is laid out on: its context (already scaled), its size in layout units, the margin, the width inside it, where the footer starts. */
+interface Page {
+  ctx: CanvasRenderingContext2D;
+  w: number;
+  h: number;
+  m: number;
+  inner: number;
+  footerTop: number;
+}
+
 /**
  * Generated back cover laid out like a real one: title band with the platform tag, the
  * publisher / developer / year line, up to two framed screenshots (in-game `screenshot` and the
@@ -36,15 +48,25 @@ export function createBackTexture(
   const scale = Math.min(1, HEIGHT_PX / h);
   const [canvas, ctx] = createCanvas(Math.round(w * scale), Math.round(h * scale));
   ctx.scale(scale, scale);
-  const m = MARGIN;
-  const inner = w - m * 2;
-  const footerTop = h - FOOTER_H;
+  const page: Page = { ctx, w, h, m: MARGIN, inner: w - MARGIN * 2, footerTop: h - FOOTER_H };
 
-  // Background: very dark version of the accent.
+  paintBackground(page, accent);
+  const bandH = paintTitleBand(page, game, platform, accent);
+  let y = paintCredits(page, game, bandH + 18);
+  y = paintScreenshots(page, game, y, screenshot, titleScreen);
+  paintDescription(page, game, y);
+  paintFooter(page, game, platform);
+  return toTexture(canvas, anisotropy);
+}
+
+/** Background: a very dark version of the accent. */
+function paintBackground({ ctx, w, h }: Page, accent: THREE.Color): void {
   ctx.fillStyle = css(accent.clone().multiplyScalar(0.2));
   ctx.fillRect(0, 0, w, h);
+}
 
-  // --- Title band -----------------------------------------------------------------------------
+/** The accent band across the top: the platform's tag in a pill at the right, the title fitted (two lines at most) at the left. Its height. */
+function paintTitleBand({ ctx, w, h, m, inner }: Page, game: Game, platform: Platform, accent: THREE.Color): number {
   const bandH = Math.round(Math.min(110, Math.max(72, h * 0.105)));
   ctx.fillStyle = css(accent);
   ctx.fillRect(0, 0, w, bandH);
@@ -68,9 +90,12 @@ export function createBackTexture(
   const titleLineH = titleSize * 1.08;
   const titleY = bandH / 2 - ((titleLines.length - 1) * titleLineH) / 2;
   titleLines.forEach((line, i) => ctx.fillText(line, m, titleY + i * titleLineH));
+  return bandH;
+}
 
-  // --- Publisher / developer / year ---------------------------------------------------------
-  let y = bandH + 18;
+/** Publisher · developer · year at the left, the region at the right, a rule under them. Where the next block starts. */
+function paintCredits({ ctx, w, m, inner }: Page, game: Game, top: number): number {
+  let y = top;
   ctx.textBaseline = 'top';
   ctx.font = `17px ${FONT}`;
   ctx.fillStyle = '#d8d8d8';
@@ -86,8 +111,15 @@ export function createBackTexture(
   y += 34;
   rule(ctx, m, y, inner);
   y += 16;
+  return y;
+}
 
-  // --- Screenshots ----------------------------------------------------------------------------
+/**
+ * Up to two framed screenshots side by side (one, wider, when there is no title screen), each with its caption,
+ * sized to leave at least three lines of description above the footer. Where the next block starts.
+ */
+function paintScreenshots({ ctx, m, inner, footerTop }: Page, game: Game, top: number, screenshot: CanvasImageSource | null, titleScreen: CanvasImageSource | null): number {
+  const y = top;
   const shots = [
     { img: screenshot, caption: 'In game' },
     { img: titleScreen, caption: 'Title screen' },
@@ -120,23 +152,26 @@ export function createBackTexture(
     ctx.textAlign = 'left';
     x += frameW + gap;
   }
-  y += frameH + captionH + 24;
+  return y + frameH + captionH + 24;
+}
 
-  // --- Description ----------------------------------------------------------------------------
-  if (game.description) {
-    ctx.font = `18px ${FONT}`;
-    ctx.fillStyle = '#e8e8e8';
-    const maxLines = Math.floor((footerTop - 14 - y) / DESC_LINE_H);
-    if (maxLines > 0) {
-      for (const line of wrapLines(ctx, game.description, inner, maxLines)) {
-        ctx.fillText(line, m, y);
-        y += DESC_LINE_H;
-      }
-    }
+/** The description as a text block, as many lines as fit above the footer. */
+function paintDescription({ ctx, m, inner, footerTop }: Page, game: Game, top: number): void {
+  if (!game.description) return;
+  ctx.font = `18px ${FONT}`;
+  ctx.fillStyle = '#e8e8e8';
+  const maxLines = Math.floor((footerTop - 14 - top) / DESC_LINE_H);
+  if (maxLines <= 0) return;
+  let y = top;
+  for (const line of wrapLines(ctx, game.description, inner, maxLines)) {
+    ctx.fillText(line, m, y);
+    y += DESC_LINE_H;
   }
+}
 
-  // --- Footer ---------------------------------------------------------------------------------
-  rule(ctx, m, footerTop, inner);
+/** The footer: a rule, the barcode and the seal at the right, the facts (players, genre, region) at the left, the copyright line and the platform's name along the bottom. */
+function paintFooter({ ctx, w, h, m, footerTop }: Page, game: Game, platform: Platform): void {
+  rule(ctx, m, footerTop, w - m * 2);
   const barcodeW = 180;
   const barcodeH = 72;
   const barcodeX = w - m - barcodeW;
@@ -145,16 +180,28 @@ export function createBackTexture(
   const sealR = 32;
   const sealX = barcodeX - 22 - sealR;
   drawSeal(ctx, sealX, barcodeY + barcodeH / 2, sealR, 'Official Seal');
+  paintFacts(ctx, game, m, footerTop, sealX - sealR - 16);
 
+  ctx.textBaseline = 'bottom';
+  ctx.font = `12px ${FONT}`;
+  ctx.fillStyle = '#8a8a8a';
+  const year = game.releaseDate?.slice(0, 4);
+  const copyright = [year ? `© ${year}` : undefined, game.publisher].filter(Boolean).join(' ');
+  if (copyright) ctx.fillText(copyright, m, h - 22);
+  ctx.textAlign = 'right';
+  ctx.fillText(platform.name, w - m, h - 22);
+}
+
+/** The facts in columns from `left` to `right`: players, genre, and the region when there is room for it. */
+function paintFacts(ctx: CanvasRenderingContext2D, game: Game, left: number, footerTop: number, right: number): void {
   const facts: { label: string; value: string }[] = [];
   const players = (game as Game & GameExtras).players;
   if (players !== undefined && players !== null && players !== '') facts.push({ label: 'Players', value: String(players) });
   if (game.genre) facts.push({ label: 'Genre', value: game.genre });
   if (game.region && facts.length < 2) facts.push({ label: 'Region', value: game.region });
-  const factsRight = sealX - sealR - 16;
-  const colW = facts.length ? Math.min(170, Math.floor((factsRight - m) / facts.length)) : 0;
+  const colW = facts.length ? Math.min(170, Math.floor((right - left) / facts.length)) : 0;
   facts.forEach((fact, i) => {
-    const fx = m + i * colW;
+    const fx = left + i * colW;
     ctx.font = `bold 11px ${FONT}`;
     ctx.fillStyle = '#8f8f8f';
     ctx.fillText(fact.label.toUpperCase(), fx, footerTop + 20);
@@ -163,16 +210,6 @@ export function createBackTexture(
     ctx.fillStyle = '#f2f2f2';
     ctx.fillText(fact.value, fx, footerTop + 38);
   });
-
-  ctx.textBaseline = 'bottom';
-  ctx.font = `12px ${FONT}`;
-  ctx.fillStyle = '#8a8a8a';
-  const copyright = [year ? `© ${year}` : undefined, game.publisher].filter(Boolean).join(' ');
-  if (copyright) ctx.fillText(copyright, m, h - 22);
-  ctx.textAlign = 'right';
-  ctx.fillText(platform.name, w - m, h - 22);
-
-  return toTexture(canvas, anisotropy);
 }
 
 function rule(ctx: CanvasRenderingContext2D, x: number, y: number, w: number): void {

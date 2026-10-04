@@ -1,6 +1,6 @@
 import * as THREE from 'three';
-import { seededRandom } from '@/covers/generated/canvasUtils';
 import { markShared, Prop } from './Prop';
+import { lcg } from '@/random';
 
 export interface CobwebOptions {
   /** How far the web reaches out of its corner along the wall and down it, metres. Default 0.45. */
@@ -24,7 +24,7 @@ export class Cobweb extends Prop {
     this.name = 'Cobweb';
     const size = options.size ?? 0.45;
     const sx = options.spread === 'right' ? 1 : -1;
-    const random = seededRandom(options.seed ?? 13);
+    const random = lcg(options.seed ?? 13);
     const spokes = 6;
     // Spoke directions from the corner: from along the ceiling (0) to straight down the wall (pi/2).
     const dirs = Array.from({ length: spokes }, (_, i) => {

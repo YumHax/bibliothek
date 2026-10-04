@@ -1,10 +1,11 @@
 import * as THREE from 'three';
-import { createCanvas, toTexture, seededRandom, repeatTexture } from '@/covers/generated/canvasUtils';
+import { createCanvas, toTexture, repeatTexture } from '@/covers/generated/canvasUtils';
 import type { DisplaySlot, StallLike } from './stallTypes';
 import { boxMesh, cylinderMesh } from '../meshUtils';
 import { Crate } from '../props/Crate';
 import { paint, timber } from '../materials/palette';
 import { QUALITY } from '@/graphics/quality';
+import { lcg } from '@/random';
 
 interface MarketStallOptions {
   /** Text on the sign hung from the awning (a platform's name). */
@@ -94,7 +95,7 @@ export class MarketStall extends THREE.Group implements StallLike {
     this.pennantAt = new THREE.Vector3(-this.width / 2 - POLE_OUT, options.awning === false ? 1.75 : FRONT_POLE_H, options.awning === false ? -DEPTH / 2 + 0.05 : DEPTH / 2 + POLE_OUT);
     const clothColor = new THREE.Color(options.cloth ?? 0x6b2f2a);
     const w = this.width;
-    const random = seededRandom(this.seed * 48271);
+    const random = lcg(this.seed * 48271);
 
     // Trestles: two A-frames, simplified to slanted legs under a beam.
     for (const x of [-w / 2 + 0.18, w / 2 - 0.18]) {
@@ -174,7 +175,7 @@ export class MarketStall extends THREE.Group implements StallLike {
     const row = (n: number): number[] => Array.from({ length: n }, (_, i) => (i - (n - 1) / 2) * (boxWidth + BOX_GAP));
     // Centre outwards: middle first, then alternately left and right.
     const leanXs = row(lean).sort((a, b) => Math.abs(a) - Math.abs(b) || a - b);
-    const random = seededRandom(this.seed * 7919);
+    const random = lcg(this.seed * 7919);
     return [
       ...leanXs.map((x) => ({ position: new THREE.Vector3(x, TOP_HEIGHT + 0.012, CRATE_FRONT), pose: 'lean' as const, yaw: 0 })),
       ...row(flat).map((x) => ({ position: new THREE.Vector3(x, TOP_HEIGHT + 0.012, FLAT_Z), pose: 'flat' as const, yaw: (random() - 0.5) * 2 * FLAT_YAW })),

@@ -3,53 +3,56 @@ import { getPlatform } from '@/catalog/platforms';
 import type { GameSource } from '@/collection/GameSource';
 import type { Fame } from '@/economy/Fame';
 import type { StockItem } from '@/economy/StockItem';
-import { CONFIRM_MS, describeCondition, tradeValue } from '@/economy/pricing';
-import { MarketPanel, coinsHtml, escapeHtml, type PanelWallet } from './MarketPanel';
+import { describeCondition, tradeValue } from '@/economy/pricing';
+import { MarketPanel, type PanelWallet } from './MarketPanel';
+import { Arming } from '../confirmTwice';
+import { attr, html, paint } from '../panel/html';
+import { coverImg, emptyState, gameRow, priceHtml } from '../panel/widgets';
 import { isKeepsake } from '@/economy/Transactions';
+import { formatCoins } from '@/text/money';
+import { compareTitles, matchesSearch } from '@/text/strings';
 
 /**
  * A swap at a stall: the player's games (not lent out, not on the wishlist) with what each counts
  * for against the copy in hand (`tradeValue`, more than the WE BUY desk pays) and the coins to add
  * on top; no change is given when a game is worth more (the button says how much value is lost). Two
- * clicks swap (the first arms the row, for `CONFIRM_MS`),
- * then the Session does the rest (`onSwap`). Values depend on fame: a row can be swapped once its
- * lookup landed.
+ * clicks swap (the first arms the row, `confirmTwice`), then the Session does the rest (`onSwap`).
+ * Values depend on fame: a row can be swapped once its lookup landed.
  */
 export class TradePanel extends MarketPanel {
   private item: StockItem | null = null;
   private onSwap: ((mine: Game, value: number) => string | null) | null = null;
-  private armed: { id: string; until: number } | null = null;
+  private readonly arming = new Arming(() => this.refresh());
   private filter = '';
 
   constructor(container: HTMLElement, wallet: PanelWallet, private readonly collection: GameSource, private readonly fame: Fame, private readonly coverUrl?: (game: Game) => string | undefined) {
-    super(container, wallet, { title: 'Swap', className: 'trade' });
-    this.body.insertAdjacentHTML('beforebegin', '<div class="catalogue__search"><input type="search" aria-label="Filter your collection" placeholder="Filter your collection…" autocomplete="off" spellcheck="false" data-autofocus /></div>');
-    const input = this.root.querySelector<HTMLInputElement>('input[type="search"]')!;
-    input.addEventListener('input', () => {
-      this.filter = input.value.trim().toLowerCase();
-      this.refresh();
-    });
+    super(container, wallet, { title: 'Swap', className: 'trade', search: { placeholder: 'Filter your collection…' } });
   }
 
   /** Sets up a swap for `item`; the Session opens the panel next. */
   start(options: { item: StockItem; stall: string; onSwap: (mine: Game, value: number) => string | null }): void {
     this.item = options.item;
     this.onSwap = options.onSwap;
-    this.armed = null;
-    this.setTitle(`Swap at ${options.stall}`, `${options.item.game.title} for ${options.item.due} coins. Offer one of your games against it: whatever it is worth comes off, no change given.`);
+    this.arming.reset();
+    this.setTitle(`Swap at ${options.stall}`, `${options.item.game.title} for ${formatCoins(options.item.due)}. Offer one of your games against it: whatever it is worth comes off, no change given.`);
+  }
+
+  protected override onSearch(query: string): void {
+    this.filter = query;
+    this.refresh();
   }
 
   protected render(): void {
     const item = this.item;
     if (!item) return;
     const games = this.collection.games
-      .filter((g) => (g.status ?? 'owned') === 'owned' && !isKeepsake(g) && g.id !== item.game.id && (!this.filter || g.title.toLowerCase().includes(this.filter)))
-      .sort((a, b) => a.title.localeCompare(b.title));
+      .filter((g) => (g.status ?? 'owned') === 'owned' && !isKeepsake(g) && g.id !== item.game.id && matchesSearch(g.title, this.filter))
+      .sort((a, b) => compareTitles(a.title, b.title));
     if (!games.length) {
-      this.body.innerHTML = `<p class="catalogue__empty">${this.filter ? 'Nothing by that name in your collection.' : 'Nothing to swap: bring some games of your own.'}</p>`;
+      paint(this.body, emptyState(this.filter ? 'Nothing by that name in your collection.' : 'Nothing to swap: bring some games of your own.'));
       return;
     }
-    this.body.innerHTML = games.map((game) => this.rowHtml(game, item)).join('');
+    paint(this.body, html`${games.map((game) => this.row(game, item))}`);
     for (const game of games) {
       if (this.fame.peek(game) !== undefined) continue;
       void this.fame.lookup(game).then(() => {
@@ -62,42 +65,31 @@ export class TradePanel extends MarketPanel {
     if (action !== 'swap' || !el.dataset.id) return;
     const game = this.collection.games.find((g) => g.id === el.dataset.id);
     if (!game || !this.item || !this.onSwap) return;
-    const now = performance.now();
-    if (!this.armed || this.armed.id !== game.id || now > this.armed.until) {
-      this.armed = { id: game.id, until: now + CONFIRM_MS };
-      this.refresh();
-      return;
-    }
-    this.armed = null;
+    if (!this.arming.press(game.id)) return;
     const failed = this.onSwap(game, tradeValue(game, this.fame.peek(game)));
     if (failed) {
-      this.setStatus(failed, true);
+      this.setStatus(failed, 'error');
       this.refresh();
       return;
     }
     this.close();
   }
 
-  private rowHtml(game: Game, item: StockItem): string {
-    const cover = this.coverUrl?.(game);
+  private row(game: Game, item: StockItem) {
     const known = this.fame.peek(game) !== undefined;
     const value = tradeValue(game, this.fame.peek(game));
     const topUp = Math.max(0, item.due - value);
-    const state = describeCondition(game.condition);
-    const armed = this.armed?.id === game.id && performance.now() <= this.armed.until;
+    const armed = this.arming.isArmed(game.id);
     const short = topUp > this.wallet.coins;
     // Worth more than what is due: no change is given, so the button says what the swap throws away.
     const lost = Math.max(0, value - item.due);
     const terms = topUp ? ` +${topUp}` : lost ? ` (−${lost} value)` : ' even';
     const label = !known ? 'Valuing…' : short ? 'Too dear' : armed ? `Swap${terms}?` : `Swap${terms}`;
-    return `
-      <div class="catalogue__row">
-        ${cover ? `<img class="catalogue__cover" src="${escapeHtml(cover)}" alt="" loading="lazy" />` : ''}
-        <span class="catalogue__title">${escapeHtml(game.title)}</span>
-        ${state ? `<span class="catalogue__meta">${escapeHtml(state)}</span>` : ''}
-        <span class="catalogue__meta">${escapeHtml(getPlatform(game.platform).shortName)}</span>
-        <span class="catalogue__meta">counts for</span>${coinsHtml(value)}
-        <button type="button" data-action="swap" data-id="${escapeHtml(game.id)}" class="ui-btn${armed ? ' sell__armed' : ''}" ${!known || short ? 'disabled' : ''}>${label}</button>
-      </div>`;
+    return gameRow({
+      cover: coverImg(this.coverUrl?.(game)),
+      title: game.title,
+      metas: [describeCondition(game.condition), getPlatform(game.platform).shortName, 'counts for'],
+      tail: html`${priceHtml(value)}<button type="button" data-action="swap" data-id="${game.id}" class="ui-btn${armed ? ' sell__armed' : ''}"${attr('disabled', !known || short)}>${label}</button>`,
+    });
   }
 }

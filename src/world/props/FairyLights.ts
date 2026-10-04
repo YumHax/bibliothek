@@ -1,8 +1,8 @@
 import * as THREE from 'three';
 import type { Updatable } from '@/core/Engine';
-import { seededRandom } from '@/covers/generated/canvasUtils';
 import { Prop } from './Prop';
 import { standard, instancedBasic } from '../materials/palette';
+import { lcg } from '@/random';
 
 export interface FairyLightsOptions {
   /** Distance between the two ends, along local +x from the origin. Default 3. */
@@ -60,7 +60,7 @@ export class FairyLights extends Prop implements Updatable {
     const sag = options.sag ?? 0.2;
     const spacing = options.spacing ?? 0.15;
     this.twinkle = options.twinkle ?? true;
-    this.random = seededRandom(options.seed ?? 3);
+    this.random = lcg(options.seed ?? 3);
     const point = (t: number, target = new THREE.Vector3()) => target.set(t * length, height - sag * 4 * t * (1 - t), 0);
     const curve = new PointCurve(point);
     const wire = new THREE.Mesh(new THREE.TubeGeometry(curve, 24, 0.003, 4, false), WIRE);

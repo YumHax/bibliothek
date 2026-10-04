@@ -2,6 +2,42 @@
 # GLSL terms, brand names, identifiers the dictionaries do not know. One word a line, any case (the check is
 # case-insensitive). A misspelling found in a string, a comment or a doc is fixed in place, never added here;
 # an identifier with a typo inside goes here with a `# typo:` note until it is renamed.
+aeiou
+agnès
+belkacem
+benali
+diallo
+dreamcast
+emeka
+fernanda
+ferri
+gameboy
+gamegear
+gilles
+givable
+gégé
+haddou
+karim
+lambrini
+lemaire
+lendable
+linh
+lowballed
+mastersystem
+mireille
+moussa
+oddjob
+okonkwo
+okoro
+oury
+paks
+puech
+rania
+remi
+sandrine
+speedruns
+théo
+valette
 ÀÂÄÇÉÈÊËÎÏÔÖÙÛÜ
 aabb
 aabbs
@@ -409,3 +445,12 @@ zeon
 zfight
 zitz
 zqsd
+fwidth
+ifdef
+inversesqrt
+ivec
+finaliser
+fmix
+ints
+unlayered
+metas

@@ -3,7 +3,7 @@ import type { Performer } from '../people/performer';
 import type { Updatable } from '@/core/Engine';
 import type { Input } from '@/core/Input';
 import type { Interactable, LabelPlacement } from '@/interaction/Interactable';
-import type { ArcadeMachineLike, ArcadeResult, PlayerState, SessionActions } from '@/game/SessionActions';
+import type { ArcadeMachineLike, ArcadePayoutMode, ArcadeResult, PlayerState, SessionActions } from '@/game/SessionActions';
 import { ChipSpeaker } from '@/audio/ChipSpeaker';
 import { actionKeyLabel } from '@/ui/keys';
 import type { Furniture } from '../Furniture';
@@ -24,6 +24,7 @@ import { AttractLoop } from './AttractLoop';
 import { CabinetControls } from './CabinetControls';
 import { BEZEL_BORDER, DEPTH, FRONT_Z, SCREEN_HEIGHT, SCREEN_Y, SCREEN_Z, TOTAL_H, WIDTH, buildCabinetBody } from './cabinetModel';
 import { PooledLight } from '../lighting/LightPool';
+import { random } from '@/random';
 
 interface ArcadeCabinetOptions {
   /** Colour of the side panels. */
@@ -54,16 +55,15 @@ interface ArcadeCabinetOptions {
   wear?: number;
   /** Plays cost nothing and pay no tickets (LexiPunk, until its page reports scores). */
   freePlay?: boolean;
-  /**
-   * A cabinet in the flat (`world/homeArcade`): played for fun, no coin, no ticket, nothing counted at the arcade
-   * (`ArcadeMachineLike.atHome`); its screens say so (no INSERT COIN, no tickets on the cards).
-   */
-  atHome?: boolean;
+  /** What a play pays (`ArcadeMachineLike.payout`); default 'arcade'. 'none' (a cabinet at home) also takes INSERT COIN and the tickets off the cards. */
+  payout?: ArcadePayoutMode;
 }
 
 /** Where the player's eye goes while playing: standing at the control panel. */
 const PLAY_EYE_HEIGHT = 1.55;
 const PLAY_DISTANCE = 0.72;
+/** The screen glow's breathing while a game runs, radians a second (0.02 a millisecond, as it always was). */
+const PULSE_RATE = 20;
 /** Where a regular's feet go, in front of the panel. */
 const STAND_DISTANCE = 0.6;
 /** How well a regular plays, and how long they wait between two games. */
@@ -100,9 +100,9 @@ export class ArcadeCabinet extends RunMachine implements Furniture, Interactable
     return this.options.freePlay === true;
   }
 
-  /** A cabinet at home: nothing paid, nothing counted (`ArcadePlay`). */
-  get atHome(): boolean {
-    return this.options.atHome === true;
+  /** What a play pays: the hall's tickets, nothing (a cabinet at home), or an event's kitty. */
+  get payout(): ArcadePayoutMode {
+    return this.options.payout ?? 'arcade';
   }
   /** Where a regular stands: closer than the player's eye (`PLAY_DISTANCE`), so their hands reach the panel. */
   readonly standAt: THREE.Vector3;
@@ -112,6 +112,8 @@ export class ArcadeCabinet extends RunMachine implements Furniture, Interactable
   readonly partner?: PartnerSpot;
 
   private readonly options: ArcadeCabinetOptions;
+  /** Score points per ticket as this cabinet pays them: none at home, whatever the plan says. */
+  private readonly pointsPerTicket: number;
   protected readonly run: MachineRun;
   private readonly runner: GameRunner;
   private readonly screens: CabinetScreens;
@@ -128,6 +130,8 @@ export class ArcadeCabinet extends RunMachine implements Furniture, Interactable
   private readonly hands: [THREE.Vector3, THREE.Vector3] = [new THREE.Vector3(), new THREE.Vector3()];
   private frameAim: { x: number; y: number } | null = null;
   private hovered = false;
+  /** The screen glow's breathing while a game runs, on the machine's time (seconds ticked), not the wall clock's. */
+  private pulse = 0;
   private partnerName: string | null = null;
 
   constructor(game: ArcadeGame, input: Input, options: ArcadeCabinetOptions) {
@@ -135,6 +139,7 @@ export class ArcadeCabinet extends RunMachine implements Furniture, Interactable
     this.name = `ArcadeCabinet:${game.id}`;
     this.game = game;
     this.options = options;
+    this.pointsPerTicket = options.payout === 'none' ? 0 : options.pointsPerTicket;
     const color = options.color ?? 0x2f4f8f;
     const glowColor = options.glow ?? 0x9ad6ff;
     this.standAt = options.attachment?.standAt?.clone() ?? new THREE.Vector3(0, 0, STAND_DISTANCE);
@@ -147,7 +152,7 @@ export class ArcadeCabinet extends RunMachine implements Furniture, Interactable
     // The controls: one joystick and two buttons, or a set for each player on a two-player game.
     this.controls = new CabinetControls(this, twoPlayer);
     const price = (): { free: boolean; text: string } => ({ free: this.run.free, text: this.run.priceText() });
-    const info = { scores: options.scores, pointsPerTicket: options.pointsPerTicket, price, ...(options.atHome ? { home: true } : {}), ...(options.medals ? { medals: options.medals } : {}), ...(options.challenge ? { challenge: options.challenge } : {}) };
+    const info = { scores: options.scores, pointsPerTicket: this.pointsPerTicket, price, ...(options.payout === 'none' ? { home: true } : {}), ...(options.medals ? { medals: options.medals } : {}), ...(options.challenge ? { challenge: options.challenge } : {}) };
     this.screens = new CabinetScreens(game, info, options.listener, this);
     const { screen } = this.screens;
     this.add(screen);
@@ -180,15 +185,13 @@ export class ArcadeCabinet extends RunMachine implements Furniture, Interactable
     });
 
     this.speaker = new ChipSpeaker(screen, options.listener);
-    // Every sound it makes is news to whoever plays or watches it.
-    this.speaker.onPlay = (sfx) => this.stationEvents.onSound?.(sfx);
     this.run = new MachineRun({
       game,
       input,
       speaker: this.speaker,
       stationEvents: this.stationEvents,
       nextPlayCost: options.nextPlayCost,
-      pointsPerTicket: options.pointsPerTicket,
+      pointsPerTicket: this.pointsPerTicket,
       scores: options.scores,
       strip: this.strip,
       note: this.screens.note,
@@ -207,10 +210,10 @@ export class ArcadeCabinet extends RunMachine implements Furniture, Interactable
       screens: this.screens,
       speaker: this.speaker,
       scores: options.scores,
-      pointsPerTicket: options.pointsPerTicket,
+      pointsPerTicket: this.pointsPerTicket,
       ...(options.replays ? { replays: options.replays } : {}),
       seed: color ^ glowColor,
-      quiet: options.atHome === true,
+      quiet: options.payout === 'none',
       onTitle: () => {
         if (this.partner) this.game.setOpponent?.(this.partnerName ?? 'CPU', this.partnerName ? 0.55 : 0.7);
       },
@@ -238,8 +241,8 @@ export class ArcadeCabinet extends RunMachine implements Furniture, Interactable
   /** Starts a paid play (recorded, when the game can replay); `onOver` is told the result once. */
   start(onOver: (result: ArcadeResult) => void): void {
     this.run.start(onOver);
-    const seed = Math.floor(Math.random() * 0x100000000);
-    this.runner.reset({ best: this.options.scores.bestOf(this.game.id), pointsPerTicket: this.options.pointsPerTicket, seed }, this.game.demoable !== false);
+    const seed = Math.floor(random() * 0x100000000);
+    this.runner.reset({ best: this.options.scores.bestOf(this.game.id), pointsPerTicket: this.pointsPerTicket, seed }, this.game.demoable !== false);
   }
 
   /** The player walked away: a running game is lost without payout; initials half-entered are signed as they stand. */
@@ -288,7 +291,7 @@ export class ArcadeCabinet extends RunMachine implements Furniture, Interactable
   }
 
   label(_player: PlayerState): string {
-    const attract = this.atHome ? `${this.game.title} · play` : `${this.game.title} · insert a coin (${this.run.priceText()})`;
+    const attract = this.payout === 'none' ? `${this.game.title} · play` : `${this.game.title} · insert a coin (${this.run.priceText()})`;
     return this.run.label(this.game.gun ? { attract, playing: `${this.game.title} (${actionKeyLabel('walkAway')}: walk away) · shoot` } : { attract });
   }
 
@@ -313,13 +316,14 @@ export class ArcadeCabinet extends RunMachine implements Furniture, Interactable
     this.strip.update(dt);
     let controls = this.run.update(dt);
     let poolLevel = 0.55;
+    this.pulse += dt;
     switch (this.run.state) {
       case 'playing': {
         this.frameAim = this.game.gun ? this.screens.aimFromView() : null;
         controls = this.runner.step(dt, () => this.readControls());
         this.screens.paintGame(dt, true);
         this.speaker.playAll(this.game.takeSounds());
-        poolLevel = 0.9 + Math.sin(performance.now() * 0.02) * 0.12;
+        poolLevel = 0.9 + Math.sin(this.pulse * PULSE_RATE) * 0.12;
         if (this.game.over) this.run.finish(this.game.score, undefined, this.game.unreported === true);
         break;
       }
@@ -335,12 +339,12 @@ export class ArcadeCabinet extends RunMachine implements Furniture, Interactable
         break;
       case 'demo':
         controls = this.updateDemo(dt);
-        poolLevel = 0.8 + Math.sin(performance.now() * 0.02) * 0.1;
+        poolLevel = 0.8 + Math.sin(this.pulse * PULSE_RATE) * 0.1;
         break;
       case 'attract': {
         const dead = this.outOfOrder;
         controls = this.attract.update(dt, dead);
-        poolLevel = dead ? 0.15 + Math.random() * 0.15 : this.attract.showingTitle ? (this.hovered ? 0.7 : 0.5) : 0.65;
+        poolLevel = dead ? 0.15 + random() * 0.15 : this.attract.showingTitle ? (this.hovered ? 0.7 : 0.5) : 0.65;
         break;
       }
     }
@@ -372,7 +376,7 @@ export class ArcadeCabinet extends RunMachine implements Furniture, Interactable
   }
 
   private resetDemo(): void {
-    this.runner.reset({ best: this.options.scores.topOf(this.game.id).score, pointsPerTicket: this.options.pointsPerTicket });
+    this.runner.reset({ best: this.options.scores.topOf(this.game.id).score, pointsPerTicket: this.pointsPerTicket });
   }
 
   /** The player's keys (a click on the glass pulls a light gun's trigger), and where the gun points. */

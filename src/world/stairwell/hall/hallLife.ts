@@ -14,7 +14,8 @@ import { Concierge } from './Concierge';
 import { MeetingSetup } from './MeetingSetup';
 import { TimerButton } from './TimerButton';
 import { placeCoproLook } from './coproLook';
-import { STAIRWELL_PLAN as plan, STOREYS, landingY } from '../stairwellPlan';
+import { STAIRWELL_PLAN as plan } from '../stairwellPlan';
+import { STOREYS, landingY } from '@/world/measures/building';
 
 interface HallLifeParts {
   stairs: Staircase;
@@ -31,7 +32,7 @@ interface HallLifeParts {
  */
 export function placeHallLife(
   zone: Zone,
-  { listener, today, sky, building, money }: Pick<BuildContext, 'listener' | 'today' | 'sky' | 'building' | 'money'>,
+  { listener, today, sky, building, money, social }: Pick<BuildContext, 'listener' | 'today' | 'sky' | 'building' | 'money' | 'social'>,
   { stairs, lights, ground }: HallLifeParts,
 ): StairWalker[] {
   const hours = (): number => sky.dayNight.state.hours;
@@ -53,12 +54,12 @@ export function placeHallLife(
 
   // The concierge's lodge on the east wall, her Christmas box on its sill, and herself.
   const room = zone.place(new Lodge(), new THREE.Vector3());
-  const concierge = zone.place(new Concierge({ viewer: listener, ground, hours, day, lodge: room, extraLines: () => meeting.gossip() }), new THREE.Vector3());
+  const concierge = zone.place(new Concierge({ viewer: listener, ground, hours, day, lodge: room, extraLines: () => meeting.gossip(), people: social }), new THREE.Vector3());
   zone.place(concierge.walker, concierge.walker.position.clone());
   zone.place(new TipBox((session) => concierge.tipped(session)), new THREE.Vector3(hall.x1 - 0.08, lodge.window.sill, lodge.tipBox.z), -Math.PI / 2);
 
   // The meeting's chairs and its syndic, on its day.
-  const setup = zone.place(new MeetingSetup({ viewer: listener, ground, meeting, hours }), new THREE.Vector3());
+  const setup = zone.place(new MeetingSetup({ viewer: listener, ground, meeting, hours, people: social }), new THREE.Vector3());
   zone.place(setup.syndic, setup.syndic.position.clone());
 
   // A timer button on every floor landing's wall (the hall's by the cellar door).

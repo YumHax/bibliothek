@@ -1,8 +1,8 @@
 import { Sheet, type Rng, groundSquash, outline, sizePx, worldPoint } from './Sheet';
-import { between, integer, pick } from './paint';
 import { paintBox, paintGroundShadow, paintPost } from './Solid';
 import { currentSeason } from '@/time/season';
 import { type SeatedPose, paintSeated } from './figures';
+import { between, integer, pick } from '@/random';
 
 /**
  * The things that make the park lived in, each at a ground point in metres from the eye: flower

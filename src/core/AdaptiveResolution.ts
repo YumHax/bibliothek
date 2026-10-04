@@ -1,6 +1,4 @@
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, value));
-}
+import { clamp } from '@/math/scalar';
 
 /** Seconds of frames judged together. */
 const WINDOW = 1;

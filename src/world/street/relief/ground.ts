@@ -1,4 +1,5 @@
-import { FRONT, KERB_HEIGHT, PARK_STREET, SIDE_STREET, STREET_ENDS, STREET_PLAN } from '../streetPlan';
+import { STREET_PLAN } from '../streetPlan';
+import { FRONT, KERB_HEIGHT, PARK_STREET, SIDE_STREET, STREET_ENDS } from '@/world/measures/street';
 
 /** The road's three rectangles (zone-local x0, z0, x1, z1): Front Street, Park Street, the side street. */
 const ROAD_RECTS: readonly (readonly [number, number, number, number])[] = [

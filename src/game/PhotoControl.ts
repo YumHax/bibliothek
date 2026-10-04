@@ -7,14 +7,16 @@ export interface PhotoParts {
   photo?: { readonly isActive: boolean; enter(): void; handleKey(code: string): boolean };
   /** The journal's panel (the notebook on the hall console opens it too). */
   journalPanel?: ModalLike;
+  /** The People book (docs/social.md): everyone the player knows. */
+  peopleBook?: ModalLike;
 }
 
-/** P: photo mode (while it is on every key is its own); J: the journal. */
+/** P: photo mode (while it is on every key is its own); J: the journal; I: the People book. */
 export class PhotoControl implements KeyRoute {
   constructor(private readonly parts: PhotoParts, private readonly openPanel: (panel: ModalLike) => void) {}
 
   onKey(code: string): boolean {
-    const { photo, journalPanel } = this.parts;
+    const { photo, journalPanel, peopleBook } = this.parts;
     if (photo?.isActive) return photo.handleKey(code);
     if (photo && isAction(code, 'photoMode')) {
       photo.enter();
@@ -22,6 +24,10 @@ export class PhotoControl implements KeyRoute {
     }
     if (journalPanel && isAction(code, 'journal')) {
       this.openPanel(journalPanel);
+      return true;
+    }
+    if (peopleBook && isAction(code, 'people')) {
+      this.openPanel(peopleBook);
       return true;
     }
     return false;

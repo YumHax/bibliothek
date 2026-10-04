@@ -1,7 +1,7 @@
 import * as THREE from 'three';
-import { seededRandom } from '@/covers/generated/canvasUtils';
 import { paint, standard, instancedStandard } from '../materials/palette';
 import { Prop } from './Prop';
+import { lcg } from '@/random';
 
 export interface WreathOptions {
   /** Outer radius, metres. Default 0.19. */
@@ -26,7 +26,7 @@ export class Wreath extends Prop {
     const radius = options.radius ?? 0.19;
     const tube = radius * 0.24;
     const ring = radius - tube;
-    const random = seededRandom(options.seed ?? 9);
+    const random = lcg(options.seed ?? 9);
     const base = new THREE.Mesh(new THREE.TorusGeometry(ring, tube, 7, 22), FIR);
     base.position.z = tube;
     base.castShadow = false;

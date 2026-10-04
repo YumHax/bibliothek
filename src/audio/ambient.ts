@@ -1,6 +1,8 @@
-import { audioBus, audioContext, type AudioChannel } from './audioContext';
+import { audioBus, startedAudioContext, type AudioChannel } from './audioContext';
 import { whiteNoise } from './noise';
 import { SpatialOut } from './spatial';
+import { noiseBurst, rand } from './synth';
+import { random } from '@/random';
 
 /**
  * A small sound a room makes on its own (the fridge's hum, a clock's tick, a dripping tap),
@@ -156,7 +158,7 @@ export abstract class Voice implements AmbientVoice {
     const source = ctx.createBufferSource();
     source.buffer = buffer;
     source.loop = true;
-    source.start(0, Math.random() * buffer.duration);
+    source.start(0, random() * buffer.duration);
     this.sources.push(source);
     return source;
   }
@@ -168,10 +170,10 @@ export abstract class Voice implements AmbientVoice {
   /** Builds the graph once the context may run; false until then. */
   private ensure(): boolean {
     if (this.ctx) return true;
-    if (this.failed || !userHasInteracted()) return false;
+    if (this.failed) return false;
     try {
-      const ctx = audioContext();
-      if (ctx.state !== 'running') return false;
+      const ctx = startedAudioContext();
+      if (!ctx) return false;
       this.ctx = ctx;
       this.master = ctx.createGain();
       this.master.gain.value = 0;
@@ -262,7 +264,7 @@ export class FridgeHum extends Voice {
     this.running = !this.running;
     this.cycleLeft = this.running ? rand(50, 90) : rand(30, 60);
     this.motor.gain.setTargetAtTime(this.running ? 1 : 0, ctx.currentTime, this.running ? 0.6 : 1.2);
-    click(ctx, this.master!, 1800, 0.12, this.noise(ctx, 0.03));
+    noiseBurst(ctx, this.master!, ctx.currentTime, { band: 1800, q: 4, level: 0.12, length: 0.018, attack: 0, floor: 0.0001, noise: this.noise(ctx, 0.03), duration: 0.02 });
   }
 }
 
@@ -271,7 +273,7 @@ export class FridgeHum extends Voice {
  * unless a clock drives it (`strike` on each step of its second hand): then the two stay in step.
  */
 export class ClockTick extends Voice {
-  private untilNext = Math.random();
+  private untilNext = random();
   private tock = false;
   private burst: AudioBuffer | null = null;
   /** A clock strikes each tick itself: the voice's own second stops. */
@@ -297,7 +299,7 @@ export class ClockTick extends Voice {
   /** Tick or tock, never twice the same: a few per cent off in pitch and loudness, like a real escapement. */
   private escapement(ctx: AudioContext, out: AudioNode, burst: AudioBuffer): void {
     const hz = (this.tock ? 2600 : 3400) * rand(0.96, 1.04);
-    click(ctx, out, hz, 0.5 * rand(0.9, 1.1), burst);
+    noiseBurst(ctx, out, ctx.currentTime, { band: hz, q: 4, level: 0.5 * rand(0.9, 1.1), length: 0.018, attack: 0, floor: 0.0001, noise: burst, duration: 0.02 });
   }
 
   protected override tick(ctx: AudioContext, dt: number): void {
@@ -311,34 +313,3 @@ export class ClockTick extends Voice {
   }
 }
 
-/** A short band-passed noise click (a relay, an escapement). */
-function click(ctx: AudioContext, out: AudioNode, frequency: number, level: number, burst: AudioBuffer): void {
-  const now = ctx.currentTime;
-  const source = ctx.createBufferSource();
-  source.buffer = burst;
-  const band = ctx.createBiquadFilter();
-  band.type = 'bandpass';
-  band.frequency.value = frequency;
-  band.Q.value = 4;
-  const gain = ctx.createGain();
-  gain.gain.setValueAtTime(level, now);
-  gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.018);
-  source.connect(band).connect(gain).connect(out);
-  // A burst longer than a click gives each one its own stretch of noise.
-  const spare = burst.duration - CLICK_S;
-  if (spare > 0.005) source.start(now, Math.random() * spare, CLICK_S);
-  else source.start(now);
-}
-
-/** How much of the burst a click plays (s). */
-const CLICK_S = 0.02;
-
-/** Whether the page has had a gesture, so an AudioContext may start (`navigator.userActivation`, where the browser has it). */
-function userHasInteracted(): boolean {
-  const activation = (navigator as Navigator & { userActivation?: { hasBeenActive: boolean } }).userActivation;
-  return activation ? activation.hasBeenActive : true;
-}
-
-function rand(min: number, max: number): number {
-  return min + Math.random() * (max - min);
-}

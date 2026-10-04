@@ -9,6 +9,7 @@ import { isShopOpen } from '../shops/shopHours';
 import type { ShopKind, Vec2 } from '../streetPlan';
 import { Figure } from './Figure';
 import type { TalkRole } from './streetTalk';
+import { random, within } from '@/random';
 
 /** A spot where a few people stand together a while (`STREET_PLAN.loiterers`). */
 export interface LoiterSpec {
@@ -136,7 +137,7 @@ export class Loiterers extends THREE.Group implements Furniture, Updatable {
 
   private arrive(g: Group, instantly: boolean): void {
     g.there = true;
-    g.clock = between(STAY);
+    g.clock = within(random, STAY);
     g.figures.forEach((f, i) => {
       const [x, z] = g.spec.at[i]!;
       f.show(new THREE.Vector3(x, 0, z), instantly);
@@ -150,7 +151,7 @@ export class Loiterers extends THREE.Group implements Furniture, Updatable {
 
   private go(g: Group): void {
     g.there = false;
-    g.clock = between(BREAK);
+    g.clock = within(random, BREAK);
     for (const f of g.figures) f.hide();
   }
 
@@ -158,9 +159,9 @@ export class Loiterers extends THREE.Group implements Furniture, Updatable {
   private talk(g: Group, dt: number): void {
     g.chat -= dt;
     if (g.chat > 0) return;
-    g.chat = between(CHAT_EVERY);
-    const talker = g.figures[Math.floor(Math.random() * g.figures.length)]!;
-    const seconds = 1.2 + Math.random() * 2.2;
+    g.chat = within(random, CHAT_EVERY);
+    const talker = g.figures[Math.floor(random() * g.figures.length)]!;
+    const seconds = 1.2 + random() * 2.2;
     talker.walker.talkAlong(seconds);
     talker.walker.getWorldPosition(this.gaze);
     this.gaze.y += 1.55;
@@ -169,6 +170,3 @@ export class Loiterers extends THREE.Group implements Furniture, Updatable {
   }
 }
 
-function between([lo, hi]: readonly [number, number]): number {
-  return lo + Math.random() * (hi - lo);
-}

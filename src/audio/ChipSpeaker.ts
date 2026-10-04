@@ -2,6 +2,8 @@ import * as THREE from 'three';
 import { audioBus, startedAudioContext } from './audioContext';
 import { whiteNoise } from './noise';
 import { stereoPan } from './spatial';
+import { random } from '@/random';
+import { loudness } from './hearing';
 
 /** Every blip a little off (±3 % pitch): a machine that plays the same coin twice in a row does not sound like a loop. */
 const PITCH_JITTER = 0.03;
@@ -20,11 +22,19 @@ export interface SfxEvent {
   pitch?: number;
 }
 
+/** Where a speaker with no place in the room sends its sounds: a node that places them (a set's own speaker). */
+interface FixedOutput {
+  readonly ctx: AudioContext;
+  readonly out: AudioNode;
+}
+
 interface ChipSpeakerOptions {
   /** Loudness at `refDistance` and closer, linear. Default 0.22. */
   volume?: number;
   /** Metres within which it plays at full volume; it falls off as 1/distance beyond. Default 1. */
   refDistance?: number;
+  /** Into this output at `volume`, no place in the room (`ChipSpeaker.into`). */
+  output?: FixedOutput;
 }
 
 type Wave = OscillatorType;
@@ -126,20 +136,28 @@ export class ChipSpeaker {
   /** Told of every sound asked for, heard or not (the audio may not have started): the people at the machine react to them. */
   onPlay: ((sfx: Sfx) => void) | null = null;
 
+  private readonly output: FixedOutput | null;
+
   constructor(
-    private readonly anchor: THREE.Object3D,
-    private readonly listener: THREE.Object3D,
+    private readonly anchor: THREE.Object3D | null,
+    private readonly listener: THREE.Object3D | null,
     options: ChipSpeakerOptions = {},
   ) {
     this.volume = options.volume ?? 0.22;
     this.refDistance = options.refDistance ?? 1;
+    this.output = options.output ?? null;
+  }
+
+  /** A speaker with no place in the room: its sounds go into `output` at `volume` (a TV program's, into the set's own speaker, which places them). */
+  static into(output: FixedOutput, volume = 0.22): ChipSpeaker {
+    return new ChipSpeaker(null, null, { volume, output });
   }
 
   play(sfx: Sfx, pitch = 1): void {
     this.onPlay?.(sfx);
     const ctx = this.build();
     if (!ctx || !this.out) return;
-    pitch *= 1 + (Math.random() * 2 - 1) * PITCH_JITTER;
+    pitch *= 1 + (random() * 2 - 1) * PITCH_JITTER;
     const recipe = RECIPES[sfx];
     const t0 = ctx.currentTime + 0.005;
     for (const note of recipe.notes ?? []) {
@@ -171,7 +189,7 @@ export class ChipSpeaker {
       env.gain.setValueAtTime(peak, start);
       env.gain.exponentialRampToValueAtTime(0.0001, start + hiss.length);
       source.connect(filter).connect(env).connect(this.out);
-      source.start(start, Math.random() * 0.5);
+      source.start(start, random() * 0.5);
       source.stop(start + hiss.length + 0.02);
       source.onended = () => env.disconnect();
     }
@@ -189,11 +207,11 @@ export class ChipSpeaker {
 
   /** Level and pan from where the listener is: 1/distance past `refDistance`, panned by the side the speaker is on. */
   follow(immediate = false): void {
-    if (!this.ctx || !this.out || !this.pan) return;
+    if (!this.ctx || !this.out || !this.pan || !this.anchor || !this.listener) return;
     this.anchor.getWorldPosition(this.here);
     this.listener.getWorldPosition(this.ear);
     const distance = this.here.distanceTo(this.ear);
-    const gain = this.volume * Math.min(1, this.refDistance / Math.max(0.01, distance));
+    const gain = this.volume * loudness(distance, { referenceDistance: this.refDistance, rolloff: 1, maxDistance: Infinity });
     // The side it is heard from: the flat's shared rule (`spatial.ts`).
     const pan = stereoPan(this.listener, this.here);
     if (immediate) {
@@ -216,6 +234,14 @@ export class ChipSpeaker {
 
   private build(): AudioContext | null {
     if (this.ctx) return this.ctx;
+    if (this.output) {
+      // Into the given output, at the set volume: whoever owns the output places the sound.
+      this.ctx = this.output.ctx;
+      this.out = this.ctx.createGain();
+      this.out.gain.value = this.volume;
+      this.out.connect(this.output.out);
+      return this.ctx;
+    }
     const ctx = startedAudioContext();
     if (!ctx) return null;
     this.ctx = ctx;

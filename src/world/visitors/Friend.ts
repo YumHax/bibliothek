@@ -3,6 +3,7 @@ import type { SessionActions } from '@/game/SessionActions';
 import { Walker } from '../people/Walker';
 import { randomLook } from '../people/looks';
 import type { FriendPlan } from './friendsPlan';
+import type { SocialHook } from '../people/socialHook';
 
 /** The radius (m) their path's corners are swept round with: tight enough for the flat's doorways. */
 const CORNERS = 0.25;
@@ -26,6 +27,15 @@ export class Friend extends Walker {
   chat: (() => string) | null = null;
   /** Hears them talk: every line or word said, when its bubble shows (the host plays it as a murmur at their mouth). */
   voice: ((text: string) => void) | null = null;
+  /**
+   * Talking to them (docs/social.md "Friends"): a click opens the conversation, what they asked among its entries;
+   * null (a guest, a build without the social layer): the line, or the request answered straight away.
+   */
+  talker: SocialHook | null = null;
+  /** The session of the last click (the conversation's entries open panels through it). */
+  session: SessionActions | null = null;
+  /** Clicked to talk: the visit turns them to the player. */
+  onTalk: (() => void) | null = null;
 
   constructor(readonly plan: FriendPlan, viewer: THREE.Object3D) {
     // Corners swept rather than pivoted; the `Visit` makes way for the player itself (a word, a sidestep clear of walls).
@@ -41,11 +51,16 @@ export class Friend extends Walker {
 
   override label(): string | null {
     if (!this.isPresent) return null;
-    return this.request?.label ?? `${this.plan.name} · chat`;
+    return this.request?.label ?? this.talker?.caption() ?? `${this.plan.name} · chat`;
   }
 
   override activate(session: SessionActions): void {
     if (!this.isPresent) return;
+    this.session = session;
+    if (this.talker) {
+      this.onTalk?.();
+      if (this.talker.open(session)) return;
+    }
     if (this.request) {
       this.request.answer(session);
       return;

@@ -2,7 +2,8 @@ import type { Game } from '@/catalog/types';
 import { getPlatform } from '@/catalog/platforms';
 import { formatReleaseDate } from '@/catalog/format';
 import { escapeHtml } from '@/ui/html';
-import { formatCount } from '@/ui/money';
+import { formatCount } from '@/text/count';
+import { formatCoins } from '@/text/money';
 import type { CollectionSummary } from './collectionSummary';
 
 /*
@@ -17,7 +18,7 @@ export function collectionPage(summary: CollectionSummary, coverUrl: (game: Game
     .map(({ platform, count }) => `<button type="button" data-platform="${escapeHtml(platform.id)}" style="--accent:${hex(platform.accentColor)}">${escapeHtml(platform.shortName)} <b>${count}</b></button>`)
     .join('');
   const pride = summary.pride
-    .map((p) => `<li>${cover(p.game, coverUrl)}<strong>${p.grail ? '★ ' : ''}${escapeHtml(p.game.title)}</strong><span>${escapeHtml(getPlatform(p.game.platform).shortName)} · about ${formatCount(p.value)} coins</span></li>`)
+    .map((p) => `<li>${cover(p.game, coverUrl)}<strong>${p.grail ? '★ ' : ''}${escapeHtml(p.game.title)}</strong><span>${escapeHtml(getPlatform(p.game.platform).shortName)} · about ${formatCoins(p.value)}</span></li>`)
     .join('');
   const cards = summary.games.map((game) => card(game, coverUrl)).join('\n');
   const games = summary.games.length;
@@ -56,7 +57,7 @@ footer { margin-top: 40px; color: var(--dim); font-size: 12px; }
 </head>
 <body>
 <h1>The collection</h1>
-<p class="sub">${escapeHtml(who)} · ${games} game${games === 1 ? '' : 's'} · worth about ${formatCount(summary.value)} coins</p>
+<p class="sub">${escapeHtml(who)} · ${formatCount(games, 'game')} · worth about ${formatCoins(summary.value)}</p>
 <div class="chips">${chips}</div>
 ${pride ? `<h2>PRIDE OF THE SHELVES</h2><ul class="pride">${pride}</ul>` : ''}
 <h2>EVERY GAME</h2>

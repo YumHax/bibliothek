@@ -1,4 +1,5 @@
-import { type ArcadeControls, SCREEN_H, SCREEN_W, clamp } from './ArcadeGame';
+import { clamp } from '@/math/scalar';
+import { type ArcadeControls, SCREEN_H, SCREEN_W } from './ArcadeGame';
 import { BaseGame, PLAY_TOP } from './BaseGame';
 
 const ROUND_SECONDS = 15;

@@ -4,20 +4,22 @@ import type { Interactable, LabelPlacement } from '@/interaction/Interactable';
 import type { ArcadeMachineLike, ArcadeResult, SessionActions } from '@/game/SessionActions';
 import { actionKeyLabel } from '@/ui/keys';
 import { ChipSpeaker, type Sfx } from '@/audio/ChipSpeaker';
-import { createCanvas, seededRandom, toTexture } from '@/covers/generated/canvasUtils';
+import { createCanvas, toTexture } from '@/covers/generated/canvasUtils';
 import type { Furniture } from '../Furniture';
 import { boxMesh, cylinderMesh, eyePoseAt, invisibleHitbox } from '../meshUtils';
 import { layMesh, WALL } from '../surface/layers';
 import { paint, standard } from '../materials/palette';
 import { drawText } from './games/ArcadeGame';
-import { ordinal } from './InitialsEntry';
+import { formatNumber } from '@/text/count';
 import { BALL_R, type PinballEvent, PinballSim } from './pinball/PinballSim';
 import type { Station, StationEvents } from './Station';
 import type { ScoreTable } from './scoreTable';
 import type { TicketMachineWiring } from './TicketMachine';
 import { MachineRun, type MachineState } from './MachineRun';
+import { endCardNote, playAgainLine } from './EndCard';
 import { RunMachine } from './RunMachine';
 import { CHROME, type MachineDisplay, displayScreen, outOfOrderNote } from './machineParts';
+import { lcg } from '@/random';
 
 export interface PinballOptions {
   /** The table's name, on the backglass. Default METEOR ALLEY. */
@@ -92,6 +94,8 @@ export class Pinball extends RunMachine implements Furniture, Interactable, Upda
   readonly focus = new THREE.Vector3(0, FRONT_TOP + RISE / 2, 0);
   readonly stationEvents: StationEvents = {};
   readonly freeWhenBroke = true;
+  /** Pays the hall's tickets through the arcade's books. */
+  readonly payout = 'arcade' as const;
   readonly game: { readonly id: string; readonly title: string; readonly hint: string };
 
   private readonly sim = new PinballSim(FIELD_L / FIELD_W);
@@ -111,7 +115,6 @@ export class Pinball extends RunMachine implements Furniture, Interactable, Upda
   private clock = 0;
   private displayClock = 0;
   private demoHold = 0;
-  private bestBeaten = false;
   private readonly local = new THREE.Vector3();
 
   constructor(options: PinballOptions, wiring: PinballWiring) {
@@ -120,7 +123,7 @@ export class Pinball extends RunMachine implements Furniture, Interactable, Upda
     this.wiring = wiring;
     this.title = options.title ?? 'METEOR ALLEY';
     this.game = { id: 'pinball', title: this.title, hint: 'A / D flip · hold Space to pull the plunger, let go to launch' };
-    const random = seededRandom((options.seed ?? 1) * 6151);
+    const random = lcg((options.seed ?? 1) * 6151);
     const color = options.color ?? 0x3a1f5c;
     const body = paint(color, 0.5);
     const accent = new THREE.Color(options.accent ?? 0xff8a2a);
@@ -246,8 +249,6 @@ export class Pinball extends RunMachine implements Furniture, Interactable, Upda
       if (mesh.isMesh && mesh !== this.ball) mesh.receiveShadow = true;
     });
     this.speaker = new ChipSpeaker(backglass, wiring.listener);
-    // Every sound it makes is news to whoever plays or watches it.
-    this.speaker.onPlay = (sfx) => this.stationEvents.onSound?.(sfx);
     this.run = new MachineRun({
       game: this.game,
       input: wiring.input,
@@ -270,7 +271,6 @@ export class Pinball extends RunMachine implements Furniture, Interactable, Upda
   start(onOver: (result: ArcadeResult) => void): void {
     this.run.start(onOver);
     this.sim.reset();
-    this.bestBeaten = false;
   }
 
   abort(): void {
@@ -339,11 +339,7 @@ export class Pinball extends RunMachine implements Furniture, Interactable, Upda
         const controls = this.run.readControls();
         this.sim.update(dt, { left: controls.left, right: controls.right, launch: controls.fire });
         this.playEvents();
-        const best = this.wiring.scores.bestOf(this.game.id);
-        if (!this.bestBeaten && this.sim.score > best && best > 0) {
-          this.bestBeaten = true;
-          this.speaker.play('best');
-        }
+        this.run.noteScore(this.sim.score);
         if (this.sim.over) this.run.finish(this.sim.score);
         break;
       }
@@ -457,7 +453,7 @@ export class Pinball extends RunMachine implements Furniture, Interactable, Upda
     }
     drawText(ctx, this.title, W / 2, H * 0.3, 36, '#ffe680');
 
-    const { entry, last, lastRank } = this.run;
+    const { entry, last } = this.run;
     if (this.state === 'initials' && entry) {
       entry.draw(ctx, W / 2, H * 0.66, 1.5);
     } else {
@@ -469,16 +465,16 @@ export class Pinball extends RunMachine implements Furniture, Interactable, Upda
       const top = this.wiring.scores.topOf(this.game.id);
       const live = this.state === 'playing' || this.state === 'demo';
       drawText(ctx, live && this.sim.multiplier > 1 ? `x${this.sim.multiplier}` : 'PLAYER 1', 60, H * 0.5 + 24, 12, '#c9c4ff', 'left');
-      drawText(ctx, `HI ${top.name} ${format(top.score)}`, W - 60, H * 0.5 + 24, 12, '#c9c4ff', 'right');
+      drawText(ctx, `HI ${top.name} ${formatNumber(top.score)}`, W - 60, H * 0.5 + 24, 12, '#c9c4ff', 'right');
       const score = this.state === 'attract' ? 0 : this.state === 'over' ? last.score : this.sim.score;
-      drawText(ctx, format(score), W / 2, H * 0.5 + 76, 34, '#ff8a3a');
+      drawText(ctx, formatNumber(score), W / 2, H * 0.5 + 76, 34, '#ff8a3a');
       const blink = Math.floor(this.clock * 3) % 2 === 0;
       if (this.state === 'over') {
         // Every ticket counted so far, the bonuses' (challenge, medal...) too.
         drawText(ctx, `${this.run.shownTotal} TICKETS`, W / 2, H * 0.8, 22, '#ffd23a');
-        const note = lastRank !== null ? `${ordinal(lastRank + 1)} ON THE BOARD!` : last.best ? 'NEW BEST!' : last.first ? 'FIRST SCORE!' : 'GAME OVER';
+        const note = endCardNote(this.run, 'GAME OVER');
         drawText(ctx, note, W / 2, H * 0.87, 16, blink ? '#7ee787' : '#ffffff');
-        if (this.run.canReplay) drawText(ctx, `${actionKeyLabel('fire').toUpperCase()}: AGAIN (${this.run.priceText().toUpperCase()})`, W / 2, H * 0.94, 12, '#ffd6a0');
+        if (this.run.canReplay) drawText(ctx, playAgainLine(this.run), W / 2, H * 0.94, 12, '#ffd6a0');
       } else if (this.state === 'attract') {
         drawText(ctx, 'GAME OVER', W / 2, H * 0.82, 20, '#ff4a4a');
         if (blink) drawText(ctx, 'INSERT COIN', W / 2, H * 0.9, 16, '#ffd6a0');
@@ -549,8 +545,4 @@ export class Pinball extends RunMachine implements Furniture, Interactable, Upda
     drawText(ctx, this.title, 0.45 * W, 0.47 * W, 16, '#ffe680');
     return toTexture(canvas, 'grazing');
   }
-}
-
-function format(n: number): string {
-  return n.toLocaleString('en-US');
 }

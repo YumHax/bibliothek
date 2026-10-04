@@ -7,6 +7,7 @@ import { PooledLight } from '../../lighting/LightPool';
 import { LAMP_LIGHT } from '../../lighting/lampColours';
 import { TubeHum } from '../shopSounds';
 import { Glows, type PropVoice, type ShopFitting, type ShopVoiced } from './fitting';
+import { random } from '@/random';
 
 export interface TubeBattenOptions {
   /** Length of the batten, metres. Default 1.2 (a 4 ft tube). */
@@ -56,7 +57,7 @@ export class TubeBatten extends Prop implements ShopFitting, ShopVoiced, Updatab
     const tubes = options.tubes ?? 2;
     const drop = options.drop ?? 0;
     this.flickers = options.flicker ?? false;
-    this.untilStutter = STUTTER_EVERY * (0.5 + Math.random());
+    this.untilStutter = STUTTER_EVERY * (0.5 + random());
     const top = -drop;
     if (drop > 0) {
       for (const x of [-length * 0.4, length * 0.4]) part(this, 0.006, drop, 0.006, CHAIN, { x, y: -drop / 2 });
@@ -103,13 +104,13 @@ export class TubeBatten extends Prop implements ShopFitting, ShopVoiced, Updatab
     if (!this.flickers || !this.lit) return;
     if (this.stutter > 0) {
       this.stutter -= dt;
-      this.render(this.stutter > 0 ? (Math.random() < 0.5 ? 0.15 : 0.9) : 1);
+      this.render(this.stutter > 0 ? (random() < 0.5 ? 0.15 : 0.9) : 1);
       return;
     }
     this.untilStutter -= dt;
     if (this.untilStutter > 0) return;
-    this.untilStutter = STUTTER_EVERY * (0.3 + Math.random() * 1.7);
-    this.stutter = STUTTER_FOR * (0.5 + Math.random());
+    this.untilStutter = STUTTER_EVERY * (0.3 + random() * 1.7);
+    this.stutter = STUTTER_FOR * (0.5 + random());
     this.hum?.stutter();
   }
 

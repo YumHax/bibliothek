@@ -6,6 +6,7 @@ import type { CollectionSummary } from '@/share/collectionSummary';
 import { download, fileDate } from '@/share/download';
 import { action, group } from './fields';
 import type { SettingsHost } from './GameSettingsForm';
+import { formatCount } from '@/text/count';
 
 interface SaveFileOptions {
   version: string;
@@ -43,7 +44,7 @@ export function addSaveFileSettings(host: SettingsHost, options: SaveFileOptions
       return;
     }
     const when = read.file.exportedAt ? ` written on ${read.file.exportedAt.slice(0, 10)}` : '';
-    const games = read.games ? ` (${read.games} game${read.games === 1 ? '' : 's'})` : '';
+    const games = read.games ? ` (${formatCount(read.games, 'game')})` : '';
     host.confirm({
       title: 'Load this save?',
       message: `The save${when}${games} replaces everything in this browser: coins, collection, the flat, the arcade, the market. Settings stay. Download your own save first if you may want it back.`,

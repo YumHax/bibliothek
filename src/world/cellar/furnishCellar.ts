@@ -33,7 +33,7 @@ const STEP: Record<StorageBox['faces'], [number, number]> = { north: [0, 1], sou
  * board (a power cut is reset here too), the rat, the drips, the stairs back up to the hall, and whatever another
  * feature dresses the cellars with (`huntHook`). A zone reached by travel only, no `Room`: returns its light level.
  */
-export function furnishCellar(zone: Zone, ctx: BuildContext): ZoneHandle {
+export function furnishCellar(zone: Zone, ctx: Pick<BuildContext, 'sky' | 'listener' | 'acoustics' | 'collection' | 'covers' | 'market' | 'money' | 'today'>): ZoneHandle {
   const { listener, acoustics } = ctx;
   const hearing = { listener, acoustics };
   const origin = new THREE.Vector3();
@@ -84,7 +84,7 @@ export function furnishCellar(zone: Zone, ctx: BuildContext): ZoneHandle {
  * The game in box `front`'s carton: one drawn for the box (the same each time, a game the player does not own), laid
  * on the carton, free to take; taken, it is gone for good (`cellarFinds`).
  */
-async function placeFind(zone: Zone, front: CellarBox, { covers, collection, money, market }: BuildContext): Promise<void> {
+async function placeFind(zone: Zone, front: CellarBox, { covers, collection, money, market }: Pick<BuildContext, 'covers' | 'collection' | 'money' | 'market'>): Promise<void> {
   const games = await market.stock.randomGames(`cellar:${front.number}`, 6).catch(() => []);
   const game = games.find((g) => !collection.owns(g.id));
   if (!game || !zone.isLoaded) return;

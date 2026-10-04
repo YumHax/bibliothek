@@ -1,21 +1,24 @@
-/* `?payout`: the arcade balance table, top right, above the canvas. */
-.payout-overlay {
-  position: fixed;
-  top: 0.75rem;
-  right: 0.75rem;
-  z-index: var(--z-hud);
-  max-width: 22rem;
-  padding: 0.5rem 0.7rem;
-  border-radius: var(--ui-radius-sm);
-  background: var(--ui-panel);
-  color: var(--ui-text);
-  font: 12px/1.35 ui-monospace, Menlo, monospace;
-  pointer-events: none;
+/* `?payout`: the arcade balance table, top right, above the canvas. Fixed pixels on purpose: a debug readout, not interface text. */
+@layer tokens, base, components, panels;
+@layer panels {
+  .payout-overlay {
+    position: fixed;
+    top: var(--sp-3);
+    right: var(--sp-3);
+    z-index: var(--z-hud);
+    max-width: 22rem;
+    padding: 0.5rem 0.7rem;
+    border-radius: var(--ui-radius-sm);
+    background: var(--ui-panel);
+    color: var(--ui-text);
+    font: 12px/1.35 var(--ui-font-mono);
+    pointer-events: none;
+  }
+  .payout-overlay header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.3rem; }
+  .payout-overlay button { pointer-events: auto; font: inherit; color: inherit; background: var(--ui-fill); border: 1px solid var(--ui-border); border-radius: var(--ui-radius-sm); cursor: pointer; }
+  .payout-overlay table { border-collapse: collapse; width: 100%; }
+  .payout-overlay th, .payout-overlay td { padding: 0.1rem 0.35rem; text-align: right; }
+  .payout-overlay th:first-child, .payout-overlay td:first-child { text-align: left; }
+  .payout-overlay th { color: var(--ui-text-dim); font-weight: normal; }
+  .payout-overlay p { margin: 0.35rem 0 0; opacity: var(--ui-faint); font-size: 11px; }
 }
-.payout-overlay header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.3rem; }
-.payout-overlay button { pointer-events: auto; font: inherit; color: inherit; background: var(--ui-fill); border: 1px solid var(--ui-border); border-radius: var(--ui-radius-sm); cursor: pointer; }
-.payout-overlay table { border-collapse: collapse; width: 100%; }
-.payout-overlay th, .payout-overlay td { padding: 0.1rem 0.35rem; text-align: right; }
-.payout-overlay th:first-child, .payout-overlay td:first-child { text-align: left; }
-.payout-overlay th { color: var(--ui-text-dim); font-weight: normal; }
-.payout-overlay p { margin: 0.35rem 0 0; opacity: 0.55; font-size: 11px; }

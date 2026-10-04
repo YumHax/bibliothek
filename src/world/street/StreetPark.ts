@@ -1,14 +1,15 @@
 import * as THREE from 'three';
-import { seededRandom } from '@/covers/generated/canvasUtils';
 import type { Updatable } from '@/core/Engine';
 import type { Furniture } from '../Furniture';
 import { currentSeason } from '@/time/season';
 import { FLOWER_BEDS, PARK_PATHS, PATH_WIDTH } from '../city/park';
 import { gravelTile } from './groundTextures';
 import { snowCovered } from './snowCover';
-import { FLAT_IN_STREET, PARK_STREET, STREET_ENDS, type Vec2 } from './streetPlan';
+import type { Vec2 } from './streetPlan';
+import { FLAT_IN_STREET, PARK_STREET, STREET_ENDS } from '@/world/measures/street';
 import { GROUND, onSurface } from '../surface/layers';
 import { buildParkFeatures, type ParkFeatures } from './StreetParkFeatures';
+import { lcg } from '@/random';
 
 interface StreetParkOptions {
   anisotropy: number;
@@ -95,7 +96,7 @@ export class StreetPark extends THREE.Group implements Furniture, Updatable {
     const bloom = season.name === 'spring' ? 0.8 : season.name === 'summer' ? 1 : season.name === 'autumn' ? 0.4 * (1 - season.depth) : 0;
     // Over the paths where a bed rounds a crossing of them.
     const soil = onSurface(new THREE.MeshStandardMaterial({ color: 0x4a3526, roughness: 0.98 }), GROUND.patch);
-    const random = seededRandom(707);
+    const random = lcg(707);
     const flowers: THREE.Matrix4[] = [];
     const colors: THREE.Color[] = [];
     for (const { at, r } of beds) {

@@ -1,4 +1,4 @@
-import { ATTIC_PLAN } from '../attic/atticPlan';
+import { ATTIC_PLAN } from '../attic/atticPlan'; // imports-ok: the hunt's clues point at the attic's lift code and chest
 import type { ClueMarkLook } from './ClueMark';
 import { writeLines } from './ClueMark';
 

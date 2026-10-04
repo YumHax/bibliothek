@@ -1,4 +1,5 @@
 import { outdoorsInput, startedAudioContext } from './audioContext';
+import { seededRng } from '@/random';
 import { dailySeed } from '@/time/daily';
 
 /** Semitones of the notes used, from the key's root: a major pentatonic over two octaves, plus the fourth and seventh for colour. */
@@ -196,8 +197,7 @@ const hz = (root: number, semitones: number): number => root * Math.pow(2, semit
 
 /** A song drawn from `seed`: its loop, tempo, key, lead voice and melody (one bar per chord). */
 function compose(seed: number): Song {
-  let state = (seed * 9301 + 49297) % 2147483647 || 1;
-  const random = (): number => (state = (state * 16807) % 2147483647) / 2147483647;
+  const random = seededRng(seed);
   const chords = PROGRESSIONS[Math.floor(random() * PROGRESSIONS.length)]!;
   const bpm = 104 + Math.floor(random() * 36);
   const root = C4 * Math.pow(2, (Math.floor(random() * 9) - 4) / 12);

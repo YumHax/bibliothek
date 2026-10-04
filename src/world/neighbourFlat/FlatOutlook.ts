@@ -6,7 +6,7 @@ import type { Outdoors } from '../props/outdoors/Outdoors';
 import type { WindowLife } from '../street/windowLife';
 import { leaseHomeOutlook, windowAt, type OutlookLease } from '../outlook/sharedOutlook';
 import { RoomWindow } from '../props/Window';
-import { landingY } from '../stairwell/stairwellPlan';
+import { landingY } from '@/world/measures/building';
 import { currentHost, onHostChange } from './visits';
 import { NEIGHBOUR_FLAT_PLAN as plan, type NeighbourHost } from './neighbourFlatPlan';
 

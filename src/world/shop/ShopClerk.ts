@@ -1,9 +1,11 @@
 import * as THREE from 'three';
-import { proximityVolume } from '@/video/proximityVolume';
+import { loudness } from '@/audio/hearing';
 import { Walker } from '../people/Walker';
+import type { SocialHook } from '../people/socialHook';
 import { randomLook } from '../people/looks';
 import type { Pose } from '../people/poses';
 import { playChore, type ChoreSound } from './shopSounds';
+import { random, within } from '@/random';
 
 /** Something the clerk goes and does when the shop is quiet: where to go (by `path`, zone-local), how to stand there. */
 export interface ShopChore {
@@ -33,6 +35,8 @@ interface ShopClerkOptions {
   home: { at: THREE.Vector3; yaw: number };
   chores: readonly ShopChore[];
   label: string;
+  /** The clerk as someone to talk to (docs/social.md): the social caption, a click opens the conversation. */
+  social?: SocialHook;
 }
 
 /** Seconds between two chores, drawn in this range; never while the player is at the counter. */
@@ -65,7 +69,7 @@ export class ShopClerk extends Walker {
   private readonly mine = new THREE.Vector3();
 
   constructor(options: ShopClerkOptions) {
-    super({ viewer: options.viewer, seed: options.seed, look: randomLook(options.seed, 'vendor'), speed: 0.7, lines: options.lines, label: options.label, speaker: 'Shopkeeper' });
+    super({ viewer: options.viewer, seed: options.seed, look: randomLook(options.seed, 'vendor'), speed: 0.7, lines: options.lines, label: options.label, speaker: 'Shopkeeper', ...(options.social ? { social: options.social, stopsToTalk: true } : {}) });
     this.name = 'ShopClerk';
     this.home = options.home;
     this.chores = options.chores;
@@ -74,13 +78,13 @@ export class ShopClerk extends Walker {
     this.listener = options.viewer;
     this.callOutTimer = CALL_OUT_EVERY[0] * (0.4 + (options.seed % 5) * 0.15);
     this.nextChore = options.seed % Math.max(1, this.chores.length);
-    this.duty = { kind: 'counter', stance: 6, chore: between(CHORE_EVERY) };
+    this.duty = { kind: 'counter', stance: 6, chore: within(random, CHORE_EVERY) };
     this.stand(this.home.yaw, STANCES[options.seed % STANCES.length]!);
   }
 
   /** The coins changed hands: a word of thanks (wherever they are), and a nod. */
   thank(): void {
-    const line = this.thanks[Math.floor(Math.random() * this.thanks.length)];
+    const line = this.thanks[Math.floor(random() * this.thanks.length)];
     if (line) this.speak(line);
   }
 
@@ -95,12 +99,12 @@ export class ShopClerk extends Walker {
       case 'counter': {
         const player = this.playerFromHome();
         if (player < CALL_RANGE && this.callOuts.length && (this.callOutTimer -= dt) <= 0) {
-          this.callOutTimer = between(CALL_OUT_EVERY);
-          this.say(this.callOuts[Math.floor(Math.random() * this.callOuts.length)]!);
+          this.callOutTimer = within(random, CALL_OUT_EVERY);
+          this.say(this.callOuts[Math.floor(random() * this.callOuts.length)]!);
         }
         if ((s.stance -= dt) <= 0) {
-          s.stance = 10 + Math.random() * 20;
-          this.setPose(STANCES[Math.floor(Math.random() * STANCES.length)]!);
+          s.stance = 10 + random() * 20;
+          this.setPose(STANCES[Math.floor(random() * STANCES.length)]!);
         }
         s.chore -= dt;
         if (s.chore > 0 || !this.chores.length || player < SERVING_RANGE) return;
@@ -123,7 +127,7 @@ export class ShopClerk extends Walker {
         this.duty = { kind: 'back' };
         this.walk([...back, this.home.at.clone()], () => {
           this.stand(this.home.yaw, 'stand');
-          this.duty = { kind: 'counter', stance: 4 + Math.random() * 6, chore: between(CHORE_EVERY) };
+          this.duty = { kind: 'counter', stance: 4 + random() * 6, chore: within(random, CHORE_EVERY) };
         });
         return;
       }
@@ -143,10 +147,7 @@ export class ShopClerk extends Walker {
   private heard(): number {
     this.listener.getWorldPosition(this.ear);
     this.getWorldPosition(this.mine);
-    return proximityVolume(this.ear.distanceTo(this.mine), { referenceDistance: 1, rolloff: 1.2, maxDistance: 9 }) / 100;
+    return loudness(this.ear.distanceTo(this.mine), { referenceDistance: 1, rolloff: 1.2, maxDistance: 9 });
   }
 }
 
-function between([min, max]: [number, number]): number {
-  return min + Math.random() * (max - min);
-}

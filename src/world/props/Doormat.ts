@@ -1,8 +1,9 @@
 import * as THREE from 'three';
-import { createCanvas, seededRandom, toTexture, FONT } from '@/covers/generated/canvasUtils';
+import { createCanvas, toTexture, FONT } from '@/covers/generated/canvasUtils';
 import { paint } from '@/world/materials/palette';
 import { FLOOR } from '@/world/surface/layers';
 import { Prop } from './Prop';
+import { lcg } from '@/random';
 
 export interface DoormatOptions {
   /** Size, along local x and z. Default 0.62 x 0.4. */
@@ -30,7 +31,7 @@ export class Doormat extends Prop {
     this.name = 'Doormat';
     const width = options.width ?? 0.62;
     const depth = options.depth ?? 0.4;
-    const map = paintCoir(width, depth, options.text ?? '', options.wear ?? 0.7, seededRandom((options.seed ?? 3) * 7919));
+    const map = paintCoir(width, depth, options.text ?? '', options.wear ?? 0.7, lcg((options.seed ?? 3) * 7919));
     const top = new THREE.MeshStandardMaterial({ map, roughness: 1, bumpMap: map, bumpScale: 1.5 });
     const rubber = paint(0x1e1c1a, 0.9);
     // BoxGeometry material order: +x, -x, +y (top), -y, +z, -z.

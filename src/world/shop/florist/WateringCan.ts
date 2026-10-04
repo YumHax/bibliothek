@@ -2,8 +2,8 @@ import * as THREE from 'three';
 import { cylinderMesh } from '../../meshUtils';
 import { Prop, part } from '../../props/Prop';
 import { METAL, paint } from '../../materials/palette';
-import { seededRandom } from '@/graphics/canvas';
-import { LeafBatch, LEAF_GREENS, addBunch, headGeometry, pick } from './greenery';
+import { LeafBatch, LEAF_GREENS, addBunch, headGeometry } from './greenery';
+import { lcg, pick } from '@/random';
 
 export interface WateringCanOptions {
   /** A zinc bucket of stems beside it, and one of greenery. Default true. */
@@ -40,7 +40,7 @@ export class WateringCan extends Prop {
     part(this, 0.02, 0.14, 0.02, zinc, { x: -0.12, y: 0.17 });
 
     if (options.buckets ?? true) {
-      const random = seededRandom(options.seed ?? 9);
+      const random = lcg(options.seed ?? 9);
       const leaves = new LeafBatch();
       const head = headGeometry();
       for (const [i, [x, z]] of ([[-0.2, -0.22], [0.08, -0.3]] as const).entries()) {

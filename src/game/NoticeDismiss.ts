@@ -1,5 +1,6 @@
 import type { NoticeDismissing } from '@/notices';
 import { isAction } from '@/input/actions';
+import { Arming } from '@/ui/confirmTwice';
 import type { KeyRoute } from './SessionHost';
 
 export interface NoticeDismissParts {
@@ -16,16 +17,14 @@ const DOUBLE_MS = 450;
  * but for seating: a piece of furniture carried (put away) and a market copy in hand (swap) keep X.
  */
 export class NoticeDismiss implements KeyRoute {
-  private last = -Infinity;
+  /** Each press restarts the window; a press within the window of the one before puts every card away (nothing to repaint). */
+  private readonly arming = new Arming<'all'>(() => {}, DOUBLE_MS);
 
   constructor(private readonly parts: NoticeDismissParts) {}
 
   onKey(code: string): boolean {
     const notices = this.parts.noticeDismiss;
     if (!isAction(code, 'dismissNotice') || !notices) return false;
-    const now = performance.now();
-    const all = now - this.last < DOUBLE_MS;
-    this.last = now;
-    return notices.dismiss(all);
+    return notices.dismiss(this.arming.again('all'));
   }
 }

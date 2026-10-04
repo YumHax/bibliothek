@@ -11,9 +11,11 @@ import { Gait } from './motion/gait';
 import { GesturePlayer, type FaceKey, type GestureName } from './motion/gestures';
 import { ankleOver, orientFoot, solveArm, solveLeg, type ArmSolution } from './motion/ik';
 import { idleFidget, respond, type Context } from './motion/repertoire';
-import { Spring, smooth, spring } from './motion/springs';
+import { smooth } from '@/math/scalar';
+import { Spring, spring } from '@/math/springs';
 import { seedOfLook, temperamentOf, type Temperament } from './motion/temperament';
-import { seededRandom } from '@/covers/generated/canvasUtils';
+import { lcg, random as liveRandom } from '@/random';
+import { damp, dampFactor } from '@/math/damp';
 
 /*
  * A person at real scale (`rig.ts` builds the body: a pelvis, a lower back and a chest the trunk
@@ -56,7 +58,7 @@ const EYE_YAW = 0.38;
 const EYE_PITCH = 0.25;
 /** The head's spring stiffness (rad/s); the eyes settle at `EYE_RATE` per second, ahead of it. */
 const GAZE_OMEGA = 8;
-const EYE_RATE = 22;
+const EYE_RATE = 27;
 /** The arms' springs (rad/s): shoulders, elbows (a little behind), wrists and fingers (quick); hands on moving controls follow stiffly. */
 const ARM_OMEGA = 9;
 const ELBOW_OMEGA = 8;
@@ -97,6 +99,37 @@ const FAR_RATE = 15;
 /** Those distances hold at the default field of view (70 degrees); a narrower one (photo mode's zoom) brings the far level of detail further out. */
 const REFERENCE_TAN = Math.tan(THREE.MathUtils.degToRad(70) / 2);
 
+/** What one frame's gesture player hands back. */
+type GestureFrame = ReturnType<GesturePlayer['update']>;
+
+/** This frame's stances, shared by the steps of `animate`: the gait's share `w` (0 standing .. 1 walking), what the body is at. */
+interface Frame {
+  tempo: number;
+  moving: boolean;
+  w: number;
+  walking: boolean;
+  seated: boolean;
+  standing: boolean;
+  /** How much they are talking, 0..1 (fades in over 0.3 s). */
+  talk: number;
+  reaching: boolean;
+}
+
+/** The carriage's springs this frame: the bend of the back, the crouch, the rise on the toes, the hips' sway, and the person's slouch. */
+interface Carriage {
+  spine: number;
+  crouch: number;
+  rise: number;
+  hips: number;
+  slouch: number;
+}
+
+/** The pelvis's turn and roll this frame, which the back turns against. */
+interface PelvisPose {
+  yaw: number;
+  roll: number;
+}
+
 export class PersonModel extends THREE.Group implements Performer {
   readonly hitbox: THREE.Object3D;
   /** Eye height in world metres once scaled, for whoever wants to be looked at. */
@@ -118,7 +151,7 @@ export class PersonModel extends THREE.Group implements Performer {
   private wasMoving = false;
   /** Seconds left of talking (`talk`). */
   private talking = 0;
-  private time = Math.random() * 100;
+  private time = liveRandom() * 100;
 
   // The director's asks (`lean`, `crouch`, ...) and the springs that ease the body onto them.
   private leanAngle = 0;
@@ -154,7 +187,7 @@ export class PersonModel extends THREE.Group implements Performer {
   private weight = 0;
   private weightVelocity = 0;
   private weightGoal = 0;
-  private weightIn = 2 + Math.random() * 6;
+  private weightIn = 2 + liveRandom() * 6;
   /** Per arm, how far a hand is raised in a gesture while talking (eased to the goal), and when the goals change. */
   private readonly beat = [0, 0];
   private readonly beatGoal = [0, 0];
@@ -162,7 +195,7 @@ export class PersonModel extends THREE.Group implements Performer {
   /** Seconds until the next idle fidget. */
   private fidgetIn: number;
   /** This person's own slow drifts (frequencies, rad/s, and phases): no two sway alike. */
-  private readonly drifts = Array.from({ length: 4 }, () => [0.17 + Math.random() * 0.2, 0.47 + Math.random() * 0.4, Math.random() * 6.3, Math.random() * 6.3] as const);
+  private readonly drifts = Array.from({ length: 4 }, () => [0.17 + liveRandom() * 0.2, 0.47 + liveRandom() * 0.4, liveRandom() * 6.3, liveRandom() * 6.3] as const);
 
   /** World points the palms are on (a joystick, a flipper button, a ball), per arm; null: the pose decides. */
   private readonly reachTargets: [THREE.Vector3 | null, THREE.Vector3 | null] = [null, null];
@@ -220,14 +253,14 @@ export class PersonModel extends THREE.Group implements Performer {
     this.look = look;
     const s = seed ?? seedOfLook(look);
     this.temper = temperamentOf(s, look);
-    this.random = seededRandom(s * 2654435761 + 7);
-    this.fidgetIn = this.temper.fidgetEvery * (0.4 + Math.random());
+    this.random = lcg(s * 2654435761 + 7);
+    this.fidgetIn = this.temper.fidgetEvery * (0.4 + liveRandom());
     this.rig = buildRig(look);
     this.add(this.rig.root);
     this.hitbox = this.rig.hitbox;
     this.add(this.hitbox);
     this.eyeHeight = this.rig.eyeHeight;
-    this.face = new Face(this.rig.face, this.rig.morphs, this.rig.eyes, 0.03 + Math.random() * 0.05);
+    this.face = new Face(this.rig.face, this.rig.morphs, this.rig.eyes, 0.03 + liveRandom() * 0.05);
     this.armSprings = this.rig.arms.map((arm) => {
       const c = arm.current;
       const make = (value: number, omega: number, zeta = 0.9): Spring => new Spring(value, omega, zeta);
@@ -489,15 +522,36 @@ export class PersonModel extends THREE.Group implements Performer {
 
   // --- A frame of the body --------------------------------------------------------------------
 
+  /**
+   * One frame of the body, in layers, each a step below: the gait and the stances it leaves, the idle fidgets, the
+   * weight on the legs, the carriage's springs, the pelvis, the back, the legs, the talking hands, the arms, the head,
+   * the face. The order is the order the draws and the springs were always run in.
+   */
   private animate(dt: number): void {
     this.time += dt;
     const t = this.time;
-    const tempo = this.temper.tempo;
-    const rig = this.rig;
     this.updateWorldMatrix(true, false);
     const bodyYaw = worldYaw(this.getWorldQuaternion(this.worldQ));
 
-    // The gait comes in and settles over `GAIT_S`; its feet are left where they are when it stops.
+    const f = this.stance(dt, bodyYaw);
+    this.fidget(dt, f);
+    const g = this.gestures.update(dt);
+    this.shiftWeight(dt, f);
+    const c = this.carriage(dt, f, g);
+    const p = this.placePelvis(dt, t, f, c);
+    this.bendBack(t, f, g, c, p);
+    // Legs: seated they fold on the seat; otherwise the feet, planted or walking, and the legs solved to reach them.
+    if (f.seated) this.seatLegs(dt);
+    else this.standLegs(dt, f.w, bodyYaw, f.tempo);
+    this.beatHands(dt, f);
+    // Arms, hands, collarbones.
+    for (const [i, arm] of this.rig.arms.entries()) this.moveArm(i, arm, dt, t, f.w, f.moving, f.standing, f.talk, f.tempo);
+    this.moveHead(dt, t, f.walking, f.seated, f.reaching, f.talk, g.head, g.ownGaze);
+    this.showFace(dt, t, f, g);
+  }
+
+  /** The gait comes in and settles over `GAIT_S` (its feet are left where they are when it stops); from it, the frame's stances. */
+  private stance(dt: number, bodyYaw: number): Frame {
     const moving = this.speed > 0.02;
     if (moving && !this.wasMoving && this.gaitIn === 0) this.gait.phase = 0.62;
     if (!moving && this.wasMoving) this.footing.follow(this.gait.feet, this.toWorld, bodyYaw);
@@ -506,25 +560,28 @@ export class PersonModel extends THREE.Group implements Performer {
     const w = smooth(this.gaitIn);
     const walking = w > 0;
     // The gait lays the feet out in the rig's own (reference) metres: the speed too.
-    if (moving) this.gait.update(dt, this.speed / rig.scale, this.look.build);
+    if (moving) this.gait.update(dt, this.speed / this.rig.scale, this.look.build);
     const seated = !walking && this.seatHeight !== null;
     const standing = !walking && !seated;
     const talk = this.talking > 0 ? Math.min(1, this.talking / 0.3) : 0;
     this.talking = Math.max(0, this.talking - dt);
     const reaching = !moving && (this.reachTargets[0] !== null || this.reachTargets[1] !== null);
+    return { tempo: this.temper.tempo, moving, w, walking, seated, standing, talk, reaching };
+  }
 
-    // Gestures: what plays, and a fidget now and then when idle.
+  /** A fidget now and then when idle (what plays is the gesture player's). */
+  private fidget(dt: number, f: Frame): void {
     this.fidgetIn -= dt;
-    if (this.fidgetIn <= 0) {
-      this.fidgetIn = this.temper.fidgetEvery * (0.5 + this.random());
-      if (!walking && !talk && !this.gestures.playing) {
-        const fidget = idleFidget(this.context(), this.random);
-        if (fidget) this.gesture(fidget);
-      }
+    if (this.fidgetIn > 0) return;
+    this.fidgetIn = this.temper.fidgetEvery * (0.5 + this.random());
+    if (!f.walking && !f.talk && !this.gestures.playing) {
+      const fidget = idleFidget(this.context(), this.random);
+      if (fidget) this.gesture(fidget);
     }
-    const g = this.gestures.update(dt);
+  }
 
-    // Weight on one leg for a while, then the other (or both).
+  /** Weight on one leg for a while, then the other (or both); while a foot steps it is on the other one. */
+  private shiftWeight(dt: number, f: Frame): void {
     this.weightIn -= dt;
     if (this.weightIn <= 0) {
       this.weightIn = THREE.MathUtils.lerp(WEIGHT_EVERY[0], WEIGHT_EVERY[1], this.random());
@@ -532,11 +589,13 @@ export class PersonModel extends THREE.Group implements Performer {
       this.weightGoal = roll < 0.2 ? 0 : (roll < 0.6 ? -1 : 1) * (0.6 + this.random() * 0.4);
     }
     const stepping = this.footing.stepping;
-    // While a foot steps the weight is on the other one.
-    const weightGoal = !standing ? 0 : stepping >= 0 ? (stepping === 0 ? 1 : -1) : reaching ? this.weightGoal * 0.4 : this.weightGoal;
+    const weightGoal = !f.standing ? 0 : stepping >= 0 ? (stepping === 0 ? 1 : -1) : f.reaching ? this.weightGoal * 0.4 : this.weightGoal;
     [this.weight, this.weightVelocity] = spring(this.weight, this.weightVelocity, weightGoal, stepping >= 0 ? 7 : 2.6, dt);
+  }
 
-    // The back, the knees, the toes, the hips: the director's asks, the gesture's, the person's own carriage.
+  /** The back, the knees, the toes, the hips: the director's asks, the gesture's, the person's own carriage, each on its spring. */
+  private carriage(dt: number, f: Frame, g: GestureFrame): Carriage {
+    const { w, seated, walking, reaching, tempo } = f;
     const slouch = this.temper.slouch;
     const spine = this.spineSpring.step(
       (seated ? this.leanAngle : this.leanAngle * (1 - w)) + g.spine + slouch * 0.1 + 0.05 * w * this.gait.amount + (reaching ? 0.03 : 0),
@@ -546,15 +605,21 @@ export class PersonModel extends THREE.Group implements Performer {
     const crouch = this.crouchSpring.step(seated ? 0 : this.crouchAmount * (1 - w) + g.crouch, dt, 7 * tempo);
     const rise = this.riseSpring.step(seated || walking ? 0 : this.riseAmount + g.rise, dt, 12 * tempo);
     const hips = this.hipsSpring.step(g.hips, dt);
+    return { spine, crouch, rise, hips, slouch };
+  }
 
-    // Pelvis: turned, tilted and swayed by the gait, shifted over the standing leg, lowered by a crouch, back as the body bends.
+  /** Pelvis: turned, tilted and swayed by the gait, shifted over the standing leg, lowered by a crouch, back as the body bends. */
+  private placePelvis(dt: number, t: number, f: Frame, c: Carriage): PelvisPose {
+    const { w, walking, seated } = f;
+    const { spine, crouch, rise, hips } = c;
+    const rig = this.rig;
     const pelvis = rig.pelvis;
     const pelvisPitch = spine * LEAN_SHARE[0] + (walking ? 0.03 * w : 0);
-    const pelvisYaw = this.gait.pelvisYaw * w;
-    const pelvisRoll = this.gait.pelvisRoll * w + 0.045 * this.weight * (1 - w);
+    const yaw = this.gait.pelvisYaw * w;
+    const roll = this.gait.pelvisRoll * w + 0.045 * this.weight * (1 - w);
     const scale = rig.scale;
     // Down onto a seat slower than the legs fold (no thigh through the cushion); up from it with the legs pushing (solved to the planted feet).
-    this.seatBlend += ((seated ? 1 : 0) - this.seatBlend) * Math.min(1, dt * SEAT_RATE);
+    this.seatBlend = damp(this.seatBlend, seated ? 1 : 0, SEAT_RATE, dt);
     const sat = this.seatBlend;
     pelvis.position.set(
       (this.gait.sway * w + WEIGHT_SHIFT * this.weight * (1 - w)) * (1 - sat),
@@ -562,28 +627,32 @@ export class PersonModel extends THREE.Group implements Performer {
       THREE.MathUtils.lerp(-0.16 * Math.sin(Math.max(0, spine - 0.05)) - 0.1 * crouch + hips, 0.12 / scale, sat),
     );
     if (seated) pelvis.rotation.set(-0.06 + spine * 0.2, this.drift(t, 0) * 0.02, 0, 'YXZ');
-    else pelvis.rotation.set(pelvisPitch * (1 - sat) + (-0.06 + spine * 0.2) * sat, pelvisYaw, pelvisRoll * (1 - sat), 'YXZ');
+    else pelvis.rotation.set(pelvisPitch * (1 - sat) + (-0.06 + spine * 0.2) * sat, yaw, roll * (1 - sat), 'YXZ');
     this.pelvisQ.copy(pelvis.quaternion);
+    return { yaw, roll };
+  }
 
-    // The back: the lean shared down it, the chest turning against the hips as they walk and with a wide turn of the head.
+  /** The back: the lean shared down it, the chest turning against the hips as they walk and with a wide turn of the head; the breath. */
+  private bendBack(t: number, f: Frame, g: GestureFrame, c: Carriage, p: PelvisPose): void {
+    const { w, walking, standing, talk, tempo } = f;
+    const { spine, slouch } = c;
+    const rig = this.rig;
     const drift0 = this.drift(t, 0);
     const drift1 = this.drift(t, 1);
-    rig.lumbar.rotation.set(spine * LEAN_SHARE[1] + slouch * 0.04, this.twist * 0.35 - pelvisYaw * 0.4, -pelvisRoll * 0.35, 'YXZ');
+    rig.lumbar.rotation.set(spine * LEAN_SHARE[1] + slouch * 0.04, this.twist * 0.35 - p.yaw * 0.4, -p.roll * 0.35, 'YXZ');
     rig.chest.rotation.set(
       spine * LEAN_SHARE[2] + slouch * 0.08 + (standing ? drift1 * 0.012 : 0),
-      this.twist * 0.65 + g.twist - pelvisYaw * 0.55 + (walking ? 0 : drift0 * 0.03),
-      -pelvisRoll * 0.3 + talk * Math.sin(t * 2.3) * 0.015,
+      this.twist * 0.65 + g.twist - p.yaw * 0.55 + (walking ? 0 : drift0 * 0.03),
+      -p.roll * 0.3 + talk * Math.sin(t * 2.3) * 0.015,
       'YXZ',
     );
     const breath = Math.sin(t * (1.5 + 0.3 * tempo)) * 0.012 * (1 + 0.5 * w);
     rig.spine.update(rig.lumbar, rig.chest, rig.trunk.position, breath, CHEST_CENTRE);
+  }
 
-    // Legs: seated they fold on the seat; otherwise the feet, planted or walking, and the legs solved to reach them.
-    if (seated) this.seatLegs(dt);
-    else this.standLegs(dt, w, bodyYaw, tempo);
-
-    // Talking with the arms free, the hands come up with the words now and then.
-    const beats = talk > 0 && standing && !reaching && this.pose === 'stand' && !this.held && !this.gestures.playing;
+  /** Talking with the arms free, the hands come up with the words now and then. */
+  private beatHands(dt: number, f: Frame): void {
+    const beats = f.talk > 0 && f.standing && !f.reaching && this.pose === 'stand' && !this.held && !this.gestures.playing;
     this.beatIn -= dt;
     if (this.beatIn <= 0) {
       this.beatIn = 0.5 + this.random() * 1.1;
@@ -592,23 +661,21 @@ export class PersonModel extends THREE.Group implements Performer {
       this.beatGoal[1 - main] = beats && this.random() < 0.3 ? (0.3 + this.random() * 0.5) * this.temper.energy : 0;
     }
     if (!beats) this.beatGoal[0] = this.beatGoal[1] = 0;
+  }
 
-    // Arms, hands, collarbones.
-    for (const [i, arm] of rig.arms.entries()) this.moveArm(i, arm, dt, t, w, moving, standing, talk, tempo);
-
-    this.moveHead(dt, t, walking, seated, reaching, talk, g.head, g.ownGaze);
-
+  /** The face and the swinging parts, close up only: far off the face rests and the swing stays primed for the return. */
+  private showFace(dt: number, t: number, f: Frame, g: GestureFrame): void {
     if (this.far) {
       this.face.rest();
       this.swingPrimed = false;
       return;
     }
-    const concentrate = reaching && !g.face.smile ? 1 : 0;
+    const concentrate = f.reaching && !g.face.smile ? 1 : 0;
     const face = g.face;
     this.face.update(
       dt,
       t,
-      talk,
+      f.talk,
       { smile: face.smile, browsUp: face.browsUp, frown: face.frown + concentrate * 0.18, squint: face.squint + concentrate * 0.1, jaw: face.jaw },
       this.eyeYaw,
       this.eyePitch,
@@ -618,7 +685,7 @@ export class PersonModel extends THREE.Group implements Performer {
 
   /** Thighs level on the seat, shins hanging a little forward, feet flat; the knees a touch apart. */
   private seatLegs(dt: number): void {
-    const ease = Math.min(1, dt * 6);
+    const ease = dampFactor(6, dt);
     for (const leg of this.rig.legs) {
       leg.hip.rotation.x += (-1.5 - leg.hip.rotation.x) * ease;
       leg.hip.rotation.y += (0 - leg.hip.rotation.y) * ease;
@@ -679,7 +746,7 @@ export class PersonModel extends THREE.Group implements Performer {
     }
     // Down at once, up eased: no foot ever floats, no hitch when a leg comes under the body.
     needed = Math.max(0, needed);
-    this.drop = needed > this.drop ? needed : this.drop + (needed - this.drop) * Math.min(1, dt * 10);
+    this.drop = needed > this.drop ? needed : damp(this.drop, needed, 11, dt);
     rig.pelvis.position.y -= this.drop;
     for (let i = 0; i < 2; i++) {
       const leg = rig.legs[i]!;
@@ -723,7 +790,7 @@ export class PersonModel extends THREE.Group implements Performer {
       target.lx += -(0.12 + Math.max(0, forward) * 0.3) * a * w;
       target.curl += 0.15 * w;
     }
-    this.beat[i]! += (this.beatGoal[i]! - this.beat[i]!) * Math.min(1, dt * 3.5);
+    this.beat[i] = damp(this.beat[i]!, this.beatGoal[i]!, 3.5, dt);
     const b = this.beat[i]!;
     target.ux -= 0.22 * b;
     target.uz += side * 0.05 * b;
@@ -792,12 +859,12 @@ export class PersonModel extends THREE.Group implements Performer {
     if (!this.far) {
       this.saccadeIn -= dt;
       if (this.saccadeIn <= 0) {
-        this.saccadeIn = 0.5 + Math.random() * 2;
-        this.saccade.set((Math.random() - 0.5) * 0.2, (Math.random() - 0.5) * 0.08);
+        this.saccadeIn = 0.5 + liveRandom() * 2;
+        this.saccade.set((liveRandom() - 0.5) * 0.2, (liveRandom() - 0.5) * 0.08);
       }
     }
     // A wide shift of the goal: the eyes jump and, often, the lids blink with it.
-    if (Math.hypot(yaw - this.lastGoalYaw, pitch - this.lastGoalPitch) > SHIFT_BLINK && Math.random() < SHIFT_BLINK_CHANCE) this.face.blink();
+    if (Math.hypot(yaw - this.lastGoalYaw, pitch - this.lastGoalPitch) > SHIFT_BLINK && liveRandom() < SHIFT_BLINK_CHANCE) this.face.blink();
     this.lastGoalYaw = yaw;
     this.lastGoalPitch = pitch;
     [this.twist, this.twistVelocity] = spring(this.twist, this.twistVelocity, twist, GAZE_OMEGA * 0.45, dt);
@@ -811,7 +878,7 @@ export class PersonModel extends THREE.Group implements Performer {
     if (talk) nod += talk * Math.max(0, Math.sin(t * 4.1) * Math.sin(t * 1.3 + 0.7)) * 0.06;
     const tilt = talk ? talk * this.drift(t, 1) * 0.06 : this.drift(t, 0) * 0.02;
     head.rotation.set(this.pitch + nod + extra[0]!, this.yaw + extra[1]!, tilt + extra[2]!, 'YXZ');
-    const eyeEase = Math.min(1, dt * EYE_RATE);
+    const eyeEase = dampFactor(EYE_RATE, dt);
     this.eyeYaw += (eyeYaw - this.eyeYaw) * eyeEase;
     this.eyePitch += (eyePitch - this.eyePitch) * eyeEase;
   }

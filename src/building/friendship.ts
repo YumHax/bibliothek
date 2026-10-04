@@ -1,79 +1,50 @@
-import { KEYS, PersistedStore } from '@/persistence';
+import { personAtDoor } from '@/social/people';
+import { lastCounted as lastCountedFor, nudge, warmth } from '@/social/standing';
 
 /*
- * How well the player stands with each resident of the building, by their door's key
- * (`stairwell/building.doorKey(k, i)`: landing k, door i): -100 (cold) .. 100 (friends), 0 to start.
- * A chat, a swap, a favour, a gift raise it; noise late at night (`building/noiseComplaints`) lowers
- * it. The rest of the building reads it: an invitation in (`world/neighbourFlat`), a friendlier
- * price, a cold hello. A module-level store, so any feature can read or nudge it without wiring.
+ * The residents' friendship by their door's key (`stairwell/building.doorKey(k, i)`), as the building's systems
+ * have always asked it: now the warmth of the social layer (`social/standing`, docs/social.md), read and nudged
+ * through whoever lives behind that door. A door nobody is known behind reads 0 and nudges nothing.
  */
 
-/** A door's standing, and the last game day each kind of nudge was given (one a day of each). */
-interface Standing {
-  value: number;
-  /** `reason` -> the game day it last counted. */
-  last: Record<string, number>;
-}
-
-type State = Record<string, Standing>;
-
-/** The range of a standing. */
-const FRIENDSHIP_MIN = -100;
-const FRIENDSHIP_MAX = 100;
-/** At or under this standing, a resident is cross with the player (a curt hello, no invitation). */
+/** At or under this warmth, a resident is cross with the player (a curt hello, no invitation). */
 export const COLD = -15;
 
-let store: PersistedStore<State> | null = null;
-let state: State | null = null;
-
-function loaded(): State {
-  if (state) return state;
-  store = new PersistedStore<State>({ key: KEYS.neighbourFriendship, version: 1, defaults: () => ({}), read: readState });
-  state = store.load();
-  return state;
-}
-
-function readState(data: unknown): State | null {
-  if (!data || typeof data !== 'object') return null;
-  const out: State = {};
-  for (const [key, raw] of Object.entries(data as Record<string, unknown>)) {
-    if (!raw || typeof raw !== 'object') continue;
-    const { value, last } = raw as { value?: unknown; last?: unknown };
-    if (typeof value !== 'number' || !Number.isFinite(value)) continue;
-    const days: Record<string, number> = {};
-    if (last && typeof last === 'object') for (const [r, d] of Object.entries(last as Record<string, unknown>)) if (typeof d === 'number') days[r] = d;
-    out[key] = { value: clamp(value), last: days };
-  }
-  return out;
-}
-
-function clamp(value: number): number {
-  return Math.max(FRIENDSHIP_MIN, Math.min(FRIENDSHIP_MAX, Math.round(value)));
-}
-
-/** The standing with whoever lives behind door `key` (0 when nothing happened yet). */
+/** The warmth of whoever lives behind door `key` (0 when nobody known does). */
 export function friendship(key: string): number {
-  return loaded()[key]?.value ?? 0;
+  const id = personAtDoor(key);
+  return id ? warmth(id) : 0;
 }
 
 /**
- * Raises (or lowers, `amount` < 0) the standing with `key`. With `reason` and `day` (the game day),
- * the same reason counts once a day only (a dozen chats in a row are one chat). Returns whether it counted.
+ * Raises (or lowers, `amount` < 0) the warmth of whoever lives behind `key`. With `reason` and `day` (the game day),
+ * the same reason counts once a day only. Returns whether it counted.
  */
 export function befriend(key: string, amount: number, reason?: string, day?: number): boolean {
-  const all = loaded();
-  const standing = all[key] ?? { value: 0, last: {} };
-  if (reason !== undefined && day !== undefined) {
-    if (standing.last[reason] === day) return false;
-    standing.last[reason] = day;
-  }
-  standing.value = clamp(standing.value + amount);
-  all[key] = standing;
-  store!.save(all);
-  return true;
+  const id = personAtDoor(key);
+  if (!id) return false;
+  const why = amount >= 0 ? WHY[reason ?? ''] ?? 'appreciated it' : WHY_NOT[reason ?? ''] ?? 'was put out';
+  return nudge(id, { warmth: amount, trust: amount >= 10 ? 2 : 0, reason, day: day ?? 0, why, gossip: Math.abs(amount) >= 6 }) !== null || reason === undefined;
 }
 
-/** The game day `reason` last counted for `key`, or null. */
+/** The game day `reason` last counted for whoever lives behind `key`, or null. */
 export function lastCounted(key: string, reason: string): number | null {
-  return loaded()[key]?.last[reason] ?? null;
+  const id = personAtDoor(key);
+  return id ? lastCountedFor(id, reason) : null;
 }
+
+/** The chip's words for the building's own reasons. */
+const WHY: Record<string, string> = {
+  knock: 'liked the knock on the door',
+  swap: 'happy with the swap',
+  chat: 'enjoyed the chat',
+  watch: 'liked watching their game together',
+  cat: 'brought the cat back',
+  partyChat: 'enjoyed the party chat',
+  partySale: 'liked the game you sold them',
+  partyTournament: 'enjoyed the tournament',
+};
+const WHY_NOT: Record<string, string> = {
+  noise: 'kept awake by your noise',
+  escalated: 'heard the syndic had to step in',
+};

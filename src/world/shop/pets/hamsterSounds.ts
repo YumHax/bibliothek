@@ -1,6 +1,7 @@
 import { Voice } from '@/audio/ambient';
+import { random } from '@/random';
 
-const rand = (a: number, b: number): number => a + Math.random() * (b - a);
+const rand = (a: number, b: number): number => a + random() * (b - a);
 
 /**
  * The hamster in its cage: the wheel's axle squeaking round while it runs (`setRunning`, driven by `HamsterCage`, so
@@ -61,7 +62,7 @@ export class HamsterVoice extends Voice {
     high.frequency.value = 2500;
     high.connect(out);
     let at = ctx.currentTime + 0.02;
-    const bursts = 3 + Math.floor(Math.random() * 5);
+    const bursts = 3 + Math.floor(random() * 5);
     for (let i = 0; i < bursts; i++) {
       const source = ctx.createBufferSource();
       source.buffer = this.noise(ctx, 0.08);

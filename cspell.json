@@ -11,7 +11,7 @@
       "addWords": true
     }
   ],
-  "files": ["src/**/*.ts", "src/**/*.css", "docs/**/*.md", "CLAUDE.md", "README.md", ".claude/skills/**/*.md", "index.html", "scripts/*.mjs"],
+  "files": ["src/**/*.ts", "src/**/*.css", "src/**/*.glsl", "docs/**/*.md", "CLAUDE.md", "README.md", ".claude/skills/**/*.md", "index.html", "scripts/*.mjs", "scripts/conventions/*.mjs"],
   "ignorePaths": ["node_modules", "dist", ".cache", "public", "package-lock.json", "docs/consistency-audit.md"],
   "ignoreRegExpList": [
     "Urls",

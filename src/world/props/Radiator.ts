@@ -48,6 +48,47 @@ const VALVE_HEAD = paint(0xf4f4f2, 0.45);
 const VALVE_RING = paint(0x3b3d40, 0.5);
 const BRASS = standard({ color: 0xbfa36a, metalness: 1, roughness: 0.35 });
 
+/** A radiator's measures, settled once from its options: what every part is built from. */
+interface RadiatorMeasures {
+  style: 'column' | 'panel' | 'towel';
+  towel: boolean;
+  width: number;
+  height: number;
+  lift: number;
+  standoff: number;
+  depth: number;
+  /** The body's middle, out from the wall. */
+  midZ: number;
+  /** The pipes' distance from the middle at each end, and the height they join the body at. */
+  endX: number;
+  connectY: number;
+  /** Which end carries the valve (-1 left, 1 right); the other has the lockshield. */
+  valveEnd: -1 | 1;
+}
+
+function measuresOf(options: RadiatorOptions): RadiatorMeasures {
+  const style = options.style ?? 'column';
+  const towel = style === 'towel';
+  const width = options.width ?? (towel ? 0.45 : 0.8);
+  const height = options.height ?? (style === 'panel' ? 0.5 : towel ? 0.8 : 0.6);
+  const lift = options.lift ?? (towel ? 0.35 : 0.12);
+  const standoff = options.standoff ?? 0.04;
+  const depth = style === 'column' ? 0.075 : style === 'panel' ? 0.07 : 0.035;
+  return {
+    style,
+    towel,
+    width,
+    height,
+    lift,
+    standoff,
+    depth,
+    midZ: standoff + depth / 2,
+    endX: towel ? width / 2 - 0.015 : width / 2 + 0.035,
+    connectY: lift + (towel ? 0.02 : 0.04),
+    valveEnd: options.valve === 'left' ? -1 : 1,
+  };
+}
+
 /**
  * A radiator under or beside a window: the body on two wall brackets, and at its bottom corners
  * the pipes that come up out of the floor through chrome roses, a thermostatic valve (white head,
@@ -68,40 +109,55 @@ export class Radiator extends THREE.Group implements Furniture {
   constructor(options: RadiatorOptions = {}) {
     super();
     this.name = 'Radiator';
-    const style = options.style ?? 'column';
-    const towel = style === 'towel';
-    const width = options.width ?? (towel ? 0.45 : 0.8);
-    const height = options.height ?? (style === 'panel' ? 0.5 : towel ? 0.8 : 0.6);
-    const lift = options.lift ?? (towel ? 0.35 : 0.12);
-    const standoff = options.standoff ?? 0.04;
-    const depth = style === 'column' ? 0.075 : style === 'panel' ? 0.07 : 0.035;
-    const body = towel ? CHROME : standard({ color: options.color ?? 0xf1efe8, roughness: 0.4, metalness: 0 });
-    const midZ = standoff + depth / 2;
-    const bodyParts: THREE.BufferGeometry[] = [];
-    if (style === 'column') this.columns(bodyParts, width, height, lift, midZ);
-    else if (style === 'panel') this.panel(bodyParts, width, height, lift, midZ, depth);
-    else this.ladder(bodyParts, width, height, lift, midZ);
-    // Two brackets behind, a third of the way in from each end.
-    for (const sx of [-1, 1]) bodyParts.push(box(0.03, 0.04, standoff, sx * width * 0.3, lift + height * 0.8, standoff / 2));
-    this.mesh(bodyParts, body);
+    const m = measuresOf(options);
+    this.body(m, options.color);
+    this.plumb(m);
 
-    // The pipes: from each bottom corner out a little, down into the floor (a rose where they go in).
+    const top = m.lift + m.height;
+    const face = m.standoff + m.depth;
+    this.middle = new THREE.Vector3(0, m.lift + m.height / 2, m.midZ);
+    let reach = face + 0.02;
+    this.hasCradle = options.catCradle ?? false;
+    if (this.hasCradle) {
+      this.cradle(top, face);
+      reach = face + CRADLE_REACH;
+      this.catSpot = new THREE.Vector3(0, top - 0.04 + CAT_ON_CRADLE, face + CRADLE_REACH / 2);
+    } else {
+      this.catSpot = new THREE.Vector3(0, 0, face + FLOOR_SPOT);
+    }
+    // Clear of the collider (the cradle's reaches the floor), so the cat's grid has it free.
+    this.catApproach = new THREE.Vector3(0, 0, this.hasCradle ? reach + CRADLE_APPROACH : face + APPROACH);
+    const half = Math.max(m.width / 2, m.endX) + 0.03;
+    this.footprint = new THREE.Box3(new THREE.Vector3(-half, 0, 0), new THREE.Vector3(half, top + 0.02, reach));
+  }
+
+  /** The body in its style, on two brackets behind, a third of the way in from each end: one mesh. */
+  private body(m: RadiatorMeasures, color: number | undefined): void {
+    const material = m.towel ? CHROME : standard({ color: color ?? 0xf1efe8, roughness: 0.4, metalness: 0 });
+    const parts: THREE.BufferGeometry[] = [];
+    if (m.style === 'column') this.columns(parts, m.width, m.height, m.lift, m.midZ);
+    else if (m.style === 'panel') this.panel(parts, m.width, m.height, m.lift, m.midZ, m.depth);
+    else this.ladder(parts, m.width, m.height, m.lift, m.midZ);
+    for (const sx of [-1, 1]) parts.push(box(0.03, 0.04, m.standoff, sx * m.width * 0.3, m.lift + m.height * 0.8, m.standoff / 2));
+    this.mesh(parts, material);
+  }
+
+  /**
+   * The pipes: from each bottom corner out a little, down into the floor (a chrome rose where they go in); the valve
+   * body on one (its white head standing up, a TRV, or out, a towel rail's; the numbered ring under it), the
+   * lockshield cap on the other; the bleed key in the top corner at the lockshield end.
+   */
+  private plumb(m: RadiatorMeasures): void {
+    const { towel, width, height, lift, standoff, depth, midZ, endX, connectY, valveEnd } = m;
     const pipes: THREE.BufferGeometry[] = [];
     const chrome: THREE.BufferGeometry[] = [];
-    const valveEnd = options.valve === 'left' ? -1 : 1;
-    const endX = towel ? width / 2 - 0.015 : width / 2 + 0.035;
-    const connectY = lift + (towel ? 0.02 : 0.04);
     for (const sx of [-1, 1]) {
       const x = sx * endX;
       if (!towel) pipes.push(cylinder(PIPE_R, 0.05, sx * (width / 2 + 0.012), connectY, midZ, 'x'));
       pipes.push(cylinder(PIPE_R, connectY, x, connectY / 2, midZ));
       chrome.push(cylinder(0.018, 0.006, x, 0.003, midZ));
-      if (sx === valveEnd) {
-        // The valve body on the pipe, its head standing up (a TRV) or out (a towel rail's).
-        pipes.push(cylinder(0.012, 0.045, x, connectY - 0.035, midZ));
-      } else {
-        chrome.push(cylinder(0.011, 0.03, x, connectY - 0.03, midZ));
-      }
+      if (sx === valveEnd) pipes.push(cylinder(0.012, 0.045, x, connectY - 0.035, midZ));
+      else chrome.push(cylinder(0.011, 0.03, x, connectY - 0.03, midZ));
     }
     this.mesh(pipes, towel ? CHROME : WHITE_PIPE);
     this.mesh(chrome, CHROME);
@@ -110,27 +166,10 @@ export class Radiator extends THREE.Group implements Furniture {
     head.position.set(headX, connectY + 0.02, midZ);
     const ring = new THREE.Mesh(new THREE.CylinderGeometry(0.0225, 0.0225, 0.008, 16), VALVE_RING);
     ring.position.set(headX, connectY - 0.004, midZ);
-    // The bleed key in the top corner at the lockshield end.
     const bleed = new THREE.Mesh(new THREE.CylinderGeometry(0.005, 0.005, 0.02, 8).rotateX(Math.PI / 2), BRASS);
     bleed.position.set(-valveEnd * (width / 2 - 0.02), lift + height - 0.03, standoff + depth + 0.008);
     head.castShadow = true;
     this.add(head, ring, bleed);
-
-    const top = lift + height;
-    this.middle = new THREE.Vector3(0, lift + height / 2, midZ);
-    let reach = standoff + depth + 0.02;
-    this.hasCradle = options.catCradle ?? false;
-    if (this.hasCradle) {
-      this.cradle(top, standoff + depth);
-      reach = standoff + depth + CRADLE_REACH;
-      this.catSpot = new THREE.Vector3(0, top - 0.04 + CAT_ON_CRADLE, standoff + depth + CRADLE_REACH / 2);
-    } else {
-      this.catSpot = new THREE.Vector3(0, 0, standoff + depth + FLOOR_SPOT);
-    }
-    // Clear of the collider (the cradle's reaches the floor), so the cat's grid has it free.
-    this.catApproach = new THREE.Vector3(0, 0, this.hasCradle ? reach + CRADLE_APPROACH : standoff + depth + APPROACH);
-    const half = Math.max(width / 2, endX) + 0.03;
-    this.footprint = new THREE.Box3(new THREE.Vector3(-half, 0, 0), new THREE.Vector3(half, top + 0.02, reach));
   }
 
   /** World point where a cat lies: on the cradle, or on the warm floor in front. */

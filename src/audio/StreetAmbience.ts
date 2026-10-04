@@ -3,12 +3,13 @@ import type { Updatable } from '@/core/Engine';
 import type { SkyState } from '@/world/props/DayNight';
 import type { LifeEvents } from '@/world/props/outdoors/lifeEvents';
 import { wakefulnessAt } from '@/time/wakefulness';
-import { proximityVolume } from '@/video/proximityVolume';
-import { audioBus, audioContext } from './audioContext';
+import { loudness } from '@/audio/hearing';
+import { audioBus, audioContext, onAudioStart } from './audioContext';
 import { brownNoise, whiteNoise } from './noise';
 import { ringTheHour } from './churchBells';
 import { birdNote, horn, sirenVoice, twoTone } from './street/streetVoices';
 import { BUS_STOP } from '@/world/city/frontage';
+import { random } from '@/random';
 
 interface StreetAmbienceOptions {
   /** Where the ears are (the camera). */
@@ -116,14 +117,17 @@ export class StreetAmbience implements Updatable {
   private readonly ear = new THREE.Vector3();
   private readonly pane = new THREE.Vector3();
 
+  /** Lets go of the wait for the audio to start (`onAudioStart`), once built or disposed. */
+  private readonly unsubscribe: () => void;
+
   constructor(private readonly options: StreetAmbienceOptions) {
-    window.addEventListener('pointerdown', this.start);
-    window.addEventListener('keydown', this.start);
+    // The street starts the moment there is sound: the first gesture starts the audio (`unlockAudioOnFirstGesture`), and this follows.
+    this.unsubscribe = onAudioStart(() => this.build());
   }
 
-  /** Stops the street for good: its beds and engines, and the wait for the first gesture. */
+  /** Stops the street for good: its beds and engines, and the wait for the audio to start. */
   dispose(): void {
-    this.stopListening();
+    this.unsubscribe();
     for (const source of this.sources) source.stop();
     this.sources = [];
     this.master?.disconnect();
@@ -141,36 +145,13 @@ export class StreetAmbience implements Updatable {
     this.ctx = null;
   }
 
-  private readonly start = (): void => {
-    this.stopListening();
-    this.build();
-  };
-
-  private stopListening(): void {
-    window.removeEventListener('pointerdown', this.start);
-    window.removeEventListener('keydown', this.start);
-  }
-
   update(dt: number): void {
-    const { ctx, master, loud } = this;
-    if (!ctx || !master || !loud || !this.traffic || !this.rainBed) return;
-    this.paneClock += dt;
-    if (this.paneClock >= PANE_REFRESH) {
-      this.paneClock = 0;
-      this.panes = this.options.panes();
-      this.openings = this.options.openings?.() ?? [];
-    }
+    const { ctx, master, loud, traffic, rainBed } = this;
+    if (!ctx || !master || !loud || !traffic || !rainBed) return;
+    this.refreshWaysIn(dt);
     const sky = this.options.sky();
     const now = ctx.currentTime;
-    this.listenClock += dt;
-    if (this.listenClock >= LISTEN_EVERY) {
-      this.listenClock = 0;
-      this.level = this.loudness();
-      master.gain.setTargetAtTime(this.level, now, FOLLOW);
-      // Thunder: in the open at full level, under a hall's roof as through a pane, anywhere else never below its floor.
-      const thunder = this.options.open?.() ? LEVEL : this.options.underRoof?.() ? THROUGH_GLASS * LEVEL : THUNDER_FLOOR * LEVEL;
-      loud.gain.setTargetAtTime(Math.max(this.level, thunder), now, FOLLOW);
-    }
+    this.listen(dt, now, master, loud);
     // Thunder: heard wherever the listener is, so noticed before the silence check.
     if (this.strikes >= 0 && sky.strikes !== this.strikes) this.thunder(ctx, loud, sky.strikeDistance);
     this.strikes = sky.strikes;
@@ -182,39 +163,76 @@ export class StreetAmbience implements Updatable {
 
     const awake = wakefulnessAt(sky.hours);
     const day = sky.daylight;
-    this.traffic.gain.setTargetAtTime(0.35 * awake * (0.55 + 0.45 * day) + 0.05, now, 2);
-    this.rainBed.gain.setTargetAtTime(0.5 * sky.rain + 0.12 * sky.wetness * awake, now, 3);
-    // The wind: a band of noise swelling with it (the gusts are in `sky.wind`), a thin whistle when it blows hard.
+    this.followSky(traffic, rainBed, sky, awake, day, life, now);
+    this.passers(ctx, master, dt, sky, awake, day);
+    this.birdsAndDrops(ctx, master, dt, sky, day);
+  }
+
+  /** The panes and the doors the street is heard through, re-read every `PANE_REFRESH` seconds (rooms load and unload). */
+  private refreshWaysIn(dt: number): void {
+    this.paneClock += dt;
+    if (this.paneClock < PANE_REFRESH) return;
+    this.paneClock = 0;
+    this.panes = this.options.panes();
+    this.openings = this.options.openings?.() ?? [];
+  }
+
+  /**
+   * How loud the street is where the listener stands, read every `LISTEN_EVERY` seconds: the master follows it; the
+   * thunder's bus is in the open at full level, under a hall's roof as through a pane, anywhere else never below its floor.
+   */
+  private listen(dt: number, now: number, master: GainNode, loud: GainNode): void {
+    this.listenClock += dt;
+    if (this.listenClock < LISTEN_EVERY) return;
+    this.listenClock = 0;
+    this.level = this.loudness();
+    master.gain.setTargetAtTime(this.level, now, FOLLOW);
+    const thunder = this.options.open?.() ? LEVEL : this.options.underRoof?.() ? THROUGH_GLASS * LEVEL : THUNDER_FLOOR * LEVEL;
+    loud.gain.setTargetAtTime(Math.max(this.level, thunder), now, FOLLOW);
+  }
+
+  /**
+   * The beds follow the sky: the traffic with how awake the city is and the daylight, the rain and the wet ground, the
+   * wind as a band of noise swelling with it (the gusts are in `sky.wind`) and a thin whistle when it blows hard, the
+   * park's fountain from the park side.
+   */
+  private followSky(traffic: GainNode, rainBed: GainNode, sky: SkyState, awake: number, day: number, life: LifeEvents | undefined, now: number): void {
+    traffic.gain.setTargetAtTime(0.35 * awake * (0.55 + 0.45 * day) + 0.05, now, 2);
+    rainBed.gain.setTargetAtTime(0.5 * sky.rain + 0.12 * sky.wetness * awake, now, 3);
     const wind = sky.wind;
     this.windBed?.gain.setTargetAtTime(0.45 * wind * wind, now, 0.6);
     this.windBand?.frequency.setTargetAtTime(220 + 650 * wind, now, 0.8);
     this.whistle?.gain.setTargetAtTime(0.05 * THREE.MathUtils.smoothstep(wind, 0.55, 0.95), now, 1);
     this.fountainBed?.gain.setTargetAtTime(life?.fountain && this.parkSide ? 0.018 : 0, now, 2);
+  }
 
-    // A car going past: a swell of tyre noise rising and falling over a few seconds.
+  /** A car going past now and then (a swell of tyre noise rising and falling over a few seconds), a horn once in a while in the busy daytime. */
+  private passers(ctx: AudioContext, master: GainNode, dt: number, sky: SkyState, awake: number, day: number): void {
     this.passClock -= dt;
     if (this.passClock <= 0) {
-      this.passClock = (2 + Math.random() * 7) / Math.max(awake, 0.08);
+      this.passClock = (2 + random() * 7) / Math.max(awake, 0.08);
       this.passingCar(ctx, master, sky.wetness);
     }
     this.hornClock -= dt;
     if (this.hornClock <= 0) {
-      this.hornClock = 70 + Math.random() * 160;
+      this.hornClock = 70 + random() * 160;
       if (awake > 0.6 && day > 0.3) this.horn(ctx, master);
     }
-    // Birds: sparrows and blackbirds by day, a chorus around sunrise, silent in the rain and at night.
+  }
+
+  /** Birds (sparrows and blackbirds by day, a chorus around sunrise, silent in the rain and at night) and the drops tapping on the pane. */
+  private birdsAndDrops(ctx: AudioContext, master: GainNode, dt: number, sky: SkyState, day: number): void {
     const dawn = 1 - Math.min(1, Math.abs(sky.hours - 6.5) / 1.5);
     const birdiness = day * (1 - sky.rain) * (1 - sky.snow * 0.7) * (0.35 + 1.2 * dawn);
     this.birdClock -= dt;
     if (this.birdClock <= 0) {
-      this.birdClock = 0.8 + Math.random() * 4 / Math.max(birdiness, 0.05);
+      this.birdClock = 0.8 + random() * 4 / Math.max(birdiness, 0.05);
       if (birdiness > 0.05) this.birdPhrase(ctx, master, Math.min(1, birdiness));
     }
-    // Drops tapping on the pane.
     if (sky.rain > 0.1) {
       this.patterClock -= dt;
       while (this.patterClock <= 0) {
-        this.patterClock += (0.02 + Math.random() * 0.12) / sky.rain;
+        this.patterClock += (0.02 + random() * 0.12) / sky.rain;
         this.patter(ctx, master, sky.rain);
       }
     }
@@ -236,7 +254,7 @@ export class StreetAmbience implements Updatable {
       const distance = this.ear.distanceTo(at);
       if (distance > FALLOFF.maxDistance) return;
       const walls = this.options.wallsBetween?.(this.ear, at) ?? 0;
-      const volume = (proximityVolume(distance, { ...FALLOFF, walls }) / 100) * gain;
+      const volume = loudness(distance, FALLOFF, walls) * gain;
       if (volume <= best) return;
       best = volume;
       const dx = at.x - this.ear.x;
@@ -250,6 +268,7 @@ export class StreetAmbience implements Updatable {
   private build(): void {
     if (this.ctx) return;
     const ctx = audioContext();
+    if (!ctx) return;
     this.ctx = ctx;
     this.master = ctx.createGain();
     this.master.gain.value = 0;
@@ -338,7 +357,7 @@ export class StreetAmbience implements Updatable {
     const source = ctx.createBufferSource();
     source.buffer = buffer;
     source.loop = true;
-    source.start(0, Math.random() * buffer.duration);
+    source.start(0, random() * buffer.duration);
     this.sources.push(source);
     return source;
   }
@@ -361,7 +380,7 @@ export class StreetAmbience implements Updatable {
     gain.gain.setValueAtTime(0, start);
     for (const [t, v] of envelope) gain.gain.linearRampToValueAtTime(v, start + t);
     source.connect(filter).connect(gain).connect(out);
-    source.start(start, Math.random() * 1.5);
+    source.start(start, random() * 1.5);
     source.stop(start + length);
   }
 
@@ -393,9 +412,9 @@ export class StreetAmbience implements Updatable {
     }
     // The roll: low noise building over a moment, then a few swells dying away over seconds.
     const level = 0.5 + 0.9 * near;
-    const length = 4 + 5 * near + Math.random() * 3;
+    const length = 4 + 5 * near + random() * 3;
     const envelope: [number, number][] = [[0.25 + 0.6 * (1 - near), level]];
-    for (let t = 1, k = 0.8; t < length - 1; t += 0.6 + Math.random() * 1.2, k *= 0.72) envelope.push([t, level * k * (0.6 + Math.random() * 0.6)]);
+    for (let t = 1, k = 0.8; t < length - 1; t += 0.6 + random() * 1.2, k *= 0.72) envelope.push([t, level * k * (0.6 + random() * 0.6)]);
     envelope.push([length, 0]);
     this.burst(ctx, out, this.filter(ctx, 'lowpass', 90 + 180 * near, 0.9), envelope, length + 0.1, delay);
   }
@@ -458,8 +477,8 @@ export class StreetAmbience implements Updatable {
       if (life.garbageWorking && audible) {
         this.clatterClock -= dt;
         if (this.clatterClock <= 0) {
-          this.clatterClock = 0.4 + Math.random() * 1.6;
-          this.burst(ctx, out, this.filter(ctx, 'bandpass', 500 + Math.random() * 900, 1.2), [[0.01, 0.22 * reach], [0.12, 0.06 * reach], [0.3, 0]], 0.35);
+          this.clatterClock = 0.4 + random() * 1.6;
+          this.burst(ctx, out, this.filter(ctx, 'bandpass', 500 + random() * 900, 1.2), [[0.01, 0.22 * reach], [0.12, 0.06 * reach], [0.3, 0]], 0.35);
         }
       }
     }
@@ -510,10 +529,10 @@ export class StreetAmbience implements Updatable {
 
   /** A dog's bark or two: a short falling growl-tone through a throaty band, with a puff of breath. */
   private bark(ctx: AudioContext, out: AudioNode, reach: number): void {
-    const woofs = 1 + Math.floor(Math.random() * 3);
-    const pitch = 380 + Math.random() * 300;
+    const woofs = 1 + Math.floor(random() * 3);
+    const pitch = 380 + random() * 300;
     for (let i = 0; i < woofs; i++) {
-      const t = ctx.currentTime + i * (0.22 + Math.random() * 0.12);
+      const t = ctx.currentTime + i * (0.22 + random() * 0.12);
       const osc = ctx.createOscillator();
       osc.type = 'sawtooth';
       osc.frequency.setValueAtTime(pitch * 1.25, t);
@@ -534,40 +553,40 @@ export class StreetAmbience implements Updatable {
     const filter = ctx.createBiquadFilter();
     filter.type = 'bandpass';
     // Wet roads hiss: the tyres sound higher and louder.
-    filter.frequency.value = 500 + 900 * wetness + Math.random() * 300;
+    filter.frequency.value = 500 + 900 * wetness + random() * 300;
     filter.Q.value = 0.8;
-    const peak = (0.12 + Math.random() * 0.12) * (1 + wetness * 0.6);
-    const rise = 1.5 + Math.random() * 1.5;
-    this.burst(ctx, out, filter, [[rise, peak], [rise + 1.5 + Math.random() * 2, 0]], rise + 4);
+    const peak = (0.12 + random() * 0.12) * (1 + wetness * 0.6);
+    const rise = 1.5 + random() * 1.5;
+    this.burst(ctx, out, filter, [[rise, peak], [rise + 1.5 + random() * 2, 0]], rise + 4);
   }
 
   /** A car's horn somewhere down the street: one toot, muffled. */
   private horn(ctx: AudioContext, out: AudioNode): void {
-    const toot = 0.18 + Math.random() * 0.3;
+    const toot = 0.18 + random() * 0.3;
     horn(ctx, out, { pitches: [410, 515], detune: 20, blasts: 1, length: toot + 0.05, gap: 0, level: 0.05, attack: 0.02, release: 0.05, filter: { type: 'lowpass', frequency: 1400 } });
   }
 
   /** A few quick chirps sweeping up or down, like a sparrow or a tit, sometimes a blackbird's fluting. */
   private birdPhrase(ctx: AudioContext, out: AudioNode, strength: number): void {
     const now = ctx.currentTime;
-    const blackbird = Math.random() < 0.25;
-    const notes = blackbird ? 3 + Math.floor(Math.random() * 4) : 2 + Math.floor(Math.random() * 5);
-    const base = blackbird ? 1400 + Math.random() * 800 : 3200 + Math.random() * 1600;
-    let t = now + Math.random() * 0.2;
+    const blackbird = random() < 0.25;
+    const notes = blackbird ? 3 + Math.floor(random() * 4) : 2 + Math.floor(random() * 5);
+    const base = blackbird ? 1400 + random() * 800 : 3200 + random() * 1600;
+    let t = now + random() * 0.2;
     for (let i = 0; i < notes; i++) {
-      const length = blackbird ? 0.12 + Math.random() * 0.18 : 0.04 + Math.random() * 0.06;
-      const f0 = base * (0.85 + Math.random() * 0.3);
-      const to = f0 * (Math.random() < 0.5 ? 1.35 : 0.75);
+      const length = blackbird ? 0.12 + random() * 0.18 : 0.04 + random() * 0.06;
+      const f0 = base * (0.85 + random() * 0.3);
+      const to = f0 * (random() < 0.5 ? 1.35 : 0.75);
       birdNote(ctx, out, { at: t, from: f0, to, sweep: length, attack: length * 0.2, length, level: (blackbird ? 0.035 : 0.022) * strength });
-      t += length + (blackbird ? 0.05 + Math.random() * 0.12 : 0.03 + Math.random() * 0.08);
+      t += length + (blackbird ? 0.05 + random() * 0.12 : 0.03 + random() * 0.08);
     }
   }
 
   private patter(ctx: AudioContext, out: AudioNode, rain: number): void {
     const filter = ctx.createBiquadFilter();
     filter.type = 'highpass';
-    filter.frequency.value = 2500 + Math.random() * 2500;
-    const level = (0.03 + Math.random() * 0.05) * rain;
+    filter.frequency.value = 2500 + random() * 2500;
+    const level = (0.03 + random() * 0.05) * rain;
     this.burst(ctx, out, filter, [[0.002, level], [0.03, 0]], 0.05);
   }
 }

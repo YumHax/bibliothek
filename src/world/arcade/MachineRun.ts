@@ -3,6 +3,10 @@ import type { Input } from '@/core/Input';
 import type { LabelPlacement } from '@/interaction/Interactable';
 import type { ArcadeBonus, ArcadeMachineLike, ArcadeResult, SessionActions } from '@/game/SessionActions';
 import type { ChipSpeaker } from '@/audio/ChipSpeaker';
+import { GameInput } from '@/input/GameInput';
+import { placeOf } from '@/economy/scoreTable';
+import { countUpEase } from '@/ui/countUp';
+import { reduceMotion } from '@/settings/motion';
 import { type ArcadeControls, NO_CONTROLS } from './games/ArcadeGame';
 import { InitialsEntry } from './InitialsEntry';
 import type { TicketStrip } from './TicketStrip';
@@ -22,7 +26,7 @@ export interface MachineRunOptions {
   stationEvents: StationEvents;
   /** What the next play costs right now (0: on the house). */
   nextPlayCost: () => number;
-  /** Score points per ticket; none: the machine pays no tickets (the claw). */
+  /** Score points per ticket; none: the machine pays no tickets (the claw, a cabinet at home). */
   pointsPerTicket?: number;
   /** The hall of fame, for a machine that keeps a table. */
   scores?: ScoreTable;
@@ -45,12 +49,15 @@ const BONUS_SECONDS = 0.55;
  * The paid play every arcade machine goes through, from the coin to the end card, as a part the
  * machine holds and forwards to: who is on it (`occupant`, a regular taking it with `occupy` until
  * `release`), the Session's play (`start` / `abort`, `activate` asking for it), the keys read
- * straight from `Input` (`readControls`: fire's press edge, a click standing in for the trigger),
+ * through one `GameInput` (`readControls`: fire's press edge, a click standing in for the trigger),
  * `finish` with the play's score (the initials for one that makes the table, the result to the
  * Session and the crowd), the end card's tickets counted up with a tick each (the strip feeding
- * out), the labels, the regulars' results, and out-of-order days (it says so, a note shows, nobody
- * plays it). The machine keeps its play, its display and where people stand; each frame it calls
- * `update` (the initials and the end card) and runs its own play in 'playing' and 'demo'.
+ * out), the labels, the regulars' results, out-of-order days (it says so, a note shows, nobody
+ * plays it), and the NEW BEST sting the moment a live score passes the best (`noteScore`; the
+ * cabinet games raise their own banner instead). Every sound the speaker makes is news to the
+ * crowd (`stationEvents.onSound`, wired here once). The machine keeps its play, its display and
+ * where people stand; each frame it calls `update` (the initials and the end card) and runs its
+ * own play in 'playing' and 'demo'.
  */
 export class MachineRun {
   private current: MachineState = 'attract';
@@ -61,9 +68,7 @@ export class MachineRun {
   private clock = 0;
   private counted = 0;
   private onOver: ((result: ArcadeResult) => void) | null = null;
-  private lastFire = false;
-  private latched = false;
-  private clicked = false;
+  private readonly keys: GameInput;
   private reported = false;
   private pause = 0;
   /** The pointer was unlocked mid-play: nothing moves until it is locked again. */
@@ -72,8 +77,15 @@ export class MachineRun {
   private fireReleased = false;
   private bonusLines: readonly ArcadeBonus[] = [];
   private bonusTicked = 0;
+  /** The best to beat when the play started, and whether the live score has passed it (the sting plays once). */
+  private startBest = 0;
+  private bestBeaten = false;
 
-  constructor(private readonly options: MachineRunOptions) {}
+  constructor(private readonly options: MachineRunOptions) {
+    this.keys = new GameInput(ARCADE_KEYS, options.input);
+    // Every sound it makes is news to whoever plays or watches it.
+    options.speaker.onPlay ??= (sfx) => options.stationEvents.onSound?.(sfx);
+  }
 
   get state(): MachineState {
     return this.current;
@@ -112,9 +124,9 @@ export class MachineRun {
     return this.clock;
   }
 
-  /** The end card's count-up, 0..1. */
+  /** The end card's count-up, 0..1 (eased like every count in the game, `ui/countUp`). */
   get countUp(): number {
-    return Math.min(1, this.clock / COUNT_UP_SECONDS);
+    return countUpEase(Math.min(1, this.clock / COUNT_UP_SECONDS));
   }
 
   /** The tickets the end card shows so far. */
@@ -129,7 +141,7 @@ export class MachineRun {
 
   /** How far bonus `i`'s count-up is, 0..1 (it starts once the one before it is done). */
   bonusCountUp(i: number): number {
-    return Math.max(0, Math.min(1, (this.clock - COUNT_UP_SECONDS - i * BONUS_SECONDS) / BONUS_SECONDS));
+    return countUpEase(Math.max(0, Math.min(1, (this.clock - COUNT_UP_SECONDS - i * BONUS_SECONDS) / BONUS_SECONDS)));
   }
 
   /** Every ticket the end card has counted so far, the bonuses' too (what the strip feeds out). */
@@ -137,9 +149,14 @@ export class MachineRun {
     return this.shownTickets + this.bonusLines.reduce((sum, b, i) => sum + Math.floor(b.tickets * this.bonusCountUp(i)), 0);
   }
 
+  /** When the end card has counted everything up (seconds on it). */
+  private get countEnd(): number {
+    return COUNT_UP_SECONDS + this.bonusLines.length * BONUS_SECONDS;
+  }
+
   /** The end card has counted everything up. */
   get countDone(): boolean {
-    return this.clock >= COUNT_UP_SECONDS + this.bonusLines.length * BONUS_SECONDS;
+    return this.clock >= this.countEnd;
   }
 
   /** On the end card, done counting, and fire let go since: a press or a click now plays again. */
@@ -156,11 +173,7 @@ export class MachineRun {
   setPaused(paused: boolean): void {
     if (this.held === paused) return;
     this.held = paused;
-    if (!paused) {
-      this.latched = true;
-      this.lastFire = true;
-      this.clicked = false;
-    }
+    if (!paused) this.keys.latch();
   }
 
   /** What the play earned besides its score, shown on the end card and fed out on the strip. */
@@ -185,7 +198,7 @@ export class MachineRun {
 
   /** The Session took the coin: a paid play starts (the machine resets its board after this); `onOver` is told the result once. */
   start(onOver: (result: ArcadeResult) => void): void {
-    const { speaker, strip, stationEvents } = this.options;
+    const { speaker, strip, stationEvents, scores, game } = this.options;
     this.onOver = onOver;
     this.current = 'playing';
     speaker.level = 1;
@@ -194,10 +207,11 @@ export class MachineRun {
     this.counted = 0;
     this.held = false;
     this.bonusLines = [];
+    this.startBest = scores?.bestOf(game.id) ?? 0;
+    this.bestBeaten = false;
     // The click or Space that started it must not count as a fire press.
-    this.lastFire = true;
-    this.latched = this.options.fireAfterRelease ?? false;
-    this.clicked = false;
+    this.keys.reset(true);
+    if (this.options.fireAfterRelease) this.keys.latch();
     if (this.who !== 'player') {
       this.who = 'player';
       stationEvents.onPlayerStart?.();
@@ -237,6 +251,16 @@ export class MachineRun {
   }
 
   /**
+   * The live score of the player's play: the first time it passes the best there was to beat, the
+   * NEW BEST sting plays (the physical machines; a cabinet game raises its own banner, `BaseGame`).
+   */
+  noteScore(score: number): void {
+    if (this.current !== 'playing' || this.bestBeaten || this.startBest <= 0 || score <= this.startBest) return;
+    this.bestBeaten = true;
+    this.options.speaker.play('best');
+  }
+
+  /**
    * The play is over with `score` (and a prize, for the claw; `refund` when it reported nothing through
    * no fault of the player's): the table's initials first when it makes it, else the end card. A best
    * is only a best when there was one to beat; the first score on a machine is just `first`.
@@ -252,11 +276,7 @@ export class MachineRun {
     this.bonusTicked = 0;
     this.fireReleased = false;
     if (scores?.qualifies(game.id, score)) {
-      // Under every entry of a table not yet full: the last place, not the first.
-      const table = scores.table(game.id);
-      const above = table.findIndex((e) => score > e.score);
-      const rank = above < 0 ? table.length : above;
-      this.initials = new InitialsEntry(scores.initials, rank, score);
+      this.initials = new InitialsEntry(scores.initials, placeOf(scores.table(game.id), score), score);
       this.current = 'initials';
     } else {
       if (scores) this.sign(scores.initials);
@@ -318,34 +338,18 @@ export class MachineRun {
 
   /** The end card's count-up jumps to its end (every ticket and bonus shown, the strip fed out); fire must be let go before it replays. */
   private skipCount(): void {
-    this.clock = Math.max(this.clock, COUNT_UP_SECONDS + this.bonusLines.length * BONUS_SECONDS);
+    this.clock = Math.max(this.clock, this.countEnd);
     this.fireReleased = false;
   }
 
   /** A click counts as a fire press on the next `readControls` (a light gun's trigger). */
   click(): void {
-    this.clicked = true;
+    this.keys.click();
   }
 
   /** The player's keys this frame, with fire's press edge. */
   readControls(): ArcadeControls {
-    const { input } = this.options;
-    let fire = input.isDown(...ARCADE_KEYS.fire) || this.clicked;
-    this.clicked = false;
-    if (this.latched) {
-      if (!fire) this.latched = false;
-      fire = false;
-    }
-    const controls: ArcadeControls = {
-      left: input.isDown(...ARCADE_KEYS.left),
-      right: input.isDown(...ARCADE_KEYS.right),
-      up: input.isDown(...ARCADE_KEYS.up),
-      down: input.isDown(...ARCADE_KEYS.down),
-      fire,
-      firePressed: fire && !this.lastFire,
-    };
-    this.lastFire = fire;
-    return controls;
+    return this.keys.read();
   }
 
   /**
@@ -373,6 +377,8 @@ export class MachineRun {
     }
     if (this.current === 'over') {
       this.clock += dt;
+      // Under reduced motion the card shows everything at once (the bonuses may arrive a frame after the result).
+      if (reduceMotion()) this.clock = Math.max(this.clock, this.countEnd);
       // Fire let go since the play: a fresh press while the card still counts skips to its end; the next one replays.
       if (!this.options.input.isDown(...ARCADE_KEYS.fire)) this.fireReleased = true;
       else if (this.fireReleased && !this.countDone && this.who === 'player') this.skipCount();

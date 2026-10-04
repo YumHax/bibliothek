@@ -38,6 +38,13 @@ export interface ArcadeBonus {
  * the player at it, start a paid play, abort. `isPlaying` is true from the coin to the end of
  * everything the player does there (the initials included): a click or E then walks away.
  */
+/**
+ * What a finished play on a machine pays (`economy/arcadePayout`, `game/ArcadePlay`): 'arcade' the hall's tickets, medals,
+ * challenge and league; 'none' a cabinet at home, played for fun (no coin, nothing paid or counted, the end card is the
+ * whole of it and the screens show no tickets); 'event' a party's cabinet, whose kitty its own hook pays on top.
+ */
+export type ArcadePayoutMode = 'arcade' | 'none' | 'event';
+
 export interface ArcadeMachineLike {
   readonly game: { readonly id: string; readonly title: string; readonly hint: string };
   readonly isPlaying: boolean;
@@ -47,11 +54,8 @@ export interface ArcadeMachineLike {
   readonly luck?: boolean;
   /** Plays cost no coin (LexiPunk, until its page reports scores). */
   readonly freePlay?: boolean;
-  /**
-   * Played at home for fun (a games night's match on the TV, a cabinet of one's own): no coin taken, nothing paid
-   * out, no medal, league or challenge; the end card is the whole of it.
-   */
-  readonly atHome?: boolean;
+  /** What a finished play pays (`ArcadePayoutMode`). */
+  readonly payout: ArcadePayoutMode;
   eyePose(): { position: THREE.Vector3; yaw: number };
   /** World point the camera looks at while playing. */
   screenCentre(): THREE.Vector3;

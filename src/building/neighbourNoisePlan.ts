@@ -1,15 +1,13 @@
+import type { PersonId } from '@/social/types';
+import type { HourSpan } from '@/time/clock';
+
 /*
  * THE BUILDING'S NOISE, as data: what the flat hears of the neighbours through its floor and
  * ceiling (`throughWalls`), and what the neighbours do about the flat's noise late at night
  * (`noiseComplaints`). Residents by their door's key (`stairwell/building.doorKey`: landing k, door
- * i; the 4th floor, under us, is k 1). Hours are the game clock's.
+ * i; the 4th floor, under us, is k 1). Hours are the game clock's; an hour window is a `HourSpan`
+ * (`time/clock`: `to` past 24 runs on after midnight, 23 .. 25.5 is 23:00 to 01:30).
  */
-
-/** An hour window; `to` past 24 runs on after midnight (23 .. 25.5 is 23:00 to 01:30). */
-export interface HourSpan {
-  from: number;
-  to: number;
-}
 
 /** A sound through the floor or the ceiling, some days of the game. */
 export interface ThroughWall {
@@ -22,17 +20,27 @@ export interface ThroughWall {
   oneIn: number;
   /** Level in the flat (0..1, before the voice's own peak). */
   level: number;
+  /** Plays only while this person's effect is in force (`social/perks`): a feud's TV, a hostile neighbour's late scales. */
+  needs?: { person: PersonId; effect: string };
+  /** Softer by `factor` while this person's effect is in force (a friend's piano). */
+  softer?: { person: PersonId; effect: string; factor: number };
 }
 
 export const NEIGHBOUR_NOISE = {
   /** What the flat hears of the building, quietly; never while the player is out of it. */
   throughWalls: [
-    // Mrs Moreau practising downstairs before dinner (her door's piano, `STAIRWELL_PLAN.doors`).
-    { voice: 'piano', who: '1:0', hours: { from: 18.5, to: 20.5 }, oneIn: 2, level: 0.16 },
+    // Mrs Moreau practising downstairs before dinner (her door's piano, `STAIRWELL_PLAN.doors`); softer for a friend.
+    { voice: 'piano', who: '1:0', hours: { from: 18.5, to: 20.5 }, oneIn: 2, level: 0.16, softer: { person: 'moreau', effect: 'quietPiano', factor: 0.55 } },
+    // Hostile, she practises her scales late, right under the player.
+    { voice: 'piano', who: '1:0', hours: { from: 22, to: 23.5 }, oneIn: 2, level: 0.22, needs: { person: 'moreau', effect: 'loudPiano' } },
+    // A. Leclerc at war with the player: his radio turned up through the floor, late, every night.
+    { voice: 'tv', who: '1:1', hours: { from: 22.5, to: 24.5 }, oneIn: 1, level: 0.18, needs: { person: 'leclerc', effect: 'feud' } },
     // The Moreaus' evening TV, under the living room.
     { voice: 'tv', who: '1:0', hours: { from: 20.5, to: 23 }, oneIn: 1, level: 0.12 },
     // The student up in the attic, some nights.
     { voice: 'music', who: 'attic', hours: { from: 23, to: 25.5 }, oneIn: 3, level: 0.1 },
+    // Cross with the player, Théo turns it up: earlier, louder, every night.
+    { voice: 'music', who: 'attic', hours: { from: 22, to: 26 }, oneIn: 1, level: 0.2, needs: { person: 'student', effect: 'loudMusic' } },
   ] as ThroughWall[],
   /** Someone walking about upstairs now and then of an evening: seconds between, at most this often. */
   stepsAbove: { hours: { from: 19, to: 24.5 } as HourSpan, everyS: { min: 50, max: 160 }, level: 0.16 },

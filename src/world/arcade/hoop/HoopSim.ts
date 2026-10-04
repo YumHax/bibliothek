@@ -1,6 +1,9 @@
 import * as THREE from 'three';
 import type { SfxEvent } from '@/audio/ChipSpeaker';
+import { SoundQueue } from '../SoundQueue';
 import { type ArcadeControls, NO_CONTROLS } from '../games/ArcadeGame';
+import { random } from '@/random';
+import { damp } from '@/math/damp';
 
 /*
  * HOOP FEVER's rules and ball physics, machine-local in metres (origin on the floor under the
@@ -24,6 +27,8 @@ export const HOOP = { x: 0, y: 2.0, z: -0.98, r: 0.21, tube: 0.012 };
 export const BOARD = { z: -1.18, w: 0.8, h: 0.55, y: 2.12 };
 const GRAVITY = 9.81;
 const SUBSTEP = 1 / 240;
+/** Where a throw goes when nothing says where the player looks (never live: the machine always hands the look over). */
+const STRAIGHT_AHEAD = new THREE.Vector3(0, 0.2, -1).normalize();
 /** What the roof net leaves of a ball's speed along it when the ball hits it. */
 const ROOF_DRAG = 0.35;
 /** Where the ball leaves the hand, machine-local, and how the throw works: speed from the meter, a lift above the look. */
@@ -82,7 +87,7 @@ export class HoopSim {
   private demoWait = 0;
   /** Seconds since the clock ran out: a ball balanced on the rim must not hold the round open for ever. */
   private overtime = 0;
-  private sounds: SfxEvent[] = [];
+  private readonly sounds = new SoundQueue();
   private outcomes: HoopOutcome[] = [];
   private flash: string | null = null;
   private readonly scratch = new THREE.Vector3();
@@ -95,9 +100,7 @@ export class HoopSim {
 
   /** The sounds of this frame, oldest first. */
   takeSounds(): SfxEvent[] {
-    const sounds = this.sounds;
-    this.sounds = [];
-    return sounds;
+    return this.sounds.take();
   }
 
   /** How the shots that ended this frame ended, oldest first. */
@@ -136,14 +139,14 @@ export class HoopSim {
 
   /**
    * One frame of the round; true once it is over. `player` throws on fire's release along
-   * `look()` (the player's view direction, machine-local, unit length); otherwise fire's press
+   * `controls.look` (the player's view direction, machine-local, unit length); otherwise fire's press
    * is a regular's throw.
    */
-  play(dt: number, controls: ArcadeControls, player: boolean, look: () => THREE.Vector3): boolean {
+  play(dt: number, controls: ArcadeControls, player: boolean): boolean {
     this.timeLeft = Math.max(0, this.timeLeft - dt);
     this.slide(dt);
     if (this.timeLeft > 0) {
-      if (player) this.playerThrow(dt, controls, look);
+      if (player) this.playerThrow(dt, controls);
       else if (controls.firePressed) this.regularThrow();
     }
     this.simulate(dt);
@@ -156,12 +159,12 @@ export class HoopSim {
   autopilot(dt: number): ArcadeControls {
     this.demoWait -= dt;
     const ready = this.demoWait <= 0 && this.balls.some((b) => b.state === 'rest');
-    if (ready) this.demoWait = 0.9 + Math.random() * 0.9;
+    if (ready) this.demoWait = 0.9 + random() * 0.9;
     return { ...NO_CONTROLS, fire: ready, firePressed: ready };
   }
 
   /** The player: hold fire and the meter swings, let go to throw where they look. */
-  private playerThrow(dt: number, controls: ArcadeControls, look: () => THREE.Vector3): void {
+  private playerThrow(dt: number, controls: ArcadeControls): void {
     if (controls.fire) {
       if (!this.charging) {
         this.charging = true;
@@ -177,7 +180,7 @@ export class HoopSim {
     const ball = this.nextBall();
     if (!ball) return;
     // Where the player looks, lifted: the arc a throw takes.
-    const direction = look();
+    const direction = controls.look ?? STRAIGHT_AHEAD;
     direction.y += LIFT;
     direction.normalize();
     const speed = THREE.MathUtils.lerp(THROW_SPEED[0], THROW_SPEED[1], this.power);
@@ -189,12 +192,12 @@ export class HoopSim {
     const ball = this.nextBall();
     if (!ball) return;
     const skill = 0.7;
-    const target = this.scratch.set(this.hoopX + (Math.random() - 0.5) * 0.12 * (1 - skill + 0.3), HOOP.y, HOOP.z + 0.02);
+    const target = this.scratch.set(this.hoopX + (random() - 0.5) * 0.12 * (1 - skill + 0.3), HOOP.y, HOOP.z + 0.02);
     const d = target.clone().sub(RELEASE);
     const horizontal = Math.hypot(d.x, d.z);
     const angle = THREE.MathUtils.degToRad(55);
     const denom = 2 * Math.cos(angle) ** 2 * (horizontal * Math.tan(angle) - d.y);
-    const speed = Math.sqrt((GRAVITY * horizontal * horizontal) / Math.max(0.01, denom)) * (1 + (Math.random() - 0.5) * 0.08);
+    const speed = Math.sqrt((GRAVITY * horizontal * horizontal) / Math.max(0.01, denom)) * (1 + (random() - 0.5) * 0.08);
     const vel = new THREE.Vector3(d.x / horizontal, 0, d.z / horizontal).multiplyScalar(Math.cos(angle) * speed);
     vel.y = Math.sin(angle) * speed;
     this.launch(ball, vel);
@@ -232,12 +235,12 @@ export class HoopSim {
       return;
     }
     const from = ball.pos;
-    const target = this.scratch.set(this.hoopXAt(0.75) + (Math.random() - 0.5) * 0.2 * error, HOOP.y, HOOP.z + 0.02 + (Math.random() - 0.5) * 0.12 * error);
+    const target = this.scratch.set(this.hoopXAt(0.75) + (random() - 0.5) * 0.2 * error, HOOP.y, HOOP.z + 0.02 + (random() - 0.5) * 0.12 * error);
     const d = target.clone().sub(from);
     const horizontal = Math.max(0.05, Math.hypot(d.x, d.z));
-    const angle = THREE.MathUtils.degToRad(52 + (Math.random() - 0.5) * 6);
+    const angle = THREE.MathUtils.degToRad(52 + (random() - 0.5) * 6);
     const denom = 2 * Math.cos(angle) ** 2 * (horizontal * Math.tan(angle) - d.y);
-    const speed = Math.sqrt((GRAVITY * horizontal * horizontal) / Math.max(0.01, denom)) * (1 + (Math.random() - 0.5) * 0.1 * error);
+    const speed = Math.sqrt((GRAVITY * horizontal * horizontal) / Math.max(0.01, denom)) * (1 + (random() - 0.5) * 0.1 * error);
     const vel = new THREE.Vector3(d.x / horizontal, 0, d.z / horizontal).multiplyScalar(Math.cos(angle) * speed);
     vel.y = Math.sin(angle) * speed;
     this.launch(ball, vel, from.clone());
@@ -258,7 +261,7 @@ export class HoopSim {
     ball.scored = false;
     ball.touched = false;
     ball.rimmed = false;
-    this.sounds.push({ sfx: 'launch' });
+    this.sounds.push('launch');
   }
 
   private slide(dt: number): void {
@@ -266,7 +269,7 @@ export class HoopSim {
     const fast = this.baskets >= MOVE_AFTER * 2;
     this.slideClock += dt * (fast ? 1.6 : 1);
     const target = moving ? Math.sin(this.slideClock * 1.3) * SLIDE : 0;
-    this.hoopX += (target - this.hoopX) * Math.min(1, dt * 3);
+    this.hoopX = damp(this.hoopX, target, 3, dt);
   }
 
   /** The balls in flight: gravity, the rim, the backboard, the nets and the ramp; a basket when one drops through the ring. */
@@ -284,7 +287,7 @@ export class HoopSim {
           b.pos.z = BOARD.z + BALL_R;
           b.vel.z *= -0.55;
           b.touched = true;
-          this.sounds.push({ sfx: 'thud', pitch: 1.3 });
+          this.sounds.push('thud', 1.3);
         }
         // The back panel, the side nets and the cage's top net.
         if (b.pos.z - BALL_R < BACK_Z) {
@@ -315,7 +318,7 @@ export class HoopSim {
           b.pos.y = floor;
           if (b.vel.y < -0.6) {
             b.vel.y *= -0.35;
-            this.sounds.push({ sfx: 'thud', pitch: 0.8 });
+            this.sounds.push('thud', 0.8);
           } else b.vel.y = 0;
           // Rolling: downhill towards the front, losing a little to the ramp.
           b.vel.x *= 1 - 3 * h;
@@ -349,7 +352,7 @@ export class HoopSim {
     if (vn < 0) {
       b.vel.addScaledVector(n, -(1 + 0.5) * vn);
       b.vel.multiplyScalar(0.85);
-      if (!b.touched || vn < -0.8) this.sounds.push({ sfx: 'rim', pitch: 0.9 + Math.random() * 0.2 });
+      if (!b.touched || vn < -0.8) this.sounds.push('rim', 0.9 + random() * 0.2);
       b.touched = true;
       b.rimmed = true;
     }
@@ -364,17 +367,18 @@ export class HoopSim {
     this.points += points;
     this.flash = b.touched ? `+${points}` : `SWISH +${points}`;
     this.outcomes.push(b.touched ? 'basket' : 'swish');
-    this.sounds.push({ sfx: 'swish' }, { sfx: 'score', pitch: 1 + Math.min(STREAK_MAX, this.streak) * 0.1 });
+    this.sounds.push('swish');
+    this.sounds.push('score', 1 + Math.min(STREAK_MAX, this.streak) * 0.1);
     if (this.baskets === MOVE_AFTER || this.baskets === MOVE_AFTER * 2) {
       this.flash = this.baskets === MOVE_AFTER ? 'HOOP ON THE MOVE!' : 'FASTER!';
-      this.sounds.push({ sfx: 'bonus' });
+      this.sounds.push('bonus');
     }
   }
 
   private missed(b: HoopBall): void {
     b.scored = true; // counted, one way or the other
     this.outcomes.push(b.rimmed ? 'rimOut' : 'miss');
-    if (this.streak > 1) this.sounds.push({ sfx: 'lose' });
+    if (this.streak > 1) this.sounds.push('lose');
     this.streak = 0;
   }
 

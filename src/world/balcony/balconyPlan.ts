@@ -1,7 +1,7 @@
 import type { Doorway, RoomOptions } from '../Room';
 import type { DecorEntry } from '../props/decor';
 import type { Owned } from '../build/owned';
-import { GROUND_FLOOR, STOREY } from '../street/streetPlan';
+import { GROUND_FLOOR, STOREY } from '@/world/measures/street';
 
 /*
  * THE BALCONY: a small stone balcony on the collection room's front wall (Front Street side, fifth

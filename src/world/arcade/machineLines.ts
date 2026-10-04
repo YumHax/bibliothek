@@ -1,6 +1,7 @@
 /** The hover lines and hints every paid machine shares (a machine's own lines are its attract and playing labels). */
 
 import { actionKeyLabel } from '@/ui/keys';
+import { formatCoins } from '@/text/money';
 
 export { TAKEN_LINE } from './Station';
 
@@ -22,5 +23,5 @@ export function againLine(price: string): string {
 
 /** "free play", "1 coin", "2 coins". */
 export function priceText(cost: number): string {
-  return cost === 0 ? 'free play' : `${cost} coin${cost > 1 ? 's' : ''}`;
+  return cost === 0 ? 'free play' : `${formatCoins(cost)}`;
 }

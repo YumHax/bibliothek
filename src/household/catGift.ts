@@ -1,7 +1,7 @@
 import type { Game } from '@/catalog/types';
-import { seeded } from '@/economy/seeded';
 import type { CatGift } from './Household';
 import { HOUSEHOLD } from './rules';
+import { dayStream } from '@/time/daily';
 
 /**
  * What the cat will leave by its kitchen bowl after a treat on market day `day`, or null: now and
@@ -9,7 +9,7 @@ import { HOUSEHOLD } from './rules';
  * else a few coins from under the armchair. Seeded by the day, so a reload does not reroll it.
  */
 export function drawCatGift(day: number, shelved: readonly Game[]): CatGift | null {
-  const random = seeded(`catGift:${day}`);
+  const random = dayStream(`catGift:${day}`);
   const { giftChance, manualChance, coins } = HOUSEHOLD.treat;
   if (random() >= giftChance) return null;
   const lacking = shelved.filter((g) => (g.status ?? 'owned') === 'owned' && g.condition === 'noManual' && !g.repro);

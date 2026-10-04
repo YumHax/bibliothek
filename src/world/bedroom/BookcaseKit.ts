@@ -5,6 +5,7 @@ import { invisibleHitbox } from '../meshUtils';
 import { Prop, part } from '../props/Prop';
 import { paint } from '../materials/palette';
 import { HoverGlint } from '../props/hoverGlint';
+import { formatCoins } from '@/text/money';
 
 interface BookcaseKitOptions {
   price: number;
@@ -85,7 +86,7 @@ export class BookcaseKit extends Prop implements Interactable, UpgradeOfferLike 
   }
 
   label(): string | null {
-    return this.visible ? `Bookcase kit (${this.price} coins, for the games ${this.options.for ?? 'the living room'} has no room left for) · buy` : null;
+    return this.visible ? `Bookcase kit (${formatCoins(this.price)}, for the games ${this.options.for ?? 'the living room'} has no room left for) · buy` : null;
   }
 
   activate(session: SessionActions): void {

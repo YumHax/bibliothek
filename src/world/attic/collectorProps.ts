@@ -3,12 +3,13 @@ import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeom
 import type { Interactable } from '@/interaction/Interactable';
 import type { SessionActions } from '@/game/SessionActions';
 import type { Updatable } from '@/core/Engine';
-import { createCanvas, seededRandom, toTexture } from '@/covers/generated/canvasUtils';
+import { createCanvas, toTexture } from '@/covers/generated/canvasUtils';
 import { playWoodKnock } from '@/audio/furnitureSounds';
 import { boxMesh, invisibleHitbox } from '../meshUtils';
 import { cloth, paint, timber } from '../materials/palette';
 import { Prop } from '../props/Prop';
 import { additive } from '@/world/materials/blend';
+import { lcg } from '@/random';
 
 /** The dust sheets: an old linen gone grey. */
 const SHEET = cloth(0xcfc8ba, 1);
@@ -86,7 +87,7 @@ const HEADLINES = ['THE 16-BIT WARS', 'SECRETS OF THE WARP ZONE', 'WE PLAY THE P
 
 function coverTexture(seed: number): THREE.CanvasTexture {
   const [canvas, ctx] = createCanvas(300, 400);
-  const random = seededRandom(seed * 97 + 13);
+  const random = lcg(seed * 97 + 13);
   const hue = Math.floor(random() * 360);
   const g = ctx.createLinearGradient(0, 0, 0, 400);
   g.addColorStop(0, `hsl(${hue}, 70%, 45%)`);
@@ -176,7 +177,7 @@ function notebookTexture(): THREE.CanvasTexture {
   for (let y = 24; y < 240; y += 14) ctx.fillRect(0, y, 340, 1);
   ctx.fillStyle = 'rgba(40, 40, 70, 0.75)';
   ctx.font = 'italic 12px Georgia, serif';
-  const random = seededRandom(31);
+  const random = lcg(31);
   for (let y = 36; y < 230; y += 14) ctx.fillRect(14, y - 6, 120 + random() * 190, 1.5);
   ctx.fillText('A. Vasseur', 14, 18);
   return toTexture(canvas, 'facing');
@@ -198,7 +199,7 @@ export class DustyShelf extends Prop implements Interactable {
     const height = rows * 0.36 + 0.1;
     for (const x of [-width / 2, width / 2]) this.add(boxMesh(0.025, height, 0.3, pine, { x, y: height / 2 }));
     for (let r = 0; r <= rows; r++) this.add(boxMesh(width, 0.025, 0.3, pine, { y: 0.05 + r * 0.36 }));
-    const random = seededRandom(1989);
+    const random = lcg(1989);
     const box = new THREE.BoxGeometry(1, 1, 1);
     const material = new THREE.MeshStandardMaterial({ roughness: 0.85 });
     const perRow = Math.floor((width - 0.06) / 0.03);
@@ -257,7 +258,7 @@ export class DustMotes extends THREE.Points implements Updatable {
   private clock = 0;
 
   constructor(width: number, depth: number, height: number, count = 260) {
-    const random = seededRandom(7);
+    const random = lcg(7);
     const positions = new Float32Array(count * 3);
     const speeds = new Float32Array(count);
     for (let i = 0; i < count; i++) {

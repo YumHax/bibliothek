@@ -4,6 +4,7 @@ import { getPlatform } from '@/catalog/platforms';
 import { fuzzyMatch, highlightHtml } from './fuzzy';
 import { escapeHtml } from './html';
 import { fadeIn, fadeOut } from './fade';
+import { compareTitles } from '@/text/strings';
 import './SearchBar.css';
 
 const MAX_RESULTS = 6;
@@ -117,7 +118,7 @@ export class SearchBar {
         meta: [platform.shortName, game.releaseDate?.slice(0, 4)].filter(Boolean).join(' · '),
       });
     }
-    scored.sort((a, b) => b.score - a.score || a.game.title.localeCompare(b.game.title));
+    scored.sort((a, b) => b.score - a.score || compareTitles(a.game.title, b.game.title));
     this.results = query ? scored.slice(0, MAX_RESULTS) : [];
     this.active = 0;
     this.render(query);

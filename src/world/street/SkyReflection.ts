@@ -55,7 +55,7 @@ export class SkyReflection implements ReflectionSource {
     // the scene's environment for a few frames after the zone unloads (a freed one reads black).
     const [target, previous, generator] = [this.target, this.previous, this.generator];
     this.target = this.previous = this.generator = null;
-    setTimeout(() => {
+    setTimeout(() => { // convention-ok: frees after the renderer's dip; nothing ticks a disposed zone
       target?.dispose();
       previous?.dispose();
       generator?.dispose();

@@ -6,6 +6,12 @@ import type { VisitRoute } from '../Visit';
 import type { GatheringDeps } from './deps';
 import { CLUB_VISITOR, GATHERING_LINES, GATHERING_RULES } from './gatheringPlan';
 import { Party } from './Party';
+import type { Friend } from '../Friend';
+import { bodyOf, talkHook } from '../../people/socialHook';
+import { effectValue } from '@/social/perks';
+
+/** The club's secretary's person (`social/people/town`). */
+const CLUB_PERSON = 'albers';
 
 type Stop = VisitRoute['browse'][number];
 
@@ -33,8 +39,14 @@ export class ClubVisit {
       visitOptions: () => ({ sits: false, stops: () => visit.stops() }),
       gaveUp: () => host.options.notices?.react('Nobody answered: the collectors’ club will try another day.'),
     });
-    this.party.add(CLUB_VISITOR, 0);
+    // Mrs Albers is someone to know (`social/people/town`): a word with her while she is round, the club's gift by how she takes to the player.
+    const member = this.party.add(CLUB_VISITOR, 0);
+    this.body = member.friend;
+    this.body.talker = talkHook(deps.social, CLUB_PERSON, () => ({ person: CLUB_PERSON, place: 'flat', body: bodyOf(member.friend) })) ?? null;
   }
+
+  /** The secretary's body, while her visit lasts (its conversation is let go with it). */
+  private readonly body: Friend;
 
   get done(): boolean {
     return this.party.done;
@@ -71,7 +83,7 @@ export class ClubVisit {
     const { host } = this.deps;
     if (this.thanked) return host.line('houseLeave', GATHERING_LINES.houseLeave);
     this.thanked = true;
-    const coins = GATHERING_RULES.club.gift[this.honour.kind];
+    const coins = Math.round(GATHERING_RULES.club.gift[this.honour.kind] * effectValue(CLUB_PERSON, 'clubBonus', 1));
     host.options.purse?.earnCoins(coins);
     host.coinsFrom(CLUB_VISITOR, coins);
     host.options.notices?.reward({ title: 'The collectors’ club', detail: `${CLUB_VISITOR.name} came to see ${this.honour.name}, and left the club’s thanks.`, coins });
@@ -82,6 +94,7 @@ export class ClubVisit {
   finish(): void {
     if (this.finished) return;
     this.finished = true;
+    this.body.talker = null;
     // Seen, or thanked on the way out (no shelf stop reached): either way the club came, and pays once.
     if (this.seen || this.thanked) this.onSeen(this.honour.id);
   }

@@ -10,7 +10,8 @@ import { Prop, part, markShared } from './Prop';
 import { paint as paintMaterial, scuffedPaint, timber } from '../materials/palette';
 import { FLOOR } from '../surface/layers';
 import { playHingeCreak, playLatchClick, playWoodKnock } from '@/audio/furnitureSounds';
-import { earsAt, heardAt } from '@/audio/spatial';
+import { earsAt, hear } from '@/audio/hearing';
+import { random } from '@/random';
 
 interface DoorOptions {
   /** Colour of the painted leaf. Default a deep slate green. */
@@ -154,18 +155,18 @@ export class Door extends Prop implements Updatable, Interactable {
 
   /** Now and then, the hinges as the leaf sets off. */
   private creak(): void {
-    if (Math.random() >= CREAK_CHANCE) return;
+    if (random() >= CREAK_CHANCE) return;
     const { gain, spatial } = this.heard();
     playHingeCreak(0.035 * gain, spatial);
   }
 
   /** How the door is heard from where the player stands (`audio/spatial`'s ears): at the handle's height. */
-  private heard(): ReturnType<typeof heardAt> {
+  private heard(): ReturnType<typeof hear> {
     // On the listener's side of the shut leaf: its latch is not heard through the door itself.
     const at = DOOR_SOUND_AT.clone();
     const ears = earsAt();
     if (ears) at.z = this.worldToLocal(ears).z < SOUND_SIDE_Z.split ? SOUND_SIDE_Z.far : SOUND_SIDE_Z.near;
-    return heardAt(this.localToWorld(at));
+    return hear(this.localToWorld(at));
   }
 
   /**

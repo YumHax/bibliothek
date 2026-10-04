@@ -1,10 +1,11 @@
 import { Sheet, type Rng, type Fill, type Surface, SCENE_HEIGHT, azimuthX, heightY, outline, sizePx, worldPoint } from './Sheet';
-import { between, integer, pick, shade } from './paint';
+import { shade } from './paint';
 import { BUS_SHELTER, CYCLE_NEAR, FAR_LANE, FRONTAGE, FRONT_END, KERB, LAMPS, LAMP_LINE, NEAR_KERB, NEAR_LANE, OUR_LINE, PARK_END, PARK_NEAR_KERB, PARK_OUR_LINE, ROAD, frontage, ground, streetEnd } from './plan';
 import { BENCHES, BIKE_RACKS, BUS_STOP, CROSSINGS, KIOSK, LAMP_HEIGHT, PARK_SECTION, SIGNAL_POSTS, STOP_LINE, STREET_BINS, STREET_DETAILS, TERRACES, inFlatFrame, roadworks } from '@/world/city/frontage';
 import { STREET_TREES, TREE_FORM, treeHeight } from '@/world/city/trees';
 import { PARKED_CARS, type ParkedShape } from '@/world/city/parkedCars';
-import { FRONT, STREET_ENDS, STREET_PLAN } from '@/world/street/streetPlan';
+import { STREET_PLAN } from '@/world/street/streetPlan'; // imports-ok: the painted view of the street draws what the walkable one lays out; one model for both is the last wave
+import { FRONT, STREET_ENDS } from '@/world/measures/street';
 import { LAMP_DESIGNS } from '@/world/street/StreetLamps';
 import { TREE_STYLES, paintTree } from './Tree';
 import { holidayStreetItems, paintTreeLights } from './Holiday';
@@ -29,6 +30,7 @@ import {
   paintTrafficLight,
   paintTreeGrate,
 } from './paintedFurniture';
+import { between, integer, pick } from '@/random';
 
 const ASPHALT = '#4a4c50';
 /** How the ground takes the weather: the road puddles most, the flags a little less; snow settles on both. */

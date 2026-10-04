@@ -9,7 +9,7 @@ import { invisibleHitbox } from '../../meshUtils';
 import { paint } from '../../materials/palette';
 import { snowPaint } from '../snowCover';
 import { nightnessOf } from '../streetAir';
-import { clockTime } from '../shops/shopHours';
+import { clockShort } from '@/text/clock';
 
 /** The clock's head: a drum this wide and deep over the post, its dials' radius. */
 const HEAD = { radius: 0.36, depth: 0.2 };
@@ -94,7 +94,7 @@ export class StreetClock extends THREE.Group implements Furniture, Interactable,
   activate(session: SessionActions): void {
     const hours = this.dayNight.state.hours;
     const soon = this.closingSoon(hours);
-    session.react(`It is ${clockTime(hours)}.${soon ? ` ${soon}` : ''}`);
+    session.react(`It is ${clockShort(hours)}.${soon ? ` ${soon}` : ''}`);
   }
 }
 

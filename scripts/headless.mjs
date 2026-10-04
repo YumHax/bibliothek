@@ -75,6 +75,24 @@ export function stubs(quality = 'high') {
 }
 
 /**
+ * Vite's `?raw` imports in Node: `import frag from './Foo.frag.glsl?raw'` is the file's text (the shaders live in
+ * `.glsl` files beside the code that compiles them; `src/vite-env.d.ts` types the import, `scripts/check-glsl.mjs`
+ * parses the files).
+ */
+const rawImports = {
+  name: 'raw-imports',
+  setup(api) {
+    api.onResolve({ filter: /\?raw$/ }, (args) => {
+      const spec = args.path.replace(/\?raw$/, '');
+      // A plugin's resolution runs before esbuild's `alias`, so `@/` is mapped here too.
+      const file = spec.startsWith('@/') ? path.join(ROOT, 'src', spec.slice(2)) : path.resolve(args.resolveDir, spec);
+      return { path: file, namespace: 'raw' };
+    });
+    api.onLoad({ filter: /.*/, namespace: 'raw' }, (args) => ({ contents: fs.readFileSync(args.path, 'utf8'), loader: 'text' }));
+  },
+};
+
+/**
  * Bundles `contents` (an ES module body; `@/` is `src/`) for Node and imports it. The temp file is removed once
  * imported, so a stack trace names a file that is gone: the message is what to read. `name` tells the temp files of
  * two checks apart.
@@ -89,6 +107,7 @@ export async function bundle(contents, { quality = 'high', name = 'headless' } =
     alias: { '@': path.join(ROOT, 'src') },
     define: { 'import.meta.env.DEV': 'false', 'import.meta.env.PROD': 'true', 'import.meta.env.MODE': '"production"', 'import.meta.env.BASE_URL': '"/"' },
     loader: { '.png': 'empty', '.jpg': 'empty', '.svg': 'empty', '.css': 'empty', '.wasm': 'empty' },
+    plugins: [rawImports],
     banner: { js: `(() => {${stubs(quality)}})();` },
     outfile: out,
     logLevel: 'error',

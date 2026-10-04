@@ -1,5 +1,6 @@
 import { Voice } from './ambient';
 import { whiteNoise } from './noise';
+import { random } from '@/random';
 
 /** Loudness of the whole murmur at level 1 (linear). */
 const MASTER = 0.07;
@@ -54,12 +55,12 @@ export class CrowdMurmur extends Voice {
       const source = this.loop(ctx, noise);
       const band = ctx.createBiquadFilter();
       band.type = 'bandpass';
-      band.frequency.value = frequency * (0.9 + Math.random() * 0.2);
+      band.frequency.value = frequency * (0.9 + random() * 0.2);
       band.Q.value = q;
       const gain = ctx.createGain();
       gain.gain.value = 0;
       source.connect(band).connect(gain).connect(out);
-      this.talkers.push({ gain, talking: false, phrase: Math.random() * 2, syllable: 0 });
+      this.talkers.push({ gain, talking: false, phrase: random() * 2, syllable: 0 });
     }
   }
 
@@ -68,14 +69,14 @@ export class CrowdMurmur extends Voice {
       talker.phrase -= dt;
       if (talker.phrase <= 0) {
         talker.talking = !talker.talking;
-        talker.phrase = talker.talking ? 0.8 + Math.random() * 2.5 : 0.4 + Math.random() * 2.5 / Math.max(0.3, this.level);
+        talker.phrase = talker.talking ? 0.8 + random() * 2.5 : 0.4 + random() * 2.5 / Math.max(0.3, this.level);
         if (!talker.talking) talker.gain.gain.setTargetAtTime(0, ctx.currentTime, 0.08);
       }
       if (!talker.talking) continue;
       talker.syllable -= dt;
       if (talker.syllable <= 0) {
-        talker.syllable = 0.1 + Math.random() * 0.16;
-        talker.gain.gain.setTargetAtTime(0.25 + Math.random() * 0.75, ctx.currentTime, 0.03);
+        talker.syllable = 0.1 + random() * 0.16;
+        talker.gain.gain.setTargetAtTime(0.25 + random() * 0.75, ctx.currentTime, 0.03);
       }
     }
   }

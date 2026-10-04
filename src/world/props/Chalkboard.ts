@@ -1,9 +1,10 @@
 import * as THREE from 'three';
-import { createCanvas, fitFontSize, seededRandom, toTexture, FONT } from '@/covers/generated/canvasUtils';
+import { createCanvas, fitFontSize, toTexture, FONT } from '@/covers/generated/canvasUtils';
 import type { Furniture } from '../Furniture';
 import { boxMesh } from '../meshUtils';
 import { paint, timber } from '@/world/materials/palette';
 import { INSET } from './joinery';
+import { lcg } from '@/random';
 
 export interface ChalkboardOptions {
   /** What is chalked on it, the first line bigger. Default a welcome. */
@@ -39,7 +40,7 @@ export class Chalkboard extends THREE.Group implements Furniture {
     this.height = options.height ?? 0.95;
     const lines = options.lines ?? ['WELCOME', 'prices as marked', 'haggling welcome'];
     const wood = timber(options.wood ?? 0x5a4632, 0.8);
-    const random = seededRandom((options.seed ?? 1) * 7919);
+    const random = lcg((options.seed ?? 1) * 7919);
     const map = paintSlate(this.width, this.height, lines, options.slate ?? 0x1f2a22, random);
     const slate = new THREE.MeshStandardMaterial({ map, roughness: 0.9 });
     const { width: w, height: h } = this;

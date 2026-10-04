@@ -1,6 +1,6 @@
 import { Sheet, type Rng, azimuthOf, azimuthX, heightY, sizePx } from './Sheet';
-import { pick } from './paint';
 import type { Cell } from './sprites';
+import { pick } from '@/random';
 
 /**
  * How the painted people look: the palettes they are dressed from, the pen the sprite figures

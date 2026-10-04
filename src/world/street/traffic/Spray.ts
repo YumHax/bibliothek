@@ -8,6 +8,10 @@ import type { StreetTraffic } from './StreetTraffic';
 import { RENDER_ORDER } from '../../surface/layers';
 import { POINT_SCALE, scalesPoints } from '../../particles/pointScale';
 import { overKeepingAlpha } from '@/world/materials/blend';
+import { assemble } from '@/graphics/glslAssemble';
+import sprayVertex from './Spray.vert.glsl?raw';
+import FRAGMENT from './Spray.frag.glsl?raw';
+import { random } from '@/random';
 
 /** How long a droplet flies (s), gravity on it, and how wet the road must be before anything throws spray. */
 const LIFE = 0.9;
@@ -18,38 +22,8 @@ const RATE = 3.2;
 const FAST_ENOUGH = 3;
 const WHITE = new THREE.Color(1, 1, 1);
 
-const VERTEX = /* glsl */ `
-  attribute vec3 velocity;
-  attribute float birth;
-  uniform float time;
-  uniform float size;
-  uniform float pointScale;
-  varying float vAge;
-  void main() {
-    float t = time - birth;
-    vAge = t / ${LIFE.toFixed(2)};
-    vec3 p = position + velocity * t + vec3(0.0, 0.5 * ${GRAVITY.toFixed(1)} * t * t, 0.0);
-    p.y = max(p.y, ${ROAD_Y.toFixed(3)});
-    vec4 mv = modelViewMatrix * vec4(p, 1.0);
-    gl_Position = projectionMatrix * mv;
-    float alive = step(0.0, t) * step(vAge, 1.0);
-    gl_PointSize = alive * pointScale * min(48.0, size * (0.6 + vAge * 1.6) * 500.0 / max(0.5, -mv.z));
-  }
-`;
-
-const FRAGMENT = /* glsl */ `
-  uniform vec3 tint;
-  uniform float strength;
-  varying float vAge;
-  void main() {
-    float d = length(gl_PointCoord - 0.5);
-    float a = smoothstep(0.5, 0.05, d) * (1.0 - vAge) * strength;
-    if (a < 0.003) discard;
-    gl_FragColor = vec4(tint, a);
-    #include <tonemapping_fragment>
-    #include <colorspace_fragment>
-  }
-`;
+/** The droplets' flight, with the constants above written in. */
+const VERTEX = assemble(sprayVertex, { defines: { TS_LIFE: LIFE.toFixed(2), TS_GRAVITY: GRAVITY.toFixed(1), TS_ROAD_Y: ROAD_Y.toFixed(3) } });
 
 /**
  * The spray a vehicle throws off a wet road: fine droplets kicked up behind its rear wheels, more
@@ -125,16 +99,16 @@ export class Spray extends THREE.Group implements Furniture, Updatable {
       const hz = -Math.sin(v.yaw);
       for (let i = 0; i < n; i++) {
         // Behind a rear wheel, either side.
-        const side = (Math.random() < 0.5 ? -1 : 1) * (v.width / 2 - 0.15);
-        const back = -v.length / 2 + 0.6 + Math.random() * 0.3;
+        const side = (random() < 0.5 ? -1 : 1) * (v.width / 2 - 0.15);
+        const back = -v.length / 2 + 0.6 + random() * 0.3;
         const k = this.next;
         this.next = (this.next + 1) % this.count;
         this.start.setXYZ(k, v.position.x + hx * back - hz * side, ROAD_Y + 0.15, v.position.z + hz * back + hx * side);
         // Thrown backwards and up, at a fraction of the vehicle's speed, fanning out.
         const out = side > 0 ? 1 : -1;
-        const speed = v.speed * (0.18 + Math.random() * 0.12);
-        this.velocity.setXYZ(k, -hx * speed - hz * out * Math.random() * 1.2, 0.8 + Math.random() * 1.4, -hz * speed + hx * out * Math.random() * 1.2);
-        this.birth.setX(k, this.time - Math.random() * dt);
+        const speed = v.speed * (0.18 + random() * 0.12);
+        this.velocity.setXYZ(k, -hx * speed - hz * out * random() * 1.2, 0.8 + random() * 1.4, -hz * speed + hx * out * random() * 1.2);
+        this.birth.setX(k, this.time - random() * dt);
         wrote = true;
       }
     }

@@ -1,3 +1,4 @@
+import { clamp } from '@/math/scalar';
 import { KEYS, PersistedStore } from '@/persistence';
 
 const SETTINGS_STORAGE_KEY = KEYS.settings;
@@ -137,24 +138,24 @@ function readSettings(data: unknown): GameSettings | null {
   return sanitize({ ...(structuredClone(DEFAULT_SETTINGS) as GameSettings), ...stored, volume: { ...DEFAULT_SETTINGS.volume, ...stored.volume } });
 }
 
-function clamp(value: unknown, min: number, max: number, fallback: number): number {
-  const n = typeof value === 'number' && Number.isFinite(value) ? value : fallback;
-  return Math.min(max, Math.max(min, n));
+/** A saved value read back as a finite number held within `min`..`max`, or `fallback` when it is not a number at all. */
+function numberIn(value: unknown, min: number, max: number, fallback: number): number {
+  return clamp(typeof value === 'number' && Number.isFinite(value) ? value : fallback, min, max);
 }
 
 function sanitize(s: GameSettings): GameSettings {
   const d = DEFAULT_SETTINGS;
   const { min, max } = SENSITIVITY_RANGE;
-  const volume = Object.fromEntries(VOLUME_CHANNELS.map((c) => [c, clamp(s.volume?.[c], 0, 1, d.volume[c])])) as Record<VolumeChannel, number>;
+  const volume = Object.fromEntries(VOLUME_CHANNELS.map((c) => [c, numberIn(s.volume?.[c], 0, 1, d.volume[c])])) as Record<VolumeChannel, number>;
   const bindings = Object.fromEntries(
     Object.entries(s.bindings && typeof s.bindings === 'object' ? s.bindings : {}).filter(([k, v]) => typeof k === 'string' && typeof v === 'string' && k !== v),
   );
   return {
-    mouseSensitivity: clamp(s.mouseSensitivity, min, max, d.mouseSensitivity),
-    padSensitivity: clamp(s.padSensitivity, min, max, d.padSensitivity),
-    touchSensitivity: clamp(s.touchSensitivity, min, max, d.touchSensitivity),
+    mouseSensitivity: numberIn(s.mouseSensitivity, min, max, d.mouseSensitivity),
+    padSensitivity: numberIn(s.padSensitivity, min, max, d.padSensitivity),
+    touchSensitivity: numberIn(s.touchSensitivity, min, max, d.touchSensitivity),
     invertY: s.invertY === true,
-    fov: clamp(s.fov, FOV_RANGE.min, FOV_RANGE.max, d.fov),
+    fov: numberIn(s.fov, FOV_RANGE.min, FOV_RANGE.max, d.fov),
     volume,
     crosshair: s.crosshair !== false,
     hoverLabel: s.hoverLabel !== false,

@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { birdNote } from '@/audio/street/streetVoices';
 import type { SeasonName } from '@/time/season';
 import type { SoundGraph } from './soundGraph';
+import { random } from '@/random';
 
 /** What the birds go by: the hour, how light it is, the weather, what lies on the ground. */
 interface BirdWeather {
@@ -48,11 +49,11 @@ export class StreetBirds {
     this.clock -= dt;
     if (this.clock > 0) return;
     // Phrases come quicker the more there is to sing: every 1.5 s in a spring dawn, every 10 s on a grey winter noon.
-    this.clock = (1.2 + Math.random() * 4) / Math.max(0.15, song);
+    this.clock = (1.2 + random() * 4) / Math.max(0.15, song);
     if (song < 0.05 && !(season === 'summer' && dusk > 0.2 && weather > 0.5)) return;
     const kind = pick(MIX[season], sky.snowCover > 0.4, season === 'summer' ? dusk : 0);
-    const pan = Math.random() * 1.6 - 0.8;
-    const rear = Math.random() < 0.3 ? 0.6 + Math.random() * 0.4 : 0;
+    const pan = random() * 1.6 - 0.8;
+    const rear = random() < 0.3 ? 0.6 + random() * 0.4 : 0;
     phrase(g, out(pan, rear, 3), kind, Math.min(1.2, 0.6 + song * 0.5));
   }
 }
@@ -63,7 +64,7 @@ function pick(mix: Record<Kind, number>, snowy: boolean, dusk: number): Kind {
   if (snowy) weights.blackbird = weights.tit = weights.swift = 0;
   weights.swift *= 1 + dusk * 4;
   const total = Object.values(weights).reduce((a, b) => a + b, 0) || 1;
-  let r = Math.random() * total;
+  let r = random() * total;
   for (const [kind, w] of Object.entries(weights) as [Kind, number][]) {
     r -= w;
     if (r <= 0) return kind;
@@ -73,30 +74,30 @@ function pick(mix: Record<Kind, number>, snowy: boolean, dusk: number): Kind {
 
 /** One phrase of `kind` into `out`, at `strength`. */
 function phrase(g: SoundGraph, out: AudioNode, kind: Kind, strength: number): void {
-  let t = g.now + 0.02 + Math.random() * 0.2;
+  let t = g.now + 0.02 + random() * 0.2;
   const note = (from: number, to: number, length: number, level: number): void => {
     birdNote(g.ctx, out, { at: t, from, to, sweep: length, attack: length * 0.2, length, level: level * strength });
   };
   if (kind === 'sparrow') {
-    const notes = 2 + Math.floor(Math.random() * 4);
+    const notes = 2 + Math.floor(random() * 4);
     for (let i = 0; i < notes; i++) {
-      const f = 3600 + Math.random() * 1500;
+      const f = 3600 + random() * 1500;
       note(f, f * 0.7, 0.07, 0.05);
-      t += 0.09 + Math.random() * 0.06;
+      t += 0.09 + random() * 0.06;
     }
   } else if (kind === 'blackbird') {
-    const notes = 3 + Math.floor(Math.random() * 4);
-    const base = 1400 + Math.random() * 800;
+    const notes = 3 + Math.floor(random() * 4);
+    const base = 1400 + random() * 800;
     for (let i = 0; i < notes; i++) {
-      const length = 0.12 + Math.random() * 0.18;
-      const f0 = base * (0.85 + Math.random() * 0.3);
-      note(f0, f0 * (Math.random() < 0.5 ? 1.35 : 0.75), length, 0.04);
-      t += length + 0.05 + Math.random() * 0.12;
+      const length = 0.12 + random() * 0.18;
+      const f0 = base * (0.85 + random() * 0.3);
+      note(f0, f0 * (random() < 0.5 ? 1.35 : 0.75), length, 0.04);
+      t += length + 0.05 + random() * 0.12;
     }
   } else if (kind === 'tit') {
     // "Teacher, teacher": a high and a low note, three or four times.
-    const high = 5200 + Math.random() * 600;
-    for (let i = 0; i < 3 + Math.floor(Math.random() * 2); i++) {
+    const high = 5200 + random() * 600;
+    for (let i = 0; i < 3 + Math.floor(random() * 2); i++) {
       note(high, high * 0.97, 0.08, 0.035);
       t += 0.1;
       note(high * 0.72, high * 0.7, 0.1, 0.035);
@@ -104,25 +105,25 @@ function phrase(g: SoundGraph, out: AudioNode, kind: Kind, strength: number): vo
     }
   } else if (kind === 'robin') {
     // A thin, wistful trickle of high notes going up and down.
-    for (let i = 0; i < 6 + Math.floor(Math.random() * 5); i++) {
-      const f = 3000 + Math.random() * 3500;
-      note(f, f * (0.8 + Math.random() * 0.45), 0.06 + Math.random() * 0.08, 0.025);
-      t += 0.08 + Math.random() * 0.07;
+    for (let i = 0; i < 6 + Math.floor(random() * 5); i++) {
+      const f = 3000 + random() * 3500;
+      note(f, f * (0.8 + random() * 0.45), 0.06 + random() * 0.08, 0.025);
+      t += 0.08 + random() * 0.07;
     }
   } else if (kind === 'swift') {
     // A party screaming past over the roofs: a long buzzy shriek, three or four birds overlapping.
-    for (let b = 0; b < 2 + Math.floor(Math.random() * 3); b++) {
-      const start = t + b * (0.08 + Math.random() * 0.15);
+    for (let b = 0; b < 2 + Math.floor(random() * 3); b++) {
+      const start = t + b * (0.08 + random() * 0.15);
       for (let i = 0; i < 14; i++) {
-        const f = 6200 + Math.random() * 900;
+        const f = 6200 + random() * 900;
         birdNote(g.ctx, out, { at: start + i * 0.035, from: f, to: f * 0.9, sweep: 0.03, attack: 0.005, length: 0.03, level: 0.03 * strength * (1 - i / 18) });
       }
     }
   } else {
     // A crow: two or three hoarse caws.
-    for (let i = 0; i < 2 + Math.floor(Math.random() * 2); i++) {
+    for (let i = 0; i < 2 + Math.floor(random() * 2); i++) {
       caw(g, out, t, 0.12 * strength);
-      t += 0.45 + Math.random() * 0.2;
+      t += 0.45 + random() * 0.2;
     }
   }
 }

@@ -1,8 +1,9 @@
 import * as THREE from 'three';
-import { createCanvas, seededRandom, toTexture, FONT } from '@/covers/generated/canvasUtils';
+import { createCanvas, toTexture, FONT } from '@/covers/generated/canvasUtils';
 import type { Furniture } from '../Furniture';
 import { boxMesh } from '../meshUtils';
 import { paint, timber } from '../materials/palette';
+import { lcg } from '@/random';
 
 /** `wood`: a slatted fruit crate; `cardboard`: a taped-up moving box with a marker scrawl. */
 export type CrateStyle = 'wood' | 'cardboard';
@@ -41,7 +42,7 @@ export class Crate extends THREE.Group implements Furniture {
     const depth = options.depth ?? (style === 'wood' ? 0.36 : 0.38);
     const stack = options.stack ?? 1;
     this.size = { width, height, depth, stack };
-    const random = seededRandom((options.seed ?? 1) * 2654435761);
+    const random = lcg((options.seed ?? 1) * 2654435761);
 
     for (let level = 0; level < stack; level++) {
       const one = style === 'wood' ? woodCrate(width, height, depth, random) : cardboardBox(width, height, depth, options.label ?? SCRAWLS[Math.floor(random() * SCRAWLS.length)]!, random);

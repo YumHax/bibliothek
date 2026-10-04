@@ -10,13 +10,14 @@ import { homeGoodsItems, type HomeGoodsItem } from './HomeGoodsDisplay';
 import { MARKET_PLAN } from './marketPlan';
 import { RecordCrate } from '../vinyl/RecordCrate';
 import { RECORDS } from '@/vinyl/records';
+import { formatCoins } from '@/text/money';
 
 /**
  * The household stall: furniture for the flat (`HOME_GOODS`), bought like anywhere else (`SessionActions.buyUpgrade`:
  * a dear piece takes a second click); one-offs vanish once there is no room at home for another, a piece whose
  * companion is not bought yet says so.
  */
-export function furnishHousehold(zone: Zone, { listener, home: { upgrades } }: BuildContext): void {
+export function furnishHousehold(zone: Zone, { listener, home: { upgrades } }: Pick<BuildContext, 'listener' | 'home'>): void {
   const plan = MARKET_PLAN.household;
   const stall = zone.placeAt(new MarketStall({ sign: plan.sign, cloth: plan.cloth, seed: 17 }), plan.at);
   zone.place(new Vendor({
@@ -37,7 +38,7 @@ export function furnishHousehold(zone: Zone, { listener, home: { upgrades } }: B
     label: (id) => {
       const good = goodOf(id);
       if (!good) return '';
-      const head = `${good.name} · ${good.price} coins`;
+      const head = `${good.name} · ${formatCoins(good.price)}`;
       return status(id) === 'needs' ? `${head} · needs the ${HOME_GOODS.find((g) => g.id === good.requires)?.name.toLowerCase() ?? 'rest'} first` : `${head} · ${good.blurb} · buy`;
     },
     onActivate: (id, session) => {
@@ -71,7 +72,7 @@ function furnishRecordCrate(zone: Zone, stall: MarketStall, upgrades: NonNullabl
       const status = upgrades.status('record');
       if (status === 'full') return 'Soundtrack LPs · you have every one they had';
       const next = nextRecord();
-      const head = `${next?.title ?? good.name} (${next?.artist ?? 'LP'}) · ${good.price} coins`;
+      const head = `${next?.title ?? good.name} (${next?.artist ?? 'LP'}) · ${formatCoins(good.price)}`;
       return status === 'needs' ? `${head} · needs a sideboard and its turntable first` : `${head} · buy`;
     },
     onActivate: (session) => {

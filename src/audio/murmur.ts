@@ -1,6 +1,7 @@
 import { audioBus, startedAudioContext } from './audioContext';
 import { whiteNoise } from './noise';
 import { spatialInput, type Spatial } from './spatial';
+import { random } from '@/random';
 
 /** One syllable (s), the gap between two, and the longest a line's murmur runs (s). */
 const SYLLABLE = { min: 0.07, max: 0.16, gap: 0.05 };
@@ -46,24 +47,24 @@ export function playMurmur(text: string, level: number, spatial?: Spatial, pitch
     const tail = ending === '?' ? INTONATION.rise : ending === '.' || ending === '!' ? -INTONATION.fall : 0;
     let first = true;
     while (t < end) {
-      const length = SYLLABLE.min + Math.random() * (SYLLABLE.max - SYLLABLE.min);
+      const length = SYLLABLE.min + random() * (SYLLABLE.max - SYLLABLE.min);
       const along = (t - start) / seconds;
-      const lift = 1 + (Math.random() * 2 - 1) * INTONATION.syllable + tail * Math.max(0, (along - 0.6) / 0.4);
+      const lift = 1 + (random() * 2 - 1) * INTONATION.syllable + tail * Math.max(0, (along - 0.6) / 0.4);
       band.frequency.setValueAtTime(centre * lift, t);
       formant.frequency.setValueAtTime(centre * lift * BAND.second, t);
       const source = ctx.createBufferSource();
       source.buffer = noise;
       const env = ctx.createGain();
-      const peak = first ? 1 : 0.6 + Math.random() * 0.4;
+      const peak = first ? 1 : 0.6 + random() * 0.4;
       first = false;
       env.gain.setValueAtTime(0.0001, t);
       env.gain.exponentialRampToValueAtTime(peak, t + length * 0.3);
       env.gain.exponentialRampToValueAtTime(0.0001, t + length);
       // Each syllable a touch higher or lower: the tune of speech.
-      source.playbackRate.value = 0.85 + Math.random() * 0.3;
+      source.playbackRate.value = 0.85 + random() * 0.3;
       source.connect(env).connect(band);
-      source.start(t, Math.random() * 0.7, length + 0.02);
-      t += length + SYLLABLE.gap * (0.5 + Math.random());
+      source.start(t, random() * 0.7, length + 0.02);
+      t += length + SYLLABLE.gap * (0.5 + random());
     }
     window.setTimeout(() => out.disconnect(), (seconds + 0.6) * 1000);
   } catch {

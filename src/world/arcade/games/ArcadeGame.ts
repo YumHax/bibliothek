@@ -1,15 +1,13 @@
+import type * as THREE from 'three';
 import type { SfxEvent } from '@/audio/ChipSpeaker';
+import type { GameControls } from '@/input/GameInput';
 
-/** What the cabinet reads from the player's keys each frame; `firePressed` is true on the frame the button went down. */
-export interface ArcadeControls {
-  left: boolean;
-  right: boolean;
-  up: boolean;
-  down: boolean;
-  fire: boolean;
-  firePressed: boolean;
+/** What a game reads each frame: the stick, fire and its press edge (`input/GameInput`, worked out once), plus where the player aims. */
+export interface ArcadeControls extends GameControls {
   /** Where a light gun points on the screen (logical pixels), null when it points off the glass; absent on cabinets without one. */
   aim?: { x: number; y: number } | null;
+  /** Where the player looks (a unit direction, machine-local) on a machine aimed by looking: the hoops. Absent elsewhere. */
+  look?: THREE.Vector3 | null;
 }
 
 /** What a play starts with: the score to beat and the payout rate, so the game can show both live. */
@@ -75,8 +73,4 @@ export function drawText(ctx: CanvasRenderingContext2D, text: string, x: number,
   ctx.textBaseline = 'middle';
   ctx.fillStyle = color;
   ctx.fillText(text, x, y);
-}
-
-export function clamp(v: number, lo: number, hi: number): number {
-  return Math.min(hi, Math.max(lo, v));
 }

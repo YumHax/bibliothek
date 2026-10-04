@@ -4,6 +4,7 @@ import { drawSealedLot } from '@/economy/boxLots';
 import { SEALED_LOT } from '@/economy/pricing';
 import { CartonCorner } from './CartonCorner';
 import { MARKET_PLAN } from './marketPlan';
+import { formatCoins } from '@/text/money';
 
 /** How the receipts of a carton bought here name the place. */
 const WHERE = 'the flea market';
@@ -15,7 +16,7 @@ const POOL = 14;
  * same carton all day, reloads included), gone once bought (`SealedLots.marketSoldOn`), bought through
  * `Transactions.buySealedLot` (the coins, the carton home, one save). Opened at home, in the hallway.
  */
-export function furnishCarton(zone: Zone, ctx: BuildContext, lots: LotServices): void {
+export function furnishCarton(zone: Zone, ctx: Pick<BuildContext, 'market' | 'today'>, lots: LotServices): void {
   const day = ctx.today.gameDay;
   const lot = ctx.market.stock.randomGames(`carton:${day}`, POOL).then((pool) => {
     if (!pool.length) return null;
@@ -28,7 +29,7 @@ export function furnishCarton(zone: Zone, ctx: BuildContext, lots: LotServices):
     buy: (carton, session) => {
       const result = lots.tx.buySealedLot(carton.price, () => lots.sealed.add(carton, WHERE, carton.price, day, true));
       if (!result.ok) {
-        session.refuse(result.reason === 'short' ? `The carton is ${carton.price} coins and you have ${result.have ?? 0}.` : 'Not today.');
+        session.refuse(result.reason === 'short' ? `The carton is ${formatCoins(carton.price)} and you have ${result.have ?? 0}.` : 'Not today.');
         return false;
       }
       session.reward({ title: `A sealed carton: ${carton.label}`, detail: 'Carried home: it waits in the hallway, to be opened one thing at a time.', coins: -carton.price });

@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import type { SfxEvent } from '@/audio/ChipSpeaker';
+import { SoundQueue } from '../SoundQueue';
 import { type ArcadeControls, NO_CONTROLS } from '../games/ArcadeGame';
+import { random } from '@/random';
 
 /*
  * The ball alley's rules and the ball's path, machine-local in metres (origin on the floor under
@@ -72,7 +74,7 @@ export class AlleySim {
   private rollSeconds = 1;
   private demoTarget = { u: 0, power: 0.4, holdFor: 0.5 };
   private demoClock = 0;
-  private sounds: SfxEvent[] = [];
+  private readonly sounds = new SoundQueue();
 
   constructor() {
     this.resetBall(true);
@@ -89,9 +91,7 @@ export class AlleySim {
 
   /** The sounds of this frame, oldest first. */
   takeSounds(): SfxEvent[] {
-    const sounds = this.sounds;
-    this.sounds = [];
-    return sounds;
+    return this.sounds.take();
   }
 
   /** Nine balls, no points; `attract` when nobody is at it (the ball and a full trough on show). */
@@ -113,10 +113,10 @@ export class AlleySim {
     const out: ArcadeControls = { ...NO_CONTROLS };
     if (this.currentPhase !== 'aim') return out;
     if (!this.charging && this.phaseClock === 0) {
-      const pocket = Math.random() < 0.2 ? POCKETS[Math.floor(Math.random() * 2)]! : null;
-      const u = pocket ? pocket.u : RING_CENTRE.u + (Math.random() - 0.5) * 0.06;
+      const pocket = random() < 0.2 ? POCKETS[Math.floor(random() * 2)]! : null;
+      const u = pocket ? pocket.u : RING_CENTRE.u + (random() - 0.5) * 0.06;
       const v = pocket ? pocket.v : RING_CENTRE.v;
-      const power = THREE.MathUtils.clamp((v - 0.04) / 0.72 + (Math.random() - 0.5) * 0.12, 0.15, 1);
+      const power = THREE.MathUtils.clamp((v - 0.04) / 0.72 + (random() - 0.5) * 0.12, 0.15, 1);
       // Once lined up: a beat's wait, then fire held until the meter has climbed to that power on its first way up.
       this.demoTarget = { u, power, holdFor: 0.6 + power * (POWER_PERIOD / 2) };
       this.demoClock = 0;
@@ -183,7 +183,7 @@ export class AlleySim {
         this.ball.lerpVectors(this.flightFrom, this.flightTo, t);
         this.ball.y += Math.sin(t * Math.PI) * 0.12;
         if (t >= 1) {
-          this.sounds.push({ sfx: 'thud' });
+          this.sounds.push('thud');
           this.enterPhase('sink');
         }
         break;
@@ -195,7 +195,7 @@ export class AlleySim {
           const points = this.landing.points;
           this.points += points;
           this.lastPoints = points;
-          this.sounds.push({ sfx: points >= POCKET_POINTS ? 'bonus' : points >= 40 ? 'score' : 'blip', pitch: 1 + points / 200 });
+          this.sounds.push(points >= POCKET_POINTS ? 'bonus' : points >= 40 ? 'score' : 'blip', 1 + points / 200);
           this.resetBall(false);
         }
         break;
@@ -208,7 +208,7 @@ export class AlleySim {
         this.spin += dt * 14;
         if (t >= 1) {
           this.lastPoints = 0;
-          this.sounds.push({ sfx: 'lose' });
+          this.sounds.push('lose');
           this.resetBall(false);
         }
         break;
@@ -221,17 +221,17 @@ export class AlleySim {
     const power = this.power;
     this.ballsLeft -= 1;
     this.syncTrough(false);
-    this.sounds.push({ sfx: 'roll' });
+    this.sounds.push('roll');
     this.rollSeconds = 0.9 - power * 0.35;
     if (power < 0.12) {
       this.landing = { u: this.aimU, v: 0, points: -1 };
       this.enterPhase('roll');
       return;
     }
-    const noise = (): number => (Math.random() + Math.random() - 1) * 0.035;
+    const noise = (): number => (random() + random() - 1) * 0.035;
     let v = 0.04 + power * 0.72 + noise();
     // Over the top: it hits the back of the cage and drops somewhere on the upper board.
-    if (v > BOARD_V - 0.02) v = BOARD_V - 0.1 - Math.random() * 0.2;
+    if (v > BOARD_V - 0.02) v = BOARD_V - 0.1 - random() * 0.2;
     const u = THREE.MathUtils.clamp(this.aimU * 1.05 + noise(), -BOARD_W / 2 + 0.05, BOARD_W / 2 - 0.05);
     this.landing = { u, v, points: scoreAt(u, v) };
     this.enterPhase('roll');

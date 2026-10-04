@@ -1,8 +1,9 @@
 import * as THREE from 'three';
-import { createCanvas, seededRandom, toTexture } from '@/covers/generated/canvasUtils';
+import { createCanvas, toTexture } from '@/covers/generated/canvasUtils';
 import { Prop } from '../../props/Prop';
 import { FLOOR, RENDER_ORDER, onSurface } from '../../surface/layers';
 import { overKeepingAlpha } from '@/world/materials/blend';
+import { lcg } from '@/random';
 
 export interface FloorScuffsOptions {
   /** The patch's size along local x and z. Default 1.4 x 0.9. */
@@ -46,7 +47,7 @@ function paint(wM: number, dM: number, options: FloorScuffsOptions): THREE.Textu
   const W = Math.round(wM * PX_PER_M);
   const H = Math.round(dM * PX_PER_M);
   const [canvas, ctx] = createCanvas(W, H);
-  const random = seededRandom((options.seed ?? 5) * 48271 + 7);
+  const random = lcg((options.seed ?? 5) * 48271 + 7);
   const amount = options.amount ?? 0.6;
   const kind = options.kind ?? 'heels';
   // Everything fades out towards the patch's edge, so it has no outline.

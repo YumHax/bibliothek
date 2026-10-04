@@ -30,18 +30,6 @@ export function spline(keys: Keys, x: number): number {
   return (2 * t3 - 3 * t2 + 1) * y1 + (t3 - 2 * t2 + t) * m1 + (-2 * t3 + 3 * t2) * y2 + (t3 - t2) * m2;
 }
 
-/** 0 at `from`, 1 at `to`, smooth in between; `from` may be above `to`. */
-export function ramp(x: number, from: number, to: number): number {
-  const t = THREE.MathUtils.clamp((x - from) / (to - from), 0, 1);
-  return t * t * (3 - 2 * t);
-}
-
-/** A bell of height 1 at `centre`, `width` being the standard deviation. */
-export function bump(x: number, centre: number, width: number): number {
-  const d = (x - centre) / width;
-  return Math.exp(-0.5 * d * d);
-}
-
 export interface LimbOptions {
   /** Height of the rounded ends as a fraction of their radius: 1 is a hemisphere, 0 a flat disc (a hem). */
   top?: number;

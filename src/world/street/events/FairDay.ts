@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { Updatable } from '@/core/Engine';
-import { createCanvas, seededRandom, toTexture } from '@/covers/generated/canvasUtils';
+import { createCanvas, toTexture } from '@/covers/generated/canvasUtils';
 import type { Furniture } from '../../Furniture';
 import { Walker } from '../../people/Walker';
 import { randomLook } from '../../people/looks';
@@ -8,7 +8,9 @@ import { paint } from '../../materials/palette';
 import { TriBuilder } from '../relief/TriBuilder';
 import { distanceFade } from '../life/fade';
 import { snowCovered } from '../snowCover';
-import { FAIR_DAY, FRONT, type Vec2 } from '../streetPlan';
+import { FAIR_DAY, type Vec2 } from '../streetPlan';
+import { FRONT } from '@/world/measures/street';
+import { lcg } from '@/random';
 
 interface FairDayOptions {
   /** The camera: the waiting people face and fade by it. */
@@ -43,7 +45,7 @@ export class FairDay extends THREE.Group implements Furniture, Updatable {
   constructor(private readonly options: FairDayOptions) {
     super();
     this.name = 'FairDay';
-    const random = seededRandom(1313);
+    const random = lcg(1313);
     const painted = new TriBuilder();
     const identity = new THREE.Matrix4();
     // The bunting: a sagging line across the street, a triangle flag hanging from it every so often.

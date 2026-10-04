@@ -6,6 +6,7 @@ import type { DrawnAware } from '../zone/Zone';
 import { PROUD } from './joinery';
 import { SwitchableLamp } from './SwitchableLamp';
 import { LAMP_GLOW, LAMP_LIGHT } from '../lighting/lampColours';
+import { random } from '@/random';
 
 interface ShelfLampOptions {
   /** Horizontal distance from the fixture to the bookcase face (m); the bookcase lies along local -z. */
@@ -50,7 +51,7 @@ export class ShelfLamp extends SwitchableLamp implements Updatable, OccupancyAwa
   private occupied = false;
   private zoneDrawn = true;
   private parked = false;
-  private shadowTimer = Math.random() * IDLE_SHADOW_INTERVAL;
+  private shadowTimer = random() * IDLE_SHADOW_INTERVAL;
 
   constructor(options: ShelfLampOptions) {
     super('shelf spot');

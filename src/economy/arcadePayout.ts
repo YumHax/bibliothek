@@ -1,5 +1,8 @@
 import { BEGINNER, COIN_BACK, ticketsFor } from './pricing';
 import { getPrize } from './Prizes';
+import { formatNumber, ordinal } from '@/text/count';
+import { formatTickets } from '@/text/money';
+import { capitalise } from '@/text/strings';
 
 /** The machine a play was on, as the payout reads it. */
 interface PayoutMachine {
@@ -52,67 +55,99 @@ interface ArcadePayout {
   notable: boolean;
 }
 
+/** A ticket play's settlement as the rules write it, one after the other: the score's tickets, then each bonus on top. */
+class Settlement implements ArcadePayout {
+  prizes: string[] = [];
+  tickets: { earned: number; paid: number };
+  lines: string[] = [];
+  bonuses: { label: string; tickets: number }[] = [];
+  notable = false;
+
+  constructor(earned: number) {
+    this.tickets = { earned, paid: earned };
+  }
+
+  /** Tickets on top of the score's: counted into what is paid, a line on the banner, a line on the end card. */
+  bonus(label: string, tickets: number, line: string): void {
+    this.tickets.paid += tickets;
+    this.lines.push(line);
+    this.bonuses.push({ label, tickets });
+  }
+}
+
 /**
  * Settles a finished play: its tickets (or its prize), today's challenge bonus if it met the
  * target, any medal it earned, the streak's bonus on the day's first play; it all counts in the
  * weekly league, and a finished week is announced (a won one brings the pennant home).
  */
 export function arcadePayout(machine: PayoutMachine, play: PayoutPlay, books: PayoutBooks): ArcadePayout {
-  const { daily, medals, league } = books;
-  if (play.prize) {
-    return { prizes: [play.prize], tickets: null, lines: [`You won the ${getPrize(play.prize)?.name ?? 'prize'}! It is on the prize shelf at home.`], bonuses: [], notable: true };
-  }
+  if (play.prize) return prizeWon(play.prize);
   if (!machine.freeWhenBroke) return { prizes: [], tickets: null, lines: ['Nothing this time.'], bonuses: [], notable: false };
-
-  const prizes: string[] = [];
-  const lines: string[] = [];
-  const bonuses: { label: string; tickets: number }[] = [];
-  const earned = ticketsFor(machine.game.id, play.score);
-  let paid = earned;
-  const mark = play.best ? ' — new best!' : play.first ? ' — first score on the board' : '';
-  lines.push(machine.luck ? `The wheel pays ${earned} ticket${earned === 1 ? '' : 's'}!` : `${play.score.toLocaleString('en-US')} points: ${earned} ticket${earned === 1 ? '' : 's'} in your pocket${mark}`);
-  if (play.beginner && !machine.luck && earned < BEGINNER.tickets) {
-    const luck = BEGINNER.tickets - earned;
-    paid += luck;
-    lines.push(`Beginner’s luck: +${luck} tickets while you learn this one.`);
-    bonuses.push({ label: 'BEGINNER', tickets: luck });
-  } else if (play.paid && !machine.luck && earned < COIN_BACK) {
-    const back = COIN_BACK - earned;
-    paid += back;
-    lines.push(`Coin back: +${back} tickets, try again!`);
-    bonuses.push({ label: 'COIN BACK', tickets: back });
-  }
-  const challenge = daily?.challenge();
-  if (challenge && !challenge.done && challenge.gameId === machine.game.id && play.score >= challenge.target && daily?.claimChallenge()) {
-    paid += challenge.reward;
-    lines.push(`Daily challenge beaten: +${challenge.reward} tickets!`);
-    bonuses.push({ label: 'CHALLENGE', tickets: challenge.reward });
-  }
-  for (const medal of machine.luck ? [] : (medals?.award(machine.game.id, play.score) ?? [])) {
-    paid += medal.reward;
-    lines.push(`${medal.tier[0]!.toUpperCase()}${medal.tier.slice(1)} medal on ${machine.game.title}: +${medal.reward} tickets!`);
-    bonuses.push({ label: `${medal.tier.toUpperCase()} MEDAL`, tickets: medal.reward });
-  }
-  const streak = league?.record(paid);
-  if (streak?.bonus) {
-    paid += streak.bonus;
-    lines.push(`Day ${streak.days} in a row: +${streak.bonus} tickets!`);
-    bonuses.push({ label: `DAY ${streak.days} STREAK`, tickets: streak.bonus });
-  }
-  const week = league?.takeWeekResult();
-  if (week?.won) {
-    prizes.push('pennant');
-    lines.push(`You won last week's league with ${week.tickets} tickets! The pennant is on the prize shelf at home.`);
-  } else if (week) {
-    lines.push(`Last week's league: you came ${ordinalOf(week.rank + 1)} with ${week.tickets} tickets.`);
-  }
+  const settled = new Settlement(ticketsFor(machine.game.id, play.score));
+  settled.lines.push(scoreLine(machine, play, settled.tickets.earned));
+  payFloor(settled, machine, play);
+  payChallenge(settled, machine, play, books.daily);
+  payMedals(settled, machine, play, books.medals);
+  payStreak(settled, books.league);
+  const week = announceWeek(settled, books.league);
   // The coin back is a floor, not news: the end card counts it up, no banner.
-  return { prizes, tickets: { earned, paid }, lines, bonuses, notable: bonuses.some((b) => b.label !== 'COIN BACK') || Boolean(week) };
+  settled.notable = settled.bonuses.some((b) => b.label !== 'COIN BACK') || week;
+  return settled;
 }
 
-/** 1st, 2nd, 3rd, 4th… */
-function ordinalOf(n: number): string {
-  const tens = n % 100;
-  const suffix = tens >= 11 && tens <= 13 ? 'th' : (['th', 'st', 'nd', 'rd'][n % 10] ?? 'th');
-  return `${n}${suffix}`;
+/** The claw's prize: on the shelf at home, nothing else to settle. */
+function prizeWon(prize: string): ArcadePayout {
+  return { prizes: [prize], tickets: null, lines: [`You won the ${getPrize(prize)?.name ?? 'prize'}! It is on the prize shelf at home.`], bonuses: [], notable: true };
+}
+
+/** The banner's first line: what the score earned, and whether it was a best or a first. */
+function scoreLine(machine: PayoutMachine, play: PayoutPlay, earned: number): string {
+  const mark = play.best ? ' — new best!' : play.first ? ' — first score on the board' : '';
+  return machine.luck ? `The wheel pays ${formatTickets(earned)}!` : `${formatNumber(play.score)} points: ${formatTickets(earned)} in your pocket${mark}`;
+}
+
+/** A poor score's floor: a beginner's luck up to `BEGINNER.tickets` on their first plays, else the coin back for a paid play (not on the wheel). */
+function payFloor(settled: Settlement, machine: PayoutMachine, play: PayoutPlay): void {
+  const { earned } = settled.tickets;
+  if (play.beginner && !machine.luck && earned < BEGINNER.tickets) {
+    const luck = BEGINNER.tickets - earned;
+    settled.bonus('BEGINNER', luck, `Beginner’s luck: +${formatTickets(luck)} while you learn this one.`);
+  } else if (play.paid && !machine.luck && earned < COIN_BACK) {
+    const back = COIN_BACK - earned;
+    settled.bonus('COIN BACK', back, `Coin back: +${formatTickets(back)}, try again!`);
+  }
+}
+
+/** Today's challenge, on its machine, met and not yet claimed: its reward, claimed here once. */
+function payChallenge(settled: Settlement, machine: PayoutMachine, play: PayoutPlay, daily: PayoutBooks['daily']): void {
+  const challenge = daily?.challenge();
+  if (challenge && !challenge.done && challenge.gameId === machine.game.id && play.score >= challenge.target && daily?.claimChallenge()) {
+    settled.bonus('CHALLENGE', challenge.reward, `Daily challenge beaten: +${formatTickets(challenge.reward)}!`);
+  }
+}
+
+/** The medals the score earns on this machine (none on the wheel), each with its reward. */
+function payMedals(settled: Settlement, machine: PayoutMachine, play: PayoutPlay, medals: PayoutBooks['medals']): void {
+  for (const medal of machine.luck ? [] : (medals?.award(machine.game.id, play.score) ?? [])) {
+    settled.bonus(`${medal.tier.toUpperCase()} MEDAL`, medal.reward, `${capitalise(medal.tier)} medal on ${machine.game.title}: +${formatTickets(medal.reward)}!`);
+  }
+}
+
+/** What is paid so far counts in the week's league; the day's first play may bring the streak's bonus. */
+function payStreak(settled: Settlement, league: PayoutBooks['league']): void {
+  const streak = league?.record(settled.tickets.paid);
+  if (streak?.bonus) settled.bonus(`DAY ${streak.days} STREAK`, streak.bonus, `Day ${streak.days} in a row: +${formatTickets(streak.bonus)}!`);
+}
+
+/** A finished week, announced once: won, the pennant goes home. True when there was one to announce. */
+function announceWeek(settled: Settlement, league: PayoutBooks['league']): boolean {
+  const week = league?.takeWeekResult();
+  if (!week) return false;
+  if (week.won) {
+    settled.prizes.push('pennant');
+    settled.lines.push(`You won last week's league with ${formatTickets(week.tickets)}! The pennant is on the prize shelf at home.`);
+  } else {
+    settled.lines.push(`Last week's league: you came ${ordinal(week.rank + 1)} with ${formatTickets(week.tickets)}.`);
+  }
+  return true;
 }

@@ -10,6 +10,7 @@ import type { Zone } from '../zone/Zone';
 import type { Placement } from '../Placement';
 import { ROOM_PLAN } from '../roomPlan';
 import { CollectorsBook } from './CollectorsBook';
+import { formatDay } from '@/text/clock';
 import { BrassPlaque } from './BrassPlaque';
 import { HomeVitrine, VITRINE_CAPACITY } from './HomeVitrine';
 import { furnishHonours } from './HonourNeons';
@@ -88,15 +89,8 @@ export function furnishCollectorCorner(zone: Zone, home: CollectorHome, options:
     fill();
   };
   follow();
-  if (home.honours) furnishHonours(zone, home.honours);
+  if (home.honours) furnishHonours(zone, home.honours, ROOM_PLAN.honours);
   zone.onUnload(milestones.subscribe(follow));
   zone.onUnload(watch.subscribe(fill));
   zone.onUnload(options.shelved.subscribe(fill));
-}
-
-/** "25 Sep 2026" from a `dayKey` (empty stays empty). */
-function formatDay(day: string): string {
-  const [y, m, d] = day.split('-').map(Number);
-  if (!y || !m || !d) return day;
-  return new Date(y, m - 1, d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 }

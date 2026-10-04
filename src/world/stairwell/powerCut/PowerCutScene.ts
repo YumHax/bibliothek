@@ -5,7 +5,7 @@ import type { OccupancyAware } from '../../Furniture';
 import { onBlackout, blackoutNow } from '@/building/blackout';
 import { playMurmur } from '@/audio/murmur';
 import { stereoPan } from '@/audio/spatial';
-import { proximityVolume } from '@/video/proximityVolume';
+import { loudness } from '@/audio/hearing';
 import { paint, timber } from '../../materials/palette';
 import { boxMesh } from '../../meshUtils';
 import { Walker } from '../../people/Walker';
@@ -15,6 +15,12 @@ import { doorKey } from '../building';
 import type { StairLights } from '../StairLights';
 import { Candle, FLAME_Y } from './Candle';
 import { POWER_CUT_PLAN as plan, type CandleNeighbour } from './powerCutPlan';
+import type { SocialServices } from '@/social/talk';
+import { metName, bodyOf, talkHook, type SocialHook } from '../../people/socialHook';
+import { befriend } from '@/building/friendship';
+import { BUILDING_SOCIAL } from '@/building/buildingSocialPlan';
+import { personAtDoor } from '@/social/people';
+import { addMemory } from '@/social/standing';
 
 interface PowerCutSceneOptions {
   viewer: THREE.Object3D;
@@ -22,6 +28,10 @@ interface PowerCutSceneOptions {
   lift: Lift;
   /** The zone's collision set: the card table and its stools stand in the way only while they are out. */
   collisions: Collisions;
+  /** The game day (what the stuck neighbour remembers of it, `social/`). */
+  day?: () => number;
+  /** The people the player talks to (docs/social.md): each resident out in the dark talks, the night their news. */
+  social?: SocialServices;
 }
 
 /** Seconds people take to fade in at a cut, and out after the power is back (the cheer said first). */
@@ -80,17 +90,28 @@ export class PowerCutScene extends Prop implements Updatable, OccupancyAware {
     this.add(this.props);
     const { viewer } = options;
     for (const who of plan.neighbours) {
-      const walker = new Walker({ viewer, seed: who.seed, lines: who.lines, label: `${who.who} · chat`, speaker: who.who, fade: true, yields: false });
+      const walker: Walker = new Walker({ viewer, seed: who.seed, lines: who.lines, label: `${who.who} · chat`, speaker: metName(who.person, who.who), fade: true, yields: false, social: this.inTheDark(who.person, who.lines, () => walker) });
       walker.setPresent(false);
       this.out.push({ walker, plan: who });
       this.walkers.push(walker);
     }
     const { stuck } = plan;
-    this.stuck = new Walker({ viewer, seed: stuck.seed, lines: stuck.lines, label: `${stuck.who}, stuck in the lift · talk`, speaker: stuck.who, fade: true, yields: false });
+    this.stuck = new Walker({ viewer, seed: stuck.seed, lines: stuck.lines, label: `${stuck.who}, stuck in the lift · talk`, speaker: metName(stuck.person, stuck.who), fade: true, yields: false, social: this.inTheDark(stuck.person, stuck.lines, () => this.stuck) });
     this.stuck.setPresent(false);
     this.walkers.push(this.stuck);
     this.unsubscribe = onBlackout((cut) => (cut ? this.begin() : this.end()));
     if (blackoutNow()) this.begin();
+  }
+
+  /** `person` met in the dark: talked to like anywhere, their lines of the night an entry of their own. */
+  private inTheDark(person: string, lines: readonly string[], body: () => Walker): SocialHook | undefined {
+    let next = 0;
+    return talkHook(this.options.social, person, () => ({
+      person,
+      place: 'stairs',
+      body: bodyOf(body()),
+      extras: [{ id: 'dark', group: 'talk', label: 'Some night, eh?', run: () => ({ line: lines[next++ % lines.length]! }) }],
+    }));
   }
 
   setOccupied(occupied: boolean): void {
@@ -156,10 +177,18 @@ export class PowerCutScene extends Prop implements Updatable, OccupancyAware {
       walker.say(who.cheer, 3);
       if (!this.occupied) return;
       walker.getWorldPosition(this.at);
-      const volume = proximityVolume(this.ear.distanceTo(this.at), { referenceDistance: 2, rolloff: 1, maxDistance: 18 }) / 100;
+      const volume = loudness(this.ear.distanceTo(this.at), { referenceDistance: 2, rolloff: 1, maxDistance: 18 });
       playMurmur(who.cheer, 0.05 * volume, { pan: stereoPan(this.options.viewer, this.at), walls: 0 }, 0.3 + 0.15 * i);
     });
-    if (this.stranded) this.stuck.speak(plan.stuck.freed);
+    if (this.stranded) {
+      this.stuck.speak(plan.stuck.freed);
+      // The player was there with her (on the stairs): she won't forget it (docs/social.md "The building").
+      const freed = BUILDING_SOCIAL.freedFromLift;
+      if (this.occupied && befriend(doorKey(plan.stuck.k, plan.stuck.i), freed.warmth, 'freedFromLift', this.options.day?.() ?? 0)) {
+        const id = personAtDoor(doorKey(plan.stuck.k, plan.stuck.i));
+        if (id) addMemory(id, this.options.day?.() ?? 0, freed.memory, freed.warmth * 2);
+      }
+    }
   }
 
   /** Mrs Moreau rides with the car (it goes on once the power is back) and fades with the rest of the scene. */

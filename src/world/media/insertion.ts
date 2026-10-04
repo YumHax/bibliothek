@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { MediaSpec } from '@/catalog/media';
+import { easeInOutQuad } from '@/math/easing';
 import type { MediaSlot } from '../props/consoleStyles';
 import type { Step } from './Timeline';
 
@@ -59,8 +60,8 @@ export function insertSteps(media: THREE.Object3D, slot: MediaSlot, poses: SeatP
       seconds: FLY_SECONDS,
       linear: true,
       run: (t) => {
-        const eased = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
-        curve.getPoint(eased, media.position);
+        // The flight is quadratic in and out (the timeline's own cubic ease would linger at the slot).
+        curve.getPoint(easeInOutQuad(t), media.position);
         media.quaternion.slerpQuaternions(fromQ, slot.rotation, THREE.MathUtils.smoothstep(t, 0, 0.8));
         if (door) {
           doorFrom ??= door.pivot.rotation.x;

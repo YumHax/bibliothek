@@ -1,9 +1,10 @@
 import * as THREE from 'three';
 import type { Updatable } from '@/core/Engine';
-import { createCanvas, seededRandom, toTexture } from '@/covers/generated/canvasUtils';
+import { createCanvas, toTexture } from '@/covers/generated/canvasUtils';
 import { cylinderMesh } from '../meshUtils';
 import { Prop } from './Prop';
 import { paint, standard } from '../materials/palette';
+import { lcg } from '@/random';
 
 export interface MirrorBallOptions {
   /** Radius of the ball, metres. Default 0.18. */
@@ -48,7 +49,7 @@ export class MirrorBall extends Prop implements Updatable {
 /** Scattered white speckles on black: the facets that happen to catch a light. */
 function paintGlints(seed: number): THREE.CanvasTexture {
   const [canvas, ctx] = createCanvas(128, 64);
-  const random = seededRandom(seed * 7717);
+  const random = lcg(seed * 7717);
   ctx.fillStyle = '#000000';
   ctx.fillRect(0, 0, 128, 64);
   const colours = ['#ffffff', '#ffd0f0', '#c0f0ff', '#fff0b0'];

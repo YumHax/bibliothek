@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { type Rng, azimuthOf, azimuthX, heightY } from './Sheet';
-import { between } from './paint';
 import type { AtlasPens, Cell, LifeEnv, LifeLayer, Push } from './sprites';
+import { between } from '@/random';
 
 /** Pigeons wheeling over the street: how many, their size and the cell they are painted in. */
 const BIRDS = 7;

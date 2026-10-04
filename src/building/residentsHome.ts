@@ -1,4 +1,5 @@
 import { STAIRWELL_PLAN, type ResidentOnStairs } from '@/world/stairwell/stairwellPlan';
+import { inHours } from '@/time/clock';
 import { movedOut } from './rouxMove';
 
 /*
@@ -21,7 +22,7 @@ export function movedAway(k: number, i: number): boolean {
 
 /** Whether `r` is home at `hours` (game time): out between their hours, home the rest of the day and all night. */
 export function isHomeAt(r: Pick<ResidentOnStairs, 'out' | 'back'>, hours: number): boolean {
-  return !(hours >= r.out && hours < r.back);
+  return !inHours(hours, [r.out, r.back]);
 }
 
 /** The name on door `i` of landing `k` (Mrs Roux's on ours), as its brass plate has it. */

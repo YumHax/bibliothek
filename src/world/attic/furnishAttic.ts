@@ -43,7 +43,7 @@ const ALREADY_OWNED_COINS = { prize: 600, chest: 300 };
  * four-wheel padlock (`chest.code`, the treasure hunt's end: a game sealed since 1991), dust in the
  * light. A zone reached by travel only (the lift's code; the roof's hatch back down).
  */
-export function furnishAttic(zone: Zone, ctx: BuildContext): ZoneHandle {
+export function furnishAttic(zone: Zone, ctx: Pick<BuildContext, 'sky' | 'listener' | 'acoustics' | 'input' | 'covers' | 'money' | 'arcade' | 'collection' | 'home'>): ZoneHandle {
   const { sky, listener, acoustics, input, covers, money, arcade, collection, home } = ctx;
   const notices = home.household?.notices;
   const origin = new THREE.Vector3();
@@ -109,7 +109,7 @@ export function furnishAttic(zone: Zone, ctx: BuildContext): ZoneHandle {
       glow: plan.cabinet.glow,
       scores: table,
       nextPlayCost: () => 0,
-      atHome: true,
+      payout: 'none',
       // At home it pays no tickets, so it shows none either.
       pointsPerTicket: 0,
       listener,

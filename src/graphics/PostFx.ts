@@ -7,6 +7,7 @@ import { NEUTRAL_LOOK, displayColor, type Look } from './grade';
 import { whiteBalance } from './whiteBalance';
 import { GlassMask } from './glassMask';
 import { AO_FRAGMENT, AO_BLUR_FRAGMENT, DOF_FRAGMENT, LUMINANCE_FRAGMENT, METER_DOWNSAMPLE_FRAGMENT, OUTPUT_FRAGMENT, QUAD_VERTEX } from './postFxShaders';
+import { damp, dampFactor } from '@/math/damp';
 
 interface PostFxOptions {
   /** Distance (metres) of what the player is reading up close, or null: the background blurs beyond it. */
@@ -330,19 +331,19 @@ export class PostFx implements FramePipeline, Updatable {
 
   update(dt: number): void {
     this.time += dt;
-    this.stepLook(1 - Math.exp(-LOOK_RATE * dt));
+    this.stepLook(dampFactor(LOOK_RATE, dt));
 
     const lens = this.lens;
     const focus = lens ? lens.focus : this.quality.depthOfField ? (this.options.focus?.() ?? null) : null;
     const wanted = lens ? (lens.blur > 0 ? 1 : 0) : focus === null ? 0 : 1;
     // A photographer's lens follows its ring at once; the reading eye eases in and out.
-    this.dofAmount = lens ? wanted : this.dofAmount + (wanted - this.dofAmount) * (1 - Math.exp(-DOF_RATE * dt));
+    this.dofAmount = lens ? wanted : damp(this.dofAmount, wanted, DOF_RATE, dt);
     if (focus !== null) this.prepMaterial.uniforms.focus!.value = focus;
     this.prepMaterial.uniforms.maxRadius!.value = lens && lens.blur > 0 ? lens.blur : DOF_MAX_RADIUS;
 
     // The eye adapts slowly, faster to glare than to the dark.
     const tau = this.targetExposure < this.exposure ? ADAPT_DARKER_S : ADAPT_BRIGHTER_S;
-    this.exposure += (this.targetExposure - this.exposure) * (1 - Math.exp(-dt / tau));
+    this.exposure = damp(this.exposure, this.targetExposure, 1 / tau, dt);
     this.meterTimer += dt;
   }
 

@@ -12,6 +12,7 @@ import { Prop, part } from '../props/Prop';
 import { PointSound } from '../acoustics/PointSound';
 import type { SoundOcclusion } from '../acoustics/SoundOcclusion';
 import type { ActivityAware } from '../zone/lifecycle';
+import { damp } from '@/math/damp';
 
 /** 33⅓ rpm, in radians per second. */
 const SPIN = (33.333 / 60) * Math.PI * 2;
@@ -166,15 +167,15 @@ export class RecordPlayer extends Prop implements Interactable, Updatable, Activ
     const on = this.tune.playing !== null;
     // The platter spins up and down; the arm follows the groove inwards across the side.
     const speed = on ? SPIN : 0;
-    this.spin += (speed - this.spin) * Math.min(1, dt / SPIN_UP * 3);
+    this.spin = damp(this.spin, speed, 3 / SPIN_UP, dt);
     this.disc.rotation.y -= this.spin * dt;
     const across = on ? Math.min(1, this.tune.elapsed / Math.max(1, this.tune.sideSeconds)) : 0;
     const target = on ? this.leadIn + (this.runOut - this.leadIn) * across : ARM_REST;
-    this.armYaw += (target - this.armYaw) * Math.min(1, dt * ARM_EASE);
+    this.armYaw = damp(this.armYaw, target, ARM_EASE, dt);
     this.arm.rotation.y = this.armYaw;
     // The stylus comes down onto the record once the arm is over it, and up before it swings back.
     const over = on && Math.abs(this.armYaw - target) < 0.08;
-    this.drop += ((over ? 1 : 0) - this.drop) * Math.min(1, dt * 5);
+    this.drop = damp(this.drop, over ? 1 : 0, 5, dt);
     this.arm.position.y = this.armHeight - ARM_DROP * this.drop;
     this.sound.update(dt);
   }

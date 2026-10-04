@@ -8,6 +8,7 @@ import { WALL } from '../surface/layers';
 import { paint } from '../materials/palette';
 import { drawText } from './games/ArcadeGame';
 import type { TodaysChallenge } from './scoreTable';
+import { formatNumber } from '@/text/count';
 
 interface ChallengeBoardOptions {
   /** Today's challenge, read again every second (it changes when paid, and at midnight). */
@@ -83,7 +84,7 @@ export class ChallengeBoard extends Prop implements Updatable {
     }
     drawText(ctx, "TODAY'S CHALLENGE", W / 2, H * 0.17, Math.round(H * 0.08), '#ffd23a');
     drawText(ctx, this.options.titleOf(c.gameId), W / 2, H * 0.36, Math.round(H * 0.11), '#ffffff');
-    drawText(ctx, `SCORE ${c.target.toLocaleString('en-US')}`, W / 2, H * 0.54, Math.round(H * 0.085), '#9ad6ff');
+    drawText(ctx, `SCORE ${formatNumber(c.target)}`, W / 2, H * 0.54, Math.round(H * 0.085), '#9ad6ff');
     drawText(ctx, `+${c.reward} TICKETS ON TOP`, W / 2, H * 0.7, Math.round(H * 0.07), '#7ee787');
     drawText(ctx, 'ONE PRIZE A DAY · NEW ONE AT MIDNIGHT, YOUR TIME', W / 2, H * 0.84, Math.round(H * 0.04), '#b09ac0');
     if (c.done) {

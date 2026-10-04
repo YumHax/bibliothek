@@ -3,8 +3,9 @@ import type { Furniture } from '../../Furniture';
 import { part } from '../../props/Prop';
 import { paint, timber } from '../../materials/palette';
 import { WALL, onSurface } from '../../surface/layers';
-import { createCanvas, seededRandom, toTexture } from '@/graphics/canvas';
+import { createCanvas, toTexture } from '@/graphics/canvas';
 import { POSTER, PRINT, setLines } from '../common/lettering';
+import { lcg } from '@/random';
 
 export interface KibblePalletOptions {
   seed?: number;
@@ -33,7 +34,7 @@ export class KibblePallet extends THREE.Group implements Furniture {
   constructor(options: KibblePalletOptions = {}) {
     super();
     this.name = 'KibblePallet';
-    const random = seededRandom(options.seed ?? 29);
+    const random = lcg(options.seed ?? 29);
     const pine = timber(0xb89a6a, 0.8);
     // The pallet: three runners, the top boards across them.
     for (const x of [-1, 0, 1]) part(this, 0.08, PALLET.height - 0.02, PALLET.depth, pine, { x: (x * (PALLET.width - 0.08)) / 2, y: (PALLET.height - 0.02) / 2, z: 0 });

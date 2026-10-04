@@ -2,7 +2,7 @@ import { cylinderMesh } from '../../meshUtils';
 import * as THREE from 'three';
 import { Prop, part } from '../../props/Prop';
 import { paint, METAL } from '../../materials/palette';
-import { seededRandom } from '@/graphics/canvas';
+import { lcg } from '@/random';
 
 export interface ReceiptSpikeOptions {
   /** Slips on it. Default 9. */
@@ -23,7 +23,7 @@ export class ReceiptSpike extends Prop {
   constructor(options: ReceiptSpikeOptions = {}) {
     super();
     this.name = 'ReceiptSpike';
-    const random = seededRandom(options.seed ?? 7);
+    const random = lcg(options.seed ?? 7);
     this.add(cylinderMesh(0.035, 0.018, BASE, { y: 0.009 }, { radiusBottom: 0.04, segments: 16 }));
     this.add(cylinderMesh(0.002, 0.16, METAL.steel(), { y: 0.1 }, { radiusBottom: 0.003, segments: 6 }));
     const slips = options.slips ?? 9;

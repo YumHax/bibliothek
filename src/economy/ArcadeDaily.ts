@@ -2,7 +2,7 @@ import { KEYS, PersistedStore } from '@/persistence';
 import { dayKey, fromUtcDayKey } from './calendar';
 import { CHALLENGE_BAND, CHALLENGE_REWARD, CHANGE_MACHINE, OUT_OF_ORDER_ODDS } from './pricing';
 import { rivalScore } from './rivals';
-import { seeded } from './seeded';
+import { dayStream } from '@/time/daily';
 
 const ARCADE_DAILY_KEY = KEYS.arcadeDaily;
 
@@ -58,7 +58,7 @@ export class ArcadeDaily {
 
   challenge(): Challenge {
     const day = this.today();
-    const rng = seeded(`${day}:challenge`);
+    const rng = dayStream(`${day}:challenge`);
     const gameId = this.games[Math.floor(rng() * this.games.length)] ?? 'stacker';
     // Somewhere in the game's band of its starting table (most: the fourth to the second score), rounded like a sign would say it.
     const band = CHALLENGE_BAND[gameId] ?? CHALLENGE_BAND.default;
@@ -85,7 +85,7 @@ export class ArcadeDaily {
    * three, never the one today's challenge is set on.
    */
   outOfOrder(candidates: readonly string[]): string | null {
-    const rng = seeded(`${this.today()}:outOfOrder`);
+    const rng = dayStream(`${this.today()}:outOfOrder`);
     if (rng() >= OUT_OF_ORDER_ODDS) return null;
     const challenge = this.challenge().gameId;
     const pool = candidates.filter((id) => id !== challenge);
@@ -94,7 +94,7 @@ export class ArcadeDaily {
 
   /** Whether the change machine works today (it has been claimed or not). */
   get changeMachineWorks(): boolean {
-    return seeded(`${this.today()}:change`)() < CHANGE_MACHINE.workingOdds;
+    return dayStream(`${this.today()}:change`)() < CHANGE_MACHINE.workingOdds;
   }
 
   /** Whether today's change is still in the machine. */
@@ -106,7 +106,7 @@ export class ArcadeDaily {
   claimChange(): number {
     if (!this.changeWaiting) return 0;
     const day = this.today();
-    const rng = seeded(`${day}:change:coins`);
+    const rng = dayStream(`${day}:change:coins`);
     const coins = CHANGE_MACHINE.minCoins + Math.floor(rng() * (CHANGE_MACHINE.maxCoins - CHANGE_MACHINE.minCoins + 1));
     this.state = { ...this.state, change: day };
     this.commit();

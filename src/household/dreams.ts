@@ -1,8 +1,8 @@
 import type { Game } from '@/catalog/types';
 import { getPlatform } from '@/catalog/platforms';
-import { hash01 } from '@/economy/seeded';
 import type { StockItem, StockSource } from '@/economy/StockItem';
 import { HOUSEHOLD } from './rules';
+import { unit01 } from '@/random';
 
 /** A night's dream: one of the morning's copies, half remembered. */
 export interface Dream {
@@ -52,16 +52,16 @@ const DREAM_LINES: Partial<Record<StockSource, readonly string[]>> = {
  * copies left out): the most remarkable copy. Null for a dreamless night.
  */
 export function dreamOf(day: number, items: readonly StockItem[]): Dream | null {
-  if (hash01(`dream:${day}`) >= HOUSEHOLD.dreamChance) return null;
+  if (unit01(`dream:${day}`) >= HOUSEHOLD.dreamChance) return null;
   const worth = (item: StockItem) => (item.source === 'bin' && !item.gem ? undefined : WORTH[item.source]);
   const ranked = items.filter((item) => worth(item) !== undefined).sort((a, b) => worth(a)! - worth(b)!);
   const best = ranked[0];
   if (!best) return null;
   const tied = ranked.filter((item) => worth(item) === worth(best));
-  const item = tied[Math.floor(hash01(`dream-pick:${day}`) * tied.length)]!;
+  const item = tied[Math.floor(unit01(`dream-pick:${day}`) * tied.length)]!;
   const where = item.source === 'bin' ? 'in the bargain bin, under a pile of sports games' : `on the ${getPlatform(item.game.platform).shortName} stall`;
   const lines = DREAM_LINES[item.source] ?? DREAM_LINES.showpiece!;
   // The kind's lines in turn, day after day from a start of its own: never the same line two mornings running.
-  const line = lines[(((day + Math.floor(hash01(`dream-line:${item.source}`) * lines.length)) % lines.length) + lines.length) % lines.length]!;
+  const line = lines[(((day + Math.floor(unit01(`dream-line:${item.source}`) * lines.length)) % lines.length) + lines.length) % lines.length]!;
   return { game: item.game, where, line };
 }

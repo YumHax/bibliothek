@@ -5,6 +5,8 @@ import { cylinderMesh } from '../meshUtils';
 import { paint, standard, timber } from '../materials/palette';
 import { part } from './Prop';
 import { nowPlaying } from '../screen/nowPlaying';
+import { random } from '@/random';
+import { damp } from '@/math/damp';
 
 export interface SpeakerOptions {
   /** Height of the cabinet. Default 0.85 (a slim floor-stander). */
@@ -39,7 +41,7 @@ export class Speaker extends THREE.Group implements Furniture, Updatable {
   private readonly led = new THREE.MeshStandardMaterial({ color: 0x6fd08a, emissive: 0x4fd070, emissiveIntensity: LED_IDLE, roughness: 0.4 });
   /** The woofer's cone and dust cap, moved together along z. */
   private readonly woofer = new THREE.Group();
-  private time = Math.random() * 10;
+  private time = random() * 10;
 
   constructor(options: SpeakerOptions = {}) {
     super();
@@ -78,7 +80,7 @@ export class Speaker extends THREE.Group implements Furniture, Updatable {
     this.time += dt;
     const loudness = nowPlaying.loudness();
     const target = loudness > 0 ? LED_PLAYING : LED_IDLE;
-    this.led.emissiveIntensity += (target - this.led.emissiveIntensity) * Math.min(1, dt * 4);
+    this.led.emissiveIntensity = damp(this.led.emissiveIntensity, target, 4, dt);
     // No access to the video's sound (a cross-origin iframe): a beat and a flutter, as deep as it is loud.
     const t = this.time;
     const pump = Math.max(0, Math.sin(t * BEAT_HZ * Math.PI * 2)) ** 3 * 0.7 + 0.3 * (0.5 + 0.5 * Math.sin(t * FLUTTER_HZ * Math.PI * 2));

@@ -11,6 +11,8 @@ import { playCoins } from '@/audio/coins';
 import type { Furniture } from '../Furniture';
 import { GameBox } from '../GameBox';
 import { RENDER_ORDER } from '../surface/layers';
+import { random } from '@/random';
+import { formatCoins } from '@/text/money';
 
 /** How the box stands: tipped back onto a support by `angle`, or lying face up on the table. */
 export type ForSalePose = { kind: 'lean'; angle?: number } | { kind: 'flat' };
@@ -85,7 +87,7 @@ export class ForSaleBox extends THREE.Group implements Furniture, Interactable {
     this.name = `ForSale:${item.game.id}`;
     this.wallet = options.wallet;
     this.isWanted = options.isWanted ?? (() => false);
-    this.thanksLine = options.thanks ?? (() => THANKS[Math.floor(Math.random() * THANKS.length)]!);
+    this.thanksLine = options.thanks ?? (() => THANKS[Math.floor(random() * THANKS.length)]!);
     this.where = options.where;
     this.behindGlass = options.behindGlass ?? false;
     this.reactTo = options.react;
@@ -210,7 +212,7 @@ export class ForSaleBox extends THREE.Group implements Furniture, Interactable {
     const extra = [describeCondition(item.condition), this.wanted ? '★ wishlist' : ''].filter(Boolean).join(' · ');
     ctx.font = 'bold 34px system-ui, sans-serif';
     ctx.fillStyle = !item.priced ? FADED_INK : this.wallet.coins >= item.due ? '#f1d48a' : '#ff9a8a';
-    ctx.fillText(item.priced ? `${item.price} coins${extra ? `  ·  ${extra}` : ''}` : 'being priced…', w / 2, 84);
+    ctx.fillText(item.priced ? `${formatCoins(item.price)}${extra ? `  ·  ${extra}` : ''}` : 'being priced…', w / 2, 84);
     texture.needsUpdate = true;
     this.scanPainted = true;
   }
@@ -247,7 +249,7 @@ export class ForSaleBox extends THREE.Group implements Furniture, Interactable {
     const variant = variantTag(game).toLowerCase();
     const edition = [printing, variant].filter(Boolean).join(', ');
     const was = this.item.beforeSale;
-    const cost = `${price} coin${price > 1 ? 's' : ''}${this.item.haggled ? ' (haggled)' : was !== undefined ? ` (clearance, was ${was})` : ''}${this.item.source === 'grail' ? ' · a grail' : ''}`;
+    const cost = `${formatCoins(price)}${this.item.haggled ? ' (haggled)' : was !== undefined ? ` (clearance, was ${was})` : ''}${this.item.source === 'grail' ? ' · a grail' : ''}`;
     const due = this.item.due;
     const short = coins < due ? ` · you have ${coins}` : '';
     const wish = this.wanted ? ' · ★ on your wishlist' : '';

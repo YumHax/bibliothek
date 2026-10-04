@@ -1,11 +1,10 @@
 import * as THREE from 'three';
-import { seededRandom } from '@/covers/generated/canvasUtils';
 import { RegionUploader } from '@/world/city/regionUpload';
 import { syncWorks } from '@/world/street/details/roadworks';
 import { MarketCalendar } from '@/economy/MarketCalendar';
 import type { DayNight, SkyState } from '../DayNight';
 import { EYE_HEIGHT, type Rng, SCENE_WIDTH, Sheet } from './Sheet';
-import { FLAT_IN_STREET } from '@/world/street/streetPlan';
+import { FLAT_IN_STREET } from '@/world/measures/street';
 import { QUALITY } from '@/graphics/quality';
 import { paintSkyDetail } from './SkyDetail';
 import { paintSkyline } from './Skyline';
@@ -23,6 +22,7 @@ import { wakefulnessAt } from '@/time/wakefulness';
 /** The painting's eye over the flat's floor: painted `EYE_HEIGHT` over the street, whose pavement is the flat's floor's height below. */
 const EYE_HEIGHT_OVER_FLOOR = EYE_HEIGHT - FLAT_IN_STREET.height;
 import { type Holiday, type Season, holidayOf, seasonOf, useHoliday, useSeason } from '@/time/season';
+import { lcg, random as liveRandom } from '@/random';
 
 /**
  * A wall of the building itself, close outside some windows, facing +z (world): the pane shader
@@ -279,7 +279,7 @@ export class Outdoors {
   ) {
     this.primaryQuaternion = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), options.primaryRotationY);
     this.viewer = options.viewer;
-    const random = seededRandom(PAINT_SEED);
+    const random = lcg(PAINT_SEED);
 
     const season = options.season ?? seasonOf(new Date());
     this.season = season;
@@ -291,7 +291,7 @@ export class Outdoors {
     syncWorks(MarketCalendar.savedDay());
     const painting = options.paintOnFirstDraw ? null : this.paint(random);
     // Painted now, the life draws on after the painting, as it always has; later, from its own seed.
-    this.life = new Life(painting ? random : seededRandom(LIFE_SEED));
+    this.life = new Life(painting ? random : lcg(LIFE_SEED));
     this.sky = dayNight.state;
 
     const uniforms = outdoorsUniforms(this.life, options, season);
@@ -334,7 +334,7 @@ export class Outdoors {
    */
   readonly markDrawn = (): void => {
     this.drawn = true;
-    if (!this.painting) this.adopt(this.paint(seededRandom(PAINT_SEED)));
+    if (!this.painting) this.adopt(this.paint(lcg(PAINT_SEED)));
   };
 
   /** Moves the traffic, the passers-by, the birds and the clouds on by `dt` seconds. */
@@ -507,8 +507,8 @@ export class Outdoors {
     if (sky.strikes !== this.strikes) {
       // A new strike: somewhere round the horizon, a fresh bolt; only the nearer ones show theirs.
       this.strikes = sky.strikes;
-      this.direction(0, Math.random() * Math.PI * 2, u.boltDir.value as THREE.Vector3);
-      u.boltSeed.value = Math.random() * 100;
+      this.direction(0, liveRandom() * Math.PI * 2, u.boltDir.value as THREE.Vector3);
+      u.boltSeed.value = liveRandom() * 100;
       u.boltReach.value = 1 - THREE.MathUtils.smoothstep(sky.strikeDistance, 1200, 3500);
     }
     u.hazeDistance.value = HAZE_DISTANCE * (1 - 0.5 * sky.rain - 0.4 * sky.snow - 0.2 * sky.cloudCover);

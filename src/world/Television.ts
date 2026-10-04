@@ -18,6 +18,7 @@ import { QUALITY } from '@/graphics/quality';
 import { paint, timber } from '@/world/materials/palette';
 import { PROUD } from './props/joinery';
 import type { MediaDecks } from './media/MediaDeck';
+import { damp, dampFactor } from '@/math/damp';
 
 /** Height of the built-in cabinet the CRT sits on when nothing else carries it (see `mountOn`). */
 const OWN_CABINET_HEIGHT = 0.55;
@@ -263,12 +264,12 @@ export class Television extends SurfaceScreen implements Furniture, Updatable, I
       target = GLOW_MESSAGE * this.glowScale;
     }
     // Ease so switching the set on or off does not pop.
-    this.glow.intensity += (target - this.glow.intensity) * Math.min(1, dt * 6);
+    this.glow.intensity = damp(this.glow.intensity, target, 6, dt);
 
     // The hue drifts from one to the next while playing; the static glows the plain bluish white.
     if (this.state === 'playing') this.glow.color.copy(this.hue.update(dt));
     else this.glow.color.set(GLOW_COLOR);
-    this.ledMaterial.emissive.lerp(this.state === 'off' ? LED_STANDBY : LED_ON, Math.min(1, dt * 8));
+    this.ledMaterial.emissive.lerp(this.state === 'off' ? LED_STANDBY : LED_ON, dampFactor(8, dt));
     if (this.panel) {
       this.panel.color.copy(this.glow.color);
       this.panel.intensity = this.glow.intensity * PANEL_PER_GLOW;

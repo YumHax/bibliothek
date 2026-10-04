@@ -1,4 +1,5 @@
 import type { PlatformId } from '@/catalog/types';
+import { between, random as liveRandom } from '@/random';
 import { AUCTION } from './pricing';
 import { RIVAL_COLLECTOR } from './rivalCollector';
 
@@ -62,7 +63,6 @@ interface LotSketch {
  * rival's (`RivalCollector.keenness`). A ceiling under the opening ask is no interest.
  */
 export function drawInterest(lot: LotSketch, rng: () => number, keenness = 1): LotInterest[] {
-  const between = (lo: number, hi: number) => lo + rng() * (hi - lo);
   const out: LotInterest[] = [];
   for (const bidder of SALEROOM_BIDDERS) {
     // Always draw both numbers: one bidder's luck never shifts another's.
@@ -78,7 +78,7 @@ export function drawInterest(lot: LotSketch, rng: () => number, keenness = 1): L
         break;
       }
       case 'dealer': if (want < 0.7) ceiling = 0.6 + share * 0.2; break;
-      case 'rival': if (lot.star || want < 0.25) ceiling = (lot.star ? between(1.0, 1.3) : 0.7 + share * 0.25) * keenness; break;
+      case 'rival': if (lot.star || want < 0.25) ceiling = (lot.star ? between(rng, 1.0, 1.3) : 0.7 + share * 0.25) * keenness; break;
     }
     const coins = Math.floor(lot.estimate * ceiling);
     if (coins >= lot.reserve) out.push({ bidder: bidder.id, ceiling: coins });
@@ -151,7 +151,7 @@ export class LotRun {
     readonly reserve: number,
     interest: readonly LotInterest[],
     private readonly timing: LotTiming = AUCTION,
-    private readonly rand: () => number = Math.random,
+    private readonly rand: () => number = liveRandom,
   ) {
     this.ceilings = new Map(interest.map((i) => [i.bidder, i.ceiling]));
   }
@@ -242,6 +242,32 @@ export class LotRun {
       if (due !== 'sold') this.plan();
     }
     return events;
+  }
+
+  /** `id` comes in (or goes higher) on this lot, up to `ceiling` coins: the rival's spite, docs/social.md "Victor". */
+  join(id: string, ceiling: number): void {
+    if (!this.open || (this.ceilings.get(id) ?? 0) >= ceiling) return;
+    this.ceilings.set(id, ceiling);
+    this.out.delete(id);
+    this.plan();
+  }
+
+  /** `id` stops bidding on this lot (a deal struck to go halves). */
+  drop(id: string): void {
+    this.ceilings.delete(id);
+    if (this.next?.by === id) this.plan();
+  }
+
+  /**
+   * `id` lets the lot go whatever their ceiling (a friend leaving it to the player, `social/saleroom`): a shake of
+   * the head, once. Their bid already standing stands.
+   */
+  withdraw(id: string): LotEvent[] {
+    if (!this.ceilings.has(id) || this.out.has(id)) return [];
+    this.ceilings.set(id, 0);
+    this.out.add(id);
+    if (this.next?.by === id) this.plan();
+    return [{ kind: 'out', by: id }];
   }
 
   /** The leader could not pay: the lot goes to the underbidder at their bid, or is passed. */

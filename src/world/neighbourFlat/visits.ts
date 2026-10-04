@@ -3,8 +3,10 @@ import type { SessionActions } from '@/game/SessionActions';
 import { KEYS, PersistedStore } from '@/persistence';
 import { befriend, friendship } from '@/building/friendship';
 import { arriveNextAt } from '../travel/nextArrival';
-import { STAIRWELL_PLAN, landingY } from '../stairwell/stairwellPlan';
+import { STAIRWELL_PLAN } from '../stairwell/stairwellPlan'; // imports-ok: the neighbours' flats open on the stairwell's floors
+import { landingY } from '@/world/measures/building';
 import { NEIGHBOUR_FLAT_PLAN, NEIGHBOUR_HOSTS, hostAt, type NeighbourHost } from './neighbourFlatPlan';
+import { random } from '@/random';
 
 /*
  * Visiting the neighbours. A knock on their door while they are home counts for how well they know the player
@@ -72,6 +74,12 @@ export interface DoorVisit {
    * travelling). False: the door answers as before (their line, or nobody).
    */
   knock(session: SessionActions): boolean;
+  /** Whether they would ask the player in now (home, in their hours, warm enough). */
+  canEnter(): boolean;
+  /** A knock while they are home: counted for the friendship once a day (a tip the first times). */
+  knocked(session: SessionActions): void;
+  /** In through their door (`canEnter` first). */
+  enter(session: SessionActions): void;
 }
 
 /** The door of landing `k`, door `i` as a visit, if that neighbour is one who asks the player in. */
@@ -83,18 +91,23 @@ export function doorVisit(k: number, i: number, moment: DoorMoment): DoorVisit |
     const h = moment.hours();
     return moment.isHome() && h >= NEIGHBOUR_FLAT_PLAN.hours[0] && h < NEIGHBOUR_FLAT_PLAN.hours[1];
   };
+  const canEnter = (): boolean => open() && friendship(key) >= host.inviteAt;
+  const knocked = (session: SessionActions): void => {
+    const counted = befriend(key, FRIENDSHIP_NUDGES.knock, 'knock', moment.day());
+    if (counted && friendship(key) < host.inviteAt) session.tip('Neighbours who get to know you ask you in: knock now and then, talk on the stairs, take them up on a swap.', { id: 'neighbour-knock' });
+  };
   return {
-    label: () => (open() && friendship(key) >= host.inviteAt ? `${host.who}, ${STAIRWELL_PLAN.floorNames[k]} floor · visit` : null),
+    label: () => (canEnter() ? `${host.who}, ${STAIRWELL_PLAN.floorNames[k]} floor · visit` : null),
     knock: (session) => {
       if (!open()) return false;
-      const counted = befriend(key, FRIENDSHIP_NUDGES.knock, 'knock', moment.day());
-      if (friendship(key) < host.inviteAt) {
-        if (counted) session.tip('Neighbours who get to know you ask you in: knock now and then, say hello on the stairs, take them up on a swap.', { id: 'neighbour-knock' });
-        return false;
-      }
+      knocked(session);
+      if (friendship(key) < host.inviteAt) return false;
       enter(host, session);
       return true;
     },
+    canEnter,
+    knocked,
+    enter: (session) => enter(host, session),
   };
 }
 
@@ -107,7 +120,7 @@ function enter(host: NeighbourHost, session: SessionActions): void {
   store.save(state);
   if (changed) for (const cb of [...listeners]) cb(host);
   const { again } = host.welcome;
-  session.say(first ? host.welcome.first : again[Math.floor(Math.random() * again.length)]!, host.who);
+  session.say(first ? host.welcome.first : again[Math.floor(random() * again.length)]!, host.who);
   session.travel('neighbourFlat');
 }
 

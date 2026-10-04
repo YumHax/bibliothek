@@ -4,6 +4,7 @@ import { Negotiation } from '@/economy/haggle';
 import type { StockItem } from '@/economy/StockItem';
 import type { SaleDealer } from '@/game/SessionActions';
 import { pinSource, refreshBoard, type BoardNote } from './boardNotes';
+import { formatCoins } from '@/text/money';
 
 /*
  * THE ESTATE SALE: Mr Henri Lambert, the third floor's courtyard flat, a collector nobody on the stairs ever saw
@@ -107,8 +108,8 @@ export class EstateDealer implements SaleDealer {
 
   negotiate(item: StockItem): Negotiation | { line: string } {
     if (!item.priced) return { line: 'Let me look it up, my uncle kept a list somewhere…' };
-    if (this.haggles.has(item.game.id)) return { line: `${REFUSALS.again} ${item.price} coins.` };
-    if (Negotiation.patienceFor(this.soured, false) + ESTATE_HAGGLE.patience <= 0) return { line: `I think we’ve haggled enough today. ${item.price} coins.` };
+    if (this.haggles.has(item.game.id)) return { line: `${REFUSALS.again} ${formatCoins(item.price)}.` };
+    if (Negotiation.patienceFor(this.soured, false) + ESTATE_HAGGLE.patience <= 0) return { line: `I think we’ve haggled enough today. ${formatCoins(item.price)}.` };
     const negotiation = new Negotiation(item, { day: this.day, soured: this.soured, loyalty: 0, coffee: false, rain: false });
     negotiation.ease(ESTATE_HAGGLE);
     return negotiation;

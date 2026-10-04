@@ -5,8 +5,9 @@ import { cylinderMesh } from '../../meshUtils';
 import { part } from '../../props/Prop';
 import { METAL, paint, standard } from '../../materials/palette';
 import { WALL, decal } from '../../surface/layers';
-import { createCanvas, seededRandom, toTexture } from '@/graphics/canvas';
+import { createCanvas, toTexture } from '@/graphics/canvas';
 import { HAND, setLines } from '../common/lettering';
+import { lcg } from '@/random';
 
 export interface TreatBinOptions {
   /** What the strip along its front says. */
@@ -37,7 +38,7 @@ export class TreatBin extends THREE.Group implements Furniture {
   constructor(options: TreatBinOptions = {}) {
     super();
     this.name = 'TreatBin';
-    const random = seededRandom(options.seed ?? 53);
+    const random = lcg(options.seed ?? 53);
     const steel = METAL.satinSteel();
     // The stand: four legs, a shelf, the tray the bins sit in.
     for (const x of [-1, 1]) for (const z of [-1, 1]) this.add(cylinderMesh(0.012, TOP, steel, { x: (x * (W - 0.03)) / 2, y: TOP / 2, z: (z * (D - 0.03)) / 2 }, { segments: 8 }));

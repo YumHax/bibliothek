@@ -3,7 +3,8 @@ import type { MailPost } from '@/collection/MailPost';
 import type { NeighbourTrades, Resident, TradeOffer } from '@/economy/NeighbourTrades';
 import type { Doorstep } from '../hallway/Doorstep';
 import type { CoproBallotSource } from '@/ui/CoproPanel';
-import { STAIRWELL_PLAN, STOREYS } from './stairwellPlan';
+import { STAIRWELL_PLAN } from './stairwellPlan';
+import { STOREYS } from '@/world/measures/building';
 
 /** The neighbour's swap panel as a door opens it: shown the offer, then opened by the Session. */
 export interface TradePanelLike extends ModalLike {

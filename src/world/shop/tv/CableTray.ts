@@ -2,8 +2,8 @@ import * as THREE from 'three';
 import { cylinderMesh } from '../../meshUtils';
 import { Prop, part } from '../../props/Prop';
 import { paint } from '../../materials/palette';
-import { seededRandom } from '@/graphics/canvas';
 import { hangFromCeiling } from '../common/ceilingDrop';
+import { lcg } from '@/random';
 
 export interface CableTrayOptions {
   /** Length along local x. Default 3. */
@@ -32,7 +32,7 @@ export class CableTray extends Prop {
     this.name = 'CableTray';
     const L = options.length ?? 3;
     const drop = options.drop ?? 0.3;
-    const random = seededRandom(options.seed ?? 41);
+    const random = lcg(options.seed ?? 41);
     // Two rods (each with its rose), the tray under them.
     let y = 0;
     for (const x of [-L * 0.35, L * 0.35]) {

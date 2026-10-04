@@ -1,5 +1,5 @@
 /** What a panel list's controls are recognised by across a re-render. */
-const KEYS = ['action', 'id', 'result', 'prize'] as const;
+const KEYS = ['action', 'id', 'result', 'prize', 'kind', 'tab', 'index', 'page'] as const;
 const FOCUSABLE = 'button:not([disabled]), select:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
 /**

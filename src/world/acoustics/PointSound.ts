@@ -1,11 +1,13 @@
 import * as THREE from 'three';
 import type { Updatable } from '@/core/Engine';
 import type { AmbientVoice } from '@/audio/ambient';
-import { proximityVolume, type ProximityVolumeOptions } from '@/video/proximityVolume';
+import { HEARING, loudness, type HearingProfile } from '@/audio/hearing';
 import { rearOf, stereoPan } from '@/audio/spatial';
 import { Prop } from '../props/Prop';
 import type { ActivityAware } from '../zone/lifecycle';
 import type { SoundOcclusion } from './SoundOcclusion';
+import { random } from '@/random';
+import { damp } from '@/math/damp';
 
 export interface PointSoundOptions {
   /** Object whose distance drives the loudness (the camera). */
@@ -13,7 +15,7 @@ export interface PointSoundOptions {
   /** Walls in between muffle the sound. */
   occlusion?: SoundOcclusion;
   /** Distance model; the defaults suit a small household sound, heard across a room and faintly next door. */
-  volume?: ProximityVolumeOptions;
+  volume?: HearingProfile;
 }
 
 /** Walls are counted this often (a raycast against every loaded wall); the distance follows every frame. */
@@ -35,7 +37,7 @@ export class PointSound extends Prop implements Updatable, ActivityAware {
   private walls = 0;
   /** `walls` as heard: eased, fractional in between. */
   private heardWalls = NaN;
-  private wallsIn = Math.random() * WALLS_EVERY_S;
+  private wallsIn = random() * WALLS_EVERY_S;
 
   constructor(
     private readonly voice: AmbientVoice,
@@ -49,7 +51,7 @@ export class PointSound extends Prop implements Updatable, ActivityAware {
     this.getWorldPosition(this.here);
     this.options.listener.getWorldPosition(this.ear);
     const distance = this.here.distanceTo(this.ear);
-    const volume = { referenceDistance: 0.8, rolloff: 1.2, maxDistance: 7, ...this.options.volume };
+    const volume = { ...HEARING.household, ...this.options.volume };
     if (distance >= (volume.maxDistance ?? 7)) {
       this.voice.setLevel(0);
       return;
@@ -59,9 +61,9 @@ export class PointSound extends Prop implements Updatable, ActivityAware {
       this.wallsIn = WALLS_EVERY_S;
       this.walls = this.options.occlusion.wallsBetween(this.ear, this.here);
     }
-    this.heardWalls = Number.isNaN(this.heardWalls) ? this.walls : this.heardWalls + (this.walls - this.heardWalls) * Math.min(1, dt * WALLS_EASE);
+    this.heardWalls = Number.isNaN(this.heardWalls) ? this.walls : damp(this.heardWalls, this.walls, WALLS_EASE, dt);
     const walls = this.heardWalls;
-    this.voice.setLevel(proximityVolume(distance, { ...volume, walls }) / 100);
+    this.voice.setLevel(loudness(distance, volume, walls));
     this.voice.setSpatial?.(stereoPan(this.options.listener, this.here), walls, rearOf(this.options.listener, this.here));
     this.voice.update(dt);
   }

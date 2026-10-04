@@ -3,7 +3,7 @@ import type { Updatable } from '@/core/Engine';
 import type { DayNight } from '../props/DayNight';
 import { audioBus, startedAudioContext } from '@/audio/audioContext';
 import { whiteNoise } from '@/audio/noise';
-import { seededRandom } from '@/covers/generated/canvasUtils';
+import { lcg, random as liveRandom } from '@/random';
 
 /** A bird takes off when the player comes this close (m), and is back this long after (s, if the player is away). */
 const SCARE = 2.6;
@@ -43,7 +43,7 @@ export class RoofPigeons extends THREE.Group implements Updatable {
   /** Scratch for the body's and the head's spot (no allocation per bird per frame). */
   private readonly at = new THREE.Vector3();
   private readonly s = new THREE.Vector3();
-  private readonly random = seededRandom(404);
+  private readonly random = lcg(404);
   private clock = 0;
 
   constructor(perches: readonly [number, number, number][], private readonly dayNight: DayNight, private readonly viewer: THREE.Object3D) {
@@ -131,7 +131,7 @@ function flutter(): void {
     source.buffer = whiteNoise(ctx, 1);
     const band = ctx.createBiquadFilter();
     band.type = 'bandpass';
-    band.frequency.value = 900 + Math.random() * 600;
+    band.frequency.value = 900 + liveRandom() * 600;
     band.Q.value = 1.2;
     const gain = ctx.createGain();
     const at = t + i * 0.07;
@@ -139,7 +139,7 @@ function flutter(): void {
     gain.gain.exponentialRampToValueAtTime(0.05, at + 0.01);
     gain.gain.exponentialRampToValueAtTime(0.0001, at + 0.06);
     source.connect(band).connect(gain).connect(audioBus(ctx, 'world'));
-    source.start(at, Math.random() * 0.5);
+    source.start(at, liveRandom() * 0.5);
     source.stop(at + 0.07);
   }
 }

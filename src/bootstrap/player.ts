@@ -56,7 +56,7 @@ export function createPlayerMoves(services: Services, parts: { world: GameWorld;
     // Not on the stairs: a floor plan cannot say which flight the player stood on (they wake up at home instead).
     // Not onto the stairs (which flight?), nor up in the attic or on the roof (the restore sets the feet at 0: the flat under them).
     floorOf: (id) => (id !== 'stairwell' && id !== 'attic' && id !== 'roof' && isZoneId(id) ? world.zone(id).floorBounds : null),
-    busy: () => travel.isTravelling || sleep.isAsleep || built.pastimes.isBusy || airlockLink.isCrossing,
+    busy: () => built.activity.held,
     // Left in a shop or the flea market that has shut since: out on Front Street in front of its door.
     instead: (saved) => {
       const spot = outsideIfShut(saved.zone, sky.dayNight.state.hours);
@@ -75,7 +75,7 @@ export function createPlayerMoves(services: Services, parts: { world: GameWorld;
     player,
     surfaceAt: (at) => surfaceUnderfoot(zones.current, at),
     ground: () => sky.dayNight.state,
-    suspended: () => travel.isTravelling || sleep.isAsleep || built.pastimes.isBusy || airlockLink.isCrossing,
+    suspended: () => built.activity.held,
   }));
 
   return { travel, sleep };

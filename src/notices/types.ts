@@ -48,6 +48,9 @@ export interface RewardNotice {
   tickets?: number;
   /** The big ones (a milestone, a tournament, a prize): a larger banner with rays. */
   big?: boolean;
+  /** A picture over the title (a person's portrait when they become a friend), and the colour it is ringed in. */
+  picture?: HTMLCanvasElement;
+  pictureRing?: string;
 }
 
 export interface TipOptions {

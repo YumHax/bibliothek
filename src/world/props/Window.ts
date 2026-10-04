@@ -19,6 +19,7 @@ import { WALL, layMesh } from '../surface/layers';
 import { markGlass, unmarkGlass } from '@/graphics/glassMask';
 import type { OutlookLease } from '../outlook/sharedOutlook';
 import { normalBiasAt, snapDirection, texelAngle } from './shadowTexels';
+import { random } from '@/random';
 
 interface WindowOptions {
   /** Size of the glazed opening in metres. The kick rail below it reaches the floor. */
@@ -105,7 +106,7 @@ export class RoomWindow extends Prop implements Updatable, Interactable, Occupan
   private occupied = false;
   /** Whether the zone's meshes are drawn: while they are hidden a refresh would render an empty map (see `setZoneDrawn`). */
   private zoneDrawn = true;
-  private shadowTimer = Math.random() * IDLE_SHADOW_INTERVAL;
+  private shadowTimer = random() * IDLE_SHADOW_INTERVAL;
   /** The sun's regular shadow refresh while the player is in this room and the sun comes in. */
   private sunShadow: ShadowRefresh | null = null;
 

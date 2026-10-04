@@ -6,6 +6,7 @@ import type { Furniture } from '../Furniture';
 import { boxMesh, cylinderMesh, invisibleHitbox } from '../meshUtils';
 import { paint, standard, timber } from '../materials/palette';
 import { PROUD, proud } from '../props/joinery';
+import { formatCoins } from '@/text/money';
 
 interface CoffeeCartOptions {
   /** Price of a cup, chalked on the menu board. */
@@ -228,7 +229,7 @@ function paintMenu(price: number): THREE.Texture {
     ctx.stroke();
   }
   ctx.fillStyle = 'rgba(255,225,160,0.92)';
-  const text = `${price} coin${price === 1 ? '' : 's'}`;
+  const text = `${formatCoins(price)}`;
   fitFontSize(ctx, text, W * 0.86, 44, 16, hand, 'bold');
   ctx.fillText(text, W / 2, 222);
   ctx.fillStyle = 'rgba(190,230,255,0.85)';

@@ -1,6 +1,7 @@
 import * as THREE from 'three';
-import { createCanvas, seededRandom, toTexture } from '@/covers/generated/canvasUtils';
+import { createCanvas, toTexture } from '@/covers/generated/canvasUtils';
 import type { CoatKind } from './types';
+import { lcg } from '@/random';
 
 /*
  * Fur of the procedural cat: flat colours for the small parts (head, legs, muzzle, paws, nose,
@@ -88,7 +89,7 @@ function mix(a: string, b: string, t: number): string {
 }
 
 function paintBody(ctx: CanvasRenderingContext2D, w: number, h: number, coat: CoatKind, p: CoatPalette): void {
-  const random = seededRandom(0x5ca7);
+  const random = lcg(0x5ca7);
   ctx.globalAlpha = 1;
   ctx.fillStyle = p.base;
   ctx.fillRect(0, 0, w, h);

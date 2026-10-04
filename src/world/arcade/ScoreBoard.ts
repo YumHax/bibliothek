@@ -8,6 +8,7 @@ import { WALL } from '../surface/layers';
 import { paint } from '../materials/palette';
 import { drawText } from './games/ArcadeGame';
 import type { ScoreTable } from './scoreTable';
+import { formatNumber } from '@/text/count';
 
 interface ScoreBoardOptions {
   /** The hall's games, in the order they are listed. */
@@ -111,7 +112,7 @@ export class ScoreBoard extends Prop implements Updatable {
         const colour = entry.you ? '#7ee787' : '#ffffff';
         drawText(ctx, `${rank + 1}`, x0 + 30, y, size, MEDALS[rank]!, 'left');
         drawText(ctx, entry.name, x0 + 70, y, size, colour, 'left');
-        drawText(ctx, entry.score.toLocaleString('en-US'), x0 + cellW - 30, y, size, colour, 'right');
+        drawText(ctx, formatNumber(entry.score), x0 + cellW - 30, y, size, colour, 'right');
       });
     });
     drawText(ctx, 'BEAT THE BOARD · YOUR SCORES IN GREEN', W / 2, H * 0.96, Math.round(H * 0.028), '#ff8a80');

@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { pickWeighted, random } from '@/random';
 import type { Seat } from '../Seat';
 import type { CatBedLike } from './types';
 import type { FloorNav } from '../nav/FloorNav';
@@ -75,20 +76,50 @@ interface RestingSpotSources {
  * Allocates: only called when the cat decides to lie down.
  */
 export function pickRestingSpot(sources: RestingSpotSources): RestingSpot | null {
-  const candidates: { spot: RestingSpot; weight: number }[] = [];
   const shrunk = sources.bounds.clone().expandByScalar(-0.2);
   const centre2d = shrunk.getCenter(new THREE.Vector2());
-  const centre = new THREE.Vector3(centre2d.x, 0, centre2d.y);
+  const room: RoomFloor = { shrunk, centre: new THREE.Vector3(centre2d.x, 0, centre2d.y) };
+  const candidates = CANDIDATES.flatMap((candidatesOf) => candidatesOf(sources, room));
+  // None when every weight is zero (nowhere worth going).
+  const weighted = candidates.filter((c) => c.weight > 0);
+  return weighted.length ? pickWeighted(random, weighted, (c) => c.weight).spot : null;
+}
 
-  if (sources.bed) {
-    const position = sources.bed.restingSpot(new THREE.Vector3());
-    // Step in from the room side of the bed so the little hop onto the padding reads.
-    const approach = position.clone().setY(0);
-    const toCentre = centre.clone().sub(approach).setY(0);
-    if (toCentre.lengthSq() > 1e-4) approach.addScaledVector(toCentre.normalize(), 0.3);
-    candidates.push({ spot: { kind: 'bed', position, approach, facing: centre.clone(), seat: null }, weight: sources.night ? 6 : 2.5 });
-  }
+/** A place the cat might lie, and how much it fancies it. */
+interface Candidate {
+  spot: RestingSpot;
+  weight: number;
+}
 
+/** The room's floor the places are judged against: its bounds stepped in from the walls, and its middle. */
+interface RoomFloor {
+  shrunk: THREE.Box2;
+  centre: THREE.Vector3;
+}
+
+/** Where a cat might lie, each kind of place its own finder; in this order, since the rug and the floor draw random points. */
+const CANDIDATES: readonly ((sources: RestingSpotSources, room: RoomFloor) => Candidate[])[] = [
+  bedCandidates,
+  perchCandidates,
+  seatCandidates,
+  rugCandidates,
+  sunCandidates,
+  floorCandidates,
+];
+
+/** The cat's bed: favoured, doubly so at night; approached from the room side so the little hop onto the padding reads. */
+function bedCandidates(sources: RestingSpotSources, room: RoomFloor): Candidate[] {
+  if (!sources.bed) return [];
+  const position = sources.bed.restingSpot(new THREE.Vector3());
+  const approach = position.clone().setY(0);
+  const toCentre = room.centre.clone().sub(approach).setY(0);
+  if (toCentre.lengthSq() > 1e-4) approach.addScaledVector(toCentre.normalize(), 0.3);
+  return [{ spot: { kind: 'bed', position, approach, facing: room.centre.clone(), seat: null }, weight: sources.night ? 6 : 2.5 }];
+}
+
+/** The perches up off the floor that are open and reachable; the people's bed is a treat at night, by day the cat has its own. */
+function perchCandidates(sources: RestingSpotSources): Candidate[] {
+  const candidates: Candidate[] = [];
   for (const perch of sources.perches ?? []) {
     if (perch.available && !perch.available()) continue;
     const position = perch.restingSpot(new THREE.Vector3());
@@ -97,53 +128,51 @@ export function pickRestingSpot(sources: RestingSpotSources): RestingSpot | null
     // On the floor (in front of a radiator) the spot itself must be free too: it walks there and lies down.
     if (position.y <= 0.05 && !sources.nav.isFree(position)) continue;
     const available = perch.available ? () => perch.available!() : undefined;
-    // The people's bed is a treat at night; by day the cat has its own.
     const weight = perch.catWeight?.(sources.night) ?? (sources.night ? 3 : 1);
     candidates.push({ spot: { kind: 'perch', position, approach, facing: null, seat: null, hopApex: perch.hopApex, available }, weight });
   }
+  return candidates;
+}
 
+/** An armchair nobody is in or heading for: the player's, or a visiting friend's, is never offered. */
+function seatCandidates(sources: RestingSpotSources): Candidate[] {
+  const candidates: Candidate[] = [];
   for (const seat of sources.seats) {
-    // The player's armchair, or one a visiting friend sits in (or is heading for), is never offered.
     if (seat === sources.playerSeat || seat.guest) continue;
     const approach = seat.approachPoint(new THREE.Vector3());
     if (!sources.nav.isFree(approach)) continue;
     const position = seat.restingSpot(new THREE.Vector3());
     candidates.push({ spot: { kind: 'seat', position, approach, facing: approach.clone(), seat }, weight: 2.5 });
   }
-
-  if (sources.rugPoint) {
-    const position = sources.rugPoint.clone();
-    position.x += THREE.MathUtils.randFloatSpread(0.5);
-    position.z += THREE.MathUtils.randFloatSpread(0.5);
-    position.y = 0;
-    if (sources.nav.isFree(position)) candidates.push({ spot: { kind: 'rug', position, approach: position, facing: null, seat: null }, weight: 1 });
-  }
-
-  if (sources.windows && !sources.night) {
-    for (const window of sources.windows) {
-      const position = window.sunSpotOnFloor(new THREE.Vector3());
-      if (!position) continue;
-      position.y = 0;
-      if (!shrunk.containsPoint(new THREE.Vector2(position.x, position.z)) || !sources.nav.isFree(position)) continue;
-      candidates.push({ spot: { kind: 'sun', position, approach: position, facing: window.getWorldPosition(new THREE.Vector3()), seat: null }, weight: 2.5 });
-    }
-  }
-
-  const floor = sources.nav.randomFreePoint(new THREE.Vector3(), sources.from, 1.2);
-  if (floor) candidates.push({ spot: { kind: 'floor', position: floor, approach: floor, facing: null, seat: null }, weight: 0.4 });
-
-  return pickWeighted(candidates)?.spot ?? null;
+  return candidates;
 }
 
-/** Weighted random choice; null when every weight is zero. */
-export function pickWeighted<T extends { weight: number }>(items: readonly T[]): T | null {
-  let total = 0;
-  for (const item of items) total += Math.max(0, item.weight);
-  if (total <= 0) return null;
-  let r = Math.random() * total;
-  for (const item of items) {
-    r -= Math.max(0, item.weight);
-    if (r <= 0) return item;
+/** Somewhere on the rug, a little off its middle. */
+function rugCandidates(sources: RestingSpotSources): Candidate[] {
+  if (!sources.rugPoint) return [];
+  const position = sources.rugPoint.clone();
+  position.x += THREE.MathUtils.randFloatSpread(0.5);
+  position.z += THREE.MathUtils.randFloatSpread(0.5);
+  position.y = 0;
+  return sources.nav.isFree(position) ? [{ spot: { kind: 'rug', position, approach: position, facing: null, seat: null }, weight: 1 }] : [];
+}
+
+/** A sun patch a window throws on the floor, by day, facing the window. */
+function sunCandidates(sources: RestingSpotSources, room: RoomFloor): Candidate[] {
+  if (!sources.windows || sources.night) return [];
+  const candidates: Candidate[] = [];
+  for (const window of sources.windows) {
+    const position = window.sunSpotOnFloor(new THREE.Vector3());
+    if (!position) continue;
+    position.y = 0;
+    if (!room.shrunk.containsPoint(new THREE.Vector2(position.x, position.z)) || !sources.nav.isFree(position)) continue;
+    candidates.push({ spot: { kind: 'sun', position, approach: position, facing: window.getWorldPosition(new THREE.Vector3()), seat: null }, weight: 2.5 });
   }
-  return items[items.length - 1] ?? null;
+  return candidates;
+}
+
+/** The floor nearby, for a lazy cat. */
+function floorCandidates(sources: RestingSpotSources): Candidate[] {
+  const floor = sources.nav.randomFreePoint(new THREE.Vector3(), sources.from, 1.2);
+  return floor ? [{ spot: { kind: 'floor', position: floor, approach: floor, facing: null, seat: null }, weight: 0.4 }] : [];
 }

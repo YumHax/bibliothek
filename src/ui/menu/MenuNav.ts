@@ -72,6 +72,19 @@ export function registerPanel(root: HTMLElement, options: PanelNavOptions): void
   });
 }
 
+/** Forgets a panel taken out of the page (`ModalPanel.dispose`). */
+export function unregisterPanel(root: HTMLElement): void {
+  const at = panels.findIndex((p) => p.root === root);
+  if (at >= 0) panels.splice(at, 1);
+}
+
+/** True while a controller's A press is being delivered as a click: the panel's own click handler then plays no second pick. */
+let navClick = false;
+
+export function isNavClick(): boolean {
+  return navClick;
+}
+
 /** The open panel the focus is in, else the last one registered that is open. */
 function openPanel(): Panel | null {
   const open = panels.filter((p) => p.isOpen());
@@ -118,12 +131,20 @@ export function initPanelNav(source: Input): void {
           return;
         }
         playUiSound('pick');
-        focused!.click();
+        navClick = true;
+        try {
+          focused!.click();
+        } finally {
+          navClick = false;
+        }
         return;
       case 'GamepadB':
-        playUiSound('back');
+        // A kit panel steps back or closes itself (and plays the back sound); another panel gets an Escape press.
         if (panel.onBack) panel.onBack();
-        else source.pressVirtual('Escape');
+        else {
+          playUiSound('back');
+          source.pressVirtual('Escape');
+        }
         return;
     }
   });

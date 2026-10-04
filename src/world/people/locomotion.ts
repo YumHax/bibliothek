@@ -1,21 +1,11 @@
 import * as THREE from 'three';
+import { random } from '@/random';
 
 /*
  * What the people who walk about (Walker, Shopper) do alike: turn the body onto a heading, walk a
  * path of floor points one leg at a time, glance about now and then, notice the player close by.
  * Each owner keeps its own rates and ranges and decides what to do with them.
  */
-
-/** The signed angle from `from` to `to` the short way round, in (-pi, pi]. */
-export function angleBetween(from: number, to: number): number {
-  const delta = to - from;
-  return Math.atan2(Math.sin(delta), Math.cos(delta));
-}
-
-/** `heading` turned towards `yaw` the short way round, by `rate` of the gap per second. */
-export function turnTowards(heading: number, yaw: number, dt: number, rate: number): number {
-  return heading + angleBetween(heading, yaw) * Math.min(1, dt * rate);
-}
 
 /** The way from where someone stands to the next point of their path, on the floor. */
 export interface Leg {
@@ -69,12 +59,12 @@ export class Glance {
  * look), for 2.5 to 6.5 seconds; once in four a shorter look aside.
  */
 export function idleGlance(point: THREE.Vector3): number {
-  if (Math.random() < 0.25) {
-    point.set((Math.random() < 0.5 ? -1 : 1) * (1.2 + Math.random() * 1.6), 1.2 + Math.random() * 0.5, 2.2);
-    return 1.2 + Math.random() * 1.6;
+  if (random() < 0.25) {
+    point.set((random() < 0.5 ? -1 : 1) * (1.2 + random() * 1.6), 1.2 + random() * 0.5, 2.2);
+    return 1.2 + random() * 1.6;
   }
-  point.set((Math.random() - 0.5) * 1.4, 0.95 + Math.random() * 0.6, 3 + Math.random() * 2);
-  return 2.5 + Math.random() * 4;
+  point.set((random() - 0.5) * 1.4, 0.95 + random() * 0.6, 3 + random() * 2);
+  return 2.5 + random() * 4;
 }
 
 /** Whether `viewer` stands within `range` of `self` on the floor; its world position is left in `viewerPos`. */

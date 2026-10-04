@@ -4,6 +4,8 @@ import type { SaleDealer } from '@/game/SessionActions';
 import type { Ad } from './ads';
 import type { Classifieds } from './Classifieds';
 import { SELLERS, type SellerKind } from './rules';
+import { sellerEase, sellerInsulted } from '@/social/sellers';
+import { formatCoins } from '@/text/money';
 
 /** What each kind of seller says when asked to hold a copy or take a game in part exchange. */
 const REFUSALS: Readonly<Record<SellerKind, { hold: string; swap: string; again: string }>> = {
@@ -42,17 +44,21 @@ export class SellerDealer implements SaleDealer {
   negotiate(item: StockItem): Negotiation | { line: string } {
     if (!item.priced) return { line: 'Hang on, let me think what it’s worth…' };
     const agreed = this.book.haggleOf(this.ad.id, item.game.id);
-    if (agreed !== undefined) return { line: `${REFUSALS[this.ad.kind].again} ${item.price} coins.` };
+    if (agreed !== undefined) return { line: `${REFUSALS[this.ad.kind].again} ${formatCoins(item.price)}.` };
     const soured = this.book.souredBy(this.ad.id);
-    if (Negotiation.patienceFor(soured, false) + SELLERS[this.ad.kind].haggle.patience <= 0) return { line: `I think we’re done haggling. ${item.price} coins.` };
+    if (Negotiation.patienceFor(soured, false) + SELLERS[this.ad.kind].haggle.patience <= 0) return { line: `I think we’re done haggling. ${formatCoins(item.price)}.` };
     const negotiation = new Negotiation(item, { day: this.day, soured, loyalty: 0, coffee: false, rain: false });
     negotiation.ease(SELLERS[this.ad.kind].haggle);
+    // A pleasant visit eases them further (`social/sellers`: a chat, a compliment, a gift that landed).
+    const pleasant = sellerEase(this.ad.id);
+    if (pleasant) negotiation.ease(pleasant);
     return negotiation;
   }
 
   settle(item: StockItem, negotiation: Negotiation, insults: number): void {
     this.book.recordHaggle(this.ad.id, item.game.id, negotiation.factor);
     for (let i = 0; i < insults; i++) this.book.sour(this.ad.id);
+    sellerInsulted(this.ad.id, insults, this.day);
     item.setHaggle(negotiation.factor);
   }
 

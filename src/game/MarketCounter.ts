@@ -8,6 +8,8 @@ import type { NoticeActions } from '@/notices';
 import type { KeyRoute, SessionHost } from './SessionHost';
 import { isAction, keyMarkup } from '@/input/actions';
 import { actionKeyLabel, renderKeys } from '@/ui/keys';
+import { formatCoins } from '@/text/money';
+import { capitalise } from '@/text/strings';
 
 /** What the counter works with: the hands and the panel, the money, the market, its two panels. */
 export interface MarketCounterParts extends Pick<CoreParts, 'inspector' | 'panel'> {
@@ -152,7 +154,7 @@ export class MarketCounter implements KeyRoute {
       if (result.reason === 'pricing') this.host.notices.refuse('The stallholder is still working out the price. Give it a moment.');
       else if (result.reason === 'owned') this.host.notices.refuse(`You already own ${game.title}`);
       else if (result.reason === 'short') {
-        this.host.notices.refuse(`${game.title} costs ${result.needed} coins and you have ${result.have}.`);
+        this.host.notices.refuse(`${game.title} costs ${formatCoins(result.needed ?? 0)} and you have ${result.have}.`);
         this.host.notices.tip(item.source === 'bin' ? 'Short of coins? Win tickets at the arcade and change them at its prize counter.' : `Short of coins? ${actionKeyLabel('haggle')} haggles the price down, ${actionKeyLabel('holdCopy')} holds the copy for the day against a deposit, and the arcade pays in tickets.`, { id: 'short-of-coins', until: () => !this.sale });
       }
       return;
@@ -168,7 +170,7 @@ export class MarketCounter implements KeyRoute {
     this.last = undoable ? { sale, game: bought, paid: due, deposit: item.deposit, usedPerk, until: performance.now() + UNDO_PURCHASE.seconds * 1000 } : null;
     const home = upgrade ? 'Your copy at home is a first print now.' : 'It waits for you in a parcel in the hallway.';
     this.speak(sale, thanks);
-    this.host.notices.reward({ title: `Bought ${game.title}`, detail: item.deposit ? `${home}\n${item.price} coins in all, the deposit included.` : home, coins: -due });
+    this.host.notices.reward({ title: `Bought ${game.title}`, detail: item.deposit ? `${home}\n${formatCoins(item.price)} in all, the deposit included.` : home, coins: -due });
     if (undoable) {
       const last = this.last;
       this.host.notices.tip(`Changed your mind? ${actionKeyLabel('handBack')} within ${UNDO_PURCHASE.seconds} s hands it back.`, { id: 'hand-back', until: () => this.last !== last || performance.now() > (last?.until ?? 0) });
@@ -194,8 +196,8 @@ export class MarketCounter implements KeyRoute {
     last.sale.dealer?.unsold?.(last.sale.item);
     last.sale.restock();
     this.speak(last.sale, 'Changed your mind? No harm done.');
-    const held = hold ? ` Still on hold for you: ${last.sale.item.due} coins to go.` : '';
-    this.host.notices.react(`${last.game.title} is back on the table: ${refund} of your ${last.paid} coins back.${held}`);
+    const held = hold ? ` Still on hold for you: ${formatCoins(last.sale.item.due)} to go.` : '';
+    this.host.notices.react(`${last.game.title} is back on the table: ${refund} of your ${formatCoins(last.paid)} back.${held}`);
     return true;
   }
 
@@ -208,7 +210,7 @@ export class MarketCounter implements KeyRoute {
     if (!sale || !market) return;
     // Flat-price copies (the bin, a garage sale on the street) are never haggled over.
     if (sale.item.source === 'bin') {
-      this.speak(sale, `It’s ${sale.where}, friend. ${sale.item.price} coins, that’s the deal.`);
+      this.speak(sale, `It’s ${sale.where}, friend. ${formatCoins(sale.item.price)}, that’s the deal.`);
       return;
     }
     const opened = market.negotiate(sale.item);
@@ -250,7 +252,7 @@ export class MarketCounter implements KeyRoute {
       return;
     }
     if (item.reserved) {
-      this.speak(sale, item.source === 'ordered' ? `That’s your order, it’s not going anywhere.` : `It’s held for you already. ${item.due} coins to go.`);
+      this.speak(sale, item.source === 'ordered' ? `That’s your order, it’s not going anywhere.` : `It’s held for you already. ${formatCoins(item.due)} to go.`);
       return;
     }
     if (market.isStale?.(item)) {
@@ -266,7 +268,7 @@ export class MarketCounter implements KeyRoute {
     const { deposit } = result;
     sale.react?.('hold');
     this.speak(sale, `I’ll keep ${item.game.title} under the table for you till closing tonight.`);
-    this.host.notices.reward({ title: `${item.game.title} on hold`, detail: `Held for today: ${item.due} coins to pay when you come back for it, before the market shuts tonight. Not collected, your deposit comes back tomorrow.`, coins: -deposit });
+    this.host.notices.reward({ title: `${item.game.title} on hold`, detail: `Held for today: ${formatCoins(item.due)} to pay when you come back for it, before the market shuts tonight. Not collected, your deposit comes back tomorrow.`, coins: -deposit });
   }
 
   /** X: offer a game from the collection in part exchange. */
@@ -296,7 +298,7 @@ export class MarketCounter implements KeyRoute {
     const { panel, inspector } = this.host.parts;
     const { item } = sale;
     const result = this.transactions.swap(item, mine, value, sale.where);
-    if (!result.ok) return result.reason === 'short' ? `You need ${result.needed} coins on top and you have ${result.have}.` : 'The swap fell through.';
+    if (!result.ok) return result.reason === 'short' ? `You need ${formatCoins(result.needed ?? 0)} on top and you have ${result.have}.` : 'The swap fell through.';
     const { topUp } = result;
     sale.thanks();
     sale.react?.('bought');
@@ -314,8 +316,8 @@ export class MarketCounter implements KeyRoute {
     const { market } = this.host.parts;
     if (!sale || !market || !market.expose(sale.item)) return;
     sale.react?.('caught');
-    this.host.notices.read({ title: 'A reproduction', text: 'The label is a glossy print and the board inside is brand new.', effect: `Found out: ${sale.item.price} coins now, no questions.` });
-    this.speak(sale, `Ah. Well spotted. ${sale.item.price} coins and it’s yours, no questions.`);
+    this.host.notices.read({ title: 'A reproduction', text: 'The label is a glossy print and the board inside is brand new.', effect: `Found out: ${formatCoins(sale.item.price)} now, no questions.` });
+    this.speak(sale, `Ah. Well spotted. ${formatCoins(sale.item.price)} and it’s yours, no questions.`);
   }
 
   /** The stallholder says `line` to the player: over their head, or as a subtitle when nobody stands by (the bargain bin). */
@@ -328,51 +330,71 @@ export class MarketCounter implements KeyRoute {
   show(): void {
     const sale = this.sale?.item;
     if (!sale) return;
-    const { item, wanted } = sale;
-    const { wallet, standing } = this.host.parts;
-    const coins = wallet?.coins ?? 0;
+    const coins = this.host.parts.wallet?.coins ?? 0;
+    this.host.parts.panel.show(sale.item.game, { rows: this.panelRows(sale), note: panelNote(sale, coins), hints: this.panelHints(sale) });
+  }
+
+  /**
+   * The panel's rows: the price (settled, haggled, what is still due after a deposit), the state, an old price sticker,
+   * what the player's eye and the morning's luck say, the edition, how the stall knows the player, room at home, a
+   * clearance's usual price.
+   */
+  private panelRows(sale: ForSaleLike): [string, string][] {
+    const { item } = sale;
+    const { standing, perks } = this.host.parts;
     const price = !item.priced ? 'being priced…'
-      : item.haggled ? `${item.price} coins (was ${item.tagPrice})`
-      : `${item.price} coin${item.price > 1 ? 's' : ''}`;
+      : item.haggled ? `${formatCoins(item.price)} (was ${item.tagPrice})`
+      : `${formatCoins(item.price)}`;
     const state = item.condition === 'complete' ? 'Complete, with its manual' : item.condition === 'noManual' ? 'No manual' : 'Worn, no manual';
     const rows: [string, string][] = [['Price', price]];
-    if (item.deposit) rows.push(['Still due', `${item.due} coins (${item.deposit} paid down)`]);
+    if (item.deposit) rows.push(['Still due', `${formatCoins(item.due)} (${item.deposit} paid down)`]);
     rows.push(['State', state]);
     if (item.sticker) rows.push(['Sticker', 'An old shop’s price sticker on the cover: cheaper for it, and it peels off at home']);
-    const { perks } = this.host.parts;
     const tell = perks?.tell(item);
     if (tell) rows.push(['Your eye', tell]);
     const luck = perks?.note(item);
     if (luck) rows.push(['This morning', luck]);
     const edition = describeEdition(item.edition, item.game.platform);
-    if (edition) rows.push(['Edition', edition[0]!.toUpperCase() + edition.slice(1)]);
+    if (edition) rows.push(['Edition', capitalise(edition)]);
     const loyalty = item.source !== 'bin' && !sale.dealer ? standing?.loyaltyName(item.game.platform) : '';
     if (loyalty) rows.push(['You are', `${loyalty} at this stall`]);
     const room = this.host.parts.shelfRoom?.();
     if (room) rows.push(['At home', room]);
-    if (item.beforeSale !== undefined) rows.push(['Usual price', `${item.beforeSale} coins`]);
-    const note = !item.priced ? 'The stallholder is looking it up.'
-      : item.exposed ? 'A reproduction, found out: knocked right down.'
-      : item.source === 'ordered' ? 'Your order, waiting for you.'
-      : item.source === 'keptAside' ? 'Kept aside for you: a regular’s privilege.'
-      : item.source === 'upgrade' ? 'A first print of a game you own: buy it and it replaces your copy (the stallholder takes the old one).'
-      : item.source === 'grail' ? `A grail. ${grailById(item.game.id)?.lore ?? 'Collectors dream of this one.'} The seller will not budge much.`
-      : item.sale < 1 ? `Clearance: ${Math.round((1 - item.sale) * 100)}% off. No haggling.`
-      : item.gem ? 'In the bargain bin? Someone did not know what they had.'
-      : coins < item.due ? `You have ${coins} coins: ${item.due - coins} short.${wanted ? ' ★ On your wishlist.' : ''}`
-      : wanted ? '★ On your wishlist.'
-      : item.source === 'showpiece' || item.source === 'estate' ? 'The pride of the stall.' : undefined;
-    // H shows only when a haggle would open (not on a clearance, an order, a copy already haggled over today).
+    if (item.beforeSale !== undefined) rows.push(['Usual price', `${formatCoins(item.beforeSale)}`]);
+    return rows;
+  }
+
+  /**
+   * The key hints: buy; haggle only when a haggle would open (not on a clearance, an order, a copy already haggled over
+   * today); at a stall, hold for the day (unless reserved) and swap a game (not an order or an upgrade); open the box
+   * unless the copy is sealed (`CopyOpening`); and put it back.
+   */
+  private panelHints(sale: ForSaleLike): string {
+    const { item } = sale;
     const { market } = this.host.parts;
     const canHaggle = (sale.dealer ?? market)?.canNegotiate?.(item) ?? true;
-    // A sealed copy is not opened at a stall (`CopyOpening`).
     const open = item.sealed ? '' : `${keyMarkup('lookInside')} open the box`;
     const keys = item.source === 'bin'
       ? [`${keyMarkup('buy')} buy`, open]
       : sale.dealer
         ? [`${keyMarkup('buy')} buy`, canHaggle ? `${keyMarkup('haggle')} haggle` : '', open]
         : [`${keyMarkup('buy')} buy`, canHaggle ? `${keyMarkup('haggle')} haggle` : '', item.reserved ? '' : `${keyMarkup('holdCopy')} hold for the day`, item.source === 'ordered' || item.source === 'upgrade' ? '' : `${keyMarkup('swap')} swap a game`, open];
-    const hints = [...keys.filter(Boolean), `${keyMarkup('putBack')} or [Click] elsewhere to put it back`].map(renderKeys).join(' · ');
-    this.host.parts.panel.show(item.game, { rows, note, hints });
+    return [...keys.filter(Boolean), `${keyMarkup('putBack')} or [Click] elsewhere to put it back`].map(renderKeys).join(' · ');
   }
+}
+
+/** The panel's one line about the copy: what kind of find it is, or what stands between the player and it. */
+function panelNote(sale: ForSaleLike, coins: number): string | undefined {
+  const { item, wanted } = sale;
+  return !item.priced ? 'The stallholder is looking it up.'
+    : item.exposed ? 'A reproduction, found out: knocked right down.'
+    : item.source === 'ordered' ? 'Your order, waiting for you.'
+    : item.source === 'keptAside' ? 'Kept aside for you: a regular’s privilege.'
+    : item.source === 'upgrade' ? 'A first print of a game you own: buy it and it replaces your copy (the stallholder takes the old one).'
+    : item.source === 'grail' ? `A grail. ${grailById(item.game.id)?.lore ?? 'Collectors dream of this one.'} The seller will not budge much.`
+    : item.sale < 1 ? `Clearance: ${Math.round((1 - item.sale) * 100)}% off. No haggling.`
+    : item.gem ? 'In the bargain bin? Someone did not know what they had.'
+    : coins < item.due ? `You have ${formatCoins(coins)}: ${item.due - coins} short.${wanted ? ' ★ On your wishlist.' : ''}`
+    : wanted ? '★ On your wishlist.'
+    : item.source === 'showpiece' || item.source === 'estate' ? 'The pride of the stall.' : undefined;
 }

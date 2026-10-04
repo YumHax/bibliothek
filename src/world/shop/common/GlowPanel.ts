@@ -3,6 +3,7 @@ import { Prop } from '../../props/Prop';
 import { PooledLight } from '../../lighting/LightPool';
 import { WALL, decal } from '../../surface/layers';
 import { Glows, type ShopFitting } from './fitting';
+import { random } from '@/random';
 
 export interface GlowPanelOptions {
   /** Size of the glowing face. Default 0.6 x 0.4. */
@@ -34,7 +35,7 @@ export class GlowPanel extends Prop implements ShopFitting, Updatable {
   private readonly shimmer: boolean;
   private readonly switched: boolean;
   private lit = true;
-  private time = Math.random() * 10;
+  private time = random() * 10;
 
   constructor(options: GlowPanelOptions = {}) {
     super();

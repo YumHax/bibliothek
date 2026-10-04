@@ -1,7 +1,6 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import type { Updatable } from '@/core/Engine';
-import { seededRandom } from '@/covers/generated/canvasUtils';
 import { dailySeed } from '@/time/daily';
 import { currentSeason } from '@/time/season';
 import type { Furniture } from '../../Furniture';
@@ -9,8 +8,11 @@ import type { DayNight } from '../../props/DayNight';
 import { snowCovered } from '../snowCover';
 import { outOfSight } from '../life/sight';
 import { groundHeight } from '../relief/ground';
-import { FACADES, FRONT, KERB_HEIGHT, isWalkable, type Vec2 } from '../streetPlan';
+import type { Vec2 } from '../streetPlan';
+import { FACADES } from '@/world/city/facades';
+import { FRONT, KERB_HEIGHT, isWalkable } from '@/world/measures/street';
 import { GROUND, onSurface } from '../../surface/layers';
+import { lcg } from '@/random';
 
 interface StreetClutterOptions {
   /** The pavement trees (petals settle round them in spring). */
@@ -130,7 +132,7 @@ export class StreetClutter extends THREE.Group implements Furniture, Updatable {
       if (!isWalkable(at)) continue;
       spots.push({ at, yaw: Math.atan2(-uz, ux), along: [ux, uz] });
     }
-    const random = seededRandom(5150);
+    const random = lcg(5150);
     const wheelies = new THREE.InstancedMesh(wheelieBin(), snowCovered(new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.55 })), Math.max(1, spots.length));
     const bags = new THREE.InstancedMesh(binBag(), snowCovered(new THREE.MeshStandardMaterial({ color: 0x16181b, roughness: 0.3 })), Math.max(1, spots.length * 3));
     let bagCount = 0;
@@ -172,7 +174,7 @@ export class StreetClutter extends THREE.Group implements Furniture, Updatable {
 
   /** Today's litter (`dailySeed`): by the bins, under the benches, in the gutters along the kerbs. */
   private layLitter(): void {
-    const random = seededRandom(dailySeed('street-litter'));
+    const random = lcg(dailySeed('street-litter'));
     const count = LITTER[0] + Math.floor(random() * (LITTER[1] - LITTER[0] + 1));
     const kinds = [paperCup(), drinkCan(), paperBall(), wrapper()];
     const material = snowCovered(new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.6 }));
@@ -230,7 +232,7 @@ export class StreetClutter extends THREE.Group implements Furniture, Updatable {
     const settled = THREE.MathUtils.smoothstep(season.depth, 0.15, 0.6) * (1 - THREE.MathUtils.smoothstep(season.depth, 0.85, 1));
     const count = Math.round(PETALS * settled);
     if (count < 10 || this.options.trees.length === 0) return null;
-    const random = seededRandom(dailySeed('street-petals'));
+    const random = lcg(dailySeed('street-petals'));
     const material = onSurface(new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.8, side: THREE.DoubleSide }), GROUND.leaf);
     const mesh = new THREE.InstancedMesh(new THREE.PlaneGeometry(0.028, 0.022).rotateX(-Math.PI / 2), material, count);
     const m = new THREE.Matrix4();

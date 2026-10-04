@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { createCanvas, canvasTexture } from '@/covers/generated/canvasUtils';
 import { QUALITY } from '@/graphics/quality';
 import type { Rng } from './Sheet';
-import { between } from './paint';
+import { between } from '@/random';
 
 /**
  * Equirectangular size of the sky map: 360° across, 180° down. 2048 across is 5.7 texels a degree, three times

@@ -1,9 +1,12 @@
 import type { Updatable } from '@/core/Engine';
 import { CAT_EARSHOT, type CatCallKind, type CatNoiseKind, type CatVoiceLike } from '@/world/cat/types';
-import { audioBus, audioContext } from './audioContext';
+import { audioBus, startedAudioContext } from './audioContext';
 import { whiteNoise } from './noise';
 import { playCatNoise } from './catNoises';
 import { SpatialOut, spatialInput } from './spatial';
+import { jitter } from './synth';
+import { random } from '@/random';
+import { loudness } from './hearing';
 
 type MeowKind = Exclude<CatCallKind, 'hiss'>;
 
@@ -501,8 +504,8 @@ export class CatVoice implements CatVoiceLike, Updatable {
     if (this.failed) return null;
     if (this.ctx && this.master) return this.ctx;
     try {
-      const ctx = audioContext();
-      if (ctx.state !== 'running') return null;
+      const ctx = startedAudioContext();
+      if (!ctx) return null;
       this.build(ctx);
       return ctx;
     } catch (err) {
@@ -567,13 +570,13 @@ export class CatVoice implements CatVoiceLike, Updatable {
     gain.setTargetAtTime(exhale.gain * loud, now + inS, 0.15);
     band.setTargetAtTime(exhale.hz * pitch, now + inS, 0.2);
     gain.setTargetAtTime(0, now + inS + outS * 0.6, outS / 4);
-    this.snoreLeft = SNORE.cycle.min + Math.random() * (SNORE.cycle.max - SNORE.cycle.min);
+    this.snoreLeft = SNORE.cycle.min + random() * (SNORE.cycle.max - SNORE.cycle.min);
   }
 
   /** noise -> highpass -> band at the hiss -> envelope -> master. */
   private playHiss(ctx: AudioContext, master: GainNode, priority: number): void {
     const now = ctx.currentTime;
-    const end = now + HISS.duration * (1 + (Math.random() * 2 - 1) * MEOW_JITTER.duration);
+    const end = now + HISS.duration * (1 + (random() * 2 - 1) * MEOW_JITTER.duration);
     this.meowUntil = end;
     const envelope = ctx.createGain();
     envelope.gain.setValueAtTime(0.0001, now);
@@ -586,7 +589,7 @@ export class CatVoice implements CatVoiceLike, Updatable {
     highpass.frequency.value = HISS.highpass;
     const band = ctx.createBiquadFilter();
     band.type = 'peaking';
-    band.frequency.value = HISS.band * (1 + (Math.random() * 2 - 1) * MEOW_JITTER.pitch);
+    band.frequency.value = HISS.band * (1 + (random() * 2 - 1) * MEOW_JITTER.pitch);
     band.Q.value = HISS.q;
     band.gain.value = 9;
     const source = this.noiseSource(ctx, false);
@@ -711,7 +714,7 @@ export class CatVoice implements CatVoiceLike, Updatable {
     this.purrLowpass.frequency.setTargetAtTime(phase.lowpass, now, glide);
     this.purrBreath.gain.setTargetAtTime(phase.gain, now, glide);
     for (const source of this.purrSources) source.frequency.setTargetAtTime(phase.hz, now, glide);
-    this.breathLeft = PURR.breath.min + Math.random() * (PURR.breath.max - PURR.breath.min);
+    this.breathLeft = PURR.breath.min + random() * (PURR.breath.max - PURR.breath.min);
   }
 
   /**
@@ -728,7 +731,7 @@ export class CatVoice implements CatVoiceLike, Updatable {
     const formantKeys = shiftKeyframes(spec.formant, shift);
     const formantScale = 1 + jitter(MEOW_JITTER.formant);
     const vibratoScale = 1 + jitter(MEOW_JITTER.vibrato);
-    const duration = spec.duration * (1 + (Math.random() * 2 - 1) * MEOW_JITTER.duration) * (1 + INSIST.duration * insist);
+    const duration = spec.duration * (1 + (random() * 2 - 1) * MEOW_JITTER.duration) * (1 + INSIST.duration * insist);
     const level = spec.level * (1 + INSIST.level * insist);
     const end = now + duration;
     this.meowUntil = end;
@@ -839,7 +842,7 @@ export class CatVoice implements CatVoiceLike, Updatable {
     source.buffer = this.noiseBuffer;
     source.loop = loop;
     // A loop starts anywhere in the buffer: the purr's grain and the snore never breathe in phase.
-    source.start(0, loop && this.noiseBuffer ? Math.random() * this.noiseBuffer.duration : 0);
+    source.start(0, loop && this.noiseBuffer ? random() * this.noiseBuffer.duration : 0);
     return source;
   }
 
@@ -853,14 +856,7 @@ export class CatVoice implements CatVoiceLike, Updatable {
 function loudnessAt(metres: number, walls: number): number {
   const d = Math.max(0, metres);
   if (!(d < DISTANCE.silent)) return 0;
-  let loudness = VOICE_LEVEL / (1 + (d / DISTANCE.reference) ** 2);
-  if (d > DISTANCE.fadeFrom) loudness *= (DISTANCE.silent - d) / (DISTANCE.silent - DISTANCE.fadeFrom);
-  return loudness * Math.pow(WALLS.gain, walls);
-}
-
-/** A random share in ±`amount`. */
-function jitter(amount: number): number {
-  return (Math.random() * 2 - 1) * amount;
+  return VOICE_LEVEL * loudness(d, { shape: 'inverseSquare', referenceDistance: DISTANCE.reference, maxDistance: DISTANCE.silent, fade: DISTANCE.silent - DISTANCE.fadeFrom, wallGain: WALLS.gain }, walls);
 }
 
 /** The inner keyframes (not the first or last) moved by `shift` of the length, kept in order and inside the call. */

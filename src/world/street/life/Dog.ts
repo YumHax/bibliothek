@@ -1,5 +1,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { random } from '@/random';
+import { damp, dampAngle } from '@/math/damp';
 
 /** Body length and height at the shoulder, metres: a mid-sized mongrel. */
 const SIZE = { length: 0.62, height: 0.42 };
@@ -20,7 +22,7 @@ export class Dog extends THREE.Group {
   private readonly material: THREE.MeshStandardMaterial;
   private readonly heading = { value: 0 };
   private phase = 0;
-  private time = Math.random() * 10;
+  private time = random() * 10;
   private sitting = 0;
   /** Where the lead ties on (its parent's frame), for whoever draws the lead. */
   readonly collar = new THREE.Vector3();
@@ -76,19 +78,17 @@ export class Dog extends THREE.Group {
       const step = Math.min(dist, speed * dt);
       this.position.x += (dx / dist) * step;
       this.position.z += (dz / dist) * step;
-      let delta = Math.atan2(dx, dz) - this.heading.value;
-      delta = Math.atan2(Math.sin(delta), Math.cos(delta));
-      this.heading.value += delta * Math.min(1, dt * TURN_RATE);
+      this.heading.value = dampAngle(this.heading.value, Math.atan2(dx, dz), TURN_RATE, dt);
       this.rotation.y = this.heading.value;
     }
     const moving = speed > 0.15;
     this.phase += dt * speed * 9;
-    this.sitting += ((!moving && !walking ? 1 : 0) - this.sitting) * Math.min(1, dt * 4);
+    this.sitting = damp(this.sitting, !moving && !walking ? 1 : 0, 4, dt);
     // Legs trot in diagonal pairs; sitting folds the hind legs and tips the body back.
     this.legs.forEach((leg, i) => {
       const swing = moving ? Math.sin(this.phase + (i === 0 || i === 3 ? 0 : Math.PI)) * 0.55 : 0;
       const fold = i >= 2 ? -1.2 * this.sitting : 0;
-      leg.rotation.x += (swing + fold - leg.rotation.x) * Math.min(1, dt * 12);
+      leg.rotation.x = damp(leg.rotation.x, swing + fold, 13, dt);
     });
     this.body.rotation.x = -0.35 * this.sitting;
     this.body.position.y = -0.1 * this.sitting;

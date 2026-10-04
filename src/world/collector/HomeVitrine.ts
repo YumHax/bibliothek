@@ -12,6 +12,7 @@ import { fabric } from '../materials/finishes';
 import { METAL, shared, standard, timber } from '../materials/palette';
 import { FLOOR, WALL, onSurface } from '../surface/layers';
 import { bakedGlow, poolTexture, washTexture } from '../showcase/glow';
+import { formatCoins } from '@/text/money';
 
 /** A copy on show, and what it is worth. */
 interface Showpiece {
@@ -226,7 +227,7 @@ export class HomeVitrine extends THREE.Group implements Furniture, Interactable,
   label(): string | null {
     if (!this.pieces.length) return 'The display cabinet, waiting for its first showpiece';
     const total = this.pieces.reduce((sum, p) => sum + p.value, 0);
-    return `Display cabinet: your ${this.pieces.length} most valuable games, about ${total.toLocaleString('en-US')} coins`;
+    return `Display cabinet: your ${this.pieces.length} most valuable games, about ${formatCoins(total)}`;
   }
 
   activate(session: SessionActions): void {

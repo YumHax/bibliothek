@@ -19,6 +19,8 @@ import { CUBE_FACE_HALF_ANGLE, normalBiasAt } from './props/shadowTexels';
 import { createCanvas, toTexture } from '@/covers/generated/canvasUtils';
 import { patchShader, replaceChunk } from './materials/shaderPatch';
 import type { ZoneId } from './zoneIds';
+import { fnv1a, hashInts, random as liveRandom } from '@/random';
+import { dampFactor } from '@/math/damp';
 
 /** Walls as seen from the default spawn: back = -z (shelves), front = +z, left = -x (TV), right = +x. */
 export type Wall = 'front' | 'back' | 'left' | 'right';
@@ -181,7 +183,7 @@ export class Room extends THREE.Group implements Updatable, OccupancyAware, Draw
   /** Whether the zone's meshes are drawn: while they are hidden a refresh would render an empty map (see `setZoneDrawn`). */
   private zoneDrawn = true;
   /** Starts at a random phase so several idle rooms do not all refresh their shadows on the same frame. */
-  private shadowTimer = Math.random() * IDLE_SHADOW_INTERVAL;
+  private shadowTimer = liveRandom() * IDLE_SHADOW_INTERVAL;
   /** How many things stood in the zone when the walls' ghosts of frames were last placed round them (see `settleWallDetail`). */
   private wallDetailCount = -1;
   private wallDetailWait = 0;
@@ -362,7 +364,7 @@ export class Room extends THREE.Group implements Updatable, OccupancyAware, Draw
   private easeAmbient(dt: number): void {
     const light = this.hemisphere;
     if (this.ambientNow === this.ambientIntensity && light.color.equals(this.ambientColor)) return;
-    const t = 1 - Math.exp(-dt / AMBIENT_EASE);
+    const t = dampFactor(1 / AMBIENT_EASE, dt);
     this.ambientNow += (this.ambientIntensity - this.ambientNow) * t;
     light.intensity = this.ambientNow;
     light.color.lerp(this.ambientColor, t);
@@ -498,7 +500,7 @@ export class Room extends THREE.Group implements Updatable, OccupancyAware, Draw
     const doorways = this.options.doorways ?? [];
     const wall = (name: Wall, length: number): THREE.Mesh => {
       const holes = doorways.filter((d) => d.wall === name).map((d) => ({ x: wallLocalX(name, d.along), width: d.width, height: d.height }));
-      const seed = Math.round(width * 7919 + depth * 104729) + name.length * 31 + name.charCodeAt(0);
+      const seed = hashInts(width * 1000, depth * 1000, fnv1a(name));
       const mesh = new THREE.Mesh(wallGeometry(length, height, holes), wallMaterial(finish.walls ?? 0xf3f0ea, { length, height, seed, openings: holes }));
       mesh.receiveShadow = true;
       return mesh;

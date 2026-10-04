@@ -1,3 +1,4 @@
+import { gaussian } from '@/math/scalar';
 import { STREET_PLAN } from '../street/streetPlan';
 
 /*
@@ -23,6 +24,7 @@ export const TAXI = { share: 0.18, paint: 0xe8b820 } as const;
  * (1 the rest of the day). Cars come that much oftener on both pictures of the street.
  */
 export function rushAt(h: number): number {
-  const bump = (centre: number, width: number): number => Math.exp(-(((h - centre) / width) ** 2));
-  return 1 + 0.9 * bump(8.25, 1.1) + 0.75 * bump(17.75, 1.3);
+  // Each rush is a bell down to 1/e at `width` hours from its centre (a standard deviation of width / √2).
+  const rush = (centre: number, width: number): number => gaussian(h, centre, width / Math.SQRT2);
+  return 1 + 0.9 * rush(8.25, 1.1) + 0.75 * rush(17.75, 1.3);
 }

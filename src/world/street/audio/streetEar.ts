@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { rearOf, stereoPan, type Spatial } from '@/audio/spatial';
+import { loudness } from '@/audio/hearing';
 
 /**
  * The listener as every sound of the street hears it (one helper instead of a pan worked out
@@ -31,7 +32,7 @@ export class StreetEar {
   }
 }
 
-/** 1 close by, 0.5 at `halfAt` metres, fading beyond. */
+/** 1 close by, 0.5 at `halfAt` metres, fading beyond and never quite gone: the street's own profile of `loudness`. */
 export function falloff(distance: number, halfAt: number): number {
-  return 1 / (1 + (distance / halfAt) ** 2);
+  return loudness(distance, { shape: 'inverseSquare', referenceDistance: halfAt, maxDistance: Infinity });
 }

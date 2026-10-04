@@ -4,6 +4,7 @@ import { cylinderMesh } from '../meshUtils';
 import { part } from '../props/Prop';
 import { UsableProp, type UseOptions } from '../props/UsableProp';
 import { paint } from '../materials/palette';
+import { formatClock } from '@/text/clock';
 
 const W = 0.12;
 const H = 0.065;
@@ -51,9 +52,7 @@ export class AlarmClock extends UsableProp {
     ctx.font = 'bold 34px "Courier New", monospace';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    const h = Math.floor(hours);
-    const m = Math.round((hours - h) * 60);
-    ctx.fillText(`${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`, canvas.width / 2 + 8, canvas.height / 2 + 2);
+    ctx.fillText(formatClock(hours), canvas.width / 2 + 8, canvas.height / 2 + 2);
     // The little bell of an armed alarm, top left.
     ctx.beginPath();
     ctx.arc(14, 16, 6, Math.PI, 0);

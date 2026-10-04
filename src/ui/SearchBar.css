@@ -1,68 +1,71 @@
-/* Quick search: a text field at the top of the screen with up to 6 results under it. */
-.search-bar {
-  position: fixed;
-  top: 2.5rem;
-  left: 50%;
-  transform: translateX(-50%);
-  width: min(30rem, 90vw);
-  z-index: var(--z-modal);
-  color: var(--ui-text);
-  animation: search-in 160ms ease-out;
-  transition: opacity 140ms ease;
-}
-/* Closing: the shared short fade before `hidden` (`ui/fade`). */
-.search-bar--closing { opacity: 0; pointer-events: none; }
-@keyframes search-in {
-  from { opacity: 0; transform: translate(-50%, -0.5rem); }
-  to   { opacity: 1; transform: translateX(-50%); }
-}
+/* Quick search: a text field at the top of the screen with up to 6 results under it. Its exit fade is the one `SearchBar.ts` waits for. */
+@layer tokens, base, components, panels;
+@layer panels {
+  .search-bar {
+    --search-fade: 140ms;
+    position: fixed;
+    top: 2.5rem;
+    left: 50%;
+    transform: translateX(-50%);
+    width: min(var(--card-w-md), 90vw);
+    z-index: var(--z-modal);
+    color: var(--ui-text);
+    animation: search-in var(--dur-fade) ease-out;
+    transition: opacity var(--search-fade) ease;
+  }
+  /* Closing: the shared short fade before `hidden` (`ui/fade`). */
+  .search-bar--closing { opacity: 0; pointer-events: none; }
+  @keyframes search-in {
+    from { opacity: 0; transform: translate(-50%, -0.5rem); }
+    to   { opacity: 1; transform: translateX(-50%); }
+  }
 
-.search-bar__input {
-  box-sizing: border-box;
-  width: 100%;
-  padding: 0.7rem 1rem;
-  border-radius: var(--ui-radius);
-  border: 1px solid var(--ui-border);
-  background: var(--ui-panel);
-  color: inherit;
-  font: inherit;
-  font-size: 1.05rem;
-  outline: none;
-  box-shadow: var(--ui-shadow);
-}
-.search-bar__input:focus { border-color: var(--ui-border-strong); }
-.search-bar__input::placeholder { color: var(--ui-text-dim); }
+  .search-bar__input {
+    box-sizing: border-box;
+    width: 100%;
+    padding: 0.7rem var(--sp-4);
+    border-radius: var(--ui-radius);
+    border: 1px solid var(--ui-border);
+    background: var(--ui-panel);
+    color: inherit;
+    font: inherit;
+    font-size: var(--fs-8);
+    box-shadow: var(--ui-shadow);
+  }
+  .search-bar__input:focus { border-color: var(--ui-border-strong); }
+  .search-bar__input::placeholder { color: var(--ui-text-dim); }
 
-.search-bar__results {
-  list-style: none;
-  margin: 0.4rem 0 0;
-  padding: 0.3rem;
-  border-radius: var(--ui-radius);
-  background: var(--ui-panel);
-  border: 1px solid var(--ui-border);
-  box-shadow: var(--ui-shadow);
-}
-.search-bar__results:empty { display: none; }
+  .search-bar__results {
+    list-style: none;
+    margin: 0.4rem 0 0;
+    padding: 0.3rem;
+    border-radius: var(--ui-radius);
+    background: var(--ui-panel);
+    border: 1px solid var(--ui-border);
+    box-shadow: var(--ui-shadow);
+  }
+  .search-bar__results:empty { display: none; }
 
-.search-bar__item {
-  display: flex;
-  justify-content: space-between;
-  gap: 1rem;
-  padding: 0.45rem 0.7rem;
-  border-radius: var(--ui-radius-sm);
-  font-size: 0.95rem;
-  cursor: pointer;
-}
-.search-bar__item:hover { background: var(--ui-fill); }
-.search-bar__item--active,
-.search-bar__item--active:hover { background: var(--ui-fill-hover); }
-.search-bar__item mark { background: none; color: var(--ui-accent); font-weight: 600; }
-.search-bar__meta { color: var(--ui-text-dim); font-size: 0.85em; white-space: nowrap; }
-.search-bar__empty { padding: 0.45rem 0.7rem; color: var(--ui-text-dim); font-size: 0.9rem; }
+  .search-bar__item {
+    display: flex;
+    justify-content: space-between;
+    gap: var(--sp-4);
+    padding: 0.45rem 0.7rem;
+    border-radius: var(--ui-radius-sm);
+    font-size: var(--fs-6);
+    cursor: pointer;
+  }
+  .search-bar__item:hover { background: var(--ui-fill); }
+  .search-bar__item--active,
+  .search-bar__item--active:hover { background: var(--ui-fill-hover); }
+  .search-bar__item mark { background: none; color: var(--ui-accent); font-weight: 600; }
+  .search-bar__meta { color: var(--ui-text-dim); font-size: 0.85em; white-space: nowrap; }
+  .search-bar__empty { padding: 0.45rem 0.7rem; color: var(--ui-text-dim); font-size: var(--fs-5); }
 
-.search-bar__help {
-  margin: 0.4rem 0 0;
-  text-align: center;
-  font-size: 0.75rem;
-  opacity: 0.6;
+  .search-bar__help {
+    margin: 0.4rem 0 0;
+    text-align: center;
+    font-size: var(--fs-2);
+    opacity: 0.6;
+  }
 }

@@ -2,7 +2,8 @@ import * as THREE from 'three';
 import type { TriBuilder } from '../relief/TriBuilder';
 import type { TexQuads } from './TexQuads';
 import type { SpillAtlas } from './spillCanvas';
-import { at, ball, cylinder, pick } from './shapes';
+import { at, ball, cylinder } from './shapes';
+import { pick } from '@/random';
 
 /** What a shop puts out on the pavement (`STREET_PLAN.shopSpill`). */
 export type SpillPiece = 'flowerBuckets' | 'flowerTiers' | 'aBoard' | 'saleBench' | 'dogBowls' | 'kibbleSack' | 'brokenTv';

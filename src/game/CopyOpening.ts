@@ -1,7 +1,8 @@
 import type { Game } from '@/catalog/types';
 import { pastTitle } from '@/economy/copyTraits';
-import { CONFIRM_MS, VARIANT } from '@/economy/pricing';
+import { VARIANT } from '@/economy/pricing';
 import { isAction } from '@/input/actions';
+import { Arming } from '@/ui/confirmTwice';
 import { actionKeyLabel } from '@/ui/keys';
 import type { ForSaleLike } from './SessionActions';
 import type { CollectionLike, CoreParts } from './SessionParts';
@@ -16,8 +17,8 @@ type CopyOpeningParts = Pick<CoreParts, 'inspector' | 'notices'> & { collection?
  * it is opened (kept as found on the player's own copy, on the market's copy in hand, bought with it).
  */
 export class CopyOpening implements KeyRoute {
-  /** The copy whose seal the next O breaks, until when. */
-  private armed: { id: string; until: number } | null = null;
+  /** The copy whose seal the next O breaks, keyed by its id (nothing to repaint: the reaction says it). */
+  private readonly arming = new Arming<string>(() => {});
 
   constructor(private readonly parts: CopyOpeningParts, private readonly marketCopy: () => ForSaleLike | null) {}
 
@@ -57,13 +58,10 @@ export class CopyOpening implements KeyRoute {
 
   /** The first O arms, the second (in time) breaks the seal; true once it is broken. */
   private breakSeal(copy: Game): boolean {
-    const now = performance.now();
-    if (this.armed?.id !== copy.id || now > this.armed.until) {
-      this.armed = { id: copy.id, until: now + CONFIRM_MS };
+    if (!this.arming.press(copy.id)) {
       this.parts.notices.react(`Still sealed: ${actionKeyLabel('openBox')} again to break the seal (it is worth ${VARIANT.sealed.factor}× unopened)`);
       return false;
     }
-    this.armed = null;
     this.parts.collection?.update?.(copy.id, { variant: undefined });
     this.parts.notices.react(`You slit the shrink-wrap: ${copy.title} is an ordinary copy now, and yours to read.`);
     return true;

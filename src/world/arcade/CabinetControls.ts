@@ -3,6 +3,7 @@ import { cylinderMesh } from '../meshUtils';
 import { paint } from '../materials/palette';
 import type { ArcadeControls } from './games/ArcadeGame';
 import { BASE_H, CABINET_CHROME, DEPTH } from './cabinetModel';
+import { dampFactor } from '@/math/damp';
 
 /** How far a joystick leans with a held direction (radians). */
 const STICK_TILT = 0.35;
@@ -38,7 +39,7 @@ export class CabinetControls {
 
   /** The first set follows `controls`, the second (when there is one) `second`. */
   move(dt: number, controls: ArcadeControls, second: ArcadeControls): void {
-    const ease = Math.min(1, dt * 18);
+    const ease = dampFactor(21, dt);
     this.sets.forEach((set, i) => {
       const c = i === 0 ? controls : second;
       const tz = ((c.left ? 1 : 0) - (c.right ? 1 : 0)) * STICK_TILT;

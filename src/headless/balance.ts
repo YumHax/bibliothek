@@ -8,4 +8,5 @@ export { rivalTable } from '@/economy/rivals';
 export { HoopSim } from '@/world/arcade/hoop/HoopSim';
 export { AlleySim } from '@/world/arcade/alley/AlleySim';
 export { PinballSim } from '@/world/arcade/pinball/PinballSim';
+export { REPLAY_STEP } from '@/world/arcade/replay/Replay';
 export * as THREE from 'three';

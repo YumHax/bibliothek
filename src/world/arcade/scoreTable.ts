@@ -12,6 +12,11 @@ export interface TableEntry {
 
 /** The hall of fame as a machine reads and signs it. */
 export interface ScoreTable {
+  /**
+   * The score to beat for a NEW BEST on this machine: the player's own best at the arcade (the regulars' entries do
+   * not count), the table's top where every entry is the household's (home) or where the evening's contest is
+   * against the table (the party).
+   */
   bestOf(gameId: string): number;
   topOf(gameId: string): TableEntry;
   table(gameId: string): TableEntry[];

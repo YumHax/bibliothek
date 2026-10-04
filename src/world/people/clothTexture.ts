@@ -1,7 +1,8 @@
 import * as THREE from 'three';
-import { createCanvas, hashString, roundRect, seededRandom, toTexture, repeatTexture } from '@/covers/generated/canvasUtils';
+import { createCanvas, roundRect, toTexture, repeatTexture } from '@/covers/generated/canvasUtils';
 import type { PersonLook } from './looks';
 import { cachedTexture } from './textureCache';
+import { fnv1a, lcg } from '@/random';
 
 /*
  * The one canvas a person wears: the torso's texture, painted once from the look. The trunk's
@@ -20,27 +21,37 @@ const H = 512;
 
 export function paintTorso(look: PersonLook, waistV: number): THREE.CanvasTexture {
   const key = ['torso', look.top, look.topColor, look.topAccent, look.trousers, look.apron ?? '', waistV].join('|');
-  return cachedTexture(key, () => torso(look, waistV, seededRandom(hashString(key))));
+  return cachedTexture(key, () => torso(look, waistV, lcg(fnv1a(key))));
 }
 
 function torso(look: PersonLook, waistV: number, random: () => number): THREE.CanvasTexture {
   const [canvas, ctx] = createCanvas(W, H);
   const waistY = (1 - waistV) * H;
-  const base = css(look.topColor);
-  const accent = css(look.topAccent);
-  const shade = css(darken(look.topColor, 0.75));
-
   // Trousers and belt first: an untucked top is painted over them below.
+  paintTrousers(ctx, look, waistY);
+  const tucked = look.top === 'shirt' || look.top === 'jacket';
+  const hemY = tucked ? waistY - 1 : waistY + 0.35 * (H - waistY);
+  TOPS[look.top](ctx, hemY, { look, base: css(look.topColor), accent: css(look.topAccent), shade: css(darken(look.topColor, 0.75)) });
+  // The hem shadow of an untucked top.
+  if (!tucked) {
+    ctx.fillStyle = 'rgba(0,0,0,0.35)';
+    ctx.fillRect(0, hemY, W, 6);
+  }
+  if (look.apron !== undefined) paintApron(ctx, look.apron, waistY);
+  finish(ctx, look.top === 'tee' || look.top === 'stripes', random);
+  return toTexture(canvas, 'facing');
+}
+
+/** The trousers below the waist, the belt on the line (buckle, loops), and the seams: the fly, the front pockets, the sides, the seat. */
+function paintTrousers(ctx: CanvasRenderingContext2D, look: PersonLook, waistY: number): void {
   ctx.fillStyle = css(look.trousers);
   ctx.fillRect(0, waistY, W, H - waistY);
   ctx.fillStyle = css(darken(look.trousers, 0.7));
   ctx.fillRect(0, waistY - 5, W, 10);
-  // Belt buckle, belt loops.
   ctx.fillStyle = '#c9b48a';
   ctx.fillRect(W / 2 - 8, waistY - 6, 16, 12);
   ctx.fillStyle = css(darken(look.trousers, 0.85));
   for (const u of [0.1, 0.3, 0.42, 0.58, 0.7, 0.9]) ctx.fillRect(W * u - 3, waistY - 7, 6, 14);
-  // Trouser seams: the fly, the front pockets, the sides, the seat.
   ctx.strokeStyle = css(darken(look.trousers, 0.65));
   ctx.lineWidth = 3;
   ctx.beginPath();
@@ -58,152 +69,156 @@ function torso(look: PersonLook, waistV: number, random: () => number): THREE.Ca
   ctx.moveTo(1, waistY + 4);
   ctx.lineTo(1, H);
   ctx.stroke();
+}
 
-  const tucked = look.top === 'shirt' || look.top === 'jacket';
-  const hemY = tucked ? waistY - 1 : waistY + 0.35 * (H - waistY);
+/** The look and its colours as CSS, for a top's painter. */
+interface TopPaint {
+  look: PersonLook;
+  base: string;
+  accent: string;
+  shade: string;
+}
 
-  switch (look.top) {
-    case 'tee':
-      ctx.fillStyle = base;
-      ctx.fillRect(0, 0, W, hemY);
-      // A print on the chest: a disc or a bar, once in three nothing.
-      if ((look.topColor ^ look.topAccent) % 3 !== 0) {
-        ctx.fillStyle = accent;
-        if ((look.topColor ^ look.topAccent) % 2) {
-          ctx.beginPath();
-          ctx.arc(W / 2, H * 0.34, W * 0.075, 0, Math.PI * 2);
-          ctx.fill();
-        } else {
-          roundRect(ctx, W * 0.4, H * 0.3, W * 0.2, H * 0.09, 8);
-          ctx.fill();
-        }
-      }
-      break;
-    case 'stripes': {
-      ctx.fillStyle = base;
-      ctx.fillRect(0, 0, W, hemY);
-      ctx.fillStyle = accent;
-      const band = H / 14;
-      for (let y = H * 0.1; y < hemY; y += band * 2) ctx.fillRect(0, y, W, Math.min(band, hemY - y));
-      break;
-    }
-    case 'flannel': {
-      ctx.fillStyle = base;
-      ctx.fillRect(0, 0, W, hemY);
-      ctx.fillStyle = withAlpha(look.topAccent, 0.35);
-      const cell = W / 8;
-      for (let x = cell / 2; x < W; x += cell) ctx.fillRect(x - 10, 0, 20, hemY);
-      for (let y = cell / 2; y < hemY; y += cell) ctx.fillRect(0, y - 10, W, Math.min(20, hemY - y + 10));
-      ctx.fillStyle = withAlpha(darken(look.topColor, 0.6), 0.5);
-      for (let x = cell / 2; x < W; x += cell) ctx.fillRect(x - 2, 0, 4, hemY);
-      for (let y = cell / 2; y < hemY; y += cell) ctx.fillRect(0, y - 2, W, 4);
-      // A button placket down the front.
-      ctx.fillStyle = shade;
-      ctx.fillRect(W / 2 - 2, 0, 4, hemY);
-      break;
-    }
-    case 'hoodie': {
-      ctx.fillStyle = base;
-      ctx.fillRect(0, 0, W, hemY);
-      // Kangaroo pocket, drawn as a darker outline with its slanted openings.
-      ctx.strokeStyle = shade;
-      ctx.lineWidth = 6;
-      ctx.beginPath();
-      ctx.moveTo(W * 0.36, hemY - H * 0.02);
-      ctx.lineTo(W * 0.36, H * 0.6);
-      ctx.lineTo(W * 0.42, H * 0.52);
-      ctx.moveTo(W * 0.64, hemY - H * 0.02);
-      ctx.lineTo(W * 0.64, H * 0.6);
-      ctx.lineTo(W * 0.58, H * 0.52);
-      ctx.stroke();
-      // Drawstrings from the hood.
-      ctx.strokeStyle = '#efece6';
-      ctx.lineWidth = 5;
-      ctx.beginPath();
-      ctx.moveTo(W * 0.46, H * 0.06);
-      ctx.lineTo(W * 0.45, H * 0.3);
-      ctx.moveTo(W * 0.54, H * 0.06);
-      ctx.lineTo(W * 0.555, H * 0.3);
-      ctx.stroke();
-      break;
-    }
-    case 'jacket': {
-      // The shirt underneath shows in a strip down the middle; the jacket's edges frame it.
-      ctx.fillStyle = accent;
-      ctx.fillRect(0, 0, W, hemY);
-      ctx.fillStyle = base;
-      ctx.fillRect(0, 0, W * 0.43, hemY);
-      ctx.fillRect(W * 0.57, 0, W * 0.43, hemY);
-      // Lapels: a wedge each side opening towards the neck.
-      ctx.fillStyle = shade;
-      ctx.beginPath();
-      ctx.moveTo(W * 0.43, H * 0.32);
-      ctx.lineTo(W * 0.43, 0);
-      ctx.lineTo(W * 0.35, 0);
-      ctx.closePath();
-      ctx.fill();
-      ctx.beginPath();
-      ctx.moveTo(W * 0.57, H * 0.32);
-      ctx.lineTo(W * 0.57, 0);
-      ctx.lineTo(W * 0.65, 0);
-      ctx.closePath();
-      ctx.fill();
-      ctx.fillStyle = shade;
-      ctx.fillRect(W * 0.43 - 3, 0, 6, hemY);
-      ctx.fillRect(W * 0.57 - 3, 0, 6, hemY);
-      break;
-    }
-    case 'shirt': {
-      ctx.fillStyle = base;
-      ctx.fillRect(0, 0, W, hemY);
-      ctx.fillStyle = shade;
-      ctx.fillRect(W / 2 - 10, 0, 20, hemY);
-      ctx.fillStyle = base;
-      ctx.fillRect(W / 2 - 6, 0, 12, hemY);
-      ctx.fillStyle = '#e9e4d8';
-      for (let y = H * 0.12; y < hemY - 12; y += H * 0.11) {
-        ctx.beginPath();
-        ctx.arc(W / 2, y, 4.5, 0, Math.PI * 2);
-        ctx.fill();
-      }
-      // A breast pocket.
-      ctx.strokeStyle = shade;
-      ctx.lineWidth = 4;
-      ctx.strokeRect(W * 0.6, H * 0.24, W * 0.12, H * 0.12);
-      break;
-    }
-  }
+/** A top's painter: the garment from the neck (0) down to `hemY`. */
+type TopPainter = (ctx: CanvasRenderingContext2D, hemY: number, paint: TopPaint) => void;
 
-  // The hem shadow of an untucked top.
-  if (!tucked) {
-    ctx.fillStyle = 'rgba(0,0,0,0.35)';
-    ctx.fillRect(0, hemY, W, 6);
-  }
+/** Each kind of top: adding one is one entry. */
+const TOPS: Record<PersonLook['top'], TopPainter> = {
+  tee: paintTee,
+  stripes: paintStripes,
+  flannel: paintFlannel,
+  hoodie: paintHoodie,
+  jacket: paintJacket,
+  shirt: paintShirt,
+};
 
-  if (look.apron !== undefined) {
-    const apron = css(look.apron);
-    ctx.fillStyle = apron;
-    // Bib, then the skirt below the waist, then the straps up to the neck.
-    ctx.fillRect(W * 0.41, H * 0.2, W * 0.18, H * 0.3);
-    ctx.fillRect(W * 0.34, H * 0.48, W * 0.32, H - H * 0.48);
-    ctx.strokeStyle = apron;
-    ctx.lineWidth = 12;
+/** A plain tee with a print on the chest: a disc or a bar, once in three nothing. */
+function paintTee(ctx: CanvasRenderingContext2D, hemY: number, { look, base, accent }: TopPaint): void {
+  ctx.fillStyle = base;
+  ctx.fillRect(0, 0, W, hemY);
+  if ((look.topColor ^ look.topAccent) % 3 === 0) return;
+  ctx.fillStyle = accent;
+  if ((look.topColor ^ look.topAccent) % 2) {
     ctx.beginPath();
-    ctx.moveTo(W * 0.43, H * 0.2);
-    ctx.lineTo(W * 0.46, 0);
-    ctx.moveTo(W * 0.57, H * 0.2);
-    ctx.lineTo(W * 0.54, 0);
-    ctx.stroke();
-    // Waist ties run round the back.
-    ctx.fillRect(0, waistY - 8, W, 10);
-    // A pocket and a wear line.
-    ctx.strokeStyle = css(darken(look.apron, 0.7));
-    ctx.lineWidth = 4;
-    ctx.strokeRect(W * 0.4, H * 0.62, W * 0.2, H * 0.14);
+    ctx.arc(W / 2, H * 0.34, W * 0.075, 0, Math.PI * 2);
+    ctx.fill();
+  } else {
+    roundRect(ctx, W * 0.4, H * 0.3, W * 0.2, H * 0.09, 8);
+    ctx.fill();
   }
+}
 
-  finish(ctx, look.top === 'tee' || look.top === 'stripes', random);
-  return toTexture(canvas, 'facing');
+/** Horizontal stripes in the accent. */
+function paintStripes(ctx: CanvasRenderingContext2D, hemY: number, { base, accent }: TopPaint): void {
+  ctx.fillStyle = base;
+  ctx.fillRect(0, 0, W, hemY);
+  ctx.fillStyle = accent;
+  const band = H / 14;
+  for (let y = H * 0.1; y < hemY; y += band * 2) ctx.fillRect(0, y, W, Math.min(band, hemY - y));
+}
+
+/** A check: wide translucent bands both ways, fine dark lines through them, a button placket down the front. */
+function paintFlannel(ctx: CanvasRenderingContext2D, hemY: number, { look, base, shade }: TopPaint): void {
+  ctx.fillStyle = base;
+  ctx.fillRect(0, 0, W, hemY);
+  ctx.fillStyle = withAlpha(look.topAccent, 0.35);
+  const cell = W / 8;
+  for (let x = cell / 2; x < W; x += cell) ctx.fillRect(x - 10, 0, 20, hemY);
+  for (let y = cell / 2; y < hemY; y += cell) ctx.fillRect(0, y - 10, W, Math.min(20, hemY - y + 10));
+  ctx.fillStyle = withAlpha(darken(look.topColor, 0.6), 0.5);
+  for (let x = cell / 2; x < W; x += cell) ctx.fillRect(x - 2, 0, 4, hemY);
+  for (let y = cell / 2; y < hemY; y += cell) ctx.fillRect(0, y - 2, W, 4);
+  ctx.fillStyle = shade;
+  ctx.fillRect(W / 2 - 2, 0, 4, hemY);
+}
+
+/** A hoodie: the kangaroo pocket as a darker outline with its slanted openings, the drawstrings from the hood. */
+function paintHoodie(ctx: CanvasRenderingContext2D, hemY: number, { base, shade }: TopPaint): void {
+  ctx.fillStyle = base;
+  ctx.fillRect(0, 0, W, hemY);
+  ctx.strokeStyle = shade;
+  ctx.lineWidth = 6;
+  ctx.beginPath();
+  ctx.moveTo(W * 0.36, hemY - H * 0.02);
+  ctx.lineTo(W * 0.36, H * 0.6);
+  ctx.lineTo(W * 0.42, H * 0.52);
+  ctx.moveTo(W * 0.64, hemY - H * 0.02);
+  ctx.lineTo(W * 0.64, H * 0.6);
+  ctx.lineTo(W * 0.58, H * 0.52);
+  ctx.stroke();
+  ctx.strokeStyle = '#efece6';
+  ctx.lineWidth = 5;
+  ctx.beginPath();
+  ctx.moveTo(W * 0.46, H * 0.06);
+  ctx.lineTo(W * 0.45, H * 0.3);
+  ctx.moveTo(W * 0.54, H * 0.06);
+  ctx.lineTo(W * 0.555, H * 0.3);
+  ctx.stroke();
+}
+
+/** A jacket open over a shirt: the shirt shows in a strip down the middle, the jacket's edges and lapels frame it. */
+function paintJacket(ctx: CanvasRenderingContext2D, hemY: number, { base, accent, shade }: TopPaint): void {
+  ctx.fillStyle = accent;
+  ctx.fillRect(0, 0, W, hemY);
+  ctx.fillStyle = base;
+  ctx.fillRect(0, 0, W * 0.43, hemY);
+  ctx.fillRect(W * 0.57, 0, W * 0.43, hemY);
+  // Lapels: a wedge each side opening towards the neck.
+  ctx.fillStyle = shade;
+  ctx.beginPath();
+  ctx.moveTo(W * 0.43, H * 0.32);
+  ctx.lineTo(W * 0.43, 0);
+  ctx.lineTo(W * 0.35, 0);
+  ctx.closePath();
+  ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(W * 0.57, H * 0.32);
+  ctx.lineTo(W * 0.57, 0);
+  ctx.lineTo(W * 0.65, 0);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = shade;
+  ctx.fillRect(W * 0.43 - 3, 0, 6, hemY);
+  ctx.fillRect(W * 0.57 - 3, 0, 6, hemY);
+}
+
+/** A buttoned shirt: the placket, its buttons, a breast pocket. */
+function paintShirt(ctx: CanvasRenderingContext2D, hemY: number, { base, shade }: TopPaint): void {
+  ctx.fillStyle = base;
+  ctx.fillRect(0, 0, W, hemY);
+  ctx.fillStyle = shade;
+  ctx.fillRect(W / 2 - 10, 0, 20, hemY);
+  ctx.fillStyle = base;
+  ctx.fillRect(W / 2 - 6, 0, 12, hemY);
+  ctx.fillStyle = '#e9e4d8';
+  for (let y = H * 0.12; y < hemY - 12; y += H * 0.11) {
+    ctx.beginPath();
+    ctx.arc(W / 2, y, 4.5, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.strokeStyle = shade;
+  ctx.lineWidth = 4;
+  ctx.strokeRect(W * 0.6, H * 0.24, W * 0.12, H * 0.12);
+}
+
+/** The stallholder's apron over the top: bib, the skirt below the waist, the straps up to the neck, the waist ties round the back, a pocket and a wear line. */
+function paintApron(ctx: CanvasRenderingContext2D, colour: number, waistY: number): void {
+  const apron = css(colour);
+  ctx.fillStyle = apron;
+  ctx.fillRect(W * 0.41, H * 0.2, W * 0.18, H * 0.3);
+  ctx.fillRect(W * 0.34, H * 0.48, W * 0.32, H - H * 0.48);
+  ctx.strokeStyle = apron;
+  ctx.lineWidth = 12;
+  ctx.beginPath();
+  ctx.moveTo(W * 0.43, H * 0.2);
+  ctx.lineTo(W * 0.46, 0);
+  ctx.moveTo(W * 0.57, H * 0.2);
+  ctx.lineTo(W * 0.54, 0);
+  ctx.stroke();
+  ctx.fillRect(0, waistY - 8, W, 10);
+  ctx.strokeStyle = css(darken(colour, 0.7));
+  ctx.lineWidth = 4;
+  ctx.strokeRect(W * 0.4, H * 0.62, W * 0.2, H * 0.14);
 }
 
 /**
@@ -253,7 +268,7 @@ function finish(ctx: CanvasRenderingContext2D, ribbedNeck: boolean, random: () =
 export function paintCloth(color: number, accent: number, pattern: 'plain' | 'stripes' | 'check'): THREE.CanvasTexture {
   // A plain tile never shows its accent: leave it out of the key so it is shared more.
   const key = ['cloth', color, pattern === 'plain' ? '' : accent, pattern].join('|');
-  return cachedTexture(key, () => cloth(color, accent, pattern, seededRandom(hashString(key))));
+  return cachedTexture(key, () => cloth(color, accent, pattern, lcg(fnv1a(key))));
 }
 
 function cloth(color: number, accent: number, pattern: 'plain' | 'stripes' | 'check', random: () => number): THREE.CanvasTexture {

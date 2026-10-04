@@ -6,6 +6,8 @@ import { cylinderMesh } from '../meshUtils';
 import { Prop } from '../props/Prop';
 import { CELLAR_PLAN as plan, cellCentre } from './cellarPlan';
 import { playSqueak } from './cellarSounds';
+import { random } from '@/random';
+import { loudness } from '@/audio/hearing';
 
 /** How fast it scurries (m/s), how close to the wall it keeps (m off the passage's middle). */
 const SPEED = 1.6;
@@ -59,7 +61,7 @@ export class Rat extends Prop implements Updatable, OccupancyAware {
     if (!this.run) {
       this.wait -= dt;
       if (this.wait > 0) return;
-      const forward = Math.random() < 0.5;
+      const forward = random() < 0.5;
       const from = forward ? this.path[0]! : this.path[this.path.length - 1]!;
       const to = forward ? this.path[this.path.length - 1]! : this.path[0]!;
       this.run = { from, to, t: 0, length: from.distanceTo(to) };
@@ -68,7 +70,7 @@ export class Rat extends Prop implements Updatable, OccupancyAware {
       this.viewer.getWorldPosition(this.eye);
       this.worldToLocal(this.eye);
       const d = this.eye.distanceTo(from);
-      playSqueak(0.12 / (1 + d * d * 0.2));
+      playSqueak(0.12 * loudness(d, { shape: 'inverseSquare', referenceDistance: Math.sqrt(5), maxDistance: Infinity }));
     }
     const run = this.run;
     run.t += (dt * SPEED) / run.length;
@@ -85,6 +87,6 @@ export class Rat extends Prop implements Updatable, OccupancyAware {
 
   private nextWait(): number {
     const [a, b] = plan.rat.every;
-    return a + Math.random() * (b - a);
+    return a + random() * (b - a);
   }
 }

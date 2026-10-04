@@ -3,9 +3,9 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import type { Interactable } from '@/interaction/Interactable';
 import type { SessionActions } from '@/game/SessionActions';
 import { createCanvas, toTexture } from '@/graphics/canvas';
-import { HOME_GOOD_PRICES } from '@/economy/pricing';
+import { annexPrice } from '@/social/building/roux';
 import { boughtLine } from '@/economy/homeGoods';
-import { bindRouxMove, markRouxBought, onRouxPhase, rouxPhase, type RouxPhase } from '@/building/rouxMove';
+import { markRouxBought, onRouxPhase, rouxPhase, type RouxPhase } from '@/building/rouxMove';
 import type { Zone } from '../zone/Zone';
 import type { BuildContext } from '../buildContext';
 import { Prop } from '../props/Prop';
@@ -13,8 +13,10 @@ import { invisibleHitbox } from '../meshUtils';
 import { paint } from '../materials/palette';
 import { WALL } from '../surface/layers';
 import { HoverGlint } from '../props/hoverGlint';
-import { STAIRWELL_PLAN, landingY } from '../stairwell/stairwellPlan';
+import { STAIRWELL_PLAN } from '../stairwell/stairwellPlan'; // imports-ok: Mrs Roux's landing is the stairwell's: the annex opens onto it
+import { landingY } from '@/world/measures/building';
 import { ROUX_LANDING } from './annexPlan';
+import { formatCoins } from '@/text/money';
 
 /** The sign's board, a hand's breadth proud of the leaf (whose face is 16 mm out of its frame, `ShutDoor`). */
 const SIGN = { width: 0.36, height: 0.26, depth: 0.008, z: 0.03 };
@@ -107,7 +109,7 @@ class RouxDoorSign extends Prop implements Interactable {
   label(): string | null {
     switch (this.phase) {
       case 'forSale':
-        return `Mrs Roux’s flat, for sale · ${HOME_GOOD_PRICES.annex} coins · buy`;
+        return `Mrs Roux’s flat, for sale · ${formatCoins(annexPrice())} · buy`;
       case 'moving':
         return 'SOLD: Mrs Roux moves out today';
       case 'works':
@@ -159,14 +161,14 @@ class RemovalBoxes extends Prop {
  * Mrs Roux's move as our landing shows it: the agency's sign on her door (for sale, then SOLD) and the removal men's
  * boxes on moving day. Zone-local in the stairwell (`STAIRWELL_PLAN`: her door at `ourNeighbourX` on our landing).
  */
-export function placeRouxLanding(zone: Zone, { today, home, building }: Pick<BuildContext, 'today' | 'home' | 'building'>): void {
+export function placeRouxLanding(zone: Zone, { home }: Pick<BuildContext, 'home'>): void {
   const upgrades = home.upgrades;
   if (!upgrades) return;
-  bindRouxMove({ today, upgrades, ...(building ? { doorstep: building.doorstep } : {}) });
   const y = landingY(0);
   const sign = new RouxDoorSign(() => ({
     title: 'Mrs Roux’s flat',
-    price: HOME_GOOD_PRICES.annex,
+    // Less for a close friend of hers (`social/building/roux`).
+    price: annexPrice(),
     detail: `${boughtLine({ id: 'annex' })} She moves out today; the wall comes down tomorrow.`,
     // The day first: the purchase tells everyone at once (`upgrades.add`), and the move must read as begun, not done.
     bought: () => {

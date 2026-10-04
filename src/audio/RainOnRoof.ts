@@ -1,5 +1,6 @@
 import { Voice } from './ambient';
 import { whiteNoise } from './noise';
+import { random } from '@/random';
 
 /** Loudness of a downpour at level 1 (linear). */
 const MASTER = 0.09;
@@ -46,14 +47,14 @@ export class RainOnRoof extends Voice {
     if (!this.dropBus || this.level < 0.05) return;
     this.nextDrop -= dt;
     while (this.nextDrop <= 0) {
-      this.nextDrop += (0.3 + Math.random() * 1.4) / (DROPS_PER_SECOND * this.level);
+      this.nextDrop += (0.3 + random() * 1.4) / (DROPS_PER_SECOND * this.level);
       const osc = ctx.createOscillator();
       osc.type = 'sine';
-      osc.frequency.value = 1800 + Math.random() * 2600;
+      osc.frequency.value = 1800 + random() * 2600;
       const env = ctx.createGain();
-      const t = ctx.currentTime + Math.random() * 0.05;
+      const t = ctx.currentTime + random() * 0.05;
       env.gain.setValueAtTime(0, t);
-      env.gain.linearRampToValueAtTime(0.1 + Math.random() * 0.25, t + 0.002);
+      env.gain.linearRampToValueAtTime(0.1 + random() * 0.25, t + 0.002);
       env.gain.exponentialRampToValueAtTime(0.0005, t + 0.04);
       osc.connect(env).connect(this.dropBus);
       osc.start(t);

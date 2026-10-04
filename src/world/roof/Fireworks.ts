@@ -4,6 +4,7 @@ import type { DayNight } from '../props/DayNight';
 import { audioBus, startedAudioContext } from '@/audio/audioContext';
 import { whiteNoise } from '@/audio/noise';
 import { additive } from '@/world/materials/blend';
+import { random } from '@/random';
 
 /** Bursts in the air at once, the sparks each throws, how long a spark lives (s). */
 const BURSTS = 6;
@@ -70,7 +71,7 @@ export class Fireworks extends THREE.Points implements Updatable {
     if (on) {
       this.next -= dt;
       if (this.next <= 0) {
-        this.next = EVERY[0] + Math.random() * (EVERY[1] - EVERY[0]);
+        this.next = EVERY[0] + random() * (EVERY[1] - EVERY[0]);
         this.fire();
       }
     }
@@ -106,14 +107,14 @@ export class Fireworks extends THREE.Points implements Updatable {
   /** A shell bursts somewhere over the show: its sparks start out from the same point. */
   private fire(): void {
     const b = this.burst++ % BURSTS;
-    const x = (Math.random() - 0.5) * this.spread;
-    const y = (Math.random() - 0.3) * this.spread * 0.3;
-    const z = (Math.random() - 0.5) * this.spread * 0.4;
-    const speed = 9 + Math.random() * 7;
+    const x = (random() - 0.5) * this.spread;
+    const y = (random() - 0.3) * this.spread * 0.3;
+    const z = (random() - 0.5) * this.spread * 0.4;
+    const speed = 9 + random() * 7;
     for (let s = 0; s < SPARKS; s++) {
       const i = b * SPARKS + s;
-      const u = Math.random() * 2 - 1;
-      const a = Math.random() * Math.PI * 2;
+      const u = random() * 2 - 1;
+      const a = random() * Math.PI * 2;
       const r = Math.sqrt(1 - u * u);
       this.base.set([x, y, z], i * 3);
       this.velocity.set([r * Math.cos(a) * speed, u * speed, r * Math.sin(a) * speed], i * 3);

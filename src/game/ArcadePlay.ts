@@ -1,5 +1,5 @@
 import { BEGINNER, PLAY_COST, PRIZE_TICKETS, TICKETS_PER_COIN, playIsFree } from '@/economy/pricing';
-import { ArcadeHabits, HINTED_PLAYS } from '@/economy/ArcadeHabits';
+import { HINTED_PLAYS } from '@/economy/ArcadeHabits';
 import { arcadePayout } from '@/economy/arcadePayout';
 import { tournamentLine, type TournamentOutcome } from '@/economy/ArcadeTournament';
 import { batch } from '@/persistence';
@@ -9,7 +9,10 @@ import type { ArcadeBonus, ArcadeMachineLike, ArcadeResult } from './SessionActi
 import type { ArcadeDailyLike, CoreParts, LeagueLike, MedalsLike, PayoutStatsLike, PerksLike, PrizesLike, WalletLike } from './SessionParts';
 import { isAction } from '@/input/actions';
 import { actionKeyLabel } from '@/ui/keys';
+import { Arming } from '@/ui/confirmTwice';
 import type { KeyRoute, SessionHost } from './SessionHost';
+import { formatNumber } from '@/text/count';
+import { formatCoins, formatTickets } from '@/text/money';
 
 export interface ArcadeParts extends Pick<CoreParts, 'player'> {
   wallet?: WalletLike;
@@ -24,8 +27,8 @@ export interface ArcadeParts extends Pick<CoreParts, 'player'> {
   perks?: PerksLike;
   /** Which machines' controls the HUD already spelled out, kept across sessions (the first day's store). */
   arcadeHints?: { seen(gameId: string): boolean; mark(gameId: string): void };
-  /** Plays per machine, for how long the HUD keeps saying what the keys do next (`ArcadeHabits`; one of its own when absent). */
-  arcadeHabits?: { plays(gameId: string): number; played(gameId: string): void };
+  /** Plays per machine, for how long the HUD keeps saying what the keys do next (the one `ArcadeHabits`, made in `bootstrap/services`). */
+  arcadeHabits: { plays(gameId: string): number; played(gameId: string): void };
 }
 
 /** How a tournament round is named when it starts. */
@@ -46,6 +49,13 @@ export interface TournamentLike {
   play(score: number): TournamentOutcome | null;
 }
 
+/** What a finished play came to: the arcade's settlement, the tee's tickets on top, the tournament round it was. */
+interface Settled {
+  payout: ReturnType<typeof arcadePayout>;
+  tee: number;
+  round: TournamentOutcome | null;
+}
+
 /**
  * Playing at the arcade: a coin goes in and the player stands at the controls (every key is the
  * game's then, but E to walk away and, on the end card, fire to replay); a finished play is paid
@@ -63,16 +73,16 @@ export class ArcadePlay implements KeyRoute {
   /** The machine held still while the pointer is unlocked. */
   private paused: ArcadeMachineLike | null = null;
   /** Plays per machine, kept across visits. */
-  private readonly habits: NonNullable<ArcadeParts['arcadeHabits']>;
+  private readonly habits: ArcadeParts['arcadeHabits'];
   /** Plays the house stood this session: the banner says so the first time, a word after that. */
   private housePlays = 0;
   /** The attendant asked once this session before swapping a prize's worth of tickets for a play's coin. */
   private swapAsked = false;
-  /** When walk-away was first pressed mid-play (ms): a second press within `WALK_AWAY_CONFIRM_MS` leaves. */
-  private walkArmed = 0;
+  /** Walk-away pressed once mid-play: a second press within `WALK_AWAY_CONFIRM_MS` leaves (nothing to repaint, the reaction says it). */
+  private readonly walkArming = new Arming<'walk'>(() => {}, WALK_AWAY_CONFIRM_MS);
 
   constructor(private readonly parts: ArcadeParts, private readonly host: SessionHost) {
-    this.habits = parts.arcadeHabits ?? new ArcadeHabits();
+    this.habits = parts.arcadeHabits;
   }
 
   /** The machine being played, if any. */
@@ -86,50 +96,73 @@ export class ArcadePlay implements KeyRoute {
    */
   play(machine: ArcadeMachineLike): void {
     const replay = this.machine === machine;
-    // A click on the machine being played is a reflex, not a choice: only walk-away leaves a running play.
-    if (replay && machine.isPlaying) return;
-    // The end card still counting (or fire still held from the play): not a replay yet.
-    if (replay && machine.canReplay === false) return;
+    if (!this.mayStart(machine, replay)) return;
+    const { wallet, player } = this.parts;
+    if (!wallet) return;
+    const paid = this.settleCoin(machine, wallet);
+    if (paid === null) return;
+    this.paid = paid;
+    if (!replay) this.standAt(machine, player);
+    this.started = performance.now();
+    machine.start((result) => this.over(machine, result));
+    this.announceStart(machine);
+  }
+
+  /**
+   * Whether a click on `machine` starts a play: not mid-game on it (a click there is a reflex, only walk-away leaves),
+   * not before its end card has counted (or fire is still held), not with a play running elsewhere (said); on another
+   * machine's end card the player walks over.
+   */
+  private mayStart(machine: ArcadeMachineLike, replay: boolean): boolean {
+    if (replay && machine.isPlaying) return false;
+    if (replay && machine.canReplay === false) return false;
     if (this.machine && !replay) {
       if (this.machine.isPlaying) {
         this.host.refuse(`Finish here first: ${actionKeyLabel('walkAway')} walks away.`);
-        return;
+        return false;
       }
-      // On another machine's end card: walk over.
       this.leave();
     }
-    const { wallet, player } = this.parts;
-    if (!wallet) return;
-    // Broke, and not even a coin's worth of tickets: the house stands a ticket machine's play, so the loop never dead-ends.
-    const onTheHouse = !machine.freePlay && !machine.atHome && machine.freeWhenBroke && playIsFree(wallet);
-    if (machine.freePlay || machine.atHome) {
+    return true;
+  }
+
+  /**
+   * The coin for the play: nothing on a free or home machine, the house's when the player is broke at a ticket machine
+   * (so the loop never dead-ends), else paid from the wallet. Whether a coin was paid, or null when the player could not.
+   */
+  private settleCoin(machine: ArcadeMachineLike, wallet: WalletLike): boolean | null {
+    const home = machine.payout === 'none';
+    const onTheHouse = !machine.freePlay && !home && machine.freeWhenBroke && playIsFree(wallet);
+    if (machine.freePlay || home) {
       // Nothing to pay (and nothing paid out while its page sends no score).
     } else if (onTheHouse) {
       if (this.housePlays++ === 0) this.host.reward({ title: 'On the house!', detail: 'Out of coins? This play is free. Win some tickets!' });
       else this.host.react('On the house again.');
-    } else if (!this.pay(wallet, machine)) return;
-    this.paid = !onTheHouse && !machine.freePlay && !machine.atHome;
-    if (!replay) {
-      this.host.putBack();
-      this.host.stand();
-      const { position, yaw } = machine.eyePose();
-      player.sit(position, yaw); // parks the camera and freezes walking, like an armchair
-      player.lookAt(machine.screenCentre());
-      this.machine = machine;
-    }
-    this.started = performance.now();
-    machine.start((result) => this.over(machine, result));
-    const { arcadeHints } = this.parts;
+    } else if (!this.pay(wallet, machine)) return null;
+    return !onTheHouse && !machine.freePlay && !home;
+  }
+
+  /** The player takes the controls: what was in hand goes back, the camera parks at the machine's eye pose, like an armchair. */
+  private standAt(machine: ArcadeMachineLike, player: ArcadeParts['player']): void {
+    this.host.putBack();
+    this.host.stand();
+    const { position, yaw } = machine.eyePose();
+    player.sit(position, yaw); // parks the camera and freezes walking, like an armchair
+    player.lookAt(machine.screenCentre());
+    this.machine = machine;
+  }
+
+  /** What is said as the play starts: a tournament round and the score to beat; the controls on a machine's first play ever, how to walk away for its first few. */
+  private announceStart(machine: ArcadeMachineLike): void {
+    const { arcadeHints, tournament } = this.parts;
     const id = machine.game.id;
     const first = !(arcadeHints?.seen(id) ?? this.hinted.has(id));
     this.hinted.add(id);
     arcadeHints?.mark(id);
     this.habits.played(id);
     // A tournament round: said before it starts, with the score to beat (a play on the house is not a round).
-    const { tournament } = this.parts;
     const round = this.paid && tournament?.running && tournament.gameId === id ? tournament.next : null;
-    if (round) this.host.react(`Tournament ${ROUND_WORDS[round.round] ?? 'round'}: beat ${round.name}'s ${round.score.toLocaleString('en-US')}.`);
-    // The controls on a machine's first play ever; how to walk away for its first few, then the player knows.
+    if (round) this.host.react(`Tournament ${ROUND_WORDS[round.round] ?? 'round'}: beat ${round.name}'s ${formatNumber(round.score)}.`);
     const walkAway = `${actionKeyLabel('walkAway')} walks away.`;
     if (first || this.hintsLeft(id)) this.host.tip(first ? `${machine.game.hint}\n${walkAway}` : walkAway, { id: 'arcade-play', until: () => this.machine !== machine || !machine.isPlaying });
   }
@@ -148,14 +181,14 @@ export class ArcadePlay implements KeyRoute {
       // A pocket that could take a prize home: asked once a session before the first swap, never nibbled unawares.
       if (!this.swapAsked && wallet.tickets >= CHEAPEST_PRIZE) {
         this.swapAsked = true;
-        this.host.refuse(`Out of coins. The attendant can swap ${TICKETS_PER_COIN * PLAY_COST} of your ${wallet.tickets} tickets for the coin: play again to swap, or save them for the prize counter.`);
+        this.host.refuse(`Out of coins. The attendant can swap ${TICKETS_PER_COIN * PLAY_COST} of your ${formatTickets(wallet.tickets)} for the coin: play again to swap, or save them for the prize counter.`);
         return false;
       }
       const swapped = wallet.redeemTickets(TICKETS_PER_COIN, PLAY_COST - wallet.coins);
-      if (swapped) this.host.react(`Out of coins: the attendant swaps ${swapped * TICKETS_PER_COIN} tickets for ${swapped === 1 ? 'a coin' : `${swapped} coins`}.`);
+      if (swapped) this.host.react(`Out of coins: the attendant swaps ${formatTickets(swapped * TICKETS_PER_COIN)} for ${swapped === 1 ? 'a coin' : `${formatCoins(swapped)}`}.`);
     }
     if (wallet.spend(PLAY_COST)) return true;
-    this.host.refuse(`Insert coin: a play costs ${PLAY_COST} coin${PLAY_COST > 1 ? 's' : ''} and you have ${wallet.coins}.`);
+    this.host.refuse(`Insert coin: a play costs ${formatCoins(PLAY_COST)} and you have ${wallet.coins}.`);
     // The claw never plays for free; the ticket machines do when the player is broke.
     if (!machine.freeWhenBroke && playIsFree(wallet)) this.host.tip('Broke? The ticket machines play on the house: win some tickets there first.', { id: 'short-of-coins' });
     else this.host.tip('Short of coins? Tickets turn into coins at the prize counter.', { id: 'short-of-coins' });
@@ -197,13 +230,10 @@ export class ArcadePlay implements KeyRoute {
       this.leave();
       return;
     }
-    const now = performance.now();
-    if (now - this.walkArmed > WALK_AWAY_CONFIRM_MS) {
-      this.walkArmed = now;
+    if (!this.walkArming.press('walk')) {
       this.host.react(`${actionKeyLabel('walkAway')} again to walk away from the machine.`);
       return;
     }
-    this.walkArmed = 0;
     this.leave();
     this.host.react('Walked away: that play is over.');
   }
@@ -243,27 +273,46 @@ export class ArcadePlay implements KeyRoute {
    * medal, the streak, the league, the tournament, a prize, a new best).
    */
   private over(machine: ArcadeMachineLike, result: ArcadeResult): void {
-    const { wallet, prizes, arcadeDaily, medals, league, payoutStats, tournament, perks } = this.parts;
     // At home, for fun: the end card says how it went, nothing is paid or counted.
-    if (machine.atHome) {
+    if (machine.payout === 'none') {
       this.endTip(machine);
       return;
     }
     // Nothing came back (LexiPunk's page sent no score): the coin goes back, nothing else is settled.
     if (result.refund) {
-      if (this.paid) wallet?.earnCoins(PLAY_COST);
-      this.host.react(this.paid ? `No score came back from ${machine.game.title}: your coin is returned.` : `No score came back from ${machine.game.title}.`);
-      this.paid = false;
+      this.refund(machine);
       this.endTip(machine);
       return;
     }
+    const settled = this.settle(machine, result);
+    this.bank(machine, result, settled);
+    this.announceEnd(machine, result, settled);
+    this.endTip(machine);
+  }
+
+  /** The coin back for a play that reported nothing, and the word. */
+  private refund(machine: ArcadeMachineLike): void {
+    if (this.paid) this.parts.wallet?.earnCoins(PLAY_COST);
+    this.host.react(this.paid ? `No score came back from ${machine.game.title}: your coin is returned.` : `No score came back from ${machine.game.title}.`);
+    this.paid = false;
+  }
+
+  /** What the play came to: the arcade's settlement against its books, the tee's tickets on top, the tournament round it was. */
+  private settle(machine: ArcadeMachineLike, result: ArcadeResult): Settled {
+    const { arcadeDaily, medals, league, tournament, perks } = this.parts;
     const beginner = this.habits.plays(machine.game.id) <= BEGINNER.plays;
     const payout = arcadePayout(machine, { ...result, beginner, paid: this.paid }, { daily: arcadeDaily, medals, league });
     // The arcade tee: the regulars nod the player through, a few tickets on top of the play's own.
     const tee = payout.tickets ? perks?.arcadeBonus(payout.tickets.paid) ?? 0 : 0;
-    if (tee) payout.lines.push(`Arcade tee: +${tee} tickets`);
+    if (tee) payout.lines.push(`Arcade tee: +${formatTickets(tee)}`);
     // On tournament day, a play on its cabinet by a player still in is their next round.
     const round = tournament && this.paid && machine.freeWhenBroke && machine.game.id === tournament.gameId && tournament.running ? tournament.play(result.score) : null;
+    return { payout, tee, round };
+  }
+
+  /** The tickets and prizes into the wallet and onto the shelf, saved as one; the play into the balance table. */
+  private bank(machine: ArcadeMachineLike, result: ArcadeResult, { payout, tee, round }: Settled): void {
+    const { wallet, prizes, league, payoutStats } = this.parts;
     batch(() => {
       for (const prize of payout.prizes) prizes?.add(prize);
       if (payout.tickets) wallet?.addTickets(payout.tickets.paid + tee);
@@ -273,8 +322,11 @@ export class ArcadePlay implements KeyRoute {
       league?.count?.(tee + (round?.tickets ?? 0));
     });
     if (payout.tickets) payoutStats?.record(machine.game.id, result.score, payout.tickets.earned, (performance.now() - this.started) / 1000);
+  }
+
+  /** The bonuses counting up on the machine's end card after the score's tickets, and the banner (or a word) for what the play came to. */
+  private announceEnd(machine: ArcadeMachineLike, result: ArcadeResult, { payout, tee, round }: Settled): void {
     if (round) payout.lines.push(tournamentLine(round));
-    // The bonuses count up on the machine's end card after the score's tickets, and feed out on its strip.
     const bonuses: ArcadeBonus[] = [...payout.bonuses];
     if (tee) bonuses.push({ label: 'ARCADE TEE', tickets: tee });
     if (round?.tickets) bonuses.push({ label: 'TOURNAMENT', tickets: round.tickets });
@@ -284,7 +336,6 @@ export class ArcadePlay implements KeyRoute {
     const prizesWon = payout.prizes.length > 0 || Boolean(round?.prize);
     if (payout.notable || round || prizesWon || result.best) this.host.reward({ title: headline ?? 'Well played!', detail: extras.join('\n') || undefined, tickets: tickets || undefined, big: prizesWon || result.best });
     else if (!machine.freeWhenBroke || result.first) this.host.react([headline, ...extras].filter(Boolean).join('\n'));
-    this.endTip(machine);
   }
 
   /** What the keys do next: the initials (a score that makes the table goes there first), or another go (the machine's first few plays). */

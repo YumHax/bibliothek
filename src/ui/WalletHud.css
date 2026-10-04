@@ -1,122 +1,127 @@
-/* Coins and tickets, top left: the head of the top-left column (`hud-slot--top-left`, the tips under it). */
-.wallet-hud {
-  --wallet-coin: #ffd766;
-  --wallet-ticket: #ff9aaa;
-  position: relative;
-  order: 0;
-  display: flex;
-  align-items: center;
-  padding: 0.28rem 0.35rem;
-  border-radius: 999px;
-  /* No backdrop-filter: over the live canvas it re-blurs every frame. */
-  background: linear-gradient(180deg, rgba(40, 38, 52, 0.92), rgba(14, 14, 20, 0.92));
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  box-shadow:
-    0 6px 18px rgba(0, 0, 0, 0.45),
-    inset 0 1px 0 rgba(255, 255, 255, 0.09),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.4);
-  color: var(--ui-text);
-  pointer-events: none;
-  user-select: none;
-  transition: opacity 300ms ease;
-}
-.wallet-hud--closing { opacity: 0; }
+/* Coins and tickets, top left: the head of the top-left column (`hud-slot--top-left`, the tips under it). The float's and the fade's times are the ones `WalletHud.ts` waits for. */
+@layer tokens, base, components, panels;
+@layer panels {
+  .wallet-hud {
+    --wallet-coin: var(--ui-accent-bright);
+    --wallet-ticket: var(--ui-ticket-text);
+    --wallet-chip-top: rgba(40, 38, 52, 0.92);
+    --wallet-chip-bottom: rgba(14, 14, 20, 0.92);
+    position: relative;
+    order: 0;
+    display: flex;
+    align-items: center;
+    padding: 0.28rem 0.35rem;
+    border-radius: var(--ui-radius-pill);
+    /* No backdrop-filter: over the live canvas it re-blurs every frame. */
+    background: linear-gradient(180deg, var(--wallet-chip-top), var(--wallet-chip-bottom));
+    border: 1px solid var(--ui-border);
+    box-shadow:
+      var(--ui-shadow-raised),
+      inset 0 1px 0 var(--tint-08),
+      inset 0 -1px 0 var(--shade-45);
+    color: var(--ui-text);
+    pointer-events: none;
+    user-select: none;
+    transition: opacity var(--dur-slow) ease;
+  }
+  .wallet-hud--closing { opacity: 0; }
 
-.wallet-hud__item {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.45rem;
-  padding: 0 0.7rem 0 0.15rem;
-}
-.wallet-hud__sep {
-  align-self: stretch;
-  width: 1px;
-  margin: 0.25rem 0.35rem 0.25rem 0;
-  background: linear-gradient(transparent, rgba(255, 255, 255, 0.2), transparent);
-}
+  .wallet-hud__item {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    padding: 0 0.7rem 0 0.15rem;
+  }
+  .wallet-hud__sep {
+    align-self: stretch;
+    width: 1px;
+    margin: var(--sp-1) 0.35rem var(--sp-1) 0;
+    background: linear-gradient(transparent, var(--tint-20), transparent);
+  }
 
-.wallet-hud__icon {
-  display: block;
-  flex: none;
-  filter: drop-shadow(0 1px 1.5px rgba(0, 0, 0, 0.55));
-}
-.wallet-hud__icon--coin { width: 1.45rem; height: 1.45rem; }
-.wallet-hud__icon--ticket { width: 1.65rem; height: 1.1rem; }
+  .wallet-hud__icon {
+    display: block;
+    flex: none;
+    filter: drop-shadow(0 1px 1.5px var(--shade-55));
+  }
+  .wallet-hud__icon--coin { width: 1.45rem; height: 1.45rem; }
+  .wallet-hud__icon--ticket { width: 1.65rem; height: 1.1rem; }
 
-.wallet-hud__count {
-  font-family: var(--ui-font-display);
-  font-size: 1.02rem;
-  line-height: 1;
-  letter-spacing: 0.04em;
-  font-variant-numeric: tabular-nums;
-  /* Bungee sits a touch high in its box: nudged onto the icons' centre line. */
-  padding-top: 0.1em;
-  min-width: 1.4ch;
-  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.7);
-  transition: color 250ms ease, text-shadow 250ms ease;
-}
-.wallet-hud__item[data-kind='coins'] .wallet-hud__count { color: #fff3d0; }
-.wallet-hud__item[data-kind='tickets'] .wallet-hud__count { color: #ffe3e7; }
+  .wallet-hud__count {
+    font-family: var(--ui-font-display);
+    font-size: var(--fs-7);
+    line-height: 1;
+    letter-spacing: 0.04em;
+    font-variant-numeric: tabular-nums;
+    /* Bungee sits a touch high in its box: nudged onto the icons' centre line. */
+    padding-top: 0.1em;
+    min-width: 1.4ch;
+    text-shadow: var(--ui-shadow-text);
+    transition: color var(--dur-settle) ease, text-shadow var(--dur-settle) ease;
+  }
+  .wallet-hud__item[data-kind='coins'] .wallet-hud__count { color: var(--ui-gold-pale); }
+  .wallet-hud__item[data-kind='tickets'] .wallet-hud__count { color: var(--ui-ticket-pale); }
 
-/* While a balance rolls: gold when it grows, red when it is spent. */
-.wallet-hud__item.wallet-hud__item--up .wallet-hud__count {
-  color: var(--wallet-coin);
-  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.7), 0 0 10px rgba(255, 200, 70, 0.65);
-}
-.wallet-hud__item[data-kind='tickets'].wallet-hud__item--up .wallet-hud__count {
-  color: var(--wallet-ticket);
-  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.7), 0 0 10px rgba(255, 90, 120, 0.6);
-}
-.wallet-hud__item.wallet-hud__item--down .wallet-hud__count {
-  color: var(--ui-danger-hover);
-  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.7), 0 0 10px rgba(224, 106, 90, 0.55);
-}
+  /* While a balance rolls: gold when it grows, red when it is spent. */
+  .wallet-hud__item.wallet-hud__item--up .wallet-hud__count {
+    color: var(--wallet-coin);
+    text-shadow: var(--ui-shadow-text), 0 0 10px var(--ui-glow-gold);
+  }
+  .wallet-hud__item[data-kind='tickets'].wallet-hud__item--up .wallet-hud__count {
+    color: var(--wallet-ticket);
+    text-shadow: var(--ui-shadow-text), 0 0 10px var(--ui-ticket-glow);
+  }
+  .wallet-hud__item.wallet-hud__item--down .wallet-hud__count {
+    color: var(--ui-danger-hover);
+    text-shadow: var(--ui-shadow-text), 0 0 10px var(--ui-danger-glow);
+  }
 
-/* The bump: the coin flips, the ticket wiggles, the count pops. */
-.wallet-hud__item--bump .wallet-hud__icon--coin { animation: wallet-coin-flip 550ms var(--ui-ease); }
-.wallet-hud__item--bump .wallet-hud__icon--ticket { animation: wallet-ticket-wiggle 500ms ease-out; }
-.wallet-hud__item--bump .wallet-hud__count { animation: wallet-count-pop 400ms var(--ui-ease); }
-@keyframes wallet-coin-flip {
-  from { transform: perspective(60px) rotateY(0deg) scale(1.2); }
-  to   { transform: perspective(60px) rotateY(360deg) scale(1); }
-}
-@keyframes wallet-ticket-wiggle {
-  0%   { transform: rotate(0deg) scale(1.15); }
-  30%  { transform: rotate(-12deg) scale(1.15); }
-  60%  { transform: rotate(8deg) scale(1.05); }
-  100% { transform: rotate(0deg) scale(1); }
-}
-@keyframes wallet-count-pop {
-  from { transform: scale(1.18); }
-  to   { transform: scale(1); }
-}
+  /* The bump: the coin flips, the ticket wiggles, the count pops. */
+  .wallet-hud__item--bump .wallet-hud__icon--coin { animation: wallet-coin-flip var(--dur-longer) var(--ui-ease); }
+  .wallet-hud__item--bump .wallet-hud__icon--ticket { animation: wallet-ticket-wiggle var(--dur-longer) ease-out; }
+  .wallet-hud__item--bump .wallet-hud__count { animation: wallet-count-pop var(--dur-long) var(--ui-ease); }
+  @keyframes wallet-coin-flip {
+    from { transform: perspective(60px) rotateY(0deg) scale(1.2); }
+    to   { transform: perspective(60px) rotateY(360deg) scale(1); }
+  }
+  @keyframes wallet-ticket-wiggle {
+    0%   { transform: rotate(0deg) scale(1.15); }
+    30%  { transform: rotate(-12deg) scale(1.15); }
+    60%  { transform: rotate(8deg) scale(1.05); }
+    100% { transform: rotate(0deg) scale(1); }
+  }
+  @keyframes wallet-count-pop {
+    from { transform: scale(1.18); }
+    to   { transform: scale(1); }
+  }
 
-/* The differences: a column off the chip's right end (coins above tickets, centred when alone), drifting right. */
-.wallet-hud__floats {
-  position: absolute;
-  left: calc(100% + 0.5rem);
-  top: 0;
-  bottom: 0;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  gap: 0.1rem;
-}
-.wallet-hud__delta {
-  font-family: var(--ui-font-display);
-  font-size: 0.85rem;
-  line-height: 1;
-  letter-spacing: 0.03em;
-  white-space: nowrap;
-  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.8), 0 0 8px rgba(0, 0, 0, 0.6);
-  animation: wallet-float 1100ms ease-out forwards;
-}
-.wallet-hud__delta--coins { order: 0; color: var(--wallet-coin); }
-.wallet-hud__delta--tickets { order: 1; color: var(--wallet-ticket); }
-.wallet-hud__delta--spent { color: var(--ui-danger-hover); }
-@keyframes wallet-float {
-  from { opacity: 0; translate: -0.4rem 0; }
-  20%  { opacity: 1; translate: 0.1rem 0; }
-  70%  { opacity: 1; }
-  to   { opacity: 0; translate: 1.1rem 0; }
+  /* The differences: a column off the chip's right end (coins above tickets, centred when alone), drifting right. */
+  .wallet-hud__floats {
+    position: absolute;
+    left: calc(100% + 0.5rem);
+    top: 0;
+    bottom: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 0.1rem;
+  }
+  .wallet-hud__delta {
+    font-family: var(--ui-font-display);
+    font-size: var(--fs-4);
+    line-height: 1;
+    letter-spacing: 0.03em;
+    white-space: nowrap;
+    text-shadow: 0 1px 0 var(--shade-90), 0 0 8px var(--shade-60);
+    animation: wallet-float var(--dur-drift) ease-out forwards;
+  }
+  .wallet-hud__delta--coins { order: 0; color: var(--wallet-coin); }
+  .wallet-hud__delta--tickets { order: 1; color: var(--wallet-ticket); }
+  .wallet-hud__delta--spent { color: var(--ui-danger-hover); }
+  @keyframes wallet-float {
+    from { opacity: 0; translate: -0.4rem 0; }
+    20%  { opacity: 1; translate: 0.1rem 0; }
+    70%  { opacity: 1; }
+    to   { opacity: 0; translate: 1.1rem 0; }
+  }
 }

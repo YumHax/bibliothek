@@ -3,7 +3,10 @@ import type { Honour, Honours } from '@/economy/Honours';
 import type { Zone } from '../zone/Zone';
 import type { Placement } from '../Placement';
 import { NeonSign } from '../props/NeonSign';
-import { ROOM_PLAN } from '../roomPlan';
+import type { ROOM_PLAN } from '../roomPlan';
+
+/** Where the honours hang (`ROOM_PLAN.honours`), handed in by the collector's builder: the neons read no plan. */
+type HonoursPlan = typeof ROOM_PLAN.honours;
 
 /** Each console's tube colour (its box accent is too dark for neon on some: the Mega Drive's black). */
 const NEON_COLOR: Partial<Record<PlatformId, number>> = {
@@ -50,8 +53,7 @@ function honourNeonName(id: string): string {
  * console's name over the right wall, in the order they were earned. Neon without a light of its own, placed when
  * earned (nothing stands staged): a new one never changes the scene's lights.
  */
-export function furnishHonours(zone: Zone, honours: Honours): void {
-  const plan = ROOM_PLAN.honours;
+export function furnishHonours(zone: Zone, honours: Honours, plan: HonoursPlan): void {
   const placed = new Set<string>();
   const show = (): void => {
     let sets = 0;
@@ -59,7 +61,7 @@ export function furnishHonours(zone: Zone, honours: Honours): void {
     for (const honour of honours.earned) {
       const n = honour.kind === 'set' ? sets++ : consoles++;
       if (placed.has(honour.id)) continue;
-      const spot = spotFor(honour, n);
+      const spot = spotFor(plan, honour, n);
       if (!spot) continue;
       const size = honour.kind === 'set' ? plan.sets : plan.consoles;
       const sign = new NeonSign({ text: wordFor(honour), color: NEON_COLOR[honour.platform] ?? 0xff2fa0, width: size.width, height: size.height, intensity: 0, flicker: false, seed: n + 3 });
@@ -77,8 +79,7 @@ function wordFor(honour: Honour): string {
 }
 
 /** The `n`th spot of its kind: the sets' two rows of five, left to right, the lower row first; the consoles' one row. */
-function spotFor(honour: Honour, n: number): Placement | null {
-  const { sets, consoles } = ROOM_PLAN.honours;
+function spotFor({ sets, consoles }: HonoursPlan, honour: Honour, n: number): Placement | null {
   if (honour.kind === 'console') {
     const along = consoles.along[n];
     return along === undefined ? null : { wall: consoles.wall, along, y: consoles.y };

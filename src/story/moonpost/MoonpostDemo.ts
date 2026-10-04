@@ -1,7 +1,7 @@
-import { seededRandom } from '@/graphics/canvas';
 import { drawText } from '@/world/arcade/games/ArcadeGame';
 import { Fx } from '@/world/arcade/games/Fx';
-import { KeyEdges } from '@/world/arcade/games/KeyEdges';
+import { KeyEdges } from '@/input/GameInput';
+import { lcg, random as liveRandom } from '@/random';
 
 /*
  * MOONPOST v0.9, the demo on the prototype cart: a postman with a jet pack on the moon, three letters
@@ -253,7 +253,7 @@ export class MoonpostDemo {
 
   /** The ground's height per pixel column: rolling hills, crater rims, and four flat pads cut in. */
   private build(): void {
-    const random = seededRandom(1993);
+    const random = lcg(1993);
     const base = (x: number): number => 196 + Math.sin(x * 0.045) * 12 + Math.sin(x * 0.13 + 1) * 5;
     this.ground = Array.from({ length: DEMO_W + 1 }, (_, x) => base(x));
     // Two craters: a bowl with raised rims.
@@ -362,7 +362,7 @@ export class MoonpostDemo {
     const y = Math.round(this.y);
     if (this.flame) {
       ctx.fillStyle = Math.floor(this.clock * 20) % 2 ? '#ffb347' : '#ffe066';
-      ctx.fillRect(x - 5, y - 4, 2, 4 + Math.floor(Math.random() * 3));
+      ctx.fillRect(x - 5, y - 4, 2, 4 + Math.floor(liveRandom() * 3));
     }
     ctx.fillStyle = '#8a6d1f'; // the satchel
     ctx.fillRect(x + 1, y - 7, 4, 4);

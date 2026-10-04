@@ -2,8 +2,8 @@ import * as THREE from 'three';
 import type { Furniture } from '../../Furniture';
 import { Prop, part } from '../../props/Prop';
 import { paint } from '../../materials/palette';
-import { seededRandom } from '@/graphics/canvas';
 import { labelSheet, typed, type Label } from './labels';
+import { lcg } from '@/random';
 
 export interface BoxStackOptions {
   /** Boxes in the stack, bottom first. Default 5. */
@@ -26,7 +26,7 @@ export class BoxStack extends Prop implements Furniture {
   constructor(options: BoxStackOptions = {}) {
     super();
     this.name = 'BoxStack';
-    const random = seededRandom(options.seed ?? 19);
+    const random = lcg(options.seed ?? 19);
     const count = options.count ?? 5;
     let y = 0;
     let wMax = 0;

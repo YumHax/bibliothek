@@ -6,7 +6,7 @@ import { snowPaint, snowStandard } from '../snowCover';
 import { Walker } from '../../people/Walker';
 import { randomLook } from '../../people/looks';
 import type { DayNight } from '../../props/DayNight';
-import { KERB_HEIGHT } from '../streetPlan';
+import { KERB_HEIGHT } from '@/world/measures/street';
 import { distanceFade } from '../life/fade';
 import { outOfSight } from '../life/sight';
 import { closureBox, type Closure } from './roadworks';

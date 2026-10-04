@@ -1,4 +1,4 @@
-import { STOREY, landingY } from '../stairwellPlan';
+import { STOREY, landingY } from '@/world/measures/building';
 
 /*
  * THE ENDLESS STAIRS: some nights the flight down from the 3rd floor leads back onto the 4th's (zone-local, as

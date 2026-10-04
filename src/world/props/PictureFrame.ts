@@ -1,8 +1,9 @@
 import * as THREE from 'three';
-import { createCanvas, toTexture, seededRandom } from '@/covers/generated/canvasUtils';
+import { createCanvas, toTexture } from '@/covers/generated/canvasUtils';
 import { paint, timber } from '@/world/materials/palette';
 import { layMesh, WALL } from '@/world/surface/layers';
 import { Prop, part } from './Prop';
+import { lcg, pick } from '@/random';
 
 /**
  * `sunset`: soft gradient over a sea line; `mountains`: layered pastel-blue ridges; `abstract`: pastel shapes on cream;
@@ -73,7 +74,7 @@ export class PictureFrame extends Prop {
     const W = CANVAS_W;
     const H = Math.round((W * innerH) / innerW);
     const [canvas, ctx] = createCanvas(W, H);
-    const random = seededRandom(this.options.seed * 40503 + 7);
+    const random = lcg(this.options.seed * 40503 + 7);
 
     ctx.fillStyle = MAT_COLOR;
     ctx.fillRect(0, 0, W, H);
@@ -235,12 +236,11 @@ const paintAbstract: MotifPainter = (ctx, w, h, random) => {
   ctx.fillStyle = '#f5f0e6';
   ctx.fillRect(0, 0, w, h);
   const palette = ['#f0c6b4', '#a9c6c2', '#e6d3a0', '#b8c4d9', '#d9b8c4', '#c9d3b3'];
-  const pick = (): string => palette[Math.floor(random() * palette.length)]!;
 
   ctx.globalAlpha = 0.85;
   const shapes = 5 + Math.floor(random() * 3);
   for (let i = 0; i < shapes; i++) {
-    ctx.fillStyle = pick();
+    ctx.fillStyle = pick(random, palette);
     const cx = w * (0.15 + random() * 0.7);
     const cy = h * (0.15 + random() * 0.7);
     if (random() < 0.55) {

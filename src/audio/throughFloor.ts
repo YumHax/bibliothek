@@ -2,6 +2,7 @@ import { audioBus, startedAudioContext } from './audioContext';
 import { Voice } from './ambient';
 import { spatialInput, type Spatial } from './spatial';
 import { whiteNoise } from './noise';
+import { random } from '@/random';
 
 /*
  * The building heard through the flat's floor and ceiling: a broom handle banging on the ceiling
@@ -56,10 +57,10 @@ export function playBroomThumps(level = 0.5): boolean {
   if (!ctx || level < 0.002) return false;
   const out = floorOut(ctx, level, 4);
   let t = ctx.currentTime + 0.05;
-  for (const burst of [3 + Math.floor(Math.random() * 2), 3]) {
+  for (const burst of [3 + Math.floor(random() * 2), 3]) {
     for (let i = 0; i < burst; i++) {
-      blow(ctx, out, t, 0.8 + Math.random() * 0.2);
-      t += 0.24 + Math.random() * 0.05;
+      blow(ctx, out, t, 0.8 + random() * 0.2);
+      t += 0.24 + random() * 0.05;
     }
     t += 0.7;
   }
@@ -70,12 +71,12 @@ export function playBroomThumps(level = 0.5): boolean {
 export function playStepsAbove(level = 0.2): boolean {
   const ctx = startedAudioContext();
   if (!ctx || level < 0.002) return false;
-  const steps = 4 + Math.floor(Math.random() * 4);
+  const steps = 4 + Math.floor(random() * 4);
   const out = floorOut(ctx, level, steps * 0.7 + 1);
   let t = ctx.currentTime + 0.05;
   for (let i = 0; i < steps; i++) {
-    blow(ctx, out, t, 0.35 + Math.random() * 0.2, 70 + Math.random() * 15);
-    t += 0.55 + Math.random() * 0.12;
+    blow(ctx, out, t, 0.35 + random() * 0.2, 70 + random() * 15);
+    t += 0.55 + random() * 0.12;
   }
   return true;
 }

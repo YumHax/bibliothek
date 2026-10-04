@@ -20,6 +20,14 @@ import { paint, standard } from './materials/palette';
 import { RENDER_ORDER } from './surface/layers';
 import { POINT_SCALE, scalesPoints } from './particles/pointScale';
 import { additive } from '@/world/materials/blend';
+import VEIL_VERTEX from './ProjectorVeil.vert.glsl?raw';
+import VEIL_FRAGMENT from './ProjectorVeil.frag.glsl?raw';
+import CONE_VERTEX from './ProjectorCone.vert.glsl?raw';
+import CONE_FRAGMENT from './ProjectorCone.frag.glsl?raw';
+import MOTE_VERTEX from './ProjectorMote.vert.glsl?raw';
+import MOTE_FRAGMENT from './ProjectorMote.frag.glsl?raw';
+import { damp, dampFactor } from '@/math/damp';
+import { random } from '@/random';
 
 interface ProjectorOptions {
   /** Width of the picture on the wall (metres). */
@@ -191,10 +199,10 @@ export class Projector extends SurfaceScreen implements Furniture, Updatable, In
     const seeds = new Float32Array(MOTES * 3);
     const phases = new Float32Array(MOTES);
     for (let i = 0; i < MOTES; i++) {
-      seeds[i * 3] = Math.random() - 0.5;
-      seeds[i * 3 + 1] = Math.random() - 0.5;
-      seeds[i * 3 + 2] = 0.08 + 0.9 * Math.random();
-      phases[i] = Math.random() * 100;
+      seeds[i * 3] = random() - 0.5;
+      seeds[i * 3 + 1] = random() - 0.5;
+      seeds[i * 3 + 2] = 0.08 + 0.9 * random();
+      phases[i] = random() * 100;
     }
     const moteGeometry = new THREE.BufferGeometry();
     moteGeometry.setAttribute('position', new THREE.BufferAttribute(seeds, 3));
@@ -351,10 +359,10 @@ export class Projector extends SurfaceScreen implements Furniture, Updatable, In
         beam = BEAM_MESSAGE;
         spill = SPILL_PLAYING * 0.25;
       }
-      this.beam.color.lerp(this.lampColor.set(BEAM_COLOR), Math.min(1, dt * 2));
+      this.beam.color.lerp(this.lampColor.set(BEAM_COLOR), dampFactor(2, dt));
       this.spill.color.copy(this.beam.color);
     }
-    const ease = Math.min(1, dt * 5);
+    const ease = dampFactor(5, dt);
     this.beam.intensity += (beam - this.beam.intensity) * ease;
     this.spill.intensity += (spill - this.spill.intensity) * ease;
     const coneTarget = beam > 0 ? CONE_STRENGTH * (beam / BEAM_PLAYING) : 0;
@@ -382,91 +390,7 @@ export class Projector extends SurfaceScreen implements Furniture, Updatable, In
       target = LED_AMBER;
       if (this.state === 'searching') level = 0.15 + 0.85 * (0.5 + 0.5 * Math.cos(this.ledTime * LED_BLINK_HZ * Math.PI * 2));
     }
-    this.standby.emissive.lerp(target, Math.min(1, dt * 10));
-    this.standby.emissiveIntensity += (level - this.standby.emissiveIntensity) * Math.min(1, dt * 12);
+    this.standby.emissive.lerp(target, dampFactor(11, dt));
+    this.standby.emissiveIntensity = damp(this.standby.emissiveIntensity, level, 13, dt);
   }
 }
-
-const VEIL_VERTEX = /* glsl */ `
-varying vec2 vUv;
-void main() {
-  vUv = uv;
-  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-}
-`;
-
-const VEIL_FRAGMENT = /* glsl */ `
-uniform float level;
-uniform vec3 black;
-uniform float hot;
-uniform float aspect;
-varying vec2 vUv;
-void main() {
-  vec2 p = (vUv - 0.5) * vec2(1.0, aspect);
-  float centre = 1.0 - smoothstep(0.0, 0.6, length(p));
-  gl_FragColor = vec4((black + vec3(hot * centre * centre)) * level, 1.0);
-  #include <colorspace_fragment>
-}
-`;
-
-const CONE_VERTEX = /* glsl */ `
-attribute float along;
-attribute float across;
-varying float vAlong;
-varying float vAcross;
-void main() {
-  vAlong = along;
-  vAcross = across;
-  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-}
-`;
-
-const CONE_FRAGMENT = /* glsl */ `
-uniform vec3 color;
-uniform float strength;
-varying float vAlong;
-varying float vAcross;
-void main() {
-  // Across the side, 0..1 at any distance from the lens (the side narrows to the apex).
-  float s = vAlong > 0.001 ? (vAcross - 0.5) / vAlong + 0.5 : 0.5;
-  float edge = smoothstep(0.0, 0.3, s) * smoothstep(1.0, 0.7, s);
-  // Brightest out of the lens, thinning towards the wall.
-  float fade = mix(1.0, 0.2, vAlong);
-  gl_FragColor = vec4(color * strength * edge * fade, 1.0);
-  #include <tonemapping_fragment>
-  #include <colorspace_fragment>
-}
-`;
-
-const MOTE_VERTEX = /* glsl */ `
-uniform float time;
-uniform vec3 apex;
-uniform vec3 centre;
-uniform vec2 size;
-uniform float pointScale;
-attribute float phase;
-varying float vFade;
-void main() {
-  // Seeded point in the frustum: across the picture, then back towards the lens; drifting on slow sines.
-  vec3 base = centre + vec3(position.xy * size * 0.8, 0.0);
-  vec3 p = mix(apex, base, position.z);
-  p += vec3(sin(time * 0.13 + phase), sin(time * 0.09 + phase * 1.7) - 0.3 * fract(time * 0.004 + phase), cos(time * 0.11 + phase * 0.6)) * 0.05 * (0.3 + position.z);
-  vFade = (1.0 - smoothstep(0.6, 1.0, position.z)) * (0.4 + 0.6 * abs(sin(time * 0.7 + phase * 3.1)));
-  vec4 view = modelViewMatrix * vec4(p, 1.0);
-  gl_Position = projectionMatrix * view;
-  gl_PointSize = clamp(3.3 * pointScale * (1.5 / -view.z), 1.0, 4.0 * pointScale);
-}
-`;
-
-const MOTE_FRAGMENT = /* glsl */ `
-uniform vec3 color;
-uniform float strength;
-varying float vFade;
-void main() {
-  float d = length(gl_PointCoord - 0.5);
-  float a = (1.0 - smoothstep(0.1, 0.5, d)) * vFade;
-  gl_FragColor = vec4(color * strength * 14.0, a);
-  #include <tonemapping_fragment>
-  #include <colorspace_fragment>
-}
-`;

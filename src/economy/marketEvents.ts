@@ -3,7 +3,7 @@ import { PLATFORM_LIST } from '@/catalog/platforms';
 import type { Views } from './Fame';
 import { grailGame, grailOn, isGrail, upcomingGrail, type Grail } from './grails';
 import { BROCANTE, GRAIL, SALES, shopPrice } from './pricing';
-import { seeded } from './seeded';
+import { dayStream } from '@/time/daily';
 
 /*
  * THE MARKET'S CALENDAR OF EVENTS, by market day (`MarketCalendar`'s count): the grail of the day,
@@ -51,7 +51,7 @@ export function catalogueSaleOn(day: number): number | null {
 
 /** The stall clearing out on `day`, if one is (drawn from the day). */
 export function clearanceOn(day: number): Clearance | null {
-  const rng = seeded(`${day}:clearance`);
+  const rng = dayStream(`${day}:clearance`);
   if (rng() >= SALES.clearance.odds) return null;
   const platform = PLATFORM_LIST[Math.floor(rng() * PLATFORM_LIST.length)]!.id;
   return { platform, factor: SALES.clearance.factor };

@@ -1,5 +1,5 @@
-import { seededRandom } from '@/covers/generated/canvasUtils';
 import type { FacadeStyle } from './facadeStyle';
+import { between, integer, lcg } from '@/random';
 
 /*
  * What stands on a building's roof, drawn from its style's seed so both pictures put it in the same places: the window
@@ -36,8 +36,6 @@ export interface RoofFurniture {
   tank: { s: number } | null;
 }
 
-const between = (random: () => number, a: number, b: number): number => a + random() * (b - a);
-const integer = (random: () => number, a: number, b: number): number => a + Math.floor(random() * (b - a + 1));
 /** An air-conditioning unit's width along the front (as `RoofClutter` builds it). */
 const UNIT_WIDTH = 0.9;
 /** Whether two things `s` along (their left ends) and `w` wide come within 10 cm of each other. */
@@ -48,7 +46,7 @@ const clash = (s0: number, w0: number, s1: number, w1: number): boolean => s0 < 
  * roof window is the share of the night it stays lit for (0: dark): a curfew, as the window view's lights take it.
  */
 export function roofFurniture(style: FacadeStyle, width: number, bays: number, winW: number): RoofFurniture {
-  const random = seededRandom(style.seed * 4241 + 7);
+  const random = lcg(style.seed * 4241 + 7);
   const pitch = width / Math.max(1, bays);
   const chimneys: Chimney[] = [];
   for (let i = integer(random, 1, 3); i > 0; i--) {

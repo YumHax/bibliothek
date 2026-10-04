@@ -1,3 +1,5 @@
+import type { PersonId } from '@/social/types';
+
 /*
  * THE CO-OWNERSHIP MEETING (l'assemblée générale): what can be put to the vote, who votes and how
  * they lean, when it sits. Data only; `coproMeeting.ts` runs it, `coproState.ts` keeps what it
@@ -111,6 +113,8 @@ export const RESOLUTIONS: readonly Resolution[] = [
 /** Someone with a vote: a flat on the stairs (by name, as `STAIRWELL_PLAN`), or the rear building's owners. */
 interface Voter {
   who: string;
+  /** Who they are to the social layer (`social/people`): how the player stands with them sways their vote (`coproSway`). */
+  person?: PersonId;
   /** How they vote on a resolution whatever happens (their nature); the rest is drawn per meeting. */
   leans: Partial<Record<ResolutionId, string>>;
   /** A line of theirs heard about the vote, for the minutes. */
@@ -143,15 +147,15 @@ export const COPRO_PLAN = {
   /** At most this many bought votes on one resolution. */
   maxBought: 3,
   voters: [
-    { who: 'Mrs Roux', leans: { runner: 'red', paint: 'cream', plants: 'yes', bikes: 'no', lift: 'overhaul', fibre: 'no' }, aside: 'Mrs Roux said the red runner was there before the war and would be after.' },
-    { who: 'Mr & Mrs Moreau', leans: { lift: 'overhaul', bikes: 'no', mirror: 'yes' }, aside: 'The Moreaus asked whether the lift could go faster. It could not, until now.' },
-    { who: 'A. Leclerc', leans: { fibre: 'yes', bikes: 'yes' } },
-    { who: 'The Nguyens', leans: { fibre: 'yes', bikes: 'yes', plants: 'yes' }, aside: 'The Nguyens’ son asked whether fibre meant faster games. It does.' },
-    { who: 'P. Girard', leans: { runner: 'none', paint: 'sage' } },
-    { who: 'R. Haddad', leans: { paint: 'ochre', doormat: 'yes' } },
-    { who: 'Mrs Dubois', leans: { plants: 'yes', runner: 'green', mirror: 'yes' }, aside: 'Mrs Dubois offered cuttings from her own plants.' },
-    { who: 'J.-P. Martin', leans: { fibre: 'no', lift: 'keep' }, aside: 'M. Martin voted against everything, on principle.' },
-    { who: 'S. Rossi', leans: { bikes: 'yes', doormat: 'yes' } },
+    { who: 'Mrs Roux', person: 'roux', leans: { runner: 'red', paint: 'cream', plants: 'yes', bikes: 'no', lift: 'overhaul', fibre: 'no' }, aside: 'Mrs Roux said the red runner was there before the war and would be after.' },
+    { who: 'Mr & Mrs Moreau', person: 'moreau', leans: { lift: 'overhaul', bikes: 'no', mirror: 'yes' }, aside: 'The Moreaus asked whether the lift could go faster. It could not, until now.' },
+    { who: 'A. Leclerc', person: 'leclerc', leans: { fibre: 'yes', bikes: 'yes' } },
+    { who: 'The Nguyens', person: 'nguyen', leans: { fibre: 'yes', bikes: 'yes', plants: 'yes' }, aside: 'The Nguyens’ son asked whether fibre meant faster games. It does.' },
+    { who: 'P. Girard', person: 'girard', leans: { runner: 'none', paint: 'sage' } },
+    { who: 'R. Haddad', person: 'haddad', leans: { paint: 'ochre', doormat: 'yes' } },
+    { who: 'Mrs Dubois', person: 'dubois', leans: { plants: 'yes', runner: 'green', mirror: 'yes' }, aside: 'Mrs Dubois offered cuttings from her own plants.' },
+    { who: 'J.-P. Martin', person: 'martin', leans: { fibre: 'no', lift: 'keep' }, aside: 'M. Martin voted against everything, on principle.' },
+    { who: 'S. Rossi', person: 'rossi', leans: { bikes: 'yes', doormat: 'yes' } },
     { who: 'The rear building', leans: { lift: 'keep' }, aside: 'The rear building, which has no lift, voted against paying for ours.' },
   ] as Voter[],
 };

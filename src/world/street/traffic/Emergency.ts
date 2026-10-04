@@ -10,6 +10,7 @@ import { ScriptedVehicle, type CollisionSet } from './ScriptedVehicle';
 import type { SirenVehicle, StreetTraffic } from './StreetTraffic';
 import type { SirenVoice } from '../audio/StreetCues';
 import { closures } from '../details/roadworks';
+import { random } from '@/random';
 
 /** Which service a siren belongs to (the street's sound may tell them apart). */
 export type SirenKind = 'ambulance' | 'police' | 'fire';
@@ -74,7 +75,7 @@ export abstract class EmergencyVehicle extends ScriptedVehicle implements SirenV
     const [route, ...alternatives] = call.routes;
     super({ traffic: call.traffic, viewer: call.viewer, route: route!, alternatives, cruise: call.cruise, size, kind, stopFor: call.stopFor, collisions: call.collisions, accel });
     const [a, b] = call.first;
-    this.clock = a + Math.random() * (b - a);
+    this.clock = a + random() * (b - a);
     this.blues = [new THREE.MeshBasicMaterial({ color: 0x0a1030 }), new THREE.MeshBasicMaterial({ color: 0x0a1030 })];
     call.traffic.sirens.add(this);
   }
@@ -118,8 +119,8 @@ export abstract class EmergencyVehicle extends ScriptedVehicle implements SirenV
       return;
     }
     const [a, b] = this.call.every;
-    this.clock = a + Math.random() * (b - a);
-    this.depart(0, Math.floor(Math.random() * this.routeCount));
+    this.clock = a + random() * (b - a);
+    this.depart(0, Math.floor(random() * this.routeCount));
   }
 
   protected override animate(dt: number): void {

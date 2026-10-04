@@ -8,10 +8,12 @@ import { INSET } from '../props/joinery';
 import { instancedStandard, paint, standard } from '../materials/palette';
 import { isShared } from '../materials/sharedResources';
 import { plasterBumpMap } from '../materials/surfaces';
-import { STAIRWELL_PLAN as plan, STOREY, STOREYS, landingY, type Rect } from './stairwellPlan';
+import { STAIRWELL_PLAN as plan, type Rect } from './stairwellPlan';
+import { STOREY, STOREYS, landingY } from '@/world/measures/building';
 import { flightTreads } from './flights';
 import { STAIR_ATTRIBUTE, stairFloors, stairWalls, type StairFloors, type StairWalls } from './stairFinish';
 import { paintOnce } from '../materials/paintedTiles';
+import { random } from '@/random';
 
 /** `wall`: the painted walls (dado, creases: `stairFinish`); `plaster`: the ceilings, soffits and cornices. */
 type Finish = 'stone' | 'plaster' | 'wall' | 'iron' | 'wood' | 'hall' | 'tread';
@@ -570,10 +572,10 @@ function treadTexture(): THREE.CanvasTexture {
   ctx.fillStyle = '#d6cfc0';
   ctx.fillRect(0, 0, size, size);
   for (let i = 0; i < 2600; i++) {
-    const r = Math.random();
+    const r = random();
     ctx.fillStyle = r < 0.4 ? 'rgba(120,110,95,0.35)' : r < 0.7 ? 'rgba(250,246,238,0.5)' : 'rgba(150,80,60,0.25)';
-    const s = 1 + Math.random() * 2.5;
-    ctx.fillRect(Math.random() * size, Math.random() * size, s, s);
+    const s = 1 + random() * 2.5;
+    ctx.fillRect(random() * size, random() * size, s, s);
   }
   const texture = toTexture(canvas, 'grazing');
   repeatTexture(texture);

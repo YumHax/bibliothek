@@ -3,7 +3,9 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import type { Updatable } from '@/core/Engine';
 import type { Furniture } from '../../Furniture';
 import type { DayNight } from '../../props/DayNight';
-import { WALKABLE, type Vec2 } from '../streetPlan';
+import type { Vec2 } from '../streetPlan';
+import { WALKABLE } from '@/world/measures/street';
+import { random } from '@/random';
 
 interface PigeonsOptions {
   /** The flocks: where each pecks about and how many birds it has. */
@@ -104,13 +106,13 @@ export class Pigeons extends THREE.Group implements Furniture, Updatable {
     this.name = 'Pigeons';
     const share = options.share ?? 1;
     this.spots = options.flocks.map(({ at }) => new THREE.Vector3(at[0], 0, at[1]));
-    this.coos = options.flocks.map(() => COO_EVERY[0] + Math.random() * (COO_EVERY[1] - COO_EVERY[0]));
+    this.coos = options.flocks.map(() => COO_EVERY[0] + random() * (COO_EVERY[1] - COO_EVERY[0]));
     options.flocks.forEach(({ at, count }, flock) => {
       for (let i = 0; i < Math.max(1, Math.round(count * share)); i++) {
-        const [x, z] = [at[0] + (Math.random() - 0.5) * 2 * FORAGE, at[1] + (Math.random() - 0.5) * FORAGE];
+        const [x, z] = [at[0] + (random() - 0.5) * 2 * FORAGE, at[1] + (random() - 0.5) * FORAGE];
         this.birds.push({
-          flock, x, z, y: 0, yaw: Math.random() * Math.PI * 2, flying: false, from: new THREE.Vector3(), to: new THREE.Vector3(), t: 0, duration: 1,
-          startle: -1, hop: 1 + Math.random() * 4, hopFrom: [x, z], hopTo: [x, z], hopT: 1, peck: Math.random() * 10, gone: false, roosting: false,
+          flock, x, z, y: 0, yaw: random() * Math.PI * 2, flying: false, from: new THREE.Vector3(), to: new THREE.Vector3(), t: 0, duration: 1,
+          startle: -1, hop: 1 + random() * 4, hopFrom: [x, z], hopTo: [x, z], hopT: 1, peck: random() * 10, gone: false, roosting: false,
         });
       }
     });
@@ -187,7 +189,7 @@ export class Pigeons extends THREE.Group implements Furniture, Updatable {
         told.add(bird.flock);
         this.options.onTakeOff?.([bird.x, bird.z]);
       }
-      if (!bird.flying) bird.startle = Math.random() * 1.2;
+      if (!bird.flying) bird.startle = random() * 1.2;
       else bird.roosting = true;
     }
   }
@@ -198,7 +200,7 @@ export class Pigeons extends THREE.Group implements Furniture, Updatable {
     bird.roosting = true;
     bird.from.set(bird.x, bird.y, bird.z);
     const side = Math.sign(bird.z) || 1;
-    bird.to.set(bird.x + (Math.random() - 0.5) * 2 * ROOST.spread, ROOST.y + Math.random() * 2, side * ROOST.line);
+    bird.to.set(bird.x + (random() - 0.5) * 2 * ROOST.spread, ROOST.y + random() * 2, side * ROOST.line);
     bird.duration = Math.max(1.6, bird.from.distanceTo(bird.to) / FLIGHT_SPEED);
     bird.t = 0;
     bird.yaw = Math.atan2(bird.to.x - bird.x, bird.to.z - bird.z);
@@ -213,12 +215,12 @@ export class Pigeons extends THREE.Group implements Furniture, Updatable {
       bird.roosting = false;
       bird.startle = -1;
       bird.flying = true;
-      bird.from.set(spot.x + (Math.random() - 0.5) * 2 * ROOST.spread, ROOST.y, side * ROOST.line);
-      bird.to.set(spot.x + (Math.random() - 0.5) * 2 * FORAGE, 0, spot.z + (Math.random() - 0.5) * FORAGE);
+      bird.from.set(spot.x + (random() - 0.5) * 2 * ROOST.spread, ROOST.y, side * ROOST.line);
+      bird.to.set(spot.x + (random() - 0.5) * 2 * FORAGE, 0, spot.z + (random() - 0.5) * FORAGE);
       bird.x = bird.from.x;
       bird.y = bird.from.y;
       bird.z = bird.from.z;
-      bird.duration = Math.max(1.6, bird.from.distanceTo(bird.to) / FLIGHT_SPEED) + Math.random();
+      bird.duration = Math.max(1.6, bird.from.distanceTo(bird.to) / FLIGHT_SPEED) + random();
       bird.t = 0;
       bird.yaw = Math.atan2(bird.to.x - bird.x, bird.to.z - bird.z);
     }
@@ -237,12 +239,12 @@ export class Pigeons extends THREE.Group implements Furniture, Updatable {
     // A hop to a nearby spot now and then; pecking in between.
     bird.hop -= dt;
     if (bird.hop <= 0 && bird.hopT >= 1) {
-      bird.hop = 1.5 + Math.random() * 4;
+      bird.hop = 1.5 + random() * 4;
       const spot = this.spots[bird.flock]!;
       bird.hopFrom = [bird.x, bird.z];
       bird.hopTo = [
-        THREE.MathUtils.clamp(bird.x + (Math.random() - 0.5) * 0.8, spot.x - FORAGE * 1.5, spot.x + FORAGE * 1.5),
-        THREE.MathUtils.clamp(bird.z + (Math.random() - 0.5) * 0.5, spot.z - FORAGE, spot.z + FORAGE),
+        THREE.MathUtils.clamp(bird.x + (random() - 0.5) * 0.8, spot.x - FORAGE * 1.5, spot.x + FORAGE * 1.5),
+        THREE.MathUtils.clamp(bird.z + (random() - 0.5) * 0.5, spot.z - FORAGE, spot.z + FORAGE),
       ];
       bird.hopT = 0;
       bird.yaw = Math.atan2(bird.hopTo[0] - bird.x, bird.hopTo[1] - bird.z);
@@ -272,7 +274,7 @@ export class Pigeons extends THREE.Group implements Furniture, Updatable {
     for (const other of this.birds) {
       if (other.flying || other.startle >= 0 || other.flock !== bird.flock) continue;
       const d = Math.hypot(other.x - bird.x, other.z - bird.z);
-      if (d < SPREAD || other === bird) other.startle = other === bird ? 0 : 0.05 + Math.random() * 0.35;
+      if (d < SPREAD || other === bird) other.startle = other === bird ? 0 : 0.05 + random() * 0.35;
     }
   }
 
@@ -281,14 +283,14 @@ export class Pigeons extends THREE.Group implements Furniture, Updatable {
     const spot = this.spots[bird.flock]!;
     if (spot.distanceTo(this.eye) < LAND_MIN || !this.birds.some((b) => b.flock === bird.flock && b.flying)) {
       const away = Math.sign(spot.x - this.eye.x) || 1;
-      spot.x += away * (LAND_MIN + Math.random() * (LAND_MAX - LAND_MIN));
+      spot.x += away * (LAND_MIN + random() * (LAND_MAX - LAND_MIN));
       spot.x = THREE.MathUtils.clamp(spot.x, LAND_X[0], LAND_X[1]);
       if (Math.abs(spot.x - this.eye.x) < LAND_MIN) spot.x = this.eye.x - away * LAND_MIN;
       this.options.onTakeOff?.([bird.x, bird.z]);
     }
     bird.flying = true;
     bird.from.set(bird.x, bird.y, bird.z);
-    bird.to.set(spot.x + (Math.random() - 0.5) * 2 * FORAGE, 0, spot.z + (Math.random() - 0.5) * FORAGE);
+    bird.to.set(spot.x + (random() - 0.5) * 2 * FORAGE, 0, spot.z + (random() - 0.5) * FORAGE);
     bird.duration = Math.max(1.4, bird.from.distanceTo(bird.to) / FLIGHT_SPEED);
     bird.t = 0;
     bird.yaw = Math.atan2(bird.to.x - bird.x, bird.to.z - bird.z);
@@ -310,7 +312,7 @@ export class Pigeons extends THREE.Group implements Furniture, Updatable {
       bird.flying = false;
       bird.y = 0;
       bird.hopT = 1;
-      bird.hop = 1 + Math.random() * 3;
+      bird.hop = 1 + random() * 3;
     }
   }
 
@@ -328,7 +330,7 @@ export class Pigeons extends THREE.Group implements Furniture, Updatable {
     for (let f = 0; f < this.coos.length; f++) {
       this.coos[f]! -= dt;
       if (this.coos[f]! > 0) continue;
-      this.coos[f] = COO_EVERY[0] + Math.random() * (COO_EVERY[1] - COO_EVERY[0]);
+      this.coos[f] = COO_EVERY[0] + random() * (COO_EVERY[1] - COO_EVERY[0]);
       const bird = this.birds.find((b) => b.flock === f && !b.flying && !b.gone);
       if (bird) this.options.onCoo([bird.x, bird.z]);
     }

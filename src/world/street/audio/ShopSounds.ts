@@ -6,10 +6,14 @@ import type { ActivityAware } from '../../zone/lifecycle';
 import type { DayNight } from '../../props/DayNight';
 import { terraceOut, type SeatedCount } from '../life/terraceWeather';
 import { isShopOpen } from '../shops/shopHours';
-import { STREET_PLAN, WALKABLE, shopDoors, type ShopDoor, type ShopKind, type Vec2 } from '../streetPlan';
+import { STREET_PLAN, type ShopDoor, type ShopKind, type Vec2 } from '../streetPlan';
+import { WALKABLE } from '@/world/measures/street';
+import { shopDoors } from '@/world/city/facades';
 import { BarMusic } from './BarMusic';
 import { SoundGraph } from './soundGraph';
 import { StreetEar } from './streetEar';
+import { random } from '@/random';
+import { loudness } from '@/audio/hearing';
 
 interface ShopSoundsOptions {
   /** The ears (the camera). */
@@ -143,7 +147,7 @@ export class ShopSounds extends THREE.Group implements Furniture, Updatable, Occ
     this.ear.update();
     this.localToWorld(this.spot.set(at[0], 2.3, at[1]));
     const d = this.ear.distance(this.spot);
-    const gain = 0.5 / (1 + (d / 4) ** 2);
+    const gain = 0.5 * loudness(d, { shape: 'inverseSquare', referenceDistance: 4, maxDistance: Infinity });
     if (gain < 0.004) return;
     const out = g.shot(this.ear.spatial(this.spot), 1.5);
     const t = g.now + 0.01;
@@ -151,7 +155,7 @@ export class ShopSounds extends THREE.Group implements Furniture, Updatable, Occ
     if (!door || NO_BELL.has(door.shop.kind)) {
       // A house door: the latch, then the door pulled to.
       g.burst(latch(g, out), t, 0.03, gain * 0.25);
-      g.burst(thud(g, out), t + 0.5 + Math.random() * 0.3, 0.16, gain * 0.6);
+      g.burst(thud(g, out), t + 0.5 + random() * 0.3, 0.16, gain * 0.6);
       return;
     }
     // Two strikes of a little brass bell: a bright partial and a lower one, each ringing out.
@@ -181,7 +185,7 @@ export class ShopSounds extends THREE.Group implements Furniture, Updatable, Occ
       const level = s.level();
       this.localToWorld(this.spot.copy(s.at));
       const d = this.ear.distance(this.spot);
-      const near = d > s.reach * 8 ? 0 : 1 / (1 + (d * d) / (s.reach * s.reach));
+      const near = loudness(d, { shape: 'inverseSquare', referenceDistance: s.reach, maxDistance: s.reach * 8 });
       s.now = s.loudness * near * level;
       s.gain.gain.setTargetAtTime(s.now, now, 0.3);
       const side = this.ear.spatial(this.spot);
@@ -196,10 +200,10 @@ export class ShopSounds extends THREE.Group implements Furniture, Updatable, Occ
       s.next -= dt;
       if (s.next > 0) continue;
       if (s.kind === 'chatter') {
-        s.next = 0.8 + Math.random() * 3.5 / Math.max(0.3, level);
+        s.next = 0.8 + random() * 3.5 / Math.max(0.3, level);
         this.clink(g, s);
       } else if (s.kind === 'arcade') {
-        s.next = 0.12 + Math.random() * 0.6;
+        s.next = 0.12 + random() * 0.6;
         this.bleep(g, s);
       }
     }
@@ -248,10 +252,10 @@ export class ShopSounds extends THREE.Group implements Furniture, Updatable, Occ
         // Voices talking over each other (the arcade's crowd is fewer and further in).
         const count = s.kind === 'arcade' ? 2 : 3;
         for (let i = 0; i < count; i++) {
-          const band = g.filter('bandpass', FORMANTS[Math.floor(Math.random() * FORMANTS.length)]! * (0.9 + Math.random() * 0.2), 3);
+          const band = g.filter('bandpass', FORMANTS[Math.floor(random() * FORMANTS.length)]! * (0.9 + random() * 0.2), 3);
           const gain = g.gain();
           g.loop().connect(band).connect(gain).connect(s.gain);
-          s.voices.push({ gain, talking: false, phrase: Math.random() * 2, syllable: 0 });
+          s.voices.push({ gain, talking: false, phrase: random() * 2, syllable: 0 });
         }
         // A low bed of room noise under the voices.
         g.loop().connect(g.filter('lowpass', 300)).connect(g.gain(0.25)).connect(s.gain);
@@ -266,14 +270,14 @@ export class ShopSounds extends THREE.Group implements Furniture, Updatable, Occ
       voice.phrase -= dt;
       if (voice.phrase <= 0) {
         voice.talking = !voice.talking;
-        voice.phrase = voice.talking ? 0.7 + Math.random() * 2.4 : 0.5 + Math.random() * 2.5;
+        voice.phrase = voice.talking ? 0.7 + random() * 2.4 : 0.5 + random() * 2.5;
         if (!voice.talking) voice.gain.gain.setTargetAtTime(0, g.now, 0.08);
       }
       if (!voice.talking) continue;
       voice.syllable -= dt;
       if (voice.syllable <= 0) {
-        voice.syllable = 0.09 + Math.random() * 0.15;
-        voice.gain.gain.setTargetAtTime(0.3 + Math.random() * 0.7, g.now, 0.03);
+        voice.syllable = 0.09 + random() * 0.15;
+        voice.gain.gain.setTargetAtTime(0.3 + random() * 0.7, g.now, 0.03);
       }
     }
   }
@@ -282,7 +286,7 @@ export class ShopSounds extends THREE.Group implements Furniture, Updatable, Occ
   private clink(g: SoundGraph, s: Source): void {
     if (!s.gain) return;
     const t = g.now + 0.01;
-    const f = 2600 + Math.random() * 1800;
+    const f = 2600 + random() * 1800;
     for (const [ratio, level] of [[1, 1], [2.76, 0.4]] as const) {
       const osc = g.ctx.createOscillator();
       osc.frequency.value = f * ratio;
@@ -300,12 +304,12 @@ export class ShopSounds extends THREE.Group implements Furniture, Updatable, Occ
   private bleep(g: SoundGraph, s: Source): void {
     if (!s.gain) return;
     const t = g.now + 0.01;
-    const notes = 1 + Math.floor(Math.random() * 3);
-    const base = 330 * 2 ** (Math.floor(Math.random() * 12) / 12);
-    const up = Math.random() < 0.5;
+    const notes = 1 + Math.floor(random() * 3);
+    const base = 330 * 2 ** (Math.floor(random() * 12) / 12);
+    const up = random() < 0.5;
     for (let i = 0; i < notes; i++) {
       const osc = g.ctx.createOscillator();
-      osc.type = Math.random() < 0.6 ? 'square' : 'triangle';
+      osc.type = random() < 0.6 ? 'square' : 'triangle';
       osc.frequency.value = base * 2 ** (((up ? 1 : -1) * i * 4) / 12);
       const env = g.gain();
       const at = t + i * 0.07;
@@ -328,7 +332,7 @@ export class ShopSounds extends THREE.Group implements Furniture, Updatable, Occ
 }
 
 function source(kind: SourceKind, at: THREE.Vector3, level: () => number, loudness: number, reach: number): Source {
-  return { kind, at, level, loudness, reach, music: null, musicLevel: () => 0, voices: [], next: Math.random() * 2, now: 0 };
+  return { kind, at, level, loudness, reach, music: null, musicLevel: () => 0, voices: [], next: random() * 2, now: 0 };
 }
 
 /** A door latch's click: a bright, short band. */

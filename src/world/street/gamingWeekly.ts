@@ -1,9 +1,11 @@
 import { getPlatform } from '@/catalog/platforms';
-import { seededRandom } from '@/covers/generated/canvasUtils';
 import type { StockItem } from '@/economy/StockItem';
 import type { MarketNews } from '@/economy/marketEvents';
 import { paperRumour } from '@/economy/rumours';
 import { SELLERS_BUILDING, type Ad } from '@/classifieds/ads';
+import { shuffled } from '@/random';
+import { dayLcg } from '@/time/daily';
+import { formatCoins } from '@/text/money';
 
 /** One issue of the newsstand's paper: its masthead line, the day's lead and three or four tips. */
 export interface WeeklyIssue {
@@ -58,7 +60,7 @@ const QUIET = [
  * yet) it prints general tips instead.
  */
 export function writeWeekly({ stock, day, theme, wanted, news = [], classifieds = [], street = [] }: WeeklySources): WeeklyIssue {
-  const random = seededRandom(day * 131 + 7);
+  const random = dayLcg(day * 131 + 7);
   const date = new Date();
   const dateline = `Issue ${day + 1} · ${date.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })}`;
   // A grail on the market today makes the front page.
@@ -70,7 +72,7 @@ export function writeWeekly({ stock, day, theme, wanted, news = [], classifieds 
   const small = classifieds.map((ad) => ({ head: `${ad.name.toUpperCase()}, ${ad.flat}, ${SELLERS_BUILDING}`, text: ad.text }));
   const talk = [...news.filter((n) => !(n.kind === 'grail' && n.inDays === 0)).slice(0, 2).map(paperRumour), ...street.slice(0, 1).map((line) => `On Front Street: ${line}`)];
   if (!stock || stock.length === 0) {
-    const hints = [...talk, ...[...QUIET].sort(() => random() - 0.5)].slice(0, 3);
+    const hints = [...talk, ...shuffled(random, QUIET)].slice(0, 3);
     return { ...base, hints, prices: null, classifieds: small };
   }
 
@@ -90,9 +92,9 @@ export function writeWeekly({ stock, day, theme, wanted, news = [], classifieds 
   const priced = stock.filter((i) => i.priced && i.source !== 'bin');
   if (priced.length) {
     const cheapest = priced.reduce((a, b) => (b.price < a.price ? b : a));
-    hints.push(`Cheapest box on the stalls: ${name(cheapest)[0]} (${name(cheapest)[1]}), ${cheapest.price} coins.`);
+    hints.push(`Cheapest box on the stalls: ${name(cheapest)[0]} (${name(cheapest)[1]}), ${formatCoins(cheapest.price)}.`);
   }
   while (hints.length < 3) hints.push(QUIET[Math.floor(random() * QUIET.length)]!);
   const prices = priced.length ? priced.map((i) => i.price) : stock.map((i) => i.price);
-  return { ...base, hints: hints.slice(0, 5), prices: `Prices today: ${Math.min(...prices)} to ${Math.max(...prices)} coins.`, classifieds: small };
+  return { ...base, hints: hints.slice(0, 5), prices: `Prices today: ${Math.min(...prices)} to ${formatCoins(Math.max(...prices))}.`, classifieds: small };
 }

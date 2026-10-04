@@ -1,7 +1,8 @@
 import * as THREE from 'three';
-import { createCanvas, seededRandom, toTexture, canvasTexture, repeatTexture } from '@/covers/generated/canvasUtils';
+import { createCanvas, toTexture, canvasTexture, repeatTexture } from '@/covers/generated/canvasUtils';
 import { paintOnce } from './materials/paintedTiles';
 import { afterChunk, patchShader, VALUE_NOISE } from './materials/shaderPatch';
+import { lcg } from '@/random';
 
 /** A tiled floor's look (`RoomFinish.floorTiles`); every field has a default. */
 export interface FloorTiles {
@@ -94,7 +95,7 @@ function paintTiles(options: FloorTiles): [THREE.Texture, THREE.Texture] {
   const grout = new THREE.Color(options.grout ?? 0xc4c5c0);
   const groutPx = Math.max(1.5, (options.groutWidth ?? 0.003) * PX_PER_M);
   const variance = options.variance ?? 0.03;
-  const random = seededRandom(0x7113f100 + Math.round(size * 1000));
+  const random = lcg(0x7113f100 + Math.round(size * 1000));
   const radius = size / Math.sqrt(3);
   const w = Math.round(regionX * PX_PER_M);
   const h = Math.round(regionY * PX_PER_M);

@@ -8,6 +8,7 @@ import { SwingLeaf, revealWhileOpen } from '../props/SwingLeaf';
 import { SlideDrawer } from '../props/SlideDrawer';
 import { DropDoor } from './DropDoor';
 import { PooledLight } from '../lighting/LightPool';
+import { unitOf } from '@/random';
 
 /**
  * One cabinet of a run, left to right as seen from the room. `doors`: one door under 0.5 m, two
@@ -461,7 +462,7 @@ function tileTexture(width: number, height: number): THREE.CanvasTexture {
     const y = H - (r + 1) * tileH;
     for (let x = -tileW + shift; x < W; x += tileW) {
       // A touch of variation per tile so the wall does not read as a flat white sheet.
-      const shade = 238 + Math.round(seeded(r * 131 + x) * 10);
+      const shade = 238 + Math.round(unitOf(r, x) * 10);
       ctx.fillStyle = `rgb(${shade}, ${shade - 3}, ${shade - 9})`;
       ctx.fillRect(x + joint / 2, y + joint / 2, tileW - joint, tileH - joint);
       // Glazed highlight along the top edge of the tile.
@@ -472,8 +473,3 @@ function tileTexture(width: number, height: number): THREE.CanvasTexture {
   return toTexture(canvas, 'grazing');
 }
 
-/** Deterministic 0..1 noise from an integer, so the tiles look the same every build. */
-function seeded(n: number): number {
-  const s = Math.sin(n * 12.9898) * 43758.5453;
-  return s - Math.floor(s);
-}

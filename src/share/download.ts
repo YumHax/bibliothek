@@ -1,3 +1,5 @@
+import { fileStamp } from '@/text/clock';
+
 /** Hands `blob` to the browser as a download named `name` (an anchor clicked, its URL freed a moment later). */
 export function download(name: string, blob: Blob): void {
   const url = URL.createObjectURL(blob);
@@ -13,6 +15,5 @@ export function download(name: string, blob: Blob): void {
 
 /** Today as a file name's date (the real one: a file is dated like any other). */
 export function fileDate(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  return fileStamp();
 }

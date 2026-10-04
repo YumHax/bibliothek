@@ -1,5 +1,4 @@
 import * as THREE from 'three';
-import { hashString, seededRandom } from '@/graphics/canvas';
 import type { Furniture } from '../Furniture';
 import type { Interactable } from '@/interaction/Interactable';
 import type { PlayerState, SessionActions } from '@/game/SessionActions';
@@ -8,6 +7,7 @@ import type { Game } from '@/catalog/types';
 import { GameBox } from '../GameBox';
 import { invisibleHitbox } from '../meshUtils';
 import type { StrayGames } from './StrayGames';
+import { gameDayRandom } from '@/time/daily';
 
 /** How far a stray box lies off square (radians) and off its spot (metres), unless its spot says less. */
 const MAX_YAW = THREE.MathUtils.degToRad(20);
@@ -107,7 +107,7 @@ export class StrayBox extends THREE.Group implements Furniture, Interactable {
     const { depth } = box.dimensions;
     // Lying on its back, cover up, the top of the cover towards local -z; dropped there, not squared up:
     // turned up to 20° either way and off the spot by a few centimetres (the same all day for this spot).
-    const random = seededRandom(hashString(`${this.options.slot}:${this.day}`));
+    const random = gameDayRandom(this.options.slot, this.day);
     const jitter = this.options.jitter ?? { yaw: MAX_YAW, offset: MAX_OFFSET };
     const yaw = (random() * 2 - 1) * jitter.yaw;
     box.rotation.set(-Math.PI / 2, yaw, 0, 'YXZ');

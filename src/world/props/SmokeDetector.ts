@@ -3,6 +3,7 @@ import type { Updatable } from '@/core/Engine';
 import { cylinderMesh } from '../meshUtils';
 import { paint } from '../materials/palette';
 import { Prop } from './Prop';
+import { random } from '@/random';
 
 export interface SmokeDetectorOptions {
   /** Seconds between two blinks of the standby LED. Default 4. */
@@ -28,7 +29,7 @@ export class SmokeDetector extends Prop implements Updatable {
     super();
     this.name = 'SmokeDetector';
     this.period = options.period ?? 4;
-    this.timer = Math.random() * this.period;
+    this.timer = random() * this.period;
     const puck = cylinderMesh(RADIUS, HEIGHT, BODY, { y: -HEIGHT / 2 }, { radiusBottom: RADIUS * 0.85, segments: 28 });
     puck.castShadow = false;
     this.add(puck);

@@ -1,7 +1,8 @@
 import * as THREE from 'three';
-import { createCanvas, seededRandom, toTexture } from '@/covers/generated/canvasUtils';
+import { createCanvas, toTexture } from '@/covers/generated/canvasUtils';
 import { drawText } from './games/ArcadeGame';
 import { paintMarquee } from './machineParts';
+import { lcg } from '@/random';
 
 /*
  * The upright cabinet's print, painted once per cabinet on canvases: the marquee, the side art
@@ -69,7 +70,7 @@ export function paintSideArt(color: number, glow: number, part: 'base' | 'upper'
   band(38, 10, 0.55);
   band(-30, 6, 0.35);
   // Stars.
-  const random = seededRandom(color ^ glow ^ (part === 'base' ? 0x55 : 0xaa));
+  const random = lcg(color ^ glow ^ (part === 'base' ? 0x55 : 0xaa));
   for (let i = 0; i < (part === 'upper' ? 26 : 12); i++) {
     const x = random() * W;
     const y = random() * H;
@@ -196,7 +197,7 @@ export function paintPanel(seed: number, wear: number): THREE.CanvasTexture {
   const [canvas, ctx] = createCanvas(W, H);
   ctx.fillStyle = '#2a2a30';
   ctx.fillRect(0, 0, W, H);
-  const random = seededRandom(seed ^ 0x3c3c);
+  const random = lcg(seed ^ 0x3c3c);
   for (let i = 0; i < 2 + Math.round(wear * 3); i++) {
     const x = random() * W;
     const y = random() * H;

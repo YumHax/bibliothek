@@ -1,5 +1,8 @@
-/* Controller mode: the mouse is ignored, so its cursor must not float over the room. */
-body.input-gamepad,
-body.input-gamepad * {
-  cursor: none !important;
+/* Controller mode: the mouse is ignored, so its cursor must not float over the room, whatever a button says. */
+@layer tokens, base, components, panels;
+@layer panels {
+  body.input-gamepad,
+  body.input-gamepad * {
+    cursor: none !important; /* convention-ok: every control sets its own cursor; in pad mode none may show */
+  }
 }

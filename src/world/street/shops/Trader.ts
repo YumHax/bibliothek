@@ -10,7 +10,14 @@ import { StockItem } from '@/economy/StockItem';
 import { TRADER_MARKUP } from '@/economy/pricing';
 import { KEYS, PersistedStore } from '@/persistence';
 import { gameDayRandom } from '@/time/daily';
-import { RIVAL_COLLECTOR, rivalOnFrontStreet, type RivalCollector } from '@/economy/rivalCollector';
+import { inHours } from '@/time/clock';
+import { keptAway } from '@/time/schedule';
+import { TRADER } from '../events/streetSchedules';
+import { RIVAL_COLLECTOR, RIVAL_PERSON, rivalOnFrontStreet, type RivalCollector } from '@/economy/rivalCollector';
+import { has } from '@/social/perks';
+import type { SocialServices } from '@/social/talk';
+import { victorHook } from '../../people/victorTalk';
+import type { SocialHook } from '../../people/socialHook';
 import type { Today } from '@/time/Today';
 import { snowStandard } from '../snowCover';
 import type { DayNight } from '../../props/DayNight';
@@ -18,6 +25,7 @@ import type { Furniture } from '../../Furniture';
 import { ForSaleBox } from '../../market/ForSaleBox';
 import { Walker } from '../../people/Walker';
 import { outOfSight } from '../life/sight';
+import { random as liveRandom } from '@/random';
 
 interface TraderOptions {
   /** The zone: his games must be placed to be clickable. */
@@ -39,6 +47,8 @@ interface TraderOptions {
   talk?: () => string | null;
   /** Who he is to the player (`economy/rivalCollector`): what he won at the flea market and the saleroom joins his suitcase. */
   rival?: RivalCollector;
+  /** The social layer: a click opens a conversation with him (docs/social.md "Victor"). */
+  social?: SocialServices;
 }
 
 /** Whether today (the real date) the collector sets up on Front Street: about one day in `oneDayIn` (phase 1 of the cycle). */
@@ -100,6 +110,8 @@ export class Trader extends THREE.Group implements Furniture, Updatable, Interac
   /** Just (re)activated: the first update takes what the clock says, seen or not (the player has only just arrived). */
   private fresh = true;
   private readonly here = new THREE.Vector3();
+  /** Talking to him (the social layer), or null: his lines. */
+  private readonly social: SocialHook | null;
 
   constructor(private readonly dayNight: DayNight, private readonly options: TraderOptions) {
     super();
@@ -114,6 +126,7 @@ export class Trader extends THREE.Group implements Furniture, Updatable, Interac
     this.buildKit();
     this.add(this.kit);
     this.hitboxes = this.person.hitboxes;
+    this.social = options.rival ? (victorHook(options.social, options.rival, 'street', () => this.person, { opening: () => this.opening() }) ?? null) : null;
     this.setPresent(false);
   }
 
@@ -131,16 +144,18 @@ export class Trader extends THREE.Group implements Furniture, Updatable, Interac
   }
 
   label(): string | null {
-    return this.present ? `${RIVAL_COLLECTOR.label} · chat` : null;
+    if (!this.present) return null;
+    return this.social ? this.social.caption() : `${RIVAL_COLLECTOR.label} · chat`;
   }
 
-  activate(_session: SessionActions): void {
+  activate(session: SessionActions): void {
     if (!this.present) return;
     const told = this.options.talk?.();
     if (told) {
       this.person.speak(told);
       return;
     }
+    if (this.social?.open(session)) return;
     // The first word is how things stand between them (the hall, the saleroom); then his patter.
     const { rival } = this.options;
     if (rival && !this.greeted) {
@@ -155,6 +170,18 @@ export class Trader extends THREE.Group implements Furniture, Updatable, Interac
     this.person.speak(line);
   }
 
+  /** His first word in a conversation: how things stand, and the copy he beat the player to if it is on his table; then his patter. */
+  private opening(): string {
+    const rival = this.options.rival!;
+    if (!this.greeted) {
+      this.greeted = true;
+      const haul = this.boxes.some((b) => this.haulIds.has(b.item.game.id));
+      return haul ? `${rival.greeting()} And yes, that's the one I beat you to. Still for sale.` : rival.greeting();
+    }
+    const lines = this.boxes.length ? LINES : EMPTY_LINES;
+    return lines[this.line++ % lines.length]!;
+  }
+
   /** Him, for the street's people budget (`life/PeopleBudget`): drawn only while among the nearest few. */
   get figure(): Walker {
     return this.person;
@@ -166,9 +193,9 @@ export class Trader extends THREE.Group implements Furniture, Updatable, Interac
   }
 
   update(dt: number): void {
-    const [from, to] = this.options.hours;
     const s = this.dayNight.state;
-    const present = s.hours >= from && s.hours < to && s.rain < 0.3;
+    // His hours and his weather are his schedule's (`events/streetSchedules`), the same the paper reads.
+    const present = inHours(s.hours, this.options.hours) && !keptAway(TRADER, s);
     if (!this.collider) {
       this.updateWorldMatrix(true, false);
       this.collider = new THREE.Box3(new THREE.Vector3(-0.45, 0, -0.6), new THREE.Vector3(0.45, 1.1, 0.8)).applyMatrix4(this.matrixWorld);
@@ -229,19 +256,27 @@ export class Trader extends THREE.Group implements Furniture, Updatable, Interac
   private lay({ games, prices }: { games: Game[]; prices: number[] }): void {
     this.filled = true;
     const { host, covers, wallet, isWanted, owns, rival, today } = this.options;
-    const haul = (rival?.haulOn(today.gameDay) ?? []).map((h) => ({ game: h.game, price: Math.max(2, Math.round(h.price * MARKUP)) }));
+    // A friend now (`duplicatesAtCost`, docs/social.md "Victor"): what he paid, no markup.
+    const markup = has(RIVAL_PERSON, 'duplicatesAtCost') ? 1 : MARKUP;
+    const haul = (rival?.haulOn(today.gameDay) ?? []).map((h) => ({ game: h.game, price: Math.max(2, Math.round(h.price * markup)) }));
     for (const h of haul) this.haulIds.add(h.game.id);
-    const picked = games.map((game, i) => ({ game, price: prices[i]! })).filter(({ game }) => !this.haulIds.has(game.id));
+    // Today's pick was saved with his markup on: taken off again for a friend.
+    const picked = games.map((game, i) => ({ game, price: Math.max(2, Math.round((prices[i]! / MARKUP) * markup)) })).filter(({ game }) => !this.haulIds.has(game.id));
     const left = [...haul, ...picked].filter(({ game }) => !owns(game.id)).slice(0, COPIES + 2);
     const spacing = SUITCASE.width / (left.length + 1);
     left.forEach(({ game, price }, i) => {
-      const item = new StockItem(game, game.condition ?? 'complete', 'stall', { list: price, final: true });
+      // At cost it is a sale (the usual price struck through), never haggled on top: what he won at a saleroom's
+      // opening bid, haggled down, would sell back at the WE BUY desk for more than it cost (docs/economy.md).
+      // What he won (the haul) is firm at his markup too: a saleroom copy came at an opening bid, and a haggle off
+      // ×1.25 of it could still land under the desk's buy-back.
+      const won = this.haulIds.has(game.id);
+      const item = new StockItem(game, game.condition ?? 'complete', 'stall', { list: price, final: true }, { ...(markup < MARKUP ? { sale: markup / MARKUP } : {}), ...(won ? { firm: true } : {}) });
       const box = new ForSaleBox(item, covers, {
         pose: { kind: 'lean', angle: 0.35 },
         wallet,
         where: 'the collector outside RETRO GAMES',
         isWanted: () => isWanted(game.id),
-        thanks: () => THANKS[Math.floor(Math.random() * THANKS.length)]!,
+        thanks: () => THANKS[Math.floor(liveRandom() * THANKS.length)]!,
       });
       const at = host.toLocal(this.localToWorld(new THREE.Vector3(-SUITCASE.width / 2 + spacing * (i + 1), SUITCASE.height + 0.1, 0.52)));
       const place = (): void => {

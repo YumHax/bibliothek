@@ -3,6 +3,7 @@ import { PLATFORM_LIST } from '@/catalog/platforms';
 import { collectionValue, mostValuable, valuedGames } from '@/economy/collectionValue';
 import type { Views } from '@/economy/Fame';
 import { isGrail } from '@/economy/grails';
+import { compareTitles } from '@/text/strings';
 
 /** What the shared card and page say about the collection: its games, per platform, its worth, its pride. */
 export interface CollectionSummary {
@@ -20,7 +21,7 @@ export interface CollectionSummary {
 const PRIDE = 3;
 
 export function summarise(all: readonly Game[], viewsOf: (game: Game) => Views): CollectionSummary {
-  const games = valuedGames(all).sort((a, b) => order(a) - order(b) || a.title.localeCompare(b.title));
+  const games = valuedGames(all).sort((a, b) => order(a) - order(b) || compareTitles(a.title, b.title));
   const platforms = PLATFORM_LIST.map((platform) => ({ platform, count: games.filter((g) => g.platform === platform.id).length })).filter((p) => p.count > 0);
   const pride = mostValuable(games, viewsOf, PRIDE).map(({ game, value }) => ({ game, value, grail: isGrail(game.id) }));
   return { games, platforms, value: collectionValue(games, viewsOf).market, pride, wished: all.length - games.length };

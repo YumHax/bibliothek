@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import type { Updatable } from '@/core/Engine';
 import { KEYS, PersistedStore, safeStorage } from '@/persistence';
+import { flag } from '@/settings/flags';
 
 const POSITION_STORAGE_KEY = KEYS.position;
 
@@ -76,7 +77,7 @@ export class PositionMemory implements Updatable {
 
   /** Puts the player where they were last time; false (nothing moved) when there is nothing valid to go back to. */
   restore(): boolean {
-    if (new URLSearchParams(location.search).has('fresh')) return false;
+    if (flag('fresh')) return false;
     const stored = this.load();
     if (!stored) return false;
     const saved = this.options.instead?.(stored) ?? stored;

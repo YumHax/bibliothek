@@ -1,8 +1,8 @@
 import { type Rng, azimuthOf, azimuthX, heightY } from './Sheet';
-import { between } from './paint';
 import { FOUNTAIN } from './plan';
 import type { LifeEvents } from './lifeEvents';
 import type { AtlasPens, Cell, LifeEnv, LifeLayer, Push } from './sprites';
+import { between } from '@/random';
 
 /** The fountain's plume, animated: its size in metres and frames. */
 const SPRAY = { width: 3.6, height: 4.8, scale: 12, frames: 4 };

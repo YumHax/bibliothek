@@ -9,6 +9,9 @@ import { Prop } from '../../props/Prop';
 import { paint } from '../../materials/palette';
 import { StairWalker, type StairWalkerOptions } from '../StairWalker';
 import { STAIRWELL_PLAN as plan } from '../stairwellPlan';
+import { rememberLook } from '@/social/lookBook';
+import type { SocialServices } from '@/social/talk';
+import { bodyOf, talkHook } from '../../people/socialHook';
 
 /** The syndic's look: a grey suit, white hair, glasses. */
 function syndicLook(): PersonLook {
@@ -35,10 +38,15 @@ function syndicLook(): PersonLook {
   };
 }
 
-interface MeetingSetupOptions extends Omit<StairWalkerOptions, 'look' | 'seed' | 'label' | 'speaker' | 'lines'> {
+interface MeetingSetupOptions extends Omit<StairWalkerOptions, 'look' | 'seed' | 'label' | 'speaker' | 'lines' | 'social'> {
   meeting: CoproMeeting;
   hours: () => number;
+  /** The people the player talks to (docs/social.md): the syndic talks, his own lines an entry ("The agenda?"). */
+  people?: SocialServices;
 }
+
+/** His person in the social layer (`social/people/building`). */
+const PERSON = 'bertin';
 
 /**
  * The co-owners' meeting set out in the entrance hall on its day (`COPRO_PLAN.syndicHours`): six folding chairs facing
@@ -55,7 +63,16 @@ export class MeetingSetup extends Prop implements Updatable, OccupancyAware {
   constructor(private readonly options: MeetingSetupOptions) {
     super();
     this.name = 'MeetingSetup';
-    this.syndic = new StairWalker({ ...options, seed: COPRO_PLAN.syndicSeed, look: syndicLook(), speaker: COPRO_PLAN.syndic, label: `${COPRO_PLAN.syndic}, the syndic · chat`, lines: COPRO_PLAN.syndicLines });
+    const look = syndicLook();
+    rememberLook(PERSON, look);
+    let next = 0;
+    const social = talkHook(options.people, PERSON, () => ({
+      person: PERSON,
+      place: 'stairs',
+      body: bodyOf(this.syndic),
+      extras: [{ id: 'agenda', group: 'talk', label: 'The meeting, the agenda?', run: () => ({ line: COPRO_PLAN.syndicLines[next++ % COPRO_PLAN.syndicLines.length]! }) }],
+    }));
+    this.syndic = new StairWalker({ ...options, seed: COPRO_PLAN.syndicSeed, look, speaker: COPRO_PLAN.syndic, label: `${COPRO_PLAN.syndic}, the syndic · chat`, lines: COPRO_PLAN.syndicLines, social });
     const seats: THREE.BufferGeometry[] = [];
     const frames: THREE.BufferGeometry[] = [];
     const [sx, sz] = plan.meeting.syndic;

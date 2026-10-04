@@ -1,464 +1,491 @@
 /*
- * What the game tells the player (src/notices), each kind in its own place:
- * speech over heads and the subtitle strip (bottom), the crosshair's line (centre), tips (top left,
- * under the wallet), the card to read (lower middle), rewards (upper middle) and alerts (top), the
- * last two over the panels too.
+ * What the game tells the player (src/notices), each kind in its own place: speech over heads and the subtitle strip
+ * (bottom), the crosshair's line (centre), tips (top left, under the wallet), the card to read (lower middle),
+ * rewards (upper middle) and alerts (top), the last two over the panels too. Each exit fade's time is the one its
+ * class in src/notices waits for.
  */
-.speech-layer,
-.subtitles,
-.reaction,
-.tip-board,
-.reading-stage { z-index: var(--z-hud); }
-.reward-stage,
-.alert-bar { z-index: var(--z-toast); }
+@layer tokens, base, components, panels;
+@layer panels {
+  .speech-layer,
+  .subtitles,
+  .reaction,
+  .tip-board,
+  .reading-stage { z-index: var(--z-hud); }
+  .reward-stage,
+  .alert-bar { z-index: var(--z-notice); }
 
-.speech-layer,
-.subtitles,
-.reaction,
-.tip-board,
-.reading-stage,
-.reward-stage,
-.alert-bar { pointer-events: none; user-select: none; }
+  .speech-layer,
+  .subtitles,
+  .reaction,
+  .tip-board,
+  .reading-stage,
+  .reward-stage,
+  .alert-bar { pointer-events: none; user-select: none; }
 
-/* --- speech ------------------------------------------------------------------------------------ */
+  /* --- speech ------------------------------------------------------------------------------------ */
 
-.speech-layer { position: fixed; inset: 0; overflow: hidden; }
+  .speech-layer { position: fixed; inset: 0; overflow: hidden; }
 
-.speech {
-  --speech-paper: #fbf8f1;
-  --speech-ink: #1d1b22;
-  position: absolute;
-  left: 0;
-  top: 0;
-  transform-origin: 50% 100%;
-  max-width: min(22rem, 60vw);
-  padding: 0.5rem 0.85rem 0.55rem;
-  margin-bottom: 0.7rem;
-  border-radius: 14px;
-  background: var(--speech-paper);
-  color: var(--speech-ink);
-  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.45), 0 0 0 2px var(--speech-ink);
-  font-size: 1.02rem;
-  line-height: 1.3;
-  text-align: left;
-  white-space: pre-line;
-  animation: speech-in 220ms var(--ui-ease);
-  transition: opacity 260ms ease;
-}
-/* The tail, pointing down at the speaker. */
-.speech::after {
-  content: '';
-  position: absolute;
-  left: 50%;
-  bottom: -0.62rem;
-  width: 0.9rem;
-  height: 0.9rem;
-  transform: translateX(-50%) rotate(45deg);
-  background: var(--speech-paper);
-  box-shadow: 2px 2px 0 0 var(--speech-ink);
-  border-radius: 0 0 3px 0;
-}
-.speech__name {
-  display: block;
-  margin-bottom: 0.15rem;
-  font-family: var(--ui-font-display);
-  font-size: 0.8rem;
-  letter-spacing: 0.04em;
-  /* Dark enough on the cream bubble (about 7:1). */
-  color: #6b4a05;
-  text-transform: uppercase;
-}
-/* A word in passing: small, comic, no name. */
-.speech--passing {
-  padding: 0.3rem 0.7rem;
-  font-family: var(--ui-font-comic);
-  font-weight: 700;
-  font-size: 0.92rem;
-  text-align: center;
-  opacity: 0.94;
-}
-.speech--out { opacity: 0; }
-/* Settings > Display > Speech text size, over the interface's own size. */
-html.speech-small .speech { font-size: 0.9rem; }
-html.speech-small .speech.speech--subtitle { font-size: 0.95rem; }
-html.speech-large .speech { font-size: 1.25rem; }
-html.speech-large .speech.speech--subtitle { font-size: 1.3rem; }
-html.speech-large .speech__name { font-size: 0.92rem; }
-@keyframes speech-in {
-  from { opacity: 0; translate: 0 8px; }
-  to   { opacity: 1; translate: 0 0; }
-}
+  .speech {
+    --speech-paper: var(--paper-speech);
+    --speech-ink: var(--ink-speech);
+    position: absolute;
+    left: 0;
+    top: 0;
+    transform-origin: 50% 100%;
+    max-width: min(22rem, 60vw);
+    padding: 0.5rem 0.85rem 0.55rem;
+    margin-bottom: 0.7rem;
+    border-radius: 14px;
+    background: var(--speech-paper);
+    color: var(--speech-ink);
+    box-shadow: 0 4px 18px var(--shade-45), 0 0 0 2px var(--speech-ink);
+    font-size: var(--fs-7);
+    line-height: 1.3;
+    text-align: left;
+    white-space: pre-line;
+    animation: speech-in var(--dur-quick) var(--ui-ease);
+    transition: opacity var(--dur-settle) ease;
+  }
+  /* The tail, pointing down at the speaker. */
+  .speech::after {
+    content: '';
+    position: absolute;
+    left: 50%;
+    bottom: -0.62rem;
+    width: 0.9rem;
+    height: 0.9rem;
+    transform: translateX(-50%) rotate(45deg);
+    background: var(--speech-paper);
+    box-shadow: 2px 2px 0 0 var(--speech-ink);
+    border-radius: 0 0 3px 0;
+  }
+  .speech__name {
+    display: block;
+    margin-bottom: 0.15rem;
+    font-family: var(--ui-font-display);
+    font-size: var(--fs-3);
+    letter-spacing: 0.04em;
+    /* Dark enough on the cream bubble (about 7:1). */
+    color: var(--ui-gold-deep);
+    text-transform: uppercase;
+  }
+  /* A word in passing: small, comic, no name. */
+  .speech--passing {
+    padding: 0.3rem 0.7rem;
+    font-family: var(--ui-font-comic);
+    font-weight: 700;
+    font-size: var(--fs-5);
+    text-align: center;
+    opacity: 0.94;
+  }
+  .speech--out { opacity: 0; }
+  /* Settings > Display > Speech text size, over the interface's own size. */
+  html.speech-small .speech { font-size: var(--fs-5); }
+  html.speech-small .speech.speech--subtitle { font-size: var(--fs-6); }
+  html.speech-large .speech { font-size: var(--fs-t2); }
+  html.speech-large .speech.speech--subtitle { font-size: 1.3rem; }
+  html.speech-large .speech__name { font-size: var(--fs-5); }
+  @keyframes speech-in {
+    from { opacity: 0; translate: 0 8px; }
+    to   { opacity: 1; translate: 0 0; }
+  }
 
-/* Out of view, or a voice without a body: the subtitle strip at the bottom. */
-.subtitles {
-  position: fixed;
-  left: 50%;
-  bottom: 2.2rem;
-  transform: translateX(-50%);
-  width: min(40rem, 90vw);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.35rem;
-}
-.speech.speech--subtitle {
-  position: static;
-  transform: none;
-  max-width: 100%;
-  margin: 0;
-  padding: 0.45rem 0.95rem;
-  border-radius: var(--ui-radius-sm);
-  background: rgba(10, 10, 14, 0.82);
-  color: #fff;
-  box-shadow: var(--ui-shadow);
-  font-family: inherit;
-  font-weight: 400;
-  font-size: 1.08rem;
-  text-align: center;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
-}
-.speech--subtitle::after { display: none; }
-.speech--subtitle .speech__name {
-  display: inline;
-  margin: 0 0.5rem 0 0;
-  color: var(--ui-accent);
-  font-size: 0.78rem;
-}
-.speech--subtitle .speech__name::after { content: ':'; }
+  /* Out of view, or a voice without a body: the subtitle strip at the bottom. */
+  .subtitles {
+    position: fixed;
+    left: 50%;
+    bottom: 2.2rem;
+    transform: translateX(-50%);
+    width: min(40rem, 90vw);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.35rem;
+  }
+  .speech.speech--subtitle {
+    position: static;
+    transform: none;
+    max-width: 100%;
+    margin: 0;
+    padding: 0.45rem 0.95rem;
+    border-radius: var(--ui-radius-sm);
+    background: var(--ui-panel-dense);
+    color: var(--ui-white);
+    box-shadow: var(--ui-shadow);
+    font-family: inherit;
+    font-weight: 400;
+    font-size: var(--fs-9);
+    text-align: center;
+    text-shadow: 0 1px 2px var(--shade-90);
+  }
+  .speech--subtitle::after { display: none; }
+  .speech--subtitle .speech__name {
+    display: inline;
+    margin: 0 0.5rem 0 0;
+    color: var(--ui-accent);
+    font-size: var(--fs-3);
+  }
+  .speech--subtitle .speech__name::after { content: ':'; }
 
-/* --- the crosshair's line -------------------------------------------------------------------- */
+  /* --- the crosshair's line -------------------------------------------------------------------- */
 
-/* In the column under the crosshair (`hud-slot--crosshair`), after the caption. */
-.reaction {
-  order: 1;
-  max-width: min(30rem, 80vw);
-  padding: 0.5rem 1rem;
-  border-radius: var(--ui-radius-sm);
-  background: var(--ui-panel);
-  border: 1px solid var(--ui-border-strong);
-  border-left: 4px solid var(--ui-accent);
-  color: var(--ui-text);
-  font-size: 1rem;
-  font-weight: 500;
-  text-align: center;
-  white-space: pre-line;
-  box-shadow: var(--ui-shadow);
-  animation: reaction-in 200ms var(--ui-ease);
-  transition: opacity 220ms ease;
-}
-.reaction--no {
-  border-color: rgba(224, 106, 90, 0.7);
-  border-left-color: var(--ui-danger);
-  background: rgba(46, 16, 16, 0.92);
-  animation: reaction-in 160ms var(--ui-ease), reaction-shake 360ms ease 60ms;
-}
-.reaction--no::before {
-  content: '✕';
-  margin-right: 0.5rem;
-  color: var(--ui-danger);
-  font-weight: 700;
-}
-.reaction--out { opacity: 0; }
-@keyframes reaction-in {
-  from { opacity: 0; translate: 0 -6px; scale: 0.96; }
-  to   { opacity: 1; translate: 0 0; scale: 1; }
-}
-@keyframes reaction-shake {
-  0%, 100% { translate: 0 0; }
-  20% { translate: -7px 0; }
-  40% { translate: 6px 0; }
-  60% { translate: -4px 0; }
-  80% { translate: 2px 0; }
-}
+  /* In the column under the crosshair (`hud-slot--crosshair`), after the caption. */
+  .reaction {
+    order: 1;
+    max-width: min(30rem, 80vw);
+    padding: 0.5rem 1rem;
+    border-radius: var(--ui-radius-sm);
+    background: var(--ui-panel);
+    border: 1px solid var(--ui-border-strong);
+    border-left: 4px solid var(--ui-accent);
+    color: var(--ui-text);
+    font-size: var(--fs-7);
+    font-weight: 500;
+    text-align: center;
+    white-space: pre-line;
+    box-shadow: var(--ui-shadow);
+    animation: reaction-in var(--dur-enter) var(--ui-ease);
+    transition: opacity var(--dur-quick) ease;
+  }
+  .reaction--no {
+    border-color: var(--ui-danger-line);
+    border-left-color: var(--ui-danger);
+    background: var(--ui-danger-surface-glass);
+    animation: reaction-in var(--dur-fade) var(--ui-ease), reaction-shake var(--dur-fall) ease var(--dur-beat);
+  }
+  .reaction--no::before {
+    content: '✕';
+    margin-right: 0.5rem;
+    color: var(--ui-danger);
+    font-weight: 700;
+  }
+  .reaction--out { opacity: 0; }
+  @keyframes reaction-in {
+    from { opacity: 0; translate: 0 -6px; scale: 0.96; }
+    to   { opacity: 1; translate: 0 0; scale: 1; }
+  }
+  @keyframes reaction-shake {
+    0%, 100% { translate: 0 0; }
+    20% { translate: -7px 0; }
+    40% { translate: 6px 0; }
+    60% { translate: -4px 0; }
+    80% { translate: 2px 0; }
+  }
 
-/* --- tips ------------------------------------------------------------------------------------ */
+  /* --- tips ------------------------------------------------------------------------------------ */
 
-/* In the top-left column (`hud-slot--top-left`), under the wallet chip. */
-.tip-board {
-  order: 1;
-  width: min(21rem, 42vw);
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-.tip {
-  padding: 0.55rem 0.85rem 0.65rem;
-  border-radius: var(--ui-radius);
-  background: var(--ui-panel);
-  border: 1px solid var(--ui-border);
-  border-left: 4px solid var(--ui-info);
-  color: var(--ui-text);
-  box-shadow: var(--ui-shadow);
-  animation: tip-in 380ms var(--ui-ease);
-  transition: opacity 300ms ease, translate 300ms ease;
-}
-.tip__head {
-  font-family: var(--ui-font-display);
-  font-size: max(0.68rem, 11px);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--ui-info);
-}
-.tip__text {
-  margin-top: 0.15rem;
-  font-size: 0.95rem;
-  line-height: 1.35;
-  white-space: pre-line;
-}
-.tip--out { opacity: 0; translate: -1rem 0; }
-/* A click (the pointer free) or a tap puts a tip away (`closeOnPress`); the board itself lets clicks through. */
-.tip { pointer-events: auto; cursor: pointer; }
-.tip--out { pointer-events: none; }
-@keyframes tip-in {
-  0%   { opacity: 0; translate: -2rem 0; }
-  60%  { opacity: 1; translate: 0.3rem 0; box-shadow: 0 0 0 3px var(--ui-info-glow), var(--ui-shadow); }
-  100% { translate: 0 0; }
-}
-/* The first day's steps: a slip of squared paper in felt pen, like the to-do list. */
-.tip.tip--note {
-  border: none;
-  border-radius: 2px;
-  color: #1d3557;
-  font-family: var(--ui-font-hand);
-  rotate: -0.6deg;
-  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.5);
-  background:
-    repeating-linear-gradient(0deg, transparent 0, transparent 15px, rgba(80, 120, 170, 0.18) 15px, rgba(80, 120, 170, 0.18) 16px),
-    repeating-linear-gradient(90deg, transparent 0, transparent 15px, rgba(80, 120, 170, 0.18) 15px, rgba(80, 120, 170, 0.18) 16px),
-    #fdfcf7;
-  animation: tip-note-in 380ms var(--ui-ease);
-}
-.tip--note .tip__head { font-family: var(--ui-font-hand); font-size: 0.8rem; letter-spacing: 0.02em; text-transform: none; color: #9b3d33; text-decoration: underline; }
-.tip--note .tip__text { font-size: 0.98rem; }
-@keyframes tip-note-in {
-  from { opacity: 0; translate: -2rem 0; rotate: -3deg; }
-  to   { opacity: 1; translate: 0 0; rotate: -0.6deg; }
-}
+  /* In the top-left column (`hud-slot--top-left`), under the wallet chip. */
+  .tip-board {
+    order: 1;
+    width: min(21rem, 42vw);
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-2);
+  }
+  .tip {
+    padding: 0.55rem 0.85rem 0.65rem;
+    border-radius: var(--ui-radius);
+    background: var(--ui-panel);
+    border: 1px solid var(--ui-border);
+    border-left: 4px solid var(--ui-info);
+    color: var(--ui-text);
+    box-shadow: var(--ui-shadow);
+    animation: tip-in var(--dur-fall) var(--ui-ease);
+    transition: opacity var(--dur-slow) ease, translate var(--dur-slow) ease;
+  }
+  .tip__head {
+    font-family: var(--ui-font-display);
+    font-size: var(--fs-0);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ui-info);
+  }
+  .tip__text {
+    margin-top: 0.15rem;
+    font-size: var(--fs-6);
+    line-height: 1.35;
+    white-space: pre-line;
+  }
+  .tip--out { opacity: 0; translate: -1rem 0; }
+  /* A click (the pointer free) or a tap puts a tip away (`closeOnPress`); the board itself lets clicks through. */
+  .tip { pointer-events: auto; cursor: pointer; }
+  .tip--out { pointer-events: none; }
+  @keyframes tip-in {
+    0%   { opacity: 0; translate: -2rem 0; }
+    60%  { opacity: 1; translate: 0.3rem 0; box-shadow: 0 0 0 3px var(--ui-info-glow), var(--ui-shadow); }
+    100% { translate: 0 0; }
+  }
+  /* The first day's steps: a slip of squared paper in felt pen, like the to-do list. */
+  .tip.tip--note {
+    border: none;
+    border-radius: var(--ui-radius-2xs);
+    color: var(--ink-note);
+    font-family: var(--ui-font-hand);
+    rotate: -0.6deg;
+    box-shadow: 0 6px 22px var(--shade-45);
+    background:
+      repeating-linear-gradient(0deg, transparent 0, transparent 15px, var(--paper-squares) 15px, var(--paper-squares) 16px),
+      repeating-linear-gradient(90deg, transparent 0, transparent 15px, var(--paper-squares) 15px, var(--paper-squares) 16px),
+      var(--paper-note);
+    animation: tip-note-in var(--dur-fall) var(--ui-ease);
+  }
+  .tip--note .tip__head { font-family: var(--ui-font-hand); font-size: var(--fs-3); letter-spacing: 0.02em; text-transform: none; color: var(--ink-red); text-decoration: underline; }
+  .tip--note .tip__text { font-size: var(--fs-7); }
+  @keyframes tip-note-in {
+    from { opacity: 0; translate: -2rem 0; rotate: -3deg; }
+    to   { opacity: 1; translate: 0 0; rotate: -0.6deg; }
+  }
 
-/* --- the card to read ------------------------------------------------------------------------ */
+  /* --- the card to read ------------------------------------------------------------------------ */
 
-.reading-stage {
-  position: fixed;
-  left: 50%;
-  bottom: 6.5rem;
-  transition: bottom 260ms var(--ui-ease);
-  transform: translateX(-50%);
-  width: min(34rem, 88vw);
-  display: flex;
-  justify-content: center;
-}
-/* Subtitles up (a radio's news, a voice): the card rises over their lines instead of covering them. */
-body:has(.subtitles > :nth-child(2)) .reading-stage { bottom: 9.5rem; }
-body:has(.subtitles > :nth-child(3)) .reading-stage { bottom: 12.5rem; }
-.reading {
-  --paper: #f4ecd8;
-  --ink: #2b2418;
-  --rule: rgba(43, 36, 24, 0.25);
-  position: relative;
-  width: 100%;
-  padding: 1rem 1.3rem 1.05rem;
-  border-radius: 4px;
-  background: var(--paper);
-  color: var(--ink);
-  box-shadow: 0 10px 34px rgba(0, 0, 0, 0.55);
-  font-family: var(--ui-font-serif);
-  rotate: -0.6deg;
-  animation: reading-in 360ms var(--ui-ease);
-  transition: opacity 320ms ease, translate 320ms ease;
-}
-.reading__title {
-  margin: 0 0 0.45rem;
-  padding-bottom: 0.35rem;
-  border-bottom: 1px solid var(--rule);
-  font-family: var(--ui-font-display);
-  font-size: 0.85rem;
-  font-weight: 400;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-}
-.reading__text {
-  margin: 0;
-  font-size: 1.08rem;
-  line-height: 1.45;
-  white-space: pre-line;
-}
-.reading__effect {
-  margin: 0.6rem 0 0;
-  padding-top: 0.45rem;
-  border-top: 1px dashed var(--rule);
-  font-family: var(--ui-font-body);
-  font-size: 0.95rem;
-  font-weight: 700;
-  white-space: pre-line;
-}
-.reading__effect::before { content: '→ '; }
-/* The overflow of a busy moment: "…and 2 more notes" under the last card (`ReadingCard`). */
-.reading__more { margin: 0.55rem 0 0; font-size: 0.85rem; font-style: italic; opacity: 0.75; }
-.reading[data-look='letter'] { --paper: #fdfcf8; --ink: #1f2430; rotate: 0.5deg; }
-.reading[data-look='radio'] {
-  --paper: #1b1a17;
-  --ink: #ffcf73;
-  --rule: rgba(255, 207, 115, 0.3);
-  rotate: 0deg;
-  border: 1px solid rgba(255, 207, 115, 0.35);
-  font-family: 'Courier New', ui-monospace, monospace;
-  text-shadow: 0 0 6px rgba(255, 180, 60, 0.35);
-}
-.reading[data-look='plaque'] {
-  --paper: linear-gradient(160deg, #e8c46a, #b98a2c 55%, #d9b35a);
-  --ink: #3a2808;
-  --rule: rgba(58, 40, 8, 0.35);
-  background: var(--paper);
-  rotate: 0deg;
-  text-align: center;
-  font-style: italic;
-}
-.reading--out { opacity: 0; translate: 0 1rem; }
-/* Put down by a click or a tap too (`closeOnPress`); the stage itself lets clicks through. */
-.reading { pointer-events: auto; cursor: pointer; }
-.reading--out { pointer-events: none; }
-/* "✕ X put down": how to put the card away with the device in hand (`dismissHint`). */
-.notice-dismiss {
-  position: absolute;
-  right: 0.7rem;
-  bottom: 0.35rem;
-  font-family: var(--ui-font-body);
-  font-size: max(0.66rem, 10px);
-  opacity: 0.55;
-}
-.notice-dismiss kbd { font-size: 0.95em; }
-.reading { padding-bottom: 1.45rem; }
-@keyframes reading-in {
-  from { opacity: 0; translate: 0 1.5rem; }
-  to   { opacity: 1; translate: 0 0; }
-}
+  .reading-stage {
+    position: fixed;
+    left: 50%;
+    bottom: 6.5rem;
+    transition: bottom var(--dur-settle) var(--ui-ease);
+    transform: translateX(-50%);
+    width: min(34rem, 88vw);
+    display: flex;
+    justify-content: center;
+  }
+  /* Subtitles up (a radio's news, a voice): the card rises over their lines instead of covering them. */
+  body:has(.subtitles > :nth-child(2)) .reading-stage { bottom: 9.5rem; }
+  body:has(.subtitles > :nth-child(3)) .reading-stage { bottom: 12.5rem; }
+  .reading {
+    --paper: var(--paper-reading);
+    --ink: var(--ink-reading);
+    --rule: var(--rule-reading);
+    /* The radio's printout and the brass plaque, the two looks with colours of their own. */
+    --radio-paper: #1b1a17;
+    --radio-ink: #ffcf73;
+    --radio-rule: rgba(255, 207, 115, 0.3);
+    --radio-frame: rgba(255, 207, 115, 0.35);
+    --radio-glow: rgba(255, 180, 60, 0.35);
+    --plaque-brass: linear-gradient(160deg, #e8c46a, #b98a2c 55%, #d9b35a);
+    --plaque-ink: #3a2808;
+    --plaque-rule: rgba(58, 40, 8, 0.35);
+    position: relative;
+    width: 100%;
+    padding: 1rem 1.3rem 1.05rem;
+    border-radius: var(--ui-radius-xs);
+    background: var(--paper);
+    color: var(--ink);
+    box-shadow: var(--ui-shadow-paper);
+    font-family: var(--ui-font-serif);
+    rotate: -0.6deg;
+    animation: reading-in var(--dur-fall) var(--ui-ease);
+    transition: opacity var(--dur-linger) ease, translate var(--dur-linger) ease;
+  }
+  .reading__title {
+    margin: 0 0 0.45rem;
+    padding-bottom: 0.35rem;
+    border-bottom: 1px solid var(--rule);
+    font-family: var(--ui-font-display);
+    font-size: var(--fs-4);
+    font-weight: 400;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+  }
+  .reading__text {
+    margin: 0;
+    font-size: var(--fs-9);
+    line-height: 1.45;
+    white-space: pre-line;
+  }
+  .reading__effect {
+    margin: 0.6rem 0 0;
+    padding-top: 0.45rem;
+    border-top: 1px dashed var(--rule);
+    font-family: var(--ui-font-body);
+    font-size: var(--fs-6);
+    font-weight: 700;
+    white-space: pre-line;
+  }
+  .reading__effect::before { content: '→ '; }
+  /* The overflow of a busy moment: "…and 2 more notes" under the last card (`ReadingCard`). */
+  .reading__more { margin: 0.55rem 0 0; font-size: var(--fs-4); font-style: italic; opacity: 0.75; }
+  .reading[data-look='letter'] { --paper: var(--paper-letter); --ink: var(--ink-letter); rotate: 0.5deg; }
+  .reading[data-look='radio'] {
+    --paper: var(--radio-paper);
+    --ink: var(--radio-ink);
+    --rule: var(--radio-rule);
+    rotate: 0deg;
+    border: 1px solid var(--radio-frame);
+    font-family: var(--ui-font-typewriter);
+    text-shadow: 0 0 6px var(--radio-glow);
+  }
+  .reading[data-look='plaque'] {
+    --paper: var(--plaque-brass);
+    --ink: var(--plaque-ink);
+    --rule: var(--plaque-rule);
+    background: var(--paper);
+    rotate: 0deg;
+    text-align: center;
+    font-style: italic;
+  }
+  .reading--out { opacity: 0; translate: 0 1rem; }
+  /* Put down by a click or a tap too (`closeOnPress`); the stage itself lets clicks through. */
+  .reading { pointer-events: auto; cursor: pointer; }
+  .reading--out { pointer-events: none; }
+  /* "✕ X put down": how to put the card away with the device in hand (`dismissHint`). */
+  .notice-dismiss {
+    position: absolute;
+    right: 0.7rem;
+    bottom: 0.35rem;
+    font-family: var(--ui-font-body);
+    font-size: max(0.66rem, 10px);
+    opacity: var(--ui-faint);
+  }
+  .notice-dismiss kbd { font-size: 0.95em; }
+  .reading { padding-bottom: 1.45rem; }
+  @keyframes reading-in {
+    from { opacity: 0; translate: 0 1.5rem; }
+    to   { opacity: 1; translate: 0 0; }
+  }
 
-/* --- rewards --------------------------------------------------------------------------------- */
+  /* --- rewards --------------------------------------------------------------------------------- */
 
-.reward-stage {
-  position: fixed;
-  left: 50%;
-  top: 16vh;
-  /* Touch: under the action bar, however many rows it wraps to. */
-  top: max(16vh, calc(var(--touch-bar-bottom, 0px) + 0.75rem));
-  transform: translateX(-50%);
-  width: min(34rem, 90vw);
-  display: flex;
-  justify-content: center;
-}
-.reward {
-  position: relative;
-  isolation: isolate;
-  padding: 0.9rem 1.6rem 1rem;
-  border-radius: var(--ui-radius);
-  background: linear-gradient(180deg, rgba(38, 30, 12, 0.95), rgba(20, 17, 10, 0.95));
-  border: 2px solid var(--ui-accent);
-  color: var(--ui-text);
-  text-align: center;
-  box-shadow: 0 0 0 4px rgba(212, 165, 42, 0.18), 0 0 40px rgba(212, 165, 42, 0.35), var(--ui-shadow);
-  animation: reward-in 520ms cubic-bezier(0.2, 1.6, 0.4, 1);
-  transition: opacity 360ms ease, translate 360ms ease;
-}
-.reward__title {
-  position: relative;
-  font-family: var(--ui-font-display);
-  font-size: 1.45rem;
-  line-height: 1.15;
-  color: #ffd766;
-  text-shadow: 0 2px 0 #6b4a05, 0 0 18px rgba(255, 200, 60, 0.45);
-}
-.reward__detail {
-  position: relative;
-  margin-top: 0.35rem;
-  font-size: 1rem;
-  line-height: 1.35;
-  white-space: pre-line;
-}
-.reward__chips {
-  position: relative;
-  display: flex;
-  justify-content: center;
-  gap: 0.6rem;
-  margin-top: 0.6rem;
-}
-.reward__chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  padding: 0.2rem 0.7rem;
-  border-radius: 999px;
-  background: rgba(255, 215, 102, 0.16);
-  border: 1px solid rgba(255, 215, 102, 0.5);
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-  animation: chip-in 420ms cubic-bezier(0.2, 1.8, 0.4, 1) 260ms both;
-}
-.reward__chip--spent { background: rgba(255, 255, 255, 0.07); border-color: var(--ui-border-strong); color: var(--ui-text-dim); }
-.reward__icon { display: inline-block; width: 0.9em; height: 0.9em; }
-.reward__icon--coin {
-  border-radius: 50%;
-  background: radial-gradient(circle at 35% 35%, #ffe7a0, var(--ui-accent) 60%, #9a731a);
-}
-.reward__icon--ticket {
-  width: 1.15em;
-  height: 0.72em;
-  border-radius: 2px;
-  background: #e0566b;
-}
-.reward--big { padding: 1.3rem 2rem 1.35rem; }
-.reward--big .reward__title { font-size: 1.9rem; }
-.reward__rays {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  width: 34rem;
-  height: 34rem;
-  margin: -17rem 0 0 -17rem;
-  z-index: -1;
-  border-radius: 50%;
-  background: repeating-conic-gradient(rgba(255, 210, 90, 0.2) 0deg 9deg, transparent 9deg 22deg);
-  mask-image: radial-gradient(circle, #000 20%, transparent 68%);
-  -webkit-mask-image: radial-gradient(circle, #000 20%, transparent 68%);
-  animation: rays-spin 9s linear infinite;
-}
-.reward--out { opacity: 0; translate: 0 -1.2rem; }
-@keyframes reward-in {
-  from { opacity: 0; scale: 0.5; }
-  to   { opacity: 1; scale: 1; }
-}
-@keyframes chip-in {
-  from { opacity: 0; scale: 0.4; }
-  to   { opacity: 1; scale: 1; }
-}
-@keyframes rays-spin { to { rotate: 360deg; } }
-/* Reduced motion (`html.reduce-motion`, the setting or the system's): the rays stand still, the banner arrives without its overshoot (`reward--calm`). */
-.reduce-motion .reward__rays { animation: none; }
-.reward--calm, .reward--calm .reward__chip { animation-timing-function: ease-out; }
+  .reward-stage {
+    position: fixed;
+    left: 50%;
+    top: 16vh;
+    /* Touch: under the action bar, however many rows it wraps to. */
+    top: max(16vh, calc(var(--touch-bar-bottom, 0px) + 0.75rem));
+    transform: translateX(-50%);
+    width: min(34rem, 90vw);
+    display: flex;
+    justify-content: center;
+  }
+  .reward {
+    /* The banner's dark gold ground and its chips' tint. */
+    --reward-top: rgba(38, 30, 12, 0.95);
+    --reward-bottom: rgba(20, 17, 10, 0.95);
+    --reward-chip: rgba(255, 215, 102, 0.16);
+    --reward-chip-line: rgba(255, 215, 102, 0.5);
+    --reward-ray: rgba(255, 210, 90, 0.2);
+    position: relative;
+    isolation: isolate;
+    padding: 0.9rem 1.6rem 1rem;
+    border-radius: var(--ui-radius);
+    background: linear-gradient(180deg, var(--reward-top), var(--reward-bottom));
+    border: 2px solid var(--ui-accent);
+    color: var(--ui-text);
+    text-align: center;
+    box-shadow: 0 0 0 4px var(--ui-accent-soft), 0 0 40px var(--ui-glow-accent), var(--ui-shadow);
+    animation: reward-in var(--dur-longer) var(--ui-ease-pop);
+    transition: opacity var(--dur-fall) ease, translate var(--dur-fall) ease;
+  }
+  .reward__title {
+    position: relative;
+    font-family: var(--ui-font-display);
+    font-size: 1.45rem;
+    line-height: 1.15;
+    color: var(--ui-accent-bright);
+    text-shadow: 0 2px 0 var(--ui-gold-deep), 0 0 18px var(--ui-glow-gold);
+  }
+  .reward__detail {
+    position: relative;
+    margin-top: 0.35rem;
+    font-size: var(--fs-7);
+    line-height: 1.35;
+    white-space: pre-line;
+  }
+  .reward__chips {
+    position: relative;
+    display: flex;
+    justify-content: center;
+    gap: 0.6rem;
+    margin-top: 0.6rem;
+  }
+  .reward__chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.2rem 0.7rem;
+    border-radius: var(--ui-radius-pill);
+    background: var(--reward-chip);
+    border: 1px solid var(--reward-chip-line);
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    animation: chip-in var(--dur-long) var(--ui-ease-pop) var(--dur-settle) both;
+  }
+  .reward__chip--spent { background: var(--ui-fill); border-color: var(--ui-border-strong); color: var(--ui-text-dim); }
+  .reward__icon { display: inline-block; width: 0.9em; height: 0.9em; }
+  .reward__icon--ticket { width: 1.15em; height: 0.72em; }
+  .reward--big { padding: 1.3rem 2rem 1.35rem; }
+  .reward--big .reward__title { font-size: var(--fs-t6); }
+  /* A person's portrait over the title (a tier reached), ringed in their tier's colour. */
+  .reward__picture {
+    --ring: var(--ui-accent);
+    position: relative;
+    width: 4.5rem;
+    height: 4.5rem;
+    margin: 0 auto 0.5rem;
+    padding: 3px;
+    border-radius: 50%;
+    background: var(--ring);
+    box-shadow: 0 0 22px color-mix(in srgb, var(--ring) 60%, transparent), var(--ui-shadow-raised);
+  }
+  .reward__picture canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+  }
+  .reward__rays {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 34rem;
+    height: 34rem;
+    margin: -17rem 0 0 -17rem;
+    z-index: var(--z-below);
+    border-radius: 50%;
+    background: repeating-conic-gradient(var(--reward-ray) 0deg 9deg, transparent 9deg 22deg);
+    mask-image: radial-gradient(circle, var(--ui-black) 20%, transparent 68%);
+    -webkit-mask-image: radial-gradient(circle, var(--ui-black) 20%, transparent 68%);
+    animation: rays-spin var(--dur-spin) linear infinite;
+  }
+  .reward--out { opacity: 0; translate: 0 -1.2rem; }
+  @keyframes reward-in {
+    from { opacity: 0; scale: 0.5; }
+    to   { opacity: 1; scale: 1; }
+  }
+  @keyframes chip-in {
+    from { opacity: 0; scale: 0.4; }
+    to   { opacity: 1; scale: 1; }
+  }
+  @keyframes rays-spin { to { rotate: 360deg; } }
+  /* Reduced motion (`html.reduce-motion`, the setting or the system's): the rays stand still, the banner arrives without its overshoot (`reward--calm`). */
+  .reduce-motion .reward__rays { animation: none; }
+  .reward--calm, .reward--calm .reward__chip { animation-timing-function: ease-out; }
 
-/* --- alerts ---------------------------------------------------------------------------------- */
+  /* --- alerts ---------------------------------------------------------------------------------- */
 
-.alert-bar {
-  position: fixed;
-  left: 50%;
-  top: 1rem;
-  transform: translateX(-50%);
-  max-width: min(40rem, 90vw);
-  padding: 0.65rem 1.1rem;
-  border-radius: var(--ui-radius-sm);
-  background: #4a1512;
-  border: 1px solid var(--ui-danger);
-  color: #fff;
-  font-size: 0.98rem;
-  font-weight: 500;
-  text-align: center;
-  white-space: pre-line;
-  box-shadow: var(--ui-shadow);
-  animation: reaction-in 220ms var(--ui-ease);
-  transition: opacity 300ms ease;
+  .alert-bar {
+    position: fixed;
+    left: 50%;
+    top: var(--sp-4);
+    transform: translateX(-50%);
+    max-width: min(40rem, 90vw);
+    padding: 0.65rem 1.1rem;
+    border-radius: var(--ui-radius-sm);
+    background: var(--ui-danger-surface);
+    border: 1px solid var(--ui-danger);
+    color: var(--ui-white);
+    font-size: var(--fs-7);
+    font-weight: 500;
+    text-align: center;
+    white-space: pre-line;
+    box-shadow: var(--ui-shadow);
+    animation: reaction-in var(--dur-quick) var(--ui-ease);
+    transition: opacity var(--dur-slow) ease;
+  }
+  .alert-bar::before { content: '⚠ '; color: var(--ui-danger-text); }
+  /* Touch, in the room: under the action bar, so the Menu button stays in reach. */
+  body.input-touch .alert-bar { top: calc(var(--touch-bar-bottom, 0px) + 0.5rem); }
+  .alert-bar--action { pointer-events: auto; }
+  .alert-bar__action { margin-left: 0.6rem; padding: 0.2em 0.8em; font-size: var(--fs-5); border-color: var(--ui-border-bright); }
+  .alert-bar--out { opacity: 0; }
 }
-.alert-bar::before { content: '⚠ '; color: #ffb3a8; }
-/* Touch, in the room: under the action bar, so the Menu button stays in reach. */
-body.input-touch .alert-bar { top: calc(var(--touch-bar-bottom, 0px) + 0.5rem); }
-.alert-bar--action { pointer-events: auto; }
-.alert-bar__action { margin-left: 0.6rem; padding: 0.2em 0.8em; font-size: 0.9rem; border-color: rgba(255, 255, 255, 0.5); }
-.alert-bar--out { opacity: 0; }

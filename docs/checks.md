@@ -2,8 +2,8 @@
 
 There is no test suite: the checks below are the net. They run in two bands, both from `package.json`:
 
-- `npm run typecheck` (about 10 s), after every change: `tsc` (src, then `api/`), then the scripts that read the tree or
-  build it headless: `check-conventions`, `check-imports`, `check-docs`, `check-data`, `zfight`, `scene-lint`.
+- `npm run typecheck` (about 12 s), after every change: `tsc` (src, then `api/`), then the scripts that read the tree or
+  build it headless: `check-conventions`, `check-imports`, `check-docs`, `check-data`, `check-glsl`, `zfight`, `scene-lint`.
 - `npm run lint` (about 20 s), before a commit and inside `npm run build`: `eslint`, `cspell`, `knip`.
 - `npm run build` = typecheck + lint + `vite build` + `check-bundle`.
 
@@ -33,10 +33,33 @@ A reviewed case is accepted by rewriting the baseline, never by loosening the ru
 
 ## Conventions (`scripts/check-conventions.mjs`)
 
-Line rules that keep z-fighting, freed materials and shader recompiles from coming back: no bare render order or polygon
-offset (`world/surface/layers`), no in-place edit of a shared geometry, no unshared module-level material, no light hidden
-with `visible`, one way to make a canvas texture and to tile it, no anisotropy number, no random lift. Plus the ratchet on
-hand-picked millimetre offsets. docs/props.md and docs/graphics.md say where each rule's right way lives.
+Rules as data, one module per concern in `scripts/conventions/` (the script only loads and runs them; a rule may be
+`within` some folders, `except` files or folders, and read `.css` instead of `.ts`). `surface.mjs`: no bare render order
+or polygon offset (`world/surface/layers`), no in-place edit of a shared geometry, no unshared module-level material, no
+light hidden with `visible`, one way to make a canvas texture and to tile it, no anisotropy number, no random lift, plus
+the ratchet on hand-picked millimetre offsets (docs/props.md, docs/graphics.md). `random.mjs`: no `Math.random`, generator
+or hash constant, sort-shuffle, clock-seeded or day-seeded stream outside `src/random/` and `time/daily`. `maths.mjs`: no
+local clamp / lerp / smoothstep / easing / angle helper, `atan2(sin, cos)` wrap or frame-share smoothing outside
+`src/math/`. `text.mjs`: no hand-made plural, money string, `toLocaleString`, padded clock, capital or bare title sort
+outside `src/text/`. `audio.mjs`: no local burst / ping / bed helper, no second `AudioContext`, no gesture listener in
+`src/audio`, no loudness curve written in place outside `audio/hearing`. `ui.mjs`: no `innerHTML`, `escapeHtml`, raw keydown
+listener, `title=` tooltip, hand-made status line, press-twice timer or second search debounce in a panel (the kit does
+these, docs/ui.md). `time.mjs`: no `setTimeout` / `setInterval` / `performance.now()` in zone or game code (`zone.after`,
+a phase fed by `dt`; audio and loading say why), no `location.search` outside `settings/flags`, no hand-made hour window
+(`time/clock` `inHours`) or hand-rolled daily marker (`time/OncePerDay`). `css.mjs`: below. A new shared module lands
+with its rule module.
+
+## Stylesheets (`scripts/conventions/css.mjs`)
+
+The look is layered: `ui/design/tokens.css` holds every colour, size, radius, shadow, duration and stacking level as a
+token; `base.css` the page, `kbd` and the one focus ring; `components.css` the building blocks (`.ui-btn`, `.ui-card`,
+`.ui-modal`, `.ui-field`, `.ui-tabs`, `.ui-row`, `.ui-chip`, `.ui-badge`, `.ui-coin`, `.ui-status`, `.ui-paper`); each
+panel's sheet comes last, in `@layer panels`, and only lays them out. A sheet writes no raw colour, `z-index`, font family
+or duration: it names a token, or sets a slot variable in its theme block (`--pz-hot` on the prize counter, `--shop-ink`
+per shop, `--focus` for a theme's ring) and reads it with `var()`. A time TypeScript waits for is a slot beside the rule
+(`--search-fade: 140ms`). `!important` is for the few overrides that say why (`/* convention-ok: <why> */`): `[hidden]`,
+the renderer's inline style, the reduce-motion clamp, pad-mode cursor, the photo dim. A legacy class listed beside a
+`.ui-*` selector in components.css goes when its template says `.ui-*`.
 
 ## Import rules (`scripts/check-imports.mjs`)
 
@@ -45,11 +68,17 @@ nothing but `main.ts` imports `bootstrap/` (types included); the engine (`core`,
 imports values only from the engine folders, `graphics`, `settings` and `persistence`, anything else is handed in by the
 wiring (an option, a callback, an element: `TouchControls` takes its `badgeHome`); plan files (`worldPlan.ts`,
 `roomPlan.ts`, `**/*Plan.ts`) import no values from three.js, the engine, `game/`, `ui/`, `world/zone/`, `layout.ts` or
-a `furnish*.ts`; `world/**` imports no values from `game/`; and no runtime import cycle (value, static edges: type-only
-imports are erased, a dynamic import runs after both modules exist). A relative or `@/` import that resolves to nothing
-fails too. The script checks itself on a small synthetic tree before the real one. No baseline: the tree passes clean.
-`node scripts/check-imports.mjs --verbose` adds the edge counts and the tally of furniture files that still read a
-plan at runtime (169 imports in 143 files today), the one layer rule not enforced yet.
+a `furnish*.ts`; `world/**` imports no values from `game/`; furniture knows no other plan (below); and no runtime import
+cycle (value, static edges: type-only imports are erased, a dynamic import runs after both modules exist). A relative or
+`@/` import that resolves to nothing fails too. The script checks itself on a small synthetic tree before the real one.
+No baseline: the tree passes clean. `node scripts/check-imports.mjs --verbose` adds the edge counts and the tallies.
+
+**The measures.** What a plan lays out and what a class builds often agree on one number: the height of a storey, where
+the kerb is, how wide the street door's hole is. Those numbers live in `world/measures/`, one small file per family, and
+both sides import them; a plan never exports a dimension for a class to read. A class reads its own zone's plan as its
+data, never another zone's and never the world plan ("furniture knows no other plan"); what one zone needs of another
+comes as an option from its builder, or, where the feature is the crossing itself (the cat's outing, the party's
+residents, the painted view), on an import line that says so with `// imports-ok: <why>`.
 
 ## Docs paths (`scripts/check-docs.mjs`)
 
@@ -68,6 +97,16 @@ games, the save `KEYS` (unique, under the root prefix), `WORLD_PLAN` (neighbours
 the collection room's doorways onto neighbours), a `PAYOUT` rate for every cabinet game, and every pricing table finite
 with prices never negative and odds in 0..1. `--list` adds what is only worth knowing (seed games without baked art,
 neighbours not kept both ways).
+
+## Shaders (`scripts/check-glsl.mjs`)
+
+A shader program lives in a `.glsl` file beside the module that compiles it (`Foo.vert.glsl`, `Foo.frag.glsl`) and is
+imported as its text (`import frag from './Foo.frag.glsl?raw'`; `src/vite-env.d.ts` types it, `scripts/headless.mjs`
+loads it in Node). What the file cannot hold statically comes in through `assemble()` (`graphics/glslAssemble`): a
+TypeScript value as a `#define TS_NAME` (the GLSL may then declare `const float NAME = TS_NAME;`), a shared or generated
+chunk as an `#include <name>` it replaces; three.js's own `#include` lines pass through. Fragments spliced into three.js's
+chunks and the chunk constants themselves (`graphics/glslNoise`, the sky and vehicle chunks) stay template literals: no
+backtick in them. The check parses every `.glsl` as GLSL ES and fails on one no module imports.
 
 ## Z-fighting (`scripts/zfight.mjs`)
 
@@ -92,6 +131,15 @@ per rule, `--list` shows them all, `--write-baseline` accepts what is there afte
 builds (shelf lamps, the suns, the stair lights) are outside the catalogue, so a room's shadow budget is judged on its
 shell and plan decor; the browser's `[lights]` monitor (`lighting/lightBudget`) covers the rest.
 
+## Social sim (`scripts/social-sim.mjs`, `npm run social`)
+
+Not part of the typecheck: run it after touching `social/socialPlan.ts`, a card's effects or the talk rules. Bundles
+`src/headless/social.ts` (a fresh copy per run: the standing is a module-level store) and plays the cast through the
+real rules: a typical player (a few meetings a day) for 60 game days, a diligent one (everyone daily, gifts, favours)
+for 120. It prints each person's warmth, trust, tier and perks in force, notes when casual play saturates warmth, and
+fails when a perk is out of the diligent player's reach or one day's spam (30 interactions with one stranger) gains
+more than 20 warmth. `--days`, `--seed`.
+
 ## Bundle size (`scripts/check-bundle.mjs`)
 
 The last step of `npm run build`: every chunk in `dist/assets` weighed (raw and gzip) against `scripts/bundle-baseline.json`.
@@ -104,9 +152,9 @@ one zone goes behind that zone's dynamic import; `--list` prints the table.
   every member or has a `default`; `map` / `filter` callbacks return on every path; no promise is dropped (`void` says it
   is meant) or handed to a plain callback; `===` except against null; no comparison that is always true. No style rules:
   the style is in docs/ and the skills, the layout rules in check-conventions. Alone: `npx eslint src server api`.
-- **knip** (`knip.json`, about 4 s) reports unused files, exports, types and dependencies. What the headless scripts import
-  through a `bundle()` string is listed as an entry (knip cannot read a template string): add a new one there. An export
-  kept on purpose carries `/** @public */` and is not reported. The tree is kept at zero: an export nobody imports is
+- **knip** (`knip.json`, about 4 s) reports unused files, exports, types and dependencies. A headless script imports the
+  game through a module in `src/headless/` (an entry knip and tsc both read), never through a string in the script. An
+  export kept on purpose carries `/** @public */` and is not reported. The tree is kept at zero: an export nobody imports is
   removed, not kept for later.
 - **cspell** (`cspell.json`, British English with American allowed, about 5 s) reads strings, comments and docs. A real
   misspelling is fixed where it is; a name (a game, a neighbour, a GLSL chunk) goes into `scripts/cspell-words.txt`, one

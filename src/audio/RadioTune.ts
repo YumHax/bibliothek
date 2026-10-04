@@ -1,6 +1,7 @@
 import { audioBus, audioContext } from './audioContext';
 import { whiteNoise } from './noise';
 import { SpatialOut } from './spatial';
+import { random } from '@/random';
 
 /** Loudness at volume 1, right next to the set (linear). */
 const MASTER = 0.13;
@@ -45,6 +46,14 @@ const TREMOLO = { hz: 5.2, depth: 0.28 };
 
 /** One eighth of the tune: a scale degree held short or long, or a rest (null). */
 type TuneNote = { degree: number; long: boolean } | null;
+
+/** One eighth note of the song: where it falls in the bar, the chord under it and the next, its time (the offbeats swung late). */
+interface Beat {
+  inBar: number;
+  chord: Chord;
+  nextChord: Chord;
+  t: number;
+}
 /** A small speaker: not much low end, no highs. */
 const BAND = { low: 200, high: 3600 };
 const HISS = 0.012;
@@ -207,9 +216,9 @@ export class RadioTune {
 
   private newSong(): void {
     this.song = {
-      root: 50 + Math.floor(Math.random() * 8),
-      step: 60 / (BPM.min + Math.random() * (BPM.max - BPM.min)) / 2,
-      progression: PROGRESSIONS[Math.floor(Math.random() * PROGRESSIONS.length)]!,
+      root: 50 + Math.floor(random() * 8),
+      step: 60 / (BPM.min + random() * (BPM.max - BPM.min)) / 2,
+      progression: PROGRESSIONS[Math.floor(random() * PROGRESSIONS.length)]!,
       bars: 0,
       motif: makeMotif(),
     };
@@ -222,30 +231,52 @@ export class RadioTune {
    * vibraphone's hook on the first two bars of every four.
    */
   private playStep(ctx: AudioContext, out: AudioNode, t0: number): void {
+    const beat = this.beatOf(t0);
+    this.brushes(ctx, out, beat);
+    this.walkingBass(ctx, out, beat);
+    this.pianoChord(ctx, out, beat);
+    this.vibesHook(ctx, beat);
+  }
+
+  /** Where the step at `t0` falls: its place in the bar, the chord under it and the one after, the offbeats a touch late. */
+  private beatOf(t0: number): Beat {
     const inBar = this.step % 8;
     const bar = Math.floor(this.step / 8);
-    const { root, step, progression } = this.song;
-    const chord = progression[bar % progression.length]!;
-    const nextChord = progression[(bar + 1) % progression.length]!;
-    const t = inBar % 2 ? t0 + step * SWING : t0;
+    const { step, progression } = this.song;
+    return {
+      inBar,
+      chord: progression[bar % progression.length]!,
+      nextChord: progression[(bar + 1) % progression.length]!,
+      t: inBar % 2 ? t0 + step * SWING : t0,
+    };
+  }
 
-    // Brushes: a swish on each eighth, leaned on the backbeat; a soft kick and a rim click.
+  /** Brushes: a swish on each eighth, leaned on the backbeat; a soft kick and a rim click. */
+  private brushes(ctx: AudioContext, out: AudioNode, { inBar, t }: Beat): void {
     const backbeat = inBar === 2 || inBar === 6;
     this.noiseHit(ctx, out, t, 4200, backbeat ? 0.2 : 0.09, backbeat ? 0.09 : inBar % 2 ? 0.035 : 0.05, 0.012);
     if (inBar === 0 || inBar === 3) this.kick(ctx, out, t, inBar === 0 ? 0.32 : 0.2);
-    if (inBar === 6 && Math.random() < 0.6) this.noiseHit(ctx, out, t, 1900, 0.025, 0.07, 0);
+    if (inBar === 6 && random() < 0.6) this.noiseHit(ctx, out, t, 1900, 0.025, 0.07, 0);
+  }
 
-    // The bass: the root, the fifth on the third beat, sometimes a step into the next chord.
+  /** The bass: the root, the fifth on the third beat, sometimes a step into the next chord. */
+  private walkingBass(ctx: AudioContext, out: AudioNode, { inBar, chord, nextChord, t }: Beat): void {
+    const { root, step } = this.song;
     const bassNote = root - 12;
     if (inBar === 0) this.pluck(ctx, out, 'triangle', midi(bassNote + chord.bass), t, step * 3.2, 0.34);
-    else if (inBar === 4) this.pluck(ctx, out, 'triangle', midi(bassNote + chord.bass + (Math.random() < 0.7 ? 7 : 12)), t, step * 2.6, 0.28);
-    else if (inBar === 7 && Math.random() < 0.45) this.pluck(ctx, out, 'triangle', midi(bassNote + nextChord.bass - 1), t, step * 0.9, 0.22);
+    else if (inBar === 4) this.pluck(ctx, out, 'triangle', midi(bassNote + chord.bass + (random() < 0.7 ? 7 : 12)), t, step * 2.6, 0.28);
+    else if (inBar === 7 && random() < 0.45) this.pluck(ctx, out, 'triangle', midi(bassNote + nextChord.bass - 1), t, step * 0.9, 0.22);
+  }
 
-    // The piano: the chord on one, pushed again on the and of two now and then.
-    if (inBar === 0) for (const n of chord.notes) this.electricPiano(ctx, out, midi(root + n), t + Math.random() * 0.012, step * 5, 0.05);
-    else if (inBar === 3 && Math.random() < 0.5) for (const n of chord.notes) this.electricPiano(ctx, out, midi(root + n), t + Math.random() * 0.01, step * 2, 0.032);
+  /** The piano: the chord on one, pushed again on the and of two now and then. */
+  private pianoChord(ctx: AudioContext, out: AudioNode, { inBar, chord, t }: Beat): void {
+    const { root, step } = this.song;
+    if (inBar === 0) for (const n of chord.notes) this.electricPiano(ctx, out, midi(root + n), t + random() * 0.012, step * 5, 0.05);
+    else if (inBar === 3 && random() < 0.5) for (const n of chord.notes) this.electricPiano(ctx, out, midi(root + n), t + random() * 0.01, step * 2, 0.032);
+  }
 
-    // The vibraphone: the hook on the first two bars of every four, the others left to the piano.
+  /** The vibraphone (into its own tremolo, not the song's output): the hook on the first two bars of every four, the others left to the piano. */
+  private vibesHook(ctx: AudioContext, { inBar, chord, t }: Beat): void {
     const vibes = this.vibes;
     if (!vibes || this.song.bars % 4 >= 2) return;
     const note = this.song.motif[(this.song.bars % 2) * 8 + inBar] ?? null;
@@ -253,7 +284,7 @@ export class RadioTune {
     let pitch = SCALE[note.degree]! + 12;
     // Pulled to the chord on the beat, so the hook still fits when the chord under it changes.
     if (inBar % 2 === 0) pitch = nearestChordTone(pitch, chord);
-    this.vibraphone(ctx, vibes, midi(root + pitch), t, step * (note.long ? 4 : 2), 0.13);
+    this.vibraphone(ctx, vibes, midi(this.song.root + pitch), t, this.song.step * (note.long ? 4 : 2), 0.13);
   }
 
   /** A sustained tone (the jingle's bells): up in 10 ms, held, let go. */
@@ -358,13 +389,14 @@ export class RadioTune {
     } else env.gain.setValueAtTime(level, t);
     env.gain.exponentialRampToValueAtTime(0.0001, t + attack + length);
     source.connect(band).connect(env).connect(out);
-    source.start(t, Math.random() * 0.5);
+    source.start(t, random() * 0.5);
     source.stop(t + attack + length + 0.02);
   }
 
   private build(): AudioContext {
     if (this.ctx) return this.ctx;
     const ctx = audioContext();
+    if (!ctx) throw new Error('no Web Audio to play the radio through');
     this.ctx = ctx;
     const out = ctx.createGain();
     out.gain.value = 0;
@@ -412,7 +444,7 @@ export class RadioTune {
     const hissGain = ctx.createGain();
     hissGain.gain.value = HISS;
     hiss.connect(hissGain).connect(music);
-    hiss.start(0, Math.random() * this.noise.duration);
+    hiss.start(0, random() * this.noise.duration);
     this.hiss = hiss;
     return ctx;
   }
@@ -420,21 +452,21 @@ export class RadioTune {
 
 /** One step of the tune's random walk on the scale: mostly a step, sometimes a leap, never off the ends. */
 function walk(degree: number): number {
-  const move = Math.random() < 0.75 ? (Math.random() < 0.5 ? -1 : 1) : Math.round((Math.random() - 0.5) * 6);
+  const move = random() < 0.75 ? (random() < 0.5 ? -1 : 1) : Math.round((random() - 0.5) * 6);
   return Math.max(0, Math.min(SCALE.length - 1, degree + move));
 }
 
 /** A song's two-bar hook: a phrase that starts on the beat, walks the scale and ends on a long note. */
 function makeMotif(): TuneNote[] {
   const motif: TuneNote[] = [];
-  let degree = 2 + Math.floor(Math.random() * 5);
+  let degree = 2 + Math.floor(random() * 5);
   for (let i = 0; i < MOTIF_STEPS; i++) {
     degree = walk(degree);
-    const sounded = i === 0 || (i < MOTIF_STEPS - 4 && Math.random() < NOTE_CHANCE);
-    motif.push(sounded ? { degree, long: Math.random() < 0.35 } : null);
+    const sounded = i === 0 || (i < MOTIF_STEPS - 4 && random() < NOTE_CHANCE);
+    motif.push(sounded ? { degree, long: random() < 0.35 } : null);
   }
   // The phrase comes to rest on the second bar's third beat, held.
-  motif[MOTIF_STEPS - 4] = { degree: [0, 2, 4, 7][Math.floor(Math.random() * 4)]!, long: true };
+  motif[MOTIF_STEPS - 4] = { degree: [0, 2, 4, 7][Math.floor(random() * 4)]!, long: true };
   return motif;
 }
 

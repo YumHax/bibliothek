@@ -1,207 +1,209 @@
 /*
  * A Front Street shop's counter as its printed leaflet: a sheet of paper over the blurred shop (drawn by the root's
  * ::before, the catalogue's frame sits on it), a card per piece with its studio photo, a swing tag and the shop's
- * rubber stamp once it is at home. Each shop prints on its own paper with its own ink (`data-shop`).
+ * rubber stamp once it is at home. Each shop prints on its own paper with its own ink: the theme block below sets
+ * the slots per `data-shop`, the rest of the sheet only reads them.
  */
-.home-shop {
-  --shop-paper: #f3ece0;
-  --shop-ink: #2a2119;
-  --shop-ink-soft: #6b5d4f;
-  --shop-accent: #b5452b;
-  --shop-sweep: #e4d9c6;
-  --shop-rule: rgba(42, 33, 25, 0.22);
-  --sheet-x: max(1rem, calc(50% - 580px));
-  --sheet-y: clamp(0.75rem, 3vh, 1.75rem);
-  padding: calc(var(--sheet-y) + 1.6rem) calc(var(--sheet-x) + clamp(1rem, 3vw, 2.2rem)) calc(var(--sheet-y) + 1.2rem);
-  gap: 0.6rem;
-  color: var(--shop-ink);
-}
-.home-shop[data-shop='electronics'] { --shop-paper: #e8ecee; --shop-ink: #1c2328; --shop-ink-soft: #56626b; --shop-accent: #d4561c; --shop-sweep: #d3dbe0; --shop-rule: rgba(28, 35, 40, 0.2); }
-.home-shop[data-shop='florist'] { --shop-paper: #eef0e4; --shop-ink: #1f2a1f; --shop-ink-soft: #5b6a58; --shop-accent: #3d7a47; --shop-sweep: #dbe3cf; --shop-rule: rgba(31, 42, 31, 0.2); }
-.home-shop[data-shop='pets'] { --shop-paper: #f6efda; --shop-ink: #22252e; --shop-ink-soft: #636270; --shop-accent: #2e6bb0; --shop-sweep: #ebe0c2; --shop-rule: rgba(34, 37, 46, 0.2); }
-.home-shop[data-shop='market'] { --shop-paper: #f1e8d6; --shop-accent: #8a5424; --shop-sweep: #e2d4b8; }
+@layer tokens, base, components, panels;
+@layer panels {
+  .home-shop {
+    --shop-paper: var(--paper-shop);
+    --shop-ink: var(--ink-shop);
+    --shop-ink-soft: #6b5d4f;
+    --shop-accent: #b5452b;
+    --shop-sweep: #e4d9c6;
+    --shop-rule: rgba(42, 33, 25, 0.22);
+    --shop-error: #a3261c;
+    --shop-fibre: rgba(0, 0, 0, 0.012);
+    --shop-fibre-2: rgba(0, 0, 0, 0.01);
+    --shop-photo-shadow: rgba(40, 30, 20, 0.28);
+    --focus: var(--shop-accent);
+    --sheet-x: max(1rem, calc(50% - 580px));
+    --sheet-y: clamp(0.75rem, 3vh, 1.75rem);
+    padding: calc(var(--sheet-y) + 1.6rem) calc(var(--sheet-x) + clamp(1rem, 3vw, 2.2rem)) calc(var(--sheet-y) + 1.2rem);
+    gap: 0.6rem;
+    color: var(--shop-ink);
+  }
+  .home-shop[data-shop='electronics'] { --shop-paper: #e8ecee; --shop-ink: #1c2328; --shop-ink-soft: #56626b; --shop-accent: #d4561c; --shop-sweep: #d3dbe0; --shop-rule: rgba(28, 35, 40, 0.2); }
+  .home-shop[data-shop='florist'] { --shop-paper: #eef0e4; --shop-ink: #1f2a1f; --shop-ink-soft: #5b6a58; --shop-accent: #3d7a47; --shop-sweep: #dbe3cf; --shop-rule: rgba(31, 42, 31, 0.2); }
+  .home-shop[data-shop='pets'] { --shop-paper: #f6efda; --shop-ink: #22252e; --shop-ink-soft: #636270; --shop-accent: #2e6bb0; --shop-sweep: #ebe0c2; --shop-rule: rgba(34, 37, 46, 0.2); }
+  .home-shop[data-shop='market'] { --shop-paper: #f1e8d6; --shop-accent: #8a5424; --shop-sweep: #e2d4b8; }
 
-/* The sheet itself, a little fibre in it. */
-.home-shop::before {
-  content: '';
-  position: absolute;
-  inset: var(--sheet-y) var(--sheet-x);
-  border-radius: 3px;
-  background:
-    repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.012) 0 1px, transparent 1px 3px),
-    repeating-linear-gradient(90deg, rgba(0, 0, 0, 0.01) 0 1px, transparent 1px 4px),
-    var(--shop-paper);
-  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55), 0 2px 0 rgba(255, 255, 255, 0.4) inset;
-  animation: shop-in 240ms var(--ui-ease);
-}
-.home-shop > * { position: relative; }
-@keyframes shop-in {
-  from { opacity: 0; transform: translateY(10px); }
-  to   { opacity: 1; transform: none; }
-}
+  /* The sheet itself, a little fibre in it. */
+  .home-shop::before {
+    content: '';
+    position: absolute;
+    inset: var(--sheet-y) var(--sheet-x);
+    border-radius: 3px;
+    background:
+      repeating-linear-gradient(0deg, var(--shop-fibre) 0 1px, transparent 1px 3px),
+      repeating-linear-gradient(90deg, var(--shop-fibre-2) 0 1px, transparent 1px 4px),
+      var(--shop-paper);
+    box-shadow: 0 24px 60px var(--shade-55), 0 2px 0 var(--tint-35) inset;
+    animation: shop-in var(--dur-settle) var(--ui-ease);
+  }
+  .home-shop > * { position: relative; }
+  @keyframes shop-in {
+    from { opacity: 0; transform: translateY(10px); }
+    to   { opacity: 1; transform: none; }
+  }
 
-/* --- the masthead -------------------------------------------------------------------------------- */
+  /* --- the masthead -------------------------------------------------------------------------------- */
 
-.home-shop .catalogue__header { align-items: flex-end; padding-bottom: 0.55rem; border-bottom: 3px double var(--shop-ink); }
-.home-shop .catalogue__header h2 {
-  font-family: var(--ui-font-print);
-  font-size: clamp(1.7rem, 3.6vw, 2.5rem);
-  letter-spacing: 0;
-  line-height: 1;
-  color: var(--shop-ink);
-}
-.home-shop .catalogue__wallet { order: 3; margin-left: auto; font-size: 0.9rem; color: var(--shop-ink-soft); font-variant-numeric: tabular-nums; }
-.home-shop .catalogue__actions { order: 4; margin-left: 0; }
-.home-shop .catalogue__actions .ui-btn {
-  color: var(--shop-ink);
-  background: transparent;
-  border: 1.5px solid var(--shop-ink);
-  border-radius: 2px;
-  font-size: 0.82rem;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-.home-shop .catalogue__actions .ui-btn:hover { background: var(--shop-ink); color: var(--shop-paper); }
-.home-shop .catalogue__blurb { font-family: var(--ui-font-print); font-style: italic; font-size: 1rem; color: var(--shop-ink-soft); }
-.home-shop .catalogue__status { min-height: 1.3em; font-size: 0.88rem; color: var(--shop-accent); opacity: 1; font-weight: 600; }
-.home-shop .catalogue__status:empty { visibility: hidden; }
-.home-shop .catalogue__status--error { color: #a3261c; }
+  .home-shop .catalogue__header { align-items: flex-end; padding-bottom: 0.55rem; border-bottom: 3px double var(--shop-ink); }
+  .home-shop .catalogue__header h2 {
+    font-family: var(--ui-font-print);
+    font-size: clamp(1.7rem, 3.6vw, 2.5rem);
+    letter-spacing: 0;
+    line-height: 1;
+    color: var(--shop-ink);
+  }
+  .home-shop .catalogue__wallet { order: 3; margin-left: auto; font-size: var(--fs-5); color: var(--shop-ink-soft); font-variant-numeric: tabular-nums; }
+  .home-shop .catalogue__actions { order: 4; margin-left: 0; }
+  .home-shop .catalogue__actions .ui-btn {
+    color: var(--shop-ink);
+    background: transparent;
+    border: 1.5px solid var(--shop-ink);
+    border-radius: var(--ui-radius-2xs);
+    font-size: var(--fs-3);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+  .home-shop .catalogue__actions .ui-btn:hover { background: var(--shop-ink); color: var(--shop-paper); }
+  .home-shop .catalogue__blurb { font-family: var(--ui-font-print); font-style: italic; font-size: var(--fs-7); color: var(--shop-ink-soft); }
+  .home-shop .catalogue__status { min-height: 1.3em; font-size: var(--fs-5); color: var(--shop-accent); opacity: 1; font-weight: 600; }
+  .home-shop .catalogue__status:empty { visibility: hidden; }
+  .home-shop .catalogue__status--error { color: var(--shop-error); }
 
-/* --- the cards ------------------------------------------------------------------------------------- */
+  /* --- the cards ------------------------------------------------------------------------------------- */
 
-.home-shop .market-panel__body {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr));
-  gap: 1.1rem 1rem;
-  align-content: start;
-  padding: 0.3rem 0.2rem 0.8rem;
-  background: none;
-  border: 0;
-  border-radius: 0;
-  box-shadow: none;
-  scrollbar-color: var(--shop-rule) transparent;
-}
+  .home-shop .market-panel__body {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr));
+    gap: 1.1rem var(--sp-4);
+    align-content: start;
+    padding: 0.3rem 0.2rem 0.8rem;
+    background: none;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+    scrollbar-color: var(--shop-rule) transparent;
+  }
 
-.shop__item { display: flex; flex-direction: column; min-width: 0; }
-.shop__photo {
-  position: relative;
-  display: grid;
-  place-items: center;
-  aspect-ratio: 4 / 3;
-  overflow: hidden;
-  border-radius: 2px;
-  /* A photographer's paper sweep, the floor line soft. */
-  background:
-    radial-gradient(ellipse 70% 30% at 50% 86%, rgba(0, 0, 0, 0.1), transparent 70%),
-    linear-gradient(180deg, color-mix(in srgb, var(--shop-sweep) 70%, #fff) 0%, var(--shop-sweep) 70%, color-mix(in srgb, var(--shop-sweep) 88%, #000) 100%);
-}
-/* While the studio takes the photo: the paper breathes. */
-.shop__photo:not(.shop__photo--ready)::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(100deg, transparent 30%, rgba(255, 255, 255, 0.35) 50%, transparent 70%) -100% 0 / 200% 100% no-repeat;
-  animation: shop-shimmer 1.4s linear infinite;
-}
-@keyframes shop-shimmer {
-  to { background-position: 200% 0; }
-}
-.shop__photo img { width: 88%; height: 88%; object-fit: contain; opacity: 0; transition: opacity 240ms ease, transform 300ms var(--ui-ease); }
-.shop__photo img:not([src]) { visibility: hidden; }
-.shop__photo--ready img { opacity: 1; filter: drop-shadow(0 8px 6px rgba(40, 30, 20, 0.28)); }
-.shop__item:hover .shop__photo--ready img,
-.shop__item:focus-within .shop__photo--ready img { transform: scale(1.04); }
-.shop__item--done .shop__photo img { filter: grayscale(0.35) opacity(0.75); }
+  .shop__item { display: flex; flex-direction: column; min-width: 0; }
+  .shop__photo {
+    position: relative;
+    display: grid;
+    place-items: center;
+    aspect-ratio: 4 / 3;
+    overflow: hidden;
+    border-radius: var(--ui-radius-2xs);
+    /* A photographer's paper sweep, the floor line soft. */
+    background:
+      radial-gradient(ellipse 70% 30% at 50% 86%, var(--shade-10), transparent 70%),
+      linear-gradient(180deg, color-mix(in srgb, var(--shop-sweep) 70%, var(--ui-white)) 0%, var(--shop-sweep) 70%, color-mix(in srgb, var(--shop-sweep) 88%, var(--ui-black)) 100%);
+  }
+  /* While the studio takes the photo: the paper breathes. */
+  .shop__photo:not(.shop__photo--ready)::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(100deg, transparent 30%, var(--tint-35) 50%, transparent 70%) -100% 0 / 200% 100% no-repeat;
+    animation: shop-shimmer var(--dur-shimmer) linear infinite;
+  }
+  @keyframes shop-shimmer {
+    to { background-position: 200% 0; }
+  }
+  .shop__photo img { width: 88%; height: 88%; object-fit: contain; opacity: 0; transition: opacity var(--dur-settle) ease, transform var(--dur-slow) var(--ui-ease); }
+  .shop__photo img:not([src]) { visibility: hidden; }
+  .shop__photo--ready img { opacity: 1; filter: drop-shadow(0 8px 6px var(--shop-photo-shadow)); }
+  .shop__item:hover .shop__photo--ready img,
+  .shop__item:focus-within .shop__photo--ready img { transform: scale(1.04); }
+  .shop__item--done .shop__photo img { filter: grayscale(0.35) opacity(0.75); }
 
-/* The shop's rubber stamp. */
-.shop__stamp {
-  position: absolute;
-  padding: 0.25rem 0.7rem 0.2rem;
-  border: 3px solid currentColor;
-  border-radius: 4px;
-  color: var(--shop-accent);
-  font-family: var(--ui-font-display);
-  font-size: 1rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  opacity: 0.85;
-  transform: rotate(-11deg);
-  mix-blend-mode: multiply;
-  -webkit-mask: repeating-radial-gradient(circle at 30% 40%, #000 0 2px, rgba(0, 0, 0, 0.75) 2px 3px);
-  mask: repeating-radial-gradient(circle at 30% 40%, #000 0 2px, rgba(0, 0, 0, 0.75) 2px 3px);
-}
+  /* The shop's rubber stamp. */
+  .shop__stamp {
+    position: absolute;
+    padding: 0.25rem 0.7rem 0.2rem;
+    border: 3px solid currentColor;
+    border-radius: var(--ui-radius-xs);
+    color: var(--shop-accent);
+    font-family: var(--ui-font-display);
+    font-size: var(--fs-7);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    opacity: 0.85;
+    transform: rotate(-11deg);
+    mix-blend-mode: multiply;
+    -webkit-mask: repeating-radial-gradient(circle at 30% 40%, var(--ui-black) 0 2px, var(--shade-70) 2px 3px);
+    mask: repeating-radial-gradient(circle at 30% 40%, var(--ui-black) 0 2px, var(--shade-70) 2px 3px);
+  }
 
-.shop__text { flex: 1; padding: 0.55rem 0.1rem 0.3rem; }
-.shop__text h3 { margin: 0; font-family: var(--ui-font-print); font-weight: 400; font-size: 1.15rem; line-height: 1.15; }
-.shop__text p { margin: 0.25rem 0 0; font-size: 0.8rem; line-height: 1.4; color: var(--shop-ink-soft); }
-.shop__spots { display: flex; align-items: center; gap: 0.45rem; font-size: 0.72rem !important; font-variant-numeric: tabular-nums; }
-.shop__spots span { display: inline-flex; flex-wrap: wrap; gap: 3px; }
-.shop__spots i { width: 7px; height: 7px; border-radius: 50%; border: 1.5px solid var(--shop-ink-soft); box-sizing: border-box; }
-.shop__spots i.on { background: var(--shop-accent); border-color: var(--shop-accent); }
+  .shop__text { flex: 1; padding: 0.55rem 0.1rem 0.3rem; }
+  .shop__text h3 { margin: 0; font-family: var(--ui-font-print); font-weight: 400; font-size: var(--fs-t1); line-height: 1.15; }
+  .shop__text p { margin: var(--sp-1) 0 0; font-size: var(--fs-3); line-height: 1.4; color: var(--shop-ink-soft); }
+  /* The spots line is a paragraph too: named here so it keeps its own size. */
+  .shop__text .shop__spots { display: flex; align-items: center; gap: 0.45rem; font-size: var(--fs-1); font-variant-numeric: tabular-nums; }
+  .shop__spots span { display: inline-flex; flex-wrap: wrap; gap: 3px; }
+  .shop__spots i { width: 7px; height: 7px; border-radius: 50%; border: 1.5px solid var(--shop-ink-soft); box-sizing: border-box; }
+  .shop__spots i.on { background: var(--shop-accent); border-color: var(--shop-accent); }
 
-.shop__buy { display: flex; align-items: center; gap: 0.6rem; padding-top: 0.45rem; border-top: 1px solid var(--shop-rule); }
-/* A card swing tag on its string. */
-.shop__tag {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  gap: 0.3rem;
-  padding: 0.18rem 0.6rem 0.14rem 1.15rem;
-  font-family: var(--ui-font-print);
-  font-size: 1.15rem;
-  line-height: 1.1;
-  color: #fff;
-  background: var(--shop-accent);
-  clip-path: polygon(0.6rem 0, 100% 0, 100% 100%, 0.6rem 100%, 0 50%);
-  font-variant-numeric: tabular-nums;
-  transform: rotate(-2deg);
-}
-.shop__tag::before {
-  content: '';
-  position: absolute;
-  left: 0.5rem;
-  top: 50%;
-  width: 0.34rem;
-  height: 0.34rem;
-  margin-top: -0.17rem;
-  border-radius: 50%;
-  background: var(--shop-paper);
-}
-.shop__coin {
-  width: 0.72em;
-  height: 0.72em;
-  border-radius: 50%;
-  background: radial-gradient(circle at 35% 35%, #fff4c2, #e0b02c 60%, #8f6a12);
-  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.25);
-}
-.shop__btn {
-  margin-left: auto;
-  font: inherit;
-  font-size: 0.78rem;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  padding: 0.5rem 0.85rem 0.45rem;
-  color: var(--shop-paper);
-  background: var(--shop-ink);
-  border: 0;
-  border-radius: 2px;
-  cursor: pointer;
-  transition: background 120ms ease, transform 100ms ease;
-}
-.shop__btn:hover:not(:disabled) { background: var(--shop-accent); }
-.shop__btn:active:not(:disabled) { transform: translateY(1px); }
-/* Armed: a dear piece's first click; the second buys. */
-.shop__btn.sell__armed { background: rgba(200, 68, 58, 0.85); }
-.shop__btn:disabled { color: var(--shop-ink-soft); background: transparent; box-shadow: inset 0 0 0 1px var(--shop-rule); cursor: default; font-weight: 600; letter-spacing: 0.03em; text-transform: none; font-size: 0.8rem; }
-.home-shop .shop__btn:focus-visible,
-.home-shop .catalogue__actions .ui-btn:focus-visible { outline: 2px solid var(--shop-accent); outline-offset: 2px; }
+  .shop__buy { display: flex; align-items: center; gap: 0.6rem; padding-top: 0.45rem; border-top: 1px solid var(--shop-rule); }
+  /* A card swing tag on its string. */
+  .shop__tag {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.18rem 0.6rem 0.14rem 1.15rem;
+    font-family: var(--ui-font-print);
+    font-size: var(--fs-t1);
+    line-height: 1.1;
+    color: var(--ui-white);
+    background: var(--shop-accent);
+    clip-path: polygon(0.6rem 0, 100% 0, 100% 100%, 0.6rem 100%, 0 50%);
+    font-variant-numeric: tabular-nums;
+    transform: rotate(-2deg);
+  }
+  .shop__tag::before {
+    content: '';
+    position: absolute;
+    left: 0.5rem;
+    top: 50%;
+    width: 0.34rem;
+    height: 0.34rem;
+    margin-top: -0.17rem;
+    border-radius: 50%;
+    background: var(--shop-paper);
+  }
+  .shop__coin { width: 0.72em; height: 0.72em; }
+  .shop__btn {
+    margin-left: auto;
+    font: inherit;
+    font-size: var(--fs-3);
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 0.5rem 0.85rem 0.45rem;
+    color: var(--shop-paper);
+    background: var(--shop-ink);
+    border: 0;
+    border-radius: var(--ui-radius-2xs);
+    cursor: pointer;
+    transition: background var(--dur-hover) ease, transform var(--dur-tap) ease;
+  }
+  .shop__btn:hover:not(:disabled) { background: var(--shop-accent); }
+  .shop__btn:active:not(:disabled) { transform: translateY(1px); }
+  /* Armed: a dear piece's first click; the second buys. */
+  .shop__btn.sell__armed { background: var(--ui-armed-strong); border-color: transparent; }
+  .shop__btn:disabled { color: var(--shop-ink-soft); background: transparent; box-shadow: inset 0 0 0 1px var(--shop-rule); cursor: default; font-weight: 600; letter-spacing: 0.03em; text-transform: none; font-size: var(--fs-3); }
 
-@media (max-width: 560px) {
-  .home-shop .market-panel__body { grid-template-columns: repeat(auto-fill, minmax(10.5rem, 1fr)); gap: 0.9rem 0.7rem; }
-  .home-shop .catalogue__wallet { order: 0; flex-basis: 100%; margin: 0; }
+  @media (max-width: 560px) {
+    .home-shop .market-panel__body { grid-template-columns: repeat(auto-fill, minmax(10.5rem, 1fr)); gap: 0.9rem 0.7rem; }
+    .home-shop .catalogue__wallet { order: 0; flex-basis: 100%; margin: 0; }
+  }
+  @media (pointer: coarse) {
+    .shop__btn { min-height: 44px; }
+  }
+  .reduce-motion .shop__photo::after { animation: none; }
 }
-@media (pointer: coarse) {
-  .shop__btn { min-height: 44px; }
-}
-.reduce-motion .shop__photo::after { animation: none !important; }

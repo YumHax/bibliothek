@@ -1,7 +1,8 @@
 import * as THREE from 'three';
-import { createCanvas, seededRandom, toTexture, FONT } from '@/covers/generated/canvasUtils';
+import { createCanvas, toTexture, FONT } from '@/covers/generated/canvasUtils';
 import { Prop, part } from './Prop';
 import { timber } from '@/world/materials/palette';
+import { lcg } from '@/random';
 
 export interface NoticeboardOptions {
   /** Outer size of the frame. Default 0.34 x 0.44. */
@@ -35,7 +36,7 @@ export class Noticeboard extends Prop {
     for (const sx of [-1, 1]) part(this, FRAME, height - 2 * FRAME, 0.02, pine, { x: (sx * (width - FRAME)) / 2, z: 0.01 });
     const cork = new THREE.Mesh(
       new THREE.PlaneGeometry(width - 2 * FRAME, height - 2 * FRAME),
-      new THREE.MeshStandardMaterial({ map: paintBoard(width - 2 * FRAME, height - 2 * FRAME, options.notes ?? NOTES, seededRandom((options.seed ?? 5) * 2654435)), roughness: 0.95 }),
+      new THREE.MeshStandardMaterial({ map: paintBoard(width - 2 * FRAME, height - 2 * FRAME, options.notes ?? NOTES, lcg((options.seed ?? 5) * 2654435)), roughness: 0.95 }),
     );
     cork.position.z = 0.012;
     cork.receiveShadow = true;

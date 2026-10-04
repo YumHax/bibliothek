@@ -2,7 +2,8 @@ import * as THREE from 'three';
 import { QUALITY } from '@/graphics/quality';
 import { afterChunk, patchShader } from '../materials/shaderPatch';
 import { plasterBumpMap } from '../materials/surfaces';
-import { STAIRWELL_PLAN as plan, STOREY, landingY } from './stairwellPlan';
+import { STAIRWELL_PLAN as plan } from './stairwellPlan';
+import { STOREY, landingY } from '@/world/measures/building';
 
 /*
  * The stairwell's painted walls and worn floors, as shader patches on its merged meshes: light

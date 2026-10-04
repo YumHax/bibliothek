@@ -1,4 +1,5 @@
 import type { Game, PlatformId } from '@/catalog/types';
+import { searchKey } from '@/text/strings';
 
 /** One game of a set: its platform and the titles it goes by, normalised (a trailing `*` matches any subtitle). */
 export interface SetPiece {
@@ -119,9 +120,9 @@ export const COLLECTOR_SETS: readonly CollectorSet[] = [
   },
 ];
 
-/** Lower case, accents off, anything but letters and digits a single space. */
+/** The key a title is matched under (`text/strings` searchKey: lower case, accents off, letters and digits only). */
 export function normaliseTitle(title: string): string {
-  return title.normalize('NFKD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  return searchKey(title);
 }
 
 /** Whether `game` is this piece of a set. */

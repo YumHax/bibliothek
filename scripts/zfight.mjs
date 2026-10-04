@@ -20,7 +20,9 @@ const BASELINE = path.join(ROOT, 'scripts', 'zfight-baseline.json');
 const started = performance.now();
 const restore = hush();
 // What the script imports from the game is listed in `src/headless/zfight.ts` (typechecked, and knip sees it used).
-const { zfightSubjects, findZFighting, THREE } = await bundle(`export * from '@/headless/zfight';`, { name: 'zfight' });
+const { zfightSubjects, findZFighting, seedLiveRandom, THREE } = await bundle(`export * from '@/headless/zfight';`, { name: 'zfight' });
+// The props' own live draws (a rug's jitter, a clock's hands) from one seed, so a run finds the same pairs as the last.
+seedLiveRandom(0x9e3779b9);
 
 // First, that the detector still sees a fight: a red slab flush on a blue one's top (both tops at y 0.1).
 {

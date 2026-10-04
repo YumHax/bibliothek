@@ -1,3 +1,4 @@
+import { partials } from './synth';
 /*
  * A church bell, synthesised: a bell's partials are not harmonic (hum, prime, tierce, quint,
  * nominal...), each ringing out at its own rate, the low ones longest. `strikeBell` plays one
@@ -25,17 +26,7 @@ const HOUR_BELL = 196;
 
 /** One strike of a bell tuned to `note` (Hz) at `time`, `level` loud, into `out`. */
 function strikeBell(ctx: BaseAudioContext, out: AudioNode, time: number, note: number, level: number): void {
-  for (const [ratio, partLevel, decay] of PARTIALS) {
-    const osc = ctx.createOscillator();
-    osc.frequency.value = note * ratio * (1 + (Math.random() - 0.5) * 0.002);
-    const env = ctx.createGain();
-    env.gain.setValueAtTime(0, time);
-    env.gain.linearRampToValueAtTime(level * partLevel, time + 0.008);
-    env.gain.exponentialRampToValueAtTime(0.00005, time + decay);
-    osc.connect(env).connect(out);
-    osc.start(time);
-    osc.stop(time + decay + 0.05);
-  }
+  partials(ctx, out, time, PARTIALS.map(([ratio, partLevel, decay]) => [note * ratio, partLevel, decay] as const), { level, length: PARTIALS[0]?.[2] ?? 1, attack: 0.008, floor: 0.00005, tail: 0.05, spread: 0.002 });
 }
 
 /**

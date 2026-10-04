@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { inHours } from '@/time/clock';
 import type { Updatable } from '@/core/Engine';
 import { Timers } from '@/core/Timers';
 import type { OccupancyAware } from '../Furniture';
@@ -11,11 +12,19 @@ import { NEIGHBOUR_NOISE } from '@/building/neighbourNoisePlan';
 import { StairWalker } from './StairWalker';
 import { doorKey } from './building';
 import { doorSpot, liftGate, liftToStreet, routeDown, routeUp, streetDoorSpot, toLiftGate } from './stairRoutes';
-import { STAIRWELL_PLAN as plan, STOREYS, STOREY, landingY } from './stairwellPlan';
+import { STAIRWELL_PLAN as plan } from './stairwellPlan';
+import { STOREYS, STOREY, landingY } from '@/world/measures/building';
 import type { LiftRides } from './Lift';
 import { playMurmur } from '@/audio/murmur';
+import type { SessionActions } from '@/game/SessionActions';
+import { personAtDoor } from '@/social/people';
+import { rememberLook } from '@/social/lookBook';
+import type { SocialServices, TalkExtra, TalkSession } from '@/social/talk';
+import type { PersonId } from '@/social/types';
+import { metName, bodyOf, talkHook } from '../people/socialHook';
 import { stereoPan } from '@/audio/spatial';
-import { proximityVolume } from '@/video/proximityVolume';
+import { loudness } from '@/audio/hearing';
+import { random } from '@/random';
 
 type ResidentPlan = (typeof plan.residents)[number];
 
@@ -55,8 +64,12 @@ interface NeighboursOptions {
   gone?: (key: string) => boolean;
   /** What the resident behind door `key` has to say of the moment before their own lines (her move), or null. */
   says?: (key: string) => string | null;
-  /** The player chatted with the resident behind door `key` (a friendship's worth, `building/friendship`). */
+  /** The player chatted with the resident behind door `key` (a friendship's worth, `building/friendship`); only without `social`. */
   onChat?: (key: string) => void;
+  /** The people the player talks to (docs/social.md): a click opens the conversation instead of a line. */
+  social?: SocialServices;
+  /** The swap a resident has going, opened from the conversation ("Swap games"), as their door does. */
+  swap?: (key: string, session: SessionActions) => void;
 }
 
 /** Nearer than this (m, level and across) and a resident says hello. */
@@ -105,14 +118,20 @@ export class Neighbours extends Prop implements Updatable, OccupancyAware {
       const door = doorKey(r.k, r.i);
       // Each starts somewhere of their own in their lines, so two neighbours never open alike.
       const resident: Resident = { plan: r, who, door, at: 'home', going: null, hold: null, greeted: false, nextHello: r.seed % r.hello.length, nextLine: r.seed % r.lines.length } as Resident;
+      const look = randomLook(r.seed + 900, 'shopper');
+      const person = personAtDoor(door);
+      if (person) rememberLook(person, look);
       resident.walker = new StairWalker({
         viewer: options.viewer,
         seed: r.seed,
-        look: randomLook(r.seed + 900, 'shopper'),
+        look,
         speed: 0.75 + (r.seed % 5) * 0.05,
         label: `${who} · ${plan.floorNames[r.k]} floor`,
         talk: () => this.chat(resident),
         ground: options.ground,
+        speaker: person ? metName(person, who) : who,
+        stopsToTalk: true,
+        social: person ? talkHook(options.social, person, (session) => this.talk(resident, person, session)) : undefined,
       });
       return resident;
     });
@@ -171,7 +190,7 @@ export class Neighbours extends Prop implements Updatable, OccupancyAware {
       if (left > 0 && left < HOLD_MAX) return r.going ?? r.at;
       r.hold = null;
     }
-    return hours >= r.plan.out && hours < r.plan.back ? 'out' : 'home';
+    return inHours(hours, [r.plan.out, r.plan.back]) ? 'out' : 'home';
   }
 
   /** Nobody sets off: at night, and in a power cut (they are out on the landings with candles: `powerCut/`). */
@@ -186,16 +205,16 @@ export class Neighbours extends Prop implements Updatable, OccupancyAware {
     const near = (a: number) => Math.abs(hours - a) <= RUSH_WINDOW;
     const here = this.residents.filter((r) => !this.options.gone?.(r.door));
     const rush = here.filter((r) => (r.at === 'home' && near(r.plan.out)) || (r.at === 'out' && near(r.plan.back)));
-    if (rush.length && Math.random() < RUSH_ODDS) {
-      const r = rush[Math.floor(Math.random() * rush.length)]!;
+    if (rush.length && random() < RUSH_ODDS) {
+      const r = rush[Math.floor(random() * rush.length)]!;
       this.startTrip(r, r.at === 'home' ? 'out' : 'home', hours + RUSH_WINDOW + 0.5);
       return;
     }
-    if (Math.random() >= ERRAND_ODDS) return;
+    if (random() >= ERRAND_ODDS) return;
     const home = here.filter((r) => r.at === 'home');
-    const r = home[Math.floor(Math.random() * home.length)];
+    const r = home[Math.floor(random() * home.length)];
     if (!r) return;
-    this.startTrip(r, 'out', hours + 1 + Math.random() * 1.5);
+    this.startTrip(r, 'out', hours + 1 + random() * 1.5);
   }
 
   /** Whether whoever lives behind door `key` is in (no resident on the stairs lives there: someone always is). */
@@ -217,7 +236,7 @@ export class Neighbours extends Prop implements Updatable, OccupancyAware {
     r.going = to;
     r.greeted = false;
     const walker = r.walker;
-    const byLift = lift && Math.random() < 0.7;
+    const byLift = lift && random() < 0.7;
     const going = (): boolean => r.going === to && this.occupied;
     const intoDoor = (): void => {
       this.options.door?.(k, i);
@@ -305,6 +324,40 @@ export class Neighbours extends Prop implements Updatable, OccupancyAware {
     return `${r.who}: “${text}”`;
   }
 
+  /**
+   * A conversation on the stairs (docs/social.md): their body answers, and two entries of their own: their news (the
+   * swap, the hunt's clue, the move, their everyday lines: what a click used to say) and their swap's panel.
+   */
+  private talk(r: Resident, person: PersonId, session: SessionActions): TalkSession {
+    const extras: TalkExtra[] = [
+      {
+        id: 'news',
+        group: 'talk',
+        label: this.hasNews(r) ? 'Any news? ●' : 'Any news?',
+        run: () => {
+          const offer = this.options.trades?.offerAt(r.door);
+          const text = offer ? `I’d swap my ${offer.gives.title} for your ${offer.wants.title}. Shall we?` : (this.options.says?.(r.door) ?? this.nextLine(r));
+          return { line: text };
+        },
+      },
+    ];
+    const swap = this.options.swap;
+    if (swap && this.options.trades?.offerAt(r.door)) {
+      extras.push({ id: 'swap', group: 'trade', label: 'Swap games', opensPanel: true, run: () => swap(r.door, session) });
+    }
+    return {
+      person,
+      place: 'stairs',
+      body: bodyOf(r.walker, (line) => this.murmur(r, line)),
+      extras,
+    };
+  }
+
+  /** Whether `r` has something of the moment to say (a swap, the hunt's clue, the move). */
+  private hasNews(r: Resident): boolean {
+    return !!this.options.trades?.offerAt(r.door) || !!this.options.says?.(r.door);
+  }
+
   private nextLine(r: Resident): string {
     const lines = r.plan.lines;
     const hours = this.options.hours();
@@ -324,7 +377,7 @@ export class Neighbours extends Prop implements Updatable, OccupancyAware {
     r.walker.getWorldPosition(scratch);
     scratch.y += MURMUR.y;
     this.options.viewer.getWorldPosition(this.eye);
-    const level = proximityVolume(this.eye.distanceTo(scratch), { referenceDistance: 1, maxDistance: MURMUR.maxDistance }) / 100;
+    const level = loudness(this.eye.distanceTo(scratch), { referenceDistance: 1, maxDistance: MURMUR.maxDistance });
     playMurmur(text, MURMUR.level * level, { pan: stereoPan(this.options.viewer, scratch), walls: 0 }, r.plan.voice.pitch);
   }
 }

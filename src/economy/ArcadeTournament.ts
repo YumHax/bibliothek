@@ -2,7 +2,10 @@ import { KEYS, PersistedStore } from '@/persistence';
 import { dayKey } from './calendar';
 import { TOURNAMENT } from './pricing';
 import { REGULARS, rivalScore } from './rivals';
-import { seeded } from './seeded';
+import { dayStream } from '@/time/daily';
+import { flag } from '@/settings/flags';
+import { formatNumber } from '@/text/count';
+import { formatTickets } from '@/text/money';
 
 const ARCADE_TOURNAMENT_KEY = KEYS.arcadeTournament;
 
@@ -57,9 +60,9 @@ export interface TournamentOutcome {
 /** How a round is announced at the end of the play. */
 export function tournamentLine(outcome: TournamentOutcome): string {
   const round = ['quarter-final', 'semi-final', 'final'][outcome.round]!;
-  const vs = `${outcome.score.toLocaleString('en-US')} against ${outcome.opponent}'s ${outcome.opponentScore.toLocaleString('en-US')}`;
-  if (outcome.finished === 'champion') return `TOURNAMENT CHAMPION! ${vs}. ${outcome.tickets} tickets, and the Saturday cup goes on the prize shelf at home.`;
-  if (outcome.finished === 'out') return `Knocked out in the ${round}: ${vs}.${outcome.tickets ? ` ${outcome.tickets} tickets for getting this far.` : ''} Next Saturday!`;
+  const vs = `${formatNumber(outcome.score)} against ${outcome.opponent}'s ${formatNumber(outcome.opponentScore)}`;
+  if (outcome.finished === 'champion') return `TOURNAMENT CHAMPION! ${vs}. ${formatTickets(outcome.tickets)}, and the Saturday cup goes on the prize shelf at home.`;
+  if (outcome.finished === 'out') return `Knocked out in the ${round}: ${vs}.${outcome.tickets ? ` ${formatTickets(outcome.tickets)} for getting this far.` : ''} Next Saturday!`;
   return `${round[0]!.toUpperCase()}${round.slice(1)} won: ${vs}. Next round: play again.`;
 }
 
@@ -106,8 +109,8 @@ export class ArcadeTournament {
   constructor(options: ArcadeTournamentOptions) {
     this.games = options.games.length ? options.games : ['stacker'];
     this.names = options.names ?? [];
-    // `?tournament` in the URL makes any day a Saturday, to try it out (like `?debug`, read here so no wiring is needed).
-    this.force = options.force ?? (typeof location !== 'undefined' && new URLSearchParams(location.search).has('tournament'));
+    // `?tournament` in the URL makes any day a Saturday, to try it out (`settings/flags`, so no wiring is needed).
+    this.force = options.force ?? flag('tournament');
     this.now = options.now ?? (() => new Date());
     this.store = new PersistedStore<TournamentFile>({
       key: ARCADE_TOURNAMENT_KEY,
@@ -126,7 +129,7 @@ export class ArcadeTournament {
 
   /** Today's cabinet (whatever the day: the board says which game next Saturday's is not, only today's). */
   get gameId(): string {
-    const rng = seeded(`${this.today()}:tournament`);
+    const rng = dayStream(`${this.today()}:tournament`);
     return this.games[Math.floor(rng() * this.games.length)]!;
   }
 
@@ -263,7 +266,7 @@ export class ArcadeTournament {
   /** What `name` scores in `round` today: between the hall of fame's fifth and fourth score in the quarter-finals, climbing to its second in the final. */
   private npcScore(name: string, round: number): number {
     const gameId = this.gameId;
-    const rng = seeded(`${this.today()}:tournament:${name}:${round}`);
+    const rng = dayStream(`${this.today()}:tournament:${name}:${round}`);
     const low = rivalScore(gameId, 4 - round);
     const high = rivalScore(gameId, 3 - round);
     const raw = (low + (high - low) * rng()) * (0.9 + 0.2 * rng());
@@ -273,7 +276,7 @@ export class ArcadeTournament {
 
   /** The eight names on today's sheet: the player, the hall's regulars, then others from the hall of fame's. */
   private entrants(): string[] {
-    const rng = seeded(`${this.today()}:tournament:entrants`);
+    const rng = dayStream(`${this.today()}:tournament:entrants`);
     const others = REGULARS.filter((n) => n !== 'KID' && !this.names.includes(n));
     for (let i = others.length - 1; i > 0; i--) {
       const j = Math.floor(rng() * (i + 1));

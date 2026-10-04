@@ -1,6 +1,5 @@
 import * as THREE from 'three';
 import type { Updatable } from '@/core/Engine';
-import { seededRandom } from '@/graphics/canvas';
 import type { Furniture } from '../../Furniture';
 import type { DayNight } from '../../props/DayNight';
 import { isShopOpen } from '../shops/shopHours';
@@ -10,6 +9,7 @@ import { TriBuilder } from '../relief/TriBuilder';
 import { TexQuads } from './TexQuads';
 import { paintSpillAtlas } from './spillCanvas';
 import { buildSpill, type SpillPiece } from './spillPieces';
+import { lcg } from '@/random';
 
 /** One thing a shop puts out on the pavement: what, whose (it is out in their hours), where, which way its front faces (yaw 0 = +z). */
 export interface SpillSpot {
@@ -64,7 +64,7 @@ export class ShopSpill extends THREE.Group implements Furniture, Updatable {
         if (spot.shop !== kind) return;
         const [x, z] = spot.at;
         const m = new THREE.Matrix4().makeRotationY(spot.yaw).setPosition(x, 0, z);
-        const { width, depth } = buildSpill(spot.piece, solid, quads, atlas, m, seededRandom(811 + i * 97));
+        const { width, depth } = buildSpill(spot.piece, solid, quads, atlas, m, lcg(811 + i * 97));
         const half = new THREE.Vector3(width / 2, 0, depth / 2);
         const corners = [-1, 1].flatMap((sx) => [-1, 1].map((sz) => new THREE.Vector3(sx * half.x, 0, sz * half.z).applyMatrix4(m)));
         const box = new THREE.Box3().setFromPoints(corners);

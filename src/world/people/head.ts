@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import { at, bump, capsuleBetween, Parts, radialSurface, ramp, spline, type Keys } from './geometry';
+import { gaussian, ramp } from '@/math/scalar';
+import { at, capsuleBetween, Parts, radialSurface, spline, type Keys } from './geometry';
 import type { PersonLook } from './looks';
 
 /*
@@ -60,8 +61,8 @@ export function headRadius(d: THREE.Vector3, shape: FaceShape): number {
   const au = Math.abs(fu);
   const fv = Math.asin(THREE.MathUtils.clamp(d.y, -1, 1));
   // The mouth and jaw sit back under the nose rather than jutting like a muzzle.
-  r *= 1 - 0.1 * bump(fv, -0.55, 0.16) * d.z;
-  const g = (u0: number, v0: number, su: number, sv: number): number => bump(au, u0, su) * bump(fv, v0, sv);
+  r *= 1 - 0.1 * gaussian(fv, -0.55, 0.16) * d.z;
+  const g = (u0: number, v0: number, su: number, sv: number): number => gaussian(au, u0, su) * gaussian(fv, v0, sv);
   r += 0.0045 * g(0.3, 0.36, 0.3, 0.07); // brow ridge
   r -= 0.01 * g(0.34, 0.15, 0.17, 0.12); // eye sockets
   r -= 0.004 * g(0.95, 0.35, 0.18, 0.2); // temples
@@ -69,7 +70,7 @@ export function headRadius(d: THREE.Vector3, shape: FaceShape): number {
   r += 0.008 * g(1.0, -0.72, 0.3, 0.16) * shape.jaw; // angle of the jaw
   r -= 0.0015 * g(0.62, -0.5, 0.18, 0.15); // below them
   const noseWidth = 0.055 + 0.045 * ramp(fv, 0.16, -0.3);
-  r += shape.nose * spline(NOSE, fv) * bump(fu, 0, noseWidth);
+  r += shape.nose * spline(NOSE, fv) * gaussian(fu, 0, noseWidth);
   r += 0.008 * shape.nose * g(0.17, -0.36, 0.07, 0.06); // nostril wings
   r += 0.005 * g(0, -0.52, 0.24, 0.07); // upper lip
   r += 0.004 * g(0, -0.64, 0.2, 0.05); // lower lip
@@ -181,22 +182,22 @@ export function addFaceMorphs(geometry: THREE.BufferGeometry, look: PersonLook):
   };
   const brows = (au: number): number => ramp(au, 0.02, 0.12) * ramp(au, 0.8, 0.62);
   morphs.browsUp = target((_u, v, au, _s, out) => {
-    const w = brows(au) * (bump(v, 0.36, 0.08) + 0.45 * bump(v, 0.52, 0.12) * ramp(au, 0.7, 0.4));
+    const w = brows(au) * (gaussian(v, 0.36, 0.08) + 0.45 * gaussian(v, 0.52, 0.12) * ramp(au, 0.7, 0.4));
     out.addScaledVector(up, (0.0035 + 0.0022 * (1 - ramp(au, 0.12, 0.5))) * w);
   });
   morphs.frown = target((_u, v, au, sign, out) => {
-    const w = bump(v, 0.34, 0.075) * bump(au, 0.2, 0.16) * ramp(au, 0.02, 0.08);
+    const w = gaussian(v, 0.34, 0.075) * gaussian(au, 0.2, 0.16) * ramp(au, 0.02, 0.08);
     out.addScaledVector(up, -0.0028 * w).addScaledVector(across, -sign * 0.0016 * w).addScaledVector(d, 0.0008 * w);
   });
   if (lower) {
     morphs.smile = target((_u, v, au, sign, out) => {
-      const corner = bump(au, 0.28, 0.1) * bump(v, -0.56, 0.08);
+      const corner = gaussian(au, 0.28, 0.1) * gaussian(v, -0.56, 0.08);
       out.addScaledVector(up, 0.003 * corner).addScaledVector(across, sign * 0.0016 * corner).addScaledVector(d, -0.001 * corner);
-      const cheek = bump(au, 0.46, 0.16) * bump(v, -0.3, 0.13);
+      const cheek = gaussian(au, 0.46, 0.16) * gaussian(v, -0.3, 0.13);
       out.addScaledVector(up, 0.0022 * cheek).addScaledVector(d, 0.0013 * cheek);
     });
     morphs.pucker = target((_u, v, au, sign, out) => {
-      const w = bump(v, -0.58, 0.065) * ramp(au, 0.42, 0.26);
+      const w = gaussian(v, -0.58, 0.065) * ramp(au, 0.42, 0.26);
       out.addScaledVector(across, -sign * 0.0045 * w * Math.min(1, au / 0.3)).addScaledVector(d, 0.0025 * w);
     });
   }

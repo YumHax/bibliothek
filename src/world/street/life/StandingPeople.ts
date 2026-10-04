@@ -1,13 +1,16 @@
 import * as THREE from 'three';
 import type { Updatable } from '@/core/Engine';
+import { inHours } from '@/time/clock';
 import type { Furniture } from '../../Furniture';
 import type { DayNight } from '../../props/DayNight';
 import { rushAt, wakefulnessAt, type Weekday } from '@/time/wakefulness';
 import { Walker } from '../../people/Walker';
 import type { StreetTraffic } from '../traffic/StreetTraffic';
-import { FRONT, STREET_PLAN, type Vec2 } from '../streetPlan';
+import { STREET_PLAN, type Vec2 } from '../streetPlan';
+import { FRONT } from '@/world/measures/street';
 import { Figure } from './Figure';
 import type { TalkRole } from './streetTalk';
+import { random, within } from '@/random';
 
 type Standing = typeof STREET_PLAN.standing;
 
@@ -145,12 +148,10 @@ export class StandingPeople extends THREE.Group implements Furniture, Updatable 
     this.lastHours = s.hours;
 
     if (this.phone) {
-      const [from, to] = spots.phone.hours;
-      this.updateRota(this.phone, dt, s.hours >= from && s.hours < to, spots.phone, 'phone');
+      this.updateRota(this.phone, dt, inHours(s.hours, spots.phone.hours), spots.phone, 'phone');
     }
     if (this.bench) {
-      const [from, to] = spots.bench.hours;
-      const sits = s.hours >= from && s.hours < to && s.rain < 0.1 && s.snowCover < 0.3;
+      const sits = inHours(s.hours, spots.bench.hours) && s.rain < 0.1 && s.snowCover < 0.3;
       this.updateRota(this.bench, dt, sits, spots.bench, 'bench');
     }
     this.fresh = false;
@@ -165,7 +166,7 @@ export class StandingPeople extends THREE.Group implements Furniture, Updatable 
     const walker = figure.walker;
     if (rota.state === 'away' && due && (this.fresh || this.minutes >= rota.until)) {
       // The other one of the two, mostly.
-      rota.current = Math.random() < 0.75 ? 1 - rota.current : rota.current;
+      rota.current = random() < 0.75 ? 1 - rota.current : rota.current;
       const next = rota.figures[rota.current]!;
       const seat = kind === 'bench' ? benchSeat(spot) : at(spot.at);
       if (this.fresh) {
@@ -188,13 +189,13 @@ export class StandingPeople extends THREE.Group implements Furniture, Updatable 
       walker.walk(path, () => {
         figure.hide();
         rota.state = 'away';
-        rota.until = this.minutes + between(BREAK);
+        rota.until = this.minutes + within(random, BREAK);
       });
     } else if (rota.state === 'there' && kind === 'phone') {
       // A step or two away and back, still talking.
       rota.pace -= dt;
       if (rota.pace <= 0 && !walker.isWalking) {
-        rota.pace = 8 + Math.random() * 10;
+        rota.pace = 8 + random() * 10;
         rota.out = !rota.out;
         const target = at(spot.at).add(new THREE.Vector3(rota.out ? 1.3 : 0, 0, 0));
         walker.walk([target], () => walker.stand(spot.yaw + (rota.out ? 0.5 : 0), 'phone'));
@@ -207,7 +208,7 @@ export class StandingPeople extends THREE.Group implements Furniture, Updatable 
   private settleNow(rota: Rota, spot: { yaw: number }, kind: 'phone' | 'bench'): void {
     const walker = rota.figures[rota.current]!.walker;
     rota.state = 'there';
-    rota.until = this.minutes + between(SESSION);
+    rota.until = this.minutes + within(random, SESSION);
     if (kind === 'phone') {
       walker.stand(spot.yaw, 'phone');
       walker.hold('phone');
@@ -226,68 +227,78 @@ export class StandingPeople extends THREE.Group implements Furniture, Updatable 
     const { traffic, spots, busStop } = this.options;
     const atStop = traffic.busAtStop;
     const doors = this.doors.set(busStop[0] + DOORS_AHEAD, 0, KERB_Z);
-    const yaw = spots.busStop.yaw;
-    if (atStop && !this.wasAtStop) {
-      let queued = 0;
-      for (const w of this.waiters) {
-        if (w.state !== 'waiting' && w.state !== 'arriving') continue;
-        w.state = 'boarding';
-        // In turn: each a step behind the one before at the doors.
-        const behind = doors.clone().add(new THREE.Vector3(-0.7 * queued, 0, 0.25 * queued));
-        queued++;
-        w.figure.walker.walk([behind, doors.clone()], () => w.figure.hide());
-      }
-      // Someone or other gets off and walks away.
-      let off = 0;
-      for (const alighter of this.alighters) {
-        if (!alighter.gone || Math.random() > (off === 0 ? 0.55 : 0.3)) continue;
-        const from = doors.clone().add(new THREE.Vector3(0.4 * off, 0, 0));
-        alighter.show(from);
-        alighter.walker.walk(spots.busStop.alight.map((p, i) => at(p).add(new THREE.Vector3(0, 0, i < 2 ? 0 : 0.25 * off))), () => alighter.hide(true));
-        off++;
-      }
-    }
-    for (const w of this.waiters) {
-      const walker = w.figure.walker;
-      if (!atStop && this.wasAtStop && w.state === 'boarding' && w.figure.shown) {
-        // The bus left without them: back to the shelter.
-        w.state = 'arriving';
-        walker.walk([w.at.clone()], () => {
-          w.state = 'waiting';
-          walker.stand(yaw, 'pockets');
-        });
-      }
-      if (w.state === 'boarding' && w.figure.gone) {
-        w.state = 'gone';
-        w.clock = (30 + Math.random() * 60) / Math.max(0.15, awake);
-      }
-      if (w.state !== 'gone') continue;
-      w.clock -= dt;
-      if (w.clock > 0 || atStop) continue;
-      // The first always comes back; the others in the rush, and now and then by day.
-      const first = w === this.waiters[0];
-      if (!first && !(rush > 0.25 || (awake > 0.8 && Math.random() < 0.25))) {
-        w.clock = 20 + Math.random() * 30;
-        continue;
-      }
-      w.state = 'arriving';
-      const phone = !first && Math.random() < 0.5;
-      const settle = (): void => {
-        w.state = 'waiting';
-        walker.stand(yaw, phone ? 'phone' : 'pockets');
-        walker.hold(phone ? 'phone' : null);
-      };
-      walker.hold(null);
-      if (first) {
-        w.figure.show(at(FROM_DOOR));
-        this.options.onDoor?.(FROM_DOOR);
-        walker.walk([at([FROM_DOOR[0], 10.3]), w.at.clone()], settle);
-      } else {
-        w.figure.show(w.at.clone().add(new THREE.Vector3(-WALK_IN, 0, -0.3)));
-        walker.walk([w.at.clone()], settle);
-      }
-    }
+    if (atStop && !this.wasAtStop) this.busPulledIn(doors);
+    for (const w of this.waiters) this.waiterStep(w, dt, atStop, awake, rush, spots.busStop.yaw);
     this.wasAtStop = atStop;
+  }
+
+  /** The bus pulled in: the waiters board in turn, each a step behind the one before at the doors; someone or other gets off and walks away. */
+  private busPulledIn(doors: THREE.Vector3): void {
+    const { spots } = this.options;
+    let queued = 0;
+    for (const w of this.waiters) {
+      if (w.state !== 'waiting' && w.state !== 'arriving') continue;
+      w.state = 'boarding';
+      const behind = doors.clone().add(new THREE.Vector3(-0.7 * queued, 0, 0.25 * queued));
+      queued++;
+      w.figure.walker.walk([behind, doors.clone()], () => w.figure.hide());
+    }
+    let off = 0;
+    for (const alighter of this.alighters) {
+      if (!alighter.gone || random() > (off === 0 ? 0.55 : 0.3)) continue;
+      const from = doors.clone().add(new THREE.Vector3(0.4 * off, 0, 0));
+      alighter.show(from);
+      alighter.walker.walk(spots.busStop.alight.map((p, i) => at(p).add(new THREE.Vector3(0, 0, i < 2 ? 0 : 0.25 * off))), () => alighter.hide(true));
+      off++;
+    }
+  }
+
+  /** A waiter's frame: left behind by the bus, gone aboard, or due back at the shelter after a while away. */
+  private waiterStep(w: Waiter, dt: number, atStop: boolean, awake: number, rush: number, yaw: number): void {
+    const walker = w.figure.walker;
+    if (!atStop && this.wasAtStop && w.state === 'boarding' && w.figure.shown) {
+      // The bus left without them: back to the shelter.
+      w.state = 'arriving';
+      walker.walk([w.at.clone()], () => {
+        w.state = 'waiting';
+        walker.stand(yaw, 'pockets');
+      });
+    }
+    if (w.state === 'boarding' && w.figure.gone) {
+      w.state = 'gone';
+      w.clock = (30 + random() * 60) / Math.max(0.15, awake);
+    }
+    if (w.state !== 'gone') return;
+    w.clock -= dt;
+    if (w.clock > 0 || atStop) return;
+    // The first always comes back; the others in the rush, and now and then by day.
+    const first = w === this.waiters[0];
+    if (!first && !(rush > 0.25 || (awake > 0.8 && random() < 0.25))) {
+      w.clock = 20 + random() * 30;
+      return;
+    }
+    this.comeBack(w, first, yaw);
+  }
+
+  /** Back to the shelter: the first out of the building's door, the others in along the pavement, half of them on the phone. */
+  private comeBack(w: Waiter, first: boolean, yaw: number): void {
+    const walker = w.figure.walker;
+    w.state = 'arriving';
+    const phone = !first && random() < 0.5;
+    const settle = (): void => {
+      w.state = 'waiting';
+      walker.stand(yaw, phone ? 'phone' : 'pockets');
+      walker.hold(phone ? 'phone' : null);
+    };
+    walker.hold(null);
+    if (first) {
+      w.figure.show(at(FROM_DOOR));
+      this.options.onDoor?.(FROM_DOOR);
+      walker.walk([at([FROM_DOOR[0], 10.3]), w.at.clone()], settle);
+    } else {
+      w.figure.show(w.at.clone().add(new THREE.Vector3(-WALK_IN, 0, -0.3)));
+      walker.walk([w.at.clone()], settle);
+    }
   }
 }
 
@@ -305,6 +316,3 @@ function benchFront(spot: { readonly at: readonly [number, number]; yaw: number 
   return at(spot.at).add(new THREE.Vector3(Math.sin(spot.yaw) * 0.5, 0, Math.cos(spot.yaw) * 0.5));
 }
 
-function between([lo, hi]: readonly [number, number]): number {
-  return lo + Math.random() * (hi - lo);
-}

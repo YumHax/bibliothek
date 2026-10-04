@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { Updatable } from '@/core/Engine';
+import { inHours } from '@/time/clock';
 import type { Furniture } from '../Furniture';
 import type { DayNight } from '../props/DayNight';
 import { rushAt, streetBusyAt, type Weekday } from '@/time/wakefulness';
@@ -14,8 +15,12 @@ import type { DoorGaps } from './life/DoorGaps';
 import type { TalkRole } from './life/streetTalk';
 import { isShopOpen } from './shops/shopHours';
 import type { RoadObstacle, StreetTraffic } from './traffic/StreetTraffic';
-import { FRONT, KERB_HEIGHT, PARK_STREET, STREET_PLAN, shopDoors, type ShopDoor, type ShopKind, type Vec2 } from './streetPlan';
+import { STREET_PLAN, type ShopDoor, type ShopKind, type Vec2 } from './streetPlan';
+import { FRONT, KERB_HEIGHT, PARK_STREET } from '@/world/measures/street';
+import { shopDoors } from '@/world/city/facades';
 import { atCrossing, groundHeight } from './relief/ground';
+import { random, within } from '@/random';
+import { smooth } from '@/math/scalar';
 
 interface StreetCrowdOptions {
   /** Where the passers-by go: they appear at a route's first point and vanish at its last. */
@@ -285,7 +290,7 @@ export class StreetCrowd extends THREE.Group implements Furniture, Updatable {
       if (!r || passer.state.kind !== 'away') continue;
       const outKey = `${r.key}:out:${day}`;
       const backKey = `${r.key}:back:${day}`;
-      if (!this.residentsDone.has(outKey) && hours >= r.out && hours < r.out + plan.lateBy) {
+      if (!this.residentsDone.has(outKey) && inHours(hours, [r.out, r.out + plan.lateBy])) {
         this.residentsDone.add(outKey);
         this.send(passer, this.general, 0);
       } else if (!this.residentsDone.has(backKey) && hours >= r.back - plan.backBefore[0] && hours < r.back - plan.backBefore[1]) {
@@ -315,15 +320,15 @@ export class StreetCrowd extends THREE.Group implements Furniture, Updatable {
   }
 
   private isNight(hours: number): boolean {
-    return hours >= NIGHT.from || hours < NIGHT.to;
+    return inHours(hours, NIGHT);
   }
 
   /** A route whose doors are open now (shops shut for the night are left out); at night, half the time from a bar. */
   private pickRoute(hours: number): number | null {
     const routes = this.routes;
     const night = this.isNight(hours);
-    const preferNight = night && Math.random() < 0.5;
-    const start = Math.floor(Math.random() * this.general);
+    const preferNight = night && random() < 0.5;
+    const start = Math.floor(random() * this.general);
     let fallback: number | null = null;
     for (let k = 0; k < this.general; k++) {
       const i = (start + k) % this.general;
@@ -388,9 +393,9 @@ export class StreetCrowd extends THREE.Group implements Furniture, Updatable {
       // A leg between the first and the last (so neither in a doorway), never the one across the road.
       const legs: number[] = [];
       for (let i = 1; i < route.path.length - 1; i++) if (i !== route.crossing) legs.push(i);
-      const leg = legs[Math.floor(Math.random() * legs.length)];
+      const leg = legs[Math.floor(random() * legs.length)];
       if (leg === undefined) continue;
-      this.send(passer, index, leg, 0.15 + Math.random() * 0.7);
+      this.send(passer, index, leg, 0.15 + random() * 0.7);
       sent++;
     }
   }
@@ -436,12 +441,12 @@ export class StreetCrowd extends THREE.Group implements Furniture, Updatable {
     const m = passer.member;
     if (m.resident) return { role: 'passer', stops: 0, pace: 1, hand: null };
     if (passer.leader) return { role: m.age === 'child' ? 'child' : m.age === 'elder' ? 'elder' : 'passer', stops: 0, pace: 1, hand: null };
-    if (m.age === 'elder') return { role: 'elder', stops: Math.random() < 0.6 ? 1 : 2, pace: 1, hand: null };
+    if (m.age === 'elder') return { role: 'elder', stops: random() < 0.6 ? 1 : 2, pace: 1, hand: null };
     const rush = rushAt(hours, this.options.weekday());
-    if (!m.dog && !passer.companion && Math.random() < rush * 0.75) return { role: 'commuter', stops: 0, pace: RUSH_PACE, hand: Math.random() < 0.35 ? 'phone' : null };
-    const r = Math.random();
+    if (!m.dog && !passer.companion && random() < rush * 0.75) return { role: 'commuter', stops: 0, pace: RUSH_PACE, hand: random() < 0.35 ? 'phone' : null };
+    const r = random();
     const stops = r < 0.4 ? 0 : r < 0.85 ? 1 : 2;
-    const hand: Held | null = m.dog || passer.companion ? null : Math.random() < 0.1 ? 'phone' : Math.random() < 0.04 ? 'book' : null;
+    const hand: Held | null = m.dog || passer.companion ? null : random() < 0.1 ? 'phone' : random() < 0.04 ? 'book' : null;
     return { role: 'passer', stops, pace: 1, hand };
   }
 
@@ -449,9 +454,9 @@ export class StreetCrowd extends THREE.Group implements Furniture, Updatable {
   private carried(start: Vec2, hours: number): Held | null {
     if (!this.isDoor(start)) return null;
     const kind = this.shopAt(start);
-    if (kind === 'bakery') return hours < 13 && Math.random() < 0.7 ? 'baguette' : 'shopping';
+    if (kind === 'bakery') return hours < 13 && random() < 0.7 ? 'baguette' : 'shopping';
     if (kind === 'florist') return 'flowers';
-    if (kind === 'grocer' || kind === 'butcher' || kind === 'pharmacy' || kind === 'books' || kind === 'tabac' || kind === 'pets') return Math.random() < 0.75 ? 'shopping' : null;
+    if (kind === 'grocer' || kind === 'butcher' || kind === 'pharmacy' || kind === 'books' || kind === 'tabac' || kind === 'pets') return random() < 0.75 ? 'shopping' : null;
     return null;
   }
 
@@ -461,7 +466,7 @@ export class StreetCrowd extends THREE.Group implements Furniture, Updatable {
     const wet = this.dayNight.state.rain > 0.05 || this.dayNight.state.snow > 0.1;
     const open = this.routeStops[index]!.filter(({ stop }) => (!stop.dry || !wet) && (!stop.hours || (hours >= stop.hours[0] && hours < stop.hours[1])));
     const chosen: RouteStop[] = [];
-    while (chosen.length < count && open.length) chosen.push(open.splice(Math.floor(Math.random() * open.length), 1)[0]!);
+    while (chosen.length < count && open.length) chosen.push(open.splice(Math.floor(random() * open.length), 1)[0]!);
     return chosen;
   }
 
@@ -475,7 +480,7 @@ export class StreetCrowd extends THREE.Group implements Furniture, Updatable {
     const start: Vec2 = [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
     const how = this.castRole(passer, hours);
     passer.role = how.role;
-    const steps = planTrip(route, from, t, this.chooseStops(index, how.stops, hours), (x) => this.crossingAt(x), (stop) => between(stop.seconds));
+    const steps = planTrip(route, from, t, this.chooseStops(index, how.stops, hours), (x) => this.crossingAt(x), (stop) => within(random, stop.seconds));
     passer.end = route.path[route.path.length - 1]!;
     passer.carry = from === 0 && t === 0 ? this.carried(start, hours) : null;
     this.setOff(passer, walker, new THREE.Vector3(start[0], 0, start[1]), steps, from === 0 && t === 0 && this.isDoor(start), how);
@@ -498,7 +503,7 @@ export class StreetCrowd extends THREE.Group implements Furniture, Updatable {
     if (fromDoor && !passer.leader) this.throughDoor([at.x, at.z]);
     if (passer.dog) passer.dog.position.set(at.x, 0, at.z);
     passer.steps = steps;
-    passer.chat = between(CHAT_EVERY);
+    passer.chat = within(random, CHAT_EVERY);
     passer.looking = 0;
     passer.pauseFocus = null;
     // Dressed for the weather they set out in: an umbrella up (half of them) and a quicker step in the rain, hoods up in the snow.
@@ -542,9 +547,9 @@ export class StreetCrowd extends THREE.Group implements Furniture, Updatable {
     } else {
       passer.state = { kind: 'pausing', left: step.seconds };
       passer.pauseFocus = this.localToWorld(step.focus.clone());
-      walker.stand(step.yaw, passer.carry || passer.dog ? 'stand' : Math.random() < 0.5 ? 'pockets' : 'stand', passer.pauseFocus);
+      walker.stand(step.yaw, passer.carry || passer.dog ? 'stand' : random() < 0.5 ? 'pockets' : 'stand', passer.pauseFocus);
       // A coin for the busker, now and then.
-      if (step.gesture && Math.random() < 0.35) walker.gesture(step.gesture);
+      if (step.gesture && random() < 0.35) walker.gesture(step.gesture);
     }
   }
 
@@ -568,7 +573,7 @@ export class StreetCrowd extends THREE.Group implements Furniture, Updatable {
     passer.dog?.setFade(0);
     passer.lead?.setFade(0);
     passer.steps = [];
-    passer.state = { kind: 'away', wait: 6 + Math.random() * 16 };
+    passer.state = { kind: 'away', wait: 6 + random() * 16 };
   }
 
   private crossingAt(x: number): number {
@@ -601,7 +606,7 @@ export class StreetCrowd extends THREE.Group implements Furniture, Updatable {
     dog.position.y = kerbY(dog.position);
     bark.clock -= dt;
     if (bark.clock <= 0) {
-      bark.clock = BARK_EVERY[0] + Math.random() * (BARK_EVERY[1] - BARK_EVERY[0]);
+      bark.clock = BARK_EVERY[0] + random() * (BARK_EVERY[1] - BARK_EVERY[0]);
       if (passer.door >= 1) {
         bark.barks++;
         bark.position.copy(dog.position);
@@ -627,14 +632,14 @@ export class StreetCrowd extends THREE.Group implements Furniture, Updatable {
     if (passer.leader) return;
     passer.chat -= dt;
     if (passer.chat > 0) return;
-    passer.chat = between(CHAT_EVERY);
-    const talker = Math.random() < 0.55 ? passer : other;
-    const seconds = 1.2 + Math.random() * 2;
+    passer.chat = within(random, CHAT_EVERY);
+    const talker = random() < 0.55 ? passer : other;
+    const seconds = 1.2 + random() * 2;
     talker.walker!.talkAlong(seconds);
     talker.looking = seconds;
     // The other looks back, mostly.
     const listener = talker === passer ? other : passer;
-    if (Math.random() < 0.7) listener.looking = seconds * 0.8;
+    if (random() < 0.7) listener.looking = seconds * 0.8;
   }
 
   /** How much of each passer-by shows (their door's fade times the distance's), the weather they walk in, what their dog sees. */
@@ -694,10 +699,6 @@ export class StreetCrowd extends THREE.Group implements Furniture, Updatable {
 
 const Y = new THREE.Vector3(0, 1, 0);
 
-function between([lo, hi]: readonly [number, number]): number {
-  return lo + Math.random() * (hi - lo);
-}
-
 /** Whether a point is on Front Street's road (a kerb below the pavements). */
 function roadAt(p: THREE.Vector3): boolean {
   return Math.abs(p.z) < FRONT.farKerb && p.x > PARK_STREET.farKerb;
@@ -712,6 +713,5 @@ function kerbY(p: THREE.Vector3): number {
   if (atCrossing(p.x)) return groundHeight(p.x, p.z);
   // How far into the road (negative: out on the pavement), from the nearest kerb edge.
   const into = Math.min(FRONT.farKerb - Math.abs(p.z), p.x - PARK_STREET.farKerb);
-  const t = Math.min(1, Math.max(0, (into + KERB_EASE) / (2 * KERB_EASE)));
-  return -KERB_HEIGHT * t * t * (3 - 2 * t);
+  return -KERB_HEIGHT * smooth((into + KERB_EASE) / (2 * KERB_EASE));
 }

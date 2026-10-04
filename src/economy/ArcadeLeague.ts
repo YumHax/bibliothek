@@ -2,7 +2,7 @@ import { KEYS, PersistedStore } from '@/persistence';
 import { addDays, dayKey, isoWeek, weekProgress } from './calendar';
 import { LEAGUE, STREAK } from './pricing';
 import { REGULARS } from './rivals';
-import { seeded } from './seeded';
+import { dayStream } from '@/time/daily';
 
 const ARCADE_LEAGUE_KEY = KEYS.arcadeLeague;
 
@@ -169,7 +169,7 @@ export class ArcadeLeague {
 
   /** The regulars' totals for `week` at `progress` (0 Monday morning, 1 Sunday night). */
   private rivals(week: string, progress: number): LeagueEntry[] {
-    const rng = seeded(`${week}:league`);
+    const rng = dayStream(`${week}:league`);
     const start = Math.floor(rng() * REGULARS.length);
     const out: LeagueEntry[] = [];
     for (let i = 0; i < LEAGUE.rivals; i++) {

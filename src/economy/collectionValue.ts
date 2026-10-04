@@ -2,6 +2,7 @@ import type { Game } from '@/catalog/types';
 import type { Views } from './Fame';
 import { grailById } from './grails';
 import { IMPORT, MARKET_DISCOUNT, REPRO_BUY_BACK, STICKER, buyBackPrice, isImport, marketPrice } from './pricing';
+import { compareTitles } from '@/text/strings';
 
 /** The market's average day: halfway between its deepest and its shallowest discount. */
 const AVERAGE_DISCOUNT = (MARKET_DISCOUNT.min + MARKET_DISCOUNT.max) / 2;
@@ -54,6 +55,6 @@ export function collectionValue(games: readonly Game[], viewsOf: (game: Game) =>
 export function mostValuable(games: readonly Game[], viewsOf: (game: Game) => Views, count: number): { game: Game; value: number }[] {
   return valuedGames(games)
     .map((game) => ({ game, value: copyValue(game, viewsOf(game)).market }))
-    .sort((a, b) => b.value - a.value || a.game.title.localeCompare(b.game.title))
+    .sort((a, b) => b.value - a.value || compareTitles(a.game.title, b.game.title))
     .slice(0, count);
 }

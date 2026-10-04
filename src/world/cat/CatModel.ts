@@ -4,6 +4,7 @@ import { CoatTextures, COAT_PALETTES } from './coats';
 import type { CatBody, CatPose, CoatKind } from './types';
 import { QUALITY } from '@/graphics/quality';
 import { fabric } from '@/world/materials/finishes';
+import { damp, dampFactor } from '@/math/damp';
 import { CatFur } from './CatFur';
 import {
   GROOM_PHASES,
@@ -19,6 +20,7 @@ import {
   type LowerKey,
   type UpperKey,
 } from './catPoses';
+import { random } from '@/random';
 
 /*
  * The procedural cat body: primitives on a small rig of pivots, posed by a table of joint angles
@@ -230,8 +232,8 @@ export class CatModel extends THREE.Group implements CatBody {
     this.hitbox = invisibleHitbox(0.25, 0.38, 0.55, { y: 0.19, z: 0.02 });
     this.add(this.hitbox);
 
-    this.blinkIn = 3 + Math.random() * 4;
-    this.twitchIn = 5 + Math.random() * 10;
+    this.blinkIn = 3 + random() * 4;
+    this.twitchIn = 5 + random() * 10;
     this.applyJoints();
   }
 
@@ -371,7 +373,7 @@ export class CatModel extends THREE.Group implements CatBody {
     this.poseTime = 0;
     if (pose === 'groom') {
       // Either paw, starting on it.
-      this.groomSide = Math.random() < 0.5 ? 'right' : 'left';
+      this.groomSide = random() < 0.5 ? 'right' : 'left';
       this.groomPhase = 'paw';
       this.groomLeft = THREE.MathUtils.randFloat(GROOM_PHASE_S.min, GROOM_PHASE_S.max);
       this.target = GROOM_SIDES[this.groomSide].paw;
@@ -444,10 +446,10 @@ export class CatModel extends THREE.Group implements CatBody {
     for (const key of JOINT_KEYS) {
       let tau = key === 'rootY' ? rootTau : JOINT_TAU[key];
       if (LEG_KEYS.has(key)) tau = Math.min(tau, rootTau * LEGS_LEAD);
-      cur[key] += (tgt[key] - cur[key]) * (1 - Math.exp(-dt / tau));
+      cur[key] = damp(cur[key], tgt[key], 1 / tau, dt);
     }
 
-    this.purrWeight += ((this.purring ? 1 : 0) - this.purrWeight) * Math.min(1, dt * 4);
+    this.purrWeight = damp(this.purrWeight, this.purring ? 1 : 0, 4, dt);
     if (this.flickLeft > 0) this.flickLeft = Math.max(0, this.flickLeft - dt);
     if (this.prickLeft > 0) this.prickLeft = Math.max(0, this.prickLeft - dt);
     this.squash *= Math.exp(-dt * 7);
@@ -465,7 +467,7 @@ export class CatModel extends THREE.Group implements CatBody {
     this.groomLeft -= dt;
     if (this.groomLeft > 0) return;
     const next = GROOM_NEXT[this.groomPhase];
-    this.groomPhase = next[Math.floor(Math.random() * next.length)]!;
+    this.groomPhase = next[Math.floor(random() * next.length)]!;
     this.groomLeft = THREE.MathUtils.randFloat(GROOM_PHASE_S.min, GROOM_PHASE_S.max);
     this.target = GROOM_SIDES[this.groomSide][this.groomPhase];
   }
@@ -477,7 +479,7 @@ export class CatModel extends THREE.Group implements CatBody {
 
   private updateGait(dt: number): void {
     const walking = this.speed > 0 && (this.currentPose === 'stand' || this.currentPose === 'crouch');
-    this.gaitWeight += ((walking ? 1 : 0) - this.gaitWeight) * Math.min(1, dt * 8);
+    this.gaitWeight = damp(this.gaitWeight, walking ? 1 : 0, 8, dt);
     if (walking) {
       const swing = THREE.MathUtils.lerp(GAIT_SWING.walk, GAIT_SWING.trot, this.trotWeight);
       const stride = 2 * (UPPER_LEN + LOWER_LEN) * Math.sin(swing) * STRIDE_OVER_SWEEP;
@@ -505,7 +507,7 @@ export class CatModel extends THREE.Group implements CatBody {
     }
     // A saccade: quick while far off the target, settling slowly onto it.
     const off = Math.max(Math.abs(yaw - this.headYaw), Math.abs(pitch - this.headPitch));
-    const k = Math.min(1, dt * (5 + 14 * Math.min(1, off / 0.5)));
+    const k = dampFactor(5 + 14 * Math.min(1, off / 0.5), dt);
     this.headYaw += (yaw - this.headYaw) * k;
     this.headPitch += (pitch - this.headPitch) * k;
   }
@@ -517,10 +519,10 @@ export class CatModel extends THREE.Group implements CatBody {
     } else {
       this.blinkIn -= dt;
       if (this.blinkIn <= 0) {
-        this.blinkIn = 3 + Math.random() * 4;
+        this.blinkIn = 3 + random() * 4;
         if (this.current.eyes > 0.3) {
           this.blinkLeft = 0.12;
-          if (Math.random() < DOUBLE_BLINK.chance) this.doubleIn = DOUBLE_BLINK.after;
+          if (random() < DOUBLE_BLINK.chance) this.doubleIn = DOUBLE_BLINK.after;
         }
       }
     }
@@ -538,14 +540,14 @@ export class CatModel extends THREE.Group implements CatBody {
       open *= 1 - shut;
     }
     if (this.blinkLeft > 0) open = 0;
-    this.eyeOpen += (open - this.eyeOpen) * Math.min(1, dt * 30);
+    this.eyeOpen = damp(this.eyeOpen, open, 42, dt);
   }
 
   private updateEars(dt: number): void {
     this.twitchIn -= dt;
     if (this.twitchIn <= 0) {
-      this.twitchIn = 5 + Math.random() * 10;
-      this.twitchSide = Math.random() < 0.5 ? 0 : 1;
+      this.twitchIn = 5 + random() * 10;
+      this.twitchSide = random() < 0.5 ? 0 : 1;
       this.twitchAmount = 0.4;
     }
     this.twitchAmount *= Math.exp(-dt * 9);

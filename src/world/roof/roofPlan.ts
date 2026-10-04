@@ -1,7 +1,7 @@
 import type { RoomOptions } from '../Room';
 import { ROOF_SLOPE } from '../city/facadeStyle';
 import { facadeHeight } from '../street/facadePainter';
-import { COURTYARD, FLAT_IN_STREET } from '../street/streetPlan';
+import { COURTYARD, FLAT_IN_STREET } from '@/world/measures/street';
 import { ATTIC_PLAN } from '../attic/atticPlan';
 
 /*

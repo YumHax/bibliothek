@@ -1,5 +1,7 @@
 import { audioBus, startedAudioContext } from './audioContext';
 import { spatialInput, type Spatial } from './spatial';
+import { random } from '@/random';
+import { decayingNoise, whiteNoise } from './noise';
 
 /** The two chimes of the flat's bell (Hz): a falling major third, "ding… dong". */
 const CHIMES = [659.3, 523.3];
@@ -49,9 +51,8 @@ export function playKnock(count = 3, level = 0.3): boolean {
   const out = ctx.createGain();
   out.gain.value = level;
   out.connect(audioBus(ctx, 'world'));
-  const noise = ctx.createBuffer(1, Math.ceil(ctx.sampleRate * 0.06), ctx.sampleRate);
-  const data = noise.getChannelData(0);
-  for (let i = 0; i < data.length; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / data.length) ** 3;
+  // The tap's grain: 60 ms of noise dying away as the knuckle leaves the wood.
+  const noise = decayingNoise(ctx, 0.06, 3);
   let t = ctx.currentTime + 0.02;
   for (let i = 0; i < count; i++) {
     const thump = ctx.createOscillator();
@@ -68,13 +69,13 @@ export function playKnock(count = 3, level = 0.3): boolean {
     tap.buffer = noise;
     const filter = ctx.createBiquadFilter();
     filter.type = 'bandpass';
-    filter.frequency.value = 900 + Math.random() * 200;
+    filter.frequency.value = 900 + random() * 200;
     filter.Q.value = 1.2;
     const tapGain = ctx.createGain();
     tapGain.gain.value = 0.5;
     tap.connect(filter).connect(tapGain).connect(out);
     tap.start(t);
-    t += 0.2 + Math.random() * 0.06;
+    t += 0.2 + random() * 0.06;
   }
   window.setTimeout(() => out.disconnect(), (t - ctx.currentTime + 0.5) * 1000);
   return true;
@@ -91,9 +92,7 @@ export function playDoorShut(level = 0.3, spatial?: Spatial): boolean {
   out.gain.value = level;
   out.connect(spatialInput(ctx, audioBus(ctx, 'world'), spatial, 1.5));
   const t = ctx.currentTime + 0.02;
-  const noise = ctx.createBuffer(1, Math.ceil(ctx.sampleRate * 0.4), ctx.sampleRate);
-  const data = noise.getChannelData(0);
-  for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
+  const noise = whiteNoise(ctx, 0.4);
   // The swish of the leaf through the air.
   const swish = ctx.createBufferSource();
   swish.buffer = noise;

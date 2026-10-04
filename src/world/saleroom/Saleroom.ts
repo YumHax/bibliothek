@@ -5,7 +5,10 @@ import type { TxResult } from '@/economy/Transactions';
 import { AUCTION } from '@/economy/pricing';
 import { LotRun, RIVAL_BIDDER, YOU, bidderById, drawInterest, type LotEvent } from '@/economy/auction';
 import { isAuctionDay, nextAuctionDay, type AuctionLot } from '@/economy/AuctionHouse';
-import { RIVAL_COLLECTOR } from '@/economy/rivalCollector';
+import { RIVAL_COLLECTOR, RIVAL_PERSON } from '@/economy/rivalCollector';
+import { has } from '@/social/perks';
+import { nudge } from '@/social/standing';
+import { leavesLotToYou, outbidBy } from '@/social/saleroom';
 import { gameDayRandom } from '@/time/daily';
 import { playGavel } from '@/audio/gavel';
 import type { LotServices } from '../buildContext';
@@ -15,6 +18,7 @@ import type { Walker } from '../people/Walker';
 import type { Rostrum } from './Rostrum';
 import type { LotStand } from './LotStand';
 import type { SaleBoard } from './SaleBoard';
+import { formatCoins } from '@/text/money';
 
 /** How the receipts of what is bought here name the place. */
 const SALEROOM_WHERE = 'the saleroom';
@@ -24,7 +28,11 @@ interface SaleroomOptions {
   dayNight: DayNight;
   day: () => number;
   wallet: { readonly coins: number };
+  /** Victor's half of a lot split with him (`splitWithRival`). */
+  purse?: { earnCoins(coins: number): void };
   owns: (id: string) => boolean;
+  /** Whether a game is on the player's wishlist (a friend of the room leaves such a lot to them, `social/saleroom`). */
+  wanted?: (id: string) => boolean;
   rostrum: Rostrum;
   stand: LotStand;
   board: SaleBoard;
@@ -38,9 +46,13 @@ type State =
   /** No sale now: the board's notice says why; looked at again every few seconds (the clock, a new day). */
   | { kind: 'idle'; recheck: number }
   | { kind: 'between'; wait: number; lot: AuctionLot }
-  | { kind: 'calling'; lot: AuctionLot; run: LotRun; youBid: boolean; rivalBid: boolean };
+  | { kind: 'calling'; lot: AuctionLot; run: LotRun; youBid: boolean; rivalBid: boolean; split: boolean };
 
 const RECHECK_S = 4;
+/** A nemesis bids on whatever the player bids on, up to this share of the estimate (times his keenness): `spiteBids`. */
+const SPITE_CEILING = 1.25;
+/** Going halves with Victor: once a sale day (`splitLots`). */
+const SPLIT_SHARE = 0.5;
 
 /**
  * Runs the saleroom: on a sale day (`isAuctionDay`) between `AUCTION.hours`, the day's lots one after the other
@@ -61,6 +73,12 @@ export class Saleroom extends THREE.Object3D implements Furniture, Updatable {
   /** The session of the player's last bid: what the hammer tells them goes through it. */
   private session: SessionActions | null = null;
   private live = true;
+  /** The room's regulars who bid on the lot being called (the player winning it outbids them: `social/saleroom`). */
+  private readonly biddersOnLot = new Set<string>();
+  /** What each regular won today, still theirs to sell on (a close one sells it at what they paid). */
+  private readonly wonToday = new Map<string, { lot: AuctionLot; price: number; day: number }>();
+  /** The game day a lot was last split with Victor (once a sale day). */
+  private splitDay = -1;
 
   constructor(private readonly options: SaleroomOptions) {
     super();
@@ -71,14 +89,37 @@ export class Saleroom extends THREE.Object3D implements Furniture, Updatable {
     return new THREE.Box3();
   }
 
+  /** Today's star lot's title (a close regular's tip), or null when there is no sale today. */
+  starLot(): string | null {
+    const day = this.options.day();
+    if (!isAuctionDay(day) || this.lotsDay !== day) return null;
+    return this.lots?.find((l) => l.star)?.title ?? null;
+  }
+
+  /** The game lot `bidder` won today that is still theirs, or null. */
+  wonBy(bidder: string): { title: string; price: number } | null {
+    const won = this.wonToday.get(bidder);
+    return won && won.day === this.options.day() ? { title: won.lot.title, price: won.price } : null;
+  }
+
+  /** Buys `bidder`'s lot of today off them at what they paid. */
+  buyFrom(bidder: string, name: string): { ok: true } | { ok: false; why: string } {
+    const won = this.wonToday.get(bidder);
+    if (!won?.lot.game || won.day !== this.options.day()) return { ok: false, why: 'I didn’t win anything worth selling today.' };
+    const result = this.options.lots.tx.winAuctionLot(won.lot.game, won.price, `${name}, after the sale`);
+    if (!result.ok) return { ok: false, why: result.reason === 'owned' ? 'You’ve got it already, haven’t you?' : result.reason === 'short' ? `It’s ${formatCoins(won.price)}. Come back when you have them.` : 'Not today.' };
+    this.wonToday.delete(bidder);
+    return { ok: true };
+  }
+
   /** The caption on the rostrum and the stand: what a click does now. */
   caption(): string | null {
     const s = this.state;
     if (s.kind !== 'calling' || !s.run.open) return s.kind === 'between' ? `Lot ${s.lot.number}: ${s.lot.title} · coming up` : 'The rostrum';
     const { run, lot } = s;
     if (lot.game && this.options.owns(lot.game.id)) return `${lot.title}: you have it already`;
-    if (run.leader === YOU) return `You lead at ${run.amount} coins`;
-    return `${lot.title} · bid ${run.ask} coins`;
+    if (run.leader === YOU) return `You lead at ${formatCoins(run.amount)}`;
+    return `${lot.title} · bid ${formatCoins(run.ask)}`;
   }
 
   /** The player's click on the rostrum or the stand. */
@@ -94,17 +135,59 @@ export class Saleroom extends THREE.Object3D implements Furniture, Updatable {
       return;
     }
     if (run.leader === YOU) {
-      session.react(`Your paddle is up at ${run.amount} coins.`);
+      session.react(`Your paddle is up at ${formatCoins(run.amount)}.`);
       return;
     }
     const ask = run.ask;
     if (this.options.wallet.coins < ask) {
-      session.refuse(`The bid is ${ask} coins and you have ${this.options.wallet.coins}.`);
+      session.refuse(`The bid is ${formatCoins(ask)} and you have ${this.options.wallet.coins}.`);
       return;
     }
     this.session = session;
+    const first = !s.youBid;
     s.youBid = true;
+    // A friend of the room who knows the player wants it lets it go (`social/saleroom`).
+    const day = this.options.day();
+    const wanted = !!lot.game && (this.options.wanted?.(lot.game.id) ?? false);
+    for (const id of this.options.bidders.keys()) if (leavesLotToYou(id, day, wanted)) this.handle(s, run.withdraw(id));
+    if (!run.open) return;
     this.handle(s, run.bid(YOU));
+    if (first && !s.split) this.spite(s);
+  }
+
+  /**
+   * A nemesis (`spiteBids`, docs/social.md "Victor"): the player's first bid on a lot brings him in on it, whatever it
+   * is, and higher than he would go for himself.
+   */
+  private spite(s: Extract<State, { kind: 'calling' }>): void {
+    if (!has(RIVAL_PERSON, 'spiteBids') || !this.options.bidders.has(RIVAL_BIDDER)) return;
+    const ceiling = Math.floor(s.lot.estimate * SPITE_CEILING * this.options.lots.rival.keenness);
+    if (ceiling < s.run.ask) return;
+    s.run.join(RIVAL_BIDDER, ceiling);
+    this.options.bidders.get(RIVAL_BIDDER)?.speak(`Oh, you want that one? Then so do I.`);
+  }
+
+  /** Whether a lot is being called that could be split with Victor now (his `splitLots`, once a sale day). */
+  canSplit(): string | null {
+    const s = this.state;
+    if (s.kind !== 'calling' || !s.run.open) return 'Wait for a lot to be called';
+    if (s.split) return 'Agreed already';
+    if (this.splitDay === this.options.day()) return 'Once a sale';
+    if (s.lot.game && this.options.owns(s.lot.game.id)) return 'You have it already';
+    return null;
+  }
+
+  /**
+   * Going halves with Victor on the lot being called (`splitLots`): he stops bidding against the player, and pays
+   * half the hammer price if they win it. The lot is the player's.
+   */
+  splitWithRival(): string {
+    const s = this.state;
+    if (s.kind !== 'calling' || this.canSplit()) return 'Not now, the hammer’s about to fall.';
+    s.split = true;
+    this.splitDay = this.options.day();
+    s.run.drop(RIVAL_BIDDER);
+    return `Halves on the ${s.lot.title}? Done. You bid, I'll pay my share. And I'm holding you to the next star lot.`;
   }
 
   update(dt: number): void {
@@ -186,7 +269,8 @@ export class Saleroom extends THREE.Object3D implements Furniture, Updatable {
     const rng = gameDayRandom(`auction:${lot.number}`, day);
     const interest = drawInterest({ estimate: lot.estimate, reserve: lot.reserve, ...(lot.platform ? { platform: lot.platform } : {}), star: lot.star }, rng, this.options.lots.rival.keenness);
     const run = new LotRun(lot.reserve, interest);
-    const state: Extract<State, { kind: 'calling' }> = { kind: 'calling', lot, run, youBid: false, rivalBid: false };
+    this.biddersOnLot.clear();
+    const state: Extract<State, { kind: 'calling' }> = { kind: 'calling', lot, run, youBid: false, rivalBid: false, split: false };
     this.state = state;
     // On the star lot the rival says so first: fair warning.
     if (lot.star && interest.some((i) => i.bidder === RIVAL_BIDDER)) this.options.bidders.get(RIVAL_BIDDER)?.speak(`The ${lot.title}. That one's coming home with me.`);
@@ -201,6 +285,7 @@ export class Saleroom extends THREE.Object3D implements Furniture, Updatable {
       switch (event.kind) {
         case 'bid': {
           if (event.by === RIVAL_BIDDER) state.rivalBid = true;
+          if (event.by !== YOU) this.biddersOnLot.add(event.by);
           const body = bidders.get(event.by);
           body?.gesture('wave');
           auctioneer.say(event.by === YOU ? `${event.amount}, by the door. Thank you.` : `${event.amount}, ${nameOf(event.by)}.`, 1.6);
@@ -236,31 +321,72 @@ export class Saleroom extends THREE.Object3D implements Furniture, Updatable {
 
   /** The hammer fell: to the player (paid now, or to the underbidder if they cannot), or to someone of the room. */
   private sold(state: Extract<State, { kind: 'calling' }>, to: string, price: number): void {
-    const { lot, run } = state;
-    const { lots: services, day, auctioneer, bidders } = this.options;
-    const today = day();
+    const today = this.options.day();
     if (to === YOU) {
-      const session = this.session;
-      const result = this.payFor(lot, price, today);
-      if (result.ok) {
-        if (state.rivalBid) services.rival.beatenOnce();
-        auctioneer.speak(`Sold! To the bidder by the door, for ${price}.`);
-        for (const [, body] of bidders) body.gesture('clap');
-        session?.reward({ title: `Sold to you: ${lot.title}`, detail: lot.sealed ? 'The carton is taken round to the flat: it waits in the hallway, to be opened.' : 'It goes in the parcel: unpack it in the hallway at home.', coins: -price });
-        this.options.board.show({ kind: 'lot', number: lot.number, of: this.lots?.length ?? lot.number, title: lot.title, estimate: lot.estimate, bid: price, leader: 'you', status: 'SOLD', you: true });
-        return this.next();
-      }
-      session?.refuse(result.reason === 'short' ? `You cannot cover ${price} coins: the lot goes to the underbidder.` : result.reason === 'owned' ? `You have ${lot.title} already: the lot goes to the underbidder.` : 'The sale fell through.');
-      const fallback = run.fallBack();
-      if (fallback.kind === 'passed') {
-        auctioneer.speak('Then it’s passed.');
-        this.settle(lot, { to: 'passed', price: 0 });
-        return;
-      }
-      to = fallback.to;
-      price = fallback.price;
+      const underbid = this.soldToPlayer(state, price, today);
+      if (!underbid) return;
+      ({ to, price } = underbid);
     }
+    this.soldToRoom(state, to, price, today);
+  }
+
+  /**
+   * The player's hammer: paid now, the lot is theirs (null: nothing more to sell); unable to pay, the underbidder's
+   * bid to sell on (or null once the lot is passed for want of one).
+   */
+  private soldToPlayer(state: Extract<State, { kind: 'calling' }>, price: number, today: number): { to: string; price: number } | null {
+    const { lot, run } = state;
+    const result = this.payFor(lot, price, today);
+    if (result.ok) {
+      this.paidByPlayer(state, price, today);
+      return null;
+    }
+    this.session?.refuse(result.reason === 'short' ? `You cannot cover ${formatCoins(price)}: the lot goes to the underbidder.` : result.reason === 'owned' ? `You have ${lot.title} already: the lot goes to the underbidder.` : 'The sale fell through.');
+    const fallback = run.fallBack();
+    if (fallback.kind === 'passed') {
+      this.options.auctioneer.speak('Then it’s passed.');
+      this.settle(lot, { to: 'passed', price: 0 });
+      return null;
+    }
+    return { to: fallback.to, price: fallback.price };
+  }
+
+  /** The player paid: the rival beaten or paid his half, the room outbid, the applause, the reward and the board, then the next lot. */
+  private paidByPlayer(state: Extract<State, { kind: 'calling' }>, price: number, today: number): void {
+    const { lot } = state;
+    const { lots: services, auctioneer, bidders } = this.options;
+    if (state.rivalBid) services.rival.beatenOnce(today);
+    outbidBy(this.biddersOnLot, today);
+    if (state.split) this.payRivalHalf(lot, price, today);
+    auctioneer.speak(`Sold! To the bidder by the door, for ${price}.`);
+    for (const [, body] of bidders) body.gesture('clap');
+    this.session?.reward({ title: `Sold to you: ${lot.title}`, detail: lot.sealed ? 'The carton is taken round to the flat: it waits in the hallway, to be opened.' : 'It goes in the parcel: unpack it in the hallway at home.', coins: -price });
+    this.options.board.show({ kind: 'lot', number: lot.number, of: this.lots?.length ?? lot.number, title: lot.title, estimate: lot.estimate, bid: price, leader: 'you', status: 'SOLD', you: true });
+    this.next();
+  }
+
+  /**
+   * The lot went halves with the rival: his share, never taking the player's cost under the reserve (a lot kept at
+   * less than its opening bid would sell back at the WE BUY desk for more than it cost: docs/economy.md,
+   * `assertBuyingToSellNeverPays`), and the standing it earns.
+   */
+  private payRivalHalf(lot: AuctionLot, price: number, today: number): void {
+    const { bidders } = this.options;
+    const half = Math.max(0, Math.min(Math.floor(price * SPLIT_SHARE), price - lot.reserve));
+    if (half > 0) {
+      this.options.purse?.earnCoins(half);
+      bidders.get(RIVAL_BIDDER)?.speak(`My half: ${formatCoins(half)}. Pleasure doing business, partner.`);
+      this.session?.reward({ title: `Victor’s half: ${formatCoins(half)}`, detail: 'You went halves on the lot.', coins: half });
+    } else bidders.get(RIVAL_BIDDER)?.speak(`At the opening bid? Nothing to split. Keep it, partner.`);
+    nudge(RIVAL_PERSON, { trust: 4, warmth: 2, why: 'went halves on a lot with you', day: today, memory: 'we went halves at the saleroom' });
+  }
+
+  /** Sold to someone of the room: the record of who took what today (the rival's wins go into his suitcase), the board, the settlement. */
+  private soldToRoom(state: Extract<State, { kind: 'calling' }>, to: string, price: number, today: number): void {
+    const { lot } = state;
+    const { lots: services, auctioneer, bidders } = this.options;
     auctioneer.speak(`Sold! To ${nameOf(to)}, for ${price}.`);
+    if (to !== RIVAL_BIDDER && lot.game) this.wonToday.set(to, { lot, price, day: today });
     const winner = bidders.get(to);
     winner?.gesture(to === RIVAL_BIDDER ? 'fistPump' : 'clap');
     if (to === RIVAL_BIDDER && lot.game) {

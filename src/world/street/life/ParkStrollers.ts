@@ -5,8 +5,10 @@ import type { DayNight } from '../../props/DayNight';
 import { wakefulnessAt } from '@/time/wakefulness';
 import { Walker } from '../../people/Walker';
 import { PARK_PATHS } from '../../city/park';
-import { FLAT_IN_STREET, PARK_STREET, type Vec2 } from '../streetPlan';
+import type { Vec2 } from '../streetPlan';
+import { FLAT_IN_STREET, PARK_STREET } from '@/world/measures/street';
 import { Figure } from './Figure';
+import { random } from '@/random';
 
 interface ParkStrollersOptions {
   viewer: THREE.Object3D;
@@ -77,7 +79,7 @@ export class ParkStrollers extends THREE.Group implements Furniture, Updatable {
           st.figure.walker.walk([...route.slice(1), ...back], () => {
             st.figure.hide();
             st.out = false;
-            st.wait = PAUSE[0] + Math.random() * (PAUSE[1] - PAUSE[0]);
+            st.wait = PAUSE[0] + random() * (PAUSE[1] - PAUSE[0]);
           });
         }
       }

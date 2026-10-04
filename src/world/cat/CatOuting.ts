@@ -3,8 +3,11 @@ import type { CatBody, CatVoiceLike } from './types';
 import type { CatMotion } from './CatMotion';
 import type { CatBrain } from './CatBrain';
 import { CAT_OUTING as plan, type HideSpot } from './catOutingPlan';
-import { STAIRWELL_PLAN as stairs, landingY, STOREYS } from '../stairwell/stairwellPlan';
+import { STAIRWELL_PLAN as stairs } from '../stairwell/stairwellPlan'; // imports-ok: the cat's outing walks the building: it reads the stairwell it crosses
+import { landingY, STOREYS } from '@/world/measures/building';
 import { liftGate, routeDown } from '../stairwell/stairRoutes';
+import { damp, dampAngle } from '@/math/damp';
+import { random } from '@/random';
 
 /** The cat as its outing drives it: the group that moves, its body, its feet indoors, its voice, its mind to hand back to. */
 interface OutingCat {
@@ -35,7 +38,7 @@ export type OutingEnd = 'home' | 'cancelled';
 /** Seconds to reach the door before it thinks better of it. */
 const TO_DOOR_S = 20;
 /** The feet settle onto the next tread this fast (1/s), as a resident's do; past `SNAP` (m) they are put there. */
-const TREAD_RATE = 14;
+const TREAD_RATE = 16;
 const SNAP = 0.5;
 /** The body turns towards its way this fast (1/s). */
 const TURN_RATE = 8;
@@ -298,7 +301,7 @@ export class CatOuting {
   private feetAt(p: THREE.Vector3, dt: number): number {
     const floor = this.building.ground(p.x, p.z, p.y);
     const gap = floor - p.y;
-    return Math.abs(gap) > SNAP ? floor : p.y + gap * Math.min(1, dt * TREAD_RATE);
+    return Math.abs(gap) > SNAP ? floor : damp(p.y, floor, TREAD_RATE, dt);
   }
 
   /** Sitting where it is: in the lift's car, the floor under it may ride off (it rides with it, no easing). */
@@ -313,7 +316,7 @@ export class CatOuting {
     this.meowIn -= dt;
     if (this.meowIn > 0) return;
     this.meowIn = THREE.MathUtils.randFloat(plan.meowEveryS.min, plan.meowEveryS.max);
-    this.cat.voice?.meow('demand', 0.55 + Math.random() * 0.3);
+    this.cat.voice?.meow('demand', 0.55 + random() * 0.3);
   }
 
   private gazeAtPlayer(): void {
@@ -360,9 +363,7 @@ export class CatOuting {
 
   private turnTowards(yaw: number, dt: number): void {
     const group = this.cat.group;
-    let delta = yaw - group.rotation.y;
-    delta = Math.atan2(Math.sin(delta), Math.cos(delta));
-    group.rotation.y += delta * Math.min(1, dt * TURN_RATE);
+    group.rotation.y = dampAngle(group.rotation.y, yaw, TURN_RATE, dt);
   }
 
   private faceYaw(yaw: number): void {

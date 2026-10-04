@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { BoxDimensions, Game } from '@/catalog/types';
-import { hashString } from '@/graphics/canvas';
+import { fnv1a } from '@/random';
 
 /*
  * How a copy's variant shows on its box (`Game.variant`, `economy/copyTraits`), with what the box already has: no new
@@ -43,7 +43,7 @@ export function setWrapped(materials: readonly THREE.MeshStandardMaterial[], wra
 
 /** The corner a crushed copy took the knock on (box space, the box centred on its origin), from its id. */
 export function dentedCorner(game: Pick<Game, 'id'>, dims: BoxDimensions): THREE.Vector3 {
-  const h = hashString(`${game.id}:dent`);
+  const h = fnv1a(`${game.id}:dent`);
   return new THREE.Vector3((h & 1 ? 1 : -1) * dims.width / 2, (h & 2 ? 1 : -1) * dims.height / 2, dims.depth / 2);
 }
 

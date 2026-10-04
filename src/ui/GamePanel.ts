@@ -6,11 +6,13 @@ import { describeVariant } from '@/economy/copyTraits';
 import { CONVERTER_OF } from '@/economy/regionLock';
 import { CONTROLS } from './controls';
 import { escapeHtml } from './html';
+import { capitalise } from '@/text/strings';
 import { renderKeys } from './keys';
 import { fadeIn, fadeOut } from './fade';
 import { lastDevice } from '@/input/lastDevice';
 import type { ReviewSource } from '@/reviews/Reviews';
 import { reviewCardHtml } from '@/reviews/reviewCard';
+import { formatCoins } from '@/text/money';
 
 /** Built on each show, for the device last used (the controller's buttons, the touch bar's, or the keys as bound and printed). */
 const holdingHints = (): string => {
@@ -57,11 +59,11 @@ export class GamePanel {
     // A copy of the player's own (no market rows): its edition, its receipt, and the truth about a fake.
     const own = !extra.rows;
     const edition = own ? describeEdition(game.edition, game.platform) : '';
-    const bought = own && game.acquired ? `${game.acquired.price} coins, ${game.acquired.where} (market day ${game.acquired.day})` : undefined;
+    const bought = own && game.acquired ? `${formatCoins(game.acquired.price)}, ${game.acquired.where} (market day ${game.acquired.day})` : undefined;
     const note = extra.note ?? (own && game.repro ? 'A reproduction, sadly: the label is a print. Worth next to nothing.' : undefined);
     const rows: Array<[string, string | undefined]> = [
       ...(extra.rows ?? []),
-      ['Edition', edition ? edition[0]!.toUpperCase() + edition.slice(1) : undefined],
+      ['Edition', edition ? capitalise(edition) : undefined],
       // What sets this copy apart (sealed, a misprint, a crushed box), shown on a stall's copy too; what was found inside it.
       ['Copy', describeVariant(game)],
       ['Bootleg', game.bootleg ? 'An unlicensed cartridge: a curiosity, never a fake' : undefined],

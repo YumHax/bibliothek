@@ -2,7 +2,8 @@ import type { Game } from '@/catalog/types';
 import { getPlatform } from '@/catalog/platforms';
 import { createCanvas } from '@/graphics/canvas';
 import { libretroMirrors } from '@/covers/LibretroCoverProvider';
-import { formatCount } from '@/ui/money';
+import { formatCount } from '@/text/count';
+import { formatCoins } from '@/text/money';
 import type { CollectionSummary } from './collectionSummary';
 
 /*
@@ -58,7 +59,7 @@ export async function collectionCard(summary: CollectionSummary, coverUrl: (game
   ctx.fillStyle = DIM;
   ctx.font = `28px system-ui, sans-serif`;
   const games = summary.games.length;
-  ctx.fillText(`${who} · ${games} game${games === 1 ? '' : 's'} · worth about ${formatCount(summary.value)} coins`, PAD, PAD + 130);
+  ctx.fillText(`${who} · ${formatCount(games, 'game')} · worth about ${formatCoins(summary.value)}`, PAD, PAD + 130);
 
   // One chip per platform, in its colour.
   let x = PAD;
@@ -91,7 +92,7 @@ export async function collectionCard(summary: CollectionSummary, coverUrl: (game
       ctx.fillText(clip(ctx, `${p.grail ? '★ ' : ''}${p.game.title}`, PRIDE_W + 40), px, py + PRIDE_H + 40);
       ctx.fillStyle = DIM;
       ctx.font = `20px system-ui, sans-serif`;
-      ctx.fillText(`${getPlatform(p.game.platform).shortName} · about ${formatCount(p.value)} coins`, px, py + PRIDE_H + 70);
+      ctx.fillText(`${getPlatform(p.game.platform).shortName} · about ${formatCoins(p.value)}`, px, py + PRIDE_H + 70);
     });
   }
 

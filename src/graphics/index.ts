@@ -6,6 +6,7 @@ import { PostFx } from './PostFx';
 import { Environment } from './Environment';
 import { Haze } from './Haze';
 import { LOOKS, displayColor, type Look, type LookName } from './grade';
+import { dampFactor } from '@/math/damp';
 
 export { QUALITY, QUALITY_LEVELS, recommendedQuality, setQuality, type QualityLevel,  } from './quality';
 export { LOOKS,  type Look, type LookName } from './grade';
@@ -74,7 +75,7 @@ class LowExposure implements Updatable {
   }
 
   update(dt: number): void {
-    const t = 1 - Math.exp(-LOW_EXPOSURE_RATE * dt);
+    const t = dampFactor(LOW_EXPOSURE_RATE, dt);
     this.exposure += (this.target - this.exposure) * t;
     const g = this.grade;
     const to = this.gradeTarget;

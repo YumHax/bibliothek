@@ -1,4 +1,5 @@
-import { STAIRWELL_PLAN as plan, STOREY, STOREYS, landingY } from './stairwellPlan';
+import { STAIRWELL_PLAN as plan } from './stairwellPlan';
+import { STOREY, STOREYS, landingY } from '@/world/measures/building';
 
 /** A tread of a flight (zone-local): its box, and the riser above it (the face up to the tread or landing above). */
 interface Tread {

@@ -1,4 +1,5 @@
 import type { RoomOptions } from '../Room';
+import { STOREY, STOREYS } from '../measures/building';
 
 /*
  * THE STAIRWELL: the building's staircase behind the flat's front door, from our landing on the
@@ -22,13 +23,8 @@ import type { RoomOptions } from '../Room';
  * (world y 0); the entrance hall (k = 5) with the street. The lift rides the well between the two.
  */
 
-/** Height of one storey, and how many there are between our landing and the street. */
-export const STOREY = 3.26;
-export const STOREYS = 5;
-/** Local y of floor landing `k` (0 = ours, at the top; `STOREYS` = the entrance hall's). */
-export function landingY(k: number): number {
-  return (STOREYS - k) * STOREY;
-}
+// The storey height and count and `landingY` are the building's measures (`measures/building`): the stairwell's
+// classes and the other zones that climb it read them there, this plan lays the landings out with them.
 
 /** The zone's box (the bounds the player is "in the stairwell" inside): from the landing strip to the street door, hall to roof. */
 export const STAIRWELL_ROOM: RoomOptions = { width: 7.14, depth: 11.7, height: STOREYS * STOREY + 2.8 };
@@ -225,6 +221,12 @@ export const STAIRWELL_PLAN = {
   ] as ResidentOnStairs[],
   /** The postman on our landing, waiting by the front door clear of its leaf's swing (local x, z; yaw towards the door). */
   postman: { at: [-2.4, -0.72] as [number, number], yaw: -Math.PI / 2, seed: 77 },
+  /**
+   * Théo, the attic's student (`social/people/building` 'student'), some nights (`share` of game days) on our landing
+   * between `hours` (game hours, past 24 the small hours), waiting for the lift up to the attic: a step off its gate
+   * (`fromGate`, m along x), headphones on, facing the stairs (`yaw`).
+   */
+  student: { seed: 151, hours: [22, 26] as [number, number], share: 0.6, fromGate: -0.9, yaw: Math.PI * 0.5 },
   /**
    * The estate sale on its days (`world/estateSale`, `building/estateSale`): the trestle table along the hall's west
    * wall in front of the mailboxes (its middle, turned so the buyers stand on the hall's side), the crate past it, the

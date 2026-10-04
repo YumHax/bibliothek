@@ -4,6 +4,7 @@ import type { Updatable } from '@/core/Engine';
 import type { Interactable } from '@/interaction/Interactable';
 import type { SessionActions } from '@/game/SessionActions';
 import { playCoins } from '@/audio/coins';
+import { oncePerDay } from '@/time/OncePerDay';
 import { fromUnpaddedDayKey } from '@/economy/calendar';
 import { KEYS, PersistedStore } from '@/persistence';
 import { withDay } from '@/time/DailyTally';
@@ -17,6 +18,7 @@ import { RENDER_ORDER } from '../../surface/layers';
 import type { Furniture } from '../../Furniture';
 import type { Vec2 } from '../streetPlan';
 import { additive } from '@/world/materials/blend';
+import { shuffled } from '@/random';
 
 interface DroppedCoinsOptions {
   /** Where a coin may lie (zone-local), and how many lie about a day. */
@@ -48,13 +50,18 @@ const picks = new DailyList<number>({
   migrate: { 1: (data) => withDay(data, fromUnpaddedDayKey) },
 });
 
-/** The last game day whose coin was picked up (`-1`: none yet). */
-const gameDayPick = new PersistedStore<{ day: number }>({
+/**
+ * Whether the market day's coin was picked up today: "done today" lives in `time/OncePerDay` under `coins.gameDay`.
+ * The store it had before (`KEYS.gameDayFinds`, `{ day }`, -1 for none) is read once to carry an older save over.
+ */
+const DAY_COIN = 'coins.gameDay';
+const legacyDayPick = new PersistedStore<{ day: number }>({
   key: KEYS.gameDayFinds,
   version: 1,
   defaults: () => ({ day: -1 }),
   read: (data) => (typeof data === 'object' && data !== null && typeof (data as { day?: unknown }).day === 'number' ? { day: (data as { day: number }).day } : null),
 });
+oncePerDay.adopt(DAY_COIN, legacyDayPick.exists ? legacyDayPick.load().day : null, -1);
 
 /**
  * The coins people drop on Front Street: a few a (real) day at spots drawn from the date, and one
@@ -77,7 +84,7 @@ export class DroppedCoins extends THREE.Group implements Furniture, Updatable {
     this.name = 'DroppedCoins';
     const random = dailyRandom('coins');
     const picked = new Set(picks.today());
-    const order = options.spots.map((_, i) => i).sort(() => random() - 0.5);
+    const order = shuffled(random, options.spots.map((_, i) => i));
     const layout = order.slice(0, options.perDay);
     this.layout = layout;
     // Picks off another layout (drawn under the old day format, or before `spots` changed) still count against today's few.
@@ -113,14 +120,14 @@ export class DroppedCoins extends THREE.Group implements Furniture, Updatable {
       this.options.host.remove(this.dayCoin);
       this.dayCoin = null;
     }
-    if (gameDayPick.load().day === day) return;
+    if (oncePerDay.done(DAY_COIN, day)) return;
     const free = this.options.spots.map((_, i) => i).filter((i) => !this.layout.includes(i));
     if (!free.length) return;
     const random = gameDayRandom('coins', day);
     const spot = free[Math.floor(random() * free.length)]!;
     const [x, z] = this.options.spots[spot]!;
     const coin: DroppedCoin = new DroppedCoin(random() * 10, (): string => {
-      gameDayPick.save({ day });
+      oncePerDay.mark(DAY_COIN, day);
       this.dayCoin = null;
       return this.pocket(coin, spot);
     });

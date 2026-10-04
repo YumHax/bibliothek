@@ -1,3 +1,4 @@
+import type { SocialServices } from '@/social/talk';
 import type { Showcases } from './showcase/Showcases';
 import type { ShelfLabels } from './labels/ShelfLabels';
 import type * as THREE from 'three';
@@ -12,7 +13,10 @@ import type { PrizeStore } from '@/economy/Prizes';
 import type { ArcadeMedals } from '@/economy/ArcadeMedals';
 import type { ArcadeLeague } from '@/economy/ArcadeLeague';
 import type { ArcadeTournament } from '@/economy/ArcadeTournament';
+import type { ArcadeHabits } from '@/economy/ArcadeHabits';
 import type { Jackpot } from '@/economy/Jackpot';
+import type { Fame } from '@/economy/Fame';
+import type { HomeScores } from './homeArcade/HomeScores';
 import type { HomeUpgrades } from '@/economy/HomeUpgrades';
 import type { GameSource } from '@/collection/GameSource';
 import type { GameList } from '@/collection/GameList';
@@ -149,12 +153,16 @@ export interface ArcadeContext {
   league?: ArcadeLeague;
   /** The big frame a web-page cabinet game (LexiPunk) is played in. */
   screen?: RemoteScreen;
-  /** The Saturday tournament (the Session's arcade play settles its rounds). Absent: the hall's own, made once (`arcade/hallStores`). */
-  tournament?: ArcadeTournament;
-  /** The ticket wheel's progressive pot. Absent: the hall's own, made once. */
-  jackpot?: Jackpot;
-  /** The player's best run per cabinet game (the attract screens replay them). Absent: the hall's own, made once. */
-  replays?: ReplayShelf;
+  /** The Saturday tournament (the Session's arcade play settles its rounds); made once in `bootstrap/services`. */
+  tournament: ArcadeTournament;
+  /** The ticket wheel's progressive pot; made once in `bootstrap/services`. */
+  jackpot: Jackpot;
+  /** The player's best run per cabinet game (the attract screens replay them); made once in `bootstrap/services`. */
+  replays: ReplayShelf;
+  /** Plays per machine: how long the HUD keeps explaining the keys, the claw's grip luck; one for the Session and the hall. */
+  habits: ArcadeHabits;
+  /** The home cabinet's own hall of fame (`world/homeArcade`), kept across its zone's loads. */
+  homeScores: HomeScores;
 }
 
 /** What the market's hall needs beyond the shared services: the panels it opens, and how the market knows the player. */
@@ -172,6 +180,8 @@ export interface MarketContext {
   stock: MarketStock;
   /** What kind of market day it is: the theme, the events, the talk of the days ahead. */
   day: MarketDay;
+  /** How well known each game is (monthly views): what the building's own sellers price their copies by (`building/pricedCopy`). */
+  fame: Fame;
   /** The panels its hall opens (notice board, job lot), how the market knows the player. */
   hall?: MarketHallServices;
   /** The saleroom, the sealed cartons and the rival collector (docs/economy.md "The saleroom"); none: none of them. */
@@ -219,6 +229,8 @@ export interface BuildContext {
   today: Today;
   /** The DOM panels world things open. */
   panels: WorldPanels;
+  /** What the game tells the player (docs/notices.md): one channel for every builder, never borrowed from the household's. */
+  notices: NoticeActions;
   covers: BoxArtLoader;
   collection: CollectionContext;
   home: HomeContext;
@@ -231,6 +243,8 @@ export interface BuildContext {
   story?: StoryChannels;
   /** The paper's small ads, the sellers' flats and the consoles mended at home (`src/classifieds`, `src/repair`). */
   classifieds?: ClassifiedsContext;
+  /** The people the player can talk to (docs/social.md): a click on someone opens the conversation through it (`people/socialHook.talkHook`). */
+  social?: SocialServices;
 }
 
 /** The small ads and the consoles (docs/economy.md "Small ads and the seller's flat", docs/household.md "Repairing a console"). */

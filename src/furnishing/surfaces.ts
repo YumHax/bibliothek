@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import type { Placement } from '@/world/Placement';
 import type { RoomOptions, Wall } from '@/world/Room';
 import { wallMount } from '@/world/props/wallMount';
+import { angleTo } from '@/math/angles';
 
 /** What a piece moves over: the floor (standing), a wall (hung flat, facing into the room), the ceiling (hanging). */
 export type Surface = 'floor' | 'wall' | 'ceiling';
@@ -43,7 +44,7 @@ const WALLS: readonly { wall: Wall; normal: THREE.Vector3; yaw: number }[] = [
 /** The inward normal of the wall a hung piece turned `yaw` faces the room from. */
 export function wallNormal(yaw: number): THREE.Vector3 {
   let best = WALLS[0]!;
-  for (const w of WALLS) if (Math.abs(angleBetween(yaw, w.yaw)) < Math.abs(angleBetween(yaw, best.yaw))) best = w;
+  for (const w of WALLS) if (Math.abs(angleTo(yaw, w.yaw)) < Math.abs(angleTo(yaw, best.yaw))) best = w;
   return best.normal;
 }
 
@@ -113,7 +114,7 @@ function clampSpan(x: number, min: number, max: number, half: number): number {
  */
 export function snapToWall(pose: Pose, room: Pick<RoomOptions, 'width' | 'depth'>, bounds: THREE.Box3): boolean {
   for (const { normal, yaw } of WALLS) {
-    if (Math.abs(angleBetween(pose.yaw, yaw)) > SNAP_ANGLE) continue;
+    if (Math.abs(angleTo(pose.yaw, yaw)) > SNAP_ANGLE) continue;
     const plane = normal.x !== 0 ? room.width / 2 : room.depth / 2;
     // Squared up, the piece's back (local -z) faces the wall: its back stands at p . normal + min.z.
     const along = pose.position.dot(normal);
@@ -129,10 +130,4 @@ export function snapToWall(pose: Pose, room: Pick<RoomOptions, 'width' | 'depth'
 /** The axis-aligned box (zone axes) of `bounds` turned `yaw` about y. */
 export function turnedBounds(bounds: THREE.Box3, yaw: number): THREE.Box3 {
   return bounds.clone().applyMatrix4(new THREE.Matrix4().makeRotationY(yaw));
-}
-
-/** The signed difference `a - b` between two angles, in (-pi, pi]. */
-function angleBetween(a: number, b: number): number {
-  const d = THREE.MathUtils.euclideanModulo(a - b + Math.PI, Math.PI * 2) - Math.PI;
-  return d;
 }

@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import type { Furniture } from '../Furniture';
 import { paint } from '../materials/palette';
-import { COURTYARD_YARD as yard } from '../outlook/outlookPlan';
+import { COURTYARD_YARD as yard } from '@/world/courtyard/courtyardPlan';
 import type { Vec2 } from '../street/streetPlan';
 
 const HIGH = 2.4;

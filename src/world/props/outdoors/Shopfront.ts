@@ -1,10 +1,12 @@
 import { Polygon, type Rng, type ShopCurfew } from './Sheet';
-import { between, integer, pick, shade } from './paint';
+import { shade } from './paint';
 import { FacadeFrame } from './FacadeFrame';
 import { SHOP_LOOKS, letteringFont } from '@/world/city/shopLooks';
-import { GROUND_FLOOR, type ShopKind } from '@/world/street/streetPlan';
+import type { ShopKind } from '@/world/street/streetPlan';
+import { GROUND_FLOOR } from '@/world/measures/street';
 import { SHOP_HOURS } from '@/world/street/shops/shopHours';
-import { hasShopfront } from '@/world/street/shopfronts/shopfrontPlan';
+import { hasShopfront } from '@/world/street/shopfronts/shopfrontPlan'; // imports-ok: the painted view of the street draws what the walkable one lays out; one model for both is the last wave
+import { between, integer, pick } from '@/random';
 
 /** What a shop puts out on the pavement in front of it. */
 export type ShopDisplay = 'terrace' | 'crates' | 'buckets' | 'board' | 'none';

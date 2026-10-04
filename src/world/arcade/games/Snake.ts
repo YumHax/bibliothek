@@ -1,5 +1,6 @@
 import { type ArcadeControls, SCREEN_H, SCREEN_W } from './ArcadeGame';
 import { BaseGame, PLAY_TOP } from './BaseGame';
+import { random } from '@/random';
 
 const ROUND_SECONDS = 15;
 const CELL = 10;
@@ -152,9 +153,9 @@ export class Snake extends BaseGame {
     const goal = this.gold && skill > 0.5 ? this.gold : this.nearestPellet(head);
     const first = this.firstStepTowards(head, goal, blocked);
     let pick: Dir | null = first;
-    if (!pick || Math.random() > 0.9 + skill * 0.1) {
+    if (!pick || random() > 0.9 + skill * 0.1) {
       const safe = (['left', 'right', 'up', 'down'] as const).filter((d) => d !== OPPOSITE[this.dir] && this.free(head.x + STEP[d][0], head.y + STEP[d][1], blocked));
-      pick = safe.includes(this.dir) && !first ? this.dir : safe[Math.floor(Math.random() * safe.length)] ?? null;
+      pick = safe.includes(this.dir) && !first ? this.dir : safe[Math.floor(random() * safe.length)] ?? null;
     }
     if (pick && pick !== this.dir && !this.keys.isHeld(pick)) out[pick] = true;
     return out;

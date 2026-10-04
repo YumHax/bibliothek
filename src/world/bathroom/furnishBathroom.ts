@@ -36,7 +36,7 @@ import { rugsUnderfoot } from '../build/rugsUnderfoot';
  * The water works: each fitting's click drives its own `PointSound` (the basin's tap, which also
  * drips when shut; the tub's tap and drain; the flush).
  */
-export function furnishBathroom(zone: Zone, ctx: BuildContext): ZoneHandle {
+export function furnishBathroom(zone: Zone, ctx: Pick<BuildContext, 'sky' | 'listener' | 'acoustics' | 'home'>): ZoneHandle {
   const { sky } = ctx;
   const plan = BATHROOM_PLAN;
   const household = ctx.home.household;

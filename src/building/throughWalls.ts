@@ -6,7 +6,10 @@ import { DoorPiano, DoorTelevision } from '@/world/stairwell/stairSounds';
 import { Prop } from '@/world/props/Prop';
 import type { ActivityAware } from '@/world/zone/lifecycle';
 import { gameDayRandom } from '@/time/daily';
-import { NEIGHBOUR_NOISE as plan, type HourSpan, type ThroughWall } from './neighbourNoisePlan';
+import { has } from '@/social/perks';
+import { inHours, nightOf } from '@/time/clock';
+import { NEIGHBOUR_NOISE as plan, type ThroughWall } from './neighbourNoisePlan';
+import { damp } from '@/math/damp';
 
 /** What the sounds through the walls need to know. */
 interface ThroughWallsOptions {
@@ -25,16 +28,6 @@ interface ThroughWallsOptions {
 
 /** The level eases this fast (1/s): stepping in at the door, a sound comes up over a second. */
 const EASE = 2.5;
-
-/** Whether `hours` falls in `span` (which may run past midnight: `to` over 24). */
-export function inHours(hours: number, span: HourSpan): boolean {
-  return (hours >= span.from && hours < span.to) || (span.to > 24 && hours + 24 >= span.from && hours + 24 < span.to);
-}
-
-/** The game day an evening belongs to: the small hours are still last night's. */
-export function nightOf(day: number, hours: number): number {
-  return hours < 12 ? day - 1 : day;
-}
 
 function voiceFor(kind: ThroughWall['voice']): AmbientVoice {
   switch (kind) {
@@ -82,9 +75,10 @@ export class NeighboursThroughWalls extends Prop implements Updatable, ActivityA
     const d = day();
     for (const sound of this.sounds) {
       const { plan: p } = sound;
-      const on = here && (power || p.voice === 'piano') && inHours(h, p.hours) && (p.who === 'attic' || isHome(p.who)) && playsOn(p, nightOf(d, h));
-      const target = on ? p.level : 0;
-      sound.level += (target - sound.level) * Math.min(1, dt * EASE);
+      const on = here && (power || p.voice === 'piano') && inHours(h, p.hours) && (p.who === 'attic' || isHome(p.who)) && playsOn(p, nightOf(d, h)) && (!p.needs || has(p.needs.person, p.needs.effect));
+      // A friend downstairs plays softer (`social/perks`).
+      const target = on ? p.level * (p.softer && has(p.softer.person, p.softer.effect) ? p.softer.factor : 1) : 0;
+      sound.level = damp(sound.level, target, EASE, dt);
       sound.voice.setLevel(sound.level < 0.002 ? 0 : sound.level);
       sound.voice.update(dt);
     }

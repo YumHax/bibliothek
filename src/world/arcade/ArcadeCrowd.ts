@@ -7,6 +7,7 @@ import type { Reaction } from '../people/performer';
 import type { Walker } from '../people/Walker';
 import type { Station } from './Station';
 import { Prop } from '../props/Prop';
+import { pick, random, within } from '@/random';
 
 /** A walkable point of the hall (zone-local) and the points it connects to in a straight, clear line. */
 export interface NavNode {
@@ -59,6 +60,12 @@ interface ArcadeCrowdOptions {
   viewer: THREE.Object3D;
   /** Zone-local to world and back. */
   toWorld: (p: THREE.Vector3) => THREE.Vector3;
+  /**
+   * How the kid takes the player's games (how the player stands with him, docs/social.md): `devoted` comes over for
+   * every one and always takes player two, `cheer` comes over and cheers louder, `plain` comes over now and then,
+   * `heckle` comes to jeer and leaves the second stick alone. Default `devoted` (the kid as he always was).
+   */
+  kidMood?: () => 'devoted' | 'cheer' | 'plain' | 'heckle';
 }
 
 /** How long a regular plays a machine, and waits outside between visits (seconds). */
@@ -69,6 +76,12 @@ const DOOR_UNSEEN_COS = 0.35;
 const REGULAR_CHATTER = ['Yes!', 'Come on...', 'Argh!', 'So close!', 'Ha!', 'No no no...'];
 const PARTNER_LINES = ['Player two! Me! Me!', 'I call the blue stick!', 'Two players? I am in.'];
 const PARTNER_RESULTS = { won: ['Rematch. Now.', 'I let you win.', 'The blue stick is broken.'], lost: ['Ha! Kid wins!', 'Too easy.', 'Again? I will go easy.'] };
+/** The kid not getting on with the player: what he jeers at their games. */
+const KID_HECKLES = ['Boo!', 'My nan plays better.', 'Is that it?', 'Ha! Ouch.', 'Give someone else a go.'];
+/** The kid a fan of the player's: what he shouts at a decent game. */
+const KID_LOUD = ['GO GO GO!', 'YES! Did you see that?', 'That’s my player!', 'Teach me that!'];
+/** A kid who is neither: the odds he comes over to a game of the player's, and takes a free second stick. */
+const KID_PLAIN = { watch: 0.6, partner: 0.6 };
 
 type RegularState =
   | { kind: 'out'; left: number }
@@ -77,6 +90,13 @@ type RegularState =
   | { kind: 'toWatch'; spot: number }
   | { kind: 'watching'; spot: number; left: number; chatter: number }
   | { kind: 'leaving' };
+
+/** A regular: the walker, where they are in their round, the name their scores go up under. */
+interface Regular {
+  walker: Walker;
+  state: RegularState;
+  name: string;
+}
 
 /** How long a regular stands watching the tournament before doing something else (seconds), what they mutter meanwhile, and how keen they are on it. */
 const WATCH_SECONDS: [number, number] = [45, 120];
@@ -118,7 +138,6 @@ type KidState =
   | { kind: 'watching'; at: CrowdStation; byPlayer: boolean; left: number }
   | { kind: 'partner'; at: CrowdStation };
 
-const rand = ([a, b]: [number, number]): number => a + Math.random() * (b - a);
 
 /**
  * Who is in the arcade and what they do: a few regulars walk in through the door (only when the
@@ -134,7 +153,7 @@ export class ArcadeCrowd extends Prop implements Updatable {
   private readonly timers = new Timers();
   private readonly options: ArcadeCrowdOptions;
   private readonly nodes = new Map<string, NavNode>();
-  private readonly regulars: { walker: Walker; state: RegularState; name: string }[];
+  private readonly regulars: Regular[];
   private kidState: KidState = { kind: 'hanging', left: 2 };
   /** Stations a regular is heading for, so two never pick the same. */
   private readonly claimed = new Set<CrowdStation>();
@@ -168,7 +187,7 @@ export class ArcadeCrowd extends Prop implements Updatable {
     r.walker.setPresent(true, this.standSpot(cs));
     r.walker.rotation.y = this.standYaw(cs);
     this.standAtMachine(r.walker, cs);
-    r.state = { kind: 'playing', at: cs, left: rand(PLAY_SECONDS), chatter: 5 + Math.random() * 10 };
+    r.state = { kind: 'playing', at: cs, left: within(random, PLAY_SECONDS), chatter: 5 + random() * 10 };
   }
 
   update(dt: number): void {
@@ -185,68 +204,80 @@ export class ArcadeCrowd extends Prop implements Updatable {
 
   // --- Regulars ---------------------------------------------------------------------------------
 
-  private updateRegular(r: { walker: Walker; state: RegularState; name: string }, dt: number): void {
+  private updateRegular(r: Regular, dt: number): void {
     const s = r.state;
     switch (s.kind) {
-      case 'out': {
-        s.left -= dt;
-        if (s.left > 0 || this.inside >= this.options.maxInside() || this.doorInView()) return;
-        const spot = Math.random() < WATCH_ODDS ? this.freeWatchSpot() : null;
-        const target = spot === null ? this.freeStation() : null;
-        if (spot === null && !target) {
-          s.left = 5;
-          return;
-        }
-        r.walker.setPresent(true, this.nodePoint(this.options.door));
-        if (spot !== null) this.goWatch(r, spot);
-        else this.goTo(r, target!);
+      case 'out':
+        this.waitOutside(r, s, dt);
         return;
-      }
       case 'going':
       case 'toWatch':
         return; // the walker's `then` moves the state on
-      case 'watching': {
-        s.left -= dt;
-        s.chatter -= dt;
-        if (s.chatter <= 0) {
-          s.chatter = 15 + Math.random() * 25;
-          r.walker.say(WATCH_CHATTER[Math.floor(Math.random() * WATCH_CHATTER.length)]!, 2);
-        }
-        if (s.left > 0 && this.options.gathering?.() && this.inside <= this.options.maxInside() + 1) return;
-        const next = Math.random() < 0.4 ? this.freeStation() : null;
-        if (next) this.goTo(r, next);
-        else this.leave(r);
+      case 'watching':
+        this.watch(r, s, dt);
         return;
-      }
-      case 'playing': {
-        s.left -= dt;
-        s.chatter -= dt;
-        if (s.chatter <= 0) {
-          s.chatter = 12 + Math.random() * 20;
-          r.walker.say(REGULAR_CHATTER[Math.floor(Math.random() * REGULAR_CHATTER.length)]!, 1.6);
-        }
-        // Pinball players bump the table with their hips now and then.
-        if (s.at.station.name === 'Pinball' && Math.random() < dt * NUDGE_RATE) r.walker.gesture('nudge');
-        // Time to go, or the hall is emptying out for the night.
-        if (s.left > 0 && this.inside <= this.options.maxInside() + 1) return;
-        s.at.station.release();
-        // The tournament to watch, another go somewhere else, or home.
-        const spot = Math.random() < WATCH_ODDS ? this.freeWatchSpot() : null;
-        if (spot !== null) {
-          this.goWatch(r, spot);
-          return;
-        }
-        const next = Math.random() < 0.45 ? this.freeStation() : null;
-        if (next) this.goTo(r, next);
-        else this.leave(r);
+      case 'playing':
+        this.play(r, s, dt);
         return;
-      }
       case 'leaving':
         return;
     }
   }
 
-  private goTo(r: { walker: Walker; state: RegularState; name: string }, target: CrowdStation): void {
+  /** Outside: the wait runs down, then in through the door (unseen, with room in the hall) to watch the cup or to play. */
+  private waitOutside(r: Regular, s: Extract<RegularState, { kind: 'out' }>, dt: number): void {
+    s.left -= dt;
+    if (s.left > 0 || this.inside >= this.options.maxInside() || this.doorInView()) return;
+    const spot = random() < WATCH_ODDS ? this.freeWatchSpot() : null;
+    const target = spot === null ? this.freeStation() : null;
+    if (spot === null && !target) {
+      s.left = 5;
+      return;
+    }
+    r.walker.setPresent(true, this.nodePoint(this.options.door));
+    if (spot !== null) this.goWatch(r, spot);
+    else if (target) this.goTo(r, target);
+  }
+
+  /** Watching the cup: a mutter now and then; the watch over (or the hall emptying), a free machine or home. */
+  private watch(r: Regular, s: Extract<RegularState, { kind: 'watching' }>, dt: number): void {
+    s.left -= dt;
+    s.chatter -= dt;
+    if (s.chatter <= 0) {
+      s.chatter = 15 + random() * 25;
+      r.walker.say(WATCH_CHATTER[Math.floor(random() * WATCH_CHATTER.length)]!, 2);
+    }
+    if (s.left > 0 && this.options.gathering?.() && this.inside <= this.options.maxInside() + 1) return;
+    const next = random() < 0.4 ? this.freeStation() : null;
+    if (next) this.goTo(r, next);
+    else this.leave(r);
+  }
+
+  /** At a machine: a word now and then, a hip to the pinball; the play over (or the hall emptying), the cup to watch, another go, or home. */
+  private play(r: Regular, s: Extract<RegularState, { kind: 'playing' }>, dt: number): void {
+    s.left -= dt;
+    s.chatter -= dt;
+    if (s.chatter <= 0) {
+      s.chatter = 12 + random() * 20;
+      r.walker.say(REGULAR_CHATTER[Math.floor(random() * REGULAR_CHATTER.length)]!, 1.6);
+    }
+    // Pinball players bump the table with their hips now and then.
+    if (s.at.station.name === 'Pinball' && random() < dt * NUDGE_RATE) r.walker.gesture('nudge');
+    // Time to go, or the hall is emptying out for the night.
+    if (s.left > 0 && this.inside <= this.options.maxInside() + 1) return;
+    s.at.station.release();
+    // The tournament to watch, another go somewhere else, or home.
+    const spot = random() < WATCH_ODDS ? this.freeWatchSpot() : null;
+    if (spot !== null) {
+      this.goWatch(r, spot);
+      return;
+    }
+    const next = random() < 0.45 ? this.freeStation() : null;
+    if (next) this.goTo(r, next);
+    else this.leave(r);
+  }
+
+  private goTo(r: Regular, target: CrowdStation): void {
     this.claimed.add(target);
     r.state = { kind: 'going', to: target };
     r.walker.walk(this.route(r.walker.position, this.standSpot(target)), () => {
@@ -261,15 +292,15 @@ export class ArcadeCrowd extends Prop implements Updatable {
       this.standAtMachine(r.walker, target);
       // A coin in first.
       r.walker.gesture('insertCoin');
-      r.state = { kind: 'playing', at: target, left: rand(PLAY_SECONDS), chatter: 4 + Math.random() * 8 };
+      r.state = { kind: 'playing', at: target, left: within(random, PLAY_SECONDS), chatter: 4 + random() * 8 };
     });
   }
 
-  private leave(r: { walker: Walker; state: RegularState; name: string }): void {
+  private leave(r: Regular): void {
     r.state = { kind: 'leaving' };
     r.walker.walk(this.route(r.walker.position, this.nodePoint(this.options.door)), () => {
       r.walker.setPresent(false);
-      r.state = { kind: 'out', left: rand(AWAY_SECONDS) };
+      r.state = { kind: 'out', left: within(random, AWAY_SECONDS) };
     });
   }
 
@@ -281,7 +312,7 @@ export class ArcadeCrowd extends Prop implements Updatable {
   private freeStation(): CrowdStation | null {
     const reserved = this.options.reserved?.() ?? null;
     const free = this.options.stations.filter((cs) => cs.station !== reserved && !cs.station.occupant && !cs.station.outOfOrder && !this.claimed.has(cs) && !this.partnered(cs));
-    return free[Math.floor(Math.random() * free.length)] ?? null;
+    return free[Math.floor(random() * free.length)] ?? null;
   }
 
   // --- A crowd round the tournament ---------------------------------------------------------------
@@ -292,11 +323,11 @@ export class ArcadeCrowd extends Prop implements Updatable {
     if (!gathering) return null;
     const taken = new Set(this.regulars.map((o) => (o.state.kind === 'toWatch' || o.state.kind === 'watching' ? o.state.spot : -1)));
     const free = gathering.spots.map((_, i) => i).filter((i) => !taken.has(i));
-    return free[Math.floor(Math.random() * free.length)] ?? null;
+    return free[Math.floor(random() * free.length)] ?? null;
   }
 
   /** Off to stand at a watching spot, arms crossed, eyes on the tournament's screen. */
-  private goWatch(r: { walker: Walker; state: RegularState; name: string }, spot: number): void {
+  private goWatch(r: Regular, spot: number): void {
     const gathering = this.options.gathering?.();
     const at = gathering?.spots[spot];
     if (!gathering || !at) {
@@ -312,8 +343,8 @@ export class ArcadeCrowd extends Prop implements Updatable {
       }
       const world = this.options.toWorld(at.clone());
       const yaw = Math.atan2(now.focus.x - world.x, now.focus.z - world.z);
-      r.walker.stand(yaw, Math.random() < 0.5 ? 'crossed' : 'hips', now.focus);
-      r.state = { kind: 'watching', spot, left: rand(WATCH_SECONDS), chatter: 6 + Math.random() * 10 };
+      r.walker.stand(yaw, random() < 0.5 ? 'crossed' : 'hips', now.focus);
+      r.state = { kind: 'watching', spot, left: within(random, WATCH_SECONDS), chatter: 6 + random() * 10 };
     });
   }
 
@@ -324,7 +355,7 @@ export class ArcadeCrowd extends Prop implements Updatable {
       .forEach((r, i) => {
         this.timers.after(0.3 + i * 0.45, () => {
           if (r.state.kind !== 'watching') return;
-          r.walker.say(lines[Math.floor(Math.random() * lines.length)]!, 2.4);
+          r.walker.say(lines[Math.floor(random() * lines.length)]!, 2.4);
           r.walker.react(cheer ? 'great' : 'fail');
         });
       });
@@ -341,7 +372,7 @@ export class ArcadeCrowd extends Prop implements Updatable {
       if (s.left > 0) return;
       // Watch a regular for a bit, or go and stand somewhere else.
       const busy = this.options.stations.filter((cs) => cs.station.occupant === 'regular');
-      if (busy.length && Math.random() < 0.4) this.kidWatch(busy[Math.floor(Math.random() * busy.length)]!, false);
+      if (busy.length && random() < 0.4) this.kidWatch(busy[Math.floor(random() * busy.length)]!, false);
       else this.kidHangOut();
     } else if (s.kind === 'watching' && !s.byPlayer) {
       s.left -= dt;
@@ -353,11 +384,11 @@ export class ArcadeCrowd extends Prop implements Updatable {
     const kid = this.options.kid;
     const spots = this.options.hangouts;
     if (!kid || !spots.length) return;
-    const spot = spots[Math.floor(Math.random() * spots.length)]!;
+    const spot = spots[Math.floor(random() * spots.length)]!;
     this.kidState = { kind: 'walking' };
     kid.walk(this.route(kid.position, new THREE.Vector3(spot.at[0], 0, spot.at[1])), () => {
-      kid.stand(spot.yaw, Math.random() < 0.5 ? 'pockets' : 'crossed', spot.look ? this.options.toWorld(new THREE.Vector3(...spot.look)) : null);
-      this.kidState = { kind: 'hanging', left: 6 + Math.random() * 12 };
+      kid.stand(spot.yaw, random() < 0.5 ? 'pockets' : 'crossed', spot.look ? this.options.toWorld(new THREE.Vector3(...spot.look)) : null);
+      this.kidState = { kind: 'hanging', left: 6 + random() * 12 };
     });
   }
 
@@ -371,15 +402,20 @@ export class ArcadeCrowd extends Prop implements Updatable {
       const local = this.options.toWorld(spot.clone());
       const yaw = Math.atan2(focus.x - local.x, focus.z - local.z);
       kid.stand(yaw, byPlayer ? 'crossed' : 'pockets', focus);
-      this.kidState = { kind: 'watching', at: cs, byPlayer, left: 10 + Math.random() * 15 };
+      this.kidState = { kind: 'watching', at: cs, byPlayer, left: 10 + random() * 15 };
     });
   }
 
   private playerStarted(cs: CrowdStation): void {
     const s = this.kidState;
     if ((s.kind === 'watching' || s.kind === 'partner') && s.at === cs) return;
-    if (cs.station.partner) this.kidPartner(cs);
-    else this.kidWatch(cs, true);
+    const mood = this.kidMood();
+    if (cs.station.partner && mood !== 'heckle' && (mood === 'devoted' || random() < KID_PLAIN.partner)) this.kidPartner(cs);
+    else if (mood !== 'plain' || random() < KID_PLAIN.watch) this.kidWatch(cs, true);
+  }
+
+  private kidMood(): 'devoted' | 'cheer' | 'plain' | 'heckle' {
+    return this.options.kidMood?.() ?? 'devoted';
   }
 
   /** A two-player machine: the kid takes the second stick (the machine plays it until they get there). */
@@ -389,7 +425,7 @@ export class ArcadeCrowd extends Prop implements Updatable {
     if (!kid || !partner) return;
     this.kidState = { kind: 'walking' };
     const spot = partner.standAt.clone().applyAxisAngle(THREE.Object3D.DEFAULT_UP, cs.station.rotation.y).add(cs.station.position).setY(0);
-    kid.say(PARTNER_LINES[Math.floor(Math.random() * PARTNER_LINES.length)]!, 2);
+    kid.say(PARTNER_LINES[Math.floor(random() * PARTNER_LINES.length)]!, 2);
     kid.walk(this.route(kid.position, spot), () => {
       if (cs.station.occupant !== 'player') {
         this.kidState = { kind: 'hanging', left: 1 };
@@ -411,25 +447,38 @@ export class ArcadeCrowd extends Prop implements Updatable {
     const s = this.kidState;
     if (kid && s.kind === 'partner' && s.at === cs) {
       const lines = result.best || result.score > 0 ? PARTNER_RESULTS.won : PARTNER_RESULTS.lost;
-      kid.say(lines[Math.floor(Math.random() * lines.length)]!, 2.4);
+      kid.say(lines[Math.floor(random() * lines.length)]!, 2.4);
       kid.react(lines === PARTNER_RESULTS.won ? 'fail' : 'great');
       return;
     }
     if (!kid || s.kind !== 'watching' || s.at !== cs) return;
+    const mood = this.kidMood();
+    if (mood === 'heckle') {
+      kid.say(pick(random, KID_HECKLES), 2.4);
+      kid.react(result.best ? 'fail' : 'great');
+      return;
+    }
     let line: string;
     let cheer = false;
     if (result.prize) {
       line = 'NO WAY! It actually let go!';
       cheer = true;
     } else if (cs.station.name === 'ClawMachine') {
-      line = Math.random() < 0.5 ? 'Rigged. Told you.' : 'Nearly had it!';
+      line = random() < 0.5 ? 'Rigged. Told you.' : 'Nearly had it!';
     } else if (result.best) {
-      line = Math.random() < 0.5 ? 'NEW RECORD!' : 'WHOA!';
+      line = random() < 0.5 ? 'NEW RECORD!' : 'WHOA!';
       cheer = true;
     } else if (result.score === 0) {
       line = 'Ouch.';
     } else {
-      line = ['Nice one!', 'Not bad!', 'Aww...', 'So close!', 'Again! Again!'][Math.floor(Math.random() * 5)]!;
+      line = ['Nice one!', 'Not bad!', 'Aww...', 'So close!', 'Again! Again!'][Math.floor(random() * 5)]!;
+    }
+    // A fan of the player's shouts a decent game from the rooftops.
+    if (!cheer && result.score > 0 && (mood === 'cheer' || mood === 'devoted') && this.options.kidMood) {
+      line = pick(random, KID_LOUD);
+      kid.say(line, 2.4);
+      kid.react('great');
+      return;
     }
     kid.say(line, 2.4);
     kid.react(cheer ? 'record' : result.score === 0 ? 'fail' : 'good');
@@ -438,7 +487,7 @@ export class ArcadeCrowd extends Prop implements Updatable {
   private playerLeft(cs: CrowdStation): void {
     const s = this.kidState;
     cs.station.partner?.setPartner(null);
-    if ((s.kind === 'watching' || s.kind === 'partner') && s.at === cs) this.kidState = { kind: 'hanging', left: 2 + Math.random() * 3 };
+    if ((s.kind === 'watching' || s.kind === 'partner') && s.at === cs) this.kidState = { kind: 'hanging', left: 2 + random() * 3 };
   }
 
   /** A regular's game ended: their score may go on the board, and they have something to say about it. */
@@ -452,7 +501,7 @@ export class ArcadeCrowd extends Prop implements Updatable {
     } else r.walker.react('over');
     this.reacted.set(r.walker, this.clock);
     // Then the next coin, if they are staying on.
-    this.timers.after(NEXT_COIN_AFTER + Math.random() * 0.6, () => {
+    this.timers.after(NEXT_COIN_AFTER + random() * 0.6, () => {
       if (r.state.kind === 'playing' && r.state.at === cs && !r.walker.performer.gesturing) r.walker.gesture('insertCoin');
     });
   }
@@ -471,9 +520,9 @@ export class ArcadeCrowd extends Prop implements Updatable {
     }
     const kid = this.options.kid;
     const s = this.kidState;
-    if (kid && (s.kind === 'watching' || s.kind === 'partner') && s.at === cs && this.reactOnce(kid, reaction) && Math.random() < 0.3) {
-      if (reaction === 'fail') kid.say(KID_OOH[Math.floor(Math.random() * KID_OOH.length)]!, 1.4);
-      else if (reaction === 'great' || reaction === 'record') kid.say(KID_NICE[Math.floor(Math.random() * KID_NICE.length)]!, 1.4);
+    if (kid && (s.kind === 'watching' || s.kind === 'partner') && s.at === cs && this.reactOnce(kid, reaction) && random() < 0.3) {
+      if (reaction === 'fail') kid.say(KID_OOH[Math.floor(random() * KID_OOH.length)]!, 1.4);
+      else if (reaction === 'great' || reaction === 'record') kid.say(KID_NICE[Math.floor(random() * KID_NICE.length)]!, 1.4);
     }
   }
 
@@ -481,7 +530,7 @@ export class ArcadeCrowd extends Prop implements Updatable {
   private reactOnce(walker: Walker, reaction: Reaction): boolean {
     const last = this.reacted.get(walker) ?? -Infinity;
     if (this.clock - last < REACT_GAP[reaction]) return false;
-    if (reaction === 'good' && Math.random() > GOOD_ODDS) return false;
+    if (reaction === 'good' && random() > GOOD_ODDS) return false;
     this.reacted.set(walker, this.clock);
     walker.react(reaction);
     return true;

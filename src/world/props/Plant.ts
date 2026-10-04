@@ -1,10 +1,10 @@
 import * as THREE from 'three';
 import type { Updatable } from '@/core/Engine';
-import { seededRandom } from '@/covers/generated/canvasUtils';
 import { paint, shared, standard } from '../materials/palette';
 import { foliage } from '../materials/finishes';
 import { Prop } from './Prop';
 import { mergeStaticParts } from '../zone/mergeStatic';
+import { lcg } from '@/random';
 
 /**
  * `yucca`: a trunk with a rosette of long sword leaves; `fig`: a leaning trunk with big oval leaves;
@@ -111,7 +111,7 @@ export class Plant extends Prop implements Updatable {
     super();
     this.options = { kind: 'yucca', pot: 'terracotta', seed: 1, collides: true, scale: 1, ...options };
     this.name = `Plant:${this.options.kind}`;
-    const random = seededRandom(this.options.seed * 7919 + 17);
+    const random = lcg(this.options.seed * 7919 + 17);
     this.time = random() * 10;
 
     const { kind } = this.options;

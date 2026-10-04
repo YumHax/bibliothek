@@ -2,8 +2,8 @@ import * as THREE from 'three';
 import type { Furniture } from '../../Furniture';
 import { part } from '../../props/Prop';
 import { cloth, paint, timber } from '../../materials/palette';
-import { seededRandom } from '@/graphics/canvas';
-import { LeafBatch, LEAF_GREENS, addFern, addTrail, pick } from './greenery';
+import { LeafBatch, LEAF_GREENS, addFern, addTrail } from './greenery';
+import { lcg, pick } from '@/random';
 
 export interface FernWallOptions {
   /** Size of the panel. Default 1.3 x 1.1. */
@@ -37,7 +37,7 @@ export class FernWall extends THREE.Group implements Furniture {
     const y0 = options.bottom ?? 0.95;
     const columns = options.columns ?? 4;
     const rows = options.rows ?? 3;
-    const random = seededRandom(options.seed ?? 8);
+    const random = lcg(options.seed ?? 8);
     const oak = timber(0xa07a4e, 0.6);
     const F = 0.05;
     part(this, W - 2 * F, H - 2 * F, 0.02, FELT, { y: y0 + H / 2, z: 0.01 });

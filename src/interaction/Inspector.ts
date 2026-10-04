@@ -3,6 +3,8 @@ import type { Updatable } from '@/core/Engine';
 import { Listeners } from '@/core/Listeners';
 import type { Carriable } from './Carriable';
 import { reduceMotion } from '@/settings/motion';
+import { dampFactor } from '@/math/damp';
+import { smoothDamp } from '@/math/springs';
 
 type Phase = 'idle' | 'toHand' | 'inHand' | 'toShelf' | 'stowing';
 
@@ -225,7 +227,14 @@ export class Inspector<Box extends Carriable = Carriable> implements Updatable {
     if (!this.box || this.phase === 'idle') return;
     const box = this.box;
     box.tick(dt);
+    this.aimTarget(box, dt);
+    this.followView(box);
+    this.moveTowardsTarget(box, dt);
+    this.advancePhase(box);
+  }
 
+  /** Where the box is heading this frame (`targetPos` / `targetQuat`): into the bag, the rest pose or the point just out of the row, or the hand. */
+  private aimTarget(box: Box, dt: number): void {
     if (this.phase === 'stowing') {
       this.stowTime += dt;
       this.camera.getWorldPosition(this.targetPos);
@@ -241,10 +250,11 @@ export class Inspector<Box extends Carriable = Carriable> implements Updatable {
     } else {
       this.handPose(box);
     }
+  }
 
-    const flying = this.phase === 'toHand' || this.phase === 'toShelf';
+  /** What the view moved since last frame moves a box flying to the hand with it: the spring only closes the gap in the hand's frame. */
+  private followView(box: Box): void {
     if (this.phase === 'toHand' && this.stage === 'fly' && this.hasLastView) {
-      // What the view moved since last frame moves the box with it: the spring only closes the gap in the hand's frame.
       this.viewDelta.copy(this.lastView).invert().premultiply(this.camera.matrixWorld);
       box.position.applyMatrix4(this.viewDelta);
       this.viewTurn.setFromRotationMatrix(this.viewDelta);
@@ -253,26 +263,30 @@ export class Inspector<Box extends Carriable = Carriable> implements Updatable {
     }
     this.lastView.copy(this.camera.matrixWorld);
     this.hasLastView = true;
+  }
+
+  /**
+   * One frame of motion towards the target: in flight a critically damped spring (the box keeps its speed from one
+   * stage to the next; the closed form of `SmoothDamp`, stable at any frame time), else a tight follow, snappier in the
+   * hand so the box does not lag behind head movement; with reduced motion the flights are short.
+   */
+  private moveTowardsTarget(box: Box, dt: number): void {
+    const flying = this.phase === 'toHand' || this.phase === 'toShelf';
     if (flying && !reduceMotion()) {
-      // A critically damped spring: the box keeps its speed from one stage to the next.
-      // (The closed form of `SmoothDamp`: stable at any frame time.)
       const w = this.stage === 'slide' ? SLIDE_STIFFNESS : FLY_STIFFNESS;
-      const x = w * dt;
-      const decay = 1 / (1 + x + 0.48 * x * x + 0.235 * x * x * x);
-      const change = this.tmpOffset.subVectors(box.position, this.targetPos);
-      const temp = this.eye.copy(this.velocity).addScaledVector(change, w).multiplyScalar(dt);
-      this.velocity.addScaledVector(temp, -w).multiplyScalar(decay);
-      box.position.copy(this.targetPos).addScaledVector(change.add(temp), decay);
-      box.quaternion.slerp(this.targetQuat, 1 - Math.exp(-(this.stage === 'slide' ? 16 : 9) * dt));
+      smoothDamp(box.position, this.targetPos, this.velocity, w, dt, [this.tmpOffset, this.eye]);
+      box.quaternion.slerp(this.targetQuat, dampFactor(this.stage === 'slide' ? 16 : 9, dt));
     } else {
-      // Snappier when following the hand so the box does not lag behind head movement; with reduced motion the flights are short.
       const rate = reduceMotion() ? 28 : this.phase === 'inHand' ? 18 : 10;
-      const t = 1 - Math.exp(-rate * dt);
+      const t = dampFactor(rate, dt);
       box.position.lerp(this.targetPos, t);
       box.quaternion.slerp(this.targetQuat, t);
       this.velocity.set(0, 0, 0);
     }
+  }
 
+  /** The stage and phase a frame's motion earns: out of the row then flying, into the hand, back into the row once the lid is shut, home or into the bag. */
+  private advancePhase(box: Box): void {
     const gap = box.position.distanceToSquared(this.targetPos);
     const still = this.velocity.lengthSq() < 0.0004;
     const settled = gap < 1e-6 && box.quaternion.angleTo(this.targetQuat) < 0.005;

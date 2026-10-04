@@ -1,7 +1,8 @@
 import * as THREE from 'three';
-import { createCanvas, seededRandom, toTexture, repeatTexture } from '@/covers/generated/canvasUtils';
+import { createCanvas, toTexture, repeatTexture } from '@/covers/generated/canvasUtils';
 import { fabric } from '@/world/materials/finishes';
 import { paintOnce } from '@/world/materials/paintedTiles';
+import { lcg, pick } from '@/random';
 
 /** Metres of floor covered by one tile of the texture; the confetti is drawn wrapped, so it tiles seamlessly. */
 const TILE_M = 3;
@@ -28,7 +29,7 @@ export function carpetMaterial(floorWidth: number, floorDepth: number): THREE.Me
 /** The confetti tile, repeat-wrapped. */
 function paintCarpet(): [THREE.Texture] {
   const [canvas, ctx] = createCanvas(TILE_PX, TILE_PX);
-  const random = seededRandom(0x4a7c4de);
+  const random = lcg(0x4a7c4de);
 
   ctx.fillStyle = GROUND;
   ctx.fillRect(0, 0, TILE_PX, TILE_PX);
@@ -50,7 +51,6 @@ function paintCarpet(): [THREE.Texture] {
       }
     }
   };
-  const pick = (): string => NEON[Math.floor(random() * NEON.length)]!;
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
 
@@ -59,7 +59,7 @@ function paintCarpet(): [THREE.Texture] {
     const y = random() * TILE_PX;
     const angle = random() * Math.PI * 2;
     const size = 18 + random() * 40;
-    const color = pick();
+    const color = pick(random, NEON);
     const kind = random();
     // Drawn before `wrapped`: the nine copies of a shape must be the same shape (a draw inside would
     // give each its own width or fill, and the tile's seams would show where a shape crosses them).
@@ -118,7 +118,7 @@ function paintCarpet(): [THREE.Texture] {
   for (let i = 0; i < 260; i++) {
     const x = random() * TILE_PX;
     const y = random() * TILE_PX;
-    const color = pick();
+    const color = pick(random, NEON);
     wrapped(() => {
       ctx.fillStyle = color;
       ctx.fillRect(-2, -2, 4, 4);

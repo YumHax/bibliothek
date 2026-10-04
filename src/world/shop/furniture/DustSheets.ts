@@ -2,8 +2,8 @@ import * as THREE from 'three';
 import type { Furniture } from '../../Furniture';
 import { part } from '../../props/Prop';
 import { cloth } from '../../materials/palette';
-import { seededRandom } from '@/graphics/canvas';
 import { tagCard } from './tagCard';
+import { lcg } from '@/random';
 
 export interface DustSheetsOptions {
   /** The sheeted wardrobe's size. Default 0.85 x 0.5 x 1.8. */
@@ -33,7 +33,7 @@ export class DustSheets extends THREE.Group implements Furniture {
     const w = options.width ?? 0.85;
     const d = options.depth ?? 0.5;
     const h = options.height ?? 1.8;
-    const random = seededRandom(options.seed ?? 3);
+    const random = lcg(options.seed ?? 3);
     const sheet = cloth(0xe8e2d4, 1);
     const shade = cloth(0xd8d0c0, 1);
     // The body, its top sagging a touch in the middle.

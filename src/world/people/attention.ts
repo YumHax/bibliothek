@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { seededRandom } from '@/covers/generated/canvasUtils';
+import { lcg } from '@/random';
 
 /*
  * How someone's eyes treat the player: never a stare. Coming into range, they look up for a
@@ -60,7 +60,7 @@ export class Attention {
   private readonly view = new THREE.Vector3();
 
   constructor(seed: number) {
-    this.random = seededRandom(seed * 7919 + 17);
+    this.random = lcg(seed * 7919 + 17);
     this.shyness = 0.7 + this.random() * 0.7;
     this.warmth = 0.25 + this.random() * 0.5;
     this.timer = this.draw(BETWEEN) * this.random();

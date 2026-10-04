@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import { FRONT, PARK_PARKING, PARK_STREET, STREET_PLAN, WORKS, WORKS_LIFT, setFrontStreetEnd } from '../streetPlan';
+import { STREET_PLAN } from '../streetPlan';
+import { FRONT, PARK_PARKING, PARK_STREET, WORKS, WORKS_LIFT, setFrontStreetEnd } from '@/world/measures/street';
 
 /** A span across a street (zone-local metres on the across axis), low to high. */
 export type Span = readonly [number, number];

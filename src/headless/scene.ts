@@ -9,4 +9,5 @@ export { lintReach } from '@/world/lint/reach';
 export { lintDisposal } from '@/world/lint/disposal';
 export { SharingLedger } from '@/world/lint/sharing';
 export { markShared } from '@/world/materials/sharedResources';
+export { seedLiveRandom } from '@/random';
 export * as THREE from 'three';

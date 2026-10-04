@@ -1,5 +1,6 @@
 import type { SfxEvent } from '@/audio/ChipSpeaker';
 import { type ArcadeControls, type ArcadeGame, NO_CONTROLS, SCREEN_H, SCREEN_W, drawText } from './ArcadeGame';
+import { formatNumber } from '@/text/count';
 
 /**
  * The big frame a web-page game is played in (the UI's `ArcadeScreenPanel` fits it): shows `url`,
@@ -83,7 +84,7 @@ export class LexiPunk implements ArcadeGame {
     }
     drawText(ctx, 'LEXIPUNK', SCREEN_W / 2, 70, 26, '#ff2fa0');
     drawText(ctx, 'NOW PLAYING ON THE BIG SCREEN', SCREEN_W / 2, 110, 8, '#33e0ff');
-    drawText(ctx, this.reported ? `SCORE ${this.score.toLocaleString('en-US')}` : 'SCORE —', SCREEN_W / 2, 146, 14, '#ffd23a');
+    drawText(ctx, this.reported ? `SCORE ${formatNumber(this.score)}` : 'SCORE —', SCREEN_W / 2, 146, 14, '#ffd23a');
     if (Math.floor(this.clock * 2) % 2 === 0) drawText(ctx, 'PRESS DONE TO CASH IN', SCREEN_W / 2, 190, 8, '#ff8a80');
   }
 

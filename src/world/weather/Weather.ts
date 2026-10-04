@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import { dailyRandom } from '@/time/daily';
 import type { SeasonName } from '@/time/season';
+import { random as liveRandom } from '@/random';
+import { damp } from '@/math/damp';
 
 /** The kinds of weather a spell can bring. */
 export type WeatherKind = 'clear' | 'fair' | 'cloudy' | 'overcast' | 'fog' | 'showers' | 'rain' | 'storm' | 'snow';
@@ -105,7 +107,7 @@ export class Weather {
 
   private readonly random: () => number;
   /** Real-time randomness (gusts, strikes): not the seeded sequence, which must stay the same for everyone. */
-  private readonly jitter = Math.random;
+  private readonly jitter = liveRandom;
   private hoursLeft: number;
   private pinned: WeatherKind | null = null;
   /** The spell's own wind and fog, eased; `state.wind` adds the gusts and `state.fog` the dawn mist. */
@@ -187,7 +189,7 @@ export class Weather {
       this.gustClock = THREE.MathUtils.lerp(2, 7, this.jitter()) * (1.2 - 0.6 * this.steadyWind);
       this.gustTarget = this.jitter() * this.jitter() * (0.15 + 0.5 * this.steadyWind);
     }
-    this.gust += (this.gustTarget - this.gust) * (1 - Math.exp(-dt * 1.5));
+    this.gust = damp(this.gust, this.gustTarget, 1.5, dt);
     s.wind = THREE.MathUtils.clamp(this.steadyWind + this.gust, 0, 1);
 
     const stormy = s.kind === 'storm' ? THREE.MathUtils.smoothstep(s.rain, 0.5, 0.9) : 0;

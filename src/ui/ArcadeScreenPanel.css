@@ -1,36 +1,46 @@
-/* The big screen for a cabinet whose game is a web page: the page in a cabinet's bezel, over the room (`.ui-modal--centre`). */
-.arcade-screen {
-  padding: clamp(0.5rem, 3vw, 2rem);
-  background: rgba(6, 4, 10, 0.88);
-  backdrop-filter: blur(4px);
-  color: var(--ui-text);
+/* The big screen for a cabinet whose game is a web page: the page in a cabinet's bezel, over the room (`.ui-modal--centre`), in the cabinet's own colours. */
+@layer tokens, base, components, panels;
+@layer panels {
+  .arcade-screen {
+    --arcade-dark: rgba(6, 4, 10, 0.88);
+    --arcade-bezel: #3a1f5c;
+    --arcade-bezel-shade: #16101f;
+    --arcade-rim: #111;
+    --arcade-neon: #ff2fa0;
+    --arcade-neon-glow: rgba(255, 47, 160, 0.35);
+    --arcade-neon-text-glow: rgba(255, 47, 160, 0.6);
+    padding: clamp(0.5rem, 3vw, 2rem);
+    background: var(--arcade-dark);
+    backdrop-filter: blur(4px);
+    color: var(--ui-text);
+  }
+  .arcade-screen__bezel {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-2);
+    width: min(100%, 1100px);
+    height: 100%;
+    max-height: 860px;
+    padding: 0.8rem;
+    box-sizing: border-box;
+    border-radius: 18px;
+    background: linear-gradient(160deg, var(--arcade-bezel), var(--arcade-bezel-shade) 60%);
+    box-shadow: 0 0 0 3px var(--arcade-rim), 0 0 40px var(--arcade-neon-glow), inset 0 0 20px var(--shade-60);
+  }
+  .arcade-screen__header { display: flex; align-items: baseline; gap: var(--sp-4); flex-wrap: wrap; }
+  .arcade-screen__title { margin: 0; font-family: var(--ui-font-display); font-weight: 400; font-size: 1.3rem; letter-spacing: 0.12em; color: var(--arcade-neon); text-shadow: 0 0 8px var(--arcade-neon-text-glow); }
+  .arcade-screen__score { font-variant-numeric: tabular-nums; color: var(--ui-accent); }
+  .arcade-screen__status { color: var(--ui-text-dim); font-size: var(--fs-4); }
+  /* A `.ui-btn`; the bezel keeps its own cabinet look rather than a `.ui-card`. */
+  .arcade-screen__done { margin-left: auto; padding: 0.35rem 0.9rem; }
+  .arcade-screen__frame {
+    flex: 1;
+    min-height: 0;
+    width: 100%;
+    border: 0;
+    border-radius: 10px;
+    background: var(--ui-black);
+    box-shadow: inset 0 0 0 2px var(--ui-black);
+  }
+  .arcade-screen__foot { margin: 0; font-size: var(--fs-3); color: var(--ui-text-dim); }
 }
-.arcade-screen__bezel {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  width: min(100%, 1100px);
-  height: 100%;
-  max-height: 860px;
-  padding: 0.8rem;
-  box-sizing: border-box;
-  border-radius: 18px;
-  background: linear-gradient(160deg, #3a1f5c, #16101f 60%);
-  box-shadow: 0 0 0 3px #111, 0 0 40px rgba(255, 47, 160, 0.35), inset 0 0 20px rgba(0, 0, 0, 0.6);
-}
-.arcade-screen__header { display: flex; align-items: baseline; gap: 1rem; flex-wrap: wrap; }
-.arcade-screen__title { margin: 0; font-family: var(--ui-font-display); font-weight: 400; font-size: 1.3rem; letter-spacing: 0.12em; color: #ff2fa0; text-shadow: 0 0 8px rgba(255, 47, 160, 0.6); }
-.arcade-screen__score { font-variant-numeric: tabular-nums; color: var(--ui-accent); }
-.arcade-screen__status { color: var(--ui-text-dim); font-size: 0.85rem; }
-/* A `.ui-btn`; the bezel keeps its own cabinet look rather than a `.ui-card`. */
-.arcade-screen__done { margin-left: auto; padding: 0.35rem 0.9rem; }
-.arcade-screen__frame {
-  flex: 1;
-  min-height: 0;
-  width: 100%;
-  border: 0;
-  border-radius: 10px;
-  background: #000;
-  box-shadow: inset 0 0 0 2px #000;
-}
-.arcade-screen__foot { margin: 0; font-size: 0.8rem; color: var(--ui-text-dim); }

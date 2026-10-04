@@ -1,6 +1,8 @@
 import * as THREE from 'three';
-import { annexJoined, bindRouxMove, onRouxPhase, rouxGone } from '@/building/rouxMove';
+import { annexJoined, onRouxPhase, rouxGone, rouxPhase } from '@/building/rouxMove';
 import type { Zone } from '../zone/Zone';
+import { ANNEX_DOORWAY } from '../roomPlan';
+import { AnnexOpening } from './AnnexOpening';
 import type { BuildContext, ZoneHandle } from '../buildContext';
 import type { Room } from '../Room';
 import type { Shelving } from '../shelving/Shelving';
@@ -29,6 +31,20 @@ const PORTAL_HALF_DEPTH = 0.15;
 const HER_EVENING = { from: 17, to: 23 };
 
 /**
+ * The collection room's side of the opening to Mrs Roux's two rooms: the walled-up door, the works' sheet, the
+ * archway; its collider in the room's scoped set. Called by the collection room's builder (`layout.ts`); the prop
+ * gets the doorway's size from here, the room plan's `ANNEX_DOORWAY`, and reads no plan itself. The move it shows is
+ * bound once at boot (`bindRouxMove`, `bootstrap/world`).
+ */
+export function placeAnnexOpening(zone: Zone, ctx: Pick<BuildContext, 'sky'>): AnnexOpening {
+  const opening = new AnnexOpening({ collisions: zone.collisions, hours: () => ctx.sky.dayNight.state.hours, doorway: ANNEX_DOORWAY });
+  zone.placeAt(opening, { wall: ANNEX_DOORWAY.wall, along: ANNEX_DOORWAY.along, y: 0 });
+  opening.show(rouxPhase());
+  zone.onUnload(onRouxPhase((phase) => opening.show(phase)));
+  return opening;
+}
+
+/**
  * Builds Mrs Roux's front room into its zone from `ANNEX_PLAN`: the shell (her paint, the parquet), her pendant and its
  * switch, the two French windows on Front Street, the marble fireplace with her note, the radiator, and the bookcases
  * the flat gains once it is joined (`placeAnnexShelving`: the bedroom's leftovers, then the study's). The opening to the
@@ -36,10 +52,9 @@ const HER_EVENING = { from: 17, to: 23 };
  * collection room's (`AnnexOpening`). Part of the flat from the start (its lights compiled with it); until it is
  * joined nobody can see or reach it, and the street sees her windows lit of an evening.
  */
-export function furnishAnnex(zone: Zone, ctx: BuildContext): AnnexHandle {
+export function furnishAnnex(zone: Zone, ctx: Pick<BuildContext, 'sky' | 'home' | 'covers' | 'collection' | 'listener' | 'acoustics'>): AnnexHandle {
   const { sky, home } = ctx;
   const plan = ANNEX_PLAN;
-  if (home.upgrades) bindRouxMove({ today: ctx.today, upgrades: home.upgrades, ...(ctx.building ? { doorstep: ctx.building.doorstep } : {}) });
   const room = furnishShell(zone, sky, plan.room);
   zone.addPortal({ to: 'living', bounds: openingBounds(zone), door: ANNEX_PASSAGE });
   placeRoomLight(zone, room, 'pendant', plan.pendant, plan.lightSwitch);

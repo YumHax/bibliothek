@@ -1,4 +1,6 @@
 import type { SoundGraph } from './soundGraph';
+import { tone } from '@/audio/synth';
+import { random } from '@/random';
 
 /*
  * One-off sounds of the street's vehicles, synthesised (the bus's, the bin lorry's and the van's
@@ -43,8 +45,8 @@ export function brakesOff(g: SoundGraph, out: AudioNode, level: number): void {
 /** A wheelie bin tipped into the lorry's back: a hollow plastic clatter and the lid slapping. */
 export function binClatter(g: SoundGraph, out: AudioNode, level: number): void {
   const t = g.now + 0.02;
-  g.shaped(filtered(g, out, 'bandpass', 500 + Math.random() * 900, 1.2), t, [[0.01, 0.24 * level], [0.12, 0.07 * level], [0.3, 0]]);
-  g.burst(filtered(g, out, 'bandpass', 320, 2), t + 0.25 + Math.random() * 0.2, 0.1, 0.25 * level);
+  g.shaped(filtered(g, out, 'bandpass', 500 + random() * 900, 1.2), t, [[0.01, 0.24 * level], [0.12, 0.07 * level], [0.3, 0]]);
+  g.burst(filtered(g, out, 'bandpass', 320, 2), t + 0.25 + random() * 0.2, 0.1, 0.25 * level);
 }
 
 /** A van's back doors: the latch's click, then the door swung to with a heavy metal clunk. */
@@ -59,20 +61,20 @@ export function vanDoor(g: SoundGraph, out: AudioNode, level: number): void {
 export function crate(g: SoundGraph, out: AudioNode, level: number): void {
   const t = g.now + 0.02;
   g.burst(filtered(g, out, 'bandpass', 420, 1.6), t, 0.09, 0.3 * level);
-  if (Math.random() < 0.5) {
-    for (let i = 0; i < 3; i++) ping(g, out, t + 0.03 + i * 0.04 + Math.random() * 0.03, 3000 + Math.random() * 1500, 0.04 * level);
+  if (random() < 0.5) {
+    for (let i = 0; i < 3; i++) tone(g.ctx, out, t + 0.03 + i * 0.04 + random() * 0.03, { frequency: 3000 + random() * 1500, level: 0.04 * level, length: 0.15, attack: 0.002, floor: 0.0001 });
   }
 }
 
 /** A bicycle's bell: two quick strikes of a little dome ringing out. */
 export function bikeBell(g: SoundGraph, out: AudioNode, level: number): void {
   const t = g.now + 0.02;
-  const strikes = Math.random() < 0.6 ? 2 : 1;
+  const strikes = random() < 0.6 ? 2 : 1;
   for (let i = 0; i < strikes; i++) {
     const at = t + i * 0.14;
     for (const [f, part, decay] of [[3950, 1, 0.55], [6170, 0.4, 0.3], [2140, 0.3, 0.4]] as const) {
       const osc = g.ctx.createOscillator();
-      osc.frequency.value = f * (1 + (Math.random() - 0.5) * 0.004);
+      osc.frequency.value = f * (1 + (random() - 0.5) * 0.004);
       const env = g.gain();
       env.gain.setValueAtTime(0, at);
       env.gain.linearRampToValueAtTime(0.09 * part * level, at + 0.003);
@@ -91,7 +93,7 @@ export function freewheelTick(g: SoundGraph, out: AudioNode, at: number, level: 
 
 /** A tyre through a puddle: a wet swish. */
 export function splash(g: SoundGraph, out: AudioNode, level: number): void {
-  g.shaped(filtered(g, out, 'bandpass', 1800 + Math.random() * 1200, 0.7), g.now + 0.02, [[0.05, 0.25 * level], [0.35, 0.06 * level], [0.6, 0]]);
+  g.shaped(filtered(g, out, 'bandpass', 1800 + random() * 1200, 0.7), g.now + 0.02, [[0.05, 0.25 * level], [0.35, 0.06 * level], [0.6, 0]]);
 }
 
 /** A filter into `out`, for a burst to play through. */
@@ -102,15 +104,3 @@ function filtered(g: SoundGraph, out: AudioNode, type: BiquadFilterType, frequen
   return f;
 }
 
-/** A short glassy ping. */
-function ping(g: SoundGraph, out: AudioNode, at: number, frequency: number, level: number): void {
-  const osc = g.ctx.createOscillator();
-  osc.frequency.value = frequency;
-  const env = g.gain();
-  env.gain.setValueAtTime(0, at);
-  env.gain.linearRampToValueAtTime(level, at + 0.002);
-  env.gain.exponentialRampToValueAtTime(0.0001, at + 0.15);
-  osc.connect(env).connect(out);
-  osc.start(at);
-  osc.stop(at + 0.17);
-}

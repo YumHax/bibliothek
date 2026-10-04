@@ -1,5 +1,7 @@
-import { type ArcadeControls, SCREEN_H, SCREEN_W, clamp } from './ArcadeGame';
+import { clamp } from '@/math/scalar';
+import { type ArcadeControls, SCREEN_H, SCREEN_W } from './ArcadeGame';
 import { BaseGame, PLAY_TOP } from './BaseGame';
+import { random } from '@/random';
 
 const ROUND_SECONDS = 15;
 const WAVE_TIME_BONUS = 5;
@@ -146,7 +148,7 @@ export class Invaders extends BaseGame {
     const alive = this.aliens.filter((a) => a.alive);
     const divers = alive.filter((a) => a.dive).sort((a, b) => b.dive!.y - a.dive!.y);
     let target: number;
-    if (divers[0] && Math.random() < skill + 0.2) target = this.alienPos(divers[0]).x + ALIEN_W / 2;
+    if (divers[0] && random() < skill + 0.2) target = this.alienPos(divers[0]).x + ALIEN_W / 2;
     else if (this.saucer && this.saucer.x > 0 && skill > 0.5) target = this.saucer.x + 30;
     else {
       const nearest = alive.reduce<Alien | null>((best, a) => {
@@ -157,7 +159,7 @@ export class Invaders extends BaseGame {
     }
     const diff = target - this.shipX;
     const dead = 3 + (1 - skill) * 10;
-    return { left: diff < -dead, right: diff > dead, up: false, down: false, fire: Math.random() < 0.6 + skill * 0.4, firePressed: false };
+    return { left: diff < -dead, right: diff > dead, up: false, down: false, fire: random() < 0.6 + skill * 0.4, firePressed: false };
   }
 
   private marchFleet(dt: number, alive: Alien[]): void {

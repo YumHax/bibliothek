@@ -7,6 +7,7 @@ import type { ActivityAware } from '../../zone/lifecycle';
 import type { Vec2 } from '../streetPlan';
 import { SoundGraph } from './soundGraph';
 import { StreetEar, falloff } from './streetEar';
+import { random } from '@/random';
 
 /** Someone on the street who barks now and then (a counter that only goes up) where they are (zone-local). */
 interface Barker {
@@ -97,7 +98,7 @@ export class StreetCues extends THREE.Group implements Furniture, Updatable, Occ
     band.connect(heard.out);
     const t = g.now + 0.02;
     // Wing claps: a dozen short noise bursts, quick at first, thinning out as the flock climbs away.
-    for (let i = 0, when = 0; i < 14; i++, when += 0.035 + i * 0.012 + Math.random() * 0.03) {
+    for (let i = 0, when = 0; i < 14; i++, when += 0.035 + i * 0.012 + random() * 0.03) {
       g.burst(band, t + when, 0.05, 0.22 * heard.level * (1 - i / 16));
     }
   }
@@ -108,7 +109,7 @@ export class StreetCues extends THREE.Group implements Furniture, Updatable, Occ
     const heard = g && this.at(x, 0.2, z, HALF.coo, 3);
     if (!g || !heard) return;
     const t = g.now + 0.02;
-    const base = 260 + Math.random() * 60;
+    const base = 260 + random() * 60;
     const notes = [0.28, 0.22, 0.6];
     let when = t;
     for (const [i, length] of notes.entries()) {
@@ -139,8 +140,8 @@ export class StreetCues extends THREE.Group implements Furniture, Updatable, Occ
     const heard = g && this.at(x, 0.3, z, HALF.meow, 2);
     if (!g || !heard) return;
     const t = g.now + 0.02;
-    const length = 0.5 + Math.random() * 0.3;
-    const pitch = 520 + Math.random() * 180;
+    const length = 0.5 + random() * 0.3;
+    const pitch = 520 + random() * 180;
     const osc = g.ctx.createOscillator();
     osc.type = 'sawtooth';
     osc.frequency.setValueAtTime(pitch * 0.8, t);
@@ -186,7 +187,7 @@ export class StreetCues extends THREE.Group implements Furniture, Updatable, Occ
     band.connect(heard.out);
     const t = g.now + 0.02;
     // The slats clacking over the drum, 22 a second, a little uneven.
-    for (let when = 0; when < 3.6; when += 0.045 + Math.random() * 0.012) g.burst(band, t + when, 0.02, 0.1 * heard.level);
+    for (let when = 0; when < 3.6; when += 0.045 + random() * 0.012) g.burst(band, t + when, 0.02, 0.1 * heard.level);
   }
 
   update(dt: number): void {
@@ -237,8 +238,8 @@ export class StreetCues extends THREE.Group implements Furniture, Updatable, Occ
     const heard = this.at(position.x, 0.5, position.z, HALF.bark, 2);
     if (!heard) return;
     const t = g.now + 0.02;
-    const times = Math.random() < 0.5 ? 1 : 2;
-    const pitch = 330 + Math.random() * 180;
+    const times = random() < 0.5 ? 1 : 2;
+    const pitch = 330 + random() * 180;
     for (let i = 0; i < times; i++) {
       const at = t + i * 0.28;
       const osc = g.ctx.createOscillator();

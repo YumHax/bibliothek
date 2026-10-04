@@ -1,10 +1,12 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { createCanvas, seededRandom, toTexture } from '@/graphics/canvas';
+import { createCanvas, toTexture } from '@/graphics/canvas';
 import { Prop } from '../props/Prop';
 import { instancedStandard } from '../materials/palette';
 import { flightTreads } from './flights';
-import { STAIRWELL_PLAN as plan, STOREYS } from './stairwellPlan';
+import { STAIRWELL_PLAN as plan } from './stairwellPlan';
+import { STOREYS } from '@/world/measures/building';
+import { lcg } from '@/random';
 
 /** The runner's thickness over the stone, and the brass rods' radius. */
 const PILE = 0.006;
@@ -68,7 +70,7 @@ function runnerTexture(): THREE.CanvasTexture {
   const w = 128;
   const h = 128;
   const [canvas, ctx] = createCanvas(w, h);
-  const random = seededRandom(0x5a17);
+  const random = lcg(0x5a17);
   ctx.fillStyle = '#e8e8e8';
   ctx.fillRect(0, 0, w, h);
   for (let i = 0; i < 1800; i++) {

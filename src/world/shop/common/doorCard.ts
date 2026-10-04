@@ -1,5 +1,6 @@
 import type { ShopKind } from '../../street/streetPlan';
-import { SHOP_HOURS, clockTime } from '../../street/shops/shopHours';
+import { SHOP_HOURS } from '../../street/shops/shopHours';
+import { clockShort } from '@/text/clock';
 import { HAND, POSTER, setLines } from './lettering';
 
 /*
@@ -21,7 +22,7 @@ export const DOOR_CARD_LOOK = { card: '#f4eedc', closedInk: '#9a2a22' } as const
 /** The CLOSED side's small print: the hours the shop keeps, or nothing for a shop that never shuts. */
 function hoursNote(kind: ShopKind): string {
   const hours = SHOP_HOURS[kind];
-  return hours ? `open ${clockTime(hours.open)} – ${clockTime(hours.close % 24)}` : '';
+  return hours ? `open ${clockShort(hours.open)} – ${clockShort(hours.close % 24)}` : '';
 }
 
 /** Paints one side of `kind`'s door card into (0, 0, w, h) of `ctx`: OPEN ("come in!") or SORRY, WE'RE CLOSED and the hours. */

@@ -1,11 +1,12 @@
 import * as THREE from 'three';
 import type { Interactable } from '@/interaction/Interactable';
 import type { SessionActions } from '@/game/SessionActions';
-import { createCanvas, fitFontSize, seededRandom, toTexture, wrapLines, FONT } from '@/covers/generated/canvasUtils';
+import { createCanvas, fitFontSize, toTexture, wrapLines, FONT } from '@/covers/generated/canvasUtils';
 import { boxMesh, invisibleHitbox } from '../meshUtils';
 import { Prop } from '../props/Prop';
 import { timber } from '../materials/palette';
 import { layMesh, WALL } from '../surface/layers';
+import { lcg } from '@/random';
 
 /** One card pinned on the board. */
 interface NoticeCard {
@@ -89,7 +90,7 @@ export class NoticeBoard extends Prop implements Interactable {
     const H = canvas.height;
     paintCork(ctx, W, H);
     const headerH = HEADER_M * PX_PER_M;
-    const random = seededRandom(4099);
+    const random = lcg(4099);
     const cellW = W / COLS;
     const cellH = (H - headerH) / ROWS;
     cards.slice(0, NOTICE_BOARD_MAX_CARDS).forEach((card, i) => {
@@ -116,7 +117,7 @@ export class NoticeBoard extends Prop implements Interactable {
 
 /** Cork: a warm tan, speckled darker and lighter, old pin holes; the header strip of painted wood with NOTICES stencilled on it. */
 function paintCork(ctx: CanvasRenderingContext2D, W: number, H: number): void {
-  const random = seededRandom(1301);
+  const random = lcg(1301);
   ctx.fillStyle = '#b98a58';
   ctx.fillRect(0, 0, W, H);
   for (let i = 0; i < 2600; i++) {

@@ -1,5 +1,6 @@
 import { audioBus, startedAudioContext } from './audioContext';
 import { whiteNoise } from './noise';
+import { random } from '@/random';
 
 const DECAY = Float32Array.from({ length: 65 }, (_, i) => Math.pow(1 - i / 64, 4));
 
@@ -22,10 +23,10 @@ export function playGavel(times = 1, level = 0.22): void {
     shape.gain.setValueCurveAtTime(DECAY, t, 0.05);
     const band = ctx.createBiquadFilter();
     band.type = 'bandpass';
-    band.frequency.value = 900 + Math.random() * 120;
+    band.frequency.value = 900 + random() * 120;
     band.Q.value = 3;
     noise.connect(shape).connect(band).connect(out);
-    noise.start(t, Math.random() * 0.9, 0.05);
+    noise.start(t, random() * 0.9, 0.05);
     const knock = ctx.createOscillator();
     knock.type = 'triangle';
     knock.frequency.setValueAtTime(320, t);

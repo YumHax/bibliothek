@@ -1,5 +1,6 @@
 import { type ArcadeControls, NO_CONTROLS, SCREEN_H, SCREEN_W, drawText } from './ArcadeGame';
 import { BaseGame, PLAY_TOP } from './BaseGame';
+import { random } from '@/random';
 
 const ROUND_SECONDS = 20;
 const LANES = ['left', 'down', 'up', 'right'] as const;
@@ -183,7 +184,7 @@ export class StepBeat extends BaseGame {
       const note = this.notes.find((n) => n.lanes.includes(lane) && !n.hit.includes(lane) && Math.abs(n.at - this.songTime) < 0.1);
       if (!note) continue;
       const off = this.songTime - note.at;
-      if (off >= -(1 - skill) * 0.08 && Math.random() < 0.4 + skill * 0.5) out[lane] = true;
+      if (off >= -(1 - skill) * 0.08 && random() < 0.4 + skill * 0.5) out[lane] = true;
     }
     return out;
   }

@@ -9,10 +9,12 @@ import { Prop } from '../../props/Prop';
 import { WALL, onSurface } from '../../surface/layers';
 import type { Staircase } from '../Staircase';
 import type { StairLights } from '../StairLights';
-import { STAIRWELL_PLAN as stairs, landingY } from '../stairwellPlan';
+import { STAIRWELL_PLAN as stairs } from '../stairwellPlan';
+import { landingY } from '@/world/measures/building';
 import { ENDLESS_PLAN as plan } from './endlessPlan';
 import { playBackwardsPiano } from './endlessSounds';
 import { StrangeDoor } from './StrangeDoor';
+import { loudness } from '@/audio/hearing';
 
 interface EndlessStairsOptions {
   viewer: THREE.Object3D;
@@ -191,7 +193,7 @@ export class EndlessStairs extends Prop implements Updatable, OccupancyAware {
     if (this.piano > 0) return;
     this.piano = PIANO_EVERY_S;
     const d = this.eye.distanceTo(this.doorPlace.at.setY(plan.lowerY + 1.2));
-    playBackwardsPiano(0.05 / (1 + (d * d) / 6));
+    playBackwardsPiano(0.05 * loudness(d, { shape: 'inverseSquare', referenceDistance: Math.sqrt(6), maxDistance: Infinity }));
   }
 
   /** Plate `i` (0 the upper landing's, 1 the lower's) reads `text` ('' blank), shown over the real one. */

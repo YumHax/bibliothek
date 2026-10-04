@@ -1,16 +1,17 @@
 import { Polygon, Sheet, type Rng, azimuthOf, azimuthX, groundSquash, heightY, sizePx, worldPoint } from './Sheet';
-import { between, mixHex, pick } from './paint';
+import { mixHex } from './paint';
 import { CORNER, PARK_FROM, PARK_TO, frontage, parkLine } from './plan';
 import { BANDSTAND as KIOSK, FLOWER_BEDS as BEDS, PARK_EDGE, PARK_FAR, PARK_PATHS, PATH_WIDTH, PLAYGROUND, POND, WILLOWS, insidePond, onLawn } from '@/world/city/park';
 import { PARK_TREES, TREE_FORM, treeHeight } from '@/world/city/trees';
 import { inFlatFrame } from '@/world/city/frontage';
-import { STREET_PLAN } from '@/world/street/streetPlan';
+import { STREET_PLAN } from '@/world/street/streetPlan'; // imports-ok: the painted view of the street draws what the walkable one lays out; one model for both is the last wave
 import { paintGroundBand } from './Street';
 import { paintBench, paintBin, paintLamp } from './paintedFurniture';
 import { CONIFER_STYLE, TREE_STYLES, type TreeForm, WILLOW_STYLE, paintTree } from './Tree';
 import { seasonalLawn } from './paint';
 import { holidayParkItems } from './Holiday';
 import { groundEllipse, paintDucks, paintFlowerBed, paintFountain, paintLilyPads, paintPicnic, paintPlayground, paintRowingBoat } from './ParkFeatures';
+import { between, pick } from '@/random';
 
 const LAWN_NEAR = '#5f8c45';
 const LAWN_FAR = '#95b57a';

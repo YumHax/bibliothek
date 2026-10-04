@@ -1,6 +1,8 @@
 import { KEYS, PersistedStore } from '@/persistence';
+import { inHours } from '@/time/clock';
+import type { Game } from '@/catalog/types';
+import type { Transactions } from '@/economy/Transactions';
 import { REPUTATION } from '@/economy/pricing';
-import { hashString } from '@/graphics/canvas';
 import { gameDayRandom } from '@/time/daily';
 import { dayKey } from '@/economy/calendar';
 import { STAIRWELL_PLAN } from '@/world/stairwell/stairwellPlan';
@@ -8,6 +10,10 @@ import type { BoardNote } from './boardNotes';
 import { movedAway, residentName } from './residentsHome';
 import { befriend } from './friendship';
 import { doorKey } from '@/world/stairwell/building';
+import { fnv1a } from '@/random';
+import { buildingName, buildingWarmth } from '@/social/reputation';
+import { BUILDING_SOCIAL } from './buildingSocialPlan';
+import { formatCoins } from '@/text/money';
 
 /*
  * The neighbours' party in the courtyard (the courtyard's `NeighboursParty` dresses it): once every `every` game days,
@@ -53,11 +59,34 @@ export const PARTY_TALK: readonly string[] = [
  * A game sold at the party's table on game day `day`: one of the residents (by the game) takes it home, and thinks
  * the better of the player for it (`friendship`, once a day). Returns what is said.
  */
-export function partySold(game: { id: string; title: string }, offer: number, day: number): string {
+function partySold(game: { id: string; title: string }, offer: number, day: number): string {
   const guests = STAIRWELL_PLAN.residents.filter((g) => !movedAway(g.k, g.i));
-  const r = guests[hashString(`party-buyer:${game.id}`) % guests.length]!;
+  const r = guests[fnv1a(`party-buyer:${game.id}`) % guests.length]!;
   befriend(doorKey(r.k, r.i), 3, 'partySale', day);
-  return `${residentName(r.k, r.i)} takes "${game.title}" home for ${offer} coins.`;
+  return `${residentName(r.k, r.i)} takes "${game.title}" home for ${formatCoins(offer)}.`;
+}
+
+/** The residents' table as the WE BUY desk's panel takes a buyer: who they are, what they pay, what is said. */
+interface PartyBuyer {
+  heading: string;
+  blurb: string;
+  bonus: number;
+  sell: (game: Game, offer: number) => { ok: boolean };
+  soldLine: (game: Game, offer: number) => string;
+}
+
+/**
+ * The residents' table at the party: they buy games off the player for the party's tin (`PARTY.saleBonus` over the
+ * desk's price), each sale through the one `Transactions` and told as `partySold` says it.
+ */
+export function partyBuyer(tx: Pick<Transactions, 'sellToNeighbour'>, today: { readonly gameDay: number }): PartyBuyer {
+  return {
+    heading: 'The residents’ table',
+    blurb: 'The neighbours buy games off you at a fair price, cash from the party’s tin. What you sell goes home with them.',
+    bonus: PARTY.saleBonus,
+    sell: (game, offer) => tx.sellToNeighbour(game, offer),
+    soldLine: (game, offer) => partySold(game, offer, today.gameDay),
+  };
 }
 
 /** The day of the cycle the parties fall on, counted in game days. */
@@ -78,14 +107,14 @@ export function isPartyDay(day: number, date: Date): boolean {
 /** What stands in the courtyard at `hours` of a party day: nothing, the tables set up, or the party itself. */
 export function partyStage(day: number, hours: number, date: Date): 'none' | 'setUp' | 'on' {
   if (!isPartyDay(day, date)) return 'none';
-  if (hours >= PARTY.from && hours < PARTY.to) return 'on';
+  if (inHours(hours, PARTY)) return 'on';
   return hours >= PARTY.setUp ? 'setUp' : 'none';
 }
 
 /** The party's tournament game on day `day`. */
 export function tournamentGame(day: number): (typeof PARTY.tournament.games)[number] {
   const { games } = PARTY.tournament;
-  return games[hashString(`party-game:${day}`) % games.length]!;
+  return games[fnv1a(`party-game:${day}`) % games.length]!;
 }
 
 /** A guest of the party: the resident's door (landing, door), name, look's seed. */
@@ -111,6 +140,13 @@ export function residentScores(day: number, pointsPerTicket: number): { name: st
     .sort((a, b) => b.score - a.score);
 }
 
+/** The poster's last line, by what the building thinks of the player (`social/reputation`): a welcome, or a dig. */
+function posterLine(): string[] {
+  const w = buildingWarmth();
+  const { party } = BUILDING_SOCIAL;
+  return w >= party.warm ? [party.posterWarm] : w <= party.cold ? [party.posterCold] : [];
+}
+
 /** The board's notes about the party: the poster in the days before, the thanks the day after. */
 export function partyNotes(day: number, date: Date): BoardNote[] {
   for (let ahead = 0; ahead <= PARTY.announceDays; ahead++) {
@@ -120,7 +156,7 @@ export function partyNotes(day: number, date: Date): BoardNote[] {
       {
         id: 'party-poster',
         title: `NEIGHBOURS' PARTY · ${when}`,
-        lines: ['In the courtyard, from 5 pm.', 'Bring a dish, a chair, a game to sell.', 'Tournament on the old cabinet!'],
+        lines: ['In the courtyard, from 5 pm.', 'Bring a dish, a chair, a game to sell.', 'Tournament on the old cabinet!', ...posterLine()],
         paper: 0xf6e7a8,
         signed: 'Mme Pereira & the residents',
         weight: 2,
@@ -128,7 +164,8 @@ export function partyNotes(day: number, date: Date): BoardNote[] {
     ];
   }
   if (cycleParty(day - 1)) {
-    return [{ id: 'party-thanks', title: 'THANK YOU ALL', lines: ['For a lovely evening.', 'A blue dish was left behind:', 'ask at the lodge.'], paper: 0xffffff, signed: 'The residents', weight: 1 }];
+    const toast = buildingWarmth() >= BUILDING_SOCIAL.party.warm ? [BUILDING_SOCIAL.party.toast.replace('{name}', buildingName())] : [];
+    return [{ id: 'party-thanks', title: 'THANK YOU ALL', lines: ['For a lovely evening.', ...toast, 'A blue dish was left behind:', 'ask at the lodge.'], paper: 0xffffff, signed: 'The residents', weight: 1 }];
   }
   return [];
 }

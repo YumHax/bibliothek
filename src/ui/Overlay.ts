@@ -17,6 +17,19 @@ const STILL_LOADING_MS = 10_000;
 
 type Screen = 'main' | 'settings' | 'controls' | 'confirm';
 
+/** One key press as the menu reads it before routing it to the key's handler. */
+interface Press {
+  code: string;
+  event: KeyboardEvent;
+  focused: Element | null;
+  /** The focused element is inside the menu's card. */
+  inCard: boolean;
+  /** An alert's button (Retry) while one shows: part of the menu's walk (Up from the first item reaches it, Enter / A presses it). */
+  alertButton: HTMLElement | null;
+  /** The alert's button, when it is the focused element. */
+  focusedAlert: HTMLElement | null;
+}
+
 /** The Settings screen's tabs; `addSetting` names one. */
 export type SettingsTab = 'display' | 'audio' | 'controls' | 'game';
 const SETTINGS_TABS: Array<{ id: SettingsTab; label: string }> = [
@@ -553,86 +566,129 @@ export class Overlay {
   private onPress(code: string, e: KeyboardEvent): void {
     if (!this.visible) return;
     const focused = document.activeElement;
-    const inCard = focused instanceof HTMLElement && this.card.contains(focused);
-    // An alert's button (Retry) is part of the menu's walk: Up from the first item reaches it, Enter / A presses it.
     const alertButton = document.querySelector<HTMLElement>('.alert-bar:not([hidden]) .alert-bar__action');
-    const inAlert = !!alertButton && focused === alertButton;
-    const handled = () => {
-      this.handledCode = code;
-      e.preventDefault();
+    const press: Press = {
+      code,
+      event: e,
+      focused,
+      inCard: focused instanceof HTMLElement && this.card.contains(focused),
+      alertButton,
+      focusedAlert: alertButton && focused === alertButton ? alertButton : null,
     };
     switch (code) {
       case 'ArrowDown':
       case 'GamepadDown':
-        if (code === 'ArrowDown' && focused instanceof HTMLSelectElement) return; // the select's own options
-        moveFocus(this.screens[this.screen], 1);
-        return handled();
+        return this.pressDown(press);
       case 'ArrowUp':
       case 'GamepadUp':
-        if (code === 'ArrowUp' && focused instanceof HTMLSelectElement) return; // the select's own options
-        if (alertButton && !inAlert && navItems(this.screens[this.screen])[0] === focused) {
-          alertButton.focus();
-          playUiSound('move');
-          return handled();
-        }
-        moveFocus(this.screens[this.screen], -1);
-        return handled();
+        return this.pressUp(press);
       case 'ArrowLeft':
       case 'ArrowRight':
       case 'GamepadLeft':
-      case 'GamepadRight': {
-        const direction = code.endsWith('Left') ? -1 : 1;
-        if (focused instanceof HTMLInputElement && focused.type === 'range') {
-          if (code.startsWith('Gamepad')) this.nudge(focused, direction);
-          else playUiSound('move'); // the range steps itself on the arrow keys
-          return code.startsWith('Gamepad') ? handled() : undefined;
-        }
-        if (isField(focused)) return;
-        if (this.screen === 'controls') this.controls.step(direction);
-        else if (this.screen === 'settings') this.stepSettingsTab(direction);
-        else if (this.screen === 'confirm' || inCard) moveFocus(this.screens[this.screen], direction);
-        else return;
-        return handled();
-      }
+      case 'GamepadRight':
+        return this.pressSideways(press);
       case 'Escape':
       case 'GamepadB':
-        if (this.returning) {
-          // The whole pause menu, instead of the one line.
-          this.returning = false;
-          this.renderReturn();
-          this.primary.focus({ preventScroll: true });
-          return handled();
-        }
-        if (this.screen !== 'main') {
-          playUiSound('back');
-          this.show(this.screen === 'confirm' ? this.confirmFrom : 'main');
-        }
-        return handled();
+        return this.pressBack(press);
       case 'Enter':
       case 'NumpadEnter':
-        if (isField(focused)) return; // typing the cat's name
-        e.preventDefault();
-        if (inAlert) alertButton.click();
-        else if (this.returning) this.onStart();
-        else if (inCard && focused instanceof HTMLButtonElement) focused.click();
-        else if (this.screen === 'main' && !this.loading) this.onStart();
-        return;
+        return this.pressEnter(press);
       case 'Space':
-        // Only the focused button: a stray Space must never start or resume the game.
-        if (isField(focused)) return;
-        e.preventDefault();
-        if (inCard && focused instanceof HTMLButtonElement && focused !== this.primary) focused.click();
-        return;
+        return this.pressSpace(press);
       case 'GamepadA':
-        if (inAlert) {
-          alertButton.click();
-          return handled();
-        }
-        // On the primary button the press enters the room (the PointerLockFlow's controller mode).
-        if (!inCard || focused === this.primary || !(focused instanceof HTMLButtonElement)) return;
-        focused.click();
-        return handled();
+        return this.pressA(press);
     }
+  }
+
+  /** The press was the menu's: nothing else sees it, and `handledCode` tells its key-up apart. */
+  private handled(press: Press): void {
+    this.handledCode = press.code;
+    press.event.preventDefault();
+  }
+
+  private pressDown(press: Press): void {
+    if (press.code === 'ArrowDown' && press.focused instanceof HTMLSelectElement) return; // the select's own options
+    moveFocus(this.screens[this.screen], 1);
+    this.handled(press);
+  }
+
+  private pressUp(press: Press): void {
+    const { focused, alertButton, focusedAlert } = press;
+    if (press.code === 'ArrowUp' && focused instanceof HTMLSelectElement) return; // the select's own options
+    if (alertButton && !focusedAlert && navItems(this.screens[this.screen])[0] === focused) {
+      alertButton.focus();
+      playUiSound('move');
+      this.handled(press);
+      return;
+    }
+    moveFocus(this.screens[this.screen], -1);
+    this.handled(press);
+  }
+
+  /** Left / Right: a range steps (the D-pad nudges it, the arrow keys let it step itself), the Controls tabs and the Settings tabs turn, a row walks sideways. */
+  private pressSideways(press: Press): void {
+    const { code, focused, inCard } = press;
+    const direction = code.endsWith('Left') ? -1 : 1;
+    if (focused instanceof HTMLInputElement && focused.type === 'range') {
+      if (code.startsWith('Gamepad')) this.nudge(focused, direction);
+      else playUiSound('move'); // the range steps itself on the arrow keys
+      if (code.startsWith('Gamepad')) this.handled(press);
+      return;
+    }
+    if (isField(focused)) return;
+    if (this.screen === 'controls') this.controls.step(direction);
+    else if (this.screen === 'settings') this.stepSettingsTab(direction);
+    else if (this.screen === 'confirm' || inCard) moveFocus(this.screens[this.screen], direction);
+    else return;
+    this.handled(press);
+  }
+
+  /** Escape / B: the one-line return becomes the whole pause menu; a sub-screen goes back to where it came from. */
+  private pressBack(press: Press): void {
+    if (this.returning) {
+      this.returning = false;
+      this.renderReturn();
+      this.primary.focus({ preventScroll: true });
+      this.handled(press);
+      return;
+    }
+    if (this.screen !== 'main') {
+      playUiSound('back');
+      this.show(this.screen === 'confirm' ? this.confirmFrom : 'main');
+    }
+    this.handled(press);
+  }
+
+  /** Enter: the alert's button, the return line, the focused button, or on the main screen the start itself. */
+  private pressEnter(press: Press): void {
+    const { focused, inCard, focusedAlert } = press;
+    if (isField(focused)) return; // typing the cat's name
+    press.event.preventDefault();
+    if (focusedAlert) focusedAlert.click();
+    else if (this.returning) this.onStart();
+    else if (inCard && focused instanceof HTMLButtonElement) focused.click();
+    else if (this.screen === 'main' && !this.loading) this.onStart();
+  }
+
+  /** Space: only the focused button; a stray Space must never start or resume the game. */
+  private pressSpace(press: Press): void {
+    const { focused, inCard } = press;
+    if (isField(focused)) return;
+    press.event.preventDefault();
+    if (inCard && focused instanceof HTMLButtonElement && focused !== this.primary) focused.click();
+  }
+
+  /** A: the alert's button or the focused button; on the primary button the press enters the room (the PointerLockFlow's controller mode). */
+  private pressA(press: Press): void {
+    const { focused, inCard, focusedAlert } = press;
+    if (focusedAlert) {
+      focusedAlert.click();
+      this.handled(press);
+      return;
+    }
+    if (!inCard || focused === this.primary || !(focused instanceof HTMLButtonElement)) return;
+    focused.click();
+    this.handled(press);
   }
 
   /**

@@ -7,6 +7,7 @@ import type { DayNight } from '../../props/DayNight';
 import { invisibleHitbox } from '../../meshUtils';
 import { paint } from '../../materials/palette';
 import { snowPaint } from '../snowCover';
+import { formatCoins } from '@/text/money';
 
 interface BusStopPoleOptions {
   line: string;
@@ -78,7 +79,7 @@ export class BusStopPole extends THREE.Group implements Furniture, Interactable 
       `Line ${line} to ${towards}, calling at ${stops}.`,
       `A bus about every ${every} minutes by day, every ${nightEvery} at night.`,
       due,
-      `Fare: ${fare} coins, paid to the driver while the doors are open.`,
+      `Fare: ${formatCoins(fare)}, paid to the driver while the doors are open.`,
     ].join('\n');
     session.read({ title: `Bus ${line} · timetable`, text, look: 'note' });
   }
@@ -122,7 +123,7 @@ function tableTexture({ line, towards, stops, every, nightEvery, fare }: BusStop
   ctx.fillText(towards.toUpperCase(), 52, 28, 132);
   ctx.fillStyle = '#1a1a1a';
   ctx.font = '12px sans-serif';
-  const lines = [`via ${stops}`, '', `Day: every ${every} min`, `Night: every ${nightEvery} min`, '', `Fare ${fare} coins`, 'Pay the driver'];
+  const lines = [`via ${stops}`, '', `Day: every ${every} min`, `Night: every ${nightEvery} min`, '', `Fare ${formatCoins(fare)}`, 'Pay the driver'];
   lines.forEach((text, i) => ctx.fillText(text, 12, 70 + i * 20, 170));
   ctx.strokeStyle = 'rgba(0,0,0,0.25)';
   for (let y = 210; y < 262; y += 8) {

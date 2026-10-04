@@ -9,6 +9,9 @@ import type { Pose } from './poses';
 import { blobShadow } from '../zone/ContactShadows';
 import { SpeechBubble } from './SpeechBubble';
 import { Attention, type AttentionRange } from './attention';
+import type { SocialHook } from './socialHook';
+import type { FaceKey, GestureName } from './motion/gestures';
+import { random } from '@/random';
 
 interface VendorOptions {
   /** Whose gaze to meet: the camera. */
@@ -26,6 +29,8 @@ interface VendorOptions {
   callOuts?: readonly string[];
   /** The name on what they say to the player. Default "Stallholder". */
   speaker?: string;
+  /** Someone the player can talk to (docs/social.md): the social caption, and a click opens the conversation instead of a line. */
+  social?: SocialHook;
 }
 
 /** A player nearer than this, in front of the stall, is noticed (and called out to). */
@@ -60,6 +65,7 @@ export class Vendor extends THREE.Group implements Furniture, Interactable, Upda
   private readonly viewer: THREE.Object3D;
   private readonly lines: () => readonly string[];
   private readonly caption: string;
+  private readonly social: SocialHook | null;
   private readonly speaker: string;
   private readonly focus: THREE.Vector3;
   private nextLine: number;
@@ -81,6 +87,7 @@ export class Vendor extends THREE.Group implements Furniture, Interactable, Upda
     const lines = options.lines;
     this.lines = typeof lines === 'function' ? lines : () => lines;
     this.caption = options.label ?? 'Stallholder · chat';
+    this.social = options.social ?? null;
     this.speaker = options.speaker ?? 'Stallholder';
     this.focus = options.focus ? new THREE.Vector3(...options.focus) : TABLE_POINT.clone();
     const seed = options.seed ?? 1;
@@ -118,8 +125,8 @@ export class Vendor extends THREE.Group implements Furniture, Interactable, Upda
     if (near && this.callOuts.length) {
       this.callOutTimer -= dt;
       if (this.callOutTimer <= 0) {
-        this.callOutTimer = THREE.MathUtils.lerp(CALL_OUT_EVERY[0], CALL_OUT_EVERY[1], Math.random());
-        this.say(this.callOuts[Math.floor(Math.random() * this.callOuts.length)]!);
+        this.callOutTimer = THREE.MathUtils.lerp(CALL_OUT_EVERY[0], CALL_OUT_EVERY[1], random());
+        this.say(this.callOuts[Math.floor(random() * this.callOuts.length)]!);
       }
     }
     if (looking) {
@@ -131,10 +138,10 @@ export class Vendor extends THREE.Group implements Furniture, Interactable, Upda
     }
     this.stanceTimer -= dt;
     if (this.stanceTimer <= 0) {
-      this.stanceTimer = 12 + Math.random() * 25;
+      this.stanceTimer = 12 + random() * 25;
       // Talking with the player, nobody folds their arms.
       const stances = this.attention.inConversation ? STANCES.filter((pose) => pose !== 'crossed') : STANCES;
-      this.stance = stances[Math.floor(Math.random() * stances.length)]!;
+      this.stance = stances[Math.floor(random() * stances.length)]!;
       this.model.setPose(this.stance);
     }
     this.model.update(dt);
@@ -148,9 +155,9 @@ export class Vendor extends THREE.Group implements Furniture, Interactable, Upda
     });
   }
 
-  /** A line to the player, over their head with their name (or in the subtitles, out of view): they talk it, eyes on the player. */
-  speak(text: string): void {
-    this.bubble.speak(text, this.speaker, () => {
+  /** A line to the player, over their head with their name (`name`: someone met, by their own) (or in the subtitles, out of view): they talk it, eyes on the player. */
+  speak(text: string, name = this.speaker): void {
+    this.bubble.speak(text, name, () => {
       this.model.talk(lineSeconds(text));
       this.attention.engage(lineSeconds(text) + LINE_ATTENTION);
       this.unfold();
@@ -161,6 +168,21 @@ export class Vendor extends THREE.Group implements Furniture, Interactable, Upda
   gesture(pose: Pose, seconds = 2.5): void {
     this.model.setPose(pose);
     this.stanceTimer = seconds;
+  }
+
+  /** A gesture now (a shrug, a laugh behind the hand). */
+  gestureNow(name: GestureName): void {
+    this.model.gesture(name);
+  }
+
+  /** A feeling on the face for `seconds`. */
+  feel(face: FaceKey, seconds: number): void {
+    this.model.feel(face, seconds);
+  }
+
+  /** A nod. */
+  nod(): void {
+    this.model.nod();
   }
 
   /** Arms folded come down (to the sides, the talking hands free). */
@@ -176,10 +198,16 @@ export class Vendor extends THREE.Group implements Furniture, Interactable, Upda
   }
 
   label(): string {
-    return this.caption;
+    return this.social ? this.social.caption() : this.caption;
   }
 
-  activate(_session: SessionActions): void {
+  activate(session: SessionActions): void {
+    if (this.social?.open(session)) {
+      this.attention.engage(12);
+      this.unfold();
+      this.model.nod();
+      return;
+    }
     const lines = this.lines();
     if (!lines.length) return;
     this.speak(lines[this.nextLine % lines.length]!);
@@ -188,11 +216,11 @@ export class Vendor extends THREE.Group implements Furniture, Interactable, Upda
 
   /** Now the focus (the table), now the aisle, now the far wall, each for a few seconds. */
   private pickGlance(): void {
-    this.glanceTimer = 3 + Math.random() * 6;
-    const roll = Math.random();
-    if (roll < 0.5) this.glance.copy(this.focus).x += (Math.random() - 0.5) * 0.6;
-    else if (roll < 0.85) this.glance.set((Math.random() - 0.5) * 6, 1.6, 3 + Math.random() * 3);
-    else this.glance.set((Math.random() - 0.5) * 3, 1.5, -2);
+    this.glanceTimer = 3 + random() * 6;
+    const roll = random();
+    if (roll < 0.5) this.glance.copy(this.focus).x += (random() - 0.5) * 0.6;
+    else if (roll < 0.85) this.glance.set((random() - 0.5) * 6, 1.6, 3 + random() * 3);
+    else this.glance.set((random() - 0.5) * 3, 1.5, -2);
   }
 }
 

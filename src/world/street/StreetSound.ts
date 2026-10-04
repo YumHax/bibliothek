@@ -15,6 +15,7 @@ import { SoundGraph } from './audio/soundGraph';
 import { StreetBirds } from './audio/StreetBirds';
 import { StreetEar } from './audio/streetEar';
 import { VehicleVoice, type VehicleRole } from './audio/VehicleVoice';
+import { random } from '@/random';
 
 interface StreetSoundOptions {
   /** The ears (the camera). */
@@ -70,7 +71,7 @@ export class StreetSound extends THREE.Group implements Furniture, Updatable, Oc
   private beds: Beds | null = null;
   private occupied = false;
   private active = true;
-  private sirenClock = 40 + Math.random() * 120;
+  private sirenClock = 40 + random() * 120;
   private lastHour = -1;
   private bellsUntil = 0;
   private readonly ear: StreetEar;
@@ -139,7 +140,7 @@ export class StreetSound extends THREE.Group implements Furniture, Updatable, Oc
     this.sirenClock -= dt;
     if (this.sirenClock <= 0) {
       const [a, b] = s.night ? SIREN_EVERY.night : SIREN_EVERY.day;
-      this.sirenClock = a + Math.random() * (b - a);
+      this.sirenClock = a + random() * (b - a);
       this.siren(g);
     }
     // The church clock on the full hour (never over the last hour's strokes).
@@ -200,9 +201,9 @@ export class StreetSound extends THREE.Group implements Furniture, Updatable, Oc
   private siren(g: SoundGraph): void {
     const ctx = g.ctx;
     const t = ctx.currentTime + 0.05;
-    const length = 9 + Math.random() * 6;
+    const length = 9 + random() * 6;
     const panner = ctx.createStereoPanner();
-    const from = Math.random() * 1.6 - 0.8;
+    const from = random() * 1.6 - 0.8;
     panner.pan.setValueAtTime(from, t);
     panner.pan.linearRampToValueAtTime(-from * 0.6, t + length);
     panner.connect(g.master);

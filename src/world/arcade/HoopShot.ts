@@ -111,7 +111,7 @@ export class HoopShot extends TicketMachine {
   }
 
   protected play(dt: number, controls: ArcadeControls): boolean {
-    const over = this.sim.play(dt, controls, this.who === 'player', () => this.lookDirection());
+    const over = this.sim.play(dt, { ...controls, look: this.lookDirection() }, this.who === 'player');
     if (this.thrower) this.thrower.update(dt, this.sim.timeLeft > 0);
     else this.sim.takeOutcomes();
     this.model.hoop.position.x = this.sim.hoopX;

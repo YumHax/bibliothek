@@ -2,9 +2,9 @@ import * as THREE from 'three';
 import { cylinderMesh } from '../../meshUtils';
 import { Prop } from '../../props/Prop';
 import { paint, timber } from '../../materials/palette';
-import { seededRandom } from '@/graphics/canvas';
 import { hangFromCeiling } from '../common/ceilingDrop';
-import { LeafBatch, LEAF_GREENS, addTrail, headGeometry, pick, stem } from './greenery';
+import { LeafBatch, LEAF_GREENS, addTrail, headGeometry, stem } from './greenery';
+import { lcg, pick } from '@/random';
 
 /** A basket of trailing greens on a jute hanger, `drop` below the ceiling at (x, z) of the prop's frame. */
 export interface HangingBasket {
@@ -47,7 +47,7 @@ export class HangingGreens extends Prop {
   constructor(options: HangingGreensOptions = {}) {
     super();
     this.name = 'HangingGreens';
-    const random = seededRandom(options.seed ?? 12);
+    const random = lcg(options.seed ?? 12);
     const leaves = new LeafBatch();
     for (const basket of options.baskets ?? []) {
       const g = new THREE.Group();

@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { cylinderMesh } from '../../meshUtils';
 import { Prop } from '../../props/Prop';
 import { paint, standard } from '../../materials/palette';
-import { seededRandom } from '@/graphics/canvas';
+import { lcg } from '@/random';
 
 export interface ValveJarOptions {
   /** Valves in it. Default 14. */
@@ -27,7 +27,7 @@ export class ValveJar extends Prop {
   constructor(options: ValveJarOptions = {}) {
     super();
     this.name = 'ValveJar';
-    const random = seededRandom(options.seed ?? 23);
+    const random = lcg(options.seed ?? 23);
     const R = 0.065;
     const H = 0.19;
     const count = options.count ?? 14;

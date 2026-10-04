@@ -11,6 +11,7 @@ import type { Furniture } from '../Furniture';
 import { invisibleHitbox } from '../meshUtils';
 import { HoverGlint } from '../props/hoverGlint';
 import { SealedCartonModel } from '../props/SealedCartonModel';
+import { plural } from '@/text/count';
 
 interface CartonAtHomeOptions {
   sealed: SealedLots;
@@ -71,7 +72,7 @@ export class CartonAtHome extends THREE.Group implements Furniture, Interactable
     const end = left ? '' : ' That was the last thing in it: the carton goes out with the recycling.';
     if (item.kind === 'junk') {
       session.read({ title: item.name, text: item.line, ...(left ? {} : { effect: 'The carton is empty.' }) });
-      if (coins) session.reward({ title: `${coins} loose coin${coins === 1 ? '' : 's'}`, detail: 'Found at the bottom of the carton.', coins });
+      if (coins) session.reward({ title: `${coins} loose ${plural(coins, 'coin')}`, detail: 'Found at the bottom of the carton.', coins });
       return;
     }
     if (duplicate) {

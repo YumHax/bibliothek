@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { Updatable } from '@/core/Engine';
-import { createCanvas, roundRect, seededRandom, toTexture, repeatTexture } from '@/covers/generated/canvasUtils';
+import { createCanvas, roundRect, toTexture, repeatTexture } from '@/covers/generated/canvasUtils';
 import type { Furniture } from '../Furniture';
 import type { DayNight } from '../props/DayNight';
 import { part } from '../props/Prop';
@@ -10,7 +10,8 @@ import { seasonalLawn } from '../props/outdoors/paint';
 import { QuadBuilder } from '../street/QuadBuilder';
 import { lawnTile } from '../street/groundTextures';
 import { facadeHeight } from '../street/facadePainter';
-import { COURTYARD_YARD as yard } from './outlookPlan';
+import { COURTYARD_YARD as yard } from '@/world/courtyard/courtyardPlan';
+import { lcg } from '@/random';
 
 /** A sett's side (m) and how many to a texture tile. */
 const SETT = 0.11;
@@ -184,7 +185,7 @@ const WHEEL = new THREE.TorusGeometry(0.33, 0.02, 6, 24);
 function settsTexture(anisotropy: number): THREE.CanvasTexture {
   const size = 512;
   const [canvas, ctx] = createCanvas(size, size);
-  const random = seededRandom(2417);
+  const random = lcg(2417);
   ctx.fillStyle = '#56534e';
   ctx.fillRect(0, 0, size, size);
   const cell = size / SETTS_PER_TILE;

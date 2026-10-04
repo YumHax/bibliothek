@@ -2,14 +2,17 @@ import * as THREE from 'three';
 import type { Updatable } from '@/core/Engine';
 import type { Input } from '@/core/Input';
 import type { Interactable, LabelPlacement } from '@/interaction/Interactable';
-import type { ArcadeBonus, ArcadeMachineLike, ArcadeResult, SessionActions } from '@/game/SessionActions';
+import type { ArcadeMachineLike, ArcadeResult, SessionActions } from '@/game/SessionActions';
 import { ChipSpeaker } from '@/audio/ChipSpeaker';
 import { actionKeyLabel } from '@/ui/keys';
 import type { Furniture } from '../Furniture';
 import { eyePoseAt } from '../meshUtils';
 import { drawText } from './games/ArcadeGame';
-import type { Occupant, Station, StationEvents } from './Station';
+import type { Station, StationEvents } from './Station';
 import { MachineRun } from './MachineRun';
+import { RunMachine } from './RunMachine';
+import { FixedStep } from './FixedStep';
+import { REPLAY_STEP } from './replay/Replay';
 import { BASE_H, CASE_H, ClawSim, DEPTH, TOTAL_H, WIDTH } from './claw/ClawSim';
 import { type ClawModel, buildClawModel } from './claw/clawModel';
 
@@ -41,23 +44,27 @@ const EYE_Z = DEPTH / 2 + 0.33;
  * in the corner, and a claw on a gantry (`claw/clawModel`). Paid for like a cabinet (`playArcade`,
  * one coin, never free): the player steers the claw with WASD for fifteen seconds (a display
  * counts them down), Space drops it; it closes, lifts, goes back over the chute and opens. The
- * rules are the `ClawSim`'s (where it came down, the slips, the pity grip); this class feeds it the
- * keys and moves the model, the sounds and the display to match. A plush that makes it down the
- * chute is a prize to take home. A regular playing it (`occupy`) roams, drops and comes up empty,
- * as ever. The coin, the end and out-of-order days go through its `MachineRun` (no table, no
- * tickets). Origin on the floor under its centre, +z faces the room. Collides.
+ * rules are the `ClawSim`'s (where it came down, the slips, the pity grip), stepped at the
+ * machines' fixed rate; this class feeds it the keys and moves the model, the sounds and the
+ * display to match. A plush that makes it down the chute is a prize to take home. A regular
+ * playing it (`occupy`) roams, drops and comes up empty, as ever. The coin, the end and
+ * out-of-order days go through its `MachineRun` (no table, no tickets). Origin on the floor under
+ * its centre, +z faces the room. Collides.
  */
-export class ClawMachine extends THREE.Group implements Furniture, Interactable, Updatable, ArcadeMachineLike, Station {
+export class ClawMachine extends RunMachine implements Furniture, Interactable, Updatable, ArcadeMachineLike, Station {
   readonly hitboxes: THREE.Object3D[];
   readonly standAt = new THREE.Vector3(0, 0, STAND_Z);
   readonly lean = 0.15;
   readonly focus = new THREE.Vector3(0, BASE_H + CASE_H * 0.55, 0);
   readonly stationEvents: StationEvents = {};
   readonly freeWhenBroke = false;
+  /** Its prize goes home through the arcade's books (`arcadePayout`). */
+  readonly payout = 'arcade' as const;
   readonly game = { id: 'claw', title: 'GRAB A PRIZE', hint: 'WASD or arrows move the claw · Space drops it' };
 
-  private readonly run: MachineRun;
+  protected readonly run: MachineRun;
   private readonly sim: ClawSim;
+  private readonly steps = new FixedStep(REPLAY_STEP);
   private readonly model: ClawModel;
   /** The colour each plush's fur is painted, to repaint it when the sim restocks one. */
   private readonly furColors: number[];
@@ -73,8 +80,6 @@ export class ClawMachine extends THREE.Group implements Furniture, Interactable,
     this.hitboxes = [this.model.hitbox];
     this.placeClaw();
     this.speaker = new ChipSpeaker(this.model.carriage, wiring.listener, { volume: 0.18 });
-    // Every sound it makes is news to whoever plays or watches it.
-    this.speaker.onPlay = (sfx) => this.stationEvents.onSound?.(sfx);
     this.run = new MachineRun({
       game: this.game,
       input: wiring.input,
@@ -91,21 +96,9 @@ export class ClawMachine extends THREE.Group implements Furniture, Interactable,
     return new THREE.Box3(new THREE.Vector3(-WIDTH / 2 - 0.02, 0, -DEPTH / 2 - 0.02), new THREE.Vector3(WIDTH / 2 + 0.02, TOTAL_H, DEPTH / 2 + 0.04));
   }
 
-  /** From the coin until the claw has opened over the chute. */
-  get isPlaying(): boolean {
-    return this.run.isPlaying;
-  }
-
-  get occupant(): Occupant {
-    return this.run.occupant;
-  }
-
-  get outOfOrder(): boolean {
-    return this.run.outOfOrder;
-  }
-
   start(onOver: (result: ArcadeResult) => void): void {
     this.run.start(onOver);
+    this.steps.reset();
     this.sim.start();
   }
 
@@ -163,18 +156,6 @@ export class ClawMachine extends THREE.Group implements Furniture, Interactable,
     this.run.activate(session, this);
   }
 
-  get canReplay(): boolean {
-    return this.run.canReplay;
-  }
-
-  pause(paused: boolean): void {
-    this.run.setPaused(paused);
-  }
-
-  showBonus(bonuses: readonly ArcadeBonus[]): void {
-    this.run.showBonus(bonuses);
-  }
-
   update(dt: number): void {
     // The pointer went free mid-play: the claw hangs where it is until it is locked again.
     if (this.run.paused) return;
@@ -182,9 +163,12 @@ export class ClawMachine extends THREE.Group implements Furniture, Interactable,
     this.speaker.follow();
     this.run.update(dt);
     const mode = this.run.state;
-    // The keys are read only while the player steers (reading them takes fire's press edge).
-    const keys = mode === 'playing' && this.sim.phase === 'aim' ? this.run.readControls() : null;
-    this.sim.update(dt, mode, keys);
+    // The keys are read only while the player steers (reading them takes fire's press edge); the press counts on the first step only.
+    let keys = mode === 'playing' && this.sim.phase === 'aim' ? this.run.readControls() : null;
+    this.steps.run(dt, (h) => {
+      this.sim.update(h, mode, keys);
+      if (keys?.firePressed) keys = { ...keys, firePressed: false };
+    });
     const text = this.sim.takeDisplay();
     if (text !== null) this.paintDisplay(text);
     this.playSounds();
@@ -198,7 +182,7 @@ export class ClawMachine extends THREE.Group implements Furniture, Interactable,
   }
 
   private playSounds(): void {
-    for (const sound of this.sim.takeSounds()) this.speaker.play(sound);
+    this.speaker.playAll(this.sim.takeSounds());
   }
 
   /** The model follows the sim: the carriage and its beam, the cable stretched to the claw, the prongs, the stick, the plush. */

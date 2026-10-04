@@ -25,9 +25,8 @@ const services = createServices(container);
 const { world, player } = createWorld(services);
 // The menus, the HUD and every panel, before the world: the market hall is handed its panels when its builder is bound.
 const ui = createUi(services, player, { zones, session });
-// The zones from WORLD_PLAN (the flat built and compiled now), the cat, the graphics, the shelves as one.
-const built = buildWorld(services, { world, player, marketHall: ui.marketHall, flat: ui, session, moves });
-zones.set(built.zones);
+// The zones from WORLD_PLAN (the flat built and compiled now), the cat, the graphics, the shelves as one; it sets `zones`.
+const built = buildWorld(services, { world, player, marketHall: ui.marketHall, flat: ui, session, moves, zones });
 // Travel, sleep, the spot remembered across reloads, the footsteps; the crosshair and the input devices.
 moves.set(createPlayerMoves(services, { world, built, player, fader: ui.fader }));
 const interaction = createInteraction(services, { world, built, player, overlay: ui.overlay, moves: moves.get(), notices: ui.notices });

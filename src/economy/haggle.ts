@@ -1,5 +1,7 @@
-import { GRAIL, NEGOTIATION, STICKER, hash01 } from './pricing';
+import { GRAIL, NEGOTIATION, STICKER } from './pricing';
 import type { StockItem } from './StockItem';
+import { unit01 } from '@/random';
+import { formatCoins } from '@/text/money';
 
 /** The three offers the player can make, as shares of the tag (see `NEGOTIATION.offers`). */
 export type OfferKind = keyof typeof NEGOTIATION.offers;
@@ -76,7 +78,7 @@ export class Negotiation {
     this.tag = item.tagPrice;
     const kind = item.source === 'showpiece' || item.source === 'estate' || item.source === 'grail' ? 'showpiece' : item.condition === 'worn' ? 'worn' : 'ordinary';
     const [lo, hi] = NEGOTIATION.floor[kind];
-    this.drawn = lo + hash01(`${mood.day}:floor:${item.game.id}`) * (hi - lo) + mood.soured * NEGOTIATION.moodPenalty;
+    this.drawn = lo + unit01(`${mood.day}:floor:${item.game.id}`) * (hi - lo) + mood.soured * NEGOTIATION.moodPenalty;
     this.sway = mood.loyalty * NEGOTIATION.loyalty + (mood.coffee ? NEGOTIATION.coffee.floor : 0) + (mood.rain ? NEGOTIATION.rain : 0);
     this.share = this.swayed();
     this.floor = this.floorFor(this.share);
@@ -157,7 +159,7 @@ export class Negotiation {
 
   /** The player offers `kind`. */
   offer(kind: OfferKind): Reply {
-    if (this.finished) return { kind: 'accept', price: this.finished.price, line: `We already shook on ${this.finished.price} coins.` };
+    if (this.finished) return { kind: 'accept', price: this.finished.price, line: `We already shook on ${formatCoins(this.finished.price)}.` };
     const offered = this.offerPrice(kind);
     this.turn++;
     if (offered >= this.counterPrice) return this.close(this.counterPrice, ACCEPT);
@@ -177,7 +179,7 @@ export class Negotiation {
 
   /** The player takes the standing counter-offer. */
   acceptCounter(): Reply {
-    if (this.finished) return { kind: 'accept', price: this.finished.price, line: `We already shook on ${this.finished.price} coins.` };
+    if (this.finished) return { kind: 'accept', price: this.finished.price, line: `We already shook on ${formatCoins(this.finished.price)}.` };
     return this.close(this.counterPrice, ACCEPT);
   }
 
@@ -193,7 +195,7 @@ export class Negotiation {
   }
 
   private say(lines: readonly string[], price: number): string {
-    const i = Math.floor(hash01(`${this.mood.day}:line:${this.item.game.id}:${this.turn}`) * lines.length);
-    return lines[i]!.replace('{price}', `${price} coins`);
+    const i = Math.floor(unit01(`${this.mood.day}:line:${this.item.game.id}:${this.turn}`) * lines.length);
+    return lines[i]!.replace('{price}', `${formatCoins(price)}`);
   }
 }

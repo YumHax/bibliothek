@@ -1,9 +1,10 @@
 import * as THREE from 'three';
 import { Prop, part } from '../../props/Prop';
 import { paint } from '../../materials/palette';
-import { createCanvas, seededRandom, toTexture } from '@/graphics/canvas';
+import { createCanvas, toTexture } from '@/graphics/canvas';
 import { decal, WALL } from '../../surface/layers';
 import { HAND, POSTER, PRINT } from '../common/lettering';
+import { lcg } from '@/random';
 
 export interface WallCalendarOptions {
   /** Whose calendar it is (a parts supplier's, printed across its picture). */
@@ -43,7 +44,7 @@ function paintCalendar(options: WallCalendarOptions): THREE.Texture {
   const w = Math.round(W * PX_PER_M);
   const h = Math.round(H * PX_PER_M);
   const [canvas, ctx] = createCanvas(w, h);
-  const random = seededRandom(options.seed ?? 5);
+  const random = lcg(options.seed ?? 5);
   ctx.fillStyle = '#f4f0e4';
   ctx.fillRect(0, 0, w, h);
   // The picture: a set on a sunset.

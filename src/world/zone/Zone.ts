@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { isUpdatable, type Updatable } from '@/core/Engine';
 import type { ColliderSet, Collisions, CollisionWorld } from '@/core/Collider';
 import { isInteractable, type Interactable } from '@/interaction/Interactable';
+import { Timers } from '@/core/Timers';
 import type { Furniture } from '../Furniture';
 import type { GameBox } from '../GameBox';
 import { resolvePlacement, type Placement } from '../Placement';
@@ -11,6 +12,7 @@ import { disposeTree } from '../props/Prop';
 import { ContactShadows } from './ContactShadows';
 import { mergeStaticParts } from './mergeStatic';
 import { isActivityAware, isDrawnAware, isOccupancyAware } from './lifecycle';
+import { Moving } from './moving';
 
 /**
  * How often an undrawn zone's items tick (per second): out of sight, a smooth 60 Hz buys nothing,
@@ -216,10 +218,10 @@ export class Zone<Id extends string = string> implements ShelvingHost {
   private readonly kept = new Set<Furniture>();
   /** Interactables that are not placed furniture themselves (the boxes on the shelves). */
   private readonly looseInteractables = new Set<Interactable>();
-  /** What stands on what (`ride`): per host, each rider's pose in the host's frame; `move` carries them along. */
-  private readonly riders = new Map<THREE.Object3D, Map<Furniture, THREE.Matrix4>>();
-  /** Placed items the player is carrying (`lift`): drawn and ticked, neither colliding nor clickable until `setDown`. */
-  private readonly lifted = new Set<Furniture>();
+  /** Moving the placed furniture about: what rides what, what the player carries (`zone/moving.ts`; the methods below delegate). */
+  readonly moving: Moving;
+  /** The zone's delayed calls (`after`): ticked while the zone is active, dropped with it (`core/Timers`). */
+  private readonly timers = new Timers();
   private readonly disposers: Array<() => void> = [];
   private readonly scoped: ScopedCollisions;
   /** The soft shadows where the furniture stands on the floor, one instanced mesh for the zone. */
@@ -252,6 +254,27 @@ export class Zone<Id extends string = string> implements ShelvingHost {
     this.scoped = new ScopedCollisions(host.collisions);
     this.collisions = this.scoped;
     this.contactShadows = new ContactShadows(this.group);
+    const zone = this;
+    this.moving = new Moving({
+      group: this.group,
+      shadowLayer,
+      collisions: host.collisions,
+      get isActive() {
+        return zone.state === 'active';
+      },
+      boxesOf: (item) => this.items.get(item),
+      setBoxes: (item, boxes) => {
+        this.items.set(item, boxes);
+      },
+      shadow: (item, shown) => (shown ? this.contactShadows.add(item) : this.contactShadows.remove(item)),
+      plugSolid: (item, boxes) => this.plugSolid(item, boxes),
+      unplugSolid: (item, boxes) => this.unplugSolid(item, boxes),
+      reveal: (item) => this.reveal(item),
+      remove: (item) => this.remove(item),
+      forget: (item) => {
+        this.kept.delete(item);
+      },
+    });
   }
 
   /** ShelvingHost: shelves are parented to the zone, not the scene. */
@@ -429,7 +452,7 @@ export class Zone<Id extends string = string> implements ShelvingHost {
     if (!boxes) return;
     if (this.state === 'active') this.unplug(item, boxes);
     this.items.delete(item);
-    this.lifted.delete(item);
+    this.moving.forget(item);
     this.contactShadows.remove(item);
     this.group.remove(item);
   }
@@ -439,121 +462,46 @@ export class Zone<Id extends string = string> implements ShelvingHost {
     return this.items.has(item);
   }
 
-  /**
-   * Records `rider` as standing on (or hanging from, or belonging to) `host` as they stand now: `move(host)`
-   * carries it along, keeping its pose in the host's frame. `placeWith` records it for what it places.
-   */
+  // --- Moving the furniture about: `zone/moving.ts` does it, these keep the callers' names -----------------------
+
+  /** Records `rider` as standing on (or hanging from, or belonging to) `host` as they stand now: `move(host)` carries it along. */
   ride(host: THREE.Object3D, rider: Furniture): void {
-    host.updateWorldMatrix(true, false);
-    rider.updateWorldMatrix(true, false);
-    let list = this.riders.get(host);
-    if (!list) this.riders.set(host, (list = new Map()));
-    list.set(rider, new THREE.Matrix4().copy(host.matrixWorld).invert().multiply(rider.matrixWorld));
+    this.moving.ride(host, rider);
   }
 
   /** `rider` stands on nothing any more (taken off the table it stood on): moving that host leaves it. */
   unride(rider: Furniture): void {
-    for (const list of this.riders.values()) list.delete(rider);
+    this.moving.unride(rider);
   }
 
   /** What `rider` stands on (`ride`), if anything. */
   hostOf(rider: Furniture): THREE.Object3D | null {
-    for (const [host, list] of this.riders) if (list.has(rider)) return host;
-    return null;
+    return this.moving.hostOf(rider);
   }
 
   /** What rides `host` (`ride`), directly. */
   ridersOf(host: THREE.Object3D): Furniture[] {
-    return [...(this.riders.get(host)?.keys() ?? [])];
+    return this.moving.ridersOf(host);
   }
 
-  /**
-   * Moves `item` to a new zone-local pose, and what rides it with it (`ride`, all the way down). A placed item
-   * takes its colliders and its contact shadow along; one staged or taken out just stands there when it comes.
-   */
+  /** Moves `item` to a new zone-local pose, and what rides it with it (`ride`, all the way down). */
   move(item: Furniture, position: THREE.Vector3, rotationY: number): void {
-    item.position.copy(position);
-    item.rotation.y = rotationY;
-    item.updateWorldMatrix(true, false);
-    const old = this.items.get(item);
-    if (old) {
-      const boxes = [item.footprint, ...(item.colliders ?? [])].map((box) => box.clone().applyMatrix4(item.matrixWorld));
-      const solid = this.state === 'active' && !this.lifted.has(item);
-      if (solid) for (const box of old) this.host.collisions.remove(box);
-      this.items.set(item, boxes);
-      if (solid) for (const box of boxes) this.host.collisions.add(box);
-      if (!this.lifted.has(item)) {
-        this.contactShadows.remove(item);
-        this.contactShadows.add(item);
-      }
-    }
-    const riders = this.riders.get(item);
-    if (!riders) return;
-    const toZone = new THREE.Matrix4().copy(this.group.matrixWorld).invert();
-    const pose = new THREE.Matrix4();
-    const at = new THREE.Vector3();
-    const turn = new THREE.Quaternion();
-    const scale = new THREE.Vector3();
-    for (const [rider, local] of riders) {
-      pose.multiplyMatrices(item.matrixWorld, local).premultiply(toZone).decompose(at, turn, scale);
-      this.move(rider, at.clone(), new THREE.Euler().setFromQuaternion(turn, 'YXZ').y);
-    }
+    this.moving.move(item, position, rotationY);
   }
 
-  /**
-   * The player takes `item` (placed here) to move it: it and what rides it stop colliding and being clickable
-   * and lose their contact shadow, but stay in the group (a lamp's light never leaves the scene) and keep ticking.
-   */
+  /** The player takes `item` (placed here) to move it: it and what rides it stop colliding and being clickable until `setDown`. */
   lift(item: Furniture): void {
-    const boxes = this.items.get(item);
-    if (boxes && !this.lifted.has(item)) {
-      if (this.state === 'active') this.unplugSolid(item, boxes);
-      this.lifted.add(item);
-      this.contactShadows.remove(item);
-    }
-    for (const rider of this.ridersOf(item)) this.lift(rider);
+    this.moving.lift(item);
   }
 
   /** Undoes `lift` where the item (and what rides it) now stands. */
   setDown(item: Furniture): void {
-    const boxes = this.items.get(item);
-    if (boxes && this.lifted.delete(item)) {
-      if (this.state === 'active') this.plugSolid(item, boxes);
-      this.contactShadows.add(item);
-    }
-    for (const rider of this.ridersOf(item)) this.setDown(rider);
+    this.moving.setDown(item);
   }
 
-  /**
-   * Hands `item` (placed here) and what rides it to zone `to`, standing where it stands now in the world: out of this
-   * zone's group, colliders, ticks, culling and shadow layer, into `to`'s (the player carried it through a doorway,
-   * or took it out of storage in another room). Lifted, it stays lifted there; it rides nothing any more. For the
-   * flat's zones, which are never unloaded (the item is disposed with the zone that holds it then).
-   */
+  /** Hands `item` (placed here) and what rides it to zone `to`, standing where it stands now in the world. */
   handOver(item: Furniture, to: Zone): void {
-    if (to === this || !this.items.has(item)) return;
-    const lifted = this.lifted.has(item);
-    const riders = this.riders.get(item);
-    item.updateWorldMatrix(true, false);
-    const world = item.matrixWorld.clone();
-    // What culling hid of it here comes back (`to` hides it again if it is not drawn).
-    this.reveal(item);
-    this.remove(item);
-    this.kept.delete(item);
-    this.riders.delete(item);
-    for (const list of this.riders.values()) list.delete(item);
-    item.traverse((obj) => obj.layers.disable(this.shadowLayer));
-    const at = new THREE.Vector3();
-    const turn = new THREE.Quaternion();
-    to.group.updateMatrixWorld();
-    new THREE.Matrix4().copy(to.group.matrixWorld).invert().multiply(world).decompose(at, turn, new THREE.Vector3());
-    // Its riders go too, keeping their pose on it; recorded on `to` before it is placed, so a lift there reaches them.
-    if (riders) {
-      to.riders.set(item, riders);
-      for (const rider of riders.keys()) this.handOver(rider, to);
-    }
-    to.place(item, at, new THREE.Euler().setFromQuaternion(turn, 'YXZ').y);
-    if (lifted) to.lift(item);
+    this.moving.handOver(item, to);
   }
 
   /**
@@ -561,7 +509,7 @@ export class Zone<Id extends string = string> implements ShelvingHost {
    * what a piece being set down must not stand in.
    */
   forEachPlaced(visit: (item: Furniture, boxes: readonly THREE.Box3[]) => void): void {
-    for (const [item, boxes] of this.items) if (!this.lifted.has(item)) visit(item, boxes);
+    for (const [item, boxes] of this.items) if (!this.moving.isLifted(item)) visit(item, boxes);
   }
 
   /** ShelvingHost: boxes are interactables that come and go with rebuilds. */
@@ -602,6 +550,15 @@ export class Zone<Id extends string = string> implements ShelvingHost {
   }
 
   /** Registers clean-up for things the builder created that are not furniture (subscriptions, a Shelving). */
+  /**
+   * Calls `fn` once `seconds` of the zone's time have passed: not while the zone is dormant, slowed with it when
+   * culled, never after it unloads. The builders' `setTimeout`: a note read a moment after a find, a door that
+   * answers after a ring.
+   */
+  after(seconds: number, fn: () => void): void {
+    this.timers.after(seconds, fn);
+  }
+
   onUnload(dispose: () => void): void {
     this.disposers.push(dispose);
   }
@@ -682,6 +639,7 @@ export class Zone<Id extends string = string> implements ShelvingHost {
       this.host.scene.add(this.group);
       for (const [item, boxes] of this.items) this.plug(item, boxes);
       this.scoped.setLive(true);
+      this.host.addUpdatable(this.timers);
       for (const item of this.looseInteractables) if (!this.culled.has(item)) this.host.interactableAdded(item);
       this.state = 'active';
     }
@@ -692,6 +650,7 @@ export class Zone<Id extends string = string> implements ShelvingHost {
   deactivate(): void {
     if (this.state !== 'active') return;
     for (const item of this.looseInteractables) this.host.interactableRemoved(item);
+    this.host.removeUpdatable(this.timers);
     this.scoped.setLive(false);
     for (const [item, boxes] of this.items) this.unplug(item, boxes);
     this.host.scene.remove(this.group);
@@ -718,8 +677,8 @@ export class Zone<Id extends string = string> implements ShelvingHost {
     this.contactShadows.clear();
     this.group.add(this.contactShadows.mesh);
     this.items.clear();
-    this.riders.clear();
-    this.lifted.clear();
+    this.moving.clear();
+    this.timers.clear();
     this.looseInteractables.clear();
     this.portals.length = 0;
     this.hiddenMeshes = [];
@@ -763,14 +722,14 @@ export class Zone<Id extends string = string> implements ShelvingHost {
     for (const object of item.occluders ?? []) this.host.occluderAdded(object);
     if (isUpdatable(item)) this.tick(item);
     if (isActivityAware(item)) item.setZoneActive(true);
-    if (!this.lifted.has(item)) this.plugSolid(item, boxes);
+    if (!this.moving.isLifted(item)) this.plugSolid(item, boxes);
   }
 
   private unplug(item: Furniture, boxes: THREE.Box3[]): void {
     for (const object of item.occluders ?? []) this.host.occluderRemoved(object);
     if (isUpdatable(item)) this.untick(item);
     if (isActivityAware(item)) item.setZoneActive(false);
-    if (!this.lifted.has(item)) this.unplugSolid(item, boxes);
+    if (!this.moving.isLifted(item)) this.unplugSolid(item, boxes);
   }
 
   /** What a lifted item gives up: its colliders and its place under the crosshair. */

@@ -8,10 +8,12 @@ import { Walker } from '../../people/Walker';
 import { randomLook } from '../../people/looks';
 import type { Season } from '@/time/season';
 import { snowCovered } from '../snowCover';
-import { shopDoors, type Vec2 } from '../streetPlan';
+import type { Vec2 } from '../streetPlan';
+import { shopDoors } from '@/world/city/facades';
 import { Figure } from './Figure';
 import type { TalkRole } from './streetTalk';
 import { terraceOut, terraceWeather } from './terraceWeather';
+import { random, within } from '@/random';
 
 interface TerraceSpec {
   /** The stretch of pavement the tables stand along (same z at both ends). */
@@ -253,7 +255,7 @@ export class Terraces extends THREE.Group implements Furniture, Updatable {
       if (seated >= wanted) break;
       if (c.state !== 'away') continue;
       const free = t.seats.filter((s) => !taken.has(s));
-      const seat = free[Math.floor(Math.random() * free.length)];
+      const seat = free[Math.floor(random() * free.length)];
       if (!seat) break;
       taken.add(seat);
       seated++;
@@ -263,8 +265,8 @@ export class Terraces extends THREE.Group implements Furniture, Updatable {
 
   private arrive(t: Terrace, c: Customer, seat: Seat, instantly: boolean): void {
     c.seat = seat;
-    c.stay = between(STAY);
-    c.serve = instantly ? 0 : between(SERVED_AFTER);
+    c.stay = within(random, STAY);
+    c.serve = instantly ? 0 : within(random, SERVED_AFTER);
     const walker = c.figure.walker;
     const sit = (): void => {
       c.state = 'seated';
@@ -278,7 +280,7 @@ export class Terraces extends THREE.Group implements Furniture, Updatable {
     // Up from the pavement's lane, along it from one side, to the chair.
     const side = Math.sign(t.spec.from[1]);
     const lane = new THREE.Vector3(seat.at.x, 0, side * LANE_Z);
-    const from = lane.clone().add(new THREE.Vector3((Math.random() < 0.5 ? -1 : 1) * WALK_OFF, 0, 0));
+    const from = lane.clone().add(new THREE.Vector3((random() < 0.5 ? -1 : 1) * WALK_OFF, 0, 0));
     c.state = 'arriving';
     c.figure.show(from);
     walker.walk([lane, seat.at.clone()], sit);
@@ -296,7 +298,7 @@ export class Terraces extends THREE.Group implements Furniture, Updatable {
     const side = Math.sign(t.spec.from[1]);
     const lane = new THREE.Vector3(seat.at.x, 0, side * LANE_Z);
     // Along the pavement, fading out over its last metre or so.
-    const way = (Math.random() < 0.5 ? -1 : 1) * WALK_OFF;
+    const way = (random() < 0.5 ? -1 : 1) * WALK_OFF;
     const fadeFrom = lane.clone().add(new THREE.Vector3(way * 0.7, 0, 0));
     const off = lane.clone().add(new THREE.Vector3(way, 0, 0));
     walker.walk([lane, fadeFrom], () => {
@@ -445,6 +447,3 @@ function plain(g: THREE.BufferGeometry): THREE.BufferGeometry {
   return out;
 }
 
-function between([lo, hi]: readonly [number, number]): number {
-  return lo + Math.random() * (hi - lo);
-}

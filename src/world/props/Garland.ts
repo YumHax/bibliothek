@@ -1,7 +1,7 @@
 import * as THREE from 'three';
-import { seededRandom } from '@/covers/generated/canvasUtils';
 import { Prop } from './Prop';
 import { standard, instancedStandard } from '../materials/palette';
+import { lcg } from '@/random';
 
 /** `bulbs`: a string of warm fairground bulbs; `bunting`: triangular cloth flags on a string. */
 export type GarlandStyle = 'bulbs' | 'bunting';
@@ -67,7 +67,7 @@ export class Garland extends Prop {
     const height = options.height ?? 2.4;
     const sag = options.sag ?? 0.25;
     const spacing = options.spacing ?? (style === 'bulbs' ? 0.3 : 0.24);
-    const random = seededRandom(options.seed ?? 7);
+    const random = lcg(options.seed ?? 7);
     const curve = new Slack(length, height, sag);
 
     const wire = new THREE.Mesh(new THREE.TubeGeometry(curve, 32, WIRE_RADIUS, 5, false), WIRE);

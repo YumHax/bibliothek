@@ -1,9 +1,10 @@
 import * as THREE from 'three';
-import { createCanvas, seededRandom, toTexture } from '@/covers/generated/canvasUtils';
+import { createCanvas, toTexture } from '@/covers/generated/canvasUtils';
 import { Prop, part } from '../../props/Prop';
 import { paint, timber } from '../../materials/palette';
 import { WALL, decal } from '../../surface/layers';
 import { CHALK, setLines } from './lettering';
+import { lcg } from '@/random';
 
 export interface WallChalkboardOptions {
   /** What is chalked on it, the first line bigger. */
@@ -54,7 +55,7 @@ function paintSlate(wM: number, hM: number, options: WallChalkboardOptions, slat
   const W = Math.round(wM * PX_PER_M);
   const H = Math.round(hM * PX_PER_M);
   const [canvas, ctx] = createCanvas(W, H);
-  const random = seededRandom((options.seed ?? 4) * 7919 + 3);
+  const random = lcg((options.seed ?? 4) * 7919 + 3);
   ctx.fillStyle = `#${slate.toString(16).padStart(6, '0')}`;
   ctx.fillRect(0, 0, W, H);
   for (let i = 0; i < 50; i++) {

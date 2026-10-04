@@ -1,11 +1,11 @@
 import type { ChipSpeaker } from '@/audio/ChipSpeaker';
-import { seededRandom } from '@/covers/generated/canvasUtils';
 import { type ArcadeControls, type ArcadeGame, NO_CONTROLS } from './games/ArcadeGame';
 import type { GameRunner } from './GameRunner';
 import type { CabinetScreens } from './CabinetScreens';
 import type { ScoreTable } from './scoreTable';
 import { ReplayPlayer } from './replay/Replay';
 import type { ReplayShelf } from './replay/ReplayStore';
+import { lcg, random as liveRandom } from '@/random';
 
 /** What an idle cabinet shows: its title card, the game playing itself, or the player's best run. */
 type AttractMode = 'title' | 'autoplay' | 'replay';
@@ -52,11 +52,13 @@ export class AttractLoop {
   private clock = 0;
   private phase = 0;
   private hold = 0;
+  /** The dead tube's rolling bar, on the machine's time (seconds ticked), not the wall clock's. */
+  private staticPhase = 0;
   private jingleIn: number;
   private replay: ReplayPlayer | null = null;
 
   constructor(private readonly parts: AttractParts) {
-    this.jingleIn = JINGLE_EVERY[0] * seededRandom(parts.seed)() + 5;
+    this.jingleIn = JINGLE_EVERY[0] * lcg(parts.seed)() + 5;
   }
 
   /** Whether the title card is up (not a demo or a replay). */
@@ -79,9 +81,10 @@ export class AttractLoop {
     const { game, runner, screens, speaker, replays } = this.parts;
     if (dead) {
       this.clock += dt;
+      this.staticPhase += dt;
       if (this.clock >= 1 / STATIC_FPS) {
         this.clock = 0;
-        screens.drawStatic();
+        screens.drawStatic(this.staticPhase);
       }
       return NO_CONTROLS;
     }
@@ -90,7 +93,7 @@ export class AttractLoop {
       this.jingleIn -= dt;
       if (this.jingleIn <= 0 && this.parts.quiet) this.jingleIn = Infinity;
       if (this.jingleIn <= 0) {
-        this.jingleIn = JINGLE_EVERY[0] + Math.random() * (JINGLE_EVERY[1] - JINGLE_EVERY[0]);
+        this.jingleIn = JINGLE_EVERY[0] + liveRandom() * (JINGLE_EVERY[1] - JINGLE_EVERY[0]);
         speaker.level = 0.35;
         speaker.play('jingle');
       }

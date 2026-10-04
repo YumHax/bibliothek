@@ -6,6 +6,10 @@ import { estatePhase } from './estateSale';
 import { mainsOn } from './mains';
 import { COPRO_PLAN as plan, RESOLUTIONS, type Resolution, type ResolutionId } from './coproPlan';
 import { ballotFor, castBallot, coproChoice, minutesOf, pendingBallotDays, recordMeeting, settledThrough, voidBallot, type Outcome } from './coproState';
+import { swayedVote, swayOf, type Stance } from './coproSway';
+import { BUILDING_SOCIAL } from './buildingSocialPlan';
+import { has } from '@/social/perks';
+import { markMood } from '@/social/mood';
 
 /** One resolution as the ballot shows it: its options with who leans to each, the building's current choice, the player's vote. */
 export interface BallotItem {
@@ -30,6 +34,8 @@ export interface BallotView {
   maxBought: number;
   /** The player's own votes (two once they own two flats). */
   playerVotes: number;
+  /** How the residents stand to the player's ballot, from how the player stands with them (`coproSway`). */
+  sway: { who: string; stance: Stance }[];
 }
 
 interface CoproMeetingOptions {
@@ -50,6 +56,12 @@ export function nextMeetingDay(day: number): number {
 /** The last meeting that sat before game day `day` (0: none yet). */
 function lastMeetingDay(day: number): number {
   return Math.floor((day - 1) / plan.every) * plan.every;
+}
+
+/** The next meeting from game day `day` and its agenda's titles (the syndic, asked early). */
+export function nextAgenda(day: number): { day: number; titles: string[] } {
+  const next = nextMeetingDay(day);
+  return { day: next, titles: agendaFor(next).map((r) => r.title) };
 }
 
 /** The resolutions put to the meeting of `day`: a seeded draw, those never decided first. */
@@ -141,7 +153,8 @@ export class CoproMeeting {
         bought: ballot.bought[r.id] ?? 0,
       };
     });
-    return { day, hour: plan.hour, syndic: plan.syndic, items, contribution: plan.contribution, maxBought: plan.maxBought, playerVotes: this.playerVotes() };
+    const sway = [...swayOf(voters)].map(([who, stance]) => ({ who, stance }));
+    return { day, hour: plan.hour, syndic: plan.syndic, items, contribution: plan.contribution, maxBought: plan.maxBought, playerVotes: this.playerVotes(), sway };
   }
 
   /**
@@ -198,19 +211,37 @@ export class CoproMeeting {
   private tally(day: number): void {
     const ballot = ballotFor(day);
     const voters = plan.voters.filter((v) => this.stillHere(v.who));
+    // The player's friends vote with their ballot, a close one brings another round, a hostile one votes against it.
+    const sway = swayOf(voters);
+    const cast = new Map<string, string[]>();
     const outcomes = agendaFor(day).map((r): Outcome => {
       const current = coproChoice(r.id);
       const tally: Record<string, number> = Object.fromEntries(r.options.map((o) => [o.id, 0]));
-      for (const v of voters) tally[voteOf(v.who, r, day, current)]! += 1;
       const player = ballot.votes[r.id];
+      for (const v of voters) {
+        const stance = sway.get(v.who);
+        const vote = stance && player && player in tally ? swayedVote(stance, player, current, r.options) : voteOf(v.who, r, day, current);
+        tally[vote]! += 1;
+        cast.set(v.who, [...(cast.get(v.who) ?? []), `${r.id}:${vote}`]);
+      }
       if (player && player in tally) tally[player]! += this.playerVotes() + (ballot.bought[r.id] ?? 0);
       const best = Math.max(...Object.values(tally));
       const top = r.options.filter((o) => tally[o.id] === best).map((o) => o.id);
-      // A tie keeps the building as it is.
-      const winner = top.includes(current) ? current : top[0]!;
+      // A tie keeps the building as it is, unless the syndic is the player's friend: then it goes their way.
+      const winner = player && top.includes(player) && top.length > 1 && has('bertin', 'tieBreak') ? player : top.includes(current) ? current : top[0]!;
       return { id: r.id, winner, tally, player, changed: winner !== current };
     });
     recordMeeting(day, outcomes);
+    // The meeting just sat (not an old one tallied late): whose side won puts them in a good or a bad mood today.
+    if (this.day - day > 1) return;
+    for (const v of voters) {
+      if (!v.person) continue;
+      const votes = cast.get(v.who) ?? [];
+      const won = outcomes.filter((o) => votes.includes(`${o.id}:${o.winner}`)).length;
+      const lost = outcomes.length - won;
+      if (won === lost) continue;
+      markMood(v.person, this.day, won > lost ? 1 : -1, won > lost ? BUILDING_SOCIAL.meetingMood.won : BUILDING_SOCIAL.meetingMood.lost);
+    }
   }
 
   /** The board's notes: the agenda while the ballot is open, the minutes for a few days after. */

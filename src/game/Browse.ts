@@ -10,6 +10,8 @@ import type { KeyRoute, SessionHost } from './SessionHost';
 import { isAction } from '@/input/actions';
 import { actionKeyLabel } from '@/ui/keys';
 import { distanceTo, faceBox, standInFrontOf } from './playerPose';
+import { random as liveRandom } from '@/random';
+import { formatCount } from '@/text/count';
 
 /** A box may be picked up with Enter when closer than this (metres). */
 const REACH_M = 2.5;
@@ -73,7 +75,7 @@ export class Browse implements KeyRoute {
       return;
     }
     if (this.locate(boxes[0]!.game, 'random')) {
-      this.host.react(`${name}: ${boxes.length} game${boxes.length > 1 ? 's' : ''}`);
+      this.host.react(`${name}: ${formatCount(boxes.length, 'game')}`);
       this.tipWhileFocused(`Press ${actionKeyLabel('randomPick')} to go to the glowing box.`);
     }
   }
@@ -169,7 +171,7 @@ export class Browse implements KeyRoute {
       this.host.refuse('No games on the shelves');
       return;
     }
-    const box = boxes[Math.floor(Math.random() * boxes.length)]!;
+    const box = boxes[Math.floor(liveRandom() * boxes.length)]!;
     if (this.locate(box.game, 'random')) {
       this.host.react(`Random pick: ${box.game.title}`);
       this.tipWhileFocused(`Press ${actionKeyLabel('randomPick')} again to go there.`);

@@ -2,7 +2,8 @@ import * as THREE from 'three';
 import { afterChunk, patchShader } from '../materials/shaderPatch';
 import { isShared, markShared } from '../materials/sharedResources';
 import { facadeHeight } from './facadePainter';
-import { FACADES, FRONT, PARK_STREET, STREET_ENDS } from './streetPlan';
+import { FACADES } from '@/world/city/facades';
+import { FRONT, PARK_STREET, STREET_ENDS } from '@/world/measures/street';
 
 /** The sun's shadow fades out over this outer share of its map (the square of street round the player): no hard edge. */
 const EDGE_FADE = 0.15;

@@ -1,5 +1,5 @@
-import { seededRandom } from '@/covers/generated/canvasUtils';
 import { shade } from './colour';
+import { lcg, pick } from '@/random';
 
 /*
  * How a building of the neighbourhood looks, drawn from its plan's `seed` (`street/streetPlan.FACADES`):
@@ -82,19 +82,15 @@ export function facadeBays(width: number, bays?: number): number {
   return bays ?? Math.max(1, Math.round(width / 2.7));
 }
 
-function pick<T>(random: () => number, items: readonly T[]): T {
-  return items[Math.floor(random() * items.length)]!;
-}
-
 /**
  * A building's look from its seed (`stoneShare`: the chance of a dressed stone front). The same seed
  * always gives the same building, whichever renderer asks. `random` draws a lot's look instead (the
  * window view's unplanned buildings, from its shared sequence).
  */
-export function facadeStyle(seed: number, stoneShare = 0.25, random: () => number = seededRandom(seed * 7919 + 17)): FacadeStyle {
+export function facadeStyle(seed: number, stoneShare = 0.25, random: () => number = lcg(seed * 7919 + 17)): FacadeStyle {
   const base = baseStyle(seed, stoneShare, random);
   // The finer points from a draw of their own, so the main draw (and every lot drawn after it) is as it was.
-  const more = seededRandom(seed * 6151 + 29);
+  const more = lcg(seed * 6151 + 29);
   const grand = base.kind === 'stone';
   const windows: WindowSize = {
     sill: grand ? 0.75 + more() * 0.1 : 0.82 + more() * 0.18,
@@ -159,7 +155,7 @@ interface BalconyRow {
 export function balconyRows(style: FacadeStyle, storeys: number, bays: number): BalconyRow[] {
   if (style.balconies === 'none') return [];
   if (style.balconies === 'haussmann') return [...new Set([1, storeys - 1])].filter((f) => f >= 1).map((floor) => ({ floor, from: 0, to: bays - 1 }));
-  const random = seededRandom(style.seed * 104729 + 3);
+  const random = lcg(style.seed * 104729 + 3);
   const rows: BalconyRow[] = [];
   for (let floor = 1; floor < storeys; floor++) {
     if (random() >= 0.25) continue;

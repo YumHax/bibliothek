@@ -3,7 +3,8 @@ import type { GestureName } from '../../people/motion/gestures';
 import type { PaintedFront } from '../Buildings';
 import { FacadeFrame } from '../relief/facadeFrame';
 import { hasShopfront } from '../shopfronts/shopfrontPlan';
-import { isWalkable, WORKS, type Vec2 } from '../streetPlan';
+import type { Vec2 } from '../streetPlan';
+import { isWalkable, WORKS } from '@/world/measures/street';
 
 /*
  * A passer-by's trip (`StreetCrowd`): a route of the plan walked as steps, with stops on the way: a look in a

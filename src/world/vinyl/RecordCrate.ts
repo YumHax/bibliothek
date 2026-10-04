@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import type { Interactable } from '@/interaction/Interactable';
 import type { SessionActions } from '@/game/SessionActions';
 import { createCanvas, toTexture } from '@/graphics/canvas';
+import { seededRng } from '@/random';
 import { RECORDS, type Soundtrack } from '@/vinyl/records';
 import { invisibleHitbox } from '../meshUtils';
 import { Prop, part, matte } from '../props/Prop';
@@ -112,9 +113,8 @@ function paintSleeve(record: Soundtrack): THREE.Texture {
   const hex = (c: number) => `#${c.toString(16).padStart(6, '0')}`;
   ctx.fillStyle = hex(record.sleeve.ground);
   ctx.fillRect(0, 0, S, S);
-  // A band of big pixels across the middle, in the sleeve's ink and label colours.
-  let seed = [...record.id].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7);
-  const rand = () => ((seed = (seed * 1103515245 + 12345) >>> 0) / 4294967296);
+  // A band of big pixels across the middle, in the sleeve's ink and label colours (the same band for a record every time).
+  const rand = seededRng(record.id);
   const px = 16;
   for (let y = 96; y < 176; y += px) for (let x = 0; x < S; x += px) {
     const r = rand();

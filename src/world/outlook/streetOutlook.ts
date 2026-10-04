@@ -15,7 +15,7 @@ import { RetroLure } from '../street/RetroLure';
 import { RETRO_NEWS } from '../props/outdoors/RetroShopLure';
 import type { WindowLife } from '../street/windowLife';
 import { Courtyard } from './Courtyard';
-import { COURTYARD_YARD } from './outlookPlan';
+import { COURTYARD_YARD } from '@/world/courtyard/courtyardPlan';
 import { disposeOutlookScene, type OutlookContents } from './OutlookView';
 import type { HomeUpgrades } from '@/economy/HomeUpgrades';
 

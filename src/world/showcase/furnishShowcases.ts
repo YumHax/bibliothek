@@ -11,7 +11,7 @@ import type { ShowcaseStand } from './stand';
  * bought (`placerFor`), then movable about the room (never out of it: their boxes are the room's) and filled with the
  * games the player put in them (`Showcases`). Nothing without the flat's displays and box pool (a build without them).
  */
-export function furnishShowcases(zone: Zone, ctx: BuildContext): void {
+export function furnishShowcases(zone: Zone, ctx: Pick<BuildContext, 'collection' | 'home'>): void {
   const { collection: { showcases, boxes }, home: { upgrades, furnishings } } = ctx;
   if (!showcases || !boxes) return;
   const plan = ROOM_PLAN.showcase;

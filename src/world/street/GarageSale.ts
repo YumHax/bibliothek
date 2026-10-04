@@ -8,13 +8,16 @@ import { createCanvas, toTexture } from '@/covers/generated/canvasUtils';
 import { StockItem } from '@/economy/StockItem';
 import { KEYS } from '@/persistence';
 import { DailyList } from '@/time/DailyList';
-import { dailyRandom, isEventDay } from '@/time/daily';
+import { dailyRandom } from '@/time/daily';
+import { GARAGE_SALE } from './events/streetSchedules';
 import type { Furniture } from '../Furniture';
 import { shared } from '../materials/palette';
 import { snowPaint } from './snowCover';
 import { bareMetal } from './metals';
 import { ForSaleBox } from '../market/ForSaleBox';
 import { GARAGE_WHERE } from '@/economy/pricing';
+import { random as liveRandom } from '@/random';
+import { formatCoins } from '@/text/money';
 
 /** Where the sale's boxes go: the zone (they must be placed to be clickable). */
 interface GarageSaleHost {
@@ -42,10 +45,12 @@ const LOOK_EVERY = 2;
 const THANKS = ['Coins in the tin, ta!', 'Clearing out the loft. Enjoy it!', 'My brother will never notice.', 'Good home, that one.'];
 
 /**
- * Whether today (the real date) is a garage-sale day on Front Street: about one day in `oneDayIn`.
+ * Whether today (the real date) is a garage-sale day on Front Street: about one day in the plan's `oneDayIn`, as the
+ * sale's schedule says (`events/streetSchedules`, the one rule the paper and the pavement share; the plan's number
+ * is passed by the builder and read there).
  */
-export function isGarageSaleDay(oneDayIn: number, date = new Date()): boolean {
-  return isEventDay('garage', oneDayIn, { date });
+export function isGarageSaleDay(_oneDayIn: number, date = new Date()): boolean {
+  return GARAGE_SALE.isDay(date);
 }
 
 /**
@@ -107,8 +112,8 @@ export class GarageSale extends THREE.Group implements Furniture, Updatable, Int
   /** What the table holds now: loft games at the flat price, nothing yet (the stock not drawn), or picked clean. */
   activate(session: SessionActions): void {
     const price = this.options.price();
-    if (!this.filled) session.react(`“Still unpacking, love. Games ${price} coins each, the rest is at the flea market in RETRO GAMES.”`);
-    else if (this.onTable > 0) session.react(`Loft finds, ${price} coins each, no haggling. Pick one up to look at it.`);
+    if (!this.filled) session.react(`“Still unpacking, love. Games ${formatCoins(price)} each, the rest is at the flea market in RETRO GAMES.”`);
+    else if (this.onTable > 0) session.react(`Loft finds, ${formatCoins(price)} each, no haggling. Pick one up to look at it.`);
     else session.react('Picked clean. A box of cables and a broken joypad are all that is left.');
   }
 
@@ -153,7 +158,7 @@ export class GarageSale extends THREE.Group implements Furniture, Updatable, Int
         wallet,
         where: GARAGE_WHERE,
         isWanted: () => isWanted(item.game.id),
-        thanks: () => THANKS[Math.floor(Math.random() * THANKS.length)]!,
+        thanks: () => THANKS[Math.floor(liveRandom() * THANKS.length)]!,
       });
       const at = host.toLocal(this.localToWorld(new THREE.Vector3(-TABLE.width / 2 + spacing * (i + 1), TABLE.height + 0.016, 0.08)));
       const place = (): void => {
@@ -197,7 +202,7 @@ function signTexture(price: number): THREE.CanvasTexture {
   ctx.font = 'bold 40px "Comic Sans MS", "Chalkboard SE", sans-serif';
   ctx.fillText('GARAGE SALE', 160, 58);
   ctx.font = 'bold 30px "Comic Sans MS", "Chalkboard SE", sans-serif';
-  ctx.fillText(`games ${price} coins`, 160, 112);
+  ctx.fillText(`games ${formatCoins(price)}`, 160, 112);
   ctx.font = '22px "Comic Sans MS", "Chalkboard SE", sans-serif';
   ctx.fillText('more inside RETRO GAMES ➜', 160, 170);
   ctx.fillText('(the flea market, at the back)', 160, 200);

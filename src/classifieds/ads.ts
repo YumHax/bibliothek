@@ -2,6 +2,8 @@ import type { PlatformId } from '@/catalog/types';
 import { PLATFORM_LIST, getPlatform } from '@/catalog/platforms';
 import { gameDayRandom } from '@/time/daily';
 import { CLASSIFIEDS, SELLERS, type SellerKind } from './rules';
+import { capitalise } from '@/text/strings';
+import { fnv1a } from '@/random';
 
 /** A private seller's small ad in THE GAMING WEEKLY: who, where, what, and when to come round. */
 export interface Ad {
@@ -76,7 +78,7 @@ const TEXTS: Readonly<Record<SellerKind, readonly ((p: string, when: string) => 
     (_p, when) => `Emptying the flat before I move: a box of old games, mixed. Quick sale. Ring ${when}.`,
   ],
   collector: [
-    (p, when) => `Thinning my ${p} collection: complete in box, some first prints. Serious buyers only. ${cap(when)}.`,
+    (p, when) => `Thinning my ${p} collection: complete in box, some first prints. Serious buyers only. ${capitalise(when)}.`,
     (p, when) => `Collector selling ${p} duplicates. CIB, kept in protectors. No time-wasters. Phone ${when}.`,
   ],
   loft: [
@@ -95,10 +97,6 @@ function whenOf([from, to]: readonly [number, number]): string {
 function clock12(hours: number): string {
   const h = Math.floor(hours) % 12 || 12;
   return String(h);
-}
-
-function cap(text: string): string {
-  return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
 /** The ads that went in on game `day`, drawn from the day alone (the same all day, across reloads). */
@@ -125,7 +123,7 @@ export function adsPostedOn(day: number): Ad[] {
 /** A scripted ad as the paper prints it. */
 export function scriptedAd(spec: ScriptedAd): Ad {
   const days = spec.days ?? CLASSIFIEDS.lasts;
-  const seed = [...spec.id].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7);
+  const seed = fnv1a(spec.id);
   const hours = spec.hours ?? SELLERS[spec.kind].hours[0]!;
   return {
     id: spec.id,
@@ -149,11 +147,4 @@ function pickKind(u: number): SellerKind {
     if (u < acc) return kind;
   }
   return 'clearOut';
-}
-
-/** "18:00" for hours of the clock. */
-export function clockOf(hours: number): string {
-  const h = Math.floor(hours);
-  const m = Math.round((hours - h) * 60);
-  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
 }

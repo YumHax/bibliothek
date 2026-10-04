@@ -25,7 +25,9 @@ coins clink from where they stand. The script's pauses are `VISIT_RULES.beats`. 
 first; a comment on the box they looked at is made once, then they talk of others. Nobody
 answering after two rings, they go back down and try another day.
 
-Borrowing: a click on the friend opens the `BorrowPanel` (`src/ui/BorrowPanel.ts`, via `SessionActions.openPanel`).
+Talking: a click on a friend opens the conversation (docs/social.md "Friends"): what they asked is its first entry; visits, loans, cake and games nights move how they stand with the player, and their tier brings perks (a game of theirs lent, a postcard, an unannounced call with a find) or keeps them away when cold.
+
+Borrowing: a click on the friend's request entry opens the `BorrowPanel` (`src/ui/BorrowPanel.ts`, via `SessionActions.openPanel`).
 Lending marks the game `lent` in the collection (the existing status: its box wears the LENT OUT tag, the WE BUY desk
 refuses it). It comes back when due (2-4 days): the friend rings again and hands it back inside the door, holding its box
 out for `handBackFor` s (a `GameBox` in both hands) before it goes back on its shelf (the loan closes then, or when the

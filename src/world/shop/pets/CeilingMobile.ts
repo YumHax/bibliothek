@@ -3,8 +3,8 @@ import type { Updatable } from '@/core/Engine';
 import { Prop, part } from '../../props/Prop';
 import { mergeStaticParts } from '../../zone/mergeStatic';
 import { cloth, paint } from '../../materials/palette';
-import { seededRandom } from '@/graphics/canvas';
 import { hangFromCeiling } from '../common/ceilingDrop';
+import { lcg } from '@/random';
 
 export interface CeilingMobileOptions {
   /** How far below the ceiling the top bar hangs. Default 0.55. */
@@ -34,7 +34,7 @@ export class CeilingMobile extends Prop implements Updatable {
   constructor(options: CeilingMobileOptions = {}) {
     super();
     this.name = 'CeilingMobile';
-    const random = seededRandom(options.seed ?? 61);
+    const random = lcg(options.seed ?? 61);
     const y = hangFromCeiling(this, options.drop ?? 0.55, 'cord');
     this.top.position.y = y;
     this.add(this.top);

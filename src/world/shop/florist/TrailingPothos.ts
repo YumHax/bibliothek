@@ -2,8 +2,8 @@ import * as THREE from 'three';
 import { cylinderMesh } from '../../meshUtils';
 import { Prop, part } from '../../props/Prop';
 import { paint, timber } from '../../materials/palette';
-import { seededRandom } from '@/graphics/canvas';
-import { LeafBatch, LEAF_GREENS, addTrail, pick, stem } from './greenery';
+import { LeafBatch, LEAF_GREENS, addTrail, stem } from './greenery';
+import { lcg, pick } from '@/random';
 
 export interface TrailingPothosOptions {
   /** Length of the shelf top they stand along. Default 1.3. */
@@ -35,7 +35,7 @@ export class TrailingPothos extends Prop {
     const D = options.depth ?? 0.36;
     const pots = options.pots ?? 3;
     const trail = options.trail ?? 0.8;
-    const random = seededRandom(options.seed ?? 3);
+    const random = lcg(options.seed ?? 3);
     const leaves = new LeafBatch();
     const soil = paint(0x2e2119, 1);
     const vine = paint(0x5a7a3a, 0.7);

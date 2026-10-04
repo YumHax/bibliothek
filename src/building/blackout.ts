@@ -1,5 +1,7 @@
 import { KEYS, PersistedStore } from '@/persistence';
+import { inHours } from '@/time/clock';
 import { gameDayRandom } from '@/time/daily';
+import { oncePerDay } from '@/time/OncePerDay';
 import { mainsOn, onMains, setMains } from './mains';
 import { pinSource, refreshBoard } from './boardNotes';
 
@@ -36,12 +38,24 @@ interface BlackoutInputs {
 /** What resetting the fuse did. */
 type FuseOutcome = 'restored' | 'trips' | 'on';
 
-const store = new PersistedStore<{ day: number }>({
+/**
+ * The game day of the last cut: "done today" lives in `time/OncePerDay` under `blackout`. The store it had before
+ * (`KEYS.blackout`, `{ day }`, 0 for none) is read once to carry an older save over.
+ */
+const CUT = 'blackout';
+const legacy = new PersistedStore<{ day: number }>({
   key: KEYS.blackout,
   version: 1,
   defaults: () => ({ day: 0 }),
   read: (data) => (typeof data === 'object' && data !== null && typeof (data as { day?: unknown }).day === 'number' ? { day: (data as { day: number }).day } : null),
 });
+oncePerDay.adopt(CUT, legacy.exists ? legacy.load().day : null, 0);
+
+/** The game day of the last cut, 0 for none yet. */
+function lastCutDay(): number {
+  const day = oncePerDay.lastDone(CUT);
+  return typeof day === 'number' ? day : 0;
+}
 
 /** What the syndic pins after a power cut. */
 const NOTICE = {
@@ -65,7 +79,7 @@ export class Blackout {
     current = this;
     // The syndic's word on the hall's board, the day of a cut and the next.
     pinSource('blackout', (day) => {
-      const cut = store.load().day;
+      const cut = lastCutDay();
       return cut > 0 && day >= cut && day - cut <= 1 ? [NOTICE] : [];
     });
   }
@@ -87,16 +101,16 @@ export class Blackout {
     }
     if (!struck || !inputs.canCut() || inputs.weatherKind() !== 'storm') return;
     const hours = inputs.hours();
-    if (hours < EVENING.from || hours >= EVENING.to) return;
+    if (!inHours(hours, EVENING)) return;
     const day = inputs.gameDay();
-    if (store.load().day === day || gameDayRandom('blackout', day)() >= ODDS) return;
+    if (oncePerDay.done(CUT, day) || gameDayRandom('blackout', day)() >= ODDS) return;
     this.cut(day);
   }
 
   /** The power goes now (a strike, or `?debug`'s `bibliothek.blackout()`). */
   cut(day = this.inputs.gameDay()): void {
     if (!mainsOn()) return;
-    store.save({ day });
+    oncePerDay.mark(CUT, day);
     this.since = 0;
     setMains(false);
     refreshBoard();

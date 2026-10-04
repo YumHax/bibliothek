@@ -1,11 +1,17 @@
 import type { PlatformId } from '@/catalog/types';
 import { PLATFORM_LIST } from '@/catalog/platforms';
 import type { StockItem } from '@/economy/StockItem';
-import { escapeHtml } from '../html';
-import { ModalPanel } from '../ModalPanel';
+import { CardPanel, type PanelAction } from '../panel/CardPanel';
+import { attr, html, type Html } from '../panel/html';
+import { formatCoins } from '@/text/money';
+import { standing } from '@/social/standing';
+import { tierInfo, tierOf } from '@/social/tiers';
+import { icon } from '../social/icons';
+import { portrait } from '../social/portrait';
+import '../social/social.css';
 import './household.css';
 
-/** What the phone reaches: the market's stalls (which know the player), and the friends. */
+/** What the phone reaches: the people whose number the player has, the market's stalls (which know the player), the friends. */
 interface PhoneDeps {
   /** Whether the market answers now; the line when it does not ("They open at 8:00"). */
   marketOpen(): boolean;
@@ -24,6 +30,16 @@ interface PhoneDeps {
   friends?: PhoneFriends;
   /** The small ads read in the paper (`classifieds/`): ringing one agrees a visit. Absent: no page. */
   ads?: PhoneAds;
+  /** The people whose number the player has (docs/social.md): ringing one opens the conversation. Absent: no page. */
+  contacts?: PhoneContacts;
+}
+
+/** The address book as the phone reaches it (`social/`). */
+export interface PhoneContacts {
+  /** Everyone whose number the player has: who, a note (their tier, whether they pick up at this hour). */
+  list(): readonly { id: string; name: string; note: string }[];
+  /** Rings them: null when they picked up (the conversation opens over the phone), else why not ("Asleep at this hour"). */
+  call(id: string): string | null;
 }
 
 /** The Gaming Weekly's small ads as the phone reaches them. */
@@ -59,40 +75,21 @@ const holdable = (item: StockItem) => item.source !== 'bin' && item.source !== '
  * The phone on the nightstand: ring round the market's stalls that know the player (a regular's
  * stallholder reads out what is on the table today and puts a copy aside for the deposit, as if
  * the player had held it at the stall), or ask a friend round. A `ModalLike` opened by the phone.
+ * A stall's page is a sub-page: Hang up, Esc or B go back to the address book; Put it down closes.
  */
-export class PhonePanel extends ModalPanel {
-  private readonly card: HTMLElement;
+export class PhonePanel extends CardPanel {
   private stall: PlatformId | null = null;
   /** The copies the stall on the line read out. */
   private items: readonly StockItem[] = [];
   private message = '';
+  /** The page shown: the address book, or a stall on the line. */
+  private page: Html = html``;
   private friends: PhoneFriends | undefined;
   private events: PhoneEvents | undefined;
 
   constructor(container: HTMLElement, private readonly deps: PhoneDeps) {
-    super(container, { className: 'ui-modal--centre household-panel' });
-    this.root.innerHTML = `<article class="household-panel__card ui-card" role="dialog" aria-modal="true" aria-label="The phone"></article>`;
-    this.card = this.root.querySelector('.household-panel__card')!;
+    super(container, { className: 'household-panel', cardClass: 'household-panel__card ui-card', title: '☎ The phone', label: 'The phone', dismiss: 'Put it down', dismissAutofocus: true });
     this.friends = deps.friends;
-    this.root.addEventListener('click', (e) => {
-      const target = e.target as HTMLElement;
-      if (target === this.root || target.closest('button[data-action="close"]')) return this.close();
-      const button = target.closest<HTMLButtonElement>('button[data-action]');
-      if (!button) return;
-      const { action, id } = button.dataset;
-      if (action === 'stall' && id) void this.callStall(id as PlatformId);
-      else if (action === 'back') this.showHome();
-      else if (action === 'hold' && id) this.hold(id);
-      else if (action === 'invite' && id) this.invite(id);
-      else if (action === 'ad' && id && this.deps.ads) {
-        this.message = this.deps.ads.ring(id);
-        this.showHome();
-      }
-      else if (action === 'event' && id && this.events) {
-        this.message = this.events.call(id);
-        this.showHome();
-      }
-    });
   }
 
   /** The friends' page, once the flat's visitors exist. */
@@ -107,34 +104,103 @@ export class PhonePanel extends ModalPanel {
 
   protected override onOpened(): void {
     this.message = '';
+    this.stall = null;
+    this.page = this.homePage();
+    super.onOpened();
+  }
+
+  protected render(): Html {
+    return html`${this.message ? html`<p class="household-panel__message">${this.message}</p>` : ''}${this.page}`;
+  }
+
+  protected override actions(): PanelAction[] {
+    return this.stall !== null ? [{ action: 'back', label: 'Hang up' }] : [];
+  }
+
+  /** On a stall's page, Esc and B hang up instead of putting the phone down. */
+  protected override onBack(): boolean {
+    if (this.stall === null) return false;
     this.showHome();
+    return true;
+  }
+
+  protected override onAction(action: string, el: HTMLElement): void {
+    const { id } = el.dataset;
+    if (action === 'stall' && id) void this.callStall(id as PlatformId);
+    else if (action === 'back') this.showHome();
+    else if (action === 'hold' && id) this.hold(id);
+    else if (action === 'invite' && id) this.invite(id);
+    else if (action === 'contact' && id && this.deps.contacts) {
+      const why = this.deps.contacts.call(id);
+      if (why !== null) {
+        this.message = why;
+        this.showHome();
+      }
+    } else if (action === 'ad' && id && this.deps.ads) {
+      this.message = this.deps.ads.ring(id);
+      this.showHome();
+    } else if (action === 'event' && id && this.events) {
+      this.message = this.events.call(id);
+      this.showHome();
+    }
+  }
+
+  /** The contacts' portraits are drawn canvases: dropped into their slots after the markup. */
+  protected override repaint(): void {
+    super.repaint();
+    for (const slot of this.body.querySelectorAll<HTMLElement>('[data-portrait]')) {
+      const s = standing(slot.dataset.portrait!);
+      slot.appendChild(portrait(slot.dataset.portrait!, 36, tierInfo(tierOf(s.warmth, s.trust)).colour));
+    }
+  }
+
+  private showHome(): void {
+    this.stall = null;
+    this.page = this.homePage();
+    this.refresh();
   }
 
   /** The address book: the stalls that know the player, the friends. */
-  private showHome(): void {
-    this.stall = null;
+  private homePage(): Html {
     const { deps } = this;
     const stalls = PLATFORM_LIST.filter((p) => deps.loyalty(p.id) >= deps.regularFrom);
     const market = !deps.marketOpen()
-      ? `<p class="household-panel__dim">${escapeHtml(deps.closedLine())}</p>`
+      ? html`<p class="household-panel__dim">${deps.closedLine()}</p>`
       : stalls.length
-        ? `<div class="household-panel__list">${stalls.map((p) => `<button type="button" class="ui-btn" data-action="stall" data-id="${p.id}">The ${escapeHtml(p.shortName)} stall <span class="household-panel__tag">${escapeHtml(deps.loyaltyName(p.id))}</span></button>`).join('')}</div>`
-        : '<p class="household-panel__dim">No stallholder knows you well enough yet to put a copy aside over the phone. Buy at a stall a few times: regulars get the number.</p>';
+        ? html`<div class="household-panel__list">${stalls.map((p) => html`<button type="button" class="ui-btn" data-action="stall" data-id="${p.id}">The ${p.shortName} stall <span class="household-panel__tag">${deps.loyaltyName(p.id)}</span></button>`)}</div>`
+        : html`<p class="household-panel__dim">No stallholder knows you well enough yet to put a copy aside over the phone. Buy at a stall a few times: regulars get the number.</p>`;
     const friends = this.friends?.list() ?? [];
     const people = this.friends
-      ? `<h3>Friends</h3><div class="household-panel__list">${friends.map((f) => `<button type="button" class="ui-btn" data-action="invite" data-id="${escapeHtml(f.id)}" ${f.free ? '' : 'disabled'}>Ask ${escapeHtml(f.name)} round <span class="household-panel__tag">${escapeHtml(f.note)}</span></button>`).join('')}</div>`
+      ? html`<h3>Friends</h3><div class="household-panel__list">${friends.map((f) => html`<button type="button" class="ui-btn" data-action="invite" data-id="${f.id}"${attr('disabled', !f.free)}>Ask ${f.name} round <span class="household-panel__tag">${f.note}</span></button>`)}</div>`
       : '';
     const rows = this.events?.list() ?? [];
     const gatherings = rows.length
-      ? `<h3>Have people round</h3><div class="household-panel__list">${rows.map((r) => `<button type="button" class="ui-btn" data-action="event" data-id="${escapeHtml(r.id)}" ${r.enabled ? '' : 'disabled'}>${escapeHtml(r.label)} <span class="household-panel__tag">${escapeHtml(r.note)}</span></button>`).join('')}</div>`
+      ? html`<h3>Have people round</h3><div class="household-panel__list">${rows.map((r) => html`<button type="button" class="ui-btn" data-action="event" data-id="${r.id}"${attr('disabled', !r.enabled)}>${r.label} <span class="household-panel__tag">${r.note}</span></button>`)}</div>`
       : '';
     const ads = this.deps.ads;
     const adRows = ads?.list() ?? [];
-    const small = !ads ? ''
+    const small = !ads
+      ? ''
       : adRows.length
-        ? `<h3>Small ads</h3><ul class="household-panel__rows">${adRows.map((ad) => `<li><span>${escapeHtml(ad.who)}<small>${escapeHtml(ad.booked ? `Expecting you ${ad.booked}` : ad.text)}</small></span><button type="button" class="ui-btn" data-action="ad" data-id="${escapeHtml(ad.id)}">${ad.booked ? 'Ring again' : 'Ring'}</button></li>`).join('')}</ul>`
-        : `<h3>Small ads</h3><p class="household-panel__dim">${escapeHtml(ads.hint)}</p>`;
-    this.paint(`<h3>The market</h3>${market}${people}${gatherings}${small}`);
+        ? html`<h3>Small ads</h3><ul class="household-panel__rows">${adRows.map((ad) => html`<li><span>${ad.who}<small>${ad.booked ? `Expecting you ${ad.booked}` : ad.text}</small></span><button type="button" class="ui-btn" data-action="ad" data-id="${ad.id}">${ad.booked ? 'Ring again' : 'Ring'}</button></li>`)}</ul>`
+        : html`<h3>Small ads</h3><p class="household-panel__dim">${ads.hint}</p>`;
+    const contacts = this.deps.contacts;
+    const contactRows = contacts?.list() ?? [];
+    const book = !contacts
+      ? ''
+      : contactRows.length
+        ? html`<h3>Contacts</h3><div class="social-contacts">${contactRows.map((c) => {
+            const s = standing(c.id);
+            const tier = tierInfo(tierOf(s.warmth, s.trust));
+            return html`<button type="button" class="social-contact" data-action="contact" data-id="${c.id}" aria-label="Ring ${c.name}, ${c.note}" style="--tier:${tier.colour}">
+              <span class="social-contact__face" data-portrait="${c.id}"></span>
+              <span class="social-contact__who"><b>${c.name}</b><small>${c.note}</small></span>
+              <span class="social-tier" style="--tier:${tier.colour}">${tier.glyph} ${tier.name}</span>
+              <span class="social-contact__ring">${icon('phone', 1)}</span>
+            </button>`;
+          })}</div>`
+        : html`<h3>Contacts</h3><p class="household-panel__dim">No numbers yet. Get to know people, then ask for theirs.</p>`;
+    return html`${book}<h3>The market</h3>${market}${people}${gatherings}${small}`;
   }
 
   /** A stall picks up: what is on its table today that it could put aside. */
@@ -142,19 +208,22 @@ export class PhonePanel extends ModalPanel {
     this.stall = platform;
     if (!keepMessage) this.message = '';
     const name = PLATFORM_LIST.find((p) => p.id === platform)?.shortName ?? platform;
-    this.paint(`<h3>The ${escapeHtml(name)} stall</h3><p class="household-panel__dim">Ringing…</p>`, true);
+    this.page = html`<h3>The ${name} stall</h3><p class="household-panel__dim">Ringing…</p>`;
+    this.refresh();
     const onStall = (await this.deps.todays()).filter((item) => item.game.platform === platform);
     // The stallholder looks the prices up first (a few seconds at most; what is still unpriced is not offered).
     await Promise.race([Promise.all(onStall.map((item) => item.settled)), new Promise((resolve) => window.setTimeout(resolve, PRICING_WAIT_MS))]);
     const items = onStall.filter(holdable);
     if (this.stall !== platform || !this.isOpen) return;
     this.items = items;
-    const rows = items.slice(0, 8).map((item, i) => `
-      <li><span>${escapeHtml(item.game.title)}<small>${escapeHtml(stateOf(item))} · ${item.price} coins</small></span>
-      <button type="button" class="ui-btn" data-action="hold" data-id="${i}">Put it aside (${this.deps.deposit(item)} down)</button></li>`).join('');
-    this.paint(`<h3>The ${escapeHtml(name)} stall</h3>
+    const rows = items.slice(0, 8).map(
+      (item, i) => html`<li><span>${item.game.title}<small>${stateOf(item)} · ${formatCoins(item.price)}</small></span>
+      <button type="button" class="ui-btn" data-action="hold" data-id="${i}">Put it aside (${this.deps.deposit(item)} down)</button></li>`,
+    );
+    this.page = html`<h3>The ${name} stall</h3>
       <p class="household-panel__dim">“Oh, it’s you! Here’s what I’ve got on the table today.”</p>
-      ${rows ? `<ul class="household-panel__rows">${rows}</ul>` : '<p class="household-panel__dim">“Nothing I could put by, sorry. Come and see.”</p>'}`, true);
+      ${rows.length ? html`<ul class="household-panel__rows">${rows}</ul>` : html`<p class="household-panel__dim">“Nothing I could put by, sorry. Come and see.”</p>`}`;
+    this.refresh();
   }
 
   private hold(index: string): void {
@@ -169,17 +238,6 @@ export class PhonePanel extends ModalPanel {
     if (!this.friends) return;
     this.message = this.friends.invite(id);
     this.showHome();
-  }
-
-  private paint(body: string, back = false): void {
-    const message = this.message ? `<p class="household-panel__message">${escapeHtml(this.message)}</p>` : '';
-    this.card.innerHTML = `
-      <header><h2>☎ The phone</h2></header>
-      ${message}${body}
-      <footer>
-        ${back ? '<button type="button" class="ui-btn" data-action="back">Hang up</button>' : ''}
-        <button type="button" class="ui-btn" data-action="close" data-autofocus>Put it down</button>
-      </footer>`;
   }
 }
 

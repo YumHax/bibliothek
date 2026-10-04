@@ -1,10 +1,10 @@
 import * as THREE from 'three';
 import type { Updatable } from '@/core/Engine';
 import type { Furniture } from '../Furniture';
-import { seededRandom } from '@/covers/generated/canvasUtils';
 import { boxMesh, cylinderMesh } from '../meshUtils';
 import { basic, paint, standard, instancedStandard, instancedBasic } from '../materials/palette';
 import { proud } from './joinery';
+import { lcg } from '@/random';
 
 export interface ChristmasTreeOptions {
   /** Height to the tip, metres (the star sits on it). Default 1.8. */
@@ -54,7 +54,7 @@ export class ChristmasTree extends THREE.Group implements Furniture, Updatable {
     this.name = 'ChristmasTree';
     const height = options.height ?? 1.8;
     const radius = options.radius ?? 0.5;
-    this.random = seededRandom(options.seed ?? 25);
+    this.random = lcg(options.seed ?? 25);
     const potH = 0.24;
     this.add(cylinderMesh(0.17, potH, POT, { y: potH / 2 }, { radiusBottom: 0.13, segments: 14 }));
     this.add(cylinderMesh(0.04, 0.3, TRUNK, { y: potH + 0.1 }, { segments: 7 }));

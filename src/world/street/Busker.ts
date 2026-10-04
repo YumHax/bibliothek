@@ -12,8 +12,22 @@ import { Walker } from '../people/Walker';
 import { KEYS as SAVE_KEYS } from '@/persistence';
 import { DailyTally } from '@/time/DailyTally';
 import { Timers } from '@/core/Timers';
+import { inHours } from '@/time/clock';
+import { keptAway } from '@/time/schedule';
+import { BUSKER } from './events/streetSchedules';
 import { outOfSight } from './life/sight';
 import { pocket } from '@/errands/pocket';
+import { pick, random } from '@/random';
+import type { HomeUpgrades } from '@/economy/HomeUpgrades';
+import { socialCaption } from '@/social/caption';
+import { findPerson } from '@/social/people';
+import { has } from '@/social/perks';
+import { isMet, nudge } from '@/social/standing';
+import type { SocialServices, TalkExtra, TalkSession } from '@/social/talk';
+import { actReaction } from '../people/socialHook';
+import { favouriteRequest, giveTape, noteRequest, tapeGiven } from './buskerBook';
+import { formatTickets } from '@/text/money';
+import { loudness } from '@/audio/hearing';
 
 interface BuskerOptions {
   /** The ears (the camera): the tune's level and side follow it. */
@@ -27,6 +41,14 @@ interface BuskerOptions {
   seed?: number;
   /** The zone's collision set (world boxes): the stand collides only while they are there. */
   collisions?: { add(box: THREE.Box3): void; remove(box: THREE.Box3): void };
+  /** The people the player talks to (docs/social.md): a click opens the conversation with him, the requests among its entries. */
+  social?: SocialServices;
+  /** The game day (a tip's warmth counts once a day). */
+  day?: () => number;
+  /** The flat's goods: his record goes on the sideboard's turntable (`record`). */
+  upgrades?: Pick<HomeUpgrades, 'has' | 'canBuy' | 'add'>;
+  /** Tickets, when there is no turntable for his record. */
+  wallet?: { addTickets(tickets: number): void };
 }
 
 const LINES = [
@@ -39,6 +61,12 @@ const LINES = [
 ];
 /** What they play on request, one after another: each a tune of its own (`BuskerTune`'s seed). */
 const REQUESTS = ['the castle theme', 'a boss tune, slowed down', 'the game over jingle, as a waltz', 'a racing game’s menu music', 'the first level, but sad'];
+/** His person card (`social/people/town`). */
+const ME = 'busker';
+/** A friend this near (m) hears their favourite tune struck up, once a visit. */
+const FAVOURITE_RANGE = 7;
+/** Tickets instead of his record, for a flat with no turntable (or every record already there). */
+const TAPE_TICKETS = 40;
 /** After a word, this long (s) for a click to tip a coin for a request. */
 const ASK_WINDOW = 6;
 /** Beyond this the busker is not drawn nor posed (the tune still carries). */
@@ -84,6 +112,8 @@ export class Busker extends THREE.Group implements Furniture, Updatable, Interac
   private collider: THREE.Box3 | null = null;
   /** Just (re)activated: the first update takes what the clock says, seen or not (the player has only just arrived). */
   private fresh = true;
+  /** Their favourite was struck up for the player this visit. */
+  private favouritePlayed = false;
 
   constructor(private readonly dayNight: DayNight, private readonly options: BuskerOptions) {
     super();
@@ -108,7 +138,9 @@ export class Busker extends THREE.Group implements Furniture, Updatable, Interac
   }
 
   setZoneActive(active: boolean): void {
-    if (active) this.fresh = true;
+    if (!active) return;
+    this.fresh = true;
+    this.favouritePlayed = false;
   }
 
   setHovered(): void {
@@ -117,6 +149,7 @@ export class Busker extends THREE.Group implements Furniture, Updatable, Interac
 
   label(): string | null {
     if (!this.present) return null;
+    if (this.options.social) return socialCaption(ME, 'talk');
     if (pocket.count('croissant') > 0 || pocket.count('bunch') > 0) return 'Busker · give them something for a request';
     if (this.asking > 0 && this.tipsToday() < this.options.tipsPerDay) return 'Busker · tip a coin for a request';
     return 'Busker · chat';
@@ -128,6 +161,11 @@ export class Busker extends THREE.Group implements Furniture, Updatable, Interac
    */
   activate(session: SessionActions): void {
     if (!this.present) return;
+    const { social } = this.options;
+    if (social) {
+      social.open(session, this.talk(session));
+      return;
+    }
     const gift = pocket.take('croissant', 'bunch');
     if (gift) {
       this.playRequest(gift === 'croissant' ? 'Half a croissant? You’re a saint.' : 'Flowers! Nobody ever gives a busker flowers.');
@@ -146,33 +184,129 @@ export class Busker extends THREE.Group implements Furniture, Updatable, Interac
       paid: () => {
         this.recordTip();
         playCoins();
-        this.playRequest(THANKS[Math.floor(Math.random() * THANKS.length)]!);
+        this.playRequest(THANKS[Math.floor(random() * THANKS.length)]!);
         return 'You drop a coin in the keyboard case.';
       },
     });
   }
 
-  /** A flourish, a cheer, then the next tune of their book (a request), their word over it. */
-  private playRequest(thanks: string): void {
-    const request = REQUESTS[this.requestIndex % REQUESTS.length]!;
-    this.requestIndex++;
+  /** A flourish, a cheer, then the next tune of their book (a request, or `tune`: the player's favourite), their word over it. */
+  private playRequest(thanks: string, tune?: number): void {
+    const index = tune ?? this.requestIndex % REQUESTS.length;
+    if (tune === undefined) {
+      this.requestIndex++;
+      noteRequest(index);
+    }
+    const request = REQUESTS[index]!;
     this.tune.flourish();
-    this.person.speak(`${thanks} Here’s ${request}.`, 'Busker');
+    this.person.speak(`${thanks} Here’s ${request}.`, this.speaker());
     this.person.setPose('cheer');
     this.timers.after(1.4, () => {
       this.person.setPose(this.resting ? 'crossed' : 'play');
-      // The next tune of their book: another seed, another chiptune.
+      // The tune of their book: each request its own seed, its own chiptune.
       this.tune.dispose();
-      this.tune = new BuskerTune((this.options.seed ?? 77) + 101 * this.requestIndex);
+      this.tune = new BuskerTune((this.options.seed ?? 77) + 101 * (index + 1));
     });
+  }
+
+  /** The name over his lines: his own once met. */
+  private speaker(): string {
+    return this.options.social && isMet(ME) ? (findPerson(ME)?.short ?? 'Busker') : 'Busker';
+  }
+
+  /** The conversation with him: his word, the requests (a coin, free for a friend; a croissant, a bunch), his record. */
+  private talk(session: SessionActions): TalkSession {
+    const day = (): number => this.options.day?.() ?? 0;
+    const full = (): string | null => (this.tipsToday() >= this.options.tipsPerDay ? 'Enough requests for today' : null);
+    const thanked = (why: string): void => {
+      nudge(ME, { warmth: 2, why, reason: 'buskerRequest', day: day() });
+    };
+    const forFood = (errand: 'croissant' | 'bunch', label: string, thanks: string): TalkExtra => ({
+      id: errand,
+      group: 'trade',
+      label,
+      disabled: () => (pocket.count(errand) === 0 ? `No ${errand === 'bunch' ? 'flowers' : 'croissant'} on you` : null),
+      run: () => {
+        if (pocket.take(errand) !== errand) return;
+        this.playRequest(thanks);
+        thanked(errand === 'bunch' ? 'loved the flowers' : 'loved the croissant');
+      },
+    });
+    const extras: TalkExtra[] = [
+      {
+        id: 'request',
+        group: 'trade',
+        label: has(ME, 'freeRequests') ? 'Play me one (free, for a friend)' : 'Play me one (1 coin)',
+        disabled: full,
+        run: () => {
+          if (has(ME, 'freeRequests')) {
+            this.recordTip();
+            this.playRequest('For you? Always.');
+            thanked('happy to play for a friend');
+            return;
+          }
+          session.pay({
+            price: 1,
+            paid: () => {
+              this.recordTip();
+              playCoins();
+              this.playRequest(pick(random, THANKS));
+              thanked('liked the tip');
+              return 'You drop a coin in the keyboard case.';
+            },
+          });
+        },
+      },
+      forFood('croissant', 'A croissant for a tune', 'Half a croissant? You’re a saint.'),
+      forFood('bunch', 'Flowers for a tune', 'Flowers! Nobody ever gives a busker flowers.'),
+    ];
+    if (!tapeGiven()) {
+      extras.push({
+        id: 'tape',
+        group: 'ask',
+        label: 'That record of yours…',
+        disabled: () => (!has(ME, 'tape') ? 'Only for a close friend' : null),
+        run: () => this.giveRecord(session),
+      });
+    }
+    return {
+      person: ME,
+      place: 'street',
+      body: { speak: (line) => this.person.speak(line, this.speaker()), react: (reaction) => actReaction(this.person, reaction) },
+      extras,
+    };
+  }
+
+  /** His record, once: on the sideboard's turntable if there is one with room, else tickets and a card. */
+  private giveRecord(session: SessionActions): { line: string } {
+    if (tapeGiven()) return { line: 'You’ve got the only copy, friend.' };
+    giveTape();
+    const { upgrades, wallet } = this.options;
+    if (upgrades?.has('sideboard') && upgrades.canBuy('record')) {
+      upgrades.add('record');
+      session.reward({ title: 'A record from Django', detail: 'A soundtrack LP, signed on the sleeve. It is on the sideboard at home, by the turntable.', big: true });
+      return { line: 'Pressed a few last year. This one’s yours. Play it loud, the neighbours love it.' };
+    }
+    wallet?.addTickets(TAPE_TICKETS);
+    session.read({ title: 'A cassette from Django', text: '“My tunes, on tape. Hiss included at no extra cost.” A hand-written label, a doodle of a keyboard. There is nothing at home to play it on, but the arcade’s attendant swaps it gladly.', effect: `${formatTickets(TAPE_TICKETS)}.`, look: 'letter' });
+    return { line: 'Got a tape deck? No? Then trade it at the arcade, Gus collects them.' };
+  }
+
+  /** A friend coming by: their favourite tune, struck up once a visit. */
+  private greetFavourite(distance: number): void {
+    if (this.favouritePlayed || distance > FAVOURITE_RANGE || !this.options.social || !has(ME, 'favouriteTune')) return;
+    const favourite = favouriteRequest();
+    if (favourite === null) return;
+    this.favouritePlayed = true;
+    this.playRequest('Oh, it’s you!', favourite);
   }
 
   update(dt: number): void {
     this.timers.update(dt);
     this.asking = Math.max(0, this.asking - dt);
     const s = this.dayNight.state;
-    const [from, to] = this.options.hours;
-    const present = s.hours >= from && s.hours < to && s.rain < 0.08 && s.snow < 0.15;
+    // Their hours and their weather are their schedule's (`events/streetSchedules`), the same the paper reads.
+    const present = inHours(s.hours, this.options.hours) && !keptAway(BUSKER, s);
     if (!this.collider) {
       this.updateWorldMatrix(true, false);
       this.collider = new THREE.Box3(new THREE.Vector3(-0.35, 0, -0.3), new THREE.Vector3(0.35, 1.8, 0.65)).applyMatrix4(this.matrixWorld);
@@ -205,7 +339,8 @@ export class Busker extends THREE.Group implements Furniture, Updatable, Interac
         this.person.setPose(resting ? 'crossed' : 'play');
       }
       if (near) this.person.update(dt);
-      level = Math.max(0, 1 - distance / this.options.reach) ** 2;
+      this.greetFavourite(distance);
+      level = loudness(distance, { shape: 'rampSquared', referenceDistance: 0, maxDistance: this.options.reach });
       this.options.viewer.getWorldDirection(this.facing);
       this.toMe.copy(this.here).sub(this.ear).setY(0).normalize();
       // Right of the view is facing x up.

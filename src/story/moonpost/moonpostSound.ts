@@ -1,4 +1,5 @@
 import type { DemoSound } from './MoonpostDemo';
+import { random } from '@/random';
 
 /*
  * MOONPOST's sound, as an NES would make it: Hana's tune on a pulse wave over a triangle bass (scheduled
@@ -159,7 +160,7 @@ function noiseBuffer(ctx: AudioContext): AudioBuffer {
   if (shared?.ctx === ctx) return shared.buffer;
   const buffer = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
   const data = buffer.getChannelData(0);
-  for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
+  for (let i = 0; i < data.length; i++) data[i] = random() * 2 - 1;
   shared = { ctx, buffer };
   return buffer;
 }

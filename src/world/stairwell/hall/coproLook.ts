@@ -9,7 +9,8 @@ import { createCanvas, toTexture } from '@/graphics/canvas';
 import type { Staircase } from '../Staircase';
 import { StairRunner } from '../StairRunner';
 import { Bicycle } from './Bicycle';
-import { STAIRWELL_PLAN as plan, STOREY, STOREYS, landingY } from '../stairwellPlan';
+import { STAIRWELL_PLAN as plan } from '../stairwellPlan';
+import { STOREY, STOREYS, landingY } from '@/world/measures/building';
 
 const PLANTS: readonly PlantKind[] = ['fig', 'monstera', 'yucca', 'small', 'fig'];
 const BIKE_COLOURS = [0x2f5a8a, 0x8a2f2a];

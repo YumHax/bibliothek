@@ -1,16 +1,18 @@
 import * as THREE from 'three';
 import type { Updatable } from '@/core/Engine';
 import { bareMetal } from '../metals';
-import { createCanvas, seededRandom, toTexture, repeatTexture } from '@/covers/generated/canvasUtils';
+import { createCanvas, toTexture, repeatTexture } from '@/covers/generated/canvasUtils';
 import type { Furniture } from '../../Furniture';
 import type { DayNight } from '../../props/DayNight';
 import { snowCovered } from '../snowCover';
 import { nightnessOf } from '../streetAir';
-import { FRONT, KERB_HEIGHT, PARK_STREET, STREET_PLAN } from '../streetPlan';
+import { STREET_PLAN } from '../streetPlan';
+import { FRONT, KERB_HEIGHT, PARK_STREET } from '@/world/measures/street';
 import { groundHeight } from '../relief/ground';
 import { TriBuilder } from '../relief/TriBuilder';
 import { closures, closureBox, type Closure } from './roadworks';
 import { GROUND, onSurface } from '../../surface/layers';
+import { lcg } from '@/random';
 
 /* Where the little things stand: the street's plan (`STREET_PLAN.details`, which the window view paints too). */
 const { manholes: MANHOLES, hydrants: HYDRANTS, bollards: BOLLARDS, column: { at: COLUMN, ...COLUMN_SIZE } } = STREET_PLAN.details;
@@ -54,7 +56,7 @@ export class StreetDetails extends THREE.Group implements Furniture, Updatable {
   constructor(anisotropy: number, private readonly dayNight?: DayNight) {
     super();
     this.name = 'StreetDetails';
-    const random = seededRandom(2718);
+    const random = lcg(2718);
     // Standing on the pavement: their bottoms are never seen.
     const painted = new TriBuilder().hideGround();
     const iron = new TriBuilder().hideGround();
@@ -375,7 +377,7 @@ function merge(geometries: THREE.BufferGeometry[]): THREE.BufferGeometry {
 /** Cast iron: a manhole cover's rings and studs (left half), a drain's grate (right half). */
 function ironTexture(anisotropy: number): THREE.CanvasTexture {
   const [canvas, ctx] = createCanvas(256, 128);
-  const random = seededRandom(31);
+  const random = lcg(31);
   ctx.fillStyle = '#3a3b3d';
   ctx.fillRect(0, 0, 256, 128);
   // Cover: concentric rings, a studded field, the maker's band.
@@ -410,7 +412,7 @@ function postersTexture(anisotropy: number): THREE.CanvasTexture {
   const w = 1024;
   const h = 512;
   const [canvas, ctx] = createCanvas(w, h);
-  const random = seededRandom(1872);
+  const random = lcg(1872);
   ctx.fillStyle = '#e8dcc0';
   ctx.fillRect(0, 0, w, h);
   const bills = [

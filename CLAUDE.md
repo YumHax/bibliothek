@@ -60,6 +60,8 @@ npm run scene-lint  # the same subjects: light budgets, sunk / floating / overla
 | Post-processing, quality levels, looks, material helpers (wood, fabric, plaster), reflections | `docs/graphics.md` |
 | Materials, how parts meet, anything flat on a surface (z-fighting), hiding lamps | `docs/props.md` "Materials, joints and layers" |
 | What each check enforces (conventions, imports, docs paths, data, zfight, scene-lint, bundle, lint), its baseline and opt-out, adding a rule | `docs/checks.md` |
+| A panel or menu (the kit: CardPanel / SheetPanel, the `html` tag, widgets, confirm twice, dialogs), the CSS tokens and components | `docs/ui.md` |
+| People, relationships, talking, perks and penalties (warmth and trust, tiers, the conversation panel, the People book, the phone's contacts) | `docs/social.md` |
 
 Layer order, outermost first: `worldPlan.ts` + the plan files (data) -> `layout.ts` + `src/world/<kind>/furnish<Kind>.ts`
 (zone builders, the only wiring) -> zones (`src/world/zone/`: a room loads and unloads as one; positions are zone-local) ->
@@ -83,7 +85,9 @@ Content work stays in the first two layers; the engine is never touched for cont
   16 units on high (10 shadow, env, 2 area-light, map, bump, wear): no new map on a floor.
 - A render nested in the main one (the outlook panes' `onBeforeRender`) leaves its `clippingPlanes` as the global clip for
   the rest of the frame (three.js never re-inits clipping): things vanish depending on the view. `OutlookView.resetClipping` undoes it.
-- `outdoors/shader.ts` is a template literal: a backtick in a GLSL comment ends it (typecheck fails with `',' expected`).
+- Shaders live in `.glsl` files imported `?raw` (`scripts/check-glsl.mjs` parses them); what TypeScript knows comes in
+  through `assemble()` (`graphics/glslAssemble`) as `TS_*` defines and `#include <name>` chunks. The chunk constants and the
+  fragments spliced into three.js's chunks stay template literals: a backtick in a GLSL comment there ends the literal.
 - A `patchShader` whose source holds a variable array size (`uniform vec4 x[${n}]`) needs `n` in its key, or two
   materials share one program and three.js reads past the shorter array (`array[i] is undefined` in `setValueV4fArray`).
 - The canvas's alpha is the video cut-out: every post pass and additive effect must keep it (see `docs/graphics.md`).

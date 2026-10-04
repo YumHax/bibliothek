@@ -5,7 +5,8 @@ import { boxMesh } from '../meshUtils';
 import { markShared } from '../materials/sharedResources';
 import { PROUD } from '../props/joinery';
 import { coverageKeepsAlpha, paint, standard } from '../materials/palette';
-import { STAIRWELL_PLAN as plan, STOREYS, landingY } from './stairwellPlan';
+import { STAIRWELL_PLAN as plan } from './stairwellPlan';
+import { STOREYS, landingY } from '@/world/measures/building';
 import { scratchedCodeTexture } from './liftAttic';
 
 /*

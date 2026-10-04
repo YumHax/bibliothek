@@ -1,7 +1,10 @@
 import * as THREE from 'three';
-import { seededRandom } from '@/graphics/canvas';
+import type { SfxEvent } from '@/audio/ChipSpeaker';
 import type { ArcadeControls } from '../games/ArcadeGame';
+import { SoundQueue } from '../SoundQueue';
 import type { MachineState } from '../MachineRun';
+import { lcg } from '@/random';
+import { damp, dampFactor } from '@/math/damp';
 
 /*
  * The crane game's rules and motion, machine-local in metres (origin on the floor under the
@@ -42,7 +45,6 @@ const PLUSH_COUNT = 11;
 const PASTELS = [0xffb3c6, 0xa8d8ff, 0xfff1a8, 0xc8f7c5, 0xe0c3ff, 0xffd6a8, 0xffffff];
 
 type ClawPhase = 'aim' | 'drop' | 'lift' | 'return' | 'release' | 'rest';
-type ClawSound = 'whir' | 'drop' | 'clunk' | 'lose' | 'thud' | 'win';
 
 /** One plush in the case. */
 export interface ClawPlush {
@@ -92,13 +94,13 @@ export class ClawSim {
   private readonly prizeFor: (color: number) => string | undefined;
   private readonly from = new THREE.Vector3();
   private readonly scratch = new THREE.Vector3();
-  private sounds: ClawSound[] = [];
+  private readonly sounds = new SoundQueue();
   private shown: string | null = null;
   private outcome: ClawOutcome | null = null;
 
   /** `luck` keeps the misses in a row (the pity grip's count) across visits: `economy/ArcadeHabits`. */
   constructor(seed: number, prizeFor: (color: number) => string | undefined, luck: { clawMisses: number } = { clawMisses: 0 }) {
-    this.random = seededRandom(seed * 4099);
+    this.random = lcg(seed * 4099);
     this.prizeFor = prizeFor;
     this.luck = luck;
     // The heap: soft blobs in pastels on the floor of the case, clear of the chute.
@@ -140,10 +142,8 @@ export class ClawSim {
   }
 
   /** The sounds of this frame, oldest first. */
-  takeSounds(): ClawSound[] {
-    const sounds = this.sounds;
-    this.sounds = [];
-    return sounds;
+  takeSounds(): SfxEvent[] {
+    return this.sounds.take();
   }
 
   /** What the panel's display should now say, once, or null when unchanged. */
@@ -170,12 +170,12 @@ export class ClawSim {
         this.aim(dt, mode, keys);
         break;
       case 'rest':
-        this.grip += (0 - this.grip) * Math.min(1, dt * 3);
+        this.grip = damp(this.grip, 0, 3, dt);
         if (mode === 'demo' && this.phaseLeft <= 0) this.enter('aim', 4 + this.random() * 4);
         break;
       case 'drop':
         this.drop += ((CLAW_DOWN - this.drop) * dt) / Math.max(0.05, this.phaseLeft);
-        if (this.phaseLeft <= 0.3) this.grip += (1 - this.grip) * Math.min(1, dt * 6);
+        if (this.phaseLeft <= 0.3) this.grip = damp(this.grip, 1, 6, dt);
         if (this.phaseLeft <= 0) {
           this.tryGrab(mode);
           this.enter('lift', 1.4);
@@ -193,14 +193,14 @@ export class ClawSim {
         const t = 1 - Math.max(0, this.phaseLeft / 1.8);
         c.x = THREE.MathUtils.lerp(this.from.x, CHUTE.x, t);
         c.z = THREE.MathUtils.lerp(this.from.z, CHUTE.z, t);
-        this.drop += (CLAW_UP - this.drop) * Math.min(1, dt * 4);
+        this.drop = damp(this.drop, CLAW_UP, 4, dt);
         // The rigged bit: halfway home, a grabbed plush may slip out.
         if (this.carried && t > 0.45 && t < 0.5 && this.random() < SLIP_CHANCE * dt * 20) this.slip();
         if (this.phaseLeft <= 0) this.enter('release', 1.2);
         break;
       }
       case 'release':
-        this.grip += (0 - this.grip) * Math.min(1, dt * 4);
+        this.grip = damp(this.grip, 0, 4, dt);
         if (this.carried && this.grip < 0.5) {
           const plush = this.carried;
           this.carried = null;
@@ -245,8 +245,8 @@ export class ClawSim {
         this.sounds.push('whir');
       }
     }
-    this.stick.z += ((-dx * 0.35) - this.stick.z) * Math.min(1, dt * 18);
-    this.stick.x += ((dz * 0.35) - this.stick.x) * Math.min(1, dt * 18);
+    this.stick.z = damp(this.stick.z, -dx * 0.35, 21, dt);
+    this.stick.x = damp(this.stick.x, dz * 0.35, 21, dt);
     if (drop) {
       this.sounds.push('drop');
       this.enter('drop', 1.4);
@@ -308,7 +308,7 @@ export class ClawSim {
   private carry(dt: number, mode: MachineState): void {
     if (this.carried) {
       this.scratch.set(0, -this.drop - HANG - this.carried.r, 0).add(this.carriage);
-      this.carried.pos.lerp(this.scratch, Math.min(1, dt * 12));
+      this.carried.pos.lerp(this.scratch, dampFactor(13, dt));
     }
     const falling = this.falling;
     if (!falling) return;

@@ -9,7 +9,8 @@ import { ROOF_SLOPE, facadeBays, facadeStyle, windowWidth, type FacadeStyle } fr
 import { roofFurniture } from '../city/roofFurniture';
 import { RegionUploader } from '../city/regionUpload';
 import { nightnessOf } from './streetAir';
-import { GROUND_FLOOR, STOREY, type FacadeSpec } from './streetPlan';
+import type { FacadeSpec } from './streetPlan';
+import { GROUND_FLOOR, STOREY } from '@/world/measures/street';
 import { isShopOpen } from './shops/shopHours';
 import { VALUE_NOISE, afterChunk, patchShader } from '../materials/shaderPatch';
 import { envBoost } from '../materials/envBoost';
@@ -18,6 +19,7 @@ import { STORY_WINDOWS, type FacadeWindow, type WindowLife, type WindowStory } f
 import { WINDOW_STORY_GLSL } from './windowStoryGlsl';
 import { RoofClutter, type DressedRoof } from './RoofClutter';
 import { FacadeWindows } from './facadeWindows/FacadeWindows';
+import { hashInts } from '@/random';
 
 interface BuildingsOptions {
   /** Scales every facade's `detail` (lower on low quality). */
@@ -601,7 +603,7 @@ function windowIdTexture(lights: readonly NightLight[], width: number, height: n
     const index = light.room && flat < FLAT_WINDOWS ? ++flat : storyOf[i]! >= 0 ? 128 + storyOf[i]! : 0;
     // A shop's window and a sign keep no home life (no TV, nobody crossing, no blind).
     if ((light.curfew <= 0 || light.shop) && !index) return;
-    const id = 1 + (((i * 2654435761) >>> 0) % 254);
+    const id = 1 + (hashInts(i) % 254);
     const [x0, y0, w, h] = nightRect(light, k);
     // A texel wider all round than the light's rect: the night map's glow is filtered past its edge, and that rim must
     // follow the window (its blind, its TV) too. The rim never overwrites a neighbour's own texels.

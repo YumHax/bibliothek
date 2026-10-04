@@ -1,8 +1,9 @@
 import * as THREE from 'three';
-import { createCanvas, seededRandom, toTexture, repeatTexture } from '@/covers/generated/canvasUtils';
+import { createCanvas, toTexture, repeatTexture } from '@/covers/generated/canvasUtils';
 import { facadeHeight } from '../street/facadePainter';
-import { FACADES } from '../street/streetPlan';
+import { FACADES } from '@/world/city/facades';
 import { Prop } from '../props/Prop';
+import { lcg } from '@/random';
 
 /** How deep a block runs back from its street front (m), and how far under its parapet's top its roof lies. */
 const BLOCK_DEPTH = 16;
@@ -54,7 +55,7 @@ export class Roofscape extends Prop {
 function roofsTexture(): THREE.CanvasTexture {
   const px = 256;
   const [canvas, ctx] = createCanvas(px, px);
-  const random = seededRandom(91);
+  const random = lcg(91);
   ctx.fillStyle = '#4c5058';
   ctx.fillRect(0, 0, px, px);
   for (let i = 0; i < 26; i++) {

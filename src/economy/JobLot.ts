@@ -5,9 +5,9 @@ import type { Fame } from './Fame';
 import type { MarketLedger } from './MarketLedger';
 import type { MarketStanding } from './MarketStanding';
 import { JOB_LOT, MARKET_DISCOUNT, marketPrice } from './pricing';
-import { seeded } from './seeded';
 import { drawCondition, gameFrom } from './stockDraws';
 import { dressCopy } from './copyTraits';
+import { dayStream } from '@/time/daily';
 
 /** The day's job lot: a few games sold together, cheaper than one by one. */
 export interface JobLot {
@@ -86,11 +86,11 @@ export class JobLotDraw {
 
   /** A crate of a few games from anywhere, at a share of what they would fetch one by one. Each pick has a seed of its own. */
   private async draw(day: number): Promise<JobLot> {
-    const rng = seeded(`${day}:lot`);
+    const rng = dayStream(`${day}:lot`);
     const size = JOB_LOT.min + Math.floor(rng() * (JOB_LOT.max - JOB_LOT.min + 1));
     const games: Game[] = [];
     for (let i = 0; i < size * 3 && games.length < size; i++) {
-      const r = seeded(`${day}:lot:${i}`);
+      const r = dayStream(`${day}:lot:${i}`);
       const [platformRoll, entryRoll, conditionRoll] = [r(), r(), r()];
       const platform = PLATFORM_LIST[Math.floor(platformRoll * PLATFORM_LIST.length)]!.id;
       const pool = await this.deps.releases(platform).catch(() => [] as readonly IndexEntry[]);
@@ -100,7 +100,7 @@ export class JobLotDraw {
       const condition = drawCondition(conditionRoll);
       if (games.some((g) => g.id === game.id) || this.deps.collection.owns(game.id)) continue;
       // Each copy dressed from a stream of its own (`copyTraits`): its variant priced in, its past found at home.
-      games.push(dressCopy(seeded(`${day}:lot:dress:${i}`), { ...game, condition: condition === 'complete' ? undefined : condition }, { condition }));
+      games.push(dressCopy(dayStream(`${day}:lot:dress:${i}`), { ...game, condition: condition === 'complete' ? undefined : condition }, { condition }));
     }
     // Priced once every lookup is back. A failed one (offline, Wikipedia down) is priced as a legend, never as an
     // ordinary title: the desk pays with the real fame later, so a lot priced low would be a way to print coins.

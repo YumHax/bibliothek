@@ -1,5 +1,6 @@
 import { Voice, type AmbientVoice } from './ambient';
 import { RadioTune } from './RadioTune';
+import { noiseBurst, rand, tone } from './synth';
 
 /*
  * The kitchen's appliances, synthesised like the room's other sounds (`ambient.ts`): each is an
@@ -39,7 +40,7 @@ export class KettleBoil extends Voice {
   /** The thermostat letting go: one sharp plastic click. */
   switchOff(): void {
     this.setBoiling(false, this.progress);
-    if (this.ctx && this.master && this.burst) click(this.ctx, this.master, 1500, 1.2, this.burst);
+    if (this.ctx && this.master && this.burst) noiseBurst(this.ctx, this.master, this.ctx.currentTime, { band: 1500, q: 3, level: 1.2, length: 0.025, attack: 0, floor: 0.0001, noise: this.burst, offset: 0 });
   }
 
   protected build(ctx: AudioContext, out: GainNode): void {
@@ -93,8 +94,8 @@ export class ToasterSound extends Voice {
 
   press(): void {
     if (!this.ctx || !this.master || !this.burst) return;
-    click(this.ctx, this.master, 600, 1.2, this.burst);
-    thump(this.ctx, this.master, 140, 0.35);
+    noiseBurst(this.ctx, this.master, this.ctx.currentTime, { band: 600, q: 3, level: 1.2, length: 0.025, attack: 0, floor: 0.0001, noise: this.burst, offset: 0 });
+    tone(this.ctx, this.master, this.ctx.currentTime, { frequency: 140, toRatio: 0.5, glide: 0.08, level: 0.35, length: 0.1, attack: 0, floor: 0.0001 });
   }
 
   setTicking(ticking: boolean): void {
@@ -104,8 +105,8 @@ export class ToasterSound extends Voice {
   pop(): void {
     this.ticking = false;
     if (!this.ctx || !this.master || !this.burst) return;
-    click(this.ctx, this.master, 2200, 1.4, this.burst);
-    click(this.ctx, this.master, 900, 0.8, this.burst);
+    noiseBurst(this.ctx, this.master, this.ctx.currentTime, { band: 2200, q: 3, level: 1.4, length: 0.025, attack: 0, floor: 0.0001, noise: this.burst, offset: 0 });
+    noiseBurst(this.ctx, this.master, this.ctx.currentTime, { band: 900, q: 3, level: 0.8, length: 0.025, attack: 0, floor: 0.0001, noise: this.burst, offset: 0 });
     // The spring's short twang.
     const now = this.ctx.currentTime;
     const osc = this.ctx.createOscillator();
@@ -130,7 +131,7 @@ export class ToasterSound extends Voice {
     this.untilTick -= dt;
     if (this.untilTick > 0) return;
     this.untilTick = Math.max(0.05, this.untilTick + 0.22);
-    click(ctx, this.master, 3800, 0.35, this.burst);
+    noiseBurst(ctx, this.master, ctx.currentTime, { band: 3800, q: 3, level: 0.35, length: 0.025, attack: 0, floor: 0.0001, noise: this.burst, offset: 0 });
   }
 }
 
@@ -195,36 +196,3 @@ export class RadioVoice implements AmbientVoice {
   }
 }
 
-/** A short band-passed noise click (a thermostat, a lever, a timer). */
-function click(ctx: AudioContext, out: AudioNode, frequency: number, level: number, burst: AudioBuffer): void {
-  const now = ctx.currentTime;
-  const source = ctx.createBufferSource();
-  source.buffer = burst;
-  const band = ctx.createBiquadFilter();
-  band.type = 'bandpass';
-  band.frequency.value = frequency;
-  band.Q.value = 3;
-  const gain = ctx.createGain();
-  gain.gain.setValueAtTime(level, now);
-  gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.025);
-  source.connect(band).connect(gain).connect(out);
-  source.start(now);
-}
-
-/** A low, dull knock (a lever hitting its stop). */
-function thump(ctx: AudioContext, out: AudioNode, frequency: number, level: number): void {
-  const now = ctx.currentTime;
-  const osc = ctx.createOscillator();
-  osc.frequency.setValueAtTime(frequency, now);
-  osc.frequency.exponentialRampToValueAtTime(frequency * 0.5, now + 0.08);
-  const gain = ctx.createGain();
-  gain.gain.setValueAtTime(level, now);
-  gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.1);
-  osc.connect(gain).connect(out);
-  osc.start(now);
-  osc.stop(now + 0.12);
-}
-
-function rand(min: number, max: number): number {
-  return min + Math.random() * (max - min);
-}

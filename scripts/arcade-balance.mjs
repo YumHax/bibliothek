@@ -27,7 +27,6 @@ const NET = Number(arg('net', 60));
 const ONLY = arg('game', null)?.split(',') ?? null;
 /** Seconds a play costs beyond its own: the coin, the walk of the end card's tickets, the next coin. */
 const OVERHEAD = 5;
-const STEP = 1 / 120;
 
 // --- The game code, bundled for Node ---------------------------------------------------------------
 
@@ -53,7 +52,9 @@ await build({
   outfile: out,
   logLevel: 'error',
 });
-const { ARCADE_GAMES, pointsPerTicket, COIN_BACK, rivalTable, HoopSim, AlleySim, PinballSim, THREE } = await import(pathToFileURL(out).href);
+const { ARCADE_GAMES, pointsPerTicket, COIN_BACK, rivalTable, HoopSim, AlleySim, PinballSim, REPLAY_STEP, THREE } = await import(pathToFileURL(out).href);
+/** The machines' own fixed step (`world/arcade/replay/Replay`): the live play and this script step alike. */
+const STEP = REPLAY_STEP;
 fs.rmSync(out, { force: true });
 
 // --- The people ------------------------------------------------------------------------------------
@@ -273,7 +274,7 @@ function hoopPlay(name) {
       look = new THREE.Vector3(sim.hoopX + gauss() * p.aim, 2.1 + gauss() * p.aim, -0.98).sub(eye).normalize();
       fire = true;
     }
-    if (sim.play(STEP, { ...NONE(), fire }, true, () => look.clone())) break;
+    if (sim.play(STEP, { ...NONE(), fire, look }, true)) break;
   }
   return { score: sim.points, seconds: t };
 }

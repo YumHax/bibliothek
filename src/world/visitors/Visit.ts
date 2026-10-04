@@ -1,6 +1,9 @@
 import * as THREE from 'three';
+import { angleTo } from '@/math/angles';
+import { damp } from '@/math/damp';
 import type { Friend } from './Friend';
 import { VISIT_RULES, WORDS, type Word } from './friendsPlan';
+import { pick, random, shuffled, within } from '@/random';
 
 /** A door on the way: opened by the friend when it is shut. */
 export interface DoorLike {
@@ -104,7 +107,7 @@ const HOLD = { y: 1.08, z: 0.3, tilt: -0.3 };
  */
 const DOOR_HAND = { ahead: 0.5, y: 1.0, reach: 0.35, release: 0.4, rest: [-0.22, 0.8, 0.05] as const };
 /** How fast their feet settle onto the next tread of the flight (per second): a step up or down, not a slide. */
-const TREAD_RATE = 14;
+const TREAD_RATE = 16;
 const scratch = new THREE.Vector3();
 const eye = new THREE.Vector3();
 const from = new THREE.Vector3();
@@ -281,7 +284,7 @@ export class Visit {
     // The feet settle onto each tread of the flight in turn (a lift over the riser), and onto the landing at once.
     const floor = this.floorY(this.friend.position);
     const y = this.friend.position.y;
-    this.friend.position.y = Math.abs(floor - y) > 0.5 ? floor : y + (floor - y) * Math.min(1, dt * TREAD_RATE);
+    this.friend.position.y = Math.abs(floor - y) > 0.5 ? floor : damp(y, floor, TREAD_RATE, dt);
     this.footsteps();
     this.viewer.getWorldPosition(eye);
     if (this.seated) this.watchScreen();
@@ -305,7 +308,7 @@ export class Visit {
     // Facing the door, hands in pockets; a while after the bell, the phone comes out.
     this.friend.stand(this.yawTo(r.inside), 'pockets');
     this.script.arrived();
-    this.after(between(VISIT_RULES.landing.phoneAfter), () => {
+    this.after(within(random, VISIT_RULES.landing.phoneAfter), () => {
       if (!this.atDoor) return;
       this.friend.hold('phone');
       this.friend.setPose('phone');
@@ -348,7 +351,7 @@ export class Visit {
         await this.pause(beats.askAfter);
         this.script.ask();
       }
-      await this.pause(between(VISIT_RULES.linger.browse) * (this.options.linger?.() ?? 1));
+      await this.pause(within(random, VISIT_RULES.linger.browse) * (this.options.linger?.() ?? 1));
     }
     if (from) await this.walk([...[...from.via].reverse().map((at) => ({ at })), { at: r.hub }]);
     await this.sitAWhile();
@@ -383,7 +386,7 @@ export class Visit {
     if (!seat) return this.standAWhile();
     await this.walk([{ at: seat.at, direct: true }]);
     this.friend.stand(seat.yaw, 'stand');
-    await this.until(() => Math.abs(angleDelta(seat.yaw, this.friend.rotation.y)) < 0.25, VISIT_RULES.sitTurnFor);
+    await this.until(() => Math.abs(angleTo(this.friend.rotation.y, seat.yaw)) < 0.25, VISIT_RULES.sitTurnFor);
     this.seated = true;
     const screen = this.options.watch?.();
     this.watching = !!screen;
@@ -397,11 +400,11 @@ export class Visit {
     });
     this.script.say(this.script.sitLine(), 'ahh');
     const stayUntil = this.options.stayUntil;
-    const stay = stayUntil ? stayUntil.max : between(VISIT_RULES.linger.seat) * (this.options.linger?.() ?? 1);
+    const stay = stayUntil ? stayUntil.max : within(random, VISIT_RULES.linger.seat) * (this.options.linger?.() ?? 1);
     // Watching a longplay: a word at the screen, some way into it.
     if (!stayUntil) {
-      this.after(stay * between(VISIT_RULES.sitting.tvWordAt), () => {
-        if (this.seated && this.options.watch?.()) this.friend.say(pick(WORDS.ooh));
+      this.after(stay * within(random, VISIT_RULES.sitting.tvWordAt), () => {
+        if (this.seated && this.options.watch?.()) this.friend.say(pick(random, WORDS.ooh));
       });
     }
     if (stayUntil) await this.until(stayUntil.done, stay);
@@ -434,7 +437,7 @@ export class Visit {
     this.script.say(this.script.sitLine(), 'ahh');
     const stayUntil = this.options.stayUntil;
     if (stayUntil) await this.until(stayUntil.done, stayUntil.max);
-    else await this.pause(between(VISIT_RULES.linger.seat) * (this.options.linger?.() ?? 1));
+    else await this.pause(within(random, VISIT_RULES.linger.seat) * (this.options.linger?.() ?? 1));
     this.seated = false;
     await this.walk([{ at: r.hub }]);
   }
@@ -516,8 +519,8 @@ export class Visit {
     const others = this.route.browse.filter((b) => b.kind !== 'shelf');
     const count = this.options.returning ? 2 : VISIT_RULES.browseStops;
     // A display the player filled is always one of the stops, walked nearest first with the shelves.
-    const featured = shuffle(this.route.featured?.() ?? []).slice(0, 1);
-    const drawn = [...shuffle(shelves).slice(0, Math.max(1, count - featured.length - (others.length ? 1 : 0))), ...featured];
+    const featured = shuffled(random, this.route.featured?.() ?? []).slice(0, 1);
+    const drawn = [...shuffled(random, shelves).slice(0, Math.max(1, count - featured.length - (others.length ? 1 : 0))), ...featured];
     const picked: VisitRoute['browse'] = [];
     let at = this.route.hub;
     while (drawn.length) {
@@ -527,7 +530,7 @@ export class Visit {
       picked.push(next!);
       at = next!.at;
     }
-    if (others.length && picked.length < count) picked.push(others[Math.floor(Math.random() * others.length)]!);
+    if (others.length && picked.length < count) picked.push(others[Math.floor(random() * others.length)]!);
     return picked;
   }
 
@@ -559,26 +562,7 @@ export class Visit {
     if (!this.walking) return;
     if (this.stepping) {
       if (this.friend.isWalking) {
-        const passed = this.friend.pointsPassed;
-        if (passed !== this.passed) {
-          this.passed = passed;
-          this.resetBlocked();
-        }
-        const ahead = this.legs[passed]?.at;
-        // A door on the way shut again since they set off (by the player): stop, and open it first.
-        const door = this.legs[passed]?.door;
-        if (door && !door.isOpen) {
-          this.stopHere();
-          return;
-        }
-        if (this.catInTheWay(ahead, dt)) {
-          this.stopHere();
-          return;
-        }
-        if (this.inTheWay(ahead)) {
-          this.blockedFor += dt;
-          if (this.blockedFor < VISIT_RULES.blocked.waitFor) this.stopHere();
-        }
+        this.watchWalk(dt);
         return;
       }
       this.stepping = false;
@@ -592,27 +576,58 @@ export class Visit {
       done.resolve();
       return;
     }
-    if (leg.door && !leg.door.isOpen && this.openingDoor <= 0) this.reachForDoor(leg);
-    if (this.openingDoor > 0) {
-      this.openingDoor -= dt;
-      const { doorOpens } = VISIT_RULES.beats;
-      if (this.pendingDoor && this.openingDoor <= doorOpens) {
-        this.pendingDoor.open();
-        this.pendingDoor = null;
-      }
-      if (this.doorHand && this.openingDoor <= doorOpens - DOOR_HAND.release) {
-        this.doorHand = false;
-        this.friend.stand(this.friend.rotation.y, 'stand');
-      }
-      if (this.openingDoor > 0) return;
-    }
+    if (this.doorStillOpening(leg, dt)) return;
     if (this.catInTheWay(leg.at, dt)) return;
     if (this.blockedFor < VISIT_RULES.blocked.waitFor && this.inTheWay(leg.at)) {
       this.blockedFor += dt;
       this.makeWay(leg);
       return;
     }
-    // Every leg up to the next shut door, in one walk.
+    this.setOff();
+  }
+
+  /** Mid-walk: a door shut again on the way since they set off (by the player), the cat or the player in the way stop them where they are. */
+  private watchWalk(dt: number): void {
+    const passed = this.friend.pointsPassed;
+    if (passed !== this.passed) {
+      this.passed = passed;
+      this.resetBlocked();
+    }
+    const ahead = this.legs[passed]?.at;
+    const door = this.legs[passed]?.door;
+    if (door && !door.isOpen) {
+      this.stopHere();
+      return;
+    }
+    if (this.catInTheWay(ahead, dt)) {
+      this.stopHere();
+      return;
+    }
+    if (this.inTheWay(ahead)) {
+      this.blockedFor += dt;
+      if (this.blockedFor < VISIT_RULES.blocked.waitFor) this.stopHere();
+    }
+  }
+
+  /** A shut door on the first leg: reached for, opened a moment later, the hand let go after; true while that takes. */
+  private doorStillOpening(leg: Leg, dt: number): boolean {
+    if (leg.door && !leg.door.isOpen && this.openingDoor <= 0) this.reachForDoor(leg);
+    if (this.openingDoor <= 0) return false;
+    this.openingDoor -= dt;
+    const { doorOpens } = VISIT_RULES.beats;
+    if (this.pendingDoor && this.openingDoor <= doorOpens) {
+      this.pendingDoor.open();
+      this.pendingDoor = null;
+    }
+    if (this.doorHand && this.openingDoor <= doorOpens - DOOR_HAND.release) {
+      this.doorHand = false;
+      this.friend.stand(this.friend.rotation.y, 'stand');
+    }
+    return this.openingDoor > 0;
+  }
+
+  /** Every leg up to the next shut door, in one walk. */
+  private setOff(): void {
     let count = 1;
     while (count < this.legs.length) {
       const door = this.legs[count]!.door;
@@ -862,25 +877,3 @@ export class Visit {
   }
 }
 
-/** Signed shortest angle from `from` to `to`, in (-π, π]. */
-function angleDelta(to: number, from: number): number {
-  const d = (((to - from) % (Math.PI * 2)) + Math.PI * 3) % (Math.PI * 2) - Math.PI;
-  return d;
-}
-
-function between([min, max]: readonly [number, number]): number {
-  return min + Math.random() * (max - min);
-}
-
-function pick<T>(list: readonly T[]): T {
-  return list[Math.floor(Math.random() * list.length)]!;
-}
-
-function shuffle<T>(list: readonly T[]): T[] {
-  const out = [...list];
-  for (let i = out.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [out[i], out[j]] = [out[j]!, out[i]!];
-  }
-  return out;
-}

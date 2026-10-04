@@ -80,22 +80,3 @@ export function repeatTexture<T extends THREE.Texture>(texture: T, x?: number, y
   if (x !== undefined) texture.repeat.set(x, y ?? x);
   return texture;
 }
-
-/** FNV-1a: a stable 32-bit hash so procedural details (barcodes, serials) are the same on every load. */
-export function hashString(text: string): number {
-  let h = 0x811c9dc5;
-  for (let i = 0; i < text.length; i++) {
-    h ^= text.charCodeAt(i);
-    h = Math.imul(h, 0x01000193) >>> 0;
-  }
-  return h >>> 0;
-}
-
-/** Tiny deterministic PRNG in [0, 1). */
-export function seededRandom(seed: number): () => number {
-  let state = seed >>> 0 || 1;
-  return () => {
-    state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
-    return state / 0x100000000;
-  };
-}

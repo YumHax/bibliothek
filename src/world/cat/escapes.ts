@@ -9,10 +9,12 @@ import type { DoorVisitor } from '../stairwell/DoorVisitor';
 import type { StairwellHandle } from '../stairwell/furnishStairwell';
 import type { Doorstep } from '../hallway/Doorstep';
 import type { Zone } from '../zone/Zone';
-import { STAIRWELL_PLAN as stairs, landingY } from '../stairwell/stairwellPlan';
+import { STAIRWELL_PLAN as stairs } from '../stairwell/stairwellPlan'; // imports-ok: the cat's escapes run down the stairwell it reads
+import { landingY } from '@/world/measures/building';
 import type { Cat } from './Cat';
 import type { OutingEnd, OutingWorld } from './CatOuting';
 import { CAT_OUTING as plan, type HideSpot } from './catOutingPlan';
+import { random } from '@/random';
 
 /** Something the cat may bring back in its mouth from an outing (a read card). */
 interface CatFind {
@@ -114,7 +116,7 @@ class CatEscapes extends Prop implements Updatable {
     if (this.here.distanceTo(this.inside) > plan.reach) return;
     const today = day();
     if (this.saved.lastDay !== null && today - this.saved.lastDay < plan.everyDays) return;
-    if (Math.random() >= plan.chance) return;
+    if (random() >= plan.chance) return;
     const spot = this.pick();
     if (!spot) return;
     if (!cat.goOut(building, spot, (how, found) => this.ended(how, found))) return;
@@ -128,7 +130,7 @@ class CatEscapes extends Prop implements Updatable {
   private pick(): HideSpot | null {
     const spots = plan.spots.filter((s) => s.kind !== 'neighbour' || (s.door !== undefined && this.options.isHome(s.door)));
     const total = spots.reduce((sum, s) => sum + s.weight, 0);
-    let roll = Math.random() * total;
+    let roll = random() * total;
     for (const spot of spots) {
       roll -= spot.weight;
       if (roll <= 0) return spot;
@@ -172,10 +174,10 @@ class CatEscapes extends Prop implements Updatable {
   private ended(how: OutingEnd, found: boolean): void {
     this.untip?.();
     this.untip = null;
-    if (how !== 'home' || !found || this.broughtBack || Math.random() >= plan.bringsBack) return;
+    if (how !== 'home' || !found || this.broughtBack || random() >= plan.bringsBack) return;
     let find: CatFind | null = null;
     for (const finder of finders) if ((find = finder())) break;
-    find ??= plan.finds[Math.floor(Math.random() * plan.finds.length)]!;
+    find ??= plan.finds[Math.floor(random() * plan.finds.length)]!;
     const name = this.options.cat.settings.name;
     this.options.notices?.read({ title: find.title, text: `${name} drops something at your feet. ${find.text}`, ...(find.effect ? { effect: find.effect } : {}), look: 'note' });
   }

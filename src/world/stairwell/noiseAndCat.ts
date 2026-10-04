@@ -5,11 +5,12 @@ import { NeighboursThroughWalls } from '@/building/throughWalls';
 import { NoiseWatch } from '@/building/noiseComplaints';
 import { NEIGHBOUR_NOISE } from '@/building/neighbourNoisePlan';
 import { mainsOn } from '@/building/mains';
-import { CAT_OUTING } from '../cat/catOutingPlan';
+import { CAT_OUTING } from '../cat/catOutingPlan'; // imports-ok: the stairwell's noises follow the cat's outing through it
 import { DoorVisitor } from './DoorVisitor';
 import { BuildingSpaces, flatStairwellRoute } from './flatHeard';
 import type { StairWalkerOptions } from './StairWalker';
-import { STAIRWELL_PLAN as plan, landingY } from './stairwellPlan';
+import { STAIRWELL_PLAN as plan } from './stairwellPlan';
+import { landingY } from '@/world/measures/building';
 
 /** What the cat's outings need of the stairwell (`world/cat/escapes`, wired in `bootstrap/world.ts`). */
 export interface StairLife {

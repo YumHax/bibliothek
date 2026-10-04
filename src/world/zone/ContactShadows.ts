@@ -4,6 +4,7 @@ import { QUALITY } from '@/graphics/quality';
 import type { Furniture } from '../Furniture';
 import { markShared } from '../materials/sharedResources';
 import { FLOOR, RENDER_ORDER, onSurface } from '../surface/layers';
+import { smooth } from '@/math/scalar';
 
 /**
  * Height of the blobs over the floor (`FLOOR.contactShadow`): clear of a rug's top (so what stands
@@ -47,7 +48,7 @@ function texture(): THREE.CanvasTexture {
       const dx = Math.max(0, Math.abs((x + 0.5) / size - 0.5) - 0.2) / 0.3;
       const dy = Math.max(0, Math.abs((y + 0.5) / size - 0.5) - 0.2) / 0.3;
       const d = Math.min(1, Math.hypot(dx, dy));
-      const alpha = Math.pow(1 - d * d * (3 - 2 * d), 1.6);
+      const alpha = Math.pow(1 - smooth(d), 1.6);
       const i = (y * size + x) * 4;
       image.data[i] = image.data[i + 1] = image.data[i + 2] = Math.round(alpha * 255);
       image.data[i + 3] = 255;

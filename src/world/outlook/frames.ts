@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import { FLAT_IN_STREET, type ShopDoor } from '../street/streetPlan';
+import type { ShopDoor } from '../street/streetPlan';
+import { FLAT_IN_STREET } from '@/world/measures/street';
 
 /*
  * Where a window of the world stands in the street's own frame (its zone-local metres, `STREET_PLAN`), so a view

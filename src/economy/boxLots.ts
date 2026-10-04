@@ -1,11 +1,12 @@
 import type { Game } from '@/catalog/types';
 import { SEED_GAMES } from '@/catalog';
 import { readGame } from '@/catalog/validate';
-import { seeded } from './seeded';
 import { isGrail } from './grails';
 import { drawCondition } from './stockDraws';
 import { dressCopy, drawBootleg } from './copyTraits';
 import { SEALED_LOT } from './pricing';
+import { frozenRng } from '@/random';
+import { plural } from '@/text/count';
 
 /*
  * SEALED BOX LOTS: a taped carton bought blind (the flea market's corner by the job lot, the saleroom's hammer),
@@ -59,7 +60,7 @@ function gems(): Game[] {
  * (when there are enough others). Priced by weight.
  */
 export function drawSealedLot(seed: string, pool: readonly Game[], owns: (id: string) => boolean = () => false): SealedLot {
-  const rng = seeded(`carton:${seed}`);
+  const rng = frozenRng(`carton:${seed}`);
   const [lo, hi] = SEALED_LOT.items;
   const count = lo + Math.floor(rng() * (hi - lo + 1));
   const items: CartonItem[] = [];
@@ -71,7 +72,7 @@ export function drawSealedLot(seed: string, pool: readonly Game[], owns: (id: st
     const pick = from[Math.floor(rng() * from.length)];
     const condition = drawCondition(rng());
     // Every copy is dressed from a stream of its own (a variant, a past: `dressCopy`), now and then a bootleg instead.
-    const copyRng = seeded(`carton:${seed}:${i}`);
+    const copyRng = frozenRng(`carton:${seed}:${i}`);
     if (u < SEALED_LOT.gameOdds && rng() < SEALED_LOT.bootlegOdds) {
       const bootleg = drawBootleg(copyRng, undefined, { condition, kind: 'bin' });
       if (bootleg && !used.has(bootleg.id)) {
@@ -88,14 +89,14 @@ export function drawSealedLot(seed: string, pool: readonly Game[], owns: (id: st
     const junk = JUNK[Math.floor(rng() * JUNK.length)]!;
     const [c0, c1] = SEALED_LOT.coins;
     const coins = rng() < SEALED_LOT.coinsOdds ? c0 + Math.floor(rng() * (c1 - c0 + 1)) : 0;
-    items.push({ kind: 'junk', name: junk.name, line: coins ? `${junk.line} And at the bottom, ${coins} loose coin${coins === 1 ? '' : 's'}.` : junk.line, coins });
+    items.push({ kind: 'junk', name: junk.name, line: coins ? `${junk.line} And at the bottom, ${coins} loose ${plural(coins, 'coin')}.` : junk.line, coins });
   }
   // Now and then a gem: a well-known title, under everything else.
   if (rng() < SEALED_LOT.gemOdds) {
     const list = gems().filter((g) => !used.has(g.id) && !owns(g.id));
     const gem = list[Math.floor(rng() * list.length)];
     const condition = drawCondition(rng());
-    if (gem) items.push({ kind: 'game', game: dressCopy(seeded(`carton:${seed}:gem`), { ...gem, condition, status: 'owned' }, { condition, kind: 'bin' }), gem: true });
+    if (gem) items.push({ kind: 'game', game: dressCopy(frozenRng(`carton:${seed}:gem`), { ...gem, condition, status: 'owned' }, { condition, kind: 'bin' }), gem: true });
   }
   const label = LABELS[Math.floor(rng() * LABELS.length)]!;
   const junkCount = items.filter((i) => i.kind === 'junk').length;

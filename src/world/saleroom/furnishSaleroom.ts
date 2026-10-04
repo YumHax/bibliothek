@@ -7,6 +7,11 @@ import { furnishShell } from '../shell';
 import { furnishDecor, placeRoomLight } from '../build/roomParts';
 import { TravelDoor } from '../travel/TravelDoor';
 import { Walker } from '../people/Walker';
+import { victorHook } from '../people/victorTalk';
+import { bodyOf, talkHook } from '../people/socialHook';
+import { saleroomExtras } from '@/social/saleroom';
+import { shortName } from '@/social/people';
+import { has } from '@/social/perks';
 import { Rostrum } from './Rostrum';
 import { LotStand } from './LotStand';
 import { SaleBoard } from './SaleBoard';
@@ -25,7 +30,7 @@ const AUCTIONEER_SEED = 461;
  * room's bidders in their seats (the rival in the front row), the decor, and the `Saleroom` that runs the sale.
  * Without the lot services (`ctx.market.lots`) it is an empty room with its door.
  */
-export function furnishSaleroom(zone: Zone, ctx: BuildContext): ZoneHandle {
+export function furnishSaleroom(zone: Zone, ctx: Pick<BuildContext, 'sky' | 'listener' | 'acoustics' | 'covers' | 'collection' | 'money' | 'today' | 'market' | 'social'>): ZoneHandle {
   const { sky, listener, covers, collection, money, today } = ctx;
   const plan = SALEROOM_PLAN;
   const room = furnishShell(zone, sky, plan.room, { fixedDaylight: DAYLIGHT });
@@ -68,7 +73,10 @@ export function furnishSaleroom(zone: Zone, ctx: BuildContext): ZoneHandle {
       seed: bidder.seed,
       speaker: rival ? RIVAL_COLLECTOR.short : bidder.name,
       label: rival ? `${RIVAL_COLLECTOR.label} · chat` : `${bidder.name} · chat`,
-      ...(rival ? { talk: () => { lots.rival.meet(); return lots.rival.greeting(); } } : { lines: bidder.lines }),
+      ...(rival
+        ? { talk: () => { lots.rival.meet(); return lots.rival.greeting(); }, social: victorHook(ctx.social, lots.rival, 'saleroom', () => bidders.get('victor')!, { extras: () => splitExtra() }) }
+        // A regular is someone to know (`social/saleroom`): their lines go into the conversation as its hello.
+        : { lines: bidder.lines, social: talkHook(ctx.social, bidder.id, () => ({ person: bidder.id, place: 'saleroom', body: bodyOf(bidders.get(bidder.id)!) })) }),
     }), chair.position.clone());
     body.traverse((o) => {
       o.castShadow = false;
@@ -77,17 +85,26 @@ export function furnishSaleroom(zone: Zone, ctx: BuildContext): ZoneHandle {
     bidders.set(bidder.id, body);
   }
 
+  // A friend now (`splitLots`): "Go halves on this lot" in a word with him while a lot is called.
+  const splitExtra = () =>
+    sale && has('victor', 'splitLots')
+      ? [{ id: 'victor:split', group: 'trade' as const, label: 'Go halves on this lot', disabled: () => sale?.canSplit() ?? null, run: () => ({ line: sale!.splitWithRival() }) }]
+      : [];
   sale = zone.place(new Saleroom({
     lots,
     dayNight: sky.dayNight,
     day: () => today.gameDay,
     wallet: money.wallet,
+    purse: money.purse,
     owns: (id) => collection.owns(id),
+    wanted: (id) => collection.isWanted(id),
     rostrum,
     stand,
     board,
     auctioneer,
     bidders,
   }), new THREE.Vector3());
+  // The regulars' side of a word with them: leave a lot, the star lot's tip, a lot sold on at what they paid.
+  zone.onUnload(saleroomExtras({ starLot: () => sale?.starLot() ?? null, wonBy: (b) => sale?.wonBy(b) ?? null, buyFrom: (b) => sale?.buyFrom(b, shortName(b)) ?? { ok: false, why: 'Not now.' } }));
   return { room };
 }

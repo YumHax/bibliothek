@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { createCanvas, fitFontSize, toTexture, FONT } from '@/covers/generated/canvasUtils';
 import { cylinderMesh } from '../meshUtils';
 import { paint } from '../materials/palette';
+import { formatCoins } from '@/text/money';
 
 /** How a tag stands: a tent card on the surface in front of the piece, a card on a stick on the floor, or pinned flat to the wall. */
 export type TagStyle = 'card' | 'stand' | 'wall';
@@ -93,7 +94,7 @@ export class PriceTag extends THREE.Group {
     const key = `${this.state}${faded ? ':faded' : ''}`;
     let texture = this.textures.get(key);
     if (!texture) {
-      texture = paintTag(this.title, `${this.price} coins`, this.accent, STAMPS[this.state](this.needs), faded);
+      texture = paintTag(this.title, `${formatCoins(this.price)}`, this.accent, STAMPS[this.state](this.needs), faded);
       this.textures.set(key, texture);
     }
     return texture;

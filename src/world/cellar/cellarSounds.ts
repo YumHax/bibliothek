@@ -1,6 +1,8 @@
 import { Voice } from '@/audio/ambient';
 import { audioBus, startedAudioContext } from '@/audio/audioContext';
 import { brownNoise } from '@/audio/noise';
+import { rand, tone } from '@/audio/synth';
+import { random } from '@/random';
 
 /*
  * What the cellars sound like: the boiler's low roar and its pump's hum, water dripping from the vault into a
@@ -47,25 +49,11 @@ export class Drips extends Voice {
   protected override tick(ctx: AudioContext, dt: number): void {
     this.untilDrip -= dt;
     if (this.untilDrip > 0 || !this.out) return;
-    this.untilDrip = Math.random() < 0.2 ? 0.25 : rand(2.5, 7);
-    plip(ctx, this.out, 900 + Math.random() * 700);
+    this.untilDrip = random() < 0.2 ? 0.25 : rand(2.5, 7);
+    // One drop: a sine falling fast in pitch, a short ring.
+    const from = rand(900, 1600);
+    tone(ctx, this.out, ctx.currentTime + 0.01, { frequency: from, to: from * 0.45, glide: 0.09, level: 0.4, length: 0.25, attack: 0.005, curve: 'exponential', floor: 0.0001, tail: 0.05 });
   }
-}
-
-/** One drop: a sine falling fast in pitch, a short ring. */
-function plip(ctx: AudioContext, out: AudioNode, from: number): void {
-  const at = ctx.currentTime + 0.01;
-  const osc = ctx.createOscillator();
-  osc.type = 'sine';
-  osc.frequency.setValueAtTime(from, at);
-  osc.frequency.exponentialRampToValueAtTime(from * 0.45, at + 0.09);
-  const gain = ctx.createGain();
-  gain.gain.setValueAtTime(0.0001, at);
-  gain.gain.exponentialRampToValueAtTime(0.4, at + 0.005);
-  gain.gain.exponentialRampToValueAtTime(0.0001, at + 0.25);
-  osc.connect(gain).connect(out);
-  osc.start(at);
-  osc.stop(at + 0.3);
 }
 
 /** The rat: two quick squeaks, `level` loud (0..1). */
@@ -92,6 +80,3 @@ export function playSqueak(level: number): void {
   }
 }
 
-function rand(min: number, max: number): number {
-  return min + Math.random() * (max - min);
-}

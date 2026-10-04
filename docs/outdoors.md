@@ -352,7 +352,7 @@ the one it is in; `homeFacades` for our building; the near ones painted finer, a
 today's stock),
 their relief, shutters and shop glow, the lamps, trees, parked and passing cars, furniture (all of these by the same
 calls as the street's own, `street/streetScenery`: only the options differ), the rain, and the courtyard
-the street never reaches (`Courtyard`, `COURTYARD_YARD` in `outlookPlan.ts`: setts, lawn and chestnut, the workshop's
+the street never reaches (`Courtyard`, `COURTYARD_YARD` in `courtyard/courtyardPlan.ts`: setts, lawn and chestnut, the workshop's
 back, bins, shed, rack, sandpit, bikes). No people, doors or sounds. It is built at the next idle moment once the
 player walks into the room (`prefetch`, from `setOccupied`) or a pane is first drawn, a step per idle moment (`between`:
 the ground and park, the facades, the fronts, the fixtures, the rest), compiled out of sight a few pieces per idle

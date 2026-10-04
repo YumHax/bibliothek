@@ -1,8 +1,9 @@
 import * as THREE from 'three';
-import { createCanvas, seededRandom, canvasTexture } from '@/covers/generated/canvasUtils';
+import { createCanvas, canvasTexture } from '@/covers/generated/canvasUtils';
 import { RENDER_ORDER } from '../surface/layers';
 import { overKeepingAlpha } from '@/world/materials/blend';
 import { markShared } from '@/world/materials/sharedResources';
+import { lcg } from '@/random';
 
 /** Rings alive at once, how long one spreads (s), how far it gets (as a share of `reach`). */
 const RINGS = 3;
@@ -22,7 +23,7 @@ export function rippleNormals(): THREE.Texture {
   if (!normals) {
     const S = 128;
     const [canvas, ctx] = createCanvas(S, S);
-    const random = seededRandom(0x71dd1e);
+    const random = lcg(0x71dd1e);
     // Whole numbers of waves across the tile both ways, so it wraps without a seam.
     const waves = Array.from({ length: 5 }, () => ({ kx: Math.round(1 + random() * 4) * (random() < 0.5 ? -1 : 1), ky: Math.round(1 + random() * 4), phase: random() * Math.PI * 2, amp: 0.5 + random() * 0.5 }));
     const image = ctx.createImageData(S, S);

@@ -1,4 +1,5 @@
-import { COURTYARD, FLAT_IN_STREET, FRONT, KERB_HEIGHT, PARK_PARKING, PARK_STREET, STREET_ENDS, STREET_PLAN, WORKS, WORKS_LIFT, type Vec2 } from '../street/streetPlan';
+import { STREET_PLAN, type Vec2 } from '../street/streetPlan';
+import { COURTYARD, FLAT_IN_STREET, FRONT, KERB_HEIGHT, PARK_PARKING, PARK_STREET, STREET_ENDS, WORKS, WORKS_LIFT } from '@/world/measures/street';
 import { frontWorksMoved } from '../street/details/roadworks';
 
 /*

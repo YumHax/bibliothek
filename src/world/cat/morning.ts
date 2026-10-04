@@ -1,8 +1,9 @@
 import * as THREE from 'three';
+import { inHours } from '@/time/clock';
 import type { CatMind } from './CatMind';
 import type { CatPerch } from './spots';
-import { chance, rand } from './random';
 import { HOUSEHOLD } from '@/household/rules';
+import { between, chance, random } from '@/random';
 
 /**
  * Hours that count as the morning after (the player woke in bed): the cat is placed then; later jumps
@@ -32,7 +33,7 @@ export function placeForMorning(mind: CatMind, night = true): void {
     mind.thirst = Math.max(mind.thirst, NIGHT_NEEDS.thirst);
   }
   const hours = ctx.clock.state.hours;
-  if (hours < MORNING.from || hours >= MORNING.to) return;
+  if (!inHours(hours, MORNING)) return;
 
   const bed = favouriteBed(mind);
   const { tmp, tmp2, goal } = mind;
@@ -44,7 +45,7 @@ export function placeForMorning(mind: CatMind, night = true): void {
     mind.perch = null;
   };
 
-  if (bed && ctx.bowl.level > 0 && chance(ON_THE_BED)) {
+  if (bed && ctx.bowl.level > 0 && chance(random, ON_THE_BED)) {
     moved();
     const position = bed.restingSpot(new THREE.Vector3());
     const approach = bed.approachPoint(new THREE.Vector3());
@@ -60,7 +61,7 @@ export function placeForMorning(mind: CatMind, night = true): void {
     // Facing the side it hops down from (its paws stretch out over the bed, not into the headboard or the wall).
     ctx.motion.teleport(position, Math.atan2(approach.x - position.x, approach.z - position.z));
     mind.enter('sleep');
-    mind.timer = rand(LIE_IN_S[0], LIE_IN_S[1]);
+    mind.timer = between(random, LIE_IN_S[0], LIE_IN_S[1]);
     return;
   }
 

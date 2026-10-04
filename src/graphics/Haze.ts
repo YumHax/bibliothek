@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import type { Updatable } from '@/core/Engine';
 import type { Look } from './grade';
+import { dampFactor } from '@/math/damp';
 
 /** Per second: walking into the arcade thickens the air over a second or so. */
 const RATE = 1.2;
@@ -67,7 +68,7 @@ export class Haze implements Updatable {
   }
 
   update(dt: number): void {
-    const t = 1 - Math.exp(-RATE * dt);
+    const t = dampFactor(RATE, dt);
     this.fog.density += (this.wantedDensity() - this.fog.density) * t;
     this.fog.color.lerp(this.wantedColor(), t);
   }

@@ -1,5 +1,5 @@
-import { seededRandom } from '@/covers/generated/canvasUtils';
 import type { PersonLook } from '../looks';
+import { lcg } from '@/random';
 
 /*
  * How a person carries themselves, from their seed: nobody moves quite like anyone else. Quick or
@@ -24,7 +24,7 @@ export interface Temperament {
 
 /** A person's temperament, fixed by `seed` (the build nudges the stance). */
 export function temperamentOf(seed: number, look: PersonLook): Temperament {
-  const random = seededRandom(seed * 40503 + 911);
+  const random = lcg(seed * 40503 + 911);
   const energy = 0.7 + random() * 0.6;
   return {
     tempo: 0.85 + random() * 0.35,

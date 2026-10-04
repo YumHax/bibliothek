@@ -6,8 +6,8 @@ import type { CatMotion } from './CatMotion';
 import type { CatPerch, WindowLookout } from './spots';
 import { CatMind } from './CatMind';
 import { CAT_TIMING, STATES, type CatState } from './catStates';
-import { chance } from './random';
 import { placeForMorning } from './morning';
+import { chance, random } from '@/random';
 
 /** The screen the cat may watch (the TV): whether it is on, where to sit, and optionally what to look at. */
 export interface CatScreen {
@@ -150,7 +150,7 @@ export class CatBrain {
     this.observePlayer(dt);
     this.tick(dt);
     this.applyGaze();
-    if (mind.state !== 'sleep') this.snoreAfter = Math.random() < SNORE_CHANCE ? SNORE_AFTER_S[0] + Math.random() * (SNORE_AFTER_S[1] - SNORE_AFTER_S[0]) : Infinity;
+    if (mind.state !== 'sleep') this.snoreAfter = random() < SNORE_CHANCE ? SNORE_AFTER_S[0] + random() * (SNORE_AFTER_S[1] - SNORE_AFTER_S[0]) : Infinity;
     this.ctx.voice?.setSnoring(mind.state === 'sleep' && this.ctx.body.pose === 'sleep' && mind.age > this.snoreAfter);
   }
 
@@ -221,7 +221,7 @@ export class CatBrain {
     }
     const busy = state === 'lap' || state === 'petted' || state === 'startle' || state === 'flee' || state === 'hop' || state === 'called';
     if (this.annoyedFor > 0 || busy) return 'ignored';
-    if (chance(1 / 3)) {
+    if (chance(random, 1 / 3)) {
       this.attendFor = 3;
       return 'ignored';
     }
@@ -319,7 +319,7 @@ export class CatBrain {
     const mind = this.mind;
     const d = mind.playerDistance;
     if (mind.state === 'sleep') {
-      if (d < CAT_TIMING.halfWakeWithin && chance(CAT_TIMING.halfWakeChance * dt)) {
+      if (d < CAT_TIMING.halfWakeWithin && chance(random, CAT_TIMING.halfWakeChance * dt)) {
         mind.sleepRemaining = mind.timer;
         mind.enter('halfWake');
       }
@@ -336,7 +336,7 @@ export class CatBrain {
         return;
       }
     }
-    if (mind.playerSeat && !mind.perch && this.lapCooldown <= 0 && this.playerSeatedFor > LAP_AFTER_S && def.invitable && chance(CAT_TIMING.lapInvite * dt)) {
+    if (mind.playerSeat && !mind.perch && this.lapCooldown <= 0 && this.playerSeatedFor > LAP_AFTER_S && def.invitable && chance(random, CAT_TIMING.lapInvite * dt)) {
       mind.startActivity('lap');
     }
   }

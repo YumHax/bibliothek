@@ -1,5 +1,6 @@
 import type { Game } from '@/catalog/types';
 import { PLATFORMS } from '@/catalog/platforms';
+import { compareTitles } from '@/text/strings';
 
 /** 'custom': the player's own arrangement (`arrangement.ts`), boxes where they were put by hand. */
 export type SortMode = 'platform' | 'year' | 'title' | 'custom';
@@ -10,11 +11,6 @@ export const SORT_MODES: readonly SortMode[] = ['platform', 'year', 'title', 'cu
 export function nextSortMode(mode: SortMode, withCustom = false): SortMode {
   const modes = withCustom ? SORT_MODES : SORT_MODES.filter((m) => m !== 'custom');
   return modes[(modes.indexOf(mode) + 1) % modes.length]!;
-}
-
-/** Title without a leading article so "The Legend of Zelda" files under L. */
-function sortTitle(game: Game): string {
-  return game.title.replace(/^(the|a|an|le|la|les)\s+/i, '');
 }
 
 function year(game: Game): number {
@@ -29,7 +25,8 @@ function platformRank(game: Game): number {
   return i === -1 ? platformOrder.length : i;
 }
 
-const byTitle = (a: Game, b: Game) => sortTitle(a).localeCompare(sortTitle(b), undefined, { sensitivity: 'base', numeric: true });
+/** The one title order (`text/strings`): articles dropped, accents and case ignored, numbers by value; the panels follow it. */
+const byTitle = (a: Game, b: Game) => compareTitles(a.title, b.title);
 
 const COMPARATORS: Record<SortMode, (a: Game, b: Game) => number> = {
   platform: (a, b) => platformRank(a) - platformRank(b) || byTitle(a, b),

@@ -1,3 +1,5 @@
+import { easeInOutCubic } from '@/math/easing';
+
 /**
  * Eased open/close progress of a hinged lid. Pure state; something ticked must call `tick`.
  * `onSettle` hears the end of each travel (`open`: it came fully open, else it shut): the host's
@@ -58,8 +60,4 @@ export class LidMotion {
     if (this.progress === this.target) this.onSettle?.(this.target === 1);
     return true;
   }
-}
-
-function easeInOutCubic(t: number): number {
-  return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
 }

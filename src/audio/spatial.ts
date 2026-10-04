@@ -117,39 +117,10 @@ export class SpatialOut {
   }
 }
 
-/** Who hears the flat's one-shots with no listener of their own (a door's latch): the camera and the walls' count. */
-let ears: { listener: THREE.Object3D; wallsBetween?: (listener: THREE.Vector3, source: THREE.Vector3) => number } | null = null;
-/** A one-shot heard through `heardAt`: full at `reference` m, gone past `silent`; each wall lets `wallGain` through. */
-const HEARD = { reference: 1.5, silent: 14, wallGain: 0.35 };
-const heardEar = new THREE.Vector3();
-
-/** Sets the ears `heardAt` places sounds for (the bootstrap, once). */
-export function setEars(listener: THREE.Object3D, wallsBetween?: (listener: THREE.Vector3, source: THREE.Vector3) => number): void {
-  ears = { listener, wallsBetween };
-}
-
-/** Where the ears are (world; a shared vector, copy it to keep), or null before they are set. */
-export function earsAt(): THREE.Vector3 | null {
-  return ears ? ears.listener.getWorldPosition(heardEar) : null;
-}
-
-/**
- * How a one-shot at `at` (world) is heard by the ears: a gain for its level (distance and walls) and
- * where it comes from. Before any ears are set, heard as it always was: full, straight ahead.
- */
-export function heardAt(at: THREE.Vector3): { gain: number; spatial: Spatial | undefined } {
-  if (!ears) return { gain: 1, spatial: undefined };
-  ears.listener.getWorldPosition(heardEar);
-  const distance = heardEar.distanceTo(at);
-  if (distance >= HEARD.silent) return { gain: 0, spatial: undefined };
-  const walls = ears.wallsBetween?.(heardEar, at) ?? 0;
-  const gain = Math.min(1, 1 / (1 + (distance / HEARD.reference) ** 2) * 2) * Math.pow(HEARD.wallGain, walls);
-  return { gain, spatial: spatialOf(ears.listener, at, walls) };
-}
-
 /**
  * Where a one-shot sound (a bell, a step, a door) connects: `out` itself when heard in the open and
- * straight ahead, else a `SpatialOut` in front of it, let go after `seconds`.
+ * straight ahead, else a `SpatialOut` in front of it, let go after `seconds`. The level itself, by
+ * distance and walls, is `hearing.ts`'s (`hear`, `loudness`).
  */
 export function spatialInput(ctx: BaseAudioContext, out: AudioNode, spatial: Spatial | undefined, seconds: number): AudioNode {
   if (!spatial || (spatial.walls <= 0 && Math.abs(spatial.pan) < 0.01 && !(spatial.rear && spatial.rear > 0.02))) return out;

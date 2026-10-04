@@ -2,10 +2,10 @@ import * as THREE from 'three';
 import type { Furniture } from '../Furniture';
 import { part } from '../props/Prop';
 import { paint, METAL } from '../materials/palette';
-import { seededRandom } from '@/graphics/canvas';
 import { PortableTv } from './shopModels';
 import type { ScreenLook } from './snowScreen';
 import { labelSheet, ticket } from './tv/labels';
+import { lcg } from '@/random';
 
 export interface TvWallOptions {
   /** Length along the wall. Default 2.4. */
@@ -43,7 +43,7 @@ export class TvWall extends THREE.Group implements Furniture {
     this.name = 'TvWall';
     const W = options.width ?? 2.4;
     const rows = options.rows ?? 3;
-    const random = seededRandom(options.seed ?? 5);
+    const random = lcg(options.seed ?? 5);
     const steel = METAL.satinSteel();
     const board = paint(0x3a3c40, 0.6);
     const top = BOTTOM + rows * ROW;

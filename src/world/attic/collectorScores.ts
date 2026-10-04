@@ -1,5 +1,6 @@
 import type { ScoreTable, TableEntry } from '../arcade/scoreTable';
 import { TABLE_SIZE } from '@/economy/rivals';
+import { byScore, makesTable } from '@/economy/scoreTable';
 
 /**
  * The hall of fame of the collector's cabinet: his own five scores (`ATTIC_PLAN.collector`) and the
@@ -26,7 +27,7 @@ export class CollectorScores implements ScoreTable {
 
   table(gameId: string): TableEntry[] {
     const mine = this.scores.table(gameId).filter((e) => e.you);
-    return [...this.his, ...mine].sort((a, b) => b.score - a.score).slice(0, TABLE_SIZE);
+    return byScore([...this.his, ...mine]).slice(0, TABLE_SIZE);
   }
 
   topOf(gameId: string): TableEntry {
@@ -34,8 +35,7 @@ export class CollectorScores implements ScoreTable {
   }
 
   qualifies(gameId: string, score: number): boolean {
-    const table = this.table(gameId);
-    return score > 0 && (table.length < TABLE_SIZE || score > table[table.length - 1]!.score);
+    return makesTable(this.table(gameId), score, TABLE_SIZE);
   }
 
   submit(gameId: string, score: number, initials?: string): { best: boolean; rank: number | null } {

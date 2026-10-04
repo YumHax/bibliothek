@@ -1,10 +1,11 @@
 import * as THREE from 'three';
-import { createCanvas, seededRandom, toTexture } from '@/covers/generated/canvasUtils';
+import { createCanvas, toTexture } from '@/covers/generated/canvasUtils';
 import { Prop, part } from '../../props/Prop';
 import { paint } from '../../materials/palette';
 import { WALL, decal } from '../../surface/layers';
 import { cutOut } from './cutout';
 import { HAND, POSTER, PRINT, hex, setLines } from './lettering';
+import { lcg } from '@/random';
 
 export interface ShopNoticeOptions {
   /** What it says, top first; the first line bigger. */
@@ -45,7 +46,7 @@ export class ShopNotice extends Prop {
     const poster = hand === 'poster';
     const width = options.width ?? (poster ? 0.42 : 0.15);
     const height = options.height ?? (poster ? 0.6 : 0.21);
-    const random = seededRandom((options.seed ?? 3) * 7919 + 13);
+    const random = lcg((options.seed ?? 3) * 7919 + 13);
     const fixing = options.fixing ?? 'tape';
     const framed = fixing === 'frame';
     const tilt = options.tilt ?? (framed ? 0 : (random() - 0.5) * 0.08);

@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import type { Zone } from '../zone/Zone';
 import type { BuildContext } from '../buildContext';
-import { FLAT } from '../worldPlan';
+import { FLAT } from '@/world/zoneIds';
 import { Blackout } from '@/building/blackout';
 import { setBuildingCircuit } from '@/building/mains';
 import { Prop } from '../props/Prop';
@@ -40,7 +40,7 @@ let endless: EndlessStairs | null = null;
  * stuck with Mrs Moreau: `powerCut/`), the meters cupboard in the hall whose main fuse brings the power back, and the
  * endless stairs of some nights (`endless/`).
  */
-export function placeDownAndDark(zone: Zone, { sky, listener, today, home }: Pick<BuildContext, 'sky' | 'listener' | 'today' | 'home'>, parts: StairParts): DownAndDark {
+export function placeDownAndDark(zone: Zone, { sky, listener, today, home, social }: Pick<BuildContext, 'sky' | 'listener' | 'today' | 'home' | 'social'>, parts: StairParts): DownAndDark {
   const { stairs, lift, lights, walkers } = parts;
   // Read here, not at the module's top: `worldPlan` imports half the world, a cycle must not find it unset.
   setBuildingCircuit([...FLAT, ...ALSO_ON_CIRCUIT]);
@@ -56,7 +56,7 @@ export function placeDownAndDark(zone: Zone, { sky, listener, today, home }: Pic
   });
   zone.place(new BlackoutClock(blackout), new THREE.Vector3());
 
-  const scene = zone.place(new PowerCutScene({ viewer: listener, lights, lift, collisions: zone.collisions }), new THREE.Vector3());
+  const scene = zone.place(new PowerCutScene({ viewer: listener, lights, lift, collisions: zone.collisions, day: () => today.gameDay, social }), new THREE.Vector3());
   for (const walker of scene.walkers) zone.place(walker, walker.position.clone());
   const [fx, fy, fz] = POWER_CUT_PLAN.fuseBox.at;
   zone.place(new FuseBox(POWER_CUT_PLAN.fuse), new THREE.Vector3(fx, fy, fz), Math.PI / 2);

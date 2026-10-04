@@ -1,11 +1,11 @@
 import * as THREE from 'three';
+import { inHours } from '@/time/clock';
 import type { Updatable } from '@/core/Engine';
 import type { NoticeActions } from '@/notices';
 import type { Game, GameStatus } from '@/catalog/types';
 import { getPlatform } from '@/catalog/platforms';
 import type { GameSource } from '@/collection/GameSource';
 import type { SessionActions } from '@/game/SessionActions';
-import { seeded } from '@/economy/seeded';
 import { BorrowPanel } from '@/ui/BorrowPanel';
 import { playDoorbell, playDoorShut } from '@/audio/doorbell';
 import { playFootfall } from '@/audio/footfall';
@@ -14,27 +14,38 @@ import { audioBus, startedAudioContext } from '@/audio/audioContext';
 import { spatialInput, spatialOf } from '@/audio/spatial';
 import { playCoins } from '@/audio/coins';
 import { playMurmur } from '@/audio/murmur';
-import { proximityVolume } from '@/video/proximityVolume';
+import { HEARING, loudness, type HearingProfile } from '@/audio/hearing';
 import type { BoxArtLoader } from '@/covers/BoxArtLoader';
 import { GameBox } from '../GameBox';
-import { STAIRWELL_PLAN, STOREY, landingY } from '../stairwell/stairwellPlan';
+import { STAIRWELL_PLAN } from '../stairwell/stairwellPlan'; // imports-ok: friends and guests walk the flat and the stairwell: the visit reads the rooms it crosses
+import { STOREY, landingY } from '@/world/measures/building';
 import type { ActivityAware } from '../zone/lifecycle';
 import type { Zone } from '../zone/Zone';
 import { Prop } from '../props/Prop';
 import { nowPlaying } from '../screen/nowPlaying';
 import type { DoorCaller } from '../hallway/FrontDoor';
-import { HALLWAY_PLAN } from '../hallway/hallwayPlan';
-import { ROOM_PLAN } from '../roomPlan';
+import { HALLWAY_PLAN } from '../hallway/hallwayPlan'; // imports-ok: friends and guests walk the flat and the stairwell: the visit reads the rooms it crosses
+import { ROOM_PLAN } from '../roomPlan'; // imports-ok: friends and guests walk the flat and the stairwell: the visit reads the rooms it crosses
+import { capitalise } from '@/text/strings';
 import { Friend } from './Friend';
 import { FRIENDS, SHARED_LINES, VISIT_RULES, WORDS, type FriendPlan, type Word } from './friendsPlan';
 import { borrowPick, fill, lookPick, pickLine, shelfComment, tasteScore, yearOf, type LinePicker } from './friendLines';
 import { SHOWCASE_LINES } from '../showcase/showcaseLines';
 import { Visit, type DoorLike, type HeldBox, type RouteSeat, type VisitRoute, type VisitScript } from './Visit';
-import { VisitBook, type Loan, type PlannedVisit } from './VisitBook';
+import type { Loan, PlannedVisit, VisitBook } from './VisitBook';
 import { HOUSEHOLD } from '@/household/rules';
 import { FloorNav, PERSON_WALKER } from '../nav/FloorNav';
 import { CLUB_VISITOR, GUESTS } from './gathering/gatheringPlan';
 import type { Occasion, VisitHost } from './gathering/host';
+import { clockShort } from '@/text/clock';
+import { dayStream } from '@/time/daily';
+import { droppedBy, isBorrowed } from '@/social/friendsLife';
+import { has } from '@/social/perks';
+import { nudge } from '@/social/standing';
+import type { SocialServices, TalkExtra, TalkSession } from '@/social/talk';
+import { bodyOf, talkHook } from '../people/socialHook';
+import { friendExtras, maybePostcard, returnBorrowed, tasteGift, watchGifts, type FriendSocialDeps } from './friendSocial';
+import { random as liveRandom } from '@/random';
 
 /** Seconds (the visit's clock) between a friend's hello and their word on the cake, so the two bubbles do not collide. */
 const CAKE_LINE_DELAY = 3;
@@ -47,6 +58,8 @@ export interface VisitorsCollection extends GameSource {
   setStatus(id: string, status: GameStatus): void;
   add(game: Game): void;
   owns(id: string): boolean;
+  /** A game borrowed from a friend goes back (`social/friendsLife`). */
+  remove?(id: string): void;
 }
 
 /** An armchair of the collection room (a `Seat`): where to stand before sitting, and its place and facing. */
@@ -129,6 +142,10 @@ export interface VisitorsOptions {
   hosting?: { cakeOut(): boolean; eatCake(): void };
   /** Asked first on a click to chat, by the friend's id: a line of a story the player follows (`src/story`), else null. */
   talk?: (friendId: string) => string | null;
+  /** The social layer (docs/social.md "Friends"): a click on a friend opens a conversation. */
+  social?: SocialServices;
+  /** Who came, lent what, invited when: made once in `bootstrap/services`, kept across the flat's loads. */
+  book: VisitBook;
 }
 
 const eye = new THREE.Vector3();
@@ -140,6 +157,8 @@ const WALK_PROBE = { radius: 0.2, heights: [0.35, 1.0], step: 0.12 };
 const SEAT_MOVED = 0.05;
 /** The detour grid is probed again at most this often (ms): the furniture moves only by the player's hand. */
 const NAV_FRESH_MS = 1000;
+/** Seconds after letting in a friend who dropped by before they bring out what they found. */
+const DROP_BY_GIFT_DELAY = 4;
 /**
  * Friends who drop by: decides the day and the hour (`VisitBook`), rings the bell with a friend
  * waiting on the landing, tells the front door who is there (a `DoorCaller`, chained behind the
@@ -152,7 +171,7 @@ const NAV_FRESH_MS = 1000;
  */
 export class Visitors extends Prop implements Updatable, ActivityAware, DoorCaller {
   readonly contactShadow = false;
-  readonly book = new VisitBook();
+  readonly book: VisitBook;
   private readonly friends = new Map<string, Friend>();
   private readonly route: VisitRoute;
   private readonly panel: BorrowPanel;
@@ -170,6 +189,8 @@ export class Visitors extends Prop implements Updatable, ActivityAware, DoorCall
   private forced: boolean;
   /** This visit's friend had some of the cake. */
   private caked = false;
+  /** Today's visit is a close friend dropping by unannounced, with something they found (`dropsBy`). */
+  private dropBy = false;
   /** A game handed back, held out: its loan closes (it goes back on its shelf) when they let go. */
   private returning: { loan: Loan; box: GameBox | null } | null = null;
   /** The box a browsing friend looks at, for their comment. */
@@ -180,6 +201,7 @@ export class Visitors extends Prop implements Updatable, ActivityAware, DoorCall
   constructor(private readonly options: VisitorsOptions) {
     super();
     this.name = 'Visitors';
+    this.book = options.book;
     this.forced = options.force ?? false;
     const { living, hallway } = options;
     const hall = (p: readonly [number, number]) => living.toLocal(hallway.toWorld(new THREE.Vector3(p[0], 0, p[1])));
@@ -222,6 +244,39 @@ export class Visitors extends Prop implements Updatable, ActivityAware, DoorCall
       friend.visible = true;
       this.friends.set(plan.id, friend);
     }
+    // The friends from before are people to talk to (docs/social.md "Friends"); the guests keep their lines.
+    for (const plan of FRIENDS) {
+      const friend = this.friends.get(plan.id)!;
+      friend.talker = talkHook(options.social, plan.id, () => this.friendTalk(friend)) ?? null;
+      friend.onTalk = () => this.visit?.faceViewer();
+    }
+    // A game a friend gave leaving the collection: they hear of it.
+    if (options.social) options.collection.subscribe(watchGifts({ games: () => options.collection.games, day: options.day }));
+  }
+
+  /** What the friends' side of the social layer needs of the flat. */
+  private get socialDeps(): FriendSocialDeps {
+    const { collection, giftPool, notices, journal, day } = this.options;
+    return { collection, giftPool, notices: notices as FriendSocialDeps['notices'], journal, day };
+  }
+
+  /** A conversation with `friend`: what they asked (a game to borrow) first, then what they offer (docs/social.md "Friends"). */
+  private friendTalk(friend: Friend): TalkSession {
+    const plan = friend.plan;
+    const extras: TalkExtra[] = [];
+    const request = friend.request;
+    if (request) {
+      // "Sam · answer (borrow X?)" -> "They ask to borrow X?"; "Sam · play PADDLE WARS (…)" -> "Play PADDLE WARS (…)".
+      const asked = /^.* · answer \((.*)\)$/.exec(request.label)?.[1];
+      const what = request.label.replace(/^[^·]*·\s*/, '');
+      const label = asked ? `They ask to ${asked}` : capitalise(what);
+      extras.push({ id: `${plan.id}:request`, group: 'trade', label, opensPanel: true, run: () => {
+          if (friend.session) request.answer(friend.session);
+        } });
+    }
+    extras.push(...friendExtras(plan, this.socialDeps, (line) => this.say(plan, line, 'ok', true)));
+    // Their own word first, as a click used to get: the story's line through them, the visit's or the evening's chat.
+    return { person: plan.id, place: 'flat', body: bodyOf(friend), extras, opening: () => friend.chat?.() ?? null };
   }
 
   // --- DoorCaller -------------------------------------------------------------------------------
@@ -238,6 +293,8 @@ export class Visitors extends Prop implements Updatable, ActivityAware, DoorCall
     }
     const plan = visit.friend.plan;
     this.book.cameIn(plan.id);
+    nudge(plan.id, { warmth: 3, why: 'enjoyed coming round', reason: 'visit', day: this.options.day() });
+    if (this.dropBy) visit.after(DROP_BY_GIFT_DELAY, () => this.dropByGift(plan));
     this.say(plan, this.line(`${plan.id}:greet`, plan.lines.greet), 'hi', true);
     this.options.journal?.note('visit', `${plan.name} came round`);
     visit.letIn();
@@ -270,6 +327,11 @@ export class Visitors extends Prop implements Updatable, ActivityAware, DoorCall
     if (day !== this.checkedDay) {
       this.checkedDay = day;
       this.tidyLoans(day);
+      if (this.options.social) {
+        // Games borrowed from friends go back when due; a postcard from Inès, now and then (docs/social.md "Friends").
+        returnBorrowed(this.socialDeps);
+        if (this.options.atHome()) maybePostcard(this.socialDeps);
+      }
     }
     const visit = this.visit;
     if (!visit) {
@@ -303,8 +365,9 @@ export class Visitors extends Prop implements Updatable, ActivityAware, DoorCall
     const hours = options.clock.state.hours;
     if (this.forced && !plan) plan = this.forcedPlan();
     if (!plan) return;
-    if (!this.forced && (hours < plan.hour || hours >= VISIT_RULES.hours.latest)) return;
+    if (!this.forced && !inHours(hours, [plan.hour, VISIT_RULES.hours.latest])) return;
     this.forced = false;
+    this.dropBy = plan.dropBy ?? false;
     const friend = this.friends.get(plan.friend.id);
     if (!friend) return;
     this.ringing = { since: -1, rings: 0 };
@@ -347,6 +410,7 @@ export class Visitors extends Prop implements Updatable, ActivityAware, DoorCall
     } else if (waited > VISIT_RULES.giveUpAfter) {
       ringing.since = -1;
       if (this.options.atHome()) this.options.notices?.react(`Nobody answered: ${visit.friend.plan.name} will try another day.`);
+      nudge(visit.friend.plan.id, { warmth: -2, why: 'rang and nobody answered', reason: 'unanswered', day: this.options.day() });
       visit.turnAway();
     }
   }
@@ -401,12 +465,12 @@ export class Visitors extends Prop implements Updatable, ActivityAware, DoorCall
       const d = Math.hypot(dx, dz);
       if (d < VISIT_RULES.lookWithin && d > 0.05 && (dx * forward.x + dz * forward.z) / d > 0.35) near.push(box);
     }
-    const game = lookPick(plan, near.map((b) => b.game), Math.random);
+    const game = lookPick(plan, near.map((b) => b.game), liveRandom);
     const box = game ? near.find((b) => b.game === game) : undefined;
     this.looked = game;
     // A box on show gets a word of its own (the display it stands in), else the shelf's usual comment.
     const stand = game && shown?.isShown(game.id) ? (shown.standOf?.(game.id) ?? 'display') : null;
-    const line = game && stand ? fill(pickLine(SHOWCASE_LINES, Math.random), { title: game.title, stand }) : shelfComment(plan, games, Math.random, { viewsOf: this.options.viewsOf, focus: game, pick: this.picker });
+    const line = game && stand ? fill(pickLine(SHOWCASE_LINES, liveRandom), { title: game.title, stand }) : shelfComment(plan, games, liveRandom, { viewsOf: this.options.viewsOf, focus: game, pick: this.picker });
     return { look: box ? box.getWorldPosition(new THREE.Vector3()) : null, line };
   }
 
@@ -439,12 +503,29 @@ export class Visitors extends Prop implements Updatable, ActivityAware, DoorCall
     if (this.panel.isOpen) this.panel.close();
   }
 
+  /** A close friend dropping by unannounced (`dropsBy`): a game they found for the player, to their own taste. */
+  private dropByGift(plan: FriendPlan): void {
+    const { collection, giftPool, notices, day: dayOf } = this.options;
+    const day = dayOf();
+    droppedBy(day);
+    const gift = tasteGift(plan, giftPool, (id) => collection.owns(id), dayStream(`drop-by:${plan.id}:${day}`));
+    if (!gift) {
+      this.say(plan, 'I was passing. No reason. Fine, I wanted to see the shelves.', 'hi', true);
+      return;
+    }
+    collection.add({ ...gift, status: 'owned', condition: 'noManual', acquired: { price: 0, where: `a gift from ${plan.name}`, day } });
+    this.say(plan, `I was passing, and I saw this and thought of you: ${gift.title}. No, keep it. I insist.`, 'here', true);
+    notices?.reward({ title: `A gift: ${gift.title}`, detail: `${plan.name} dropped by with it. It waits in your parcel in the hall.` });
+    this.options.journal?.note('visit', `${plan.name} dropped by with ${gift.title}`);
+  }
+
   /** A friend who had cake leaves a thank-you: a game they no longer play (to their taste), else a few coins. */
   private thankForCake(plan: FriendPlan): void {
     const { collection, day: dayOf, purse, giftPool, notices } = this.options;
     const day = dayOf();
-    const random = seeded(`cake:${plan.id}:${day}`);
+    const random = dayStream(`cake:${plan.id}:${day}`);
     const { giftChance, tip } = HOUSEHOLD.cake;
+    nudge(plan.id, { warmth: 4, why: 'loved the cake', reason: 'cake', day });
     const unowned = giftPool?.filter((g) => !collection.owns(g.id) && tasteScore(plan.taste, g) >= 2) ?? [];
     const gift = random() < giftChance ? unowned[Math.floor(random() * unowned.length)] : undefined;
     if (gift) {
@@ -539,11 +620,12 @@ export class Visitors extends Prop implements Updatable, ActivityAware, DoorCall
     const plan = FRIENDS.find((f) => f.id === friendId);
     const day = this.options.day();
     if (!plan) return { ok: false, line: 'Wrong number.' };
+    if (has(plan.id, 'stopsVisiting')) return { ok: false, line: `${plan.name}: “I’m… busy. Another time, maybe.”` };
     if (this.visit || this.book.rangOn(day)) return { ok: false, line: 'You have had a visitor today already. Another day.' };
     if (this.occasion?.holds(day)) return { ok: false, line: 'Not today: you have people coming round already.' };
     if (hour >= VISIT_RULES.hours.latest) return { ok: false, line: `${plan.name}: “Bit late now, isn’t it? Another day.”` };
     if (!this.book.invite(friendId, day, hour)) return { ok: false, line: 'Someone is coming round today already.' };
-    const at = `${Math.floor(hour)}:${String(Math.round((hour % 1) * 60)).padStart(2, '0')}`;
+    const at = clockShort(hour);
     return { ok: true, line: `${plan.name}: “${fill(this.line('invited', SHARED_LINES.invited), { hour: at })}”` };
   }
 
@@ -552,16 +634,16 @@ export class Visitors extends Prop implements Updatable, ActivityAware, DoorCall
     const friend = this.friends.get(plan.id);
     if (!friend || friend.request) return;
     const day = this.options.day();
-    const random = seeded(`borrow:${plan.id}:${day}`);
+    const random = dayStream(`borrow:${plan.id}:${day}`);
     if (random() >= plan.borrowChance) return;
     // Not the game on the screen right now: its box is in the console.
-    const candidates = this.options.shelved.games.filter((g) => (g.status ?? 'owned') === 'owned' && !this.book.lentTo(g.id) && g.id !== nowPlaying.gameId);
+    const candidates = this.options.shelved.games.filter((g) => (g.status ?? 'owned') === 'owned' && !this.book.lentTo(g.id) && g.id !== nowPlaying.gameId && !isBorrowed(g.id));
     // Nobody asks for the only games on a near-empty shelf.
     if (candidates.length < VISIT_RULES.borrowMinShelved) return;
     const game = borrowPick(plan, candidates, random);
     if (!game) return;
     const [min, max] = VISIT_RULES.loanDays;
-    const days = min + Math.floor(seeded(`loan:${plan.id}:${game.id}:${day}`)() * (max - min + 1));
+    const days = min + Math.floor(dayStream(`loan:${plan.id}:${game.id}:${day}`)() * (max - min + 1));
     this.askedAt = this.clock;
     this.say(plan, fill(this.line('ask', SHARED_LINES.ask), { title: game.title, days }), 'ask');
     friend.request = {
@@ -577,6 +659,7 @@ export class Visitors extends Prop implements Updatable, ActivityAware, DoorCall
           lend: () => this.lend(plan, game),
           refuse: () => {
             friend.request = null;
+            nudge(plan.id, { warmth: -2, why: 'you wouldn’t lend it', reason: 'refused', day: this.options.day() });
             this.say(plan, this.line('refused', SHARED_LINES.refused), 'ok');
           },
         });
@@ -592,6 +675,7 @@ export class Visitors extends Prop implements Updatable, ActivityAware, DoorCall
     if (!current || (current.status ?? 'owned') !== 'owned') return;
     this.book.lend(plan.id, game, this.options.day());
     this.options.collection.setStatus(game.id, 'lent');
+    nudge(plan.id, { warmth: 4, trust: 5, why: 'trusted with your game', day: this.options.day(), memory: `you lent me ${game.title}`, memoryWeight: 6 });
     this.say(plan, this.line('lent', SHARED_LINES.lent), 'yay');
     this.options.journal?.note('visit', `Lent ${game.title} to ${plan.name}`);
   }
@@ -606,7 +690,7 @@ export class Visitors extends Prop implements Updatable, ActivityAware, DoorCall
     const copy = collection.find(loan.gameId);
     const box = copy && covers ? new GameBox(copy, covers) : null;
     this.returning = { loan, box };
-    const random = seeded(`thanks:${plan.id}:${loan.gameId}:${loan.lentDay}`);
+    const random = dayStream(`thanks:${plan.id}:${loan.gameId}:${loan.lentDay}`);
     const lines = [fill(this.line('returned', SHARED_LINES.returned), { title: loan.title })];
     let coins = 0;
     let gifted: string | null = null;
@@ -628,6 +712,7 @@ export class Visitors extends Prop implements Updatable, ActivityAware, DoorCall
       }
     }
     this.say(plan, lines.join(' '), 'here', true);
+    nudge(plan.id, { warmth: 2, why: 'glad to bring your game back', reason: 'returned', day });
     this.options.journal?.note('visit', `${plan.name} brought ${loan.title} back`);
     if (coins || gifted) this.options.notices?.reward({ title: gifted ? `A gift: ${gifted}` : `${plan.name} says thanks`, detail: `${loan.title} is back.${gifted ? ` ${gifted}, from ${plan.name}, waits in your parcel in the hall.` : ''}`, coins: coins || undefined });
     return box ? { box, width: box.dimensions.width } : null;
@@ -668,27 +753,27 @@ export class Visitors extends Prop implements Updatable, ActivityAware, DoorCall
 
   /** The bell, heard through the flat (fainter and duller rooms away, never silent), from the front door's side. */
   private ring(): void {
-    this.soundAt(this.doorPoint, (level, spatial) => playDoorbell(Math.max(BELL_FLOOR, BELL_LEVEL * level), spatial), { referenceDistance: 2, maxDistance: 40, wallGain: 0.6 });
+    this.soundAt(this.doorPoint, (level, spatial) => playDoorbell(Math.max(BELL_FLOOR, BELL_LEVEL * level), spatial), HEARING.bell);
   }
 
   /**
    * A sound at `at` (world) as the player hears it: `play` gets its loudness (0..1, by distance and walls) and
    * where it comes from (`spatial.ts`: the side by the player's yaw, a low-pass per wall).
    */
-  private soundAt(at: THREE.Vector3, play: (level: number, spatial: { pan: number; walls: number }) => void, volume: { referenceDistance: number; maxDistance: number; wallGain: number; rolloff?: number } = { referenceDistance: 1.5, maxDistance: 20, wallGain: 0.5 }): void {
+  private soundAt(at: THREE.Vector3, play: (level: number, spatial: { pan: number; walls: number }) => void, volume: HearingProfile = HEARING.visitor): void {
     const { viewer, acoustics } = this.options;
     viewer.getWorldPosition(eye);
     const distance = eye.distanceTo(at);
-    if (distance >= volume.maxDistance) return play(0, { pan: 0, walls: 0 });
+    if (distance >= (volume.maxDistance ?? 12)) return play(0, { pan: 0, walls: 0 });
     const walls = acoustics?.wallsBetween(eye, at) ?? 0;
-    play(proximityVolume(distance, { ...volume, walls }) / 100, spatialOf(viewer, at, walls));
+    play(loudness(distance, volume, walls), spatialOf(viewer, at, walls));
   }
 
   // --- lines ----------------------------------------------------------------------------------------
 
   /** A line of `bucket` from its shuffle bag (every line once before any again, across visits: the `VisitBook` keeps it). */
   private line(bucket: string, lines: readonly string[]): string {
-    return this.book.draw(bucket, lines, Math.random);
+    return this.book.draw(bucket, lines, liveRandom);
   }
 
   /** Just inside the front door: a word for a first visit, a regular's, or the evening's. */
@@ -696,7 +781,7 @@ export class Visitors extends Prop implements Updatable, ActivityAware, DoorCall
     const visits = this.book.visitsOf(plan.id);
     if (visits <= 1) return this.line('enterFirst', SHARED_LINES.enterFirst);
     if (this.night) return this.line('enterNight', SHARED_LINES.enterNight);
-    if (visits > VISIT_RULES.regularAfter && Math.random() < 0.5) return this.line('enterRegular', SHARED_LINES.enterRegular);
+    if (visits > VISIT_RULES.regularAfter && liveRandom() < 0.5) return this.line('enterRegular', SHARED_LINES.enterRegular);
     return this.line('enter', SHARED_LINES.enter);
   }
 
@@ -758,7 +843,7 @@ export class Visitors extends Prop implements Updatable, ActivityAware, DoorCall
 
   /** A click to chat: small talk, or a word on the shelves (on the box they just looked at, once: then any other). */
   private chatLine(plan: FriendPlan): string {
-    const random = Math.random;
+    const random = liveRandom;
     if (random() < 0.5) return this.line(`${plan.id}:smalltalk`, plan.lines.smalltalk);
     const focus = this.looked;
     this.looked = null;
@@ -778,7 +863,7 @@ export class Visitors extends Prop implements Updatable, ActivityAware, DoorCall
     const to = living.toWorld(b.clone().setY(0));
     if (!floor.containsPoint(new THREE.Vector2(from.x, from.z)) || !floor.containsPoint(new THREE.Vector2(to.x, to.z))) return null;
     this.nav ??= new FloorNav(collisions, floor, undefined, PERSON_WALKER);
-    const now = performance.now();
+    const now = performance.now(); // convention-ok: the nav grid's age in real ms, refreshed at most so often
     if (now - this.navAt > NAV_FRESH_MS) {
       this.nav.invalidate();
       this.navAt = now;

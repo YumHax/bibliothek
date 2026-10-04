@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import type { Performer } from '@/world/people/performer';
 import { BALL_R, HOOP, type HoopBall, type HoopOutcome, type HoopSim } from './HoopSim';
+import { random } from '@/random';
+import { smooth } from '@/math/scalar';
 
 /*
  * A regular at the hoops, shot by shot, as people shoot them: eyes down to the gutter, bent at the
@@ -51,8 +53,8 @@ export class HoopThrower {
     private readonly machine: THREE.Object3D,
     private readonly body: Performer,
   ) {
-    this.pace = 0.95 + Math.random() * 0.35;
-    this.error = 0.65 + Math.random() * 0.5;
+    this.pace = 0.95 + random() * 0.35;
+    this.error = 0.65 + random() * 0.5;
     this.aimFor = MOVE_S.aim;
     // Stepping up: turned to the cage and the coin in before the first ball.
     this.pause(START_S);
@@ -66,108 +68,138 @@ export class HoopThrower {
     // A ball gone from the hands some other way (the round reset it): nothing to carry.
     if (this.ball && (this.ball.state === 'flying' || (this.phase !== 'reach' && this.ball.state !== 'held'))) this.ball = null;
     switch (this.phase) {
-      case 'idle': {
-        this.body.reachEach(null, null);
-        this.body.crouch(0);
-        this.body.rise(0);
-        this.body.lean(0.05);
-        this.body.hands(null);
-        this.watch();
-        // Not while a gesture has the arms (the next coin going in, a fist pump).
-        const next = playing && !this.body.gesturing ? this.sim.nextBall(this.scratch.set(0, 1, 0.8)) : null;
-        if (next) this.begin(next);
+      case 'idle':
+        this.standBy(playing);
         return;
-      }
       case 'react':
-        this.body.reachEach(null, null);
-        this.body.crouch(0);
-        this.watch();
-        this.reactFor -= dt;
-        if (this.reactFor <= 0) this.to('idle');
+        this.reacting(dt);
         return;
-      case 'reach': {
-        const ball = this.ball;
-        if (!ball || ball.state !== 'rest') return this.to('idle');
-        const k = this.progress('reach');
-        // Down to it: knees and back bend, eyes on the ball, hands open either side of it.
-        this.body.crouch(0.32 * k);
-        this.body.lean(0.05 + 0.5 * k);
-        this.body.hands([-0.7, -0.7], [0, 0]);
-        this.body.eyesOn(this.machine.localToWorld(this.lookPoint.copy(ball.pos)));
-        this.holdAt(ball.pos);
-        if (k >= 1) {
-          this.sim.take(ball);
-          this.from.copy(ball.pos);
-          this.to('lift');
-        }
+      case 'reach':
+        this.reaching();
         return;
-      }
-      case 'lift': {
-        const k = smooth(this.progress('lift'));
-        this.carry.lerpVectors(this.from, SET, k);
-        this.carry.y += Math.sin(k * Math.PI) * 0.06;
-        this.body.crouch(0.32 * (1 - k) + 0.08 * k);
-        this.body.lean(0.55 * (1 - k) + 0.04 * k);
-        this.body.hands([-0.35, -0.35], [0, 0]);
-        this.eyesOnHoop();
-        this.carryBall();
-        if (k >= 1) {
-          this.aimFor = MOVE_S.aim * (0.6 + Math.random() * 1.2) * (final ? 0.4 : 1);
-          this.to('aim');
-        }
+      case 'lift':
+        this.lifting(final);
         return;
-      }
-      case 'aim': {
-        this.carry.copy(SET);
-        this.body.crouch(0.1);
-        this.eyesOnHoop();
-        this.carryBall();
-        if (this.clock >= this.aimFor) this.to('dip');
+      case 'aim':
+        this.aiming();
         return;
-      }
-      case 'dip': {
-        const k = smooth(this.progress('dip'));
-        this.carry.copy(SET).y -= 0.07 * k;
-        this.body.crouch(0.1 + 0.2 * k);
-        this.eyesOnHoop();
-        this.carryBall();
-        if (k >= 1) this.to('shoot');
+      case 'dip':
+        this.dipping();
         return;
-      }
-      case 'shoot': {
-        const k = this.progress('shoot');
-        const e = smooth(k);
-        // Up from the legs through the arms: knees straighten, up on the toes, the ball driven up and out, the wrist snapping.
-        this.carry.lerpVectors(this.scratch.copy(SET).setY(SET.y - 0.07), RELEASE, e);
-        this.body.crouch(0.3 * (1 - e));
-        this.body.rise(e);
-        this.body.lean(0.02);
-        this.body.hands([-0.5, -0.3], [-0.2, -0.3 + 1.2 * e * e]);
-        this.eyesOnHoop();
-        this.carryBall();
-        if (k >= 1) {
-          const ball = this.ball;
-          if (ball) {
-            this.sim.throwHeld(ball, this.error * (final ? 1.3 : 1));
-            this.flying = ball;
-          }
-          this.ball = null;
-          this.to('follow');
-        }
+      case 'shoot':
+        this.shooting(final);
         return;
-      }
-      case 'follow': {
-        const k = this.progress('follow');
-        // The shooting hand held up, wrist bent down (the "gooseneck"), the other hand dropping away; down off the toes.
-        this.body.reachEach(k > 0.35 ? null : this.hands[0]!, this.machine.localToWorld(this.scratch.copy(RELEASE).add(FOLLOW_OFFSET)));
-        this.body.hands([-0.4, 0.1], [0.2, 1.1]);
-        this.body.rise(1 - smooth(k));
-        this.body.crouch(0);
-        this.watch();
-        if (k >= 1) this.to('idle');
+      case 'follow':
+        this.following();
         return;
-      }
     }
+  }
+
+  /** Between balls: upright, hands free, eyes on the game; the next ball taken when there is one. */
+  private standBy(playing: boolean): void {
+    this.body.reachEach(null, null);
+    this.body.crouch(0);
+    this.body.rise(0);
+    this.body.lean(0.05);
+    this.body.hands(null);
+    this.watch();
+    // Not while a gesture has the arms (the next coin going in, a fist pump).
+    const next = playing && !this.body.gesturing ? this.sim.nextBall(this.scratch.set(0, 1, 0.8)) : null;
+    if (next) this.begin(next);
+  }
+
+  /** A reaction playing out on the body before the next ball. */
+  private reacting(dt: number): void {
+    this.body.reachEach(null, null);
+    this.body.crouch(0);
+    this.watch();
+    this.reactFor -= dt;
+    if (this.reactFor <= 0) this.to('idle');
+  }
+
+  /** Down to the ball in the gutter: knees and back bend, eyes on it, hands open either side; taken at the end. */
+  private reaching(): void {
+    const ball = this.ball;
+    if (!ball || ball.state !== 'rest') return this.to('idle');
+    const k = this.progress('reach');
+    this.body.crouch(0.32 * k);
+    this.body.lean(0.05 + 0.5 * k);
+    this.body.hands([-0.7, -0.7], [0, 0]);
+    this.body.eyesOn(this.machine.localToWorld(this.lookPoint.copy(ball.pos)));
+    this.holdAt(ball.pos);
+    if (k >= 1) {
+      this.sim.take(ball);
+      this.from.copy(ball.pos);
+      this.to('lift');
+    }
+  }
+
+  /** The ball brought up in front of the face, the body straightening; the aim's length drawn at the top. */
+  private lifting(final: boolean): void {
+    const k = smooth(this.progress('lift'));
+    this.carry.lerpVectors(this.from, SET, k);
+    this.carry.y += Math.sin(k * Math.PI) * 0.06;
+    this.body.crouch(0.32 * (1 - k) + 0.08 * k);
+    this.body.lean(0.55 * (1 - k) + 0.04 * k);
+    this.body.hands([-0.35, -0.35], [0, 0]);
+    this.eyesOnHoop();
+    this.carryBall();
+    if (k >= 1) {
+      this.aimFor = MOVE_S.aim * (0.6 + random() * 1.2) * (final ? 0.4 : 1);
+      this.to('aim');
+    }
+  }
+
+  /** The ball set, eyes on the rim, for as long as this thrower takes. */
+  private aiming(): void {
+    this.carry.copy(SET);
+    this.body.crouch(0.1);
+    this.eyesOnHoop();
+    this.carryBall();
+    if (this.clock >= this.aimFor) this.to('dip');
+  }
+
+  /** The dip of the knees before the shot. */
+  private dipping(): void {
+    const k = smooth(this.progress('dip'));
+    this.carry.copy(SET).y -= 0.07 * k;
+    this.body.crouch(0.1 + 0.2 * k);
+    this.eyesOnHoop();
+    this.carryBall();
+    if (k >= 1) this.to('shoot');
+  }
+
+  /** Up from the legs through the arms: knees straighten, up on the toes, the ball driven up and out, the wrist snapping; released at the top. */
+  private shooting(final: boolean): void {
+    const k = this.progress('shoot');
+    const e = smooth(k);
+    this.carry.lerpVectors(this.scratch.copy(SET).setY(SET.y - 0.07), RELEASE, e);
+    this.body.crouch(0.3 * (1 - e));
+    this.body.rise(e);
+    this.body.lean(0.02);
+    this.body.hands([-0.5, -0.3], [-0.2, -0.3 + 1.2 * e * e]);
+    this.eyesOnHoop();
+    this.carryBall();
+    if (k >= 1) {
+      const ball = this.ball;
+      if (ball) {
+        this.sim.throwHeld(ball, this.error * (final ? 1.3 : 1));
+        this.flying = ball;
+      }
+      this.ball = null;
+      this.to('follow');
+    }
+  }
+
+  /** The shooting hand held up, wrist bent down (the "gooseneck"), the other hand dropping away; down off the toes, eyes on the ball. */
+  private following(): void {
+    const k = this.progress('follow');
+    this.body.reachEach(k > 0.35 ? null : this.hands[0]!, this.machine.localToWorld(this.scratch.copy(RELEASE).add(FOLLOW_OFFSET)));
+    this.body.hands([-0.4, 0.1], [0.2, 1.1]);
+    this.body.rise(1 - smooth(k));
+    this.body.crouch(0);
+    this.watch();
+    if (k >= 1) this.to('idle');
   }
 
   /** A new round: whatever was under way is forgotten (the balls are all back in the gutter). */
@@ -192,12 +224,12 @@ export class HoopThrower {
       const streak = this.sim.streak;
       const between = this.phase === 'idle' || this.phase === 'follow';
       if (outcome === 'basket' || outcome === 'swish') {
-        if (streak >= 3 && between && !final && Math.random() < 0.5) {
+        if (streak >= 3 && between && !final && random() < 0.5) {
           this.body.react('great');
           this.pause(0.9);
         } else this.body.feel({ smile: outcome === 'swish' ? 1 : 0.7, browsUp: outcome === 'swish' ? 0.4 : 0 }, 1.2);
       } else if (outcome === 'rimOut') {
-        if (between && !final && Math.random() < 0.6) {
+        if (between && !final && random() < 0.6) {
           this.body.react('near');
           this.pause(1.5);
         } else this.body.feel({ browsUp: 0.9, jaw: 0.35, frown: 0.2 }, 1.2);
@@ -261,7 +293,3 @@ export class HoopThrower {
 /** The shooting hand's follow-through, a little past the release (machine-local). */
 const FOLLOW_OFFSET = new THREE.Vector3(-0.02, 0.05, -0.08);
 
-function smooth(t: number): number {
-  const x = Math.min(1, Math.max(0, t));
-  return x * x * (3 - 2 * x);
-}

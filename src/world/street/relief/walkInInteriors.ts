@@ -1,3 +1,4 @@
+import { pick } from '@/random';
 /*
  * The walk-in shops as seen through their windows from the street (`ShopInteriors`' back walls): the same rooms one
  * walks into (`world/shop/`), painted flat on the back wall of the pane's room. The furniture shop's bed along the
@@ -17,10 +18,6 @@ type Painter = (ctx: CanvasRenderingContext2D, art: WallArt, palette: readonly s
 
 /** The rooms' own walls (`SHOP_PLANS`' finishes), for the pane's side walls and floor. */
 export const WALK_IN_ROOM_WALLS = { furniture: '#e8dcc8', electronics: '#c8ccc4', pets: '#e4ecd8', florist: '#eae4dc' } as const;
-
-function pick<T>(random: () => number, items: readonly T[]): T {
-  return items[Math.floor(random() * items.length)]!;
-}
 
 /** A rectangle from (x0, y0) to (x1, y1) in metres (x along, y up from the floor). */
 function rect(ctx: CanvasRenderingContext2D, { X, Y }: WallArt, x0: number, y0: number, x1: number, y1: number, color: string): void {

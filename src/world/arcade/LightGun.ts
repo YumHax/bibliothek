@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { boxMesh, cylinderMesh } from '../meshUtils';
 import { paint } from '../materials/palette';
 import type { AttachmentFrame, CabinetAttachment } from './CabinetAttachment';
+import { dampFactor } from '@/math/damp';
 
 interface LightGunOptions {
   /** The camera: the player's gun is held just below and right of it. */
@@ -16,7 +17,7 @@ interface LightGunOptions {
 
 /** Where the held gun sits relative to the eye (right, down, forward), metres. */
 const HELD = new THREE.Vector3(0.12, -0.17, -0.3);
-const EASE = 14;
+const EASE = 16;
 const RECOIL = 0.03;
 const CABLE_POINTS = 16;
 
@@ -86,7 +87,7 @@ export class LightGun implements CabinetAttachment {
     if (frame.who === 'player') this.heldPose(frame.aim);
     else if (frame.who === 'regular') this.regularPose(frame.aim);
     else this.restPose(this.targetPos, this.targetQuat);
-    const t = frame.who === 'player' ? 1 : Math.min(1, dt * EASE);
+    const t = frame.who === 'player' ? 1 : dampFactor(EASE, dt);
     this.gun.position.lerp(this.targetPos, t);
     this.gun.quaternion.slerp(this.targetQuat, t);
     // Recoil: back along the barrel and the muzzle up.

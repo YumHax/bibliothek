@@ -1,11 +1,12 @@
 import * as THREE from 'three';
 import type { Updatable } from '@/core/Engine';
 import type { Interactable } from '@/interaction/Interactable';
-import { createCanvas, fitFontSize, seededRandom, toTexture, MONO } from '@/covers/generated/canvasUtils';
+import { createCanvas, fitFontSize, toTexture, MONO } from '@/covers/generated/canvasUtils';
 import type { Furniture, OccupancyAware } from '../Furniture';
 import { boxMesh, cylinderMesh, invisibleHitbox } from '../meshUtils';
 import { paint, standard } from '../materials/palette';
 import { crtScreenMaterial } from '../arcade/crtScreen';
+import { lcg } from '@/random';
 
 interface DemoTellyOptions {
   /** The game whose attract loop it shows (e.g. "SUPER GAME"). */
@@ -102,7 +103,7 @@ export class DemoTelly extends THREE.Group implements Furniture, Updatable, Inte
       if (mesh.isMesh && mesh !== screen) mesh.castShadow = true;
     });
 
-    const random = seededRandom(31337);
+    const random = lcg(31337);
     for (let i = 0; i < STARS; i++) this.stars.push({ x: random() * PX_W, y: random() * PX_H, speed: 10 + random() * 40 });
     this.paint();
     const hitbox = invisibleHitbox(W + 0.04, H + 0.06, D + 0.04, { y: (H + 0.06) / 2 });

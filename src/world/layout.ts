@@ -42,8 +42,7 @@ import { furnishCollectorCorner, placeCollectorsBook } from './collector/furnish
 import { rugsUnderfoot } from './build/rugsUnderfoot';
 import { ChannelDial } from './roof/ChannelDial';
 import { RecordPlayer } from './vinyl/RecordPlayer';
-import { placeAnnexOpening } from './annex/AnnexOpening';
-import { furnishAnnex } from './annex/furnishAnnex';
+import { furnishAnnex, placeAnnexOpening } from './annex/furnishAnnex';
 import { furnishStudy } from './annex/furnishStudy';
 import { onRouxPhase } from '@/building/rouxMove';
 import { regionLockFor } from '@/economy/regionLock';
@@ -68,7 +67,7 @@ interface RoomHandle extends ZoneHandle {
  * Everything goes through `zone.place()` (zone-local coordinates) so it collides, ticks and is
  * clickable as its class says. Lights are switched by clicking them; playing a video never touches them.
  */
-function furnishRoom(zone: Zone, ctx: BuildContext): RoomHandle {
+function furnishRoom(zone: Zone, ctx: Pick<BuildContext, 'cssLayer' | 'covers' | 'sky' | 'listener' | 'acoustics' | 'collection' | 'home' | 'arcade' | 'today'>): RoomHandle {
   const { cssLayer, covers, sky, collection: { games, shelved, overflow, arrangement, boxes }, home: { onSelectPlatform, upgrades, furnishings, callCat, collector }, arcade: { prizes } } = ctx;
   const plan = ROOM_PLAN;
   const { width } = plan.room;

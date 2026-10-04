@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import type { Updatable } from '@/core/Engine';
 import type { Furniture } from '../../Furniture';
 import type { Walker } from '../../people/Walker';
+import { smooth } from '@/math/scalar';
 
 /** Seconds between two rankings of who is nearest. */
 const RANK_EVERY = 0.12;
@@ -68,7 +69,7 @@ export class PeopleBudget extends THREE.Group implements Furniture, Updatable {
       const target = e.allowed ? 1 : 0;
       if (e.share === target) continue;
       e.share = target > e.share ? Math.min(1, e.share + step) : Math.max(0, e.share - step);
-      e.walker.setAllowance(e.share * e.share * (3 - 2 * e.share));
+      e.walker.setAllowance(smooth(e.share));
     }
   }
 

@@ -6,9 +6,9 @@ import { cylinderMesh } from '../../meshUtils';
 import { part } from '../../props/Prop';
 import { METAL, paint, standard, timber } from '../../materials/palette';
 import { mergeStaticParts } from '../../zone/mergeStatic';
-import { seededRandom } from '@/graphics/canvas';
 import type { PropVoice, ShopVoiced } from '../common/fitting';
 import { HamsterVoice } from './hamsterSounds';
+import { lcg } from '@/random';
 
 export interface HamsterCageOptions {
   /** The stand's width along the wall. Default 0.8. */
@@ -50,7 +50,7 @@ export class HamsterCage extends THREE.Group implements Furniture, Updatable, Sh
     super();
     this.name = 'HamsterCage';
     const W = options.width ?? 0.8;
-    this.random = seededRandom(options.seed ?? 41);
+    this.random = lcg(options.seed ?? 41);
     this.until = REST[0] * 0.5;
     const still = new THREE.Group();
     this.add(still);

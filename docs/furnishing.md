@@ -15,7 +15,8 @@ same on the keyboard). `src/furnishing/` carries furniture, `src/game/Rearrangin
   puts it away, a right-click or E puts it back where it was. U with free hands undoes the last move (20 deep).
   Leaving the pointer lock (Esc) or opening a panel puts it back too.
 - **Through a doorway**: carried into another room of the flat (not the stairwell), the piece goes with the player
-  (`Zone.handOver`: out of one zone's group, colliders and shadow layer into the other's); its saved pose records the
+  (`Zone.handOver`, implemented with `ride`, `move`, `lift` and `setDown` in `zone/moving.ts`, `zone.moving`: out of one
+  zone's group, colliders and shadow layer into the other's); its saved pose records the
   room (`SavedPose.in`). Bookcases stay in their room (`keepsRoom`), and so does a piece something unbought is staged on
   (the lava lamp's side table before the lamp: `canChangeRoom`, the staged lamp belongs to its room till bought). The
   pieces riding it go too and are saved with it. Walked out of the flat (the stairwell) with it, it goes back.

@@ -7,12 +7,16 @@ import type { Furniture } from '../../Furniture';
 import { standard } from '../../materials/palette';
 import { invisibleHitbox } from '../../meshUtils';
 import type { RoadObstacle, StreetTraffic } from '../traffic/StreetTraffic';
-import { FRONT, KERB_HEIGHT, PARK_STREET, type StrayCatPerch } from '../streetPlan';
+import type { StrayCatPerch } from '../streetPlan';
+import { FRONT, KERB_HEIGHT, PARK_STREET } from '@/world/measures/street';
 import { catRoute } from './catPaths';
 import { CatVoice } from '@/audio/CatVoice';
 import { dayKey } from '@/economy/calendar';
 import { KEYS, PersistedStore } from '@/persistence';
 import { pocket } from '@/errands/pocket';
+import { random } from '@/random';
+import { damp, dampAngle } from '@/math/damp';
+import { wrapAngle } from '@/math/angles';
 
 interface StrayCatOptions {
   /** Where it likes to sit: a spot on the ground, how high the perch is (a car roof, a bench, a bin), the way it faces. */
@@ -104,7 +108,7 @@ export class StrayCat extends THREE.Group implements Furniture, Updatable, Inter
   private perch = 0;
   private next = 0;
   private heading = 0;
-  private time = Math.random() * 10;
+  private time = random() * 10;
   private phase = 0;
   private sitting = 1;
   private groom = 0;
@@ -156,7 +160,7 @@ export class StrayCat extends THREE.Group implements Furniture, Updatable, Inter
     this.traverse((o) => {
       o.castShadow = o !== hitbox;
     });
-    this.perch = Math.floor(Math.random() * options.perches.length);
+    this.perch = Math.floor(random() * options.perches.length);
     options.traffic.obstacles.add(this.obstacle);
     // A tom: lower than the flat's cat.
     this.voice.setPitch(0.86);
@@ -273,7 +277,7 @@ export class StrayCat extends THREE.Group implements Furniture, Updatable, Inter
     for (let i = 0; i < perches.length; i++) {
       if (i === this.perch || this.isTaken(i)) continue;
       const [x, z] = perches[i]!.at;
-      const d = Math.hypot(x - this.eye.x, z - this.eye.z) + Math.random() * 4;
+      const d = Math.hypot(x - this.eye.x, z - this.eye.z) + random() * 4;
       if (d > far) {
         far = d;
         best = i;
@@ -335,9 +339,7 @@ export class StrayCat extends THREE.Group implements Furniture, Updatable, Inter
   }
 
   private face(yaw: number, dt: number): void {
-    let delta = yaw - this.heading;
-    delta = Math.atan2(Math.sin(delta), Math.cos(delta));
-    this.heading += delta * Math.min(1, dt * TURN_RATE);
+    this.heading = dampAngle(this.heading, yaw, TURN_RATE, dt);
   }
 
   /** Sitting and washing on a perch; trotting, tail up, on the way. */
@@ -346,7 +348,7 @@ export class StrayCat extends THREE.Group implements Furniture, Updatable, Inter
     if (perched) this.face(this.options.perches[this.perch]!.yaw, dt);
     this.rotation.y = this.heading;
     const moving = this.state.kind === 'walk';
-    this.sitting += ((perched ? 1 : 0) - this.sitting) * Math.min(1, dt * 5);
+    this.sitting = damp(this.sitting, perched ? 1 : 0, 5, dt);
     if (moving) this.phase += dt * WALK * 11;
     // Sitting: haunches down, the body tipped up, the forelegs straight.
     this.body.rotation.x = -0.55 * this.sitting;
@@ -358,7 +360,7 @@ export class StrayCat extends THREE.Group implements Furniture, Updatable, Inter
     });
     // Washing now and then: the head dips to a raised paw.
     this.groom -= dt;
-    if (perched && this.groom < -6 - Math.random() * 6) this.groom = 2.5;
+    if (perched && this.groom < -6 - random() * 6) this.groom = 2.5;
     const washing = perched && this.groom > 0;
     this.stare = Math.max(0, this.stare - dt);
     let headYaw = Math.sin(this.time * 0.4) * 0.5;
@@ -366,7 +368,7 @@ export class StrayCat extends THREE.Group implements Furniture, Updatable, Inter
     if (this.stare > 0) {
       this.toEye.copy(this.eye).sub(this.position);
       const local = Math.atan2(this.toEye.x, this.toEye.z) - this.heading;
-      headYaw = THREE.MathUtils.clamp(Math.atan2(Math.sin(local), Math.cos(local)), -1.2, 1.2);
+      headYaw = THREE.MathUtils.clamp(wrapAngle(local), -1.2, 1.2);
       headPitch = 0.2;
     }
     this.head.rotation.set(headPitch, headYaw, 0, 'YXZ');

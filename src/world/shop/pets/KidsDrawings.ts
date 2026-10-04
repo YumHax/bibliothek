@@ -1,8 +1,9 @@
 import * as THREE from 'three';
 import { Prop } from '../../props/Prop';
 import { WALL, onSurface } from '../../surface/layers';
-import { createCanvas, seededRandom, toTexture } from '@/graphics/canvas';
+import { createCanvas, toTexture } from '@/graphics/canvas';
 import { HAND } from '../common/lettering';
+import { lcg } from '@/random';
 
 export interface KidsDrawingsOptions {
   /** Metres between two sheets' centres. Default 0.26. */
@@ -32,7 +33,7 @@ export class KidsDrawings extends Prop {
   constructor(options: KidsDrawingsOptions = {}) {
     super();
     this.name = 'KidsDrawings';
-    const random = seededRandom(options.seed ?? 83);
+    const random = lcg(options.seed ?? 83);
     const gap = options.gap ?? 0.26;
     const material = onSurface(new THREE.MeshStandardMaterial({ map: paintSheets(random), roughness: 0.9 }), WALL.paper);
     SHEETS.forEach((_, i) => {

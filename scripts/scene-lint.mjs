@@ -42,25 +42,16 @@ const HINTS = {
   leak: 'keep every geometry, material and texture reachable from the prop (disposeTree frees them), or free it in dispose()',
 };
 
-// The props' own randomness (a rug's jitter, a clock's hands) drawn from one seed, so a finding keyed on geometry is
-// the same from one run to the next.
-{
-  let state = 0x9e3779b9;
-  Math.random = () => {
-    state = (state + 0x6d2b79f5) | 0;
-    let t = Math.imul(state ^ (state >>> 15), 1 | state);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
-
 const started = performance.now();
 const restore = hush();
 // What the script imports from the game is listed in `src/headless/scene.ts` (typechecked, and knip sees it used).
-const { zfightSubjects, lintLights, lintPlacement, lintReach, lintDisposal, SharingLedger, markShared, THREE } = await bundle(
+const { zfightSubjects, lintLights, lintPlacement, lintReach, lintDisposal, SharingLedger, markShared, seedLiveRandom, THREE } = await bundle(
   `export * from '@/headless/scene';`,
   { name: 'scene-lint' },
 );
+// The props' own live draws (a rug's jitter, a clock's hands) from one seed, so a finding keyed on geometry is the
+// same from one run to the next.
+seedLiveRandom(0x9e3779b9);
 
 // First, that the checks still see. A crate half under the floor of a 4 x 4 room and a shadow lamp left at three's
 // 500 m far must both be found; a material two builds hold without being marked shared must be, and a prop whose

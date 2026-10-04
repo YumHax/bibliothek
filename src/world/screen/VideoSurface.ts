@@ -4,7 +4,7 @@ import { CssLayer } from '@/core/CssLayer';
 import type { VideoInfo } from '@/video/VideoProvider';
 import { YouTubePlayer } from '@/video/YouTubePlayer';
 import { randomStartSeconds } from '@/video/randomStart';
-import { proximityVolume, type ProximityVolumeOptions } from '@/video/proximityVolume';
+import { facingGain, loudness, type HearingProfile } from '@/audio/hearing';
 import type { SoundOcclusion } from '../acoustics/SoundOcclusion';
 import { stereoPan } from '@/audio/spatial';
 import { RENDER_ORDER } from '../surface/layers';
@@ -42,7 +42,7 @@ interface VideoSurfaceOptions {
   listener?: THREE.Object3D;
   /** Counts the walls between the listener and the picture; each damps the volume. Omit to hear through walls. */
   occlusion?: SoundOcclusion;
-  volume?: ProximityVolumeOptions;
+  volume?: HearingProfile;
   /** Ceiling of the video volume, 0..1: a small television speaker is quieter than a projector's sound system. */
   gain?: number;
   /**
@@ -77,7 +77,7 @@ export class VideoSurface extends THREE.Object3D {
   private readonly cssObject: CSS3DObject;
   private readonly idle: 'glass' | 'nothing';
   private readonly signal: SignalCanvas;
-  private readonly volume: ProximityVolumeOptions;
+  private readonly volume: HearingProfile;
   private readonly gain: number;
   private readonly listener?: THREE.Object3D;
   private readonly occlusion?: SoundOcclusion;
@@ -433,7 +433,8 @@ export class VideoSurface extends THREE.Object3D {
       this.listenerForward.lengthSq() && this.toScreen.lengthSq()
         ? this.listenerForward.normalize().dot(this.toScreen.normalize())
         : 1;
-    const volume = proximityVolume(distance, { ...this.volume, facing, walls }) * this.gain;
+    // The player takes a whole percent (0..100); the loudness is kept as it was handed to it.
+    const volume = Math.round(loudness(distance, this.volume, walls) * facingGain(facing, this.volume.rearGain) * 100) * this.gain;
     this._loudness = volume / 100;
     // Silent behind the static: the sound comes in with the picture.
     if (this.cssObject.visible) this.player.setVolume(this.cutout.visible ? volume : 0);

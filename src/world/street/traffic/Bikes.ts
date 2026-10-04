@@ -2,7 +2,6 @@ import * as THREE from 'three';
 import { bareMetal } from '../metals';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import type { Updatable } from '@/core/Engine';
-import { seededRandom } from '@/covers/generated/canvasUtils';
 import { QUALITY } from '@/graphics/quality';
 import type { Furniture } from '../../Furniture';
 import type { DayNight } from '../../props/DayNight';
@@ -13,6 +12,7 @@ import type { Spot, Vec2 } from '../streetPlan';
 import { ROAD_Y, allowedSpeed, approach, corneringSpeed, placeOnRoute, sampleRoute, type Route } from './driving';
 import type { RoadVehicle, StreetTraffic } from './StreetTraffic';
 import { CYCLE_OFFSET } from '../../city/frontage';
+import { lcg, seededRng } from '@/random';
 
 interface StreetBikesOptions {
   traffic: StreetTraffic;
@@ -72,7 +72,7 @@ export class StreetBikes extends THREE.Group implements Furniture, Updatable {
   private readonly bodies: THREE.InstancedMesh;
   private readonly skin: THREE.InstancedMesh;
   private readonly legs: THREE.InstancedMesh;
-  private readonly random = seededRandom(Date.now() & 0xfff);
+  private readonly random = seededRng();
   private spawnClock = 3;
   private nextRoute = 0;
   private readonly eye = new THREE.Vector3();
@@ -102,7 +102,7 @@ export class StreetBikes extends THREE.Group implements Furniture, Updatable {
     this.bodies = new THREE.InstancedMesh(riderBody(), cloth, riders);
     this.skin = new THREE.InstancedMesh(riderSkin(), new THREE.MeshStandardMaterial({ color: 0xd9a888, roughness: 0.7 }), riders);
     this.legs = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), cloth, riders * 4);
-    const paint = seededRandom(515);
+    const paint = lcg(515);
     for (let i = 0; i < riders + parked; i++) this.frames.setColorAt(i, this.color.setHex(FRAMES[Math.floor(paint() * FRAMES.length)]!));
     for (let i = 0; i < riders; i++) {
       this.bodies.setColorAt(i, this.color.setHex(CLOTHES[i % CLOTHES.length]!));

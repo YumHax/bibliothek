@@ -1,9 +1,11 @@
 import * as THREE from 'three';
-import { createCanvas, seededRandom, toTexture } from '@/covers/generated/canvasUtils';
-import { filterTriangles, Parts, radialSurface, ramp, spline, type Keys } from './geometry';
+import { createCanvas, toTexture } from '@/covers/generated/canvasUtils';
+import { ramp } from '@/math/scalar';
+import { filterTriangles, Parts, radialSurface, spline, type Keys } from './geometry';
 import { headRadius, type FaceShape } from './head';
 import type { HairStyle, PersonLook } from './looks';
 import { cachedTexture } from './textureCache';
+import { lcg } from '@/random';
 
 /*
  * Hair and beard, in the head's frame. Both are a shell over the skin: the head's own surface
@@ -302,7 +304,7 @@ function ponytailGeometry(shape: FaceShape): THREE.BufferGeometry {
 function strandTexture(color: number, curly: boolean, seed: number): THREE.CanvasTexture {
   const S = 256;
   const [canvas, ctx] = createCanvas(S, S);
-  const random = seededRandom(seed);
+  const random = lcg(seed);
   const r = (color >> 16) & 255;
   const g = (color >> 8) & 255;
   const b = color & 255;

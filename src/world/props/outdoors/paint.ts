@@ -1,6 +1,5 @@
 import { currentSeason } from '@/time/season';
 import * as THREE from 'three';
-import type { Rng } from './Sheet';
 
 const scratchA = new THREE.Color();
 const scratchB = new THREE.Color();
@@ -12,19 +11,6 @@ export { shade } from '../../city/colour';
 export function mixHex(a: string, b: string, t: number): string {
   scratchA.set(a).lerp(scratchB.set(b), THREE.MathUtils.clamp(t, 0, 1));
   return `#${scratchA.getHexString()}`;
-}
-
-/** One of `items` at random; `items` is never empty (a palette, a table of styles). */
-export function pick<T>(random: Rng, items: readonly T[]): T {
-  return items[Math.min(items.length - 1, Math.floor(random() * items.length))]!;
-}
-
-export function between(random: Rng, min: number, max: number): number {
-  return min + random() * (max - min);
-}
-
-export function integer(random: Rng, min: number, max: number): number {
-  return min + Math.floor(random() * (max - min + 1));
 }
 
 export function deg(degrees: number): number {

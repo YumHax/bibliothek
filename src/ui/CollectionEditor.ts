@@ -3,13 +3,18 @@ import { PLATFORM_LIST, PLATFORMS, getPlatform } from '@/catalog/platforms';
 import { gameIdFor } from '@/catalog/nointro';
 import type { CollectionStore } from '@/collection/CollectionStore';
 import type { IndexMatch, LibretroIndex } from '@/collection/LibretroIndex';
-import { escapeHtml } from './html';
-import { ModalPanel } from './ModalPanel';
+import { Arming } from './confirmTwice';
+import { ConfirmDialog } from './panel/ConfirmDialog';
+import { SheetPanel } from './panel/SheetPanel';
+import { attr, html, paint, type Html } from './panel/html';
+import { emptyState } from './panel/widgets';
 import { rememberFocus } from './rememberFocus';
+import { fileStamp } from '@/text/clock';
+import { formatCount } from '@/text/count';
+import { compareTitles } from '@/text/strings';
 import './CollectionEditor.css';
 
 const STATUSES: GameStatus[] = ['owned', 'wishlist', 'lent'];
-const SEARCH_DEBOUNCE_MS = 250;
 
 interface CollectionEditorOptions {
   /**
@@ -20,22 +25,17 @@ interface CollectionEditorOptions {
 }
 
 /**
- * Full-screen overlay to manage the collection: browse by platform, change statuses, remove games,
- * export/import JSON and, when `canAdd` is on, add new ones from the libretro-thumbnails index.
- * Plain DOM; binds no global keys — the Session decides which key toggles it (Tab), and Tab
- * inside it closes it too (the panel keeps its keys from the window, so the Session's Tab never
- * hears that one).
+ * The collection, as a sheet: browse by platform, change statuses, remove games (two presses), export and import
+ * JSON (the import asks first: it replaces the collection) and, when `canAdd` is on, add new ones from the
+ * libretro-thumbnails index through the sheet's search field (and reset the list to the built-in one, asked first).
+ * Plain DOM; binds no global keys — the Session decides which key toggles it (Tab), and Tab inside it closes it too
+ * (the panel keeps its keys from the window, so the Session's Tab never hears that one).
  */
-export class CollectionEditor extends ModalPanel {
-  private readonly countEl: HTMLElement;
-  private readonly statusEl: HTMLElement;
-  private readonly extrasEl: HTMLElement;
-  private readonly listEl: HTMLElement;
-  private readonly resultsEl: HTMLElement;
-  private readonly searchInput: HTMLInputElement;
-  private readonly platformSelect: HTMLSelectElement;
+export class CollectionEditor extends SheetPanel {
+  private readonly canAdd: boolean;
   private readonly fileInput: HTMLInputElement;
-  private searchTimer: number | undefined;
+  private readonly dialog: ConfirmDialog;
+  private readonly removing = new Arming(() => this.renderCollection());
   private searchSeq = 0;
   private lastResults: IndexMatch[] = [];
 
@@ -45,63 +45,36 @@ export class CollectionEditor extends ModalPanel {
     private readonly index: LibretroIndex,
     { canAdd = false }: CollectionEditorOptions = {},
   ) {
-    super(container, { className: 'ui-modal--sheet collection-editor', label: 'Collection' });
-    this.root.classList.toggle('collection-editor--no-add', !canAdd);
-    this.root.innerHTML = `
-      <header class="collection-editor__header">
-        <h2>Collection</h2>
-        <span class="collection-editor__count"></span>
-        <div class="collection-editor__actions">
-          <button type="button" class="ui-btn" data-action="export">Export JSON</button>
-          <button type="button" class="ui-btn" data-action="import">Import JSON</button>
-          ${canAdd ? '<button type="button" class="ui-btn" data-action="reset">Reset to built-in list</button>' : ''}
-          <button type="button" class="ui-btn" data-action="close" aria-label="Close">Close</button>
-        </div>
-      </header>
-      <div class="collection-editor__status"></div>
-      <div class="collection-editor__extras" hidden></div>
-      <div class="collection-editor__body">
-        <div class="collection-editor__pane ui-card" ${canAdd ? '' : 'hidden'}>
-          <h3>Add a game</h3>
-          <div class="collection-editor__search">
-            <input type="search" placeholder="Search box art by title…" autocomplete="off" spellcheck="false" data-autofocus />
-            <select data-role="platform">
-              <option value="">All platforms</option>
-              ${PLATFORM_LIST.map((p) => `<option value="${p.id}">${escapeHtml(p.shortName)}</option>`).join('')}
-            </select>
-          </div>
-          <div class="collection-editor__scroll" data-role="results"></div>
-          <p class="collection-editor__hint">Names come from libretro-thumbnails; the box art appears on the shelf once added.</p>
-        </div>
-        <div class="collection-editor__pane ui-card">
-          <h3>Your games</h3>
-          <div class="collection-editor__scroll" data-role="list"></div>
-        </div>
-      </div>
-      <input type="file" accept="application/json,.json" hidden />`;
-
-    this.countEl = this.root.querySelector('.collection-editor__count')!;
-    this.statusEl = this.root.querySelector('.collection-editor__status')!;
-    this.extrasEl = this.root.querySelector('.collection-editor__extras')!;
-    this.listEl = this.root.querySelector('[data-role="list"]')!;
-    this.resultsEl = this.root.querySelector('[data-role="results"]')!;
-    this.searchInput = this.root.querySelector('input[type="search"]')!;
-    this.platformSelect = this.root.querySelector('[data-role="platform"]')!;
-    this.fileInput = this.root.querySelector('input[type="file"]')!;
-
-    this.bindEvents();
+    super(container, {
+      title: 'Collection',
+      className: `collection-editor${canAdd ? '' : ' collection-editor--no-add'}`,
+      search: canAdd ? { placeholder: 'Search box art by title…', platforms: true } : undefined,
+      headerActions: [
+        { action: 'export', label: 'Export JSON' },
+        { action: 'import', label: 'Import JSON' },
+        ...(canAdd ? [{ action: 'reset', label: 'Reset to built-in list' }] : []),
+      ],
+    });
+    this.canAdd = canAdd;
+    this.dialog = new ConfirmDialog(container);
+    this.fileInput = document.createElement('input');
+    this.fileInput.type = 'file';
+    this.fileInput.accept = 'application/json,.json';
+    this.fileInput.hidden = true;
+    this.root.appendChild(this.fileInput);
+    this.listen(this.fileInput, 'change', () => void this.importFile());
+    this.listen(this.root, 'change', (e) => {
+      const select = (e.target as HTMLElement).closest<HTMLSelectElement>('select[data-action="status"]');
+      if (select) this.store.setStatus(select.dataset.id!, select.value as GameStatus);
+    });
     store.subscribe(() => {
       if (this.isOpen) this.renderCollection();
     });
-    this.renderCollection();
   }
 
   protected override onOpened(): void {
-    this.renderCollection();
-  }
-
-  protected override onClosed(): void {
-    this.setStatus('');
+    this.removing.reset();
+    super.onOpened();
   }
 
   /** Tab closes the editor from inside, as it opened it (the key stops here, so the Session never sees it). */
@@ -111,54 +84,57 @@ export class CollectionEditor extends ModalPanel {
     if (!e.repeat) this.close(); // a Tab still held from opening it must not shut it again
   }
 
-  /** Hosts a small settings block from another feature (e.g. the cat) in a strip under the header. */
-  addPanel(title: string, content: HTMLElement): void {
-    const panel = document.createElement('section');
-    panel.className = 'collection-editor__extra';
-    const heading = document.createElement('h3');
-    heading.textContent = title;
-    panel.append(heading, content);
-    this.extrasEl.appendChild(panel);
-    this.extrasEl.hidden = false;
+  protected override onAction(action: string, el: HTMLElement): void {
+    const { id, result } = el.dataset;
+    switch (action) {
+      case 'export': return this.exportFile();
+      case 'import': return void this.askImport();
+      case 'reset': return void this.askReset();
+      case 'remove': return this.removeGame(id!);
+      case 'add': return this.addResult(Number(result));
+      default: return;
+    }
   }
 
-  // --- events ---------------------------------------------------------------------------------
-
-  private bindEvents(): void {
-    this.root.addEventListener('click', (e) => {
-      const button = (e.target as HTMLElement).closest<HTMLButtonElement>('button[data-action]');
-      if (!button) return;
-      const { action, id, result } = button.dataset;
-      switch (action) {
-        case 'close': return this.close();
-        case 'export': return this.exportFile();
-        case 'import': return this.fileInput.click();
-        case 'reset': return this.resetToSeed(button);
-        case 'remove': return this.removeGame(id!);
-        case 'add': return this.addResult(Number(result));
-        default: return; // a button with some other data-action is not ours
-      }
-    });
-
-    this.root.addEventListener('change', (e) => {
-      const target = e.target as HTMLElement;
-      if (target === this.fileInput) return void this.importFile();
-      if (target === this.platformSelect) return this.scheduleSearch(0);
-      const select = target.closest<HTMLSelectElement>('select[data-action="status"]');
-      if (select) this.store.setStatus(select.dataset.id!, select.value as GameStatus);
-    });
-
-    this.searchInput.addEventListener('input', () => this.scheduleSearch(SEARCH_DEBOUNCE_MS));
-    this.searchInput.addEventListener('keydown', (e) => {
-      if (e.code === 'Enter') this.scheduleSearch(0);
-    });
+  protected override onSearch(query: string, platform: PlatformId | undefined): void {
+    void this.runSearch(query, platform);
   }
 
-  // --- collection pane ------------------------------------------------------------------------
+  // --- the panes --------------------------------------------------------------------------------
+
+  /** Both panes: the index's results (with `canAdd`) and the collection by platform. */
+  protected render(): void {
+    paint(
+      this.body,
+      html`<div class="collection-editor__body">
+        <div class="collection-editor__pane ui-card"${attr('hidden', !this.canAdd)}>
+          <h3>Add a game</h3>
+          <div class="collection-editor__scroll" data-role="results"></div>
+          <p class="collection-editor__hint">Names come from libretro-thumbnails; the box art appears on the shelf once added.</p>
+        </div>
+        <div class="collection-editor__pane ui-card">
+          <h3>Your games</h3>
+          <div class="collection-editor__scroll" data-role="list"></div>
+        </div>
+      </div>`,
+    );
+    this.renderCollection();
+    if (this.lastResults.length) this.renderResults(this.lastResults);
+  }
+
+  private get listEl(): HTMLElement | null {
+    return this.body.querySelector<HTMLElement>('[data-role="list"]');
+  }
+
+  private get resultsEl(): HTMLElement | null {
+    return this.body.querySelector<HTMLElement>('[data-role="results"]');
+  }
 
   private renderCollection(): void {
+    const listEl = this.listEl;
+    if (!listEl) return;
     const games = this.store.games;
-    this.countEl.textContent = `${games.length} game${games.length === 1 ? '' : 's'}${this.store.isPersisted || !games.length ? '' : ' (built-in list)'}`;
+    this.setTitle('Collection', `${formatCount(games.length, 'game')}${this.store.isPersisted || !games.length ? '' : ' (built-in list)'}`);
 
     const groups = new Map<PlatformId, Game[]>();
     for (const g of games) {
@@ -168,85 +144,75 @@ export class CollectionEditor extends ModalPanel {
     }
 
     if (games.length === 0) {
-      this.listEl.innerHTML = this.root.classList.contains('collection-editor--no-add')
-        ? '<p class="collection-editor__empty">No games yet. Go out through the front door: the market sells them, the arcade pays for them.</p>'
-        : '<p class="collection-editor__empty">No games yet. Search on the left to add some.</p>';
+      paint(
+        listEl,
+        emptyState(
+          this.canAdd ? 'No games yet. Search above to add some.' : 'No games yet. Go out through the front door: the market sells them, the arcade pays for them.',
+          'collection-editor__empty',
+        ),
+      );
       return;
     }
-    const restoreFocus = rememberFocus(this.listEl);
-    this.listEl.innerHTML = PLATFORM_LIST
-      .filter((p) => groups.has(p.id))
-      .map((p) => {
-        const list = groups.get(p.id)!.slice().sort((a, b) => a.title.localeCompare(b.title));
-        return `
-          <section class="collection-editor__group">
+    const restoreFocus = rememberFocus(listEl);
+    paint(
+      listEl,
+      html`${PLATFORM_LIST.filter((p) => groups.has(p.id)).map((p) => {
+        const list = groups.get(p.id)!.slice().sort((a, b) => compareTitles(a.title, b.title));
+        return html`<section class="collection-editor__group">
             <h4 class="collection-editor__group-title">
               <span class="collection-editor__swatch" style="background:${hexColor(p.accentColor)}"></span>
-              ${escapeHtml(p.name)} <span class="collection-editor__meta">${list.length}</span>
+              ${p.name} <span class="collection-editor__meta">${list.length}</span>
             </h4>
-            ${list.map((g) => this.renderGameRow(g)).join('')}
+            ${list.map((g) => this.gameRow(g))}
           </section>`;
-      })
-      .join('');
+      })}`,
+    );
     restoreFocus();
     // Re-render the results too: their "Add"/"Added" state depends on the collection.
     if (this.lastResults.length) this.renderResults(this.lastResults);
   }
 
-  private renderGameRow(g: Game): string {
+  private gameRow(g: Game): Html {
     const status = g.status ?? 'owned';
-    return `
-      <div class="collection-editor__row">
-        <span class="collection-editor__title" title="${escapeHtml(g.externalIds?.libretroName ?? g.title)}">${escapeHtml(g.title)}</span>
-        ${g.region ? `<span class="collection-editor__meta">${escapeHtml(g.region)}</span>` : ''}
+    const armed = this.removing.isArmed(g.id);
+    return html`<div class="collection-editor__row">
+        <span class="collection-editor__title">${g.title}</span>
+        ${g.region ? html`<span class="collection-editor__meta">${g.region}</span>` : ''}
         <span class="collection-editor__badge collection-editor__badge--${status}">${status}</span>
-        <select data-action="status" data-id="${escapeHtml(g.id)}" aria-label="Status">
-          ${STATUSES.map((s) => `<option value="${s}"${s === status ? ' selected' : ''}>${s}</option>`).join('')}
+        <select data-action="status" data-id="${g.id}" aria-label="Status">
+          ${STATUSES.map((s) => html`<option value="${s}"${attr('selected', s === status)}>${s}</option>`)}
         </select>
-        <button type="button" class="ui-btn" data-action="remove" data-id="${escapeHtml(g.id)}" title="Remove from collection">Remove</button>
+        <button type="button" class="ui-btn${armed ? ' ui-btn--danger' : ''}" data-action="remove" data-id="${g.id}" aria-label="Remove ${g.title} from the collection">${armed ? 'Sure? Remove' : 'Remove'}</button>
       </div>`;
   }
 
+  /** Two presses: the first arms the row's button, the second takes the game out (`confirmTwice`). */
   private removeGame(id: string): void {
+    if (!this.removing.press(id)) return;
     const game = this.store.find(id);
     this.store.remove(id);
     if (game) this.setStatus(`Removed "${game.title}".`);
   }
 
-  /** Two presses, no browser dialog (it would freeze the page and the controller): the first one arms the button for a few seconds. */
-  private resetToSeed(button: HTMLButtonElement): void {
-    if (button.dataset.armed !== 'true') {
-      button.dataset.armed = 'true';
-      button.classList.add('ui-btn--danger');
-      button.textContent = 'Sure? Discard your changes';
-      window.setTimeout(() => {
-        delete button.dataset.armed;
-        button.classList.remove('ui-btn--danger');
-        button.textContent = 'Reset to built-in list';
-      }, 4000);
-      return;
-    }
+  /** Destroying what is there asks first (no browser dialog: it would freeze the page and the controller). */
+  private async askReset(): Promise<void> {
+    const yes = await this.dialog.ask({ title: 'Reset the collection?', text: 'Your changes go; the built-in list comes back.', confirm: 'Reset', danger: true });
+    if (!yes) return;
     this.store.resetToSeed();
     this.setStatus('Collection reset to the built-in list.');
   }
 
-  // --- search pane ----------------------------------------------------------------------------
+  // --- the search pane ------------------------------------------------------------------------
 
-  private scheduleSearch(delayMs: number): void {
-    window.clearTimeout(this.searchTimer);
-    this.searchTimer = window.setTimeout(() => void this.runSearch(), delayMs);
-  }
-
-  private async runSearch(): Promise<void> {
-    const query = this.searchInput.value.trim();
-    const platform = (this.platformSelect.value || undefined) as PlatformId | undefined;
+  private async runSearch(query: string, platform: PlatformId | undefined): Promise<void> {
+    const resultsEl = this.resultsEl;
     const seq = ++this.searchSeq;
     if (query.length < 2) {
       this.lastResults = [];
-      this.resultsEl.innerHTML = '';
+      if (resultsEl) paint(resultsEl, html``);
       return;
     }
-    this.resultsEl.innerHTML = '<p class="collection-editor__empty">Searching…</p>';
+    if (resultsEl) paint(resultsEl, emptyState('Searching…', 'collection-editor__empty'));
     try {
       const results = await this.index.search(query, platform);
       if (seq !== this.searchSeq) return; // superseded
@@ -255,29 +221,30 @@ export class CollectionEditor extends ModalPanel {
     } catch (err) {
       if (seq !== this.searchSeq) return;
       this.lastResults = [];
-      this.resultsEl.innerHTML = `<p class="collection-editor__empty">Could not load the index: ${escapeHtml(String(err))}</p>`;
+      if (this.resultsEl) paint(this.resultsEl, emptyState(`Could not load the index: ${String(err)}`, 'collection-editor__empty'));
     }
   }
 
   private renderResults(results: IndexMatch[]): void {
+    const resultsEl = this.resultsEl;
+    if (!resultsEl) return;
     if (results.length === 0) {
-      this.resultsEl.innerHTML = '<p class="collection-editor__empty">No box art matches that title.</p>';
+      paint(resultsEl, emptyState('No box art matches that title.', 'collection-editor__empty'));
       return;
     }
-    const restoreFocus = rememberFocus(this.resultsEl);
-    this.resultsEl.innerHTML = results
-      .map((r, i) => {
-        const id = gameIdFor(r.platform, r.name);
-        const owned = this.store.has(id);
-        return `
-          <div class="collection-editor__row">
-            <span class="collection-editor__title" title="${escapeHtml(r.name)}">${escapeHtml(r.title)}</span>
-            ${r.region ? `<span class="collection-editor__meta">${escapeHtml(r.region)}</span>` : ''}
-            <span class="collection-editor__meta">${escapeHtml(getPlatform(r.platform).shortName)}</span>
-            <button type="button" class="ui-btn" data-action="add" data-result="${i}" ${owned ? 'disabled' : ''}>${owned ? 'Added' : 'Add'}</button>
+    const restoreFocus = rememberFocus(resultsEl);
+    paint(
+      resultsEl,
+      html`${results.map((r, i) => {
+        const owned = this.store.has(gameIdFor(r.platform, r.name));
+        return html`<div class="collection-editor__row">
+            <span class="collection-editor__title">${r.title}</span>
+            ${r.region ? html`<span class="collection-editor__meta">${r.region}</span>` : ''}
+            <span class="collection-editor__meta">${getPlatform(r.platform).shortName}</span>
+            <button type="button" class="ui-btn" data-action="add" data-result="${i}"${attr('disabled', owned)}>${owned ? 'Added' : 'Add'}</button>
           </div>`;
-      })
-      .join('');
+      })}`,
+    );
     restoreFocus();
   }
 
@@ -304,10 +271,16 @@ export class CollectionEditor extends ModalPanel {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `bibliothek-collection-${new Date().toISOString().slice(0, 10)}.json`;
+    a.download = `bibliothek-collection-${fileStamp(new Date())}.json`;
     a.click();
     window.setTimeout(() => URL.revokeObjectURL(url), 1000);
     this.setStatus(`Exported ${this.store.games.length} games.`);
+  }
+
+  /** An import replaces the collection: asked first, then the file picker (the dialog's press is the gesture it needs). */
+  private async askImport(): Promise<void> {
+    const yes = await this.dialog.ask({ title: 'Import a collection?', text: 'The games in the file replace your collection. Export first to keep a copy.', confirm: 'Choose a file', danger: true });
+    if (yes) this.fileInput.click();
   }
 
   private async importFile(): Promise<void> {
@@ -318,13 +291,8 @@ export class CollectionEditor extends ModalPanel {
       this.store.importJson(await file.text());
       this.setStatus(`Imported ${this.store.games.length} games from ${file.name}.`);
     } catch (err) {
-      this.setStatus(`Import failed: ${err instanceof Error ? err.message : String(err)}`, true);
+      this.setStatus(`Import failed: ${err instanceof Error ? err.message : String(err)}`, 'error');
     }
-  }
-
-  private setStatus(message: string, isError = false): void {
-    this.statusEl.textContent = message;
-    this.statusEl.classList.toggle('collection-editor__status--error', isError);
   }
 }
 

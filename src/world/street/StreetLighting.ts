@@ -7,6 +7,7 @@ import { airColor, airDensity } from './streetAir';
 import { ShadowRefresh } from '../lighting/shadowRefresh';
 import { snapDirection } from '../props/shadowTexels';
 import { farShadowUniforms, type FarShadowUniforms } from './shadowFade';
+import { dampFactor } from '@/math/damp';
 
 interface StreetLightingOptions {
   /** Shadow map size of the sun (square). */
@@ -154,7 +155,7 @@ export class StreetLighting extends THREE.Group implements Furniture, Updatable,
     this.sunShadow.setLive(this.occupied && this.sun.intensity > 0);
 
     // The sky's ambient: its hue, brighter by day, a moonlit trace at night; a flash in a storm (at once).
-    const ease = 1 - Math.exp(-SKY_RATE * dt);
+    const ease = dampFactor(SKY_RATE, dt);
     if (this.occupied) {
       this.sky.color.copy(s.ambient).lerp(s.zenith, 0.25);
       this.sky.groundColor.copy(GROUND_BOUNCE).lerp(GLOW, 0.2 * (1 - s.daylight));

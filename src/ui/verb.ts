@@ -1,4 +1,5 @@
 import { lastDevice } from '@/input/lastDevice';
+import { capitalise } from '@/text/strings';
 
 /**
  * The word for "use it" on the device in hand, for tips and captions written as a sentence: `click`
@@ -12,8 +13,7 @@ export function useVerb(): string {
 
 /** `useVerb()` at the start of a sentence: Click, Press A, Tap. */
 export function useVerbCap(): string {
-  const verb = useVerb();
-  return verb[0]!.toUpperCase() + verb.slice(1);
+  return capitalise(useVerb());
 }
 
 /** "click it" / "press A on it" / "tap it": the verb with its object, `it` by default. */
@@ -29,8 +29,7 @@ export function grabVerb(): string {
 
 /** `grabVerb()` at the start of a sentence. */
 export function grabVerbCap(): string {
-  const verb = grabVerb();
-  return verb[0]!.toUpperCase() + verb.slice(1);
+  return capitalise(grabVerb());
 }
 
 /** "Space or click" on the keyboard (a key that also does it), else the device's own verb: "press A", "tap". */
@@ -40,6 +39,5 @@ export function keyOrUse(key: string): string {
 
 /** `useVerbOn(what)` at the start of a sentence: "Click a machine", "Press A on a machine", "Tap a machine". */
 export function useVerbOnCap(what = 'it'): string {
-  const line = useVerbOn(what);
-  return line[0]!.toUpperCase() + line.slice(1);
+  return capitalise(useVerbOn(what));
 }

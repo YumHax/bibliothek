@@ -1,5 +1,7 @@
 import * as THREE from 'three';
 import { gapAt } from './layers';
+import { flag } from '@/settings/flags';
+import { plural } from '@/text/count';
 
 /**
  * Faces of one merged mesh that lie in (nearly) the same plane, face the same way, overlap and show
@@ -143,7 +145,7 @@ function coplanarOverlaps(position: THREE.BufferAttribute, index: THREE.BufferAt
 }
 
 /** Under `?debug` / `?stats`, like `bibliothek.zfight()`: the builders check what they build. */
-const CHECKING = typeof location !== 'undefined' && /[?&](debug|stats)\b/.test(location.search);
+const CHECKING = flag('debug') || flag('stats');
 
 /**
  * `?debug` / `?stats` only: warns for `geometry` (a builder's output) about its overlapping coplanar
@@ -158,7 +160,7 @@ export function warnCoplanar(geometry: THREE.BufferGeometry, attribute: 'color' 
   const where = new Error().stack?.split('\n')[3]?.trim() ?? '';
   const first = found[0]!;
   console.warn(
-    `[zfight] ${found.length}${found.length >= 50 ? '+' : ''} coplanar overlap${found.length === 1 ? '' : 's'} in one built mesh (${where}): first at ${first.at.join(', ')}, ${(first.gap * 1000).toFixed(1)} mm apart, ${(first.area * 1e4).toFixed(0)} cm². Give the nearer face a real gap of gapAt(distance) (surface/layers).`,
+    `[zfight] ${found.length}${found.length >= 50 ? '+' : ''} coplanar ${plural(found.length, 'overlap')} in one built mesh (${where}): first at ${first.at.join(', ')}, ${(first.gap * 1000).toFixed(1)} mm apart, ${(first.area * 1e4).toFixed(0)} cm². Give the nearer face a real gap of gapAt(distance) (surface/layers).`,
     found,
   );
 }

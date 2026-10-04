@@ -80,7 +80,11 @@ the `ProgramRunner` (made in `bootstrap/session`, ticked by the engine, `Session
   `K` / Space, B `J` / Shift, Start Enter, Select `H` / Backspace, `input/actions` padA..padSelect; a controller's d-pad and
   stick, bottom button B, right button A, Y Start, LB Select, since its own Start pauses the room and X walks away);
   walk-away twice puts the pad down and switches it off; the pointer unlocked holds it still, a dormant zone too;
-- pad two is `ProgramRunner.setSecondPad(source)` (a guest's hands, a CPU), read when `players` is 2.
+- pad two is a second connected controller (`ProgramRunner.readPad(1)`); a CPU opponent is the game's own
+  (`Duel.setOpponent(name, skill)`);
+- an arcade game on the TV (PADDLE WARS, STARFALL, the home cabinet's games) runs through `onscreen/ArcadeProgram`: the
+  arcade's fixed step, `padToControls` for the stick and fire with the press edge (`input/GameInput`), the chip sounds
+  into the set's own output, no tickets shown.
 
 ## Homebrew carts (`src/emulator/`)
 

@@ -3,6 +3,12 @@ import { IQ_HASH, SINE_HASH, valueNoise3 } from '@/graphics/glslNoise';
 import { RENDER_ORDER } from '@/world/surface/layers';
 import { POINT_SCALE, scalesPoints } from '@/world/particles/pointScale';
 import { additive } from '@/world/materials/blend';
+import BEAM_VERTEX from './SunShaftBeam.vert.glsl?raw';
+import MOTE_VERTEX from './SunShaftMote.vert.glsl?raw';
+import MOTE_FRAGMENT from './SunShaftMote.frag.glsl?raw';
+import sunShaftBeamFrag from './SunShaftBeam.frag.glsl?raw';
+import { assemble } from '@/graphics/glslAssemble';
+import { random } from '@/random';
 
 interface SunShaftOptions {
   /** Glazed opening, metres (the shaft's section at the glass). */
@@ -90,10 +96,10 @@ export class SunShaft extends THREE.Group {
     const seeds = new Float32Array(MOTES * 3);
     const phases = new Float32Array(MOTES);
     for (let i = 0; i < MOTES; i++) {
-      seeds[i * 3] = Math.random() - 0.5;
-      seeds[i * 3 + 1] = Math.random() - 0.5;
-      seeds[i * 3 + 2] = Math.pow(Math.random(), 1.4);
-      phases[i] = Math.random() * 100;
+      seeds[i * 3] = random() - 0.5;
+      seeds[i * 3 + 1] = random() - 0.5;
+      seeds[i * 3 + 2] = Math.pow(random(), 1.4);
+      phases[i] = random() * 100;
     }
     const moteGeometry = new THREE.BufferGeometry();
     moteGeometry.setAttribute('position', new THREE.BufferAttribute(seeds, 3));
@@ -156,13 +162,6 @@ export class SunShaft extends THREE.Group {
 }
 
 /** Window-local position of the fragment, for the shader to trace it back to the glass. */
-const BEAM_VERTEX = /* glsl */ `
-varying vec3 vLocal;
-void main() {
-  vLocal = position;
-  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-}
-`;
 
 /**
  * The beam is shaded by what reaches the eye through it, approximated per fragment of its back
@@ -171,84 +170,4 @@ void main() {
  * weighted by how far along the beam it is (fading out towards the floor) and a slow noise (the
  * air moving). Far side only, so the camera may stand inside the beam.
  */
-const BEAM_FRAGMENT = /* glsl */ `
-${SINE_HASH}
-uniform float time;
-uniform vec3 rayDir;
-uniform vec3 color;
-uniform float strength;
-uniform float beamLength;
-uniform vec4 opening;
-uniform vec3 eye;
-varying vec3 vLocal;
-
-${IQ_HASH}
-${valueNoise3('noise', 'iqHash')}
-
-/** 1 in the sun at window-local point p, 0 behind a mullion or outside the opening. */
-float lit(vec3 p) {
-  float t = p.z / rayDir.z;
-  vec2 onGlass = p.xy - rayDir.xy * t;
-  vec2 uv = onGlass / opening.xy + 0.5;
-  if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0 || t < 0.0 || t > beamLength) return 0.0;
-  vec2 cell = fract(uv * opening.zw);
-  vec2 bar = 0.028 / opening.xy * opening.zw;
-  float mullion = step(bar.x * 0.5, cell.x) * step(cell.x, 1.0 - bar.x * 0.5) * step(bar.y * 0.5, cell.y) * step(cell.y, 1.0 - bar.y * 0.5);
-  float fade = (1.0 - smoothstep(0.35, 1.0, t / beamLength)) * smoothstep(0.0, 0.25, t);
-  return mullion * fade;
-}
-
-void main() {
-  vec3 toFrag = vLocal - eye;
-  float total = length(toFrag);
-  vec3 dir = toFrag / total;
-  // March from the eye (or the near side of the volume) to this far face.
-  float start = max(0.0, total - beamLength * 2.0);
-  float light = 0.0;
-  const int STEPS = 10;
-  float jitter = sineHash(dot(gl_FragCoord.xy, vec2(12.9898, 78.233)));
-  for (int i = 0; i < STEPS; i++) {
-    float s = mix(start, total, (float(i) + jitter) / float(STEPS));
-    vec3 p = eye + dir * s;
-    light += lit(p) * (0.65 + 0.7 * noise(p * 2.2 + vec3(0.0, time * 0.05, time * 0.03)));
-  }
-  float path = (total - start) / float(STEPS);
-  gl_FragColor = vec4(color * light * path * strength, 1.0);
-  #include <tonemapping_fragment>
-  #include <colorspace_fragment>
-}
-`;
-
-const MOTE_VERTEX = /* glsl */ `
-uniform float time;
-uniform vec3 rayDir;
-uniform float beamLength;
-uniform vec4 opening;
-uniform float pointScale;
-attribute float phase;
-varying float vFade;
-void main() {
-  // Seeded point in the beam: across the opening, then along the rays; drifting on slow sines.
-  float t = position.z * beamLength;
-  vec3 p = vec3(position.xy * opening.xy, 0.0) + rayDir * t;
-  p += vec3(sin(time * 0.13 + phase), sin(time * 0.09 + phase * 1.7) - 0.3 * fract(time * 0.004 + phase), cos(time * 0.11 + phase * 0.6)) * 0.12;
-  vFade = (1.0 - smoothstep(0.5, 1.0, position.z)) * (0.4 + 0.6 * abs(sin(time * 0.7 + phase * 3.1)));
-  vec4 view = modelViewMatrix * vec4(p, 1.0);
-  gl_Position = projectionMatrix * view;
-  gl_PointSize = clamp(3.3 * pointScale * (1.5 / -view.z), 1.0, 4.0 * pointScale);
-}
-`;
-
-const MOTE_FRAGMENT = /* glsl */ `
-uniform vec3 color;
-uniform float strength;
-uniform float moteStrength;
-varying float vFade;
-void main() {
-  float d = length(gl_PointCoord - 0.5);
-  float a = (1.0 - smoothstep(0.1, 0.5, d)) * vFade;
-  gl_FragColor = vec4(color * strength * moteStrength * 12.0, a);
-  #include <tonemapping_fragment>
-  #include <colorspace_fragment>
-}
-`;
+const BEAM_FRAGMENT = assemble(sunShaftBeamFrag, { chunks: { valueNoise3_noise: valueNoise3('noise', 'iqHash'), iq_hash: IQ_HASH, sine_hash: SINE_HASH } });

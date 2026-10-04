@@ -1,0 +1,257 @@
+/*
+ * The design tokens: every colour, size, radius, shadow, duration and layer the HUD, the menus and the panels read,
+ * so the look changes in one place. `styles.css` loads this file first (`@layer tokens`), then `base.css` and
+ * `components.css`; the panels' own sheets come last (`@layer panels`) and read from here. A stylesheet outside this
+ * file writes no raw colour, z-index, font family or duration: it names a token, or sets a slot variable of its own
+ * (`--pz-hot: #e8245f` in a theme block), which `scripts/conventions/css.mjs` allows. Papers (`--paper-*`, `--ink-*`)
+ * are the surfaces things are printed on: a panel sets `--paper` / `--ink` / `--rule` from them and `.ui-paper` draws.
+ */
+:root {
+  color-scheme: dark;
+
+  /* --- type ------------------------------------------------------------------------------------------------- */
+  --ui-font-body: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --ui-font-display: 'Bungee', system-ui, sans-serif;
+  --ui-font-marker: 'Permanent Marker', 'Comic Sans MS', cursive;
+  --ui-font-led: 'VT323', ui-monospace, monospace;
+  --ui-font-print: 'DM Serif Display', Georgia, serif;
+  /* Printed paragraphs (the paper, a card to read): the print face is a display cut, too heavy for running text. */
+  --ui-font-serif: Georgia, 'Iowan Old Style', 'Times New Roman', serif;
+  /* A pen on paper: the to-do list, the journal, the first day's tips. */
+  --ui-font-hand: 'Segoe Print', 'Bradley Hand', 'Comic Sans MS', cursive;
+  /* A word said in passing, comic-book style. */
+  --ui-font-comic: 'Comic Sans MS', 'Chalkboard SE', system-ui, sans-serif;
+  /* Figures and tables (the payout overlay, the till slip). */
+  --ui-font-mono: ui-monospace, 'SF Mono', Menlo, monospace;
+  /* A radio's printout, a typewriter. */
+  --ui-font-typewriter: 'Courier New', ui-monospace, monospace;
+  font-family: var(--ui-font-body);
+
+  /* The type scale, in rem so Settings > Display > Text size scales it all; `--fs-0` has a pixel floor. */
+  --fs-tiny: 0.62rem;
+  --fs-0: max(0.68rem, 11px);
+  --fs-1: 0.7rem;
+  --fs-2: 0.75rem;
+  --fs-3: 0.8rem;
+  --fs-4: 0.85rem;
+  --fs-5: 0.9rem;
+  --fs-6: 0.95rem;
+  --fs-7: 1rem;
+  --fs-8: 1.05rem;
+  --fs-9: 1.1rem;
+  /* Titles. */
+  --fs-t1: 1.15rem;
+  --fs-t2: 1.25rem;
+  --fs-t3: 1.35rem;
+  --fs-t4: 1.5rem;
+  --fs-t5: 1.7rem;
+  --fs-t6: 1.9rem;
+
+  /* --- space and shape ------------------------------------------------------------------------------------ */
+  --sp-1: 0.25rem;
+  --sp-2: 0.5rem;
+  --sp-3: 0.75rem;
+  --sp-4: 1rem;
+  --sp-5: 1.5rem;
+  --sp-6: 2rem;
+  /* A centred card's width. */
+  --card-w-sm: 24rem;
+  --card-w-md: 30rem;
+  --card-w-lg: 34rem;
+  --card-w-xl: 44rem;
+  --ui-radius-2xs: 2px;
+  --ui-radius-xs: 4px;
+  --ui-radius-sm: 6px;
+  --ui-radius-md: 8px;
+  --ui-radius: 12px;
+  --ui-radius-pill: 999px;
+  /* The safe areas of a phone's screen. */
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+
+  /* --- the dark interface --------------------------------------------------------------------------------- */
+  --ui-black: #000;
+  --ui-white: #fff;
+  --ui-page: #0b0b10;
+  --ui-text: #ece9e2;
+  --ui-text-dim: rgba(236, 233, 226, 0.65);
+  /* Muted text by opacity: a note, a detail, a ghost. */
+  --ui-muted: 0.7;
+  --ui-faint: 0.55;
+  --ui-ghost: 0.4;
+  --ui-panel: rgba(20, 20, 28, 0.88);
+  --ui-panel-solid: #15151d;
+  /* Over the live canvas (the photo card, the plan view's strip): see-through, no blur. */
+  --ui-panel-glass: rgba(10, 10, 14, 0.66);
+  /* The subtitle strip: denser, the words must read over anything. */
+  --ui-panel-dense: rgba(10, 10, 14, 0.82);
+  --ui-backdrop: rgba(8, 8, 12, 0.72);
+  /* Behind a full-screen panel: translucent enough that the room shows through. */
+  --ui-backdrop-panel: rgba(8, 8, 12, 0.6);
+  /* A side sheet's shade, the "click to return" card's. */
+  --ui-backdrop-soft: rgba(8, 8, 12, 0.45);
+  --ui-backdrop-faint: rgba(8, 8, 12, 0.35);
+  --ui-border: rgba(255, 255, 255, 0.14);
+  --ui-border-strong: rgba(255, 255, 255, 0.35);
+  --ui-border-bright: rgba(255, 255, 255, 0.5);
+  --ui-fill: rgba(255, 255, 255, 0.07);
+  --ui-fill-hover: rgba(255, 255, 255, 0.15);
+  /* The key caps' own border and fill (`kbd`). */
+  --ui-kbd-border: rgba(255, 255, 255, 0.25);
+  --ui-kbd-fill: rgba(255, 255, 255, 0.08);
+  /* Light and shade as alphas: a highlight line, a tint, a shadow's ink. */
+  --tint-08: rgba(255, 255, 255, 0.08);
+  --tint-20: rgba(255, 255, 255, 0.2);
+  --tint-35: rgba(255, 255, 255, 0.35);
+  --tint-50: rgba(255, 255, 255, 0.5);
+  --tint-75: rgba(255, 255, 255, 0.75);
+  --tint-90: rgba(255, 255, 255, 0.9);
+  --shade-10: rgba(0, 0, 0, 0.1);
+  --shade-25: rgba(0, 0, 0, 0.25);
+  --shade-45: rgba(0, 0, 0, 0.45);
+  --shade-55: rgba(0, 0, 0, 0.55);
+  --shade-60: rgba(0, 0, 0, 0.6);
+  --shade-70: rgba(0, 0, 0, 0.7);
+  --shade-90: rgba(0, 0, 0, 0.9);
+  --ui-placeholder: #5a5a66;
+
+  /* The accent: brass and gold. */
+  --ui-accent: #d4a52a;
+  --ui-accent-hover: #e6b93c;
+  --ui-accent-soft: rgba(212, 165, 42, 0.14);
+  --ui-accent-bright: #ffd766;
+  /* Every amount of coins reads in this. */
+  --ui-money: #f3dfa6;
+  --ui-gold-pale: #fff3d0;
+  --ui-gold-deep: #6b4a05;
+  /* Dark text on the accent and on the danger button. */
+  --ui-on-accent: #1a1408;
+  --ui-on-danger: #1a0a08;
+  --ui-glow-accent: rgba(212, 165, 42, 0.35);
+  --ui-glow-gold: rgba(255, 200, 60, 0.45);
+  /* A coin: a highlight, the accent, a shadow. */
+  --ui-coin-light: #fff1b8;
+  --ui-coin-dark: #8f6a12;
+  /* A ticket, and its text and glow in the wallet. */
+  --ui-ticket: #e0566b;
+  --ui-ticket-text: #ff9aaa;
+  --ui-ticket-pale: #ffe3e7;
+  --ui-ticket-glow: rgba(255, 90, 120, 0.6);
+
+  /* Status: "how to" blue, good green, danger red. */
+  --ui-info: #5fb3e6;
+  --ui-info-glow: rgba(95, 179, 230, 0.55);
+  --ui-info-text: #8fc7ff;
+  --ui-success: #9be59b;
+  --ui-success-dim: #8fd18a;
+  --ui-success-pale: #bfe3b4;
+  --ui-success-faint: #d4f2d9;
+  --ui-success-soft: rgba(79, 138, 90, 0.35);
+  /* The controller's A button. */
+  --ui-pad: #6fcf7c;
+  --ui-danger: #e06a5a;
+  --ui-danger-hover: #ec8072;
+  --ui-danger-soft: rgba(224, 106, 90, 0.14);
+  --ui-danger-line: rgba(224, 106, 90, 0.7);
+  --ui-danger-glow: rgba(224, 106, 90, 0.55);
+  --ui-danger-surface: #4a1512;
+  --ui-danger-surface-glass: rgba(46, 16, 16, 0.92);
+  --ui-danger-text: #ffb3a8;
+  --ui-danger-pale: #ffd2cc;
+  --ui-danger-chip: rgba(200, 68, 58, 0.35);
+  /* A button asking to be clicked again. */
+  --ui-armed: rgba(200, 68, 58, 0.45);
+  --ui-armed-hover: rgba(200, 68, 58, 0.6);
+  --ui-armed-strong: rgba(200, 68, 58, 0.85);
+
+  /* --- papers: what is printed or written on ---------------------------------------------------------------- */
+  --paper-speech: #fbf8f1;
+  --paper-note: #fdfcf7;
+  --paper-journal: #fbf8ef;
+  --paper-news: #f1ebdc;
+  --paper-reading: #f4ecd8;
+  --paper-letter: #fdfcf8;
+  --paper-review: #efe8d8;
+  --paper-review-box: #fbf7ee;
+  --paper-receipt: #f5f1e6;
+  --paper-shop: #f3ece0;
+  --paper-scratch: #f4efe2;
+  --ink-black: #111;
+  --ink-speech: #1d1b22;
+  --ink-journal: #22303f;
+  --ink-news: #1f1b16;
+  --ink-reading: #2b2418;
+  --ink-letter: #1f2430;
+  --ink-review: #2a2620;
+  --ink-review-dim: #6b6152;
+  --ink-review-soft: #5a5144;
+  --ink-review-faint: #7a7062;
+  --ink-shop: #2a2119;
+  --ink-note: #1d3557;
+  --ink-red: #9b3d33;
+  --ink-gold: #b8862b;
+  --ink-green: #2d7a3e;
+  --rule-reading: rgba(43, 36, 24, 0.25);
+  --rule-review: rgba(42, 38, 32, 0.25);
+  /* Squared and ruled paper, and the red margin line. */
+  --paper-squares: rgba(80, 120, 170, 0.18);
+  --paper-rules: rgba(90, 130, 180, 0.28);
+  --paper-margin: rgba(200, 70, 60, 0.45);
+  --paper-note-line: rgba(29, 53, 87, 0.45);
+  --paper-note-wash: rgba(29, 53, 87, 0.08);
+  --paper-journal-line: rgba(34, 48, 63, 0.45);
+  --paper-journal-wash: rgba(34, 48, 63, 0.08);
+  --paper-news-line: rgba(31, 27, 22, 0.5);
+  --paper-news-wash: rgba(31, 27, 22, 0.08);
+
+  /* --- shadows ---------------------------------------------------------------------------------------------- */
+  --ui-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
+  /* A sheet of paper held up over the view. */
+  --ui-shadow-paper: 0 10px 40px rgba(0, 0, 0, 0.55);
+  /* The wallet chip and other raised things over the canvas. */
+  --ui-shadow-raised: 0 6px 18px rgba(0, 0, 0, 0.45);
+  --ui-shadow-text: 0 1px 0 rgba(0, 0, 0, 0.7);
+
+  /* --- motion ----------------------------------------------------------------------------------------------- */
+  --ui-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+  /* An overshoot: the reward banner and its chips. */
+  --ui-ease-pop: cubic-bezier(0.2, 1.6, 0.4, 1);
+  --dur-beat: 60ms;
+  --dur-tap: 100ms;
+  --dur-hover: 120ms;
+  --dur-fade: 150ms;
+  --dur-enter: 200ms;
+  --dur-quick: 220ms;
+  --dur-settle: 260ms;
+  --dur-slow: 300ms;
+  --dur-linger: 320ms;
+  --dur-fall: 360ms;
+  --dur-long: 420ms;
+  --dur-longer: 520ms;
+  --dur-pulse: 900ms;
+  --dur-drift: 1100ms;
+  --dur-breathe: 1200ms;
+  --dur-shimmer: 1400ms;
+  --dur-spin: 9s;
+
+  /*
+   * Stacking, back to front. The CSS3D screens sit behind the canvas (its cut-outs show them); the HUD and the
+   * title / pause card share a layer (later in the page draws on top); the full-screen panels and the search bar
+   * cover both; the travel curtain covers everything but the touch controls and the rewards and alerts
+   * (src/notices), which stay readable over any of it. `--z-above` / `--z-below` order things inside one panel.
+   */
+  --z-below: -1;
+  --z-css-layer: 0;
+  --z-above: 1;
+  --z-canvas: 1;
+  --z-hud: 2;
+  --z-overlay: 2;
+  --z-modal: 3;
+  --z-fader: 4;
+  --z-controls: 5;
+  --z-notice: 6;
+  /* The hover caption's height: the reaction under it keeps its place when it goes. */
+  --caption-height: 1.8rem;
+}

@@ -213,7 +213,7 @@ export class Console extends Prop implements Interactable, Updatable, MediaDeck 
       () => {
         loaded.moving = null;
         loaded.seated = true;
-        this.seatedAt = performance.now();
+        this.seatedAt = performance.now(); // convention-ok: an ordering stamp compared between decks, not a duration
         if (this.current === loaded) this.play(session, box);
       },
     );

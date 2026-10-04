@@ -1,6 +1,6 @@
-import { hashString } from '@/graphics/canvas';
 import { gameDayRandom } from '@/time/daily';
 import { randomLook, type Age, type Dress, type PersonLook } from '../../people/looks';
+import { fnv1a } from '@/random';
 
 /*
  * Who walks Front Street (`StreetCrowd`): the regulars (the same faces every day, `STREET_PLAN.crowd.seeds`), the
@@ -70,7 +70,7 @@ export function castCrowd({ regulars, strangers, companions, dogs, day, season }
   const member = (seed: number, age: Age, stranger: boolean): CastMember => {
     // The look a `Walker` of this seed has always had (seed + 200), dressed for today.
     const look = randomLook(seed + 200, 'shopper', { season, age });
-    const r = (hashString(`pace:${seed}`) % 1000) / 1000;
+    const r = (fnv1a(`pace:${seed}`) % 1000) / 1000;
     const speed = age === 'elder' ? PACE.elder + r * 0.15 : PACE.adult + (r - 0.5) * PACE.spread;
     return { seed, look, age, speed, dog: false, umbrella: seed % 2 === 0, companion: null, follows: false, stranger };
   };

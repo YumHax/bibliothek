@@ -3,7 +3,7 @@ import { cylinderMesh } from '../../meshUtils';
 import { Prop, part } from '../../props/Prop';
 import { paint, timber, METAL } from '../../materials/palette';
 import { GLASS } from '../../materials/glass';
-import { seededRandom } from '@/graphics/canvas';
+import { lcg } from '@/random';
 
 export interface SalonWallOptions {
   seed?: number;
@@ -34,7 +34,7 @@ export class SalonWall extends Prop {
   constructor(options: SalonWallOptions = {}) {
     super();
     this.name = 'SalonWall';
-    const random = seededRandom(options.seed ?? 13);
+    const random = lcg(options.seed ?? 13);
     // The round mirror in the middle, a little high.
     disc(this, 0.3, 0.035, GILT, 0, 0.12);
     disc(this, 0.26, 0.012, GLASS.mirror, 0, 0.12, 0.035);

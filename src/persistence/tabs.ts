@@ -1,4 +1,5 @@
 import { CACHE_PREFIX, CORRUPT_PREFIX, DEBUG_SAVE, ROOT_PREFIX, SAVE_PREFIX } from './keys';
+import { random } from '@/random';
 
 /** How another tab showed itself: it is open on the same save, or it just wrote to it. */
 type OtherTabSignal = 'open' | 'write';
@@ -6,7 +7,7 @@ type OtherTabSignal = 'open' | 'write';
 type Message = { type: 'hello' | 'here'; from: string };
 
 const listeners = new Set<(signal: OtherTabSignal) => void>();
-const me = Math.random().toString(36).slice(2);
+const me = random().toString(36).slice(2);
 let started = false;
 
 /**

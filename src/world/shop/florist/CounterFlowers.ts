@@ -2,8 +2,8 @@ import * as THREE from 'three';
 import { cylinderMesh } from '../../meshUtils';
 import { Prop, part } from '../../props/Prop';
 import { METAL, paint } from '../../materials/palette';
-import { seededRandom } from '@/graphics/canvas';
 import { LeafBatch, addBunch, headGeometry } from './greenery';
+import { lcg } from '@/random';
 
 export interface CounterFlowersOptions {
   seed?: number;
@@ -21,7 +21,7 @@ export class CounterFlowers extends Prop {
   constructor(options: CounterFlowersOptions = {}) {
     super();
     this.name = 'CounterFlowers';
-    const random = seededRandom(options.seed ?? 4);
+    const random = lcg(options.seed ?? 4);
     const leaves = new LeafBatch();
     // The jug of sweet peas.
     this.add(cylinderMesh(0.04, 0.13, paint(0x5a7a8a, 0.35), { y: 0.065 }, { radiusBottom: 0.05, segments: 16 }));

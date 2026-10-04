@@ -1,9 +1,9 @@
 import type * as THREE from 'three';
 import type { SessionActions } from '@/game/SessionActions';
 import { createCanvas, toTexture } from '@/covers/generated/canvasUtils';
-import { ATTIC_PLAN, LIFT_CODE } from '../attic/atticPlan';
+import { ATTIC_PLAN, LIFT_CODE } from '../attic/atticPlan'; // imports-ok: the lift climbs to the attic: its code and its stop are the attic's plan
 import { LiftCode } from './liftCode';
-import { landingY } from './stairwellPlan';
+import { landingY } from '@/world/measures/building';
 
 /** `climbing`: past our landing, up to the attic (the panel's code, `ATTIC_PLAN.liftCode`). */
 export type LiftPhase = 'shut' | 'opening' | 'open' | 'closing' | 'moving' | 'climbing';

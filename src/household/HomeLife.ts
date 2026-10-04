@@ -1,4 +1,5 @@
 import type { Game } from '@/catalog/types';
+import { inHours } from '@/time/clock';
 import { getPlatform } from '@/catalog/platforms';
 import type { Household } from './Household';
 import { HOUSEHOLD } from './rules';
@@ -7,6 +8,8 @@ import { morningChronicle } from './chronicle';
 import { knowHowOf } from './perks';
 import { dreamOf, type Dream } from './dreams';
 import type { StockItem } from '@/economy/StockItem';
+import { formatCount } from '@/text/count';
+import { formatCoins } from '@/text/money';
 
 interface HomeLifeDeps {
   household: Household;
@@ -191,8 +194,8 @@ export class HomeLife {
     if (!gift) return no('Nothing there.');
     if (gift.kind === 'coins') {
       this.deps.purse.earnCoins(gift.coins);
-      this.log(`${catName} turned up ${gift.coins} coins`);
-      return yes(`${gift.coins} coins, ${catName} fished out from ${pickPlace(gift.coins, COIN_PLACES)}. Good cat.`);
+      this.log(`${catName} turned up ${formatCoins(gift.coins)}`);
+      return yes(`${formatCoins(gift.coins)}, ${catName} fished out from ${pickPlace(gift.coins, COIN_PLACES)}. Good cat.`);
     }
     const copy = this.deps.collection.find(gift.gameId);
     if (!copy || copy.condition !== 'noManual') return yes(`An old booklet… for ${gift.title}, which you no longer have. ${catName} looks proud anyway.`);
@@ -204,13 +207,13 @@ export class HomeLife {
   /** Radio Brocante's chronicle is on the air and not heard yet today (the radio's caption says so). */
   get chronicleDue(): boolean {
     const hours = this.deps.hours();
-    return hours >= HOUSEHOLD.radio.from && hours < HOUSEHOLD.radio.until && !this.household.doneToday('radio');
+    return inHours(hours, [HOUSEHOLD.radio.from, HOUSEHOLD.radio.until]) && !this.household.doneToday('radio');
   }
 
   /** The radio switched on: Radio Brocante's chronicle, once a market day in the morning; null otherwise. */
   chronicle(): string[] | null {
     const hours = this.deps.hours();
-    if (hours < HOUSEHOLD.radio.from || hours >= HOUSEHOLD.radio.until || !this.household.once('radio')) return null;
+    if (!inHours(hours, [HOUSEHOLD.radio.from, HOUSEHOLD.radio.until]) || !this.household.once('radio')) return null;
     return morningChronicle(this.household.today, (id) => this.deps.collection.owns(id));
   }
 
@@ -238,7 +241,7 @@ export class HomeLife {
     const next = level === 'none' ? `${eye - n} more and you will spot a fake ${platform} print at a glance.`
       : level === 'eye' ? (n === eye ? `You now spot a fake ${platform} print at a glance. ${respect - n} more and the stallholders will notice.` : `${respect - n} more and the ${platform} stallholders will notice.`)
       : n === respect ? `The ${platform} stallholders will hear it in how you talk: they go easier on you now.` : `You know the ${platform} like few do.`;
-    return yes(`You leaf through ${copy.title}'s manual: the controls, the lore, the ads at the back.\n${platform} know-how: ${n} manual${n === 1 ? '' : 's'} read. ${next}`);
+    return yes(`You leaf through ${copy.title}'s manual: the controls, the lore, the ads at the back.\n${platform} know-how: ${formatCount(n, 'manual')} read. ${next}`);
   }
 
   /** On waking: the night's dream, if it brought one (once a market day, of the morning's stock). */

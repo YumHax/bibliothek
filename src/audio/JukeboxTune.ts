@@ -1,5 +1,6 @@
 import { audioBus, audioContext } from './audioContext';
 import { whiteNoise } from './noise';
+import { pick, random } from '@/random';
 
 /** Loudness at volume 1, right next to the jukebox (linear). */
 const MASTER = 0.2;
@@ -195,14 +196,13 @@ export class JukeboxTune {
   private newSong(): void {
     const style = this.style;
     if (!style) return;
-    const pick = <T>(list: readonly T[]): T => list[Math.floor(Math.random() * list.length)]!;
-    const bpm = style.bpm[0] + Math.random() * (style.bpm[1] - style.bpm[0]);
+    const bpm = style.bpm[0] + random() * (style.bpm[1] - style.bpm[0]);
     this.song = {
-      root: style.root[0] + Math.floor(Math.random() * (style.root[1] - style.root[0] + 1)),
+      root: style.root[0] + Math.floor(random() * (style.root[1] - style.root[0] + 1)),
       sixteenth: 60 / bpm / 4,
-      progression: pick(style.progressions),
+      progression: pick(random, style.progressions),
       bars: 0,
-      title: `${pick(WORDS_A)} ${pick(WORDS_B)}`,
+      title: `${pick(random, WORDS_A)} ${pick(random, WORDS_B)}`,
     };
     this.step = 0;
   }
@@ -221,16 +221,16 @@ export class JukeboxTune {
       this.tone(ctx, out, style.name === 'CHIPTUNE' ? 'triangle' : 'sawtooth', midi(root - 24 + chord[0]! + octave), t, sixteenth * 1.6, 0.34, 700);
     }
     if (style.pad && s === 0) for (const n of chord) this.tone(ctx, out, style.pad, midi(root + n), t, sixteenth * 15, 0.045, 2200);
-    if (Math.random() < style.leadDensity) {
+    if (random() < style.leadDensity) {
       let pitch: number;
       if (style.arpeggio) {
         pitch = chord[s % chord.length]! + (s % 8 >= 4 ? 12 : 0);
       } else {
-        this.note = Math.max(0, Math.min(style.scale.length - 1, this.note + Math.round((Math.random() - 0.5) * 3)));
+        this.note = Math.max(0, Math.min(style.scale.length - 1, this.note + Math.round((random() - 0.5) * 3)));
         pitch = style.scale[this.note]!;
         if (s % 4 === 0) pitch = chord.reduce((best, c) => (Math.abs(c - pitch) < Math.abs(best - pitch) ? c : best), chord[0]!);
       }
-      this.tone(ctx, out, style.lead, midi(root + 12 + pitch), t, sixteenth * (Math.random() < 0.25 ? 2.8 : 0.9), style.arpeggio ? 0.07 : 0.09, 3500);
+      this.tone(ctx, out, style.lead, midi(root + 12 + pitch), t, sixteenth * (random() < 0.25 ? 2.8 : 0.9), style.arpeggio ? 0.07 : 0.09, 3500);
     }
   }
 
@@ -276,7 +276,7 @@ export class JukeboxTune {
     env.gain.setValueAtTime(level, t);
     env.gain.exponentialRampToValueAtTime(0.001, t + length);
     source.connect(filter).connect(env).connect(out);
-    source.start(t, Math.random() * 0.5);
+    source.start(t, random() * 0.5);
     source.stop(t + length + 0.02);
     source.onended = () => env.disconnect();
   }
@@ -284,6 +284,7 @@ export class JukeboxTune {
   private build(): AudioContext {
     if (this.ctx) return this.ctx;
     const ctx = audioContext();
+    if (!ctx) throw new Error('no Web Audio to play the jukebox through');
     this.ctx = ctx;
     const out = ctx.createGain();
     out.gain.value = 0;

@@ -6,6 +6,7 @@ import { playCoins } from '@/audio/coins';
 import { playCrateScrape, playRummage } from '@/audio/marketBustle';
 import { rearOf, stereoPan } from '@/audio/spatial';
 import type { Furniture, OccupancyAware } from '../Furniture';
+import { random } from '@/random';
 
 interface CrowdSoundOptions {
   /** Whose distance and side place the bustle: the camera. */
@@ -67,7 +68,7 @@ export class CrowdSound extends THREE.Object3D implements Furniture, Updatable, 
     this.untilBustle -= dt;
     if (this.untilBustle > 0) return;
     const quiet = 1 / Math.max(0.25, this.crowd);
-    this.untilBustle = (BUSTLE_GAP.min + Math.random() * (BUSTLE_GAP.max - BUSTLE_GAP.min)) * quiet;
+    this.untilBustle = (BUSTLE_GAP.min + random() * (BUSTLE_GAP.max - BUSTLE_GAP.min)) * quiet;
     this.bustle();
   }
 
@@ -82,15 +83,15 @@ export class CrowdSound extends THREE.Object3D implements Furniture, Updatable, 
   /** One sound of the bustle, from a stall drawn at random. */
   private bustle(): void {
     if (!startedAudioContext()) return;
-    const source = this.sources[Math.floor(Math.random() * this.sources.length)]!;
+    const source = this.sources[Math.floor(random() * this.sources.length)]!;
     source.getWorldPosition(this.at);
     this.listener.getWorldPosition(this.ear);
     const fall = Math.min(1, REF / Math.max(0.1, this.at.distanceTo(this.ear)));
     const spatial = { pan: stereoPan(this.listener, this.at), walls: 0, rear: rearOf(this.listener, this.at) };
     const scale = fall * (0.6 + 0.4 * this.crowd);
-    const roll = Math.random();
+    const roll = random();
     if (roll < 0.5) playRummage(BUSTLE_LEVEL.rummage * scale, spatial);
-    else if (roll < 0.75) playCoins(1 + Math.floor(Math.random() * 4), BUSTLE_LEVEL.coins * scale, spatial);
+    else if (roll < 0.75) playCoins(1 + Math.floor(random() * 4), BUSTLE_LEVEL.coins * scale, spatial);
     else playCrateScrape(BUSTLE_LEVEL.scrape * scale, spatial);
   }
 }

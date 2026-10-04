@@ -1,4 +1,6 @@
 import { ModalPanel } from './ModalPanel';
+import { html, paint } from './panel/html';
+import { formatNumber } from '@/text/count';
 import './ArcadeScreenPanel.css';
 
 /** What a cabinet whose game runs in a web page needs: open it, hear its score, know when it is shut. */
@@ -31,29 +33,29 @@ export class ArcadeScreenPanel extends ModalPanel<[RemoteGame]> implements Remot
   private readonly frame: HTMLIFrameElement;
   private readonly titleEl: HTMLElement;
   private readonly scoreEl: HTMLElement;
-  private readonly statusEl: HTMLElement;
   private session: RemoteGame | null = null;
   private closeTimer = 0;
 
   constructor(container: HTMLElement) {
-    super(container, { className: 'ui-modal--centre arcade-screen' });
-    this.root.innerHTML = `
-      <div class="arcade-screen__bezel" role="dialog" aria-modal="true" aria-label="Arcade game">
+    super(container, { className: 'ui-modal--centre ui-panel arcade-screen' });
+    paint(
+      this.root,
+      html`<div class="arcade-screen__bezel" role="dialog" aria-modal="true" aria-label="Arcade game">
         <header class="arcade-screen__header">
           <h2 class="arcade-screen__title"></h2>
           <span class="arcade-screen__score"></span>
-          <span class="arcade-screen__status"></span>
-          <button type="button" class="arcade-screen__done ui-btn" data-action="done" aria-label="Close">Done</button>
+          <span class="arcade-screen__status" role="status"></span>
+          <button type="button" class="arcade-screen__done ui-btn" data-action="close" aria-label="Done">Done</button>
         </header>
         <iframe class="arcade-screen__frame" title="Arcade game" allow="autoplay; fullscreen" referrerpolicy="origin"></iframe>
         <p class="arcade-screen__foot">Your score pays out in tickets when you are done. Done steps back from the cabinet (Esc too, once you click outside the game).</p>
-      </div>`;
+      </div>`,
+    );
     this.frame = this.root.querySelector('iframe')!;
     this.titleEl = this.root.querySelector('.arcade-screen__title')!;
     this.scoreEl = this.root.querySelector('.arcade-screen__score')!;
     this.statusEl = this.root.querySelector('.arcade-screen__status')!;
-    this.root.querySelector('[data-action="done"]')!.addEventListener('click', () => this.close());
-    window.addEventListener('message', (e) => this.onMessage(e));
+    this.listen(window, 'message', (e) => this.onMessage(e));
   }
 
   /** A cabinet opening it while it is up (a second coin) starts afresh. */
@@ -66,10 +68,10 @@ export class ArcadeScreenPanel extends ModalPanel<[RemoteGame]> implements Remot
     this.session = options;
     this.titleEl.textContent = options.title;
     this.scoreEl.textContent = 'Score: —';
-    this.statusEl.textContent = 'Loading…';
+    this.setStatus('Loading…');
     this.frame.src = options.url;
     this.frame.onload = () => {
-      if (this.session === options) this.statusEl.textContent = '';
+      if (this.session === options) this.setStatus('');
     };
     // The page gets the keyboard straight away.
     window.setTimeout(() => this.frame.focus(), 50);
@@ -101,10 +103,10 @@ export class ArcadeScreenPanel extends ModalPanel<[RemoteGame]> implements Remot
     if (data.type !== 'lexipunk:score' && data.type !== 'lexipunk:over') return;
     const final = data.type === 'lexipunk:over' || data.final === true;
     const score = Math.max(0, Math.floor(data.score));
-    this.scoreEl.textContent = `Score: ${score.toLocaleString('en-US')}`;
+    this.scoreEl.textContent = `Score: ${formatNumber(score)}`;
     session.onScore(score, final);
     if (final) {
-      this.statusEl.textContent = 'Game over!';
+      this.setStatus('Game over!', 'ok');
       window.clearTimeout(this.closeTimer);
       this.closeTimer = window.setTimeout(() => this.close(), CLOSE_AFTER_FINAL_MS);
     }

@@ -1,8 +1,9 @@
 import * as THREE from 'three';
-import { createCanvas, toTexture, seededRandom, FONT } from '@/covers/generated/canvasUtils';
+import { createCanvas, toTexture, FONT } from '@/covers/generated/canvasUtils';
 import { cylinderMesh } from '../meshUtils';
 import { paint, standard } from '@/world/materials/palette';
 import { Prop } from './Prop';
+import { lcg } from '@/random';
 
 export interface WallCalendarOptions {
   /** Size of the sheet. Default 0.3 x 0.45 m. */
@@ -62,7 +63,7 @@ function paintPage(width: number, height: number, now: Date, seed: number, accen
   ctx.fillRect(0, 0, W, H);
 
   // The picture: a seeded landscape, sky, sun, three ranges of hills.
-  const random = seededRandom(seed);
+  const random = lcg(seed);
   const pad = W * 0.06;
   const picH = H * 0.46;
   const px = pad;

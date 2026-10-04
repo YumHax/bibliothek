@@ -1,4 +1,7 @@
 import type { ShopKind } from '../streetPlan';
+import { inHours } from '@/time/clock';
+import { clockShort } from '@/text/clock';
+import { capitalise } from '@/text/strings';
 
 /** When a shop is open, in game hours: from `open` to `close` (past 24 means after midnight: 25 = 1:00). */
 interface ShopHours {
@@ -31,12 +34,10 @@ export const SHOP_HOURS: Record<ShopKind, ShopHours | null> = {
   shut: null,
 };
 
-/** Whether a shop of `kind` is open at `hours` (0 ≤ hours < 24). */
+/** Whether a shop of `kind` is open at `hours` (0 ≤ hours < 24): its span, past midnight included (`time/clock`). */
 export function isShopOpen(kind: ShopKind, hours: number): boolean {
   const h = SHOP_HOURS[kind];
-  if (!h) return false;
-  if (h.close - h.open >= 24) return true;
-  return (hours >= h.open && hours < h.close) || hours + 24 < h.close;
+  return h !== null && inHours(hours, { from: h.open, to: h.close });
 }
 
 /**
@@ -45,7 +46,7 @@ export function isShopOpen(kind: ShopKind, hours: number): boolean {
  */
 export function retroShutNotice(hours: number): { label: string; hint: string } | null {
   if (isShopOpen('retro', hours)) return null;
-  const opens = clockTime(SHOP_HOURS.retro?.open ?? 8);
+  const opens = clockShort(SHOP_HOURS.retro?.open ?? 8);
   return { label: `RETRO GAMES is closed · opens at ${opens}`, hint: `RETRO GAMES is shut for the night, and the flea market behind it. It opens at ${opens}. The arcade is open all night.` };
 }
 
@@ -55,14 +56,7 @@ export function retroShutNotice(hours: number): { label: string; hint: string } 
  */
 export function shopShutNotice(kind: ShopKind, name: string, closed: string, hours: number): { label: string; hint: string } | null {
   if (isShopOpen(kind, hours)) return null;
-  const opens = clockTime(SHOP_HOURS[kind]?.open ?? 8);
-  const Name = name.charAt(0).toUpperCase() + name.slice(1);
+  const opens = clockShort(SHOP_HOURS[kind]?.open ?? 8);
+  const Name = capitalise(name);
   return { label: `${Name} · closed, opens at ${opens}`, hint: `${Name} is closed. ${closed} Opens at ${opens}.` };
-}
-
-/** "8:00", "19:30": a game hour as a clock reading. */
-export function clockTime(hours: number): string {
-  const h = Math.floor(hours) % 24;
-  const m = Math.round((hours - Math.floor(hours)) * 60);
-  return `${h}:${String(m).padStart(2, '0')}`;
 }

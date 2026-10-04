@@ -5,6 +5,8 @@ import type { Input } from '@/core/Input';
 import { ACTIONS } from '@/input/actions';
 import type { CollisionWorld } from '@/core/Collider';
 import { reduceMotion } from '@/settings/motion';
+import { angleTo } from '@/math/angles';
+import { damp, dampFactor } from '@/math/damp';
 
 /** Virtual code other input devices hold to sprint (gamepad stick click, touch joystick pushed far). */
 export const SPRINT_CODE = 'Sprint';
@@ -311,7 +313,7 @@ export class FirstPersonController implements Updatable {
     }
     const look = this.getLook();
     // The shorter way round.
-    const turn = Math.atan2(Math.sin(yaw - look.yaw), Math.cos(yaw - look.yaw));
+    const turn = angleTo(look.yaw, yaw);
     this.seatMove = {
       from: this.camera.position.clone(),
       to: to.clone(),
@@ -515,7 +517,7 @@ export class FirstPersonController implements Updatable {
     this.right.crossVectors(this.forward, this.camera.up).normalize();
 
     // The sprint comes and goes over a moment (the speed and the wider view together).
-    this.sprintAmount += ((sprint && (advance !== 0 || strafe !== 0) ? 1 : 0) - this.sprintAmount) * (1 - Math.exp(-SPRINT_EASE * dt));
+    this.sprintAmount = damp(this.sprintAmount, sprint && (advance !== 0 || strafe !== 0) ? 1 : 0, SPRINT_EASE, dt);
     const speed = this.walkSpeed * (crouch ? this.crouchMultiplier : 1 + (this.sprintMultiplier - 1) * this.sprintAmount);
     this.target
       .set(0, 0, 0)
@@ -529,13 +531,13 @@ export class FirstPersonController implements Updatable {
       const ahead = this.ground(this.camera.position.x + this.target.x * CLIMB.probe, this.camera.position.z + this.target.z * CLIMB.probe, this.feet);
       climbing = ahead - this.feet > CLIMB.rise;
     }
-    this.climbFactor += ((climbing ? CLIMB.factor : 1) - this.climbFactor) * (1 - Math.exp(-CLIMB.ease * dt));
+    this.climbFactor = damp(this.climbFactor, climbing ? CLIMB.factor : 1, CLIMB.ease, dt);
     this.target.multiplyScalar(speed * this.climbFactor);
 
     // Exponential smoothing gives a bit of acceleration/deceleration without a full physics step:
     // a gentle start, a quicker stop (slowing down, or turning back against the way the body goes).
     const braking = this.target.lengthSq() < this.velocity.lengthSq() || this.target.dot(this.velocity) < 0;
-    this.velocity.lerp(this.target, 1 - Math.exp(-(braking ? DECEL : ACCEL) * dt));
+    this.velocity.lerp(this.target, dampFactor(braking ? DECEL : ACCEL, dt));
 
     const fromX = this.camera.position.x;
     const fromZ = this.camera.position.z;
@@ -543,13 +545,13 @@ export class FirstPersonController implements Updatable {
     this.moveAxis('z', this.velocity.z * dt);
     // What the body really covered (a wall stops it whatever the keys say), eased over a few frames.
     const moved = dt > 0 ? Math.hypot(this.camera.position.x - fromX, this.camera.position.z - fromZ) / dt : 0;
-    this.groundSpeed += (moved - this.groundSpeed) * (1 - Math.exp(-12 * dt));
+    this.groundSpeed = damp(this.groundSpeed, moved, 12, dt);
 
     this.followGround(dt);
 
     // Crouching eases the eye down and back up rather than snapping.
     const targetHeight = crouch ? this.crouchHeight : this.eyeHeight;
-    this.height += (targetHeight - this.height) * (1 - Math.exp(-10 * dt));
+    this.height = damp(this.height, targetHeight, 10, dt);
     this.camera.position.y = this.feet + this.height;
     // The wider view follows the speed really reached past a walk (none against a wall), off with reduced motion or no head bob.
     const pastWalk = THREE.MathUtils.clamp((this.groundSpeed / this.walkSpeed - 1) / (this.sprintMultiplier - 1), 0, 1);
@@ -604,7 +606,7 @@ export class FirstPersonController implements Updatable {
     this.lastFloor = floor;
     if (!riding && stepped > 0.05 && stepped <= SNAP && drop <= SNAP && this.feel.headBob && !reduceMotion()) this.dip = Math.min(STEP_DIP, this.dip + stepped * 0.12);
     if (riding) this.feet = floor;
-    else this.feet = Math.abs(floor - this.feet) > SNAP ? floor : this.feet + (floor - this.feet) * (1 - Math.exp(-18 * dt));
+    else this.feet = Math.abs(floor - this.feet) > SNAP ? floor : damp(this.feet, floor, 18, dt);
   }
 
   private moveAxis(axis: 'x' | 'z', delta: number): void {

@@ -3,6 +3,7 @@ import { GameBox } from './GameBox';
 import { boxMesh } from './meshUtils';
 import { isShared } from './materials/sharedResources';
 import { QUALITY } from '@/graphics/quality';
+import { seededRng } from '@/random';
 import { basic, timber } from '@/world/materials/palette';
 import { INSET, PROUD } from './props/joinery';
 import { mergeStaticParts } from './zone/mergeStatic';
@@ -460,14 +461,8 @@ function bow(geometry: THREE.BufferGeometry, span: number, sag: number): void {
 
 /** Yaw and depth offset of a box on the shelf, from its game id (the same every time). */
 function untidiness(id: string): [yaw: number, push: number] {
-  let hash = 2166136261;
-  for (let i = 0; i < id.length; i++) hash = Math.imul(hash ^ id.charCodeAt(i), 16777619);
-  const next = (): number => {
-    hash = Math.imul(hash ^ (hash >>> 15), 2246822507);
-    hash = Math.imul(hash ^ (hash >>> 13), 3266489909);
-    return ((hash ^= hash >>> 16) >>> 0) / 4294967296;
-  };
   if (!QUALITY.detailedMaterials) return [0, 0];
+  const next = seededRng(id);
   const yaw = (next() * 2 - 1) * BOX_YAW;
   const r = next();
   const push = r < 0.18 ? -next() * BOX_PUSH : r > 0.9 ? next() * BOX_PULL : 0;

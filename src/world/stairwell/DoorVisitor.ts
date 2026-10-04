@@ -2,13 +2,14 @@ import * as THREE from 'three';
 import type { Updatable } from '@/core/Engine';
 import type { SessionActions } from '@/game/SessionActions';
 import { playKnock } from '@/audio/doorbell';
-import { proximityVolume } from '@/video/proximityVolume';
+import { HEARING, loudness } from '@/audio/hearing';
 import type { SoundOcclusion } from '../acoustics/SoundOcclusion';
 import type { DoorRinger, Doorstep } from '../hallway/Doorstep';
 import { randomLook, type PersonLook } from '../people/looks';
 import { Prop } from '../props/Prop';
 import { StairWalker, type StairWalkerOptions } from './StairWalker';
-import { STAIRWELL_PLAN as plan, STOREY, landingY } from './stairwellPlan';
+import { STAIRWELL_PLAN as plan } from './stairwellPlan';
+import { STOREY, landingY } from '@/world/measures/building';
 
 /**
  * Someone from downstairs coming up to the flat's door for a word (`DoorVisitor.come`): who, how
@@ -170,7 +171,7 @@ export class DoorVisitor extends Prop implements Updatable, DoorRinger {
     const { viewer, acoustics, door } = this.options;
     viewer.getWorldPosition(this.ear);
     const walls = acoustics?.wallsBetween(this.ear, door) ?? 0;
-    const level = (KNOCK_LEVEL * proximityVolume(this.ear.distanceTo(door), { referenceDistance: 2, maxDistance: 30, walls, wallGain: 0.6 })) / 100;
+    const level = KNOCK_LEVEL * loudness(this.ear.distanceTo(door), HEARING.knock, walls);
     playKnock(3, Math.max(KNOCK_FLOOR, level));
   }
 

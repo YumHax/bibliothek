@@ -1,3 +1,5 @@
+import { fileStamp } from '@/text/clock';
+
 /** How a save went: the file's name, or why there is none. */
 type PhotoSaved = { ok: true; name: string } | { ok: false; reason: string };
 
@@ -7,8 +9,7 @@ type PhotoSaved = { ok: true; name: string } | { ok: false; reason: string };
  * encode, or a download it blocked).
  */
 export function savePhoto(canvas: HTMLCanvasElement, done: (result: PhotoSaved) => void = () => {}, now: Date = new Date()): void {
-  const pad = (n: number) => String(n).padStart(2, '0');
-  const name = `bibliothek-${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}-${pad(now.getHours())}h${pad(now.getMinutes())}m${pad(now.getSeconds())}.png`;
+  const name = `bibliothek-${fileStamp(now, { time: true })}.png`;
   try {
     canvas.toBlob((blob) => {
       if (!blob) {

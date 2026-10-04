@@ -1,9 +1,10 @@
 import * as THREE from 'three';
 import type { Updatable } from '@/core/Engine';
-import { createCanvas, seededRandom, toTexture } from '@/covers/generated/canvasUtils';
+import { createCanvas, toTexture } from '@/covers/generated/canvasUtils';
 import { boxMesh } from '../meshUtils';
 import { paint } from '../materials/palette';
 import { Prop } from './Prop';
+import { lcg } from '@/random';
 
 export interface NeonSignOptions {
   /** The word(s) in glass tubing. Default ARCADE. */
@@ -57,7 +58,7 @@ export class NeonSign extends Prop implements Updatable {
     const height = options.height ?? width / 3;
     this.intensity = options.intensity ?? 3;
     this.flicker = options.flicker ?? true;
-    this.random = seededRandom((options.seed ?? 1) * 7331);
+    this.random = lcg((options.seed ?? 1) * 7331);
     this.nextStutter = 2 + this.random() * 6;
 
     const panel = boxMesh(width + 0.12, height + 0.1, PANEL_T, PANEL, { z: PANEL_T / 2 });

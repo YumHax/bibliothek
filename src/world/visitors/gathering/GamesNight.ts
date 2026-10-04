@@ -1,15 +1,18 @@
+import { nudge } from '@/social/standing';
 import * as THREE from 'three';
 import type { Game } from '@/catalog/types';
 import type { SessionActions } from '@/game/SessionActions';
 import { ChipSpeaker } from '@/audio/ChipSpeaker';
-import { seeded } from '@/economy/seeded';
-import { ROOM_PLAN } from '../../roomPlan';
+import { ROOM_PLAN } from '../../roomPlan'; // imports-ok: friends and guests walk the flat and the stairwell: the visit reads the rooms it crosses
 import { FRIENDS, VISIT_RULES } from '../friendsPlan';
 import { fill, tasteScore } from '../friendLines';
 import type { GatheringDeps } from './deps';
 import { GATHERING_LINES, GATHERING_RULES } from './gatheringPlan';
 import { PaddleWarsProgram } from './PaddleWarsProgram';
 import { Party, type PartyMember } from './Party';
+import { dayStream } from '@/time/daily';
+import { together } from '@/social/life/introductions';
+import { random as liveRandom } from '@/random';
 
 /** The match as the program runner knows it (no box: it is the evening's, not the collection's). */
 const MATCH_GAME: Game = { id: 'games-night:paddle-wars', title: 'PADDLE WARS', platform: 'nes' };
@@ -70,11 +73,11 @@ export class GamesNight {
       },
     });
     // The one who rings first, the others up the stairs behind; who leads changes with the day.
-    const lead = Math.floor(seeded(`night:${day}`)() * FRIENDS.length);
+    const lead = Math.floor(dayStream(`night:${day}`)() * FRIENDS.length);
     FRIENDS.forEach((_, i) => {
       const plan = FRIENDS[(lead + i) % FRIENDS.length]!;
       const [min, max] = this.rules.stagger;
-      this.party.add(plan, i === 0 ? 0 : min + Math.random() * (max - min), i > 0);
+      this.party.add(plan, i === 0 ? 0 : min + liveRandom() * (max - min), i > 0);
     });
   }
 
@@ -173,8 +176,8 @@ export class GamesNight {
     p2?.friend.react(forPlayer ? 'fail' : 'great');
     const watchers = this.watchers();
     for (const m of watchers) m.friend.react(forPlayer ? 'great' : 'near');
-    const talker = watchers[Math.floor(Math.random() * watchers.length)];
-    if (talker && p2 && Math.random() < 0.5) {
+    const talker = watchers[Math.floor(liveRandom() * watchers.length)];
+    if (talker && p2 && liveRandom() < 0.5) {
       const bucket = forPlayer ? 'goalFor' : 'goalAgainst';
       host.say(talker.plan, fill(host.line(bucket, GATHERING_LINES[bucket]), { name: p2.plan.name }), forPlayer ? 'yay' : 'ooh');
     }
@@ -222,11 +225,15 @@ export class GamesNight {
     const { book, host } = this.deps;
     const came = this.party.members.filter((m) => m.cameIn);
     book.heldNight(this.day, came.length > 0);
+    // An evening together brings the friends closer to each other too (docs/social.md "Introductions").
+    together(came.map((m) => m.plan.id), this.day, 'gamesNight');
     if (!came.length || this.matches === 0) return;
+    // A good evening: each friend who came thinks the better of the host (docs/social.md "Friends").
+    for (const m of came) nudge(m.plan.id, { warmth: 5, trust: 1, why: 'had a great games night', reason: 'gamesNight', day: this.day, memory: 'the games night at yours', memoryWeight: 5 });
     const names = came.map((m) => m.plan.name);
     book.addPhoto({ day: this.day, names, score: this.lastScore });
     const { collection, giftPool, purse, notices } = host.options;
-    const random = seeded(`night-thanks:${this.day}`);
+    const random = dayStream(`night-thanks:${this.day}`);
     const giver = came[Math.floor(random() * came.length)]!.plan;
     const unowned = giftPool?.filter((g) => !collection.owns(g.id) && tasteScore(giver.taste, g) >= 2) ?? [];
     const gift = random() < this.rules.giftChance ? unowned[Math.floor(random() * unowned.length)] : undefined;

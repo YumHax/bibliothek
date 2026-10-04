@@ -1,10 +1,8 @@
-import { actionKeyLabel } from '@/ui/keys';
 import * as THREE from 'three';
 import type { ArcadeResult } from '@/game/SessionActions';
 import { ChipSpeaker } from '@/audio/ChipSpeaker';
 import { eyePoseAt } from '../meshUtils';
 import { type ArcadeControls, drawText } from './games/ArcadeGame';
-import { ordinal } from './InitialsEntry';
 import type { TicketStrip } from './TicketStrip';
 import { TicketMachine, type TicketMachineWiring } from './TicketMachine';
 import type { MachineRunOptions } from './MachineRun';
@@ -174,9 +172,9 @@ export class AlleyRoller extends TicketMachine {
     if (this.state === 'over') {
       drawText(ctx, `SCORE ${this.last.score}`, W / 2, 36, 18, '#fff2a8');
       drawText(ctx, `${this.shownTotal} TICKETS`, W / 2, 80, 24, '#ffd23a');
-      const note = this.lastRank !== null ? `${ordinal(this.lastRank + 1)} ON THE BOARD!` : this.last.best ? 'NEW BEST!' : this.last.first ? 'FIRST SCORE!' : '';
+      const note = this.endCardNote();
       if (note) drawText(ctx, note, W / 2, 118, 14, blink ? '#7ee787' : '#ffffff');
-      if (this.canReplay) drawText(ctx, `${actionKeyLabel('fire').toUpperCase()}: AGAIN (${this.priceText().toUpperCase()})`, W / 2, 160, 11, '#ff8a80');
+      if (this.canReplay) drawText(ctx, this.playAgainLine(), W / 2, 160, 11, '#ff8a80');
       texture.needsUpdate = true;
       return;
     }

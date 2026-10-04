@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { createCanvas, toTexture } from '@/covers/generated/canvasUtils';
+import { inHours } from '@/time/clock';
 import type { Interactable } from '@/interaction/Interactable';
 import type { SessionActions } from '@/game/SessionActions';
 import type { ZoneId } from '../../zoneIds';
@@ -13,6 +14,7 @@ import type { Vec2 } from '../streetPlan';
 import { ScriptedVehicle, type CollisionSet } from './ScriptedVehicle';
 import type { StreetTraffic } from './StreetTraffic';
 import { CRUISE as CITY_CRUISE } from '../../city/traffic';
+import { formatCoins } from '@/text/money';
 
 interface StreetBusOptions {
   traffic: StreetTraffic;
@@ -160,7 +162,7 @@ export class StreetBus extends ScriptedVehicle implements Interactable {
       const why = ride.closed?.();
       return why ? `Bus ${this.bus.line} · ${why}` : null;
     }
-    return `Bus ${this.bus.line} · get on to ${where.label} (${ride.fare} coins)`;
+    return `Bus ${this.bus.line} · get on to ${where.label} (${formatCoins(ride.fare)})`;
   }
 
   activate(session: SessionActions): void {
@@ -180,7 +182,7 @@ export class StreetBus extends ScriptedVehicle implements Interactable {
     if (this.active) return;
     this.waitClock -= dt;
     if (this.waitClock > 0) return;
-    const night = this.dayNight.state.hours < 6 || this.dayNight.state.hours >= 22.5;
+    const night = inHours(this.dayNight.state.hours, [22.5, 6]);
     const gameMinute = this.dayNight.dayLength / (24 * 60);
     this.waitClock = Math.max(night ? NIGHT_MIN_GAP_S : MIN_GAP_S, (night ? this.bus.nightEvery : this.bus.every) * gameMinute);
     this.depart();

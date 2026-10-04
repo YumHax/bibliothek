@@ -1,7 +1,13 @@
 import { KEYS, PersistedStore, safeStorage } from '@/persistence';
 import { canonicalGameId } from '@/catalog';
-import { hash01, seeded } from '@/economy/seeded';
 import { FRIENDS, VISIT_RULES, type FriendPlan } from './friendsPlan';
+import { unit01 } from '@/random';
+import { dayStream } from '@/time/daily';
+import { has } from '@/social/perks';
+import { lastDropBy } from '@/social/friendsLife';
+
+/** A close friend dropping by unannounced (`dropsBy`, docs/social.md "Friends"): this likely on a free day, this many game days apart at least. */
+const DROP_BY = { odds: 0.25, gap: 5 } as const;
 
 /** A game out on loan: to whom, since which in-game day, due back when. */
 export interface Loan {
@@ -17,6 +23,8 @@ export interface PlannedVisit {
   friend: FriendPlan;
   hour: number;
   loan: Loan | null;
+  /** Unannounced, with a game they found for the player (a close friend's `dropsBy`). */
+  dropBy?: boolean;
 }
 
 interface BookState {
@@ -72,17 +80,23 @@ export class VisitBook {
     const invited = this.state.invited;
     const guest = invited && invited.day === day ? FRIENDS.find((f) => f.id === invited.friendId) : undefined;
     if (guest) return { friend: guest, hour: invited!.hour, loan: this.state.loans.find((loan) => loan.friendId === guest.id && loan.dueDay <= day) ?? null };
-    const hour = VISIT_RULES.hours.from + hash01(`visit-hour:${day}`) * (VISIT_RULES.hours.until - VISIT_RULES.hours.from);
+    const hour = VISIT_RULES.hours.from + unit01(`visit-hour:${day}`) * (VISIT_RULES.hours.until - VISIT_RULES.hours.from);
     const due = this.state.loans.filter((loan) => loan.dueDay <= day).sort((a, b) => a.dueDay - b.dueDay)[0];
     if (due) {
       const friend = FRIENDS.find((f) => f.id === due.friendId);
       if (friend) return { friend, hour, loan: due };
     }
+    // A friend gone cold stops coming round (`stopsVisiting`); one with a loan still brings it back, above.
+    const free = FRIENDS.filter((f) => !this.state.loans.some((loan) => loan.friendId === f.id) && !has(f.id, 'stopsVisiting'));
+    // A close friend drops by now and then, outside the usual round, with something they found (`dropsBy`).
+    const close = free.filter((f) => has(f.id, 'dropsBy'));
+    if (close.length && day - this.state.lastDay >= 2 && day - lastDropBy() >= DROP_BY.gap && unit01(`drop-by:${day}`) < DROP_BY.odds) {
+      return { friend: close[Math.floor(unit01(`drop-by-who:${day}`) * close.length)]!, hour, loan: null, dropBy: true };
+    }
     if (day - this.state.lastDay < VISIT_RULES.minGap) return null;
-    if (hash01(`visit:${day}`) >= VISIT_RULES.chance) return null;
-    const free = FRIENDS.filter((f) => !this.state.loans.some((loan) => loan.friendId === f.id));
+    if (unit01(`visit:${day}`) >= VISIT_RULES.chance) return null;
     if (!free.length) return null;
-    return { friend: free[Math.floor(hash01(`visit-who:${day}`) * free.length)]!, hour, loan: null };
+    return { friend: free[Math.floor(unit01(`visit-who:${day}`) * free.length)]!, hour, loan: null };
   }
 
   /** The bell rang on `day` (whether or not the door opened): no other visit that day. */
@@ -100,7 +114,7 @@ export class VisitBook {
   /** `game` goes home with `friendId` on `day`; returns the loan (its length is the day's draw). */
   lend(friendId: string, game: { id: string; title: string }, day: number): Loan {
     const [min, max] = VISIT_RULES.loanDays;
-    const days = min + Math.floor(seeded(`loan:${friendId}:${game.id}:${day}`)() * (max - min + 1));
+    const days = min + Math.floor(dayStream(`loan:${friendId}:${game.id}:${day}`)() * (max - min + 1));
     const loan: Loan = { friendId, gameId: game.id, title: game.title, lentDay: day, dueDay: day + days };
     this.state.loans = [...this.state.loans.filter((l) => l.gameId !== game.id), loan];
     this.save();

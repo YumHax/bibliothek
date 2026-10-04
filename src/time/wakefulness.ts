@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { triangle } from '@/math/scalar';
 
 /**
  * How awake the city is at `hours` (0 ≤ hours < 24), 0..1: the share of homes still up, and with
@@ -18,7 +19,11 @@ export function wakefulnessAt(hours: number): number {
 
 /** A day of the week, Monday 0 .. Sunday 6. */
 export type Weekday = 0 | 1 | 2 | 3 | 4 | 5 | 6;
-/** The game day that is a Sunday (the saleroom's sale day, `AUCTION.offset`, every seven): the weeks hang on it. */
+export const SUNDAY_WEEKDAY: Weekday = 6;
+/**
+ * The game day that is a Sunday: the weeks hang on it. The saleroom's sale is every Sunday (`economy/AuctionHouse`
+ * reads `weekdayOf`), so this is the one place the week is pinned to the day count.
+ */
 const SUNDAY_DAY = 3;
 
 /** The weekday of game day `day` (`Today.gameDay`): the market's days run through a week, Sunday the sale's. */
@@ -46,8 +51,7 @@ export function streetBusyAt(hours: number, weekday: Weekday): number {
 /** Whether `hours` is in a weekday's rush (the commuters' hours): 0 out of them .. 1 at their height. */
 export function rushAt(hours: number, weekday: Weekday): number {
   if (weekday >= 5) return 0;
-  const bump = (centre: number, half: number): number => Math.max(0, 1 - Math.abs(hours - centre) / half);
-  return Math.max(bump(8.4, 1.2), bump(18, 1.2));
+  return Math.max(triangle(hours, 8.4, 1.2), triangle(hours, 18, 1.2));
 }
 
 const WEEKDAY: readonly [number, number][] = [

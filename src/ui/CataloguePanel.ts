@@ -1,5 +1,5 @@
 import type { Game, PlatformId } from '@/catalog/types';
-import { PLATFORM_LIST, getPlatform } from '@/catalog/platforms';
+import { getPlatform } from '@/catalog/platforms';
 import { gameIdFor } from '@/catalog/nointro';
 import type { CollectionStore } from '@/collection/CollectionStore';
 import type { IndexMatch, LibretroIndex } from '@/collection/LibretroIndex';
@@ -8,18 +8,17 @@ import type { Wallet } from '@/economy/Wallet';
 import type { StockItem } from '@/economy/StockItem';
 import type { Transactions } from '@/economy/Transactions';
 import type { Views } from '@/economy/Fame';
-import { CONFIRM_MS, describeCondition, purchaseClinks, shopPrice } from '@/economy/pricing';
+import { describeCondition, purchaseClinks, shopPrice } from '@/economy/pricing';
 import { catalogueSaleOn, mailOrderPrice } from '@/economy/marketEvents';
 import { isGrail } from '@/economy/grails';
 import { playCoins } from '@/audio/coins';
-import { escapeHtml } from './html';
-import { useVerbCap } from './verb';
-import { coverAttrs } from './coverPlaceholder';
-import { ModalPanel } from './ModalPanel';
+import { Arming, armedLine } from './confirmTwice';
+import { SheetPanel } from './panel/SheetPanel';
+import { attr, html, paint, type Html } from './panel/html';
+import { coverImg, emptyState, gameRow, priceHtml } from './panel/widgets';
 import { rememberFocus } from './rememberFocus';
-import './CataloguePanel.css';
-
-const SEARCH_DEBOUNCE_MS = 250;
+import { plural } from '@/text/count';
+import { formatCoins } from '@/text/money';
 
 interface CataloguePanelOptions {
   /**
@@ -42,19 +41,13 @@ interface CataloguePanelOptions {
 
 /**
  * The market's order counter: search any game in the libretro-thumbnails index and buy a complete
- * copy at the shop price. A full-screen DOM modal like the collection editor; the Session opens it
- * from the counter, releases the mouse while it is up and re-enters the room when it closes.
- * Prices depend on fame (`Fame`), which arrives after the rows: a row shows the ordinary price
- * greyed and cannot be bought until its lookup lands, then settles; a copy is bought at the price
- * its row shows. A row says so when one of today's stalls has a copy, and at what price.
+ * copy at the shop price. A sheet like the collection editor; the Session opens it from the
+ * counter, releases the mouse while it is up and re-enters the room when it closes. Prices depend
+ * on fame (`Fame`), which arrives after the rows: a row shows the ordinary price greyed and cannot
+ * be bought until its lookup lands, then settles; a copy is bought at the price its row shows. A
+ * row says so when one of today's stalls has a copy, and at what price.
  */
-export class CataloguePanel extends ModalPanel {
-  private readonly walletEl: HTMLElement;
-  private readonly statusEl: HTMLElement;
-  private readonly resultsEl: HTMLElement;
-  private readonly searchInput: HTMLInputElement;
-  private readonly platformSelect: HTMLSelectElement;
-  private searchTimer: number | undefined;
+export class CataloguePanel extends SheetPanel {
   private searchSeq = 0;
   private lastResults: IndexMatch[] = [];
   /** Price shown per result row (index into `lastResults`); what `buy` charges. */
@@ -63,8 +56,8 @@ export class CataloguePanel extends ModalPanel {
   private settled = new Set<number>();
   /** A used copy quoted by a first click on "Used", confirmed by a second. */
   private quoted: { row: number; quote: { price: number; deposit: number; day: number } } | null = null;
-  /** A new copy's row clicked once ("N coins?"), until when a second click orders it (no handing a posted copy back). */
-  private armedBuy: { row: number; until: number } | null = null;
+  /** A new copy's row clicked once ("N coins?"): a second click orders it (no handing a posted copy back). */
+  private readonly buying = new Arming(() => this.repaintArmed());
 
   constructor(
     container: HTMLElement,
@@ -75,45 +68,27 @@ export class CataloguePanel extends ModalPanel {
     private readonly tx: Transactions,
     private readonly options: CataloguePanelOptions = {},
   ) {
-    super(container, { className: 'ui-modal--sheet catalogue', label: 'Mail order' });
-    this.root.innerHTML = `
-      <header class="catalogue__header">
-        <h2>Mail order</h2>
-        <span class="catalogue__wallet"></span>
-        <div class="catalogue__actions"><button type="button" class="ui-btn" data-action="close" aria-label="Close">Close</button></div>
-      </header>
-      <p class="catalogue__blurb">Any game, new and complete, at the catalogue price. Second-hand copies are cheaper on the stalls, and can be ordered: “Used…” puts one by for you on its stall.</p>
-      <div class="catalogue__search">
-        <input type="search" placeholder="Search a title…" autocomplete="off" spellcheck="false" data-autofocus />
-        <select data-role="platform">
-          <option value="">All platforms</option>
-          ${PLATFORM_LIST.map((p) => `<option value="${p.id}">${escapeHtml(p.shortName)}</option>`).join('')}
-        </select>
-      </div>
-      <div class="catalogue__status"></div>
-      <div class="catalogue__scroll ui-card" data-role="results"></div>`;
-
-    this.walletEl = this.root.querySelector('.catalogue__wallet')!;
-    this.statusEl = this.root.querySelector('.catalogue__status')!;
-    this.resultsEl = this.root.querySelector('[data-role="results"]')!;
-    this.searchInput = this.root.querySelector('input[type="search"]')!;
-    this.platformSelect = this.root.querySelector('[data-role="platform"]')!;
-
-    this.bindEvents();
-    wallet.subscribe(() => {
-      this.renderWallet();
-      if (this.isOpen && this.lastResults.length) this.renderResults(this.lastResults);
+    super(container, {
+      title: 'Mail order',
+      blurb: 'Any game, new and complete, at the catalogue price. Second-hand copies are cheaper on the stalls, and can be ordered: “Used…” puts one by for you on its stall.',
+      className: 'mail-order',
+      wallet,
+      search: { placeholder: 'Search a title…', platforms: true },
     });
     store.subscribe(() => {
-      if (this.isOpen && this.lastResults.length) this.renderResults(this.lastResults);
+      if (this.isOpen && this.lastResults.length) this.render();
     });
-    this.renderWallet();
   }
 
   protected override onOpened(): void {
-    if (this.lastResults.length) this.renderResults(this.lastResults); // today's stalls may have changed
+    super.onOpened();
     const sale = catalogueSaleOn(this.day);
     if (sale) this.setStatus(`Sale today: ${Math.round((1 - sale) * 100)}% off every new copy.`);
+  }
+
+  /** Today's stalls may have changed since the last look: the results read again. */
+  protected render(): void {
+    if (this.lastResults.length) this.renderResults(this.lastResults);
   }
 
   /** Today's market day (the sale's calendar). */
@@ -127,57 +102,29 @@ export class CataloguePanel extends ModalPanel {
   }
 
   /** The row's price: today's, with the usual one struck out on a sale day. */
-  private priceHtml(game: Game, price: number | null, views: Views): string {
-    if (price === null) return 'out of print';
-    const usual = shopPrice(game, views);
-    return `${usual !== price ? `<s class="catalogue__was">${usual}</s> ` : ''}${price} <span class="catalogue__coin"></span>`;
+  private rowPrice(game: Game, price: number | null, views: Views, pending: boolean): Html {
+    if (price === null) return html`<span class="catalogue__price">out of print</span>`;
+    return priceHtml(price, { was: shopPrice(game, views), pending });
   }
 
-  protected override onClosed(): void {
-    this.setStatus('');
+  protected override onAction(action: string, el: HTMLElement): void {
+    const row = Number(el.dataset.result);
+    if (action === 'buy') this.buy(row);
+    else if (action === 'order') void this.orderUsed(row, el as HTMLButtonElement);
   }
 
-  private bindEvents(): void {
-    this.root.addEventListener('click', (e) => {
-      const button = (e.target as HTMLElement).closest<HTMLButtonElement>('button[data-action]');
-      if (!button) return;
-      if (button.dataset.action === 'close') this.close();
-      else if (button.dataset.action === 'buy') this.buy(Number(button.dataset.result), button);
-      else if (button.dataset.action === 'order') void this.orderUsed(Number(button.dataset.result), button);
-    });
-    this.root.addEventListener('change', (e) => {
-      if (e.target === this.platformSelect) this.scheduleSearch(0);
-    });
-    this.searchInput.addEventListener('input', () => this.scheduleSearch(SEARCH_DEBOUNCE_MS));
-    this.searchInput.addEventListener('keydown', (e) => {
-      if (e.code === 'Enter') this.scheduleSearch(0);
-    });
-    // A cover that does not exist: a made-up box (`coverPlaceholder`, installed on the container); this is the fallback's fallback.
-    this.resultsEl.addEventListener('error', (e) => {
-      const img = e.target as HTMLElement;
-      if (img instanceof HTMLImageElement) img.classList.add('catalogue__cover--missing');
-    }, true);
+  protected override onSearch(query: string, platform: PlatformId | undefined): void {
+    void this.runSearch(query, platform);
   }
 
-  private renderWallet(): void {
-    this.walletEl.textContent = `${this.wallet.coins} coin${this.wallet.coins === 1 ? '' : 's'} in your pocket`;
-  }
-
-  private scheduleSearch(delayMs: number): void {
-    window.clearTimeout(this.searchTimer);
-    this.searchTimer = window.setTimeout(() => void this.runSearch(), delayMs);
-  }
-
-  private async runSearch(): Promise<void> {
-    const query = this.searchInput.value.trim();
-    const platform = (this.platformSelect.value || undefined) as PlatformId | undefined;
+  private async runSearch(query: string, platform: PlatformId | undefined): Promise<void> {
     const seq = ++this.searchSeq;
     if (query.length < 2) {
       this.lastResults = [];
-      this.resultsEl.innerHTML = '';
+      paint(this.body, html``);
       return;
     }
-    this.resultsEl.innerHTML = '<p class="catalogue__empty">Leafing through the catalogue…</p>';
+    paint(this.body, emptyState('Leafing through the catalogue…'));
     try {
       const results = await this.index.search(query, platform);
       if (seq !== this.searchSeq) return;
@@ -186,45 +133,41 @@ export class CataloguePanel extends ModalPanel {
     } catch (err) {
       if (seq !== this.searchSeq) return;
       this.lastResults = [];
-      this.resultsEl.innerHTML = `<p class="catalogue__empty">The catalogue is unavailable: ${escapeHtml(String(err))}</p>`;
+      paint(this.body, emptyState(`The catalogue is unavailable: ${String(err)}`));
     }
   }
 
   private renderResults(results: IndexMatch[]): void {
     this.quoted = null;
-    this.armedBuy = null;
+    this.buying.reset();
     this.prices.clear();
     this.settled.clear();
     if (results.length === 0) {
-      this.resultsEl.innerHTML = '<p class="catalogue__empty">Nothing by that name.</p>';
+      paint(this.body, emptyState('Nothing by that name.'));
       return;
     }
     const seq = this.searchSeq;
     const onStalls = new Map((this.options.market?.peekToday() ?? []).map((item) => [item.game.id, item]));
-    const restoreFocus = rememberFocus(this.resultsEl);
-    this.resultsEl.innerHTML = results
-      .map((r, i) => {
+    const restoreFocus = rememberFocus(this.body);
+    paint(
+      this.body,
+      html`${results.map((r, i) => {
         const game = this.gameOf(r);
         const views = this.fame.peek(game);
         const known = views !== undefined;
         const price = this.priceOf(game, views);
         this.prices.set(i, price ?? Infinity);
         if (known) this.settled.add(i);
-        const cover = this.options.coverUrl?.(game);
         const stall = onStalls.get(game.id);
-        return `
-          <div class="catalogue__row" data-result="${i}">
-            ${cover ? `<img class="catalogue__cover" src="${escapeHtml(cover)}" alt=""${coverAttrs(game)} loading="lazy" />` : ''}
-            <span class="catalogue__title" title="${escapeHtml(r.name)}">${escapeHtml(r.title)}</span>
-            ${stall ? `<span class="catalogue__stall">${escapeHtml(stallNote(stall))}</span>` : ''}
-            ${r.region ? `<span class="catalogue__meta">${escapeHtml(r.region)}</span>` : ''}
-            <span class="catalogue__meta">${escapeHtml(getPlatform(r.platform).shortName)}</span>
-            <span class="catalogue__price${known ? '' : ' catalogue__price--pending'}">${this.priceHtml(game, price, views)}</span>
-            ${this.buttonHtml(i, game.id)}
-            ${this.orderButtonHtml(i, game.id)}
-          </div>`;
-      })
-      .join('');
+        return gameRow({
+          id: String(i),
+          cover: coverImg(this.options.coverUrl?.(game), game),
+          title: r.title,
+          metas: [stall && html`<span class="catalogue__stall">${stallNote(stall)}</span>`, r.region, getPlatform(r.platform).shortName],
+          tail: html`${this.rowPrice(game, price, views, !known)}${this.buttonHtml(i, game.id)}${this.orderButtonHtml(i, game.id)}`,
+        });
+      })}`,
+    );
     restoreFocus();
     results.forEach((r, i) => {
       const game = this.gameOf(r);
@@ -236,10 +179,11 @@ export class CataloguePanel extends ModalPanel {
     });
   }
 
-  /** The row's button: owned, still being priced, too dear, or buy. */
-  private buttonHtml(i: number, id: string): string {
+  /** The row's button: owned, still being priced, too dear, armed, or buy. */
+  private buttonHtml(i: number, id: string): Html {
     const [label, enabled] = this.buttonState(i, id);
-    return `<button type="button" class="ui-btn ui-btn--primary" data-action="buy" data-result="${i}" ${enabled ? '' : 'disabled'}>${label}</button>`;
+    const armed = this.buying.isArmed(String(i));
+    return html`<button type="button" class="ui-btn ui-btn--primary${armed ? ' sell__armed' : ''}" data-action="buy" data-result="${i}"${attr('disabled', !enabled)}>${armed ? `${formatCoins(this.prices.get(i) ?? 0)}?` : label}</button>`;
   }
 
   private buttonState(i: number, id: string): [label: string, enabled: boolean] {
@@ -255,28 +199,32 @@ export class CataloguePanel extends ModalPanel {
     const price = this.priceOf(game, views);
     this.prices.set(i, price ?? Infinity);
     this.settled.add(i);
-    const row = this.resultsEl.querySelector<HTMLElement>(`.catalogue__row[data-result="${i}"]`);
-    if (!row) return;
-    const priceEl = row.querySelector<HTMLElement>('.catalogue__price');
-    const button = row.querySelector<HTMLButtonElement>('button[data-action="buy"]');
-    if (priceEl) {
-      priceEl.innerHTML = this.priceHtml(game, price, views);
-      priceEl.classList.remove('catalogue__price--pending');
-    }
-    if (button) {
-      const [label, enabled] = this.buttonState(i, game.id);
-      button.textContent = label;
-      button.disabled = !enabled;
+    const row = this.body.querySelector<HTMLElement>(`.catalogue__row[data-id="${i}"]`);
+    const priceEl = row?.querySelector<HTMLElement>('.catalogue__price');
+    const button = row?.querySelector<HTMLElement>('button[data-action="buy"]');
+    if (!row || !priceEl || !button) return;
+    const restoreFocus = rememberFocus(row);
+    priceEl.outerHTML = this.rowPrice(game, price, views, false).markup; // convention-ok: the kit's own markup, repainted in place
+    button.outerHTML = this.buttonHtml(i, game.id).markup; // convention-ok: same
+    restoreFocus();
+  }
+
+  /** The buy buttons read armed or not: repainted in place (the one armed and the one just disarmed). */
+  private repaintArmed(): void {
+    for (const button of this.body.querySelectorAll<HTMLElement>('button[data-action="buy"]')) {
+      const i = Number(button.dataset.result);
+      const r = this.lastResults[i];
+      if (r) button.outerHTML = this.buttonHtml(i, this.gameOf(r).id).markup; // convention-ok: one button of the kit's own markup, repainted in place
     }
   }
 
   /** "Used": a second-hand copy put by on its stall, for a deposit now and the rest when collected. */
-  private orderButtonHtml(i: number, id: string): string {
+  private orderButtonHtml(i: number, id: string): Html | '' {
     const market = this.options.market;
     if (!market?.orders || isGrail(id)) return '';
     const onOrder = market.orders.list.some((o) => o.game.id === id);
     const disabled = onOrder || this.store.owns(id);
-    return `<button type="button" class="ui-btn" data-action="order" data-result="${i}" title="Order a second-hand copy: a deposit now, the rest when you collect it from its stall" ${disabled ? 'disabled' : ''}>${onOrder ? 'On order' : 'Used…'}</button>`;
+    return html`<button type="button" class="ui-btn" data-action="order" data-result="${i}"${attr('disabled', disabled)}>${onOrder ? 'On order' : 'Used…'}</button>`;
   }
 
   /** First click quotes a used copy (price, deposit, the day it arrives); a second one orders it. */
@@ -297,68 +245,44 @@ export class CataloguePanel extends ModalPanel {
       if (hadFocus) button.focus(); // disabling it dropped the focus
       button.textContent = `${quote.deposit} down?`;
       button.classList.add('sell__armed');
-      this.setStatus(`A used, complete copy of "${game.title}": ${quote.price} coins, ${quote.deposit} down now. It will wait for you on the ${getPlatform(game.platform).shortName} stall in ${days} market day${days === 1 ? '' : 's'}. ${useVerbCap()} again to order.`);
+      this.setStatus(`A used, complete copy of "${game.title}": ${formatCoins(quote.price)}, ${quote.deposit} down now. It will wait for you on the ${getPlatform(game.platform).shortName} stall in ${days} market ${plural(days, 'day')}. ${armedLine('order')}`);
       return;
     }
     const { quote } = this.quoted;
     this.quoted = null;
     const ordered = this.tx.orderUsed(game, quote);
     if (!ordered.ok) {
-      if (ordered.reason === 'short') this.setStatus(`The deposit is ${quote.deposit} coins and you have ${this.wallet.coins}.`, true);
+      if (ordered.reason === 'short') this.setStatus(`The deposit is ${formatCoins(quote.deposit)} and you have ${this.wallet.coins}.`, 'error');
       this.renderResults(this.lastResults);
       return;
     }
     playCoins(2);
-    this.setStatus(`Ordered: "${game.title}" will be on the ${getPlatform(game.platform).shortName} stall, put by for you. ${quote.price - quote.deposit} coins to pay when you collect it.`);
+    this.setStatus(`Ordered: "${game.title}" will be on the ${getPlatform(game.platform).shortName} stall, put by for you. ${formatCoins(quote.price - quote.deposit)} to pay when you collect it.`);
     this.renderResults(this.lastResults);
   }
 
-  /** First click on "Buy" arms the row ("N coins?"), the second within `CONFIRM_MS` orders the new copy: a posted copy cannot be handed back. */
-  private buy(i: number, button: HTMLButtonElement): void {
+  /** First click on "Buy" arms the row ("N coins?"), the second orders the new copy: a posted copy cannot be handed back. */
+  private buy(i: number): void {
     const r = this.lastResults[i];
     if (!r) return;
     const game = this.gameOf(r);
     if (this.store.owns(game.id)) return;
     const price = this.prices.get(i);
     if (price === undefined || !this.settled.has(i)) {
-      this.setStatus('Still working out the price of that one.', true);
+      this.setStatus('Still working out the price of that one.', 'error');
       return;
     }
-    const now = performance.now();
-    if (this.armedBuy?.row !== i || now > this.armedBuy.until) {
-      this.disarmBuy();
-      this.armedBuy = { row: i, until: now + CONFIRM_MS };
-      button.textContent = `${price} coins?`;
-      button.classList.add('sell__armed');
-      this.setStatus(`A new copy of "${game.title}" by post: ${price} coins. ${useVerbCap()} again to order.`);
-      const armed = this.armedBuy;
-      window.setTimeout(() => {
-        if (this.armedBuy === armed) this.disarmBuy();
-      }, CONFIRM_MS + 50);
+    if (!this.buying.press(String(i))) {
+      this.setStatus(`A new copy of "${game.title}" by post: ${formatCoins(price)}. ${armedLine('order')}`);
       return;
     }
-    this.disarmBuy();
     const bought = this.tx.buyMailOrder(game, price);
     if (!bought.ok) {
-      if (bought.reason === 'short') this.setStatus(`You need ${price} coins for "${game.title}".`, true);
+      if (bought.reason === 'short') this.setStatus(`You need ${formatCoins(price)} for "${game.title}".`, 'error');
       return;
     }
     playCoins(purchaseClinks(price));
-    this.setStatus(`Bought "${game.title}" for ${price} coins. The postman brings it on his next round: it will be in the hallway.`);
-  }
-
-  /** The armed "Buy" button (if any) reads what it did before. */
-  private disarmBuy(): void {
-    const armed = this.armedBuy;
-    this.armedBuy = null;
-    if (!armed) return;
-    const button = this.resultsEl.querySelector<HTMLButtonElement>(`.catalogue__row[data-result="${armed.row}"] button[data-action="buy"]`);
-    const r = this.lastResults[armed.row];
-    if (!button || !r) return;
-    const [label, enabled] = this.buttonState(armed.row, this.gameOf(r).id);
-    button.textContent = label;
-    button.disabled = !enabled;
-    button.classList.remove('sell__armed');
+    this.setStatus(`Bought "${game.title}" for ${formatCoins(price)}. The postman brings it on his next round: it will be in the hallway.`);
   }
 
   private gameOf(r: IndexMatch): Game {
@@ -369,11 +293,6 @@ export class CataloguePanel extends ModalPanel {
       region: r.region,
       externalIds: { libretroName: r.name },
     };
-  }
-
-  private setStatus(message: string, isError = false): void {
-    this.statusEl.textContent = message;
-    this.statusEl.classList.toggle('catalogue__status--error', isError);
   }
 }
 

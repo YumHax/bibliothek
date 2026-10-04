@@ -1,0 +1,613 @@
+/*
+ * The People book: an address book held up over the view (`.ui-modal--centre`). A leather cover with coloured index
+ * tabs down its spine, a cream page inside: on the list, a portrait card per person; on a person's page, a Polaroid
+ * with tape, their tier, the gauges and the card's facts on the left, and the notes on the right (their ways, what you
+ * know, gifts, what the relationship does as ink stamps, what they remember as a diary, whom they know as a web).
+ */
+@layer tokens, base, components, panels;
+@layer panels {
+  .people-book {
+    /* The cover and its tabs. */
+    --leather: #3b2418;
+    --leather-edge: #24150e;
+    --stitch: rgba(240, 210, 160, 0.35);
+    --tab-all: #8a7a62;
+    --tab-friends: #c2475f;
+    --tab-building: #6d8b5a;
+    --tab-street: #c9853a;
+    --tab-market: #4f7fa8;
+    --tab-arcade: #8e5cb3;
+    --tab-rivals: #3c3c46;
+    /* The page. */
+    --page: var(--paper-journal);
+    --page-ink: var(--ink-journal);
+    --page-dim: color-mix(in srgb, var(--ink-journal) 62%, transparent);
+    --page-rule: var(--paper-journal-line);
+    --page-wash: var(--paper-journal-wash);
+    padding: var(--sp-4);
+    background: var(--ui-backdrop-panel);
+  }
+  .people-book__book {
+    --card-w: 52rem;
+    width: min(var(--card-w), 100%);
+    max-height: min(46rem, 100%);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    padding: 0.7rem 0.7rem 0.6rem 1.4rem;
+    box-sizing: border-box;
+    color: var(--page-ink);
+    font-size: var(--fs-5);
+    background:
+      repeating-linear-gradient(90deg, transparent 0 6px, var(--stitch) 6px 9px) 0.55rem 0 / 3px 100% no-repeat,
+      radial-gradient(140% 120% at 30% 10%, color-mix(in srgb, var(--leather) 85%, var(--ui-white)), var(--leather) 55%, var(--leather-edge));
+    border: 1px solid var(--leather-edge);
+    border-radius: var(--ui-radius-md) var(--ui-radius) var(--ui-radius) var(--ui-radius-md);
+    box-shadow: var(--ui-shadow-paper), inset 0 0 0 1px var(--tint-08);
+    color-scheme: light;
+  }
+  .people-book .ui-panel__body {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+  }
+  .people-book .ui-panel__status:empty {
+    display: none;
+  }
+  .people-book .ui-panel__footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--sp-2);
+    margin-top: 0;
+    padding-top: 0.55rem;
+  }
+  .people-book .ui-panel__footer .ui-btn {
+    color: var(--ui-gold-pale);
+    border-color: var(--stitch);
+    background: var(--shade-25);
+  }
+
+  /* --- the list: tabs down the spine, the page of cards ----------------------------------------------------- */
+  .people-book__spread {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+    gap: 0;
+  }
+  .people-book__tabs {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+    padding: 0.8rem 0 0;
+    margin-right: -1px;
+  }
+  .people-book__tab {
+    --tab: var(--tab-all);
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    min-width: 7.2rem;
+    padding: 0.4rem 0.7rem 0.4rem 0.55rem;
+    border: 0;
+    border-radius: var(--ui-radius-sm) 0 0 var(--ui-radius-sm);
+    background: color-mix(in srgb, var(--tab) 78%, var(--shade-60));
+    color: var(--ui-white);
+    font: inherit;
+    font-size: var(--fs-3);
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    text-align: left;
+    text-shadow: var(--ui-shadow-text);
+    cursor: pointer;
+    box-shadow: inset -6px 0 8px -6px var(--shade-60);
+    transition: translate var(--dur-hover) var(--ui-ease), background var(--dur-hover) ease;
+  }
+  .people-book__tab:hover {
+    translate: 3px 0;
+  }
+  .people-book__tab--on {
+    background: var(--tab);
+    translate: 6px 0;
+    box-shadow: none;
+  }
+  .people-book__tab--friends { --tab: var(--tab-friends); }
+  .people-book__tab--building { --tab: var(--tab-building); }
+  .people-book__tab--street { --tab: var(--tab-street); }
+  .people-book__tab--market { --tab: var(--tab-market); }
+  .people-book__tab--arcade { --tab: var(--tab-arcade); }
+  .people-book__tab--rivals { --tab: var(--tab-rivals); }
+
+  .people-book__page,
+  .people-book__dossier {
+    position: relative;
+    flex: 1;
+    min-width: 0;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    padding: var(--sp-4) var(--sp-5);
+    background:
+      linear-gradient(90deg, var(--shade-10), transparent 1.2rem),
+      var(--page);
+    border-radius: var(--ui-radius-xs) var(--ui-radius-sm) var(--ui-radius-sm) var(--ui-radius-xs);
+    box-shadow: inset 0 0 30px var(--page-wash), 2px 2px 0 var(--paper-review), 4px 4px 0 var(--paper-news);
+  }
+  .people-book__masthead {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--sp-3);
+    padding-bottom: var(--sp-2);
+    margin-bottom: var(--sp-3);
+    border-bottom: 2px solid var(--page-rule);
+  }
+  .people-book__masthead h2 {
+    display: flex;
+    align-items: center;
+    gap: 0.4em;
+    margin: 0;
+    font-family: var(--ui-font-print);
+    font-weight: 400;
+    font-size: var(--fs-t5);
+  }
+  .people-book__tally {
+    margin: 0;
+    color: var(--page-dim);
+    font-size: var(--fs-3);
+  }
+  .people-book__tally b {
+    color: var(--page-ink);
+  }
+  .people-book__grid {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(17rem, 1fr));
+    gap: var(--sp-2);
+  }
+  .people-book__tile {
+    --tier: var(--page-dim);
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-rows: auto auto;
+    column-gap: var(--sp-3);
+    row-gap: 0.3rem;
+    width: 100%;
+    padding: 0.55rem 0.65rem;
+    border: 1px solid var(--page-rule);
+    border-left: 4px solid var(--tier);
+    border-radius: var(--ui-radius-sm);
+    background: color-mix(in srgb, var(--paper-note) 70%, transparent);
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    box-shadow: 0 1px 2px var(--shade-10);
+    transition: translate var(--dur-hover) var(--ui-ease), box-shadow var(--dur-hover) ease;
+  }
+  .people-book__tile:hover,
+  .people-book__tile:focus-visible {
+    translate: 0 -2px;
+    box-shadow: 0 6px 14px var(--shade-25);
+  }
+  .people-book__face {
+    grid-row: span 2;
+    padding: 2px;
+    border-radius: 50%;
+    background: var(--tier);
+    align-self: center;
+  }
+  .people-book__who {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+  .people-book__who b {
+    font-family: var(--ui-font-print);
+    font-weight: 400;
+    font-size: var(--fs-8);
+    line-height: 1.15;
+  }
+  .people-book__who small {
+    overflow: hidden;
+    color: var(--page-dim);
+    font-size: var(--fs-2);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .people-book__line {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.4rem;
+    margin-top: 0.25rem;
+  }
+  .people-book__flag {
+    display: inline-grid;
+    place-items: center;
+    color: var(--page-dim);
+  }
+  .people-book__flag--cake {
+    color: var(--ink-gold);
+  }
+  .people-book__gauges {
+    display: grid;
+    gap: 0.1rem;
+  }
+  .people-book__blank,
+  .people-book__hint {
+    margin: var(--sp-3) 0 0;
+    color: var(--page-dim);
+    font-family: var(--ui-font-hand);
+    font-size: var(--fs-4);
+  }
+
+  /* On the page, the shared pills and gauges take the ink. */
+  .people-book .social-tier {
+    color: color-mix(in srgb, var(--tier) 70%, var(--page-ink));
+    background: color-mix(in srgb, var(--tier) 16%, transparent);
+  }
+  .people-book .social-mood {
+    --mood: var(--page-dim);
+  }
+  .people-book .social-mood--good { --mood: var(--ink-gold); }
+  .people-book .social-mood--annoyed { --mood: var(--ink-red); }
+  .people-book .social-gauge--trust i {
+    background: var(--page-wash);
+    box-shadow: inset 0 0 0 1px var(--page-rule);
+  }
+  .people-book .social-gauge__tick {
+    background: var(--page-rule);
+  }
+
+  /* --- a person's page --------------------------------------------------------------------------------------- */
+  .people-book__dossier {
+    display: grid;
+    grid-template-columns: 15rem minmax(0, 1fr);
+    gap: var(--sp-5);
+    align-items: start;
+  }
+  .people-book__id {
+    position: sticky;
+    top: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-3);
+  }
+  .people-book__polaroid {
+    position: relative;
+    margin: 0.4rem auto 0;
+    padding: 0.55rem 0.55rem 0.35rem;
+    background: var(--ui-white);
+    box-shadow: 0 6px 16px var(--shade-25), 0 1px 2px var(--shade-25);
+    rotate: -2deg;
+  }
+  .people-book__polaroid .social-portrait {
+    border-radius: var(--ui-radius-2xs);
+  }
+  .people-book__polaroid figcaption {
+    margin-top: 0.3rem;
+    font-family: var(--ui-font-hand);
+    font-size: var(--fs-6);
+    text-align: center;
+  }
+  .people-book__tape {
+    position: absolute;
+    top: -0.55rem;
+    left: 50%;
+    width: 4.2rem;
+    height: 1.1rem;
+    translate: -50% 0;
+    rotate: 3deg;
+    background: var(--tint-50);
+    border: 1px solid var(--tint-75);
+    box-shadow: 0 1px 2px var(--shade-10);
+  }
+  .people-book__ribbon {
+    margin: 0;
+    text-align: center;
+  }
+  .people-book__ribbon .social-tier {
+    font-size: var(--fs-4);
+    padding: 0.2rem 0.85rem;
+  }
+  .people-book__meters {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    align-items: center;
+    column-gap: var(--sp-2);
+    color: var(--page-dim);
+    font-size: var(--fs-2);
+  }
+  .people-book__meters > span:not(.social-gauge) {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3em;
+  }
+  .people-book__bond {
+    margin: -0.3rem 0 0;
+    color: var(--page-dim);
+    font-size: var(--fs-2);
+    font-style: italic;
+    text-align: center;
+  }
+  .people-book__bond em {
+    color: var(--ink-gold);
+  }
+  .people-book__card {
+    display: grid;
+    grid-template-columns: 1.3rem 1fr;
+    gap: 0.35rem 0.4rem;
+    margin: 0;
+    padding: var(--sp-2) var(--sp-3);
+    border: 1px dashed var(--page-rule);
+    border-radius: var(--ui-radius-sm);
+    font-size: var(--fs-3);
+  }
+  .people-book__card dt {
+    color: var(--page-dim);
+  }
+  .people-book__card dd {
+    margin: 0;
+  }
+
+  .people-book__title {
+    margin-bottom: var(--sp-2);
+    padding-bottom: var(--sp-2);
+    border-bottom: 2px solid var(--page-rule);
+  }
+  .people-book__title h2 {
+    margin: 0;
+    font-family: var(--ui-font-print);
+    font-weight: 400;
+    font-size: var(--fs-t6);
+    line-height: 1.05;
+  }
+  .people-book__title p {
+    margin: 0.2rem 0 0;
+    color: var(--page-dim);
+    font-variant: small-caps;
+    letter-spacing: 0.05em;
+  }
+  .people-book__notes h3 {
+    margin: var(--sp-4) 0 0.4rem;
+    color: var(--ink-red);
+    font-size: var(--fs-1);
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+  .people-book__traits {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(9rem, 1fr));
+    gap: 0.35rem;
+  }
+  .people-book__trait {
+    display: flex;
+    flex-direction: column;
+    padding: 0.35rem 0.55rem;
+    border: 1px solid var(--page-rule);
+    border-radius: var(--ui-radius-sm);
+    background: var(--paper-note);
+  }
+  .people-book__trait b {
+    font-size: var(--fs-4);
+  }
+  .people-book__trait small {
+    color: var(--page-dim);
+    font-size: var(--fs-1);
+  }
+  .people-book__trait--unknown {
+    border-style: dashed;
+    background: transparent;
+    color: var(--page-dim);
+  }
+  .people-book__facts {
+    margin: 0;
+    padding-left: 1.1rem;
+    font-family: var(--ui-font-hand);
+    font-size: var(--fs-5);
+    line-height: 1.6;
+  }
+  .people-book__unknown {
+    color: var(--page-dim);
+    font-family: var(--ui-font-hand);
+  }
+  .people-book__facts .people-book__unknown {
+    list-style: '? ';
+  }
+  .people-book__gifts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    margin: 0;
+  }
+  .people-book__gift {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3em;
+    padding: 0.15rem 0.55rem;
+    border-radius: var(--ui-radius-pill);
+    background: color-mix(in srgb, var(--tab-friends) 14%, transparent);
+    color: color-mix(in srgb, var(--tab-friends) 75%, var(--page-ink));
+    font-size: var(--fs-3);
+  }
+  .people-book__gift--no {
+    background: var(--page-wash);
+    color: var(--page-dim);
+    text-decoration: line-through;
+  }
+
+  /* What it does: ink stamps. Earned, solid; next up, dashed and faint; the bad ones, red. */
+  .people-book__stamps {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr));
+    gap: var(--sp-2);
+  }
+  .people-book__stamp {
+    --stamp: var(--tier);
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    padding: 0.4rem 0.6rem;
+    border: 2px solid color-mix(in srgb, var(--stamp) 75%, var(--page-ink));
+    border-radius: var(--ui-radius-sm);
+    color: color-mix(in srgb, var(--stamp) 60%, var(--page-ink));
+    font-size: var(--fs-3);
+    line-height: 1.3;
+  }
+  .people-book__stamp small {
+    font-size: var(--fs-0);
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+  .people-book__stamp--on {
+    background: color-mix(in srgb, var(--stamp) 10%, transparent);
+    rotate: -0.6deg;
+  }
+  .people-book__stamp--next {
+    border-style: dashed;
+    border-color: var(--page-rule);
+    color: var(--page-dim);
+  }
+  .people-book__stamp--bad,
+  .people-book__stamp--risk {
+    --stamp: var(--ink-red);
+  }
+  .people-book__stamp--risk {
+    border-style: dashed;
+    opacity: 0.75;
+  }
+
+  /* They remember: a diary, a day a line. */
+  .people-book__diary {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    background: repeating-linear-gradient(180deg, transparent 0, transparent calc(1.7rem - 1px), var(--paper-rules) calc(1.7rem - 1px), var(--paper-rules) 1.7rem);
+  }
+  .people-book__diary li {
+    display: grid;
+    grid-template-columns: 3.6rem 1fr;
+    align-items: baseline;
+    min-height: 1.7rem;
+    line-height: 1.7rem;
+    font-family: var(--ui-font-hand);
+  }
+  .people-book__diary time {
+    color: var(--page-dim);
+    font-family: var(--ui-font-body);
+    font-size: var(--fs-1);
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+  }
+  .people-book__diary--sore span {
+    color: var(--ink-red);
+  }
+
+  /* Who they know: their face in the middle, the others round it on threads. */
+  .people-book__web {
+    position: relative;
+    height: 16rem;
+    margin-top: var(--sp-2);
+    border-radius: var(--ui-radius-sm);
+    background: radial-gradient(circle at 50% 50%, var(--page-wash), transparent 70%);
+  }
+  .people-book__web svg {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    overflow: visible;
+  }
+  .people-book__thread {
+    stroke-width: var(--weight);
+    stroke-linecap: round;
+    vector-effect: non-scaling-stroke;
+  }
+  .people-book__thread--warm { stroke: color-mix(in srgb, var(--tab-friends) 70%, transparent); }
+  .people-book__thread--even { stroke: var(--page-rule); stroke-dasharray: 4 4; }
+  .people-book__thread--cold { stroke: var(--ink-red); stroke-dasharray: 2 5; }
+  .people-book__hub,
+  .people-book__node {
+    position: absolute;
+    translate: -50% -50%;
+  }
+  .people-book__hub {
+    left: 50%;
+    top: 50%;
+    padding: 3px;
+    border-radius: 50%;
+    background: var(--tier);
+    box-shadow: 0 3px 10px var(--shade-25);
+  }
+  .people-book__node {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.1rem;
+    padding: 0.2rem 0.35rem;
+    border: 0;
+    border-radius: var(--ui-radius-sm);
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+    transition: background var(--dur-hover) ease;
+  }
+  .people-book__node:hover,
+  .people-book__node:focus-visible {
+    background: var(--page-wash);
+  }
+  .people-book__node .social-portrait {
+    box-shadow: 0 0 0 2px var(--paper-note), 0 2px 6px var(--shade-25);
+  }
+  .people-book__node b {
+    font-size: var(--fs-2);
+    white-space: nowrap;
+  }
+  .people-book__node small {
+    color: var(--page-dim);
+    font-size: var(--fs-0);
+    white-space: nowrap;
+  }
+
+  @media (max-width: 760px) {
+    .people-book__spread {
+      flex-direction: column;
+    }
+    .people-book__tabs {
+      flex-direction: row;
+      flex-wrap: wrap;
+      padding: 0 0 0.3rem;
+    }
+    .people-book__tab {
+      min-width: 0;
+      border-radius: var(--ui-radius-sm) var(--ui-radius-sm) 0 0;
+    }
+    .people-book__tab--on,
+    .people-book__tab:hover {
+      translate: 0 3px;
+    }
+    .people-book__dossier {
+      grid-template-columns: 1fr;
+    }
+    .people-book__id {
+      position: static;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .people-book__tab,
+    .people-book__tile,
+    .people-book__node {
+      transition: none;
+    }
+  }
+}

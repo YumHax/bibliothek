@@ -1,6 +1,6 @@
 import type * as THREE from 'three';
 import type { AmbientVoice } from '@/audio/ambient';
-import type { ProximityVolumeOptions } from '@/video/proximityVolume';
+import type { HearingProfile } from '@/audio/hearing';
 import type { SoundOcclusion } from '../acoustics/SoundOcclusion';
 import { PointSound } from '../acoustics/PointSound';
 import type { BuildContext } from '../buildContext';
@@ -17,6 +17,6 @@ export function heardBy({ listener, acoustics }: Hearing): { listener: THREE.Obj
 }
 
 /** A `PointSound` for `voice`, heard from the context's listener through its walls; `volume` overrides the distance model. */
-export function pointSound(hearing: Hearing, voice: AmbientVoice, volume?: ProximityVolumeOptions): PointSound {
+export function pointSound(hearing: Hearing, voice: AmbientVoice, volume?: HearingProfile): PointSound {
   return new PointSound(voice, volume ? { ...heardBy(hearing), volume } : heardBy(hearing));
 }

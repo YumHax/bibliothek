@@ -1,10 +1,10 @@
 import * as THREE from 'three';
 import { type Rng, azimuthOf, azimuthX, heightY } from './Sheet';
-import { between, pick } from './paint';
 import { LAMP_LINE, NEAR_KERB, PARK_EDGE, nearestLamp } from './plan';
 import { LAMP_HEIGHT } from '@/world/city/frontage';
 import { currentSeason } from '@/time/season';
 import { type AtlasPens, type Cell, type LifeEnv, type LifeLayer, type Push, acrossSign, glowDot, hoursRamp, pushStanding } from './sprites';
+import { between, pick } from '@/random';
 
 /** Lamp heads the bats hunt round (posts of `paintStreet` near the windows: far pavements and ours), metres; `LAMP_HEAD` up. */
 const BAT_LAMP_SPOTS: readonly [number, number][] = [

@@ -5,13 +5,15 @@ import type { SessionActions } from '@/game/SessionActions';
 import { audioBus, startedAudioContext } from '@/audio/audioContext';
 import { Prop } from '../props/Prop';
 import type { OccupancyAware } from '../Furniture';
-import { STAIRWELL_PLAN as plan, STOREYS, landingY } from './stairwellPlan';
+import { STAIRWELL_PLAN as plan } from './stairwellPlan';
+import { STOREYS, landingY } from '@/world/measures/building';
 import { liftGate } from './stairRoutes';
 import { mainsOn } from '@/building/mains';
 import { coproChoice } from '@/building/coproState';
 import { AtticRide, type LiftCarState, type LiftPhase } from './liftAttic';
 import { CAGE, GATE_HEIGHT, STOPS, buildCage, buildCar, panelY, panelZ } from './liftBody';
 import { LiftButton, PANEL_BUTTON } from './LiftButton';
+import { loudness } from '@/audio/hearing';
 
 interface LiftOptions {
   /** The zone's collision set: the gates' boxes come and go as they open and shut (world space). */
@@ -422,24 +424,10 @@ export class Lift extends Prop implements Updatable, OccupancyAware, LiftRides {
    * straight back: they have to step out first.
    */
   private autoPilot(dt: number): void {
-    this.options.listener.getWorldPosition(this.eye);
-    this.worldToLocal(this.eye);
-    const feet = this.eye.y - EYE;
-    const inCar = this.floorAt(this.eye.x, this.eye.z, feet) !== null;
-    this.playerAboard = inCar;
-    if (!inCar) {
-      this.armed = true;
-      this.insideFor = 0;
-    }
-    const at = inCar ? null : this.landingOf(this.eye.x, this.eye.z, feet);
+    const { inCar, at } = this.locatePlayer();
     if (this.attic.active) return;
     if (this.target !== this.stop) {
-      // Leaving by itself, and the rider stepped back out onto the landing: it stays for them.
-      if (this.autoDeparture && at === this.stop && (this.phase === 'open' || this.phase === 'closing')) {
-        this.target = this.stop;
-        this.autoDeparture = false;
-        if (this.phase === 'closing') this.phase = 'opening';
-      }
+      this.stayForRider(at);
       return;
     }
     if (this.phase === 'opening' || this.phase === 'closing' || this.phase === 'moving') return;
@@ -450,10 +438,43 @@ export class Lift extends Prop implements Updatable, OccupancyAware, LiftRides {
       return;
     }
     if (this.phase === 'shut' && at === this.stop) {
-      const gate = liftGate();
-      if (Math.hypot(this.eye.x - gate.x, this.eye.z - gate.z) < OPEN_NEAR) this.phase = 'opening';
+      this.openForArrival();
       return;
     }
+    this.departWithRider(dt, inCar);
+  }
+
+  /** Where the player stands, car-local: aboard (stepping out re-arms the departure), or on which landing. */
+  private locatePlayer(): { inCar: boolean; at: number | null } {
+    this.options.listener.getWorldPosition(this.eye);
+    this.worldToLocal(this.eye);
+    const feet = this.eye.y - EYE;
+    const inCar = this.floorAt(this.eye.x, this.eye.z, feet) !== null;
+    this.playerAboard = inCar;
+    if (!inCar) {
+      this.armed = true;
+      this.insideFor = 0;
+    }
+    return { inCar, at: inCar ? null : this.landingOf(this.eye.x, this.eye.z, feet) };
+  }
+
+  /** Leaving by itself, and the rider stepped back out onto the landing: it stays for them. */
+  private stayForRider(at: number | null): void {
+    if (this.autoDeparture && at === this.stop && (this.phase === 'open' || this.phase === 'closing')) {
+      this.target = this.stop;
+      this.autoDeparture = false;
+      if (this.phase === 'closing') this.phase = 'opening';
+    }
+  }
+
+  /** Shut at the landing the player stands on: the gate folds open for whoever walks up to it. */
+  private openForArrival(): void {
+    const gate = liftGate();
+    if (Math.hypot(this.eye.x - gate.x, this.eye.z - gate.z) < OPEN_NEAR) this.phase = 'opening';
+  }
+
+  /** Open at either end with the player aboard and clear of the gateway: off to the other end a beat later. */
+  private departWithRider(dt: number, inCar: boolean): void {
     if (this.phase === 'open' && inCar && this.armed && isEnd(this.stop) && !this.inGateway(this.stop)) {
       this.insideFor += dt;
       if (this.insideFor >= DEPART_AFTER) {
@@ -549,7 +570,7 @@ export class Lift extends Prop implements Updatable, OccupancyAware, LiftRides {
     this.options.listener.getWorldPosition(this.ear);
     this.car.getWorldPosition(this.here);
     const d = this.ear.distanceTo(this.here);
-    const level = this.occupied && this.running && mainsOn() ? 0.05 / (1 + (d * d) / 20) : 0;
+    const level = this.occupied && this.running && mainsOn() ? 0.05 * loudness(d, { shape: 'inverseSquare', referenceDistance: Math.sqrt(20), maxDistance: Infinity }) : 0;
     this.hum.gain.gain.setTargetAtTime(level, ctx.currentTime, 0.3);
     // The climb past the top: the motor labours, lower.
     this.hum.osc.frequency.setTargetAtTime(this.phase === 'climbing' ? 38 : this.phase === 'moving' ? 55 : 45, ctx.currentTime, 0.4);
@@ -568,7 +589,7 @@ export class Lift extends Prop implements Updatable, OccupancyAware, LiftRides {
     osc.frequency.setValueAtTime(420, t);
     osc.frequency.exponentialRampToValueAtTime(90, t + 0.12);
     const gain = ctx.createGain();
-    gain.gain.setValueAtTime(0.08 / (1 + (d * d) / 12), t);
+    gain.gain.setValueAtTime(0.08 * loudness(d, { shape: 'inverseSquare', referenceDistance: Math.sqrt(12), maxDistance: Infinity }), t);
     gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.16);
     osc.connect(gain).connect(audioBus(ctx, 'world'));
     osc.start(t);

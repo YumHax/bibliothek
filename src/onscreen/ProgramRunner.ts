@@ -40,8 +40,8 @@ interface ProgramListener {
 /**
  * Runs one `ScreenProgram` at a time on a screen of the flat: paints its canvas onto the glass
  * (`VideoScreen.showFeed`), routes its sound through the set (level and pan follow the listener, the screens'
- * bus), reads pad one from the keys and the controller while the player holds the pad (`setHolding`) and pad two
- * from whoever holds it (`setSecondPad`), holds it still while paused or dormant, and switches it off with the set.
+ * bus), reads pad one from the keys and the first controller while the player holds the pad (`setHolding`) and pad
+ * two from a second controller (a program with `players: 2`), holds it still while paused or dormant, and switches it off with the set.
  * Ticked by the engine; `game/Screens.playOn` starts it, `game/ProgramPlay` parks the player. Docs: docs/media.md
  * "Programs on the screen".
  */
@@ -59,7 +59,6 @@ export class ProgramRunner implements Updatable {
   private paused = false;
   /** Whether the program was last told to hold still (pause, dormant zone), so it hears each change once. */
   private heldStill = false;
-  private secondPad: (() => Pad) | null = null;
   private offState: (() => void) | null = null;
   private readonly listeners = new Set<ProgramListener>();
 
@@ -166,14 +165,6 @@ export class ProgramRunner implements Updatable {
     this.paused = paused;
   }
 
-  /**
-   * Who holds pad two: a friend's hands (a function read every frame), or null (nobody: `NO_PAD`). A games night
-   * hands it the guest's controls; a program with `players: 2` reads it.
-   */
-  setSecondPad(source: (() => Pad) | null): void {
-    this.secondPad = source;
-  }
-
   update(dt: number): void {
     const { program, ctx, texture, feed } = this;
     if (!program || !ctx || !texture || !feed) return;
@@ -190,7 +181,7 @@ export class ProgramRunner implements Updatable {
       if (still && this.ready) this.paint(program, ctx, texture);
     }
     if (still) return;
-    const pads: [Pad, Pad] = [this.holding ? this.readPad() : NO_PAD, program.players === 2 ? (this.secondPad?.() ?? NO_PAD) : NO_PAD];
+    const pads: [Pad, Pad] = [this.holding ? this.readPad(0) : NO_PAD, program.players === 2 && this.holding ? this.readPad(1) : NO_PAD];
     program.update(Math.min(dt, MAX_DT), pads);
     this.paint(program, ctx, texture);
   }
@@ -202,12 +193,8 @@ export class ProgramRunner implements Updatable {
 
   /** The set's speaker: a gain (its level) and a pan into the screens' bus; null before any click started the audio. */
   private audioOut(): { ctx: AudioContext; out: AudioNode } | null {
-    let ctx: AudioContext;
-    try {
-      ctx = audioContext();
-    } catch {
-      return null;
-    }
+    const ctx = audioContext();
+    if (!ctx) return null;
     const gain = ctx.createGain();
     gain.gain.value = 0;
     const panner = ctx.createStereoPanner();
@@ -217,11 +204,11 @@ export class ProgramRunner implements Updatable {
     return { ctx, out: gain };
   }
 
-  /** Pad one: the keys (any of each button's) or the controller's buttons and left stick. */
-  private readPad(): Pad {
+  /** Pad `index`: the first pad's keys (any of each button's) and the first controller, the second controller for pad two; buttons and left stick. */
+  private readPad(index: 0 | 1): Pad {
     const pad: Pad = { ...NO_PAD };
-    for (const button of Object.keys(PAD_KEYS) as (keyof Pad)[]) pad[button] = this.input.isDown(...PAD_KEYS[button]);
-    const gamepad = firstGamepad();
+    if (index === 0) for (const button of Object.keys(PAD_KEYS) as (keyof Pad)[]) pad[button] = this.input.isDown(...PAD_KEYS[button]);
+    const gamepad = gamepadAt(index);
     if (gamepad) {
       const held = (i: number): boolean => gamepad.buttons[i]?.pressed ?? false;
       for (const button of Object.keys(GAMEPAD) as (keyof typeof GAMEPAD)[]) if (held(GAMEPAD[button])) pad[button] = true;
@@ -235,18 +222,18 @@ export class ProgramRunner implements Updatable {
   }
 }
 
-/** The first connected controller, a standard-mapped one first; null without the API. */
-function firstGamepad(): Gamepad | null {
+/** The `index`-th connected controller (standard-mapped ones first): pad one's, then pad two's; null without one. */
+function gamepadAt(index: number): Gamepad | null {
   if (typeof navigator.getGamepads !== 'function') return null;
-  let fallback: Gamepad | null = null;
+  const standard: Gamepad[] = [];
+  const others: Gamepad[] = [];
   try {
     for (const pad of navigator.getGamepads()) {
       if (!pad || !pad.connected) continue;
-      if (pad.mapping === 'standard') return pad;
-      fallback ??= pad;
+      (pad.mapping === 'standard' ? standard : others).push(pad);
     }
   } catch {
     return null;
   }
-  return fallback;
+  return [...standard, ...others][index] ?? null;
 }

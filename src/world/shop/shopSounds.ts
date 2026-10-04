@@ -3,6 +3,8 @@ import { audioBus, startedAudioContext } from '@/audio/audioContext';
 import { brownNoise, whiteNoise } from '@/audio/noise';
 import { RadioVoice } from '@/audio/kitchenSounds';
 import { birdNote } from '@/audio/street/streetVoices';
+import { noiseBurst, partials, rand } from '@/audio/synth';
+import { random } from '@/random';
 
 /*
  * What the walk-in shops sound like, synthesised like the flat's own room sounds (`audio/ambient`):
@@ -119,7 +121,7 @@ export class PetShopNoises extends Voice {
   /** A budgie's burst: three to eight quick warbled notes, high and bright. */
   private chatter(ctx: AudioContext, out: AudioNode): void {
     let at = ctx.currentTime + 0.02;
-    const notes = 3 + Math.floor(Math.random() * 6);
+    const notes = 3 + Math.floor(random() * 6);
     for (let i = 0; i < notes; i++) {
       const from = rand(2600, 4200);
       const length = rand(0.04, 0.1);
@@ -205,6 +207,11 @@ export class ShopRadio implements AmbientVoice {
     this.radio.update();
   }
 
+  /** Where the set stands: the side it is heard from and the walls between (the radio's own `setSpatial`). */
+  setSpatial(pan: number, walls: number): void {
+    this.radio.setSpatial(pan, walls);
+  }
+
   setZoneActive(active: boolean): void {
     if (!active) this.radio.setLevel(0);
   }
@@ -213,6 +220,9 @@ export class ShopRadio implements AmbientVoice {
     this.radio.dispose();
   }
 }
+
+/** The shop's bursts strike from silence in 3 ms and die to 0.0001, cut from the first 0.3 s of the noise, as they always did. */
+const GRAIN = { attack: 0.003, curve: 'exponential', floor: 0.0001, offset: 0 } as const;
 
 /** The till after a sale: the drawer's bell (two bright partials ringing out) and its rattle as it shoots open. */
 export function playTill(level = 0.12): void {
@@ -223,26 +233,15 @@ export function playTill(level = 0.12): void {
   out.gain.value = level;
   out.connect(audioBus(ctx, 'world'));
   // The keys: two dry clicks.
-  for (const at of [0, 0.09]) noiseBurst(ctx, out, now + at, 2600, 4, 0.5, 0.02);
-  // The bell.
-  for (const [frequency, peak] of [
+  for (const at of [0, 0.09]) noiseBurst(ctx, out, now + at, { ...GRAIN, band: 2600, q: 4, level: 0.5, length: 0.02, noise: whiteNoise(ctx, 0.3) });
+  // The bell: three partials ringing out over nearly a second.
+  partials(ctx, out, now + 0.2, [
     [2093, 0.7],
     [2637, 0.45],
     [4186, 0.15],
-  ] as const) {
-    const osc = ctx.createOscillator();
-    osc.type = 'sine';
-    osc.frequency.value = frequency;
-    const env = ctx.createGain();
-    env.gain.setValueAtTime(0.0001, now + 0.2);
-    env.gain.exponentialRampToValueAtTime(peak, now + 0.203);
-    env.gain.exponentialRampToValueAtTime(0.0001, now + 1.1);
-    osc.connect(env).connect(out);
-    osc.start(now + 0.2);
-    osc.stop(now + 1.15);
-  }
+  ], { length: 0.9, attack: 0.003, curve: 'exponential', floor: 0.0001, tail: 0.05 });
   // The drawer: a rattle of coins and wood.
-  noiseBurst(ctx, out, now + 0.24, 1400, 1.5, 0.6, 0.16);
+  noiseBurst(ctx, out, now + 0.24, { ...GRAIN, band: 1400, q: 1.5, level: 0.6, length: 0.16, noise: whiteNoise(ctx, 0.3) });
   window.setTimeout(() => out.disconnect(), 1500);
 }
 
@@ -261,10 +260,10 @@ export function playChore(kind: ChoreSound, level: number): void {
     case 'water':
       // Water through the rose onto leaves: a hiss rising and falling over a second and a half, patters in it.
       noiseSwell(ctx, out, now, 4200, 0.8, 0.25, 1.6);
-      for (let t = 0.1; t < 1.5; t += rand(0.03, 0.09)) noiseBurst(ctx, out, now + t, rand(1800, 3400), 6, rand(0.05, 0.15), 0.02);
+      for (let t = 0.1; t < 1.5; t += rand(0.03, 0.09)) noiseBurst(ctx, out, now + t, { ...GRAIN, band: rand(1800, 3400), q: 6, level: rand(0.05, 0.15), length: 0.02, noise: whiteNoise(ctx, 0.3) });
       break;
     case 'feed':
-      for (let i = 0; i < 3; i++) noiseBurst(ctx, out, now + i * 0.16, 3600, 2, 0.35, 0.07);
+      for (let i = 0; i < 3; i++) noiseBurst(ctx, out, now + i * 0.16, { ...GRAIN, band: 3600, q: 2, level: 0.35, length: 0.07, noise: whiteNoise(ctx, 0.3) });
       break;
     case 'tap':
       for (const at of [0, 0.22]) {
@@ -278,7 +277,7 @@ export function playChore(kind: ChoreSound, level: number): void {
         osc.connect(env).connect(out);
         osc.start(now + at);
         osc.stop(now + at + 0.1);
-        noiseBurst(ctx, out, now + at, 900, 2, 0.3, 0.04);
+        noiseBurst(ctx, out, now + at, { ...GRAIN, band: 900, q: 2, level: 0.3, length: 0.04, noise: whiteNoise(ctx, 0.3) });
       }
       break;
   }
@@ -302,23 +301,6 @@ function noiseSwell(ctx: AudioContext, out: AudioNode, at: number, band: number,
   source.stop(at + length + 0.05);
 }
 
-/** A band of white noise at `at`, decaying over `decay` s. */
-function noiseBurst(ctx: AudioContext, out: AudioNode, at: number, band: number, q: number, level: number, decay: number): void {
-  const source = ctx.createBufferSource();
-  source.buffer = whiteNoise(ctx, 0.3);
-  const filter = ctx.createBiquadFilter();
-  filter.type = 'bandpass';
-  filter.frequency.value = band;
-  filter.Q.value = q;
-  const env = ctx.createGain();
-  env.gain.setValueAtTime(0.0001, at);
-  env.gain.exponentialRampToValueAtTime(level, at + 0.003);
-  env.gain.exponentialRampToValueAtTime(0.0001, at + decay);
-  source.connect(filter).connect(env).connect(out);
-  source.start(at);
-  source.stop(at + decay + 0.02);
-}
-
 /**
  * A fluorescent tube's ballast (`common/TubeBatten`): a thin mains hum, 100 Hz and its harmonics through a band, and a
  * tick of crackle when the tube stutters. Silent while the tubes are off (`setLit`).
@@ -339,7 +321,7 @@ export class TubeHum extends Voice {
 
   /** The tube drops out for a moment: a few ticks of crackle. */
   stutter(): void {
-    if (this.lit) this.crackles = 3 + Math.floor(Math.random() * 4);
+    if (this.lit) this.crackles = 3 + Math.floor(random() * 4);
   }
 
   protected build(ctx: AudioContext, out: GainNode): void {
@@ -365,12 +347,9 @@ export class TubeHum extends Voice {
   }
 
   protected override tick(ctx: AudioContext): void {
-    if (this.crackles <= 0 || !this.master || Math.random() > 0.3) return;
+    if (this.crackles <= 0 || !this.master || random() > 0.3) return;
     this.crackles--;
-    noiseBurst(ctx, this.master, ctx.currentTime, rand(2500, 4500), 4, rand(0.3, 0.6), 0.03);
+    noiseBurst(ctx, this.master, ctx.currentTime, { ...GRAIN, band: rand(2500, 4500), q: 4, level: rand(0.3, 0.6), length: 0.03, noise: whiteNoise(ctx, 0.3) });
   }
 }
 
-function rand(min: number, max: number): number {
-  return min + Math.random() * (max - min);
-}

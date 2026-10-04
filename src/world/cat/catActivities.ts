@@ -2,8 +2,8 @@ import * as THREE from 'three';
 import type { CatMind } from './CatMind';
 import { TROT_SPEED, WALK_SPEED } from './CatMotion';
 import type { WaterBowlLike } from './types';
-import { isElevated, pickRestingSpot, pickWeighted } from './spots';
-import { chance, rand } from './random';
+import { isElevated, pickRestingSpot } from './spots';
+import { between, chance, pickWeighted, random } from '@/random';
 
 /** What the cat decides to do next when idle (or is made to do). */
 export type Activity =
@@ -141,7 +141,7 @@ export const ACTIVITIES: Record<Activity, ActivityDef> = {
       // Another room of the flat, if the doors on the way are open: a look round, then back to its day.
       const visits = mind.ctx.visits;
       if (!visits?.length) return false;
-      mind.goal.copy(visits[Math.floor(Math.random() * visits.length)]!);
+      mind.goal.copy(visits[Math.floor(random() * visits.length)]!);
       mind.goal.x += THREE.MathUtils.randFloatSpread(0.5);
       mind.goal.z += THREE.MathUtils.randFloatSpread(0.5);
       if (mind.ctx.motion.walkTo(mind.goal, WALK_SPEED)) {
@@ -158,7 +158,7 @@ export const ACTIVITIES: Record<Activity, ActivityDef> = {
     begin(mind) {
       const windows = mind.ctx.windows;
       if (!windows?.length) return false;
-      const window = windows[Math.floor(Math.random() * windows.length)]!;
+      const window = windows[Math.floor(random() * windows.length)]!;
       window.lookoutSpot(mind.goal).setY(0);
       mind.setFacing(window.getWorldPosition(mind.tmp));
       mind.goTo(mind.goal, 'window');
@@ -195,7 +195,7 @@ export const ACTIVITIES: Record<Activity, ActivityDef> = {
       // A new bout, unless this is the next round of one (straight from watching the ball roll).
       if (mind.state !== 'toyWatch') {
         mind.bout.done = 0;
-        mind.bout.of = chance(0.5) ? 2 : 3;
+        mind.bout.of = chance(random, 0.5) ? 2 : 3;
       }
       const { tmp, tmp2, goal } = mind;
       toy.getWorldPosition(tmp).setY(0);
@@ -231,7 +231,7 @@ export const ACTIVITIES: Record<Activity, ActivityDef> = {
     weight: (mind) => 0.05 + 0.1 * active(mind),
     begin(mind) {
       mind.bout.done = 0;
-      mind.bout.of = Math.floor(rand(3, 6));
+      mind.bout.of = Math.floor(between(random, 3, 6));
       mind.enter('flyStalk');
       return true;
     },
@@ -240,9 +240,9 @@ export const ACTIVITIES: Record<Activity, ActivityDef> = {
     weight: (mind) => 0.3 + 0.3 * active(mind),
     begin(mind) {
       const { seats, nav } = mind.ctx;
-      const seat = seats[Math.floor(Math.random() * seats.length)];
+      const seat = seats[Math.floor(random() * seats.length)];
       if (!seat) return false;
-      const side = chance(0.5) ? 1 : -1;
+      const side = chance(random, 0.5) ? 1 : -1;
       for (const s of [side, -side]) {
         seat.localToWorld(mind.goal.set(s * 0.55, 0, -0.2)).setY(0);
         seat.localToWorld(mind.rubEnd.set(s * 0.55, 0, 0.25)).setY(0);
@@ -333,7 +333,8 @@ function recency(mind: CatMind, activity: Activity): number {
 /** An idle cat's weighted pick; `wander` when nothing weighs anything. */
 export function pickActivity(mind: CatMind): Activity {
   const options = CHOOSABLE.map((activity) => ({ activity, weight: (ACTIVITIES[activity].weight?.(mind) ?? 0) * recency(mind, activity) }));
-  return pickWeighted(options)?.activity ?? 'wander';
+  const weighted = options.filter((o) => o.weight > 0);
+  return weighted.length ? pickWeighted(random, weighted, (o) => o.weight).activity : 'wander';
 }
 
 /** Away from the player: trotting when scared, walking off when merely fed up. */
@@ -355,7 +356,7 @@ function pointAwayFromPlayer(mind: CatMind, out: THREE.Vector3, minDistance: num
       bestDistance = d;
       out.copy(tmp);
     }
-    if (d >= minDistance && d < minDistance + 1.5 && chance(0.5)) break;
+    if (d >= minDistance && d < minDistance + 1.5 && chance(random, 0.5)) break;
   }
   return bestDistance >= 0;
 }

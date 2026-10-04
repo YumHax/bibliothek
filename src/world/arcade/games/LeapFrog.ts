@@ -1,5 +1,7 @@
-import { type ArcadeControls, NO_CONTROLS, SCREEN_H, SCREEN_W, clamp, drawText } from './ArcadeGame';
+import { clamp } from '@/math/scalar';
+import { type ArcadeControls, NO_CONTROLS, SCREEN_H, SCREEN_W, drawText } from './ArcadeGame';
 import { BaseGame } from './BaseGame';
+import { random } from '@/random';
 
 const ROUND_SECONDS = 15;
 const CELL = 16;
@@ -215,7 +217,7 @@ export class LeapFrog extends BaseGame {
       return true;
     };
     const pick = (d: Dir): ArcadeControls => (this.keys.isHeld(d) ? out : { ...out, [d]: true });
-    if (lands('up') || Math.random() < (1 - skill) * 0.002) return pick('up');
+    if (lands('up') || random() < (1 - skill) * 0.002) return pick('up');
     let staying = true;
     for (let t = 0; t <= margin + 0.1; t += 0.06) if (!this.safe(this.frogRow, this.rideX(this.frogRow, this.frogX, t), t)) staying = false;
     // On a log drifting to the edge: step back towards the middle.

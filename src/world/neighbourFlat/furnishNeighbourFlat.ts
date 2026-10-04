@@ -29,7 +29,7 @@ import { buildingWindowLife } from '@/building/rearWindows';
  * (`FlatDressing`: their paint, furniture, shelf of their own games, themselves). One lamp, the TV's glow and nothing
  * else lights it, whoever the host: the scene's light count never changes with them.
  */
-export function furnishNeighbourFlat(zone: Zone, ctx: BuildContext): ZoneHandle {
+export function furnishNeighbourFlat(zone: Zone, ctx: Pick<BuildContext, 'sky' | 'cssLayer' | 'covers' | 'listener' | 'acoustics' | 'today' | 'building' | 'collection' | 'market' | 'social'>): ZoneHandle {
   const { sky, cssLayer, covers, listener, today } = ctx;
   const room = furnishShell(zone, sky, plan.room);
   placeRoomLight(zone, room, 'pendant', plan.lamp.at, plan.lamp.switchAt);

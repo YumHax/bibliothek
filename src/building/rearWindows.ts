@@ -1,7 +1,9 @@
 import { STORY, type FacadeWindow, type WindowClaim, type WindowLife, type WindowStory } from '@/world/street/windowLife';
+import { inHours } from '@/time/clock';
 import { wakefulnessAt } from '@/time/wakefulness';
 import { REAR_WINDOWS_PLAN as plan, type StoryWindow } from './rearWindowsPlan';
 import { isHomeAt, movedAway, residentAt } from './residentsHome';
+import { unitOf } from '@/random';
 
 /*
  * The building's windows at night (`REAR_WINDOWS_PLAN`), handed to a facade painter as its `windowLife`: our
@@ -76,29 +78,19 @@ function claimWindows(windows: readonly FacadeWindow[], clock: BuildingClock): (
   return claims;
 }
 
-/** Whether `h` (game hours) is in [from, to), the span wrapping past midnight when `to` < `from`. */
-function within(h: number, from: number, to: number): boolean {
-  return from <= to ? h >= from && h < to : h >= from || h < to;
-}
-
-/** A steady 0..1 draw for `n`. */
-function hash01(n: number): number {
-  const x = Math.sin(n * 127.1 + 311.7) * 43758.5453;
-  return x - Math.floor(x);
-}
 
 /** A resident's window: lit while they are in, from getting up to their bedtime (each their own, by `seed`). */
 function inAndUp(resident: { out: number; back: number }, seed: number, h: number): boolean {
   if (!isHomeAt(resident, h)) return false;
   const [early, late] = plan.bedtime;
-  const bed = (early + (late + 24 - early) * hash01(seed)) % 24;
-  return !within(h, bed, plan.wakeUp);
+  const bed = (early + (late + 24 - early) * unitOf(seed)) % 24;
+  return !inHours(h, [bed, plan.wakeUp]);
 }
 
 /** The stairwell's window on floor `floor`: lit for a timer's while now and then, more often while the building is up. */
 function stairsLit(floor: number, h: number): boolean {
   const { slot, chance } = plan.stairTimer;
-  return hash01(Math.floor(h / slot) * 13 + floor * 7) < chance * wakefulnessAt(h);
+  return unitOf(Math.floor(h / slot) * 13 + floor * 7) < chance * wakefulnessAt(h);
 }
 
 /** What a story window shows now: whether it is lit, and the story (`STORY` kind, -1 just a lit room) and its parameter. */
@@ -106,29 +98,29 @@ function storyNow(spot: StoryWindow, day: number, h: number): WindowStory & { li
   const show = (lit: boolean, kind: number, param = 0) => ({ lit, kind, param });
   switch (spot.life) {
     case 'trader':
-      return show(within(h, 18, 0.75) || within(h, 7, 8.5), STORY.shelves, traderShelves(day));
+      return show(inHours(h, [18, 0.75]) || inHours(h, [7, 8.5]), STORY.shelves, traderShelves(day));
     case 'couple':
-      return show(within(h, 18, 23.5), within(h, 19, 21) ? STORY.dinner : STORY.reader);
+      return show(inHours(h, [18, 23.5]), inHours(h, [19, 21]) ? STORY.dinner : STORY.reader);
     case 'painter': {
       const n = plan.painterCanvas;
-      return show(within(h, 17, 1), STORY.painter, ((day % n) + h / 24) / n);
+      return show(inHours(h, [17, 1]), STORY.painter, ((day % n) + h / 24) / n);
     }
     case 'sporty':
-      return show(within(h, 18, 23) || within(h, 6.5, 8), within(h, 18.5, 19.3) || within(h, 7, 7.6) ? STORY.workout : -1);
+      return show(inHours(h, [18, 23]) || inHours(h, [6.5, 8]), inHours(h, [18.5, 19.3]) || inHours(h, [7, 7.6]) ? STORY.workout : -1);
     case 'partyFlat':
-      return day % plan.partyEvery === plan.partyEvery - 1 ? show(within(h, 20, 2.5), STORY.party) : show(within(h, 18, 22.5), -1);
+      return day % plan.partyEvery === plan.partyEvery - 1 ? show(inHours(h, [20, 2.5]), STORY.party) : show(inHours(h, [18, 22.5]), -1);
     case 'movers': {
       const { cycle, moving, empty } = plan.movers;
       const c = day % cycle;
       // Gone: the flat stands empty and dark. Packing up (and, the first day of a tenancy, unpacking): the boxes.
       if (c >= cycle - empty) return show(false, -1);
-      if (c >= cycle - empty - moving || c === 0) return show(within(h, 8, 23), STORY.removal, c === 0 ? 1 : 0);
+      if (c >= cycle - empty - moving || c === 0) return show(inHours(h, [8, 23]), STORY.removal, c === 0 ? 1 : 0);
       // Every other tenant has a cat; the others read.
-      return show(within(h, 17, 23.5), Math.floor(day / cycle) % 2 === 0 ? STORY.cat : STORY.reader);
+      return show(inHours(h, [17, 23.5]), Math.floor(day / cycle) % 2 === 0 ? STORY.cat : STORY.reader);
     }
     case 'catLady':
-      return show(within(h, 16, 23.5), STORY.cat);
+      return show(inHours(h, [16, 23.5]), STORY.cat);
     case 'nightOwl':
-      return show(within(h, 20, 3.5), STORY.gamer);
+      return show(inHours(h, [20, 3.5]), STORY.gamer);
   }
 }

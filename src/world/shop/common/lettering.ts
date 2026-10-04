@@ -1,4 +1,5 @@
 import { FONT, fitFontSize } from '@/covers/generated/canvasUtils';
+import { random as liveRandom } from '@/random';
 
 /*
  * The hands the shops' signs are written in, and a helper that sets lines of text in a box on a canvas. Shared by the
@@ -42,7 +43,7 @@ export function setLines(ctx: CanvasRenderingContext2D, block: TextBlock): void 
   const weight = block.weight ?? '600';
   const units = first + (lines.length - 1);
   const unit = h / units;
-  const random = block.random ?? Math.random;
+  const random = block.random ?? liveRandom;
   const align = block.align ?? 'center';
   ctx.fillStyle = color;
   ctx.textAlign = align;

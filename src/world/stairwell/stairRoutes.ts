@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import { STAIRWELL_PLAN as plan, STOREYS } from './stairwellPlan';
+import { STAIRWELL_PLAN as plan } from './stairwellPlan';
+import { STOREYS } from '@/world/measures/building';
 
 /*
  * The residents' ways about the stairs, as floor points (local x, z; their height comes from the

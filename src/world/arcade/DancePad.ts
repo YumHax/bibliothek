@@ -5,6 +5,7 @@ import { markShared } from '../props/Prop';
 import { paint, standard } from '../materials/palette';
 import type { AttachmentFrame, CabinetAttachment } from './CabinetAttachment';
 import type { Performer } from '../people/performer';
+import { dampFactor } from '@/math/damp';
 
 type Lane = 'left' | 'down' | 'up' | 'right';
 
@@ -98,7 +99,7 @@ export class DancePad implements CabinetAttachment {
 
   update(dt: number, frame: AttachmentFrame): void {
     if (this.performer && frame.who === 'regular') this.dance(dt, frame);
-    const ease = Math.min(1, dt * 20);
+    const ease = dampFactor(24, dt);
     for (const [lane, panel] of this.panels) {
       const held = frame.controls[lane] ? 1 : 0;
       panel.press += (held - panel.press) * ease;

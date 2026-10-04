@@ -1,9 +1,10 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { createCanvas, seededRandom, toTexture, repeatTexture } from '@/covers/generated/canvasUtils';
+import { createCanvas, toTexture, repeatTexture } from '@/covers/generated/canvasUtils';
 import { Prop } from '../props/Prop';
 import { CELL, CELLAR_PLAN as plan, COLUMNS, CROWN, ROWS, SPRING, brickSides, cellAt, cellCentre, type CellSide } from './cellarPlan';
 import { paintOnce } from '../materials/paintedTiles';
+import { lcg } from '@/random';
 
 type Finish = 'brick' | 'floor';
 /** The colliders' thickness behind a wall face (m). */
@@ -222,7 +223,7 @@ function box3(x0: number, z0: number, x1: number, z1: number): THREE.Box3 {
 /** Old red brick in lime mortar, each brick its own shade, some flaking white with saltpetre. */
 function brickTexture(): THREE.CanvasTexture {
   const [canvas, ctx] = createCanvas(512, 320);
-  const random = seededRandom(1907);
+  const random = lcg(1907);
   ctx.fillStyle = '#8a8070';
   ctx.fillRect(0, 0, 512, 320);
   const rows = 8;
@@ -257,7 +258,7 @@ function brickTexture(): THREE.CanvasTexture {
 /** Worn flagstones, grit between them, damp patches. */
 function flagTexture(): THREE.CanvasTexture {
   const [canvas, ctx] = createCanvas(512, 512);
-  const random = seededRandom(1911);
+  const random = lcg(1911);
   ctx.fillStyle = '#3e3a34';
   ctx.fillRect(0, 0, 512, 512);
   const n = 4;

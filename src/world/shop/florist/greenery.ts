@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { paint, shared } from '../../materials/palette';
 import { foliage } from '../../materials/finishes';
 import { markShared } from '../../materials/sharedResources';
+import { pick } from '@/random';
 
 /*
  * The florist's leaves, stems and flower heads, built cheap: a leaf is a folded diamond of four triangles baked
@@ -68,11 +69,6 @@ export class LeafBatch {
     }
     this.byColour.clear();
   }
-}
-
-/** Picks one of `list` with `random`. */
-export function pick<T>(random: () => number, list: readonly T[]): T {
-  return list[Math.floor(random() * list.length)]!;
 }
 
 /** A thin stem (a box: it merges by colour however it is turned) from `a` to `b`. */

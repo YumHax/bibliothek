@@ -210,47 +210,67 @@ export class LightCuller implements Updatable {
     for (const [kind, list] of this.byKind) {
       list.sort((a, b) => b.tier - a.tier || b.score - a.score);
       const target = Math.min(this.budget[kind], list.length);
-      let shown = 0;
-      for (let i = 0; i < list.length; i++) {
-        const { light } = list[i]!;
-        if (!light.visible) continue;
-        const fade = FADES.get(light);
-        const wanted = i < target;
-        // Never faded in (just came with its zone), dark, or all at once: out now, nothing to see go.
-        if (!wanted && (!fade || dt === 0 || fade.base <= 0 || (fade.gain -= step) <= 0)) {
-          this.hide(light, fade);
-          continue;
-        }
-        if (wanted && fade) {
-          // Fading in, its shadow map follows what moves meanwhile (a door, the cat), not only the
-          // frame it came back on: else a room seen through a door keeps a stale shadow until the
-          // shadow's next idle refresh.
-          if (fade.gain < 1) requestShadow(light);
-          fade.gain = Math.min(1, fade.gain + step);
-        }
-        else if (wanted) FADES.set(light, { base: light.intensity, gain: dt === 0 ? 1 : 0, written: light.intensity });
-        shown++;
-      }
-      // The places freed go to the best lights waiting, which fade in from dark.
-      for (let i = 0; i < target && shown < target; i++) {
-        const { light } = list[i]!;
-        if (light.visible) continue;
-        light.visible = true;
-        const fade = FADES.get(light);
-        if (fade) fade.gain = dt === 0 ? 1 : 0;
-        else FADES.set(light, { base: light.intensity, gain: dt === 0 ? 1 : 0, written: light.intensity });
-        requestShadow(light);
-        shown++;
-      }
-      // More shown than the count (a zone's lights came in shown, a light outranked one still fading):
-      // the lowest go at once, so the count never moves.
-      for (let i = list.length - 1; i >= 0 && shown > target; i--) {
-        const { light } = list[i]!;
-        if (!light.visible) continue;
-        this.hide(light, FADES.get(light));
-        shown--;
-      }
+      let shown = this.fadeShown(list, target, step, dt);
+      shown = this.fillPlaces(list, target, shown, dt);
+      this.trimOverflow(list, target, shown);
       for (const { light } of list) if (light.visible) this.write(light);
+    }
+  }
+
+  /**
+   * The lights shown now, in rank order: those within the count fade in (or start to), those beyond it fade out and
+   * go dark before they are hidden (at once when never faded in, dark already, or `dt` 0). Returns how many stay shown.
+   */
+  private fadeShown(list: readonly Entry[], target: number, step: number, dt: number): number {
+    let shown = 0;
+    for (let i = 0; i < list.length; i++) {
+      const { light } = list[i]!;
+      if (!light.visible) continue;
+      const fade = FADES.get(light);
+      const wanted = i < target;
+      // Never faded in (just came with its zone), dark, or all at once: out now, nothing to see go.
+      if (!wanted && (!fade || dt === 0 || fade.base <= 0 || (fade.gain -= step) <= 0)) {
+        this.hide(light, fade);
+        continue;
+      }
+      if (wanted && fade) {
+        // Fading in, its shadow map follows what moves meanwhile (a door, the cat), not only the
+        // frame it came back on: else a room seen through a door keeps a stale shadow until the
+        // shadow's next idle refresh.
+        if (fade.gain < 1) requestShadow(light);
+        fade.gain = Math.min(1, fade.gain + step);
+      }
+      else if (wanted) FADES.set(light, { base: light.intensity, gain: dt === 0 ? 1 : 0, written: light.intensity });
+      shown++;
+    }
+    return shown;
+  }
+
+  /** The places freed go to the best lights waiting, which fade in from dark. Returns the count shown after. */
+  private fillPlaces(list: readonly Entry[], target: number, shown: number, dt: number): number {
+    for (let i = 0; i < target && shown < target; i++) {
+      const { light } = list[i]!;
+      if (light.visible) continue;
+      light.visible = true;
+      const fade = FADES.get(light);
+      if (fade) fade.gain = dt === 0 ? 1 : 0;
+      else FADES.set(light, { base: light.intensity, gain: dt === 0 ? 1 : 0, written: light.intensity });
+      requestShadow(light);
+      shown++;
+    }
+    return shown;
+  }
+
+  /**
+   * More shown than the count (a zone's lights came in shown, a light outranked one still fading): the lowest go
+   * at once, so the count never moves.
+   */
+  private trimOverflow(list: readonly Entry[], target: number, shown: number): void {
+    for (let i = list.length - 1; i >= 0 && shown > target; i--) {
+      const { light } = list[i]!;
+      if (!light.visible) continue;
+      this.hide(light, FADES.get(light));
+      shown--;
     }
   }
 

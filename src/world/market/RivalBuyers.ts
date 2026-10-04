@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import type { Updatable } from '@/core/Engine';
 import type { BrowseSpot } from '../people/Shopper';
 import type { Furniture } from '../Furniture';
+import { random } from '@/random';
 
 /** A shopper as the rivals see them: where they browse, and the moment they buy. */
 interface RivalShopper {
@@ -43,7 +44,7 @@ export class RivalBuyers extends THREE.Object3D implements Furniture, Updatable 
     const chance = (dt / meanSeconds) * keenness();
     for (const shopper of shoppers) {
       const spot = shopper.browsing;
-      if (!spot || Math.random() >= chance || !mayBuy()) continue;
+      if (!spot || random() >= chance || !mayBuy()) continue;
       if (buyAt(spot)) shopper.buy();
     }
   }

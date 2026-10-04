@@ -2,8 +2,9 @@ import * as THREE from 'three';
 import { cylinderMesh } from '../../meshUtils';
 import { Prop, part } from '../../props/Prop';
 import { paint, timber, METAL } from '../../materials/palette';
-import { createCanvas, seededRandom, toTexture } from '@/graphics/canvas';
+import { createCanvas, toTexture } from '@/graphics/canvas';
 import { decal, WALL } from '../../surface/layers';
+import { lcg } from '@/random';
 
 export interface PegboardOptions {
   width?: number;
@@ -34,7 +35,7 @@ export class Pegboard extends Prop {
     this.name = 'Pegboard';
     const W = options.width ?? 1.4;
     const H = options.height ?? 0.8;
-    const random = seededRandom(options.seed ?? 31);
+    const random = lcg(options.seed ?? 31);
     const batten = timber(0x8a6a48, 0.7);
     // Battens hold it off the wall, the board over them.
     for (const y of [-H / 2 + 0.05, H / 2 - 0.05]) part(this, W, 0.04, 0.018, batten, { y, z: 0.009 });

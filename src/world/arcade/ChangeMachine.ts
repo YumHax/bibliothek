@@ -15,6 +15,8 @@ interface ChangeMachineOptions {
   color?: number;
   /** Whether today's change is still in it (a working machine once emptied says so). */
   waiting?: () => boolean;
+  /** For the player alone it is "out of order" (the attendant is cross with them, docs/social.md): what it says then, or null. */
+  jammed?: () => string | null;
 }
 
 const WIDTH = 0.6;
@@ -40,7 +42,7 @@ export class ChangeMachine extends THREE.Group implements Furniture, Interactabl
   private readonly working: boolean;
   private readonly waiting: () => boolean;
 
-  constructor(options: ChangeMachineOptions = {}) {
+  constructor(private readonly options: ChangeMachineOptions = {}) {
     super();
     this.name = 'ChangeMachine';
     this.working = options.working ?? false;
@@ -88,11 +90,16 @@ export class ChangeMachine extends THREE.Group implements Furniture, Interactabl
   }
 
   label(): string {
-    if (!this.working) return 'Change machine · out of order';
+    if (!this.working || this.options.jammed?.()) return 'Change machine · out of order';
     return this.waiting() ? 'Change machine · take the change (it works today!)' : 'Change machine · empty today';
   }
 
   activate(session: SessionActions): void {
+    const jammed = this.working ? this.options.jammed?.() : null;
+    if (jammed) {
+      session.refuse(jammed);
+      return;
+    }
     session.collectChange();
   }
 }

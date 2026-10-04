@@ -1,4 +1,6 @@
 import * as THREE from 'three';
+import { dampFactor } from '@/math/damp';
+import { random } from '@/random';
 
 /** Body radius (m): a house fly is ~7 mm long. */
 const SIZE = 0.0035;
@@ -19,7 +21,7 @@ export class CatFly extends THREE.Group {
   private readonly wings: THREE.Mesh;
   private shown = false;
   private leaving = 0;
-  private time = Math.random() * 10;
+  private time = random() * 10;
   private readonly local = new THREE.Vector3();
 
   constructor() {
@@ -47,7 +49,7 @@ export class CatFly extends THREE.Group {
         this.shown = true;
       }
       this.leaving = LEAVE_S;
-      this.at.lerp(target, Math.min(1, dt * FOLLOW));
+      this.at.lerp(target, dampFactor(FOLLOW, dt));
     } else if (this.shown) {
       this.leaving -= dt;
       this.at.y += dt * 2;

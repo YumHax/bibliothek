@@ -1,7 +1,6 @@
 import * as THREE from 'three';
 import type { Rng } from './Sheet';
 import { CAR_BODY, CAR_COLORS } from './Car';
-import { between, pick } from './paint';
 import { BUS_STOP_X, FAR_LANE, KERB, LIFE_REACH, NEAR_KERB, NEAR_LANE, TURN_CENTRE } from './plan';
 import { BIN_ROUND_HOURS, BUS_DWELL, CRUISE as SPEEDS } from '@/world/city/traffic';
 import { DELIVERY_OUT, STREET_BINS } from '@/world/city/frontage';
@@ -9,6 +8,7 @@ import { resample } from './Park';
 import type { LifeEvents } from './lifeEvents';
 import { type AtlasPens, type Cell, type LifeEnv, type LifeLayer, type Push, packTint } from './sprites';
 import { type FlashColor, type VehicleKind, type VehiclePose, VEHICLE_KINDS, VEHICLE_LOOKS, arc, carFrameAt, flashesOf, paintFlashCells, pushFlash } from './LifeVehicles';
+import { between, pick } from '@/random';
 
 const MAX_CARS = 14;
 /** Each driver's own cruising speed, round the street's (`city/traffic`). */
@@ -181,51 +181,81 @@ export class Traffic implements LifeLayer {
     return at;
   }
 
-  /** Cars set off (fewer the sleepier the city), brake for the car ahead, take the corner slowly, and leave at the far end; the special vehicles keep their own hours. */
+  /**
+   * One step: the special vehicles and the cars set off on their own schedules, then every vehicle advances (the road's
+   * limit, the car ahead, the siren, its next stop) and what reaches the far end leaves. The draws keep this order.
+   */
   private drive(dt: number, env: LifeEnv): void {
     const { wakefulness, hours } = env;
+    this.dispatchBus(dt, wakefulness);
+    this.dispatchDustcart(hours);
+    this.dispatchVan(dt, hours);
+    this.dispatchAmbulance(dt);
+    this.dispatchCars(dt, wakefulness);
+
     const events = this.events;
-    // The bus: up Park Street, round the corner and along Front Street, stopping at the shelter; none in the small hours.
+    const ambulance = this.cars.find((c) => c.kind === 'ambulance') ?? null;
+    const siren = ambulance ? this.carPosition(ambulance, this.sirenAt) : null;
+    events.siren.active = siren !== null;
+    if (siren) [events.siren.x, events.siren.z] = siren;
+    events.garbage.active = false;
+    events.garbage.working = false;
+    for (const car of this.cars) this.advance(car, dt, ambulance, siren);
+    events.garbageWorking = events.garbage.working;
+    for (let i = this.cars.length - 1; i >= 0; i--) {
+      const car = this.cars[i]!;
+      if (car.s >= car.route.points.length - 1) this.cars.splice(i, 1);
+    }
+  }
+
+  /** The bus: up Park Street, round the corner and along Front Street, stopping at the shelter; none in the small hours. */
+  private dispatchBus(dt: number, wakefulness: number): void {
     this.busTimer -= dt;
-    if (this.busTimer <= 0) {
-      this.busTimer = between(this.random, BUS_INTERVAL * 0.7, BUS_INTERVAL * 1.3) / Math.max(wakefulness, 0.2);
-      const route = this.routes[1];
-      if (wakefulness > 0.3 && this.clearStart(route, GAP + 12) && this.cars.length < MAX_CARS) {
-        this.cars.push(this.newCar(route, 'bus', SPEEDS.bus, [{ at: this.sampleNear(route, BUS_STOP_X, 0, KERB - 8), dwell: BUS_DWELL, waited: 0 }]));
-      }
+    if (this.busTimer > 0) return;
+    this.busTimer = between(this.random, BUS_INTERVAL * 0.7, BUS_INTERVAL * 1.3) / Math.max(wakefulness, 0.2);
+    const route = this.routes[1];
+    if (wakefulness > 0.3 && this.clearStart(route, GAP + 12) && this.cars.length < MAX_CARS) {
+      this.cars.push(this.newCar(route, 'bus', SPEEDS.bus, [{ at: this.sampleNear(route, BUS_STOP_X, 0, KERB - 8), dwell: BUS_DWELL, waited: 0 }]));
     }
-    // The dustcart, once each morning.
+  }
+
+  /** The dustcart, once each morning, with a stop at every bin. */
+  private dispatchDustcart(hours: number): void {
     if (hours < GARBAGE_HOURS[0] - 0.5 || hours > 12) this.garbageDone = false;
-    if (!this.garbageDone && hours >= GARBAGE_HOURS[0] && hours < GARBAGE_HOURS[1] && this.clearStart(this.routes[1], GAP + 10)) {
-      this.garbageDone = true;
-      const route = this.routes[1];
-      const dwell = (): number => between(this.random, GARBAGE_DWELL[0], GARBAGE_DWELL[1]);
-      const stops = GARBAGE_STOPS_X.map((x) => ({ at: this.sampleNear(route, x, 0), dwell: dwell(), waited: 0 }));
-      this.cars.push(this.newCar(route, 'truck', SPEEDS.lorry, stops));
-    }
-    // The delivery van, in business hours.
+    if (this.garbageDone || hours < GARBAGE_HOURS[0] || hours >= GARBAGE_HOURS[1] || !this.clearStart(this.routes[1], GAP + 10)) return;
+    this.garbageDone = true;
+    const route = this.routes[1];
+    const dwell = (): number => between(this.random, GARBAGE_DWELL[0], GARBAGE_DWELL[1]);
+    const stops = GARBAGE_STOPS_X.map((x) => ({ at: this.sampleNear(route, x, 0), dwell: dwell(), waited: 0 }));
+    this.cars.push(this.newCar(route, 'truck', SPEEDS.lorry, stops));
+  }
+
+  /** The delivery van, in business hours, one at a time: it double-parks by a shop on Front Street's far side. */
+  private dispatchVan(dt: number, hours: number): void {
     this.vanTimer -= dt;
-    if (this.vanTimer <= 0) {
-      this.vanTimer = 3;
-      const route = this.routes[1];
-      const busy = this.cars.some((c) => c.kind === 'van');
-      if (!busy && hours >= VAN_HOURS[0] && hours < VAN_HOURS[1] && this.clearStart(route, GAP + 4) && this.cars.length < MAX_CARS) {
-        this.vanTimer = between(this.random, VAN_INTERVAL[0], VAN_INTERVAL[1]);
-        const at = this.sampleNear(route, between(this.random, VAN_PARK_X[0], VAN_PARK_X[1]), 0);
-        this.cars.push(this.newCar(route, 'van', SPEEDS.van, [{ at, dwell: between(this.random, VAN_DWELL[0], VAN_DWELL[1]), waited: 0 }]));
-      }
-    }
-    // Now and then an ambulance, siren going.
+    if (this.vanTimer > 0) return;
+    this.vanTimer = 3;
+    const route = this.routes[1];
+    const busy = this.cars.some((c) => c.kind === 'van');
+    if (busy || hours < VAN_HOURS[0] || hours >= VAN_HOURS[1] || !this.clearStart(route, GAP + 4) || this.cars.length >= MAX_CARS) return;
+    this.vanTimer = between(this.random, VAN_INTERVAL[0], VAN_INTERVAL[1]);
+    const at = this.sampleNear(route, between(this.random, VAN_PARK_X[0], VAN_PARK_X[1]), 0);
+    this.cars.push(this.newCar(route, 'van', SPEEDS.van, [{ at, dwell: between(this.random, VAN_DWELL[0], VAN_DWELL[1]), waited: 0 }]));
+  }
+
+  /** Now and then an ambulance, siren going, on either route; the way in blocked, it tries again in a moment. */
+  private dispatchAmbulance(dt: number): void {
     this.ambulanceTimer -= dt;
-    if (this.ambulanceTimer <= 0) {
-      // The way in blocked: try again in a moment.
-      this.ambulanceTimer = 3;
-      const route = pick(this.random, this.routes);
-      if (!this.cars.some((c) => c.kind === 'ambulance') && this.clearStart(route, GAP + 4)) {
-        this.cars.push(this.newCar(route, 'ambulance', AMBULANCE_CRUISE));
-        this.ambulanceTimer = between(this.random, AMBULANCE_INTERVAL[0], AMBULANCE_INTERVAL[1]);
-      }
-    }
+    if (this.ambulanceTimer > 0) return;
+    this.ambulanceTimer = 3;
+    const route = pick(this.random, this.routes);
+    if (this.cars.some((c) => c.kind === 'ambulance') || !this.clearStart(route, GAP + 4)) return;
+    this.cars.push(this.newCar(route, 'ambulance', AMBULANCE_CRUISE));
+    this.ambulanceTimer = between(this.random, AMBULANCE_INTERVAL[0], AMBULANCE_INTERVAL[1]);
+  }
+
+  /** Cars and taxis set off on each route at its interval, fewer the sleepier the city. */
+  private dispatchCars(dt: number, wakefulness: number): void {
     for (const route of this.routes) {
       route.nextSpawn -= dt;
       if (route.nextSpawn > 0 || this.cars.length >= MAX_CARS) continue;
@@ -233,74 +263,81 @@ export class Traffic implements LifeLayer {
       if (!this.clearStart(route, GAP + 2)) continue;
       this.cars.push(this.newCar(route, this.random() < TAXI_SHARE ? 'taxi' : 'car', between(this.random, CRUISE[0], CRUISE[1])));
     }
+  }
 
-    const ambulance = this.cars.find((c) => c.kind === 'ambulance');
-    const siren = ambulance ? this.carPosition(ambulance, this.sirenAt) : null;
-    events.siren.active = siren !== null;
-    if (siren) [events.siren.x, events.siren.z] = siren;
-    events.garbage.active = false;
-    events.garbage.working = false;
-    for (const car of this.cars) {
-      const { route } = car;
-      const body = VEHICLE_LOOKS[car.kind].body;
-      // Nearest car ahead on the same route, bumper to bumper; whatever is out of its lane is passed
-      // (a double-parked van), and the ambulance slips past the cars pulling over for it.
-      let ahead = Infinity;
-      const passable = car.kind === 'ambulance' ? 0.6 : OUT_OF_LANE;
-      if (car.offset < OUT_OF_LANE) {
-        for (const other of this.cars) {
-          if (other === car || other.route !== route || other.s <= car.s || other.offset >= passable) continue;
-          const gap = (other.s - car.s) * route.step - (VEHICLE_LOOKS[other.kind].body.length + body.length) / 2 + CAR_BODY.length;
-          if (gap < ahead) ahead = gap;
-        }
-      }
-      const limit = route.limits[Math.min(route.limits.length - 1, Math.floor(car.s))]!; // a limit per point, clamped to the last
-      let target = Math.min(car.cruise, car.kind === 'ambulance' ? limit * 1.6 : limit);
-      if (ahead < Infinity) target = Math.min(target, Math.sqrt(Math.max(0, 2 * BRAKING * (ahead - GAP))));
-      // Make way for the ambulance: pull over and crawl if it is coming up behind, brake if it is near on the other side.
-      if (ambulance && car !== ambulance && siren) {
-        const behind = ambulance.route === route ? (car.s - ambulance.s) * route.step : -1;
-        if (behind > 0 && behind < YIELD_REACH) {
-          car.offsetTarget = Math.max(car.offsetTarget, YIELD_OFFSET);
-          target = Math.min(target, 1.5);
-        } else {
-          if (car.offsetTarget === YIELD_OFFSET) car.offsetTarget = 0;
-          const [cx, cz] = this.carPosition(car, this.at);
-          if (Math.hypot(cx - siren[0], cz - siren[1]) < 30) target = Math.min(target, 3);
-        }
-      } else if (car.offsetTarget === YIELD_OFFSET) car.offsetTarget = 0;
+  /** One vehicle's step: the speed the road and the queue allow, made way for the siren, held at its stop; then it moves. */
+  private advance(car: MovingCar, dt: number, ambulance: MovingCar | null, siren: Placement | null): void {
+    const { route } = car;
+    let target = this.roadSpeed(car);
+    target = this.yieldToSiren(car, ambulance, siren, target);
+    target = this.serveStop(car, dt, target);
+    car.offset += THREE.MathUtils.clamp(car.offsetTarget - car.offset, -0.9 * dt, 0.9 * dt);
+    car.speed += THREE.MathUtils.clamp(target - car.speed, -2 * BRAKING * dt, (car.kind === 'ambulance' ? 3.5 : 2.5) * dt);
+    car.s += (Math.max(0, car.speed) * dt) / route.step;
+    if (car.kind === 'truck') {
+      this.events.garbage.active = true;
+      [this.events.garbage.x, this.events.garbage.z] = this.carPosition(car, this.at);
+    }
+  }
 
-      const stop = car.stops[0];
-      if (stop) {
-        // Pull up, wait (the passengers, the bins, the parcels), then go.
-        const left = (stop.at - car.s) * route.step;
-        if (car.kind === 'van' && left < 16) car.offsetTarget = VAN_OFFSET;
-        if (left <= 0.3) {
-          target = 0;
-          car.speed = Math.min(car.speed, 0.3);
-          if (stop.waited === 0 && car.kind === 'bus') events.busStops++;
-          stop.waited += dt;
-          if (car.kind === 'truck') events.garbage.working = true;
-          if (stop.waited > stop.dwell && (car.kind !== 'van' || this.clearBehind(car, 18))) {
-            car.stops.shift();
-            if (car.kind === 'bus') events.busDepartures++;
-            if (car.kind === 'van') car.offsetTarget = 0;
-          }
-        } else target = Math.min(target, Math.sqrt(2 * BRAKING * 0.6 * left));
-      }
-      car.offset += THREE.MathUtils.clamp(car.offsetTarget - car.offset, -0.9 * dt, 0.9 * dt);
-      car.speed += THREE.MathUtils.clamp(target - car.speed, -2 * BRAKING * dt, (car.kind === 'ambulance' ? 3.5 : 2.5) * dt);
-      car.s += (Math.max(0, car.speed) * dt) / route.step;
-      if (car.kind === 'truck') {
-        events.garbage.active = true;
-        [events.garbage.x, events.garbage.z] = this.carPosition(car, this.at);
+  /**
+   * The speed `car` aims for on its own: its cruise under the road's limit (the ambulance stretches it), braking for the
+   * nearest vehicle ahead on its route, bumper to bumper. Whatever is out of its lane is passed (a double-parked van),
+   * and the ambulance slips past the cars pulling over for it.
+   */
+  private roadSpeed(car: MovingCar): number {
+    const { route } = car;
+    const body = VEHICLE_LOOKS[car.kind].body;
+    let ahead = Infinity;
+    const passable = car.kind === 'ambulance' ? 0.6 : OUT_OF_LANE;
+    if (car.offset < OUT_OF_LANE) {
+      for (const other of this.cars) {
+        if (other === car || other.route !== route || other.s <= car.s || other.offset >= passable) continue;
+        const gap = (other.s - car.s) * route.step - (VEHICLE_LOOKS[other.kind].body.length + body.length) / 2 + CAR_BODY.length;
+        if (gap < ahead) ahead = gap;
       }
     }
-    events.garbageWorking = events.garbage.working;
-    for (let i = this.cars.length - 1; i >= 0; i--) {
-      const car = this.cars[i]!;
-      if (car.s >= car.route.points.length - 1) this.cars.splice(i, 1);
+    const limit = route.limits[Math.min(route.limits.length - 1, Math.floor(car.s))]!; // a limit per point, clamped to the last
+    let target = Math.min(car.cruise, car.kind === 'ambulance' ? limit * 1.6 : limit);
+    if (ahead < Infinity) target = Math.min(target, Math.sqrt(Math.max(0, 2 * BRAKING * (ahead - GAP))));
+    return target;
+  }
+
+  /** Makes way for the ambulance: pull over and crawl if it is coming up behind, brake if it is near on the other side. */
+  private yieldToSiren(car: MovingCar, ambulance: MovingCar | null, siren: Placement | null, target: number): number {
+    if (!ambulance || car === ambulance || !siren) {
+      if (car.offsetTarget === YIELD_OFFSET) car.offsetTarget = 0;
+      return target;
     }
+    const { route } = car;
+    const behind = ambulance.route === route ? (car.s - ambulance.s) * route.step : -1;
+    if (behind > 0 && behind < YIELD_REACH) {
+      car.offsetTarget = Math.max(car.offsetTarget, YIELD_OFFSET);
+      return Math.min(target, 1.5);
+    }
+    if (car.offsetTarget === YIELD_OFFSET) car.offsetTarget = 0;
+    const [cx, cz] = this.carPosition(car, this.at);
+    return Math.hypot(cx - siren[0], cz - siren[1]) < 30 ? Math.min(target, 3) : target;
+  }
+
+  /** Pulls up at the next stop, waits (the passengers, the bins, the parcels), then goes; the van pulls out of the lane first. */
+  private serveStop(car: MovingCar, dt: number, target: number): number {
+    const stop = car.stops[0];
+    if (!stop) return target;
+    const events = this.events;
+    const left = (stop.at - car.s) * car.route.step;
+    if (car.kind === 'van' && left < 16) car.offsetTarget = VAN_OFFSET;
+    if (left > 0.3) return Math.min(target, Math.sqrt(2 * BRAKING * 0.6 * left));
+    car.speed = Math.min(car.speed, 0.3);
+    if (stop.waited === 0 && car.kind === 'bus') events.busStops++;
+    stop.waited += dt;
+    if (car.kind === 'truck') events.garbage.working = true;
+    if (stop.waited > stop.dwell && (car.kind !== 'van' || this.clearBehind(car, 18))) {
+      car.stops.shift();
+      if (car.kind === 'bus') events.busDepartures++;
+      if (car.kind === 'van') car.offsetTarget = 0;
+    }
+    return 0;
   }
 
   /** Whether no car in its lane is coming up within `room` metres behind `car` (a parked van may pull out). */

@@ -23,6 +23,7 @@ import { NOTICE_BOARD_MAX_CARDS, type NoticeBoard } from './NoticeBoard';
 import type { LotCrate } from './LotCrate';
 import type { WishPennant } from './WishPennant';
 import { REACTIONS, stallLines } from './stallTalk';
+import { random } from '@/random';
 
 /** One stall as the hall keeps track of it: what stands there, who sells, what is on it and what went. */
 export interface FloorStall {
@@ -39,7 +40,8 @@ export interface FloorStall {
 interface MarketFloorOptions {
   /** The market's zone: the day's boxes are placed into it and taken out of it. */
   zone: Zone;
-  context: BuildContext;
+  /** What the floor reads of the context: the day's stock and the hall, the collection and the covers, the money, the sky's hours, the day. */
+  context: Pick<BuildContext, 'collection' | 'covers' | 'market' | 'money' | 'sky' | 'today'>;
   /** One per platform, in stall order, their stallholders and pennants placed. */
   stalls: FloorStall[];
   /** The bargain bins: the first always, the Flea Fair's extra ones after it. */
@@ -210,10 +212,10 @@ export class MarketFloor {
     const entry = this.nearestStall(zone.toWorld(new THREE.Vector3(spot.at[0], 0, spot.at[1])));
     // Nobody else can afford a grail: after all the rumours, it waits for the player all day.
     const choices = entry ? [...entry.boxes].filter((b) => !b.isHeld && b.item.priced && !b.item.reserved && b.item.source !== 'grail' && !entry.stall.behindGlass) : [];
-    const box = choices[Math.floor(Math.random() * choices.length)];
+    const box = choices[Math.floor(random() * choices.length)];
     if (!entry || !box) return false;
     this.options.context.market.stock.soldToRival(box.item);
-    entry.vendor.say(REACTIONS.bought[Math.floor(Math.random() * REACTIONS.bought.length)]!);
+    entry.vendor.say(REACTIONS.bought[Math.floor(random() * REACTIONS.bought.length)]!);
     this.takeOff(box);
     return true;
   }
@@ -231,7 +233,7 @@ export class MarketFloor {
     if (!this.displayed.has(box) || box.isHeld || box.item.reserved) return false;
     const entry = this.options.stalls.find((e) => e.boxes.has(box));
     this.options.context.market.stock.soldToRival(box.item);
-    entry?.vendor.say(REACTIONS.bought[Math.floor(Math.random() * REACTIONS.bought.length)]!);
+    entry?.vendor.say(REACTIONS.bought[Math.floor(random() * REACTIONS.bought.length)]!);
     this.takeOff(box);
     return true;
   }
@@ -351,9 +353,9 @@ export class MarketFloor {
   /** The stallholder answers: the clack of the box, a word in a bubble, a shrug or a cheer. */
   private reactAt(entry: FloorStall | null, reaction: SaleReaction): void {
     if (reaction === 'pickUp' || reaction === 'putBack') playBoxClack(reaction === 'putBack');
-    if (!entry || (reaction === 'pickUp' && Math.random() > PICK_UP_REMARK)) return;
+    if (!entry || (reaction === 'pickUp' && random() > PICK_UP_REMARK)) return;
     const lines = REACTIONS[reaction];
-    entry.vendor.say(lines[Math.floor(Math.random() * lines.length)]!);
+    entry.vendor.say(lines[Math.floor(random() * lines.length)]!);
     if (reaction === 'bought' || reaction === 'haggleWon') entry.vendor.gesture('cheer');
     else if (reaction === 'insult' || reaction === 'locked' || reaction === 'haggleLost') entry.vendor.gesture('hips');
     else if (reaction === 'caught') entry.vendor.gesture('think');

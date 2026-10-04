@@ -12,7 +12,8 @@ import { SHOP_LOOKS } from '../city/shopLooks';
 import type { Furniture } from '../Furniture';
 import type { ActivityAware } from '../zone/lifecycle';
 import type { ZoneId } from '../zoneIds';
-import { SHOP_ZONE_OF, type ShopKind } from './streetPlan';
+import type { ShopKind } from './streetPlan';
+import { SHOP_ZONE_OF } from '@/world/city/facades';
 
 interface StreetDoorOptions {
   width: number;

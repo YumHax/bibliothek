@@ -1,5 +1,7 @@
 import { COFFEE_PRICE, SCRATCH, STREET_TREATS } from '@/economy/pricing';
 import type { ShopKind, ShopSpec } from '../streetPlan';
+import type { PersonId } from '@/social/types';
+import { capitalise } from '@/text/strings';
 
 /** Something a shop sells over the counter: the coffee, a croissant, a scratch card, a drink, a scrap for the stray. */
 export interface ShopOffer {
@@ -81,6 +83,15 @@ export const SHOP_TALK: Record<ShopKind, ShopTalk> = {
   },
 };
 
+/**
+ * Who serves behind a café's counter, by the name on its fascia (`social/people/town`): the counter's coffee is a
+ * conversation with them (docs/social.md "Front Street and the arcade"). A café not named here keeps its plain counter.
+ */
+export const BARISTAS: Readonly<Record<string, PersonId>> = {
+  'SUNNY SIDE CAFE': 'lou',
+  'PARKSIDE CAFE': 'remi',
+};
+
 /** Names of the kinds, when the plan gives the shop none of its own. */
 const KIND_NAMES: Partial<Record<ShopKind, string>> = {
   cafe: 'the café', bakery: 'the bakery', pharmacy: 'the pharmacy', books: 'the bookshop', grocer: 'the greengrocer', florist: 'the florist',
@@ -98,7 +109,7 @@ function titleCase(text: string): string {
   return text
     .toLowerCase()
     .split(' ')
-    .map((word, i) => (i > 0 && ['of', 'the', 'and', '&'].includes(word) ? word : word.charAt(0).toUpperCase() + word.slice(1)))
+    .map((word, i) => (i > 0 && ['of', 'the', 'and', '&'].includes(word) ? word : capitalise(word)))
     .join(' ');
 }
 

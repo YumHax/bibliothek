@@ -3,11 +3,15 @@ import { SEED_GAMES } from '@/catalog';
 import { KEYS, PersistedStore } from '@/persistence';
 import type { Views } from './Fame';
 import { isGrail } from './grails';
-import { seeded } from './seeded';
 import { drawCondition } from './stockDraws';
 import { drawSealedLot, type SealedLot } from './boxLots';
 import { describeVariant, dressCopy } from './copyTraits';
 import { AUCTION, marketPrice } from './pricing';
+import { frozenRng } from '@/random';
+import { dayStream } from '@/time/daily';
+import { SUNDAY_WEEKDAY, weekdayOf } from '@/time/wakefulness';
+import { flag } from '@/settings/flags';
+import { capitalise } from '@/text/strings';
 
 /*
  * THE SALEROOM'S SALES: which market days there is one (`isAuctionDay`), what goes under the hammer (`lotsFor`:
@@ -15,12 +19,12 @@ import { AUCTION, marketPrice } from './pricing';
  * sale day's results only). The bidding itself is `auction.ts`; the room is `world/saleroom/`.
  */
 
-/** `?auction` in the URL makes every market day a sale day, to try it (read here, so nothing needs wiring). */
-const EVERY_DAY = typeof location !== 'undefined' && new URLSearchParams(location.search).has('auction');
+/** `?auction` in the URL makes every market day a sale day, to try it (`settings/flags`, so nothing needs wiring). */
+const EVERY_DAY = flag('auction');
 
-/** Whether market day `day` has a sale in the saleroom. */
+/** Whether market day `day` has a sale in the saleroom: every Sunday of the game's week (`time/wakefulness`). */
 export function isAuctionDay(day: number): boolean {
-  return EVERY_DAY || ((day - AUCTION.offset) % AUCTION.every + AUCTION.every) % AUCTION.every === 0;
+  return EVERY_DAY || weekdayOf(day) === SUNDAY_WEEKDAY;
 }
 
 /** The first sale day from `day` on (`day` itself when it is one). */
@@ -81,7 +85,7 @@ const BLURBS: Record<BoxCondition, readonly string[]> = {
 function dress(game: Game, rng: () => number, star: boolean, seed: string): { game: Game; condition: BoxCondition; edition: Edition } {
   const condition: BoxCondition = star ? 'complete' : drawCondition(rng());
   const edition: Edition = rng() < (star ? AUCTION.firstPrintOdds * 1.6 : AUCTION.firstPrintOdds) ? 'firstPrint' : 'standard';
-  const copy = dressCopy(seeded(seed), { ...game, condition, status: 'owned', edition: edition === 'standard' ? undefined : edition }, { condition, kind: star ? 'collector' : 'ordinary' });
+  const copy = dressCopy(frozenRng(seed), { ...game, condition, status: 'owned', edition: edition === 'standard' ? undefined : edition }, { condition, kind: star ? 'collector' : 'ordinary' });
   return { game: copy, condition, edition };
 }
 
@@ -123,7 +127,7 @@ export class AuctionHouse {
   }
 
   private async draw(day: number): Promise<AuctionLot[]> {
-    const rng = seeded(`auction:${day}`);
+    const rng = dayStream(`auction:${day}`);
     const { games, sealed } = AUCTION.lots;
     // Nothing here depends on what the player owns: the day's lots stay the same lots (their results are kept by
     // number) however the collection changes; a lot the player has already is refused at the bid.
@@ -149,7 +153,7 @@ export class AuctionHouse {
       const lot = drawSealedLot(`auction:${day}:${i}`, cartonPool);
       return {
         number: 0, kind: 'sealed', sealed: lot, title: `Sealed carton: ${lot.label}`,
-        blurb: `A sealed carton, unopened, sold as seen. ${lot.hint.charAt(0).toUpperCase()}${lot.hint.slice(1)}. Who knows?`,
+        blurb: `A sealed carton, unopened, sold as seen. ${capitalise(lot.hint)}. Who knows?`,
         estimate: lot.price, reserve: Math.max(4, Math.round(lot.price * 0.55)), star: false,
       };
     };

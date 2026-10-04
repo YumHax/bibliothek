@@ -22,6 +22,8 @@ export interface StockTraits {
   sale?: number;
   /** An old shop's price sticker on the cover: it goes at `STICKER.factor` of the price (peeled off at home, it is worth the full price). */
   sticker?: boolean;
+  /** A firm price, never haggled (the collector's saleroom wins: bought at an opening bid, a haggle would undercut the WE BUY desk). */
+  firm?: boolean;
 }
 
 /**
@@ -37,6 +39,8 @@ export class StockItem {
   readonly repro: boolean;
   readonly gem: boolean;
   readonly sticker: boolean;
+  /** Never haggled (`StockTraits.firm`). */
+  readonly firm: boolean;
   /** The share of the usual price a sale asks (1: not on sale). */
   readonly sale: number;
   private listPrice: number;
@@ -69,6 +73,7 @@ export class StockItem {
     this.gem = traits.gem ?? false;
     this.sale = traits.sale ?? 1;
     this.sticker = traits.sticker ?? false;
+    this.firm = traits.firm ?? false;
     // A real copy, whatever the source entry was (a wishlist entry would draw as a ghost box). A seal holds only on a
     // complete genuine copy (a street table re-dealing a stall's copy in a worse state breaks it).
     const sealBroken = game.variant === 'sealed' && (condition !== 'complete' || this.repro);

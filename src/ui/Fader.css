@@ -1,9 +1,12 @@
-/* Teleport curtain: above the 3D view, the HUD and the panels; only the touch controls and the toasts show through. */
-.fader {
-  position: fixed;
-  inset: 0;
-  z-index: var(--z-fader);
-  background: #000;
-  pointer-events: none;
-  transition: opacity 350ms ease;
+/* Teleport curtain: above the 3D view, the HUD and the panels; only the touch controls and the notices show through. `Fader` sets the fade's duration inline per trip. */
+@layer tokens, base, components, panels;
+@layer panels {
+  .fader {
+    position: fixed;
+    inset: 0;
+    z-index: var(--z-fader);
+    background: var(--ui-black);
+    pointer-events: none;
+    transition: opacity var(--dur-fall) ease;
+  }
 }

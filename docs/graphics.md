@@ -107,7 +107,10 @@ linear HDR before tone mapping; 60 mireds per unit, luminance kept), exposure, A
 - **GLSL noise** comes from `graphics/glslNoise`: guarded hash chunks (`SINE_HASH`, `HOSKINS_HASH`, `FRACT_HASH`,
   `IQ_HASH`) and builders (`valueNoise2`, `valueNoise3`, `fbm2`) that name the function and its hash, so each shader
   keeps the hash its look was tuned on. `shaderPatch`'s `VALUE_NOISE` is built from them. Never paste a hash into a
-  shader again (a backtick in a GLSL comment ends the template literal).
+  shader again: a program lives in a `.glsl` file beside its module (imported `?raw`, parsed by `scripts/check-glsl.mjs`)
+  and takes a chunk as an `#include <name>` that `assemble()` (`graphics/glslAssemble`) writes in, a TypeScript value as
+  a `#define TS_NAME`; only the chunk constants and the fragments spliced into three.js's own chunks stay template
+  literals (docs/checks.md "Shaders").
 - Tone mapping happens in the output shader only: rendering to a target skips three's tone mapping, so custom
   `ShaderMaterial`s should still `#include <tonemapping_fragment>` + `<colorspace_fragment>` (no-ops off-screen,
   correct on `low`).

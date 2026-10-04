@@ -1,10 +1,11 @@
 import * as THREE from 'three';
-import { createCanvas, seededRandom, toTexture } from '@/covers/generated/canvasUtils';
+import { createCanvas, toTexture } from '@/covers/generated/canvasUtils';
 import { Prop } from './Prop';
 import { addFringes } from './KilimRug';
 import { fabric } from '@/world/materials/finishes';
 import { cloth as paletteCloth } from '@/world/materials/palette';
 import { FLOOR } from '@/world/surface/layers';
+import { lcg, random as liveRandom } from '@/random';
 
 export interface RugOptions {
   width?: number;
@@ -45,7 +46,7 @@ export class Rug extends Prop {
     const slab = new THREE.Mesh(roundedSlab(width, depth), [top, edge]);
     slab.receiveShadow = true;
     this.add(slab);
-    addFringes(this, width, depth, FRINGE, seededRandom(Math.round(width * 1000 + depth * 7)));
+    addFringes(this, width, depth, FRINGE, lcg(Math.round(width * 1000 + depth * 7)));
   }
 
   private paint(): THREE.CanvasTexture {
@@ -117,8 +118,8 @@ export class Rug extends Prop {
 
     // Fibre noise.
     for (let i = 0; i < 6000; i++) {
-      ctx.fillStyle = `rgba(${Math.random() < 0.5 ? '0,0,0' : '255,255,255'},${(Math.random() * 0.08).toFixed(3)})`;
-      ctx.fillRect(Math.random() * W, Math.random() * H, 2, 2);
+      ctx.fillStyle = `rgba(${liveRandom() < 0.5 ? '0,0,0' : '255,255,255'},${(liveRandom() * 0.08).toFixed(3)})`;
+      ctx.fillRect(liveRandom() * W, liveRandom() * H, 2, 2);
     }
     return toTexture(canvas, 'grazing');
   }

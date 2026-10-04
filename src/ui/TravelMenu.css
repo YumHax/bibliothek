@@ -1,39 +1,42 @@
 /* "Where to?" panel opened by a door. Above the canvas and the crosshair; the surface is `.ui-card`. */
-.travel-menu {
-  position: fixed;
-  inset: 0;
-  z-index: var(--z-overlay);
-  display: grid;
-  place-items: center;
-  pointer-events: none;
+@layer tokens, base, components, panels;
+@layer panels {
+  .travel-menu {
+    position: fixed;
+    inset: 0;
+    z-index: var(--z-overlay);
+    display: grid;
+    place-items: center;
+    pointer-events: none;
+    transition: opacity var(--dur-fade) ease;
+  }
+  .travel-menu__card {
+    pointer-events: auto;
+    min-width: 16rem;
+    padding: 1.25rem 1.75rem;
+    text-align: center;
+    user-select: none;
+    animation: travel-in var(--dur-fade) var(--ui-ease);
+  }
+  @keyframes travel-in {
+    from { opacity: 0; transform: translateY(0.4rem); }
+    to   { opacity: 1; transform: none; }
+  }
+  .travel-menu__card h2 {
+    margin: 0 0 0.9rem;
+    font-family: var(--ui-font-display);
+    font-weight: 400;
+    font-size: var(--fs-t2);
+    letter-spacing: 0.04em;
+  }
+  .travel-menu__card ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.4rem; }
+  .travel-menu__card li .ui-btn { width: 100%; text-align: left; font-size: var(--fs-7); padding: 0.6em 0.9em; }
+  .travel-menu__card li .ui-btn:hover:not(:disabled),
+  .travel-menu__card li .ui-btn:focus-visible { border-color: var(--ui-accent); background: var(--ui-fill-hover); }
+  .travel-menu__stay { margin-top: 0.9rem; font-size: var(--fs-4); color: var(--ui-text-dim); }
+  .travel-menu__stay:hover:not(:disabled),
+  .travel-menu__stay:focus-visible { color: var(--ui-text); }
+  /* Closing: the shared short fade before `hidden` (`ui/fade`). */
+  .travel-menu--closing { opacity: 0; }
+  .travel-menu--closing .travel-menu__card { pointer-events: none; }
 }
-.travel-menu__card {
-  pointer-events: auto;
-  min-width: 16rem;
-  padding: 1.25rem 1.75rem;
-  text-align: center;
-  user-select: none;
-  animation: travel-in 160ms var(--ui-ease);
-}
-@keyframes travel-in {
-  from { opacity: 0; transform: translateY(0.4rem); }
-  to   { opacity: 1; transform: none; }
-}
-.travel-menu__card h2 {
-  margin: 0 0 0.9rem;
-  font-family: var(--ui-font-display);
-  font-weight: 400;
-  font-size: 1.25rem;
-  letter-spacing: 0.04em;
-}
-.travel-menu__card ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.4rem; }
-.travel-menu__card li .ui-btn { width: 100%; text-align: left; font-size: 1rem; padding: 0.6em 0.9em; }
-.travel-menu__card li .ui-btn:hover:not(:disabled),
-.travel-menu__card li .ui-btn:focus-visible { border-color: var(--ui-accent); background: var(--ui-fill-hover); }
-.travel-menu__stay { margin-top: 0.9rem; font-size: 0.85rem; color: var(--ui-text-dim); }
-.travel-menu__stay:hover:not(:disabled),
-.travel-menu__stay:focus-visible { color: var(--ui-text); }
-/* Closing: the shared short fade before `hidden` (`ui/fade`). */
-.travel-menu { transition: opacity 150ms ease; }
-.travel-menu--closing { opacity: 0; }
-.travel-menu--closing .travel-menu__card { pointer-events: none; }

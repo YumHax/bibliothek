@@ -5,8 +5,8 @@ import { part } from '../../props/Prop';
 import { METAL, paint, standard, timber } from '../../materials/palette';
 import { GLASS, asGlass } from '../../materials/glass';
 import { PooledLight } from '../../lighting/LightPool';
-import { seededRandom } from '@/graphics/canvas';
 import { Glows } from '../common/fitting';
+import { lcg } from '@/random';
 
 export interface TerrariumOptions {
   /** Along the wall. Default 0.8. */
@@ -32,7 +32,7 @@ export class Terrarium extends THREE.Group implements Furniture {
     super();
     this.name = 'Terrarium';
     const W = options.width ?? 0.8;
-    const random = seededRandom(options.seed ?? 31);
+    const random = lcg(options.seed ?? 31);
     const wood = timber(0x5a4030, 0.6);
     // The cabinet, its doors and knobs.
     part(this, W, CABINET, DEPTH, wood, { y: CABINET / 2, z: DEPTH / 2 });

@@ -1,6 +1,9 @@
 import * as THREE from 'three';
 import type { Updatable } from '@/core/Engine';
 import { playBump, playFloorCreak, playGridTick, playSetDown } from '@/audio/furnitureSounds';
+import { lerpAngle } from '@/math/angles';
+import { dampFactor } from '@/math/damp';
+import { smooth } from '@/math/scalar';
 import { reduceMotion } from '@/settings/motion';
 import { FLOOR } from '@/world/surface/layers';
 import { Fit, localBounds, type Blocker, type Occupant } from './fit';
@@ -433,9 +436,9 @@ export class FurnitureCarrier implements Updatable {
     }
     const target = carried.target;
     if (!target) return;
-    const t = reduceMotion() ? 1 : 1 - Math.exp(-FOLLOW * dt);
+    const t = reduceMotion() ? 1 : dampFactor(FOLLOW, dt);
     this.shown.position.lerp(target.position, t);
-    this.shown.yaw += shortest(target.yaw - this.shown.yaw) * t;
+    this.shown.yaw = lerpAngle(this.shown.yaw, target.yaw, t);
     carried.lift = reduceMotion() ? 1 : Math.min(1, carried.lift + dt / SETTLE);
     const drawn = this.shown.position.clone().add(this.liftOffset(piece, target, carried.lift));
     zone.move(item, drawn, this.shown.yaw);
@@ -586,7 +589,7 @@ export class FurnitureCarrier implements Updatable {
 
   /** How far the carried piece floats off its surface while `lift` (0..1): up off the floor, out from its wall. */
   private liftOffset(piece: Piece, target: Pose, lift: number): THREE.Vector3 {
-    const eased = lift * lift * (3 - 2 * lift);
+    const eased = smooth(lift);
     if (piece.surface === 'floor') return new THREE.Vector3(0, LIFT * eased, 0);
     if (piece.surface === 'wall') return wallNormal(target.yaw).clone().multiplyScalar(WALL_LIFT * eased);
     return new THREE.Vector3();
@@ -694,10 +697,5 @@ export class FurnitureCarrier implements Updatable {
   private worldBox(pose: Pose, bounds: THREE.Box3): THREE.Box3 {
     return turnedBounds(bounds, pose.yaw).translate(pose.position).applyMatrix4(this.toZone.clone().invert());
   }
-}
-
-/** `angle` brought into (-pi, pi]. */
-function shortest(angle: number): number {
-  return THREE.MathUtils.euclideanModulo(angle + Math.PI, Math.PI * 2) - Math.PI;
 }
 

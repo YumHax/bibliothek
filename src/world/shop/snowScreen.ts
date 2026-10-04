@@ -3,6 +3,7 @@ import { createCanvas, canvasTexture } from '@/graphics/canvas';
 import { markShared } from '../props/Prop';
 import type { Updatable } from '@/core/Engine';
 import type { Furniture } from '../Furniture';
+import { random } from '@/random';
 
 const W = 80;
 const H = 60;
@@ -57,7 +58,7 @@ function paintSnow(): void {
   if (!screen) return;
   const { data } = screen.image;
   for (let i = 0; i < W * H; i++) {
-    const v = Math.random() * 200 + 40;
+    const v = random() * 200 + 40;
     data[i * 4] = v;
     data[i * 4 + 1] = v;
     data[i * 4 + 2] = v + 12;

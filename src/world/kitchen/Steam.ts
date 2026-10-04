@@ -2,6 +2,9 @@ import * as THREE from 'three';
 import { RENDER_ORDER } from '../surface/layers';
 import { viewScale } from '../particles/pointScale';
 import { overKeepingAlpha } from '@/world/materials/blend';
+import VERTEX from './Steam.vert.glsl?raw';
+import FRAGMENT from './Steam.frag.glsl?raw';
+import { random } from '@/random';
 
 interface SteamOptions {
   /** Puffs alive at once at full rate. Default 24. */
@@ -108,39 +111,9 @@ export class Steam extends THREE.Points {
     const i = this.next;
     this.next = (this.next + 1) % this.settings.count;
     this.ages[i] = 0;
-    this.positions.setXYZ(i, (Math.random() - 0.5) * 0.01, 0, (Math.random() - 0.5) * 0.01);
-    this.drift[i * 2] = (Math.random() - 0.5) * 0.06;
-    this.drift[i * 2 + 1] = (Math.random() - 0.5) * 0.06;
+    this.positions.setXYZ(i, (random() - 0.5) * 0.01, 0, (random() - 0.5) * 0.01);
+    this.drift[i * 2] = (random() - 0.5) * 0.06;
+    this.drift[i * 2 + 1] = (random() - 0.5) * 0.06;
     this.lives.setX(i, 0);
   }
 }
-
-const VERTEX = /* glsl */ `
-uniform float viewScale;
-uniform float startSize;
-uniform float endSize;
-attribute float life;
-varying float vLife;
-void main() {
-  vLife = life;
-  vec4 view = modelViewMatrix * vec4(position, 1.0);
-  gl_Position = projectionMatrix * view;
-  float size = mix(startSize, endSize, sqrt(max(life, 0.0)));
-  gl_PointSize = life < 0.0 ? 0.0 : clamp(size * viewScale / -view.z, 1.0, 256.0);
-}
-`;
-
-const FRAGMENT = /* glsl */ `
-uniform float opacity;
-varying float vLife;
-void main() {
-  if (vLife < 0.0) discard;
-  float d = length(gl_PointCoord - 0.5) * 2.0;
-  float soft = 1.0 - smoothstep(0.2, 1.0, d);
-  // Fades in over its first tenth, out over the rest.
-  float fade = smoothstep(0.0, 0.1, vLife) * (1.0 - vLife);
-  gl_FragColor = vec4(vec3(0.82, 0.84, 0.86), soft * fade * opacity);
-  #include <tonemapping_fragment>
-  #include <colorspace_fragment>
-}
-`;

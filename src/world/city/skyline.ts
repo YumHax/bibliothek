@@ -1,6 +1,6 @@
-import { seededRandom } from '@/covers/generated/canvasUtils';
-import { FLAT_IN_STREET, FRONT, PARK_STREET } from '../street/streetPlan';
+import { FLAT_IN_STREET, FRONT, PARK_STREET } from '@/world/measures/street';
 import { PARK_FAR } from './park';
+import { between, lcg } from '@/random';
 
 /*
  * The towers of the far city, in the flat's frame: a dense cluster behind Front Street's block, a
@@ -41,16 +41,15 @@ const CROWNS: readonly TowerCrown[] = ['flat', 'flat', 'setback', 'setback', 'sp
 const deg = (d: number): number => (d * Math.PI) / 180;
 
 export const SKYLINE: readonly SkylineTower[] = (() => {
-  const random = seededRandom(60917);
-  const between = (a: number, b: number): number => a + random() * (b - a);
+  const random = lcg(60917);
   const towers: SkylineTower[] = [];
   const cluster = (from: number, to: number, count: number, near: number, far: number, minH: number, maxH: number): void => {
     for (let i = 0; i < count; i++) {
       towers.push({
-        azimuth: between(from, to),
-        distance: between(near, far),
-        width: between(24, 56),
-        height: between(minH, maxH),
+        azimuth: between(random, from, to),
+        distance: between(random, near, far),
+        width: between(random, 24, 56),
+        height: between(random, minH, maxH),
         style: Math.floor(random() * TOWER_STYLES.length),
         crown: CROWNS[Math.floor(random() * CROWNS.length)]!,
         sideLeft: random() < 0.5,
@@ -122,24 +121,23 @@ const PARK_FAR_X = -PARK_FAR;
  * wherever the player stands, so they stand still against the roofs as one walks.
  */
 export const BACKDROP_BLOCKS: readonly BackdropBlock[] = (() => {
-  const random = seededRandom(70321);
-  const between = (a: number, b: number): number => a + random() * (b - a);
+  const random = lcg(70321);
   const floors = (lo: number, hi: number): number => (lo + Math.floor(random() * (hi - lo + 1))) * 3.1 + 2.2;
   const blocks: BackdropBlock[] = [];
   const wall = (): number => Math.floor(random() * BACKDROP_WALLS.length);
   // A row of blocks along x from `from` to `to`, their fronts on z = `line` (depth towards +z if `deep` > 0).
   const rowAlongX = (from: number, to: number, line: number, deep: number, width: [number, number], storeys: [number, number]): void => {
     for (let x = from; x < to; ) {
-      const w = between(...width);
+      const w = between(random, ...width);
       blocks.push({ x0: x, x1: x + w, z0: Math.min(line, line + deep), z1: Math.max(line, line + deep), height: floors(...storeys), wall: wall() });
-      x += w + (random() < 0.15 ? between(4, 10) : 0);
+      x += w + (random() < 0.15 ? between(random, 4, 10) : 0);
     }
   };
   const rowAlongZ = (from: number, to: number, line: number, deep: number, width: [number, number], storeys: [number, number]): void => {
     for (let z = from; z < to; ) {
-      const w = between(...width);
+      const w = between(random, ...width);
       blocks.push({ z0: z, z1: z + w, x0: Math.min(line, line + deep), x1: Math.max(line, line + deep), height: floors(...storeys), wall: wall() });
-      z += w + (random() < 0.15 ? between(4, 10) : 0);
+      z += w + (random() < 0.15 ? between(random, 4, 10) : 0);
     }
   };
   // The park's far side.
@@ -148,10 +146,10 @@ export const BACKDROP_BLOCKS: readonly BackdropBlock[] = (() => {
   rowAlongX(PARK_HEDGE_X, 260, FAR_LINE + 42, 15, [12, 22], [6, 9]);
   // Taller blocks a few streets further.
   for (let i = 0; i < 22; i++) {
-    const z = between(115, 240);
-    const x = between(-160, 380);
-    const w = between(18, 40);
-    blocks.push({ x0: x, x1: x + w, z0: z, z1: z + between(16, 26), height: floors(9, 16), wall: wall() });
+    const z = between(random, 115, 240);
+    const x = between(random, -160, 380);
+    const w = between(random, 18, 40);
+    blocks.push({ x0: x, x1: x + w, z0: z, z1: z + between(random, 16, 26), height: floors(9, 16), wall: wall() });
   }
   // Behind our block and its courtyard (the flat's back is about z -9: the courtyard runs to -24, the rear building beyond).
   rowAlongX(-5, 240, -62, -16, [14, 24], [6, 8]);

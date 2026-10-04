@@ -1,11 +1,11 @@
 import * as THREE from 'three';
 import { type Rng, azimuthOf, azimuthX, heightY } from './Sheet';
-import { between, pick } from './paint';
 import { KERB, LIFE_REACH, PARK_PATHS, WALK_LINE } from './plan';
 import { resample } from './Park';
 import type { LifeEvents } from './lifeEvents';
 import { FIGURE_MARGIN, FIGURE_SCALE, HAIRS, type Look, SHIRTS, SKINS, TROUSERS, figurePen } from './figures';
 import type { AtlasPens, Cell, LifeEnv, LifeLayer, Push } from './sprites';
+import { between, pick } from '@/random';
 
 /** How tall a pedestrian cell reaches: room for an umbrella over the head. */
 const PERSON_TOP = 2.3;

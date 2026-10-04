@@ -4,6 +4,7 @@ import type { ProgramRunner } from '@/onscreen';
 import type { VideoScreen } from '../../screen';
 import type { GatheringBook } from './GatheringBook';
 import type { VisitHost } from './host';
+import type { SocialServices } from '@/social/talk';
 
 /** What the gatherings need besides the visitors' director (`host`): the book, the TV for a match, the stores. */
 export interface GatheringDeps {
@@ -26,4 +27,6 @@ export interface GatheringDeps {
   showcases?: () => readonly { at: THREE.Vector3; yaw: number; look: THREE.Vector3; name: string; games: readonly Game[] }[];
   /** Where an honour's neon hangs (world), for the club's visitor to look up at. */
   honourAt?: (id: string) => THREE.Vector3 | null;
+  /** The people the player talks to (docs/social.md): the club's visitor is one of them. */
+  social?: SocialServices;
 }

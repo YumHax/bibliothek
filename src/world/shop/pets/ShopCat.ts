@@ -6,6 +6,7 @@ import { cloth, paint } from '../../materials/palette';
 import { CatBed } from '../../cat/CatBed';
 import { createCanvas, toTexture } from '@/graphics/canvas';
 import { HAND, setLines } from '../common/lettering';
+import { random } from '@/random';
 
 export interface ShopCatOptions {
   /** The fur and the tabby's darker stripes. Default a grey-brown tabby. */
@@ -28,7 +29,7 @@ const BREATH = { depth: 0.035, rate: 1.6 };
  */
 export class ShopCat extends Prop implements Updatable {
   private readonly body: THREE.Group;
-  private time = Math.random() * 10;
+  private time = random() * 10;
 
   constructor(options: ShopCatOptions = {}) {
     super();

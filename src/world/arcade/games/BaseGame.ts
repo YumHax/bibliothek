@@ -1,9 +1,10 @@
 import type { Sfx, SfxEvent } from '@/audio/ChipSpeaker';
 import { type ArcadeControls, type ArcadeGame, type RunContext, SCREEN_H, SCREEN_W, drawText } from './ArcadeGame';
-import { seededRandom } from '@/covers/generated/canvasUtils';
 import { Fx } from './Fx';
-import { KeyEdges } from './KeyEdges';
+import { KeyEdges } from '@/input/GameInput';
+import { SoundQueue } from '../SoundQueue';
 import { POINTS_PER_TICKET } from '@/economy/pricing';
+import { lcg, random as liveRandom } from '@/random';
 
 /** The HUD strip across the top; the playfield starts at `PLAY_TOP`. */
 export const PLAY_TOP = 22;
@@ -46,8 +47,8 @@ export abstract class BaseGame implements ArcadeGame {
   private comboTimer = 0;
   private bestBeaten = false;
   private bestBanner = 0;
-  private sounds: SfxEvent[] = [];
-  private rng: () => number = Math.random;
+  private readonly sounds = new SoundQueue();
+  private rng: () => number = liveRandom;
 
   /**
    * `timeLimit` in seconds, or null for a play that only ends by the game's own rules; `comboMax`
@@ -59,17 +60,14 @@ export abstract class BaseGame implements ArcadeGame {
   ) {}
 
   takeSounds(): SfxEvent[] {
-    const sounds = this.sounds;
-    this.sounds = [];
-    return sounds;
+    return this.sounds.take();
   }
 
   abstract autopilot(skill: number): ArcadeControls;
 
-  /** Queues a sound for the cabinet's speaker; the same sound twice in a frame plays once. */
+  /** Queues a sound for the cabinet's speaker (`SoundQueue`: the same sound twice in a frame plays once). */
   protected sound(sfx: Sfx, pitch = 1): void {
-    if (this.sounds.some((s) => s.sfx === sfx)) return;
-    if (this.sounds.length < 6) this.sounds.push({ sfx, pitch });
+    this.sounds.push(sfx, pitch);
   }
 
   reset(run: RunContext): void {
@@ -86,8 +84,8 @@ export abstract class BaseGame implements ArcadeGame {
     this.endReason = '';
     this.bestBeaten = false;
     this.bestBanner = 0;
-    this.sounds = [];
-    this.rng = seededRandom(run.seed ?? Math.floor(Math.random() * 0x100000000));
+    this.sounds.clear();
+    this.rng = lcg(run.seed ?? Math.floor(liveRandom() * 0x100000000));
     this.fx.clear();
     this.keys.reset();
     this.begin();
@@ -136,8 +134,8 @@ export abstract class BaseGame implements ArcadeGame {
 
   /**
    * The run's random numbers, seeded by `reset`: every draw that shapes the board (a spawn, a
-   * serve, a pick) goes through it, never `Math.random`, so a play replays exactly from its seed
-   * and inputs. Autopilots and screen shake may use `Math.random`: they never change the board.
+   * serve, a pick) goes through it, never the live `random()`, so a play replays exactly from its seed
+   * and inputs. Autopilots and screen shake may draw live: they never change the board.
    */
   protected rand(): number {
     return this.rng();

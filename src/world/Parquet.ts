@@ -1,7 +1,8 @@
 import * as THREE from 'three';
-import { createCanvas, seededRandom, canvasTexture } from '@/covers/generated/canvasUtils';
+import { createCanvas, canvasTexture } from '@/covers/generated/canvasUtils';
 import { paintOnce } from './materials/paintedTiles';
 import { beforeChunk, afterChunk, patchShader, replaceChunk, VALUE_NOISE } from './materials/shaderPatch';
+import { lcg } from '@/random';
 
 /** Metres of floor covered by one tile of the texture (must be a multiple of `PLANK_LENGTH`). */
 const TILE_M = 2.4;
@@ -121,7 +122,7 @@ export function parquetMaterial(floorWidth: number, floorDepth: number): THREE.M
 function paintParquet(): [THREE.Texture, THREE.Texture] {
   const [colorCanvas, color] = createCanvas(TILE_PX, TILE_PX);
   const [bumpCanvas, bump] = createCanvas(TILE_PX, TILE_PX);
-  const random = seededRandom(0x9a7452);
+  const random = lcg(0x9a7452);
 
   // Gaps first: whatever the planks do not cover.
   color.fillStyle = '#4a3320';

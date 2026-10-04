@@ -1,8 +1,9 @@
 import * as THREE from 'three';
 import { QUALITY } from '@/graphics/quality';
-import { createCanvas, seededRandom, canvasTexture } from '@/covers/generated/canvasUtils';
+import { createCanvas, canvasTexture } from '@/covers/generated/canvasUtils';
 import { afterChunk, patchShader, VALUE_NOISE } from './shaderPatch';
 import { markShared } from './sharedResources';
+import { lcg } from '@/random';
 
 /** Metres of timber one repeat of the grain texture covers (along the fibres, then across). */
 const GRAIN_ALONG_M = 1.6;
@@ -22,7 +23,7 @@ let grainTexture: THREE.CanvasTexture | null = null;
 function grain(): THREE.CanvasTexture {
   if (grainTexture) return grainTexture;
   const [canvas, ctx] = createCanvas(GRAIN_PX, GRAIN_PX);
-  const random = seededRandom(0x6a1b3c);
+  const random = lcg(0x6a1b3c);
   ctx.fillStyle = '#9a9a9a';
   ctx.fillRect(0, 0, GRAIN_PX, GRAIN_PX);
   // Growth bands: sinuous strokes across the whole tile, wrapped so the tile repeats.

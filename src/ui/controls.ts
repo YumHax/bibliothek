@@ -97,6 +97,7 @@ export const CONTROLS: ControlHint[] = [
   { group: 'room', action: 'Call the cat', keys: k('callCat'), pad: 'Click [Right stick]' },
   { group: 'room', action: 'Put down the card being read (twice: every waiting card), else the tips and the banner', keys: `${k('dismissNotice')} or [Click] it`, pad: 'Hold [Y]', touch: 'Tap it' },
   { group: 'room', action: 'Your journal: the day, the days before', keys: `${k('journal')} or [Click] the notebook on the hall console`, pad: 'Hold [Select], or [Start] › Journal', touch: '[Menu] › Journal' },
+  { group: 'room', action: 'The People book: everyone you know, how you stand, what each relationship does', keys: `${k('people')} or the journal’s People button`, pad: '[Start] › People', touch: '[Menu] › People' },
   { group: 'room', action: 'The collector’s book: milestones, sets, value', keys: '[Click] the binder in the living room', pad: '[A]', touch: 'Tap' },
   { group: 'room', action: 'Photo mode (fly, focus, take a PNG)', keys: k('photoMode'), pad: '[Start] › Photo mode', touch: '[Menu] › Photo mode' },
   { group: 'room', action: 'Pet the cat, refill its bowl', keys: '[Click] it, [Click] the bowl', pad: '[A]', touch: 'Tap' },

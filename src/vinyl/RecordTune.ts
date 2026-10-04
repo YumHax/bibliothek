@@ -1,4 +1,5 @@
 import { Voice } from '@/audio/ambient';
+import { fnv1a, mulberry32, pick, random as liveRandom } from '@/random';
 import type { Era, Soundtrack } from './records';
 
 /** How far ahead notes are put on the audio clock (s); the voice is ticked every frame while heard. */
@@ -58,6 +59,29 @@ const PROGRESSIONS: Record<Soundtrack['mood'], number[][]> = {
   major: [[0, 5, 3, 4], [0, 3, 4, 0], [0, 4, 5, 3], [3, 4, 0, 5], [0, 2, 3, 4]],
   minor: [[0, 5, 2, 6], [0, 3, 4, 0], [0, 6, 5, 6], [0, 5, 3, 4], [5, 6, 0, 0]],
 };
+
+/** Where a sixteenth falls in its track: the step in the bar, the bar, the section and the chord under it, whether the bar is the last. */
+interface Beat {
+  index: number;
+  /** The step in its bar, 0..15. */
+  s: number;
+  bar: number;
+  section: 'a' | 'b';
+  /** The chord's scale degree, and its three notes as semitones above the root. */
+  degree: number;
+  chord: number[];
+  lastBar: boolean;
+}
+
+function beatOf(track: Track, index: number): Beat {
+  const s = index % 16;
+  const bar = Math.floor(index / 16);
+  const section = bar >= 16 && bar < 24 ? 'b' : 'a';
+  const progression = section === 'b' ? track.b : track.a;
+  const degree = progression[bar % progression.length]!;
+  const chord = [0, 2, 4].map((k) => scaleNote(track.scale, degree + k));
+  return { index, s, bar, section, degree, chord, lastBar: bar === BARS - 1 };
+}
 
 /** One track, as it will be played: everything drawn from its seed up front. */
 interface Track {
@@ -180,7 +204,7 @@ export class RecordTune extends Voice {
     if (this.dropPending) {
       this.dropPending = false;
       this.thump(ctx, out, now, 70, 0.5);
-      for (let i = 0; i < 6; i++) this.pop(ctx, out, now + Math.random() * 0.25, 0.25);
+      for (let i = 0; i < 6; i++) this.pop(ctx, out, now + liveRandom() * 0.25, 0.25);
     }
     if (this.liftPending) {
       this.liftPending = false;
@@ -193,7 +217,7 @@ export class RecordTune extends Voice {
     this.tone.frequency.setTargetAtTime(style.cutoff, now, 0.1);
     this.echo?.send.gain.setTargetAtTime(style.echo, now, 0.1);
     // The crackle's pops, random all along.
-    if (Math.random() < POPS_PER_S * dt) this.pop(ctx, out, now + Math.random() * 0.05, 0.12 + Math.random() * 0.15);
+    if (liveRandom() < POPS_PER_S * dt) this.pop(ctx, out, now + liveRandom() * 0.05, 0.12 + liveRandom() * 0.15);
     // Notes up to the lookahead, in song time; a stretch nobody heard (the voice let go) is skipped.
     const songNow = this.elapsed;
     if (this.cursor < songNow) this.cursor = songNow;
@@ -221,38 +245,48 @@ export class RecordTune extends Voice {
 
   /** One sixteenth: drums, bass, the harmony (an arpeggio or a held chord), the lead from the section's motif. */
   private playStep(ctx: AudioContext, out: AudioNode, style: Style, track: Track, index: number, t: number): void {
-    const s = index % 16;
-    const bar = Math.floor(index / 16);
-    const section = bar >= 16 && bar < 24 ? 'b' : 'a';
-    const progression = section === 'b' ? track.b : track.a;
-    const degree = progression[bar % progression.length]!;
-    const chord = [0, 2, 4].map((k) => scaleNote(track.scale, degree + k));
-    const { root, sixteenth } = track;
-    const lastBar = bar === BARS - 1;
+    const beat = beatOf(track, index);
+    this.drums(ctx, out, style, beat, t);
+    this.bassNote(ctx, out, style, track, beat, t);
+    this.harmonyNotes(ctx, out, style, track, beat, t);
+    this.leadNote(ctx, out, style, track, beat, t);
+  }
+
+  /** The kick, snare and hat where the style puts them; the last bar keeps its first kick only. */
+  private drums(ctx: AudioContext, out: AudioNode, style: Style, { s, lastBar }: Beat, t: number): void {
     if (style.kick.includes(s) && !(lastBar && s > 0)) this.kick(ctx, out, t);
     if (style.snare.includes(s) && !lastBar) this.hit(ctx, out, t, 2200, 0.12, 0.28, 'bandpass');
     if (style.hat.includes(s) && !lastBar) this.hit(ctx, out, t, 8500, 0.025, 0.07, 'highpass');
-    if (style.bassAt.includes(s) && !(lastBar && s > 0)) {
-      const octave = style.octave.includes(s) ? 12 : 0;
-      this.note(ctx, out, style.bass, midi(root - 24 + chord[0]! + octave), t, sixteenth * style.bassLength, 0.3, style.slap ? 1400 : 2400, 0.004, 0, style.slap);
+  }
+
+  /** The bass on the chord's root two octaves down, an octave up on the style's octave steps. */
+  private bassNote(ctx: AudioContext, out: AudioNode, style: Style, track: Track, { s, chord, lastBar }: Beat, t: number): void {
+    if (!style.bassAt.includes(s) || (lastBar && s > 0)) return;
+    const octave = style.octave.includes(s) ? 12 : 0;
+    this.note(ctx, out, style.bass, midi(track.root - 24 + chord[0]! + octave), t, track.sixteenth * style.bassLength, 0.3, style.slap ? 1400 : 2400, 0.004, 0, style.slap);
+  }
+
+  /** The harmony: the chord as a fast arpeggio (the 8-bit way) or held as a pad from the bar's first step, longer on the last bar. */
+  private harmonyNotes(ctx: AudioContext, out: AudioNode, style: Style, track: Track, { index, s, chord, lastBar }: Beat, t: number): void {
+    if (!style.harmony) return;
+    if (style.arpeggio && !lastBar) {
+      const n = chord[(index % 3)]! + (s % 8 >= 4 ? 12 : 0);
+      this.note(ctx, out, style.harmony, midi(track.root + n), t, track.sixteenth * 0.9, 0.05, 6000, 0.002, 0);
+    } else if (s === 0) {
+      for (const n of chord) this.note(ctx, out, style.harmony, midi(track.root + n), t, track.sixteenth * (lastBar ? 24 : 15), 0.045, 2600, style.attack * 2, 0);
     }
-    if (style.harmony) {
-      if (style.arpeggio && !lastBar) {
-        const n = chord[(index % 3)]! + (s % 8 >= 4 ? 12 : 0);
-        this.note(ctx, out, style.harmony, midi(root + n), t, sixteenth * 0.9, 0.05, 6000, 0.002, 0);
-      } else if (s === 0) {
-        for (const n of chord) this.note(ctx, out, style.harmony, midi(root + n), t, sixteenth * (lastBar ? 24 : 15), 0.045, 2600, style.attack * 2, 0);
-      }
-    }
+  }
+
+  /** The lead from the section's motif; every fourth bar the phrase comes home (its last beat the chord's root, held), and the last bar holds one note. */
+  private leadNote(ctx: AudioContext, out: AudioNode, style: Style, track: Track, { s, bar, section, degree, lastBar }: Beat, t: number): void {
     const motif = section === 'b' ? track.motifB : track.motifA;
     let step = motif[s];
-    // Every fourth bar the phrase comes home: its last beat is the chord's root, held.
     if (bar % 4 === 3 && s >= 12) step = s === 12 ? 0 : null;
     if (lastBar) step = s === 0 ? 0 : null;
     if (step === null || step === undefined) return;
     const pitch = scaleNote(track.scale, degree + step);
     const held = lastBar ? 12 : bar % 4 === 3 && s === 12 ? 4 : motif[s + 1] === null ? 2 : 1;
-    this.note(ctx, out, style.lead, midi(root + 12 + pitch), t, sixteenth * held * 0.95, 0.085, 5200, style.attack, style.vibrato);
+    this.note(ctx, out, style.lead, midi(track.root + 12 + pitch), t, track.sixteenth * held * 0.95, 0.085, 5200, style.attack, style.vibrato);
   }
 
   private note(ctx: AudioContext, out: AudioNode, wave: Wave, frequency: number, t: number, length: number, level: number, cutoff: number, attack: number, vibrato: number, slap = false): void {
@@ -308,14 +342,14 @@ export class RecordTune extends Voice {
     env.gain.setValueAtTime(level, t);
     env.gain.exponentialRampToValueAtTime(0.001, t + length);
     source.connect(filter).connect(env).connect(out);
-    source.start(t, Math.random() * 1.5);
+    source.start(t, liveRandom() * 1.5);
     source.stop(t + length + 0.02);
     source.onended = () => env.disconnect();
   }
 
   /** A crackle's pop: a click of bright noise a few milliseconds long. */
   private pop(ctx: AudioContext, out: AudioNode, t: number, level: number): void {
-    this.hit(ctx, out, t, 2500 + Math.random() * 4000, 0.004 + Math.random() * 0.006, level, 'highpass');
+    this.hit(ctx, out, t, 2500 + liveRandom() * 4000, 0.004 + liveRandom() * 0.006, level, 'highpass');
   }
 
   /** The needle landing (low) or the arm lifting (a click): a short dull sine knock. */
@@ -351,9 +385,8 @@ export class RecordTune extends Voice {
 
 /** Everything a track is, drawn from its record and number: the same tune every time. */
 function makeTrack(record: Soundtrack, index: number): Track {
-  const rand = seeded(`${record.id}:${index}`);
+  const rand = mulberry32(fnv1a(`${record.id}:${index}`));
   const style = STYLES[record.era];
-  const pick = <T>(list: readonly T[]): T => list[Math.floor(rand() * list.length)]!;
   const bpm = style.bpm[0] + rand() * (style.bpm[1] - style.bpm[0]);
   const sixteenth = 60 / bpm / 4;
   const progressions = PROGRESSIONS[record.mood];
@@ -361,8 +394,8 @@ function makeTrack(record: Soundtrack, index: number): Track {
     sixteenth,
     root: 55 + Math.floor(rand() * 9),
     scale: record.mood === 'major' ? MAJOR : MINOR,
-    a: pick(progressions),
-    b: pick(progressions),
+    a: pick(rand, progressions),
+    b: pick(rand, progressions),
     motifA: motif(rand, style.density),
     motifB: motif(rand, style.density * 0.8),
     seconds: BARS * 16 * sixteenth,
@@ -392,17 +425,4 @@ function scaleNote(scale: readonly number[], step: number): number {
 
 function midi(note: number): number {
   return 440 * 2 ** ((note - 69) / 12);
-}
-
-/** A seeded random stream (mulberry32 over an FNV hash of `key`). */
-function seeded(key: string): () => number {
-  let h = 0x811c9dc5;
-  for (let i = 0; i < key.length; i++) h = Math.imul(h ^ key.charCodeAt(i), 0x01000193);
-  let a = h >>> 0;
-  return () => {
-    a = (a + 0x6d2b79f5) | 0;
-    let t = Math.imul(a ^ (a >>> 15), 1 | a);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
 }

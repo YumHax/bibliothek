@@ -1,4 +1,4 @@
-import { formatCoins } from '@/ui/money';
+import { formatMoney } from '@/text/money';
 import { reduceMotion } from '@/settings/motion';
 import { playNoticeSound } from '@/audio/noticeSounds';
 import { readMs } from './readingTime';
@@ -78,6 +78,13 @@ export class RewardBanner {
       rays.className = 'reward__rays';
       el.appendChild(rays);
     }
+    if (reward.picture) {
+      const frame = document.createElement('div');
+      frame.className = 'reward__picture';
+      if (reward.pictureRing) frame.style.setProperty('--ring', reward.pictureRing);
+      frame.appendChild(reward.picture);
+      el.appendChild(frame);
+    }
     const title = document.createElement('div');
     title.className = 'reward__title';
     title.textContent = reward.title;
@@ -109,7 +116,7 @@ function chip(amount: number | undefined, kind: 'coin' | 'ticket'): HTMLSpanElem
   el.className = `reward__chip reward__chip--${kind}${amount < 0 ? ' reward__chip--spent' : ''}`;
   const icon = document.createElement('span');
   icon.className = `reward__icon reward__icon--${kind}`;
-  el.append(icon, formatCoins(amount, { sign: true, unit: kind }));
+  el.append(icon, formatMoney(amount, kind, { sign: true }));
   return el;
 }
 

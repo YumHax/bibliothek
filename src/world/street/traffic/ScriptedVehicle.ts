@@ -8,6 +8,7 @@ import { Horn, allowedSpeed, approach, corneringSpeed, distanceNearest, headingA
 import type { LampMaterial } from './lampMaterial';
 import { rollAngle, type WheelMaterial } from './wheelSpin';
 import type { RoadObstacle, RoadVehicle, StreetTraffic } from './StreetTraffic';
+import { angleTo } from '@/math/angles';
 
 /** The zone's collision set (world-space boxes): a vehicle standing still is solid while it stands. */
 export interface CollisionSet {
@@ -249,7 +250,7 @@ export abstract class ScriptedVehicle extends THREE.Group implements Furniture, 
     if (this.state === 'driving') {
       const here = headingAt(this.route, this.distance);
       const next = headingAt(this.route, this.distance + SIGNAL.ahead);
-      const turn = Math.atan2(Math.sin(next - here), Math.cos(next - here));
+      const turn = angleTo(here, next);
       const toStop = this.toNextStop;
       this.signalling = Math.abs(turn) > SIGNAL.turn ? (turn > 0 ? -1 : 1) : toStop < 30 ? 1 : 0;
     } else this.signalling = 0;

@@ -4,7 +4,7 @@ import type { Updatable } from '@/core/Engine';
 import type { Furniture } from '../Furniture';
 import { cylinderMesh } from '../meshUtils';
 import { METAL, paint } from '../materials/palette';
-import { seededRandom } from '@/graphics/canvas';
+import { lcg } from '@/random';
 
 /** The stand's pole and the cage hung from its arm (m): the cage's bottom and top, its radius, the bars round it. */
 const POLE = 1.75;
@@ -32,7 +32,7 @@ export class Birdcage extends THREE.Group implements Furniture, Updatable {
   constructor(seed = 5) {
     super();
     this.name = 'Birdcage';
-    this.random = seededRandom(seed);
+    this.random = lcg(seed);
     const brass = METAL.brass();
     const iron = paint(0x2a2a2c, 0.5);
     // The stand: a weighted foot, the pole, the arm and its hook.

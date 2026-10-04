@@ -1,10 +1,10 @@
 import * as THREE from 'three';
 import type { Rng } from './Sheet';
 import { AMBULANCE_BODY, BUS_BODY, CAR_BODY, type CarFrame, TAXI_BODY, TRUCK_BODY, VAN_BODY, type VehicleBody } from './Car';
-import { between, pick } from './paint';
 import { resample } from './Park';
 import { CYCLE_FAR, CYCLE_NEAR, LIFE_REACH, TURN_CENTRE } from './plan';
 import { type AtlasPens, type Cell, type LifeEnv, type LifeLayer, type Push, glowDot, packTint, uprightBounds } from './sprites';
+import { between, pick } from '@/random';
 
 /** Every kind of vehicle on the roads, in the order the pane shader numbers them (`vehicleShader`). */
 export const VEHICLE_KINDS = ['car', 'taxi', 'bus', 'truck', 'van', 'ambulance'] as const;

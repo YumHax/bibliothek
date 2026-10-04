@@ -46,7 +46,7 @@ interface AnnexShelvingSpec {
  * buys the next one, leaning at the first empty slot while the next bookcase bought would stand here. No ceiling spots
  * (a light added mid-game would recompile every shader). Null without the flat's purchases.
  */
-export function placeAnnexShelving(zone: Zone, ctx: BuildContext, spec: AnnexShelvingSpec): Shelving | null {
+export function placeAnnexShelving(zone: Zone, ctx: Pick<BuildContext, 'covers' | 'collection' | 'home'>, spec: AnnexShelvingSpec): Shelving | null {
   const { covers, collection: { arrangement, boxes, shelved }, home: { upgrades, furnishings, shelfLabels } } = ctx;
   if (!upgrades) return null;
   const slots = spec.slots.map((at) => {

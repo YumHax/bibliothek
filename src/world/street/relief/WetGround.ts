@@ -1,13 +1,14 @@
 import * as THREE from 'three';
 import { Reflector } from 'three/examples/jsm/objects/Reflector.js';
 import type { Updatable } from '@/core/Engine';
-import { createCanvas, seededRandom, canvasTexture } from '@/covers/generated/canvasUtils';
+import { createCanvas, canvasTexture } from '@/covers/generated/canvasUtils';
 import type { Furniture } from '../../Furniture';
 import type { DayNight, SkyState } from '../../props/DayNight';
 import type { PaintedFront } from '../Buildings';
 import { isShopOpen } from '../shops/shopHours';
 import { nightnessOf } from '../streetAir';
-import { FRONT, KERB_HEIGHT, PARK_STREET, STREET_PLAN, WALKABLE, type ShopKind, type Vec2 } from '../streetPlan';
+import { STREET_PLAN, type ShopKind, type Vec2 } from '../streetPlan';
+import { FRONT, KERB_HEIGHT, PARK_STREET, WALKABLE } from '@/world/measures/street';
 import { FacadeFrame } from './facadeFrame';
 import { groundHeight } from './ground';
 import { GROUND, RENDER_ORDER, onSurface } from '../../surface/layers';
@@ -15,6 +16,9 @@ import { LAMP_LIGHT } from '../../lighting/lampColours';
 import { envBoost } from '../../materials/envBoost';
 import type { MovingLamp } from '../StreetCars';
 import { additive, additiveOne } from '@/world/materials/blend';
+import { lcg } from '@/random';
+import wetGroundVertex from './WetGround.vert.glsl?raw';
+import wetGroundFragment from './WetGround.frag.glsl?raw';
 
 interface WetGroundOptions {
   fronts: readonly PaintedFront[];
@@ -318,7 +322,7 @@ export class WetGround extends THREE.Group implements Furniture, Updatable {
 
 /** Where the puddles lie (seeded): in the gutters of Front Street and Park Street, a few in the lanes, on the pavements' low spots. */
 function puddleSpots(): Puddle[] {
-  const random = seededRandom(6061);
+  const random = lcg(6061);
   const out: Puddle[] = [];
   const add = (x: number, z: number, big: number): void => {
     out.push({ at: [x, z], y: groundHeight(x, z) + GROUND.puddle.lift, sx: (0.8 + random() * 1.6) * big, sz: (0.5 + random() * 0.7) * big, yaw: (random() - 0.5) * 0.5 });
@@ -378,39 +382,8 @@ function mirrorShader(mask: THREE.Texture) {
       strength: { value: 0 },
       mask: { value: mask },
     },
-    vertexShader: /* glsl */ `
-      uniform mat4 textureMatrix;
-      varying vec4 vUvProj;
-      varying vec2 vUv;
-      varying vec3 vWorld;
-      void main() {
-        vUvProj = textureMatrix * vec4(position, 1.0);
-        vUv = uv;
-        vWorld = (modelMatrix * vec4(position, 1.0)).xyz;
-        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-      }`,
-    fragmentShader: /* glsl */ `
-      uniform sampler2D tDiffuse;
-      uniform sampler2D mask;
-      uniform float strength;
-      varying vec4 vUvProj;
-      varying vec2 vUv;
-      varying vec3 vWorld;
-      void main() {
-        float m = texture2D(mask, vUv).r;
-        vec3 sum = vec3(0.0);
-        float spread = 0.006 * vUvProj.w;
-        for (int x = -1; x <= 1; x++) {
-          for (int y = -1; y <= 1; y++) {
-            sum += texture2DProj(tDiffuse, vUvProj + vec4(float(x) * spread, float(y) * spread * 2.0, 0.0, 0.0)).rgb;
-          }
-        }
-        vec3 toEye = normalize(cameraPosition - vWorld);
-        float fresnel = 0.2 + 0.8 * pow(1.0 - clamp(toEye.y, 0.0, 1.0), 3.0);
-        gl_FragColor = vec4(sum / 9.0 * strength * fresnel * m, 1.0);
-        #include <tonemapping_fragment>
-        #include <colorspace_fragment>
-      }`,
+    vertexShader: wetGroundVertex,
+    fragmentShader: wetGroundFragment,
   };
 }
 
@@ -420,7 +393,7 @@ function streakTexture(): THREE.CanvasTexture {
   const h = 256;
   const [canvas, ctx] = createCanvas(w, h);
   const image = ctx.createImageData(w, h);
-  const random = seededRandom(707);
+  const random = lcg(707);
   const ripple = Array.from({ length: h }, () => 0.7 + random() * 0.3);
   for (let y = 0; y < h; y++) {
     const t = y / (h - 1);
@@ -444,7 +417,7 @@ function streakTexture(): THREE.CanvasTexture {
 function blobTexture(): THREE.CanvasTexture {
   const size = 128;
   const [canvas, ctx] = createCanvas(size, size);
-  const random = seededRandom(909);
+  const random = lcg(909);
   ctx.fillStyle = '#000';
   ctx.fillRect(0, 0, size, size);
   for (let i = 0; i < 7; i++) {

@@ -16,8 +16,12 @@ import { Today } from '@/time/Today';
 import { MarketDay } from '@/economy/MarketDay';
 import { ArcadeDaily, ArcadeLeague, ArcadeMedals, ArcadeScores, CollectorWatch, Fame, MarketCalendar, MarketLedger, MarketStanding, MarketStock, Milestones, PayoutStats, PrizeStore, STARTING_COINS, Transactions, ValueHistory, Wallet } from '@/economy';
 import { ArcadeTournament } from '@/economy/ArcadeTournament';
+import { ArcadeHabits } from '@/economy/ArcadeHabits';
 import { Jackpot } from '@/economy/Jackpot';
 import { ReplayStore } from '@/world/arcade/replay/ReplayStore';
+import { HomeScores } from '@/world/homeArcade/HomeScores';
+import { VisitBook } from '@/world/visitors/VisitBook';
+import { GatheringBook } from '@/world/visitors/gathering/GatheringBook';
 import { NeighbourTrades } from '@/economy/NeighbourTrades';
 import { AuctionHouse } from '@/economy/AuctionHouse';
 import { SealedLots } from '@/economy/SealedLots';
@@ -42,13 +46,15 @@ import { FurnitureLayout } from '@/furnishing/FurnitureLayout';
 import { Furnishings } from '@/furnishing/Furnishings';
 import { Sky } from '@/world/Sky';
 import { HEAVY_RAIN } from '@/world/weather/Weather';
-import { KITCHEN_WING, SUN_ROTATION_Y } from '@/world/worldPlan';
+import { KITCHEN_WING } from '@/world/worldPlan';
+import { SUN_ROTATION_Y } from '@/world/measures/street';
 import { parseHoliday, parseNewYear, parseSeason } from '@/time/season';
 import { parseLatitude } from '@/world/props/solar';
 import { parseWeather } from '@/world/weather/Weather';
 import { CatSettingsStore } from '@/world/cat';
 import { ArcadeScreenPanel } from '@/ui/ArcadeScreenPanel';
 import { SettingsStore, hasProgress } from '@/settings';
+import { flag } from '@/settings/flags';
 import { initKeyLabels } from '@/ui/keys';
 import { initPanelNav } from '@/ui/menu/MenuNav';
 import { ReviewSource } from '@/reviews/Reviews';
@@ -65,7 +71,7 @@ export type Services = ReturnType<typeof createServices>;
 export function createServices(container: HTMLElement) {
   const params = new URLSearchParams(location.search);
   /** `?debug`: the built-in seed collection and the editor's "add a game" pane, instead of earning every game. */
-  const debug = params.has('debug');
+  const debug = flag('debug');
   // Read before any store writes: a save from before the guided first day never sees it.
   const returningPlayer = hasProgress();
   const engine = new Engine(container);
@@ -131,6 +137,7 @@ export function createServices(container: HTMLElement) {
   const standing = new MarketStanding();
   // The one "today" (the game day and the real date, see `time/Today`), and what kind of market day it is.
   const today = new Today(new MarketCalendar(sky.dayNight));
+  today.setHoursSource(() => sky.dayNight.state.hours);
   const marketDay = new MarketDay(today, (id) => collection.owns(id));
   const market = new MarketStock({ index, collection, fame, today, ledger, standing, raining: () => sky.weather.state.rain >= HEAVY_RAIN });
   engine.addUpdatable(sky);
@@ -148,9 +155,12 @@ export function createServices(container: HTMLElement) {
   const catSettings = new CatSettingsStore();
   // The Saturday tournament at the arcade: the hall shows its bracket, the Session's arcade play settles its rounds.
   const tournament = new ArcadeTournament({ games: ARCADE_PLAN.tournament.games, names: ARCADE_PLAN.crowd.regulars.names });
-  // The ticket wheel's progressive pot and the player's best run per cabinet, kept across the hall's loads.
+  // The ticket wheel's progressive pot and the player's best run per cabinet, kept across the hall's loads; the plays per
+  // machine (how long the HUD explains the keys, the claw's luck); the home cabinet's own table of scores.
   const jackpot = new Jackpot();
   const replays = new ReplayStore();
+  const arcadeHabits = new ArcadeHabits();
+  const homeScores = new HomeScores();
   // The collector's book: milestones reached (the plaque, the display cabinet, rewards to claim) and the collection's value day by day.
   const milestones = new Milestones();
   const valueHistory = new ValueHistory();
@@ -162,6 +172,9 @@ export function createServices(container: HTMLElement) {
   // The guided first day (a new game only) and the daily journal, which fills itself from the stores.
   const firstDay = new FirstDay({ returningPlayer, enabled: !debug });
   const journal = new Journal();
+  // Who came round, lent what, when (the visitors' book), and the gatherings planned (games nights, open houses).
+  const visitBook = new VisitBook();
+  const gatheringBook = new GatheringBook();
   // The lost prototype's trail, followed through the mail, the market, the radio, the arcade and the friends (src/story).
   const story = new PrototypeStory({ today, collection, journal });
   // The press at the time, from each game's Wikipedia article: the game panel's clipping (src/reviews).
@@ -197,7 +210,7 @@ export function createServices(container: HTMLElement) {
     scores, arcadeDaily, prizes, medals, league, payoutStats, arcadeScreen,
     index, fame, coverUrl, covers, videos,
     sky, today, marketDay, ledger, standing, market, tx, lots, catSettings,
-    tournament, jackpot, replays, milestones, valueHistory, collectorWatch, honours, neighbourTrades, firstDay, journal,
+    tournament, jackpot, replays, arcadeHabits, homeScores, milestones, valueHistory, collectorWatch, honours, neighbourTrades, firstDay, journal, visitBook, gatheringBook,
     household, homeLife, perks, story, reviews,
     classifieds, sellerLots, workshop,
   };

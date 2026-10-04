@@ -1,7 +1,7 @@
 import './WalletHud.css';
 import { fadeIn, fadeOut } from './fade';
-import { formatCount } from './money';
-import { reduceMotion } from '@/settings/motion';
+import { formatNumber } from '@/text/count';
+import { Roll } from './countUp';
 import { hudSlot } from './hudSlot';
 
 /** What the HUD reads: the two balances and a way to hear about changes. */
@@ -64,10 +64,8 @@ export class WalletHud {
   private inRoom = false;
   private paused = false;
   private peekLeft = 0;
-  /** The balances as drawn (they roll towards the wallet's). */
-  private readonly drawn = { coins: 0, tickets: 0 };
-  private readonly from = { coins: 0, tickets: 0 };
-  private rollT = 1;
+  /** The balances as drawn: they roll towards the wallet's (`ui/countUp`). */
+  private readonly rolls = { coins: new Roll(COUNT_S), tickets: new Roll(COUNT_S) };
   private last = { coins: 0, tickets: 0 };
 
   constructor(container: HTMLElement, private readonly wallet: WalletView, private readonly options: WalletHudOptions = {}) {
@@ -89,8 +87,8 @@ export class WalletHud {
     // Top of the top-left column, the tips under it (`hudSlot`): hidden, it leaves no gap above them.
     hudSlot(container, 'top-left').appendChild(this.root);
     this.last = { coins: wallet.coins, tickets: wallet.tickets };
-    this.drawn.coins = wallet.coins;
-    this.drawn.tickets = wallet.tickets;
+    this.rolls.coins.start(wallet.coins, wallet.coins);
+    this.rolls.tickets.start(wallet.tickets, wallet.tickets);
     this.draw();
     wallet.subscribe(() => this.onChange());
   }
@@ -113,13 +111,12 @@ export class WalletHud {
       this.peekLeft -= dt * 1000;
       if (this.peekLeft <= 0) this.refresh();
     } else if (this.inRoom) this.refresh(); // the zone may have changed (the arcade's door)
-    if (this.rollT < 1) {
-      this.rollT = Math.min(1, this.rollT + dt / COUNT_S);
-      const k = 1 - (1 - this.rollT) ** 3;
-      this.drawn.coins = Math.round(this.from.coins + (this.wallet.coins - this.from.coins) * k);
-      this.drawn.tickets = Math.round(this.from.tickets + (this.wallet.tickets - this.from.tickets) * k);
+    const { coins, tickets } = this.rolls;
+    if (!coins.done || !tickets.done) {
+      coins.update(dt);
+      tickets.update(dt);
       this.draw();
-      if (this.rollT >= 1) this.settle();
+      if (coins.done && tickets.done) this.settle();
     }
   }
 
@@ -143,17 +140,17 @@ export class WalletHud {
     this.refresh();
     this.mark('coins', coins);
     this.mark('tickets', tickets);
-    if (reduceMotion() || this.root.hidden) {
-      this.drawn.coins = this.wallet.coins;
-      this.drawn.tickets = this.wallet.tickets;
-      this.rollT = 1;
+    this.rolls.coins.start(this.rolls.coins.value, this.wallet.coins);
+    this.rolls.tickets.start(this.rolls.tickets.value, this.wallet.tickets);
+    // Hidden, the chip has nothing to roll: it shows the new balances when it comes back (reduced motion lands at once too).
+    if (this.root.hidden) {
+      this.rolls.coins.skipToEnd();
+      this.rolls.tickets.skipToEnd();
+    }
+    if (this.rolls.coins.done && this.rolls.tickets.done) {
       this.draw();
       window.setTimeout(() => this.settle(), 600);
-      return;
     }
-    this.from.coins = this.drawn.coins;
-    this.from.tickets = this.drawn.tickets;
-    this.rollT = 0;
   }
 
   /**
@@ -180,13 +177,13 @@ export class WalletHud {
   private float(kind: Kind, amount: number): void {
     const el = document.createElement('span');
     el.className = `wallet-hud__delta wallet-hud__delta--${kind}${amount < 0 ? ' wallet-hud__delta--spent' : ''}`;
-    el.textContent = formatCount(amount, true);
+    el.textContent = formatNumber(amount, { sign: true });
     this.floats.appendChild(el);
     window.setTimeout(() => el.remove(), FLOAT_MS);
   }
 
   private draw(): void {
-    this.coinsEl.textContent = formatCount(this.drawn.coins);
-    this.ticketsEl.textContent = formatCount(this.drawn.tickets);
+    this.coinsEl.textContent = formatNumber(this.rolls.coins.value);
+    this.ticketsEl.textContent = formatNumber(this.rolls.tickets.value);
   }
 }

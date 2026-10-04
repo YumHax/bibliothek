@@ -4,12 +4,14 @@ import type { Interactable } from '@/interaction/Interactable';
 import type { SessionActions } from '@/game/SessionActions';
 import type { HomeUpgrades } from '@/economy/HomeUpgrades';
 import { boughtLine, homeGood, refusalFor, type HomeGood, type HomeGoodStatus } from '@/economy/homeGoods';
-import { ARM_ABOVE, CONFIRM_MS } from '@/economy/pricing';
+import { ARM_ABOVE } from '@/economy/pricing';
+import { Arming, CONFIRM_MS } from '@/ui/confirmTwice';
 import type { Furniture } from '../Furniture';
 import { invisibleHitbox } from '../meshUtils';
 import { mergeStaticParts } from '../zone/mergeStatic';
 import type { DisplayPiece } from './displayPieces';
 import { PriceTag, type TagStyle, type TagState } from './PriceTag';
+import { formatCoins } from '@/text/money';
 
 interface ForSaleOptions {
   good: HomeGood;
@@ -32,8 +34,6 @@ interface ForSaleOptions {
 const TALL = 0.6;
 /** A little margin round the piece's bounds for the click. */
 const PAD = 0.03;
-/** Seconds a first click keeps the tag armed: the second within them buys (`CONFIRM_MS`, the same everywhere). */
-const ARMED_S = CONFIRM_MS / 1000;
 
 /**
  * A piece of the flat on the shop floor with its price tag: the real thing (a `DisplayPiece`, the flat's own class
@@ -53,8 +53,10 @@ export class ForSale extends THREE.Group implements Furniture, Interactable {
   private readonly good: HomeGood;
   private readonly tag: PriceTag;
   private readonly piece: DisplayPiece;
-  /** Seconds left of the first click's arming, 0 when not armed. */
-  private armed = 0;
+  /** The tag's own clock (ms that pass while its zone ticks it: a pause keeps a first click's arming). */
+  private clockMs = 0;
+  /** A dear piece's first click arms the tag (AGAIN TO BUY) until the second within `CONFIRM_MS` of that clock buys; lapsed, the tag reads its price again. */
+  private readonly arming = new Arming<'buy'>(() => this.refresh(), CONFIRM_MS, () => this.clockMs);
   private unsubscribe: (() => void) | null = null;
 
   constructor(private readonly options: ForSaleOptions) {
@@ -67,7 +69,8 @@ export class ForSale extends THREE.Group implements Furniture, Interactable {
     const pieceUpdate = piece.update?.bind(piece);
     this.update = (dt) => {
       pieceUpdate?.(dt);
-      if (this.armed > 0 && (this.armed -= dt) <= 0) this.disarm();
+      this.clockMs += dt * 1000;
+      this.arming.expire();
     };
     // Clickable, so the zone never freezes or merges it: a still piece does it here (a bed is a hundred parts).
     if (!pieceUpdate) freeze(piece.object);
@@ -97,8 +100,8 @@ export class ForSale extends THREE.Group implements Furniture, Interactable {
   /** Shows on the tag what the flat has of it now (call on every purchase). */
   refresh(): void {
     const status = this.status();
-    if (status !== 'buy') this.armed = 0;
-    const state: TagState = status === 'needs' ? 'needs' : status === 'buy' ? (this.armed > 0 ? 'armed' : 'price') : this.good.max > 1 ? 'full' : 'sold';
+    if (status !== 'buy') this.arming.reset();
+    const state: TagState = status === 'needs' ? 'needs' : status === 'buy' ? (this.arming.isArmed('buy') ? 'armed' : 'price') : this.good.max > 1 ? 'full' : 'sold';
     this.tag.setState(state);
     this.piece.setSold?.(status === 'full');
   }
@@ -109,7 +112,7 @@ export class ForSale extends THREE.Group implements Furniture, Interactable {
 
   label(): string {
     const { good } = this;
-    const head = `${good.name} · ${good.price} coins`;
+    const head = `${good.name} · ${formatCoins(good.price)}`;
     const upgrades = this.options.upgrades;
     if (!upgrades) return `${head} · ${good.blurb}`;
     switch (this.status()) {
@@ -118,7 +121,7 @@ export class ForSale extends THREE.Group implements Furniture, Interactable {
       case 'needs':
         return `${head} · ${good.blurb} · needs the ${homeGood(good.requires!).name.toLowerCase()} first`;
       case 'buy': {
-        if (this.armed > 0) return `${head} · again to buy`;
+        if (this.arming.isArmed('buy')) return `${head} · again to buy`;
         const wallet = this.options.wallet;
         const short = wallet && wallet.coins < good.price ? ` · you have ${wallet.coins}` : '';
         return `${head} · ${good.blurb}${good.max > 1 ? ` (${upgrades.count(good.id)} / ${good.max} at home)` : ''}${short} · buy`;
@@ -138,14 +141,10 @@ export class ForSale extends THREE.Group implements Furniture, Interactable {
       session.refuse(refusal);
       return;
     }
-    // Short of coins: no arming, the purchase says so at once. Else a dear piece's first click arms, the second buys.
+    // Short of coins: no arming, the purchase says so at once. Else a dear piece's first click arms (the tag repaints), the second buys.
     const short = this.options.wallet && this.options.wallet.coins < good.price;
-    if (!short && good.price > ARM_ABOVE && this.armed <= 0) {
-      this.armed = ARMED_S;
-      this.refresh();
-      return;
-    }
-    this.armed = 0;
+    if (!short && good.price > ARM_ABOVE && !this.arming.press('buy')) return;
+    this.arming.reset();
     this.refresh();
     session.buyUpgrade({
       title: good.name,
@@ -163,12 +162,6 @@ export class ForSale extends THREE.Group implements Furniture, Interactable {
     this.unsubscribe?.();
     this.unsubscribe = null;
     this.tag.dispose();
-  }
-
-  /** The first click's few seconds ran out: the tag reads its price again. */
-  private disarm(): void {
-    this.armed = 0;
-    this.refresh();
   }
 
   private status(): HomeGoodStatus {

@@ -1,6 +1,5 @@
 import * as THREE from 'three';
 import type { Updatable } from '@/core/Engine';
-import { seededRandom } from '@/covers/generated/canvasUtils';
 import { QUALITY } from '@/graphics/quality';
 import type { Furniture } from '../../Furniture';
 import type { DayNight } from '../../props/DayNight';
@@ -15,6 +14,8 @@ import { LampMaterial, lampStates } from './lampMaterial';
 import { WheelMaterial, rollAngle, wheelAngles } from './wheelSpin';
 import { TWO_WHEELERS, courierBox, twoWheelerGeometries, type TwoWheelerModel } from './twoWheelers';
 import { rushAt } from '../../city/traffic';
+import { seededRng } from '@/random';
+import { angleTo } from '@/math/angles';
 
 interface MotorbikesOptions {
   traffic: StreetTraffic;
@@ -102,7 +103,7 @@ export class Motorbikes extends THREE.Group implements Furniture, Updatable {
   private readonly routes: Route[];
   private readonly sets = new Map<TwoWheelerModel, ModelSet>();
   private readonly lampMaterial = new LampMaterial(true);
-  private readonly random = seededRandom(Date.now() & 0x7ff);
+  private readonly random = seededRng();
   private readonly color = new THREE.Color();
   private readonly eye = new THREE.Vector3();
   private readonly pose = new THREE.Matrix4();
@@ -246,12 +247,12 @@ export class Motorbikes extends THREE.Group implements Furniture, Updatable {
     }
     mount.yaw = placeOnRoute(route, mount.distance, mount.position);
     // Lean into the bend: tan(lean) = v ω / g, towards the inside (a left turn leans left, -x about the bike's axis).
-    const omega = Math.atan2(Math.sin(mount.yaw - yawBefore), Math.cos(mount.yaw - yawBefore)) / Math.max(dt, 1e-3);
+    const omega = angleTo(yawBefore, mount.yaw) / Math.max(dt, 1e-3);
     const lean = THREE.MathUtils.clamp(-Math.atan((mount.speed * omega) / 9.81), -LEAN.most, LEAN.most);
     mount.lean += THREE.MathUtils.clamp(lean - mount.lean, -LEAN.rate * dt, LEAN.rate * dt);
     const here = headingAt(route, mount.distance);
     const next = headingAt(route, mount.distance + SIGNAL.ahead);
-    const turn = Math.atan2(Math.sin(next - here), Math.cos(next - here));
+    const turn = angleTo(here, next);
     mount.signal = Math.abs(turn) < SIGNAL.turn ? 0 : turn > 0 ? -1 : 1;
   }
 

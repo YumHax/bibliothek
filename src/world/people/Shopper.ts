@@ -1,12 +1,14 @@
 import * as THREE from 'three';
 import type { Updatable } from '@/core/Engine';
 import type { Furniture } from '../Furniture';
-import { Glance, idleGlance, nextLeg, stepAlong, turnTowards, type Leg } from './locomotion';
+import { dampAngle } from '@/math/damp';
+import { Glance, idleGlance, nextLeg, stepAlong, type Leg } from './locomotion';
 import { Attention, STANDING, WALKING } from './attention';
 import { PersonModel } from './PersonModel';
 import { randomLook, type PersonLook } from './looks';
 import type { Pose } from './poses';
 import { blobShadow } from '../zone/ContactShadows';
+import { random } from '@/random';
 
 /** A place to stand and browse: a spot on the floor (zone-local) and the way to face there, in radians about y (0 = facing +z). */
 export interface BrowseSpot {
@@ -151,7 +153,7 @@ export class Shopper extends THREE.Group implements Furniture, Updatable {
       }
       if (!present) {
         this.release();
-        this.state = { kind: 'linger', left: 1 + Math.random() * 3 };
+        this.state = { kind: 'linger', left: 1 + random() * 3 };
       }
       return;
     }
@@ -212,9 +214,9 @@ export class Shopper extends THREE.Group implements Furniture, Updatable {
     const leg = nextLeg(this.position, state.path, ARRIVE, this.leg);
     if (leg === 'done') {
       this.current = 0;
-      this.state = state.then ? { kind: 'browse', spot: state.then, left: 4 + Math.random() * 7 } : { kind: 'linger', left: 1.5 + Math.random() * 3 };
+      this.state = state.then ? { kind: 'browse', spot: state.then, left: 4 + random() * 7 } : { kind: 'linger', left: 1.5 + random() * 3 };
       const poses = state.then ? BROWSE_POSES : LINGER_POSES;
-      this.model.setPose(poses[Math.floor(Math.random() * poses.length)]!);
+      this.model.setPose(poses[Math.floor(random() * poses.length)]!);
       return;
     }
     // Past a point of the path: on to the next in the same frame (no halt at every point).
@@ -262,7 +264,7 @@ export class Shopper extends THREE.Group implements Furniture, Updatable {
   private comeIn(): void {
     const { gaps, rowZ, out } = this.exit!;
     const door = out[out.length - 1] ?? [0, 0];
-    const gap = gaps[Math.floor(Math.random() * gaps.length)] ?? 0;
+    const gap = gaps[Math.floor(random() * gaps.length)] ?? 0;
     this.position.set(door[0], 0, door[1]);
     this.heading = Math.PI;
     this.rotation.y = Math.PI;
@@ -307,8 +309,8 @@ export class Shopper extends THREE.Group implements Furniture, Updatable {
     this.release();
     const here = this.position;
     const free = this.spots.filter((s) => !this.claims.has(s) && Math.hypot(s.at[0] - here.x, s.at[1] - here.z) >= 0.5);
-    const spot = Math.random() < 0.2 ? undefined : free[Math.floor(Math.random() * free.length)];
-    const x = spot ? spot.at[0] : THREE.MathUtils.lerp(this.aisle.x[0], this.aisle.x[1], Math.random());
+    const spot = random() < 0.2 ? undefined : free[Math.floor(random() * free.length)];
+    const x = spot ? spot.at[0] : THREE.MathUtils.lerp(this.aisle.x[0], this.aisle.x[1], random());
     // Keep right: heading +x walks on one side of the centre line, heading -x on the other.
     const lane = this.aisle.z + (x >= here.x ? LANE : -LANE);
     const path = [new THREE.Vector3(here.x, 0, lane), new THREE.Vector3(x, 0, lane)];
@@ -344,7 +346,7 @@ export class Shopper extends THREE.Group implements Furniture, Updatable {
   }
 
   private face(yaw: number, dt: number): void {
-    this.heading = turnTowards(this.heading, yaw, dt, TURN_RATE);
+    this.heading = dampAngle(this.heading, yaw, TURN_RATE, dt);
     this.rotation.y = this.heading;
   }
 
@@ -377,8 +379,8 @@ export class Shopper extends THREE.Group implements Furniture, Updatable {
 
 /** Browsing: somewhere along the table ahead, once in five a look up across the hall; for 1.5 to 4.5 seconds. */
 function browseGlance(point: THREE.Vector3): number {
-  const timer = 1.5 + Math.random() * 3;
-  const up = Math.random() < 0.2;
-  point.set((Math.random() - 0.5) * 1.2, up ? 1.7 : 0.9, up ? 3 : 0.9);
+  const timer = 1.5 + random() * 3;
+  const up = random() < 0.2;
+  point.set((random() - 0.5) * 1.2, up ? 1.7 : 0.9, up ? 3 : 0.9);
   return timer;
 }

@@ -5,13 +5,14 @@ import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeom
 import type { Interactable } from '@/interaction/Interactable';
 import type { SessionActions } from '@/game/SessionActions';
 import type { ModalLike } from '@/game/SessionParts';
-import { createCanvas, seededRandom, toTexture } from '@/covers/generated/canvasUtils';
+import { createCanvas, toTexture } from '@/covers/generated/canvasUtils';
 import { invisibleHitbox } from '../meshUtils';
 import type { Furniture } from '../Furniture';
 import { coverageKeepsAlpha } from '../materials/palette';
 import { WALL, onSurface } from '../surface/layers';
 import { snowPaint, snowStandard } from './snowCover';
 import type { WeeklyIssue } from './gamingWeekly';
+import { lcg } from '@/random';
 
 interface NewsstandOptions {
   /** The paper's panel: printed with today's issue, then opened by the Session. */
@@ -96,7 +97,7 @@ export class Newsstand extends THREE.Group implements Furniture, Interactable {
 function paintFront(width: number, height: number): THREE.CanvasTexture {
   const k = 200;
   const [canvas, ctx] = createCanvas(Math.round(width * k), Math.round(height * k));
-  const random = seededRandom(1212);
+  const random = lcg(1212);
   const y = (m: number) => (height - m) * k;
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   // Fascia.

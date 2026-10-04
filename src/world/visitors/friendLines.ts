@@ -1,5 +1,6 @@
 import type { Game } from '@/catalog/types';
 import { getPlatform } from '@/catalog/platforms';
+import { pickWeighted } from '@/random';
 import { SHARED_LINES, type FriendPlan, type FriendTaste } from './friendsPlan';
 
 /** Fills a template: {title}, {platform}, {year}, {cat}, {days}, {coins}, {name}. */
@@ -45,7 +46,7 @@ export function shelfComment(friend: FriendPlan, games: readonly Game[], random:
   const pick: LinePicker = options.pick ?? ((_bucket, lines) => pickLine(lines, random));
   if (games.length < 3) return pick('comment.empty', c.empty);
   if (games.length > 60 && !options.focus && random() < 0.25) return pick('comment.many', c.many);
-  const game = options.focus ?? pickWeighted(games, (g) => 1 + tasteScore(friend.taste, g), random);
+  const game = options.focus ?? pickWeighted(random, games, (g) => 1 + tasteScore(friend.taste, g));
   const values = { title: game.title, platform: getPlatform(game.platform).name, year: yearOf(game) ?? '', name: friend.name };
   if (tasteScore(friend.taste, game) >= 3) return fill(pick(`${friend.id}:loved`, friend.lines.loved), values);
   if ((options.viewsOf?.(game) ?? 0) >= FAMOUS_VIEWS) return fill(pick('comment.famous', c.famous), values);
@@ -57,22 +58,12 @@ export function shelfComment(friend: FriendPlan, games: readonly Game[], random:
 
 /** The game `friend` would rather look at among `games` (their taste weighs), or null. */
 export function lookPick(friend: FriendPlan, games: readonly Game[], random: () => number): Game | null {
-  return games.length ? pickWeighted(games, (g) => 1 + tasteScore(friend.taste, g), random) : null;
+  return games.length ? pickWeighted(random, games, (g) => 1 + tasteScore(friend.taste, g)) : null;
 }
 
 /** The game `friend` would most like to borrow of `games`, or null when none is to their taste. */
 export function borrowPick(friend: FriendPlan, games: readonly Game[], random: () => number): Game | null {
   const liked = games.filter((g) => tasteScore(friend.taste, g) >= 2);
   if (!liked.length) return null;
-  return pickWeighted(liked, (g) => tasteScore(friend.taste, g) ** 2, random);
-}
-
-function pickWeighted<T>(items: readonly T[], weight: (item: T) => number, random: () => number): T {
-  const weights = items.map(weight);
-  let roll = random() * weights.reduce((sum, w) => sum + w, 0);
-  for (let i = 0; i < items.length; i++) {
-    roll -= weights[i]!;
-    if (roll <= 0) return items[i]!;
-  }
-  return items[items.length - 1]!;
+  return pickWeighted(random, liked, (g) => tasteScore(friend.taste, g) ** 2);
 }

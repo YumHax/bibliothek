@@ -1,0 +1,668 @@
+/*
+ * Talking to someone (`ConversationPanel`): a frosted sheet on the right, the room and the person still in view on the
+ * left. The sheet wears the tier's colour (`--tier`, set by the panel): a glow at the top, the portrait's ring, the
+ * gauge's fill. Their words are on a paper speech bubble pointing at them; what an interaction did floats up as
+ * chips; the gauges ease to the new standing. The shared pieces (icons, gauges, odds, portraits, the tier pill)
+ * are styled here for the People book and the phone too.
+ */
+@layer tokens, base, components, panels;
+@layer panels {
+  /* --- shared: icons, the portrait, the tier pill, the mood, the gauges, the odds ---------------------------- */
+  .social-icon {
+    flex: none;
+    vertical-align: -0.18em;
+  }
+  .social-portrait {
+    display: block;
+    width: var(--size);
+    height: var(--size);
+    border-radius: 50%;
+  }
+  .social-tier {
+    --tier: var(--ui-text-dim);
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3em;
+    padding: 0.12rem 0.55rem;
+    border: 1px solid color-mix(in srgb, var(--tier) 65%, transparent);
+    border-radius: var(--ui-radius-pill);
+    background: color-mix(in srgb, var(--tier) 20%, transparent);
+    color: color-mix(in srgb, var(--tier) 55%, var(--ui-white));
+    font-size: var(--fs-2);
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    white-space: nowrap;
+  }
+  .social-mood {
+    --mood: var(--ui-text-dim);
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3em;
+    color: var(--mood);
+    font-size: var(--fs-2);
+    white-space: nowrap;
+  }
+  .social-mood--good { --mood: var(--ui-accent-bright); }
+  .social-mood--fine { --mood: var(--ui-text); }
+  .social-mood--low { --mood: var(--ui-info-text); }
+  .social-mood--annoyed { --mood: var(--ui-danger-text); }
+
+  .social-gauge {
+    /* Warmth runs cold (blue, left) to warm (rose, right). */
+    --warmth-cold: #6b1c2a;
+    --warmth-cool: #3f6d8e;
+    --warmth-even: #6e737c;
+    --warmth-warm: #c08a2c;
+    --warmth-hot: #d8366a;
+    position: relative;
+    display: block;
+    min-width: 0;
+  }
+  .social-gauge--warmth {
+    height: 1.1rem;
+  }
+  .social-gauge__track {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 50%;
+    height: 0.4rem;
+    translate: 0 -50%;
+    border-radius: var(--ui-radius-pill);
+    background: linear-gradient(90deg, var(--warmth-cold), var(--warmth-cool) 30%, var(--warmth-even) 50%, var(--warmth-warm) 72%, var(--warmth-hot));
+    box-shadow: inset 0 1px 2px var(--shade-45);
+  }
+  .social-gauge__track::before {
+    /* The gradient stays a hint; the fill says where you are. */
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: var(--shade-55);
+  }
+  .social-gauge__fill {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: var(--from);
+    width: var(--span);
+    border-radius: var(--ui-radius-pill);
+    background: color-mix(in srgb, var(--tier) 80%, var(--ui-white));
+    box-shadow: 0 0 8px color-mix(in srgb, var(--tier) 70%, transparent);
+    transition: left var(--dur-longer) var(--ui-ease), width var(--dur-longer) var(--ui-ease);
+  }
+  .social-gauge__tick {
+    position: absolute;
+    top: -0.15rem;
+    bottom: -0.15rem;
+    width: 1px;
+    background: var(--tint-35);
+  }
+  .social-gauge__marker {
+    position: absolute;
+    top: 50%;
+    left: var(--at);
+    translate: -50% -50%;
+    display: grid;
+    place-items: center;
+    width: 1.15rem;
+    height: 1.15rem;
+    border-radius: 50%;
+    background: var(--ui-panel-solid);
+    color: color-mix(in srgb, var(--tier) 60%, var(--ui-white));
+    box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--tier) 70%, var(--ui-white)), 0 2px 6px var(--shade-60);
+    transition: left var(--dur-longer) var(--ui-ease);
+  }
+  .social-gauge__marker .social-icon {
+    fill: currentColor;
+    vertical-align: 0;
+  }
+  .social-gauge--trust {
+    display: grid;
+    grid-template-columns: repeat(10, 1fr);
+    gap: 3px;
+    align-items: center;
+    height: 1.1rem;
+  }
+  .social-gauge--trust i {
+    position: relative;
+    height: 0.4rem;
+    border-radius: var(--ui-radius-2xs);
+    background: var(--ui-fill);
+    box-shadow: inset 0 1px 1px var(--shade-45);
+    overflow: hidden;
+  }
+  .social-gauge--trust i::after {
+    content: '';
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: calc(clamp(0, var(--trust) / 10 - var(--i), 1) * 100%);
+    background: linear-gradient(180deg, var(--ui-info-text), var(--ui-info));
+    transition: width var(--dur-longer) var(--ui-ease);
+  }
+  .social-gauge--compact.social-gauge--warmth,
+  .social-gauge--compact.social-gauge--trust {
+    height: 0.8rem;
+  }
+  .social-gauge--compact .social-gauge__marker {
+    width: 0.75rem;
+    height: 0.75rem;
+  }
+  .social-gauge--compact .social-gauge__marker .social-icon {
+    display: none;
+  }
+  .social-gauge--compact.social-gauge--trust i {
+    height: 0.3rem;
+  }
+
+  .social-odds {
+    display: inline-flex;
+    gap: 3px;
+    align-items: center;
+  }
+  .social-odds i {
+    width: 0.42rem;
+    height: 0.42rem;
+    border-radius: 50%;
+    border: 1px solid var(--tint-35);
+  }
+  .social-odds--3 i.on { background: var(--ui-success); border-color: var(--ui-success); }
+  .social-odds--2 i.on { background: var(--ui-accent); border-color: var(--ui-accent); }
+  .social-odds--1 i.on { background: var(--ui-danger-hover); border-color: var(--ui-danger-hover); }
+  .social-odds--0 i { border-color: var(--ui-danger-line); }
+  .social-odds--unknown {
+    display: inline-grid;
+    place-items: center;
+    width: 1.05rem;
+    height: 1.05rem;
+    border: 1px dashed var(--tint-35);
+    border-radius: 50%;
+    color: var(--ui-text-dim);
+    font-size: var(--fs-1);
+  }
+
+  /* --- the conversation ----------------------------------------------------------------------------------- */
+  .social-talk {
+    display: flex;
+    justify-content: flex-end;
+    align-items: stretch;
+    padding: var(--sp-4);
+    background: linear-gradient(90deg, transparent 0%, transparent 50%, var(--ui-backdrop-faint) 100%);
+  }
+  .social-talk__sheet {
+    --tier: var(--ui-accent);
+    position: relative;
+    width: min(26.5rem, 100%);
+    max-height: 100%;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+    padding: var(--sp-4) var(--sp-4) var(--sp-3);
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-3);
+    color: var(--ui-text);
+    font-size: var(--fs-5);
+    background:
+      radial-gradient(120% 60% at 0% 0%, color-mix(in srgb, var(--tier) 22%, transparent), transparent 70%),
+      var(--ui-panel);
+    border: 1px solid color-mix(in srgb, var(--tier) 30%, var(--ui-border));
+    backdrop-filter: blur(12px) saturate(1.15);
+    animation: social-slide-in var(--dur-settle) var(--ui-ease);
+  }
+  .social-talk__sheet:focus {
+    outline: none;
+  }
+  /* Cross with the player: the sheet cools. */
+  .social-talk__sheet--cross {
+    background:
+      radial-gradient(120% 60% at 0% 0%, var(--ui-danger-soft), transparent 70%),
+      var(--ui-panel);
+  }
+  @keyframes social-slide-in {
+    from { opacity: 0; translate: 1.5rem 0; }
+  }
+
+  .social-talk__head {
+    display: flex;
+    gap: var(--sp-3);
+    align-items: center;
+  }
+  /* The portrait in a ring of the tier's colour, drawn round as far as the way to the next tier goes. */
+  .social-medallion {
+    position: relative;
+    flex: none;
+    width: 5.75rem;
+    height: 5.75rem;
+    padding: 4px;
+    box-sizing: border-box;
+    border-radius: 50%;
+    background: conic-gradient(var(--tier) calc(var(--progress) * 1turn), var(--ui-fill-hover) 0);
+    box-shadow: 0 6px 18px var(--shade-45), 0 0 18px color-mix(in srgb, var(--tier) 35%, transparent);
+  }
+  .social-medallion__face {
+    width: 100%;
+    height: 100%;
+    padding: 2px;
+    box-sizing: border-box;
+    border-radius: 50%;
+    background: var(--ui-panel-solid);
+  }
+  .social-medallion__face .social-portrait {
+    width: 100%;
+    height: 100%;
+  }
+  .social-medallion__badge {
+    position: absolute;
+    right: -0.1rem;
+    bottom: 0.1rem;
+    display: grid;
+    place-items: center;
+    width: 1.6rem;
+    height: 1.6rem;
+    border-radius: 50%;
+    background: var(--ui-info);
+    color: var(--ui-on-accent);
+    box-shadow: 0 2px 6px var(--shade-60);
+  }
+  .social-talk__who {
+    min-width: 0;
+  }
+  .social-talk__name {
+    margin: 0;
+    font-family: var(--ui-font-print);
+    font-weight: 400;
+    font-size: var(--fs-t4);
+    line-height: 1.1;
+    text-shadow: var(--ui-shadow-text);
+  }
+  .social-talk__role {
+    margin: 0.15rem 0 0.4rem;
+    color: var(--ui-text-dim);
+    font-size: var(--fs-3);
+    font-variant: small-caps;
+    letter-spacing: 0.04em;
+  }
+  .social-talk__badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--sp-2);
+    align-items: center;
+    margin: 0;
+  }
+
+  .social-talk__meters {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    align-items: center;
+    column-gap: var(--sp-3);
+    row-gap: 0.15rem;
+    padding: var(--sp-2) var(--sp-3);
+    border-radius: var(--ui-radius-md);
+    background: var(--shade-25);
+  }
+  .social-talk__meter-name {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35em;
+    color: var(--ui-text-dim);
+    font-size: var(--fs-2);
+  }
+  .social-talk__bond {
+    margin: -0.35rem 0 0;
+    color: var(--ui-text-dim);
+    font-size: var(--fs-2);
+    font-style: italic;
+    text-align: right;
+  }
+  .social-talk__bond em {
+    color: var(--ui-accent);
+  }
+  .social-talk__traits,
+  .social-talk__chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    margin: 0;
+  }
+  .social-chip--gold {
+    border-color: var(--ui-accent);
+    color: var(--ui-accent-bright);
+  }
+
+  /* Cold or worse: what it costs, and the way back. */
+  .social-trouble {
+    padding: var(--sp-2) var(--sp-3);
+    border-left: 3px solid var(--ui-danger);
+    border-radius: var(--ui-radius-xs) var(--ui-radius-md) var(--ui-radius-md) var(--ui-radius-xs);
+    background: var(--ui-danger-surface-glass);
+    font-size: var(--fs-3);
+  }
+  .social-trouble__head {
+    display: flex;
+    align-items: center;
+    gap: 0.4em;
+    margin: 0;
+    color: var(--ui-danger-text);
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    font-size: var(--fs-1);
+  }
+  .social-trouble ul {
+    margin: 0.3rem 0 0;
+    padding-left: 1.1rem;
+    color: var(--ui-danger-pale);
+  }
+  .social-trouble__way {
+    margin: 0.35rem 0 0;
+    color: var(--ui-text-dim);
+    font-style: italic;
+  }
+
+  /* Their words: a paper bubble, its tail towards them (the room, on the left). */
+  .social-speech {
+    position: relative;
+    margin: 0.1rem 0 0 0.6rem;
+    padding: var(--sp-3) var(--sp-4) var(--sp-2);
+    border-radius: 1rem 1rem 1rem 0.3rem;
+    background: var(--paper-speech);
+    color: var(--ink-speech);
+    box-shadow: var(--ui-shadow-raised);
+    color-scheme: light;
+  }
+  .social-speech::before {
+    content: '';
+    position: absolute;
+    left: -0.55rem;
+    bottom: 0;
+    border-style: solid;
+    border-width: 0 0 0.75rem 0.7rem;
+    border-color: transparent transparent var(--paper-speech) transparent;
+  }
+  .social-speech__line {
+    margin: 0;
+    min-height: 1.4em;
+    font-family: var(--ui-font-serif);
+    font-size: var(--fs-7);
+    line-height: 1.4;
+  }
+  .social-speech__line--typing::after {
+    content: '▍';
+    margin-left: 1px;
+    opacity: 0.5;
+    animation: social-caret var(--dur-pulse) steps(1) infinite;
+  }
+  @keyframes social-caret {
+    50% { opacity: 0; }
+  }
+  .social-speech figcaption {
+    margin-top: 0.25rem;
+    color: var(--ink-review-dim);
+    font-size: var(--fs-2);
+    font-style: italic;
+    text-align: right;
+  }
+  .social-speech figcaption:not(:empty)::before {
+    content: '— ';
+  }
+  /* On the phone: a cooler slip, no tail (nobody in the room). */
+  .social-speech--phone {
+    background: var(--paper-letter);
+    color: var(--ink-letter);
+    border: 1px dashed var(--paper-note-line);
+  }
+  .social-speech--phone::before {
+    display: none;
+  }
+
+  /* What the interaction did: chips that float up, one after the other. */
+  .social-float {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.18rem 0.6rem;
+    border: 1px solid var(--ui-success-soft);
+    border-radius: var(--ui-radius-pill);
+    background: var(--ui-success-soft);
+    color: var(--ui-success-faint);
+    font-size: var(--fs-2);
+    animation: social-float-in var(--dur-long) var(--ui-ease-pop) both;
+    animation-delay: calc(var(--i) * var(--dur-tap));
+  }
+  .social-float--bad {
+    border-color: var(--ui-danger-line);
+    background: var(--ui-danger-chip);
+    color: var(--ui-danger-pale);
+  }
+  @keyframes social-float-in {
+    from { opacity: 0; translate: 0 0.6rem; scale: 0.92; }
+  }
+
+  /* --- the choices ---------------------------------------------------------------------------------------- */
+  .social-talk__options {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-3);
+  }
+  .social-group h3 {
+    display: flex;
+    align-items: center;
+    gap: 0.4em;
+    margin: 0 0 0.3rem;
+    color: var(--ui-text-dim);
+    font-size: var(--fs-1);
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+  .social-group h3 small {
+    margin-left: auto;
+    font-weight: 400;
+    letter-spacing: 0;
+    text-transform: none;
+  }
+  .social-group--mean h3 {
+    color: var(--ui-danger-text);
+  }
+  .social-group--mean summary {
+    list-style: none;
+    cursor: pointer;
+  }
+  .social-group--mean summary::-webkit-details-marker {
+    display: none;
+  }
+  .social-group--mean summary h3 {
+    margin: 0;
+    opacity: 0.75;
+  }
+  .social-group--mean summary h3::after {
+    content: '▸';
+    margin-left: auto;
+    transition: rotate var(--dur-hover) ease;
+  }
+  .social-group--mean[open] summary h3::after {
+    rotate: 90deg;
+  }
+  .social-group--mean[open] summary {
+    margin-bottom: 0.3rem;
+  }
+  .social-group__list {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .social-choice {
+    --tone: var(--ui-accent);
+    display: grid;
+    grid-template-columns: 1.3rem 1.4rem minmax(0, 1fr) auto;
+    align-items: center;
+    gap: var(--sp-2);
+    width: 100%;
+    padding: 0.42rem 0.6rem;
+    border: 1px solid transparent;
+    border-radius: var(--ui-radius-md);
+    background: var(--ui-fill);
+    color: var(--ui-text);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    transition: background var(--dur-hover) ease, border-color var(--dur-hover) ease, translate var(--dur-hover) var(--ui-ease);
+  }
+  .social-choice:hover:not(:disabled),
+  .social-choice:focus-visible {
+    background: var(--ui-fill-hover);
+    border-color: color-mix(in srgb, var(--tone) 55%, transparent);
+    translate: 2px 0;
+  }
+  .social-choice:active:not(:disabled) {
+    translate: 1px 0;
+    background: color-mix(in srgb, var(--tone) 22%, transparent);
+  }
+  .social-choice:disabled {
+    cursor: default;
+    opacity: 0.5;
+  }
+  .social-choice--place {
+    --tone: var(--ui-info);
+    background: color-mix(in srgb, var(--ui-info) 12%, transparent);
+  }
+  .social-choice--mean {
+    --tone: var(--ui-danger);
+  }
+  .social-choice__key {
+    justify-self: start;
+    min-width: 1.1rem;
+    padding: 0 0.2rem;
+    font-size: var(--fs-0);
+    text-align: center;
+    color: var(--ui-text-dim);
+  }
+  .social-choice__icon {
+    display: grid;
+    place-items: center;
+    color: var(--tone);
+  }
+  .social-choice__label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .social-choice__side {
+    justify-self: end;
+    color: var(--ui-text-dim);
+    font-size: var(--fs-2);
+  }
+  .social-choice__side small {
+    font-size: var(--fs-1);
+    font-style: italic;
+  }
+  .social-like {
+    color: var(--ui-ticket-text);
+  }
+  .social-like--no {
+    color: var(--ui-danger-text);
+  }
+  .social-empty {
+    margin: 0;
+    padding: var(--sp-3);
+    border: 1px dashed var(--ui-border);
+    border-radius: var(--ui-radius-md);
+    color: var(--ui-text-dim);
+    font-size: var(--fs-4);
+    font-style: italic;
+  }
+  .social-talk__foot {
+    display: flex;
+    gap: var(--sp-2);
+    justify-content: flex-end;
+    padding-top: var(--sp-2);
+    border-top: 1px solid var(--ui-border);
+  }
+  .social-talk__foot .ui-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4em;
+  }
+
+  /* --- the phone's contacts -------------------------------------------------------------------------------- */
+  .social-contacts {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+  .social-contact {
+    --tier: var(--ui-text-dim);
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto auto;
+    align-items: center;
+    gap: var(--sp-3);
+    width: 100%;
+    padding: 0.35rem 0.6rem 0.35rem 0.4rem;
+    border: 1px solid transparent;
+    border-radius: var(--ui-radius-md);
+    background: var(--ui-fill);
+    color: var(--ui-text);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    transition: background var(--dur-hover) ease, border-color var(--dur-hover) ease;
+  }
+  .social-contact:hover,
+  .social-contact:focus-visible {
+    background: var(--ui-fill-hover);
+    border-color: color-mix(in srgb, var(--tier) 55%, transparent);
+  }
+  .social-contact__face {
+    padding: 2px;
+    border-radius: 50%;
+    background: var(--tier);
+  }
+  .social-contact__who {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+  .social-contact__who small {
+    overflow: hidden;
+    color: var(--ui-text-dim);
+    font-size: var(--fs-2);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .social-contact__ring {
+    display: grid;
+    place-items: center;
+    width: 1.9rem;
+    height: 1.9rem;
+    border-radius: 50%;
+    background: color-mix(in srgb, var(--ui-success) 22%, transparent);
+    color: var(--ui-success);
+  }
+  .social-contact:hover .social-contact__ring {
+    background: var(--ui-success);
+    color: var(--ui-on-accent);
+  }
+
+  @media (max-width: 600px) {
+    .social-talk {
+      padding: var(--sp-2);
+      background: var(--ui-backdrop-soft);
+    }
+    .social-talk__sheet {
+      width: 100%;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .social-talk__sheet,
+    .social-float {
+      animation: none;
+    }
+    .social-gauge__fill,
+    .social-gauge__marker,
+    .social-gauge--trust i::after,
+    .social-choice {
+      transition: none;
+    }
+  }
+}

@@ -1,5 +1,6 @@
 import { KEYS, PersistedStore, safeStorage } from '@/persistence';
 import { TABLE_SIZE, rivalTable, scoreRules, type ScoreEntry } from './rivals';
+import { byScore, makesTable, rankOf, withEntry } from './scoreTable';
 
 const ARCADE_SCORES_KEY = KEYS.arcadeScores;
 /** The first version kept only the player's best per game; it is read once and folded in. */
@@ -73,8 +74,7 @@ export class ArcadeScores {
 
   /** Whether `score` would make the table (beats its fifth). */
   qualifies(gameId: string, score: number): boolean {
-    const table = this.table(gameId);
-    return score > 0 && (table.length < TABLE_SIZE || score > table[table.length - 1]!.score);
+    return makesTable(this.table(gameId), score, TABLE_SIZE);
   }
 
   get initials(): string {
@@ -93,7 +93,7 @@ export class ArcadeScores {
     if (this.qualifies(gameId, score)) {
       const entry: ScoreEntry = { name, score, you: true };
       tables = this.enter(gameId, entry);
-      rank = merged(gameId, tables[gameId]!).indexOf(entry);
+      rank = rankOf(merged(gameId, tables[gameId]!), entry);
     }
     if (!best && rank === null) return { best, rank };
     this.state = {
@@ -118,7 +118,7 @@ export class ArcadeScores {
     const tables = this.enter(gameId, entry);
     this.state = { ...this.state, tables, rules: { ...this.state.rules, [gameId]: scoreRules(gameId) } };
     this.commit();
-    return merged(gameId, tables[gameId]!).indexOf(entry);
+    return rankOf(merged(gameId, tables[gameId]!), entry);
   }
 
   subscribe(cb: Listener): () => void {
@@ -128,7 +128,7 @@ export class ArcadeScores {
 
   /** The tables with `entry` among `gameId`'s entries made since (best first, a table's worth kept). */
   private enter(gameId: string, entry: ScoreEntry): Record<string, ScoreEntry[]> {
-    const entries = [...(this.state.tables[gameId] ?? []), entry].sort((a, b) => b.score - a.score).slice(0, TABLE_SIZE);
+    const entries = withEntry(this.state.tables[gameId] ?? [], entry, TABLE_SIZE);
     return { ...this.state.tables, [gameId]: entries };
   }
 
@@ -172,7 +172,7 @@ function underTodaysRules(file: ScoresFile): ScoresFile {
 
 /** The starting rivals and `entries`, best first (a rival keeps a tie: a score must beat one to pass it), a table's worth. */
 function merged(gameId: string, entries: readonly ScoreEntry[]): ScoreEntry[] {
-  return [...rivalTable(gameId), ...entries].sort((a, b) => b.score - a.score).slice(0, TABLE_SIZE);
+  return byScore([...rivalTable(gameId), ...entries]).slice(0, TABLE_SIZE);
 }
 
 function readScores(data: unknown): ScoresFile | null {

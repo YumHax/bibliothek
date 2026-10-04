@@ -6,11 +6,14 @@ import type { DayNight } from '../props/DayNight';
 import { currentSeason } from '@/time/season';
 import { patchShader, afterChunk } from '../materials/shaderPatch';
 import { snowCovered } from './snowCover';
-import { PARK_STREET, type Vec2 } from './streetPlan';
+import type { Vec2 } from './streetPlan';
+import { PARK_STREET } from '@/world/measures/street';
 import { isRoad } from './relief/ground';
 import { GROUND, onSurface } from '../surface/layers';
-import { createCanvas, seededRandom, toTexture } from '@/covers/generated/canvasUtils';
+import { createCanvas, toTexture } from '@/covers/generated/canvasUtils';
 import { TREE_FORM, type PlantedTree } from '../city/trees';
+import { lcg } from '@/random';
+import { damp } from '@/math/damp';
 
 /** A tree to plant: where, and how big (1 = a street tree about 7 m tall; `city/trees`). */
 export type TreeSpot = PlantedTree;
@@ -47,11 +50,11 @@ export class StreetTrees extends THREE.Group implements Furniture, Updatable {
   constructor(private readonly dayNight: DayNight, spots: readonly TreeSpot[]) {
     super();
     this.name = 'StreetTrees';
-    const random = seededRandom(3301);
+    const random = lcg(3301);
     const season = currentSeason();
     const bare = season.name === 'winter';
 
-    const woods = Array.from({ length: WOOD_SHAPES }, (_, k) => branchFrame(seededRandom(4401 + k * 17)));
+    const woods = Array.from({ length: WOOD_SHAPES }, (_, k) => branchFrame(lcg(4401 + k * 17)));
     const bark = snowCovered(new THREE.MeshStandardMaterial({ color: 0x4a3c30, roughness: 0.95 }));
     const crownGeometries = Array.from({ length: CROWN_SHAPES }, () => crownClumps(random));
     const crownMaterial = snowCovered(new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9, flatShading: true, vertexColors: true }));
@@ -140,7 +143,7 @@ export class StreetTrees extends THREE.Group implements Furniture, Updatable {
 
   update(dt: number): void {
     this.sway.time.value = (this.sway.time.value + dt) % 1000;
-    this.sway.wind.value += (this.dayNight.state.wind - this.sway.wind.value) * Math.min(1, dt * 2);
+    this.sway.wind.value = damp(this.sway.wind.value, this.dayNight.state.wind, 2, dt);
   }
 
   private finish(mesh: THREE.InstancedMesh): void {

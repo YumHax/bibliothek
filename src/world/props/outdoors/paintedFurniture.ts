@@ -1,8 +1,9 @@
 import { Polygon, Sheet, type Rng, azimuthOf, azimuthX, groundSquash, heightY, outline, sizePx, worldPoint } from './Sheet';
-import { between, pick, shade } from './paint';
+import { shade } from './paint';
 import { type Footprint, footPoint, paintBox, paintGroundShadow, paintPost } from './Solid';
 import { type SeatedPose, paintSeated } from './figures';
 import type { LampDesign } from '@/world/street/streetPlan';
+import { between, pick } from '@/random';
 
 /**
  * The window view's street furniture (the walkable street's own, in 3D, is `street/StreetFurniture`): the things

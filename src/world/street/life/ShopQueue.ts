@@ -9,6 +9,7 @@ import type { Vec2 } from '../streetPlan';
 import type { DoorGaps } from './DoorGaps';
 import { Figure } from './Figure';
 import type { TalkRole } from './streetTalk';
+import { random, within } from '@/random';
 
 /** A queue outside a shop (`STREET_PLAN.shopQueues`). */
 interface ShopQueueSpec {
@@ -104,7 +105,7 @@ export class ShopQueue extends THREE.Group implements Furniture, Updatable {
         options.place(walker, new THREE.Vector3());
         return { figure: new Figure(walker), place: { kind: 'away' } as Place };
       });
-      this.queues.push({ spec, door, spots, queuers, clock: between(spec.every), wanted: 1, fresh: true });
+      this.queues.push({ spec, door, spots, queuers, clock: within(random, spec.every), wanted: 1, fresh: true });
     }
   }
 
@@ -130,7 +131,7 @@ export class ShopQueue extends THREE.Group implements Furniture, Updatable {
       if (open) {
         q.clock -= dt;
         if (q.clock <= 0) {
-          q.clock = between(q.spec.every);
+          q.clock = within(random, q.spec.every);
           this.serve(q);
         }
       }
@@ -149,7 +150,7 @@ export class ShopQueue extends THREE.Group implements Furniture, Updatable {
       q.fresh = false;
       return;
     }
-    if (Math.random() < 0.08) q.wanted = 1 + Math.floor(Math.random() * q.spots.length);
+    if (random() < 0.08) q.wanted = 1 + Math.floor(random() * q.spots.length);
     const taken = new Set<number>();
     for (const queuer of q.queuers) if (queuer.place.kind === 'coming' || queuer.place.kind === 'queued') taken.add(queuer.place.spot);
     for (const queuer of q.queuers) {
@@ -211,6 +212,3 @@ export class ShopQueue extends THREE.Group implements Furniture, Updatable {
   }
 }
 
-function between([lo, hi]: readonly [number, number]): number {
-  return lo + Math.random() * (hi - lo);
-}

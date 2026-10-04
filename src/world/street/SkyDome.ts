@@ -12,8 +12,9 @@ import { MOON_SHADOW_OFFSET } from '../city/skyGlsl';
 import { RENDER_ORDER } from '../surface/layers';
 import { SKYLINE_COLUMNS, SKYLINE_TOP, SkylineSilhouette } from './SkylineSilhouette';
 import { BACKDROP_BLOCKS, BACKDROP_WALLS } from '../city/skyline';
-import { FLAT_IN_STREET } from './streetPlan';
+import { FLAT_IN_STREET } from '@/world/measures/street';
 import { markShared } from '../materials/sharedResources';
+import { random } from '@/random';
 
 /** Inside the camera's far plane (100 m). */
 const RADIUS = 90;
@@ -151,8 +152,8 @@ export class SkyDome extends THREE.Mesh implements Furniture, Updatable, Occupan
     u.lightning!.value = s.lightning;
     if (s.strikes !== this.strikes) {
       this.strikes = s.strikes;
-      skyDirection(0, Math.random() * Math.PI * 2, u.boltDir!.value as THREE.Vector3);
-      u.boltSeed!.value = Math.random() * 100;
+      skyDirection(0, random() * Math.PI * 2, u.boltDir!.value as THREE.Vector3);
+      u.boltSeed!.value = random() * 100;
       u.boltReach!.value = 1 - THREE.MathUtils.smoothstep(s.strikeDistance, 1200, 3500);
     }
   }

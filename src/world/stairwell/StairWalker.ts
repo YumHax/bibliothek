@@ -1,10 +1,11 @@
 import * as THREE from 'three';
 import { Walker, type WalkerOptions } from '../people/Walker';
+import { damp } from '@/math/damp';
 
 /** How long a fade in or out takes (s): a door opening, the lift's gate. */
 const FADE_S = 0.6;
 /** How fast the feet settle onto the next tread (per second): a step up or down each riser, not a slide or a hop. */
-const TREAD_RATE = 14;
+const TREAD_RATE = 16;
 /** Beyond this gap (m) the feet are put on the floor at once (a lift, a door on another landing). */
 const SNAP = 0.5;
 /** The floor changed under them within this long (s): on a flight, where the blob shadow would cut the treads. */
@@ -65,7 +66,7 @@ export class StairWalker extends Walker {
     const floor = this.ground(this.position.x, this.position.z, feet);
     if (floor !== null) {
       const gap = floor - feet;
-      this.position.y = Math.abs(gap) > SNAP ? floor : feet + gap * Math.min(1, dt * TREAD_RATE);
+      this.position.y = Math.abs(gap) > SNAP ? floor : damp(feet, floor, TREAD_RATE, dt);
       // A tread's step up or down just now: on a flight, no flat blob under them.
       if (!Number.isNaN(this.lastFloor) && Math.abs(floor - this.lastFloor) > 1e-3 && Math.abs(floor - this.lastFloor) < SNAP) this.flightFor = ON_FLIGHT_S;
       this.lastFloor = floor;

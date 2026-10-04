@@ -4,6 +4,7 @@ import { audioBus, setRoomAir, startedAudioContext, type RoomAir } from './audio
 import { OUTDOOR_SURFACES, type FootSurface } from './footSurface';
 import { playFootfall } from './footfall';
 import { playFloorCreak } from './furnitureSounds';
+import { random } from '@/random';
 
 /** What the footsteps need to know of the player (the `FirstPersonController`, read-only). */
 interface Walking {
@@ -141,7 +142,7 @@ export class Footsteps implements Updatable {
     const ground = outdoor ? this.options.ground() : { wetness: 0, snowCover: 0 };
     const force = (player.isCrouching ? 0.45 : player.isSprinting ? 1.35 : 1) * weight;
     playFootfall(ctx, this.output(ctx), surface, { force, pan: this.side * 0.12, ...ground });
-    if (surface === 'wood' && weight >= 1 && Math.random() < CREAK_CHANCE) playFloorCreak(CREAK_LEVEL * force);
+    if (surface === 'wood' && weight >= 1 && random() < CREAK_CHANCE) playFloorCreak(CREAK_LEVEL * force);
   }
 
   private output(ctx: AudioContext): GainNode {

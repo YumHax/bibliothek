@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import type { Furniture } from '../Furniture';
 import { cylinderMesh } from '../meshUtils';
 import { cloth, paint } from '../materials/palette';
-import { seededRandom } from '@/graphics/canvas';
+import { lcg } from '@/random';
 
 export interface RugRollsOptions {
   /** How many stand on end. Default 4. */
@@ -24,7 +24,7 @@ export class RugRolls extends THREE.Group implements Furniture {
   constructor(options: RugRollsOptions = {}) {
     super();
     this.name = 'RugRolls';
-    const random = seededRandom(options.seed ?? 13);
+    const random = lcg(options.seed ?? 13);
     const count = options.count ?? 4;
     const label = paint(0xf2ecdc, 0.9);
     let reach = 0.3;

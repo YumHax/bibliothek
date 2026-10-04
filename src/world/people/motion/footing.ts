@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import { smooth } from './springs';
+import { angleTo, lerpAngle, wrapAngle } from '@/math/angles';
+import { smooth } from '@/math/scalar';
 
 /*
  * Feet that stay where they are put. Standing, each foot is planted on the floor in the world: the
@@ -97,7 +98,7 @@ export class Footing {
       let worstError = STEP_FROM;
       for (const [i, spot] of spots.entries()) {
         const here = toLocal(this.scratch.copy(this.world[i]!)).setY(0);
-        const turn = Math.abs(angleBetween(this.worldYaw[i]! - bodyYaw, spot.yaw));
+        const turn = Math.abs(angleTo(this.worldYaw[i]! - bodyYaw, spot.yaw));
         const error = here.distanceTo(spot.at) + turn * TURN_WEIGHT - (i === this.lastFoot ? 0.01 : 0);
         if (error > worstError) {
           worstError = error;
@@ -115,7 +116,7 @@ export class Footing {
         // From where it was (now in the root's frame) to where the stance wants it, lifted on the way.
         toLocal(foot.flat.copy(s.from)).setY(0).lerp(spot.at, k);
         foot.flat.y = STEP_LIFT * Math.sin(Math.PI * s.t);
-        foot.yaw = angleLerp(s.fromYaw - bodyYaw, spot.yaw, k);
+        foot.yaw = lerpAngle(s.fromYaw - bodyYaw, spot.yaw, k);
         foot.pitch = 0.12 * Math.sin(Math.PI * 2 * s.t);
         if (s.t >= 1) {
           toWorld(this.world[i]!.copy(spot.at).setY(0));
@@ -126,18 +127,9 @@ export class Footing {
         }
       } else {
         toLocal(foot.flat.copy(this.world[i]!)).setY(0);
-        foot.yaw = angleBetween(0, this.worldYaw[i]! - bodyYaw);
+        foot.yaw = wrapAngle(this.worldYaw[i]! - bodyYaw);
         foot.pitch = 0;
       }
     }
   }
-}
-
-/** The signed difference `to - from`, wrapped to -pi..pi. */
-function angleBetween(from: number, to: number): number {
-  return Math.atan2(Math.sin(to - from), Math.cos(to - from));
-}
-
-function angleLerp(from: number, to: number, t: number): number {
-  return from + angleBetween(from, to) * t;
 }

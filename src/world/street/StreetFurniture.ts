@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
-import { createCanvas, seededRandom, toTexture, repeatTexture } from '@/covers/generated/canvasUtils';
+import { createCanvas, toTexture, repeatTexture } from '@/covers/generated/canvasUtils';
 import type { Updatable } from '@/core/Engine';
 import type { Furniture } from '../Furniture';
 import type { DayNight } from '../props/DayNight';
@@ -11,6 +11,7 @@ import type { Vec2 } from './streetPlan';
 import { standard } from '../materials/palette';
 import { isShared } from '../materials/sharedResources';
 import { RENDER_ORDER } from '../surface/layers';
+import { lcg } from '@/random';
 
 export interface StreetFurnitureOptions {
   shelter: { at: Vec2; yaw: number; length: number };
@@ -333,7 +334,7 @@ function hedgeRun(depth: number, height: number, length: number, seed: number): 
 function hedgeTexture(anisotropy: number): THREE.CanvasTexture {
   const size = 256;
   const [canvas, ctx] = createCanvas(size, size);
-  const random = seededRandom(808);
+  const random = lcg(808);
   ctx.fillStyle = '#34502a';
   ctx.fillRect(0, 0, size, size);
   for (let i = 0; i < 2600; i++) {

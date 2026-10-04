@@ -102,25 +102,118 @@ export function zfightRoots(): ReadonlyMap<string, { root: THREE.Object3D; viewD
 
 export function findZFighting(root: THREE.Object3D, options: ZFightOptions = {}): ZFightPair[] {
   const { viewDistance = 10, minArea = 1e-4, maxTriangles = 3_000_000 } = options;
-  const step = depthStep(viewDistance);
-  // Candidates: planes closer than this (buckets this wide and their neighbours). Past it the gap holds unless an
-  // offset more than two ranks deep pulls the farther face through the nearer one, which is not looked for.
-  const tolerance = Math.max(2e-5, (MIN_STEPS + 2 * UNITS_PER_RANK) * step);
   root.updateWorldMatrix(true, true);
+  const faces = new FaceCollector(viewDistance, maxTriangles).collect(root);
+  const found = new PairJudge(faces, root, viewDistance, minArea).judge();
+  const pairs = [...found.values()].sort((x, y) => y.areaCm2 - x.areaCm2);
+  for (const pair of pairs) {
+    pair.gapMm = Number(pair.gapMm.toFixed(3));
+    pair.areaCm2 = Number(pair.areaCm2.toFixed(1));
+  }
+  if (faces.triangles > maxTriangles) console.warn(`[zfight] stopped after ${maxTriangles} triangles`);
+  return pairs;
+}
 
-  const owners: Owner[] = [];
-  const buckets = new Map<string, Tri[]>();
-  let triangles = 0;
-  const va = new THREE.Vector3();
-  const vb = new THREE.Vector3();
-  const vc = new THREE.Vector3();
-  const normal = new THREE.Vector3();
-  const e1 = new THREE.Vector3();
-  const e2 = new THREE.Vector3();
-  const instance = new THREE.Matrix4();
-  const world = new THREE.Matrix4();
+/** Every drawn face of a tree, filed under its plane (rounded normal and depth bin), and the meshes they came from. */
+interface Faces {
+  owners: Owner[];
+  buckets: Map<string, Tri[]>;
+  triangles: number;
+  /**
+   * Candidates: planes closer than this (buckets this wide and their neighbours). Past it the gap holds unless an
+   * offset more than two ranks deep pulls the farther face through the nearer one, which is not looked for.
+   */
+  tolerance: number;
+  /** One depth step at the view distance. */
+  step: number;
+}
 
-  const addTriangle = (owner: number, material: THREE.Material, corners: [number, number, number], a: THREE.Vector3, b: THREE.Vector3, c: THREE.Vector3, doubleSided: boolean): void => {
+/**
+ * Walks a tree and files each drawn triangle under the plane it lies in: what the camera draws (meshes on layer 0,
+ * not skinned, not ignored), every instance of an instanced mesh, each material group's triangles under its own material.
+ */
+class FaceCollector {
+  private readonly faces: Faces;
+  private readonly va = new THREE.Vector3();
+  private readonly vb = new THREE.Vector3();
+  private readonly vc = new THREE.Vector3();
+  private readonly normal = new THREE.Vector3();
+  private readonly e1 = new THREE.Vector3();
+  private readonly e2 = new THREE.Vector3();
+  private readonly instance = new THREE.Matrix4();
+  private readonly world = new THREE.Matrix4();
+
+  constructor(
+    viewDistance: number,
+    private readonly maxTriangles: number,
+  ) {
+    const step = depthStep(viewDistance);
+    this.faces = { owners: [], buckets: new Map(), triangles: 0, tolerance: Math.max(2e-5, (MIN_STEPS + 2 * UNITS_PER_RANK) * step), step };
+  }
+
+  collect(root: THREE.Object3D): Faces {
+    root.traverseVisible((obj) => {
+      if (this.faces.triangles > this.maxTriangles) return;
+      const mesh = obj as THREE.Mesh;
+      // Not what the camera never draws (a shadow-only proxy, off layer 0).
+      if (!mesh.isMesh || (obj as THREE.SkinnedMesh).isSkinnedMesh || obj.userData.zfightIgnore || !obj.layers.isEnabled(0)) return;
+      this.collectMesh(mesh);
+    });
+    return this.faces;
+  }
+
+  /** The mesh's triangles, every instance of it, each material group judged by its own material. */
+  private collectMesh(mesh: THREE.Mesh): void {
+    const geometry = mesh.geometry;
+    const position = geometry.getAttribute('position') as THREE.BufferAttribute | undefined;
+    if (!position) return;
+    const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+    const owner =
+      this.faces.owners.push({
+        object: mesh,
+        color: (geometry.getAttribute('color') as THREE.BufferAttribute | undefined) ?? null,
+        uv: (geometry.getAttribute('uv') as THREE.BufferAttribute | undefined) ?? null,
+      }) - 1;
+    const index = geometry.index;
+    const count = index ? index.count : position.count;
+    const groups = geometry.groups.length > 0 && Array.isArray(mesh.material) ? geometry.groups : [{ start: 0, count, materialIndex: 0 }];
+    const instanced = (mesh as THREE.InstancedMesh).isInstancedMesh ? (mesh as THREE.InstancedMesh) : null;
+    const copies = instanced ? instanced.count : 1;
+    for (let k = 0; k < copies; k++) {
+      if (instanced) {
+        instanced.getMatrixAt(k, this.instance);
+        this.world.multiplyMatrices(mesh.matrixWorld, this.instance);
+      } else {
+        this.world.copy(mesh.matrixWorld);
+      }
+      for (const group of groups) {
+        const material = materials[group.materialIndex ?? 0];
+        if (!material || !material.visible || !material.colorWrite || !material.depthTest) continue;
+        // The inner side of a closed solid (a double-sided glass box) is only seen from inside it: judged outside only.
+        const doubleSided = material.side === THREE.DoubleSide && !material.userData.zfightFrontOnly && !closedSolid(geometry);
+        this.collectGroup(owner, material, position, index, group.start, Math.min(count, group.start + group.count), doubleSided);
+      }
+    }
+  }
+
+  /** One material group's triangles, `start` up to `end`, brought into world space through the instance under way. */
+  private collectGroup(owner: number, material: THREE.Material, position: THREE.BufferAttribute, index: THREE.BufferAttribute | null, start: number, end: number, doubleSided: boolean): void {
+    for (let i = start; i + 2 < end; i += 3) {
+      const i0 = index ? index.getX(i) : i;
+      const i1 = index ? index.getX(i + 1) : i + 1;
+      const i2 = index ? index.getX(i + 2) : i + 2;
+      this.va.fromBufferAttribute(position, i0).applyMatrix4(this.world);
+      this.vb.fromBufferAttribute(position, i1).applyMatrix4(this.world);
+      this.vc.fromBufferAttribute(position, i2).applyMatrix4(this.world);
+      this.addTriangle(owner, material, [i0, i1, i2], doubleSided);
+      this.faces.triangles++;
+    }
+  }
+
+  /** The triangle in `va`, `vb`, `vc` filed under its plane (under both planes when double-sided); a sliver of no area is dropped. */
+  private addTriangle(owner: number, material: THREE.Material, corners: [number, number, number], doubleSided: boolean): void {
+    const { va: a, vb: b, vc: c, e1, e2, normal } = this;
+    const { tolerance, buckets } = this.faces;
     e1.subVectors(b, a);
     e2.subVectors(c, a);
     normal.crossVectors(e1, e2);
@@ -156,58 +249,90 @@ export function findZFighting(root: THREE.Object3D, options: ZFightOptions = {})
       if (!list) buckets.set(key, (list = []));
       list.push(tri);
     }
-  };
+  }
+}
 
-  root.traverseVisible((obj) => {
-    if (triangles > maxTriangles) return;
-    const mesh = obj as THREE.Mesh;
-    // Not what the camera never draws (a shadow-only proxy, off layer 0).
-    if (!mesh.isMesh || (obj as THREE.SkinnedMesh).isSkinnedMesh || obj.userData.zfightIgnore || !obj.layers.isEnabled(0)) return;
-    const geometry = mesh.geometry;
-    const position = geometry.getAttribute('position') as THREE.BufferAttribute | undefined;
-    if (!position) return;
-    const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
-    const owner =
-      owners.push({
-        object: obj,
-        color: (geometry.getAttribute('color') as THREE.BufferAttribute | undefined) ?? null,
-        uv: (geometry.getAttribute('uv') as THREE.BufferAttribute | undefined) ?? null,
-      }) - 1;
-    const index = geometry.index;
-    const count = index ? index.count : position.count;
-    const groups = geometry.groups.length > 0 && Array.isArray(mesh.material) ? geometry.groups : [{ start: 0, count, materialIndex: 0 }];
-    const instanced = (mesh as THREE.InstancedMesh).isInstancedMesh ? (mesh as THREE.InstancedMesh) : null;
-    const copies = instanced ? instanced.count : 1;
-    for (let k = 0; k < copies; k++) {
-      if (instanced) {
-        instanced.getMatrixAt(k, instance);
-        world.multiplyMatrices(mesh.matrixWorld, instance);
-      } else {
-        world.copy(mesh.matrixWorld);
-      }
-      for (const group of groups) {
-        const material = materials[group.materialIndex ?? 0];
-        if (!material || !material.visible || !material.colorWrite || !material.depthTest) continue;
-        // The inner side of a closed solid (a double-sided glass box) is only seen from inside it: judged outside only.
-        const doubleSided = material.side === THREE.DoubleSide && !material.userData.zfightFrontOnly && !closedSolid(geometry);
-        const end = Math.min(count, group.start + group.count);
-        for (let i = group.start; i + 2 < end; i += 3) {
-          const i0 = index ? index.getX(i) : i;
-          const i1 = index ? index.getX(i + 1) : i + 1;
-          const i2 = index ? index.getX(i + 2) : i + 2;
-          va.fromBufferAttribute(position, i0).applyMatrix4(world);
-          vb.fromBufferAttribute(position, i1).applyMatrix4(world);
-          vc.fromBufferAttribute(position, i2).applyMatrix4(world);
-          addTriangle(owner, material, [i0, i1, i2], va, vb, vc, doubleSided);
-          triangles++;
-        }
-      }
+/**
+ * Judges the collected faces pair by pair, within a bucket and against the next bucket along: two faces that overlap
+ * within two depth steps of one plane, as far as the overlap is still seen, and show as two, are a fighting pair.
+ */
+class PairJudge {
+  private readonly found = new Map<string, ZFightPair>();
+  private readonly middle = new THREE.Vector3();
+
+  constructor(
+    private readonly faces: Faces,
+    private readonly root: THREE.Object3D,
+    private readonly viewDistance: number,
+    private readonly minArea: number,
+  ) {}
+
+  judge(): Map<string, ZFightPair> {
+    const { buckets } = this.faces;
+    for (const [key, list] of buckets) {
+      this.sweep(list, null);
+      const [n, bin] = key.split('|') as [string, string];
+      const next = buckets.get(`${n}|${Number(bin) + 1}`);
+      if (next) this.sweep(list, next);
     }
-  });
+    return this.found;
+  }
+
+  /** Sweep and prune along u: only triangles whose u ranges overlap are tested (a merged facade has thousands in one plane). */
+  private sweep(list: Tri[], other: Tri[] | null): void {
+    const items = other ? [...list.map((t) => ({ t, side: 0 })), ...other.map((t) => ({ t, side: 1 }))] : list.map((t) => ({ t, side: 0 }));
+    items.sort((x, y) => x.t.minU - y.t.minU);
+    let active: typeof items = [];
+    for (const item of items) {
+      active = active.filter((a) => a.t.maxU > item.t.minU);
+      for (const a of active) if (!other || a.side !== item.side) this.test(a.t, item.t);
+      active.push(item);
+    }
+  }
+
+  /** Whether `s` and `t` fight; a pair is recorded once per two meshes and materials, its overlap summed. */
+  private test(s: Tri, t: Tri): void {
+    const { owners, buckets, tolerance, step } = this.faces;
+    if (s.maxV <= t.minV || t.maxV <= s.minV) return;
+    // How far `s` stands in front of `t`, in depth steps at `viewDistance`: its gap along the shared normal, plus
+    // how much more its polygon offset pulls it forward (more negative units: nearer).
+    const lead = (s.d - t.d) / step + (units(t.material) - units(s.material));
+    if (Math.abs(lead) >= MIN_STEPS) return;
+    const polygon = clipTriangle(s.p, t.p);
+    const overlap = polygonArea(polygon);
+    if (overlap < this.minArea) return;
+    // Judged only as far as the overlap still shows `MIN_PIXELS` across (a trim's sliver past 60 m is under a pixel).
+    const seen = Math.min(this.viewDistance, visibleTo(polygon, overlap));
+    if (Math.abs((s.d - t.d) / depthStep(seen) + (units(t.material) - units(s.material))) >= MIN_STEPS) return;
+    if (bothBlend(s.material, t.material)) return;
+    const one = s.owner === t.owner && s.material === t.material;
+    if (one && !this.differ(s, t, centroid(polygon))) return;
+    if (!one && lookAlike(s.material, t.material) && !owners[s.owner]!.color && !owners[t.owner]!.color) return;
+    // Both pressed on another solid's face (a box's bottom on the shelf, a frame's back on the wall): neither is seen.
+    const [qu, qv] = centroid(polygon);
+    if (pressed(buckets, tolerance, this.middle.copy(s.axis).multiplyScalar(s.d).addScaledVector(s.u, qu).addScaledVector(s.v, qv), s.axis, [s, t], CONTACT)) return;
+    const key = `${Math.min(s.owner, t.owner)}|${Math.max(s.owner, t.owner)}|${s.material.id}|${t.material.id}`;
+    const previous = this.found.get(key);
+    const areaCm2 = overlap * 1e4;
+    if (previous) {
+      previous.areaCm2 += areaCm2;
+      return;
+    }
+    const gap = s.d - t.d;
+    const c = s.centre;
+    this.found.set(key, {
+      a: pathOf(owners[s.owner]!.object, this.root),
+      b: pathOf(owners[t.owner]!.object, this.root),
+      gapMm: Math.abs(gap) * 1000,
+      areaCm2,
+      holdsToM: holdsTo(gap, units(t.material) - units(s.material)),
+      at: `${c.x.toFixed(2)}, ${c.y.toFixed(3)}, ${c.z.toFixed(2)}`,
+    });
+  }
 
   /** Inside one mesh and material: only where the two show something different (a colour, a bit of texture). */
-  const differ = (s: Tri, t: Tri, q: P2): boolean => {
-    const { color, uv } = owners[s.owner]!;
+  private differ(s: Tri, t: Tri, q: P2): boolean {
+    const { color, uv } = this.faces.owners[s.owner]!;
     // Only what the material reads: vertex colours it is told to use, uvs it samples a map with.
     for (const attribute of [readsColors(s.material) ? color : null, readsUvs(s.material) ? uv : null]) {
       if (!attribute) continue;
@@ -216,71 +341,7 @@ export function findZFighting(root: THREE.Object3D, options: ZFightOptions = {})
       }
     }
     return false;
-  };
-
-  const found = new Map<string, ZFightPair>();
-  const middle = new THREE.Vector3();
-  const test = (s: Tri, t: Tri): void => {
-    if (s.maxV <= t.minV || t.maxV <= s.minV) return;
-    // How far `s` stands in front of `t`, in depth steps at `viewDistance`: its gap along the shared normal, plus
-    // how much more its polygon offset pulls it forward (more negative units: nearer).
-    const lead = (s.d - t.d) / step + (units(t.material) - units(s.material));
-    if (Math.abs(lead) >= MIN_STEPS) return;
-    const polygon = clipTriangle(s.p, t.p);
-    const overlap = polygonArea(polygon);
-    if (overlap < minArea) return;
-    // Judged only as far as the overlap still shows `MIN_PIXELS` across (a trim's sliver past 60 m is under a pixel).
-    const seen = Math.min(viewDistance, visibleTo(polygon, overlap));
-    if (Math.abs((s.d - t.d) / depthStep(seen) + (units(t.material) - units(s.material))) >= MIN_STEPS) return;
-    if (bothBlend(s.material, t.material)) return;
-    const one = s.owner === t.owner && s.material === t.material;
-    if (one && !differ(s, t, centroid(polygon))) return;
-    if (!one && lookAlike(s.material, t.material) && !owners[s.owner]!.color && !owners[t.owner]!.color) return;
-    // Both pressed on another solid's face (a box's bottom on the shelf, a frame's back on the wall): neither is seen.
-    const [qu, qv] = centroid(polygon);
-    if (pressed(buckets, tolerance, middle.copy(s.axis).multiplyScalar(s.d).addScaledVector(s.u, qu).addScaledVector(s.v, qv), s.axis, [s, t], CONTACT)) return;
-    const key = `${Math.min(s.owner, t.owner)}|${Math.max(s.owner, t.owner)}|${s.material.id}|${t.material.id}`;
-    const previous = found.get(key);
-    const areaCm2 = overlap * 1e4;
-    if (previous) {
-      previous.areaCm2 += areaCm2;
-      return;
-    }
-    const gap = s.d - t.d;
-    const c = s.centre;
-    found.set(key, {
-      a: pathOf(owners[s.owner]!.object, root),
-      b: pathOf(owners[t.owner]!.object, root),
-      gapMm: Math.abs(gap) * 1000,
-      areaCm2,
-      holdsToM: holdsTo(gap, units(t.material) - units(s.material)),
-      at: `${c.x.toFixed(2)}, ${c.y.toFixed(3)}, ${c.z.toFixed(2)}`,
-    });
-  };
-  /** Sweep and prune along u: only triangles whose u ranges overlap are tested (a merged facade has thousands in one plane). */
-  const sweep = (list: Tri[], other: Tri[] | null): void => {
-    const items = other ? [...list.map((t) => ({ t, side: 0 })), ...other.map((t) => ({ t, side: 1 }))] : list.map((t) => ({ t, side: 0 }));
-    items.sort((x, y) => x.t.minU - y.t.minU);
-    let active: typeof items = [];
-    for (const item of items) {
-      active = active.filter((a) => a.t.maxU > item.t.minU);
-      for (const a of active) if (!other || a.side !== item.side) test(a.t, item.t);
-      active.push(item);
-    }
-  };
-  for (const [key, list] of buckets) {
-    sweep(list, null);
-    const [n, bin] = key.split('|') as [string, string];
-    const next = buckets.get(`${n}|${Number(bin) + 1}`);
-    if (next) sweep(list, next);
   }
-  const pairs = [...found.values()].sort((x, y) => y.areaCm2 - x.areaCm2);
-  for (const pair of pairs) {
-    pair.gapMm = Number(pair.gapMm.toFixed(3));
-    pair.areaCm2 = Number(pair.areaCm2.toFixed(1));
-  }
-  if (triangles > maxTriangles) console.warn(`[zfight] stopped after ${maxTriangles} triangles`);
-  return pairs;
 }
 
 /** Whether `m` takes its vertex colours (a shader of its own may: assumed so). */

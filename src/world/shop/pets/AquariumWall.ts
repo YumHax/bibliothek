@@ -7,9 +7,9 @@ import { part } from '../../props/Prop';
 import { basic, instancedStandard, paint, standard } from '../../materials/palette';
 import { mergeStaticParts } from '../../zone/mergeStatic';
 import { PooledLight } from '../../lighting/LightPool';
-import { seededRandom } from '@/graphics/canvas';
 import { TankBubbler } from '../shopSounds';
 import type { PropVoice, ShopVoiced } from '../common/fitting';
+import { lcg } from '@/random';
 
 export interface AquariumWallOptions {
   /** Length along the wall. Default 2.0. */
@@ -84,7 +84,7 @@ export class AquariumWall extends THREE.Group implements Furniture, Updatable, S
     super();
     this.name = 'AquariumWall';
     const W = options.width ?? 2.0;
-    const random = seededRandom(options.seed ?? 13);
+    const random = lcg(options.seed ?? 13);
     const still = new THREE.Group();
     this.add(still);
 

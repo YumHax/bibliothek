@@ -4,4 +4,5 @@
  */
 export { zfightSubjects } from '@/world/surface/zfightCatalogue';
 export { findZFighting } from '@/world/surface/zfight';
+export { seedLiveRandom } from '@/random';
 export * as THREE from 'three';

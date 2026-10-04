@@ -5,6 +5,9 @@ import type { VisitRoute } from '../Visit';
 import type { GatheringDeps } from './deps';
 import { GATHERING_LINES, GATHERING_RULES, GUESTS } from './gatheringPlan';
 import { Party, type PartyMember } from './Party';
+import { random } from '@/random';
+import { formatCount } from '@/text/count';
+import { formatCoins } from '@/text/money';
 
 type Stop = VisitRoute['browse'][number];
 
@@ -80,7 +83,7 @@ export class OpenHouse {
       if (plan) this.party.add(plan, i * PAIR_GAP);
     }
     this.waves += 1;
-    this.nextWaveAt = this.party.time + waveGap[0] + Math.random() * (waveGap[1] - waveGap[0]);
+    this.nextWaveAt = this.party.time + waveGap[0] + random() * (waveGap[1] - waveGap[0]);
     this.caseStops = this.casesNow();
   }
 
@@ -148,7 +151,7 @@ export class OpenHouse {
     }
     book.heldHouse({ day: this.day, guests: this.guests, coins: this.coins, best: showpiece?.()?.title ?? null, quotes: [...this.quotes] }, this.day);
     standing?.record('openHouse');
-    host.options.journal?.note('visit', `Open house: ${this.guests} visitors, ${this.coins} coins in the jar`);
-    host.options.notices?.reward({ title: 'Open house', detail: `${this.guests} visitor${this.guests === 1 ? '' : 's'} came up the stairs. The paper will have it tomorrow.`, coins: this.coins });
+    host.options.journal?.note('visit', `Open house: ${this.guests} visitors, ${formatCoins(this.coins)} in the jar`);
+    host.options.notices?.reward({ title: 'Open house', detail: `${formatCount(this.guests, 'visitor')} came up the stairs. The paper will have it tomorrow.`, coins: this.coins });
   }
 }

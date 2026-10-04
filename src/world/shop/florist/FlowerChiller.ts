@@ -4,12 +4,12 @@ import { FridgeHum } from '@/audio/ambient';
 import { cylinderMesh } from '../../meshUtils';
 import { part } from '../../props/Prop';
 import { paint, METAL } from '../../materials/palette';
-import { seededRandom } from '@/graphics/canvas';
 import { PooledLight } from '../../lighting/LightPool';
 import { RENDER_ORDER } from '../../surface/layers';
 import { Glows } from '../common/fitting';
 import type { PropVoice, ShopVoiced } from '../common/fitting';
-import { LeafBatch, LEAF_GREENS, addBunch, headGeometry, pick } from './greenery';
+import { LeafBatch, LEAF_GREENS, addBunch, headGeometry } from './greenery';
+import { lcg, pick } from '@/random';
 
 export interface FlowerChillerOptions {
   /** Outer size. Default 1.3 wide, 2.0 high, 0.62 deep. */
@@ -28,6 +28,17 @@ const GRILLE = paint(0x1c1e20, 0.7);
 const ZINC = (): THREE.MeshStandardMaterial => METAL.satinSteel();
 /** The cold white of the chiller's tube behind its header, and what it throws out of the glass. */
 const COLD = 0xe4f0ff;
+
+/** The cabinet's measures: its outer size, the thickness of its walls, its plinth and header, and the clear space inside. */
+interface Cabinet {
+  W: number;
+  H: number;
+  D: number;
+  wall: number;
+  plinth: number;
+  header: number;
+  inner: { x0: number; x1: number; y0: number; y1: number; z0: number; z1: number };
+}
 
 /**
  * The florist's glass-door chiller, the shop's centrepiece: a white enamelled cabinet against the wall, two glass
@@ -49,13 +60,27 @@ export class FlowerChiller extends THREE.Group implements Furniture, ShopVoiced 
     const H = options.height ?? 2.0;
     const D = options.depth ?? 0.62;
     this.size = { width: W, height: H, depth: D };
-    const random = seededRandom(options.seed ?? 31);
+    const random = lcg(options.seed ?? 31);
     const wall = 0.04;
     const plinth = 0.16;
     const header = 0.2;
-    const inner = { x0: -W / 2 + wall, x1: W / 2 - wall, y0: plinth, y1: H - header, z0: wall, z1: D - 0.05 };
+    const cabinet: Cabinet = { W, H, D, wall, plinth, header, inner: { x0: -W / 2 + wall, x1: W / 2 - wall, y0: plinth, y1: H - header, z0: wall, z1: D - 0.05 } };
+    this.carcass(cabinet);
+    this.stock(cabinet, random);
+    this.doors(cabinet);
+    // A drip tray in front of the plinth, a puddle of condensation never wiped.
+    part(this, W * 0.5, 0.012, 0.05, paint(0x9aa0a4, 0.3), { y: 0.006, z: D + 0.02 });
 
-    // The carcass: sides, top, the back, the plinth with its grille, the header over the doors.
+    // The cold light it throws on the floor and the counter in front.
+    const light = new PooledLight(COLD, 0.55, 2.6, 2);
+    light.position.set(0, 1.2, D + 0.35);
+    this.add(light);
+
+    this.footprint = new THREE.Box3(new THREE.Vector3(-W / 2, 0, 0), new THREE.Vector3(W / 2, H, D + 0.03));
+  }
+
+  /** The carcass: sides, top, the back, the plinth with its grille, the header over the doors, the lit strip and the glowing back panel. */
+  private carcass({ W, H, D, wall, plinth, header, inner }: Cabinet): void {
     for (const x of [-1, 1]) part(this, wall, H, D, BODY, { x: (x * (W - wall)) / 2, y: H / 2, z: D / 2 });
     part(this, W, wall, D, BODY, { y: H - wall / 2, z: D / 2 });
     // The back and the plinth fit between the sides and under the top (run through them, their faces would lie in theirs).
@@ -64,7 +89,6 @@ export class FlowerChiller extends THREE.Group implements Furniture, ShopVoiced 
     part(this, W - 2 * wall, plinth, D - 0.04 - wall, PLINTH, { y: plinth / 2, z: wall + (D - 0.04 - wall) / 2 });
     for (let i = 0; i < 9; i++) part(this, W * 0.6, 0.008, 0.004, GRILLE, { y: 0.035 + i * 0.011, z: D - 0.038 });
     part(this, W - 2 * wall, header, 0.03, BODY, { y: H - header / 2, z: D - 0.015 });
-    // The header's lit strip, and the glowing back panel behind the flowers.
     const strip = this.glows.add({ color: 0xf6fbff, emissive: COLD, strength: 1.4, roughness: 0.3 });
     part(this, W - 0.2, 0.05, 0.006, strip, { y: H - header / 2, z: D + 0.001 });
     const back = this.glows.add({ color: 0xe8f0f4, emissive: COLD, strength: 0.55, roughness: 0.5 });
@@ -72,14 +96,15 @@ export class FlowerChiller extends THREE.Group implements Furniture, ShopVoiced 
     const backFoot = inner.y0 + 0.02;
     part(this, inner.x1 - inner.x0, inner.y1 - backFoot, 0.006, back, { y: (backFoot + inner.y1) / 2, z: wall + 0.004 });
     this.glows.set(1);
+  }
 
-    // Two wire shelves (a frame and bars), buckets of bunches on each and on the floor of the cabinet.
+  /** The cabinet's floor and two wire shelves (a frame and bars), zinc buckets of bunches on each, eucalyptus with the roses now and then. */
+  private stock({ inner }: Cabinet, random: () => number): void {
     const steel = METAL.steel();
     const zinc = ZINC();
     const leaves = new LeafBatch();
     const head = headGeometry();
     const levels = [inner.y0 + 0.02, inner.y0 + 0.62, inner.y0 + 1.1];
-    // The cabinet's floor, the lowest buckets on it.
     part(this, inner.x1 - inner.x0, 0.02, inner.z1 - inner.z0, INSIDE, { y: inner.y0 + 0.01, z: (inner.z0 + inner.z1) / 2 });
     for (const [i, y] of levels.entries()) {
       if (i > 0) {
@@ -95,13 +120,14 @@ export class FlowerChiller extends THREE.Group implements Furniture, ShopVoiced 
         const z = (inner.z0 + inner.z1) / 2 + (random() - 0.5) * 0.06;
         this.add(cylinderMesh(r, h, zinc, { x, y: y + (i === 0 ? 0 : 0.008) + h / 2, z }, { radiusBottom: r * 0.8, segments: 14 }));
         addBunch(this, leaves, head, new THREE.Vector3(x, y + h, z), { colors: pick(random, COLD_BLOOMS), stems: i === 0 ? 12 : 8, height: i === 0 ? 0.3 : 0.24, spread: r * 0.9, head: i === 0 ? 0.03 : 0.025, green: pick(random, LEAF_GREENS.classic) }, random);
-        // Eucalyptus with the roses now and then.
         if (random() < 0.35) addBunch(this, leaves, head, new THREE.Vector3(x, y + h, z), { colors: [LEAF_GREENS.sage[0]], stems: 3, height: i === 0 ? 0.28 : 0.22, spread: r, head: 0.012, green: LEAF_GREENS.sage[1] }, random);
       }
     }
     leaves.addTo(this);
+  }
 
-    // The doors: glass in steel frames, a bar handle on each at the meeting stiles.
+  /** The doors: glass in steel frames, a bar handle on each at the meeting stiles. */
+  private doors({ W, D, wall, inner }: Cabinet): void {
     const glass = new THREE.MeshStandardMaterial({ color: 0xdfeaf0, roughness: 0.05, metalness: 0, transparent: true, opacity: 0.16, depthWrite: false });
     const frame = paint(0xc8ccd0, 0.35);
     const doorW = (W - 2 * wall) / 2;
@@ -119,15 +145,6 @@ export class FlowerChiller extends THREE.Group implements Furniture, ShopVoiced 
       part(this, 0.018, 0.6, 0.018, METAL.chrome(), { x: hx, y: 1.05, z: zDoor + 0.05 });
       for (const y of [0.78, 1.32]) part(this, 0.012, 0.012, 0.04, METAL.chrome(), { x: hx, y, z: zDoor + 0.03 });
     }
-    // A drip tray in front of the plinth, a puddle of condensation never wiped.
-    part(this, W * 0.5, 0.012, 0.05, paint(0x9aa0a4, 0.3), { y: 0.006, z: D + 0.02 });
-
-    // The cold light it throws on the floor and the counter in front.
-    const light = new PooledLight(COLD, 0.55, 2.6, 2);
-    light.position.set(0, 1.2, D + 0.35);
-    this.add(light);
-
-    this.footprint = new THREE.Box3(new THREE.Vector3(-W / 2, 0, 0), new THREE.Vector3(W / 2, H, D + 0.03));
   }
 
   voices(): readonly PropVoice[] {

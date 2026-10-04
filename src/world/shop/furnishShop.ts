@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { Zone } from '../zone/Zone';
-import type { BuildContext, ZoneHandle } from '../buildContext';
+import type { BuildContext, HomeContext, MoneyContext, ZoneHandle } from '../buildContext';
 import type { Furniture } from '../Furniture';
 import { furnishShell } from '../shell';
 import { placeClock, placeRoomLight } from '../build/roomParts';
@@ -35,6 +35,15 @@ import { PetShopNoises, ShopRadio, ShopRoomTone, SnowHiss, playTill } from './sh
 import { SHOP_DOOR, SHOP_PLANS, type OnSurface, type ShopPlan, type ShopSound, type ShopZoneId } from './shopPlan';
 import { surfaceOfRoom } from '@/audio/footSurface';
 import { furnishRepairCorner } from '../repair/furnishRepair';
+import type { SessionActions } from '@/game/SessionActions';
+import type { ErrandId } from '@/errands/errands';
+import { effectValue } from '@/social/perks';
+import { clerkOf, priced, shopFactor } from '@/social/street/streetPerks';
+import { talkHook } from '../people/socialHook';
+import { clerkTalk } from './clerkTalk';
+
+/** What a walk-in shop's builder reads of the `BuildContext`: the sky and the camera (its sounds), the till's panel, the day, what the flat owns, the money, the consoles and the people. */
+type ShopBuild = Pick<BuildContext, 'sky' | 'listener' | 'acoustics' | 'panels' | 'today' | 'classifieds' | 'social'> & { home: Pick<HomeContext, 'upgrades' | 'household'>; money: Pick<MoneyContext, 'wallet'> };
 
 /**
  * The shop's daylight: the sky's through its one window, never darker than this (the back of a shop is lit by its
@@ -59,6 +68,9 @@ interface Surface {
   centreZ?: number;
 }
 
+/** Puts `item` on a plan's surface (`OnSurface`: the counter, the window display, a table by id), at its spot on the top. */
+type PlaceOn = <F extends Furniture>(item: F, surface: OnSurface) => F;
+
 /**
  * Builds one of Front Street's shops into its zone from `SHOP_PLANS[zone.id]`: the room (its daylight the sky's
  * through the front window, `ShopWindow`, and the display plinth inside it), its lamp and switch (which works the
@@ -69,8 +81,8 @@ interface Surface {
  * the counter with the clerk behind it (`ShopClerk`: off on a chore now and then, a thanks and the till after a sale),
  * whose till opens the shop's list (`HomeShopPanel`), and another customer now and then.
  */
-export function furnishShop(zone: Zone, ctx: BuildContext): ZoneHandle {
-  const { sky, listener, panels, home: { upgrades } } = ctx;
+export function furnishShop(zone: Zone, ctx: ShopBuild): ZoneHandle {
+  const { sky, listener, home: { upgrades } } = ctx;
   const plan = SHOP_PLANS[zone.id as ShopZoneId];
   if (!plan) throw new Error(`[shop] no SHOP_PLANS entry for zone ${zone.id}`);
   const room = furnishShell(zone, sky, plan.room, { fixedDaylight: DAYLIGHT.min });
@@ -126,56 +138,9 @@ export function furnishShop(zone: Zone, ctx: BuildContext): ZoneHandle {
   const placed: Furniture[] = [];
   const tables = placeFixtures(zone, plan.fixtures, ctx, shop, placed);
 
-  // The counter and the clerk behind it; the till has the whole list.
-  const counter = zone.placeAt(
-    new ShopCounter({
-      width: plan.counter.width,
-      front: plan.accent,
-      label: upgrades ? 'The till · see everything for the flat' : 'The till',
-      open: (session) => {
-        if (upgrades) session.openPanel(panels.homeShop.forShop(plan.shop));
-        else session.refuse('The flat is furnished already.');
-      },
-    }),
-    plan.counter.at,
-  );
-  // TV REPAIR buys working consoles over its counter and sells broken ones from a crate (docs/household.md "Repairing a console").
-  if (plan.shop === 'electronics') furnishRepairCorner(zone, ctx, counter);
-  const home = zone.toLocal(counter.localToWorld(CLERK_AT.clone()));
-  const { seed, lines, callOuts, thanks, chores } = plan.clerk;
-  const clerk = zone.place(new ShopClerk({ viewer: listener, seed, lines, callOuts, thanks, chores, home: { at: home.clone(), yaw: counter.rotation.y }, label: 'The shopkeeper · chat' }), home, counter.rotation.y);
-  const sold = (): void => {
-    clerk.thank();
-    playTill();
-  };
-  // What stands on a surface, once every surface is there: the radios, the props on the counter, the tables, the window.
-  const surfaceOf = (on: string): Surface => {
-    if (on === 'counter') return { host: counter, top: COUNTER_TOP };
-    if (on === 'windowDisplay') {
-      if (!display) throw new Error(`[shop] ${zone.id}: no window display (windowDisplay: false)`);
-      return { host: display, top: display.topHeight, centreZ: display.topCentre };
-    }
-    const table = tables.get(on);
-    if (!table) throw new Error(`[shop] ${zone.id}: no table '${on}'`);
-    return { host: table, top: table.topHeight };
-  };
-  const placeOn = <F extends Furniture>(item: F, surface: OnSurface): F => {
-    const { host, top, centreZ = 0 } = surfaceOf(surface.on);
-    host.updateMatrixWorld(true);
-    const [x, z] = surface.spot;
-    return zone.place(item, zone.toLocal(host.localToWorld(new THREE.Vector3(x, top, centreZ + z))), host.rotation.y + (surface.yaw ?? 0));
-  };
-  plan.fixtures.forEach((fixture, index) => {
-    if (fixture.kind === 'radio') {
-      const radio = placeOn(new Radio(), fixture);
-      radio.updateMatrixWorld(true);
-      zone.place(pointSound(ctx, new ShopRadio(radio), { maxDistance: 10 }), zone.toLocal(radio.localToWorld(new THREE.Vector3(-0.05, 0.08, 0.04))));
-    } else if (fixture.kind === 'prop' && 'on' in fixture) {
-      placed.push(placeOn(makeShopProp(fixture.prop, fixture.options, { ...shop, seed: index + 1 }), fixture));
-    }
-  });
-  // What is sold over the counter to be used up (the pet shop's treats, the florist's bunches: `errands/`).
-  for (const shown of plan.errands ?? []) placeOn(new CounterErrand(shown.errand, sold), shown);
+  const { counter, sold } = placeCounterAndClerk(zone, ctx, plan);
+  const placeOn = placerOnSurfaces(zone, counter, display, tables);
+  placeOnSurfaces(zone, ctx, plan, shop, placeOn, placed, sold);
   // The fittings, now all there, lit as the switch is; the props' sounds at their places.
   for (const item of placed) {
     if (isShopFitting(item)) {
@@ -195,19 +160,103 @@ export function furnishShop(zone: Zone, ctx: BuildContext): ZoneHandle {
   const customer = zone.place(new ShopCustomer({ viewer: listener, seed: plan.customer.seed, browsing: plan.customer, lines: plan.customer.lines }), new THREE.Vector3());
   zone.place(customer.walker, customer.walker.position.clone(), Math.PI);
 
-  // What the flat can be sold, on the floor, on the walls and on the surfaces.
+  const displays = placeGoods(zone, ctx, plan, accent, placeOn, sold);
+  return { room, surfaceAt: rugsOnShow(zone, displays, plan.room) };
+}
+
+/**
+ * The counter and the clerk behind it; the till has the whole list (`HomeShopPanel`), the clerk is someone to talk to
+ * (docs/social.md: what their standing gives). TV REPAIR buys working consoles over its counter and sells broken ones
+ * from a crate (docs/household.md "Repairing a console"). Returns the counter and what a sale does (a thanks, the till).
+ */
+function placeCounterAndClerk(zone: Zone, ctx: ShopBuild, plan: ShopPlan): { counter: ShopCounter; sold: () => void } {
+  const { listener, panels, home: { upgrades } } = ctx;
+  const openTill = (session: SessionActions): void => {
+    if (upgrades) session.openPanel(panels.homeShop.forShop(plan.shop));
+    else session.refuse('The flat is furnished already.');
+  };
+  const counter = zone.placeAt(
+    new ShopCounter({
+      width: plan.counter.width,
+      front: plan.accent,
+      label: upgrades ? 'The till · see everything for the flat' : 'The till',
+      open: (session) => openTill(session),
+    }),
+    plan.counter.at,
+  );
+  if (plan.shop === 'electronics') furnishRepairCorner(zone, ctx, counter);
+  const home = zone.toLocal(counter.localToWorld(CLERK_AT.clone()));
+  const { seed, lines, callOuts, thanks, chores } = plan.clerk;
+  const clerkId = clerkOf(plan.shop);
+  const talk = { shop: plan.shop, openTill, day: () => ctx.today.gameDay, catName: ctx.home.household?.catName, catHome: () => upgrades?.has('cat') ?? true, workshop: ctx.classifieds?.workshop };
+  const social = clerkId ? talkHook(ctx.social, clerkId, (session) => clerkTalk({ ...talk, clerk }, session)) : undefined;
+  const clerk: ShopClerk = zone.place(new ShopClerk({ viewer: listener, seed, lines, callOuts, thanks, chores, home: { at: home.clone(), yaw: counter.rotation.y }, label: 'The shopkeeper · chat', ...(social ? { social } : {}) }), home, counter.rotation.y);
+  const sold = (): void => {
+    clerk.thank();
+    playTill();
+  };
+  return { counter, sold };
+}
+
+/** What stands on a surface, once every surface is there: the counter, the window display, the tables by id. */
+function placerOnSurfaces(zone: Zone, counter: ShopCounter, display: WindowDisplay | null, tables: Map<string, DisplayTable>): PlaceOn {
+  const surfaceOf = (on: string): Surface => {
+    if (on === 'counter') return { host: counter, top: COUNTER_TOP };
+    if (on === 'windowDisplay') {
+      if (!display) throw new Error(`[shop] ${zone.id}: no window display (windowDisplay: false)`);
+      return { host: display, top: display.topHeight, centreZ: display.topCentre };
+    }
+    const table = tables.get(on);
+    if (!table) throw new Error(`[shop] ${zone.id}: no table '${on}'`);
+    return { host: table, top: table.topHeight };
+  };
+  return (item, surface) => {
+    const { host, top, centreZ = 0 } = surfaceOf(surface.on);
+    host.updateMatrixWorld(true);
+    const [x, z] = surface.spot;
+    return zone.place(item, zone.toLocal(host.localToWorld(new THREE.Vector3(x, top, centreZ + z))), host.rotation.y + (surface.yaw ?? 0));
+  };
+}
+
+/**
+ * What stands on the surfaces: the radios (with their sound), the props on the counter and the tables, and what is
+ * sold over the counter to be used up (the pet shop's treats, the florist's bunches: `errands/`; a friend of the
+ * florist's gets a fourth bunch for the price of two, `extraBunch`).
+ */
+function placeOnSurfaces(zone: Zone, ctx: ShopBuild, plan: ShopPlan, shop: ShopContext, placeOn: PlaceOn, placed: Furniture[], sold: () => void): void {
+  plan.fixtures.forEach((fixture, index) => {
+    if (fixture.kind === 'radio') {
+      const radio = placeOn(new Radio(), fixture);
+      radio.updateMatrixWorld(true);
+      zone.place(pointSound(ctx, new ShopRadio(radio), { maxDistance: 10 }), zone.toLocal(radio.localToWorld(new THREE.Vector3(-0.05, 0.08, 0.04))));
+    } else if (fixture.kind === 'prop' && 'on' in fixture) {
+      placed.push(placeOn(makeShopProp(fixture.prop, fixture.options, { ...shop, seed: index + 1 }), fixture));
+    }
+  });
+  const clerkId = clerkOf(plan.shop);
+  const portions = (errand: ErrandId, base: number): number => (errand === 'bunch' && clerkId ? effectValue(clerkId, 'extraBunch', base) : base);
+  for (const shown of plan.errands ?? []) placeOn(new CounterErrand(shown.errand, sold, portions), shown);
+}
+
+/**
+ * What the flat can be sold, on the floor, on the walls and on the surfaces: each piece with its price tag (the clerk's
+ * discount or markup as the shop is built; today's talked-down discount is the till's), SOLD once a one-off is at home.
+ */
+function placeGoods(zone: Zone, ctx: ShopBuild, plan: ShopPlan, accent: string, placeOn: PlaceOn, sold: () => void): ForSale[] {
+  const { home: { upgrades } } = ctx;
   const coat = plan.shop === 'pets' ? new CatSettingsStore().settings.coat : undefined;
   const displays: ForSale[] = [];
   for (const shown of plan.displays) {
     const piece = buildPiece(shown.good, shown.variant, coat);
     if (!piece) continue;
-    const item = new ForSale({ good: homeGood(shown.good), piece, upgrades, accent, tag: shown.tag, collides: shown.collides, wallet: ctx.money.wallet, onBought: sold });
+    const good = homeGood(shown.good);
+    const item = new ForSale({ good: { ...good, price: priced(good.price, shopFactor(plan.shop)) }, piece, upgrades, accent, tag: shown.tag, collides: shown.collides, wallet: ctx.money.wallet, onBought: sold });
     if ('on' in shown) placeOn(item, shown);
     else zone.placeAt(item, shown.at);
     displays.push(item);
   }
   if (upgrades) followUpgrades(zone, upgrades, () => displays.forEach((item) => item.refresh()));
-  return { room, surfaceAt: rugsOnShow(zone, displays, plan.room) };
+  return displays;
 }
 
 /** The display plinth inside the front window, as wide as the glass, in the shop's colour darkened. */

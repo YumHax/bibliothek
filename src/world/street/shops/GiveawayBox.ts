@@ -3,17 +3,19 @@ import type { Updatable } from '@/core/Engine';
 import type { Interactable } from '@/interaction/Interactable';
 import type { SessionActions } from '@/game/SessionActions';
 import type { BoxArtLoader } from '@/covers/BoxArtLoader';
-import { createCanvas, seededRandom, toTexture } from '@/covers/generated/canvasUtils';
+import { createCanvas, toTexture } from '@/covers/generated/canvasUtils';
 import { dayKey } from '@/economy/calendar';
 import { KEYS, PersistedStore } from '@/persistence';
 import { StockItem } from '@/economy/StockItem';
-import { dailyRandom, isEventDay } from '@/time/daily';
+import { dailyRandom } from '@/time/daily';
+import { GIVEAWAY } from '../events/streetSchedules';
 import { paint, standard } from '../../materials/palette';
 import { invisibleHitbox } from '../../meshUtils';
 import type { Furniture } from '../../Furniture';
 import { ForSaleBox } from '../../market/ForSaleBox';
 import { snowCovered } from '../snowCover';
 import { GIVEAWAY_WHERE } from '@/economy/pricing';
+import { lcg } from '@/random';
 
 interface GiveawayBoxOptions {
   /** The zone: the free game must be placed to be clickable. */
@@ -26,9 +28,13 @@ interface GiveawayBoxOptions {
   isWanted: (id: string) => boolean;
 }
 
-/** Whether today (the real date) somebody leaves a box out: about one day in `oneDayIn`. */
-export function isGiveawayDay(oneDayIn: number, date = new Date()): boolean {
-  return isEventDay('giveaway', oneDayIn, { date });
+/**
+ * Whether today (the real date) somebody leaves a box out: about one day in the plan's `oneDayIn`, as the box's
+ * schedule says (`events/streetSchedules`, the one rule the paper and the pavement share; the builder passes the
+ * plan's number, read there).
+ */
+export function isGiveawayDay(_oneDayIn: number, date = new Date()): boolean {
+  return GIVEAWAY.isDay(date);
 }
 
 /** Where the box stands on the real day `date`: the spot for its day of the month. */
@@ -173,7 +179,7 @@ export class GiveawayBox extends THREE.Group implements Furniture, Updatable, In
 /** The flap's lettering, in marker: FREE TO TAKE. */
 function flapTexture(): THREE.CanvasTexture {
   const [canvas, ctx] = createCanvas(256, 82);
-  const random = seededRandom(404);
+  const random = lcg(404);
   ctx.fillStyle = '#b08a56';
   ctx.fillRect(0, 0, 256, 82);
   for (let i = 0; i < 200; i++) {

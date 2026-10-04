@@ -4,7 +4,7 @@ import { Prop, part } from '../../props/Prop';
 import { bandAround } from '../../props/joinery';
 import { Cushion } from '../../props/Cushion';
 import { cloth, paint, timber, METAL } from '../../materials/palette';
-import { seededRandom } from '@/graphics/canvas';
+import { lcg } from '@/random';
 
 /*
  * What makes SECOND HOME's rooms on show look lived in rather than delivered: a throw over an armchair's arm, cushions
@@ -92,7 +92,7 @@ export class DresserTop extends Prop {
   constructor(seed = 5) {
     super();
     this.name = 'DresserTop';
-    const random = seededRandom(seed);
+    const random = lcg(seed);
     const top = 0.85;
     const z = 0.24;
     // The vase and its grasses, fanned out.
@@ -133,7 +133,7 @@ export class TableDressing extends Prop {
   constructor(seed = 9) {
     super();
     this.name = 'TableDressing';
-    const random = seededRandom(seed);
+    const random = lcg(seed);
     const top = 0.75;
     part(this, 0.8, 0.004, 0.24, cloth(0xd8cbb0, 1), { y: top + 0.002 });
     // The jug, its handle and a bunch of flowers.

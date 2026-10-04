@@ -2,7 +2,9 @@ import type * as THREE from 'three';
 import { BLINK_ANGLE, type Eye } from '../eyes';
 import type { FaceMorphs } from '../head';
 import type { FaceKey } from './gestures';
-import { Spring, smooth } from './springs';
+import { smooth } from '@/math/scalar';
+import { Spring } from '@/math/springs';
+import { random } from '@/random';
 
 /*
  * The face's life: expressions (a smile, raised brows, a frown, a squint, the mouth open) as springs
@@ -41,7 +43,7 @@ export class Face {
   private readonly feeling: Expression = { smile: 0, browsUp: 0, frown: 0, squint: 0, jaw: 0 };
   private feelingLeft = 0;
   private feelingFade = 1;
-  private blinkIn = 2 + Math.random() * 4;
+  private blinkIn = 2 + random() * 4;
   private blinkAge = -1;
   private doubleBlink = false;
   private syllable = 0;
@@ -86,7 +88,7 @@ export class Face {
     if (talk > 0) {
       const before = Math.floor(this.syllable / Math.PI);
       this.syllable += dt * (19 + 7 * Math.sin(t * 0.9));
-      if (Math.floor(this.syllable / Math.PI) !== before) this.vowel = Math.floor(Math.random() * VOWELS.length);
+      if (Math.floor(this.syllable / Math.PI) !== before) this.vowel = Math.floor(random() * VOWELS.length);
       const words = smooth((Math.sin(t * 1.7 + Math.sin(t * 0.6) * 2) + 0.35) / 0.55);
       const [jaw, pucker, ee] = VOWELS[this.vowel]!;
       const open = Math.max(0, Math.sin(this.syllable));
@@ -110,8 +112,8 @@ export class Face {
     this.blinkIn -= dt;
     if (this.blinkIn <= 0 && this.blinkAge < 0) {
       this.blinkAge = 0;
-      this.doubleBlink = !this.doubleBlink && Math.random() < 0.12;
-      this.blinkIn = this.doubleBlink ? BLINK_CLOSE + BLINK_OPEN + 0.08 : 1.8 + Math.random() * 4.5;
+      this.doubleBlink = !this.doubleBlink && random() < 0.12;
+      this.blinkIn = this.doubleBlink ? BLINK_CLOSE + BLINK_OPEN + 0.08 : 1.8 + random() * 4.5;
     }
     let closed = 0;
     if (this.blinkAge >= 0) {

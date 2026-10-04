@@ -7,7 +7,7 @@ import { shelfRoomNote } from '@/ui/market/shelfRoom';
 import { bookcasesIn } from '@/world/build/bookcases';
 import { labelMaker } from '@/world/labels/labelMaker';
 import { LabelPanel } from '@/ui/LabelPanel';
-import { inFlat } from '@/world/worldPlan';
+import { refundLapsedHoldsDaily } from '@/economy/lapsedHolds';
 import type { Services } from './services';
 import type { Ui } from './ui';
 import type { BuiltWorld } from './world';
@@ -37,7 +37,7 @@ export function createSession(services: Services, parts: { player: FirstPersonCo
     camera: services.engine.camera,
     blocked: (from, to) => interaction.interactor.blocked(from, to),
     upgrades,
-    atHome: () => inFlat(built.zones.current.id) && built.zones.current.id !== 'stairwell',
+    atHome: () => built.activity.atHome,
     notices: ui.notices,
   });
   const session = new Session({
@@ -60,7 +60,7 @@ export function createSession(services: Services, parts: { player: FirstPersonCo
     collectionEditor: ui.editor,
     cat: built.cat,
     // A household beat (cleaning, baking, a soak) is dark like a night: the keys wait for it too (the deaf route).
-    sleep: { get isAsleep() { return moves.sleep.isAsleep || built.pastimes.isBusy; }, untilMorning: () => moves.sleep.untilMorning() },
+    sleep: { get isAsleep() { return built.activity.isAsleep; }, untilMorning: () => moves.sleep.untilMorning() },
     // Back the way the player was in (a controller player gets the virtual lock again).
     enterRoom: () => void ui.lockFlow.resume(),
     wallet,
@@ -73,6 +73,7 @@ export function createSession(services: Services, parts: { player: FirstPersonCo
     league,
     payoutStats,
     tournament,
+    arcadeHabits: services.arcadeHabits,
     travel: moves.travel,
     travelMenu: ui.travelMenu,
     catalogue: ui.catalogue,
@@ -86,6 +87,7 @@ export function createSession(services: Services, parts: { player: FirstPersonCo
     shelfPlacing: interaction.shelfPlacing,
     planView: interaction.planView,
     journalPanel: ui.journalPanel,
+    peopleBook: ui.peopleBook,
     shelfRoom: () => {
       // Past the collection room's walls: the bedroom's bookcase, then Mrs Roux's rooms once they are the flat's.
       const elsewhere = bookcasesIn(upgrades.count('bookcase'));
@@ -108,12 +110,7 @@ export function createSession(services: Services, parts: { player: FirstPersonCo
   session.bindInput(input);
   // The touch bar shows the buttons that work where the hands are (a box, a market copy, a machine, a seat).
   interaction.touch.setContext(() => session.handsContext);
-  // A hold lasts its market day: one never collected gives its deposit back the next (docs/economy.md "Holds and orders").
-  const refundHolds = (): void => {
-    const back = services.tx.refundLapsedHolds(services.today.gameDay);
-    if (back.ok) ui.notices.reward({ title: 'Deposit back', detail: `The market kept ${back.titles.join(', ')} for you till closing: your deposit is back in your pocket.`, coins: back.coins });
-  };
-  refundHolds();
-  services.today.onNewGameDay(refundHolds);
+  // A hold lasts its market day: one never collected gives its deposit back the next (`economy/lapsedHolds`).
+  refundLapsedHoldsDaily(services.tx, services.today, ui.notices);
   return session;
 }

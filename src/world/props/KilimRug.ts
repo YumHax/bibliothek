@@ -1,10 +1,11 @@
 import * as THREE from 'three';
-import { createCanvas, seededRandom, toTexture } from '@/covers/generated/canvasUtils';
+import { createCanvas, toTexture } from '@/covers/generated/canvasUtils';
 import { Prop } from './Prop';
 import { fabric } from '@/world/materials/finishes';
 import { cloth as paletteCloth, coverageKeepsAlpha } from '@/world/materials/palette';
 import { FLOOR, layMesh } from '@/world/surface/layers';
 import { QUALITY } from '@/graphics/quality';
+import { lcg } from '@/random';
 
 export interface KilimRugOptions {
   /** Size of the woven part, along local x and z (the fringes come on top along x). Default 1.55 x 0.7. */
@@ -36,7 +37,7 @@ export class KilimRug extends Prop {
     const depth = options.depth ?? 0.7;
     this.size = new THREE.Vector2(width, depth);
     const colors = options.colors ?? [0xa6392e, 0x243a5e, 0xd9a441, 0xeee4cc];
-    const random = seededRandom((options.seed ?? 11) * 48271);
+    const random = lcg((options.seed ?? 11) * 48271);
 
     const top = fabric({ map: paintKilim(width, depth, colors, random), roughness: 1, sheenTint: 0x8a8580 });
     const edgeColor = new THREE.Color(colors[0]).multiplyScalar(0.6);

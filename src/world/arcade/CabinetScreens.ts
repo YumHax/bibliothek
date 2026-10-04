@@ -3,12 +3,15 @@ import { createCanvas, toTexture } from '@/covers/generated/canvasUtils';
 import { actionKeyLabel } from '@/ui/keys';
 import { type ArcadeControls, type ArcadeGame, SCREEN_H, SCREEN_W, drawText } from './games/ArcadeGame';
 import { crtScreenMaterial } from './crtScreen';
-import { type InitialsEntry, ordinal } from './InitialsEntry';
+import type { InitialsEntry } from './InitialsEntry';
+import { formatNumber } from '@/text/count';
 import type { MachineRun } from './MachineRun';
+import { endCardNote, playAgainLine, ticketsWord, walkAwayLine } from './EndCard';
 import type { MedalBook, ScoreTable, TodaysChallenge } from './scoreTable';
 import type { Replay } from './replay/Replay';
 import { outOfOrderNote } from './machineParts';
 import { SCREEN_HEIGHT, SCREEN_TILT, SCREEN_WIDTH, SCREEN_Y, SCREEN_Z } from './cabinetModel';
+import { random } from '@/random';
 
 /**
  * Redraws of a game somebody else is running (a regular, a demo, a replay): at most this often, and
@@ -98,10 +101,10 @@ export class CabinetScreens {
     drawText(ctx, game.title, SCREEN_W / 2, 40, 20, '#fff2a8');
     drawText(ctx, game.summary, SCREEN_W / 2, 64, 7, '#9ad6ff');
     const top = scores.topOf(game.id);
-    if (!this.info.home || top.score > 0) drawText(ctx, `HI ${top.name}  ${top.score.toLocaleString('en-US')}`, SCREEN_W / 2, 88, 10, top.you ? '#7ee787' : '#c9c4ff');
+    if (!this.info.home || top.score > 0) drawText(ctx, `HI ${top.name}  ${formatNumber(top.score)}`, SCREEN_W / 2, 88, 10, top.you ? '#7ee787' : '#c9c4ff');
     const best = scores.bestOf(game.id);
     const home = this.info.home === true;
-    const bestLine = home ? `YOUR BEST ${best.toLocaleString('en-US')}` : `YOUR BEST ${best.toLocaleString('en-US')}  (${Math.floor(best / pointsPerTicket)} TIX)`;
+    const bestLine = home ? `YOUR BEST ${formatNumber(best)}` : `YOUR BEST ${formatNumber(best)}  (${Math.floor(best / pointsPerTicket)} TIX)`;
     if (!home || best > 0) drawText(ctx, best > 0 ? bestLine : 'NO SCORE OF YOURS YET', SCREEN_W / 2, 106, 7, '#8a86b0');
     const medal = this.nextMedal();
     if (medal) drawText(ctx, medal, SCREEN_W / 2, 122, 7, '#e0995a');
@@ -110,7 +113,7 @@ export class CabinetScreens {
       ctx.fillStyle = 'rgba(255,210,58,0.12)';
       ctx.fillRect(20, 134, SCREEN_W - 40, 30);
       drawText(ctx, "TODAY'S CHALLENGE", SCREEN_W / 2, 142, 7, '#ffd23a');
-      drawText(ctx, challenge.done ? 'BEATEN! COME BACK TOMORROW' : `SCORE ${challenge.target.toLocaleString('en-US')} · +${challenge.reward} TIX`, SCREEN_W / 2, 156, 8, challenge.done ? '#7ee787' : '#fff2a8');
+      drawText(ctx, challenge.done ? 'BEATEN! COME BACK TOMORROW' : `SCORE ${formatNumber(challenge.target)} · +${challenge.reward} TIX`, SCREEN_W / 2, 156, 8, challenge.done ? '#7ee787' : '#fff2a8');
     }
     if (phase % 2 === 0) drawText(ctx, home ? 'PRESS FIRE' : 'INSERT COIN', SCREEN_W / 2, 186, 12, '#ff8a80');
     const price = this.info.price?.();
@@ -124,22 +127,23 @@ export class CabinetScreens {
     const { ctx } = this;
     ctx.fillStyle = 'rgba(0,0,0,0.6)';
     ctx.fillRect(0, SCREEN_H - 26, SCREEN_W, 26);
-    if (replay) drawText(ctx, `YOUR BEST RUN · ${replay.initials} ${replay.score.toLocaleString('en-US')}`, SCREEN_W / 2, SCREEN_H - 17, 7, '#7ee787');
+    if (replay) drawText(ctx, `YOUR BEST RUN · ${replay.initials} ${formatNumber(replay.score)}`, SCREEN_W / 2, SCREEN_H - 17, 7, '#7ee787');
     else drawText(ctx, 'DEMO PLAY', SCREEN_W / 2, SCREEN_H - 17, 7, '#9ad6ff');
     if (Math.floor(clock * 2) % 2 === 0) drawText(ctx, this.info.home ? 'PRESS FIRE' : 'INSERT COIN', SCREEN_W / 2, SCREEN_H - 7, 7, '#ff8a80');
   }
 
-  /** A dead tube: snow and a rolling bar (the note on the glass says the rest). */
-  drawStatic(): void {
+  /** A dead tube: snow and a rolling bar (the note on the glass says the rest); `seconds` is the machine's time, for the bar. */
+  drawStatic(seconds: number): void {
     const { ctx } = this;
     ctx.fillStyle = '#101014';
     ctx.fillRect(0, 0, SCREEN_W, SCREEN_H);
     for (let i = 0; i < 900; i++) {
-      const v = Math.floor(Math.random() * 140);
+      const v = Math.floor(random() * 140);
       ctx.fillStyle = `rgb(${v},${v},${v})`;
-      ctx.fillRect(Math.random() * SCREEN_W, Math.random() * SCREEN_H, 2, 1);
+      ctx.fillRect(random() * SCREEN_W, random() * SCREEN_H, 2, 1);
     }
-    const bar = ((performance.now() / 12) % (SCREEN_H + 40)) - 20;
+    // The bar rolls the height in about 2.5 s (1000 / 12 pixels a second, as it always did).
+    const bar = (((seconds * 1000) / 12) % (SCREEN_H + 40)) - 20;
     ctx.fillStyle = 'rgba(255,255,255,0.06)';
     ctx.fillRect(0, bar, SCREEN_W, 14);
     this.texture.needsUpdate = true;
@@ -170,11 +174,11 @@ export class CabinetScreens {
     if (this.info.home) {
       // At home: the score is the whole card.
       drawText(ctx, 'SCORE', SCREEN_W / 2, 62, 9, '#fff2a8');
-      drawText(ctx, last.score.toLocaleString('en-US'), SCREEN_W / 2, 92, 24, '#ffd23a');
+      drawText(ctx, formatNumber(last.score), SCREEN_W / 2, 92, 24, '#ffd23a');
     } else {
-      drawText(ctx, `SCORE ${last.score.toLocaleString('en-US')}`, SCREEN_W / 2, 58, 12, '#fff2a8');
+      drawText(ctx, `SCORE ${formatNumber(last.score)}`, SCREEN_W / 2, 58, 12, '#fff2a8');
       drawText(ctx, `${shown}`, SCREEN_W / 2, 90, counted ? 28 : 24, counted ? '#ffd23a' : '#ffe9a0');
-      drawText(ctx, total === 1 ? 'TICKET' : 'TICKETS', SCREEN_W / 2, 112, 9, '#ffd23a');
+      drawText(ctx, ticketsWord(total), SCREEN_W / 2, 112, 9, '#ffd23a');
     }
     // The bonuses, a line each as it lands (at most three fit; the rest add up on the last).
     const lines = bonuses.length > 3 ? [...bonuses.slice(0, 2), { label: 'MORE BONUSES', tickets: bonuses.slice(2).reduce((sum, b) => sum + b.tickets, 0) }] : bonuses;
@@ -185,12 +189,13 @@ export class CabinetScreens {
     });
     const blink = Math.floor(overClock * 4) % 2 === 0;
     const markY = 128 + lines.length * 11 + 6;
-    if (done && lastRank !== null) drawText(ctx, `${ordinal(lastRank + 1)} ON THE BOARD!`, SCREEN_W / 2, markY, 10, blink ? '#7ee787' : '#ffffff');
-    else if (done && last.best) drawText(ctx, 'NEW BEST!', SCREEN_W / 2, markY, 11, blink ? '#7ee787' : '#ffffff');
-    else if (done && last.first) drawText(ctx, 'FIRST SCORE ON THE BOARD', SCREEN_W / 2, markY, 8, '#c9c4ff');
-    if (run.canReplay && Math.floor(overClock * 2) % 2 === 0) drawText(ctx, `${actionKeyLabel('fire').toUpperCase()} · PLAY AGAIN`, SCREEN_W / 2, 180, 8, '#ff8a80');
-    if (counted && this.info.home) drawText(ctx, `${actionKeyLabel('walkAway').toUpperCase()} TO WALK AWAY`, SCREEN_W / 2, 196, 7, '#9a96c0');
-    else if (counted) drawText(ctx, run.free ? 'FREE PLAY: ON THE HOUSE' : `${run.priceText().toUpperCase()} · ${actionKeyLabel('walkAway').toUpperCase()} TO WALK AWAY`, SCREEN_W / 2, 196, 7, '#9a96c0');
+    // The verdict (one wording on every machine, `EndCard`): a place on the board or a new best blinks, a first score is quiet.
+    const note = done ? endCardNote(run) : '';
+    const loud = lastRank !== null || last.best;
+    if (note) drawText(ctx, note, SCREEN_W / 2, markY, lastRank !== null ? 10 : last.best ? 11 : 8, loud ? (blink ? '#7ee787' : '#ffffff') : '#c9c4ff');
+    if (run.canReplay && Math.floor(overClock * 2) % 2 === 0) drawText(ctx, this.info.home ? `${actionKeyLabel('fire').toUpperCase()} · PLAY AGAIN` : playAgainLine(run), SCREEN_W / 2, 180, 8, '#ff8a80');
+    if (counted && this.info.home) drawText(ctx, walkAwayLine(), SCREEN_W / 2, 196, 7, '#9a96c0');
+    else if (counted) drawText(ctx, run.free ? 'FREE PLAY: ON THE HOUSE' : walkAwayLine(), SCREEN_W / 2, 196, 7, '#9a96c0');
     this.texture.needsUpdate = true;
   }
 
@@ -240,6 +245,6 @@ export class CabinetScreens {
     const earned = book.earned(this.game.id);
     const thresholds = book.thresholds(this.game.id);
     const next = (['bronze', 'silver', 'gold'] as const).find((tier) => !earned.includes(tier));
-    return next ? `NEXT MEDAL ${next.toUpperCase()} AT ${thresholds[next].toLocaleString('en-US')}` : 'ALL THREE MEDALS WON';
+    return next ? `NEXT MEDAL ${next.toUpperCase()} AT ${formatNumber(thresholds[next])}` : 'ALL THREE MEDALS WON';
   }
 }

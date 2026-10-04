@@ -1,8 +1,9 @@
 import * as THREE from 'three';
-import { createCanvas, seededRandom, toTexture, repeatTexture } from '@/graphics/canvas';
+import { createCanvas, toTexture, repeatTexture } from '@/graphics/canvas';
 import { markShared } from '../materials/sharedResources';
 import { METAL, basic, paint, standard } from '../materials/palette';
 import { SAS } from './airlockPlan';
+import { lcg } from '@/random';
 
 /*
  * How the sas looks, the same in both twins by construction: every surface seen from inside with
@@ -142,7 +143,7 @@ export function sasFinish(): SasFinish {
 /** 1 m x 3 m of wall: plaster above, a marble dado to 1 m with a moulded capping, a dark skirting. */
 function paintWall(): HTMLCanvasElement {
   const [canvas, ctx] = createCanvas(256, 768);
-  const random = seededRandom(3);
+  const random = lcg(3);
   const px = 256; // per metre
   ctx.fillStyle = '#ece4d2';
   ctx.fillRect(0, 0, 256, 768);
@@ -216,7 +217,7 @@ function paintFloor(): HTMLCanvasElement {
 
 function paintPlaster(size: number, color: number, seed: number): HTMLCanvasElement {
   const [canvas, ctx] = createCanvas(size, size);
-  const random = seededRandom(seed);
+  const random = lcg(seed);
   ctx.fillStyle = `#${color.toString(16).padStart(6, '0')}`;
   ctx.fillRect(0, 0, size, size);
   for (let i = 0; i < size * 2; i++) {
@@ -229,7 +230,7 @@ function paintPlaster(size: number, color: number, seed: number): HTMLCanvasElem
 /** A coir doormat with a dark border. */
 function paintMat(): HTMLCanvasElement {
   const [canvas, ctx] = createCanvas(256, 128);
-  const random = seededRandom(5);
+  const random = lcg(5);
   ctx.fillStyle = '#3a2c20';
   ctx.fillRect(0, 0, 256, 128);
   ctx.fillStyle = '#8a6a44';
@@ -285,7 +286,7 @@ function paintPlate(): HTMLCanvasElement {
 /** One leaf of the street door, as painted on the facade (`facadePainter.paintEntrance`): dark wood, two sunk panels. */
 function paintStreetLeaf(): HTMLCanvasElement {
   const [canvas, ctx] = createCanvas(128, 512);
-  const random = seededRandom(9);
+  const random = lcg(9);
   ctx.fillStyle = '#4a2e22';
   ctx.fillRect(0, 0, 128, 512);
   for (let i = 0; i < 160; i++) {

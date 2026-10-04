@@ -9,6 +9,7 @@ import { boxMesh, cylinderMesh, invisibleHitbox } from '../meshUtils';
 import { layMesh, WALL } from '../surface/layers';
 import { METAL, paint } from '../materials/palette';
 import { drawText } from './games/ArcadeGame';
+import { loudness } from '@/audio/hearing';
 
 interface JukeboxOptions {
   /** Whose distance sets the volume: the camera. */
@@ -119,7 +120,7 @@ export class Jukebox extends THREE.Group implements Furniture, Updatable, Intera
     if (this.playing) {
       this.getWorldPosition(this.here);
       this.listener.getWorldPosition(this.ear);
-      const t = THREE.MathUtils.clamp(1 - (this.here.distanceTo(this.ear) - NEAR) / (FAR - NEAR), 0, 1);
+      const t = loudness(this.here.distanceTo(this.ear), { shape: 'ramp', referenceDistance: NEAR, maxDistance: FAR });
       this.tune.setVolume(0.25 + t * t * 0.75);
       this.tune.update();
       if (this.tune.title !== this.shownTitle) this.paintCard();

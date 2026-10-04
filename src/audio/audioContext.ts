@@ -1,12 +1,18 @@
+import { random } from '@/random';
 /**
- * One lazily created AudioContext for the whole room. Browsers only let a context start after
- * a user gesture; every sound in the room is triggered by a click, so callers ask for it at
- * that moment and `resume()` covers the case where it was created while still suspended.
+ * One lazily created AudioContext for the whole room. Browsers only let a context start after a user
+ * gesture: `unlockAudioOnFirstGesture` (the bootstrap, once) creates it on the page's first click or
+ * key press, so by the time a click's handler asks (`audioContext()`) it exists and only needs a
+ * `resume()`; a sound nobody clicked for asks `startedAudioContext()` and plays only once a gesture
+ * has started the audio; whoever must act the moment it starts registers with `onAudioStart`. These
+ * three are the only ways to the context: nothing else creates one or listens for a gesture itself.
  *
  * The context carries the mixer the Settings screen drives: a master gain in front of the
  * speakers and one bus per channel behind it. `ctx.destination` is redirected to the `world` bus,
  * so every sound is under the master volume without knowing about it; the TV, the radio and the
- * arcade's machines connect to their own bus with `audioBus`.
+ * arcade's machines connect to their own bus with `audioBus`. A sound the player is making with
+ * their hands while the scene is ducked (a repair, the camera's shutter) takes `foregroundInput`:
+ * the world's volume without the duck, a category and not a routing trick.
  */
 let context: AudioContext | null = null;
 
@@ -30,11 +36,22 @@ function createContext(): AudioContext {
   for (const [channel, gain] of gains) gain.gain.value = volumes[channel];
   // An own property shadows the prototype's getter: `x.connect(ctx.destination)` now lands on the world bus.
   Object.defineProperty(ctx, 'destination', { value: gains.get('world'), configurable: true });
+  ctx.addEventListener('statechange', () => {
+    if (ctx.state === 'running') fireStarted();
+  });
   return ctx;
 }
 
-export function audioContext(): AudioContext {
-  context ??= createContext();
+/**
+ * The context, for a sound that follows a click (created if the page never had one, resumed if the
+ * browser suspended it). Null where there is no Web Audio at all (a headless run): the caller plays nothing.
+ */
+export function audioContext(): AudioContext | null {
+  if (!context) {
+    if (typeof AudioContext === 'undefined') return null;
+    context = createContext();
+    if (context.state === 'running') fireStarted();
+  }
   if (context.state === 'suspended') void context.resume();
   return context;
 }
@@ -47,9 +64,52 @@ export function startedAudioContext(): AudioContext | null {
   return context && context.state === 'running' ? context : null;
 }
 
+/** Who waits for the audio to start (`onAudioStart`); each is called once and dropped. */
+const startListeners = new Set<() => void>();
+
+function fireStarted(): void {
+  const listeners = [...startListeners];
+  startListeners.clear();
+  for (const cb of listeners) cb();
+}
+
+/**
+ * Calls `cb` once, as soon as the audio runs: now if it already does, else when the first gesture
+ * starts it (or a suspended context resumes). For what must begin the moment there is sound (the street
+ * heard through the windows) instead of listening for a gesture itself. Returns the unsubscribe.
+ */
+export function onAudioStart(cb: () => void): () => void {
+  if (context?.state === 'running') {
+    cb();
+    return () => undefined;
+  }
+  startListeners.add(cb);
+  return () => {
+    startListeners.delete(cb);
+  };
+}
+
 /** The input of a mixer bus of `ctx` (the context `audioContext()` returned), to connect a sound to instead of `destination`. */
 export function audioBus(ctx: BaseAudioContext, channel: Exclude<AudioChannel, 'master'>): AudioNode {
   return (ctx === context && gains.get(channel)) || ctx.destination;
+}
+
+/** The world's volume straight into the master, past the scene's duck (`duckScene`): see `foregroundInput`. */
+let foreground: GainNode | null = null;
+
+/**
+ * Where a sound the player is making lands while the scene is ducked (a repair at the kitchen table,
+ * the camera's shutter): at the world's volume, but not under the curtain a pastime or a travel pulls
+ * over the room's sounds. Falls back on `destination` for any other context.
+ */
+export function foregroundInput(ctx: BaseAudioContext): AudioNode {
+  if (ctx !== context) return ctx.destination;
+  if (!foreground) {
+    foreground = context.createGain();
+    foreground.gain.value = volumes.world;
+    foreground.connect(gains.get('master') ?? context.destination);
+  }
+  return foreground;
 }
 
 /** Sets the mixer's volumes (0..1), live if the context exists, kept for when it is created otherwise. */
@@ -58,6 +118,7 @@ export function setVolumes(next: Partial<Record<AudioChannel, number>>): void {
     volumes[channel] = Math.min(1, Math.max(0, value));
     const gain = gains.get(channel);
     if (gain && context) gain.gain.setTargetAtTime(volumes[channel], context.currentTime, 0.02);
+    if (channel === 'world' && foreground && context) foreground.gain.setTargetAtTime(volumes.world, context.currentTime, 0.02);
   }
 }
 
@@ -168,7 +229,7 @@ function impulse(ctx: AudioContext, kind: RoomAir): AudioBuffer {
       const t = i / length;
       // A one-pole low-pass whose smoothing grows along the tail: bright at first, duller as it dies.
       const k = 1 - damp * t;
-      low += (Math.random() * 2 - 1 - low) * Math.max(0.05, k);
+      low += (random() * 2 - 1 - low) * Math.max(0.05, k);
       data[i] = low * Math.pow(1 - t, 3);
     }
   }

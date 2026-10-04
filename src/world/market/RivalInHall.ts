@@ -1,7 +1,10 @@
 import * as THREE from 'three';
 import type { Updatable } from '@/core/Engine';
 import { RIVAL } from '@/economy/pricing';
-import { RIVAL_COLLECTOR, rivalAtMarket, type RivalCollector } from '@/economy/rivalCollector';
+import { RIVAL_COLLECTOR, RIVAL_PERSON, rivalAtMarket, type RivalCollector } from '@/economy/rivalCollector';
+import { has } from '@/social/perks';
+import type { SocialServices } from '@/social/talk';
+import { victorHook } from '../people/victorTalk';
 import type { Furniture } from '../Furniture';
 import type { DayNight } from '../props/DayNight';
 import { Walker } from '../people/Walker';
@@ -26,6 +29,10 @@ interface RivalInHallOptions {
   /** Where people browse, and which are taken (the shoppers' claims: he takes one too while he stands there). */
   spots: readonly BrowseSpot[];
   claims: Set<BrowseSpot>;
+  /** The player's wishlist: hostile, he goes after what is on it on purpose (`snipesWishlist`, docs/social.md "Victor"). */
+  isWanted?: (id: string) => boolean;
+  /** The social layer: a click opens a conversation with him (else a line). */
+  social?: SocialServices;
 }
 
 type Step =
@@ -65,6 +72,7 @@ export class RivalInHall extends THREE.Object3D implements Furniture, Updatable 
       fade: true,
       corners: 0.35,
       talk: () => this.talk(),
+      social: victorHook(options.social, options.rival, 'market', () => this.person, { opening: () => this.talk() }),
     });
     this.person.traverse((o) => {
       o.castShadow = false;
@@ -157,10 +165,22 @@ export class RivalInHall extends THREE.Object3D implements Furniture, Updatable 
     const { floor, owns } = this.options;
     const boxes = floor.stalls.flatMap((entry) => (entry.stall.behindGlass ? [] : [...entry.boxes]));
     if (gameId) return boxes.find((b) => b.item.game.id === gameId) ?? null;
-    const fair = boxes.filter((b) => b.item.priced && !b.isHeld && !b.item.reserved && !NOT_HIS.has(b.item.source) && !owns(b.item.game.id));
     // Wait for the prices: he knows what things are worth.
-    if (!fair.length || boxes.some((b) => !b.item.priced)) return null;
+    if (boxes.some((b) => !b.item.priced)) return null;
+    const free = (b: ForSaleBox) => b.item.priced && !b.isHeld && !b.item.reserved && !owns(b.item.game.id);
+    // Out of spite (hostile): what the player wants most, on purpose (never held, never kept aside, never ordered).
+    if (this.spiteful()) {
+      const wanted = boxes.filter((b) => free(b) && (b.item.source === 'wanted' || this.options.isWanted?.(b.item.game.id)) && !['keptAside', 'ordered', 'upgrade', 'grail', 'bin'].includes(b.item.source));
+      if (wanted.length) return wanted.reduce((best, b) => (b.item.price > best.item.price ? b : best));
+    }
+    const fair = boxes.filter((b) => free(b) && !NOT_HIS.has(b.item.source));
+    if (!fair.length) return null;
     return fair.reduce((best, b) => (b.item.price > best.item.price ? b : best));
+  }
+
+  /** Hostile and worse: he goes after the player's wishlist (`snipesWishlist`). */
+  private spiteful(): boolean {
+    return has(RIVAL_PERSON, 'snipesWishlist');
   }
 
   private goForIt(): void {
@@ -189,8 +209,13 @@ export class RivalInHall extends THREE.Object3D implements Furniture, Updatable 
     if (!floor.takeForRival(target)) return this.lost();
     rival.endHunt(day(), 'took', { game, price });
     this.person.gesture('fistPump');
-    const smug = rival.view().mood === 'smug';
-    this.person.speak(smug ? `The ${game.title}: mine. Again. You'll find it on my table on Front Street, at my price.` : `There we are: the ${game.title}. If you want it after all, I'll be on Front Street with my suitcase.`);
+    const mood = rival.view().mood;
+    this.person.speak(
+      mood === 'bitter' ? `The ${game.title}. Off your wishlist, wasn't it? What a shame.`
+        : mood === 'warm' ? `Sorry, old thing: the ${game.title} is mine. I'll let you hold it on Front Street.`
+          : mood === 'smug' ? `The ${game.title}: mine. Again. You'll find it on my table on Front Street, at my price.`
+            : `There we are: the ${game.title}. If you want it after all, I'll be on Front Street with my suitcase.`,
+    );
     this.target = null;
     this.leave();
   }
@@ -239,6 +264,8 @@ export class RivalInHall extends THREE.Object3D implements Furniture, Updatable 
     const where = entry ? `on the ${entry.platform.shortName} stall` : 'over there';
     const mood = this.options.rival.view().mood;
     const title = box.item.game.title;
+    if (mood === 'bitter') return `The ${title} ${where}. It's on your list, isn't it? Not for long.`;
+    if (mood === 'warm') return `Fair warning, friend: the ${title} ${where} is the one I'm after. May the early bird win.`;
     if (mood === 'stung') return `Not this time. The ${title} ${where} is mine: I'm just having a look round first.`;
     if (mood === 'smug') return `See the ${title} ${where}? Lovely. I'll be taking that in a minute.`;
     return `Morning. The ${title} ${where}: I've had my eye on it. Don't you go getting ideas.`;

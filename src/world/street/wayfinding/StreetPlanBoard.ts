@@ -7,8 +7,11 @@ import { invisibleHitbox } from '../../meshUtils';
 import { snowPaint } from '../snowCover';
 import { HoverGlint } from '../../props/hoverGlint';
 import { WALL, onSurface } from '../../surface/layers';
-import { SHOP_HOURS, clockTime } from '../shops/shopHours';
-import { FACADES, FRONT, PARK_STREET, PARK_WALK, WALKABLE_AREAS, type ShopKind, type Vec2 } from '../streetPlan';
+import { SHOP_HOURS } from '../shops/shopHours';
+import { clockShort } from '@/text/clock';
+import type { ShopKind, Vec2 } from '../streetPlan';
+import { FACADES } from '@/world/city/facades';
+import { FRONT, PARK_STREET, PARK_WALK, WALKABLE_AREAS } from '@/world/measures/street';
 
 /** A place on the plan: its name, where its door is (zone-local), and its kind of shop for the hours. */
 interface PlanPlace {
@@ -96,7 +99,7 @@ function whereIs(from: Vec2, [x, z]: Vec2): string {
 function directions({ at, places, far }: StreetPlanBoardOptions): string {
   const lines = places.map((place) => {
     const hours = place.kind ? SHOP_HOURS[place.kind] : null;
-    const open = place.kind === 'arcade' ? ' · never shuts' : hours ? ` · ${clockTime(hours.open)} to ${clockTime(hours.close % 24)}` : '';
+    const open = place.kind === 'arcade' ? ' · never shuts' : hours ? ` · ${clockShort(hours.open)} to ${clockShort(hours.close % 24)}` : '';
     return `${place.text}: ${whereIs(at, place.to)}${open}`;
   });
   lines.push(far() ? 'Front Street is open again as far as the side street: the works moved on.' : 'Past the arcade the street is up for the gas main: back the way you came.');

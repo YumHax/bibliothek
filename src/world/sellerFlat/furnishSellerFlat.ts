@@ -20,7 +20,7 @@ import { TravelDoor } from '../travel/TravelDoor';
 import { RoomWindow } from '../props/Window';
 import { leaseOutlookFrom } from '../outlook/sharedOutlook';
 import { facadesInView } from '../outlook/inView';
-import { GROUND_FLOOR, STOREY } from '../street/streetPlan';
+import { GROUND_FLOOR, STOREY } from '@/world/measures/street';
 import { KitchenTable } from '../kitchen/KitchenTable';
 import { Chair } from '../kitchen/Chair';
 import { Seat } from '../Seat';
@@ -33,8 +33,13 @@ import { ConsoleProp } from '../repair/ConsoleProp';
 import { NO_BENCH, hasBench } from '../repair/furnishRepair';
 import { NoteCard } from './NoteCard';
 import { Seller } from './Seller';
+import { bodyOf, talkHook } from '../people/socialHook';
+import { randomLook } from '../people/looks';
+import { rememberLook } from '@/social/lookBook';
+import { sellerOf, sellerVisitEnded } from '@/social/sellers';
 import { SELLER_TALK } from './sellerTalk';
 import { SELLER_FLAT_PLAN as PLAN } from './sellerFlatPlan';
+import { formatCoins } from '@/text/money';
 
 /** A copy on the seller's table: a market box whose haggle and sale are the seller's own (`ForSaleLike.dealer`). */
 class SellerBox extends ForSaleBox {
@@ -52,7 +57,7 @@ const GREET_AFTER = 1;
  * their lot on it once drawn (market boxes whose haggle and sale go through the seller, `SellerDealer`), their broken
  * console on the box of spares, a scripted ad's note on the sideboard.
  */
-export function furnishSellerFlat(zone: Zone, ctx: BuildContext): ZoneHandle {
+export function furnishSellerFlat(zone: Zone, ctx: Pick<BuildContext, 'sky' | 'listener' | 'acoustics' | 'classifieds' | 'collection' | 'covers' | 'money' | 'social' | 'today' | 'home'>): ZoneHandle {
   const { sky, listener } = ctx;
   const room = furnishShell(zone, sky, PLAN.room);
   placeRoomLight(zone, room, 'pendant', PLAN.pendant, PLAN.lightSwitch);
@@ -101,11 +106,23 @@ class Visit extends Prop implements Updatable {
   private shown: string | null = null;
   private readonly placed = new Set<Furniture>();
   private generation = 0;
+  /** The ad whose seller is being visited, until the visit ends. */
+  private visiting: Ad | null = null;
 
-  constructor(private readonly zone: Zone, private readonly ctx: BuildContext, private readonly classifieds: ClassifiedsContext, private readonly hosts: Hosts) {
+  constructor(private readonly zone: Zone, private readonly ctx: Pick<BuildContext, 'sky' | 'listener' | 'acoustics' | 'classifieds' | 'collection' | 'covers' | 'money' | 'social' | 'today' | 'home'>, private readonly classifieds: ClassifiedsContext, private readonly hosts: Hosts) {
     super();
     this.name = 'SellerVisit';
-    zone.onUnload(() => this.generation++);
+    zone.onUnload(() => {
+      this.generation++;
+      this.endVisit();
+    });
+  }
+
+  /** The visit shown is over (the player left, another seller's turn): a seller left happy rings back (`social/sellers`). */
+  private endVisit(): void {
+    const ad = this.visiting;
+    this.visiting = null;
+    if (ad) sellerVisitEnded(ad, this.ctx.today.gameDay, (spec) => this.classifieds.book.inject(spec));
   }
 
   update(): void {
@@ -118,6 +135,7 @@ class Visit extends Prop implements Updatable {
 
   private takeDown(): void {
     this.generation++;
+    this.endVisit();
     for (const item of this.placed) {
       this.zone.remove(item);
       item.dispose?.();
@@ -140,11 +158,16 @@ class Visit extends Prop implements Updatable {
     // The seller, behind the table, says hello once the player is in.
     const talk = SELLER_TALK[ad.kind];
     const [sx, sz] = PLAN.seller.at;
-    const seller = this.place(zone.place(new Seller({ viewer: ctx.listener, seed: ad.seed % 997, name: ad.name, talk }), new THREE.Vector3(sx, 0, sz), PLAN.seller.yaw));
+    // The seller is someone to talk to (`social/sellers`): a pleasant visit eases their haggle, a happy one rings back.
+    const person = sellerOf(ad, talk.chat);
+    const social = talkHook(ctx.social, person, () => ({ person, place: 'theirFlat', body: bodyOf(seller) }));
+    const seller = this.place(zone.place(new Seller({ viewer: ctx.listener, seed: ad.seed % 997, name: ad.name, talk, social }), new THREE.Vector3(sx, 0, sz), PLAN.seller.yaw));
+    rememberLook(person, randomLook(ad.seed % 997, 'vendor'));
+    this.visiting = ad;
     seller.stand(PLAN.seller.yaw, ad.kind === 'collector' ? 'crossed' : 'stand', 'viewer');
-    window.setTimeout(() => {
+    zone.after(GREET_AFTER, () => {
       if (this.generation === generation) seller.greet(ad.scripted?.greeting);
-    }, GREET_AFTER * 1000);
+    });
 
     // A scripted ad's note on the sideboard (a quest's clue).
     const clue = ad.scripted?.clue;
@@ -203,7 +226,7 @@ class Visit extends Prop implements Updatable {
     const talk = SELLER_TALK[ad.kind];
     let pitched = false;
     const prop: ConsoleProp = new ConsoleProp({
-      label: () => `A broken ${platform.shortName} · ${offer.price} coins`,
+      label: () => `A broken ${platform.shortName} · ${formatCoins(offer.price)}`,
       use: (session) => {
         if (!pitched) {
           pitched = true;

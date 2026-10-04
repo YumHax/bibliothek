@@ -1,3 +1,4 @@
+import { random } from '@/random';
 /*
  * The street's voices, synthesised: a car horn, a two-tone siren, a bird's note. Pure WebAudio
  * builders taking a context and where to play into, shared by the two soundscapes of the same
@@ -55,7 +56,7 @@ export function horn(ctx: BaseAudioContext, out: AudioNode, spec: HornSpec, at =
     for (const pitch of spec.pitches) {
       const osc = ctx.createOscillator();
       osc.type = 'square';
-      osc.frequency.value = pitch + Math.random() * (spec.detune ?? 0);
+      osc.frequency.value = pitch + random() * (spec.detune ?? 0);
       osc.connect(env);
       osc.start(start);
       osc.stop(end + 0.05);

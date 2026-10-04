@@ -1,4 +1,6 @@
-import { PARK_STREET, walkInShops, type ShopDoor } from '../street/streetPlan';
+import type { ShopDoor } from '../street/streetPlan';
+import { PARK_STREET } from '@/world/measures/street';
+import { walkInShops } from '@/world/city/facades';
 import type { ShopZoneId } from './shopPlan';
 
 /*

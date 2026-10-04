@@ -1,6 +1,7 @@
 import type * as THREE from 'three';
 import type { Updatable } from '@/core/Engine';
-import { STAIRWELL_PLAN, STOREY, landingY } from '../stairwell/stairwellPlan';
+import { STAIRWELL_PLAN } from '../stairwell/stairwellPlan'; // imports-ok: the sas is the stairwell's hall twin: its view of the street is set from the hall's height
+import { STOREY, landingY } from '@/world/measures/building';
 import { TWINS } from './airlockPlan';
 
 interface StreetAheadOptions {

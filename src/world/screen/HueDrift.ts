@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { random } from '@/random';
 
 /**
  * The picture's light is not one colour: without access to the video's pixels (a cross-origin
@@ -24,7 +25,7 @@ export class HueDrift {
     if (this.timer >= HUE_SECONDS) {
       this.timer = 0;
       this.from.copy(this.to);
-      this.index = (this.index + 1 + Math.floor(Math.random() * (GLOW_HUES.length - 1))) % GLOW_HUES.length;
+      this.index = (this.index + 1 + Math.floor(random() * (GLOW_HUES.length - 1))) % GLOW_HUES.length;
       this.to.set(GLOW_HUES[this.index]!);
     }
     this.color.lerpColors(this.from, this.to, THREE.MathUtils.smoothstep(this.timer / HUE_SECONDS, 0, 0.6));

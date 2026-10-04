@@ -4,12 +4,16 @@ import { Walker } from '../people/Walker';
 import { randomLook } from '../people/looks';
 import type { GestureName } from '../people/motion/gestures';
 import type { SellerTalk } from './sellerTalk';
+import type { SocialHook } from '../people/socialHook';
+import { random } from '@/random';
 
 interface SellerOptions {
   viewer: THREE.Object3D;
   seed: number;
   name: string;
   talk: SellerTalk;
+  /** Someone the player can talk to (`social/sellers`): the conversation instead of a line. */
+  social?: SocialHook;
 }
 
 /** How each move of the player's is met, besides the words. */
@@ -30,7 +34,7 @@ export class Seller extends Walker {
   private turn = 0;
 
   constructor(options: SellerOptions) {
-    super({ viewer: options.viewer, seed: options.seed, look: randomLook(options.seed, 'vendor'), lines: options.talk.chat, label: `${options.name} · chat`, speaker: options.name });
+    super({ viewer: options.viewer, seed: options.seed, look: randomLook(options.seed, 'vendor'), lines: options.talk.chat, label: `${options.name} · chat`, speaker: options.name, social: options.social });
     this.name = 'Seller';
     this.script = options.talk;
   }
@@ -55,6 +59,6 @@ export class Seller extends Walker {
   }
 
   private pick(lines: readonly string[]): string {
-    return lines[Math.floor(Math.random() * lines.length)] ?? '';
+    return lines[Math.floor(random() * lines.length)] ?? '';
   }
 }

@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { Prop, part } from '../../props/Prop';
 import { cloth, paint } from '../../materials/palette';
-import { seededRandom } from '@/graphics/canvas';
+import { lcg } from '@/random';
 
 export interface ToyMiceOptions {
   /** How many mice. Default 3. */
@@ -22,7 +22,7 @@ export class ToyMice extends Prop {
   constructor(options: ToyMiceOptions = {}) {
     super();
     this.name = 'ToyMice';
-    const random = seededRandom(options.seed ?? 71);
+    const random = lcg(options.seed ?? 71);
     const spread = options.spread ?? 0.14;
     const count = options.count ?? 3;
     for (let i = 0; i < count; i++) {

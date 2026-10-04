@@ -2,6 +2,8 @@ import { startedAudioContext } from '@/audio/audioContext';
 import { whiteNoise } from '@/audio/noise';
 import { SpatialOut, type Spatial } from '@/audio/spatial';
 import { streetInput } from './streetBus';
+import { noiseBurst } from '@/audio/synth';
+import { random } from '@/random';
 
 /**
  * One street sound's Web Audio graph, kept so it can be let go whole: a master gain into the
@@ -44,7 +46,7 @@ export class SoundGraph {
     const source = this.ctx.createBufferSource();
     source.buffer = buffer;
     source.loop = true;
-    source.start(0, Math.random() * buffer.duration);
+    source.start(0, random() * buffer.duration);
     this.running.push(source);
     return source;
   }
@@ -98,14 +100,7 @@ export class SoundGraph {
   /** A burst of the noise into `out`: up to `level` in a few ms, dying over `length` s, from `at` (context time). */
   burst(out: AudioNode, at: number, length: number, level: number): void {
     if (this.stopped) return;
-    const source = this.ctx.createBufferSource();
-    source.buffer = this.noise;
-    const env = this.ctx.createGain();
-    env.gain.setValueAtTime(0, at);
-    env.gain.linearRampToValueAtTime(level, at + Math.min(0.006, length / 4));
-    env.gain.exponentialRampToValueAtTime(0.0005, at + length);
-    source.connect(env).connect(out);
-    source.start(at, Math.random() * 1.5, length + 0.02);
+    noiseBurst(this.ctx, out, at, { level, length, attack: Math.min(0.006, length / 4), noise: this.noise, duration: length + 0.02 });
   }
 
   /** A burst shaped by `envelope` ([seconds from `at`, gain] points, linear between), through `out`. */
@@ -119,7 +114,7 @@ export class SoundGraph {
     for (const [t, v] of envelope) env.gain.linearRampToValueAtTime(v, at + t);
     source.connect(env).connect(out);
     const end = envelope[envelope.length - 1]?.[0] ?? 0.1;
-    source.start(at, Math.random() * 1.5);
+    source.start(at, random() * 1.5);
     source.stop(at + end + 0.02);
   }
 

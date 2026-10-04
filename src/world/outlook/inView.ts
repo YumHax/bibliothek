@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import { FACADES, type FacadeSpec, type Vec2 } from '../street/streetPlan';
+import type { FacadeSpec, Vec2 } from '../street/streetPlan';
+import { FACADES } from '@/world/city/facades';
 
 /*
  * Which of the street's facades a window sees (`streetOutlook` builds them): light, so a zone can say what its window

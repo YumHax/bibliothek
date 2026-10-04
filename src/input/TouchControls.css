@@ -1,93 +1,100 @@
-/* The 3D view is the touch surface: no scroll, no pinch-zoom, no long-press callout or selection. */
-#app canvas {
-  touch-action: none;
-  -webkit-touch-callout: none;
-  -webkit-user-select: none;
-  user-select: none;
-}
+/* The touch controls: the floating stick, the action bar along the top, the "rotating" badge under the crosshair. */
+@layer tokens, base, components, panels;
+@layer panels {
+  /* The 3D view is the touch surface: no scroll, no pinch-zoom, no long-press callout or selection. */
+  #app canvas {
+    touch-action: none;
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
+  }
 
-/* The stick and the bar stack above the canvas, the HUD, the panels and the curtain (`--z-controls`); the badge is HUD (the crosshair's column). */
-.touch-stick,
-.touch-bar {
-  z-index: var(--z-controls);
-}
+  /* The stick and the bar stack above the canvas, the HUD, the panels and the curtain (`--z-controls`); the badge is HUD (the crosshair's column). */
+  .touch-stick,
+  .touch-bar {
+    z-index: var(--z-controls);
+  }
 
-/* Floating joystick, spawned where the finger lands on the left half of the screen. */
-.touch-stick {
-  position: fixed;
-  border-radius: 50%;
-  border: 2px solid var(--ui-border-strong);
-  background: color-mix(in srgb, var(--ui-panel-solid) 35%, transparent);
-  pointer-events: none;
-  box-sizing: border-box;
-}
-.touch-stick__knob {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  width: 44%;
-  height: 44%;
-  transform: translate(-50%, -50%);
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.78);
-  box-shadow: 0 0 6px rgba(0, 0, 0, 0.6);
-  will-change: transform;
-}
-/* The sprint's edge, out past the ring (`sprintRatio` 1.4): pushed beyond it, the walk becomes a run. */
-.touch-stick::before {
-  content: '';
-  position: absolute;
-  inset: -20%;
-  border-radius: 50%;
-  border: 1px dashed rgba(255, 255, 255, 0.28);
-}
-.touch-stick--sprint::before { border-color: rgba(255, 220, 130, 0.75); border-style: solid; }
-.touch-stick--sprint .touch-stick__knob {
-  background: rgba(255, 220, 130, 0.9);
-}
+  /* Floating joystick, spawned where the finger lands on the left half of the screen. */
+  .touch-stick {
+    /* The sprint's gold, past the ring's edge. */
+    --touch-sprint: rgba(255, 220, 130, 0.75);
+    --touch-sprint-knob: rgba(255, 220, 130, 0.9);
+    position: fixed;
+    border-radius: 50%;
+    border: 2px solid var(--ui-border-strong);
+    background: color-mix(in srgb, var(--ui-panel-solid) 35%, transparent);
+    pointer-events: none;
+    box-sizing: border-box;
+  }
+  .touch-stick__knob {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 44%;
+    height: 44%;
+    transform: translate(-50%, -50%);
+    border-radius: 50%;
+    background: var(--tint-75);
+    box-shadow: 0 0 6px var(--shade-60);
+    will-change: transform;
+  }
+  /* The sprint's edge, out past the ring (`sprintRatio` 1.4): pushed beyond it, the walk becomes a run. */
+  .touch-stick::before {
+    content: '';
+    position: absolute;
+    inset: -20%;
+    border-radius: 50%;
+    border: 1px dashed var(--tint-35);
+  }
+  .touch-stick--sprint::before { border-color: var(--touch-sprint); border-style: solid; }
+  .touch-stick--sprint .touch-stick__knob {
+    background: var(--touch-sprint-knob);
+  }
 
-/* On-screen action buttons, top centre, clear of the joystick and look zones. */
-.touch-bar {
-  position: fixed;
-  top: calc(env(safe-area-inset-top, 0px) + 0.5rem);
-  left: 50%;
-  transform: translateX(-50%);
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 0.4rem;
-  max-width: calc(100vw - 2rem);
-  padding: 0;
-  margin: 0;
-}
-.touch-bar__btn {
-  min-width: max(3.4rem, 48px);
-  /* A fingertip's target, whatever the text size. */
-  min-height: max(2.6rem, 44px);
-  padding: 0.35rem 0.75rem;
-  border-radius: 999px;
-  border: 1px solid var(--ui-border-strong);
-  background: var(--ui-panel);
-  color: var(--ui-text);
-  font: inherit;
-  font-size: 0.85rem;
-  touch-action: manipulation;
-  -webkit-tap-highlight-color: transparent;
-  -webkit-user-select: none;
-  user-select: none;
-}
-.touch-bar__btn:active,
-.touch-bar__btn.is-pressed {
-  background: var(--ui-fill-hover);
-}
+  /* On-screen action buttons, top centre, clear of the joystick and look zones. */
+  .touch-bar {
+    position: fixed;
+    top: calc(var(--safe-top) + 0.5rem);
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 0.4rem;
+    max-width: calc(100vw - 2rem);
+    padding: 0;
+    margin: 0;
+  }
+  .touch-bar__btn {
+    min-width: max(3.4rem, 48px);
+    /* A fingertip's target, whatever the text size. */
+    min-height: max(2.6rem, 44px);
+    padding: 0.35rem 0.75rem;
+    border-radius: var(--ui-radius-pill);
+    border: 1px solid var(--ui-border-strong);
+    background: var(--ui-panel);
+    color: var(--ui-text);
+    font: inherit;
+    font-size: var(--fs-4);
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+  .touch-bar__btn:active,
+  .touch-bar__btn.is-pressed {
+    background: var(--ui-fill-hover);
+  }
 
-/* Shown under the crosshair while a long press rotates the carried box: last in its column (`hud-slot--crosshair`). */
-.touch-badge {
-  order: 2;
-  padding: 0.25rem 0.6rem;
-  border-radius: var(--ui-radius-sm);
-  background: var(--ui-panel);
-  color: var(--ui-text);
-  font-size: 0.8rem;
-  pointer-events: none;
+  /* Shown under the crosshair while a long press rotates the carried box: last in its column (`hud-slot--crosshair`). */
+  .touch-badge {
+    order: 2;
+    padding: 0.25rem 0.6rem;
+    border-radius: var(--ui-radius-sm);
+    background: var(--ui-panel);
+    color: var(--ui-text);
+    font-size: var(--fs-3);
+    pointer-events: none;
+  }
 }

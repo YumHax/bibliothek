@@ -49,7 +49,7 @@ root (scaled to look.height) > pelvis > hips (2) > knees > ankles (shoes)
    chest. When the torso bends, the hips go back. The chest counter-turns against the hips while walking and
    takes part of a wide head turn.
 4. **Arms.** Each arm has a goal: a gesture's key, an umbrella or phone held up, a world point to reach (IK to
-   the palm's middle), or the pose. Every joint runs on a spring (`motion/springs.ts`). Wrist and fingers are
+   the palm's middle), or the pose. Every joint runs on a spring (`math/springs.ts`). Wrist and fingers are
    quicker than the shoulder, so the hand trails. Hands on moving controls use stiff springs. The collarbone
    lifts with a raised arm and comes forward with a reach. Walking swings the arms against the legs, and
    talking brings the hands up.

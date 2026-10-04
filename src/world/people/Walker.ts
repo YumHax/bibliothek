@@ -3,16 +3,19 @@ import type { Updatable } from '@/core/Engine';
 import type { Interactable } from '@/interaction/Interactable';
 import type { SessionActions } from '@/game/SessionActions';
 import type { Furniture } from '../Furniture';
-import { angleBetween, Glance, idleGlance, nextLeg, roundCorners, stepAlong, turnTowards, viewerWithin, type Leg } from './locomotion';
+import { angleTo } from '@/math/angles';
+import { dampAngle } from '@/math/damp';
+import { Glance, idleGlance, nextLeg, roundCorners, stepAlong, viewerWithin, type Leg } from './locomotion';
 import { PersonModel } from './PersonModel';
 import { randomLook, type PersonLook } from './looks';
 import type { Pose } from './poses';
 import type { Performer, Reaction } from './performer';
-import type { GestureName } from './motion/gestures';
+import type { FaceKey, GestureName } from './motion/gestures';
 import type { Held } from './held';
 import { SpeechBubble } from './SpeechBubble';
 import { Attention, STANDING, WALKING } from './attention';
 import { blobShadow } from '../zone/ContactShadows';
+import type { SocialHook } from './socialHook';
 
 export interface WalkerOptions {
   /** Whose passing to notice: the camera. */
@@ -30,7 +33,7 @@ export interface WalkerOptions {
   /** Can be faded in and out (`setFade`): set once, as it changes their shaders. */
   fade?: boolean;
   /** The name on what they say to the player (a friend's, "Postman"); none for a stranger. */
-  speaker?: string;
+  speaker?: string | (() => string | undefined);
   /** The caption shows only while the player is within this many metres (a stranger across the street says nothing). */
   labelWithin?: number;
   /** Corners of a walked path are rounded with this radius (metres) and taken a little slower (`roundCorners`); 0: pivot on the spot. */
@@ -44,6 +47,8 @@ export interface WalkerOptions {
   crowd?: () => readonly Walker[];
   /** Clicked while walking, they stop for what they say, facing the player, then walk on (default: they talk walking). */
   stopsToTalk?: boolean;
+  /** Someone the player can talk to (docs/social.md): the social caption, and a click opens the conversation instead of a line. */
+  social?: SocialHook;
 }
 
 /** How fast the body turns towards its heading, per second, walking; standing, a turn is slower (the feet step it round). */
@@ -102,9 +107,10 @@ export class Walker extends THREE.Group implements Furniture, Updatable, Interac
   private readonly bubble = new SpeechBubble();
   private readonly lines: readonly string[];
   private readonly talk: (() => string) | null;
+  private readonly social: SocialHook | null;
   private readonly blob: THREE.Mesh | null;
   private readonly caption: string;
-  private readonly speaker: string | undefined;
+  private readonly speaker: string | (() => string | undefined) | undefined;
   private readonly labelWithin: number;
   private readonly corners: number;
   private readonly yields: boolean;
@@ -164,6 +170,7 @@ export class Walker extends THREE.Group implements Furniture, Updatable, Interac
     this.hitboxes = [this.model.hitbox];
     this.lines = options.lines ?? [];
     this.talk = options.talk ?? null;
+    this.social = options.social ?? null;
     this.caption = options.label ?? 'Chat';
     this.speaker = options.speaker;
     this.labelWithin = options.labelWithin ?? Infinity;
@@ -241,6 +248,16 @@ export class Walker extends THREE.Group implements Furniture, Updatable, Interac
   /** A gesture now (a wave, a coin put in). */
   gesture(name: GestureName): void {
     this.model.gesture(name);
+  }
+
+  /** A feeling on the face for `seconds` (a smile at a compliment). */
+  feel(face: FaceKey, seconds: number): void {
+    this.model.feel(face, seconds);
+  }
+
+  /** A nod (a greeting, a yes). */
+  nod(): void {
+    this.model.nod();
   }
 
   /** How many points of the path last given to `walk` they have got past so far. */
@@ -372,7 +389,7 @@ export class Walker extends THREE.Group implements Furniture, Updatable, Interac
   }
 
   /** A line to the player, over their head with their name (or in the subtitles, out of view); `name` overrides theirs. */
-  speak(text: string, name = this.speaker): void {
+  speak(text: string, name = typeof this.speaker === 'function' ? this.speaker() : this.speaker): void {
     this.bubble.speak(text, name, () => {
       this.lineShown(text);
       this.attention.engage(this.lineSeconds(text) + LINE_ATTENTION);
@@ -412,12 +429,18 @@ export class Walker extends THREE.Group implements Furniture, Updatable, Interac
   }
 
   label(): string | null {
-    if (!this.present || !(this.lines.length || this.talk)) return null;
+    if (!this.present || !(this.lines.length || this.talk || this.social)) return null;
     if (this.labelWithin < Infinity && !viewerWithin(this, this.viewer, this.labelWithin, this.viewerPos, this.here)) return null;
-    return this.caption;
+    return this.social ? this.social.caption() : this.caption;
   }
 
-  activate(_session: SessionActions): void {
+  activate(session: SessionActions): void {
+    if (this.social?.open(session)) {
+      // In conversation: stopped, turned to the player, eyes on them while the panel is up.
+      if (this.stopsToTalk && this.state.kind === 'walk') this.halted = 12;
+      this.model.nod();
+      return;
+    }
     let line: string;
     if (this.talk) line = this.talk();
     else if (this.lines.length) {
@@ -577,11 +600,11 @@ export class Walker extends THREE.Group implements Furniture, Updatable, Interac
 
   /** Whether the body has (nearly) finished turning to `yaw`. */
   private facing(yaw: number): boolean {
-    return Math.abs(angleBetween(this.heading, yaw)) < 0.25;
+    return Math.abs(angleTo(this.heading, yaw)) < 0.25;
   }
 
   private face(yaw: number, dt: number, rate = TURN_RATE): void {
-    this.heading = turnTowards(this.heading, yaw, dt, rate);
+    this.heading = dampAngle(this.heading, yaw, rate, dt);
     this.rotation.y = this.heading;
   }
 

@@ -1,8 +1,9 @@
-import { escapeHtml } from './html';
-import { ModalPanel } from './ModalPanel';
+import { CardPanel, type PanelAction } from './panel/CardPanel';
+import { html, paint, raw, type Html } from './panel/html';
 import { renderKeys } from './keys';
 import type { ScratchCard, ScratchSymbol } from '@/world/street/shops/scratchCard';
 import './ScratchCardPanel.css';
+import { random } from '@/random';
 
 /** How much of a cell's silver must be gone before it counts as scratched. */
 const CLEARED = 0.5;
@@ -23,6 +24,13 @@ interface ScratchDeal {
   onReveal?: (index: number) => void;
 }
 
+interface Cell {
+  canvas: HTMLCanvasElement;
+  ctx: CanvasRenderingContext2D;
+  symbol: ScratchSymbol;
+  revealed: boolean;
+}
+
 /**
  * The newsagent's scratch card, PIXEL SCRATCH, held in hand: six silver cells over their symbols,
  * scratched off with the pointer (drag, or a tap reveals a cell at once; Enter or the pad's A
@@ -30,62 +38,57 @@ interface ScratchDeal {
  * `ModalLike` the Session opens through `SessionActions.openPanel`: Close, Esc or a click outside
  * puts it down; "Another" buys the next card on the spot.
  */
-export class ScratchCardPanel extends ModalPanel {
-  private readonly cellsBox: HTMLElement;
-  private readonly result: HTMLElement;
-  private readonly againButton: HTMLButtonElement;
+export class ScratchCardPanel extends CardPanel {
   private deal: ScratchDeal | null = null;
-  private cells: { canvas: HTMLCanvasElement; ctx: CanvasRenderingContext2D; symbol: ScratchSymbol; revealed: boolean }[] = [];
+  private cells: Cell[] = [];
   private finished = false;
   private scratching: HTMLCanvasElement | null = null;
 
   constructor(container: HTMLElement) {
-    super(container, { className: 'ui-modal--centre scratch-panel' });
-    this.root.innerHTML = `
-      <article class="scratch-panel__card ui-card" role="dialog" aria-modal="true" aria-label="A scratch card">
-        <header><h2>PIXEL SCRATCH</h2><p>Three alike win. 🍒 2 · 🎮 3 · 💾 5 · ⭐ 10 · 7 25 coins</p></header>
-        <div class="scratch-panel__cells"></div>
-        <p class="scratch-panel__result" aria-live="polite"></p>
-        <p class="scratch-panel__hint">${renderKeys('Scratch with the mouse, tap a cell, or {Enter} for the next one')}</p>
-        <footer>
-          <button type="button" class="ui-btn" data-action="reveal">Scratch it all</button>
-          <button type="button" class="ui-btn" data-action="again" hidden>Another card</button>
-          <button type="button" class="ui-btn" data-action="close" aria-label="Close">Close</button>
-        </footer>
-      </article>`;
-    this.cellsBox = this.root.querySelector('.scratch-panel__cells')!;
-    this.result = this.root.querySelector('.scratch-panel__result')!;
-    this.againButton = this.root.querySelector('button[data-action="again"]')!;
-    this.root.addEventListener('click', (e) => {
-      const target = e.target as HTMLElement;
-      if (target === this.root || target.closest('button[data-action="close"]')) this.close();
-      else if (target.closest('button[data-action="reveal"]')) this.revealAll();
-      else if (target.closest('button[data-action="again"]')) this.buyAnother();
-    });
-    this.root.addEventListener('pointerup', () => this.stopScratching());
-    this.root.addEventListener('pointerleave', () => this.stopScratching());
+    super(container, { className: 'scratch-panel', cardClass: 'scratch-panel__card ui-card', title: 'A scratch card', header: false });
+    this.listen(this.root, 'pointerup', () => this.stopScratching());
+    this.listen(this.root, 'pointerleave', () => this.stopScratching());
   }
 
   /** Lays a fresh card (call before the Session opens the panel, or from "Another"). */
   show(deal: ScratchDeal): void {
     this.deal = deal;
     this.finished = false;
-    this.result.textContent = '';
-    this.againButton.hidden = true;
-    this.cellsBox.innerHTML = '';
+    if (this.isOpen) this.refresh();
+  }
+
+  protected render(): Html {
+    return html`<header><h2>PIXEL SCRATCH</h2><p>Three alike win. 🍒 2 · 🎮 3 · 💾 5 · ⭐ 10 · 7 25 coins</p></header>
+      <div class="scratch-panel__cells"></div>
+      <p class="scratch-panel__hint">${raw(renderKeys('Scratch with the mouse, tap a cell, or {Enter} for the next one'))}</p>`;
+  }
+
+  protected override actions(): PanelAction[] {
+    return [{ action: 'reveal', label: 'Scratch it all' }, ...(this.finished ? [{ action: 'again', label: 'Another card' }] : [])];
+  }
+
+  /** The cells are canvases with their silver and their pointer handlers: built after the markup, from the deal. */
+  protected override repaint(): void {
+    super.repaint();
+    const box = this.body.querySelector<HTMLElement>('.scratch-panel__cells');
+    const deal = this.deal;
+    if (!box || !deal) return;
+    const before = this.cells;
     this.cells = deal.card.cells.map((symbol, index) => {
       const cell = document.createElement('div');
       cell.className = 'scratch-panel__cell';
-      cell.innerHTML = `<span class="scratch-panel__symbol${symbol.glyph === '7' ? ' scratch-panel__symbol--seven' : ''}" aria-label="${escapeHtml(symbol.name)}">${escapeHtml(symbol.glyph)}</span>`;
+      paint(cell, html`<span class="scratch-panel__symbol${symbol.glyph === '7' ? ' scratch-panel__symbol--seven' : ''}" aria-label="${symbol.name}">${symbol.glyph}</span>`);
       const canvas = document.createElement('canvas');
       canvas.width = CELL_PX;
       canvas.height = CELL_PX;
       const ctx = canvas.getContext('2d')!;
-      const revealed = deal.revealed?.[index] ?? false;
+      // A repaint mid-card (the status line changed) keeps what was scratched so far.
+      const revealed = before[index]?.symbol === symbol ? before[index]!.revealed : (deal.revealed?.[index] ?? false);
       if (!revealed) paintSilver(ctx);
+      if (this.finished && deal.card.win && symbol === deal.card.win) cell.classList.add('scratch-panel__cell--win');
       cell.appendChild(canvas);
-      this.cellsBox.appendChild(cell);
-      const entry = { canvas, ctx, symbol, revealed };
+      box.appendChild(cell);
+      const entry: Cell = { canvas, ctx, symbol, revealed };
       canvas.addEventListener('pointerdown', (e) => {
         this.scratching = canvas;
         canvas.setPointerCapture(e.pointerId);
@@ -98,7 +101,17 @@ export class ScratchCardPanel extends ModalPanel {
       return entry;
     });
     // Taken up again with every cell already scratched (the page went just as the last one cleared): pay it now.
-    if (this.cells.every((c) => c.revealed)) this.finish();
+    if (!this.finished && this.cells.every((c) => c.revealed)) this.finish();
+  }
+
+  protected override onOpened(): void {
+    this.cells = [];
+    super.onOpened();
+  }
+
+  protected override onAction(action: string): void {
+    if (action === 'reveal') this.revealAll();
+    else if (action === 'again') this.buyAnother();
   }
 
   override close(): void {
@@ -107,25 +120,25 @@ export class ScratchCardPanel extends ModalPanel {
     super.close();
   }
 
-  /** Enter or Space (off a button) scratches the next cell. */
+  /** Enter (off a button) scratches the next cell. */
+  protected override onEnter(): boolean {
+    this.revealNext();
+    return true;
+  }
+
+  /** Space too, off a button. */
   protected override onKey(e: KeyboardEvent): void {
-    if ((e.code === 'Enter' || e.code === 'Space') && !(e.target instanceof HTMLButtonElement)) {
+    if (e.code === 'Space' && !(e.target instanceof HTMLButtonElement)) {
       e.preventDefault();
       this.revealNext();
     }
-  }
-
-  /** Takes the panel out of the page (the street unloaded). */
-  dispose(): void {
-    this.close();
-    this.root.remove();
   }
 
   private stopScratching(): void {
     this.scratching = null;
   }
 
-  private scratch(cell: (typeof this.cells)[number], e: PointerEvent): void {
+  private scratch(cell: Cell, e: PointerEvent): void {
     if (cell.revealed) return;
     const rect = cell.canvas.getBoundingClientRect();
     const x = ((e.clientX - rect.left) / rect.width) * CELL_PX;
@@ -139,7 +152,7 @@ export class ScratchCardPanel extends ModalPanel {
     if (cleared(ctx) >= CLEARED) this.reveal(cell);
   }
 
-  private reveal(cell: (typeof this.cells)[number]): void {
+  private reveal(cell: Cell): void {
     if (cell.revealed) return;
     cell.revealed = true;
     cell.ctx.clearRect(0, 0, CELL_PX, CELL_PX);
@@ -161,15 +174,16 @@ export class ScratchCardPanel extends ModalPanel {
     this.finished = true;
     const { win } = this.deal.card;
     if (win) for (const cell of this.cells) if (cell.symbol === win) cell.canvas.parentElement?.classList.add('scratch-panel__cell--win');
-    this.result.textContent = this.deal.done(win);
-    this.againButton.hidden = false;
+    this.setStatus(this.deal.done(win), win ? 'ok' : 'info');
+    // "Another card" joins the footer.
+    if (this.isOpen) this.refresh();
   }
 
   private buyAnother(): void {
     const deal = this.deal;
     if (!deal) return;
     const refused = deal.again();
-    if (refused) this.result.textContent = refused;
+    if (refused) this.setStatus(refused, 'error');
   }
 }
 
@@ -182,8 +196,8 @@ function paintSilver(ctx: CanvasRenderingContext2D): void {
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, CELL_PX, CELL_PX);
   for (let i = 0; i < 400; i++) {
-    ctx.fillStyle = Math.random() < 0.5 ? 'rgba(255,255,255,0.35)' : 'rgba(60,64,72,0.25)';
-    ctx.fillRect(Math.random() * CELL_PX, Math.random() * CELL_PX, 1.5, 1.5);
+    ctx.fillStyle = random() < 0.5 ? 'rgba(255,255,255,0.35)' : 'rgba(60,64,72,0.25)';
+    ctx.fillRect(random() * CELL_PX, random() * CELL_PX, 1.5, 1.5);
   }
   ctx.fillStyle = 'rgba(80,84,92,0.35)';
   ctx.font = 'bold 22px system-ui, sans-serif';

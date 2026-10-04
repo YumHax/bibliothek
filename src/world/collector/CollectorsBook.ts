@@ -7,6 +7,7 @@ import { invisibleHitbox } from '../meshUtils';
 import { PROUD } from '../props/joinery';
 import { Prop, part } from '../props/Prop';
 import { METAL, paint } from '../materials/palette';
+import { formatCount } from '@/text/count';
 
 interface CollectorsBookOptions {
   /** The collector's book panel the binder opens. */
@@ -61,7 +62,7 @@ export class CollectorsBook extends Prop implements Interactable {
 
   label(): string | null {
     const waiting = this.options.unclaimed?.() ?? 0;
-    return `Collector’s book · open${waiting ? ` (${waiting} reward${waiting === 1 ? '' : 's'} to claim)` : ''}`;
+    return `Collector’s book · open${waiting ? ` (${formatCount(waiting, 'reward')} to claim)` : ''}`;
   }
 
   activate(session: SessionActions): void {

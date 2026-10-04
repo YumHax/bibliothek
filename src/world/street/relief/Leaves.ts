@@ -1,16 +1,22 @@
 import * as THREE from 'three';
 import { QUALITY } from '@/graphics/quality';
 import type { Updatable } from '@/core/Engine';
-import { createCanvas, seededRandom, toTexture } from '@/covers/generated/canvasUtils';
+import { createCanvas, toTexture } from '@/covers/generated/canvasUtils';
 import type { Furniture } from '../../Furniture';
 import type { DayNight } from '../../props/DayNight';
 import type { Season } from '@/time/season';
-import { FRONT, type Vec2 } from '../streetPlan';
+import type { Vec2 } from '../streetPlan';
+import { FRONT } from '@/world/measures/street';
 import { groundHeight } from './ground';
 import { GROUND, RENDER_ORDER, onSurface } from '../../surface/layers';
 import { coverageKeepsAlpha } from '../../materials/palette';
 import { POINT_SCALE, scalesPoints } from '../../particles/pointScale';
 import { overKeepingAlpha } from '@/world/materials/blend';
+import { lcg } from '@/random';
+import { assemble } from '@/graphics/glslAssemble';
+import leavesFallVertex from './LeavesFall.vert.glsl?raw';
+import FALL_FRAGMENT from './LeavesFall.frag.glsl?raw';
+import { damp } from '@/math/damp';
 
 const AUTUMN = ['#c9862f', '#d9a33a', '#b8562a', '#8a7a32', '#a8442a', '#e0b048', '#7a5a2a'];
 /** Fallen leaves at the season's deepest, and how many fall at once. */
@@ -20,50 +26,8 @@ const FALLING = 180;
 const CROWN = 6.2;
 const FALL_SECONDS = 9;
 
-const FALL_VERTEX = /* glsl */ `
-attribute vec4 seed;
-attribute vec3 tint;
-uniform float time;
-uniform float wind;
-uniform float size;
-uniform float pointScale;
-varying vec3 vTint;
-varying float vSpin;
-varying float vFade;
-void main() {
-  float t = fract(time / ${FALL_SECONDS.toFixed(1)} + seed.w);
-  vec3 p = position;
-  p.y = mix(${CROWN.toFixed(1)} + seed.z * 1.5, seed.x, t);
-  // Drift downwind, and flutter from side to side as it falls.
-  p.x += wind * 5.0 * t + sin(time * 1.7 + seed.w * 40.0) * 0.5;
-  p.z += wind * 1.5 * t + cos(time * 1.3 + seed.w * 23.0) * 0.4;
-  vec4 view = modelViewMatrix * vec4(p, 1.0);
-  gl_Position = projectionMatrix * view;
-  gl_PointSize = size * pointScale / max(-view.z, 0.5);
-  vTint = tint;
-  vSpin = time * (1.5 + seed.y * 3.0) + seed.w * 6.28;
-  vFade = smoothstep(0.0, 0.06, t) * (1.0 - smoothstep(0.92, 1.0, t));
-}
-`;
-
-const FALL_FRAGMENT = /* glsl */ `
-uniform float light;
-varying vec3 vTint;
-varying float vSpin;
-varying float vFade;
-void main() {
-  vec2 c = gl_PointCoord - 0.5;
-  float cs = cos(vSpin);
-  float sn = sin(vSpin);
-  vec2 r = vec2(c.x * cs - c.y * sn, c.x * sn + c.y * cs);
-  // A leaf seen turning: an ellipse whose width swings with its spin.
-  float w = 0.12 + 0.2 * abs(sin(vSpin * 0.7));
-  if ((r.x * r.x) / (w * w) + (r.y * r.y) / 0.16 > 1.0) discard;
-  gl_FragColor = vec4(vTint * light, vFade);
-  #include <tonemapping_fragment>
-  #include <colorspace_fragment>
-}
-`;
+/** A leaf's fall, with the two constants above written in. */
+const FALL_VERTEX = assemble(leavesFallVertex, { defines: { TS_FALL_SECONDS: FALL_SECONDS.toFixed(1), TS_CROWN: CROWN.toFixed(1) } });
 
 /**
  * Autumn on the pavements: leaves fallen around every street tree and swept into the gutters
@@ -80,7 +44,7 @@ export class Leaves extends THREE.Group implements Furniture, Updatable {
   constructor(private readonly dayNight: DayNight, trees: readonly Vec2[], season: Season) {
     super();
     this.name = 'Leaves';
-    const random = seededRandom(1311);
+    const random = lcg(1311);
     const depth = 0.35 + 0.65 * season.depth;
 
     // Fallen: around the trees (denser near the trunk) and in the gutters.
@@ -161,7 +125,7 @@ export class Leaves extends THREE.Group implements Furniture, Updatable {
     const s = this.dayNight.state;
     this.time = (this.time + dt) % (FALL_SECONDS * 100);
     this.uniforms.time!.value = this.time;
-    this.uniforms.wind!.value += (s.wind - (this.uniforms.wind!.value as number)) * Math.min(1, dt);
+    this.uniforms.wind!.value = damp(this.uniforms.wind!.value as number, s.wind, 1, dt);
     this.uniforms.light!.value = 0.2 + 0.8 * s.daylight;
   }
 }

@@ -1,6 +1,5 @@
 import * as THREE from 'three';
 import { getPlatform } from '@/catalog/platforms';
-import { seeded } from '@/economy/seeded';
 import { FAULTS, REPAIR, brokenOf } from '@/repair/consoles';
 import { PLATFORM_LIST } from '@/catalog/platforms';
 import type { BuildContext, ClassifiedsContext } from '../buildContext';
@@ -12,6 +11,8 @@ import { Crate } from '../props/Crate';
 import { ConsoleProp } from './ConsoleProp';
 import { CounterCard } from './CounterCard';
 import { REPAIR_PLAN } from './repairPlan';
+import { dayStream } from '@/time/daily';
+import { formatCoins } from '@/text/money';
 
 /**
  * The kitchen's part in mending consoles (docs/household.md "Repairing a console"): whatever console the player bought
@@ -59,7 +60,7 @@ export function furnishKitchenRepair(zone: Zone, classifieds: ClassifiedsContext
  * console on it some game days (`REPAIR.crateOdds`, one a day), and the card on the counter that opens the desk where
  * the repairer buys working consoles back (`ConsoleDeskPanel`).
  */
-export function furnishRepairCorner(zone: Zone, ctx: BuildContext, counter: THREE.Object3D): void {
+export function furnishRepairCorner(zone: Zone, ctx: Pick<BuildContext, 'classifieds' | 'today' | 'home'>, counter: THREE.Object3D): void {
   const classifieds = ctx.classifieds;
   if (!classifieds) return;
   const { workshop } = classifieds;
@@ -69,13 +70,13 @@ export function furnishRepairCorner(zone: Zone, ctx: BuildContext, counter: THRE
 
   // Today's console in the crate, drawn from the game day.
   const day = ctx.today.gameDay;
-  const rng = seeded(`${day}:repairCrate`);
+  const rng = dayStream(`${day}:repairCrate`);
   if (rng() >= REPAIR.crateOdds) return;
   const platform = PLATFORM_LIST[Math.floor(rng() * PLATFORM_LIST.length)]!.id;
   const offer = brokenOf(platform, rng(), rng());
   const name = getPlatform(platform).shortName;
   const prop = new ConsoleProp({
-    label: () => `A broken ${name}, sold as seen · ${offer.price} coins`,
+    label: () => `A broken ${name}, sold as seen · ${formatCoins(offer.price)}`,
     use: (session) => {
       if (!hasBench(ctx)) {
         session.refuse(NO_BENCH);

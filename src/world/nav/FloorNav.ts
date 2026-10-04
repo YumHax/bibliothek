@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { CollisionProbe } from '@/core/Collider';
+import { random } from '@/random';
 
 /** Grid cell size (metres). */
 const CELL = 0.15;
@@ -110,13 +111,13 @@ export class FloorNav {
     this.refresh();
     for (let i = 0; i < 40; i++) {
       if (near) {
-        const angle = Math.random() * Math.PI * 2;
-        const r = radius * Math.sqrt(Math.random());
+        const angle = random() * Math.PI * 2;
+        const r = radius * Math.sqrt(random());
         out.set(near.x + Math.cos(angle) * r, 0, near.z + Math.sin(angle) * r);
       } else if (within) {
-        out.set(THREE.MathUtils.lerp(within.min.x, within.max.x, Math.random()), 0, THREE.MathUtils.lerp(within.min.y, within.max.y, Math.random()));
+        out.set(THREE.MathUtils.lerp(within.min.x, within.max.x, random()), 0, THREE.MathUtils.lerp(within.min.y, within.max.y, random()));
       } else {
-        out.set(this.minX + Math.random() * this.cols * CELL, 0, this.minZ + Math.random() * this.rows * CELL);
+        out.set(this.minX + random() * this.cols * CELL, 0, this.minZ + random() * this.rows * CELL);
       }
       const cell = this.cellOf(out);
       if (cell !== -1 && this.blocked[cell] === 0) return out;
@@ -236,75 +237,83 @@ export class FloorNav {
     if (start === -1 || goal === -1) return null;
     const goalIsExact = this.cellOf(to) === goal;
 
-    if (start === goal) {
-      const end = goalIsExact ? to.clone().setY(0) : this.cellCentre(goal, new THREE.Vector3());
-      return [end];
-    }
+    if (start === goal) return [goalIsExact ? to.clone().setY(0) : this.cellCentre(goal, new THREE.Vector3())];
+    if (!this.aStar(start, goal)) return null;
+    return this.smooth(this.pathPoints(from, to, start, goal, goalIsExact));
+  }
 
-    const { cols, rows, blocked, gCost, fCost, parent, closed } = this;
+  /** A* over the grid from `start` to `goal` on the instance's cost, parent and closed arrays (reset here); whether the goal was reached. */
+  private aStar(start: number, goal: number): boolean {
+    const { gCost, fCost, parent, closed } = this;
     gCost.fill(Infinity);
     closed.fill(0);
     parent.fill(-1);
     const open = new MinHeap(fCost);
-    const goalCol = goal % cols;
-    const goalRow = (goal - goalCol) / cols;
-    const heuristic = (cell: number): number => {
-      const col = cell % cols;
-      const row = (cell - col) / cols;
-      const dx = Math.abs(col - goalCol);
-      const dz = Math.abs(row - goalRow);
-      return Math.max(dx, dz) + (SQRT2 - 1) * Math.min(dx, dz);
-    };
     gCost[start] = 0;
-    fCost[start] = heuristic(start);
+    fCost[start] = this.octile(start, goal);
     open.push(start);
-
-    let found = false;
     while (open.size > 0) {
       const current = open.pop();
-      if (current === goal) {
-        found = true;
-        break;
-      }
+      if (current === goal) return true;
       if (closed[current]) continue;
       closed[current] = 1;
-      const col = current % cols;
-      const row = (current - col) / cols;
-      for (let dr = -1; dr <= 1; dr++) {
-        const nr = row + dr;
-        if (nr < 0 || nr >= rows) continue;
-        for (let dc = -1; dc <= 1; dc++) {
-          if (dr === 0 && dc === 0) continue;
-          const nc = col + dc;
-          if (nc < 0 || nc >= cols) continue;
-          const next = nr * cols + nc;
-          if (blocked[next] || closed[next]) continue;
-          // No corner cutting: a diagonal step needs both orthogonal neighbours free.
-          if (dr !== 0 && dc !== 0 && (blocked[row * cols + nc] || blocked[nr * cols + col])) continue;
-          const step = dr !== 0 && dc !== 0 ? SQRT2 : 1;
-          // Both cells are within the grid (`current` came off the heap, `next` was bounds-checked above).
-          const g = gCost[current]! + step;
-          if (g < gCost[next]!) {
-            gCost[next] = g;
-            fCost[next] = g + heuristic(next);
-            parent[next] = current;
-            open.push(next);
-          }
+      this.expand(current, goal, open);
+    }
+    return false;
+  }
+
+  /** The octile distance from `cell` to `goal` (a diagonal step costs √2): the A* heuristic. */
+  private octile(cell: number, goal: number): number {
+    const { cols } = this;
+    const col = cell % cols;
+    const row = (cell - col) / cols;
+    const goalCol = goal % cols;
+    const dx = Math.abs(col - goalCol);
+    const dz = Math.abs(row - (goal - goalCol) / cols);
+    return Math.max(dx, dz) + (SQRT2 - 1) * Math.min(dx, dz);
+  }
+
+  /** `current`'s eight neighbours onto the open set where they shorten the way. No corner cutting: a diagonal step needs both orthogonal neighbours free. */
+  private expand(current: number, goal: number, open: MinHeap): void {
+    const { cols, rows, blocked, gCost, fCost, parent, closed } = this;
+    const col = current % cols;
+    const row = (current - col) / cols;
+    for (let dr = -1; dr <= 1; dr++) {
+      const nr = row + dr;
+      if (nr < 0 || nr >= rows) continue;
+      for (let dc = -1; dc <= 1; dc++) {
+        if (dr === 0 && dc === 0) continue;
+        const nc = col + dc;
+        if (nc < 0 || nc >= cols) continue;
+        const next = nr * cols + nc;
+        if (blocked[next] || closed[next]) continue;
+        if (dr !== 0 && dc !== 0 && (blocked[row * cols + nc] || blocked[nr * cols + col])) continue;
+        const step = dr !== 0 && dc !== 0 ? SQRT2 : 1;
+        // Both cells are within the grid (`current` came off the heap, `next` was bounds-checked above).
+        const g = gCost[current]! + step;
+        if (g < gCost[next]!) {
+          gCost[next] = g;
+          fCost[next] = g + this.octile(next, goal);
+          parent[next] = current;
+          open.push(next);
         }
       }
     }
-    if (!found) return null;
+  }
 
-    // Cell chain goal -> start, then reversed into world points; the exact goal replaces its cell.
+  /**
+   * The found chain, goal back to start, as world points from `from` to the end: the exact goal replaces its cell.
+   * Standing on a blocked cell (dropped there, or furniture rebuilt around it): step out first.
+   */
+  private pathPoints(from: THREE.Vector3, to: THREE.Vector3, start: number, goal: number, goalIsExact: boolean): THREE.Vector3[] {
     const cells: number[] = [];
-    for (let cell = goal; cell !== -1; cell = parent[cell]!) cells.push(cell);
+    for (let cell = goal; cell !== -1; cell = this.parent[cell]!) cells.push(cell);
     cells.reverse();
     const points: THREE.Vector3[] = [from.clone().setY(0)];
-    // Standing on a blocked cell (dropped there, or furniture rebuilt around it): step out first.
     if (this.cellOf(from) !== start) points.push(this.cellCentre(start, new THREE.Vector3()));
     for (let i = 1; i < cells.length - 1; i++) points.push(this.cellCentre(cells[i]!, new THREE.Vector3()));
     points.push(goalIsExact ? to.clone().setY(0) : this.cellCentre(goal, new THREE.Vector3()));
-    return this.smooth(points);
+    return points;
   }
 
   /** String-pulling: from each point, jump to the furthest later point reachable in a straight line. */

@@ -1,5 +1,6 @@
 import { isTouchDevice } from '@/input/deviceDetect';
 import { KEYS, safeStorage } from '@/persistence';
+import { flagValue } from '@/settings/flags';
 import { toneMapEveryMaterial } from './displayTone';
 import { brightenMetalReflections } from './metalReflections';
 
@@ -212,7 +213,7 @@ export function recommendedQuality(): QualityLevel {
 }
 
 function resolve(): QualitySettings {
-  const param = new URLSearchParams(location.search).get('quality');
+  const param = flagValue('quality');
   const level = isLevel(param) ? param : (stored() ?? recommendedQuality());
   return { level, ...PRESETS[level] };
 }

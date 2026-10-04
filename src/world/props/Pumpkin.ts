@@ -1,9 +1,10 @@
 import * as THREE from 'three';
 import type { Updatable } from '@/core/Engine';
-import { createCanvas, seededRandom, toTexture } from '@/covers/generated/canvasUtils';
+import { createCanvas, toTexture } from '@/covers/generated/canvasUtils';
 import { cylinderMesh } from '../meshUtils';
 import { paint, standard } from '../materials/palette';
 import { Prop } from './Prop';
+import { lcg } from '@/random';
 
 export interface PumpkinOptions {
   /** Radius, metres. Default 0.14 (a carving pumpkin); a small one 0.09. */
@@ -38,7 +39,7 @@ export class Pumpkin extends Prop implements Updatable {
     this.name = 'Pumpkin';
     const radius = options.radius ?? 0.14;
     const squash = 0.78;
-    this.random = seededRandom(options.seed ?? 31);
+    this.random = lcg(options.seed ?? 31);
     const lift = options.lift ?? 0;
 
     const body = new THREE.Mesh(ribbed(new THREE.SphereGeometry(radius, 28, 16), radius), SKIN);
@@ -88,7 +89,7 @@ function ribbed(geometry: THREE.SphereGeometry, radius: number): THREE.SphereGeo
 /** The carved face: two triangle eyes, a triangle nose and a jagged grin, candle-yellow on nothing. */
 function carving(seed: number): THREE.CanvasTexture {
   const [canvas, ctx] = createCanvas(256, 192);
-  const random = seededRandom(seed);
+  const random = lcg(seed);
   const W = canvas.width;
   const H = canvas.height;
   const gradient = ctx.createRadialGradient(W / 2, H * 0.55, 10, W / 2, H * 0.55, W * 0.5);

@@ -1,10 +1,11 @@
 import * as THREE from 'three';
-import { createCanvas, seededRandom, toTexture } from '@/graphics/canvas';
+import { createCanvas, toTexture } from '@/graphics/canvas';
 import { Prop, part } from '../../props/Prop';
 import { cylinderMesh } from '../../meshUtils';
 import { METAL, paint } from '../../materials/palette';
 import { WALL, decal } from '../../surface/layers';
 import { POSTER, setLines } from '../common/lettering';
+import { lcg } from '@/random';
 
 export interface LeadPegboardOptions {
   /** Size of the board. Default 1.0 x 0.72. */
@@ -32,7 +33,7 @@ export class LeadPegboard extends Prop {
     this.name = 'LeadPegboard';
     const W = options.width ?? 1.0;
     const H = options.height ?? 0.72;
-    const random = seededRandom(options.seed ?? 17);
+    const random = lcg(options.seed ?? 17);
     part(this, W, H, 0.006, paint(0x7a5a3a, 0.9), { z: 0.012 });
     // Battens behind it, holding it off the wall for the hooks.
     for (const s of [-1, 1]) part(this, W - 0.04, 0.03, 0.009, paint(0x5a4028, 0.8), { y: (s * (H - 0.08)) / 2, z: 0.0045 });

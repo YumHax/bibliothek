@@ -5,7 +5,7 @@ import type { Placer } from '../build/owned';
 import type { GameBox } from '../GameBox';
 import { ClickSpot } from '../props/ClickSpot';
 import { AlarmClock } from './AlarmClock';
-import { clockTime } from '../street/shops/shopHours';
+import { clockShort } from '@/text/clock';
 import { furnishShell } from '../shell';
 import { furnishDecor, placeRoomLight, placeStrayBox } from '../build/roomParts';
 import { heardBy, pointSound } from '../build/hearing';
@@ -35,7 +35,7 @@ import { Shelving } from '../shelving/Shelving';
 import { tellOutcome } from '@/household/tellOutcome';
 import { playAlarmButton, playHangers } from '@/audio/householdSounds';
 import { playAlarm } from '@/audio/alarm';
-import { heardAt } from '@/audio/spatial';
+import { hear } from '@/audio/hearing';
 import { resolvePlacement } from '../Placement';
 import { BOOKCASE_PRICE } from '@/economy/pricing';
 import { PrizeShelf } from '../prizes/PrizeShelf';
@@ -66,7 +66,7 @@ interface BedroomHandle extends ZoneHandle {
  * the reading corner, the bought bookcases (or the kit to buy one), the shelf of arcade prizes,
  * then the rug, pictures and plant. The clock unmakes the bed until noon and lights the glows at night.
  */
-export function furnishBedroom(zone: Zone, ctx: BuildContext): BedroomHandle {
+export function furnishBedroom(zone: Zone, ctx: Pick<BuildContext, 'sky' | 'cssLayer' | 'covers' | 'listener' | 'acoustics' | 'input' | 'collection' | 'home' | 'arcade' | 'today'>): BedroomHandle {
   const { sky, cssLayer, covers, collection: { overflow }, home: { upgrades, furnishings }, arcade: { prizes }, today } = ctx;
   const plan = BEDROOM_PLAN;
   const room = furnishShell(zone, sky, plan.room);
@@ -254,12 +254,12 @@ function furnishBedroomLife(zone: Zone, household: HouseholdContext, parts: { st
   const { stands, nightstands } = parts;
   const alarmStand = nightstands[alarmAt.stand]!;
   const alarm = new AlarmClock({
-    label: () => `Alarm clock (${clockTime(life.household.wakeHour)}) · change the hour`,
+    label: () => `Alarm clock (${clockShort(life.household.wakeHour)}) · change the hour`,
     use: () => {
       playAlarmButton();
       const hour = life.household.cycleAlarm();
       alarm.setAlarm(hour);
-      notices.react(`The alarm will wake you at ${clockTime(hour)}.`);
+      notices.react(`The alarm will wake you at ${clockShort(hour)}.`);
     },
   });
   alarm.setAlarm(life.household.wakeHour);
@@ -270,10 +270,10 @@ function furnishBedroomLife(zone: Zone, household: HouseholdContext, parts: { st
   life.setAlarmRinger(() => {
     if (!stands.owned) return;
     // Two groups of beeps, then the slap on the button that stops it.
-    const heard = heardAt(alarm.getWorldPosition(new THREE.Vector3()));
+    const heard = hear(alarm.getWorldPosition(new THREE.Vector3()));
     if (heard.gain <= 0) return;
     const rang = playAlarm(0.05 * heard.gain, 2, heard.spatial);
-    if (rang > 0) window.setTimeout(() => playAlarmButton(0.08), (rang + 0.12) * 1000);
+    if (rang > 0) zone.after(rang + 0.12, () => playAlarmButton(0.08));
   });
 
   const call = new ClickSpot({ size: phoneSpot, label: () => 'Phone · make a call', onClick: () => undefined });

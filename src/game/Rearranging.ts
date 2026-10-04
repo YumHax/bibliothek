@@ -182,29 +182,40 @@ export class Rearranging implements KeyRoute {
   }
 
   onKey(code: string): boolean {
-    const { furniture, shelfPlacing, inspector, player, planView } = this.parts;
+    const { furniture, shelfPlacing, inspector, planView } = this.parts;
     // From above, every key is the planning view's (and L opens it with free hands).
     if (planView && (planView.isOpen || (!inspector.current && !furniture?.piece)) && planView.onKey(code)) return true;
-    if (furniture?.piece) {
-      if (isAction(code, 'setDown')) this.setDown();
-      // The controller's Y (the open-box button) turns it too.
-      else if (isAction(code, 'turnPiece') || code === 'GamepadY') furniture.turn(1);
-      else if (isAction(code, 'turnPieceBack')) furniture.turn(-1);
-      else if (isAction(code, 'gridSnap')) {
-        furniture.snapping = !furniture.snapping;
-        this.host.react(furniture.snapping ? 'On the grid' : 'Free placement: off the grid');
-      } else if (isAction(code, 'putBackPiece')) this.cancel();
-      else if (isAction(code, 'storePiece')) this.store();
-      else return false;
-      return true;
-    }
+    if (furniture?.piece) return this.carryingKey(code, furniture);
     if (inspector.current && isAction(code, 'putHere') && shelfPlacing?.active) {
       this.putHere();
       return true;
     }
-    // Only at home: out there U hands back what was just bought.
-    if (!inspector.current && !player.isSeated && isAction(code, 'undoMove') && furniture?.atHome) return this.undo();
-    if (!inspector.current && !player.isSeated && isAction(code, 'moveFurniture') && furniture) return this.take(true);
+    return this.freeHandsKey(code);
+  }
+
+  /** The keys with a piece in hand: set it down, turn it (the controller's Y, the open-box button, turns it too), snap, put back, store. */
+  private carryingKey(code: string, furniture: FurnitureCarrierLike): boolean {
+    if (isAction(code, 'setDown')) this.setDown();
+    else if (isAction(code, 'turnPiece') || code === 'GamepadY') furniture.turn(1);
+    else if (isAction(code, 'turnPieceBack')) furniture.turn(-1);
+    else if (isAction(code, 'gridSnap')) this.toggleSnap(furniture);
+    else if (isAction(code, 'putBackPiece')) this.cancel();
+    else if (isAction(code, 'storePiece')) this.store();
+    else return false;
+    return true;
+  }
+
+  private toggleSnap(furniture: FurnitureCarrierLike): void {
+    furniture.snapping = !furniture.snapping;
+    this.host.react(furniture.snapping ? 'On the grid' : 'Free placement: off the grid');
+  }
+
+  /** With free hands, standing: the undo (only at home: out there U hands back what was just bought) or taking the piece aimed at. */
+  private freeHandsKey(code: string): boolean {
+    const { furniture, inspector, player } = this.parts;
+    if (inspector.current || player.isSeated) return false;
+    if (isAction(code, 'undoMove') && furniture?.atHome) return this.undo();
+    if (isAction(code, 'moveFurniture') && furniture) return this.take(true);
     return false;
   }
 

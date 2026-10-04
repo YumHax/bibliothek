@@ -2,6 +2,7 @@ import type { Updatable } from '@/core/Engine';
 import { Voice } from './ambient';
 import { audioBus, audioContext } from './audioContext';
 import { whiteNoise } from './noise';
+import { random } from '@/random';
 
 /** Level of the whole bed at full loudness (linear, relative to full scale). */
 const BED_LEVEL = 0.45;
@@ -41,7 +42,8 @@ export class CrtSpeaker extends Voice implements Updatable {
   setOn(on: boolean): void {
     if (on === this.running) return;
     this.running = on;
-    if (on) this.playPowerOnThump(audioContext());
+    const ctx = on ? audioContext() : null;
+    if (ctx) this.playPowerOnThump(ctx);
     this.follow = on ? FOLLOW : 0.25;
     this.setLevel(on ? this.loudness : 0);
   }
@@ -54,7 +56,7 @@ export class CrtSpeaker extends Voice implements Updatable {
 
   protected override tick(ctx: AudioContext, dt: number): void {
     if (!this.crackle) return;
-    if (Math.random() < dt * CRACKLE.perSecond) this.crackleLevel = CRACKLE.level * (0.3 + 0.7 * Math.random());
+    if (random() < dt * CRACKLE.perSecond) this.crackleLevel = CRACKLE.level * (0.3 + 0.7 * random());
     this.crackleLevel *= Math.exp(-CRACKLE.decayPerSecond * dt);
     this.crackle.gain.setTargetAtTime(this.crackleLevel, ctx.currentTime, 0.004);
   }

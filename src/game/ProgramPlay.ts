@@ -1,4 +1,5 @@
 import { isAction } from '@/input/actions';
+import { Arming } from '@/ui/confirmTwice';
 import { actionKeyLabel } from '@/ui/keys';
 import type { ProgramRunner, ScreenProgram } from '@/onscreen';
 import type { KeyRoute, SessionHost } from './SessionHost';
@@ -20,7 +21,8 @@ const PUT_DOWN_CONFIRM_MS = 1500;
 export class ProgramPlay implements KeyRoute {
   /** Whether the walk and the crosshair were frozen for the pad, to give them back. */
   private frozen = false;
-  private armed = 0;
+  /** Walk-away pressed once: a second press within `PUT_DOWN_CONFIRM_MS` puts the pad down (nothing to repaint, the reaction says it). */
+  private readonly arming = new Arming<'putDown'>(() => {}, PUT_DOWN_CONFIRM_MS);
 
   constructor(private readonly parts: ProgramParts, private readonly host: SessionHost) {
     parts.programs?.listen({
@@ -56,14 +58,8 @@ export class ProgramPlay implements KeyRoute {
   onKey(code: string): boolean {
     if (!this.holding) return false;
     if (isAction(code, 'walkAway')) {
-      const now = performance.now();
-      if (now - this.armed > PUT_DOWN_CONFIRM_MS) {
-        this.armed = now;
-        this.host.react(`${actionKeyLabel('walkAway')} again to put the pad down.`);
-      } else {
-        this.armed = 0;
-        this.leave();
-      }
+      if (this.arming.press('putDown')) this.leave();
+      else this.host.react(`${actionKeyLabel('walkAway')} again to put the pad down.`);
     }
     return true;
   }
@@ -80,6 +76,6 @@ export class ProgramPlay implements KeyRoute {
   private letGo(): void {
     if (this.frozen) this.host.setFrozen(false);
     this.frozen = false;
-    this.armed = 0;
+    this.arming.reset();
   }
 }

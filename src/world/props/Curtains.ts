@@ -5,6 +5,8 @@ import { standard } from '../materials/palette';
 import { fabric } from '@/world/materials/finishes';
 import { Backlight } from '../materials/backlight';
 import { playCurtainRings } from '@/audio/furnitureSounds';
+import { dampFactor } from '@/math/damp';
+import { spring } from '@/math/springs';
 
 interface CurtainsOptions {
   /** Size of the opening the curtains flank, in metres. */
@@ -154,7 +156,7 @@ export class Curtains extends THREE.Group {
         moved = true;
       }
     } else {
-      const step = gap * (1 - Math.exp(-DRAW_SPEED * dt));
+      const step = gap * dampFactor(DRAW_SPEED, dt);
       this.openness += step;
       speed = dt > 0 ? step / dt : 0;
       moved = true;
@@ -170,11 +172,8 @@ export class Curtains extends THREE.Group {
       this.sway = this.swayVelocity = 0;
       return false;
     }
-    const omega = 2 * Math.PI * SWAY_HZ;
-    const h = Math.min(dt, 1 / 30);
-    const accel = -omega * omega * this.sway - 2 * SWAY_DAMPING * omega * this.swayVelocity + Math.abs(speed) * SWAY_KICK * omega * omega * 0.25;
-    this.swayVelocity += accel * h;
-    this.sway += this.swayVelocity * h;
+    // The panels' speed pushes the hem: a spring whose goal moves with it and sits at 0 once they are still.
+    [this.sway, this.swayVelocity] = spring(this.sway, this.swayVelocity, Math.abs(speed) * SWAY_KICK * 0.25, 2 * Math.PI * SWAY_HZ, dt, SWAY_DAMPING);
     return true;
   }
 

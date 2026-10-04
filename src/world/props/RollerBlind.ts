@@ -5,6 +5,7 @@ import { paint } from '../materials/palette';
 import { part } from './Prop';
 import { fabric } from '@/world/materials/finishes';
 import { Backlight } from '../materials/backlight';
+import { dampFactor } from '@/math/damp';
 
 interface RollerBlindOptions {
   /** Size of the opening it covers, in metres. */
@@ -105,7 +106,7 @@ export class RollerBlind extends THREE.Group {
       this.setOpenness(this.target);
       return true;
     }
-    this.setOpenness(this.openness + gap * (1 - Math.exp(-SPEED * dt)));
+    this.setOpenness(this.openness + gap * dampFactor(SPEED, dt));
     return true;
   }
 

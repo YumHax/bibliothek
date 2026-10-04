@@ -4,12 +4,13 @@ import type { Updatable } from '@/core/Engine';
 import type { Interactable } from '@/interaction/Interactable';
 import type { SessionActions } from '@/game/SessionActions';
 import { playHingeCreak, playLatchClick } from '@/audio/furnitureSounds';
-import { createCanvas, seededRandom, toTexture } from '@/covers/generated/canvasUtils';
+import { createCanvas, toTexture } from '@/covers/generated/canvasUtils';
 import { METAL, paint, timber } from '../materials/palette';
 import { boxMesh, invisibleHitbox } from '../meshUtils';
 import { Prop } from '../props/Prop';
 import { CELL, SPRING, type StorageBox } from './cellarPlan';
 import { isOpened, markOpened } from './cellarFinds';
+import { lcg } from '@/random';
 
 /** The slats of a front (m): their width, the gap between, their thickness. */
 const SLAT = { width: 0.085, gap: 0.035, depth: 0.022 };
@@ -38,7 +39,7 @@ export class CellarBox extends Prop implements Interactable, Updatable {
   constructor(private readonly box: StorageBox) {
     super();
     this.name = `CellarBox ${box.n}`;
-    const random = seededRandom(box.n * 97 + 5);
+    const random = lcg(box.n * 97 + 5);
     const wood = timber(0x6e5236, 0.85);
     // The partition either side of the door: slats floor to spring, two rails across.
     const slats: THREE.BufferGeometry[] = [];

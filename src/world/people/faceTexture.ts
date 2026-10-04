@@ -1,9 +1,10 @@
 import * as THREE from 'three';
-import { createCanvas, seededRandom, toTexture } from '@/covers/generated/canvasUtils';
-import { bump, ramp } from './geometry';
+import { createCanvas, toTexture } from '@/covers/generated/canvasUtils';
+import { gaussian, ramp } from '@/math/scalar';
 import { beardCover } from './hair';
 import type { PersonLook } from './looks';
 import { cachedTexture } from './textureCache';
+import { lcg } from '@/random';
 
 /*
  * The skin of the head, painted once from the look. The canvas is laid out like the head's
@@ -27,7 +28,7 @@ export function paintFace(look: PersonLook): THREE.CanvasTexture {
 
 function paint(look: PersonLook): THREE.CanvasTexture {
   const [canvas, ctx] = createCanvas(W, H);
-  const random = seededRandom(look.skin * 13 + look.hair * 7 + Math.round(look.nose * 100));
+  const random = lcg(look.skin * 13 + look.hair * 7 + Math.round(look.nose * 100));
   const skin = rgb(look.skin);
   const hair = rgb(look.hair);
   ctx.fillStyle = css(skin);
@@ -54,9 +55,9 @@ function paint(look: PersonLook): THREE.CanvasTexture {
     [0.05, 0.34, 0.2, 0.2, 0.1], // eyelids
   ] as const;
   const columns = (list: ReadonlyArray<readonly number[]>): Float32Array[] =>
-    list.map(([, u0, , su]) => Float32Array.from({ length: x1 - x0 }, (_, i) => bump(Math.abs(((x0 + i) / W - 0.5) * 2 * Math.PI), u0!, su!)));
+    list.map(([, u0, , su]) => Float32Array.from({ length: x1 - x0 }, (_, i) => gaussian(Math.abs(((x0 + i) / W - 0.5) * 2 * Math.PI), u0!, su!)));
   const rows = (list: ReadonlyArray<readonly number[]>): Float32Array[] =>
-    list.map(([, , v0, , sv]) => Float32Array.from({ length: H - y0 }, (_, i) => bump((0.5 - (y0 + i) / H) * Math.PI, v0!, sv!)));
+    list.map(([, , v0, , sv]) => Float32Array.from({ length: H - y0 }, (_, i) => gaussian((0.5 - (y0 + i) / H) * Math.PI, v0!, sv!)));
   const shadeCols = columns(shades);
   const shadeRows = rows(shades);
   const flushCols = columns(flushes);

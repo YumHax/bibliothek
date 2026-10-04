@@ -6,7 +6,11 @@ import { Vendor } from '../people/Vendor';
 import { randomLook } from '../people/looks';
 import type { StringLights } from './StringLights';
 import { PARTY_TALK, partyGuests, type partyStage } from '@/building/neighboursParty';
-import { STAIRWELL_PLAN } from '../stairwell/stairwellPlan';
+import { STAIRWELL_PLAN } from '../stairwell/stairwellPlan'; // imports-ok: the residents who come down to the party are the stairwell's
+import { doorKey } from '../stairwell/building';
+import { personAtDoor } from '@/social/people';
+import type { SocialServices } from '@/social/talk';
+import { talkHook, vendorBody } from '../people/socialHook';
 
 /** What the party places and takes away again: the zone. */
 interface PartyHost {
@@ -28,6 +32,8 @@ interface NeighboursPartyOptions {
   lamp: { at: THREE.Vector3; intensity: number; distance: number; color: number };
   /** The player chatted with guest `i` (in `partyGuests`' order). */
   onChat?: (guest: number) => void;
+  /** The people the player talks to (docs/social.md): each guest talks, the party's chat an entry of theirs. */
+  social?: SocialServices;
 }
 
 /** Seconds between two looks at the clock. */
@@ -99,7 +105,22 @@ export class NeighboursParty extends THREE.Group implements Furniture, Updatable
       const own = residents[i]?.lines.filter((line): line is string => typeof line === 'string') ?? [];
       const role = ROLE_LINES[i];
       const lines = [...(role ? [role] : []), ...PARTY_TALK.slice(i % PARTY_TALK.length), ...own];
-      const vendor = new PartyGuest(() => this.options.onChat?.(i), { viewer, lines, seed: guest.seed, look: randomLook(guest.seed + 900, 'shopper'), label: `${guest.name} · chat`, speaker: guest.name, focus: [0, 1.0, 1.2] });
+      const person = personAtDoor(doorKey(guest.k, guest.i));
+      const chatted = (): void => this.options.onChat?.(i);
+      let next = 0;
+      const social = person
+        ? talkHook(this.options.social, person, () => ({
+            person,
+            place: 'courtyard',
+            body: vendorBody(vendor),
+            // The party's own talk, and the party's friendship once a party.
+            extras: [{ id: 'party', group: 'talk', label: 'Some party!', run: () => {
+              chatted();
+              return { line: lines[next++ % lines.length]! };
+            } }],
+          }))
+        : undefined;
+      const vendor: PartyGuest = new PartyGuest(social ? () => {} : chatted, { viewer, lines, seed: guest.seed, look: randomLook(guest.seed + 900, 'shopper'), label: `${guest.name} · chat`, speaker: guest.name, focus: [0, 1.0, 1.2], social });
       return host.place(vendor, spot.at.clone(), spot.yaw);
     });
   }

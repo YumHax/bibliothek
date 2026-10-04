@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { bareMetal } from '../metals';
 import type { Updatable } from '@/core/Engine';
-import { createCanvas, seededRandom, toTexture } from '@/covers/generated/canvasUtils';
+import { createCanvas, toTexture } from '@/covers/generated/canvasUtils';
 import type { Furniture } from '../../Furniture';
 import type { DayNight } from '../../props/DayNight';
 import type { PaintedFront } from '../Buildings';
@@ -11,6 +11,7 @@ import { snowCovered } from '../snowCover';
 import { FacadeFrame } from './facadeFrame';
 import { INSET } from '../../props/joinery';
 import { frontVariant, hasShopfront, pilasterWidth } from '../shopfronts/shopfrontPlan';
+import { lcg } from '@/random';
 
 /** The shutter's box under the fascia (bottom, top, depth out of the wall), the curtain's plane, its foot. */
 const BOX = { bottom: 2.8, top: 2.93, depth: 0.1 };
@@ -57,7 +58,7 @@ export class Shutters extends THREE.Group implements Furniture, Updatable {
   constructor(fronts: readonly PaintedFront[], private readonly dayNight: DayNight, private readonly onRoll?: (at: Vec2) => void) {
     super();
     this.name = 'Shutters';
-    const random = seededRandom(4141);
+    const random = lcg(4141);
     const boxes: THREE.BufferGeometry[] = [];
     const position: number[] = [];
     const normal: number[] = [];
@@ -199,7 +200,7 @@ function shutterTexture(): THREE.CanvasTexture {
   const w = 512;
   const h = 256;
   const [canvas, ctx] = createCanvas(w, h);
-  const random = seededRandom(515);
+  const random = lcg(515);
   for (const half of [0, 1]) {
     const x0 = half * (w / 2);
     ctx.fillStyle = '#9a9ea2';

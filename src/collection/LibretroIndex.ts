@@ -1,6 +1,7 @@
 import type { PlatformId } from '@/catalog/types';
 import { PLATFORM_LIST, getPlatform } from '@/catalog/platforms';
 import { parseNoIntroName } from '@/catalog/nointro';
+import { searchKey } from '@/text/strings';
 
 /** One box art known to libretro-thumbnails for a platform. */
 export interface IndexEntry {
@@ -73,16 +74,12 @@ export class LibretroIndex {
 }
 
 function tokenize(text: string): string[] {
-  return normalise(text).split(' ').filter(Boolean);
-}
-
-function normalise(text: string): string {
-  return text.normalize('NFKD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  return searchKey(text).split(' ').filter(Boolean);
 }
 
 /** 0 when a query token is missing; otherwise higher is better. */
 function scoreEntry(entry: IndexEntry, tokens: string[], query: string): number {
-  const title = normalise(entry.title);
+  const title = searchKey(entry.title);
   const words = title.split(' ');
   let score = 0;
   for (const token of tokens) {
@@ -91,7 +88,7 @@ function scoreEntry(entry: IndexEntry, tokens: string[], query: string): number 
     else if (title.includes(token)) score += 1;
     else return 0;
   }
-  const q = normalise(query);
+  const q = searchKey(query);
   if (title === q) score += 6;
   else if (title.startsWith(q)) score += 1.5;
   score -= Math.min(1, Math.max(0, words.length - tokens.length) * 0.2); // shorter titles first

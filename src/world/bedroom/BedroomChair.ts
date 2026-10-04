@@ -4,10 +4,11 @@ import type { Interactable } from '@/interaction/Interactable';
 import type { PlayerState, SessionActions } from '@/game/SessionActions';
 import { FACING_OUT, cylinderMesh, eyePoseAt, invisibleHitbox } from '../meshUtils';
 import { part } from '../props/Prop';
-import { seededRandom } from '@/covers/generated/canvasUtils';
 import { fabric } from '@/world/materials/finishes';
 import { timber, cloth as paletteCloth } from '@/world/materials/palette';
 import { HoverGlint } from '../props/hoverGlint';
+import { shuffled } from '@/random';
+import { dayLcg } from '@/time/daily';
 
 interface BedroomChairOptions {
   /** Colour of the shirt thrown over the back; `null` for a bare chair. */
@@ -112,10 +113,10 @@ export class BedroomChair extends THREE.Group implements Furniture, Interactable
   setDay(day: number): void {
     if (day === this.day) return;
     this.day = day;
-    const random = seededRandom(day * 7919 + 17);
+    const random = dayLcg(day * 7919 + 17);
     const count = PILE_SIZES[Math.floor(random() * PILE_SIZES.length)]!;
     // Which garments, in which order: a shuffle of the list, the first `count` shown.
-    const order = this.garments.map((_, i) => i).sort(() => random() - 0.5);
+    const order = shuffled(random, this.garments.map((_, i) => i));
     const shown = new Set(order.slice(0, count));
     let y = this.pileBase;
     this.garments.forEach((garment, i) => {

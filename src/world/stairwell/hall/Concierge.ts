@@ -11,7 +11,12 @@ import { paint } from '../../materials/palette';
 import { createCanvas, toTexture } from '@/graphics/canvas';
 import { StairWalker, type StairWalkerOptions } from '../StairWalker';
 import type { Lodge, LodgeSign } from './Lodge';
-import { STAIRWELL_PLAN as plan, landingY } from '../stairwellPlan';
+import { STAIRWELL_PLAN as plan } from '../stairwellPlan';
+import { landingY } from '@/world/measures/building';
+import { rememberLook } from '@/social/lookBook';
+import { nudge } from '@/social/standing';
+import type { SocialServices, TalkExtra, TalkSession } from '@/social/talk';
+import { bodyOf, talkHook } from '../../people/socialHook';
 
 const who = plan.concierge;
 
@@ -43,13 +48,21 @@ function conciergeLook(): PersonLook {
 /** Where she is now: behind her glass, mopping a landing, or out of sight (her lunch, the night). */
 type Whereabouts = { at: 'lodge' } | { at: 'mop'; k: number } | { at: 'away'; sign: LodgeSign };
 
-interface ConciergeOptions extends Omit<StairWalkerOptions, 'look' | 'seed' | 'label' | 'speaker'> {
+interface ConciergeOptions extends Omit<StairWalkerOptions, 'look' | 'seed' | 'label' | 'speaker' | 'social'> {
   hours: () => number;
   day: () => number;
   lodge: Lodge;
   /** A line of the day besides her own (the last meeting's gossip), if any. */
   extraLines?: () => string | null;
+  /** The people the player talks to (docs/social.md): a click on her opens the conversation, her errand and box among its entries. */
+  people?: SocialServices;
 }
+
+/** Her person in the social layer (`social/people/building`). */
+const PERSON = 'pereira';
+/** A favour done for her (the timer buttons) and a tip in her box, as warmth and trust. */
+const ERRAND_THANKS = { warmth: 8, trust: 6 };
+const TIP_THANKS = { warmth: 4, trust: 1 };
 
 /** The concierge as a person: a stair walker whose click is her conversation. */
 class ConciergeWalker extends StairWalker {
@@ -85,8 +98,11 @@ export class Concierge extends Prop implements Updatable, OccupancyAware {
   constructor(private readonly options: ConciergeOptions) {
     super();
     this.name = 'Concierge';
-    this.walker = new ConciergeWalker({ ...options, seed: who.seed, look: conciergeLook(), speaker: who.name, label: `${who.name}, the concierge · chat`, lines: who.lines, speed: 0.6 });
-    this.walker.talkTo = (session) => this.talk(session);
+    const look = conciergeLook();
+    rememberLook(PERSON, look);
+    const social = talkHook(options.people, PERSON, (session) => this.conversation(session));
+    this.walker = new ConciergeWalker({ ...options, seed: who.seed, look, speaker: who.name, label: `${who.name}, the concierge · chat`, lines: who.lines, speed: 0.6, social });
+    if (!social) this.walker.talkTo = (session) => this.talk(session);
     this.buildMop();
     this.add(this.mop);
     this.mop.visible = false;
@@ -240,12 +256,86 @@ export class Concierge extends Prop implements Updatable, OccupancyAware {
     w.speak(lines[this.nextLine++ % lines.length]!);
   }
 
-  private handOverKey(session: SessionActions, line: string): void {
+  /** Hands the cellar key over with `line` (said by her unless `quiet`: the conversation says it itself). */
+  private handOverKey(session: SessionActions, line: string, quiet = false): void {
     const state = conciergeState();
     state.errand = 'done';
     saveConcierge();
-    this.walker.speak(line);
+    if (!quiet) this.walker.speak(line);
     if (giveKey('cellar')) session.reward({ title: 'The cellar key', detail: 'Cellar No 5: the door at the foot of the stairs, in the hall.' });
+  }
+
+  /**
+   * Talking to her (docs/social.md): her body answers; her errand for the cellar key, the answer to it, the
+   * Christmas box and the building's news are entries of the conversation.
+   */
+  private conversation(session: SessionActions): TalkSession {
+    const state = conciergeState();
+    if (!state.met) {
+      state.met = true;
+      saveConcierge();
+    }
+    const extras: TalkExtra[] = [];
+    if (!hasKey('cellar')) {
+      if (state.tips > 0 || state.errand === 'tried') {
+        const tried = state.errand === 'tried';
+        extras.push({
+          id: 'key',
+          group: 'ask',
+          label: tried ? 'The timer buttons: it’s the 3rd floor’s that sticks' : 'Ask for the cellar key',
+          run: () => {
+            this.handOverKey(session, tried ? who.given : who.tipKey, true);
+            if (tried) nudge(PERSON, { ...ERRAND_THANKS, day: this.options.day(), why: 'you did her errand', memory: 'you tried the timer buttons for me', reason: 'errand' });
+            return { line: tried ? who.given : who.tipKey };
+          },
+        });
+      } else if (state.errand === 'none') {
+        extras.push({
+          id: 'key',
+          group: 'ask',
+          label: 'Ask for the cellar key',
+          run: () => {
+            state.errand = 'asked';
+            state.pressed = [];
+            saveConcierge();
+            session.tip('Try the timer button on the landings of the 1st to the 4th floor, then tell the concierge which one sticks.', {
+              id: 'concierge-errand',
+              head: 'To do',
+              until: () => conciergeState().errand !== 'asked',
+            });
+            return { line: who.askKey };
+          },
+        });
+      } else if (state.errand === 'asked') {
+        extras.push({
+          id: 'key',
+          group: 'ask',
+          label: 'About the timer buttons…',
+          run: () => {
+            const left = who.errandFloors.filter((k) => !state.pressed.includes(k));
+            if (left.length < who.errandFloors.length) session.react(`Still to try: ${left.map((k) => plan.floorNames[k]).join(', ')}`);
+            return { line: who.stillAsking };
+          },
+        });
+      }
+    }
+    extras.push({
+      id: 'news',
+      group: 'talk',
+      label: 'Any news in the building?',
+      run: () => {
+        const extra = this.options.extraLines?.();
+        const lines = [...who.lines, who.after, ...(extra ? [extra] : [])];
+        return { line: lines[this.nextLine++ % lines.length]! };
+      },
+    });
+    extras.push({
+      id: 'tip',
+      group: 'give',
+      label: `Coins in the Christmas box (${plan.lodge.tipBox.price})`,
+      run: () => session.pay({ price: plan.lodge.tipBox.price, paid: () => this.tipped(session) }),
+    });
+    return { person: PERSON, place: 'stairs', body: bodyOf(this.walker), extras };
   }
 
   /**
@@ -266,8 +356,9 @@ export class Concierge extends Prop implements Updatable, OccupancyAware {
   tipped(session: SessionActions): string {
     const state = conciergeState();
     state.tips += plan.lodge.tipBox.price;
-    state.tipDay = this.options.day();
     saveConcierge();
+    // Her box is a gift to her (once a day it warms her; the rest of the day it is only thanked).
+    nudge(PERSON, { ...TIP_THANKS, day: this.options.day(), reason: 'tip', why: 'thanks for the Christmas box' });
     const here = this.walker.isPresent && this.where.at === 'lodge';
     if (!here) return 'The coins clink into the tin. She will find them.';
     // She is at her window: a tip is as good as a hello (else the coins bought nothing but a thank-you).

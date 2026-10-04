@@ -1,6 +1,8 @@
 import { gameDayOf, type JournalDay, type JournalEntry } from '@/journal/Journal';
-import { escapeHtml } from './html';
-import { ModalPanel } from './ModalPanel';
+import { CardPanel, type PanelAction } from './panel/CardPanel';
+import { html, type Html } from './panel/html';
+import { formatCount, formatNumber } from '@/text/count';
+import { formatTickets } from '@/text/money';
 import './JournalPanel.css';
 
 /** What the panel reads: the journal's pages. `Journal` fits. */
@@ -20,6 +22,8 @@ interface JournalPanelOptions {
   file?: () => { title: string; clues: readonly string[]; next?: string } | null;
   /** More trails, each its own page after `file`'s (the building's sixth floor, `building/hunt`). */
   files?: readonly (() => { title: string; clues: readonly string[]; next?: string } | null)[];
+  /** Opens the People book (docs/social.md): a button by the book's Close. */
+  people?: () => void;
 }
 
 /** Older days listed under today's page. */
@@ -37,6 +41,7 @@ const BULLETS: Record<string, string> = {
   home: '⌂',
   story: '✎',
   hunt: '⌕',
+  social: '♥',
 };
 
 /**
@@ -45,85 +50,81 @@ const BULLETS: Record<string, string> = {
  * then the days before, each folded to a line until opened. A `ModalLike` the Session opens through
  * `SessionActions.openPanel`; it repaints on every open (the journal changes while it is shut).
  */
-export class JournalPanel extends ModalPanel {
-  private readonly book: HTMLElement;
-
+export class JournalPanel extends CardPanel {
   constructor(container: HTMLElement, private readonly journal: JournalLike, private readonly options: JournalPanelOptions = {}) {
-    super(container, { className: 'ui-modal--centre journal-panel' });
-    this.root.innerHTML = '<article class="journal-panel__book" role="dialog" aria-modal="true" aria-label="Journal"></article>';
-    this.book = this.root.querySelector('.journal-panel__book')!;
-    this.root.addEventListener('click', (e) => {
-      const target = e.target as HTMLElement;
-      if (target === this.root || target.closest('button[data-action="close"]')) this.close();
-    });
+    super(container, { className: 'journal-panel', cardClass: 'journal-panel__book', title: 'Journal', dismiss: 'Close the book', dismissAutofocus: true, header: false, buttonClass: '' });
   }
 
-  protected override onOpened(): void {
+  protected render(): Html {
     const today = this.journal.today;
     const past = this.journal.history.filter((d) => d.day !== today.day).slice(0, PAST_DAYS);
-    this.book.innerHTML = `
-      <header>
+    return html`<header>
         <h2>Journal</h2>
-        <p class="journal-panel__date">${escapeHtml(longDate(today.day))}</p>
+        <p class="journal-panel__date">${longDate(today.day)}</p>
       </header>
       ${this.totals(today)}
-      ${today.entries.length ? `<ul class="journal-panel__lines">${today.entries.map(line).join('')}</ul>` : '<p class="journal-panel__empty">Nothing written yet today.</p>'}
+      ${today.entries.length ? html`<ul class="journal-panel__lines">${today.entries.map(line)}</ul>` : html`<p class="journal-panel__empty">Nothing written yet today.</p>`}
       ${this.ahead()}
-      ${[this.options.file, ...(this.options.files ?? [])].map((f) => this.file(f?.() ?? null)).join('')}
-      ${past.length ? `<h3>Before</h3>${past.map((d) => this.pastDay(d)).join('')}` : ''}
-      <footer><button type="button" data-action="close" data-autofocus aria-label="Close">Close the book</button></footer>`;
+      ${[this.options.file, ...(this.options.files ?? [])].map((f) => this.file(f?.() ?? null))}
+      ${past.length ? html`<h3>Before</h3>${past.map((d) => this.pastDay(d))}` : ''}`;
+  }
+
+  protected override actions(): PanelAction[] {
+    return this.options.people ? [{ action: 'people', label: 'People ›' }] : [];
+  }
+
+  protected override onAction(action: string): void {
+    if (action === 'people') this.options.people?.();
   }
 
   /** The day's sums, left out when there is nothing to add up. */
-  private totals(day: JournalDay): string {
+  private totals(day: JournalDay): Html | '' {
     const t = day.totals;
     const bits = [
-      t.coinsIn || t.coinsOut ? `Coins <b>+${t.coinsIn}</b> / <b>−${t.coinsOut}</b>` : '',
-      t.ticketsIn || t.ticketsOut ? `Tickets <b>+${t.ticketsIn}</b> / <b>−${t.ticketsOut}</b>` : '',
-      t.gamesIn || t.gamesOut ? `Games <b>+${t.gamesIn}</b> / <b>−${t.gamesOut}</b>` : '',
-    ].filter(Boolean);
-    return bits.length ? `<p class="journal-panel__totals">${bits.join(' · ')}</p>` : '';
+      t.coinsIn || t.coinsOut ? html`Coins <b>+${t.coinsIn}</b> / <b>−${t.coinsOut}</b>` : null,
+      t.ticketsIn || t.ticketsOut ? html`Tickets <b>+${t.ticketsIn}</b> / <b>−${t.ticketsOut}</b>` : null,
+      t.gamesIn || t.gamesOut ? html`Games <b>+${t.gamesIn}</b> / <b>−${t.gamesOut}</b>` : null,
+    ].filter((b): b is Html => b !== null);
+    return bits.length ? html`<p class="journal-panel__totals">${bits.map((b, i) => html`${i ? ' · ' : ''}${b}`)}</p>` : '';
   }
 
   /** The challenge and what is coming, under today's lines. */
-  private ahead(): string {
+  private ahead(): Html | '' {
     const lines: string[] = [];
     const c = this.options.challenge?.();
     if (c) {
       const title = this.options.titleOf?.(c.gameId) ?? c.gameId.toUpperCase();
-      lines.push(c.done ? `Arcade challenge on ${title}: beaten ✓` : `Arcade challenge: ${c.target.toLocaleString('en-US')} on ${title}, for ${c.reward} bonus tickets`);
+      lines.push(c.done ? `Arcade challenge on ${title}: beaten ✓` : `Arcade challenge: ${formatNumber(c.target)} on ${title}, for ${c.reward} bonus tickets`);
     }
     lines.push(...(this.options.upcoming?.() ?? []));
     if (!lines.length) return '';
-    return `<h3>To do, to watch</h3><ul class="journal-panel__ahead">${lines.map((l) => `<li>${escapeHtml(l)}</li>`).join('')}</ul>`;
+    return html`<h3>To do, to watch</h3><ul class="journal-panel__ahead">${lines.map((l) => html`<li>${l}</li>`)}</ul>`;
   }
 
   /** A trail's page: what was found, in the player's own words, and where to look next. */
-  private file(file: { title: string; clues: readonly string[]; next?: string } | null): string {
+  private file(file: { title: string; clues: readonly string[]; next?: string } | null): Html | '' {
     if (!file) return '';
-    const clues = file.clues.map((c) => `<li>${escapeHtml(c)}</li>`).join('');
-    return `<h3>${escapeHtml(file.title)}</h3><ol class="journal-panel__ahead journal-panel__file">${clues}</ol>${file.next ? `<p class="journal-panel__empty">Next: ${escapeHtml(file.next)}</p>` : ''}`;
+    return html`<h3>${file.title}</h3><ol class="journal-panel__ahead journal-panel__file">${file.clues.map((c) => html`<li>${c}</li>`)}</ol>${file.next ? html`<p class="journal-panel__empty">Next: ${file.next}</p>` : ''}`;
   }
 
-  private pastDay(day: JournalDay): string {
+  private pastDay(day: JournalDay): Html {
     const t = day.totals;
     const summary = [
-      t.gamesIn ? `${t.gamesIn} game${t.gamesIn === 1 ? '' : 's'} in` : '',
+      t.gamesIn ? `${formatCount(t.gamesIn, 'game')} in` : '',
       t.gamesOut ? `${t.gamesOut} out` : '',
-      t.ticketsIn ? `${t.ticketsIn} tickets` : '',
-      !t.gamesIn && !t.gamesOut && !t.ticketsIn ? `${day.entries.length} line${day.entries.length === 1 ? '' : 's'}` : '',
+      t.ticketsIn ? `${formatTickets(t.ticketsIn)}` : '',
+      !t.gamesIn && !t.gamesOut && !t.ticketsIn ? `${formatCount(day.entries.length, 'line')}` : '',
     ].filter(Boolean).join(', ');
-    return `
-      <details class="journal-panel__day">
-        <summary data-nav tabindex="0">${escapeHtml(longDate(day.day))} <span>${escapeHtml(summary)}</span></summary>
+    return html`<details class="journal-panel__day">
+        <summary data-nav tabindex="0">${longDate(day.day)} <span>${summary}</span></summary>
         ${this.totals(day)}
-        ${day.entries.length ? `<ul class="journal-panel__lines">${day.entries.map(line).join('')}</ul>` : ''}
+        ${day.entries.length ? html`<ul class="journal-panel__lines">${day.entries.map(line)}</ul>` : ''}
       </details>`;
   }
 }
 
-function line(entry: JournalEntry): string {
-  return `<li data-kind="${escapeHtml(entry.kind)}"><span class="journal-panel__bullet">${BULLETS[entry.kind] ?? '·'}</span><time>${escapeHtml(entry.at)}</time> ${escapeHtml(entry.text)}</li>`;
+function line(entry: JournalEntry): Html {
+  return html`<li data-kind="${entry.kind}"><span class="journal-panel__bullet">${BULLETS[entry.kind] ?? '·'}</span><time>${entry.at}</time> ${entry.text}</li>`;
 }
 
 /**

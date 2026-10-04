@@ -1,10 +1,11 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { createCanvas, seededRandom, toTexture, repeatTexture } from '@/covers/generated/canvasUtils';
+import { createCanvas, toTexture, repeatTexture } from '@/covers/generated/canvasUtils';
 import { Prop } from '../props/Prop';
 import { PROUD } from '../props/joinery';
 import { ATTIC_PLAN as plan, type AtticRect } from './atticPlan';
 import { paintOnce } from '../materials/paintedTiles';
+import { lcg } from '@/random';
 
 type Finish = 'plaster' | 'ceiling' | 'floor' | 'boards' | 'wood';
 
@@ -241,7 +242,7 @@ export class AtticShell extends Prop {
 function tometteTexture(): THREE.CanvasTexture {
   const px = 512;
   const [canvas, ctx] = createCanvas(px, px);
-  const random = seededRandom(606);
+  const random = lcg(606);
   ctx.fillStyle = '#5a3a2c';
   ctx.fillRect(0, 0, px, px);
   // Hexagons 16 cm across the flats: 6.25 a metre, laid in offset rows.
@@ -280,7 +281,7 @@ function tometteTexture(): THREE.CanvasTexture {
 function boardsTexture(): THREE.CanvasTexture {
   const px = 512;
   const [canvas, ctx] = createCanvas(px, px);
-  const random = seededRandom(707);
+  const random = lcg(707);
   const board = px / 5;
   for (let i = 0; i < 5; i++) {
     const tone = 0.8 + random() * 0.3;

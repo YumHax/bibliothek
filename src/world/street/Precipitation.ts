@@ -1,14 +1,21 @@
 import * as THREE from 'three';
 import type { Updatable } from '@/core/Engine';
-import { seededRandom } from '@/covers/generated/canvasUtils';
 import type { Furniture } from '../Furniture';
 import type { DayNight } from '../props/DayNight';
-import { KERB_HEIGHT } from './streetPlan';
+import { KERB_HEIGHT } from '@/world/measures/street';
 import { roadGlsl } from './relief/ground';
 import { SINE_HASH } from '@/graphics/glslNoise';
 import { RENDER_ORDER } from '../surface/layers';
 import { POINT_SCALE, scalesPoints } from '../particles/pointScale';
 import { overKeepingAlpha } from '@/world/materials/blend';
+import { lcg } from '@/random';
+import RAIN_FRAGMENT from './PrecipitationRain.frag.glsl?raw';
+import SNOW_FRAGMENT from './PrecipitationSnow.frag.glsl?raw';
+import SPLASH_FRAGMENT from './PrecipitationSplash.frag.glsl?raw';
+import precipitationRainVert from './PrecipitationRain.vert.glsl?raw';
+import precipitationSnowVert from './PrecipitationSnow.vert.glsl?raw';
+import precipitationSplashVert from './PrecipitationSplash.vert.glsl?raw';
+import { assemble } from '@/graphics/glslAssemble';
 
 /** The box of air around the eye the drops and flakes fill (metres), and how many there can be at most. */
 const BOX = new THREE.Vector3(34, 16, 34);
@@ -27,7 +34,8 @@ const PETAL_SHARE = 0.35;
  * Both shaders place every particle in world space from its seed and the time, wrapped into the
  * box centred on the camera, so the rain stands still while the player walks through it and no
  * vertex is ever touched on the CPU. A particle whose threshold is above the current amount is
- * thrown out of the clip volume. No backtick in these strings.
+ * thrown out of the clip volume. The programs are the `Precipitation*.glsl` files beside this one; `SHELTER` below is
+ * the chunk `assemble()` writes into each (a template literal: no backtick in it).
  */
 /**
  * At most this many shelters (boxes nothing falls into) in the shaders at once: of all the street's,
@@ -51,67 +59,9 @@ bool sheltered(vec3 p) {
 }
 `;
 
-const RAIN_VERTEX = /* glsl */ `
-${SHELTER}
-attribute vec2 extra;
-uniform float time;
-uniform float amount;
-uniform vec3 box;
-uniform vec3 velocity;
-uniform float streak;
-varying float vFade;
-void main() {
-  vec3 p = position * box + velocity * time;
-  vec3 origin = cameraPosition - box * 0.5;
-  vec3 w = origin + mod(p - origin, box);
-  w -= normalize(velocity) * streak * extra.x;
-  vFade = 1.0 - extra.x * 0.8;
-  gl_Position = projectionMatrix * viewMatrix * vec4(w, 1.0);
-  if (extra.y > amount || sheltered(w)) gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
-}
-`;
+const RAIN_VERTEX = assemble(precipitationRainVert, { chunks: { shelter: SHELTER } });
 
-const RAIN_FRAGMENT = /* glsl */ `
-uniform vec3 color;
-uniform float opacity;
-varying float vFade;
-void main() {
-  gl_FragColor = vec4(color, opacity * vFade);
-}
-`;
-
-const SNOW_VERTEX = /* glsl */ `
-${SHELTER}
-attribute vec2 extra;
-uniform float time;
-uniform float amount;
-uniform vec3 box;
-uniform vec3 velocity;
-uniform float size;
-uniform float pointScale;
-void main() {
-  vec3 p = position * box + velocity * time;
-  p.x += sin(time * 0.9 + position.y * 40.0) * 0.6;
-  p.z += cos(time * 0.7 + position.x * 40.0) * 0.6;
-  vec3 origin = cameraPosition - box * 0.5;
-  vec3 w = origin + mod(p - origin, box);
-  vec4 view = viewMatrix * vec4(w, 1.0);
-  gl_Position = projectionMatrix * view;
-  gl_PointSize = size * pointScale * (0.6 + 0.8 * extra.x) / max(-view.z, 0.5);
-  if (extra.y > amount || sheltered(w)) gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
-}
-`;
-
-const SNOW_FRAGMENT = /* glsl */ `
-uniform vec3 color;
-uniform float opacity;
-void main() {
-  vec2 c = gl_PointCoord - 0.5;
-  float d = dot(c, c);
-  if (d > 0.25) discard;
-  gl_FragColor = vec4(color, opacity * (1.0 - d * 3.0));
-}
-`;
+const SNOW_VERTEX = assemble(precipitationSnowVert, { chunks: { shelter: SHELTER } });
 
 /*
  * A splash: each point is a ring on the ground that grows and fades over `period`, then turns up
@@ -120,53 +70,7 @@ void main() {
  * in zone-local metres: `origin` is the zone's world position). The ring is squashed by the view's
  * slant so it lies on the ground.
  */
-const SPLASH_VERTEX = /* glsl */ `
-${SHELTER}
-attribute vec2 extra;
-uniform float time;
-uniform float amount;
-uniform float box;
-uniform float period;
-uniform float size;
-uniform float pointScale;
-uniform vec3 origin;
-uniform float roadY;
-varying float vAge;
-varying float vSquash;
-${SINE_HASH}
-${roadGlsl()}
-void main() {
-  float phase = time / period + extra.x;
-  float cycle = floor(phase);
-  vAge = fract(phase);
-  vec2 seed = position.xz + vec2(sineHash(cycle + extra.x * 91.0), sineHash(cycle * 1.7 + extra.x * 57.0));
-  vec2 corner = cameraPosition.xz - vec2(box * 0.5);
-  vec2 w = corner + mod(seed * box - corner, vec2(box));
-  vec2 local = w - origin.xz;
-  float y = origin.y + (onRoad(local) ? roadY : 0.0) + 0.01;
-  vec4 view = viewMatrix * vec4(w.x, y, w.y, 1.0);
-  gl_Position = projectionMatrix * view;
-  vec3 toEye = normalize(cameraPosition - vec3(w.x, y, w.y));
-  vSquash = max(abs(toEye.y), 0.12);
-  gl_PointSize = size * pointScale / max(-view.z, 0.5);
-  if (extra.y > amount || sheltered(vec3(w.x, y, w.y))) gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
-}
-`;
-
-const SPLASH_FRAGMENT = /* glsl */ `
-uniform vec3 color;
-uniform float opacity;
-varying float vAge;
-varying float vSquash;
-void main() {
-  vec2 c = (gl_PointCoord - 0.5) * 2.0;
-  c.y /= vSquash;
-  float r = length(c);
-  float ring = 1.0 - smoothstep(0.0, 0.12, abs(r - (0.2 + 0.75 * vAge)));
-  if (ring <= 0.0 || r > 1.0) discard;
-  gl_FragColor = vec4(color, opacity * ring * (1.0 - vAge));
-}
-`;
+const SPLASH_VERTEX = assemble(precipitationSplashVert, { chunks: { roadGlsl: roadGlsl(), sine_hash: SINE_HASH, shelter: SHELTER } });
 
 /** Blends over the scene but keeps the canvas alpha (the video cut-out rule, docs/graphics.md). */
 function overlay(material: THREE.ShaderMaterial): THREE.ShaderMaterial {
@@ -175,7 +79,7 @@ function overlay(material: THREE.ShaderMaterial): THREE.ShaderMaterial {
 }
 
 function particles(count: number, verticesEach: number, seed: number): THREE.BufferGeometry {
-  const random = seededRandom(seed);
+  const random = lcg(seed);
   const positions = new Float32Array(count * verticesEach * 3);
   const extra = new Float32Array(count * verticesEach * 2);
   for (let i = 0; i < count; i++) {

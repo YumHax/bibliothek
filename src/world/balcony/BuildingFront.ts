@@ -1,9 +1,10 @@
 import * as THREE from 'three';
-import { createCanvas, seededRandom, canvasTexture, toTexture } from '@/covers/generated/canvasUtils';
+import { createCanvas, canvasTexture, toTexture } from '@/covers/generated/canvasUtils';
 import type { SkyState } from '../props/DayNight';
 import { wakefulnessAt } from '@/time/wakefulness';
 import { Prop } from '../props/Prop';
 import { afterChunk, patchShader } from '../materials/shaderPatch';
+import { lcg } from '@/random';
 
 interface BuildingFrontOptions {
   /** Extent along the wall (local x) and from the street to the parapet (local y), metres. */
@@ -140,7 +141,7 @@ export class BuildingFront extends Prop {
 
   private paint(color: CanvasRenderingContext2D, rough: CanvasRenderingContext2D, W: number, H: number): void {
     const { x, street, top, storey, groundFloor, pitch, ourWindows, ours } = this.options;
-    const random = seededRandom(3303);
+    const random = lcg(3303);
     color.fillStyle = PLASTER;
     color.fillRect(0, 0, W, H);
     // Weathering: soft blotches, darker towards the street, streaks under the sills.

@@ -4,6 +4,7 @@
     "api/**/*.ts",
     "server/*Plugin.ts",
     "scripts/*.mjs",
+    "scripts/conventions/*.mjs",
     "src/headless/*.ts"
   ],
   "project": ["src/**/*.ts", "api/**/*.ts", "server/**/*.ts", "scripts/**/*.mjs"]

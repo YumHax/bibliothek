@@ -1,9 +1,12 @@
-import { seededRandom } from '@/covers/generated/canvasUtils';
 import { themeOf } from '@/economy/marketDays';
 import type { MarketNews } from '@/economy/marketEvents';
 import { flyerRumour } from '@/economy/rumours';
 import { ARCADE_GAMES, type ArcadeGameId } from '../arcade/games';
 import type { MailPiece } from '../props/MailDrop';
+import { shuffled } from '@/random';
+import { dayLcg } from '@/time/daily';
+import { formatNumber } from '@/text/count';
+import { formatCoins, formatTickets } from '@/text/money';
 
 /** What the flyers can advertise, read-only: today's arcade challenge, today's market stock (if drawn yet); tomorrow's market theme comes from the calendar. */
 interface MailSources {
@@ -36,7 +39,7 @@ const ONE = 0.75;
  * there is one; the rest is the neighbourhood's usual paper.
  */
 export function mailFor(day: number, sources: MailSources): MailPiece[] {
-  const random = seededRandom(day * 7349 + 13);
+  const random = dayLcg(day * 7349 + 13);
   const roll = random();
   const rumour = rumourFlyer(sources);
   // A story's letter comes first, whatever else the day brings (it is asked once: the story moves on as it is posted).
@@ -45,7 +48,7 @@ export function mailFor(day: number, sources: MailSources): MailPiece[] {
   const count = Math.max(letter ? 1 : 0, rumour ? 1 : 0, roll < NONE ? 0 : roll < ONE ? 1 : 2);
   if (!count) return [];
   const topical = [letter, rumour, challengeFlyer(sources), tomorrowFlyer(day), dealFlyer(sources, random)].filter((p): p is MailPiece => p !== null);
-  const everyday = [...EVERYDAY].sort(() => random() - 0.5);
+  const everyday = shuffled(random, EVERYDAY);
   return [...topical, ...everyday].slice(0, count).map((piece, i) => ({ ...piece, seed: day * 3 + i }));
 }
 
@@ -53,7 +56,7 @@ function challengeFlyer({ arcadeDaily }: MailSources): MailPiece | null {
   const challenge = arcadeDaily?.challenge();
   if (!challenge || challenge.done) return null;
   const game = ARCADE_GAMES[challenge.gameId as ArcadeGameId]?.({}).title ?? challenge.gameId.toUpperCase();
-  return { title: 'DAILY CHALLENGE', lines: [game, `Score ${challenge.target.toLocaleString('en')}`, `+${challenge.reward} tickets at the arcade`], accent: 0x7a2e8f };
+  return { title: 'DAILY CHALLENGE', lines: [game, `Score ${formatNumber(challenge.target)}`, `+${formatTickets(challenge.reward)} at the arcade`], accent: 0x7a2e8f };
 }
 
 /**
@@ -76,5 +79,5 @@ function dealFlyer({ market }: MailSources, random: () => number): MailPiece | n
   const stock = market?.peekToday()?.filter((item) => item.priced && item.source !== 'bin');
   if (!stock?.length) return null;
   const item = stock[Math.floor(random() * stock.length)]!;
-  return { title: 'FLEA MARKET', lines: ['Spotted on a stall today:', item.game.title, `${item.price} coins, while it lasts`], accent: 0xc8443a };
+  return { title: 'FLEA MARKET', lines: ['Spotted on a stall today:', item.game.title, `${formatCoins(item.price)}, while it lasts`], accent: 0xc8443a };
 }

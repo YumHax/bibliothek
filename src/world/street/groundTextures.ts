@@ -1,6 +1,7 @@
 import * as THREE from 'three';
-import { canvasTexture, createCanvas, seededRandom } from '@/covers/generated/canvasUtils';
+import { canvasTexture, createCanvas } from '@/covers/generated/canvasUtils';
 import { QUALITY } from '@/graphics/quality';
+import { lcg } from '@/random';
 
 /**
  * A tiling texture and how many metres one tile covers; the road's and the pavement's also carry a
@@ -49,7 +50,7 @@ export function asphaltTile(anisotropy: number): Tile {
   const [canvas, ctx] = createCanvas(size, size);
   const [bumpCanvas, bump] = createCanvas(size, size);
   const [roughCanvas, rough] = createCanvas(size, size);
-  const random = seededRandom(4242);
+  const random = lcg(4242);
   ctx.fillStyle = '#4a4b4d';
   ctx.fillRect(0, 0, size, size);
   bump.fillStyle = grey(128);
@@ -121,7 +122,7 @@ export function pavingTile(anisotropy: number): Tile {
   const [canvas, ctx] = createCanvas(size, size);
   const [bumpCanvas, bump] = createCanvas(size, size);
   const [roughCanvas, rough] = createCanvas(size, size);
-  const random = seededRandom(1717);
+  const random = lcg(1717);
   ctx.fillStyle = '#6f6b64';
   ctx.fillRect(0, 0, size, size);
   bump.fillStyle = grey(60);
@@ -178,7 +179,7 @@ export function kerbTile(anisotropy: number): Tile {
   const [canvas, ctx] = createCanvas(size, size);
   const [bumpCanvas, bump] = createCanvas(size, size);
   const [roughCanvas, rough] = createCanvas(size, size);
-  const random = seededRandom(99);
+  const random = lcg(99);
   ctx.fillStyle = '#9c9a95';
   ctx.fillRect(0, 0, size, size);
   bump.fillStyle = grey(150);
@@ -221,7 +222,7 @@ export function settsTile(anisotropy: number): Tile {
   const [canvas, ctx] = createCanvas(size, size);
   const [bumpCanvas, bump] = createCanvas(size, size);
   const [roughCanvas, rough] = createCanvas(size, size);
-  const random = seededRandom(2828);
+  const random = lcg(2828);
   ctx.fillStyle = '#4c4842';
   ctx.fillRect(0, 0, size, size);
   bump.fillStyle = grey(40);
@@ -265,7 +266,7 @@ export function tactileTile(anisotropy: number): Tile {
   const size = 256;
   const [canvas, ctx] = createCanvas(size, size);
   const [bumpCanvas, bump] = createCanvas(size, size);
-  const random = seededRandom(616);
+  const random = lcg(616);
   ctx.fillStyle = '#c7a67a';
   ctx.fillRect(0, 0, size, size);
   bump.fillStyle = grey(70);
@@ -306,7 +307,7 @@ export function tactileTile(anisotropy: number): Tile {
 export function lawnTile(color: string, anisotropy: number): Tile {
   const size = 256;
   const [canvas, ctx] = createCanvas(size, size);
-  const random = seededRandom(515);
+  const random = lcg(515);
   ctx.fillStyle = color;
   ctx.fillRect(0, 0, size, size);
   for (let i = 0; i < 40; i++) {
@@ -323,7 +324,7 @@ export function lawnTile(color: string, anisotropy: number): Tile {
 export function gravelTile(anisotropy: number): Tile {
   const size = 256;
   const [canvas, ctx] = createCanvas(size, size);
-  const random = seededRandom(313);
+  const random = lcg(313);
   ctx.fillStyle = '#b5a88e';
   ctx.fillRect(0, 0, size, size);
   for (let i = 0; i < 30; i++) {

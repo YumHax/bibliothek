@@ -1,11 +1,10 @@
-import { seededRandom } from '@/covers/generated/canvasUtils';
 import { Polygon, Sheet, type Rng, sizePx, worldPoint } from './Sheet';
-import { between, pick } from './paint';
 import { FRONTAGE, OUR_LINE } from './plan';
 import { LIGHT_STRINGS } from '@/world/city/frontage';
 import { CONIFER_STYLE, paintTree } from './Tree';
 import { currentHoliday } from '@/time/season';
 import { PARK_FIR } from '@/world/city/park';
+import { between, lcg, pick } from '@/random';
 
 /**
  * What the neighbourhood puts up for the holidays (`currentHoliday()`): at Christmas strings of
@@ -34,11 +33,11 @@ type Item = [x: number, z: number, draw: () => void];
  * The decorations draw from their own sequence, never the painters' shared one: dressing the view for
  * a holiday must not change a single building of it. Restarted by \`beginHoliday()\` before each paint.
  */
-let random: Rng = seededRandom(2412);
+let random: Rng = lcg(2412);
 
 /** Restarts the decorations' random sequence (called by \`paintView\` before it paints). */
 export function beginHoliday(): void {
-  random = seededRandom(2412);
+  random = lcg(2412);
 }
 
 /** Whether this lit window gets a pumpkin on its sill at Halloween (draws from the decorations' own sequence). */

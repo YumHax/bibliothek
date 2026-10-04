@@ -1,8 +1,9 @@
 import * as THREE from 'three';
 import type { Game } from '@/catalog/types';
 import { boxDimensionsOf, regionOf, type MediaRegion } from '@/catalog/media';
-import { createCanvas, drawImageCover, fitFontSize, hashString, roundRect, toTexture, FONT } from './canvasUtils';
+import { createCanvas, drawImageCover, fitFontSize, roundRect, toTexture, FONT } from './canvasUtils';
 import { css } from './palette';
+import { fnv1a } from '@/random';
 
 /** Pixels along the spine's length (its height on a portrait box, its width on a landscape one). */
 const LENGTH_PX = 1024;
@@ -129,7 +130,7 @@ const STYLES: Record<Game['platform'], Style> = {
     title(s, 0.16, 0.6, logoColour(s.accent, false), false);
     if (s.region === 'na') genesisEmblem(s, 0.66, 0.84);
     else outlined(s, 'MEGA DRIVE', 0.64, 0.96);
-    along(s, String(1000 + (hashString(s.game.id) % 600)), 0.9, 0.98, s.T * 0.14, '#cfcfcf', 'bold', FONT);
+    along(s, String(1000 + (fnv1a(s.game.id) % 600)), 0.9, 0.98, s.T * 0.14, '#cfcfcf', 'bold', FONT);
   },
   n64(s) {
     fill(s, css(vivid(s.accent)));
@@ -164,7 +165,7 @@ const STYLES: Record<Game['platform'], Style> = {
 };
 
 function paintSpine(ctx: CanvasRenderingContext2D, L: number, T: number, game: Game, accent: THREE.Color, cover: CanvasImageSource | null): void {
-  const pick = (hashString(game.id) % 1000) / 1000;
+  const pick = (fnv1a(game.id) % 1000) / 1000;
   STYLES[game.platform]({ ctx, L, T, game, accent, region: regionOf(game), cover, pick });
 }
 
@@ -412,7 +413,7 @@ function publisherOf(game: Game): string {
 function productCode(s: SpineCtx): string {
   const sony = /sony|scea|scee|sce/i.test(s.game.publisher ?? '');
   const zone = s.region === 'na' ? 'US' : s.region === 'jp' ? 'PS' : 'ES';
-  const n = hashString(s.game.id);
+  const n = fnv1a(s.game.id);
   return sony ? `SC${zone}-94${String(n % 1000).padStart(3, '0')}` : `SL${zone}-0${String(n % 1500).padStart(4, '0')}`;
 }
 
@@ -446,7 +447,7 @@ function vivid(c: THREE.Color): THREE.Color {
 function logoColour(c: THREE.Color, onLight: boolean): string {
   const hsl = { h: 0, s: 0, l: 0 };
   c.getHSL(hsl);
-  const hue = hsl.s < 0.25 ? [0.0, 0.07, 0.13][hashString(css(c)) % 3]! : hsl.h;
+  const hue = hsl.s < 0.25 ? [0.0, 0.07, 0.13][fnv1a(css(c)) % 3]! : hsl.h;
   return css(new THREE.Color().setHSL(hue, 0.85, onLight ? 0.32 : 0.56));
 }
 

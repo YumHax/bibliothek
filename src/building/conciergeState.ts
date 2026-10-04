@@ -14,15 +14,13 @@ interface ConciergeSaved {
   pressed: number[];
   /** Coins put in her Christmas box, all told. */
   tips: number;
-  /** The game day of the last tip (one a day is thanked). */
-  tipDay: number;
 }
 
 let store: PersistedStore<ConciergeSaved> | null = null;
 let state: ConciergeSaved | null = null;
 
 function fresh(): ConciergeSaved {
-  return { met: false, errand: 'none', pressed: [], tips: 0, tipDay: 0 };
+  return { met: false, errand: 'none', pressed: [], tips: 0 };
 }
 
 function readSaved(data: unknown): ConciergeSaved | null {

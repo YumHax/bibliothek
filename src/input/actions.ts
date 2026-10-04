@@ -142,6 +142,7 @@ export const ACTIONS = {
   nightMode: { codes: ['KeyN'], context: 'room', hint: 'night mode', rebind: 'Night mode' },
   callCat: { codes: ['KeyC'], context: 'room', hint: 'call the cat', pad: 'GamepadRS', rebind: 'Call the cat' },
   journal: { codes: ['KeyJ'], context: 'room', hint: 'open the journal: today, the days before', padHold: 'GamepadSelect', rebind: 'Journal' },
+  people: { codes: ['KeyI'], context: 'room', hint: 'open the People book: everyone you know, how you stand', rebind: 'People' },
   photoMode: { codes: ['KeyP'], context: 'room', hint: 'photo mode (again: leave it)', rebind: 'Photo mode' },
   tipBox: { codes: ['KeyQ'], context: 'room', hint: 'hold to tip the box looked at half out of its row and read it, at home (shares readStalls’s key)' },
   labelShelf: { codes: ['KeyK'], context: 'room', hint: 'print a label for the shelf edge looked at, or peel one off (the label maker, at home)' },

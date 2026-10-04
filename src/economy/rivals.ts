@@ -1,3 +1,4 @@
+import { fnv1a } from '@/random';
 /*
  * THE HALL OF FAME'S REGULARS: the made-up scores every table starts with, so a fresh board already
  * has names to beat. Five per game, set against the simulated plays of `npm run balance` (the fifth
@@ -66,8 +67,7 @@ export function scoreRules(gameId: string): number {
 /** The table a game starts with (a copy): rivals by name, deterministic per game. */
 export function rivalTable(gameId: string): ScoreEntry[] {
   const scores = RIVAL_SCORES[gameId] ?? [5000, 4000, 3000, 2000, 1000];
-  let h = 0;
-  for (let i = 0; i < gameId.length; i++) h = (h * 31 + gameId.charCodeAt(i)) >>> 0;
+  const h = fnv1a(gameId);
   return scores.map((score, i) => ({ name: REGULARS[(h + i * 5) % REGULARS.length]!, score }));
 }
 

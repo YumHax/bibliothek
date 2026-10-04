@@ -9,7 +9,8 @@ export { caseOf, mediaOf, regionOf, widestCaseOf, defaultCaseOf } from '@/catalo
 export { BOOTLEGS, isBootlegId } from '@/catalog/bootlegs';
 export { gameIdFor } from '@/catalog/nointro';
 export { KEYS, ROOT_PREFIX, CACHE_PREFIX, CORRUPT_PREFIX, PREFERENCE_KEYS } from '@/persistence/keys';
-export { WORLD_PLAN, FLAT } from '@/world/worldPlan';
+export { WORLD_PLAN } from '@/world/worldPlan';
+export { FLAT } from '@/world/zoneIds';
 export { DEFAULT_ROOM } from '@/world/roomPlan';
 export { ARCADE_GAMES } from '@/world/arcade/games';
 export * as pricing from '@/economy/pricing';

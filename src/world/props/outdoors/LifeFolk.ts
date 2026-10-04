@@ -1,13 +1,14 @@
 import * as THREE from 'three';
 import { type Rng, SCENE_WIDTH } from './Sheet';
-import { between, pick } from './paint';
 import { FRONTAGE } from './plan';
-import { FLAT_IN_STREET, shopDoors } from '../../street/streetPlan';
+import { FLAT_IN_STREET } from '@/world/measures/street';
+import { shopDoors } from '@/world/city/facades';
 import { SHOP_HOURS } from '../../street/shops/shopHours';
 import { GROUND } from './Facades';
 import type { GoodsRect } from './Shopfront';
 import { type AtlasPens, type Cell, type LifeEnv, type LifeLayer, type Push, glowDot, hoursRamp, pushStanding } from './sprites';
 import { FIGURE_MARGIN, FIGURE_SCALE, FOLK_SHIRTS, HAIRS, type Look, SKINS, TROUSERS, figurePen } from './figures';
+import { between, pick } from '@/random';
 
 /** Pixels per metre of the figures painted here (the walkers' scale), and the feet margin in their cells. */
 const SCALE = FIGURE_SCALE;

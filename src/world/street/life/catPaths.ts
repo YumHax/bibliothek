@@ -1,4 +1,5 @@
-import { CORNER_BAY, FRONT, PARK_STREET, STREET_PLAN, type Vec2 } from '../streetPlan';
+import { STREET_PLAN, type Vec2 } from '../streetPlan';
+import { CORNER_BAY, FRONT, PARK_STREET } from '@/world/measures/street';
 
 /*
  * The stray cat's ways between his perches: along the pavements on a line clear of the lamp posts,

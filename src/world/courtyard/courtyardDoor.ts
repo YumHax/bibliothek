@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import type { Zone } from '../zone/Zone';
 import type { Today } from '@/time/Today';
 import { TravelDoor } from '../travel/TravelDoor';
-import { STAIRWELL_PLAN } from '../stairwell/stairwellPlan';
+import { STAIRWELL_PLAN } from '../stairwell/stairwellPlan'; // imports-ok: the door between the hall and the yard is the stairwell's; the yard hangs its own side
 import { pinSource } from '@/building/boardNotes';
 import { partyNotes } from '@/building/neighboursParty';
 

@@ -1,10 +1,15 @@
 import type { Game } from '@/catalog/types';
+import { inHours } from '@/time/clock';
+import { keptAway } from '@/time/schedule';
+import { BUSKER } from '../events/streetSchedules';
 import type { StockItem } from '@/economy/StockItem';
 import type { MarketDayTheme } from '@/economy/marketDays';
 import type { ScoreEntry } from '@/economy/rivals';
 import type { SkyState } from '../../props/DayNight';
 import { HEAVY_RAIN } from '../../weather/Weather';
 import { ARCADE_TITLES } from '../arcadeTitles';
+import { pick, random } from '@/random';
+import { formatNumber } from '@/text/count';
 
 interface StreetTalkOptions {
   /** The sky right now: the time, the weather. */
@@ -30,10 +35,6 @@ const ANY_TIME = [
 /** Said only while the busker plays (`STREET_PLAN.busker.hours`, by day and dry). */
 const BUSKER_LINES = ['The busker was here yesterday too. Same tune.', 'That busker only knows game music. Not that I mind.'];
 
-function pick<T>(items: readonly T[]): T {
-  return items[Math.floor(Math.random() * items.length)]!;
-}
-
 /**
  * Who is talking, for what they would say: a passer-by (the news of the street), someone in a hurry (a word over
  * the shoulder), a child, an old regular, someone interrupted on the phone, a reader on the bench, someone waiting
@@ -54,9 +55,9 @@ export function streetTalk(options: StreetTalkOptions): (role?: TalkRole) => str
   return (role = 'passer') => {
     const own = roleLines(role, options);
     // Their own lines mostly, the news of the street now and then; a passer-by has only the news.
-    const lines = !own.length ? candidates(options) : Math.random() < 0.7 ? own : [...own, ...candidates(options)];
+    const lines = !own.length ? candidates(options) : random() < 0.7 ? own : [...own, ...candidates(options)];
     const fresh = lines.filter((line) => line !== last);
-    last = pick(fresh.length ? fresh : lines);
+    last = pick(random, fresh.length ? fresh : lines);
     return `“${last}”`;
   };
 }
@@ -90,7 +91,7 @@ function roleLines(role: TalkRole, { sky, market }: StreetTalkOptions): string[]
     case 'queue': {
       const stock = market.peekToday();
       return stock?.length
-        ? [`They say there’s a ${pick(stock).game.title} in today.`, 'New stock day. I’m not missing it this time.', 'Don’t push in, I was here first!']
+        ? [`They say there’s a ${pick(random, stock).game.title} in today.`, 'New stock day. I’m not missing it this time.', 'Don’t push in, I was here first!']
         : ['New stock day. I’m not missing it this time.', 'Don’t push in, I was here first!', 'Is this the queue for RETRO GAMES?'];
     }
     case 'bakery':
@@ -130,19 +131,20 @@ function candidates({ sky, market, marketDay, games, scores }: StreetTalkOptions
     if (hit) lines.push(`Aren’t you the one looking for ${hit.game.title}? I saw one at the flea market this morning.`, `Word is there’s a ${hit.game.title} on a stall back there. Hurry.`);
     const gem = stock.find((item) => item.gem);
     if (gem) lines.push('Somebody said there’s a real find in the bargain bin today.');
-    const any = pick(stock);
+    const any = pick(random, stock);
     lines.push(`I nearly bought ${any.game.title} at the market. Maybe tomorrow.`);
   } else {
     lines.push('RETRO GAMES has fresh crates at the back, they say.');
   }
   // The arcade's tables.
   if (scores) {
-    const [id, title] = pick(ARCADE);
+    const [id, title] = pick(random, ARCADE);
     const top = scores.table(id)[0];
     if (top?.you) lines.push(`Was that you at the top of ${title}? My nephew is furious.`);
-    else if (top) lines.push(`${top.name} still holds ${title} at the arcade. ${top.score.toLocaleString('en')} points, can you believe it.`);
+    else if (top) lines.push(`${top.name} still holds ${title} at the arcade. ${formatNumber(top.score)} points, can you believe it.`);
   }
   lines.push(...ANY_TIME);
-  if (s.hours >= 9 && s.hours < 21.5 && s.rain < 0.3) lines.push(...BUSKER_LINES);
+  // Talk of the busker while they play, by the busker's own hours and weather (`events/streetSchedules`).
+  if (BUSKER.hours && inHours(s.hours, BUSKER.hours) && !keptAway(BUSKER, s)) lines.push(...BUSKER_LINES);
   return lines;
 }

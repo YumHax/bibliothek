@@ -22,6 +22,12 @@ import { DogBasket, Piano, Vectrex, paintedPoster } from './flatProps';
 import type { Vestibule } from './Vestibule';
 import { FRIENDSHIP_NUDGES, currentHost, hostKey, onHostChange } from './visits';
 import { NEIGHBOUR_FLAT_PLAN as plan, type Dressing, type NeighbourHost } from './neighbourFlatPlan';
+import { pick, random } from '@/random';
+import { personAtDoor } from '@/social/people';
+import { rememberLook } from '@/social/lookBook';
+import type { TalkExtra, TalkSession } from '@/social/talk';
+import type { PersonId } from '@/social/types';
+import { bodyOf, talkHook } from '../people/socialHook';
 
 /** Seconds a host keeps their eyes on the TV once a longplay they put on starts. */
 const WATCH_GAZE_S = 25;
@@ -62,7 +68,7 @@ export class FlatDressing extends THREE.Group implements Furniture, Updatable {
   private current: Dressed | null = null;
   private watchClock = 0;
 
-  constructor(private readonly zone: Zone, private readonly ctx: BuildContext, private readonly parts: FlatDressingParts) {
+  constructor(private readonly zone: Zone, private readonly ctx: Pick<BuildContext, 'building' | 'collection' | 'covers' | 'listener' | 'acoustics' | 'market' | 'social' | 'today'>, private readonly parts: FlatDressingParts) {
     super();
     this.name = 'FlatDressing';
     this.dress(currentHost());
@@ -157,13 +163,17 @@ export class FlatDressing extends THREE.Group implements Furniture, Updatable {
     const at = resolvePlacement(plan.room, plan.shelf.at);
     shelf.position.copy(at.position);
     shelf.rotation.y = at.rotationY;
+    const look = randomLook(host.seed + 900, 'shopper');
+    const person = personAtDoor(key);
+    if (person) rememberLook(person, look);
     walker = new HostWalker(host, this.ctx, {
       viewer: this.ctx.listener,
       seed: host.seed,
-      look: randomLook(host.seed + 900, 'shopper'),
+      look,
       label: `${host.who} · chat`,
       speaker: host.who,
       yields: false,
+      social: person ? talkHook(this.ctx.social, person, (session) => this.hostTalk(host, person, walker, session)) : undefined,
     });
     return { host, items, shelf, walker, favourite: null };
   }
@@ -196,11 +206,46 @@ export class FlatDressing extends THREE.Group implements Furniture, Updatable {
     await d.shelf.fill(games, 1);
   }
 
+  /**
+   * Talking with the host at home (docs/social.md): their body answers; their news (their lines), their swap, and
+   * their favourite game on their TV, watched together.
+   */
+  private hostTalk(host: NeighbourHost, person: PersonId, walker: HostWalker, session: SessionActions): TalkSession {
+    const key = hostKey(host);
+    const favourite = this.parts.favourite;
+    const extras: TalkExtra[] = [
+      { id: 'news', group: 'talk', label: 'What’s new?', run: () => ({ line: walker.newsLine() }) },
+      {
+        id: 'watch',
+        group: 'invite',
+        label: 'Watch their favourite together',
+        opensPanel: true,
+        disabled: () => (this.current?.favourite ? null : 'They are looking for it'),
+        run: () => favourite.activate(session),
+      },
+    ];
+    const offer = this.ctx.building?.trades?.offerAt(key);
+    const panel = this.ctx.building?.tradePanel;
+    if (offer && panel) {
+      extras.push({
+        id: 'swap',
+        group: 'trade',
+        label: `Swap: their ${offer.gives.title} for your ${offer.wants.title}`,
+        opensPanel: true,
+        run: () => {
+          panel.prepare(offer);
+          session.openPanel(panel);
+        },
+      });
+    }
+    return { person, place: 'theirFlat', body: bodyOf(walker), extras };
+  }
+
   /** The longplay of their favourite went on: they say something, look at the screen a while, it counts for the friendship. */
   watching(): void {
     const d = this.current;
     if (!d) return;
-    d.walker.speak(pick(d.host.watching));
+    d.walker.speak(pick(random, d.host.watching));
     d.walker.setFocus(this.zone.toWorld(this.parts.tvAt.clone()));
     this.watchClock = WATCH_GAZE_S;
     befriend(hostKey(d.host), FRIENDSHIP_NUDGES.watch, 'watch', this.ctx.today.gameDay);
@@ -214,12 +259,25 @@ export class FlatDressing extends THREE.Group implements Furniture, Updatable {
 class HostWalker extends Walker {
   private next = 0;
 
-  constructor(private readonly host: NeighbourHost, private readonly ctx: BuildContext, options: WalkerOptions) {
+  private readonly hasSocial: boolean;
+
+  constructor(private readonly host: NeighbourHost, private readonly ctx: Pick<BuildContext, 'building' | 'collection' | 'covers' | 'listener' | 'acoustics' | 'market' | 'social' | 'today'>, options: WalkerOptions) {
     super({ ...options, talk: () => this.line() });
     this.next = host.seed % host.lines.length;
+    this.hasSocial = !!options.social;
+  }
+
+  /** Their next line, in turn (the conversation's "What's new?"). */
+  newsLine(): string {
+    return this.line();
   }
 
   override activate(session: SessionActions): void {
+    // Someone to talk to (docs/social.md): the conversation has the swap, the news and the game among its entries.
+    if (this.hasSocial) {
+      super.activate(session);
+      return;
+    }
     const key = hostKey(this.host);
     befriend(key, FRIENDSHIP_NUDGES.visit, 'chat', this.ctx.today.gameDay);
     const offer = this.ctx.building?.trades?.offerAt(key);
@@ -289,6 +347,3 @@ class StaticPiece extends THREE.Group implements Furniture {
   }
 }
 
-function pick<T>(list: readonly T[]): T {
-  return list[Math.floor(Math.random() * list.length)]!;
-}

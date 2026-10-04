@@ -3,8 +3,9 @@ import { Prop, part } from '../../props/Prop';
 import { cylinderMesh } from '../../meshUtils';
 import { paint, standard } from '../../materials/palette';
 import { WALL, onSurface } from '../../surface/layers';
-import { createCanvas, seededRandom, toTexture } from '@/graphics/canvas';
+import { createCanvas, toTexture } from '@/graphics/canvas';
 import { HAND, setLines } from '../common/lettering';
+import { lcg } from '@/random';
 
 export interface TreatJarOptions {
   /** The label's words. */
@@ -24,7 +25,7 @@ export class TreatJar extends Prop {
   constructor(options: TreatJarOptions = {}) {
     super();
     this.name = 'TreatJar';
-    const random = seededRandom(options.seed ?? 19);
+    const random = lcg(options.seed ?? 19);
     // The biscuits: a heap filling the jar two thirds, a few loose ones on top.
     this.add(cylinderMesh(R - 0.006, H * 0.62, paint(0xc8904a, 0.95), { y: H * 0.31 + 0.005 }, { segments: 16 }));
     const biscuit = paint(0xd8a060, 0.9);

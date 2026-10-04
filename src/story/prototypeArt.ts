@@ -1,7 +1,8 @@
 import type { Game } from '@/catalog/types';
 import type { BoxArtUrls, CoverArtProvider } from '@/covers/CoverArtProvider';
-import { createCanvas, seededRandom } from '@/graphics/canvas';
+import { createCanvas } from '@/graphics/canvas';
 import { COMPOSER, PROTOTYPE_ID, STUDIO } from './prototype';
+import { lcg } from '@/random';
 
 /*
  * The prototype's look, painted here since no scan of it exists anywhere: a plain white mailer box
@@ -47,7 +48,7 @@ async function paint(): Promise<BoxArtUrls> {
 function board(ctx: CanvasRenderingContext2D, w: number, h: number, seed: number): void {
   ctx.fillStyle = '#ece8df';
   ctx.fillRect(0, 0, w, h);
-  const random = seededRandom(seed);
+  const random = lcg(seed);
   for (let i = 0; i < 900; i++) {
     ctx.fillStyle = `rgba(90, 80, 60, ${0.02 + random() * 0.05})`;
     ctx.fillRect(random() * w, random() * h, 1 + random() * 3, 1);

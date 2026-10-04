@@ -1,5 +1,5 @@
 import type { ArmAngles } from '../poses';
-import { smooth } from './springs';
+import { smooth } from '@/math/scalar';
 
 /*
  * Gestures: short keyframed moves, pose to pose, as an animator blocks them. A key sets, at a

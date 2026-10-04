@@ -1,5 +1,6 @@
 import { KEYS, PersistedStore, safeStorage } from '@/persistence';
 import type { ScoreTable, TableEntry } from '../arcade/scoreTable';
+import { makesTable, rankOf, withEntry } from '@/economy/scoreTable';
 
 /** Places on each game's table at home. */
 const PLACES = 5;
@@ -46,9 +47,7 @@ export class HomeScores implements ScoreTable {
   }
 
   qualifies(gameId: string, score: number): boolean {
-    if (score <= 0) return false;
-    const table = this.state.tables[gameId] ?? [];
-    return table.length < PLACES || score > table[table.length - 1]!.score;
+    return makesTable(this.state.tables[gameId] ?? [], score, PLACES);
   }
 
   submit(gameId: string, score: number, initials?: string): { best: boolean; rank: number | null } {
@@ -57,11 +56,12 @@ export class HomeScores implements ScoreTable {
     const best = score > (table[0]?.score ?? 0);
     if (!this.qualifies(gameId, score)) return { best, rank: null };
     const name = (initials ?? state.initials).slice(0, 3).toUpperCase() || 'YOU';
-    const next = [...table, { name, score }].sort((a, b) => b.score - a.score).slice(0, PLACES);
-    const rank = next.findIndex((e) => e.score === score && e.name === name);
+    const entry = { name, score };
+    const next = withEntry(table, entry, PLACES);
+    const rank = rankOf(next, entry);
     this.store.save({ tables: { ...state.tables, [gameId]: next }, initials: initials ? name : state.initials });
     for (const cb of this.listeners) cb();
-    return { best, rank: rank >= 0 ? rank : null };
+    return { best, rank };
   }
 
   subscribe(cb: () => void): () => void {

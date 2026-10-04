@@ -1,6 +1,7 @@
 import { Sheet, type Rng, azimuthOf, azimuthX, groundSquash, heightY, sizePx } from './Sheet';
-import { between, mixHex, pick } from './paint';
+import { mixHex } from './paint';
 import { currentSeason } from '@/time/season';
+import { between, pick, unitOf } from '@/random';
 
 interface TreeStyle {
   base: string;
@@ -69,7 +70,7 @@ export function paintTree(sheet: Sheet, random: Rng, tree: TreeShape): void {
   const cy = heightY(tree.height, d) + ry;
   // In the wind the crown sways, its top most (a few centimetres per metre of tree at full wind).
   const sway = Math.min(15, sizePx(SWAY_PER_METRE * tree.height, d));
-  const phase = fract(Math.sin(x * 12.9898 + z * 78.233) * 43758.5453);
+  const phase = unitOf(x * 100, z * 100);
   const crownTop = cy - ry * 1.15;
   sheet.begin(d);
   sheet.swaying(crownTop, groundY, sway, phase);
@@ -120,10 +121,6 @@ export function paintTree(sheet: Sheet, random: Rng, tree: TreeShape): void {
 
 /** How far a tree's top sways at full wind, per metre of its height. */
 const SWAY_PER_METRE = 0.035;
-
-function fract(v: number): number {
-  return v - Math.floor(v);
-}
 
 /**
  * A tree in the current season (see `season.ts`): fresh and sometimes in blossom in spring, turning

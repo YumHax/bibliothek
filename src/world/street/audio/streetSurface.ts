@@ -1,6 +1,6 @@
 import type * as THREE from 'three';
 import type { FootSurface } from '@/audio/footSurface';
-import { FRONT, PARK_STREET, SIDE_STREET } from '../streetPlan';
+import { FRONT, PARK_STREET, SIDE_STREET } from '@/world/measures/street';
 
 /**
  * What is underfoot at a zone-local point of the street (the same areas `StreetGround` lays):

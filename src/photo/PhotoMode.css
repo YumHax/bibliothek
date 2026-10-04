@@ -1,137 +1,141 @@
 /* Photo mode: the game's HUD out of the way, the guides and the card above the canvas. */
-body.photo-mode .crosshair,
-body.photo-mode .hover-label,
-body.photo-mode .game-panel,
-body.photo-mode .wallet-hud,
-body.photo-mode .speech-layer,
-body.photo-mode .subtitles,
-body.photo-mode .reaction,
-body.photo-mode .tip-board,
-body.photo-mode .reading-stage,
-body.photo-mode .reward-stage,
-body.photo-mode .touch-stick,
-body.photo-mode .touch-bar,
-body.photo-mode .touch-badge {
-  visibility: hidden;
-}
+@layer tokens, base, components, panels;
+@layer panels {
+  body.photo-mode .crosshair,
+  body.photo-mode .hover-label,
+  body.photo-mode .game-panel,
+  body.photo-mode .wallet-hud,
+  body.photo-mode .speech-layer,
+  body.photo-mode .subtitles,
+  body.photo-mode .reaction,
+  body.photo-mode .tip-board,
+  body.photo-mode .reading-stage,
+  body.photo-mode .reward-stage,
+  body.photo-mode .touch-stick,
+  body.photo-mode .touch-bar,
+  body.photo-mode .touch-badge {
+    visibility: hidden;
+  }
 
-.photo-guides,
-.photo-card,
-.photo-flash {
-  z-index: var(--z-hud);
-}
+  .photo-guides,
+  .photo-card,
+  .photo-flash {
+    z-index: var(--z-hud);
+  }
 
-.photo-guides {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-}
-/* Thirds: two lines each way. */
-.photo-guides[data-frame='thirds'] {
-  background:
-    linear-gradient(90deg, transparent calc(33.333% - 0.5px), rgba(255, 255, 255, 0.45) calc(33.333% - 0.5px), rgba(255, 255, 255, 0.45) calc(33.333% + 0.5px), transparent calc(33.333% + 0.5px)),
-    linear-gradient(90deg, transparent calc(66.666% - 0.5px), rgba(255, 255, 255, 0.45) calc(66.666% - 0.5px), rgba(255, 255, 255, 0.45) calc(66.666% + 0.5px), transparent calc(66.666% + 0.5px)),
-    linear-gradient(180deg, transparent calc(33.333% - 0.5px), rgba(255, 255, 255, 0.45) calc(33.333% - 0.5px), rgba(255, 255, 255, 0.45) calc(33.333% + 0.5px), transparent calc(33.333% + 0.5px)),
-    linear-gradient(180deg, transparent calc(66.666% - 0.5px), rgba(255, 255, 255, 0.45) calc(66.666% - 0.5px), rgba(255, 255, 255, 0.45) calc(66.666% + 0.5px), transparent calc(66.666% + 0.5px));
-}
-/* Letterbox and square: what falls outside the kept rectangle is shaded (a centred box with a huge shadow). */
-.photo-guides[data-frame='letterbox']::before,
-.photo-guides[data-frame='square']::before {
-  content: '';
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  translate: -50% -50%;
-  width: min(100vw, calc(100vh * var(--photo-aspect, 1)));
-  height: min(100vh, calc(100vw / var(--photo-aspect, 1)));
-  box-shadow: 0 0 0 100vmax rgba(0, 0, 0, 0.72);
-  outline: 1px solid rgba(255, 255, 255, 0.35);
-}
+  .photo-guides {
+    --guide: var(--tint-50);
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+  }
+  /* Thirds: two lines each way. */
+  .photo-guides[data-frame='thirds'] {
+    background:
+      linear-gradient(90deg, transparent calc(33.333% - 0.5px), var(--guide) calc(33.333% - 0.5px), var(--guide) calc(33.333% + 0.5px), transparent calc(33.333% + 0.5px)),
+      linear-gradient(90deg, transparent calc(66.666% - 0.5px), var(--guide) calc(66.666% - 0.5px), var(--guide) calc(66.666% + 0.5px), transparent calc(66.666% + 0.5px)),
+      linear-gradient(180deg, transparent calc(33.333% - 0.5px), var(--guide) calc(33.333% - 0.5px), var(--guide) calc(33.333% + 0.5px), transparent calc(33.333% + 0.5px)),
+      linear-gradient(180deg, transparent calc(66.666% - 0.5px), var(--guide) calc(66.666% - 0.5px), var(--guide) calc(66.666% + 0.5px), transparent calc(66.666% + 0.5px));
+  }
+  /* Letterbox and square: what falls outside the kept rectangle is shaded (a centred box with a huge shadow). */
+  .photo-guides[data-frame='letterbox']::before,
+  .photo-guides[data-frame='square']::before {
+    content: '';
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    translate: -50% -50%;
+    width: min(100vw, calc(100vh * var(--photo-aspect, 1)));
+    height: min(100vh, calc(100vw / var(--photo-aspect, 1)));
+    box-shadow: 0 0 0 100vmax var(--shade-70);
+    outline: 1px solid var(--ui-border-strong);
+  }
 
-/* Binoculars: two round eyepieces side by side, the rest dark (dark where both masks are: outside both circles). */
-.photo-guides[data-frame='binoculars']::before {
-  --eyepiece: min(27vw, 42vh);
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.94);
-  -webkit-mask-image:
-    radial-gradient(circle at 36% 50%, transparent var(--eyepiece), #000 calc(var(--eyepiece) + 2px)),
-    radial-gradient(circle at 64% 50%, transparent var(--eyepiece), #000 calc(var(--eyepiece) + 2px));
-  mask-image:
-    radial-gradient(circle at 36% 50%, transparent var(--eyepiece), #000 calc(var(--eyepiece) + 2px)),
-    radial-gradient(circle at 64% 50%, transparent var(--eyepiece), #000 calc(var(--eyepiece) + 2px));
-  -webkit-mask-composite: source-in;
-  mask-composite: intersect;
-}
+  /* Binoculars: two round eyepieces side by side, the rest dark (dark where both masks are: outside both circles). */
+  .photo-guides[data-frame='binoculars']::before {
+    --eyepiece: min(27vw, 42vh);
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: var(--shade-90);
+    -webkit-mask-image:
+      radial-gradient(circle at 36% 50%, transparent var(--eyepiece), var(--ui-black) calc(var(--eyepiece) + 2px)),
+      radial-gradient(circle at 64% 50%, transparent var(--eyepiece), var(--ui-black) calc(var(--eyepiece) + 2px));
+    mask-image:
+      radial-gradient(circle at 36% 50%, transparent var(--eyepiece), var(--ui-black) calc(var(--eyepiece) + 2px)),
+      radial-gradient(circle at 64% 50%, transparent var(--eyepiece), var(--ui-black) calc(var(--eyepiece) + 2px));
+    -webkit-mask-composite: source-in;
+    mask-composite: intersect;
+  }
 
-.photo-card {
-  position: absolute;
-  top: 1rem;
-  left: 1rem;
-  max-width: min(22rem, calc(100vw - 2rem));
-  padding: 0.7rem 0.9rem;
-  box-sizing: border-box;
-  color: #f2f2f2;
-  font-size: 0.8rem;
-  line-height: 1.45;
-  background: rgba(10, 10, 14, 0.66);
-  border-radius: 8px;
-  pointer-events: none;
-}
-.photo-card h2 {
-  margin: 0 0 0.3rem;
-  font-size: 0.95rem;
-  letter-spacing: 0.04em;
-}
-.photo-card dl {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  gap: 0 0.8rem;
-  margin: 0 0 0.4rem;
-}
-.photo-card dt {
-  opacity: 0.7;
-}
-.photo-card dd {
-  margin: 0;
-}
-.photo-card ul {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  opacity: 0.85;
-}
-.photo-card kbd {
-  display: inline-block;
-  min-width: 1em;
-  padding: 0 0.25em;
-  font: inherit;
-  text-align: center;
-  border: 1px solid rgba(255, 255, 255, 0.4);
-  border-radius: 3px;
-}
+  .photo-card {
+    position: absolute;
+    top: var(--sp-4);
+    left: var(--sp-4);
+    max-width: min(22rem, calc(100vw - 2rem));
+    padding: 0.7rem 0.9rem;
+    box-sizing: border-box;
+    color: var(--ui-text);
+    font-size: var(--fs-3);
+    line-height: 1.45;
+    background: var(--ui-panel-glass);
+    border-radius: var(--ui-radius-md);
+    pointer-events: none;
+  }
+  .photo-card h2 {
+    margin: 0 0 0.3rem;
+    font-size: var(--fs-6);
+    letter-spacing: 0.04em;
+  }
+  .photo-card dl {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 0 0.8rem;
+    margin: 0 0 0.4rem;
+  }
+  .photo-card dt {
+    opacity: var(--ui-muted);
+  }
+  .photo-card dd {
+    margin: 0;
+  }
+  .photo-card ul {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    opacity: 0.85;
+  }
+  .photo-card kbd {
+    min-width: 1em;
+    padding: 0 0.25em;
+    margin-right: 0;
+    font: inherit;
+    border-color: var(--ui-border-strong);
+    background: none;
+    border-radius: 3px;
+  }
 
-.photo-flash {
-  position: absolute;
-  inset: 0;
-  background: #fff;
-  opacity: 0;
-  pointer-events: none;
+  .photo-flash {
+    position: absolute;
+    inset: 0;
+    background: var(--ui-white);
+    opacity: 0;
+    pointer-events: none;
+  }
+  .photo-flash--go {
+    animation: photo-flash var(--dur-long) ease-out;
+  }
+  @keyframes photo-flash {
+    from { opacity: 0.85; }
+    to { opacity: 0; }
+  }
+  /* Reduced motion: no white burst, a brief soft dim instead; the clamp shortens every animation, so this one insists (a layered `!important` beats the unlayered clamp's). */
+  .photo-flash--dim { background: var(--ui-black); }
+  .photo-flash--dim.photo-flash--go { animation: photo-dim var(--dur-long) ease-out !important; animation-duration: var(--dur-long) !important; } /* convention-ok: the one animation that must outlast the reduce-motion clamp */
+  @keyframes photo-dim {
+    from { opacity: 0.35; }
+    to { opacity: 0; }
+  }
+  .photo-card__saved { margin: var(--sp-2) 0 0; color: var(--ui-success-pale); word-break: break-all; }
+  .photo-card__saved--failed { color: var(--ui-danger-text); word-break: normal; }
 }
-.photo-flash--go {
-  animation: photo-flash 0.42s ease-out;
-}
-@keyframes photo-flash {
-  from { opacity: 0.85; }
-  to { opacity: 0; }
-}
-/* Reduced motion: no white burst, a brief soft dim instead (the reduced-motion rule shortens the animation, so hold it with a transition-free class). */
-.photo-flash--dim { background: #000; }
-.photo-flash--dim.photo-flash--go { animation: photo-dim 0.42s ease-out !important; animation-duration: 0.42s !important; }
-@keyframes photo-dim {
-  from { opacity: 0.35; }
-  to { opacity: 0; }
-}
-.photo-card__saved { margin: 0.5rem 0 0; color: #bfe3b4; word-break: break-all; }
-.photo-card__saved--failed { color: #f2a497; word-break: normal; }

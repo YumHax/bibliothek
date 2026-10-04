@@ -2,7 +2,9 @@ import * as THREE from 'three';
 import type { Updatable } from '@/core/Engine';
 import type { Furniture } from '../../Furniture';
 import type { DayNight } from '../../props/DayNight';
-import { FRONT, STREET_PLAN } from '../streetPlan';
+import { STREET_PLAN } from '../streetPlan';
+import { FRONT } from '@/world/measures/street';
+import { random } from '@/random';
 
 /** Where the signalled crossing's cycle is: cars go, amber, all red, walkers go, walkers' flashing man, all red again. */
 type SignalPhase = 'carsGreen' | 'amber' | 'clearForWalkers' | 'walkersGreen' | 'walkersFlash' | 'clearForCars';
@@ -72,7 +74,7 @@ export class StreetTraffic extends THREE.Group implements Furniture, Updatable {
     super();
     this.name = 'StreetTraffic';
     // Start somewhere in the cycle, so two visits do not look alike.
-    this.phaseTime = Math.random() * STREET_PLAN.signals.cycle.carsGreen;
+    this.phaseTime = random() * STREET_PLAN.signals.cycle.carsGreen;
   }
 
   get footprint(): THREE.Box3 {

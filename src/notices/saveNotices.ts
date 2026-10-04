@@ -1,4 +1,5 @@
 import { ROOT_PREFIX, onCorruptSave, onOtherTab, onWriteFailure } from '@/persistence';
+import { capitalise } from '@/text/strings';
 
 /** A repeated warning (every save fails once storage is full) is shown at most this often. */
 const REPEAT_MS = 60_000;
@@ -47,7 +48,7 @@ export function announceSaveProblems(notices: Notifier): () => void {
     onWriteFailure(() => say('write', 'Could not save: the browser’s storage is full or blocked.\nWhat you do now will not survive a reload.')),
     onCorruptSave((e) => {
       const what = saveName(e.key);
-      const What = what[0]!.toUpperCase() + what.slice(1);
+      const What = capitalise(what);
       say(
         `corrupt:${e.key}`,
         e.newer

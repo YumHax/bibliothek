@@ -1,4 +1,5 @@
 import { audioBus, startedAudioContext } from './audioContext';
+import { crackleNoise } from './noise';
 
 /**
  * The notices' sounds (src/notices), on the `ui` bus, so a message is heard as well as seen:
@@ -77,15 +78,8 @@ export function playNoticeSound(kind: NoticeSound): void {
 
 /** A sheet of paper turned: a short burst of band-passed noise. */
 function rustle(ctx: AudioContext): void {
-  const seconds = 0.22;
-  const buffer = ctx.createBuffer(1, Math.floor(ctx.sampleRate * seconds), ctx.sampleRate);
-  const data = buffer.getChannelData(0);
-  for (let i = 0; i < data.length; i++) {
-    const envelope = Math.sin((Math.PI * i) / data.length) ** 2;
-    data[i] = (Math.random() * 2 - 1) * envelope * (0.6 + 0.4 * Math.sin(i / 90));
-  }
   const source = ctx.createBufferSource();
-  source.buffer = buffer;
+  source.buffer = crackleNoise(ctx, 0.22);
   const filter = ctx.createBiquadFilter();
   filter.type = 'bandpass';
   filter.frequency.value = 2400;

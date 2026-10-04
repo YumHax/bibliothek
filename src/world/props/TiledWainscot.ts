@@ -3,6 +3,7 @@ import type { RoomOptions, Wall } from '../Room';
 import { createCanvas, toTexture } from '@/covers/generated/canvasUtils';
 import { paint } from '../materials/palette';
 import { Prop, part } from './Prop';
+import { hashInts } from '@/random';
 
 export interface TiledWainscotOptions {
   /** Height of the tiling above the floor. Default 1.2. */
@@ -155,7 +156,7 @@ function paintTiles(lengthM: number, heightM: number, colours: { tile: number; g
     const base = new THREE.Color(row === 0 ? colours.accent : colours.tile);
     const shift = row % 2 ? tw / 2 : 0;
     for (let x = -shift; x < W; x += tw) {
-      const shade = 1 + ((((row * 31 + Math.round(x)) * 2654435761) % 7) - 3) * style.variance;
+      const shade = 1 + ((hashInts(row, Math.round(x)) % 7) - 3) * style.variance;
       ctx.fillStyle = `#${base.clone().multiplyScalar(shade).getHexString()}`;
       ctx.fillRect(x + GROUT_PX / 2, y + GROUT_PX / 2, tw - GROUT_PX, th - GROUT_PX);
       if (!style.bevel) continue;

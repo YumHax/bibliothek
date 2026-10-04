@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { bump, capsuleBetween, limbGeometry, ramp, roundedBox, spline, weldNormals, type Keys, type LimbOptions } from './geometry';
+import { gaussian, ramp } from '@/math/scalar';
+import { capsuleBetween, limbGeometry, roundedBox, spline, weldNormals, type Keys, type LimbOptions } from './geometry';
 import type { PersonLook } from './looks';
 
 /*
@@ -83,12 +84,12 @@ export function trunkSection(y: number, look: PersonLook): TrunkSection {
   let front = spline(FRONT, y);
   let back = spline(BACK, y);
   if (look.figure === 'curvy') {
-    halfWidth += 0.018 * bump(y, 0.9, 0.06) - 0.013 * bump(y, 1.04, 0.045) - 0.012 * bump(y, 1.37, 0.04);
-    back += 0.012 * bump(y, 0.87, 0.05);
-    front += 0.026 * bump(y, 1.235, 0.045);
+    halfWidth += 0.018 * gaussian(y, 0.9, 0.06) - 0.013 * gaussian(y, 1.04, 0.045) - 0.012 * gaussian(y, 1.37, 0.04);
+    back += 0.012 * gaussian(y, 0.87, 0.05);
+    front += 0.026 * gaussian(y, 1.235, 0.045);
   }
   // A broad build carries a belly.
-  front += Math.max(0, look.build - 1) * 0.12 * bump(y, 1.06, 0.06);
+  front += Math.max(0, look.build - 1) * 0.12 * gaussian(y, 1.06, 0.06);
   const depth = 0.75 + 0.25 * look.build;
   return { halfWidth: halfWidth * look.build, front: front * depth, back: back * depth };
 }
@@ -142,11 +143,11 @@ export function trunkGeometry(look: PersonLook): THREE.BufferGeometry {
  */
 function trunkOcclusion(y: number, sin: number, cos: number, look: PersonLook): number {
   const side = Math.abs(sin);
-  const armpit = 0.34 * bump(y, 1.3, 0.045) * ramp(side, 0.78, 0.98);
+  const armpit = 0.34 * gaussian(y, 1.3, 0.045) * ramp(side, 0.78, 0.98);
   const underArm = 0.14 * ramp(y, 1.12, 1.3) * ramp(y, 1.4, 1.34) * ramp(side, 0.86, 1);
   const crotch = 0.3 * ramp(y, 0.86, 0.775) * (0.6 + 0.4 * ramp(side, 0.6, 0));
   const collar = 0.14 * ramp(y, 1.445, 1.49);
-  const bust = look.figure === 'curvy' ? 0.14 * bump(y, 1.175, 0.022) * ramp(cos, 0.35, 0.8) : 0;
+  const bust = look.figure === 'curvy' ? 0.14 * gaussian(y, 1.175, 0.022) * ramp(cos, 0.35, 0.8) : 0;
   return Math.min(0.6, armpit + underArm + crotch + collar + bust);
 }
 

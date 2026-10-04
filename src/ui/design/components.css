@@ -1,0 +1,271 @@
+/*
+ * The interface's building blocks (`@layer components`), read from the tokens: the card and the modal layouts, the
+ * button and its states, fields, tabs, rows, chips, badges, coins, status lines, titles and papers. A panel's own
+ * sheet (`@layer panels`) lays them out and themes them by setting slot variables; it does not restyle them. Where a
+ * template still carries its old class, that class is listed beside the `.ui-*` one it stands for, so the look is
+ * written once; the alias goes when the template says `.ui-*`.
+ */
+
+/* --- surfaces --------------------------------------------------------------------------------------------- */
+
+.ui-card {
+  color: var(--ui-text);
+  background: var(--ui-panel);
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius);
+  box-shadow: var(--ui-shadow);
+}
+
+/* A sheet of paper held up over the view: the panel sets `--paper`, `--ink` and `--rule` from the paper tokens. */
+.ui-paper {
+  --paper: var(--paper-note);
+  --ink: var(--ink-note);
+  --rule: var(--paper-squares);
+  background: var(--paper);
+  color: var(--ink);
+  box-shadow: var(--ui-shadow-paper);
+  color-scheme: light;
+}
+.ui-paper[data-paper='letter'] { --paper: var(--paper-letter); --ink: var(--ink-letter); --rule: var(--rule-reading); }
+.ui-paper[data-paper='news'] { --paper: var(--paper-news); --ink: var(--ink-news); --rule: var(--paper-news-line); }
+.ui-paper[data-paper='receipt'] { --paper: var(--paper-receipt); --ink: var(--ink-review); --rule: var(--rule-review); }
+.ui-paper[data-paper='squared'] {
+  background:
+    repeating-linear-gradient(0deg, transparent 0, transparent 19px, var(--paper-squares) 19px, var(--paper-squares) 20px),
+    repeating-linear-gradient(90deg, transparent 0, transparent 19px, var(--paper-squares) 19px, var(--paper-squares) 20px),
+    var(--paper);
+}
+.ui-paper[data-paper='ruled'] {
+  --paper: var(--paper-journal);
+  --ink: var(--ink-journal);
+  background:
+    linear-gradient(90deg, transparent 1.9rem, var(--paper-margin) 1.9rem, var(--paper-margin) calc(1.9rem + 1px), transparent calc(1.9rem + 1px)),
+    repeating-linear-gradient(180deg, var(--paper) 0, var(--paper) calc(1.6rem - 1px), var(--paper-rules) calc(1.6rem - 1px), var(--paper-rules) 1.6rem);
+}
+
+/*
+ * A full-screen DOM panel's root (`ModalPanel`): the modal layer over the view, with a layout. `--sheet` is a column
+ * of header, lines and a scrolling list over the blurred room (collection, catalogue, desks, prize counter; each sets
+ * its own gap and padding); `--centre` holds one card in the middle over the dimmed room (the paper, the scratch card,
+ * the arcade's big screen; a panel with its own backdrop sets it in its sheet).
+ */
+.ui-modal {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal);
+  box-sizing: border-box;
+  animation: ui-modal-in var(--dur-enter) var(--ui-ease);
+  transition: opacity var(--dur-fade) ease;
+}
+/* Every panel's entrance: a fade, a 6 px rise and a hint of scale; and its exit, a fade before `hidden` (`ModalPanel`). */
+@keyframes ui-modal-in {
+  from { opacity: 0; translate: 0 6px; scale: 0.985; }
+  to   { opacity: 1; translate: 0 0; scale: 1; }
+}
+.ui-modal--closing { opacity: 0; pointer-events: none; }
+.ui-modal--sheet {
+  display: flex;
+  flex-direction: column;
+  /* The room stays in sight behind: dimmed and softened, not covered. */
+  background: var(--ui-backdrop-panel);
+  backdrop-filter: blur(4px);
+  color: var(--ui-text);
+  font-size: var(--fs-5);
+  overflow: hidden;
+}
+.ui-modal--centre {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--sp-5);
+  background: var(--ui-backdrop);
+}
+/* The card in the middle: as wide as `--card-w` allows, scrolling inside. */
+.ui-modal__card,
+.household-panel__card,
+.copro-panel__card,
+.label-panel__card,
+.storage-panel__card,
+.borrow-panel__card,
+.scratch-panel__card,
+.people-book__book {
+  width: min(var(--card-w, var(--card-w-md)), 100%);
+  max-height: 100%;
+  overflow-y: auto;
+  padding: 1.1rem 1.2rem 1rem;
+  box-sizing: border-box;
+}
+/* The buttons along a card's foot: to the right, the primary one last. */
+.ui-actions,
+.household-panel__card footer,
+.people-book__book footer {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--sp-2);
+  margin-top: var(--sp-4);
+}
+
+/* --- buttons ---------------------------------------------------------------------------------------------- */
+
+.ui-btn {
+  font: inherit;
+  color: inherit;
+  padding: 0.45em 1em;
+  border-radius: var(--ui-radius-sm);
+  border: 1px solid var(--ui-border);
+  background: var(--ui-fill);
+  cursor: pointer;
+  transition: background var(--dur-hover) ease, border-color var(--dur-hover) ease, transform var(--dur-hover) var(--ui-ease);
+}
+.ui-btn:hover:not(:disabled) { background: var(--ui-fill-hover); }
+.ui-btn:active:not(:disabled) { transform: scale(0.98); }
+.ui-btn:disabled { opacity: 0.45; cursor: default; }
+.ui-btn[aria-pressed='true'],
+.ui-btn[aria-selected='true'] { background: var(--ui-fill-hover); border-color: var(--ui-border-strong); }
+/* One of several choices, picked (a device, a text size, a tab of the People book). */
+.ui-btn[aria-checked='true'],
+.people-book__tab--on { background: var(--ui-accent-soft); border-color: var(--ui-accent); color: var(--ui-text); }
+.ui-btn--primary {
+  color: var(--ui-on-accent);
+  font-weight: 600;
+  background: var(--ui-accent);
+  border-color: transparent;
+}
+.ui-btn--primary:hover:not(:disabled) { background: var(--ui-accent-hover); }
+.ui-btn--danger { color: var(--ui-on-danger); font-weight: 600; background: var(--ui-danger); border-color: transparent; }
+.ui-btn--danger:hover:not(:disabled) { background: var(--ui-danger-hover); }
+/* Asking to be clicked again to confirm (a sale, a used copy ordered, a dear piece bought). */
+.ui-btn--armed,
+.sell__armed { background: var(--ui-armed); border-color: var(--ui-danger); }
+.ui-btn--armed:hover:not(:disabled),
+.sell__armed:hover:not(:disabled) { background: var(--ui-armed-hover); }
+.ui-btn--sm { padding: 0.3em 0.75em; font-size: var(--fs-3); }
+.ui-btn--lg { padding: 0.7em 1em; font-size: var(--fs-7); }
+/* Only its text and a line of the current ink: on paper, on a counter. */
+.ui-btn--ghost { background: transparent; border-color: currentColor; }
+.ui-btn--ghost:hover:not(:disabled) { background: color-mix(in srgb, currentColor 8%, transparent); }
+.ui-btn--pill { border-radius: var(--ui-radius-pill); }
+.ui-btn--block { display: flex; width: 100%; justify-content: space-between; align-items: center; text-align: left; }
+/* Fingers need bigger targets than a mouse, on any screen size. */
+@media (pointer: coarse) {
+  .ui-btn { min-height: 44px; }
+}
+
+/* --- fields ----------------------------------------------------------------------------------------------- */
+
+/* A text field or a select on the panels' surface; buttons beside it are `.ui-btn`. */
+.ui-field,
+.catalogue select,
+.catalogue input,
+.collection-editor select,
+.collection-editor input,
+.menu__section input,
+.menu__section select {
+  font: inherit;
+  color: inherit;
+  background: var(--ui-fill);
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius-sm);
+  padding: 0.35rem 0.7rem;
+}
+select option { background: var(--ui-panel-solid); }
+
+/* --- tabs, rows, lists ------------------------------------------------------------------------------------- */
+
+/* A row of tabs (`.ui-btn`s, `aria-selected` marks the one shown). */
+.ui-tabs,
+.menu__tabs,
+.notices__tabs,
+.people-book__tabs { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+/* A line of a list: the box, the title, its details, the price and the buttons; lit when hovered or focused. */
+.ui-row,
+.catalogue__row { display: flex; align-items: center; gap: 0.7rem; padding: 0.45rem 0.6rem; border-radius: var(--ui-radius-sm); }
+.ui-row + .ui-row,
+.catalogue__row + .catalogue__row { box-shadow: 0 -1px 0 var(--ui-border); }
+.ui-row:hover,
+.ui-row:focus-within,
+.catalogue__row:hover,
+.catalogue__row:focus-within { background: var(--ui-fill); box-shadow: none; }
+.ui-row:hover + .ui-row,
+.ui-row:focus-within + .ui-row,
+.catalogue__row:hover + .catalogue__row,
+.catalogue__row:focus-within + .catalogue__row { box-shadow: none; }
+.ui-row__title,
+.catalogue__title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.ui-row__meta,
+.catalogue__meta { font-size: var(--fs-3); opacity: var(--ui-faint); white-space: nowrap; }
+/* Nothing in the list. */
+.ui-empty,
+.catalogue__empty,
+.collection-editor__empty { opacity: var(--ui-faint); font-style: italic; padding: 0.5rem 0.4rem; }
+
+/* --- small things: chips, badges, coins, status, notes, titles ------------------------------------------------- */
+
+/* A small rounded label: a stall's name, a trait, a change. */
+.ui-chip,
+.social-chip {
+  display: inline-block;
+  padding: 0.1rem 0.45rem;
+  border-radius: var(--ui-radius-pill);
+  background: var(--ui-fill);
+  border: 1px solid var(--ui-border);
+  font-size: var(--fs-1);
+}
+.ui-chip--accent,
+.catalogue__stall { border-color: var(--ui-accent); background: var(--ui-accent-soft); color: var(--ui-accent); white-space: nowrap; }
+.ui-chip--danger,
+.social-chip--bad { border-color: var(--ui-danger); background: var(--ui-danger-soft); }
+/* A badge in small capitals: outlined in its tone (`--tone`), or solid on the accent. */
+.ui-badge,
+.collection-editor__badge {
+  font-size: var(--fs-1);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 0.1em 0.45em;
+  border-radius: var(--ui-radius-pill);
+  border: 1px solid currentColor;
+  color: var(--tone, currentColor);
+  opacity: 0.85;
+}
+.ui-badge--solid,
+.collector__badge {
+  display: inline-block;
+  min-width: 1.2em;
+  padding: 0 0.3em;
+  border-radius: 0.6em;
+  border: 0;
+  background: var(--ui-accent);
+  color: var(--ui-on-accent);
+  font-size: 0.75em;
+  text-align: center;
+  text-transform: none;
+  letter-spacing: 0;
+  opacity: 1;
+}
+/* A coin and a ticket, as the wallet draws them; the panel only sizes them. */
+.ui-coin,
+.catalogue__coin,
+.prizes__coin,
+.shop__coin,
+.reward__icon--coin {
+  display: inline-block;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, var(--ui-coin-light), var(--ui-accent) 58%, var(--ui-coin-dark));
+  box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--ui-coin-dark) 45%, transparent);
+}
+.ui-ticket,
+.reward__icon--ticket { display: inline-block; border-radius: var(--ui-radius-2xs); background: var(--ui-ticket); }
+/* A line that says how it went: dim until it matters, red when it went wrong. */
+.ui-status,
+.catalogue__status,
+.collection-editor__status { min-height: 1.2em; font-size: var(--fs-4); opacity: 0.8; }
+.ui-status--error,
+.catalogue__status--error,
+.collection-editor__status--error { color: var(--ui-danger); opacity: 1; }
+/* Muted running text: a hint, a detail, what a thing is for. */
+.ui-note { margin: 0; font-size: var(--fs-4); color: var(--ui-text-dim); }
+/* A panel's title in the display face, a section's small-capitals head. */
+.ui-title { margin: 0; font-family: var(--ui-font-display); font-weight: 400; font-size: var(--fs-t2); letter-spacing: 0.04em; }
+.ui-eyebrow,
+.household-panel__card h3 { font-size: var(--fs-3); letter-spacing: 0.08em; text-transform: uppercase; color: var(--ui-text-dim); }

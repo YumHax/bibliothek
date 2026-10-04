@@ -2,8 +2,8 @@ import * as THREE from 'three';
 import { cylinderMesh } from '../../meshUtils';
 import { Prop, part } from '../../props/Prop';
 import { METAL, paint, timber } from '../../materials/palette';
-import { seededRandom } from '@/graphics/canvas';
-import { LeafBatch, LEAF_GREENS, addBunch, headGeometry, pick, stem } from './greenery';
+import { LeafBatch, LEAF_GREENS, addBunch, headGeometry, stem } from './greenery';
+import { lcg, pick } from '@/random';
 
 export interface FloristBenchOptions {
   /** The table top's size the things are spread over (local x along it, z across, +z the florist's side). Default 1.15 x 0.6. */
@@ -35,7 +35,7 @@ export class FloristBench extends Prop {
     this.name = 'FloristBench';
     const W = options.width ?? 1.15;
     const D = options.depth ?? 0.6;
-    const random = seededRandom(options.seed ?? 17);
+    const random = lcg(options.seed ?? 17);
     const leaves = new LeafBatch();
     const head = headGeometry();
     const wood = timber(0x9a7048, 0.7);

@@ -77,6 +77,8 @@ screwed shut, the power switch: the light, the chime, `Workshop.fix`. Shut halfw
 A mended console waits on the chair (WORKS!) until sold at TV REPAIR's counter (the WE BUY card, `ConsoleDeskPanel`,
 two clicks) for `REPAIR.resaleShare` of its value (`CONSOLES`). Bonus only: a broken console waits as long as it likes.
 Not kept to play: the TV stand already shows a console for every platform owned. Numbers in `repair/consoles.ts`.
+A friend upstairs helps: with Théo at Friend, the find and tool steps name the faulty part and the tool
+(`RepairPanel`'s `hint`, `social/building/student.repairHint`).
 
 ## Files
 

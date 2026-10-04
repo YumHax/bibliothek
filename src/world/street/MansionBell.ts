@@ -2,7 +2,8 @@ import * as THREE from 'three';
 import type { Interactable } from '@/interaction/Interactable';
 import type { SessionActions } from '@/game/SessionActions';
 import type { Classifieds } from '@/classifieds/Classifieds';
-import { SELLERS_BUILDING, clockOf } from '@/classifieds/ads';
+import { SELLERS_BUILDING } from '@/classifieds/ads';
+import { formatClock } from '@/text/clock';
 import { createCanvas, toTexture, FONT } from '@/covers/generated/canvasUtils';
 import { playIntercomLine } from '@/audio/furnitureSounds';
 import { playDoorbell } from '@/audio/doorbell';
@@ -79,7 +80,7 @@ export class MansionBell extends Prop implements Interactable {
       this.buzzing = true;
       playDoorbell(0.12);
       this.book.arrive(door.ad);
-      window.setTimeout(() => {
+      window.setTimeout(() => { // convention-ok: the buzz answers a click, a second of the player's own time while they stand at the door
         this.buzzing = false;
         playIntercomLine(0.8, 0.1);
         session.travel('sellerFlat');
@@ -88,7 +89,7 @@ export class MansionBell extends Prop implements Interactable {
     }
     if (door.kind === 'early') {
       playDoorbell(0.12);
-      session.react(`No answer from ${door.ad.flat}. ${door.ad.name} said from ${clockOf(door.from)}.`);
+      session.react(`No answer from ${door.ad.flat}. ${door.ad.name} said from ${formatClock(door.from)}.`);
       return;
     }
     session.react(`${SELLERS_BUILDING}: twelve bells, and nobody expecting you.`);

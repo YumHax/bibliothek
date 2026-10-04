@@ -1,5 +1,6 @@
 import type * as THREE from 'three';
 import type { Zone } from '@/world/zone/Zone';
+import { capitalise } from '@/text/strings';
 
 /** The friends in the flat are looked for again this often (ms): a visit comes and goes, their walk is read live. */
 const LOOK_EVERY = 1000;
@@ -31,7 +32,7 @@ export function friendsIn(zones: readonly Zone[]): { around(): FriendHere[] } {
         zone.group.traverseVisible((object) => {
           if (!object.name.startsWith(PREFIX)) return;
           const id = object.name.slice(PREFIX.length);
-          found.push({ object, name: id ? id[0]!.toUpperCase() + id.slice(1) : 'a friend', getWorldPosition: (target) => object.getWorldPosition(target) });
+          found.push({ object, name: id ? capitalise(id) : 'a friend', getWorldPosition: (target) => object.getWorldPosition(target) });
         });
       }
       return found;

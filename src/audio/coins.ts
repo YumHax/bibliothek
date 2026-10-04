@@ -1,5 +1,6 @@
 import { audioBus, audioContext } from './audioContext';
 import { spatialInput, type Spatial } from './spatial';
+import { random } from '@/random';
 
 /** Partials of a struck coin (Hz): inharmonic, bright, short. */
 const PARTIALS = [2350, 3900, 5600];
@@ -11,12 +12,13 @@ const PARTIALS = [2350, 3900, 5600];
  */
 export function playCoins(count = 3, level = 0.12, spatial?: Spatial): void {
   const ctx = audioContext();
+  if (!ctx) return;
   const out = ctx.createGain();
   out.gain.value = level;
   out.connect(spatialInput(ctx, audioBus(ctx, 'world'), spatial, 1.5));
   let t = ctx.currentTime + 0.01;
   for (let i = 0; i < count; i++) {
-    const pitch = 0.9 + Math.random() * 0.25;
+    const pitch = 0.9 + random() * 0.25;
     for (const [k, f] of PARTIALS.entries()) {
       const osc = ctx.createOscillator();
       osc.type = 'sine';
@@ -30,7 +32,7 @@ export function playCoins(count = 3, level = 0.12, spatial?: Spatial): void {
       osc.start(t);
       osc.stop(t + 0.35);
     }
-    t += 0.06 + Math.random() * 0.07;
+    t += 0.06 + random() * 0.07;
   }
   window.setTimeout(() => out.disconnect(), (t - ctx.currentTime + 0.5) * 1000);
 }

@@ -9,9 +9,9 @@ Walls as seen from the spawn: back = -z (shelves, door), front = +z, left = -x (
 | Layer | Files | Role |
 | --- | --- | --- |
 | Plan (data) | `src/world/worldPlan.ts`, `src/world/roomPlan.ts`, `src/world/<kind>/<kind>Plan.ts` | `WORLD_PLAN`: the zones and how they connect; `ROOM_PLAN`: every position in the collection room; one plan per other zone (hallway, bathroom, bedroom, kitchen, balcony, stairwell, airlock, street, arcade, market...). No three.js at runtime. |
-| Layout | `src/world/layout.ts`, `src/world/buildContext.ts`, `src/world/shell.ts`, `src/world/<kind>/furnish<Kind>.ts` | `ZONE_BUILDERS` / `furnishRoom()` and the per-room builders read the plans and build a zone from the `BuildContext`; the only places that wire props together. `furnishShell()` is the common start (Room + sky + doors). |
+| Layout | `src/world/layout.ts`, `src/world/buildContext.ts`, `src/world/shell.ts`, `src/world/<kind>/furnish<Kind>.ts` | `ZONE_BUILDERS` / `furnishRoom()` and the per-room builders read the plans and build a zone from the slice of the `BuildContext` their signature names (`Pick<BuildContext, …>`: the dependency list is the signature; `bootstrap/worldContext` assembles the whole once); the only places that wire props together. `furnishShell()` is the common start (Room + sky + doors). |
 | Zones | `src/world/zone/`, `src/world/World.ts`, `src/world/Sky.ts` | `Zone` (load/unload unit, zone-local coordinates), `ZoneManager` (current + neighbours active), `Sky` (the one clock + outdoors). See docs/zones.md. |
-| Furniture | `src/world/**`, `src/world/props/**` | Classes: `Furniture` (+ `Interactable`, `Updatable`). Know nothing about the plan or the session's rules. |
+| Furniture | `src/world/**`, `src/world/props/**` | Classes: `Furniture` (+ `Interactable`, `Updatable`). Read their own zone's plan and `world/measures/`, never another zone's plan or the session's rules; a shared dimension is a measure, a position comes from the builder (check-imports "furniture knows no other plan"). |
 | Engine | `src/core/`, `src/player/`, `src/input/`, `src/interaction/` | Loop, input, collisions, raycast. Never touched for content. |
 | Rules | `src/game/` | `Session`: a thin router over feature controllers (what clicks and keys do). Each controller declares its narrow parts; `SessionParts` is their union. |
 | Data | `src/catalog/`, `src/collection/`, `src/covers/`, `src/video/`, `src/economy/`, `server/`, `api/` | Games, platforms, art, longplays, money and stock. |
@@ -20,10 +20,13 @@ Walls as seen from the spawn: back = -z (shelves, door), front = +z, left = -x (
 
 ```
 src/main.ts             wiring only: a short sequence of `src/bootstrap/` calls; `late` holders for what is made after it is asked for
-src/bootstrap/          the start-up, in order, each step returning a typed bundle: services (engine, input, settings, stores, art, sky,
-                        market), world (`createWorld`: World + player; `buildWorld`: graphics, BuildContext, zones, ZoneManager + culler,
-                        cat, prime, the ShelvingGroup of every zone handle's `shelving`; `startWhenReady`: loop + idle preload of the lazy
-                        zones), ui (start card / pause menu + PointerLockFlow, HUD, every DOM panel, made before the world), player (travel,
+src/bootstrap/          the start-up, in order, each step returning a typed bundle: services (engine, input, settings, every store made
+                        once, art, sky, market), world (`createWorld`: World + player; `buildWorld`: the orchestrator over worldSound
+                        (hearing, the street heard), worldContext (`FlatPanels`, `makeBuilding`, `makeBuildContext`), worldZones
+                        (`declareZones`, `streamZones`, `wirePlayerGround`), worldLife (the cat, the building's life, the visitors, the
+                        gatherings and the phone); `startWhenReady`: loop + idle preload of the lazy zones), ui (`createUi` over uiMenus:
+                        the overlay, notices, lock flow, pause buttons; uiPanels: the collection's, the market's, the books, the home's
+                        panels, the HUD; made before the world), player (travel,
                         sleep, PositionMemory, footsteps), input (crosshair, gamepad, touch, settings applied), session, debug (`?stats`,
                         `?payout`), late (`late<T>(name)`: a service made later; `get()` before `set()` throws naming it)
 src/core/               Listeners (a multi-listener event: `add` returns the unsubscribe; replaces single `onX` slots), Engine (renderer at pixel ratio <= 1.5, loop gated by a GPU fence so a slow frame throttles the loop instead of
@@ -31,12 +34,15 @@ src/core/               Listeners (a multi-listener event: `add` returns the uns
                         Collider (CollisionWorld: AABB set, add/remove), CssLayer, PerfLog (`?stats`: fps, draw calls, lights per 2 s)
 src/graphics/           quality (QUALITY: low / medium / high, `?quality=`), PostFx (HDR target, SSAO, depth of field, bloom, light meter,
                         tone map + grade), grade (Look per zone), Environment (PMREM reflections), Haze (fog per look), canvas (createCanvas,
-                        toTexture, hashString, seededRandom; `covers/generated/canvasUtils` re-exports them); see docs/graphics.md
+                        toTexture; `covers/generated/canvasUtils` re-exports them), glslAssemble (`assemble`: TS values as `TS_*` defines
+                        and chunks as `#include <name>` into a `.glsl` file's text; every shader program is a `.glsl` beside its module,
+                        imported `?raw`, parsed by `scripts/check-glsl.mjs`); see docs/graphics.md
 src/player/             FirstPersonController (yaw/pitch, sliding collisions against CollisionWorld only, sit/stand, crouch Shift, sprint double-tap
                         forward; `setGround`: the floor's height under the feet, for the stairwell's stairs and lift), PointerLockFlow
                         (start card <-> lock; modes pointer | gamepad | touch), PositionMemory (zone + spot + look saved across reloads)
 src/input/              actions (ACTIONS: every keyed action -> codes, gamepad alias, touch button, Settings row, context; `isAction`,
                         markup / alias / touch-bar derivations), padButtons, Gamepad (standard mapping -> virtual keys + synthetic mouse),
+                        GameInput (a mini-game's stick and fire with the press edge worked out once: `FireEdge`, `GameInput.read`, `KeyEdges`),
                         TouchControls (the bar shows what works where the hands are: `setContext`), SyntheticMouse, deviceDetect,
                         lastDevice (the device last used, whatever the room's entry mode: key caps, "click / press A / tap", hints)
 src/game/               Session (thin router: builds the controllers, key route order, SessionActions facade), SessionHost (what a
@@ -48,15 +54,18 @@ src/game/               Session (thin router: builds the controllers, key route 
                         Browse (search, random pick, console focus, sort T, night N), CatCare (C; `callCat` words every cat call),
                         Rearranging (M: the shelf box in hand into the gap aimed at, a bought piece of furniture carried about its room;
                         docs/furnishing.md).
-                        Highlighter (emissive pulse), playerPose, Sleep (fade, wind the clock to 7:00, fade back)
+                        Highlighter (emissive pulse), playerPose, Sleep (fade, wind the clock to 7:00, fade back), PlayerActivity (where
+                        the player is and whether they are free: `inFlat`, `atHome`, `isAsleep`, `busy`, `held`; the one definition)
 src/interaction/        Interactable (hitboxes + label + activate), Interactor (crosshair raycast -> owner; `onHoverChange` / `onSelect`),
                         Inspector (carry/rotate/return/open any `Carriable`, the shape of a `GameBox`, back to its `home` when that
                         changed while in hand; `onLookEnabledChange`)
 src/world/              World<ZoneHandleById> (scene + CollisionWorld + live interactables + zones: addZone, `zone(id)` / `handle(id)` / `build(id)` typed by
                         zone id, `load` / `loadAll` for lazy builders, `onInteractableAdded` / `onOccluderAdded`...), zoneIds (`ZoneId`: every
-                        zone's id, a leaf type), zoneHandle (`lightLevelOf`, `surfaceUnderfoot`: the current zone's handle), Sky (DayNight + Weather + Outdoors, ticked once), worldPlan (WORLD_PLAN,
-                        WALL_GAP, SUN_ROTATION_Y), roomPlan (ROOM_PLAN, DOOR_LEAF), Placement (floor/ceiling/corner/wall -> position+yaw), buildContext (BuildContext
-                        grouped: scene services + `collection` / `home` / `money` / `arcade` / `market`; ZoneHandle), layout (furnishRoom,
+                        zone's id, a leaf type), zoneHandle (`lightLevelOf`, `surfaceUnderfoot`: the current zone's handle), Sky (DayNight + Weather + Outdoors, ticked once), worldPlan (WORLD_PLAN),
+                        roomPlan (ROOM_PLAN, DOOR_LEAF), measures/ (the numbers plans and classes share, below), Placement (floor/ceiling/corner/wall -> position+yaw), buildContext (BuildContext
+                        grouped: scene services + `collection` / `home` / `money` / `arcade` / `market`, `notices` for every builder,
+                        `market.fame`, `arcade.habits` / `homeScores`, the tournament, jackpot and replays required, all made once in
+                        bootstrap/services; each builder takes its `Pick` of it; ZoneHandle), layout (furnishRoom,
                         RoomHandle, ZONE_BUILDERS: eager or `lazy(() => import(...))`, `bindBuilder`, ZoneHandles / ZoneHandleById), shell (furnishShell: Room + sky + owned doors), Room (a Furniture: walls cut by doorways,
                         opaque-wall shadow casters, colliders, setDaylight/setSkylight/setLampOn/setOccupied), Furniture (footprint, colliders, dispose?), Seat,
                         GameBox, Television, Projector, Shelf, meshUtils (boxMesh, cylinderMesh, invisibleHitbox, eyePoseAt), Parquet
@@ -72,7 +81,9 @@ src/world/strays/       StrayGames (a few owned games lent off the shelves each 
                         cover-up: picking it up hands over its shelf box)
 src/world/arcade/       arcadePlan (+ TICKET_GAMES / DEMO_CABINETS / BREAKABLE, `machines`, the crowd's nav graph) + furnishArcade +
                         machineKinds (MACHINE_KINDS: plan kind -> physical machine). The machines, each an `ArcadeMachineLike`
-                        (SessionActions) and a `Station` (someone stands at it; a regular can `occupy` it), all over a MachineRun
+                        (SessionActions; `payout`: arcade / none / event says what a play pays) and a `Station` (someone stands at it; a
+                        regular can `occupy` it), all over a RunMachine base (FixedStep: every simulation's step; SoundQueue: the one
+                        sound queue; EndCard: the end screens' words) and a MachineRun
                         (the paid play: coin, keys, initials, end card count-up, labels, regulars' results, out-of-order days;
                         arcadeKeys, machineLines, machineParts: CHROME, paintMarquee, displayScreen, outOfOrderNote):
                         ArcadeCabinet (cabinetModel + cabinetArt: the body and its print; CabinetScreens: the CRT glass via
@@ -134,7 +145,10 @@ src/world/people/       PersonModel (the body in motion, in layers: planted feet
 src/world/street/       streetPlan (Front Street's map and every spot, `shopDoors()`, `FLAT_IN_STREET`) + furnishStreet: an outdoor zone
                         without a Room. StreetLighting (sun, sky ambient, fog), SkyDome, StreetGround, Buildings (+ facadePainter: the
                         facade atlas, night windows, `fronts` for the relief), StreetLamps (the flickering one), StreetTrees, StreetCars
-                        (+ carModel: three car shapes, van, bus, lorry, bike), StreetFurniture, StreetDoor (`guard`), StreetBounds,
+                        (the traffic simulation only; traffic/Car: a car's state and bay, traffic/carVoices: the moving cars' borrowed
+                        voices and lamps, traffic/carFleet: the instanced bodies, drivers, signs and headlight pools that draw it;
+                        + carModel: three car shapes, van, bus, lorry, bike), StreetFurniture, StreetDoor (`guard`), StreetBounds,
+                        events/streetSchedules (what is on along the street and when: the one rule the paper and the pavement share),
                         Newsstand (+ gamingWeekly), Busker, GarageSale, StreetCrowd, Precipitation (+ splashes), StreetSound (horns,
                         sirens, bells), snowCover (`snowCovered()`); traffic/ (StreetTraffic, driving, ScriptedVehicle, StreetBus,
                         ServiceVehicles, Bikes, SignalHeads, Spray), life/ (streetTalk, StandingPeople, Terraces, Pigeons, StrayCat,
@@ -158,10 +172,12 @@ src/world/travel/       TravelDoor (a ShutDoor that asks the Session to travel, 
                         a zone's `travel.arrival`, or its `arrivals[zone left]`; loads the destination's module as the curtain falls),
                         stops (`travelStops`: the stops from `WORLD_PLAN`)
 src/world/zone/         Zone (group at origin, place()/placeAt()/remove(), scoped collisions, empty/dormant/active, build/activate/deactivate/unload,
-                        own shadow layer, portals, setOccupied/setDrawn; a builder may be a `LazyZoneBuilder`, `load()`ed before it builds),
-                        undrawn items tick at 20 Hz, static items frozen and their parts merged per material: mergeStatic; `ride` /
-                        `move`: what stands on a piece moves with it, colliders and contact shadow following; `lift` / `setDown`: a piece
-                        the player carries stops colliding and being clickable, its lights never leaving the scene),
+                        own shadow layer, portals, setOccupied/setDrawn; a builder may be a `LazyZoneBuilder`, `load()`ed before it builds;
+                        `after(seconds, fn)`: a delay on the zone's own time, waiting while it is dormant and dying with it),
+                        undrawn items tick at 20 Hz, static items frozen and their parts merged per material: mergeStatic; moving
+                        (`Moving`, `zone.moving`, the Zone's methods of these names delegate: `ride` / `move`: what stands on a piece
+                        moves with it, colliders and contact shadow following; `lift` / `setDown` / `handOver`: a piece the player
+                        carries stops colliding and being clickable, its lights never leaving the scene),
                         ZoneManager (Updatable: player position -> current zone, neighbours active, unload after 30 s unless persistent
                         or one of the 2 travel zones left last; `onZoneChange`; a zone still loading its module is switched to once
                         loaded), PortalCuller (Updatable: draws only zones seen through open doorways),
@@ -215,13 +231,20 @@ src/world/props/        The props any room may use (a prop only one room has liv
                         SideTable, Cushion, Speaker, Sideboard, SwingLeaf and SlideDrawer (doors and drawers that open on a
                         click), MirrorGlass, Parcel (bought games waiting in the hallway). See docs/props.md.
 src/world/props/outdoors/ The painted 360° view outside every window (its plan derived from world/city). See docs/outdoors.md.
-src/world/city/         The neighbourhood's one data model, read by the painted view and the walkable street: frontage (the road's
-                        cross-section, kerbs, lanes, bus stop, ends), vehicles (body sizes), traffic (cruise speeds, dwell, rounds),
-                        shopLooks (each kind of shop's colours)
+src/world/city/         The neighbourhood's one data model, read by the painted view and the walkable street: facades (every building
+                        face with its shops and the flat: what the street, the painted view, the window views and the roofscape build
+                        from), frontage (the road's cross-section, kerbs, lanes, bus stop, ends), vehicles (body sizes), traffic (cruise
+                        speeds, dwell, rounds), shopLooks (each kind of shop's colours)
+src/world/measures/     The dimensions and coordinates plans and classes both read: the building's storeys (building), the street's
+                        lines, kerbs, extents and the flat's place in it (street), shared door openings (doors). No positions of
+                        props: those stay in the plans.
+src/world/lint/         The scene lint's checks, one a file (lights, placement, reach, disposal, sharing), run headless by
+                        `scripts/scene-lint.mjs` on the z-fight catalogue's subjects (docs/checks.md).
 src/world/balcony/      balconyPlan + furnishBalcony: the balcony off the living room (BalconyDoor, BalconySlab, BistroSet, the
                         BuildingFront it stands on, OpenAir: the sun and sky light outside). See docs/zones.md.
 src/world/visitors/     Friends who ring, come in, borrow and return games: Visitors (the rules), Visit, VisitBook (who came, lent
-                        what, invited when), Friend (the walker), friendsPlan, friendLines. See docs/visitors.md.
+                        what, invited when), Friend (the walker), friendsPlan, friendLines, phoneInvite (the phone's invite rule). See
+                        docs/visitors.md.
   gathering/            Several round at once: Party (visits played together, one door), GamesNight (PADDLE WARS on the
                         TV), OpenHouse (strangers in waves, the paper), ClubVisit (an honour's neon), Gatherings (the
                         director, the phone's rows), GatheringBook, NightPhotos. docs/visitors.md "Gatherings".
@@ -270,25 +293,46 @@ src/thumbnails/         ThumbnailStudio (`studio.shoot(key, build, view)`: a pro
                         small WebGLRenderer + Scene + lights, never the world's; one shot per idle slot, cached by key, packs up
                         when idle), prizePhotos (a prize's `prizeModel`), homeGoodPhotos (+ homeGoodModels, a lazy chunk: the shops'
                         `displayPiece`, the market stall's four). The shop panels (PrizePanel, HomeShopPanel) show them.
-src/time/               Today (the one "today": `gameDay`, the market calendar's count, and `realDay`; in BuildContext), daily
-                        (`dailySeed` / `isEventDay` / `dailyRandom` / `gameDayRandom`: every day-seeded draw), DailyList and DailyTally
+src/random/             Randomness, one module: hash (fnv1a, unit01, hashInts, unitOf), streams (`random()` the live stream the headless
+                        checks seed with `seedLiveRandom`; `lcg` and `frozenRng` the frozen streams saved days depend on; `seededRng` for
+                        new code; mulberry32), draws (pick, pickWeighted, shuffled, between, within, integer, chance: the stream named
+                        first). Day draws go through time/daily only.
+src/math/               scalar (clamp, lerp, smooth / smoother, ramp, gaussian, triangle), easing (easeInOutQuad / Cubic), angles
+                        (wrapAngle, angleTo(from, to), lerpAngle: one sign convention), damp (dampFactor, damp, dampAngle: frame-rate
+                        independent easing), springs (spring, springAngle, Spring, smoothDamp)
+src/text/               Player-facing text, one way: counts and money (count, money: grouped digits, a true minus, the unit pluralised),
+                        clock readings, days and file dates (clock), capitals, search keys and the one title order (strings)
+src/headless/           What each headless script imports from the game (data, scene, zfight, balance, social): the module
+                        `scripts/headless.mjs` bundles, so tsc checks the imports and knip sees them used
+src/time/               Today (the one "today": `gameDay`, the market calendar's count, and `realDay`; `clock` (a `GameClock`), `weekday(kind)`,
+                        `moment`, `onNewRealDay`; in BuildContext), clock (`HourSpan`, `inHours` with the one wrap rule, `nightOf`,
+                        `GameClock`), schedule (`Schedule`, `realDays` / `gameDays`, `keptAway`, the `SCHEDULES` book: what is on and
+                        when, declared once per feature), OncePerDay (`oncePerDay`: done today, by name, in `daily.v1`), daily
+                        (`dailySeed` / `isEventDay` / `dailyRandom` / `gameDayRandom`, `dayStream` / `dayLcg` for what was always drawn
+                        so: every day-seeded draw, the only place a day seeds a stream), DailyList and DailyTally
                         (per-real-day saved lists and counts), season (the real calendar's season and holidays), wakefulness (how busy the
                         town is by the hour; `streetBusyAt` / `rushAt` / `weekdayOf` for the street's rushes and weekdays)
 src/errands/            What the player buys over a Front Street counter to carry and give later (errands: `ErrandId` croissant,
                         scrap, treats, bunch, with price, portions, per-day cap, the season's flowers; buy: `buyErrand` through
                         `SessionActions.pay`; pocket: what is carried now, saved)
 src/economy/            Wallet (coins + tickets), pricing (every tunable number, deterministic prices), Transactions (every buy / sell /
-                        swap / lot / prize: validate, then apply and save together), calendar (local day keys), seeded (the RNG), MarketStock (the day's
+                        swap / lot / prize: validate, then apply and save together), calendar (local day keys), MarketStock (the day's
                         stalls and bargain bin, seeded per platform and slot; `lot`: JobLot, `orders`: MarketOrders; stockDraws;
+                        dayDraw: `drawDay`, the day's stock step by step, a `Stall` per platform then the bin, every step on its own
+                        seeded stream), scoreTable (the ranked-table core every hall of fame uses: `rankOf`, `withEntry`, 0-based),
                         copyTraits: `dressCopy` / `drawBootleg`, a copy's variant and past; regionLock: Japanese copies and their converters),
-                        MarketDay (what kind of market day: theme, events, news), StockItem (a copy: price settling, haggle), MarketCalendar
+                        MarketDay (what kind of market day: theme, events, news), lapsedHolds (deposits back daily), marketWarmup (pricing
+                        on the way out), StockItem (a copy: price settling, haggle), MarketCalendar
                         (in-game days), MarketLedger (haggles, games sold to the market), haggle, ArcadeScores (the player's bests,
                         the top-five tables and initials, the regulars' entries), rivals (the tables' starting names), ArcadeDaily (the
                         day's challenge, whether the change machine works, the cabinet out of order), ArcadeMedals, ArcadeLeague (the
                         weekly league and the streak), Jackpot (the wheel's pot), PayoutStats (`?payout`), Prizes (the prize catalogue + PrizeStore, `bibliothek.prizes.v1`),
                         HomeUpgrades (furniture bought for the flat: the bedroom's bookcases and the `homeGoods` one-offs, localStorage
                         `bibliothek.home.v1`), homeGoods (HOME_GOODS: what the market's household stall sells; slots in the flat's plans)
-src/audio/              audioContext (one lazy AudioContext; `startedAudioContext` for sounds nobody clicked for, `unlockAudioOnFirstGesture`),
+src/audio/              Synthesised sound: audioContext (the one context, buses, `foregroundInput`, `onAudioStart`; `startedAudioContext`
+                        for sounds nobody clicked for), synth (the kit: noiseBurst, tone, partials, bed, one envelope shape), oneShot
+                        (the output for what follows a click), hearing (loudness by distance and walls, the ears, named `HEARING`
+                        profiles), spatial (side and walls' low-pass), noise, the Voice beds (ambient) and the sound files:
                         ChipSpeaker (an arcade machine's chip sounds, level and pan following the camera), CrtSpeaker (old TV speaker bed following the video's loudness), CatVoice,
                         CrowdMurmur (the market hall's chatter), RadioTune (a generated easy-listening station), JukeboxTune (the arcade jukebox's
                         four generated stations), coins (a sale's clink),
@@ -310,7 +354,9 @@ src/covers/             CoverArtProvider chain, StaticArtProvider (public/boxart
                         (fetch-based: 404 remembered, retries, mirrors, a failing origin paused), scanFaces (spine sides, trimmed
                         cartridge photo, square disc), LoadQueue (cached priorities, re-sorted by `setPriorityOrigin`), generated/ (faces, BoxAtlas)
 src/onscreen/           Programs on the flat's screens instead of a longplay (docs/media.md "Programs on the screen"): ScreenProgram (a
-                        canvas, two pads, its own sound), programs (`registerProgram` / `programFor`, asked by `game/Screens.playOn`),
+                        canvas, two pads, its own sound), ArcadeProgram (the one host for an arcade game on a screen: fixed step,
+                        `padToControls`, chip sounds into the set; pad two is a second controller), programs (`registerProgram` /
+                        `programFor`, asked by `game/Screens.playOn`),
                         ProgramRunner (one at a time: the feed on the glass, the set's level and pan, the pads, pause; ticked by the engine);
                         `game/ProgramPlay` is the Session's route while the player holds the pad
 src/emulator/           NesProgram (jsnes, Apache-2.0, as a ScreenProgram), homebrew (HOMEBREW_CARTS: freely licensed NES homebrew,
@@ -318,6 +364,8 @@ src/emulator/           NesProgram (jsnes, Apache-2.0, as a ScreenProgram), home
 src/vinyl/              records (RECORDS: the soundtrack LPs, invented), RecordTune (an ambient Voice: crackle, needle drop, each track
                         made up from the record and its number in its console's style)
 src/video/              VideoProvider, YouTubeSearchProvider (/api/youtube/search, cached in `bibliothek.cache.longplay.v1`), YouTubePlayer, proximityVolume, randomStart
+src/settings/flags.ts   the URL's switches read once (`flag('debug' | 'stats' | 'fresh' | 'payout' | 'auction' | 'tournament')`,
+                        `flagValue('quality')`); nothing else reads `location.search`
 src/settings/           SettingsStore (`bibliothek.settings.v1`: look sensitivity per device, invert Y, FOV, mixer volumes, HUD aids, text
                         size, speech size, reduce motion, head bob, sprint double-tap / hold Shift, crouch hold / toggle, show tips, key
                         bindings; saved debounced, flushed on pagehide), apply (pushes every setting to the player's feel and FOV, the
@@ -325,9 +373,15 @@ src/settings/           SettingsStore (`bibliothek.settings.v1`: look sensitivit
                         (rebinding = swapping two physical keys), saveData (hasProgress / eraseProgress: `saveKeys()`, the save's keys but the preferences, caches and corrupt copies),
                         saveFile (the save as a JSON file and back: `saveKeys()` + the cat, relative to the save's prefix; loading
                         replaces this browser's progress and reloads, its keys written again on `pagehide`)
+src/ui/design/          tokens.css (every colour, size, radius, shadow, duration and layer the interface reads), base.css (the page, `kbd`,
+                        the one focus ring), components.css (`.ui-card`, `.ui-modal*`, `.ui-btn` and its states, `.ui-field`, `.ui-tabs`,
+                        `.ui-row`, `.ui-chip`, `.ui-badge`, `.ui-coin`, `.ui-status`, `.ui-paper`); loaded in `@layer`s by `ui/styles.css`,
+                        the panels' sheets last (docs/checks.md "Stylesheets")
 src/ui/                 Overlay (title: Continue / New game; pause: status, Go home, Collection; Settings in tabs via `addSetting(tab, …)`;
-                        Controls by group and device; `confirm()` yes / no in the card), menu/ (menu.css: `.ui-btn`, `.ui-card`, fields;
-                        MenuNav: arrows / D-pad for the menu, `registerPanel()` for every DOM panel, `initPanelNav`; ControlsScreen; zoneNames),
+                        Controls by group and device; `confirm()` yes / no in the card), panel/ (the kit, docs/ui.md: ModalPanel base,
+                        CardPanel and SheetPanel layouts, the `html` tag and `paint`, widgets, ConfirmDialog), confirmTwice (`Arming`),
+                        the panels on it (every `*Panel`), menu/ (menu.css: the menu's own layout; MenuNav: arrows / D-pad for the menu,
+                        `registerPanel()` / `unregisterPanel()` for every DOM panel, `initPanelNav`; ControlsScreen; zoneNames),
                         settings/ (GameSettingsForm, KeyBindingsForm, fields), keys (key names from the bindings and the keyboard layout,
                         `renderKeys('{KeyW} [Click]')`), GamePanel, SearchBar, CollectionEditor (Tab; `canAdd` only with ?debug),
                         CataloguePanel (mail order, a modal like the editor), SellPanel (the WE BUY desk), PrizePanel (the arcade's prize counter drawn as one: shelves by ticket band, photos, the ticket muncher; the mystery game), HomeShopPanel (a Front Street shop's leaflet, paper per shop via `data-shop`), ArcadeScreenPanel (LexiPunk's

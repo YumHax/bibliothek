@@ -1,3 +1,4 @@
+import { isBorrowed } from '@/social/friendsLife';
 import type { Game, PlatformId } from '@/catalog/types';
 import { batch } from '@/persistence';
 import type { CollectorSet } from './collectorSets';
@@ -86,11 +87,12 @@ export type TxFailure = 'unavailable' | 'pricing' | 'owned' | 'notOwned' | 'shor
 export type TxResult<T extends object = object> = ({ ok: true } & T) | { ok: false; reason: TxFailure; needed?: number; have?: number };
 
 /**
- * A one-of-a-kind story item (the lost prototype, `story/prototype.PROTOTYPE_ID`, ids prefixed `proto:`): never sold,
- * swapped or traded away; every desk and stall refuses it (`notOwned`, the panels say why).
+ * A one-of-a-kind story item (the lost prototype, `story/prototype.PROTOTYPE_ID`, ids prefixed `proto:`), or a game
+ * borrowed from a friend (`social/friendsLife`): never sold, swapped or traded away; every desk and stall refuses it
+ * (`notOwned`, the panels say why).
  */
 export function isKeepsake(game: Pick<Game, 'id'>): boolean {
-  return game.id.startsWith('proto:');
+  return game.id.startsWith('proto:') || isBorrowed(game.id);
 }
 
 const fail = (reason: TxFailure, needed?: number, have?: number): { ok: false; reason: TxFailure; needed?: number; have?: number } => ({
@@ -250,6 +252,15 @@ export class Transactions {
     return { ok: true };
   }
 
+  /** A game given to someone (`social/`, the conversation's Give): out of the collection, nothing paid. Not a lent one, not a keepsake. */
+  giveAway(game: Game): TxResult {
+    const { collection } = this.deps;
+    if (!collection?.remove) return fail('unavailable');
+    if (!collection.owns(game.id) || game.status === 'lent' || isKeepsake(game)) return fail('notOwned');
+    collection.remove(game.id);
+    return { ok: true };
+  }
+
   /**
    * A wanted card answered: the player's copy goes to the collector, who pays the card's price for a complete copy,
    * less for a worse one (`wantedPay`: its state, printing, a fake, a flat-price receipt).
@@ -259,7 +270,7 @@ export class Transactions {
     if (!wallet || !collection?.remove || !market || !ledger) return fail('unavailable');
     if (ledger.cardDone(ad.id)) return fail('done');
     const mine = collection.find?.(ad.game.id) ?? collection.games?.find((g) => g.id === ad.game.id);
-    if (!mine || (mine.status ?? 'owned') !== 'owned') return fail('notOwned');
+    if (!mine || (mine.status ?? 'owned') !== 'owned' || isKeepsake(mine)) return fail('notOwned');
     const pay = wantedPay(ad.pay, mine);
     batch(() => {
       collection.remove!(mine.id);

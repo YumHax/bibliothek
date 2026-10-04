@@ -1,6 +1,6 @@
 import * as THREE from 'three';
+import { inHours } from '@/time/clock';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { seededRandom } from '@/covers/generated/canvasUtils';
 import type { Updatable } from '@/core/Engine';
 import type { HomeUpgrades } from '@/economy/HomeUpgrades';
 import type { Furniture } from '../../Furniture';
@@ -10,13 +10,14 @@ import type { FlatFront, ShopKind } from '../streetPlan';
 import { snowCovered } from '../snowCover';
 import { isShopOpen } from '../shops/shopHours';
 import { afterChunk, patchShader } from '../../materials/shaderPatch';
-import { BALCONY_PLAN } from '../../balcony/balconyPlan';
+import { BALCONY_PLAN } from '../../balcony/balconyPlan'; // imports-ok: the street shows the flat's balcony as the balcony plan lays it
 import { BISTRO } from '../../balcony/BistroSet';
 import { facadeHeight } from '../facadePainter';
 import { FacadeFrame } from './facadeFrame';
 import { TriBuilder } from './TriBuilder';
 import { frontVariant } from '../shopfronts/shopfrontPlan';
 import { gapAt } from '../../surface/layers';
+import { lcg } from '@/random';
 
 /** An awning: fixed to the wall at `top`, reaching `reach` out and down to `edge`, a valance `valance` deep, stripes `stripe` wide. */
 const AWNING = { top: 3.0, reach: 1.05, edge: 2.48, valance: 0.2, scallop: 0.07, stripe: 0.35 };
@@ -101,7 +102,7 @@ export class FacadeRelief extends THREE.Group implements Furniture, Updatable {
         this.awnings.push({ kind: a.kind, out: 1 });
       }
       const slab = new THREE.Color(features.trim).multiplyScalar(0.86);
-      const random = seededRandom(front.spec.seed * 613 + 5);
+      const random = lcg(front.spec.seed * 613 + 5);
       for (const b of features.balconies) {
         balcony(stone, iron, m, b.s0, b.s1, b.y, BALCONY.depth, slab, fine ? BALCONY.bar : BALCONY.farBar);
         // What stands on its slab loses its foot (pressed on the slab, never seen).
@@ -161,7 +162,7 @@ export class FacadeRelief extends THREE.Group implements Furniture, Updatable {
     // At once when first seen, then wound at the crank's pace.
     const step = dt <= 0 ? Infinity : dt * WIND_SPEED;
     this.awnings.forEach((a, i) => {
-      const down = hours >= AWNING_HOURS.from && hours < AWNING_HOURS.to && isShopOpen(a.kind, hours) ? 1 : ROLLED;
+      const down = inHours(hours, AWNING_HOURS) && isShopOpen(a.kind, hours) ? 1 : ROLLED;
       a.out += THREE.MathUtils.clamp(down - a.out, -step, step);
       this.awningOut[i >> 2]!.setComponent(i & 3, a.out);
     });
@@ -397,7 +398,7 @@ function flatBalcony(stone: TriBuilder, iron: TriBuilder, plants: TriBuilder, en
   railing(iron, m, [s0, b.depth], [s1, b.depth], y, rail, barSpacing);
   railing(iron, m, [s0, 0], [s0, b.depth], y, rail, barSpacing);
   railing(iron, m, [s1, b.depth], [s1, 0], y, rail, barSpacing);
-  const random = seededRandom(2121);
+  const random = lcg(2121);
   // Balcony-local (x, z) -> facade (s, out): z is measured from the slab's middle.
   const at = (x: number, z: number): [number, number] => [b.at + x, b.depth / 2 + z];
   // The florist's pots in the order they come home: the three of `boughtPlants`, then the two of its decor.

@@ -4,6 +4,7 @@ import { Walker } from '../people/Walker';
 import { randomLook } from '../people/looks';
 import { Prop } from '../props/Prop';
 import { playShopBell } from '../travel/travelSounds';
+import { random, within } from '@/random';
 
 /** Where another customer walks in and out of a shop, and what they stop to look at (zone-local). */
 export interface ShopBrowsing {
@@ -83,7 +84,7 @@ export class ShopCustomer extends Prop implements Updatable {
       this.walker.setFade(this.fade);
       if (this.fade === 0 && this.fadeTo === 0) {
         this.walker.setPresent(false);
-        this.state = { kind: 'out', left: between(OUT_S) };
+        this.state = { kind: 'out', left: within(random, OUT_S) };
       }
     }
     const s = this.state;
@@ -96,7 +97,7 @@ export class ShopCustomer extends Prop implements Updatable {
       case 'browsing':
         s.left -= dt;
         if (s.left > 0) return;
-        if (s.seen >= 2 + (Math.random() < 0.4 ? 1 : 0)) this.goOut();
+        if (s.seen >= 2 + (random() < 0.4 ? 1 : 0)) this.goOut();
         else this.goTo(s.seen);
         return;
       default:
@@ -122,14 +123,14 @@ export class ShopCustomer extends Prop implements Updatable {
       this.goOut();
       return;
     }
-    const spot = spots[Math.floor(Math.random() * spots.length)]!;
+    const spot = spots[Math.floor(random() * spots.length)]!;
     this.state = { kind: 'walking' };
     const { entry } = this.browsing;
     // In from the door: by the entry point first, if the shop has one.
     const legs = seen === 0 && entry ? [v(entry), v(hub), v(spot.at)] : [v(hub), v(spot.at)];
     this.walker.walk(legs, () => {
-      this.walker.stand(spot.yaw, Math.random() < 0.6 ? 'think' : 'pockets');
-      this.state = { kind: 'browsing', left: between(BROWSE_S), seen: seen + 1 };
+      this.walker.stand(spot.yaw, random() < 0.6 ? 'think' : 'pockets');
+      this.state = { kind: 'browsing', left: within(random, BROWSE_S), seen: seen + 1 };
     });
   }
 
@@ -166,6 +167,3 @@ function v([x, z]: [number, number]): THREE.Vector3 {
   return new THREE.Vector3(x, 0, z);
 }
 
-function between([min, max]: [number, number]): number {
-  return min + Math.random() * (max - min);
-}

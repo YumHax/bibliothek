@@ -1,6 +1,8 @@
 import * as THREE from 'three';
-import { FRONT, KERB_HEIGHT, STREET_PLAN, type Vec2 } from '../streetPlan';
+import { STREET_PLAN, type Vec2 } from '../streetPlan';
+import { FRONT, KERB_HEIGHT } from '@/world/measures/street';
 import type { RoadObstacle, RoadVehicle, StreetTraffic } from './StreetTraffic';
+import { angleTo, lerpAngle } from '@/math/angles';
 
 /** Route samples every this many metres (positions and headings looked up, never computed per frame). */
 const STEP = 0.5;
@@ -48,7 +50,7 @@ export function placeOnRoute(route: Route, distance: number, out: THREE.Vector3)
   out.set(samples[a]! + (samples[a + 3]! - samples[a]!) * t, ROAD_Y, samples[a + 1]! + (samples[a + 4]! - samples[a + 1]!) * t);
   const h0 = samples[a + 2]!;
   const h1 = samples[a + 5]!;
-  return h0 + Math.atan2(Math.sin(h1 - h0), Math.cos(h1 - h0)) * t;
+  return lerpAngle(h0, h1, t);
 }
 
 export function headingAt(route: Route, distance: number): number {
@@ -75,7 +77,7 @@ export function distanceNearest(route: Route, [x, z]: Vec2): number {
 export function corneringSpeed(route: Route, distance: number, cruise: number): number {
   const here = headingAt(route, distance);
   const ahead = headingAt(route, distance + 8);
-  const turn = Math.abs(Math.atan2(Math.sin(ahead - here), Math.cos(ahead - here)));
+  const turn = Math.abs(angleTo(here, ahead));
   return cruise * (1 - 0.6 * Math.min(1, turn / 1.2));
 }
 
@@ -157,15 +159,32 @@ export function allowedSpeed(traffic: StreetTraffic, me: DriverView, cap: number
   const nose = me.length / 2;
   const brake = BRAKE * traffic.grip;
 
-  if (viewer) {
-    const along = ahead(viewer, 0.6);
-    if (along !== null) hold(stoppingSpeed(along - nose - stopFor, brake), 'viewer');
-  }
+  // Each rule lowers the cap it is given; the lowest wins, the first to reach it names the cause.
+  if (viewer) holdForViewer(viewer, nose, brake, stopFor);
+  holdForObstacles(traffic, me, nose, brake, stopFor);
+  holdForQueue(traffic, me, nose, brake);
+  if (!me.emergency) holdForSirens(traffic, me);
+  holdAtCrossings(traffic, me, nose, brake);
+  return scratch;
+}
+
+/** The player standing in the path: stop `stopFor` short of them. */
+function holdForViewer(viewer: THREE.Vector3, nose: number, brake: number, stopFor: number): void {
+  const along = ahead(viewer, 0.6);
+  if (along !== null) hold(stoppingSpeed(along - nose - stopFor, brake), 'viewer');
+}
+
+/** Anything on the road (`traffic.obstacles`) in the path, but not the driver's own. */
+function holdForObstacles(traffic: StreetTraffic, me: DriverView, nose: number, brake: number, stopFor: number): void {
   for (const o of traffic.obstacles) {
     if (!o.active || me.own?.has(o)) continue;
     const along = ahead(o.position, o.radius);
     if (along !== null) hold(stoppingSpeed(along - nose - o.radius - (o.gap ?? stopFor), brake), 'obstacle');
   }
+}
+
+/** The vehicle ahead going the same way: queue 2.5 m behind it, matching its speed (a vehicle pulled out of the lane is passed). */
+function holdForQueue(traffic: StreetTraffic, me: DriverView, nose: number, brake: number): void {
   for (const v of traffic.vehicles) {
     if (v === me.self || v === (me as unknown) || !v.active) continue;
     // Same way only (a car coming the other way through a bend is not a queue).
@@ -175,45 +194,49 @@ export function allowedSpeed(traffic: StreetTraffic, me: DriverView, cap: number
     const room = along - nose - v.length / 2 - 2.5;
     hold(room <= 0 ? 0 : Math.min(stoppingSpeed(room, brake) + v.speed, v.speed + room * 0.8), 'vehicle');
   }
-  if (!me.emergency) {
-    for (const s of traffic.sirens) {
-      if (!s.active || !s.sirenOn) continue;
-      const rx = px - s.position.x;
-      const rz = pz - s.position.z;
-      const sx = Math.cos(s.yaw);
-      const sz = -Math.sin(s.yaw);
-      const along = rx * sx + rz * sz;
-      const lateral = Math.abs(rx * sz - rz * sx);
-      if (Math.cos(s.yaw - me.yaw) > 0.6 && along > 0 && along < YIELD.reach && lateral < 3) {
-        scratch.pullOver = true;
-        hold(YIELD.crawl, 'siren');
-      } else if (rx * rx + rz * rz < YIELD.near * YIELD.near) hold(YIELD.slow, 'siren');
-    }
-  }
+}
 
-  // The crossings on Front Street, for a driver going along it.
+/** The sirens: one coming up behind, pull over and crawl; one going by near, slow down. */
+function holdForSirens(traffic: StreetTraffic, me: DriverView): void {
+  for (const s of traffic.sirens) {
+    if (!s.active || !s.sirenOn) continue;
+    const rx = px - s.position.x;
+    const rz = pz - s.position.z;
+    const sx = Math.cos(s.yaw);
+    const sz = -Math.sin(s.yaw);
+    const along = rx * sx + rz * sz;
+    const lateral = Math.abs(rx * sz - rz * sx);
+    if (Math.cos(s.yaw - me.yaw) > 0.6 && along > 0 && along < YIELD.reach && lateral < 3) {
+      scratch.pullOver = true;
+      hold(YIELD.crawl, 'siren');
+    } else if (rx * rx + rz * rz < YIELD.near * YIELD.near) hold(YIELD.slow, 'siren');
+  }
+}
+
+/**
+ * The crossings on Front Street, for a driver going along it: red or amber at the lights (amber only if it can still
+ * stop), a plain zebra someone is on or waiting at; an ambulance on a call goes through the red, slowly, never over
+ * someone on a zebra.
+ */
+function holdAtCrossings(traffic: StreetTraffic, me: DriverView, nose: number, brake: number): void {
   const east = hx > 0.75;
   const west = hx < -0.75;
-  if ((east || west) && Math.abs(pz) < FRONT.farKerb) {
-    const direction = east ? 1 : -1;
-    const crossings = STREET_PLAN.crossings;
-    for (let i = 0; i < crossings.length; i++) {
-      const crossing = crossings[i]!;
-      const line = traffic.stopLineX(crossing, direction);
-      const room = direction * (line - px) - nose;
-      if (room < -0.2 || room > 45) continue;
-      if (!traffic.mustHoldAt(crossing, i)) continue;
-      // Amber: go on if it cannot stop in time any more.
-      if (crossing.signals && traffic.amber && (me.speed * me.speed) / (2 * brake) > room) continue;
-      // An ambulance on a call goes through the red, slowly; never over someone on a zebra.
-      if (me.emergency && crossing.signals) {
-        if (room < 14) hold(THROUGH_RED, 'signal');
-        continue;
-      }
-      hold(stoppingSpeed(room - 0.3, brake), crossing.signals ? 'signal' : 'obstacle');
+  if (!(east || west) || Math.abs(pz) >= FRONT.farKerb) return;
+  const direction = east ? 1 : -1;
+  const crossings = STREET_PLAN.crossings;
+  for (let i = 0; i < crossings.length; i++) {
+    const crossing = crossings[i]!;
+    const line = traffic.stopLineX(crossing, direction);
+    const room = direction * (line - px) - nose;
+    if (room < -0.2 || room > 45) continue;
+    if (!traffic.mustHoldAt(crossing, i)) continue;
+    if (crossing.signals && traffic.amber && (me.speed * me.speed) / (2 * brake) > room) continue;
+    if (me.emergency && crossing.signals) {
+      if (room < 14) hold(THROUGH_RED, 'signal');
+      continue;
     }
+    hold(stoppingSpeed(room - 0.3, brake), crossing.signals ? 'signal' : 'obstacle');
   }
-  return scratch;
 }
 
 /** Eases `speed` towards `target`: brakes hard (less hard on a slippery road: `grip`), pulls away gently. */

@@ -1,8 +1,8 @@
 import { type LightKind, Polygon, Sheet, type Rng, type Surface, groundSquash, sizePx, worldPoint } from './Sheet';
-import { between, integer, mixHex, pick, shade } from './paint';
+import { mixHex, shade } from './paint';
 import { COURT_BACK, COURT_EAST, COURT_FROM, COURT_TO } from './plan';
 import { inFlatFrame } from '@/world/city/frontage';
-import { COURTYARD_YARD } from '@/world/outlook/outlookPlan';
+import { COURTYARD_YARD } from '@/world/courtyard/courtyardPlan'; // imports-ok: the painted view of the street draws what the walkable one lays out; one model for both is the last wave
 import { paintGroundBand } from './Street';
 import { TREE_STYLES, paintTree } from './Tree';
 import { paintBicycle } from './paintedFurniture';
@@ -11,6 +11,7 @@ import { groundEllipse } from './ParkFeatures';
 import { currentSeason } from '@/time/season';
 import { seasonalLawn } from './paint';
 import { BLINDS, CHIMNEY_POT, CURTAINS, DISH, PAVEMENT, POT_LEAVES, TERRACOTTA, WINDOW_FRAME, WINDOW_GLASS } from './palette';
+import { between, integer, pick } from '@/random';
 
 /**
  * Our own block's inner courtyard, behind the building (azimuths +90°..180°, `COURT_*` in
@@ -528,7 +529,7 @@ function courtFootprint(x: number, z: number, alongX: boolean): Footprint {
   return { x, z, along: alongX ? [1, 0] : [0, 1] };
 }
 
-/** A point of the walkable street's plan (`outlook/outlookPlan` `COURTYARD_YARD`) in the window view's frame. */
+/** A point of the walkable courtyard's plan (`courtyard/courtyardPlan` `COURTYARD_YARD`) in the window view's frame. */
 const yardPoint = (at: readonly [number, number]): [number, number] => inFlatFrame(at);
 /** A colour of the plan (a hex number) as a CSS colour. */
 const css = (color: number): string => `#${color.toString(16).padStart(6, '0')}`;

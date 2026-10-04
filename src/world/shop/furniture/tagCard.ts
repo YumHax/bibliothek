@@ -1,10 +1,11 @@
 import * as THREE from 'three';
-import { createCanvas, seededRandom, toTexture } from '@/covers/generated/canvasUtils';
+import { createCanvas, toTexture } from '@/covers/generated/canvasUtils';
 import { part } from '../../props/Prop';
 import { paint } from '../../materials/palette';
 import { WALL, decal } from '../../surface/layers';
 import { cutOut } from '../common/cutout';
 import { HAND, hex, setLines } from '../common/lettering';
+import { lcg } from '@/random';
 
 const PX_PER_M = 1600;
 const STRING = paint(0xd8cbb0, 0.9);
@@ -41,7 +42,7 @@ export function hangTag(parent: THREE.Object3D, at: THREE.Vector3, yaw: number, 
   const h = options.height ?? 0.09;
   const holder = new THREE.Group();
   holder.position.copy(at);
-  holder.rotation.set(0, yaw, (seededRandom(options.seed ?? 1)() - 0.5) * 0.2);
+  holder.rotation.set(0, yaw, (lcg(options.seed ?? 1)() - 0.5) * 0.2);
   part(holder, 0.002, drop, 0.002, STRING, { y: -drop / 2 });
   const card = tagCard(options);
   card.position.y = -drop - h / 2;
@@ -53,7 +54,7 @@ function paintCard(wM: number, hM: number, options: TagCardOptions): THREE.Textu
   const W = Math.round(wM * PX_PER_M);
   const H = Math.round(hM * PX_PER_M);
   const [canvas, ctx] = createCanvas(W, H);
-  const random = seededRandom((options.seed ?? 1) * 131 + 7);
+  const random = lcg((options.seed ?? 1) * 131 + 7);
   ctx.fillStyle = '#f4eedc';
   ctx.fillRect(0, 0, W, H);
   ctx.fillStyle = hex(options.band ?? 0x7a5234);

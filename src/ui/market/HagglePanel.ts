@@ -3,7 +3,10 @@ import { OFFER_KINDS } from '@/economy/haggle';
 import type { StockItem } from '@/economy/StockItem';
 import { playCoins } from '@/audio/coins';
 import { actionKeyLabel } from '@/ui/keys';
-import { MarketPanel, coinsHtml, escapeHtml, type PanelWallet } from './MarketPanel';
+import { MarketPanel, type PanelWallet } from './MarketPanel';
+import { attr, html, paint } from '../panel/html';
+import { priceHtml } from '../panel/widgets';
+import { formatCoins } from '@/text/money';
 
 /** How a haggle ended, as the Session hears it. */
 type HaggleOutcome = 'deal' | 'walk' | 'stopped' | 'none';
@@ -25,9 +28,10 @@ const OFFER_LINE: Record<OfferKind, string> = {
 
 /**
  * Haggling over the copy in hand, as a short exchange with the stallholder: the three offers
- * (keys 1-3), taking their counter-offer (Enter), walking off (Esc or Close: their last word
- * stands for the day). What was said scrolls above, the asking price and the patience left
- * (dots) beside it. The negotiation itself (`Negotiation`) is pure; this panel only talks.
+ * (keys 1-3), taking their counter-offer (Enter with no button focused: a focused button takes
+ * Enter itself), walking off (Esc or Close: their last word stands for the day). What was said
+ * scrolls above, the asking price and the patience left (dots) beside it. The negotiation itself
+ * (`Negotiation`) is pure; this panel only talks.
  */
 export class HagglePanel extends MarketPanel {
   private item: StockItem | null = null;
@@ -48,7 +52,7 @@ export class HagglePanel extends MarketPanel {
     this.onDone = options.onClose;
     this.insults = 0;
     this.outcome = 'none';
-    this.log = [{ who: 'them', text: `${options.item.game.title}? ${options.item.tagPrice} coins, like it says.` }];
+    this.log = [{ who: 'them', text: `${options.item.game.title}? ${formatCoins(options.item.tagPrice)}, like it says.` }];
     this.setTitle(`Haggling at ${options.stall}`, 'Make an offer. Too low and they take offence. Walk off (Esc) or run out of patience and their last counter-offer stands for the day.');
   }
 
@@ -57,33 +61,34 @@ export class HagglePanel extends MarketPanel {
     const item = this.item;
     if (!n || !item) return;
     const pips = '●'.repeat(n.patienceLeft) || '—';
-    const log = this.log.map((e) => `<p class="haggle__line haggle__line--${e.who}"><b>${e.who === 'you' ? 'You' : 'Stallholder'}</b> ${escapeHtml(e.text)}</p>`).join('');
+    const log = this.log.map((e) => html`<p class="haggle__line haggle__line--${e.who}"><b>${e.who === 'you' ? 'You' : 'Stallholder'}</b> ${e.text}</p>`);
     const proud = item.source === 'showpiece' || item.source === 'estate' || item.source === 'grail';
     const risks = proud ? PROUD_RISK : OFFER_RISK;
     const offers = OFFER_KINDS.map((kind, i) => {
       // An offer at or over what they ask now would only take their price: greyed, the Take button does that.
       const same = !n.done && n.offerPrice(kind) >= n.asking;
       const risk = !same ? risks[kind] : undefined;
-      return `
-      <button type="button" class="ui-btn" data-action="offer" data-kind="${kind}" ${n.done || same ? 'disabled' : ''} ${i === 1 ? 'data-autofocus' : ''}>
-        <kbd>${i + 1}</kbd> ${OFFER_LABEL[kind]} ${same ? '<small class="haggle__risk">= asking</small>' : coinsHtml(n.offerPrice(kind))}${risk ? ` <small class="haggle__risk">${risk}</small>` : ''}
+      return html`<button type="button" class="ui-btn" data-action="offer" data-kind="${kind}"${attr('disabled', n.done || same)}${attr('data-autofocus', i === 1)}>
+        <kbd>${i + 1}</kbd> ${OFFER_LABEL[kind]} ${same ? html`<small class="haggle__risk">= asking</small>` : priceHtml(n.offerPrice(kind))}${risk ? html` <small class="haggle__risk">${risk}</small>` : ''}
       </button>`;
-    }).join('');
+    });
     const canTake = !n.done && n.asking < n.tag;
-    this.body.innerHTML = `
-      <div class="haggle__deal">
+    paint(
+      this.body,
+      html`<div class="haggle__deal">
         <div class="haggle__what">
-          <span class="catalogue__title">${escapeHtml(item.game.title)}</span>
-          <span class="catalogue__meta">tag ${item.tagPrice} · asking ${n.done ? Math.round(n.factor * n.tag) : n.asking} coins${n.swayShare > 0 ? ` · in your favour today: ${Math.round(n.swayShare * 100)} %` : ''}</span>
+          <span class="catalogue__title">${item.game.title}</span>
+          <span class="catalogue__meta">tag ${item.tagPrice} · asking ${formatCoins(n.done ? Math.round(n.factor * n.tag) : n.asking)}${n.swayShare > 0 ? ` · in your favour today: ${Math.round(n.swayShare * 100)} %` : ''}</span>
         </div>
-        <div class="haggle__patience" title="Patience left">${n.done ? '' : `patience <span>${pips}</span>`}</div>
+        <div class="haggle__patience" aria-label="Patience left">${n.done ? '' : html`patience <span>${pips}</span>`}</div>
       </div>
       <div class="haggle__log">${log}</div>
       <div class="haggle__offers">
         ${offers}
-        <button type="button" class="ui-btn ui-btn--primary" data-action="take" ${canTake ? '' : 'disabled'}><kbd>Enter</kbd> Take ${n.asking}</button>
-        ${n.done ? `<button type="button" data-action="close" class="ui-btn ui-btn--primary haggle__back">Back to the stall</button>` : ''}
-      </div>`;
+        <button type="button" class="ui-btn ui-btn--primary" data-action="take"${attr('disabled', !canTake)}><kbd>Enter</kbd> Take ${n.asking}</button>
+        ${n.done ? html`<button type="button" data-action="close" class="ui-btn ui-btn--primary haggle__back">Back to the stall</button>` : ''}
+      </div>`,
+    );
     const logEl = this.body.querySelector('.haggle__log');
     if (logEl) logEl.scrollTop = logEl.scrollHeight;
   }
@@ -96,11 +101,13 @@ export class HagglePanel extends MarketPanel {
   protected override onKey(e: KeyboardEvent): void {
     const i = ['Digit1', 'Digit2', 'Digit3', 'Numpad1', 'Numpad2', 'Numpad3'].indexOf(e.code);
     if (i >= 0) this.offer(OFFER_KINDS[i % 3]!);
-    else if (e.code === 'Enter' || e.code === 'NumpadEnter') {
-      e.preventDefault();
-      if (this.negotiation?.done) this.close();
-      else this.take();
-    }
+  }
+
+  /** Enter with nothing focused: take their price, or leave once the haggle is over. */
+  protected override onEnter(): boolean {
+    if (this.negotiation?.done) this.close();
+    else this.take();
+    return true;
   }
 
   protected override onClosed(): void {
@@ -137,7 +144,7 @@ export class HagglePanel extends MarketPanel {
       this.outcome = reply.kind === 'walk' ? 'walk' : 'stopped';
       if (reply.insulted) this.insults++;
     }
-    this.setStatus(reply.kind === 'accept' ? `Deal: ${reply.price} coins. ${actionKeyLabel('buy')} at the stall to pay.` : reply.kind === 'walk' ? `Out of patience: ${reply.price} coins stands for today.` : '');
+    this.setStatus(reply.kind === 'accept' ? `Deal: ${formatCoins(reply.price)}. ${actionKeyLabel('buy')} at the stall to pay.` : reply.kind === 'walk' ? `Out of patience: ${formatCoins(reply.price)} stands for today.` : '');
     this.refresh();
   }
 }

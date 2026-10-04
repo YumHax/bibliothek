@@ -1,5 +1,7 @@
-import { audioBus, startedAudioContext } from '@/audio/audioContext';
 import { whiteNoise } from '@/audio/noise';
+import { shot } from '@/audio/oneShot';
+import { noiseBurst, tone } from '@/audio/synth';
+import { audioBus, startedAudioContext } from '@/audio/audioContext';
 
 /*
  * The street door's sounds, synthesised: the door release's buzz while the lock is held open, the
@@ -47,39 +49,18 @@ export function startBuzz(level = 0.07): { stop(): void } {
 
 /** The lock letting go: a short bright knock of metal, a little wood under it. */
 export function playClack(level = 0.35): void {
-  burst(level, 1500, 3, 0.05, 140);
+  knock(level, 1500, 3, 0.05, 140);
 }
 
 /** A heavy leaf meeting its frame. */
 export function playThud(level = 0.4): void {
-  burst(level, 380, 1.2, 0.14, 70);
+  knock(level, 380, 1.2, 0.14, 70);
 }
 
-/** A band of noise decaying over `decay` s, and a low sine knock at `knock` Hz under it. */
-function burst(level: number, band: number, q: number, decay: number, knock: number): void {
-  const ctx = startedAudioContext();
-  if (!ctx) return;
-  const now = ctx.currentTime;
-  const out = audioBus(ctx, 'world');
-  const source = ctx.createBufferSource();
-  source.buffer = whiteNoise(ctx, 0.3);
-  const filter = ctx.createBiquadFilter();
-  filter.type = 'bandpass';
-  filter.frequency.value = band;
-  filter.Q.value = q;
-  const env = ctx.createGain();
-  env.gain.setValueAtTime(level, now);
-  env.gain.exponentialRampToValueAtTime(0.0001, now + decay);
-  source.connect(filter).connect(env).connect(out);
-  source.start(now);
-  source.stop(now + decay + 0.02);
-  const osc = ctx.createOscillator();
-  osc.frequency.setValueAtTime(knock * 1.6, now);
-  osc.frequency.exponentialRampToValueAtTime(knock, now + decay);
-  const low = ctx.createGain();
-  low.gain.setValueAtTime(level * 0.8, now);
-  low.gain.exponentialRampToValueAtTime(0.0001, now + decay * 1.4);
-  osc.connect(low).connect(out);
-  osc.start(now);
-  osc.stop(now + decay * 1.5);
+/** A band of noise decaying over `decay` s, and a low sine knock at `knock` Hz under it, dying over half as long again. */
+function knock(level: number, band: number, q: number, decay: number, knock: number): void {
+  shot(level, decay * 1.5, { start: 'started', lead: 0 }, ({ ctx, out, t }) => {
+    noiseBurst(ctx, out, t, { band, q, level: 1, length: decay, attack: 0, floor: 0.0001, noise: whiteNoise(ctx, 0.3), offset: 0 });
+    tone(ctx, out, t, { frequency: knock * 1.6, to: knock, glide: decay, level: 0.8, length: decay * 1.4, attack: 0, floor: 0.0001, tail: decay * 0.1 });
+  });
 }

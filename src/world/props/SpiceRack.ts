@@ -1,8 +1,8 @@
-import { seededRandom } from '@/covers/generated/canvasUtils';
 import { cylinderMesh } from '../meshUtils';
 import { paint, standard, timber } from '../materials/palette';
 import { WALL } from '../surface/layers';
 import { Prop, part } from './Prop';
+import { lcg } from '@/random';
 
 export interface SpiceRackOptions {
   /** Outer width. Default 0.4. */
@@ -33,7 +33,7 @@ export class SpiceRack extends Prop {
     this.name = 'SpiceRack';
     const width = options.width ?? 0.4;
     const rows = options.rows ?? 2;
-    const random = seededRandom(options.seed ?? 11);
+    const random = lcg(options.seed ?? 11);
     const wood = timber(options.wood ?? 0xc9a577, 0.6);
     const height = rows * ROW_HEIGHT + 0.02;
     const t = 0.012;

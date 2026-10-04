@@ -4,12 +4,16 @@ import { CONSOLES, FAULTS, TOOLS, resaleOf, type BoardPart, type Fault, type Too
 import type { HomeConsole, Workshop } from '@/repair/Workshop';
 import { playPartClick, playPowerOn, playScrew, playScrub, playSolder } from '@/audio/repairSounds';
 import { escapeHtml } from '../html';
-import { ModalPanel } from '../ModalPanel';
+import { CardPanel } from '../panel/CardPanel';
+import { attr, html, raw, type Html } from '../panel/html';
+import { formatCoins } from '@/text/money';
 import './repair.css';
 
 interface RepairPanelDeps {
   workshop: Workshop;
   notices: NoticeActions;
+  /** A neighbour's help at a step (`social/building/student.repairHint`): the part to look at, the tool to take; null without it. */
+  hint?: (step: 'find' | 'tool', name: string) => string | null;
 }
 
 /** Where the job is: the shell's screws out, lifted, the fault found, the tool picked, the fix, the shell back and screwed, the test. */
@@ -47,10 +51,10 @@ const JOINTS: Readonly<Record<string, number>> = { capacitor: 2, ribbon: 4 };
  * from the tray (a wrong one is a word, no harm), the fix itself (scrubbed clean with the pointer held down, an old
  * part out and a new one in, joints soldered one by one), the shell back on and screwed, and the power switch: the
  * light comes on, the chime, `Workshop.fix`. Closing it halfway leaves the console as it was (the next opening starts
- * over). A `ModalLike`: `prepare(console)` first, then the Session opens it.
+ * over). A `ModalLike`: `prepare(console)` first, then the Session opens it. The drawing is SVG built as text (`raw`):
+ * nothing in it comes from the player.
  */
-export class RepairPanel extends ModalPanel {
-  private readonly card: HTMLElement;
+export class RepairPanel extends CardPanel {
   private console: HomeConsole | null = null;
   private step: Step = 'unscrew';
   private screws: boolean[] = [];
@@ -65,13 +69,11 @@ export class RepairPanel extends ModalPanel {
   private solderStage: 'out' | 'in' = 'out';
 
   constructor(container: HTMLElement, private readonly deps: RepairPanelDeps) {
-    super(container, { className: 'ui-modal--centre repair-panel' });
-    this.root.innerHTML = '<article class="repair ui-card" role="dialog" aria-modal="true" aria-label="Repairing a console"></article>';
-    this.card = this.root.querySelector('.repair')!;
-    this.root.addEventListener('click', (e) => this.onClick(e));
-    this.root.addEventListener('pointerdown', (e) => this.onPointerDown(e));
-    this.root.addEventListener('pointermove', (e) => this.onPointerMove(e));
-    window.addEventListener('pointerup', () => {
+    super(container, { className: 'repair-panel', cardClass: 'repair ui-card', title: 'Repairing a console', dismiss: 'Put it down', header: false });
+    this.listen(this.root, 'click', (e) => this.onClick(e));
+    this.listen(this.root, 'pointerdown', (e) => this.onPointerDown(e));
+    this.listen(this.root, 'pointermove', (e) => this.onPointerMove(e));
+    this.listen(window, 'pointerup', () => {
       this.scrubbing = false;
       this.last = null;
     });
@@ -92,80 +94,99 @@ export class RepairPanel extends ModalPanel {
     this.swapOut = false;
     this.solderStage = 'out';
     this.joints = Array.from({ length: console ? JOINTS[FAULTS[console.fault].part] ?? 2 : 2 }, () => false);
-    this.render();
+    super.onOpened();
+  }
+
+  protected override dismissLabel(): string {
+    return this.step === 'done' ? 'Done' : 'Put it down';
+  }
+
+  protected override dismissFocused(): boolean {
+    return this.step === 'done' || !this.console;
   }
 
   private get fault(): Fault | null {
     return this.console ? FAULTS[this.console.fault] : null;
   }
 
+  /** A click on the bench: what it does depends on the step (a screw, the shell, a part, a tool, the fix, the power button). */
   private onClick(e: MouseEvent): void {
     const target = e.target as Element;
-    if (target === this.root || target.closest('[data-action="close"]')) {
-      this.close();
-      return;
-    }
     const console = this.console;
     const fault = this.fault;
     if (!console || !fault) return;
-    const el = target.closest<Element>('[data-hit]');
-    const hit = el?.getAttribute('data-hit') ?? '';
+    const hit = target.closest<Element>('[data-hit]')?.getAttribute('data-hit') ?? '';
     const tool = target.closest<HTMLElement>('[data-tool]')?.dataset.tool as ToolId | undefined;
     switch (this.step) {
       case 'unscrew':
-      case 'screw': {
-        if (!hit.startsWith('screw:')) return;
-        const i = Number(hit.slice(6));
-        const out = this.step === 'unscrew';
-        if (this.screws[i] !== out) return;
-        this.screws[i] = !out;
-        playScrew(!out);
-        if (out && this.screws.every((s) => !s)) this.go('lift');
-        else if (!out && this.screws.every((s) => s)) this.go('test');
-        else this.render();
+      case 'screw':
+        this.screwClick(hit);
         return;
-      }
       case 'lift':
-        if (target.closest('[data-hit="shell"]')) {
-          playPartClick(false);
-          this.go('find');
-        }
+        this.shellClick(target, false, 'find');
         return;
       case 'find':
-        if (!hit.startsWith('part:')) return;
-        if (hit.slice(5) === fault.part) {
-          this.message = fault.finding;
-          this.go('tool');
-        } else {
-          const name = PARTS[hit.slice(5) as BoardPart].name;
-          this.message = `The ${name} look${name.endsWith('s') ? '' : 's'} fine.`;
-          this.render();
-        }
+        this.findClick(hit, fault);
         return;
       case 'tool':
-        if (!tool) return;
-        if (tool === fault.tool) {
-          this.message = this.fixHint(fault);
-          this.go('fix');
-        } else {
-          this.message = `Not with the ${TOOLS[tool].name.toLowerCase()}. ${fault.finding}`;
-          this.render();
-        }
+        this.toolClick(tool, fault);
         return;
       case 'fix':
         this.fixClick(hit, fault);
         return;
       case 'close':
-        if (target.closest('[data-hit="shell"]')) {
-          playPartClick(true);
-          this.go('screw');
-        }
+        this.shellClick(target, true, 'screw');
         return;
       case 'test':
         if (hit === 'power') this.powerOn(console, fault);
         return;
       default:
         return;
+    }
+  }
+
+  /** A screw turned: out while opening the case, in while closing it; the last one moves the step on. */
+  private screwClick(hit: string): void {
+    if (!hit.startsWith('screw:')) return;
+    const i = Number(hit.slice(6));
+    const out = this.step === 'unscrew';
+    if (this.screws[i] !== out) return;
+    this.screws[i] = !out;
+    playScrew(!out);
+    if (out && this.screws.every((s) => !s)) this.go('lift');
+    else if (!out && this.screws.every((s) => s)) this.go('test');
+    else this.refresh();
+  }
+
+  /** The shell lifted off (to look for the fault) or put back on (to screw it shut). */
+  private shellClick(target: Element, on: boolean, next: Step): void {
+    if (!target.closest('[data-hit="shell"]')) return;
+    playPartClick(on);
+    this.go(next);
+  }
+
+  /** A part pointed at on the board: the fault's part names the finding, any other looks fine. */
+  private findClick(hit: string, fault: Fault): void {
+    if (!hit.startsWith('part:')) return;
+    if (hit.slice(5) === fault.part) {
+      this.message = fault.finding;
+      this.go('tool');
+    } else {
+      const name = PARTS[hit.slice(5) as BoardPart].name;
+      this.message = `The ${name} look${name.endsWith('s') ? '' : 's'} fine.`; // convention-ok: the verb agrees with the noun, not a count
+      this.refresh();
+    }
+  }
+
+  /** A tool picked up: the fault's tool says how to go about the fix, another is turned down. */
+  private toolClick(tool: ToolId | undefined, fault: Fault): void {
+    if (!tool) return;
+    if (tool === fault.tool) {
+      this.message = this.fixHint(fault);
+      this.go('fix');
+    } else {
+      this.message = `Not with the ${TOOLS[tool].name.toLowerCase()}. ${fault.finding}`;
+      this.refresh();
     }
   }
 
@@ -176,7 +197,7 @@ export class RepairPanel extends ModalPanel {
         this.swapOut = true;
         playPartClick(false);
         this.message = `The old ${PARTS[fault.part].name} is out. Seat the new one in its place.`;
-        this.render();
+        this.refresh();
       } else if (this.swapOut && hit === 'socket') {
         playPartClick(true);
         this.fixed();
@@ -189,7 +210,7 @@ export class RepairPanel extends ModalPanel {
       this.joints[i] = true;
       playSolder();
       if (!this.joints.every(Boolean)) {
-        this.render();
+        this.refresh();
         return;
       }
       // A capacitor comes out on its two legs, then the new one goes in on two more.
@@ -198,7 +219,7 @@ export class RepairPanel extends ModalPanel {
         this.joints = this.joints.map(() => false);
         playPartClick(false);
         this.message = 'The old capacitor is out. Solder the new one’s legs in.';
-        this.render();
+        this.refresh();
         return;
       }
       this.fixed();
@@ -246,12 +267,12 @@ export class RepairPanel extends ModalPanel {
     const platform = getPlatform(console.platform);
     this.message = 'The power light comes on, and the test cartridge’s title screen comes up clean.';
     this.go('done');
-    this.deps.notices.reward({ title: `Mended: the ${platform.shortName}`, detail: `${fault.done}\nTV REPAIR on Park Street pays ${resaleOf(console.platform)} coins for a working one.` });
+    this.deps.notices.reward({ title: `Mended: the ${platform.shortName}`, detail: `${fault.done}\nTV REPAIR on Park Street pays ${formatCoins(resaleOf(console.platform))} for a working one.` });
   }
 
   private go(step: Step): void {
     this.step = step;
-    this.render();
+    this.refresh();
   }
 
   private fixHint(fault: Fault): string {
@@ -265,12 +286,19 @@ export class RepairPanel extends ModalPanel {
     }
   }
 
+  /** A neighbour's word on the step, naming the faulty part or the right tool, if one helps. */
+  private hintFor(step: 'find' | 'tool'): string | null {
+    const fault = this.fault;
+    if (!fault || !this.deps.hint) return null;
+    return this.deps.hint(step, step === 'find' ? PARTS[fault.part].name : TOOLS[fault.tool].name.toLowerCase());
+  }
+
   private stepLine(): string {
     switch (this.step) {
       case 'unscrew': return `Undo the ${this.screws.length} screws holding the shell (${this.screws.filter((s) => !s).length} out).`;
       case 'lift': return 'Lift the shell off.';
-      case 'find': return 'Find what is wrong: look the board over.';
-      case 'tool': return 'Pick the right thing off the tray.';
+      case 'find': return this.hintFor('find') ?? 'Find what is wrong: look the board over.';
+      case 'tool': return this.hintFor('tool') ?? 'Pick the right thing off the tray.';
       case 'fix': return '';
       case 'close': return 'Put the shell back on.';
       case 'screw': return `Screw it shut (${this.screws.filter(Boolean).length} of ${this.screws.length}).`;
@@ -279,26 +307,27 @@ export class RepairPanel extends ModalPanel {
     }
   }
 
-  private render(): void {
+  /** The step's line (what was found, what to do next) goes on the status line. */
+  protected override repaint(): void {
+    super.repaint();
+    this.setStatus(this.console && this.fault ? [this.message, this.stepLine()].filter(Boolean).join(' ') : '');
+  }
+
+  protected render(): Html {
     const console = this.console;
     const fault = this.fault;
-    if (!console || !fault) {
-      this.card.innerHTML = '<p>Nothing on the table to mend.</p><footer><button type="button" class="ui-btn" data-action="close" data-autofocus>Close</button></footer>';
-      return;
-    }
+    if (!console || !fault) return html`<p>Nothing on the table to mend.</p>`;
     const platform = getPlatform(console.platform);
     const toolsOn = this.step === 'tool';
-    const tools = (Object.keys(TOOLS) as ToolId[]).map((id) => `<button type="button" class="repair__tool${this.step === 'fix' && fault.tool === id ? ' repair__tool--in-hand' : ''}" data-tool="${id}" ${toolsOn ? '' : 'disabled'} title="${escapeHtml(TOOLS[id].name)}"><span aria-hidden="true">${TOOLS[id].icon}</span>${escapeHtml(TOOLS[id].name)}</button>`).join('');
-    const line = [this.message, this.stepLine()].filter(Boolean).join(' ');
-    this.card.innerHTML = `
-      <header>
-        <h2>The kitchen table · a broken ${escapeHtml(platform.shortName)}</h2>
-        <p class="repair__job">From ${escapeHtml(console.from)}: “${escapeHtml(fault.symptom)}”</p>
+    const tools = (Object.keys(TOOLS) as ToolId[]).map(
+      (id) => html`<button type="button" class="repair__tool${this.step === 'fix' && fault.tool === id ? ' repair__tool--in-hand' : ''}" data-tool="${id}"${attr('disabled', !toolsOn)}><span aria-hidden="true">${TOOLS[id].icon}</span>${TOOLS[id].name}</button>`,
+    );
+    return html`<header>
+        <h2>The kitchen table · a broken ${platform.shortName}</h2>
+        <p class="repair__job">From ${console.from}: “${fault.symptom}”</p>
       </header>
-      <div class="repair__bench">${this.drawing(console, fault)}</div>
-      <p class="repair__step" aria-live="polite">${escapeHtml(line)}</p>
-      <div class="repair__tools">${tools}</div>
-      <footer><button type="button" class="ui-btn" data-action="close" ${this.step === 'done' ? 'data-autofocus' : ''}>${this.step === 'done' ? 'Done' : 'Put it down'}</button></footer>`;
+      <div class="repair__bench">${raw(this.drawing(console, fault))}</div>
+      <div class="repair__tools">${tools}</div>`;
   }
 
   /** The bench seen from above: the board and its parts, the shell over it (with its screws) until lifted. */

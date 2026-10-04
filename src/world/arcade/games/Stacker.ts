@@ -1,5 +1,6 @@
 import { type ArcadeControls, SCREEN_H, SCREEN_W, drawText } from './ArcadeGame';
 import { BaseGame, PLAY_TOP } from './BaseGame';
+import { random } from '@/random';
 
 const START_SECONDS = 12;
 /** Seconds a landed row puts back; a clean one adds `PERFECT_SECONDS` more. */
@@ -106,7 +107,7 @@ export class Stacker extends BaseGame {
     const turn = this.tower * ROWS + this.row;
     if (this.pilotTurn !== turn) {
       this.pilotTurn = turn;
-      this.pilotLate = this.row > 0 && Math.random() < 0.08 + (1 - skill) * 0.3 + this.row * 0.02 + this.tower * 0.1;
+      this.pilotLate = this.row > 0 && random() < 0.08 + (1 - skill) * 0.3 + this.row * 0.02 + this.tower * 0.1;
       this.pilotWasSquare = false;
     }
     const width = widthFor(this.row);

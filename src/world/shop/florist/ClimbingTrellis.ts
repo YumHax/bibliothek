@@ -3,8 +3,8 @@ import type { Furniture } from '../../Furniture';
 import { part } from '../../props/Prop';
 import { INSET } from '../../props/joinery';
 import { paint, timber } from '../../materials/palette';
-import { seededRandom } from '@/graphics/canvas';
-import { LeafBatch, LEAF_GREENS, headGeometry, pick, stem } from './greenery';
+import { LeafBatch, LEAF_GREENS, headGeometry, stem } from './greenery';
+import { lcg, pick } from '@/random';
 
 export interface ClimbingTrellisOptions {
   /** Width of the trellis and its trough, and the trellis's height. Default 1.2 x 2.3. */
@@ -35,7 +35,7 @@ export class ClimbingTrellis extends THREE.Group implements Furniture {
     this.name = 'ClimbingTrellis';
     const W = options.width ?? 1.2;
     const H = options.height ?? 2.3;
-    const random = seededRandom(options.seed ?? 5);
+    const random = lcg(options.seed ?? 5);
     const wood = timber(0x7a5a3a, 0.8);
 
     // The trough: front, back, ends and the soil.

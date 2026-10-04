@@ -6,6 +6,8 @@ import { invisibleHitbox } from '../meshUtils';
 import { Prop } from './Prop';
 import { HoverGlint } from './hoverGlint';
 import { playFridgeSeal, playHingeCreak, playWoodKnock } from '@/audio/furnitureSounds';
+import { capitalise } from '@/text/strings';
+import { random } from '@/random';
 
 interface SwingLeafOptions {
   width: number;
@@ -31,7 +33,7 @@ const CREAK_CHANCE = 0.2;
 
 /** "fridge" -> "Fridge": the caption's name. */
 export function captionName(noun: string): string {
-  return noun.charAt(0).toUpperCase() + noun.slice(1);
+  return capitalise(noun);
 }
 
 /**
@@ -112,7 +114,7 @@ export class SwingLeaf extends Prop implements Interactable, Updatable {
     this.target = this.target > 0 ? 0 : 1;
     if (this.target === 0) return;
     if (this.options.seal) playFridgeSeal(true);
-    else if (Math.random() < CREAK_CHANCE) playHingeCreak(0.025);
+    else if (random() < CREAK_CHANCE) playHingeCreak(0.025);
   }
 }
 

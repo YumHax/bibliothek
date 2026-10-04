@@ -5,6 +5,8 @@ import type { CarVoice } from '../StreetCars';
 import { falloff, type StreetEar } from './streetEar';
 import type { SoundGraph } from './soundGraph';
 import { airBrakes, bikeBell, binClatter, brakesOff, crate, doorPsst, freewheelTick, splash, vanDoor } from './vehicleCues';
+import { random } from '@/random';
+import { damp } from '@/math/damp';
 
 /** Which scripted vehicle a voice is, when it is one (the bus's brakes and doors, the van's crates, the lorry's bins). */
 export type VehicleRole = 'bus' | 'van' | 'lorry';
@@ -140,7 +142,7 @@ export class VehicleVoice {
     const d = Math.max(0.5, ear.distance(this.world));
     // The approach, smoothed over a few frames: what shifts the pitch.
     const rate = this.distance < 0 || dt <= 0 ? 0 : (d - this.distance) / dt;
-    this.closing += (THREE.MathUtils.clamp(rate, -30, 30) - this.closing) * Math.min(1, dt * 6);
+    this.closing = damp(this.closing, THREE.MathUtils.clamp(rate, -30, 30), 6, dt);
     this.distance = d;
     const doppler = SOUND_SPEED / (SOUND_SPEED + this.closing);
     const speed = voice.speed;
@@ -195,7 +197,7 @@ export class VehicleVoice {
     if (wet > 0.45 && speed > 3 && d < 16) {
       this.nextSplash -= dt;
       if (this.nextSplash <= 0) {
-        this.nextSplash = 1.5 + Math.random() * 3;
+        this.nextSplash = 1.5 + random() * 3;
         splash(g, out(1.2), heard * wet);
       }
     }
@@ -230,8 +232,8 @@ export class VehicleVoice {
     if (this.role === 'bus') airBrakes(this.g, out(2.5), heard);
     else if (this.role === 'lorry') brakesOff(this.g, out(1), heard * 0.8);
     this.doorsOpen = false;
-    this.nextCrate = 2.5 + Math.random() * 2;
-    this.nextBin = 2.5 + Math.random();
+    this.nextCrate = 2.5 + random() * 2;
+    this.nextBin = 2.5 + random();
   }
 
   /** The van unloading, the lorry emptying bins. */
@@ -244,7 +246,7 @@ export class VehicleVoice {
       if (this.standingFor > 3) {
         this.nextCrate -= dt;
         if (this.nextCrate <= 0) {
-          this.nextCrate = 2 + Math.random() * 4;
+          this.nextCrate = 2 + random() * 4;
           crate(this.g, out(1), heard);
         }
       }
@@ -252,7 +254,7 @@ export class VehicleVoice {
       this.setWhine(true, this.g.now, heard);
       this.nextBin -= dt;
       if (this.nextBin <= 0) {
-        this.nextBin = 0.6 + Math.random() * 1.8;
+        this.nextBin = 0.6 + random() * 1.8;
         binClatter(this.g, out(1), heard);
       }
     }
@@ -276,7 +278,7 @@ export class VehicleVoice {
     this.coastClock -= dt;
     if (this.coastClock <= 0) {
       this.coasting = !this.coasting;
-      this.coastClock = this.coasting ? 1.5 + Math.random() * 2.5 : 2 + Math.random() * 4;
+      this.coastClock = this.coasting ? 1.5 + random() * 2.5 : 2 + random() * 4;
     }
     if (this.coasting && speed > 1 && d < 12) {
       this.tickClock -= dt;
@@ -290,8 +292,8 @@ export class VehicleVoice {
     }
     this.bellCooldown -= dt;
     const braking = this.lastSpeed - speed > 2.5 * dt && this.lastSpeed > 2;
-    if (this.bellCooldown <= 0 && d < 16 && (braking || Math.random() < dt / 90)) {
-      this.bellCooldown = 8 + Math.random() * 6;
+    if (this.bellCooldown <= 0 && d < 16 && (braking || random() < dt / 90)) {
+      this.bellCooldown = 8 + random() * 6;
       bikeBell(this.g, out(1.5), Math.min(1, heard * 2.5));
     }
   }
@@ -302,7 +304,7 @@ export class VehicleVoice {
     const scooter = this.kindKey === 'scooter' || this.kindKey === 'motorbike';
     horn(this.g.ctx, out, {
       pitches: heavy ? [233, 294] : scooter ? [560, 600] : [415 + this.tint * 40, 523 + this.tint * 40],
-      blasts: Math.random() < 0.4 ? 2 : 1,
+      blasts: random() < 0.4 ? 2 : 1,
       length: heavy ? 0.7 : scooter ? 0.2 : 0.32,
       gap: 0.12,
       level: Math.min(0.5, 0.15 + heard * 0.6) * 0.25,

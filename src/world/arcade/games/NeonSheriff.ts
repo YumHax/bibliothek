@@ -1,5 +1,7 @@
-import { type ArcadeControls, NO_CONTROLS, SCREEN_H, SCREEN_W, clamp, drawText } from './ArcadeGame';
+import { clamp } from '@/math/scalar';
+import { type ArcadeControls, NO_CONTROLS, SCREEN_H, SCREEN_W, drawText } from './ArcadeGame';
 import { BaseGame, PLAY_TOP } from './BaseGame';
+import { random } from '@/random';
 
 const ROUND_SECONDS = 15;
 const MAGAZINE = 6;
@@ -187,7 +189,7 @@ export class NeonSheriff extends BaseGame {
     if (this.counting) return out;
     if (this.ammo === 0) {
       out.aim = null;
-      out.fire = out.firePressed = Math.random() < 0.2;
+      out.fire = out.firePressed = random() < 0.2;
       return out;
     }
     const threats = this.targets.filter((t) => t.down === 0 && t.kind !== 'townsfolk');
@@ -200,7 +202,7 @@ export class NeonSheriff extends BaseGame {
     this.pilotAim.y += clamp(s.y - this.pilotAim.y, -speed, speed);
     out.aim = { ...this.pilotAim };
     const close = Math.hypot(s.x - this.pilotAim.x, s.y - this.pilotAim.y) < 6 + (1 - skill) * 8;
-    out.fire = out.firePressed = close && Math.random() < 0.25 + skill * 0.4;
+    out.fire = out.firePressed = close && random() < 0.25 + skill * 0.4;
     return out;
   }
 

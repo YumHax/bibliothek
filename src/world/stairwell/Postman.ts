@@ -4,15 +4,19 @@ import type { SessionActions } from '@/game/SessionActions';
 import type { MailPost } from '@/collection/MailPost';
 import { playDoorbell } from '@/audio/doorbell';
 import { spatialOf } from '@/audio/spatial';
-import { proximityVolume } from '@/video/proximityVolume';
+import { HEARING, loudness } from '@/audio/hearing';
 import type { SoundOcclusion } from '../acoustics/SoundOcclusion';
 import type { DoorRinger, Doorstep } from '../hallway/Doorstep';
 import { randomLook } from '../people/looks';
 import { Prop } from '../props/Prop';
 import { StairWalker, type StairWalkerOptions } from './StairWalker';
 import { liftGate } from './stairRoutes';
-import { STAIRWELL_PLAN as plan, STOREYS, landingY } from './stairwellPlan';
+import { STAIRWELL_PLAN as plan } from './stairwellPlan';
+import { STOREYS, landingY } from '@/world/measures/building';
 import type { LiftRides } from './Lift';
+import { rememberLook } from '@/social/lookBook';
+import type { SocialServices } from '@/social/talk';
+import { bodyOf, talkHook } from '../people/socialHook';
 
 interface PostmanOptions {
   viewer: THREE.Object3D;
@@ -25,7 +29,12 @@ interface PostmanOptions {
   bell: THREE.Vector3;
   /** The lift he comes up and goes down in, for real when it is free (else he steps out of its gate, and fades into it). */
   lift?: LiftRides;
+  /** The people the player talks to (docs/social.md): clicked, he talks, the parcel the first entry. */
+  social?: SocialServices;
 }
+
+/** His person in the social layer (`social/people/building`). */
+const PERSON = 'postman';
 
 /** Seconds between rings, and how many before the parcel is left with the concierge. */
 const RING_EVERY = 18;
@@ -60,17 +69,32 @@ export class Postman extends Prop implements Updatable, DoorRinger {
     super();
     this.name = 'Postman';
     const self = this;
-    // Clicked on the landing: the same as opening the door to him.
+    // Clicked on the landing: the same as opening the door to him (with someone to talk to, the conversation's first entry).
+    const look = { ...randomLook(plan.postman.seed, 'vendor'), apron: undefined, bag: 'tote' as const };
+    rememberLook(PERSON, look);
+    const here = (): boolean => self.state === 'waiting' || self.state === 'coming';
+    const take = (session: SessionActions): void => {
+      if (!here()) return;
+      options.doorstep.leave(self);
+      self.answer(session);
+    };
+    const social = talkHook(options.social, PERSON, (session) => ({
+      person: PERSON,
+      place: 'stairs',
+      body: bodyOf(self.walker),
+      extras: [{ id: 'parcel', group: 'trade', label: 'Take the parcel', disabled: () => (here() ? null : 'He has handed it over'), run: () => take(session) }],
+    }), 'take the parcel');
     this.walker = new (class extends StairWalker {
       override label(): string | null {
-        return self.state === 'waiting' || self.state === 'coming' ? 'The postman · take the parcel' : null;
+        if (!here()) return null;
+        return social ? social.caption() : 'The postman · take the parcel';
       }
       override activate(session: SessionActions): void {
-        if (self.state !== 'waiting' && self.state !== 'coming') return;
-        options.doorstep.leave(self);
-        self.answer(session);
+        if (!here()) return;
+        if (social) social.open(session);
+        else take(session);
       }
-    })({ viewer: options.viewer, seed: plan.postman.seed, look: { ...randomLook(plan.postman.seed, 'vendor'), apron: undefined, bag: 'tote' }, ground: options.ground, talk: () => '' });
+    })({ viewer: options.viewer, seed: plan.postman.seed, look, ground: options.ground, talk: () => '', speaker: 'Mr Diallo' });
     // Standing at his spot until the first frame, so the start-up compile sees his materials.
     this.walker.setPresent(true, this.spot());
     this.walker.position.y = landingY(0);
@@ -144,7 +168,7 @@ export class Postman extends Prop implements Updatable, DoorRinger {
     const { viewer, acoustics, bell } = this.options;
     viewer.getWorldPosition(this.ear);
     const walls = acoustics?.wallsBetween(this.ear, bell) ?? 0;
-    const level = (BELL_LEVEL * proximityVolume(this.ear.distanceTo(bell), { referenceDistance: 2, maxDistance: 40, walls, wallGain: 0.6 })) / 100;
+    const level = BELL_LEVEL * loudness(this.ear.distanceTo(bell), HEARING.bell, walls);
     playDoorbell(Math.max(BELL_FLOOR, level), spatialOf(viewer, bell, walls));
   }
 

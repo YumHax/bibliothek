@@ -28,6 +28,8 @@ import { printGlow } from './materials/printGlow';
 import { SHARED_SHADOW_LAYER } from './zone/Zone';
 import { playBoxClack } from '@/audio/boxClack';
 import { playPlasticClick } from '@/audio/furnitureSounds';
+import { damp } from '@/math/damp';
+import { easeInOutQuad } from '@/math/easing';
 
 /** How far a hovered box slides out of its row, how long it takes (s), and the faint lift of its cover's print. */
 const HOVER_POP_OUT = 0.02;
@@ -38,7 +40,7 @@ const TIP_OUT = 0.035;
 const TIP_ANGLE = THREE.MathUtils.degToRad(24);
 const TIP_SECONDS = 0.22;
 /** How fast a box parts along its row to show where the box in hand would go (1/s), and when it is there (m). */
-const PART_RATE = 14;
+const PART_RATE = 16;
 const PART_DONE = 1e-4;
 /** Off a stall (no shelf to clear): how far the box slides out along its front before it flies to the hand (m). */
 const SLIDE_OUT = 0.05;
@@ -332,7 +334,7 @@ export class GameBox extends THREE.Mesh<THREE.BoxGeometry, THREE.Material[]> imp
     const want = this.hovered ? 1 : 0;
     if (this.pop !== want) this.pop = want > this.pop ? Math.min(1, this.pop + dt / HOVER_SECONDS) : Math.max(0, this.pop - dt / HOVER_SECONDS);
     if (this.part !== this.partTarget) {
-      this.part += (this.partTarget - this.part) * Math.min(1, dt * PART_RATE);
+      this.part = damp(this.part, this.partTarget, PART_RATE, dt);
       if (Math.abs(this.partTarget - this.part) < PART_DONE) this.part = this.partTarget;
     }
     if (this.slide) {
@@ -363,13 +365,13 @@ export class GameBox extends THREE.Mesh<THREE.BoxGeometry, THREE.Material[]> imp
     const slide = this.slide;
     if (slide && slide.t < 1 && slide.around) {
       // The first quarter out of the row, the middle half across in front of the boards, the last quarter in.
-      const across = easeInOut(THREE.MathUtils.clamp((slide.t - 0.25) / 0.5, 0, 1));
+      const across = easeInOutQuad(THREE.MathUtils.clamp((slide.t - 0.25) / 0.5, 0, 1));
       const out = THREE.MathUtils.smoothstep(slide.t, 0, 0.25) * (1 - THREE.MathUtils.smoothstep(slide.t, 0.75, 1));
       this.position.lerpVectors(slide.from, this.restPosition, across);
       this.position.z += out * this.slideOut;
       this.quaternion.slerpQuaternions(slide.fromQuaternion, this.restQuaternion, across);
     } else if (slide && slide.t < 1) {
-      const t = easeInOut(slide.t);
+      const t = easeInOutQuad(slide.t);
       this.position.lerpVectors(slide.from, this.restPosition, t);
       this.quaternion.slerpQuaternions(slide.fromQuaternion, this.restQuaternion, t);
     } else {
@@ -817,11 +819,6 @@ export class GameBox extends THREE.Mesh<THREE.BoxGeometry, THREE.Material[]> imp
     const contents = this.parts ? [...this.parts.media.materials, ...(this.parts.manual?.material ?? [])] : [];
     return [...SHELL_MATERIAL_ORDER.map((name) => this.faces[name]), this.closed.material, ...contents];
   }
-}
-
-/** Slow start, slow finish: a box eased out of its row and into its new place. */
-function easeInOut(t: number): number {
-  return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
 }
 
 /** Scratch for the tip (`applyPose`), one box at a time. */

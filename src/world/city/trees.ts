@@ -1,7 +1,7 @@
-import { seededRandom } from '@/covers/generated/canvasUtils';
 import { STREET_PLAN, type Vec2 } from '../street/streetPlan';
 import { inFlatFrame } from './frontage';
 import { offPaths, onLawn } from './park';
+import { lcg } from '@/random';
 
 /*
  * Every tree of the neighbourhood the walkable street plants (`street/StreetTrees`), with its final
@@ -27,14 +27,14 @@ export function treeHeight(scale: number): number {
 
 /** The street trees, each a little bigger or smaller than the next. */
 export const STREET_TREES: readonly PlantedTree[] = (() => {
-  const random = seededRandom(3301);
+  const random = lcg(3301);
   return STREET_PLAN.trees.map((at) => ({ at, scale: 0.85 + random() * 0.3 }));
 })();
 
 /** The park's trees: seeded over its rectangle, on free lawn off the paths (checked in the flat's frame, where the park is drawn). */
 export const PARK_TREES: readonly PlantedTree[] = (() => {
   const { from, to, trees, seed } = STREET_PLAN.park;
-  const random = seededRandom(seed);
+  const random = lcg(seed);
   const planted: PlantedTree[] = [];
   for (let attempt = 0; planted.length < trees && attempt < trees * 30; attempt++) {
     const at: Vec2 = [from[0] + random() * (to[0] - from[0]), from[1] + random() * (to[1] - from[1])];

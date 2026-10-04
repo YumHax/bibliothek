@@ -1,6 +1,9 @@
 import * as THREE from 'three';
 import type { CatBody, CatPose } from './types';
 import type { FloorNav } from '../nav/FloorNav';
+import { angleTo } from '@/math/angles';
+import { lerp, smooth } from '@/math/scalar';
+import { springAngle } from '@/math/springs';
 
 /** Gaits (m/s). */
 export const WALK_SPEED = 0.45;
@@ -205,7 +208,7 @@ export class CatMotion {
     if (keepClear && this.mode === 'idle') this.makeRoom(this.faceYaw);
     // Not a turntable: a sitting, eating or lying cat gets up to turn round, the paws stepping, and sits back.
     const pose = this.body.pose;
-    if (this.mode === 'idle' && this.resumePose === null && pose !== 'stand' && pose !== 'crouch' && Math.abs(angleDelta(this.faceYaw, this.cat.rotation.y)) > STAND_TO_TURN) {
+    if (this.mode === 'idle' && this.resumePose === null && pose !== 'stand' && pose !== 'crouch' && Math.abs(angleTo(this.cat.rotation.y, this.faceYaw)) > STAND_TO_TURN) {
       this.resumePose = pose;
       this.body.setPose('stand');
     }
@@ -301,7 +304,7 @@ export class CatMotion {
       this.tmp.lerpVectors(waypoint, next, share);
       desiredYaw = Math.atan2(this.tmp.x - position.x, this.tmp.z - position.z);
     }
-    const diff = Math.abs(angleDelta(Math.atan2(dx, dz), this.cat.rotation.y));
+    const diff = Math.abs(angleTo(this.cat.rotation.y, Math.atan2(dx, dz)));
     this.turnTowards(desiredYaw, dt, TURN);
     const factor = THREE.MathUtils.clamp(1.15 - diff / Math.PI, 0.15, 1);
     const remaining = distance + this.after[this.index]!;
@@ -366,7 +369,7 @@ export class CatMotion {
     this.hopT = Math.min(1, this.hopT + dt / this.hopDuration);
     const t = this.hopT;
     // Horizontal travel eased a little in and out; the height is a parabola in time through both ends, peaking at `hopHeight`.
-    const eased = t + HOP_EASE * (t * t * (3 - 2 * t) - t);
+    const eased = lerp(t, smooth(t), HOP_EASE);
     position.lerpVectors(this.hopFrom, this.hopEnd, eased);
     const base = THREE.MathUtils.lerp(this.hopFrom.y, this.hopEnd.y, t);
     position.y = base + (this.hopHeight - base) * 4 * t * (1 - t);
@@ -468,26 +471,12 @@ export class CatMotion {
   /** Eases the yaw towards `yaw` on a critically damped spring; true once settled there. */
   private turnTowards(yaw: number, dt: number, spring: { omega: number; maxRate: number }): boolean {
     const rotation = this.cat.rotation;
-    if (Math.abs(angleDelta(yaw, rotation.y)) < 0.004 && Math.abs(this.yawRate) < 0.05) {
+    if (Math.abs(angleTo(rotation.y, yaw)) < 0.004 && Math.abs(this.yawRate) < 0.05) {
       rotation.y = yaw;
       this.yawRate = 0;
       return true;
     }
-    const { omega, maxRate } = spring;
-    for (let left = dt; left > 1e-6; left -= TURN_STEP) {
-      const h = Math.min(left, TURN_STEP);
-      const delta = angleDelta(yaw, rotation.y);
-      this.yawRate = THREE.MathUtils.clamp(this.yawRate + (omega * omega * delta - 2 * omega * this.yawRate) * h, -maxRate, maxRate);
-      rotation.y += this.yawRate * h;
-    }
+    [rotation.y, this.yawRate] = springAngle(rotation.y, this.yawRate, yaw, spring.omega, dt, spring.maxRate, TURN_STEP);
     return false;
   }
-}
-
-/** Signed shortest angle from `from` to `to`, in (-π, π]. */
-function angleDelta(to: number, from: number): number {
-  let d = (to - from) % (Math.PI * 2);
-  if (d > Math.PI) d -= Math.PI * 2;
-  if (d < -Math.PI) d += Math.PI * 2;
-  return d;
 }

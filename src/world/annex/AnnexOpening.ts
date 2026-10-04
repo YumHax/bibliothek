@@ -1,22 +1,21 @@
 import * as THREE from 'three';
+import { inHours } from '@/time/clock';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import type { Collisions } from '@/core/Collider';
 import type { Updatable } from '@/core/Engine';
 import type { Interactable } from '@/interaction/Interactable';
 import type { SessionActions } from '@/game/SessionActions';
 import { playWoodKnock } from '@/audio/furnitureSounds';
-import { heardAt } from '@/audio/spatial';
-import { bindRouxMove, onRouxPhase, rouxPhase, type RouxPhase } from '@/building/rouxMove';
-import type { Zone } from '../zone/Zone';
-import type { BuildContext } from '../buildContext';
+import { hear } from '@/audio/hearing';
+import type { RouxPhase } from '@/building/rouxMove';
 import { Prop } from '../props/Prop';
 import { invisibleHitbox } from '../meshUtils';
 import { cloth, paint, scuffedPaint, timber } from '../materials/palette';
 import { INSET } from '../props/joinery';
 import { FLOOR } from '../surface/layers';
 import { SKIRTING } from '../mouldings';
-import { WALL_GAP } from '../worldPlan';
-import { ANNEX_DOORWAY } from '../roomPlan';
+import { WALL_GAP } from '@/world/measures/building';
+import { random } from '@/random';
 
 /** The architrave round the knocked-through opening and the lining through it, as the flat's doors have them (`Door`). */
 const ARCHITRAVE = 0.07;
@@ -54,7 +53,7 @@ function merged(geometries: THREE.BufferGeometry[], material: THREE.Material, ca
  * either face and a lining through the wall's gap, an oak threshold, nothing in the way. Wall-hung: origin on the floor
  * at the opening's middle, +z into the collection room. Both rooms see it (`seenFromNextDoor`).
  */
-class AnnexOpening extends Prop implements Updatable, Interactable {
+export class AnnexOpening extends Prop implements Updatable, Interactable {
   readonly contactShadow = false;
   readonly seenFromNextDoor = true;
   readonly hitboxes: THREE.Object3D[];
@@ -68,10 +67,11 @@ class AnnexOpening extends Prop implements Updatable, Interactable {
   private nextBurst = 2;
   private burstLeft = 0;
 
-  constructor(private readonly options: { collisions: Collisions; hours: () => number }) {
+  /** `doorway`: the opening's size, the room plan's `ANNEX_DOORWAY` handed in by the builder (the prop reads no plan). */
+  constructor(private readonly options: { collisions: Collisions; hours: () => number; doorway: { width: number; height: number } }) {
     super();
     this.name = 'AnnexOpening';
-    const { width: w, height: h } = ANNEX_DOORWAY;
+    const { width: w, height: h } = options.doorway;
     this.buildPlug(w, h);
     this.buildSheet(w, h);
     this.buildArchway(w, h);
@@ -149,7 +149,7 @@ class AnnexOpening extends Prop implements Updatable, Interactable {
       this.blockerLaidOut = true;
       // The hole, through the wall's gap, in world space (laid out once placed).
       this.updateMatrixWorld(true);
-      const { width: w, height: h } = ANNEX_DOORWAY;
+      const { width: w, height: h } = this.options.doorway;
       const corners = [new THREE.Vector3(-w / 2, 0, -WALL_GAP - 0.05), new THREE.Vector3(w / 2, h, 0.05)].map((v) => this.localToWorld(v));
       this.blocker.setFromPoints(corners);
       const was = this.blocking;
@@ -170,14 +170,14 @@ class AnnexOpening extends Prop implements Updatable, Interactable {
   /** The day of the works, in working hours: bursts of hammering from the far side of the wall. */
   private hammer(dt: number): void {
     const hours = this.options.hours();
-    if (hours < WORKS.from || hours >= WORKS.to) return;
+    if (!inHours(hours, WORKS)) return;
     this.nextBurst -= dt;
     if (this.nextBurst > 0) return;
-    if (this.burstLeft <= 0) this.burstLeft = Math.round(WORKS.knocks[0] + Math.random() * (WORKS.knocks[1] - WORKS.knocks[0]));
-    const { gain, spatial } = heardAt(this.localToWorld(new THREE.Vector3(0, 1.1, -0.4)));
-    if (gain > 0.01) playWoodKnock(0.32 * gain, 0.55 + Math.random() * 0.15, spatial);
+    if (this.burstLeft <= 0) this.burstLeft = Math.round(WORKS.knocks[0] + random() * (WORKS.knocks[1] - WORKS.knocks[0]));
+    const { gain, spatial } = hear(this.localToWorld(new THREE.Vector3(0, 1.1, -0.4)));
+    if (gain > 0.01) playWoodKnock(0.32 * gain, 0.55 + random() * 0.15, spatial);
     this.burstLeft--;
-    this.nextBurst = this.burstLeft > 0 ? WORKS.every * (0.8 + Math.random() * 0.4) : WORKS.gap[0] + Math.random() * (WORKS.gap[1] - WORKS.gap[0]);
+    this.nextBurst = this.burstLeft > 0 ? WORKS.every * (0.8 + random() * 0.4) : WORKS.gap[0] + random() * (WORKS.gap[1] - WORKS.gap[0]);
   }
 
   setHovered(): void {}
@@ -196,7 +196,7 @@ class AnnexOpening extends Prop implements Updatable, Interactable {
   }
 
   activate(session: SessionActions): void {
-    const { gain, spatial } = heardAt(this.localToWorld(new THREE.Vector3(0, 1.2, 0)));
+    const { gain, spatial } = hear(this.localToWorld(new THREE.Vector3(0, 1.2, 0)));
     playWoodKnock(0.16 * gain, 0.75, spatial);
     switch (this.phase) {
       case 'works':
@@ -212,17 +212,4 @@ class AnnexOpening extends Prop implements Updatable, Interactable {
         session.react('Hollow. There was a door here once: this flat and the one next door were one, long ago.');
     }
   }
-}
-
-/**
- * The collection room's side of the opening to Mrs Roux's two rooms (`world/annex`): the walled-up door, the works'
- * sheet, the archway; its collider in the room's scoped set. Called by the collection room's builder (`layout.ts`).
- */
-export function placeAnnexOpening(zone: Zone, ctx: Pick<BuildContext, 'today' | 'home' | 'building' | 'sky'>): AnnexOpening {
-  if (ctx.home.upgrades) bindRouxMove({ today: ctx.today, upgrades: ctx.home.upgrades, ...(ctx.building ? { doorstep: ctx.building.doorstep } : {}) });
-  const opening = new AnnexOpening({ collisions: zone.collisions, hours: () => ctx.sky.dayNight.state.hours });
-  zone.placeAt(opening, { wall: ANNEX_DOORWAY.wall, along: ANNEX_DOORWAY.along, y: 0 });
-  opening.show(rouxPhase());
-  zone.onUnload(onRouxPhase((phase) => opening.show(phase)));
-  return opening;
 }

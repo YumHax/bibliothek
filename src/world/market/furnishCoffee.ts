@@ -4,14 +4,15 @@ import { COFFEE_PRICE } from '@/economy/pricing';
 import { Vendor } from '../people/Vendor';
 import { CoffeeCart } from './CoffeeCart';
 import { MARKET_PLAN } from './marketPlan';
+import { formatCoins } from '@/text/money';
 
 /** The coffee cart and its barista: a coffee a day makes the stallholders easier (see `NEGOTIATION.coffee`). */
-export function furnishCoffee(zone: Zone, { listener, market: { stock: market } }: BuildContext): void {
+export function furnishCoffee(zone: Zone, { listener, market: { stock: market } }: Pick<BuildContext, 'listener' | 'market'>): void {
   const plan = MARKET_PLAN.coffee;
   let barista: Vendor | null = null;
   const cart = zone.placeAt(new CoffeeCart({
     price: COFFEE_PRICE,
-    label: () => (market.hadCoffee ? 'The coffee cart · you have had your coffee today' : `The coffee cart · buy a coffee (${COFFEE_PRICE} coins: the stallholders go easier on you all day)`),
+    label: () => (market.hadCoffee ? 'The coffee cart · you have had your coffee today' : `The coffee cart · buy a coffee (${formatCoins(COFFEE_PRICE)}: the stallholders go easier on you all day)`),
     onActivate: (session) => {
       if (market.hadCoffee) {
         barista?.speak('Another one? You’ll be haggling in your sleep.');

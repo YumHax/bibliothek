@@ -8,6 +8,8 @@ import { pocket } from '@/errands/pocket';
 import type { Furniture } from '../Furniture';
 import { boxMesh, cylinderMesh, invisibleHitbox } from '../meshUtils';
 import { paint } from '../materials/palette';
+import { formatCoins } from '@/text/money';
+import { capitalise } from '@/text/strings';
 
 /** The season's blooms in the florist's bunches. */
 const BLOOMS = { spring: 0xd8344a, summer: 0xf2c230, autumn: 0xc8502a, winter: 0xe8e0e8 } as const;
@@ -22,7 +24,8 @@ export class CounterErrand extends THREE.Group implements Furniture, Interactabl
   readonly contactShadow = false;
   readonly hitboxes: THREE.Object3D[];
 
-  constructor(private readonly errand: ErrandId, private readonly onBought: () => void) {
+  /** `portions` may change how many one buy puts in the pocket (a friend of the florist's: four bunches for two). */
+  constructor(private readonly errand: ErrandId, private readonly onBought: () => void, private readonly portions?: (errand: ErrandId, base: number) => number) {
     super();
     this.name = `CounterErrand:${errand}`;
     if (errand === 'bunch') this.buildBunches();
@@ -43,11 +46,14 @@ export class CounterErrand extends THREE.Group implements Furniture, Interactabl
   label(): string {
     const e = errandOf(this.errand, currentSeason().name);
     const carried = pocket.count(this.errand);
-    return `${capitalise(e.title)} · ${e.price} coin${e.price > 1 ? 's' : ''}${carried ? ` · you carry ${carried}` : ''}`;
+    return `${capitalise(e.title)} · ${formatCoins(e.price)}${carried ? ` · you carry ${carried}` : ''}`;
   }
 
   activate(session: SessionActions): void {
-    buyErrand(session, errandOf(this.errand, currentSeason().name), '“That’s the last of them till tomorrow.”', this.onBought);
+    const e = errandOf(this.errand, currentSeason().name);
+    const portions = this.portions?.(this.errand, e.portions) ?? e.portions;
+    const bought = portions > e.portions ? `${e.bought} And one more: “For a friend.”` : e.bought;
+    buyErrand(session, { ...e, portions, bought }, '“That’s the last of them till tomorrow.”', this.onBought);
   }
 
   /** Three pouches standing in a row, a fish on each (a paper band). */
@@ -79,8 +85,4 @@ export class CounterErrand extends THREE.Group implements Furniture, Interactabl
       this.add(bunch);
     }
   }
-}
-
-function capitalise(text: string): string {
-  return text.charAt(0).toUpperCase() + text.slice(1);
 }

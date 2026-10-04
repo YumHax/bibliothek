@@ -49,17 +49,26 @@ stairwell. She holds the cellar key:
 
 ## Friendship
 
-Knock while home 8 (once a game day), a chat on the stairs 10, a swap done 15; in their flat a chat 5, watching their
-game 6 (their shelf sells nothing: their games are theirs, a swap brings one home); a party chat once a party. Noise complaints take it down (below). Six neighbours ask
+Knock while home 8 (once a game day), a swap done 15, watching their game in their flat 6 (their shelf sells nothing:
+their games are theirs, a swap brings one home); a party chat once a party. Talking itself goes through the
+conversation (docs/social.md "Who talks in the building"): on the stairs, at their door when they answer, in their flat. Noise complaints take it down (below). Six neighbours ask
 the player in once it reaches their `inviteAt` (`neighbourFlat/visits`, `NEIGHBOUR_HOSTS`: Mrs Roux at the first knock,
 the Moreaus and Martin at 25), between 9:00 and 21:30. The door's caption then says "visit", and the knock travels into
 the `neighbourFlat` zone. A resident at `COLD` or under only gives a curt hello on the stairs.
+What a friend gives (Lucien's box, Gilles's cartridges, Théo's cart, meals, the cat fed, Mrs Roux's flat for less, Mrs
+Haddad's better swaps) is docs/social.md "The building's perks".
+
+The friendship is now the warmth of the social layer (docs/social.md): `building/friendship` reads and nudges it by
+door. How a resident stands with the player changes their vote, the noise they put up with, the post, the board's
+notes and more: docs/social.md "The building".
 
 ## The co-owners' meeting
 
 - **Schedule.** A meeting sits every 14 game days. Its agenda has three resolutions, those never voted coming first: the
   runner (red, green or none), the paint (cream, sage or ochre), plants on the half landings, bikes in the hall, the
   lift's overhaul, the fibre, a doormat, a mirror. The agenda goes up on the board 3 days before.
+- **Sway.** A resident who is the player's Friend votes with their ballot, a Close one brings another round, a
+  Hostile one votes against it; a Friend syndic breaks a tie their way (docs/social.md "The building").
 - **Voting.** The ballot is open until the meeting's day ends. The ten households vote by nature (`Voter.leans`, shown
   on the ballot) or by a mind of their own drawn per meeting. The player has one vote, two once Mrs Roux's flat is
   theirs (hers is then no longer cast), plus up to 3 bought votes a resolution at 25 coins each.
@@ -116,7 +125,9 @@ the `neighbourFlat` zone. A resident at `COLD` or under only gives a curt hello 
      if it went quiet. Unanswered: a note under the door, -10.
   3. Still loud 90 s after that, the syndic hears of it: a quiet-hours reminder on the board for two days, -12 for him
      and -4 for the Moreaus.
-  This happens once a night at most.
+  This happens once a night at most. The threshold, the hour it starts and what he does follow his standing with the
+  player (docs/social.md "The building"): a close friend comes up to listen instead, a hostile one goes straight to
+  the syndic.
 
 ## Mrs Roux's move
 

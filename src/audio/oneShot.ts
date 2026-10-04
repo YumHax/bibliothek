@@ -1,10 +1,10 @@
-import { audioBus, audioContext, type AudioChannel } from './audioContext';
-import { whiteNoise } from './noise';
+import { audioBus, audioContext, foregroundInput, startedAudioContext, type AudioChannel } from './audioContext';
+import { spatialInput, type Spatial } from './spatial';
 
 /*
- * The one-shot synth kit: a sound played by a click (the flat's household uses, the kitchen table's console repair),
- * synthesised on the spot on a fresh output and gone after. The player stands at the thing, so no distance model,
- * only a level. Each sound is a few bursts of noise and pings laid on the output's clock.
+ * Where a one-shot sound lands: a fresh output at a level on a bus, let go once the sound is over. Every click-made
+ * sound (a latch, a bell, the household's uses) is a few of the kit's bursts and tones (`synth.ts`) laid on this
+ * output's clock; the output knows the bus and, if the sound is placed, the side and the walls it is heard from.
  */
 
 /** A fresh output and the moment to lay the first sound on it. */
@@ -15,57 +15,47 @@ interface OneShot {
   t: number;
 }
 
+/** A mixer channel, or `foreground`: the world's volume without the scene's duck (a sound the player is making). */
+type OneShotChannel = Exclude<AudioChannel, 'master'> | 'foreground';
+
+export interface OneShotOptions {
+  /** Where it plays. Default `world`. */
+  channel?: OneShotChannel;
+  /** Where it is heard from (`spatial.ts`): a leg with the side and the walls in front of the bus. Default straight ahead, in the open. */
+  spatial?: Spatial;
+  /** How far ahead of now the clock starts (s). Default 0.02. */
+  lead?: number;
+  /** Seconds past `seconds` before the output is let go. Default 0.5. */
+  free?: number;
+  /**
+   * `gesture` (default): the sound follows a click, so the context is asked for (created or resumed if need be).
+   * `started`: a sound nobody clicked for, played only if a gesture already started the audio.
+   */
+  start?: 'gesture' | 'started';
+}
+
 /**
- * A fresh output at `level` on `channel`'s bus (the world's, or the UI's for a sound heard over the fade that ducks
- * the room), let go `seconds` later; `lead` is how far ahead of now its clock starts. Null when the context cannot
- * start (no audio yet): the caller plays nothing.
+ * A fresh output at `level` on a bus, let go `seconds` later (plus `free`). Null when there is nothing to play
+ * through (no audio yet, or a level nobody would hear): the caller plays nothing.
  */
-export function oneShot(level: number, seconds: number, channel: Exclude<AudioChannel, 'master'> = 'world', lead = 0.02): OneShot | null {
-  let ctx: AudioContext;
-  try {
-    ctx = audioContext();
-  } catch {
-    return null;
-  }
+export function oneShot(level: number, seconds: number, options: OneShotOptions = {}): OneShot | null {
+  if (level <= 0.001) return null;
+  const ctx = options.start === 'started' ? startedAudioContext() : audioContext();
+  if (!ctx) return null;
+  const channel = options.channel ?? 'world';
+  const bus = channel === 'foreground' ? foregroundInput(ctx) : audioBus(ctx, channel);
+  const free = options.free ?? 0.5;
   const out = ctx.createGain();
   out.gain.value = level;
-  out.connect(audioBus(ctx, channel));
-  window.setTimeout(() => out.disconnect(), (seconds + 0.5) * 1000);
-  return { ctx, out, t: ctx.currentTime + lead };
+  out.connect(spatialInput(ctx, bus, options.spatial, seconds + free));
+  window.setTimeout(() => out.disconnect(), (seconds + free) * 1000);
+  return { ctx, out, t: ctx.currentTime + (options.lead ?? 0.02) };
 }
 
-/** A burst of band-passed noise (a scuff, a rub, a grain). */
-export function burst(ctx: AudioContext, out: AudioNode, t: number, band: number, q: number, level: number, length: number): void {
-  const source = ctx.createBufferSource();
-  source.buffer = whiteNoise(ctx, 1);
-  const filter = ctx.createBiquadFilter();
-  filter.type = 'bandpass';
-  filter.frequency.value = band;
-  filter.Q.value = q;
-  const env = ctx.createGain();
-  env.gain.setValueAtTime(0, t);
-  env.gain.linearRampToValueAtTime(level, t + Math.min(0.01, length * 0.3));
-  env.gain.exponentialRampToValueAtTime(0.0005, t + length);
-  source.connect(filter).connect(env).connect(out);
-  source.start(t, Math.random() * 0.5);
-  source.stop(t + length + 0.02);
-}
-
-/** A struck, decaying tone (a clink, a ding, a beep). */
-export function ping(ctx: AudioContext, out: AudioNode, t: number, frequency: number, level: number, decay: number, type: OscillatorType = 'sine'): void {
-  const osc = ctx.createOscillator();
-  osc.type = type;
-  osc.frequency.value = frequency;
-  const env = ctx.createGain();
-  env.gain.setValueAtTime(0, t);
-  env.gain.linearRampToValueAtTime(level, t + 0.003);
-  env.gain.exponentialRampToValueAtTime(0.0005, t + decay);
-  osc.connect(env).connect(out);
-  osc.start(t);
-  osc.stop(t + decay + 0.02);
-}
-
-/** A number between `min` and `max`: the little differences that keep a repeated sound from sounding sampled. */
-export function rand(min: number, max: number): number {
-  return min + Math.random() * (max - min);
+/** `oneShot` with the sound laid on at once by `build`; whether anything could play (for a caller that reports it). */
+export function shot(level: number, seconds: number, options: OneShotOptions, build: (o: OneShot) => void): boolean {
+  const o = oneShot(level, seconds, options);
+  if (!o) return false;
+  build(o);
+  return true;
 }

@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { smooth, smoother } from './springs';
+import { smooth, smoother } from '@/math/scalar';
 
 /*
  * A walk as people walk it, in the root's frame (reference metres, +z ahead): each foot is on the

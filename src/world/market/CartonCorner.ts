@@ -2,14 +2,16 @@ import * as THREE from 'three';
 import type { Interactable } from '@/interaction/Interactable';
 import type { SessionActions } from '@/game/SessionActions';
 import type { SealedLot } from '@/economy/boxLots';
-import { CONFIRM_MS, purchaseClinks } from '@/economy/pricing';
+import { purchaseClinks } from '@/economy/pricing';
 import { playCoins } from '@/audio/coins';
+import { Arming } from '@/ui/confirmTwice';
 import type { Furniture } from '../Furniture';
 import { invisibleHitbox } from '../meshUtils';
 import { paint } from '../materials/palette';
 import { part } from '../props/Prop';
 import { HoverGlint } from '../props/hoverGlint';
 import { SealedCartonModel } from '../props/SealedCartonModel';
+import { formatCoins } from '@/text/money';
 
 interface CartonCornerOptions {
   /** Today's carton, once drawn (null: none today, or not yet). */
@@ -34,7 +36,8 @@ export class CartonCorner extends THREE.Group implements Furniture, Interactable
   private carton: SealedCartonModel | null = null;
   private glint: HoverGlint | null = null;
   private lot: SealedLot | null = null;
-  private armedUntil = 0;
+  /** A first click arms the carton (its caption says again to buy) until the second within `CONFIRM_MS` takes it home. */
+  private readonly arming = new Arming<'buy'>(() => {});
   private live = true;
 
   constructor(private readonly options: CartonCornerOptions) {
@@ -65,19 +68,17 @@ export class CartonCorner extends THREE.Group implements Furniture, Interactable
     const lot = this.lot;
     if (!lot) return null;
     if (!this.carton) return 'The sealed carton: sold today. Another tomorrow';
-    if (performance.now() < this.armedUntil) return `Sealed carton, ${lot.price} coins · again to buy it`;
-    return `Sealed carton “${lot.label}”: ${lot.hint} · ${lot.price} coins, sold as seen`;
+    if (this.arming.isArmed('buy')) return `Sealed carton, ${formatCoins(lot.price)} · again to buy it`;
+    return `Sealed carton “${lot.label}”: ${lot.hint} · ${formatCoins(lot.price)}, sold as seen`;
   }
 
   activate(session: SessionActions): void {
     const lot = this.lot;
     if (!lot || !this.carton) return;
-    if (performance.now() >= this.armedUntil) {
-      this.armedUntil = performance.now() + CONFIRM_MS;
-      session.react(`${lot.price} coins, unopened, no returns. Click again to take it home.`);
+    if (!this.arming.press('buy')) {
+      session.react(`${formatCoins(lot.price)}, unopened, no returns. Click again to take it home.`);
       return;
     }
-    this.armedUntil = 0;
     if (!this.options.buy(lot, session)) return;
     playCoins(purchaseClinks(lot.price));
     this.hide();

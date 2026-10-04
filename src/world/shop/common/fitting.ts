@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { AmbientVoice } from '@/audio/ambient';
-import type { ProximityVolumeOptions } from '@/video/proximityVolume';
+import type { HearingProfile } from '@/audio/hearing';
 import { LAMP_GLOW, type LampKind } from '../../lighting/lampColours';
 
 /**
@@ -20,7 +20,7 @@ export function isShopFitting(obj: object): obj is ShopFitting {
 export interface PropVoice {
   voice: AmbientVoice;
   at: THREE.Vector3;
-  options?: ProximityVolumeOptions;
+  options?: HearingProfile;
 }
 
 /** A prop that sounds (a tube's hum, a pump, a fridge): `furnishShop` places its voices once it stands. */

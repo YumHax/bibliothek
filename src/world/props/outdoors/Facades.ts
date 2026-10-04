@@ -1,15 +1,18 @@
 import { type LightKind, Polygon, Sheet, type Rng } from './Sheet';
-import { between, deg, integer, mixHex, pick, shade } from './paint';
+import { deg, mixHex, shade } from './paint';
 import { CORNER, FRONTAGE, FRONT_END, FRONT_END_FROM, FRONT_END_TO, PARK_END, PARK_END_FROM, PARK_END_TO, frontage } from './plan';
 import { FacadeFrame } from './FacadeFrame';
 import { BLINDS, CHIMNEY_POT, CURTAINS, DISH, POT_LEAVES, TERRACOTTA, WINDOW_GLASS } from './palette';
 import { RETRO_GAMES, type PlannedShop, type Storefront, paintShopfronts } from './Shopfront';
-import { FACADES, FLAT_IN_STREET, FRONT, GROUND_FLOOR, STOREY, type FacadeSpec } from '../../street/streetPlan';
+import type { FacadeSpec } from '../../street/streetPlan';
+import { FACADES } from '@/world/city/facades';
+import { FLAT_IN_STREET, FRONT, GROUND_FLOOR, STOREY } from '@/world/measures/street';
 import { BRICKS, balconyRows, facadeBays, facadeStyle, onBalcony, windowWidth, type FacadeStyle } from '@/world/city/facadeStyle';
 import { roofFurniture } from '@/world/city/roofFurniture';
 import { BACKDROP_BLOCKS, BACKDROP_WALLS, type BackdropBlock } from '@/world/city/skyline';
 import { holidayBetween, paintPumpkin, wantsPumpkin } from './Holiday';
 import { currentHoliday } from '@/time/season';
+import { between, integer, pick } from '@/random';
 
 const FLOWERS = ['#d9383a', '#e0567a', '#f0f0e8', '#b04ac0', '#f09a3a', '#e8d040'];
 /** Ground floor height and floor-to-floor height, in metres (the walkable street's). */
@@ -187,6 +190,7 @@ function paintBuilding(sheet: Sheet, random: Rng, spec: BuildingSpec): Storefron
   // The style's balcony rows count bays from the building's left end seen from the street; ours from the eye's -x end.
   const balconies = balconyRows(arch, floors, cols).map((row) => (spec.mirrored ? { ...row, from: cols - 1 - row.to, to: cols - 1 - row.from } : row));
   const door = spec.door ?? w / 2;
+  const bays: Bays = { cols, pitch, winW };
   let shops: Storefront[] = [];
 
   sheet.begin(d, 0.05);
@@ -196,54 +200,72 @@ function paintBuilding(sheet: Sheet, random: Rng, spec: BuildingSpec): Storefron
     sheet.path(body, arch.wall);
     if (fine) paintWallTexture(f, random, arch, h);
     f.detail(body, f.vertical(0, h, [[0, 'rgba(255,255,255,0.05)'], [0.55, 'rgba(0,0,0,0.04)'], [1, 'rgba(0,0,0,0.3)']]));
-
-    // Street level: shops (and the residents' door where the plan has one), or a residential entrance between windows.
-    if (spec.planned ? spec.planned.length > 0 : spec.landmark || (spec.shops && fine && random() < 0.72)) {
-      shops = paintShopfronts(f, random, arch.wall, spec.landmark ? RETRO_GAMES : undefined, spec.planned);
-      if (fine && spec.door !== undefined) paintEntrance(f, random, arch, door);
-    } else {
-      sheet.path(f.strip(0, w, -1.5, GROUND - 0.5), arch.rusticated ? shade(arch.wall, 0.95) : shade(arch.wall, 0.82));
-      if (fine) {
-        if (arch.rusticated) paintGrooves(f, 0, GROUND - 0.5);
-        paintEntrance(f, random, arch, door);
-      }
-      for (let c = 0; c < cols; c++) {
-        const s0 = c * pitch + (pitch - winW) / 2;
-        if (Math.abs(s0 + winW / 2 - door) < 1.4) continue; // the door is there
-        paintWindow(f, random, arch, s0, s0 + winW, 1.1, 3.0, 0.3, false);
-      }
-    }
+    shops = paintGroundFloor(f, random, arch, spec, bays, door);
     // The course under the first floor: over the shops' fascias (up to 3.6) and awnings (3.7), under the first floor's sills.
     if (fine && arch.courses) f.detail(f.strip(0, w, GROUND - 0.25, GROUND), shade(arch.trim, 0.95));
-
-    // Upper floors, the windows where the walkable street has them (the style's `windows`).
-    for (let fl = 1; fl < floors; fl++) {
-      const hb = GROUND + (fl - 1) * FLOOR + arch.windows.sill;
-      const ht = hb + arch.windows.height;
-      if (fine && arch.courses && fl > 1) f.detail(f.strip(0, w, hb - 0.95, hb - 0.8), shade(arch.trim, 0.9));
-      for (let c = 0; c < cols; c++) {
-        const s0 = c * pitch + (pitch - winW) / 2;
-        // Tall French windows onto the balconies.
-        const balcony = fine && onBalcony(balconies, fl, c);
-        paintWindow(f, random, arch, s0, s0 + winW, balcony ? hb - 0.4 : hb, ht, 0.34, fl === 1 && !balcony);
-      }
-      if (!fine) continue;
-      for (const row of balconies) {
-        if (row.floor === fl) paintBalcony(f, random, arch, row.from * pitch + pitch * 0.08, (row.to + 1) * pitch - pitch * 0.08, hb - 0.45, arch.balconies === 'haussmann');
-      }
-    }
-    if (fine && arch.quoins) paintQuoins(f, arch, h);
-    if (fine && arch.downpipe) {
-      // A downpipe from the gutter, darker than the wall, at the end the walkable street has it.
-      const s = (arch.downpipe === 'left') !== !!spec.mirrored ? 0.3 : w - 0.4;
-      f.detail(f.quad(s, s + 0.12, 0, h), shade(arch.wall, 0.5));
-    }
-    // Party wall: a shadow line along the left edge.
-    f.detail(f.quad(0, Math.min(0.15, w * 0.02), -1.5, h + 0.6), 'rgba(0,0,0,0.35)');
-
+    paintUpperFloors(f, random, arch, floors, bays, balconies);
+    paintCorners(f, arch, spec, h);
     paintRoof(f, random, arch, h, cols, winW, !!spec.mirrored);
   });
   return shops;
+}
+
+/** How a front's windows are spaced: bays per storey, the pitch between them and a window's width. */
+interface Bays {
+  cols: number;
+  pitch: number;
+  winW: number;
+}
+
+/** Street level: shops (and the residents' door where the plan has one), or a residential entrance between windows. Returns the shops. */
+function paintGroundFloor(f: FacadeFrame, random: Rng, arch: FacadeStyle, spec: BuildingSpec, { cols, pitch, winW }: Bays, door: number): Storefront[] {
+  const { sheet, w, fine } = f;
+  if (spec.planned ? spec.planned.length > 0 : spec.landmark || (spec.shops && fine && random() < 0.72)) {
+    const shops = paintShopfronts(f, random, arch.wall, spec.landmark ? RETRO_GAMES : undefined, spec.planned);
+    if (fine && spec.door !== undefined) paintEntrance(f, random, arch, door);
+    return shops;
+  }
+  sheet.path(f.strip(0, w, -1.5, GROUND - 0.5), arch.rusticated ? shade(arch.wall, 0.95) : shade(arch.wall, 0.82));
+  if (fine) {
+    if (arch.rusticated) paintGrooves(f, 0, GROUND - 0.5);
+    paintEntrance(f, random, arch, door);
+  }
+  for (let c = 0; c < cols; c++) {
+    const s0 = c * pitch + (pitch - winW) / 2;
+    if (Math.abs(s0 + winW / 2 - door) < 1.4) continue; // the door is there
+    paintWindow(f, random, arch, s0, s0 + winW, 1.1, 3.0, 0.3, false);
+  }
+  return [];
+}
+
+/** Upper floors, the windows where the walkable street has them (the style's `windows`); tall French windows onto the balconies. */
+function paintUpperFloors(f: FacadeFrame, random: Rng, arch: FacadeStyle, floors: number, { cols, pitch, winW }: Bays, balconies: ReturnType<typeof balconyRows>): void {
+  const { w, fine } = f;
+  for (let fl = 1; fl < floors; fl++) {
+    const hb = GROUND + (fl - 1) * FLOOR + arch.windows.sill;
+    const ht = hb + arch.windows.height;
+    if (fine && arch.courses && fl > 1) f.detail(f.strip(0, w, hb - 0.95, hb - 0.8), shade(arch.trim, 0.9));
+    for (let c = 0; c < cols; c++) {
+      const s0 = c * pitch + (pitch - winW) / 2;
+      const balcony = fine && onBalcony(balconies, fl, c);
+      paintWindow(f, random, arch, s0, s0 + winW, balcony ? hb - 0.4 : hb, ht, 0.34, fl === 1 && !balcony);
+    }
+    if (!fine) continue;
+    for (const row of balconies) {
+      if (row.floor === fl) paintBalcony(f, random, arch, row.from * pitch + pitch * 0.08, (row.to + 1) * pitch - pitch * 0.08, hb - 0.45, arch.balconies === 'haussmann');
+    }
+  }
+}
+
+/** The front's ends: quoins up both corners, a downpipe from the gutter at the end the walkable street has it, the party wall's shadow line. */
+function paintCorners(f: FacadeFrame, arch: FacadeStyle, spec: BuildingSpec, h: number): void {
+  const { w, fine } = f;
+  if (fine && arch.quoins) paintQuoins(f, arch, h);
+  if (fine && arch.downpipe) {
+    const s = (arch.downpipe === 'left') !== !!spec.mirrored ? 0.3 : w - 0.4;
+    f.detail(f.quad(s, s + 0.12, 0, h), shade(arch.wall, 0.5));
+  }
+  f.detail(f.quad(0, Math.min(0.15, w * 0.02), -1.5, h + 0.6), 'rgba(0,0,0,0.35)');
 }
 
 /** Brick courses or weathered render over the wall. */
@@ -325,121 +347,166 @@ function paintEntrance(f: FacadeFrame, random: Rng, arch: FacadeStyle, s: number
  */
 function paintWindow(f: FacadeFrame, random: Rng, arch: FacadeStyle, s0: number, s1: number, hb: number, ht: number, litShare: number, nobile: boolean): void {
   const { sheet, d, fine } = f;
-  const winW = s1 - s0;
-  const arched = arch.window === 'arched';
-  const rise = arched ? winW * 0.22 : 0;
-  // The glass: a rectangle, its top a flat segmental arch on arched fronts.
-  const corners: [number, number][] = [f.P(s0, hb), f.P(s1, hb)];
-  if (arched) for (let i = 0; i <= 6; i++) corners.push(f.P(s1 - (winW * i) / 6, ht - rise + rise * Math.sin((Math.PI * i) / 6)));
-  else corners.push(f.P(s1, ht), f.P(s0, ht));
-  const glass = new Polygon(corners);
-
-  if (fine) {
-    // Surround: a painted frame, a stone lintel or arch, or a carved head with a pediment on the main floor.
-    if (arch.shutters) {
-      const sw = winW * 0.5;
-      for (const [a, b] of [[s0 - sw - 0.05, s0 - 0.05], [s1 + 0.05, s1 + sw + 0.05]] as const) {
-        f.detail(f.quad(a, b, hb, ht), arch.shutters);
-        for (let y = hb + 0.15; y < ht - 0.1; y += 0.16) f.detail(f.quad(a + 0.04, b - 0.04, y, y + 0.05), shade(arch.shutters, 0.72));
-      }
-    }
-    if (arch.window === 'lintel' || arch.window === 'pediment') {
-      f.detail(f.quad(s0 - 0.18, s1 + 0.18, ht + 0.02, ht + 0.3), arch.trim);
-      f.detail(f.quad(s0 - 0.18, s1 + 0.18, ht + 0.02, ht + 0.07), 'rgba(0,0,0,0.25)');
-      if (arch.window === 'pediment' && nobile) {
-        const p = new Path2D();
-        const [xa, ya] = f.P(s0 - 0.25, ht + 0.32);
-        const [xb, yb] = f.P(s1 + 0.25, ht + 0.32);
-        const [xc, yc] = f.P((s0 + s1) / 2, ht + 0.85);
-        p.moveTo(xa, ya);
-        p.lineTo(xb, yb);
-        p.lineTo(xc, yc);
-        p.closePath();
-        f.detail(p, arch.trim);
-      }
-      f.detail(f.quad(s0 - 0.08, s1 + 0.08, hb - 0.06, ht + 0.02), shade(arch.trim, 0.92));
-    } else if (arched) {
-      const ring: [number, number][] = [f.P(s0 - 0.14, ht - rise), f.P(s1 + 0.14, ht - rise)];
-      for (let i = 0; i <= 6; i++) ring.push(f.P(s1 + 0.14 - ((winW + 0.28) * i) / 6, ht - rise + (rise + 0.26) * Math.sin((Math.PI * i) / 6)));
-      const p = new Path2D();
-      ring.forEach(([x, y], i) => (i === 0 ? p.moveTo(x, y) : p.lineTo(x, y)));
-      p.closePath();
-      f.detail(p, arch.trim);
-      f.detail(f.quad(s0 - 0.08, s1 + 0.08, hb - 0.06, ht - rise), shade(arch.wall, 0.7));
-    } else {
-      f.detail(f.quad(s0 - 0.1, s1 + 0.1, hb - 0.08, ht + 0.1), arch.frame);
-    }
-  }
+  const opening: Opening = { s0, s1, hb, ht, rise: arch.window === 'arched' ? (s1 - s0) * 0.22 : 0 };
+  const glass = windowGlass(f, opening);
+  if (fine) paintSurround(f, arch, opening, nobile);
 
   sheet.begin(d, 0.22);
   sheet.path(glass, WINDOW_GLASS);
   sheet.begin(d, 0.05);
+  const room = roomLight(random, litShare);
+  if (room.lit) sheet.lit(glass, room.kind, room.strength, room.curfew, room.tv);
+  if (!fine) return;
+  f.detail(glass, f.vertical(hb, ht, [[0, 'rgba(190,210,230,0.35)'], [0.6, 'rgba(120,140,160,0.08)'], [1, 'rgba(0,0,0,0.18)']]));
+  paintRoom(f, random, opening, room);
+  paintGlazingBars(f, arch, opening, room);
+  paintSill(f, random, arch, opening, room.lit);
+}
+
+/** A window's opening on the front: from `s0` to `s1` along, `hb` to `ht` up, and the rise of its segmental arch (0 when square). */
+interface Opening {
+  s0: number;
+  s1: number;
+  hb: number;
+  ht: number;
+  rise: number;
+}
+
+/** The light in the room behind a window: how bright, whether on at all, when it goes out (`curfew`, 0..1 through the night), its kind. */
+interface RoomLight {
+  strength: number;
+  lit: boolean;
+  curfew: number;
+  kind: LightKind;
+  /** A television: the blue kind, which flickers. */
+  tv: boolean;
+}
+
+/** The glass: a rectangle, its top a flat segmental arch on arched fronts. */
+function windowGlass(f: FacadeFrame, { s0, s1, hb, ht, rise }: Opening): Polygon {
+  const winW = s1 - s0;
+  const corners: [number, number][] = [f.P(s0, hb), f.P(s1, hb)];
+  if (rise > 0) for (let i = 0; i <= 6; i++) corners.push(f.P(s1 - (winW * i) / 6, ht - rise + rise * Math.sin((Math.PI * i) / 6)));
+  else corners.push(f.P(s1, ht), f.P(s0, ht));
+  return new Polygon(corners);
+}
+
+/** Surround: shutters, then a painted frame, a stone lintel or arch, or a carved head with a pediment on the main floor. */
+function paintSurround(f: FacadeFrame, arch: FacadeStyle, { s0, s1, hb, ht, rise }: Opening, nobile: boolean): void {
+  const winW = s1 - s0;
+  if (arch.shutters) {
+    const sw = winW * 0.5;
+    for (const [a, b] of [[s0 - sw - 0.05, s0 - 0.05], [s1 + 0.05, s1 + sw + 0.05]] as const) {
+      f.detail(f.quad(a, b, hb, ht), arch.shutters);
+      for (let y = hb + 0.15; y < ht - 0.1; y += 0.16) f.detail(f.quad(a + 0.04, b - 0.04, y, y + 0.05), shade(arch.shutters, 0.72));
+    }
+  }
+  if (arch.window === 'lintel' || arch.window === 'pediment') {
+    f.detail(f.quad(s0 - 0.18, s1 + 0.18, ht + 0.02, ht + 0.3), arch.trim);
+    f.detail(f.quad(s0 - 0.18, s1 + 0.18, ht + 0.02, ht + 0.07), 'rgba(0,0,0,0.25)');
+    if (arch.window === 'pediment' && nobile) {
+      const p = new Path2D();
+      const [xa, ya] = f.P(s0 - 0.25, ht + 0.32);
+      const [xb, yb] = f.P(s1 + 0.25, ht + 0.32);
+      const [xc, yc] = f.P((s0 + s1) / 2, ht + 0.85);
+      p.moveTo(xa, ya);
+      p.lineTo(xb, yb);
+      p.lineTo(xc, yc);
+      p.closePath();
+      f.detail(p, arch.trim);
+    }
+    f.detail(f.quad(s0 - 0.08, s1 + 0.08, hb - 0.06, ht + 0.02), shade(arch.trim, 0.92));
+  } else if (arch.window === 'arched') {
+    const ring: [number, number][] = [f.P(s0 - 0.14, ht - rise), f.P(s1 + 0.14, ht - rise)];
+    for (let i = 0; i <= 6; i++) ring.push(f.P(s1 + 0.14 - ((winW + 0.28) * i) / 6, ht - rise + (rise + 0.26) * Math.sin((Math.PI * i) / 6)));
+    const p = new Path2D();
+    ring.forEach(([x, y], i) => (i === 0 ? p.moveTo(x, y) : p.lineTo(x, y)));
+    p.closePath();
+    f.detail(p, arch.trim);
+    f.detail(f.quad(s0 - 0.08, s1 + 0.08, hb - 0.06, ht - rise), shade(arch.wall, 0.7));
+  } else {
+    f.detail(f.quad(s0 - 0.1, s1 + 0.1, hb - 0.08, ht + 0.1), arch.frame);
+  }
+}
+
+/**
+ * The room's light, drawn in this order: how bright, whether it is on (`litShare` of the windows), its bedtime
+ * (homes' bedtimes spread evenly through the night, so about as many stay up as the city is awake), its kind (most
+ * rooms are lamplit; some have a whiter ceiling light; the blue ones are televisions, which flicker).
+ */
+function roomLight(random: Rng, litShare: number): RoomLight {
   const strength = between(random, 0.7, 1);
   const lit = random() < litShare;
-  // Homes: bedtimes spread evenly through the night, so about as many stay up as the city is awake.
   const curfew = random();
-  // Most rooms are lamplit; some have a whiter ceiling light; the blue ones are televisions, which flicker.
   const k = random();
   const kind: LightKind = k < 0.16 ? 'cool' : k < 0.3 ? 'neutral' : 'warm';
-  const tv = kind === 'cool';
-  if (lit) sheet.lit(glass, kind, strength, curfew, tv);
-  if (fine) {
-    f.detail(glass, f.vertical(hb, ht, [[0, 'rgba(190,210,230,0.35)'], [0.6, 'rgba(120,140,160,0.08)'], [1, 'rgba(0,0,0,0.18)']]));
-    const inside = random();
-    if (inside < 0.1) {
-      // Curtains drawn right across: the room's light glows through the cloth, dimmer and warmer.
-      const both = f.quad(s0 + 0.02, s1 - 0.02, hb + 0.03, ht - 0.03 - rise);
-      f.detail(both, pick(random, CURTAINS));
-      f.detail(f.quad((s0 + s1) / 2 - 0.02, (s0 + s1) / 2 + 0.02, hb + 0.03, ht - 0.03 - rise), 'rgba(0,0,0,0.2)');
-      if (lit) sheet.lit(both, 'warm', strength * 0.45, curfew);
-    } else if (inside < 0.45) {
-      // Curtains drawn to one side, or both.
-      const both = random() < 0.4;
-      const cw = winW * between(random, both ? 0.18 : 0.25, both ? 0.28 : 0.45);
-      const color = pick(random, CURTAINS);
-      const left = random() < 0.5;
-      const panels: [number, number][] = both ? [[s0, s0 + cw], [s1 - cw, s1]] : [left ? [s0, s0 + cw] : [s1 - cw, s1]];
-      for (const [a, b] of panels) {
-        const panel = f.quad(a, b, hb + 0.05, ht - 0.05 - rise);
-        f.detail(panel, color);
-        if (lit) sheet.lit(panel, 'warm', strength * 0.7, curfew);
-      }
-    } else if (inside < 0.6) {
-      // A blind half down.
-      const blind = f.quad(s0 + 0.03, s1 - 0.03, ht - rise - (ht - hb) * between(random, 0.25, 0.55), ht - rise - 0.03);
-      f.detail(blind, pick(random, BLINDS));
-      if (lit) sheet.lit(blind, 'warm', strength * 0.8, curfew);
+  return { strength, lit, curfew, kind, tv: kind === 'cool' };
+}
+
+/** Behind the glass: curtains drawn across or to a side, a blind half down, the dark shapes of furniture, someone standing in the room. */
+function paintRoom(f: FacadeFrame, random: Rng, { s0, s1, hb, ht, rise }: Opening, { lit, strength, curfew, kind, tv }: RoomLight): void {
+  const { sheet } = f;
+  const winW = s1 - s0;
+  const inside = random();
+  if (inside < 0.1) {
+    // Curtains drawn right across: the room's light glows through the cloth, dimmer and warmer.
+    const both = f.quad(s0 + 0.02, s1 - 0.02, hb + 0.03, ht - 0.03 - rise);
+    f.detail(both, pick(random, CURTAINS));
+    f.detail(f.quad((s0 + s1) / 2 - 0.02, (s0 + s1) / 2 + 0.02, hb + 0.03, ht - 0.03 - rise), 'rgba(0,0,0,0.2)');
+    if (lit) sheet.lit(both, 'warm', strength * 0.45, curfew);
+  } else if (inside < 0.45) {
+    // Curtains drawn to one side, or both.
+    const both = random() < 0.4;
+    const cw = winW * between(random, both ? 0.18 : 0.25, both ? 0.28 : 0.45);
+    const color = pick(random, CURTAINS);
+    const left = random() < 0.5;
+    const panels: [number, number][] = both ? [[s0, s0 + cw], [s1 - cw, s1]] : [left ? [s0, s0 + cw] : [s1 - cw, s1]];
+    for (const [a, b] of panels) {
+      const panel = f.quad(a, b, hb + 0.05, ht - 0.05 - rise);
+      f.detail(panel, color);
+      if (lit) sheet.lit(panel, 'warm', strength * 0.7, curfew);
     }
-    if (lit && inside >= 0.1 && random() < 0.6) {
-      // The dark shapes of furniture in the lower part of the room.
-      sheet.lit(f.quad(s0 + winW * between(random, 0, 0.4), s1 - winW * between(random, 0, 0.3), hb, hb + (ht - hb) * between(random, 0.2, 0.35)), kind, strength * 0.45, curfew, tv);
-    }
-    if (lit && inside >= 0.1 && random() < 0.14) {
-      // Someone standing in the room, a dark figure against the light: shoulders, then the head.
-      const at = between(random, s0 + winW * 0.3, s1 - winW * 0.3);
-      const foot = hb + (ht - hb) * 0.05;
-      const shoulders = hb + (ht - hb) * 0.62;
-      sheet.dim(f.quad(at - 0.22, at + 0.22, foot, shoulders), kind, strength * 0.2);
-      const head = new Path2D();
-      const [hx, hy] = f.P(at, shoulders + 0.17);
-      head.ellipse(hx, hy, Math.max(0.6, f.pxPerMetre.x * 0.11), Math.max(0.6, f.pxPerMetre.y * 0.13), 0, 0, Math.PI * 2);
-      sheet.dim(head, kind, strength * 0.2);
-    }
-    // Glazing bars: a centre bar, and a transom near the top of tall windows.
-    const bar = 0.05;
-    const mid = (s0 + s1) / 2;
-    const bars = [f.quad(mid - bar, mid + bar, hb, ht - rise), f.quad(s0, s1, ht - rise - (ht - hb) * 0.26, ht - rise - (ht - hb) * 0.26 + bar * 1.6)];
-    for (const b of bars) {
-      f.detail(b, arch.frame);
-      if (lit) sheet.lit(b, kind, strength * 0.2, curfew, tv);
-    }
-    // The sill, and sometimes a flower box on it.
-    f.detail(f.quad(s0 - 0.15, s1 + 0.15, hb - 0.16, hb - 0.04), shade(arch.trim, 1.05));
-    if (random() < arch.flowers) paintFlowerBox(f, random, s0, s1, hb);
-    if (lit && currentHoliday() === 'halloween' && wantsPumpkin()) {
-      const [px, py] = f.P(holidayBetween(s0 + 0.2, s1 - 0.2), hb - 0.04);
-      paintPumpkin(sheet, px, py, f.pxPerMetre.y * 0.45);
-    }
+  } else if (inside < 0.6) {
+    // A blind half down.
+    const blind = f.quad(s0 + 0.03, s1 - 0.03, ht - rise - (ht - hb) * between(random, 0.25, 0.55), ht - rise - 0.03);
+    f.detail(blind, pick(random, BLINDS));
+    if (lit) sheet.lit(blind, 'warm', strength * 0.8, curfew);
+  }
+  if (lit && inside >= 0.1 && random() < 0.6) {
+    // The dark shapes of furniture in the lower part of the room.
+    sheet.lit(f.quad(s0 + winW * between(random, 0, 0.4), s1 - winW * between(random, 0, 0.3), hb, hb + (ht - hb) * between(random, 0.2, 0.35)), kind, strength * 0.45, curfew, tv);
+  }
+  if (lit && inside >= 0.1 && random() < 0.14) {
+    // Someone standing in the room, a dark figure against the light: shoulders, then the head.
+    const at = between(random, s0 + winW * 0.3, s1 - winW * 0.3);
+    const foot = hb + (ht - hb) * 0.05;
+    const shoulders = hb + (ht - hb) * 0.62;
+    sheet.dim(f.quad(at - 0.22, at + 0.22, foot, shoulders), kind, strength * 0.2);
+    const head = new Path2D();
+    const [hx, hy] = f.P(at, shoulders + 0.17);
+    head.ellipse(hx, hy, Math.max(0.6, f.pxPerMetre.x * 0.11), Math.max(0.6, f.pxPerMetre.y * 0.13), 0, 0, Math.PI * 2);
+    sheet.dim(head, kind, strength * 0.2);
+  }
+}
+
+/** Glazing bars: a centre bar, and a transom near the top of tall windows; lit with the room when it is. */
+function paintGlazingBars(f: FacadeFrame, arch: FacadeStyle, { s0, s1, hb, ht, rise }: Opening, { lit, strength, curfew, kind, tv }: RoomLight): void {
+  const bar = 0.05;
+  const mid = (s0 + s1) / 2;
+  const bars = [f.quad(mid - bar, mid + bar, hb, ht - rise), f.quad(s0, s1, ht - rise - (ht - hb) * 0.26, ht - rise - (ht - hb) * 0.26 + bar * 1.6)];
+  for (const b of bars) {
+    f.detail(b, arch.frame);
+    if (lit) f.sheet.lit(b, kind, strength * 0.2, curfew, tv);
+  }
+}
+
+/** The sill, and sometimes a flower box on it; at Halloween a pumpkin in a lit window. */
+function paintSill(f: FacadeFrame, random: Rng, arch: FacadeStyle, { s0, s1, hb }: Opening, lit: boolean): void {
+  f.detail(f.quad(s0 - 0.15, s1 + 0.15, hb - 0.16, hb - 0.04), shade(arch.trim, 1.05));
+  if (random() < arch.flowers) paintFlowerBox(f, random, s0, s1, hb);
+  if (lit && currentHoliday() === 'halloween' && wantsPumpkin()) {
+    const [px, py] = f.P(holidayBetween(s0 + 0.2, s1 - 0.2), hb - 0.04);
+    paintPumpkin(f.sheet, px, py, f.pxPerMetre.y * 0.45);
   }
 }
 
@@ -513,120 +580,146 @@ function paintRoof(f: FacadeFrame, random: Rng, arch: FacadeStyle, h: number, co
   const { sheet, d, w, fine } = f;
   const things = roofFurniture(arch, w, cols, winW);
   // A span along the front from the street's left end, in the frame's own s.
-  const span = (s0: number, s1: number): [number, number] => (mirrored ? [w - s1, w - s0] : [s0, s1]);
+  const span: Span = (s0, s1) => (mirrored ? [w - s1, w - s0] : [s0, s1]);
+  paintCornice(f, arch, h);
+  const base = h + 0.55;
+  if (arch.roof === 'mansard' || arch.roof === 'pitched') paintPitchedRoof(f, random, arch, things, span, base);
+  else paintFlatRoof(f, arch, things, span, base);
+  if (fine && things.dish) paintDish(f, span, things.dish, base);
+  // Chimney stacks, with their pots, standing up from the roof ridge.
+  const roofTop = base + (arch.roof === 'mansard' ? 3.2 : arch.roof === 'pitched' ? 2.6 : 0.7);
+  sheet.begin(d, 0.05);
+  paintChimneys(f, arch, things, span, roofTop);
+  if (fine && things.aerial) paintAerial(f, span, things.aerial, roofTop);
+}
+
+/** What stands on a roof (`city/roofFurniture`), in the street's own s. */
+type RoofThings = ReturnType<typeof roofFurniture>;
+/** A span along the front from the street's left end, turned into the frame's own s. */
+type Span = (s0: number, s1: number) => [number, number];
+
+/** The cornice at `h`: its band, a highlight along the top, brackets (modillions) under it, its shadow on the wall. */
+function paintCornice(f: FacadeFrame, arch: FacadeStyle, h: number): void {
+  const { sheet, d, w, fine } = f;
   sheet.begin(d, 0.05);
   sheet.path(f.strip(-0.15, w + 0.15, h, h + 0.55), shade(arch.trim, arch.kind === 'brick' ? 1 : 1.02));
   f.detail(f.strip(-0.15, w + 0.15, h + 0.4, h + 0.55), 'rgba(255,255,255,0.12)');
   if (fine) {
-    // Brackets (modillions) under the cornice.
     for (let s = 0.3; s < w - 0.2; s += 0.55) f.detail(f.quad(s, s + 0.14, h - 0.2, h), shade(arch.trim, 0.8));
   }
   f.detail(f.strip(0, w, h - 0.35, h), 'rgba(0,0,0,0.3)');
-  const base = h + 0.55;
-  if (arch.roof === 'mansard' || arch.roof === 'pitched') {
-    const mansard = arch.roof === 'mansard';
-    const top = base + (mansard ? 3.2 : 2.6);
-    const inset = Math.min(mansard ? 1.4 : 1.0, w * 0.12);
-    const p = new Path2D();
-    const [x0, y0] = f.P(0, base);
-    const [x1, y1] = f.P(w, base);
-    const [x2, y2] = f.P(w - inset, top);
-    const [x3, y3] = f.P(inset, top);
-    p.moveTo(x0, y0);
-    p.lineTo(x1, y1);
-    p.lineTo(x2, y2);
-    p.lineTo(x3, y3);
-    p.closePath();
-    const slate = arch.roofColor;
-    sheet.begin(d, mansard ? 0.15 : 0.05, { wet: 0.3, snow: 0.8 });
-    sheet.path(p, slate);
-    if (fine) {
-      // Zinc seams or tile courses.
-      if (mansard) for (let s = 0.4; s < w; s += 0.5) f.detail(f.quad(s, s + 0.04, base, top), 'rgba(255,255,255,0.08)');
-      else for (let y = base + 0.25; y < top; y += 0.3) f.detail(f.strip(inset * ((y - base) / (top - base)), w - inset * ((y - base) / (top - base)), y, y + 0.06), 'rgba(0,0,0,0.14)');
-      f.detail(p, f.vertical(base, top, [[0, 'rgba(255,255,255,0.1)'], [1, 'rgba(0,0,0,0.12)']]));
-      // Weathering: rain streaks down the slope, moss and lichen on old tiles.
-      for (let i = integer(random, 3, 8); i > 0; i--) {
-        const s = between(random, inset + 0.3, w - inset - 0.6);
-        f.detail(f.quad(s, s + between(random, 0.15, 0.5), base, base + (top - base) * between(random, 0.4, 0.9)), mansard ? 'rgba(20,24,30,0.12)' : 'rgba(60,70,30,0.12)');
-      }
-      if (!mansard) {
-        // Roof windows set in the slope, and the ridge tiles along the top.
-        for (const window of things.roofWindows) {
-          const [s0, s1] = span(window.s, window.s + 0.8);
-          const pane = f.quad(s0, s1, base + 0.8, base + 1.9);
-          sheet.begin(d, 0.35);
-          sheet.path(f.quad(s0 - 0.08, s1 + 0.08, base + 0.72, base + 1.98), '#6a6e72');
-          sheet.path(pane, WINDOW_GLASS);
-          sheet.begin(d, 0.05, { wet: 0.3, snow: 0.8 });
-          if (window.lit) sheet.lit(pane, 'warm', 0.8, window.lit);
-        }
-        f.detail(f.quad(inset, w - inset, top - 0.08, top + 0.1), shade(slate, 0.75));
-      }
+}
+
+/** A slate mansard with dormers or a tiled pitched roof with roof windows: the slope, its seams or courses, weathering, the ridge. */
+function paintPitchedRoof(f: FacadeFrame, random: Rng, arch: FacadeStyle, things: RoofThings, span: Span, base: number): void {
+  const { sheet, d, w, fine } = f;
+  const mansard = arch.roof === 'mansard';
+  const top = base + (mansard ? 3.2 : 2.6);
+  const inset = Math.min(mansard ? 1.4 : 1.0, w * 0.12);
+  const p = new Path2D();
+  const [x0, y0] = f.P(0, base);
+  const [x1, y1] = f.P(w, base);
+  const [x2, y2] = f.P(w - inset, top);
+  const [x3, y3] = f.P(inset, top);
+  p.moveTo(x0, y0);
+  p.lineTo(x1, y1);
+  p.lineTo(x2, y2);
+  p.lineTo(x3, y3);
+  p.closePath();
+  const slate = arch.roofColor;
+  sheet.begin(d, mansard ? 0.15 : 0.05, { wet: 0.3, snow: 0.8 });
+  sheet.path(p, slate);
+  if (fine) {
+    // Zinc seams or tile courses.
+    if (mansard) for (let s = 0.4; s < w; s += 0.5) f.detail(f.quad(s, s + 0.04, base, top), 'rgba(255,255,255,0.08)');
+    else for (let y = base + 0.25; y < top; y += 0.3) f.detail(f.strip(inset * ((y - base) / (top - base)), w - inset * ((y - base) / (top - base)), y, y + 0.06), 'rgba(0,0,0,0.14)');
+    f.detail(p, f.vertical(base, top, [[0, 'rgba(255,255,255,0.1)'], [1, 'rgba(0,0,0,0.12)']]));
+    // Weathering: rain streaks down the slope, moss and lichen on old tiles.
+    for (let i = integer(random, 3, 8); i > 0; i--) {
+      const s = between(random, inset + 0.3, w - inset - 0.6);
+      f.detail(f.quad(s, s + between(random, 0.15, 0.5), base, base + (top - base) * between(random, 0.4, 0.9)), mansard ? 'rgba(20,24,30,0.12)' : 'rgba(60,70,30,0.12)');
     }
-    f.detail(f.quad(inset, w - inset, top - 0.18, top), mansard ? '#6b717c' : '#b9755a');
-    if (fine && mansard) {
-      for (const dormer of things.dormers) {
-        const [s0, s1] = span(dormer.s - dormer.width / 2, dormer.s + dormer.width / 2);
-        // Dormer: cheeks, a little pediment, the pane.
-        f.detail(f.quad(s0 - 0.15, s1 + 0.15, base + 0.5, base + 2.1), arch.trim);
-        const cap = new Path2D();
-        const [ca, cb] = [f.P(s0 - 0.25, base + 2.05), f.P(s1 + 0.25, base + 2.05)];
-        const cc = f.P((s0 + s1) / 2, base + 2.55);
-        cap.moveTo(...ca);
-        cap.lineTo(...cb);
-        cap.lineTo(...cc);
-        cap.closePath();
-        f.detail(cap, shade(arch.trim, 0.9));
-        const pane = f.quad(s0, s1, base + 0.7, base + 1.9);
-        f.detail(pane, WINDOW_GLASS);
-        f.detail(f.quad((s0 + s1) / 2 - 0.03, (s0 + s1) / 2 + 0.03, base + 0.7, base + 1.9), arch.frame);
-        if (dormer.lit) sheet.lit(pane, 'warm', 0.85, dormer.lit);
+    if (!mansard) {
+      // Roof windows set in the slope, and the ridge tiles along the top.
+      for (const window of things.roofWindows) {
+        const [s0, s1] = span(window.s, window.s + 0.8);
+        const pane = f.quad(s0, s1, base + 0.8, base + 1.9);
+        sheet.begin(d, 0.35);
+        sheet.path(f.quad(s0 - 0.08, s1 + 0.08, base + 0.72, base + 1.98), '#6a6e72');
+        sheet.path(pane, WINDOW_GLASS);
+        sheet.begin(d, 0.05, { wet: 0.3, snow: 0.8 });
+        if (window.lit) sheet.lit(pane, 'warm', 0.8, window.lit);
       }
-    }
-  } else {
-    // Parapet, then the clutter of a flat roof: lift housing, a water tank, an aerial.
-    sheet.path(f.strip(0, w, base, base + 0.7), shade(arch.wall, 0.9));
-    f.detail(f.strip(0, w, base + 0.6, base + 0.7), shade(arch.trim, 0.95));
-    if (fine) {
-      // Air-conditioning units and vent stacks along the parapet.
-      for (const unit of things.units) {
-        const [s0, s1] = span(unit.s, unit.s + 0.9);
-        sheet.path(f.quad(s0, s1, base + 0.7, base + 1.35, -0.4), '#b8bcbe');
-        f.detail(f.quad(s0 + 0.1, s0 + 0.55, base + 0.8, base + 1.25, -0.4), 'rgba(0,0,0,0.25)');
-      }
-      for (const vent of things.vents) {
-        const [s0, s1] = span(vent.s, vent.s + 0.14);
-        sheet.path(f.quad(s0, s1, base + 0.7, base + 0.7 + vent.height, -0.8), '#6a6c6e');
-      }
-    }
-    if (fine && things.tank) {
-      const [s] = span(things.tank.s, things.tank.s + 2.4);
-      sheet.path(f.quad(s + 0.3, s + 0.5, base, base + 1.6), '#2a2724');
-      sheet.path(f.quad(s + 1.9, s + 2.1, base, base + 1.6), '#2a2724');
-      sheet.path(f.quad(s, s + 2.4, base + 1.6, base + 4.0), '#5a4a3c');
-      for (let y = base + 1.9; y < base + 4; y += 0.45) f.detail(f.quad(s, s + 2.4, y, y + 0.05), 'rgba(0,0,0,0.25)');
-      const cone = new Path2D();
-      cone.moveTo(...f.P(s, base + 4.0));
-      cone.lineTo(...f.P(s + 2.4, base + 4.0));
-      cone.lineTo(...f.P(s + 1.2, base + 5.0));
-      cone.closePath();
-      sheet.path(cone, '#4a3c30');
+      f.detail(f.quad(inset, w - inset, top - 0.08, top + 0.1), shade(slate, 0.75));
     }
   }
-  // A satellite dish on its bracket.
-  if (fine && things.dish) {
-    const [s] = span(things.dish.s, things.dish.s);
-    const [cx, cy] = f.P(s, base + 1.4, -0.5);
-    const { x: px, y: py } = f.pxPerMetre;
-    const dish = new Path2D();
-    dish.ellipse(cx, cy, Math.max(1, px * 0.35), Math.max(1, py * 0.4), -0.4, 0, Math.PI * 2);
-    sheet.path(f.quad(s - 0.03, s + 0.03, base + 0.7, base + 1.3, -0.5), '#8a8c8e');
-    sheet.path(dish, DISH);
+  f.detail(f.quad(inset, w - inset, top - 0.18, top), mansard ? '#6b717c' : '#b9755a');
+  if (fine && mansard) for (const dormer of things.dormers) paintDormer(f, arch, span, dormer, base);
+}
+
+/** A dormer in the mansard: cheeks, a little pediment, the pane. */
+function paintDormer(f: FacadeFrame, arch: FacadeStyle, span: Span, dormer: RoofThings['dormers'][number], base: number): void {
+  const [s0, s1] = span(dormer.s - dormer.width / 2, dormer.s + dormer.width / 2);
+  f.detail(f.quad(s0 - 0.15, s1 + 0.15, base + 0.5, base + 2.1), arch.trim);
+  const cap = new Path2D();
+  const [ca, cb] = [f.P(s0 - 0.25, base + 2.05), f.P(s1 + 0.25, base + 2.05)];
+  const cc = f.P((s0 + s1) / 2, base + 2.55);
+  cap.moveTo(...ca);
+  cap.lineTo(...cb);
+  cap.lineTo(...cc);
+  cap.closePath();
+  f.detail(cap, shade(arch.trim, 0.9));
+  const pane = f.quad(s0, s1, base + 0.7, base + 1.9);
+  f.detail(pane, WINDOW_GLASS);
+  f.detail(f.quad((s0 + s1) / 2 - 0.03, (s0 + s1) / 2 + 0.03, base + 0.7, base + 1.9), arch.frame);
+  if (dormer.lit) f.sheet.lit(pane, 'warm', 0.85, dormer.lit);
+}
+
+/** Parapet, then the clutter of a flat roof: air-conditioning units and vent stacks along the parapet, a water tank on its legs. */
+function paintFlatRoof(f: FacadeFrame, arch: FacadeStyle, things: RoofThings, span: Span, base: number): void {
+  const { sheet, w, fine } = f;
+  sheet.path(f.strip(0, w, base, base + 0.7), shade(arch.wall, 0.9));
+  f.detail(f.strip(0, w, base + 0.6, base + 0.7), shade(arch.trim, 0.95));
+  if (fine) {
+    for (const unit of things.units) {
+      const [s0, s1] = span(unit.s, unit.s + 0.9);
+      sheet.path(f.quad(s0, s1, base + 0.7, base + 1.35, -0.4), '#b8bcbe');
+      f.detail(f.quad(s0 + 0.1, s0 + 0.55, base + 0.8, base + 1.25, -0.4), 'rgba(0,0,0,0.25)');
+    }
+    for (const vent of things.vents) {
+      const [s0, s1] = span(vent.s, vent.s + 0.14);
+      sheet.path(f.quad(s0, s1, base + 0.7, base + 0.7 + vent.height, -0.8), '#6a6c6e');
+    }
   }
-  // Chimney stacks, with their pots, standing up from the roof ridge.
-  const roofTop = base + (arch.roof === 'mansard' ? 3.2 : arch.roof === 'pitched' ? 2.6 : 0.7);
-  sheet.begin(d, 0.05);
+  if (fine && things.tank) {
+    const [s] = span(things.tank.s, things.tank.s + 2.4);
+    sheet.path(f.quad(s + 0.3, s + 0.5, base, base + 1.6), '#2a2724');
+    sheet.path(f.quad(s + 1.9, s + 2.1, base, base + 1.6), '#2a2724');
+    sheet.path(f.quad(s, s + 2.4, base + 1.6, base + 4.0), '#5a4a3c');
+    for (let y = base + 1.9; y < base + 4; y += 0.45) f.detail(f.quad(s, s + 2.4, y, y + 0.05), 'rgba(0,0,0,0.25)');
+    const cone = new Path2D();
+    cone.moveTo(...f.P(s, base + 4.0));
+    cone.lineTo(...f.P(s + 2.4, base + 4.0));
+    cone.lineTo(...f.P(s + 1.2, base + 5.0));
+    cone.closePath();
+    sheet.path(cone, '#4a3c30');
+  }
+}
+
+/** A satellite dish on its bracket. */
+function paintDish(f: FacadeFrame, span: Span, at: NonNullable<RoofThings['dish']>, base: number): void {
+  const [s] = span(at.s, at.s);
+  const [cx, cy] = f.P(s, base + 1.4, -0.5);
+  const { x: px, y: py } = f.pxPerMetre;
+  const dish = new Path2D();
+  dish.ellipse(cx, cy, Math.max(1, px * 0.35), Math.max(1, py * 0.4), -0.4, 0, Math.PI * 2);
+  f.sheet.path(f.quad(s - 0.03, s + 0.03, base + 0.7, base + 1.3, -0.5), '#8a8c8e');
+  f.sheet.path(dish, DISH);
+}
+
+/** The chimney stacks, brick or rendered like the wall, each with its pots. */
+function paintChimneys(f: FacadeFrame, arch: FacadeStyle, things: RoofThings, span: Span, roofTop: number): void {
+  const { sheet, fine } = f;
   for (const chimney of things.chimneys) {
     const [s, s1] = span(chimney.s, chimney.s + chimney.width);
     const cw = s1 - s;
@@ -639,10 +732,11 @@ function paintRoof(f: FacadeFrame, random: Rng, arch: FacadeStyle, h: number, co
       for (let k = 0; k < chimney.pots; k++) sheet.path(f.quad(s + 0.1 + k * 0.35, s + 0.3 + k * 0.35, ch + 0.15, ch + 0.5), CHIMNEY_POT);
     }
   }
-  if (fine && things.aerial) {
-    // A television aerial on a mast.
-    const [s] = span(things.aerial.s, things.aerial.s + 0.05);
-    sheet.path(f.quad(s, s + 0.05, roofTop, roofTop + 2.4), '#2a2a2c');
-    for (const [y, sp] of [[2.2, 0.9], [1.8, 0.7], [1.4, 0.5]] as const) sheet.path(f.quad(s - sp / 2, s + sp / 2, roofTop + y, roofTop + y + 0.04), '#2a2a2c');
-  }
+}
+
+/** A television aerial on a mast. */
+function paintAerial(f: FacadeFrame, span: Span, at: NonNullable<RoofThings['aerial']>, roofTop: number): void {
+  const [s] = span(at.s, at.s + 0.05);
+  f.sheet.path(f.quad(s, s + 0.05, roofTop, roofTop + 2.4), '#2a2a2c');
+  for (const [y, sp] of [[2.2, 0.9], [1.8, 0.7], [1.4, 0.5]] as const) f.sheet.path(f.quad(s - sp / 2, s + sp / 2, roofTop + y, roofTop + y + 0.04), '#2a2a2c');
 }

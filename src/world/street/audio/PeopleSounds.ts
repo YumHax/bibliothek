@@ -9,6 +9,8 @@ import type { DayNight } from '../../props/DayNight';
 import type { Walker } from '../../people/Walker';
 import { SoundGraph } from './soundGraph';
 import { StreetEar } from './streetEar';
+import { random } from '@/random';
+import { loudness } from '@/audio/hearing';
 
 interface PeopleSoundsOptions {
   listener: THREE.Object3D;
@@ -122,7 +124,7 @@ export class PeopleSounds extends THREE.Group implements Furniture, Updatable, O
       gait.walked -= gait.stride;
       if (i >= MAX_STEPPERS) continue;
       this.localToWorld(this.world.copy(walker.position));
-      const force = 0.5 * Math.min(1, 1.6 / (1 + (d / 3.2) ** 2));
+      const force = 0.5 * loudness(d, { shape: 'inverseSquare', referenceDistance: 3.2, boost: 1.6, maxDistance: Infinity });
       if (force < 0.02) continue;
       playFootfall(g.ctx, g.shot(this.ear.spatial(this.world), 0.8), this.options.surfaceAt(walker.position), { force, wetness: s.wetness, snowCover: s.snowCover });
     }
@@ -133,7 +135,7 @@ export class PeopleSounds extends THREE.Group implements Furniture, Updatable, O
     let gait = this.gaits.get(walker);
     if (!gait) {
       // Long legs and short: a stride of their own.
-      gait = { last: walker.position.clone(), walked: Math.random() * STRIDE, stride: STRIDE * (0.88 + Math.random() * 0.24) };
+      gait = { last: walker.position.clone(), walked: random() * STRIDE, stride: STRIDE * (0.88 + random() * 0.24) };
       this.gaits.set(walker, gait);
     }
     return gait;
@@ -153,9 +155,9 @@ export class PeopleSounds extends THREE.Group implements Furniture, Updatable, O
     for (const voice of m.voices) {
       voice.phrase -= dt;
       if (voice.phrase > 0) continue;
-      voice.talking = !voice.talking && Math.random() < 0.3 + crowd / MURMUR_FULL;
-      voice.phrase = voice.talking ? 0.6 + Math.random() * 2 : 0.8 + Math.random() * 3;
-      voice.gain.gain.setTargetAtTime(voice.talking ? 0.4 + Math.random() * 0.6 : 0, g.now, 0.12);
+      voice.talking = !voice.talking && random() < 0.3 + crowd / MURMUR_FULL;
+      voice.phrase = voice.talking ? 0.6 + random() * 2 : 0.8 + random() * 3;
+      voice.gain.gain.setTargetAtTime(voice.talking ? 0.4 + random() * 0.6 : 0, g.now, 0.12);
     }
   }
 
@@ -168,8 +170,8 @@ export class PeopleSounds extends THREE.Group implements Furniture, Updatable, O
     gain.connect(g.filter('lowpass', 1600, 0.6)).connect(leg.input);
     const voices = FORMANTS.map((f) => {
       const v = g.gain();
-      g.loop().connect(g.filter('bandpass', f * (0.92 + Math.random() * 0.16), 3.5)).connect(v).connect(gain);
-      return { gain: v, phrase: Math.random() * 2, talking: false };
+      g.loop().connect(g.filter('bandpass', f * (0.92 + random() * 0.16), 3.5)).connect(v).connect(gain);
+      return { gain: v, phrase: random() * 2, talking: false };
     });
     this.murmur = { gain, leg, voices };
     return g;

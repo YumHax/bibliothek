@@ -1,15 +1,18 @@
 /* The cat's name and coat, one row of the Settings screen. */
-.cat-settings {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  flex-wrap: wrap;
-  margin: 0;
+@layer tokens, base, components, panels;
+@layer panels {
+  .cat-settings {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-4);
+    flex-wrap: wrap;
+    margin: 0;
+  }
+  .cat-settings__field {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+  }
+  .cat-settings__field span { color: var(--ui-text-dim); }
+  .cat-settings input[type='text'] { width: 9rem; }
 }
-.cat-settings__field {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-.cat-settings__field span { color: var(--ui-text-dim); }
-.cat-settings input[type='text'] { width: 9rem; }

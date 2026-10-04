@@ -3,7 +3,7 @@ import type { Furniture } from '../Furniture';
 import { cylinderMesh } from '../meshUtils';
 import { part } from '../props/Prop';
 import { paint, timber, METAL } from '../materials/palette';
-import { seededRandom } from '@/graphics/canvas';
+import { lcg } from '@/random';
 
 export interface FlowerStandOptions {
   width?: number;
@@ -29,7 +29,7 @@ export class FlowerStand extends THREE.Group implements Furniture {
     super();
     this.name = 'FlowerStand';
     const W = options.width ?? 1.6;
-    const random = seededRandom(options.seed ?? 21);
+    const random = lcg(options.seed ?? 21);
     const wood = timber(0x9a7048, 0.7);
     const zinc = METAL.satinSteel();
     const stem = paint(STEM, 0.7);

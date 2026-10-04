@@ -1,6 +1,5 @@
 import * as THREE from 'three';
 import type { Updatable } from '@/core/Engine';
-import { seededRandom } from '@/graphics/canvas';
 import { QUALITY } from '@/graphics/quality';
 import type { Furniture } from '../../Furniture';
 import type { DayNight } from '../../props/DayNight';
@@ -23,6 +22,7 @@ import { FRONT, PLAIN, SHOPFRONTS, SIGN, frontVariant, type FrontKind } from './
 import { FULL_UV, TexQuads } from './TexQuads';
 import { buildDisplay } from './windowDisplays';
 import { GLASS } from '../../materials/glass';
+import { lcg } from '@/random';
 
 /** Seconds between two looks at the clock (the door's card, the glow, the neon). */
 const CHECK_EVERY = 0.5;
@@ -166,7 +166,7 @@ export class Shopfronts extends THREE.Group implements Furniture, Updatable {
   private buildWalkIn(joinery: TriBuilder, frame: FacadeFrame, kind: FrontKind, layout: FrontLayout, seed: number): void {
     const look = SHOPFRONTS[kind];
     const shopLook = SHOPS[kind];
-    const random = seededRandom(seed);
+    const random = lcg(seed);
     const m = frame.matrix(0, 0);
     const sign = buildJoinery(joinery, m, layout, look, { front: shopLook.front, fascia: shopLook.fascia });
     // The door card's hook on the glass and its string down to the card's corners.

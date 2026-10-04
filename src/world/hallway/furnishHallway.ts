@@ -41,7 +41,7 @@ const KEYS_SAID_TIMES = 2;
  * way home, the parcel under the console (there while bought games wait in it), the runner (or the
  * kilim, once bought) and the shop poster (once bought), then the decor.
  */
-export function furnishHallway(zone: Zone, ctx: BuildContext): ZoneHandle {
+export function furnishHallway(zone: Zone, ctx: Pick<BuildContext, 'sky' | 'listener' | 'acoustics' | 'building' | 'collection' | 'market' | 'today' | 'arcade' | 'home' | 'panels' | 'story'>): ZoneHandle {
   const { sky, listener, building, collection: { deliveries }, market: { stock: market, day: marketDay }, today, arcade: { daily: arcadeDaily }, home: { upgrades } } = ctx;
   const plan = HALLWAY_PLAN;
   const room = furnishShell(zone, sky, plan.room, { leafColor: plan.leafColor });

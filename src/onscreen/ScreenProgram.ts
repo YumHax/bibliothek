@@ -39,7 +39,7 @@ export interface ScreenProgram {
   readonly height: number;
   /** One line of controls, for the HUD tip when the player takes the pad. */
   readonly hint: string;
-  /** 2 when the second pad is read: `ProgramRunner.setSecondPad` (a friend, a CPU) fills it, else it stays `NO_PAD`. */
+  /** 2 when the second pad is read (a second controller drives it, `ProgramRunner`), else it stays `NO_PAD`. */
   readonly players: 1 | 2;
   /** Set true when the program is done by itself (a canvas game's last round): the runner switches the set off. */
   readonly over?: boolean;

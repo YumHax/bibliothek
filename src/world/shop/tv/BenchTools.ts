@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { seededRng } from '@/random';
 import { cylinderMesh } from '../../meshUtils';
 import { Prop, part } from '../../props/Prop';
 import { paint, standard, METAL } from '../../materials/palette';
@@ -88,8 +89,7 @@ function paintSchematic(ctx: CanvasRenderingContext2D, w: number, h: number): vo
   ctx.fillRect(w / 2 - 2, 0, 4, h);
   ctx.strokeStyle = '#2a2a2e';
   ctx.lineWidth = 2;
-  let seed = 7;
-  const r = (): number => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  const r = seededRng(7);
   for (const page of [0, 1]) {
     const x0 = page * (w / 2) + w * 0.04;
     const pw = w / 2 - w * 0.08;

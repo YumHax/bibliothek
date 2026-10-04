@@ -1,5 +1,5 @@
-import { escapeHtml } from './html';
-import { ModalPanel } from './ModalPanel';
+import { CardPanel } from './panel/CardPanel';
+import { html, type Html } from './panel/html';
 import './NewsPanel.css';
 
 /** What the panel prints: the paper's masthead, dateline, lead and tips (see `street/gamingWeekly`). */
@@ -18,39 +18,34 @@ interface NewsIssue {
  * The newsstand's paper, THE GAMING WEEKLY, held up to read: a newsprint card over the view with
  * the day's lead and a few tips about the flea market. A `ModalLike` the Session opens through
  * `SessionActions.openPanel` (the mouse is released while it is up, the room re-entered when it
- * closes): Close, Esc or a click outside puts it down.
+ * closes): "Put it back", Esc or a click outside puts it down.
  */
-export class NewsPanel extends ModalPanel {
-  private readonly card: HTMLElement;
+export class NewsPanel extends CardPanel {
+  private issue: NewsIssue | null = null;
 
   constructor(container: HTMLElement) {
-    super(container, { className: 'ui-modal--centre news-panel' });
-    this.root.innerHTML = '<article class="news-panel__paper" role="dialog" aria-modal="true" aria-label="The newspaper"></article>';
-    this.card = this.root.querySelector('.news-panel__paper')!;
-    this.root.addEventListener('click', (e) => {
-      const target = e.target as HTMLElement;
-      if (target === this.root || target.closest('button[data-action="close"]')) this.close();
-    });
+    super(container, { className: 'news-panel', cardClass: 'news-panel__paper', title: 'The newspaper', dismiss: 'Put it back', header: false, buttonClass: '' });
   }
 
   /** Prints `issue` (call before the Session opens the panel). */
   print(issue: NewsIssue): void {
-    this.card.innerHTML = `
-      <header>
-        <h2>${escapeHtml(issue.masthead)}</h2>
-        <p class="news-panel__dateline">${escapeHtml(issue.dateline)}</p>
-      </header>
-      <h3>${escapeHtml(issue.headline)}</h3>
-      <p class="news-panel__blurb">${escapeHtml(issue.blurb)}</p>
-      <ul>${issue.hints.map((hint) => `<li>${escapeHtml(hint)}</li>`).join('')}</ul>
-      ${issue.prices ? `<p class="news-panel__prices">${escapeHtml(issue.prices)}</p>` : ''}
-      ${issue.classifieds?.length ? `<section class="news-panel__ads"><h4>Small ads</h4>${issue.classifieds.map((ad) => `<p><b>${escapeHtml(ad.head)}</b> ${escapeHtml(ad.text)}</p>`).join('')}<p class="news-panel__ads-note">Ring from your phone at home.</p></section>` : ''}
-      <footer><button type="button" data-action="close" aria-label="Close">Put it back</button></footer>`;
+    this.issue = issue;
+    if (this.isOpen) this.refresh();
   }
 
-  /** Takes the panel out of the page (the street unloaded). */
-  dispose(): void {
-    this.close();
-    this.root.remove();
+  protected render(): Html {
+    const issue = this.issue;
+    if (!issue) return html``;
+    return html`<header>
+        <h2>${issue.masthead}</h2>
+        <p class="news-panel__dateline">${issue.dateline}</p>
+      </header>
+      <h3>${issue.headline}</h3>
+      <p class="news-panel__blurb">${issue.blurb}</p>
+      <ul>${issue.hints.map((hint) => html`<li>${hint}</li>`)}</ul>
+      ${issue.prices ? html`<p class="news-panel__prices">${issue.prices}</p>` : ''}
+      ${issue.classifieds?.length
+        ? html`<section class="news-panel__ads"><h4>Small ads</h4>${issue.classifieds.map((ad) => html`<p><b>${ad.head}</b> ${ad.text}</p>`)}<p class="news-panel__ads-note">Ring from your phone at home.</p></section>`
+        : ''}`;
   }
 }

@@ -1,8 +1,8 @@
 import * as THREE from 'three';
-import { seededRandom } from '@/covers/generated/canvasUtils';
 import { cylinderMesh } from '../meshUtils';
 import { paint, standard, timber } from '../materials/palette';
 import { Prop, part } from './Prop';
+import { lcg } from '@/random';
 
 export interface WallShelfOptions {
   /** Length of the boards. Default 0.8. */
@@ -39,7 +39,7 @@ export class WallShelf extends Prop {
     const spacing = options.spacing ?? 0.3;
     const depth = options.depth ?? 0.2;
     const items = options.items ?? 'mixed';
-    const random = seededRandom(options.seed ?? 7);
+    const random = lcg(options.seed ?? 7);
     const board = timber(options.wood ?? 0x9a7248, 0.55);
     const thickness = 0.025;
 

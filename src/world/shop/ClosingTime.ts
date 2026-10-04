@@ -1,6 +1,8 @@
 import type { Updatable } from '@/core/Engine';
-import { SHOP_ZONE_OF, STREET_PLAN, type ShopKind } from '../street/streetPlan';
-import { clockTime, isShopOpen, SHOP_HOURS } from '../street/shops/shopHours';
+import { STREET_PLAN, type ShopKind } from '../street/streetPlan'; // imports-ok: closing time sends the player out onto the street's arrival spots
+import { SHOP_ZONE_OF } from '@/world/city/facades';
+import { isShopOpen, SHOP_HOURS } from '../street/shops/shopHours';
+import { clockShort } from '@/text/clock';
 
 /** The places behind Front Street's doors that keep shop hours, by zone: the walk-in shops and the flea market (RETRO GAMES'). */
 const HOURS_OF: Readonly<Record<string, ShopKind>> = {
@@ -69,7 +71,7 @@ export class ClosingTime implements Updatable {
     if (this.warned?.zone !== zone) {
       this.warned = { zone, clock: 0 };
       const kind = hoursKindOf(zone)!;
-      say(`${words.warn} (Open again at ${clockTime(SHOP_HOURS[kind]?.open ?? 9)}.)`, words.who);
+      say(`${words.warn} (Open again at ${clockShort(SHOP_HOURS[kind]?.open ?? 9)}.)`, words.who);
       return;
     }
     this.warned.clock += dt;

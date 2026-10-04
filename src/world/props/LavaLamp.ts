@@ -3,6 +3,7 @@ import type { Updatable } from '@/core/Engine';
 import { paint, standard } from '@/world/materials/palette';
 import { RENDER_ORDER } from '@/world/surface/layers';
 import { Prop } from './Prop';
+import { random } from '@/random';
 
 interface LavaLampOptions {
   /** Colour of the wax. Default orange. */
@@ -55,7 +56,7 @@ export class LavaLamp extends Prop implements Updatable {
   private readonly vesselWidth: number;
   private readonly warmUp: number;
   private age = 0;
-  private time = Math.random() * 100;
+  private time = random() * 100;
 
   constructor(options: LavaLampOptions = {}) {
     super();

@@ -1,4 +1,4 @@
-import { landingY, STOREYS } from '../stairwellPlan';
+import { landingY, STOREYS } from '@/world/measures/building';
 
 /*
  * The stairwell in a power cut (`building/blackout`), zone-local like `STAIRWELL_PLAN`: the candles the residents
@@ -10,6 +10,8 @@ import { landingY, STOREYS } from '../stairwellPlan';
 /** A resident out on the stairs in the dark: their look's seed, where they stand (or sit), what they say in turn. */
 export interface CandleNeighbour {
   who: string;
+  /** Their person in the social layer (`social/people/building`). */
+  person: string;
   seed: number;
   at: readonly [x: number, y: number, z: number];
   yaw: number;
@@ -42,22 +44,22 @@ export const POWER_CUT_PLAN = {
   table: { at: [2.25, 2.35] as [number, number], width: 0.62, depth: 0.62, height: 0.72, stools: [[1.8, 2.35], [2.7, 2.35]] as [number, number][], stoolHeight: 0.45 },
   neighbours: [
     {
-      who: 'R. Haddad', seed: 41, at: [0.25, second, -1.0], yaw: 0.6, pose: 'crossed',
+      who: 'R. Haddad', person: 'haddad', seed: 41, at: [0.25, second, -1.0], yaw: 0.6, pose: 'crossed',
       lines: ['The whole street is dark. Even the arcade sign is off.', 'I have candles for a month. You learn, in this building.', 'Somebody should look at the fuse. The meters cupboard, in the hall.'],
       cheer: 'Ha! There we are!',
     },
     {
-      who: 'Mrs Dubois', seed: 63, at: [1.05, second, -1.1], yaw: -0.8, pose: 'hips',
+      who: 'Mrs Dubois', person: 'dubois', seed: 63, at: [1.05, second, -1.1], yaw: -0.8, pose: 'hips',
       lines: ['My freezer! Everything will be ruined.', 'It was like this in seventy-six, a whole night. We sang.', 'Mr Haddad always has candles. Thank heaven.'],
       cheer: 'Oh, thank goodness. My freezer!',
     },
     {
-      who: 'P. Girard', seed: 37, at: [1.8, hall, 2.35], yaw: Math.PI / 2, seat: 0.45, pose: 'play',
+      who: 'P. Girard', person: 'girard', seed: 37, at: [1.8, hall, 2.35], yaw: Math.PI / 2, seat: 0.45, pose: 'play',
       lines: ['Belote? We need a fourth, but two will do.', 'No TV, no internet. Cards it is, like when I was a kid.', 'Your turn. Ah, you are not playing. Pity.'],
       cheer: 'And just when I had a good hand!',
     },
     {
-      who: 'J.-P. Martin', seed: 71, at: [2.7, hall, 2.35], yaw: -Math.PI / 2, seat: 0.45, pose: 'play',
+      who: 'J.-P. Martin', person: 'martin', seed: 71, at: [2.7, hall, 2.35], yaw: -Math.PI / 2, seat: 0.45, pose: 'play',
       lines: ['He cheats, you know. Even in the dark.', 'The fuse will hold once the storm has moved off. Not before.', 'Mrs Moreau is in the lift, poor thing. Somebody talk to her.'],
       cheer: 'Light! I can see your cards now, Girard.',
     },
@@ -68,6 +70,7 @@ export const POWER_CUT_PLAN = {
     k: 1,
     i: 0,
     who: 'Mrs Moreau',
+    person: 'moreau',
     seed: 23,
     /** Where she stands in the car (x, z), facing its gate (+z). */
     at: [0.75, -2.4] as [number, number],

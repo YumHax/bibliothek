@@ -1,8 +1,9 @@
 import * as THREE from 'three';
 import { QUALITY } from '@/graphics/quality';
-import { createCanvas, seededRandom, canvasTexture } from '@/covers/generated/canvasUtils';
+import { createCanvas, canvasTexture } from '@/covers/generated/canvasUtils';
 import { afterChunk, patchShader, VALUE_NOISE } from './shaderPatch';
 import { markShared } from '../props/Prop';
+import { lcg } from '@/random';
 
 /** Metres of wall covered by one tile of the plaster texture. */
 const PLASTER_TILE_M = 1.2;
@@ -21,7 +22,7 @@ let plasterBump: THREE.CanvasTexture | null = null;
 export function plasterBumpMap(): THREE.CanvasTexture {
   if (plasterBump) return plasterBump;
   const [canvas, ctx] = createCanvas(PLASTER_PX, PLASTER_PX);
-  const random = seededRandom(0x91a57e);
+  const random = lcg(0x91a57e);
   ctx.fillStyle = '#808080';
   ctx.fillRect(0, 0, PLASTER_PX, PLASTER_PX);
   const stamp = (x: number, y: number, r: number, style: string): void => {
@@ -96,7 +97,7 @@ const wallDetails = new WeakMap<THREE.Material, WallDetail>();
  * finds no clear spot is left out.
  */
 function drawGhosts(surface: WallSurface, blocked: readonly WallRect[]): [THREE.Vector4, THREE.Vector4] {
-  const random = seededRandom(surface.seed);
+  const random = lcg(surface.seed);
   const obstacles = ghostObstacles(surface, blocked);
   const clear = (g: THREE.Vector4): boolean => ghostClear(g, obstacles);
   const ghost = (): THREE.Vector4 => {
@@ -249,7 +250,7 @@ export function floorWearMap(width: number, depth: number, paths: readonly THREE
   if (cached) return cached;
   const px = WEAR_PX;
   const [canvas, ctx] = createCanvas(px, px);
-  const random = seededRandom(seed);
+  const random = lcg(seed);
   ctx.fillStyle = 'rgb(0,150,0)';
   ctx.fillRect(0, 0, px, px);
   // The floor plane is turned face up, its local +y along world -z; the canvas's top row is the

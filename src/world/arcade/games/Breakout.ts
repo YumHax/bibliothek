@@ -1,5 +1,7 @@
-import { type ArcadeControls, SCREEN_H, SCREEN_W, clamp } from './ArcadeGame';
+import { clamp } from '@/math/scalar';
+import { type ArcadeControls, SCREEN_H, SCREEN_W } from './ArcadeGame';
 import { BaseGame, PLAY_TOP } from './BaseGame';
+import { random } from '@/random';
 
 /** Longer than the other cabinets: a ball at 200 px/s needs about 25 s to take a whole wall down. */
 const ROUND_SECONDS = 30;
@@ -176,8 +178,8 @@ export class Breakout extends BaseGame {
     const ball = (falling.length ? falling : this.balls).reduce<Ball | null>((low, b) => (!low || b.y > low.y ? b : low), null);
     this.pilotTimer -= 1 / 60;
     if (this.pilotTimer <= 0) {
-      this.pilotTimer = 0.4 + Math.random() * 0.6;
-      this.pilotError = (Math.random() - 0.5) * this.paddleW * (1.4 - skill);
+      this.pilotTimer = 0.4 + random() * 0.6;
+      this.pilotError = (random() - 0.5) * this.paddleW * (1.4 - skill);
     }
     const target = (ball ? ball.x : SCREEN_W / 2) + this.pilotError;
     const diff = target - this.paddleX;

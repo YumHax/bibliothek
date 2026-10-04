@@ -1,8 +1,6 @@
 import type { BoxCondition, CopyVariant, Edition, Game, PlatformId } from '@/catalog/types';
 import type { Views } from './Fame';
-import { hash01 } from './seeded';
-
-export { hash01 } from './seeded';
+import { unit01 } from '@/random';
 
 /*
  * THE ECONOMY'S NUMBERS, all in one place. Coins buy games and arcade plays; the cabinets pay in
@@ -327,16 +325,15 @@ export const SCRATCH = {
 export const TRADER_MARKUP = 1.25;
 
 /**
- * The saleroom behind the flea market (`economy/auction.ts`, `AuctionHouse`): a sale every `every` market days from
- * `offset` (a quiet day of the week round, the first one three days into a new game), `lots.games` games and `lots.sealed` sealed cartons, called between
+ * The saleroom behind the flea market (`economy/auction.ts`, `AuctionHouse`): a sale every Sunday of the game's week
+ * (`time/wakefulness`: the first one three days into a new game), `lots.games` games and `lots.sealed` sealed cartons, called between
  * game hours `hours`. A lot opens at `reserve` of its shop price (times its condition and printing, like the stalls:
  * over the WE BUY desk's top share, so a lot nobody else wants is a bargain, never a press); the room expects it to
  * fetch about `estimate` of that. Silence after a bid: `call` seconds to "going once", as much to "twice", as much to
  * the hammer; a lot nobody opens in `openSilence` seconds is passed. `pause` between two lots.
  */
 export const AUCTION = {
-  every: 7,
-  offset: 3,
+  // The sale day is the game week's Sunday (`time/wakefulness` SUNDAY_DAY, every seventh day from day 3): `isAuctionDay`.
   lots: { games: 4, sealed: 2 },
   hours: [9, 22] as readonly [number, number],
   reserve: 0.36,
@@ -389,9 +386,7 @@ export const ESTATE_SALE = { fromDay: 25, notice: 3, mourning: 5, days: 3, copie
  */
 export const UNDO_PURCHASE = { seconds: 8, refund: 0.9 };
 
-/** A deliberate second click: a first click arms a sale (a row, a tag, a button) for this long, the second within it goes through. */
-export const CONFIRM_MS = 4000;
-/** Something for the flat dearer than this (coins) asks for that second click wherever it is bought (a shop's tag or till, the household stall, the bookcase kit). */
+/** Something for the flat dearer than this (coins) asks for a second click wherever it is bought (a shop's tag or till, the household stall, the bookcase kit; the window is `CONFIRM_MS` in `ui/confirmTwice`). */
 export const ARM_ABOVE = 30;
 /** How many coin clinks a purchase of `price` coins makes (the same everywhere something is bought on the spot). */
 export function purchaseClinks(price: number): number {
@@ -444,7 +439,7 @@ export function fameFactor(views: Views): number {
 
 /** What a copy of `game` costs new in the shop (integer coins, at least 1), given its fame. */
 export function shopPrice(game: Pick<Game, 'id' | 'platform'>, views: Views): number {
-  const jitter = JITTER.min + hash01(game.id) * (JITTER.max - JITTER.min);
+  const jitter = JITTER.min + unit01(game.id) * (JITTER.max - JITTER.min);
   return Math.max(1, Math.round(BASE_PRICE[game.platform] * fameFactor(views) * jitter));
 }
 

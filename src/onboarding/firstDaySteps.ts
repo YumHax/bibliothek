@@ -7,10 +7,12 @@
 import { actionKeyLabel } from '@/ui/keys';
 import { useVerbOn, useVerbOnCap } from '@/ui/verb';
 import { BARGAIN_PRICE, HOME_GOOD_PRICES, TICKETS_PER_COIN } from '@/economy/pricing';
-import { SHOP_HOURS, clockTime } from '@/world/street/shops/shopHours';
+import { SHOP_HOURS } from '@/world/street/shops/shopHours';
+import { clockShort } from '@/text/clock';
+import { formatCoins } from '@/text/money';
 
 /** The flat's shops' hours, as the tips say them ("9:00 to 21:00"). */
-const FLAT_SHOPS_HOURS = `${clockTime(SHOP_HOURS.furniture?.open ?? 9)} to ${clockTime(SHOP_HOURS.furniture?.close ?? 21)}`;
+const FLAT_SHOPS_HOURS = `${clockShort(SHOP_HOURS.furniture?.open ?? 9)} to ${clockShort(SHOP_HOURS.furniture?.close ?? 21)}`;
 
 export type FirstDayStepId = 'note' | 'out' | 'arcade' | 'play' | 'redeem' | 'market' | 'buy' | 'unpack' | 'shelf';
 
@@ -61,23 +63,23 @@ export const FIRST_DAY_STEPS: readonly FirstDayStep[] = [
   },
   {
     id: 'redeem',
-    todo: `Tickets → ${BARGAIN_PRICE} coins at the prize counter`,
-    tips: { arcade: `Tickets in your pocket: the prize counter swaps them for coins (${TICKETS_PER_COIN} a coin), or for prizes. About ${BARGAIN_PRICE} coins buys a bargain-bin game.` },
+    todo: `Tickets → ${formatCoins(BARGAIN_PRICE)} at the prize counter`,
+    tips: { arcade: `Tickets in your pocket: the prize counter swaps them for coins (${TICKETS_PER_COIN} a coin), or for prizes. About ${formatCoins(BARGAIN_PRICE)} buys a bargain-bin game.` },
   },
   {
     id: 'market',
     todo: 'Flea market, at the back of RETRO GAMES',
     tips: {
       arcade: 'Coins in hand: the flea market is at the back of RETRO GAMES, across the street.',
-      street: `RETRO GAMES: the flea market is at its back, open ${clockTime(SHOP_HOURS.retro?.open ?? 8)} to ${clockTime(SHOP_HOURS.retro?.close ?? 23)}.`,
+      street: `RETRO GAMES: the flea market is at its back, open ${clockShort(SHOP_HOURS.retro?.open ?? 8)} to ${clockShort(SHOP_HOURS.retro?.close ?? 23)}.`,
     },
   },
   {
     id: 'buy',
     todo: 'Buy a first game!',
     tips: {
-      market: () => `The bargain bin: anything in it for ${BARGAIN_PRICE} coins. ${useVerbOnCap('a game')} to look closer: ${actionKeyLabel('buy')} buys it, ${actionKeyLabel('haggle')} haggles (not in the bin). What you buy is sent home.`,
-      street: `The flat is bare: SECOND HOME (furniture), the florist and the pet shop are along Front Street, TV REPAIR round the corner on Park Street, open ${FLAT_SHOPS_HOURS}. A houseplant is ${HOME_GOOD_PRICES.houseplant} coins.`,
+      market: () => `The bargain bin: anything in it for ${formatCoins(BARGAIN_PRICE)}. ${useVerbOnCap('a game')} to look closer: ${actionKeyLabel('buy')} buys it, ${actionKeyLabel('haggle')} haggles (not in the bin). What you buy is sent home.`,
+      street: `The flat is bare: SECOND HOME (furniture), the florist and the pet shop are along Front Street, TV REPAIR round the corner on Park Street, open ${FLAT_SHOPS_HOURS}. A houseplant is ${formatCoins(HOME_GOOD_PRICES.houseplant)}.`,
     },
   },
   {

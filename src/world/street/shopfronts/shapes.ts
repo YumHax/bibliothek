@@ -26,7 +26,3 @@ export function ball(b: TriBuilder, m: THREE.Matrix4, x: number, y: number, z: n
   g.dispose();
 }
 
-/** One of `items`, drawn with `random`. */
-export function pick<T>(random: () => number, items: readonly T[]): T {
-  return items[Math.floor(random() * items.length)]!;
-}

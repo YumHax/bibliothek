@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import type { Updatable } from '@/core/Engine';
 import type { Furniture } from '../Furniture';
 import type { LiftRides } from './Lift';
-import { STOREYS } from './stairwellPlan';
+import { STOREYS } from '@/world/measures/building';
 
 interface RemovalLiftOptions {
   lift: LiftRides;

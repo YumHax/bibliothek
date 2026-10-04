@@ -1,9 +1,10 @@
 import * as THREE from 'three';
-import { createCanvas, seededRandom, toTexture } from '@/covers/generated/canvasUtils';
+import { createCanvas, toTexture } from '@/covers/generated/canvasUtils';
 import { Prop, part } from '../../props/Prop';
 import { paint, timber } from '../../materials/palette';
 import { WALL, decal } from '../../surface/layers';
 import { SIGNWRITER, hex, setLines } from './lettering';
+import { lcg } from '@/random';
 
 export interface NameBoardOptions {
   /** What it says, the first line biggest. Default the shop's name. */
@@ -53,7 +54,7 @@ function paintFace(wM: number, hM: number, options: NameBoardOptions & { lines: 
   const W = Math.round(wM * PX_PER_M);
   const H = Math.round(hM * PX_PER_M);
   const [canvas, ctx] = createCanvas(W, H);
-  const random = seededRandom(options.seed ?? 7);
+  const random = lcg(options.seed ?? 7);
   const inset = H * 0.1;
   const edge = enamel ? options.letters : '#c9a44a';
   ctx.fillStyle = enamel ? '#f4f1e8' : hex(options.color);
@@ -77,10 +78,10 @@ function paintFace(wM: number, hM: number, options: NameBoardOptions & { lines: 
   if (!enamel) {
     ctx.save();
     ctx.translate(H * 0.018, H * 0.018);
-    setLines(ctx, { ...block, color: 'rgba(0,0,0,0.45)', random: seededRandom(1) });
+    setLines(ctx, { ...block, color: 'rgba(0,0,0,0.45)', random: lcg(1) });
     ctx.restore();
   }
-  setLines(ctx, { ...block, color: enamel ? hex(options.color) : options.letters, random: seededRandom(1) });
+  setLines(ctx, { ...block, color: enamel ? hex(options.color) : options.letters, random: lcg(1) });
   // The weather indoors: a little dust and fading, heavier at the bottom edge.
   for (let i = 0; i < W * 0.6; i++) {
     ctx.fillStyle = `rgba(255,255,255,${0.02 + random() * 0.04})`;

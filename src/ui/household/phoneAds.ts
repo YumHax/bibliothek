@@ -1,5 +1,6 @@
 import type { Classifieds } from '@/classifieds/Classifieds';
-import { SELLERS_BUILDING, clockOf } from '@/classifieds/ads';
+import { SELLERS_BUILDING } from '@/classifieds/ads';
+import { formatClock } from '@/text/clock';
 import type { PhoneAds } from './PhonePanel';
 
 /**
@@ -15,7 +16,7 @@ export function phoneAds(book: Classifieds): PhoneAds {
         id: ad.id,
         who: `${ad.name}, ${ad.flat}`,
         text: ad.text,
-        booked: booking?.ad.id === ad.id ? `${booking.day === book.today ? 'today' : 'tomorrow'} ${clockOf(ad.hours[0])}–${clockOf(ad.hours[1])}` : null,
+        booked: booking?.ad.id === ad.id ? `${booking.day === book.today ? 'today' : 'tomorrow'} ${formatClock(ad.hours[0])}–${formatClock(ad.hours[1])}` : null,
       }));
     },
     ring: (id) => {

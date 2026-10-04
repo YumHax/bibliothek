@@ -1,11 +1,12 @@
-import { seededRandom } from '@/covers/generated/canvasUtils';
-import { GROUND_FLOOR, STOREY, type FacadeSpec, type FlatFront, type ShopKind, type ShopSpec } from './streetPlan';
+import type { FacadeSpec, FlatFront, ShopKind, ShopSpec } from './streetPlan';
+import { GROUND_FLOOR, STOREY } from '@/world/measures/street';
 import { LETTERING, SHOP_LOOKS, letteringFont } from '../city/shopLooks';
 import { balconyRows, facadeBays, facadeStyle, onBalcony, windowWidth, type FacadeStyle, type WindowHead } from '../city/facadeStyle';
 import type { RoofFurniture } from '../city/roofFurniture';
 import { shade } from '../city/colour';
 import type { FlatRoomId } from '../city/flatWindows';
 import { awningOut, frontVariant, pilasterWidth } from './shopfronts/shopfrontPlan';
+import { lcg, pick } from '@/random';
 
 /** What a lit window shows of its room at night, drawn on the night map over its light (`Buildings`). Shares of the light's rect. */
 export interface LightInside {
@@ -201,11 +202,6 @@ export const SHOPS: Record<Exclude<ShopKind, 'shut'>, ShopLook> = {
   arcade: { ...SHOP_LOOKS.arcade, name: '', light: '#c070ff' },
 };
 
-function pick<T>(random: () => number, items: readonly T[]): T {
-  return items[Math.floor(random() * items.length)]!;
-}
-
-
 /**
  * Paints one facade into the colour atlas (`ctx`, at `slot`) and returns the lights it holds for
  * the night map: the wall (brick is the shader's, render or dressed stone painted), string courses, a
@@ -221,7 +217,7 @@ function pick<T>(random: () => number, items: readonly T[]): T {
  * are painted, the frames, bars, sills, heads, shutters and flower boxes are the geometry's.
  */
 export function paintFacade(ctx: CanvasRenderingContext2D, spec: FacadeSpec, width: number, slot: AtlasSlot, goods: readonly string[] | null, framed = false): PaintedFacade {
-  const random = seededRandom(spec.seed * 7919);
+  const random = lcg(spec.seed * 7919);
   // The building's look is the neighbourhood's (`city/facadeStyle`): the window view paints the same front.
   const style = facadeStyle(spec.seed);
   const height = facadeHeight(spec.storeys);
@@ -232,26 +228,54 @@ export function paintFacade(ctx: CanvasRenderingContext2D, spec: FacadeSpec, wid
   p.features.trim = style.trim;
   p.features.cornice = cornice - 0.16;
 
-  // The wall, and its texture (brick courses are laid by the facade's shader, at any distance).
+  paintWall(p, random, style, width, height);
+  paintCrown(p, style, width, height, cornice);
+  // Storeys over the ground floor: a row of bays, balconies where the style hangs them.
+  const bays = facadeBays(width, spec.bays);
+  const bay = width / bays;
+  const winW = windowWidth(style, bay);
+  // None in a light well (a face a bay or two wide): they would run into the next wall's.
+  const balconies = width < MIN_BALCONY_FRONT ? [] : balconyRows(style, spec.storeys, bays);
+  for (let storey = 1; storey < spec.storeys; storey++) paintStorey(p, random, style, spec, { width, bays, bay, winW }, balconies, storey);
+  if (spec.flat) paintFlat(p, style, spec.flat);
+  paintGroundFloor(p, random, style, spec, width, bays, goods);
+  return { lights: p.lights, glass: p.panes, relief: p.reliefs, features: p.features, brick: style.kind === 'brick' };
+}
+
+/** How a front's bays are laid out: its width, bays per storey, the pitch of a bay and a window's width. */
+interface Bays {
+  width: number;
+  bays: number;
+  bay: number;
+  winW: number;
+}
+
+/** The wall and its texture (brick courses are laid by the facade's shader, at any distance), and the grime running down from the top. */
+function paintWall(p: Brush, random: () => number, style: FacadeStyle, width: number, height: number): void {
   p.rect(0, 0, width, height, style.wall);
   for (let i = 0; i < width * height * 0.8; i++) {
     const s = random() * width;
     const y = random() * height;
     p.rect(s, y, s + 0.2 + random() * 0.6, y + 0.1 + random() * 0.3, random() < 0.5 ? 'rgba(0,0,0,0.05)' : 'rgba(255,255,255,0.05)');
   }
-  // Grime running down from the top.
+  const { ctx, slot } = p;
   const grime = ctx.createLinearGradient(0, p.y(height), 0, p.y(height - 3));
   grime.addColorStop(0, 'rgba(40,35,30,0.22)');
   grime.addColorStop(1, 'rgba(40,35,30,0)');
   ctx.fillStyle = grime;
   ctx.fillRect(p.x(0), p.y(height), width * slot.k, 3 * slot.k);
+}
 
-  // Parapet and cornice on its brackets (the cornice's band is also what the cornice ledge's geometry samples).
+/**
+ * The top of the front: parapet and cornice on its brackets (the cornice's band is also what the cornice ledge's geometry
+ * samples), the quoins up the corners, and the damp the 3D downpipe (`relief/FacadeRelief`) leaves on the wall either side.
+ */
+function paintCrown(p: Brush, style: FacadeStyle, width: number, height: number, cornice: number): void {
   p.rect(0, cornice, width, height, shade(style.wall, 0.93));
   p.rect(0, cornice - 0.1, width, cornice + 0.25, style.trim);
   p.relief(0, cornice - 0.1, width, cornice + 0.25, RELIEF.cornice, ROUGH.stone);
   p.rect(0, cornice - 0.16, width, cornice - 0.1, 'rgba(0,0,0,0.25)');
-  if (slot.k >= 12) {
+  if (p.slot.k >= 12) {
     for (let s = 0.3; s < width - 0.2; s += 0.55) {
       p.rect(s, cornice - 0.34, s + 0.14, cornice - 0.1, shade(style.trim, 0.86));
       p.rect(s + 0.1, cornice - 0.34, s + 0.14, cornice - 0.1, 'rgba(0,0,0,0.18)');
@@ -262,69 +286,70 @@ export function paintFacade(ctx: CanvasRenderingContext2D, spec: FacadeSpec, wid
   p.relief(0, height - 0.12, width, height, RELIEF.trim, ROUGH.stone);
   if (style.quoins) paintQuoins(p, style, width, cornice);
   if (style.downpipe) {
-    // The downpipe is built in 3D (`relief/FacadeRelief`); the damp it leaves on the wall either side is painted.
     const s = style.downpipe === 'left' ? 0.35 : width - 0.35;
     p.features.downpipe = s;
     p.rect(s - 0.18, 0.35, s + 0.18, cornice, 'rgba(40,40,36,0.08)');
   }
+}
 
-  // Storeys over the ground floor: a row of bays, balconies where the style hangs them.
-  const bays = facadeBays(width, spec.bays);
-  const bay = width / bays;
-  const winW = windowWidth(style, bay);
-  // None in a light well (a face a bay or two wide): they would run into the next wall's.
-  const balconies = width < MIN_BALCONY_FRONT ? [] : balconyRows(style, spec.storeys, bays);
-  for (let storey = 1; storey < spec.storeys; storey++) {
-    const floorY = GROUND_FLOOR + (storey - 1) * STOREY;
-    // A string course at the floor, where the front has them.
-    if (style.courses) {
-      p.rect(0, floorY - 0.06, width, floorY + 0.1, shade(style.trim, 0.96));
-      p.relief(0, floorY - 0.06, width, floorY + 0.1, RELIEF.trim, ROUGH.stone);
-    }
-    // Our flat's floor: its own windows where they really are (painted after the loop).
-    if (spec.flat && storey === spec.storeys - 1) continue;
-    const y0 = floorY + style.windows.sill;
-    const y1 = y0 + style.windows.height;
-    for (const row of balconies) {
-      if (row.floor !== storey) continue;
-      // A wrought-iron balcony across the row's bays over a stone slab: built in 3D (`relief/FacadeRelief`), a shadow painted under it.
-      const s0 = row.from * bay + bay * 0.08;
-      const s1 = (row.to + 1) * bay - bay * 0.08;
-      p.rect(s0, y0 - 0.3, s1, y0 - 0.12, 'rgba(0,0,0,0.12)');
-      p.features.balconies.push({ s0, s1, y: y0 });
-    }
-    for (let b = 0; b < bays; b++) {
-      const cx = (b + 0.5) * bay;
-      const s0 = cx - winW / 2;
-      const s1 = cx + winW / 2;
-      const balcony = onBalcony(balconies, storey, b);
-      const inside = paintWindow(p, style, random, s0, y0, s1, y1, storey === 1 && !balcony, balcony);
-      // A framed facade's window was just recorded: its shutters and flower box are built with it.
-      const built = p.framed ? p.features.casements[p.features.casements.length - 1] : undefined;
-      if (style.shutters && !balcony) {
-        if (built) built.shutters = style.shutters;
-        else paintShutters(p, style, s0, y0, s1, y1, winW);
-      }
-      if (!balcony && random() < style.flowers) {
-        const flowers = Array.from({ length: 6 }, () => pick(random, FLOWERS));
-        if (built) built.flowers = flowers;
-        else {
-          p.rect(s0 - 0.05, y0 - 0.02, s1 + 0.05, y0 + 0.2, '#6a4a32');
-          flowers.forEach((flower, i) => p.rect(s0 + (i / 6) * winW, y0 + 0.15, s0 + ((i + 0.8) / 6) * winW, y0 + 0.32, flower));
-          p.relief(s0 - 0.05, y0 - 0.02, s1 + 0.05, y0 + 0.32, RELIEF.sill, ROUGH.paint);
-        }
-      }
-      // Its light at night: a home, now and then a TV, some empty all night.
-      if (random() < 0.72) {
-        const tv = random() < 0.12;
-        p.light(s0 + 0.06, y0 + 0.06, s1 - 0.06, y1 - 0.06, tv ? TV_LIGHT : pick(random, HOME_LIGHTS), random() * 0.9, 0.08 + random() * 0.9, undefined, inside);
-      }
+/**
+ * One storey over the ground floor: a string course at the floor where the front has them, the balconies' shadows (the
+ * balconies themselves are built in 3D, `relief/FacadeRelief`), then a window per bay. Our flat's floor paints its own
+ * windows where they really are (`paintFlat`), nothing here.
+ */
+function paintStorey(p: Brush, random: () => number, style: FacadeStyle, spec: FacadeSpec, { width, bays, bay, winW }: Bays, balconies: ReturnType<typeof balconyRows>, storey: number): void {
+  const floorY = GROUND_FLOOR + (storey - 1) * STOREY;
+  if (style.courses) {
+    p.rect(0, floorY - 0.06, width, floorY + 0.1, shade(style.trim, 0.96));
+    p.relief(0, floorY - 0.06, width, floorY + 0.1, RELIEF.trim, ROUGH.stone);
+  }
+  if (spec.flat && storey === spec.storeys - 1) return;
+  const y0 = floorY + style.windows.sill;
+  const y1 = y0 + style.windows.height;
+  for (const row of balconies) {
+    if (row.floor !== storey) continue;
+    const s0 = row.from * bay + bay * 0.08;
+    const s1 = (row.to + 1) * bay - bay * 0.08;
+    p.rect(s0, y0 - 0.3, s1, y0 - 0.12, 'rgba(0,0,0,0.12)');
+    p.features.balconies.push({ s0, s1, y: y0 });
+  }
+  for (let b = 0; b < bays; b++) {
+    const cx = (b + 0.5) * bay;
+    const balcony = onBalcony(balconies, storey, b);
+    paintBay(p, random, style, cx - winW / 2, y0, cx + winW / 2, y1, storey === 1 && !balcony, balcony);
+  }
+}
+
+/**
+ * One bay's window with its dressing: shutters and a flower box (built with the window on a framed facade, painted
+ * otherwise) and its light at night: a home, now and then a TV, some empty all night.
+ */
+function paintBay(p: Brush, random: () => number, style: FacadeStyle, s0: number, y0: number, s1: number, y1: number, nobile: boolean, balcony: boolean): void {
+  const winW = s1 - s0;
+  const inside = paintWindow(p, style, random, s0, y0, s1, y1, nobile, balcony);
+  // A framed facade's window was just recorded: its shutters and flower box are built with it.
+  const built = p.framed ? p.features.casements[p.features.casements.length - 1] : undefined;
+  if (style.shutters && !balcony) {
+    if (built) built.shutters = style.shutters;
+    else paintShutters(p, style, s0, y0, s1, y1, winW);
+  }
+  if (!balcony && random() < style.flowers) {
+    const flowers = Array.from({ length: 6 }, () => pick(random, FLOWERS));
+    if (built) built.flowers = flowers;
+    else {
+      p.rect(s0 - 0.05, y0 - 0.02, s1 + 0.05, y0 + 0.2, '#6a4a32');
+      flowers.forEach((flower, i) => p.rect(s0 + (i / 6) * winW, y0 + 0.15, s0 + ((i + 0.8) / 6) * winW, y0 + 0.32, flower));
+      p.relief(s0 - 0.05, y0 - 0.02, s1 + 0.05, y0 + 0.32, RELIEF.sill, ROUGH.paint);
     }
   }
+  if (random() < 0.72) {
+    const tv = random() < 0.12;
+    p.light(s0 + 0.06, y0 + 0.06, s1 - 0.06, y1 - 0.06, tv ? TV_LIGHT : pick(random, HOME_LIGHTS), random() * 0.9, 0.08 + random() * 0.9, undefined, inside);
+  }
+}
 
-  if (spec.flat) paintFlat(p, style, spec.flat);
-
-  // The ground floor: a plinth, then shops, a door, or the ground floor's own windows.
+/** The ground floor: a plinth (rusticated where the style is), then shops, a door, or the ground floor's own windows; posters and tags on bare wall; the name plates. */
+function paintGroundFloor(p: Brush, random: () => number, style: FacadeStyle, spec: FacadeSpec, width: number, bays: number, goods: readonly string[] | null): void {
   p.rect(0, 0, width, GROUND_FLOOR, shade(style.wall, 0.86));
   p.rect(0, 0, width, 0.35, shade(style.wall, 0.62));
   p.relief(0, 0, width, 0.35, RELIEF.plinth, ROUGH.stone);
@@ -341,7 +366,6 @@ export function paintFacade(ctx: CanvasRenderingContext2D, spec: FacadeSpec, wid
   if (spec.shops.length === 0 && !spec.flat) paintGroundWindows(p, style, random, width, bays, spec.door);
   paintBareWall(p, random, spec, width);
   for (const plate of spec.nameplates ?? []) paintNamePlate(p, plate.at, plate.name);
-  return { lights: p.lights, glass: p.panes, relief: p.reliefs, features: p.features, brick: style.kind === 'brick' };
 }
 
 /**
@@ -428,7 +452,7 @@ class Brush {
     private readonly height: number,
     seed = 1,
   ) {
-    this.weather = seededRandom(seed * 104729 + 17);
+    this.weather = lcg(seed * 104729 + 17);
   }
 
   x(s: number): number {
@@ -725,7 +749,7 @@ function paintQuoins(p: Brush, style: FacadeStyle, width: number, top: number): 
  */
 export function paintRoof(ctx: CanvasRenderingContext2D, style: FacadeStyle, width: number, depth: number, slot: AtlasSlot, things?: RoofFurniture, lights?: NightLight[]): void {
   const p = new Brush(ctx, slot, depth);
-  const random = seededRandom(style.seed * 31 + 5);
+  const random = lcg(style.seed * 31 + 5);
   p.rect(0, 0, width, depth, style.roofColor);
   const mansard = style.roof === 'mansard';
   if (mansard) for (let s = 0.4; s < width; s += 0.5) p.rect(s, 0, s + 0.04, depth, 'rgba(255,255,255,0.08)');
@@ -876,7 +900,7 @@ const GHOST_SIGNS = ['PIANOS & ORGANS', 'COAL · COKE · LOGS', 'TEA ROOMS', 'DR
  */
 export function paintPartyWall(ctx: CanvasRenderingContext2D, style: FacadeStyle, width: number, height: number, slot: AtlasSlot, seed: number): { relief: ReliefRect[] } {
   const p = new Brush(ctx, slot, height, seed);
-  const random = seededRandom(seed * 3571 + 13);
+  const random = lcg(seed * 3571 + 13);
   p.rect(0, 0, width, height, shade(style.wall, style.kind === 'brick' ? 0.95 : 0.9));
   for (let i = 0; i < width * height * 0.5; i++) {
     const s = random() * width;

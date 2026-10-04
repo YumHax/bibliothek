@@ -20,7 +20,7 @@ interface StudyHandle extends ZoneHandle {
  * light and its switch inside the door from the new room (which hangs it), her old front door seen from inside
  * (locked), a radiator, and the last two of the annex's bookcases (the new room's leftovers).
  */
-export function furnishStudy(zone: Zone, ctx: BuildContext): StudyHandle {
+export function furnishStudy(zone: Zone, ctx: Pick<BuildContext, 'sky' | 'covers' | 'collection' | 'home' | 'listener' | 'acoustics'>): StudyHandle {
   const plan = STUDY_PLAN;
   const room = furnishShell(zone, ctx.sky, plan.room);
   // Off to start (a flush light starts lit): nobody is in here before the wall is down.

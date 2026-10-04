@@ -1,6 +1,7 @@
 import type { LookName } from '@/graphics/grade';
 import type { ZoneSpec } from './zone/Zone';
-import type { ZoneId } from './zoneIds';
+import { FLAT, type ZoneId } from './zoneIds';
+import { WALL_GAP } from './measures/building';
 import type { NearWall } from './props/outdoors/Outdoors';
 import { EYE_HEIGHT as STREET_TO_EYE } from './props/outdoors/Sheet';
 import { DEFAULT_ROOM, ROOM_PLAN } from './roomPlan';
@@ -12,7 +13,8 @@ import { BALCONY_ROOM } from './balcony/balconyPlan';
 import { ARCADE_PLAN, ARCADE_ROOM } from './arcade/arcadePlan';
 import { MARKET_PLAN, MARKET_ROOM } from './market/marketPlan';
 import { SALEROOM_PLAN, SALEROOM_ROOM } from './saleroom/saleroomPlan';
-import { STREET_EXTENT, STREET_PLAN } from './street/streetPlan';
+import { STREET_PLAN } from './street/streetPlan';
+import { STREET_EXTENT } from './measures/street';
 import { STAIRWELL_PLAN, STAIRWELL_ROOM } from './stairwell/stairwellPlan';
 import { SHOP_PLANS, type ShopZoneId } from './shop/shopPlan';
 import { NEIGHBOUR_FLAT_PLAN, NEIGHBOUR_FLAT_ROOM } from './neighbourFlat/neighbourFlatPlan';
@@ -57,9 +59,6 @@ import { ROOF_PLAN, ROOF_ROOM } from './roof/roofPlan';
  * The kitchen juts past the collection room's left wall, so its wall shows in the left windows
  * (`KITCHEN_WING`, rendered by the pane shader; see `docs/outdoors.md`).
  */
-
-/** Gap between the wall planes of two adjacent zones (metres). */
-export const WALL_GAP = 0.06;
 
 /** Where the kitchen zone stands (world metres); also what `KITCHEN_WING` is built from. */
 const KITCHEN_ORIGIN: [number, number, number] = [-4.66, 0, -4.4];
@@ -121,23 +120,17 @@ interface ZonePlan extends ZoneSpec<ZoneId> {
 /** A zone's entry in `ZONES` (its id is the key). */
 type ZoneEntry = Omit<ZonePlan, 'id'>;
 
-/**
- * World yaw the sun's azimuth is expressed against: the collection room's front wall (+z, rotation π).
- * One value for the whole world so every window agrees on where the sun is.
- */
-export const SUN_ROTATION_Y = Math.PI;
-
-/**
+/*
  * Neighbours are what stays active around a zone. In the flat every room is every other room's
- * neighbour (`FLAT`), so the flat's active set, and with it the scene's light count, never changes
+ * neighbour (`FLAT`, zoneIds.ts), so the flat's active set, and with it the scene's light count, never changes
  * at a doorway: a zone coming or going adds or removes lights, and a different light count
  * recompiles every shader program in the scene (seconds of freeze with the graphics materials).
  * The `PortalCuller` still draws only what is seen through open doors, and a room's shadow maps
  * only follow while it is occupied, so an active room out of sight costs little.
  * Every room of the flat is `persistent`: small enough to keep, and rebuilding one on the way back
  * (geometry, painted textures) is a hitch in a doorway. Leave it off for something big, like the street.
+ * The sun's world yaw (`SUN_ROTATION_Y`) is a street measure (`measures/street`).
  */
-export const FLAT = ['living', 'hallway', 'bathroom', 'bedroom', 'kitchen', 'balcony', 'annex', 'annexStudy', 'stairwell'] as const satisfies readonly ZoneId[];
 /** A room of the flat. */
 type FlatId = (typeof FLAT)[number];
 /** The rest of the flat, seen from `id`. */

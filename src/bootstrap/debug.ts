@@ -9,6 +9,10 @@ import { PayoutOverlay } from '@/ui/PayoutOverlay';
 import { findZFighting, zfightRoots, type ZFightOptions } from '@/world/surface/zfight';
 import { forceBlackout } from '@/building/blackout';
 import { forceEndlessStairs } from '@/world/stairwell/downAndDark';
+import { everyone, findPerson } from '@/social/people';
+import { setStanding, standing } from '@/social/standing';
+import { tierOf } from '@/social/tiers';
+import { formatCount } from '@/text/count';
 
 /** Every light (every shadow-casting one with `shadowed`) in the zones but `current`, for the F9 bisection. */
 function lightsOutside(zones: readonly { readonly group: THREE.Object3D }[], current: object, shadowed: boolean): THREE.Light[] {
@@ -43,6 +47,31 @@ export function installBuildingDebug(): void {
   exposeDebug({ blackout: forceBlackout, endlessStairs: forceEndlessStairs });
 }
 
+/**
+ * `?debug`: `bibliothek.social.table()` lists how the player stands with everyone (warmth, trust, tier, met),
+ * `bibliothek.social.set(id, warmth, trust)` sets one outright (docs/social.md).
+ */
+export function installSocialDebug(day: () => number): void {
+  exposeDebug({
+    social: {
+      table: () =>
+        console.table(
+          Object.fromEntries(
+            everyone().map((p) => {
+              const s = standing(p.id);
+              return [p.id, { name: p.short ?? p.name, warmth: s.warmth, trust: s.trust, tier: tierOf(s.warmth, s.trust), met: s.met, memories: s.memories.length }];
+            }),
+          ),
+        ),
+      set: (id: string, warmth: number, trust: number) => {
+        if (!findPerson(id)) return `No one called "${id}": bibliothek.social.table() lists the ids.`;
+        setStanding(id, warmth, trust, day());
+        return `${id}: ${tierOf(warmth, trust)}`;
+      },
+    },
+  });
+}
+
 /** Adds `entries` to the console's `bibliothek` handle (each installer adds its own). */
 function exposeDebug(entries: Record<string, unknown>): void {
   const global = globalThis as { bibliothek?: Record<string, unknown> };
@@ -67,7 +96,7 @@ export function installZFight(parts: { world: { readonly zones: readonly Zone[] 
     return report(zone.id, findZFighting(zone.group, { viewDistance: Math.min(FARTHEST, Math.max(6, diagonal * 0.8)), ...options }));
   };
   const report = (name: string, pairs: ReturnType<typeof findZFighting>): ReturnType<typeof findZFighting> => {
-    console.log(`[zfight] ${name}: ${pairs.length} pair${pairs.length === 1 ? '' : 's'}${pairs.length ? ` (bibliothek.zfight('${name}') lists them)` : ''}`);
+    console.log(`[zfight] ${name}: ${formatCount(pairs.length, 'pair')}${pairs.length ? ` (bibliothek.zfight('${name}') lists them)` : ''}`);
     return pairs;
   };
   const runRoot = (name: string, options?: ZFightOptions): ReturnType<typeof findZFighting> | null => {
@@ -127,8 +156,7 @@ function reportMixedInstancing(zone: Zone): void {
   if (mixed.length) console.warn(`[materials] ${zone.id}: ${mixed.length} material(s) on both instanced and plain meshes (a program switch per draw):`, mixed.map(([m, u]) => ({ material: m.name || m.type, instanced: u.instanced.slice(0, 3), plain: u.plain.slice(0, 3) })));
 }
 
-/** `?payout`: the arcade's balance table, and `simulatePayouts()` in the console (the cabinet games on autopilot, fetched on demand). */
+/** `?payout`: the arcade's balance table (the headless balance is `npm run balance`). */
 export function installPayoutTable(container: HTMLElement, stats: PayoutStats): void {
   new PayoutOverlay(container, stats);
-  void import('@/world/arcade/payoutSim').then(({ simulatePayouts }) => Object.assign(globalThis, { simulatePayouts }));
 }

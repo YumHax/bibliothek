@@ -91,7 +91,7 @@ Everything tunable is there (prize tickets `PRIZE_TICKETS`, household prices `HO
 `CONDITION_ODDS`, `OUT_OF_ORDER_ODDS`, `CONSIGNMENT_DAYS`, `CARD_MEMORY_DAYS`, `CHALLENGE_BAND`, the street's
 `STREET_TREATS`, `SCRATCH` and `TRADER_MARKUP`, the neighbours' `NEIGHBOUR_SWAPS` and the
 building's `ESTATE_SALE` (see "In the building"), and the one second-click rule:
-`CONFIRM_MS` 4 s for every armed row, tag and button, `ARM_ABOVE` 30 coins for the flat's things, included): starting coins, play cost, tickets per coin, points per ticket, base price per
+`CONFIRM_MS` 4 s for every armed row, tag and button (it lives in `ui/confirmTwice`, the `Arming` class every press-twice uses), `ARM_ABOVE` 30 coins for the flat's things, included): starting coins, play cost, tickets per coin, points per ticket, base price per
 platform, the fame curve, the market discount range and condition factors, the bargain bin's flat price, the WE BUY
 desk's share (`BUY_BACK_SHARE` 0.3 of the shop price, up to 0.34 with reputation: below the cheapest a haggled
 market copy goes, `NEGOTIATION.lowest`, so buying to sell back never pays), the negotiation, and every rule of "The
@@ -297,6 +297,10 @@ the job lot. Orders, upgrades, grails and the shop stay plain. A new seller call
   lot, a wanted card, a set); levels open the glass case, raise the WE BUY desk's offers, and (`earlyAccessLevel`)
   keep an estate-sale copy back. Loyalty per stall (`LOYALTY.tiers`, copies bought there): a regular gets wishlist
   finds more often, better haggles, a friend a copy kept aside every day. Stallholders greet them accordingly.
+- **Stallholders are people** (docs/social.md "The market"): the market's loyalty at a stall is the warmer of the
+  copies counted and the stallholder's tier (`social/market.stallLoyalty`); a cold one won't haggle, a hostile one keeps
+  the showpiece back and prices 5% dearer for the player, a close one gives credit. Discounts stay inside the haggle's
+  bounds, so buying to sell back still never pays.
 - **Market days** (`marketDays.ts`, `themeOf(day)`): a weekly round of ordinary days, a big bin day, a Nintendo
   fair, a Sega & Sony day, a collectors' fair, an estate sale; shown on the program board by the door.
 - **Coffee** (`CoffeeCart`, `COFFEE_PRICE`, once a day): stallholders go easier (`NEGOTIATION.coffee`).
@@ -381,8 +385,12 @@ Caches: `bibliothek.cache.longplay.v1`, `bibliothek.cache.fame.v1`
 (`BrowserCache`: one key each, LRU-capped, TTL). Game ids are canonical (`gameIdFor`, see `SEED_GAMES`): every store
 maps the seed lists' old hand-made ids on load (`canonicalGameId`).
 
-**Days and randomness**: one real-day convention, local time (`economy/calendar.ts`: `dayKey`, `dayNumber`, `isoWeek`);
-one RNG module (`economy/seeded.ts`: mulberry32 `seeded`, FNV `hash01`), never changed (it would reshuffle saved days).
+**Days and randomness**: one real-day convention, local time (`economy/calendar.ts`: `dayKey`, `isoWeek`); one RNG
+module (`src/random/`: the economy's frozen stream is `frozenRng`, its FNV unit `unit01`), never changed (it would reshuffle
+saved days); a day seeds a stream in `time/daily` only (`dayStream`). A feature says which day it follows by its schedule
+(`time/schedule`; the street's in `street/events/streetSchedules`): the real date for what the street does for everyone
+that day (the trader, the busker, the garage sale, the giveaway, the tournament), the game day for the market's calendar
+(the fair, the saleroom's sale); "done today" is `oncePerDay` (`time/OncePerDay`, one `daily.v1` store).
 
 **Persisting something new**: (1) add its key to `KEYS` in `persistence/keys.ts` (`save(...)` for progress, which
 "New game" wipes and `?debug` keeps apart; `pref(...)` for a preference, then also in `PREFERENCE_KEYS`); (2) keep it in a
@@ -601,7 +609,8 @@ one shut since lands there too (`PositionMemory`'s `instead`, `outsideIfShut`).
   croissant or a bunch buys the busker's request; the scrap and the treats are for the stray cat.
 - **The sunny side cafés** (SUNNY SIDE CAFE, PARKSIDE CAFE): a coffee (`COFFEE_PRICE`, 2 coins) *is* the flea market's coffee of the day (`market.drinkCoffee`:
   the stallholders go easier on the haggle), with the barista's tip: a wishlisted game on a stall today, a gem in the
-  bin, or the day's theme. Had already, the barista still talks.
+  bin, or the day's theme. Had already, the barista still talks. At the two named cafés the counter is a conversation
+  with the barista: their standing gives a second tip, a free coffee, or none (docs/social.md "Front Street and the arcade").
 - **The newsagent** (kind `tabac`): PIXEL SCRATCH cards (`scratchCard.ts`, the numbers `SCRATCH` in pricing.ts), 2 coins, five a real day (`bibliothek.scratch.v1`):
   three alike of six cells win 2, 3, 5, 10 or 25 coins; drawn outcome first, 38 % win, 1.35 coins paid out on average
   (the house wins). Scratched in `ui/ScratchCardPanel`; walking off scratches the rest and pays.
@@ -624,9 +633,10 @@ one shut since lands there too (`PositionMemory`'s `instead`, `outsideIfShut`).
   market had it), at `TRADER_MARKUP` (1.25) times their price. They are `'stall'` copies: B buys, H haggles, X swaps a game from the
   collection in part exchange (it goes to the market), R holds. His picks are kept for the day (`bibliothek.trader.v1`).
   He is the rival collector, Victor Crane (see "The saleroom, sealed cartons, the rival collector"): what he won at the
-  flea market or the saleroom lately comes first in his suitcase, at the same markup; his first word says how things stand.
+  flea market or the saleroom lately comes first in his suitcase, at the same markup and firm (`StockTraits.firm`: no haggle, since a copy won at an opening bid haggled off ×1.25 could sell back for more); his first word says how things stand.
 - **The busker**: a click is a word (free); clicked again while they wait, a coin buys a request (the next tune of
-  their book), a few a real day; a croissant or a bunch buys one too. Hands off the keys between songs.
+  their book), a few a real day; a croissant or a bunch buys one too. Hands off the keys between songs. With the social
+  layer a click is a conversation with Django, the requests its entries (free for a friend; docs/social.md).
 - **The garage sale**: its table answers a click (unpacking, the price, or picked clean). RETRO GAMES' queue grows with
   the market's day (`MarketDayTheme.crowd`, a grail on a stall) and stays all day on a big one.
 - **The neighbours' party** in the courtyard (`building/neighboursParty`, docs/zones.md "The courtyard"): the residents'
@@ -652,7 +662,9 @@ one shut since lands there too (`PositionMemory`'s `instead`, `outsideIfShut`).
   extra votes at the ballot box: `contribution` 25 coins a vote, `maxBought` 3 a resolution. Votes once paid are not
   refunded, and nothing is gained back. **The concierge's Christmas box**: `STAIRWELL_PLAN.lodge.tipBox.price`, 10 coins
   a tip. The first one buys the cellar key if she does not have the player's favour yet; after that a tip only gets thanks.
-- **The attic** (docs/zones.md "The attic"): its STARFALL cabinet is free and pays no tickets (`atHome`). Beating the
+- **The attic** (docs/zones.md "The attic"): its STARFALL cabinet is free and pays no tickets (`payout: 'none'`; a machine's
+  `payout` is arcade, none or event, and the display, the strip, the screens and ArcadePlay all read it; the party cabinet is
+  `event` and today pays the hall's tickets plus its kitty). Beating the
   collector's best (3000, `ATTIC_PLAN.collector`) gives his grail once (Stadium Events, at 0). His chest gives a
   sealed Super Mario World. If the player already owns that game, the club pays `ALREADY_OWNED_COINS` instead (`furnishAttic`):
   600 coins for the prize, 300 for the chest.
@@ -664,7 +676,7 @@ Numbers: `AUCTION`, `SEALED_LOT`, `RIVAL` in pricing.ts. Stores: `services.lots`
 
 - **The saleroom** (`world/saleroom/`, zone `saleroom` at x 440, `unlisted`): a door in the flea market's back wall
   (`MARKET_PLAN.saleroom`; coming back sets the player down in front of it, `travel.arrivals.saleroom`). A sale every
-  `AUCTION.every` market days (`isAuctionDay`; `?auction` makes every day one) between `AUCTION.hours`; other days the
+  the game week's Sundays (`isAuctionDay`: `weekdayOf(day) === SUNDAY_WEEKDAY`, `time/wakefulness`; `?auction` makes every day one) between `AUCTION.hours`; other days the
   board says when the next is and lists its lots. `AuctionHouse.lotsFor(day)` (seeded by the day, independent of the
   collection so results stay keyed by lot number): ordinary index games, a sealed carton among them, the **star lot**
   (a well-known title, `kind: 'collector'` dressing) second to last, a carton to close; each copy dressed
@@ -700,7 +712,10 @@ Numbers: `AUCTION`, `SEALED_LOT`, `RIVAL` in pricing.ts. Stores: `services.lots`
   days in his Front Street suitcase); the player buying first is a point to them (`endHunt`). In the saleroom he sits
   in the front row, says so before the star lot, and bids hardest on it (`keenness`: a little more per player win,
   capped); what he wins goes into his haul, and counts against the player only if they bid on it. His mood
-  (`even` / `stung` / `smug`) picks his lines. Never a penalty on what the player owns.
+  (`even` / `stung` / `smug`, and `warm` / `bitter` from the social standing) picks his lines. He is someone to talk to
+  wherever met, and how the player stands with him changes what he does: wishlist sniping and spite bids when hostile,
+  his suitcase at cost, lots split and his collection shown as a friend (docs/social.md "Victor"). Never a penalty on
+  what the player owns.
 
 ## Small ads and the seller's flat (`src/classifieds/`, `world/sellerFlat/`, `street/MansionBell`)
 

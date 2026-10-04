@@ -12,6 +12,10 @@ import { GROUND, RENDER_ORDER, onSurface } from '../surface/layers';
 import { LAMP_GLOW, LAMP_LIGHT } from '../lighting/lampColours';
 import { additive, additiveOne } from '@/world/materials/blend';
 import { radialGlow } from '@/world/materials/glowTextures';
+import streetLampsVertex from './StreetLamps.vert.glsl?raw';
+import streetLampsFragment from './StreetLamps.frag.glsl?raw';
+import { random as liveRandom, unitOf } from '@/random';
+import { loudness } from '@/audio/hearing';
 
 interface StreetLampsOptions {
   lamps: readonly { at: Vec2; yaw: number; design?: LampDesign }[];
@@ -208,10 +212,7 @@ export class StreetLamps extends THREE.Group implements Furniture, Updatable, Oc
 
     this.flickering = options.flickering ?? -1;
     // Each lamp its own switching point and warm-up pace (fixed per lamp: the same ones come on first every evening).
-    const hash = (i: number, k: number): number => {
-      const x = Math.sin(i * 12.9898 + k * 78.233) * 43758.5453;
-      return x - Math.floor(x);
-    };
+    const hash = (i: number, k: number): number => unitOf(i, k);
     this.lampSwitch = lamps.map((_, i) => THREE.MathUtils.lerp(SWITCH_AT[0], SWITCH_AT[1], hash(i, 1)));
     this.lampOn = lamps.map(() => false);
     this.lampWarm = new Float32Array(lamps.length);
@@ -385,10 +386,10 @@ export class StreetLamps extends THREE.Group implements Furniture, Updatable, Oc
       this.flickerClock -= dt;
       if (this.dropout > 0) {
         this.dropout -= dt;
-        level = Math.random() < 0.35 ? 0.9 : 0.08;
+        level = liveRandom() < 0.35 ? 0.9 : 0.08;
       } else if (this.flickerClock <= 0) {
-        this.flickerClock = 0.4 + Math.random() * 3.5;
-        this.dropout = Math.random() < 0.15 ? 0.8 + Math.random() * 0.8 : 0.05 + Math.random() * 0.2;
+        this.flickerClock = 0.4 + liveRandom() * 3.5;
+        this.dropout = liveRandom() < 0.15 ? 0.8 + liveRandom() * 0.8 : 0.05 + liveRandom() * 0.2;
       }
     }
     // Its head and pool take the level in `warm()`, with its warm-up.
@@ -400,7 +401,7 @@ export class StreetLamps extends THREE.Group implements Furniture, Updatable, Oc
       this.options.viewer.getWorldPosition(this.ear);
       const head = this.localToWorld(this.head.copy(this.headPoints[i]!));
       const distance = this.ear.distanceTo(head);
-      loud = night * Math.max(0, 1 - distance / BUZZ_REACH) ** 2;
+      loud = night * loudness(distance, { shape: 'rampSquared', referenceDistance: 0, maxDistance: BUZZ_REACH });
       this.options.viewer.getWorldDirection(this.facing);
       const dx = head.x - this.ear.x;
       const dz = head.z - this.ear.z;
@@ -505,30 +506,8 @@ function postLamp(): { metal: THREE.BufferGeometry; lens: THREE.BufferGeometry }
  */
 function haloShader(): THREE.ShaderMaterial {
   return additiveOne(new THREE.ShaderMaterial({
-    vertexShader: /* glsl */ `
-      varying vec2 vUv;
-      varying vec3 vHalo;
-      void main() {
-        vUv = uv;
-        #ifdef USE_INSTANCING_COLOR
-          vHalo = instanceColor;
-        #else
-          vHalo = vec3(1.0);
-        #endif
-        vec4 mv = modelViewMatrix * instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0);
-        mv.xy += position.xy * length(instanceMatrix[0].xyz);
-        gl_Position = projectionMatrix * mv;
-      }`,
-    fragmentShader: /* glsl */ `
-      varying vec2 vUv;
-      varying vec3 vHalo;
-      void main() {
-        float d = length(vUv - 0.5) * 2.0;
-        float glow = exp(-d * d * 5.0) * (1.0 - smoothstep(0.75, 1.0, d));
-        gl_FragColor = vec4(vHalo * glow, 1.0);
-        #include <tonemapping_fragment>
-        #include <colorspace_fragment>
-      }`,
+    vertexShader: streetLampsVertex,
+    fragmentShader: streetLampsFragment,
     depthWrite: false,
     fog: false,
   }));

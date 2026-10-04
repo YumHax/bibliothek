@@ -41,13 +41,16 @@ const CHRONICLE_AFTER_MS = 1500;
 /** The radio on, as noise for the neighbours (`building/flatNoise`: a longplay is 0.7). */
 const RADIO_NOISE = 0.45;
 
+/** What the kitchen's builder reads of the `BuildContext`. */
+type KitchenBuild = Pick<BuildContext, 'sky' | 'cssLayer' | 'listener' | 'acoustics' | 'home' | 'classifieds' | 'story' | 'today' | 'collection' | 'covers'>;
+
 /**
  * Builds the kitchen into its zone from `KITCHEN_PLAN`: shell (the hallway hangs the door), the
  * ceiling light, the L of cabinets with the wall cupboards and hood over it, the fridge, the
  * window over the sink, the breakfast table and its chairs, what is left out on the worktop, the
  * clock, then the decoration.
  */
-export function furnishKitchen(zone: Zone, ctx: BuildContext): ZoneHandle {
+export function furnishKitchen(zone: Zone, ctx: KitchenBuild): ZoneHandle {
   const { sky, cssLayer, home: { upgrades } } = ctx;
   const plan = KITCHEN_PLAN;
 
@@ -133,7 +136,7 @@ export function furnishKitchen(zone: Zone, ctx: BuildContext): ZoneHandle {
  * it lasts), the treat jar and whatever the cat leaves by its bowl the next day, and Radio Brocante's
  * chronicle when the radio is switched on in the morning.
  */
-function furnishKitchenLife(zone: Zone, ctx: BuildContext, householdCtx: HouseholdContext, parts: { table: KitchenTable; furnished: Placer; catThings: Placer; radio: Radio }): void {
+function furnishKitchenLife(zone: Zone, ctx: KitchenBuild, householdCtx: HouseholdContext, parts: { table: KitchenTable; furnished: Placer; catThings: Placer; radio: Radio }): void {
   const { life, notices, catName, callCat, pastimes } = householdCtx;
   const plan = KITCHEN_PLAN.household;
   const { household } = life;
@@ -236,6 +239,6 @@ function furnishKitchenLife(zone: Zone, ctx: BuildContext, householdCtx: Househo
     const caller = ctx.story?.onRadio();
     const text = (caller ? [...lines.filter((l) => !l.includes('Nothing on the grapevine')), caller] : lines).join('\n');
     radio.sound.announce((CHRONICLE_AFTER_MS + readMs(text)) / 1000);
-    window.setTimeout(() => notices.read({ title: 'Radio Brocante · the morning chronicle', text, look: 'radio' }), CHRONICLE_AFTER_MS);
+    zone.after(CHRONICLE_AFTER_MS / 1000, () => notices.read({ title: 'Radio Brocante · the morning chronicle', text, look: 'radio' }));
   });
 }

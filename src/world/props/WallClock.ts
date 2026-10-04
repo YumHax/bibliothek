@@ -10,6 +10,9 @@ import { Prop } from './Prop';
 import type { DayNight } from './DayNight';
 import { playAlarm } from '@/audio/alarm';
 import { useVerbOnCap } from '@/ui/verb';
+import { Arming } from '@/ui/confirmTwice';
+import { formatClock } from '@/text/clock';
+import { random } from '@/random';
 
 interface WallClockOptions {
   /** Outer diameter of the case. Default 0.32 m. */
@@ -45,13 +48,14 @@ export class WallClock extends Prop implements Interactable, Updatable {
   private readonly minuteHand = new THREE.Group();
   private readonly secondHand = new THREE.Group();
   /** Real seconds on the second hand (its step is the whole part), and who hears each step. */
-  private seconds = Math.floor(Math.random() * 60);
+  private seconds = Math.floor(random() * 60);
   private readonly onSecond?: () => void;
   private readonly bezel: THREE.MeshStandardMaterial;
   private hours = 0;
   /** In-game hours until the alarm rings, and the time it was set for; null when none is set. */
   private alarm: { left: number; at: number } | null = null;
-  private lastClickAt = -Infinity;
+  /** A click says the time and arms the clock; a second within `DOUBLE_CLICK_MS` sets or cancels the alarm (the tip says so; nothing to repaint). */
+  private readonly arming = new Arming<'alarm'>(() => {}, DOUBLE_CLICK_MS);
   /** Who set the alarm: told when it rings. */
   private session: SessionActions | null = null;
   private readonly unsubscribe: () => void;
@@ -153,18 +157,15 @@ export class WallClock extends Prop implements Interactable, Updatable {
   }
 
   label(): string {
-    const alarm = this.alarm ? ` · alarm ${formatTime(this.alarm.at)}` : '';
-    return `Clock ${formatTime(this.hours)}${alarm} · check the time`;
+    const alarm = this.alarm ? ` · alarm ${formatClock(this.alarm.at)}` : '';
+    return `Clock ${formatClock(this.hours)}${alarm} · check the time`;
   }
 
   activate(session: SessionActions): void {
     this.session = session;
-    const now = performance.now();
-    const again = now - this.lastClickAt < DOUBLE_CLICK_MS;
-    this.lastClickAt = again ? -Infinity : now;
-    if (!again) {
-      const next = this.alarm ? `cancel the ${formatTime(this.alarm.at)} alarm` : `set an alarm for ${formatTime(this.hours + ALARM_IN_HOURS)}`;
-      session.react(`It’s ${formatTime(this.hours)}`);
+    if (!this.arming.press('alarm')) {
+      const next = this.alarm ? `cancel the ${formatClock(this.alarm.at)} alarm` : `set an alarm for ${formatClock(this.hours + ALARM_IN_HOURS)}`;
+      session.react(`It’s ${formatClock(this.hours)}`);
       session.tip(`${useVerbOnCap('the clock')} again to ${next}.`, { id: 'wall-clock', ms: DOUBLE_CLICK_MS });
       return;
     }
@@ -174,7 +175,7 @@ export class WallClock extends Prop implements Interactable, Updatable {
       return;
     }
     this.alarm = { left: ALARM_IN_HOURS, at: (this.hours + ALARM_IN_HOURS) % 24 };
-    session.react(`Alarm set for ${formatTime(this.alarm.at)}`);
+    session.react(`Alarm set for ${formatClock(this.alarm.at)}`);
   }
 
   /** Counts the clock's forward run down to the alarm; a jump back (the N key's afternoon) is not time passing. */
@@ -187,16 +188,8 @@ export class WallClock extends Prop implements Interactable, Updatable {
     const at = this.alarm.at;
     this.alarm = null;
     playAlarm();
-    this.session?.react(`The alarm rings: ${formatTime(at)}`);
+    this.session?.react(`The alarm rings: ${formatClock(at)}`);
   }
-}
-
-/** "HH:MM" of a fractional hour of the day. */
-function formatTime(hours: number): string {
-  const total = Math.floor((((hours % 24) + 24) % 24) * 60);
-  const h = Math.floor(total / 60);
-  const m = total % 60;
-  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
 }
 
 /** A hand of `length` pointing up (+y) from the pivot, with a short `tail` past it. */

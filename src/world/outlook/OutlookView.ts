@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import type { Updatable } from '@/core/Engine';
 import { QUALITY } from '@/graphics/quality';
+import { flag } from '@/settings/flags';
 import { disposeTree } from '../props/Prop';
 import { patchShader } from '../materials/shaderPatch';
 import { WALL, onSurface } from '../surface/layers';
@@ -630,7 +631,7 @@ function overlaps(a: THREE.Vector4, b: THREE.Vector4): boolean {
  * `?stats`: what the views through the windows cost, every 2 s on the console next to the frame's own line: the
  * renders a second, their draw calls and CPU time each, and how many pane draws reused a kept picture.
  */
-const STATS = { on: new URLSearchParams(location.search).has('stats'), renders: 0, calls: 0, ms: 0, reused: 0 };
+const STATS = { on: flag('stats'), renders: 0, calls: 0, ms: 0, reused: 0 };
 if (STATS.on) {
   setInterval(() => {
     if (STATS.renders + STATS.reused === 0) return;

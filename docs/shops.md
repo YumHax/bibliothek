@@ -3,6 +3,9 @@
 The four walk-in shops of Front Street (SECOND HOME the furniture shop, TV REPAIR, PAWS & CLAWS, the florist) are
 zones of kind `shop`, built by `src/world/shop/furnishShop.ts` from their plans. What they sell and cost is
 docs/economy.md; the street side of each (its shopfront, its window seen from outside) is `src/world/street/`.
+The clerk behind each counter is a person (Bernard, Karim, Nadia, Iris): a click is a conversation, the till among its
+entries, and the shop's prices follow how the player stands with them (`shop/clerkTalk`, docs/social.md "Front Street
+and the arcade").
 
 ## Where things are
 

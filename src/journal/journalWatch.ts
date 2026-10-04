@@ -3,6 +3,7 @@ import { getPlatform } from '@/catalog/platforms';
 import { getPrize } from '@/economy/Prizes';
 import { HOME_GOODS } from '@/economy/homeGoods';
 import type { Journal } from './Journal';
+import { formatCoins } from '@/text/money';
 
 /*
  * The stores the journal writes itself from, by what they already tell anyone (their counts and a
@@ -77,7 +78,7 @@ export function watchForJournal(journal: Journal, sources: JournalSources): () =
       for (const good of HOME_GOODS) {
         const more = (now.get(good.id) ?? 0) - (counts.get(good.id) ?? 0);
         // The bookcases the collection starts with are not bought: only what a shop sold is noted.
-        if (more > 0 && more <= 2) journal.note('home', good.id === 'cat' ? `Adopted a cat (${good.price} coins)` : `Bought for the flat: ${good.name.toLowerCase()} (${good.price} coins)`, { id: good.id });
+        if (more > 0 && more <= 2) journal.note('home', good.id === 'cat' ? `Adopted a cat (${formatCoins(good.price)})` : `Bought for the flat: ${good.name.toLowerCase()} (${formatCoins(good.price)})`, { id: good.id });
       }
       counts = now;
     }));
@@ -138,7 +139,7 @@ export function watchForJournal(journal: Journal, sources: JournalSources): () =
         // A game given (a friend's thank-you: `acquired.where` "a gift from Sam") is a gift, not a purchase.
         const giver = /^a gift from (.+)$/i.exec(game.acquired?.where ?? '')?.[1];
         if (giver) journal.note('gift', `A gift from ${giver}: ${game.title} (${platformName(game)})`, { id: game.id });
-        else if (game.acquired && game.acquired.price > 0) journal.note('bought', `Got ${game.title} (${platformName(game)}) from ${game.acquired.where}, ${game.acquired.price} coins`, { id: game.id, price: game.acquired.price });
+        else if (game.acquired && game.acquired.price > 0) journal.note('bought', `Got ${game.title} (${platformName(game)}) from ${game.acquired.where}, ${formatCoins(game.acquired.price)}`, { id: game.id, price: game.acquired.price });
         else journal.note('bought', `Got ${game.title} (${platformName(game)})`, { id: game.id });
       }
       for (const game of wished) journal.note('wished', `Put ${game.title} on the wishlist`, { id: game.id });

@@ -18,6 +18,7 @@ export function playVolumeSample(channel: VolumeChannel): void {
   if (now - last < 120) return; // a D-pad held on the slider is not a buzz
   last = now;
   const ctx = audioContext(); // the release of a slider is a gesture: the audio may start here
+  if (!ctx) return;
   const out = audioBus(ctx, channel === 'master' ? 'ui' : channel);
   const { type, notes } = SAMPLES[channel];
   notes.forEach((f, i) => {

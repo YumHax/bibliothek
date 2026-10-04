@@ -2,8 +2,8 @@ import * as THREE from 'three';
 import type { Furniture } from '../../Furniture';
 import { Prop, part } from '../../props/Prop';
 import { paint, scuffedPaint } from '../../materials/palette';
-import { seededRandom } from '@/graphics/canvas';
 import { labelSheet, typed } from './labels';
+import { lcg } from '@/random';
 
 export interface PartsCabinetOptions {
   width?: number;
@@ -43,7 +43,7 @@ export class PartsCabinet extends Prop implements Furniture {
     const H = options.height ?? 1.25;
     const columns = options.columns ?? 4;
     const rows = options.rows ?? 10;
-    const random = seededRandom(options.seed ?? 3);
+    const random = lcg(options.seed ?? 3);
     const steel = scuffedPaint(0x6a7074, 0.5);
     const T = 0.02;
     part(this, W, T, DEPTH, steel, { y: H - T / 2, z: DEPTH / 2 });

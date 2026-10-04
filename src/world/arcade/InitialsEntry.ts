@@ -1,6 +1,7 @@
 import type { Sfx } from '@/audio/ChipSpeaker';
 import { type ArcadeControls, drawText } from './games/ArcadeGame';
-import { type ArcadeKey, KeyEdges } from './games/KeyEdges';
+import { type ControlKey as ArcadeKey, KeyEdges } from '@/input/GameInput';
+import { formatNumber, ordinal } from '@/text/count';
 
 const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
 /** Held up / down repeats after this, then this often. */
@@ -86,8 +87,8 @@ export class InitialsEntry {
     ctx.strokeStyle = '#ffd23a';
     ctx.lineWidth = 2 * scale;
     ctx.strokeRect(cx - w / 2 + 3 * scale, cy - h / 2 + 3 * scale, w - 6 * scale, h - 6 * scale);
-    drawText(ctx, `${ordinal(this.rank + 1)} PLACE!`, cx, cy - 50 * scale, 12 * scale, '#7ee787');
-    drawText(ctx, `${this.score.toLocaleString('en-US')}`, cx, cy - 30 * scale, 9 * scale, '#fff2a8');
+    drawText(ctx, `${ordinal(this.rank + 1).toUpperCase()} PLACE!`, cx, cy - 50 * scale, 12 * scale, '#7ee787');
+    drawText(ctx, formatNumber(this.score), cx, cy - 30 * scale, 9 * scale, '#fff2a8');
     drawText(ctx, 'ENTER YOUR INITIALS', cx, cy - 12 * scale, 7 * scale, '#c9c4ff');
     const blink = Math.floor(this.clock * 4) % 2 === 0;
     for (let i = 0; i < 3; i++) {
@@ -104,8 +105,4 @@ export class InitialsEntry {
     const i = this.letters[this.cursor]!;
     this.letters[this.cursor] = (i + by + ALPHABET.length) % ALPHABET.length;
   }
-}
-
-export function ordinal(n: number): string {
-  return n === 1 ? '1ST' : n === 2 ? '2ND' : n === 3 ? '3RD' : `${n}TH`;
 }

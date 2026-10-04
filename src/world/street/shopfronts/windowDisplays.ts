@@ -2,8 +2,9 @@ import * as THREE from 'three';
 import type { TriBuilder } from '../relief/TriBuilder';
 import { CARD_ASPECT, type ShopfrontAtlas } from './shopfrontCanvas';
 import { FULL_UV, type TexQuads } from './TexQuads';
-import { at, ball, cylinder, pick } from './shapes';
+import { at, ball, cylinder } from './shapes';
 import type { CardId, DisplayId } from './shopfrontPlan';
+import { pick } from '@/random';
 
 /** Where a window display's pieces go: what the street's light falls on, what has its own light, the screens, the cards. */
 interface DisplayParts {

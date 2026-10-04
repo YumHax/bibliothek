@@ -2,6 +2,8 @@ import type { Game } from '@/catalog/types';
 import { readGame } from '@/catalog/validate';
 import { KEYS, PersistedStore } from '@/persistence';
 import { gameDayRandom, isEventDay } from '@/time/daily';
+import { nudge, tier } from '@/social/standing';
+import { atLeast, tierRank } from '@/social/tiers';
 import { RIVAL } from './pricing';
 
 /*
@@ -29,8 +31,14 @@ export function rivalAtMarket(day: number): boolean {
   return gameDayRandom('rival-hall', day)() < RIVAL.marketOdds;
 }
 
-/** How he feels about the player: even, stung (beaten more often than not), smug (he has been winning). */
-type RivalMood = 'even' | 'stung' | 'smug';
+/**
+ * How he feels about the player: even, stung (beaten more often than not), smug (he has been winning); and, once the
+ * social standing says so (docs/social.md "Victor"), warm (a friend now, whoever wins) or bitter (hostile and worse).
+ */
+type RivalMood = 'even' | 'stung' | 'smug' | 'warm' | 'bitter';
+
+/** His person id in the social layer (`social/people/town.ts`). */
+export const RIVAL_PERSON = 'victor';
 
 /** What anything showing him may read. */
 interface RivalView {
@@ -67,9 +75,13 @@ interface RivalFile {
   met: boolean;
   hunt: RivalHunt | null;
   haul: HaulEntry[];
+  /** The game day the player last beat him (a copy, a lot): talking to him that day is gracious or gloating. -1: never. */
+  lastBeaten: number;
+  /** He showed the player his collection (the arc's end: `showsCollection`, once). */
+  shown: boolean;
 }
 
-const fresh = (): RivalFile => ({ beaten: 0, took: 0, met: false, hunt: null, haul: [] });
+const fresh = (): RivalFile => ({ beaten: 0, took: 0, met: false, hunt: null, haul: [], lastBeaten: -1, shown: false });
 
 /**
  * The rival's side of the story, persisted: who beat whom (lifetime), today's hunt, his haul. Never a penalty on
@@ -87,7 +99,26 @@ export class RivalCollector {
 
   view(): RivalView {
     const { beaten, took, met } = this.state;
-    return { name: RIVAL_COLLECTOR.name, beaten, took, met, mood: beaten > took + 1 ? 'stung' : took > beaten + 1 ? 'smug' : 'even' };
+    const standing = tier(RIVAL_PERSON);
+    const mood: RivalMood = atLeast(standing, 'friend') ? 'warm' : tierRank(standing) <= tierRank('hostile') ? 'bitter' : beaten > took + 1 ? 'stung' : took > beaten + 1 ? 'smug' : 'even';
+    return { name: RIVAL_COLLECTOR.name, beaten, took, met, mood };
+  }
+
+  /** Whether the player beat him on game day `day` (his feelings are raw: a kind word lands, a gloat bites). */
+  beatenOn(day: number): boolean {
+    return this.state.lastBeaten === day;
+  }
+
+  /** Whether he showed the player his collection already. */
+  get shown(): boolean {
+    return this.state.shown;
+  }
+
+  /** He showed the player his collection (once). */
+  showCollection(): void {
+    if (this.state.shown) return;
+    this.state = { ...this.state, shown: true };
+    this.save();
   }
 
   /** How much harder he bids: a little more for every time the player beat him (capped). */
@@ -114,13 +145,17 @@ export class RivalCollector {
     if (!hunt || hunt.outcome) return;
     this.state = { ...this.state, hunt: { ...hunt, outcome } };
     if (outcome === 'took') this.tookOne(day, taken);
-    else this.beatenOnce();
+    else this.beatenOnce(day);
   }
 
-  /** The player won something he was after (a lot he bid on). */
-  beatenOnce(): void {
-    this.state = { ...this.state, beaten: this.state.beaten + 1 };
+  /**
+   * The player won something he was after (a lot he bid on), on game day `day`: it stings (warmth) but he respects
+   * a fair win (trust; docs/social.md "Victor").
+   */
+  beatenOnce(day?: number): void {
+    this.state = { ...this.state, beaten: this.state.beaten + 1, ...(day !== undefined ? { lastBeaten: day } : {}) };
     this.save();
+    if (day !== undefined) nudge(RIVAL_PERSON, { warmth: -3, trust: 4, why: 'stung, but you beat him fairly', day, memory: 'you beat me to one', memoryWeight: -3 });
   }
 
   /** He won something the player could have had; a game goes into his suitcase. */
@@ -128,6 +163,7 @@ export class RivalCollector {
     const haul = taken ? [...this.state.haul.filter((h) => h.game.id !== taken.game.id), { game: taken.game, price: taken.price, day }] : this.state.haul;
     this.state = { ...this.state, took: this.state.took + 1, haul };
     this.save();
+    nudge(RIVAL_PERSON, { warmth: 2, why: 'pleased he got there first', reason: 'rivalTook', day });
   }
 
   /** He bought `taken` with the player nowhere in it (a lot they never bid on): into his suitcase, no point to anyone. */
@@ -159,6 +195,8 @@ export class RivalCollector {
   greeting(): string {
     const { mood, met } = this.view();
     const you = met ? 'you' : 'friend';
+    if (mood === 'warm') return `Ah, my favourite thorn in the side. Found anything I should be jealous of?`;
+    if (mood === 'bitter') return `You. Of course. Don't let me keep you from whatever you're about to snatch.`;
     if (mood === 'stung') return `Ah, it's ${you}. Beat me to it again lately? I'm keeping count, you know.`;
     if (mood === 'smug') return `Hello, ${you}. Early bird, and all that. Try getting up before me some time.`;
     return `${RIVAL_COLLECTOR.short} Crane. I collect too: we'll be seeing a lot of each other.`;
@@ -192,7 +230,7 @@ function readRival(data: unknown): RivalFile | null {
       if (g && typeof price === 'number' && Number.isFinite(price) && typeof day === 'number') haul.push({ game: g, price, day });
     }
   }
-  return { beaten: count(d.beaten), took: count(d.took), met: d.met === true, hunt, haul };
+  return { beaten: count(d.beaten), took: count(d.took), met: d.met === true, hunt, haul, lastBeaten: typeof d.lastBeaten === 'number' ? d.lastBeaten : -1, shown: d.shown === true };
 }
 
 function readHunt(value: unknown): RivalHunt | null {

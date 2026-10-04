@@ -1,9 +1,10 @@
 import * as THREE from 'three';
-import { createCanvas, fitFontSize, seededRandom, toTexture, FONT } from '@/covers/generated/canvasUtils';
+import { createCanvas, fitFontSize, toTexture, FONT } from '@/covers/generated/canvasUtils';
 import { layMesh, WALL } from '@/world/surface/layers';
 import { QUALITY } from '@/graphics/quality';
 import { coverageKeepsAlpha } from '@/world/materials/palette';
 import { Prop } from './Prop';
+import { lcg } from '@/random';
 
 /** `paper`: a pinned-up A3 poster, a little askew; `cloth`: a hemmed banner slung on eyelets. */
 export type FlyerStyle = 'paper' | 'cloth';
@@ -39,7 +40,7 @@ export class Flyer extends Prop {
     this.name = `Flyer:${style}`;
     const width = options.width ?? (style === 'paper' ? 0.3 : 2.4);
     const height = options.height ?? (style === 'paper' ? 0.42 : 0.5);
-    const random = seededRandom((options.seed ?? 1) * 40503);
+    const random = lcg((options.seed ?? 1) * 40503);
     const colours = {
       paper: options.paper ?? (style === 'paper' ? 0xf1e9d6 : 0xf3e7c8),
       ink: options.ink ?? 0x2a2420,

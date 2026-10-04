@@ -9,6 +9,8 @@ import { faceOn } from '../props/joinery';
 import { WALL } from '../surface/layers';
 import { paint, standard } from '../materials/palette';
 import { drawText } from './games/ArcadeGame';
+import { formatNumber } from '@/text/count';
+import { formatCoins } from '@/text/money';
 
 /** One match as the board draws it (the concrete bracket is `economy/ArcadeTournament`'s). */
 interface BoardMatch {
@@ -125,8 +127,8 @@ export class TournamentBoard extends Prop implements Updatable, Interactable {
   label(): string | null {
     const v = this.options.tournament.view();
     if (!v.on) return 'SATURDAY TOURNAMENT · every Saturday';
-    if (!v.entered) return `Saturday tournament · sign up (${this.options.entry} coin${this.options.entry === 1 ? '' : 's'})`;
-    if (v.next) return `Next: ${v.next.name} on ${this.options.titleOf(v.gameId)} · beat ${v.next.score.toLocaleString('en-US')}`;
+    if (!v.entered) return `Saturday tournament · sign up (${formatCoins(this.options.entry)})`;
+    if (v.next) return `Next: ${v.next.name} on ${this.options.titleOf(v.gameId)} · beat ${formatNumber(v.next.score)}`;
     return v.out ? 'Knocked out. Next Saturday, then.' : 'Champion! The cup is on the prize shelf at home.';
   }
 
@@ -140,7 +142,7 @@ export class TournamentBoard extends Prop implements Updatable, Interactable {
     }
     if (v.entered) {
       this.options.onClicked?.(session);
-      if (v.next) session.tip(`${ROUND_TITLES[v.next.round]}: play ${game} and beat ${v.next.name}'s ${v.next.score.toLocaleString('en-US')}.`, { id: 'tournament' });
+      if (v.next) session.tip(`${ROUND_TITLES[v.next.round]}: play ${game} and beat ${v.next.name}'s ${formatNumber(v.next.score)}.`, { id: 'tournament' });
       else session.react(v.out ? 'You are out for today. The bracket plays on without you.' : 'You won the tournament. Frame the bracket.');
       return;
     }
@@ -151,7 +153,7 @@ export class TournamentBoard extends Prop implements Updatable, Interactable {
         this.options.onSigned?.(session);
         const next = tournament.view().next;
         return next
-          ? `You are in! Quarter-final on ${game}: beat ${next.name}'s ${next.score.toLocaleString('en-US')}. Each round is a normal play.`
+          ? `You are in! Quarter-final on ${game}: beat ${next.name}'s ${formatNumber(next.score)}. Each round is a normal play.`
           : `You are in! Play ${game}.`;
       },
     });
@@ -217,7 +219,7 @@ export class TournamentBoard extends Prop implements Updatable, Interactable {
       ctx.strokeRect(x, y - slotH / 2, colW, slotH);
       const color = you ? '#7ee787' : state === 'lost' ? '#6a6690' : '#ffffff';
       drawText(ctx, name, x + 8, y, size, color, 'left');
-      if (score !== null) drawText(ctx, score.toLocaleString('en-US'), x + colW - 8, y, Math.round(size * 0.8), state === 'won' ? '#ffd23a' : '#8a86b0', 'right');
+      if (score !== null) drawText(ctx, formatNumber(score), x + colW - 8, y, Math.round(size * 0.8), state === 'won' ? '#ffd23a' : '#8a86b0', 'right');
     };
     v.rounds.forEach((matches, r) => {
       matches.forEach((m, i) => {
@@ -250,7 +252,7 @@ export class TournamentBoard extends Prop implements Updatable, Interactable {
     const foot = !v.entered
       ? 'SIGN UP HERE · EACH ROUND IS ONE PLAY ON THE CABINET'
       : v.next
-        ? `YOUR ${ROUND_TITLES[v.next.round]}: BEAT ${v.next.name} · ${v.next.score.toLocaleString('en-US')}`
+        ? `YOUR ${ROUND_TITLES[v.next.round]}: BEAT ${v.next.name} · ${formatNumber(v.next.score)}`
         : v.out
           ? 'KNOCKED OUT · SEE YOU NEXT SATURDAY'
           : 'CHAMPION! THE CUP GOES HOME WITH YOU';

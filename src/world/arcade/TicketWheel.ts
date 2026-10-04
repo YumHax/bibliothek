@@ -10,6 +10,8 @@ import { type ArcadeControls, NO_CONTROLS, drawText } from './games/ArcadeGame';
 import { TicketMachine, type TicketMachineWiring } from './TicketMachine';
 import { TicketStrip } from './TicketStrip';
 import { type MachineDisplay, displayScreen, outOfOrderNote, paintMarquee } from './machineParts';
+import { random } from '@/random';
+import { formatTickets } from '@/text/money';
 
 /** One slice of the wheel: what it pays (or the jackpot) and how wide it is (its odds). */
 export interface WheelSlice {
@@ -207,7 +209,7 @@ export class TicketWheel extends TicketMachine {
   }
 
   protected attractLabel(price: string): string {
-    return `${this.game.title} · insert a coin (${price}) · jackpot ${this.options.jackpot.value} tickets`;
+    return `${this.game.title} · insert a coin (${price}) · jackpot ${formatTickets(this.options.jackpot.value)}`;
   }
 
   protected override playingLabel(): string {
@@ -235,7 +237,7 @@ export class TicketWheel extends TicketMachine {
         this.lastPeg = peg;
         this.flap = 1;
         this.spin = Math.max(0, this.spin - PEG_BRAKE * (1 + 3 / Math.max(0.5, this.spin)));
-        this.speaker.play('tick', 0.9 + Math.random() * 0.2);
+        this.speaker.play('tick', 0.9 + random() * 0.2);
       }
       if (this.spin <= STOP_BELOW) this.land();
       return false;
@@ -273,7 +275,7 @@ export class TicketWheel extends TicketMachine {
 
   private fling(): void {
     this.spinning = true;
-    this.spin = SPIN_SPEED + Math.random() * SPIN_EXTRA;
+    this.spin = SPIN_SPEED + random() * SPIN_EXTRA;
     this.lastPeg = this.pegIndex();
     this.options.jackpot.grow();
     this.speaker.play('launch');

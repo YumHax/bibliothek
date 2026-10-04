@@ -1,8 +1,8 @@
 import * as THREE from 'three';
 import type { Updatable } from '@/core/Engine';
-import { seededRandom } from '@/covers/generated/canvasUtils';
 import { markShared, Prop } from './Prop';
 import { paint, standard } from '../materials/palette';
+import { lcg } from '@/random';
 
 export interface BalloonsOptions {
   /** How many balloons in the bunch. Default 4. */
@@ -34,7 +34,7 @@ export class Balloons extends Prop implements Updatable {
     const count = options.count ?? 4;
     const colors = options.colors ?? COLORS;
     const height = options.height ?? 1.5;
-    const random = seededRandom(options.seed ?? 17);
+    const random = lcg(options.seed ?? 17);
     const weight = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.035, 0.04, 10), WEIGHT);
     weight.position.y = 0.02;
     this.add(weight);

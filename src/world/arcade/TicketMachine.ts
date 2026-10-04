@@ -12,6 +12,9 @@ import type { Occupant, Station, StationEvents } from './Station';
 import type { Performer } from '../people/performer';
 import type { ScoreTable } from './scoreTable';
 import { MachineRun, type MachineRunOptions, type MachineState } from './MachineRun';
+import { endCardNote, playAgainLine } from './EndCard';
+import { FixedStep } from './FixedStep';
+import { REPLAY_STEP } from './replay/Replay';
 import { RunMachine } from './RunMachine';
 
 /** What every physical ticket machine is wired to. */
@@ -46,6 +49,8 @@ export abstract class TicketMachine extends RunMachine implements Furniture, Int
   abstract readonly lean: number;
   readonly stationEvents: StationEvents = {};
   readonly freeWhenBroke = true;
+  /** Pays the hall's tickets through the arcade's books. */
+  readonly payout = 'arcade' as const;
 
   protected clock = 0;
   protected abstract readonly speaker: ChipSpeaker;
@@ -53,6 +58,8 @@ export abstract class TicketMachine extends RunMachine implements Furniture, Int
   /** The out-of-order note on its display, when it has one. */
   protected note: THREE.Object3D | null = null;
   private machineRun: MachineRun | null = null;
+  /** The play stepped at the cabinets' fixed rate, so a frame rate never changes a roll or a throw (`npm run balance` plays at the same step). */
+  private readonly steps = new FixedStep(REPLAY_STEP);
   /** The regular on it, when their body is the machine's to direct (`occupy`). */
   protected performer: Performer | null = null;
 
@@ -99,6 +106,7 @@ export abstract class TicketMachine extends RunMachine implements Furniture, Int
 
   start(onOver: (result: ArcadeResult) => void): void {
     this.run.start(onOver);
+    this.steps.reset();
     this.newGame();
   }
 
@@ -135,8 +143,6 @@ export abstract class TicketMachine extends RunMachine implements Furniture, Int
   }
 
   update(dt: number): void {
-    // Every sound it makes is news to whoever plays or watches it.
-    this.speaker.onPlay ??= (sfx) => this.stationEvents.onSound?.(sfx);
     this.speaker.follow();
     // The pointer went free mid-play: everything holds still until it is locked again.
     if (this.run.paused) return;
@@ -145,12 +151,13 @@ export abstract class TicketMachine extends RunMachine implements Furniture, Int
     const { run } = this;
     run.update(dt);
     if (run.state === 'playing') {
-      if (this.play(dt, run.readControls())) this.finished(run.finish(this.score));
+      if (this.playSteps(dt, run.readControls())) this.finished(run.finish(this.score));
+      else run.noteScore(this.score);
     } else if (run.state === 'demo') {
       if (run.regularDone) {
         this.betweenGames(dt);
         if (run.regularPause(dt, REGULAR_PAUSE)) this.newGame();
-      } else if (this.play(dt, this.demoControls(dt))) {
+      } else if (this.playSteps(dt, this.demoControls(dt))) {
         run.regularResult(this.score);
         this.regularFinished(this.score);
       }
@@ -162,7 +169,27 @@ export abstract class TicketMachine extends RunMachine implements Furniture, Int
     this.speaker.dispose();
   }
 
+  /** `play` in fixed steps over `dt`: the press edge counts on the first step only. True once the play is over. */
+  private playSteps(dt: number, controls: ArcadeControls): boolean {
+    let step = controls;
+    return this.steps.run(dt, (h) => {
+      const over = this.play(h, step);
+      if (step.firePressed) step = { ...step, firePressed: false };
+      return over;
+    });
+  }
+
   // --- What the subclass reads of the run -------------------------------------------------------
+
+  /** The end card's verdict (`EndCard`): the place on the board, a new best, a first score, else `fallback`. */
+  protected endCardNote(fallback = ''): string {
+    return endCardNote(this.run, fallback);
+  }
+
+  /** Another go and its price, as the end cards spell it. */
+  protected playAgainLine(): string {
+    return playAgainLine(this.run);
+  }
 
   protected get state(): MachineState {
     return this.run.state;

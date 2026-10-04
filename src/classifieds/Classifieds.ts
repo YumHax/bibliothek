@@ -1,5 +1,6 @@
 import { KEYS, PersistedStore, safeStorage } from '@/persistence';
-import { SELLERS_BUILDING, adsPostedOn, clockOf, scriptedAd, type Ad, type ScriptedAd } from './ads';
+import { SELLERS_BUILDING, adsPostedOn, scriptedAd, type Ad, type ScriptedAd } from './ads';
+import { formatClock } from '@/text/clock';
 import { CLASSIFIEDS, SELLERS } from './rules';
 
 /** A visit agreed on the phone: whose ad, on which game day (their window that day, `Ad.hours`). */
@@ -140,7 +141,7 @@ export class Classifieds {
     const slot = this.slotFor(ad);
     this.commit({ booking: { adId: ad.id, day: slot.day } });
     const when = slot.day === this.clock.day() ? 'today' : 'tomorrow';
-    return `“Lovely. Come round ${when} between ${clockOf(slot.from)} and ${clockOf(slot.to)}: ${ad.flat}, ${SELLERS_BUILDING}, over the greengrocer’s. Ring the bell.”`;
+    return `“Lovely. Come round ${when} between ${formatClock(slot.from)} and ${formatClock(slot.to)}: ${ad.flat}, ${SELLERS_BUILDING}, over the greengrocer’s. Ring the bell.”`;
   }
 
   /** Calls the booking off (the phone). */

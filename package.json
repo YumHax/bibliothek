@@ -12,16 +12,18 @@
     "preview": "vite preview",
     "bake-art": "node scripts/bake-box-art.mjs",
     "balance": "node scripts/arcade-balance.mjs",
+    "social": "node scripts/social-sim.mjs",
     "zfight": "node scripts/zfight.mjs",
     "scene-lint": "node scripts/scene-lint.mjs",
     "lint": "eslint src server api && cspell --no-progress && knip --no-progress",
-    "typecheck": "tsc --noEmit && tsc --noEmit -p api && node scripts/check-conventions.mjs && node scripts/check-imports.mjs && node scripts/check-docs.mjs && node scripts/check-data.mjs && node scripts/zfight.mjs && node scripts/scene-lint.mjs"
+    "typecheck": "tsc --noEmit && tsc --noEmit -p api && node scripts/check-conventions.mjs && node scripts/check-imports.mjs && node scripts/check-docs.mjs && node scripts/check-data.mjs && node scripts/check-glsl.mjs && node scripts/zfight.mjs && node scripts/scene-lint.mjs"
   },
   "dependencies": {
     "jsnes": "^2.1.0",
     "three": "^0.169.0"
   },
   "devDependencies": {
+    "@shaderfrog/glsl-parser": "^7.0.1",
     "@types/node": "^18.19.130",
     "@types/three": "^0.169.0",
     "cspell": "^8.19.4",

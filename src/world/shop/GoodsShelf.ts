@@ -3,7 +3,7 @@ import type { Furniture } from '../Furniture';
 import { cylinderMesh } from '../meshUtils';
 import { part } from '../props/Prop';
 import { paint, timber } from '../materials/palette';
-import { seededRandom } from '@/graphics/canvas';
+import { lcg, pick } from '@/random';
 
 /** What stands on the shelves: kibble bags and tins (the pet shop), boxed spares and valves (the TV repair), empty pots (the florist), cushions and table lamps (the furniture shop). */
 export type ShelfStock = 'pets' | 'spares' | 'pots' | 'homewares';
@@ -46,19 +46,19 @@ export class GoodsShelf extends THREE.Group implements Furniture {
     this.name = 'GoodsShelf';
     const W = options.width ?? 1.6;
     const shelves = options.shelves ?? 4;
-    const random = seededRandom(options.seed ?? 11);
+    const random = lcg(options.seed ?? 11);
     const wood = timber(0xc9a878, 0.6);
     const top = BOTTOM + (shelves - 1) * SPACING + 0.4;
     part(this, W, top, 0.015, wood, { y: top / 2, z: 0.0075 });
     for (const x of [-W / 2 + 0.015, W / 2 - 0.015]) part(this, 0.03, top, DEPTH, wood, { x, y: top / 2, z: DEPTH / 2 });
     const colours = COLOURS[options.stock];
-    const pick = (): THREE.Material => paint(colours[Math.floor(random() * colours.length)]!, 0.7);
+    const pickPaint = (): THREE.Material => paint(pick(random, colours), 0.7);
     for (let s = 0; s < shelves; s++) {
       const y = BOTTOM + s * SPACING;
       part(this, W - 0.06, BOARD, DEPTH - 0.02, wood, { y: y - BOARD / 2, z: DEPTH / 2 + 0.005 });
       let x = -W / 2 + 0.06;
       while (x < W / 2 - 0.12) {
-        const w = this.item(options.stock, x, y, random, pick);
+        const w = this.item(options.stock, x, y, random, pickPaint);
         x += w + 0.015 + random() * 0.03;
       }
     }

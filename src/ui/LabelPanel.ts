@@ -1,5 +1,5 @@
-import { ModalPanel } from './ModalPanel';
-import { escapeHtml } from './html';
+import { CardPanel, type PanelAction } from './panel/CardPanel';
+import { html, type Html } from './panel/html';
 import { MAX_LETTERS, TAPES, TAPE_COLOURS, labelText, type TapeColour } from '@/world/labels/labelTape';
 import './LabelPanel.css';
 
@@ -16,60 +16,61 @@ interface LabelPanelRequest {
 
 /**
  * The label maker (docs/furnishing.md "Shelf labels"): type a few capitals, pick the tape, see it embossed, Print
- * sticks it on the shelf edge the player aimed at. Aimed at a label already there: Peel off, or print a new one over it.
- * The last tape is kept for the next label.
+ * sticks it on the shelf edge the player aimed at (Enter in the text field prints too; on a button, Enter presses
+ * that button). Aimed at a label already there: Peel off, or print a new one over it. The last tape is kept for
+ * the next label.
  */
-export class LabelPanel extends ModalPanel {
-  private readonly card: HTMLElement;
+export class LabelPanel extends CardPanel {
   private request: LabelPanelRequest | null = null;
   private tape: TapeColour = 'black';
 
   constructor(container: HTMLElement) {
-    super(container, { className: 'ui-modal--centre label-panel' });
-    this.root.innerHTML = `<article class="label-panel__card ui-card" role="dialog" aria-modal="true" aria-label="Label maker"></article>`;
-    this.card = this.root.querySelector('.label-panel__card')!;
-    this.root.addEventListener('click', (e) => {
-      const target = e.target as HTMLElement;
-      if (target === this.root || target.closest('button[data-action="close"]')) return this.close();
-      const swatch = target.closest<HTMLElement>('button[data-tape]');
-      if (swatch) return this.pickTape(swatch.dataset.tape as TapeColour);
-      if (target.closest('button[data-action="print"]')) return this.print();
-      if (target.closest('button[data-action="peel"]')) {
-        const peel = this.request?.peel;
-        this.request = null;
-        peel?.();
-        this.close();
-      }
-    });
-    this.root.addEventListener('input', () => this.redraw());
+    super(container, { className: 'label-panel', cardClass: 'label-panel__card ui-card', title: 'Label maker', dismiss: 'Cancel' });
+    this.listen(this.root, 'input', () => this.redraw());
   }
 
   /** Deals the panel for the edge aimed at (call before the Session opens it). */
   show(request: LabelPanelRequest): void {
     this.request = request;
     if (request.existing) this.tape = request.existing.tape;
-    const existing = request.existing;
+    if (this.isOpen) this.refresh();
+  }
+
+  protected render(): Html {
+    const existing = this.request?.existing ?? null;
     const swatches = TAPE_COLOURS.map(
-      (id) => `<button type="button" class="label-panel__tape" data-tape="${id}" style="--tape:${TAPES[id].vinyl}" aria-label="${TAPES[id].name} tape" aria-pressed="${id === this.tape}"></button>`,
-    ).join('');
-    this.card.innerHTML = `
-      <header><h2>Label maker</h2></header>
-      <p class="label-panel__note">${existing ? `This edge says <strong>${escapeHtml(existing.text)}</strong>. Peel it off, or print another over it.` : 'Up to sixteen capitals, embossed on tape, stuck on the edge you aimed at.'}</p>
-      <input class="label-panel__text" type="text" maxlength="${MAX_LETTERS + 8}" placeholder="RPG, MY FAVOURITES…" autocomplete="off" spellcheck="false" aria-label="Label text" value="${escapeHtml(existing?.text ?? '')}" data-autofocus />
+      (id) => html`<button type="button" class="label-panel__tape" data-action="tape" data-tape="${id}" style="--tape:${TAPES[id].vinyl}" aria-label="${TAPES[id].name} tape" aria-pressed="${id === this.tape ? 'true' : 'false'}"></button>`,
+    );
+    return html`<p class="label-panel__note">${existing ? html`This edge says <strong>${existing.text}</strong>. Peel it off, or print another over it.` : 'Up to sixteen capitals, embossed on tape, stuck on the edge you aimed at.'}</p>
+      <input class="label-panel__text" type="text" maxlength="${MAX_LETTERS + 8}" placeholder="RPG, MY FAVOURITES…" autocomplete="off" spellcheck="false" aria-label="Label text" value="${existing?.text ?? ''}" data-autofocus />
       <div class="label-panel__tapes" role="group" aria-label="Tape">${swatches}</div>
-      <div class="label-panel__preview"><canvas aria-hidden="true"></canvas></div>
-      <p class="label-panel__error" role="alert" hidden></p>
-      <footer>
-        ${existing && request.peel ? '<button type="button" class="ui-btn" data-action="peel">Peel off</button>' : ''}
-        <span class="label-panel__gap"></span>
-        <button type="button" class="ui-btn" data-action="close">Cancel</button>
-        <button type="button" class="ui-btn ui-btn--primary" data-action="print">Print</button>
-      </footer>`;
+      <div class="label-panel__preview"><canvas aria-hidden="true"></canvas></div>`;
+  }
+
+  protected override actions(): PanelAction[] {
+    const request = this.request;
+    return [...(request?.existing && request.peel ? [{ action: 'peel', label: 'Peel off' }] : []), { action: 'print', label: 'Print', primary: true }];
+  }
+
+  protected override repaint(): void {
+    super.repaint();
     this.redraw();
   }
 
+  protected override onAction(action: string, el: HTMLElement): void {
+    if (action === 'tape' && el.dataset.tape) this.pickTape(el.dataset.tape as TapeColour);
+    else if (action === 'print') this.print();
+    else if (action === 'peel') {
+      const peel = this.request?.peel;
+      this.request = null;
+      peel?.();
+      this.close();
+    }
+  }
+
+  /** Enter in the text field prints (a button takes its own Enter). */
   protected override onKey(e: KeyboardEvent): void {
-    if (e.code === 'Enter' || e.code === 'NumpadEnter') {
+    if ((e.code === 'Enter' || e.code === 'NumpadEnter') && document.activeElement === this.input) {
       e.preventDefault();
       this.print();
     }
@@ -92,8 +93,7 @@ export class LabelPanel extends ModalPanel {
   private redraw(): void {
     const canvas = this.card.querySelector('canvas');
     if (canvas && this.request) this.request.preview(canvas, this.input?.value ?? '', this.tape);
-    const error = this.card.querySelector<HTMLElement>('.label-panel__error');
-    if (error) error.hidden = true;
+    this.setStatus('');
   }
 
   private print(): void {
@@ -102,11 +102,7 @@ export class LabelPanel extends ModalPanel {
     const text = labelText(this.input?.value ?? '');
     const refusal = request.print(text, this.tape);
     if (refusal) {
-      const error = this.card.querySelector<HTMLElement>('.label-panel__error');
-      if (error) {
-        error.textContent = refusal;
-        error.hidden = false;
-      }
+      this.setStatus(refusal, 'error');
       return;
     }
     this.request = null;

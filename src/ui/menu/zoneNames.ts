@@ -1,5 +1,6 @@
 import type { ControlGroup } from '../controls';
 import type { ZoneId } from '@/world/zoneIds';
+import { capitalise } from '@/text/strings';
 
 /** What the pause menu calls each zone of `WORLD_PLAN` (by id; every zone has a name); an unknown id is shown as is. */
 const NAMES: Readonly<Record<string, string>> = {
@@ -29,7 +30,7 @@ const NAMES: Readonly<Record<string, string>> = {
 } satisfies Record<ZoneId, string>;
 
 export function zoneName(id: string): string {
-  return NAMES[id] ?? id.charAt(0).toUpperCase() + id.slice(1);
+  return NAMES[id] ?? capitalise(id);
 }
 
 /** The Controls tab that fits a zone: the arcade's and the market's own, else home. */

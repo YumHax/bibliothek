@@ -1,5 +1,7 @@
-import { type ArcadeControls, NO_CONTROLS, SCREEN_H, SCREEN_W, clamp, drawText } from './ArcadeGame';
+import { clamp } from '@/math/scalar';
+import { type ArcadeControls, NO_CONTROLS, SCREEN_H, SCREEN_W, drawText } from './ArcadeGame';
 import { BaseGame, PLAY_TOP } from './BaseGame';
+import { random } from '@/random';
 
 const ROUND_SECONDS = 20;
 const PADDLE_W = 5;
@@ -63,12 +65,15 @@ export class Duel extends BaseGame {
   private server: 1 | 2 = 1;
   private opponentName = 'CPU';
   private aimError = 0;
+  /** How well player two plays, 0..1: 0.7 is the machine's own level (`OPPONENT` as written), a friend joining plays at theirs. */
+  private opponentSkill = 0.7;
 
   constructor() {
     super(ROUND_SECONDS);
   }
 
-  setOpponent(name: string): void {
+  setOpponent(name: string, skill = 0.7): void {
+    this.opponentSkill = skill;
     if (name === this.opponentName) return;
     const joining = name !== 'CPU';
     this.opponentName = name;
@@ -132,7 +137,7 @@ export class Duel extends BaseGame {
       if (smash) this.fx.pop('SMASH', PADDLE_X + 30, b.y - 14, '#ffe066', 7);
     } else if (b.vx > 0 && b.x + BALL / 2 >= SCREEN_W - PADDLE_X - PADDLE_W && b.x < SCREEN_W - PADDLE_X + 4 && Math.abs(b.y - this.p2) <= PADDLE_H / 2 + BALL / 2) {
       this.bounce(this.p2, -1);
-      this.aimError = (this.rand() - 0.5) * 2 * OPPONENT.error;
+      this.aimError = (this.rand() - 0.5) * 2 * OPPONENT.error * (1.7 - this.opponentSkill);
     }
     // A goal either way.
     if (b.x < -BALL) {
@@ -184,7 +189,7 @@ export class Duel extends BaseGame {
     const diff = target - this.p1;
     const dead = 3 + (1 - skill) * 6;
     const smash = b.vx < 0 && b.x < PADDLE_X + 30 && skill > 0.5 && this.rally < 1.3;
-    return { ...NO_CONTROLS, up: diff < -dead, down: diff > dead, fire: this.serveIn > 0 || smash, firePressed: this.serveIn > 0 && Math.random() < 0.1 };
+    return { ...NO_CONTROLS, up: diff < -dead, down: diff > dead, fire: this.serveIn > 0 || smash, firePressed: this.serveIn > 0 && random() < 0.1 };
   }
 
   private get set(): number {
@@ -196,7 +201,7 @@ export class Duel extends BaseGame {
     const b = this.ball;
     const coming = (b.vx > 0 && b.x > SCREEN_W * OPPONENT_REACTS) || (this.serveIn > 0 && this.server === 2);
     const target = coming ? b.y + this.aimError : (PLAY_TOP + SCREEN_H) / 2;
-    const speed = OPPONENT.speed + OPPONENT.speedPerSet * (this.set - 1);
+    const speed = (OPPONENT.speed + OPPONENT.speedPerSet * (this.set - 1)) * (0.3 + this.opponentSkill);
     const diff = target - this.p2;
     const step = clamp(diff, -speed * dt, speed * dt);
     this.p2Dir = Math.abs(diff) > 2 ? Math.sign(diff) : 0;

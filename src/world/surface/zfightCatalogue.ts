@@ -16,7 +16,7 @@ import { AquariumWall } from '../shop/pets/AquariumWall';
 import { RugRolls } from '../shop/RugRolls';
 import { DisplayTable } from '../shop/DisplayTable';
 import { buildStreetBase, buildStreetFronts, type AddScenery } from '../street/streetScenery';
-import { FACADES } from '../street/streetPlan';
+import { FACADES } from '@/world/city/facades';
 import { DayNight } from '../props/DayNight';
 import { Room, type RoomOptions } from '../Room';
 import { resolvePlacement, type Placement } from '../Placement';

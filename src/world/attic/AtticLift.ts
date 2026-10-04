@@ -10,7 +10,8 @@ import { PROUD } from '../props/joinery';
 import { Prop } from '../props/Prop';
 import { arriveNextAt } from '../travel/nextArrival';
 import { LiftButton } from '../stairwell/LiftButton';
-import { STAIRWELL_PLAN, landingY } from '../stairwell/stairwellPlan';
+import { STAIRWELL_PLAN } from '../stairwell/stairwellPlan'; // imports-ok: the attic's lift stop stands over the stairwell's car
+import { landingY } from '@/world/measures/building';
 import { ATTIC_PLAN as plan } from './atticPlan';
 
 const GATE_SECONDS = 0.45;

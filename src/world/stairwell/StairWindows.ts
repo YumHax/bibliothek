@@ -9,7 +9,8 @@ import { WALL, onSurface } from '../surface/layers';
 import { PaneReflection } from '../materials/paneReflection';
 import { leaseHomeOutlook, type OutlookLease } from '../outlook/sharedOutlook';
 import type { WindowLife } from '../street/windowLife';
-import { STAIRWELL_PLAN as plan, STOREY, STOREYS, landingY } from './stairwellPlan';
+import { STAIRWELL_PLAN as plan } from './stairwellPlan';
+import { STOREY, STOREYS, landingY } from '@/world/measures/building';
 
 /** How many of the landings' panes show the courtyard at once (the nearest to the eye). */
 const LIVE = 2;

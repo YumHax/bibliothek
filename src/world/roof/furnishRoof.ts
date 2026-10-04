@@ -10,7 +10,7 @@ import { LAWN_REACH, LAWN_Y } from '../street/StreetGround';
 import { StreetPark } from '../street/StreetPark';
 import { Buildings } from '../street/Buildings';
 import { Precipitation } from '../street/Precipitation';
-import { FACADES } from '../street/streetPlan';
+import { FACADES } from '@/world/city/facades';
 import { buildingWindowLife } from '@/building/rearWindows';
 import { pointSound } from '../build/hearing';
 import { arriveAtHatch } from '../attic/hatchArrival';
@@ -36,7 +36,7 @@ const ANISOTROPY = anisotropyFor('grazing');
  * (`StreetLighting`: one sun shadow, a hemisphere while the player is up here), the rain and snow,
  * the wind. A zone reached by travel only (the attic's ladder).
  */
-export function furnishRoof(zone: Zone, ctx: BuildContext): ZoneHandle {
+export function furnishRoof(zone: Zone, ctx: Pick<BuildContext, 'sky' | 'listener' | 'acoustics' | 'today'>): ZoneHandle {
   const { sky, listener, acoustics, today } = ctx;
   const { dayNight } = sky;
   const origin = new THREE.Vector3();

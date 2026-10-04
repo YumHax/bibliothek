@@ -1,5 +1,6 @@
 import type { PayoutStats } from '@/economy/PayoutStats';
 import { escapeHtml } from './html';
+import { formatNumber } from '@/text/count';
 import './PayoutOverlay.css';
 
 /**
@@ -33,7 +34,7 @@ export class PayoutOverlay {
     const rows = this.stats.rows();
     this.body.innerHTML = rows.length
       ? rows
-          .map((r) => `<tr><td>${escapeHtml(r.gameId)}</td><td>${r.plays}</td><td>${Math.round(r.avgScore).toLocaleString('en-US')}</td><td>${r.avgTickets.toFixed(1)}</td><td>${r.ticketsPerMinute.toFixed(0)}</td></tr>`)
+          .map((r) => `<tr><td>${escapeHtml(r.gameId)}</td><td>${r.plays}</td><td>${formatNumber(Math.round(r.avgScore))}</td><td>${r.avgTickets.toFixed(1)}</td><td>${r.ticketsPerMinute.toFixed(0)}</td></tr>`)
           .join('')
       : '<tr><td colspan="5">No plays yet: go and play something.</td></tr>';
   }

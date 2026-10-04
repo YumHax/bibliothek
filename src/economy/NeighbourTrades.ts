@@ -1,9 +1,11 @@
+import { isKeepsake } from './Transactions';
 import type { Game, PlatformId } from '@/catalog/types';
 import { KEYS, PersistedStore, safeStorage } from '@/persistence';
 import type { Views } from './Fame';
 import { NEIGHBOUR_SWAPS, shopPrice } from './pricing';
-import { seeded } from './seeded';
 import { befriend } from '@/building/friendship';
+import { swapGenerosity } from '@/social/building/swaps';
+import { dayStream } from '@/time/daily';
 
 /** How much a swap done counts for the friendship with that neighbour. */
 const SWAP_FRIENDSHIP = 15;
@@ -105,7 +107,7 @@ export class NeighbourTrades {
   refresh(): void {
     const day = this.options.today.gameDay;
     if (day === this.state.day || this.drawing) return;
-    const random = seeded(`neighbours:${day}`);
+    const random = dayStream(`neighbours:${day}`);
     if (this.offer || random() >= ODDS) {
       this.state = { ...this.state, day };
       this.store.save(this.state);
@@ -143,7 +145,7 @@ export class NeighbourTrades {
 
   private async draw(day: number, random: () => number): Promise<TradeOffer | null> {
     const { collection, market, fame, residents } = this.options;
-    const owned = collection.games.filter((g) => (g.status ?? 'owned') === 'owned' && !g.repro);
+    const owned = collection.games.filter((g) => (g.status ?? 'owned') === 'owned' && !g.repro && !isKeepsake(g));
     if (owned.length < MIN_OWNED || !residents.length) return null;
     const wants = owned[Math.floor(random() * owned.length)]!;
     const resident = residents[Math.floor(random() * residents.length)]!;
@@ -151,11 +153,13 @@ export class NeighbourTrades {
     if (this.options.present && !this.options.present(resident.door)) return null;
     const worth = shopPrice(wants, await fame.lookup(wants));
     const candidates = (await market.randomGames(`neighbours:${day}:${resident.door}`, CANDIDATES)).filter((g) => g.id !== wants.id && !collection.owns(g.id));
+    // A friend gives more than she asks (`social/building/swaps`).
+    const generous = swapGenerosity(resident.door);
     let best: { game: Game; score: number } | null = null;
     for (const game of candidates) {
       const ratio = shopPrice(game, await fame.lookup(game)) / worth;
-      if (ratio < FAIR[0] || ratio > FAIR[1]) continue;
-      const score = Math.abs(ratio - IDEAL);
+      if (ratio < FAIR[0] || ratio > FAIR[1] * generous) continue;
+      const score = Math.abs(ratio - IDEAL * generous);
       if (!best || score < best.score) best = { game, score };
     }
     if (!best) return null;

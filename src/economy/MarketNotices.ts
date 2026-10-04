@@ -6,7 +6,7 @@ import type { Fame } from './Fame';
 import type { MarketLedger } from './MarketLedger';
 import type { StockItem } from './StockItem';
 import { CARD_MEMORY_DAYS, FOR_SALE_AD, WANTED_AD, shopPrice } from './pricing';
-import { seeded } from './seeded';
+import { dayStream } from '@/time/daily';
 
 const NOTICES_STORAGE_KEY = KEYS.notices;
 
@@ -78,7 +78,7 @@ export class MarketNotices {
   }
 
   private async draw(day: number, sources: { collection: readonly Game[]; stock: readonly StockItem[]; pool: () => Promise<Game[]> }): Promise<void> {
-    const rng = seeded(`${day}:notices`);
+    const rng = dayStream(`${day}:notices`);
     const name = () => NAMES[Math.floor(rng() * NAMES.length)]!;
     const fresh: NoticeAd[] = [];
     const taken = new Set<string>();

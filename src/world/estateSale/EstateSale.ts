@@ -8,15 +8,19 @@ import type { Views } from '@/economy/Fame';
 import { GRAILS, grailGame } from '@/economy/grails';
 import { StockItem } from '@/economy/StockItem';
 import { drawCondition } from '@/economy/stockDraws';
-import { seeded } from '@/economy/seeded';
-import { drawGames, pricedCopy, type ReleasePool } from '@/building/pricedCopy';
+import { drawGames, pricedCopy, type CopyFame, type ReleasePool } from '@/building/pricedCopy';
 import { ESTATE, EstateDealer, estatePhase, estateSold, estateStart } from '@/building/estateSale';
 import type { Furniture } from '../Furniture';
 import { ForSaleBox, type ForSaleBoxOptions } from '../market/ForSaleBox';
 import { Walker } from '../people/Walker';
 import { randomLook } from '../people/looks';
+import { rememberLook } from '@/social/lookBook';
+import type { SocialServices } from '@/social/talk';
+import { bodyOf, talkHook } from '../people/socialHook';
 import { boxMesh } from '../meshUtils';
 import { paint, timber } from '../materials/palette';
+import { dayStream } from '@/time/daily';
+import { random } from '@/random';
 
 /** Where the sale's things go: the stairwell's zone (they must be placed to be clickable, and to collide). */
 interface EstateHost {
@@ -42,10 +46,17 @@ interface EstateSaleOptions {
   owns: (id: string) => boolean;
   /** The market's index of releases, the games are drawn from. */
   pool: ReleasePool;
+  /** How well known a game is: what its copy is priced by once known (the market's one `Fame`). */
+  fame: CopyFame;
   viewer: THREE.Object3D;
   day: () => number;
   hours: () => number;
+  /** The people the player talks to (docs/social.md): Claire talks, her uncle's story an entry of hers. */
+  social?: SocialServices;
 }
+
+/** Lambert's niece in the social layer (`social/people/building`). */
+const CLAIRE = 'claire';
 
 const TABLE = { length: 1.5, depth: 0.6, height: 0.74 };
 const CRATE = { width: 0.5, depth: 0.36, height: 0.28 };
@@ -102,7 +113,16 @@ export class EstateSale extends THREE.Group implements Furniture, Updatable {
     this.table = new SaleFurniture(saleTable(), new THREE.Box3(new THREE.Vector3(-TABLE.length / 2, 0, -TABLE.depth / 2), new THREE.Vector3(TABLE.length / 2, TABLE.height, TABLE.depth / 2)));
     this.crate = new SaleFurniture(openCrate(), new THREE.Box3(new THREE.Vector3(-CRATE.width / 2, 0, -CRATE.depth / 2), new THREE.Vector3(CRATE.width / 2, CRATE.height, CRATE.depth / 2)));
     const { seller } = options.spots;
-    this.seller = new Walker({ viewer: options.viewer, seed: seller.seed, look: randomLook(seller.seed + 900, 'shopper'), lines: LINES, label: `${ESTATE.family} · chat`, speaker: ESTATE.family, yields: false });
+    const look = randomLook(seller.seed + 900, 'shopper');
+    rememberLook(CLAIRE, look);
+    let next = 0;
+    const social = talkHook(options.social, CLAIRE, () => ({
+      person: CLAIRE,
+      place: 'stairs',
+      body: bodyOf(this.seller),
+      extras: [{ id: 'uncle', group: 'talk', label: 'About your uncle…', run: () => ({ line: LINES[next++ % LINES.length]! }) }],
+    }));
+    this.seller = new Walker({ viewer: options.viewer, seed: seller.seed, look, lines: LINES, label: `${ESTATE.family} · chat`, speaker: ESTATE.family, yields: false, social });
     this.dealer = new EstateDealer(options.day);
   }
 
@@ -146,9 +166,9 @@ export class EstateSale extends THREE.Group implements Furniture, Updatable {
   }
 
   private async draw(): Promise<StockItem[]> {
-    const { pool, owns, day } = this.options;
+    const { pool, owns, day, fame } = this.options;
     const start = estateStart(day()) ?? day();
-    const rng = seeded(`estate:${start}`);
+    const rng = dayStream(`estate:${start}`);
     const platforms = PLATFORM_LIST.map((p) => p.id);
     const games = await drawGames(pool, `estate:${start}`, platforms, ESTATE_SALE.copies + 2, (id) => owns(id) && !estateSold(id));
     const items = games.map((game, i) => {
@@ -156,7 +176,7 @@ export class EstateSale extends THREE.Group implements Furniture, Updatable {
       // A couple of his collector's pieces, priced as such; the rest as a family clearing a flat prices them.
       const piece = i === 1 || i === 4;
       const price = (views: Views) => marketPrice(game, views, condition, ESTATE_SALE.discount * (piece ? 1.35 : 1));
-      return pricedCopy(game, condition, piece ? 'estate' : 'stall', price);
+      return pricedCopy(fame, game, condition, piece ? 'estate' : 'stall', price);
     });
     // At the bottom of the crate, the grail they do not know about (none if the player has it already).
     const grail = GRAILS[Math.floor(rng() * GRAILS.length)]!;
@@ -176,10 +196,10 @@ export class EstateSale extends THREE.Group implements Furniture, Updatable {
         wallet,
         where: `${ESTATE.deceased}’s estate sale`,
         isWanted: () => isWanted(item.game.id),
-        thanks: () => THANKS[Math.floor(Math.random() * THANKS.length)]!,
+        thanks: () => THANKS[Math.floor(random() * THANKS.length)]!,
         react: (reaction) => {
           const lines = REACTIONS[reaction];
-          if (lines) this.seller.say(lines[Math.floor(Math.random() * lines.length)]!);
+          if (lines) this.seller.say(lines[Math.floor(random() * lines.length)]!);
         },
         speak: (line) => this.seller.speak(line),
       });

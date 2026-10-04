@@ -10,7 +10,16 @@ import { NEIGHBOUR_NOISE as plan } from './neighbourNoisePlan';
 import { flatNoise, flatNoiseSource } from './flatNoise';
 import { befriend, lastCounted } from './friendship';
 import { pinSource, refreshBoard } from './boardNotes';
-import { inHours, nightOf } from './throughWalls';
+import { inHours, nightOf } from '@/time/clock';
+import { BUILDING_SOCIAL } from './buildingSocialPlan';
+import { effectValue, has } from '@/social/perks';
+import { markMood } from '@/social/mood';
+import { addMemory } from '@/social/standing';
+
+/** Who complains, to the social layer (`social/people`): his standing moves the threshold, the hours, what he does. */
+const COMPLAINER = 'leclerc';
+/** A Cold syndic makes his reminder cost the building's goodwill this much more. */
+const STRICT_FACTOR = 1.5;
 
 interface NoiseWatchOptions {
   /** The ears (the camera): the broom is heard where the player is. */
@@ -76,21 +85,29 @@ export class NoiseWatch extends Prop implements Updatable {
       this.stage = 'calm';
       this.loudFor = 0;
     }
-    if (!inHours(h, plan.quietHours)) {
+    // How he stands with the player moves when the quiet hours start for him and how loud is too loud (docs/social.md).
+    const quietHours = { from: effectValue(COMPLAINER, 'noiseFrom', plan.quietHours.from), to: plan.quietHours.to };
+    if (!inHours(h, quietHours)) {
       if (this.stage !== 'atDoor') this.stage = 'calm';
       this.loudFor = 0;
       return;
     }
-    const loud = flatNoise() >= plan.loud;
+    const loud = flatNoise() >= effectValue(COMPLAINER, 'noiseThreshold', plan.loud);
     this.quietFor = loud ? 0 : this.quietFor + dt;
     this.timer += dt;
     switch (this.stage) {
       case 'calm':
         this.loudFor = loud ? this.loudFor + dt : Math.max(0, this.loudFor - dt * 2);
-        if (this.loudFor >= plan.broomAfterS) this.broom();
+        if (this.loudFor >= plan.broomAfterS) {
+          // A close friend downstairs does not complain: he comes up once a night to listen a while.
+          if (has(COMPLAINER, 'noComplaints')) this.comeToListen();
+          else this.broom();
+        }
         break;
       case 'broomed':
         if (this.quietFor > SETTLED_S) this.stage = 'calm';
+        // Hostile, he does not bother knocking: straight to the syndic.
+        else if (this.timer > plan.knockAfterS && loud && has(COMPLAINER, 'straightToSyndic')) this.escalate();
         else if (this.timer > plan.knockAfterS && loud) this.comeUp();
         break;
       case 'answered':
@@ -138,13 +155,13 @@ export class NoiseWatch extends Prop implements Updatable {
         const what = flatNoiseSource();
         walker.speak(what && what !== 'TV' ? line.replace('that thing', `that ${what}`) : line, complainer.name);
         walker.gesture('checkWatch');
-        befriend(complainer.key, cost.answered, 'noise', this.night);
+        if (befriend(complainer.key, cost.answered, 'noise', this.night)) this.remember();
         this.toAnswered();
         return plan.thanksWithinS;
       },
       gaveUp: () => {
         this.options.slipNote(note);
-        befriend(complainer.key, cost.unanswered, 'noise', this.night);
+        if (befriend(complainer.key, cost.unanswered, 'noise', this.night)) this.remember();
         this.toAnswered();
       },
       leaving: (walker) => {
@@ -161,6 +178,35 @@ export class NoiseWatch extends Prop implements Updatable {
     this.stage = 'atDoor';
   }
 
+  /** He will remember the night, and wake up cross. */
+  private remember(): void {
+    addMemory(COMPLAINER, this.options.day(), BUILDING_SOCIAL.complaintMemory, -8);
+    markMood(COMPLAINER, this.night + 1, -1, BUILDING_SOCIAL.complaintMood);
+  }
+
+  /** At Close, up the stairs he comes, not to complain: to listen at the door a while (once a night), and a little warmer for it. */
+  private comeToListen(): void {
+    const { complainer } = plan;
+    const visit = BUILDING_SOCIAL.leclercVisit;
+    const came = this.options.visitor.come({
+      who: complainer.name,
+      knocks: 2,
+      answer: (_session, walker) => {
+        walker.speak(visit.lines[this.nth % visit.lines.length]!, complainer.name);
+        walker.gesture('wave');
+        befriend(complainer.key, visit.warmth, 'listened', this.night);
+        addMemory(COMPLAINER, this.options.day(), visit.memory, visit.warmth * 3);
+        this.nth++;
+        return plan.thanksWithinS;
+      },
+      gaveUp: () => {},
+      leaving: () => {},
+    });
+    // Once a night either way: nothing more comes of the noise tonight.
+    this.stage = came ? 'done' : 'calm';
+    this.loudFor = 0;
+  }
+
   private toAnswered(): void {
     this.stage = 'answered';
     this.timer = 0;
@@ -170,8 +216,11 @@ export class NoiseWatch extends Prop implements Updatable {
   /** Still loud after all that: the syndic hears of it. */
   private escalate(): void {
     const { complainer, alsoMinds, cost } = plan;
-    befriend(complainer.key, cost.escalated, 'escalated', this.options.day());
-    for (const key of alsoMinds) befriend(key, cost.alsoEscalated, 'escalated', this.options.day());
+    // A syndic cross with the player makes more of it.
+    const strict = has('bertin', 'strictReminders') ? STRICT_FACTOR : 1;
+    befriend(complainer.key, Math.round(cost.escalated * strict), 'escalated', this.options.day());
+    for (const key of alsoMinds) befriend(key, Math.round(cost.alsoEscalated * strict), 'escalated', this.options.day());
+    this.remember();
     this.stage = 'done';
     refreshBoard();
   }

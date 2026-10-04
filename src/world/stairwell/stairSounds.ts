@@ -1,6 +1,8 @@
 import { Voice, type AmbientVoice } from '@/audio/ambient';
 import { audioBus, startedAudioContext } from '@/audio/audioContext';
 import { brownNoise, whiteNoise } from '@/audio/noise';
+import { noiseBurst, rand } from '@/audio/synth';
+import { random } from '@/random';
 
 /*
  * What the stairwell sounds like, synthesised like the flat's room sounds (`audio/ambient`): the
@@ -144,7 +146,7 @@ export class DoorTelevision extends Voice {
     if (this.untilSwell > 0 || !this.murmur || !this.door) return;
     this.untilSwell = rand(6, 18);
     const now = ctx.currentTime;
-    if (Math.random() < 0.7) {
+    if (random() < 0.7) {
       // The studio laughing.
       this.murmur.gain.setTargetAtTime(0.7, now, 0.25);
       this.murmur.gain.setTargetAtTime(0.35, now + 1.6, 0.5);
@@ -189,14 +191,14 @@ export class DoorPiano extends Voice {
     if (!this.phrase.length) {
       // A new try: up the scale of C, or the same little tune again.
       const scale = [0, 2, 4, 5, 7, 9, 11, 12];
-      this.phrase = Math.random() < 0.5 ? scale.slice(0, 3 + Math.floor(Math.random() * 6)) : [4, 2, 0, 2, 4, 4, 4];
+      this.phrase = random() < 0.5 ? scale.slice(0, 3 + Math.floor(random() * 6)) : [4, 2, 0, 2, 4, 4, 4];
       this.untilNote = rand(2.5, 7);
       return;
     }
     let step = this.phrase.shift()!;
     // The wrong note, then a stop to start the phrase over.
-    if (Math.random() < 0.12) {
-      step += Math.random() < 0.5 ? 1 : -1;
+    if (random() < 0.12) {
+      step += random() < 0.5 ? 1 : -1;
       this.phrase = [];
     }
     this.untilNote = this.phrase.length ? rand(0.32, 0.5) : rand(2.5, 6);
@@ -222,7 +224,7 @@ export class DoorDog extends Voice {
     const door = this.door;
     if (this.untilBark > 0 || !door) return;
     this.untilBark = rand(25, 80);
-    const barks = Math.random() < 0.6 ? 1 : 2;
+    const barks = random() < 0.6 ? 1 : 2;
     for (let i = 0; i < barks; i++) bark(ctx, door, ctx.currentTime + i * rand(0.28, 0.4));
   }
 }
@@ -235,7 +237,7 @@ export function whileHome(voice: AmbientVoice, on: () => boolean): AmbientVoice 
   return {
     setLevel: (level) => voice.setLevel(on() ? level : 0),
     update: (dt) => voice.update(dt),
-    setSpatial: voice.setSpatial ? (pan, walls) => voice.setSpatial!(pan, walls) : undefined,
+    setSpatial: voice.setSpatial ? (pan, walls, rear) => voice.setSpatial!(pan, walls, rear) : undefined,
     dispose: () => voice.dispose(),
     setZoneActive: voice.setZoneActive ? (active) => voice.setZoneActive!(active) : undefined,
   };
@@ -247,8 +249,8 @@ export function playRelay(level: number, on: boolean): void {
   if (!ctx || level < 0.004) return;
   const now = ctx.currentTime;
   const out = stairOut(ctx, level);
-  burst(ctx, out, now, on ? 2200 : 1700, 5, on ? 0.9 : 0.5, 0.025);
-  burst(ctx, out, now + 0.012, 600, 2, on ? 0.5 : 0.3, 0.05);
+  noiseBurst(ctx, out, now, { ...GRAIN, band: on ? 2200 : 1700, q: 5, level: on ? 0.9 : 0.5, length: 0.025, noise: whiteNoise(ctx, 0.3) });
+  noiseBurst(ctx, out, now + 0.012, { ...GRAIN, band: 600, q: 2, level: on ? 0.5 : 0.3, length: 0.05, noise: whiteNoise(ctx, 0.3) });
 }
 
 /** A neighbour's door on the landing: the latch, and a moment later the leaf meeting its frame. */
@@ -257,8 +259,8 @@ export function playNeighbourDoor(level: number): void {
   if (!ctx || level < 0.004) return;
   const now = ctx.currentTime;
   const out = stairOut(ctx, level);
-  burst(ctx, out, now, 1800, 4, 0.6, 0.04);
-  burst(ctx, out, now + 0.55, 300, 1.2, 1, 0.18);
+  noiseBurst(ctx, out, now, { ...GRAIN, band: 1800, q: 4, level: 0.6, length: 0.04, noise: whiteNoise(ctx, 0.3) });
+  noiseBurst(ctx, out, now + 0.55, { ...GRAIN, band: 300, q: 1.2, level: 1, length: 0.18, noise: whiteNoise(ctx, 0.3) });
   const osc = ctx.createOscillator();
   osc.frequency.setValueAtTime(100, now + 0.55);
   osc.frequency.exponentialRampToValueAtTime(60, now + 0.72);
@@ -269,8 +271,11 @@ export function playNeighbourDoor(level: number): void {
   osc.connect(env).connect(out);
   osc.start(now + 0.55);
   osc.stop(now + 0.8);
-  burst(ctx, out, now + 0.6, 2600, 5, 0.4, 0.03);
+  noiseBurst(ctx, out, now + 0.6, { ...GRAIN, band: 2600, q: 5, level: 0.4, length: 0.03, noise: whiteNoise(ctx, 0.3) });
 }
+
+/** The stairwell's bursts strike from silence in 3 ms and die to 0.0001, cut from the first 0.3 s of the noise, as they always did. */
+const GRAIN = { attack: 0.003, curve: 'exponential', floor: 0.0001, offset: 0 } as const;
 
 /** The stone's echo, one per context: a couple of short delays feeding back through a low-pass, onto the world bus. */
 const echoes = new WeakMap<BaseAudioContext, AudioNode>();
@@ -348,26 +353,6 @@ function bark(ctx: AudioContext, out: AudioNode, at: number): void {
   osc.connect(mouth).connect(env).connect(out);
   osc.start(at);
   osc.stop(at + 0.22);
-  burst(ctx, out, at, 1200, 1, 0.25, 0.12);
+  noiseBurst(ctx, out, at, { ...GRAIN, band: 1200, q: 1, level: 0.25, length: 0.12, noise: whiteNoise(ctx, 0.3) });
 }
 
-/** A band of noise at `at`, decaying over `decay` s. */
-function burst(ctx: AudioContext, out: AudioNode, at: number, band: number, q: number, level: number, decay: number): void {
-  const source = ctx.createBufferSource();
-  source.buffer = whiteNoise(ctx, 0.3);
-  const filter = ctx.createBiquadFilter();
-  filter.type = 'bandpass';
-  filter.frequency.value = band;
-  filter.Q.value = q;
-  const env = ctx.createGain();
-  env.gain.setValueAtTime(0.0001, at);
-  env.gain.exponentialRampToValueAtTime(level, at + 0.003);
-  env.gain.exponentialRampToValueAtTime(0.0001, at + decay);
-  source.connect(filter).connect(env).connect(out);
-  source.start(at);
-  source.stop(at + decay + 0.02);
-}
-
-function rand(min: number, max: number): number {
-  return min + Math.random() * (max - min);
-}

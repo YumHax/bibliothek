@@ -1,4 +1,5 @@
 import { Voice } from './ambient';
+import { noiseBurst, rand, tone } from './synth';
 
 /*
  * The bathroom's water, synthesised like the other ambient voices (`ambient.ts`): a tap running
@@ -97,7 +98,7 @@ export class RunningWater extends Voice {
       this.untilBloop -= dt;
       if (this.untilBloop <= 0) {
         this.untilBloop = rand(0.15, 0.7);
-        bloop(ctx, this.drain, rand(140, 320), 0.35);
+        tone(ctx, this.drain, ctx.currentTime, { frequency: rand(140, 320), toRatio: 1.8, glide: 0.08, level: 0.35, length: 0.12, attack: 0.01, curve: 'exponential', floor: 0.0001, tail: 0.03 });
       }
     }
     if (this.options.drips && !this.running && this.master) {
@@ -146,7 +147,7 @@ export class ToiletFlush extends Voice {
     const t = ctx.currentTime;
 
     // The button.
-    noiseBand(ctx, out, this.burst, { at: t, frequency: 2600, q: 5, peak: 0.4, attack: 0.002, hold: 0, release: 0.03 });
+    noiseBurst(ctx, out, t, { band: 2600, q: 5, level: 0.4, length: 0.002 + 0 + 0.03, attack: 0.002, curve: 'exponential', hold: 0, floor: 0.0001, noise: this.burst, offset: 0, tail: 0.05 });
 
     // The rush: a lowpass sweeping down from a bright gush to a drain's roar.
     const rush = ctx.createBufferSource();
@@ -166,56 +167,12 @@ export class ToiletFlush extends Voice {
     rush.stop(t + 3.5);
 
     // The bowl clearing its throat.
-    for (let i = 0; i < 5; i++) bloopAt(ctx, out, t + 2.3 + i * rand(0.12, 0.25), rand(120, 260), 0.3);
+    for (let i = 0; i < 5; i++) tone(ctx, out, t + 2.3 + i * rand(0.12, 0.25), { frequency: rand(120, 260), toRatio: 1.8, glide: 0.08, level: 0.3, length: 0.12, attack: 0.01, curve: 'exponential', floor: 0.0001, tail: 0.03 });
 
     // The refill: a thin hiss through the valve, then its thunk.
     const end = FLUSH_SECONDS - 0.4;
-    noiseBand(ctx, out, this.burst, { at: t + 2.9, frequency: 3400, q: 1.4, peak: 0.12, attack: 0.5, hold: end - 3.6, release: 0.2 });
-    bloopAt(ctx, out, t + end, 90, 0.25);
+    noiseBurst(ctx, out, t + 2.9, { band: 3400, q: 1.4, level: 0.12, length: 0.5 + end - 3.6 + 0.2, attack: 0.5, curve: 'exponential', hold: end - 3.6, floor: 0.0001, noise: this.burst, offset: 0, tail: 0.05 });
+    tone(ctx, out, t + end, { frequency: 90, toRatio: 1.8, glide: 0.08, level: 0.25, length: 0.12, attack: 0.01, curve: 'exponential', floor: 0.0001, tail: 0.03 });
   }
 }
 
-/** A burst of band-passed noise with an attack, a hold and a release (s). */
-function noiseBand(
-  ctx: AudioContext,
-  out: AudioNode,
-  buffer: AudioBuffer,
-  { at, frequency, q, peak, attack, hold, release }: { at: number; frequency: number; q: number; peak: number; attack: number; hold: number; release: number },
-): void {
-  const source = ctx.createBufferSource();
-  source.buffer = buffer;
-  const band = ctx.createBiquadFilter();
-  band.type = 'bandpass';
-  band.frequency.value = frequency;
-  band.Q.value = q;
-  const gain = ctx.createGain();
-  gain.gain.setValueAtTime(0.0001, at);
-  gain.gain.exponentialRampToValueAtTime(peak, at + attack);
-  gain.gain.setValueAtTime(peak, at + attack + hold);
-  gain.gain.exponentialRampToValueAtTime(0.0001, at + attack + hold + release);
-  source.connect(band).connect(gain).connect(out);
-  source.start(at);
-  source.stop(at + attack + hold + release + 0.05);
-}
-
-/** An air bubble through water: a short sine, its pitch rising. */
-function bloop(ctx: AudioContext, out: AudioNode, pitch: number, level: number): void {
-  bloopAt(ctx, out, ctx.currentTime, pitch, level);
-}
-
-function bloopAt(ctx: AudioContext, out: AudioNode, at: number, pitch: number, level: number): void {
-  const osc = ctx.createOscillator();
-  osc.frequency.setValueAtTime(pitch, at);
-  osc.frequency.exponentialRampToValueAtTime(pitch * 1.8, at + 0.08);
-  const gain = ctx.createGain();
-  gain.gain.setValueAtTime(0.0001, at);
-  gain.gain.exponentialRampToValueAtTime(level, at + 0.01);
-  gain.gain.exponentialRampToValueAtTime(0.0001, at + 0.12);
-  osc.connect(gain).connect(out);
-  osc.start(at);
-  osc.stop(at + 0.15);
-}
-
-function rand(min: number, max: number): number {
-  return min + Math.random() * (max - min);
-}

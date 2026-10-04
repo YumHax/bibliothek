@@ -1,4 +1,5 @@
 import { audioBus, startedAudioContext } from '@/audio/audioContext';
+import { random } from '@/random';
 
 /** How loud the hum is right under the lamp, and the crackle's loudest burst. */
 const HUM = 0.05;
@@ -57,7 +58,7 @@ export class LampBuzz {
     const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
     const data = buffer.getChannelData(0);
     // Sparse clicks rather than a hiss: a discharge crackling.
-    for (let i = 0; i < length; i++) data[i] = Math.random() < 0.02 ? Math.random() * 2 - 1 : (Math.random() * 2 - 1) * 0.05;
+    for (let i = 0; i < length; i++) data[i] = random() < 0.02 ? random() * 2 - 1 : (random() * 2 - 1) * 0.05;
     this.noise = ctx.createBufferSource();
     this.noise.buffer = buffer;
     this.noise.loop = true;

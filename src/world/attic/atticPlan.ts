@@ -1,5 +1,6 @@
 import type { RoomOptions } from '../Room';
-import { STAIRWELL_PLAN, STOREYS, landingY } from '../stairwell/stairwellPlan';
+import { STAIRWELL_PLAN } from '../stairwell/stairwellPlan';
+import { STOREYS, landingY } from '@/world/measures/building';
 
 /*
  * THE ATTIC: the building's sixth floor under the slate mansard (our building's roof, `facadeStyle`

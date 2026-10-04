@@ -61,10 +61,7 @@ export function createInteraction(services: Services, parts: { world: GameWorld;
     scene: engine.scene,
     handsFree: () => player.isLocked && !inspector.current && !player.isSeated,
     // The flat's rooms (not the stairwell): a piece carried through a doorway follows, one put away comes out there.
-    roomHere: () => {
-      const here = zones.current;
-      return inFlat(here.id) && here.id !== 'stairwell' ? here : null;
-    },
+    roomHere: () => (built.activity.atHome ? zones.current : null),
     // Nothing is set down on the cat nor on a friend visiting (the player's own feet the carrier minds itself).
     occupants: () => [
       ...(built.cat.adopted ? [{ at: built.cat.getWorldPosition(new Vector3()), radius: 0.3, height: 0.35, name: services.catSettings.settings.name }] : []),
@@ -79,7 +76,7 @@ export function createInteraction(services: Services, parts: { world: GameWorld;
     camera: engine.camera,
     boxes: () => [...built.shelves.boxes, ...services.showcases.boxes()],
     // Not while frozen (a program's pad in hand standing up, an arcade play): Q is no pad key, but nothing moves then.
-    allowed: () => player.isLocked && player.movementEnabled && !inspector.current && !player.isSeated && !furniture.piece && inFlat(zones.current.id),
+    allowed: () => player.isLocked && player.movementEnabled && !inspector.current && !player.isSeated && !furniture.piece && built.activity.inFlat,
     blocked,
   }));
 

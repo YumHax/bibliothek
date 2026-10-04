@@ -1,4 +1,5 @@
 import { SCREEN_H, SCREEN_W, drawText } from './ArcadeGame';
+import { random } from '@/random';
 
 interface Pop {
   text: string;
@@ -58,7 +59,7 @@ export class Fx {
 
   begin(ctx: CanvasRenderingContext2D): void {
     ctx.save();
-    if (this.shakeTime > 0) ctx.translate((Math.random() - 0.5) * 2 * this.shakeAmount, (Math.random() - 0.5) * 2 * this.shakeAmount);
+    if (this.shakeTime > 0) ctx.translate((random() - 0.5) * 2 * this.shakeAmount, (random() - 0.5) * 2 * this.shakeAmount);
   }
 
   end(ctx: CanvasRenderingContext2D): void {

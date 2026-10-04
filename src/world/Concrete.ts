@@ -1,6 +1,7 @@
 import * as THREE from 'three';
-import { createCanvas, seededRandom, toTexture, canvasTexture, repeatTexture } from '@/covers/generated/canvasUtils';
+import { createCanvas, toTexture, canvasTexture, repeatTexture } from '@/covers/generated/canvasUtils';
 import { paintOnce } from './materials/paintedTiles';
+import { lcg } from '@/random';
 
 /** Metres of floor covered by one tile of the texture: two slabs each way, so the joints tile seamlessly. */
 const TILE_M = 4;
@@ -30,7 +31,7 @@ export function concreteMaterial(floorWidth: number, floorDepth: number): THREE.
 function paintConcrete(): [THREE.Texture, THREE.Texture] {
   const [colorCanvas, color] = createCanvas(TILE_PX, TILE_PX);
   const [bumpCanvas, bump] = createCanvas(TILE_PX, TILE_PX);
-  const random = seededRandom(0x5c0c8e7e);
+  const random = lcg(0x5c0c8e7e);
 
   color.fillStyle = '#8d8a84';
   color.fillRect(0, 0, TILE_PX, TILE_PX);

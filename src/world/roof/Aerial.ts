@@ -9,10 +9,13 @@ import { boxMesh, cylinderMesh, invisibleHitbox } from '../meshUtils';
 import { standard } from '../materials/palette';
 import { Prop } from '../props/Prop';
 import { AERIAL_STEPS, aerialStep, signalAt, turnAerial } from './channels';
+import { damp } from '@/math/damp';
 
 const STEEL = standard({ color: 0x8a8e92, roughness: 0.45, metalness: 0.8 });
 /** Seconds the aerial takes to swing a step round on its rusty bearing. */
 const TURN_S = 0.6;
+/** The needle's tremble, radians a second (a cycle every 0.57 s, as it always was). */
+const WIND_RATE = 1000 / 90;
 
 /**
  * The old TV aerial on its tripod by the hatch: a Yagi on a mast, its cable down into the roof. It
@@ -29,6 +32,8 @@ export class Aerial extends Prop implements Interactable, Updatable {
   private shown = aerialStep();
   private turning = 0;
   private level = signalAt(aerialStep()).strength;
+  /** The needle's tremble, on the prop's own time (seconds ticked), not the wall clock's. */
+  private wind = 0;
 
   constructor(height: number) {
     super();
@@ -103,8 +108,9 @@ export class Aerial extends Prop implements Interactable, Updatable {
       if (this.turning === 0) this.shown = this.step;
     }
     // The needle settles on the signal, trembling a little in the wind.
-    this.level += (signalAt(this.step).strength - this.level) * Math.min(1, dt * 4);
-    this.needle.rotation.z = 1.0 - this.level * 2.0 + Math.sin(performance.now() / 90) * 0.02;
+    this.level = damp(this.level, signalAt(this.step).strength, 4, dt);
+    this.wind += dt;
+    this.needle.rotation.z = 1.0 - this.level * 2.0 + Math.sin(this.wind * WIND_RATE) * 0.02;
   }
 
   private angleOf(step: number): number {

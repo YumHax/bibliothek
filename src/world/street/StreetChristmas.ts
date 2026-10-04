@@ -1,7 +1,6 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import type { Updatable } from '@/core/Engine';
-import { seededRandom } from '@/covers/generated/canvasUtils';
 import type { Furniture } from '../Furniture';
 import type { DayNight } from '../props/DayNight';
 import { instancedBasic } from '../materials/palette';
@@ -10,7 +9,8 @@ import { PARK_FIR } from '../city/park';
 import { TREE_FORM, type PlantedTree } from '../city/trees';
 import { nightnessOf } from './streetAir';
 import { snowCovered } from './snowCover';
-import { FLAT_IN_STREET } from './streetPlan';
+import { FLAT_IN_STREET } from '@/world/measures/street';
+import { lcg } from '@/random';
 
 interface StreetChristmasOptions {
   /** The street trees the bulbs are wound round (not the park's). */
@@ -37,14 +37,14 @@ export class StreetChristmas extends THREE.Group implements Furniture, Updatable
   private readonly bulbs: THREE.InstancedMesh;
   private readonly colors: THREE.Color[] = [];
   private readonly scratch = new THREE.Color();
-  private readonly random = seededRandom(2412);
+  private readonly random = lcg(2412);
   private readonly star: THREE.MeshBasicMaterial;
   private clock = TWINKLE_SECONDS;
 
   constructor(private readonly dayNight: DayNight, options: StreetChristmasOptions) {
     super();
     this.name = 'StreetChristmas';
-    const random = seededRandom(1225);
+    const random = lcg(1225);
     const points: THREE.Vector3[] = [];
     // Round each street tree's crown: on its surface, mostly its upper two thirds.
     for (const { at, scale } of options.trees) {

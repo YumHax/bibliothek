@@ -1,5 +1,6 @@
 import { KEYS, PersistedStore, safeStorage } from '@/persistence';
 import { dayKey } from '@/economy/calendar';
+import { formatClock } from '@/text/clock';
 
 /**
  * What an entry is about. The watchers (`journalWatch`) write the economy's (a game a friend gave is a
@@ -95,18 +96,9 @@ export class Journal {
 
   /** The time on the game clock (else the real one), as HH:MM. */
   private stamp(): string {
-    let h: number;
-    let m: number;
-    if (this.clock) {
-      const hours = ((this.clock.hours() % 24) + 24) % 24;
-      h = Math.floor(hours);
-      m = Math.floor((hours - h) * 60);
-    } else {
-      const at = this.now();
-      h = at.getHours();
-      m = at.getMinutes();
-    }
-    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+    if (this.clock) return formatClock(this.clock.hours());
+    const at = this.now();
+    return formatClock(at.getHours() + at.getMinutes() / 60);
   }
 
   /** Today's page (an empty one when nothing happened yet: not saved until something does). */

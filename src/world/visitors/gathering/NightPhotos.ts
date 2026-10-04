@@ -1,10 +1,11 @@
 import * as THREE from 'three';
 import { FONT } from '@/covers/generated/canvasUtils';
-import { createCanvas, seededRandom, toTexture } from '@/graphics/canvas';
+import { createCanvas, toTexture } from '@/graphics/canvas';
 import { boxMesh } from '../../meshUtils';
 import { paint } from '../../materials/palette';
 import { Prop } from '../../props/Prop';
 import type { NightPhoto } from './GatheringBook';
+import { dayLcg } from '@/time/daily';
 
 /** The string's length, how far it stands off the wall (its two pins), and how far the photos hang below it (m). */
 const STRING = { length: 0.62, off: 0.012, sag: 0.025 };
@@ -63,7 +64,7 @@ export class NightPhotos extends Prop {
       const x = (t - 0.5) * (STRING.length - PHOTO.w);
       // Lower towards the middle, as the cord sags.
       const y = -STRING.sag * (1 - Math.abs(t - 0.5) * 2) - PHOTO.h / 2 - 0.004;
-      const random = seededRandom(photo.day * 977 + 13);
+      const random = dayLcg(photo.day * 977 + 13);
       const material = new THREE.MeshStandardMaterial({ map: paintPhoto(photo, random), roughness: 0.55 });
       const card = new THREE.Mesh(new THREE.PlaneGeometry(PHOTO.w, PHOTO.h), material);
       card.position.set(x, y, STRING.off + 0.002);

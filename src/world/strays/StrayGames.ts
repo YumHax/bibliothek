@@ -1,7 +1,7 @@
 import type { Game } from '@/catalog/types';
 import type { GameSource } from '@/collection/GameSource';
-import { seeded } from '@/economy/seeded';
 import type { GameBox } from '../GameBox';
+import { dayStream } from '@/time/daily';
 
 interface Claim {
   gameId: string;
@@ -52,7 +52,7 @@ export class StrayGames implements GameSource {
     const taken = new Set([...this.claims.values()].map((c) => c.gameId));
     const candidates = this.source.games.filter((g) => eligible(g) && !taken.has(g.id) && (gameId === undefined || g.id === gameId));
     if (!candidates.length) return null;
-    const game = candidates[Math.floor(seeded(`${slot}:${day}`)() * candidates.length)]!;
+    const game = candidates[Math.floor(dayStream(`${slot}:${day}`)() * candidates.length)]!;
     this.claims.set(slot, { gameId: game.id, onLost });
     this.changed();
     return game;

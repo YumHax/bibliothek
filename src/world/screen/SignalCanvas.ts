@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { createCanvas, toTexture } from '@/graphics/canvas';
 import { MONO } from '@/covers/generated/canvasUtils';
+import { random } from '@/random';
 
 /** How a screen says it has no picture: a tuner's `snow` (a CRT) or a projector's blue source `slate`. */
 export type SignalLook = 'snow' | 'slate';
@@ -32,7 +33,7 @@ export class SignalCanvas {
   private since = 0;
   private elapsed = 0;
   /** Where the rolling bar of brighter snow is, 0..1 down the picture. */
-  private roll = Math.random();
+  private roll = random();
 
   constructor(
     private readonly look: SignalLook,
@@ -96,7 +97,7 @@ export class SignalCanvas {
       const row = (lost ? 0.55 : 1) * (0.8 + 0.25 * Math.max(0, 1 - Math.min(d, SNOW_H - d) / 14));
       for (let x = 0; x < SNOW_W; x++) {
         const i = (y * SNOW_W + x) * 4;
-        const v = (Math.random() * 190 + 30) * row;
+        const v = (random() * 190 + 30) * row;
         data[i] = v;
         data[i + 1] = v;
         data[i + 2] = v + 10;

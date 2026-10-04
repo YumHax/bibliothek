@@ -1,13 +1,9 @@
 import { escapeHtml } from './html';
+import { foldAccents } from '@/text/strings';
 
-/** Lower-case, strip diacritics and collapse whitespace so "Pokémon" matches "pokemon". */
+/** Lower-case, accents folded (`text/strings`) and whitespace collapsed, so "Pokémon" matches "pokemon"; punctuation kept, the positions must map back. */
 function normalize(text: string): string {
-  return text
-    .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
-    .toLowerCase()
-    .replace(/\s+/g, ' ')
-    .trim();
+  return foldAccents(text).toLowerCase().replace(/\s+/g, ' ').trim();
 }
 
 interface FuzzyMatch {

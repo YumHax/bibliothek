@@ -1,0 +1,57 @@
+/*
+ * The page itself (`@layer base`): the document, the canvas, the CSS3D layer, the text-size setting, the elements'
+ * defaults (`kbd`) and the one focus ring. Everything reads the tokens (tokens.css); the panels' sheets never
+ * repeat what is here.
+ */
+html, body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: var(--ui-page);
+}
+
+#app { position: fixed; inset: 0; }
+
+/* Author `display` rules would otherwise beat the UA stylesheet for [hidden] (CLAUDE.md gotcha): toggle with `el.hidden`. */
+[hidden] { display: none !important; } /* convention-ok: the one global override, so `hidden` beats every layout's display */
+#app canvas { display: block; position: absolute; inset: 0; z-index: var(--z-canvas); }
+/* CSS3D layer sits behind the canvas; cut-out meshes reveal it. The renderer sets the position inline, hence the override. */
+.css-layer { position: absolute !important; inset: 0; z-index: var(--z-css-layer); pointer-events: none; } /* convention-ok: beats the CSS3DRenderer's inline style */
+.css-layer iframe { pointer-events: none; }
+
+/* Settings > Display > Text size: the HUD and the panels are sized in rem, so the root size scales them all. */
+html.ui-scale-small { font-size: 14px; }
+html.ui-scale-large { font-size: 18.5px; }
+
+/* A key cap, on any background: the panels only size it. */
+kbd {
+  display: inline-block;
+  min-width: 1.2em;
+  padding: 0.1em 0.4em;
+  margin-right: 0.15em;
+  border-radius: var(--ui-radius-xs);
+  border: 1px solid var(--ui-kbd-border);
+  background: var(--ui-kbd-fill);
+  font-family: inherit;
+  font-size: 0.85em;
+  text-align: center;
+}
+
+/*
+ * One focus ring everywhere, on the controls (a panel's root takes focus for its keys with `tabindex="-1"` and shows
+ * nothing): a theme (a shop's leaflet) sets `--focus` for its own ink; a control that draws its own marker (the prize
+ * counter's circled item) sets `outline: none` in its sheet.
+ */
+:is(button, a, input, select, textarea, summary, [role='button'], [tabindex]):not([tabindex='-1']):focus-visible {
+  outline: 2px solid var(--focus, var(--ui-accent));
+  outline-offset: 2px;
+}
+
+/* Screen-reader text (a live region's announcements). */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+}

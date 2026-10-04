@@ -1,7 +1,7 @@
 import type { Game } from '@/catalog/types';
-import { coverAttrs } from './coverPlaceholder';
-import { escapeHtml } from './html';
-import { ModalPanel } from './ModalPanel';
+import { CardPanel, type PanelAction } from './panel/CardPanel';
+import { html, type Html } from './panel/html';
+import { coverImg } from './panel/widgets';
 import './BorrowPanel.css';
 
 /** A friend's request: who asks for what, for how long, and what each answer does. */
@@ -24,37 +24,43 @@ interface BorrowRequest {
  * `ModalLike` the Session opens through `SessionActions.openPanel` (the friend's click); closing it
  * without an answer leaves the question open, so the friend can be clicked again.
  */
-export class BorrowPanel extends ModalPanel {
+export class BorrowPanel extends CardPanel {
   private request: BorrowRequest | null = null;
-  private readonly card: HTMLElement;
 
   constructor(container: HTMLElement) {
-    super(container, { className: 'ui-modal--centre borrow-panel' });
-    this.root.innerHTML = `<article class="borrow-panel__card ui-card" role="dialog" aria-modal="true" aria-label="A friend asks to borrow a game"></article>`;
-    this.card = this.root.querySelector('.borrow-panel__card')!;
-    this.root.addEventListener('click', (e) => {
-      const target = e.target as HTMLElement;
-      if (target === this.root || target.closest('button[data-action="close"]')) this.close();
-      else if (target.closest('button[data-action="lend"]')) this.answer('lend');
-      else if (target.closest('button[data-action="refuse"]')) this.answer('refuse');
-    });
+    super(container, { className: 'borrow-panel', cardClass: 'borrow-panel__card ui-card', title: 'A friend asks to borrow a game', dismiss: 'Think about it' });
   }
 
   /** Deals the question (call before the Session opens the panel). */
   show(request: BorrowRequest): void {
     this.request = request;
+    this.setTitle(`${request.friend} would like to borrow`);
+    if (this.isOpen) this.refresh();
+  }
+
+  protected render(): Html {
+    const request = this.request;
+    if (!request) return html``;
     // A cover that fails is swapped for a made-up box by the shared listener (`installCoverPlaceholders`).
-    const attrs = request.game ? coverAttrs(request.game) : ` data-cover-title="${escapeHtml(request.title)}"`;
-    const cover = request.cover ? `<img class="borrow-panel__cover catalogue__cover" src="${escapeHtml(request.cover)}" alt=""${attrs}>` : '';
-    this.card.innerHTML = `
-      <header><h2>${escapeHtml(request.friend)} would like to borrow</h2></header>
-      <div class="borrow-panel__game">${cover}<div><p class="borrow-panel__title">${escapeHtml(request.title)}</p><p class="borrow-panel__detail">${escapeHtml(request.detail)}</p></div></div>
-      <p class="borrow-panel__terms">Back in ${request.days} days. It stays in your collection meanwhile, but it cannot be sold or swapped while it is out. Friends often bring a little something back with it.</p>
-      <footer>
-        <button type="button" class="ui-btn ui-btn--primary" data-action="lend" data-autofocus>Lend it</button>
-        <button type="button" class="ui-btn" data-action="refuse">Not this one</button>
-        <button type="button" class="ui-btn" data-action="close">Think about it</button>
-      </footer>`;
+    const cover = request.game
+      ? coverImg(request.cover, request.game, 'borrow-panel__cover catalogue__cover')
+      : request.cover
+        ? html`<img class="borrow-panel__cover catalogue__cover" src="${request.cover}" alt="" data-cover-title="${request.title}">`
+        : '';
+    return html`<div class="borrow-panel__game">${cover}<div><p class="borrow-panel__title">${request.title}</p><p class="borrow-panel__detail">${request.detail}</p></div></div>
+      <p class="borrow-panel__terms">Back in ${request.days} days. It stays in your collection meanwhile, but it cannot be sold or swapped while it is out. Friends often bring a little something back with it.</p>`;
+  }
+
+  protected override actions(): PanelAction[] {
+    if (!this.request) return [];
+    return [
+      { action: 'refuse', label: 'Not this one' },
+      { action: 'lend', label: 'Lend it', primary: true, autofocus: true },
+    ];
+  }
+
+  protected override onAction(action: string): void {
+    if (action === 'lend' || action === 'refuse') this.answer(action);
   }
 
   private answer(kind: 'lend' | 'refuse'): void {

@@ -1,5 +1,6 @@
 import type * as THREE from 'three';
 import { QUALITY } from '@/graphics/quality';
+import { random } from '@/random';
 
 /**
  * When a live light's shadow map is redrawn: a lit lamp or sun of the player's room (what moves in
@@ -21,7 +22,7 @@ export class ShadowRefresh {
     hz = QUALITY.shadowRefreshHz,
   ) {
     this.period = hz > 0 ? 1 / hz : 0;
-    this.timer = Math.random() * this.period;
+    this.timer = random() * this.period;
     light.shadow.autoUpdate = false;
   }
 

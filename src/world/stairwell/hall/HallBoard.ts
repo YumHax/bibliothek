@@ -2,11 +2,12 @@ import * as THREE from 'three';
 import type { Interactable } from '@/interaction/Interactable';
 import type { SessionActions } from '@/game/SessionActions';
 import type { Today } from '@/time/Today';
-import { createCanvas, seededRandom, toTexture } from '@/graphics/canvas';
+import { createCanvas, toTexture } from '@/graphics/canvas';
 import { notesOn, onBoardChange, type BoardNote } from '@/building/boardNotes';
 import { Prop, part } from '../../props/Prop';
 import { timber } from '../../materials/palette';
 import { invisibleHitbox } from '../../meshUtils';
+import { dayLcg } from '@/time/daily';
 
 const PX_PER_M = 900;
 const FRAME = 0.03;
@@ -80,7 +81,7 @@ export class HallBoard extends Prop implements Interactable {
     const { canvas, ctx } = this;
     const W = canvas.width;
     const H = canvas.height;
-    const random = seededRandom(this.today.gameDay * 7919 + 13);
+    const random = dayLcg(this.today.gameDay * 7919 + 13);
     ctx.fillStyle = '#b48a5a';
     ctx.fillRect(0, 0, W, H);
     for (let i = 0; i < 2200; i++) {

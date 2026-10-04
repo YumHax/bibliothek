@@ -1,4 +1,6 @@
 import type { Pad, ProgramContext, ScreenProgram } from '@/onscreen/ScreenProgram';
+import { FireEdge } from '@/input/GameInput';
+import { padToControls } from '@/onscreen/ArcadeProgram';
 import { DEMO_H, DEMO_W, MoonpostDemo } from './MoonpostDemo';
 import { MoonpostSound } from './moonpostSound';
 
@@ -16,7 +18,7 @@ export class MoonpostProgram implements ScreenProgram {
   private readonly demo = new MoonpostDemo();
   private sound: MoonpostSound | null = null;
   private told = false;
-  private fireHeld = false;
+  private readonly edge = new FireEdge();
 
   constructor(private readonly onFinished: () => void) {}
 
@@ -30,9 +32,7 @@ export class MoonpostProgram implements ScreenProgram {
 
   update(dt: number, pads: readonly [Pad, Pad]): void {
     const pad = pads[0];
-    const fire = pad.a || pad.b;
-    this.demo.update(dt, { left: pad.left, right: pad.right, up: pad.up, down: pad.down, fire, firePressed: fire && !this.fireHeld, start: pad.start });
-    this.fireHeld = fire;
+    this.demo.update(dt, { ...padToControls(pad, this.edge, false), start: pad.start });
     for (const s of this.demo.takeSounds()) this.sound?.play(s);
     this.sound?.update(this.demo.musicOn, this.demo.thrusting);
     if (this.demo.finished && !this.told) {

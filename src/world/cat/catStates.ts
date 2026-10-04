@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import type { CatMind } from './CatMind';
 import { RUB_SPEED } from './CatMotion';
-import { chance, rand } from './random';
+import { between, chance, random } from '@/random';
 
 export type CatState =
   | 'idle'
@@ -173,7 +173,7 @@ export const CAT_TIMING = {
   idleDemand: 0.08,
 } as const;
 
-const span = (range: readonly [number, number]): number => rand(range[0], range[1]);
+const span = (range: readonly [number, number]): number => between(random, range[0], range[1]);
 
 /**
  * Every state of the cat: set-up, frame, caption and how it takes the player. The compiler keeps
@@ -189,7 +189,7 @@ export const STATES: Record<CatState, StateDef> = {
       mind.faceIfAny();
     },
     tick(mind, dt) {
-      if (mind.hunger > 0.7 && mind.ctx.bowl.level <= 0 && mind.playerDistance < CAT_TIMING.begNear && chance(CAT_TIMING.idleDemand * dt)) mind.ctx.voice?.meow('demand');
+      if (mind.hunger > 0.7 && mind.ctx.bowl.level <= 0 && mind.playerDistance < CAT_TIMING.begNear && chance(random, CAT_TIMING.idleDemand * dt)) mind.ctx.voice?.meow('demand');
       if (mind.timer <= 0) mind.chooseActivity();
     },
     describe: LOOKING_AROUND,
@@ -209,7 +209,7 @@ export const STATES: Record<CatState, StateDef> = {
         const { cat } = mind.ctx;
         const yaw = cat.rotation.y + THREE.MathUtils.randFloatSpread(CAT_TIMING.glanceCone * 2);
         const distance = span(CAT_TIMING.glanceDistance);
-        mind.lookPoint.set(cat.position.x + Math.sin(yaw) * distance, rand(0.1, 1.2), cat.position.z + Math.cos(yaw) * distance);
+        mind.lookPoint.set(cat.position.x + Math.sin(yaw) * distance, between(random, 0.1, 1.2), cat.position.z + Math.cos(yaw) * distance);
         memo.glanceIn = span(CAT_TIMING.glance);
       }
       mind.gazeTarget.copy(mind.lookPoint);
@@ -300,7 +300,7 @@ export const STATES: Record<CatState, StateDef> = {
   sleep: {
     enter(mind) {
       const bed = mind.perch?.kind === 'bed' || mind.spot?.kind === 'bed';
-      mind.ctx.body.setPose(mind.ctx.clock.state.night || bed || chance(0.7) ? 'sleep' : 'loaf');
+      mind.ctx.body.setPose(mind.ctx.clock.state.night || bed || chance(random, 0.7) ? 'sleep' : 'loaf');
       mind.timer = mind.sleepRemaining > 0 ? mind.sleepRemaining : sleepDuration(mind);
       mind.sleepRemaining = 0;
       mind.setPurr(false);
@@ -329,7 +329,7 @@ export const STATES: Record<CatState, StateDef> = {
       mind.ctx.body.setPose('stretch');
       mind.timer = span(CAT_TIMING.stretch);
       mind.sleepRemaining = 0;
-      if (chance(CAT_TIMING.yawnChance)) memo.yawnIn = span(CAT_TIMING.yawnAt);
+      if (chance(random, CAT_TIMING.yawnChance)) memo.yawnIn = span(CAT_TIMING.yawnAt);
     },
     tick(mind, dt, memo) {
       memo.yawnIn -= dt;
@@ -415,7 +415,7 @@ export const STATES: Record<CatState, StateDef> = {
         memo.meowIn -= dt;
       }
       if (memo.meowIn <= 0) {
-        if (memo.meows > 0 && chance(CAT_TIMING.begTrill)) mind.ctx.voice?.meow('trill');
+        if (memo.meows > 0 && chance(random, CAT_TIMING.begTrill)) mind.ctx.voice?.meow('trill');
         else mind.ctx.voice?.meow('demand', Math.min(1, memo.meows / CAT_TIMING.begRamp));
         memo.meows++;
         memo.meowIn = span(mind.playerDistance < CAT_TIMING.begNear ? CAT_TIMING.begMeowNear : CAT_TIMING.begMeowFar);
@@ -489,12 +489,12 @@ export const STATES: Record<CatState, StateDef> = {
         const { facing, tmp } = mind;
         tmp.subVectors(facing, mind.ctx.cat.position).setY(0).normalize();
         const side = THREE.MathUtils.randFloatSpread(1.4);
-        mind.lookPoint.set(facing.x - tmp.z * side, HEAD_HEIGHT + rand(0, 0.6), facing.z + tmp.x * side);
-        memo.glanceIn = chance(0.25) ? rand(0.3, 0.6) : rand(1.2, 3.5);
-        if (chance(0.3)) {
+        mind.lookPoint.set(facing.x - tmp.z * side, HEAD_HEIGHT + between(random, 0, 0.6), facing.z + tmp.x * side);
+        memo.glanceIn = chance(random, 0.25) ? between(random, 0.3, 0.6) : between(random, 1.2, 3.5);
+        if (chance(random, 0.3)) {
           mind.ctx.body.prick();
           // A bird out there: now and then a chirp, or the teeth-chattering it makes at prey it cannot reach.
-          if (chance(CAT_TIMING.windowCall)) mind.ctx.voice?.meow(chance(0.5) ? 'chirp' : 'chatter');
+          if (chance(random, CAT_TIMING.windowCall)) mind.ctx.voice?.meow(chance(random, 0.5) ? 'chirp' : 'chatter');
         }
       }
       mind.gazeTarget.copy(mind.lookPoint);
@@ -538,7 +538,7 @@ export const STATES: Record<CatState, StateDef> = {
     /** Until the next check that the sun patch is still under it. */
     memo: () => ({ checkIn: 3 }),
     enter(mind) {
-      mind.ctx.body.setPose(chance(0.5) ? 'lie' : 'loaf');
+      mind.ctx.body.setPose(chance(random, 0.5) ? 'lie' : 'loaf');
       mind.faceIfAny();
       mind.timer = span(CAT_TIMING.sunbathe);
     },
@@ -673,9 +673,9 @@ export const STATES: Record<CatState, StateDef> = {
       mind.lookPoint.copy(mind.ctx.cat.position);
       mind.lookPoint.x += THREE.MathUtils.randFloatSpread(1.2);
       mind.lookPoint.z += THREE.MathUtils.randFloatSpread(1.2);
-      mind.lookPoint.y = rand(0.3, 0.7);
+      mind.lookPoint.y = between(random, 0.3, 0.7);
       mind.ctx.body.prick();
-      if (chance(0.3)) mind.ctx.voice?.meow('chirp');
+      if (chance(random, 0.3)) mind.ctx.voice?.meow('chirp');
     },
     tick(mind) {
       mind.gazeTarget.copy(mind.lookPoint);
@@ -717,7 +717,7 @@ export const STATES: Record<CatState, StateDef> = {
       mind.ctx.body.flick();
       mind.ctx.body.setPose('crouch');
       // Only a charge gets the hiss; a player merely stepping too close gets a grumble and a flinch.
-      mind.ctx.voice?.meow(mind.startledBy === 'crowd' ? 'grumble' : chance(0.5) ? 'hiss' : 'yowl');
+      mind.ctx.voice?.meow(mind.startledBy === 'crowd' ? 'grumble' : chance(random, 0.5) ? 'hiss' : 'yowl');
       // Read once: any other startle (not set by the player's approach) is a fright.
       mind.startledBy = 'sprint';
       mind.setPurr(false);
@@ -743,7 +743,7 @@ export const STATES: Record<CatState, StateDef> = {
       mind.ctx.body.setPose(memo.resumeRest ? 'lie' : 'sit');
       mind.setPurr(true);
       mind.timer = span(CAT_TIMING.petted);
-      memo.blinkIn = rand(0.8, 1.6);
+      memo.blinkIn = between(random, 0.8, 1.6);
     },
     tick(mind, dt, memo) {
       memo.blinkIn -= dt;
@@ -787,7 +787,7 @@ export const STATES: Record<CatState, StateDef> = {
       mind.ctx.body.setPose('sit');
       mind.setFacing(mind.eye);
       mind.faceIfAny();
-      mind.ctx.voice?.meow(chance(0.5) ? 'trill' : 'greet');
+      mind.ctx.voice?.meow(chance(random, 0.5) ? 'trill' : 'greet');
       mind.timer = span(CAT_TIMING.called);
     },
     tick(mind) {
@@ -821,7 +821,7 @@ export const STATES: Record<CatState, StateDef> = {
       memo.crunchIn -= dt;
       if (memo.crunchIn <= 0) {
         mind.ctx.voice?.noise('crunch', 0.8);
-        memo.crunchIn = rand(0.25, 0.45);
+        memo.crunchIn = between(random, 0.25, 0.45);
       }
       if (mind.timer <= 0) {
         mind.hunger = Math.max(0, mind.hunger - TREAT_FILLS);
@@ -845,14 +845,14 @@ function keepOrSettle(mind: CatMind): void {
     if (pose !== 'lie' && pose !== 'sit' && pose !== 'loaf') body.setPose('lie');
     return;
   }
-  if (pose !== 'sit' && pose !== 'stand') body.setPose(chance(0.6) ? 'sit' : 'stand');
+  if (pose !== 'sit' && pose !== 'stand') body.setPose(chance(random, 0.6) ? 'sit' : 'stand');
 }
 
 function sleepDuration(mind: CatMind): number {
   const drive = mind.sleepDrive();
-  if (drive >= 0.7) return rand(110, 200);
-  if (drive >= 0.4) return rand(50, 90);
-  return rand(20, 40);
+  if (drive >= 0.7) return between(random, 110, 200);
+  if (drive >= 0.4) return between(random, 50, 90);
+  return between(random, 20, 40);
 }
 
 /**
@@ -865,19 +865,19 @@ function nudgeToy(mind: CatMind): void {
   const { tmp, tmp2, goal } = mind;
   toy.getWorldPosition(tmp).setY(0);
   tmp2.subVectors(tmp, cat.position).setY(0);
-  const ahead = tmp2.lengthSq() > 1e-4 ? Math.atan2(tmp2.x, tmp2.z) : Math.random() * Math.PI * 2;
+  const ahead = tmp2.lengthSq() > 1e-4 ? Math.atan2(tmp2.x, tmp2.z) : random() * Math.PI * 2;
   for (let i = 0; i < 8; i++) {
     const angle = ahead + THREE.MathUtils.randFloatSpread(NUDGE_SPREAD * (1 + i * 0.5));
     tmp2.set(Math.sin(angle), 0, Math.cos(angle));
     goal.copy(tmp).addScaledVector(tmp2, 0.8);
     if (nav.isFree(goal) && nav.segmentFree(tmp, goal)) {
-      const speed = rand(1.2, 1.7);
+      const speed = between(random, 1.2, 1.7);
       toy.nudge(tmp2, speed);
       mind.ctx.voice?.noise('ball', speed / 1.7);
       return;
     }
   }
-  tmp2.set(Math.random() - 0.5, 0, Math.random() - 0.5).normalize();
+  tmp2.set(random() - 0.5, 0, random() - 0.5).normalize();
   toy.nudge(tmp2, 0.8);
   mind.ctx.voice?.noise('ball', 0.4);
 }

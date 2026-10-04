@@ -4,10 +4,10 @@ import type { Interactable } from '@/interaction/Interactable';
 import type { SessionActions } from '@/game/SessionActions';
 import type { Furniture } from '@/world/Furniture';
 import { boxMesh, invisibleHitbox } from '@/world/meshUtils';
-import { seededRandom } from '@/covers/generated/canvasUtils';
 import { paint } from '@/world/materials/palette';
 import type { FoodBowlLike } from './types';
 import { playKibblePour } from '@/audio/catNoises';
+import { lcg } from '@/random';
 
 /**
  * The cat's food bowl: a shallow glazed ceramic dish on a rubber mat with a heap of kibble in it.
@@ -194,7 +194,7 @@ export class FoodBowl extends THREE.Group implements Furniture, Interactable, Up
 
   /** Resting places under a dome profile (higher at the centre), with a random tumble each. */
   private buildHeap(): void {
-    const random = seededRandom(this.options.seed * 4241 + 11);
+    const random = lcg(this.options.seed * 4241 + 11);
     const floorY = BOWL_FLOOR + KIBBLE_RADIUS;
     const spread = BOWL_INNER_RADIUS - KIBBLE_RADIUS * 1.5;
     for (let i = 0; i < KIBBLE_COUNT; i++) {

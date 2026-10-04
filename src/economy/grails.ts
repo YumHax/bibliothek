@@ -1,7 +1,7 @@
 import type { Game, PlatformId } from '@/catalog/types';
 import { gameIdFor } from '@/catalog/nointro';
 import { GRAIL } from './pricing';
-import { seeded } from './seeded';
+import { frozenRng, shuffled } from '@/random';
 
 /**
  * A grail: a game so rare it never turns up in an ordinary crate. Each one comes to the flea market
@@ -72,7 +72,7 @@ export function grailOn(day: number): Grail | null {
   if (k < 0 || k % GRAIL.every >= GRAIL.stays) return null;
   const turn = Math.floor(k / GRAIL.every);
   const round = Math.floor(turn / GRAILS.length);
-  return shuffled(round)[turn % GRAILS.length]!;
+  return roundOrder(round)[turn % GRAILS.length]!;
 }
 
 /** The next grail from `day` on (today included) within `within` days, and in how many days it comes. */
@@ -84,12 +84,7 @@ export function upcomingGrail(day: number, within: number = GRAIL.rumourDays): {
   return null;
 }
 
-function shuffled(round: number): Grail[] {
-  const rng = seeded(`grails:${round}`);
-  const list = [...GRAILS];
-  for (let i = list.length - 1; i > 0; i--) {
-    const j = Math.floor(rng() * (i + 1));
-    [list[i], list[j]] = [list[j]!, list[i]!];
-  }
-  return list;
+/** The grails' order in `round`: the same shuffle every time (`frozenRng`), a round apart from the last. */
+function roundOrder(round: number): Grail[] {
+  return shuffled(frozenRng(`grails:${round}`), GRAILS);
 }

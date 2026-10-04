@@ -2,8 +2,8 @@ import * as THREE from 'three';
 import { cylinderMesh } from '../../meshUtils';
 import { Prop, part } from '../../props/Prop';
 import { paint } from '../../materials/palette';
-import { seededRandom } from '@/graphics/canvas';
-import { LeafBatch, LEAF_GREENS, addBunch, headGeometry, pick } from './greenery';
+import { LeafBatch, LEAF_GREENS, addBunch, headGeometry } from './greenery';
+import { lcg, pick } from '@/random';
 
 export interface BouquetStandOptions {
   /** Length of the stand. Default 1.2. */
@@ -37,7 +37,7 @@ export class BouquetStand extends Prop {
     super();
     this.name = 'BouquetStand';
     const W = options.width ?? 1.2;
-    const random = seededRandom(options.seed ?? 44);
+    const random = lcg(options.seed ?? 44);
     const wood = paint(0xeeeae0, 0.55);
     const leaves = new LeafBatch();
     const head = headGeometry();
