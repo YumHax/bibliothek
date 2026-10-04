@@ -1,7 +1,11 @@
+import type * as THREE from 'three';
 import type { ModalLike } from '@/game/SessionParts';
 import type { SessionActions } from '@/game/SessionActions';
 import type { Reaction } from './conversation';
 import type { InteractionGroup, PersonId, SocialPlace } from './types';
+
+/** The point over someone's head their words come from (their `SpeechBubble`): what the panel sits beside and frames. */
+export type SocialAnchor = THREE.Object3D;
 
 /*
  * What a conversation is made of (docs/social.md "Talking"): who, where, the body that answers in the room, and
@@ -9,10 +13,16 @@ import type { InteractionGroup, PersonId, SocialPlace } from './types';
  * a `TalkSession` when someone is clicked; `ui/social/ConversationPanel` runs it.
  */
 
-/** The person in the room: their lines over their head, their body taking what was said. */
+/**
+ * The person as the conversation reaches them: in the room (a body that `react`s: their lines over their head, the
+ * panel showing neither their face nor their words), or only a voice (through a door, over a counter: no `react`,
+ * so the panel shows their face and says their lines itself).
+ */
 export interface SocialBody {
   speak(line: string): void;
   react?(reaction: Reaction): void;
+  /** Where their words come from (a body in the room): the panel turns the view to them, sits beside them, shows the hearts by their face. */
+  anchor?: SocialAnchor;
 }
 
 /** What one extra entry of the panel does when chosen: a line they say, and whether the conversation ends with it. */
@@ -25,9 +35,12 @@ export interface ExtraResult {
 export interface TalkExtra {
   id: string;
   group: InteractionGroup;
+  /** Phrased as the player's words ("Any news?", ending ?, ! or …) it is said; else it is something done ("Take the parcel"). */
   label: string;
-  /** Why it is not open now (shown greyed), or null. Asked each time the panel paints. */
+  /** Why it is not open now, or null: the panel leaves it out until it is. Asked each time the panel paints. */
   disabled?: () => string | null;
+  /** A word on the row's right for something of the moment ("news"): words, never a symbol. */
+  tag?: string;
   /** It opens a panel of its own (the swap, the haggle, a sub-shop): the conversation closes first, then `run`. */
   opensPanel?: boolean;
   run(): ExtraResult | void;

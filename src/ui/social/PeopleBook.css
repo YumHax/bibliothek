@@ -1,8 +1,9 @@
 /*
  * The People book: an address book held up over the view (`.ui-modal--centre`). A leather cover with coloured index
- * tabs down its spine, a cream page inside: on the list, a portrait card per person; on a person's page, a Polaroid
- * with tape, their tier, the gauges and the card's facts on the left, and the notes on the right (their ways, what you
- * know, gifts, what the relationship does as ink stamps, what they remember as a diary, whom they know as a web).
+ * tabs down its spine, a cream page inside: on the list, a portrait card per person (their tier in a word, the
+ * relationship bar, their day); on a person's page, a Polaroid with tape, their tier, the bar and the card's lines on
+ * the left, and the notes on the right (what you know, what is between you as ink stamps, what they remember as a
+ * diary, whom they know as a web).
  */
 @layer tokens, base, components, panels;
 @layer panels {
@@ -169,7 +170,8 @@
     --tier: var(--page-dim);
     display: grid;
     grid-template-columns: auto minmax(0, 1fr);
-    grid-template-rows: auto auto;
+    grid-template-rows: auto auto auto;
+    align-content: center;
     column-gap: var(--sp-3);
     row-gap: 0.3rem;
     width: 100%;
@@ -190,8 +192,11 @@
     translate: 0 -2px;
     box-shadow: 0 6px 14px var(--shade-25);
   }
+  .people-book__tile--unmet {
+    opacity: 0.75;
+  }
   .people-book__face {
-    grid-row: span 2;
+    grid-row: span 3;
     padding: 2px;
     border-radius: 50%;
     background: var(--tier);
@@ -215,49 +220,56 @@
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-  .people-book__line {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 0.4rem;
-    margin-top: 0.25rem;
-  }
-  .people-book__flag {
-    display: inline-grid;
-    place-items: center;
-    color: var(--page-dim);
-  }
-  .people-book__flag--cake {
-    color: var(--ink-gold);
-  }
-  .people-book__gauges {
+  /* How you stand: the tier in a word, the bar beside it (the same bar as the conversation's). */
+  .people-book__standing {
     display: grid;
-    gap: 0.1rem;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    column-gap: var(--sp-2);
   }
-  .people-book__blank,
-  .people-book__hint {
+  .people-book__level {
+    color: color-mix(in srgb, var(--tier) 70%, var(--page-ink));
+    font-size: var(--fs-1);
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+  .people-book__level--big {
+    margin: 0;
+    font-size: var(--fs-4);
+    text-align: center;
+  }
+  .people-book__today {
+    display: flex;
+    align-items: center;
+    min-width: 0;
+    overflow: hidden;
+  }
+  .people-book__cake {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3em;
+    color: var(--ink-gold);
+    font-size: var(--fs-2);
+  }
+  .people-book__blank {
     margin: var(--sp-3) 0 0;
     color: var(--page-dim);
     font-family: var(--ui-font-hand);
     font-size: var(--fs-4);
   }
 
-  /* On the page, the shared pills and gauges take the ink. */
-  .people-book .social-tier {
-    color: color-mix(in srgb, var(--tier) 70%, var(--page-ink));
-    background: color-mix(in srgb, var(--tier) 16%, transparent);
-  }
+  /* On the page, the shared mood and bar take the ink and the paper. */
   .people-book .social-mood {
     --mood: var(--page-dim);
   }
   .people-book .social-mood--good { --mood: var(--ink-gold); }
   .people-book .social-mood--annoyed { --mood: var(--ink-red); }
-  .people-book .social-gauge--trust i {
-    background: var(--page-wash);
+  .people-book .social-meter {
+    --meter-track: var(--page-wash);
+    --meter-notch: var(--page-rule);
     box-shadow: inset 0 0 0 1px var(--page-rule);
-  }
-  .people-book .social-gauge__tick {
-    background: var(--page-rule);
   }
 
   /* --- a person's page --------------------------------------------------------------------------------------- */
@@ -303,27 +315,6 @@
     border: 1px solid var(--tint-75);
     box-shadow: 0 1px 2px var(--shade-10);
   }
-  .people-book__ribbon {
-    margin: 0;
-    text-align: center;
-  }
-  .people-book__ribbon .social-tier {
-    font-size: var(--fs-4);
-    padding: 0.2rem 0.85rem;
-  }
-  .people-book__meters {
-    display: grid;
-    grid-template-columns: auto 1fr;
-    align-items: center;
-    column-gap: var(--sp-2);
-    color: var(--page-dim);
-    font-size: var(--fs-2);
-  }
-  .people-book__meters > span:not(.social-gauge) {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.3em;
-  }
   .people-book__bond {
     margin: -0.3rem 0 0;
     color: var(--page-dim);
@@ -331,13 +322,10 @@
     font-style: italic;
     text-align: center;
   }
-  .people-book__bond em {
-    color: var(--ink-gold);
-  }
   .people-book__card {
     display: grid;
-    grid-template-columns: 1.3rem 1fr;
-    gap: 0.35rem 0.4rem;
+    grid-template-columns: auto 1fr;
+    gap: 0.35rem 0.6rem;
     margin: 0;
     padding: var(--sp-2) var(--sp-3);
     border: 1px dashed var(--page-rule);
@@ -346,6 +334,8 @@
   }
   .people-book__card dt {
     color: var(--page-dim);
+    font-variant: small-caps;
+    letter-spacing: 0.04em;
   }
   .people-book__card dd {
     margin: 0;
@@ -416,7 +406,11 @@
     color: var(--page-dim);
     font-family: var(--ui-font-hand);
   }
+  /* A fact still to find out: a blank line after its "?". */
   .people-book__facts .people-book__unknown {
+    width: 60%;
+    min-height: 1.2em;
+    border-bottom: 1px dashed var(--page-rule);
     list-style: '? ';
   }
   .people-book__gifts {
@@ -435,13 +429,16 @@
     color: color-mix(in srgb, var(--tab-friends) 75%, var(--page-ink));
     font-size: var(--fs-3);
   }
-  .people-book__gift--no {
+  .people-book__gift--dislikes {
+    background: color-mix(in srgb, var(--ink-red) 12%, transparent);
+    color: var(--ink-red);
+  }
+  .people-book__gift--fine {
     background: var(--page-wash);
     color: var(--page-dim);
-    text-decoration: line-through;
   }
 
-  /* What it does: ink stamps. Earned, solid; next up, dashed and faint; the bad ones, red. */
+  /* Between you: ink stamps of what is in force now. Earned, in the tier's ink; bad blood, red. */
   .people-book__stamps {
     list-style: none;
     margin: 0;
@@ -462,28 +459,12 @@
     font-size: var(--fs-3);
     line-height: 1.3;
   }
-  .people-book__stamp small {
-    font-size: var(--fs-0);
-    font-weight: 700;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-  }
   .people-book__stamp--on {
     background: color-mix(in srgb, var(--stamp) 10%, transparent);
     rotate: -0.6deg;
   }
-  .people-book__stamp--next {
-    border-style: dashed;
-    border-color: var(--page-rule);
-    color: var(--page-dim);
-  }
-  .people-book__stamp--bad,
-  .people-book__stamp--risk {
+  .people-book__stamp--bad {
     --stamp: var(--ink-red);
-  }
-  .people-book__stamp--risk {
-    border-style: dashed;
-    opacity: 0.75;
   }
 
   /* They remember: a diary, a day a line. */

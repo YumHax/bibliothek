@@ -1,11 +1,11 @@
 import { findPerson, shortName } from './people';
 import { isBirthday, moodOf } from './mood';
-import { giftName, giftWarmth, type GameGift } from './gifts';
+import { giftName, giftWarmth, tasteFact, type GameGift } from './gifts';
 import { INTERACTIONS, MOODS, ODDS, TRAITS, BATTERY } from './socialPlan';
-import { BIRTHDAY_LINES, COLD_LINES, HELLO_LINES, HOSTILE_LINES, SOCIAL_LINES, TIRED_LINES } from './socialLines';
+import { BIRTHDAY_LINES, COLD_LINES, FAREWELL_LINES, HELD_LINES, HELLO_LINES, HOSTILE_LINES, PLAYER_LINES, REPEAT_LINES, SOCIAL_LINES, TIRED_LINES } from './socialLines';
 import { countedToday, drawBattery, talkWarmth, giveNumber, learn, learnTrait, meet, nudge, standing } from './standing';
-import { atLeast, tierOf, tierRank } from './tiers';
-import type { GiftKind, InteractionId, PersonFact, PersonId, SocialChange, SocialPlace, Trait } from './types';
+import { atLeast, tierOf, tierRank, warmthTier } from './tiers';
+import type { GiftKind, InteractionId, PersonFact, PersonId, SocialChange, SocialPlace, TierId, Trait } from './types';
 import { random } from '@/random';
 
 /*
@@ -25,24 +25,27 @@ export interface TalkContext {
   rand?: () => number;
 }
 
-/** How their body takes what was said (`world/people` acts it: a laugh, a nod, a shrug, arms folded). */
-export type Reaction = 'pleased' | 'laugh' | 'thanks' | 'nod' | 'shrug' | 'annoyed' | 'hurt';
+/**
+ * How their body takes what was said (`world/people` acts it: a laugh, a nod, a shrug, arms folded), and how it says
+ * the rest without words: `restless` (a look at the watch: their talk is running out), `bye` (a wave).
+ */
+export type Reaction = 'pleased' | 'laugh' | 'thanks' | 'nod' | 'shrug' | 'annoyed' | 'hurt' | 'restless' | 'bye';
 
 /** An interaction as the panel offers it. */
 export interface OptionView {
   id: InteractionId;
   label: string;
   group: (typeof INTERACTIONS)[InteractionId]['group'];
-  /** The odds it lands, 0..1. */
+  /** The odds it lands, 0..1 (the rules' and the checks'; the panel never shows them). */
   odds: number;
-  /** Whether the player knows them well enough to read the odds (▲▲ ▲ ? ▼); else "?". */
-  oddsKnown: boolean;
   /** Why it is not open now, or null. */
   disabled: string | null;
+  /** The tier it opens at, while they are short of it (the panel leaves it out until then); else null. */
+  needs: TierId | null;
 }
 
 /** What trying an interaction did. */
-export interface Outcome {
+interface Outcome {
   ok: boolean;
   /** What they say back. */
   line: string;
@@ -59,17 +62,31 @@ export interface Outcome {
   tired?: boolean;
 }
 
+/** How a landed (`win`) or missed (`lose`) interaction is told in a tier's banner or card ("Laughed at the joke."). */
+const WHY: Record<Exclude<InteractionId, 'giveGift' | 'giveGame'>, { win: string; lose: string }> = {
+  chat: { win: 'enjoyed the chat', lose: 'wasn’t in the mood to chat' },
+  askDay: { win: 'liked being asked', lose: 'didn’t want to talk about it' },
+  talkGames: { win: 'loved talking games', lose: 'isn’t one for games talk' },
+  compliment: { win: 'liked the compliment', lose: 'didn’t buy the compliment' },
+  joke: { win: 'laughed at the joke', lose: 'didn’t find it funny' },
+  gossip: { win: 'enjoyed the gossip', lose: 'didn’t like the gossip' },
+  complain: { win: 'agreed about the building', lose: 'didn’t like the moaning' },
+  apologise: { win: 'accepted the apology', lose: 'isn’t ready to forgive' },
+  askNumber: { win: 'gave you their number', lose: 'kept their number to themselves' },
+  askFavour: { win: 'was glad to help', lose: 'didn’t like being asked' },
+  askTip: { win: 'let you in on something', lose: 'didn’t like being asked' },
+  askDiscount: { win: 'knocked a bit off', lose: 'didn’t like the haggling' },
+  tease: { win: 'took the teasing well', lose: 'didn’t like the teasing' },
+  insult: { win: 'took offence', lose: 'took offence' },
+  challenge: { win: 'loved the challenge', lose: 'didn’t want a challenge' },
+  giveCoins: { win: 'took the coins', lose: 'was offended by the coins' },
+};
+
 /** What goes with an interaction: the gift, the game, whom it is about. */
 export interface InteractionExtra {
   gift?: GiftKind;
   game?: GameGift;
   about?: PersonId;
-}
-
-/** Whether `id` knows the player well enough for the odds to show: a trait found out, or acquaintance reached. */
-function readable(id: PersonId): boolean {
-  const s = standing(id);
-  return s.traitsKnown.length > 0 || atLeast(tierOf(s.warmth, s.trust), 'acquaintance');
 }
 
 /** The odds `interaction` lands with `id` now, and the trait that bent them most (found out when it shows). */
@@ -97,19 +114,23 @@ function oddsOf(id: PersonId, interaction: InteractionId, ctx: TalkContext): { o
   return { odds: rule.odds >= 1 ? 1 : Math.max(lo, Math.min(hi, odds)), bentBy };
 }
 
+/** Whether talk's daily warmth cap (`GAIN.talkPerDay`) applies to `interaction`: the Talk and Mean groups, not an apology. */
+function talkCapped(interaction: InteractionId): boolean {
+  const group = INTERACTIONS[interaction].group;
+  return (group === 'talk' || group === 'mean') && interaction !== 'apologise';
+}
+
 /** The interactions open with `id` here and now, in the panel's order. */
 export function optionsFor(id: PersonId, ctx: TalkContext): OptionView[] {
   const s = standing(id);
   const tier = tierOf(s.warmth, s.trust);
-  const known = readable(id);
   const out: OptionView[] = [];
   for (const [key, rule] of Object.entries(INTERACTIONS) as [InteractionId, (typeof INTERACTIONS)[InteractionId]][]) {
     if (rule.notAt?.includes(ctx.place)) continue;
     if (rule.below && atLeast(tier, rule.below)) continue;
     if (key === 'askNumber' && (s.number || !findPerson(id)?.phone)) continue;
-    let disabled: string | null = null;
-    if (rule.from && !atLeast(tier, rule.from)) disabled = `Not close enough yet (${rule.from})`;
-    out.push({ id: key, label: rule.label, group: rule.group, odds: oddsOf(id, key, ctx).odds, oddsKnown: known, disabled });
+    const needs = rule.from && !atLeast(tier, rule.from) ? rule.from : null;
+    out.push({ id: key, label: rule.label, group: rule.group, odds: oddsOf(id, key, ctx).odds, disabled: needs ? `Not close enough yet (${needs})` : null, needs });
   }
   return out;
 }
@@ -126,6 +147,11 @@ function fill(line: string, id: PersonId, extra: InteractionExtra): string {
     .replaceAll('{game}', extra.game?.title ?? 'that');
 }
 
+/** What the player says choosing `interaction` with `id` (`PLAYER_LINES`, its placeholders filled): the panel shows it as theirs. */
+export function playerLine(id: PersonId, interaction: InteractionId, extra: InteractionExtra = {}, r: number = random()): string {
+  return fill(pick(PLAYER_LINES[interaction], r), id, extra);
+}
+
 /** The first word on opening the conversation: an introduction the first time, their hello, a cold word. */
 export function opening(id: PersonId, ctx: TalkContext): { line: string; introduced: boolean } {
   const card = findPerson(id);
@@ -138,7 +164,21 @@ export function opening(id: PersonId, ctx: TalkContext): { line: string; introdu
     nudge(id, { reason: 'birthdaySaid', day: ctx.day });
     return { line: pick(BIRTHDAY_LINES, r), introduced: false };
   }
+  // Trust is what holds them back: once a day they say what they would like, the only hint of how to get closer.
+  const s = standing(id);
+  if (warmthTier(s.warmth) !== tier && !countedToday(id, 'heldSaid', ctx.day)) {
+    nudge(id, { reason: 'heldSaid', day: ctx.day });
+    return { line: pick(HELD_LINES, r), introduced: false };
+  }
   return { line: pick(card?.lines?.hello ?? HELLO_LINES, r), introduced: false };
+}
+
+/** Their goodbye when the player leaves, by how warm they are. */
+export function farewell(id: PersonId, r: number = random()): string {
+  const s = standing(id);
+  const rank = tierRank(tierOf(s.warmth, s.trust));
+  const band = rank >= tierRank('friendly') ? 'warm' : rank >= tierRank('stranger') ? 'even' : rank >= tierRank('cold') ? 'cold' : 'hostile';
+  return pick(FAREWELL_LINES[band], r);
 }
 
 /** The reaction a landed or missed interaction gets. */
@@ -180,7 +220,7 @@ export function perform(id: PersonId, interaction: InteractionId, ctx: TalkConte
   let trustMove = ok ? (rule.win.trust ?? 0) : (rule.lose.trust ?? 0);
   // Their traits bend how much it moves them too.
   if (ok) for (const t of card?.traits ?? []) warmth = Math.round(warmth * (TRAITS[t].bends[interaction]?.warmth ?? 1));
-  let why: string = ok ? `liked the ${rule.label.toLowerCase()}` : `didn’t like the ${rule.label.toLowerCase()}`;
+  let why: string = interaction === 'giveGift' || interaction === 'giveGame' ? '' : WHY[interaction][ok ? 'win' : 'lose'];
   let line: string;
 
   if (interaction === 'giveGift' || interaction === 'giveGame') {
@@ -193,22 +233,33 @@ export function perform(id: PersonId, interaction: InteractionId, ctx: TalkConte
     nudge(id, { reason: second ? 'gift2' : 'gift', day: ctx.day });
     why = ok ? `loved ${kind === 'game' ? (extra.game?.title ?? 'the game') : giftName(kind)}` : `didn’t want ${giftName(kind)}`;
     if (!ok) trustMove = 0;
+    // How they take this kind of gift is known from now on (the People book lists the tastes found out, one by one).
+    if (kind !== 'game') learn(id, tasteFact(kind));
   }
   if (interaction === 'giveCoins' && ok && card?.traits.includes('businesslike')) why = 'appreciated the coins';
   const lines = card?.lines?.[interaction];
-  line = fill(pick(ok && lines?.length ? lines : SOCIAL_LINES[interaction][ok ? 'win' : 'lose'], rand()), id, extra);
+  // One draw for the line, whichever it ends up being (the draws that follow stay as they were).
+  const lineDraw = rand();
+  line = fill(pick(ok && lines?.length ? lines : SOCIAL_LINES[interaction][ok ? 'win' : 'lose'], lineDraw), id, extra);
 
   // A daily interaction that landed counts once a day; a miss always counts.
   const daily = rule.daily && ok && countedToday(id, `talk:${interaction}`, ctx.day);
   const tired = drawBattery(id, ctx.day, rule.battery);
+  // Said again today, it moves nothing: they say so, unimpressed, rather than a label saying it.
+  let reaction: Reaction | null = null;
+  if (daily && !tired) {
+    line = pick(REPEAT_LINES, lineDraw);
+    reaction = 'shrug';
+  }
   if (tired) {
     warmth = Math.min(warmth, 0) + BATTERY.over;
     line = pick(TIRED_LINES, rand());
     why = 'had talked enough for one day';
     ok = false;
+    reaction = 'restless';
   }
   // Talk warms a person `GAIN.talkPerDay` a day at most (an apology mends past it); gifts and deeds are not capped.
-  if (!daily && !tired && (rule.group === 'talk' || rule.group === 'mean') && interaction !== 'apologise') warmth = talkWarmth(id, ctx.day, warmth);
+  if (!daily && !tired && talkCapped(interaction)) warmth = talkWarmth(id, ctx.day, warmth);
   const memory = interaction === 'insult' ? 'you insulted me' : interaction === 'giveGame' && ok ? `you gave me ${extra.game?.title ?? 'a game'}` : interaction === 'apologise' && ok ? 'you apologised' : undefined;
   const change = daily && !tired
     ? null
@@ -219,7 +270,7 @@ export function perform(id: PersonId, interaction: InteractionId, ctx: TalkConte
     nudge(extra.about, { warmth: -3, why: `heard you talked about them to ${shortName(id)}`, day: ctx.day });
   }
 
-  const outcome: Outcome = { ok, line, reaction: reactionOf(interaction, ok, warmth), change, tired };
+  const outcome: Outcome = { ok, line, reaction: reaction ?? reactionOf(interaction, ok, warmth), change, tired };
   if (ok && !tired) {
     if (interaction === 'askNumber') {
       giveNumber(id);

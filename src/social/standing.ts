@@ -181,12 +181,16 @@ function warmthGain(warmth: number): number {
   return Math.max(GAIN.floor, Math.pow(Math.max(0, 1 - Math.max(0, warmth) / GAIN.span), GAIN.power));
 }
 
+/** A change as it lands on `s`: gains slowed as they grow (`GAIN`), losses whole. */
+function slowed(s: Readonly<PersonState>, dw: number, dt: number): [number, number] {
+  return [dw > 0 ? dw * warmthGain(s.warmth) : dw, dt > 0 ? dt * Math.max(GAIN.trustFloor, 1 - s.trust / GAIN.trustSpan) : dt];
+}
+
 function apply(id: PersonId, s: PersonState, dw: number, dt: number, day: number, why?: string, raw = false): SocialChange {
   const before = s.told;
   const w0 = s.warmth;
   const t0 = s.trust;
-  if (!raw && dw > 0) dw *= warmthGain(s.warmth);
-  if (!raw && dt > 0) dt *= Math.max(GAIN.trustFloor, 1 - s.trust / GAIN.trustSpan);
+  if (!raw) [dw, dt] = slowed(s, dw, dt);
   s.warmth = roundInto(s.warmth + dw, WARMTH.min, WARMTH.max);
   s.trust = roundInto(s.trust + dt, TRUST.min, TRUST.max);
   s.lastSeen = Math.max(s.lastSeen, day);
@@ -298,6 +302,11 @@ function batteryOf(id: PersonId, day: number): { size: number; left: number } {
   const size = Math.max(2, Math.round(BATTERY.perDay * factor));
   const s = standing(id);
   return { size, left: s.battery.day === day ? Math.max(0, size - s.battery.used) : size };
+}
+
+/** How much talk `id` has left in them on `day`, read only (the conversation shows them restless, then wanting to go). */
+export function talkLeft(id: PersonId, day: number): number {
+  return batteryOf(id, day).left;
 }
 
 /** Draws `cost` from `id`'s battery on `day`; returns whether it was past empty (the talk then costs warmth). */

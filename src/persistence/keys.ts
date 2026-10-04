@@ -146,6 +146,8 @@ export const KEYS = {
   buildingPerks: save('buildingPerks.v1'),
   /** The People book's weekly digest in the journal: the warmth of everyone a week ago, the day it was taken (`social/socialJournal`). */
   socialDigest: save('socialDigest.v1'),
+  /** What each person has offered the player in a conversation (a new entry is marked once), the first conversation's tip shown (`social/noticed`). */
+  socialNoticed: save('socialNoticed.v1'),
   /** What a stallholder lent the player on credit, and when it is due (`social/market`). */
   marketCredit: save('marketCredit.v1'),
   /** The friends' side of the social layer: games borrowed from them, Inès' postcards, a word put in (`social/friendsLife`). */

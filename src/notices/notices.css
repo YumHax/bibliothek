@@ -70,6 +70,10 @@
     color: var(--ui-gold-deep);
     text-transform: uppercase;
   }
+  /* In a conversation the panel names them: the bubble over their head says only the words (a subtitle keeps its name). */
+  .conversing .speech:not(.speech--subtitle) .speech__name {
+    display: none;
+  }
   /* A word in passing: small, comic, no name. */
   .speech--passing {
     padding: 0.3rem 0.7rem;
@@ -356,6 +360,10 @@
     width: min(34rem, 90vw);
     display: flex;
     justify-content: center;
+  }
+  /* In a conversation the answer is over their head, in the middle: a banner comes in higher, clear of it. */
+  .conversing .reward-stage {
+    top: max(2.5vh, calc(var(--touch-bar-bottom, 0px) + 0.75rem));
   }
   .reward {
     /* The banner's dark gold ground and its chips' tint. */

@@ -56,7 +56,7 @@ export function clerkTalk(options: ClerkTalkOptions, session: SessionActions): T
   return {
     person: id,
     place: 'shop',
-    body: { speak: (line) => clerk.speak(line, speakerOf(id)), react: (reaction) => actReaction(clerk, reaction) },
+    body: { speak: (line) => clerk.speak(line, speakerOf(id)), react: (reaction) => actReaction(clerk, reaction), anchor: clerk.speechAnchor },
     extras: extrasOf(id, options, session),
   };
 }

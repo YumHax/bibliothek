@@ -2,7 +2,7 @@ import { KEYS, PersistedStore } from '@/persistence';
 import { findPerson, shortName } from './people';
 import { DIGEST } from './socialPlan';
 import { allStandings, onSocial } from './standing';
-import { tierInfo, tierOf, tierRank } from './tiers';
+import { tierChangeLine, tierInfo, tierOf, tierRank } from './tiers';
 import type { PersonId } from './types';
 
 /*
@@ -44,9 +44,8 @@ export function watchSocialJournal(journal: JournalLike, today: { readonly gameD
       return;
     }
     if (change.before === change.after || change.why === 'debug') return;
-    const after = tierInfo(change.after);
-    const up = tierRank(change.after) > tierRank(change.before);
-    journal.note('social', up ? `${shortName(change.id)}: now ${after.glyph} ${after.name}.` : `${shortName(change.id)} cooled: ${after.glyph} ${after.name}${change.heard ? ' (word got round)' : ''}.`);
+    const down = tierRank(change.after) < tierRank(change.before);
+    journal.note('social', `${tierChangeLine(shortName(change.id), change.before, change.after)}${down && change.heard ? ': word got round' : ''}.`);
   });
   const weekly = (day: number): void => {
     if (day - digest.day < DIGEST.everyDays) return;

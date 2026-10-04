@@ -149,7 +149,7 @@ export class Busker extends THREE.Group implements Furniture, Updatable, Interac
 
   label(): string | null {
     if (!this.present) return null;
-    if (this.options.social) return socialCaption(ME, 'talk');
+    if (this.options.social) return socialCaption(ME, 'talk', { day: this.options.social.day(), hour: this.options.social.hour() });
     if (pocket.count('croissant') > 0 || pocket.count('bunch') > 0) return 'Busker · give them something for a request';
     if (this.asking > 0 && this.tipsToday() < this.options.tipsPerDay) return 'Busker · tip a coin for a request';
     return 'Busker · chat';
@@ -272,7 +272,7 @@ export class Busker extends THREE.Group implements Furniture, Updatable, Interac
     return {
       person: ME,
       place: 'street',
-      body: { speak: (line) => this.person.speak(line, this.speaker()), react: (reaction) => actReaction(this.person, reaction) },
+      body: { speak: (line) => this.person.speak(line, this.speaker()), react: (reaction) => actReaction(this.person, reaction), anchor: this.person.speechAnchor },
       extras,
     };
   }

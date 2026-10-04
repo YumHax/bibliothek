@@ -111,9 +111,9 @@ export function createBookPanels(services: Services, late: UiLate, peopleBook: L
  * postal vote, what the street's shops and the hall console open (`BuildContext.panels`), the bedroom's phone and
  * wardrobe, the kitchen table's console repair and TV REPAIR's counter, and the dream on waking.
  */
-export function createHomePanels(services: Services, notices: Notices, late: UiLate) {
+export function createHomePanels(services: Services, notices: Notices, late: UiLate, player: FirstPersonController) {
   const { container, wallet, collection, fame, tx, market, standing, coverUrl, neighbourTrades, household, homeLife, perks } = services;
-  const { social, peopleBook, contacts } = createSocial(services, container, notices, () => late.session.get());
+  const { social, peopleBook, contacts } = createSocial(services, container, notices, () => late.session.get(), player);
   const neighbourTradePanel = new NeighbourTradePanel(container, wallet, { trades: neighbourTrades, tx, collection }, coverUrl);
   // The co-owners' postal vote, opened by the ballot box in the stairwell's hall (`building/coproMeeting`).
   const coproPanel = new CoproPanel(container);

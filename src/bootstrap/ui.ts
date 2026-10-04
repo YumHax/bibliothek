@@ -24,7 +24,7 @@ export function createUi(services: Services, player: FirstPersonController, hold
   const peopleBook = late<ModalLike>('the People book');
   const books = createBookPanels(services, holders, peopleBook);
   addPauseButtons(services, player, holders, menus, { journalPanel: books.journalPanel, peopleBook });
-  const home = createHomePanels(services, notices, holders);
+  const home = createHomePanels(services, notices, holders, player);
   peopleBook.set(home.peopleBook);
   const hud = wireHud(services, player, menus, holders);
   return { overlay, lockFlow, notices, ...collection, ...market, ...books, ...home, ...hud };

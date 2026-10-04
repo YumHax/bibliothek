@@ -69,6 +69,8 @@ export class SpeechLayer {
   /** True when a wall stands between the eye and a point (world); none set: nothing hides a speaker. */
   private blocked: ((from: THREE.Vector3, to: THREE.Vector3) => boolean) | null = null;
   private readonly eye = new THREE.Vector3();
+  /** A conversation is going on: a line to the player replaces the speaker's current one (`converse`). */
+  private conversing = false;
 
   constructor(container: HTMLElement, private readonly camera: THREE.Camera) {
     this.layer = document.createElement('div');
@@ -90,6 +92,11 @@ export class SpeechLayer {
   /** A voice without a body: `name` on the subtitle. */
   voice(text: string, name?: string): void {
     this.enqueue(null, text, { addressed: true, name });
+  }
+
+  /** While on (a conversation is open), a line to the player takes the speaker's bubble at once instead of waiting its turn. */
+  converse(on: boolean): void {
+    this.conversing = on;
   }
 
   /** What hides a speaker behind a wall (the interactor's occluders). */
@@ -141,6 +148,12 @@ export class SpeechLayer {
     if (bubble.current?.addressed) {
       // Someone talking to the player is not talked over: a line to the player waits its turn, a word in passing is dropped.
       if (!addressed) return;
+      // In a conversation the newest answer is the one that matters: it replaces the line said and those waiting.
+      if (this.conversing) {
+        bubble.queue.length = 0;
+        this.show(bubble, line);
+        return;
+      }
       bubble.queue.push(line);
       if (bubble.queue.length > QUEUE_MAX) bubble.queue.shift();
       return;

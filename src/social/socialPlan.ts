@@ -11,17 +11,20 @@ export const TRUST = { min: 0, max: 100 } as const;
 
 /**
  * The warmth tiers, coldest first: `from` is the lowest warmth of the tier. A tier above `acquaintance` also needs
- * `trust` at least: short of it, they stay a tier lower (a charmer who is liked but not relied on).
+ * `trust` at least: short of it, they stay a tier lower (a charmer who is liked but not relied on). `name` is what
+ * the player reads (the ids stay as saved: `stranger` reads "Polite", someone met but neither warm nor cold);
+ * `colour` says the side at a glance, the same everywhere: reds and a cold blue below, grey in the middle, greens
+ * above, gold for a close friend (red never means a friend).
  */
-export const TIERS: readonly { id: TierId; from: number; trust: number; name: string; glyph: string; colour: string }[] = [
-  { id: 'nemesis', from: -100, trust: 0, name: 'Nemesis', glyph: '☠', colour: '#8f1d2c' },
-  { id: 'hostile', from: -70, trust: 0, name: 'Hostile', glyph: '✖', colour: '#c0392b' },
-  { id: 'cold', from: -40, trust: 0, name: 'Cold', glyph: '❄', colour: '#5d8aa8' },
-  { id: 'stranger', from: -15, trust: 0, name: 'Stranger', glyph: '·', colour: '#8a8f99' },
-  { id: 'acquaintance', from: 10, trust: 0, name: 'Acquaintance', glyph: '○', colour: '#b9a36a' },
-  { id: 'friendly', from: 30, trust: 10, name: 'Friendly', glyph: '◐', colour: '#d9a441' },
-  { id: 'friend', from: 55, trust: 30, name: 'Friend', glyph: '♥', colour: '#e0655a' },
-  { id: 'close', from: 80, trust: 55, name: 'Close', glyph: '❤', colour: '#e83f6f' },
+export const TIERS: readonly { id: TierId; from: number; trust: number; name: string; colour: string }[] = [
+  { id: 'nemesis', from: -100, trust: 0, name: 'Nemesis', colour: '#8f1d2c' },
+  { id: 'hostile', from: -70, trust: 0, name: 'Hostile', colour: '#c0392b' },
+  { id: 'cold', from: -40, trust: 0, name: 'Cold', colour: '#5d8aa8' },
+  { id: 'stranger', from: -15, trust: 0, name: 'Polite', colour: '#8a8f99' },
+  { id: 'acquaintance', from: 10, trust: 0, name: 'Acquaintance', colour: '#9db58a' },
+  { id: 'friendly', from: 30, trust: 10, name: 'Friendly', colour: '#6cbf5a' },
+  { id: 'friend', from: 55, trust: 30, name: 'Friend', colour: '#2fa86a' },
+  { id: 'close', from: 80, trust: 55, name: 'Close friend', colour: '#e2b33c' },
 ];
 
 /** The bonds read off both axes (`tiers.bondOf`): warm is `warm` or more, trusted `trusted` or more. */
@@ -99,16 +102,6 @@ export const INTERACTIONS: Record<InteractionId, InteractionRule> = {
   giveGame: { group: 'give', label: 'Give a game', odds: 1, win: { warmth: 14, trust: 4 }, lose: { warmth: -2 }, battery: 0, from: 'acquaintance', notAt: ['phone'], heard: true },
   giveCoins: { group: 'give', label: 'Give a few coins', odds: 0.5, win: { warmth: 4 }, lose: { warmth: -4 }, battery: 0, notAt: ['phone'] },
 };
-
-/** The order of the panel's groups and their headings. */
-export const GROUPS: readonly { id: InteractionGroup; name: string }[] = [
-  { id: 'talk', name: 'Talk' },
-  { id: 'give', name: 'Give' },
-  { id: 'ask', name: 'Ask' },
-  { id: 'trade', name: 'Trade' },
-  { id: 'invite', name: 'Invite' },
-  { id: 'mean', name: 'Mean' },
-];
 
 /**
  * The daily social battery: how much talk a person has in them a game day (`TRAITS[t].battery` multiplies it).

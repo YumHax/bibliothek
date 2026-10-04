@@ -305,10 +305,10 @@ class NeighbourDoor extends ShutDoor implements Interactable {
     const caption = this.offer() ? `${this.options.caption} (the swap)` : (this.options.visit?.label() ?? this.options.caption);
     const person = this.person();
     if (!person || !isMet(person)) return caption;
-    // Once met, their standing on the door: "Mrs Roux, 5th floor · ♥ Friend · knock".
+    // Once met, their standing on the door: "Mrs Roux, 5th floor · Friend · knock".
     const tier = tierInfo(tier_(person));
     const at = caption.lastIndexOf(' · ');
-    return at < 0 ? caption : `${caption.slice(0, at)} · ${tier.glyph} ${tier.name}${caption.slice(at)}`;
+    return at < 0 ? caption : `${caption.slice(0, at)} · ${tier.name}${caption.slice(at)}`;
   }
 
   activate(session: SessionActions): void {

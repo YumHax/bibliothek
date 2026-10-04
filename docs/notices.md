@@ -6,7 +6,7 @@ its own look and its own way of being sure it is read. The API is `NoticeActions
 
 | Kind | Call | Where / how | Read because |
 | --- | --- | --- | --- |
-| Speech (someone in the room) | `walker.speak(line, name)`, `vendor.speak(line)` | Bubble over their head (HTML on the HUD, follows the head), name tag | It is where the player looks when talking to someone; out of view it moves to the subtitles. Lines queue per speaker, never talked over. |
+| Speech (someone in the room) | `walker.speak(line, name)`, `vendor.speak(line)` | Bubble over their head (HTML on the HUD, follows the head), name tag | It is where the player looks when talking to someone; out of view it moves to the subtitles. Lines queue per speaker, never talked over; while a conversation is open (`conversing`, `body.conversing`), an answer replaces the speaker's line at once, the bubble drops its name tag and a reward banner comes in higher, clear of it. |
 | Voice without a body | `say(line, speaker)` | Subtitle strip, bottom centre, `Name: line` | The film convention; queued. |
 | Word in passing | `walker.say(word)`, `vendor.say(word)` | Small comic bubble, no name, only near and in view | Ambient: not meant to be read, dropped out of view. |
 | Reaction | `react(text)` | Right under the crosshair and its caption (one column: caption, reaction, touch badge) | The eyes are on the crosshair when clicking. One at a time (the latest click wins). |

@@ -388,6 +388,11 @@ export class Walker extends THREE.Group implements Furniture, Updatable, Interac
     this.bubble.say(text, seconds, () => this.lineShown(text));
   }
 
+  /** The point over their head their words come from (a conversation sits beside it and turns the view to it). */
+  get speechAnchor(): THREE.Object3D {
+    return this.bubble;
+  }
+
   /** A line to the player, over their head with their name (or in the subtitles, out of view); `name` overrides theirs. */
   speak(text: string, name = typeof this.speaker === 'function' ? this.speaker() : this.speaker): void {
     this.bubble.speak(text, name, () => {

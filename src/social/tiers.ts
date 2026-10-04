@@ -48,6 +48,27 @@ export function bondOf(warmth: number, trust: number): Bond {
   return trusted ? 'business' : 'neutral';
 }
 
+/** How a tier reached is said, `{name}` theirs: a sentence, never a symbol. */
+const BECAME: Record<TierId, string> = {
+  nemesis: '{name} is your nemesis now',
+  hostile: '{name} is hostile to you now',
+  cold: '{name} has gone cold on you',
+  stranger: '{name} is civil with you again',
+  acquaintance: 'You and {name} know each other now',
+  friendly: '{name} is friendly with you now',
+  friend: '{name} is a friend now',
+  close: '{name} is a close friend now',
+};
+
+/**
+ * A tier change in words, for the banner, the card and the journal: "Mrs Dubois is a friend now", "Mrs Dubois has
+ * gone cold on you"; a fall that stays on the warm side is "Things have cooled with Mrs Dubois".
+ */
+export function tierChangeLine(name: string, before: TierId, after: TierId): string {
+  if (tierRank(after) < tierRank(before) && tierRank(after) >= tierRank('stranger')) return `Things have cooled with ${name}`;
+  return BECAME[after].replace('{name}', name);
+}
+
 /** How the book names a bond. */
 export const BOND_NAMES: Record<Bond, string> = {
   friend: 'Friends',

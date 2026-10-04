@@ -22,12 +22,15 @@ perks when you get along, penalties when you don't. Read this before touching an
 
 - **Warmth** -100..100 (do they like you) and **trust** 0..100 (can they rely on you). A module-level store saved
   under `KEYS.social`; the old `KEYS.neighbourFriendship` (by door) is read once into warmth.
-- **Tiers** (`socialPlan.TIERS`): Nemesis, Hostile, Cold, Stranger, Acquaintance, Friendly, Friend, Close. Above
-  Acquaintance a tier also needs trust: short of it they stay a tier lower ("trust holds them here").
+- **Tiers** (`socialPlan.TIERS`): Nemesis, Hostile, Cold, Stranger, Acquaintance, Friendly, Friend, Close (the ids;
+  the player reads `stranger` as "Polite" and `close` as "Close friend", never a glyph). Their colours say the side:
+  reds and a cold blue below, grey in the middle, greens above, gold for a close friend. Above Acquaintance a tier
+  also needs trust: short of it they stay a tier lower (the UI says what the two of you are: "Likes you, doesn’t rely
+  on you").
 - **Bonds** (`tiers.bondOf`): friend (warm, trusted), charmer (warm, not relied on), business (trusted, cool),
   enemy, neutral.
 - `nudge(id, { warmth, trust, why, reason, day, memory, gossip })` is the one way to move a standing: `reason`
-  counts once a game day, `why` is the chip's words, `memory` is kept (the mildest forgotten first), `gossip` sends
+  counts once a game day, `why` is the banner's or the card's words, `memory` is kept (the mildest forgotten first), `gossip` sends
   it down the grapevine. Every change goes to `onSocial` listeners with the tier before and after (a tier is told
   once: `PersonState.told`).
 - `building/friendship.ts` is the old door-keyed API (`friendship`, `befriend`, `COLD`) over the same store.
@@ -49,28 +52,53 @@ perks when you get along, penalties when you don't. Read this before touching an
 ## Talking (`conversation.ts`, `ui/social/ConversationPanel`)
 
 - A person in the room is a `Walker` or a `Vendor` given a `social` hook (`world/people/socialHook.talkHook(ctx.social,
-  id, () => TalkSession)`): the caption becomes "Name · ♥ Friend · talk" (the role before they are met) and a click
+  id, () => TalkSession)`): the caption becomes "Name · Friend · talk" (the role before they are met) and a click
   opens the conversation instead of a line. `actReaction(body, reaction)` acts what the panel reports.
-- `TalkSession`: the person, the place (`SocialPlace`), their `body` (`speak`, `react`), the place's `extras`
-  (swap, haggle, visit: `TalkExtra`, `opensPanel` when it opens a panel of its own), `onClose`.
-- The panel (`ui/social/ConversationPanel` + `social.css`): a frosted sheet sliding in on the right, tinted by the
-  tier's colour (`--tier`; cooled red when they're cross). The portrait in a medallion ringed in the tier's colour as
-  far round as the way to the next tier goes (`meters.tierProgress`), a phone badge on a call; the name in the print
-  face, the role in small caps, the tier pill and the mood with its weather icon (`icons.MOOD_ICONS`). The gauges
-  (`meters`): warmth from cold to warm with the tiers ticked and a fill from neutral, trust as ten segments; both
-  placed by CSS variables, so after an interaction they ease from the old standing to the new. The bond, the held
-  tier and the mood's reason under them; traits found out, a birthday; bad blood in a red box. Their words on a paper
-  speech bubble pointing at them, typed out (at once for reduced motion), signed; what it did floats up in chips
-  (green, red for a loss). The interactions by group, each a row with its number key, icon (`icons.INTERACTION_ICONS`)
-  and odds as three pips once the player knows them (a "?" before), the place's extras first in blue, a shut one
-  with a lock and why; the Mean group folded away (and given no number key). Number keys pick, Backspace backs out
-  of a sub-list, Esc leaves. Give lists the pocket (croissant, flowers, treats, a scrap), a
-  game (best fits first; it leaves the collection: `Transactions.giveAway`), coins (`COIN_GIFT`).
-- `opening`: the first meeting is their `intro` (`meet`), then their hello, a cold or hostile word, a birthday.
+- `TalkSession`: the person, the place (`SocialPlace`), their `body` (`speak`, `react`: a body that reacts is in the
+  room; one without, `voiceBody`, is only a voice), the place's `extras` (swap, haggle, visit: `TalkExtra`,
+  `opensPanel` when it opens a panel of its own), `onClose`.
+- The panel (`ui/social/ConversationPanel` + `social.css`), built the way The Sims does it: **the person is the
+  show, the UI says no rules**. No odds, no numbers, no previews of what a choice brings, no locked rows, no "done
+  today" labels, no help page: the player learns to read people from their mood, their ways and their reactions.
+  - The person: the view turns gently to their face (`player/lookTowards`, through `deps.frame`). Their answers come
+    over their head (`body.speak`), their body takes what was said (`react`; talked out it looks at its watch,
+    leaving it waves); while the panel is open the speech layer is `conversing` (`notices/speech`): an answer replaces
+    the speaker's line at once instead of queueing behind it, the bubble drops its name tag and a reward banner comes
+    in higher (`body.conversing`). By their face (`core/screenPoint`, followed each frame): one to three hearts rising
+    (warmer) or cracked ones falling (cooler) by how much it moved, with a chime or a low note (`uiSounds` `warm` /
+    `cool`), "trusts you more" or "less" when trust moved; and on opening, their thought: the icon of a talk their
+    ways make welcome now, found out or not (its chip glows until talked about). Only a voice (`voiceBody`, through a
+    door or a counter) or a call shows their painted face in the card and says their lines there, on a paper slip.
+  - The card, beside them and clear of the bubble over their head (placed from their head's place on screen, on its
+    right, else its left; it moves only when they walk off), its foot fixed above the subtitles: it grows upwards, so
+    the rows under the pointer never move. Top to bottom: the line the player just said, in quotes
+    (`conversation.playerLine`, `socialLines.PLAYER_LINES`, or a place entry phrased as speech), or what they did
+    (an entry that is an action, as a stage direction); their name (a click opens their page in the People book),
+    role and tier in a word; one bar (`meters.relationMeter`, the same as the book's: cold left, warm right, neutral in
+    the middle, no ticks), easing to the new standing; the day (a birthday, the mood and why, the ways of theirs
+    found out, a new one glowing), wrapping rather than cut; the bond in words when trust is what holds them back.
+  - The menu: the place's own entries that are open now first (a shut one is not shown; words in quotes are said,
+    the rest done; `TalkExtra.tag` adds a word like "news"), the talk on chips two by two, then Give…, Ask… and Be
+    mean… side by side (sub-lists, Back last), Goodbye last. A found-out trait of theirs that makes a choice go down
+    well now tags it with the trait's name; an entry they never offered before says "new" (`social/noticed`, kept by
+    row once a conversation ends; a first meeting is the baseline). An interaction not open at their tier is not
+    shown until it is. Give lists the pocket with its own icons, tagged "a favourite" or "not for them" once a gift of
+    that kind told it (`gifts.tasteOf`), then "A game…" (box art, best fits first; it leaves the collection:
+    `Transactions.giveAway`) and "A few coins" (`COIN_GIFT`). A game given, coins and an insult take a second press
+    (`confirmTwice.Arming`), the row saying what the second does.
+  - Talked out (`TIRED_LINES`), they look at their watch and leave by themselves a moment later: one try costs, not
+    a string of them. Leaving (Goodbye, Esc, a click on the room away from the card), they say goodbye
+    (`FAREWELL_LINES`, by how warm they are) and wave.
+  - Number keys pick (their digits show once a key is used, gone when the mouse moves), Backspace or B come back
+    from a sub-list, Esc leaves. The very first conversation pins one tip (`notices.tip`, `noticed.firstConversation`).
+- `opening`: the first meeting is their `intro` (`meet`), then their hello, a cold or hostile word, a birthday, and
+  once a day when trust is what holds them back, what they would like (`HELD_LINES`: the only hint of how to get
+  closer).
 - `perform(id, interaction, ctx, extra)`: odds = base × mood × traits (some by hour) + warmth; a landed daily
-  interaction counts once a day, a miss always costs; the social battery (`BATTERY`, × traits) spent, more talk
-  costs warmth; a good chat may teach a fact; the trait that bent the odds is found out. `onInteraction` hears every
-  one (favours, challenges).
+  interaction counts once a day (said again, they say so: `REPEAT_LINES`, a shrug), a miss always costs; the social
+  battery (`BATTERY`, × traits) spent, more talk costs warmth (`TIRED_LINES`); a good chat may teach a fact; the
+  trait that bent the odds is found out; a gift tells how they take its kind (`gifts.tasteFact`, kept with the facts
+  learned). `onInteraction` hears every one (favours, challenges).
 - **Extending**: a feature adds entries to anyone's conversation with `extras.addExtras(ctx => TalkExtra[])`.
 
 ## What it does (`perks.ts`)
@@ -88,35 +116,40 @@ Rules shared by everything here:
 
 ## Clarity: where the player reads relationships
 
-- **The hover caption** (`caption.socialCaption`): "Mrs Dubois · ♥ Friend · talk" (the Overlay draws the last part as
-  the verb behind a key cap), the role before they are met ("2nd floor, right · talk").
-- **The conversation panel** shows the tier (and "trust holds them here" when the warmth alone would reach the next),
-  the bars, the mood and why, the bond, the traits found out, a birthday; the chips say what each try did and why
-  ("+6 warmth · liked the joke", in red when it cost), a fact learned, a trait found out, a number given. Cold or
-  worse, a red box says what the bad blood costs now (the penalties in force) and the ways back. On the phone (place
-  `phone`) there is no body: the line is the panel's, marked ☎.
-- **Tier changes** (`announce.announceTiers`, wired by `bootstrap/social`): a reward banner when someone reaches
-  Friendly or more or a perk comes into force ("Mrs Dubois is now a Friend ♥", the perk as its detail; `big` for
-  Close); a card (`read`, look `note`) when they fall to Cold or lower or a perk is lost, naming the penalty and the
-  way back. Smaller moves (stranger to acquaintance, a thaw to neutral) are only the journal's.
+- **Nothing is announced before it happens.** What a tier brings is told when it is reached (the banner), what bad
+  blood costs when it starts (the card); neither the panel nor the book lists perks or penalties to come.
+- **The hover caption** (`caption.socialCaption`): "Mrs Dubois · Friend · annoyed · talk" (the mood only when it is
+  worth knowing before going up to them; the Overlay draws the last part as the verb behind a key cap), the role
+  before they are met ("2nd floor, right · talk"). A resident's door says the tier too.
+- **The conversation panel**: their tier in a word and the bar, the mood and why, a birthday, the ways found out;
+  after a try, their answer and reaction in the room, the hearts and a word of trust by their face, a chime. Cold or
+  worse, Apologise is offered. On the phone (place `phone`) the card shows their face with a phone badge and their
+  lines on a dashed slip.
+- **Tier changes** (`announce.announceTiers`, wired by `bootstrap/social`), in sentences (`tiers.tierChangeLine`):
+  a reward banner when someone reaches Friendly or more or a perk comes into force ("Mrs Dubois is a friend now",
+  the perk as its detail; `big` for a close friend); a card (`read`, look `note`) when they fall to Cold or lower or a
+  perk is lost ("Mrs Dubois has gone cold on you", why, the penalty now in force). Smaller moves (a newcomer becoming
+  an acquaintance, a thaw to civil) are only the journal's.
 - **The People book** (`ui/social/PeopleBook` + `PeopleBook.css`, the `people` key I, the journal's People button,
   the pause menu's People): an address book, a leather cover with coloured index tabs down its spine (Everyone,
   Friends, Building, Street, Market, Arcade, Rivals; D-pad left / right) and a cream page. The list: a card per
-  person met or `listed: 'always'`, warmest first, edged in their tier's colour, with portrait, name, role, tier pill,
-  the day's mood, phone and birthday marks, and both gauges; the tally of people known, friends, still to meet. A
-  person's page (Backspace back): on the left a taped Polaroid, the tier, the gauges, the bond, and a card of where
-  to find them (once met), the birthday (known once a fact is learned or warmth reaches 30), the mood, the phone; on
-  the right the notes: their ways (traits found out, dashed "?" slots for the rest), what you know (in handwriting,
-  "?" slots saying from which tier), the gifts they love and dislike (once anything is known of them or a gift was
-  given), what the relationship does as ink stamps (solid: yours; dashed: next, with its tier and trust; red: a
-  penalty in force or what a fall would cost), what they remember as a dated diary, and whom they know as a web
+  person met or `listed: 'always'`, warmest first, edged in their tier's colour, with portrait, name, role, their tier
+  in a word with the bar, and their day in words (the mood, or "Birthday today"); "Not met yet" for one listed but
+  not met; the tally of people known, friends, still to meet. A person's page (Backspace back; `showPerson` opens the
+  book on it, from a name in a conversation): on the left a taped
+  Polaroid, the tier, the bar, the bond in words, and a card of where to find them, the birthday (once known), today,
+  the phone; on the right what you know (traits found out with a dashed "?" for each one still to find, facts in
+  handwriting with a blank line for each one still to find, how they took the gifts given: "Loves flowers",
+  "Doesn’t want a butcher’s scrap", "Glad of a croissant"), what is between you now as ink stamps (the perks in
+  force in the tier's ink, the penalties in red), what they remember as a dated diary, and whom they know as a web
   (their portrait in the middle, the others round it on threads coloured by the tie, each a link to their page).
 - **Portraits** (`ui/social/face.ts` painting, `portrait.ts` caching): a head and shoulders from the look their body
   was built with (skin, hair and its style, eyes with a catch-light, brows, jaw, nose, smile, freckles, beard,
   glasses, hat, the top and its collar, scarf, apron, age), lit from the upper left on a backdrop of the tier's colour,
   at the screen's density. The phone's contacts and a tier reached (the reward banner's `picture`) show them too.
 - **The journal** (`socialJournal.watchSocialJournal`, bullet ♥, kind `social`): a line when someone is met ("Met
-  Rania Haddad, 2nd floor, left") and on every tier crossed; every `DIGEST.everyDays` game days the week's digest: who
+  Rania Haddad, 2nd floor, left") and on every tier crossed, in a sentence ("Mrs Haddad is friendly with you now.",
+  "Things have cooled with Mr Leclerc."); every `DIGEST.everyDays` game days the week's digest: who
   grew closer or cooled by `DIGEST.notable` warmth or more, who was met. The warmth a week ago is kept under
   `KEYS.socialDigest`.
 
@@ -171,7 +204,7 @@ Everyone met in the building opens the conversation (`world/people/socialHook.ta
 (`bodyOf`: their lines over their head, `actReaction`), the place's own entries first. Each body built for a known
 person records its look (`rememberLook`).
 - **On the stairs** (`stairwell/Neighbours`, place `stairs`): the residents, stopping to talk. "Any news?" is what a
-  click used to say (their swap, the hunt's clue, the move, their everyday lines; ● when there is news); "Swap games"
+  click used to say (their swap, the hunt's clue, the move, their everyday lines; tagged "news" when there is some); "Swap games"
   opens their swap's panel while one is going. The old stairs chat nudge is gone: the conversation is the chat.
 - **At their door** (`furnishStairwell` `NeighbourDoor`): a knock while they are in counts as before
   (`DoorVisit.knocked`) and the talk is had through the doorway (`voiceBody`: the subtitles); "Come in?" (greyed

@@ -195,7 +195,7 @@ export class PhonePanel extends CardPanel {
             return html`<button type="button" class="social-contact" data-action="contact" data-id="${c.id}" aria-label="Ring ${c.name}, ${c.note}" style="--tier:${tier.colour}">
               <span class="social-contact__face" data-portrait="${c.id}"></span>
               <span class="social-contact__who"><b>${c.name}</b><small>${c.note}</small></span>
-              <span class="social-tier" style="--tier:${tier.colour}">${tier.glyph} ${tier.name}</span>
+              <span class="social-tier" style="--tier:${tier.colour}">${tier.name}</span>
               <span class="social-contact__ring">${icon('phone', 1)}</span>
             </button>`;
           })}</div>`

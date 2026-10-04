@@ -155,6 +155,11 @@ export class Vendor extends THREE.Group implements Furniture, Interactable, Upda
     });
   }
 
+  /** The point over their head their words come from (a conversation sits beside it and turns the view to it). */
+  get speechAnchor(): THREE.Object3D {
+    return this.bubble;
+  }
+
   /** A line to the player, over their head with their name (`name`: someone met, by their own) (or in the subtitles, out of view): they talk it, eyes on the player. */
   speak(text: string, name = this.speaker): void {
     this.bubble.speak(text, name, () => {

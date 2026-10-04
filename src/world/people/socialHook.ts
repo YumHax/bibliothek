@@ -2,13 +2,13 @@ import type { SessionActions } from '@/game/SessionActions';
 import type { Reaction as SocialReaction } from '@/social/conversation';
 import { socialCaption } from '@/social/caption';
 import { isMet } from '@/social/standing';
-import type { SocialBody, SocialServices, TalkSession } from '@/social/talk';
+import type { SocialAnchor, SocialBody, SocialServices, TalkSession } from '@/social/talk';
 import type { PersonId } from '@/social/types';
 import type { FaceKey, GestureName } from './motion/gestures';
 
 /*
  * How a person in the room becomes someone to talk to (docs/social.md "Talking"): a `Walker` or a `Vendor` given a
- * `SocialHook` shows the social caption ("Mrs Dubois · ♥ Friend · talk") and, clicked, opens the conversation
+ * `SocialHook` shows the social caption ("Mrs Dubois · Friend · talk") and, clicked, opens the conversation
  * instead of saying a line. `talkHook` makes one from the builder's `BuildContext.social`.
  */
 
@@ -27,7 +27,7 @@ interface Expressive {
   nod?(): void;
 }
 
-/** How each reaction of the conversation is acted. */
+/** How each reaction of the conversation is acted (their talk running out: a look at the watch; leaving: a wave). */
 const ACTED: Record<SocialReaction, { gesture?: GestureName; face: FaceKey; nod?: boolean }> = {
   pleased: { face: { smile: 0.9, browsUp: 0.3 }, nod: true },
   laugh: { gesture: 'coverMouth', face: { smile: 1, squint: 0.6 } },
@@ -36,6 +36,8 @@ const ACTED: Record<SocialReaction, { gesture?: GestureName; face: FaceKey; nod?
   shrug: { gesture: 'shrug', face: { browsUp: 0.4 } },
   annoyed: { gesture: 'headShake', face: { frown: 0.9 } },
   hurt: { gesture: 'facepalm', face: { frown: 1, squint: 0.4 } },
+  restless: { gesture: 'checkWatch', face: { browsUp: 0.3 } },
+  bye: { gesture: 'wave', face: { smile: 0.6 } },
 };
 
 /** Acts `reaction` on `body`. */
@@ -47,14 +49,14 @@ export function actReaction(body: Expressive, reaction: SocialReaction): void {
 }
 
 /**
- * The hook for someone the builder knows the person of: the caption from their standing, the click opening
+ * The hook for someone the builder knows the person of: the caption from their standing and mood, the click opening
  * `talk(session)` (asked afresh on each click: what the place offers changes; the session for its extras). No `social` in the build: undefined, and
  * the person keeps their lines.
  */
 export function talkHook(social: SocialServices | undefined, person: PersonId, talk: (session: SessionActions) => TalkSession, verb = 'talk'): SocialHook | undefined {
   if (!social) return undefined;
   return {
-    caption: () => socialCaption(person, verb),
+    caption: () => socialCaption(person, verb, { day: social.day(), hour: social.hour() }),
     open: (session) => {
       social.open(session, talk(session));
       return true;
@@ -65,6 +67,8 @@ export function talkHook(social: SocialServices | undefined, person: PersonId, t
 /** Someone with a voice in the room and a body that shows things: a `Walker`, or a `Vendor` through `vendorBody`. */
 interface Speaking extends Expressive {
   speak(line: string): void;
+  /** The point over their head their words come from. */
+  readonly speechAnchor?: SocialAnchor;
 }
 
 /** The conversation's body for `person`: their lines over their head (`said` hears each, e.g. for the murmur), their reactions acted. */
@@ -75,12 +79,13 @@ export function bodyOf(person: Speaking, said?: (line: string) => void): SocialB
       said?.(line);
     },
     react: (reaction) => actReaction(person, reaction),
+    anchor: person.speechAnchor,
   };
 }
 
 /** A `Vendor`'s body (its `gesture` is a stance: the gestures go through `gestureNow`). */
-export function vendorBody(vendor: { speak(line: string): void; gestureNow(name: GestureName): void; feel(face: FaceKey, seconds: number): void; nod(): void }): SocialBody {
-  return bodyOf({ speak: (line) => vendor.speak(line), gesture: (name) => vendor.gestureNow(name), feel: (face, s) => vendor.feel(face, s), nod: () => vendor.nod() });
+export function vendorBody(vendor: { speak(line: string): void; gestureNow(name: GestureName): void; feel(face: FaceKey, seconds: number): void; nod(): void; readonly speechAnchor: SocialAnchor }): SocialBody {
+  return bodyOf({ speak: (line) => vendor.speak(line), gesture: (name) => vendor.gestureNow(name), feel: (face, s) => vendor.feel(face, s), nod: () => vendor.nod(), speechAnchor: vendor.speechAnchor });
 }
 
 /** A voice with no body in view (through a door, on the phone): the subtitles, named. */

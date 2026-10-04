@@ -83,6 +83,49 @@ export const SOCIAL_LINES: Record<InteractionId, { win: readonly string[]; lose:
 /** When the day's talk is spent (the battery empty). */
 export const TIRED_LINES: readonly string[] = ['Sorry, I’m talked out for today.', 'Let’s pick this up another day, shall we?', 'I really must get on.'];
 
+/** Trust is what holds them back (their warmth would reach the next tier): once a day, they say what they would like. */
+export const HELD_LINES: readonly string[] = [
+  'You’re good company. I’d just like to know I can count on you.',
+  'I like you, I do. Whether I can rely on you, we’ll see.',
+  'Friends help each other out, don’t they? We’ll get there.',
+];
+
+/** Their goodbye when the player leaves, by how warm they are: warm, neutral, cold, hostile. */
+export const FAREWELL_LINES: Record<'warm' | 'even' | 'cold' | 'hostile', readonly string[]> = {
+  warm: ['See you soon!', 'Take care, now.', 'Come by any time.'],
+  even: ['Bye, then.', 'See you around.', 'Have a good one.'],
+  cold: ['Right.', 'Hm. Bye.'],
+  hostile: ['Good riddance.', 'Finally.'],
+};
+
+/** A once-a-day one tried again after it landed today: it moves nothing, and they let it show. */
+export const REPEAT_LINES: readonly string[] = ['Ha, you said that already.', 'We’ve been over that today, haven’t we?', 'Yes, yes. You told me.', 'Again? You’re repeating yourself.'];
+
+/**
+ * What the player says when choosing an interaction (the conversation panel shows it as theirs, then the answer comes
+ * over their head). Placeholders as in `SOCIAL_LINES`.
+ */
+export const PLAYER_LINES: Record<InteractionId, readonly string[]> = {
+  chat: ['How are things?', 'Busy week?', 'Nice to see you.'],
+  askDay: ['How’s your day been?', 'Good day so far?', 'What have you been up to?'],
+  talkGames: ['Played anything good lately?', 'What was your first console?', 'Still have your old games?'],
+  compliment: ['You look well today.', 'I like your style, you know.', 'You always know what to say.'],
+  joke: ['Want to hear a terrible joke?', 'I’ve got one for you…', 'Stop me if you’ve heard this one.'],
+  gossip: ['Did you hear about {about}?', 'Between us, about {about}…', 'Have you noticed {about} lately?'],
+  complain: ['This lift, honestly…', 'The bins again!', 'Is the stair light ever on?'],
+  apologise: ['I’m sorry about before.', 'I was out of line. Sorry.', 'Can we start again?'],
+  askNumber: ['Shall we swap numbers?', 'Can I have your number?'],
+  askFavour: ['Could you do me a favour?', 'Can I ask you something?'],
+  askTip: ['Any tips for me?', 'Heard of anything good?'],
+  askDiscount: ['Any chance of a little discount?', 'Could you do me a better price?'],
+  tease: ['Is that your best shirt?', 'Still losing at cards, then?', 'Nice hat. Did it come free?'],
+  insult: ['You’re impossible, you know that?', 'Nobody can stand you.'],
+  challenge: ['Bet I could beat you at anything.', 'Fancy a little contest?'],
+  giveGift: ['This is for you: {gift}.', 'I brought you {gift}.'],
+  giveGame: ['I thought you’d like {game}.', 'Here, {game}. It’s yours.'],
+  giveCoins: ['Here, for your trouble.', 'Have a few coins on me.'],
+};
+
 /** On their birthday, a word of it once. */
 export const BIRTHDAY_LINES: readonly string[] = ['It’s my birthday today, you know.', 'You remembered? It’s my birthday!', 'Another year older. Don’t ask which.'];
 

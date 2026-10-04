@@ -85,7 +85,7 @@ export function kidTalk(kid: Walker): TalkSession {
   return {
     person: KID,
     place: 'arcade',
-    body: { speak: (line) => kid.speak(line, speakerOf(KID, 'The kid')), react: (reaction) => actReaction(kid, reaction) },
+    body: { speak: (line) => kid.speak(line, speakerOf(KID, 'The kid')), react: (reaction) => actReaction(kid, reaction), anchor: kid.speechAnchor },
   };
 }
 

@@ -333,7 +333,9 @@ export class Neighbours extends Prop implements Updatable, OccupancyAware {
       {
         id: 'news',
         group: 'talk',
-        label: this.hasNews(r) ? 'Any news? ●' : 'Any news?',
+        label: 'Any news?',
+        // Something of the moment to tell (a swap, the hunt's clue, the move): a word on the row, never a dot.
+        tag: this.hasNews(r) ? 'news' : undefined,
         run: () => {
           const offer = this.options.trades?.offerAt(r.door);
           const text = offer ? `I’d swap my ${offer.gives.title} for your ${offer.wants.title}. Shall we?` : (this.options.says?.(r.door) ?? this.nextLine(r));

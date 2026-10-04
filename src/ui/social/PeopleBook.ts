@@ -1,3 +1,4 @@
+import { tasteOf } from '@/social/gifts';
 import { tiesOf } from '@/social/gossip';
 import { knowsBirthday } from '@/social/life/birthdays';
 import { daysToBirthday, isBirthday, moodInfo, moodOf } from '@/social/mood';
@@ -5,13 +6,13 @@ import { everyone, findPerson, shortName } from '@/social/people';
 import { effectsOf } from '@/social/perks';
 import { GIFTS, TRAITS } from '@/social/socialPlan';
 import { standing } from '@/social/standing';
-import { atLeast, BOND_NAMES, bondOf, tierInfo, tierOf, warmthTier } from '@/social/tiers';
-import type { PersonCard, PersonId, PersonState, SocialEffect, SocialGroup } from '@/social/types';
+import { atLeast, BOND_NAMES, bondOf, tierInfo, tierOf } from '@/social/tiers';
+import type { GiftKind, PersonCard, PersonId, PersonState, SocialEffect, SocialGroup } from '@/social/types';
 import { CardPanel, type PanelAction } from '../panel/CardPanel';
 import { html, type Html } from '../panel/html';
 import { nextTab } from '../panel/widgets';
 import { icon, MOOD_ICONS, type IconName } from './icons';
-import { trustGauge, warmthGauge } from './meters';
+import { relationMeter } from './meters';
 import { portrait } from './portrait';
 import './social.css';
 import './PeopleBook.css';
@@ -44,17 +45,12 @@ function listed(card: PersonCard, s: Readonly<PersonState>): boolean {
   return s.met !== null || card.listed === 'always';
 }
 
-/** Whether the player has learned anything of them (their tastes in gifts show then): a fact, a trait, a gift given. */
-function acquainted(s: Readonly<PersonState>): boolean {
-  return s.known.length > 0 || s.traitsKnown.length > 0 || s.last.gift !== undefined;
-}
-
 /**
- * THE PEOPLE BOOK (docs/social.md "The People book"): everyone the player has met, by group, each with their tier,
- * warmth and trust, today's mood; a page per person with what the player knows of them (where to find them, the
- * traits and facts found out, greyed slots for the rest, what they like as a gift, their birthday), what they
- * remember, what the relationship does now and what comes next, whom they know. Opened by its key, the journal and
- * the pause menu; D-pad left / right changes the tab; Backspace, Esc or B go back from a page to the list.
+ * THE PEOPLE BOOK (docs/social.md "The People book"): everyone the player has met, by group, each with how you stand
+ * in a word and the relationship bar, today's mood in words; a page per person with what the player knows of them
+ * (where to find them, the traits and facts found out and a "?" for the rest, how they took the gifts given, their
+ * birthday), what is between you now, what they remember, whom they know. Nothing of what is to come. Opened by its
+ * key, the journal and the pause menu; D-pad left / right changes the tab; Backspace, Esc or B go back to the list.
  */
 export class PeopleBook extends CardPanel {
   private filter: Filter = 'all';
@@ -66,6 +62,12 @@ export class PeopleBook extends CardPanel {
 
   protected override onClosed(): void {
     this.page = null;
+  }
+
+  /** The next opening shows `id`'s page (the conversation's name opens it), on the Everyone tab behind it. */
+  showPerson(id: PersonId): void {
+    this.filter = 'all';
+    this.page = id;
   }
 
   protected override onAction(action: string, el: HTMLElement): void {
@@ -151,53 +153,58 @@ export class PeopleBook extends CardPanel {
           <h2>${icon('book', 1)} People</h2>
           <p class="people-book__tally"><b>${shown.length}</b> known · <b>${friends}</b> ${friends === 1 ? 'friend' : 'friends'}${unmet > 0 ? html` · <i>${unmet} still to meet</i>` : ''}</p>
         </header>
-        ${cards.length ? html`<ul class="people-book__grid">${cards}</ul>` : html`<p class="people-book__blank">Nobody here yet. Talk to people: click them.</p>`}
-        ${unmet > 0 ? html`<p class="people-book__hint">${unmet} more ${unmet === 1 ? 'person' : 'people'} to meet: the stairs, Front Street, the market, the arcade, the saleroom.</p>` : ''}
+        ${cards.length ? html`<ul class="people-book__grid">${cards}</ul>` : html`<p class="people-book__blank">Nobody here yet.</p>`}
       </section>
     </div>`;
   }
 
-  /** A person on the list: a portrait card with their name, role, tier, gauges and the day's mood. */
+  /** A person on the list: their portrait, name and role, how you stand in a word and the bar, their day in words. */
   private tile(card: PersonCard): Html {
     const s = standing(card.id);
     const tier = tierInfo(tierOf(s.warmth, s.trust));
     const day = this.deps.day();
+    const met = s.met !== null;
     const { mood } = moodOf(card.id, day, this.deps.hour());
     const cake = isBirthday(card.id, day) && knowsBirthday(card.id);
-    return html`<li><button type="button" class="people-book__tile" data-action="person" data-id="${card.id}" style="--tier:${tier.colour}">
+    const today = cake ? html`<span class="people-book__cake">${icon('cake', 0.95)} Birthday today</span>` : html`<span class="social-mood social-mood--${mood}">${icon(MOOD_ICONS[mood], 0.95)} ${moodInfo(mood).name}</span>`;
+    return html`<li><button type="button" class="people-book__tile${met ? '' : ' people-book__tile--unmet'}" data-action="person" data-id="${card.id}" style="--tier:${tier.colour}">
         <span class="people-book__face" data-portrait="${card.id}" data-size="56"></span>
         <span class="people-book__who">
           <b>${card.short ?? card.name}</b>
           <small>${card.role}</small>
-          <span class="people-book__line"><span class="social-tier" style="--tier:${tier.colour}">${tier.glyph} ${tier.name}</span><span class="social-mood social-mood--${mood}">${icon(MOOD_ICONS[mood], 0.95)}</span>${s.number ? html`<span class="people-book__flag" aria-label="Number in your phone">${icon('phone', 0.9)}</span>` : ''}${cake ? html`<span class="people-book__flag people-book__flag--cake" aria-label="Birthday today">${icon('cake', 0.9)}</span>` : ''}</span>
         </span>
-        <span class="people-book__gauges">${warmthGauge(s, { compact: true })}${trustGauge(s, { compact: true })}</span>
+        <span class="people-book__standing"><span class="people-book__level">${met ? tier.name : 'Not met yet'}</span>${met ? relationMeter(s, { compact: true }) : ''}</span>
+        ${met ? html`<span class="people-book__today">${today}</span>` : ''}
       </button></li>`;
   }
 
+  /**
+   * A person's page: on the left their Polaroid, how you stand (in a word, the bar, what the two of you are) and where
+   * to find them; on the right what you know of them (their ways, facts, how they took your gifts: a "?" for what is
+   * still to find out), what is between you now, what they remember, whom they know. Nothing of what is to come.
+   */
   private personPage(id: PersonId): Html {
     const card = findPerson(id);
     if (!card) return html``;
     const s = standing(id);
-    const tierId = tierOf(s.warmth, s.trust);
-    const tier = tierInfo(tierId);
+    const tier = tierInfo(tierOf(s.warmth, s.trust));
     const day = this.deps.day();
+    const met = s.met !== null;
     const { mood, why } = moodOf(id, day, this.deps.hour());
-    const moodView = moodInfo(mood);
-    const held = warmthTier(s.warmth) !== tierId;
-    const known = s.met !== null || card.listed === 'always';
-    const traits = card.traits.map((t) => (s.traitsKnown.includes(t) ? html`<li class="people-book__trait"><b>${TRAITS[t].name}</b><small>${TRAITS[t].blurb}</small></li>` : html`<li class="people-book__trait people-book__trait--unknown"><b>?</b><small>Not found out yet</small></li>`));
-    const facts = (card.facts ?? []).map((f) => (s.known.includes(f.id) ? html`<li>${f.text}</li>` : html`<li class="people-book__unknown">Something to find out${f.from && f.from !== 'stranger' ? html` <small>(once ${tierInfo(f.from).name})</small>` : ''}</li>`));
-    const gifts = acquainted(s)
-      ? html`${(card.likes ?? []).map((g) => html`<span class="people-book__gift">${icon('heart', 0.85)} ${GIFTS[g].name}</span>`)}${(card.dislikes ?? []).map((g) => html`<span class="people-book__gift people-book__gift--no">${icon('close', 0.85)} ${GIFTS[g].name}</span>`)}`
-      : html`<span class="people-book__unknown">Get to know them first.</span>`;
-    const birthday = knowsBirthday(id) ? birthdayLine(id, day) : 'Not known yet';
+    const known = met || card.listed === 'always';
+    const traits = card.traits.map((t) => (s.traitsKnown.includes(t) ? html`<li class="people-book__trait"><b>${TRAITS[t].name}</b><small>${TRAITS[t].blurb}</small></li>` : html`<li class="people-book__trait people-book__trait--unknown"><b>?</b></li>`));
+    const facts = (card.facts ?? []).map((f) => (s.known.includes(f.id) ? html`<li>${f.text}</li>` : html`<li class="people-book__unknown" aria-label="Not found out yet"></li>`));
+    const tastes = (Object.keys(GIFTS) as GiftKind[]).flatMap((kind) => {
+      const taste = tasteOf(id, kind);
+      return taste ? [html`<span class="people-book__gift people-book__gift--${taste}">${TASTE_WORDS[taste]} ${GIFTS[kind].name}</span>`] : [];
+    });
+    const birthday = knowsBirthday(id) ? birthdayLine(id, day) : '?';
     const memories = s.memories.length
       ? html`<ol class="people-book__diary">${s.memories.map((m) => html`<li class="${m.weight < 0 ? 'people-book__diary--sore' : ''}"><time>Day ${m.day}</time><span>“${capitalise(m.text)}.”</span></li>`)}</ol>`
       : html`<p class="people-book__unknown">Nothing yet.</p>`;
-    const { active, next, penalties } = effectsOf(id);
-    const stamp = (e: SocialEffect, kind: 'on' | 'bad' | 'next' | 'risk') =>
-      html`<li class="people-book__stamp people-book__stamp--${kind}" style="--tier:${tierInfo(e.at).colour}"><span>${e.text}</span><small>${kind === 'on' ? 'Yours' : kind === 'bad' ? 'In force' : `${tierInfo(e.at).name}${e.down ? ' or worse' : ''}${e.trust ? ` · trust ${e.trust}` : ''}`}</small></li>`;
+    // What is between you now: the perks earned and the penalties in force, never the ones to come.
+    const between = effectsOf(id).active;
+    const stamp = (e: SocialEffect) => html`<li class="people-book__stamp people-book__stamp--${e.down ? 'bad' : 'on'}" style="--tier:${tierInfo(e.at).colour}">${e.text}</li>`;
     return html`<div class="people-book__dossier" style="--tier:${tier.colour}">
       <aside class="people-book__id">
         <figure class="people-book__polaroid">
@@ -205,17 +212,13 @@ export class PeopleBook extends CardPanel {
           <span data-portrait="${id}" data-size="132"></span>
           <figcaption>${card.short ?? card.name}</figcaption>
         </figure>
-        <p class="people-book__ribbon"><span class="social-tier" style="--tier:${tier.colour}">${tier.glyph} ${tier.name}</span></p>
-        <div class="people-book__meters">
-          <span>${icon('heart', 0.9)} Warmth</span>${warmthGauge(s)}
-          <span>${icon('key', 0.9)} Trust</span>${trustGauge(s)}
-        </div>
-        <p class="people-book__bond">${BOND_NAMES[bondOf(s.warmth, s.trust)]}${held ? html`<br><em>Trust holds them at ${tier.name}</em>` : ''}</p>
+        <p class="people-book__level people-book__level--big">${met ? tier.name : 'Not met yet'}</p>
+        ${met ? html`${relationMeter(s)}<p class="people-book__bond">${BOND_NAMES[bondOf(s.warmth, s.trust)]}</p>` : ''}
         <dl class="people-book__card">
-          <dt>${icon('pin', 0.9)}</dt><dd>${known ? card.whereabouts : 'Not met yet'}</dd>
-          <dt>${icon('cake', 0.9)}</dt><dd>${birthday}</dd>
-          <dt>${icon(MOOD_ICONS[mood], 0.9)}</dt><dd>${moodView.name}${why ? html` · ${why}` : ''}</dd>
-          <dt>${icon('phone', 0.9)}</dt><dd>${s.number ? 'Number in your phone' : card.phone ? 'Ask them for their number' : 'No phone'}</dd>
+          <dt>Where</dt><dd>${known ? card.whereabouts : '?'}</dd>
+          <dt>Birthday</dt><dd>${birthday}</dd>
+          ${met ? html`<dt>Today</dt><dd>${moodInfo(mood).name}${why ? html` · ${why}` : ''}</dd>` : ''}
+          <dt>Phone</dt><dd>${s.number ? 'In your phone' : card.phone ? 'Not yet' : 'No phone'}</dd>
         </dl>
       </aside>
       <section class="people-book__notes">
@@ -223,18 +226,11 @@ export class PeopleBook extends CardPanel {
           <h2>${card.name}</h2>
           <p>${card.role}</p>
         </header>
-        <h3>Their ways</h3>
+        <h3>What you know</h3>
         <ul class="people-book__traits">${traits}</ul>
-        ${facts.length ? html`<h3>What you know</h3><ul class="people-book__facts">${facts}</ul>` : ''}
-        <h3>Gifts</h3>
-        <p class="people-book__gifts">${gifts}</p>
-        <h3>What it does</h3>
-        <ul class="people-book__stamps">
-          ${active.filter((e) => !e.down).map((e) => stamp(e, 'on'))}
-          ${active.filter((e) => e.down).map((e) => stamp(e, 'bad'))}
-          ${next.map((e) => stamp(e, 'next'))}
-          ${penalties.map((e) => stamp(e, 'risk'))}
-        </ul>
+        ${facts.length ? html`<ul class="people-book__facts">${facts}</ul>` : ''}
+        ${tastes.length ? html`<p class="people-book__gifts">${tastes}</p>` : ''}
+        ${between.length ? html`<h3>Between you</h3><ul class="people-book__stamps">${between.map(stamp)}</ul>` : ''}
         <h3>They remember</h3>
         ${memories}
         <h3>Who they know</h3>
@@ -272,9 +268,12 @@ export class PeopleBook extends CardPanel {
   }
 }
 
+/** How a gift taste found out is written: "Loves flowers", "Doesn’t want a butcher’s scrap", "Glad of a croissant". */
+const TASTE_WORDS: Record<'loves' | 'dislikes' | 'fine', string> = { loves: 'Loves', dislikes: 'Doesn’t want', fine: 'Glad of' };
+
 function birthdayLine(id: PersonId, day: number): string {
   const days = daysToBirthday(id, day);
-  if (days === 0) return 'Today! A gift counts three times';
+  if (days === 0) return 'Today!';
   if (days === 1) return 'Tomorrow';
   return `In ${days} days`;
 }

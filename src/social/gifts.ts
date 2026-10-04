@@ -1,5 +1,6 @@
 import { findPerson } from './people';
 import { isBirthday } from './mood';
+import { standing } from './standing';
 import { BIRTHDAY_GIFT, GAME_GIFT, GIFT_LIKE, GIFTS } from './socialPlan';
 import type { GiftKind, PersonId } from './types';
 
@@ -42,4 +43,16 @@ export function giftWarmth(id: PersonId, kind: GiftKind, day: number, game?: Gam
 /** The gift's name in a sentence: "flowers", "a croissant". */
 export function giftName(kind: GiftKind): string {
   return GIFTS[kind].name;
+}
+
+/** How a taste found out is kept with the facts learned of someone (`PersonState.known`): "taste:flowers". */
+export function tasteFact(kind: GiftKind): string {
+  return `taste:${kind}`;
+}
+
+/** How `id` takes a gift of `kind`, once the player has given them one (else null): they love it, don't want it, or it's fine. */
+export function tasteOf(id: PersonId, kind: GiftKind): 'loves' | 'dislikes' | 'fine' | null {
+  if (!standing(id).known.includes(tasteFact(kind))) return null;
+  const card = findPerson(id);
+  return card?.likes?.includes(kind) ? 'loves' : card?.dislikes?.includes(kind) ? 'dislikes' : 'fine';
 }

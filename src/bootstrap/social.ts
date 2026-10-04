@@ -23,6 +23,9 @@ import type { SocialServices } from '@/social/talk';
 import type { GiftKind } from '@/social/types';
 import { ConversationPanel, type PocketGift } from '@/ui/social/ConversationPanel';
 import type { Services } from './services';
+import { screenPoint } from '@/core/screenPoint';
+import type { FirstPersonController } from '@/player/FirstPersonController';
+import { lookTowards } from '@/player/lookTowards';
 
 /** What in the pocket is given as what (`errands/pocket`'s ids to the social layer's gifts). */
 const POCKET_GIFTS: readonly [ErrandId, GiftKind][] = [
@@ -36,9 +39,11 @@ const POCKET_GIFTS: readonly [ErrandId, GiftKind][] = [
  * The social layer's wiring (docs/social.md): the conversation panel, the services the world's builders open it
  * through (`BuildContext.social`), the tier changes told as notices, and the drift run on every new game day.
  */
-export function createSocial(services: Services, container: HTMLElement, notices: Notices, session?: () => SessionActions) {
-  const { wallet, collection, tx, today, sky, params, journal } = services;
+export function createSocial(services: Services, container: HTMLElement, notices: Notices, session?: () => SessionActions, player?: Pick<FirstPersonController, 'getLook' | 'setLook' | 'getEyePosition'>) {
+  const { wallet, collection, tx, today, sky, params, journal, engine } = services;
   const hour = (): number => sky.dayNight.state.hours;
+  // The People book (its key, the journal, the pause menu, a name in a conversation) and the phone's contacts (docs/social.md).
+  const peopleBook = new PeopleBook(container, { day: () => today.gameDay, hour });
   const conversation = new ConversationPanel(container, {
     day: () => today.gameDay,
     hour,
@@ -48,6 +53,15 @@ export function createSocial(services: Services, container: HTMLElement, notices
     pocket: () =>
       POCKET_GIFTS.map(([errand, kind]): PocketGift => ({ kind, count: pocket.count(errand), take: () => pocket.take(errand) === errand })),
     notices,
+    coverUrl: services.coverUrl,
+    // The conversation sits beside the person and turns the view to their face (docs/social.md "Talking").
+    whereOnScreen: (anchor, lift) => screenPoint(engine.camera, anchor, lift),
+    frame: player ? (anchor, lift) => void lookTowards(player, anchor, lift) : undefined,
+    openPerson: (id) => {
+      if (!session) return;
+      peopleBook.showPerson(id);
+      session().openPanel(peopleBook);
+    },
   });
   const social: SocialServices = {
     open: (session, talk) => {
@@ -84,8 +98,6 @@ export function createSocial(services: Services, container: HTMLElement, notices
   });
   // Victor Crane: a kind word after beating him, a gloat; his collection shown at the end of the arc (docs/social.md "Victor").
   wireRivalry({ rival: services.lots.rival, collection, notices, pool: SEED_GAMES, day: () => today.gameDay });
-  // The People book (its key, the journal, the pause menu) and the phone's contacts (docs/social.md).
-  const peopleBook = new PeopleBook(container, { day: () => today.gameDay, hour });
   const contacts: PhoneContacts = {
     list: () =>
       everyone()

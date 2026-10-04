@@ -1,5 +1,5 @@
 import type { MoodId } from '@/social/socialPlan';
-import type { InteractionGroup, InteractionId } from '@/social/types';
+import type { GiftKind, InteractionGroup, InteractionId } from '@/social/types';
 import { raw, type Html } from '../panel/html';
 
 /*
@@ -31,6 +31,13 @@ const PATHS = {
   door: ['M5.5 20.5v-16a1 1 0 0 1 1-1h11a1 1 0 0 1 1 1v16', 'M3.5 20.5h17', 'M14.5 12.5h.01'],
   horns: ['M5 3.5c-.5 3 .5 5 2.5 6.5M19 3.5c.5 3-.5 5-2.5 6.5', 'M12 7a7 7 0 0 1 7 7c0 3.9-3.1 6.5-7 6.5S5 17.9 5 14a7 7 0 0 1 7-7Z', 'M9 14.5l2 .8M15 14.5l-2 .8'],
   heart: ['M12 20s-7.5-4.6-7.5-10A4.3 4.3 0 0 1 12 7.4 4.3 4.3 0 0 1 19.5 10c0 5.4-7.5 10-7.5 10Z'],
+  heartCrack: ['M12 20s-7.5-4.6-7.5-10A4.3 4.3 0 0 1 12 7.4 4.3 4.3 0 0 1 19.5 10c0 5.4-7.5 10-7.5 10Z', 'M12 7.4l-1.6 3.8 2.6 1.7-2.1 3.6'],
+  clock: ['M12 3a9 9 0 1 1 0 18 9 9 0 0 1 0-18Z', 'M12 7.5V12l3 2'],
+  croissant: ['M3.5 14c1.5-4.5 5-7.5 8.5-7.5s7 3 8.5 7.5c-1.6.9-3.3.6-4.3-.6-.9 1.6-2.4 2.6-4.2 2.6s-3.3-1-4.2-2.6c-1 1.2-2.7 1.5-4.3.6Z', 'M9.3 7.6l1.2 6.6M14.7 7.6l-1.2 6.6'],
+  flowers: ['M12 21v-8', 'M12 13c-3 0-4.5-2.5-4.5-6l2.2 1.6L12 5l2.3 3.6L16.5 7c0 3.5-1.5 6-4.5 6Z', 'M12 18c-2.4-.1-3.9-1.3-4.4-3.1M12 17.5c2.2-.2 3.6-1.3 4.1-3'],
+  fish: ['M3 12c2.5-3.5 6-5 9.5-5 3 0 5.2 1.6 6.5 3l2.5-2v8l-2.5-2c-1.3 1.4-3.5 3-6.5 3-3.5 0-7-1.5-9.5-5Z', 'M8 11h.01'],
+  bone: ['M6.5 6.5l11 11', 'M5 5.2a1.8 1.8 0 1 1 0 3.6 1.8 1.8 0 0 1 0-3.6Z', 'M7 3.2a1.8 1.8 0 1 1 0 3.6 1.8 1.8 0 0 1 0-3.6Z', 'M17 17.2a1.8 1.8 0 1 1 0 3.6 1.8 1.8 0 0 1 0-3.6Z', 'M19 15.2a1.8 1.8 0 1 1 0 3.6 1.8 1.8 0 0 1 0-3.6Z'],
+  wave: ['M7 11V6.5a1.5 1.5 0 0 1 3 0V11', 'M10 10V4.5a1.5 1.5 0 0 1 3 0V10', 'M13 10.5V5.5a1.5 1.5 0 0 1 3 0v6', 'M16 11.5V8.5a1.5 1.5 0 0 1 3 0v5.5a7 7 0 0 1-7 7h-.5a6.5 6.5 0 0 1-5-2.4L4 15.5a1.6 1.6 0 0 1 2.4-2.1L7 14', 'M3.5 7.5c.4-1.5 1.3-2.7 2.6-3.5M20.5 4.5c.6.8 1 1.7 1.1 2.7'],
   key: ['M8.5 11a4 4 0 1 1 0 .01Z', 'M12 11.5h9M18.5 11.5v3M15.5 11.5v2'],
   lock: ['M6.5 10.5h11a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1v-8a1 1 0 0 1 1-1Z', 'M8.5 10.5V7.5a3.5 3.5 0 0 1 7 0v3'],
   cake: ['M4.5 20.5h15v-7a1.5 1.5 0 0 0-1.5-1.5H6a1.5 1.5 0 0 0-1.5 1.5Z', 'M4.5 15.5c1.3 1 2.5 1 3.75 0s2.5-1 3.75 0 2.5 1 3.75 0 2.5-1 3.75 0', 'M12 12V8.5M12 5.5c.8 0 1.3-.7 1-1.5L12 2.5l-1 1.5c-.3.8.2 1.5 1 1.5Z'],
@@ -81,6 +88,15 @@ export const GROUP_ICONS: Record<InteractionGroup, IconName> = {
   trade: 'swap',
   invite: 'door',
   mean: 'horns',
+};
+
+/** What a gift from the pocket looks like in the Give list (the rest: the gift box). */
+export const GIFT_ICONS: Partial<Record<GiftKind, IconName>> = {
+  croissant: 'croissant',
+  flowers: 'flowers',
+  treats: 'fish',
+  scrap: 'bone',
+  cake: 'cake',
 };
 
 /** Each mood's weather. */
