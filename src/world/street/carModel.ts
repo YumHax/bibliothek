@@ -20,8 +20,8 @@ export function vehicleGlass(color = 0x1a232b): THREE.MeshStandardMaterial {
 /** A small hatchback at real scale (`city/vehicles`), nose to +x, wheels on y = 0, centred. */
 const CAR = VEHICLES.car;
 
-/** The street's car shapes: the hatchback, a saloon with a boot, a small panel van (parked, and the delivery van). */
-export type CarModelId = 'hatch' | 'saloon' | 'van';
+/** The street's car shapes: the hatchback, a small city car, a saloon with a boot, an estate, a small panel van (parked, and the delivery van). */
+export type CarModelId = 'hatch' | 'city' | 'saloon' | 'estate' | 'van';
 
 /** Outer size of a vehicle, metres: nose to +x, wheels on y = 0, centred on x and z. */
 export interface VehicleSize {
@@ -32,7 +32,9 @@ export interface VehicleSize {
 
 export const CAR_SIZES: Record<CarModelId, VehicleSize> = {
   hatch: { length: CAR.length, width: CAR.width, height: CAR.height },
+  city: VEHICLES.cityCar,
   saloon: VEHICLES.saloon,
+  estate: VEHICLES.estate,
   van: VEHICLES.van,
 };
 
@@ -287,13 +289,17 @@ function dress(lamps: LampSet, d: Dressing, lampY: number, tailY: number, grille
 /** Where a driver sits in each shape (left-hand drive: the -z side), for the figure seen through the glass: the seat's x, the belt line. */
 export const DRIVER_SEAT: Record<CarModelId, { x: number; belt: number; z: number }> = {
   hatch: { x: -0.42, belt: 0.95, z: -0.38 },
+  city: { x: -0.36, belt: 0.97, z: -0.36 },
   saloon: { x: -0.3, belt: 0.92, z: -0.38 },
+  estate: { x: -0.3, belt: 0.93, z: -0.38 },
   van: { x: 0.55, belt: 1.2, z: -0.38 },
 };
 
 /** Builds a car shape's geometries once; every car of that shape (parked or driving) instances them. */
 export function carGeometries(model: CarModelId = 'hatch'): CarGeometries {
   if (model === 'saloon') return saloon();
+  if (model === 'estate') return estate();
+  if (model === 'city') return cityCar();
   if (model === 'van') return van();
   const half = CAR.length / 2;
   const d: Dressing = { length: CAR.length, width: CAR.width, front: half + 0.05, back: -half - 0.05, bumperY: 0.4, mirror: [0.82, 1.0], seats: [DRIVER_SEAT.hatch.x, -1.25], belt: DRIVER_SEAT.hatch.belt, dash: 0.62, plates: [0.4, 0.62] };
@@ -326,6 +332,42 @@ function saloon(): CarGeometries {
     glass: plain(glass),
     wheels: tyres([-1.45, 1.42], width - 0.28, VEHICLES.saloon.wheelRadius, length, width, 0.22, trimOf(d)),
     lamps: dress(lamps, d, 0.64, 0.78, [0.6, 0.1]).build(),
+  });
+}
+
+/** A small city car: a stubby bonnet, a tall cabin over most of its length, a near-vertical tailgate. */
+function cityCar(): CarGeometries {
+  const { length, width, height } = CAR_SIZES.city;
+  const half = length / 2;
+  const d: Dressing = { length, width, front: half + 0.05, back: -half - 0.05, bumperY: 0.38, mirror: [0.62, 1.02], seats: [DRIVER_SEAT.city.x, -1.0], belt: DRIVER_SEAT.city.belt, dash: 0.5, plates: [0.38, 0.64] };
+  const body = prism([[-half, 0.3], [half, 0.3], [half + 0.02, 0.68], [half - 0.14, 0.84], [0.72, 0.96], [-1.5, 1.0], [-half, 0.96]], width, 0.05);
+  const roof = prism([[0.12, 1.4], [-1.36, 1.4], [-1.36, height], [0.05, height]], width - 0.22, 0.02);
+  const glass = prism([[0.74, 0.95], [0.12, 1.42], [-1.34, 1.42], [-1.62, 0.98]], width - 0.16, 0);
+  const lamps = new LampSet();
+  for (const z of [-0.55, 0.55]) lamps.add(half + 0.08, 0.68, z, 1, WHITE, 0.26, 0.12).add(-half - 0.06, 0.82, z, -1, RED, 0.12, 0.26);
+  return finish({
+    body: mergeGeometries([plain(body), plain(roof), ...mirrors(d)])!,
+    glass: plain(glass),
+    wheels: tyres([-1.16, 1.2], width - 0.24, VEHICLES.cityCar.wheelRadius, length, width, 0.2, trimOf(d)),
+    lamps: dress(lamps, d, 0.68, 0.82, [0.48, 0.12]).build(),
+  });
+}
+
+/** An estate: the saloon's front, its roof and glass carried back to a square tailgate. */
+function estate(): CarGeometries {
+  const { length, width, height } = CAR_SIZES.estate;
+  const half = length / 2;
+  const d: Dressing = { length, width, front: half + 0.05, back: -half - 0.05, bumperY: 0.4, mirror: [0.92, 0.98], seats: [DRIVER_SEAT.estate.x, -1.1], belt: DRIVER_SEAT.estate.belt, dash: 0.7, plates: [0.4, 0.66] };
+  const body = prism([[-half, 0.3], [half, 0.3], [half + 0.02, 0.66], [half - 0.22, 0.8], [0.95, 0.9], [-2.1, 0.98], [-half, 0.95]], width, 0.05);
+  const roof = prism([[0.4, 1.38], [-2.08, 1.38], [-2.08, height], [0.3, height]], width - 0.26, 0.02);
+  const glass = prism([[1.0, 0.89], [0.35, 1.4], [-2.06, 1.4], [-2.22, 0.98]], width - 0.2, 0);
+  const lamps = new LampSet();
+  for (const z of [-0.6, 0.6]) lamps.add(half + 0.08, 0.64, z, 1, WHITE, 0.34, 0.1).add(-half - 0.06, 0.86, z, -1, RED, 0.14, 0.3);
+  return finish({
+    body: mergeGeometries([plain(body), plain(roof), ...mirrors(d)])!,
+    glass: plain(glass),
+    wheels: tyres([-1.5, 1.45], width - 0.28, VEHICLES.estate.wheelRadius, length, width, 0.22, trimOf(d)),
+    lamps: dress(lamps, d, 0.64, 0.86, [0.6, 0.1]).build(),
   });
 }
 

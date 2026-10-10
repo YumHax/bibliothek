@@ -308,6 +308,15 @@ export class MarketFloor {
     });
   }
 
+  /** Whether another copy of `item`'s game is on show today for less (the scan label says so). */
+  private cheaperElsewhere(item: StockItem): boolean {
+    for (const box of this.displayed) {
+      const other = box.item;
+      if (other !== item && other.game.id === item.game.id && other.priced && item.priced && other.price < item.price) return true;
+    }
+    return false;
+  }
+
   /** Puts `item` on show at `slot` of `entry`'s stall (or in `crate`, a bargain bin, when `entry` is null). */
   private display(item: StockItem, slot: DisplaySlot | { position: THREE.Vector3; angle: number }, entry: FloorStall | null, crate: BargainBin = this.options.bins[0]!): ForSaleBox {
     const { zone, context } = this.options;
@@ -318,6 +327,7 @@ export class MarketFloor {
       tag: entry !== null,
       wallet: context.money.wallet,
       isWanted: () => collection.isWanted(item.game.id),
+      compare: () => ({ owned: collection.owns(item.game.id), cheaperElsewhere: this.cheaperElsewhere(item) }),
       where: entry ? `the ${entry.platform.shortName} stall` : BIN_WHERE,
       behindGlass: entry?.stall.behindGlass,
       react: (reaction) => this.reactAt(entry, reaction),

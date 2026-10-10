@@ -55,6 +55,12 @@ export function estateStart(day: number): number | null {
   return state.start;
 }
 
+/** `?debug`: the sale opens on game day `day` (its notice and mourning taken as past). */
+export function forceEstateSale(day: number): void {
+  state = { ...state, start: day };
+  store.save(state);
+}
+
 /** Where the sale stands on game day `day`. */
 export function estatePhase(day: number): EstatePhase {
   const start = estateStart(day);

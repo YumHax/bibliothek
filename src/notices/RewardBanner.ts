@@ -1,5 +1,5 @@
-import { formatMoney } from '@/text/money';
 import { reduceMotion } from '@/settings/motion';
+import { moneyChips } from './chips';
 import { playNoticeSound } from '@/audio/noticeSounds';
 import { readMs } from './readingTime';
 import type { RewardNotice } from './types';
@@ -13,7 +13,7 @@ const QUEUE_MAX = 4;
 
 /**
  * THE REWARD: something gained, in the middle of the screen, big: the title in the display font,
- * a line under it, the coins and tickets as chips, and a fanfare. One at a time; the rest queue,
+ * a line under it, the coins and tickets as chips (`chips`), and a fanfare. One at a time; the rest queue,
  * so two rewards in a row are both seen. A big one (a milestone, a prize, a tournament) has rays.
  */
 export class RewardBanner {
@@ -95,29 +95,15 @@ export class RewardBanner {
       detail.textContent = reward.detail;
       el.appendChild(detail);
     }
-    const chips = [chip(reward.coins, 'coin'), chip(reward.tickets, 'ticket')].filter((c): c is HTMLSpanElement => c !== null);
-    if (chips.length) {
-      const row = document.createElement('div');
-      row.className = 'reward__chips';
-      row.append(...chips);
-      el.appendChild(row);
-    }
+    const chips = moneyChips(reward.coins, reward.tickets, 'reward__chips');
+    if (chips) el.appendChild(chips);
     this.root.appendChild(el);
     this.current = el;
     this.left = Math.max(MIN_MS, readMs(`${reward.title} ${reward.detail ?? ''}`) + 600) + (reward.big ? BIG_EXTRA_MS : 0);
-    const gain = (reward.coins ?? 0) > 0 || (reward.tickets ?? 0) > 0 || reward.big;
-    playNoticeSound(reward.big ? 'fanfare' : gain ? 'reward' : 'tip');
+    // A fanfare for the big ones, the arpeggio for a gain; a banner with nothing counted gets the slip's soft tick.
+    const gain = (reward.coins ?? 0) > 0 || (reward.tickets ?? 0) > 0;
+    playNoticeSound(reward.big ? 'fanfare' : gain ? 'reward' : 'slip');
   }
-}
-
-function chip(amount: number | undefined, kind: 'coin' | 'ticket'): HTMLSpanElement | null {
-  if (!amount) return null;
-  const el = document.createElement('span');
-  el.className = `reward__chip reward__chip--${kind}${amount < 0 ? ' reward__chip--spent' : ''}`;
-  const icon = document.createElement('span');
-  icon.className = `reward__icon reward__icon--${kind}`;
-  el.append(icon, formatMoney(amount, kind, { sign: true }));
-  return el;
 }
 
 /** How many rewards a merged banner stands for (a merged one merged again still counts them all). */

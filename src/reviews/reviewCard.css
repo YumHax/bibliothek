@@ -41,14 +41,15 @@
     background: var(--paper-review-box);
   }
   .review-card__score b { font: var(--fs-7)/1.1 var(--ui-font-print); }
-  .review-card__score span { font-size: var(--fs-tiny); line-height: 1.15; text-align: center; max-width: 5.5rem; color: var(--ink-review-soft); }
+  .review-card__score span { font-size: var(--fs-0); line-height: 1.15; text-align: center; max-width: 5.5rem; color: var(--ink-review-soft); }
   .review-card__score--aggregate { background: var(--ui-accent); border-color: var(--ui-gold-deep); }
   .review-card__score--aggregate span { color: var(--review-ink-on-gold); }
   .game-panel .review-card p,
   .review-card__quote { margin: 0.2rem 0 0.35rem; font: italic var(--fs-5)/1.4 var(--ui-font-serif); opacity: 1; }
-  .review-card__quote cite { display: block; margin-top: 0.2rem; font: normal var(--fs-1)/1.2 var(--ui-font-body); color: var(--ink-review-soft); }
+  .review-card__quote cite { display: block; margin-top: 0.2rem; font: normal var(--fs-0)/1.2 var(--ui-font-body); color: var(--ink-review-soft); }
   .review-card__quote cite::before { content: '— '; }
-  .review-card__credit { margin: 0.35rem 0 0; font-size: var(--fs-tiny); color: var(--ink-review-faint); }
+  /* The small print in the floored size and the darker ink: readable on the cream (about 9 px in the faint one was not). */
+  .review-card__credit { margin: 0.35rem 0 0; font-size: var(--fs-0); color: var(--ink-review-dim); }
   .review-card__credit a { color: inherit; }
-  .game-panel .review-card footer { margin-top: 0.35rem; font-size: var(--fs-tiny); color: var(--ink-review-faint); }
+  .game-panel .review-card footer { margin-top: 0.35rem; font-size: var(--fs-0); color: var(--ink-review-dim); }
 }

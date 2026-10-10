@@ -41,9 +41,6 @@
     color: var(--ui-text-dim);
     white-space: nowrap;
   }
-  .household-panel__tag--locked {
-    font-style: italic;
-  }
   .household-panel__rows {
     list-style: none;
     margin: 0;
@@ -68,11 +65,182 @@
     font-size: var(--fs-3);
     color: var(--ui-text-dim);
   }
-  .household-panel__rows .household-panel__perk {
+
+  /* The wardrobe: the outfits drawn on a rail in the closet's dark wood, the one worn lifted forward, the one pointed
+     at below the rail. Each garment's colours are its slot variables; the closet's are the card's. */
+  .wardrobe-panel__card {
+    --card-w: var(--card-w-lg);
+    --closet-top: #2b1d14;
+    --closet-bottom: #1a110b;
+    --closet-floor: #3a281b;
+    --rail-light: #e9dcc0;
+    --rail-dark: #8a7656;
+    --hanger: #b98a56;
+    --hanger-dark: #6b4a2b;
+    --bag: #5d6066;
+    --bag-dark: #3f4146;
+    --tag: #efe6d2;
+    --tag-ink: #3a3027;
+  }
+  .wardrobe__item[data-id='everyday']     { --cloth: #6f86a6; --cloth-dark: #546a88; --trim: #c9d4e3; }
+  .wardrobe__item[data-id='arcadeTee']    { --cloth: #26262c; --cloth-dark: #18181c; --trim: #ffd34d; }
+  .wardrobe__item[data-id='hunterJacket'] { --cloth: #5f6a3e; --cloth-dark: #454e2b; --trim: #7a4b2a; }
+  .wardrobe__item[data-id='sundayBest']   { --cloth: #2c3140; --cloth-dark: #1d212c; --trim: #b0283a; --shirt: #ece8de; }
+  .wardrobe__item[data-id='memeScarf']    { --cloth: #7a2734; --cloth-dark: #5a1a25; --trim: #d9b45a; }
+
+  .wardrobe__closet {
+    position: relative;
+    margin: var(--sp-2) 0 var(--sp-3);
+    padding: var(--sp-3) var(--sp-3) 0;
+    border-radius: var(--ui-radius-sm);
+    background: linear-gradient(var(--closet-top), var(--closet-bottom) 80%, var(--closet-floor));
+    box-shadow: inset 0 0.6rem 1.4rem var(--shade-60), inset 0 -0.2rem 0.6rem var(--shade-45);
+    overflow: hidden;
+  }
+  /* The pole, a brass tube across the closet at the hooks' height. */
+  .wardrobe__closet::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: calc(var(--sp-3) + 0.15rem);
+    height: 0.4rem;
+    background: linear-gradient(var(--rail-light), var(--rail-dark));
+    box-shadow: 0 0.15rem 0.3rem var(--shade-55);
+  }
+  .wardrobe__rail {
+    position: relative;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: var(--sp-2);
+  }
+  .wardrobe__item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.25rem;
+    width: 100%;
+    padding: 0 0 var(--sp-2);
+    border: 0;
+    border-radius: var(--ui-radius-sm);
+    background: none;
+    color: var(--ui-text-dim);
+    font: inherit;
+    cursor: pointer;
+  }
+  .wardrobe__item--bagged {
+    cursor: default;
+  }
+  .wardrobe__garment {
+    width: 100%;
+    max-width: 7.5rem;
+    overflow: visible;
+    transform-origin: 50% 2%;
+    filter: drop-shadow(0 0.35rem 0.4rem var(--shade-60));
+    transition: transform var(--dur-hover) var(--ui-ease), filter var(--dur-hover) var(--ui-ease);
+  }
+  .wardrobe__item:hover .wardrobe__garment,
+  .wardrobe__item:focus-visible .wardrobe__garment {
+    transform: rotate(-2.5deg);
+  }
+  .wardrobe__item--worn .wardrobe__garment,
+  .wardrobe__item--worn:hover .wardrobe__garment {
+    transform: scale(1.06);
+    filter: drop-shadow(0 0.5rem 0.6rem var(--shade-70)) drop-shadow(0 0 0.7rem var(--ui-glow-gold));
+  }
+  .wardrobe__item--swing .wardrobe__garment {
+    animation: wardrobe-swing var(--dur-drift) var(--ui-ease);
+  }
+  @keyframes wardrobe-swing {
+    0%   { transform: scale(1.06) rotate(0); }
+    25%  { transform: scale(1.06) rotate(-7deg); }
+    55%  { transform: scale(1.06) rotate(4deg); }
+    80%  { transform: scale(1.06) rotate(-1.5deg); }
+    100% { transform: scale(1.06) rotate(0); }
+  }
+  .wardrobe__label {
+    font-size: var(--fs-3);
+    text-align: center;
+    line-height: 1.2;
+  }
+  .wardrobe__item:hover .wardrobe__label,
+  .wardrobe__item:focus-visible .wardrobe__label,
+  .wardrobe__item--worn .wardrobe__label {
     color: var(--ui-text);
   }
-  .household-panel__row--locked > span {
+  .wardrobe__item--bagged .wardrobe__label {
+    font-style: italic;
     opacity: var(--ui-muted);
+  }
+  /* Every hanger keeps the chip's room, so putting one on moves nothing. */
+  .wardrobe__worn {
+    visibility: hidden;
+  }
+  .wardrobe__item--worn .wardrobe__worn {
+    visibility: visible;
+  }
+
+  /* The drawing's parts. */
+  .wardrobe__hanger { fill: none; stroke: var(--hanger); stroke-width: 2.6; stroke-linejoin: round; stroke-linecap: round; }
+  .wardrobe__cloth  { fill: var(--cloth); stroke: var(--cloth-dark); stroke-width: 1; stroke-linejoin: round; }
+  .wardrobe__shade  { fill: var(--cloth-dark); }
+  .wardrobe__seam   { fill: none; stroke: var(--cloth-dark); stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+  .wardrobe__rib    { fill: none; stroke: var(--cloth); stroke-width: 1.2; opacity: 0.6; }
+  .wardrobe__fold   { fill: none; stroke: var(--shade-25); stroke-width: 1.4; stroke-linecap: round; }
+  .wardrobe__trim   { fill: var(--trim); }
+  .wardrobe__fringe { fill: none; stroke: var(--cloth-dark); stroke-width: 1.6; stroke-linecap: round; }
+  .wardrobe__item[data-id='memeScarf'] .wardrobe__rib { stroke: var(--cloth-dark); }
+  .wardrobe__shirt  { fill: var(--shirt); }
+  .wardrobe__button { fill: var(--cloth-dark); stroke: var(--tint-20); stroke-width: 0.6; }
+  .wardrobe__pocket { fill: var(--cloth); stroke: var(--cloth-dark); stroke-width: 1.2; }
+  .wardrobe__zip    { fill: none; stroke: var(--trim); stroke-width: 1.6; stroke-dasharray: 2 1.2; }
+  .wardrobe__zip--bag { stroke: var(--bag-dark); }
+  .wardrobe__print  { fill: var(--trim); font-family: var(--ui-font-led); font-size: 15px; letter-spacing: 1px; }
+  .wardrobe__bag    { fill: var(--bag); stroke: var(--bag-dark); stroke-width: 1.2; stroke-linejoin: round; }
+  .wardrobe__string { fill: none; stroke: var(--tag); stroke-width: 0.8; }
+  .wardrobe__tag    { fill: var(--tag); stroke: var(--hanger-dark); stroke-width: 0.6; }
+  .wardrobe__tag-hole { fill: var(--bag-dark); }
+
+  /* Below the rail: the outfit pointed at. A fixed height, so the doors' button never moves under the pointer. */
+  .wardrobe__detail {
+    height: 7.2rem;
+    overflow: hidden;
+    padding: 0 0.2rem;
+  }
+  .wardrobe__name {
+    margin: 0 0 0.25rem;
+    font-family: var(--ui-font-display);
+    font-weight: 400;
+    font-size: var(--fs-t1);
+    color: var(--ui-text);
+  }
+  .wardrobe__on {
+    font-family: var(--ui-font-body);
+    font-size: var(--fs-3);
+    color: var(--ui-gold-pale);
+    font-style: italic;
+  }
+  .wardrobe__look,
+  .wardrobe__perk,
+  .wardrobe__note {
+    margin: 0 0 0.25rem;
+  }
+  .wardrobe__look {
+    font-size: var(--fs-5);
+    font-style: italic;
+    color: var(--ui-text-dim);
+  }
+  .wardrobe__perk {
+    font-size: var(--fs-5);
+    color: var(--ui-text);
+  }
+  .wardrobe__note {
+    font-family: var(--ui-font-hand);
+    font-size: var(--fs-t5);
+    color: var(--ui-text-dim);
   }
 
   /* The dream on waking: a card at the top of the view, above the canvas, under the panels. */

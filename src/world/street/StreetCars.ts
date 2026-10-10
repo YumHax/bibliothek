@@ -149,7 +149,7 @@ export class StreetCars extends THREE.Group implements Furniture, Updatable {
 
     // Which shape each parked car is (`city/parkedCars`: the window view parks the same), and the driving ones'.
     const parkedModels = options.parked.map(({ shape }): CarModelId => shape);
-    const drivingModels = Array.from({ length: options.cars }, (_, i): CarModelId => (i % 3 === 1 ? 'saloon' : i % 5 === 4 ? 'van' : 'hatch'));
+    const drivingModels = Array.from({ length: options.cars }, (_, i): CarModelId => (i % 3 === 1 ? 'saloon' : i % 5 === 4 ? 'van' : i % 7 === 3 ? 'city' : i % 7 === 6 ? 'estate' : 'hatch'));
     this.fleet = new CarFleet(this, [...parkedModels, ...drivingModels]);
 
     // The bays: every one the plan has (taken or free), each with the route that passes it.

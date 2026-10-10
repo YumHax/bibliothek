@@ -16,8 +16,8 @@ export interface WeeklyIssue {
   hints: string[];
   /** "Prices today: 18 to 540 coins", or null when nobody has been to the market yet. */
   prices: string | null;
-  /** The small ads (private sellers: `classifieds/`), as printed: who, where, the ad's words. */
-  classifieds: { head: string; text: string }[];
+  /** The small ads (private sellers: `classifieds/`), as printed: who, where, the ad's words, and its id (to ring it). */
+  classifieds: { id: string; head: string; text: string }[];
 }
 
 interface WeeklySources {
@@ -69,7 +69,7 @@ export function writeWeekly({ stock, day, theme, wanted, news = [], classifieds 
     ? { masthead: 'THE GAMING WEEKLY', dateline, headline: `GRAIL ALERT: ${grailToday.title} at the market`, blurb: grailToday.lore }
     : { masthead: 'THE GAMING WEEKLY', dateline, headline: `Today at the market: ${theme.title}`, blurb: theme.blurb };
   // The talk of the market leads the tips, drawn or not.
-  const small = classifieds.map((ad) => ({ head: `${ad.name.toUpperCase()}, ${ad.flat}, ${SELLERS_BUILDING}`, text: ad.text }));
+  const small = classifieds.map((ad) => ({ id: ad.id, head: `${ad.name.toUpperCase()}, ${ad.flat}, ${SELLERS_BUILDING}`, text: ad.text }));
   const talk = [...news.filter((n) => !(n.kind === 'grail' && n.inDays === 0)).slice(0, 2).map(paperRumour), ...street.slice(0, 1).map((line) => `On Front Street: ${line}`)];
   if (!stock || stock.length === 0) {
     const hints = [...talk, ...shuffled(random, QUIET)].slice(0, 3);

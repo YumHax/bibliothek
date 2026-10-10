@@ -82,9 +82,13 @@ export const KEYS = {
   scratchCard: save('scratchCard.v1'),
   visitors: save('visitors.v1'),
   journal: save('journal.v1'),
+  /** Where the player's reading of the journal stopped: the day key and the lines read on it (`Journal.markRead`). */
+  journalRead: save('journalRead.v1'),
   milestones: save('milestones.v1'),
   valueHistory: save('valueHistory.v1'),
   firstDay: save('firstDay.v1'),
+  /** The opening cutscene was seen (`src/intro`): it plays once per game. */
+  intro: save('intro.v1'),
   post: save('post.v1'),
   /** What was done today, by name, on the game day or the real day it follows (`time/OncePerDay`). */
   daily: save('daily.v1'),
@@ -99,6 +103,12 @@ export const KEYS = {
   estateSale: save('estateSale.v1'),
   /** The neighbours' party in the courtyard: the tournament's plays and prize, per party (`building/neighboursParty`). */
   neighboursParty: save('neighboursParty.v1'),
+  /** Bulky-waste day in the courtyard: what the player carried off the last pile (`building/bulkyWaste`). */
+  bulkyWaste: save('bulkyWaste.v1'),
+  /** The courtyard's kids: carts swapped away this week, their practice, the week's cart handed over (`building/kids/yardKids`). */
+  yardKids: save('yardKids.v1'),
+  /** The film night in the courtyard: the film put on, the screenings shown (`building/yardCinema`). */
+  yardCinema: save('yardCinema.v1'),
   household: save('household.v1'),
   /** The sort the shelves stand in and the player's own arrangement of the boxes (`world/shelving/arrangement`). */
   shelves: save('shelves.v1'),
@@ -114,6 +124,10 @@ export const KEYS = {
   honours: save('honours.v1'),
   /** The lost prototype's trail: how far the player followed it (`story/PrototypeStory`). */
   prototypeStory: save('prototypeStory.v1'),
+  /** Uncle Félix's notebook: when it was found, his games bought back since (`story/FelixNotebook`). */
+  felixNotebook: save('felixNotebook.v1'),
+  /** Mémé's: the visits, the last Sunday envelope, the memories of her album seen (`grandma/GrandmaVisits`). */
+  grandma: save('grandma.v1'),
   /** The building's keys the player was given (the cellar's, `building/keys`). */
   buildingKeys: save('buildingKeys.v1'),
   /** The game day the building last had a power cut (`building/blackout`): one storm's evening a day at most. */
@@ -152,6 +166,8 @@ export const KEYS = {
   marketCredit: save('marketCredit.v1'),
   /** The friends' side of the social layer: games borrowed from them, Inès' postcards, a word put in (`social/friendsLife`). */
   friendsLife: save('friendsLife.v1'),
+  /** `?debug` only: the progressions its panel switched off, which the debug save then never unlocks again (`cheats/progress`). */
+  debugProgress: save('debugProgress.v1'),
   // Caches.
   longplayCache: `${CACHE_PREFIX}longplay.v1`,
   fameCache: `${CACHE_PREFIX}fame.v1`,

@@ -13,6 +13,10 @@
  *   the middle of the screen with a fanfare; rewards queue, none is lost.
  * - `tip`: how to do something (keys, the first day's next step): a card pinned top left that stays
  *   until it is done (`until`) or replaced.
+ * - `prompt`: the keys that matter in a state the player is in (seated, carrying): a quiet line at the
+ *   bottom, no sound, gone with the state.
+ * - `slip`: something that changed hands without a fanfare (bought, held, a parcel): a slip under the
+ *   crosshair with its coin chip.
  * - `read`: something to read (the radio's chronicle, the mail, a plaque, a bath's effect): a paper
  *   card that does not go before it has been read.
  */
@@ -26,7 +30,35 @@ export interface NoticeActions {
   reward(reward: RewardNotice): void;
   /** Pins a tip; returns the function that takes it down. */
   tip(text: string, options?: TipOptions): () => void;
+  /**
+   * The keys that matter while the player is in a state (seated, carrying a piece, a pad in hand, at a machine):
+   * a quiet line at the bottom of the view, no sound, gone when `until` says the state ended. Returns the function
+   * that takes it down.
+   */
+  prompt(text: string, options?: PromptOptions): () => void;
+  /**
+   * Something that changed hands with no fanfare (a game bought, a parcel come, a copy held, a debt settled): a slip
+   * under the crosshair with its coin / ticket chip. A gain with a number, a prize or a milestone is a `reward`.
+   */
+  slip(notice: SlipNotice): void;
   read(card: ReadingNotice): void;
+}
+
+export interface PromptOptions {
+  /** A prompt with the same id replaces it (the same state, new keys). */
+  id?: string;
+  /** Asked every frame: true takes the prompt down (the state ended). Without it the prompt stays until its remover is called. */
+  until?: () => boolean;
+}
+
+export interface SlipNotice {
+  /** Short: "Bought Chrono Trigger", "A parcel came". */
+  title: string;
+  /** A line under it: where it went. */
+  detail?: string;
+  /** Coins spent (negative) or had back (positive), as a chip. */
+  coins?: number;
+  tickets?: number;
 }
 
 /**
@@ -36,6 +68,8 @@ export interface NoticeActions {
  */
 export interface NoticeDismissing {
   dismiss(all?: boolean): boolean;
+  /** Only the card being read (Esc heard in the room, before it pauses); false when no card is up. */
+  putDownCard(): boolean;
 }
 
 export interface RewardNotice {
@@ -66,8 +100,12 @@ export interface TipOptions {
   ms?: number;
 }
 
-/** The paper the card is printed on. */
-export type ReadingLook = 'note' | 'letter' | 'radio' | 'plaque';
+/**
+ * The paper the card is printed on: a `note` (a scrap, a plaque's neighbour), a `letter` (a sheet with a sender, a date and
+ * a signature, out of an envelope), a `postcard` (picture side first), a `flyer` (printed in its `accent` colour), the
+ * `radio`'s printout, a brass `plaque`.
+ */
+export type ReadingLook = 'note' | 'letter' | 'postcard' | 'flyer' | 'radio' | 'plaque';
 
 export interface ReadingNotice {
   title?: string;
@@ -75,4 +113,16 @@ export interface ReadingNotice {
   /** What it changed, in bold under the text ("Worth its full price again."). */
   effect?: string;
   look?: ReadingLook;
+  /** Who wrote it (a letter, a postcard): the signature line. */
+  from?: string;
+  /** A letter's hand: in `pen` (default), on a `typewriter`, or in `print` (the paper). */
+  hand?: 'pen' | 'typewriter' | 'print';
+  /** When (a letter): the date line, in the writer's words ("December 1993", "Tuesday"). */
+  date?: string;
+  /** Where from (a postcard): the picture side's caption. */
+  place?: string;
+  /** A flyer's printed colour (the 3D sheet's `accent`). */
+  accent?: number;
+  /** One of a batch (the mailbox's three pieces, the notice board): "2 of 3" on the card. */
+  of?: { index: number; count: number };
 }

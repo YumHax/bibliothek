@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import { createCanvas, toTexture } from '@/covers/generated/canvasUtils';
-import { drawText } from './games/ArcadeGame';
+import { PIXEL_FONT, drawText } from './games/ArcadeGame';
+import { arcadeHint } from './arcadeHint';
+import { repaintWhenFontLoads } from '@/graphics/fontReady';
 
 interface InstructionCardOptions {
   /** The machine's name, across the top. */
@@ -44,6 +46,18 @@ function paintCard(options: InstructionCardOptions, width: number, height: numbe
   const H = Math.round(height * PX_PER_M);
   const [canvas, ctx] = createCanvas(W, H);
   const accent = `#${new THREE.Color(options.accent ?? 0xff2fa0).getHexString()}`;
+  const paint = (): void => paintFace(ctx, options, W, H, accent);
+  paint();
+  const texture = toTexture(canvas, 'facing');
+  repaintWhenFontLoads(`${Math.round(H * 0.13)}px ${PIXEL_FONT}`, () => {
+    paint();
+    texture.needsUpdate = true;
+  });
+  return texture;
+}
+
+/** The card's print: yellowed paper, the stripe and title, the lines (their key tokens named, `arcadeHint`), INSERT 1 COIN. */
+function paintFace(ctx: CanvasRenderingContext2D, options: InstructionCardOptions, W: number, H: number, accent: string): void {
   ctx.fillStyle = '#efe6cf';
   ctx.fillRect(0, 0, W, H);
   // Yellowed towards the edges, where fingers go.
@@ -55,12 +69,12 @@ function paintCard(options: InstructionCardOptions, width: number, height: numbe
   ctx.fillStyle = accent;
   ctx.fillRect(0, 0, W, H * 0.24);
   drawText(ctx, options.title, W / 2, H * 0.125, Math.round(H * 0.13), '#fffbe6');
-  const lines = options.lines.slice(0, 4);
+  const lines = options.lines.slice(0, 4).map((line) => arcadeHint(line).toUpperCase());
   const rowH = (H * 0.66) / Math.max(3, lines.length);
   lines.forEach((line, i) => {
-    const size = Math.min(Math.round(H * 0.095), Math.floor((W * 0.9) / Math.max(8, line.length) / 0.8));
+    // Pixel type is square: a character as wide as it is tall.
+    const size = Math.min(Math.round(H * 0.095), Math.floor((W * 0.9) / Math.max(8, line.length)));
     drawText(ctx, line, W / 2, H * 0.3 + rowH * (i + 0.5), size, '#2a2230');
   });
   drawText(ctx, 'INSERT 1 COIN', W / 2, H * 0.94, Math.round(H * 0.06), '#6a5a70');
-  return toTexture(canvas, 'facing');
 }

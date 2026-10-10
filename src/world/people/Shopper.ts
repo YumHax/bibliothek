@@ -7,7 +7,6 @@ import { Attention, STANDING, WALKING } from './attention';
 import { PersonModel } from './PersonModel';
 import { randomLook, type PersonLook } from './looks';
 import type { Pose } from './poses';
-import { blobShadow } from '../zone/ContactShadows';
 import { random } from '@/random';
 
 /** A place to stand and browse: a spot on the floor (zone-local) and the way to face there, in radians about y (0 = facing +z). */
@@ -96,7 +95,7 @@ export class Shopper extends THREE.Group implements Furniture, Updatable {
   private readonly gazePoint = new THREE.Vector3();
   private readonly mine = new THREE.Vector3();
   private readonly exit: ShopperOptions['exit'];
-  private readonly blob: THREE.Mesh | null;
+  private readonly blob: THREE.Object3D | null;
   private fade = 1;
   private fadeTo = 1;
   private readonly attention: Attention;
@@ -112,9 +111,8 @@ export class Shopper extends THREE.Group implements Furniture, Updatable {
     const seed = options.seed ?? 1;
     this.model = new PersonModel(options.look ?? randomLook(seed + 100, 'shopper'), this.viewer, seed + 100);
     this.add(this.model);
-    const blob = blobShadow(0.55, 0.5);
-    if (blob) this.add(blob);
-    this.blob = blob;
+    // Under the hips and each foot, sized to them.
+    this.blob = this.model.groundShadow();
     this.exit = options.exit;
     if (this.exit) this.model.enableFade();
     this.attention = new Attention(seed + 100);

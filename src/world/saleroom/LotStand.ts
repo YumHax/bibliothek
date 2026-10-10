@@ -9,12 +9,17 @@ import { invisibleHitbox } from '../meshUtils';
 import { cloth, timber } from '../materials/palette';
 import { part } from '../props/Prop';
 import { SealedCartonModel } from '../props/SealedCartonModel';
+import { PooledLight } from '../lighting/LightPool';
+import { bakedGlow, poolTexture } from '../showcase/glow';
+import { FLOOR, onSurface } from '../surface/layers';
 
 interface LotStandOptions {
   covers: BoxArtLoader;
   label: () => string | null;
   /** A click: a bid on the lot shown, when it is being called. */
   onActivate: (session: SessionActions) => void;
+  /** Told what goes up on the stand (the board shows the lot's cover). */
+  onShow?: (lot: AuctionLot | null) => void;
 }
 
 const WIDTH = 0.56;
@@ -37,6 +42,15 @@ export class LotStand extends THREE.Group implements Furniture, Interactable {
     this.name = 'LotStand';
     part(this, WIDTH, HEIGHT - 0.03, DEPTH, BASE, { y: (HEIGHT - 0.03) / 2 });
     part(this, WIDTH + 0.03, 0.03, DEPTH + 0.03, VELVET, { y: HEIGHT - 0.015 });
+    // The lot under its light: a warm pool baked on the velvet, and a light the room's pool lends when the player is near.
+    const pool = new THREE.Mesh(new THREE.PlaneGeometry(WIDTH, DEPTH), onSurface(bakedGlow(0xffd9a0, 0.28, poolTexture()), FLOOR.glowPool, { depthWrite: false }));
+    pool.rotation.x = -Math.PI / 2;
+    pool.position.y = HEIGHT + FLOOR.glowPool.lift;
+    pool.raycast = () => {};
+    this.add(pool);
+    const light = new PooledLight(0xffd9a0, 1.1, 2.6, 2);
+    light.position.set(0, HEIGHT + 0.9, 0.35);
+    this.add(light);
     const hitbox = invisibleHitbox(WIDTH + 0.1, HEIGHT + 0.45, DEPTH + 0.1, { y: (HEIGHT + 0.45) / 2 });
     this.add(hitbox);
     this.hitboxes = [hitbox];
@@ -48,6 +62,7 @@ export class LotStand extends THREE.Group implements Furniture, Interactable {
 
   show(lot: AuctionLot | null): void {
     this.takeDown();
+    this.options.onShow?.(lot);
     if (!lot) return;
     if (lot.game) {
       const box = new GameBox(lot.game, this.options.covers);

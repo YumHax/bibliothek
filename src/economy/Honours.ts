@@ -98,6 +98,26 @@ export class Honours {
   }
 }
 
+/** A console's built-in list (`SEED_GAMES`) as the collector's book ticks it: each game, and whether a copy is here. */
+interface ConsoleChecklist {
+  platform: PlatformId;
+  name: string;
+  entries: { game: Game; have: boolean }[];
+}
+
+/**
+ * Every console's built-in list against `games` (matched by title, the wishlist left out), the book's Consoles page:
+ * a console whose list is all ticked is an honour (a neon over the bookcases). Lists of fewer than two are left out.
+ */
+export function consoleChecklists(games: readonly Game[]): ConsoleChecklist[] {
+  const owned = new Set(games.filter((g) => g.status !== 'wishlist').map((g) => `${g.platform}:${normaliseTitle(g.title)}`));
+  const lists = new Map<PlatformId, Game[]>();
+  for (const game of SEED_GAMES) lists.set(game.platform, [...(lists.get(game.platform) ?? []), game]);
+  return [...lists]
+    .filter(([, list]) => list.length >= 2)
+    .map(([platform, list]) => ({ platform, name: getPlatform(platform).name, entries: list.map((game) => ({ game, have: owned.has(`${game.platform}:${normaliseTitle(game.title)}`) })) }));
+}
+
 /** The consoles whose whole built-in list is in `games`, and the club's sets they complete, as honours of `day`. */
 function completed(games: readonly Game[], day: number): Honour[] {
   const mine = games.filter((g) => g.status !== 'wishlist');
@@ -106,12 +126,9 @@ function completed(games: readonly Game[], day: number): Honour[] {
     if (!setProgress(set, mine).every((p) => p.have)) continue;
     out.push({ id: `set:${set.id}`, kind: 'set', name: set.name, platform: set.pieces[0]!.platform, day, visited: false });
   }
-  const owned = new Set(mine.map((g) => `${g.platform}:${normaliseTitle(g.title)}`));
-  const lists = new Map<PlatformId, Game[]>();
-  for (const game of SEED_GAMES) lists.set(game.platform, [...(lists.get(game.platform) ?? []), game]);
-  for (const [platform, list] of lists) {
-    if (list.length < 2 || !list.every((g) => owned.has(`${g.platform}:${normaliseTitle(g.title)}`))) continue;
-    out.push({ id: `console:${platform}`, kind: 'console', name: getPlatform(platform).name, platform, day, visited: false });
+  for (const list of consoleChecklists(mine)) {
+    if (!list.entries.every((e) => e.have)) continue;
+    out.push({ id: `console:${list.platform}`, kind: 'console', name: list.name, platform: list.platform, day, visited: false });
   }
   return out;
 }

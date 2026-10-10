@@ -12,6 +12,7 @@ const STRAND_DENSITY = 650;
  * further out along the normals and with more of its surface cut away (strands thin out towards
  * their tips), shading darker near the skin where the coat shadows itself. One instanced draw per
  * part (the shell index is the instance index), no blending (the gaps are discarded), no shadows.
+ * Once a strand cell is under a pixel (a few metres off) the shells dither away instead of sparkling.
  *
  * Each skin material gets one shell material (`shellMaterialFor`), kept in step by `sync` when the
  * coat or the hover glow changes.
@@ -77,6 +78,10 @@ export class CatFur {
             vec3 local = fract(cell) - 0.5;
             float thickness = 1.0 - length(local.xy + local.yz) * 0.9;
             if (strand * thickness < vShell * 0.85 + 0.1) discard;
+            // Strands under a pixel sparkle: past that the shells dither out (the skin's own coat shows).
+            float cellPx = length(fwidth(cell));
+            float faded = smoothstep(0.5, 1.2, cellPx);
+            if (fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715)))) < faded) discard;
             diffuseColor.rgb *= mix(0.62, 1.05, vShell);
           }`,
         );

@@ -65,7 +65,7 @@ export function wireRoux(deps: PerkDeps, story: { readonly stage: StoryStage }):
             return y !== null && y >= from && y <= to;
           });
           nudge('roux', { warmth: 4, trust: 4, day, memory: 'you took Lucien’s games', memoryWeight: 12 });
-          deps.notices.reward({ title: `Lucien’s box: ${games.length} games`, detail: `${games.map((g) => g.title).join(', ')}.\nFrom Mrs Roux. They wait in your parcel in the hall.`, big: true });
+          deps.notices.reward({ title: `Lucien’s box: ${games.length} games`, detail: `${games.map((g) => g.title).join(', ')}. In the parcel in the hall.`, big: true });
           return { line: R.lucien.line };
         },
       });
@@ -82,6 +82,6 @@ export function wireRoux(deps: PerkDeps, story: { readonly stage: StoryStage }):
     if (!gift) return;
     deps.wallet.earnCoins(gift.coins);
     const games = gift.game ? giveGames(deps, 'roux-parting', 1, 'a gift from Mrs Roux', () => true) : [];
-    deps.notices.reward({ title: 'Mrs Roux’s parting gift', detail: `“For the coffee, and for being kind to an old woman.”${games[0] ? `\nAnd ${games[0].title}: it waits in your parcel.` : ''}`, coins: gift.coins });
+    deps.notices.reward({ title: 'Mrs Roux’s parting gift', detail: `“For the coffee, and for being kind to an old woman.”${games[0] ? ` And ${games[0].title}, in the parcel in the hall.` : ''}`, coins: gift.coins });
   });
 }

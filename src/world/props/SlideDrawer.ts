@@ -4,6 +4,7 @@ import type { Interactable } from '@/interaction/Interactable';
 import type { SessionActions } from '@/game/SessionActions';
 import { invisibleHitbox } from '../meshUtils';
 import { Prop } from './Prop';
+import type { Openable, Stash } from './Openable';
 import { HoverGlint } from './hoverGlint';
 import { captionName } from './SwingLeaf';
 import { playWoodKnock } from '@/audio/furnitureSounds';
@@ -29,18 +30,20 @@ interface SlideDrawerOptions {
  * drawer is then placed in the zone next to its host (`placeWith`), since only placed furniture is
  * ticked and clickable. Decoration: it never blocks the player (see `Prop`).
  */
-export class SlideDrawer extends Prop implements Interactable, Updatable {
+export class SlideDrawer extends Prop implements Interactable, Updatable, Openable {
   readonly contactShadow = false;
+  onOpen: ((session: SessionActions) => void) | null = null;
+  stash: Stash | null = null;
   readonly hitboxes: THREE.Object3D[];
   /** The front and everything that slides with it. */
   readonly front = new THREE.Group();
   /** The drawer's box and its contents, riding on `front`, hidden while shut. */
   readonly inside = new THREE.Group();
-  private readonly noun: string;
+  readonly noun: string;
   private readonly travel: number;
   private readonly seconds: number;
   private target = 0;
-  private openness = 0;
+  private opened = 0;
   /** The pull (the front's small fittings, not what is in the drawer) glints on hover; found on first hover, once the host has built it. */
   private readonly glint = HoverGlint.fittings(this.front, this.inside);
 
@@ -61,14 +64,18 @@ export class SlideDrawer extends Prop implements Interactable, Updatable {
     return this.target > 0;
   }
 
+  get openness(): number {
+    return this.opened;
+  }
+
   update(dt: number): void {
-    if (this.openness === this.target) return;
+    if (this.opened === this.target) return;
     const step = dt / this.seconds;
-    this.openness = this.target > this.openness ? Math.min(this.target, this.openness + step) : Math.max(this.target, this.openness - step);
-    this.front.position.z = this.travel * THREE.MathUtils.smoothstep(this.openness, 0, 1);
-    this.inside.visible = this.openness > 0;
+    this.opened = this.target > this.opened ? Math.min(this.target, this.opened + step) : Math.max(this.target, this.opened - step);
+    this.front.position.z = this.travel * THREE.MathUtils.smoothstep(this.opened, 0, 1);
+    this.inside.visible = this.opened > 0;
     // The end of its runners: a light knock out, a fuller one as it closes home.
-    if (this.openness === this.target) playWoodKnock(this.target > 0 ? 0.04 : 0.08, this.target > 0 ? 1.6 : 1.4);
+    if (this.opened === this.target) playWoodKnock(this.target > 0 ? 0.04 : 0.08, this.target > 0 ? 1.6 : 1.4);
   }
 
   // --- Interactable -------------------------------------------------------------------------
@@ -81,7 +88,8 @@ export class SlideDrawer extends Prop implements Interactable, Updatable {
     return `${captionName(this.noun)} · ${this.isOpen ? 'close' : 'open'}`;
   }
 
-  activate(_session: SessionActions): void {
+  activate(session: SessionActions): void {
     this.target = this.target > 0 ? 0 : 1;
+    if (this.target > 0) this.onOpen?.(session);
   }
 }

@@ -37,8 +37,10 @@ src/graphics/           quality (QUALITY: low / medium / high, `?quality=`), Pos
                         toTexture; `covers/generated/canvasUtils` re-exports them), glslAssemble (`assemble`: TS values as `TS_*` defines
                         and chunks as `#include <name>` into a `.glsl` file's text; every shader program is a `.glsl` beside its module,
                         imported `?raw`, parsed by `scripts/check-glsl.mjs`); see docs/graphics.md
-src/player/             FirstPersonController (yaw/pitch, sliding collisions against CollisionWorld only, sit/stand, crouch Shift, sprint double-tap
-                        forward; `setGround`: the floor's height under the feet, for the stairwell's stairs and lift), PointerLockFlow
+src/player/             FirstPersonController (yaw/pitch, sliding collisions against CollisionWorld only, sit/stand, sprint Shift held (crouch
+                        Z; or double-tap forward, Shift crouching), raw mouse input where the browser has it, a walking pace per zone
+                        (`setPace`: 0.8 indoors, `bootstrap/worldZones`), aim friction for the stick and the finger over something
+                        clickable; `setGround`: the floor's height under the feet, for the stairwell's stairs and lift), PointerLockFlow
                         (start card <-> lock; modes pointer | gamepad | touch), PositionMemory (zone + spot + look saved across reloads)
 src/input/              actions (ACTIONS: every keyed action -> codes, gamepad alias, touch button, Settings row, context; `isAction`,
                         markup / alias / touch-bar derivations), padButtons, Gamepad (standard mapping -> virtual keys + synthetic mouse),
@@ -266,7 +268,11 @@ src/household/          What the kitchen, bathroom and bedroom are for: Househol
                         chronicle, dreams, catGift. See docs/household.md.
 src/journal/            Journal (the day's lines and sums per local date, 60 days kept, `note(kind, text, data?)` / `tally`), journalWatch
                         (`watchForJournal`: writes it from the wallet, collection, parcel, prizes and medals by diffing their counts),
-                        upcoming (the market's round ahead). The notebook is `world/hallway/Notebook` on the hall console.
+                        upcoming (`Upcoming { kind, text, inDays? }`: a "to watch" line is a kind for its pictogram, a few words
+                        without the date, and the days ahead; the market's round ahead), worldWatch (`upcomingWorld`: the tournament,
+                        the co-owners' meeting, the estate sale, the party, a seller expecting the player, holds and orders, what waits
+                        at home, a list one game short; today's lines first). A line's `data` carries what the panel pastes beside it
+                        (`id` a game's cover, `who` a person's face, `price`, `platform`). The notebook is `world/hallway/Notebook`.
 src/onboarding/         FirstDay (the guided first day: steps ticked by the stores and the zones, one tip per step and zone, persisted,
                         off for a save that predates it), firstDaySteps (the steps, the to-do lines, the tips per zone), ToDoNote (the
                         folded card on the hall console), StickyNote ("KEYS!" on the front door's leaf, `Door.attachToLeaf`), context
@@ -279,13 +285,21 @@ src/notices/            What the game tells the player, by kind (docs/notices.md
 src/story/              The lost prototype (docs/story.md): PrototypeStory (the trail's stages, its channels `mail` / `atStall` / `onRadio`
                         / `atArcadeCounter` / `atTrader` / `atFriend`, the journal's file), prototype (the fiction's words, the cart's
                         `Game`, `STORY_RULES`), prototypeArt (the painted box and cart), moonpost/ (MoonpostDemo, its sound, the
-                        `ScreenProgram`), index (`StoryChannels`, `registerPrototype`)
+                        `ScreenProgram`), index (`StoryChannels`, `registerPrototype`); FelixNotebook (uncle Félix's games: found in a
+                        drawer, onto the wishlist, ticked as they come home, the journal's page)
+src/intro/              The opening cutscene (docs/story.md "The opening"): IntroCutscene (the director: the shots, the black, the
+                        morning, skip and "Get up", on the music's clock), DreamFlat (the flat as Félix had it, its sale, put away
+                        exactly), introPlan (the shots, the beats and the words, as data),
+                        introLooks (the dream's and the sale's grades), dreamAtlas (the baked fronts in one texture for the dream's
+                        shelves), introSeen (`KEYS.intro`); wired by `bootstrap/intro` through `PointerLockFlow.setGate`
 src/reviews/            Reviews (`ReviewSource`: `/api/reviews` client, cached a month, `override` for a fictional game), reviewCard
                         (the game panel's clipping: score badges, a quoted line, the Wikipedia credit and link)
 src/share/              The collection to share: collectionSummary (games, per platform, worth, the three proudest), collectionCard
                         (a PNG drawn on a canvas, covers through the art proxy), collectionPage (a standalone HTML page, covers from
                         GitHub), download. Settings' Game tab, `ui/settings/SaveFileSettings` (with the save file, `settings/saveFile`)
-src/cheats/             moneyCheat (typing 5 0 0 0 on the top row, or `bibliothek.coins(n)` in the console: +5000 coins, a reward banner).
+src/cheats/             moneyCheat (under `?debug` only: typing 5 0 0 0 on the top row, or `bibliothek.coins(n)` in the console: +5000 coins, a reward banner);
+                        progress/ (`?debug`'s progressions, each done at start-up unless its panel switched it off, `ui/debug/DebugPanel`;
+                        docs/checks.md "Debug mode").
 src/photo/              PhotoMode (free camera on a leash, lens via `PostFx.setLens`, grades over the zone's look, guides, PNG capture;
                         `toggle` / `capture` / `handleKey`), PhotoHud (guides, card, flash; `body.photo-mode` hides the HUD), photoLooks,
                         frames, savePhoto. See docs/graphics.md ("Photo mode").
@@ -307,7 +321,7 @@ src/headless/           What each headless script imports from the game (data, s
 src/time/               Today (the one "today": `gameDay`, the market calendar's count, and `realDay`; `clock` (a `GameClock`), `weekday(kind)`,
                         `moment`, `onNewRealDay`; in BuildContext), clock (`HourSpan`, `inHours` with the one wrap rule, `nightOf`,
                         `GameClock`), schedule (`Schedule`, `realDays` / `gameDays`, `keptAway`, the `SCHEDULES` book: what is on and
-                        when, declared once per feature), OncePerDay (`oncePerDay`: done today, by name, in `daily.v1`), daily
+                        when, declared once per feature), gameDateLabel ("Sat · day 12 · 18:40"), OncePerDay (`oncePerDay`: done today, by name, in `daily.v1`), daily
                         (`dailySeed` / `isEventDay` / `dailyRandom` / `gameDayRandom`, `dayStream` / `dayLcg` for what was always drawn
                         so: every day-seeded draw, the only place a day seeds a stream), DailyList and DailyTally
                         (per-real-day saved lists and counts), season (the real calendar's season and holidays), wakefulness (how busy the
@@ -367,7 +381,10 @@ src/video/              VideoProvider, YouTubeSearchProvider (/api/youtube/searc
 src/settings/flags.ts   the URL's switches read once (`flag('debug' | 'stats' | 'fresh' | 'payout' | 'auction' | 'tournament')`,
                         `flagValue('quality')`); nothing else reads `location.search`
 src/settings/           SettingsStore (`bibliothek.settings.v1`: look sensitivity per device, invert Y, FOV, mixer volumes, HUD aids, text
-                        size, speech size, reduce motion, head bob, sprint double-tap / hold Shift, crouch hold / toggle, show tips, key
+                        size (five, two only for the interface), speech size, text stays on screen, plain lettering, reduce motion (like the
+                        system / on / off), brightness (`graphics/brightness`), resolution (automatic or a fixed share, `Engine.setRenderScale`),
+                        frame rate (`Engine.setFrameCap`), head bob, sprint hold Shift / double-tap, crouch hold / toggle, show tips, full
+                        screen (`fullscreen.ts`: requestFullscreen + `navigator.keyboard.lock(['Escape'])`, asked from a gesture), key
                         bindings; saved debounced, flushed on pagehide), apply (pushes every setting to the player's feel and FOV, the
                         Inspector, devices, mixer, HUD, tips, Input), motion (`reduceMotion()` for code: the setting or the system's), bindings
                         (rebinding = swapping two physical keys), saveData (hasProgress / eraseProgress: `saveKeys()`, the save's keys but the preferences, caches and corrupt copies),
@@ -379,22 +396,27 @@ src/ui/design/          tokens.css (every colour, size, radius, shadow, duration
                         the panels' sheets last (docs/checks.md "Stylesheets")
 src/ui/                 Overlay (title: Continue / New game; pause: status, Go home, Collection; Settings in tabs via `addSetting(tab, …)`;
                         Controls by group and device; `confirm()` yes / no in the card), panel/ (the kit, docs/ui.md: ModalPanel base,
-                        CardPanel and SheetPanel layouts, the `html` tag and `paint`, widgets, ConfirmDialog), confirmTwice (`Arming`),
+                        CardPanel and SheetPanel layouts, the `html` tag and `paint`, widgets, pictograms (the 16 × 16 line symbols the paper panels
+                        draw with: `pictogramSprite()` once, then `pictogram(name, className)`), ConfirmDialog), confirmTwice (`Arming`),
                         the panels on it (every `*Panel`), menu/ (menu.css: the menu's own layout; MenuNav: arrows / D-pad for the menu,
                         `registerPanel()` / `unregisterPanel()` for every DOM panel, `initPanelNav`; ControlsScreen; zoneNames),
                         settings/ (GameSettingsForm, KeyBindingsForm, fields), keys (key names from the bindings and the keyboard layout,
-                        `renderKeys('{KeyW} [Click]')`), GamePanel, SearchBar, CollectionEditor (Tab; `canAdd` only with ?debug),
+                        `renderKeys('{KeyW} [Click]')`), GamePanel, SearchBar, CollectionEditor (Tab: the list read-only with covers, search, order, receipts, "Show on shelf" through
+                        `SearchBar.pick`; the editor's statuses, Remove, JSON and adding only with ?debug), SaidPanel ("What was said"),
                         CataloguePanel (mail order, a modal like the editor), SellPanel (the WE BUY desk), PrizePanel (the arcade's prize counter drawn as one: shelves by ticket band, photos, the ticket muncher; the mystery game), HomeShopPanel (a Front Street shop's leaflet, paper per shop via `data-shop`), ArcadeScreenPanel (LexiPunk's
                         big frame, its score by postMessage), PayoutOverlay (`?payout`), TravelMenu ("Where to?", digits / click), WalletHud (up in
-                        the arcade / market / shops and under the pause menu, else a few seconds when money moves; rolls the count, floats the
+                        the arcade / market / shops, on the street and under the pause menu, with the game's day and hour
+                        out there (`time/gameDateLabel`), else a few seconds when money moves; rolls the count, floats the
                         difference), money (`formatCount` / `formatCoins`: the one way amounts read), fade (`fadeIn` / `fadeOut`: a closing class,
                         then `hidden`), hoverCaption (`Name · verb`, legacy "click to …" read too), coverPlaceholder (a made-up box for art that
                         does not load), worldLoad (the start button waits for the first zone; a failure alerts with Retry), fonts.css (self-hosted
                         faces from public/fonts), Fader,
-                        NewsPanel (the newsstand's paper), ScratchCardPanel (the newsagent's scratch card), JournalPanel (the notebook's
-                        pages: today's sums and lines, the challenge, what is coming, the days before), ToDoNotePanel (the first day's
-                        list, ticked), Overlay `addPauseButton(id, label, run)` (Journal, …), collector/ (CollectorBookPanel:
-                        milestones, sets, value; valueChart),
+                        NewsPanel (the newsstand's paper), ScratchCardPanel (the newsagent's scratch card), journal/ (JournalPanel, the
+                        notebook open on a day: glancePage, the left page's counters, week bars, snapshots of the games come home, what
+                        is coming with the day beside, the trails as dots; linesPage, the strip of days and the lines with covers, faces
+                        and stickers pasted beside; journalSprite, weekBars, journalDates), ToDoNotePanel (the first day's
+                        round drawn as a route, a stop a step: done ticked green, the next ringed red, the rest in pencil), Overlay `addPauseButton(id, label, run)` (Journal, …), collector/ (CollectorBookPanel,
+                        the ring binder: bindBook, front/stamp/sleeve/worth pages; valueChart),
                         controls (one help line per action: `keys` / `pad` / `touch` in the `renderKeys` markup, built from `input/actions`), styles.css
                         (`--ui-*` tokens: colours, radius, fonts; `reduce-motion`, `ui-scale-*` on <html>)
 server/                 pure `(ApiRequest) => ApiResponse` handlers: youtubeSearch/longplaySearch, artCache/artStore/imageProcessing, libretroIndex; Vite plugins
@@ -485,7 +507,8 @@ api/                    Vercel functions wrapping the server handlers; vercel.js
   things that share a place stack in one flex column (`ui/hudSlot`: under the crosshair, top left), never by hand-set offsets;
   reduced motion is the one selector `.reduce-motion` (on <html> for the setting or the system's), no media query of its own. Key names are never
   hard-coded: write `{KeyB}` through `renderKeys`, it follows the player's bindings and layout. Sounds connect to
-  `ctx.destination` (the mixer's `world` bus) or `audioBus(ctx, 'screens' | 'arcade' | 'ui')`; a YouTube player is scaled
+  `ctx.destination` (the mixer's `world` bus) or `audioBus(ctx, 'screens' | 'arcade' | 'ui')`, all through the master and its
+  limiter (`audioContext` `LIMITER`, never clipping); a YouTube player is scaled
   by `channelVolume('screens')`.
 
 ## Data sources (key-less only)

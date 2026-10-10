@@ -121,7 +121,7 @@ function paintGroundLine(sheet: Sheet, offset: number, width: number, style: str
 }
 
 /** The painted body of each shape of parked car. */
-const PARKED_BODIES: Record<ParkedShape, VehicleBody> = { hatch: CAR_BODY, saloon: SALOON_BODY, van: VAN_BODY };
+const PARKED_BODIES: Record<ParkedShape, VehicleBody> = { hatch: CAR_BODY, city: CAR_BODY, saloon: SALOON_BODY, estate: SALOON_BODY, van: VAN_BODY };
 
 /** A parked car on the scenery, painted with the shared box model, its faces stamped with its distance. */
 function paintParkedCar(sheet: Sheet, frame: CarFrame, body: VehicleBody, color: string): void {

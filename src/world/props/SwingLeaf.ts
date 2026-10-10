@@ -4,6 +4,7 @@ import type { Interactable } from '@/interaction/Interactable';
 import type { SessionActions } from '@/game/SessionActions';
 import { invisibleHitbox } from '../meshUtils';
 import { Prop } from './Prop';
+import type { Openable, Stash } from './Openable';
 import { HoverGlint } from './hoverGlint';
 import { playFridgeSeal, playHingeCreak, playWoodKnock } from '@/audio/furnitureSounds';
 import { capitalise } from '@/text/strings';
@@ -46,8 +47,10 @@ export function captionName(noun: string): string {
  * next to its host (`placeWith`), since only placed furniture is ticked and clickable.
  * Decoration: it never blocks the player (see `Prop`).
  */
-export class SwingLeaf extends Prop implements Interactable, Updatable {
+export class SwingLeaf extends Prop implements Interactable, Updatable, Openable {
   readonly contactShadow = false;
+  onOpen: ((session: SessionActions) => void) | null = null;
+  stash: Stash | null = null;
   readonly hitboxes: THREE.Object3D[];
   /** The leaf's parts, turning about the hinge line. */
   readonly panel = new THREE.Group();
@@ -57,7 +60,7 @@ export class SwingLeaf extends Prop implements Interactable, Updatable {
   private readonly maxAngle: number;
   private readonly seconds: number;
   private target = 0;
-  private openness = 0;
+  private opened = 0;
   /** The handle (the panel's small fittings) glints on hover; the host builds it after this constructor, so it is found on first hover. */
   private readonly glint = HoverGlint.fittings(this.panel);
 
@@ -82,19 +85,27 @@ export class SwingLeaf extends Prop implements Interactable, Updatable {
     return this.sign * distance;
   }
 
+  get noun(): string {
+    return this.options.noun;
+  }
+
   get isOpen(): boolean {
     return this.target > 0;
   }
 
+  get openness(): number {
+    return this.opened;
+  }
+
   update(dt: number): void {
-    if (this.openness === this.target) return;
+    if (this.opened === this.target) return;
     const step = dt / this.seconds;
-    this.openness = this.target > this.openness ? Math.min(this.target, this.openness + step) : Math.max(this.target, this.openness - step);
+    this.opened = this.target > this.opened ? Math.min(this.target, this.opened + step) : Math.max(this.target, this.opened - step);
     // Hinged on the left, a negative turn about +y brings the free edge (+x) forward (+z).
-    this.pivot.rotation.y = -this.sign * this.maxAngle * THREE.MathUtils.smoothstep(this.openness, 0, 1);
-    this.options.onOpenness?.(this.openness);
+    this.pivot.rotation.y = -this.sign * this.maxAngle * THREE.MathUtils.smoothstep(this.opened, 0, 1);
+    this.options.onOpenness?.(this.opened);
     // Home: the knock of the leaf on its carcass, or the seal sucking shut.
-    if (this.openness === 0) {
+    if (this.opened === 0) {
       if (this.options.seal) playFridgeSeal(false);
       else playWoodKnock(0.07, 1.25);
     }
@@ -110,11 +121,12 @@ export class SwingLeaf extends Prop implements Interactable, Updatable {
     return `${captionName(this.options.noun)} · ${this.isOpen ? 'close' : 'open'}`;
   }
 
-  activate(_session: SessionActions): void {
+  activate(session: SessionActions): void {
     this.target = this.target > 0 ? 0 : 1;
     if (this.target === 0) return;
     if (this.options.seal) playFridgeSeal(true);
     else if (random() < CREAK_CHANCE) playHingeCreak(0.025);
+    this.onOpen?.(session);
   }
 }
 

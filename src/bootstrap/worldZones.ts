@@ -87,6 +87,11 @@ export function streamZones(services: Services, engine: Engine, world: GameWorld
   return manager;
 }
 
+/** Where the player walks at full pace; everywhere else (the flat, the shops, the halls) at `INDOOR_PACE` of it. */
+const BRISK_ZONES: ReadonlySet<ZoneId> = new Set<ZoneId>(['street', 'stairwell', 'courtyard', 'roof']);
+/** 2 m/s of the walk's 2.5 indoors: a 4 m room is not crossed in a second and a half while reading the shelves. */
+const INDOOR_PACE = 0.8;
+
 /**
  * The player's ground: the stairwell's stairs and lift are its floor (flights stack: the one under the feet; the attic
  * and the roof stand over its shaft, Mrs Roux's rooms over its entrance hall, whose tiles would drop the feet 16 m), out
@@ -94,6 +99,10 @@ export function streamZones(services: Services, engine: Engine, world: GameWorld
  * the feet stay put. The endless stairs of some nights move the player up a storey on the same tread (`stairwell/endless`).
  */
 export function wirePlayerGround(player: FirstPersonController, world: GameWorld, manager: ZoneManager<ZoneId>): void {
+  // Indoors the walk is a browsing pace (shelves, stalls, cabinets); the street, the stairs and the open air keep the full one.
+  const pace = (id: ZoneId): number => (BRISK_ZONES.has(id) ? 1 : INDOOR_PACE);
+  player.setPace(pace(manager.current.id));
+  manager.onZoneChange((zone) => player.setPace(pace(zone.id)));
   const onStairs = world.build('stairwell').ground;
   world.build('stairwell').connectPlayer((dy) => player.shiftVertically(dy));
   const streetGroup = world.zone('street').group;

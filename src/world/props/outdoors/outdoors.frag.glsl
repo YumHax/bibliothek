@@ -11,6 +11,8 @@
 // Last, the weather between the eye and the view: falling rain or snow, and drops on the glass.
 #define SPRITES TS_SPRITE_COUNT
 #include <common>
+// After `common`: its `dithering()` (DITHERING on `low`, `graphics/displayTone`) calls common's `rand`.
+#include <dithering_pars_fragment>
 uniform sampler2D scene;
 uniform sampler2D lights;
 uniform sampler2D curfew;
@@ -275,10 +277,13 @@ vec3 skyAlong(vec3 d, vec2 gx, vec2 gy) {
   float sheet = skyCloudSheet(n, cloudCover) * smoothstep(-0.03, 0.08, d.y);
   // Stars only through the gaps.
   color = mix(color, vec3(1.0), detail.r * starAlpha * (1.0 - sheet));
-  vec3 cumulus = cloudTint * mix(vec3(1.0), vec3(0.66, 0.7, 0.8), clouds.b);
+  // Both lit as over the street (city/skyGlsl): dark bases, a silver lining, the sunset's glow underneath.
+  vec3 cloudGlow = vec3(1.0, 0.42, 0.22) * glowStrength;
+  float sunSeen = sunVisibility * (1.0 - 0.7 * cloudCover);
+  vec3 cumulus = skyCloudLight(cloudTint * mix(vec3(1.0), vec3(0.66, 0.7, 0.8), clouds.b), d, clouds.b, sunDir, sunColor, sunSeen, cloudGlow, glowDir);
   float heaps = min(clouds.g, 1.0) * cloudAlpha * (0.5 + 0.7 * cloudCover);
   color = mix(color, cumulus, heaps);
-  vec3 stratus = cloudTint * mix(1.0, 0.62, smoothstep(0.35, 1.0, n)) * (1.0 - 0.35 * rain);
+  vec3 stratus = skyCloudLight(cloudTint * (1.0 - 0.35 * rain), d, n, sunDir, sunColor, sunSeen * 0.5, cloudGlow, glowDir);
   color = mix(color, addCityGlow(stratus, d), sheet * (0.35 + 0.6 * cloudAlpha / 0.55));
   float veil = max(sheet, heaps * 0.8);
   color = drawMoon(drawSun(color, d, veil), d, veil);
@@ -623,4 +628,6 @@ void main() {
   gl_FragColor = vec4(color, 1.0);
   #include <tonemapping_fragment>
   #include <colorspace_fragment>
+  // `low` (no grain pass): the long gradients dither against banding (`graphics/displayTone`).
+  #include <dithering_fragment>
 }

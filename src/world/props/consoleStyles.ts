@@ -1,8 +1,12 @@
 import * as THREE from 'three';
+import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import type { Platform } from '@/catalog/types';
 import { part, matte } from './Prop';
 import { cylinderMesh, type MeshPosition } from '../meshUtils';
-import { paint } from '../materials/palette';
+import { paint, shared } from '../materials/palette';
+import { markShared, sharedCanvasTexture } from '../materials/sharedResources';
+import { WALL, decal } from '../surface/layers';
+import { createCanvas } from '@/covers/generated/canvasUtils';
 import { nowPlaying } from '../screen/nowPlaying';
 
 /**
@@ -134,6 +138,53 @@ function pad(v: ConsoleVisual, spec: PadSpec): void {
   v.group.add(cable);
 }
 
+/** How far a moulded hump sinks into the rounded base under it (its foot hidden in the base's top, never on it). */
+const HUMP_SINK = 0.008;
+
+/** Rounded body blocks, one geometry per size for the page (the SNES's and the N64's moulded shells). */
+const roundedBodies = new Map<string, THREE.BufferGeometry>();
+
+/** A moulded block: `part()` with its edges rounded by `radius` (the plastic's curve, not the bevel's few millimetres). */
+function moulded(parent: THREE.Object3D, w: number, h: number, d: number, radius: number, material: THREE.Material, pos: MeshPosition): THREE.Mesh {
+  const key = `${w}|${h}|${d}|${radius}`;
+  let geometry = roundedBodies.get(key);
+  if (!geometry) roundedBodies.set(key, (geometry = markShared(new RoundedBoxGeometry(w, h, d, 3, radius))));
+  const mesh = new THREE.Mesh(geometry, material);
+  mesh.position.set(pos.x ?? 0, pos.y ?? 0, pos.z ?? 0);
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  parent.add(mesh);
+  return mesh;
+}
+
+/**
+ * Lettering printed on a console's shell (a logo, POWER / RESET): `lines` in `ink`, centred on a transparent ground,
+ * cut out with an alpha test (no blending, no draw order), laid on the face as a print (`WALL.print`). `facing`
+ * `up` lies on a top at `pos`, `out` stands on a front facing +z. Its texture and material are one for the page.
+ */
+function lettering(parent: THREE.Object3D, key: string, w: number, h: number, lines: readonly { text: string; font: string; color: string }[], pos: MeshPosition, facing: 'up' | 'out'): void {
+  const px = 256;
+  const pxH = Math.max(16, Math.round((px * h) / w));
+  const texture = sharedCanvasTexture(`console-print|${key}`, () => {
+    const [canvas, ctx] = createCanvas(px, pxH);
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    lines.forEach((line, i) => {
+      ctx.fillStyle = line.color;
+      ctx.font = line.font;
+      ctx.fillText(line.text, px / 2, ((i + 0.5) * pxH) / lines.length, px - 8);
+    });
+    return canvas;
+  }, { anisotropy: 'grazing' });
+  const material = shared(`console-print|${key}`, () => new THREE.MeshStandardMaterial({ map: texture, alphaTest: 0.5, roughness: 0.5 }));
+  const print = decal(w, h, material, WALL.print, facing);
+  print.castShadow = false;
+  print.position.x += pos.x ?? 0;
+  print.position.y += pos.y ?? 0;
+  print.position.z += pos.z ?? 0;
+  parent.add(print);
+}
+
 /** Puts the console body group at its slot position. */
 function body(v: ConsoleVisual, w: number, h: number, d: number): THREE.Group {
   v.size = { w, h, d };
@@ -157,6 +208,22 @@ const SHAPES: Record<string, Shape> = {
     part(g, w * 0.62 - 0.004, 0.004, 0.004, red, { x: -w * 0.19, y: 0.085, z: d * 0.5 - 0.001 }); // red pinstripe, 1 mm proud of the dark panel
     part(g, 0.022, 0.006, 0.012, red, { x: w * 0.22, y: 0.092, z: d * 0.3 }); // power
     part(g, 0.022, 0.006, 0.012, dark, { x: w * 0.36, y: 0.092, z: d * 0.3 }); // reset
+    // POWER and RESET printed under their buttons, the logo along the lid's front edge, ribs over the back half.
+    lettering(g, 'nes-power', 0.026, 0.006, [{ text: 'POWER', font: 'bold 44px system-ui, sans-serif', color: '#2a2a2e' }], { x: w * 0.22, y: 0.089, z: d * 0.3 + 0.013 }, 'up');
+    lettering(g, 'nes-reset', 0.026, 0.006, [{ text: 'RESET', font: 'bold 44px system-ui, sans-serif', color: '#2a2a2e' }], { x: w * 0.36, y: 0.089, z: d * 0.3 + 0.013 }, 'up');
+    lettering(
+      g,
+      'nes-logo',
+      0.11,
+      0.016,
+      [
+        { text: 'Nintendo', font: 'italic bold 30px Georgia, serif', color: '#2a2a2e' },
+        { text: 'ENTERTAINMENT SYSTEM', font: 'bold 22px system-ui, sans-serif', color: '#2a2a2e' },
+      ],
+      { x: -w * 0.24, y: 0.089, z: -0.016 },
+      'up',
+    );
+    for (let i = 0; i < 6; i++) part(g, w * 0.4, 0.0015, 0.004, grey, { x: w * 0.24, y: 0.089 + 0.00075, z: -d * 0.42 + i * 0.012 });
     powerLed(g, p, 0xd0281c, [0.006, 0.004, 0.002], { x: -w * 0.4, y: 0.03, z: d / 2 + 0.001 }); // power LED, front left
     // The flap over the cartridge bay, hinged along its top: it swings in as the cartridge is pushed through.
     const doorW = 0.132;
@@ -173,8 +240,21 @@ const SHAPES: Record<string, Shape> = {
     const grey = tinted(v, 0xc9c9cf);
     const purple = paint(0x5b4b9e, 0.5);
     const { w, d } = v.size;
-    part(g, w, 0.05, d, grey, { y: 0.025 });
-    part(g, w * 0.8, 0.022, d * 0.62, tinted(v, 0xb9b9c2), { y: 0.061, z: -d * 0.08 });
+    // The moulded shell: a soft-edged base, the rounded hump of the slot on it, its logo on the base's front.
+    moulded(g, w, 0.05, d, 0.016, grey, { y: 0.025 });
+    moulded(g, w * 0.8, 0.022 + HUMP_SINK, d * 0.62, 0.01, tinted(v, 0xb9b9c2), { y: 0.061 - HUMP_SINK / 2, z: -d * 0.08 });
+    lettering(
+      g,
+      'snes-logo',
+      0.07,
+      0.014,
+      [
+        { text: 'SUPER NINTENDO', font: 'bold 34px system-ui, sans-serif', color: '#4a4a52' },
+        { text: 'ENTERTAINMENT SYSTEM', font: 'bold 22px system-ui, sans-serif', color: '#5b4b9e' },
+      ],
+      { x: 0, y: 0.05, z: d * 0.38 },
+      'up',
+    );
     part(g, 0.142, 0.001, 0.024, paint(0x1c1c20), { y: 0.0725, z: -d * 0.12 }); // the slot's spring flaps
     part(g, 0.016, 0.006, 0.02, purple, { y: 0.0745, z: d * 0.08 }); // eject lever
     for (const x of [-0.06, 0.06]) part(g, 0.028, 0.006, 0.014, purple, { x, y: 0.053, z: d * 0.36 });
@@ -230,8 +310,10 @@ const SHAPES: Record<string, Shape> = {
     const g = body(v, 0.26, 0.073, 0.19);
     const charcoal = tinted(v, 0x3b3b43, 0.6);
     const { w, d } = v.size;
-    part(g, w, 0.045, d, charcoal, { y: 0.0225 });
-    part(g, w * 0.56, 0.028, d * 0.86, charcoal, { y: 0.059 });
+    // The moulded shell: a soft-edged base, the round-backed hump on it, the logo on the base's front.
+    moulded(g, w, 0.045, d, 0.008, charcoal, { y: 0.0225 }); // tight: the side wings sit out near its edges
+    moulded(g, w * 0.56, 0.028 + HUMP_SINK, d * 0.86, 0.012, charcoal, { y: 0.059 - HUMP_SINK / 2 });
+    lettering(g, 'n64-logo', 0.06, 0.012, [{ text: 'NINTENDO 64', font: 'bold 40px system-ui, sans-serif', color: '#c9c9cf' }], { x: -w * 0.2, y: 0.0225, z: d / 2 }, 'out');
     for (const sx of [-1, 1]) part(g, w * 0.2, 0.014, d * 0.8, tinted(v, 0x34343b, 0.6), { x: sx * w * 0.38, y: 0.052 });
     part(g, 0.122, 0.001, 0.022, paint(0x1a1a1e), { y: 0.0735, z: -d * 0.1 }); // the slot's spring flaps
     v.slot = { parent: g, mouth: new THREE.Vector3(0, 0.073, -d * 0.1), inward: DOWN.clone(), rotation: new THREE.Quaternion() };

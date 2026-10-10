@@ -106,8 +106,8 @@ function buildCrate(g: THREE.Group, glowing: THREE.MeshStandardMaterial[]): void
   }
 }
 
-/** A sleeve's cover: its ground, a band of console-era pixels, the title and the composer. */
-function paintSleeve(record: Soundtrack): THREE.Texture {
+/** A sleeve's cover: its ground, a band of console-era pixels, the title and the composer (also the sideboard's pile). */
+export function paintSleeve(record: Soundtrack): THREE.Texture {
   const S = 256;
   const [canvas, ctx] = createCanvas(S, S);
   const hex = (c: number) => `#${c.toString(16).padStart(6, '0')}`;

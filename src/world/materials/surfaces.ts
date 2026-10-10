@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { QUALITY } from '@/graphics/quality';
 import { createCanvas, canvasTexture } from '@/covers/generated/canvasUtils';
 import { afterChunk, patchShader, VALUE_NOISE } from './shaderPatch';
+import { bumpFinish } from './bumpFinish';
 import { markShared } from '../props/Prop';
 import { lcg } from '@/random';
 
@@ -161,6 +162,8 @@ export function wallMaterial(color: number, surface: WallSurface): THREE.MeshSta
   if (!QUALITY.detailedMaterials) return material;
   material.bumpMap = plasterBumpMap();
   material.bumpScale = 0.35;
+  // The plaster's relief thins out where a pixel covers more of it (a long wall at a grazing angle would sparkle).
+  bumpFinish(material);
 
   const [ghostA, ghostB] = drawGhosts(surface, []);
   // Each opening: x of its centre, half its width, its top (from the floor); w 1 when used.
@@ -183,6 +186,12 @@ export function wallMaterial(color: number, surface: WallSurface): THREE.MeshSta
       float ghostMask(vec4 g) {
         vec2 d = abs(vSurfacePos - g.xy) - g.zw;
         return g.z <= 0.0 ? 0.0 : 1.0 - smoothstep(-0.015, 0.015, max(d.x, d.y));
+      }
+      // The nail the frame hung from, left in the wall a few centimetres under the ghost's top: a dark head, a lit rim.
+      float nailMark(vec4 g) {
+        if (g.z <= 0.0) return 0.0;
+        float r = length(vSurfacePos - vec2(g.x, g.y + g.w - 0.05));
+        return (1.0 - smoothstep(0.0022, 0.0032, r)) - 0.35 * (smoothstep(0.0028, 0.0034, r) - smoothstep(0.0034, 0.0042, r));
       }\n` +
       afterChunk(
         shader.fragmentShader,
@@ -207,7 +216,8 @@ export function wallMaterial(color: number, surface: WallSurface): THREE.MeshSta
             grime += 0.8 * jamb * hands * patchNoise(vSurfacePos * vec2(20.0, 9.0) + float(i) * 3.1);
           }
           float ghost = max(ghostMask(ghostA), ghostMask(ghostB));
-          diffuseColor.rgb *= max(crease, 0.45) * (1.0 - 0.08 * min(grime, 1.0)) * (1.0 + 0.035 * ghost);
+          float nail = nailMark(ghostA) + nailMark(ghostB);
+          diffuseColor.rgb *= max(crease, 0.45) * (1.0 - 0.08 * min(grime, 1.0)) * (1.0 + 0.035 * ghost) * (1.0 - 0.6 * nail);
         }`,
       );
   });
@@ -242,10 +252,16 @@ export function edgeOcclusion<M extends THREE.MeshStandardMaterial>(material: M,
  * towards `paths`, zone-local door spots) are scuffed dull; along the walls, where nobody steps,
  * the varnish keeps its gloss. G channel, as three.js reads it; multiply with the material's roughness.
  */
-export function floorWearMap(width: number, depth: number, paths: readonly THREE.Vector2[], seed: number): THREE.CanvasTexture | null {
+export function floorWearMap(
+  width: number,
+  depth: number,
+  paths: readonly THREE.Vector2[],
+  seed: number,
+  footprints: readonly { at: [number, number]; size: [number, number] }[] = [],
+): THREE.CanvasTexture | null {
   if (!QUALITY.detailedMaterials) return null;
   // A room rebuilt after its zone unloaded wears the same map: painted once per floor for the page.
-  const key = `${width}|${depth}|${seed}|${paths.map((p) => `${p.x},${p.y}`).join(';')}`;
+  const key = `${width}|${depth}|${seed}|${paths.map((p) => `${p.x},${p.y}`).join(';')}|${footprints.map((f) => f.at.concat(f.size).join(',')).join(';')}`;
   const cached = wearMaps.get(key);
   if (cached) return cached;
   const px = WEAR_PX;
@@ -270,6 +286,24 @@ export function floorWearMap(width: number, depth: number, paths: readonly THREE
     for (let t = 0; t <= 1; t += 0.1) scuff(x + (cx - x) * t, y + (cy - y) * t, px * 0.12, 0.35);
   }
   for (let i = 0; i < 80; i++) scuff(random() * px, random() * px, 8 + random() * 28, 0.25);
+  // Where furniture stood for years nobody walked and nothing faded: the varnish there kept its gloss, a rectangle
+  // with soft edges (the legs' dents at its corners a touch duller).
+  for (const { at, size } of footprints) {
+    const [x0, y0] = toPx(at[0] - size[0] / 2, at[1] - size[1] / 2);
+    const [x1, y1] = toPx(at[0] + size[0] / 2, at[1] + size[1] / 2);
+    for (let inset = 0; inset < 6; inset++) {
+      ctx.fillStyle = 'rgba(0,70,0,0.16)';
+      ctx.fillRect(x0 + inset, y0 + inset, x1 - x0 - 2 * inset, y1 - y0 - 2 * inset);
+    }
+    ctx.fillStyle = 'rgba(0,230,0,0.5)';
+    for (const [cx, cy] of [
+      [x0 + 3, y0 + 3],
+      [x1 - 3, y0 + 3],
+      [x0 + 3, y1 - 3],
+      [x1 - 3, y1 - 3],
+    ] as const)
+      ctx.fillRect(cx - 1.5, cy - 1.5, 3, 3);
+  }
   // A fine mottle over everything: the varnish never wears evenly, even where nobody walks.
   for (let i = 0; i < 2600; i++) {
     const g = Math.round(110 + random() * 110);

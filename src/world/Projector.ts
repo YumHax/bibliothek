@@ -36,6 +36,8 @@ interface ProjectorOptions {
   listener?: THREE.Object3D;
   /** Walls between the listener and the picture damp the volume (see `SoundOcclusion`). */
   occlusion?: SoundOcclusion;
+  /** Stood on a stool or a table instead of hung from the ceiling: no plate, no pole, the unit sits on y 0. */
+  standing?: boolean;
 }
 
 /** Light thrown by the lens: cool white, brightest while a video plays. */
@@ -124,10 +126,13 @@ export class Projector extends SurfaceScreen implements Furniture, Updatable, In
     const unitW = 0.32;
     const unitH = 0.1;
     const unitD = 0.26;
-    const plate = boxMesh(0.12, 0.01, 0.12, dark, { y: -0.005 });
-    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, poleLength, 12), dark);
-    pole.position.y = -poleLength / 2;
-    const unitY = -poleLength - unitH / 2;
+    const mount: THREE.Mesh[] = [];
+    if (!options.standing) {
+      const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, poleLength, 12), dark);
+      pole.position.y = -poleLength / 2;
+      mount.push(boxMesh(0.12, 0.01, 0.12, dark, { y: -0.005 }), pole);
+    }
+    const unitY = options.standing ? unitH / 2 : -poleLength - unitH / 2;
     const unit = new THREE.Mesh(new RoundedBoxGeometry(unitW, unitH, unitD, 3, 0.022), this.unitMaterial);
     unit.position.y = unitY;
     const lensX = unitW * 0.2;
@@ -152,7 +157,7 @@ export class Projector extends SurfaceScreen implements Furniture, Updatable, In
       for (const side of [-1, 1]) vents.push(boxMesh(0.002, 0.004, 0.12, vent, { x: side * (unitW / 2 + 0.001), y: unitY + unitH * (0.22 - i * 0.11), z: -unitD * 0.08 }));
     }
     // Overhead, right next to the ceiling lamp: a shadow from here would smear across a wall.
-    const parts = [plate, pole, unit, barrel, focusRing, lensGlass, led, ...vents];
+    const parts = [...mount, unit, barrel, focusRing, lensGlass, led, ...vents];
     for (const mesh of parts) mesh.castShadow = false;
     this.add(...parts);
 

@@ -47,6 +47,11 @@ export interface FacadeSpec {
   bays?: number;
   /** The street's name on an enamel plate at a corner: its middle along the face, the name (`facadePainter`). */
   nameplates?: { at: number; name: string }[];
+  /**
+   * Its ground floor is built in 3D in front of it (the walked courtyard's, `courtyard/YardGroundFloors`, set by that
+   * zone's builder only): painted as bare wall, no plinth, windows, doors, posters or plates of its own.
+   */
+  builtGround?: boolean;
 }
 
 /**
@@ -158,6 +163,26 @@ export const FACADES: readonly FacadeSpec[] = [
   { id: 'frontEnd', from: [136, -12], to: [136, 12], storeys: 7, seed: 117, shops: [{ kind: 'cafe', from: 0.8, to: 8.4, name: 'TERMINUS CAFE' }, { kind: 'shut', from: 15.6, to: 23.2 }], door: 12, detail: FAR },
   { id: 'sideSouth', from: [112, -60], to: [120, -60], storeys: 5, seed: 119, shops: [], detail: FAR },
 ];
+
+/**
+ * The paint a facade gets once the player walks along it (`Buildings`' windows in 3D and the shopfront kit start
+ * there): the far rows of Front Street are walked past once the roadworks move on (`WORKS_LIFT`).
+ */
+const WALKED_DETAIL = 20;
+
+/**
+ * `facades` as the walkable street builds them: the rows of Front Street that stand along the walked stretch, up to
+ * `walkEnd` (street x), painted at least at `WALKED_DETAIL` (a FAR row walked a metre off would read as a flat print).
+ */
+export function walkedFacades(facades: readonly FacadeSpec[], walkEnd: number): FacadeSpec[] {
+  return facades.map((spec) => {
+    const alongFront = spec.from[1] === spec.to[1] && Math.abs(spec.from[1]) === FRONT_ROW_Z;
+    const walked = alongFront && Math.min(spec.from[0], spec.to[0]) < walkEnd;
+    return walked && spec.detail < WALKED_DETAIL ? { ...spec, detail: WALKED_DETAIL } : spec;
+  });
+}
+/** Front Street's two rows of facades stand at z = ±this. */
+const FRONT_ROW_Z = 12;
 
 /**
  * The shops one walks into (`world/shop/`): their door travels to their room, the way RETRO GAMES' leads to the

@@ -2,7 +2,7 @@ import { KEYS, PersistedStore } from '@/persistence';
 import { findPerson, shortName } from './people';
 import { DIGEST } from './socialPlan';
 import { allStandings, onSocial } from './standing';
-import { tierChangeLine, tierInfo, tierOf, tierRank } from './tiers';
+import { tierChangeLine, tierRank } from './tiers';
 import type { PersonId } from './types';
 
 /*
@@ -13,7 +13,7 @@ import type { PersonId } from './types';
 
 /** The journal as this writes to it. */
 interface JournalLike {
-  note(kind: string, text: string): void;
+  note(kind: string, text: string, options?: { weight?: 'headline' | 'line' | 'note'; data?: Readonly<Record<string, string | number | boolean>> }): void;
 }
 
 interface DigestSave {
@@ -40,17 +40,19 @@ export function watchSocialJournal(journal: JournalLike, today: { readonly gameD
     const card = findPerson(change.id);
     if (!card) return;
     if (change.why === 'met') {
-      journal.note('social', `Met ${card.name}, ${card.role}.`);
+      journal.note('social', `Met ${card.name}, ${card.role}`, { weight: 'note', data: { who: card.id } });
       return;
     }
     if (change.before === change.after || change.why === 'debug') return;
     const down = tierRank(change.after) < tierRank(change.before);
-    journal.note('social', `${tierChangeLine(shortName(change.id), change.before, change.after)}${down && change.heard ? ': word got round' : ''}.`);
+    // A tier that does something (friendly and up) is set large; the small moves and the cooling are the ordinary hand.
+    const weight = !down && tierRank(change.after) >= tierRank('friendly') ? 'headline' : 'line';
+    journal.note('social', `${tierChangeLine(shortName(change.id), change.before, change.after)}${down && change.heard ? ' (word got round)' : ''}`, { weight, data: { who: change.id } });
   });
   const weekly = (day: number): void => {
     if (day - digest.day < DIGEST.everyDays) return;
     const text = summary(digest.warmth);
-    if (text) journal.note('social', text);
+    if (text) journal.note('social', text, { weight: 'note' });
     digest = { day, warmth: snapshot() };
     store.save(digest);
   };
@@ -65,7 +67,7 @@ function snapshot(): Record<PersonId, number> {
   return out;
 }
 
-/** The week's digest: closer, cooler, newly met; empty when nothing notable happened. */
+/** The week's digest, one short line: closer, cooler, newly met (first names only); empty when nothing notable happened. */
 function summary(before: Record<PersonId, number>): string {
   const closer: string[] = [];
   const cooler: string[] = [];
@@ -78,12 +80,11 @@ function summary(before: Record<PersonId, number>): string {
       continue;
     }
     const moved = s.warmth - was;
-    const tier = tierInfo(tierOf(s.warmth, s.trust)).name.toLowerCase();
-    if (moved >= DIGEST.notable) closer.push(`${shortName(id)} (${tier})`);
-    else if (moved <= -DIGEST.notable) cooler.push(`${shortName(id)} (${tier})`);
+    if (moved >= DIGEST.notable) closer.push(shortName(id));
+    else if (moved <= -DIGEST.notable) cooler.push(shortName(id));
   }
-  const parts = [closer.length ? `closer to ${list(closer)}` : '', cooler.length ? `cooling with ${list(cooler)}` : '', met.length ? `met ${list(met)}` : ''].filter(Boolean);
-  return parts.length ? `The week with people: ${parts.join('; ')}.` : '';
+  const parts = [closer.length ? `closer to ${list(closer)}` : '', cooler.length ? `cooler with ${list(cooler)}` : '', met.length ? `met ${list(met)}` : ''].filter(Boolean);
+  return parts.length ? `People this week: ${parts.join('; ')}` : '';
 }
 
 function list(names: readonly string[]): string {

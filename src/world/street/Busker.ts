@@ -284,11 +284,11 @@ export class Busker extends THREE.Group implements Furniture, Updatable, Interac
     const { upgrades, wallet } = this.options;
     if (upgrades?.has('sideboard') && upgrades.canBuy('record')) {
       upgrades.add('record');
-      session.reward({ title: 'A record from Django', detail: 'A soundtrack LP, signed on the sleeve. It is on the sideboard at home, by the turntable.', big: true });
+      session.reward({ title: 'A record from Django', detail: 'A signed soundtrack LP, on the sideboard by the turntable.', big: true });
       return { line: 'Pressed a few last year. This one’s yours. Play it loud, the neighbours love it.' };
     }
     wallet?.addTickets(TAPE_TICKETS);
-    session.read({ title: 'A cassette from Django', text: '“My tunes, on tape. Hiss included at no extra cost.” A hand-written label, a doodle of a keyboard. There is nothing at home to play it on, but the arcade’s attendant swaps it gladly.', effect: `${formatTickets(TAPE_TICKETS)}.`, look: 'letter' });
+    session.read({ title: 'A cassette from Django', text: '“My tunes, on tape. Hiss included at no extra cost.” A hand-written label, a doodle of a keyboard. There is nothing at home to play it on, but the arcade’s attendant swaps it gladly.', effect: `${formatTickets(TAPE_TICKETS)}.`, look: 'note' });
     return { line: 'Got a tape deck? No? Then trade it at the arcade, Gus collects them.' };
   }
 

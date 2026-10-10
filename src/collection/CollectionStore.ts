@@ -142,6 +142,20 @@ export class CollectionStore implements GameSource {
     this.update(id, { status });
   }
 
+  /**
+   * Puts a game on the wishlist: its card waits in its gap on the shelf, the stalls look out for it. Nothing when the
+   * player already has it or wants it. How the game proper adds a wish (the mail-order catalogue's "Want it").
+   */
+  want(game: Game): void {
+    if (this.has(game.id)) return;
+    this.add({ id: game.id, title: game.title, platform: game.platform, region: game.region, externalIds: game.externalIds, releaseDate: game.releaseDate, status: 'wishlist' });
+  }
+
+  /** Takes a game off the wishlist; a copy the player has is left alone. */
+  dropWish(id: string): void {
+    if (this.isWanted(id)) this.remove(id);
+  }
+
   /** Drops the saved collection and goes back to the built-in seed list. */
   resetToSeed(): void {
     this.list = this.seed.map(withDefaults);

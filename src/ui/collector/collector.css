@@ -1,15 +1,688 @@
-/* The collector's book (CollectorBookPanel): on the market panels' look (market.css), with a progress bar per milestone; its count badge is the kit's solid badge. */
+/*
+ * The collector's book (CollectorBookPanel): Félix's ring binder open over the view (`.ui-modal--centre`). A bottle-
+ * green cloth cover shows round the pages, three rings cross the gutter, the coloured dividers stand out on the right.
+ * Each section has its own kind of leaf: cream card for the contents, a stamp album's squared page for the stamps,
+ * grey card with clear pockets for the sets and the consoles, green-ruled ledger paper for the worth. The hand
+ * (Caveat) writes, the serif prints. Under 48rem the pages stack and the dividers lie along the top.
+ */
 @layer tokens, base, components, panels;
 @layer panels {
-  .collector__panel > h3:first-child { margin-top: var(--sp-4); }
-  .collector__milestone { border-top: 1px solid var(--ui-border); padding: 0.35rem 0; align-items: center; }
-  .collector__milestone .catalogue__title { display: flex; flex-direction: column; gap: 0.2rem; }
-  .collector__milestone--done b { color: var(--ui-accent); }
-  .collector__seal { font-size: 1.2rem; width: 1.4rem; text-align: center; color: var(--ui-text-dim); }
-  .collector__milestone--done .collector__seal { color: var(--ui-accent); }
-  .collector__bar { display: block; height: 4px; max-width: 16rem; border-radius: var(--ui-radius-2xs); background: var(--ui-fill); overflow: hidden; }
-  .collector__bar > span { display: block; height: 100%; background: var(--ui-accent); }
-  .collector__badge { margin-left: 0.2em; }
-  .collector__chart { display: block; margin: 0.6rem 0 0.4rem; border-radius: var(--ui-radius-sm); background: var(--ui-fill); }
-  .collector__rank { width: 1.6rem; text-align: right; color: var(--ui-text-dim); }
+  .book-binder {
+    /* The cloth, the rings, the leaves and the inks: this book's own slots. */
+    --cloth: #24392e;
+    --cloth-light: #33503f;
+    --cloth-dark: #15241c;
+    --cloth-text: #e8e0c8;
+    --ring: #c9cdd2;
+    --ring-shade: #6f767d;
+    --leaf-card: #f7f2e4;
+    --leaf-album: #f4efe0;
+    --leaf-album-grid: rgba(120, 96, 52, 0.1);
+    --leaf-pocket: #e3e4e2;
+    --leaf-ledger: #f1f3e4;
+    --ledger-rule: rgba(52, 120, 84, 0.28);
+    --ink: var(--ink-journal);
+    --ink-chart: #1f4f86;
+    --pencil: rgba(60, 60, 66, 0.82);
+    --pencil-faint: rgba(60, 60, 66, 0.35);
+    --gutter: rgba(50, 36, 18, 0.22);
+    --paper-edge: #ece6d4;
+    --paper-edge-2: #ddd5c0;
+    /* The stamps: their paper, the cancellation, the glassine mount waiting for one; a colour per group. */
+    --stamp-paper: #fbf8ef;
+    --stamp-ink: #fffaf0;
+    --postmark: rgba(28, 28, 40, 0.55);
+    --glassine: rgba(255, 255, 255, 0.45);
+    --mount-edge: rgba(90, 80, 60, 0.35);
+    --stamp-shelves: #b4472f;
+    --stamp-depth: #2e5d8b;
+    --stamp-character: #6a4b89;
+    --stamp-club: #2e7954;
+    --stamp-arcade: #c0771c;
+    --stamp-market: #8a3a5b;
+    --stamp-worth: #a8852a;
+    --stamp-more: #5a6570;
+    --envelope: #e5cd98;
+    --envelope-edge: #b99a5c;
+    /* The pockets' plastic, the club's rubber stamp, a gold sticker. */
+    --pocket-edge: rgba(70, 76, 84, 0.45);
+    --pocket-back: #cfd1d1;
+    --rubber: #b3302a;
+    --sticker-gold: #d6a321;
+    --sticker-shine: #f6dd84;
+    /* The bookplate, the snapshots and their tape. */
+    --plate-ink: #3a2a1a;
+    --plate-paper: #f3ead2;
+    --snap-paper: #fdfcf8;
+    --tape: rgba(236, 228, 190, 0.7);
+    /* The dividers. */
+    --tab-contents: #d9cfb4;
+    --tab-stamps: #c4604a;
+    --tab-sets: #4f8862;
+    --tab-consoles: #4a71a0;
+    --tab-worth: #b8932f;
+    --tab-ink: #fbf6e8;
+    width: min(70rem, 100%);
+    max-height: 100%;
+    display: flex;
+    flex-direction: column;
+    box-sizing: border-box;
+    padding: 0.9rem 0.5rem 0.7rem 1rem;
+    color: var(--ink);
+    color-scheme: light;
+    font-family: var(--ui-font-serif);
+    font-size: var(--fs-6);
+    border-radius: var(--ui-radius-sm);
+    /* Book cloth: a fine weave over the green. */
+    background:
+      repeating-linear-gradient(0deg, var(--tint-08) 0 1px, transparent 1px 3px),
+      repeating-linear-gradient(90deg, var(--shade-10) 0 1px, transparent 1px 3px),
+      linear-gradient(135deg, var(--cloth-light), var(--cloth) 45%, var(--cloth-dark));
+    box-shadow: var(--ui-shadow-paper), inset 0 1px 0 var(--tint-20), inset 0 -2px 0 var(--shade-25);
+  }
+  .book-binder .ui-panel__body {
+    display: flex;
+    min-height: 0;
+    flex: 1 1 auto;
+  }
+
+  /* --- the spread, the rings, the leaves ------------------------------------------------------ */
+
+  .book-spread {
+    position: relative;
+    flex: 1 1 auto;
+    min-width: 0;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.8rem;
+    perspective: 1800px;
+  }
+  /* Three rings across the gutter, over both leaves, and the binder's bar under them. */
+  .book-spread::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 50%;
+    width: 0.9rem;
+    transform: translateX(-50%);
+    border-radius: var(--ui-radius-2xs);
+    background: linear-gradient(90deg, var(--ring-shade), var(--ring) 45%, var(--ring-shade));
+    opacity: 0.55;
+  }
+  .book-spread::after {
+    content: '';
+    position: absolute;
+    z-index: var(--z-above);
+    top: 0;
+    bottom: 0;
+    left: 50%;
+    width: 3.4rem;
+    transform: translateX(-50%);
+    pointer-events: none;
+    background:
+      radial-gradient(ellipse 1.7rem 0.5rem at 50% 16%, transparent 62%, var(--ring) 66% 82%, var(--ring-shade) 88%, transparent 92%),
+      radial-gradient(ellipse 1.7rem 0.5rem at 50% 50%, transparent 62%, var(--ring) 66% 82%, var(--ring-shade) 88%, transparent 92%),
+      radial-gradient(ellipse 1.7rem 0.5rem at 50% 84%, transparent 62%, var(--ring) 66% 82%, var(--ring-shade) 88%, transparent 92%);
+  }
+
+  .book-page {
+    --leaf: var(--leaf-card);
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    box-sizing: border-box;
+    min-width: 0;
+    /* One height for every spread, so a turn never resizes the binder (a long page scrolls in its body). */
+    height: clamp(26rem, 78vh, 40rem);
+    padding: 1rem 1.3rem 0.4rem;
+    background: var(--leaf);
+    transform-origin: 100% 50%;
+  }
+  .book-page--left {
+    padding-right: 1.9rem;
+    border-radius: var(--ui-radius-sm) var(--ui-radius-2xs) var(--ui-radius-2xs) var(--ui-radius-sm);
+    box-shadow: inset -2.5rem 0 2rem -2rem var(--gutter), -2px 0 0 var(--paper-edge), -4px 0 0 var(--paper-edge-2), -6px 0 0 var(--shade-25);
+  }
+  .book-page--right {
+    padding-left: 1.9rem;
+    transform-origin: 0 50%;
+    border-radius: var(--ui-radius-2xs) var(--ui-radius-sm) var(--ui-radius-sm) var(--ui-radius-2xs);
+    box-shadow: inset 2.5rem 0 2rem -2rem var(--gutter), 2px 0 0 var(--paper-edge), 4px 0 0 var(--paper-edge-2);
+  }
+  /* The leaves, a kind a section. */
+  .book-page--stamps {
+    --leaf: var(--leaf-album);
+    background:
+      linear-gradient(90deg, var(--leaf-album-grid) 1px, transparent 1px) 0 0 / 0.75rem 0.75rem,
+      linear-gradient(0deg, var(--leaf-album-grid) 1px, transparent 1px) 0 0 / 0.75rem 0.75rem,
+      var(--leaf);
+  }
+  .book-page--sets,
+  .book-page--consoles { --leaf: var(--leaf-pocket); }
+  .book-page--worth {
+    --leaf: var(--leaf-ledger);
+    background:
+      repeating-linear-gradient(180deg, transparent 0 calc(1.6rem - 1px), var(--ledger-rule) calc(1.6rem - 1px) 1.6rem) 0 0.3rem,
+      var(--leaf);
+  }
+  .book-page__body {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    scrollbar-width: thin;
+  }
+  /* The foot: the folio in the middle, the link to the next spread in the outer corner. */
+  .book-page__foot {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    align-items: baseline;
+    min-height: 1.7rem;
+  }
+  .book-page__folio { grid-column: 2; font-size: var(--fs-2); opacity: 0.55; font-variant-numeric: oldstyle-nums; }
+  .book-corner {
+    font-family: var(--ui-font-hand);
+    font-size: var(--fs-t1);
+    line-height: 1;
+    color: inherit;
+    background: transparent;
+    border: none;
+    padding: 0.2rem 0.3rem;
+    cursor: pointer;
+    opacity: var(--ui-muted);
+  }
+  .book-corner--left { grid-column: 1; justify-self: start; }
+  .book-corner--right { grid-column: 3; justify-self: end; }
+  .book-corner:hover,
+  .book-corner:focus-visible { opacity: 1; text-decoration: underline; }
+
+  /* The turn: the leaves come in with a little swing on the rings. */
+  .book-page--turned-on { animation: book-turn-on var(--dur-long) var(--ui-ease); }
+  .book-page--turned-back { animation: book-turn-back var(--dur-long) var(--ui-ease); }
+  @keyframes book-turn-on {
+    from { opacity: 0; transform: rotateY(-14deg); }
+    to { opacity: 1; transform: rotateY(0); }
+  }
+  @keyframes book-turn-back {
+    from { opacity: 0; transform: rotateY(14deg); }
+    to { opacity: 1; transform: rotateY(0); }
+  }
+
+  /* --- the hand -------------------------------------------------------------------------------- */
+
+  .book-hand-heading {
+    margin: 0.2rem 0 0.45rem;
+    font-family: var(--ui-font-hand);
+    font-size: var(--fs-t3);
+    font-weight: 600;
+    line-height: 1.2;
+  }
+  .book-hand-note {
+    margin-left: 0.4em;
+    font-family: var(--ui-font-hand);
+    font-size: var(--fs-t1);
+    font-weight: 500;
+    color: var(--pencil);
+  }
+  .book-hand-line {
+    margin: 0 0 0.15rem;
+    font-family: var(--ui-font-hand);
+    font-size: var(--fs-t1);
+    line-height: 1.6rem;
+  }
+  .book-hand-line--faint { color: var(--pencil); }
+  .book-ink--up { color: var(--ink-green); }
+  .book-ink--down { color: var(--ink-red); }
+
+  /* --- the contents ------------------------------------------------------------------------------ */
+
+  .book-plate {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.1rem;
+    width: min(17rem, 88%);
+    margin: 0.5rem auto 1.2rem;
+    padding: 0.8rem 1rem 0.7rem;
+    box-sizing: border-box;
+    color: var(--plate-ink);
+    background: var(--plate-paper);
+    border: 3px double var(--plate-ink);
+    outline: 1px solid var(--plate-ink);
+    outline-offset: 4px;
+  }
+  .book-plate__ex { font-size: var(--fs-2); text-transform: uppercase; letter-spacing: 0.35em; }
+  .book-plate__name { font-family: var(--ui-font-print); font-size: var(--fs-t5); line-height: 1.2; }
+  .book-plate__heir { font-family: var(--ui-font-hand); font-size: var(--fs-t2); color: var(--ink); transform: rotate(-3deg); }
+  .book-summary {
+    margin: 0 0 0.8rem;
+    padding: 0;
+    list-style: none;
+    font-family: var(--ui-font-hand);
+    font-size: var(--fs-t2);
+    line-height: 1.55;
+  }
+  .book-summary li::before { content: '– '; color: var(--pencil); }
+  /* The newest arrivals, snapshots taped in at an angle. */
+  .book-snaps {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 0.8rem;
+    margin: 0;
+    padding: 0.4rem 0.3rem;
+    list-style: none;
+  }
+  .book-snap {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+    min-width: 0;
+    padding: 0.3rem 0.3rem 0.2rem;
+    background: var(--snap-paper);
+    box-shadow: 0 2px 5px var(--shade-25);
+    transform: rotate(var(--tilt, 0deg));
+    font-family: var(--ui-font-hand);
+    font-size: var(--fs-4);
+    line-height: 1.05;
+    text-align: center;
+  }
+  .book-snap::before {
+    content: '';
+    position: absolute;
+    top: -0.4rem;
+    left: 50%;
+    width: 2.2rem;
+    height: 0.8rem;
+    transform: translateX(-50%) rotate(-4deg);
+    background: var(--tape);
+  }
+  .book-snap span { overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+  .book-snap__cover { display: block; width: 100%; aspect-ratio: 5 / 7; object-fit: cover; background: var(--pocket-back); }
+  .book-contents__title {
+    margin: 1.4rem 0 1.6rem;
+    font-family: var(--ui-font-print);
+    font-size: var(--fs-t5);
+    font-weight: normal;
+    letter-spacing: 0.04em;
+    text-align: center;
+  }
+  .book-contents { margin: 0; padding: 0 0.6rem; list-style: none; }
+  .book-contents__line {
+    display: flex;
+    align-items: baseline;
+    gap: 0.4rem;
+    width: 100%;
+    padding: 0.45rem 0;
+    font-family: var(--ui-font-hand);
+    font-size: var(--fs-t4);
+    color: inherit;
+    text-align: left;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+  }
+  .book-contents__dots { flex: 1 1 auto; border-bottom: 2px dotted var(--pencil-faint); }
+  .book-contents__folio { font-family: var(--ui-font-serif); font-size: var(--fs-6); font-variant-numeric: oldstyle-nums; }
+  .book-contents__line:hover > span:first-child,
+  .book-contents__line:focus-visible > span:first-child { text-decoration: underline; text-underline-offset: 0.2em; }
+
+  /* --- the stamps -------------------------------------------------------------------------------- */
+
+  .book-stamps {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(4.4rem, 1fr));
+    gap: 0.8rem 0.7rem;
+    margin: 0 0 0.6rem;
+  }
+  .book-stamp-cell { display: flex; flex-direction: column; align-items: center; gap: 0.25rem; min-width: 0; }
+  .book-stamp {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    aspect-ratio: 4 / 5;
+    padding: 0.25rem;
+    box-sizing: border-box;
+    font: inherit;
+    color: inherit;
+    background: transparent;
+    border: none;
+    cursor: default;
+  }
+  .book-stamp:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; }
+  /* An empty mount: glassine over the page, the name pencilled in, how far along. */
+  .book-stamp--empty {
+    background: var(--glassine);
+    border: 1px solid var(--mount-edge);
+    border-radius: var(--ui-radius-2xs);
+  }
+  .book-stamp__pencil {
+    font-family: var(--ui-font-hand);
+    font-size: var(--fs-5);
+    line-height: 1.05;
+    text-align: center;
+    color: var(--pencil);
+  }
+  .book-stamp__tally { margin-top: 0.25rem; font-family: var(--ui-font-hand); font-size: var(--fs-3); color: var(--pencil); }
+  /* A stamp stuck in: perforated edges, the group's colour, engraved lines, a slight angle. */
+  .book-stamp__face {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    padding: 0.32rem;
+    box-sizing: border-box;
+    background: var(--stamp-paper);
+    filter: drop-shadow(0 1px 1px var(--shade-25));
+    mask:
+      radial-gradient(circle 0.16rem, transparent 96%, black) -0.25rem -0.25rem / 0.5rem 0.5rem round,
+      linear-gradient(black 0 0) content-box;
+  }
+  .book-stamp__title {
+    flex: 1 1 auto;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    padding: 0.25rem;
+    font-family: var(--ui-font-print);
+    font-size: var(--fs-2);
+    line-height: 1.05;
+    text-align: center;
+    color: var(--stamp-ink);
+    background:
+      repeating-linear-gradient(135deg, var(--tint-08) 0 2px, transparent 2px 5px),
+      radial-gradient(circle at 50% 38%, var(--tint-20) 0 22%, transparent 23%),
+      var(--stamp);
+  }
+  .book-stamp[data-group='shelves'] { --stamp: var(--stamp-shelves); }
+  .book-stamp[data-group='depth'] { --stamp: var(--stamp-depth); }
+  .book-stamp[data-group='character'] { --stamp: var(--stamp-character); }
+  .book-stamp[data-group='club'] { --stamp: var(--stamp-club); }
+  .book-stamp[data-group='arcade'] { --stamp: var(--stamp-arcade); }
+  .book-stamp[data-group='market'] { --stamp: var(--stamp-market); }
+  .book-stamp[data-group='worth'] { --stamp: var(--stamp-worth); }
+  .book-stamp[data-group='more'] { --stamp: var(--stamp-more); }
+  .book-stamp-cell:nth-child(3n + 1) .book-stamp--stuck { transform: rotate(-1.6deg); }
+  .book-stamp-cell:nth-child(3n + 2) .book-stamp--stuck { transform: rotate(1.1deg); }
+  /* The cancellation: a ring with the day, wavy lines trailing off to the left. */
+  .book-stamp__postmark {
+    position: absolute;
+    z-index: var(--z-above);
+    top: -0.5rem;
+    right: -0.7rem;
+    display: grid;
+    place-items: center;
+    width: 2.6rem;
+    height: 2.6rem;
+    border: 2px solid var(--postmark);
+    border-radius: 50%;
+    font-family: var(--ui-font-mono);
+    font-size: var(--fs-tiny);
+    line-height: 1;
+    text-align: center;
+    color: var(--postmark);
+    transform: rotate(-14deg);
+    pointer-events: none;
+  }
+  .book-stamp__postmark::after {
+    content: '';
+    position: absolute;
+    top: 0.75rem;
+    right: 92%;
+    width: 2rem;
+    height: 0.95rem;
+    background: repeating-linear-gradient(180deg, var(--postmark) 0 1.5px, transparent 1.5px 4px);
+  }
+  /* An envelope an older save left tucked behind a stamp. */
+  .book-envelope {
+    font-family: var(--ui-font-hand);
+    font-size: var(--fs-4);
+    line-height: 1.1;
+    color: var(--ink);
+    background: var(--envelope);
+    border: 1px solid var(--envelope-edge);
+    border-radius: var(--ui-radius-2xs);
+    padding: 0.1rem 0.4rem;
+    transform: rotate(-3deg);
+    cursor: pointer;
+    box-shadow: 0 1px 2px var(--shade-25);
+  }
+  .book-envelope:hover,
+  .book-envelope:focus-visible { text-decoration: underline; }
+  /* The page's foot: what the stamp pointed at says, on a fixed three lines so nothing moves. */
+  .book-caption {
+    position: sticky;
+    bottom: 0;
+    height: 3.9em;
+    margin: 0.5rem 0 0;
+    padding-top: 0.3rem;
+    overflow: hidden;
+    font-family: var(--ui-font-hand);
+    font-size: var(--fs-t1);
+    line-height: 1.3;
+    background: var(--leaf);
+    border-top: 1px dashed var(--pencil-faint);
+  }
+
+  /* --- the sleeve pages ------------------------------------------------------------------------- */
+
+  .book-set,
+  .book-console { margin: 0 0 0.6rem; }
+  .book-sleeves {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.5rem 0.6rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .book-sleeves--wide { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .book-set .book-sleeves { grid-template-columns: repeat(auto-fill, minmax(4.6rem, 5.6rem)); }
+  .book-sleeve { display: flex; flex-direction: column; gap: 0.2rem; min-width: 0; }
+  .book-sleeve__pocket {
+    position: relative;
+    display: block;
+    aspect-ratio: 5 / 7;
+    overflow: hidden;
+    background: var(--pocket-back);
+    border: 1px solid var(--pocket-edge);
+    border-radius: var(--ui-radius-2xs);
+    box-shadow: inset 0 0.35rem 0 -0.2rem var(--tint-35);
+  }
+  /* The plastic's sheen over whatever is in the pocket. */
+  .book-sleeve__pocket::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: linear-gradient(115deg, var(--tint-20) 0 16%, transparent 30% 62%, var(--tint-08) 70%, transparent 80%);
+  }
+  .book-sleeve__cover { display: block; width: 100%; height: 100%; object-fit: cover; }
+  .book-sleeve:not(.book-sleeve--filled) .book-sleeve__pocket { background: transparent; border-style: dashed; box-shadow: none; }
+  .book-sleeve:not(.book-sleeve--filled) .book-sleeve__cover { opacity: 0.16; filter: grayscale(1); }
+  .book-sleeve__name {
+    display: -webkit-box;
+    overflow: hidden;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    font-size: var(--fs-1);
+    line-height: 1.15;
+    text-align: center;
+  }
+  .book-sleeve:not(.book-sleeve--filled) .book-sleeve__name { font-family: var(--ui-font-hand); font-size: var(--fs-4); line-height: 1; color: var(--pencil); }
+  .book-sleeve__lent { display: block; font-family: var(--ui-font-hand); font-size: var(--fs-4); font-style: normal; color: var(--ink-red); }
+  /* PAID, the club's rubber stamp; Complete, a gold sticker. */
+  .book-rubber {
+    display: inline-block;
+    margin-left: 0.5rem;
+    padding: 0 0.35rem;
+    font-family: var(--ui-font-print);
+    font-size: var(--fs-3);
+    font-weight: normal;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--rubber);
+    border: 2px solid var(--rubber);
+    border-radius: var(--ui-radius-2xs);
+    transform: rotate(-8deg);
+    opacity: 0.85;
+  }
+  .book-sticker {
+    display: inline-block;
+    margin-left: 0.4rem;
+    padding: 0.05rem 0.55rem;
+    font-family: var(--ui-font-print);
+    font-size: var(--fs-2);
+    font-weight: normal;
+    color: var(--ink);
+    background: radial-gradient(circle at 35% 30%, var(--sticker-shine), var(--sticker-gold) 65%);
+    border-radius: var(--ui-radius-pill);
+    box-shadow: 0 1px 0 var(--shade-25);
+    transform: rotate(4deg);
+  }
+
+  /* --- the worth ---------------------------------------------------------------------------------- */
+
+  .book-sum {
+    margin: 0 0 0.3rem;
+    font-family: var(--ui-font-hand);
+    font-size: calc(var(--fs-t6) * 1.5);
+    font-weight: 600;
+    line-height: 1.1;
+  }
+  .book-chart-paper {
+    margin-top: 0.8rem;
+    padding: 0.4rem 0.5rem;
+    background:
+      linear-gradient(90deg, var(--ledger-rule) 1px, transparent 1px) 0 0 / 0.8rem 0.8rem,
+      linear-gradient(0deg, var(--ledger-rule) 1px, transparent 1px) 0 0 / 0.8rem 0.8rem,
+      var(--leaf);
+    border: 1px solid var(--ledger-rule);
+  }
+  .book-chart { display: block; width: 100%; height: auto; overflow: visible; }
+  .book-chart__band { stroke: var(--pencil-faint); stroke-width: 0.6; stroke-dasharray: 2 2; }
+  .book-chart__label { fill: var(--pencil); font-family: var(--ui-font-hand); font-size: 11px; }
+  .book-chart__line { fill: none; stroke: var(--ink-chart); stroke-width: 1.6; stroke-linejoin: round; stroke-linecap: round; }
+  .book-chart__dot { fill: var(--ink-chart); }
+  .book-chart__today { fill: var(--ink-red); }
+  .book-chart__empty { margin: 1.4rem 0; text-align: center; }
+  .book-best { margin: 0; padding: 0; list-style: none; counter-reset: best; }
+  .book-best__row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    min-height: 3.2rem;
+    counter-increment: best;
+  }
+  .book-best__row::before {
+    content: counter(best) '.';
+    flex: none;
+    width: 1.5rem;
+    font-family: var(--ui-font-hand);
+    font-size: var(--fs-t1);
+    text-align: right;
+    color: var(--pencil);
+  }
+  .book-best__cutting {
+    flex: none;
+    width: 2rem;
+    aspect-ratio: 5 / 7;
+    overflow: hidden;
+    background: var(--pocket-back);
+    box-shadow: 0 1px 2px var(--shade-25);
+    transform: rotate(-2deg);
+  }
+  .book-best__cover { display: block; width: 100%; height: 100%; object-fit: cover; }
+  .book-best__title { flex: 0 1 auto; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: var(--fs-5); }
+  .book-best__title small { font-size: var(--fs-1); color: var(--pencil); }
+  .book-best__leader { flex: 1 1 1rem; align-self: flex-end; margin-bottom: 1.1rem; border-bottom: 2px dotted var(--pencil-faint); }
+  .book-best__worth { flex: none; font-family: var(--ui-font-hand); font-size: var(--fs-t1); white-space: nowrap; }
+
+  /* --- the dividers, the foot ------------------------------------------------------------------- */
+
+  .book-tabs {
+    flex: none;
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    width: 2.2rem;
+    padding-top: 1.2rem;
+  }
+  .book-tab {
+    --tab: var(--tab-contents);
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.7rem 0.3rem;
+    writing-mode: vertical-rl;
+    font-family: var(--ui-font-serif);
+    font-size: var(--fs-4);
+    font-variant: small-caps;
+    letter-spacing: 0.06em;
+    color: var(--tab-ink);
+    background: var(--tab);
+    border: none;
+    border-radius: 0 var(--ui-radius-sm) var(--ui-radius-sm) 0;
+    box-shadow: inset 0.35rem 0 0.4rem -0.3rem var(--shade-45), 1px 1px 0 var(--shade-25);
+    cursor: pointer;
+    filter: saturate(0.75) brightness(0.88);
+  }
+  .book-tab[data-section='contents'] { color: var(--plate-ink); }
+  .book-tab[data-section='stamps'] { --tab: var(--tab-stamps); }
+  .book-tab[data-section='sets'] { --tab: var(--tab-sets); }
+  .book-tab[data-section='consoles'] { --tab: var(--tab-consoles); }
+  .book-tab[data-section='worth'] { --tab: var(--tab-worth); }
+  .book-tab--open { filter: none; box-shadow: 1px 1px 0 var(--shade-25); }
+  .book-tab:focus-visible { outline: 2px solid var(--cloth-text); outline-offset: 2px; }
+  .book-tab__slip {
+    padding: 0.3rem 0.05rem;
+    font-family: var(--ui-font-hand);
+    font-size: var(--fs-4);
+    font-variant: normal;
+    letter-spacing: 0;
+    color: var(--ink-red);
+    background: var(--paper-note);
+    border-radius: var(--ui-radius-2xs);
+  }
+  .book-binder .ui-panel__status { min-height: 1.2rem; font-family: var(--ui-font-hand); font-size: var(--fs-t1); color: var(--cloth-text); }
+  .book-binder footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--sp-3);
+    margin-top: 0.6rem;
+    padding-right: 2.7rem;
+  }
+  /* The buttons tooled into the cloth. */
+  .book-binder footer button {
+    font: inherit;
+    font-size: var(--fs-4);
+    font-variant: small-caps;
+    letter-spacing: 0.06em;
+    color: var(--cloth-text);
+    background: transparent;
+    border: 1px solid var(--cloth-text);
+    border-radius: var(--ui-radius-xs);
+    padding: 0.1rem 0.8rem;
+    cursor: pointer;
+    opacity: 0.8;
+  }
+  .book-binder footer button:hover,
+  .book-binder footer button:focus-visible { opacity: 1; background: var(--tint-08); }
+
+  /* A narrow view: the leaves stack, the rings go, the dividers lie along the top. */
+  @media (max-width: 48rem) {
+    .book-binder { padding: 0.7rem; }
+    .book-binder .ui-panel__body { flex-direction: column; overflow-y: auto; }
+    .book-spread { grid-template-columns: 1fr; gap: 0.6rem; }
+    .book-spread::before,
+    .book-spread::after { display: none; }
+    .book-page { height: auto; }
+    .book-page--left,
+    .book-page--right { padding: 0.9rem 1rem 0.4rem; border-radius: var(--ui-radius-sm); box-shadow: none; }
+    .book-tabs { order: -1; flex-direction: row; flex-wrap: wrap; width: auto; padding: 0 0 0.3rem; }
+    .book-tab { writing-mode: horizontal-tb; padding: 0.3rem 0.6rem; border-radius: var(--ui-radius-sm) var(--ui-radius-sm) 0 0; }
+    .book-binder footer { padding-right: 0; }
+  }
 }

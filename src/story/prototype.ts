@@ -44,11 +44,15 @@ export const PROTOTYPE_REVIEWS: Reviews = {
   fiction: { credit: 'A preview from the time: the game never came out, so nobody reviewed it.' },
 };
 
-/** A flyer or letter on the doormat (`hallway/mail.ts`'s piece, by shape). */
+/** A flyer, note, letter or postcard on the doormat (`hallway/mail.ts`'s piece, by shape: `MailPiece`). */
 export interface StoryMail {
   title: string;
   lines: string[];
   accent?: number;
+  look?: 'flyer' | 'letter' | 'postcard' | 'note';
+  from?: string;
+  place?: string;
+  hand?: 'pen' | 'typewriter' | 'print';
 }
 
 /** The trail's steps, in order: each is the clue found so far. */
@@ -100,9 +104,12 @@ export const LINES = {
     lines: [
       'A note from the morning show:',
       `“You asked about MOONPOST: ${COMPOSER.name} wrote its music and kept the last build in ’93.`,
-      `She plays at the arcade, signs ${COMPOSER.initials}. Ask at the counter. Good luck! — the producer”`,
+      `She plays at the arcade, signs ${COMPOSER.initials}. Ask at the counter. Good luck!”`,
     ],
     accent: 0x8a3b2f,
+    look: 'letter',
+    hand: 'typewriter',
+    from: 'The producer, Radio Brocante',
   } satisfies StoryMail,
   /** The arcade's attendant. */
   arcade: `${COMPOSER.initials}? Hana. Top of the old tables since before I worked here. She moved to the coast last year. Before she went she sold a box of carts to the collector who sets up outside RETRO GAMES. He wouldn't know a prototype from a doorstop.`,
@@ -111,9 +118,11 @@ export const LINES = {
     lines: [
       'A note on the arcade’s paper:',
       `“Someone said you were asking about ${COMPOSER.initials}. That’s Hana: she moved away,`,
-      'and sold her old carts to the collector outside RETRO GAMES first. — the attendant”',
+      'and sold her old carts to the collector outside RETRO GAMES first.”',
     ],
     accent: 0x7a2e8f,
+    look: 'note',
+    from: 'The attendant',
   } satisfies StoryMail,
   /** The collector outside RETRO GAMES. */
   trader: `A grey cart with a handwritten label? From the Hana box, yes. I swapped it: the label put buyers off. To ${KEEPER.name}, your friend. Pays cash, never haggles. Shame.`,
@@ -125,6 +134,8 @@ export const LINES = {
       'If it’s worth something, I don’t want to know.”',
     ],
     accent: 0x55565a,
+    look: 'note',
+    from: 'The collector',
   } satisfies StoryMail,
   /** A friend who is not the keeper, asked about it. */
   otherFriend: `${KEEPER.name}? He's been showing everyone a grey cart with a handwritten label. Ring him, he'll bring it.`,
@@ -135,20 +146,24 @@ export const LINES = {
     lines: [
       '“Got your message about the grey cart!',
       'Thought it was a bootleg. It’s in the post: look in the parcel in the hall.',
-      `Let me know if it actually runs. — ${KEEPER.name}”`,
+      'Let me know if it actually runs.”',
     ],
     accent: 0x3b6b4a,
+    look: 'postcard',
+    place: 'Front Street',
+    from: KEEPER.name,
   } satisfies StoryMail,
-  /** Hana's letter, folded in the box, read once the demo has played to its end. */
+  /** Hana's letter, folded in the box, read once the demo has played to its end: one page, in her hand. */
   letter: [
     'Whoever you are,',
     '',
     'If you are reading this, MOONPOST found its way to someone who plugged it in. That is all we ever wanted.',
-    'There were four of us over the launderette. We had three months of work left and no publisher. I kept this build because the music was finished, and it was the best thing I ever wrote.',
+    'There were four of us over the launderette, three months of work left and no publisher. I kept this build because the music was finished, and it was the best thing I ever wrote.',
     'Thank you for the round trip.',
-    '',
-    `— Hana, ${STUDIO}, December 1993`,
   ].join('\n'),
+  /** The letter's signature and date lines. */
+  letterFrom: `Hana, ${STUDIO}`,
+  letterDate: 'December 1993',
 };
 
 /**

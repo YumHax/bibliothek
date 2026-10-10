@@ -229,7 +229,7 @@
   }
   .people-book__level {
     color: color-mix(in srgb, var(--tier) 70%, var(--page-ink));
-    font-size: var(--fs-1);
+    font-size: var(--fs-0);
     font-weight: 700;
     letter-spacing: 0.06em;
     text-transform: uppercase;
@@ -362,7 +362,7 @@
   .people-book__notes h3 {
     margin: var(--sp-4) 0 0.4rem;
     color: var(--ink-red);
-    font-size: var(--fs-1);
+    font-size: var(--fs-0);
     font-weight: 700;
     letter-spacing: 0.12em;
     text-transform: uppercase;
@@ -388,7 +388,7 @@
   }
   .people-book__trait small {
     color: var(--page-dim);
-    font-size: var(--fs-1);
+    font-size: var(--fs-0);
   }
   .people-book__trait--unknown {
     border-style: dashed;
@@ -485,7 +485,7 @@
   .people-book__diary time {
     color: var(--page-dim);
     font-family: var(--ui-font-body);
-    font-size: var(--fs-1);
+    font-size: var(--fs-0);
     letter-spacing: 0.05em;
     text-transform: uppercase;
   }

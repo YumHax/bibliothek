@@ -19,7 +19,7 @@ interface State {
 
 /** What the hunt tells: the journal's line, the "new lead" word. */
 interface HuntOutlets {
-  journal?: { note(kind: string, text: string): void };
+  journal?: { note(kind: string, text: string, options?: { weight?: 'headline' | 'line' | 'note' }): void };
   notices?: NoticeActions;
   day: () => number;
 }
@@ -77,7 +77,7 @@ export function findClue(clue: ClueId, tell: LeadWord = 'now'): boolean {
   const now = current();
   state = { found: [...now.found, clue], since: outlets?.day() ?? now.since };
   store.save(state);
-  outlets?.journal?.note('hunt', HUNT.clues[clue].note);
+  outlets?.journal?.note('hunt', HUNT.clues[clue].note, { weight: clue === 'chest' ? 'headline' : 'line' });
   const notices = outlets?.notices;
   if (notices && tell === 'now') notices.react(NEW_LEAD);
   else if (notices && tell === 'later') window.setTimeout(() => notices.react(NEW_LEAD), LATER_MS);
@@ -92,14 +92,15 @@ export function onHunt(cb: () => void): () => void {
 }
 
 /** The journal's page of it (`JournalPanel` files): the clues in the player's words, where to look next. Null before the first. */
-export function huntFile(): { title: string; clues: string[]; next?: string } | null {
+export function huntFile(): { title: string; clues: string[]; total: number; next?: string; done?: boolean } | null {
   const { found } = current();
   if (!found.length) return null;
   const clues = found.map((id) => HUNT.clues[id].note);
-  if (found.includes('chest')) return { title: `${HUNT.fileTitle} (solved)`, clues };
+  const total = Object.keys(HUNT.clues).length;
+  if (found.includes('chest')) return { title: HUNT.fileTitle, clues, total, done: true };
   // The furthest of the main way's clues found says where next.
   const main: ClueId[] = ['chestnut', 'board', 'mailbox', 'chalk', 'letter'];
   const last = main.find((id) => found.includes(id));
   const next = last ? HUNT.next[last] : undefined;
-  return { title: HUNT.fileTitle, clues, ...(next ? { next } : {}) };
+  return { title: HUNT.fileTitle, clues, total, ...(next ? { next } : {}) };
 }

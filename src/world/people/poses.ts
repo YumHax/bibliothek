@@ -27,6 +27,9 @@ interface PoseAngles {
   right: ArmAngles;
 }
 
+/** The poses whose forearms cross in front of the chest: a fuller chest or belly (or a coat) pushes their elbows forward (`PersonModel`). */
+export const ACROSS_CHEST: ReadonlySet<Pose> = new Set<Pose>(['crossed', 'think', 'read']);
+
 const HANG = (side: -1 | 1): ArmAngles => ({ ux: 0, uz: side * 0.08, lx: -0.25, ly: 0, lz: 0 });
 
 export const POSES: Record<Pose, PoseAngles> = {

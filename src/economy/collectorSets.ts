@@ -132,8 +132,23 @@ function isPiece(piece: SetPiece, game: Game): boolean {
   return piece.titles.some((t) => (t.endsWith('*') ? title.startsWith(t.slice(0, -1).trimEnd()) : title === t));
 }
 
-/** Which pieces of `set` the collection holds (owned or lent), in the set's order. */
-export function setProgress(set: CollectorSet, games: readonly Game[]): { piece: SetPiece; have: boolean }[] {
+/** Which pieces of `set` the collection holds (owned or lent), in the set's order, with the copy that is it (the book shows its cover). */
+export function setProgress(set: CollectorSet, games: readonly Game[]): { piece: SetPiece; have: boolean; game?: Game }[] {
   const mine = games.filter((g) => g.status !== 'wishlist');
-  return set.pieces.map((piece) => ({ piece, have: mine.some((g) => isPiece(piece, g)) }));
+  return set.pieces.map((piece) => {
+    const game = mine.find((g) => isPiece(piece, g));
+    return game ? { piece, have: true, game } : { piece, have: false };
+  });
+}
+
+/**
+ * Whether `game` is a piece the player still lacks of a club set they are close to finishing (at most `missing`
+ * pieces short, this one among them): what a spiteful rival goes after when the wishlist gives him nothing.
+ */
+export function missingFromNearSet(game: Game, games: readonly Game[], missing = 2): boolean {
+  return COLLECTOR_SETS.some((set) => {
+    const progress = setProgress(set, games);
+    const lacking = progress.filter((p) => !p.have);
+    return lacking.length > 0 && lacking.length <= missing && lacking.some((p) => isPiece(p.piece, game));
+  });
 }

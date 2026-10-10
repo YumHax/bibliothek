@@ -40,7 +40,11 @@ const MAT_COLOR = '#f3efe6';
 export class PictureFrame extends Prop {
   readonly options: Required<PictureFrameOptions>;
 
-  constructor(options: PictureFrameOptions = {}) {
+  /**
+   * `custom` paints a picture of the caller's own instead of a motif (a family photo, `world/grandma/familyPhotos`), on
+   * a canvas `canvasWidth` pixels wide (default 512).
+   */
+  constructor(options: PictureFrameOptions = {}, private readonly custom?: { painter: MotifPainter; canvasWidth?: number }) {
     super();
     this.options = { width: 0.4, height: 0.3, motif: 'sunset', frameColor: 0x3c2f24, frameWidth: 0.022, matWidth: 0.03, seed: 1, ...options };
     this.name = `PictureFrame:${this.options.motif}`;
@@ -71,7 +75,7 @@ export class PictureFrame extends Prop {
 
   /** Paints the mat and, inside it, the chosen motif. */
   private paint(innerW: number, innerH: number): THREE.CanvasTexture {
-    const W = CANVAS_W;
+    const W = this.custom?.canvasWidth ?? CANVAS_W;
     const H = Math.round((W * innerH) / innerW);
     const [canvas, ctx] = createCanvas(W, H);
     const random = lcg(this.options.seed * 40503 + 7);
@@ -94,7 +98,7 @@ export class PictureFrame extends Prop {
     ctx.rect(0, 0, pw, ph);
     ctx.clip();
     const painters: Record<PictureMotif, MotifPainter> = { sunset: paintSunset, mountains: paintMountains, abstract: paintAbstract, roofs: paintRoofs, botanical: paintBotanical, map: paintMap, stillLife: paintStillLife, poster: paintPoster };
-    painters[this.options.motif](ctx, pw, ph, random);
+    (this.custom?.painter ?? painters[this.options.motif])(ctx, pw, ph, random);
     ctx.restore();
 
     // Paper grain over the whole thing.
@@ -106,7 +110,8 @@ export class PictureFrame extends Prop {
   }
 }
 
-type MotifPainter = (ctx: CanvasRenderingContext2D, w: number, h: number, random: () => number) => void;
+/** Paints a picture into `w` x `h` pixels (the mat's opening), drawing its randomness from `random`. */
+export type MotifPainter = (ctx: CanvasRenderingContext2D, w: number, h: number, random: () => number) => void;
 
 function verticalGradient(ctx: CanvasRenderingContext2D, y0: number, y1: number, stops: [number, string][]): CanvasGradient {
   const g = ctx.createLinearGradient(0, y0, 0, y1);

@@ -24,7 +24,11 @@ export class NoticeDismiss implements KeyRoute {
 
   onKey(code: string): boolean {
     const notices = this.parts.noticeDismiss;
-    if (!isAction(code, 'dismissNotice') || !notices) return false;
+    if (!notices) return false;
+    // Esc in the room reaches the page only with the keyboard held (Settings > Display > Full screen): it puts down the
+    // card up first, and pauses only when no card is up (`Session`'s last route).
+    if (isAction(code, 'close')) return notices.putDownCard();
+    if (!isAction(code, 'dismissNotice')) return false;
     return notices.dismiss(this.arming.again('all'));
   }
 }

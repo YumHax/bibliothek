@@ -1,5 +1,5 @@
 import { CORRUPT_PREFIX, ROOT_PREFIX } from './keys';
-import { emitCorruptSave, emitWriteFailure } from './events';
+import { emitCorruptSave, emitWriteFailure, noteSaved } from './events';
 import { safeStorage, storageKeys } from './storage';
 
 /** Timestamped copies of a damaged save kept per key: older ones are pruned. */
@@ -73,6 +73,7 @@ function flush(): void {
       if (text === null) storage.removeItem(key);
       else storage.setItem(key, text);
       done.push({ storage, key, previous });
+      noteSaved();
     } catch (error) {
       for (const undo of done.reverse()) {
         try {
@@ -168,6 +169,7 @@ export class PersistedStore<T> {
     try {
       if (text === null) storage.removeItem(this.key);
       else storage.setItem(this.key, text);
+      noteSaved();
     } catch (error) {
       emitWriteFailure({ key: this.key, keys: [this.key], error });
     }

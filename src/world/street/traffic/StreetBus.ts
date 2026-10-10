@@ -173,7 +173,7 @@ export class StreetBus extends ScriptedVehicle implements Interactable {
       price: ride.fare,
       paid: () => {
         session.travel(where.to);
-        return `You pay the driver and take a seat to ${where.label}.`;
+        return `You pay the driver and take a seat, off to ${where.label}.`;
       },
     });
   }

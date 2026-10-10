@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import { invisibleHitbox } from '../meshUtils';
 import { CoatTextures, COAT_PALETTES } from './coats';
-import type { CatBody, CatPose, CoatKind } from './types';
+import type { CatBody, CatCallKind, CatPose, CoatKind } from './types';
+import { afterChunk, patchShader } from '@/world/materials/shaderPatch';
 import { QUALITY } from '@/graphics/quality';
 import { fabric } from '@/world/materials/finishes';
 import { damp, dampFactor } from '@/math/damp';
@@ -31,15 +32,19 @@ import { random } from '@/random';
  *   ├ hitbox                    one invisible box over body + head, fixed whatever the pose
  *   └ root                      position.y = body-centre height, rotation.x = pitch (+ = nose
  *     │                         down), rotation.z = roll; the pose lives here
- *     ├ torso                   chest + belly capsules along z; scale.y breathes
+ *     ├ torso                   the chest capsule along z; scale.y breathes
+ *     ├ hips                    mid-back, rotation.y = the spine's bend (`spineYaw`, and into turns)
+ *     │ ├ rump                  the belly capsule; breathes with the chest
+ *     │ ├ hind leg pivots (2)   as the front ones, with a haunch on the thigh and a hock in the lower leg
+ *     │ └ tail chain (6)        each pivot rotation.x (+ = up) / rotation.y (+ = to the right),
+ *     │                         segment i's pivot is the child of segment i-1's
  *     ├ neck pivot              at the front top of the chest, rotation.x (+ = head down)
  *     │ └ head                  skull, muzzle, nose, whiskers; rotation.y/x = gaze (YXZ)
- *     │   ├ ear pivots (2)      rotation.x (+ = forward, - = back), cone + pink inner
- *     │   └ eye sockets (2)     eyeball sphere (scale.y squashes when closing) + upper eyelid cap
- *     ├ leg pivots (4)          hip / shoulder, rotation.x (+ = lower end swings back)
- *     │ └ knee pivot            rotation.x (+ = paw swings back), lower capsule + paw
- *     └ tail chain (6)          each pivot rotation.x (+ = up) / rotation.y (+ = to the right),
- *                               segment i's pivot is the child of segment i-1's
+ *     │   ├ jaw                 the lower muzzle, rotation.x (+ = open), tongue; mouth and fangs behind it
+ *     │   ├ ear pivots (2)      rotation.x (+ = forward, - = back), a furred half shell + pink inner
+ *     │   └ eye sockets (2)     eyeball sphere (scale.y squashes when closing; the pupil widens in the dark) + upper eyelid cap
+ *     └ front leg pivots (2)    shoulder, rotation.x (+ = lower end swings back)
+ *       └ knee pivot            rotation.x (+ = paw swings back), lower capsule + paw
  *
  * A pose is a `JointAngles` record (the table is in `catPoses.ts`); `setPose` chooses the target and `update` eases the current
  * angles towards it, each joint at its own pace (`JOINT_TAU`: the head leads, the tail trails). A
@@ -67,6 +72,26 @@ const HEAD_OFFSET = { x: 0, y: 0.045, z: 0.06 };
 const SKULL_R = 0.045;
 const EYE_R = 0.009;
 const TAIL_PIVOT = { x: 0, y: 0.02, z: -0.17 };
+/** Where the back bends (the hips' pivot, root frame). */
+const HIPS_Z = -0.01;
+/** The rump's bend into a turn, per rad/s of turning, and the most it bends. */
+const TURN_BEND = 0.12;
+const TURN_BEND_MAX = 0.32;
+/** The jaw's widest opening (rad) and the pupil's width (share of the eye texture's u) in daylight and at its widest. */
+const JAW_MAX = 0.62;
+const PUPIL = { slit: 0.035, dark: 0.12, wide: 0.15 } as const;
+/** How wide the mouth opens and for how long (s) for each call. */
+const CALL_MOUTH: Record<CatCallKind, { open: number; seconds: number }> = {
+  demand: { open: 0.75, seconds: 0.55 },
+  greet: { open: 0.55, seconds: 0.4 },
+  grumble: { open: 0.25, seconds: 0.45 },
+  trill: { open: 0.2, seconds: 0.3 },
+  chirp: { open: 0.35, seconds: 0.14 },
+  chatter: { open: 0.4, seconds: 1.1 },
+  yawn: { open: 1, seconds: 1.5 },
+  hiss: { open: 0.9, seconds: 0.9 },
+  yowl: { open: 0.85, seconds: 0.8 },
+};
 const TAIL_SEGMENTS = 6;
 const TAIL_SEG_LEN = 0.047;
 const GAZE_YAW_MAX = THREE.MathUtils.degToRad(70);
@@ -131,6 +156,33 @@ function shadowed<T extends THREE.Mesh>(mesh: T): T {
   return mesh;
 }
 
+/** A capsule from `from` to `to` (its parent's frame). */
+function capsuleBetween(from: THREE.Vector3, to: THREE.Vector3, radius: number, material: THREE.Material): THREE.Mesh {
+  const along = to.clone().sub(from);
+  const mesh = shadowed(new THREE.Mesh(new THREE.CapsuleGeometry(radius, Math.max(0.001, along.length() - radius), 4, 12), material));
+  mesh.position.copy(from).addScaledVector(along, 0.5);
+  mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), along.normalize());
+  return mesh;
+}
+
+/**
+ * An ear: the back of a cone, open to the front, wide at the base and flattened front to back,
+ * its tip rounded (`ConeGeometry` from +z round to -z and back: thetaStart a quarter turn in).
+ */
+function earShell(radius: number, height: number, depth: number): THREE.BufferGeometry {
+  const geometry = new THREE.CylinderGeometry(radius * 0.12, radius, height, 12, 3, true, Math.PI * 0.38, Math.PI * 1.24);
+  geometry.scale(1, 1, depth);
+  // Cupped: the sides curl a little forward towards the tip.
+  const position = geometry.getAttribute('position') as THREE.BufferAttribute;
+  for (let i = 0; i < position.count; i++) {
+    const y = position.getY(i) / height + 0.5;
+    const x = position.getX(i);
+    position.setZ(i, position.getZ(i) + Math.abs(x) * 0.35 * y);
+  }
+  geometry.computeVertexNormals();
+  return geometry;
+}
+
 function capsuleZ(radius: number, length: number, material: THREE.Material, backwards = false): THREE.Mesh {
   const mesh = shadowed(new THREE.Mesh(new THREE.CapsuleGeometry(radius, length, 6, 16), material));
   mesh.rotation.x = backwards ? -Math.PI / 2 : Math.PI / 2;
@@ -145,6 +197,10 @@ export class CatModel extends THREE.Group implements CatBody {
 
   private readonly root = new THREE.Group();
   private readonly torso = new THREE.Group();
+  private readonly hips = new THREE.Group();
+  private readonly rump = new THREE.Group();
+  private readonly jaw = new THREE.Group();
+  private readonly tongue = new THREE.Group();
   private readonly neckPivot = new THREE.Group();
   private readonly head = new THREE.Group();
   private readonly ears: THREE.Group[] = [];
@@ -159,6 +215,9 @@ export class CatModel extends THREE.Group implements CatBody {
   private readonly muzzleMaterial: THREE.MeshStandardMaterial;
   private readonly pawMaterial: THREE.MeshStandardMaterial;
   private readonly earInnerMaterial: THREE.MeshStandardMaterial;
+  /** The ears' fur, both faces (an open shell). */
+  private readonly earMaterial: THREE.MeshStandardMaterial;
+  private readonly mouthMaterial: THREE.MeshStandardMaterial;
   private readonly noseMaterial: THREE.MeshStandardMaterial;
   private readonly eyeMaterial: THREE.MeshStandardMaterial;
   private readonly furMaterials: THREE.MeshStandardMaterial[];
@@ -196,6 +255,21 @@ export class CatModel extends THREE.Group implements CatBody {
     flUpper: 0, flLower: 0, frUpper: 0, frLower: 0, hlUpper: 0, hlLower: 0, hrUpper: 0, hrLower: 0,
   };
 
+  /** The mouth: how far open now, and the call holding it open (its peak and the seconds left of it). */
+  private mouthOpen = 0;
+  private callOpen = 0;
+  private callLeft = 0;
+  private callLength = 1;
+  private chattering = false;
+  /** The pupils' width and the eyes' night shine (uniforms of the eye material), and how dark it is. */
+  private readonly pupil = { value: PUPIL.slit as number };
+  private readonly shine = { value: 0 };
+  private dark = 0;
+  /** The body's heading last frame and how fast it turns (rad/s, eased): the rump bends into it. */
+  private lastYaw = NaN;
+  private turnRate = 0;
+  private readonly worldQ = new THREE.Quaternion();
+
   private eyeOpen = 1;
   private blinkIn = 3;
   private blinkLeft = 0;
@@ -217,10 +291,12 @@ export class CatModel extends THREE.Group implements CatBody {
     this.furMaterial = fabric({ color: palette.base, roughness: 0.95, sheenTint });
     this.muzzleMaterial = fabric({ color: palette.muzzle, roughness: 0.95, sheenTint });
     this.pawMaterial = fabric({ color: palette.paws, roughness: 0.95, sheenTint });
-    this.earInnerMaterial = new THREE.MeshStandardMaterial({ color: palette.earInner, roughness: 0.8 });
+    this.earInnerMaterial = new THREE.MeshStandardMaterial({ color: palette.earInner, roughness: 0.8, side: THREE.DoubleSide });
+    this.earMaterial = fabric({ color: palette.base, roughness: 0.95, sheenTint, side: THREE.DoubleSide });
+    this.mouthMaterial = new THREE.MeshStandardMaterial({ color: 0x5a2228, roughness: 0.6 });
     this.noseMaterial = new THREE.MeshStandardMaterial({ color: palette.nose, roughness: 0.4 });
-    this.eyeMaterial = new THREE.MeshStandardMaterial({ map: this.textures.eye, roughness: 0.15, metalness: 0 });
-    this.furMaterials = [this.bodyMaterial, this.tailMaterial, this.furMaterial, this.muzzleMaterial, this.pawMaterial];
+    this.eyeMaterial = this.withPupil(new THREE.MeshStandardMaterial({ map: this.textures.eye, roughness: 0.15, metalness: 0 }));
+    this.furMaterials = [this.bodyMaterial, this.tailMaterial, this.furMaterial, this.muzzleMaterial, this.pawMaterial, this.earMaterial];
 
     this.add(this.root);
     this.root.position.y = ROOT_STAND_Y;
@@ -239,15 +315,42 @@ export class CatModel extends THREE.Group implements CatBody {
 
   // ---------------------------------------------------------------- construction
 
+  /**
+   * The eye's pupil drawn over the painted one (`paintEye`: centred at u 0.25, v 0.5), as wide as
+   * `pupil` (u): a slit by day, round in the dark, at play or startled; the tapetum's faint green-gold
+   * shine in it at night.
+   */
+  private withPupil(material: THREE.MeshStandardMaterial): THREE.MeshStandardMaterial {
+    const mask = `float catPupilMask() {
+      vec2 d = vec2((vMapUv.x - 0.25) / catPupil, (vMapUv.y - 0.5) / 0.3);
+      return 1.0 - smoothstep(0.8, 1.0, dot(d, d));
+    }`;
+    return patchShader(material, 'catPupil', (shader) => {
+      shader.uniforms.catPupil = this.pupil;
+      shader.uniforms.catShine = this.shine;
+      shader.fragmentShader = `uniform float catPupil;\nuniform float catShine;\n${afterChunk(
+        afterChunk(shader.fragmentShader, 'map_fragment', 'diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.03), catPupilMask());'),
+        'emissivemap_fragment',
+        'totalEmissiveRadiance += catShine * catPupilMask() * vec3(0.16, 0.3, 0.12);',
+      )}`;
+      shader.fragmentShader = shader.fragmentShader.replace('void main() {', `${mask}\nvoid main() {`);
+    });
+  }
+
   private buildTorso(): void {
     const chest = capsuleZ(CHEST.r, CHEST.len, this.bodyMaterial);
     chest.position.z = CHEST.z;
-    const belly = capsuleZ(BELLY.r, BELLY.len, this.bodyMaterial);
-    belly.position.z = BELLY.z;
-    this.torso.add(chest, belly);
+    this.torso.add(chest);
     this.fur?.grow(chest);
-    this.fur?.grow(belly);
     this.root.add(this.torso);
+    // The belly on the hips' pivot, so the back can bend (its front end stays inside the chest).
+    this.hips.position.z = HIPS_Z;
+    const belly = capsuleZ(BELLY.r, BELLY.len, this.bodyMaterial);
+    belly.position.z = BELLY.z - HIPS_Z;
+    this.rump.add(belly);
+    this.fur?.grow(belly);
+    this.hips.add(this.rump);
+    this.root.add(this.hips);
   }
 
   private buildHead(): void {
@@ -272,19 +375,21 @@ export class CatModel extends THREE.Group implements CatBody {
     const nose = shadowed(new THREE.Mesh(new THREE.SphereGeometry(0.0055, 8, 6), this.noseMaterial));
     nose.position.set(0, -0.004, 0.058);
     nose.scale.set(1.2, 0.8, 0.8);
+    this.fur?.grow(muzzle);
     this.head.add(skull, muzzle, nose);
+    this.buildMouth();
 
     for (const side of [1, -1]) {
-      // Ears: a cone on a pivot at the top of the skull, splayed outwards, with a pink inner face.
+      // Ears: a furred half shell on a pivot at the top of the skull, open to the front, splayed outwards, pink inside.
       const pivot = new THREE.Group();
       pivot.position.set(side * 0.026, 0.032, -0.004);
-      const ear = shadowed(new THREE.Mesh(new THREE.ConeGeometry(0.014, 0.032, 8), this.furMaterial));
-      ear.position.y = 0.013;
+      const ear = shadowed(new THREE.Mesh(earShell(0.017, 0.034, 0.55), this.earMaterial));
+      ear.position.y = 0.014;
       ear.rotation.z = -side * 0.35;
-      const inner = new THREE.Mesh(new THREE.ConeGeometry(0.009, 0.022, 8), this.earInnerMaterial);
-      inner.position.set(0, 0.01, 0.004);
+      this.fur?.grow(ear);
+      const inner = new THREE.Mesh(earShell(0.0135, 0.026, 0.42), this.earInnerMaterial);
+      inner.position.set(0, 0.011, 0.0035);
       inner.rotation.z = -side * 0.35;
-      inner.scale.x = 0.6;
       pivot.add(ear, inner);
       this.head.add(pivot);
       this.ears.push(pivot);
@@ -316,6 +421,34 @@ export class CatModel extends THREE.Group implements CatBody {
     this.head.add(whiskers);
   }
 
+  /**
+   * The mouth under the muzzle: a dark inside and two fangs on the head, hidden by the muzzle while
+   * shut; the lower muzzle (chin) on a hinge behind it with the tongue, which drops to open it.
+   */
+  private buildMouth(): void {
+    const inside = new THREE.Mesh(new THREE.SphereGeometry(0.012, 12, 8), this.mouthMaterial);
+    inside.position.set(0, -0.019, 0.034);
+    inside.scale.set(1.15, 0.45, 1.5);
+    const tooth = new THREE.MeshStandardMaterial({ color: 0xf2eee4, roughness: 0.35 });
+    for (const side of [-1, 1]) {
+      const fang = new THREE.Mesh(new THREE.ConeGeometry(0.0016, 0.006, 5), tooth);
+      fang.position.set(side * 0.0075, -0.0245, 0.047);
+      fang.rotation.x = Math.PI;
+      this.head.add(fang);
+    }
+    this.head.add(inside);
+    this.jaw.position.set(0, -0.017, 0.016);
+    const chin = shadowed(new THREE.Mesh(new THREE.SphereGeometry(0.013, 12, 8), this.muzzleMaterial));
+    chin.position.set(0, -0.006, 0.024); // convention-ok: anatomy inside the body, not a surface layer
+    chin.scale.set(1.2, 0.55, 1.55);
+    const tongue = new THREE.Mesh(new THREE.SphereGeometry(0.008, 10, 6), new THREE.MeshStandardMaterial({ color: 0xd9808c, roughness: 0.45 }));
+    tongue.scale.set(1, 0.3, 1.6);
+    this.tongue.position.set(0, -0.002, 0.022); // convention-ok: anatomy inside the body, not a surface layer
+    this.tongue.add(tongue);
+    this.jaw.add(chin, this.tongue);
+    this.head.add(this.jaw);
+  }
+
   private buildLegs(): void {
     const legs: [number, number, number, UpperKey, LowerKey, number][] = [
       [FRONT_PIVOT.x, FRONT_PIVOT.y, FRONT_PIVOT.z, 'flUpper', 'flLower', 0],
@@ -324,30 +457,51 @@ export class CatModel extends THREE.Group implements CatBody {
       [-HIND_PIVOT.x, HIND_PIVOT.y, HIND_PIVOT.z, 'hrUpper', 'hrLower', 0],
     ];
     for (const [x, y, z, upper, lower, phase] of legs) {
+      const hind = upper === 'hlUpper' || upper === 'hrUpper';
       const hip = new THREE.Group();
-      hip.position.set(x, y, z);
-      const thigh = shadowed(new THREE.Mesh(new THREE.CapsuleGeometry(0.018, UPPER_LEN - 0.02, 4, 12), this.furMaterial));
+      // The hind legs hang from the hips (the back bends), the front ones from the chest.
+      hip.position.set(x, y, hind ? z - HIPS_Z : z);
+      const thigh = shadowed(new THREE.Mesh(new THREE.CapsuleGeometry(hind ? 0.024 : 0.02, UPPER_LEN - 0.024, 4, 12), this.furMaterial));
       thigh.position.y = -UPPER_LEN / 2;
       this.fur?.grow(thigh);
+      hip.add(thigh);
+      if (hind) {
+        // The haunch: the thigh's muscle, rounding the rump over the leg (sitting, loafing).
+        const haunch = shadowed(new THREE.Mesh(new THREE.SphereGeometry(1, 16, 12), this.furMaterial));
+        haunch.position.set(Math.sign(x) * 0.006, -0.022, -0.004); // convention-ok: anatomy inside the body, not a surface layer
+        haunch.scale.set(0.03, 0.046, 0.05);
+        this.fur?.grow(haunch);
+        hip.add(haunch);
+      }
       const knee = new THREE.Group();
       knee.position.y = -UPPER_LEN;
-      const shank = shadowed(new THREE.Mesh(new THREE.CapsuleGeometry(0.014, LOWER_LEN - 0.02, 4, 12), this.furMaterial));
-      shank.position.y = -LOWER_LEN / 2;
+      const pieces: THREE.Mesh[] = [];
+      if (hind) {
+        // Shank back to the hock (the heel), the long metatarsus forward again to the paw: the paw where it always was.
+        const hock = new THREE.Vector3(0, -LOWER_LEN * 0.52, -0.013);
+        pieces.push(capsuleBetween(new THREE.Vector3(), hock, 0.016, this.furMaterial), capsuleBetween(hock, new THREE.Vector3(0, -LOWER_LEN + 0.004, 0.002), 0.012, this.furMaterial)); // convention-ok: anatomy inside the body, not a surface layer
+      } else {
+        const shank = shadowed(new THREE.Mesh(new THREE.CapsuleGeometry(0.015, LOWER_LEN - 0.02, 4, 12), this.furMaterial));
+        shank.position.y = -LOWER_LEN / 2;
+        pieces.push(shank);
+      }
+      for (const piece of pieces) this.fur?.grow(piece);
       const paw = shadowed(new THREE.Mesh(new THREE.SphereGeometry(PAW_R, 12, 8), this.pawMaterial));
       paw.position.set(0, -LOWER_LEN - 0.004, 0.01);
       paw.scale.set(1, 0.7, 1.15);
-      knee.add(shank, paw);
-      hip.add(thigh, knee);
-      this.root.add(hip);
+      this.fur?.grow(paw);
+      knee.add(...pieces, paw);
+      hip.add(knee);
+      (hind ? this.hips : this.root).add(hip);
       this.legs.push({ hip, knee, upper, lower, phase });
     }
   }
 
   private buildTail(): void {
-    let parent: THREE.Object3D = this.root;
+    let parent: THREE.Object3D = this.hips;
     for (let i = 0; i < TAIL_SEGMENTS; i++) {
       const pivot = new THREE.Group();
-      if (i === 0) pivot.position.set(TAIL_PIVOT.x, TAIL_PIVOT.y, TAIL_PIVOT.z);
+      if (i === 0) pivot.position.set(TAIL_PIVOT.x, TAIL_PIVOT.y, TAIL_PIVOT.z - HIPS_Z);
       else pivot.position.z = -TAIL_SEG_LEN;
       const radius = 0.013 - i * 0.0009;
       const segment = capsuleZ(radius, TAIL_SEG_LEN - radius, this.tailMaterial, true);
@@ -420,8 +574,21 @@ export class CatModel extends THREE.Group implements CatBody {
     this.muzzleMaterial.color.set(palette.muzzle);
     this.pawMaterial.color.set(palette.paws);
     this.earInnerMaterial.color.set(palette.earInner);
+    this.earMaterial.color.set(palette.base);
     this.noseMaterial.color.set(palette.nose);
     this.fur?.sync();
+  }
+
+  vocalize(kind: CatCallKind, insistence = 0): void {
+    const call = CALL_MOUTH[kind];
+    this.callOpen = Math.min(1, call.open * (1 + 0.3 * insistence));
+    this.callLength = call.seconds * (1 + 0.5 * insistence);
+    this.callLeft = this.callLength;
+    this.chattering = kind === 'chatter';
+  }
+
+  setDark(amount: number): void {
+    this.dark = THREE.MathUtils.clamp(amount, 0, 1);
   }
 
   setHovered(hovered: boolean): void {
@@ -457,6 +624,8 @@ export class CatModel extends THREE.Group implements CatBody {
     this.updateGaze(dt);
     this.updateEyes(dt);
     this.updateEars(dt);
+    this.updateMouth(dt);
+    this.updateTurn(dt);
     this.applyJoints();
   }
 
@@ -543,6 +712,43 @@ export class CatModel extends THREE.Group implements CatBody {
     this.eyeOpen = damp(this.eyeOpen, open, 42, dt);
   }
 
+  /** The mouth for a call (eased open, held, closing), chewing at the bowl; the pupils for the light and the mood. */
+  private updateMouth(dt: number): void {
+    let open = 0;
+    if (this.callLeft > 0) {
+      this.callLeft = Math.max(0, this.callLeft - dt);
+      const u = 1 - this.callLeft / this.callLength;
+      open = this.callOpen * Math.min(1, u / 0.2) * Math.min(1, (1 - u) / 0.3);
+      // Chattering at a bird: the jaw flutters.
+      if (this.chattering) open *= 0.5 + 0.5 * Math.abs(Math.sin(this.time * 28));
+    }
+    const pt = this.poseTime * Math.PI * 2;
+    if (this.currentPose === 'eat') open = Math.max(open, 0.22 * Math.max(0, Math.sin(pt * 2.2)));
+    if (this.currentPose === 'drink') open = Math.max(open, 0.12);
+    this.mouthOpen = damp(this.mouthOpen, open, 30, dt);
+    const keen = this.currentPose === 'crouch' || this.currentPose === 'pounce' ? 1 : 0;
+    const wide = Math.max(this.dark * (PUPIL.dark - PUPIL.slit), keen * (PUPIL.wide - PUPIL.slit), Math.min(1, this.flickLeft / 0.3) * (PUPIL.dark - PUPIL.slit));
+    this.pupil.value = damp(this.pupil.value, PUPIL.slit + wide, 3, dt);
+    this.shine.value = this.dark * 0.6;
+  }
+
+  /** How fast the body is turning (its world heading, eased): the rump bends into the turn. */
+  private updateTurn(dt: number): void {
+    this.getWorldQuaternion(this.worldQ);
+    const yaw = 2 * Math.atan2(this.worldQ.y, this.worldQ.w);
+    let rate = 0;
+    // dt 0 (a paused or repeated frame) would divide 0 by 0: a NaN that never leaves the eased rate.
+    if (!Number.isNaN(this.lastYaw) && dt > 0) {
+      let d = yaw - this.lastYaw;
+      d -= Math.round(d / (Math.PI * 2)) * Math.PI * 2;
+      rate = d / dt;
+    }
+    this.lastYaw = yaw;
+    // A teleport (the morning) is not a turn.
+    if (Math.abs(rate) > 12) rate = 0;
+    this.turnRate = damp(this.turnRate, rate, 6, dt);
+  }
+
   private updateEars(dt: number): void {
     this.twitchIn -= dt;
     if (this.twitchIn <= 0) {
@@ -621,6 +827,17 @@ export class CatModel extends THREE.Group implements CatBody {
     const breathRate = pose === 'sleep' ? 0.3 : 0.5;
     this.torso.scale.y = (1 + Math.sin(t * Math.PI * 2 * breathRate) * 0.015) * (1 - 0.1 * squash);
     this.torso.scale.z = 1 + 0.05 * squash;
+    this.rump.scale.copy(this.torso.scale);
+
+    // The back: the pose's bend, and into a turn (the rump swings out the other way, as a cat's does).
+    const bend = THREE.MathUtils.clamp(-this.turnRate * TURN_BEND, -TURN_BEND_MAX, TURN_BEND_MAX) * this.gaitWeight;
+    this.hips.rotation.y = cur.spineYaw + bend;
+
+    // The mouth: the jaw drops, the tongue laps at the water.
+    this.jaw.rotation.x = this.mouthOpen * JAW_MAX;
+    const lap = pose === 'drink' ? Math.max(0, Math.sin(pt * 3)) : 0;
+    this.tongue.position.z = 0.022 + 0.012 * lap;
+    this.tongue.rotation.x = -0.4 * lap;
 
     // Head.
     this.neckPivot.rotation.x = cur.neck + neckMod;

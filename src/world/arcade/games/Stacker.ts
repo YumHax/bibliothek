@@ -1,6 +1,7 @@
 import { type ArcadeControls, SCREEN_H, SCREEN_W, drawText } from './ArcadeGame';
 import { BaseGame, PLAY_TOP } from './BaseGame';
 import { random } from '@/random';
+import { arcadeHint } from '../arcadeHint';
 
 const START_SECONDS = 12;
 /** Seconds a landed row puts back; a clean one adds `PERFECT_SECONDS` more. */
@@ -53,7 +54,9 @@ function widthFor(row: number): number {
 export class Stacker extends BaseGame {
   readonly id = 'stacker';
   readonly title = 'SKY STACK';
-  readonly hint = 'Space drops the block · line it up with the row below';
+  get hint(): string {
+    return arcadeHint('{fire} drops the block · line it up with the row below');
+  }
   readonly summary = 'ONE BUTTON · EVERY ROW PAYS TIME · JACKPOT';
 
   /** Landed rows, as bitmasks of occupied columns; index 0 is the bottom row. */
@@ -204,7 +207,11 @@ export class Stacker extends BaseGame {
     this.fx.shake(1, 0.08);
     this.addScore(POINTS_PER_ROW * (this.row + 1), x, y);
     const perfect = !cut && this.row > 0;
-    if (cut) this.breakCombo();
+    if (cut) {
+      this.breakCombo();
+      // The overhang breaks off in pieces from each column cut.
+      for (let c = 0; c < COLS; c++) if (cut & (1 << c)) this.fx.burst(BOARD_X + (c + 0.5) * CELL, y + CELL / 2, '#ff8a80', 6, 50, 2);
+    }
     else if (perfect) {
       this.bumpCombo(Infinity);
       this.fx.pop(`PERFECT +${PERFECT_BONUS}`, x, y - 12, '#7ee787', 9);

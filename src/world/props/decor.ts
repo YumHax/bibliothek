@@ -39,6 +39,7 @@ import { ShoeRack, type ShoeRackOptions } from './ShoeRack';
 import { Doormat, type DoormatOptions } from './Doormat';
 import { KilimRug, type KilimRugOptions } from './KilimRug';
 import { Radiator, type RadiatorOptions } from './Radiator';
+import { Suitcase, type SuitcaseOptions } from './Suitcase';
 import { Pumpkin, type PumpkinOptions } from './Pumpkin';
 import { Cobweb, type CobwebOptions } from './Cobweb';
 import { SweetsBowl, type SweetsBowlOptions } from './SweetsBowl';
@@ -46,9 +47,11 @@ import { ChristmasTree, type ChristmasTreeOptions } from './ChristmasTree';
 import { FairyLights, type FairyLightsOptions } from './FairyLights';
 import { Wreath, type WreathOptions } from './Wreath';
 import { Balloons, type BalloonsOptions } from './Balloons';
+import { GamePoster, type GamePosterOptions } from '../arcade/GamePoster';
+import { ArcadeMural, type ArcadeMuralOptions } from '../arcade/ArcadeMural';
 import { currentFestivities, type Festivity } from '@/time/season';
 import type { HomeUpgrades } from '@/economy/HomeUpgrades';
-import { placerFor, type Owned } from '../build/owned';
+import { isOwned, placerFor, type Owned } from '../build/owned';
 import { ownedKey, type Furnishings } from '@/furnishing/Furnishings';
 
 /**
@@ -97,6 +100,10 @@ export const DECOR_KINDS = {
   doormat: (o: DoormatOptions = {}) => new Doormat(o),
   kilimRug: (o: KilimRugOptions = {}) => new KilimRug(o),
   radiator: (o: RadiatorOptions = {}) => new Radiator(o),
+  suitcase: (o: SuitcaseOptions = {}) => new Suitcase(o),
+  // The arcade's walls: its games' one-sheets, the airbrushed panel.
+  gamePoster: (o: GamePosterOptions = {}) => new GamePoster(o),
+  arcadeMural: (o: ArcadeMuralOptions = {}) => new ArcadeMural(o),
   // The holidays' (plan entries gated by `holiday`).
   pumpkin: (o: PumpkinOptions = {}) => new Pumpkin(o),
   cobweb: (o: CobwebOptions = {}) => new Cobweb(o),
@@ -116,7 +123,17 @@ type OptionsOf<K extends DecorKind> = Parameters<(typeof DECOR_KINDS)[K]>[0];
  * `upgrade` only once that piece is bought for the flat (`build/owned.ts`, `economy/homeGoods.ts`).
  */
 export type DecorEntry = {
-  [K in DecorKind]: { kind: K; at: Placement; options?: OptionsOf<K>; holiday?: Festivity; upgrade?: Owned };
+  [K in DecorKind]: {
+    kind: K;
+    at: Placement;
+    options?: OptionsOf<K>;
+    holiday?: Festivity;
+    upgrade?: Owned;
+    /** With `upgrade`: stands once bought but is not a piece the player moves (the cable plugged in for it). */
+    fixed?: true;
+    /** Stands only *until* this is bought, then goes (the moving-in cartons of the bare flat). Never with `upgrade`. */
+    until?: Owned;
+  };
 }[DecorKind];
 
 /** Whether an entry is up today: always, or during its festivity. */
@@ -137,8 +154,26 @@ export function buildDecor(entry: DecorEntry): Furniture {
 export function placeDecor(zone: Zone, entries: readonly DecorEntry[], upgrades?: HomeUpgrades, furnishings?: Furnishings): Furniture[] {
   const seen = new Map<string, number>();
   return entries.filter(isUp).map((entry) => {
+    if (entry.until !== undefined) return placeUntil(zone, buildDecor(entry), entry.at, entry.until, upgrades);
     const item = placerFor(zone, upgrades, entry.upgrade).placeAt(buildDecor(entry), entry.at);
-    if (entry.upgrade !== undefined) furnishings?.register(zone, item, { key: ownedKey(entry.upgrade, seen), at: entry.at, owned: entry.upgrade });
+    if (entry.upgrade !== undefined && !entry.fixed) furnishings?.register(zone, item, { key: ownedKey(entry.upgrade, seen), at: entry.at, owned: entry.upgrade });
     return item;
   });
+}
+
+/**
+ * Places `item` while `until` is not bought and takes it away on the purchase (`zone.remove`: no collider, not drawn;
+ * still freed on unload). Already bought: never stands. Holds no light (taking one away would recompile every shader).
+ */
+function placeUntil(zone: Zone, item: Furniture, at: Placement, until: Owned, upgrades: HomeUpgrades | undefined): Furniture {
+  zone.keep(item);
+  if (!upgrades || isOwned(upgrades, until)) return item;
+  zone.placeAt(item, at);
+  const unsubscribe = upgrades.subscribe(() => {
+    if (!isOwned(upgrades, until)) return;
+    unsubscribe();
+    zone.remove(item);
+  });
+  zone.onUnload(unsubscribe);
+  return item;
 }

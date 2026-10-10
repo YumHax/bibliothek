@@ -66,7 +66,7 @@ export class GamesNight {
       }),
       cameIn: (m) => {
         if (night.firstInAt < 0) night.firstInAt = night.party.time;
-        if (m.index === 0) host.options.journal?.note('visit', 'Games night: everyone came round');
+        if (m.index === 0) host.options.journal?.note('visit', 'Games night', { weight: 'headline' });
       },
       gaveUp: () => {
         if (!night.party.members.some((m) => m.cameIn)) host.options.notices?.react('Nobody answered: your friends went home. Another night.');
@@ -239,12 +239,12 @@ export class GamesNight {
     const gift = random() < this.rules.giftChance ? unowned[Math.floor(random() * unowned.length)] : undefined;
     if (gift) {
       collection.add({ ...gift, status: 'owned', condition: 'noManual', acquired: { price: 0, where: `a gift from ${giver.name}`, day: this.day } });
-      notices?.reward({ title: 'Games night', detail: `A photo of the evening is pegged up in the hallway.\n${giver.name} left you ${gift.title}: it waits in your parcel in the hall.` });
+      notices?.reward({ title: `A gift: ${gift.title}`, detail: `${giver.name} left it after games night. In the parcel in the hall.` });
       return;
     }
     const [min, max] = this.rules.tip;
     const coins = min + Math.floor(random() * (max - min + 1));
     purse?.earnCoins(coins);
-    notices?.reward({ title: 'Games night', detail: `A photo of the evening is pegged up in the hallway.\n${giver.name} left a few coins for the crisps.`, coins });
+    notices?.reward({ title: 'Games night', detail: `${giver.name} left a few coins for the crisps. A photo is pegged up in the hallway.`, coins });
   }
 }

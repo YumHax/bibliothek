@@ -1,6 +1,7 @@
 import type { Game } from '@/catalog/types';
 import { getPlatform } from '@/catalog/platforms';
 import { getPrize } from '@/economy/Prizes';
+import { isGrail } from '@/economy/grails';
 import { HOME_GOODS } from '@/economy/homeGoods';
 import type { Journal } from './Journal';
 import { formatCoins } from '@/text/money';
@@ -78,7 +79,7 @@ export function watchForJournal(journal: Journal, sources: JournalSources): () =
       for (const good of HOME_GOODS) {
         const more = (now.get(good.id) ?? 0) - (counts.get(good.id) ?? 0);
         // The bookcases the collection starts with are not bought: only what a shop sold is noted.
-        if (more > 0 && more <= 2) journal.note('home', good.id === 'cat' ? `Adopted a cat (${formatCoins(good.price)})` : `Bought for the flat: ${good.name.toLowerCase()} (${formatCoins(good.price)})`, { id: good.id });
+        if (more > 0 && more <= 2) journal.note('home', good.id === 'cat' ? `Adopted a cat (${formatCoins(good.price)})` : `For the flat: ${good.name.toLowerCase()} (${formatCoins(good.price)})`, { weight: good.id === 'cat' ? 'headline' : 'line', data: { id: good.id } });
       }
       counts = now;
     }));
@@ -88,8 +89,8 @@ export function watchForJournal(journal: Journal, sources: JournalSources): () =
     let played = league.playedToday;
     let pennants = league.pennants;
     stops.push(league.subscribe(() => {
-      if (league.playedToday && !played) journal.note('arcade', league.streakDays >= 2 ? `First arcade play of the day: ${league.streakDays} days in a row` : 'First arcade play of the day');
-      if (league.pennants > pennants) journal.note('arcade', 'Won the weekly league: the pennant came home');
+      if (league.playedToday && !played) journal.note('arcade', league.streakDays >= 2 ? `Arcade, day ${league.streakDays} in a row` : 'Arcade', { weight: 'note' });
+      if (league.pennants > pennants) journal.note('arcade', 'Won the week’s league: the pennant is home', { weight: 'headline' });
       played = league.playedToday;
       pennants = league.pennants;
     }));
@@ -130,22 +131,23 @@ export function watchForJournal(journal: Journal, sources: JournalSources): () =
       known = now;
 
       if (collection.lastChange === 'import' || arrived.length > BULK) {
-        if (arrived.length) journal.note('note', `Brought ${arrived.length} games into the collection at once`);
+        if (arrived.length) journal.note('note', `Brought ${arrived.length} games in at once`);
         journal.tally('gamesIn', arrived.length);
         return;
       }
       for (const game of arrived) {
         journal.tally('gamesIn', 1);
         // A game given (a friend's thank-you: `acquired.where` "a gift from Sam") is a gift, not a purchase.
+        // The title alone: the panel groups the day's purchases under their stall and shows the price from `data`.
         const giver = /^a gift from (.+)$/i.exec(game.acquired?.where ?? '')?.[1];
-        if (giver) journal.note('gift', `A gift from ${giver}: ${game.title} (${platformName(game)})`, { id: game.id });
-        else if (game.acquired && game.acquired.price > 0) journal.note('bought', `Got ${game.title} (${platformName(game)}) from ${game.acquired.where}, ${formatCoins(game.acquired.price)}`, { id: game.id, price: game.acquired.price });
-        else journal.note('bought', `Got ${game.title} (${platformName(game)})`, { id: game.id });
+        const platform = platformShortName(game);
+        if (giver) journal.note('gift', `${game.title}, from ${giver}`, { weight: 'headline', data: { id: game.id, platform, who: giver } });
+        else journal.note('bought', game.title, { weight: isGrail(game.id) ? 'headline' : 'line', data: { id: game.id, platform, ...(game.acquired ? { where: game.acquired.where, ...(game.acquired.price > 0 ? { price: game.acquired.price } : {}) } : {}) } });
       }
-      for (const game of wished) journal.note('wished', `Put ${game.title} on the wishlist`, { id: game.id });
+      for (const game of wished) journal.note('wished', `Wishlist: ${game.title}`, { weight: 'note', data: { id: game.id } });
       for (const id of left) {
         journal.tally('gamesOut', 1);
-        journal.note('sold', `Parted with ${oldTitles.get(id) ?? 'a game'}`, { id });
+        journal.note('sold', `Parted with ${oldTitles.get(id) ?? 'a game'}`, { data: { id } });
       }
     }));
 
@@ -158,7 +160,7 @@ export function watchForJournal(journal: Journal, sources: JournalSources): () =
         waiting = still;
         if (!unpacked.length) return;
         const names = unpacked.map((id) => collection.games.find((g) => g.id === id)?.title ?? id);
-        journal.note('unpacked', names.length <= 3 ? `Unpacked ${names.join(', ')} onto the shelves` : `Unpacked ${names.length} games onto the shelves`);
+        journal.note('unpacked', names.length <= 2 ? `Unpacked: ${names.join(', ')}` : `Unpacked ${names.length} games`);
       }));
     }
   }
@@ -168,7 +170,7 @@ export function watchForJournal(journal: Journal, sources: JournalSources): () =
     stops.push(prizes.subscribe(() => {
       const fresh = prizes.owned.slice(count);
       count = prizes.owned.length;
-      for (const { id } of fresh) journal.note('prize', `Took home the ${getPrize(id)?.name ?? 'prize'}`, { id });
+      for (const { id } of fresh) journal.note('prize', `Prize: the ${getPrize(id)?.name ?? 'prize'}`, { weight: 'headline', data: { id } });
     }));
   }
 
@@ -177,7 +179,8 @@ export function watchForJournal(journal: Journal, sources: JournalSources): () =
     stops.push(medals.subscribe(() => {
       const won = medals.total - total;
       total = medals.total;
-      if (won > 0) journal.note('medal', won === 1 ? `A new arcade medal (${total} in all)` : `${won} new arcade medals (${total} in all)`);
+      // A round ten is worth the page's large hand; the medals between are the small things.
+      if (won > 0) journal.note('medal', won === 1 ? `An arcade medal (${total} in all)` : `${won} arcade medals (${total} in all)`, { weight: total % 10 === 0 ? 'headline' : 'note' });
     }));
   }
 
@@ -188,9 +191,9 @@ function statusMap(games: readonly Game[]): Map<string, string> {
   return new Map(games.map((g) => [g.id, g.status ?? 'owned']));
 }
 
-function platformName(game: Game): string {
+function platformShortName(game: Game): string {
   try {
-    return getPlatform(game.platform).name;
+    return getPlatform(game.platform).shortName;
   } catch {
     return game.platform;
   }

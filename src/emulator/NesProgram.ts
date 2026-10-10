@@ -1,4 +1,4 @@
-import type { ButtonKey, NES } from 'jsnes';
+import type { ButtonKey, EmulatorData, NES } from 'jsnes';
 import type { Pad, ProgramContext, ScreenProgram } from '@/onscreen';
 
 /** The NES's picture (pixels). */
@@ -14,6 +14,13 @@ const RING_SECONDS = 0.08;
 const BLOCK = 1024;
 /** The APU is loud next to the room's other sounds. */
 const LEVEL = 0.7;
+
+/**
+ * Where each cart was when its pad went down, by ROM: picked up again, it carries on from there (a platformer's level
+ * is not lost to a walk to the kitchen). Kept for the page's life only: a whole machine state (64 KB of memory and the
+ * picture buffers as JSON) is too big for the save.
+ */
+const resumeAt = new Map<string, EmulatorData>();
 
 /** The pad's buttons as jsnes numbers them (`Controller.BUTTON_*`). */
 const BUTTONS: readonly [keyof Pad, ButtonKey][] = [
@@ -61,11 +68,14 @@ export class NesProgram implements ScreenProgram {
   private writeAt = 0;
   private count = 0;
   private disposed = false;
+  /** The cart's key in `resumeAt` (its ROM's address), none for bytes handed in. */
+  private readonly resumeKey: string | null;
 
   constructor(private readonly options: NesProgramOptions) {
     this.title = options.title;
     this.hint = options.hint;
     this.players = options.players;
+    this.resumeKey = typeof options.rom === 'string' ? options.rom : null;
     this.image = new ImageData(NES_W, NES_H);
     this.pixels = new Uint32Array(this.image.data.buffer);
     this.pixels.fill(0xff000000);
@@ -87,6 +97,19 @@ export class NesProgram implements ScreenProgram {
       onAudioSample: (left) => this.push(left),
     });
     nes.loadROM(bytes);
+    const saved = this.resumeKey ? resumeAt.get(this.resumeKey) : undefined;
+    if (saved) {
+      try {
+        nes.fromJSON(saved);
+        // The state keeps the pads as they were when it was put down: a button held then would stay held (`press`
+        // only sends changes), so every button starts released.
+        for (const controller of [1, 2] as const) for (const [, button] of BUTTONS) nes.buttonUp(controller, button);
+      } catch (error) {
+        console.warn('[nes] could not resume, starting afresh', error);
+        resumeAt.delete(this.resumeKey!);
+        nes.loadROM(bytes);
+      }
+    }
     this.nes = nes;
     if (audio) {
       const node = audio.ctx.createScriptProcessor(BLOCK, 0, 1);
@@ -121,6 +144,14 @@ export class NesProgram implements ScreenProgram {
   }
 
   dispose(): void {
+    // The pad goes down: where the cart was, to carry on from next time.
+    if (this.nes && this.resumeKey) {
+      try {
+        resumeAt.set(this.resumeKey, this.nes.toJSON());
+      } catch (error) {
+        console.warn('[nes] could not keep the state', error);
+      }
+    }
     this.disposed = true;
     this.node?.disconnect();
     if (this.node) this.node.onaudioprocess = null;

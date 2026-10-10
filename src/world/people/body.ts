@@ -101,9 +101,17 @@ export function trunkGeometry(look: PersonLook): THREE.BufferGeometry {
   const positions: number[] = [];
   const uvs: number[] = [];
   const colors: number[] = [];
+  // A jacket (or a coat) stands off the body: a little ease from the hips to the collar.
+  const layered = look.top === 'jacket' || look.coat === true;
   for (let i = 0; i <= rows; i++) {
     const y = THREE.MathUtils.lerp(TORSO_BOTTOM, TORSO_TOP, i / rows);
     const s = trunkSection(y, look);
+    if (layered) {
+      const ease = 0.008 * ramp(y, 0.9, 0.97) * ramp(y, 1.47, 1.42);
+      s.halfWidth += ease;
+      s.front += ease;
+      s.back += ease;
+    }
     for (let j = 0; j <= cols; j++) {
       const theta = -Math.PI + (j / cols) * Math.PI * 2;
       const sin = Math.sin(theta);

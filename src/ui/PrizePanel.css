@@ -1,7 +1,7 @@
 /*
  * The arcade's prize counter, drawn as one: a laminate counter with its marquee and ticket counter, a lit glass case
  * of shelves (fluorescent price cards, ticket stubs, stickers), the attendant's side with the prize shown large, and
- * the ticket muncher along the bottom. Its own colours, read off a real redemption counter, not the menus' tokens:
+ * the cash-in band (the ticket muncher) right under the top, as loud as the case. Its own colours, read off a real redemption counter, not the menus' tokens:
  * the theme block on `.prizes` holds every one of them (`--pz-*`); the rest of the sheet only reads them.
  */
 @layer tokens, base, components, panels;
@@ -74,6 +74,8 @@
     --pz-feed-off: #57515c;
     --pz-feed-off-ink: #a59dab;
     --pz-feed-off-shade: #333038;
+    --pz-cash-band: #4a3410;
+    --pz-cash-band-2: #2a1d08;
     padding: clamp(0.5rem, 2.5vw, 2rem);
     background: var(--pz-dark);
     backdrop-filter: blur(5px);
@@ -82,7 +84,7 @@
 
   .prizes__counter {
     display: grid;
-    grid-template-rows: auto minmax(0, 1fr) auto;
+    grid-template-rows: auto auto minmax(0, 1fr);
     width: min(100%, 1180px);
     height: min(100%, 840px);
     border-radius: 14px;
@@ -173,6 +175,11 @@
 
   .prizes__purse { display: flex; align-items: center; gap: 0.4rem; font-size: var(--fs-9); font-variant-numeric: tabular-nums; }
   .prizes__coin { width: 1.1rem; height: 1.1rem; }
+  /* Coins in from the muncher: the purse jumps. */
+  .prizes__purse--jump { animation: prizes-jump calc(var(--dur-settle) * 2) var(--ui-ease); }
+  @keyframes prizes-jump {
+    35% { transform: translateY(-5px) scale(1.18); color: var(--pz-sign); }
+  }
 
   .prizes__close {
     font: inherit;
@@ -422,6 +429,7 @@
   /* The counter's own ring: the sign's yellow, wide, as a lit button's halo. */
   .prizes__take:focus-visible,
   .prizes__feed:focus-visible,
+  .prizes__cash-all:focus-visible,
   .prizes__close:focus-visible { outline: 3px solid var(--pz-sign); outline-offset: 3px; }
 
   /* What the counter says, printed on a till slip with a torn bottom. */
@@ -443,17 +451,24 @@
     to   { clip-path: inset(0 0 0 0); }
   }
 
-  /* --- the ticket muncher -------------------------------------------------------------------------- */
+  /* --- the cash-in band (the ticket muncher), right under the top ------------------------------------------ */
 
   .prizes__muncher {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
     gap: 0.6rem 1rem;
-    padding: 0.7rem 1.2rem;
-    border-top: 3px solid var(--ui-black);
+    padding: 0.8rem 1.2rem;
+    border-bottom: 3px solid var(--ui-black);
     background: linear-gradient(180deg, var(--pz-muncher), var(--pz-muncher-2));
     box-shadow: inset 0 1px 0 var(--tint-08);
+    transition: background var(--dur-hover) ease;
+  }
+  /* Tickets enough for a coin: the band lights up gold like the marquee. */
+  .prizes__muncher--ready {
+    background:
+      radial-gradient(ellipse at 85% 50%, var(--pz-sign-glow), transparent 60%),
+      linear-gradient(180deg, var(--pz-cash-band), var(--pz-cash-band-2));
   }
   .prizes__slot {
     flex: none;
@@ -477,10 +492,14 @@
     -webkit-mask: radial-gradient(circle at 50% 0, transparent 0.2rem, var(--ui-black) 0.22rem);
     mask: radial-gradient(circle at 50% 0, transparent 0.2rem, var(--ui-black) 0.22rem);
   }
-  .prizes__muncher-text { flex: 1; min-width: 0; margin: 0; font-size: var(--fs-4); color: var(--pz-muncher-text); }
-  .prizes__muncher-text b { font-family: var(--ui-font-display); font-weight: 400; letter-spacing: 0.05em; color: var(--pz-sign); margin-right: 0.4rem; }
-  .prizes__muncher-text span { display: block; font-size: var(--fs-1); color: var(--pz-muncher-dim); }
-  .prizes__slip--inline { flex: 0 1 18rem; margin: 0; }
+  .prizes__muncher-text { flex: 1; min-width: 12rem; margin: 0; color: var(--pz-muncher-text); }
+  .prizes__muncher-text b { display: block; font-family: var(--ui-font-display); font-weight: 400; font-size: var(--fs-7); letter-spacing: 0.05em; color: var(--pz-sign); }
+  .prizes__worth { display: block; font-size: var(--fs-5); }
+  .prizes__worth em { font-style: normal; font-weight: 700; color: var(--pz-sign); }
+  /* The muncher's word, in place of the worth line (the band keeps its height). */
+  .prizes__worth--said { font-family: var(--ui-font-mono); font-size: var(--fs-3); animation: prizes-print var(--dur-linger) var(--ui-ease); }
+  .prizes__worth--error { color: var(--pz-need); }
+  .prizes__feeds { display: flex; gap: 0.5rem; }
   .prizes__feed {
     font: inherit;
     font-weight: 700;
@@ -496,6 +515,36 @@
   }
   .prizes__feed:active:not(:disabled) { transform: translateY(3px); box-shadow: 0 1px 0 var(--pz-feed-shade); }
   .prizes__feed:disabled { background: var(--pz-feed-off); color: var(--pz-feed-off-ink); box-shadow: 0 4px 0 var(--pz-feed-off-shade); cursor: default; font-weight: 500; }
+
+  /* Cash in the lot: the take button's big arcade press, in the muncher's gold. */
+  .prizes__cash-all {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.55rem;
+    min-width: 13rem;
+    justify-content: center;
+    font-family: var(--ui-font-display);
+    font-size: var(--fs-8);
+    letter-spacing: 0.05em;
+    color: var(--pz-feed-ink);
+    padding: 0.7rem 1.2rem 0.6rem;
+    border: 0;
+    border-radius: var(--ui-radius);
+    background: linear-gradient(180deg, var(--pz-feed), var(--pz-feed-2));
+    box-shadow: 0 6px 0 var(--pz-feed-shade), 0 0 22px var(--pz-sign-glow), inset 0 1px 0 var(--tint-35);
+    cursor: pointer;
+    white-space: nowrap;
+    transition: transform var(--dur-tap) ease, box-shadow var(--dur-tap) ease, filter var(--dur-hover) ease;
+  }
+  .prizes__cash-all .prizes__coin { width: 1.3rem; height: 1.3rem; }
+  .prizes__muncher--ready .prizes__cash-all:not(:disabled) { animation: prizes-beckon var(--dur-pulse) ease-in-out infinite alternate; }
+  @keyframes prizes-beckon {
+    to { box-shadow: 0 6px 0 var(--pz-feed-shade), 0 0 34px var(--pz-sign-glow), inset 0 1px 0 var(--tint-35); filter: brightness(1.06); }
+  }
+  .prizes__cash-all:hover:not(:disabled) { filter: brightness(1.1); }
+  .prizes__cash-all:active:not(:disabled) { transform: translateY(5px); box-shadow: 0 1px 0 var(--pz-feed-shade), inset 0 1px 0 var(--tint-35); animation: none; }
+  .prizes__cash-all:disabled { background: var(--pz-feed-off); color: var(--pz-feed-off-ink); box-shadow: 0 6px 0 var(--pz-feed-off-shade); cursor: default; }
+  .prizes__cash-all:disabled .prizes__coin { opacity: 0.4; }
 
   /* --- small screens: the prize shown under the case ---------------------------------------------------- */
 
@@ -515,9 +564,12 @@
     .prizes__card { width: 4.2rem; }
   }
   @media (pointer: coarse) {
-    .prizes__close, .prizes__feed { min-height: 44px; }
+    .prizes__close, .prizes__feed, .prizes__cash-all { min-height: 44px; }
   }
 
   .reduce-motion .prizes__marquee::before,
-  .reduce-motion .prizes__photo::before { animation: none; }
+  .reduce-motion .prizes__photo::before,
+  .reduce-motion .prizes__muncher--ready .prizes__cash-all,
+  .reduce-motion .prizes__purse--jump,
+  .reduce-motion .prizes__worth--said { animation: none; }
 }

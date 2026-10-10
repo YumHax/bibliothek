@@ -8,7 +8,7 @@ import { boxMesh, cylinderMesh, invisibleHitbox } from './meshUtils';
 import { paint, timber } from '@/world/materials/palette';
 import { INSET, proud } from './props/joinery';
 import { HoverGlint } from './props/hoverGlint';
-import { fabric as fabricMaterial } from '@/world/materials/finishes';
+import { wovenCloth } from '@/world/materials/weave';
 
 /** Eye height above the floor when sitting (seat cushion at ~0.45 m plus torso). */
 const SEATED_EYE_HEIGHT = 1.2;
@@ -32,7 +32,7 @@ const SINK_SECONDS = 0.3;
 export class Seat extends THREE.Group implements Furniture, Interactable, Updatable {
   readonly hitboxes: THREE.Object3D[];
 
-  private readonly fabric = fabricMaterial({ color: 0x8a7a68, roughness: 0.95 });
+  private readonly fabric: THREE.Material;
   private readonly width: number;
   private readonly depth: number;
   private readonly height: number;
@@ -56,9 +56,11 @@ export class Seat extends THREE.Group implements Furniture, Interactable, Updata
   /** Where a cat lies (seat-local): on the bare seat until `mountCushion` puts it on top of the cushion. */
   private readonly restPoint: THREE.Vector3;
 
-  constructor() {
+  /** `fabric`: the upholstery's colour (default a warm taupe), a woven cloth shared by every seat of that colour. */
+  constructor(options: { fabric?: number } = {}) {
     super();
     this.name = 'Seat';
+    this.fabric = wovenCloth(options.fabric ?? 0x8a7a68, 0.95);
 
     const width = 0.8;
     const depth = 0.6;
@@ -82,7 +84,8 @@ export class Seat extends THREE.Group implements Furniture, Interactable, Updata
     this.cushionBottom = seatTop - this.cushionHeight;
     this.cushion = upholstered(innerW - 0.01, this.cushionHeight, depth - 0.02, this.fabric, CROWN, 'top');
     this.cushion.position.set(0, seatTop - this.cushionHeight / 2, 0.02);
-    const back = upholstered(width, backH, 0.14, this.fabric, CROWN, 'front');
+    // A hair narrower than the chair: its sides stay inside the arms' outer faces (the same woven cloth, textured: flush, they would fight).
+    const back = upholstered(width - 2 * INSET, backH, 0.14, this.fabric, CROWN, 'front');
     back.position.set(0, seatTop + backH / 2, -depth / 2 + 0.07);
     back.rotation.x = -0.12; // slight recline
     this.backCentreY = seatTop + backH / 2;

@@ -35,7 +35,22 @@ export const ANNEX_DOORWAY: Doorway = { wall: 'right', along: 2.3, width: 1.1, h
  * The room shell everything else is laid out in: 6 x 6 m, 2.8 m under the ceiling, one door. The
  * back wall (hallway behind) and the right wall have no window and keep the light in.
  */
-export const DEFAULT_ROOM: RoomOptions = { width: 6, depth: 6, height: 2.8, doorways: [FRONT_DOOR, BALCONY_DOORWAY, ANNEX_DOORWAY], opaqueWalls: ['back', 'right'] };
+export const DEFAULT_ROOM: RoomOptions = {
+  width: 6,
+  depth: 6,
+  height: 2.8,
+  doorways: [FRONT_DOOR, BALCONY_DOORWAY, ANNEX_DOORWAY],
+  opaqueWalls: ['back', 'right'],
+  // Uncle Félix's furniture, sold with the rest: the parquet kept its gloss where it stood (his sofa facing the TV
+  // wall, his reading chair in the projector corner, a low chest under the front wall's posters).
+  finish: {
+    footprints: [
+      { at: [-1.0, 0.1], size: [0.95, 2.1] },
+      { at: [1.55, -0.45], size: [0.85, 0.85] },
+      { at: [-2.2, 2.72], size: [1.1, 0.46] },
+    ],
+  },
+};
 
 interface WindowPlan {
   wall: Wall;
@@ -45,6 +60,8 @@ interface WindowPlan {
 interface SeatPlan {
   at: Placement;
   cushion: CushionOptions;
+  /** The upholstery's colour (`Seat`): each armchair its own, the thrown cushion picking up the other's. */
+  fabric?: number;
   /** What must be bought for it to stand (see `build/owned.ts`). */
   upgrade?: Owned;
 }
@@ -73,13 +90,14 @@ export const ROOM_PLAN = {
 
   /** Armchairs (`Seat`), in front of the TV and in front of the projector wall, in the order they are bought. */
   seats: [
-    { at: { floor: [-1.1, 0], rotationY: -Math.PI / 2 }, cushion: { color: 0x8fa383, tilt: 0.25 }, upgrade: { good: 'armchair', nth: 0 } },
-    { at: { floor: [0.5, 0], rotationY: Math.PI / 2 }, cushion: { color: 0xc8785a, tilt: 0.2 }, upgrade: { good: 'armchair', nth: 1 } },
+    { at: { floor: [-1.1, 0], rotationY: -Math.PI / 2 }, cushion: { color: 0x8fa383, tilt: 0.25 }, fabric: 0x7a4b3a, upgrade: { good: 'armchair', nth: 0 } },
+    { at: { floor: [0.5, 0], rotationY: Math.PI / 2 }, cushion: { color: 0xc8785a, tilt: 0.2 }, fabric: 0x5f6b4e, upgrade: { good: 'armchair', nth: 1 } },
   ] as SeatPlan[],
 
   /** Floor-to-ceiling loft windows: two on the front wall, two on the left wall either side of the TV. */
   windows: {
-    size: { width: 1.2, height: 2.4 },
+    // `reveal`: the old wall's thickness shows round each (plaster returns, `RoomWindow`), the curtains hung in front.
+    size: { width: 1.2, height: 2.4, reveal: 0.1 },
     list: [
       { wall: 'front', along: 0.3 },
       { wall: 'left', along: -1.8 },
@@ -191,9 +209,10 @@ export const ROOM_PLAN = {
     // Around the TV armchair (at x -1.1): side table by its right armrest, floor lamp by its left one.
     // Everything marked `upgrade` stands once bought (`economy/homeGoods.ts`: the shops of Front Street), staged till then.
     { kind: 'sideTable', at: { floor: [-1.1, 0.72] }, upgrade: 'sideTable' },
-    { kind: 'floorLamp', at: { floor: [-1.1, -0.76] }, upgrade: { good: 'floorLamp', nth: 0 } },
+    // Each lamp's cord snakes across the boards and away under the armchair beside it.
+    { kind: 'floorLamp', at: { floor: [-1.1, -0.76] }, options: { cord: [0.05, 0.55] }, upgrade: { good: 'floorLamp', nth: 0 } },
     // Floor lamp beside the projector armchair (at x 0.5).
-    { kind: 'floorLamp', at: { floor: [0.5, -0.76] }, options: { intensity: 5 }, upgrade: { good: 'floorLamp', nth: 1 } },
+    { kind: 'floorLamp', at: { floor: [0.5, -0.76] }, options: { intensity: 5, cord: [-0.05, 0.55] }, upgrade: { good: 'floorLamp', nth: 1 } },
     // Rug between the TV and its armchair, long side along the wall.
     { kind: 'rug', at: { floor: [-1.55, 0], rotationY: Math.PI / 2 }, options: { width: 2.4, depth: 1.8 }, upgrade: { good: 'livingRug', nth: 0 } },
     // Hi-fi speakers either side of the TV stand (1.4 m wide), facing into the room like the screen.
@@ -230,11 +249,20 @@ export const ROOM_PLAN = {
     // Sockets: behind the TV stand (the set and the console plugged in, cables into the back of the
     // stand), by the sideboard (the turntable), and a free one under the light switch.
     { kind: 'wallSocket', at: { wall: 'left', along: 0.3, y: 0 }, options: { cables: [[0.25, 0.45, 0.15], [0.12, 0.3, 0.12]] } },
-    { kind: 'wallSocket', at: { wall: 'right', along: 0.75, y: 0 }, options: { gangs: 1, cables: [[-0.3, 0.5, 0.05]] } },
+    // The sideboard's socket is free till the sideboard comes; its turntable's plug and cable come with it.
+    { kind: 'wallSocket', at: { wall: 'right', along: 0.75, y: 0 }, options: { gangs: 1 } },
+    { kind: 'wallSocket', at: { wall: 'right', along: 0.75, y: 0 }, options: { gangs: 1, plugsOnly: true, cables: [[-0.3, 0.5, 0.05]] }, upgrade: 'sideboard', fixed: true },
     { kind: 'wallSocket', at: { wall: 'back', along: -2.05, y: 0 }, options: { gangs: 1 } },
     // A column radiator on the front wall under the posters, between the scratching post (x -1.79..-1.41) and the first
     // window's curtains (from x -0.6), a fleece cradle hooked over it for the cat.
     { kind: 'radiator', at: { wall: 'front', along: -1.0, y: 0 }, options: { width: 0.6, catCradle: true } },
+
+    // --- Moving in (each goes once what replaces it is bought, `until`): the bare flat reads as a fresh start ---
+    // Two taped cartons where the sideboard will stand (clear of the binder on the floor at z 0.3), one more in the
+    // projector corner the floor cushions will have, a suitcase lying open-flat by the front window till the first armchair.
+    { kind: 'crate', at: { floor: [2.3, -0.6], rotationY: 0.25 }, options: { style: 'cardboard', stack: 2, label: 'BOOKS', seed: 4 }, until: 'sideboard' },
+    { kind: 'crate', at: { floor: [1.5, 0.45], rotationY: -0.45 }, options: { style: 'cardboard', label: 'KITCHEN', seed: 9 }, until: 'floorCushions' },
+    { kind: 'suitcase', at: { floor: [-0.55, 1.95], rotationY: 0.3 }, until: { good: 'armchair', nth: 0 } },
 
     // --- The holidays (up only then, see `props/outdoors/season.ts`) ---
     // Christmas: the tree between the first window (x -0.3..0.9) and the balcony door, its branches over the window's

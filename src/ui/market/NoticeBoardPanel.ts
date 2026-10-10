@@ -146,7 +146,7 @@ export class NoticeBoardPanel extends MarketPanel {
       const claimed = standing.hasClaimed(set.id);
       const pieces = progress.map(({ piece, have }) => html`<li class="${have ? 'notices__have' : ''}">${have ? '✔' : '○'} ${piece.name} <span class="catalogue__meta">${getPlatform(piece.platform).shortName}</span></li>`);
       const button = claimed
-        ? html`<button type="button" class="ui-btn" disabled>Claimed</button>`
+        ? html`<button type="button" class="ui-btn" disabled>Paid</button>`
         : html`<button type="button" class="ui-btn${complete ? ' ui-btn--primary' : ''}" data-action="claim" data-id="${set.id}"${attr('disabled', !complete)}>${complete ? 'Claim' : `${have} / ${progress.length}`}</button>`;
       return html`<div class="notices__set${complete ? ' notices__set--done' : ''}">
           <div class="catalogue__row"><span class="catalogue__title"><b>${set.name}</b></span><span class="catalogue__meta">reward</span>${priceHtml(set.reward)}${button}</div>

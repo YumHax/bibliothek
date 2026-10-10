@@ -104,7 +104,7 @@ export class FacadeRelief extends THREE.Group implements Furniture, Updatable {
       const slab = new THREE.Color(features.trim).multiplyScalar(0.86);
       const random = lcg(front.spec.seed * 613 + 5);
       for (const b of features.balconies) {
-        balcony(stone, iron, m, b.s0, b.s1, b.y, BALCONY.depth, slab, fine ? BALCONY.bar : BALCONY.farBar);
+        balcony(stone, iron, m, b.s0, b.s1, b.y, BALCONY.depth, slab, fine ? BALCONY.bar : BALCONY.farBar, fine);
         // What stands on its slab loses its foot (pressed on the slab, never seen).
         props.hideAgainst(new THREE.Vector3(0, 1, 0), frame.point(b.s0, b.y), new THREE.Box3().setFromPoints([frame.point(b.s0, b.y, 0), frame.point(b.s1, b.y, BALCONY.depth)]));
         if (fine) dressBalcony(props, m, b.s0, b.s1, b.y, random);
@@ -259,17 +259,38 @@ function awning(b: TriBuilder, m: THREE.Matrix4, s0: number, s1: number, [a, c]:
   b.triangle(m, [s1, top, back], [s1, edge, back + 0.01], [s1, edge, reach], under(a));
 }
 
-/** A balcony across s0..s1 with its floor at `y`: the stone slab, the rail along the front and the two returns to the wall. */
-function balcony(stone: TriBuilder, iron: TriBuilder, m: THREE.Matrix4, s0: number, s1: number, y: number, depth: number, slab: THREE.Color, pitch: number): void {
+/**
+ * A balcony across s0..s1 with its floor at `y`: the stone slab, the rail along the front and the two returns to the
+ * wall. Seen close (`fine`): stone consoles under the slab, stepped like the Haussmann ones, and the rail's wrought
+ * work, a band of rings between its foot and a middle rail.
+ */
+function balcony(stone: TriBuilder, iron: TriBuilder, m: THREE.Matrix4, s0: number, s1: number, y: number, depth: number, slab: THREE.Color, pitch: number, fine: boolean): void {
   const { slab: thick, rail } = BALCONY;
   const w = s1 - s0;
   const mid = (s0 + s1) / 2;
   stone.box(m, mid, y - thick / 2, depth / 2, w + 0.06, thick, depth + 0.04, slab);
   const front = depth - 0.03;
-  railing(iron, m, [s0, front], [s1, front], y, rail, pitch);
-  railing(iron, m, [s0, 0], [s0, front], y, rail, pitch);
-  railing(iron, m, [s1, front], [s1, 0], y, rail, pitch);
+  railing(iron, m, [s0, front], [s1, front], y, rail, pitch, fine);
+  railing(iron, m, [s0, 0], [s0, front], y, rail, pitch, fine);
+  railing(iron, m, [s1, front], [s1, 0], y, rail, pitch, fine);
+  if (!fine) return;
+  const consoles = Math.max(2, Math.round(w / CONSOLE.every) + 1);
+  const under = new THREE.Color(slab).multiplyScalar(0.92);
+  for (let i = 0; i < consoles; i++) {
+    const s = s0 + 0.12 + ((w - 0.24) * i) / (consoles - 1);
+    let top = y - thick;
+    for (const [h, reach] of CONSOLE.steps) {
+      stone.box(m, s, top - h / 2, (depth * reach) / 2, CONSOLE.width, h, depth * reach, under);
+      top -= h;
+    }
+  }
 }
+
+/** The consoles under a balcony seen close: one about every so many metres, how wide, and their steps (height, share of the slab's depth). */
+const CONSOLE = { every: 1.3, width: 0.13, steps: [[0.09, 0.85], [0.09, 0.6], [0.08, 0.35]] as const };
+/** The wrought band of a rail seen close: its rings' radius and spacing, the middle rail's height over the floor. */
+const WROUGHT = { ring: 0.055, every: 0.15, middle: 0.27 };
+const RING_GEOMETRY = new THREE.TorusGeometry(WROUGHT.ring, 0.008, 4, 10);
 
 /** How far apart two faces of a heap of boxes stay (a balcony's pots and leaves, seen from across the street). */
 const HEAP_GAP = gapAt(60);
@@ -343,7 +364,7 @@ const leaf = new THREE.Matrix4();
 const tilt = new THREE.Euler();
 
 /** A wrought-iron rail from a to b (facade (s, out) points) over a floor at `y`: top and bottom rails, bars every `pitch`. */
-function railing(iron: TriBuilder, m: THREE.Matrix4, a: readonly [number, number], b: readonly [number, number], y: number, height: number, pitch: number): void {
+function railing(iron: TriBuilder, m: THREE.Matrix4, a: readonly [number, number], b: readonly [number, number], y: number, height: number, pitch: number, fine = false): void {
   const [s0, o0] = a;
   const [s1, o1] = b;
   const length = Math.hypot(s1 - s0, o1 - o0);
@@ -358,6 +379,17 @@ function railing(iron: TriBuilder, m: THREE.Matrix4, a: readonly [number, number
   for (let i = 0; i <= bars; i++) {
     const t = i / bars;
     iron.box(m, s0 + (s1 - s0) * t, y + height / 2, o0 + (o1 - o0) * t, 0.018, height, 0.018, IRON);
+  }
+  if (!fine) return;
+  // The wrought band: a middle rail, and a run of rings between it and the foot rail, in the rail's plane.
+  iron.box(m, cs, y + WROUGHT.middle, co, rw, 0.025, rd, IRON);
+  const rings = Math.max(1, Math.round(length / WROUGHT.every));
+  const ringY = y + (0.075 + WROUGHT.middle) / 2;
+  for (let i = 0; i < rings; i++) {
+    const t = (i + 0.5) / rings;
+    moved.makeTranslation(s0 + (s1 - s0) * t, ringY, o0 + (o1 - o0) * t).premultiply(m);
+    if (!alongS) moved.multiply(scaled.makeRotationY(Math.PI / 2));
+    iron.geometry(moved, RING_GEOMETRY, IRON);
   }
 }
 

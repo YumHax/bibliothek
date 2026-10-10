@@ -24,6 +24,8 @@ export interface JointAngles {
   tailYaw: number;
   /** Extra yaw of every tail segment after the first (wraps the tail round the body). */
   tailWrap: number;
+  /** The rump's turn against the chest about the middle of the back (+ = rump to the left, -x): curls the body. */
+  spineYaw: number;
   flUpper: number;
   flLower: number;
   frUpper: number;
@@ -50,6 +52,7 @@ export const STAND: JointAngles = {
   tailCurl: 0.1,
   tailYaw: 0,
   tailWrap: 0,
+  spineYaw: 0,
   flUpper: 0,
   flLower: 0,
   frUpper: 0,
@@ -95,6 +98,7 @@ const LIE: JointAngles = pose({
   tailCurl: 0.07,
   tailYaw: 0.4,
   tailWrap: 0.2,
+  spineYaw: -0.15,
   ...front(-1.25, 0.35),
   ...hind(-1.3, 2.4),
 });
@@ -114,6 +118,7 @@ export function mirrored(pose: JointAngles): JointAngles {
     headYaw: -pose.headYaw,
     tailYaw: -pose.tailYaw,
     tailWrap: -pose.tailWrap,
+    spineYaw: -pose.spineYaw,
     flUpper: pose.frUpper,
     flLower: pose.frLower,
     frUpper: pose.flUpper,
@@ -140,8 +145,10 @@ export const POSES: Record<CatPose, JointAngles> = {
     eyes: 0,
     tailBase: -0.3,
     tailCurl: 0.05,
-    tailYaw: 1.2,
-    tailWrap: 0.3,
+    // Curled: the rump comes round towards the head (both to +x), the tail wraps round that side to the nose.
+    tailYaw: -0.6,
+    tailWrap: -0.45,
+    spineYaw: -0.7,
     ...front(-1.6, 2.2),
     ...hind(-1.5, 2.4),
   }),
@@ -278,4 +285,5 @@ export const JOINT_TAU: Record<keyof JointAngles, number> = {
   tailCurl: 0.28,
   tailYaw: 0.28,
   tailWrap: 0.3,
+  spineYaw: 0.26,
 };

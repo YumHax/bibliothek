@@ -18,6 +18,9 @@ import { nudge } from '@/social/standing';
 import type { SocialServices, TalkExtra, TalkSession } from '@/social/talk';
 import { bodyOf, talkHook } from '../../people/socialHook';
 
+/** The errand's to-do, pinned while it is on. */
+const ERRAND_TIP = 'Press the timer button on landings 1 to 4, then tell the concierge which one sticks.';
+
 const who = plan.concierge;
 
 /** Her look: a blue housecoat over a mauve blouse, grey hair in a bun, glasses. */
@@ -235,7 +238,7 @@ export class Concierge extends Prop implements Updatable, OccupancyAware {
         state.pressed = [];
         saveConcierge();
         w.speak(who.askKey);
-        session.tip('Try the timer button on the landings of the 1st to the 4th floor, then tell the concierge which one sticks.', {
+        session.tip(ERRAND_TIP, {
           id: 'concierge-errand',
           head: 'To do',
           until: () => conciergeState().errand !== 'asked',
@@ -262,7 +265,7 @@ export class Concierge extends Prop implements Updatable, OccupancyAware {
     state.errand = 'done';
     saveConcierge();
     if (!quiet) this.walker.speak(line);
-    if (giveKey('cellar')) session.reward({ title: 'The cellar key', detail: 'Cellar No 5: the door at the foot of the stairs, in the hall.' });
+    if (giveKey('cellar')) session.reward({ title: 'The cellar key', detail: 'Cellar No 5, at the foot of the stairs.' });
   }
 
   /**
@@ -298,7 +301,7 @@ export class Concierge extends Prop implements Updatable, OccupancyAware {
             state.errand = 'asked';
             state.pressed = [];
             saveConcierge();
-            session.tip('Try the timer button on the landings of the 1st to the 4th floor, then tell the concierge which one sticks.', {
+            session.tip(ERRAND_TIP, {
               id: 'concierge-errand',
               head: 'To do',
               until: () => conciergeState().errand !== 'asked',

@@ -40,6 +40,22 @@ export interface Placer {
 }
 
 
+/** A piece standing staged now: hung where it will stand, hidden till bought (`placerFor`). */
+export interface StagedPiece {
+  readonly item: Furniture;
+  readonly zone: Zone;
+  /** What buys it. */
+  readonly owned: Owned;
+}
+
+/** Every piece staged now, in every built zone: the opening's dream shows them for a while (`src/intro`). */
+const staged = new Set<StagedPiece>();
+
+/** The pieces staged now (not bought), zone by zone as they were built. Show one with `setShownKeepingLights` and hide it again the same way. */
+export function stagedPieces(): readonly StagedPiece[] {
+  return [...staged];
+}
+
 /**
  * Places what `owned` needs bought: straight into the zone when it is (or when nothing is needed), else *staged*: hung in
  * the zone's group where it will stand, hidden with its lights kept dark (`setShownKeepingLights`), neither colliding,
@@ -49,7 +65,7 @@ export interface Placer {
  */
 export function placerFor(zone: Zone, upgrades: HomeUpgrades | undefined, owned: Owned | undefined): Placer {
   const direct = isOwned(upgrades, owned);
-  const staged: Furniture[] = [];
+  const waiting: StagedPiece[] = [];
   const callbacks: (() => void)[] = [];
   let isBought = direct;
 
@@ -60,9 +76,12 @@ export function placerFor(zone: Zone, upgrades: HomeUpgrades | undefined, owned:
     zone.group.add(item);
     item.updateWorldMatrix(true, true);
     setShownKeepingLights(item, false);
-    staged.push(item);
+    const piece: StagedPiece = { item, zone, owned: owned! };
+    waiting.push(piece);
+    staged.add(piece);
     // Not placed, still the zone's: disposed on unload even if never bought.
     zone.keep(item);
+    zone.onUnload(() => staged.delete(piece));
     return item;
   };
 
@@ -96,7 +115,9 @@ export function placerFor(zone: Zone, upgrades: HomeUpgrades | undefined, owned:
       isBought = true;
       unsubscribe();
       // Where it hangs now (the piece it stands on may have been moved meanwhile, carrying it along).
-      for (const item of staged.splice(0)) {
+      for (const piece of waiting.splice(0)) {
+        const { item } = piece;
+        staged.delete(piece);
         setShownKeepingLights(item, true);
         zone.place(item, item.position.clone(), item.rotation.y);
       }

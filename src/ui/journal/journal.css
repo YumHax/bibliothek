@@ -1,0 +1,609 @@
+/*
+ * The journal (JournalPanel): a hardback open on a day's two facing pages over the view (`.ui-modal--centre`). An
+ * oxblood cover shows round the pages and in the spine between them; the pages are cream, faintly ruled, shaded
+ * towards the gutter, their edges stacked at the outside. The hand (Caveat) writes the day, the headings and what is
+ * coming; the lines are in the serif, set on the rules, the time in the margin. What is pasted in (the counters, the
+ * bars, the snapshots, the covers, the faces, the stickers, the trails' dots, the strip of days) does the showing, so
+ * the words stay few. Under 48rem the pages stack.
+ */
+@layer tokens, base, components, panels;
+@layer panels {
+  .journal-panel__book {
+    --paper: var(--paper-journal);
+    --ink: var(--ink-journal);
+    /* The cover's leather, the spine, the page edges and the faint ruling: this book's own slots. */
+    --cover: #5b2824;
+    --cover-light: #7a3a33;
+    --cover-dark: #3a1714;
+    --cover-text: #efe2cf;
+    --paper-edge: #efe9da;
+    --paper-edge-2: #e4dcc9;
+    --rule: rgba(96, 128, 168, 0.16);
+    --margin-line: rgba(196, 80, 66, 0.42);
+    --gutter: rgba(60, 40, 20, 0.22);
+    /* The pencil, the snapshots' paper and tape, the pockets' back and plastic, the rubber stamp, a sticker's shine. */
+    --pencil: rgba(60, 60, 66, 0.78);
+    --pencil-faint: rgba(60, 60, 66, 0.32);
+    --snap-paper: #fdfcf8;
+    --tape: rgba(236, 228, 190, 0.7);
+    --pocket-back: #d9d6cc;
+    --pocket-edge: rgba(70, 76, 84, 0.4);
+    --rubber: #b3302a;
+    --sticker-shine: rgba(255, 255, 255, 0.55);
+    --strip-ink: rgba(34, 48, 63, 0.14);
+    --ruling: 1.65rem;
+    --margin: 3rem;
+    width: min(64rem, 100%);
+    max-height: 100%;
+    display: flex;
+    flex-direction: column;
+    box-sizing: border-box;
+    padding: 0.9rem 1rem 0.7rem;
+    color: var(--ink);
+    color-scheme: light;
+    font-family: var(--ui-font-serif);
+    font-size: var(--fs-6);
+    line-height: var(--ruling);
+    border-radius: var(--ui-radius-xs) var(--ui-radius) var(--ui-radius) var(--ui-radius-xs);
+    background:
+      radial-gradient(circle at 30% 20%, var(--tint-08) 0 0.5px, transparent 1.5px) 0 0 / 7px 9px,
+      radial-gradient(circle at 70% 60%, var(--shade-10) 0 0.5px, transparent 1.5px) 3px 4px / 11px 8px,
+      linear-gradient(135deg, var(--cover-light), var(--cover) 45%, var(--cover-dark));
+    box-shadow: var(--ui-shadow-paper), inset 0 1px 0 var(--tint-20), inset 0 -2px 0 var(--shade-25);
+  }
+  /* The two pages, the spine's leather showing between them. */
+  .journal-panel__book .ui-panel__body {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.7rem;
+    min-height: 0;
+    flex: 1 1 auto;
+    overflow: hidden;
+    perspective: 1800px;
+  }
+  /* A page: its body scrolls under the ruling, its foot holds the corner's link (never over the words). */
+  .journal-page {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    box-sizing: border-box;
+    min-width: 0;
+    height: clamp(26rem, 78vh, 44rem);
+    background: var(--paper);
+    transform-origin: 100% 50%;
+  }
+  .journal-page__body {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    padding: 1.1rem 1.2rem 1rem var(--margin);
+    /* The ruling, shifted so a line's baseline sits on its rule, and the red margin line; the paper under it all. */
+    background:
+      linear-gradient(90deg, transparent calc(var(--margin) - 0.7rem), var(--margin-line) calc(var(--margin) - 0.7rem), var(--margin-line) calc(var(--margin) - 0.7rem + 1px), transparent calc(var(--margin) - 0.7rem + 1px)),
+      repeating-linear-gradient(180deg, transparent 0, transparent calc(var(--ruling) - 1px), var(--rule) calc(var(--ruling) - 1px), var(--rule) var(--ruling)) 0 -0.45rem,
+      var(--paper);
+    background-attachment: local, local, scroll;
+  }
+  .journal-page__foot {
+    flex: none;
+    display: flex;
+    align-items: center;
+    min-height: 1.9rem;
+    padding: 0.2rem 0.8rem;
+  }
+  .journal-page--right .journal-page__foot { justify-content: flex-end; }
+  /* The gutter's shade, where the page bends into the spine; the outer edge's stacked pages. */
+  .journal-page--left {
+    border-radius: var(--ui-radius-sm) var(--ui-radius-2xs) var(--ui-radius-2xs) var(--ui-radius-sm);
+    box-shadow:
+      inset -2.5rem 0 2rem -2rem var(--gutter),
+      -2px 0 0 var(--paper-edge),
+      -4px 0 0 var(--paper-edge-2),
+      -6px 0 0 var(--shade-25);
+  }
+  .journal-page--right {
+    border-radius: var(--ui-radius-2xs) var(--ui-radius-sm) var(--ui-radius-sm) var(--ui-radius-2xs);
+    transform-origin: 0 50%;
+    box-shadow:
+      inset 2.5rem 0 2rem -2rem var(--gutter),
+      2px 0 0 var(--paper-edge),
+      4px 0 0 var(--paper-edge-2),
+      6px 0 0 var(--shade-25);
+  }
+  /* The turn: the pages come in with a little swing on the spine. */
+  .journal-page--turned-on { animation: journal-turn-on var(--dur-long) var(--ui-ease); }
+  .journal-page--turned-back { animation: journal-turn-back var(--dur-long) var(--ui-ease); }
+  @keyframes journal-turn-on {
+    from { opacity: 0; transform: rotateY(-14deg); }
+    to { opacity: 1; transform: rotateY(0); }
+  }
+  @keyframes journal-turn-back {
+    from { opacity: 0; transform: rotateY(14deg); }
+    to { opacity: 1; transform: rotateY(0); }
+  }
+  .journal-icon {
+    display: inline-block;
+    width: 0.9em;
+    height: 0.9em;
+    margin-right: 0.15em;
+    vertical-align: -0.1em;
+  }
+
+  /* --- the hand ------------------------------------------------------------------------------ */
+
+  .journal-page__day {
+    margin: 0;
+    font-family: var(--ui-font-hand);
+    font-size: 2.6rem;
+    font-weight: 600;
+    line-height: calc(var(--ruling) * 2);
+    letter-spacing: 0.01em;
+  }
+  .journal-page__weekday {
+    margin: calc(-0.4 * var(--ruling)) 0 0;
+    font-family: var(--ui-font-hand);
+    font-size: var(--fs-t2);
+    font-weight: 500;
+    color: var(--pencil);
+  }
+  .journal-page__heading {
+    margin: calc(0.8 * var(--ruling)) 0 0;
+    font-family: var(--ui-font-hand);
+    font-size: var(--fs-t3);
+    font-weight: 600;
+    line-height: var(--ruling);
+    text-decoration: underline;
+    text-decoration-thickness: 1px;
+    text-underline-offset: 0.2em;
+  }
+  .journal-page__heading--small { font-size: var(--fs-t1); font-weight: 500; color: var(--pencil); text-decoration: none; }
+  .journal-page__empty {
+    margin: var(--ruling) 0 0;
+    font-family: var(--ui-font-hand);
+    font-size: var(--fs-t2);
+    opacity: var(--ui-muted);
+  }
+  .journal-pencil {
+    margin: 0;
+    font-family: var(--ui-font-hand);
+    font-size: var(--fs-t1);
+    color: var(--pencil);
+  }
+
+  /* --- the counters and the bars ------------------------------------------------------------- */
+
+  /* Three counters in a row, nothing boxed: the pictogram, the figure in hand written large, the name, the day's moves. */
+  .journal-sums {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.4rem;
+    margin: calc(0.5 * var(--ruling)) 0 0;
+    padding: 0;
+    list-style: none;
+  }
+  .journal-sum {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0;
+    text-align: center;
+    font-family: var(--ui-font-hand);
+    line-height: 1.05;
+  }
+  .journal-sum .journal-icon { width: 1.5rem; height: 1.5rem; margin: 0 0 0.15rem; color: var(--pencil); }
+  .journal-sum[data-what='coins'] .journal-icon { color: var(--ink-gold); }
+  .journal-sum__have { font-size: var(--fs-t5); font-weight: 600; letter-spacing: 0.01em; font-variant-numeric: tabular-nums; }
+  .journal-sum__name { font-size: var(--fs-4); color: var(--pencil); }
+  .journal-sum__moves { display: flex; gap: 0.5rem; margin-top: 0.1rem; font-size: var(--fs-t1); font-weight: 600; font-variant-numeric: tabular-nums; }
+  /* An earlier day has no figure in hand: its moves are the counter. */
+  .journal-sum:not(:has(.journal-sum__have)) .journal-sum__moves { font-size: var(--fs-t3); }
+  .journal-sum__in { color: var(--ink-green); }
+  .journal-sum__out { color: var(--ink-red); }
+
+  /* The last days' coins: bars up in the green, down in the red, the day's number under each. */
+  .journal-week { margin: calc(0.6 * var(--ruling)) 0 0; }
+  .journal-week__caption {
+    font-family: var(--ui-font-hand);
+    font-size: var(--fs-t1);
+    font-weight: 500;
+    color: var(--pencil);
+  }
+  .journal-week__chart { display: block; width: auto; max-width: 100%; height: 5.4rem; margin: 0.1rem auto 0; overflow: visible; }
+  .journal-week__figure { font-family: var(--ui-font-hand); font-size: 10px; font-weight: 600; }
+  .journal-week__figure--in { fill: var(--ink-green); }
+  .journal-week__figure--out { fill: var(--ink-red); }
+  .journal-week__base { stroke: var(--pencil-faint); stroke-width: 1; stroke-dasharray: 3 3; }
+  .journal-week__in { fill: var(--ink-green); opacity: 0.8; }
+  .journal-week__out { fill: var(--ink-red); opacity: 0.8; }
+  .journal-week__label { fill: var(--pencil); font-family: var(--ui-font-hand); font-size: 12px; }
+  .journal-week__label--open { fill: var(--ink-red); font-weight: 600; text-decoration: underline; }
+
+  /* --- the snapshots -------------------------------------------------------------------------- */
+
+  /* The games come home, their covers as snapshots taped in at an angle. */
+  .journal-snaps {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 0.8rem 0.7rem;
+    margin: 0;
+    padding: 0.5rem 0.2rem 0.3rem;
+    list-style: none;
+  }
+  .journal-snap {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+    min-width: 0;
+    padding: 0.3rem 0.3rem 0.2rem;
+    background: var(--snap-paper);
+    box-shadow: 0 2px 5px var(--shade-25);
+    transform: rotate(var(--tilt, 0deg));
+  }
+  .journal-snap::before {
+    content: '';
+    position: absolute;
+    top: -0.4rem;
+    left: 50%;
+    width: 2.2rem;
+    height: 0.8rem;
+    transform: translateX(-50%) rotate(-4deg);
+    background: var(--tape);
+  }
+  .journal-snap__pocket { display: block; width: 100%; aspect-ratio: 5 / 7; overflow: hidden; background: var(--pocket-back); }
+  .journal-snap__cover { display: block; width: 100%; height: 100%; object-fit: cover; }
+  .journal-snap__name {
+    display: -webkit-box;
+    overflow: hidden;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    font-family: var(--ui-font-hand);
+    font-size: var(--fs-4);
+    line-height: 1.05;
+    text-align: center;
+  }
+
+  /* --- to do, to watch; the trails ----------------------------------------------------------- */
+
+  .journal-ahead,
+  .journal-lines,
+  .journal-haul,
+  .journal-trail__dots,
+  .journal-trail__earlier,
+  .journal-strip {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  /* A line to watch: its pictogram, a few words, the day in a pencilled ring at the end. */
+  .journal-ahead { font-family: var(--ui-font-hand); font-size: var(--fs-t1); }
+  .journal-ahead__item {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: baseline;
+    column-gap: 0.4rem;
+    line-height: calc(0.85 * var(--ruling));
+    padding: 0.1rem 0;
+  }
+  .journal-ahead__item .journal-icon { width: 1em; height: 1em; margin: 0; color: var(--pencil); align-self: center; }
+  .journal-ahead__item[data-kind='arcade'] .journal-icon { color: var(--ink-gold); }
+  .journal-ahead__item[data-kind='market'] .journal-icon { color: var(--ink-green); }
+  .journal-ahead__item[data-kind='social'] .journal-icon { color: var(--ink-red); }
+  .journal-ahead__text { min-width: 0; }
+  .journal-when {
+    padding: 0 0.45rem;
+    font-size: var(--fs-4);
+    line-height: 1.3;
+    white-space: nowrap;
+    color: var(--pencil);
+    border: 1px solid var(--pencil-faint);
+    border-radius: var(--ui-radius-pill);
+  }
+  .journal-when--today { color: var(--ink-red); border-color: var(--ink-red); }
+
+  /* A trail: the clues as a row of dots, the latest in the serif, the next lead in the hand. */
+  .journal-trail { margin: 0; }
+  .journal-trail__dots {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.3rem;
+    padding: 0.2rem 0 0.3rem;
+  }
+  .journal-trail__dot {
+    display: grid;
+    place-items: center;
+    width: 1rem;
+    height: 1rem;
+    border: 1.5px solid var(--pencil);
+    border-radius: 50%;
+    box-sizing: border-box;
+  }
+  .journal-trail__dot--found { background: var(--ink); border-color: var(--ink); }
+  .journal-trail__dot--next { border-style: dashed; border-color: var(--ink-red); color: var(--ink-red); }
+  .journal-trail__dot--next .journal-icon { width: 0.7rem; height: 0.7rem; margin: 0; }
+  .journal-trail__dot--ahead { border-color: var(--pencil-faint); }
+  .journal-trail--done .journal-trail__dot--found { background: var(--ink-green); border-color: var(--ink-green); }
+  .journal-trail__clue {
+    display: -webkit-box;
+    overflow: hidden;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    margin: 0;
+  }
+  .journal-trail__next { margin: 0; font-family: var(--ui-font-hand); font-size: var(--fs-t1); color: var(--pencil); }
+  .journal-trail__earlier { counter-reset: clue; font-size: var(--fs-4); }
+  .journal-trail__earlier li { counter-increment: clue; }
+  .journal-trail__earlier li::before { content: counter(clue) '. '; opacity: var(--ui-muted); }
+  .journal-fold__toggle {
+    font-family: var(--ui-font-hand);
+    font-size: var(--fs-t1);
+    line-height: var(--ruling);
+    color: inherit;
+    background: transparent;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    text-decoration: underline dotted;
+    text-underline-offset: 0.2em;
+  }
+  .journal-fold__toggle small { font-size: var(--fs-5); opacity: var(--ui-muted); }
+  /* SOLVED, a rubber stamp by a trail's title. */
+  .journal-rubber {
+    display: inline-block;
+    margin-left: 0.4rem;
+    padding: 0 0.35rem;
+    font-family: var(--ui-font-print);
+    font-size: var(--fs-3);
+    font-weight: normal;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    text-decoration: none;
+    color: var(--rubber);
+    border: 2px solid var(--rubber);
+    border-radius: var(--ui-radius-2xs);
+    transform: rotate(-8deg);
+    opacity: 0.85;
+  }
+
+  /* The small things, a run-on line in the hand. */
+  .journal-small {
+    margin: 0;
+    font-family: var(--ui-font-hand);
+    font-size: var(--fs-t1);
+    color: var(--pencil);
+  }
+
+  /* --- the strip of days ---------------------------------------------------------------------- */
+
+  /* The last fortnight as little squares, shaded by how much was written; a star on a headline day; the open one ringed. */
+  .journal-strip {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+    margin: 0 0 var(--ruling);
+  }
+  .journal-strip__day {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 1.9rem;
+    padding: 0.1rem 0 0.15rem;
+    font-family: var(--ui-font-hand);
+    font-size: var(--fs-5);
+    font-weight: 600;
+    line-height: 1;
+    color: var(--ink);
+    background: transparent;
+    border: 1px solid var(--pencil-faint);
+    border-radius: var(--ui-radius-2xs);
+    cursor: pointer;
+  }
+  .journal-strip__day small { font-size: var(--fs-tiny); font-weight: 500; color: var(--pencil); }
+  .journal-strip__day[data-level='1'] { background: var(--strip-ink); }
+  .journal-strip__day[data-level='2'] { background: color-mix(in srgb, var(--strip-ink) 100%, var(--ink) 14%); }
+  .journal-strip__day[data-level='3'] { background: color-mix(in srgb, var(--strip-ink) 100%, var(--ink) 30%); color: var(--paper); }
+  .journal-strip__day[data-level='3'] small { color: var(--paper); }
+  .journal-strip__day[data-star]::after {
+    content: '★';
+    position: absolute;
+    top: -0.45rem;
+    right: -0.3rem;
+    font-size: var(--fs-2);
+    color: var(--ink-gold);
+  }
+  .journal-strip__day[aria-current] { border: 2px solid var(--ink-red); }
+  .journal-strip__day:hover,
+  .journal-strip__day:focus-visible { border-color: var(--ink); }
+
+  /* --- the lines ----------------------------------------------------------------------------- */
+
+  /* The time in the margin, left of the red line, then the text. */
+  .journal-line,
+  .journal-bought {
+    display: grid;
+    grid-template-columns: 2rem 1fr;
+    column-gap: 0.75rem;
+    margin-left: calc(-1 * var(--margin) + 0.25rem);
+  }
+  .journal-lines__at {
+    font-size: var(--fs-2);
+    line-height: var(--ruling);
+    opacity: 0.5;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+  .journal-line__text { display: flow-root; min-width: 0; }
+  .journal-line--headline {
+    font-family: var(--ui-font-hand);
+    font-size: var(--fs-t3);
+    font-weight: 600;
+    line-height: var(--ruling);
+  }
+  .journal-line[data-kind='bought'] .journal-icon,
+  .journal-line[data-kind='unpacked'] .journal-icon,
+  .journal-bought .journal-icon { color: var(--ink-green); }
+  .journal-line[data-kind='sold'] .journal-icon { color: var(--ink-red); }
+  .journal-line[data-kind='social'] .journal-icon { color: var(--ink-red); }
+  .journal-line[data-kind='medal'] .journal-icon,
+  .journal-line[data-kind='prize'] .journal-icon { color: var(--ink-gold); }
+  .journal-line--headline[data-kind='medal'] .journal-icon { width: 1.3em; height: 1.3em; }
+
+  /* A cover pasted beside a line, like a cutting, over two rules. */
+  .journal-cutting {
+    float: left;
+    width: 2rem;
+    aspect-ratio: 5 / 7;
+    margin: 0.15rem 0.5rem 0.1rem 0;
+    overflow: hidden;
+    background: var(--pocket-back);
+    box-shadow: 0 1px 2px var(--shade-25);
+    transform: rotate(-2.5deg);
+  }
+  .journal-cutting__cover { display: block; width: 100%; height: 100%; object-fit: cover; }
+  /* The face of whoever a line is about, a small round portrait on the line. */
+  .journal-face {
+    display: inline-block;
+    width: 1.6rem;
+    height: 1.6rem;
+    margin: 0 0.3rem 0 0;
+    overflow: hidden;
+    vertical-align: middle;
+    border-radius: 50%;
+    box-shadow: 0 0 0 1.5px var(--snap-paper), 0 1px 2px var(--shade-25);
+  }
+  .journal-face canvas { display: block; width: 100%; height: 100%; }
+  /* A prize's sticker: a round in its colour with a shine, on the line. */
+  .journal-sticker {
+    display: inline-block;
+    width: 1.1em;
+    height: 1.1em;
+    margin-right: 0.3rem;
+    vertical-align: -0.15em;
+    border-radius: 50%;
+    background: radial-gradient(circle at 35% 30%, var(--sticker-shine), var(--prize) 65%);
+    box-shadow: 0 1px 0 var(--shade-25);
+    transform: rotate(6deg);
+  }
+
+  /* A stall's purchases: the stall in the hand, the covers in a row under it with the title and the price. */
+  .journal-bought__where {
+    margin: 0;
+    font-family: var(--ui-font-hand);
+    font-size: var(--fs-t2);
+    font-weight: 500;
+    line-height: var(--ruling);
+  }
+  .journal-haul {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(3.6rem, 4.4rem));
+    gap: 0.45rem 0.5rem;
+    padding: 0.2rem 0 0.4rem;
+  }
+  .journal-haul__item { display: flex; flex-direction: column; gap: 0.15rem; min-width: 0; }
+  .journal-haul__pocket {
+    position: relative;
+    display: block;
+    aspect-ratio: 5 / 7;
+    overflow: hidden;
+    background: var(--pocket-back);
+    border: 1px solid var(--pocket-edge);
+    border-radius: var(--ui-radius-2xs);
+  }
+  .journal-haul__pocket::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: linear-gradient(115deg, var(--tint-20) 0 16%, transparent 30% 62%, var(--tint-08) 70%, transparent 80%);
+  }
+  .journal-haul__cover { display: block; width: 100%; height: 100%; object-fit: cover; }
+  .journal-haul__name {
+    display: -webkit-box;
+    overflow: hidden;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    font-size: var(--fs-1);
+    line-height: 1.15;
+    text-align: center;
+  }
+  .journal-haul__name small { font-size: var(--fs-0); color: var(--pencil); }
+  .journal-haul__price {
+    font-family: var(--ui-font-hand);
+    font-size: var(--fs-5);
+    line-height: 1;
+    text-align: center;
+    color: var(--ink-red);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Where the last reading stopped: a dashed rule with its tag in the hand. */
+  .journal-mark {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    height: var(--ruling);
+    font-family: var(--ui-font-hand);
+    font-size: var(--fs-5);
+    color: var(--ink-red);
+  }
+  .journal-mark::before,
+  .journal-mark::after {
+    content: '';
+    flex: 1 1 auto;
+    border-top: 1px dashed var(--ink-red);
+    opacity: 0.6;
+  }
+  .journal-mark::after { flex: 0 0 1.2rem; }
+
+  /* --- the corners and the foot -------------------------------------------------------------- */
+
+  /* The link to another day, written in a page's bottom corner. */
+  .journal-page__corner {
+    font-family: var(--ui-font-hand);
+    font-size: var(--fs-t1);
+    line-height: 1;
+    color: inherit;
+    background: var(--paper);
+    border: none;
+    padding: 0.2rem 0.4rem;
+    cursor: pointer;
+    opacity: var(--ui-muted);
+  }
+  .journal-page__corner:hover,
+  .journal-page__corner:focus-visible { opacity: 1; text-decoration: underline; }
+
+  .journal-panel__book .ui-panel__status { color: var(--cover-text); }
+  .journal-panel__book footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--sp-3);
+    margin-top: 0.7rem;
+  }
+  /* The buttons tooled into the cover. */
+  .journal-panel__book footer button {
+    font: inherit;
+    font-size: var(--fs-4);
+    font-variant: small-caps;
+    letter-spacing: 0.06em;
+    color: var(--cover-text);
+    background: transparent;
+    border: 1px solid var(--cover-text);
+    border-radius: var(--ui-radius-xs);
+    padding: 0.1rem 0.8rem;
+    cursor: pointer;
+    opacity: 0.8;
+  }
+  .journal-panel__book footer button:hover,
+  .journal-panel__book footer button:focus-visible { opacity: 1; background: var(--tint-08); }
+
+  /* A narrow view: the pages stack, the glance over the lines. */
+  @media (max-width: 48rem) {
+    .journal-panel__book .ui-panel__body { grid-template-columns: 1fr; overflow-y: auto; }
+    .journal-page { height: auto; }
+    .journal-page__body { overflow: visible; }
+    .journal-page--left,
+    .journal-page--right { border-radius: var(--ui-radius-sm); box-shadow: none; }
+  }
+}

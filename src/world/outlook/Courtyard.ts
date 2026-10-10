@@ -3,11 +3,13 @@ import type { Updatable } from '@/core/Engine';
 import { createCanvas, roundRect, toTexture, repeatTexture } from '@/covers/generated/canvasUtils';
 import type { Furniture } from '../Furniture';
 import type { DayNight } from '../props/DayNight';
-import { part } from '../props/Prop';
+import { markShared, part } from '../props/Prop';
 import { gapAt } from '../surface/layers';
 import { paint } from '../materials/palette';
 import { seasonalLawn } from '../props/outdoors/paint';
 import { QuadBuilder } from '../street/QuadBuilder';
+import { GrassTufts } from '../street/GrassTufts';
+import { Climber } from '../street/Climber';
 import { lawnTile } from '../street/groundTextures';
 import { facadeHeight } from '../street/facadePainter';
 import { COURTYARD_YARD as yard } from '@/world/courtyard/courtyardPlan';
@@ -54,6 +56,22 @@ export class Courtyard extends THREE.Group implements Furniture, Updatable {
     part(this, w + 0.2, 0.08, 0.1, curb, { x: cx, y: 0.04, z: lawn.z1 + 0.05 });
     part(this, 0.1, 0.08, d, curb, { x: lawn.x0 - 0.05, y: 0.04, z: cz });
     part(this, 0.1, 0.08, d, curb, { x: lawn.x1 + 0.05, y: 0.04, z: cz });
+    // The grass the mower misses along the curb, and a few tufts in the setts' joints at the curb's foot outside.
+    const inset = 0.12;
+    this.add(
+      new GrassTufts(
+        [
+          { from: [lawn.x0 + inset, lawn.z0 + inset], to: [lawn.x1 - inset, lawn.z0 + inset], width: 0.18, y: 0.03 },
+          { from: [lawn.x0 + inset, lawn.z1 - inset], to: [lawn.x1 - inset, lawn.z1 - inset], width: 0.18, y: 0.03 },
+          { from: [lawn.x0 + inset, lawn.z0 + inset], to: [lawn.x0 + inset, lawn.z1 - inset], width: 0.18, y: 0.03 },
+          { from: [lawn.x1 - inset, lawn.z0 + inset], to: [lawn.x1 - inset, lawn.z1 - inset], width: 0.18, y: 0.03 },
+          { from: [lawn.x0 - 0.16, lawn.z0 - 0.16], to: [lawn.x1 + 0.16, lawn.z0 - 0.16], width: 0.06 },
+          { from: [lawn.x0 - 0.16, lawn.z1 + 0.16], to: [lawn.x1 + 0.16, lawn.z1 + 0.16], width: 0.06 },
+        ],
+        5,
+        31,
+      ),
+    );
 
     // The workshop's back: a rendered wall with a door and two barred windows, a tarred flat roof behind its parapet.
     const wall = paint(workshop.wall, 0.92);
@@ -76,6 +94,12 @@ export class Courtyard extends THREE.Group implements Furniture, Updatable {
       for (let i = -2; i <= 2; i++) part(this, 0.03, 1.1, 0.02, bars, { x: face + 0.03, y: 1.75, z: z + i * 0.26 });
       part(this, 0.1, 0.05, 1.45, paint(0x9a958c, 0.8), { x: face + 0.04, y: 1.18, z });
     }
+
+    // Ivy up the workshop's back between its door and the far window, nearly to the parapet.
+    const ivy = new Climber(yard.ivy.width, Math.min(yard.ivy.height, WORKSHOP_HEIGHT - 0.3), 41);
+    ivy.position.set(face, 0, yard.ivy.z);
+    ivy.rotation.y = Math.PI / 2;
+    this.add(ivy);
 
     this.bins();
     this.shed();
@@ -179,7 +203,7 @@ export class Courtyard extends THREE.Group implements Furniture, Updatable {
 }
 
 /** A bicycle wheel: a thin tyre ring. */
-const WHEEL = new THREE.TorusGeometry(0.33, 0.02, 6, 24);
+const WHEEL = markShared(new THREE.TorusGeometry(0.33, 0.02, 6, 24));
 
 /** Granite setts laid in rows, each its own grey, the joints darker: one tile `SETTS_PER_TILE` setts square. */
 function settsTexture(anisotropy: number): THREE.CanvasTexture {

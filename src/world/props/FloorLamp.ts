@@ -11,6 +11,11 @@ export interface FloorLampOptions {
   intensity?: number;
   /** Starts lit? */
   on?: boolean;
+  /**
+   * Where its cord runs to, a lamp-local floor point `[x, z]` (under the armchair beside it, to the wall): it leaves the
+   * base and snakes across the floor there. None by default.
+   */
+  cord?: [x: number, z: number];
 }
 
 const SEGMENTS = 32;
@@ -44,7 +49,7 @@ export class FloorLamp extends SwitchableLamp {
   constructor(options: FloorLampOptions = {}) {
     super('floor lamp');
     this.name = 'FloorLamp';
-    this.options = { poleHeight: 1.5, intensity: 6, on: false, ...options };
+    this.options = { poleHeight: 1.5, intensity: 6, on: false, cord: [0, 0], ...options };
     const { poleHeight } = this.options;
 
     const base = cylinderMesh(BASE_RADIUS, BASE_HEIGHT, DARK_METAL, { y: BASE_HEIGHT / 2 }, { segments: SEGMENTS });
@@ -79,6 +84,7 @@ export class FloorLamp extends SwitchableLamp {
 
     for (const m of [shade, top, bottom, bulb]) m.castShadow = false;
     this.add(base, pole, shade, top, bottom, bulb, this.light, hitbox);
+    if (options.cord) this.add(cord(options.cord));
     this.setOn(this.options.on);
   }
 
@@ -95,4 +101,25 @@ export class FloorLamp extends SwitchableLamp {
     this.bulb.emissiveIntensity = level * BULB_GLOW;
     this.fabric.emissiveIntensity = level * FABRIC_GLOW;
   }
+}
+
+/** A cord lies a hair over the floor (clear of the contact shadows), this thick. */
+const CORD_Y = 0.013;
+const CORD_RADIUS = 0.0028;
+/** How far up the base's side the cord comes out of it. */
+const CORD_RISE = 0.006;
+const CORD = standard({ color: 0x1c1c1e, roughness: 0.55, metalness: 0 });
+
+/** The lamp's cord: out of the base's side at the floor, a lazy S across the boards to `to`. */
+function cord(to: [number, number]): THREE.Mesh {
+  const end = new THREE.Vector3(to[0], CORD_Y, to[1]);
+  const dir = end.clone().setY(0).normalize();
+  const side = new THREE.Vector3(-dir.z, 0, dir.x);
+  const start = dir.clone().multiplyScalar(BASE_RADIUS * 0.9).setY(CORD_Y + CORD_RISE);
+  const along = (t: number, sway: number): THREE.Vector3 => start.clone().lerp(end, t).addScaledVector(side, sway).setY(CORD_Y);
+  const curve = new THREE.CatmullRomCurve3([start, along(0.15, 0.03), along(0.45, -0.05), along(0.75, 0.04), end], false, 'centripetal');
+  const mesh = new THREE.Mesh(new THREE.TubeGeometry(curve, 48, CORD_RADIUS, 6, false), CORD);
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  return mesh;
 }

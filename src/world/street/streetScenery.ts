@@ -18,6 +18,7 @@ import { StreetTrees, type TreeSpot } from './StreetTrees';
 import { StreetCars, type StreetCarsOptions } from './StreetCars';
 import { StreetFurniture, type StreetFurnitureOptions } from './StreetFurniture';
 import type { StreetTraffic } from './traffic/StreetTraffic';
+import type { FarShadowUniforms } from './shadowFade';
 import { STREET_PLAN, type FacadeSpec, type Vec2 } from './streetPlan';
 
 /**
@@ -60,7 +61,7 @@ export function buildStreetBase(add: AddScenery, options: StreetBaseOptions): { 
   const { dayNight, facades, detailScale, shopGoods, windowLife, walkable, windowFrames } = options;
   const anisotropy = sceneryAnisotropy();
   add(new StreetGround(dayNight, anisotropy));
-  add(new StreetPark({ anisotropy, lawnY: LAWN_Y, reach: LAWN_REACH.x, ...(walkable ? { walkable } : {}) }));
+  add(new StreetPark({ anisotropy, lawnY: LAWN_Y, reach: LAWN_REACH.x, dayNight, ...(walkable ? { walkable } : {}) }));
   const buildings = add(new Buildings(facades, dayNight, { detailScale, anisotropy, shopGoods, nightScale: nightScale(), ...(windowLife ? { windowLife } : {}), ...(windowFrames === false ? { windowFrames } : {}) }));
   return { buildings };
 }
@@ -97,16 +98,22 @@ interface StreetFixturesOptions {
   moreTrees?: readonly TreeSpot[];
   cars?: CarExtras;
   furniture?: FurnitureExtras;
+  /** What else the lamps without a real light wash at night (`StreetLamps.wash`: the facades); the trees and cars always. */
+  washed?: readonly THREE.Object3D[];
+  /** The street's sun (`StreetLighting.far`): the trees lay their shadows past its map with it. */
+  farShadow?: FarShadowUniforms;
 }
 
 /** The lamps, the trees, the parked and passing cars, the benches, bins, shelter, hedge and railings. */
 export function buildStreetFixtures(add: AddScenery, options: StreetFixturesOptions): { lamps: StreetLamps; cars: StreetCars } {
-  const { dayNight, viewer, traffic, lampLights, moreTrees = [], cars: carExtras = {}, furniture = {} } = options;
+  const { dayNight, viewer, traffic, lampLights, moreTrees = [], cars: carExtras = {}, furniture = {}, washed = [], farShadow } = options;
   const plan = STREET_PLAN;
   const anisotropy = sceneryAnisotropy();
   const lamps = add(new StreetLamps(dayNight, { lamps: plan.lamps, height: plan.lampHeight, lights: lampLights, viewer, flickering: plan.flickeringLamp }));
-  add(new StreetTrees(dayNight, [...STREET_TREES, ...PARK_TREES, ...moreTrees]));
+  const trees = add(new StreetTrees(dayNight, [...STREET_TREES, ...PARK_TREES, ...moreTrees], farShadow?.farSun));
   const cars = add(new StreetCars(dayNight, { parked: PARKED_CARS, ...plan.traffic, cars: plan.traffic.carsByQuality[QUALITY.level], viewer, traffic, ...carExtras }));
+  // Every lamp lights the walls, trees and cars round it at night, not only the few with a real light (not on low).
+  if (QUALITY.level !== 'low') lamps.wash.over([...washed, trees, cars]);
   const { gateHours, ...furnitureExtras } = furniture;
   add(
     new StreetFurniture({

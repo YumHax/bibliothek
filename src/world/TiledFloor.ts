@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { createCanvas, toTexture, canvasTexture, repeatTexture } from '@/covers/generated/canvasUtils';
 import { paintOnce } from './materials/paintedTiles';
 import { afterChunk, patchShader, VALUE_NOISE } from './materials/shaderPatch';
+import { bumpFinish } from './materials/bumpFinish';
 import { lcg } from '@/random';
 
 /** A tiled floor's look (`RoomFinish.floorTiles`); every field has a default. */
@@ -44,7 +45,8 @@ export function tiledFloorMaterial(floorWidth: number, floorDepth: number, optio
     t.offset.set(-floorWidth / regionX / 2, -floorDepth / regionY / 2);
   }
   const material = new THREE.MeshStandardMaterial({ map, bumpMap, bumpScale: 0.5, roughness: roughness ?? 0.35, metalness: 0 });
-  return shadePerTile(material, look);
+  // The glaze shines, the grout (low in the bump map) is matt; the grout's relief fades with distance.
+  return shadePerTile(bumpFinish(material, { seamRoughness: 0.88, seamRange: [0.2, 0.5] }), look);
 }
 
 /**

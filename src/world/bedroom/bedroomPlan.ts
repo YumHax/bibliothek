@@ -11,8 +11,9 @@ import type { Owned } from '../build/owned';
  * (the bathroom is behind it), right = +x. 3.4 x 3.6 m, 2.8 m under the ceiling.
  * World: x from -1.1 to 2.3, z from -8.02 to -4.42; the door to the hallway is at world x -0.5.
  *
- * The door (front wall, x -1.1) swings in, hinged at x -0.685, and ends flat along the front wall
- * towards +x: nothing stands in x -1.5..0.1, z 1.0..1.8. The bed has its head to the back wall
+ * The door (front wall, x -1.1) swings in, hinged at x -1.515 on the corner side, and stops square
+ * (the hallway's plan, `swing: 90`) a few centimetres short of the wardrobe's end (z 0.92): nothing
+ * stands in x -1.7..-0.6, z 0.9..1.8, the way in. The bed has its head to the back wall
  * with a nightstand each side, the wardrobe is on the left wall, a chair by the right wall (a reading corner), the
  * dresser on the front wall right of the door, a small TV on it facing the bed. The right wall is
  * the neighbour's side (the collection room's right wall is blind for the same reason, the flat's
@@ -38,8 +39,8 @@ export const BEDROOM_PLAN = {
   room: BEDROOM_ROOM,
   /** The fixture of the room's ceiling light (the `Room` puts its point light at the centre of the ceiling). */
   pendant: { ceiling: [0, 0] } as Placement,
-  /** Its switch inside the door, on the short stretch of front wall between the opening and the left corner (x -1.7..-1.515). */
-  lightSwitch: { wall: 'front', along: -1.6, y: 1.1 } as Placement,
+  /** Its switch inside the door, on its latch side (the corner side is behind the open leaf), short of the arcade cabinet's spot. */
+  lightSwitch: { wall: 'front', along: -0.56, y: 1.1 } as Placement,
 
   /**
    * The double bed, head to the back wall, right of centre: between its left side (x -0.4) and
@@ -80,10 +81,10 @@ export const BEDROOM_PLAN = {
 
   /** The wardrobe on the left wall, short of the door's swing. */
   wardrobe: { at: { wall: 'left', along: 0.3, y: 0 } as Placement, depth: 0.55 },
-  /** The chest of drawers on the front wall, right of where the open door ends, short of the chair (its tray makes way for the TV). */
-  dresser: { at: { wall: 'front', along: 0.6, y: 0 } as Placement, width: 0.8 },
+  /** The chest of drawers on the front wall (x 0.25..1.0), short of the chair, room for the arcade cabinet left of it (its tray makes way for the TV). */
+  dresser: { at: { wall: 'front', along: 0.625, y: 0 } as Placement, width: 0.75 },
   /** A portable CRT on the dresser, left of its books, watched from the bed: `along` is from the dresser's middle. */
-  tv: { along: -0.12, screenWidth: 0.4 },
+  tv: { along: -0.13, screenWidth: 0.4 },
   /** The obscured window over the left nightstand, high enough to clear its lamp. */
   window: { at: { wall: 'back', along: -0.9, y: 1.6 } as Placement, width: 0.7, height: 0.9 },
   /**
@@ -126,13 +127,14 @@ export const BEDROOM_PLAN = {
   /** The arcade's poster once won (a prize that lives at home): framed on the right wall above the radiator, beside the mirror. */
   arcadePoster: { at: { wall: 'right', along: -0.8, y: 1.5 } as Placement, width: 0.44, height: 0.62 },
   /** The arcade's mood lamp once won: on the dresser's pile of books (dresser-local x, height above its top). */
-  moodLamp: { along: 0.23, above: 0.06 },
+  moodLamp: { along: 0.21, above: 0.06 },
   /**
    * The home arcade cabinet once bought (`world/homeArcade`, the TV repair shop): against the front wall between the
-   * doorway (x -1.515..-0.685, the leaf's swing) and the dresser (from x 0.2), its screen to the bed; 0.66 x 0.78 m, its
-   * origin the base's centre. Played standing at the rug's edge.
+   * light switch and the dresser (x -0.44..0.22, z 1.01..1.79), its screen to the bed; 0.66 x 0.78 m, its origin the
+   * base's centre. Between its front-left corner and the wardrobe's end stays 0.7 m, the way in for the player (0.6 m
+   * wide). Played standing at the rug's edge.
    */
-  homeArcade: { floor: [-0.25, 1.39], rotationY: Math.PI } as Placement,
+  homeArcade: { floor: [-0.11, 1.4], rotationY: Math.PI } as Placement,
 
   /**
    * What stands only once bought (`economy/homeGoods.ts`; `build/owned.ts`). Before the bed, a mattress lies on the floor
@@ -154,7 +156,7 @@ export const BEDROOM_PLAN = {
     // A wide landscape over the headboard, a small one over the dresser.
     // Bought at the furniture shop (`framedPrint` nth 5, 6: after the living room's and the hallway's).
     { kind: 'pictureFrame', at: { wall: 'back', along: 0.4, y: 1.7 }, options: { motif: 'mountains', seed: 7, width: 0.9, height: 0.5, matWidth: 0.05, frameColor: 0x8a6a48 }, upgrade: { good: 'framedPrint', nth: 5 } },
-    { kind: 'pictureFrame', at: { wall: 'front', along: 0.6, y: 1.55 }, options: { motif: 'botanical', seed: 12, width: 0.42, height: 0.32, frameColor: 0x2a2a2c }, upgrade: { good: 'framedPrint', nth: 6 } },
+    { kind: 'pictureFrame', at: { wall: 'front', along: 0.625, y: 1.55 }, options: { motif: 'botanical', seed: 12, width: 0.42, height: 0.32, frameColor: 0x2a2a2c }, upgrade: { good: 'framedPrint', nth: 6 } },
     // A small fig tucked in the back-left corner, between the left nightstand and the bookcase slot.
     { kind: 'plant', at: { corner: 'back-left', inset: 0.26 }, options: { kind: 'fig', pot: 'terracotta', seed: 21, scale: 0.7 }, upgrade: { good: 'houseplant', nth: 7 } },
     // A full-length mirror leaning on the bare right wall beside the foot of the bed (z -0.45..0.05), between the

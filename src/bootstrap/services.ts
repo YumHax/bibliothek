@@ -1,5 +1,6 @@
 import type { Game } from '@/catalog/types';
 import { Engine } from '@/core/Engine';
+import { loadCanvasFaces } from '@/graphics/fontReady';
 import { Input } from '@/core/Input';
 import { CssLayer } from '@/core/CssLayer';
 import { SEED_GAMES, STARTER_GAMES } from '@/catalog';
@@ -59,6 +60,14 @@ import { initKeyLabels } from '@/ui/keys';
 import { initPanelNav } from '@/ui/menu/MenuNav';
 import { ReviewSource } from '@/reviews/Reviews';
 import { PrototypeStory } from '@/story';
+import { FelixNotebook } from '@/story/FelixNotebook';
+import { GrandmaVisits } from '@/grandma/GrandmaVisits';
+import { COLLECTOR_SETS, setProgress } from '@/economy/collectorSets';
+import { effect as socialEffect } from '@/social/perks';
+import { MEME_ID } from '@/social/people/family';
+import { pocket } from '@/errands/pocket';
+import { debugWants, unlockDebugProgress } from '@/cheats/progress/debugProgress';
+import { debugSubjects } from './debug';
 
 /** The engine and every store and data source: nothing in the world, no panel but the arcade's big frame. */
 export type Services = ReturnType<typeof createServices>;
@@ -70,10 +79,12 @@ export type Services = ReturnType<typeof createServices>;
  */
 export function createServices(container: HTMLElement) {
   const params = new URLSearchParams(location.search);
-  /** `?debug`: the built-in seed collection and the editor's "add a game" pane, instead of earning every game. */
+  /** `?debug`: the built-in seed collection, the editor's "add a game" pane, every progression done (its panel: docs/checks.md "Debug mode"). */
   const debug = flag('debug');
   // Read before any store writes: a save from before the guided first day never sees it.
   const returningPlayer = hasProgress();
+  // The faces the signs, tags and arcade screens are painted in, fetched now so later zones letter in them at once.
+  loadCanvasFaces();
   const engine = new Engine(container);
   const input = new Input();
   // The player's settings (look, audio, HUD, keys): applied once the camera, the devices and the HUD exist (`bootstrap/input`).
@@ -99,7 +110,7 @@ export function createServices(container: HTMLElement) {
   const shelfLabels = new ShelfLabels();
   // What has been bought for the flat (it starts bare: a bookcase, the TV, a mattress; `?debug` has it all). A save from
   // before the bare flat is given the bookcases its games need, once.
-  const upgrades = new HomeUpgrades(undefined, undefined, { furnished: debug });
+  const upgrades = new HomeUpgrades(undefined, undefined, { furnished: debug && debugWants('flat') });
   if (collection.isPersisted) upgrades.shelveCollection(collection.games.length);
   const overflow = new GameList();
   // The sort the shelves stand in (T) and the boxes as the player arranged them by hand, kept across reloads.
@@ -138,6 +149,8 @@ export function createServices(container: HTMLElement) {
   // The one "today" (the game day and the real date, see `time/Today`), and what kind of market day it is.
   const today = new Today(new MarketCalendar(sky.dayNight));
   today.setHoursSource(() => sky.dayNight.state.hours);
+  // Front Street's counters sell so many a game day, like the market's own day (`errands/pocket`).
+  pocket.followGameDay(() => today.gameDay);
   const marketDay = new MarketDay(today, (id) => collection.owns(id));
   const market = new MarketStock({ index, collection, fame, today, ledger, standing, raining: () => sky.weather.state.rain >= HEAVY_RAIN });
   engine.addUpdatable(sky);
@@ -154,7 +167,7 @@ export function createServices(container: HTMLElement) {
   // The cat's name and coat, kept next to the collection (the Settings' Cat tab edits them).
   const catSettings = new CatSettingsStore();
   // The Saturday tournament at the arcade: the hall shows its bracket, the Session's arcade play settles its rounds.
-  const tournament = new ArcadeTournament({ games: ARCADE_PLAN.tournament.games, names: ARCADE_PLAN.crowd.regulars.names });
+  const tournament = new ArcadeTournament({ games: ARCADE_PLAN.tournament.games, names: ARCADE_PLAN.crowd.regulars.names, gameDay: () => today.gameDay });
   // The ticket wheel's progressive pot and the player's best run per cabinet, kept across the hall's loads; the plays per
   // machine (how long the HUD explains the keys, the claw's luck); the home cabinet's own table of scores.
   const jackpot = new Jackpot();
@@ -175,6 +188,34 @@ export function createServices(container: HTMLElement) {
   // Who came round, lent what, when (the visitors' book), and the gatherings planned (games nights, open houses).
   const visitBook = new VisitBook();
   const gatheringBook = new GatheringBook();
+  // Uncle Félix's notebook, at the back of a drawer from the second day: his games onto the wishlist, ticked as they come home (docs/story.md).
+  const felix = new FelixNotebook(collection);
+  // Mémé's across town, by bus: the visits, the Sunday envelope, the memories of her album seen (docs/story.md "Mémé").
+  // What she has heard of and what the memories' unlocking reads, live; what the player can bring her (her gifts).
+  const grandma = new GrandmaVisits({
+    facts: () => {
+      const games = collection.games.filter((g) => g.status !== 'wishlist');
+      return {
+        gamesOwned: games.length,
+        arcadeMedals: medals.total,
+        notebookFound: felix.found,
+        clubSet: COLLECTOR_SETS.some((set) => setProgress(set, games).every((p) => p.have)),
+        prototypeFound: story.stage === 'found' || story.stage === 'ended',
+        trailStarted: story.stage !== 'waiting',
+        craneBeaten: lots.rival.view().beaten,
+      };
+    },
+    cakeOut: () => household.cakeOut,
+    flowers: { carried: () => pocket.count('bunch') > 0, take: () => pocket.take('bunch') === 'bunch' },
+    latestFind: () => {
+      const owned = collection.games.filter((g) => (g.status ?? 'owned') === 'owned');
+      const latest = owned.reduce<(typeof owned)[number] | undefined>((a, g) => (!a || (g.addedAt ?? '') > (a.addedAt ?? '') ? g : a), undefined);
+      return latest ? { id: latest.id, title: latest.title } : null;
+    },
+  });
+  felix.onTicked(() => grandma.felixGameHome());
+  // `?debug`: every progression done that its panel did not switch off (before the trail reads whether its cart is home).
+  if (debug) unlockDebugProgress(debugSubjects({ today, collection, felix, upgrades, standing, medals, prizes }));
   // The lost prototype's trail, followed through the mail, the market, the radio, the arcade and the friends (src/story).
   const story = new PrototypeStory({ today, collection, journal });
   // The press at the time, from each game's Wikipedia article: the game panel's clipping (src/reviews).
@@ -189,11 +230,12 @@ export function createServices(container: HTMLElement) {
     marketOpen: () => isShopOpen('retro', hours() % 24),
     todays: () => market.todays(),
     journal,
+    notebook: felix,
   });
   const perks = new Perks({
     household,
     hours,
-    facts: () => ({ ownsPrize: (id) => prizes.owns(id), reputationLevel: standing.reputation.level, gamesOwned: collection.games.filter((g) => g.status !== 'wishlist').length }),
+    facts: () => ({ ownsPrize: (id) => prizes.owns(id), reputationLevel: standing.reputation.level, gamesOwned: collection.games.filter((g) => g.status !== 'wishlist').length, knitted: grandma.scarfKnitted(socialEffect(MEME_ID, 'knitsScarf') === true) }),
   });
 
   // The paper's small ads, the sellers' lots, and the consoles bought broken to mend at home (docs/economy.md "Small ads
@@ -205,13 +247,13 @@ export function createServices(container: HTMLElement) {
   const workshop = new Workshop();
 
   return {
-    container, params, debug, engine, input, settings, cssLayer,
+    container, params, debug, returningPlayer, engine, input, settings, cssLayer,
     collection, deliveries, strays, showcases, shelfLabels, upgrades, overflow, arrangement, boxPool: new BoxPool(covers), furnishings, wallet,
     scores, arcadeDaily, prizes, medals, league, payoutStats, arcadeScreen,
     index, fame, coverUrl, covers, videos,
     sky, today, marketDay, ledger, standing, market, tx, lots, catSettings,
     tournament, jackpot, replays, arcadeHabits, homeScores, milestones, valueHistory, collectorWatch, honours, neighbourTrades, firstDay, journal, visitBook, gatheringBook,
-    household, homeLife, perks, story, reviews,
+    household, homeLife, perks, story, felix, grandma, reviews,
     classifieds, sellerLots, workshop,
   };
 }

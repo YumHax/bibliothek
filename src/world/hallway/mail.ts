@@ -1,6 +1,7 @@
 import { themeOf } from '@/economy/marketDays';
 import type { MarketNews } from '@/economy/marketEvents';
 import { flyerRumour } from '@/economy/rumours';
+import { ESTATE, estatePhase, estateStart } from '@/building/estateSale';
 import { ARCADE_GAMES, type ArcadeGameId } from '../arcade/games';
 import type { MailPiece } from '../props/MailDrop';
 import { shuffled } from '@/random';
@@ -44,12 +45,23 @@ export function mailFor(day: number, sources: MailSources): MailPiece[] {
   const rumour = rumourFlyer(sources);
   // A story's letter comes first, whatever else the day brings (it is asked once: the story moves on as it is posted).
   const letter = sources.story?.mail(day) ?? null;
+  // The late Mr Lambert's family clears his flat once only: their flyer comes through the door every day of the notice and the sale.
+  const estate = estateFlyer(day);
   // Talk of the market (a grail, the Flea Fair, a sale) always finds its way through the door.
-  const count = Math.max(letter ? 1 : 0, rumour ? 1 : 0, roll < NONE ? 0 : roll < ONE ? 1 : 2);
+  const count = Math.max((letter ? 1 : 0) + (estate ? 1 : 0), rumour ? 1 : 0, roll < NONE ? 0 : roll < ONE ? 1 : 2);
   if (!count) return [];
-  const topical = [letter, rumour, challengeFlyer(sources), tomorrowFlyer(day), dealFlyer(sources, random)].filter((p): p is MailPiece => p !== null);
+  const topical = [letter, estate, rumour, challengeFlyer(sources), tomorrowFlyer(day), dealFlyer(sources, random)].filter((p): p is MailPiece => p !== null);
   const everyday = shuffled(random, EVERYDAY);
   return [...topical, ...everyday].slice(0, count).map((piece, i) => ({ ...piece, seed: day * 3 + i }));
+}
+
+/** The estate sale's flyer, from the family, while its notice is up or the sale is on (`building/estateSale`). */
+function estateFlyer(day: number): MailPiece | null {
+  const phase = estatePhase(day);
+  if (phase !== 'notice' && phase !== 'on') return null;
+  const start = estateStart(day) ?? day;
+  const when = phase === 'on' ? 'On now, downstairs in the entrance hall' : start - day === 1 ? 'Tomorrow, in the entrance hall' : `In ${start - day} days, in the entrance hall`;
+  return { title: `${ESTATE.surname} ESTATE SALE`, lines: [when, `${ESTATE.deceased}’s games, priced to clear`, `Once only. ${ESTATE.family}`], accent: 0x6b5a8e };
 }
 
 function challengeFlyer({ arcadeDaily }: MailSources): MailPiece | null {

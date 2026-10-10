@@ -5,12 +5,15 @@ import type { PersonLook } from './looks';
 import { cachedTexture } from './textureCache';
 import { skin as skinMaterial } from '../materials/finishes';
 import { QUALITY } from '@/graphics/quality';
+import { afterChunk, patchShader } from '../materials/shaderPatch';
 
 /*
  * Eyes at real scale, set into the sockets of the head: an eyeball (a glossy sphere painted with
  * the iris and pupil) that turns on its own to follow the gaze, framed by an upper and a lower lid
  * (shells of skin just outside the ball, the lash line darker). A blink rotates the upper lid down
  * over the ball. Most of each ball is buried in the head, so only the almond between the lids shows.
+ * The upper lid carries the lashes (a fine dark tube along its edge); both lids tilt a little at
+ * the outer corner, up or down by the face; the ball's reflections dim where the lids shade it.
  */
 
 const BALL_R = 0.012;
@@ -39,14 +42,23 @@ export function buildEyes(look: PersonLook, shape: FaceShape): [Eye, Eye] {
   const skin = new THREE.Color(look.skin);
   const lash = new THREE.Color(0x17110e).lerp(new THREE.Color(look.hair), 0.2);
   const surface = headPoint(EYE_DIRECTION, shape);
+  const lashMaterial = new THREE.MeshStandardMaterial({ color: lash, roughness: 0.8 });
+  // The outer corners up or down a little, fixed by the face (no draw: the nose's size stands in for a seed).
+  const tilt = ((look.nose * 97.3) % 1 - 0.5) * 0.16;
   const make = (side: -1 | 1): Eye => {
     const group = new THREE.Group();
     group.position.set(side * surface.x, surface.y, surface.z - 0.0085);
     const ball = new THREE.Mesh(ballGeometry(), ballMaterial);
-    const upperLid = new THREE.Mesh(lidGeometry(0, UPPER_EDGE, skin, lash, 'bottom'), lidMaterial);
+    const upper = lidGeometry(0, UPPER_EDGE, skin, lash, 'bottom').rotateZ(side * tilt);
+    const upperLid = new THREE.Mesh(upper, lidMaterial);
+    // The lashes along the upper lid's edge, the front half (the rest is in the head), curling a touch outwards.
+    const edge = LID_R * Math.sin(UPPER_EDGE) + 0.0003;
+    const lashes = new THREE.Mesh(new THREE.TorusGeometry(edge, 0.00042, 4, 24, Math.PI).rotateX(Math.PI / 2).rotateZ(side * tilt), lashMaterial);
+    lashes.position.y = LID_R * Math.cos(UPPER_EDGE);
+    upperLid.add(lashes);
     // A smile reaches the eyes: the lower lids ride a little higher.
     const lowerEdge = look.smile ? LOWER_EDGE - 0.05 : LOWER_EDGE;
-    const lowerLid = new THREE.Mesh(lidGeometry(lowerEdge, Math.PI - lowerEdge,skin.clone().lerp(new THREE.Color(0xc07a70), 0.12), lash, 'top'), lidMaterial);
+    const lowerLid = new THREE.Mesh(lidGeometry(lowerEdge, Math.PI - lowerEdge, skin.clone().lerp(new THREE.Color(0xc07a70), 0.12), lash, 'top').rotateZ(side * tilt * 0.6), lidMaterial);
     group.add(ball, upperLid, lowerLid);
     return { group, ball, upperLid, lowerLid };
   };
@@ -146,8 +158,24 @@ function eyeTexture(irisColor: number): THREE.CanvasTexture {
   return toTexture(canvas, 'facing');
 }
 
-/** The eyeball's material: a clear coat over the painted ball where the renderer affords it (`QUALITY.physicalMaterials`). */
+/**
+ * The eyeball's material: a clear coat over the painted ball where the renderer affords it
+ * (`QUALITY.physicalMaterials`). The room's reflections are dimmed (a ball sits in a socket, under
+ * lids and brows, never in the open), more so up where the upper lid shades it.
+ */
 function wetEye(parameters: THREE.MeshStandardMaterialParameters): THREE.MeshStandardMaterial {
-  if (!QUALITY.physicalMaterials) return new THREE.MeshStandardMaterial({ ...parameters, roughness: 0.12 });
-  return new THREE.MeshPhysicalMaterial({ ...parameters, clearcoat: 1, clearcoatRoughness: 0.04 });
+  const material = QUALITY.physicalMaterials ? new THREE.MeshPhysicalMaterial({ ...parameters, clearcoat: 1, clearcoatRoughness: 0.04 }) : new THREE.MeshStandardMaterial({ ...parameters, roughness: 0.12 });
+  return patchShader(material, 'eyeShade', (shader) => {
+    shader.fragmentShader = afterChunk(shader.fragmentShader, 'lights_fragment_maps', /* glsl */ `
+      {
+        float socket = 0.5 * (1.0 - 0.6 * smoothstep(0.05, 0.55, normal.y));
+        #if defined( RE_IndirectSpecular )
+          radiance *= socket;
+          #ifdef USE_CLEARCOAT
+            clearcoatRadiance *= socket;
+          #endif
+        #endif
+      }
+    `);
+  });
 }

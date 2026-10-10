@@ -42,7 +42,7 @@ export class Purchases {
       return;
     }
     playCoins(purchaseClinks(offer.price));
-    this.host.reward({ title: `${offer.title}: yours`, ...(offer.detail ? { detail: offer.detail } : {}), coins: -offer.price });
+    this.host.slip({ title: `${offer.title}: yours`, ...(offer.detail ? { detail: offer.detail } : {}), coins: -offer.price });
   }
 
   pay(payment: PaymentLike): void {
@@ -62,6 +62,6 @@ export class Purchases {
 
   private refuseShort(offer: UpgradeOfferLike, coins: number): void {
     this.host.refuse(`${offer.title} costs ${formatCoins(offer.price)} and you have ${coins}.`);
-    this.host.tip('Short of coins? The arcade pays in tickets: change them for coins at its prize counter.', { id: 'short-of-coins' });
+    this.host.tip('Short of coins? Tickets become coins at the arcade’s prize counter.', { id: 'short-of-coins' });
   }
 }

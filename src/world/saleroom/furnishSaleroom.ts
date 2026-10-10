@@ -18,6 +18,7 @@ import { SaleBoard } from './SaleBoard';
 import { SaleChair } from './SaleChair';
 import { Saleroom } from './Saleroom';
 import { SALEROOM_PLAN } from './saleroomPlan';
+import { LightPool } from '../lighting/LightPool';
 
 /** The saleroom has no window: it never darkens with the night (its pendant lights it). */
 const DAYLIGHT = 0.8;
@@ -47,8 +48,11 @@ export function furnishSaleroom(zone: Zone, ctx: Pick<BuildContext, 'sky' | 'lis
   const bid = (session: Parameters<Saleroom['bid']>[0]) => sale?.bid(session);
   const caption = () => sale?.caption() ?? null;
   const rostrum = zone.placeAt(new Rostrum({ label: caption, onActivate: bid }), plan.rostrum);
-  const stand = zone.placeAt(new LotStand({ covers, label: caption, onActivate: bid }), plan.lotStand);
-  const board = zone.placeAt(new SaleBoard(), plan.board);
+  // The board shows the lot's cover big beside the bid, as the stand puts each lot up.
+  const board = zone.placeAt(new SaleBoard(covers), plan.board);
+  const stand = zone.placeAt(new LotStand({ covers, label: caption, onActivate: bid, onShow: (lot) => board.showCover(lot?.game ?? null) }), plan.lotStand);
+  // The lot and the rostrum under their own light at the far end, lent a real light near the eye (`LightPool`).
+  zone.place(new LightPool(plan.glowLights, listener), new THREE.Vector3());
 
   const focus = zone.toWorld(new THREE.Vector3(0, 1.5, rostrum.position.z));
   const [ax, az] = plan.auctioneerAt;
@@ -82,6 +86,8 @@ export function furnishSaleroom(zone: Zone, ctx: Pick<BuildContext, 'sky' | 'lis
       o.castShadow = false;
     });
     body.sit(chair.rotation.y, plan.seatHeight, 'lap', focus);
+    // Their numbered paddle in hand, on the lap; a bid raises it (the wave is the right arm's).
+    body.hold('paddle');
     bidders.set(bidder.id, body);
   }
 

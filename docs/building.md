@@ -19,6 +19,9 @@ in `src/world/<kind>/`.
 | Mrs Roux's move | `rouxMove` | `world/annex/`, `stairwell/RemovalLift` |
 | Estate sale | `estateSale`, `pricedCopy` | `world/estateSale/` |
 | Neighbours' party | `neighboursParty` | `courtyard/NeighboursParty`, `PartyScores`, `StringLights` |
+| Bulky-waste day | `bulkyWaste` (`bulkyLot`, `takeFromBulky`, `bulkyNotes`) | `courtyard/placeBulky`, `bulkyModels` |
+| The kids in the yard | `kids/` (`kidsPlan`, `yardKids`: `kidsOut`, `kidCarts`, `judgeSwap`, `kidScore`, `beatKid`; `kidNews`) | `courtyard/YardKids`, `YardKid`, `handheldModel`, `placeKids`, `ui/yard/KidSwapPanel`, `ui/yard/HandheldPanel` |
+| Film night | `yardCinema` (`putOnFilm`, `filmNightNow`, `audience`, `filmShown`, `cinemaNotes`) | `courtyard/YardCinema`, `YardCinemaPieces`, `placeCinema`, `ui/ScreeningPanel` |
 | Rear windows | `rearWindows`, `rearWindowsPlan` (stories, the trader's shelves) | `street/windowLife`, `windowStoryGlsl` (docs/outdoors.md) |
 | The post | `postCollected` (the day's post: flap or mat, once) | `stairwell/hall/OurMailbox`, `hallway/` |
 | Treasure hunt | `hunt/` (`huntPlan`, `BuildingHunt`, `huntSays`) | `world/hunt/` (docs/zones.md "The sixth floor") |
@@ -154,6 +157,8 @@ stays on a mailbox. His family clears his flat in the hall for 3 days, 9:00 to 2
 - his niece Claire to talk to.
 
 The board shows his death notice from 5 days before, the sale's notice from 3 days before, and the family's thanks after.
+The family's flyer comes through the flat's door every day of the notice and the sale (`hallway/mail` `estateFlyer`), and
+the journal's "to watch" names it (`journal/worldWatch`), so a player who runs past the board does not miss it.
 Copies are bought like a stall's and haggled with the family's own `EstateDealer` (`ForSaleLike.dealer`: no holds, no
 swaps, one haggle a copy). What was bought is not laid out again (`bibliothek.estateSale.v1`). Off its days it places
 nothing. Lambert is also the treasure hunt's Henri.
@@ -165,3 +170,64 @@ docs/zones.md "The courtyard". The residents buy the player's duplicates at the 
 to resell still never pays (docs/economy.md). The tournament gives 3 free plays a party; beating the residents' best pays
 60 tickets once. Its book is kept per party (`partyId`): the cycle's by its game day, the Fête des voisins by its real
 date, so the prize pays once that date, however many game days it lasts.
+
+## Bulky-waste day
+
+One game day in seven (`BULKY.every`, `phase` 5: never the bin bags' day nor a party day), a resident clears out a
+cupboard and leaves it by the bins in the courtyard for the dawn lorry (`bulkyLot(day, fits)`, drawn from the day:
+who, which junk, whether a piece for the flat is out and which, whether a console that won't switch on is, how many
+loose games). Whatever the player carries off is free: the games go to the parcel like any find, the piece goes
+straight into the flat (`HomeUpgrades.add`, only a piece it has room for), the console to the kitchen chair for its
+repair. Each take warms the owner by `BULKY.warmth` once a day (`befriend`, reason `bulkyWaste`). The board pins the
+concierge's reminder the day before and the owner's CLEARING OUT note on the day (`bulkyNotes`). The yard's side is in
+docs/zones.md "The courtyard".
+
+## The kids in the yard
+
+The building's children (`kids/kidsPlan`: Hugo, the Moreaus' son, 12; Mai and Tuan, the Nguyens' twins, 8, one
+handheld between them; Lina, Mrs Haddad's niece, 10, Wednesdays and weekends only) are down in the courtyard with their
+handhelds after school (`KIDS_RULES.hours`: 16:45-19:15, Wednesdays from 13:30, weekend mornings and afternoons), each most
+days (`comesDown`, drawn per kid and game day, the twins together, a little late and a little early); never in the rain,
+after dark nor on a party day (`kidsOut`). They are people of the social layer (`social/people/kids`, group
+`building`): met, warmed, given gifts and favours like anyone. Each conversation adds:
+- **Heard anything?** Kids hear everything (`kidNews.kidsNews`): tomorrow's clear-out by the bins and its owner (a
+  console in it, said), the day's pile, a party within three days (urgent: the first kid to see the player shouts it,
+  once a game day, and the entry is tagged "news"), then a nudge towards the treasure hunt's next place (by the clue last
+  found) and the lost prototype's trail (by its stage: where it already goes, never a step of its own; the stage is
+  handed in by `bootstrap/worldLife`, `tellKidsTheStory`), Victor at the market or outside RETRO GAMES, and two of the
+  neighbours' cupboards. One line an ask, a little warmth once a day.
+- **Swap carts?** (`ui/yard/KidSwapPanel`): their pencil case (`kidCarts`: three carts of their platforms drawn from the
+  market's index per game week, `MarketStock.randomGames` with `platforms`, sometimes a big hit of the seed's; less what
+  they swapped away that week, plus the player's games they got). A kid weighs an offer by fame, never by price
+  (`judgeSwap`: monthly page views, a big name hyped, their own cart a bit dearer, another machine's game less, a game
+  with no article next to nothing): a rare cart goes for a famous common one. They answer a deal, a deal if 10 to 30
+  tickets are thrown in, or no (never heard of it, it doesn't go in their handheld, or plain no), in the panel and over
+  their head; a handful of offers (`offers`) and they want to play. A swap goes through `Transactions.swapWithNeighbour`
+  (the cart to the parcel, its receipt "Hugo, in the courtyard"), warms and trusts the kid (gossiped to their family).
+  A friend of theirs swaps more easily (`easySwaps`), one gone cold won't (`noSwaps`: the entry is not offered).
+- **Bet I can beat your score!** (`ui/yard/HandheldPanel`): their handheld held up in front of the player, their game on
+  it (`KidPlan.game`, an arcade game stepped at the arcade's rate) with their score of the day as its HI (`kidScore`:
+  their skill in tickets' worth, grown 12 % a loss to the player up to double: they practise). Beaten, they groan and the
+  week's first loss sometimes hands over a cart they are bored of (`beatKid`, `boredCart`, free, into the parcel);
+  winning, they crow. Never a penalty: a go costs nothing, giving up mid-game is only "Chicken!".
+
+Kept (`bibliothek.yardKids.v1`): the week's carts gone and the player's games they hold, each kid's practice, who handed
+a cart over this week. `?debug`: the panel's "The kids down in the courtyard now" (whatever the hour and the sky, today).
+The yard's side is in docs/zones.md "The courtyard".
+
+## The film night
+
+Once the flat has its projector (`HomeUpgrades` `projector`), the sheet rolled up on the workshop's wall in the
+courtyard puts on a film: a click opens `ui/ScreeningPanel` (the player's games; "Show this one" is `putOnFilm`), the
+game's longplay is the film. The film waits for the first evening that is dark (`CINEMA.dark` daylight), dry
+(`CINEMA.rain`; rain puts it off, said once), before `CINEMA.until` and not a party day
+(`filmNightNow`), with the player in the yard: nothing happens while they are elsewhere. Then the residents who are home
+and not cross with the player come down, each with a chance that grows with their friendship (`audience`, seeded by the
+day and the film); the player starts the film at the projector. Once it has run `CINEMA.film` seconds of picture they
+clap, each is warmed by `CINEMA.warmth` (`befriend`, reason `yardCinema`, once a day), and the one whose tastes it fits
+best (`social/gifts.gameFit`) says what it meant to them; a friend (`CINEMA.giftFrom`) it fits well leaves a game from
+their cupboard on their chair, free (`filmShown`). A film that never starts or finds no longplay and they go back up:
+it stays on for another evening. The board pins the poster while a film is on (`cinemaNotes`). Kept: the film put on
+and the screenings shown (`bibliothek.yardCinema.v1`). `?debug`: the panel's "A film night in the courtyard now" (or
+`bibliothek.filmNight()`) puts the collection's first game on, the night on now whatever the sky. The yard's side is in
+docs/zones.md "The courtyard".

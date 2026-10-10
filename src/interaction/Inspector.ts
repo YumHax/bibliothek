@@ -5,6 +5,7 @@ import type { Carriable } from './Carriable';
 import { reduceMotion } from '@/settings/motion';
 import { dampFactor } from '@/math/damp';
 import { smoothDamp } from '@/math/springs';
+import { noteShadowMotion } from '@/graphics/shadowMotion';
 
 type Phase = 'idle' | 'toHand' | 'inHand' | 'toShelf' | 'stowing';
 
@@ -30,6 +31,12 @@ const WALL_CLEARANCE = 0.06;
 const MIN_REACH = 0.24;
 /** This close to the hand pose (m), the box is in hand: from there it follows the view tightly. */
 const HAND_REACHED = 0.02;
+/** The box brought up close to read (the wheel, `zoomBy`): nearer the eye and nearer the middle of the view (camera space, m). */
+const CLOSE_OFFSET = new THREE.Vector3(-0.035, -0.02, -0.26);
+/** How far one notch of the wheel (100 px of delta) brings the box towards `CLOSE_OFFSET` (0..1 of the way). */
+const ZOOM_PER_NOTCH = 0.25;
+/** How fast "turn over" spins the box (rad/s): half a turn in about 0.35 s. */
+const TURN_OVER_SPEED = 9;
 
 /**
  * Pulls a GameBox off its shelf and carries it in front of the camera, low and to the left
@@ -43,6 +50,13 @@ const HAND_REACHED = 0.02;
 export class Inspector<Box extends Carriable = Carriable> implements Updatable {
   /** Hand pose in camera space (metres): x right, y up, z forward is negative. */
   readonly handOffset = new THREE.Vector3(-0.11, -0.05, -0.42);
+  /** How close the box is brought to read (0 the hand, 1 `CLOSE_OFFSET`): the wheel sets it, the pose eases to it. */
+  private closeness = 0;
+  private closenessShown = 0;
+  /** What is left of a "turn over" (radians of yaw still to spin). */
+  private turnLeft = 0;
+  /** The offset the hand holds the box at now (between the hand and close up). */
+  private readonly heldOffset = new THREE.Vector3();
   /** Radians of spin per pixel of mouse travel at sensitivity 1. */
   rotateSpeed = 0.005;
   /** Settings > Look (`setLook`): each device's sensitivity turns the box as it turns the view (the inverted Y does not: it is the view's). */
@@ -92,6 +106,11 @@ export class Inspector<Box extends Carriable = Carriable> implements Updatable {
     document.addEventListener('mousemove', this.onMouseMove);
     document.addEventListener('mousedown', this.onMouseDown);
     document.addEventListener('mouseup', this.onMouseUp);
+    // The wheel brings the box in hand closer to read, and back (a carried piece of furniture takes it instead: no box then).
+    document.addEventListener('wheel', (e) => {
+      if (!document.pointerLockElement || (this.phase !== 'inHand' && this.phase !== 'toHand')) return;
+      this.zoomBy((-e.deltaY / 100) * ZOOM_PER_NOTCH);
+    }, { passive: true });
     // A right button let go outside the window (or the lock lost) never reaches mouseup: stop turning, give the look back.
     window.addEventListener('blur', () => this.setRotating(false));
     document.addEventListener('pointerlockchange', () => this.setRotating(false));
@@ -128,7 +147,19 @@ export class Inspector<Box extends Carriable = Carriable> implements Updatable {
 
   /** Distance from the eye to the box while it is in (or on its way to) the hand, else null: what the view focuses on. */
   get focusDistance(): number | null {
-    return this.phase === 'toHand' || this.phase === 'inHand' ? this.handOffset.length() : null;
+    return this.phase === 'toHand' || this.phase === 'inHand' ? this.heldOffset.copy(this.handOffset).lerp(CLOSE_OFFSET, this.closenessShown).length() : null;
+  }
+
+  /** Brings the box in hand closer (positive) or back towards the hand (negative), by a share of the way (0..1). */
+  zoomBy(amount: number): void {
+    if (this.phase !== 'inHand' && this.phase !== 'toHand') return;
+    this.closeness = THREE.MathUtils.clamp(this.closeness + amount, 0, 1);
+  }
+
+  /** Turns the box in hand over (half a turn about the vertical, eased): the back cover, then the front again. */
+  turnOver(): void {
+    if (this.phase !== 'inHand' && this.phase !== 'toHand') return;
+    this.turnLeft += Math.PI;
   }
 
   /** True while the carried box is open (or opening). */
@@ -175,6 +206,9 @@ export class Inspector<Box extends Carriable = Carriable> implements Updatable {
     box.setInHand(true); // the openable shell, its back, cartridge and manual
     this.userRotation.identity();
     this.euler.set(0, 0, 0);
+    this.closeness = 0;
+    this.closenessShown = 0;
+    this.turnLeft = 0;
     this.velocity.set(0, 0, 0);
     this.hasLastView = false;
     this.phase = 'toHand';
@@ -227,6 +261,15 @@ export class Inspector<Box extends Carriable = Carriable> implements Updatable {
     if (!this.box || this.phase === 'idle') return;
     const box = this.box;
     box.tick(dt);
+    // A box in hand moves with every look: its shadow keeps up (`graphics/shadowMotion`).
+    noteShadowMotion();
+    this.closenessShown += (this.closeness - this.closenessShown) * dampFactor(reduceMotion() ? 30 : 10, dt);
+    if (this.turnLeft > 0) {
+      const step = reduceMotion() ? this.turnLeft : Math.min(this.turnLeft, TURN_OVER_SPEED * dt);
+      this.turnLeft -= step;
+      this.euler.y += step;
+      this.userRotation.setFromEuler(this.euler);
+    }
     this.aimTarget(box, dt);
     this.followView(box);
     this.moveTowardsTarget(box, dt);
@@ -307,7 +350,7 @@ export class Inspector<Box extends Carriable = Carriable> implements Updatable {
     this.camera.getWorldPosition(this.eye);
     this.camera.getWorldQuaternion(this.tmpQuat);
     // A lid swings out to the left (the box shifts right so the spread stays centred), or the contents rise out of the top (it drops).
-    this.tmpOffset.copy(this.handOffset);
+    this.tmpOffset.copy(this.handOffset).lerp(CLOSE_OFFSET, this.closenessShown);
     const shift = box.openShift;
     this.tmpOffset.x += box.openness * (shift ? shift.x : box.dimensions.width * 0.5);
     this.tmpOffset.y += box.openness * (shift?.y ?? 0);

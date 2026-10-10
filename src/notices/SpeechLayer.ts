@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { readMs } from './readingTime';
+import { noteSaid } from './speechLog';
 
 /** How a line is said: to the player (named, queued, kept until read) or in passing (a word to nobody). */
 export interface SpeechOptions {
@@ -136,6 +137,7 @@ export class SpeechLayer {
   private enqueue(anchor: THREE.Object3D | null, text: string, options: SpeechOptions): void {
     if (!text) return;
     const addressed = options.addressed === true;
+    if (addressed) noteSaid({ name: options.name, text }); // to read again under the pause menu's "What was said"
     const key = anchor ?? `voice:${options.name ?? ''}`;
     const line: Line = { text, name: options.name, addressed, ms: addressed ? readMs(text) : Math.max((options.seconds ?? 2.2) * 1000, readMs(text) * 0.7), onShow: options.onShow };
     let bubble = this.bubbles.get(key);

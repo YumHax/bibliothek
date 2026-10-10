@@ -10,12 +10,32 @@ import { formatClock } from '@/text/clock';
  */
 export type JournalKind = 'bought' | 'gift' | 'sold' | 'wished' | 'unpacked' | 'prize' | 'medal' | 'arcade' | 'market' | 'visit' | 'home' | 'event' | 'note' | (string & {});
 
-/** A line of the day: what happened, at what time (the game clock's HH:MM), and anything a feature wants to keep with it. */
+/**
+ * How much a line weighs on the page: a `headline` (a game come home, a milestone, a story stage) is set large; a
+ * `line` (bought, a visit, a tier crossed) is the page's ordinary hand; a `note` (a chore done, a favour in progress,
+ * the day's first arcade play) folds under "and the small things". Default `line`.
+ */
+export type JournalWeight = 'headline' | 'line' | 'note';
+
+/** A line of the day: what happened, at what time (the game clock's HH:MM), its weight, and anything a feature wants to keep with it. */
 export interface JournalEntry {
   kind: JournalKind;
   text: string;
   at: string;
+  weight?: JournalWeight;
   data?: Readonly<Record<string, string | number | boolean>>;
+}
+
+/** What `note` may keep with a line besides its text. */
+interface NoteOptions {
+  weight?: JournalWeight;
+  data?: JournalEntry['data'];
+}
+
+/** Where the reading stopped: the page (its day key) and how many of its lines were read. */
+export interface ReadMark {
+  day: string;
+  count: number;
 }
 
 /** The day's running sums: coins in and out, tickets won and spent, games in and out of the collection. */
@@ -40,7 +60,7 @@ export interface JournalDay {
   totals: JournalTotals;
 }
 
-/** Days kept (the oldest go first), and lines per day (the first ones stay: a busy day ends "…and more"). */
+/** Days kept (the oldest go first), and lines per day (the first ones stay: a busy day ends on one line counting the rest, "…and 3 more"). */
 const MAX_DAYS = 60;
 const MAX_ENTRIES = 80;
 
@@ -72,6 +92,8 @@ export class Journal {
   private days: JournalDay[];
   private readonly listeners = new Set<() => void>();
   private readonly store: PersistedStore<JournalDay[]>;
+  private readonly readStore: PersistedStore<ReadMark | null>;
+  private mark: ReadMark | null;
   private clock: JournalClock | null = null;
 
   constructor(
@@ -82,6 +104,34 @@ export class Journal {
     // Version 1: the days, oldest first.
     this.store = new PersistedStore<JournalDay[]>({ key, version: 1, storage, defaults: () => [], read: readDays });
     this.days = this.store.load();
+    this.readStore = new PersistedStore<ReadMark | null>({ key: key === KEYS.journal ? KEYS.journalRead : `${key}:read`, version: 1, storage, defaults: () => null, read: readMark });
+    this.mark = this.readStore.load();
+  }
+
+  /** Where the reading stopped (`markRead`), or null when the journal was never opened. */
+  get readMark(): ReadMark | null {
+    return this.mark;
+  }
+
+  /** Lines written since the journal was last read: the notebook's caption and the menu say so. */
+  get unread(): number {
+    const mark = this.mark;
+    let count = 0;
+    for (const day of this.days) {
+      if (mark && day.day < mark.day) continue;
+      count += mark && day.day === mark.day ? Math.max(0, day.entries.length - mark.count) : day.entries.length;
+    }
+    return count;
+  }
+
+  /** The journal was opened: everything written so far is read. */
+  markRead(): void {
+    const last = this.days[this.days.length - 1];
+    const mark: ReadMark = last ? { day: last.day, count: last.entries.length } : { day: this.todayKey(), count: 0 };
+    if (this.mark && this.mark.day === mark.day && this.mark.count === mark.count) return;
+    this.mark = mark;
+    this.readStore.save(mark);
+    for (const cb of [...this.listeners]) cb();
   }
 
   /** Follows the game's clock from now on (the day and the time of each line): `bootstrap/ui` wires the sky. */
@@ -112,11 +162,19 @@ export class Journal {
     return [...this.days].reverse();
   }
 
-  /** Adds a line to today. */
-  note(kind: JournalKind, text: string, data?: JournalEntry['data']): void {
+  /** Adds a line to today, an ordinary `line` unless `weight` says otherwise. */
+  note(kind: JournalKind, text: string, options: NoteOptions = {}): void {
     const page = this.page();
-    if (page.entries.length >= MAX_ENTRIES) return;
-    page.entries.push({ kind, text, at: this.stamp(), ...(data ? { data } : {}) });
+    if (page.entries.length >= MAX_ENTRIES) {
+      // The page is full: one closing line counts what came after, so a busy day says so rather than losing it in silence.
+      const over = page.entries[MAX_ENTRIES];
+      const more = (typeof over?.data?.more === 'number' ? over.data.more : 0) + 1;
+      page.entries[MAX_ENTRIES] = { kind: 'note', text: `…and ${more} more`, at: over?.at ?? this.stamp(), weight: 'note', data: { more } };
+      this.commit();
+      return;
+    }
+    const { weight, data } = options;
+    page.entries.push({ kind, text, at: this.stamp(), ...(weight && weight !== 'line' ? { weight } : {}), ...(data ? { data } : {}) });
     this.commit();
   }
 
@@ -151,6 +209,13 @@ export class Journal {
   }
 }
 
+function readMark(data: unknown): ReadMark | null {
+  const d = data as Partial<ReadMark> | null;
+  return d && typeof d.day === 'string' && typeof d.count === 'number' && d.count >= 0 ? { day: d.day, count: Math.floor(d.count) } : null;
+}
+
+const WEIGHTS: readonly JournalWeight[] = ['headline', 'line', 'note'];
+
 function readDays(data: unknown): JournalDay[] | null {
   if (!Array.isArray(data)) return null;
   const days: JournalDay[] = [];
@@ -159,7 +224,10 @@ function readDays(data: unknown): JournalDay[] | null {
     const d = raw as Partial<JournalDay>;
     if (typeof d.day !== 'string' || !/^(\d{4}-\d{2}-\d{2}|day-\d+)$/.test(d.day)) continue;
     const entries = Array.isArray(d.entries)
-      ? d.entries.filter((e): e is JournalEntry => !!e && typeof e.kind === 'string' && typeof e.text === 'string' && typeof e.at === 'string').slice(0, MAX_ENTRIES)
+      ? d.entries
+          .filter((e): e is JournalEntry => !!e && typeof e.kind === 'string' && typeof e.text === 'string' && typeof e.at === 'string')
+          .map((e) => (e.weight && !WEIGHTS.includes(e.weight) ? { ...e, weight: undefined } : e))
+          .slice(0, MAX_ENTRIES + 1)
       : [];
     const totals = emptyTotals();
     if (d.totals && typeof d.totals === 'object') for (const k of Object.keys(totals) as JournalTotal[]) {

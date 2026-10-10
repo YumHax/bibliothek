@@ -2,6 +2,8 @@ import { clamp } from '@/math/scalar';
 import { type ArcadeControls, SCREEN_H, SCREEN_W } from './ArcadeGame';
 import { BaseGame, PLAY_TOP } from './BaseGame';
 import { random } from '@/random';
+import { Sprite } from './sprite';
+import { arcadeHint } from '../arcadeHint';
 
 const ROUND_SECONDS = 15;
 const WAVE_TIME_BONUS = 5;
@@ -34,6 +36,26 @@ const SAUCER_EVERY = 6;
 /** Kills this close together keep the chain going; a shot that hits nothing breaks it. */
 const CHAIN_HOLD = 1.5;
 
+/* The fleet's three kinds (by row), two frames each, stepping with the march; the ship; the saucer. 16 x 8 in a 16 x 10 cell. */
+export const CRAB = new Sprite([
+  ['...x........x...', '....x......x....', '...xxxxxxxxxx...', '..xx.xxxxxx.xx..', '.xxxxxxxxxxxxxx.', '.x.xxxxxxxxxx.x.', '.x.x........x.x.', '....xx....xx....'],
+  ['...x........x...', '.x..x......x..x.', '.x.xxxxxxxxxx.x.', '.xxx.xxxxxx.xxx.', '.xxxxxxxxxxxxxx.', '...xxxxxxxxxx...', '....x......x....', '...x........x...'],
+]);
+export const SQUID = new Sprite([
+  ['......xxxx......', '....xxxxxxxx....', '...xxxxxxxxxx...', '..xxx.xxxx.xxx..', '..xxxxxxxxxxxx..', '.....x....x.....', '....x.xxxx.x....', '...x.x....x.x...'],
+  ['......xxxx......', '....xxxxxxxx....', '...xxxxxxxxxx...', '..xxx.xxxx.xxx..', '..xxxxxxxxxxxx..', '....xx.xx.xx....', '...x........x...', '....x......x....'],
+]);
+const OCTOPUS = new Sprite([
+  ['.....xxxxxx.....', '..xxxxxxxxxxxx..', '.xxxxxxxxxxxxxx.', '.xxx..xxxx..xxx.', '.xxxxxxxxxxxxxx.', '....xxx..xxx....', '...xx..xx..xx...', '.xx..........xx.'],
+  ['.....xxxxxx.....', '..xxxxxxxxxxxx..', '.xxxxxxxxxxxxxx.', '.xxx..xxxx..xxx.', '.xxxxxxxxxxxxxx.', '...xxxx..xxxx...', '..xx...xx...xx..', '...xx......xx...'],
+]);
+const KINDS = [SQUID, CRAB, CRAB, OCTOPUS, OCTOPUS];
+const SHIP = new Sprite([['........xx........', '.......xxxx.......', '.......xoox.......', '..x...xxxxxx...x..', '..x.xxxxxxxxxx.x..', '.xxxxxxxxxxxxxxxx.', 'xxxxxxxxxxxxxxxxxx', 'xxx.xxx....xxx.xxx']]);
+const SAUCER = new Sprite([
+  ['......xxxxxxxx......', '...xxxxxxxxxxxxxx...', '..xxoxxoxxoxxoxxoxx.', 'xxxxxxxxxxxxxxxxxxxx', '...xxx...xx...xxx...', '....x..........x....'],
+  ['......xxxxxxxx......', '...xxxxxxxxxxxxxx...', '..xxxxoxxoxxoxxoxxx.', 'xxxxxxxxxxxxxxxxxxxx', '...xxx...xx...xxx...', '....x..........x....'],
+]);
+
 interface Alien {
   col: number;
   row: number;
@@ -59,7 +81,9 @@ interface Shot {
 export class Invaders extends BaseGame {
   readonly id = 'invaders';
   readonly title = 'STAR RAID';
-  readonly hint = 'A / D or arrows move the ship · hold Space to fire';
+  get hint(): string {
+    return arcadeHint('{leftRight} or arrows move the ship · hold {fire} to fire');
+  }
   readonly summary = '15 SEC · AIM TO CHAIN · SAUCER = +3S';
 
   private shipX = SCREEN_W / 2;
@@ -74,6 +98,8 @@ export class Invaders extends BaseGame {
   private diveTimer = 0;
   private saucer: Shot | null = null;
   private saucerTimer = 0;
+  /** The fleet's steps so far: the aliens' two frames alternate with it (drawing only). */
+  private marchStep = 0;
 
   constructor() {
     super(ROUND_SECONDS);
@@ -123,21 +149,12 @@ export class Invaders extends BaseGame {
     for (const a of this.aliens) {
       if (!a.alive) continue;
       const { x, y } = this.alienPos(a);
-      ctx.fillStyle = a.dive ? '#ffffff' : ROW_COLORS[a.row % ROW_COLORS.length]!;
-      ctx.fillRect(x + 2, y, ALIEN_W - 4, ALIEN_H - 3);
-      ctx.fillRect(x, y + 3, ALIEN_W, ALIEN_H - 6);
-      ctx.fillStyle = '#050812';
-      ctx.fillRect(x + 4, y + 3, 2, 2);
-      ctx.fillRect(x + ALIEN_W - 6, y + 3, 2, 2);
+      const kind = KINDS[a.row % KINDS.length]!;
+      // Divers flap twice as fast as the march.
+      kind.draw(ctx, x, y + 1, { x: a.dive ? '#ffffff' : ROW_COLORS[a.row % ROW_COLORS.length]! }, a.dive ? Math.floor(a.dive.t * 8) : this.marchStep);
     }
-    if (this.saucer) {
-      ctx.fillStyle = '#ff5f5f';
-      ctx.fillRect(this.saucer.x - 10, this.saucer.y - 2, 20, 4);
-      ctx.fillRect(this.saucer.x - 5, this.saucer.y - 5, 10, 3);
-    }
-    ctx.fillStyle = '#e8ffe6';
-    ctx.fillRect(this.shipX - SHIP_W / 2, SHIP_Y - SHIP_H / 2 + 3, SHIP_W, SHIP_H - 3);
-    ctx.fillRect(this.shipX - 2, SHIP_Y - SHIP_H / 2, 4, 4);
+    if (this.saucer) SAUCER.drawCentred(ctx, this.saucer.x, this.saucer.y - 1, { x: '#ff5f5f', o: '#fff2a8' }, Math.floor(this.elapsed * 6));
+    SHIP.drawCentred(ctx, this.shipX, SHIP_Y, { x: '#e8ffe6', o: '#63b3ff' });
     ctx.fillStyle = '#fff2a8';
     for (const s of this.shots) ctx.fillRect(s.x - 1, s.y, 2, 6);
     this.drawStage(ctx, `WAVE ${this.wave}`);
@@ -168,6 +185,7 @@ export class Invaders extends BaseGame {
     this.stepTimer += dt;
     if (this.stepTimer < interval || !formation.length) return;
     this.stepTimer = 0;
+    this.marchStep += 1;
     let minX = Infinity;
     let maxX = -Infinity;
     for (const a of formation) {
@@ -235,6 +253,8 @@ export class Invaders extends BaseGame {
         this.addScore(SAUCER_POINTS, this.saucer.x, this.saucer.y + 10, '#ff5f5f');
         this.addTime(SAUCER_SECONDS, this.saucer.x, this.saucer.y + 26);
         this.fx.flash('#ff5f5f', 0.08);
+        this.fx.burst(this.saucer.x, this.saucer.y, '#ff5f5f', 26, 120, 2);
+        this.fx.burst(this.saucer.x, this.saucer.y, '#fff2a8', 10, 70, 2);
         this.saucer = null;
         return false;
       }
@@ -243,6 +263,7 @@ export class Invaders extends BaseGame {
         const { x, y } = this.alienPos(a);
         if (shot.x < x || shot.x > x + ALIEN_W || shot.y < y || shot.y > y + ALIEN_H) continue;
         a.alive = false;
+        this.fx.burst(x + ALIEN_W / 2, y + ALIEN_H / 2, a.dive ? '#ffffff' : ROW_COLORS[a.row % ROW_COLORS.length]!, 16, 90, 2);
         this.bumpCombo(CHAIN_HOLD);
         if (a.dive) this.addScore(DIVER_POINTS, x + ALIEN_W / 2, y, '#ffffff');
         else this.addScore(ROW_POINTS[a.row] ?? 10, x + ALIEN_W / 2, y);

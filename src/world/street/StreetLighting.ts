@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import type { Updatable } from '@/core/Engine';
 import { Haze } from '@/graphics/Haze';
+import { clearOutdoorAir, setOutdoorAir } from '@/graphics/heightFog';
 import type { ActivityAware, Furniture, OccupancyAware } from '../Furniture';
 import type { DayNight } from '../props/DayNight';
 import { airColor, airDensity } from './streetAir';
@@ -16,6 +17,8 @@ interface StreetLightingOptions {
   shadowReach?: number;
   /** Refreshes of the sun's map a second while live (default `QUALITY.shadowRefreshHz`): a window's view needs few. */
   shadowRefreshHz?: number;
+  /** The street's ground under the rig (zone-local y; default 0): the roof's street lies far below it, and the mist with it. */
+  groundY?: number;
 }
 
 /** The light's distance from the patch of street it shadows, and its shadow camera's depth. */
@@ -74,6 +77,7 @@ export class StreetLighting extends THREE.Group implements Furniture, Updatable,
   readonly far: FarShadowUniforms = farShadowUniforms();
   /** The scene's haze, found the first time the street is occupied (null outside a scene with one). */
   private haze: Haze | null = null;
+  private readonly groundY: number;
 
   constructor(
     private readonly dayNight: DayNight,
@@ -84,6 +88,7 @@ export class StreetLighting extends THREE.Group implements Furniture, Updatable,
     super();
     this.name = 'StreetLighting';
     this.reach = options.shadowReach ?? 28;
+    this.groundY = options.groundY ?? 0;
     this.sun = new THREE.DirectionalLight(0xffffff, 0);
     this.sun.castShadow = true;
     this.sun.shadow.mapSize.set(options.shadowMapSize, options.shadowMapSize);
@@ -113,7 +118,10 @@ export class StreetLighting extends THREE.Group implements Furniture, Updatable,
     this.occupied = occupied;
     this.sunShadow.setLive(occupied);
     // The sky's ambient eases out in `update` (the zone may stay active a while: the sas next door).
-    if (!occupied) this.haze?.setAir(null);
+    if (!occupied) {
+      this.haze?.setAir(null);
+      clearOutdoorAir();
+    }
   }
 
   /** Out of the loop, the easing stops: the ambient goes at once (it lights the whole scene) and the air is given back. */
@@ -122,6 +130,7 @@ export class StreetLighting extends THREE.Group implements Furniture, Updatable,
     this.skyLevel = 0;
     this.sky.intensity = 0;
     this.haze?.setAir(null);
+    clearOutdoorAir();
   }
 
   /** How lit the street is: 0 deep night .. 1 full day. */
@@ -179,6 +188,11 @@ export class StreetLighting extends THREE.Group implements Furniture, Updatable,
     }
     const s = this.dayNight.state;
     this.haze?.setAir(airDensity(s), airColor(s, this.airTint));
+    // Its shape (graphics/heightFog): the fog or dawn mist lying low, the haze glowing round a low sun. Only where
+    // the scene has a haze (the street, the roof): a window's view of the street (`outlook/`) keeps the room's air.
+    if (!this.haze) return;
+    const scatter = (0.4 + s.fog) * (1 - 0.6 * Math.max(s.sunHeight, 0)) * (s.night ? 0.12 : 0.45) * (0.3 + 0.7 * s.sunThrough);
+    setOutdoorAir(s.fog, this.far.farOrigin.value.y + this.groundY, this.far.farSun.value, s.lightColor, scatter);
   }
 
   /** Moves `point` to the nearest whole shadow texel in the light's view, so the map does not shimmer as the player walks. */

@@ -6,7 +6,6 @@ import type { Furniture } from '../Furniture';
 import { PersonModel } from './PersonModel';
 import { randomLook, type PersonLook } from './looks';
 import type { Pose } from './poses';
-import { blobShadow } from '../zone/ContactShadows';
 import { SpeechBubble } from './SpeechBubble';
 import { Attention, type AttentionRange } from './attention';
 import type { SocialHook } from './socialHook';
@@ -94,10 +93,12 @@ export class Vendor extends THREE.Group implements Furniture, Interactable, Upda
     this.nextLine = seed;
     this.model = new PersonModel(options.look ?? randomLook(seed, 'vendor'), this.viewer, seed);
     this.add(this.model);
-    const blob = blobShadow(0.55, 0.5);
-    if (blob) this.add(blob);
+    // Under the hips and each foot, sized to them.
+    this.model.groundShadow();
     this.hitboxes = [this.model.hitbox];
     this.bubble.position.y = BUBBLE_Y;
+    // A conversation frames their eyes, wherever they are under the bubble (a child, seated, tall).
+    this.bubble.userData.faceLift = (): number => this.model.eyesAbove(this.bubble);
     this.add(this.bubble);
     this.callOuts = options.callOuts ?? [];
     this.callOutTimer = CALL_OUT_EVERY[0] * (0.3 + (seed % 5) * 0.2);

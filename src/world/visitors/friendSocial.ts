@@ -36,8 +36,8 @@ const POSTCARD_PLACES: readonly { place: string; text: string }[] = [
 export interface FriendSocialDeps {
   collection: { find(id: string): Game | undefined; add(game: Game): void; owns(id: string): boolean; remove?(id: string): void };
   giftPool?: readonly Game[];
-  notices?: Pick<NoticeActions, 'react' | 'reward' | 'read' | 'tip'>;
-  journal?: { note(kind: string, text: string): void };
+  notices?: Pick<NoticeActions, 'react' | 'reward' | 'slip' | 'read' | 'tip'>;
+  journal?: { note(kind: string, text: string, options?: { data?: Readonly<Record<string, string | number | boolean>> }): void };
   day(): number;
 }
 
@@ -67,7 +67,6 @@ export function friendExtras(plan: FriendPlan, deps: FriendSocialDeps, say: (lin
       group: 'ask',
       label: 'Give me a hand with the furniture?',
       run: () => {
-        deps.notices?.tip('Right-click a piece of furniture to carry it; L plans the room from above.', { id: 'friendCarry' });
         return { line: id === 'marco' ? 'Point me at it. I moved a piano once. Well, I watched someone move a piano.' : 'Sure. You lift, I’ll supervise. Kidding! Which one?' };
       },
     });
@@ -116,8 +115,8 @@ function lendToPlayer(plan: FriendPlan, deps: FriendSocialDeps): { line: string 
   borrow({ gameId: game.id, title: game.title, from: plan.id, dueDay: day + BORROW_DAYS });
   deps.collection.add({ ...game, status: 'owned', condition: 'complete', acquired: { price: 0, where: `borrowed from ${plan.name}`, day } });
   nudge(plan.id, { trust: 2, why: 'lent you a game', day, memory: `I lent you ${game.title}`, memoryWeight: 4 });
-  deps.notices?.reward({ title: `Borrowed: ${game.title}`, detail: `From ${plan.name}, for ${BORROW_DAYS} days. It waits in your parcel in the hall; it can’t be sold or swapped.` });
-  deps.journal?.note('visit', `Borrowed ${game.title} from ${plan.name}`);
+  deps.notices?.slip({ title: `Borrowed ${game.title}`, detail: `From ${plan.name}, ${BORROW_DAYS} days: in the parcel in the hall.` });
+  deps.journal?.note('visit', `Borrowed ${game.title} from ${plan.name}`, { data: { who: plan.id, id: game.id } });
   return { line: `Take my ${game.title}. ${BORROW_DAYS} days, and I want it back with the manual, thank you.` };
 }
 
@@ -136,7 +135,7 @@ export function returnBorrowed(deps: FriendSocialDeps): void {
     const name = FRIENDS.find((f) => f.id === b.from)?.name ?? 'Your friend';
     nudge(b.from, { trust: 2, warmth: 1, why: 'got their game back on time', day, reason: 'gaveBack' });
     deps.notices?.read({ title: `${b.title} went back to ${name}`, text: `${name} picked it up on the landing: “Thanks for looking after it! Same time next week?”`, look: 'note' });
-    deps.journal?.note('visit', `${b.title} went back to ${name}`);
+    deps.journal?.note('visit', `${b.title} back to ${name}`, { data: { who: b.from } });
   }
 }
 
@@ -153,11 +152,13 @@ export function maybePostcard(deps: FriendSocialDeps): void {
   if (gift) deps.collection.add({ ...gift, status: 'owned', condition: 'noManual', acquired: { price: 0, where: `a gift from ${ines.name}`, day } });
   deps.notices?.read({
     title: `A postcard from ${card.place}`,
-    text: `${card.text} — ${ines.name}`,
+    text: card.text,
     effect: gift ? `A small parcel came with it: ${gift.title}. It waits in your parcel in the hall.` : undefined,
-    look: 'letter',
+    look: 'postcard',
+    place: card.place,
+    from: ines.name,
   });
-  deps.journal?.note('visit', `A postcard from ${ines.name}, from ${card.place}`);
+  deps.journal?.note('visit', `Postcard from ${ines.name}, ${card.place}`, { data: { who: ines.id } });
 }
 
 /**

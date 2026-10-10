@@ -3,6 +3,7 @@ import { bareMetal } from '../metals';
 import type { Updatable } from '@/core/Engine';
 import { createCanvas, toTexture } from '@/covers/generated/canvasUtils';
 import type { Furniture } from '../../Furniture';
+import type { ActivityAware } from '../../zone/lifecycle';
 import type { DayNight } from '../../props/DayNight';
 import type { PaintedFront } from '../Buildings';
 import { isShopOpen } from '../shops/shopHours';
@@ -42,9 +43,11 @@ interface Shutter {
  * tagged. Shops that have shut for good are painted shut already; the arcade never shuts, and the walk-in shops
  * keep none (their windows stand out of the wall, lit after closing: `shopfronts/`). All
  * curtains are one mesh whose four corners per shop move (only while one is rolling); the boxes
- * are another. Snow settles on the boxes.
+ * are another. Snow settles on the boxes. Back from dormancy (the street built ahead, or kept while the player was
+ * home) each curtain takes the clock's state at once: hours may have passed, and every shop that opened or shut
+ * meanwhile rolling and rattling in the same frame was a wall of noise on arrival.
  */
-export class Shutters extends THREE.Group implements Furniture, Updatable {
+export class Shutters extends THREE.Group implements Furniture, Updatable, ActivityAware {
   readonly contactShadow = false;
   private readonly shutters: Shutter[] = [];
   private readonly positions: THREE.BufferAttribute;
@@ -52,6 +55,8 @@ export class Shutters extends THREE.Group implements Furniture, Updatable {
   private readonly curtain: THREE.Mesh;
   private clock = CHECK_EVERY;
   private rolling = true;
+  /** Just (re)activated: the first update snaps to the clock, silently. */
+  private fresh = true;
   private readonly frameMatrix = new THREE.Matrix4();
 
   /** `onRoll`: a shutter starts rolling (up or down) at `at` (zone-local, on the pavement before it), for its rattle. */
@@ -113,8 +118,15 @@ export class Shutters extends THREE.Group implements Furniture, Updatable {
       this.add(merged);
     }
     // Start where the clock says, no rolling on arrival.
-    const hours = dayNight.state.hours;
+    this.snapToClock();
+  }
+
+  /** Every curtain where the clock says it is, without a roll or a rattle. */
+  private snapToClock(): void {
+    const hours = this.dayNight.state.hours;
     for (const s of this.shutters) s.down = s.target = isShopOpen(s.kind, hours) ? 0 : 1;
+    this.clock = 0;
+    this.rolling = false;
     this.layout();
   }
 
@@ -122,7 +134,16 @@ export class Shutters extends THREE.Group implements Furniture, Updatable {
     return new THREE.Box3();
   }
 
+  setZoneActive(active: boolean): void {
+    if (active) this.fresh = true;
+  }
+
   update(dt: number): void {
+    if (this.fresh) {
+      this.fresh = false;
+      this.snapToClock();
+      return;
+    }
     this.clock += dt;
     if (this.clock >= CHECK_EVERY) {
       this.clock = 0;

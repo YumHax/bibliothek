@@ -154,7 +154,12 @@ export abstract class BaseGame implements ArcadeGame {
   protected addScore(points: number, x?: number, y?: number, color?: string): number {
     const gained = points * this.combo;
     this.score += gained;
-    if (x !== undefined && y !== undefined) this.fx.pop(`+${gained}`, x, y, color ?? COMBO_COLORS[this.combo] ?? '#fff2a8', this.combo >= 3 ? 10 : 8);
+    if (x !== undefined && y !== undefined) {
+      const ink = color ?? COMBO_COLORS[this.combo] ?? '#fff2a8';
+      this.fx.pop(`+${gained}`, x, y, ink, this.combo >= 3 ? 10 : 8);
+      // A few sparks where it scored (the games break what they hit apart themselves, `fx.burst`).
+      this.fx.burst(x, y, ink, 5 + Math.min(this.combo, 4) * 2, 60, 1);
+    }
     this.sound('score', 1 + (this.combo - 1) * 0.12);
     if (!this.bestBeaten && this.best > 0 && this.score > this.best) {
       this.bestBeaten = true;

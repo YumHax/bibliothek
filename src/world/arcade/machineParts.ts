@@ -2,8 +2,13 @@ import * as THREE from 'three';
 import { createCanvas, toTexture } from '@/covers/generated/canvasUtils';
 import type { Anisotropy } from '@/graphics/canvas';
 import { standard } from '../materials/palette';
-import { drawText } from './games/ArcadeGame';
+import { PIXEL_FONT, drawText } from './games/ArcadeGame';
+import { repaintWhenFontLoads } from '@/graphics/fontReady';
 import { onSurface, WALL } from '../surface/layers';
+
+/** The shipped marker and pen (`ui/fonts.css`), for what is written by hand on the machines. */
+const MARKER = '"Permanent Marker", "Comic Sans MS", "Marker Felt", cursive';
+const HAND = 'Caveat, "Comic Sans MS", "Marker Felt", cursive';
 
 /** The polished steel of the physical machines' rails, legs, posts and plunger rods. */
 export const CHROME = standard({ color: 0xc4c7cc, metalness: 1, roughness: 0.2 });
@@ -29,13 +34,29 @@ interface MarqueeStyle {
 export function paintMarquee(title: string, style: MarqueeStyle): THREE.CanvasTexture {
   const { width = 512, height = 96 } = style;
   const [canvas, ctx] = createCanvas(width, height);
-  const gradient = style.diagonal ? ctx.createLinearGradient(0, 0, width, height) : ctx.createLinearGradient(0, 0, width, 0);
-  style.stops.forEach((stop, i) => gradient.addColorStop(style.stops.length > 1 ? i / (style.stops.length - 1) : 0, stop));
-  ctx.fillStyle = gradient;
-  ctx.fillRect(0, 0, width, height);
-  style.decorate?.(ctx, width, height);
-  drawText(ctx, title, width / 2, style.textY ?? height / 2 + 2, style.size, style.ink);
-  return toTexture(canvas, style.anisotropy ?? 'grazing');
+  const paint = (): void => {
+    const gradient = style.diagonal ? ctx.createLinearGradient(0, 0, width, height) : ctx.createLinearGradient(0, 0, width, 0);
+    style.stops.forEach((stop, i) => gradient.addColorStop(style.stops.length > 1 ? i / (style.stops.length - 1) : 0, stop));
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, width, height);
+    style.decorate?.(ctx, width, height);
+    // A soft glow under the letters, so the pixel type reads as backlit.
+    ctx.save();
+    ctx.shadowColor = 'rgba(255,255,255,0.55)';
+    ctx.shadowBlur = Math.round(style.size * 0.35);
+    drawText(ctx, title, width / 2, style.textY ?? height / 2 + 2, style.size, style.ink);
+    ctx.restore();
+    // A hard dark drop under the type (the print's key line), then the type again on top.
+    drawText(ctx, title, width / 2 + 3, (style.textY ?? height / 2 + 2) + 3, style.size, 'rgba(0,0,0,0.45)');
+    drawText(ctx, title, width / 2, style.textY ?? height / 2 + 2, style.size, style.ink);
+  };
+  paint();
+  const texture = toTexture(canvas, style.anisotropy ?? 'grazing');
+  repaintWhenFontLoads(`${style.size}px ${PIXEL_FONT}`, () => {
+    paint();
+    texture.needsUpdate = true;
+  });
+  return texture;
 }
 
 /** A machine's lit display: a canvas to paint and the plane showing it (unlit, so it reads as lit). */
@@ -70,23 +91,35 @@ export function outOfOrderNote(width = 0.3): THREE.Mesh {
 
 function paintNote(): THREE.CanvasTexture {
   const [canvas, ctx] = createCanvas(300, 160);
-  ctx.fillStyle = '#f4f1e8';
-  ctx.fillRect(0, 0, 300, 160);
-  ctx.fillStyle = 'rgba(200,190,160,0.7)';
-  for (const [x, y] of [[0, 0], [270, 0], [0, 138], [270, 138]] as const) ctx.fillRect(x, y, 30, 22);
-  ctx.save();
-  ctx.translate(150, 70);
-  ctx.rotate(-0.04);
-  ctx.fillStyle = '#c8261e';
-  ctx.font = 'bold 42px "Comic Sans MS", "Marker Felt", cursive';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText('OUT OF', 0, -18);
-  ctx.fillText('ORDER', 0, 24);
-  ctx.restore();
-  ctx.fillStyle = '#333';
-  ctx.font = '16px "Comic Sans MS", "Marker Felt", cursive';
-  ctx.textAlign = 'center';
-  ctx.fillText('sorry — the mgmt', 150, 140);
-  return toTexture(canvas, 'facing');
+  const paint = (): void => {
+    ctx.fillStyle = '#f4f1e8';
+    ctx.fillRect(0, 0, 300, 160);
+    ctx.fillStyle = 'rgba(200,190,160,0.7)';
+    for (const [x, y] of [[0, 0], [270, 0], [0, 138], [270, 138]] as const) ctx.fillRect(x, y, 30, 22);
+    ctx.save();
+    ctx.translate(150, 70);
+    ctx.rotate(-0.04);
+    ctx.fillStyle = '#c8261e';
+    ctx.font = `40px ${MARKER}`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('OUT OF', 0, -18);
+    ctx.fillText('ORDER', 0, 24);
+    ctx.restore();
+    ctx.fillStyle = '#333';
+    ctx.font = `600 22px ${HAND}`;
+    ctx.textAlign = 'center';
+    ctx.fillText('sorry — the mgmt', 150, 140);
+  };
+  paint();
+  const texture = toTexture(canvas, 'facing');
+  repaintWhenFontLoads(`40px ${MARKER}`, () => {
+    paint();
+    texture.needsUpdate = true;
+  });
+  repaintWhenFontLoads(`600 22px ${HAND}`, () => {
+    paint();
+    texture.needsUpdate = true;
+  });
+  return texture;
 }

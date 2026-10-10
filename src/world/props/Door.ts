@@ -43,10 +43,11 @@ const FAR_WALL = 0.06;
 const LINING = 0.03;
 const LEAF_THICKNESS = 0.04;
 /**
- * The leaf swings away from the room that hangs it when open, in this long: almost flat against
- * the wall of the room it opens into (a door pushed right back), so it never bars a corridor.
+ * The leaf swings away from the room that hangs it when open, by default this far: almost flat against
+ * the wall of the room it opens into (a door pushed right back), so it never bars a corridor
+ * (`Doorway.swing` stops it sooner where the hinge side has no wall to lie against).
  */
-const OPEN_ANGLE = THREE.MathUtils.degToRad(165);
+const OPEN_DEGREES = 165;
 const SWING_SECONDS = 1.4;
 /** The leaf's collider swaps from the shut position to the open one as it swings past this openness. */
 const BLOCKER_SWAP = 0.5;
@@ -85,15 +86,9 @@ export class Door extends Prop implements Updatable, Interactable {
   readonly seenFromNextDoor = true;
 
   /** The end of each swing is heard: the latch springing home as it shuts, a soft knock against its stop open. */
-  private readonly motion = new LidMotion(OPEN_ANGLE, SWING_SECONDS, (open) => {
-    // Heard from the door, through the walls between (a door two rooms away is not in the ear).
-    const { gain, spatial } = this.heard();
-    if (open) playWoodKnock(0.05 * gain, 0.7, spatial);
-    else {
-      playLatchClick(0.12 * gain, spatial);
-      playWoodKnock(0.08 * gain, 0.85, spatial);
-    }
-  });
+  private readonly motion: LidMotion;
+  /** How far the leaf turns open (radians). */
+  private readonly openAngle: number;
   private readonly pivot = new THREE.Group();
   /** The leaf itself, on the pivot: its swing-side face on the hinge axis, like a butt hinge's knuckle. */
   private readonly hung = new THREE.Group();
@@ -108,11 +103,21 @@ export class Door extends Prop implements Updatable, Interactable {
   private blocker: THREE.Box3 | null = null;
 
   constructor(
-    readonly doorway: Pick<Doorway, 'width' | 'height' | 'hinge'>,
+    readonly doorway: Pick<Doorway, 'width' | 'height' | 'hinge' | 'swing'>,
     options: DoorOptions = {},
   ) {
     super();
     this.name = 'Door';
+    this.openAngle = THREE.MathUtils.degToRad(doorway.swing ?? OPEN_DEGREES);
+    this.motion = new LidMotion(this.openAngle, SWING_SECONDS, (open) => {
+      // Heard from the door, through the walls between (a door two rooms away is not in the ear).
+      const { gain, spatial } = this.heard();
+      if (open) playWoodKnock(0.05 * gain, 0.7, spatial);
+      else {
+        playLatchClick(0.12 * gain, spatial);
+        playWoodKnock(0.08 * gain, 0.85, spatial);
+      }
+    });
     const { width, height } = doorway;
     this.side = doorway.hinge === 'right' ? -1 : 1;
     this.brass = BRASS.clone();
@@ -221,7 +226,7 @@ export class Door extends Prop implements Updatable, Interactable {
     this.shutBlocker.set(new THREE.Vector3(-width / 2, 0, -FRAME_DEPTH), new THREE.Vector3(width / 2, height, ARCHITRAVE_DEPTH));
     // The open leaf runs from the hinge along its swung direction (see `render`), thick as it is.
     const hinge = this.pivot.position;
-    const tip = hinge.clone().add(new THREE.Vector3(this.side * Math.cos(OPEN_ANGLE), 0, -Math.sin(OPEN_ANGLE)).multiplyScalar(leafWidth(width)));
+    const tip = hinge.clone().add(new THREE.Vector3(this.side * Math.cos(this.openAngle), 0, -Math.sin(this.openAngle)).multiplyScalar(leafWidth(width)));
     this.openBlocker.setFromPoints([hinge, tip]).expandByScalar(LEAF_THICKNESS);
     this.openBlocker.min.y = 0;
     this.openBlocker.max.y = height;

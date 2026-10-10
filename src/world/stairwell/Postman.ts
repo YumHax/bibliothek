@@ -136,7 +136,7 @@ export class Postman extends Prop implements Updatable, DoorRinger {
       this.walker.speak('Sorry, wrong flat!', 'Postman');
     } else {
       const titles = games.length <= 2 ? games.map((g) => g.title).join(' and ') : `${games.length} games`;
-      session.reward({ title: 'A parcel for you!', detail: `${titles}. It goes under the hall console with the rest.` });
+      session.slip({ title: 'A parcel for you', detail: `${titles}: under the hall console.` });
       this.walker.speak('Have a nice day!', 'Postman');
     }
     this.leave();

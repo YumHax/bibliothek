@@ -14,8 +14,8 @@ const HELP = [
   `${k('photoLook')} look · ${k('photoFrame')} frame · ${k('photoReset')} reset · ${k('photoHelp')} hide this`,
   `${k('photoCapture')} or [Click]: take the photo · ${k('photoMode')} back`,
 ];
-/** A controller or a touchscreen takes the photo and goes back; flying and the lens are the keyboard's. */
-const HELP_PAD = ['[A]: take the photo · [Start]: back', 'Flying, zoom and the lens need a keyboard and mouse.'];
+/** A controller flies and looks with the sticks, zooms on the triggers, focuses on the bumpers; a touchscreen takes the photo and goes back. */
+const HELP_PAD = ['Left stick fly · right stick look · [LT] / [RT] zoom · [LB] / [RB] focus', '[X] grade · [Y] guide · [Select] reset', '[A]: take the photo · [Start]: back'];
 const HELP_TOUCH = ['Tap: take the photo · [Menu]: back', 'Flying, zoom and the lens need a keyboard and mouse.'];
 
 /** The help for the device in hand now. */

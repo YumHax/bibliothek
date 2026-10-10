@@ -4,6 +4,7 @@ import type { Interactable } from '@/interaction/Interactable';
 import type { SessionActions } from '@/game/SessionActions';
 import { invisibleHitbox } from '../meshUtils';
 import { Prop } from '../props/Prop';
+import type { Openable, Stash } from '../props/Openable';
 import { HoverGlint } from '../props/hoverGlint';
 import { captionName } from '../props/SwingLeaf';
 import { playLatchClick, playSoftThud } from '@/audio/furnitureSounds';
@@ -31,15 +32,17 @@ const DEFAULT_ANGLE = THREE.MathUtils.degToRad(85);
  * `position` in its own space (the hinge line: bottom edge of the back face) and exposes it among
  * its `leaves`, which the builder places with `placeLeaves`. Decoration: it never blocks the player.
  */
-export class DropDoor extends Prop implements Interactable, Updatable {
+export class DropDoor extends Prop implements Interactable, Updatable, Openable {
   readonly contactShadow = false;
+  onOpen: ((session: SessionActions) => void) | null = null;
+  stash: Stash | null = null;
   readonly hitboxes: THREE.Object3D[];
   /** The door's parts, turning about the hinge line (local x). */
   readonly panel = new THREE.Group();
   private readonly maxAngle: number;
   private readonly seconds: number;
   private target = 0;
-  private openness = 0;
+  private opened = 0;
   /** The handle bar (the panel's small fittings) glints on hover; found on first hover, once the host has built it. */
   private readonly glint = HoverGlint.fittings(this.panel);
 
@@ -55,19 +58,27 @@ export class DropDoor extends Prop implements Interactable, Updatable {
     this.add(this.panel);
   }
 
+  get noun(): string {
+    return this.options.noun;
+  }
+
   get isOpen(): boolean {
     return this.target > 0;
   }
 
+  get openness(): number {
+    return this.opened;
+  }
+
   update(dt: number): void {
-    if (this.openness === this.target) return;
+    if (this.opened === this.target) return;
     const step = dt / this.seconds;
-    this.openness = this.target > this.openness ? Math.min(this.target, this.openness + step) : Math.max(this.target, this.openness - step);
+    this.opened = this.target > this.opened ? Math.min(this.target, this.opened + step) : Math.max(this.target, this.opened - step);
     // A positive turn about +x brings the top edge (+y) forward (+z).
-    this.panel.rotation.x = this.maxAngle * THREE.MathUtils.smoothstep(this.openness, 0, 1);
-    this.options.onOpenness?.(this.openness);
+    this.panel.rotation.x = this.maxAngle * THREE.MathUtils.smoothstep(this.opened, 0, 1);
+    this.options.onOpenness?.(this.opened);
     // Down onto its stays with a soft thud; shut, the catch clicks.
-    if (this.openness === this.target) {
+    if (this.opened === this.target) {
       if (this.target > 0) playSoftThud(0.08);
       else playLatchClick(0.08);
     }
@@ -83,7 +94,8 @@ export class DropDoor extends Prop implements Interactable, Updatable {
     return `${captionName(this.options.noun)} · ${this.isOpen ? 'close' : 'open'}`;
   }
 
-  activate(_session: SessionActions): void {
+  activate(session: SessionActions): void {
     this.target = this.target > 0 ? 0 : 1;
+    if (this.target > 0) this.onOpen?.(session);
   }
 }

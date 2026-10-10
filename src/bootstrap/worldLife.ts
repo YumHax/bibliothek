@@ -7,6 +7,7 @@ import { isGrail } from '@/economy/grails';
 import type { Pastimes } from '@/household';
 import type { ProgramRunner } from '@/onscreen';
 import { wireBuildingPerks } from '@/social/building/wire';
+import { tellKidsTheStory } from '@/building/kids/kidNews';
 import type { BuildContext, ZoneHandle } from '@/world/buildContext';
 import type { BuildingServices } from '@/world/stairwell/building';
 import { catPlacers, followAdoption, furnishCat, placeCatEscapes, type Cat } from '@/world/cat';
@@ -93,6 +94,8 @@ export function wireBuildingLife(services: Services, engine: Engine, world: Game
   const hallway = world.zone('hallway');
   placeCatEscapes(world.zone('stairwell'), { cat, stairs: world.build('stairwell'), door: doorTo(hallway, 'stairwell'), eye: engine.camera, day: () => services.today.gameDay, doorstep: building.doorstep, notices: flat.notices });
   placeHunt({ today: services.today, journal: services.journal, notices: flat.notices, slipNote: (piece) => building.doorstep.slipNote(piece), stairwell: world.zone('stairwell') });
+  // The courtyard's kids hear where the lost prototype's trail stands (`building/kids/kidNews`).
+  tellKidsTheStory(services.story);
   wireBuildingPerks({
     collection, wallet, notices: flat.notices, pool: SEED_GAMES,
     day: () => services.today.gameDay, hour: () => sky.dayNight.state.hours,

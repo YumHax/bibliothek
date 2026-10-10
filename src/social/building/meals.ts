@@ -45,7 +45,7 @@ export function wireMeals(deps: PerkDeps, beats: MealBeats): void {
           markDay(`meal-${effect}`, day);
           void beats.run({ minutes: meal.minutes, ...MEALS.fade }, () => {
             nudge(meal.who, { warmth: meal.warmth, trust: meal.trust, day, why: 'loved having you round', memory: title.toLowerCase(), memoryWeight: 10 });
-            deps.notices.read({ title, text: meal.line, effect: `${capitalise(shortName(meal.who))} will remember it.`, look: 'letter' });
+            deps.notices.read({ title, text: meal.line, effect: `${capitalise(shortName(meal.who))} will remember it.`, look: 'letter', from: capitalise(shortName(meal.who)) });
           });
         },
       });

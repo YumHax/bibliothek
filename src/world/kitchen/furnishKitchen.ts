@@ -35,6 +35,7 @@ import { rugsUnderfoot } from '../build/rugsUnderfoot';
 import { addFlatNoise } from '@/building/flatNoise';
 import { regionLockFor } from '@/economy/regionLock';
 import { furnishKitchenRepair } from '../repair/furnishRepair';
+import { rummageIn } from '../build/rummage';
 
 /** The chronicle's card comes up this long after the jingle starts (ms). */
 const CHRONICLE_AFTER_MS = 1500;
@@ -60,10 +61,19 @@ export function furnishKitchen(zone: Zone, ctx: KitchenBuild): ZoneHandle {
 
   // 1. The fitted kitchen: base runs, wall cupboards with the extractor, the fridge past the end of the run.
   //    Their doors, drawers and the oven door open on a click: each leaf is placed beside its host.
-  for (const run of plan.runs) placeLeaves(zone, zone.placeAt(new KitchenRun(run.options), run.at));
-  placeLeaves(zone, zone.placeAt(new WallCabinets(plan.wallCabinets.options), plan.wallCabinets.at));
+  //    Each holds what the last tenant left, and now and then a find (docs/household.md "Doors and drawers").
+  const household = ctx.home.household;
+  plan.runs.forEach((run, i) => {
+    const kitchenRun = zone.placeAt(new KitchenRun(run.options), run.at);
+    placeLeaves(zone, kitchenRun);
+    rummageIn(zone, household, kitchenRun.leaves, `kitchen.run${i}`, true);
+  });
+  const wallCabinets = zone.placeAt(new WallCabinets(plan.wallCabinets.options), plan.wallCabinets.at);
+  placeLeaves(zone, wallCabinets);
+  rummageIn(zone, household, wallCabinets.leaves, 'kitchen.wall', true);
   const fridge = zone.placeAt(new Fridge({ hinge: plan.fridge.hinge }), plan.fridge.at);
   placeLeaves(zone, fridge);
+  rummageIn(zone, household, fridge.leaves, 'kitchen.fridge', true);
   // Its compressor hums low at the back, on and off.
   placeWith(zone, fridge, pointSound(ctx, new FridgeHum()), new THREE.Vector3(0, 0.3, 0.1));
   // One real light, always there (the scene's light count never changes), lent to the fridge's bulb
@@ -123,7 +133,7 @@ export function furnishKitchen(zone: Zone, ctx: KitchenBuild): ZoneHandle {
   placerFor(zone, upgrades, plan.upgrades.crt).place(crt, zone.toLocal(fridge.localToWorld(top)), fridge.rotation.y);
 
   // 8. What the kitchen is used for (docs/household.md): the cleaning kit, a cake, the cat's treats, the radio's chronicle.
-  if (ctx.home.household) furnishKitchenLife(zone, ctx, ctx.home.household, { table, furnished, catThings, radio });
+  if (household) furnishKitchenLife(zone, ctx, household, { table, furnished, catThings, radio });
   // A console bought broken waits on the right-hand chair, to be mended on the table (docs/household.md "Repairing a console").
   if (ctx.classifieds && chairs.length) furnishKitchenRepair(zone, ctx.classifieds, { chair: chairs[chairs.length - 1]!, furnished });
 

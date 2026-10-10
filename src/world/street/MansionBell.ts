@@ -93,7 +93,6 @@ export class MansionBell extends Prop implements Interactable {
       return;
     }
     session.react(`${SELLERS_BUILDING}: twelve bells, and nobody expecting you.`);
-    session.tip('The Gaming Weekly’s small ads have people round here selling games: read one at the newsstand, then ring them from the phone at home.', { id: 'small-ads' });
   }
 
   dispose(): void {

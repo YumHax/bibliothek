@@ -9,8 +9,8 @@ export interface SideTableOptions {
   height?: number;
   /** Wood colour (light oak by default). */
   wood?: number;
-  /** Colour of the mug on top. */
-  mug?: number;
+  /** Colour of the mug on top; null for none (a caller lays its own things there). */
+  mug?: number | null;
   /** Cover colours of the magazine stack, bottom first (2-3 entries). */
   covers?: number[];
 }
@@ -44,7 +44,7 @@ export class SideTable extends THREE.Group implements Furniture {
     };
     this.topHeight = this.options.height;
     this.buildTable();
-    this.buildMug(0.085, 0.06);
+    if (this.options.mug !== null) this.buildMug(0.085, 0.06, this.options.mug);
     this.buildMagazines(-0.05, -0.035);
   }
 
@@ -92,8 +92,8 @@ export class SideTable extends THREE.Group implements Furniture {
   }
 
   /** An open ceramic mug with a half-ring handle facing +x, standing at (x, z) on the top. */
-  private buildMug(x: number, z: number): void {
-    const ceramic = standard({ color: this.options.mug, roughness: 0.4, side: THREE.DoubleSide });
+  private buildMug(x: number, z: number, color: number): void {
+    const ceramic = standard({ color, roughness: 0.4, side: THREE.DoubleSide });
     const mug = new THREE.Group();
     mug.position.set(x, this.topHeight, z);
     mug.rotation.y = -0.6; // handle turned a little towards the room

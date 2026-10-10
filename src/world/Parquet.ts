@@ -81,7 +81,9 @@ export function parquetMaterial(floorWidth: number, floorDepth: number): THREE.M
           float Hll = bumpScale * textureGrad(bumpMap, uv, dSTdx, dSTdy).x;
           float dBx = bumpScale * textureGrad(bumpMap, uv + dSTdx * flip, dSTdx, dSTdy).x - Hll;
           float dBy = bumpScale * textureGrad(bumpMap, uv + dSTdy * flip, dSTdx, dSTdy).x - Hll;
-          return vec2(dBx, dBy);
+          // Thinned out where a pixel covers several texels (far off, at a grazing angle): the bevels would sparkle.
+          vec2 texels = max(abs(dSTdx), abs(dSTdy)) * vec2(textureSize(bumpMap, 0));
+          return vec2(dBx, dBy) * mix(1.0, 0.2, smoothstep(1.0, 4.0, max(texels.x, texels.y)));
         }
         vec3 perturbNormalArb(vec3 surf_pos, vec3 surf_norm, vec2 dHdxy, float faceDirection) {
           vec3 vSigmaX = normalize(dFdx(surf_pos.xyz));
@@ -112,7 +114,12 @@ export function parquetMaterial(floorWidth: number, floorDepth: number): THREE.M
     fragment = afterChunk(
       fragment,
       'roughnessmap_fragment',
-      `roughnessFactor = clamp(roughnessFactor * (1.0 + ${PLANK_ROUGHNESS_SPREAD} * (2.0 * parquetHere.z - 1.0)), 0.0, 1.0);`,
+      `roughnessFactor = clamp(roughnessFactor * (1.0 + ${PLANK_ROUGHNESS_SPREAD} * (2.0 * parquetHere.z - 1.0)), 0.0, 1.0);
+      #ifdef USE_BUMPMAP
+        // The gaps between the planks (low in the bump map) hold dust, not varnish: matt.
+        float parquetGap = textureGrad(bumpMap, parquetHere.xy, dFdx(vBumpMapUv), dFdy(vBumpMapUv)).x;
+        roughnessFactor = mix(0.95, roughnessFactor, smoothstep(0.27, 0.42, parquetGap));
+      #endif`,
     );
     shader.fragmentShader = fragment;
   });

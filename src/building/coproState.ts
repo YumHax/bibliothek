@@ -97,6 +97,12 @@ export function recordMeeting(day: number, outcomes: Outcome[]): void {
   save();
 }
 
+/** `?debug`'s panel: the building stands on `id` as `option` from now, as if a meeting had decided it (no minutes). */
+export function decideResolution(id: ResolutionId, option: string): void {
+  load().decided[id] = option;
+  save();
+}
+
 /** The game day of the last meeting tallied (0: none yet). */
 export function settledThrough(): number {
   return load().settled;

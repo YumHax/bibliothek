@@ -1,8 +1,10 @@
 import { isTouchDevice } from '@/input/deviceDetect';
 import { KEYS, safeStorage } from '@/persistence';
 import { flagValue } from '@/settings/flags';
-import { toneMapEveryMaterial } from './displayTone';
+import { ditherEveryMaterial, toneMapEveryMaterial } from './displayTone';
 import { brightenMetalReflections } from './metalReflections';
+import { contactHardeningShadows } from './softShadows';
+import { shapeOutdoorFog } from './heightFog';
 
 /**
  * How much the GPU is asked to do. `low` is the plain forward render the game shipped with;
@@ -71,6 +73,9 @@ export interface QualitySettings {
   bloom: boolean;
   /** Screen-space ambient occlusion from the depth buffer (no extra scene render). */
   ssao: boolean;
+  /** The occlusion's resolution as a share of the frame's side (0.5 half, 0.25 quarter) and its taps per pixel. */
+  ssaoScale: number;
+  ssaoSamples: number;
   /** Blur beyond the box held up to read. */
   depthOfField: boolean;
   /** The eye adapting between a dark and a bright view. */
@@ -114,6 +119,8 @@ const PRESETS: Record<QualityLevel, Omit<QualitySettings, 'level'>> = {
     fxaa: false,
     bloom: false,
     ssao: false,
+    ssaoScale: 0.5,
+    ssaoSamples: 12,
     depthOfField: false,
     autoExposure: false,
     grade: false,
@@ -142,7 +149,10 @@ const PRESETS: Record<QualityLevel, Omit<QualitySettings, 'level'>> = {
     msaa: 4,
     fxaa: true,
     bloom: true,
-    ssao: false,
+    // A cheap occlusion: a quarter of the frame's side and half the taps (the creases under shelves, behind furniture).
+    ssao: true,
+    ssaoScale: 0.25,
+    ssaoSamples: 6,
     depthOfField: true,
     autoExposure: true,
     grade: true,
@@ -162,7 +172,8 @@ const PRESETS: Record<QualityLevel, Omit<QualitySettings, 'level'>> = {
     maxFps: 0,
     shadowMapSize: 1024,
     sunShadowMapSize: 2048,
-    anisotropy: 8,
+    // 16 costs next to nothing on a desktop GPU (three caps it at the GPU's maximum): parquet and paving stay sharp at a grazing angle.
+    anisotropy: 16,
     canvasScale: 1.25,
     shadowRefreshHz: 0,
     minShadowCaster: 0.04,
@@ -172,6 +183,8 @@ const PRESETS: Record<QualityLevel, Omit<QualitySettings, 'level'>> = {
     fxaa: true,
     bloom: true,
     ssao: true,
+    ssaoScale: 0.5,
+    ssaoSamples: 12,
     depthOfField: true,
     autoExposure: true,
     grade: true,
@@ -226,8 +239,14 @@ export const QUALITY: Readonly<QualitySettings> = resolve();
 
 // One tone-mapping rule for every level (see `displayTone`): set before any material is made.
 toneMapEveryMaterial(!QUALITY.postFx);
+// No grain pass on `low`: everything dithers against banding (see `displayTone`).
+ditherEveryMaterial(!QUALITY.postFx);
 // Bare metal takes more of the reflections than paint (see `metalReflections`): before any program compiles.
 brightenMetalReflections();
+// The window suns' shadows sharp at the mullion, soft across the room (high only, see `softShadows`).
+if (QUALITY.level === 'high') contactHardeningShadows();
+// The street's mist lies low and glows round the sun (see `heightFog`): before any program compiles.
+shapeOutdoorFog();
 
 /** Saves `level` as the player's choice and reloads the page to rebuild everything with it. */
 export function setQuality(level: QualityLevel): void {

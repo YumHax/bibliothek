@@ -5,7 +5,7 @@ import type { GameBox } from '@/world/GameBox';
 import type { VideoScreen } from '@/world/screen';
 import type { ZoneId } from '@/world/zoneIds';
 import type { ArcadeMachineLike, ForSaleLike, PaymentLike, SeatLike, SessionActions, UpgradeOfferLike } from './SessionActions';
-import type { ReadingNotice, RewardNotice, TipOptions } from '@/notices';
+import type { PromptOptions, ReadingNotice, RewardNotice, SlipNotice, TipOptions } from '@/notices';
 import type { ModalLike, SessionParts } from './SessionParts';
 import type { KeyRoute, SessionHost } from './SessionHost';
 import { ModalStack } from './ModalStack';
@@ -25,10 +25,14 @@ import { PhotoControl } from './PhotoControl';
 import { Rearranging, type PieceLike } from './Rearranging';
 import { Labelling } from './Labelling';
 import { isAction } from '@/input/actions';
+import { actionKeyLabel } from '@/ui/keys';
+import { grabCap } from '@/ui/verb';
 
 /** A right-button press with a box in hand shorter than this (ms) and moving the mouse less (px) is a tap, not a turn of the box. */
 const RIGHT_TAP_MS = 280;
 const RIGHT_TAP_MOVE = 10;
+/** A right press just after a box went back (ms) is the tail of handling the box, not a reach for the furniture behind it. */
+const GRAB_AFTER_PUT_BACK_MS = 300;
 
 /**
  * Game rules: what happens when the player clicks something, presses a key or leaves the room.
@@ -70,8 +74,9 @@ export class Session implements SessionActions, SessionHost {
    * 5. a box in hand: E puts it back, O opens it;
    * 6. browsing: F / Slash search, T sorts, N night, R random pick (not while holding), Enter picks up the found box;
    *    then K, the label maker, at home with free hands (`Labelling`);
-   * 7. X puts down the card being read, the tips, the banner (`NoticeDismiss`); C calls the cat;
-   * 8. seated: a movement key or E stands up.
+   * 7. X puts down the card being read, the tips, the banner (`NoticeDismiss`; Esc too, when the page hears it); C calls the cat;
+   * 8. seated: a movement key or E stands up;
+   * 9. Esc heard in the room (full screen holds the keyboard): the pause menu.
    */
   private readonly routes: readonly KeyRoute[];
 
@@ -93,10 +98,13 @@ export class Session implements SessionActions, SessionHost {
     this.purchases = new Purchases(parts, this);
     this.rearranging = new Rearranging(parts, this, () => this.onHover(this.hovered));
     const deaf: KeyRoute = { onKey: () => this.modalOpen || !parts.player.isLocked || this.goingOut.menuOpen || this.seating.asleep };
+    // Esc that the page hears in the room (the keyboard held in full screen, `settings/fullscreen`), once nothing before
+    // took it (a card put down, the planning view left): the pause menu, as the browser's own Esc would.
+    const pauseOnEsc: KeyRoute = { onKey: (code) => isAction(code, 'close') && parts.player.hasPointerLock && (parts.player.unlock(), true) };
     const photo = new PhotoControl(parts, (panel) => this.openPanel(panel));
     // O on a box in hand asks the copy first (a seal, a past: `CopyOpening`), then the market, then the hands open it.
     const opening = new CopyOpening(parts, () => this.counter.holding);
-    this.routes = [this.modals, deaf, this.arcade, this.programPlay, photo, this.rearranging, opening, this.counter, this.hands, this.browse, new Labelling(parts, this, (panel) => this.openPanel(panel), () => this.rearranging.carrying), new NoticeDismiss(parts), new CatCare(parts, this), this.seating];
+    this.routes = [this.modals, deaf, this.arcade, this.programPlay, photo, this.rearranging, opening, this.counter, this.hands, this.browse, new Labelling(parts, this, (panel) => this.openPanel(panel), () => this.rearranging.carrying), new NoticeDismiss(parts), new CatCare(parts, this), this.seating, pauseOnEsc];
 
     const { interactor, inspector, player, search } = parts;
     // The carried box must not block the ray, nor its wrapper (a market copy's `ForSaleBox` owns the box's hitbox).
@@ -110,10 +118,14 @@ export class Session implements SessionActions, SessionHost {
     player.controls.addEventListener('unlock', () => {
       // A panel needs the hands (a haggle or a swap panel works on the copy still in hand); the pause menu leaves the box held.
       if (inspector.isActive && this.modals.active && !this.modals.holdingThrough) this.putBack();
+      // A panel that opened itself or by Tab (not through `openModal`) puts the carried piece back all the same.
+      if (this.modals.active) this.rearranging.cancel();
       inspector.stopRotating(); // a right button held through the unlock must not leave the look frozen
-      this.rearranging.cancel(); // a piece being carried goes back where it was
-      // A paid arcade play holds still (it goes on once the pointer is locked again) instead of being lost.
-      if (!this.arcade.hold() && !this.programPlay.hold()) this.stand();
+      // Pausing (Esc, a lost focus, an alt-tab) freezes the room, it undoes nothing: a piece carried stays in the hands
+      // (a panel opening puts it back, `openModal`), the seat stays taken, and a paid arcade play holds still (it goes on
+      // once the pointer is locked again) instead of being lost.
+      this.arcade.hold();
+      this.programPlay.hold();
       // Esc under pointer lock is eaten by the browser and unlocks instead: treat it as "close search / stay here".
       search?.close();
       this.goingOut.onUnlock();
@@ -136,6 +148,10 @@ export class Session implements SessionActions, SessionHost {
     return this.parts.player.isSeated;
   }
 
+  get sleepy(): boolean {
+    return this.parts.sleep?.sleepy ?? false;
+  }
+
   /** What the hands are on (a machine, a market copy, a box, a seat, nothing): the touch bar shows what works there. */
   get handsContext(): 'arcade' | 'market' | 'held' | 'seated' | 'room' | 'furnishing' {
     if (this.arcade.current || this.programPlay.holding) return 'arcade';
@@ -155,17 +171,22 @@ export class Session implements SessionActions, SessionHost {
     const { player, interactor, inspector } = this.parts;
     // The right button (docs/furnishing.md): pressed with free hands it takes the piece of furniture aimed at, while
     // carrying it puts it back; with a box in hand a drag turns the box (`Inspector`), a tap puts it in the shelf's gap aimed at.
-    let rightTap: { at: number; moved: number } | null = null;
+    // Free-handed, the piece is taken (or the carried one put back) on the button's release, and only if the mouse
+    // hardly moved: a reflex right-drag (to turn a box that has just gone back) never lifts the armchair behind it.
+    let rightTap: { at: number; moved: number; withBox: boolean } | null = null;
     doc.addEventListener('mousedown', (e) => {
       if (this.modalOpen || !player.isLocked) return;
       if (e.button === 2) {
-        rightTap = inspector.current ? { at: performance.now(), moved: 0 } : null;
-        if (!inspector.current) this.rearranging.grab();
+        const now = performance.now();
+        const withBox = inspector.current !== null;
+        rightTap = withBox || now - this.putBackAt > GRAB_AFTER_PUT_BACK_MS ? { at: now, moved: 0, withBox } : null;
         return;
       }
       if (e.button !== 0) return;
       if (this.rearranging.click()) return; // sets the carried piece down
-      if (!interactor.select() && inspector.isActive) this.putBack(); // clicked at nothing while holding
+      // A click at nothing does nothing, a box in hand included: it goes back with E (or a tap of the right button
+      // on a shelf's gap), never because a click on its console landed a few pixels off.
+      interactor.select();
     });
     doc.addEventListener('mousemove', (e) => {
       if (rightTap) rightTap.moved += Math.abs(e.movementX) + Math.abs(e.movementY);
@@ -174,8 +195,10 @@ export class Session implements SessionActions, SessionHost {
       if (e.button !== 2 || !rightTap) return;
       const tap = rightTap;
       rightTap = null;
-      if (this.modalOpen || !player.isLocked) return;
-      if (performance.now() - tap.at < RIGHT_TAP_MS && tap.moved < RIGHT_TAP_MOVE) this.rearranging.tapWithBox();
+      if (this.modalOpen || !player.isLocked || tap.moved >= RIGHT_TAP_MOVE) return;
+      if (tap.withBox) {
+        if (performance.now() - tap.at < RIGHT_TAP_MS) this.rearranging.tapWithBox();
+      } else if (!inspector.current) this.rearranging.grab();
     });
     // Right-click drag rotates the held box; the browser menu would steal the mouse.
     doc.addEventListener('contextmenu', (e) => e.preventDefault());
@@ -198,8 +221,12 @@ export class Session implements SessionActions, SessionHost {
   }
 
   putBack(): void {
+    if (this.parts.inspector.current) this.putBackAt = performance.now();
     this.hands.putBack();
   }
+
+  /** When a box last went back (ms, `performance.now`): a right press just after it does not take the furniture. */
+  private putBackAt = -Infinity;
 
   sit(seat: SeatLike): void {
     this.seating.sit(seat);
@@ -286,6 +313,14 @@ export class Session implements SessionActions, SessionHost {
     return this.parts.notices.tip(text, options);
   }
 
+  prompt(text: string, options?: PromptOptions): () => void {
+    return this.parts.notices.prompt(text, options);
+  }
+
+  slip(notice: SlipNotice): void {
+    this.parts.notices.slip(notice);
+  }
+
   read(card: ReadingNotice): void {
     this.parts.notices.read(card);
   }
@@ -313,11 +348,38 @@ export class Session implements SessionActions, SessionHost {
   /** A caption can change while looked at (a lamp switched, a price paid): it is re-read 4 times a second. */
   private onHover(item: Interactable | null): void {
     this.hovered = item;
+    // The stick and the finger slow down over something clickable (the mouse is not touched: `applyLook` is theirs).
+    this.parts.player.setAimFriction(item !== null);
     window.clearInterval(this.hoverTimer);
-    // A piece of furniture being carried (the crosshair picks nothing then) says whether it fits where it is aimed.
-    const reread = item || this.rearranging.carrying || this.rearranging.hovering;
+    // A piece of furniture being carried (the crosshair picks nothing then) says whether it fits where it is aimed; a
+    // box in hand keeps its keys line following what is aimed at (a shelf's gap).
+    const reread = item || this.rearranging.carrying || this.rearranging.hovering || this.parts.inspector.current;
     this.hoverTimer = reread ? window.setInterval(() => this.showHoverLabel(), 250) : undefined;
     this.showHoverLabel();
+  }
+
+  /** The holding prompt's text on screen now (null: none), so it is written again only when it changes. */
+  private holdingShown: string | null = null;
+
+  /**
+   * The keys that matter with a box of the player's in hand, after what is aimed at, as one prompt line (three groups at
+   * most): at a shelf's gap, shelving it there; on something clickable, only the way back (the caption says what a click
+   * does there); else open, turn over, put back. A market copy's keys are on its panel instead.
+   */
+  private holdingKeys(): string | null {
+    const { inspector, shelfPlacing } = this.parts;
+    if (!inspector.current || this.counter.holding || this.rearranging.carrying) return null;
+    const back = `[${actionKeyLabel('putBack')}] put back`;
+    if (shelfPlacing?.active && shelfPlacing.target) return `[${grabCap()}] shelve it here · ${back}`;
+    if (this.hovered) return back;
+    return `[${actionKeyLabel('openBox')}] open · [${actionKeyLabel('turnBox')}] turn over · ${back}`;
+  }
+
+  private showHoldingKeys(): void {
+    const keys = this.holdingKeys();
+    if (keys === this.holdingShown) return;
+    this.holdingShown = keys;
+    if (keys) this.prompt(keys, { id: 'holding-box', until: () => this.holdingShown !== keys || !this.parts.inspector.current });
   }
 
   private showHoverLabel(): void {
@@ -326,7 +388,8 @@ export class Session implements SessionActions, SessionHost {
     const item = this.hovered;
     // A movable piece under the crosshair says it can be taken (after what a click on it does, a seat's "sit").
     const movable = this.rearranging.hoverHint();
-    if (!item && !movable) {
+    this.showHoldingKeys();
+    if (!item && !movable && !this.parts.inspector.current) {
       window.clearInterval(this.hoverTimer); // set down with nothing under the crosshair: nothing more to re-read
       this.hoverTimer = undefined;
     }

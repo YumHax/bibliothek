@@ -21,6 +21,8 @@ import { patchShader, replaceChunk } from './materials/shaderPatch';
 import type { ZoneId } from './zoneIds';
 import { fnv1a, hashInts, random as liveRandom } from '@/random';
 import { dampFactor } from '@/math/damp';
+import { RoomReflection } from '@/graphics/RoomReflection';
+import { clearReflectionSource, setReflectionSource } from '@/graphics/Environment';
 
 /** Walls as seen from the default spawn: back = -z (shelves), front = +z, left = -x (TV), right = +x. */
 export type Wall = 'front' | 'back' | 'left' | 'right';
@@ -45,6 +47,11 @@ export interface Doorway {
    * hinge side: pick the side with the longer stretch of wall.
    */
   hinge?: 'left' | 'right';
+  /**
+   * How far the leaf opens, in degrees (default 165: pushed back against the wall). Less where the hinge side has
+   * no stretch of wall to lie along: the leaf then stands into the room, and the plan keeps that strip clear.
+   */
+  swing?: number;
   /** Id of the zone on the other side: the opening becomes a portal the view is culled through. */
   to?: ZoneId;
 }
@@ -87,6 +94,11 @@ export interface RoomFinish {
    * with `QUALITY.reflections` (a second render of the room while the floor is in view).
    */
   reflective?: number;
+  /**
+   * Where furniture once stood (zone-local centre and size, x by z, m): the varnish under it kept its gloss, so the floor
+   * remembers it in the light (`floorWearMap`). The flat's are uncle Félix's (docs/story.md).
+   */
+  footprints?: readonly { at: [number, number]; size: [number, number] }[];
 }
 
 /** Hemisphere sky colour in full daylight (warm, lamp-like) and at night (cool, moonlit), when no sky hue is given. */
@@ -112,7 +124,8 @@ const CEILING_BOUNCE_REACH = 3.2;
 const CEILING_DAYLIGHT = 0.08;
 /** The sky's part of the ambient: from night to full day, and the share left with every curtain drawn. */
 const SKYLIGHT_NIGHT = 0.12;
-const SKYLIGHT_DAY = 0.85;
+// The even part only: the windows pour the rest in with a falloff from the glass (`RoomWindow`'s daylight spot or area light).
+const SKYLIGHT_DAY = 0.68;
 const SKYLIGHT_DRAWN = 0.3;
 /** The lamp's bounce off the walls, added to the ambient while it is lit: more at night, less by day (the sky dominates). */
 const LAMP_BOUNCE_NIGHT = 0.23;
@@ -139,6 +152,11 @@ const OPAQUE_OFFSET = 0.02;
 const LAMP_SHADOW_BIAS_M = 0.005;
 /** The ceiling lamp's range (`PointLight.distance`) in multiples of the room's farthest corner from it (see `buildLights`). */
 const LAMP_RANGE = 2.5;
+/** The plain twin's share of the lamp (`low`): a little dimmer, its range cut at the room's corner. */
+const LAMP_TWIN_SHARE = 0.8;
+/** Height (m) the room's reflections are captured from, and the change of its light level that captures them again. */
+const REFLECTION_EYE = 1.5;
+const RECAPTURE_LEVEL = 0.12;
 
 /**
  * Floor, ceiling, four walls and the base lighting rig.
@@ -159,6 +177,15 @@ export class Room extends THREE.Group implements Updatable, OccupancyAware, Draw
   private readonly lampIntensity: number;
   private hemisphere!: THREE.HemisphereLight;
   private ceilingLamp!: THREE.PointLight;
+  /**
+   * `low` only: a plain twin of the ceiling lamp, lit while the culler has no shadowed slot left for
+   * it (two on `low`), so a lit room seen through a doorway is not dark. Its range ends at the room's
+   * farthest corner: without the shadow it would shine through the walls further out.
+   */
+  private lampTwin: THREE.PointLight | null = null;
+  /** What the room reflects (medium, high: `graphics/RoomReflection`), and the light level it was last captured at. */
+  private reflection: RoomReflection | null = null;
+  private reflectedLevel = -1;
   private lampShadow!: ShadowRefresh;
   private ceilingMat!: THREE.MeshStandardMaterial;
   /** 0: the ceiling's emissive falls off round the lamp (its bounce); 1: even (daylight from the windows). */
@@ -237,6 +264,30 @@ export class Room extends THREE.Group implements Updatable, OccupancyAware, Draw
     if (!occupied) setContactShadowStrength(1);
     this.lampShadow.setLive(occupied && this.lampOn);
     this.applyLighting();
+    // The room's own reflections while the player is in it (medium, high); the look's studio again once out.
+    const reflection = occupied ? this.ownReflection() : this.reflection;
+    if (reflection) {
+      if (occupied) setReflectionSource(reflection);
+      else clearReflectionSource(reflection);
+    }
+  }
+
+  /** Lets go of the room's captured reflections (the zone unloading it calls this). */
+  dispose(): void {
+    if (!this.reflection) return;
+    clearReflectionSource(this.reflection);
+    this.reflection.dispose();
+    this.reflection = null;
+  }
+
+  /** The room seen from its middle at eye height (`graphics/RoomReflection`), made the first time the player walks in; null on `low` or outside a scene. */
+  private ownReflection(): RoomReflection | null {
+    if (this.reflection || !QUALITY.postFx || !QUALITY.environment) return this.reflection;
+    let root: THREE.Object3D = this;
+    while (root.parent) root = root.parent;
+    if (!(root as THREE.Scene).isScene) return null;
+    this.reflection = new RoomReflection(root as THREE.Scene, (out) => this.localToWorld(out.set(0, REFLECTION_EYE, 0)));
+    return this.reflection;
   }
 
   /** Culled from view: the idle refresh waits (the room is hidden, its map would come out empty, the walls with it), and runs at once when drawn again. */
@@ -252,6 +303,8 @@ export class Room extends THREE.Group implements Updatable, OccupancyAware, Draw
    * Occupied: the lamp's regular refresh; unoccupied: now and then, and never while the lamp is off (nothing to see).
    */
   update(dt: number): void {
+    // `visible` is the culler's: read, never written.
+    if (this.lampTwin) this.lampTwin.intensity = this.ceilingLamp.visible ? 0 : this.lampLevel * this.lampIntensity * LAMP_TWIN_SHARE;
     const lampTarget = this.lampOn ? 1 : 0;
     if (this.lampLevel !== lampTarget) {
       const step = dt / (this.lampOn ? LAMP_WARM_SECONDS : LAMP_COOL_SECONDS);
@@ -262,6 +315,12 @@ export class Room extends THREE.Group implements Updatable, OccupancyAware, Draw
     this.settleWallDetail(dt);
     if (this.occupied) {
       setContactShadowStrength(this.ambientShare());
+      // A lamp switched, the curtains drawn, the day moved on: the room's reflections are captured again.
+      const level = this.lightLevel;
+      if (this.reflection && Math.abs(level - this.reflectedLevel) > RECAPTURE_LEVEL) {
+        this.reflectedLevel = level;
+        this.reflection.invalidate();
+      }
       return this.lampShadow.update(dt);
     }
     if (!this.zoneDrawn || !this.lampOn) return;
@@ -455,7 +514,7 @@ export class Room extends THREE.Group implements Updatable, OccupancyAware, Draw
     // `low` has no grain pass: the big plain surfaces dither themselves against banding.
     floorMat.dithering = !QUALITY.postFx;
     if (finish.floor !== 'carpet') {
-      const wear = floorWearMap(width, depth, this.doorSpots(), Math.round(width * 1000 + depth * 10));
+      const wear = floorWearMap(width, depth, this.doorSpots(), Math.round(width * 1000 + depth * 10), finish.footprints);
       if (wear) {
         floorMat.roughnessMap = wear;
         floorMat.roughness = Math.min(1, floorMat.roughness * 1.3);
@@ -617,12 +676,20 @@ export class Room extends THREE.Group implements Updatable, OccupancyAware, Draw
     ceilingLamp.shadow.bias = -LAMP_SHADOW_BIAS_M / far;
     // The normal offset in texels of the cube's faces, at the farthest corner (the coarsest texel it lays down).
     ceilingLamp.shadow.normalBias = normalBiasAt(reach, CUBE_FACE_HALF_ANGLE, QUALITY.shadowMapSize);
+    // A cube map's nine taps sit one texel apart by default: a table's shadow under a 512 or 1024 map
+    // steps. Spread over a few texels (same taps, same cost) the edge softens like a diffuser's.
+    ceilingLamp.shadow.radius = QUALITY.shadowMapSize >= 1024 ? 2.5 : 3;
     // Rendered once now, then only while occupied or on `update()`'s slow tick; unoccupied until told
     // (see `setOccupied`). The zone that places the room restricts what it renders to the zone's own layer.
     this.lampShadow = new ShadowRefresh(ceilingLamp);
     ceilingLamp.shadow.needsUpdate = true;
     this.ceilingLamp = ceilingLamp;
     this.add(ceilingLamp);
+    if (QUALITY.level === 'low') {
+      this.lampTwin = new THREE.PointLight(LAMP_LIGHT.led, 0, reach, 2);
+      this.lampTwin.position.copy(ceilingLamp.position);
+      this.add(this.lampTwin);
+    }
   }
 }
 

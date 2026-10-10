@@ -32,7 +32,7 @@ export abstract class RunMachine extends THREE.Group {
     this.run.setPaused(paused);
   }
 
-  showBonus(bonuses: readonly ArcadeBonus[]): void {
-    this.run.showBonus(bonuses);
+  showBonus(bonuses: readonly ArcadeBonus[], counted?: number): void {
+    this.run.showBonus(bonuses, counted);
   }
 }

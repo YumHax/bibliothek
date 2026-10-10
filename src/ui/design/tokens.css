@@ -18,7 +18,7 @@
   /* Printed paragraphs (the paper, a card to read): the print face is a display cut, too heavy for running text. */
   --ui-font-serif: Georgia, 'Iowan Old Style', 'Times New Roman', serif;
   /* A pen on paper: the to-do list, the journal, the first day's tips. */
-  --ui-font-hand: 'Segoe Print', 'Bradley Hand', 'Comic Sans MS', cursive;
+  --ui-font-hand: 'Caveat', 'Segoe Print', 'Bradley Hand', cursive;
   /* A word said in passing, comic-book style. */
   --ui-font-comic: 'Comic Sans MS', 'Chalkboard SE', system-ui, sans-serif;
   /* Figures and tables (the payout overlay, the till slip). */

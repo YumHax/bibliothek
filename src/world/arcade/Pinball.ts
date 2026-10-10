@@ -20,6 +20,7 @@ import { endCardNote, playAgainLine } from './EndCard';
 import { RunMachine } from './RunMachine';
 import { CHROME, type MachineDisplay, displayScreen, outOfOrderNote } from './machineParts';
 import { lcg } from '@/random';
+import { arcadeHint } from './arcadeHint';
 
 export interface PinballOptions {
   /** The table's name, on the backglass. Default METEOR ALLEY. */
@@ -122,7 +123,9 @@ export class Pinball extends RunMachine implements Furniture, Interactable, Upda
     this.name = 'Pinball';
     this.wiring = wiring;
     this.title = options.title ?? 'METEOR ALLEY';
-    this.game = { id: 'pinball', title: this.title, hint: 'A / D flip · hold Space to pull the plunger, let go to launch' };
+    this.game = { id: 'pinball', title: this.title, get hint() {
+        return arcadeHint('{leftRight} flip · hold {fire} to pull the plunger, let go to launch');
+      } };
     const random = lcg((options.seed ?? 1) * 6151);
     const color = options.color ?? 0x3a1f5c;
     const body = paint(color, 0.5);

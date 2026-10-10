@@ -35,7 +35,7 @@ export function wireStudent(deps: PerkDeps): void {
         if (!cart) return { line: S.homebrewNone };
         deps.collection.add({ ...cart.game, status: 'owned', acquired: { price: 0, where: 'a gift from Théo', day } });
         nudge('student', { warmth: 4, trust: 4, day, memory: `I burned you ${cart.game.title}`, memoryWeight: 12 });
-        deps.notices.reward({ title: `A homebrew cart: ${cart.game.title}`, detail: 'Burned by Théo, upstairs. It plays in the NES. It waits in your parcel.', big: true });
+        deps.notices.reward({ title: `A homebrew cart: ${cart.game.title}`, detail: 'Burned by Théo upstairs; it plays in the NES. In the parcel in the hall.', big: true });
         return { line: S.homebrew };
       },
     };

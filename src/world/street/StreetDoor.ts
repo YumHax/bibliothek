@@ -14,6 +14,7 @@ import type { ActivityAware } from '../zone/lifecycle';
 import type { ZoneId } from '../zoneIds';
 import type { ShopKind } from './streetPlan';
 import { SHOP_ZONE_OF } from '@/world/city/facades';
+import { CONFIRM_MS } from '@/ui/confirmTwice';
 
 interface StreetDoorOptions {
   width: number;
@@ -23,6 +24,11 @@ interface StreetDoorOptions {
   label: string;
   /** Asked on hover and click: why the door will not open right now (the shop is shut), or null to go. */
   guard?: () => { label: string; hint: string } | null;
+  /**
+   * While the guard says shut: a way to wait on the step until it opens (a short fade, the clock wound on), or null
+   * when it opens too far off for that. Offered on the first click, done on a second within `CONFIRM_MS`.
+   */
+  wait?: () => (() => void) | null;
 }
 
 /**
@@ -49,6 +55,8 @@ export class StreetDoor extends THREE.Group implements Furniture, Interactable, 
   readonly hitboxes: THREE.Object3D[];
   private readonly swing: DoorSwing;
   private readonly glint: HoverGlint;
+  /** A first click on a shut door offered to wait (`wait`): a second one while this is above 0 (s, run down in `update`) waits. */
+  private waitArmedFor = 0;
 
   constructor(private readonly options: StreetDoorOptions) {
     super();
@@ -96,6 +104,7 @@ export class StreetDoor extends THREE.Group implements Furniture, Interactable, 
   }
 
   update(dt: number): void {
+    if (this.waitArmedFor > 0) this.waitArmedFor = Math.max(0, this.waitArmedFor - dt);
     this.swing.update(dt);
   }
 
@@ -115,7 +124,14 @@ export class StreetDoor extends THREE.Group implements Furniture, Interactable, 
   activate(session: SessionActions): void {
     const blocked = this.options.guard?.();
     if (blocked) {
-      session.refuse(blocked.hint);
+      const wait = this.options.wait?.();
+      if (wait && this.waitArmedFor > 0) {
+        this.waitArmedFor = 0;
+        wait();
+      } else if (wait) {
+        this.waitArmedFor = CONFIRM_MS / 1000;
+        session.react(`${blocked.hint} Click again to wait on the step till it opens.`);
+      } else session.refuse(blocked.hint);
       return;
     }
     this.swing.open();

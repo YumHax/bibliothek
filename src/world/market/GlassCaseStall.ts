@@ -5,6 +5,8 @@ import { METAL, paint, timber } from '../materials/palette';
 import { GLASS, asGlass } from '../materials/glass';
 import { PROUD, proud } from '../props/joinery';
 import { centreOutRow, fitInRow, paintStallSign, plainCloth } from './stallPaint';
+import { WARM_STRIP, bakedGlow, poolTexture, washTexture } from '../showcase/glow';
+import { FLOOR, WALL, onSurface } from '../surface/layers';
 
 interface GlassCaseStallOptions {
   /** Text on the little sign on its post (a platform's name). */
@@ -45,6 +47,8 @@ const POST_X = WIDTH / 2 - FRAME / 2;
 const POST_Z = -DEPTH / 2 + FRAME / 2;
 const POST_TOP = 1.55;
 const SIGN_PX_PER_M = 1600;
+/** The LED strip under the front rail. */
+const STRIP_H = 0.008;
 
 const WOOD = timber(0x3a2418, 0.45);
 const PLINTH = timber(0x24160e, 0.55);
@@ -101,6 +105,25 @@ export class GlassCaseStall extends THREE.Group implements StallLike {
     this.add(boxMesh(INNER_W, TOP - FRAME - FLOOR_Y, 0.006, velvet, { y: (FLOOR_Y + TOP - FRAME) / 2, z: BACK_FACE - 0.003 }));
     this.add(boxMesh(INNER_W - 0.01, STEP_H, STEP_FRONT - BACK_FACE, velvet, { y: FLOOR_Y + STEP_H / 2, z: (STEP_FRONT + BACK_FACE) / 2 }));
 
+    // The case lit from inside, as a collector's case is (the showcase kit's strip, its light baked, no light of its
+    // own): a warm LED strip under the front rail, a wash down the back velvet, a pool on each tier.
+    const strip = boxMesh(INNER_W - 0.04, STRIP_H, 0.014, WARM_STRIP, { y: TOP - FRAME - STRIP_H / 2, z: DEPTH / 2 - FRAME - 0.012 });
+    strip.castShadow = false;
+    this.add(strip);
+    const washH = TOP - FRAME - STEP_TOP;
+    const wash = new THREE.Mesh(new THREE.PlaneGeometry(INNER_W, washH), onSurface(bakedGlow(0xffd9a0, 0.4, washTexture()), WALL.overlay, { depthWrite: false }));
+    wash.position.set(0, STEP_TOP + washH / 2, BACK_FACE + WALL.overlay.lift);
+    this.add(wash);
+    const pool = poolTexture();
+    for (const [y, z, d, opacity] of [[FLOOR_Y, (DEPTH / 2 - FRAME + STEP_FRONT) / 2, DEPTH / 2 - FRAME - STEP_FRONT, 0.3], [STEP_TOP, (STEP_FRONT + BACK_FACE) / 2, STEP_FRONT - BACK_FACE, 0.22]] as const) {
+      const glow = new THREE.Mesh(new THREE.PlaneGeometry(INNER_W - 0.02, d), onSurface(bakedGlow(0xffd9a0, opacity, pool), FLOOR.glowPool, { depthWrite: false }));
+      glow.rotation.x = -Math.PI / 2;
+      glow.position.set(0, y + FLOOR.glowPool.lift, z);
+      glow.raycast = () => {};
+      this.add(glow);
+    }
+    wash.raycast = () => {};
+
     // The glass: front, sides and top, see-through to the eye and to the crosshair.
     const glass = GLASS.clear;
     const panes = [
@@ -125,7 +148,7 @@ export class GlassCaseStall extends THREE.Group implements StallLike {
 
     this.traverse((obj) => {
       const mesh = obj as THREE.Mesh;
-      if (mesh.isMesh && mesh.material !== glass) mesh.receiveShadow = true;
+      if (mesh.isMesh && mesh.material !== glass && !(mesh.material as THREE.Material).transparent) mesh.receiveShadow = true;
     });
   }
 

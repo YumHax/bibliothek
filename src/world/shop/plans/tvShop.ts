@@ -12,6 +12,7 @@ const TV_ROOM = shopRoom(6, 5, { floor: 'concrete', walls: 0xc8ccc4, ceiling: 0x
 export const TV_SHOP: ShopPlan = {
   shop: 'electronics',
   accent: 0x2e5a8a,
+  look: 'tvShop',
   room: TV_ROOM,
   arrival: arrival(TV_ROOM.depth),
   exit: FRONT_EXIT,

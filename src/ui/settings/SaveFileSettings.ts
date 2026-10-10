@@ -18,6 +18,12 @@ interface SaveFileOptions {
   publicCoverUrl: (game: Game) => string | undefined;
 }
 
+/** This browser's progress as a file the player keeps (Save file, and the wipes' "Download a copy first"). */
+export function downloadSave(version: string): void {
+  const file = exportSave(version);
+  download(saveFileName(file), new Blob([JSON.stringify(file)], { type: 'application/json' }));
+}
+
 /** Whose collection the card names: the collector, plainly (the game has no player name). */
 const WHO = 'A collector’s shelves';
 
@@ -54,10 +60,7 @@ export function addSaveFileSettings(host: SettingsHost, options: SaveFileOptions
     });
   };
 
-  const saveButton = action('Download save', () => {
-    const file = exportSave(options.version);
-    download(saveFileName(file), new Blob([JSON.stringify(file)], { type: 'application/json' }));
-  });
+  const saveButton = action('Download save', () => downloadSave(options.version));
   const loadButton = action('Load a save…', () => picker.click());
   const saveGroup = group(saveButton, loadButton);
   saveGroup.append(picker);

@@ -1,6 +1,6 @@
 import { isAction } from '@/input/actions';
 import { actionKeyLabel } from '@/ui/keys';
-import { grabVerb, grabVerbCap, useVerb, useVerbCap } from '@/ui/verb';
+import { grabCap, grabVerb, grabVerbCap, useCap, useVerb } from '@/ui/verb';
 import type { CoreParts } from './SessionParts';
 import type { KeyRoute, SessionHost } from './SessionHost';
 import { whyBlocked as why, type BlockerWords } from '@/furnishing/blockerText';
@@ -102,7 +102,7 @@ export class Rearranging implements KeyRoute {
   ) {
     parts.furniture?.onHoverChange(() => {
       this.carryChanged();
-      if (parts.furniture?.hovered) this.tipOnce('movable', `${grabVerbCap()} what you bought for the flat to move it: it follows your aim on a grid, green where it fits. ${actionKeyLabel('planView')} plans the room from above.`);
+      if (parts.furniture?.hovered) this.tipOnce('movable', `${grabVerbCap()} bought furniture to move it; [${actionKeyLabel('planView')}] plans the room from above.`);
     });
     // A bookcase a rebuild took down while it was carried: the hands are free again.
     parts.furniture?.onCarryLost(() => this.end());
@@ -232,10 +232,8 @@ export class Rearranging implements KeyRoute {
     furniture.take(piece);
     this.parts.interactor.enabled = false;
     this.carryChanged();
-    this.host.tip(
-      `${useVerbCap()} to set it down where it shows green. ${actionKeyLabel('turnPiece')} and ${actionKeyLabel('turnPieceBack')} (or the wheel) turn it, ${actionKeyLabel('gridSnap')} lets it off the grid, ${actionKeyLabel('storePiece')} puts it away, ${grabVerb()} or ${actionKeyLabel('putBackPiece')} puts it back. Carry it through a door to take it to another room.`,
-      { id: 'carrying-furniture', until: () => !this.carrying },
-    );
+    // "Put back" is where it came from (the right button, E); storing it out of the room (X) is in the keys card (hold H).
+    this.host.prompt(`[${useCap()}] set down · [${actionKeyLabel('turnPiece')}] turn · [${grabCap()}] put back`, { id: 'carrying-furniture', until: () => !this.carrying });
     return true;
   }
 
@@ -257,7 +255,7 @@ export class Rearranging implements KeyRoute {
     const moved = furniture.lastMove;
     if (moved) this.remember(moved);
     this.end();
-    if (moved) this.tipOnce('undo-furniture', `${actionKeyLabel('undoMove')} undoes a move.`);
+    if (moved) this.tipOnce('undo-furniture', `[${actionKeyLabel('undoMove')}] undoes a move.`);
   }
 
   /** A tip told once this session. */
@@ -285,7 +283,7 @@ export class Rearranging implements KeyRoute {
     this.history.splice(0, this.history.length, ...this.history.filter((move) => move.piece !== piece));
     this.end();
     this.host.react(`${piece.name} put away`);
-    this.tipOnce('stored-furniture', 'The pause menu’s Stored furniture takes it out again, in any room of the flat.');
+    this.tipOnce('stored-furniture', 'Pause menu › Stored furniture takes it out again, in any room.');
   }
 
   /** A stored piece taken out, in front of the player, into the hands (the pause menu's "Stored furniture"). */
@@ -298,7 +296,7 @@ export class Rearranging implements KeyRoute {
     }
     this.parts.interactor.enabled = false;
     this.carryChanged();
-    this.host.tip(`${useVerbCap()} to set it down where it shows green, ${grabVerb()} to put it away again.`, { id: 'taken-out', until: () => !this.carrying });
+    this.host.prompt(`[${useCap()}] set down where it shows green · [${grabCap()}] put away`, { id: 'taken-out', until: () => !this.carrying });
   }
 
   /** The last move taken back: the piece goes where it stood before, if nothing stands there now. */

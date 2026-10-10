@@ -86,8 +86,8 @@ export class ClubVisit {
     const coins = Math.round(GATHERING_RULES.club.gift[this.honour.kind] * effectValue(CLUB_PERSON, 'clubBonus', 1));
     host.options.purse?.earnCoins(coins);
     host.coinsFrom(CLUB_VISITOR, coins);
-    host.options.notices?.reward({ title: 'The collectors’ club', detail: `${CLUB_VISITOR.name} came to see ${this.honour.name}, and left the club’s thanks.`, coins });
-    host.options.journal?.note('visit', `${CLUB_VISITOR.name} of the collectors’ club came to see ${this.honour.name}`);
+    host.options.notices?.reward({ title: 'The collectors’ club', detail: `${CLUB_VISITOR.name} came to see ${this.honour.name}.`, coins });
+    host.options.journal?.note('visit', `The club came to see ${this.honour.name}`, { weight: 'headline' });
     return fill(host.line('clubGift', GATHERING_LINES.clubGift), { coins });
   }
 

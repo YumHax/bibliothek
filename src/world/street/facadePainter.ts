@@ -351,6 +351,12 @@ function paintBay(p: Brush, random: () => number, style: FacadeStyle, s0: number
 /** The ground floor: a plinth (rusticated where the style is), then shops, a door, or the ground floor's own windows; posters and tags on bare wall; the name plates. */
 function paintGroundFloor(p: Brush, random: () => number, style: FacadeStyle, spec: FacadeSpec, width: number, bays: number, goods: readonly string[] | null): void {
   p.rect(0, 0, width, GROUND_FLOOR, shade(style.wall, 0.86));
+  // Built in 3D in front (the walked courtyard's): bare wall under its string course, nothing painted on it.
+  if (spec.builtGround) {
+    p.rect(0, GROUND_FLOOR - 0.12, width, GROUND_FLOOR, style.trim);
+    p.relief(0, GROUND_FLOOR - 0.12, width, GROUND_FLOOR, RELIEF.trim, ROUGH.stone);
+    return;
+  }
   p.rect(0, 0, width, 0.35, shade(style.wall, 0.62));
   p.relief(0, 0, width, 0.35, RELIEF.plinth, ROUGH.stone);
   if (style.rusticated) {

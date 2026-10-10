@@ -9,6 +9,7 @@ import type { MachineRunOptions } from './MachineRun';
 import type { ScoreTable } from './scoreTable';
 import { AlleySim, BALL_R, LANE_NEAR } from './alley/AlleySim';
 import { type AlleyModel, BACK_H, BACK_Z, WIDTH, buildAlleyModel } from './alley/alleyModel';
+import { arcadeHint } from './arcadeHint';
 
 export interface AlleyRollerOptions {
   /** Paint of the cabinet. Default a racing red. */
@@ -58,7 +59,9 @@ export class AlleyRoller extends TicketMachine {
     this.name = 'AlleyRoller';
     this.scores = wiring.scores;
     this.title = options.title ?? 'ALLEY ROLL';
-    this.game = { id: 'alley', title: this.title, hint: 'A / D aim · hold Space, let go at the power you want' };
+    this.game = { id: 'alley', title: this.title, get hint() {
+        return arcadeHint('{leftRight} aim · hold {fire}, let go at the power you want');
+      } };
     this.model = buildAlleyModel(this, options.color ?? 0xb8202a, this.title);
     this.note = this.model.note;
     this.strip = this.model.strip;

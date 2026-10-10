@@ -6,6 +6,7 @@ import { invisibleHitbox } from '../meshUtils';
 import { paint, timber } from '../materials/palette';
 import { part } from '../props/Prop';
 import { HoverGlint } from '../props/hoverGlint';
+import { PooledLight } from '../lighting/LightPool';
 
 interface RostrumOptions {
   /** The caption while looked at (what a click does now: bid N, you lead...). */
@@ -52,6 +53,10 @@ export class Rostrum extends THREE.Group implements Furniture, Interactable {
     this.gavel.position.set(0.05, HEIGHT, -0.1);
     this.add(this.gavel);
     this.glint = HoverGlint.of(rail);
+    // A warm light over the auctioneer and the rostrum (the room's `LightPool` lends it a real one near the eye).
+    const light = new PooledLight(0xffe2b0, 0.8, 3, 2);
+    light.position.set(0, 2.3, 0.6);
+    this.add(light);
     const hitbox = invisibleHitbox(WIDTH + 0.1, HEIGHT + 0.1, DEPTH + 0.1, { y: (HEIGHT + 0.1) / 2 });
     this.add(hitbox);
     this.hitboxes = [hitbox];

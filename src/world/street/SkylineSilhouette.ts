@@ -10,12 +10,14 @@ export const SKYLINE_TOP = 0.9;
 const BEACON_OVER = 150;
 /** How far the player walks before the silhouettes are worked out again (small: a tower's edge must not hop). */
 const REBAKE_AFTER = 0.5;
+/** B for a column on a tower's right-hand face (under 128, so never read as a beacon: the dome tests B > 0.5). */
+const RIGHT_FACE = 64;
 
 /**
  * The far city's towers (`city/SKYLINE`, the window view's) as the sky dome sees them from where the
  * player stands: a 1D texture round the horizon (u = azimuth), R the sine of the silhouette's top
  * elevation over `SKYLINE_TOP`, G which cladding (`TOWER_STYLES`) shows there, B a beacon on its top
- * there (A its blink's phase). Linearly filtered: R blends between columns, the rest is read at a column's centre. Worked out on the CPU
+ * there (255; A its blink's phase), else which face the column sees (0 left, `RIGHT_FACE` right). Linearly filtered: R blends between columns, the rest is read at a column's centre. Worked out on the CPU
  * (a few towers by a couple of thousand columns) whenever the player has walked `REBAKE_AFTER`
  * metres, so the dome's shader reads one texel per pixel.
  */
@@ -65,6 +67,9 @@ export class SkylineSilhouette {
         this.tops[i] = top;
         this.data[i * 4] = Math.round((top / SKYLINE_TOP) * 255);
         this.data[i * 4 + 1] = Math.round(((tower.style + 0.5) / TOWER_STYLES.length) * 255);
+        // Which of its two faces in view the column sees (B under a half: 0 the left one, `RIGHT_FACE` the
+        // right one), for the dome to light one by the sun and leave the other in shade.
+        this.data[i * 4 + 2] = off > 0 ? RIGHT_FACE : 0;
         this.data[i * 4 + 3] = 255;
       }
     }

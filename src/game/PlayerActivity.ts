@@ -13,6 +13,8 @@ interface ActivitySources {
   pastime(): boolean;
   /** The sas is being crossed (no curtain, the player carried: `world/airlock`). */
   crossing(): boolean;
+  /** A memory of Mémé's album is playing: the camera is in the past (`memories/MemoryFilm`). */
+  filming(): boolean;
 }
 
 /**
@@ -45,9 +47,9 @@ export class PlayerActivity {
     return this.sources.asleep() || this.sources.pastime();
   }
 
-  /** Away or dark: a trip behind the curtain, a night, a household beat. Nobody rings, nothing shuts them out. */
+  /** Away or dark: a trip behind the curtain, a night, a household beat, a memory. Nobody rings, nothing shuts them out. */
   get busy(): boolean {
-    return this.sources.travelling() || this.isAsleep;
+    return this.sources.travelling() || this.isAsleep || this.sources.filming();
   }
 
   /** Busy, or carried through the sas: the feet are not theirs, so nothing is saved or heard of them. */

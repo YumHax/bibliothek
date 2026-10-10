@@ -67,8 +67,8 @@ export class HallBoard extends Prop implements Interactable {
       session.react('Old drawing pins, and the ghost of a notice.');
       return;
     }
-    const text = notes.map((n) => [n.title.toUpperCase(), ...n.lines, n.signed ? `— ${n.signed}` : ''].filter(Boolean).join('\n')).join('\n\n');
-    session.read({ title: 'The notice board', text, look: 'note' });
+    // One card a note, "2 of 3" stamped on each, signed by whoever pinned it.
+    notes.forEach((n, i) => session.read({ title: n.title, text: n.lines.join('\n'), look: 'note', ...(n.signed ? { from: n.signed } : {}), of: { index: i + 1, count: notes.length } }));
     for (const note of notes) note.onRead?.();
   }
 

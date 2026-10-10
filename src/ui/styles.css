@@ -32,17 +32,28 @@
   body.menu-open .speech-layer,
   body.menu-open .subtitles,
   body.menu-open .reaction,
+  body.menu-open .slip,
+  body.menu-open .tip-card,
   body.menu-open .tip-board,
+  body.menu-open .hint-tray,
+  body.menu-open .prompt-line,
   body.menu-open .reading-stage,
   body.menu-open .game-panel,
   body.menu-open .hover-label,
   body.menu-open .crosshair,
   body.menu-open .wallet-hud { visibility: hidden; }
+  /*
+   * Watching from a seat with nothing pressed for a few seconds (`ui/HudIdle`): the crosshair, its caption and the
+   * prompt line fade almost out of the picture; any key, look or click brings them back at once.
+   */
+  body.hud-idle .crosshair,
+  body.hud-idle .hover-label,
+  body.hud-idle .prompt-line { opacity: 0.05; transition: opacity var(--dur-longer) ease; }
 
   /*
    * Shared HUD columns (`ui/hudSlot`): what several parts show in one place stacks there, `order` top to bottom.
-   * Under the crosshair: the caption (0), the reaction (1), the touch "rotating" badge (2). Top left: the wallet
-   * chip (0), the tips (1).
+   * Under the crosshair: the caption (0), the reaction (1), the slip and the touch "rotating" badge (2), the tip card
+   * (3). Top left: the wallet chip (0), the first day's slips (1).
    */
   .hud-slot { position: fixed; display: flex; flex-direction: column; pointer-events: none; }
   .hud-slot--crosshair { left: 0; right: 0; top: calc(50% + 1.5rem); align-items: center; gap: 0.45rem; }
@@ -50,7 +61,7 @@
    * The reaction keeps its place while it is read: with no caption in the column (nothing looked at any more, or the
    * caption moved to the top edge), an empty row the caption's height stands in for it, so the line does not jump up.
    */
-  .hud-slot--crosshair:has(> .reaction:not([hidden])):not(:has(> .hover-label:not([hidden]):not(.hover-label--edge)))::before {
+  .hud-slot--crosshair:has(> :is(.reaction, .slip, .tip-card):not([hidden])):not(:has(> .hover-label:not([hidden]):not(.hover-label--edge)))::before {
     content: '';
     order: 0;
     height: var(--caption-height);
@@ -78,6 +89,19 @@
   .crosshair--active { opacity: 1; scale: 1.3; }
   .crosshair.crosshair--out { opacity: 0; transition-duration: var(--dur-tap); }
   @keyframes crosshair-in { from { opacity: 0; } }
+  /* A tip card came in under it: a ring widens once from the crosshair, so the eye drops to the card (`TipBoard`). */
+  .crosshair--pulse::after {
+    content: '';
+    position: absolute;
+    inset: -2px;
+    border-radius: 50%;
+    border: 1px solid var(--tint-75);
+    animation: crosshair-pulse var(--dur-longer) ease-out forwards;
+  }
+  @keyframes crosshair-pulse {
+    from { opacity: 0.9; scale: 1; }
+    to   { opacity: 0; scale: 3.4; }
+  }
 
   /* What the crosshair is on: the name, and the verb after a key cap for the device in hand (`Overlay.setHoverLabel`). First in the crosshair's column. */
   .hover-label {
@@ -149,12 +173,17 @@
   body.input-touch .hud-slot--top-left { top: calc(var(--touch-bar-bottom, 0px) + 0.5rem); }
   body.alert-up .hover-label--edge { visibility: hidden; }
 
+  /*
+   * Anchored from the top, not centred: the press's card arrives after the rest and grows the panel downwards
+   * instead of re-centring it (everything jumped up). Capped to the view; a long description stops at six lines.
+   */
   .game-panel {
     position: fixed;
-    top: 50%;
+    top: 12vh;
     right: 3rem;
-    transform: translateY(-50%);
     width: min(22rem, 40vw);
+    max-height: 76vh;
+    overflow: hidden;
     padding: var(--sp-5) 1.75rem;
     border-radius: var(--ui-radius);
     background: var(--ui-panel);
@@ -167,14 +196,15 @@
   /* Put down: a short fade before it hides (`GamePanel.hide`). */
   .game-panel--closing { opacity: 0; }
   @keyframes panel-in {
-    from { opacity: 0; transform: translateY(-50%) translateX(1rem); }
-    to   { opacity: 1; transform: translateY(-50%); }
+    from { opacity: 0; transform: translateX(1rem); }
+    to   { opacity: 1; transform: none; }
   }
   .game-panel h2 { margin: 0 0 var(--sp-4); font-size: 1.4rem; line-height: 1.2; }
   .game-panel dl { display: grid; grid-template-columns: auto 1fr; gap: 0.35rem var(--sp-4); margin: 0; font-size: var(--fs-5); }
   .game-panel dt { color: var(--ui-text-dim); }
   .game-panel dd { margin: 0; }
   .game-panel p { margin: var(--sp-4) 0 0; font-size: var(--fs-5); line-height: 1.45; opacity: 0.9; }
+  .game-panel p:not(.game-panel__note) { display: -webkit-box; -webkit-line-clamp: 6; line-clamp: 6; -webkit-box-orient: vertical; overflow: hidden; }
   .game-panel footer { margin-top: 1.25rem; font-size: var(--fs-3); color: var(--ui-text-dim); }
   .game-panel .game-panel__note { padding: 0.5rem 0.7rem; border-left: 3px solid var(--ui-accent); background: var(--ui-accent-soft); opacity: 1; }
 }

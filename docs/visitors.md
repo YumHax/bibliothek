@@ -105,7 +105,8 @@ held, the paper's account, the photos.
 - **Open house** (`OpenHouse`): the phone's "Ring THE GAMING WEEKLY", from `minGames` games, every `everyDays`, for
   `aheadDays` later; that morning at home a word says it is today. From `from` to `until`, `waves` waves of
   `perWave` strangers (never more than `inFlat` in the flat, the next once the last is in and the player is home):
-  each drops `entry` coins at the door, makes `stops` stops (the shelves, the window, the displays with something in
+  each drops `entry` coins at the door (one more for every `entryEvery` games past `minGames`, at most `entryMax`: a
+  fuller flat draws a better crowd), makes `stops` stops (the shelves, the window, the displays with something in
   them: `Showcases.stops`), gasps at a rare copy (`isRare`: a grail, a first print, 40 000 monthly views), goes. The
   account (`OpenHouseAccount`) is read the next day at home as THE GAMING WEEKLY's article, and the market records an
   `openHouse` deed (`REPUTATION.points`).

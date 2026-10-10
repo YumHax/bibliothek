@@ -168,6 +168,11 @@ export class SearchBar {
     this.selectListeners.emit(result.game);
   }
 
+  /** A game picked elsewhere (the collection list's "Show on shelf"): found on the shelves as if searched here. */
+  pick(game: Game): void {
+    this.selectListeners.emit(game);
+  }
+
   private onKeyDown = (e: KeyboardEvent): void => {
     switch (e.code) {
       case 'ArrowDown':

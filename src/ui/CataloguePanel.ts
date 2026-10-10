@@ -86,9 +86,24 @@ export class CataloguePanel extends SheetPanel {
     if (sale) this.setStatus(`Sale today: ${Math.round((1 - sale) * 100)}% off every new copy.`);
   }
 
-  /** Today's stalls may have changed since the last look: the results read again. */
+  /** Today's stalls may have changed since the last look: the results read again; nothing searched yet, a way in. */
   protected render(): void {
     if (this.lastResults.length) this.renderResults(this.lastResults);
+    else if (this.query.length < 2) this.renderIdle();
+  }
+
+  /** Before a search: what to do, and the wishlist's titles to look up in one press. */
+  private renderIdle(): void {
+    const wished = this.store.games.filter((g) => g.status === 'wishlist').slice(0, 8);
+    paint(
+      this.body,
+      html`${emptyState('Type a title to leaf through the catalogue: every game, new and complete, sent by post.')}
+        ${wished.length
+          ? html`<div class="catalogue__suggest"><p class="catalogue__meta">On your wishlist</p>${wished.map(
+              (g) => html`<button type="button" class="ui-btn ui-btn--sm" data-action="suggest" data-title="${g.title}">${g.title}</button>`,
+            )}</div>`
+          : ''}`,
+    );
   }
 
   /** Today's market day (the sale's calendar). */
@@ -111,6 +126,27 @@ export class CataloguePanel extends SheetPanel {
     const row = Number(el.dataset.result);
     if (action === 'buy') this.buy(row);
     else if (action === 'order') void this.orderUsed(row, el as HTMLButtonElement);
+    else if (action === 'want') this.toggleWant(row);
+    else if (action === 'suggest' && el.dataset.title && this.searchInput) {
+      this.searchInput.value = el.dataset.title;
+      this.searchInput.focus();
+      void this.runSearch(el.dataset.title, undefined);
+    }
+  }
+
+  /** "Want it": on the wishlist (its card waits on the shelf, the stalls look out for it), or off it again. */
+  private toggleWant(i: number): void {
+    const r = this.lastResults[i];
+    if (!r) return;
+    const game = this.gameOf(r);
+    if (this.store.owns(game.id)) return;
+    if (this.store.isWanted(game.id)) {
+      this.store.dropWish(game.id);
+      this.setStatus(`"${game.title}" is off your wishlist.`);
+    } else {
+      this.store.want(game);
+      this.setStatus(`"${game.title}" is on your wishlist: its card waits on your shelf, and the stallholders will look out for it.`, 'ok');
+    }
   }
 
   protected override onSearch(query: string, platform: PlatformId | undefined): void {
@@ -121,7 +157,7 @@ export class CataloguePanel extends SheetPanel {
     const seq = ++this.searchSeq;
     if (query.length < 2) {
       this.lastResults = [];
-      paint(this.body, html``);
+      this.renderIdle();
       return;
     }
     paint(this.body, emptyState('Leafing through the catalogue…'));
@@ -133,7 +169,8 @@ export class CataloguePanel extends SheetPanel {
     } catch (err) {
       if (seq !== this.searchSeq) return;
       this.lastResults = [];
-      paint(this.body, emptyState(`The catalogue is unavailable: ${String(err)}`));
+      console.warn('[catalogue] the index could not be read', err);
+      paint(this.body, emptyState('The catalogue isn’t answering. Try again in a moment.'));
     }
   }
 
@@ -164,7 +201,7 @@ export class CataloguePanel extends SheetPanel {
           cover: coverImg(this.options.coverUrl?.(game), game),
           title: r.title,
           metas: [stall && html`<span class="catalogue__stall">${stallNote(stall)}</span>`, r.region, getPlatform(r.platform).shortName],
-          tail: html`${this.rowPrice(game, price, views, !known)}${this.buttonHtml(i, game.id)}${this.orderButtonHtml(i, game.id)}`,
+          tail: html`${this.rowPrice(game, price, views, !known)}${this.wantButtonHtml(i, game.id)}${this.buttonHtml(i, game.id)}${this.orderButtonHtml(i, game.id)}`,
         });
       })}`,
     );
@@ -179,19 +216,30 @@ export class CataloguePanel extends SheetPanel {
     });
   }
 
-  /** The row's button: owned, still being priced, too dear, armed, or buy. */
-  private buttonHtml(i: number, id: string): Html {
-    const [label, enabled] = this.buttonState(i, id);
-    const armed = this.buying.isArmed(String(i));
-    return html`<button type="button" class="ui-btn ui-btn--primary${armed ? ' sell__armed' : ''}" data-action="buy" data-result="${i}"${attr('disabled', !enabled)}>${armed ? `${formatCoins(this.prices.get(i) ?? 0)}?` : label}</button>`;
+  /** "Want it" beside a game the player has not got: on the wishlist or not (a press says what it did). */
+  private wantButtonHtml(i: number, id: string): Html | '' {
+    if (this.store.owns(id)) return '';
+    const wanted = this.store.isWanted(id);
+    return html`<button type="button" class="ui-btn" data-action="want" data-result="${i}" aria-pressed="${wanted}">${wanted ? 'Wanted' : 'Want it'}</button>`;
   }
 
-  private buttonState(i: number, id: string): [label: string, enabled: boolean] {
-    if (this.store.owns(id)) return ['Owned', false];
-    if (isGrail(id)) return ['Market only', false];
-    if (!this.settled.has(i)) return ['Pricing…', false];
-    if (!this.wallet.canAfford(this.prices.get(i) ?? Infinity)) return ['Too dear', false];
-    return ['Buy', true];
+  /**
+   * The row's button: owned, still being priced, out of reach (still focusable: a press says why), armed, or buy. Out
+   * of reach reads "N short" like the other counters.
+   */
+  private buttonHtml(i: number, id: string): Html {
+    const [label, state] = this.buttonState(i, id);
+    const armed = this.buying.isArmed(String(i));
+    return html`<button type="button" class="ui-btn ui-btn--primary${armed ? ' sell__armed' : ''}" data-action="buy" data-result="${i}"${attr('disabled', state === 'off')} aria-disabled="${state === 'why'}">${armed ? `${formatCoins(this.prices.get(i) ?? 0)}?` : label}</button>`;
+  }
+
+  private buttonState(i: number, id: string): [label: string, state: 'on' | 'off' | 'why'] {
+    if (this.store.owns(id)) return ['Owned', 'off'];
+    if (isGrail(id)) return ['Market only', 'why'];
+    if (!this.settled.has(i)) return ['Pricing…', 'off'];
+    const price = this.prices.get(i) ?? Infinity;
+    if (!this.wallet.canAfford(price)) return [`${formatCoins(price - this.wallet.coins)} short`, 'why'];
+    return ['Buy', 'on'];
   }
 
   /** A fame lookup landed: the row shows its real price and whether the wallet still stretches to it. */
@@ -267,9 +315,17 @@ export class CataloguePanel extends SheetPanel {
     if (!r) return;
     const game = this.gameOf(r);
     if (this.store.owns(game.id)) return;
+    if (isGrail(game.id)) {
+      this.setStatus(`"${game.title}" is out of print: only ever found at the market. “Want it” and the stallholders will look out for it.`);
+      return;
+    }
     const price = this.prices.get(i);
     if (price === undefined || !this.settled.has(i)) {
       this.setStatus('Still working out the price of that one.', 'error');
+      return;
+    }
+    if (!this.wallet.canAfford(price)) {
+      this.setStatus(`You’re ${formatCoins(price - this.wallet.coins)} short for "${game.title}". The arcade pays in tickets, the prize counter swaps them for coins.`);
       return;
     }
     if (!this.buying.press(String(i))) {

@@ -57,8 +57,13 @@ up as it is painted (`adopt`), from the same seed as on `low`.
   side wall's plane (Park Street on one side, the courtyard on the other).
 - `paintView()` (in `Outdoors.ts`) runs the painters in order and is what the headless check calls.
 - **One sky.** `city/skyGlsl` (`SKY_CHUNK`) is the GLSL both pictures share: the sun's halo and disc colour, the
-  moon's crescent (`MOON_SHADOW_OFFSET`, in moon radii) and halo, the overcast's cover curve (`skyCloudSheet`). The
-  panes and the street's dome (`street/skyDomeShader`, smaller discs) include it; change the sky there.
+  moon's crescent (`MOON_SHADOW_OFFSET`, in moon radii) and halo, the overcast's cover curve (`skyCloudSheet`), and how
+  a cloud is lit (`skyCloudLight`: darker under its thick parts, a silver lining towards the sun, the sunset's glow on
+  its underside). The panes and the street's dome (`street/skyDomeShader`, smaller discs) include it; change the sky
+  there. The dome's own: stars as round points of one to two pixels (blue, white or warm, twinkling, drowned low down
+  by the city's glow); the far city's and the backdrop blocks' windows fade to their average lit share under two pixels
+  (no shimmer as the player turns); the low roofline has pitched zinc roofs and chimney stacks; the towers show two
+  faces, the one turned to the sun lit (with a glint off the glass), the other in shade (`SkylineSilhouette`'s B).
 - `Sheet`: five 4096 x 1344 canvases in azimuth x elevation band space (+40° down to -80°, the pavement under the window);
   on high quality (and a GPU taking 8192-wide textures, `sceneColorScale`) the day colours are painted twice as fine
   (`Sheet.colorScale`: the context is scaled once, painters keep scene texels; a pixel copy, `getImageData`, multiplies
@@ -127,6 +132,9 @@ a cornice and two bays of windows per storey lit by the same curfew rules. Rays 
 
 ## Night
 
+- The clock (and the weather's game time) moves only while the player is in the room: under the pause menu, a panel, the
+  start card or the opening film it stands still (`Sky.holdClock`, wired in `bootstrap/session.ts`); the sky's own motion
+  (gusts, the rain, the clouds) goes on.
 - Sun: `DayNight` follows today's real sunrise and sunset (`solar.ts`, NOAA equations, no network) for the time zone's city
   (`localPlace`, a table of ~25 zones, else 50°N on the zone's meridian; `?lat=` overrides the latitude). `sunHeight` is
   0 at sunrise/sunset, 1 for a sun 60° up (a winter noon peaks ~0.3 in Berlin), -1 at the night's lowest point.
@@ -318,7 +326,9 @@ up). Starts on the first click or key press.
 - Props: bare metal is `street/metals` `bareMetal` (metalness 1, roughness broken by world-space noise), painted
   metal is paint (0); the shelter, benches, bins and kiosk are rounded boxes, the hedge a lumpy clipped run, the cars'
   bodies 3-step bevels with creased normals on 20-segment lathe tyres (`carModel`).
-- Traffic: driving cars throw a headlight pool on the road at night (additive, alpha kept) and their lamps streak the
+- Traffic: five car shapes (`carModel`: hatchback, city car, saloon, estate, panel van; the window view paints the
+  city car as a hatchback and the estate as a saloon), their paint clear-coated on medium and high with the road's
+  grime up the sills (`carFleet` `carPaint`). Driving cars throw a headlight pool on the road at night (additive, alpha kept) and their lamps streak the
   wet road (`WetGround` `cars`). Cars and riders by quality (`carsByQuality`, `ridersByQuality`, `twoWheelers`), 18 % taxis (`city/traffic` `TAXI`, lit
   roof sign), busier in the rush hours (`city/traffic` `rushAt`; the window view's traffic does not read it yet), now and
   then an ambulance, a police car or a fire engine (`STREET_PLAN.ambulance`, `police`, `fireEngine`) that the cars pull
@@ -328,6 +338,23 @@ up). Starts on the first click or key press.
   wind band and whistle; `audio/StreetCues` plays wings and coos (pigeons), barks (the crowd's dog), the crossing's
   beeper, shutter rattles and the sirens; `StreetAmbience` hears thunder at the open air's level in the street (`open`)
   and as through a pane in the market hall (`underRoof`).
+- Lamps without a real light: `StreetLamps` lends real point lights to the nearest few only; the next `WASH_SLOTS` (12)
+  light the facades, the trees and the cars round them through an analytic term (`street/lampWash`, `LampWash.over`
+  from `buildStreetFixtures`, medium and high), so the walls stay warm all down the street at night.
+- Trees (`StreetTrees`): smooth-shaded crowns (normals leaning to the crown's middle, `SOFT_NORMALS`) under alpha-tested
+  leaf cards that break their outline (`LEAF_CARDS`), the sun wrapping round them and shining through their rim from
+  behind; past the sun's shadow map each throws a soft ground shadow away from the sun (`farShadows`, `FAR_SHADE`,
+  with `StreetLighting.far`). The park's pond ripples with the wind and rings with the rain (`rippledWater`); long
+  grass grows along its paths and the hedge's foot (`street/GrassTufts`).
+- Far people: past the 3D crowd's draw distance, flat figures walk both pavements down the street (`FarWalkers`,
+  `STREET_PLAN.crowd.far`; a cylindrical billboard from a small atlas in the window view's colours, dithered in past
+  the crowd).
+- The air (`graphics/heightFog`): the street's fog is patched to lie low (the dawn mist thick at the feet, half as thick
+  9 m up, as the panes' `fogAt`) and to brighten round the sun; `StreetLighting` sets it while the player is out here
+  (the ground under the roof's rig is `groundY`), plain fog everywhere else.
+- Facades: walked rows are painted at least at 20 px/m (`city/facades` `walkedFacades`: the stretch the roadworks
+  opened, its windows in 3D and its fronts in the kit); balconies seen close stand on stepped stone consoles and their
+  rails carry a band of wrought rings (`FacadeRelief` `CONSOLE`, `WROUGHT`).
 
 ## Views onto the street (`src/world/outlook/`)
 
@@ -358,7 +385,8 @@ player walks into the room (`prefetch`, from `setOccupied`) or a pane is first d
 the ground and park, the facades, the fronts, the fixtures, the rest), compiled out of sight a few pieces per idle
 moment (`OutlookContents.parts`, `COMPILE_SLICE_MS`; without the driver's parallel compile each slice's programs are
 linked there and then, not on the first draw), and ticked only while a pane was drawn in the last 1.5 s; the glass
-shows a pale sky until then.
+shows a pale sky until then, and the view comes through it over `REVEAL_S` (0.4 s) once ready (a veil over the fresh
+picture, again after a free).
 
 **One view per building, leased** (`sharedOutlook`). Every window looking out of our building shares the view
 `'home'` (`leaseHomeOutlook`): the flat's rooms (`RoomWindow`'s `outlook: homeOutlook(sky.outdoors)` in `layout.ts`,

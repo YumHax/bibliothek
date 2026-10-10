@@ -64,7 +64,7 @@ interface PlanViewDeps {
 
 /**
  * PLANNING VIEW (docs/furnishing.md): the room seen from just under its ceiling, straight down, and a cursor the
- * mouse moves over it (the pointer stays locked, so leaving is never the pause menu). A click takes the piece under
+ * mouse moves over it (the pointer stays locked; L leaves, and Esc, which the browser takes, is the pause menu). A click takes the piece under
  * the cursor and a click sets it down; the carrier does the rest as it does on foot (the grid, the footprint, what
  * is in the way), aimed by the cursor (`FurnitureCarrier.setAim`). Only floor pieces are taken from above: a picture
  * or a hanging plant is moved from the room. Pendant lamps and whatever hangs near the ceiling are hidden meanwhile.
@@ -163,8 +163,6 @@ export class PlanView implements Updatable {
     this.hideHung(zone);
     // The player's feet stay where they stood: nothing is set down there.
     carrier.setAim({ ray: () => this.aimRay(), reach: REACH, feet: () => this.savedPosition });
-    const k = actionKeyLabel;
-    this.keys.innerHTML = `<strong>Planning</strong> · click a piece to take it · click to set down · wheel or ${k('turnPiece')} / ${k('turnPieceBack')} turns · ${k('gridSnap')} grid · ${k('storePiece')} puts away · right-click or ${k('putBackPiece')} puts back · ${k('planView')} leaves`;
     const rect = this.deps.canvas.getBoundingClientRect();
     this.cursorAt.set(rect.width / 2, rect.height / 2);
     this.placeCursor();
@@ -214,7 +212,9 @@ export class PlanView implements Updatable {
     else if (isAction(code, 'gridSnap')) carrier.snapping = !carrier.snapping;
     else if (isAction(code, 'storePiece') && carrier.piece && !carrier.store()) this.deps.say?.('That one cannot be put away.');
     else if (isAction(code, 'setDown')) this.primary();
-    else if (isAction(code, 'putBackPiece') || code === 'Escape') {
+    // Esc reaches the page only with the keyboard held (Settings > Display > Full screen); otherwise the browser takes it
+    // and lets go of the mouse, and `update` closes the view.
+    else if (isAction(code, 'putBackPiece') || isAction(code, 'close')) {
       if (carrier.piece) carrier.cancel();
       else this.close();
     }
@@ -342,10 +342,24 @@ export class PlanView implements Updatable {
     this.outline.object.visible = true;
   }
 
+  /**
+   * The strip's keys for the state the view is in (three groups at most, docs/notices.md "Prompt"): with free hands how to
+   * take a piece and leave, while a piece is carried how to set it down, turn it and put it back. The grid (G) and putting
+   * away (X) are in the keys card (hold H) and the help.
+   */
+  private keysFor(carrying: boolean): string {
+    const k = actionKeyLabel;
+    return carrying
+      ? `<strong>Planning</strong> · click to set down · wheel or ${k('turnPiece')} turns · right-click puts back`
+      : `<strong>Planning</strong> · click a piece to take it · ${k('planView')} leaves`;
+  }
+
   /** The strip's second line: what is carried and whether it fits, or what is under the cursor. */
   private refresh(): void {
     const { carrier } = this.deps;
     const piece = carrier.piece;
+    const keys = this.keysFor(piece != null);
+    if (this.keys.innerHTML !== keys) this.keys.innerHTML = keys;
     if (piece) {
       const grid = carrier.snapping ? '' : ' · free';
       this.status.textContent = carrier.fits ? `${piece.name} · click to set down${grid}` : `${piece.name}: ${carrier.aiming ? why(carrier.blocker) : 'aim at the floor'}${grid}`;

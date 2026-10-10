@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { createCanvas, toTexture, canvasTexture, repeatTexture } from '@/covers/generated/canvasUtils';
 import { paintOnce } from './materials/paintedTiles';
+import { bumpFinish } from './materials/bumpFinish';
 import { lcg } from '@/random';
 
 /** Metres of floor covered by one tile of the texture: two slabs each way, so the joints tile seamlessly. */
@@ -24,7 +25,8 @@ export function concreteMaterial(floorWidth: number, floorDepth: number): THREE.
     // Joints line up with the room's centre: half a tile's offset puts a slab edge on the origin.
     t.offset.set(0.5 - floorWidth / TILE_M / 2, 0.5 - floorDepth / TILE_M / 2);
   }
-  return new THREE.MeshStandardMaterial({ map, bumpMap, bumpScale: 0.4, roughness: 0.92, metalness: 0 });
+  // Trowelled, then worn: the slab's sheen wanders a little, the saw cuts and cracks (low in the bump) are dead matt.
+  return bumpFinish(new THREE.MeshStandardMaterial({ map, bumpMap, bumpScale: 0.4, roughness: 0.85, metalness: 0 }), { seamRoughness: 1, seamRange: [0.2, 0.4], mottle: 0.12 });
 }
 
 /** The colour and bump tiles, repeat-wrapped. */

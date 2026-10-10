@@ -37,6 +37,18 @@ export function keyOrUse(key: string): string {
   return lastDevice() === 'keyboard' ? `${key} or click` : useVerb();
 }
 
+/** The device's "use" as a key cap for a prompt line: `[Click]`, `[A]`, `[Tap]`. */
+export function useCap(): string {
+  const device = lastDevice();
+  return device === 'gamepad' ? 'A' : device === 'touch' ? 'Tap' : 'Click';
+}
+
+/** The device's "take it to move it" as a key cap: `[Right-click]`, `[B]`, `[Hold]`. */
+export function grabCap(): string {
+  const device = lastDevice();
+  return device === 'gamepad' ? 'B' : device === 'touch' ? 'Hold' : 'Right-click';
+}
+
 /** `useVerbOn(what)` at the start of a sentence: "Click a machine", "Press A on a machine", "Tap a machine". */
 export function useVerbOnCap(what = 'it'): string {
   return capitalise(useVerbOn(what));

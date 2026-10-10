@@ -32,6 +32,9 @@ export const SALEROOM_PLAN = {
   /** Coming in: just inside the door, facing the rostrum. */
   arrival: { at: [2.4, HALF_DEPTH - 0.85] as [number, number], yaw: 0 },
 
+  /** Real lights lent to the lot's and the rostrum's glows (`LightPool`): the far end lit, not just the chairs. */
+  glowLights: 2,
+
   /** The room's light: a pendant over the chairs; its switch by the door. */
   light: { ceiling: [0, -0.3] } as Placement,
   lightSwitch: { wall: 'front', along: 1.6, y: 1.1 } as Placement,

@@ -60,11 +60,11 @@ function showCollection(deps: RivalryDeps): { line: string } {
     title: 'Victor’s collection',
     text: 'A third-floor flat by the river, every wall shelved floor to ceiling, the boxes in archival sleeves, a ladder on a rail. Eleven thousand games, catalogued in his father’s handwriting and then his own. He talks for two hours and you do not notice them pass. At the door he says it is the first time anyone has looked at it properly.',
     effect: gift ? `${gift.title}: a duplicate of his, for you.` : 'He has nothing you don’t have: he says that is a first, too.',
-    look: 'letter',
+    look: 'note',
   });
   if (gift) {
     collection.add({ ...gift, status: 'owned', condition: 'complete', acquired: { price: 0, where: 'a gift from Victor', day } });
-    notices.reward({ title: `A gift from Victor: ${gift.title}`, detail: 'One of his duplicates. It waits in your parcel in the hall.', big: true });
+    notices.reward({ title: `A gift from Victor: ${gift.title}`, detail: 'One of his duplicates. In the parcel in the hall.', big: true });
   }
   nudge(VICTOR, { warmth: 5, trust: 5, why: 'showed you his collection', day, memory: 'you came to see my collection', memoryWeight: 20 });
   return { line: 'Tuesday, seven o’clock. Bring nothing. Well… bring an opinion.' };

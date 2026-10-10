@@ -261,17 +261,31 @@ function finish(ctx: CanvasRenderingContext2D, ribbedNeck: boolean, random: () =
   ctx.putImageData(image, 0, 0);
 }
 
+/** The pattern of a `paintCloth` tile. */
+type ClothPattern = 'plain' | 'stripes' | 'check' | 'denim';
+
+/** Blue trousers are jeans: a denim weave with the wear lighter down the front of the leg (`paintCloth` 'denim'). */
+export function isDenim(color: number): boolean {
+  const r = (color >> 16) & 255;
+  const g = (color >> 8) & 255;
+  const b = color & 255;
+  return b > r + 14 && b >= g;
+}
+
 /**
  * A small tile for sleeves, trouser legs and hoods: the colour with the same weave, and for a
- * striped or checked top its pattern, so a striped tee has striped sleeves.
+ * striped or checked top its pattern, so a striped tee has striped sleeves. Denim is one tile round
+ * the whole leg (not repeated): a twill with pale threads in it and the front worn lighter, more so
+ * mid-thigh and at the knee (a leg's u = 0 is its front).
  */
-export function paintCloth(color: number, accent: number, pattern: 'plain' | 'stripes' | 'check'): THREE.CanvasTexture {
+export function paintCloth(color: number, accent: number, pattern: ClothPattern): THREE.CanvasTexture {
   // A plain tile never shows its accent: leave it out of the key so it is shared more.
   const key = ['cloth', color, pattern === 'plain' ? '' : accent, pattern].join('|');
   return cachedTexture(key, () => cloth(color, accent, pattern, lcg(fnv1a(key))));
 }
 
-function cloth(color: number, accent: number, pattern: 'plain' | 'stripes' | 'check', random: () => number): THREE.CanvasTexture {
+function cloth(color: number, accent: number, pattern: ClothPattern, random: () => number): THREE.CanvasTexture {
+  if (pattern === 'denim') return denim(color, random);
   const S = 64;
   const [canvas, ctx] = createCanvas(S, S);
   ctx.fillStyle = css(color);
@@ -302,6 +316,34 @@ function cloth(color: number, accent: number, pattern: 'plain' | 'stripes' | 'ch
   repeatTexture(texture);
   texture.repeat.set(3, pattern === 'plain' ? 3 : 4);
   return texture;
+}
+
+function denim(color: number, random: () => number): THREE.CanvasTexture {
+  const S = 128;
+  const [canvas, ctx] = createCanvas(S, S);
+  ctx.fillStyle = css(color);
+  ctx.fillRect(0, 0, S, S);
+  const image = ctx.getImageData(0, 0, S, S);
+  const data = image.data;
+  for (let i = 0; i < data.length; i += 4) {
+    const p = i / 4;
+    const x = p % S;
+    const y = (p - x) / S;
+    // The front of the leg (u near 0 and 1), worn pale mid-thigh and at the knee (v from the bottom: the texture's rows from the top).
+    const u = Math.min(x, S - x) / S;
+    const v = 1 - y / S;
+    const front = Math.exp(-((u / 0.16) ** 2));
+    const wear = front * (0.55 * Math.exp(-(((v - 0.62) / 0.16) ** 2)) + 0.35 * Math.exp(-(((v - 0.25) / 0.1) ** 2)));
+    // A right-hand twill, a pale weft thread showing through now and then.
+    const twill = (x + y * 2) % 5 < 2 ? 1.06 : 0.95;
+    const fleck = random() < 0.04 ? 1.25 : 0.97 + random() * 0.06;
+    for (let c = 0; c < 3; c++) {
+      const base = data[i + c]! * twill * fleck;
+      data[i + c] = Math.min(255, base + (200 - base) * wear * 0.45);
+    }
+  }
+  ctx.putImageData(image, 0, 0);
+  return toTexture(canvas, 'facing');
 }
 
 function css(color: number): string {

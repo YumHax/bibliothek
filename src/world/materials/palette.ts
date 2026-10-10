@@ -3,6 +3,7 @@ import { QUALITY } from '@/graphics/quality';
 import { markShared } from './sharedResources';
 import { fabric, scuffed, wood } from './finishes';
 import { envBoost } from './envBoost';
+import { paintMottle } from './paintMottle';
 
 /**
  * Shared, memoised materials: one per look for the whole page, marked shared so no zone's unload
@@ -55,9 +56,15 @@ export function standardVariant(variant: string, parameters: THREE.MeshStandardM
   return shared(`${variant}|standard|${keyOf(parameters)}`, () => finish(standardMaterial(parameters)));
 }
 
-/** `envMapIntensity` is ignored by three under a scene environment: honoured through `envBoost`. */
+/**
+ * `envMapIntensity` is ignored by three under a scene environment: honoured through `envBoost`.
+ * A plain painted surface (no map, not metal, opaque) gets the paint's own unevenness with
+ * `QUALITY.detailedMaterials` (`paintMottle`): no two square metres of a cabinet catch the light alike.
+ */
 function standardMaterial(parameters: THREE.MeshStandardMaterialParameters): THREE.MeshStandardMaterial {
-  return envBoost(new THREE.MeshStandardMaterial(parameters), parameters.envMapIntensity ?? 1);
+  const material = envBoost(new THREE.MeshStandardMaterial(parameters), parameters.envMapIntensity ?? 1);
+  const plain = !parameters.map && !parameters.roughnessMap && !parameters.transparent && (parameters.metalness ?? 0) < 0.5;
+  return plain && QUALITY.detailedMaterials ? paintMottle(material) : material;
 }
 
 /** The twin of `basic(parameters)` for `InstancedMesh`es only. */

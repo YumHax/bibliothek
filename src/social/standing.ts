@@ -2,7 +2,7 @@ import { KEYS, PersistedStore } from '@/persistence';
 import { findPerson, personAtDoor } from './people';
 import { grapevine } from './gossip';
 import { BATTERY, DRIFT, GAIN, MEMORY, TIERS, TRAITS, TRUST, WARMTH } from './socialPlan';
-import { tierOf } from './tiers';
+import { atLeast, tierOf } from './tiers';
 import type { Memory, PersonId, PersonState, SocialChange, TierId, Trait } from './types';
 
 /*
@@ -191,12 +191,18 @@ function apply(id: PersonId, s: PersonState, dw: number, dt: number, day: number
   const w0 = s.warmth;
   const t0 = s.trust;
   if (!raw) [dw, dt] = slowed(s, dw, dt);
-  s.warmth = roundInto(s.warmth + dw, WARMTH.min, WARMTH.max);
+  s.warmth = roundInto(s.warmth + dw, familyFloor(id), WARMTH.max);
   s.trust = roundInto(s.trust + dt, TRUST.min, TRUST.max);
   s.lastSeen = Math.max(s.lastSeen, day);
   const after = raw ? tierOf(s.warmth, s.trust) : toldTier(s);
   s.told = after;
   return { id, warmth: s.warmth - w0, trust: s.trust - t0, why, before, after };
+}
+
+/** How low warmth can go: family (`PersonCard.family`) never under where they started, anyone else `WARMTH.min`. */
+function familyFloor(id: PersonId): number {
+  const card = findPerson(id);
+  return card?.family ? Math.max(WARMTH.min, card.startWarmth ?? 0) : WARMTH.min;
 }
 
 /** Warmth a standing may slip under its told tier's floor before the drop is news (no banner, card, banner at a boundary). */
@@ -359,10 +365,11 @@ export function settleDay(day: number): void {
     if (s.met === null) continue;
     const card = findPerson(id);
     const grudge = Math.max(1, ...(card?.traits ?? []).map((t) => TRAITS[t].grudge ?? 1));
-    for (let d = from; d <= day; d++) {
-      if (d - s.lastSeen <= DRIFT.graceDays) continue;
-      const rest = DRIFT.rest;
+    // Family does not cool for being left a while (docs/social.md "Mémé").
+    for (let d = card?.family ? day + 1 : from; d <= day; d++) {
       const t = tierOf(s.warmth, s.trust);
+      if (d - s.lastSeen <= (atLeast(t, 'friend') ? DRIFT.friendGraceDays : DRIFT.graceDays)) continue;
+      const rest = DRIFT.rest;
       const pace = t === 'close' ? DRIFT.closeShare : 1;
       if (s.warmth > rest) s.warmth = Math.max(rest, s.warmth - DRIFT.perDay * pace);
       else if (s.warmth < rest && (d % grudge === 0)) s.warmth = Math.min(rest, s.warmth + DRIFT.perDay);
@@ -380,11 +387,14 @@ export function settleDay(day: number): void {
   save();
 }
 
-/** `?debug`: sets `id`'s warmth and trust outright (the debug console's `bibliothek.social.set`). */
-export function setStanding(id: PersonId, warmthValue: number, trustValue: number, day: number): void {
+/**
+ * `?debug`: sets `id`'s warmth and trust outright (the debug console's `bibliothek.social.set`). `quiet`: nobody hears
+ * it (no banner, no journal line): the debug panel's "everyone a close friend" would otherwise tell every one of them.
+ */
+export function setStanding(id: PersonId, warmthValue: number, trustValue: number, day: number, quiet = false): void {
   const s = entry(id);
   if (s.met === null) s.met = day;
   const change = apply(id, s, warmthValue - s.warmth, trustValue - s.trust, day, 'debug', true);
   save();
-  emit(change);
+  if (!quiet) emit(change);
 }

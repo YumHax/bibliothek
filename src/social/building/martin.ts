@@ -40,7 +40,7 @@ export function wireMartin(deps: PerkDeps): void {
           markGiven('martin-carts');
           const games = giveGames(deps, 'martin-carts', M.carts.games, M.carts.where, (g) => g.platform === M.carts.platform);
           nudge('martin', { warmth: 8, trust: 6, day, why: 'opened the box together', memory: 'you opened Gilles’s box with me', memoryWeight: 20 });
-          if (games.length) deps.notices.reward({ title: `Gilles’s cartridges: ${games.length} games`, detail: `${games.map((g) => g.title).join(', ')}.\nFrom Mr Martin, to keep together. They wait in your parcel.`, big: true });
+          if (games.length) deps.notices.reward({ title: `Gilles’s cartridges: ${games.length} games`, detail: `${games.map((g) => g.title).join(', ')}. To keep together. In the parcel in the hall.`, big: true });
           return { line: M.open };
         },
       });

@@ -23,6 +23,7 @@ import { MirrorCabinet } from './MirrorCabinet';
 import { CabinetKit } from './CabinetKit';
 import { presentWhile } from '../build/presence';
 import { placeWith, placeLeaves, floorPointsToWorld } from '../zone/attach';
+import { rummageIn } from '../build/rummage';
 import { RunningWater, ToiletFlush, FLUSH_SECONDS } from '@/audio/water';
 import type { CatPerch } from '../cat/spots';
 import { BATHROOM_PLAN } from './bathroomPlan';
@@ -70,6 +71,7 @@ export function furnishBathroom(zone: Zone, ctx: Pick<BuildContext, 'sky' | 'lis
   placeWith(zone, basin, pointSound(ctx, tap, { maxDistance: 5 }), new THREE.Vector3(0, 0.82, 0.2));
   const cabinet = zone.placeAt(new MirrorCabinet(plan.mirrorCabinetOptions), plan.mirrorCabinet);
   placeLeaves(zone, cabinet);
+  rummageIn(zone, household, cabinet.leaves, 'bathroom.cabinet', true);
   if (household) furnishBathroomLife(zone, household, cabinet);
 
   const flush = new ToiletFlush();

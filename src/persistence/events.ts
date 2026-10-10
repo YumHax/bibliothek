@@ -48,3 +48,14 @@ export function emitCorruptSave(event: CorruptSave): void {
   else console.warn(`[save] ${event.key} was unreadable (${event.reason}); ${event.backup ? `copied to ${event.backup}` : 'no copy could be kept'}, starting afresh`);
   for (const cb of [...corruptSaves]) cb(event);
 }
+
+/** When the game last wrote something to storage (ms, `Date.now`), or null: the pause menu's "Saved · just now". */
+let lastSaved: number | null = null;
+
+export function noteSaved(): void {
+  lastSaved = Date.now();
+}
+
+export function lastSavedAt(): number | null {
+  return lastSaved;
+}

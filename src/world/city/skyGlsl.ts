@@ -56,4 +56,16 @@ export const SKY_CHUNK = /* glsl */ `
   float skyCloudSheet(float n, float cover) {
     return smoothstep(1.0 - cover, 1.25 - cover, n + 0.2 * cover);
   }
+  // A cloud of colour tint seen along d, n its thickness there (about 0..1): darker under the thick of it, a
+  // silver lining where it thins towards the sun (sunSeen: the sun's visibility), and while the sun is low the
+  // warm glow (glowTint, already scaled by its strength) on its underside towards glowDir.
+  vec3 skyCloudLight(vec3 tint, vec3 d, float n, vec3 sunDir, vec3 sunColor, float sunSeen, vec3 glowTint, vec3 glowDir) {
+    float thick = smoothstep(0.3, 1.0, n);
+    vec3 c = tint * mix(1.08, 0.6, thick);
+    float lining = pow(max(dot(d, sunDir), 0.0), 10.0) * (1.0 - smoothstep(0.5, 0.95, n)) * sunSeen;
+    c += sunColor * lining * 0.8;
+    vec3 level = normalize(vec3(d.x, 0.0, d.z) + vec3(0.0, 1e-5, 0.0));
+    float toward = 0.3 + 0.7 * pow(max(dot(level, glowDir), 0.0), 2.0);
+    return c + glowTint * toward * (0.25 + 0.5 * thick) * (1.0 - smoothstep(0.0, 0.6, d.y)) * 0.7;
+  }
 `;

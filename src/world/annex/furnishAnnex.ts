@@ -101,7 +101,7 @@ export function furnishAnnex(zone: Zone, ctx: Pick<BuildContext, 'sky' | 'home' 
   if (notices) {
     zone.onUnload(
       onRouxPhase((phase) => {
-        if (phase === 'joined') notices.reward({ title: 'Two more rooms', detail: 'The wall is down: Mrs Roux’s flat is part of yours. More room for bookcases.', big: true });
+        if (phase === 'joined') notices.reward({ title: 'Two more rooms', detail: 'The wall is down: Mrs Roux’s flat is part of yours.', big: true });
       }),
     );
   }

@@ -2,6 +2,7 @@ import { isNavClick, registerPanel, unregisterPanel } from './menu/MenuNav';
 import { fadeIn, fadeOut } from './fade';
 import { playUiSound } from '@/audio/uiSounds';
 import { rememberFocus } from './rememberFocus';
+import { isActionKey } from './keys';
 import './menu/menu.css';
 
 /** What Tab can land on. */
@@ -38,7 +39,7 @@ interface ModalPanelOptions {
  * closes, D-pad left / right is `onSide`).
  *
  * One policy for every panel:
- * - Dismiss: a `[data-action="close"]` control, Esc, B or the backdrop (`backdropCloses`) close it; any other
+ * - Dismiss: a `[data-action="close"]` control, Esc, E (outside a text field), B or the backdrop (`backdropCloses`) close it; any other
  *   `[data-action]` click plays the pick sound and reaches `onAction`; closing plays the back sound.
  * - Back: a panel with sub-pages overrides `onBack` to step back; Esc and B then step back before they close.
  * - Focus: on opening, the visible `[data-autofocus]` control, else the first control that commits nothing, else
@@ -106,6 +107,13 @@ export abstract class ModalPanel<OpenArgs extends unknown[] = []> {
       e.stopPropagation();
       this.onKey(e);
       if (e.defaultPrevented || !this.isOpen) return;
+      // The room's use key (E) closes a panel too, outside a text field: unlike Esc it is a gesture, so the mouse lock
+      // comes straight back instead of asking for a click (`PointerLockFlow.enter`).
+      if (!e.repeat && !isTextField(document.activeElement) && isActionKey(e.code, 'putBack')) {
+        e.preventDefault();
+        if (!this.stepBack()) this.close();
+        return;
+      }
       if (e.code === 'Tab') this.keepTabInside(e);
       else if ((e.code === 'Enter' || e.code === 'NumpadEnter') && !isControl(document.activeElement) && this.onEnter()) e.preventDefault();
     });
@@ -276,6 +284,13 @@ export abstract class ModalPanel<OpenArgs extends unknown[] = []> {
     this.onOpenChange?.(open);
     for (const listener of [...this.openListeners]) listener(open);
   }
+}
+
+/** A field the keys type into (an E there is a letter, not a close). */
+function isTextField(el: Element | null): boolean {
+  if (!el) return false;
+  if ((el as HTMLElement).isContentEditable || el.tagName === 'TEXTAREA') return true;
+  return el.tagName === 'INPUT' && !['button', 'checkbox', 'radio', 'range', 'submit', 'reset', 'color'].includes((el as HTMLInputElement).type);
 }
 
 function isControl(el: Element | null): boolean {

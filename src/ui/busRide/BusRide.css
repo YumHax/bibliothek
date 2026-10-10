@@ -1,0 +1,46 @@
+/* The bus ride (`BusRide`): the view from the seat on a canvas over the travel curtain, its own black, the Skip hint. */
+@layer tokens, base, components, panels;
+@layer panels {
+  .bus-ride {
+    --bus-ride-black: 1;
+    position: fixed;
+    inset: 0;
+    z-index: var(--z-fader);
+    background: var(--ui-black);
+    cursor: none;
+  }
+
+  .bus-ride__view {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+  }
+
+  /* The black over the view, faded in and out by the ride's clock. */
+  .bus-ride::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: var(--ui-black);
+    opacity: var(--bus-ride-black);
+    pointer-events: none;
+  }
+
+  .bus-ride__skip {
+    position: absolute;
+    right: var(--sp-5);
+    bottom: var(--sp-4);
+    z-index: var(--z-above);
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    margin: 0;
+    padding: var(--sp-1) var(--sp-3);
+    border: 1px solid var(--tint-20);
+    border-radius: var(--ui-radius-pill);
+    background: var(--shade-45);
+    color: var(--tint-75);
+    font-size: var(--fs-2);
+  }
+}

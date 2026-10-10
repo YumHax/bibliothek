@@ -14,7 +14,6 @@ import type { FaceKey, GestureName } from './motion/gestures';
 import type { Held } from './held';
 import { SpeechBubble } from './SpeechBubble';
 import { Attention, STANDING, WALKING } from './attention';
-import { blobShadow } from '../zone/ContactShadows';
 import type { SocialHook } from './socialHook';
 
 export interface WalkerOptions {
@@ -108,7 +107,7 @@ export class Walker extends THREE.Group implements Furniture, Updatable, Interac
   private readonly lines: readonly string[];
   private readonly talk: (() => string) | null;
   private readonly social: SocialHook | null;
-  private readonly blob: THREE.Mesh | null;
+  private readonly blob: THREE.Object3D | null;
   private readonly caption: string;
   private readonly speaker: string | (() => string | undefined) | undefined;
   private readonly labelWithin: number;
@@ -161,11 +160,12 @@ export class Walker extends THREE.Group implements Furniture, Updatable, Interac
     const seed = options.seed ?? 1;
     this.model = new PersonModel(options.look ?? randomLook(seed + 200, 'shopper'), this.viewer, seed + 200);
     this.add(this.model);
-    const blob = blobShadow(0.55, 0.5);
-    if (blob) this.add(blob);
-    this.blob = blob;
+    // Under the hips and each foot, sized to them.
+    this.blob = this.model.groundShadow();
     if (options.fade) this.model.enableFade();
     this.bubble.position.y = BUBBLE_Y;
+    // A conversation frames their eyes, wherever they are under the bubble (a child, seated, tall).
+    this.bubble.userData.faceLift = (): number => this.model.eyesAbove(this.bubble);
     this.add(this.bubble);
     this.hitboxes = [this.model.hitbox];
     this.lines = options.lines ?? [];
@@ -303,9 +303,12 @@ export class Walker extends THREE.Group implements Furniture, Updatable, Interac
     this.model.talk(seconds);
   }
 
-  /** Sits down where they are, on a seat `height` metres high, facing `yaw`, arms in `pose`, eyes on `focus` or wandering. */
-  sit(yaw: number, height: number, pose: Pose = 'lap', focus: Focus = null): void {
-    this.stand(yaw, pose, focus);
+  /**
+   * Sits down where they are, on a seat `height` metres high, facing `yaw`, arms in `pose`, eyes on `focus` or
+   * wandering; `hands` as `stand`'s (a handheld held in the lap).
+   */
+  sit(yaw: number, height: number, pose: Pose = 'lap', focus: Focus = null, hands: (() => readonly [THREE.Vector3, THREE.Vector3]) | null = null): void {
+    this.stand(yaw, pose, focus, hands);
     this.seated = true;
     this.model.sit(height);
   }
@@ -440,6 +443,8 @@ export class Walker extends THREE.Group implements Furniture, Updatable, Interac
   }
 
   activate(session: SessionActions): void {
+    // Out of the hall (no caption either): a click on where they stood opens nothing.
+    if (!this.present) return;
     if (this.social?.open(session)) {
       // In conversation: stopped, turned to the player, eyes on them while the panel is up.
       if (this.stopsToTalk && this.state.kind === 'walk') this.halted = 12;

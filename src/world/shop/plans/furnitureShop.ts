@@ -121,12 +121,12 @@ export const FURNITURE_SHOP: ShopPlan = {
     // The bedroom along the back wall.
     { good: 'bed', at: { wall: 'back', along: -3.0, y: 0 } },
     { good: 'nightstands', at: { wall: 'back', along: -1.8, y: 0 } },
-    { good: 'bedroomRug', at: { floor: [-3.0, -1.5] }, collides: false, tag: 'card' },
+    { good: 'bedroomRug', at: { floor: [-3.0, -1.5] }, collides: false, tag: 'stand' },
     { good: 'dresser', at: { wall: 'back', along: -0.4, y: 0 } },
     { good: 'mirror', at: { wall: 'back', along: 0.75, y: 0 } },
     { good: 'sideboard', at: { wall: 'back', along: 2.6, y: 0 } },
     // The living room in the middle.
-    { good: 'livingRug', at: { floor: [-0.6, 0.45] }, collides: false, tag: 'card' },
+    { good: 'livingRug', at: { floor: [-0.6, 0.45] }, collides: false, tag: 'stand' },
     { good: 'armchair', variant: 0, at: { floor: [-1.15, 0.35], rotationY: 0.5 } },
     { good: 'armchair', variant: 1, at: { floor: [0.0, 0.35], rotationY: -0.5 } },
     { good: 'sideTable', at: { floor: [-0.55, -0.15] } },
@@ -135,14 +135,14 @@ export const FURNITURE_SHOP: ShopPlan = {
     // A kitchen and a reading corner on the right.
     { good: 'kitchenTable', at: { floor: [3.9, -1.9] } },
     // The runner under the table, as it would lie in the kitchen.
-    { good: 'kitchenRug', at: { floor: [3.9, -1.9] }, collides: false, tag: 'card' },
+    { good: 'kitchenRug', at: { floor: [3.9, -1.9] }, collides: false, tag: 'stand' },
     { good: 'readingCorner', at: { floor: [2.2, 0.3], rotationY: -0.4 } },
     // The hall and the walls on the left, the balcony's set by the window.
     { good: 'framedPrint', variant: 0, at: { wall: 'left', along: -2.6, y: 1.65 }, collides: false, tag: 'wall' },
     { good: 'framedPrint', variant: 1, at: { wall: 'left', along: -1.9, y: 1.65 }, collides: false, tag: 'wall' },
     { good: 'framedPrint', variant: 2, at: { wall: 'left', along: -1.2, y: 1.65 }, collides: false, tag: 'wall' },
     { good: 'hallStand', at: { wall: 'left', along: 0.3, y: 0 } },
-    { good: 'bathMat', at: { floor: [-4.1, 1.7] }, collides: false, tag: 'card' },
+    { good: 'bathMat', at: { floor: [-4.1, 1.7] }, collides: false, tag: 'stand' },
     // Clear of the window's display bed (0.8 deep).
     { good: 'bistroSet', at: { floor: [-3.6, 2.35] } },
     // The collector's corner: the display case against the left wall past the prints, the pedestal in the open floor

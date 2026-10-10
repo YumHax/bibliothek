@@ -7,6 +7,7 @@ import { paint, standard } from '../materials/palette';
 import { SwingLeaf, revealWhileOpen } from '../props/SwingLeaf';
 import { SlideDrawer } from '../props/SlideDrawer';
 import { DropDoor } from './DropDoor';
+import { stashBehind } from '../props/Openable';
 import { PooledLight } from '../lighting/LightPool';
 import { unitOf } from '@/random';
 
@@ -69,6 +70,10 @@ const OVEN_SPILL = { color: 0xffc27a, intensity: 0.7, distance: 1.6 };
 const OVEN_LAMP = standard({ color: 0xfff1d0, emissive: 0xffd28a, emissiveIntensity: 1.2 });
 /** Thickness of the carcass boards (back, bottom, the sides between units). */
 const CARCASS_WALL = 0.016;
+/** The board of a base cupboard's shelf. */
+const CUPBOARD_SHELF = 0.016;
+/** The enamel walls of the oven's cavity. */
+const OVEN_WALL = 0.01;
 /** Base doors open square to the run: past 90° a leaf would sweep into the next unit's front. */
 const BASE_DOOR_ANGLE = Math.PI / 2;
 /** A drawer's box, front to back, and how far it pulls out. */
@@ -157,8 +162,11 @@ export class KitchenRun extends THREE.Group implements Furniture {
     const h = top - bottom - 2 * GAP;
     const interior = new THREE.Group();
     this.add(interior);
-    if (unit.kind === 'sink') this.fillUnderSink(interior, cx, unit.width, bottom, doorZ - DOOR_THICKNESS);
-    else this.fillCupboard(interior, cx, unit.width, bottom, top, doorZ - DOOR_THICKNESS);
+    const depth = doorZ - DOOR_THICKNESS;
+    const sink = unit.kind === 'sink';
+    // Where a find lies behind each door (`build/rummage`): on the front of the shelf, or under the sink on the floor
+    // in the gap between the bucket and the bottles.
+    const stashY = sink ? this.fillUnderSink(interior, cx, unit.width, bottom, depth) : this.fillCupboard(interior, cx, unit.width, bottom, top, depth);
     const reveal = revealWhileOpen(interior, count);
     for (let i = 0; i < count; i++) {
       const hinge = count === 1 ? (unit.hinge ?? 'left') : i === 0 ? 'left' : 'right';
@@ -167,6 +175,8 @@ export class KitchenRun extends THREE.Group implements Furniture {
       this.buildHandle(leaf.panel, leaf.edge(w - 0.12), h - 0.06 + GAP, DOOR_THICKNESS);
       const left = cx - unit.width / 2 + i * (unit.width / count) + GAP;
       leaf.position.set(hinge === 'left' ? left : left + w, bottom + GAP, doorZ - DOOR_THICKNESS);
+      const stashX = sink ? cx + (count === 1 ? 0.04 : i === 0 ? -0.02 : 0.04) : left + w / 2;
+      leaf.stash = stashBehind(leaf, new THREE.Vector3(stashX, stashY, sink ? depth - 0.04 : depth - 0.06));
       this.leaves.push(leaf);
     }
   }
@@ -181,7 +191,7 @@ export class KitchenRun extends THREE.Group implements Furniture {
       const drawer = new SlideDrawer({ width: w, height: h, travel: DRAWER_TRAVEL, seconds: 0.45 });
       part(drawer.front, w, h, DOOR_THICKNESS, front, { y: h / 2, z: DOOR_THICKNESS / 2 });
       this.buildHandle(drawer.front, 0, h / 2, DOOR_THICKNESS);
-      this.fillDrawer(drawer.inside, i, w, h);
+      drawer.stash = { holder: drawer.inside, ...this.fillDrawer(drawer.inside, i, w, h) };
       drawer.position.set(cx, y - GAP - h, doorZ - DOOR_THICKNESS);
       this.leaves.push(drawer);
       y -= h + 2 * GAP;
@@ -202,13 +212,13 @@ export class KitchenRun extends THREE.Group implements Furniture {
     }
   }
 
-  /** A cupboard: a shelf halfway up, saucepans and a colander below, tins and a mixing bowl on the shelf. */
-  private fillCupboard(interior: THREE.Group, cx: number, width: number, bottom: number, top: number, depth: number): void {
+  /** A cupboard: a shelf halfway up, saucepans and a colander below, tins and a mixing bowl on the shelf. Returns the shelf's top. */
+  private fillCupboard(interior: THREE.Group, cx: number, width: number, bottom: number, top: number, depth: number): number {
     const inner = width - 2 * CARCASS_WALL;
     const floor = bottom + CARCASS_WALL;
     const shelfY = (bottom + top) / 2;
     const z = CARCASS_WALL + (depth - CARCASS_WALL) / 2;
-    part(interior, inner, 0.016, depth - CARCASS_WALL - 0.02, CARCASS, { x: cx, y: shelfY, z }).castShadow = false;
+    part(interior, inner, CUPBOARD_SHELF, depth - CARCASS_WALL - 0.02, CARCASS, { x: cx, y: shelfY, z }).castShadow = false;
     // Two pans nested by size, a lid on the bigger one, a steel colander.
     const pan = Math.min(0.11, inner / 4);
     interior.add(cylinderMesh(pan, 0.12, DARK_STEEL, { x: cx - inner / 4, y: floor + 0.06, z }, { segments: 20 }));
@@ -218,10 +228,11 @@ export class KitchenRun extends THREE.Group implements Furniture {
     const tins = [0xc0392b, 0x2f6fb3, 0xe8b64a];
     tins.forEach((colour, i) => interior.add(cylinderMesh(0.037, 0.11, paint(colour, 0.4), { x: cx - inner / 2 + 0.05 + i * 0.08, y: shelfY + 0.063, z: z - 0.08 }, { segments: 14 })));
     interior.add(cylinderMesh(0.09, 0.08, paint(0xe9e2d0, 0.3), { x: cx + inner / 2 - 0.1, y: shelfY + 0.048, z: z + 0.05 }, { radiusBottom: 0.05, segments: 18 }));
+    return shelfY + CUPBOARD_SHELF / 2;
   }
 
-  /** Under the sink: the waste trap from the basin's drain back into the wall, a bucket and the cleaning bottles. */
-  private fillUnderSink(interior: THREE.Group, cx: number, width: number, bottom: number, depth: number): void {
+  /** Under the sink: the waste trap from the basin's drain back into the wall, a bucket and the cleaning bottles. Returns the floor's height. */
+  private fillUnderSink(interior: THREE.Group, cx: number, width: number, bottom: number, depth: number): number {
     const floor = bottom + CARCASS_WALL;
     const drainZ = 0.14 + BASIN.depth / 2;
     const basinFloor = WORKTOP_HEIGHT - BASIN.height;
@@ -246,10 +257,14 @@ export class KitchenRun extends THREE.Group implements Furniture {
       [0.23, 0xe8e8e8, 0.26],
     ];
     for (const [dx, colour, tall] of bottles) interior.add(cylinderMesh(0.03, tall, paint(colour, 0.35), { x: cx + dx, y: floor + tall / 2, z: depth - 0.12 }, { segments: 12 }));
+    return floor;
   }
 
-  /** What a drawer holds, by its place in the stack: cutlery, tea towels, tubs and a roll of foil. */
-  private fillDrawer(box: THREE.Group, index: number, width: number, height: number): void {
+  /**
+   * What a drawer holds, by its place in the stack: cutlery, tea towels, tubs and a roll of foil. Returns where a find
+   * lies in it (`build/rummage`): small things at the front, clear of what is kept there; a booklet on top of it.
+   */
+  private fillDrawer(box: THREE.Group, index: number, width: number, height: number): { at: THREE.Vector3; flat: THREE.Vector3 } {
     const inner = width - 0.04;
     const boxH = height - 0.04;
     const depth = DRAWER_DEPTH;
@@ -268,10 +283,16 @@ export class KitchenRun extends THREE.Group implements Furniture {
         const lx = -inner / 2 + 0.015 + ((i + 0.5) * (inner - 0.03)) / lanes;
         for (let k = 0; k < 3; k++) part(box, 0.018, 0.004, 0.19, STEEL, { x: lx + (k - 1) * 0.012, y: floor + 0.008 + k * 0.004, z: z + 0.02 }).castShadow = false;
       }
+      // In the first lane, in front of the forks; a booklet across the dividers.
+      const lane = -inner / 2 + 0.015 + (0.5 * (inner - 0.03)) / lanes;
+      const onTray = floor + 0.005; // convention-ok: the tray's top, 5 mm thick
+      return { at: new THREE.Vector3(lane, onTray, -0.065), flat: new THREE.Vector3(0, floor + 0.04, -0.17) };
     } else if (index === 1) {
       // Folded tea towels in two piles.
       const towels = [0xd9d2c3, 0x9fb7c9, 0xc9785a, 0xe8e2d4];
       towels.forEach((colour, i) => part(box, inner / 2 - 0.03, 0.03, 0.22, paint(colour, 0.95), { x: (i % 2 ? 1 : -1) * (inner / 4), y: floor + 0.015 + Math.floor(i / 2) * 0.03, z: z + 0.06 }));
+      // In front of the piles; a booklet lying across them.
+      return { at: new THREE.Vector3(0, floor, -0.028), flat: new THREE.Vector3(0, floor + 0.06, -0.17) };
     } else {
       // Food tubs with coloured lids and a roll of foil.
       for (let i = 0; i < 2; i++) {
@@ -282,6 +303,8 @@ export class KitchenRun extends THREE.Group implements Furniture {
       foil.rotation.z = Math.PI / 2;
       box.add(foil);
     }
+    // Beside the tubs at the front; a booklet on their lids.
+    return { at: new THREE.Vector3(inner / 4, floor, -0.045), flat: new THREE.Vector3(-inner / 2 + 0.17, floor + 0.102, -0.15) };
   }
 
   /**
@@ -385,7 +408,7 @@ export class KitchenRun extends THREE.Group implements Furniture {
     const doorBottom = top - GAP - fasciaH - doorH;
     const interior = new THREE.Group();
     this.add(interior);
-    this.buildOvenCavity(interior, cx, w, doorBottom, doorBottom + doorH, doorZ - DOOR_THICKNESS);
+    const ovenFloor = this.buildOvenCavity(interior, cx, w, doorBottom, doorBottom + doorH, doorZ - DOOR_THICKNESS);
     const reveal = revealWhileOpen(interior, 1);
     const door = new DropDoor({ width: w, height: doorH, thickness: DOOR_THICKNESS, noun: 'oven', onOpenness: reveal(0) });
     const { panel } = door;
@@ -401,14 +424,16 @@ export class KitchenRun extends THREE.Group implements Furniture {
       panel.add(post);
     }
     door.position.set(cx, doorBottom, doorZ - DOOR_THICKNESS);
+    // A find lies on the oven's floor, near the front, under the rack.
+    door.stash = stashBehind(door, new THREE.Vector3(cx - w / 5, ovenFloor, doorZ - DOOR_THICKNESS - 0.09));
     this.leaves.push(door);
 
     const drawerTop = doorBottom - GAP;
     part(this, w, drawerTop - bottom - GAP, DOOR_THICKNESS, OVEN_FASCIA, { x: cx, y: (drawerTop + bottom) / 2, z });
   }
 
-  /** The oven's inside: dark enamel walls, the lamp glowing at the back, runners, a wire rack with a roasting tin on it. */
-  private buildOvenCavity(interior: THREE.Group, cx: number, width: number, bottom: number, top: number, depth: number): void {
+  /** The oven's inside: dark enamel walls, the lamp glowing at the back, runners, a wire rack with a roasting tin on it. Returns its floor's height. */
+  private buildOvenCavity(interior: THREE.Group, cx: number, width: number, bottom: number, top: number, depth: number): number {
     const w = width - 0.06;
     const h = top - bottom - 0.04;
     const d = depth - 0.06;
@@ -416,7 +441,7 @@ export class KitchenRun extends THREE.Group implements Furniture {
     const z = depth - d / 2;
     part(interior, w, h, 0.01, OVEN_ENAMEL, { x: cx, y, z: depth - d }).castShadow = false;
     for (const side of [-1, 1]) part(interior, 0.01, h, d, OVEN_ENAMEL, { x: cx + side * (w / 2), y, z }).castShadow = false;
-    for (const dy of [-h / 2, h / 2]) part(interior, w, 0.01, d, OVEN_ENAMEL, { x: cx, y: y + dy, z }).castShadow = false;
+    for (const dy of [-h / 2, h / 2]) part(interior, w, OVEN_WALL, d, OVEN_ENAMEL, { x: cx, y: y + dy, z }).castShadow = false;
     part(interior, 0.06, 0.04, 0.004, OVEN_LAMP, { x: cx + w / 2 - 0.06, y: y + h / 2 - 0.05, z: depth - d + 0.008 }).castShadow = false;
     const spill = new PooledLight(OVEN_SPILL.color, OVEN_SPILL.intensity, OVEN_SPILL.distance);
     spill.position.set(cx, y + h / 2 - 0.08, depth - 0.04);
@@ -435,6 +460,7 @@ export class KitchenRun extends THREE.Group implements Furniture {
     roast.scale.set(1.3, 0.6, 1);
     roast.position.set(cx, rackY + 0.06, z + 0.02);
     interior.add(roast);
+    return y - h / 2 + OVEN_WALL / 2;
   }
 
   /** White metro tiles behind the worktop: one slab wearing a painted brick-bond tile texture (a short one is a plain upstand). */

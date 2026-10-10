@@ -1,6 +1,6 @@
 // postFxShaders output fragment shader (postFxShaders.ts): the #include <...> lines are chunks assemble() writes in.
 // To the screen: the white balance (a von Kries matrix from the CPU, in linear light), exposure,
-// ACES filmic (three.js's fit, so the look matches the plain renderer), sRGB, then the grade in
+// ACES filmic (three.js's fit, so the look matches the plain renderer; mixed towards PBR Neutral by the look's `neutral`), sRGB, then the grade in
 // display space (lift / gain, contrast S-curve, saturation), the vignette (as a black veil, so it darkens a video cut-out too) and grain (which
 // also dithers the gradients). Output stays premultiplied.
 //
@@ -29,6 +29,8 @@ uniform vec3 highlights;
 uniform float vignette;
 uniform float grain;
 uniform float sharpen;
+// 0 ACES .. 1 Khronos PBR Neutral (`Look.neutralTone`): Neutral keeps saturated print colours where ACES whitens them.
+uniform float neutral;
 varying vec2 vUv;
 
 vec3 rrtAndOdtFit(vec3 v) {
@@ -45,6 +47,27 @@ vec3 acesFilmic(vec3 color) {
   color = rrtAndOdtFit(color);
   color = outputMat * color;
   return clamp(color, 0.0, 1.0);
+}
+
+/**
+ * Khronos PBR Neutral: linear below the compression start (so a printed colour stays itself), the
+ * peak rolled off above it and desaturated only as it nears white. Its input is scaled by 1.4 so a
+ * mid grey lands where ACES (three's fit, exposure / 0.6) puts it: the looks keep their brightness.
+ */
+vec3 pbrNeutral(vec3 color) {
+  const float startCompression = 0.76;
+  const float desaturation = 0.15;
+  color *= exposure * 1.4;
+  float x = min(color.r, min(color.g, color.b));
+  float offset = x < 0.08 ? x - 6.25 * x * x : 0.04;
+  color -= offset;
+  float peak = max(color.r, max(color.g, color.b));
+  if (peak < startCompression) return clamp(color, 0.0, 1.0);
+  const float d = 1.0 - startCompression;
+  float newPeak = 1.0 - d * d / (peak + d - startCompression);
+  color *= newPeak / peak;
+  float g = 1.0 - 1.0 / (desaturation * (peak - newPeak) + 1.0);
+  return clamp(mix(color, vec3(newPeak), g), 0.0, 1.0);
 }
 
 vec3 toSRGB(vec3 c) {
@@ -124,7 +147,10 @@ void main() {
   #endif
   if (sharpen > 0.001) texel0 = sharpened(texel0, st);
   // Premultiplied: the balance scales the colour only, a cut-out stays a cut-out.
-  vec3 color = toSRGB(acesFilmic(max(whiteBalance * texel0.rgb, vec3(0.0))));
+  vec3 balanced = max(whiteBalance * texel0.rgb, vec3(0.0));
+  vec3 mapped = acesFilmic(balanced);
+  if (neutral > 0.001) mapped = mix(mapped, pbrNeutral(balanced), neutral);
+  vec3 color = toSRGB(mapped);
 
   color = color * highlights + shadows * (1.0 - color);
   vec3 curve = color * color * (3.0 - 2.0 * color);

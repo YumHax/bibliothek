@@ -61,7 +61,7 @@ export function wireHaddad(deps: PerkDeps): void {
             markDay('haddad-find', week);
             deps.collection.add({ ...find.game, status: 'owned', condition: 'noManual', acquired: { price: find.price, where: 'Mrs Haddad (a friend’s price)', day } });
             nudge('haddad', { warmth: 2, trust: 2, day, why: 'glad it went to a good home' });
-            deps.notices.reward({ title: `Bought ${find.game.title}`, detail: 'From Mrs Haddad, at what she paid. It waits in your parcel.', coins: -find.price });
+            deps.notices.slip({ title: `Bought ${find.game.title}`, detail: 'From Mrs Haddad, at what she paid. In the parcel in the hall.', coins: -find.price });
             return { line: H.finds.line };
           },
         });

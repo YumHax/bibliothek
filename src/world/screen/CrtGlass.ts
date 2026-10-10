@@ -3,11 +3,16 @@ import { createCanvas, canvasTexture } from '@/covers/generated/canvasUtils';
 import { RENDER_ORDER } from '../surface/layers';
 import { markShared } from '@/world/materials/sharedResources';
 import { lcg } from '@/random';
+import { damp } from '@/math/damp';
 import crtGlassVertex from './CrtGlass.vert.glsl?raw';
 import crtGlassFragment from './CrtGlass.frag.glsl?raw';
 
 /** Visible scan lines over the picture (a 480-line set seen up close). */
 const SCAN_LINES = 240;
+/** The tube's corner radius, a share of its shorter side: the bezel's hole is cut to the same (`Television`). */
+export const CRT_CORNER = 0.07;
+/** How fast the glint follows the room's lamp (1/s). */
+const LAMP_RATE = 6;
 
 let smudgeTexture: THREE.CanvasTexture | null = null;
 
@@ -62,6 +67,8 @@ export class CrtGlass extends THREE.Mesh<THREE.PlaneGeometry, THREE.ShaderMateri
   /** 0..1 of the power-off collapse (0 = not collapsing). */
   private readonly collapse: THREE.IUniform<number>;
   private readonly afterglow: THREE.IUniform<number>;
+  private readonly lampLit: THREE.IUniform<number>;
+  private lampTarget = 1;
   private phase: 'steady' | 'on' | 'off' = 'steady';
 
   /** `bulge`: how far the centre of the glass stands in front of its edges (m). */
@@ -70,10 +77,12 @@ export class CrtGlass extends THREE.Mesh<THREE.PlaneGeometry, THREE.ShaderMateri
     const opening = { value: 1 };
     const collapse = { value: 0 };
     const afterglow = { value: 0 };
+    const lampLit = { value: 1 };
+    const corner = (CRT_CORNER * Math.min(width, height)) / width;
     super(
       curvedPlane(width, height, bulge),
       new THREE.ShaderMaterial({
-        uniforms: { playing, opening, collapse, afterglow, smudges: { value: smudges() }, scanLines: { value: SCAN_LINES } },
+        uniforms: { playing, opening, collapse, afterglow, lampLit, smudges: { value: smudges() }, scanLines: { value: SCAN_LINES }, aspect: { value: height / width }, cornerRadius: { value: corner } },
         vertexShader: crtGlassVertex,
         fragmentShader: crtGlassFragment,
         transparent: true,
@@ -85,6 +94,7 @@ export class CrtGlass extends THREE.Mesh<THREE.PlaneGeometry, THREE.ShaderMateri
     this.opening = opening;
     this.collapse = collapse;
     this.afterglow = afterglow;
+    this.lampLit = lampLit;
     this.castShadow = false;
     this.receiveShadow = false;
     this.renderOrder = RENDER_ORDER.glass;
@@ -93,6 +103,11 @@ export class CrtGlass extends THREE.Mesh<THREE.PlaneGeometry, THREE.ShaderMateri
   /** Scan lines and corner shading only show while the tube is lit (static or a picture). */
   setPlaying(playing: boolean): void {
     this.playing.value = playing ? 1 : 0;
+  }
+
+  /** The room's ceiling lamp, on or off: its glint on the glass comes and goes with it (eased). */
+  setLampLit(lit: boolean): void {
+    this.lampTarget = lit ? 1 : 0;
   }
 
   /** The tube comes on: a bright line opens to the full picture. */
@@ -111,6 +126,7 @@ export class CrtGlass extends THREE.Mesh<THREE.PlaneGeometry, THREE.ShaderMateri
   }
 
   update(dt: number): void {
+    this.lampLit.value = damp(this.lampLit.value, this.lampTarget, LAMP_RATE, dt);
     if (this.phase === 'on') {
       this.opening.value = Math.min(1, this.opening.value + dt / POWER_ON_SECONDS);
       if (this.opening.value >= 1) this.phase = 'steady';

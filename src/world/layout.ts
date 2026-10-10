@@ -6,6 +6,7 @@ import { Television } from './Television';
 import { Projector } from './Projector';
 import { Seat } from './Seat';
 import { Shelving, slotCount } from './shelving/Shelving';
+import type { Shelf } from './Shelf';
 import { ROOM_PLAN } from './roomPlan';
 import type { ZoneKind, ZoneKindOf } from './worldPlan';
 import type { ZoneId } from './zoneIds';
@@ -59,6 +60,11 @@ interface RoomHandle extends ZoneHandle {
   armchairs: Seat[];
   /** The loft windows (the cat looks out of them and naps in their sun patch). */
   windows: RoomWindow[];
+  /**
+   * The opening's dream (`src/intro`): `true` stands a bookcase in every slot of the room, empty, and returns them all;
+   * `false` puts back the ones bought. Nothing is bought either way.
+   */
+  standEveryBookcase(every: boolean): readonly Shelf[];
 }
 
 /**
@@ -101,8 +107,8 @@ function furnishRoom(zone: Zone, ctx: Pick<BuildContext, 'cssLayer' | 'covers' |
   projector.aimAt(projector.worldToLocal(zone.toWorld(new THREE.Vector3(width / 2 - 0.005, plan.projectorPicture.centreY, 0))));
   const armchairs: Seat[] = [];
   const seatKeys = new Map<string, number>();
-  const placed = plan.seats.map(({ at, cushion, upgrade }) => {
-    const seat = new Seat();
+  const placed = plan.seats.map(({ at, cushion, upgrade, fabric }) => {
+    const seat = new Seat({ fabric });
     seat.mountCushion(new Cushion(cushion));
     const placer = placerFor(zone, upgrades, upgrade);
     placer.placeAt(seat, at);
@@ -162,7 +168,8 @@ function furnishRoom(zone: Zone, ctx: Pick<BuildContext, 'cssLayer' | 'covers' |
   const door = plan.room.doorways?.[0];
   const clockAt = door ? { wall: door.wall, along: door.along, y: door.height + plan.clock.aboveDoor } : plan.clock.fallback;
   placeClock(zone, ctx, clockAt);
-  placeRoomLight(zone, room, 'pendant', plan.pendant, plan.lightSwitch);
+  // The TV's glass catches the lamp's glint while it is on.
+  placeRoomLight(zone, room, 'pendant', plan.pendant, plan.lightSwitch, (on) => tv.setLampLit(on));
 
   // 6. Decoration: plants, rug, pictures, lamps, tables, straight from the plan (what is bought, movable: M); the
   //    radiator ticks (and the cat naps in its cradle).
@@ -209,7 +216,12 @@ function furnishRoom(zone: Zone, ctx: Pick<BuildContext, 'cssLayer' | 'covers' |
     });
   }
 
-  return { room, shelving, tv, seats, armchairs, windows, catPerches: radiators, surfaceAt: rugsUnderfoot(zone) };
+  const standEveryBookcase = (every: boolean): readonly Shelf[] => {
+    // Every slot but the one Mrs Roux's opening takes once the wall is knocked through (`bookcasesIn` knows).
+    shelving.setCapacity(every ? bookcasesIn(Infinity).living : standing());
+    return shelving.bookcases;
+  };
+  return { room, shelving, tv, seats, armchairs, windows, catPerches: radiators, surfaceAt: rugsUnderfoot(zone), standEveryBookcase };
 }
 
 /**
@@ -256,6 +268,7 @@ const ZONE_BUILDERS = {
   courtyard: lazy(() => import('./courtyard/furnishCourtyard').then((m) => m.furnishCourtyard)),
   saleroom: lazy(() => import('./saleroom/furnishSaleroom').then((m) => m.furnishSaleroom)),
   sellerFlat: lazy(() => import('./sellerFlat/furnishSellerFlat').then((m) => m.furnishSellerFlat)),
+  grandmaFlat: lazy(() => import('./grandma/furnishGrandmaFlat').then((m) => m.furnishGrandmaFlat)),
   cellar: lazy(() => import('./cellar/furnishCellar').then((m) => m.furnishCellar)),
   attic: lazy(() => import('./attic/furnishAttic').then((m) => m.furnishAttic)),
   roof: lazy(() => import('./roof/furnishRoof').then((m) => m.furnishRoof)),

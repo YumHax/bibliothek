@@ -10,6 +10,7 @@ import { onWorldLoad } from './worldLoad';
 import { fadeIn, fadeOut } from './fade';
 import { parseCaption } from './hoverCaption';
 import { hudSlot } from './hudSlot';
+import { downloadSave } from './settings/SaveFileSettings';
 import { lastDevice, onDeviceChange } from '@/input/lastDevice';
 
 /** The world is slow to load: past this (ms) the waiting button says it is still at it. */
@@ -48,6 +49,8 @@ export interface ConfirmOptions {
   /** Paints the confirming button in the warning colour. */
   danger?: boolean;
   onYes(): void;
+  /** A third button that runs and leaves the question up (a copy of the save before a wipe). */
+  also?: { label: string; run(): void };
 }
 
 interface OverlayOptions {
@@ -69,7 +72,7 @@ interface OverlayOptions {
    * Settings > Display > Text size, also right on the touch start card: a phone cannot pinch-zoom the page
    * (the 3D view needs every gesture), so the size is one tap away before the first entry.
    */
-  textSize?: { get(): 'small' | 'normal' | 'large'; set(size: 'small' | 'normal' | 'large'): void };
+  textSize?: { get(): string; set(size: 'small' | 'normal' | 'large'): void };
 }
 
 const TEXT_SIZES = [
@@ -136,6 +139,8 @@ export class Overlay {
   private readonly pauseActions = new Map<string, () => void>();
   /** The pause buttons shown only when their predicate holds (read each time the menu opens). */
   private readonly pauseShown = new Map<string, () => boolean>();
+  /** The added buttons whose label is asked each time the menu shows ("Journal · 3 new"). */
+  private readonly pauseLabels = new Map<string, () => string>();
 
   constructor(container: HTMLElement, input: Input, private readonly onStart: () => void, private readonly options: OverlayOptions = {}) {
     const resuming = options.hasProgress === true;
@@ -177,6 +182,7 @@ export class Overlay {
           <p id="menu-confirm-message"></p>
           <div class="menu__confirm-buttons">
             <button type="button" class="ui-btn" data-nav data-action="confirm-no">Cancel</button>
+            <button type="button" class="ui-btn" data-nav data-action="confirm-also" hidden></button>
             <button type="button" class="ui-btn ui-btn--primary" data-nav data-action="confirm-yes"></button>
           </div>
         </section>
@@ -218,6 +224,7 @@ export class Overlay {
       else if (action === 'back') this.show('main');
       else if (action === 'new-game') this.confirmNewGame();
       else if (action === 'confirm-no') this.show(this.confirmFrom);
+      else if (action === 'confirm-also') this.pendingConfirm?.also?.run();
       else if (action === 'confirm-yes') {
         const pending = this.pendingConfirm;
         this.show(this.confirmFrom);
@@ -325,18 +332,20 @@ export class Overlay {
   /**
    * Adds a button to the pause menu, before Settings (the journal, the collector's book...): shown
    * only once the game has started, and while `shown` says so. `id` names it (unique); `run` is called on a click or Enter.
+   * A `label` given as a function is asked again each time the menu shows (a count on it).
    */
-  addPauseButton(id: string, label: string, run: () => void, shown?: () => boolean): void {
+  addPauseButton(id: string, label: string | (() => string), run: () => void, shown?: () => boolean): void {
     const action = `pause-${id}`;
     this.pauseActions.set(action, run);
     if (shown) this.pauseShown.set(action, shown);
+    if (typeof label === 'function') this.pauseLabels.set(action, label);
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'ui-btn';
     button.dataset.nav = '';
     button.dataset.action = action;
     button.dataset.pause = '';
-    button.textContent = label;
+    button.textContent = typeof label === 'function' ? label() : label;
     button.hidden = !this.started;
     const settings = this.screens.main.querySelector('[data-action="settings"]');
     settings?.parentElement?.insertBefore(button, settings);
@@ -369,6 +378,9 @@ export class Overlay {
     yes.textContent = options.yes;
     yes.classList.toggle('ui-btn--danger', options.danger === true);
     yes.classList.toggle('ui-btn--primary', options.danger !== true);
+    const also = this.screens.confirm.querySelector<HTMLElement>('[data-action="confirm-also"]')!;
+    also.hidden = !options.also;
+    also.textContent = options.also?.label ?? '';
     this.show('confirm');
   }
 
@@ -472,7 +484,11 @@ export class Overlay {
     if (collection) collection.hidden = !paused;
     const home = button('home');
     if (home) home.hidden = !paused || !this.options.goHome?.available();
-    for (const extra of this.screens.main.querySelectorAll<HTMLElement>('[data-pause]')) extra.hidden = !paused || !(this.pauseShown.get(extra.dataset.action ?? '')?.() ?? true);
+    for (const extra of this.screens.main.querySelectorAll<HTMLElement>('[data-pause]')) {
+      extra.hidden = !paused || !(this.pauseShown.get(extra.dataset.action ?? '')?.() ?? true);
+      const label = this.pauseLabels.get(extra.dataset.action ?? '');
+      if (paused && label) extra.textContent = label();
+    }
     const status = q('status');
     const rows = paused ? (this.options.status?.() ?? []) : [];
     status.hidden = rows.length === 0;
@@ -534,6 +550,7 @@ export class Overlay {
       yes: 'Start over',
       danger: true,
       onYes: onNewGame,
+      also: this.options.version ? { label: 'Download a copy first', run: () => downloadSave(this.options.version!) } : undefined,
     });
   }
 

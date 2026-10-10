@@ -4,7 +4,7 @@ import type { SessionActions } from '@/game/SessionActions';
 import { collectPost, postCollected } from '@/building/postCollected';
 import { Prop } from '../../props/Prop';
 import { invisibleHitbox } from '../../meshUtils';
-import type { MailPiece } from '../../props/MailDrop';
+import { mailCard, type MailPiece } from '../../props/MailDrop';
 
 interface OurMailboxOptions {
   /** The game's day now (the post is one round a day). */
@@ -50,12 +50,10 @@ export class OurMailbox extends Prop implements Interactable {
       session.react('Nothing but dust and a rubber band.');
       return;
     }
-    const text = pieces.map((piece) => [piece.title, ...piece.lines].join('\n')).join('\n\n');
-    session.read({
-      title: pieces.length === 1 ? 'In your mailbox' : `In your mailbox: ${pieces.length} things`,
-      text,
-      effect: 'Read on the way past, and into the recycling bin by the door.',
-      look: 'letter',
+    // One card a piece, "2 of 3" stamped on each; the last says where they go.
+    pieces.forEach((piece, i) => {
+      const last = i === pieces.length - 1;
+      session.read(mailCard(piece, { of: { index: i + 1, count: pieces.length }, ...(last ? { effect: 'Read on the way past, and into the recycling bin by the door.' } : {}) }));
     });
   }
 }

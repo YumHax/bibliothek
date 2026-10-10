@@ -14,7 +14,6 @@ import { attr, html, paint, type Html } from './panel/html';
 import { rememberFocus } from './rememberFocus';
 import './PrizePanel.css';
 import { random } from '@/random';
-import { formatNumber } from '@/text/count';
 import { formatCoins, formatTickets } from '@/text/money';
 
 /** Where the mystery game comes from: the collection it must be new to (it joins it through the parcel: `Transactions.takePrize`), and the games it is drawn from. */
@@ -62,7 +61,7 @@ interface Slip {
 /**
  * The arcade's prize counter, drawn as the counter itself: a lit glass case of shelves, one per price band with its
  * hand-written card, each prize a studio photo of its own model (`thumbnails/prizePhotos`) with its ticket stub, the
- * ticket counter's LED readout at the top and the ticket muncher (tickets for coins) along the bottom. Picking a prize
+ * ticket counter's LED readout at the top and, right under it, the cash-in band (tickets for coins). Picking a prize
  * (click, or the focus reaching it) shows it large beside the case with what it costs and where it goes at home; its
  * button takes it. A full-screen DOM modal on the kit's base (its own layout, not a card: it does not close on a
  * click beside it); the Session opens it from the counter, releases the mouse while it is up and re-enters the room
@@ -80,8 +79,9 @@ export class PrizePanel extends ModalPanel {
   private selected: string;
   private status: Slip = { text: '', error: false, prize: null };
   private shownTickets: number;
+  private shownCoins: number;
   private cancelRoll: () => void = () => {};
-  /** "Feed all" clicked once while the pocket covers a prize: a second click feeds it. */
+  /** "Cash in" clicked once while the pocket covers a prize: a second click cashes it all. */
   private readonly feedAll = new Arming<'all'>(() => this.renderMuncher());
 
   constructor(
@@ -107,11 +107,11 @@ export class PrizePanel extends ModalPanel {
           <div class="prizes__purse" aria-label="Your coins"><span class="prizes__coin" aria-hidden="true"></span><b data-role="coins"></b></div>
           <button type="button" class="prizes__close" data-action="close" aria-label="Close">Close <kbd>Esc</kbd></button>
         </header>
+        <section class="prizes__muncher" data-role="muncher" aria-label="Cash in tickets for coins"></section>
         <div class="prizes__body">
           <div class="prizes__case" data-role="list"></div>
           <aside class="prizes__detail" data-role="detail" aria-live="polite"></aside>
         </div>
-        <footer class="prizes__muncher" data-role="muncher"></footer>
       </div>`,
     );
     this.ticketsEl = this.root.querySelector('[data-role="tickets"]')!;
@@ -121,6 +121,7 @@ export class PrizePanel extends ModalPanel {
     this.munchEl = this.root.querySelector('[data-role="muncher"]')!;
     this.selected = this.forSale()[0]?.id ?? '';
     this.shownTickets = wallet.tickets;
+    this.shownCoins = wallet.coins;
     // Walking the case with the arrows or the D-pad shows each prize as the focus reaches it.
     this.listen(this.listEl, 'focusin', (e) => {
       const tile = (e.target as HTMLElement).closest<HTMLElement>('[data-action="pick"]');
@@ -136,6 +137,7 @@ export class PrizePanel extends ModalPanel {
     this.status = { text: '', error: false, prize: null };
     this.feedAll.reset();
     this.shownTickets = this.wallet.tickets;
+    this.shownCoins = this.wallet.coins;
     this.render();
     this.loadPhotos();
   }
@@ -187,7 +189,7 @@ export class PrizePanel extends ModalPanel {
     const prize = !Number.isFinite(maxCoins) ? this.affordablePrize() : null;
     if (prize && !this.feedAll.press('all')) {
       const left = before % TICKETS_PER_COIN;
-      this.slip(`That is enough for the ${prize.name}. Feed all ${formatTickets(before - left)} all the same (${left} left)? ${armedLine('feed')}`, true);
+      this.slip(`That is enough for the ${prize.name}. Cash in all ${formatTickets(before - left)} all the same (${left} left)? ${armedLine('cash them in')}`, true);
       return;
     }
     this.feedAll.reset();
@@ -225,7 +227,7 @@ export class PrizePanel extends ModalPanel {
     }
     // Who speaks is a voice, what was won a reward, where it goes the counter's slip (docs/notices.md).
     notices.say(line, 'Attendant');
-    notices.reward({ title: game ? `Mystery game: ${game.title}` : `${prize.name}: yours`, tickets: -prize.tickets! });
+    notices.reward({ title: game ? `Mystery game: ${game.title}` : `${prize.name}: yours`, tickets: -prize.tickets!, big: Boolean(game) });
     this.slip(where, false, id);
   }
 
@@ -271,7 +273,7 @@ export class PrizePanel extends ModalPanel {
 
   private render(): void {
     this.renderMeter();
-    this.coinsEl.textContent = String(this.wallet.coins);
+    this.renderPurse();
     const restoreFocus = rememberFocus(this.listEl);
     const sale = this.forSale();
     let from = 0;
@@ -344,25 +346,50 @@ export class PrizePanel extends ModalPanel {
     restoreFocus();
   }
 
+  /**
+   * The cash-in band under the counter's top, as loud as the case: what the pocket's tickets come to in coins, the big
+   * gold button that cashes them all, and a coin or ten at a time beside it. The same buttons whatever the pocket
+   * holds (greyed when it cannot cover them), and the muncher's word in place of the worth line, so nothing moves as
+   * tickets come and go.
+   */
   private renderMuncher(): void {
     const restoreFocus = rememberFocus(this.munchEl);
     const gain = Math.floor(this.wallet.tickets / TICKETS_PER_COIN);
     const status = this.status.prize === null ? this.status : null;
+    this.munchEl.classList.toggle('prizes__muncher--ready', gain > 0);
     // Fed a step at a time (a coin, ten, or the lot), so a pocket saved for a prize is not munched by one click.
-    const feeds = FEEDS.filter((coins, i) => i === FEEDS.length - 1 || coins < gain).map((coins) => {
-      const n = Math.min(coins, gain);
-      const armed = coins === Infinity && this.feedAll.isArmed('all');
-      const label = !gain ? `Needs ${formatTickets(TICKETS_PER_COIN)}` : `${armed ? 'Sure? Feed all' : coins === Infinity ? 'Feed all' : 'Feed'} ${formatNumber(n * TICKETS_PER_COIN)} → ${formatCoins(n)}`;
-      return html`<button type="button" class="prizes__feed" data-action="exchange" data-coins="${coins === Infinity ? 'Infinity' : coins}"${attr('disabled', !gain)}>${label}</button>`;
-    });
+    const steps = FEEDS.filter((coins) => Number.isFinite(coins)).map(
+      (coins) => html`<button type="button" class="prizes__feed" data-action="exchange" data-coins="${coins}"
+          aria-label="${`Cash in ${formatTickets(coins * TICKETS_PER_COIN)} for ${formatCoins(coins)}`}"${attr('disabled', gain < coins)}>${formatCoins(coins)}</button>`,
+    );
+    const armed = this.feedAll.isArmed('all');
+    const all = gain ? `${armed ? 'Sure? Cash in' : 'Cash in'} ${formatCoins(gain)}` : 'Cash in';
     paint(
       this.munchEl,
       html`<span class="prizes__slot" aria-hidden="true"></span>
-      <p class="prizes__muncher-text"><b>Ticket muncher</b> ${formatTickets(TICKETS_PER_COIN)} make a coin, as ever. <span>The claw's bunnies are not for sale.</span></p>
-      ${status?.text ? html`<p class="prizes__slip prizes__slip--inline${status.error ? ' prizes__slip--error' : ''}">${status.text}</p>` : ''}
-      ${feeds}`,
+      <p class="prizes__muncher-text">
+        <b>Tickets for coins</b>
+        ${status?.text
+          ? html`<span class="prizes__worth prizes__worth--said${status.error ? ' prizes__worth--error' : ''}" role="status">${status.text}</span>`
+          : html`<span class="prizes__worth">${gain ? html`Your tickets are worth <em>${formatCoins(gain)}</em>` : `${formatTickets(TICKETS_PER_COIN)} make a coin`}</span>`}
+      </p>
+      <div class="prizes__feeds">${steps}</div>
+      <button type="button" class="prizes__cash-all" data-action="exchange" data-coins="Infinity"${attr('disabled', !gain)}><span class="prizes__coin" aria-hidden="true"></span>${all}</button>`,
     );
     restoreFocus();
+  }
+
+  /** The coins beside the counter; coins coming in (the muncher's) make the purse jump, so the eye follows them up. */
+  private renderPurse(): void {
+    const coins = this.wallet.coins;
+    const gained = this.isOpen && coins > this.shownCoins;
+    this.shownCoins = coins;
+    this.coinsEl.textContent = String(coins);
+    if (!gained) return;
+    const purse = this.coinsEl.parentElement;
+    purse?.classList.remove('prizes__purse--jump');
+    void purse?.offsetWidth; // restarts the animation on a second cash-in in a row
+    purse?.classList.add('prizes__purse--jump');
   }
 
   /** The LED readout rolls from the number it showed to the wallet's (`ui/countUp`). */

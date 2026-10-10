@@ -4,6 +4,7 @@ import { Prop, part } from '../props/Prop';
 import { paint } from '../materials/palette';
 import { SEAM } from '../props/joinery';
 import { SwingLeaf, revealWhileOpen } from '../props/SwingLeaf';
+import { stashBehind } from '../props/Openable';
 import { CHROME } from '../props/bathroomMaterials';
 import { GLASS } from '../materials/glass';
 import { mirrorGlass } from '../props/MirrorGlass';
@@ -69,6 +70,8 @@ export class MirrorCabinet extends Prop {
     // A slim chrome pull down the free edge.
     part(panel, 0.008, 0.12, 0.012, CHROME, { x: leaf.edge(w - 0.02), y: h / 2, z: DOOR_THICKNESS + 0.006 }).castShadow = false;
     leaf.position.set(hinge === 'left' ? -width / 2 + GAP : width / 2 - GAP, GAP, bodyD);
+    // A find lies on the bottom shelf at the front, in the gap between the kit and the box of plasters: coins stacked, not spread.
+    leaf.stash = stashBehind(leaf, new THREE.Vector3(0.078, this.bottomShelf.y, bodyD - 0.025), 0.02);
     this.leaves.push(leaf);
   }
 

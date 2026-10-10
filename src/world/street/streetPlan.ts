@@ -124,6 +124,8 @@ export const STREET_PLAN = {
     market: { at: [3, 10.7], yaw: 0 } as ArrivalSpec,
     // Back down from a small ad's seller (`world/sellerFlat`): out of Park Corner Mansions' door (facade fA, at 8 along).
     sellerFlat: { at: [-37, 10.7], yaw: 0 } as ArrivalSpec,
+    // Off the bus back from Mémé's (`world/grandma`): on the pavement by the stop's pole, facing the road.
+    grandmaFlat: { at: [31.8, 9.8], yaw: 0 } as ArrivalSpec,
     ...shopArrivals(),
   },
   /**
@@ -287,13 +289,16 @@ export const STREET_PLAN = {
    */
   bus: { stop: { at: [30, 6.6] as Vec2, dwell: 14 }, every: 200, nightEvery: 420, line: '38' },
   /**
-   * Riding the bus (`StreetBus`, boarded while its doors stand open at the stop): the fare (coins), and where line 38
-   * takes the player, first that is on (`when` absent: always). More can join the list (another zone, a sale day).
+   * Riding the bus (`StreetBus`, boarded while its doors stand open at the stop): the fare (coins, the way back
+   * included), and where line 38 takes the player, the first that is on (`hours` absent: always; else when, and the
+   * word for when not). Only somewhere the player cannot walk to: Mémé's, across town (docs/story.md "Mémé").
    * The stop's pole by the shelter carries the flag and the timetable (`wayfinding/BusStopPole`), clicked to read it.
    */
   busRide: {
     fare: 2,
-    destinations: [{ to: 'market', label: 'the Old Market Hall', board: 'OLD MARKET HALL' }] as { to: ZoneId; label: string; board: string }[],
+    destinations: [
+      { to: 'grandmaFlat', label: 'Mémé’s on Linden Avenue', board: 'LINDEN AVENUE', hours: [8, 21], shut: 'Mémé’s in bed by now' },
+    ] as { to: ZoneId; label: string; board: string; hours?: [number, number]; shut?: string }[],
     pole: { at: [30.6, 8.9] as Vec2, yaw: 0 },
   },
   /** Cyclists on the road's outer lanes, and the bike racks on the pavements (with a few bikes locked to them). */
@@ -328,6 +333,19 @@ export const STREET_PLAN = {
     /** A passer-by further than this from the player is not drawn (people are the costly meshes); they fade out over the last metres. */
     drawDistance: 40,
     fade: 6,
+    /**
+     * Past the draw distance, flat figures walk the pavements down the street (`FarWalkers`): their lanes (x0 to x1 at z,
+     * both pavements, out to the street's far end) and how many at once by quality.
+     */
+    far: {
+      lanes: [
+        { x0: -38, x1: 134, z: -10.6 },
+        { x0: -38, x1: 134, z: -9.3 },
+        { x0: -38, x1: 134, z: 9.3 },
+        { x0: -38, x1: 134, z: 10.6 },
+      ],
+      countByQuality: { low: 0, medium: 12, high: 20 },
+    },
     /**
      * Where a passer-by may stop on the way, besides the shops' windows: the newsstand's front page (its counter, right on
      * the lane), a listen to the busker (in front of him, off the far pavement's lane), the bills on the Morris column.

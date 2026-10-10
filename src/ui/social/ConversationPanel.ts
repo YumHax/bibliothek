@@ -52,6 +52,8 @@ interface ConversationDeps {
   whereOnScreen?(anchor: SocialAnchor, lift: number): { x: number; y: number } | null;
   /** Turns the view gently to `anchor`, `lift` metres above it (their face, under it). */
   frame?(anchor: SocialAnchor, lift: number): void;
+  /** Narrows the view by `factor` (1: the player's own), eased, as a film's close shot does while they talk. */
+  zoom?(factor: number): void;
   /** Opens `id`'s page in the People book. */
   openPerson?(id: PersonId): void;
 }
@@ -104,8 +106,19 @@ const GAME_LIST = 12;
 /** Their talk left today under which they show they are getting restless (`standing.talkLeft`). */
 const RESTLESS = 2;
 
-/** From the point their words come from down to their face (m): where the hearts and the thought appear. */
+/** From the point their words come from down to their face (m): where the hearts and the thought appear, for a body that does not say. */
 const FACE = -0.45;
+/** How much the view narrows on the face while talking (70 degrees to about 50). */
+const CLOSE_SHOT = 1.4;
+
+/**
+ * From `anchor` down to their eyes (m): the body's own measure when it gives one (`userData.faceLift`: a child, a
+ * seated friend, someone tall), else `FACE`.
+ */
+function faceLift(anchor: SocialAnchor): number {
+  const lift = anchor.userData.faceLift as (() => number) | undefined;
+  return typeof lift === 'function' ? lift() : FACE;
+}
 
 /** A click on the room this far from the card (px) ends the conversation; nearer, it is a missed row. */
 const MISSED_CLICK = 56;
@@ -235,7 +248,8 @@ export class ConversationPanel extends ModalPanel implements ConversationPanelLi
     // The view turns to their face; the card waits for it before placing itself beside them.
     const anchor = this.anchor();
     const framing = !!anchor && !!this.deps.frame;
-    if (anchor && this.deps.frame) this.deps.frame(anchor, FACE);
+    if (anchor && this.deps.frame) this.deps.frame(anchor, faceLift(anchor));
+    if (anchor) this.deps.zoom?.(CLOSE_SHOT);
     this.wish = !introduced && anchor ? wishOf(talk.person, ctx) : null;
     this.card.style.left = '';
     this.placedAt = framing ? performance.now() + 120 : -Infinity;
@@ -243,7 +257,7 @@ export class ConversationPanel extends ModalPanel implements ConversationPanelLi
     this.focusFirst();
     if (this.wish) window.setTimeout(() => this.think(), framing ? 450 : 150);
     this.restlessLater(1400);
-    if (firstConversation()) this.deps.notices.tip('Watch how they take it: their face, their answer, the bar under their name.', { id: 'talking', head: 'Talking', until: () => !this.isOpen });
+    if (firstConversation()) this.deps.notices.tip('Watch their face, and the bar under their name.', { id: 'talking', head: 'Talking', until: () => !this.isOpen });
     this.follow = requestAnimationFrame(this.track);
   }
 
@@ -268,6 +282,7 @@ export class ConversationPanel extends ModalPanel implements ConversationPanelLi
       noteOffered(talk.person, this.offeredEarlier ? this.offered : [...this.offered, ...this.availableKeys(talk.person)]);
     }
     conversing(false);
+    this.deps.zoom?.(1);
     this.talk = null;
     talk?.onClose?.();
   }
@@ -439,7 +454,7 @@ export class ConversationPanel extends ModalPanel implements ConversationPanelLi
   private readonly track = (now: number): void => {
     if (!this.isOpen) return;
     const anchor = this.anchor();
-    const face = anchor && this.deps.whereOnScreen ? this.deps.whereOnScreen(anchor, FACE) : null;
+    const face = anchor && this.deps.whereOnScreen ? this.deps.whereOnScreen(anchor, faceLift(anchor)) : null;
     if (face) this.over.style.translate = `${Math.round(face.x)}px ${Math.round(face.y)}px`;
     else {
       // No face in view (a voice, a call): by the bar instead.
@@ -503,7 +518,8 @@ export class ConversationPanel extends ModalPanel implements ConversationPanelLi
     if (!this.isOpen || !this.wish) return;
     const thought = document.createElement('div');
     thought.className = 'social-thought';
-    paint(thought, icon(INTERACTION_ICONS[this.wish], 1.35));
+    // The icon and its word under it, the chip's own (no symbol without words).
+    paint(thought, html`${icon(INTERACTION_ICONS[this.wish], 1.35)}<span class="social-thought__word">${TOPICS[this.wish] ?? INTERACTIONS[this.wish].label}</span>`);
     this.over.appendChild(thought);
     window.setTimeout(() => thought.remove(), 5200);
   }

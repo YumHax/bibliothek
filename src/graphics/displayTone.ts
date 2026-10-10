@@ -22,3 +22,18 @@ export function toneMapEveryMaterial(enabled: boolean): void {
     set: () => undefined,
   });
 }
+
+/**
+ * `low` has no output pass and so no grain to break up 8-bit gradients (the sky dome, a lamp's
+ * falloff on a wall, the window views band): every material dithers there, the same accessor trick
+ * as `toneMapEveryMaterial` (three's `dithering`, a few ALU; a `ShaderMaterial` gets `DITHERING`
+ * and dithers where its fragment shader includes `dithering_fragment`). Before any material is made.
+ */
+export function ditherEveryMaterial(enabled: boolean): void {
+  if (!enabled) return;
+  Object.defineProperty(THREE.Material.prototype, 'dithering', {
+    configurable: true,
+    get: () => true,
+    set: () => undefined,
+  });
+}

@@ -22,7 +22,23 @@ root (scaled to look.height) > pelvis > hips (2) > knees > ankles (shoes)
 - The face has its expressions as morph targets (`head.addFaceMorphs`): jaw, brows up, frown, smile, pucker.
   They move the painted skin, so raised brows lift the painted brows. Under a full beard only the brows move.
   All morph targets share one texture unit (the face sits at about 15 of 16 in the flat: no new map on it).
-- Eyes have a clear coat (`QUALITY.physicalMaterials`), and the lower lids ride up in a squint or a smile.
+- The mouth opens about a centimetre (`JAW_OPEN`): the face's material cuts the stretched band between the lips
+  (`head.mouthPatch`, a `mouthCut` attribute and the jaw's influence as a uniform, `Face` keeps it in step), and
+  behind it sit a dark inside and the upper teeth (`head.addMouth`, inside the skin while shut; no new map).
+- Eyes have a clear coat (`QUALITY.physicalMaterials`), their reflections dimmed in the socket and under the upper
+  lid; the upper lid carries the lashes (a fine tube along its edge), both lids tilt a little at the outer corner
+  (fixed by the face), and the lower lids ride up in a squint or a smile. Glasses have lenses (nearly clear, a clear coat).
+- Hair catches the light along its strands (`hair.strandSheen`, Kajiya-Kay from the texture's v by derivatives, no
+  map). A short cut is the person's own (`cutOf`: volume, a parting or none, a quiff). Long hair's sheet is its own
+  mesh (`hairCurtain`): its ends stay on the shoulders when the head turns (`motion/hairFollow`, the head's turn
+  undone as a uniform, its shadow bent the same way).
+- Hair colour follows the skin (dark hair on dark skin, blond and red on fair skin); grey is for elders, now and then
+  an adult.
+- Below the waist: trousers (blue ones are denim, worn pale down the front), shorts, or a skirt or a dress (`skirt.ts`,
+  `look.skirt`, from a stream of its own in `looks.lowerHalf`: mostly on the curvy figure) over tights or bare legs; a
+  winter jacket is now and then a long coat whose skirts flare to mid-thigh. Skirts and coats hang from the pelvis and
+  follow the thighs in their shader (`motion/skirtSkin`), seated they lie over the lap. A jacket stands a little off
+  the body and the arms (ease), and arms crossed over a fuller chest or belly bring the elbows forward (`ACROSS_CHEST`).
 - Ages and seasons (`looks.randomLook(seed, role, dress)`): a `dress` redresses the seed's look from a stream of its own
   (no dress: the look it always had): winter coats, scarves (`look.scarf`, a torus and a tail on the chest) and beanies,
   summer tees and shorts; a child is short with a bigger head (`look.headScale` scales the neck pivot's group), someone
@@ -60,7 +76,18 @@ root (scaled to look.height) > pelvis > hips (2) > knees > ankles (shoes)
    shifts. Hands on controls give a faint look of concentration.
 7. **What swings.** Ponytail and bag are damped pendulums driven by the body's accelerations.
 
-Far away (past 16 m) the rig updates at 15 Hz, and the face and the swinging parts rest.
+Far away (past 16 m) the arms, the head and the face update at 15 Hz while the stance, the back and the legs still
+move every frame (planted feet never skate); the face and the swinging parts rest.
+
+- **Feet.** Pushing off on the ball of the foot, the toe box bends up (each shoe mesh's one morph target, `TOE_FLEX`),
+  so the toes stay on the floor.
+- **Seated.** The feet go flat on the floor and the legs are solved to them (the knees ride as high as the seat leaves
+  them); a seat too high leaves the shins hanging. Each person sits their own way (from their seed): feet apart,
+  ankles crossed, or one knee over the other.
+- **Contact shadow.** `PersonModel.groundShadow()` (called by `Walker`, `Shopper`, `Vendor`): a blob under the hips
+  sized to the person and one under each foot, shrinking as it lifts.
+- **Conversation.** The bubble's `userData.faceLift` gives the conversation the live height of the eyes under it
+  (a child, someone seated): the view turns to the face and narrows a little (`player/zoomView`, the camera's zoom).
 
 ## Gestures, fidgets, reactions
 

@@ -13,12 +13,15 @@ export const CONFIRM_MS = 4000;
  *   if (!this.arming.press(id)) return;   // first press: armed, repainted, nothing else happens
  *   ...do it...                           // second press within the time
  *
- * The window runs on the wall clock and repaints itself when it lapses. A thing of the world that is ticked by its
+ * The window runs on the wall clock and repaints itself when it lapses, unless the pointer or the focus is still on the
+ * armed control (`stillOn`): reading a long armed line does not lose it. A thing of the world that is ticked by its
  * zone hands in its own `clock` (ms that pass only while it is ticked, so a pause keeps the arming) and asks
  * `expire()` from its update: nothing is scheduled then.
  */
 export class Arming<K extends string = string> {
   private armed: { key: K; until: number } | null = null;
+  /** The control the arming press was made on, as a selector (it may be repainted): its window holds while it is pointed at or focused. */
+  private anchor: string | null = null;
   private timer: number | undefined;
   private readonly clock: () => number;
   /** On the wall clock the lapse repaints by timer; on an owner's clock the owner asks `expire()`. */
@@ -51,12 +54,28 @@ export class Arming<K extends string = string> {
     this.armed = { key, until: this.clock() + this.ms };
     window.clearTimeout(this.timer);
     if (this.scheduled) {
-      this.timer = window.setTimeout(() => {
-        if (this.armed?.key === key) this.disarm();
-      }, this.ms + 50);
+      // Only a press made by that click (not a key pressed long after some panel's button was clicked).
+      this.anchor = performance.now() - lastPressedAt < PRESS_LINK_MS ? selectorOf(lastPressed) : null;
+      this.schedule(key);
     }
     this.onChange();
     return false;
+  }
+
+  /**
+   * The lapse on the wall clock: the arming goes, unless the pointer still rests on the armed control or the focus is
+   * on it (the player is reading what the second press does): then it holds for another window.
+   */
+  private schedule(key: K): void {
+    this.timer = window.setTimeout(() => {
+      if (this.armed?.key !== key) return;
+      if (stillOn(this.anchor)) {
+        this.armed.until = this.clock() + this.ms;
+        this.schedule(key);
+        return;
+      }
+      this.disarm();
+    }, this.ms + 50);
   }
 
   /**
@@ -73,6 +92,7 @@ export class Arming<K extends string = string> {
   /** Reads the armed button as before (nothing armed). */
   disarm(): void {
     window.clearTimeout(this.timer);
+    this.anchor = null;
     if (!this.armed) return;
     this.armed = null;
     this.onChange();
@@ -90,6 +110,39 @@ export class Arming<K extends string = string> {
     window.clearTimeout(this.timer);
     this.armed = null;
   }
+}
+
+/**
+ * The control last pressed (a click, a tap, Enter or Space on it, a controller's A: all arrive as a click, seen here
+ * before the panel's own handler): what an arming press was made on.
+ */
+let lastPressed: HTMLElement | null = null;
+/** When it was pressed (`performance.now`), and how soon after it an arming press counts as made on it (ms). */
+let lastPressedAt = -Infinity;
+const PRESS_LINK_MS = 250;
+if (typeof document !== 'undefined') {
+  document.addEventListener(
+    'click',
+    (e) => {
+      lastPressed = e.target instanceof Element ? e.target.closest<HTMLElement>('button, [role="button"]') : null;
+      lastPressedAt = performance.now();
+    },
+    true,
+  );
+}
+
+/** A selector that finds the control again after a repaint: its tag and its `data-*` (the action, the row). */
+function selectorOf(el: HTMLElement | null): string | null {
+  if (!el) return null;
+  const data = Object.entries(el.dataset).map(([k, v]) => `[data-${k.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`)}="${CSS.escape(v ?? '')}"]`);
+  return data.length ? `${el.tagName.toLowerCase()}${data.join('')}` : null;
+}
+
+/** True while the control `selector` finds is under the pointer or has the focus. */
+function stillOn(selector: string | null): boolean {
+  if (!selector) return false;
+  const el = document.querySelector<HTMLElement>(selector);
+  return !!el && (el.matches(':hover') || el === document.activeElement);
 }
 
 /** The status line under an armed button: "Click again to buy." (the verb follows the device in hand). */

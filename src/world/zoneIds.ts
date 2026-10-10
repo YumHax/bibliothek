@@ -4,7 +4,7 @@
  * against it both ways: one entry per id, and no entry without one. A leaf file (no imports) so the
  * classes that name zones (Room, TravelDoor) do not import the plan and every room plan with it.
  */
-export type ZoneId = 'living' | 'hallway' | 'bathroom' | 'bedroom' | 'kitchen' | 'balcony' | 'stairwell' | 'arcade' | 'market' | 'street' | 'furnitureShop' | 'tvShop' | 'petShop' | 'flowerShop' | 'annex' | 'annexStudy' | 'neighbourFlat' | 'courtyard' | 'saleroom' | 'sellerFlat' | 'cellar' | 'attic' | 'roof';
+export type ZoneId = 'living' | 'hallway' | 'bathroom' | 'bedroom' | 'kitchen' | 'balcony' | 'stairwell' | 'arcade' | 'market' | 'street' | 'furnitureShop' | 'tvShop' | 'petShop' | 'flowerShop' | 'annex' | 'annexStudy' | 'neighbourFlat' | 'courtyard' | 'saleroom' | 'sellerFlat' | 'grandmaFlat' | 'cellar' | 'attic' | 'roof';
 
 /**
  * The zones that are the flat (the stairwell included: its door is the flat's front door). Every one is every other's

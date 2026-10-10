@@ -14,6 +14,10 @@ interface WalletView {
 interface WalletHudOptions {
   /** True where money is the point (the arcade, the market, the shops): the chip stays up there. */
   moneyHere?: () => boolean;
+  /** The game's day and hour as the player reads them ("Day 12 · 18:40"): shown where the chip stays up, since opening hours rule out there. */
+  clock?: () => string;
+  /** True where the hour matters though money is not the point (the street, its shops' opening hours): the chip stays up there with the clock. */
+  clockHere?: () => boolean;
 }
 
 /** How long the chip stays after money moved, or after coming into the room, where money is not the point (ms). */
@@ -58,6 +62,7 @@ export class WalletHud {
   private readonly root: HTMLDivElement;
   private readonly coinsEl: HTMLSpanElement;
   private readonly ticketsEl: HTMLSpanElement;
+  private readonly clockEl: HTMLSpanElement;
   private readonly items: Record<Kind, HTMLSpanElement>;
   /** Where the floating differences go, off the chip's right end. */
   private readonly floats: HTMLSpanElement;
@@ -76,9 +81,12 @@ export class WalletHud {
       <span class="wallet-hud__item" data-kind="coins" title="Coins">${COIN_SVG}<span class="wallet-hud__count" data-role="coins"></span></span>
       <span class="wallet-hud__sep"></span>
       <span class="wallet-hud__item" data-kind="tickets" title="Arcade tickets">${TICKET_SVG}<span class="wallet-hud__count" data-role="tickets"></span></span>
+      <span class="wallet-hud__sep wallet-hud__sep--clock"></span>
+      <span class="wallet-hud__clock" data-role="clock"></span>
       <span class="wallet-hud__floats"></span>`;
     this.coinsEl = this.root.querySelector('[data-role="coins"]')!;
     this.ticketsEl = this.root.querySelector('[data-role="tickets"]')!;
+    this.clockEl = this.root.querySelector('[data-role="clock"]')!;
     this.items = {
       coins: this.root.querySelector('[data-kind="coins"]')!,
       tickets: this.root.querySelector('[data-kind="tickets"]')!,
@@ -107,6 +115,7 @@ export class WalletHud {
   }
 
   update(dt: number): void {
+    this.drawClock();
     if (this.peekLeft > 0) {
       this.peekLeft -= dt * 1000;
       if (this.peekLeft <= 0) this.refresh();
@@ -123,7 +132,12 @@ export class WalletHud {
   private get wanted(): boolean {
     if (this.paused) return true;
     if (!this.inRoom) return false;
-    return this.peekLeft > 0 || (this.options.moneyHere?.() ?? false);
+    return this.peekLeft > 0 || this.stays;
+  }
+
+  /** Where the chip stays up: money is the point, or the hour is. */
+  private get stays(): boolean {
+    return (this.options.moneyHere?.() ?? false) || (this.options.clockHere?.() ?? false);
   }
 
   private refresh(): void {
@@ -180,6 +194,13 @@ export class WalletHud {
     el.textContent = formatNumber(amount, { sign: true });
     this.floats.appendChild(el);
     window.setTimeout(() => el.remove(), FLOAT_MS);
+  }
+
+  /** The clock, only where money is the point or under the pause menu (at home the chip only peeks). */
+  private drawClock(): void {
+    const clock = this.options.clock && (this.paused || this.stays) ? this.options.clock() : '';
+    if (this.clockEl.textContent !== clock) this.clockEl.textContent = clock;
+    this.root.classList.toggle('wallet-hud--clock', clock !== '');
   }
 
   private draw(): void {

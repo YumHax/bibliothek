@@ -26,6 +26,13 @@
   box-shadow: var(--ui-shadow-paper);
   color-scheme: light;
 }
+/* On paper the focus ring is in the paper's ink: the gold one is too faint on cream. */
+.ui-paper,
+.journal-panel__book,
+.news-panel__paper,
+.reading { --focus: var(--ink); }
+.people-book__page,
+.people-book__dossier { --focus: var(--page-ink); }
 .ui-paper[data-paper='letter'] { --paper: var(--paper-letter); --ink: var(--ink-letter); --rule: var(--rule-reading); }
 .ui-paper[data-paper='news'] { --paper: var(--paper-news); --ink: var(--ink-news); --rule: var(--paper-news-line); }
 .ui-paper[data-paper='receipt'] { --paper: var(--paper-receipt); --ink: var(--ink-review); --rule: var(--rule-review); }
@@ -121,8 +128,15 @@
 .ui-btn:hover:not(:disabled) { background: var(--ui-fill-hover); }
 .ui-btn:active:not(:disabled) { transform: scale(0.98); }
 .ui-btn:disabled { opacity: 0.45; cursor: default; }
-.ui-btn[aria-pressed='true'],
-.ui-btn[aria-selected='true'] { background: var(--ui-fill-hover); border-color: var(--ui-border-strong); }
+/* Not available but still reachable: the focus lands on it and a press says why ("40 coins short"). */
+.ui-btn[aria-disabled='true'] { opacity: 0.6; cursor: default; }
+.ui-btn[aria-pressed='true'] { background: var(--ui-fill-hover); border-color: var(--ui-border-strong); }
+/* The tab shown: the accent underline, so a hovered tab never looks picked too. */
+.ui-btn[aria-selected='true'] {
+  background: var(--ui-accent-soft);
+  border-color: var(--ui-accent);
+  box-shadow: inset 0 -2px 0 var(--ui-accent);
+}
 /* One of several choices, picked (a device, a text size, a tab of the People book). */
 .ui-btn[aria-checked='true'],
 .people-book__tab--on { background: var(--ui-accent-soft); border-color: var(--ui-accent); color: var(--ui-text); }
@@ -228,8 +242,7 @@ select option { background: var(--ui-panel-solid); }
   color: var(--tone, currentColor);
   opacity: 0.85;
 }
-.ui-badge--solid,
-.collector__badge {
+.ui-badge--solid {
   display: inline-block;
   min-width: 1.2em;
   padding: 0 0.3em;
@@ -248,18 +261,20 @@ select option { background: var(--ui-panel-solid); }
 .catalogue__coin,
 .prizes__coin,
 .shop__coin,
-.reward__icon--coin {
+.notice-chip__icon--coin {
   display: inline-block;
   border-radius: 50%;
   background: radial-gradient(circle at 35% 35%, var(--ui-coin-light), var(--ui-accent) 58%, var(--ui-coin-dark));
   box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--ui-coin-dark) 45%, transparent);
 }
 .ui-ticket,
-.reward__icon--ticket { display: inline-block; border-radius: var(--ui-radius-2xs); background: var(--ui-ticket); }
+.notice-chip__icon--ticket { display: inline-block; border-radius: var(--ui-radius-2xs); background: var(--ui-ticket); }
 /* A line that says how it went: dim until it matters, red when it went wrong. */
 .ui-status,
 .catalogue__status,
 .collection-editor__status { min-height: 1.2em; font-size: var(--fs-4); opacity: 0.8; }
+/* A sheet's line keeps room for two lines above its list: an armed press's longer line never pushes the list down. */
+.catalogue__status { min-height: 2.5em; }
 .ui-status--error,
 .catalogue__status--error,
 .collection-editor__status--error { color: var(--ui-danger); opacity: 1; }
@@ -269,3 +284,10 @@ select option { background: var(--ui-panel-solid); }
 .ui-title { margin: 0; font-family: var(--ui-font-display); font-weight: 400; font-size: var(--fs-t2); letter-spacing: 0.04em; }
 .ui-eyebrow,
 .household-panel__card h3 { font-size: var(--fs-3); letter-spacing: 0.08em; text-transform: uppercase; color: var(--ui-text-dim); }
+/* The pictogram sprite a paper panel paints once (`panel/pictograms`): its symbols are referred to, never shown. */
+.ui-pictogram-sprite {
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+}

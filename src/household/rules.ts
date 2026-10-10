@@ -5,8 +5,14 @@
  */
 
 export const HOUSEHOLD = {
-  /** Cleaning a worn box at the kitchen table (the kit from the bathroom cabinet): this many a market day. */
+  /** Cleaning a worn box at the kitchen table (the kit from the bathroom cabinet): this many a rest (`restEvery`). */
   restorePerDay: 1,
+  /**
+   * The flat's small daily things (the box cleaned, the cat's treat, the drawers' finds) come back after a night's
+   * sleep, or every `restEvery` market days for a player who never goes to bed: never a round to make every ten
+   * minutes of play (`Household.rest`).
+   */
+  restEvery: 3,
   /** A hot bath: the next stallholder the player haggles with meets someone unhurried (offers of patience added). */
   soak: { patience: 1 },
   /**
@@ -16,10 +22,24 @@ export const HOUSEHOLD = {
    */
   cake: { days: 2, linger: 1.5, giftChance: 0.45, tip: [4, 9] as [number, number] },
   /**
-   * A treat for the cat, once a market day. The next morning, `giftChance` it left something by its kitchen
+   * A treat for the cat, once a rest (after a sleep). The next morning, `giftChance` it left something by its kitchen
    * bowl: a lost booklet (`manualChance`, when a game on the shelves lacks one) or a few coins from under the armchair.
    */
   treat: { giftChance: 0.55, manualChance: 0.35, coins: [2, 6] as [number, number] },
+  /**
+   * What lies behind a door or in a drawer of the flat, to be picked up (`rummage.ts`). The flat's own fittings (the
+   * kitchen's cupboards, drawers, oven and fridge, the wardrobe, the mirror cabinet) each hold what the last tenant left
+   * until it is taken: `leftover` coins, or a strip of arcade tickets (`ticketChance`). After that, each
+   * spot holds something on `dailyChance` of rests (after a sleep, `restEvery`; bought furniture too): a few coins, a
+   * few tickets, or in a drawer (`manualChance`, when a game on the shelves lacks one) a lost booklet. A rare surprise
+   * on opening, never a round to make. Some 23 fitted doors and drawers: about 65 coins of leftovers in all, then
+   * some 2 finds a rest.
+   */
+  rummage: {
+    leftover: { coins: [2, 5] as [number, number], ticketChance: 0.3, tickets: [10, 25] as [number, number] },
+    dailyChance: 0.08,
+    daily: { coins: [1, 3] as [number, number], ticketChance: 0.35, tickets: [5, 15] as [number, number], manualChance: 0.12 },
+  },
   /** Radio Brocante's morning chronicle: once a market day, the radio switched on between these hours of the clock. */
   radio: { from: 6, until: 11, grailDays: 6 },
   /**

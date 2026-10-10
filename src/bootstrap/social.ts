@@ -26,6 +26,12 @@ import type { Services } from './services';
 import { screenPoint } from '@/core/screenPoint';
 import type { FirstPersonController } from '@/player/FirstPersonController';
 import { lookTowards } from '@/player/lookTowards';
+import { zoomView } from '@/player/zoomView';
+import { MEMORIES } from '@/grandma/memories';
+import { callGrandma, watchGrandma } from '@/social/grandmaSocial';
+import { rememberLook } from '@/social/lookBook';
+import { MEME_ID } from '@/social/people/family';
+import { memeLook } from '@/world/grandma/familyLooks';
 
 /** What in the pocket is given as what (`errands/pocket`'s ids to the social layer's gifts). */
 const POCKET_GIFTS: readonly [ErrandId, GiftKind][] = [
@@ -57,6 +63,7 @@ export function createSocial(services: Services, container: HTMLElement, notices
     // The conversation sits beside the person and turns the view to their face (docs/social.md "Talking").
     whereOnScreen: (anchor, lift) => screenPoint(engine.camera, anchor, lift),
     frame: player ? (anchor, lift) => void lookTowards(player, anchor, lift) : undefined,
+    zoom: (factor) => zoomView(engine.camera, factor),
     openPerson: (id) => {
       if (!session) return;
       peopleBook.showPerson(id);
@@ -94,7 +101,7 @@ export function createSocial(services: Services, container: HTMLElement, notices
     lendable: (game) => !isKeepsake(game),
     wallet,
     notices,
-    note: (text) => journal.note('note', text),
+    note: (text, weight) => journal.note('note', text, { weight }),
   });
   // Victor Crane: a kind word after beating him, a gloat; his collection shown at the end of the arc (docs/social.md "Victor").
   wireRivalry({ rival: services.lots.rival, collection, notices, pool: SEED_GAMES, day: () => today.gameDay });
@@ -105,11 +112,21 @@ export function createSocial(services: Services, container: HTMLElement, notices
         .sort((a, b) => standing(b.id).warmth - standing(a.id).warmth)
         .map((p) => ({ id: p.id, name: p.short ?? p.name, note: `${tierInfo(tierOf(standing(p.id).warmth, standing(p.id).trust)).name} · ${phoneNote(p.id, hour())}` })),
     call: (id) => {
+      // Mémé answers in her own words: the album, Sunday's lunch, her nightie after nine (docs/social.md "Mémé").
+      if (id === MEME_ID && session) {
+        const call = callGrandma({ day: today.gameDay, hour: hour(), photos: services.grandma.due !== null });
+        if ('refused' in call) return call.refused;
+        social.open(session(), { person: id, place: 'phone', opening: () => call.opening });
+        return null;
+      }
       const why = phoneRefusal(id, hour());
       if (why !== null || !session) return why ?? 'The line is dead.';
       social.open(session(), { person: id, place: 'phone' });
       return null;
     },
   };
+  // Mémé: her face as she is in her flat, and her warmth from the visits, lunches, gifts and the album's memories.
+  rememberLook(MEME_ID, memeLook());
+  watchGrandma(services.grandma, { day: () => today.gameDay, title: (id) => MEMORIES.find((m) => m.id === id)?.title ?? null, scarf: () => services.perks.outfit.id === 'memeScarf' });
   return { conversation, social, peopleBook, contacts };
 }

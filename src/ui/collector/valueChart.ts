@@ -1,85 +1,40 @@
 import type { ValuePoint } from '@/economy/ValueHistory';
+import { formatDay } from '@/text/clock';
+import { html, type Html } from '../panel/html';
 
-const INK = 'rgba(236, 233, 226, 0.65)';
-const GRID = 'rgba(255, 255, 255, 0.1)';
-const LINE = '#d4a52a';
-const FILL = 'rgba(212, 165, 42, 0.16)';
-const FONT = '12px system-ui, sans-serif';
+/** The chart's box in its own units (the SVG scales to the page's width). */
+const W = 320;
+const H = 150;
+const LEFT = 34;
+const RIGHT = W - 8;
+const TOP = 10;
+const BOTTOM = H - 22;
 
 /**
- * The collection's value, one point per day played, as a small line chart on `canvas` (drawn at
- * the device's pixel ratio): the line in the panel's gold over a soft fill, the top value and the
- * first and last days along the edges. Days not played are skipped, not interpolated as flat.
+ * The collection's value, one point per day played, drawn in ink on the ledger's squared paper (an inline SVG the
+ * page's CSS colours: `.book-chart__*`): four pencilled bands labelled on the left, the line with a dot on each day
+ * and a bigger one on the last, the first and last days written under it. Days not played are skipped, not
+ * interpolated as flat. Fewer than two days: a line in the hand instead.
  */
-export function drawValueChart(canvas: HTMLCanvasElement, points: readonly ValuePoint[]): void {
-  const ratio = Math.min(2, window.devicePixelRatio || 1);
-  const cssW = canvas.width;
-  const cssH = canvas.height;
-  canvas.style.width = '100%';
-  canvas.style.maxWidth = `${cssW}px`;
-  canvas.style.aspectRatio = `${cssW} / ${cssH}`;
-  canvas.width = cssW * ratio;
-  canvas.height = cssH * ratio;
-  const ctx = canvas.getContext('2d');
-  if (!ctx) return;
-  ctx.scale(ratio, ratio);
-  ctx.font = FONT;
-  ctx.textBaseline = 'middle';
-
-  const left = 48;
-  const right = cssW - 12;
-  const top = 14;
-  const bottom = cssH - 24;
+export function valueChartHtml(points: readonly ValuePoint[]): Html {
   if (points.length < 2) {
-    ctx.fillStyle = INK;
-    ctx.textAlign = 'center';
-    ctx.fillText(points.length ? 'Come back tomorrow: the chart starts with a second day.' : 'Nothing to chart yet.', cssW / 2, cssH / 2);
-    return;
+    return html`<p class="book-hand-note book-chart__empty">${points.length ? 'Come back tomorrow: the line starts with a second day.' : 'Nothing to draw yet.'}</p>`;
   }
   const max = niceCeiling(Math.max(...points.map((p) => p.value)));
-  const x = (i: number) => left + (i / (points.length - 1)) * (right - left);
-  const y = (v: number) => bottom - (v / max) * (bottom - top);
-
-  // Grid: four bands, labelled on the left.
-  ctx.strokeStyle = GRID;
-  ctx.lineWidth = 1;
-  ctx.fillStyle = INK;
-  ctx.textAlign = 'right';
-  for (let i = 0; i <= 4; i++) {
-    const v = (max * i) / 4;
-    ctx.beginPath();
-    ctx.moveTo(left, Math.round(y(v)) + 0.5);
-    ctx.lineTo(right, Math.round(y(v)) + 0.5);
-    ctx.stroke();
-    ctx.fillText(short(v), left - 6, y(v));
-  }
-
-  // The fill under the line, then the line.
-  ctx.beginPath();
-  ctx.moveTo(x(0), bottom);
-  points.forEach((p, i) => ctx.lineTo(x(i), y(p.value)));
-  ctx.lineTo(x(points.length - 1), bottom);
-  ctx.closePath();
-  ctx.fillStyle = FILL;
-  ctx.fill();
-  ctx.beginPath();
-  points.forEach((p, i) => (i ? ctx.lineTo(x(i), y(p.value)) : ctx.moveTo(x(i), y(p.value))));
-  ctx.strokeStyle = LINE;
-  ctx.lineWidth = 2;
-  ctx.lineJoin = 'round';
-  ctx.stroke();
+  const x = (i: number) => LEFT + (i / (points.length - 1)) * (RIGHT - LEFT);
+  const y = (v: number) => BOTTOM - (v / max) * (BOTTOM - TOP);
+  const bands = [0, 1, 2, 3, 4].map((i) => (max * i) / 4);
+  const line = points.map((p, i) => `${x(i).toFixed(1)},${y(p.value).toFixed(1)}`).join(' ');
   const last = points[points.length - 1]!;
-  ctx.fillStyle = LINE;
-  ctx.beginPath();
-  ctx.arc(x(points.length - 1), y(last.value), 3.5, 0, Math.PI * 2);
-  ctx.fill();
-
-  // The first and the last day under the axis.
-  ctx.fillStyle = INK;
-  ctx.textAlign = 'left';
-  ctx.fillText(points[0]!.day, left, cssH - 10);
-  ctx.textAlign = 'right';
-  ctx.fillText(last.day, right, cssH - 10);
+  return html`<svg class="book-chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="The collection’s value, day by day, from ${formatDay(points[0]!.day)} to ${formatDay(last.day)}">
+      ${bands.map((v) => html`<line class="book-chart__band" x1="${LEFT}" x2="${RIGHT}" y1="${y(v).toFixed(1)}" y2="${y(v).toFixed(1)}" />
+        <text class="book-chart__label" x="${LEFT - 5}" y="${y(v).toFixed(1)}" text-anchor="end" dominant-baseline="middle">${short(v)}</text>`)}
+      <polyline class="book-chart__line" points="${line}" />
+      ${points.length <= 40 ? points.map((p, i) => html`<circle class="book-chart__dot" cx="${x(i).toFixed(1)}" cy="${y(p.value).toFixed(1)}" r="1.6" />`) : ''}
+      <circle class="book-chart__today" cx="${x(points.length - 1).toFixed(1)}" cy="${y(last.value).toFixed(1)}" r="3.2" />
+      <text class="book-chart__label" x="${LEFT}" y="${H - 6}">${formatDay(points[0]!.day)}</text>
+      <text class="book-chart__label" x="${RIGHT}" y="${H - 6}" text-anchor="end">${formatDay(last.day)}</text>
+    </svg>`;
 }
 
 /** A round number at or above `v` for the chart's top (1, 2 or 5 times a power of ten). */

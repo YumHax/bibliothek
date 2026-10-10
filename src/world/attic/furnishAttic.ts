@@ -125,7 +125,7 @@ export function furnishAttic(zone: Zone, ctx: Pick<BuildContext, 'sky' | 'listen
       // He had one: the club pays for his copy instead.
       purse?.earnCoins(coinsInstead);
       done();
-      notices?.reward({ title: `${game.title}, ${where}`, detail: `You have one already: the collectors' club pays for this one.`, coins: coinsInstead });
+      notices?.reward({ title: 'Had it already', detail: `${game.title}, ${where}: the collectors' club pays for it.`, coins: coinsInstead });
       return;
     }
     const gift = new StockItem(game, 'complete', 'grail', { list: 0, final: true });

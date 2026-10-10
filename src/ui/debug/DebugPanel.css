@@ -1,0 +1,53 @@
+/* `?debug`'s panel: the progressions' switches, the votes, events and places, on the kit's card (`.ui-modal--centre`). */
+@layer tokens, base, components, panels;
+@layer panels {
+  .debug-panel__card { --card-w: 40rem; }
+  .debug-panel__page {
+    max-height: 60vh;
+    overflow-y: auto;
+    margin-top: var(--sp-3);
+  }
+  .debug-panel__group {
+    margin: var(--sp-3) 0 var(--sp-1);
+    font-size: var(--fs-3);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--ui-text-dim);
+  }
+  .debug-panel__list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: var(--sp-1);
+  }
+  .debug-panel__list li {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+  }
+  .debug-panel__vote {
+    flex-wrap: wrap;
+  }
+  .debug-panel__label {
+    flex: 1;
+    min-width: 12rem;
+    font-size: var(--fs-4);
+  }
+  .debug-panel__switch {
+    min-width: 6rem;
+  }
+  .debug-panel__options {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--sp-1);
+  }
+  .debug-panel__option {
+    font-size: var(--fs-2);
+  }
+  .debug-panel__grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
+    gap: var(--sp-2);
+  }
+}

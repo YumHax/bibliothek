@@ -37,6 +37,10 @@
     padding: var(--sp-4) 1.25rem;
   }
   .collection-editor__pane h3 { margin: 0 0 var(--sp-3); font-size: var(--fs-7); opacity: 0.85; }
+  /* "Your games" and the order chips on one line (they wrap under it on a narrow screen). */
+  .collection-editor__list-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: var(--sp-2) var(--sp-4); }
+  .collection-editor__sort { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-1); margin-bottom: var(--sp-3); }
+  .collection-editor__cover { width: 1.6rem; height: auto; }
   .collection-editor__scroll { flex: 1; min-height: 0; overflow-y: auto; padding-right: var(--sp-1); }
 
   .collection-editor__search { display: flex; gap: var(--sp-2); margin-bottom: var(--sp-3); }

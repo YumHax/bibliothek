@@ -9,6 +9,8 @@ import { paint } from '../materials/palette';
 interface NotebookOptions {
   /** The panel it opens, asked at click time (it may be made after the room is built); none: the pages are blank. */
   panel: () => ModalLike | undefined;
+  /** Lines written since the journal was last read (`Journal.unread`): the caption says so. Default none. */
+  unread?: () => number;
   /** Cover colour. Default a worn oxblood. */
   color?: number;
 }
@@ -52,7 +54,8 @@ export class Notebook extends Prop implements Interactable {
   }
 
   label(): string {
-    return 'Your journal · read your days';
+    const unread = this.options.unread?.() ?? 0;
+    return unread > 0 ? `Your journal · ${unread} new ${unread === 1 ? 'line' : 'lines'}` : 'Your journal · read your days';
   }
 
   activate(session: SessionActions): void {

@@ -67,11 +67,11 @@ export function startBirthdays(): void {
 }
 
 /** The coming birthdays the player knows, for the journal's to-do list. */
-export function upcomingBirthdays(day: number): string[] {
+export function upcomingBirthdays(day: number): { id: PersonId; days: number; wish: boolean }[] {
   return everyone()
     .filter((p) => isMet(p.id) && knowsBirthday(p.id))
     .map((p) => ({ id: p.id, days: daysToBirthday(p.id, day) }))
     .filter((b) => b.days <= AHEAD)
     .sort((a, b) => a.days - b.days)
-    .map((b) => `${shortName(b.id)}’s birthday ${when(b.days)}${b.days === 0 && life().wished[b.id] !== day ? ': wish them a happy one' : ''}.`);
+    .map((b) => ({ ...b, wish: b.days === 0 && life().wished[b.id] !== day }));
 }

@@ -31,10 +31,17 @@ const REFRESH_BELOW = 0.88;
  */
 export interface ReflectionSource {
   update(renderer: THREE.WebGLRenderer, dt: number): THREE.Texture | null;
+  /** A factor on the reflections' strength while this source's map is shown (a room's capture brought to the studio's brightness, `RoomReflection`). */
+  gain?(): number;
 }
 let reflectionSource: ReflectionSource | null = null;
 export function setReflectionSource(source: ReflectionSource | null): void {
   reflectionSource = source;
+}
+
+/** Stops `source` being the scene's reflections, if it still is (a room left after the next zone already set its own). */
+export function clearReflectionSource(source: ReflectionSource): void {
+  if (reflectionSource === source) reflectionSource = null;
 }
 
 /**
@@ -137,7 +144,8 @@ export class Environment implements Updatable {
   }
 
   private target(): number {
-    return MAX_INTENSITY * this.strength * THREE.MathUtils.clamp(this.level(), 0, 1);
+    const gain = this.ownShown ? (reflectionSource?.gain?.() ?? 1) : 1;
+    return MAX_INTENSITY * this.strength * gain * THREE.MathUtils.clamp(this.level(), 0, 1);
   }
 
   /** The studio room prefiltered with its light and glowing panels times `tint`, made once per tint. */

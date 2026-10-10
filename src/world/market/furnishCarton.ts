@@ -32,7 +32,7 @@ export function furnishCarton(zone: Zone, ctx: Pick<BuildContext, 'market' | 'to
         session.refuse(result.reason === 'short' ? `The carton is ${formatCoins(carton.price)} and you have ${result.have ?? 0}.` : 'Not today.');
         return false;
       }
-      session.reward({ title: `A sealed carton: ${carton.label}`, detail: 'Carried home: it waits in the hallway, to be opened one thing at a time.', coins: -carton.price });
+      session.slip({ title: 'A sealed carton', detail: `${carton.label}: in the hallway at home, to open one thing at a time.`, coins: -carton.price });
       return true;
     },
   }), MARKET_PLAN.carton);

@@ -55,8 +55,14 @@ export const GATHERING_RULES = {
     waveGap: [50, 80] as [number, number],
     /** At most this many guests in the flat at once (people cost frames). */
     inFlat: 4,
-    /** Each guest drops this many coins in the jar at the door. */
+    /**
+     * Each guest drops this many coins in the jar at the door: `entry`, one more for every `entryEvery` games the
+     * collection holds past `minGames` (a fuller flat draws a better crowd), never over `entryMax`. A small thing next
+     * to the arcade: the collection earning its keep, never a living.
+     */
     entry: 2,
+    entryEvery: 30,
+    entryMax: 6,
     /** They look round this many spots. */
     stops: 3,
     /** Real seconds after an unanswered wave rings before they go back down (they ring twice). */

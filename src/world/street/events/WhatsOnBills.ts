@@ -75,7 +75,10 @@ export class WhatsOnBills extends THREE.Group implements Furniture, Interactable
 
   activate(session: SessionActions): void {
     const items = whatsOn(this.options);
-    session.read({ title: "What's on", text: items.map((i) => `${i.today ? 'TODAY · ' : ''}${i.title}: ${i.line}`).join('\n'), look: 'note' });
+    // A line an item, the first five; the rest counted.
+    const lines = items.slice(0, 5).map((i) => `${i.today ? 'TODAY · ' : ''}${i.title}: ${i.line}`);
+    if (items.length > 5) lines.push(`…and ${items.length - 5} more`);
+    session.read({ title: "What's on", text: lines.join('\n'), look: 'note' });
   }
 
   private repaint(): void {

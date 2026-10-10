@@ -3,6 +3,7 @@ import type { Zone } from '../zone/Zone';
 import type { BuildContext, ZoneHandle } from '../buildContext';
 import { PLATFORM_LIST } from '@/catalog/platforms';
 import { RIVAL_BUYING } from '@/economy/pricing';
+import { missingFromNearSet } from '@/economy/collectorSets';
 import { furnishShell } from '../shell';
 import { TiledWainscot } from '../props/TiledWainscot';
 import { IndustrialPendant } from '../props/IndustrialPendant';
@@ -196,6 +197,7 @@ export function furnishMarket(zone: Zone, context: Pick<BuildContext, 'sky' | 'l
       spots: crowd.browseSpots,
       claims,
       isWanted: (id) => context.collection.isWanted(id),
+      covets: (game) => missingFromNearSet(game, context.collection.games.games),
       social: context.social,
     }), new THREE.Vector3());
     rival.placeIn(zone);

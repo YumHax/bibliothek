@@ -12,6 +12,7 @@ export const FLOWER_SHOP: ShopPlan = {
   shop: 'florist',
   // The florist's plum in the street (`SHOP_LOOKS.florist`).
   accent: 0x5a3f6a,
+  look: 'florist',
   room: FLORIST_ROOM,
   arrival: arrival(FLORIST_ROOM.depth),
   exit: FRONT_EXIT,

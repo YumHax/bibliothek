@@ -3,6 +3,8 @@ import type { Furniture } from '../Furniture';
 import { cylinderMesh } from '../meshUtils';
 import { METAL, paint, standard, timber } from '../materials/palette';
 import { part } from './Prop';
+import { RECORDS } from '@/vinyl/records';
+import { paintSleeve } from '../vinyl/RecordCrate';
 
 export interface SideboardOptions {
   /** Length along the wall. Default 1.6. */
@@ -142,7 +144,9 @@ export class Sideboard extends THREE.Group implements Furniture {
     const size = 0.315;
     const thick = 0.006;
     colors.forEach((color, i) => {
-      const cover = paint(color, 0.8);
+      // The two on top, seen from above at arm's length, are printed soundtracks; the rest show only their edges.
+      const printed = i >= colors.length - 2 ? RECORDS[(colors.length - 1 - i) % RECORDS.length] : undefined;
+      const cover = printed ? new THREE.MeshStandardMaterial({ map: paintSleeve(printed), roughness: 0.75 }) : paint(color, 0.8);
       // BoxGeometry material order: +x, -x, +y (cover), -y, +z, -z.
       const sleeve = new THREE.Mesh(new THREE.BoxGeometry(size, thick, size), [SLEEVE_EDGE, SLEEVE_EDGE, cover, cover, SLEEVE_EDGE, SLEEVE_EDGE]);
       sleeve.position.set(x + (i % 2 ? 0.012 : -0.01), top + thick / 2 + i * thick, z + (i % 3 ? 0.008 : -0.012));

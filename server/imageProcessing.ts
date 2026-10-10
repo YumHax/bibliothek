@@ -2,6 +2,8 @@ import type { StoredArt } from './artStore';
 
 /** Longest side of a served cover; box faces are a few hundred pixels on screen at most. */
 const MAX_ART_SIZE = 512;
+/** A front cover asked `?size=large`: the box in hand, held up to the eye, fills more than 512 px of the screen. */
+export const LARGE_ART_SIZE = 1024;
 const WEBP_QUALITY = 82;
 
 type Sharp = typeof import('sharp');

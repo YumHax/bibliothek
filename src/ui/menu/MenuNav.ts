@@ -91,6 +91,23 @@ function openPanel(): Panel | null {
   return open.find((p) => p.root.contains(document.activeElement)) ?? open[open.length - 1] ?? null;
 }
 
+/**
+ * Scrolls the open panel by `pixels` (the right stick, the triggers): the scrolling box round the focus, else the
+ * panel's first box that has more than it shows (a journal page, a letter, the news). True when something moved.
+ */
+export function scrollPanel(pixels: number): boolean {
+  const panel = openPanel();
+  if (!panel) return false;
+  const scrolls = (el: Element): el is HTMLElement => el instanceof HTMLElement && el.scrollHeight > el.clientHeight + 1 && /(auto|scroll)/.test(getComputedStyle(el).overflowY);
+  let target: Element | null = document.activeElement && panel.root.contains(document.activeElement) ? document.activeElement : null;
+  while (target && target !== panel.root && !scrolls(target)) target = target.parentElement;
+  const box = target && target !== panel.root && scrolls(target) ? target : [panel.root, ...panel.root.querySelectorAll('*')].find(scrolls);
+  if (!box) return false;
+  const before = box.scrollTop;
+  box.scrollTop += pixels;
+  return box.scrollTop !== before;
+}
+
 /** True while a registered panel is up (a controller press then belongs to it, not to entering the room). */
 export function panelOpen(): boolean {
   return openPanel() !== null;
@@ -138,6 +155,13 @@ export function initPanelNav(source: Input): void {
           navClick = false;
         }
         return;
+      case 'GamepadLT':
+      case 'GamepadRT': {
+        // The triggers turn a page of what is open (a long letter, the journal's day, the news).
+        const panelBox = panel.root.querySelector<HTMLElement>('.ui-panel__body') ?? panel.root;
+        scrollPanel((code === 'GamepadRT' ? 1 : -1) * Math.max(160, panelBox.clientHeight * 0.8));
+        return;
+      }
       case 'GamepadB':
         // A kit panel steps back or closes itself (and plays the back sound); another panel gets an Escape press.
         if (panel.onBack) panel.onBack();

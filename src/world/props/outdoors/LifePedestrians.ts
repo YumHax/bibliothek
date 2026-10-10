@@ -4,7 +4,7 @@ import { KERB, LIFE_REACH, PARK_PATHS, WALK_LINE } from './plan';
 import { resample } from './Park';
 import type { LifeEvents } from './lifeEvents';
 import { FIGURE_MARGIN, FIGURE_SCALE, HAIRS, type Look, SHIRTS, SKINS, TROUSERS, figurePen } from './figures';
-import type { AtlasPens, Cell, LifeEnv, LifeLayer, Push } from './sprites';
+import { type AtlasPens, type Cell, type LifeEnv, type LifeLayer, type Push, packTint } from './sprites';
 import { between, pick } from '@/random';
 
 /** How tall a pedestrian cell reaches: room for an umbrella over the head. */
@@ -12,6 +12,11 @@ const PERSON_TOP = 2.3;
 /** Pedestrian cell in the atlas: the figure (and its umbrella) plus a small margin all round. */
 const PERSON_CELL = { w: 46, h: Math.ceil(PERSON_TOP * FIGURE_SCALE) + 6, margin: FIGURE_MARGIN };
 const PERSON_VARIANTS = 8;
+/**
+ * Soft casts over a whole figure, one per walker in turn (no draw: the shared random keeps its order), so two
+ * walkers on the same painted variant are rarely quite alike (lighter, warmer, cooler, greener clothes).
+ */
+const CASTS = ['#ffffff', '#e8e2f2', '#fff0dc', '#dfe8f6', '#eef6e2', '#f2e2dc', '#d8d8d8'].map(packTint);
 const UMBRELLAS = ['#1c1c1e', '#2a3f6a', '#8a2a2a', '#2f5a44', '#e8c84a', '#6a3a6a', '#1c1c1e', '#b8302a'];
 /** A dog trotting beside its owner: its cell, a metre ahead of them. */
 const DOG = { length: 0.75, height: 0.55, scale: 40, lead: 1.1 };
@@ -39,6 +44,8 @@ interface Walker {
   nightOwl: boolean;
   homeAt: number;
   poseClock: number;
+  /** Their cast over the painted variant (a packed tint). */
+  tint: number;
   /** Walks a dog; stays in when it pours (fair-weather walkers only go out when it is dry). */
   dog: number;
   hardy: boolean;
@@ -104,6 +111,7 @@ export class Pedestrians implements LifeLayer {
       nightOwl: random() < 0.35,
       homeAt: between(random, 0.1, 0.6),
       poseClock: random(),
+      tint: CASTS[this.walkers.length % CASTS.length]!,
       dog: random() < 0.2 ? Math.floor(random() * DOG_COATS.length) : -1,
       hardy: random() < 0.55,
     });
@@ -187,7 +195,7 @@ export class Pedestrians implements LifeLayer {
     const a = azimuthOf(x, z);
     const halfWidth = ((PERSON_CELL.w / FIGURE_SCALE) * 0.5) / d;
     const margin = PERSON_CELL.margin / FIGURE_SCALE;
-    push([azimuthX(a - halfWidth), heightY(PERSON_TOP + margin, d), azimuthX(a + halfWidth), heightY(-margin, d)], cell, d, alpha);
+    push([azimuthX(a - halfWidth), heightY(PERSON_TOP + margin, d), azimuthX(a + halfWidth), heightY(-margin, d)], cell, d, alpha, w.tint);
     if (w.dog < 0 || alpha <= 0.01) return;
     // The dog trots ahead, seen side on: which way it faces on screen is which way it heads across the view.
     const gx = x + dx * DOG.lead;

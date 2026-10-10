@@ -3,8 +3,9 @@ import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import type { FramePipeline, Updatable } from '@/core/Engine';
 import type { QualitySettings } from './quality';
-import { NEUTRAL_LOOK, displayColor, type Look } from './grade';
+import { NEUTRAL_LOOK, NIGHT_GRADE, displayColor, type Look } from './grade';
 import { whiteBalance } from './whiteBalance';
+import { brightnessStops } from './brightness';
 import { GlassMask } from './glassMask';
 import { AO_FRAGMENT, AO_BLUR_FRAGMENT, DOF_FRAGMENT, LUMINANCE_FRAGMENT, METER_DOWNSAMPLE_FRAGMENT, OUTPUT_FRAGMENT, QUAD_VERTEX } from './postFxShaders';
 import { damp, dampFactor } from '@/math/damp';
@@ -12,6 +13,8 @@ import { damp, dampFactor } from '@/math/damp';
 interface PostFxOptions {
   /** Distance (metres) of what the player is reading up close, or null: the background blurs beyond it. */
   focus?: () => number | null;
+  /** The sky's daylight, 0 night .. 1 day: the look's night grade follows it (`Look.night`). */
+  daylight?: () => number;
 }
 
 /** Photo mode's lens: the distance in focus (m; beyond it blurs), the blur's radius in pixels (0 = sharp), extra exposure (stops). */
@@ -37,7 +40,6 @@ const BLOOM_KNEE = 0.15;
 /** Ambient occlusion: how far a crease darkens (metres) and how dark it gets. */
 const AO_RADIUS = 0.32;
 const AO_INTENSITY = 1.15;
-const AO_SAMPLES = 12;
 /** Depth of field: blur radius in pixels at full strength, and how fast it comes and goes. */
 const DOF_MAX_RADIUS = 5;
 const DOF_RATE = 3;
@@ -54,6 +56,8 @@ const EXPOSURE_KEY = 0.14;
 const EXPOSURE_STRENGTH = 0.32;
 const EXPOSURE_MIN = 0.8;
 const EXPOSURE_MAX = 1.35;
+/** How far the eye may open up once the look has fully turned to night (a street at night is darker than a lamp-lit room). */
+const EXPOSURE_MAX_NIGHT = 1.6;
 const ADAPT_BRIGHTER_S = 1.8;
 const ADAPT_DARKER_S = 0.6;
 const METER_SIZE = 16;
@@ -127,6 +131,13 @@ export class PostFx implements FramePipeline, Updatable {
   /** Photo mode's lens (`setLens`), or null: the focus and the blur are the held box's, the exposure the eye's. */
   private lens: PhotoLens | null = null;
   private time = 0;
+  /** How far the current look has turned to night (its `night` x the dark outside), and the look's eased shares behind it. */
+  private nightNow = 0;
+  private lookNight = 0;
+  private lookNeutral = 0;
+  private readonly nightLift = displayColor(new THREE.Color(), NIGHT_GRADE.shadows);
+  private readonly shadowsShown = new THREE.Color();
+  private readonly nightTint = new THREE.Color();
   private camera: THREE.PerspectiveCamera | null = null;
   private readonly size = new THREE.Vector2();
   /** Share of the drawing buffer the frame is rendered at (`setRenderScale`), and the frame's size in texels at that share. */
@@ -180,14 +191,14 @@ export class PostFx implements FramePipeline, Updatable {
     });
 
     if (quality.ssao) {
-      const aoSize = { w: Math.max(1, Math.round(w / 2)), h: Math.max(1, Math.round(h / 2)) };
+      const aoSize = { w: Math.max(1, Math.round(w * quality.ssaoScale)), h: Math.max(1, Math.round(h * quality.ssaoScale)) };
       const aoOptions = { type: THREE.UnsignedByteType, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, depthBuffer: false };
       this.aoTarget = new THREE.WebGLRenderTarget(aoSize.w, aoSize.h, aoOptions);
       this.aoBlurTarget = new THREE.WebGLRenderTarget(aoSize.w, aoSize.h, aoOptions);
       this.aoMaterial = new THREE.ShaderMaterial({
         ...common,
         fragmentShader: AO_FRAGMENT,
-        defines: { SAMPLES: AO_SAMPLES },
+        defines: { SAMPLES: quality.ssaoSamples },
         uniforms: {
           ...depthUniforms(),
           projection: { value: new THREE.Matrix4() },
@@ -272,11 +283,12 @@ export class PostFx implements FramePipeline, Updatable {
         whiteBalance: { value: new THREE.Matrix3() },
         uvScale: { value: this.uvScale },
         uvLimit: { value: this.uvLimit },
-        shadows: { value: this.lookColors.shadows },
+        shadows: { value: this.shadowsShown },
         highlights: { value: this.lookColors.highlights.setRGB(1, 1, 1) },
         vignette: { value: 0 },
         grain: { value: 0 },
         sharpen: { value: 0 },
+        neutral: { value: 0 },
       } satisfies Record<string, THREE.IUniform> & LookUniforms,
     });
     // Tone mapping and sRGB are done by the output shader itself, after the HDR passes.
@@ -300,8 +312,9 @@ export class PostFx implements FramePipeline, Updatable {
 
   /**
    * Behind a travel's curtain: the look where it is going now, the eye where the last reading puts
-   * it, and a reading taken on the next frame whose result the eye jumps to (it would otherwise
-   * adapt for a second or two after the fade-in).
+   * it, and a reading taken on the next frame. Into a darker place the eye jumps to that reading (it
+   * would otherwise open up for a second or two after the fade-in); into a brighter one it keeps the
+   * exposure it came with, so stepping out into daylight glares and settles in about half a second.
    */
   settle(): void {
     this.stepLook(1);
@@ -318,7 +331,7 @@ export class PostFx implements FramePipeline, Updatable {
    * the box held up to read).
    */
   videoFilter(pixelRatio: number): string {
-    const exposure = this.exposure * Math.pow(2, this.look.exposure + (this.lens?.exposure ?? 0));
+    const exposure = this.exposure * Math.pow(2, this.look.exposure + (this.lens?.exposure ?? 0) + brightnessStops());
     const round = (v: number, step: number) => Math.round(v / step) * step;
     const parts = [`brightness(${round(Math.sqrt(exposure), 0.02).toFixed(2)})`];
     if (this.quality.grade) parts.push(`contrast(${round(this.look.contrast, 0.01).toFixed(2)})`, `saturate(${round(this.look.saturation, 0.01).toFixed(2)})`);
@@ -331,6 +344,8 @@ export class PostFx implements FramePipeline, Updatable {
 
   update(dt: number): void {
     this.time += dt;
+    const day = this.options.daylight?.() ?? 1;
+    this.nightNow = this.lookNight * THREE.MathUtils.clamp(1 - day, 0, 1);
     this.stepLook(dampFactor(LOOK_RATE, dt));
 
     const lens = this.lens;
@@ -377,9 +392,9 @@ export class PostFx implements FramePipeline, Updatable {
     // The bloom reads and blends over the whole target.
     colorViewport.set(0, 0, this.size.x, this.size.y);
 
-    const exposure = this.exposure * Math.pow(2, this.look.exposure + (this.lens?.exposure ?? 0));
+    const exposure = this.exposure * Math.pow(2, this.look.exposure + (this.lens?.exposure ?? 0) + brightnessStops());
     if (this.bloom) {
-      this.bloom.strength = this.look.bloom;
+      this.bloom.strength = this.look.bloom + NIGHT_GRADE.bloom * this.nightNow;
       // The threshold is on what the eye sees, after its exposure: a lamp shown brighter in a dark
       // room the eye has adapted to glows more, not less (the scene's linear values do not change).
       this.bloomThreshold.value = THREE.MathUtils.clamp(BLOOM_THRESHOLD / exposure, BLOOM_THRESHOLD * 0.5, BLOOM_THRESHOLD * 1.6);
@@ -456,8 +471,8 @@ export class PostFx implements FramePipeline, Updatable {
       this.meterAverageMaterial.uniforms.sourceTexel!.value.set(1 / this.meterQuarter.width, 1 / this.meterQuarter.height);
     }
     if (this.aoTarget && this.aoBlurTarget && this.aoMaterial && this.aoBlurMaterial) {
-      const aw = Math.max(1, Math.round(w / 2));
-      const ah = Math.max(1, Math.round(h / 2));
+      const aw = Math.max(1, Math.round(w * this.quality.ssaoScale));
+      const ah = Math.max(1, Math.round(h * this.quality.ssaoScale));
       this.aoTarget.setSize(aw, ah);
       this.aoBlurTarget.setSize(aw, ah);
       this.glass?.setSize(aw, ah);
@@ -532,8 +547,10 @@ export class PostFx implements FramePipeline, Updatable {
     }
     if (weight <= 0) return;
     const average = Math.pow(2, sum / weight);
-    this.targetExposure = THREE.MathUtils.clamp(Math.pow(EXPOSURE_KEY / average, EXPOSURE_STRENGTH), EXPOSURE_MIN, EXPOSURE_MAX);
-    if (snap) this.exposure = this.targetExposure;
+    const most = THREE.MathUtils.lerp(EXPOSURE_MAX, EXPOSURE_MAX_NIGHT, this.nightNow);
+    this.targetExposure = THREE.MathUtils.clamp(Math.pow(EXPOSURE_KEY / average, EXPOSURE_STRENGTH), EXPOSURE_MIN, most);
+    // Only towards the dark: a brighter place is met with the eye of the dimmer one and squints itself in (`ADAPT_DARKER_S`).
+    if (snap && this.targetExposure > this.exposure) this.exposure = this.targetExposure;
   }
 
   private stepLook(t: number): void {
@@ -547,14 +564,20 @@ export class PostFx implements FramePipeline, Updatable {
     look.vignette = lerp(look.vignette, target.vignette, t);
     look.grain = lerp(look.grain, target.grain, t);
     look.bloom = lerp(look.bloom, target.bloom, t);
+    this.lookNight = lerp(this.lookNight, target.night ?? 0, t);
+    this.lookNeutral = lerp(this.lookNeutral, target.neutralTone ?? 0, t);
     this.lookColors.shadows.lerp(this.lookColors.targetShadows, t);
     this.lookColors.highlights.lerp(this.lookColors.targetHighlights, t);
 
     const grade = this.quality.grade;
     const u = this.outputMaterial.uniforms;
+    // After dark the look turns towards `NIGHT_GRADE` as far as its `night` share says.
+    const night = this.nightNow;
     u.contrast!.value = grade ? look.contrast : 1;
-    u.saturation!.value = grade ? look.saturation : 1;
-    const temperature = grade ? look.temperature : 0;
+    u.saturation!.value = grade ? look.saturation * lerp(1, NIGHT_GRADE.saturation, night) : 1;
+    u.neutral!.value = this.lookNeutral;
+    // Rounded: the night eases in over minutes, the white balance matrix is rebuilt only when it shows.
+    const temperature = grade ? Math.round((look.temperature + NIGHT_GRADE.temperature * night) * 500) / 500 : 0;
     if (temperature !== this.lastTemperature) {
       this.lastTemperature = temperature;
       whiteBalance(temperature, u.whiteBalance!.value);
@@ -565,5 +588,7 @@ export class PostFx implements FramePipeline, Updatable {
       this.lookColors.shadows.setRGB(0, 0, 0);
       this.lookColors.highlights.setRGB(1, 1, 1);
     }
+    this.shadowsShown.copy(this.lookColors.shadows);
+    if (grade) this.shadowsShown.add(this.nightTint.copy(this.nightLift).multiplyScalar(night));
   }
 }

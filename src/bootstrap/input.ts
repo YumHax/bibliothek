@@ -6,6 +6,7 @@ import type { FirstPersonController } from '@/player/FirstPersonController';
 import { applySettings } from '@/settings/apply';
 import { keyLabelsChanged } from '@/ui/keys';
 import { hudSlot } from '@/ui/hudSlot';
+import { scrollPanel } from '@/ui/menu/MenuNav';
 import type { Overlay } from '@/ui/Overlay';
 import type { Services } from './services';
 import type { BuiltWorld, GameWorld } from './world';
@@ -85,21 +86,22 @@ export function createInteraction(services: Services, parts: { world: GameWorld;
   // A controller unplugged while it was the way in: back to the menu (nothing else would move), and a word either way.
   const gamepad = new GamepadInput(input, player, syntheticMouse, {
     keyAliases: PAD_ALIASES,
+    // Out of the room the right stick scrolls the open panel.
+    onScroll: (pixels) => void scrollPanel(pixels),
     onConnectionChange: (connected) => {
       if (connected) {
         // In the room with the mouse, a button does nothing until the menu is up: say the way in that works.
-        const text = player.hasPointerLock ? 'Controller connected. Press Start, then any button, to play with it.' : 'Controller connected. Press any button to play with it.';
-        notices.tip(text, { id: 'controller', ms: 5000 });
+        notices.tip(player.hasPointerLock ? 'Controller connected: [Start], then any button' : 'Controller connected: press any button', { id: 'controller', ms: 4000 });
         return;
       }
       if (player.isVirtualLocked && document.body.classList.contains('input-gamepad')) player.exitVirtual();
-      notices.tip('Controller disconnected.', { id: 'controller', ms: 6000 });
+      notices.tip('Controller disconnected', { id: 'controller', ms: 4000 });
     },
   });
   engine.addUpdatable(gamepad);
   // The "rotating" badge joins the HUD's column under the crosshair (the input layer knows no HUD: the slot is handed in).
   const touch = new TouchControls(container, engine.renderer.domElement, input, player, syntheticMouse, { badgeHome: hudSlot(container, 'crosshair') });
-  applySettings(settings, { input, mouse: player, player, inspector, notices, gamepad, touch, hud: overlay, onBindingsChange: keyLabelsChanged });
+  applySettings(settings, { input, mouse: player, player, inspector, notices, gamepad, touch, hud: overlay, display: engine, onBindingsChange: keyLabelsChanged });
 
   // Photo mode (P): the HUD away, a free camera on a leash, the lens and the grade, a PNG of the frame (docs/graphics.md).
   const photo = new PhotoMode({

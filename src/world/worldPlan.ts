@@ -21,6 +21,7 @@ import { NEIGHBOUR_FLAT_PLAN, NEIGHBOUR_FLAT_ROOM } from './neighbourFlat/neighb
 import { ANNEX_ORIGIN, ANNEX_ROOM, STUDY_ORIGIN, STUDY_ROOM } from './annex/annexPlan';
 import { COURTYARD_PLAN, COURTYARD_ROOM, inYard } from './courtyard/courtyardPlan';
 import { SELLER_FLAT_PLAN, SELLER_FLAT_ROOM } from './sellerFlat/sellerFlatPlan';
+import { GRANDMA_FLAT_PLAN, GRANDMA_FLAT_ROOM } from './grandma/grandmaFlatPlan';
 import { CELLAR_PLAN, CELLAR_ROOM, cellCentre } from './cellar/cellarPlan';
 import { ATTIC_PLAN, ATTIC_ROOM } from './attic/atticPlan';
 import { ROOF_PLAN, ROOF_ROOM } from './roof/roofPlan';
@@ -92,7 +93,7 @@ export const KITCHEN_WING: NearWall = {
 };
 
 /** What a zone is; one builder per kind in `layout.ts`. */
-export type ZoneKind = 'collectionRoom' | 'hallway' | 'bathroom' | 'bedroom' | 'kitchen' | 'balcony' | 'stairwell' | 'arcade' | 'market' | 'street' | 'shop' | 'annex' | 'annexStudy' | 'neighbourFlat' | 'courtyard' | 'saleroom' | 'sellerFlat' | 'cellar' | 'attic' | 'roof';
+export type ZoneKind = 'collectionRoom' | 'hallway' | 'bathroom' | 'bedroom' | 'kitchen' | 'balcony' | 'stairwell' | 'arcade' | 'market' | 'street' | 'shop' | 'annex' | 'annexStudy' | 'neighbourFlat' | 'courtyard' | 'saleroom' | 'sellerFlat' | 'grandmaFlat' | 'cellar' | 'attic' | 'roof';
 
 /**
  * A zone the player is teleported to (and from) instead of walking: the arcade, the market and the walk-in shops
@@ -150,7 +151,7 @@ function shopZone(id: ShopZoneId, x: number, label: string) {
     extent: plan.room,
     neighbours: [],
     travel: { label, arrival: plan.arrival.at, yaw: plan.arrival.yaw },
-    look: 'shop',
+    look: plan.look ?? 'shop',
   } as const satisfies ZoneEntry;
 }
 
@@ -312,7 +313,7 @@ const ZONES = {
     extent: SALEROOM_ROOM,
     neighbours: [],
     travel: { label: 'The saleroom', arrival: SALEROOM_PLAN.arrival.at, yaw: SALEROOM_PLAN.arrival.yaw, unlisted: true },
-    look: 'market',
+    look: 'saleroom',
   },
   // A small ad's seller at home, in Park Corner Mansions (src/world/sellerFlat/): one living room dressed for whoever
   // the player rang, reached by the bell at the block's street door (`street/MansionBell`) and left by its landing
@@ -323,6 +324,15 @@ const ZONES = {
     extent: SELLER_FLAT_ROOM,
     neighbours: [],
     travel: { label: 'A seller’s flat', arrival: SELLER_FLAT_PLAN.arrival.at, yaw: SELLER_FLAT_PLAN.arrival.yaw, unlisted: true },
+  },
+  // Mémé's flat across town (src/world/grandma/): her living-dining room at the end of bus line 38, reached by the bus
+  // from Front Street's stop and left by its landing door back to the stop; never from the menu.
+  grandmaFlat: {
+    kind: 'grandmaFlat',
+    origin: [560, 0, 0],
+    extent: GRANDMA_FLAT_ROOM,
+    neighbours: [],
+    travel: { label: 'Mémé’s', arrival: GRANDMA_FLAT_PLAN.arrival.at, yaw: GRANDMA_FLAT_PLAN.arrival.yaw, unlisted: true },
   },
   // The building's cellars (src/world/cellar/): a vaulted maze under the entrance hall, through its cellar door once
   // the concierge has given the key, and back up its stairs; reached by travel only, never from the menu.

@@ -9,6 +9,19 @@ export interface ProgramParts {
   programs?: ProgramRunner;
 }
 
+/**
+ * A program's controls line names the pad's buttons ("A jumps", "D-pad moves"): each gets the key it is on here as a
+ * key cap next to it ("A [K] jumps"), so the line is read on the keyboard (rebound keys and AZERTY included).
+ */
+function padHint(hint: string): string {
+  const cap = (id: 'padA' | 'padB' | 'padStart' | 'padSelect'): string => `[${actionKeyLabel(id)}]`;
+  const dpad = (['stickUp', 'stickLeft', 'stickDown', 'stickRight'] as const).map((id) => `[${actionKeyLabel(id)}]`).join('');
+  return hint.replace(/\b(D-pad|Start|Select|A|B)\b/g, (button: string) => {
+    if (button === 'D-pad') return `D-pad ${dpad}`;
+    return `${button} ${cap(button === 'A' ? 'padA' : button === 'B' ? 'padB' : button === 'Start' ? 'padStart' : 'padSelect')}`;
+  });
+}
+
 /** Two presses of walk-away this close together (ms) put the pad down and switch the program off. */
 const PUT_DOWN_CONFIRM_MS = 1500;
 
@@ -70,7 +83,7 @@ export class ProgramPlay implements KeyRoute {
     this.host.setFrozen(true);
     this.frozen = true;
     this.parts.programs?.setHolding(true);
-    this.host.tip(`${program.hint}\n${actionKeyLabel('walkAway')} twice puts the pad down.`, { id: 'program-pad', until: () => !this.holding });
+    this.host.prompt(`${padHint(program.hint)} · [${actionKeyLabel('walkAway')}] twice: pad down`, { id: 'program-pad', until: () => !this.holding });
   }
 
   private letGo(): void {

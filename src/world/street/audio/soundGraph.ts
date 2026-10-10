@@ -5,18 +5,25 @@ import { streetInput } from './streetBus';
 import { noiseBurst } from '@/audio/synth';
 import { random } from '@/random';
 
+/** One-shots a graph keeps sounding or scheduled at once at most (a shutter's rattle is ~70, the hammer's tenth 4). */
+const MAX_SHOTS = 160;
+
 /**
  * One street sound's Web Audio graph, kept so it can be let go whole: a master gain into the
  * street's bus (`streetInput`), the shared white noise, and every looping source and oscillator
  * started for it. `stop()` stops them all and disconnects: called on dispose and while the zone
  * is dormant (a dormant street costs no audio processing; the graph is built again on the next
- * update). `create` gives null until a gesture started the audio.
+ * update). `create` gives null until a gesture started the audio. Its one-shots (`burst`, `shaped`) are capped at
+ * `MAX_SHOTS` sounding or scheduled at once: past it a new one is dropped, so a pile of cues landing in one frame
+ * (a dozen shutters rolling, a flock and a hammer) is thinned instead of summed into a roar.
  */
 export class SoundGraph {
   readonly noise: AudioBuffer;
   readonly master: GainNode;
   private readonly running: AudioScheduledSourceNode[] = [];
   private readonly legs: SpatialOut[] = [];
+  /** When each one-shot still sounding or scheduled ends (context time), pruned as they pass. */
+  private shotEnds: number[] = [];
   private stopped = false;
 
   private constructor(readonly ctx: AudioContext, level: number) {
@@ -99,13 +106,14 @@ export class SoundGraph {
 
   /** A burst of the noise into `out`: up to `level` in a few ms, dying over `length` s, from `at` (context time). */
   burst(out: AudioNode, at: number, length: number, level: number): void {
-    if (this.stopped) return;
+    if (this.stopped || !this.admit(at + length + 0.02)) return;
     noiseBurst(this.ctx, out, at, { level, length, attack: Math.min(0.006, length / 4), noise: this.noise, duration: length + 0.02 });
   }
 
   /** A burst shaped by `envelope` ([seconds from `at`, gain] points, linear between), through `out`. */
   shaped(out: AudioNode, at: number, envelope: readonly (readonly [number, number])[]): void {
-    if (this.stopped) return;
+    const end = envelope[envelope.length - 1]?.[0] ?? 0.1;
+    if (this.stopped || !this.admit(at + end + 0.02)) return;
     const source = this.ctx.createBufferSource();
     source.buffer = this.noise;
     source.loop = true;
@@ -113,9 +121,19 @@ export class SoundGraph {
     env.gain.setValueAtTime(0, at);
     for (const [t, v] of envelope) env.gain.linearRampToValueAtTime(v, at + t);
     source.connect(env).connect(out);
-    const end = envelope[envelope.length - 1]?.[0] ?? 0.1;
     source.start(at, random() * 1.5);
     source.stop(at + end + 0.02);
+  }
+
+  /** Whether one more one-shot (ending at `end`, context time) fits under `MAX_SHOTS`; counts it if so. */
+  private admit(end: number): boolean {
+    if (this.shotEnds.length >= MAX_SHOTS) {
+      const now = this.ctx.currentTime;
+      this.shotEnds = this.shotEnds.filter((t) => t > now);
+      if (this.shotEnds.length >= MAX_SHOTS) return false;
+    }
+    this.shotEnds.push(end);
+    return true;
   }
 
   /** Stops every kept source and lets the graph go. */

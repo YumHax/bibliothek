@@ -1,12 +1,14 @@
 import * as THREE from 'three';
 import type { Updatable } from '@/core/Engine';
 import type { Furniture } from '../Furniture';
+import type { DayNight } from '../props/DayNight';
 import { currentSeason } from '@/time/season';
 import { FLOWER_BEDS, PARK_PATHS, PATH_WIDTH } from '../city/park';
 import { gravelTile } from './groundTextures';
 import { snowCovered } from './snowCover';
 import type { Vec2 } from './streetPlan';
-import { FLAT_IN_STREET, PARK_STREET, STREET_ENDS } from '@/world/measures/street';
+import { FLAT_IN_STREET, LAWN_REACH, PARK_STREET, STREET_ENDS } from '@/world/measures/street';
+import { GrassTufts, type TuftStrip } from './GrassTufts';
 import { GROUND, onSurface } from '../surface/layers';
 import { buildParkFeatures, type ParkFeatures } from './StreetParkFeatures';
 import { lcg } from '@/random';
@@ -18,12 +20,16 @@ interface StreetParkOptions {
   reach: number;
   /** The walkable street's own park: its walked gardens' fence, trees and playground collide (`StreetParkFeatures`). */
   walkable?: boolean;
+  /** The weather the pond's water ripples with (none: a light breeze, no rain). */
+  dayNight?: DayNight;
 }
 
 /** Flowers per square metre of bed, their colours; how high they stand. */
 const FLOWERS_PER_M2 = 7;
 const BLOOMS = [0xd8324a, 0xf2c83a, 0xf4f0e8, 0x8a4ab8, 0xe8702a, 0xf28ab0];
 const STEM = 0.28;
+/** How far past a path's edge its long grass grows (m). */
+const EDGE_TUFTS = 0.15;
 
 /** A point of the park (`city/park`, the flat's frame) in the street's. */
 function inStreet([x, z]: readonly [number, number]): Vec2 {
@@ -55,6 +61,8 @@ export class StreetPark extends THREE.Group implements Furniture, Updatable {
     const positions: number[] = [];
     const uvs: number[] = [];
     const tile = gravelTile(options.anisotropy);
+    // The grass left long along the paths' edges, the gardener's strimmer never quite at the gravel.
+    const edges: TuftStrip[] = [];
     for (const path of PARK_PATHS) {
       for (let i = 1; i < path.length; i++) {
         const a = inStreet(path[i - 1]!);
@@ -71,6 +79,10 @@ export class StreetPark extends THREE.Group implements Furniture, Updatable {
           const nx = (-(b[1] - a[1]) / length) * (PATH_WIDTH / 2);
           const nz = ((b[0] - a[0]) / length) * (PATH_WIDTH / 2);
           const corners: Vec2[] = [[p0[0] - nx, p0[1] - nz], [p1[0] - nx, p1[1] - nz], [p1[0] + nx, p1[1] + nz], [p0[0] - nx, p0[1] - nz], [p1[0] + nx, p1[1] + nz], [p0[0] + nx, p0[1] + nz]];
+          const out = 1 + (2 * EDGE_TUFTS) / PATH_WIDTH;
+          for (const side of [-1, 1]) {
+            edges.push({ from: [p0[0] + side * nx * out, p0[1] + side * nz * out], to: [p1[0] + side * nx * out, p1[1] + side * nz * out], width: 0.22, y: options.lawnY });
+          }
           for (const [x, z] of corners) {
             positions.push(x, y, z);
             uvs.push(x / tile.metres, z / tile.metres);
@@ -131,7 +143,13 @@ export class StreetPark extends THREE.Group implements Furniture, Updatable {
       }
     }
 
-    this.features = buildParkFeatures(this, options.lawnY, options.walkable ?? false);
+    // Long grass along the paths and in the hedge's foot (where it stands on the lawn's side).
+    const hedgeFoot = PARK_STREET.hedge - 0.75;
+    edges.push({ from: [hedgeFoot, STREET_ENDS.south + 1], to: [hedgeFoot, LAWN_REACH.z], width: 0.3, y: options.lawnY });
+    this.add(new GrassTufts(edges, 2.2, 211));
+
+    const dayNight = options.dayNight;
+    this.features = buildParkFeatures(this, options.lawnY, options.walkable ?? false, dayNight ? () => dayNight.state : undefined);
     this.colliders = this.features.colliders;
   }
 

@@ -29,6 +29,11 @@ export class CabinetControls {
     this.sets = twoPlayer ? [addControls(cabinet, -0.2, 0xd23a3a, true), addControls(cabinet, 0.12, 0x3a7ad2, true)] : [addControls(cabinet, -0.14, 0xd23a3a, false)];
   }
 
+  /** The knobs and buttons (the cabinet's hover glints them: what a hand reaches for). */
+  get grips(): THREE.Mesh[] {
+    return this.sets.flatMap((set) => [set.knob, ...set.buttons]);
+  }
+
   /** Where the hands of the player at set `player` (0 or 1) are: on the knob as it leans, on the first button. */
   handsAt(player: number, hands: [THREE.Vector3, THREE.Vector3]): [THREE.Vector3, THREE.Vector3] {
     const set = this.sets[player]!;

@@ -1,9 +1,19 @@
-/* The first day's note: a sheet of squared paper in felt pen, held up over the view (`.ui-modal--centre`). */
+/*
+ * The first day's note (ToDoNotePanel): a sheet of squared paper in felt pen, held up over the view
+ * (`.ui-modal--centre`). The round is drawn as a route down the page: a dashed line through a stop a step, each stop
+ * a pictogram in a ring; a stop done is filled green with a tick, the next is ringed in red felt pen, the rest wait in
+ * pencil. The tally and the signature close the note.
+ */
 @layer tokens, base, components, panels;
 @layer panels {
   .todo-note__paper {
     --paper: var(--paper-note);
     --ink: var(--ink-note);
+    /* The pencil, the felt pens: this note's own slots. */
+    --pencil: rgba(60, 60, 66, 0.55);
+    --felt-green: var(--ink-green);
+    --felt-red: var(--ink-red);
+    --stop: 2.1rem;
     width: min(var(--card-w-md), 100%);
     max-height: 100%;
     overflow-y: auto;
@@ -12,8 +22,8 @@
     color: var(--ink);
     color-scheme: light;
     font-family: var(--ui-font-hand);
-    font-size: var(--fs-6);
-    line-height: 1.5;
+    font-size: var(--fs-t2);
+    line-height: 1.4;
     border-radius: var(--ui-radius-2xs);
     box-shadow: var(--ui-shadow-paper);
     transform: rotate(0.8deg);
@@ -22,24 +32,76 @@
       repeating-linear-gradient(90deg, transparent 0, transparent 19px, var(--paper-squares) 19px, var(--paper-squares) 20px),
       var(--paper);
   }
-  .todo-note__paper p {
-    margin: 0 0 0.6rem;
-  }
-  .todo-note__hello {
-    font-size: 1.3rem;
-  }
-  .todo-note__paper ol {
-    margin: 0 0 0.6rem;
+  .todo-note__paper p { margin: 0 0 0.5rem; }
+  .todo-note__hello { font-size: var(--fs-t5); font-weight: 600; line-height: 1.1; }
+  .todo-note__intro { font-size: var(--fs-t1); color: var(--pencil); }
+
+  /* The route: a dashed line down the left, through the stops. */
+  .todo-note__route {
+    position: relative;
+    margin: 0.4rem 0 0.6rem;
     padding: 0;
     list-style: none;
   }
-  .todo-note__paper li.is-done {
-    text-decoration: line-through;
-    opacity: 0.6;
+  .todo-note__route::before {
+    content: '';
+    position: absolute;
+    top: calc(var(--stop) / 2);
+    bottom: calc(var(--stop) / 2);
+    left: calc(var(--stop) / 2 - 1px);
+    border-left: 2px dashed var(--pencil);
   }
-  .todo-note__sign {
-    text-align: right;
+  .todo-note__step {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 0.7rem;
+    min-height: calc(var(--stop) + 0.5rem);
   }
+  .todo-note__stop {
+    position: relative;
+    flex: none;
+    display: grid;
+    place-items: center;
+    width: var(--stop);
+    height: var(--stop);
+    box-sizing: border-box;
+    color: var(--ink);
+    background: var(--paper);
+    border: 2px solid var(--ink);
+    border-radius: 50%;
+  }
+  .todo-note__icon { width: 1.1rem; height: 1.1rem; }
+  .todo-note__text { flex: 1 1 auto; min-width: 0; }
+  /* Done: the stop filled green, the tick over the pictogram, the words struck through lightly. */
+  .todo-note__step--done .todo-note__stop { color: var(--paper); background: var(--felt-green); border-color: var(--felt-green); }
+  .todo-note__step--done .todo-note__icon { opacity: 0.35; }
+  .todo-note__tick { position: absolute; inset: 0; width: 100%; height: 100%; padding: 0.25rem; box-sizing: border-box; stroke-width: 2; }
+  .todo-note__step--done .todo-note__text { color: var(--pencil); text-decoration: line-through; text-decoration-thickness: 1px; }
+  /* Next: ringed twice in red felt pen, a little larger; "next" written after the words. */
+  .todo-note__step--next .todo-note__stop {
+    color: var(--felt-red);
+    border: 2.5px solid var(--felt-red);
+    box-shadow: 0 0 0 3px var(--paper), 0 0 0 4.5px var(--felt-red);
+    transform: scale(1.08);
+  }
+  .todo-note__step--next .todo-note__text { font-weight: 600; }
+  .todo-note__next {
+    flex: none;
+    padding: 0 0.5rem;
+    font-size: var(--fs-5);
+    line-height: 1.3;
+    color: var(--felt-red);
+    border: 1.5px solid var(--felt-red);
+    border-radius: var(--ui-radius-pill);
+    transform: rotate(-4deg);
+  }
+  /* Ahead: in pencil. */
+  .todo-note__step--ahead .todo-note__stop { color: var(--pencil); border-color: var(--pencil); border-style: dashed; }
+  .todo-note__step--ahead .todo-note__text { color: var(--pencil); }
+
+  .todo-note__sign { display: flex; justify-content: space-between; align-items: baseline; }
+  .todo-note__tally { font-size: var(--fs-t1); color: var(--pencil); }
   .todo-note__paper footer {
     display: flex;
     justify-content: space-between;
@@ -57,7 +119,5 @@
     padding: 0.15rem 0.6rem;
     cursor: pointer;
   }
-  .todo-note__paper button:hover {
-    background: var(--paper-note-wash);
-  }
+  .todo-note__paper button:hover { background: var(--paper-note-wash); }
 }

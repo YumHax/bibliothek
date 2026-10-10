@@ -35,13 +35,25 @@ import { StringLights } from './StringLights';
 import { PartySaleTable, PartyTable } from './PartyTable';
 import { PartyScores } from './PartyScores';
 import { NeighboursParty } from './NeighboursParty';
+import { YardLantern } from './YardLantern';
 import { YardBounds, binBags } from './YardBounds';
 import { courtyardDressers } from './huntHook';
+import { YardDressing } from './YardDressing';
+import { YardGroundFloors } from './YardGroundFloors';
+import { placeBulky } from './placeBulky';
+import { placeCinema } from './placeCinema';
+import { placeKids } from './placeKids';
+import { bulkyLot } from '@/building/bulkyWaste';
 
 // The facades and the yard are walked past at a slant.
 const ANISOTROPY = anisotropyFor('grazing');
 /** The facades round the yard (`streetPlan`'s ids): our back and its light well, the rear building, the neighbour's wing. */
 const AROUND = ['oursBack', 'oursBackW', 'oursWell', 'oursWellE', 'oursWellW', 'courtRear', 'courtEast'];
+/**
+ * The paint (px/m) every face round the yard gets here, walked 1-15 m off (`Buildings` builds windows in 3D from 20):
+ * finer than from Front Street, where the rear building and the wing are far rows.
+ */
+const YARD_DETAIL = 32;
 /** What the residents' chat raises their friendship by, once a party. */
 const PARTY_CHAT = 6;
 
@@ -50,12 +62,13 @@ const PARTY_CHAT = 6;
  * on, built from the same plan and the same street classes (`Courtyard`'s setts, lawn, bins, shed, rack, sandpit and
  * bikes, the chestnut, the facades round it with their night windows and the lives behind them, `building/rearWindows`),
  * under the street's own outdoor rig (sun and its shadow, the sky's ambient, the dome, the rain), with the concierge's
- * pots by our back door and the bags out on bin day. On a party day (`building/neighboursParty`) the trestle tables,
+ * pots by our back door and the bags out on bin day, what makes it lived in walked (`YardDressing`), and on bulky-waste
+ * day a resident's clear-out by the bins to carry off (`placeBulky`, `building/bulkyWaste`). On a party day (`building/neighboursParty`) the trestle tables,
  * the residents' sale table, the old cabinet of the tournament and the bulbs are set out from the afternoon, and the
  * residents come down in the evening (`NeighboursParty`). The street's classes are built in the street's frame and
  * placed at `-COURTYARD_CENTRE`; the rig, the dome and the rain follow the camera from the zone's origin.
  */
-export function furnishCourtyard(zone: Zone, ctx: Pick<BuildContext, 'sky' | 'listener' | 'acoustics' | 'today' | 'input' | 'panels' | 'money' | 'home' | 'social' | 'building'>): ZoneHandle {
+export function furnishCourtyard(zone: Zone, ctx: Pick<BuildContext, 'cssLayer' | 'sky' | 'listener' | 'acoustics' | 'today' | 'input' | 'panels' | 'money' | 'home' | 'social' | 'building' | 'covers' | 'collection' | 'market' | 'notices' | 'classifieds'>): ZoneHandle {
   const { sky, listener, today } = ctx;
   const { dayNight } = sky;
   const origin = new THREE.Vector3();
@@ -68,12 +81,15 @@ export function furnishCourtyard(zone: Zone, ctx: Pick<BuildContext, 'sky' | 'li
 
   // Light, sky, the yard and the buildings round it.
   const lighting = zone.place(
-    new StreetLighting(dayNight, listener, (out) => sky.outdoors.lightDirection(dayNight.state, out), { shadowMapSize: Math.min(2048, QUALITY.shadowMapSize * 2), shadowReach: 20 }),
+    new StreetLighting(dayNight, listener, (out) => sky.outdoors.lightDirection(dayNight.state, out), { shadowMapSize: Math.min(2048, QUALITY.shadowMapSize * 2), shadowReach: 20, groundY: street.y }),
     origin,
   );
   zone.place(new SkyDome(dayNight, listener), origin);
   zone.place(new Courtyard(dayNight, ANISOTROPY), street);
-  const facades = FACADES.filter((f) => AROUND.includes(f.id));
+  // The faces round the yard stand 1-15 m off (the story windows among theirs): painted finer than from Front Street,
+  // and where their ground floors are built in 3D (`YardGroundFloors`) painted bare under them.
+  const built: readonly string[] = plan.groundFloors.facades;
+  const facades = FACADES.filter((f) => AROUND.includes(f.id)).map((f) => ({ ...f, detail: Math.max(f.detail, YARD_DETAIL), ...(built.includes(f.id) ? { builtGround: true } : {}) }));
   const windowLife = buildingWindowLife({ day: () => today.gameDay, hours });
   const buildings = zone.place(new Buildings(facades, dayNight, { detailScale: QUALITY.level === 'low' ? 0.8 : 1.3, anisotropy: ANISOTROPY, shopGoods: null, nightScale: QUALITY.level === 'high' ? 0.5 : 0.25, windowLife }), street);
   zone.place(new FacadeRelief(buildings.fronts), street);
@@ -81,10 +97,17 @@ export function furnishCourtyard(zone: Zone, ctx: Pick<BuildContext, 'sky' | 'li
   zone.place(new Precipitation(dayNight), origin);
   zone.place(new StreetBounds(facades), street);
   zone.place(new YardBounds(plan.trunk.radius), street);
+  // What makes it lived in, walked: the bench, the washing, the downpipe and drains, puddles, the tap, the lean-to...
+  zone.place(new YardDressing(dayNight), street);
+  // The ground floors round it, built: plinths, doors, barred windows, vents, a downpipe.
+  zone.place(new YardGroundFloors(dayNight), street);
 
   // Our back door, back into the entrance hall.
   const { backDoor } = plan;
   zone.place(new TravelDoor({ style: 'panelled', width: backDoor.width, height: backDoor.height, leafColor: YARD_DOOR_COLOUR, label: 'The entrance hall · go in', to: 'stairwell' }), at([backDoor.at[0], backDoor.at[1] - 0.005]), Math.PI);
+  // Its lantern over it, lit on the building's timer from dusk (the yard's one light but the party's).
+  const lanternY = backDoor.height + plan.lantern.overDoor;
+  zone.place(new YardLantern(dayNight, -lanternY), at(backDoor.at, lanternY));
   // The concierge's pots by it, and the bags by the bins on bin day.
   for (const pot of plan.pots) zone.place(new Plant({ kind: pot.kind, pot: 'terracotta', seed: pot.seed }), at(pot.at));
   if (today.gameDay % plan.binDay.every === plan.binDay.phase) zone.place(binBags(plan.binDay.bags), street);
@@ -108,6 +131,32 @@ export function furnishCourtyard(zone: Zone, ctx: Pick<BuildContext, 'sky' | 'li
   };
   setOut(today.gameDay);
   zone.onUnload(today.onNewGameDay(setOut));
+
+  // Bulky-waste day: a resident's clear-out by the bins, for whoever wants it before the lorry (`building/bulkyWaste`).
+  let pile: Furniture[] | null = null;
+  const putOut = (day: number): void => {
+    if (pile) {
+      for (const item of pile) {
+        zone.remove(item);
+        item.dispose?.();
+        disposeTree(item);
+      }
+      // Emptied, so the carton's games drawn late see the pile is gone.
+      pile.length = 0;
+      pile = null;
+    }
+    const upgrades = ctx.home.upgrades;
+    const lot = bulkyLot(day, (piece) => upgrades?.canBuy(piece) ?? true);
+    if (lot) pile = placeBulky(zone, ctx, lot, at);
+  };
+  putOut(today.gameDay);
+  zone.onUnload(today.onNewGameDay(putOut));
+
+  // The film night: the sheet on the workshop's wall once the flat has its projector (`building/yardCinema`).
+  placeCinema(zone, ctx, at);
+
+  // The building's kids after school, on the bench and the sandpit's edge with their handhelds (`building/kids`).
+  placeKids(zone, ctx, at);
 
   const lawn = COURTYARD_YARD.lawn;
   return {
@@ -154,7 +203,7 @@ function placeParty(zone: Zone, ctx: Pick<BuildContext, 'sky' | 'listener' | 'ac
     recordTournamentPlay(day, today.realDate(), won);
     if (won && !before.won) {
       money.wallet.addTickets(prize);
-      home.household?.notices.reward({ title: 'Party tournament won!', detail: `You beat the residents’ best on ${game.title}: the kitty is yours.`, tickets: prize, big: true });
+      home.household?.notices.reward({ title: 'Party tournament won!', detail: `The residents’ best on ${game.title}: the kitty is yours.`, tickets: prize, big: true });
       for (const guest of partyGuests()) befriend(doorKey(guest.k, guest.i), 2, 'partyTournament', day);
     } else if (before.plays + 1 >= plays) {
       home.household?.notices.react(won || before.won ? 'That’s your three goes. Champion of the courtyard!' : `That’s your three goes. ${scores.topOf(game.id).name} keeps the crown tonight.`);

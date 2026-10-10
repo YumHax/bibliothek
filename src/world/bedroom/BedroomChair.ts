@@ -4,8 +4,9 @@ import type { Interactable } from '@/interaction/Interactable';
 import type { PlayerState, SessionActions } from '@/game/SessionActions';
 import { FACING_OUT, cylinderMesh, eyePoseAt, invisibleHitbox } from '../meshUtils';
 import { part } from '../props/Prop';
-import { fabric } from '@/world/materials/finishes';
-import { timber, cloth as paletteCloth } from '@/world/materials/palette';
+import { timber } from '@/world/materials/palette';
+import { ownWovenCloth, wovenCloth } from '@/world/materials/weave';
+import { softPart } from '../props/softBlock';
 import { HoverGlint } from '../props/hoverGlint';
 import { shuffled } from '@/random';
 import { dayLcg } from '@/time/daily';
@@ -35,9 +36,14 @@ const PILE_SIZES = [0, 1, 1, 2, 2, 3, 4];
 
 const BEECH = timber(0xc9a97a, 0.6);
 
+/** How the clothes are stuffed (`props/softBlock`): hung cloth thin and soft-edged, folds flatter, sleeves tubes. */
+const HUNG = { round: 4, pinch: 0.15 };
+const FOLDED = { round: 5, pinch: 0.2 };
+const SLEEVE = { round: 2.6, pinch: 0 };
+
 /** A shared cloth for the clothes that never change colour (the shirt, the jeans). */
 function cloth(color: number, roughness: number): THREE.MeshStandardMaterial {
-  return paletteCloth(color, roughness);
+  return wovenCloth(color, roughness);
 }
 
 /** One of the day's extra clothes: its parts, its cloth (recoloured by the day), how thick it is once piled on the seat (0 = it hangs). */
@@ -88,16 +94,16 @@ export class BedroomChair extends THREE.Group implements Furniture, Interactable
     if (shirt !== null) {
       // The shirt hangs over the top rail: a body folded in two down the back, sleeves dangling.
       const linen = cloth(shirt, 0.95);
-      const drape = part(this, 0.36, 0.42, 0.05, linen, { y: BACK_Y - 0.2, z: -legInset - 0.07 });
+      const drape = softPart(this, 0.36, 0.42, 0.05, linen, { y: BACK_Y - 0.2, z: -legInset - 0.07 }, HUNG);
       drape.rotation.x = 0.1;
-      part(this, 0.34, 0.16, 0.04, linen, { y: BACK_Y - 0.09, z: -legInset + 0.02 });
-      for (const dx of [-0.2, 0.2]) part(this, 0.07, 0.3, 0.04, linen, { x: dx, y: BACK_Y - 0.28, z: -legInset - 0.06 }).castShadow = false;
+      softPart(this, 0.34, 0.16, 0.04, linen, { y: BACK_Y - 0.09, z: -legInset + 0.02 }, HUNG);
+      for (const dx of [-0.2, 0.2]) softPart(this, 0.07, 0.3, 0.04, linen, { x: dx, y: BACK_Y - 0.28, z: -legInset - 0.06 }, SLEEVE).castShadow = false;
     }
     if (jeans !== null) {
       const denim = cloth(jeans, 1);
-      const fold = part(this, 0.3, 0.05, 0.24, denim, { y: SEAT_Y + 0.025, z: 0.02 });
+      const fold = softPart(this, 0.3, 0.05, 0.24, denim, { y: SEAT_Y + 0.025, z: 0.02 }, FOLDED);
       fold.rotation.y = -0.2;
-      part(this, 0.24, 0.03, 0.2, denim, { y: SEAT_Y + 0.065, z: 0.03 }).castShadow = false;
+      softPart(this, 0.24, 0.03, 0.2, denim, { y: SEAT_Y + 0.065, z: 0.03 }, FOLDED).castShadow = false;
     }
     this.pileBase = jeans !== null ? SEAT_Y + 0.08 : SEAT_Y;
     this.buildGarments(legInset);
@@ -138,30 +144,30 @@ export class BedroomChair extends THREE.Group implements Furniture, Interactable
   private buildGarments(legInset: number): void {
     const garment = (pile: number): Garment => {
       const group = new THREE.Group();
-      const cloth = fabric({ color: 0xffffff, roughness: 0.95 });
+      const cloth = ownWovenCloth(0xffffff, 0.95);
       this.add(group);
       const g = { group, cloth, pile };
       this.garments.push(g);
       return g;
     };
     const jumper = garment(0.055);
-    const folded = part(jumper.group, 0.27, 0.055, 0.21, jumper.cloth, { x: 0.02, y: 0.0275, z: 0.04 });
+    const folded = softPart(jumper.group, 0.27, 0.055, 0.21, jumper.cloth, { x: 0.02, y: 0.0275, z: 0.04 }, { ...FOLDED, lumps: 0.006, seed: 2 });
     folded.rotation.y = 0.15;
     const tee = garment(0.035);
-    const tossed = part(tee.group, 0.24, 0.035, 0.2, tee.cloth, { x: -0.04, y: 0.0175, z: 0.07 });
+    const tossed = softPart(tee.group, 0.24, 0.035, 0.2, tee.cloth, { x: -0.04, y: 0.0175, z: 0.07 }, { round: 3, pinch: 0.35, lumps: 0.008, seed: 5 });
     tossed.rotation.set(0.05, -0.5, 0.06);
-    const sleeve = part(tee.group, 0.07, 0.02, 0.16, tee.cloth, { x: 0.13, y: 0.01, z: 0.14 });
+    const sleeve = softPart(tee.group, 0.07, 0.02, 0.16, tee.cloth, { x: 0.13, y: 0.01, z: 0.14 }, SLEEVE);
     sleeve.rotation.y = 0.4;
     sleeve.castShadow = false;
 
     const cardigan = garment(0);
-    const back = part(cardigan.group, 0.4, 0.34, 0.03, cardigan.cloth, { y: BACK_Y - 0.15, z: -legInset - 0.1 });
+    const back = softPart(cardigan.group, 0.4, 0.34, 0.03, cardigan.cloth, { y: BACK_Y - 0.15, z: -legInset - 0.1 }, HUNG);
     back.rotation.x = 0.1;
-    part(cardigan.group, 0.38, 0.1, 0.03, cardigan.cloth, { y: BACK_Y - 0.04, z: -legInset + 0.005 }).castShadow = false;
-    part(cardigan.group, 0.4, 0.03, 0.12, cardigan.cloth, { y: BACK_Y + 0.01, z: -legInset - 0.05 }).castShadow = false;
+    softPart(cardigan.group, 0.38, 0.1, 0.03, cardigan.cloth, { y: BACK_Y - 0.04, z: -legInset + 0.005 }, HUNG).castShadow = false;
+    softPart(cardigan.group, 0.4, 0.03, 0.12, cardigan.cloth, { y: BACK_Y + 0.01, z: -legInset - 0.05 }, SLEEVE).castShadow = false;
     const scarf = garment(0);
-    part(scarf.group, 0.07, 0.62, 0.015, scarf.cloth, { x: -legInset - 0.01, y: BACK_Y - 0.3, z: -legInset - 0.045 }).castShadow = false;
-    part(scarf.group, 0.07, 0.015, 0.06, scarf.cloth, { x: -legInset - 0.01, y: BACK_Y + 0.02, z: -legInset - 0.02 }).castShadow = false;
+    softPart(scarf.group, 0.07, 0.62, 0.015, scarf.cloth, { x: -legInset - 0.01, y: BACK_Y - 0.3, z: -legInset - 0.045 }, SLEEVE).castShadow = false;
+    softPart(scarf.group, 0.07, 0.015, 0.06, scarf.cloth, { x: -legInset - 0.01, y: BACK_Y + 0.02, z: -legInset - 0.02 }, SLEEVE).castShadow = false;
   }
 
   /** World-space eye and camera yaw of someone sitting on it, facing +z. */

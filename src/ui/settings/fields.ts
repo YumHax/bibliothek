@@ -19,11 +19,13 @@ interface SliderOptions {
   onInput(value: number): void;
   /** The slider let go (or stepped by a key / the D-pad): a volume plays its sample here. */
   onChange?(value: number): void;
+  /** The readout is long (two figures): a wider slot, so the row never wraps while dragging. */
+  wideOutput?: boolean;
 }
 
 export function slider(label: string, options: SliderOptions): Field<number> {
   const element = document.createElement('label');
-  element.className = 'menu__field menu__field--slider';
+  element.className = `menu__field menu__field--slider${options.wideOutput ? ' menu__field--wide-output' : ''}`;
   element.innerHTML = `
     <span class="menu__field-label">${escapeHtml(label)}</span>
     <input type="range" min="${options.min}" max="${options.max}" step="${options.step}" />

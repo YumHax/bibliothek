@@ -13,6 +13,9 @@ import type { Ui } from './ui';
 import type { BuiltWorld } from './world';
 import type { PlayerMoves } from './player';
 import type { Interaction } from './input';
+import { HudIdle } from '@/ui/HudIdle';
+import { KeysCard } from '@/ui/KeysCard';
+import { installDebugPanel } from './debug';
 
 /**
  * The rules: the Session is handed every part it routes to (see `SessionParts`), then hears every
@@ -60,7 +63,7 @@ export function createSession(services: Services, parts: { player: FirstPersonCo
     collectionEditor: ui.editor,
     cat: built.cat,
     // A household beat (cleaning, baking, a soak) is dark like a night: the keys wait for it too (the deaf route).
-    sleep: { get isAsleep() { return built.activity.isAsleep; }, untilMorning: () => moves.sleep.untilMorning() },
+    sleep: { get isAsleep() { return built.activity.isAsleep; }, get sleepy() { return moves.sleep.sleepy; }, untilMorning: () => moves.sleep.untilMorning() },
     // Back the way the player was in (a controller player gets the virtual lock again).
     enterRoom: () => void ui.lockFlow.resume(),
     wallet,
@@ -108,9 +111,19 @@ export function createSession(services: Services, parts: { player: FirstPersonCo
     },
   });
   session.bindInput(input);
+  // A trip whose destination would not load: back where the player stood, told so (not only in the console).
+  moves.travel.onFailed = () => ui.notices.refuse('The door sticks. Try again.');
+  // The day stands still while the player is out of the room (the pause menu, the start card, the opening) or in a panel.
+  sky.holdClock(() => player.isLocked && !session.modalOpen);
+  // Watching from a seat with nothing pressed, the crosshair, its caption and the prompt line step back.
+  // Holding H in the room: the keys for what the player is doing now.
+  services.engine.addUpdatable(new KeysCard(services.container, input, () => (player.isLocked && !session.modalOpen && !interaction.photo?.isActive ? session.handsContext : null)));
+  services.engine.addUpdatable(new HudIdle(() => session.seatedIn !== null && player.isLocked && !session.modalOpen, input, services.engine.camera));
   // The touch bar shows the buttons that work where the hands are (a box, a market copy, a machine, a seat).
   interaction.touch.setContext(() => session.handsContext);
   // A hold lasts its market day: one never collected gives its deposit back the next (`economy/lapsedHolds`).
   refundLapsedHoldsDaily(services.tx, services.today, ui.notices);
+  // `?debug`: the debug panel on its key (every progression's switch, the votes, events now, a trip anywhere).
+  if (services.debug) installDebugPanel(services, { input, openPanel: (panel) => session.openPanel(panel), modalOpen: () => session.modalOpen, travel: moves.travel });
   return session;
 }

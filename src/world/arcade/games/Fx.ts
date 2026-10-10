@@ -12,13 +12,33 @@ interface Pop {
 
 const POP_LIFE = 0.8;
 
+/** A square of debris: where it is, how it flies, how long it has left (of `life0`). */
+interface Bit {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  life: number;
+  life0: number;
+  color: string;
+  size: number;
+}
+
+/** Debris on screen at once (the oldest go first), its fall (px/s²) and how long a piece lives (s). */
+const MAX_BITS = 160;
+const GRAVITY = 220;
+const BIT_LIFE: [number, number] = [0.35, 0.75];
+
 /**
- * The juice every cabinet game shares: floating score pops, a screen shake and a full-screen
- * flash. `begin` / `end` bracket the game's own drawing so the shake moves the playfield and the
- * pops and flash land on top of it.
+ * The juice every cabinet game shares: floating score pops, debris bursting from what was hit, a
+ * screen shake and a full-screen flash. `begin` / `end` bracket the game's own drawing so the shake
+ * moves the playfield (and the debris with it) and the pops and flash land on top of it. Draw-only:
+ * it never touches the game's state (its draws are the live `random`, not the play's seed), so a
+ * replay plays the same.
  */
 export class Fx {
   private pops: Pop[] = [];
+  private bits: Bit[] = [];
   private shakeTime = 0;
   private shakeAmount = 0;
   private flashTime = 0;
@@ -26,6 +46,7 @@ export class Fx {
 
   clear(): void {
     this.pops = [];
+    this.bits = [];
     this.shakeTime = 0;
     this.flashTime = 0;
   }
@@ -34,6 +55,20 @@ export class Fx {
   pop(text: string, x: number, y: number, color = '#fff2a8', size = 8): void {
     this.pops.push({ text, x: Math.min(SCREEN_W - 24, Math.max(24, x)), y: Math.max(30, y), life: POP_LIFE, color, size });
     if (this.pops.length > 12) this.pops.shift();
+  }
+
+  /**
+   * `count` pixel squares of `color` flying out of (x, y), falling and fading: what was hit breaks
+   * apart. `speed` is the spread (px/s); `size` the largest square (px).
+   */
+  burst(x: number, y: number, color: string, count = 14, speed = 90, size = 2): void {
+    for (let i = 0; i < count; i++) {
+      const angle = random() * Math.PI * 2;
+      const v = speed * (0.35 + random() * 0.65);
+      const life = BIT_LIFE[0] + random() * (BIT_LIFE[1] - BIT_LIFE[0]);
+      this.bits.push({ x, y, vx: Math.cos(angle) * v, vy: Math.sin(angle) * v - speed * 0.35, life, life0: life, color, size: random() < 0.4 ? size : Math.max(1, size - 1) });
+    }
+    if (this.bits.length > MAX_BITS) this.bits.splice(0, this.bits.length - MAX_BITS);
   }
 
   shake(amount = 3, seconds = 0.18): void {
@@ -52,6 +87,13 @@ export class Fx {
       p.y -= 28 * dt;
     }
     this.pops = this.pops.filter((p) => p.life > 0);
+    for (const b of this.bits) {
+      b.life -= dt;
+      b.vy += GRAVITY * dt;
+      b.x += b.vx * dt;
+      b.y += b.vy * dt;
+    }
+    if (this.bits.length) this.bits = this.bits.filter((b) => b.life > 0 && b.y < SCREEN_H + 4);
     this.shakeTime = Math.max(0, this.shakeTime - dt);
     if (this.shakeTime === 0) this.shakeAmount = 0;
     this.flashTime = Math.max(0, this.flashTime - dt);
@@ -63,6 +105,13 @@ export class Fx {
   }
 
   end(ctx: CanvasRenderingContext2D): void {
+    // The debris belongs to the playfield: drawn before the shake is undone, on whole pixels.
+    for (const b of this.bits) {
+      ctx.globalAlpha = Math.min(1, (b.life / b.life0) * 1.6);
+      ctx.fillStyle = b.color;
+      ctx.fillRect(Math.round(b.x), Math.round(b.y), b.size, b.size);
+    }
+    ctx.globalAlpha = 1;
     ctx.restore();
     for (const p of this.pops) {
       ctx.globalAlpha = Math.min(1, p.life / (POP_LIFE * 0.5));

@@ -6,7 +6,7 @@
 
 import { actionKeyLabel } from '@/ui/keys';
 import { useVerbOn, useVerbOnCap } from '@/ui/verb';
-import { BARGAIN_PRICE, HOME_GOOD_PRICES, TICKETS_PER_COIN } from '@/economy/pricing';
+import { BARGAIN_PRICE } from '@/economy/pricing';
 import { SHOP_HOURS } from '@/world/street/shops/shopHours';
 import { clockShort } from '@/text/clock';
 import { formatCoins } from '@/text/money';
@@ -38,33 +38,33 @@ export const FIRST_DAY_STEPS: readonly FirstDayStep[] = [
   {
     id: 'note',
     todo: 'Read this list (done!)',
-    tips: everywhereAtHome('New flat, bare walls: one bookcase, one game, the TV. Your to-do list is on the hall console, by the keys.'),
+    tips: everywhereAtHome('New flat, bare walls. Your to-do list is on the hall console, by the keys.'),
   },
   {
     id: 'out',
     todo: 'Keys from the bowl, out the front door',
     tips: {
-      hallway: 'Take the keys from the bowl on the console, then the front door at the end of the corridor.',
-      living: 'Through the door to the hallway: keys in the bowl on the console, then out.',
+      hallway: 'Keys from the bowl on the console, then the front door at the end of the corridor.',
+      living: 'Through to the hallway: keys from the bowl, then out.',
     },
   },
   {
     id: 'arcade',
     todo: 'Find the arcade on Front Street',
     tips: {
-      stairwell: 'Down the stairs (or the lift): the street door is in the entrance hall.',
-      street: 'The arcade is on our side of the street, a few doors along from ours, under the neon. It never closes. The fingerpost by our door and the street plan on the wall point the way to everything.',
+      stairwell: 'Down the stairs or the lift: the street door is in the entrance hall.',
+      street: 'The arcade is a few doors along on our side, under the neon. The fingerpost by our door points the way.',
     },
   },
   {
     id: 'play',
     todo: 'Play something: good scores pay tickets',
-    tips: { arcade: () => `${useVerbOnCap('a machine')} to put a coin in. Good scores pay tickets; ${actionKeyLabel('walkAway')} walks away.` },
+    tips: { arcade: () => `${useVerbOnCap('a machine')} to put a coin in. Good scores pay tickets.` },
   },
   {
     id: 'redeem',
     todo: `Tickets → ${formatCoins(BARGAIN_PRICE)} at the prize counter`,
-    tips: { arcade: `Tickets in your pocket: the prize counter swaps them for coins (${TICKETS_PER_COIN} a coin), or for prizes. About ${formatCoins(BARGAIN_PRICE)} buys a bargain-bin game.` },
+    tips: { arcade: 'The prize counter swaps your tickets for coins, and a handful of coins buys a bargain-bin game.' },
   },
   {
     id: 'market',
@@ -78,24 +78,24 @@ export const FIRST_DAY_STEPS: readonly FirstDayStep[] = [
     id: 'buy',
     todo: 'Buy a first game!',
     tips: {
-      market: () => `The bargain bin: anything in it for ${formatCoins(BARGAIN_PRICE)}. ${useVerbOnCap('a game')} to look closer: ${actionKeyLabel('buy')} buys it, ${actionKeyLabel('haggle')} haggles (not in the bin). What you buy is sent home.`,
-      street: `The flat is bare: SECOND HOME (furniture), the florist and the pet shop are along Front Street, TV REPAIR round the corner on Park Street, open ${FLAT_SHOPS_HOURS}. A houseplant is ${formatCoins(HOME_GOOD_PRICES.houseplant)}.`,
+      market: () => `The bargain bin: anything in it for ${formatCoins(BARGAIN_PRICE)}. ${useVerbOnCap('a game')} to look closer, [${actionKeyLabel('buy')}] buys it.`,
+      street: `The flat fills from SECOND HOME, the florist and the pet shop along the street, open ${FLAT_SHOPS_HOURS}.`,
     },
   },
   {
     id: 'unpack',
     todo: 'Unpack the parcel in the hall',
     tips: {
-      market: 'Your game is on its way home: the parcel will wait in the hall.',
+      market: 'Your game is on its way home: the parcel waits in the hall.',
       hallway: () => `Your parcel is under the console: ${useVerbOn()} to unpack.`,
     },
   },
   {
     id: 'shelf',
     todo: 'Find it on the shelf, watch it on the TV',
-    tips: { living: () => `It is on the shelf now. Pick it up, bring it to its console under the TV and ${useVerbOn('the console')} to put it in.` },
+    tips: { living: () => `It is on the shelf. Bring it to its console under the TV and ${useVerbOn('the console')} to put it in.` },
   },
 ];
 
 /** Said once the list is done (or skipped from the note). */
-export const FIRST_DAY_DONE = `That is the round: arcade, market, shelves. The flat fills up from the shops on Front Street (${FLAT_SHOPS_HOURS}): a plant, an armchair, one day a cat. The journal on the console keeps your days.`;
+export const FIRST_DAY_DONE = `That is the round: arcade, market, shelves. The flat fills up from Front Street’s shops (${FLAT_SHOPS_HOURS}). The journal on the console keeps your days.`;

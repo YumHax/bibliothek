@@ -261,13 +261,13 @@ export class RepairPanel extends CardPanel {
     this.go('close');
   }
 
-  private powerOn(console: HomeConsole, fault: Fault): void {
+  private powerOn(console: HomeConsole, _fault: Fault): void {
     playPowerOn();
     this.deps.workshop.fix(console.id);
     const platform = getPlatform(console.platform);
     this.message = 'The power light comes on, and the test cartridge’s title screen comes up clean.';
     this.go('done');
-    this.deps.notices.reward({ title: `Mended: the ${platform.shortName}`, detail: `${fault.done}\nTV REPAIR on Park Street pays ${formatCoins(resaleOf(console.platform))} for a working one.` });
+    this.deps.notices.slip({ title: `Mended: the ${platform.shortName}`, detail: `TV REPAIR on Park Street pays ${formatCoins(resaleOf(console.platform))} for it.` });
   }
 
   private go(step: Step): void {

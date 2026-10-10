@@ -65,6 +65,12 @@ export class TradePanel extends MarketPanel {
     if (action !== 'swap' || !el.dataset.id) return;
     const game = this.collection.games.find((g) => g.id === el.dataset.id);
     if (!game || !this.item || !this.onSwap) return;
+    // Out of reach but still focusable: the press says why instead of doing nothing.
+    const topUp = Math.max(0, this.item.due - tradeValue(game, this.fame.peek(game)));
+    if (topUp > this.wallet.coins) {
+      this.setStatus(`You’re ${formatCoins(topUp - this.wallet.coins)} short to swap "${game.title}" for this one.`);
+      return;
+    }
     if (!this.arming.press(game.id)) return;
     const failed = this.onSwap(game, tradeValue(game, this.fame.peek(game)));
     if (failed) {
@@ -84,12 +90,12 @@ export class TradePanel extends MarketPanel {
     // Worth more than what is due: no change is given, so the button says what the swap throws away.
     const lost = Math.max(0, value - item.due);
     const terms = topUp ? ` +${topUp}` : lost ? ` (−${lost} value)` : ' even';
-    const label = !known ? 'Valuing…' : short ? 'Too dear' : armed ? `Swap${terms}?` : `Swap${terms}`;
+    const label = !known ? 'Valuing…' : short ? `${formatCoins(topUp - this.wallet.coins)} short` : armed ? `Swap${terms}?` : `Swap${terms}`;
     return gameRow({
       cover: coverImg(this.coverUrl?.(game)),
       title: game.title,
       metas: [describeCondition(game.condition), getPlatform(game.platform).shortName, 'counts for'],
-      tail: html`${priceHtml(value)}<button type="button" data-action="swap" data-id="${game.id}" class="ui-btn${armed ? ' sell__armed' : ''}"${attr('disabled', !known || short)}>${label}</button>`,
+      tail: html`${priceHtml(value)}<button type="button" data-action="swap" data-id="${game.id}" class="ui-btn${armed ? ' sell__armed' : ''}"${attr('disabled', !known)} aria-disabled="${known && short}">${label}</button>`,
     });
   }
 }

@@ -1,6 +1,7 @@
 import { type ArcadeControls, SCREEN_H, SCREEN_W } from './ArcadeGame';
 import { BaseGame, PLAY_TOP } from './BaseGame';
 import { random } from '@/random';
+import { arcadeHint } from '../arcadeHint';
 
 const ROUND_SECONDS = 15;
 const CELL = 10;
@@ -52,7 +53,9 @@ interface Cell {
 export class Snake extends BaseGame {
   readonly id = 'snake';
   readonly title = 'NEON SNAKE';
-  readonly hint = 'WASD or arrows steer · eat the pellets, miss the walls';
+  get hint(): string {
+    return arcadeHint('{stick} or arrows steer · eat the pellets, miss the walls');
+  }
   readonly summary = '15 SEC · CHAIN PELLETS · CRASH = -2S';
 
   private body: Cell[] = [];
@@ -129,7 +132,7 @@ export class Snake extends BaseGame {
     ctx.lineWidth = 2;
     ctx.strokeRect(1, TOP + 1, COLS * CELL - 2, ROWS * CELL - 2);
     // The pellet pulses; the gold one blinks as it runs out.
-    const pulse = 2 + Math.sin(this.elapsed * 10);
+    const pulse = Math.round(2 + Math.sin(this.elapsed * 10)); // whole pixels: 1, 2 or 3
     ctx.fillStyle = '#ff5fb0';
     for (const p of this.pellets) ctx.fillRect(p.x * CELL + 3 - pulse / 2, TOP + p.y * CELL + 3 - pulse / 2, 4 + pulse, 4 + pulse);
     if (this.gold && (this.gold.life > 1.2 || Math.floor(this.gold.life * 8) % 2 === 0)) {

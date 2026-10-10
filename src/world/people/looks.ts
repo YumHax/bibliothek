@@ -1,4 +1,4 @@
-import { chance, lcg, pick } from '@/random';
+import { chance, lcg, pick, pickWeighted } from '@/random';
 
 /*
  * What a person looks like and wears. Colours are hex numbers; everything else picks a variant
@@ -47,6 +47,13 @@ export interface PersonLook {
   shoeColor: number;
   bag?: 'tote' | 'backpack';
   bagColor?: number;
+  /** A skirt, or a dress (the top and the skirt one garment, in the top's colour), to the knee; the legs below in `tights` or bare. */
+  skirt?: 'skirt' | 'dress';
+  skirtColor?: number;
+  /** The tights' colour under a skirt; bare legs without. */
+  tights?: number;
+  /** A long coat over the jacket, its hem flaring to mid-thigh (in the top's colour). */
+  coat?: boolean;
 
   /** A scarf round the neck (in the cold), in this colour. */
   scarf?: number;
@@ -87,6 +94,8 @@ export interface Dress {
 }
 
 const SCARVES = [0x8f2a2a, 0x2a3f6a, 0xd8b23a, 0x3a5a3a, 0xe8e2d6, 0x5a2a5e, 0x2a2a2a];
+const SKIRTS = [0x2a2f45, 0x6b2f3a, 0x3a4a3a, 0x8a6a4a, 0x1e1e22, 0x7a5a8a, 0xb88a5a, 0x4a5a7a];
+const TIGHTS = [0x1c1a1c, 0x2a2426, 0x3a2e2a, 0x5a4a44];
 
 /**
  * A look drawn from the palettes, fixed by `seed`. Stallholders get an apron half the time and
@@ -96,7 +105,51 @@ const SCARVES = [0x8f2a2a, 0x2a3f6a, 0xd8b23a, 0x3a5a3a, 0xe8e2d6, 0x5a2a5e, 0x2
  */
 export function randomLook(seed: number, role: 'vendor' | 'shopper' = 'shopper', dress?: Dress): PersonLook {
   const look = baseLook(seed, role);
-  return dress ? dressed(look, seed, dress) : look;
+  return lowerHalf(dress ? dressed(look, seed, dress) : { ...look }, seed, dress?.season);
+}
+
+/**
+ * Skirts, dresses and long coats, from a stream of their own (every other draw stays the seed's):
+ * a skirt or a dress for some, more often on the curvy figure, the legs in tights in the cold and
+ * bare in summer; a long coat over a winter jacket now and then.
+ */
+function lowerHalf(out: PersonLook, seed: number, season: Dress['season']): PersonLook {
+  const random = lcg(seed * 1597334677 + 13);
+  const roll = random();
+  const kind = random();
+  const colour = random();
+  const legs = random();
+  const coat = random();
+  const odds = out.figure === 'curvy' ? 0.36 : 0.02;
+  if (!out.shorts && roll < odds) {
+    out.skirt = kind < 0.4 && out.top !== 'jacket' && out.top !== 'hoodie' ? 'dress' : 'skirt';
+    out.skirtColor = out.skirt === 'dress' ? out.topColor : SKIRTS[Math.floor(colour * SKIRTS.length)]!;
+    // A dress is one garment: a plain bodice in its colour.
+    if (out.skirt === 'dress') out.top = 'tee';
+    out.tights = season === 'summer' ? undefined : season === 'winter' || legs < 0.55 ? TIGHTS[Math.floor(legs * 7.3) % TIGHTS.length]! : undefined;
+  }
+  if (season === 'winter' && out.top === 'jacket' && coat < 0.5) out.coat = true;
+  return out;
+}
+
+/**
+ * Hair by skin (one draw, as `pick` took): darker skins mostly dark-haired, blond and red on fair
+ * skins; grey or white on a young adult only now and then (the elder recipe greys them).
+ */
+function hairFor(random: Stream, skin: number): number {
+  const d = Math.max(0, SKINS.indexOf(skin)) / (SKINS.length - 1);
+  const fair = (1 - d) ** 2;
+  const weights = new Map<number, number>([
+    [0x2a1d14, 3],
+    [0x4a3222, 2.5],
+    [0x8a5a2a, 2 * (1 - 0.7 * d)],
+    [0xc9a25a, 2 * fair],
+    [0xd9d3c8, 0.25],
+    [0x1a1a1a, 1 + 3 * d],
+    [0x9a2f1f, 1.2 * fair],
+    [0x6e6a66, 0.3],
+  ]);
+  return pickWeighted(random, HAIRS, (hair) => weights.get(hair) ?? 0);
 }
 
 /** A stream of draws (`lcg`, `random()`...). */
@@ -192,7 +245,7 @@ function baseLook(seed: number, role: 'vendor' | 'shopper'): PersonLook {
 
   const figure: Figure = chance(random, 0.45) ? 'curvy' : 'straight';
   const skin = pick(random, SKINS);
-  const hair = pick(random, HAIRS);
+  const hair = hairFor(random, skin);
   const hairStyle = pick(random, HAIR_STYLES[figure]);
   const hatRoll = random();
   const top = pick(random, TOP_KINDS);

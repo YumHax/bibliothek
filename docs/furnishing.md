@@ -8,12 +8,15 @@ same on the keyboard). `src/furnishing/` carries furniture, `src/game/Rearrangin
   (blue): a swap. A right-click *tap* (or M) puts it there; a right *drag* still turns the box in hand
   (`Session.bindInput` tells them apart: under 280 ms and 10 px is a tap).
 - **Hands free, aimed at a piece that was bought** (Front Street's shops, the market's household stall) **or a
-  bookcase**: the piece is outlined and the caption says "Right-click to move". A right-click takes it: it lifts 5 cm,
+  bookcase**: the piece is outlined and the caption says "Right-click to move". A right-click takes it (on the button's
+  release, if the mouse hardly moved, and not in the 300 ms after a box went back: a reflex right-drag never lifts the
+  armchair behind the shelf): it lifts 5 cm,
   stops colliding and follows the aim over its surface (floor, wall, ceiling), what stands on it riding along.
 - **Carrying**: a click (or M) sets it down where it shows green, R / Q turn it a quarter either way, the wheel an eighth,
   G turns the grid off (free placement: the wheel turns 15°, a piece brought near a wall turns flush against it), X
-  puts it away, a right-click or E puts it back where it was. U with free hands undoes the last move (20 deep).
-  Leaving the pointer lock (Esc) or opening a panel puts it back too.
+  puts it away, a right-click or E puts it back where it was. U with free hands undoes the last move (20 deep). The
+  prompt names three: set down, turn, put back (X and G are on the keys card, hold H). Opening a panel puts it back;
+  leaving the pointer lock (Esc, a lost focus) only pauses: the piece is still in hand on the way back in.
 - **Through a doorway**: carried into another room of the flat (not the stairwell), the piece goes with the player
   (`Zone.handOver`, implemented with `ride`, `move`, `lift` and `setDown` in `zone/moving.ts`, `zone.moving`: out of one
   zone's group, colliders and shadow layer into the other's); its saved pose records the
@@ -28,7 +31,10 @@ same on the keyboard). `src/furnishing/` carries furniture, `src/game/Rearrangin
   out, in front of the player, in whatever room of the flat they are in, carried (put back, it goes away again).
 - **From above** (L, or the pause menu's *Plan the room*): `furnishing/planView/PlanView` hangs the camera under the
   ceiling looking down, a cursor follows the mouse (the pointer stays locked), and the same carrier moves the floor
-  pieces with it (`FurnitureCarrier.setAim`). Pendant lamps and hung plants hide meanwhile.
+  pieces with it (`FurnitureCarrier.setAim`). Pendant lamps and hung plants hide meanwhile. Its strip names the keys of
+  the moment: with free hands how to take a piece and leave (L), carrying one how to set it down, turn it and put it
+  back. Esc reaches it only with the keyboard held (Settings > Display > Full screen); otherwise the browser takes Esc,
+  lets the mouse go, and the view closes.
 - **Put the furniture back** (pause menu, shown once something in the room was moved): every moved piece of the room
   goes back to its plan pose (`Furnishings.sendHome`).
 
@@ -48,10 +54,10 @@ stays where it is", `Furnishings.fixedAt`).
   furniture within 1.6 m, or the room's centre line; a blue guide shows what with. On a wall, the guide runs up from the
   top of the piece below. Then **flush**: within 7.5 cm of a wall, a floor piece is pushed against it (`toWalls`).
 - **What may stand there** (`fit.ts` `Fit.check`, which says why: `Blocker` kind room / doorway / window / piece /
-  furniture / someone / edge): the footprint is drawn cell by cell, green or red, the piece's outline green or red, what
+  furniture / someone / edge / way): the footprint is drawn cell by cell, green or red, the piece's outline green or red, what
   is in the way outlined red (seen through walls), the ways through the doorways faintly red all along, where it was
   taken from in faint white. The caption says why ("it would block the doorway", "it would hit the armchair", "Sam is in
-  the way"). Nobody is set down on: the player's feet, the cat, a visiting friend (`friendsIn`, by name).
+  the way", "it would block the way through": the floor it would cut off outlined). Nobody is set down on: the player's feet, the cat, a visiting friend (`friendsIn`, by name).
 - **The spot beside**: aimed where it may not stand, the nearest cell up to 3 steps round where it may is outlined
   green; a click sets it down there.
 - **Feel**: it floats 5 cm while carried and settles in 0.16 s; a tick on each grid step or turn, a bump when refused,
@@ -174,5 +180,9 @@ ctx.home.furnishings?.register(zone, item, { key: 'dresser', at: plan.dresser.at
 
 Where a piece may be set down (`Fit`): inside its room, not over another piece's footprint or colliders nor the drawn
 bounds of the other movable pieces (pictures and plants have no footprint), not in front of a doorway (0.9 m on the
-floor), and on a wall not over a window or a doorway. Flat things (under 3.5 cm: rugs, mats) only mind each other and the
-doorways; furniture stands over them.
+floor), not where it shuts part of the floor away from the doorways (`way.ts` `WayThrough`: a 5 cm grid of where the
+player's 0.3 m-radius body can stand, walked from the doorways with and without the piece; more than 0.15 m² lost besides
+the piece's own surroundings and it is refused: a cabinet narrowing the gap past a wardrobe to under a body's width), and
+on a wall not over a window or a doorway. Flat things (under 3.5 cm: rugs, mats) only mind each other and the doorways;
+furniture stands over them. A plan's own spot for a piece must pass the same: lay a new bought piece out against these
+rules, the door leaves' swing included (`Doorway.swing` when a leaf cannot lie back against the wall).

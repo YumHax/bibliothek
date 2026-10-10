@@ -91,7 +91,7 @@ export class Aerial extends Prop implements Interactable, Updatable {
     squeal();
     const found = turnAerial(this.step);
     if (found) {
-      session.reward({ title: `${found.name} comes in clear`, detail: 'The old tuner on the TV stand downstairs gets it now.' });
+      session.slip({ title: `${found.name} comes in clear`, detail: 'The old tuner downstairs gets it now.' });
       return;
     }
     const { strength } = signalAt(this.step);

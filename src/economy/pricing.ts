@@ -26,7 +26,7 @@ export const POINTS_PER_TICKET = 50;
  * different scales (a pinball ball is worth tens of thousands, a roll up the alley a few hundred)
  * and last differently long, so each rate is set on what an ordinary player nets there a minute,
  * the coin each play costs paid: about 60 tickets (6 coins) a minute on every machine, some 25-30 a
- * play on a short one, 40-50 on a long one; a first-timer nets 20-55 (`COIN_BACK` keeps a flop from
+ * play on a short one, 40-50 on a long one; a first-timer nets 20-55 (`TICKET_FLOOR` keeps a flop from
  * costing the coin), a good player one and a half to two times the ordinary one. The plays are measured by `npm run balance` (scripts/arcade-balance.mjs:
  * every cabinet game and the alley, hoops and pinball played headless by simulated people, a novice,
  * an ordinary player and a good one: their reactions, their timing, their slips); retune a rate
@@ -68,11 +68,15 @@ export function ticketsFor(gameId: string, score: number): number {
 export const BEGINNER = { plays: 3, tickets: 20 } as const;
 
 /**
- * Coin back: however badly it went, a paid ticket play pays at least the coin it cost, in tickets. A flop costs
- * only the time, so trying a new machine or a risky run never hurts; skill is all profit on top. Not on the
- * wheel (pure luck) nor a play the house stood or the cabinet gave free (nothing was paid to give back).
+ * The least a paid ticket play pays, however badly it went: more than the coin it cost, so no play ever loses
+ * value and a flop still nets a little; skill is all profit on top. It is folded into the score's own tickets
+ * (the end card never counts under it), not a consolation line. Not on the wheel (its slices are its payout,
+ * every one over the coin) nor a play the house stood or the cabinet gave free.
  */
-export const COIN_BACK = TICKETS_PER_COIN * PLAY_COST;
+export const TICKET_FLOOR = Math.round(TICKETS_PER_COIN * PLAY_COST * 1.5);
+
+/** A claw play that drops nothing pays the coin back in tickets: only the plush is a gamble, never the coin. */
+export const CLAW_MISS_TICKETS = TICKETS_PER_COIN * PLAY_COST;
 
 /**
  * Broke, and not even a coin's worth of tickets: the house stands the play (ticket machines only),
@@ -305,7 +309,7 @@ export const COFFEE_PRICE = 2;
  * bunch of the season's flowers.
  */
 export const STREET_TREATS = { croissant: 1, lemonade: 2, scrap: 1, treats: 2, bunch: 2 } as const;
-/** How many of each a real day a shop will sell (the rest: "that's enough for today"). */
+/** How many of each a game day a shop will sell (the rest: "that's enough for today"; `errands/pocket` follows the game day). */
 export const STREET_TREATS_PER_DAY = { croissant: 2, lemonade: 3, scrap: 2, treats: 1, bunch: 2 } as const;
 
 /**
@@ -600,27 +604,28 @@ export const TOURNAMENT = { entry: 3, reward: [0, 60, 180, 450], prize: 'saturda
 
 /**
  * The ticket wheel: what each slice pays and how wide it is (weights, so the slices are drawn to
- * their odds). Expected about 9.4 tickets a spin at the jackpot's start (10 with it at 450), under a
- * coin's worth and well under an ordinary skill play (25-50): the wheel is for the thrill, and worth a spin when the jackpot has grown. `JACKPOT` is progressive: it starts at `start`, grows by `perSpin` every spin
+ * their odds). Every slice pays more than the coin (12 at the least), so a spin never loses; expected about
+ * 15 tickets a spin at the jackpot's start, well under an ordinary skill play (25-50): the wheel is for the
+ * thrill, and worth a spin when the jackpot has grown. `JACKPOT` is progressive: it starts at `start`, grows by `perSpin` every spin
  * anyone takes, and goes back to `start` when someone hits it.
  */
 export const WHEEL_SLICES: readonly { tickets: number | 'jackpot'; weight: number }[] = [
-  { tickets: 4, weight: 14 },
+  { tickets: 12, weight: 14 },
   { tickets: 20, weight: 3.5 },
-  { tickets: 6, weight: 13 },
+  { tickets: 14, weight: 13 },
   { tickets: 50, weight: 1 },
-  { tickets: 8, weight: 11 },
-  { tickets: 15, weight: 5 },
-  { tickets: 5, weight: 14 },
+  { tickets: 12, weight: 11 },
+  { tickets: 18, weight: 5 },
+  { tickets: 14, weight: 14 },
   { tickets: 'jackpot', weight: 0.35 },
-  { tickets: 10, weight: 9 },
+  { tickets: 12, weight: 9 },
   { tickets: 30, weight: 1.5 },
-  { tickets: 6, weight: 13 },
+  { tickets: 14, weight: 13 },
   { tickets: 100, weight: 0.4 },
-  { tickets: 8, weight: 11 },
+  { tickets: 12, weight: 11 },
   { tickets: 25, weight: 2.5 },
-  { tickets: 5, weight: 14 },
-  { tickets: 12, weight: 8 },
+  { tickets: 14, weight: 14 },
+  { tickets: 16, weight: 8 },
 ];
 export const JACKPOT = { start: 250, perSpin: 3 } as const;
 
@@ -720,11 +725,18 @@ export const MILESTONE_REWARD: Readonly<Record<string, { coins?: number; tickets
   'games-10': { coins: 15 },
   'games-25': { coins: 30 },
   'games-50': { coins: 60 },
+  'games-75': { coins: 80 },
   'games-100': { coins: 150 },
+  'games-150': { coins: 220 },
   'games-250': { coins: 400 },
   'platform-10': { tickets: 150 },
   'platform-25': { coins: 120 },
   'platforms-5': { coins: 40 },
+  'complete-1': { coins: 15 },
+  'sealed-1': { coins: 25 },
+  'genre-5': { tickets: 60 },
+  'publisher-8': { coins: 30 },
+  'decades-3': { tickets: 80 },
   'set-1': { tickets: 100 },
   'sets-3': { coins: 100 },
   'medal-1': { tickets: 30 },

@@ -18,7 +18,7 @@ interface RefundDays {
 export function refundLapsedHoldsDaily(tx: Transactions, today: RefundDays, notices: RefundNotices): void {
   const refund = (): void => {
     const back = tx.refundLapsedHolds(today.gameDay);
-    if (back.ok) notices.reward({ title: 'Deposit back', detail: `The market kept ${back.titles.join(', ')} for you till closing: your deposit is back in your pocket.`, coins: back.coins });
+    if (back.ok) notices.reward({ title: 'Deposit back', detail: `${back.titles.join(', ')}: not collected, so the deposit is back.`, coins: back.coins });
   };
   refund();
   today.onNewGameDay(refund);

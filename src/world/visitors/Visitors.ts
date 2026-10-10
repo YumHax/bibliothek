@@ -107,7 +107,7 @@ export interface VisitorsOptions {
   /** The furniture (the world's colliders): a sidestep, or a shortcut from shelf to shelf, only goes where none stands. */
   collisions?: { intersectsSphere(point: THREE.Vector3, radius: number): boolean };
   /** The day's journal: who came round, what went on loan and came back. */
-  journal?: { note(kind: string, text: string): void };
+  journal?: { note(kind: string, text: string, options?: { weight?: 'headline' | 'line' | 'note'; data?: Readonly<Record<string, string | number | boolean>> }): void };
   /** What is underfoot at a world point (their footsteps' sound); parquet when not given. */
   surfaceAt?: (world: THREE.Vector3) => FootSurface;
   /** The box art: a game handed back is held out as its box. */
@@ -132,7 +132,7 @@ export interface VisitorsOptions {
   /** The cat, when it is about: where it is and its name. */
   cat?: () => { at: THREE.Vector3; name: string } | null;
   /** What the player is told that no friend says in person: one let themself out, a game posted back, a gift. */
-  notices?: Pick<NoticeActions, 'react' | 'reward' | 'read'>;
+  notices?: Pick<NoticeActions, 'react' | 'reward' | 'slip' | 'read'>;
   coverUrl?: (game: Game) => string | undefined;
   /** A game's fame (page views), for the comments. */
   viewsOf?: (game: Game) => number | null | undefined;
@@ -296,7 +296,7 @@ export class Visitors extends Prop implements Updatable, ActivityAware, DoorCall
     nudge(plan.id, { warmth: 3, why: 'enjoyed coming round', reason: 'visit', day: this.options.day() });
     if (this.dropBy) visit.after(DROP_BY_GIFT_DELAY, () => this.dropByGift(plan));
     this.say(plan, this.line(`${plan.id}:greet`, plan.lines.greet), 'hi', true);
-    this.options.journal?.note('visit', `${plan.name} came round`);
+    this.options.journal?.note('visit', `${plan.name} came round`, { data: { who: plan.id } });
     visit.letIn();
     const hosting = this.options.hosting;
     if (hosting?.cakeOut()) {
@@ -515,8 +515,8 @@ export class Visitors extends Prop implements Updatable, ActivityAware, DoorCall
     }
     collection.add({ ...gift, status: 'owned', condition: 'noManual', acquired: { price: 0, where: `a gift from ${plan.name}`, day } });
     this.say(plan, `I was passing, and I saw this and thought of you: ${gift.title}. No, keep it. I insist.`, 'here', true);
-    notices?.reward({ title: `A gift: ${gift.title}`, detail: `${plan.name} dropped by with it. It waits in your parcel in the hall.` });
-    this.options.journal?.note('visit', `${plan.name} dropped by with ${gift.title}`);
+    notices?.reward({ title: `A gift: ${gift.title}`, detail: `From ${plan.name}. In the parcel in the hall.` });
+    this.options.journal?.note('visit', `${plan.name} dropped by with ${gift.title}`, { data: { who: plan.id, id: gift.id } });
   }
 
   /** A friend who had cake leaves a thank-you: a game they no longer play (to their taste), else a few coins. */
@@ -531,7 +531,7 @@ export class Visitors extends Prop implements Updatable, ActivityAware, DoorCall
     if (gift) {
       collection.add({ ...gift, status: 'owned', condition: 'noManual', acquired: { price: 0, where: `a gift from ${plan.name}`, day } });
       this.say(plan, fill(this.line('cakeGift', SHARED_LINES.cakeGift), { title: gift.title }), 'here', true);
-      notices?.reward({ title: `A gift: ${gift.title}`, detail: `From ${plan.name}, for the cake. It waits in your parcel in the hall.` });
+      notices?.reward({ title: `A gift: ${gift.title}`, detail: `From ${plan.name}, for the cake. In the parcel in the hall.` });
     } else if (purse) {
       const coins = tip[0] + Math.floor(random() * (tip[1] - tip[0] + 1));
       purse.earnCoins(coins);
@@ -677,7 +677,7 @@ export class Visitors extends Prop implements Updatable, ActivityAware, DoorCall
     this.options.collection.setStatus(game.id, 'lent');
     nudge(plan.id, { warmth: 4, trust: 5, why: 'trusted with your game', day: this.options.day(), memory: `you lent me ${game.title}`, memoryWeight: 6 });
     this.say(plan, this.line('lent', SHARED_LINES.lent), 'yay');
-    this.options.journal?.note('visit', `Lent ${game.title} to ${plan.name}`);
+    this.options.journal?.note('visit', `Lent ${game.title} to ${plan.name}`, { data: { who: plan.id, id: game.id } });
   }
 
   /**
@@ -713,8 +713,8 @@ export class Visitors extends Prop implements Updatable, ActivityAware, DoorCall
     }
     this.say(plan, lines.join(' '), 'here', true);
     nudge(plan.id, { warmth: 2, why: 'glad to bring your game back', reason: 'returned', day });
-    this.options.journal?.note('visit', `${plan.name} brought ${loan.title} back`);
-    if (coins || gifted) this.options.notices?.reward({ title: gifted ? `A gift: ${gifted}` : `${plan.name} says thanks`, detail: `${loan.title} is back.${gifted ? ` ${gifted}, from ${plan.name}, waits in your parcel in the hall.` : ''}`, coins: coins || undefined });
+    this.options.journal?.note('visit', `${loan.title} back from ${plan.name}`, { data: { who: plan.id } });
+    if (coins || gifted) this.options.notices?.reward({ title: gifted ? `A gift: ${gifted}` : `${plan.name} says thanks`, detail: gifted ? `For the loan of ${loan.title}. In the parcel in the hall.` : `${loan.title} is back.`, coins: coins || undefined });
     return box ? { box, width: box.dimensions.width } : null;
   }
 
@@ -729,8 +729,8 @@ export class Visitors extends Prop implements Updatable, ActivityAware, DoorCall
       if (this.book.overdue(day).includes(loan) && this.visit?.friend.plan.id !== loan.friendId) {
         this.closeLoan(loan);
         const name = FRIENDS.find((f) => f.id === loan.friendId)?.name ?? 'A friend';
-        this.options.notices?.read({ title: `${loan.title} came back by post`, text: `A padded envelope from ${name}, and a note: “Sorry! Thanks for the loan.”`, effect: `${loan.title} is back on its shelf.`, look: 'letter' });
-        this.options.journal?.note('visit', `${loan.title} came back by post from ${name}`);
+        this.options.notices?.read({ title: `${loan.title} came back by post`, text: `A padded envelope, and a note: “Sorry! Thanks for the loan.”`, effect: `${loan.title} is back on its shelf.`, look: 'letter', from: name });
+        this.options.journal?.note('visit', `${loan.title} back by post from ${name}`, { data: { who: loan.friendId } });
       }
     }
   }

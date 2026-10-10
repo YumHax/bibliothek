@@ -4,10 +4,11 @@ import { boxMesh } from './meshUtils';
 import { isShared } from './materials/sharedResources';
 import { QUALITY } from '@/graphics/quality';
 import { seededRng } from '@/random';
-import { basic, timber } from '@/world/materials/palette';
-import { INSET, PROUD } from './props/joinery';
+import { basic, standard, timber } from '@/world/materials/palette';
+import { INSET, PROUD, SEAM } from './props/joinery';
 import { mergeStaticParts } from './zone/mergeStatic';
 import type { BoxMotion } from './shelving/BoxMotion';
+import { drawTrinket, type Trinket } from './shelving/trinkets';
 import { createCanvas, toTexture } from '@/covers/generated/canvasUtils';
 
 /** A folded card standing on a board (`Shelf.setCard`): its size (m) and how far it leans back. */
@@ -102,6 +103,8 @@ export class Shelf extends THREE.Group {
   private readonly proxyScale = new THREE.Vector3();
   /** The boxes of each row as last laid out (`placeRow`), top row first. */
   private readonly rowBoxes: GameBox[][] = [];
+  /** Each row's odds and ends (`dressRow`), drawn once per row the first time it is laid out; null for none. */
+  private readonly trinkets: (Trinket | null | undefined)[] = [];
   /** The card standing on a board, if any (`setCard`). */
   private card: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshStandardMaterial> | null = null;
 
@@ -193,6 +196,48 @@ export class Shelf extends THREE.Group {
       }
       cursorX += bw + gap;
     });
+    this.dressRow(row);
+  }
+
+  /**
+   * The row's trinket (`shelving/trinkets`), drawn by the bookcase's spot and the row: at the far right of the row, or
+   * a bookend right against its last box, shown only while the boxes leave it room (they come first).
+   */
+  private dressRow(row: number): void {
+    if (this.trinkets[row] === undefined) {
+      const seed = `${Math.round(this.position.x * 100)}|${Math.round(this.position.z * 100)}|${this.rotation.y.toFixed(2)}|${row}`;
+      const trinket = drawTrinket(seededRng(`trinket|${seed}`));
+      this.trinkets[row] = trinket;
+      if (trinket) this.add(trinket.object);
+    }
+    const trinket = this.trinkets[row];
+    if (!trinket) return;
+    const { width, depth, gap, boardThickness } = this.options;
+    const inner = width / 2 - boardThickness;
+    const boxes = this.rowBoxes[row] ?? [];
+    const used = boxes.reduce((sum, box) => sum + box.dimensions.width + gap, 0);
+    const fits = (!trinket.leans || boxes.length > 0) && inner - (-inner + used) >= trinket.width + 0.02;
+    trinket.object.visible = fits;
+    if (!fits) return;
+    const x = trinket.leans ? -inner + used - gap + SEAM : inner - trinket.width / 2 - 0.01;
+    trinket.object.position.set(x, this.boardTops[row]! - this.sagAt(row, x), trinket.leans ? depth / 2 - FRONT_SET - 0.06 : depth / 2 - FRONT_SET - 0.08);
+  }
+
+  /**
+   * Where row `row` (0 = top) has room left: its board's top (local y) and the local x its laid boxes end at (the
+   * row's inner left edge when it is empty), the inner right edge, the z the boxes' fronts stand at and the row's
+   * clearance. The opening's dream fills the rest (`DreamShelves`).
+   */
+  rowRoom(row: number): { floor: number; from: number; to: number; front: number; height: number } {
+    const { width, depth, gap, boardThickness, rowHeights } = this.options;
+    const inner = width / 2 - boardThickness;
+    const used = (this.rowBoxes[row] ?? []).reduce((sum, box) => sum + box.dimensions.width + gap, 0);
+    // A trinket at the row's end keeps its spot (a bookend by the boxes takes its width from the start).
+    const trinket = this.trinkets[row];
+    const kept = trinket?.object.visible ? trinket.width + 0.02 : 0;
+    const from = -inner + used + (trinket?.leans ? kept : 0);
+    const to = inner - (trinket && !trinket.leans ? kept : 0);
+    return { floor: this.boardTops[row] ?? 0, from, to, front: depth / 2 - FRONT_SET, height: rowHeights[row] ?? 0 };
   }
 
   /** The game ids on each row, top row first, left to right (the boxes in hand included: this is still their row). */
@@ -303,6 +348,7 @@ export class Shelf extends THREE.Group {
       this.card.material.map?.dispose();
       this.card.material.dispose();
       this.card.geometry.dispose();
+      for (const leaf of this.card.children) (leaf as THREE.Mesh).geometry.dispose();
       this.card = null;
     }
     const top = this.boardTops[row];
@@ -326,6 +372,14 @@ export class Shelf extends THREE.Group {
     card.position.set(x, top + 0.001, this.options.depth / 2 - FRONT_SET - 0.02);
     card.rotation.x = -CARD_LEAN;
     card.receiveShadow = true;
+    card.castShadow = true;
+    // Folded: the back leaf hangs from the top edge down behind it (a tent), so it stands seen from the side or behind.
+    const back = new THREE.Mesh(new THREE.PlaneGeometry(CARD_W, CARD_H).translate(0, -CARD_H / 2, 0), standard({ color: 0xece4cf, roughness: 0.85, side: THREE.DoubleSide }));
+    back.position.set(0, CARD_H, -0.0004);
+    back.rotation.x = 2 * CARD_LEAN;
+    back.castShadow = true;
+    back.receiveShadow = true;
+    card.add(back);
     this.card = card;
     this.add(card);
   }
@@ -342,6 +396,14 @@ export class Shelf extends THREE.Group {
     this.remove(this.carcass);
     this.carcass.clear();
     this.setCard(null);
+    for (const trinket of this.trinkets.splice(0)) {
+      if (!trinket) continue;
+      trinket.object.traverse((obj) => {
+        const mesh = obj as THREE.Mesh;
+        if (mesh.isMesh && !isShared(mesh.geometry)) mesh.geometry.dispose();
+      });
+      this.remove(trinket.object);
+    }
     this.shadowProxy.count = 0;
     this.shadowProxy.castShadow = false;
     this.shadowProxy.dispose(); // its instance buffer; refilled if a carried box comes back to this emptied shelf

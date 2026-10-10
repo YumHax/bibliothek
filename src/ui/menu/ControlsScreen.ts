@@ -77,7 +77,8 @@ export class ControlsScreen {
     this.table.innerHTML = CONTROLS.filter((c) => c.group === this.group)
       .map((c) => {
         const keys = keysFor(c, this.device);
-        return `<tr${keys ? '' : ' class="menu__controls--na"'}><th scope="row">${keys ?? '—'}</th><td>${escapeHtml(c.action)}</td></tr>`;
+        // Not on this device: said in words, not by the dimming alone.
+        return `<tr${keys ? '' : ' class="menu__controls--na"'}><th scope="row">${keys ?? '<span class="menu__controls-none">not on this device</span>'}</th><td>${escapeHtml(c.action)}</td></tr>`;
       })
       .join('');
   }

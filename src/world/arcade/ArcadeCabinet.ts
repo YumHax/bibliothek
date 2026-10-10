@@ -22,7 +22,8 @@ import { GameRunner } from './GameRunner';
 import { CabinetScreens } from './CabinetScreens';
 import { AttractLoop } from './AttractLoop';
 import { CabinetControls } from './CabinetControls';
-import { BEZEL_BORDER, DEPTH, FRONT_Z, SCREEN_HEIGHT, SCREEN_Y, SCREEN_Z, TOTAL_H, WIDTH, buildCabinetBody } from './cabinetModel';
+import { BEZEL_BORDER, COIN_LAMP, DEPTH, FRONT_Z, SCREEN_HEIGHT, SCREEN_Y, SCREEN_Z, TOTAL_H, WIDTH, buildCabinetBody } from './cabinetModel';
+import { HoverGlint } from '../props/hoverGlint';
 import { PooledLight } from '../lighting/LightPool';
 import { random } from '@/random';
 
@@ -122,6 +123,12 @@ export class ArcadeCabinet extends RunMachine implements Furniture, Interactable
   private readonly glow: PooledLight | null;
   private readonly pool: GlowPool;
   private readonly marquee: THREE.MeshBasicMaterial;
+  /** The coin door's lit coin-return buttons: blinking with INSERT COIN, flared when a coin drops. */
+  private readonly coinLamps: THREE.MeshStandardMaterial;
+  /** The knobs and buttons catch a glint when the cabinet is hovered. */
+  private readonly glint: HoverGlint;
+  /** The coin lamps' flare, 1 as a coin drops, easing to 0. */
+  private coinFlare = 0;
   /** The body's paint and the two side-art prints; all glow a little when hovered. */
   private readonly body: THREE.MeshStandardMaterial[];
   private readonly speaker: ChipSpeaker;
@@ -146,13 +153,15 @@ export class ArcadeCabinet extends RunMachine implements Furniture, Interactable
     this.lean = options.attachment?.lean ?? 0.12;
     const twoPlayer = typeof game.setOpponent === 'function';
 
-    const { body, marquee, marqueeMesh } = buildCabinetBody(this, { color, glow: glowColor, wear: options.wear ?? 0.5, title: game.title, hint: game.hint, twoPlayer });
+    const { body, marquee, marqueeMesh, coinLamps } = buildCabinetBody(this, { color, glow: glowColor, wear: options.wear ?? 0.5, title: game.title, hint: game.hint, twoPlayer });
     this.body = body;
     this.marquee = marquee;
+    this.coinLamps = coinLamps;
     // The controls: one joystick and two buttons, or a set for each player on a two-player game.
     this.controls = new CabinetControls(this, twoPlayer);
+    this.glint = HoverGlint.of(...this.controls.grips);
     const price = (): { free: boolean; text: string } => ({ free: this.run.free, text: this.run.priceText() });
-    const info = { scores: options.scores, pointsPerTicket: this.pointsPerTicket, price, ...(options.payout === 'none' ? { home: true } : {}), ...(options.medals ? { medals: options.medals } : {}), ...(options.challenge ? { challenge: options.challenge } : {}) };
+    const info = { scores: options.scores, pointsPerTicket: this.pointsPerTicket, price, accent: glowColor,...(options.payout === 'none' ? { home: true } : {}), ...(options.medals ? { medals: options.medals } : {}), ...(options.challenge ? { challenge: options.challenge } : {}) };
     this.screens = new CabinetScreens(game, info, options.listener, this);
     const { screen } = this.screens;
     this.add(screen);
@@ -241,6 +250,7 @@ export class ArcadeCabinet extends RunMachine implements Furniture, Interactable
   /** Starts a paid play (recorded, when the game can replay); `onOver` is told the result once. */
   start(onOver: (result: ArcadeResult) => void): void {
     this.run.start(onOver);
+    this.coinFlare = 1;
     const seed = Math.floor(random() * 0x100000000);
     this.runner.reset({ best: this.options.scores.bestOf(this.game.id), pointsPerTicket: this.pointsPerTicket, seed }, this.game.demoable !== false);
   }
@@ -286,8 +296,10 @@ export class ArcadeCabinet extends RunMachine implements Furniture, Interactable
 
   setHovered(hovered: boolean): void {
     this.hovered = hovered;
-    for (const m of this.body) m.emissive.setHex(hovered ? 0x101018 : 0x000000);
-    this.marquee.color.setHex(hovered ? 0xffffff : 0xcccccc);
+    // The body lifts out of the hall's dark, the marquee brightens, the knobs and buttons catch a glint.
+    for (const m of this.body) m.emissive.setHex(hovered ? 0x2a2a3a : 0x000000);
+    this.marquee.color.setHex(hovered ? 0xffffff : 0xb8b8b8);
+    this.glint.set(hovered);
   }
 
   label(_player: PlayerState): string {
@@ -351,6 +363,11 @@ export class ArcadeCabinet extends RunMachine implements Furniture, Interactable
     const idle = this.run.state === 'attract' && this.attract.showingTitle;
     this.controls.move(dt, controls, idle ? NO_CONTROLS : (this.game.opponentControls?.() ?? NO_CONTROLS));
     if (this.glow) this.glow.intensity = poolLevel * 0.95;
+    // The coin lamps: lit on INSERT COIN's blink while the title card is up, steady in a play, flared by a coin.
+    this.coinFlare = Math.max(0, this.coinFlare - dt * 1.5);
+    const blink = idle && this.payout !== 'none' && !this.outOfOrder && Math.floor(this.pulse * 3) % 2 === 0;
+    const rest = this.outOfOrder ? 0 : blink ? COIN_LAMP.blink : COIN_LAMP.idle;
+    this.coinLamps.emissiveIntensity = rest + (COIN_LAMP.flare - rest) * this.coinFlare;
     this.pool.setLevel(poolLevel);
     this.options.attachment?.update(dt, { controls, who: this.run.occupant, aim: this.screens.aimPoint(controls) });
   }

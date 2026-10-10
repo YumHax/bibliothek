@@ -11,6 +11,7 @@ import { Overlay } from '@/ui/Overlay';
 import { Notices } from '@/notices';
 import { CatSettingsForm } from '@/ui/CatSettings';
 import { QualityPicker } from '@/ui/QualityPicker';
+import { SaidPanel } from '@/ui/SaidPanel';
 import { StoragePanel } from '@/ui/StoragePanel';
 import { addGameSettings } from '@/ui/settings/GameSettingsForm';
 import { addSaveFileSettings } from '@/ui/settings/SaveFileSettings';
@@ -19,9 +20,11 @@ import { LibretroCoverProvider } from '@/covers/LibretroCoverProvider';
 import { isPrototype } from '@/story';
 import { controlsGroupOf, zoneName } from '@/ui/menu/zoneNames';
 import { formatNumber } from '@/text/count';
+import { gameDateLabel } from '@/time/gameDateLabel';
 import { version } from '../../package.json';
 import { late, type Late } from './late';
 import type { Services } from './services';
+import { lastSavedAt } from '@/persistence';
 
 /** What the menus read of things made after them: where the player is, the rules. */
 export interface UiLate {
@@ -52,8 +55,10 @@ export function createMenus(services: Services, player: FirstPersonController, h
     status: () => [
       ['Coins', formatNumber(wallet.coins)],
       ['Tickets', formatNumber(wallet.tickets)],
-      ['Games', String(collection.games.length)],
+      ['Games', String(collection.games.filter((game) => game.status !== 'wishlist').length)],
+      ['When', gameDateLabel(services.today.gameDay, services.today.hours)],
       ['Where', zoneName(here())],
+      ['Saved', savedLabel(lastSavedAt())],
     ],
     goHome: {
       available: () => !inFlat(here()),
@@ -96,8 +101,11 @@ export function addPauseButtons(services: Services, player: FirstPersonControlle
   const { container, input } = services;
   const { overlay, lockFlow } = menus;
   const here = (): ZoneId => holders.zones.get().current.id;
-  overlay.addPauseButton('journal', 'Journal', () => holders.session.get().openPanel(panels.journalPanel));
+  overlay.addPauseButton('journal', () => (services.journal.unread > 0 ? `Journal · ${services.journal.unread} new` : 'Journal'), () => holders.session.get().openPanel(panels.journalPanel));
   overlay.addPauseButton('people', 'People', () => holders.session.get().openPanel(panels.peopleBook.get()));
+  // The last lines said to the player, to read again what went by too fast.
+  const said = new SaidPanel(container);
+  overlay.addPauseButton('said', 'What was said', () => holders.session.get().openPanel(said));
   const inRoomThen = (code: string) => inRoomThenRun(() => input.pressVirtual(code));
   const inRoomThenRun = (run: () => void) => {
     const press = () => {
@@ -110,6 +118,9 @@ export function addPauseButtons(services: Services, player: FirstPersonControlle
     player.controls.addEventListener('lock', press);
     void lockFlow.resume();
   };
+  // Out without the walk down: from the flat, once the way to Front Street is known (the first day's trip to the
+  // market), the "Where to?" list; the front door and the stairs stay for whoever likes the walk.
+  overlay.addPauseButton('go-out', 'Go out…', () => inRoomThenRun(() => holders.session.get().travel()), () => holders.zones.isSet && inFlat(here()) && services.firstDay.isDone('market'));
   overlay.addPauseButton('photo', 'Photo mode', () => inRoomThen(primaryCode('photoMode')));
   overlay.addPauseButton('search', 'Search a game', () => inRoomThen(primaryCode('search')));
   overlay.addPauseButton('plan-room', 'Plan the room', () => inRoomThen(primaryCode('planView')), () => holders.zones.isSet && inFlat(here()) && here() !== 'stairwell');
@@ -148,4 +159,11 @@ export function addPauseButtons(services: Services, player: FirstPersonControlle
     () => services.furnishings.storedPieces().length > 0,
   );
   return storagePanel;
+}
+
+/** How long ago the game last wrote the save, for the pause menu ("Just now", "2 min ago"); "Automatically" before the first write. */
+function savedLabel(at: number | null): string {
+  if (at === null) return 'Automatically';
+  const minutes = Math.floor((Date.now() - at) / 60000);
+  return minutes < 1 ? 'Just now' : minutes < 60 ? `${minutes} min ago` : 'Over an hour ago';
 }

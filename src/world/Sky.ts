@@ -58,12 +58,25 @@ export class Sky implements Updatable {
     this.outdoors = new Outdoors(this.dayNight, { primaryRotationY: options.sunRotationY, nearWall: options.nearWall, season, holiday: options.holiday, viewer: options.viewer, paintOnFirstDraw: streetWindows() });
   }
 
+  /** Whether the day moves on now (`holdClock`): by default always. */
+  private clockRuns: () => boolean = () => true;
+
+  /**
+   * The clock (and the weather's game time) moves on only while `runs` says so: the player in the room, not under the
+   * pause menu, a panel, the start card or the opening film, so a minute spent reading the catalogue costs no shop its
+   * opening hours. The sky's own motion (gusts, the rain, the clouds' drift) goes on regardless.
+   */
+  holdClock(runs: () => boolean): void {
+    this.clockRuns = runs;
+  }
+
   update(dt: number): void {
     // The weather keeps game time, like the clock: a spell lasts hours of the day, not seconds.
     const { dayLength } = this.dayNight;
-    if (dayLength) this.weather.advance((dt * 24) / dayLength, this.dayNight.state.hours);
+    const clockDt = this.clockRuns() ? dt : 0;
+    if (dayLength) this.weather.advance((clockDt * 24) / dayLength, this.dayNight.state.hours);
     this.weather.tick(dt);
-    this.dayNight.update(dt);
+    this.dayNight.update(clockDt);
     this.outdoors.update(dt);
   }
 }

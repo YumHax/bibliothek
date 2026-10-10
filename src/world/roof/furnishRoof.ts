@@ -9,6 +9,11 @@ import { StreetGround } from '../street/StreetGround';
 import { LAWN_REACH, LAWN_Y } from '../street/StreetGround';
 import { StreetPark } from '../street/StreetPark';
 import { Buildings } from '../street/Buildings';
+import { buildStreetFixtures, buildStreetFronts, sceneryAnisotropy } from '../street/streetScenery';
+import { StreetTraffic } from '../street/traffic/StreetTraffic';
+import { Courtyard } from '../outlook/Courtyard';
+import { COURTYARD_YARD } from '@/world/courtyard/courtyardPlan'; // imports-ok: the roof looks down into our courtyard, its chestnut among the trees
+import type { Furniture } from '../Furniture';
 import { Precipitation } from '../street/Precipitation';
 import { FACADES } from '@/world/city/facades';
 import { buildingWindowLife } from '@/building/rearWindows';
@@ -43,13 +48,21 @@ export function furnishRoof(zone: Zone, ctx: Pick<BuildContext, 'sky' | 'listene
   const street = new THREE.Vector3(...plan.street);
 
   // The light and the sky, centred on the player up here; the city in the street's frame under it.
-  const lighting = zone.place(new StreetLighting(dayNight, listener, (out) => sky.outdoors.lightDirection(dayNight.state, out), { shadowMapSize: Math.min(2048, QUALITY.shadowMapSize * 2) }), origin);
+  const lighting = zone.place(new StreetLighting(dayNight, listener, (out) => sky.outdoors.lightDirection(dayNight.state, out), { shadowMapSize: Math.min(2048, QUALITY.shadowMapSize * 2), groundY: street.y }), origin);
   zone.place(new SkyDome(dayNight, listener), origin);
   zone.place(new StreetGround(dayNight, ANISOTROPY), street.clone());
-  zone.place(new StreetPark({ anisotropy: ANISOTROPY, lawnY: LAWN_Y, reach: LAWN_REACH.x }), street.clone());
+  zone.place(new StreetPark({ anisotropy: ANISOTROPY, lawnY: LAWN_Y, reach: LAWN_REACH.x, dayNight }), street.clone());
   const windowLife = buildingWindowLife({ day: () => today.gameDay, hours: () => dayNight.state.hours });
-  zone.place(new Buildings(FACADES, dayNight, { detailScale: QUALITY.level === 'low' ? 0.5 : 0.8, anisotropy: ANISOTROPY, shopGoods: null, nightScale: 0.25, windowLife }), street.clone());
+  const buildings = zone.place(new Buildings(FACADES, dayNight, { detailScale: QUALITY.level === 'low' ? 0.5 : 0.8, anisotropy: ANISOTROPY, shopGoods: null, nightScale: 0.25, windowLife }), street.clone());
   zone.place(new Roofscape(), street.clone());
+  // What stands in the street below, as a window's view of it has it (`outlook/streetOutlook`): the awnings, balconies
+  // and shopfronts, the lamps (their heads and pools, no real light: they are thirty metres down), the trees, the
+  // parked and passing cars, the benches and shelter; and our courtyard behind the building. No colliders, no manoeuvres.
+  const below = <T extends Furniture>(item: T): T => zone.place(item, street.clone());
+  buildStreetFronts(below, buildings.fronts, dayNight);
+  const traffic = below(new StreetTraffic());
+  buildStreetFixtures(below, { dayNight, viewer: listener, traffic, lampLights: 0, moreTrees: [COURTYARD_YARD.chestnut], washed: [buildings], farShadow: lighting.far });
+  below(new Courtyard(dayNight, sceneryAnisotropy()));
 
   // Our roof.
   zone.place(new RoofTop(), origin);

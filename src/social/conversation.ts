@@ -82,6 +82,24 @@ const WHY: Record<Exclude<InteractionId, 'giveGift' | 'giveGame'>, { win: string
   giveCoins: { win: 'took the coins', lose: 'was offended by the coins' },
 };
 
+/**
+ * What went well, in their words, for the People book's diary: a talk that landed is remembered once (mildly, so it
+ * fades and a deed outweighs it), and the player learns what each one likes by reading it, no odds shown.
+ */
+const WENT_WELL: Partial<Record<InteractionId, string>> = {
+  chat: 'we had a good chat',
+  askDay: 'you asked how my day went',
+  talkGames: 'we talked games for ages',
+  compliment: 'you said something kind',
+  joke: 'you made me laugh',
+  gossip: 'we had a good gossip',
+  complain: 'you see what’s wrong with this building too',
+  tease: 'you gave as good as you got',
+  challenge: 'you took up my challenge',
+};
+/** How much a "what went well" line matters: under `MEMORY.strong`, so it is forgotten after `MEMORY.fadeDays`. */
+const WENT_WELL_WEIGHT = 2;
+
 /** What goes with an interaction: the gift, the game, whom it is about. */
 export interface InteractionExtra {
   gift?: GiftKind;
@@ -260,10 +278,13 @@ export function perform(id: PersonId, interaction: InteractionId, ctx: TalkConte
   }
   // Talk warms a person `GAIN.talkPerDay` a day at most (an apology mends past it); gifts and deeds are not capped.
   if (!daily && !tired && talkCapped(interaction)) warmth = talkWarmth(id, ctx.day, warmth);
-  const memory = interaction === 'insult' ? 'you insulted me' : interaction === 'giveGame' && ok ? `you gave me ${extra.game?.title ?? 'a game'}` : interaction === 'apologise' && ok ? 'you apologised' : undefined;
+  const wentWell = ok && !tired && !daily ? WENT_WELL[interaction] : undefined;
+  const fresh = wentWell && !standing(id).memories.some((m) => m.text === wentWell) ? wentWell : undefined;
+  const memory = interaction === 'insult' ? 'you insulted me' : interaction === 'giveGame' && ok ? `you gave me ${extra.game?.title ?? 'a game'}` : interaction === 'apologise' && ok ? 'you apologised' : fresh;
+  const memoryWeight = memory !== undefined && memory === fresh ? WENT_WELL_WEIGHT : undefined;
   const change = daily && !tired
     ? null
-    : nudge(id, { warmth, trust: trustMove, why, day: ctx.day, reason: rule.daily && ok ? `talk:${interaction}` : undefined, memory, gossip: rule.heard === true });
+    : nudge(id, { warmth, trust: trustMove, why, day: ctx.day, reason: rule.daily && ok ? `talk:${interaction}` : undefined, memory, memoryWeight, gossip: rule.heard === true });
 
   // Gossip: the one talked about may hear of it (a gossip listening passes it on).
   if (interaction === 'gossip' && ok && extra.about && card?.traits.includes('gossip')) {

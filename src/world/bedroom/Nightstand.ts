@@ -31,6 +31,14 @@ const DRAWER_SPOTS: [number, number, number][] = [
   [0.08, -0.2, -0.12],
   [0.08, -0.05, 0.45],
 ];
+/** How tall each thing in the drawer lies (m): a booklet found in the drawer lies on the first. */
+const ITEM_HEIGHT: Record<NightstandItem, number> = { handheld: 0.0245, book: 0.02, glasses: 0.011 };
+/**
+ * Where coins or tickets found in the drawer lie (`build/rummage`), drawer-local [x, z]: the channel between the first
+ * two spots' things, inside what the drawer shows pulled out; and how far they may spread there.
+ */
+const STASH_SPOT: [number, number] = [-0.01, -0.13];
+const STASH_ROOM = 0.022;
 /** How far the stand stays off the wall (the skirting board is behind it). */
 const OFF_WALL = 0.02;
 
@@ -135,6 +143,10 @@ export class Nightstand extends THREE.Group implements Furniture {
     part(inside, boxW, sideH, 0.01, OAK, { y: 0.012 + sideH / 2, z: -boxD + 0.005 });
     const floor = 0.02;
 
+    const first = contents[0];
+    const [sx, sz] = STASH_SPOT;
+    const [fx, fz] = DRAWER_SPOTS[0]!;
+    drawer.stash = { holder: inside, at: new THREE.Vector3(sx, floor, sz), room: STASH_ROOM, flat: new THREE.Vector3(fx, floor + (first ? ITEM_HEIGHT[first] : 0), fz) };
     contents.slice(0, DRAWER_SPOTS.length).forEach((item, i) => {
       const [x, z, yaw] = DRAWER_SPOTS[i]!;
       const thing = item === 'handheld' ? handheld() : item === 'book' ? paperback() : foldedGlasses();

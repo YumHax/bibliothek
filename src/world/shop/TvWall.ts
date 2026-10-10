@@ -6,6 +6,8 @@ import { PortableTv } from './shopModels';
 import type { ScreenLook } from './snowScreen';
 import { labelSheet, ticket } from './tv/labels';
 import { lcg } from '@/random';
+import { GlowPool } from '../arcade/GlowPool';
+import { PooledLight } from '../lighting/LightPool';
 
 export interface TvWallOptions {
   /** Length along the wall. Default 2.4. */
@@ -80,7 +82,7 @@ export class TvWall extends THREE.Group implements Furniture {
       }
     }
     sets.forEach((set, i) => {
-      const tv = new PortableTv({ width: set.width, case: set.color, screen: looks[i] });
+      const tv = new PortableTv({ width: set.width, case: set.color, screen: looks[i], seed: i + 1 });
       tv.position.copy(set.at);
       tv.rotation.y = set.yaw;
       this.add(tv);
@@ -101,6 +103,15 @@ export class TvWall extends THREE.Group implements Furniture {
         this.add(holder);
       });
     }
+    // The wall of sets lights the room: a cold blue pool on the floor in front, and a light the shop's pool lends
+    // when the player is near (`LightPool`; shadowless).
+    const pool = new GlowPool(0x9ab8ff, W * 0.9, 1.3);
+    pool.position.z = DEPTH + 0.6;
+    pool.setLevel(0.75);
+    this.add(pool);
+    const light = new PooledLight(0xa8c0ff, 0.7, 3.2, 2);
+    light.position.set(0, BOTTOM + (rows * ROW) / 2, DEPTH + 0.35);
+    this.add(light);
     this.footprint = new THREE.Box3(new THREE.Vector3(-W / 2, 0, 0), new THREE.Vector3(W / 2, top, DEPTH));
   }
 }

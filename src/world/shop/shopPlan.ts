@@ -16,6 +16,7 @@ import { FURNITURE_SHOP } from './plans/furnitureShop';
 import { TV_SHOP } from './plans/tvShop';
 import { PET_SHOP } from './plans/petShop';
 import { FLOWER_SHOP } from './plans/flowerShop';
+import type { LookName } from '@/graphics/grade';
 
 export { SHOP_DOOR } from './plans/shared';
 
@@ -112,6 +113,8 @@ export interface ShopPlan {
   lamp: { kind: 'pendant' | 'flush'; at: Placement; switchAt: Placement };
   /** Real (shadowless) point lights the shop's glows share (`LightPool`); default 2, 0 for none. See docs/shops.md. */
   glowLights?: number;
+  /** The shop's colour grade (`graphics/grade` `LOOKS`); default `shop` (even light, true colours). */
+  look?: LookName;
   counter: { at: Placement; width: number };
   clerk: {
     seed: number;

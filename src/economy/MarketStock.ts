@@ -43,6 +43,8 @@ interface MarketStockOptions {
   wantedOdds?: number;
 }
 
+/** Every platform's id, in the list's order (the draws at large pick from it). */
+const PLATFORM_IDS: readonly PlatformId[] = PLATFORM_LIST.map((p) => p.id);
 /** Entries that are not a box on a shelf: hacks and translations (square brackets), prototypes, demos, pirates... */
 const NOT_A_RELEASE = /\[|\((Beta|Proto|Demo|Sample|Unl|Pirate|Aftermarket|Kiosk|Virtual Console|Program|Promo|Alt[^)]*|Rev [^)]*|v\d[^)]*|Disc [2-9])\)/i;
 const WESTERN_REGION = /\((USA|World|Europe)[,)]/;
@@ -279,12 +281,12 @@ export class MarketStock {
     return pool;
   }
 
-  /** `count` games from the index at large, seeded by `seed` (the private sellers' cards). */
-  async randomGames(seed: string, count: number): Promise<Game[]> {
+  /** `count` games from the index at large (or of `platforms` only), seeded by `seed` (the private sellers' cards, a kid's pencil case). */
+  async randomGames(seed: string, count: number, platforms: readonly PlatformId[] = PLATFORM_IDS): Promise<Game[]> {
     const rng = frozenRng(seed);
     const games: Game[] = [];
     for (let i = 0; i < count * 3 && games.length < count; i++) {
-      const platform = PLATFORM_LIST[Math.floor(rng() * PLATFORM_LIST.length)]!.id;
+      const platform = platforms[Math.floor(rng() * platforms.length)]!;
       const pool = await this.releases(platform).catch(() => [] as readonly IndexEntry[]);
       const entry = pool[Math.floor(rng() * pool.length)];
       if (entry) games.push(gameFrom(entry, platform));

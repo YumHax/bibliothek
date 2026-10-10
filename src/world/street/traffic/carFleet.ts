@@ -2,6 +2,8 @@ import * as THREE from 'three';
 import { canvasTexture, createCanvas, toTexture } from '@/covers/generated/canvasUtils';
 import { CAR_SIZES, DRIVER_SEAT, VEHICLE_GLASS, carGeometries, type CarModelId } from '../carModel';
 import { snowCovered } from '../snowCover';
+import { QUALITY } from '@/graphics/quality';
+import { afterChunk, patchShader } from '../../materials/shaderPatch';
 import { VEHICLES } from '../../city/vehicles';
 import { GROUND, RENDER_ORDER, onSurface } from '../../surface/layers';
 import { additive } from '@/world/materials/blend';
@@ -12,7 +14,8 @@ import { WheelMaterial, rollAngle, wheelAngles } from './wheelSpin';
 import type { Car } from './Car';
 
 /*
- * The cars' bodies: how `StreetCars`'s cars are drawn. Three shapes (a hatchback, a saloon, a panel van), each
+ * The cars' bodies: how `StreetCars`'s cars are drawn. Five shapes (a hatchback, a city car, a saloon, an estate, a
+ * panel van), each
  * instanced (body, glass, tyres with the trim and the cabin seen through the tinted glass, lamps with the plates:
  * four draw calls a shape), plus the drivers' figures, the taxis' signs, the headlight pools on the road at night
  * and the dark under each car. Every mesh is culled by one sphere round the cars shown. The simulation writes each
@@ -20,7 +23,24 @@ import type { Car } from './Car';
  */
 
 const HIDDEN = new THREE.Matrix4().makeScale(0, 0, 0);
-const MODELS: readonly CarModelId[] = ['hatch', 'saloon', 'van'];
+
+/**
+ * The cars' paint (tinted per car by its instance colour): on medium and high a clear coat over the colour, so the
+ * sky and the lamps lie crisp along the roofs and bonnets; and the road's grime up the sills and the bumpers' feet,
+ * fading out by half a metre up (the body's own height, the same on every car).
+ */
+function carPaint(): THREE.MeshStandardMaterial {
+  const material =
+    QUALITY.level === 'low'
+      ? new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.3 })
+      : new THREE.MeshPhysicalMaterial({ color: 0xffffff, roughness: 0.42, clearcoat: 1, clearcoatRoughness: 0.06 });
+  patchShader(material, 'carGrime', (shader) => {
+    shader.vertexShader = 'varying float vCarY;\n' + afterChunk(shader.vertexShader, 'begin_vertex', 'vCarY = position.y;');
+    shader.fragmentShader = 'varying float vCarY;\n' + afterChunk(shader.fragmentShader, 'color_fragment', 'diffuseColor.rgb *= mix(vec3(0.62, 0.6, 0.56), vec3(1.0), smoothstep(0.28, 0.55, vCarY));');
+  });
+  return snowCovered(material);
+}
+const MODELS: readonly CarModelId[] = ['hatch', 'city', 'saloon', 'estate', 'van'];
 /** A taxi's roof sign: size (along, up, across) and where it sits (along from the middle, over the roof). */
 const TAXI_SIGN = { size: [0.2, 0.14, 0.55] as const, along: -0.25, lift: 0.07 };
 /** The pool of the headlights on the road ahead of a driving car at night: how far it reaches, how wide it spreads, how bright. */
@@ -75,7 +95,7 @@ export class CarFleet {
    * any, then the drivers, signs, beams and shades, one slot per car.
    */
   constructor(parent: THREE.Object3D, models: readonly CarModelId[]) {
-    const body = snowCovered(new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.3 }));
+    const body = carPaint();
     // Tinted, see-through: the seats and the driver show behind it.
     // Over the body's panels as `carModel.VEHICLE_GLASS`.
     const glass = onSurface(snowCovered(new THREE.MeshStandardMaterial({ color: 0x1a232b, roughness: 0.06, transparent: true, opacity: 0.66 })), VEHICLE_GLASS, { depthWrite: false });
@@ -171,7 +191,7 @@ export class CarFleet {
     const right = this.blink && (car.hazards || car.signal > 0);
     this.lampValue.set(car.lit ? (car.reversing ? 2 : 1) : 0, car.braking && car.lit ? 1 : 0, left ? 1 : 0, right ? 1 : 0);
     set.lampState.setXYZW(car.slot, this.lampValue.x, this.lampValue.y, this.lampValue.z, this.lampValue.w);
-    set.wheelAngle.setX(car.slot, rollAngle(car.rolled, VEHICLES[car.model === 'hatch' ? 'car' : car.model].wheelRadius));
+    set.wheelAngle.setX(car.slot, rollAngle(car.rolled, VEHICLES[car.model === 'hatch' ? 'car' : car.model === 'city' ? 'cityCar' : car.model].wheelRadius));
     this.showDressing(car, i, car.active, away);
   }
 

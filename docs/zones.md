@@ -56,7 +56,13 @@ they open on) travel back to the street. A travel door's leaf swings ajar onto a
 shop's bell bobbing on its spring, and is shut again when its zone comes back (`travel/doorSwing`); the street's shop
 doors (`StreetDoor`) are real leaves too, frames in the shop's joinery colour round the painted glass. A
 travel sounds like a door (`travel/travelSounds`: the latch, a shop's bell when either end is a shop, the arcade or
-the market, the door shut on arrival) and crossfades the room's sound under its curtain (`audio/audioContext.duckScene`). In the flat every zone neighbours every other
+the market, the door shut on arrival) and crossfades the room's sound under its curtain (`audio/audioContext.duckScene`).
+The curtain (`ui/Fader`) falls in the light of where the trip goes (`travel/travelTint`: warm for a shop, the arcade,
+the market or the saleroom, the sky's grey-blue for the street by day, near black at night), names the destination
+with ticking dots if it is still down 0.8 s after falling (the first trip to the street, its shaders compiling), and a
+trip whose destination will not load comes back with a refusal ("The door sticks", `Travel.onFailed`). A trip may play
+an interlude over the fallen curtain while the destination builds (`TravelOptions.interlude`: the bus ride to Mémé's
+and back, `ui/busRide`); the curtain lifts once it has ended. In the flat every zone neighbours every other
 (`FLAT` in `worldPlan.ts`), so they are always active together: a zone coming or going changes the scene's light
 count, which recompiles every shader program (a freeze of seconds at a doorway). The `PortalCuller` still draws only what
 is seen, and idle rooms refresh their shadow maps twice a second, so an active room out of sight costs little.
@@ -119,7 +125,9 @@ it (`watch`), a relay clack at each switch, so a climb leaves a trail of landing
 point lights fade from lit globe to lit globe near the player, reaching a storey and a bit (never the landing above or
 below through the slabs), dimmed with their intensity, to 0 while nobody is here because lights ignore walls; a
 hemisphere only while occupied; the skylight tinted by the sky and the weather), `StairWindows` (a courtyard window on
-every half landing, the courtyard built in 3D through it: `outlook/`, docs/outdoors.md "Views onto the street"), what is heard (`stairSounds`: the hall's air, a TV, a piano or a dog behind a
+every half landing, the courtyard built in 3D through it: `outlook/`, docs/outdoors.md "Views onto the street"; each in a
+splayed plaster reveal 30 cm deep with a stone sill across it, laying a soft patch of daylight on its landing with dust
+turning in it by the hour and the weather), what is heard (`stairSounds`: the hall's air, a TV, a piano or a dog behind a
 neighbour's door while they are home, the street behind the street door; one-shots echo in the stone; the third step
 of the 4th floor's flight creaks, `STAIRWELL_PLAN.creak`), the neighbours' doors (each in its resident's colour, with
 its doormat and brass name plate, its knock line and sound: `STAIRWELL_PLAN.doors`; a knock is always heard, and nobody
@@ -128,7 +136,8 @@ flap, `OurMailbox`, hands over the day's post, read on the spot, and the mat at 
 `building/postCollected`, whichever comes first), and
 at the street door the sas (see "The sas"). Underfoot: tiles in the hall and the sas, stone (`concrete`: `stone` is an
 outdoor surface, it would splash on a rainy day) on the flights and landings. The menu's "Go home" lands in the
-hallway (`HALLWAY_PLAN.arrival`); travel to the stairwell (the entrance hall, `STAIRWELL_PLAN.arrival`, in front of
+hallway (`HALLWAY_PLAN.arrival`), and from the flat, once the first day's trip to the market is done, its "Go out…" opens
+the "Where to?" list (`Travel.choices`, the flat's own stops left out) for whoever does not want the stairs; travel to the stairwell (the entrance hall, `STAIRWELL_PLAN.arrival`, in front of
 the sas's glass door) is only the street's home door when the sas is not connected.
 - **The player's ground.** `FirstPersonController.setGround(fn)` gives the floor's height under (x, z) for the feet's
   current height (`GroundHeight`): flights stack, so the surface is the highest one no more than a step above the feet.
@@ -199,7 +208,8 @@ the sas's glass door) is only the street's home door when the sas is not connect
 - **Drawn only when seen.** The `PortalCuller` already hides the whole stairwell while the front door is shut and the
   player is in the flat (the hallway's portal carries the door), so its merged storeys cost nothing from home. The
   courtyard windows render the outlook only on their two panes nearest the eye (`StairWindows`, `LIVE`; the others,
-  storeys away through the well, are frosted glass in the sky's colour), panes in one plane share one render, and the
+  storeys away through the well, are frosted glass in the sky's colour, a pane frosting over or clearing in 0.3 s as it
+  leaves or joins the two: `FROST_S`, a frost layer `WALL.paneFrost`), panes in one plane share one render, and the
   outlook frees its scene after 90 s undrawn (`OutlookView`, docs/outdoors.md).
 - **Visiting the neighbours** (`neighbourFlat/visits`): past their friendship's `inviteAt` a knock while they are home
   travels into their flat (see "The neighbours' flats"; docs/building.md "Friendship"), and their door there leads back
@@ -260,6 +270,20 @@ lot on the table, their console, a scripted ad's note) are laid by a `Visit` pro
 (`Classifieds.host`), the last host's taken away and freed: the zone may wake up dormant (`keepRecent`). No lights in
 the host's things.
 
+## Mémé's flat (`src/world/grandma/`, travelled by bus)
+
+One lazy zone at x 560 (`unlisted`): Mémé's 5.6 x 4.6 m living-dining room across town (docs/story.md "Mémé"),
+reached by bus line 38 from Front Street's stop (`StreetBus`, `STREET_PLAN.busRide`) and left by its landing door, the
+bus back (`STREET_PLAN.arrivals.grandmaFlat`, by the stop's pole); both rides play over the curtain (`interlude`).
+The shell (`GRANDMA_FLAT_PLAN`: pendant, her armchair and the visitor's, the dining table and its chairs) and her
+things (`furnishGrandmaDecor`: the window on Linden Avenue, its own view `LindenView` rather than an outlook, the
+longcase clock, the set, the kitchenette, the photos) are built once; Mémé (`meme.ts`) is moved to her spot for the
+hour by an `Arrivals` prop when the zone is occupied (`OccupancyAware`), which also counts the visit
+(`GrandmaVisits.arrive`); `Seat.guest` keeps the player and the cat off her armchair. Her rug is `surfaceAt`
+(`rugsUnderfoot`). A memory stages its past under the film's black, in this zone or another it holds loaded
+(`MemoryFilm`, docs/story.md "Adding a memory"), and puts her present self back (`Walker.setPresent`); while it plays
+(`memories.filming`) no arrival counts. No light in anything staged.
+
 ## The courtyard (`src/world/courtyard/`, reached by travel)
 
 Our block's yard behind the building, walked: the same place the stairwell's windows look down on, built from the same
@@ -273,8 +297,40 @@ placed by `courtyard/courtyardDoor.placeCourtyardDoor`, kept out of the yard's c
   `COURTYARD_YARD`, and the builder places the street's classes at `-COURTYARD_CENTRE` (`inYard` for one spot). The
   outdoor rig (`StreetLighting`, its sun's shadow), the `SkyDome` and the rain follow the camera from the zone's origin.
 - **Bounds**: `StreetBounds` behind the facades, `YardBounds` for the workshop's back wall, the bins, shed, sandpit,
-  bikes, rack and the chestnut's trunk. Underfoot the setts (`stone`), the lawn (`grass`).
-- **What is there**: the concierge's pots by our door, the bags by the bins on bin day (one game day in seven).
+  bikes, rack and the chestnut's trunk; `YardDressing`'s own; on bulky-waste day the pile's (`PileBounds`). Underfoot the setts (`stone`), the lawn (`grass`).
+- **What is there**: the concierge's pots by our door, the bags by the bins on bin day (one game day in seven), the
+  lantern over the back door (`YardLantern`, `COURTYARD_PLAN.lantern`: lit on the building's timer from dusk to half
+  past midnight and from half past five, a shadowless light and a pool on the setts). The rear building and the east
+  wing are painted at `YARD_DETAIL` here (their windows in 3D), finer than from Front Street; the yard's own pieces
+  (`outlook/Courtyard`) carry long grass along the lawn's curb (`street/GrassTufts`) and ivy up the workshop's back
+  (`street/Climber`, `COURTYARD_YARD.ivy`).
+- **Lived in, walked** (`courtyard/YardDressing`, `COURTYARD_PLAN.dressing`; the window views keep to `COURTYARD_YARD`):
+  a slatted bench against our wall, a rotary airer on the lawn with the washing out on dry days from 8 to 19 (it
+  sways), the cast-iron downpipe in the wing's corner and drain gratings (`GROUND.grate`), puddles round them after
+  rain (`GROUND.puddle`, fading as the yard dries), the tap and its hose reel, the meter cabinet and a climber on the
+  wing, a lean-to over the bins with its enamel plate, solar stakes round the lawn's curb (emissive from dusk, no
+  light), a bucket in the sandpit, a ball on the lawn, weeds at the walls' foot. The bench, the airer's pole, the reel
+  and the lean-to's posts collide.
+- **Ground floors, built** (`courtyard/YardGroundFloors`, `COURTYARD_PLAN.groundFloors`): seen from a metre off, the
+  bottom of each wall is geometry, not paint. Our back, the rear building and the wing are painted bare under their
+  string course here (`FacadeSpec.builtGround`, set by `furnishCourtyard` only: Front Street and the window views keep
+  their painted ground floors), and every face round the yard is painted at `YARD_DETAIL` px/m. In front: a stone
+  plinth of blocks on a mortar bed along all four walls (stopped at the doors, our back door, the workshop's and the
+  shed), the cellars' vents with their grilles, three doors in stone surrounds with enamel plates (the bike room's
+  boarded one, the wing's glazed staircase door under a zinc hood, the rear building's), barred ground-floor windows
+  with casements in the facade's colour, café curtains and a lamp on behind some of an evening, a downpipe on the rear
+  building. Static parts are merged by material; the steps collide. Its zfight subject builds it with the dressing and
+  `Courtyard` (`yardGroundFloors`).
+- **Bulky-waste day** (`building/bulkyWaste`, `courtyard/placeBulky`, `bulkyModels`, `COURTYARD_PLAN.bulky`): one
+  game day in seven (`BULKY`, never a bin day nor a party day) a resident's clear-out stands against the rear building
+  east of the bins: junk nobody takes (a mattress, a split chair, a rolled carpet, a cracked TV, a pram, skis,
+  crockery), their cardboard FREE sign, a carton of 2 to 4 loose games the player does not own (free `ForSaleBox`es
+  as the cellars' finds, B takes one), often a piece for the flat (`BULKY_PIECES`, only one the flat has room for:
+  a click carries it up, `HomeUpgrades.add`) and some weeks a console that won't switch on (a click sends it to the
+  kitchen chair, `Workshop.add`, docs/household.md "Repairing a console"; refused while there is no kitchen table).
+  Each take warms the owner (`befriend`, `bulkyWaste`, once a day); what was taken is kept for the day
+  (`bibliothek.bulkyWaste.v1`). The hall's board says it the day before (the concierge) and on the day (the owner),
+  through `courtyardDoor`'s `pinSource`. Laid out at build and at each new game day, like the party.
 - **The neighbours' party** (`building/neighboursParty`, `courtyard/NeighboursParty`): one game day in 28 and on the real
   Fête des voisins (the last Friday of May). From 14:00 the trestle tables, the residents' sale table (they buy games
   off the player: `WorldPanels.partySale`, a `SellPanel` with the party's buyer, docs/economy.md) and the old cabinet
@@ -285,6 +341,25 @@ placed by `courtyard/courtyardDoor.placeCourtyardDoor`, kept out of the yard's c
   (`partyNotes`, through `boardNotes`). What is set out is decided when the yard is built, and again at each new game
   day while the player is there (`today.onNewGameDay`): the tables, sale, cabinet, bulbs and sounds are cleared away
   when the party's day is over, or set out when a party day begins.
+- **The film night** (`building/yardCinema`, `courtyard/YardCinema`, `YardCinemaPieces`, `placeCinema`,
+  `COURTYARD_PLAN.cinema`; docs/building.md "The film night"): once the flat has its projector, a sheet rolled up under
+  the workshop's parapet over its door and folding chairs stacked by it; a click on the sheet picks the film
+  (`WorldPanels.screening`). With a film put on, the sheet hangs on its cord (pegged, a broom handle in its hem), two
+  rows of `FoldingChair`s face it (a plaid on each in autumn and winter; the player may sit), the projector (the
+  `Projector` with `standing`, no box to bring: a click starts the film once it is dark) stands on two wine crates on a
+  trestle with the drinks (lemonade, or a thermos when cold), its lead run along the setts to our back door. Its beam
+  and spill are its own two shadowless lights. The residents come out of our door one by one, sit, react, clap; the
+  one it meant most to speaks, and may leave a free game on their chair (a `ForSaleBox`). Placed at each build; once the
+  film is shown the sheet rolls up when the residents are gone and the projector is off (else at the next build).
+- **The kids** (`building/kids`, `courtyard/YardKids`, `YardKid`, `handheldModel`, `placeKids`, `COURTYARD_PLAN.kids`;
+  docs/building.md "The kids in the yard"): after school, Hugo and Mai sat on the bench, Tuan standing off its west end
+  leaning in to Mai's screen, Lina on the sandpit's east edge (Wednesdays and weekends), each with a handheld held up to
+  their face (a grey pocket one, a purple colour one, a black Sega one held sideways: the arms solved to its grips, the
+  eyes on its screen, the game's little moments in their shoulders). The screens show a little game on two shared canvases
+  (`HandheldScreens`, a few frames a second while the player is within 9 m; no light). They look up when the player comes
+  near; someone cheers or groans now and then; on a day with news the first to see the player shouts it. They come and
+  go only out of the player's sight (further than 16 m, or behind them), checked each second. A go on a handheld plays its
+  sounds out of the bench (`ChipSpeaker`).
 - **Hooks.** Another feature dresses the yard with `courtyard/huntHook.dressCourtyard((zone, spots) => …)`, called at each
   build with `COURTYARD_PLAN.huntSpots` turned zone-local: `chestnut`, on the trunk's bark facing our back door (the
   treasure hunt's carving).
@@ -375,7 +450,9 @@ a travel zone (`unlisted`), reached through the attic's ladder and left through 
 
 - **The city round it** is the street's, laid in the street's frame (`ROOF_PLAN.street`): `StreetGround`,
   `StreetPark`, every facade and its roof (`Buildings`, its night windows following the residents), and `Roofscape`,
-  a top behind each Front Street front so the blocks are not hollow seen from above. The light is `StreetLighting`
+  a top behind each Front Street front so the blocks are not hollow seen from above; down in the street, what a window's
+  view of it has (`streetScenery`'s fronts and fixtures: awnings, balconies, shopfronts, the lamps with no real light,
+  trees, parked and passing cars, furniture) and our courtyard (`outlook/Courtyard`). The light is `StreetLighting`
   centred on the player (one sun shadow, a hemisphere while occupied), with the street's `SkyDome`, rain and snow
   (`Precipitation`), and the wind (`RoofWind`).
 - **The roof itself** (`RoofTop`): zinc with standing seams, a railing just inside the edges (its colliders keep the
@@ -457,7 +534,8 @@ is teleported in view: with both doors shut, the player is moved from one twin t
   `WALL_GAP` (0.06 m) between the two wall planes so they do not z-fight, and the `Door`'s lining bridges the gap.
 - Exactly one side hangs the leaf: the other marks its doorway `door: false`. `hinge: 'right'` mirrors the leaf; it swings
   away from the hanging room and ends nearly flat against the far wall on the hinge side, so pick the side with the longer
-  wall. Too narrow a room (the bathroom) hangs its own door so it opens into the corridor. Both sides name the zone across
+  wall; where that side is too short, `swing` (degrees, default 165) stops it sooner (the bedroom's: 90, square against
+  the wardrobe's end) and the plan keeps the strip it stands in clear. Too narrow a room (the bathroom) hangs its own door so it opens into the corridor. Both sides name the zone across
   the opening in `to`: that is the portal the view is culled through.
 - Light does not stop at a wall plane: a room's lamps would pour through it. `RoomOptions.opaqueWalls` lays an invisible
   shadow caster just outside each listed wall (cut by its doorways); list every wall without a window.
@@ -605,7 +683,7 @@ RETRO GAMES keeps `SHOP_HOURS`).
   (`FacadeRelief`, `HomeUpgrades`), the near facades' windows whole (frames, sills, heads, shutters: `facadeWindows/`), the pharmacy's cross and the newsagent's diamond on brackets (`BladeSigns`), the
   shopfronts (`shopfronts/Shopfronts`, below), interior-mapped shop windows
   (`ShopInteriors`: two looks per kind, someone inside while open; rooms only on low), roller shutters that roll down at
-  closing (`Shutters`), light pools in front of open shops (`ShopGlow`), wet streaks, puddles and, on
+  closing (`Shutters`; back from dormancy they snap to the clock, no roll and no rattle), light pools in front of open shops (`ShopGlow`), wet streaks, puddles and, on
   `QUALITY.reflections`, a masked `Reflector` hidden while dry (`WetGround`), autumn leaves (`Leaves`), manholes,
   hydrants, bollards, a Morris column and the roadworks (`StreetDetails`), the flickering lamp's buzz (`LampBuzz`).
   `snowCovered()` (`snowCover.ts`, uniform written by `StreetGround`) whitens up-facing faces of everything.
@@ -645,7 +723,8 @@ RETRO GAMES keeps `SHOP_HOURS`).
   `economy/rivalCollector`). Coins go in through `BuildContext.money.purse`. See `docs/economy.md`.
 - **Sound** (`StreetSound`, `audio/`): every street sound is a `SoundGraph` (its master into `streetBus.streetInput`:
   `outdoorsInput` plus the facades' faint slapback; every looping source kept, all stopped on dispose and while the zone
-  is dormant, `setZoneActive(false)`, rebuilt on the next update) placed by one `StreetEar` (side by `stereoPan`, behind
+  is dormant, `setZoneActive(false)`, rebuilt on the next update; at most `MAX_SHOTS` one-shots sounding or scheduled
+  at once, past it a new one is dropped) placed by one `StreetEar` (side by `stereoPan`, behind
   the head duller by `rearOf`, through `SpatialOut`). `StreetSound`: the rumble, rain (giving way under a shelter to
   `RainOnRoofs`' drumming and drips), wind, sirens far off, church bells on the hour (8:00 to 21:00), the birds by
   season and hour (`StreetBirds`: dawn chorus, summer swifts, winter robins and crows, none over snow but the hardy),
@@ -662,7 +741,7 @@ RETRO GAMES keeps `SHOP_HOURS`).
 - **Rig instead of a shell** (`StreetLighting`): a shadow-casting `DirectionalLight` from `sky.outdoors.lightDirection`,
   shadow camera a square around the player snapped to texels, its map redrawn at `QUALITY.shadowRefreshHz` while occupied (`lighting/ShadowRefresh`); a `HemisphereLight` only while occupied; it overrides
   the scene's `Haze` fog every frame with the weather's (`streetAir`), and returns `lightLevel` in its handle (what
-  `zoneHandle.lightLevelOf` reads when there is no `room`). `SkyDome` (radius 90, inside the camera's 100 m far plane, drawn last of the opaque things on the far plane with the depth test on, so only where the sky shows) draws the sky,
+  `zoneHandle.lightLevelOf` reads when there is no `room`). `SkyDome` (radius 90, inside the camera's 220 m far plane, drawn last of the opaque things on the far plane with the depth test on, so only where the sky shows) draws the sky,
   with the window view's towers on its horizon (`SkylineSilhouette`: `city/SKYLINE` seen from the player, a 1D texture
   re-baked on the CPU every 0.5 m walked) and the neighbourhood's nearer blocks ray-cast in front of them
   (`city/skyline` `BACKDROP_BLOCKS`). Past the shadow square (laid ahead of where the player looks) the rows' far shadow
@@ -695,9 +774,10 @@ RETRO GAMES keeps `SHOP_HOURS`).
   (painted from `FACADES`; clicked, the directions with each shop's hours), a pillar clock by RETRO GAMES keeping the game's
   time (clicked: the time, what opens or shuts soon), the bus stop's pole and timetable (clicked: how often, when the next
   is due from `StreetBus.dueIn`). Line 38 is boarded while its doors stand open (`StreetBus` is `Interactable`: the fare
-  through `SessionActions.pay`, then `travel` to the first of `busRide.destinations` open now, the Old Market Hall in
-  RETRO GAMES' hours; shut, the caption says when the first bus there runs; its hitbox is only raycast while it has a
-  caption). The benches and
+  through `SessionActions.pay`, then `travel` to the first of `busRide.destinations` on now: Mémé's across town in her
+  waking hours (docs/story.md "Mémé"), the one place the player cannot walk to; shut, the caption says when the first
+  bus there runs; its hitbox is only raycast while it has a caption). Back from her flat, the player steps off by the
+  pole (`STREET_PLAN.arrivals.grandmaFlat`). The benches and
   the shelter's bench are `BenchSeat`s (`Seating`; the reader's bench is taken while they sit).
 - **What's on, the Fair** (`events/`): a bill on the Morris column and the shelter's lit poster (`WhatsOnBills`, its `ad`
   handed to `StreetFurniture`) read `whatsOnItems` (the next Grand Flea Fair, today's arcade challenge, the Saturday

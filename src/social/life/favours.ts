@@ -31,8 +31,9 @@ export interface FavourDeps {
   /** Whether a game may leave the shelf (not a keepsake). */
   lendable(game: Game): boolean;
   wallet: { earnCoins(coins: number): void };
-  notices: Pick<NoticeActions, 'tip' | 'reward' | 'read'>;
-  note(text: string): void;
+  notices: Pick<NoticeActions, 'tip' | 'reward' | 'slip' | 'read'>;
+  /** A line in the day's journal: a favour taken on is a small thing (`note`), its outcome an ordinary line. */
+  note(text: string, weight?: 'line' | 'note'): void;
 }
 
 /** The person the lodge's parcels are collected from. */
@@ -266,7 +267,8 @@ function accept(f: Favour, day: number): { line: string } {
   saveLife();
   const todo = fill(FAVOUR_LINES[f.kind].todo, f);
   deps?.notices.tip(todo, { id: `favour-${f.id}`, head: 'To do', until: () => f.done !== undefined || f.failed !== undefined, ms: 10 * 60_000 });
-  deps?.note(`Said yes to ${shortName(f.person)}: ${todo}`);
+  const said = `Said yes to ${shortName(f.person)}: ${todo}`;
+  deps?.note(said.length <= 60 ? said : `Said yes to ${shortName(f.person)}’s favour`, 'note');
   return { line: f.kind === 'lend' ? 'Oh, thank you! Whenever suits.' : 'Thank you! I knew I could count on you.' };
 }
 
@@ -282,15 +284,17 @@ function complete(f: Favour, day: number): void {
   const coins = !f.amends && rand() < FAVOURS.coins.odds ? Math.round(FAVOURS.coins.min + rand() * (FAVOURS.coins.max - FAVOURS.coins.min)) : 0;
   if (coins) deps?.wallet.earnCoins(coins);
   const name = shortName(f.person);
-  deps?.notices.reward({ title: f.amends ? `Made up with ${name}` : `Favour for ${name}`, detail: f.amends ? AMENDS_LINES.done : `${name} won’t forget it.`, coins: coins || undefined });
-  deps?.note(f.amends ? `Made it up to ${name}.` : `Did ${name} a favour.`);
+  const done = { title: f.amends ? `Made up with ${name}` : `Favour for ${name}`, detail: f.amends ? AMENDS_LINES.done : `${name} won’t forget it.` };
+  if (coins) deps?.notices.reward({ ...done, coins });
+  else deps?.notices.slip(done);
+  deps?.note(f.amends ? `Made it up to ${name}` : `Did ${name} a favour`);
 }
 
 /** Missed after a yes: a little trust and warmth lost, and they remember. */
 function fail(f: Favour, day: number): void {
   f.failed = day;
   nudge(f.person, { warmth: FAVOURS.failed.warmth, trust: FAVOURS.failed.trust, why: 'you forgot their favour', day, memory: 'you forgot my favour', memoryWeight: -8 });
-  deps?.note(`Forgot ${shortName(f.person)}’s favour.`);
+  deps?.note(`Forgot ${shortName(f.person)}’s favour`);
 }
 
 /** A lent game back on its shelf, and the favour done. */

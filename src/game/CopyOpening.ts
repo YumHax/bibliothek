@@ -1,6 +1,5 @@
 import type { Game } from '@/catalog/types';
 import { pastTitle } from '@/economy/copyTraits';
-import { VARIANT } from '@/economy/pricing';
 import { isAction } from '@/input/actions';
 import { Arming } from '@/ui/confirmTwice';
 import { actionKeyLabel } from '@/ui/keys';
@@ -59,7 +58,7 @@ export class CopyOpening implements KeyRoute {
   /** The first O arms, the second (in time) breaks the seal; true once it is broken. */
   private breakSeal(copy: Game): boolean {
     if (!this.arming.press(copy.id)) {
-      this.parts.notices.react(`Still sealed: ${actionKeyLabel('openBox')} again to break the seal (it is worth ${VARIANT.sealed.factor}× unopened)`);
+      this.parts.notices.react(`Still sealed, and a sealed copy is worth far more: ${actionKeyLabel('openBox')} again to break the seal`);
       return false;
     }
     this.parts.collection?.update?.(copy.id, { variant: undefined });

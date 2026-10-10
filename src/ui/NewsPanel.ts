@@ -10,8 +10,13 @@ interface NewsIssue {
   blurb: string;
   hints: readonly string[];
   prices: string | null;
-  /** The small ads: who and where, then the ad's words (none: no column). */
-  classifieds?: readonly { head: string; text: string }[];
+  /** The small ads: who and where, then the ad's words, and the ad's id to ring it (none: no column). */
+  classifieds?: readonly { id?: string; head: string; text: string }[];
+}
+
+interface NewsPanelOptions {
+  /** Rings a small ad's seller from the kiosk's phone: what they say (`ui/household/phoneAds`). Absent: ring from home. */
+  ring?: (adId: string) => string;
 }
 
 /**
@@ -23,8 +28,12 @@ interface NewsIssue {
 export class NewsPanel extends CardPanel {
   private issue: NewsIssue | null = null;
 
-  constructor(container: HTMLElement) {
+  constructor(container: HTMLElement, private readonly options: NewsPanelOptions = {}) {
     super(container, { className: 'news-panel', cardClass: 'news-panel__paper', title: 'The newspaper', dismiss: 'Put it back', header: false, buttonClass: '' });
+  }
+
+  protected override onAction(action: string, el: HTMLElement): void {
+    if (action === 'ring' && el.dataset.id && this.options.ring) this.setStatus(this.options.ring(el.dataset.id));
   }
 
   /** Prints `issue` (call before the Session opens the panel). */
@@ -45,7 +54,7 @@ export class NewsPanel extends CardPanel {
       <ul>${issue.hints.map((hint) => html`<li>${hint}</li>`)}</ul>
       ${issue.prices ? html`<p class="news-panel__prices">${issue.prices}</p>` : ''}
       ${issue.classifieds?.length
-        ? html`<section class="news-panel__ads"><h4>Small ads</h4>${issue.classifieds.map((ad) => html`<p><b>${ad.head}</b> ${ad.text}</p>`)}<p class="news-panel__ads-note">Ring from your phone at home.</p></section>`
+        ? html`<section class="news-panel__ads"><h4>Small ads</h4>${issue.classifieds.map((ad) => html`<p><b>${ad.head}</b> ${ad.text}${this.options.ring && ad.id ? html` <button type="button" class="ui-btn news-panel__ring" data-action="ring" data-id="${ad.id}">Ring them</button>` : ''}</p>`)}<p class="news-panel__ads-note">${this.options.ring ? 'The newsagent lets you use the kiosk’s phone, or ring from home.' : 'Ring from your phone at home.'}</p></section>`
         : ''}`;
   }
 }

@@ -85,9 +85,14 @@ export function furnishCellar(zone: Zone, ctx: Pick<BuildContext, 'sky' | 'liste
  * on the carton, free to take; taken, it is gone for good (`cellarFinds`).
  */
 async function placeFind(zone: Zone, front: CellarBox, { covers, collection, money, market }: Pick<BuildContext, 'covers' | 'collection' | 'money' | 'market'>): Promise<void> {
+  // `zone.isLoaded` stays true once the cellars' code is fetched: only this says they went away before the draw came.
+  let unloaded = false;
+  zone.onUnload(() => {
+    unloaded = true;
+  });
   const games = await market.stock.randomGames(`cellar:${front.number}`, 6).catch(() => []);
   const game = games.find((g) => !collection.owns(g.id));
-  if (!game || !zone.isLoaded) return;
+  if (!game || unloaded) return;
   const item = new StockItem(game, 'worn', 'bin', { list: 0, final: true });
   const box = new ForSaleBox(item, covers, {
     pose: { kind: 'flat' },

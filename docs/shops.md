@@ -75,7 +75,15 @@ Named with the shop's word where a clash is likely (the TV shop's all start with
   `tvPegboard`, `tvPartsCabinet`, `tvRepairsShelf`, `tvGadgetCase`, `tvBoxStack`, `tvCableTray`, `tvWallCalendar`,
   `tvCrtStack`, `tvTentCard`, `tvReceiptSpike`, `tvValveJar`. The TV wall mixes its screens (`TvWall` `screens:
   'mixed'`: snow, a test card, colour bars, a rolling picture, dead sets), all repainted by the one `SnowTicker`
-  (`snowScreen`; several tickers may exist, one drives).
+  (`snowScreen`; several tickers may exist, one drives). Each snowy set shows its own corner of the shared noise,
+  mirrored or not (`PortableTv` `seed`), so the wall does not flicker in lockstep; the test card and the bars sit
+  under the arcade's CRT glass (`crtScreenMaterial`). The wall lights the room: a cold `GlowPool` on the floor in
+  front and a `PooledLight`. The sets for sale are switched on (the CRT on the test card, the bedroom set on the
+  bars) and the projector throws its beam (`ShopProjector` `on`).
+- **The shops' looks** (`ShopPlan.look`, `graphics/grade`): TV REPAIR `tvShop` (dim, warm, a heavier vignette), the
+  florist `florist` (bright, cool, a faint mist), PAWS & CLAWS `petShop` (warm); SECOND HOME keeps `shop`. The shops'
+  hands are the shipped faces (`common/lettering`: `HAND` is Caveat, `CHALK` Permanent Marker, the OS hands only as
+  fallbacks). Anything lying flat for sale (the rugs, the bath mat) takes a price tag on a stand, not a card on the floor.
 - **PAWS & CLAWS (`pets/`):** `aquariumWall` (the tanks and the pump, replacing the old fish tank), `terrarium`,
   `hamsterCage` (its wheel and its squeak, `hamsterSounds`), `leadPegboard`, `kibblePallet`, `treatBin`, `catTree`,
   `catTunnel`, `catWallShelf`, `dogBowl`, `ceilingMobile`, `shopCat` (Biscuit in the window, not for sale), `toyMice`,

@@ -8,6 +8,7 @@ import type { TicketStrip } from './TicketStrip';
 import { BACK_Z, CAGE_H, FINAL_SECONDS, FRONT_Z, HOOP, HoopSim, RELEASE, STREAK_MAX, WIDTH } from './hoop/HoopSim';
 import { type HoopModel, buildHoopModel } from './hoop/hoopModel';
 import { HoopThrower } from './hoop/HoopThrower';
+import { arcadeHint } from './arcadeHint';
 
 export interface HoopShotOptions {
   title?: string;
@@ -54,7 +55,9 @@ export class HoopShot extends TicketMachine {
     super(wiring);
     this.name = 'HoopShot';
     const title = options.title ?? 'HOOP FEVER';
-    this.game = { id: 'hoops', title, hint: 'Look to aim · hold Space, let go to throw' };
+    this.game = { id: 'hoops', title, get hint() {
+        return arcadeHint('Look to aim · hold {fire}, let go to throw');
+      } };
     this.model = buildHoopModel(this, options.color ?? 0x1f4fa8, title);
     this.note = this.model.note;
     this.strip = this.model.strip;

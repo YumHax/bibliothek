@@ -1,15 +1,20 @@
 /*
  * What the game tells the player (src/notices), each kind in its own place: speech over heads and the subtitle strip
- * (bottom), the crosshair's line (centre), tips (top left, under the wallet), the card to read (lower middle),
- * rewards (upper middle) and alerts (top), the last two over the panels too. Each exit fade's time is the one its
- * class in src/notices waits for.
+ * (bottom), the crosshair's line, the slip and the tip card (centre, in one column), the hint tray (bottom left),
+ * the prompt line (bottom, over the subtitles), the first day's slips (top left, under the wallet), the card to read
+ * (lower middle), rewards (upper middle) and alerts (top), the last two over the panels too. Each exit fade's time is
+ * the one its class in src/notices waits for.
  */
 @layer tokens, base, components, panels;
 @layer panels {
   .speech-layer,
   .subtitles,
   .reaction,
+  .slip,
+  .tip-card,
   .tip-board,
+  .hint-tray,
+  .prompt-line,
   .reading-stage { z-index: var(--z-hud); }
   .reward-stage,
   .alert-bar { z-index: var(--z-notice); }
@@ -17,10 +22,48 @@
   .speech-layer,
   .subtitles,
   .reaction,
+  .slip,
+  .tip-card,
   .tip-board,
+  .hint-tray,
+  .prompt-line,
   .reading-stage,
   .reward-stage,
   .alert-bar { pointer-events: none; user-select: none; }
+
+  /* A key written `[E]` in a prompt or a tip (`keyCaps`): a small cap in the line. */
+  .notice-cap {
+    display: inline-block;
+    margin: 0 0.1em;
+    padding: 0 0.35em;
+    border-radius: var(--ui-radius-xs);
+    border: 1px solid var(--ui-kbd-border);
+    background: var(--ui-kbd-fill);
+    font-family: var(--ui-font-body);
+    font-size: 0.82em;
+    font-weight: 700;
+    line-height: 1.35;
+    vertical-align: 0.05em;
+    white-space: nowrap;
+  }
+
+  /* The coin and ticket chips (`chips`), on a reward banner and a slip; the spent ones grey. */
+  .notice-chip {
+    --chip-fill: rgba(255, 215, 102, 0.16);
+    --chip-line: rgba(255, 215, 102, 0.5);
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.2rem 0.7rem;
+    border-radius: var(--ui-radius-pill);
+    background: var(--chip-fill);
+    border: 1px solid var(--chip-line);
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+  }
+  .notice-chip--spent { background: var(--ui-fill); border-color: var(--ui-border-strong); color: var(--ui-text-dim); }
+  .notice-chip__icon { display: inline-block; width: 0.9em; height: 0.9em; }
+  .notice-chip__icon--ticket { width: 1.15em; height: 0.72em; }
 
   /* --- speech ------------------------------------------------------------------------------------ */
 
@@ -95,11 +138,12 @@
     to   { opacity: 1; translate: 0 0; }
   }
 
-  /* Out of view, or a voice without a body: the subtitle strip at the bottom. */
+  /* Out of view, or a voice without a body: the subtitle strip at the bottom (over the prompt line when one is up). */
   .subtitles {
     position: fixed;
     left: 50%;
     bottom: 2.2rem;
+    transition: bottom var(--dur-settle) var(--ui-ease);
     transform: translateX(-50%);
     width: min(40rem, 90vw);
     display: flex;
@@ -131,6 +175,7 @@
     font-size: var(--fs-3);
   }
   .speech--subtitle .speech__name::after { content: ':'; }
+  body:has(.prompt-line:not([hidden])) .subtitles { bottom: 4.7rem; }
 
   /* --- the crosshair's line -------------------------------------------------------------------- */
 
@@ -177,9 +222,124 @@
     80% { translate: 2px 0; }
   }
 
+  /* --- the slip ------------------------------------------------------------------------------- */
+
+  /* Under the reaction in the crosshair's column: a small slip of paper with what changed hands and its chip. */
+  .slip {
+    --paper: var(--paper-receipt);
+    --ink: var(--ink-reading);
+    order: 2;
+    max-width: min(24rem, 76vw);
+    padding: 0.45rem 0.9rem 0.5rem;
+    border-radius: var(--ui-radius-2xs);
+    background: var(--paper);
+    color: var(--ink);
+    text-align: center;
+    box-shadow: var(--ui-shadow);
+    rotate: 0.4deg;
+    animation: slip-in var(--dur-enter) var(--ui-ease);
+    transition: opacity var(--dur-quick) ease;
+    pointer-events: auto;
+    cursor: pointer;
+  }
+  .slip__title { font-size: var(--fs-6); font-weight: 600; line-height: 1.3; }
+  .slip__detail { margin-top: 0.1rem; font-size: var(--fs-4); line-height: 1.3; opacity: var(--ui-muted); white-space: pre-line; }
+  .slip__chips { display: flex; justify-content: center; gap: 0.5rem; margin-top: 0.3rem; font-size: var(--fs-4); }
+  .slip .notice-chip { --chip-fill: var(--paper-journal-wash); --chip-line: var(--paper-journal-line); padding: 0.1rem 0.55rem; }
+  .slip .notice-chip--spent { background: transparent; color: inherit; opacity: var(--ui-muted); }
+  .slip--out { opacity: 0; pointer-events: none; }
+  @keyframes slip-in {
+    from { opacity: 0; translate: 0 -4px; }
+    to   { opacity: 1; translate: 0 0; }
+  }
+
   /* --- tips ------------------------------------------------------------------------------------ */
 
-  /* In the top-left column (`hud-slot--top-left`), under the wallet chip. */
+  /*
+   * The card under the crosshair, where the eyes are, for its reading time: the head, the words with their key caps.
+   * Then it folds into the hint tray below.
+   */
+  .tip-card {
+    order: 3;
+    max-width: min(26rem, 80vw);
+    padding: 0.5rem 0.95rem 0.6rem;
+    border-radius: var(--ui-radius-sm);
+    background: var(--ui-panel);
+    border: 1px solid var(--ui-border);
+    border-left: 4px solid var(--ui-info);
+    color: var(--ui-text);
+    text-align: left;
+    box-shadow: var(--ui-shadow);
+    animation: tip-card-in var(--dur-fall) var(--ui-ease);
+    transition: opacity var(--dur-slow) ease, translate var(--dur-slow) ease;
+    pointer-events: auto;
+    cursor: pointer;
+  }
+  .tip-card__head {
+    font-family: var(--ui-font-display);
+    font-size: var(--fs-0);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ui-info);
+  }
+  .tip-card__text {
+    margin-top: 0.15rem;
+    font-size: var(--fs-6);
+    line-height: 1.4;
+    white-space: pre-line;
+  }
+  /* Folded: it drops towards the tray. */
+  .tip-card--out { opacity: 0; translate: 0 1.2rem; pointer-events: none; }
+  @keyframes tip-card-in {
+    0%   { opacity: 0; translate: 0 -0.6rem; scale: 0.97; }
+    60%  { opacity: 1; translate: 0 0.15rem; scale: 1; box-shadow: 0 0 0 3px var(--ui-info-glow), var(--ui-shadow); }
+    100% { translate: 0 0; }
+  }
+
+  /* The hint tray, bottom left: the tips read, each a pill, until they are done. */
+  .hint-tray {
+    position: fixed;
+    left: var(--sp-4);
+    bottom: var(--sp-4);
+    width: min(22rem, 60vw);
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--sp-1);
+  }
+  .hint {
+    max-width: 100%;
+    padding: 0.25rem 0.7rem;
+    border-radius: var(--ui-radius-pill);
+    background: var(--ui-panel-dense);
+    border: 1px solid var(--ui-border);
+    color: var(--ui-text-dim);
+    font-size: var(--fs-3);
+    line-height: 1.35;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    animation: hint-in var(--dur-settle) var(--ui-ease);
+    transition: opacity var(--dur-slow) ease, translate var(--dur-slow) ease;
+    pointer-events: auto;
+    cursor: pointer;
+  }
+  .hint .notice-cap { color: var(--ui-text); }
+  .hint--out { opacity: 0; translate: -0.6rem 0; pointer-events: none; }
+  @keyframes hint-in {
+    from { opacity: 0; translate: 0 0.5rem; }
+    to   { opacity: 1; translate: 0 0; }
+  }
+  /* Touch: the joystick is spawned on the left half; the tray keeps to the very edge, smaller. */
+  body.input-touch .hint-tray { width: min(16rem, 44vw); }
+  /* A narrow view: the tray would meet the subtitle strip or the prompt line, so it rises above them while either is up. */
+  @media (max-width: 86rem) {
+    body:has(.subtitles > *) .hint-tray,
+    body:has(.prompt-line:not([hidden])) .hint-tray { bottom: 9.5rem; }
+  }
+
+  /* The first day's steps top left under the wallet (`hud-slot--top-left`): a slip of squared paper in felt pen, like the to-do list. */
   .tip-board {
     order: 1;
     width: min(21rem, 42vw);
@@ -189,40 +349,6 @@
   }
   .tip {
     padding: 0.55rem 0.85rem 0.65rem;
-    border-radius: var(--ui-radius);
-    background: var(--ui-panel);
-    border: 1px solid var(--ui-border);
-    border-left: 4px solid var(--ui-info);
-    color: var(--ui-text);
-    box-shadow: var(--ui-shadow);
-    animation: tip-in var(--dur-fall) var(--ui-ease);
-    transition: opacity var(--dur-slow) ease, translate var(--dur-slow) ease;
-  }
-  .tip__head {
-    font-family: var(--ui-font-display);
-    font-size: var(--fs-0);
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: var(--ui-info);
-  }
-  .tip__text {
-    margin-top: 0.15rem;
-    font-size: var(--fs-6);
-    line-height: 1.35;
-    white-space: pre-line;
-  }
-  .tip--out { opacity: 0; translate: -1rem 0; }
-  /* A click (the pointer free) or a tap puts a tip away (`closeOnPress`); the board itself lets clicks through. */
-  .tip { pointer-events: auto; cursor: pointer; }
-  .tip--out { pointer-events: none; }
-  @keyframes tip-in {
-    0%   { opacity: 0; translate: -2rem 0; }
-    60%  { opacity: 1; translate: 0.3rem 0; box-shadow: 0 0 0 3px var(--ui-info-glow), var(--ui-shadow); }
-    100% { translate: 0 0; }
-  }
-  /* The first day's steps: a slip of squared paper in felt pen, like the to-do list. */
-  .tip.tip--note {
-    border: none;
     border-radius: var(--ui-radius-2xs);
     color: var(--ink-note);
     font-family: var(--ui-font-hand);
@@ -233,13 +359,47 @@
       repeating-linear-gradient(90deg, transparent 0, transparent 15px, var(--paper-squares) 15px, var(--paper-squares) 16px),
       var(--paper-note);
     animation: tip-note-in var(--dur-fall) var(--ui-ease);
+    transition: opacity var(--dur-slow) ease, translate var(--dur-slow) ease;
+    pointer-events: auto;
+    cursor: pointer;
   }
-  .tip--note .tip__head { font-family: var(--ui-font-hand); font-size: var(--fs-3); letter-spacing: 0.02em; text-transform: none; color: var(--ink-red); text-decoration: underline; }
-  .tip--note .tip__text { font-size: var(--fs-7); }
+  .tip__head { font-family: var(--ui-font-hand); font-size: var(--fs-7); font-weight: 600; letter-spacing: 0.02em; color: var(--ink-red); text-decoration: underline; }
+  .tip__text {
+    margin-top: 0.15rem;
+    font-size: var(--fs-t2);
+    line-height: 1.35;
+    white-space: pre-line;
+  }
+  .tip--out { opacity: 0; translate: -1rem 0; pointer-events: none; }
   @keyframes tip-note-in {
     from { opacity: 0; translate: -2rem 0; rotate: -3deg; }
     to   { opacity: 1; translate: 0 0; rotate: -0.6deg; }
   }
+
+  /* --- the prompt line ------------------------------------------------------------------------ */
+
+  /* The keys that matter in the state the player is in: a quiet line at the bottom, under the subtitles' place. */
+  .prompt-line {
+    position: fixed;
+    left: 50%;
+    bottom: 1.6rem;
+    transform: translateX(-50%);
+    max-width: min(36rem, 90vw);
+    padding: 0.35rem 0.9rem;
+    border-radius: var(--ui-radius-pill);
+    background: var(--ui-panel-glass);
+    border: 1px solid var(--ui-border);
+    color: var(--ui-text-dim);
+    font-size: var(--fs-5);
+    line-height: 1.5;
+    text-align: center;
+    white-space: pre-line;
+    animation: prompt-in var(--dur-fade) ease;
+    transition: opacity var(--dur-fade) ease;
+  }
+  .prompt-line .notice-cap { color: var(--ui-text); }
+  .prompt-line--out { opacity: 0; }
+  @keyframes prompt-in { from { opacity: 0; } }
 
   /* --- the card to read ------------------------------------------------------------------------ */
 
@@ -252,10 +412,23 @@
     width: min(34rem, 88vw);
     display: flex;
     justify-content: center;
+    /* A letter's flap and a postcard's turn are in three dimensions. */
+    perspective: 900px;
   }
   /* Subtitles up (a radio's news, a voice): the card rises over their lines instead of covering them. */
   body:has(.subtitles > :nth-child(2)) .reading-stage { bottom: 9.5rem; }
   body:has(.subtitles > :nth-child(3)) .reading-stage { bottom: 12.5rem; }
+  /* While a card is up the room dims a touch behind it (`body.reading-up`): the paper is what is held. Over the canvas, under the HUD. */
+  .reading-dim {
+    position: fixed;
+    inset: 0;
+    z-index: var(--z-canvas);
+    background: var(--shade-25);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--dur-linger) ease;
+  }
+  .reading-dim--on { opacity: 1; }
   .reading {
     --paper: var(--paper-reading);
     --ink: var(--ink-reading);
@@ -269,9 +442,18 @@
     --plaque-brass: linear-gradient(160deg, #e8c46a, #b98a2c 55%, #d9b35a);
     --plaque-ink: #3a2808;
     --plaque-rule: rgba(58, 40, 8, 0.35);
+    /* A flyer's printed colour (its `accent`, set inline), a postcard's sky and ground from its place's hue (set inline). */
+    --flyer-accent: var(--ui-accent);
+    --postcard-hue: 200;
+    --postcard-sky: hsl(var(--postcard-hue) 58% 62%);
+    --postcard-sea: hsl(calc(var(--postcard-hue) + 25) 50% 42%);
+    --postcard-ground: hsl(calc(var(--postcard-hue) + 60) 38% 30%);
+    --postcard-sun: hsl(calc(var(--postcard-hue) + 150) 90% 85%);
+    --envelope: #e9dfc9;
+    --envelope-edge: rgba(0, 0, 0, 0.12);
     position: relative;
     width: 100%;
-    padding: 1rem 1.3rem 1.05rem;
+    padding: 1rem 1.3rem 1.45rem;
     border-radius: var(--ui-radius-xs);
     background: var(--paper);
     color: var(--ink);
@@ -309,7 +491,176 @@
   .reading__effect::before { content: '→ '; }
   /* The overflow of a busy moment: "…and 2 more notes" under the last card (`ReadingCard`). */
   .reading__more { margin: 0.55rem 0 0; font-size: var(--fs-4); font-style: italic; opacity: 0.75; }
-  .reading[data-look='letter'] { --paper: var(--paper-letter); --ink: var(--ink-letter); rotate: 0.5deg; }
+  /* "2 of 3 · 1/2": the card's place in its batch and its page, a stamp on the top edge. */
+  .reading__stamp {
+    position: absolute;
+    top: -0.6rem;
+    left: 1rem;
+    padding: 0.12rem 0.6rem;
+    border-radius: var(--ui-radius-pill);
+    background: var(--ink);
+    color: var(--paper);
+    font-family: var(--ui-font-body);
+    font-size: var(--fs-1);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+  /* The signature, right, and a letter's date, top right. */
+  .reading__from { margin: 0.55rem 0 0; text-align: right; font-style: italic; }
+  .reading__from::before { content: '— '; }
+  .reading__date {
+    position: absolute;
+    top: 0.55rem;
+    right: 1.3rem;
+    font-size: var(--fs-3);
+    font-style: italic;
+    opacity: var(--ui-muted);
+  }
+
+  /* A letter: a sheet out of its envelope, the hand per writer, a printed small-caps heading. */
+  .reading[data-look='letter'] { --paper: var(--paper-letter); --ink: var(--ink-letter); rotate: 0.5deg; padding-top: 1.5rem; }
+  .reading[data-look='letter'] .reading__title {
+    border-bottom: none;
+    padding-bottom: 0;
+    margin-bottom: 0.6rem;
+    font-family: var(--ui-font-print);
+    font-size: var(--fs-t1);
+    font-variant: small-caps;
+    letter-spacing: 0.02em;
+    text-transform: none;
+  }
+  .reading[data-hand='pen'] .reading__text,
+  .reading[data-hand='pen'] .reading__from { font-family: var(--ui-font-hand); font-size: var(--fs-t3); line-height: 1.35; }
+  .reading[data-hand='typewriter'] .reading__text,
+  .reading[data-hand='typewriter'] .reading__from,
+  .reading[data-hand='typewriter'] .reading__date { font-family: var(--ui-font-typewriter); }
+  /* The envelope's flap over the sheet, folding away as the card comes up. */
+  .reading__flap {
+    position: absolute;
+    left: -0.3rem;
+    right: -0.3rem;
+    top: -0.3rem;
+    height: 52%;
+    z-index: var(--z-above);
+    background: var(--envelope);
+    box-shadow: inset 0 -1px 0 var(--envelope-edge);
+    clip-path: polygon(0 0, 100% 0, 50% 100%);
+    transform-origin: 50% 0;
+    animation: flap-away var(--dur-long) ease-in both;
+    pointer-events: none;
+  }
+  @keyframes flap-away {
+    from { transform: rotateX(0deg); opacity: 1; }
+    55%  { opacity: 1; }
+    to   { transform: rotateX(-150deg); opacity: 0; }
+  }
+  .reduce-motion .reading__flap { display: none; }
+
+  /* A postcard: the picture side first (the place on a painted sky), turned to the written side. */
+  .reading[data-look='postcard'] {
+    --paper: var(--paper-letter);
+    --ink: var(--ink-letter);
+    rotate: 0deg;
+    padding: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+  .reading__sides {
+    position: relative;
+    transform-style: preserve-3d;
+    transition: transform var(--dur-longer) var(--ui-ease);
+  }
+  .reading--flipped .reading__sides { transform: rotateY(180deg); }
+  .reduce-motion .reading__sides { transition: none; }
+  .reading__front,
+  .reading__back {
+    backface-visibility: hidden;
+    border-radius: var(--ui-radius-xs);
+    box-shadow: var(--ui-shadow-paper);
+  }
+  .reading__front { position: absolute; inset: 0; overflow: hidden; }
+  .reading__picture {
+    position: absolute;
+    inset: 0;
+    background:
+      radial-gradient(circle at 72% 30%, var(--postcard-sun) 0 7%, transparent 7.5%),
+      linear-gradient(180deg, var(--postcard-sky) 0 58%, var(--postcard-sea) 58% 78%, var(--postcard-ground) 78% 100%);
+  }
+  .reading__greeting {
+    position: absolute;
+    top: 0.9rem;
+    left: 1.1rem;
+    font-family: var(--ui-font-marker);
+    font-size: var(--fs-8);
+    color: var(--ui-white);
+    text-shadow: var(--ui-shadow-text);
+  }
+  .reading__place {
+    position: absolute;
+    left: 1rem;
+    bottom: 0.7rem;
+    font-family: var(--ui-font-display);
+    font-size: var(--fs-t5);
+    line-height: 1;
+    color: var(--ui-white);
+    text-shadow: 0 2px 0 var(--shade-45), 0 0 18px var(--shade-25);
+  }
+  .reading__back {
+    position: relative;
+    transform: rotateY(180deg);
+    min-height: 13rem;
+    display: grid;
+    grid-template-columns: 1.45fr 1fr;
+    background: var(--paper);
+    color: var(--ink);
+  }
+  .reading__written { padding: 0.9rem 1rem 1.5rem 1.2rem; border-right: 1px solid var(--rule); font-family: var(--ui-font-hand); }
+  .reading__written .reading__title { border-bottom: none; padding-bottom: 0; font-family: var(--ui-font-hand); font-size: var(--fs-6); letter-spacing: 0; text-transform: none; opacity: var(--ui-muted); }
+  .reading__written .reading__text { font-size: var(--fs-8); }
+  .reading__address {
+    display: flex;
+    flex-direction: column;
+    gap: 1.1rem;
+    padding: 0.9rem 1rem 1.6rem;
+  }
+  .reading__postage {
+    align-self: flex-end;
+    width: 2.4rem;
+    height: 2.9rem;
+    margin-bottom: auto;
+    border: 2px dashed var(--rule);
+    background: var(--postcard-sea);
+    opacity: 0.85;
+  }
+  .reading__address-line { height: 1px; background: var(--rule); }
+
+  /* A flyer: printed in its colour, the headline on a band, the lines in the body face. */
+  .reading[data-look='flyer'] {
+    --paper: var(--paper-note);
+    --ink: var(--ink-black);
+    rotate: 0deg;
+    padding: 0 0 1.45rem;
+    font-family: var(--ui-font-body);
+    background: radial-gradient(var(--shade-10) 0.5px, transparent 0.6px) 0 0 / 5px 5px, var(--paper);
+  }
+  /* The band keeps the card's top corners (no overflow clip: the stamp and the pill hang off the edges). */
+  .reading[data-look='flyer'] .reading__title {
+    margin: 0 0 0.8rem;
+    padding: 0.65rem 1.3rem;
+    border: none;
+    border-radius: var(--ui-radius-xs) var(--ui-radius-xs) 0 0;
+    background: var(--flyer-accent);
+    color: var(--ui-white);
+    font-size: var(--fs-t2);
+    letter-spacing: 0.08em;
+  }
+  .reading[data-look='flyer'] .reading__text { padding: 0 1.3rem; font-size: var(--fs-t1); line-height: 1.5; font-weight: 500; }
+  .reading[data-look='flyer'] .reading__from,
+  .reading[data-look='flyer'] .reading__effect,
+  .reading[data-look='flyer'] .reading__more { margin-left: 1.3rem; margin-right: 1.3rem; }
+  .reading[data-look='flyer'] .reading__stamp { background: var(--flyer-accent); color: var(--ui-white); }
+
   .reading[data-look='radio'] {
     --paper: var(--radio-paper);
     --ink: var(--radio-ink);
@@ -328,21 +679,39 @@
     text-align: center;
     font-style: italic;
   }
+  .reading[data-look='plaque'] .reading__stamp { background: var(--plaque-ink); color: var(--ui-white); }
   .reading--out { opacity: 0; translate: 0 1rem; }
-  /* Put down by a click or a tap too (`closeOnPress`); the stage itself lets clicks through. */
+  /* Put down (or turned) by a click or a tap too (`closeOnPress`); the stage itself lets clicks through. */
   .reading { pointer-events: auto; cursor: pointer; }
   .reading--out { pointer-events: none; }
-  /* "✕ X put down": how to put the card away with the device in hand (`dismissHint`). */
-  .notice-dismiss {
+  /* The pill at the foot, hanging off the edge: "Put down" or "Turn over" with the key in hand (`dismissHint`). */
+  .reading__foot {
     position: absolute;
-    right: 0.7rem;
-    bottom: 0.35rem;
-    font-family: var(--ui-font-body);
-    font-size: max(0.66rem, 10px);
-    opacity: var(--ui-faint);
+    left: 0;
+    right: 0;
+    bottom: -0.8rem;
+    display: flex;
+    justify-content: center;
   }
-  .notice-dismiss kbd { font-size: 0.95em; }
-  .reading { padding-bottom: 1.45rem; }
+  .notice-dismiss {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    padding: 0.25rem 0.8rem;
+    border-radius: var(--ui-radius-pill);
+    border: 1px solid var(--ui-border);
+    background: var(--ui-panel-dense);
+    color: var(--ui-white);
+    box-shadow: var(--ui-shadow-raised);
+    font-family: var(--ui-font-body);
+    font-size: var(--fs-2);
+    font-style: normal;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    text-shadow: none;
+    white-space: nowrap;
+  }
+  .notice-dismiss kbd { font-size: 0.95em; text-transform: none; }
   @keyframes reading-in {
     from { opacity: 0; translate: 0 1.5rem; }
     to   { opacity: 1; translate: 0 0; }
@@ -406,21 +775,13 @@
     gap: 0.6rem;
     margin-top: 0.6rem;
   }
-  .reward__chip {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.4rem;
-    padding: 0.2rem 0.7rem;
-    border-radius: var(--ui-radius-pill);
-    background: var(--reward-chip);
-    border: 1px solid var(--reward-chip-line);
-    font-weight: 700;
-    font-variant-numeric: tabular-nums;
+  .reward .notice-chip {
+    --chip-fill: var(--reward-chip);
+    --chip-line: var(--reward-chip-line);
     animation: chip-in var(--dur-long) var(--ui-ease-pop) var(--dur-settle) both;
   }
-  .reward__chip--spent { background: var(--ui-fill); border-color: var(--ui-border-strong); color: var(--ui-text-dim); }
-  .reward__icon { display: inline-block; width: 0.9em; height: 0.9em; }
-  .reward__icon--ticket { width: 1.15em; height: 0.72em; }
+  /* An ordinary banner arrives with less of a leap than a big one. */
+  .reward:not(.reward--big) { animation-name: reward-in-small; }
   .reward--big { padding: 1.3rem 2rem 1.35rem; }
   .reward--big .reward__title { font-size: var(--fs-t6); }
   /* A person's portrait over the title (a tier reached), ringed in their tier's colour. */
@@ -460,6 +821,10 @@
     from { opacity: 0; scale: 0.5; }
     to   { opacity: 1; scale: 1; }
   }
+  @keyframes reward-in-small {
+    from { opacity: 0; scale: 0.85; }
+    to   { opacity: 1; scale: 1; }
+  }
   @keyframes chip-in {
     from { opacity: 0; scale: 0.4; }
     to   { opacity: 1; scale: 1; }
@@ -467,7 +832,7 @@
   @keyframes rays-spin { to { rotate: 360deg; } }
   /* Reduced motion (`html.reduce-motion`, the setting or the system's): the rays stand still, the banner arrives without its overshoot (`reward--calm`). */
   .reduce-motion .reward__rays { animation: none; }
-  .reward--calm, .reward--calm .reward__chip { animation-timing-function: ease-out; }
+  .reward--calm, .reward--calm .notice-chip { animation-timing-function: ease-out; }
 
   /* --- alerts ---------------------------------------------------------------------------------- */
 

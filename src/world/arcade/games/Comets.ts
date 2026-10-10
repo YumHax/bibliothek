@@ -1,6 +1,8 @@
 import { clamp } from '@/math/scalar';
 import { type ArcadeControls, SCREEN_H, SCREEN_W } from './ArcadeGame';
 import { BaseGame, PLAY_TOP } from './BaseGame';
+import { Sprite } from './sprite';
+import { arcadeHint } from '../arcadeHint';
 
 const ROUND_SECONDS = 15;
 const SHIP_Y = SCREEN_H - 20;
@@ -25,6 +27,23 @@ const TRAIL_GAP = 0.14;
 const CATCH_REACH = 5;
 
 type Kind = 'rock' | 'star' | 'clock';
+
+/** A sprite's rows turned a quarter turn clockwise (a rock's tumble). */
+function turned(rows: readonly string[]): string[] {
+  const size = rows.length;
+  return Array.from({ length: size }, (_, y) => Array.from({ length: size }, (_, x) => rows[size - 1 - x]?.[y] ?? '.').join(''));
+}
+
+const ROCK_BIG_ROWS = ['.....xxxxx......', '...xxxxxxxxx....', '..xxxooxxxxxx...', '.xxxxooxxxxxxx..', '.xxxxxxxxxoxxxx.', 'xxxxxxxxxxxxxxx.', 'xxxoxxxxxxxxxxxx', 'xxxxxxxxxxxxxxxx', 'xxxxxxxxxooxxxxx', '.xxxxxxxxooxxxx.', '.xxxxxxxxxxxxxx.', '..xxxxxxxxxxxx..', '...xxxxxxxxxx...', '....xxxxxxxx....', '......xxxx......', '................'];
+const ROCK_SMALL_ROWS = ['...xxxx...', '.xxxxxxxx.', '.xxoxxxxx.', 'xxxxxxxxxx', 'xxxxxxxoxx', 'xxxxxxxxxx', 'xoxxxxxxxx', '.xxxxxxxx.', '..xxxxxx..', '....xx....'];
+export const ROCK_BIG = new Sprite([ROCK_BIG_ROWS, turned(ROCK_BIG_ROWS), turned(turned(ROCK_BIG_ROWS)), turned(turned(turned(ROCK_BIG_ROWS)))]);
+const ROCK_SMALL = new Sprite([ROCK_SMALL_ROWS, turned(ROCK_SMALL_ROWS), turned(turned(ROCK_SMALL_ROWS)), turned(turned(turned(ROCK_SMALL_ROWS)))]);
+const ROCK_INKS = { x: '#8a6a5a', o: '#5a4238' };
+export const STAR = new Sprite([['....x....', '....x....', '...xxx...', 'xxxxoxxxx', '.xxoooxx.', '..xxxxx..', '..xx.xx..', '.xx...xx.', '.x.....x.']]);
+const STAR_INKS = { x: '#ffe066', o: '#ffffff' };
+const STAR_TWINKLE = { x: '#ffd23a', o: '#ffe066' };
+const CLOCK = new Sprite([['...xxxxx...', '..x.....x..', '.x...o...x.', 'x....o....x', 'x....o....x', 'x....ooo..x', 'x.........x', 'x.........x', '.x.......x.', '..x.....x..', '...xxxxx...']]);
+const SHIP = new Sprite([['.......xx.......', '.......xx.......', '......xxxx......', '......xoox......', '.....xxooxx.....', '.....xxxxxx.....', '....xxxxxxxx....', '...xxxxxxxxxx...', '..xxxxxxxxxxxx..', '.xxxx.xxxx.xxxx.', 'xxxx..xxxx..xxxx', 'xx....x..x....xx', '................']]);
 
 interface Trail {
   x: number;
@@ -51,7 +70,9 @@ interface Faller {
 export class Comets extends BaseGame {
   readonly id = 'comets';
   readonly title = 'COMET DASH';
-  readonly hint = 'A / D or arrows move · catch the stars, dodge the rocks';
+  get hint(): string {
+    return arcadeHint('{leftRight} or arrows move · catch the stars, dodge the rocks');
+  }
   readonly summary = '15 SEC · CHAIN STARS · CLOCKS +2S';
 
   private shipX = SCREEN_W / 2;
@@ -118,16 +139,20 @@ export class Comets extends BaseGame {
         this.addTime(-HIT_SECONDS, this.shipX, SHIP_Y - 26);
         this.fx.shake(3, 0.25);
         this.fx.flash('#ff5f5f', 0.12);
+        this.fx.burst(f.x, f.y, '#8a6a5a', 18, 110, 2);
+        this.fx.burst(f.x, f.y, '#ffb347', 8, 80, 1);
         return false;
       }
       if (f.kind === 'clock') {
         this.addTime(CLOCK_SECONDS, f.x, f.y - 20);
         this.fx.flash('#5ff2e8', 0.06);
+        this.fx.burst(f.x, f.y, '#5ff2e8', 12, 80, 2);
         return false;
       }
       this.caught += 1;
       this.bumpCombo(CHAIN_HOLD);
       this.addScore(STAR_POINTS, f.x, f.y - 10, '#ffe066');
+      this.fx.burst(f.x, f.y, '#ffe066', 10, 70, 2);
       if (this.caught % STARS_PER_STAGE === 0) {
         this.fx.pop(`STAGE ${this.stage}`, SCREEN_W / 2, SCREEN_H / 2 - 20, '#ffffff', 12);
         this.sound('stage');
@@ -144,52 +169,26 @@ export class Comets extends BaseGame {
     ctx.fillStyle = '#2a2a4a';
     for (let i = 0; i < 50; i++) ctx.fillRect((i * 67) % SCREEN_W, (i * 131 + Math.floor(this.elapsed * 120 * (1 + (i % 3)))) % SCREEN_H, 1, 3);
     for (const f of this.fallers) {
+      const turn = Math.floor(f.spin / (Math.PI / 2));
       if (f.kind === 'rock') {
-        ctx.fillStyle = '#8a6a5a';
-        ctx.beginPath();
-        for (let k = 0; k < 7; k++) {
-          const a = f.spin + (k / 7) * Math.PI * 2;
-          const rr = f.r * (0.75 + ((k * 37) % 5) * 0.07);
-          if (k === 0) ctx.moveTo(f.x + Math.cos(a) * rr, f.y + Math.sin(a) * rr);
-          else ctx.lineTo(f.x + Math.cos(a) * rr, f.y + Math.sin(a) * rr);
-        }
-        ctx.closePath();
-        ctx.fill();
+        // Its fiery wake, then the rock, a quarter turn per frame as it tumbles.
         ctx.fillStyle = 'rgba(255,140,60,0.35)';
-        ctx.fillRect(f.x - 1, f.y - f.r - 10, 2, 10);
+        ctx.fillRect(Math.round(f.x) - 1, Math.round(f.y - f.r) - 10, 2, 10);
+        ctx.fillStyle = 'rgba(255,200,90,0.5)';
+        ctx.fillRect(Math.round(f.x), Math.round(f.y - f.r) - 5, 1, 5);
+        // Drawn as big as it hits (`r` runs 7 to 13, the sprites are 10 and 16 px): about 1.8 r across, as the old polygon.
+        const rock = f.r < 9 ? ROCK_SMALL : ROCK_BIG;
+        rock.drawCentred(ctx, f.x, f.y, ROCK_INKS, turn, (f.r * 1.8) / rock.width);
       } else if (f.kind === 'star') {
-        ctx.fillStyle = '#ffe066';
-        ctx.beginPath();
-        for (let k = 0; k < 10; k++) {
-          const a = f.spin + (k / 10) * Math.PI * 2;
-          const rr = k % 2 ? f.r * 0.45 : f.r;
-          if (k === 0) ctx.moveTo(f.x + Math.cos(a) * rr, f.y + Math.sin(a) * rr);
-          else ctx.lineTo(f.x + Math.cos(a) * rr, f.y + Math.sin(a) * rr);
-        }
-        ctx.closePath();
-        ctx.fill();
+        STAR.drawCentred(ctx, f.x, f.y, Math.floor(this.elapsed * 8) % 2 ? STAR_INKS : STAR_TWINKLE);
       } else {
-        ctx.strokeStyle = '#5ff2e8';
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.arc(f.x, f.y, f.r, 0, Math.PI * 2);
-        ctx.moveTo(f.x, f.y);
-        ctx.lineTo(f.x, f.y - f.r + 2);
-        ctx.moveTo(f.x, f.y);
-        ctx.lineTo(f.x + f.r - 3, f.y);
-        ctx.stroke();
+        CLOCK.drawCentred(ctx, f.x, f.y, { x: '#5ff2e8', o: '#ffffff' });
       }
     }
     if (this.shield <= 0 || Math.floor(this.shield * 12) % 2 === 0) {
-      ctx.fillStyle = '#e8f4ff';
-      ctx.beginPath();
-      ctx.moveTo(this.shipX, SHIP_Y - 8);
-      ctx.lineTo(this.shipX + SHIP_W / 2, SHIP_Y + 5);
-      ctx.lineTo(this.shipX - SHIP_W / 2, SHIP_Y + 5);
-      ctx.closePath();
-      ctx.fill();
+      SHIP.drawCentred(ctx, this.shipX, SHIP_Y - 1, { x: '#e8f4ff', o: '#63b3ff' });
       ctx.fillStyle = Math.floor(this.elapsed * 20) % 2 ? '#ff8a3a' : '#ffe066';
-      ctx.fillRect(this.shipX - 2, SHIP_Y + 5, 4, 3);
+      ctx.fillRect(Math.round(this.shipX) - 2, SHIP_Y + 5, 4, 3);
     }
     this.drawStage(ctx, `STAGE ${this.stage}`);
   }

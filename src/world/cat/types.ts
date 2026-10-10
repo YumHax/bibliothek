@@ -62,6 +62,10 @@ export interface CatBody extends THREE.Object3D {
   land(strength: number): void;
   setCoat(coat: CoatKind): void;
   setHovered(hovered: boolean): void;
+  /** The mouth opens for a call (a meow, a hiss held wide, a long yawn, the quick chatter). */
+  vocalize(kind: CatCallKind, insistence?: number): void;
+  /** How dark it is round the cat, 0 daylight .. 1 night: the pupils widen, the eyes catch the light. */
+  setDark(amount: number): void;
   update(dt: number): void;
 }
 

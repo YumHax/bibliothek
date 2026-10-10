@@ -63,8 +63,9 @@ const STEM = paint(0x4f6a3a, 0.7);
 const CORD = paint(0xd9cbb0, 0.95);
 
 function greens(colors: number[], roughness: number): THREE.MeshStandardMaterial[] {
-  // Leaves let light through (`foliage`): against a lamp or a window they glow instead of going black.
-  return colors.map((color) => shared(`foliage|${color}|${roughness}`, () => foliage({ color, roughness })));
+  // Leaves let light through (`foliage`): against a lamp or a window they glow instead of going black. Their vertex
+  // colours (`leafGeometry`) shade each blade from a darker base to its tip, the midrib paler.
+  return colors.map((color) => shared(`leaf|${color}|${roughness}`, () => foliage({ color, roughness, vertexColors: true })));
 }
 // One material per colour, shared by every leaf of every plant of that kind.
 const CLASSIC_GREENS = greens([0x3f7a3a, 0x4d8b3f, 0x336b33, 0x5a9a48], 0.65);
@@ -361,6 +362,7 @@ export class Plant extends Prop implements Updatable {
  */
 function leafGeometry({ length, width, droop, bias, fold }: LeafShape, rows = LEAF_ROWS, notches: readonly number[] = []): THREE.BufferGeometry {
   const positions: number[] = [];
+  const colors: number[] = [];
   const indices: number[] = [];
   for (let i = 0; i <= rows; i++) {
     const t = i / rows;
@@ -369,6 +371,9 @@ function leafGeometry({ length, width, droop, bias, fold }: LeafShape, rows = LE
     const z = length * t;
     const y = -droop * length * t * t;
     positions.push(-halfWidth, y - fold * halfWidth, z, 0, y, z, halfWidth, y - fold * halfWidth, z);
+    // Darker where the blade leaves its stalk, lighter at the tip; the midrib paler and yellower than the edges.
+    const shade = 0.78 + 0.3 * t;
+    colors.push(shade * 0.94, shade * 0.94, shade * 0.94, shade * 1.14, shade * 1.16, shade * 0.86, shade * 0.94, shade * 0.94, shade * 0.94);
     if (i < rows) {
       const a = i * 3;
       const b = a + 3;
@@ -377,6 +382,7 @@ function leafGeometry({ length, width, droop, bias, fold }: LeafShape, rows = LE
   }
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
   geometry.setIndex(indices);
   geometry.computeVertexNormals();
   return geometry;

@@ -15,6 +15,7 @@ import type { BuildingServices, CoproPanelLike, TradePanelLike } from '@/world/s
 import type { SoundOcclusion } from '@/world/acoustics/SoundOcclusion';
 import type { PhoneEvents, PhoneFriends } from '@/ui/household/PhonePanel';
 import type { Cat } from '@/world/cat';
+import type { MemoryProjector } from '@/memories/MemoryFilm';
 import type { Late } from './late';
 import type { Services } from './services';
 
@@ -75,6 +76,8 @@ interface ContextParts {
   session: Late<Session>;
   /** The cat, made after the flat: only asked on a click. */
   cat: Late<Cat>;
+  /** Mémé's album's films (`BuildContext.memories`), made with the graphics. */
+  memories: MemoryProjector;
 }
 
 /**
@@ -84,7 +87,7 @@ interface ContextParts {
  */
 export function makeBuildContext(services: Services, parts: ContextParts): BuildContext {
   const { cssLayer, input, sky, covers, collection, deliveries, strays, overflow, arrangement, boxPool, upgrades, wallet, scores, arcadeDaily, prizes, medals, league, arcadeScreen, tournament, jackpot, replays, arcadeHabits, homeScores, milestones, collectorWatch, firstDay, market, fame } = services;
-  const { flat, marketHall, listener, acoustics, building, pastimes, session, cat } = parts;
+  const { flat, marketHall, listener, acoustics, building, pastimes, session, cat, memories } = parts;
   return {
     cssLayer,
     listener,
@@ -103,6 +106,7 @@ export function makeBuildContext(services: Services, parts: ContextParts): Build
       collector: { book: flat.collectorBook, milestones, watch: collectorWatch, honours: services.honours },
       firstDay,
       journalPanel: flat.journalPanel,
+      journalUnread: () => services.journal.unread,
       // What the kitchen, the bathroom and the bedroom are for (docs/household.md).
       household: {
         life: services.homeLife,
@@ -128,5 +132,8 @@ export function makeBuildContext(services: Services, parts: ContextParts): Build
       ? { book: services.classifieds, lot: (ad) => services.sellerLots.lotFor(ad), workshop: services.workshop, repairPanel: flat.repairPanel, consoleDesk: flat.consoleDesk }
       : undefined,
     social: flat.social,
+    // Mémé's across town (docs/story.md "Mémé"): the visits, and her album's memories played as films.
+    memories,
+    grandma: services.grandma,
   };
 }

@@ -15,6 +15,7 @@ import { FixedStep } from './FixedStep';
 import { REPLAY_STEP } from './replay/Replay';
 import { BASE_H, CASE_H, ClawSim, DEPTH, TOTAL_H, WIDTH } from './claw/ClawSim';
 import { type ClawModel, buildClawModel } from './claw/clawModel';
+import { arcadeHint } from './arcadeHint';
 
 export interface ClawMachineOptions {
   /** Paint of the base and the top. Default a fairground pink. */
@@ -60,7 +61,9 @@ export class ClawMachine extends RunMachine implements Furniture, Interactable, 
   readonly freeWhenBroke = false;
   /** Its prize goes home through the arcade's books (`arcadePayout`). */
   readonly payout = 'arcade' as const;
-  readonly game = { id: 'claw', title: 'GRAB A PRIZE', hint: 'WASD or arrows move the claw · Space drops it' };
+  readonly game = { id: 'claw', title: 'GRAB A PRIZE', get hint() {
+      return arcadeHint('{stick} or arrows move the claw · {fire} drops it');
+    } };
 
   protected readonly run: MachineRun;
   private readonly sim: ClawSim;

@@ -40,7 +40,9 @@ perks when you get along, penalties when you don't. Read this before touching an
   a tenth so the slivers near the top add up. Tuned with `npm run social`: a casual player reaches Friendly or
   Friend with most people in 60 game days (trust holds the rest), a diligent one every Close perk in 120.
 - **Drift** (`settleDay`, run at boot and on every new game day by `bootstrap/social`): after `DRIFT.graceDays`
-  without contact, warmth slides back towards `DRIFT.rest`; a close friend slower, a proud one slower back up.
+  without contact (`friendGraceDays` for a friend or closer, so a friendship holds over an evening away; any change
+  of standing counts, the grapevine and the phone too), warmth slides back towards `DRIFT.rest`; a close friend
+  slower, a proud one slower back up.
   Trust never drifts. Mild memories fade after `MEMORY.fadeDays`.
 - **The grapevine** (`gossip.grapevine`): a deed's warmth reaches whoever is tied to the person, at
   `GOSSIP.share` × the tie (an enemy of theirs the other way), twice as far from a gossip.
@@ -161,6 +163,18 @@ whether they pick up now (`phoneHours`: 8:00 to 22:00, a night owl 11:00 to 1:00
 in their hours opens the conversation with place `phone` (the interactions that need hands, `notAt: ['phone']`, are
 not offered); out of them the phone says why.
 
+## Mémé (`people/family.ts`, `grandmaSocial.ts`)
+
+The player's grandmother (docs/story.md "Mémé"), in the book (Friends tab) and the phone from the start. A card with
+`family: true`: her warmth never drifts (`settleDay` skips her) and never falls under `startWarmth` (`standing.apply`),
+and she has no penalty. `watchGrandma` hears `GrandmaVisits.subscribe` and nudges her, each kind once a game day: a
+visit, a Sunday lunch (reason `sundayLunch`, which the journal reads to drop its line), a gift (cake, flowers, a game
+shown), a memory seen (kept as a memory of hers), the scarf worn to hers. A ring (`callGrandma`) opens the conversation
+with her own first words (`TalkSession.opening`: the album, Sunday, Saturday, small talk) and counts once a day; from
+21:00 to 23:00 she answers in her nightie and rings off. At Close (`knitsScarf`) the wardrobe has her scarf. In her flat
+(`world/grandma/meme.ts`) a click opens the conversation, with what the player has for her (flowers, cake, the latest
+game) and "Tell me about Félix?" as entries. Her portrait is her look in her flat (`lookBook.rememberLook` at start-up).
+
 ## Debug
 
 - `?social`: everyone met, at Friendly at least (it writes to the save it plays on: use it with `?debug`).
@@ -224,6 +238,10 @@ person records its look (`rememberLook`).
 - **Claire** at the estate sale (`estateSale/EstateSale`): "About your uncle…".
 - **Théo**, the attic's student (`stairwell/AtticStudent`, `STAIRWELL_PLAN.student`): some nights (`share`) from 22:00
   into the small hours, on our landing by the lift's gate, "Late one?".
+- **The kids** in the courtyard after school (`courtyard/YardKids`, cards `people/kids`: Hugo, Mai, Tuan, Lina, group
+  `building`; docs/building.md "The kids in the yard"), place `courtyard`: "Heard anything?" (the building's news in
+  their words, tagged "news" on a day with some), "Swap carts?" (`easySwaps` at Friend, `noSwaps` at Cold) and "Bet I
+  can beat your score!".
 
 
 ## The building's perks (`social/building/`, `buildingPerksPlan.ts`)

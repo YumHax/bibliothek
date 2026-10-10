@@ -12,7 +12,7 @@ import { boxMesh, cylinderMesh } from './meshUtils';
 import type { SoundOcclusion } from './acoustics/SoundOcclusion';
 import { VideoSurface } from './screen';
 import { SurfaceScreen } from './screen/SurfaceScreen';
-import { CrtGlass } from './screen/CrtGlass';
+import { CRT_CORNER, CrtGlass } from './screen/CrtGlass';
 import { HueDrift } from './screen/HueDrift';
 import { QUALITY } from '@/graphics/quality';
 import { paint, timber } from '@/world/materials/palette';
@@ -241,6 +241,11 @@ export class Television extends SurfaceScreen implements Furniture, Updatable, I
     this.speaker.dispose();
   }
 
+  /** The room's ceiling lamp switched: its glint on the glass follows (`layout.ts` wires the pendant). */
+  setLampLit(lit: boolean): void {
+    this.glass.setLampLit(lit);
+  }
+
   update(dt: number): void {
     // A power cut in the building (`building/mains`): the picture goes at once.
     if (this.state !== 'off' && !poweredAt(this)) this.stop();
@@ -285,17 +290,16 @@ export class Television extends SurfaceScreen implements Furniture, Updatable, I
     const y = this.surface.position.y;
     const w = this.screenWidth;
     const h = this.surface.height;
-    // Bezel: four bars round the picture, standing out of the face so the bulging glass sits in a recess.
+    // Bezel: one moulded frame round the picture, standing out of the face so the bulging glass sits in a recess, its
+    // opening rounded at the corners like the tube's face (`CRT_CORNER`) and chamfered down towards the glass.
     const bezel = paint(0x1d1d20, 0.45);
     const rim = 0.014 * scale;
     const depth = 0.012;
-    const z = this.frontZ + depth / 2;
-    parts.push(
-      boxMesh(w + 2 * rim, rim, depth, bezel, { y: y + h / 2 + rim / 2, z }),
-      boxMesh(w + 2 * rim, rim, depth, bezel, { y: y - h / 2 - rim / 2, z }),
-      boxMesh(rim, h, depth, bezel, { x: -w / 2 - rim / 2, y, z }),
-      boxMesh(rim, h, depth, bezel, { x: w / 2 + rim / 2, y, z }),
-    );
+    const frame = new THREE.Mesh(bezelGeometry(w, h, rim, depth), bezel);
+    frame.position.set(0, y, this.frontZ);
+    frame.castShadow = true;
+    frame.receiveShadow = true;
+    parts.push(frame);
     // Power button and LED, in the band under the picture, right-hand side.
     const band = (bodyH - h) / 4;
     const button = new THREE.MeshStandardMaterial({ color: 0x3a3a40, roughness: 0.35, metalness: 0 });
@@ -335,4 +339,32 @@ function taperedRear(width: number, height: number, depth: number, material: THR
   mesh.castShadow = true;
   mesh.receiveShadow = true;
   return mesh;
+}
+
+/**
+ * A CRT's bezel: a `rim`-wide frame round a `w` x `h` picture, `depth` deep from z 0 out to the eye, the outside's
+ * corners softly rounded, the opening's rounded like the tube (`CRT_CORNER`), its inner edge chamfered by the bevel.
+ */
+function bezelGeometry(w: number, h: number, rim: number, depth: number): THREE.ExtrudeGeometry {
+  const roundRect = (path: THREE.Path, halfW: number, halfH: number, r: number): void => {
+    path.moveTo(-halfW + r, -halfH);
+    path.lineTo(halfW - r, -halfH);
+    path.quadraticCurveTo(halfW, -halfH, halfW, -halfH + r);
+    path.lineTo(halfW, halfH - r);
+    path.quadraticCurveTo(halfW, halfH, halfW - r, halfH);
+    path.lineTo(-halfW + r, halfH);
+    path.quadraticCurveTo(-halfW, halfH, -halfW, halfH - r);
+    path.lineTo(-halfW, -halfH + r);
+    path.quadraticCurveTo(-halfW, -halfH, -halfW + r, -halfH);
+  };
+  const bevel = Math.min(0.003, rim * 0.25);
+  const shape = new THREE.Shape();
+  roundRect(shape, w / 2 + rim - bevel, h / 2 + rim - bevel, rim * 0.5);
+  const hole = new THREE.Path();
+  // The bevel grows the shape by its size on every edge: the hole is cut that much wider so the opening ends at the picture.
+  roundRect(hole, w / 2 + bevel, h / 2 + bevel, CRT_CORNER * Math.min(w, h) + bevel);
+  shape.holes.push(hole);
+  const geometry = new THREE.ExtrudeGeometry(shape, { depth: depth - 2 * bevel, bevelEnabled: true, bevelThickness: bevel, bevelSize: bevel, bevelSegments: 2, curveSegments: 6 });
+  geometry.translate(0, 0, bevel);
+  return geometry;
 }

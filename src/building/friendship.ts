@@ -43,6 +43,8 @@ const WHY: Record<string, string> = {
   partyChat: 'enjoyed the party chat',
   partySale: 'liked the game you sold them',
   partyTournament: 'enjoyed the tournament',
+  bulkyWaste: 'glad their old things found a home',
+  yardCinema: 'enjoyed the film night',
 };
 const WHY_NOT: Record<string, string> = {
   noise: 'kept awake by your noise',

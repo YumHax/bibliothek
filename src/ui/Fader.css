@@ -1,4 +1,4 @@
-/* Teleport curtain: above the 3D view, the HUD and the panels; only the touch controls and the notices show through. `Fader` sets the fade's duration inline per trip. */
+/* Teleport curtain: above the 3D view, the HUD and the panels; only the touch controls and the notices show through. `Fader` sets the fade's duration (and a trip's tint) inline. */
 @layer tokens, base, components, panels;
 @layer panels {
   .fader {
@@ -7,6 +7,37 @@
     z-index: var(--z-fader);
     background: var(--ui-black);
     pointer-events: none;
-    transition: opacity var(--dur-fall) ease;
+    transition: opacity var(--dur-fall) ease, background-color var(--dur-fall) ease;
+    display: grid;
+    place-items: center;
+  }
+
+  /* Where the trip goes, shown only while the curtain stays down a moment (the first trip to the street). */
+  .fader__name {
+    margin: 0;
+    font: 400 var(--fs-t2) / 1.2 var(--ui-font-body);
+    letter-spacing: 0.04em;
+    color: var(--ui-text-dim);
+  }
+
+  .fader__name::after {
+    content: '';
+    display: inline-block;
+    width: 1.5em;
+    text-align: left;
+    animation: fader-dots var(--dur-breathe) steps(4, end) infinite;
+  }
+
+  @keyframes fader-dots {
+    0% { content: ''; }
+    25% { content: '.'; }
+    50% { content: '..'; }
+    75% { content: '...'; }
+  }
+
+  /* Reduced motion: the dots stand still. */
+  .reduce-motion .fader__name::after {
+    animation: none;
+    content: '...';
   }
 }

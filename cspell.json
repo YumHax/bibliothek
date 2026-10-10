@@ -21,7 +21,8 @@
     "/data:[^'\"`\\s]+/g",
     "/\\bfrom '[^']+'/g",
     "/import\\('[^']+'\\)/g",
-    "/url\\([^)]*\\)/g"
+    "/url\\([^)]*\\)/g",
+    "/'(?=[^']*(?:\\.|xx|ss|rr|cc))[.xowkdbserlc]{6,}'/g"
   ],
   "minWordLength": 4,
   "allowCompoundWords": false,

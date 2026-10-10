@@ -1,11 +1,13 @@
 /** What the player can put on from the bedroom's wardrobe. */
-export type OutfitId = 'everyday' | 'arcadeTee' | 'hunterJacket' | 'sundayBest';
+export type OutfitId = 'everyday' | 'arcadeTee' | 'hunterJacket' | 'sundayBest' | 'memeScarf';
 
 /** What an outfit's unlock is judged on: the prizes brought home, the market's regard, the collection's size. */
 export interface OutfitFacts {
   ownsPrize(id: string): boolean;
   reputationLevel: number;
   gamesOwned: number;
+  /** Mémé has knitted the player a scarf (her `knitsScarf`, a close grandchild: docs/social.md "Mémé"). */
+  knitted: boolean;
 }
 
 export interface Outfit {
@@ -13,9 +15,9 @@ export interface Outfit {
   name: string;
   /** What it looks like, one line. */
   look: string;
-  /** What it does, one line ('' for none). */
+  /** What it does, in the world's words, one line ('' for none): no numbers, the player feels the rest. */
   perk: string;
-  /** How it is earned, while it is not. */
+  /** The note pinned on its bag while it is not earned: where to look, not a rule. */
   earn: string;
   unlocked(facts: OutfitFacts): boolean;
 }
@@ -37,7 +39,7 @@ export const OUTFITS: readonly Outfit[] = [
     id: 'everyday',
     name: 'Everyday',
     look: 'Jeans and a jumper. Nobody looks twice.',
-    perk: '',
+    perk: 'Comfortable, and that is all it asks.',
     earn: '',
     unlocked: () => true,
   },
@@ -45,8 +47,8 @@ export const OUTFITS: readonly Outfit[] = [
     id: 'arcadeTee',
     name: 'Arcade tee',
     look: 'The black INSERT COIN shirt, a little faded.',
-    perk: `The regulars nod you through: ${Math.round(ARCADE_TEE_BONUS * 100)}% more tickets per play.`,
-    earn: 'Bring a trophy home from the arcade (the prize counter, the league or the Saturday cup).',
+    perk: 'The regulars nod you through, and the ticket slot seems a little more generous.',
+    earn: 'For the day a trophy comes home from the arcade.',
     unlocked: (f) => f.ownsPrize('trophy') || f.ownsPrize('pennant') || f.ownsPrize('saturdayCup'),
   },
   {
@@ -54,7 +56,7 @@ export const OUTFITS: readonly Outfit[] = [
     name: 'Bargain hunter’s jacket',
     look: 'Waxed cotton, twelve pockets, a tape measure in one of them.',
     perk: 'Stallholders take you for a dealer: every haggle starts lower.',
-    earn: 'Become a regular face at the market (reputation).',
+    earn: 'For when the stallholders know your face.',
     unlocked: (f) => f.reputationLevel >= JACKET_LEVEL,
   },
   {
@@ -62,8 +64,16 @@ export const OUTFITS: readonly Outfit[] = [
     name: 'Sunday best',
     look: 'The good coat, polished shoes. You look like money.',
     perk: 'The glass case’s stallholder hands you anything you point at.',
-    earn: `Own ${SUNDAY_BEST_GAMES} games (the brass plaque).`,
+    earn: `For a collection worth dressing up for: ${SUNDAY_BEST_GAMES} games on the shelves.`,
     unlocked: (f) => f.gamesOwned >= SUNDAY_BEST_GAMES,
+  },
+  {
+    id: 'memeScarf',
+    name: 'Mémé’s scarf',
+    look: 'Burgundy wool, a little lumpy, knitted in front of the quiz shows.',
+    perk: 'Mémé beams every time you wear it to hers.',
+    earn: 'Something Mémé has been knitting, for when she’s finished.',
+    unlocked: (f) => f.knitted,
   },
 ];
 

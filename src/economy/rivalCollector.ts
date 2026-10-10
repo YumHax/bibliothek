@@ -1,7 +1,7 @@
 import type { Game } from '@/catalog/types';
 import { readGame } from '@/catalog/validate';
 import { KEYS, PersistedStore } from '@/persistence';
-import { gameDayRandom, isEventDay } from '@/time/daily';
+import { gameDayRandom } from '@/time/daily';
 import { nudge, tier } from '@/social/standing';
 import { atLeast, tierRank } from '@/social/tiers';
 import { RIVAL } from './pricing';
@@ -11,19 +11,19 @@ import { RIVAL } from './pricing';
  * (`street/shops/Trader`), at the flea market some market days after the priciest copy on the stalls
  * (`market/RivalInHall`), in the saleroom's front row on sale days (`saleroom/`). What he and the player did to
  * each other is kept here (`bibliothek.rival.v1`), so all three, and anything else that shows him (a window onto
- * the courtyard), tell one story. Read API: `RIVAL_COLLECTOR` (who he is), `rivalOnFrontStreet(date)`,
+ * the courtyard), tell one story. Read API: `RIVAL_COLLECTOR` (who he is), `rivalOnFrontStreet(day)`,
  * `rivalAtMarket(day)`, and a `RivalCollector`'s `view()`.
  */
 
 /** Who he is: his name, the name on his lines, his caption, the seed his look is drawn from (the same body everywhere). */
 export const RIVAL_COLLECTOR = { name: 'Victor Crane', short: 'Victor', label: 'Victor, the collector', seed: 911 } as const;
 
-/** One real day in this many he sets up on Front Street (`isEventDay('trader', …)`: phase 1, the trader's draw since day one). */
+/** One game day in this many he sets up on Front Street (the game's days, like his market days and the saleroom's). */
 const RIVAL_STREET_ONE_DAY_IN = 3;
 
-/** Whether today (the real date) he stands outside RETRO GAMES with his suitcase. */
-export function rivalOnFrontStreet(date = new Date(), oneDayIn = RIVAL_STREET_ONE_DAY_IN): boolean {
-  return isEventDay('trader', oneDayIn, { date, phase: 1 });
+/** Whether on game day `day` he stands outside RETRO GAMES with his suitcase (the same for everyone, every reload). */
+export function rivalOnFrontStreet(day: number, oneDayIn = RIVAL_STREET_ONE_DAY_IN): boolean {
+  return Math.floor(gameDayRandom('trader-street', day)() * oneDayIn) === 0;
 }
 
 /** Whether he comes to the flea market on market day `day` (the same for everyone, every reload). */

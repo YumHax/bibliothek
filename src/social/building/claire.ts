@@ -27,5 +27,5 @@ export function claireReturns(deps: PerkDeps): void {
   });
   if (!games.length) return;
   deps.slipNote(C.note);
-  deps.notices.reward({ title: `From Claire: ${games[0]!.title}`, detail: 'One of her uncle Henri’s games, kept back from the sale for you. It waits in your parcel.' });
+  deps.notices.reward({ title: `From Claire: ${games[0]!.title}`, detail: 'One of her uncle Henri’s, kept back from the sale. In the parcel in the hall.' });
 }

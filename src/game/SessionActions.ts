@@ -13,6 +13,8 @@ export interface PlayerState {
   readonly seated: boolean;
   /** What the player sits (or lies) in, while seated: the bed tells "in me" from "in the chair across the room". */
   readonly seatedIn?: SeatLike | null;
+  /** Bedtime: the bed offers a night's sleep (by day it is only somewhere to lie). */
+  readonly sleepy?: boolean;
 }
 
 /** How a play at an arcade machine went: the score, whether it beat the player's best, a prize won (the claw). */
@@ -65,8 +67,11 @@ export interface ArcadeMachineLike {
   readonly canReplay?: boolean;
   /** Holds the play still (the pointer was unlocked) or lets it go on. */
   pause?(paused: boolean): void;
-  /** The bonuses the play earned besides its score (challenge, medal, streak...), for the end card and the ticket strip. */
-  showBonus?(bonuses: readonly ArcadeBonus[]): void;
+  /**
+   * The bonuses the play earned besides its score (challenge, medal, streak...), for the end card and the ticket strip,
+   * and what the score's own tickets count for there (`counted`: the floor folded in) when the Session settled it.
+   */
+  showBonus?(bonuses: readonly ArcadeBonus[], counted?: number): void;
 }
 
 /** Something the player did with a stall copy that its stallholder answers (a word, a look). */
@@ -139,8 +144,8 @@ export interface PaymentLike {
 
 /**
  * The moves an interactable may ask the session to make on the player's behalf, and what it may
- * tell the player (`NoticeActions`: `react`, `refuse`, `reward`, `tip`, `read`, and `say` for a voice
- * without a body; a person in the room speaks through their own `SpeechBubble`).
+ * tell the player (`NoticeActions`: `react`, `refuse`, `reward`, `slip`, `tip`, `prompt`, `read`, and `say` for a
+ * voice without a body; a person in the room speaks through their own `SpeechBubble`).
  */
 export interface SessionActions extends PlayerState, NoticeActions {
   pickUp(box: GameBox): void;

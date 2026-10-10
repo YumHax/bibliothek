@@ -10,13 +10,13 @@ export type CatGift = { kind: 'coins'; coins: number } | { kind: 'manual'; gameI
 interface HouseholdState {
   /** The cleaning kit was fetched from the bathroom cabinet: it lives on the kitchen table since. */
   kit: boolean;
-  /** Market day and count of the boxes cleaned that day. */
+  /** The rest (`Household.rest`) and count of the boxes cleaned in it. */
   restored: { day: number; n: number };
   /** A bath was taken and no haggle has used its calm yet. */
   soaked: boolean;
   /** Market day the cake was baked (-1: none out), and whether a friend finished it. */
   cake: { day: number; eaten: boolean };
-  /** Market day the cat had its last treat. */
+  /** The rest (`Household.rest`) the cat had its last treat in. */
   treatDay: number;
   /** What the cat left, from its market day on, until picked up. */
   gift: { day: number; gift: CatGift } | null;
@@ -30,6 +30,12 @@ interface HouseholdState {
   radioDay: number;
   inviteDay: number;
   firstSaleDay: number;
+  /** The flat's doors and drawers whose last tenant's leftover was found (spot keys, `world/build/rummage`). */
+  leftovers: string[];
+  /** The rest (`Household.rest`) and the spots whose find of that rest was taken. */
+  rummaged: { day: number; spots: string[] };
+  /** Nights slept in the bed (`Sleep.onWake`): the flat's small daily things come back after one. */
+  nights: number;
 }
 
 function defaults(): HouseholdState {
@@ -47,6 +53,9 @@ function defaults(): HouseholdState {
     radioDay: -1,
     inviteDay: -1,
     firstSaleDay: -1,
+    leftovers: [],
+    rummaged: { day: -1, spots: [] },
+    nights: 0,
   };
 }
 
@@ -70,6 +79,20 @@ export class Household {
     return this.day();
   }
 
+  /**
+   * The current rest: it turns over with a night's sleep, or every `HOUSEHOLD.restEvery` market days for a player
+   * who never goes to bed. The box cleaned, the cat's treat and the drawers' finds come once a rest, not every ten
+   * minutes of play.
+   */
+  get rest(): number {
+    return this.state.nights * 10_000 + Math.floor(this.day() / HOUSEHOLD.restEvery);
+  }
+
+  /** A night slept in the bed (the alarm rang): a new rest. */
+  wokeUp(): void {
+    this.commit({ nights: this.state.nights + 1 });
+  }
+
   subscribe(cb: () => void): () => void {
     this.listeners.add(cb);
     return () => this.listeners.delete(cb);
@@ -86,14 +109,14 @@ export class Household {
     this.commit({ kit: true });
   }
 
-  /** Boxes still to clean today. */
+  /** Boxes still to clean this rest. */
   get restoresLeft(): number {
     const { day, n } = this.state.restored;
-    return HOUSEHOLD.restorePerDay - (day === this.day() ? n : 0);
+    return HOUSEHOLD.restorePerDay - (day === this.rest ? n : 0);
   }
 
   markRestored(): void {
-    const today = this.day();
+    const today = this.rest;
     const n = this.state.restored.day === today ? this.state.restored.n : 0;
     this.commit({ restored: { day: today, n: n + 1 } });
   }
@@ -138,14 +161,15 @@ export class Household {
 
   // --- the cat's treat and its gift --------------------------------------------------------------
 
+  /** The cat had its treat this rest (it comes round again after a night's sleep). */
   get treatedToday(): boolean {
-    return this.state.treatDay === this.day();
+    return this.state.treatDay === this.rest;
   }
 
-  /** Today's treat; `gift` (drawn by the caller) turns up by the bowl tomorrow. Nothing replaces a gift not yet picked up. */
+  /** This rest's treat; `gift` (drawn by the caller) turns up by the bowl on the next market day. Nothing replaces a gift not yet picked up. */
   giveTreat(gift: CatGift | null): void {
     const today = this.day();
-    this.commit({ treatDay: today, gift: this.state.gift ?? (gift ? { day: today + 1, gift } : null) });
+    this.commit({ treatDay: this.rest, gift: this.state.gift ?? (gift ? { day: today + 1, gift } : null) });
   }
 
   /** What lies by the bowl now, if anything. */
@@ -199,6 +223,34 @@ export class Household {
     const wakeHour = hours[(i + 1) % hours.length]!;
     this.commit({ wakeHour });
     return wakeHour;
+  }
+
+  // --- the doors and drawers ------------------------------------------------------------------
+
+  /** Whether the last tenant's leftover in `spot` was found already. */
+  hasLeftover(spot: string): boolean {
+    return !this.state.leftovers.includes(spot);
+  }
+
+  /** Whether any of the last tenant's leftovers was found yet (the first comes with their note). */
+  get leftoverFound(): boolean {
+    return this.state.leftovers.length > 0;
+  }
+
+  takeLeftover(spot: string): void {
+    if (this.hasLeftover(spot)) this.commit({ leftovers: [...this.state.leftovers, spot] });
+  }
+
+  /** Whether this rest's find in `spot` (if it holds one) was taken already. */
+  rummagedToday(spot: string): boolean {
+    const { day, spots } = this.state.rummaged;
+    return day === this.rest && spots.includes(spot);
+  }
+
+  markRummaged(spot: string): void {
+    const today = this.rest;
+    const spots = this.state.rummaged.day === today ? this.state.rummaged.spots : [];
+    if (!spots.includes(spot)) this.commit({ rummaged: { day: today, spots: [...spots, spot] } });
   }
 
   // --- once a day ------------------------------------------------------------------------------
@@ -261,6 +313,19 @@ function readState(data: unknown): HouseholdState | null {
   state.radioDay = num(d.radioDay, -1);
   state.inviteDay = num(d.inviteDay, -1);
   state.firstSaleDay = num(d.firstSaleDay, -1);
+  const strings = (v: unknown): string[] => (Array.isArray(v) ? v.filter((s): s is string => typeof s === 'string') : []);
+  state.leftovers = strings(d.leftovers);
+  if (typeof d.rummaged === 'object' && d.rummaged) {
+    const r = d.rummaged as { day?: unknown; spots?: unknown };
+    state.rummaged = { day: num(r.day, -1), spots: strings(r.spots) };
+  }
+  state.nights = Math.max(0, Math.floor(num(d.nights, 0)));
+  // A save from before the rests stamped these with market days, which could read as the current rest: forgotten.
+  if (typeof d.nights !== 'number') {
+    state.restored = { day: -1, n: 0 };
+    state.treatDay = -1;
+    state.rummaged = { day: -1, spots: [] };
+  }
   return state;
 }
 

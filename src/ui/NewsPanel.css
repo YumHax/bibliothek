@@ -102,4 +102,9 @@
     font-style: italic;
     opacity: var(--ui-muted);
   }
+  /* Ringing a seller from the kiosk's phone: a small button after the ad's words. */
+  .news-panel__ring {
+    margin-left: var(--sp-1);
+    font-size: var(--fs-0);
+  }
 }

@@ -6,6 +6,7 @@ import { isTouchDevice } from '@/input/deviceDetect';
 import { lastDevice } from '@/input/lastDevice';
 import { isAction } from '@/input/actions';
 import type { PadButton } from '@/input/padButtons';
+import { enterFullscreenIfWanted } from '@/settings/fullscreen';
 
 /** The controller's Start: in and out of the room (no action of the table: it is not a key the Session hears). */
 const START: PadButton = 'GamepadStart';
@@ -45,6 +46,8 @@ export class PointerLockFlow {
   private pendingVirtual: RoomMode | null = null;
   /** The controller mode's keys have been shown this session (once is enough). */
   private controllerTipShown = false;
+  /** Asked before every entry (`setGate`): true takes the entry over (the opening plays first). */
+  private gate: ((mode: RoomMode | undefined) => boolean) | null = null;
 
   /**
    * `input` is optional for backwards compatibility; without it gamepad Start / Esc cannot
@@ -107,6 +110,21 @@ export class PointerLockFlow {
     );
 
     input?.onPress((code) => this.onPress(code));
+
+    // A tab switched away from mid-game: a pointer lock is let go by the browser (the pause menu shows on return); a
+    // virtual one (controller, touch) is let go here the same way, rather than the room going on unattended.
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden && player.isVirtualLocked) this.exit();
+    });
+  }
+
+  /**
+   * Something that plays before the room is entered (the opening cutscene, `src/intro`): asked on every entry, by
+   * whatever route (the card's button, Enter, a controller's press, a tap), with the mode asked for; returning true,
+   * it has taken the entry over and calls `enter` itself when it is done. Null removes it.
+   */
+  setGate(gate: ((mode: RoomMode | undefined) => boolean) | null): void {
+    this.gate = gate;
   }
 
   /** Current mode, `null` on the start card. */
@@ -120,6 +138,7 @@ export class PointerLockFlow {
    */
   async enter(mode?: RoomMode): Promise<void> {
     if (!this.overlay.ready) return; // the world is still loading: the start card says so
+    if (this.gate?.(mode)) return;
     const attempt = ++this.attempt;
     this.overlay.setResuming(false); // a newer try takes over from one still waiting
     const chosen = mode ?? (isTouchDevice() ? 'touch' : 'pointer');
@@ -135,8 +154,12 @@ export class PointerLockFlow {
       else this.overlay.promptReturn();
       return;
     }
-    // The menu stays until the lock is there (the `lock` listener hides it).
-    if (await this.player.lock()) return;
+    // The menu stays until the lock is there (the `lock` listener hides it). Full screen (a setting) is asked once the
+    // lock is in: it uses the gesture up, which the lock does not.
+    if (await this.player.lock()) {
+      enterFullscreenIfWanted();
+      return;
+    }
     if (attempt !== this.attempt) return; // superseded by a newer click
     // Refused, most likely Chrome's cooldown after Esc: the card says "Resuming…" and asks once more, quietly.
     this.overlay.setResuming(true);
@@ -171,7 +194,7 @@ export class PointerLockFlow {
     this.player.enterVirtual();
     if (mode === 'gamepad' && !this.controllerTipShown) {
       this.controllerTipShown = true;
-      this.notices?.tip('Controller mode: press Start or Esc for the menu.', { id: 'controller-mode', ms: 8000 });
+      this.notices?.tip('Controller mode: [Start] opens the menu.', { id: 'controller-mode', ms: 6000 });
     }
   }
 

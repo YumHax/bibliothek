@@ -360,7 +360,7 @@ export class Saleroom extends THREE.Object3D implements Furniture, Updatable {
     if (state.split) this.payRivalHalf(lot, price, today);
     auctioneer.speak(`Sold! To the bidder by the door, for ${price}.`);
     for (const [, body] of bidders) body.gesture('clap');
-    this.session?.reward({ title: `Sold to you: ${lot.title}`, detail: lot.sealed ? 'The carton is taken round to the flat: it waits in the hallway, to be opened.' : 'It goes in the parcel: unpack it in the hallway at home.', coins: -price });
+    this.session?.slip({ title: `Sold: ${lot.title}`, detail: lot.sealed ? 'The carton waits in the hallway at home.' : 'In the parcel in the hall.', coins: -price });
     this.options.board.show({ kind: 'lot', number: lot.number, of: this.lots?.length ?? lot.number, title: lot.title, estimate: lot.estimate, bid: price, leader: 'you', status: 'SOLD', you: true });
     this.next();
   }

@@ -8,7 +8,7 @@ import { random } from '@/random';
  * three are the only ways to the context: nothing else creates one or listens for a gesture itself.
  *
  * The context carries the mixer the Settings screen drives: a master gain in front of the
- * speakers and one bus per channel behind it. `ctx.destination` is redirected to the `world` bus,
+ * speakers (through a limiter, `LIMITER`) and one bus per channel behind it. `ctx.destination` is redirected to the `world` bus,
  * so every sound is under the master volume without knowing about it; the TV, the radio and the
  * arcade's machines connect to their own bus with `audioBus`. A sound the player is making with
  * their hands while the scene is ducked (a repair, the camera's shutter) takes `foregroundInput`:
@@ -23,10 +23,25 @@ const BUSES: readonly Exclude<AudioChannel, 'master'>[] = ['screens', 'arcade', 
 const volumes: Record<AudioChannel, number> = { master: 1, screens: 1, arcade: 1, world: 1, ui: 1 };
 const gains = new Map<AudioChannel, GainNode>();
 
+/**
+ * The last thing before the speakers: a fast, hard-kneed compressor just under full scale, so many sounds peaking
+ * together (a busy street, a burst of cues) are held under it instead of clipping into a harsh saturation. Quiet
+ * enough a mix never reaches it; its own make-up gain (Web Audio's, about +1 dB at these settings) is undone.
+ */
+const LIMITER = { threshold: -3, knee: 2, ratio: 16, attack: 0.002, release: 0.15, trim: 0.88 };
+
 function createContext(): AudioContext {
   const ctx = new AudioContext();
   const master = ctx.createGain();
-  master.connect(ctx.destination);
+  const limiter = ctx.createDynamicsCompressor();
+  limiter.threshold.value = LIMITER.threshold;
+  limiter.knee.value = LIMITER.knee;
+  limiter.ratio.value = LIMITER.ratio;
+  limiter.attack.value = LIMITER.attack;
+  limiter.release.value = LIMITER.release;
+  const trim = ctx.createGain();
+  trim.gain.value = LIMITER.trim;
+  master.connect(limiter).connect(trim).connect(ctx.destination);
   gains.set('master', master);
   for (const bus of BUSES) {
     const gain = ctx.createGain();

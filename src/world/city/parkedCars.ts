@@ -7,7 +7,7 @@ import { STREET_PLAN, type Vec2 } from '../street/streetPlan';
  * (`props/outdoors/Street`) show the same car in the same bay.
  */
 
-export type ParkedShape = 'hatch' | 'saloon' | 'van';
+export type ParkedShape = 'hatch' | 'city' | 'saloon' | 'estate' | 'van';
 
 /** Car paints and the vans' (mostly white), as 0xRRGGBB. */
 export const CAR_PAINTS = [0xb8322a, 0x2a4f8a, 0xe8e6e0, 0x2a2c30, 0x8a9096, 0x3f6b4f, 0xd9b44a, 0x6a2a4a, 0x9aa8b4, 0x1f3040];
@@ -39,7 +39,7 @@ export const PARKED_CARS: readonly ParkedCar[] = (() => {
   const pick = dailyRandom('parked-shapes');
   const shapes = STREET_PLAN.parked.map((): ParkedShape => {
     const r = pick();
-    return r < 0.45 ? 'hatch' : r < 0.85 ? 'saloon' : 'van';
+    return r < 0.3 ? 'hatch' : r < 0.45 ? 'city' : r < 0.7 ? 'saloon' : r < 0.85 ? 'estate' : 'van';
   });
   const paint = dailyRandom('parked-paints');
   const gaps = new Set<number>();

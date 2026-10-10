@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { gaussian, ramp } from '@/math/scalar';
 import { at, capsuleBetween, Parts, radialSurface, spline, type Keys } from './geometry';
+import { afterChunk, patchShader } from '../materials/shaderPatch';
 import type { PersonLook } from './looks';
 
 /*
@@ -88,8 +89,8 @@ export function headGeometry(shape: FaceShape): THREE.BufferGeometry {
   return radialSurface((d) => headRadius(d, shape), 112, 84, true);
 }
 
-/** How far the jaw drops fully open (radians about its hinge): a few millimetres at the lips. */
-const JAW_OPEN = 0.04;
+/** How far the jaw drops fully open (radians about its hinge): about a centimetre at the lips, seen from across a room. */
+const JAW_OPEN = 0.11;
 /** The jaw's hinge, in front of the ears and a little below their middle (the head's frame). */
 const JAW_HINGE_Y = -0.012;
 const JAW_HINGE_Z = 0.005;
@@ -104,20 +105,11 @@ function jawTarget(geometry: THREE.BufferGeometry, smile: boolean): THREE.Buffer
   const position = geometry.getAttribute('position');
   const moved = new Float32Array(position.count * 3);
   const d = new THREE.Vector3();
-  const corner = smile ? -0.55 : -0.578;
-  const middle = smile ? -0.595 : -0.58;
-  const cu = smile ? 0.28 : 0.26;
   for (let i = 0; i < position.count; i++) {
     const x = position.getX(i);
     const y = position.getY(i);
     const z = position.getZ(i);
-    d.set(x, y, z).normalize();
-    const au = Math.abs(Math.atan2(d.x, d.z));
-    const fv = Math.asin(THREE.MathUtils.clamp(d.y, -1, 1));
-    // The parting: the painted line between the lips, then up the cheek towards the hinge, softer there.
-    const line = au <= cu ? middle + (corner - middle) * (au / cu) ** 2 : corner + (-0.1 - corner) * ramp(au, cu, 1.45);
-    const soft = 0.012 + 0.1 * ramp(au, cu, 1.2);
-    const w = ramp(fv, line + soft * 0.4, line - soft) * ramp(au, 1.75, 1.4) * ramp(fv, -1.5, -1.15);
+    const w = jawWeight(d.set(x, y, z).normalize(), smile).w;
     const angle = JAW_OPEN * w;
     const cy = y - JAW_HINGE_Y;
     const cz = z - JAW_HINGE_Z;
@@ -128,6 +120,74 @@ function jawTarget(geometry: THREE.BufferGeometry, smile: boolean): THREE.Buffer
     moved[i * 3 + 2] = JAW_HINGE_Z + cy * sin + cz * cos;
   }
   return new THREE.Float32BufferAttribute(moved, 3);
+}
+
+/**
+ * How much of the jaw's turn the skin in direction `d` takes (`w`, 0 above the parting .. 1 below
+ * it) and whether it is the lips' part of the parting (`lips`, 1 between the corners of the mouth).
+ */
+function jawWeight(d: THREE.Vector3, smile: boolean): { w: number; lips: number } {
+  const corner = smile ? -0.55 : -0.578;
+  const middle = smile ? -0.595 : -0.58;
+  const cu = smile ? 0.28 : 0.26;
+  const au = Math.abs(Math.atan2(d.x, d.z));
+  const fv = Math.asin(THREE.MathUtils.clamp(d.y, -1, 1));
+  // The parting: the painted line between the lips, then up the cheek towards the hinge, softer there.
+  const line = au <= cu ? middle + (corner - middle) * (au / cu) ** 2 : corner + (-0.1 - corner) * ramp(au, cu, 1.45);
+  const soft = 0.012 + 0.1 * ramp(au, cu, 1.2);
+  const w = ramp(fv, line + soft * 0.4, line - soft) * ramp(au, 1.75, 1.4) * ramp(fv, -1.5, -1.15);
+  // Lips: the parting between the corners, narrowing into them (the cut never reaches the cheek).
+  const lips = ramp(au, cu * 0.95, cu * 0.6) * (d.z > 0 ? 1 : 0);
+  return { w, lips };
+}
+
+/**
+ * The mouth's opening, cut through the skin where the jaw stretches it (`mouthCut`: per vertex the
+ * jaw's weight and the lips' share, see `mouthPatch`): open, the face shows what is behind the lips
+ * (`addMouth`) instead of a stretched painted line.
+ */
+function addMouthCut(geometry: THREE.BufferGeometry, smile: boolean): void {
+  const position = geometry.getAttribute('position');
+  const cut = new Float32Array(position.count * 2);
+  const d = new THREE.Vector3();
+  for (let i = 0; i < position.count; i++) {
+    const { w, lips } = jawWeight(d.set(position.getX(i), position.getY(i), position.getZ(i)).normalize(), smile);
+    cut[i * 2] = w;
+    cut[i * 2 + 1] = lips;
+  }
+  geometry.setAttribute('mouthCut', new THREE.Float32BufferAttribute(cut, 2));
+}
+
+/**
+ * Cuts the open mouth out of the face's material: where the jaw's weight crosses the parting
+ * (the band of skin the jaw stretches), between the corners, as wide as `open` (0..1, the jaw
+ * morph's influence, set every frame) asks. Its uniform is returned to be driven.
+ */
+export function mouthPatch(material: THREE.Material): { value: number } {
+  const open = { value: 0 };
+  patchShader(material, 'mouthCut', (shader) => {
+    shader.uniforms.mouthOpen = open;
+    shader.vertexShader = `attribute vec2 mouthCut;\nvarying vec2 vMouthCut;\n${afterChunk(shader.vertexShader, 'begin_vertex', 'vMouthCut = mouthCut;')}`;
+    shader.fragmentShader = `uniform float mouthOpen;\nvarying vec2 vMouthCut;\n${afterChunk(
+      shader.fragmentShader,
+      'clipping_planes_fragment',
+      `{
+        float gap = mouthOpen * vMouthCut.y;
+        if (gap > 0.03 && abs(vMouthCut.x - 0.5) < 0.45 * gap) discard;
+      }`,
+    )}`;
+  });
+  return open;
+}
+
+/**
+ * What the open mouth shows (the head's frame): a dark inside behind the lips and the upper teeth
+ * just under the upper lip, both inside the skin while it is shut.
+ */
+export function addMouth(parts: Parts, shape: FaceShape, inside: THREE.Material, teeth: THREE.Material): void {
+  const lips = headPoint(new THREE.Vector3(0, Math.sin(-0.58), Math.cos(-0.58)), shape);
+  parts.add(new THREE.SphereGeometry(1, 16, 10), inside, at(0, lips.y - 0.004, lips.z - 0.029, [0, 0, 0], [0.023, 0.013, 0.025])); // convention-ok: anatomy inside the body, not a surface layer
+  parts.add(new THREE.CylinderGeometry(0.028, 0.028, 0.007, 16, 1, true, -0.62, 1.24), teeth, at(0, lips.y + 0.0005, lips.z - 0.0315));
 }
 
 /** Which morph target of the face does what (-1: this face has none: nothing moves under a full beard's shell). */
@@ -155,6 +215,7 @@ export function addFaceMorphs(geometry: THREE.BufferGeometry, look: PersonLook):
   if (lower) {
     morphs.jaw = targets.length;
     targets.push(jawTarget(geometry, look.smile));
+    addMouthCut(geometry, look.smile);
   }
   const d = new THREE.Vector3();
   const up = new THREE.Vector3();
@@ -234,9 +295,15 @@ export function addHat(parts: Parts, look: PersonLook): void {
   parts.add(new THREE.TorusGeometry(1, 0.14, 8, 36), cloth, place(at(0, 0.045, -0.004, [Math.PI / 2, 0, 0], [0.094, 0.11, 0.1])));
 }
 
-/** Thin frames: two rims in front of the eyes, a bridge, and temples running back over the ears. */
+/** The lenses' glass: nearly clear, catching the room's reflections (the glint is what reads as glasses). */
+function lensMaterial(): THREE.Material {
+  return new THREE.MeshPhysicalMaterial({ color: 0xf4f8fa, roughness: 0.05, metalness: 0, transparent: true, opacity: 0.16, clearcoat: 1, clearcoatRoughness: 0.04, depthWrite: false });
+}
+
+/** Thin frames: two rims in front of the eyes with their lenses, a bridge, and temples running back over the ears. */
 export function addGlasses(parts: Parts, color: number, shape: FaceShape): void {
   const frame = new THREE.MeshStandardMaterial({ color, roughness: 0.3 });
+  const glass = lensMaterial();
   const eye = headPoint(EYE_DIRECTION, shape);
   // They rest on the bridge of the nose.
   const z = Math.max(eye.z + 0.022, headPoint(new THREE.Vector3(0, 0.0145, 0.09).normalize(), shape).z + 0.004);
@@ -244,6 +311,8 @@ export function addGlasses(parts: Parts, color: number, shape: FaceShape): void 
   for (const side of [-1, 1] as const) {
     const cx = side * eye.x;
     parts.add(new THREE.TorusGeometry(0.019, 0.0021, 6, 24), frame, at(cx, y, z, [0, 0, 0], [1, 0.78, 1]));
+    // A lens filling the rim, bowed a little forward.
+    parts.add(new THREE.SphereGeometry(0.1, 20, 6, 0, Math.PI * 2, 0, 0.19), glass, at(cx, y, z - 0.098, [Math.PI / 2, 0, 0], [1, 1, 0.78]));
     const hinge = new THREE.Vector3(side * (eye.x + 0.019), y + 0.004, z - 0.002);
     const ear = headPoint(new THREE.Vector3(side, 0.05, -0.1).normalize(), shape);
     parts.add(capsuleBetween(hinge, new THREE.Vector3(ear.x + side * 0.004, y + 0.006, ear.z + 0.01), 0.0018, 5), frame);

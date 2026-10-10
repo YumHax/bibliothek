@@ -9,11 +9,11 @@ friend coming round), never a daily chore. What is worn or set stays so (saved) 
 | Where | What | The plus | Rules |
 | --- | --- | --- | --- |
 | Bathroom, mirror cabinet (door open) | Take the cleaning kit (it stands on the bottom shelf, `CabinetKit`) | It moves to the kitchen table, once; refused while the kitchen has no table (`HomeLife.setKitchenTable`) | `HomeLife.takeKit` |
-| Kitchen table, the kit | A **worn** box in hand, click | Cleaned: `condition` `noManual` + `restored` (bright cover, still no manual), worth more in the collector's book; the WE BUY desk and swaps still count it worn (`pricing.dealerFactor`), so bin-to-desk never pays. One a market day | `HomeLife.cleanBox` |
+| Kitchen table, the kit | A **worn** box in hand, click | Cleaned: `condition` `noManual` + `restored` (bright cover, still no manual), worth more in the collector's book; the WE BUY desk and swaps still count it worn (`pricing.dealerFactor`), so bin-to-desk never pays. One a rest (after a night's sleep, or every `restEvery` market days) | `HomeLife.cleanBox` |
 | Bathroom, hair dryer | A box with an old **price sticker** in hand | Peeled: worth its full price again (stickered copies sell at `STICKER.factor` and are worth that much less) | `HomeLife.peelSticker` |
 | Bathroom, the full bath | Click to soak (the water goes out after) | The next haggle's stallholder hears one more offer (`soak.patience`), whenever it comes | `HomeLife.soak`, `Perks.ease` |
 | Kitchen hob, mixing bowl | Bake a cake (on the table two market days; refused without the table) | A friend visiting while it is out has a slice, lingers `cake.linger` times as long and leaves a thank-you (a game to their taste, else coins) | `HomeLife.bake`, `Visitors.thankForCake` |
-| Kitchen worktop, treat jar | A treat, once a market day (the cat comes) | Next morning, sometimes, something by its kitchen bowl: coins, or the lost booklet of a shelved `noManual` game (complete again) | `HomeLife.giveTreat` / `takeGift`, `catGift.ts` |
+| Kitchen worktop, treat jar | A treat, once a rest (after a night's sleep, or every `restEvery` market days; the cat comes) | Next morning, sometimes, something by its kitchen bowl: coins, or the lost booklet of a shelved `noManual` game (complete again) | `HomeLife.giveTreat` / `takeGift`, `catGift.ts` |
 | Kitchen radio | Switched on between `radio.from` and `radio.until`, once a day | Radio Brocante: a grail heard of `radio.grailDays` ahead (the others say 3), tomorrow's theme and clearance, the Flea Fair | `chronicle.ts` |
 | Bedroom chair | Sit with a **complete** box in hand | Its manual read: platform know-how. From `knowHow.eye` manuals a fake's print is noticed before opening the box; from `respect` that platform's stallholders go easier | `HomeLife.readManual`, `Perks.tell` / `ease` |
 | Bedroom nightstand, alarm clock | Click cycles the wake hour | The bed's night ends then (`Sleep`'s `wakeHour`) | `Household.cycleAlarm` |
@@ -23,7 +23,36 @@ friend coming round), never a daily chore. What is worn or set stays so (saved) 
 | Bedroom phone | Ask a friend round, once a market day before `phone.friendsUntil` | They come `phone.inHours` later (a visit on demand: loans, tips, the cake) | `Visitors.invite`, `VisitBook.invite` |
 | Bedroom phone | Have everyone round tonight; ring THE GAMING WEEKLY for an open house | A games night (PADDLE WARS on the TV, a photo), an open house two days on (coins at the door, the paper's article) | `Gatherings.phoneRows`, `call` (docs/visitors.md "Gatherings") |
 | Market stalls | Some ordinary copies carry an old price sticker (`STICKER.odds`) | Sold at `STICKER.factor`: a bargain once peeled off at home | `MarketStock.priced` (its own hash) |
-| Bedroom wardrobe (door open) | Choose an outfit | Arcade tee: +10 % tickets. Bargain hunter's jacket: every haggle opens lower. Sunday best: the glass case opens whatever the reputation. Each is earned (a trophy, reputation, 25 games) | `outfits.ts`, `WardrobePanel` |
+| Bedroom wardrobe (door open) | Choose an outfit | Arcade tee: +10 % tickets. Bargain hunter's jacket: every haggle opens lower. Sunday best: the glass case opens whatever the reputation. Mémé's scarf: she beams when it is worn to hers. Each is earned (a trophy, reputation, 25 games, Mémé close) | `outfits.ts`, `WardrobePanel` |
+
+### Doors and drawers
+
+Every door and drawer of the flat may hold something, lying there to be seen and picked up (`household/rummage.ts`,
+`HomeLife.peekFind` / `takeFind`, wired per piece by `world/build/rummage.ts` `rummageIn` through the leaf's
+`Openable.onOpen`). The flat's own fittings (kitchen cupboards, drawers, oven, fridge and freezer, the wardrobe, the
+mirror cabinet: `fitted`) each hold what the last tenant left until it is taken: a few coins or a strip of arcade
+tickets (`HOUSEHOLD.rummage.leftover`), about 65 coins' worth in all, a good start for the bare flat. The first one has
+the last tenant's note lying under it, read when it is picked up (a `read` card, `rummageLines.ts` `TENANT_NOTE`): it
+says there is more about the flat without a rule. After that every spot, bought ones too (the nightstands' drawers),
+holds a find on `dailyChance` of rests (`Household.rest`: a new one after a night's sleep, or every
+`HOUSEHOLD.restEvery` market days for a player who never goes to bed; the cleaning and the cat's treat follow it too,
+so the flat's small things are a surprise, never a round to make every ten minutes): a coin or three, a few tickets, or
+in a drawer the booklet of a shelved `noManual` game (complete again). Only coins where nothing paper goes (fridge,
+freezer, oven: `holdsPaper`). Seeded by the spot's key (`kitchen.run0#3`) and the rest; what was taken is saved in
+`Household` (`leftovers`, `rummaged`, `nights`). From market day 2 the first fitted drawer opened that holds paper has
+uncle Félix's notebook at the back (`HomeLife` `notebook`, docs/story.md "Félix's notebook").
+
+When a leaf opens, what lies there is laid on its `stash` (`props/Openable`: the spot the host furniture chose, in the
+leaf's own space, so it stays put as a door swings and slides out with a drawer; `at` for coins and tickets, `flat`
+for a booklet on top of a drawer's things, `room` where coins must stack): a handful of real-looking coins, a fan-folded
+ticket strip, a booklet with the game's title (`props/findModels`). It is a `FindPickup`: drawn while the leaf is ajar,
+reachable once it is mostly open (never through a worktop over a shut drawer), it glints under the crosshair
+("Loose change · take") and a click pockets it: the clink or a paper rustle, a slip with the chips (a banner for a
+booklet that completes a copy), and it lifts off the shelf and shrinks into the hand. Left there, it waits (a leftover
+for good, the day's find till the day ends: the next opening swaps it for today's). Coins and tickets reach the journal
+through its wallet tally; only a booklet gets a line. Kept small next to the arcade so it is never a round to make. A
+new openable in the flat gets its finds with a `stash` set by its host (`stashBehind` for a hinged leaf) and one
+`rummageIn` call in its builder; the key must stay stable (it is in saves).
 
 The long jobs are told in a beat, not lived through (`household/pastime.ts`, `Pastimes`, like `Sleep`): cleaning a
 box (an hour: cloth and cotton buds), peeling a sticker (a minute: the dryer's whir), baking (the whisk, the oven door
@@ -104,7 +133,8 @@ A friend upstairs helps: with Théo at Friend, the find and tool steps name the 
 - Visitors: `hosting` (the cake: `Visit`'s `linger`, the slice in `answered`, the thank-you in `ended`), `phoneBook` /
   `invite` for the phone (`VisitBook.invite`: the invited friend is today's plan, whatever the draw).
 - UI: `ui/household/` (`PhonePanel`, its friends set by `bootstrap/world` once the visitors exist; `WardrobePanel`,
-  `DreamCard`); `GamePanel` shows a home copy's state and sticker.
+  the outfits drawn as inline SVG on a rail, a click puts one on, one not earned hangs in a zipped bag showing only its
+  tag's note, and the perks are worded with no numbers; `DreamCard`); `GamePanel` shows a home copy's state and sticker.
 - Bootstrap: `services` (Household, HomeLife, Perks), `ui` (the panels), `world` (`home.household`), `session`
   (`perks`, `dreams`), `player` (`Sleep`'s wake hour).
 

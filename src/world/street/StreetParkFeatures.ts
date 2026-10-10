@@ -8,6 +8,8 @@ import type { Vec2 } from './streetPlan';
 import { FLAT_IN_STREET, LAWN_REACH, PARK_STREET, PARK_WALK, STREET_ENDS } from '@/world/measures/street';
 import { standard } from '../materials/palette';
 import { GROUND, onSurface } from '../surface/layers';
+import { afterChunk, patchShader } from '../materials/shaderPatch';
+import { damp } from '@/math/damp';
 import { lcg } from '@/random';
 
 /** A point of the park (`city/park`, the flat's frame) in the street's. */
@@ -41,7 +43,7 @@ export interface ParkFeatures {
  * gardens behind the gate (`PARK_WALK`) are closed by a low hoop fence, and the trees, the
  * playground's frames and the fence collide. Painted per vertex, one mesh per material.
  */
-export function buildParkFeatures(parent: THREE.Group, lawnY: number, walkable: boolean): ParkFeatures {
+export function buildParkFeatures(parent: THREE.Group, lawnY: number, walkable: boolean, weather?: () => { wind: number; rain: number }): ParkFeatures {
   const colliders: THREE.Box3[] = [];
   const painted = new TriBuilder();
   const site: Site = {
@@ -62,7 +64,7 @@ export function buildParkFeatures(parent: THREE.Group, lawnY: number, walkable: 
     },
   };
 
-  buildPond(site);
+  const pond = buildPond(site);
   const spray = buildFountain(site);
   buildBandstand(site);
   buildPlayground(site);
@@ -84,6 +86,13 @@ export function buildParkFeatures(parent: THREE.Group, lawnY: number, walkable: 
       // The plume sways and breathes a little.
       time = (time + dt) % 1000;
       spray.scale.set(1 + 0.08 * Math.sin(time * 1.7), 0.94 + 0.06 * Math.sin(time * 2.3 + 1), 1 + 0.08 * Math.sin(time * 1.3 + 2));
+      // The pond's ripples run on, the wind and the rain on the water with the weather.
+      if (pond) {
+        pond.time.value = time;
+        const w = weather?.();
+        pond.wind.value = damp(pond.wind.value, w?.wind ?? 0.3, 1, dt);
+        pond.rain.value = damp(pond.rain.value, w?.rain ?? 0, 1, dt);
+      }
     },
   };
 }
@@ -103,13 +112,27 @@ interface Site {
   box(x: number, z: number, hx: number, hz: number, h: number): void;
 }
 
-/** The pond on the lawn: its water (ice in deep winter), and a ring of stone round the ellipse, its inner face down to the water. */
-function buildPond({ parent, lawnY, painted, season }: Site): void {
+/** What the pond's water moves with (null under ice). */
+interface PondUniforms {
+  time: THREE.IUniform<number>;
+  wind: THREE.IUniform<number>;
+  rain: THREE.IUniform<number>;
+}
+
+/**
+ * The pond on the lawn: its water (ice in deep winter), and a ring of stone round the ellipse, its inner face down to
+ * the water. Open water ripples (`rippledWater`): small waves running with the wind, rings where the rain falls, so the
+ * sky it gives back is broken up as on real water.
+ */
+function buildPond({ parent, lawnY, painted, season }: Site): PondUniforms | null {
   const [px, pz] = parkInStreet([POND.x, POND.z]);
   const frozen = season.name === 'winter' && season.depth > 0.5;
+  const uniforms: PondUniforms = { time: { value: 0 }, wind: { value: 0.3 }, rain: { value: 0 } };
   const water = new THREE.Mesh(
     new THREE.CircleGeometry(1, 64).rotateX(-Math.PI / 2).scale(POND.rx, 1, POND.rz).translate(px, lawnY + GROUND.puddle.lift, pz),
-    onSurface(standard({ color: frozen ? 0x9fb2b8 : 0x2f4a4e, roughness: frozen ? 0.35 : 0.06, metalness: 0.1 }), GROUND.puddle),
+    frozen
+      ? onSurface(standard({ color: 0x9fb2b8, roughness: 0.35, metalness: 0.1 }), GROUND.puddle)
+      : onSurface(rippledWater(new THREE.MeshStandardMaterial({ color: 0x2f4a4e, roughness: 0.06, metalness: 0.1 }), uniforms), GROUND.puddle),
   );
   water.receiveShadow = true;
   parent.add(water);
@@ -128,6 +151,51 @@ function buildPond({ parent, lawnY, painted, season }: Site): void {
     painted.quad(identity, at(t0, KERB.width, KERB.height), at(t1, KERB.width, KERB.height), at(t1, KERB.width, -0.02), at(t0, KERB.width, -0.02), '#9a968c', true);
     painted.quad(identity, at(t0, 0, -0.02), at(t1, 0, -0.02), at(t1, 0, KERB.height), at(t0, 0, KERB.height), '#8a867c', true);
   }
+  return frozen ? null : uniforms;
+}
+
+/**
+ * Open water's surface as a normal worked out in the shader, no map: three trains of small waves running with the
+ * wind (taller in a gust), and in the rain a ring spreading from where each drop fell (a drop a cell of 0.7 m, each at
+ * its own moment). Only the normal moves; the reflection does the rest.
+ */
+function rippledWater(material: THREE.MeshStandardMaterial, uniforms: PondUniforms): THREE.MeshStandardMaterial {
+  return patchShader(material, 'pondRipples', (shader) => {
+    shader.uniforms.pondTime = uniforms.time;
+    shader.uniforms.pondWind = uniforms.wind;
+    shader.uniforms.pondRain = uniforms.rain;
+    shader.vertexShader = 'varying vec3 vPondWorld;\n' + afterChunk(shader.vertexShader, 'project_vertex', 'vPondWorld = (modelMatrix * vec4(transformed, 1.0)).xyz;');
+    shader.fragmentShader =
+      /* glsl */ `
+      varying vec3 vPondWorld;
+      uniform float pondTime;
+      uniform float pondWind;
+      uniform float pondRain;
+      float pondHash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+      float pondHeight(vec2 p) {
+        float a = 0.004 + 0.012 * pondWind;
+        float h = a * sin(dot(p, vec2(1.7, 0.6)) * 3.1 - pondTime * 1.9)
+          + a * 0.7 * sin(dot(p, vec2(-0.8, 1.3)) * 4.3 - pondTime * 2.4)
+          + a * 0.4 * sin(dot(p, vec2(0.3, -1.9)) * 7.9 - pondTime * 3.3);
+        if (pondRain > 0.02) {
+          vec2 cell = floor(p / 0.7);
+          vec2 drop = (cell + vec2(pondHash(cell), pondHash(cell + 7.1))) * 0.7;
+          float age = fract(pondTime * 0.8 + pondHash(cell + 3.3));
+          float d = length(p - drop);
+          float ring = sin((d - age * 0.35) * 55.0) * exp(-abs(d - age * 0.35) * 30.0) * (1.0 - age);
+          h += 0.004 * pondRain * ring;
+        }
+        return h;
+      }
+      ` + afterChunk(shader.fragmentShader, 'normal_fragment_maps', /* glsl */ `
+      {
+        float pondE = 0.02;
+        float h0 = pondHeight(vPondWorld.xz);
+        vec3 pondN = normalize(vec3(-(pondHeight(vPondWorld.xz + vec2(pondE, 0.0)) - h0) / pondE, 1.0, -(pondHeight(vPondWorld.xz + vec2(0.0, pondE)) - h0) / pondE));
+        normal = normalize((viewMatrix * vec4(pondN, 0.0)).xyz);
+      }
+      `);
+  });
 }
 
 /** The fountain in the pond's middle: basin, column, bowl, and the plume of spray, returned for its sway. */

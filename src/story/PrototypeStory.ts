@@ -14,7 +14,7 @@ interface StoryDeps {
   /** The collection: whether the player has started one, and where the found cart goes (the parcel in the hall). */
   collection: { readonly games: readonly Game[]; owns(id: string): boolean; add(game: Game): void };
   /** The day's journal: each clue as a line. */
-  journal?: { note(kind: string, text: string): void };
+  journal?: { note(kind: string, text: string, options?: { weight?: 'headline' | 'line' | 'note' }): void };
 }
 
 /** The paper's small ads (`Classifieds`): the trail puts Hana's landlady's ad in, and hears when the player goes round. */
@@ -28,6 +28,10 @@ interface StoryFile {
   title: string;
   clues: string[];
   next?: string;
+  /** How many clues the trail has in all (the journal draws the trail as dots, one a clue). */
+  total: number;
+  /** The trail is over: the panel folds it to a line. */
+  done?: boolean;
 }
 
 interface Saved {
@@ -75,7 +79,7 @@ export class PrototypeStory {
     if (this.state.stage === 'arcade') this.advertise();
     return ads.onVisit((ad) => {
       if (ad.id !== LANDLADY_AD.id || this.state.stage !== 'arcade') return;
-      this.reach('trader', `Hana’s landlady kept a letter for her: the collector swapped the grey cart to ${KEEPER.name}`);
+      this.reach('trader', `Hana’s landlady: the collector swapped the grey cart to ${KEEPER.name}`);
     });
   }
 
@@ -115,7 +119,7 @@ export class PrototypeStory {
         this.reach('arcade', 'The arcade’s attendant left a note about HAB');
         return LINES.arcadeNote;
       case 'arcade':
-        this.reach('trader', 'The collector left his card: he swapped the grey cart');
+        this.reach('trader', 'The collector’s card: he swapped the grey cart');
         return LINES.traderCard;
       case 'trader':
         this.give(`posted by ${KEEPER.name}`);
@@ -168,8 +172,8 @@ export class PrototypeStory {
   demoFinished(): void {
     if (rank(this.state.stage) >= rank('ended')) return;
     this.reach('ended', 'MOONPOST ran to its end on the TV');
-    this.notices?.read({ title: 'A letter, folded in the box', text: LINES.letter, look: 'letter' });
-    this.notices?.reward({ title: 'The lost prototype: delivered', detail: 'MOONPOST ran on your TV, thirty-odd years late. It stays on your shelves: the only one there is.', big: true });
+    this.notices?.read({ title: 'A letter, folded in the box', text: LINES.letter, look: 'letter', from: LINES.letterFrom, date: LINES.letterDate });
+    this.notices?.reward({ title: 'The lost prototype: delivered', detail: 'MOONPOST ran on your TV, thirty-odd years late. It stays on your shelves.', big: true });
   }
 
   /** The journal's page: the clues found and the next lead; null before the trail starts. */
@@ -178,7 +182,7 @@ export class PrototypeStory {
     if (stage === 'waiting') return null;
     const clues = ORDER.slice(1, rank(stage) + 1).map((s) => CLUE_NOTES[s as Exclude<StoryStage, 'waiting'>]);
     const next = NEXT_LEADS[stage];
-    return { title: 'The MOONPOST file', clues, ...(next ? { next } : {}) };
+    return { title: 'The MOONPOST file', clues, total: ORDER.length - 1, ...(next ? { next } : {}), ...(stage === 'ended' ? { done: true } : {}) };
   }
 
   // --- moving on ---------------------------------------------------------------------------------
@@ -188,14 +192,14 @@ export class PrototypeStory {
     const day = this.deps.today.gameDay;
     if (!this.deps.collection.owns(PROTOTYPE_ID)) this.deps.collection.add(prototypeGame(day, where));
     this.reach('found', `${KEEPER.name} handed over the grey cart: MOONPOST v0.9`);
-    this.notices?.reward({ title: 'Found: the lost prototype', detail: 'MOONPOST v0.9, the only cart there is. It waits in your parcel in the hall: unpack it and put it in the NES.', big: true });
+    this.notices?.reward({ title: 'Found: the lost prototype', detail: 'MOONPOST v0.9, the only cart there is. In the parcel in the hall: put it in the NES.', big: true });
   }
 
   private reach(stage: StoryStage, journalLine: string): void {
     if (rank(stage) <= rank(this.state.stage)) return;
     this.state = { stage, since: this.deps.today.gameDay };
     this.store.save(this.state);
-    this.deps.journal?.note('story', journalLine);
+    this.deps.journal?.note('story', journalLine, { weight: 'headline' });
     if (stage === 'arcade') this.advertise();
     if (stage !== 'found' && stage !== 'ended') this.notices?.react('A new lead: in the journal, the MOONPOST file');
     for (const cb of [...this.listeners]) cb();

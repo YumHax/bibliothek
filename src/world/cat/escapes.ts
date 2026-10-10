@@ -15,6 +15,7 @@ import type { Cat } from './Cat';
 import type { OutingEnd, OutingWorld } from './CatOuting';
 import { CAT_OUTING as plan, type HideSpot } from './catOutingPlan';
 import { random } from '@/random';
+import { actionKeyLabel } from '@/ui/keys';
 
 /** Something the cat may bring back in its mouth from an outing (a read card). */
 interface CatFind {
@@ -143,7 +144,7 @@ class CatEscapes extends Prop implements Updatable {
     const { cat, notices } = this.options;
     const name = cat.settings.name;
     this.untip?.();
-    this.untip = notices?.tip(`${name} slipped out onto the landing! Listen for the miaows down the stairwell, and press C to call.`, { id: 'catOut', head: `Where is ${name}?`, until: () => !cat.out?.isOut }) ?? null;
+    this.untip = notices?.tip(`${name} is out on the landing: follow the miaows, [${actionKeyLabel('callCat')}] calls.`, { id: 'catOut', head: `Where is ${name}?`, until: () => !cat.out?.isOut }) ?? null;
   }
 
   /** Mrs Dubois up the stairs with the cat. */

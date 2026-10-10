@@ -34,7 +34,12 @@ export class OpenHouse {
   /** The stops at the display cases, made fresh for each wave (the cases may have changed). */
   private caseStops: { stop: Stop; title: string; look: THREE.Vector3 }[] = [];
 
-  constructor(private readonly deps: GatheringDeps, private readonly day: number) {
+  /** What each guest drops in the jar: more the fuller the shelves (`entryEvery`, `entryMax`). */
+  private readonly entry: number;
+
+  constructor(private readonly deps: GatheringDeps, private readonly day: number, collectionSize = 0) {
+    const { entry, entryEvery, entryMax, minGames } = this.rules;
+    this.entry = Math.min(entryMax, entry + Math.floor(Math.max(0, collectionSize - minGames) / entryEvery));
     const { host } = deps;
     const house = this;
     this.party = new Party(host, {
@@ -90,7 +95,7 @@ export class OpenHouse {
   /** Just inside the door: their coins in the jar. */
   private pay(m: PartyMember): string {
     const { host } = this.deps;
-    const { entry } = this.rules;
+    const { entry } = this;
     host.options.purse?.earnCoins(entry);
     host.coinsFrom(m.plan, entry);
     this.guests += 1;
@@ -151,7 +156,7 @@ export class OpenHouse {
     }
     book.heldHouse({ day: this.day, guests: this.guests, coins: this.coins, best: showpiece?.()?.title ?? null, quotes: [...this.quotes] }, this.day);
     standing?.record('openHouse');
-    host.options.journal?.note('visit', `Open house: ${this.guests} visitors, ${formatCoins(this.coins)} in the jar`);
-    host.options.notices?.reward({ title: 'Open house', detail: `${formatCount(this.guests, 'visitor')} came up the stairs. The paper will have it tomorrow.`, coins: this.coins });
+    host.options.journal?.note('visit', `Open house: ${this.guests} up the stairs, ${formatCoins(this.coins)}`, { weight: 'headline' });
+    host.options.notices?.reward({ title: 'Open house', detail: `${formatCount(this.guests, 'visitor')} came up the stairs.`, coins: this.coins });
   }
 }

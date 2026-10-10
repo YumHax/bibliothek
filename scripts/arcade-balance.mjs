@@ -52,7 +52,7 @@ await build({
   outfile: out,
   logLevel: 'error',
 });
-const { ARCADE_GAMES, pointsPerTicket, COIN_BACK, rivalTable, HoopSim, AlleySim, PinballSim, REPLAY_STEP, THREE } = await import(pathToFileURL(out).href);
+const { ARCADE_GAMES, pointsPerTicket, TICKET_FLOOR, rivalTable, HoopSim, AlleySim, PinballSim, REPLAY_STEP, THREE } = await import(pathToFileURL(out).href);
 /** The machines' own fixed step (`world/arcade/replay/Replay`): the live play and this script step alike. */
 const STEP = REPLAY_STEP;
 fs.rmSync(out, { force: true });
@@ -342,9 +342,9 @@ const machines = [
   { id: 'pinball', play: (name) => pinballPlay(name), runs: Math.max(10, Math.round(RUNS / 3)) },
 ].filter((m) => !ONLY || ONLY.includes(m.id));
 
-/** Average tickets a play pays at `rate`, the coin back counted (a score under the coin pays the coin). */
-const paidAt = (scores, rate) => scores.reduce((s, x) => s + Math.max(COIN_BACK, Math.floor(x / rate)), 0) / scores.length;
-/** The rate (points per ticket) at which these plays net `NET` tickets a minute, the coin back counted. */
+/** Average tickets a play pays at `rate`, the floor counted (a score under `TICKET_FLOOR` pays it). */
+const paidAt = (scores, rate) => scores.reduce((s, x) => s + Math.max(TICKET_FLOOR, Math.floor(x / rate)), 0) / scores.length;
+/** The rate (points per ticket) at which these plays net `NET` tickets a minute, the floor counted. */
 function rateFor(s) {
   const want = (NET * (s.seconds + OVERHEAD)) / 60 + 10;
   let lo = 0.01;
@@ -367,13 +367,13 @@ for (const machine of machines) {
     const scores = plays.map((x) => x.score).sort((a, b) => a - b);
     const seconds = plays.reduce((s, x) => s + x.seconds, 0) / runs;
     const avg = scores.reduce((s, x) => s + x, 0) / runs;
-    const under = scores.filter((x) => Math.floor(x / rate) < COIN_BACK).length / runs;
+    const under = scores.filter((x) => Math.floor(x / rate) < TICKET_FLOOR).length / runs;
     stats[name] = { avg, seconds, scores, tickets: paidAt(scores, rate), under, median: scores[runs >> 1], p90: scores[Math.floor(runs * 0.9)] };
   }
   const o = stats.ordinary;
   const cell = (s) => {
     const tickets = Math.round(s.tickets);
-    return `${Math.round(s.avg)} pts ${s.seconds.toFixed(0)}s ${tickets}t ${Math.round(((s.tickets - 10) / (s.seconds + OVERHEAD)) * 60)}/min ${Math.round(s.under * 100)}%<coin`;
+    return `${Math.round(s.avg)} pts ${s.seconds.toFixed(0)}s ${tickets}t ${Math.round(((s.tickets - 10) / (s.seconds + OVERHEAD)) * 60)}/min ${Math.round(s.under * 100)}%<floor`;
   };
   rows.push({
     machine: machine.id,
@@ -387,6 +387,6 @@ for (const machine of machines) {
     'ord. med / ord. p90 / good med / good p90': `${o.median} / ${o.p90} / ${stats.good.median} / ${stats.good.p90}`,
   });
 }
-console.log(`Average per play: points, seconds, tickets at today's rate (the coin back counted), net tickets a minute (the coin paid, ${OVERHEAD} s between plays), plays whose score paid under the coin. ${RUNS} plays a profile; 'rate for net' nets ${NET} a minute for the ordinary player.`);
+console.log(`Average per play: points, seconds, tickets at today's rate (the floor counted), net tickets a minute (the coin paid, ${OVERHEAD} s between plays), plays whose score paid under the floor. ${RUNS} plays a profile; 'rate for net' nets ${NET} a minute for the ordinary player.`);
 console.table(rows);
 process.exit(0);

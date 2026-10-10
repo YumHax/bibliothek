@@ -1,8 +1,30 @@
-import { CROUCH_MODES, FOV_RANGE, SENSITIVITY_RANGE, SPRINT_MODES, UI_SCALES, type CrouchMode, type SettingsStore, type SprintMode, type UiScale, type VolumeChannel } from '@/settings';
+import {
+  BRIGHTNESS_RANGE,
+  CROUCH_MODES,
+  FOV_RANGE,
+  FRAME_CAPS,
+  MOTION_MODES,
+  READING_PACES,
+  RENDER_SCALES,
+  SENSITIVITY_RANGE,
+  SPRINT_MODES,
+  TEXT_SIZES,
+  UI_SCALES,
+  type CrouchMode,
+  type FrameCap,
+  type MotionMode,
+  type ReadingPace,
+  type RenderScale,
+  type SettingsStore,
+  type SprintMode,
+  type TextSize,
+  type VolumeChannel,
+} from '@/settings';
 import { playVolumeSample } from './sampleSound';
 import type { ConfirmOptions, SettingsTab } from '../Overlay';
 import { action, choice, group, slider, toggle, type Field } from './fields';
 import { KeyBindingsForm } from './KeyBindingsForm';
+import { downloadSave } from './SaveFileSettings';
 import { actionKeyLabel, onKeyLabelsChange } from '../keys';
 import { setControlModes } from '../controls';
 
@@ -20,7 +42,11 @@ const VOLUMES: Array<{ channel: VolumeChannel; label: string }> = [
   { channel: 'ui', label: 'Menu sounds' },
 ];
 
-const SCALE_LABELS: Record<UiScale, string> = { small: 'Small', normal: 'Normal', large: 'Large' };
+const SCALE_LABELS: Record<TextSize, string> = { small: 'Small', normal: 'Normal', large: 'Large', larger: 'Larger', largest: 'Largest' };
+const PACE_LABELS: Record<ReadingPace, string> = { normal: 'Normal', longer: 'Longer', longest: 'Much longer' };
+const MOTION_LABELS: Record<MotionMode, string> = { system: 'Like the system', reduce: 'On', full: 'Off' };
+const RESOLUTION_LABELS: Record<RenderScale, string> = { auto: 'Automatic', full: 'Full', threeQuarters: '75%', half: 'Half' };
+const FRAME_CAP_LABELS: Record<FrameCap, string> = { auto: 'Automatic', fps30: '30 a second', fps60: '60 a second', off: 'No limit' };
 /** Named after the keys as bound and printed now (`actionKeyLabel`): "Hold Shift", or whatever took its place. */
 const sprintLabels = (): Record<SprintMode, string> => ({ doubleTap: `Double-tap ${actionKeyLabel('forward')}`, hold: `Hold ${actionKeyLabel('crouch')}` });
 /** The Walking section's note: where the crouch goes while the crouch key sprints, and the controller's buttons. */
@@ -53,19 +79,34 @@ export function addGameSettings(host: SettingsHost, store: SettingsStore, option
     'display',
     'View',
     group(
-      bind(slider('Field of view', { ...FOV_RANGE, step: 1, format: fovText, onInput: (fov) => store.update({ fov }) }), (s) => s.fov),
+      bind(slider('Field of view', { ...FOV_RANGE, step: 1, format: fovText, wideOutput: true, onInput: (fov) => store.update({ fov }) }), (s) => s.fov),
       bind(toggle('Crosshair', (crosshair) => store.update({ crosshair })), (s) => s.crosshair),
       bind(toggle('Name what I look at', (hoverLabel) => store.update({ hoverLabel })), (s) => s.hoverLabel),
+      // Full screen also keeps Esc for the game (`settings/fullscreen`): a press puts down a card, holding it leaves full screen.
+      bind(toggle('Full screen', (fullscreen) => store.update({ fullscreen })), (s) => s.fullscreen),
     ),
   );
   host.addSetting(
     'display',
     'Interface',
     group(
-      bind(choice('Text size', UI_SCALES.map((id) => ({ id, label: SCALE_LABELS[id] })), (uiScale) => store.update({ uiScale })), (s) => s.uiScale),
+      bind(choice('Text size', TEXT_SIZES.map((id) => ({ id, label: SCALE_LABELS[id] })), (uiScale) => store.update({ uiScale })), (s) => s.uiScale),
       bind(choice('Speech and subtitles', UI_SCALES.map((id) => ({ id, label: SCALE_LABELS[id] })), (speechSize) => store.update({ speechSize })), (s) => s.speechSize),
-      bind(toggle('Reduce motion', (reduceMotion) => store.update({ reduceMotion })), (s) => s.reduceMotion),
+      bind(choice('Text stays on screen', READING_PACES.map((id) => ({ id, label: PACE_LABELS[id] })), (readingPace) => store.update({ readingPace })), (s) => s.readingPace),
+      bind(toggle('Plain lettering', (plainLettering) => store.update({ plainLettering })), (s) => s.plainLettering),
+      bind(choice('Reduce motion', MOTION_MODES.map((id) => ({ id, label: MOTION_LABELS[id] })), (reduceMotion) => store.update({ reduceMotion })), (s) => s.reduceMotion),
     ),
+    'Plain lettering writes the handwritten notes and the speech in the plain face. Reduce motion “Like the system” follows your computer’s own setting.',
+  );
+  host.addSetting(
+    'display',
+    'Picture',
+    group(
+      bind(slider('Brightness', { ...BRIGHTNESS_RANGE, step: 0.05, format: percent, onInput: (brightness) => store.update({ brightness }) }), (s) => s.brightness),
+      bind(choice('Resolution', RENDER_SCALES.map((id) => ({ id, label: RESOLUTION_LABELS[id] })), (renderScale) => store.update({ renderScale })), (s) => s.renderScale),
+      bind(choice('Frame rate', FRAME_CAPS.map((id) => ({ id, label: FRAME_CAP_LABELS[id] })), (frameCap) => store.update({ frameCap })), (s) => s.frameCap),
+    ),
+    'Automatic resolution lowers the picture’s sharpness only while your computer struggles. A lower frame rate keeps a laptop cooler.',
   );
 
   host.addSetting(
@@ -127,6 +168,7 @@ export function addGameSettings(host: SettingsHost, store: SettingsStore, option
             yes: 'Erase everything',
             danger: true,
             onYes: options.onEraseProgress,
+            also: { label: 'Download a copy first', run: () => downloadSave(options.version) },
           }),
         true,
       ),

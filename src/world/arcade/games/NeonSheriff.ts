@@ -2,6 +2,13 @@ import { clamp } from '@/math/scalar';
 import { type ArcadeControls, NO_CONTROLS, SCREEN_H, SCREEN_W, drawText } from './ArcadeGame';
 import { BaseGame, PLAY_TOP } from './BaseGame';
 import { random } from '@/random';
+import { Sprite } from './sprite';
+import { arcadeHint } from '../arcadeHint';
+
+/* The heads popping up (hat or bonnet, face, bandana or collar; the body is the coat's rectangle under it) and the gun sight's ring. */
+const BANDIT = new Sprite([['........xxxxxxxx........', '.......xxxxxxxxxx.......', '.......xxxxxxxxxx.......', '.......xxxxxxxxxx.......', '.......bbbbbbbbbb.......', '.......bbbbbbbbbb.......', '.......xxxxxxxxxx.......', 'xxxxxxxxxxxxxxxxxxxxxxxx', 'xxxxxxxxxxxxxxxxxxxxxxxx', '.xxxxxxxxxxxxxxxxxxxxxx.', '......ssssssssssss......', '......sseesssseess......', '......sseesssseess......', '......ssssssssssss......', '......ssssssssssss......', '......rrrrrrrrrrrr......', '......rrrrrrrrrrrr......', '......rrrrrrrrrrrr......', '.......rrrrrrrrrr.......', '........rrrrrrrr........']]);
+const TOWNSFOLK = new Sprite([['......xxxxxxxxxxxx......', '....xxxxxxxxxxxxxxxx....', '...xxxxxxxxxxxxxxxxxx...', '...xx.ssssssssssss.xx...', '...xx.ssssssssssss.xx...', '......sseesssseess......', '......ssssssssssss......', '......ssssssssssss......', '......sssslllllsss......', '......ssssssssssss......', '.......ssssssssss.......', '........ssssssss........', '.......cccccccccc.......', '......cccccccccccc......', '......cccccccccccc......']]);
+const SIGHT = new Sprite([['.....xxxxx.....', '...xx.....xx...', '..x.........x..', '.x...........x.', '.x...........x.', 'x.............x', 'x.............x', 'x.............x', 'x.............x', 'x.............x', '.x...........x.', '.x...........x.', '..x.........x..', '...xx.....xx...', '.....xxxxx.....']]);
 
 const ROUND_SECONDS = 15;
 const MAGAZINE = 6;
@@ -55,7 +62,9 @@ interface Target {
 export class NeonSheriff extends BaseGame {
   readonly id = 'sheriff';
   readonly title = 'NEON SHERIFF';
-  readonly hint = 'Look to aim · click or Space to shoot · look down off the saloon to reload';
+  get hint(): string {
+    return arcadeHint('Look to aim · click or {fire} to shoot · look down off the saloon to reload');
+  }
   readonly summary = '15 SEC · SHOOT THE BANDITS · SPARE THE TOWN';
   readonly gun = true;
 
@@ -176,19 +185,16 @@ export class NeonSheriff extends BaseGame {
     // The crosshair where the gun points.
     if (this.aim) {
       const { x, y } = this.aim;
-      ctx.strokeStyle = this.muzzle > 0 ? '#ffffff' : '#7ee787';
-      ctx.lineWidth = 1.5;
-      ctx.beginPath();
-      ctx.arc(x, y, 7, 0, Math.PI * 2);
-      ctx.moveTo(x - 11, y);
-      ctx.lineTo(x - 3, y);
-      ctx.moveTo(x + 3, y);
-      ctx.lineTo(x + 11, y);
-      ctx.moveTo(x, y - 11);
-      ctx.lineTo(x, y - 3);
-      ctx.moveTo(x, y + 3);
-      ctx.lineTo(x, y + 11);
-      ctx.stroke();
+      const ink = this.muzzle > 0 ? '#ffffff' : '#7ee787';
+      // On whole pixels: a ring and four ticks, no antialiased stroke to blur under the glass's nearest filter.
+      SIGHT.drawCentred(ctx, x, y, { x: ink });
+      const px = Math.round(x);
+      const py = Math.round(y);
+      ctx.fillStyle = ink;
+      ctx.fillRect(px - 11, py, 4, 1);
+      ctx.fillRect(px + 8, py, 4, 1);
+      ctx.fillRect(px, py - 11, 1, 4);
+      ctx.fillRect(px, py + 8, 1, 4);
     }
   }
 
@@ -254,15 +260,18 @@ export class NeonSheriff extends BaseGame {
         return;
       case 'badge':
         this.fx.pop('STAR!', s.x, s.y - 20, '#ffd23a', 9);
+        this.fx.burst(s.x, s.y, '#ffd23a', 14, 90, 2);
         this.addTime(BADGE_SECONDS, s.x, s.y);
         return;
       case 'bottle':
         this.addScore(POINTS.bottle, s.x, s.y - 14, '#9ad6ff');
+        this.fx.burst(s.x, s.y, '#39ff9e', 18, 110, 2);
         return;
       default: {
         this.bumpCombo(1.6);
         // A bandit dropped before reaching for his gun pays extra.
         const early = t.age < t.life * 0.4;
+        this.fx.burst(s.x, s.y - 4, t.kind === 'quick' ? '#ff8a3a' : '#e8303a', 12, 80, 2);
         this.addScore(POINTS[t.kind] + (early ? 20 : 0), s.x, s.y - 14);
         if (early) this.fx.pop('QUICK DRAW', s.x, s.y - 28, '#ffe066', 7);
         this.bandits += 1;
@@ -300,14 +309,9 @@ export class NeonSheriff extends BaseGame {
       case 'bandit':
       case 'quick': {
         const color = t.kind === 'quick' ? '#ff8a3a' : '#e8303a';
-        ctx.fillStyle = '#1a1010';
-        ctx.fillRect(cx - 12, top - 2, 24, 4); // hat brim
-        ctx.fillRect(cx - 7, top - 9, 14, 8);
-        ctx.fillStyle = '#d8a878';
-        ctx.fillRect(cx - 6, top + 2, 12, 10);
         ctx.fillStyle = color;
-        ctx.fillRect(cx - 6, top + 7, 12, 5); // bandana
-        ctx.fillRect(cx - 10, top + 12, 20, h);
+        ctx.fillRect(Math.round(cx) - 10, Math.round(top) + 12, 20, Math.ceil(h));
+        BANDIT.draw(ctx, cx - 12, top - 9, { x: '#1a1010', b: '#5a3a20', s: '#d8a878', e: '#1a1010', r: color });
         // Drawing: the gun comes up as his time runs out.
         const drawn = t.age / t.life;
         if (t.down === 0 && drawn > 0.55) {
@@ -317,12 +321,9 @@ export class NeonSheriff extends BaseGame {
         break;
       }
       case 'townsfolk':
-        ctx.fillStyle = '#f2e6c8';
-        ctx.fillRect(cx - 9, top - 4, 18, 5); // bonnet
-        ctx.fillStyle = '#d8a878';
-        ctx.fillRect(cx - 6, top + 1, 12, 10);
         ctx.fillStyle = '#63b3ff';
-        ctx.fillRect(cx - 10, top + 11, 20, h);
+        ctx.fillRect(Math.round(cx) - 10, Math.round(top) + 11, 20, Math.ceil(h));
+        TOWNSFOLK.draw(ctx, cx - 12, top - 4, { x: '#f2e6c8', s: '#d8a878', e: '#1a1010', l: '#b0605a', c: '#f2e6c8' });
         break;
       case 'bottle':
         ctx.fillStyle = '#39ff9e';

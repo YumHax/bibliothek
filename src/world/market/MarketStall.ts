@@ -6,6 +6,7 @@ import { Crate } from '../props/Crate';
 import { paint, timber } from '../materials/palette';
 import { QUALITY } from '@/graphics/quality';
 import { lcg } from '@/random';
+import { cartTray, cashTin, pinnedCard, stencilMaterial, tangledPad, thermos } from './stallDressing';
 
 interface MarketStallOptions {
   /** Text on the sign hung from the awning (a platform's name). */
@@ -36,6 +37,9 @@ const CRATE_H = 0.22;
 const CRATE_Z = -DEPTH / 2 + 0.12;
 /** The plane the boxes lean against. */
 const CRATE_FRONT = CRATE_Z + CRATE_DEPTH / 2;
+/** The front face of the cloth's flap (1 cm thick, its centre 12 mm out from the table's edge). */
+const FLAP_T = 0.01;
+const FLAP_FACE = DEPTH / 2 + 0.012 + FLAP_T / 2;
 /** Centre line of the row of boxes lying flat, clear of the leaning row's tags and of the table's front edge. */
 const FLAT_Z = 0.15;
 /** How far a lying box may be turned off square. */
@@ -115,9 +119,33 @@ export class MarketStall extends THREE.Group implements StallLike {
     const flap = boxMesh(w + 0.04, flapH, 0.01, tiled(check, (w + 0.04) / 0.5, flapH / 0.5), { y: TOP_HEIGHT - flapH / 2, z: DEPTH / 2 + 0.012 });
     flap.castShadow = false;
     this.add(clothTop, flap);
-    // Crates at the back the boxes lean against.
+    // Crates at the back the boxes lean against, the platform stencilled on their faces.
+    const stencil = stencilMaterial(options.sign, CARD.color.getHex());
     for (let x = -w / 2 + 0.2; x <= w / 2 - 0.2; x += 0.4) {
-      this.add(boxMesh(0.36, CRATE_H, CRATE_DEPTH, CARD, { x, y: TOP_HEIGHT + 0.01 + CRATE_H / 2, z: CRATE_Z }));
+      const crate = new THREE.Mesh(new THREE.BoxGeometry(0.36, CRATE_H, CRATE_DEPTH), [CARD, CARD, CARD, CARD, stencil, stencil]);
+      crate.position.set(x, TOP_HEIGHT + 0.01 + CRATE_H / 2, CRATE_Z);
+      crate.castShadow = true;
+      crate.receiveShadow = true;
+      this.add(crate);
+    }
+    // On the crates: the cash tin (on the second crate from the right) and a thermos (the second from the left), clear
+    // of the radio's and the telly's spots at the ends.
+    if (random() < 0.7) {
+      const tin = cashTin();
+      tin.position.set(Math.min(0.2, w / 2 - 0.3), TOP_HEIGHT + 0.01 + CRATE_H, CRATE_Z);
+      tin.rotation.y = (random() - 0.5) * 0.5;
+      this.add(tin);
+    }
+    if (random() < 0.5) {
+      const flask = thermos();
+      flask.position.set(Math.max(-0.15, -w / 2 + 0.3), TOP_HEIGHT + 0.01 + CRATE_H, CRATE_Z - 0.02);
+      this.add(flask);
+    }
+    // A hand-lettered card pinned to the cloth's front.
+    if (random() < 0.6) {
+      const card = pinnedCard(random);
+      card.position.set((random() - 0.5) * (w - 0.5), TOP_HEIGHT - 0.13, FLAP_FACE);
+      this.add(card);
     }
 
     if (options.clutter !== false) {
@@ -130,6 +158,18 @@ export class MarketStall extends THREE.Group implements StallLike {
       crate.position.set(w / 4, 0, -0.02);
       crate.rotation.y = (random() - 0.5) * 0.4;
       this.add(boxes, crate);
+      // A tray of loose carts on the crate, a pad and its tangled lead on the ground by the box.
+      if (random() < 0.6) {
+        const tray = cartTray(random);
+        tray.position.set(0, 0.26, 0);
+        crate.add(tray);
+      }
+      if (random() < 0.5) {
+        const pad = tangledPad(random);
+        pad.position.set(-w / 4 + 0.32, 0, 0.12);
+        pad.rotation.y = random() * Math.PI * 2;
+        this.add(pad);
+      }
     }
 
     const painted = paintSign(options.sign, options.accent ?? clothColor.getHex());

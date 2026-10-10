@@ -152,6 +152,23 @@ export class Weather {
     this.state.snowCover = target.snow > 0 ? 1 : 0;
   }
 
+  /**
+   * Shows `kind` settled at once (a memory's snow, `memories/pastLight`) and returns what puts today's weather back
+   * exactly as it was. Meant while the clock is held (a film is a panel): the spell does not move on meanwhile.
+   */
+  hold(kind: WeatherKind): () => void {
+    const saved = { ...this.state };
+    const { pinned, steadyWind, spellFog } = this;
+    this.pin(kind);
+    this.settle();
+    return () => {
+      Object.assign(this.state, saved);
+      this.pinned = pinned;
+      this.steadyWind = steadyWind;
+      this.spellFog = spellFog;
+    };
+  }
+
   /** Moves the weather on by `hours` game hours; `clockHours` is the time of day (for the dawn mist). */
   advance(hours: number, clockHours = 12): void {
     if (hours <= 0) return;

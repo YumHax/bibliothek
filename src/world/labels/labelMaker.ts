@@ -36,7 +36,7 @@ export function labelMaker(options: LabelMakerOptions): LabelMakerLike<LabelSpot
   upgrades.subscribe(() => {
     if (owned || !upgrades.has('labelMaker')) return;
     owned = true;
-    notices.tip(`The label maker: aim at a shelf’s front edge and press ${actionKeyLabel('labelShelf')} to print a label for it (again on a label: peel it off).`, { id: 'label-maker' });
+    notices.tip(`Label maker: aim at a shelf’s front edge, [${actionKeyLabel('labelShelf')}] prints a label.`, { id: 'label-maker' });
   });
   return {
     get owned() {

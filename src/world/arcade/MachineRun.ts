@@ -76,6 +76,8 @@ export class MachineRun {
   /** Fire was up at some point on the end card (a finger still on Space from the play does not replay). */
   private fireReleased = false;
   private bonusLines: readonly ArcadeBonus[] = [];
+  /** What the Session settled the score's tickets at (the floor folded in), once it has; until then the score's own. */
+  private settledTickets: number | null = null;
   private bonusTicked = 0;
   /** The best to beat when the play started, and whether the live score has passed it (the sting plays once). */
   private startBest = 0;
@@ -129,9 +131,14 @@ export class MachineRun {
     return countUpEase(Math.min(1, this.clock / COUNT_UP_SECONDS));
   }
 
+  /** The tickets the end card counts for the score: what the Session settled (never under the floor of a paid play), else the score's own. */
+  get scoreTickets(): number {
+    return this.settledTickets ?? this.tickets(this.result.score);
+  }
+
   /** The tickets the end card shows so far. */
   get shownTickets(): number {
-    return Math.floor(this.tickets(this.result.score) * this.countUp);
+    return Math.floor(this.scoreTickets * this.countUp);
   }
 
   /** The play's bonuses (challenge, medal, streak...), counted up on the end card after the score's tickets. */
@@ -176,9 +183,10 @@ export class MachineRun {
     if (!paused) this.keys.latch();
   }
 
-  /** What the play earned besides its score, shown on the end card and fed out on the strip. */
-  showBonus(bonuses: readonly ArcadeBonus[]): void {
+  /** What the play earned besides its score, and what the score itself counts for, shown on the end card and fed out on the strip. */
+  showBonus(bonuses: readonly ArcadeBonus[], counted?: number): void {
     this.bonusLines = bonuses.filter((b) => b.tickets > 0);
+    this.settledTickets = counted ?? null;
   }
 
   tickets(score: number): number {
@@ -207,6 +215,7 @@ export class MachineRun {
     this.counted = 0;
     this.held = false;
     this.bonusLines = [];
+    this.settledTickets = null;
     this.startBest = scores?.bestOf(game.id) ?? 0;
     this.bestBeaten = false;
     // The click or Space that started it must not count as a fire press.
@@ -227,6 +236,7 @@ export class MachineRun {
     this.who = null;
     this.held = false;
     this.bonusLines = [];
+    this.settledTickets = null;
     this.options.strip?.tear();
     this.options.stationEvents.onPlayerLeave?.();
   }
@@ -273,6 +283,7 @@ export class MachineRun {
     this.rank = null;
     this.counted = 0;
     this.bonusLines = [];
+    this.settledTickets = null;
     this.bonusTicked = 0;
     this.fireReleased = false;
     if (scores?.qualifies(game.id, score)) {
@@ -382,7 +393,7 @@ export class MachineRun {
       // Fire let go since the play: a fresh press while the card still counts skips to its end; the next one replays.
       if (!this.options.input.isDown(...ARCADE_KEYS.fire)) this.fireReleased = true;
       else if (this.fireReleased && !this.countDone && this.who === 'player') this.skipCount();
-      const tickets = this.tickets(this.result.score);
+      const tickets = this.scoreTickets;
       const shown = this.shownTickets;
       // One tick per ticket paid out, as many as the ear can take.
       if (shown > this.counted && shown - this.counted >= Math.max(1, tickets / 30)) {

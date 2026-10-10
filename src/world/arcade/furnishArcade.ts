@@ -183,7 +183,7 @@ function placeBoards(zone: Zone, { arcade }: ArcadeBuild, tabled: Titled[], titl
 function placeCounter(zone: Zone, { listener, money: { purse }, arcade, story, social, today }: ArcadeBuild, hall: ArcadeHall, tabled: Titled[], titleOf: (id: string) => string): void {
   const plan = ARCADE_PLAN;
   const { crowd } = plan;
-  const forSale = PRIZES.filter((p) => p.tickets !== null).map((p) => ({ kind: p.kind, color: p.color }));
+  const forSale = PRIZES.filter((p) => p.tickets !== null).map((p) => ({ kind: p.kind, color: p.color, tickets: p.tickets ?? 0 }));
   const counter = zone.placeAt(new PrizeCounter({ ticketsPerCoin: TICKETS_PER_COIN, wallBehind: plan.counter.wallBehind, prizes: forSale }), plan.counter.at);
   const behind = counter.localToWorld(new THREE.Vector3(crowd.attendant.at[0], 0, crowd.attendant.at[1]));
   const hallLines = hall.attendantLines(crowd.attendant.lines, titleOf, tabled);

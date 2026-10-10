@@ -59,6 +59,9 @@ import type { Ad } from '@/classifieds/ads';
 import type { SellerLot } from '@/classifieds/sellerLot';
 import type { HomeConsole, Workshop } from '@/repair/Workshop';
 import type { StoryChannels } from '@/story';
+import type { MemoryProjector } from '@/memories/MemoryFilm';
+import type { GrandmaVisits } from '@/grandma/GrandmaVisits';
+import type { KidPanels } from '@/building/kids/kidDeals';
 
 /*
  * What every zone builder is handed (`BuildContext`) and what it hands back (`ZoneHandle`). Kept
@@ -108,6 +111,8 @@ export interface HomeContext {
   firstDay?: FirstDayLike;
   /** The journal's panel, opened by the notebook on the hall console. */
   journalPanel?: ModalLike;
+  /** Lines in the journal since it was last read (`Journal.unread`): the notebook's caption. */
+  journalUnread?: () => number;
   /** What the kitchen, the bathroom and the bedroom are for (docs/household.md); none: they stay as they were. */
   household?: HouseholdContext;
 }
@@ -212,6 +217,10 @@ export interface WorldPanels {
   toDo?: ToDoNotePanel;
   /** The residents' table at the neighbours' party in the courtyard: they buy games off the player (`building/neighboursParty`). */
   partySale?: ModalLike;
+  /** The film night's pick, opened by the sheet in the courtyard (`building/yardCinema`). */
+  screening?: ModalLike;
+  /** The courtyard's kids: a swap of carts, a go on their handheld, a cart handed over (`courtyard/YardKids`). */
+  kids?: KidPanels;
 }
 
 /** The shared services every zone builder may draw on; `src/bootstrap/world.ts` assembles it once. */
@@ -245,6 +254,10 @@ export interface BuildContext {
   classifieds?: ClassifiedsContext;
   /** The people the player can talk to (docs/social.md): a click on someone opens the conversation through it (`people/socialHook.talkHook`). */
   social?: SocialServices;
+  /** The memories filmed in a zone (Mémé's album, docs/story.md "Mémé"): a reel played as a panel the Session opens. */
+  memories?: MemoryProjector;
+  /** The visits to Mémé's: counted, the Sunday envelope, the memories seen (`src/grandma`). */
+  grandma?: GrandmaVisits;
 }
 
 /** The small ads and the consoles (docs/economy.md "Small ads and the seller's flat", docs/household.md "Repairing a console"). */

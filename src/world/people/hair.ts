@@ -6,6 +6,10 @@ import { headRadius, type FaceShape } from './head';
 import type { HairStyle, PersonLook } from './looks';
 import { cachedTexture } from './textureCache';
 import { lcg } from '@/random';
+import { gaussian } from '@/math/scalar';
+import { QUALITY } from '@/graphics/quality';
+import { afterChunk, patchShader } from '../materials/shaderPatch';
+import { seedOfLook } from './motion/temperament';
 
 /*
  * Hair and beard, in the head's frame. Both are a shell over the skin: the head's own surface
@@ -13,7 +17,11 @@ import { lcg } from '@/random';
  * the hairline feathers into the forehead instead of ending on a hard edge (triangles entirely
  * under the skin are dropped). On top of the shell a style adds what does not hug the skull: long
  * hair falling to the shoulders, a bun, a ponytail. Everything wears one strand texture whose
- * streaks run from the crown down.
+ * streaks run from the crown down (along v), and catches the light along its strands
+ * (`hairMaterial`: two highlights across them, Kajiya-Kay, the second tinted by the hair). A short
+ * cut is the person's own: more or less volume, a parting on one side or none, now and then a quiff.
+ * Long hair's falling sheet is a mesh of its own (`hairCurtain`): its lower rows stay with the
+ * shoulders when the head turns (`HairFollow`), instead of sweeping through them.
  */
 
 /** Where the hair starts, as the elevation (radians) of the hairline by azimuth from the front (0) to the back (pi). */
@@ -82,20 +90,60 @@ export function hairMaterial(look: PersonLook): THREE.MeshStandardMaterial {
   const curly = look.hairStyle === 'curly';
   const map = cachedTexture(`hair|${look.hair}|${curly}`, () => strandTexture(look.hair, curly, look.hair * 7 + 3));
   // Where a shell tapers to the skin (hairline, fringe, beard edge) it lies within a hair of it: the offset keeps it in front instead of z-fighting.
-  return new THREE.MeshStandardMaterial({ map, bumpMap: map, bumpScale: 1.5, roughness: 0.55, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2 }); // convention-ok: a shell over the skin, not a surface layer
+  const material = new THREE.MeshStandardMaterial({ map, bumpMap: map, bumpScale: 1.5, roughness: 0.55, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2 }); // convention-ok: a shell over the skin, not a surface layer
+  return QUALITY.detailedMaterials ? strandSheen(material, curly ? 0.4 : 1) : material;
 }
 
-/** The hair and beard for `look`, added to the head's parts. */
+/**
+ * Light along the strands (Kajiya-Kay): the strand's direction is where the texture's v runs on the
+ * surface (from the screen-space derivatives, no tangents needed), and each direct light adds a
+ * sharp white band across it and a broader one tinted by the hair, shifted either way along the
+ * normal. Curly hair (`strength` lower) only glints. No texture unit.
+ */
+function strandSheen(material: THREE.MeshStandardMaterial, strength: number): THREE.MeshStandardMaterial {
+  return patchShader(material, `strandSheen${strength}`, (shader) => {
+    shader.fragmentShader = afterChunk(
+      afterChunk(
+        shader.fragmentShader,
+        'lights_physical_pars_fragment',
+        /* glsl */ `vec3 hairStrand = vec3(0.0, 1.0, 0.0);
+        void RE_Direct_Hair(const in IncidentLight directLight, const in vec3 geometryPosition, const in vec3 geometryNormal, const in vec3 geometryViewDir, const in vec3 geometryClearcoatNormal, const in PhysicalMaterial material, inout ReflectedLight reflectedLight) {
+          RE_Direct_Physical(directLight, geometryPosition, geometryNormal, geometryViewDir, geometryClearcoatNormal, material, reflectedLight);
+          vec3 h = normalize(directLight.direction + geometryViewDir);
+          float lit = saturate(dot(geometryNormal, directLight.direction) * 0.7 + 0.3);
+          float a = dot(normalize(hairStrand + geometryNormal * 0.12), h);
+          float b = dot(normalize(hairStrand - geometryNormal * 0.1), h);
+          float primary = pow(sqrt(max(0.0, 1.0 - a * a)), 90.0);
+          float secondary = pow(sqrt(max(0.0, 1.0 - b * b)), 22.0);
+          reflectedLight.directSpecular += directLight.color * lit * ${strength.toFixed(2)} * (primary * 0.14 + secondary * 0.5 * material.diffuseColor);
+        }
+        #undef RE_Direct
+        #define RE_Direct RE_Direct_Hair`,
+      ),
+      'normal_fragment_maps',
+      /* glsl */ `{
+        vec3 dp1 = dFdx(-vViewPosition);
+        vec3 dp2 = dFdy(-vViewPosition);
+        vec2 duv1 = dFdx(vMapUv);
+        vec2 duv2 = dFdy(vMapUv);
+        vec3 along = cross(dp2, normal) * duv1.y + cross(normal, dp1) * duv2.y;
+        if (dot(along, along) > 1e-12) hairStrand = normalize(along);
+      }`,
+    );
+  });
+}
+
+/** The hair and beard for `look`, added to the head's parts (long hair's falling sheet is `hairCurtain`, a mesh of its own). */
 export function addHair(parts: Parts, look: PersonLook, shape: FaceShape, material: THREE.Material, tail?: Parts): void {
   const style = look.hairStyle;
-  const thickness = (d: THREE.Vector3): number => hairThickness(d, style, !!look.hat);
+  const cut = cutOf(look);
+  const thickness = (d: THREE.Vector3): number => hairThickness(d, style, !!look.hat, cut);
   const shell = shellGeometry(shape, 112, 84, (d) => hairCover(d, look), thickness);
   if (shell) parts.add(shell, material);
   if (look.beard === 'full') {
     const beard = shellGeometry(shape, 112, 84, beardCover, (d) => 0.0028 + 0.0035 * ramp(d.y, -0.6, -0.9));
     if (beard) parts.add(beard, material);
   }
-  if (style === 'long') parts.add(curtainGeometry(shape, thickness), material);
   if (style === 'bun' && !look.hat) parts.add(bunGeometry(shape), material);
   if (style === 'ponytail') {
     // On its own parts (a bone of its own, so it can swing) about where it is tied, or with the rest.
@@ -106,6 +154,33 @@ export function addHair(parts: Parts, look: PersonLook, shape: FaceShape, materi
       tail.add(geometry, material);
     } else parts.add(geometry, material);
   }
+}
+
+/**
+ * Long hair's falling sheet (the head's frame), or null for any other style: with a `hairFollow`
+ * attribute, 0 where it leaves the head .. 1 at the ends, how much it stays with the shoulders.
+ */
+export function hairCurtain(look: PersonLook, shape: FaceShape): THREE.BufferGeometry | null {
+  if (look.hairStyle !== 'long') return null;
+  const cut = cutOf(look);
+  return curtainGeometry(shape, (d) => hairThickness(d, 'long', !!look.hat, cut));
+}
+
+/** A short cut's own shape: volume on top, a parting (-1 on the -x side, 1 on +x, 0 none), a quiff (0 none). */
+interface Cut {
+  volume: number;
+  part: number;
+  quiff: number;
+}
+
+/** The cut for `look`, from its own stream (the look's draws stay as they were). */
+function cutOf(look: PersonLook): Cut {
+  const random = lcg(seedOfLook(look) * 7919 + 5);
+  const volume = 0.75 + random() * 0.6;
+  const roll = random();
+  const part = roll < 0.3 ? 0 : roll < 0.65 ? -1 : 1;
+  const quiff = random() < 0.3 ? 0.5 + random() * 0.6 : 0;
+  return { volume, part, quiff };
 }
 
 /** Where a ponytail is tied, in the head's frame: it swings about there. */
@@ -137,7 +212,7 @@ function edge(e: number, line: number): number {
   return ramp(e, line - 0.08, line + 0.08);
 }
 
-function hairThickness(d: THREE.Vector3, style: HairStyle, hat: boolean): number {
+function hairThickness(d: THREE.Vector3, style: HairStyle, hat: boolean, cut: Cut): number {
   const top = Math.max(0, d.y);
   let t: number;
   switch (style) {
@@ -157,12 +232,22 @@ function hairThickness(d: THREE.Vector3, style: HairStyle, hat: boolean): number
     case 'long':
       t = 0.01 + 0.01 * top + 0.0015 * lumps(d, 9);
       break;
-    default:
-      t = 0.008 + 0.012 * top + 0.0015 * lumps(d, 13);
+    default: {
+      t = 0.008 + 0.012 * top * cut.volume + 0.0015 * lumps(d, 11 + 4 * cut.volume);
+      if (cut.part) {
+        // The parting: a groove from the hairline back to the crown, the hair swept up and over from it.
+        const along = ramp(d.z, -0.35, 0.1) * ramp(d.y, 0.25, 0.55);
+        t -= 0.006 * gaussian(d.x - cut.part * 0.3, 0, 0.035) * along;
+        t += 0.004 * ramp(-cut.part * d.x, -0.1, 0.45) * top * along;
+      }
+    }
   }
   // Thin over the forehead, where a fringe lies flat rather than standing off the skin.
   const forehead = ramp(Math.abs(Math.atan2(d.x, d.z)), 1.0, 0.2) * ramp(d.y, 0.7, 0.3);
   t *= 1 - 0.65 * forehead;
+  // A quiff stands up off the front of the crown.
+  if (style === 'short' && cut.quiff) t += cut.quiff * 0.013 * gaussian(d.z, 0.5, 0.22) * ramp(d.y, 0.45, 0.8);
+  t = Math.max(0.002, t);
   return hat ? Math.min(t, 0.007) : t;
 }
 
@@ -216,6 +301,7 @@ function curtainGeometry(shape: FaceShape, thickness: (d: THREE.Vector3) => numb
   const rows = 14;
   const positions: number[] = [];
   const uvs: number[] = [];
+  const follow: number[] = [];
   const d = new THREE.Vector3();
   const start = 0.32;
   for (let j = 0; j <= rows; j++) {
@@ -233,6 +319,7 @@ function curtainGeometry(shape: FaceShape, thickness: (d: THREE.Vector3) => numb
       const length = 0.16 + 0.12 * Math.cos(phi * 0.95) + 0.012 * Math.sin(phi * 9);
       positions.push(d.x * reach, top.y - s * (length + top.y), d.z * reach);
       uvs.push(i / cols, 1 - s);
+      follow.push(ramp(s, 0.2, 0.85));
     }
   }
   const index: number[] = [];
@@ -248,6 +335,7 @@ function curtainGeometry(shape: FaceShape, thickness: (d: THREE.Vector3) => numb
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
   geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+  geometry.setAttribute('hairFollow', new THREE.Float32BufferAttribute(follow, 1));
   geometry.setIndex(index);
   geometry.computeVertexNormals();
   return geometry;

@@ -23,6 +23,13 @@ the manual under the lid's tabs; a jewel case like a book, the disc on its hub, 
 the front. A cartridge too wide to stand in its box lies on its side (`sideways`: Famicom, Super
 Famicom, PAL SNES). Inside: raw grey card, black plastic, the black PS1 tray.
 
+How handled a box looks is painted into its closed atlas (`BoxAtlas.paintWear`): a cardboard box's edges whiten
+and its corners scuff with its state (none sealed, a little complete, more without its manual, most worn), a worn
+one gets a crease or two; a plastic case's sleeve gets a thin light rim (the case's rounded edge). A third of the
+boxes, by the game, have a film of dust on their tops (`dust`, seen on a high shelf). The shelf's atlas keeps the
+front at 512 px; a box in hand asks the art proxy for its front at 1024 (`?size=large`, `server/artCache`, fronts
+only, stored apart) with its back and scans (`BoxDetails.front`).
+
 ## Media (mm)
 
 | Shell | W x H x D | Label (centre x, y; W x H) | Notes |
@@ -43,7 +50,9 @@ the whole face (refused when its proportions are more than 18 % off the shell's)
 
 ## Consoles and putting a game in
 
-Each console in `world/props/consoleStyles` has a `MediaSlot`: the slot's mouth, the way in, how
+Each console in `world/props/consoleStyles` is moulded where the real one is round (the SNES's and the N64's shells,
+`moulded`) and printed where it is lettered (`lettering`: the NES's logo and POWER / RESET, the SNES's and N64's
+logos, alpha-tested prints on `WALL.print`); the NES's top has its ribs. Each has a `MediaSlot`: the slot's mouth, the way in, how
 the media is turned once in, an optional `press` (NES) and `door` (the NES's flap, the PS1's lid),
 `lineUp` when a shelf is too close above, `swallows` for the NES bay. `Console` (a `MediaDeck`):
 
@@ -94,7 +103,10 @@ freely licensed homebrew runs, never a commercial ROM: `HOMEBREW_CARTS` (`emulat
 by "Homebrew" (generated covers, carts like any), their unmodified release ROMs in `public/roms/` with the licence next
 to each (`<file>.LICENSE.txt`: author, release, source, licence). One is on the NES stall some market days
 (`HOMEBREW` in pricing: odds, a flat price; `economy/MarketStock`); `?debug` owns them all. Put in the NES (or played
-on a set without a console) it boots instead of a longplay (`registerHomebrew`, from `bootstrap/session`).
+on a set without a console) it boots instead of a longplay (`registerHomebrew`, from `bootstrap/session`). Putting the
+pad down keeps where the cart was (`NesProgram`'s `resumeAt`, jsnes `toJSON` / `fromJSON`, for the page's life: a whole
+machine state is too big for the save), and picking it up again carries on from there. The pad's controls line names
+the keys next to the buttons ("A [K] jumps", `ProgramPlay`'s `padHint`, rebound keys included).
 
 Credits (each checked against its repository's licence, 2026-10-01):
 - **Thwaite** v0.04, Damian Yerrick: GPL-3.0-or-later (source github.com/pinobatch/thwaite-nes). 1-2 players.

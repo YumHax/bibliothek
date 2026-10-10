@@ -1,6 +1,8 @@
 import type { PersonCard, PersonId } from '../types';
 import { BUILDING_PEOPLE } from './building';
+import { FAMILY_PEOPLE } from './family';
 import { FRIEND_PEOPLE } from './friends';
+import { KID_PEOPLE } from './kids';
 import { MARKET_STALL_PEOPLE } from './market';
 import { ARCADE_PEOPLE, MARKET_PEOPLE, RIVAL_PEOPLE, STREET_PEOPLE } from './town';
 
@@ -9,7 +11,7 @@ import { ARCADE_PEOPLE, MARKET_PEOPLE, RIVAL_PEOPLE, STREET_PEOPLE } from './tow
  * person met only once (a small ad's seller, a stallholder of the day) is added at run time with `addPerson`.
  */
 
-const CAST: readonly PersonCard[] = [...FRIEND_PEOPLE, ...BUILDING_PEOPLE, ...STREET_PEOPLE, ...MARKET_PEOPLE, ...MARKET_STALL_PEOPLE, ...ARCADE_PEOPLE, ...RIVAL_PEOPLE];
+const CAST: readonly PersonCard[] = [...FAMILY_PEOPLE, ...FRIEND_PEOPLE, ...BUILDING_PEOPLE, ...STREET_PEOPLE, ...MARKET_PEOPLE, ...MARKET_STALL_PEOPLE, ...ARCADE_PEOPLE, ...RIVAL_PEOPLE, ...KID_PEOPLE];
 
 const byId = new Map<PersonId, PersonCard>(CAST.map((p) => [p.id, p]));
 const byDoor = new Map<string, PersonId>(CAST.filter((p) => p.door).map((p) => [p.door!, p.id]));

@@ -142,7 +142,7 @@ export class TournamentBoard extends Prop implements Updatable, Interactable {
     }
     if (v.entered) {
       this.options.onClicked?.(session);
-      if (v.next) session.tip(`${ROUND_TITLES[v.next.round]}: play ${game} and beat ${v.next.name}'s ${formatNumber(v.next.score)}.`, { id: 'tournament' });
+      if (v.next) session.tip(`${ROUND_TITLES[v.next.round]}: beat ${v.next.name}'s ${formatNumber(v.next.score)} on ${game}.`, { id: 'tournament' });
       else session.react(v.out ? 'You are out for today. The bracket plays on without you.' : 'You won the tournament. Frame the bracket.');
       return;
     }

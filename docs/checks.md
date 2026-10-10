@@ -138,7 +138,8 @@ Not part of the typecheck: run it after touching `social/socialPlan.ts`, a card'
 real rules: a typical player (a few meetings a day) for 60 game days, a diligent one (everyone daily, gifts, favours)
 for 120. It prints each person's warmth, trust, tier and perks in force, notes when casual play saturates warmth, and
 fails when a perk is out of the diligent player's reach or one day's spam (30 interactions with one stranger) gains
-more than 20 warmth. `--days`, `--seed`.
+more than 20 warmth. `--days`, `--seed`. Each person draws from their own stream (the seed and their id), so a newcomer
+to the cast leaves everyone else's results as they were.
 
 ## Bundle size (`scripts/check-bundle.mjs`)
 
@@ -165,3 +166,22 @@ one zone goes behind that zone's dynamic import; `--list` prints the table.
 `tsconfig.json` has `noImplicitReturns`, `noImplicitOverride` and `noUncheckedIndexedAccess` on besides `strict` and the
 unused checks: an index into an array or a record is `T | undefined` until checked (`?? fallback`, an `if`, or a `!` where
 the index was just produced by the same code, with the reason in a comment), and a method that overrides says `override`.
+
+## Debug mode (`?debug`)
+
+Not a check but the way to reach every feature at once, on a save of its own (`persistence/keys`: every key under
+`bibliothek.debug.`, the player's real save never read or written). It starts with the seed collection and the homebrew
+carts, the editor's add pane, no first day and no opening, and every progression done: `src/cheats/progress/progressions.ts`
+lists them (the furnished flat, the concierge and the cellar key, the attic's code, cabinet and chest, the aerial's
+channels, the treasure hunt, everyone met as a close friend with their number, facts and traits (quietly: no banner or journal line each), the grey cart, Félix's
+notebook, the market's top reputation and best-customer standing at every stall, gold on every arcade machine, every
+prize), each with `on` / `unlock` / `lock`. `bootstrap/services` unlocks whatever does not hold yet at each start-up
+(`debugProgress.unlockDebugProgress`), before the trail reads its cart.
+
+The debug panel (`ui/debug/DebugPanel`, the key left of 1 or F8, `bibliothek.debugPanel()`): *Progress* switches each
+progression (a switch turned off is undone and stays off in the debug save, `KEYS.debugProgress`; "Apply and reload"),
+*Votes* sets the co-owners' decisions outright (`coproState.decideResolution`), *Now* makes things happen (power cut, an
+endless night, the neighbours' party today, the estate sale today, a bulky-waste day in the courtyard, 5000 coins, 500 tickets), *Go to* travels to any
+stop, those only their own door reaches included (`Travel.everyStop`). In the console besides: `bibliothek.coins(n)`,
+`blackout()`, `endlessStairs()`, `party()`, `estateSale()`, `bulkyDay()`, `social.table()` / `social.set(id, warmth, trust)`,
+`zfight()`; typing 5 0 0 0 still gives 5000 coins. A new progression is one entry in `PROGRESSIONS`.

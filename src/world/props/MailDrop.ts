@@ -1,16 +1,41 @@
 import * as THREE from 'three';
 import type { Interactable } from '@/interaction/Interactable';
 import type { SessionActions } from '@/game/SessionActions';
+import type { ReadingNotice } from '@/notices';
 import { invisibleHitbox } from '../meshUtils';
 import { Prop, disposeTree } from './Prop';
 import { Flyer } from './Flyer';
 
-/** One flyer pushed under the door: what it says (read out on click), and its colour. */
+/**
+ * One piece pushed under the door: what it says (read on click), its colour, and the paper it is read as (a printed
+ * `flyer` unless said otherwise: a `letter` with its sender, a `postcard` from a `place`, a `note`).
+ */
 export interface MailPiece {
   title: string;
   lines: string[];
   accent?: number;
   seed?: number;
+  look?: 'flyer' | 'letter' | 'postcard' | 'note';
+  /** A letter's or postcard's sender. */
+  from?: string;
+  /** A postcard's picture side. */
+  place?: string;
+  /** A letter's hand. */
+  hand?: 'pen' | 'typewriter' | 'print';
+}
+
+/** The piece as a card to read (`ReadingNotice`): its look, colour, sender and place carried over. */
+export function mailCard(piece: MailPiece, extra: { effect?: string; of?: { index: number; count: number } } = {}): ReadingNotice {
+  return {
+    title: piece.title,
+    text: piece.lines.join('\n'),
+    look: piece.look ?? 'flyer',
+    ...(piece.accent !== undefined ? { accent: piece.accent } : {}),
+    ...(piece.from ? { from: piece.from } : {}),
+    ...(piece.place ? { place: piece.place } : {}),
+    ...(piece.hand ? { hand: piece.hand } : {}),
+    ...extra,
+  };
 }
 
 /** Where the flyers land, local [x, z, yaw]: the first skids a little further than the second. */
@@ -77,8 +102,7 @@ export class MailDrop extends Prop implements Interactable {
     if (!top) return;
     this.remove(top.sheet);
     disposeTree(top.sheet);
-    const { title, lines } = top.piece;
-    session.read({ title, text: lines.join('\n'), effect: 'Read, and into the recycling.', look: 'letter' });
+    session.read(mailCard(top.piece, { effect: 'Read, and into the recycling.' }));
     this.refresh();
   }
 

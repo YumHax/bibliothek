@@ -136,7 +136,7 @@ export class ArcadePlay implements KeyRoute {
     if (machine.freePlay || home) {
       // Nothing to pay (and nothing paid out while its page sends no score).
     } else if (onTheHouse) {
-      if (this.housePlays++ === 0) this.host.reward({ title: 'On the house!', detail: 'Out of coins? This play is free. Win some tickets!' });
+      if (this.housePlays++ === 0) this.host.slip({ title: 'On the house', detail: 'This play is free: win some tickets.' });
       else this.host.react('On the house again.');
     } else if (!this.pay(wallet, machine)) return null;
     return !onTheHouse && !machine.freePlay && !home;
@@ -163,8 +163,8 @@ export class ArcadePlay implements KeyRoute {
     // A tournament round: said before it starts, with the score to beat (a play on the house is not a round).
     const round = this.paid && tournament?.running && tournament.gameId === id ? tournament.next : null;
     if (round) this.host.react(`Tournament ${ROUND_WORDS[round.round] ?? 'round'}: beat ${round.name}'s ${formatNumber(round.score)}.`);
-    const walkAway = `${actionKeyLabel('walkAway')} walks away.`;
-    if (first || this.hintsLeft(id)) this.host.tip(first ? `${machine.game.hint}\n${walkAway}` : walkAway, { id: 'arcade-play', until: () => this.machine !== machine || !machine.isPlaying });
+    const walkAway = `[${actionKeyLabel('walkAway')}] walk away`;
+    if (first || this.hintsLeft(id)) this.host.prompt(first ? `${keyCaps(machine.game.hint)} · ${walkAway}` : walkAway, { id: 'arcade-play', until: () => this.machine !== machine || !machine.isPlaying });
   }
 
   /** Whether the HUD still spells out the keys at `gameId`'s machine (its first `HINTED_PLAYS` plays). */
@@ -181,7 +181,8 @@ export class ArcadePlay implements KeyRoute {
       // A pocket that could take a prize home: asked once a session before the first swap, never nibbled unawares.
       if (!this.swapAsked && wallet.tickets >= CHEAPEST_PRIZE) {
         this.swapAsked = true;
-        this.host.refuse(`Out of coins. The attendant can swap ${TICKETS_PER_COIN * PLAY_COST} of your ${formatTickets(wallet.tickets)} for the coin: play again to swap, or save them for the prize counter.`);
+        // An offer, not a refusal: a calm word, no buzz.
+        this.host.react('Out of coins: the attendant offers a coin for some of your tickets. Play again to swap, or keep them for the prizes.');
         return false;
       }
       const swapped = wallet.redeemTickets(TICKETS_PER_COIN, PLAY_COST - wallet.coins);
@@ -190,8 +191,8 @@ export class ArcadePlay implements KeyRoute {
     if (wallet.spend(PLAY_COST)) return true;
     this.host.refuse(`Insert coin: a play costs ${formatCoins(PLAY_COST)} and you have ${wallet.coins}.`);
     // The claw never plays for free; the ticket machines do when the player is broke.
-    if (!machine.freeWhenBroke && playIsFree(wallet)) this.host.tip('Broke? The ticket machines play on the house: win some tickets there first.', { id: 'short-of-coins' });
-    else this.host.tip('Short of coins? Tickets turn into coins at the prize counter.', { id: 'short-of-coins' });
+    if (!machine.freeWhenBroke && playIsFree(wallet)) this.host.tip('Broke? The ticket machines play on the house.', { id: 'short-of-coins' });
+    else this.host.tip('Short of coins? Tickets become coins at the prize counter.', { id: 'short-of-coins' });
     return false;
   }
 
@@ -302,8 +303,8 @@ export class ArcadePlay implements KeyRoute {
     const { arcadeDaily, medals, league, tournament, perks } = this.parts;
     const beginner = this.habits.plays(machine.game.id) <= BEGINNER.plays;
     const payout = arcadePayout(machine, { ...result, beginner, paid: this.paid }, { daily: arcadeDaily, medals, league });
-    // The arcade tee: the regulars nod the player through, a few tickets on top of the play's own.
-    const tee = payout.tickets ? perks?.arcadeBonus(payout.tickets.paid) ?? 0 : 0;
+    // The arcade tee: the regulars nod the player through, a few tickets on top of a ticket play's own (not the claw's coin back).
+    const tee = payout.tickets && machine.freeWhenBroke ? perks?.arcadeBonus(payout.tickets.paid) ?? 0 : 0;
     if (tee) payout.lines.push(`Arcade tee: +${formatTickets(tee)}`);
     // On tournament day, a play on its cabinet by a player still in is their next round.
     const round = tournament && this.paid && machine.freeWhenBroke && machine.game.id === tournament.gameId && tournament.running ? tournament.play(result.score) : null;
@@ -321,7 +322,7 @@ export class ArcadePlay implements KeyRoute {
       // The tee's and the round's tickets are won at the arcade too: they count in the week's league.
       league?.count?.(tee + (round?.tickets ?? 0));
     });
-    if (payout.tickets) payoutStats?.record(machine.game.id, result.score, payout.tickets.earned, (performance.now() - this.started) / 1000);
+    if (payout.tickets && machine.freeWhenBroke) payoutStats?.record(machine.game.id, result.score, payout.tickets.earned, (performance.now() - this.started) / 1000);
   }
 
   /** The bonuses counting up on the machine's end card after the score's tickets, and the banner (or a word) for what the play came to. */
@@ -330,17 +331,25 @@ export class ArcadePlay implements KeyRoute {
     const bonuses: ArcadeBonus[] = [...payout.bonuses];
     if (tee) bonuses.push({ label: 'ARCADE TEE', tickets: tee });
     if (round?.tickets) bonuses.push({ label: 'TOURNAMENT', tickets: round.tickets });
-    machine.showBonus?.(bonuses);
+    machine.showBonus?.(bonuses, payout.tickets?.counted);
     const [headline, ...extras] = payout.lines;
     const tickets = (payout.tickets?.paid ?? 0) + tee + (round?.tickets ?? 0);
     const prizesWon = payout.prizes.length > 0 || Boolean(round?.prize);
-    if (payout.notable || round || prizesWon || result.best) this.host.reward({ title: headline ?? 'Well played!', detail: extras.join('\n') || undefined, tickets: tickets || undefined, big: prizesWon || result.best });
-    else if (!machine.freeWhenBroke || result.first) this.host.react([headline, ...extras].filter(Boolean).join('\n'));
+    // The big banner (rays, fanfare) is for a prize won; a personal best is a normal reward: the cabinet plays its own
+    // NEW BEST sting, and a beginner beats their own score every other play (docs/notices.md: "big only for a milestone").
+    if (payout.notable || round || prizesWon || result.best) this.host.reward({ title: headline ?? 'Well played!', detail: extras.join('\n') || undefined, tickets: tickets || undefined, big: prizesWon });
+    // A reaction is one line under the crosshair: its parts side by side.
+    else if (!machine.freeWhenBroke || result.first) this.host.react([headline, ...extras].filter(Boolean).join(' · '));
   }
 
   /** What the keys do next: the initials (a score that makes the table goes there first), or another go (the machine's first few plays). */
   private endTip(machine: ArcadeMachineLike): void {
-    if (machine.isPlaying) this.host.tip('Sign the hall of fame: up / down picks a letter, fire moves on.', { id: 'arcade-play', until: () => !machine.isPlaying });
-    else if (this.hintsLeft(machine.game.id)) this.host.tip(`${actionKeyLabel('fire')} or a click plays again, ${actionKeyLabel('walkAway')} walks away.`, { id: 'arcade-play', until: () => this.machine !== machine || machine.isPlaying });
+    if (machine.isPlaying) this.host.prompt(`Sign the hall of fame: [↑] [↓] pick a letter · [${actionKeyLabel('fire')}] next`, { id: 'arcade-play', until: () => !machine.isPlaying });
+    else if (this.hintsLeft(machine.game.id)) this.host.prompt(`[${actionKeyLabel('fire')}] play again · [${actionKeyLabel('walkAway')}] walk away`, { id: 'arcade-play', until: () => this.machine !== machine || machine.isPlaying });
   }
+}
+
+/** A machine's hint ("A / D flip · hold Space to launch") with its keys as caps for the prompt line ("[A] / [D] flip · hold [Space] to launch"). */
+function keyCaps(hint: string): string {
+  return hint.replace(/\b(Space|WASD|Enter|[A-Z])\b(?![\]/])/g, '[$1]');
 }

@@ -26,6 +26,7 @@ import { Phone, duskDarkness } from './Phone';
 import { UnseenSwap } from './UnseenSwap';
 import { NightLight } from './NightLight';
 import { placeLeaves, placeWith, floorPointsToWorld } from '../zone/attach';
+import { rummageIn } from '../build/rummage';
 import { Television } from '../Television';
 import { FrostedWindow } from '../props/FrostedWindow';
 import { BookcaseKit } from './BookcaseKit';
@@ -56,6 +57,8 @@ interface BedroomHandle extends ZoneHandle {
   shelving: Shelving | null;
   /** The home arcade cabinet (staged till bought): a games night hands its stick two to a guest. */
   homeArcade: HomeArcade;
+  /** Waking up in bed (the opening's last shot, `src/intro`): the eye sitting up on the bed or the mattress, and the floor at its foot. */
+  wakeUp: { eyePose(): { position: THREE.Vector3; yaw: number }; approachPoint(out: THREE.Vector3): THREE.Vector3 };
 }
 
 /**
@@ -97,6 +100,8 @@ export function furnishBedroom(zone: Zone, ctx: Pick<BuildContext, 'sky' | 'cssL
     lamp.rotation.y = -stand.rotation.y;
     stands.placeWith(stand, lamp, stand.lampAnchor.clone());
     for (const drawer of stand.drawers) stands.placeWith(stand, drawer);
+    // Bought: no last tenant's leftover in it, only the odd find.
+    rummageIn(zone, ctx.home.household, stand.drawers, `bedroom.nightstand${i}`, false);
     return stand;
   });
   // A phone on charge and a night light on the nightstands' tops.
@@ -113,6 +118,7 @@ export function furnishBedroom(zone: Zone, ctx: Pick<BuildContext, 'sky' | 'cssL
   stands.onOwned(() => placeStrayBox(zone, ctx, 'nightstand', nightstands[plan.strayBox.stand]!, plan.strayBox));
   const wardrobe = zone.placeAt(new Wardrobe({ depth: plan.wardrobe.depth }), plan.wardrobe.at);
   placeLeaves(zone, wardrobe);
+  rummageIn(zone, ctx.home.household, wardrobe.leaves, 'bedroom.wardrobe', true);
   // The dresser, and on it the portable TV, set straight on its top (no cabinet of its own).
   const drawers = placerFor(zone, upgrades, own.dresser);
   const dresser = drawers.placeAt(new Dresser({ width: plan.dresser.width, tray: false }), plan.dresser.at);
@@ -194,7 +200,11 @@ export function furnishBedroom(zone: Zone, ctx: Pick<BuildContext, 'sky' | 'cssL
   };
   // The home arcade cabinet by the door, once bought (`world/homeArcade`).
   const homeArcade = placeHomeArcade(zone, ctx, plan.homeArcade, own.homeArcade);
-  return { room, tv, bed: sleeper, shelving, homeArcade, catVisits: floorPointsToWorld(zone, plan.catVisits), surfaceAt: rugsUnderfoot(zone) };
+  const wakeUp = {
+    eyePose: () => (mattress ?? bed).eyePose(),
+    approachPoint: (out: THREE.Vector3) => (mattress ?? bed).approachPoint(out),
+  };
+  return { room, tv, bed: sleeper, shelving, homeArcade, wakeUp, catVisits: floorPointsToWorld(zone, plan.catVisits), surfaceAt: rugsUnderfoot(zone) };
 }
 
 /**

@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import type { Updatable } from '@/core/Engine';
 import type { Furniture, OccupancyAware } from '../Furniture';
-import { setReflectionSource } from '@/graphics/Environment';
+import { clearReflectionSource, setReflectionSource } from '@/graphics/Environment';
 import { SkyReflection } from './SkyReflection';
 import type { DayNight } from '../props/DayNight';
 import { wakefulnessAt } from '@/time/wakefulness';
@@ -16,7 +16,7 @@ import { FLAT_IN_STREET } from '@/world/measures/street';
 import { markShared } from '../materials/sharedResources';
 import { random } from '@/random';
 
-/** Inside the camera's far plane (100 m). */
+/** Inside the camera's far plane (220 m, `core/Engine` `FAR`); the dome follows the eye, so 90 m is enough. */
 const RADIUS = 90;
 const GLOW = new THREE.Color(0xf08a3a);
 const CITY_LIT_CLOUD = new THREE.Color(0x6a4a3a);
@@ -98,7 +98,9 @@ export class SkyDome extends THREE.Mesh implements Furniture, Updatable, Occupan
 
   /** Out here, the scene reflects this sky (`Environment`); back inside, the look's own again. */
   setOccupied(occupied: boolean): void {
-    setReflectionSource(occupied ? this.reflection : null);
+    // Leaving (or placed in a zone loading out of sight): only our own source is let go, never a room's (`RoomReflection`).
+    if (occupied) setReflectionSource(this.reflection);
+    else clearReflectionSource(this.reflection);
     if (!occupied) this.reflection.reset();
   }
 
@@ -159,7 +161,7 @@ export class SkyDome extends THREE.Mesh implements Furniture, Updatable, Occupan
   }
 
   dispose(): void {
-    setReflectionSource(null);
+    clearReflectionSource(this.reflection);
     this.reflection.dispose();
     this.skyline.dispose();
   }

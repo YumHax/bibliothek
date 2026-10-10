@@ -2,6 +2,8 @@ import { clamp } from '@/math/scalar';
 import { type ArcadeControls, SCREEN_H, SCREEN_W } from './ArcadeGame';
 import { BaseGame, PLAY_TOP } from './BaseGame';
 import { random } from '@/random';
+import { Sprite } from './sprite';
+import { arcadeHint } from '../arcadeHint';
 
 /** Longer than the other cabinets: a ball at 200 px/s needs about 25 s to take a whole wall down. */
 const ROUND_SECONDS = 30;
@@ -38,6 +40,9 @@ const CHAIN_HOLD = 1.2;
 const CLOCK_BRICKS = 3;
 const CLOCK_SECONDS = 3;
 const CLOCK_COLOR = '#5ff2e8';
+/** The ball (round on whole pixels, a highlight) and the clock brick's face. */
+const BALL = new Sprite([['.xxxx.', 'xxoxxx', 'xoxxxx', 'xxxxxx', 'xxxxxx', '.xxxx.']]);
+const CLOCK = new Sprite([['..xxx..', '.x...x.', 'x..x..x', 'x..x..x', 'x...x.x', '.x...x.', '..xxx..']]);
 
 interface Brick {
   x: number;
@@ -66,7 +71,9 @@ interface Ball {
 export class Breakout extends BaseGame {
   readonly id = 'breakout';
   readonly title = 'BRICK STORM';
-  readonly hint = 'A / D or arrows move the paddle · every 5 bricks adds a ball';
+  get hint(): string {
+    return arcadeHint('{leftRight} or arrows move the paddle · every 5 bricks adds a ball');
+  }
   readonly summary = '30 SEC · CLOCK BRICKS +3S · EARN BALLS';
 
   private paddleX = SCREEN_W / 2;
@@ -144,32 +151,25 @@ export class Breakout extends BaseGame {
     ctx.fillRect(0, 0, SCREEN_W, SCREEN_H);
     for (const b of this.bricks) {
       if (!b.alive) continue;
+      const bx = Math.round(b.x);
+      const by = Math.round(b.y);
       ctx.fillStyle = b.clock ? CLOCK_COLOR : ROW_COLORS[b.row % ROW_COLORS.length]!;
-      ctx.fillRect(b.x, b.y, BRICK_W - BRICK_GAP, BRICK_H - BRICK_GAP);
-      ctx.fillStyle = 'rgba(255,255,255,0.25)';
-      ctx.fillRect(b.x, b.y, BRICK_W - BRICK_GAP, 2);
-      if (b.clock) {
-        // A little clock face: a ring with a hand, blinking so it reads as a pickup.
-        const cx = b.x + (BRICK_W - BRICK_GAP) / 2;
-        const cy = b.y + (BRICK_H - BRICK_GAP) / 2;
-        ctx.strokeStyle = Math.floor(this.elapsed * 4) % 2 === 0 ? '#ffffff' : '#0b0818';
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.arc(cx, cy, 3, 0, Math.PI * 2);
-        ctx.moveTo(cx, cy);
-        ctx.lineTo(cx, cy - 2);
-        ctx.stroke();
-      }
+      ctx.fillRect(bx, by, BRICK_W - BRICK_GAP, BRICK_H - BRICK_GAP);
+      // A bevel: lit top edge, shaded bottom edge.
+      ctx.fillStyle = 'rgba(255,255,255,0.3)';
+      ctx.fillRect(bx, by, BRICK_W - BRICK_GAP, 2);
+      ctx.fillStyle = 'rgba(0,0,0,0.25)';
+      ctx.fillRect(bx, by + BRICK_H - BRICK_GAP - 2, BRICK_W - BRICK_GAP, 2);
+      // A little clock face, blinking so it reads as a pickup.
+      if (b.clock) CLOCK.drawCentred(ctx, bx + (BRICK_W - BRICK_GAP) / 2, by + (BRICK_H - BRICK_GAP) / 2, { x: Math.floor(this.elapsed * 4) % 2 === 0 ? '#ffffff' : '#0b0818' });
     }
     ctx.fillStyle = '#e8e6ff';
-    ctx.fillRect(this.paddleX - this.paddleW / 2, PADDLE_Y - PADDLE_H / 2, this.paddleW, PADDLE_H);
+    const px = Math.round(this.paddleX - this.paddleW / 2);
+    ctx.fillRect(px, PADDLE_Y - PADDLE_H / 2, Math.round(this.paddleW), PADDLE_H);
+    ctx.fillStyle = '#9a96c0';
+    ctx.fillRect(px, PADDLE_Y + PADDLE_H / 2 - 2, Math.round(this.paddleW), 2);
     this.drawStage(ctx, `WALL ${this.wall}`);
-    ctx.fillStyle = '#fff2a8';
-    for (const ball of this.balls) {
-      ctx.beginPath();
-      ctx.arc(ball.x, ball.y, BALL_R, 0, Math.PI * 2);
-      ctx.fill();
-    }
+    for (const ball of this.balls) BALL.drawCentred(ctx, ball.x, ball.y, { x: '#fff2a8', o: '#ffffff' });
   }
 
   /** Under the lowest ball coming down, off by an error that a lesser player carries longer. */
@@ -220,7 +220,10 @@ export class Breakout extends BaseGame {
       this.bumpCombo(CHAIN_HOLD);
       this.destroyed += 1;
       if (this.destroyed % BALL_EVERY === 0) this.pendingBalls += 1;
-      this.fx.flash(b.clock ? CLOCK_COLOR : ROW_COLORS[b.row % ROW_COLORS.length]!, 0.04);
+      const brickColor = b.clock ? CLOCK_COLOR : ROW_COLORS[b.row % ROW_COLORS.length]!;
+      this.fx.flash(brickColor, 0.04);
+      this.fx.burst(b.x + w * 0.25, b.y + hgt / 2, brickColor, 9, 80, 2);
+      this.fx.burst(b.x + w * 0.75, b.y + hgt / 2, brickColor, 9, 80, 2);
       const dx = ball.x - (b.x + w / 2);
       const dy = ball.y - (b.y + hgt / 2);
       if (Math.abs(dx) / (w / 2) > Math.abs(dy) / (hgt / 2)) ball.vx = Math.sign(dx || 1) * Math.abs(ball.vx);

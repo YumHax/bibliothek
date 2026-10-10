@@ -1,0 +1,70 @@
+/* A kid's handheld held up in front of the player: the plastic shell in the kid's colours, the game on its screen. */
+@layer tokens, base, components, panels;
+@layer panels {
+  .handheld {
+    --hh-shell: #c9c6bd;
+    --hh-shell-shade: #a9a59a;
+    --hh-bezel: #4a4a58;
+    --hh-ink: #2a2a44;
+    --hh-key: #1c1c20;
+    --hh-button: #8a1f4a;
+    padding: var(--sp-4);
+    background: var(--ui-backdrop-soft);
+  }
+  .handheld__shell {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--sp-2);
+    width: min(92vw, 34rem);
+    padding: var(--sp-4) var(--sp-5) var(--sp-5);
+    border-radius: var(--ui-radius) var(--ui-radius) 3.5rem var(--ui-radius);
+    background: linear-gradient(165deg, var(--hh-shell), var(--hh-shell-shade));
+    box-shadow: var(--ui-shadow);
+    color: var(--hh-ink);
+  }
+  .handheld__shell[data-kind='colour'] {
+    --hh-shell: #7a58ad;
+    --hh-shell-shade: #4e3478;
+    --hh-bezel: #1e1e24;
+    --hh-ink: #efe8ff;
+    --hh-button: #2a2a30;
+  }
+  .handheld__shell[data-kind='sega'] {
+    --hh-shell: #34343a;
+    --hh-shell-shade: #1c1c20;
+    --hh-bezel: #0e0e10;
+    --hh-ink: #d8d8e0;
+    --hh-button: #3a3a44;
+    width: min(96vw, 46rem);
+    border-radius: 4rem;
+  }
+  .handheld__title { margin: 0; font-size: var(--fs-3); letter-spacing: 0.08em; text-transform: uppercase; }
+  .handheld__bezel {
+    width: 100%;
+    padding: var(--sp-3);
+    border-radius: var(--ui-radius-md) var(--ui-radius-md) 1.5rem var(--ui-radius-md);
+    background: var(--hh-bezel);
+  }
+  .handheld__screen {
+    display: block;
+    width: 100%;
+    height: auto;
+    aspect-ratio: 4 / 3;
+    image-rendering: pixelated;
+    background: var(--ui-black);
+    outline: none;
+  }
+  .handheld__hint { margin: 0; min-height: 1.3em; font-size: var(--fs-3); }
+  .handheld__controls { display: flex; justify-content: space-between; align-items: center; width: 100%; padding: 0 var(--sp-4); box-sizing: border-box; }
+  .handheld__dpad {
+    width: 3.6rem;
+    height: 3.6rem;
+    background:
+      linear-gradient(var(--hh-key), var(--hh-key)) center / 1.2rem 100% no-repeat,
+      linear-gradient(var(--hh-key), var(--hh-key)) center / 100% 1.2rem no-repeat;
+  }
+  .handheld__buttons { display: flex; gap: var(--sp-3); transform: rotate(-25deg); }
+  .handheld__buttons span { width: 2rem; height: 2rem; border-radius: 50%; background: var(--hh-button); }
+  .handheld__status { margin: 0; min-height: 1.3em; font-size: var(--fs-4); font-weight: 600; }
+}

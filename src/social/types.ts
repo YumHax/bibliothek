@@ -109,6 +109,8 @@ export interface PersonCard {
   startTrust?: number;
   /** Not in the book until met (default); `always`: in it from the start (the friends). */
   listed?: 'met' | 'always';
+  /** Family (Mémé): their warmth never drifts and never falls under `startWarmth`, whatever happens. */
+  family?: boolean;
 }
 
 /** A moment they remember. */

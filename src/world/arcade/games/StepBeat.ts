@@ -1,6 +1,7 @@
 import { type ArcadeControls, NO_CONTROLS, SCREEN_H, SCREEN_W, drawText } from './ArcadeGame';
 import { BaseGame, PLAY_TOP } from './BaseGame';
 import { random } from '@/random';
+import { arcadeHint } from '../arcadeHint';
 
 const ROUND_SECONDS = 20;
 const LANES = ['left', 'down', 'up', 'right'] as const;
@@ -52,7 +53,9 @@ interface Note {
 export class StepBeat extends BaseGame {
   readonly id = 'stepbeat';
   readonly title = 'STEP BEAT';
-  readonly hint = 'Step on the pad (WASD or arrows) as each arrow reaches the top';
+  get hint(): string {
+    return arcadeHint('Step on the pad ({stick} or arrows) as each arrow reaches the top');
+  }
   readonly summary = '20 SEC · STEP ON THE BEAT · JUMPS · FEVER x2';
 
   private notes: Note[] = [];

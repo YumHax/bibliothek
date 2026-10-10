@@ -75,6 +75,8 @@ export interface CatLike {
 /** Sleeping until morning in bed; `isAsleep` while the view is dark. `untilMorning` is false when it is no time to sleep (nothing happened). */
 export interface SleepLike {
   readonly isAsleep: boolean;
+  /** Bedtime (the evening, the night): a night's sleep may start. */
+  readonly sleepy: boolean;
   untilMorning(): Promise<boolean>;
 }
 

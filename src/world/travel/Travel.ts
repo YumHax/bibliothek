@@ -2,7 +2,7 @@ import type * as THREE from 'three';
 import type { TravelChoice } from '@/ui/TravelMenu';
 import type { ZoneId } from '../zoneIds';
 import { duckScene } from '@/audio/audioContext';
-import { zonePlan } from '../worldPlan';
+import { inFlat, zonePlan } from '../worldPlan';
 import { playDoorShut, playLatch, playShopBell } from './travelSounds';
 import { takeArrival } from './nextArrival';
 
@@ -27,8 +27,11 @@ interface Traveller {
 }
 
 interface Curtain {
-  out(): Promise<void>;
+  /** Covers the view, in `tint` (a CSS colour) if given. */
+  out(ms?: number, tint?: string): Promise<void>;
   in(): Promise<void>;
+  /** Names where the trip goes, shown only if the curtain is still down a moment later. */
+  destination?(label: string): void;
 }
 
 interface TravelOptions {
@@ -41,6 +44,13 @@ interface TravelOptions {
   load?: (id: ZoneId) => Promise<void>;
   /** Behind the curtain, once the destination is loaded: compiles its shaders (`World.primeAsync`) so the view fades in without a hitch. */
   prepare?: () => Promise<void>;
+  /** The colour the curtain falls in on the way to `id` (its light: warm for a shop, the sky's for the street); black if none. */
+  tint?: (id: ZoneId) => string | undefined;
+  /**
+   * Something played over the fallen curtain on the way from `from` to `to` (the bus ride to Mémé's and back:
+   * `ui/busRide`), the destination building behind it; the curtain lifts once it has ended. Null: a plain trip.
+   */
+  interlude?: (from: ZoneId, to: ZoneId) => (() => Promise<void>) | null;
 }
 
 /**
@@ -60,6 +70,10 @@ export class Travel {
   private readonly here: () => ZoneId;
   private readonly load: (id: ZoneId) => Promise<void>;
   private readonly prepare: () => Promise<void>;
+  private readonly tint: (id: ZoneId) => string | undefined;
+  private readonly interlude: NonNullable<TravelOptions['interlude']>;
+  /** Called when a trip could not be made (the destination would not load): the player is told, back where they stood. */
+  onFailed: (() => void) | null = null;
 
   constructor(options: TravelOptions) {
     this.stops = options.stops;
@@ -68,12 +82,21 @@ export class Travel {
     this.here = options.here;
     this.load = options.load ?? (async () => {});
     this.prepare = options.prepare ?? (async () => {});
+    this.tint = options.tint ?? (() => undefined);
+    this.interlude = options.interlude ?? (() => null);
   }
 
   /** Everywhere but here. */
   choices(): TravelChoice<ZoneId>[] {
     const current = this.here();
-    return this.stops.filter((s) => s.id !== current && !s.unlisted).map(({ id, label }) => ({ id, label }));
+    // At home, "Home" is no destination (the pause menu's Go out lists the rest).
+    return this.stops.filter((s) => s.id !== current && !s.unlisted && !(inFlat(current) && inFlat(s.id))).map(({ id, label }) => ({ id, label }));
+  }
+
+  /** `?debug`'s "Go to": every stop but the one the player is in, those only their own door reaches included. */
+  everyStop(): TravelChoice<ZoneId>[] {
+    const current = this.here();
+    return this.stops.filter((s) => s.id !== current).map(({ id, label }) => ({ id, label }));
   }
 
   get isTravelling(): boolean {
@@ -99,13 +122,19 @@ export class Travel {
       // The door: its latch (and a shop's bell) as the player goes through, the room's sound fading under the curtain.
       const from = this.here();
       const shopDoor = isShop(from) || isShop(stop.id);
+      const interlude = this.interlude(from, stop.id);
       playLatch();
       if (shopDoor) playShopBell(0.09, 0.12);
       duckScene(0, CURTAIN_S);
-      await this.curtain.out();
+      await this.curtain.out(undefined, this.tint(stop.id));
+      // A ride over the curtain (the bus to Mémé's) while the destination builds; else its name, should it take a while.
+      const played = interlude?.() ?? null;
+      if (!played) this.curtain.destination?.(stop.label);
       if (!(await loaded)) {
+        await played;
         duckScene(1, CURTAIN_S);
         await this.curtain.in();
+        this.onFailed?.();
         return;
       }
       this.player.setPosition(spot.position.x, spot.position.z, spot.position.y);
@@ -117,8 +146,10 @@ export class Travel {
       await nextFrame();
       await this.prepare();
       await nextFrame();
+      await played;
       // The other side: the door shut behind the player (a shop's bell still bobbing), the new room's sound coming up.
-      playDoorShut(shopDoor ? 0.18 : 0.25);
+      // Off a ride the bus's doors were the last thing heard.
+      if (!played) playDoorShut(shopDoor ? 0.18 : 0.25);
       if (shopDoor) playShopBell(0.035);
       duckScene(1, CURTAIN_S * 1.5);
       await this.curtain.in();

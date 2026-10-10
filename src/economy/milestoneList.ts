@@ -73,6 +73,21 @@ const count = (id: string, title: string, blurb: string, need: number, of: (fact
   id, title, blurb, progress: (facts) => ({ have: of(facts), need }),
 });
 
+/** How many games of the collection share the most common value of `key` (a genre, a publisher). */
+function mostOf(facts: CollectorFacts, key: (game: Game) => string | undefined): number {
+  const counts = new Map<string, number>();
+  for (const game of owned(facts)) {
+    const k = key(game)?.trim().toLowerCase();
+    if (k) counts.set(k, (counts.get(k) ?? 0) + 1);
+  }
+  return Math.max(0, ...counts.values());
+}
+
+/** How many decades the collection's games came out in (from their release dates). */
+function decades(facts: CollectorFacts): number {
+  return new Set(owned(facts).flatMap((g) => (g.releaseDate ? [g.releaseDate.slice(0, 3)] : []))).size;
+}
+
 /** Complete sets of the collectors' club (claimed or not). */
 function setsComplete(facts: CollectorFacts): number {
   const mine = owned(facts);
@@ -89,11 +104,19 @@ export const MILESTONES: readonly Milestone[] = [
   games(10, 'A shelf of one’s own', 'Own 10 games.'),
   games(25, 'The brass plaque', 'Own 25 games. A plaque for the sideboard comes with it.', 'plaque'),
   games(50, 'Under glass', 'Own 50 games. The best of them go in a glass display cabinet.', 'vitrine'),
+  games(75, 'Three quarters', 'Own 75 games.'),
   games(100, 'The century', 'Own 100 games. The plaque is engraved again.'),
+  games(150, 'Floor to ceiling', 'Own 150 games.'),
   games(250, 'A proper library', 'Own 250 games.'),
   platform(10, 'Specialist', 'Own 10 games for one console.'),
   platform(25, 'Almost complete', 'Own 25 games for one console.'),
   count('platforms-5', 'Omnivore', 'Own games for 5 different consoles.', 5, (facts) => new Set(owned(facts).map((g) => g.platform)).size),
+  // The small moments along the way: the collection's character, not only its size.
+  count('complete-1', 'Complete in box', 'Own a game with its box and its manual, as it left the shop.', 1, (facts) => owned(facts).filter((g) => g.condition === 'complete' && !g.repro).length),
+  count('sealed-1', 'Never opened', 'Own a copy still in its shrink-wrap.', 1, (facts) => owned(facts).filter((g) => g.variant === 'sealed').length),
+  count('genre-5', 'A taste for it', 'Own 5 games of one genre.', 5, (facts) => mostOf(facts, (g) => g.genre)),
+  count('publisher-8', 'House style', 'Own 8 games from one publisher.', 8, (facts) => mostOf(facts, (g) => g.publisher)),
+  count('decades-3', 'Across the years', 'Own games from 3 different decades.', 3, decades),
   count('set-1', 'Club member', 'Complete a set of the collectors’ club (the notice board at the market).', 1, setsComplete),
   count('sets-3', 'Set collector', 'Complete 3 sets of the collectors’ club.', 3, setsComplete),
   count('medal-1', 'On the podium', 'Win a medal on an arcade machine.', 1, (facts) => facts.medals),

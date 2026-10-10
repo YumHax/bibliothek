@@ -4,6 +4,7 @@ import { markShared } from '../props/Prop';
 import type { Updatable } from '@/core/Engine';
 import type { Furniture } from '../Furniture';
 import { random } from '@/random';
+import { crtScreenMaterial } from '../arcade/crtScreen';
 
 const W = 80;
 const H = 60;
@@ -48,7 +49,11 @@ export function stillScreen(look: Exclude<ScreenLook, 'snow' | 'dark'>): THREE.M
     else paintPicture(ctx, W * 2, H * 2);
     const texture = markShared(canvasTexture(canvas, { anisotropy: 'facing' }));
     if (look === 'rolling') texture.wrapT = THREE.RepeatWrapping; // convention-ok: the picture rolls vertically only
-    material = markShared(new THREE.MeshBasicMaterial({ map: texture, color: look === 'rolling' ? 0xb8c0c8 : 0xd4d4d4 }));
+    // On a CRT's glass, as the arcade's cabinets are (`arcade/crtScreen`): the bulge, the scan lines, the dark corners.
+    // The rolling picture keeps a flat glass: its uvs scroll, and the bulge would roll with them.
+    material = look === 'rolling' ? new THREE.MeshBasicMaterial({ map: texture }) : crtScreenMaterial(texture, { lines: 120, bend: 0.07, gain: 1.15 });
+    material.color.setHex(look === 'rolling' ? 0xb8c0c8 : 0xd4d4d4);
+    markShared(material);
     stills.set(look, material);
   }
   return material;

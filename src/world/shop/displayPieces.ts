@@ -144,9 +144,10 @@ const PIECES: Partial<Record<HomeUpgrade, PieceBuilder>> = {
   pedestal: () => still(new Pedestal()),
   labelMaker: () => still(new LabelMakerModel()),
   // The TV repair shop.
-  crt: () => still(new PortableTv({ width: 0.34, case: 0x5a5a5e })),
-  bedroomTv: () => still(new PortableTv({ width: 0.26, case: 0xd8d2c4 })),
-  projector: () => still(new ShopProjector()),
+  // Switched on, as a TV shop shows its sets: the test card, the colour bars, the projector throwing its beam.
+  crt: () => still(new PortableTv({ width: 0.34, case: 0x5a5a5e, screen: 'testCard' })),
+  bedroomTv: () => still(new PortableTv({ width: 0.26, case: 0xd8d2c4, screen: 'bars' })),
+  projector: () => still(new ShopProjector({ on: true })),
   speakers: () => still(group([new Speaker(), -0.2, 0, 0], [new Speaker(), 0.2, 0, 0])),
   radio: () => still(new Radio()),
   appliances: () => still(group([new Kettle(), -0.14, 0, 0], [new Toaster(), 0.16, 0, 0])),

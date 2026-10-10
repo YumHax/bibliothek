@@ -15,6 +15,11 @@ export interface WallSocketOptions {
   cables?: [x: number, y: number, z: number][];
   /** Colour of the cables. Default black. */
   cableColor?: number;
+  /**
+   * Only the plugs and their cables, no plate: the twin of a socket that is plugged once something is bought (a plan
+   * entry at the same spot with an `upgrade`), so the bare flat never shows a cable running to nothing.
+   */
+  plugsOnly?: boolean;
 }
 
 const PLATE = 0.082;
@@ -43,8 +48,8 @@ export class WallSocket extends Prop {
     const pitch = PLATE;
     const outlets = Array.from({ length: gangs }, (_, i) => (i - (gangs - 1) / 2) * pitch);
 
-    part(this, PLATE * gangs, PLATE, PLATE_DEPTH, plastic, { y: height, z: PLATE_DEPTH / 2 }).castShadow = false;
-    for (const x of outlets) {
+    if (!options.plugsOnly) part(this, PLATE * gangs, PLATE, PLATE_DEPTH, plastic, { y: height, z: PLATE_DEPTH / 2 }).castShadow = false;
+    for (const x of options.plugsOnly ? [] : outlets) {
       const well = new THREE.Mesh(new THREE.CylinderGeometry(0.019, 0.019, 0.004, 20), dark);
       well.rotation.x = Math.PI / 2;
       well.position.set(x, height, PLATE_DEPTH + 0.0005);

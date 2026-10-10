@@ -25,9 +25,10 @@ export const HALLWAY_ROOM: RoomOptions = {
     HALLWAY_LIVING_DOOR,
     // Across the corridor: the bathroom on the left (too small for a door to swing in: it hangs
     // its own, opening into the corridor) and the bedroom on the right (hung here, swinging in,
-    // hinged away from the bedroom's corner).
+    // hinged on the bedroom's corner side and stopped square, against its wardrobe's end: the
+    // front wall on the other side is where the arcade cabinet stands once bought).
     { wall: 'back', along: -1.1, ...DOOR_LEAF, door: false, to: 'bathroom' },
-    { wall: 'back', along: 0.5, ...DOOR_LEAF, hinge: 'right', to: 'bedroom' },
+    { wall: 'back', along: 0.5, ...DOOR_LEAF, hinge: 'left', swing: 90, to: 'bedroom' },
     // The kitchen at the left end: hinged away from the kitchen's front corner.
     { wall: 'left', along: 0, ...DOOR_LEAF, hinge: 'right', to: 'kitchen' },
     // The flat's front door at the right end, onto our landing (the stairwell): the builder hangs

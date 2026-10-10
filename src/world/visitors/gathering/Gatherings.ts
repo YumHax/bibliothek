@@ -126,7 +126,7 @@ export class Gatherings extends Prop implements Updatable, ActivityAware, Occasi
     const { from, until } = GATHERING_RULES.openHouse;
     if (house?.day === day && inHours(hours, [from, until])) {
       host.rang(day);
-      this.current = new OpenHouse(this.options, day);
+      this.current = new OpenHouse(this.options, day, this.options.collectionSize());
       return;
     }
     const honour = honours?.unvisited;
@@ -144,7 +144,7 @@ export class Gatherings extends Prop implements Updatable, ActivityAware, Occasi
     this.forced = undefined;
     host.rang(day);
     if (kind === 'night') this.current = new GamesNight(this.options, day);
-    else if (kind === 'house') this.current = new OpenHouse(this.options, day);
+    else if (kind === 'house') this.current = new OpenHouse(this.options, day, this.options.collectionSize());
     else {
       const honour = honours?.unvisited ?? honours?.earned[0] ?? { id: 'set:mario-nes', kind: 'set' as const, name: 'Mario on the NES', platform: 'nes' as const, day, visited: false };
       this.current = new ClubVisit(this.options, honour, (id) => honours?.visited(id));
@@ -174,14 +174,14 @@ export class Gatherings extends Prop implements Updatable, ActivityAware, Occasi
       const { from, inHours } = GATHERING_RULES.gamesNight;
       const hour = Math.max(from, host.options.clock.state.hours + inHours);
       book.planNight(day, hour);
-      host.options.journal?.note('visit', 'Asked everyone round for a games night');
+      host.options.journal?.note('visit', 'Asked everyone round for a games night', { weight: 'note' });
       return `Everyone: “Games night? We’re in. See you around ${clockShort(hour)}!”`;
     }
     const why = this.houseRefusal();
     if (why) return why;
     const { aheadDays, from, until } = GATHERING_RULES.openHouse;
     book.announceHouse(day + aheadDays);
-    host.options.journal?.note('visit', 'Announced an open house in THE GAMING WEEKLY');
+    host.options.journal?.note('visit', 'Open house announced in THE GAMING WEEKLY', { weight: 'note' });
     return `THE GAMING WEEKLY: “An open house, lovely. It goes in tomorrow’s paper: the day after, ${from}:00 to ${clockShort(until)}. Two coins at the door, I’ll put.”`;
   }
 
@@ -214,8 +214,9 @@ export class Gatherings extends Prop implements Updatable, ActivityAware, Occasi
       text: `OPEN HOUSE ON FRONT STREET. ${formatCount(article.guests, 'visitor')} climbed the stairs yesterday to see a private collection of old games, boxed and shelved like a museum's.${best}${quote ? ` “${quote}” said one.` : ''}`,
       effect: 'The market has heard of you: your standing there went up.',
       look: 'letter',
+      hand: 'print',
     });
-    host.options.journal?.note('visit', 'THE GAMING WEEKLY wrote about the open house');
+    host.options.journal?.note('visit', 'THE GAMING WEEKLY wrote about the open house', { weight: 'note' });
   }
 
   /** The morning of an open house, at home: a word that it is today. */

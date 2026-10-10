@@ -41,14 +41,15 @@ const KEYS_SAID_TIMES = 2;
  * way home, the parcel under the console (there while bought games wait in it), the runner (or the
  * kilim, once bought) and the shop poster (once bought), then the decor.
  */
-export function furnishHallway(zone: Zone, ctx: Pick<BuildContext, 'sky' | 'listener' | 'acoustics' | 'building' | 'collection' | 'market' | 'today' | 'arcade' | 'home' | 'panels' | 'story'>): ZoneHandle {
+export function furnishHallway(zone: Zone, ctx: Pick<BuildContext, 'sky' | 'listener' | 'acoustics' | 'building' | 'collection' | 'market' | 'today' | 'arcade' | 'home' | 'panels' | 'story' | 'memories'>): ZoneHandle {
   const { sky, listener, building, collection: { deliveries }, market: { stock: market, day: marketDay }, today, arcade: { daily: arcadeDaily }, home: { upgrades } } = ctx;
   const plan = HALLWAY_PLAN;
   const room = furnishShell(zone, sky, plan.room, { leafColor: plan.leafColor });
   placeRoomLight(zone, room, 'flush', plan.light, plan.lightSwitch);
   const hallConsole = zone.placeAt(new HallConsole({ width: 0.8 }), plan.console);
   zone.placeAt(new CoatRack({ shoeRack: false }), plan.coatRack);
-  if (deliveries) zone.placeAt(new Parcel(deliveries), plan.parcel);
+  // The first game of a console that comes home is an occasion (the shelves have none of it yet).
+  if (deliveries) zone.placeAt(new Parcel(deliveries, { firstOf: (platform) => !(ctx.collection.shelved ?? ctx.collection.games).games.some((g) => g.platform === platform && g.status !== 'wishlist') }), plan.parcel);
   // A sealed carton from the flea market or the saleroom, opened here one thing at a time.
   if (ctx.market.lots) zone.placeAt(new CartonAtHome({ sealed: ctx.market.lots.sealed, tx: ctx.market.lots.tx }), plan.carton);
 
@@ -67,6 +68,7 @@ export function furnishHallway(zone: Zone, ctx: Pick<BuildContext, 'sky' | 'list
       listener,
       arrival: zone.toWorld(new THREE.Vector3(ax, 0, az)),
       door: zone.toWorld(new THREE.Vector3(plan.room.width / 2, 0, entrance.along)),
+      filming: () => ctx.memories?.filming ?? false,
       onHome: (session) => {
         keys.setInPocket(false);
         keys.jingle();
@@ -78,8 +80,8 @@ export function furnishHallway(zone: Zone, ctx: Pick<BuildContext, 'sky' | 'list
         const posted = building?.post?.deliver().length ?? 0;
         // Said the first times only (the keys' jingle says it after that), or when something waits in the hall.
         if (++homecomings <= KEYS_SAID_TIMES || posted || mail.count) session.react('Home: keys back in the bowl');
-        if (posted) session.reward({ title: 'A parcel came', detail: 'The concierge took it in while you were out: it is under the hall console.' });
-        if (mail.count) session.tip(`There is mail on the mat by the door: ${useVerbOn()} to read.`, { id: 'mail', until: () => mail.count === 0 });
+        if (posted) session.slip({ title: 'A parcel came', detail: 'The concierge took it in: under the hall console.' });
+        if (mail.count) session.tip(`Mail on the mat: ${useVerbOn()} to read.`, { id: 'mail', until: () => mail.count === 0 });
       },
     }),
     new THREE.Vector3(),
@@ -107,7 +109,7 @@ export function furnishHallway(zone: Zone, ctx: Pick<BuildContext, 'sky' | 'list
     item.rotation.y = spot.yaw;
     placeWith(zone, hallConsole, item, new THREE.Vector3(...spot.at));
   };
-  onConsole(new Notebook({ panel: () => notes.journalPanel }), plan.journal);
+  onConsole(new Notebook({ panel: () => notes.journalPanel, unread: notes.journalUnread }), plan.journal);
   if (notes.firstDay) {
     const panel = ctx.panels.toDo;
     if (panel) onConsole(new ToDoNote(notes.firstDay, panel), plan.toDoNote);

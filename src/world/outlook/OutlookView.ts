@@ -3,6 +3,7 @@ import type { Updatable } from '@/core/Engine';
 import { QUALITY } from '@/graphics/quality';
 import { flag } from '@/settings/flags';
 import { disposeTree } from '../props/Prop';
+import { markShared } from '../materials/sharedResources';
 import { patchShader } from '../materials/shaderPatch';
 import { WALL, onSurface } from '../surface/layers';
 import { registerZfightRoot } from '../surface/zfight';
@@ -75,6 +76,8 @@ const SCISSOR_PAD = 3;
 /** How much of the outlook's light the glass lets through, and how much grey it adds (dust, the pane's own reflection). */
 const TRANSMISSION = 0.9;
 const GLASS_GREY = 0.012;
+/** Seconds the view takes to come through the waiting colour once ready (a fade, not a pop; again after a free). */
+const REVEAL_S = 0.4;
 /** How far the z-fight check judges an outlook's scene from (m): a street is seen down its length. */
 const ZFIGHT_DISTANCE = 140;
 /** Views made without a name, counted for theirs. */
@@ -135,6 +138,8 @@ export class OutlookView extends THREE.Group implements Updatable {
   private readonly covered = new Set<THREE.Mesh>();
   private coveredFrame = -1;
   private coveredBy: THREE.Camera | null = null;
+  /** 0 as the view becomes ready .. 1 once it shows through the waiting colour entirely (`REVEAL_S`). */
+  private reveal = 0;
 
   constructor(private readonly options: OutlookViewOptions) {
     super();
@@ -212,6 +217,7 @@ export class OutlookView extends THREE.Group implements Updatable {
       this.tickedFrame = frame;
     }
     this.sinceDrawn += dt;
+    if (this.state === 'ready' && this.reveal < 1) this.reveal = Math.min(1, this.reveal + dt / REVEAL_S);
     if (this.state === 'ready' && this.contents && !this.options.keep && this.sinceDrawn > FREE_AFTER_UNDRAWN) this.free();
     const drawnLately = this.sinceDrawn < LIVE_AFTER_DRAWN;
     if (this.state === 'idle' && drawnLately) {
@@ -266,6 +272,18 @@ export class OutlookView extends THREE.Group implements Updatable {
       });
   }
 
+  /** The waiting colour over the fresh picture, less of it as the view is revealed (in the pane's scissor, unclipped). */
+  private veil(renderer: THREE.WebGLRenderer): void {
+    VEIL_MATERIAL.color.copy(this.options.waiting());
+    VEIL_MATERIAL.opacity = 1 - this.reveal;
+    const autoClear = renderer.autoClear;
+    renderer.autoClear = false;
+    renderer.clippingPlanes = NO_PLANES;
+    renderer.shadowMap.autoUpdate = false;
+    renderer.render(VEIL_SCENE, VEIL_CAMERA);
+    renderer.autoClear = autoClear;
+  }
+
   /** The programs linked out of sight (as the picture's target binds them: no tone mapping, a clip plane), then shown. */
   private compile(renderer: THREE.WebGLRenderer, contents: OutlookContents): void {
     this.state = 'compiling';
@@ -273,7 +291,10 @@ export class OutlookView extends THREE.Group implements Updatable {
     const compiled = contents.parts ? this.compileInSlices(renderer, contents) : this.compileSome(renderer, contents.scene, null);
     compiled
       .then(() => {
-        if (!this.disposed && this.contents === contents) this.state = 'ready';
+        if (!this.disposed && this.contents === contents) {
+          this.state = 'ready';
+          this.reveal = 0;
+        }
       })
       .catch((error: unknown) => {
         this.state = 'failed';
@@ -360,7 +381,7 @@ export class OutlookView extends THREE.Group implements Updatable {
     this.fitTarget(renderer);
     const ready = this.state === 'ready' && this.contents;
     const toOutlook = record.toOutlook(pane);
-    if (ready && this.reusable(record, camera, toOutlook)) {
+    if (ready && this.reveal >= 1 && this.reusable(record, camera, toOutlook)) {
       STATS.reused++;
       return;
     }
@@ -380,6 +401,7 @@ export class OutlookView extends THREE.Group implements Updatable {
       renderer.shadowMap.autoUpdate = true;
       renderer.render(this.contents!.scene, this.camera);
       STATS.calls += renderer.info.render.calls;
+      if (this.reveal < 1) this.veil(renderer);
     } else {
       renderer.setClearColor(this.options.waiting(), 1);
       renderer.clear(true, true, false);
@@ -572,6 +594,12 @@ function screenSampled(material: THREE.MeshBasicMaterial, grey: number): THREE.M
   });
   return material;
 }
+
+/** The veil over a view coming through (`veil`): one quad over the whole target, seen by a camera of its own. */
+const VEIL_MATERIAL = markShared(new THREE.MeshBasicMaterial({ transparent: true, depthTest: false, depthWrite: false, fog: false, toneMapped: false }));
+const VEIL_SCENE = new THREE.Scene().add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), VEIL_MATERIAL));
+const VEIL_CAMERA = new THREE.OrthographicCamera(-1, 1, 1, -1, -1, 1);
+const NO_PLANES: THREE.Plane[] = [];
 
 /** Nothing, rendered to put the renderer's clipping back (`resetClipping`). */
 const NOTHING = new THREE.Scene();

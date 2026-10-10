@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { createCanvas, toTexture } from '@/covers/generated/canvasUtils';
 import { actionKeyLabel } from '@/ui/keys';
-import { type ArcadeControls, type ArcadeGame, SCREEN_H, SCREEN_W, drawText } from './games/ArcadeGame';
+import { type ArcadeControls, type ArcadeGame, SAFE_X, SCREEN_H, SCREEN_W, drawText } from './games/ArcadeGame';
 import { crtScreenMaterial } from './crtScreen';
 import type { InitialsEntry } from './InitialsEntry';
 import { formatNumber } from '@/text/count';
@@ -32,6 +32,25 @@ interface TitleInfo {
   price?: () => { free: boolean; text: string };
   /** A cabinet at home: no coin asked, no tickets on the cards. */
   home?: boolean;
+  /** The cabinet's glow colour: the band the title's logo sits on. */
+  accent?: number;
+}
+
+/** The hall-of-fame page's rank colours, cycled down the lines as the page blinks. */
+const RANK_COLORS = ['#ffd23a', '#ff8a80', '#7ee787', '#9ad6ff', '#c9c4ff'];
+
+/**
+ * A blurb's clauses ("15 SEC · CHAIN STARS · CLOCKS +2S") packed onto as few lines of at most
+ * `columns` glyphs as they take (the face is square: one glyph, one column); a clause is never split.
+ */
+function packClauses(summary: string, columns: number): string[] {
+  const lines: string[] = [];
+  for (const clause of summary.split(' · ')) {
+    const last = lines[lines.length - 1];
+    if (last !== undefined && `${last} · ${clause}`.length <= columns) lines[lines.length - 1] = `${last} · ${clause}`;
+    else lines.push(clause);
+  }
+  return lines;
 }
 
 /**
@@ -92,34 +111,103 @@ export class CabinetScreens {
     this.drawClock = 1;
   }
 
-  /** The title card: the table's top score, the player's best, the next medal, today's challenge, INSERT COIN blinking on `phase`. */
+  /**
+   * The title card, laid out on a grid down the glass: the logo in its band, a clear gap, then the
+   * blurb, the table's top score, the player's best, the next medal, today's challenge in its box,
+   * INSERT COIN blinking on `phase`, and the price at the foot. Every line is centred and shrinks
+   * to the safe width (`drawText`), so none runs under the tube's curved edge.
+   */
   drawTitle(phase: number): void {
     const { ctx, game } = this;
     const { scores, pointsPerTicket } = this.info;
     ctx.fillStyle = '#07070c';
     ctx.fillRect(0, 0, SCREEN_W, SCREEN_H);
-    drawText(ctx, game.title, SCREEN_W / 2, 40, 20, '#fff2a8');
-    drawText(ctx, game.summary, SCREEN_W / 2, 64, 7, '#9ad6ff');
-    const top = scores.topOf(game.id);
-    if (!this.info.home || top.score > 0) drawText(ctx, `HI ${top.name}  ${formatNumber(top.score)}`, SCREEN_W / 2, 88, 10, top.you ? '#7ee787' : '#c9c4ff');
-    const best = scores.bestOf(game.id);
+    this.drawLogo(phase, 14, 16);
     const home = this.info.home === true;
+    // The blurb, a clear gap under the logo's band: its clauses packed on one line or two (never shrunk to a squint).
+    const blurb = packClauses(game.summary, Math.floor((SCREEN_W - 2 * SAFE_X) / 7));
+    blurb.forEach((line, i) => drawText(ctx, line, SCREEN_W / 2, (blurb.length === 1 ? 68 : 64) + i * 11, 7, '#9ad6ff'));
+    const top = scores.topOf(game.id);
+    if (!home || top.score > 0) drawText(ctx, `HI ${top.name}  ${formatNumber(top.score)}`, SCREEN_W / 2, 94, 10, top.you ? '#7ee787' : '#c9c4ff');
+    const best = scores.bestOf(game.id);
     const bestLine = home ? `YOUR BEST ${formatNumber(best)}` : `YOUR BEST ${formatNumber(best)}  (${Math.floor(best / pointsPerTicket)} TIX)`;
-    if (!home || best > 0) drawText(ctx, best > 0 ? bestLine : 'NO SCORE OF YOURS YET', SCREEN_W / 2, 106, 7, '#8a86b0');
+    if (!home || best > 0) drawText(ctx, best > 0 ? bestLine : 'NO SCORE OF YOURS YET', SCREEN_W / 2, 112, 7, '#8a86b0');
     const medal = this.nextMedal();
-    if (medal) drawText(ctx, medal, SCREEN_W / 2, 122, 7, '#e0995a');
+    if (medal) drawText(ctx, medal, SCREEN_W / 2, 126, 7, '#e0995a');
     const challenge = this.info.challenge?.();
     if (challenge) {
+      // The challenge's box: 30 px tall, two lines in it, between the medal line and INSERT COIN.
+      const boxTop = 138;
       ctx.fillStyle = 'rgba(255,210,58,0.12)';
-      ctx.fillRect(20, 134, SCREEN_W - 40, 30);
-      drawText(ctx, "TODAY'S CHALLENGE", SCREEN_W / 2, 142, 7, '#ffd23a');
-      drawText(ctx, challenge.done ? 'BEATEN! COME BACK TOMORROW' : `SCORE ${formatNumber(challenge.target)} · +${challenge.reward} TIX`, SCREEN_W / 2, 156, 8, challenge.done ? '#7ee787' : '#fff2a8');
+      ctx.fillRect(SAFE_X, boxTop, SCREEN_W - 2 * SAFE_X, 30);
+      drawText(ctx, "TODAY'S CHALLENGE", SCREEN_W / 2, boxTop + 8, 7, '#ffd23a');
+      drawText(ctx, challenge.done ? 'BEATEN! COME BACK TOMORROW' : `SCORE ${formatNumber(challenge.target)} · +${challenge.reward} TIX`, SCREEN_W / 2, boxTop + 21, 8, challenge.done ? '#7ee787' : '#fff2a8');
     }
-    if (phase % 2 === 0) drawText(ctx, home ? 'PRESS FIRE' : 'INSERT COIN', SCREEN_W / 2, 186, 12, '#ff8a80');
+    if (phase % 2 === 0) drawText(ctx, home ? 'PRESS FIRE' : 'INSERT COIN', SCREEN_W / 2, 190, 12, '#ff8a80');
     const price = this.info.price?.();
     const cost = !price ? '1 COIN PER PLAY' : price.free ? 'FREE PLAY' : `${price.text.toUpperCase()} PER PLAY`;
-    drawText(ctx, home ? 'FREE PLAY · FOR FUN' : `${cost} · ${pointsPerTicket} PTS = 1 TICKET`, SCREEN_W / 2, 218, 7, '#7a7a90');
+    drawText(ctx, home ? 'FREE PLAY · FOR FUN' : `${cost} · ${pointsPerTicket} PTS = 1 TICKET`, SCREEN_W / 2, 216, 7, '#7a7a90');
     this.texture.needsUpdate = true;
+  }
+
+  /** The attract loop's hall-of-fame page: the table's top five, each line in its rank's colour, the colours walking down as it blinks. */
+  drawScores(phase: number): void {
+    const { ctx, game } = this;
+    ctx.fillStyle = '#07070c';
+    ctx.fillRect(0, 0, SCREEN_W, SCREEN_H);
+    this.drawLogo(phase, 12, 12);
+    drawText(ctx, 'HALL OF FAME', SCREEN_W / 2, 56, 10, '#ffffff');
+    const table = this.info.scores.table(game.id).slice(0, 5);
+    if (!table.length) drawText(ctx, 'NO SCORES YET · BE THE FIRST', SCREEN_W / 2, 124, 7, '#8a86b0');
+    table.forEach((entry, i) => {
+      const y = 92 + i * 22;
+      const color = entry.you ? '#7ee787' : RANK_COLORS[(i + phase) % RANK_COLORS.length]!;
+      drawText(ctx, `${i + 1}${['ST', 'ND', 'RD'][i] ?? 'TH'}`, 60, y, 9, color, 'left');
+      drawText(ctx, entry.name, 124, y, 9, color, 'left');
+      drawText(ctx, formatNumber(entry.score), SCREEN_W - 60, y, 9, color, 'right');
+    });
+    if (phase % 2 === 0) drawText(ctx, this.info.home ? 'PRESS FIRE' : 'INSERT COIN', SCREEN_W / 2, 214, 10, '#ff8a80');
+    this.texture.needsUpdate = true;
+  }
+
+  /**
+   * The game's logo: its title in pixel type with a hard drop shadow, on a band of the cabinet's
+   * glow that fades out before the glass's edges, two scan bars sliding across it with `phase`.
+   * The band starts at `top`; the title is `size` px, or smaller when the name would not fit the
+   * safe width (the face is square: a glyph is `size` wide), the shadow at the same size so it
+   * stays in register. Dim enough not to bloom over the lines under it.
+   */
+  private drawLogo(phase: number, top: number, size: number): void {
+    const { ctx, game } = this;
+    const px = Math.min(size, Math.floor((SCREEN_W - 2 * SAFE_X - 16) / Math.max(1, game.title.length)));
+    const pad = Math.round(px * 0.6);
+    const height = px + 2 * pad;
+    const y = top + height / 2;
+    const accent = `#${new THREE.Color(this.info.accent ?? 0x9ad6ff).getHexString()}`;
+    const band = ctx.createLinearGradient(SAFE_X, 0, SCREEN_W - SAFE_X, 0);
+    band.addColorStop(0, 'rgba(0,0,0,0)');
+    band.addColorStop(0.25, accent);
+    band.addColorStop(0.75, accent);
+    band.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.globalAlpha = 0.3;
+    ctx.fillStyle = band;
+    ctx.fillRect(SAFE_X, top, SCREEN_W - 2 * SAFE_X, height);
+    ctx.globalAlpha = 1;
+    // The scan bars, clipped to the band.
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(SAFE_X, top, SCREEN_W - 2 * SAFE_X, height);
+    ctx.clip();
+    ctx.fillStyle = 'rgba(255,255,255,0.14)';
+    const slide = SAFE_X + ((phase * 9) % (SCREEN_W - 2 * SAFE_X + 40));
+    ctx.fillRect(slide - 40, top, 5, height);
+    ctx.fillRect(slide - 30, top, 2, height);
+    ctx.restore();
+    ctx.fillStyle = accent;
+    ctx.fillRect(SAFE_X, top - 2, SCREEN_W - 2 * SAFE_X, 1);
+    ctx.fillRect(SAFE_X, top + height + 1, SCREEN_W - 2 * SAFE_X, 1);
+    drawText(ctx, game.title, SCREEN_W / 2 + 1, y + 1, px, '#000000');
+    drawText(ctx, game.title, SCREEN_W / 2, y, px, '#fff2a8');
   }
 
   /** Over a demo or a replay: what it is, and INSERT COIN blinking. */
@@ -165,7 +253,7 @@ export class CabinetScreens {
     const { ctx } = this;
     const { last, lastRank, overClock, bonuses } = run;
     this.game.draw(ctx);
-    const total = run.tickets(last.score) + bonuses.reduce((sum, b) => sum + b.tickets, 0);
+    const total = run.scoreTickets + bonuses.reduce((sum, b) => sum + b.tickets, 0);
     const shown = run.shownTotal;
     const done = run.countUp >= 1;
     const counted = run.countDone;

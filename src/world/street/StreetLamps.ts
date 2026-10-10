@@ -16,6 +16,7 @@ import streetLampsVertex from './StreetLamps.vert.glsl?raw';
 import streetLampsFragment from './StreetLamps.frag.glsl?raw';
 import { random as liveRandom, unitOf } from '@/random';
 import { loudness } from '@/audio/hearing';
+import { LampWash, WASH_SLOTS } from './lampWash';
 
 interface StreetLampsOptions {
   lamps: readonly { at: Vec2; yaw: number; design?: LampDesign }[];
@@ -98,6 +99,12 @@ export class StreetLamps extends THREE.Group implements Furniture, Updatable, Oc
   readonly contactShadow = false;
   /** The lamp heads (zone-local), under which the light hangs: what the wet ground reflects. */
   readonly headPoints: THREE.Vector3[];
+  /**
+   * The lamps past the real lights, as an analytic wash on the materials it is handed (`LampWash.over`: the facades,
+   * the trees, the cars): the next `WASH_SLOTS` nearest the player, each at its own warmth.
+   */
+  readonly wash = new LampWash();
+  private readonly washAt = new THREE.Vector3();
   private readonly slots: LampSlot[];
   private readonly meshes: THREE.InstancedMesh[] = [];
   private readonly buzz = new LampBuzz();
@@ -284,10 +291,28 @@ export class StreetLamps extends THREE.Group implements Furniture, Updatable, Oc
       bulb.intensity = INTENSITY * lampLevel(warm) * slot.level * (slot.lamp === this.flickering ? this.flicker : 1);
       strikeColour(warm, WARM, bulb.color);
     }
+    this.feedWash();
     this.chooseClock += dt;
     if (this.chooseClock < CHOOSE_EVERY || night === 0) return;
     this.chooseClock = 0;
     this.choose();
+  }
+
+  /** The wash's slots: the lamps after the real lights' (nearest first, as `choose` last sorted them), world space. */
+  private feedWash(): void {
+    const slots = this.wash.uniforms.lampWash.value;
+    strikeColour(1, WARM, this.wash.uniforms.lampWashColor.value);
+    for (let k = 0; k < WASH_SLOTS; k++) {
+      const lamp = this.order[this.bulbs.length + k];
+      const slot = slots[k]!;
+      if (lamp === undefined) {
+        slot.w = 0;
+        continue;
+      }
+      this.localToWorld(this.washAt.copy(this.spots[lamp]!));
+      const level = lampLevel(this.lampWarm[lamp]!) * (lamp === this.flickering ? this.flicker : 1);
+      slot.set(this.washAt.x, this.washAt.y, this.washAt.z, level);
+    }
   }
 
   private instanced(geometry: THREE.BufferGeometry, material: THREE.Material, count: number): THREE.InstancedMesh {

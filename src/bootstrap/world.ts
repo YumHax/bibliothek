@@ -18,6 +18,12 @@ import type { Cat } from '@/world/cat';
 import { lightLevelOf } from '@/world/zoneHandle';
 import { ShelvingGroup } from '@/world/shelving/ShelvingGroup';
 import { trackWorldLoad } from '@/ui/worldLoad';
+import { MemoryProjector } from '@/memories/MemoryFilm';
+import { zonePlan } from '@/world/worldPlan';
+import { DreamFlat } from '@/intro/DreamFlat';
+import { stagedPieces } from '@/world/build/owned';
+import { SEED_GAMES } from '@/catalog';
+import { seededRng, shuffled } from '@/random';
 import { late, type Late } from './late';
 import type { Services } from './services';
 import type { PlayerMoves } from './player';
@@ -88,13 +94,16 @@ export function buildWorld(services: Services, parts: WorldParts): BuiltWorld {
   const cat = late<Cat>('the cat');
   // The household's beats (cleaning, baking, a soak): a fade that holds the player still, like a night (docs/household.md).
   const pastimes = new Pastimes(flat.fader, sky.dayNight, (busy) => session.isSet && session.get().setFrozen(busy));
-  // Where the player is and whether they are free, asked the same way by everyone (`game/PlayerActivity`).
+  // Where the player is and whether they are free, asked the same way by everyone (`game/PlayerActivity`); a memory's
+  // film counts as away (its projector is made below, with the graphics).
+  const film = { playing: (): boolean => false };
   const activity: PlayerActivity = new PlayerActivity({
     zone: () => zones.get().current.id,
     travelling: () => moves.isSet && moves.get().travel.isTravelling,
     asleep: () => moves.isSet && moves.get().sleep.isAsleep,
     pastime: () => pastimes.isBusy,
     crossing: () => airlockLink.isCrossing,
+    filming: () => film.playing(),
   });
 
   const acoustics = wireHearing(engine, world);
@@ -106,11 +115,43 @@ export function buildWorld(services: Services, parts: WorldParts): BuiltWorld {
   const graphics = setupGraphics(engine, {
     focus: () => inspector.focusDistance,
     lightLevel: () => lightLevelOf(zones.get().current),
+    daylight: () => sky.dayNight.state.daylight,
     videoLayer: cssLayer,
   });
 
+  // The memories filmed in a zone (Mémé's album, docs/story.md "Mémé"): the opening's screen, the camera and the grade;
+  // the zones a film cuts to built ahead and held, the weather of the past, Félix's flat as the opening shows it.
+  const memories = new MemoryProjector({
+    camera: engine.camera,
+    player,
+    container: services.container,
+    setLook: (look, snap) => graphics.setLook(look, snap),
+    zoneLook: (id) => graphics.setLook(zonePlan(id).look, true),
+    lens: graphics.postFx,
+    engine,
+    zones: {
+      zone: (id) => world.zone(id),
+      here: () => zones.get().current.id,
+      prepare: (id) => world.prepareZone(id),
+      hold: (id, held) => zones.get().hold(id, held),
+    },
+    holdWeather: (kind) => {
+      const release = sky.weather.hold(kind);
+      sky.dayNight.setWeather(sky.weather.state);
+      return () => {
+        release();
+        sky.dayNight.setWeather(sky.weather.state);
+      };
+    },
+    dream: () => dreamOfFelix(world),
+    frame: () => {
+      engine.renderFrame();
+      return engine.renderer.domElement;
+    },
+  });
+  film.playing = () => memories.filming;
   const building = makeBuilding(services, flat, activity);
-  const context = makeBuildContext(services, { flat, marketHall, listener: engine.camera, acoustics, building, pastimes, session, cat });
+  const context = makeBuildContext(services, { flat, marketHall, listener: engine.camera, acoustics, building, pastimes, session, cat, memories });
   declareZones(world, context, services.furnishings);
   // The collection room: the cat's home, its shelves and screens.
   const home = world.build('living');
@@ -173,5 +214,26 @@ export function startWhenReady(engine: Engine, world: GameWorld): void {
       else setTimeout(run, 2000);
     };
     idle(() => void world.loadAll().catch((error: unknown) => console.error('[world] a zone module failed to preload', error)));
+  });
+}
+
+/**
+ * Félix's flat as the opening shows it (`intro/DreamFlat`), for a memory filmed there: every piece staged shown, every
+ * bookcase slot of the collection room stood and full of the built-in games' covers. Null before the flat is built.
+ */
+function dreamOfFelix(world: GameWorld): DreamFlat | null {
+  const living = world.handle('living');
+  if (!living) return null;
+  return new DreamFlat({
+    living: {
+      get bookcaseCount() {
+        return living.shelving.bookcases.length;
+      },
+      standEveryBookcase: (every) => living.standEveryBookcase(every),
+    },
+    staged: stagedPieces,
+    filmedZone: 'living',
+    games: shuffled(seededRng('intro-covers'), SEED_GAMES.filter((game) => game.externalIds?.libretroName)),
+    onGoing: () => {},
   });
 }

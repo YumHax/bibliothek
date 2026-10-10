@@ -25,7 +25,7 @@ export class CrtStack extends Prop {
     const widths = options.widths ?? [0.42, 0.34, 0.27];
     let y = 0;
     widths.forEach((width, i) => {
-      const tv = new PortableTv({ width, case: CASES[i % CASES.length]!, screen: options.screens?.[i] ?? 'snow', aerial: i === widths.length - 1 });
+      const tv = new PortableTv({ width, case: CASES[i % CASES.length]!, screen: options.screens?.[i] ?? 'snow', aerial: i === widths.length - 1, seed: i + 11 });
       tv.position.set((i % 2 ? 1 : -1) * 0.015, y, i * 0.01);
       tv.rotation.y = (i % 2 ? -1 : 1) * 0.07;
       this.add(tv);

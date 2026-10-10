@@ -1,0 +1,31 @@
+/* The keys card (`KeysCard.ts`): held up while H is down, the keys for what the player is doing now, two columns. */
+@layer tokens, base, components, panels;
+@layer panels {
+  .keys-card {
+    position: fixed;
+    left: 50%;
+    top: 50%;
+    z-index: var(--z-hud);
+    translate: -50% -50%;
+    width: min(40rem, calc(100vw - 2 * var(--sp-4)));
+    max-height: calc(100vh - 2 * var(--sp-6));
+    overflow: hidden;
+    padding: var(--sp-4) var(--sp-5);
+    pointer-events: none;
+  }
+  .keys-card__title {
+    margin: 0 0 var(--sp-3);
+    font-size: var(--fs-t1);
+  }
+  .keys-card__list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr));
+    gap: var(--sp-2) var(--sp-5);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    font-size: var(--fs-4);
+  }
+  .keys-card__keys { display: block; color: var(--ui-text-dim); }
+  body.menu-open .keys-card { visibility: hidden; }
+}

@@ -1,0 +1,170 @@
+/* The opening's screen (`IntroScreen`): the black, the cinema bars with the narration, the title over the morning. The HUD hides under `body.intro-playing`. */
+@layer tokens, base, components, panels;
+@layer panels {
+  body.intro-playing .crosshair,
+  body.intro-playing .hover-label,
+  body.intro-playing .game-panel,
+  body.intro-playing .wallet-hud,
+  body.intro-playing .speech-layer,
+  body.intro-playing .subtitles,
+  body.intro-playing .reaction,
+  body.intro-playing .tip-board,
+  body.intro-playing .reading-stage,
+  body.intro-playing .reward-stage,
+  body.intro-playing .touch-stick,
+  body.intro-playing .touch-bar,
+  body.intro-playing .touch-badge {
+    visibility: hidden;
+  }
+
+  .intro {
+    /* 0 open .. 1 closed to a 2.39:1 frame (`setBars`); the line's fades, slower than any panel's. */
+    --intro-bars: 0;
+    --intro-frame: calc((100vh - 100vw / 2.39) / 2);
+    --intro-bar: max(var(--intro-frame), 9vh);
+    --intro-line-fade: 900ms;
+    --intro-title-fade: 1600ms;
+    /* The title's letters come one after the other, out of a blur. */
+    --intro-letter-fade: 1100ms;
+    --intro-letter-step: 85ms;
+    position: fixed;
+    inset: 0;
+    z-index: var(--z-fader);
+    pointer-events: none;
+    color: var(--ui-white);
+  }
+
+  .intro__black {
+    position: absolute;
+    inset: 0;
+    background: var(--ui-black);
+    opacity: 1;
+  }
+
+  .intro__bar {
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: calc(var(--intro-bar) * var(--intro-bars));
+    background: var(--ui-black);
+  }
+  .intro__bar--top { top: 0; }
+  .intro__bar--bottom {
+    bottom: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+  }
+
+  /* The narration: a serif line in the bottom bar (over the black between shots, it is the only thing lit). */
+  .intro__line {
+    margin: 0;
+    padding: 0 var(--sp-5);
+    max-width: 46rem;
+    font-family: var(--ui-font-print);
+    font-style: italic;
+    font-size: clamp(1.05rem, 2.4vw, var(--fs-t4));
+    line-height: 1.35;
+    letter-spacing: 0.01em;
+    text-align: center;
+    color: var(--tint-90);
+    opacity: 0;
+    transform: translateY(0.3em);
+    transition: opacity var(--intro-line-fade) var(--ui-ease), transform var(--intro-line-fade) var(--ui-ease);
+  }
+  .intro__line--on {
+    opacity: 1;
+    transform: none;
+  }
+
+  /* The title over the morning: the start card's display face, large and spaced, the line under it. */
+  .intro__title {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--sp-3);
+    text-align: center;
+    opacity: 0;
+    transition: opacity var(--intro-title-fade) var(--ui-ease);
+  }
+  .intro__title--on { opacity: 1; }
+  .intro__name {
+    margin: 0;
+    font-family: var(--ui-font-display);
+    font-weight: 400;
+    font-size: clamp(2.6rem, 9vw, 5.5rem);
+    letter-spacing: 0.08em;
+    text-shadow: 0 0.06em 0.5em var(--shade-60);
+  }
+  .intro__letter {
+    display: inline-block;
+    opacity: 0;
+    transform: translateY(0.18em) scale(1.06);
+    filter: blur(0.12em);
+    transition:
+      opacity var(--intro-letter-fade) var(--ui-ease),
+      transform var(--intro-letter-fade) var(--ui-ease),
+      filter var(--intro-letter-fade) var(--ui-ease);
+    transition-delay: calc(var(--i) * var(--intro-letter-step));
+  }
+  .intro__title--on .intro__letter {
+    opacity: 1;
+    transform: none;
+    filter: none;
+  }
+  .intro__tagline {
+    margin: 0;
+    font-family: var(--ui-font-print);
+    font-style: italic;
+    font-size: clamp(1rem, 2.2vw, var(--fs-t3));
+    color: var(--tint-90);
+    text-shadow: 0 0.1em 0.6em var(--shade-70);
+    opacity: 0;
+    transition: opacity var(--intro-letter-fade) var(--ui-ease);
+    /* After the name's last letters. */
+    transition-delay: calc(9 * var(--intro-letter-step));
+  }
+  .intro__title--on .intro__tagline { opacity: 1; }
+  .intro__get-up {
+    margin-top: var(--sp-5);
+    min-width: 10rem;
+    padding: 0.7em 1.6em;
+    font-size: var(--fs-8);
+    opacity: 0;
+    transform: translateY(0.4em);
+    transition: opacity var(--intro-line-fade) var(--ui-ease), transform var(--intro-line-fade) var(--ui-ease);
+  }
+  .intro__get-up--on {
+    opacity: 1;
+    transform: none;
+    pointer-events: auto;
+  }
+
+  .intro__skip {
+    position: absolute;
+    right: var(--sp-5);
+    bottom: var(--sp-4);
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    padding: var(--sp-1) var(--sp-3);
+    border: 1px solid var(--tint-20);
+    border-radius: var(--ui-radius-pill);
+    background: var(--shade-45);
+    color: var(--tint-75);
+    font-size: var(--fs-2);
+    pointer-events: auto;
+    cursor: pointer;
+    transition: color var(--dur-hover) ease, border-color var(--dur-hover) ease;
+  }
+  .intro__skip:hover,
+  .intro__skip:focus-visible,
+  .intro__skip--armed {
+    color: var(--ui-white);
+    border-color: var(--tint-50);
+  }
+}

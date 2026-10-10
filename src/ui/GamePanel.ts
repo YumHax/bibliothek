@@ -4,33 +4,19 @@ import { formatReleaseDate } from '@/catalog/format';
 import { describeEdition } from '@/economy/pricing';
 import { describeVariant } from '@/economy/copyTraits';
 import { CONVERTER_OF } from '@/economy/regionLock';
-import { CONTROLS } from './controls';
 import { escapeHtml } from './html';
 import { capitalise } from '@/text/strings';
-import { renderKeys } from './keys';
 import { fadeIn, fadeOut } from './fade';
-import { lastDevice } from '@/input/lastDevice';
 import type { ReviewSource } from '@/reviews/Reviews';
 import { reviewCardHtml } from '@/reviews/reviewCard';
 import { formatCoins } from '@/text/money';
-
-/** Built on each show, for the device last used (the controller's buttons, the touch bar's, or the keys as bound and printed). */
-const holdingHints = (): string => {
-  const device = lastDevice();
-  return CONTROLS.filter((c) => c.whileHolding)
-    .flatMap((c) => {
-      const keys = device === 'gamepad' ? c.pad : device === 'touch' ? c.touch : c.keys;
-      return keys === undefined ? [] : [`${renderKeys(keys)} ${escapeHtml(c.action.toLowerCase())}`];
-    })
-    .join(' · ');
-};
 
 /** What the panel adds for a copy that is not the player's yet (a market box): rows on top, a line of text, and its own key hints. */
 interface PanelExtra {
   rows?: Array<[string, string]>;
   /** Plain text, shown highlighted under the rows. */
   note?: string;
-  /** HTML (trusted, built from constants) replacing the usual holding hints. */
+  /** HTML (trusted, built from constants): the copy's own keys (a box of the player's has none here: the prompt line says them, `Session`). */
   hints?: string;
 }
 
@@ -90,7 +76,7 @@ export class GamePanel {
       ${note ? `<p class="game-panel__note">${escapeHtml(note)}</p>` : ''}
       ${game.description ? `<p>${escapeHtml(game.description)}</p>` : ''}
       <section class="review-card" hidden></section>
-      <footer>${extra.hints ?? holdingHints()}</footer>`;
+      ${extra.hints ? `<footer>${extra.hints}</footer>` : ''}`;
     fadeIn(this.root, 'game-panel--closing');
     this.shown = game.id;
     this.showReviews(game);

@@ -69,18 +69,20 @@ export class CartonAtHome extends THREE.Group implements Furniture, Interactable
     playBoxClack(false);
     const { taken, game, coins, duplicate } = result;
     const { item, left } = taken;
-    const end = left ? '' : ' That was the last thing in it: the carton goes out with the recycling.';
+    const end = left ? '' : ' The carton is empty now.';
     if (item.kind === 'junk') {
       session.read({ title: item.name, text: item.line, ...(left ? {} : { effect: 'The carton is empty.' }) });
       if (coins) session.reward({ title: `${coins} loose ${plural(coins, 'coin')}`, detail: 'Found at the bottom of the carton.', coins });
       return;
     }
     if (duplicate) {
-      session.reward({ title: `${item.game.title}: you have it already`, detail: `The buyer at the flea market takes it off your hands.${end}`, coins });
+      session.reward({ title: 'Had it already', detail: `${item.game.title} goes to the buyer at the flea market.${end}`, coins });
       return;
     }
     const gem = item.gem ? ' A gem, under all that!' : '';
-    session.reward({ title: `Out of the carton: ${game?.title ?? item.game.title}`, detail: `${gem} It goes in the parcel with the rest.${end}`.trim(), big: item.gem === true });
+    const found = { title: game?.title ?? item.game.title, detail: `${gem} Out of the carton, into the parcel.${end}`.trim() };
+    if (item.gem === true) session.reward({ ...found, big: true });
+    else session.slip(found);
   }
 
   dispose(): void {

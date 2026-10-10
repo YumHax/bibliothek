@@ -4,6 +4,8 @@ import { getPlatform } from '@/catalog/platforms';
 import type { Household } from './Household';
 import { HOUSEHOLD } from './rules';
 import { drawCatGift } from './catGift';
+import { drawDailyFind, drawLeftover, type LaidFind } from './rummage';
+import { FELIX_NOTEBOOK, FIND_TITLES, TENANT_NOTE, holdsPaper } from './rummageLines';
 import { morningChronicle } from './chronicle';
 import { knowHowOf } from './perks';
 import { dreamOf, type Dream } from './dreams';
@@ -17,22 +19,49 @@ interface HomeLifeDeps {
   collection: { find(id: string): Game | undefined; update(id: string, patch: Partial<Omit<Game, 'id'>>): void; owns(id: string): boolean };
   /** What is on the shelves (the cat finds the booklet of one of these). */
   shelved: { readonly games: readonly Game[] };
-  /** Coins the cat turned up. */
-  purse: { earnCoins(coins: number): void };
+  /** Coins the cat turned up; coins and tickets found in a cupboard. */
+  purse: { earnCoins(coins: number): void; addTickets(tickets: number): void };
   /** The game's clock, hours. */
   hours: () => number;
   /** Whether the flea market keeps its doors open right now (RETRO GAMES' hours). */
   marketOpen: () => boolean;
   /** The market's stock today (owned copies left out): what a night's dream is of. */
   todays?: () => Promise<readonly StockItem[]>;
-  /** The day's journal: what got done at home (a box cleaned, a cake baked, what the cat turned up). */
-  journal?: { note(kind: string, text: string): void };
+  /** The day's journal: what got done at home (a box cleaned, a cake baked, what the cat turned up), as small things. */
+  journal?: { note(kind: string, text: string, options?: { weight?: 'note' }): void };
+  /** Uncle Félix's notebook (`story/FelixNotebook`): it lies at the back of the first drawer opened from `NOTEBOOK_FROM_DAY`. */
+  notebook?: { readonly found: boolean; find(day: number): void };
 }
+
+/** Uncle Félix's notebook waits in the flat's drawers from this market day (the first day has its own list to follow). */
+const NOTEBOOK_FROM_DAY = 2;
 
 /** A thing to do, and what came of it: a line for the toast, and whether anything happened. */
 export interface Outcome {
   done: boolean;
   line: string;
+}
+
+/** What was picked up from a door or drawer, pocketed already: the slip's lines and chips, whether it was paper, and the last tenant's note with their first leftover. */
+interface Find {
+  title: string;
+  detail?: string;
+  coins?: number;
+  tickets?: number;
+  paper: boolean;
+  /** Worth a banner (a manual that completes a copy); else a slip under the crosshair. */
+  notable?: boolean;
+  note?: { title: string; text: string };
+}
+
+/** A door or drawer of the flat (`world/build/rummage`): its key in the save, what it is called, and what kind it is. */
+interface RummageSpot {
+  key: string;
+  noun: string;
+  /** One of the flat's own fittings (it held what the last tenant left), not bought furniture. */
+  fitted: boolean;
+  /** A drawer: where a lost booklet may turn up. */
+  drawer: boolean;
 }
 
 const no = (line: string): Outcome => ({ done: false, line });
@@ -60,9 +89,9 @@ export class HomeLife {
     return this.deps.household;
   }
 
-  /** A line in the day's journal (kind `home`). */
+  /** A line in the day's journal (kind `home`): a chore done, one of the small things of the day. */
   private log(text: string): void {
-    this.deps.journal?.note('home', text);
+    this.deps.journal?.note('home', text, { weight: 'note' });
   }
 
   /** The copy of `game` in the collection (a box in hand may carry an older Game object). */
@@ -121,7 +150,7 @@ export class HomeLife {
     const copy = this.owned(game);
     if (!copy) return 'Cleaning kit';
     if (copy.condition !== 'worn') return `Cleaning kit · ${copy.title} is in good shape`;
-    if (this.household.restoresLeft <= 0) return 'Cleaning kit · one careful job a day, come back tomorrow';
+    if (this.household.restoresLeft <= 0) return 'Cleaning kit · one careful job, then sleep on it';
     return `Cleaning kit · clean up ${copy.title}`;
   }
 
@@ -130,7 +159,7 @@ export class HomeLife {
     const copy = this.owned(game);
     if (!copy) return no('Only your own boxes, at home.');
     if (copy.condition !== 'worn') return no(`${copy.title} does not need it.`);
-    if (this.household.restoresLeft <= 0) return no('That is enough fiddly work for one day. Tomorrow.');
+    if (this.household.restoresLeft <= 0) return no('That is enough fiddly work for now. After a good night’s sleep.');
     return null;
   }
 
@@ -167,7 +196,7 @@ export class HomeLife {
   }
 
   get treatLabel(): string {
-    return this.household.treatedToday ? 'Treat jar · one a day, or the cat gets round' : 'Treat jar · give the cat a treat';
+    return this.household.treatedToday ? 'Treat jar · one a night, or the cat gets round' : 'Treat jar · give the cat a treat';
   }
 
   /**
@@ -175,7 +204,7 @@ export class HomeLife {
    * does not come (asleep, mid-leap) gets none: the day's treat stays in the jar for later.
    */
   giveTreat(callCat?: () => { came: boolean; line: string }): Outcome {
-    if (this.household.treatedToday) return no('One a day. Look at that face, though.');
+    if (this.household.treatedToday) return no('One a night. Look at that face, though.');
     const call = callCat?.();
     if (call && !call.came) return no(`You shake the jar.\n${call.line}`);
     this.household.giveTreat(drawCatGift(this.household.today, this.deps.shelved.games));
@@ -202,6 +231,63 @@ export class HomeLife {
     this.deps.collection.update(copy.id, { condition: 'complete' });
     this.log(`${catName} found the manual of ${copy.title}`);
     return yes(`The manual of ${copy.title}! It was ${pickPlace(copy.title.length, BOOKLET_PLACES)} all along. ${catName} looks very pleased.\nThe copy is complete again.`);
+  }
+
+  // --- the doors and drawers ------------------------------------------------------------------
+
+  /**
+   * What lies in a door or drawer of the flat right now, nothing taken (`world/build/rummage` lays it there to be
+   * picked up): the last tenant's leftover while it is there (with their note beside the first), else today's find
+   * if it holds one and it was not taken yet; null when it holds nothing.
+   */
+  peekFind(spot: RummageSpot): LaidFind | null {
+    const { household } = this;
+    const { notebook } = this.deps;
+    if (notebook && !notebook.found && spot.fitted && spot.drawer && holdsPaper(spot.noun) && household.today >= NOTEBOOK_FROM_DAY) {
+      return { find: { kind: 'notebook', title: FELIX_NOTEBOOK.title }, leftover: false, note: false };
+    }
+    if (spot.fitted && household.hasLeftover(spot.key)) {
+      return { find: drawLeftover(spot.key, holdsPaper(spot.noun)), leftover: true, note: !household.leftoverFound };
+    }
+    if (household.rummagedToday(spot.key)) return null;
+    const find = drawDailyFind(spot.key, household.rest, { drawer: spot.drawer, paper: holdsPaper(spot.noun) }, this.deps.shelved.games);
+    return find && { find, leftover: false, note: false };
+  }
+
+  /**
+   * Picks up what `spot` holds (what `peekFind` says is there): the coins and tickets go in the wallet, a booklet
+   * completes its copy, and the spot is empty till its next find. Returns the lines saying so, or null when nothing
+   * is there any more. The journal counts the money with the rest of the day's, so only a booklet gets a line.
+   */
+  takeFind(spot: RummageSpot): Find | null {
+    const laid = this.peekFind(spot);
+    if (!laid) return null;
+    const { household } = this;
+    const { find, leftover } = laid;
+    // The day's find waits for the next opening after a leftover: one surprise at a time.
+    if (leftover) household.takeLeftover(spot.key);
+    else household.markRummaged(spot.key);
+    if (find.kind === 'notebook') {
+      this.deps.notebook?.find(household.today);
+      this.log('Found uncle Félix’s notebook');
+      return { title: FELIX_NOTEBOOK.title, detail: FELIX_NOTEBOOK.detail, paper: true, notable: true, note: { ...FELIX_NOTEBOOK.page } };
+    }
+    if (find.kind === 'manual') {
+      const title = FIND_TITLES.manual;
+      const copy = this.deps.collection.find(find.gameId);
+      if (!copy || copy.condition !== 'noManual') return { title, detail: `The booklet of ${find.title}. You no longer have the game.`, paper: true };
+      this.deps.collection.update(copy.id, { condition: 'complete' });
+      this.log(`Found the manual of ${copy.title} in the ${spot.noun}`);
+      return { title, detail: `The manual of ${copy.title}: the copy is complete again.`, paper: true, notable: true };
+    }
+    const detail = leftover ? { detail: FIND_TITLES.leftover } : {};
+    const note = laid.note ? { note: { ...TENANT_NOTE } } : {};
+    if (find.kind === 'coins') {
+      this.deps.purse.earnCoins(find.coins);
+      return { title: find.coins === 1 ? FIND_TITLES.coin : FIND_TITLES.coins, ...detail, coins: find.coins, paper: false, ...note };
+    }
+    this.deps.purse.addTickets(find.tickets);
+    return { title: FIND_TITLES.tickets, ...detail, tickets: find.tickets, paper: true, ...note };
   }
 
   /** Radio Brocante's chronicle is on the air and not heard yet today (the radio's caption says so). */

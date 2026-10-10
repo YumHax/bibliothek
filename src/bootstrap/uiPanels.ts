@@ -1,6 +1,8 @@
 import { SEED_GAMES } from '@/catalog';
 import { MarketNotices } from '@/economy';
+import { COLLECTOR_SETS } from '@/economy/collectorSets';
 import { shopPrice } from '@/economy/pricing';
+import { milestoneReward } from '@/economy/milestoneList';
 import type { ModalLike } from '@/game/SessionParts';
 import type { FirstPersonController } from '@/player/FirstPersonController';
 import type { MarketHallServices, WorldPanels } from '@/world/buildContext';
@@ -11,6 +13,9 @@ import { SearchBar } from '@/ui/SearchBar';
 import { CollectionEditor } from '@/ui/CollectionEditor';
 import { CataloguePanel } from '@/ui/CataloguePanel';
 import { SellPanel } from '@/ui/SellPanel';
+import { ScreeningPanel } from '@/ui/ScreeningPanel';
+import { KidSwapPanel } from '@/ui/yard/KidSwapPanel';
+import { HandheldPanel } from '@/ui/yard/HandheldPanel';
 import { partyBuyer } from '@/building/neighboursParty';
 import { HagglePanel } from '@/ui/market/HagglePanel';
 import { TradePanel } from '@/ui/market/TradePanel';
@@ -18,7 +23,7 @@ import { NoticeBoardPanel } from '@/ui/market/NoticeBoardPanel';
 import { JobLotPanel } from '@/ui/market/JobLotPanel';
 import { PrizePanel } from '@/ui/PrizePanel';
 import { CollectorBookPanel } from '@/ui/collector/CollectorBookPanel';
-import { JournalPanel } from '@/ui/JournalPanel';
+import { JournalPanel } from '@/ui/journal/JournalPanel';
 import { NeighbourTradePanel } from '@/ui/NeighbourTradePanel';
 import { CoproPanel } from '@/ui/CoproPanel';
 import { PhonePanel } from '@/ui/household/PhonePanel';
@@ -28,11 +33,13 @@ import { WardrobePanel } from '@/ui/household/WardrobePanel';
 import { DreamCard } from '@/ui/household/DreamCard';
 import { HOUSEHOLD } from '@/household';
 import { SHOP_HOURS } from '@/world/street/shops/shopHours';
-import { upcomingMarketDays } from '@/journal';
+import { upcomingMarketDays, upcomingWorld } from '@/journal';
 import { upcomingSocial } from '@/social/life/startLife';
+import { upcomingGrandma } from '@/social/grandmaSocial';
 import { TravelMenu } from '@/ui/TravelMenu';
 import { WalletHud } from '@/ui/WalletHud';
 import { clockShort } from '@/text/clock';
+import { gameDateLabel } from '@/time/gameDateLabel';
 import { onWorldLoad } from '@/ui/worldLoad';
 import { Fader } from '@/ui/Fader';
 import { stallLoyalty } from '@/social/market';
@@ -65,7 +72,8 @@ export function createCollectionPanels(services: Services, notices: Notices) {
   panel.setReviews(services.reviews);
   services.story.setNotices(notices);
   const search = new SearchBar(container);
-  const editor = new CollectionEditor(container, collection, index, { canAdd: debug });
+  // "Show on shelf" finds the box as the quick search does (`Browse`: the glow, the player turned towards it).
+  const editor = new CollectionEditor(container, collection, index, { canAdd: debug, coverUrl, onShow: (game) => search.pick(game) });
   const catalogue = new CataloguePanel(container, collection, index, wallet, fame, tx, { market, coverUrl });
   const sellDesk = new SellPanel(container, collection, wallet, fame, tx, { coverUrl, standing });
   return { panel, search, editor, catalogue, sellDesk };
@@ -98,10 +106,30 @@ export function createBookPanels(services: Services, late: UiLate, peopleBook: L
   journal.setClock({ day: () => services.today.gameDay, hours: () => services.sky.dayNight.state.hours });
   const journalPanel = new JournalPanel(container, journal, {
     challenge: () => arcadeDaily.challenge(),
-    upcoming: () => [...upcomingMarketDays(market.day), ...upcomingSocial(services.today.gameDay)],
+    upcoming: () => [
+      ...upcomingWorld({
+        day: services.today.gameDay,
+        date: services.today.realDate(),
+        tournament: services.tournament,
+        booking: services.classifieds.booking,
+        held: services.ledger.heldCopies(market.day),
+        orders: services.ledger.orders,
+        parcel: services.deliveries.count,
+        cartons: services.lots.sealed.waiting.length,
+        broken: services.workshop.consoles.filter((c) => !c.fixed).length,
+        unclaimed: services.milestones.unclaimed,
+        games: collection.games,
+      }),
+      ...upcomingMarketDays(market.day),
+      ...upcomingSocial(services.today.gameDay),
+      ...upcomingGrandma({ day: services.today.gameDay, photos: services.grandma.due !== null }),
+    ],
+    balance: () => ({ coins: wallet.coins, tickets: wallet.tickets, games: collection.games.filter((g) => g.status !== 'wishlist').length }),
     file: () => services.story.file(),
-    files: [huntFile],
+    files: [huntFile, () => services.felix.file()],
     people: () => late.session.get().openPanel(peopleBook.get()),
+    games: () => collection.games,
+    coverUrl,
   });
   return { collectorBook, journalPanel };
 }
@@ -119,7 +147,7 @@ export function createHomePanels(services: Services, notices: Notices, late: UiL
   const coproPanel = new CoproPanel(container);
   // What the street's shops and the hall console open: made once here, handed to their builders (`BuildContext.panels`).
   const panels: WorldPanels = {
-    news: new NewsPanel(container),
+    news: new NewsPanel(container, { ring: (id) => phoneAds(services.classifieds).ring(id) }),
     scratch: new ScratchCardPanel(container),
     // The clerk's discount or markup at the till, and the one talked out of them today (docs/social.md "Front Street and the arcade").
     homeShop: new HomeShopPanel(container, {
@@ -131,6 +159,18 @@ export function createHomePanels(services: Services, notices: Notices, late: UiL
     toDo: services.firstDay ? new ToDoNotePanel(container, services.firstDay) : undefined,
     // The residents' table at the neighbours' party (`building/neighboursParty`): the WE BUY desk's panel with their buyer.
     partySale: new SellPanel(container, collection, wallet, fame, tx, { coverUrl, buyer: partyBuyer(tx, services.today) }),
+    // The film night's pick on the courtyard's sheet (`building/yardCinema`).
+    screening: new ScreeningPanel(container, collection, services.today, coverUrl),
+    // The courtyard's kids (`building/kids`): a swap of carts, a go on their handheld, a cart they are bored of.
+    kids: {
+      swap: new KidSwapPanel(container, { wallet, tx, collection, fame, spendTickets: (n) => wallet.spendTickets(n), coverUrl }),
+      handheld: new HandheldPanel(container),
+      give: (cart, where) => {
+        if (collection.owns(cart.id)) return false;
+        collection.add({ ...cart, status: 'owned', addedAt: new Date().toISOString(), acquired: { price: 0, where, day: market.day } });
+        return true;
+      },
+    },
   };
   // What the bedroom opens (docs/household.md): the phone on the nightstand, the wardrobe's rail; and the dream on waking.
   const retro = SHOP_HOURS.retro!;
@@ -172,23 +212,51 @@ export function createHomePanels(services: Services, notices: Notices, late: UiL
  * load, the curtain every trip and every night falls behind, and the "Where to?" a door opens.
  */
 export function wireHud(services: Services, player: FirstPersonController, menus: Menus, late: UiLate) {
-  const { container, engine, input, params, wallet, payoutStats, collectorWatch } = services;
+  const { container, engine, input, params, wallet, payoutStats, collectorWatch, debug } = services;
   const { overlay, notices } = menus;
   const here = (): ZoneId => late.zones.get().current.id;
-  // A milestone reached anywhere (a purchase, a medal, a sale): a big reward, the book on the sideboard has the rest.
+  // A milestone reached anywhere (a purchase, a medal, a sale): a big reward, paid on the spot (the book on the
+  // sideboard keeps the record and the trophies).
   collectorWatch.onReached = (reached) => {
     const first = reached[0]!;
+    const paid = { coins: 0, tickets: 0 };
+    for (const milestone of reached) {
+      const { coins, tickets } = milestoneReward(milestone.id);
+      if (!services.milestones.claim(milestone.id, wallet)) continue;
+      paid.coins += coins ?? 0;
+      paid.tickets += tickets ?? 0;
+    }
     notices.reward({
       title: reached.length === 1 ? 'Milestone reached!' : `${reached.length} milestones reached!`,
-      detail: reached.length === 1 ? `${first.title}\nThe collector’s book in the living room has your reward.` : 'The collector’s book in the living room has your rewards.',
+      detail: reached.length === 1 ? `${first.title}.` : reached.map((m) => m.title).join(' · '),
+      ...(paid.coins ? { coins: paid.coins } : {}),
+      ...(paid.tickets ? { tickets: paid.tickets } : {}),
       big: true,
     });
   };
+  // A collectors' club set completed: its bounty paid there and then (the notice board and the book keep the list).
+  const paySets = () => {
+    for (const set of COLLECTOR_SETS) {
+      const paid = services.tx.claimSet(set);
+      if (paid.ok) notices.reward({ title: 'A set complete!', detail: `${set.name}: the collectors’ club sends its bounty.`, coins: paid.reward, big: true });
+    }
+  };
+  services.collection.subscribe(paySets);
+  paySets();
+  // One of uncle Félix's games home again: his line about it, in his hand (the journal's notebook page keeps them all).
+  services.felix.onTicked(({ title, line, last }) => {
+    notices.reward({ title: last ? 'Every one of Félix’s games is home' : `${title}, back on Félix’s shelf`, detail: `“${line}”`, big: last });
+    services.journal.note('story', `${title}: back on uncle Félix’s shelf`, { weight: 'headline' });
+  });
   if (params.has('payout')) installPayoutTable(container, payoutStats);
-  const walletHud = new WalletHud(container, wallet, { moneyHere: () => late.zones.isSet && MONEY_ZONES.has(here()) });
+  const walletHud = new WalletHud(container, wallet, {
+    moneyHere: () => late.zones.isSet && MONEY_ZONES.has(here()),
+    clockHere: () => late.zones.isSet && here() === 'street',
+    clock: () => gameDateLabel(services.today.gameDay, services.today.hours),
+  });
   engine.addUpdatable(walletHud);
-  // Typing 5000 (or `bibliothek.coins()` in the console): 5000 coins.
-  installMoneyCheat(input, wallet, notices);
+  // Typing 5000 (or `bibliothek.coins()` in the console): 5000 coins, only under `?debug` (a player earns them).
+  if (debug) installMoneyCheat(input, wallet, notices);
   // Sounds nobody clicked for (the arcade's machines and hum) wait for the first gesture to start the audio.
   unlockAudioOnFirstGesture();
   let entered = false;

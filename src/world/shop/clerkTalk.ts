@@ -75,7 +75,7 @@ function extrasOf(id: PersonId, options: ClerkTalkOptions, session: SessionActio
       run: () => {
         if (!onceToday(id, 'freeTreats', day)) return { line: 'One a day, you. Or the boss notices.' };
         pocket.add('treats', FREE_POUCH.portions, FREE_POUCH.max);
-        session.reward({ title: 'A pouch of treats', detail: 'Three portions, on the house. In your pocket.' });
+        session.slip({ title: 'A pouch of treats', detail: 'Three portions, on the house.' });
         return { line: 'Here. Fish ones. Don’t tell the boss, and don’t tell the cat where they came from.' };
       },
     });

@@ -35,8 +35,8 @@ export class AdaptiveResolution {
   constructor(
     private min: number,
     private max: number,
-    /** Seconds a frame should take (the fps cap, else 60 Hz). */
-    private readonly target: number,
+    /** Seconds a frame should take (the fps cap, else 60 Hz); `setTarget` when the cap changes. */
+    private target: number,
     private readonly apply: (ratio: number) => void,
   ) {
     this.ratio = max;
@@ -86,6 +86,11 @@ export class AdaptiveResolution {
     this.calm = 0;
     this.raisedLast = true;
     this.set(Math.min(this.max, this.ratio / STEP));
+  }
+
+  /** Settings > Display > Frame rate changed: a frame should now take `seconds`. */
+  setTarget(seconds: number): void {
+    this.target = seconds;
   }
 
   private set(ratio: number): void {

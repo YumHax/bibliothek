@@ -1,6 +1,5 @@
 import type { SessionActions } from '@/game/SessionActions';
 import { PLAY_COST } from '@/economy/pricing';
-import { formatCoins } from '@/text/money';
 import { findPerson } from '@/social/people';
 import { effect, effectValue, has } from '@/social/perks';
 import { isMet } from '@/social/standing';
@@ -59,7 +58,7 @@ export function attendantTalk(options: AttendantTalkOptions, session: SessionAct
         const n = creditsUsed() + 1;
         if (!purse || n > credits() || !onceToday(ATTENDANT, `freeCredit${n}`, day)) return { line: 'Don’t push it.' };
         purse.earnCoins(PLAY_COST);
-        session.reward({ title: 'A free credit', detail: `Gus slides ${formatCoins(PLAY_COST)} across the counter.`, coins: PLAY_COST });
+        session.slip({ title: 'A free credit', detail: 'Gus slides it across the counter.', coins: PLAY_COST });
         return { line: 'On the house. Don’t tell the regulars.' };
       },
     },

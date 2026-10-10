@@ -8,6 +8,7 @@ import { buildWorld, createWorld, startWhenReady } from '@/bootstrap/world';
 import { createPlayerMoves, type PlayerMoves } from '@/bootstrap/player';
 import { createInteraction } from '@/bootstrap/input';
 import { createSession } from '@/bootstrap/session';
+import { createIntro } from '@/bootstrap/intro';
 
 /*
  * Wiring only, in the order things need each other (each step in `src/bootstrap/`). What is made
@@ -31,4 +32,6 @@ const built = buildWorld(services, { world, player, marketHall: ui.marketHall, f
 moves.set(createPlayerMoves(services, { world, built, player, fader: ui.fader }));
 const interaction = createInteraction(services, { world, built, player, overlay: ui.overlay, moves: moves.get(), notices: ui.notices });
 session.set(createSession(services, { player, ui, built, moves: moves.get(), interaction }));
+// The opening cutscene, asked first on the way into the room (a new game only, or `?intro`).
+createIntro(services, { player, ui, built, world });
 startWhenReady(services.engine, world);

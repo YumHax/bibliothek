@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { bareMetal } from '../street/metals';
+import { createCanvas, toTexture } from '@/graphics/canvas';
 import { HEAD_Y, NECK_PIVOT } from './body';
 import type { ArmAngles } from './poses';
 
@@ -9,7 +10,7 @@ import type { ArmAngles } from './poses';
  * for, each with its own materials (so a faded person fades them too).
  */
 
-export type Held = 'phone' | 'book' | 'umbrella' | 'shopping' | 'baguette' | 'flowers' | 'cigarette';
+export type Held = 'phone' | 'book' | 'umbrella' | 'shopping' | 'baguette' | 'flowers' | 'cigarette' | 'paddle';
 
 /** The mesh of `item`, `seed` picking its colours; the umbrella goes on the torso, the rest in the right hand (`HELD_ON`). */
 export function heldMesh(item: Held, seed: number): THREE.Object3D {
@@ -28,7 +29,35 @@ export function heldMesh(item: Held, seed: number): THREE.Object3D {
       return bouquetMesh(seed);
     case 'cigarette':
       return cigaretteMesh();
+    case 'paddle':
+      return paddleMesh(seed);
   }
+}
+
+/**
+ * A saleroom bidder's paddle: a white card on a short wooden handle, the bidder's number printed
+ * on both faces, held up past the fingers (the wrist's frame: the hand runs down -y).
+ */
+function paddleMesh(seed: number): THREE.Object3D {
+  const group = new THREE.Group();
+  const wood = new THREE.MeshStandardMaterial({ color: 0x8a5a32, roughness: 0.6 });
+  const handle = new THREE.Mesh(new THREE.CylinderGeometry(0.009, 0.009, 0.14, 6), wood);
+  handle.position.set(0, -0.13, 0.02);
+  const [canvas, ctx] = createCanvas(128, 128);
+  ctx.fillStyle = '#f4f0e6';
+  ctx.fillRect(0, 0, 128, 128);
+  ctx.strokeStyle = '#6b1f2a';
+  ctx.lineWidth = 8;
+  ctx.strokeRect(6, 6, 116, 116);
+  ctx.fillStyle = '#1a1a1a';
+  ctx.font = 'bold 70px Georgia, serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(String(10 + (seed % 89)), 64, 68);
+  const face = new THREE.Mesh(new THREE.BoxGeometry(0.17, 0.17, 0.004), new THREE.MeshStandardMaterial({ map: toTexture(canvas, 'facing'), roughness: 0.7 }));
+  face.position.set(0, -0.28, 0.02);
+  group.add(handle, face);
+  return group;
 }
 
 const BAG_PAPERS = [0xc9a878, 0xe8e2d4, 0x9a6a3a, 0x2f4a3a];

@@ -22,8 +22,8 @@ export const CONTROL_DEVICES: Array<{ id: ControlDevice; label: string }> = [
 /**
  * One action of the controls help, in the key mini-markup of `keys.renderKeys` (`{KeyW}` a rebindable
  * key code, `[Click]` a literal cap). `pad` / `touch` are the same action on the other devices;
- * absent, the line is keyboard-only (`—` on that device). `whileHolding` lines are repeated in the
- * game panel's footer; `essential` lines are also on the title screen.
+ * absent, the line is keyboard-only (`—` on that device). `whileHolding` lines are the keys card's with a box in
+ * hand (`KeysCard`, hold H); `essential` lines are also on the title screen.
  */
 export interface ControlHint {
   group: ControlGroup;
@@ -44,7 +44,7 @@ const touch = touchMarkup;
 const walk = `${k('forward')}${k('left')}${k('back')}${k('right')}`;
 
 /** Settings > Controls > Walking, as the Controls screen shows it: only the mode chosen (`setControlModes`, from the settings form). */
-let modes: { sprint: 'doubleTap' | 'hold'; crouch: 'hold' | 'toggle' } = { sprint: 'doubleTap', crouch: 'hold' };
+let modes: { sprint: 'doubleTap' | 'hold'; crouch: 'hold' | 'toggle' } = { sprint: 'hold', crouch: 'hold' };
 
 /** The sprint and crouch modes the help describes (Settings > Controls > Walking). */
 export function setControlModes(next: { sprint: 'doubleTap' | 'hold'; crouch: 'hold' | 'toggle' }): void {
@@ -66,8 +66,10 @@ export const CONTROLS: ControlHint[] = [
   { group: 'room', action: 'Crouch', get keys() { return crouchKeys(); }, get pad() { return modes.crouch === 'toggle' ? '[LB] (again: stand up)' : 'Hold [LB]'; } },
   { group: 'room', action: 'Pick a game up, use what you look at', keys: '[Click]', pad: '[A]', touch: 'Tap', essential: true },
   { group: 'room', action: 'Rotate the game in hand', keys: 'Hold [Right click]', pad: 'Hold [RB], [Right stick]', touch: 'Long-press, drag', whileHolding: true },
+  { group: 'room', action: 'Turn it over (the back cover)', keys: k('turnBox'), whileHolding: true },
+  { group: 'room', action: 'Bring it closer to read, or back', keys: '[Wheel]', whileHolding: true },
   { group: 'room', action: 'Open / close the box', keys: k('openBox'), pad: pad('openBox'), touch: touch('openBox'), whileHolding: true },
-  { group: 'room', action: 'Put it back', keys: `${k('putBack')} or [Click] elsewhere`, pad: pad('putBack'), touch: touch('putBack'), whileHolding: true },
+  { group: 'room', action: 'Put it back', keys: k('putBack'), pad: pad('putBack'), touch: touch('putBack'), whileHolding: true },
   { group: 'room', action: 'Put it in its console and watch its longplay', keys: '[Click] its console on the TV stand (or the TV)', pad: '[A] on its console or the TV', touch: 'Tap its console or the TV', whileHolding: true },
   { group: 'room', action: 'Watch it big', keys: '[Click] the ceiling projector or its wall', pad: '[A] on the projector', touch: 'Tap the projector', whileHolding: true },
   { group: 'room', action: 'Sit in an armchair (move to stand up)', keys: '[Click] the armchair', pad: '[A]', touch: 'Tap' },
@@ -102,6 +104,7 @@ export const CONTROLS: ControlHint[] = [
   { group: 'room', action: 'Photo mode (fly, focus, take a PNG)', keys: k('photoMode'), pad: '[Start] › Photo mode', touch: '[Menu] › Photo mode' },
   { group: 'room', action: 'Pet the cat, refill its bowl', keys: '[Click] it, [Click] the bowl', pad: '[A]', touch: 'Tap' },
   { group: 'room', action: 'Go out (arcade, flea market)', keys: '[Click] the key bowl, then the front door', pad: '[A]', touch: 'Tap', essential: true },
+  { group: 'room', action: 'The keys for what you are doing', keys: `Hold ${k('keysCard')}`, essential: true },
   { group: 'room', action: 'Pause, release the mouse', keys: k('close'), pad: '[Start]', touch: touch('close'), essential: true },
 
   // --- arcade ----------------------------------------------------------------------------------------

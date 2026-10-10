@@ -4,6 +4,7 @@ import { cylinderMesh } from '../meshUtils';
 import { part } from '../props/Prop';
 import { METAL, paint } from '../materials/palette';
 import { SwingLeaf, revealWhileOpen } from '../props/SwingLeaf';
+import { stashBehind } from '../props/Openable';
 
 interface WardrobeOptions {
   /** Length along the wall. Default 1.2 (two doors). */
@@ -88,6 +89,8 @@ export class Wardrobe extends THREE.Group implements Furniture {
       }
       const side = hinge === 'left' ? -1 : 1;
       leaf.position.set(side * (width / 2 - DOOR_GAP), doorBottom, bodyD);
+      // A find lies on the wardrobe's floor at the front, in front of the shoes, under the hems.
+      leaf.stash = stashBehind(leaf, new THREE.Vector3(side * width * 0.22, PLINTH + PANEL, bodyD - 0.05));
       return leaf;
     });
 

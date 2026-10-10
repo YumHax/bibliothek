@@ -5,6 +5,7 @@ import { RoomWindow } from '@/world/props/Window';
 import { FrostedWindow } from '@/world/props/FrostedWindow';
 import type { Zone } from '@/world/zone/Zone';
 import type { Surface } from './surfaces';
+import { WayThrough } from './way';
 
 /** Thinner than this (m), a piece lies flat (a rug, a mat): flat things only mind each other, furniture stands over them. */
 const FLAT = 0.035;
@@ -61,7 +62,7 @@ function drawnBounds(item: THREE.Object3D): THREE.Box3 {
 }
 
 /** Why a piece may not stand somewhere: what the caption says, and what is outlined in red. */
-export type BlockKind = 'room' | 'doorway' | 'window' | 'piece' | 'furniture' | 'someone' | 'edge';
+export type BlockKind = 'room' | 'doorway' | 'window' | 'piece' | 'furniture' | 'someone' | 'edge' | 'way';
 
 /** What stops a piece being set down: its kind, its world box, and its name when it has one ("the armchair"). */
 export interface Blocker {
@@ -105,6 +106,8 @@ export class Fit {
   private feet: { from: readonly Occupant[] | null; boxes: Blocker[] } = { from: null, boxes: [] };
   private readonly room: THREE.Box3;
   private readonly roomBox: THREE.Box3;
+  /** The way through the room on foot, made the first time a floor piece asks. */
+  private way: WayThrough | null = null;
 
   constructor(
     zone: Zone,
@@ -160,6 +163,11 @@ export class Fit {
     if (hit) return hit;
     // Nothing is set down on anyone's feet (a rug slides under them, a picture hangs over them).
     if (flat || this.surface !== 'floor') return null;
+    // Nor where it shuts part of the room away from its doorways (outlined: the floor it would cut off).
+    if (!on) {
+      const cut = this.wayThrough().cutOff(shrunk);
+      if (cut) return { kind: 'way', box: cut };
+    }
     const occupants = this.occupants();
     if (occupants !== this.feet.from) {
       this.feet = {
@@ -203,6 +211,15 @@ export class Fit {
       if (at.x >= min.x && at.x <= max.x && at.z >= min.z && at.z <= max.z && Math.abs(max.y - at.y) < 0.03) return o.owner;
     }
     return null;
+  }
+
+  private wayThrough(): WayThrough {
+    this.way ??= new WayThrough(
+      this.roomBox,
+      this.obstacles.filter((o) => !o.flat && (o.kind === 'piece' || o.kind === 'furniture')).map((o) => o.box),
+      this.obstacles.filter((o) => o.kind === 'doorway').map((o) => o.box),
+    );
+    return this.way;
   }
 
   /** The ways through the doorways (and the window openings on a wall) kept clear (world): drawn faintly while carrying. */

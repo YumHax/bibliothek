@@ -6,6 +6,8 @@ import { playRockerClick } from '@/audio/furnitureSounds';
 import { Prop } from './Prop';
 import { HoverGlint } from './hoverGlint';
 import { poweredAt } from '@/building/mains';
+import { QUALITY } from '@/graphics/quality';
+import { LampHalo } from '../lighting/LampHalo';
 
 /** Seconds a switched lamp takes to come up (a filament warming) and to go dark (it cools a touch faster). */
 const WARM_SECONDS = 0.14;
@@ -30,6 +32,8 @@ export abstract class SwitchableLamp extends Prop implements Interactable, Updat
   private hovered = false;
   /** 0 dark .. 1 fully lit, following `on`; null until the first `setOn`, which is shown at once. */
   private level: number | null = null;
+  /** Where there is no bloom (`low`): a soft halo at each of the lamp's lights, following its level. */
+  private halos: LampHalo[] | null = null;
 
   /** `what` names the lamp in its caption: "floor lamp", "ceiling light"… */
   protected constructor(private readonly what: string) {
@@ -44,7 +48,8 @@ export abstract class SwitchableLamp extends Prop implements Interactable, Updat
     this.on = on;
     if (this.level === null) {
       this.level = on ? 1 : 0;
-      this.render(this.level, this.hovered);
+      if (!QUALITY.bloom) this.halos = this.makeHalos();
+      this.show(this.level);
     }
   }
 
@@ -58,12 +63,32 @@ export abstract class SwitchableLamp extends Prop implements Interactable, Updat
     if (this.level === null || this.level === target) return;
     const step = dt / (target ? WARM_SECONDS : COOL_SECONDS);
     this.level = target ? Math.min(1, this.level + step) : Math.max(0, this.level - step);
-    this.render(this.level, this.hovered);
+    this.show(this.level);
   }
 
   /** Renders the current level again: something else `render` reads changed (a parked spot). */
   protected refresh(): void {
-    this.render(this.level ?? (this.on ? 1 : 0), this.hovered);
+    this.show(this.level ?? (this.on ? 1 : 0));
+  }
+
+  private show(level: number): void {
+    this.render(level, this.hovered);
+    if (this.halos) for (const halo of this.halos) halo.set(level);
+  }
+
+  /** A halo at each light the subclass built (point and spot: the bulbs), in the light's colour. */
+  private makeHalos(): LampHalo[] {
+    const lights: THREE.Light[] = [];
+    this.traverse((obj) => {
+      const light = obj as THREE.PointLight & THREE.SpotLight;
+      if (light.isPointLight || light.isSpotLight) lights.push(light);
+    });
+    return lights.map((light) => {
+      const halo = new LampHalo(light.color);
+      halo.position.copy(light.position);
+      light.parent!.add(halo);
+      return halo;
+    });
   }
 
   // --- Interactable -------------------------------------------------------------------------

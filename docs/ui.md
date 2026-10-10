@@ -26,8 +26,12 @@ focused, `onBack` to step back from a sub-page (Esc and B honour it before closi
 irreversible press takes `new Arming(() => this.refresh())` (`src/ui/confirmTwice.ts`) and `arming.press(key)`:
 the first press arms and the label says so (`armedLine`), the second within `CONFIRM_MS` acts (a thing in the world on
 its zone's clock passes that clock as the third argument and calls `expire()` from its update, so a dormant zone keeps
-the arming; `again(key)` restarts the window at every press, for a run of quick presses); destroying data asks
-`ConfirmDialog.ask({ title, text, confirm, danger })`. Listeners go through `this.listen(target, type, handler)` so
+the arming; `again(key)` restarts the window at every press, for a run of quick presses); an arming on the wall
+clock holds while the pointer rests on, or the focus is on, the armed control (read again after a repaint by its
+`data-*`); destroying data asks `ConfirmDialog.ask({ title, text, confirm, danger })` (the menu's own `confirm` takes
+an `also` button: the wipes offer "Download a copy first"). Something out of reach stays a focusable button with
+`aria-disabled="true"` whose press says why in the status line ("40 coins short"); `disabled` is only for a state
+that passes by itself ("Pricing…"). Listeners go through `this.listen(target, type, handler)` so
 `dispose()` removes them with the panel.
 
 Not on the kit yet: Overlay, TravelMenu, SearchBar, GamePanel, PayoutOverlay and the settings widgets (the audit's
@@ -40,7 +44,8 @@ seven "give it data then open" verbs) needs the Session's routing first.
 `src/ui/design/tokens.css` holds every colour (`--ui-*`: text, the three panel surfaces, four backdrops, borders,
 fills, accent / gold / money / on-accent, the info / success / danger / armed states), size (`--fs-*` type scale, `--sp-*`
 spacing, radii from 2xs to pill, four shadows), motion (`--dur-*`, two eases), stacking level (`--z-*`) and paper look
-(`--paper-*`, `--ink-*`). `base.css` is the page, `kbd` and the one focus ring; `components.css` the building blocks
+(`--paper-*`, `--ink-*`). `base.css` is the page, the text sizes (`ui-scale-*`, five), plain lettering (`plain-lettering` sets the hand,
+comic and marker faces to the body's), `kbd` and the one focus ring (on paper it takes the paper's ink: `--focus`); `components.css` the building blocks
 (`.ui-modal` with `--sheet` / `--centre`, `.ui-modal__card`, `.ui-card`, `.ui-btn` and `--armed`, `.ui-field`,
 `.ui-tabs`, `.ui-row`, `.ui-chip`, `.ui-badge`, `.ui-coin`, `.ui-status`, `.ui-paper[data-paper]`). Each panel's sheet
 comes last, in `@layer panels`, and only lays the blocks out: it sets slot variables in its theme block and reads them

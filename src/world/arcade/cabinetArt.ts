@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { createCanvas, toTexture } from '@/covers/generated/canvasUtils';
-import { drawText } from './games/ArcadeGame';
+import { PIXEL_FONT, drawText } from './games/ArcadeGame';
+import { repaintWhenFontLoads } from '@/graphics/fontReady';
 import { paintMarquee } from './machineParts';
 import { lcg } from '@/random';
 
@@ -26,6 +27,61 @@ export function paintCabinetMarquee(title: string, color: number, glow: number):
       ctx.fillRect(0, height - 10, width, 10);
     },
   });
+}
+
+/**
+ * The bezel's print round the tube: black, a frame in the cabinet's glow just outside the glass, a
+ * thinner one in its colour, stars in the corners, the title small along the top border and
+ * "1 PLAYER" (and "2 PLAYERS" on a two-player game) along the bottom one. Sized to the bezel's
+ * front (0.64 x 0.555 m, the 0.58 x 0.435 m glass in its middle).
+ */
+export function paintBezel(title: string, color: number, glow: number, twoPlayer: boolean): THREE.CanvasTexture {
+  const W = 512;
+  const H = 444;
+  const [canvas, ctx] = createCanvas(W, H);
+  // The glass's opening, in pixels (the border is 0.06 m of the 0.64 / 0.555 m face).
+  const bx = Math.round((0.03 / 0.64) * W);
+  const by = Math.round((0.06 / 0.555) * H);
+  const bright = `#${new THREE.Color(glow).getHexString()}`;
+  const base = `#${new THREE.Color(color).getHexString()}`;
+  const paint = (): void => {
+    ctx.fillStyle = '#121216';
+    ctx.fillRect(0, 0, W, H);
+    // A faint sheen down the print, so the slab reads as glossy card under the glass.
+    const sheen = ctx.createLinearGradient(0, 0, W, H);
+    sheen.addColorStop(0, 'rgba(255,255,255,0.07)');
+    sheen.addColorStop(0.5, 'rgba(255,255,255,0)');
+    sheen.addColorStop(1, 'rgba(255,255,255,0.04)');
+    ctx.fillStyle = sheen;
+    ctx.fillRect(0, 0, W, H);
+    // The frames round the opening.
+    ctx.strokeStyle = bright;
+    ctx.lineWidth = 6;
+    ctx.strokeRect(bx - 8, by - 8, W - 2 * bx + 16, H - 2 * by + 16);
+    ctx.strokeStyle = base;
+    ctx.lineWidth = 3;
+    ctx.strokeRect(bx - 16, by - 16, W - 2 * bx + 32, H - 2 * by + 32);
+    // Stars in the corners.
+    for (const [x, y] of [[bx * 0.5 + 2, by * 0.5], [W - bx * 0.5 - 2, by * 0.5], [bx * 0.5 + 2, H - by * 0.5], [W - bx * 0.5 - 2, H - by * 0.5]] as const) {
+      ctx.fillStyle = bright;
+      ctx.beginPath();
+      for (let i = 0; i < 10; i++) {
+        const a = (i / 10) * Math.PI * 2 - Math.PI / 2;
+        const d = i % 2 ? 4 : 9;
+        ctx.lineTo(x + Math.cos(a) * d, y + Math.sin(a) * d);
+      }
+      ctx.fill();
+    }
+    drawText(ctx, title, W / 2, by * 0.42, 16, '#fffbe6');
+    drawText(ctx, twoPlayer ? '1 PLAYER  ·  2 PLAYERS' : '1 PLAYER', W / 2, H - by * 0.42, 12, bright);
+  };
+  paint();
+  const texture = toTexture(canvas, 'facing');
+  repaintWhenFontLoads(`16px ${PIXEL_FONT}`, () => {
+    paint();
+    texture.needsUpdate = true;
+  });
+  return texture;
 }
 
 /** The stickers people slap on cabinets: a smiley, a star, a band's name, a 1UP, a heart. */

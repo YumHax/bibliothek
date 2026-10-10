@@ -62,7 +62,7 @@ export class BallotBox extends Prop implements Interactable {
       cast: (votes, bought) =>
         meeting.cast(votes, bought, (coins) => {
           if (!purse?.spend(coins)) return false;
-          session.reward({ title: 'Paid towards the works', detail: 'Your extra votes are in the box.', coins: -coins });
+          session.slip({ title: 'Paid towards the works', detail: 'Your extra votes are in the box.', coins: -coins });
           return true;
         }),
       coins: () => purse?.coins ?? 0,

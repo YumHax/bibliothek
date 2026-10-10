@@ -5,7 +5,11 @@ Read this only when changing the cat's look, behaviour or belongings.
 ## Files
 
 - `types.ts`: contracts (CatBody, CatPose, the `*Like` props, CatVoiceLike, CatSettings, CatClock, CatPlayerView).
-- `CatModel.ts`: procedural rig (capsules + chained tail), 5 coats painted on canvases in `coats.ts`, 13 poses blended per
+- `CatModel.ts`: procedural rig (capsules + chained tail; the hind legs with a haunch and a hock; the belly, hind legs and
+  tail on a `hips` pivot so the back bends: `spineYaw` per pose, the curled sleep, and into turns; ears as furred half
+  shells; a jaw that drops for each call (`vocalize`, wired by wrapping the voice in `Cat`), chews at the bowl and
+  laps with its tongue; pupils drawn in the eye's shader, slit by day and round in the dark (`setDark`, from the
+  clock), at play or startled, with a faint night shine), 5 coats painted on canvases in `coats.ts`, 13 poses blended per
   joint, each joint at its own pace (`JOINT_TAU`: head first, rump and tail last), the joint-angle table and tail sway per
   pose are data in `catPoses.ts`. Walk blends into trot with `setSpeed` (0.45..1.1 m/s); a wash cycles paw / face / flank
   phases with a random paw (`GROOM_PHASES`, `mirrored`); `knead` treads the front paws in turn (rug scratching). `gaze`
@@ -114,6 +118,9 @@ The cat may slip out of the flat's front door into the stairwell (`escapes.ts`, 
 - **Brings back**: walked home by itself, `bringsBack` (0.3) of the time it drops something at the player's feet (a read
   card). `addCatFind` (exported from `cat/index.ts`) lets another feature hand it something first (the treasure hunt's clue).
 - A tip says it is out until it is back. A reload finds it at home (the outing is not saved).
+
+Fur (`CatFur.ts`, `QUALITY.fur`) grows on every furred part (shanks, paws, muzzle, ears too); once a strand cell is
+under a pixel the shells dither away instead of sparkling.
 
 ## Time, treats and the bowl
 

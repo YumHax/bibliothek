@@ -1,0 +1,151 @@
+/*
+ * Mémé's album (AlbumPanel): a cloth cover round two cream pages, held open over the view (`.ui-modal--centre`). Each
+ * page holds a 2 x 2 grid of fixed slots (the spread is the same size however full): a print in photo corners with
+ * its title in her hand, the memory just found slipping out of the pages back up, or empty corners.
+ */
+@layer tokens, base, components, panels;
+@layer panels {
+  .album__cover {
+    /* The album's own slots: the cloth, the pages, the corners, the print's border, her ink. */
+    --album-cloth: #5a2a2a;
+    --album-cloth-edge: #3e1c1c;
+    --album-page: #efe6d2;
+    --album-page-shade: rgba(90, 60, 30, 0.18);
+    --album-corner: #2a2018;
+    --album-border: #f6f0e2;
+    --album-ink: #2a2a4a;
+    --album-back: #f2ead8;
+    --slot-w: 9.5rem;
+    width: min(var(--card-w-xl), 100%);
+    max-height: 100%;
+    overflow-y: auto;
+    box-sizing: border-box;
+    padding: 1rem;
+    color: var(--album-ink);
+    color-scheme: light;
+    font-family: var(--ui-font-hand);
+    font-size: var(--fs-t2);
+    border-radius: var(--ui-radius-sm);
+    border: 3px solid var(--album-cloth-edge);
+    background: var(--album-cloth);
+    box-shadow: var(--ui-shadow-paper);
+  }
+  .album__spread {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2px;
+  }
+  .album__page {
+    display: grid;
+    grid-template-columns: repeat(2, var(--slot-w));
+    grid-auto-rows: calc(var(--slot-w) * 0.95);
+    justify-content: center;
+    gap: 0.6rem;
+    padding: 0.8rem 0.6rem;
+    background: var(--album-page);
+  }
+  /* The spine's shadow down the middle. */
+  .album__page--left { box-shadow: inset -14px 0 18px -12px var(--album-page-shade); }
+  .album__page--right { box-shadow: inset 14px 0 18px -12px var(--album-page-shade); }
+  .album__slot {
+    position: relative;
+    display: grid;
+    place-items: center;
+  }
+
+  /* The four black photo corners, on an empty slot or holding a print. */
+  .album__corners {
+    position: absolute;
+    inset: 0.3rem 0.3rem 1.5rem;
+    pointer-events: none;
+    background:
+      linear-gradient(135deg, var(--album-corner) 0 0.6rem, transparent 0.6rem) top left,
+      linear-gradient(225deg, var(--album-corner) 0 0.6rem, transparent 0.6rem) top right,
+      linear-gradient(45deg, var(--album-corner) 0 0.6rem, transparent 0.6rem) bottom left,
+      linear-gradient(315deg, var(--album-corner) 0 0.6rem, transparent 0.6rem) bottom right;
+    background-size: 1.2rem 1.2rem;
+    background-repeat: no-repeat;
+    opacity: 0.85;
+  }
+
+  .album__photo {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.2rem;
+    padding: 0.3rem 0.3rem 0;
+    border: 0;
+    color: inherit;
+    font: inherit;
+    background: none;
+    cursor: pointer;
+  }
+  .album__print {
+    display: block;
+    width: 100%;
+    aspect-ratio: 4 / 3;
+    object-fit: cover;
+    box-sizing: border-box;
+    border: 0.25rem solid var(--album-border);
+    filter: sepia(0.35) contrast(0.95);
+    box-shadow: var(--ui-shadow-raised);
+    transition: transform var(--dur-hover) var(--ui-ease);
+  }
+  .album__photo:hover .album__print,
+  .album__photo:focus-visible .album__print { transform: rotate(-1.2deg) scale(1.03); }
+  .album__caption {
+    max-width: 100%;
+    overflow: hidden;
+    font-size: var(--fs-t1);
+    line-height: 1.1;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  /* Just found: a print slipping out of the pages, its back up, her title on it in pen. */
+  .album__photo--new {
+    padding: 0;
+    justify-content: center;
+    transform: translate(0.6rem, -0.4rem) rotate(6deg);
+    transition: transform var(--dur-hover) var(--ui-ease);
+  }
+  .album__photo--new:hover,
+  .album__photo--new:focus-visible { transform: translate(0.2rem, -0.8rem) rotate(2deg); }
+  .album__back {
+    display: grid;
+    place-items: center;
+    width: 100%;
+    aspect-ratio: 4 / 3;
+    box-sizing: border-box;
+    padding: 0.4rem;
+    font-size: var(--fs-t3);
+    text-align: center;
+    background: var(--album-back);
+    border: 1px solid var(--album-page-shade);
+    box-shadow: var(--ui-shadow-raised);
+  }
+
+  .album .ui-panel__footer {
+    display: flex;
+    justify-content: flex-end;
+    padding-top: 0.6rem;
+  }
+  .album__button {
+    padding: 0.3rem 0.9rem;
+    border: 1px solid var(--album-page);
+    border-radius: var(--ui-radius-xs);
+    color: var(--album-page);
+    font: inherit;
+    background: none;
+    cursor: pointer;
+  }
+  .album__button:hover,
+  .album__button:focus-visible { background: var(--album-cloth-edge); }
+
+  @media (max-width: 40rem) {
+    .album__cover { --slot-w: 7rem; }
+    .album__spread { grid-template-columns: 1fr; }
+  }
+}

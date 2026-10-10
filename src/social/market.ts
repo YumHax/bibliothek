@@ -156,7 +156,7 @@ interface CreditWallet {
  * The debts due by `day` are paid out of the wallet: paid, a little trust; short, the stallholder is let down (once a
  * game day) and the debt stays until it is paid.
  */
-function settleCredit(day: number, wallet: CreditWallet, notices: Pick<NoticeActions, 'reward' | 'read'>): void {
+function settleCredit(day: number, wallet: CreditWallet, notices: Pick<NoticeActions, 'slip' | 'read'>): void {
   const state = owedState();
   for (const debt of [...state.owed]) {
     if (debt.due > day) continue;
@@ -165,7 +165,7 @@ function settleCredit(day: number, wallet: CreditWallet, notices: Pick<NoticeAct
       state.owed = state.owed.filter((o) => o !== debt);
       saveCredit();
       nudge(debt.person, { trust: MARKET_SOCIAL.credit.repaidTrust, day, reason: 'creditRepaid', why: 'paid back on time', memory: 'you paid me back', memoryWeight: 4 });
-      notices.reward({ title: `Paid ${name} back`, detail: 'The credit from the market is settled.', coins: -debt.coins });
+      notices.slip({ title: `Paid ${name} back`, detail: 'The market credit is settled.', coins: -debt.coins });
       continue;
     }
     const counted = nudge(debt.person, {
@@ -187,7 +187,7 @@ function settleCredit(day: number, wallet: CreditWallet, notices: Pick<NoticeAct
  */
 export function startMarketSocial(deps: {
   wallet: CreditWallet;
-  notices: Pick<NoticeActions, 'reward' | 'read' | 'say' | 'refuse'>;
+  notices: Pick<NoticeActions, 'slip' | 'read' | 'say' | 'refuse'>;
   /** The game day today, and a hook on each new one. */
   today: { readonly gameDay: number; onNewGameDay(cb: (day: number) => void): () => void };
   /** Today's copies on the stalls (drawn on asking). */
@@ -231,7 +231,7 @@ export function startMarketSocial(deps: {
           saveCredit();
           // Once a day: borrowing and paying straight back is not a way to buy trust.
           nudge(person, { trust: MARKET_SOCIAL.credit.repaidTrust + (owed.due > day ? 2 : 0), day, reason: 'creditRepaid', why: 'paid back', memory: 'you paid me back', memoryWeight: 4 });
-          notices.reward({ title: `Paid ${name} back`, coins: -owed.coins });
+          notices.slip({ title: `Paid ${name} back`, coins: -owed.coins });
           return { line: owed.due > day ? 'Already? You’re a good one.' : 'There we are. Square again.' };
         },
       }];
@@ -247,7 +247,7 @@ export function startMarketSocial(deps: {
         const state = owedState();
         state.owed.push({ person, coins, due: day + 1 });
         saveCredit();
-        notices.reward({ title: `Credit from ${name}`, detail: 'It comes out of your wallet next market day.', coins });
+        notices.slip({ title: `Credit from ${name}`, detail: 'Out of your wallet next market day.', coins });
         return { line: 'For you? Of course. Next market day, mind.' };
       },
     }];

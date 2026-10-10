@@ -3,12 +3,15 @@ import { PositionMemory } from '@/player/PositionMemory';
 import type { FirstPersonController } from '@/player/FirstPersonController';
 import { Footsteps } from '@/audio/Footsteps';
 import type { Fader } from '@/ui/Fader';
-import { Travel, travelStops } from '@/world/travel';
-import { isZoneId } from '@/world/worldPlan';
+import { Travel, travelStops, travelTint } from '@/world/travel';
+import { isZoneId, zonePlan } from '@/world/worldPlan';
 import { surfaceUnderfoot } from '@/world/zoneHandle';
 import { airlockLink } from '@/world/airlock';
 import { outsideIfShut } from '@/world/shop/ClosingTime';
 import * as THREE from 'three';
+import { reduceMotion } from '@/settings/motion';
+import { playRide } from '@/ui/busRide/BusRide';
+import { STREET_PLAN } from '@/world/street/streetPlan';
 import type { Services } from './services';
 import type { BuiltWorld, GameWorld } from './world';
 
@@ -38,6 +41,16 @@ export function createPlayerMoves(services: Services, parts: { world: GameWorld;
       built.graphics.settle();
       return world.primeAsync();
     },
+    // The curtain falls in the light of where the player goes: a shop's warm lamps, the street's sky.
+    tint: (id) => travelTint(zonePlan(id).kind, sky.dayNight.state.daylight),
+    // Line 38 to Mémé's and back (docs/story.md "Mémé"): the ride from a seat by the window over the curtain.
+    interlude: (from, to) => {
+      const line = STREET_PLAN.busRide.destinations.find((d) => (from === 'street' && to === d.to) || (from === d.to && to === 'street'));
+      if (!line || reduceMotion()) return null;
+      const { daylight, hours } = sky.dayNight.state;
+      const home = to === 'street';
+      return () => playRide(services.container, { board: `${STREET_PLAN.bus.line} ${home ? 'FRONT STREET' : line.board}`, daylight, hours, seed: home ? 83 : 38 });
+    },
   });
   // The building's sas: crossing between the hall's twin and the street's moves the player with no curtain
   // (docs/zones.md "The sas"); the far zone is built and compiled out of sight while the door release buzzes.
@@ -46,7 +59,10 @@ export function createPlayerMoves(services: Services, parts: { world: GameWorld;
   // The bedside alarm sets the hour the night ends at (docs/household.md).
   const sleep = new Sleep(sky.dayNight, fader, () => services.household.wakeHour);
   // The morning fades in to the bedside alarm clock's ring (once it stands on its nightstand).
-  sleep.onWake(() => services.homeLife.ringAlarm());
+  sleep.onWake(() => {
+    services.household.wokeUp();
+    services.homeLife.ringAlarm();
+  });
   // Back where the player last stood (zone, spot, look) after a reload; `?fresh` starts in the living room.
   // The ZoneManager notices on the first frame and loads that zone.
   const positionMemory = new PositionMemory({

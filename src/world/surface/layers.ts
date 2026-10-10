@@ -125,6 +125,8 @@ export const WALL = {
   flyer: { lift: 0.004, rank: 7 },
   /** A window's pane over the wall it is set in (the outside seen through it: `props/Window`, the stairwell's, the outlooks'). Never on a flyer. */
   pane: { lift: 0.004, rank: 7 },
+  /** Frost fading over a pane as its view comes or goes (the stairwell's, `StairWindows`), under the reflection. */
+  paneFrost: { lift: 0.005, rank: 7.5 },
   /** The room given back by a window's glass (`materials/paneReflection`), over its pane. */
   paneReflection: { lift: 0.006, rank: 8 },
   /** A roof light's frosted pane, under the ceiling it is set in (lifts down, out of the ceiling). */

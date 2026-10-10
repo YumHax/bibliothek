@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { type ApiRequest, type ApiResponse, empty, json } from './http';
 import { type ArtStore, type StoredArt } from './artStore';
-import { shrinkArt } from './imageProcessing';
+import { LARGE_ART_SIZE, shrinkArt } from './imageProcessing';
 import { PoliteFetcher, UpstreamPaused } from './politeFetch';
 
 const UPSTREAM = 'https://raw.githubusercontent.com/libretro-thumbnails';
@@ -27,6 +27,8 @@ interface ArtRequest {
   repo: string;
   folder: string;
   file: string;
+  /** `?size=large` on a front cover: kept at `LARGE_ART_SIZE` instead (the box in hand), stored apart. */
+  large?: boolean;
 }
 
 export type ArtResult = ({ status: 200; etag: string } & StoredArt) | { status: 404 };
@@ -66,7 +68,7 @@ export class ArtCache {
   }
 
   get(req: ArtRequest): Promise<ArtResult> {
-    const key = `${req.repo}/${req.folder}/${req.file}`;
+    const key = `${req.repo}/${req.folder}${req.large ? '@large' : ''}/${req.file}`;
     let pending = this.inflight.get(key);
     if (!pending) {
       pending = this.resolve(req, key).finally(() => this.inflight.delete(key));
@@ -77,7 +79,7 @@ export class ArtCache {
 
   private async resolve(req: ArtRequest, key: string): Promise<ArtResult> {
     const cached = await this.store.read(key);
-    if (cached) return hit(await this.upgrade(key, cached));
+    if (cached) return hit(await this.upgrade(key, cached, req.large));
 
     const missAge = await this.store.missAge(key);
     if (missAge !== null && missAge < MISS_TTL_MS) return { status: 404 };
@@ -90,15 +92,15 @@ export class ArtCache {
     if (!upstream.ok) throw new Error(`upstream ${upstream.status} for ${key}`);
 
     const png = Buffer.from(await upstream.arrayBuffer());
-    const art = this.shrink ? await shrinkArt(png) : { body: png, contentType: 'image/png' };
+    const art = this.shrink ? await shrinkArt(png, req.large ? LARGE_ART_SIZE : undefined) : { body: png, contentType: 'image/png' };
     await this.store.write(key, art);
     return hit(art);
   }
 
   /** Shrinks a full-size PNG left by an older cache once, so existing `.cache/art` entries catch up. */
-  private async upgrade(key: string, cached: StoredArt): Promise<StoredArt> {
+  private async upgrade(key: string, cached: StoredArt, large = false): Promise<StoredArt> {
     if (!this.shrink || cached.contentType !== 'image/png') return cached;
-    const shrunk = await shrinkArt(cached.body);
+    const shrunk = await shrinkArt(cached.body, large ? LARGE_ART_SIZE : undefined);
     if (shrunk.contentType === cached.contentType) return cached; // sharp unavailable: keep serving the PNG
     await this.store.write(key, shrunk);
     return shrunk;
@@ -115,8 +117,10 @@ export async function handleArtRequest(cache: ArtCache, req: ApiRequest): Promis
   if (!parsed) {
     return json(400, { error: 'expected /api/art/<repo>/<Named_Boxarts|Named_Snaps|Named_Titles>/<file>.png' });
   }
+  // The box in hand asks its front cover large (`covers/BoxArtLoader` details): only fronts are kept that big.
+  const large = req.url.searchParams.get('size') === 'large' && parsed.folder === 'Named_Boxarts';
   try {
-    return artResponse(await cache.get(parsed), req);
+    return artResponse(await cache.get({ ...parsed, large }), req);
   } catch (err) {
     if (err instanceof UpstreamPaused) return pausedResponse(err);
     throw err;

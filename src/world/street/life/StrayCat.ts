@@ -28,6 +28,8 @@ interface StrayCatOptions {
   traffic: StreetTraffic;
   /** Where a coin he brings goes (a friend of his, once a day). */
   purse?: { earnCoins(coins: number): void };
+  /** The game's day count: his treat, his trust's step and his coin follow the game's days (the real date without it). */
+  gameDay?: () => number;
 }
 
 /**
@@ -35,7 +37,7 @@ interface StrayCatOptions {
  * letting them nearer each day they feed him, at last not moving at all (the click reaches 3 m).
  */
 const WARY = [2.2, 1.8, 1.4, 0.9, 0, 0, 0];
-/** Trust he can reach, a step each real day the player feeds him; from `STROKE` he is stroked, from `FINDS` he brings a coin a day. */
+/** Trust he can reach, a step each game day the player feeds him; from `STROKE` he is stroked, from `FINDS` he brings a coin a day. */
 const TRUST = { max: 6, stroke: 3, finds: 5 } as const;
 const WALK = 1.7;
 const JUMP = 0.45;
@@ -182,23 +184,29 @@ export class StrayCat extends THREE.Group implements Furniture, Updatable, Inter
     this.voice.setPurring(false);
   }
 
+  /** Today's mark in his bond: the game day (`g12`), or the real date without a game clock. */
+  private dayMark(): string {
+    const day = this.options.gameDay?.();
+    return day === undefined ? dayKey() : `g${day}`;
+  }
+
   setHovered(): void {
     // A cat does not glow.
   }
 
   label(): string {
-    const fedToday = this.bond.fed === dayKey();
+    const fedToday = this.bond.fed === this.dayMark();
     if (!fedToday && (pocket.count('scrap') > 0 || pocket.count('treats') > 0)) return 'Stray cat · give him a treat';
     return this.bond.trust >= TRUST.stroke ? 'Stray cat · stroke him' : 'Stray cat · talk';
   }
 
   /**
-   * A treat from the pocket (the butcher's scrap, the pet shop's treats) once a real day: he trusts the player a step
+   * A treat from the pocket (the butcher's scrap, the pet shop's treats) once a game day: he trusts the player a step
    * more. Trusted enough he is stroked (and purrs); a good friend now and then brings a coin he found in the gutter.
    */
   activate(session: SessionActions): void {
     this.stare = 3;
-    const today = dayKey();
+    const today = this.dayMark();
     if (this.bond.fed !== today) {
       const food = pocket.take('scrap', 'treats');
       if (food) {

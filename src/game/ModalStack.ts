@@ -3,6 +3,13 @@ import type { CoreParts, ModalLike } from './SessionParts';
 import { isAction } from '@/input/actions';
 import type { KeyRoute } from './SessionHost';
 
+/** Whether a key went to a field that types (an E there is a letter). */
+function isTyping(target: EventTarget | null): boolean {
+  const el = target as HTMLElement | null;
+  if (!el || typeof el.tagName !== 'string') return false;
+  return el.isContentEditable || el.tagName === 'TEXTAREA' || (el.tagName === 'INPUT' && !['button', 'checkbox', 'radio', 'range'].includes((el as HTMLInputElement).type));
+}
+
 /** The full-screen DOM panels the Session knows by name, and what it needs to hand the mouse over and back. */
 export interface ModalParts extends Pick<CoreParts, 'player' | 'interactor' | 'overlay'> {
   search?: SearchBar;
@@ -83,6 +90,12 @@ export class ModalStack implements KeyRoute {
       this.current.close();
       return true;
     }
+    // E closes the open panel as well (the focus in it, `ModalPanel` takes the key itself): a gesture, so the mouse lock
+    // comes straight back, where Esc asks for a click. Not while typing: the search bar and text fields keep their letters.
+    if (isAction(code, 'putBack') && this.current && !e.repeat && !isTyping(e.target)) {
+      this.current.close();
+      return true;
+    }
     return false;
   }
 
@@ -90,8 +103,11 @@ export class ModalStack implements KeyRoute {
   private sync(modal: ModalLike, open: boolean): void {
     if (open) {
       if (this.current === modal) return;
-      if (this.current) this.current.close();
+      // The new panel takes over before the old one closes: that close then finds it is no longer the current panel
+      // and leaves the room alone (re-entering would ask for the pointer lock, granted over the new panel).
+      const previous = this.current;
       this.current = modal;
+      previous?.close();
       const { player, interactor, overlay, search } = this.parts;
       search?.close();
       overlay.setModal(true); // keeps the start card hidden behind the panel when the lock drops

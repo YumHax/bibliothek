@@ -21,6 +21,11 @@ export interface RunContext {
 /** Logical screen of every cabinet game, in pixels (4:3); the cabinet scales it onto the glass. */
 export const SCREEN_W = 320;
 export const SCREEN_H = 240;
+/**
+ * The tube's bulge (`crtScreen`) crops the picture's outer few per cent, most at the sides and the
+ * corners: text that must read whole stays this far from the left and right edges.
+ */
+export const SAFE_X = 14;
 
 /**
  * A game that runs on an `ArcadeCabinet`: pure simulation + 2D drawing on a canvas, driven by the
@@ -66,11 +71,19 @@ export const NO_CONTROLS: Readonly<ArcadeControls> = { left: false, right: false
 
 export const PIXEL_FONT = '"Press Start 2P", "Courier New", monospace';
 
-/** Centred pixel-style text helper shared by the games and the cabinet's attract screen. */
+/**
+ * Centred pixel-style text helper shared by the games and the cabinet's attract screen. Press Start 2P has one weight
+ * (no faux bold, it smears the pixels) and square glyphs: a line too wide for the canvas from where it is anchored steps
+ * down a size instead of running off the glass (the safe width: `SAFE_X` in from each side, where the tube's bulge
+ * crops). Drawn on whole pixels so the glyphs stay crisp under NearestFilter.
+ */
 export function drawText(ctx: CanvasRenderingContext2D, text: string, x: number, y: number, size: number, color: string, align: CanvasTextAlign = 'center'): void {
-  ctx.font = `bold ${size}px ${PIXEL_FONT}`;
+  ctx.font = `${size}px ${PIXEL_FONT}`;
+  const room = align === 'center' ? 2 * Math.min(x - SAFE_X, ctx.canvas.width - SAFE_X - x) : align === 'right' || align === 'end' ? x - SAFE_X : ctx.canvas.width - SAFE_X - x;
+  const width = ctx.measureText(text).width;
+  if (room > 0 && width > room) ctx.font = `${Math.max(5, Math.floor((size * room) / width))}px ${PIXEL_FONT}`;
   ctx.textAlign = align;
   ctx.textBaseline = 'middle';
   ctx.fillStyle = color;
-  ctx.fillText(text, x, y);
+  ctx.fillText(text, Math.round(x), Math.round(y));
 }

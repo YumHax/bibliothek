@@ -4,6 +4,7 @@ import { cylinderMesh } from '../meshUtils';
 import { part } from '../props/Prop';
 import { paint, standard } from '../materials/palette';
 import { SwingLeaf, revealWhileOpen } from '../props/SwingLeaf';
+import { stashBehind } from '../props/Openable';
 import { PooledLight } from '../lighting/LightPool';
 
 interface FridgeOptions {
@@ -22,6 +23,8 @@ const GAP = 0.004;
 const FEET = 0.03;
 /** Thickness of the cabinet's insulated walls. */
 const WALL = 0.035;
+/** The ledge of the freezer's floor left in front of its drawers, where a find lies. */
+const FREEZER_LEDGE = 0.07;
 
 const STEEL = standard({ color: 0xbfc2c6, metalness: 1, roughness: 0.4 });
 const SIDES = paint(0x9d9fa3, 0.55);
@@ -76,7 +79,7 @@ export class Fridge extends THREE.Group implements Furniture {
 
     const interior = new THREE.Group();
     this.add(interior);
-    this.buildInterior(interior, width, bodyD, fridgeH, freezer);
+    const stash = this.buildInterior(interior, width, bodyD, fridgeH, freezer);
     // Inside the door, high in the fridge: hidden with the insides, so lent a light only while a door is open.
     const spill = new PooledLight(SPILL.color, SPILL.intensity, SPILL.distance);
     spill.position.set(0, FEET + fridgeH * 0.8, bodyD - 0.06);
@@ -89,6 +92,8 @@ export class Fridge extends THREE.Group implements Furniture {
     const freezerDoor = this.buildDoor(width, freezer, hinge, 'freezer', reveal(1));
     freezerDoor.position.set(hingeX, FEET + fridgeH + GAP, bodyD);
     this.leaves = [fridgeDoor, freezerDoor];
+    fridgeDoor.stash = stashBehind(fridgeDoor, stash.fridge);
+    freezerDoor.stash = stashBehind(freezerDoor, stash.freezer);
     this.decorateFridgeDoor(fridgeDoor, width, fridgeH, hingeX);
 
     this.footprint = new THREE.Box3(new THREE.Vector3(-width / 2, 0, 0), new THREE.Vector3(width / 2, height, depth + 0.05));
@@ -147,8 +152,11 @@ export class Fridge extends THREE.Group implements Furniture {
     part(panel, 0.07, 0.19, 0.06, paint(0xf4f1e6, 0.7), { x: leaf.edge(width - 0.14), y: binY + 0.075, z: -0.045 });
   }
 
-  /** Liner, shelves and what is on them; only drawn while a door is open. */
-  private buildInterior(interior: THREE.Group, width: number, bodyD: number, fridgeH: number, freezer: number): void {
+  /**
+   * Liner, shelves and what is on them; only drawn while a door is open. Returns where a find lies (`build/rummage`):
+   * at the front of the upper shelf, and on the freezer's floor in front of its drawers.
+   */
+  private buildInterior(interior: THREE.Group, width: number, bodyD: number, fridgeH: number, freezer: number): { fridge: THREE.Vector3; freezer: THREE.Vector3 } {
     const innerW = width - 2 * WALL;
     const innerD = bodyD - WALL;
     const z = WALL + innerD / 2;
@@ -191,7 +199,11 @@ export class Fridge extends THREE.Group implements Furniture {
     // The freezer: two frosted drawers and an ice tray on top.
     const freezerFloor = splitY + 0.02;
     const drawerH = (top - freezerFloor - 0.08) / 2;
-    for (let i = 0; i < 2; i++) part(interior, innerW - 0.02, drawerH - 0.01, innerD - 0.02, FROST, { y: freezerFloor + (i + 0.5) * drawerH, z: WALL + (innerD - 0.02) / 2 });
+    // The drawers stand back from the door, a ledge of floor in front of them.
+    const drawerD = innerD - FREEZER_LEDGE;
+    for (let i = 0; i < 2; i++) part(interior, innerW - 0.02, drawerH - 0.01, drawerD, FROST, { y: freezerFloor + (i + 0.5) * drawerH, z: WALL + drawerD / 2 });
     part(interior, 0.24, 0.03, 0.1, paint(0xdfe9f0, 0.3), { y: freezerFloor + 2 * drawerH + 0.02, z: shelfZ });
+    const front = WALL + innerD;
+    return { fridge: new THREE.Vector3(0.05, upper, front - 0.14), freezer: new THREE.Vector3(innerW / 5, freezerFloor + 0.004, front - FREEZER_LEDGE / 2) }; // convention-ok: on the liner's floor, 4 mm thick
   }
 }

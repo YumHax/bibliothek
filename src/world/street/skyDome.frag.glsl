@@ -1,4 +1,7 @@
 // skyDomeShader fragment shader (skyDomeShader.ts): TS_DOME_MOON_RADIUS, TS_DOME_SUN_RADIUS are #defines from TypeScript; the #include <...> lines are chunks assemble() writes in.
+// `common` first: `dithering()` (DITHERING on `low`, `graphics/displayTone`) calls its `rand`.
+#include <common>
+#include <dithering_pars_fragment>
 uniform vec3 zenith;
 uniform vec3 horizon;
 uniform vec3 glowColor;
@@ -64,11 +67,18 @@ float skylineHeight(float az) {
   float cell = floor(az * 38.0);
   float h = 0.035 + 0.05 * hash1(cell) + 0.02 * hash1(floor(az * 11.0) + 3.0);
   if (hash1(cell + 91.0) > 0.93) h += 0.07 + 0.08 * hash1(cell + 17.0);
+  // Half the blocks under a pitched zinc roof (a ridge across the cell), and chimney stacks along the tops.
+  h += 0.012 * (1.0 - abs(fract(az * 38.0) * 2.0 - 1.0)) * step(0.5, hash1(cell + 33.0));
+  float stack = floor(az * 420.0);
+  if (hash1(stack + 5.0) > 0.84) h += 0.004 + 0.006 * hash1(stack + 8.0);
   return h;
 }
 
 void main() {
   vec3 d = normalize(vDir);
+  // The angle one pixel spans (radians), before any branch: the far windows fade to their average lit share
+  // once they get under two pixels, rather than shimmer as the player turns.
+  float pxAngle = max(length(fwidth(d)), 1e-6);
   float h = d.y;
   float up = max(h, 0.0);
   vec3 col = mix(horizon, zenith, pow(up, 0.5));
@@ -80,12 +90,27 @@ void main() {
   // The city's orange glow low down at night.
   col += vec3(0.32, 0.17, 0.07) * cityGlow * exp(-up * 6.0) * 0.35;
 
-  // Stars, veiled by cloud.
+  // Stars, veiled by cloud: a round point somewhere in one cell of 260 in a hundred (never wider than about a
+  // pixel and a half, never thinner than one, so they neither show as squares nor shimmer), white, blue or
+  // warm, twinkling a little; the city's glow low down drowns the faint ones.
+  vec3 starP = d * 260.0;
+  float starPx = length(fwidth(starP));
   if (starAlpha > 0.0 && h > 0.0) {
-    vec3 cell = floor(d * 260.0);
+    vec3 cell = floor(starP);
     float r = sineHash(cell);
-    float star = step(0.9965, r) * (0.4 + 0.6 * sineHash(cell + 7.0));
-    col += vec3(star * starAlpha * (1.0 - cloudCover) * smoothstep(0.02, 0.2, h));
+    if (r > 0.9965) {
+      vec3 centre = cell + 0.25 + 0.5 * vec3(sineHash(cell + 1.0), sineHash(cell + 2.0), sineHash(cell + 3.0));
+      float dist = length(starP - centre);
+      float sigma = max(0.16, starPx * 0.45);
+      float point = exp(-dist * dist / (2.0 * sigma * sigma)) * min(1.0, (0.16 * 0.16) / (sigma * sigma) * 1.6);
+      float mag = 0.4 + 0.6 * sineHash(cell + 7.0);
+      float twinkle = 0.78 + 0.22 * sin(beaconTime * (1.7 + 2.5 * sineHash(cell + 11.0)) + r * 6283.0);
+      float temp = sineHash(cell + 13.0);
+      vec3 tint = temp < 0.25 ? vec3(0.78, 0.86, 1.0) : (temp > 0.85 ? vec3(1.0, 0.86, 0.7) : vec3(1.0));
+      float glowVeil = (1.0 - smoothstep(0.03, 0.35, h)) * (0.5 + 0.5 * cityGlow);
+      float seen = smoothstep(0.0, 0.3, mag - glowVeil * 0.9);
+      col += tint * point * mag * twinkle * seen * starAlpha * (1.0 - cloudCover) * 1.4;
+    }
   }
 
   // The sun: a disc and the window view's halo (city/skyGlsl); the moon: the same crescent and halo, smaller.
@@ -104,7 +129,8 @@ void main() {
     // Fair-weather heaps thinning out as the cover closes, over the window view's overcast sheet.
     float heaps = smoothstep(0.68, 0.9, n) * (1.0 - 0.5 * cloudCover);
     float c = max(heaps, skyCloudSheet(n, cloudCover) * 0.95);
-    vec3 cloud = cloudTint * (0.62 + 0.38 * n);
+    // Lit as the panes light theirs (city/skyGlsl): dark bases, a silver lining, the sunset's glow underneath.
+    vec3 cloud = skyCloudLight(cloudTint * (0.66 + 0.34 * n), d, n, sunDir, sunColor, sunVisible * (1.0 - 0.7 * cloudCover), glowColor * horizonGlow, glowDir);
     col = mix(col, cloud, c * smoothstep(0.0, 0.12, h) * 0.95);
   }
 
@@ -134,15 +160,31 @@ void main() {
       int style = int(towerId.g * 8.0);
       vec3 clad = towerColors[0];
       for (int i = 1; i < 8; i++) if (i == style) clad = towerColors[i];
-      far = mix(far, mix(clad * mix(1.0, 0.3, nightness), far, 0.55), towerCover);
+      // Its two faces in view (SkylineSilhouette's B): each turned 50 degrees off the line of sight, the one
+      // facing the sun lit, the other in shade, with a glint of the sun off the glass on the lit one.
+      float side = (towerId.b > 0.1 && towerId.b < 0.5) ? 1.0 : -1.0;
+      float ca = cos(0.87);
+      float sa = sin(0.87) * side;
+      vec2 back = -level.xz;
+      vec2 faceN = vec2(back.x * ca - back.y * sa, back.x * sa + back.y * ca);
+      vec2 sunFlat = normalize(sunDir.xz + vec2(1e-5));
+      float sunOn = max(dot(faceN, sunFlat), 0.0) * sunVisible * (1.0 - 0.85 * cloudCover) * smoothstep(-0.05, 0.1, sunDir.y);
+      float glint = pow(sunOn, 12.0) * 0.6;
+      vec3 faceLit = clad * (0.72 + 0.55 * sunOn) + sunColor * glint;
+      far = mix(far, mix(faceLit * mix(1.0, 0.3, nightness), far, 0.55), towerCover);
     }
     // Windows: a grid on the silhouette, lit at night where the city is still up.
     vec2 grid = vec2(az * 900.0, h * 900.0);
     vec2 cell = floor(grid);
     vec2 inCell = fract(grid);
-    float window = step(0.35, inCell.x) * step(0.4, inCell.y) * step(h, roof - 0.004) * step(-0.08, h);
+    float cellPx = pxAngle * 900.0;
+    float edge = min(cellPx * 0.5, 0.2);
+    float inside = step(h, roof - 0.004) * step(-0.08, h);
+    float window = smoothstep(0.35 - edge, 0.35 + edge, inCell.x) * smoothstep(0.4 - edge, 0.4 + edge, inCell.y);
     float lit = step(sineHash(vec3(cell, 3.0)), 0.3) * step(sineHash(vec3(cell, 5.0)), wakefulness);
-    far += vec3(1.0, 0.72, 0.42) * window * lit * nightness * 0.5;
+    // Under two pixels a cell, its average: 0.39 of it glass, 0.3 of the glass lit while the city is up.
+    float shown = mix(window * lit, 0.39 * 0.3 * wakefulness, smoothstep(0.35, 0.6, cellPx));
+    far += vec3(1.0, 0.72, 0.42) * shown * inside * nightness * 0.5;
     col = mix(col, far, cityCover);
   }
   // Aviation beacons on the tallest towers' tops (the window view's), blinking red once every two seconds at night.
@@ -182,8 +224,12 @@ void main() {
       vec2 inCell = fract(cellUv);
       float pane = step(0.3, inCell.x) * step(inCell.x, 0.75) * step(0.3, inCell.y) * step(inCell.y, 0.8) * step(1.0, cell.y) * step(y, info.x - 1.2);
       float on = step(sineHash(vec3(cell, info.z)), 0.32) * step(sineHash(vec3(cell, info.z + 7.0)), wakefulness);
-      lit = mix(lit, lit * 0.55 + vec3(0.03, 0.035, 0.045), pane * (1.0 - nightness));
-      lit += vec3(1.0, 0.72, 0.42) * pane * on * nightness * 0.6;
+      // A bay seen under about two pixels: its average (0.45 x 0.5 of it glass, 0.32 of that lit), not a shimmer.
+      float tiny = smoothstep(0.35, 0.6, pxAngle * tIn / 2.8);
+      float glass = mix(pane, 0.225 * step(1.0, cell.y) * step(y, info.x - 1.2), tiny);
+      float glassLit = mix(pane * on, 0.225 * 0.32 * wakefulness * step(1.0, cell.y) * step(y, info.x - 1.2), tiny);
+      lit = mix(lit, lit * 0.55 + vec3(0.03, 0.035, 0.045), glass * (1.0 - nightness));
+      lit += vec3(1.0, 0.72, 0.42) * glassLit * nightness * 0.6;
       // Hazed by the distance, more in fog and rain.
       blockCol = mix(lit, fogColor, 1.0 - exp(-tIn * (0.0035 + fog * 0.03)));
     }
@@ -197,4 +243,6 @@ void main() {
   gl_FragColor = vec4(col, 1.0);
   #include <tonemapping_fragment>
   #include <colorspace_fragment>
+  // `low` (no grain pass): the long gradients dither against banding (`graphics/displayTone`).
+  #include <dithering_fragment>
 }

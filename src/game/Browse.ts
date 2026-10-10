@@ -76,7 +76,7 @@ export class Browse implements KeyRoute {
     }
     if (this.locate(boxes[0]!.game, 'random')) {
       this.host.react(`${name}: ${formatCount(boxes.length, 'game')}`);
-      this.tipWhileFocused(`Press ${actionKeyLabel('randomPick')} to go to the glowing box.`);
+      this.tipWhileFocused(`[${actionKeyLabel('randomPick')}] go to the glowing box`);
     }
   }
 
@@ -134,7 +134,7 @@ export class Browse implements KeyRoute {
     if (kind === 'search') {
       const distance = distanceTo(player, box);
       this.host.react(distance < REACH_M ? `Found ${game.title}` : `${game.title} is ${distance.toFixed(1)} m away`);
-      this.tipWhileFocused(distance < REACH_M ? 'Press Enter to pick up the glowing box.' : 'Walk up to the glowing box and press Enter to pick it up.');
+      this.tipWhileFocused(distance < REACH_M ? '[Enter] pick up the glowing box' : 'walk up to the glowing box · [Enter] pick it up');
     }
     return box;
   }
@@ -174,7 +174,7 @@ export class Browse implements KeyRoute {
     const box = boxes[Math.floor(liveRandom() * boxes.length)]!;
     if (this.locate(box.game, 'random')) {
       this.host.react(`Random pick: ${box.game.title}`);
-      this.tipWhileFocused(`Press ${actionKeyLabel('randomPick')} again to go there.`);
+      this.tipWhileFocused(`[${actionKeyLabel('randomPick')}] again: go there`);
     }
   }
 
@@ -192,10 +192,10 @@ export class Browse implements KeyRoute {
     if (dayNight.isNight !== undefined) this.host.react(dayNight.isNight ? 'Night' : 'Day');
   }
 
-  /** A tip that stays while a box is picked out (and goes when it is taken, or the pick times out). */
+  /** A prompt that stays while a box is picked out (and goes when it is taken, or the pick times out). */
   private tipWhileFocused(text: string): void {
     const focus = this.focus;
-    this.host.tip(text, { id: 'focused-box', until: () => this.currentFocus() !== focus });
+    this.host.prompt(text, { id: 'focused-box', until: () => this.currentFocus() !== focus });
   }
 
   private games(): readonly Game[] {

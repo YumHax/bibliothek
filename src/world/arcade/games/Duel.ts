@@ -2,6 +2,7 @@ import { clamp } from '@/math/scalar';
 import { type ArcadeControls, NO_CONTROLS, SCREEN_H, SCREEN_W, drawText } from './ArcadeGame';
 import { BaseGame, PLAY_TOP } from './BaseGame';
 import { random } from '@/random';
+import { arcadeHint } from '../arcadeHint';
 
 const ROUND_SECONDS = 20;
 const PADDLE_W = 5;
@@ -49,7 +50,9 @@ interface Ball {
 export class Duel extends BaseGame {
   readonly id = 'duel';
   readonly title = 'PADDLE WARS';
-  readonly hint = 'W / S move the paddle · hold Space to smash · beat player two';
+  get hint(): string {
+    return arcadeHint('{upDown} move the paddle · hold {fire} to smash · beat player two');
+  }
   readonly summary = '20 SEC · 2 PLAYERS · RETURNS CHAIN · GOALS +3S';
 
   private you = 0;
@@ -152,6 +155,7 @@ export class Duel extends BaseGame {
       this.goals += 1;
       this.addScore(GOAL_POINTS, SCREEN_W - 50, b.y, '#7ee787');
       this.fx.flash('#7ee787', 0.08);
+      this.fx.burst(SCREEN_W - 4, b.y, '#7ee787', 22, 120, 2);
       this.addTime(GOAL_SECONDS, SCREEN_W / 2, PLAY_TOP + 60);
       if (this.goals % GOALS_PER_SET === 0) {
         this.fx.pop(`SET ${this.set}`, SCREEN_W / 2, SCREEN_H / 2 - 24, '#ffffff', 12);

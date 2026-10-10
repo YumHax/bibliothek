@@ -1,0 +1,49 @@
+/* A swap of carts with one of the courtyard's kids: their face and words up top (a box of fixed height), their carts as tiles, then the player's games. */
+@layer tokens, base, components, panels;
+@layer panels {
+  .kid-swap__kid {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    grid-template-rows: auto auto;
+    column-gap: var(--sp-3);
+    align-items: center;
+    padding: var(--sp-2) var(--sp-3);
+    margin-bottom: var(--sp-3);
+    border-radius: var(--ui-radius-md);
+    background: var(--ui-fill);
+  }
+  .kid-swap__face { grid-row: 1 / span 2; }
+  .kid-swap__face .social-portrait { width: var(--size); height: var(--size); border-radius: var(--ui-radius-sm); display: block; }
+  /* Two lines whatever they say: the buttons under it never move. */
+  .kid-swap__line {
+    margin: 0;
+    min-height: 2.6em;
+    font-family: var(--ui-font-comic);
+    font-size: var(--fs-7);
+    line-height: 1.3;
+  }
+  .kid-swap__deal { min-height: 2.2rem; display: flex; gap: var(--sp-2); align-items: center; }
+  .kid-swap__heading { margin: var(--sp-3) 0 var(--sp-2); font-size: var(--fs-4); color: var(--ui-text-dim); font-weight: 600; }
+  /* A row of tiles' height while they are thought over or none is left: the player's list below never jumps. */
+  .kid-swap__carts { display: flex; flex-wrap: wrap; gap: var(--sp-2); min-height: 9.5rem; }
+  .kid-swap__wait { margin: 0; color: var(--ui-text-dim); }
+  .kid-swap__cart {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--sp-1);
+    width: 8.5rem;
+    min-height: 9.5rem;
+    padding: var(--sp-2);
+    border: 1px solid var(--ui-border);
+    border-radius: var(--ui-radius-md);
+    background: var(--ui-fill);
+    color: var(--ui-text);
+    cursor: pointer;
+    text-align: center;
+  }
+  .kid-swap__cart:hover { background: var(--ui-fill-hover); }
+  .kid-swap__cart[aria-pressed='true'] { border-color: var(--ui-accent); box-shadow: 0 0 0 2px var(--ui-accent-soft); }
+  .kid-swap__cover { width: 4.5rem; height: auto; }
+  .kid-swap__cart-title { font-size: var(--fs-3); line-height: 1.2; }
+}

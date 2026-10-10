@@ -13,6 +13,7 @@ import { GameBox } from '../GameBox';
 import { RENDER_ORDER } from '../surface/layers';
 import { random } from '@/random';
 import { formatCoins } from '@/text/money';
+import { repaintWhenFontLoads } from '@/graphics/fontReady';
 
 /** How the box stands: tipped back onto a support by `angle`, or lying face up on the table. */
 export type ForSalePose = { kind: 'lean'; angle?: number } | { kind: 'flat' };
@@ -25,6 +26,11 @@ export interface ForSaleBoxOptions {
   wallet: { readonly coins: number; subscribe(cb: () => void): () => void };
   /** Whether the game is on the player's wishlist (read live). */
   isWanted?: () => boolean;
+  /**
+   * What the scan label (Q held) says besides the price, read live: the player has a copy already, or another stall
+   * asks less for the same game today. Absent: neither.
+   */
+  compare?: () => { owned: boolean; cheaperElsewhere: boolean };
   /** What the stallholder says as the coins change hands. */
   thanks?: () => string;
   /** Where it is sold, for the receipt: "the NES stall". */
@@ -40,6 +46,9 @@ export interface ForSaleBoxOptions {
 }
 
 /** How far a displayed box leans back against whatever stands behind it. */
+/** The stallholder's hand on the price tags: the shipped marker for the figures, the pen for the band (`ui/fonts.css`). */
+const TAG_MARKER = '"Permanent Marker", "Marker Felt", "Comic Sans MS", cursive';
+const TAG_HAND = 'Caveat, "Comic Sans MS", cursive';
 const LEAN = THREE.MathUtils.degToRad(14);
 /** Air between the box's top edge and the support it leans on. */
 const LEAN_GAP = 0.003;
@@ -68,6 +77,7 @@ export class ForSaleBox extends THREE.Group implements Furniture, Interactable {
   private readonly tagMaterial: THREE.MeshStandardMaterial | null = null;
   private readonly wallet: ForSaleBoxOptions['wallet'];
   private readonly isWanted: () => boolean;
+  private readonly compare: () => { owned: boolean; cheaperElsewhere: boolean };
   private readonly thanksLine: () => string;
   private readonly unsubscribe: (() => void)[] = [];
   private affordable: boolean;
@@ -90,6 +100,7 @@ export class ForSaleBox extends THREE.Group implements Furniture, Interactable {
     this.name = `ForSale:${item.game.id}`;
     this.wallet = options.wallet;
     this.isWanted = options.isWanted ?? (() => false);
+    this.compare = options.compare ?? (() => ({ owned: false, cheaperElsewhere: false }));
     this.thanksLine = options.thanks ?? (() => THANKS[Math.floor(random() * THANKS.length)]!);
     this.where = options.where;
     this.behindGlass = options.behindGlass ?? false;
@@ -120,6 +131,8 @@ export class ForSaleBox extends THREE.Group implements Furniture, Interactable {
 
     if (options.tag !== false) {
       this.tagMaterial = new THREE.MeshStandardMaterial({ map: this.paintTag(), roughness: 0.8 });
+      // Hand-lettered in the shipped marker: painted again once the face has landed.
+      repaintWhenFontLoads(`66px ${TAG_MARKER}`, () => this.repaintTag());
       const tag = new THREE.Mesh(new THREE.PlaneGeometry(TAG_W, TAG_H), this.tagMaterial);
       tag.position.set(0, tagAt.y, tagAt.z);
       tag.rotation.x = tagAt.tilt;
@@ -213,11 +226,18 @@ export class ForSaleBox extends THREE.Group implements Furniture, Interactable {
       size -= 2;
     } while (ctx.measureText(item.game.title).width > w - 30 && size > 14);
     ctx.fillText(item.game.title, w / 2, 40);
-    const extra = [describeCondition(item.condition), this.wanted ? '★ wishlist' : ''].filter(Boolean).join(' · ');
-    ctx.font = 'bold 34px system-ui, sans-serif';
+    const { owned, cheaperElsewhere } = this.compare();
+    const extra = [describeCondition(item.condition), this.wanted ? '★ wishlist' : owned ? 'you have one' : '', cheaperElsewhere ? 'cheaper elsewhere' : ''].filter(Boolean).join(' · ');
     ctx.fillStyle = !item.priced ? FADED_INK : this.wallet.coins >= item.due ? '#f1d48a' : '#ff9a8a';
     const price = this.free ? 'free' : formatCoins(item.price);
-    ctx.fillText(item.priced ? `${price}${extra ? `  ·  ${extra}` : ''}` : 'being priced…', w / 2, 84);
+    const line = item.priced ? `${price}${extra ? `  ·  ${extra}` : ''}` : 'being priced…';
+    // The price line shrinks to fit what it says besides the price (the condition, a star, a comparison).
+    let lineSize = 34;
+    do {
+      ctx.font = `bold ${lineSize}px system-ui, sans-serif`;
+      lineSize -= 2;
+    } while (ctx.measureText(line).width > w - 24 && lineSize > 14);
+    ctx.fillText(line, w / 2, 84);
     texture.needsUpdate = true;
     this.scanPainted = true;
   }
@@ -296,7 +316,7 @@ export class ForSaleBox extends THREE.Group implements Furniture, Interactable {
       ctx.fillStyle = band.color;
       ctx.fillRect(0, 0, 200, 22);
       ctx.fillStyle = '#fff6d6';
-      ctx.font = 'bold 18px system-ui, sans-serif';
+      ctx.font = `700 22px ${TAG_HAND}`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillText(band.text, 100, 12);
@@ -306,7 +326,7 @@ export class ForSaleBox extends THREE.Group implements Furniture, Interactable {
     const y = band ? 70 : 62;
     if (!item.priced) {
       ctx.fillStyle = FADED_INK;
-      ctx.font = 'bold 64px system-ui, sans-serif';
+      ctx.font = `60px ${TAG_MARKER}`;
       ctx.fillText('…', 100, y - 8);
       return toTexture(canvas, 'facing');
     }
@@ -314,12 +334,12 @@ export class ForSaleBox extends THREE.Group implements Furniture, Interactable {
     // The old price struck out: before a haggle, or before a clearance's cut.
     const struck = item.haggled ? item.tagPrice : item.beforeSale;
     if (struck !== undefined) {
-      ctx.font = 'bold 26px system-ui, sans-serif';
+      ctx.font = `26px ${TAG_MARKER}`;
       ctx.fillText(String(struck), 44, y - 30);
       ctx.fillRect(22, y - 31, 44, 3);
       ctx.fillStyle = faded ? FADED_INK : '#8a2a1a';
     }
-    ctx.font = 'bold 72px system-ui, sans-serif';
+    ctx.font = `66px ${TAG_MARKER}`;
     ctx.fillText(String(item.price), 88, y);
     ctx.beginPath();
     ctx.arc(160, y, 22, 0, Math.PI * 2);
@@ -330,7 +350,7 @@ export class ForSaleBox extends THREE.Group implements Furniture, Interactable {
     ctx.stroke();
     if (this.wanted) {
       ctx.fillStyle = '#c8342a';
-      ctx.font = 'bold 34px system-ui, sans-serif';
+      ctx.font = 'bold 34px Georgia, serif';
       ctx.fillText('★', 180, band ? 42 : 24);
     }
     return toTexture(canvas, 'facing');

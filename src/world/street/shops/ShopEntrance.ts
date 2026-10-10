@@ -262,13 +262,13 @@ export class ShopEntrance extends THREE.Group implements Furniture, Interactable
     const { market, marketDay, isWanted } = this.services;
     const stock = market.peekToday();
     const wanted = stock?.find((item) => isWanted(item.game.id));
-    if (wanted) out.push(`The barista leans over: “Someone saw ${wanted.game.title} on a stall this morning. Be quick.”`);
+    if (wanted) out.push(`“Someone saw ${wanted.game.title} on a stall this morning. Be quick.”`);
     const gem = stock?.find((item) => item.gem);
-    if (gem) out.push(`The barista winks: “There’s a ${gem.game.title} in the bargain bin. Nobody’s noticed yet.”`);
+    if (gem) out.push(`“There’s a ${gem.game.title} in the bargain bin. Nobody’s noticed yet.”`);
     const news = marketDay.news()[0];
-    if (news?.kind === 'grail') out.push(`The barista lowers their voice: “${stallRumour(news, 0)}”`);
-    const { title, blurb } = marketDay.theme;
-    out.push(stock ? `The barista says it’s ${title} at the flea market today. ${blurb}` : `“${title} at the flea market today, behind RETRO GAMES. ${blurb} The dealers get there early.”`);
+    if (news?.kind === 'grail') out.push(`“${stallRumour(news, 0)}”`);
+    const { title } = marketDay.theme;
+    out.push(stock ? `“${title} at the flea market today.”` : `“${title} at the flea market today, behind RETRO GAMES. The dealers get there early.”`);
     return out;
   }
 

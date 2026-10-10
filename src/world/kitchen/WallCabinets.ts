@@ -4,6 +4,7 @@ import { Prop, part } from '../props/Prop';
 import { paint, standard } from '../materials/palette';
 import { GLASS } from '../materials/glass';
 import { SwingLeaf, revealWhileOpen } from '../props/SwingLeaf';
+import { stashBehind } from '../props/Openable';
 
 /** One bay of the row, left to right as seen from the room: a cupboard (one door under 0.5 m, two above) or the extractor hood over the hob. */
 export interface WallCabinetUnit {
@@ -27,6 +28,8 @@ const DOOR_THICKNESS = 0.018;
 /** Thickness of the carcass boards. */
 const CARCASS_WALL = 0.016;
 const GAP = 0.003;
+/** A find lies this far in from the cupboard's side, clear of the plates (`build/rummage`). */
+const STASH_FROM_SIDE = 0.07;
 const HANDLE_LENGTH = 0.14;
 /** How far a door hinged at an end of the row opens: its handle (3.5 cm proud) stays clear of the wall or the fridge beside it. */
 const END_DOOR_ANGLE = THREE.MathUtils.degToRad(80);
@@ -115,6 +118,9 @@ export class WallCabinets extends Prop {
       }
       const left = cx - width / 2 + i * (width / count) + GAP;
       leaf.position.set(hinge === 'left' ? left : left + w, WALL_CABINET_BOTTOM + GAP, bodyD);
+      // A find lies on the cupboard's floor at the front, near the hinged side, where the plates and bowls leave room.
+      const stashX = hinge === 'left' ? left + STASH_FROM_SIDE : left + w - STASH_FROM_SIDE;
+      leaf.stash = stashBehind(leaf, new THREE.Vector3(stashX, WALL_CABINET_BOTTOM + CARCASS_WALL, bodyD - 0.035));
       this.leaves.push(leaf);
     }
   }

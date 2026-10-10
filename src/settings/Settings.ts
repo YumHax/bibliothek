@@ -9,8 +9,26 @@ const VOLUME_CHANNELS: readonly VolumeChannel[] = ['master', 'screens', 'arcade'
 
 export type UiScale = 'small' | 'normal' | 'large';
 export const UI_SCALES: readonly UiScale[] = ['small', 'normal', 'large'];
+/** Settings > Display > Text size: the speech's three sizes, and two more for the whole interface. */
+export type TextSize = UiScale | 'larger' | 'largest';
+export const TEXT_SIZES: readonly TextSize[] = ['small', 'normal', 'large', 'larger', 'largest'];
 
-/** Settings > Controls: sprint on a double tap of forward, or while Shift is held (the crouch then moves to Z). */
+/** Settings > Display: motion as the system asks, or cut, or kept whatever the system says. */
+export type MotionMode = 'system' | 'reduce' | 'full';
+export const MOTION_MODES: readonly MotionMode[] = ['system', 'reduce', 'full'];
+/** Settings > Display: how long speech and notes stay up, over the time it takes to read them. */
+export type ReadingPace = 'normal' | 'longer' | 'longest';
+export const READING_PACES: readonly ReadingPace[] = ['normal', 'longer', 'longest'];
+/** Settings > Display > Resolution: the GPU decides (`AdaptiveResolution`), or a fixed share of the screen's pixels. */
+export type RenderScale = 'auto' | 'full' | 'threeQuarters' | 'half';
+export const RENDER_SCALES: readonly RenderScale[] = ['auto', 'full', 'threeQuarters', 'half'];
+/** Settings > Display > Frame rate: the quality level's cap, 30, 60, or every refresh of the screen. */
+export type FrameCap = 'auto' | 'fps30' | 'fps60' | 'off';
+export const FRAME_CAPS: readonly FrameCap[] = ['auto', 'fps30', 'fps60', 'off'];
+/** Settings > Display > Brightness, a multiplier of the frame's exposure. */
+export const BRIGHTNESS_RANGE = { min: 0.6, max: 1.6 } as const;
+
+/** Settings > Controls: sprint while Shift is held (the crouch then on Z), or on a double tap of forward (Shift crouches). */
 export type SprintMode = 'doubleTap' | 'hold';
 export const SPRINT_MODES: readonly SprintMode[] = ['doubleTap', 'hold'];
 /** Settings > Controls: crouch while the key is held, or a press to crouch and another to stand. */
@@ -33,9 +51,20 @@ export interface GameSettings {
   crosshair: boolean;
   /** The caption naming what the crosshair is on. */
   hoverLabel: boolean;
-  uiScale: UiScale;
-  /** Cuts the menus' and panels' animations, whatever the system says (and the head bob, the eased sit, the flash: `settings/motion`). */
-  reduceMotion: boolean;
+  uiScale: TextSize;
+  /** The handwriting, the comic speech and the marker drawn in the plain face (easier to read). */
+  plainLettering: boolean;
+  /** How long speech and notes stay up (`notices/readingTime`). */
+  readingPace: ReadingPace;
+  /**
+   * Cuts the menus' and panels' animations (and the head bob, the eased sit, the flash: `settings/motion`): as the
+   * system asks, always, or never.
+   */
+  reduceMotion: MotionMode;
+  /** The frame's exposure times this (`graphics/brightness`). */
+  brightness: number;
+  renderScale: RenderScale;
+  frameCap: FrameCap;
   sprintMode: SprintMode;
   crouchMode: CrouchMode;
   /** A few millimetres of bob with the stride. */
@@ -44,6 +73,11 @@ export interface GameSettings {
   speechSize: UiScale;
   /** The "how to" tips top left (the first day's to-do list included). */
   showTips: boolean;
+  /**
+   * Settings > Display: the room fills the screen (asked on the click that enters it), and Esc is the game's
+   * (`navigator.keyboard.lock`): a press closes the card or panel first, a long press still leaves.
+   */
+  fullscreen: boolean;
   /** Rebound keys, physical `KeyboardEvent.code` -> the code the game reads (see `Input.setBindings`). */
   bindings: Record<string, string>;
 }
@@ -58,12 +92,18 @@ const DEFAULT_SETTINGS: Readonly<GameSettings> = {
   crosshair: true,
   hoverLabel: true,
   uiScale: 'normal',
-  reduceMotion: false,
-  sprintMode: 'doubleTap',
+  plainLettering: false,
+  readingPace: 'normal',
+  reduceMotion: 'system',
+  brightness: 1,
+  renderScale: 'auto',
+  frameCap: 'auto',
+  sprintMode: 'hold',
   crouchMode: 'hold',
   headBob: true,
   speechSize: 'normal',
   showTips: true,
+  fullscreen: false,
   bindings: {},
 };
 
@@ -86,7 +126,8 @@ export class SettingsStore {
 
   constructor(key: string = SETTINGS_STORAGE_KEY) {
     // Version 1: the settings object (bare JSON before versions were kept); a missing field takes its default.
-    this.store = new PersistedStore<GameSettings>({ key, version: 1, defaults: () => structuredClone(DEFAULT_SETTINGS) as GameSettings, read: readSettings });
+    // Version 2: Shift sprints by default; a version-1 save still on the old defaults (double tap, Shift held to crouch) moves over.
+    this.store = new PersistedStore<GameSettings>({ key, version: 2, defaults: () => structuredClone(DEFAULT_SETTINGS) as GameSettings, read: readSettings, migrate: { 1: shiftSprints } });
     this.current = this.store.load();
     if (typeof window !== 'undefined') window.addEventListener('pagehide', () => this.flush());
   }
@@ -131,6 +172,14 @@ export class SettingsStore {
   }
 }
 
+/** Version 1 -> 2: a player who never touched the walk keys (double tap to sprint, Shift held to crouch) gets Shift to sprint. */
+function shiftSprints(data: unknown): unknown {
+  if (typeof data !== 'object' || data === null) return data;
+  const old = data as Partial<GameSettings>;
+  const untouched = (old.sprintMode ?? 'doubleTap') === 'doubleTap' && (old.crouchMode ?? 'hold') === 'hold';
+  return untouched ? { ...old, sprintMode: 'hold' } : data;
+}
+
 /** Saved settings over the defaults, each field checked; null when what was saved is not a settings object at all. */
 function readSettings(data: unknown): GameSettings | null {
   if (typeof data !== 'object' || data === null || Array.isArray(data)) return null;
@@ -159,13 +208,20 @@ function sanitize(s: GameSettings): GameSettings {
     volume,
     crosshair: s.crosshair !== false,
     hoverLabel: s.hoverLabel !== false,
-    uiScale: UI_SCALES.includes(s.uiScale) ? s.uiScale : d.uiScale,
-    reduceMotion: s.reduceMotion === true,
+    uiScale: TEXT_SIZES.includes(s.uiScale) ? s.uiScale : d.uiScale,
+    plainLettering: s.plainLettering === true,
+    readingPace: READING_PACES.includes(s.readingPace) ? s.readingPace : d.readingPace,
+    // Saved as a switch before the three-way choice: on was "reduce", off followed the system.
+    reduceMotion: (s.reduceMotion as unknown) === true ? 'reduce' : MOTION_MODES.includes(s.reduceMotion) ? s.reduceMotion : d.reduceMotion,
+    brightness: numberIn(s.brightness, BRIGHTNESS_RANGE.min, BRIGHTNESS_RANGE.max, d.brightness),
+    renderScale: RENDER_SCALES.includes(s.renderScale) ? s.renderScale : d.renderScale,
+    frameCap: FRAME_CAPS.includes(s.frameCap) ? s.frameCap : d.frameCap,
     sprintMode: SPRINT_MODES.includes(s.sprintMode) ? s.sprintMode : d.sprintMode,
     crouchMode: CROUCH_MODES.includes(s.crouchMode) ? s.crouchMode : d.crouchMode,
     headBob: s.headBob !== false,
     speechSize: UI_SCALES.includes(s.speechSize) ? s.speechSize : d.speechSize,
     showTips: s.showTips !== false,
+    fullscreen: s.fullscreen === true,
     bindings,
   };
 }

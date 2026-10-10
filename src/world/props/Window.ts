@@ -5,7 +5,7 @@ import type { Interactable } from '@/interaction/Interactable';
 import type { SessionActions } from '@/game/SessionActions';
 import { IDLE_SHADOW_INTERVAL, type OccupancyAware } from '../Furniture';
 import { invisibleHitbox } from '../meshUtils';
-import { basic } from '../materials/palette';
+import { basic, paint } from '../materials/palette';
 import { Prop, part } from './Prop';
 import { Curtains } from './Curtains';
 import { RollerBlind } from './RollerBlind';
@@ -43,6 +43,12 @@ interface WindowOptions {
    * than the opening, for a window over a sink or a worktop. Default false; wins over `curtains`.
    */
   blind?: boolean;
+  /**
+   * How deep (m) the plaster returns round the opening stand out of the wall: the jambs and the head of a thick old
+   * wall's reveal, so the steel frame reads as set back in it rather than hung on it. 0 (default): none (a shop's
+   * window, a lodge's). Kept under the curtains' standoff, which hang in front of it.
+   */
+  reveal?: number;
   /** Called while the curtains move with how open they are (1 open, 0 drawn): the room dims its skylight from it. */
   onCurtainsChange?: (openness: number) => void;
   /**
@@ -63,6 +69,8 @@ const KICK = 0.1;
 /** Face width of the frame rails and of the grid mullions. */
 const RAIL = 0.05;
 const MULLION = 0.028;
+/** The reveal's plaster returns: how thick each stands beside the frame (m). */
+const REVEAL_BOARD = 0.035;
 /** Target pane size the mullion grid is fitted to. */
 const PANE_WIDTH = 0.4;
 const PANE_HEIGHT = 0.5;
@@ -79,6 +87,25 @@ const SUN_SPOT_MIN = 0.6;
 const SKY_PANEL_INTENSITY = 1.6;
 /** The curtain hem hangs this far above the floor. */
 const HEM_CLEARANCE = 0.015;
+/** The widest the sun's penumbra opens across the room, in its map's texels (high: `graphics/softShadows`). */
+const SUN_PENUMBRA_TEXELS = 10;
+/**
+ * Without the area lights (low, medium) the sky still comes in by the window: a wide shadowless
+ * spot just inside the glass aimed down into the room, bright by the sill and falling off across
+ * it (the room's hemisphere is the even part, `Room` `SKYLIGHT_DAY`). Its intensity in full
+ * daylight, its reach (m: the depth of a room) and its half-angle.
+ */
+const DAYLIGHT_SPOT = 2;
+const DAYLIGHT_REACH = 5;
+const DAYLIGHT_HALF_ANGLE = THREE.MathUtils.degToRad(62);
+/**
+ * The sun patch on the floor lights the room round it: a shadowless point light just above it,
+ * the sun's colour times a floor's (warm wood), its share of the sun's intensity, and its reach (m).
+ */
+const BOUNCE_SHARE = 0.2;
+const BOUNCE_TINT = new THREE.Color(0.78, 0.6, 0.44);
+const BOUNCE_LIFT = 0.5;
+const BOUNCE_REACH = 4;
 
 /**
  * A loft window: a tall black steel frame rising from the floor, a grid of slim mullions, no
@@ -117,6 +144,10 @@ export class RoomWindow extends Prop implements Updatable, Interactable, Occupan
   private readonly shaft: SunShaft | null = null;
   /** The sky's soft light pouring through the whole opening (`QUALITY.areaLights`). */
   private readonly skyPanel: THREE.RectAreaLight | null = null;
+  /** The sky's light pouring in where there is no area light (low, medium). */
+  private readonly daylightSpot: THREE.SpotLight | null = null;
+  /** The warm light the sun patch throws back up into the room (medium, high). */
+  private readonly bounce: THREE.PointLight | null = null;
   private readonly steel: THREE.MeshStandardMaterial;
   /** The pane's reflection of the room, stronger as the outside darkens. */
   private readonly reflection = new PaneReflection();
@@ -129,6 +160,19 @@ export class RoomWindow extends Prop implements Updatable, Interactable, Occupan
   /** `lightDir` snapped to whole shadow texels: where the spot actually stands (see `apply`). */
   private readonly aimDir = new THREE.Vector3();
 
+  /**
+   * The reveal (`WindowOptions.reveal`): plaster returns standing `depth` out of the wall either side of the frame and
+   * over its head, their inner faces against the rails, so the frame sits back in the wall's thickness. The jambs run
+   * from the floor (through the skirting) to the head; they catch the sun and throw its shadow into the room.
+   */
+  private buildReveal(w: number, top: number, depth: number): void {
+    const plaster = paint(0xefebe3, 0.92);
+    const outer = w / 2 + RAIL;
+    const height = top - this.floorY;
+    for (const side of [-1, 1]) part(this, REVEAL_BOARD, height + REVEAL_BOARD, depth, plaster, { x: side * (outer + REVEAL_BOARD / 2), y: this.floorY + (height + REVEAL_BOARD) / 2, z: depth / 2 });
+    part(this, 2 * outer, REVEAL_BOARD, depth, plaster, { y: top + REVEAL_BOARD / 2, z: depth / 2 });
+  }
+
   /** Height at which to `place()` a window of glass height `height` so its kick rail stands on the floor. */
   static mountY(height: number): number {
     return KICK + height / 2;
@@ -140,7 +184,7 @@ export class RoomWindow extends Prop implements Updatable, Interactable, Occupan
   ) {
     super();
     this.name = 'Window';
-    this.options = { width: 1.2, height: 2.4, drivesClock: false, sunlight: true, curtains: true, blind: false, ...options };
+    this.options = { width: 1.2, height: 2.4, drivesClock: false, sunlight: true, curtains: true, blind: false, reveal: 0, ...options };
     const { width: w, height: h } = this.options;
     this.floorY = -h / 2 - KICK;
 
@@ -182,6 +226,7 @@ export class RoomWindow extends Prop implements Updatable, Interactable, Occupan
     const rows = Math.max(1, Math.round(h / PANE_HEIGHT));
     for (let i = 1; i < columns; i++) part(this, MULLION, h, 0.04, steel, { x: -w / 2 + (w * i) / columns, z: 0.02 });
     for (let j = 1; j < rows; j++) part(this, w, MULLION, 0.04, steel, { y: -h / 2 + (h * j) / rows, z: 0.02 });
+    if (this.options.reveal > 0) this.buildReveal(w, top, this.options.reveal);
 
     if (QUALITY.areaLights) {
       // Lights look down their local -z: turned round, it faces into the room.
@@ -189,6 +234,12 @@ export class RoomWindow extends Prop implements Updatable, Interactable, Occupan
       this.skyPanel.position.z = 0.02;
       this.skyPanel.rotation.y = Math.PI;
       this.add(this.skyPanel);
+    } else {
+      // From just under the head of the glass, down into the room (local +z).
+      this.daylightSpot = new THREE.SpotLight(0xffffff, 0, DAYLIGHT_REACH, DAYLIGHT_HALF_ANGLE, 1, 2);
+      this.daylightSpot.position.set(0, h * 0.3, 0.12);
+      this.daylightSpot.target.position.set(0, this.floorY, DAYLIGHT_REACH * 0.45);
+      this.add(this.daylightSpot, this.daylightSpot.target);
     }
 
     if (this.options.blind) {
@@ -227,11 +278,17 @@ export class RoomWindow extends Prop implements Updatable, Interactable, Occupan
       this.light.shadow.camera.near = LIGHT_DISTANCE - 2;
       this.light.shadow.camera.far = LIGHT_DISTANCE + 12;
       this.light.shadow.bias = -0.0003;
+      // High: contact-hardening penumbra up to this many texels (`graphics/softShadows`; elsewhere the radius means nothing to a spot).
+      if (QUALITY.level === 'high') this.light.shadow.radius = SUN_PENUMBRA_TEXELS;
       // In texels of the map, at the far end of the patch it throws (the floor a few metres in).
       this.light.shadow.normalBias = normalBiasAt(LIGHT_DISTANCE + MASK_REACH, LIGHT_HALF_ANGLE, QUALITY.sunShadowMapSize);
       this.light.target.position.set(0, 0, 0);
       this.add(this.light, this.light.target);
       this.sunShadow = new ShadowRefresh(this.light);
+      if (QUALITY.detailedMaterials) {
+        this.bounce = new THREE.PointLight(0xffffff, 0, BOUNCE_REACH, 2);
+        this.add(this.bounce);
+      }
 
       if (QUALITY.lightShafts) {
         this.shaft = new SunShaft({ width: w, height: h, columns, rows, floorY: this.floorY });
@@ -257,6 +314,16 @@ export class RoomWindow extends Prop implements Updatable, Interactable, Occupan
   /** 1 with the curtains open (or none), 0 once they are drawn across the pane. */
   get curtainOpenness(): number {
     return this.curtains?.currentOpenness ?? 1;
+  }
+
+  /** Whether the curtains (or the blind) are drawn, or on their way there. */
+  get curtainsDrawn(): boolean {
+    return this.curtains?.isDrawn ?? false;
+  }
+
+  /** Draws or opens the curtains (or the blind) as a click would, without one (a memory's evening, `memories/pastLight`). */
+  setCurtainsDrawn(drawn: boolean): void {
+    this.curtains?.setDrawn(drawn);
   }
 
   setOccupied(occupied: boolean): void {
@@ -341,6 +408,10 @@ export class RoomWindow extends Prop implements Updatable, Interactable, Occupan
       this.skyPanel.color.copy(sky.ambient);
       this.skyPanel.intensity = SKY_PANEL_INTENSITY * sky.daylight * THREE.MathUtils.lerp(0.15, 1, this.curtainOpenness);
     }
+    if (this.daylightSpot) {
+      this.daylightSpot.color.copy(sky.ambient);
+      this.daylightSpot.intensity = DAYLIGHT_SPOT * sky.daylight * THREE.MathUtils.lerp(0.15, 1, this.curtainOpenness);
+    }
     if (!this.light) return;
     // The panorama's light direction, brought into this window's frame (outward is local -z).
     // Behind the wall: no light. The first call runs before `place()`, the per-frame ones after.
@@ -361,5 +432,25 @@ export class RoomWindow extends Prop implements Updatable, Interactable, Occupan
     // material, so the light stays a shadow caster and only stops updating.
     this.sunShadow?.setLive(this.occupied && this.light.intensity > 0);
     this.shaft?.setSun(this.lightDir, sky.lightColor, sky.night ? 0 : this.light.intensity);
+    this.placeBounce(sky);
+  }
+
+  /** The bounce light over this window's sun patch (local frame), dark when no patch lies on the floor near the window. */
+  private placeBounce(sky: SkyState): void {
+    const bounce = this.bounce;
+    if (!bounce || !this.light) return;
+    const dir = this.lightDir;
+    const t = dir.y > 0.02 ? -this.floorY / dir.y : Infinity;
+    const x = -dir.x * t;
+    const z = -dir.z * t;
+    const near = Number.isFinite(t) && Math.hypot(x, z) <= 3.5;
+    if (!near || sky.night) {
+      bounce.intensity = 0;
+      return;
+    }
+    // Halfway between the glass and the patch's far end: the patch's middle, roughly.
+    bounce.position.set(x * 0.6, this.floorY + BOUNCE_LIFT, z * 0.6);
+    bounce.color.copy(sky.lightColor).multiply(BOUNCE_TINT);
+    bounce.intensity = BOUNCE_SHARE * this.light.intensity;
   }
 }

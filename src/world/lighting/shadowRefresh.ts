@@ -1,5 +1,6 @@
 import type * as THREE from 'three';
 import { QUALITY } from '@/graphics/quality';
+import { shadowsInMotion } from '@/graphics/shadowMotion';
 import { random } from '@/random';
 
 /**
@@ -9,6 +10,9 @@ import { random } from '@/random';
  * a point light, and at 60 fps that was most of the frame's draw calls. Not live (the player
  * elsewhere, the lamp off, the sun behind the wall), the owner refreshes the map itself now and then,
  * or not at all. Owners call `update` from their own tick.
+ *
+ * The rate is the still scene's: while a caster moves (`graphics/shadowMotion`: the box in hand,
+ * the cat) a live map redraws twice as often, so the moving shadow keeps up with what casts it.
  */
 export class ShadowRefresh {
   private live = false;
@@ -40,9 +44,10 @@ export class ShadowRefresh {
 
   update(dt: number): void {
     if (!this.live || this.period === 0) return;
+    const period = shadowsInMotion() ? this.period / 2 : this.period;
     this.timer += dt;
-    if (this.timer < this.period) return;
-    this.timer = Math.min(this.timer - this.period, this.period);
+    if (this.timer < period) return;
+    this.timer = Math.min(this.timer - period, period);
     this.light.shadow.needsUpdate = true;
   }
 }

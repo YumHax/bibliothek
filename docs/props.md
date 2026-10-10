@@ -11,7 +11,9 @@ Read this to add or change something visible in the room. The recipe is in the `
    read from `currentFestivities()` (`time/season.ts`, set by `Sky` before any zone is built). No holiday prop has a
    light (the light count must not change, docs/zones.md): the bulbs and candles are unlit colours that flicker. The street
    has a `decor` list too (lights across Front Street, doorstep pumpkins) and a `Snowman` shown while the snow lies.
-   `upgrade` on an entry of the flat stands it only once bought (the flat starts bare, docs/economy.md "The bare flat"):
+   `until` is the reverse of `upgrade`: the entry stands only until that is bought, then goes (`zone.remove`; never a
+   light): the bare flat's moving-in cartons and suitcase. `fixed: true` with an `upgrade` keeps a bought entry out of the
+   player's moving (M) (a plug that comes with a piece, not a piece). `upgrade` on an entry of the flat stands it only once bought (the flat starts bare, docs/economy.md "The bare flat"):
    a `HOME_GOODS` id (`'sideboard'`), the nth of a piece with several spots (`{ good: 'houseplant', nth: 3 }`), or a list
    of both. Till then it is staged (`build/owned.placerFor`: hidden, lights kept dark, not colliding, not clickable); the
    wired props use the same placers in their builders (`placerFor(zone, upgrades, plan.upgrades.x)`).
@@ -90,6 +92,11 @@ Read this to add or change something visible in the room. The recipe is in the `
   pane), `.pane` (a door's, a lodge's), `.shelf`, `.screen` (shower screen, bathroom shelves), `.ware` (jars, glasses),
   `.mirror`; `asGlass(mesh)` puts a see-through pane in the glass band (no shadow, clicked through). Roof and frosted
   glass lit by the sky: `skyGlassColour` / `daylitGlass` + `lightDaylitGlass`, one formula for every such pane.
+- **Soft things** (bedding, cushions, clothes, a mattress, an armchair's cloth): `softPart()` / `softBlockGeometry()`
+  (`world/props/softBlock.ts`): a welded box pulled onto a superellipsoid (`round`: 2 a roll, 3 a cushion, 6+ a
+  mattress), pinched towards its rim (`pinch`), lumpy on top (`lumps`, `seed`), uvs in metres; shared per shape. Their
+  cloth is `wovenCloth(color)` (`world/materials/weave.ts`: one shared weave map + bump for every colour;
+  `ownWovenCloth` for a garment dyed at runtime, `ticking()` for a mattress cover).
 - **Joints** (`world/props/joinery.ts`): two parts never share a face. Pick per joint: *buried* (`INSET`, 1 mm into the
   other), *proud* (`PROUD`, 2 mm out: a top over its carcass, a rim over a body), *apart* (`SEAM`, 0.5 mm: two fronts side
   by side); `inset()`, `proud()`, `topOf(mesh)`, `partOn(parent, below, ...)` (a part resting on another, a seam above),
@@ -148,11 +155,14 @@ Read this to add or change something visible in the room. The recipe is in the `
 | --- | --- | --- |
 | `plant` | `kind: yucca/fig/small/monstera/hanging`, `pot: ceramic/terracotta`, `seed`, `scale`, `collides` | floor plants collide at the pot; `hanging` goes on a `ceiling`/`hung` placement |
 | `rug` | `width`, `depth`, `field`, `border`, `motif` (colours) | flat slab with rounded corners and a fringe past both short ends (x); never collides; a room builder's `surfaceAt: rugsUnderfoot(zone)` (`build/rugsUnderfoot.ts`) makes the footsteps soft over it (kilims too) |
-| `pictureFrame` | `motif: mountains/sunset/abstract/roofs/botanical`, `seed`, `width`, `height`, `frameColor`, `frameWidth`, `matWidth` | wall placement; give each print of the flat its own motif and frame colour (no motif more than twice) |
-| `floorLamp` | `poleHeight`, `intensity`, `on` | clickable switch, own PointLight |
-| `sideTable` | `radius`, `height`, `wood`, `mug` | collides |
+| `pictureFrame` | `motif: mountains/sunset/abstract/roofs/botanical`, `seed`, `width`, `height`, `frameColor`, `frameWidth`, `matWidth` | wall placement; give each print of the flat its own motif and frame colour (no motif more than twice); a builder may hand it a painter of its own (`new PictureFrame(options, { painter })`: Mémé's family photos) |
+| `floorLamp` | `poleHeight`, `intensity`, `on`, `cord: [x, z]` | clickable switch, own PointLight; `cord` snakes from the base across the floor to that lamp-local point (under the armchair beside it) |
+| `sideTable` | `radius`, `height`, `wood`, `mug` (`null`: none), `covers` (`[]`: no magazines) | collides |
 | `garland` | `style: bulbs/bunting`, `length`, `height`, `sag`, `spacing`, `colors`, `seed` | a slack string from the origin along local +x; `floor` placement + `height`; no light, bulbs only glow |
-| `crate` | `style: wood/cardboard`, `width`, `height`, `depth`, `stack`, `seed`, `label` | a pile of stock; collides |
+| `crate` | `style: wood/cardboard`, `width`, `height`, `depth`, `stack`, `seed`, `label` | a pile of stock; collides (the bare flat's moving-in cartons, `until` bought) |
+| `suitcase` | `color` | a hard-shell suitcase lying on the floor, latches and handle to local +z; collides (the bare flat's, `until` the first armchair) |
+| `gamePoster` | `game: invaders/frog/comets`, `width`, `height` | wall-hung: a framed one-sheet for one of the arcade's games, its hero blown up from the game's sprite (`arcade/posterArt`) |
+| `arcadeMural` | `width`, `height`, `words`, `seed` | wall-hung: the arcade's airbrushed panel (a neon grid, mountains, lightning, the words in chrome pixel letters) |
 | `flyer` | `style: paper/cloth`, `title`, `lines`, `width`, `height`, `paper`, `ink`, `accent`, `tilt`, `seed` | wall placement; paper is pinned and askew, cloth is a banner |
 | `chalkboard` | `lines`, `width`, `height`, `wood`, `slate`, `seed` | pavement A-board, same words both faces; collides |
 | `industrialPendant` | `drop`, `color`, `intensity`, `on`, `onSwitch` | `ceiling` placement; clickable, own shadow-less PointLight; a builder chains a row through `onSwitch` (the market) |
@@ -166,7 +176,7 @@ Read this to add or change something visible in the room. The recipe is in the `
 | `leaningMirror` | `width`, `height`, `frameColor`, `lean` | full-length mirror leaning on a wall; `wall` placement with `y: 0`; collides over its wedge |
 | `pedalBin` | `radius`, `height` | steel bin, pedal facing local +z; collides |
 | `bathroomScale` | `color` | flat glass scale on the floor, display facing local +z; never collides |
-| `wallSocket` | `height`, `gangs: 1/2`, `cables: [x, y, z][]`, `cableColor` | `wall` placement with `y: 0`; each cable runs from its plug down to the floor and on to a wall-local device point |
+| `wallSocket` | `height`, `gangs: 1/2`, `cables: [x, y, z][]`, `cableColor`, `plugsOnly` | `wall` placement with `y: 0`; each cable runs from its plug down to the floor and on to a wall-local device point; `plugsOnly` is the plugged twin of a socket at the same spot, with an `upgrade` and `fixed` (the sideboard's turntable: no cable to nothing in the bare flat) |
 | `mirrorPillar` | `size`, `height`, `neon` | floor-to-ceiling square column, mirrored faces in chrome frames, a neon band; collides |
 | `mirrorBall` | `radius`, `drop`, `rpm`, `seed` | `ceiling` placement; a faceted ball turning on a rod, glints from an emissive speckle map (no light) |
 | `hangingBanner` | `title`, `line`, `width`, `height`, `drop`, `color`, `ink`, `accent` | `ceiling` placement (+ `rotationY`); a vinyl sheet on two wires, printed on both faces |
@@ -216,7 +226,7 @@ Working appliances (kitchen): `Kettle` (boils: `Steam` puffs from the spout, one
 are `PooledLight`s inside what their doors hide: the kitchen's one-light `LightPool` lends them a real light while a door is open.
 
 Wired classes: `Seat` (+ `Cushion` via `mountCushion`), `Television(cssLayer, listener)`, `Projector(cssLayer, { pictureWidth, listener })`,
-`RoomWindow(outdoors, { width, height, drivesClock, sunlight, curtains, blind, onCurtainsChange })` (`blind`: a `RollerBlind` that stops at the glass, for a window over a sink; the `Curtains` are sheets folded in real pleats, deeper as they gather, weave mapped in metres, the hem swinging after a pull; the sun spot re-aims in whole shadow texels), `Poster(width, height, painter)` with
+`RoomWindow(outdoors, { width, height, drivesClock, sunlight, curtains, blind, reveal, onCurtainsChange })` (`reveal`: plaster returns standing that deep out of the wall round the frame, the old wall's thickness, kept under the curtains' standoff; the living room's are 0.1 m; `blind`: a `RollerBlind` that stops at the glass, for a window over a sink; the `Curtains` are sheets folded in real pleats, deeper as they gather, weave mapped in metres, the hem swinging after a pull; the sun spot re-aims in whole shadow texels), `Poster(width, height, painter)` with
 `Poster.bibliothek()` / `Poster.platform()` / `shopPoster()`, `WallClock(dayNight, { onSecond })` (click says the time, a second click within 2 s sets an alarm an hour on; a red second hand steps each real second and `onSecond` strikes the `ClockTick` with it, `build/roomParts.placeClock`), `PendantLamp({ onSwitch })`, `FlushLamp({ onSwitch, on })`,
 `WallSwitch({ lamp })` (a rocker by the door that toggles the room's pendant / flush lamp; every room plan has a `lightSwitch` spot),
 `Door(doorway, { collisions, leafColor })` (hung by `furnishShell`), `ConsoleStand` + `Console(slotWidth, onSelectPlatform)` (one style per
@@ -238,7 +248,9 @@ placed at the zone's origin with `zone.place(x, new THREE.Vector3())`: `TiledWai
 
 `Room(options)` builds floor, ceiling, four walls cut by the `doorways`, baseboard, wall colliders with gaps at the doorways,
 (`options.finish` picks the surfaces: `floor: 'parquet' | 'concrete' | 'carpet'` (`Parquet.ts`, `Concrete.ts`, the arcade's neon-confetti `Carpet.ts`),
-`walls` / `ceiling` / `trim` colours, `moulding: false` for a hall),
+`walls` / `ceiling` / `trim` colours, `moulding: false` for a hall, `footprints`: where furniture once stood, the
+varnish's gloss kept there in the floor's wear map; the living room's are uncle Félix's), a wall's ghosts of frames keep
+the nail each hung from,
 an invisible shadow caster outside each `opaqueWalls` wall (keeps the lamps in), the hemisphere ambient (on only while
 `setOccupied(true)`, easing in and out over ~0.4 s) and the shadow-casting ceiling lamp (its normal bias in texels of its
 map, `props/shadowTexels.ts`; the ceiling's fake bounce falls off from over the lamp towards the walls). `furnishShell(zone, sky, options, { leafColor })` places it,
@@ -248,7 +260,10 @@ shelving fills the back wall from `ROOM_PLAN.shelving.backWallMinX` then the rig
 a bookcase (`Shelf`) stands on a recessed plinth, with a hardboard back, an overhanging top and banded edges, merged
 into three draws; the last box of a partly filled row leans on its neighbour. A re-sort that leaves every bookcase's rows
 as they are slides the boxes to their new spots (`Shelving.reorder`, ticked by a `BoxMotion`, which also eases the hover
-pop); wishlist games are a gap holding a handwritten `WishCard`, the box shows (ghosted) only in hand.
+pop); wishlist games are a gap holding a handwritten `WishCard`, the box shows (ghosted) only in hand. About half the
+rows keep a trinket in their spare room (`shelving/trinkets.ts`, drawn by the bookcase's spot and the row: a bookend
+against the last box, loose cartridges, a handheld, a pad, a figure), shown only while the boxes leave it room; the
+starter card is folded in a tent. The flat's `Seat`s take their own `fabric` colour (`ROOM_PLAN.seats`).
 What does not fit goes to its `overflow`, shown by the bedroom's bought bookcases (`BEDROOM_PLAN.bookcase`, a `Shelving`
 with an explicit `layout`, `capacity` = bookcases bought, no ceiling spots). The other rooms' shells are in their plan
 files; the flat's map is in `worldPlan.ts`.

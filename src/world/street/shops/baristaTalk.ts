@@ -54,7 +54,7 @@ function giveTip(session: SessionActions, id: PersonId, day: number, tips: reado
 /** Where Victor is today, as the barista heard it. */
 function victorToday(day: number): string {
   const where = [
-    rivalOnFrontStreet() ? 'outside RETRO GAMES with his suitcase, ten till six' : '',
+    rivalOnFrontStreet(day) ? 'outside RETRO GAMES with his suitcase, ten till six' : '',
     rivalAtMarket(day) ? 'at the flea market first thing, hunting' : '',
     isAuctionDay(day) ? 'in the front row at the saleroom' : '',
   ].filter(Boolean);
@@ -77,7 +77,7 @@ export function baristaTalk(options: BaristaTalkOptions, session: SessionActions
       return { line: 'Pay me next time? No. Sorry, love, rules.' };
     }
     market.drinkCoffee();
-    session.reward({ title: onTheHouse ? 'A coffee, on the house' : 'A coffee at the counter', detail: 'The stallholders will go easier on you today.', coins: onTheHouse ? 0 : -price });
+    session.slip({ title: onTheHouse ? 'A coffee, on the house' : 'A coffee', detail: 'The stallholders go easier on you today.', coins: onTheHouse ? 0 : -price });
     // A cold barista keeps the market to themself; a friendly one has two things to say.
     const tips = options.tips();
     const count = effect(id, 'noTip') ? 0 : effect(id, 'twoTips') ? 2 : 1;

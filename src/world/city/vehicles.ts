@@ -16,6 +16,10 @@ export const VEHICLES = {
   car: { length: 4.2, width: 1.74, height: 1.46, wheelRadius: 0.32 },
   /** A saloon with a boot. */
   saloon: { length: 4.65, width: 1.8, height: 1.44, wheelRadius: 0.33 },
+  /** A small city car, short and upright. */
+  cityCar: { length: 3.65, width: 1.66, height: 1.5, wheelRadius: 0.3 },
+  /** An estate: the saloon's length, its roof carried to the tailgate. */
+  estate: { length: 4.7, width: 1.8, height: 1.5, wheelRadius: 0.33 },
   /** A small panel van: parked, and the delivery van of the mornings. */
   van: { length: 4.9, width: 1.95, height: 2.3, wheelRadius: 0.34 },
   /** The city bus (line 38). */

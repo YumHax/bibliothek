@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import { invisibleHitbox } from '../meshUtils';
 import {
+  ANKLE_Y,
+  BALL_Z,
   CHEST_Y,
   CLAVICLE,
   FOREARM_L,
@@ -23,17 +25,20 @@ import {
   UPPER_ARM_L,
   WAIST_Y,
 } from './body';
-import { paintCloth, paintTorso } from './clothTexture';
+import { isDenim, paintCloth, paintTorso } from './clothTexture';
 import { buildEyes, type Eye } from './eyes';
 import { paintFace } from './faceTexture';
 import { at, capsuleBetween, limbGeometry, Parts, roundedBox } from './geometry';
-import { addHair, hairMaterial, ponytailAnchor } from './hair';
-import { addEars, addFaceMorphs, addGlasses, addHat, headGeometry, type FaceMorphs, type FaceShape } from './head';
+import { addHair, hairCurtain, hairMaterial, ponytailAnchor } from './hair';
+import { addEars, addFaceMorphs, addGlasses, addHat, addMouth, headGeometry, mouthPatch, type FaceMorphs, type FaceShape } from './head';
 import type { PersonLook } from './looks';
 import { POSES, type ArmAngles } from './poses';
 import { addShoe } from './shoes';
 import { fabric, skin as skinMaterial } from '../materials/finishes';
 import { SpineSkin } from './motion/spineSkin';
+import { SkirtSkin } from './motion/skirtSkin';
+import { HairFollow } from './motion/hairFollow';
+import { lowerGarments } from './skirt';
 
 /*
  * The person's skeleton and what hangs on each bone, at the reference height (the root is scaled
@@ -41,7 +46,8 @@ import { SpineSkin } from './motion/spineSkin';
  *
  *   root                       scaled; the floor under the person, facing +z
  *   └ pelvis                   at the hip joints: sways, drops, tilts and turns
- *     ├ hip (2)                thigh, knee (shin, ankle: shoe), aimed by the legs' IK
+ *     ├ hip (2)                thigh, knee (shin, ankle: shoe, its toes flexing: a morph), aimed by the legs' IK
+ *     ├ skirt, coat            hanging from the waist, following the thighs in their shader (`SkirtSkin`)
  *     ├ trunk                  one sculpted surface (seat, waist, chest, shoulders) wearing the painted
  *     │                        torso; bends with the lower back and the chest in its shader (`SpineSkin`)
  *     └ lumbar                 the lower back
@@ -50,8 +56,10 @@ import { SpineSkin } from './motion/spineSkin';
  *           ├ neck, collar, hood, bag (the tote and the pack on bones of their own, to swing)
  *           ├ clavicle (2)     shrugs and reaches: shoulder (upper arm), elbow (forearm), wrist (the hand,
  *           │                  curling to a fist or opening flat: morph targets)
- *           └ neck pivot       head: skull and face (its expressions: morph targets), hair (a ponytail
- *                              on a bone of its own), ears, hat, glasses, eyes and lids
+ *           └ neck pivot       head: skull and face (its expressions: morph targets; the mouth cut open
+ *                              when the jaw drops, teeth and the dark behind), hair (a ponytail on a bone
+ *                              of its own, long hair's ends kept on the shoulders: `HairFollow`), ears,
+ *                              hat, glasses, eyes and lids
  *
  * Every bone's pieces are merged into one mesh per material (`Parts`).
  */
@@ -60,7 +68,12 @@ export interface LegBones {
   hip: THREE.Group;
   knee: THREE.Group;
   ankle: THREE.Group;
+  /** The shoe's meshes: their one morph target bends the toes up about the ball of the foot (`TOE_FLEX` at 1). */
+  toes: THREE.Mesh[];
 }
+
+/** How far the toes bend up at the ball of the foot at the morph's full influence (radians). */
+export const TOE_FLEX = 0.6;
 
 export interface ArmBones {
   clavicle: THREE.Group;
@@ -83,8 +96,18 @@ export interface Rig {
   spine: SpineSkin;
   /** The neck pivot (the head turns and nods about it). */
   head: THREE.Group;
+  /** The skull, the neck pivot's child (the head's frame). */
+  skull: THREE.Group;
   face: THREE.Mesh;
   morphs: FaceMorphs;
+  /** How far the mouth's cut is open (to be kept at the jaw morph's influence), or null (no cut: under a full beard). */
+  mouthOpen: { value: number } | null;
+  /** Long hair's ends on the shoulders (updated with the head's turn), or null. */
+  hairFollow: HairFollow | null;
+  /** A skirt or a coat's skirts following the thighs (updated with the hips), or null. */
+  skirt: SkirtSkin | null;
+  /** The meshes whose shadows bend in their own depth materials (trunk, skirts, long hair): they stop casting as the person fades. */
+  casters: THREE.Mesh[];
   eyes: [Eye, Eye];
   legs: [LegBones, LegBones];
   arms: [ArmBones, ArmBones];
@@ -112,15 +135,20 @@ export function buildRig(look: PersonLook): Rig {
   const skin = skinMaterial({ color: look.skin, roughness: 0.68 });
   const pattern = look.top === 'stripes' ? 'stripes' : look.top === 'flannel' ? 'check' : 'plain';
   const sleeve = fabric({ map: paintCloth(look.topColor, look.topAccent, pattern), roughness: 0.9, sheenTint: new THREE.Color(look.topColor).lerp(new THREE.Color(0xffffff), 0.35) });
-  const trousers = fabric({ map: paintCloth(look.trousers, look.trousers, 'plain'), roughness: 0.92, sheenTint: new THREE.Color(look.trousers).lerp(new THREE.Color(0xffffff), 0.35) });
+  const trousers = fabric({ map: paintCloth(look.trousers, look.trousers, isDenim(look.trousers) ? 'denim' : 'plain'), roughness: 0.92, sheenTint: new THREE.Color(look.trousers).lerp(new THREE.Color(0xffffff), 0.35) });
 
   const root = new THREE.Group();
   const pelvis = new THREE.Group();
   pelvis.position.y = PELVIS_Y;
   root.add(pelvis);
   const hipHalf = 0.09 * build;
-  const legs: [LegBones, LegBones] = [leg(-1, look, girth, hipHalf, skin, trousers), leg(1, look, girth, hipHalf, skin, trousers)];
+  // Under a skirt the legs are in tights, or bare.
+  const legCover = look.skirt ? (look.tights !== undefined ? fabric({ color: look.tights, roughness: 0.55, sheenTint: new THREE.Color(look.tights).lerp(new THREE.Color(0xffffff), 0.5) }) : skin) : null;
+  const legs: [LegBones, LegBones] = [leg(-1, look, girth, hipHalf, skin, trousers, legCover), leg(1, look, girth, hipHalf, skin, trousers, legCover)];
   pelvis.add(legs[0].hip, legs[1].hip);
+  const skirtSkin = look.skirt || look.coat ? new SkirtSkin() : null;
+  const garments = skirtSkin ? lowerGarments(look, skirtSkin) : [];
+  if (garments.length) pelvis.add(...garments);
 
   // The trunk, bent in its shader by the lower back and the chest; its shadow bends with it.
   const spine = new SpineSkin(TORSO_PIVOT_Y);
@@ -167,6 +195,11 @@ export function buildRig(look: PersonLook): Rig {
   head.position.set(NECK_PIVOT.x, NECK_PIVOT.y - TORSO_PIVOT_Y, NECK_PIVOT.z);
   head.rotation.order = 'YXZ';
   const built = buildHead(head, look, skin);
+  const casters: THREE.Mesh[] = [trunk, ...garments];
+  built.skull.traverse((o) => {
+    const mesh = o as THREE.Mesh;
+    if (mesh.isMesh && mesh.customDepthMaterial) casters.push(mesh);
+  });
   // A child's head is big for its body (the whole person is then scaled to their height).
   if (look.headScale) head.scale.setScalar(look.headScale);
   torso.add(head);
@@ -186,6 +219,8 @@ export function buildRig(look: PersonLook): Rig {
     spine,
     head,
     ...built,
+    skirt: skirtSkin,
+    casters,
     legs,
     arms,
     bag,
@@ -197,12 +232,14 @@ export function buildRig(look: PersonLook): Rig {
   };
 }
 
-function leg(side: -1 | 1, look: PersonLook, girth: number, hipHalf: number, skin: THREE.Material, trousers: THREE.Material): LegBones {
+function leg(side: -1 | 1, look: PersonLook, girth: number, hipHalf: number, skin: THREE.Material, trousers: THREE.Material, cover: THREE.Material | null): LegBones {
   const hip = new THREE.Group();
   // The hip joints sit on the pelvis's own pivot line (`PELVIS_Y`): no drop from it.
   hip.position.set(side * hipHalf, 0, 0);
   const thigh = new Parts();
-  if (look.shorts) {
+  if (cover) {
+    thigh.add(limb('thigh', THIGH_L, girth, 0.001), cover);
+  } else if (look.shorts) {
     thigh.add(limb('thigh', THIGH_L, girth), skin);
     thigh.add(limbGeometry(0.24, [[0, 0.08 * girth], [0.6, 0.083 * girth], [1, 0.082 * girth]], { top: 1, bottom: 0.1 }), trousers);
   } else {
@@ -213,7 +250,9 @@ function leg(side: -1 | 1, look: PersonLook, girth: number, hipHalf: number, ski
   const knee = new THREE.Group();
   knee.position.y = -THIGH_L;
   const shin = new Parts();
-  if (look.shorts) {
+  if (cover) {
+    shin.add(limb('shin', SHIN_L, girth, 0.001), cover);
+  } else if (look.shorts) {
     shin.add(limb('shin', SHIN_L, girth), skin);
     shin.add(limbGeometry(0.08, [[0, 0.041 * girth], [1, 0.043 * girth]], { top: 0.3, bottom: 0.3 }), new THREE.MeshStandardMaterial({ color: 0xf0ede6, roughness: 0.95 }), at(0, -SHIN_L + 0.085, 0));
   } else {
@@ -225,10 +264,47 @@ function leg(side: -1 | 1, look: PersonLook, girth: number, hipHalf: number, ski
   ankle.position.y = -SHIN_L;
   const shoe = new Parts();
   addShoe(shoe, look, girth);
-  ankle.add(...shoe.meshes());
+  const toes = shoe.meshes();
+  for (const mesh of toes) {
+    addToeFlex(mesh.geometry);
+    mesh.updateMorphTargets();
+  }
+  ankle.add(...toes);
   knee.add(ankle);
   hip.add(knee);
-  return { hip, knee, ankle };
+  return { hip, knee, ankle, toes };
+}
+
+/**
+ * The shoe's one morph target: the toe box bent up about the ball of the foot by `TOE_FLEX` (a
+ * band behind the ball blending in, as a sole flexes), so pushing off on the ball the toes can stay
+ * flat on the floor instead of sinking into it (`PersonModel` sets the influence from the foot's pitch).
+ */
+function addToeFlex(geometry: THREE.BufferGeometry): void {
+  const position = geometry.getAttribute('position');
+  const normal = geometry.getAttribute('normal');
+  const moved = new Float32Array(position.count * 3);
+  const turned = new Float32Array(position.count * 3);
+  const pivotY = -ANKLE_Y;
+  for (let i = 0; i < position.count; i++) {
+    const z = position.getZ(i);
+    const w = THREE.MathUtils.smoothstep(z, BALL_Z - 0.02, BALL_Z + 0.025);
+    const a = -TOE_FLEX * w;
+    const cos = Math.cos(a);
+    const sin = Math.sin(a);
+    const y = position.getY(i) - pivotY;
+    const dz = z - BALL_Z;
+    moved[i * 3] = position.getX(i);
+    moved[i * 3 + 1] = pivotY + y * cos - dz * sin;
+    moved[i * 3 + 2] = BALL_Z + y * sin + dz * cos;
+    const ny = normal.getY(i);
+    const nz = normal.getZ(i);
+    turned[i * 3] = normal.getX(i);
+    turned[i * 3 + 1] = ny * cos - nz * sin;
+    turned[i * 3 + 2] = ny * sin + nz * cos;
+  }
+  geometry.morphAttributes.position = [new THREE.Float32BufferAttribute(moved, 3)];
+  geometry.morphAttributes.normal = [new THREE.Float32BufferAttribute(turned, 3)];
 }
 
 function arm(side: -1 | 1, look: PersonLook, build: number, girth: number, skin: THREE.Material, handSkin: THREE.Material, sleeve: THREE.Material): ArmBones {
@@ -240,8 +316,10 @@ function arm(side: -1 | 1, look: PersonLook, build: number, girth: number, skin:
   shoulder.position.set(side * (SHOULDER_X * build - CLAVICLE.x), SHOULDER_Y - CLAVICLE.y, -CLAVICLE.z);
   clavicle.add(shoulder);
   const upper = new Parts();
+  // A jacket's sleeves (a coat's) stand a little further off the arm than a shirt's.
+  const layered = look.top === 'jacket' || look.coat === true;
   if (look.longSleeves) {
-    upper.add(limb('upperArm', UPPER_ARM_L, girth, 0.008), sleeve);
+    upper.add(limb('upperArm', UPPER_ARM_L, girth, layered ? 0.014 : 0.008), sleeve);
   } else {
     // A short sleeve flaring a little to its hem, bare arm below.
     upper.add(limbGeometry(0.14, [[0, 0.056 * girth], [1, 0.057 * girth + 0.004]], { top: 1, bottom: 0.08, radial: 18 }), sleeve);
@@ -252,7 +330,7 @@ function arm(side: -1 | 1, look: PersonLook, build: number, girth: number, skin:
   const elbow = new THREE.Group();
   elbow.position.y = -UPPER_ARM_L;
   const lower = new Parts();
-  if (look.longSleeves) lower.add(limb('forearm', FOREARM_L - 0.01, girth, 0.007, { top: 1, bottom: 0.15 }), sleeve);
+  if (look.longSleeves) lower.add(limb('forearm', FOREARM_L - 0.01, girth, layered ? 0.012 : 0.007, { top: 1, bottom: 0.15 }), sleeve);
   else lower.add(limb('forearm', FOREARM_L, girth), skin);
   // The wrist showing below a long sleeve's cuff.
   if (look.longSleeves) lower.add(limbGeometry(0.04, [[0, 0.028 * girth], [1, 0.026 * girth]], { top: 0, bottom: 0.8 }), skin, at(0, -FOREARM_L + 0.04, 0));
@@ -273,13 +351,16 @@ function arm(side: -1 | 1, look: PersonLook, build: number, girth: number, skin:
 }
 
 /** The head in the neck pivot's frame, raised to the skull's centre. */
-function buildHead(head: THREE.Group, look: PersonLook, skin: THREE.Material): Pick<Rig, 'face' | 'morphs' | 'eyes' | 'tail' | 'details' | 'detailMaterials'> {
+function buildHead(head: THREE.Group, look: PersonLook, skin: THREE.Material): Pick<Rig, 'skull' | 'face' | 'morphs' | 'mouthOpen' | 'hairFollow' | 'eyes' | 'tail' | 'details' | 'detailMaterials'> {
   const shape: FaceShape = { jaw: look.jaw, nose: look.nose };
   const skull = new THREE.Group();
   skull.position.set(-NECK_PIVOT.x, HEAD_Y - NECK_PIVOT.y, -NECK_PIVOT.z);
   const geometry = headGeometry(shape);
   const morphs = addFaceMorphs(geometry, look);
-  const face = new THREE.Mesh(geometry, skinMaterial({ map: paintFace(look), roughness: 0.64 }));
+  const faceMaterial = skinMaterial({ map: paintFace(look), roughness: 0.64 });
+  // The mouth opens through the skin (not under a full beard: no jaw there).
+  const mouthOpen = morphs.jaw >= 0 ? mouthPatch(faceMaterial) : null;
+  const face = new THREE.Mesh(geometry, faceMaterial);
   face.castShadow = true;
   face.receiveShadow = true;
   skull.add(face);
@@ -287,13 +368,31 @@ function buildHead(head: THREE.Group, look: PersonLook, skin: THREE.Material): P
   const parts = new Parts();
   const earInner = skinMaterial({ color: new THREE.Color(look.skin).multiplyScalar(0.72), roughness: 0.7 });
   addEars(parts, look, shape, skin, earInner);
+  const mouthInside = new THREE.MeshStandardMaterial({ color: 0x3a1618, roughness: 0.7 });
+  const teeth = new THREE.MeshStandardMaterial({ color: 0xe6dfd2, roughness: 0.4 });
+  if (mouthOpen) addMouth(parts, shape, mouthInside, teeth);
   const hair = hairMaterial(look);
   const tailParts = new Parts();
   addHair(parts, look, shape, hair, tailParts);
   addHat(parts, look);
   if (look.glasses !== undefined) addGlasses(parts, look.glasses, shape);
   const headParts = parts.meshes();
+  const mouth = headParts.filter((mesh) => mesh.material === mouthInside || mesh.material === teeth);
+  for (const mesh of mouth) mesh.castShadow = false;
   skull.add(...headParts);
+  // Long hair's falling sheet, its ends on the shoulders whatever the head does.
+  const curtainGeometry = hairCurtain(look, shape);
+  let hairFollow: HairFollow | null = null;
+  if (curtainGeometry) {
+    hairFollow = new HairFollow();
+    const curtain = new THREE.Mesh(curtainGeometry, hairFollow.patch(hairMaterial(look)));
+    const shadows = hairFollow.shadowMaterials();
+    curtain.customDepthMaterial = shadows.depth;
+    curtain.customDistanceMaterial = shadows.distance;
+    curtain.castShadow = true;
+    curtain.receiveShadow = true;
+    skull.add(curtain);
+  }
   let tail: THREE.Group | null = null;
   const tailMeshes = tailParts.meshes();
   if (tailMeshes.length) {
@@ -305,7 +404,7 @@ function buildHead(head: THREE.Group, look: PersonLook, skin: THREE.Material): P
 
   const eyes = buildEyes(look, shape);
   for (const eye of eyes) skull.add(eye.group);
-  const details: THREE.Object3D[] = [...eyes.map((eye) => eye.group), ...headParts.filter((mesh) => mesh.material === earInner)];
+  const details: THREE.Object3D[] = [...eyes.map((eye) => eye.group), ...headParts.filter((mesh) => mesh.material === earInner), ...mouth];
   // Their materials are theirs alone: they dither by opacity as the person walks away.
   const detailMaterials = new Map<THREE.Material, number>();
   for (const detail of details) {
@@ -320,7 +419,7 @@ function buildHead(head: THREE.Group, look: PersonLook, skin: THREE.Material): P
     });
   }
   head.add(skull);
-  return { face, morphs, eyes, tail, details, detailMaterials };
+  return { skull, face, morphs, mouthOpen, hairFollow, eyes, tail, details, detailMaterials };
 }
 
 /** A shirt collar, the shirt's collar under a jacket, or a hood bunched at the back of the neck. */
@@ -339,7 +438,13 @@ function neckwear(parts: Parts, look: PersonLook, build: number, sleeve: THREE.M
     // Wound round the neck, one end hanging down the chest.
     const wool = new THREE.MeshStandardMaterial({ color: look.scarf, roughness: 0.95 });
     parts.add(new THREE.TorusGeometry(0.068, 0.026, 8, 20), wool, at(NECK_PIVOT.x, neckBase + 0.02, NECK_PIVOT.z + 0.004, [Math.PI / 2, 0, 0], [1.05 * build, 1.15, 1]));
-    parts.add(new THREE.BoxGeometry(0.075, 0.26, 0.022), wool, at(NECK_PIVOT.x + 0.035, neckBase - 0.11, NECK_PIVOT.z + 0.1 + 0.02 * build, [-0.22, 0, 0.06]));
+    // The end: a knitted band, flat, a little wider at the bottom, and its fringe.
+    const end = at(NECK_PIVOT.x + 0.035, neckBase - 0.11, NECK_PIVOT.z + 0.1 + 0.02 * build, [-0.22, 0, 0.06]);
+    parts.add(new THREE.CylinderGeometry(0.034, 0.039, 0.26, 12, 4).scale(1, 1, 0.3), wool, end);
+    for (let k = 0; k < 7; k++) {
+      const x = -0.032 + (k / 6) * 0.064;
+      parts.add(new THREE.CylinderGeometry(0.0022, 0.0018, 0.03, 4), wool, end.clone().multiply(at(x, -0.142, 0, [0, 0, (k - 3) * 0.03])));
+    }
   }
 }
 
@@ -384,7 +489,8 @@ function addBag(parts: Parts, look: PersonLook): THREE.Group | null {
 
 /** Points just off the trunk's surface at `x`, from the back at chest height over the shoulder to the front at the armpit (torso frame). */
 function strapPath(look: PersonLook, x: number): THREE.Vector3[] {
-  const off = 0.008;
+  // Clear of a jacket's ease over the trunk (`trunkGeometry`).
+  const off = look.top === 'jacket' || look.coat ? 0.017 : 0.008;
   const surface = (y: number, sx: number, front: boolean): number => {
     const s = trunkSection(y, look);
     const u = Math.min(0.98, Math.abs(sx) / s.halfWidth);

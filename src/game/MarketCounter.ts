@@ -8,6 +8,7 @@ import type { NoticeActions } from '@/notices';
 import type { KeyRoute, SessionHost } from './SessionHost';
 import { isAction, keyMarkup } from '@/input/actions';
 import { actionKeyLabel, renderKeys } from '@/ui/keys';
+import { Arming } from '@/ui/confirmTwice';
 import { formatCoins } from '@/text/money';
 import { capitalise } from '@/text/strings';
 
@@ -58,6 +59,8 @@ interface LastPurchase {
 export class MarketCounter implements KeyRoute {
   private sale: { item: ForSaleLike; unwatch: () => void } | null = null;
   private last: LastPurchase | null = null;
+  /** A hold puts coins down: the first R arms it, the second (in time) pays the deposit, as every other spending press. */
+  private readonly holdArming = new Arming<string>(() => {});
 
   constructor(private readonly host: MarketCounterHost) {}
 
@@ -89,11 +92,10 @@ export class MarketCounter implements KeyRoute {
       this.host.notices.react('The stallholder takes in your Sunday best and unlocks the case.');
       return true;
     }
-    const { name, points } = standing.reputation;
     sale.react?.('locked');
     this.speak(sale, 'Collectors only, friend. The case stays shut.');
-    this.host.notices.refuse(`The glass case opens to trusted collectors: you are a ${name} (${points} reputation).`);
-    this.host.notices.tip('Buy, sell and haggle at the market to earn reputation: the glass case opens once they know you.', { id: 'glass-case' });
+    this.host.notices.refuse('The stallholder doesn’t know you well enough yet to open the case.');
+    this.host.notices.tip('Buy, sell and haggle here: the case opens once the market knows you.', { id: 'glass-case' });
     return false;
   }
 
@@ -162,7 +164,7 @@ export class MarketCounter implements KeyRoute {
       else if (result.reason === 'owned') this.host.notices.refuse(`You already own ${game.title}`);
       else if (result.reason === 'short') {
         this.host.notices.refuse(`${game.title} costs ${formatCoins(result.needed ?? 0)} and you have ${result.have}.`);
-        this.host.notices.tip(item.source === 'bin' ? 'Short of coins? Win tickets at the arcade and change them at its prize counter.' : `Short of coins? ${actionKeyLabel('haggle')} haggles the price down, ${actionKeyLabel('holdCopy')} holds the copy for the day against a deposit, and the arcade pays in tickets.`, { id: 'short-of-coins', until: () => !this.sale });
+        this.host.notices.tip('Short of coins? Tickets become coins at the arcade’s prize counter.', { id: 'short-of-coins', until: () => !this.sale });
       }
       return;
     }
@@ -175,12 +177,12 @@ export class MarketCounter implements KeyRoute {
     inspector.stow(() => sale.sold());
     const undoable = item.source !== 'ordered' && !upgrade;
     this.last = undoable ? { sale, game: bought, paid: due, deposit: item.deposit, usedPerk, until: performance.now() + UNDO_PURCHASE.seconds * 1000 } : null;
-    const home = upgrade ? 'Your copy at home is a first print now.' : 'It waits for you in a parcel in the hallway.';
+    const home = upgrade ? 'Your copy at home is a first print now.' : 'In the parcel in the hall.';
     this.speak(sale, thanks);
-    this.host.notices.reward({ title: `Bought ${game.title}`, detail: item.deposit ? `${home}\n${formatCoins(item.price)} in all, the deposit included.` : home, coins: -due });
+    this.host.notices.slip({ title: `Bought ${game.title}`, detail: item.deposit ? `${home} ${formatCoins(item.price)} in all, deposit included.` : home, coins: -due });
     if (undoable) {
       const last = this.last;
-      this.host.notices.tip(`Changed your mind? ${actionKeyLabel('handBack')} within ${UNDO_PURCHASE.seconds} s hands it back.`, { id: 'hand-back', until: () => this.last !== last || performance.now() > (last?.until ?? 0) });
+      this.host.notices.prompt(`[${actionKeyLabel('handBack')}] hand it back · ${UNDO_PURCHASE.seconds} s`, { id: 'hand-back', until: () => this.last !== last || performance.now() > (last?.until ?? 0) });
     }
   }
 
@@ -198,7 +200,7 @@ export class MarketCounter implements KeyRoute {
     panel.hide();
     inspector.stow(() => sale.sold());
     this.last = null;
-    this.host.notices.reward({ title: `Found ${game.title}`, detail: `${said}\nIt comes home with you.` });
+    this.host.notices.reward({ title: `Found ${game.title}`, detail: said });
   }
 
   /**
@@ -261,7 +263,7 @@ export class MarketCounter implements KeyRoute {
     this.host.showModal(haggle);
   }
 
-  /** R: hold the copy for the day against a deposit (counted towards the price). */
+  /** R twice: hold the copy for the day against a deposit (counted towards the price). */
   private hold(): void {
     const sale = this.sale?.item;
     const { market, wallet } = this.host.parts;
@@ -283,6 +285,11 @@ export class MarketCounter implements KeyRoute {
       this.speak(sale, `We’re packing up yesterday’s table, friend. Buy it now or put it back.`);
       return;
     }
+    if (item.priced && !this.holdArming.press(item.game.id)) {
+      const deposit = market.holdDeposit(item);
+      this.host.notices.react(`${actionKeyLabel('holdCopy')} again to put ${deposit ? formatCoins(deposit) : 'a deposit'} down and keep it under the table till closing`);
+      return;
+    }
     const result = this.transactions.holdCopy(item);
     if (!result.ok) {
       if (result.reason === 'pricing') this.host.notices.refuse('The stallholder is still working out the price. Give it a moment.');
@@ -292,7 +299,7 @@ export class MarketCounter implements KeyRoute {
     const { deposit } = result;
     sale.react?.('hold');
     this.speak(sale, `I’ll keep ${item.game.title} under the table for you till closing tonight.`);
-    this.host.notices.reward({ title: `${item.game.title} on hold`, detail: `Held for today: ${formatCoins(item.due)} to pay when you come back for it, before the market shuts tonight. Not collected, your deposit comes back tomorrow.`, coins: -deposit });
+    this.host.notices.slip({ title: `${item.game.title} on hold`, detail: `${formatCoins(item.due)} to pay before the market shuts tonight.`, coins: -deposit });
   }
 
   /** X: offer a game from the collection in part exchange. */
@@ -330,7 +337,7 @@ export class MarketCounter implements KeyRoute {
     panel.hide();
     inspector.stow(() => sale.sold());
     this.last = null;
-    this.host.notices.reward({ title: `Swapped for ${item.game.title}`, detail: `${mine.title} stays on the stall. The new one waits for you in a parcel in the hallway.`, coins: topUp ? -topUp : undefined });
+    this.host.notices.slip({ title: `Swapped for ${item.game.title}`, detail: `${mine.title} stays on the stall. In the parcel in the hall.`, coins: topUp ? -topUp : undefined });
     return null;
   }
 
@@ -406,7 +413,7 @@ export class MarketCounter implements KeyRoute {
         : sale.dealer
           ? [`${keyMarkup('buy')} buy`, canHaggle ? `${keyMarkup('haggle')} haggle` : '', open]
           : [`${keyMarkup('buy')} buy`, canHaggle ? `${keyMarkup('haggle')} haggle` : '', item.reserved ? '' : `${keyMarkup('holdCopy')} hold for the day`, item.source === 'ordered' || item.source === 'upgrade' ? '' : `${keyMarkup('swap')} swap a game`, open];
-    return [...keys.filter(Boolean), `${keyMarkup('putBack')} or [Click] elsewhere to put it back`].map(renderKeys).join(' · ');
+    return [...keys.filter(Boolean), `${keyMarkup('putBack')} puts it back`].map(renderKeys).join(' · ');
   }
 }
 

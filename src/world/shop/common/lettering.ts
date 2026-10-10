@@ -6,10 +6,13 @@ import { random as liveRandom } from '@/random';
  * name boards, notices, cork-board cards and chalkboards of `common/`, and by each shop's own props.
  */
 
-/** A felt-tip or biro hand (the price tags' too). */
-export const HAND = `"Segoe Print", "Bradley Hand", "Chalkboard SE", "Comic Sans MS", ${FONT}`;
-/** Chalk on a slate. */
-export const CHALK = `"Chalkboard SE", "Segoe Print", "Bradley Hand", "Comic Sans MS", ${FONT}`;
+/**
+ * A felt-tip or biro hand (the price tags' too): the shipped Caveat (`ui/fonts.css`, fetched at start by
+ * `graphics/fontReady`), the OS hands only as a fallback, so every machine letters the shops alike.
+ */
+export const HAND = `Caveat, "Segoe Print", "Bradley Hand", "Chalkboard SE", "Comic Sans MS", ${FONT}`;
+/** Chalk on a slate: the shipped marker, which reads as chalk strokes, before the OS's chalk hands. */
+export const CHALK = `"Permanent Marker", "Chalkboard SE", "Segoe Print", "Bradley Hand", "Comic Sans MS", ${FONT}`;
 /** A signwriter's painted serif (name boards, enamel plates). */
 export const SIGNWRITER = `Georgia, "Times New Roman", serif`;
 /** A printed notice's plain type. */

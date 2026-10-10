@@ -93,6 +93,7 @@ chiptune's
 chiptunes
 chrono
 chunsoft
+ciné
 clearcoat
 clickables
 clubvisit
@@ -102,6 +103,7 @@ convolvers
 cooldowns
 copro
 countertop
+cour
 crocs
 crono
 croo
@@ -229,6 +231,7 @@ lightbox
 limbal
 lindqvist
 lockshield
+longcase
 longplay
 longplay's
 longplays
@@ -454,3 +457,19 @@ fmix
 ints
 unlayered
 metas
+Félix
+Aubry
+Mémé
+Odette
+Gaspard
+khronos
+pcss
+Kajiya
+alphamap
+oldstyle
+encombrants
+ESCALIER
+VÉLOS
+noooo
+tuan
+yesss

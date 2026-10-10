@@ -14,7 +14,7 @@ html, body {
 
 /* Author `display` rules would otherwise beat the UA stylesheet for [hidden] (CLAUDE.md gotcha): toggle with `el.hidden`. */
 [hidden] { display: none !important; } /* convention-ok: the one global override, so `hidden` beats every layout's display */
-#app canvas { display: block; position: absolute; inset: 0; z-index: var(--z-canvas); }
+#app > canvas { display: block; position: absolute; inset: 0; z-index: var(--z-canvas); }
 /* CSS3D layer sits behind the canvas; cut-out meshes reveal it. The renderer sets the position inline, hence the override. */
 .css-layer { position: absolute !important; inset: 0; z-index: var(--z-css-layer); pointer-events: none; } /* convention-ok: beats the CSS3DRenderer's inline style */
 .css-layer iframe { pointer-events: none; }
@@ -22,6 +22,15 @@ html, body {
 /* Settings > Display > Text size: the HUD and the panels are sized in rem, so the root size scales them all. */
 html.ui-scale-small { font-size: 14px; }
 html.ui-scale-large { font-size: 18.5px; }
+html.ui-scale-larger { font-size: 21px; }
+html.ui-scale-largest { font-size: 24px; }
+
+/* Settings > Display > Plain lettering: the handwriting, the comic speech and the marker read in the body face. */
+html.plain-lettering {
+  --ui-font-hand: var(--ui-font-body);
+  --ui-font-comic: var(--ui-font-body);
+  --ui-font-marker: var(--ui-font-body);
+}
 
 /* A key cap, on any background: the panels only size it. */
 kbd {

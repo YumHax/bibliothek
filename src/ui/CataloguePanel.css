@@ -24,6 +24,9 @@
     overflow-y: auto;
     padding: var(--sp-2) var(--sp-3);
   }
+  /* Before a search: the wishlist's titles, one press each to look them up. */
+  .catalogue__suggest { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); padding: 0 var(--sp-3); }
+  .catalogue__suggest .catalogue__meta { flex-basis: 100%; margin: 0; }
   .catalogue__price--pending { opacity: var(--ui-faint); }
   .catalogue__was { opacity: 0.6; font-size: 0.85em; }
   .catalogue__price { display: inline-flex; align-items: center; gap: 0.3rem; min-width: 3.5rem; justify-content: flex-end; font-weight: 700; font-size: var(--fs-7); color: var(--ui-money); font-variant-numeric: tabular-nums; }

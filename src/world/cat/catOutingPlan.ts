@@ -66,7 +66,7 @@ export const CAT_OUTING = {
       'He came in when I opened for the paper. I gave him a bit of chicken, I hope that’s all right.',
     ],
     /** She leaves the cat on the doormat if nobody answers. */
-    note: { title: 'YOUR CAT', lines: ['was visiting me again.', 'I left him on your mat.', 'Mrs Dubois, 3rd floor'], accent: 0xc98a8a },
+    note: { title: 'YOUR CAT', lines: ['was visiting me again.', 'I left him on your mat.'], accent: 0xc98a8a, look: 'letter' as const, from: 'Mrs Dubois, 3rd floor' },
     /** A chat's worth of standing with her, each time. */
     friendship: 4,
   },

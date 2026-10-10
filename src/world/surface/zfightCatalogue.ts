@@ -29,12 +29,20 @@ import { BATHROOM_PLAN } from '../bathroom/bathroomPlan';
 import { SALEROOM_PLAN } from '../saleroom/saleroomPlan';
 import { ANNEX_PLAN } from '../annex/annexPlan';
 import { SELLER_FLAT_PLAN } from '../sellerFlat/sellerFlatPlan';
+import { GRANDMA_FLAT_PLAN } from '../grandma/grandmaFlatPlan';
+import { PhotoAlbum } from '../grandma/PhotoAlbum';
+import { grandmaDressingSample } from '../grandma/dressingSample';
 import { MARKET_PLAN } from '../market/marketPlan';
 import { KITCHEN_PLAN } from '../kitchen/kitchenPlan';
 import { FLOWER_SHOP } from '../shop/plans/flowerShop';
 import { FURNITURE_SHOP } from '../shop/plans/furnitureShop';
 import { PET_SHOP } from '../shop/plans/petShop';
 import { TV_SHOP } from '../shop/plans/tvShop';
+import { YardDressing } from '../courtyard/YardDressing';
+import { YardGroundFloors } from '../courtyard/YardGroundFloors';
+import { Courtyard } from '../outlook/Courtyard';
+import { bulkyPileSample } from '../courtyard/bulkyModels';
+import { cinemaSample } from '../courtyard/YardCinemaPieces';
 
 /**
  * What `npm run zfight` (scripts/zfight.mjs) builds headless and runs `findZFighting` over, and what `npm run
@@ -84,6 +92,7 @@ const ROOMS: Record<string, { room: RoomOptions; decor: readonly DecorEntry[] }>
   saleroom: SALEROOM_PLAN,
   annex: ANNEX_PLAN,
   sellerFlat: SELLER_FLAT_PLAN,
+  grandmaFlat: GRANDMA_FLAT_PLAN,
   market: MARKET_PLAN,
   kitchen: KITCHEN_PLAN,
 };
@@ -101,6 +110,9 @@ const PIECES: Record<string, () => unknown> = {
   displayColumn: () => new DisplayColumn(),
   homeVitrine: () => new HomeVitrine({ covers: inert }),
   collectorsBook: () => new CollectorsBook({ panel: inert }),
+  photoAlbum: () => new PhotoAlbum({ label: () => null, use: () => {} }),
+  // Mémé's things (`furnishGrandmaDecor`): the clock, the cabinet, the kitchenette, the set, the Sunday table...
+  grandmaDressing: () => grandmaDressingSample((clock ??= new DayNight())),
   radio: () => new Radio(),
   seat: () => new Seat(),
   sasShell: () => new SasShell(),
@@ -110,6 +122,16 @@ const PIECES: Record<string, () => unknown> = {
   aquariumWall: () => new AquariumWall(),
   rugRolls: () => new RugRolls(),
   displayTable: () => new DisplayTable(),
+  // The walked courtyard's own things (in the street's frame, as the yard places them), and a bulky-waste pile's every model in a row.
+  yardDressing: () => new YardDressing((clock ??= new DayNight())),
+  bulkyPile: () => bulkyPileSample(),
+  // The film night's chairs, trestles (warm and cold), the stacked chairs and the sheet hung and rolled.
+  yardCinema: () => cinemaSample(),
+  // The yard's built ground floors with what stands against them (the dressing, the bins, shed and workshop's back).
+  yardGroundFloors: () => {
+    clock ??= new DayNight();
+    return new THREE.Group().add(new YardGroundFloors(clock), new YardDressing(clock), new Courtyard(clock, 1));
+  },
 };
 
 let clock: DayNight | null = null;

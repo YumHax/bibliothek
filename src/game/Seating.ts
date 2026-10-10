@@ -42,7 +42,7 @@ export class Seating implements KeyRoute {
     // The cat only knows the armchairs (it comes to the lap there); in bed the player is simply not in one.
     this.parts.cat?.setPlayerSeat?.(isArmchair(seat) ? seat : null);
     const player = this.parts.player;
-    this.host.tip(`Move or press ${actionKeyLabel('standUp')} to stand up.`, { id: 'seated', until: () => !player.isSeated });
+    this.host.prompt(`[${actionKeyLabel('standUp')}] stand up · or move`, { id: 'seated', until: () => !player.isSeated });
   }
 
   stand(): void {
@@ -59,13 +59,18 @@ export class Seating implements KeyRoute {
       return;
     }
     if (sleep.isAsleep) return;
+    // Asked before anything else: by day the hands keep what they hold and nothing freezes.
+    if (!sleep.sleepy) {
+      this.host.refuse('Not sleepy yet: bedtime is after 8 pm');
+      return;
+    }
     this.host.putBack();
     this.host.setFrozen(true);
     void sleep.untilMorning().then(async (slept) => {
       this.host.setFrozen(false);
       const player = this.parts.player;
       const getUp = (): void => {
-        if (player.isSeated) this.host.tip(`Move or press ${actionKeyLabel('standUp')} to get up.`, { id: 'seated', until: () => !player.isSeated });
+        if (player.isSeated) this.host.prompt(`[${actionKeyLabel('standUp')}] get up · or move`, { id: 'seated', until: () => !player.isSeated });
       };
       if (!slept) {
         this.host.refuse('Not sleepy: bedtime is after 8 pm');

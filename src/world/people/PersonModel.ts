@@ -1,10 +1,11 @@
 import * as THREE from 'three';
-import { ANKLE_Y, HEAD_Y, NECK_PIVOT, PELVIS_Y, SHIN_L, THIGH_L } from './body';
-import { POSES, type ArmAngles, type Pose } from './poses';
+import { ANKLE_Y, HEAD_Y, NECK_PIVOT, PELVIS_Y, SHIN_L, THIGH_L, trunkSection, UPPER_ARM_L } from './body';
+import { ACROSS_CHEST, POSES, type ArmAngles, type Pose } from './poses';
 import { heldMesh, hoodMesh, UMBRELLA_ARM, type Held } from './held';
 import type { PersonLook } from './looks';
 import type { Performer, Reaction } from './performer';
-import { buildRig, type ArmBones, type Rig } from './rig';
+import { buildRig, TOE_FLEX, type ArmBones, type LegBones, type Rig } from './rig';
+import { blobShadow } from '../zone/ContactShadows';
 import { Face } from './motion/face';
 import { Footing } from './motion/footing';
 import { Gait } from './motion/gait';
@@ -41,8 +42,14 @@ import { damp, dampFactor } from '@/math/damp';
  *
  * Given the viewer, a person far from it (beyond `LOD_FAR`, until back within `LOD_NEAR`, both
  * scaled by the camera's zoom) hides what is under a pixel there (the eyes and lids, the bowls of
- * the ears), lets the face and what swings rest, and animates the rest at `FAR_RATE` with the time
- * it skipped.
+ * the ears, the mouth), lets the face and what swings rest, and animates the arms and the head at
+ * `FAR_RATE` with the time they skipped; the stance, the back and the legs still move every frame,
+ * so planted feet never skate.
+ *
+ * Seated, the feet go flat on the floor (the legs solved to them, the knees as high as the seat
+ * leaves them) or hang when the seat is too high for them; each person sits their own way: feet
+ * apart, ankles crossed, or one knee over the other. Pushing off, the toes bend at the ball of the
+ * foot and stay on the floor. Their contact shadow (`groundShadow`) follows the hips and the feet.
  */
 
 /** How long the gait takes to come in from standing, or to settle back (s). */
@@ -102,6 +109,14 @@ const REFERENCE_TAN = Math.tan(THREE.MathUtils.degToRad(70) / 2);
 /** What one frame's gesture player hands back. */
 type GestureFrame = ReturnType<GesturePlayer['update']>;
 
+/** How someone sits: feet apart on the floor, ankles crossed, or one knee crossed over the other. */
+type SitStyle = 'apart' | 'ankles' | 'knee';
+/** The contact shadow: the blob under the hips (width and depth for a person of the reference height) and one under each foot. */
+const SHADOW_BODY = { width: 0.46, depth: 0.38 } as const;
+const SHADOW_FOOT = { width: 0.11, depth: 0.24, opacity: 0.55 } as const;
+/** The shoe's middle ahead of the ankle (`shoes.ts`). */
+const FOOT_CENTRE = 0.07;
+
 /** This frame's stances, shared by the steps of `animate`: the gait's share `w` (0 standing .. 1 walking), what the body is at. */
 interface Frame {
   tempo: number;
@@ -145,6 +160,16 @@ export class PersonModel extends THREE.Group implements Performer {
   private readonly look: PersonLook;
 
   private pose: Pose = 'stand';
+  /** The last gesture frame (the far level of detail plays gestures at its own rate). */
+  private lastGesture: GestureFrame;
+  /** How far forward an arm across the chest has to come for this body (radians at the shoulder: a fuller chest or belly, a coat). */
+  private readonly chestRoom: number;
+  private readonly sitStyle: SitStyle;
+  /** The leg crossed over the other (or whose ankle is on top). */
+  private readonly topLeg: 0 | 1;
+  private readonly seatHip = new THREE.Object3D();
+  private readonly seatKnee = new THREE.Object3D();
+  private shadow: { body: THREE.Mesh; feet: THREE.Mesh[] } | null = null;
   private speed = 0;
   /** How much of the gait shows, 0 standing .. 1 walking, eased over `GAIT_S`. */
   private gaitIn = 0;
@@ -260,7 +285,16 @@ export class PersonModel extends THREE.Group implements Performer {
     this.hitbox = this.rig.hitbox;
     this.add(this.hitbox);
     this.eyeHeight = this.rig.eyeHeight;
-    this.face = new Face(this.rig.face, this.rig.morphs, this.rig.eyes, 0.03 + liveRandom() * 0.05);
+    this.face = new Face(this.rig.face, this.rig.morphs, this.rig.eyes, 0.03 + liveRandom() * 0.05, this.rig.mouthOpen);
+    this.lastGesture = this.gestures.update(0);
+    // The arms' room in front of the chest: what this trunk has over a straight, average one there.
+    const average = trunkSection(1.15, { ...look, build: 1, figure: 'straight' }).front;
+    const extra = Math.max(0, trunkSection(1.15, look).front - average) + (look.top === 'jacket' || look.coat ? 0.008 : 0);
+    this.chestRoom = (extra / UPPER_ARM_L) * 1.3;
+    const sitting = lcg(s * 40503 + 17);
+    const roll = sitting();
+    this.sitStyle = roll < 0.5 ? 'apart' : roll < 0.75 ? 'ankles' : 'knee';
+    this.topLeg = sitting() < 0.5 ? 0 : 1;
     this.armSprings = this.rig.arms.map((arm) => {
       const c = arm.current;
       const make = (value: number, omega: number, zeta = 0.9): Spring => new Spring(value, omega, zeta);
@@ -459,7 +493,8 @@ export class PersonModel extends THREE.Group implements Performer {
     const seen = new Set<THREE.Material>();
     this.traverse((o) => {
       const mesh = o as THREE.Mesh;
-      if (!mesh.isMesh || mesh === this.hitbox) return;
+      // The contact shadow's material is every blob's: the owner hides it instead.
+      if (!mesh.isMesh || mesh === this.hitbox || mesh.name === 'ContactShadow') return;
       for (const material of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) {
         if (!material.visible || seen.has(material)) continue;
         seen.add(material);
@@ -475,17 +510,49 @@ export class PersonModel extends THREE.Group implements Performer {
     if (!this.fading) return;
     this.opacity = opacity;
     for (const f of this.fading) f.material.opacity = f.opacity * opacity * (this.rig.detailMaterials.has(f.material) ? this.detailLevel : 1);
-    // The trunk's own shadow materials do not dither: it stops casting a shadow as it fades.
-    this.rig.trunk.castShadow = opacity > 0.5;
+    // The bent parts' own shadow materials (trunk, skirts, long hair) do not dither: they stop casting a shadow as it fades.
+    for (const mesh of this.rig.casters) mesh.castShadow = opacity > 0.5;
   }
 
   update(dt: number): void {
     if (this.viewer) this.pickDetail(this.viewer);
     this.pending += dt;
-    if (this.far && this.pending < 1 / FAR_RATE) return;
-    const step = Math.min(0.25, this.pending);
-    this.pending = 0;
-    this.animate(step);
+    if (!this.far) {
+      const step = Math.min(0.25, this.pending);
+      this.pending = 0;
+      this.animate(step, step);
+      return;
+    }
+    // Far: the stance, the back and the legs every frame; the arms, the head and the face at `FAR_RATE`.
+    const upper = this.pending >= 1 / FAR_RATE;
+    this.animate(Math.min(0.25, dt), upper ? Math.min(0.25, this.pending) : 0);
+    if (upper) this.pending = 0;
+  }
+
+  /** How far above `point` the eyes are now (world metres; negative: below it): a conversation frames the face, not the words over the head. */
+  eyesAbove(point: THREE.Object3D): number {
+    const skull = this.rig.skull;
+    skull.updateWorldMatrix(true, false);
+    const eyes = skull.localToWorld(this.scratch.set(0, 0.014, 0.085)).y;
+    return eyes - point.getWorldPosition(this.viewerPos).y;
+  }
+
+  /**
+   * Its contact shadow, a child of the model: a soft blob under the hips sized to the person and
+   * a smaller one under each foot (shrinking as the foot lifts), following them every frame. Null
+   * when contact shadows are off. The owner hides it as the person fades.
+   */
+  groundShadow(): THREE.Object3D | null {
+    const body = blobShadow(SHADOW_BODY.width, SHADOW_BODY.depth);
+    if (!body) return null;
+    const feet = [blobShadow(SHADOW_FOOT.width, SHADOW_FOOT.depth, SHADOW_FOOT.opacity)!, blobShadow(SHADOW_FOOT.width, SHADOW_FOOT.depth, SHADOW_FOOT.opacity)!];
+    const group = new THREE.Group();
+    group.name = 'PersonShadow';
+    group.add(body, ...feet);
+    this.add(group);
+    this.shadow = { body, feet };
+    this.placeShadow();
+    return group;
   }
 
   // --- Level of detail and fading -------------------------------------------------------------
@@ -527,15 +594,20 @@ export class PersonModel extends THREE.Group implements Performer {
    * weight on the legs, the carriage's springs, the pelvis, the back, the legs, the talking hands, the arms, the head,
    * the face. The order is the order the draws and the springs were always run in.
    */
-  private animate(dt: number): void {
+  private animate(dt: number, upperDt: number): void {
     this.time += dt;
     const t = this.time;
     this.updateWorldMatrix(true, false);
     const bodyYaw = worldYaw(this.getWorldQuaternion(this.worldQ));
+    // The upper body's layers this frame (always near; at `FAR_RATE` far off, with the time they skipped).
+    const upper = upperDt > 0;
 
     const f = this.stance(dt, bodyYaw);
-    this.fidget(dt, f);
-    const g = this.gestures.update(dt);
+    if (upper) {
+      this.fidget(upperDt, f);
+      this.lastGesture = this.gestures.update(upperDt);
+    }
+    const g = this.lastGesture;
     this.shiftWeight(dt, f);
     const c = this.carriage(dt, f, g);
     const p = this.placePelvis(dt, t, f, c);
@@ -543,11 +615,38 @@ export class PersonModel extends THREE.Group implements Performer {
     // Legs: seated they fold on the seat; otherwise the feet, planted or walking, and the legs solved to reach them.
     if (f.seated) this.seatLegs(dt);
     else this.standLegs(dt, f.w, bodyYaw, f.tempo);
-    this.beatHands(dt, f);
-    // Arms, hands, collarbones.
-    for (const [i, arm] of this.rig.arms.entries()) this.moveArm(i, arm, dt, t, f.w, f.moving, f.standing, f.talk, f.tempo);
-    this.moveHead(dt, t, f.walking, f.seated, f.reaching, f.talk, g.head, g.ownGaze);
-    this.showFace(dt, t, f, g);
+    this.rig.skirt?.update(this.rig.legs[0].hip, this.rig.legs[1].hip);
+    this.placeShadow();
+    if (upper) {
+      this.beatHands(upperDt, f);
+      // Arms, hands, collarbones.
+      for (const [i, arm] of this.rig.arms.entries()) this.moveArm(i, arm, upperDt, t, f.w, f.moving, f.standing, f.talk, f.tempo);
+      this.moveHead(upperDt, t, f.walking, f.seated, f.reaching, f.talk, g.head, g.ownGaze);
+      this.showFace(upperDt, t, f, g);
+    }
+    this.rig.hairFollow?.update(this.rig.head, this.rig.skull);
+  }
+
+  /** The contact shadow under the hips and each foot (the rig's root frame, scaled). */
+  private placeShadow(): void {
+    const shadow = this.shadow;
+    if (!shadow) return;
+    const rig = this.rig;
+    const scale = rig.scale;
+    const root = rig.root.position;
+    const pelvis = rig.pelvis.position;
+    shadow.body.position.set(root.x + pelvis.x * scale, shadow.body.position.y, root.z + pelvis.z * scale);
+    const width = SHADOW_BODY.width * scale * (0.8 + 0.2 * this.look.build);
+    shadow.body.scale.set(width, 1, SHADOW_BODY.depth * scale);
+    for (const [i, blob] of shadow.feet.entries()) {
+      const ankle = this.ankles[i]!;
+      const yaw = (rig.legs[i]!.ankle.userData.yaw as number | undefined) ?? 0;
+      const lift = Math.max(0, ankle.y - ANKLE_Y);
+      const k = scale / (1 + lift * 12);
+      blob.position.set(root.x + (ankle.x + Math.sin(yaw) * FOOT_CENTRE) * scale, blob.position.y, root.z + (ankle.z + Math.cos(yaw) * FOOT_CENTRE) * scale);
+      blob.rotation.y = yaw;
+      blob.scale.set(SHADOW_FOOT.width * k, 1, SHADOW_FOOT.depth * k);
+    }
   }
 
   /** The gait comes in and settles over `GAIT_S` (its feet are left where they are when it stops); from it, the frame's stances. */
@@ -683,17 +782,59 @@ export class PersonModel extends THREE.Group implements Performer {
     this.swingParts(dt);
   }
 
-  /** Thighs level on the seat, shins hanging a little forward, feet flat; the knees a touch apart. */
+  /**
+   * Seated: the feet flat on the floor under the knees (a little ahead), the legs solved to them, so
+   * the knees ride as high as the seat leaves them; crossed at the ankles, or one knee over the other,
+   * as this person sits. A seat too high for the legs (a child's) leaves the thighs level and the
+   * shins hanging, the feet off the floor.
+   */
   private seatLegs(dt: number): void {
+    const rig = this.rig;
     const ease = dampFactor(6, dt);
-    for (const leg of this.rig.legs) {
-      leg.hip.rotation.x += (-1.5 - leg.hip.rotation.x) * ease;
-      leg.hip.rotation.y += (0 - leg.hip.rotation.y) * ease;
-      leg.hip.rotation.z += (0 - leg.hip.rotation.z) * ease;
-      leg.knee.rotation.x += (1.38 - leg.knee.rotation.x) * ease;
-      leg.ankle.rotation.set(leg.ankle.rotation.x + (0.1 - leg.ankle.rotation.x) * ease, 0, 0);
+    const pelvis = rig.pelvis.position;
+    this.invPelvisQ.copy(this.pelvisQ).invert();
+    // The thighs level, can the shins reach the floor?
+    const reaches = pelvis.y - ANKLE_Y < SHIN_L * 0.98;
+    for (const [i, leg] of rig.legs.entries()) {
+      const side = i ? 1 : -1;
+      const top = i === this.topLeg;
+      const ankle = this.ankles[i]!;
+      if (!reaches || (this.sitStyle === 'knee' && top)) {
+        // Hanging (or crossed over the other knee: the thigh up and across, the foot pointed).
+        const crossed = reaches;
+        this.seatHip.rotation.set(crossed ? -1.84 : -1.5, 0, crossed ? -side * 0.3 : 0);
+        this.seatHip.position.copy(leg.hip.position);
+        leg.hip.quaternion.slerp(this.seatHip.quaternion, ease);
+        leg.knee.rotation.x += ((crossed ? 1.55 : 1.38) - leg.knee.rotation.x) * ease;
+        leg.ankle.rotation.set(leg.ankle.rotation.x + ((crossed ? 0.45 : 0.25) - leg.ankle.rotation.x) * ease, 0, 0);
+        this.flexToes(leg, 0);
+        // Where its foot is, for the shadow: under the knee, off the floor.
+        ankle.set(pelvis.x + side * 0.1, ANKLE_Y + 0.3, pelvis.z + THIGH_L);
+        continue;
+      }
+      // The foot on the floor: apart under the knees, or the ankles crossed (the top one resting on the other).
+      const crossAnkles = this.sitStyle === 'ankles';
+      if (crossAnkles) ankle.set(top ? -side * 0.035 : side * 0.03, ANKLE_Y + (top ? 0.045 : 0), pelvis.z + THIGH_L * 0.92 + (top ? 0.16 : 0.14));
+      else ankle.set(side * (rig.hipHalf + 0.035), ANKLE_Y, pelvis.z + THIGH_L * 0.92 + 0.06);
+      const local = this.scratch.copy(ankle).sub(pelvis).applyQuaternion(this.invPelvisQ);
+      this.seatHip.position.copy(leg.hip.position);
+      solveLeg(this.seatHip, this.seatKnee, local, -side * 0.07);
+      leg.hip.quaternion.slerp(this.seatHip.quaternion, ease);
+      leg.knee.rotation.x += (this.seatKnee.rotation.x - leg.knee.rotation.x) * ease;
+      orientFoot(leg.ankle, this.pelvisQ, leg.hip, leg.knee, crossAnkles && top ? 0.25 : 0, side * 0.1);
+      leg.ankle.userData.yaw = side * 0.1;
+      this.flexToes(leg, 0);
     }
     this.footing.reset();
+  }
+
+  /** The toes bend up at the ball as the foot pitches toes-down (`pitch`, radians): they stay on the floor while the heel rises. */
+  private flexToes(leg: LegBones, pitch: number): void {
+    const flex = THREE.MathUtils.clamp(pitch / TOE_FLEX, 0, 1);
+    for (const mesh of leg.toes) {
+      const influences = mesh.morphTargetInfluences;
+      if (influences) influences[0] = flex;
+    }
   }
 
   /** The feet where they are planted (or where the gait has them), the hips down as far as a standing leg needs, the legs solved. */
@@ -754,6 +895,7 @@ export class PersonModel extends THREE.Group implements Performer {
       const local = this.scratch.copy(this.ankles[i]!).sub(rig.pelvis.position).applyQuaternion(this.invPelvisQ);
       solveLeg(leg.hip, leg.knee, local, -side * 0.07);
       orientFoot(leg.ankle, this.pelvisQ, leg.hip, leg.knee, leg.ankle.userData.pitch as number, leg.ankle.userData.yaw as number);
+      this.flexToes(leg, leg.ankle.userData.pitch as number);
     }
     if (w >= 1) this.footing.follow(walk, this.toWorld, bodyYaw);
   }
@@ -768,7 +910,10 @@ export class PersonModel extends THREE.Group implements Performer {
     const target = this.armTarget;
     let stiff = false;
     if (g) Object.assign(target, g);
-    else if (holding) Object.assign(target, { wf: 0, tw: 0, curl: 0.6 }, this.held === 'phone' ? POSES.phone.right : this.held === 'book' ? POSES.read.right : UMBRELLA_ARM);
+    else if (holding) {
+      Object.assign(target, { wf: 0, tw: 0, curl: 0.6 }, this.held === 'phone' ? POSES.phone.right : this.held === 'book' ? POSES.read.right : UMBRELLA_ARM);
+      if (this.held === 'book') target.ux -= this.chestRoom;
+    }
     else if (reachPoint) {
       // The arm solved to the point from where the collarbone is (it follows the reach, below).
       const s = solveArm(arm.shoulder, side, reachPoint, this.rig.palm, this.solution);
@@ -781,6 +926,8 @@ export class PersonModel extends THREE.Group implements Performer {
     } else {
       Object.assign(target, { wf: 0, tw: 0, curl: 0 }, i ? pose.right : pose.left);
       if (this.handCurl) target.curl = this.handCurl[i]!;
+      // Forearms across the chest clear a fuller one (or a coat): the elbows come forward.
+      if (!moving && ACROSS_CHEST.has(this.pose)) target.ux -= this.chestRoom;
     }
     // The walk's swing (against the other side's leg), a faint sway when standing, the hands with the words.
     if (!holding && !g) {

@@ -11,16 +11,16 @@ Firefox -> medium, else high). Materials and passes are built from it, so changi
 
 | | low | medium | high |
 | --- | --- | --- | --- |
-| Pipeline | plain forward render to the canvas (canvas MSAA), the look's exposure only | `PostFx`: HDR target (MSAA 4) + FXAA, bloom, grade, auto exposure, depth of field | + SSAO |
+| Pipeline | plain forward render to the canvas (canvas MSAA), the look's exposure only | `PostFx`: HDR target (MSAA 4) + FXAA, bloom, grade, auto exposure, depth of field, cheap SSAO (quarter size, 6 taps) | SSAO at half size, 12 taps |
 | Materials | plain | plaster, wood grain + dust, floor wear, creases, scuffs, bevels | + clearcoat (boxes), sheen (fabric, fur) |
-| Extras | env reflections (one, scaled per look), contact shadows, haze, dithered palette | + sun shafts and dust, reflections tinted per look | + area lights (windows, TV), real mirrors, glossy market floor, cat fur shells |
+| Extras | env reflections (one, scaled per look), contact shadows, haze, every material dithered, lamp halos (`LampHalo`), a plain twin of each ceiling lamp | + sun shafts and dust, reflections tinted per look, each room's own reflections (`RoomReflection`), window daylight spots, sun-patch bounce, paint mottle | + area lights (windows, TV) instead of the daylight spots, real mirrors, glossy market floor, cat fur shells, contact-hardening window sun shadows |
 | Pixel ratio | 1.25, down to 0.75 while GPU-bound | 1.5, down to 1 | 1.5, down to 1 |
 | Frame cap | 60 fps | 60 fps | display rate |
 | Lights drawn (point + shadowed / spot + shadowed / hemisphere) | 5 + 2 / 6 + 3 / 2 | 8 + 3 / 10 + 4 / 2 | 12 + 5 / 16 + 5 / 2 |
 | Live shadow refresh | 15 Hz | 30 Hz | every frame |
 | Smallest shadow caster | 15 cm | 8 cm | 4 cm |
 | Shadow maps (lamps / window and balcony suns / street sun) | 512 / 512 / 1024 | 1024 / 1024 / 2048 | 1024 / 2048 / 2048 |
-| Anisotropic filtering (`QUALITY.anisotropy`, capped by the GPU) | 2 | 4 | 8 |
+| Anisotropic filtering (`QUALITY.anisotropy`, capped by the GPU) | 2 | 4 | 16 |
 
 Anything new that costs per pixel or a second render gets its own flag in `QualitySettings` and is off on `low`.
 Two deliberate exceptions stay on on `low`: the environment reflections (a fixed cost per lit fragment, and without
@@ -29,7 +29,8 @@ per zone). The shadow filter is `PCFSoftShadowMap` on every level: three's `PCFS
 so it would not be cheaper on `low`, only blockier. The high level's 2048 sun maps cost a depth render of the room
 at 4x the texels while the sun is live (every frame on high); the lamps stay at 1024 (six faces each).
 
-- **Tone mapping, one rule** (`graphics/displayTone.ts`): everything is tone-mapped with ACES on every level,
+- **Tone mapping, one rule** (`graphics/displayTone.ts`): everything is tone-mapped with ACES on every level (a look
+  may mix in PBR Neutral on medium and high, `Look.neutralTone`, below),
   `toneMapped: false` included (screens, neon, marquees, fairy lights). With `PostFx` a material cannot opt out (the
   output pass tone-maps every pixel; the alpha, the only spare channel, is the video cut-out), so on `low` the flag is
   made meaningless too (`Material.prototype.toneMapped` always reads true): a sign looks the same on every level.
@@ -42,7 +43,8 @@ at 4x the texels while the sun is live (every frame on high); the lamps stay at 
 ## Frame budget (what keeps the cost down whatever the scene holds)
 
 - **The loop** (`core/Engine`): a frame is rendered only once the GPU has finished the last one (a fence), and no sooner
-  than `QUALITY.maxFps` allows (a 120 Hz screen would double the work). A display callback that renders nothing ticks
+  than `QUALITY.maxFps` allows (a 120 Hz screen would double the work; Settings > Display > Frame rate overrides it:
+  30, 60 or none, `Engine.setFrameCap`). A display callback that renders nothing ticks
   nothing either: the updatables get the whole time owed on the next frame. `core/AdaptiveResolution` lowers the pixel
   ratio a step (x0.85) when a second of frames runs 20 % over the target and the GPU made most of them late (a slow frame
   spent in JavaScript is left alone). It raises the ratio again after 5 calm seconds; the wait before a rise doubles each
@@ -77,7 +79,7 @@ at 4x the texels while the sun is live (every frame on high); the lamps stay at 
 
 ## The frame (`PostFx`)
 
-Scene -> multisampled half-float target with a depth texture -> (high) AO from depth at half resolution + depth-aware
+Scene -> multisampled half-float target with a depth texture -> (medium, high) AO from depth at `ssaoScale` of the frame + depth-aware
 blur -> prep copy (the AO applied with a depth-weighted upsample, so no halo at silhouettes and no glow darkened after
 the fact; depth of field while `Inspector.focusDistance` is set: a spiral rotated per pixel, 16 taps, 32 past 6 px) ->
 `UnrealBloomPass` (first level at half the frame, soft knee `smoothWidth` 0.15) blended into the copy -> every 0.25 s
@@ -124,20 +126,34 @@ linear HDR before tone mapping; 60 mireds per unit, luminance kept), exposure, A
   link), and with `?stats` / `?debug` a warning naming the lights that came or went within one set of active zones
   (each change recompiles every lit program).
   `World.primeAsync()` does the same after a trip, waiting for the driver's parallel compile before the frame.
-- **Settling after a trip**: `Travel`'s prepare calls `graphics.settle()` before `primeAsync`: look, haze, reflections
-  and exposure jump to where their easing is heading, and the next light reading moves the eye at once. Walked zone
+- **Settling after a trip**: `Travel`'s prepare calls `graphics.settle()` before `primeAsync`: look, haze and reflections
+  jump to where their easing is heading. The eye jumps to the next light reading only when the new place is darker
+  (opening up would take seconds after the fade-in); into a brighter one it keeps the exposure it came with and squints
+  itself in over about half a second (`ADAPT_DARKER_S`), so stepping out into daylight glares, then settles. Walked zone
   changes (the sas) keep easing.
 - The scene's MSAA buffer is invalidated after its resolve: never draw into `sceneTarget` after the scene render.
 
 ## Looks (`graphics/grade.ts`)
 
 A `Look` = grade (exposure offset, contrast, saturation, temperature, lift / gain), vignette, grain, bloom strength,
-haze and reflections (tint, strength). Zones pick one by name in `WORLD_PLAN` (`look: 'arcade'`); default `home`.
+haze and reflections (tint, strength). Zones pick one by name in `WORLD_PLAN` (`look: 'arcade'`); default `home`. A
+walk-in shop takes its plan's `look` (`ShopPlan.look`: `tvShop` dim and warm, `florist` bright and cool, `petShop`
+warm; default `shop`); the saleroom has `saleroom`.
+- **Night** (`Look.night`, 0..1): after dark the look turns towards `NIGHT_GRADE` (cooler, a little drained, the
+  shadows lifted blue, more bloom) as far as its share says, eased by the sky's `daylight` (`GraphicsOptions.daylight`);
+  the eye may then open up to `EXPOSURE_MAX_NIGHT` (1.6, against 1.35 by day). The street 1, the stairwell 0.7, home
+  0.5, the market 0.4, the shops 0.25, the arcade none.
+- **Tone mapper** (`Look.neutralTone`, 0 ACES .. 1 Khronos PBR Neutral, mixed in the output pass): Neutral keeps a
+  printed red red where ACES bleaches saturated colours towards white; its input is scaled by 1.4 so a mid grey lands
+  where ACES puts it. The shops 1, the market 0.5, the rest ACES. Medium and high only (`low` stays ACES: switching
+  the renderer's tone mapping would recompile every program). A look tuned for ACES changes if it is raised.
+
 Looks: `home` (warm den; its temperature is only 0.07 because the lamps, the gain 0xfff6ea and the reflection tint are
 warm already), `arcade`, `market`, `street`, `stairwell` (cool, a little desaturated, a faint dust haze 0.012) and
 `shop` (every shop zone, via `shopZone`: neutral, crisp, low vignette).
 `bootstrap/world.ts` calls `graphics.setLook` on zone change; `PostFx`, `Haze` and `Environment` ease over about a
-second (on `low`, the exposure only, through `renderer.toneMappingExposure`). The haze is a `FogExp2` always in the
+second (on `low`, the exposure only, through `renderer.toneMappingExposure`). Settings > Display > Brightness adds its
+stops to every exposure (`graphics/brightness`: `PostFx`'s output and video filter, `low`'s tone mapping). The haze is a `FogExp2` always in the
 scene (density 0 in the flat, so no recompile at doorways), its colour scaled by the room's `lightLevel`.
 
 - **Grade colours are display values**: `shadows` / `highlights` apply after ACES and sRGB, so their hex is read as
@@ -145,7 +161,9 @@ scene (density 0 in the flat, so no recompile at doorways), its colour scaled by
   (1, 0.965, 0.918). Never `Color.set(hex)` for them (that converts to linear: a lift ten times too small).
 - **`Haze` is the one writer of `scene.fog`.** Content whose air follows the weather (`StreetLighting`) hands it
   `Haze.of(scene).setAir(density, colour)` each frame it is occupied and `setAir(null)` on leaving; the fog eases to
-  either. The street's hemisphere eases in and out too (at once only when its zone deactivates).
+  either. Three's fog chunks are patched once (`graphics/heightFog` `shapeOutdoorFog`, from `quality.ts`): the fog can
+  hug the ground and brighten round the sun (`setOutdoorAir`, the street's), uniforms shared by reference with every
+  fogged program; left at zero (indoors) it is three's plain fog. The street's hemisphere eases in and out too (at once only when its zone deactivates).
 - **Reflections per look** (`Environment`): on medium and high each tint is its own `RoomEnvironment` PMREM (its lights
   and glowing panels times the tint), prefiltered at idle after start (`prewarm`) and kept (~6 MB each); a swap dips
   the intensity quickly to half the room's and swaps at 60 % (at once in a dark room), then eases back up: the glossy
@@ -198,9 +216,32 @@ scene (density 0 in the flat, so no recompile at doorways), its colour scaled by
 - **Floor bounce** (`world/lighting/floorBounce.ts`): a room's hemisphere ground colour is its floor's albedo (material
   colour x the colour map averaged on an 8 px canvas, in linear) x 0.6, a little desaturated; the old per-floor table
   in `Room` is the fallback when the map cannot be read. Rugs are not counted.
+- **A room's own reflections** (`graphics/RoomReflection`, medium and high): the first time the player walks into a
+  `Room`, it is captured from its middle at 1.5 m into a 128 px cube (six renders, the shadow maps left as they are)
+  and prefiltered, and stands in for the studio box while the player is in it (`setReflectionSource`; the room clears
+  it on leaving with `clearReflectionSource`, so the next zone's source is never undone). Its brightness is read back
+  (a sparse async read of the cube) and brought to the studio map's (`ReflectionSource.gain`, clamped 0.25..4), so the
+  strengths tuned on the studio still hold and only the picture changes. Captured again 0.6 s after the room's light
+  level moved by 0.12 (a lamp, the curtains, the day); two maps alternate, swapped under `Environment`'s dip.
 - `Environment`: `RoomEnvironment` prefiltered (PMREM, one per look's tint on medium / high) as `scene.environment`;
   `environmentIntensity` follows the player's room `Room.lightLevel` (0 dark .. 1 lamp or sun), max 0.24 times the
   look's `reflections.strength`, so a dark room does not glow.
+- **Daylight by the windows**: the room's hemisphere is the even part of the sky's light only (`SKYLIGHT_DAY` 0.68);
+  each `RoomWindow` pours the rest in with a falloff from the glass: on high its `RectAreaLight`, on low and medium a
+  wide shadowless spot just inside the glass aimed down into the room (`DAYLIGHT_SPOT`, reach 5 m, sky colour x
+  daylight x curtains: from the spot budget, no texture unit). On medium and high the sun patch on the floor throws a
+  warm shadowless point light back up into the room (`BOUNCE_SHARE` of the sun, the sun's colour times a wooden floor's).
+- **Soft lamp shadows**: the ceiling lamp's cube map spreads its nine taps over 2.5 texels (3 on a 512 map,
+  `shadow.radius`): same cost, a diffuser's softer edge. On high the window suns' maps are **contact-hardening**
+  (`graphics/softShadows`, a chunk edit made once): a light whose `shadow.radius` is above 1.5 on a spot or directional
+  map (where three's PCFSoft ignores it) searches the blockers round the fragment and filters over a disc as wide as
+  the gap: the mullions sharp on the sill, soft across the room. Only the window suns set it (`SUN_PENUMBRA_TEXELS`).
+- **Shadows that keep up** (`graphics/shadowMotion`): what moves and casts a live shadow says so each frame it moves
+  (`noteShadowMotion`: the box in hand, the cat); for a moment after, the live maps redraw at twice their level's rate.
+- **`low`'s lamps**: there is no bloom, so each `SwitchableLamp` puts a soft camera-facing `LampHalo` (`world/lighting`)
+  at each of its lights, following its level. Only two shadowed point lights are drawn: a `Room` keeps a plain twin of
+  its ceiling lamp (range cut at the room's farthest corner) lit while the culler shows the shadowed one no slot, so a
+  lit room seen through a doorway is not dark.
 - Area lights: `RectAreaLight` per window (`RoomWindow.skyPanel`, sky ambient colour x daylight x curtains) and on the
   TV (`Television.panel`, the glow's drifting hue). Lights look down local -z: they are turned by pi. They count as
   scene lights (each one is evaluated for every fragment), so keep them few.
@@ -230,7 +271,7 @@ scene (density 0 in the flat, so no recompile at doorways), its colour scaled by
     `// convention-ok` ("texture tiling").
   - `mipmaps: false` for a canvas repainted every few frames at its own size; `pixelated` for pixel art.
 - **Anisotropy by intent** (`Anisotropy`, "anisotropy number"): `'grazing'` (the default: floors, rugs, walls, stair
-  treads, shelf labels, everything along a street) is `QUALITY.anisotropy` (2 / 4 / 8); `'facing'` (screens, posters,
+  treads, shelf labels, everything along a street) is `QUALITY.anisotropy` (2 / 4 / 16); `'facing'` (screens, posters,
   cards, sprites, things held up) is at most 4, all a near-square footprint ever uses. A number needs its reason in
   a `// convention-ok`.
 - **Density** (`DENSITY`, `canvasFor(widthM, heightM, class)`): a new canvas is sized in metres, by how close what it
@@ -271,6 +312,17 @@ scene (density 0 in the flat, so no recompile at doorways), its colour scaled by
 - `fabric({...})`: sheen on high. `plastic({...}, clearcoat)`: clearcoat on high. `scuffed(material)`: kicks and
   hand smudges by world height (door linings, baseboards). `foliage({...})`: a leaf that lets the light on its far
   side through, tinted, and wraps it past the terminator (its own `RE_Direct`, detailed materials only).
+- `paintMottle.ts`: every plain painted look of the palette (no map, not metal, opaque) with `detailedMaterials`: a slow
+  world-space mottle moves its roughness ±0.06 and its colour ±3 % (ALU only), so big painted props stop reading as plastic.
+- `bumpFinish.ts`: for a material with a `bumpMap` (tiles, concrete, plaster): the relief fades as a pixel covers more
+  of the map (it would sparkle at a grazing angle); optionally the low parts (grout, joints) take their own roughness
+  and the roughness mottles. From the bound bump map: no new texture unit (the floors are at their limit). The parquet
+  does the same in its own bump code (gaps matt).
+- Environment specular occlusion (`metalReflections`, the same chunk edit): horizon occlusion (a reflected ray under
+  the surface sees the inside of the thing), and the metal boost leaves metal that faces down (a pipe under the sink,
+  brass inside a cabinet), which would otherwise glow with the studio's bright floor.
+- Additive glows in fog (`blend.ts` `additive`): a fogged additive material fades to black with distance, never to the
+  fog's colour (a lamp's pool far down a misty street showed as a grey blob).
 - `backlight.ts` (`Backlight`): curtains and blinds glow with the sky behind the glass where they cover it (emissive
   times their albedo, `RoomWindow` feeds the sky colour and daylight). `paneReflection.ts`: the room given back by a
   window pane (a black dielectric over the pane, additive, alpha untouched; faint smudges; ~8x stronger at night).
@@ -312,7 +364,8 @@ scene (density 0 in the flat, so no recompile at doorways), its colour scaled by
 ## Photo mode (`src/photo/`)
 
 `PhotoMode` hides the HUD (`body.photo-mode`), parks the player like in an armchair (walking stops, the look stays
-free) and flies the camera itself: WASD along the view, Space / Shift up and down, on a leash of 4 m round where it
+free) and flies the camera itself: WASD along the view (a controller's left stick), Space / Shift up and down, the
+right stick looks, the triggers zoom, the bumpers focus, X / Y / Select the grade, the guide and the reset, on a leash of 4 m round where it
 started (through furniture, never out of the building; no collisions, by choice). Leaving puts position, rotation and
 FOV back exactly. The lens is `PostFx.setLens({ focus, blur, exposure })`: the DOF prep pass with the photo's focus and
 blur radius (beyond the focus distance only, like the reading eye) and extra stops on the output exposure; `setLens(null)`

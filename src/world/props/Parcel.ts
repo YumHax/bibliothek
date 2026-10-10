@@ -5,13 +5,25 @@ import { invisibleHitbox } from '../meshUtils';
 import { paint } from '../materials/palette';
 import { Prop, part } from './Prop';
 import { HoverGlint } from './hoverGlint';
+import type { PlatformId } from '@/catalog/types';
+import { getPlatform } from '@/catalog/platforms';
 
 /** What the parcel shows: the games waiting in it (`Deliveries` fits). */
 export interface ParcelContents {
   readonly count: number;
-  unpack(): readonly { readonly title: string }[];
+  /** What waits in it, before it is unpacked. */
+  readonly pending: readonly { readonly platform: PlatformId }[];
+  unpack(): readonly { readonly title: string; readonly platform: PlatformId }[];
   subscribe(cb: () => void): () => void;
 }
+
+interface ParcelOptions {
+  /** Whether the shelves hold no game of `platform` yet (asked before unpacking): its first one is an occasion. */
+  firstOf?: (platform: PlatformId) => boolean;
+}
+
+/** Games lifted out one at a time, each with its own moment; the rest of a big parcel goes on the shelves in one line. */
+const ONE_BY_ONE = 3;
 
 const WIDTH = 0.46;
 const HEIGHT = 0.24;
@@ -35,7 +47,7 @@ export class Parcel extends Prop implements Interactable {
   /** Its hover cue: the tape catches the light, like every other thing to click. */
   private readonly glint: HoverGlint;
 
-  constructor(private readonly contents: ParcelContents) {
+  constructor(private readonly contents: ParcelContents, private readonly options: ParcelOptions = {}) {
     super();
     this.name = 'Parcel';
     const z = DEPTH / 2;
@@ -72,11 +84,23 @@ export class Parcel extends Prop implements Interactable {
     return `Parcel for you · unpack ${n === 1 ? 'the game' : `the ${n} games`}`;
   }
 
+  /**
+   * Unpacks: each game is lifted out in turn, a moment of its own (the first game of a console a big one), then onto
+   * the shelves; past `ONE_BY_ONE` the rest go up together.
+   */
   activate(session: SessionActions): void {
+    const firstOf = this.options.firstOf;
+    // Asked before unpacking: once on the shelves, every console has one.
+    const fresh = new Set(this.contents.pending.map((g) => g.platform).filter((platform) => firstOf?.(platform) ?? false));
     const games = this.contents.unpack();
     if (!games.length) return;
-    const names = games.length <= 3 ? games.map((g) => g.title).join(', ') : `${games.length} games`;
-    session.reward({ title: 'Unpacked!', detail: `${names}: on the shelves now.` });
+    const shown = games.slice(0, ONE_BY_ONE);
+    shown.forEach((game, i) => {
+      if (fresh.delete(game.platform)) session.reward({ title: `Your first ${getPlatform(game.platform).name} game`, detail: `${game.title}, out of the parcel and onto the shelves.`, big: true });
+      else session.reward({ title: game.title, detail: i === 0 ? 'Out of the parcel and onto the shelves.' : 'Onto the shelves.' });
+    });
+    const rest = games.length - shown.length;
+    if (rest > 0) session.slip({ title: 'Unpacked', detail: `And ${rest === 1 ? 'one more game' : `${rest} more games`}: on the shelves.` });
   }
 
   /** There only while it holds something; the hitbox shrinks away with it (the ray does not care about `visible`). */

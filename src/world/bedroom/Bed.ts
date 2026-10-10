@@ -5,8 +5,11 @@ import type { PlayerState, SessionActions } from '@/game/SessionActions';
 import { FACING_OUT, eyePoseAt, invisibleHitbox } from '../meshUtils';
 import { part } from '../props/Prop';
 import { actionKeyLabel } from '@/ui/keys';
+import { useCap } from '@/ui/verb';
 import { timber, cloth as paletteCloth } from '@/world/materials/palette';
 import { HoverGlint } from '../props/hoverGlint';
+import { softPart } from '../props/softBlock';
+import { ticking, wovenCloth } from '../materials/weave';
 
 interface BedOptions {
   /** Width of the frame across the room (a double is 1.6). */
@@ -37,13 +40,19 @@ const DUVET_H = 0.11;
 const PILLOW_W = 0.62;
 const PILLOW_D = 0.42;
 const PILLOW_H = 0.13;
+/** How the bedding is stuffed (`props/softBlock`): pillows plump and pinched at the rim, a folded throw nearly flat. */
+const PILLOW = { round: 3, pinch: 0.5 };
+/** The fitted sheet: how far it stands over the mattress (top and sides), and how far down the sides it wraps. */
+const SHEET_OVER = 0.006;
+const SHEET_WRAP = 0.05;
+const FOLDED = { round: 6, pinch: 0.1 };
 /** Eye height above the mattress of someone sitting up against the pillows. */
 const PROPPED_EYE = 0.62;
 
 const OAK = timber(0x9c7a52, 0.55);
 const SLATS = timber(0x7d6141, 0.7);
-const TICKING = cloth(0xf2eee6, 0.9);
-const LINEN = cloth(0xfaf7f0, 0.95);
+const TICKING = ticking();
+const LINEN = wovenCloth(0xfaf7f0, 0.95);
 const FELT = cloth(0x5a4a3e, 1);
 
 /** The shared `fabric` of this colour and roughness (bedding, the slippers). */
@@ -79,8 +88,8 @@ export class Bed extends THREE.Group implements Furniture, Interactable {
     this.name = 'Bed';
     const width = options.width ?? 1.6;
     const length = options.length ?? 2.0;
-    const duvet = cloth(options.duvet ?? 0x6c7f93, 0.95);
-    const throwCloth = cloth(options.throw ?? 0xc48a4a, 0.95);
+    const duvet = wovenCloth(options.duvet ?? 0x6c7f93, 0.95);
+    const throwCloth = wovenCloth(options.throw ?? 0xc48a4a, 0.95);
     const slippers = options.slippers ?? 'left';
     const framed = options.frame ?? true;
 
@@ -97,10 +106,10 @@ export class Bed extends THREE.Group implements Furniture, Interactable {
     const mattressY = framed ? LEG + PLATFORM : 0;
     const mw = width - 2 * MATTRESS_INSET;
     const ml = length - MATTRESS_INSET - HEADBOARD_T;
-    const mattress = part(this, mw, MATTRESS_H, ml, TICKING, { y: mattressY + MATTRESS_H / 2, z: HEADBOARD_T + ml / 2 });
-    mattress.receiveShadow = true;
+    // A soft block in striped ticking (flat faces, rounded edges); the fitted sheet wraps its top and the top of its sides.
+    softPart(this, mw, MATTRESS_H, ml, TICKING, { y: mattressY + MATTRESS_H / 2, z: HEADBOARD_T + ml / 2 }, { round: 8, pinch: 0.05 });
     const top = mattressY + MATTRESS_H;
-    part(this, mw, 0.012, ml, LINEN, { y: top + 0.006, z: HEADBOARD_T + ml / 2 }).castShadow = false;
+    softPart(this, mw + 2 * SHEET_OVER, SHEET_WRAP, ml + 2 * SHEET_OVER, LINEN, { y: top + SHEET_OVER - SHEET_WRAP / 2, z: HEADBOARD_T + ml / 2 }, { round: 8, pinch: 0 }).castShadow = false;
 
     // The bedding comes in two states, one shown at a time (`setMade`): made, and slept in.
     this.add(this.made, this.rumpled);
@@ -116,7 +125,7 @@ export class Bed extends THREE.Group implements Furniture, Interactable {
         [0, 0.1],
         [0.14, -0.25],
       ] as const) {
-        const slipper = part(this, 0.1, 0.035, 0.27, FELT, { x, y: 0.018, z: length * 0.55 + dz });
+        const slipper = softPart(this, 0.1, 0.035, 0.27, FELT, { x, y: 0.018, z: length * 0.55 + dz }, { round: 3, pinch: 0.2 });
         slipper.rotation.y = side * yaw;
         slipper.castShadow = false;
       }
@@ -152,10 +161,11 @@ export class Bed extends THREE.Group implements Furniture, Interactable {
     const g = this.made;
     const duvetFrom = DUVET_FOLD;
     const duvetLen = length - duvetFrom + 0.05;
-    part(g, mw + 0.12, DUVET_H, duvetLen, duvet, { y: top + DUVET_H / 2, z: duvetFrom + duvetLen / 2 });
-    part(g, mw + 0.12, DUVET_H + 0.05, 0.22, duvet, { y: top + (DUVET_H + 0.05) / 2, z: duvetFrom + 0.11 });
+    softPart(g, mw + 0.12, DUVET_H, duvetLen, duvet, { y: top + DUVET_H / 2, z: duvetFrom + duvetLen / 2 }, { round: 4, pinch: 0.3, lumps: 0.012, seed: 3 });
+    // The turned-back edge: a fat roll.
+    softPart(g, mw + 0.12, DUVET_H + 0.05, 0.22, duvet, { y: top + (DUVET_H + 0.05) / 2, z: duvetFrom + 0.11 }, { round: 2.4, pinch: 0 });
     // Its sides drape past the mattress edge down the frame.
-    for (const dx of [-(mw + 0.12) / 2 + 0.015, (mw + 0.12) / 2 - 0.015]) part(g, 0.03, 0.14, duvetLen, duvet, { x: dx, y: top - 0.04, z: duvetFrom + duvetLen / 2 });
+    for (const dx of [-(mw + 0.12) / 2 + 0.015, (mw + 0.12) / 2 - 0.015]) softPart(g, 0.03, 0.14, duvetLen, duvet, { x: dx, y: top - 0.04, z: duvetFrom + duvetLen / 2 }, { round: 3, pinch: 0 });
 
     for (const [dx, tilt, squash] of [
       [-width / 4, 0.32, 1],
@@ -163,13 +173,13 @@ export class Bed extends THREE.Group implements Furniture, Interactable {
     ] as const) {
       // Against the headboard; a mattress on the floor has none, so they lie nearly flat by the wall.
       const pillow = framed
-        ? part(g, PILLOW_W, PILLOW_H * squash, PILLOW_D, LINEN, { x: dx, y: top + 0.12, z: HEADBOARD_T + 0.2 })
-        : part(g, PILLOW_W, PILLOW_H * squash, PILLOW_D, LINEN, { x: dx, y: top + (PILLOW_H * squash) / 2 + 0.01, z: HEADBOARD_T + 0.16 });
+        ? softPart(g, PILLOW_W, PILLOW_H * squash, PILLOW_D, LINEN, { x: dx, y: top + 0.12, z: HEADBOARD_T + 0.2 }, PILLOW)
+        : softPart(g, PILLOW_W, PILLOW_H * squash, PILLOW_D, LINEN, { x: dx, y: top + (PILLOW_H * squash) / 2 + 0.01, z: HEADBOARD_T + 0.16 }, PILLOW);
       pillow.rotation.x = framed ? -tilt : -0.1;
     }
 
-    part(g, mw * 0.8, 0.045, 0.4, throwCloth, { y: top + DUVET_H + 0.022, z: length - 0.3 });
-    part(g, mw * 0.8, 0.02, 0.36, throwCloth, { y: top + DUVET_H + 0.055, z: length - 0.29 }).castShadow = false;
+    softPart(g, mw * 0.8, 0.045, 0.4, throwCloth, { y: top + DUVET_H + 0.022, z: length - 0.3 }, FOLDED);
+    softPart(g, mw * 0.8, 0.02, 0.36, throwCloth, { y: top + DUVET_H + 0.055, z: length - 0.29 }, FOLDED).castShadow = false;
   }
 
   /**
@@ -182,39 +192,39 @@ export class Bed extends THREE.Group implements Furniture, Interactable {
     const g = this.rumpled;
     const from = DUVET_FOLD + 0.25;
     const duvetLen = length - from + 0.05;
-    const slab = part(g, mw + 0.08, DUVET_H * 0.9, duvetLen, duvet, { x: 0.05, y: top + DUVET_H * 0.45, z: from + duvetLen / 2 });
+    const slab = softPart(g, mw + 0.08, DUVET_H * 0.9, duvetLen, duvet, { x: 0.05, y: top + DUVET_H * 0.45, z: from + duvetLen / 2 }, { round: 3.5, pinch: 0.35, lumps: 0.02, seed: 7 });
     slab.rotation.y = 0.06;
     // Only the far side still drapes over the edge; the near side was kicked back.
-    part(g, 0.03, 0.14, duvetLen * 0.8, duvet, { x: (mw + 0.08) / 2 + 0.04, y: top - 0.04, z: from + duvetLen * 0.55 });
+    softPart(g, 0.03, 0.14, duvetLen * 0.8, duvet, { x: (mw + 0.08) / 2 + 0.04, y: top - 0.04, z: from + duvetLen * 0.55 }, { round: 3, pinch: 0 });
     // The thrown-back roll across the bed on a slant, bulkier on the near side, and folds on the slab.
-    const roll = part(g, mw * 0.95, DUVET_H + 0.1, 0.34, duvet, { x: -0.02, y: top + (DUVET_H + 0.1) / 2, z: from + 0.08 });
+    const roll = softPart(g, mw * 0.95, DUVET_H + 0.1, 0.34, duvet, { x: -0.02, y: top + (DUVET_H + 0.1) / 2, z: from + 0.08 }, { round: 2.2, pinch: 0.1, lumps: 0.02, seed: 11 });
     roll.rotation.y = 0.28;
-    const lump = part(g, mw * 0.4, DUVET_H + 0.14, 0.3, duvet, { x: -mw * 0.26, y: top + (DUVET_H + 0.14) / 2, z: from + 0.02 });
+    const lump = softPart(g, mw * 0.4, DUVET_H + 0.14, 0.3, duvet, { x: -mw * 0.26, y: top + (DUVET_H + 0.14) / 2, z: from + 0.02 }, { round: 2.2, pinch: 0.2 });
     lump.rotation.y = -0.2;
     lump.rotation.z = 0.08;
     // The corner flipped back over the roll, lying on the sheet by the pillows.
-    const corner = part(g, 0.5, 0.05, 0.42, duvet, { x: -mw * 0.3, y: top + 0.07, z: from - 0.3 });
+    const corner = softPart(g, 0.5, 0.05, 0.42, duvet, { x: -mw * 0.3, y: top + 0.07, z: from - 0.3 }, { round: 3, pinch: 0.3 });
     corner.rotation.set(0.12, 0.5, -0.05);
     for (const [x, z, yaw] of [
       [0.25, from + 0.7, 0.5],
       [-0.1, from + 1.0, -0.35],
     ] as const) {
-      const fold = part(g, 0.5, 0.04, 0.12, duvet, { x, y: top + DUVET_H * 0.9 + 0.012, z });
+      const fold = softPart(g, 0.5, 0.04, 0.12, duvet, { x, y: top + DUVET_H * 0.9 + 0.012, z }, { round: 2.4, pinch: 0 });
       fold.rotation.y = yaw;
       fold.castShadow = false;
     }
 
     // Pillows: the sleeper's flat and turned half across the bed, the other slumped over sideways.
-    const flat = part(g, PILLOW_W, PILLOW_H * 0.6, PILLOW_D, LINEN, { x: -width / 4 + 0.06, y: top + PILLOW_H * 0.3, z: HEADBOARD_T + 0.3 });
+    const flat = softPart(g, PILLOW_W, PILLOW_H * 0.6, PILLOW_D, LINEN, { x: -width / 4 + 0.06, y: top + PILLOW_H * 0.3, z: HEADBOARD_T + 0.3 }, PILLOW);
     flat.rotation.set(0.04, -0.35, 0.02);
     const slumped = framed
-      ? part(g, PILLOW_W, PILLOW_H * 0.85, PILLOW_D, LINEN, { x: width / 4 + 0.03, y: top + 0.1, z: HEADBOARD_T + 0.2 })
-      : part(g, PILLOW_W, PILLOW_H * 0.85, PILLOW_D, LINEN, { x: width / 4 + 0.03, y: top + PILLOW_H * 0.425 + 0.015, z: HEADBOARD_T + 0.18 });
+      ? softPart(g, PILLOW_W, PILLOW_H * 0.85, PILLOW_D, LINEN, { x: width / 4 + 0.03, y: top + 0.1, z: HEADBOARD_T + 0.2 }, PILLOW)
+      : softPart(g, PILLOW_W, PILLOW_H * 0.85, PILLOW_D, LINEN, { x: width / 4 + 0.03, y: top + PILLOW_H * 0.425 + 0.015, z: HEADBOARD_T + 0.18 }, PILLOW);
     if (framed) slumped.rotation.set(-0.3, 0.12, 0.22);
     else slumped.rotation.set(-0.08, 0.12, 0.1);
 
     // The throw, half slid off the foot: a fold still on the duvet, the rest hanging down the end.
-    const onBed = part(g, mw * 0.6, 0.03, 0.3, throwCloth, { x: 0.15, y: top + DUVET_H * 0.9 + 0.015, z: length - 0.2 });
+    const onBed = softPart(g, mw * 0.6, 0.03, 0.3, throwCloth, { x: 0.15, y: top + DUVET_H * 0.9 + 0.015, z: length - 0.2 }, FOLDED);
     onBed.rotation.y = -0.18;
     // Down the end of the frame; from a mattress on the floor it only reaches the floor, where it gathers.
     const drop = framed ? 0.3 : top - 0.012;
@@ -245,7 +255,9 @@ export class Bed extends THREE.Group implements Furniture, Interactable {
   }
 
   label(player: PlayerState): string {
-    return player.seatedIn === this ? 'Bed · sleep until morning' : 'Bed · get in';
+    // The sleep is offered only at bedtime: by day the bed is somewhere to lie down, no promise of a night it would refuse.
+    if (player.seatedIn === this) return player.sleepy ? 'Bed · sleep until morning' : 'Bed';
+    return player.sleepy ? 'Bed · get in' : 'Bed · lie down';
   }
 
   /** Out of bed, a click gets in (up from any other seat first); in bed, it sleeps (moving or E gets up, as from any seat). */
@@ -256,6 +268,6 @@ export class Bed extends THREE.Group implements Furniture, Interactable {
     }
     if (session.seated) session.stand();
     session.sit(this);
-    session.tip(`Click the bed to sleep until morning.\nMove or press ${actionKeyLabel('standUp')} to get up.`, { id: 'seated', until: () => session.seatedIn !== this });
+    session.prompt(`[${useCap()}] sleep till morning · [${actionKeyLabel('standUp')}] get up`, { id: 'seated', until: () => session.seatedIn !== this });
   }
 }

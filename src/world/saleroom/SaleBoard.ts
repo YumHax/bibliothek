@@ -6,6 +6,8 @@ import { part } from '../props/Prop';
 import { faceOn } from '../props/joinery';
 import { WALL } from '../surface/layers';
 import { formatCoins } from '@/text/money';
+import type { BoxArtLoader } from '@/covers/BoxArtLoader';
+import type { Game } from '@/catalog/types';
 
 /** What the board shows: the lot being called, or a notice (no sale today, the sale over). */
 type BoardFace =
@@ -16,6 +18,10 @@ const WIDTH = 1.6;
 const HEIGHT = 1;
 const PX = [768, 480] as const;
 const FRAME = timber(0x3a2414, 0.5);
+/** Where a lot's cover goes on the board's canvas (an NES box's proportions). */
+const COVER = { x: 44, y: 70, w: 230, h: 322 };
+/** The number on the player's paddle (the board names it; the saleroom's bidders hold theirs up). */
+const PLAYER_PADDLE = 27;
 
 /**
  * The saleroom's board on the wall by the rostrum: lot number, what it is, the estimate, the bid and whose paddle is
@@ -28,8 +34,12 @@ export class SaleBoard extends THREE.Group implements Furniture {
   private readonly texture: THREE.CanvasTexture;
   private readonly material: THREE.MeshStandardMaterial;
   private painted = '';
+  private face: BoardFace = { kind: 'notice', title: 'SALEROOM', lines: ['…'] };
+  /** The lot's cover, drawn big on the left of a lot's face (copied off its front texture once it loads). */
+  private cover: { id: string; image: CanvasImageSource | null } | null = null;
+  private coverGame: Game | null = null;
 
-  constructor() {
+  constructor(private readonly covers?: BoxArtLoader) {
     super();
     this.name = 'SaleBoard';
     [this.canvas, this.ctx] = createCanvas(PX[0], PX[1]);
@@ -45,8 +55,30 @@ export class SaleBoard extends THREE.Group implements Furniture {
     return new THREE.Box3();
   }
 
+  /**
+   * The lot's game, whose front cover the board shows big beside the text (null: none, a sealed carton or a notice).
+   * The art is asked of the loader and held until the next lot.
+   */
+  showCover(game: Game | null): void {
+    if ((game?.id ?? null) === (this.coverGame?.id ?? null)) return;
+    if (this.coverGame) this.covers?.release(this.coverGame);
+    this.coverGame = game;
+    this.cover = game ? { id: game.id, image: null } : null;
+    this.repaint();
+    if (!game || !this.covers) return;
+    this.covers.load(game).then(
+      (art) => {
+        if (this.cover?.id !== game.id) return;
+        this.cover.image = (art.front.image as CanvasImageSource | undefined) ?? null;
+        this.repaint();
+      },
+      () => {},
+    );
+  }
+
   show(face: BoardFace): void {
-    const key = JSON.stringify(face);
+    this.face = face;
+    const key = JSON.stringify(face) + (this.cover?.image ? `|${this.cover.id}` : '');
     if (key === this.painted) return;
     this.painted = key;
     const { ctx } = this;
@@ -66,28 +98,48 @@ export class SaleBoard extends THREE.Group implements Furniture {
       ctx.font = '34px Georgia, serif';
       face.lines.slice(0, 6).forEach((line, i) => ctx.fillText(fit(ctx, line, w - 80), w / 2, 170 + i * 48));
     } else {
+      // The cover on the left, in a gilt frame; the text centred in what is left.
+      const image = this.cover?.image ?? null;
+      const cx = image ? COVER.x + COVER.w + (w - COVER.x - COVER.w) / 2 - 10 : w / 2;
+      const room = image ? w - COVER.w - COVER.x - 60 : w - 70;
+      if (image) {
+        ctx.fillStyle = '#c9a85a';
+        ctx.fillRect(COVER.x - 6, COVER.y - 6, COVER.w + 12, COVER.h + 12);
+        try {
+          ctx.drawImage(image, COVER.x, COVER.y, COVER.w, COVER.h);
+        } catch {
+          // An image the canvas cannot draw (a closed bitmap): the frame stays empty.
+        }
+      }
       ctx.fillStyle = '#c9a85a';
       ctx.font = 'bold 34px Georgia, serif';
-      ctx.fillText(`LOT ${face.number} OF ${face.of}`, w / 2, 58);
+      ctx.fillText(`LOT ${face.number} OF ${face.of}`, cx, 58);
       ctx.fillStyle = '#f4efe0';
       ctx.font = 'bold 50px Georgia, serif';
-      ctx.fillText(fit(ctx, face.title, w - 70), w / 2, 128);
+      ctx.fillText(fit(ctx, face.title, room), cx, 128);
       ctx.fillStyle = '#b8c8b0';
       ctx.font = '30px Georgia, serif';
-      ctx.fillText(`estimate around ${formatCoins(face.estimate)}`, w / 2, 186);
+      ctx.fillText(fit(ctx, `estimate around ${formatCoins(face.estimate)}`, room), cx, 186);
       ctx.fillStyle = face.you ? '#ffe070' : '#f4efe0';
-      ctx.font = 'bold 78px Georgia, serif';
-      ctx.fillText(face.bid === null ? 'NO BID YET' : `${face.bid} COINS`, w / 2, 272);
+      ctx.font = `bold ${image ? 64 : 78}px Georgia, serif`;
+      ctx.fillText(fit(ctx, face.bid === null ? 'NO BID YET' : `${face.bid} COINS`, room), cx, 272);
       ctx.font = 'bold 36px Georgia, serif';
-      ctx.fillText(face.leader ? (face.you ? 'YOUR PADDLE' : `paddle: ${face.leader}`) : '', w / 2, 340);
+      ctx.fillText(face.leader ? fit(ctx, face.you ? `YOUR PADDLE · No. ${PLAYER_PADDLE}` : `paddle: ${face.leader}`, room) : '', cx, 340);
       ctx.fillStyle = '#ff9a5a';
       ctx.font = 'bold 46px Georgia, serif';
-      ctx.fillText(face.status, w / 2, 410);
+      ctx.fillText(fit(ctx, face.status, room), cx, 410);
     }
     this.texture.needsUpdate = true;
   }
 
+  /** Paints the face shown again (the cover came in or went). */
+  private repaint(): void {
+    this.painted = '';
+    this.show(this.face);
+  }
+
   dispose(): void {
+    if (this.coverGame) this.covers?.release(this.coverGame);
     this.texture.dispose();
     this.material.dispose();
   }

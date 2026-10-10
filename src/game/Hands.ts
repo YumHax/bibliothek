@@ -6,7 +6,7 @@ import type { KeyRoute } from './SessionHost';
 export type HandsParts = Pick<CoreParts, 'inspector' | 'panel'>;
 
 /**
- * The box in the player's hand: taken (its panel shows), put back (E, or a click at nothing), opened
+ * The box in the player's hand: taken (its panel shows), put back (E; a click at nothing does nothing), opened
  * (O). `letGo` runs on either move: the market copy in hand is let go, a stale search glow cleared.
  */
 export class Hands implements KeyRoute {
@@ -33,6 +33,7 @@ export class Hands implements KeyRoute {
     if (!inspector.isActive) return false;
     if (isAction(code, 'putBack')) this.putBack();
     else if (isAction(code, 'openBox')) inspector.toggleOpen();
+    else if (isAction(code, 'turnBox')) inspector.turnOver();
     else return false;
     return true;
   }

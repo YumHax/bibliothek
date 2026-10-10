@@ -30,6 +30,7 @@ import { Pigeons } from './life/Pigeons';
 import { StrayCat } from './life/StrayCat';
 import { PeopleBudget } from './life/PeopleBudget';
 import { DoorGaps } from './life/DoorGaps';
+import { FarWalkers } from './FarWalkers';
 import { castCrowd, residentMember } from './life/crowdCast';
 import { attractionStops, windowStops } from './life/crowdTrips';
 import { pavementClutter } from './life/pavementClutter';
@@ -67,16 +68,18 @@ import { PoliceCar } from './traffic/PoliceCar';
 import { FireEngine } from './traffic/FireEngine';
 import { streetSurfaceAt } from './audio/streetSurface';
 import { ShopEntrance, type ShopServices } from './shops/ShopEntrance';
-import { SHOP_HOURS, isShopOpen, retroShutNotice, shopShutNotice } from './shops/shopHours';
+import { SHOP_HOURS, retroShutNotice, shopShutNotice } from './shops/shopHours';
+import { inHours } from '@/time/clock';
 import { clockShort } from '@/text/clock';
 import { SHOP_TALK, shopName } from './shops/shopPlan';
 import { DroppedCoins } from './shops/DroppedCoins';
 import { streetNews } from './shops/streetNews';
 import { GiveawayBox, giveawaySpot, isGiveawayDay } from './shops/GiveawayBox';
 import { Trader, isTraderDay } from './shops/Trader';
-import { STREET_PLAN, WAYFINDING, type Vec2 } from './streetPlan';
-import { FACADES, SHOP_ZONE_OF, doorOnPavement, shopDoors, walkInShops } from '@/world/city/facades';
-import { PARK_WALK } from '@/world/measures/street';
+import { STREET_PLAN, WAYFINDING, type ShopKind, type Vec2 } from './streetPlan';
+import { HOUSEHOLD } from '@/household/rules';
+import { FACADES, SHOP_ZONE_OF, doorOnPavement, shopDoors, walkInShops, walkedFacades } from '@/world/city/facades';
+import { PARK_WALK, WALKABLE } from '@/world/measures/street';
 import { closures, frontWorksMoved, syncWorks } from './details/roadworks';
 import { Flagger } from './details/Flagger';
 import { BenchSeat, type BenchSpot } from './details/BenchSeats';
@@ -99,7 +102,7 @@ type StreetBuild = Pick<BuildContext, 'sky' | 'listener' | 'covers' | 'today' | 
   money: Pick<MoneyContext, 'wallet' | 'purse'>;
   market: Pick<MarketContext, 'stock' | 'day' | 'lots'>;
   arcade: Pick<ArcadeContext, 'scores' | 'daily' | 'tournament'>;
-  home: Pick<HomeContext, 'upgrades'>;
+  home: Pick<HomeContext, 'upgrades' | 'household'>;
 };
 
 /** Neon letters over the shopfronts: how tall. */
@@ -206,7 +209,9 @@ function raiseGroundAndBuildings(site: StreetSite): void {
   // Our building's lit windows follow its residents (`building/rearWindows`).
   const windowLife = buildingWindowLife({ day: () => today.gameDay, hours: () => dayNight.state.hours });
   // The ground, the park's near stretch over the hedge (its walked gardens), the facades (`streetScenery`, shared with the window views).
-  site.buildings = buildStreetBase(scenery, { dayNight, facades: FACADES, detailScale, shopGoods: site.shopGoods, windowLife, walkable: true }).buildings;
+  // The rows along the stretch the roadworks opened (`syncWorks` ran first) painted as walked past, not as seen from afar.
+  const facades = walkedFacades(FACADES, WALKABLE.maxX);
+  site.buildings = buildStreetBase(scenery, { dayNight, facades, detailScale, shopGoods: site.shopGoods, windowLife, walkable: true }).buildings;
   for (const sign of plan.signs) {
     zone.place(new NeonSign({ text: sign.text, color: sign.color, width: sign.width, height: SIGN_HEIGHT, intensity: 0, seed: sign.seed }), new THREE.Vector3(...sign.at), sign.yaw);
   }
@@ -227,6 +232,8 @@ function placeTrafficAndFixtures(site: StreetSite): void {
     dayNight, viewer: listener, traffic, lampLights: plan.lampLights,
     cars: { bays: plan.parked, collisions: zone.collisions, taxiStops: plan.taxi.stops, taxiEvery: plan.taxi.every, speaks: true },
     furniture: { gateHours: plan.parkGate.hours, collisions: zone.collisions, viewer: listener, ad: bills.ad },
+    ...(site.buildings ? { washed: [site.buildings] } : {}),
+    ...(site.lighting ? { farShadow: site.lighting.far } : {}),
   });
   site.lamps = lamps;
   site.cars = cars;
@@ -252,17 +259,26 @@ function placeTrafficAndFixtures(site: StreetSite): void {
  */
 function hangDoors(site: StreetSite): void {
   const { zone, plan, dayNight, at, build: { listener, today, panels, collection, classifieds, market: { stock: market, day: marketDay }, arcade: { daily, tournament } } } = site;
+  // A shut door a short while before opening time offers to wait on the step (a fade, the clock wound on to it).
+  const pastimes = site.build.home.household?.pastimes;
+  const waitFor = (kind: ShopKind) => (): (() => void) | null => {
+    const open = SHOP_HOURS[kind]?.open;
+    if (!pastimes || open === undefined) return null;
+    const minutes = Math.ceil((((open - dayNight.state.hours) % 24) + 24) % 24 * 60) + 1;
+    if (minutes > HOUSEHOLD.pastimeMaxMinutes) return null;
+    return () => void pastimes.run({ minutes, outMs: 700, darkMs: 1400, inMs: 800 }, () => undefined);
+  };
   for (const door of [plan.doors.arcade, plan.doors.market]) {
     const guard = door.to === 'market' ? () => retroShutNotice(dayNight.state.hours) : undefined;
     // Open, its caption says till when (shut, the guard's says when it opens).
     const label = door.to === 'market' ? `${door.label} · till ${clockShort(SHOP_HOURS.retro?.close ?? 23)}` : door.label;
-    zone.place(new StreetDoor({ width: door.width, height: door.height, to: door.to, label, guard }), at(door.at), door.yaw);
+    zone.place(new StreetDoor({ width: door.width, height: door.height, to: door.to, label, guard, wait: door.to === 'market' ? waitFor('retro') : undefined }), at(door.at), door.yaw);
   }
   for (const { zone: to, door } of walkInShops()) {
     const { kind } = door.shop;
     const name = shopName(door.shop);
     const guard = () => shopShutNotice(kind, name, SHOP_TALK[kind].closed, dayNight.state.hours);
-    zone.place(new StreetDoor({ width: SHOP_DOOR.width, height: SHOP_DOOR.height, to, label: `${name} · go in · till ${clockShort(SHOP_HOURS[kind]?.close ?? 21)}`, guard }), at(door.at), door.yaw);
+    zone.place(new StreetDoor({ width: SHOP_DOOR.width, height: SHOP_DOOR.height, to, label: `${name} · go in · till ${clockShort(SHOP_HOURS[kind]?.close ?? 21)}`, guard, wait: waitFor(kind) }), at(door.at), door.yaw);
   }
   const home = plan.doors.home;
   placeAirlock(zone, at(home.at), home.yaw, { twin: 'street', collisions: zone.collisions, viewer: listener });
@@ -275,7 +291,7 @@ function hangDoors(site: StreetSite): void {
     return ads;
   };
   // What is on along the street today and tomorrow (the garage sale, the free box, the collector, the arcade, the rain): the paper and the bar pass it on.
-  const news = (site.news = (): string[] => streetNews({ weather: () => dayNight.state, challenge: daily ? () => daily.challenge() : undefined, tournamentOn: tournament ? () => tournament.isOn : undefined }));
+  const news = (site.news = (): string[] => streetNews({ weather: () => dayNight.state, gameDay: () => today.gameDay, challenge: daily ? () => daily.challenge() : undefined, tournamentOn: tournament ? () => tournament.isOn : undefined }));
   zone.place(new Newsstand({ panel: panels.news, issue: () => writeWeekly({ stock: market.peekToday(), day: today.gameDay, theme: marketDay.theme, wanted: isWanted, news: marketDay.news(), classifieds: smallAds(), street: news() }) }), at(plan.kiosk.at), plan.kiosk.yaw);
   if (classifieds) zone.place(new MansionBell(classifieds.book), new THREE.Vector3(plan.mansionBell.at[0], plan.mansionBell.y, plan.mansionBell.at[1]), plan.mansionBell.yaw);
 }
@@ -347,13 +363,16 @@ function placePeople(site: StreetSite): void {
     origin,
   );
   // Smokers outside the bars of an evening, neighbours catching up by day; the morning queue at the bakery.
+  // Further down the street than the 3D people are drawn: flat figures walking the pavements, faded in past them.
+  const far = plan.crowd.far;
+  if (far.countByQuality[level] > 0) zone.place(new FarWalkers(dayNight, { lanes: far.lanes, count: far.countByQuality[level], viewer: listener, near: plan.crowd.drawDistance - 4, fade: 6 }), origin);
   zone.place(new Loiterers(dayNight, { spots: plan.loiterers, viewer: listener, place: placeWalker, talk, drawDistance: plan.crowd.drawDistance, fade: plan.crowd.fade, season: season.name }), origin);
   zone.place(new ShopQueue(dayNight, { queues: plan.shopQueues, viewer: listener, place: placeWalker, talk, drawDistance: plan.crowd.drawDistance, fade: plan.crowd.fade, season: season.name, doors: doorGaps, onDoor }), origin);
 }
 
 /**
- * Vehicles (traffic/): the bus (boarded at the stop while its doors are open, to the first destination open now: the
- * Old Market Hall keeps RETRO GAMES' hours), the delivery van and the bin lorry, the parcel van double-parked twice a
+ * Vehicles (traffic/): the bus (boarded at the stop while its doors are open, to the first destination on now: Mémé's
+ * in her waking hours), the delivery van and the bin lorry, the parcel van double-parked twice a
  * day, bikes, scooters and couriers, the crossing's lights, the spray; now and then an ambulance, a police car or a fire
  * engine, siren on: the drivers pull over. Then the street's one-off sounds: wings, barks, the beeper, shutters, the siren.
  */
@@ -363,11 +382,14 @@ function runVehicles(site: StreetSite): void {
   const placeWalker = placeWalkerIn(site);
   const [line] = plan.traffic.routes;
   const vehicleBase = { traffic, viewer: listener, route: line!, stopFor: plan.traffic.stopFor, collisions: zone.collisions };
-  const marketOpen = () => isShopOpen('retro', dayNight.state.hours);
+  const { destinations } = plan.busRide;
   const ride = {
     fare: plan.busRide.fare,
-    destination: () => plan.busRide.destinations.find((d) => d.to !== 'market' || marketOpen()) ?? null,
-    closed: () => `the market hall is shut, the first bus there is after ${clockShort(SHOP_HOURS.retro?.open ?? 8)}`,
+    destination: () => destinations.find((d) => !d.hours || inHours(dayNight.state.hours, d.hours)) ?? null,
+    closed: () => {
+      const first = destinations[0];
+      return first?.hours ? `${first.shut ?? 'nobody’s up'}, the first bus there is after ${clockShort(first.hours[0])}` : null;
+    },
   };
   const bus = zone.place(new StreetBus(dayNight, { ...vehicleBase, ...plan.bus, ride }), origin);
   const pole = plan.busRide.pole;
@@ -395,7 +417,7 @@ function runVehicles(site: StreetSite): void {
 
 /** People and animals (life/): standing people, terraces, pigeons, the park's strollers, the benches to sit on, the stray cat. */
 function placeLife(site: StreetSite): void {
-  const { zone, plan, dayNight, origin, at, season, weekday, fewer, seen, build: { listener, money: { purse } } } = site;
+  const { zone, plan, dayNight, origin, at, season, weekday, fewer, seen, build: { listener, today, money: { purse } } } = site;
   const traffic = ready(site.traffic, 'the traffic');
   const talk = ready(site.talk, 'the talk');
   const crowd = ready(site.crowd, 'the crowd');
@@ -417,7 +439,7 @@ function placeLife(site: StreetSite): void {
   ];
   for (const spot of benchSpots) zone.place(new BenchSeat(spot), at(spot.at), spot.yaw);
   const lorry = ready(site.lorry, 'the bin lorry');
-  site.strayCat = zone.place(new StrayCat({ perches: plan.strayCat.perches, viewer: listener, traffic, purse, taken: (on) => (on === 'bench' ? standing.benchTaken : lorry.active) }), origin);
+  site.strayCat = zone.place(new StrayCat({ perches: plan.strayCat.perches, viewer: listener, traffic, purse, gameDay: () => today.gameDay, taken: (on) => (on === 'bench' ? standing.benchTaken : lorry.active) }), origin);
 }
 
 /**
@@ -492,7 +514,7 @@ function openShops(site: StreetSite): void {
     const spot = giveawaySpot(plan.giveaway.spots, today.realDate());
     zone.place(new GiveawayBox({ host: zone, covers, wallet, stock: () => market.peekToday(), owns, isWanted }), at(spot.at), spot.yaw);
   }
-  if (isTraderDay(plan.trader.oneDayIn)) {
+  if (isTraderDay(plan.trader.oneDayIn, today.gameDay)) {
     const trader = zone.place(new Trader(dayNight, { host: zone, covers, wallet, market, today, owns, isWanted, hours: plan.trader.hours, viewer: listener, collisions: zone.collisions, talk: () => story?.atTrader() ?? null, rival: lots?.rival, social }), at(plan.trader.at), plan.trader.yaw);
     ready(site.budget, 'the people budget').join(trader.figure);
   }

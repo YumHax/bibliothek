@@ -89,9 +89,17 @@ export function partyBuyer(tx: Pick<Transactions, 'sellToNeighbour'>, today: { r
   };
 }
 
-/** The day of the cycle the parties fall on, counted in game days. */
+/** A game day `?debug` made a party day (`forcePartyOn`), for this page only. */
+let forcedDay: number | null = null;
+
+/** `?debug`: game day `day` is a party day too (the courtyard sets up as its hours come). */
+export function forcePartyOn(day: number): void {
+  forcedDay = day;
+}
+
+/** The day of the cycle the parties fall on, counted in game days (or the one `?debug` asked for). */
 function cycleParty(day: number): boolean {
-  return day > 0 && day % PARTY.every === PARTY.phase;
+  return (day > 0 && day % PARTY.every === PARTY.phase) || day === forcedDay;
 }
 
 /** Whether `date` is the last Friday of May: the Fête des voisins. */

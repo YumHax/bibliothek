@@ -1,5 +1,6 @@
 import { RIVAL_COLLECTOR } from '@/economy/rivalCollector';
 import { keptAway } from '@/time/schedule';
+import { weekdayOf } from '@/time/wakefulness';
 import { ARCADE_GAMES, type ArcadeGameId } from '../../arcade/games';
 import { BUSKER, GARAGE_SALE, GIVEAWAY, TRADER } from '../events/streetSchedules';
 import { STREET_PLAN } from '../streetPlan';
@@ -17,6 +18,8 @@ interface StreetNewsSources {
   challenge?: () => { gameId: string; target: number; reward: number; done: boolean };
   /** Whether today is the arcade's tournament day (a Saturday). */
   tournamentOn?: () => boolean;
+  /** The game's day count: the collector and the tournament follow the game's days (`events/streetSchedules`). */
+  gameDay: () => number;
   date?: () => Date;
 }
 
@@ -27,12 +30,13 @@ interface StreetNewsSources {
  * weather does (the stallholders haggle easier; the busker and the collector each stay home by their own rule). Most
  * pressing first; nothing invented, every line is something the player can go and find.
  */
-export function streetNews({ weather, challenge, tournamentOn, date = () => new Date() }: StreetNewsSources): string[] {
+export function streetNews({ weather, challenge, tournamentOn, gameDay, date = () => new Date() }: StreetNewsSources): string[] {
   const now = date();
+  const day = gameDay();
   const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 12);
   const w = weather();
   const lines: string[] = [];
-  const traderToday = TRADER.isDay(now);
+  const traderToday = TRADER.isDay(day);
   const [from, to] = STREET_PLAN.trader.hours;
   if (traderToday && !keptAway(TRADER, w)) lines.push(`${RIVAL_COLLECTOR.name} has his suitcase out by RETRO GAMES today, ${clockShort(from)} to ${clockShort(to)}. Sells, swaps, haggles.`);
   if (GARAGE_SALE.isDay(now)) lines.push('Somebody on our side is clearing their loft: a garage sale on the pavement today, games at the bin price.');
@@ -43,14 +47,14 @@ export function streetNews({ weather, challenge, tournamentOn, date = () => new 
     lines.push(`The arcade’s challenge today: ${title}, score ${formatNumber(c.target)} for ${c.reward} extra tickets.`);
   }
   if (tournamentOn?.()) lines.push('Tournament day at the arcade: sign the sheet and play it out, eight in, one champion.');
-  else if (tomorrow.getDay() === 6) lines.push('The arcade’s tournament is tomorrow, Saturday. Practise tonight.');
+  else if (weekdayOf(day + 1) === 5) lines.push('The arcade’s tournament is tomorrow, Saturday. Practise tonight.');
   // Who the weather keeps in, each by their own rule, so the paper never says the busker plays while they have packed up.
   const kept: string[] = [];
   if (keptAway(BUSKER, w)) kept.push('the busker has packed up');
   if (traderToday && keptAway(TRADER, w)) kept.push('the collector stays home');
   if (w.rain > WET || w.snow > WET) lines.push(kept.length ? `In this weather the stallholders haggle easier, but ${kept.join(' and ')}.` : 'In this weather the stallholders haggle easier.');
   else if (kept.length) lines.push(`${capitalise(kept.join(' and '))} in this weather.`);
-  if (TRADER.isDay(tomorrow)) lines.push(`${RIVAL_COLLECTOR.short} the collector is back outside RETRO GAMES tomorrow.`);
+  if (TRADER.isDay(day + 1)) lines.push(`${RIVAL_COLLECTOR.short} the collector is back outside RETRO GAMES tomorrow.`);
   if (GARAGE_SALE.isDay(tomorrow)) lines.push('Another loft is being cleared tomorrow: a garage sale on the pavement.');
   if (GIVEAWAY.isDay(tomorrow)) lines.push('Somebody is putting a box of cast-offs out tomorrow. FREE TO TAKE.');
   return lines;

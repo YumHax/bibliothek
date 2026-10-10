@@ -4,10 +4,10 @@ import { crackleNoise } from './noise';
 /**
  * The notices' sounds (src/notices), on the `ui` bus, so a message is heard as well as seen:
  * a low double buzz for a refusal, a rising arpeggio for a reward (a fuller one for a big reward),
- * a soft two-note chime for a new tip, a paper rustle for a card to read. Silent until a gesture
+ * a soft two-note chime for a new tip, a quieter tick for a slip, a paper rustle for a card to read. Silent until a gesture
  * started the audio.
  */
-type NoticeSound = 'deny' | 'reward' | 'fanfare' | 'tip' | 'page';
+type NoticeSound = 'deny' | 'reward' | 'fanfare' | 'tip' | 'slip' | 'page';
 
 interface Note {
   /** Hz. */
@@ -39,6 +39,10 @@ const NOTES: Record<Exclude<NoticeSound, 'page'>, Note[]> = {
   tip: [
     { f: 1047, at: 0, ms: 140, level: 0.035, type: 'sine' },
     { f: 1568, at: 0.09, ms: 260, level: 0.03, type: 'sine' },
+  ],
+  slip: [
+    { f: 1319, at: 0, ms: 70, level: 0.016, type: 'sine' },
+    { f: 1760, at: 0.06, ms: 120, level: 0.012, type: 'sine' },
   ],
 };
 

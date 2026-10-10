@@ -46,7 +46,7 @@ export function giveGames(deps: PerkDeps, seed: string, count: number, where: st
   if (picked.length < count) {
     const coins = (count - picked.length) * GIFT_INSTEAD_COINS;
     deps.wallet.earnCoins(coins);
-    deps.notices.reward({ title: `A gift (${where})`, detail: 'You already had every game they could think of, so they gave you something towards the next one.', coins });
+    deps.notices.reward({ title: `A gift (${where})`, detail: 'You had every game they thought of: something towards the next one instead.', coins });
   }
   if (!picked.length) return picked;
   const day = deps.day();

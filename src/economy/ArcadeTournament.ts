@@ -3,11 +3,14 @@ import { dayKey } from './calendar';
 import { TOURNAMENT } from './pricing';
 import { REGULARS, rivalScore } from './rivals';
 import { dayStream } from '@/time/daily';
+import { weekdayOf } from '@/time/wakefulness';
 import { flag } from '@/settings/flags';
 import { formatNumber } from '@/text/count';
 import { formatTickets } from '@/text/money';
 
 const ARCADE_TOURNAMENT_KEY = KEYS.arcadeTournament;
+/** Saturday in the game's week (`weekdayOf`: Monday 0 .. Sunday 6). */
+const SATURDAY = 5;
 
 /** The three rounds, as the bracket board names them. */
 const ROUND_NAMES = ['QUARTER-FINAL', 'SEMI-FINAL', 'FINAL'] as const;
@@ -67,7 +70,7 @@ export function tournamentLine(outcome: TournamentOutcome): string {
 }
 
 interface TournamentFile {
-  /** Local date (YYYY-MM-DD) of the Saturday this entry is for. */
+  /** The Saturday this entry is for: the local date (YYYY-MM-DD), or the game day (`g12`) on the game's week. */
   day: string;
   entered: boolean;
   /** The player's score in each round played, in order. */
@@ -82,12 +85,17 @@ interface ArcadeTournamentOptions {
   /** Every day is tournament day; default: `?tournament` in the URL (to try it on a weekday). */
   force?: boolean;
   now?: () => Date;
+  /**
+   * The game's day count (`Today.gameDay`): given, the tournament follows the game's week (a Saturday every seven
+   * game days, the same week the saleroom's Sundays keep) instead of the real calendar.
+   */
+  gameDay?: () => number;
   storage?: Storage | null;
 }
 
 /**
- * THE SATURDAY TOURNAMENT at the arcade, on the real calendar (local time): every Saturday one
- * cabinet (seeded by the date, the same for everyone) hosts an eight-entrant knock-out, the player
+ * THE SATURDAY TOURNAMENT at the arcade, on the game's week (`gameDay`; the real calendar without it): every
+ * Saturday one cabinet (seeded by the day) hosts an eight-entrant knock-out, the player
  * against seven regulars. Signing the sheet costs `TOURNAMENT.entry` coins, once a Saturday; then
  * each paid play on the day's cabinet (not one on the house) is the player's next round, won by beating
  * the opponent's score (drawn per regular and round from the hall of fame's starting scores: harder each
@@ -101,6 +109,7 @@ export class ArcadeTournament {
   private readonly names: readonly string[];
   private readonly force: boolean;
   private readonly now: () => Date;
+  private readonly gameDay: (() => number) | null;
   private readonly store: PersistedStore<TournamentFile>;
   private state: TournamentFile;
   private readonly listeners = new Set<() => void>();
@@ -112,6 +121,7 @@ export class ArcadeTournament {
     // `?tournament` in the URL makes any day a Saturday, to try it out (`settings/flags`, so no wiring is needed).
     this.force = options.force ?? flag('tournament');
     this.now = options.now ?? (() => new Date());
+    this.gameDay = options.gameDay ?? null;
     this.store = new PersistedStore<TournamentFile>({
       key: ARCADE_TOURNAMENT_KEY,
       version: 1,
@@ -124,7 +134,8 @@ export class ArcadeTournament {
 
   /** Whether today is tournament day. */
   get isOn(): boolean {
-    return this.force || this.now().getDay() === 6;
+    if (this.force) return true;
+    return this.gameDay ? weekdayOf(this.gameDay()) === SATURDAY : this.now().getDay() === 6;
   }
 
   /** Today's cabinet (whatever the day: the board says which game next Saturday's is not, only today's). */
@@ -297,8 +308,9 @@ export class ArcadeTournament {
     return this.state.day === day ? this.state : { day, entered: false, scores: [] };
   }
 
+  /** The day's key: the game day's (`g12`) on the game's week, else the real date's. */
   private today(): string {
-    return dayKey(this.now());
+    return this.gameDay ? `g${this.gameDay()}` : dayKey(this.now());
   }
 
   private commit(): void {

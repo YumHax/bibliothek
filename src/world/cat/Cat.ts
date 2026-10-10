@@ -17,6 +17,7 @@ import { CatFly } from './CatFly';
 import { CatOuting, type OutingEnd, type OutingWorld } from './CatOuting';
 import { CAT_OUTING, type HideSpot } from './catOutingPlan';
 import { damp } from '@/math/damp';
+import { noteShadowMotion } from '@/graphics/shadowMotion';
 
 interface CatOptions {
   settings: CatSettings;
@@ -83,6 +84,8 @@ export class Cat extends THREE.Group implements Furniture, Interactable, Updatab
   private readonly blob: THREE.Mesh | null;
   private readonly blobY: number;
   private readonly fly = new CatFly();
+  /** Where the cat stood when its shadow last had to keep up with it. */
+  private readonly lastShadowSpot = new THREE.Vector3();
   readonly hitboxes: THREE.Object3D[];
   readonly settings: CatSettings;
   /** Its food bowl (a neighbour feeding it while the player is out: `social/building/catSitter`). */
@@ -94,6 +97,7 @@ export class Cat extends THREE.Group implements Furniture, Interactable, Updatab
   private readonly motion: CatMotion;
   private readonly brain: CatBrain;
   private readonly voice: CatVoiceLike | undefined;
+  private readonly clock: CatClock;
   private readonly player: CatPlayerView;
   private readonly listener: THREE.Object3D | undefined;
   private readonly acoustics: CatOptions['acoustics'];
@@ -117,7 +121,9 @@ export class Cat extends THREE.Group implements Furniture, Interactable, Updatab
     this.name = 'Cat';
     this.settings = { ...options.settings };
     this.bowl = options.bowl;
-    this.voice = options.voice;
+    // Its calls open its mouth: the brain and the outing get the voice through the body.
+    this.voice = options.voice ? mouthing(options.voice, body) : undefined;
+    this.clock = options.clock;
     this.voice?.setPitch?.(voicePitch(this.settings.name));
     this.player = options.player;
     this.listener = options.listener;
@@ -155,7 +161,7 @@ export class Cat extends THREE.Group implements Furniture, Interactable, Updatab
       toy: options.toy,
       windows: options.windows,
       tv: options.tv,
-      voice: options.voice,
+      voice: this.voice,
       visits: options.visits,
       perches: options.perches,
     });
@@ -293,12 +299,18 @@ export class Cat extends THREE.Group implements Furniture, Interactable, Updatab
       this.brain.update(dt);
       this.motion.update(dt);
     }
+    this.body.setDark(this.clock.state.night ? 1 : 0);
     this.body.update(dt);
     this.fly.update(dt, this.brain.fly, this);
     this.voice?.setBuzzing?.(this.fly.visible);
     this.updateBlob();
     this.updateGazeBlink(dt);
     if (this.voice) this.placeVoice(dt, this.voice);
+    // Walking about, its shadow keeps up with it (`graphics/shadowMotion`).
+    if (this.position.distanceToSquared(this.lastShadowSpot) > 1e-6) {
+      this.lastShadowSpot.copy(this.position);
+      noteShadowMotion();
+    }
   }
 
   /** Mid-hop the blob stays on the ground under the cat, shrinking and fading as it rises. */
@@ -345,6 +357,24 @@ export class Cat extends THREE.Group implements Furniture, Interactable, Updatab
     voice.setDistance(distance, pan, this.heardWalls, this.listener ? rearOf(this.listener, this.here) : 0);
     voice.update(dt);
   }
+}
+
+/** `voice`, each call also opening the body's mouth. */
+function mouthing(voice: CatVoiceLike, body: CatBody): CatVoiceLike {
+  return {
+    setPurring: (on) => voice.setPurring(on),
+    setSnoring: (on) => voice.setSnoring(on),
+    meow: (kind, insistence) => {
+      body.vocalize(kind, insistence);
+      voice.meow(kind, insistence);
+    },
+    setBuzzing: (on) => voice.setBuzzing?.(on),
+    noiseAt: (kind, strength, metres, pan, walls) => voice.noiseAt?.(kind, strength, metres, pan, walls),
+    noise: (kind, strength) => voice.noise(kind, strength),
+    setDistance: (metres, pan, walls, rear) => voice.setDistance(metres, pan, walls, rear),
+    setPitch: (scale) => voice.setPitch?.(scale),
+    update: (dt) => voice.update(dt),
+  };
 }
 
 /** A voice of its own from the cat's name (1 ± `PITCH_SPREAD`): renamed, it sounds like another cat. */

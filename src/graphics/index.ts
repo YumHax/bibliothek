@@ -7,6 +7,7 @@ import { Environment } from './Environment';
 import { Haze } from './Haze';
 import { LOOKS, displayColor, type Look, type LookName } from './grade';
 import { dampFactor } from '@/math/damp';
+import { brightnessStops } from './brightness';
 
 export { QUALITY, QUALITY_LEVELS, recommendedQuality, setQuality, type QualityLevel,  } from './quality';
 export { LOOKS,  type Look, type LookName } from './grade';
@@ -21,6 +22,8 @@ interface GraphicsOptions {
   focus: () => number | null;
   /** How lit the player's room is, 0 dark .. 1 lamp or sun (reflections and haze follow it). */
   lightLevel: () => number;
+  /** The sky's daylight, 0 night .. 1 day: the grade turns to night with it (`Look.night`). */
+  daylight?: () => number;
   /** The video layer, to grade like the frame (exposure, contrast, saturation, blur). */
   videoLayer?: VideoLayer;
 }
@@ -93,7 +96,7 @@ class LowExposure implements Updatable {
   }
 
   private apply(): void {
-    this.renderer.toneMappingExposure = this.exposure;
+    this.renderer.toneMappingExposure = this.exposure * Math.pow(2, brightnessStops());
     // A neutral grade is no filter at all: the canvas composites as it always did.
     const filter = this.filter === 'contrast(1.00) saturate(1.00) sepia(0.00)' ? '' : this.filter;
     if (filter === this.lastFilter) return;
@@ -127,7 +130,7 @@ export function setupGraphics(engine: Engine, options: GraphicsOptions): Graphic
   engine.renderer.shadowMap.enabled = true;
   // The lookup tables the window and TV area lights need (before any material compiles with one).
   if (QUALITY.areaLights) RectAreaLightUniformsLib.init();
-  const postFx = QUALITY.postFx ? new PostFx(engine.renderer, QUALITY, { focus: options.focus }) : null;
+  const postFx = QUALITY.postFx ? new PostFx(engine.renderer, QUALITY, { focus: options.focus, daylight: options.daylight }) : null;
   if (postFx) {
     engine.setPipeline(postFx);
     engine.addUpdatable(postFx);
@@ -146,7 +149,7 @@ export function setupGraphics(engine: Engine, options: GraphicsOptions): Graphic
     const filter = postFx
       // The canvas's own ratio: the frame is scaled inside it (`PostFx.setRenderScale`), the blur is in its pixels.
       ? () => postFx.videoFilter(engine.renderer.getPixelRatio())
-      : () => `brightness(${(Math.round(Math.sqrt(low!.exposure) / 0.02) * 0.02).toFixed(2)}) ${low!.filter}`;
+      : () => `brightness(${(Math.round(Math.sqrt(low!.exposure * Math.pow(2, brightnessStops())) / 0.02) * 0.02).toFixed(2)}) ${low!.filter}`;
     engine.addUpdatable(new VideoGrade(options.videoLayer, filter));
   }
 

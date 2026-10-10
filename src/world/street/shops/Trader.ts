@@ -34,7 +34,7 @@ interface TraderOptions {
   wallet: { readonly coins: number; subscribe(cb: () => void): () => void };
   /** The flea market: today's stock once drawn, and what buying one of its copies away from it means. */
   market: { peekToday(): readonly StockItem[] | null; soldToRival(item: StockItem): void };
-  /** His pick follows the game day (the market's stock), his coming the real day (`isTraderDay`). */
+  /** His pick and his coming both follow the game day (the market's stock, `isTraderDay`). */
   today: Pick<Today, 'gameDay'>;
   owns: (id: string) => boolean;
   isWanted: (id: string) => boolean;
@@ -51,9 +51,9 @@ interface TraderOptions {
   social?: SocialServices;
 }
 
-/** Whether today (the real date) the collector sets up on Front Street: about one day in `oneDayIn` (phase 1 of the cycle). */
-export function isTraderDay(oneDayIn: number, date = new Date()): boolean {
-  return rivalOnFrontStreet(date, oneDayIn);
+/** Whether on game day `day` the collector sets up on Front Street: about one day in `oneDayIn`. */
+export function isTraderDay(oneDayIn: number, day: number): boolean {
+  return rivalOnFrontStreet(day, oneDayIn);
 }
 
 /** What he adds to what the stall asked him (`TRADER_MARKUP` in pricing.ts). */

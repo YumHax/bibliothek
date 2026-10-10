@@ -138,6 +138,7 @@
   .menu__controls td { padding: 0.45rem 0; vertical-align: top; }
   .menu__controls kbd { color: var(--ui-text); }
   .menu__controls--na { opacity: var(--ui-ghost); }
+  .menu__controls-none { font-size: var(--fs-0); font-weight: 400; font-style: italic; }
   @media (max-width: 480px) {
     .menu__controls th { width: auto; }
   }
@@ -148,6 +149,8 @@
   .menu__field-label { flex: 1; font-size: var(--fs-5); }
   .menu__field--slider input[type='range'] { flex: 0 1 11rem; min-width: 6rem; accent-color: var(--ui-accent); background: none; border: none; padding: 0; }
   .menu__field--slider output { width: 3.2rem; text-align: right; font-size: var(--fs-4); font-variant-numeric: tabular-nums; color: var(--ui-text-dim); }
+  /* A readout with two figures (the field of view and its width): room for both, so dragging never wraps the row. */
+  .menu__field--wide-output output { width: 7.5rem; white-space: nowrap; }
   .menu__switch { min-width: 3.6rem; padding: 0.3em 0.6em; font-size: var(--fs-3); }
   .menu__fields > .ui-btn { align-self: flex-start; }
   .menu__bindings { display: flex; flex-direction: column; gap: 0.35rem; }

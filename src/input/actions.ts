@@ -19,7 +19,8 @@ import { PAD_LABELS, type PadButton } from './padButtons';
  * - `KeyG`: `gridSnap` (furniture carried); `KeyU`: `handBack` (market copy in hand) > `undoMove` (hands free);
  * - `KeyO`: `lookInside` (a market copy: finds out a fake, lets the key go on) then `openBox`;
  * - `KeyX`: `storePiece` (furniture carried) > `swap` (a market copy in hand) > `dismissNotice` (anywhere else in a room);
- * - `KeyR`: `holdCopy` (a market copy in hand) > `randomPick` (Browse skips it while holding);
+ * - `KeyR`: `holdCopy` (a market copy in hand) > `turnBox` (a box in hand) > `randomPick` (Browse skips it while holding);
+ * - `KeyH`: `haggle` (a market copy in hand) > `keysCard` (held in the room, read as a held key by `ui/KeysCard`);
  * - `Space` / `Enter`: `fire` (the arcade replays on its end card) > `pickUpFound` (Browse);
  * - movement keys: walking, the arcade stick while at a machine, `standUp` when seated.
  * A shared key has one Settings row (the entry with `rebind`); rebinding moves every action on it.
@@ -72,18 +73,20 @@ interface ActionSpec {
 
 export const ACTIONS = {
   // --- walking (read as held keys by the FirstPersonController) ---------------------------------------
-  forward: { codes: ['KeyW'], context: 'walk', hint: 'walk forward (double-tap and hold: sprint)', rebind: 'Forward' },
+  forward: { codes: ['KeyW'], context: 'walk', hint: 'walk forward (double-tap and hold: sprint, when Settings > Controls says so)', rebind: 'Forward' },
   back: { codes: ['KeyS'], context: 'walk', hint: 'walk back', rebind: 'Back' },
   left: { codes: ['KeyA'], context: 'walk', hint: 'strafe left', rebind: 'Left' },
   right: { codes: ['KeyD'], context: 'walk', hint: 'strafe right', rebind: 'Right' },
-  crouch: { codes: ['ShiftLeft', 'ShiftRight'], context: 'walk', hint: 'crouch while held (sprint while held when Settings > Controls says Shift sprints)', rebind: 'Crouch / sprint' },
-  crouchAlt: { codes: ['KeyZ'], context: 'walk', hint: 'crouch while Shift sprints (Settings > Controls)', rebind: 'Crouch when Shift sprints' },
+  // Shift sprints by default (Settings > Controls); the crouch is then on Z, not Ctrl (Ctrl + W closes the browser's tab).
+  crouch: { codes: ['ShiftLeft', 'ShiftRight'], context: 'walk', hint: 'sprint while held (crouch while held when Settings > Controls says a double tap sprints)', rebind: 'Sprint / crouch' },
+  crouchAlt: { codes: ['KeyZ'], context: 'walk', hint: 'crouch while Shift sprints (Settings > Controls)', rebind: 'Crouch' },
 
   // --- E, O: the box in hand ---------------------------------------------------------------------------
   putBack: {
     codes: ['KeyE'], context: 'held', hint: 'put the box back', pad: 'GamepadX',
     touch: { label: 'Put back', title: 'Put the game back / stand up', slot: 1 }, rebind: 'Put back / walk away',
   },
+  turnBox: { codes: ['KeyR'], context: 'held', hint: 'turn the box in hand over: the back cover (shares randomPick’s key; the wheel brings it closer)' },
   walkAway: { codes: ['KeyE'], context: 'arcade', hint: 'walk away from the machine (shares putBack’s key)' },
   standUp: { codes: ['KeyE'], context: 'seated', hint: 'stand up, like any movement key (shares putBack’s key)' },
   openBox: {
@@ -142,6 +145,7 @@ export const ACTIONS = {
   nightMode: { codes: ['KeyN'], context: 'room', hint: 'night mode', rebind: 'Night mode' },
   callCat: { codes: ['KeyC'], context: 'room', hint: 'call the cat', pad: 'GamepadRS', rebind: 'Call the cat' },
   journal: { codes: ['KeyJ'], context: 'room', hint: 'open the journal: today, the days before', padHold: 'GamepadSelect', rebind: 'Journal' },
+  keysCard: { codes: ['KeyH'], context: 'room', hint: 'hold to show the keys for what you are doing (shares haggle’s key: a market copy in hand haggles)' },
   people: { codes: ['KeyI'], context: 'room', hint: 'open the People book: everyone you know, how you stand', rebind: 'People' },
   photoMode: { codes: ['KeyP'], context: 'room', hint: 'photo mode (again: leave it)', rebind: 'Photo mode' },
   tipBox: { codes: ['KeyQ'], context: 'room', hint: 'hold to tip the box looked at half out of its row and read it, at home (shares readStalls’s key)' },
@@ -158,7 +162,7 @@ export const ACTIONS = {
   },
   haggle: {
     codes: ['KeyH'], context: 'market', hint: 'haggle (once a day per copy)', pad: 'GamepadLT',
-    touch: { label: 'Haggle', title: 'Make the stallholder an offer', slot: 4 }, rebind: 'Haggle',
+    touch: { label: 'Haggle', title: 'Make the stallholder an offer', slot: 4 }, rebind: 'Haggle / keys card (hold)',
   },
   holdCopy: { codes: ['KeyR'], context: 'market', hint: 'hold it for the day (shares randomPick’s key)' },
   swap: { codes: ['KeyX'], context: 'market', hint: 'swap one of yours for it', rebind: 'Swap / put a card down' },

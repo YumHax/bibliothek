@@ -1,0 +1,9 @@
+/* "What was said": the lines said to the player, a scrolling list in the card (`.ui-modal--centre`). */
+@layer tokens, base, components, panels;
+@layer panels {
+  .said-panel .ui-panel__body { max-height: min(60vh, 32rem); overflow-y: auto; }
+  .said-panel__lines { display: flex; flex-direction: column; gap: var(--sp-2); margin: 0; padding: 0; list-style: none; }
+  .said-panel__lines li { font-size: var(--fs-5); line-height: 1.4; }
+  .said-panel__who { color: var(--ui-text-dim); font-weight: 600; }
+  .said-panel__empty { margin: 0; color: var(--ui-text-dim); }
+}

@@ -23,11 +23,15 @@ interface GamepadOptions {
    */
   keyAliases?: Record<string, string>;
   onConnectionChange?(connected: boolean, gamepad: Gamepad | null): void;
+  /** Out of the room (a panel up): the right stick scrolls what is open, in pixels this frame (`MenuNav.scrollPanel`). */
+  onScroll?(pixels: number): void;
 }
 
 const BUTTON = { A: 0, B: 1, LB: 4, RB: 5, SELECT: 8, LS: 10, UP: 12, DOWN: 13, LEFT: 14, RIGHT: 15 } as const;
 /** A button with a long-press action (`PAD_HOLD_ALIASES`: Select held opens the journal) presses its own code on release, or its hold's past this (s). */
 const LONG_PRESS_S = 0.5;
+/** Pixels a second a full right-stick tilt scrolls an open panel. */
+const SCROLL_SPEED = 900;
 /** Codes the left stick / d-pad hold, i.e. what the controller reads for movement. */
 const MOVE = { up: primaryCode('forward'), down: primaryCode('back'), left: primaryCode('left'), right: primaryCode('right') } as const;
 /** Crouch code owned by the gamepad (touch never holds it, so the two never fight): a virtual code, not Shift, which may sprint. */
@@ -54,7 +58,7 @@ export class GamepadInput implements Updatable {
   private readonly appliedHolds = new Map<string, number>();
   private connected = false;
   private stickEngaged = false;
-  private readonly opts: Required<Omit<GamepadOptions, 'onConnectionChange'>> & Pick<GamepadOptions, 'onConnectionChange'>;
+  private readonly opts: Required<Omit<GamepadOptions, 'onConnectionChange' | 'onScroll'>> & Pick<GamepadOptions, 'onConnectionChange' | 'onScroll'>;
   private lookScale = 1;
   /** Time the right stick has been at (nearly) full tilt, for the look's ramp (s). */
   private fullTilt = 0;
@@ -75,6 +79,7 @@ export class GamepadInput implements Updatable {
       rotateSpeed: options.rotateSpeed ?? 500,
       keyAliases: options.keyAliases ?? {},
       onConnectionChange: options.onConnectionChange,
+      onScroll: options.onScroll,
     };
   }
 
@@ -190,6 +195,9 @@ export class GamepadInput implements Updatable {
   private updateLook(pad: Gamepad, dt: number): void {
     if (!this.player.isLocked) {
       this.fullTilt = 0;
+      // Out of the room the right stick scrolls the panel up (a journal page, a letter, the news).
+      const [, scrollY] = radial(pad.axes[2] ?? 0, pad.axes[3] ?? 0, this.opts.deadZone, this.opts.lookCurve);
+      if (scrollY !== 0) this.opts.onScroll?.(scrollY * SCROLL_SPEED * dt);
       return;
     }
     const [x, rawY] = radial(pad.axes[2] ?? 0, pad.axes[3] ?? 0, this.opts.deadZone, this.opts.lookCurve);

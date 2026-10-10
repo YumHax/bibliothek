@@ -34,7 +34,7 @@ export class Deliveries {
   ) {
     // Version 1: the waiting ids, an array (old seed ids mapped on read).
     this.store = new PersistedStore<string[]>({ key, version: 1, storage, defaults: () => [], read: readIds });
-    this.known = new Set(collection.games.map((g) => g.id));
+    this.known = haveIds(collection.games);
     this.waiting = new Set(this.store.load().filter((id) => this.known.has(id)));
     this.refilter();
     const self = this;
@@ -97,8 +97,11 @@ export class Deliveries {
 
   private onCollectionChange(): void {
     const ids = new Set(this.collection.games.map((g) => g.id));
-    const arrived = [...ids].filter((id) => !this.known.has(id));
-    this.known = ids;
+    // A game put on the wishlist is no parcel: its card goes straight into its gap on the shelf. It is not known yet
+    // either, so the copy bought later (the same id, now owned) still arrives in the parcel.
+    const had = haveIds(this.collection.games);
+    const arrived = [...had].filter((id) => !this.known.has(id));
+    this.known = had;
     const imported = this.collection.lastChange === undefined ? arrived.length > BULK : this.collection.lastChange === 'import';
     if (!imported) for (const id of arrived) this.waiting.add(id);
     for (const id of this.waiting) if (!ids.has(id)) this.waiting.delete(id);
@@ -115,6 +118,11 @@ export class Deliveries {
   private refilter(): void {
     this.shelvedGames = this.collection.games.filter((g) => !this.waiting.has(g.id));
   }
+}
+
+/** The ids of the games the player has (owned or lent out), not those only wished for. */
+function haveIds(games: readonly Game[]): Set<string> {
+  return new Set(games.filter((g) => g.status !== 'wishlist').map((g) => g.id));
 }
 
 function readIds(data: unknown): string[] | null {

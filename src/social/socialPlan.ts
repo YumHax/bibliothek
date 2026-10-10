@@ -132,11 +132,13 @@ export const GAIN = { span: 120, power: 1.2, floor: 0.15, trustSpan: 160, trustF
 export const ODDS = { perWarmth: 0.004, range: [0.05, 0.97] as [number, number] } as const;
 
 /**
- * Drift: after `graceDays` game days without contact, warmth slides `perDay` a day towards `rest` (from either
- * side; a grudge, `TRAITS.proud.grudge`, slows the climb back). Close friends drift at `closeShare` of the pace.
- * Trust never drifts.
+ * Drift: after `graceDays` game days without contact (a game day is ten minutes of play), warmth slides `perDay` a
+ * day towards `rest` (from either side; a grudge, `TRAITS.proud.grudge`, slows the climb back). A friend or a close
+ * friend waits `friendGraceDays` before drifting, close friends at `closeShare` of the pace: a friendship holds over
+ * an evening away. Contact is anything that moves their standing, the grapevine and the phone included. Trust never
+ * drifts.
  */
-export const DRIFT = { graceDays: 6, perDay: 1, rest: 5, closeShare: 0.4 } as const;
+export const DRIFT = { graceDays: 8, friendGraceDays: 18, perDay: 1, rest: 5, closeShare: 0.4 } as const;
 
 /** The grapevine: a deed reaches those tied to them at `share` × the tie (inverted for a negative tie), `min` points at least to bother. */
 export const GOSSIP = { share: 0.3, min: 1 } as const;

@@ -13,6 +13,18 @@ import { everyone, findPerson } from '@/social/people';
 import { setStanding, standing } from '@/social/standing';
 import { tierOf } from '@/social/tiers';
 import { formatCount } from '@/text/count';
+import type { Input } from '@/core/Input';
+import type { DebugSubjects } from '@/cheats/progress/progressions';
+import { forcePartyOn } from '@/building/neighboursParty';
+import { forceEstateSale } from '@/building/estateSale';
+import { forceBulkyDay } from '@/building/bulkyWaste';
+import { forceKidsOut } from '@/building/kids/yardKids';
+import { forceFilmNight } from '@/building/yardCinema';
+import { DebugPanel, type DebugEvent } from '@/ui/debug/DebugPanel';
+import type { Services } from './services';
+import { grandmaDebugEvents } from '@/grandma/grandmaDebug';
+import type { Travel } from '@/world/travel';
+import type { ZoneId } from '@/world/zoneIds';
 
 /** Every light (every shadow-casting one with `shadowed`) in the zones but `current`, for the F9 bisection. */
 function lightsOutside(zones: readonly { readonly group: THREE.Object3D }[], current: object, shadowed: boolean): THREE.Light[] {
@@ -45,6 +57,63 @@ export function installStats(parts: { engine: Engine; world: { readonly zones: r
 /** `?debug`: `bibliothek.blackout()` cuts the building's power (the next fuse reset brings it back), `bibliothek.endlessStairs()` makes tonight an endless night. */
 export function installBuildingDebug(): void {
   exposeDebug({ blackout: forceBlackout, endlessStairs: forceEndlessStairs });
+}
+
+/** What the debug progressions are read and written through, from the services' stores. */
+export function debugSubjects(parts: Omit<DebugSubjects, 'day'> & { today: { readonly gameDay: number } }): DebugSubjects {
+  const { today, ...stores } = parts;
+  return { day: () => today.gameDay, ...stores };
+}
+
+/** The key that opens the debug panel (physical: the one left of 1, `²` on AZERTY), and F8 where that one is missing. */
+const PANEL_KEYS = ['Backquote', 'F8'];
+
+/**
+ * `?debug`: the debug panel on its key (and `bibliothek.debugPanel()`): every progression's switch, the co-owners'
+ * votes, events made to happen now, a trip anywhere (docs/checks.md "Debug mode"). `bibliothek.party()` makes today a
+ * party day in the courtyard, `bibliothek.estateSale()` opens the building's estate sale today, `bibliothek.bulkyDay()`
+ * makes today a bulky-waste day (the courtyard's pile shows the next time the yard is built), `bibliothek.filmNight()`
+ * puts the collection's first game on the courtyard's sheet and the film night on now, dark or not.
+ */
+export function installDebugPanel(services: Services, parts: { input: Input; openPanel(panel: DebugPanel): void; modalOpen(): boolean; travel: Pick<Travel, 'everyStop' | 'go'> }): void {
+  const { today, wallet } = services;
+  const party = (): void => forcePartyOn(today.gameDay);
+  const estateSale = (): void => forceEstateSale(today.gameDay);
+  const bulkyDay = (): void => forceBulkyDay(today.gameDay);
+  // The first game of the collection on the courtyard's sheet, the film night on now whatever the sky.
+  const filmNight = (): void => {
+    const game = services.collection.games.find((g) => g.status !== 'wishlist');
+    if (game) forceFilmNight(game, today.gameDay);
+  };
+  const events: DebugEvent[] = [
+    { label: 'Power cut now', run: forceBlackout },
+    { label: 'An endless night on the stairs', run: forceEndlessStairs },
+    { label: 'The neighbours’ party today', run: party },
+    { label: 'The estate sale today', run: estateSale, reload: true },
+    { label: 'Bulky-waste day today', run: bulkyDay },
+    { label: 'The kids down in the courtyard now', run: () => forceKidsOut(today.gameDay) },
+    { label: 'A film night in the courtyard now', run: filmNight },
+    { label: '5000 coins', run: () => wallet.earnCoins(5000) },
+    { label: '500 tickets', run: () => wallet.addTickets(500) },
+  ];
+  // Mémé's: back to the first day, every memory ready or seen, the Sunday envelope again (docs/story.md "Mémé").
+  events.push(...grandmaDebugEvents(services.grandma));
+  const panel = new DebugPanel(services.container, {
+    subjects: debugSubjects(services),
+    events,
+    places: () => parts.travel.everyStop(),
+    go: (id) => void parts.travel.go(id as ZoneId),
+    reload: () => location.reload(),
+  });
+  const open = (): void => {
+    if (panel.isOpen) panel.close();
+    else if (!parts.modalOpen()) parts.openPanel(panel);
+  };
+  parts.input.onPress((_code, e) => {
+    if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+    if (PANEL_KEYS.includes(e.code)) open();
+  });
+  exposeDebug({ debugPanel: open, party, estateSale, bulkyDay, filmNight });
 }
 
 /**

@@ -7,7 +7,7 @@ import { PHOTO_LOOKS } from './photoLooks';
 import { PhotoHud } from './PhotoHud';
 import { savePhoto } from './savePhoto';
 import { playShutter } from './shutterSound';
-import { ACTIONS, isAction, type ActionId } from '@/input/actions';
+import { ACTIONS, PAD_ALIASES, isAction, type ActionId } from '@/input/actions';
 
 /** The player as photo mode parks and frees it (`FirstPersonController` fits). */
 interface PhotoPlayer {
@@ -79,6 +79,8 @@ export class PhotoMode implements Updatable {
   private frameIndex = 0;
   private readonly forward = new THREE.Vector3();
   private readonly right = new THREE.Vector3();
+  /** The key a controller button also presses (`PAD_ALIASES`), swallowed once after it: LT is not also the help's H. */
+  private padAlias: string | null = null;
 
   constructor(private readonly deps: PhotoModeDeps) {
     this.hud = new PhotoHud(deps.container);
@@ -168,6 +170,20 @@ export class PhotoMode implements Updatable {
   /** A key press while active: true when photo mode used it (always, while active: nothing else should hear it). */
   handleKey(code: string): boolean {
     if (!this.active) return false;
+    if (code === this.padAlias) {
+      this.padAlias = null;
+      return true;
+    }
+    this.padAlias = PAD_ALIASES[code] ?? null;
+    if (this.padKey(code)) {
+      this.refresh();
+      return true;
+    }
+    return this.keyAction(code);
+  }
+
+  /** What a key does in photo mode (the keyboard's, and the controller's buttons that stand for one). */
+  private keyAction(code: string): boolean {
     if (isAction(code, 'photoMode')) this.exit();
     else if (isAction(code, 'photoCapture')) this.capture();
     else if (isAction(code, 'photoLook')) {
@@ -238,10 +254,41 @@ export class PhotoMode implements Updatable {
   private onWheel(e: WheelEvent): void {
     if (!this.active) return;
     e.preventDefault();
+    this.zoom(Math.sign(e.deltaY));
+  }
+
+  /** A step of zoom: out (+1) or in (-1), the wheel's notch. */
+  private zoom(direction: number): void {
     const camera = this.deps.camera;
-    camera.fov = THREE.MathUtils.clamp(camera.fov * Math.exp(Math.sign(e.deltaY) * 0.08), this.minFov, FOV.max);
+    camera.fov = THREE.MathUtils.clamp(camera.fov * Math.exp(direction * 0.08), this.minFov, FOV.max);
     camera.updateProjectionMatrix();
     this.refresh();
+  }
+
+  /**
+   * The controller's lens (the sticks fly and look as in the room): the triggers zoom, the bumpers move the focus,
+   * X the grade, Y the guide, Select resets. True when the button was one of these.
+   */
+  private padKey(code: string): boolean {
+    switch (code) {
+      case 'GamepadLT':
+      case 'GamepadRT':
+        this.zoom(code === 'GamepadLT' ? 3 : -3);
+        return true;
+      case 'GamepadLB':
+      case 'GamepadRB':
+        this.focus = THREE.MathUtils.clamp(this.focus * Math.exp(code === 'GamepadLB' ? -0.3 : 0.3), FOCUS.min, FOCUS.max);
+        this.applyLens();
+        return true;
+      case 'GamepadX':
+        return this.keyAction(ACTIONS.photoLook.codes[0]!);
+      case 'GamepadY':
+        return this.keyAction(ACTIONS.photoFrame.codes[0]!);
+      case 'GamepadSelect':
+        return this.keyAction(ACTIONS.photoReset.codes[0]!);
+      default:
+        return false;
+    }
   }
 
   /** How far the wheel zooms in with the frame on (the binoculars go much further). */

@@ -24,6 +24,7 @@ const NAMES: Readonly<Record<string, string>> = {
   courtyard: 'The courtyard',
   saleroom: 'The saleroom',
   sellerFlat: 'A seller’s flat',
+  grandmaFlat: 'Mémé’s flat',
   cellar: 'The cellars',
   attic: 'The attic',
   roof: 'The roof',

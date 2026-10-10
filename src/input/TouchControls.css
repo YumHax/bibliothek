@@ -2,7 +2,7 @@
 @layer tokens, base, components, panels;
 @layer panels {
   /* The 3D view is the touch surface: no scroll, no pinch-zoom, no long-press callout or selection. */
-  #app canvas {
+  #app > canvas {
     touch-action: none;
     -webkit-touch-callout: none;
     -webkit-user-select: none;

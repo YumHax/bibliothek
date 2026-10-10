@@ -5,7 +5,9 @@ room, picks boxes off the shelves, reads them, plays longplays on the TV or proj
 earned: the front door opens on the building's stairwell, whose street door teleports to Front Street (shops, an arcade whose
 mini-games pay tickets, swapped for prizes or coins, and a flea market that sells games). So is the flat: it starts bare
 (one bookcase, one game, the TV, a mattress; no cat), the rest is bought in Front Street's shops (docs/economy.md "The
-bare flat"). `?debug` restores the seed collection, the furnished flat and the editor's add pane.
+bare flat"). `?debug` plays on its own save with the seed collection, the editor's add pane and every progression done
+(social, keys, attic, hunt, story, market, arcade); its panel (key left of 1, or F8) switches each one, sets the votes, runs
+events and travels anywhere (docs/checks.md "Debug mode").
 
 ## Commands
 
@@ -53,10 +55,10 @@ npm run scene-lint  # the same subjects: light budgets, sunk / floating / overla
 | People's bodies and motion (rig, gait, feet, IK, gestures, reactions, faces, a machine directing a body) | `docs/people.md` |
 | Friends who visit, borrow and return games; games nights, open houses, the collectors' club's visit (gatherings) | `docs/visitors.md` |
 | The building's life (neighbours, friendship, notice board, concierge, co-owners' vote, power cut, noise, Mrs Roux's move, estate sale, party, treasure hunt) | `docs/building.md` (+ `docs/zones.md` for its places) |
-| The lost prototype's trail (clues by channel, the grey cart, its demo on the TV), the press reviews card, sharing the collection, the save file | `docs/story.md` (+ `docs/architecture.md` data sources) |
+| The story's frame (uncle Félix's flat, the goal, the acts) and the opening cutscene (`src/intro/`); Mémé across town by bus (the ride, `src/ui/busRide/`) and her album's memories (`src/grandma/`, `src/memories/`); the lost prototype's trail (clues by channel, the grey cart, its demo on the TV), the press reviews card, sharing the collection, the save file | `docs/story.md` (+ `docs/architecture.md` data sources) |
 | What the kitchen, bathroom and bedroom are for (cleaning boxes, the bath, cake, radio, manuals, outfits, phone, dreams); the home arcade, the turntable, repairing a console | `docs/household.md` |
 | Moving boxes to any shelf spot, moving the flat's furniture (right-click, grid, planning view, storage), the player's shelf arrangement, making a piece movable; displays (case, pedestal), shelf labels, tipping a box out | `docs/furnishing.md` |
-| Telling the player something (speech bubbles, reactions, rewards, tips, cards to read); no toasts | `docs/notices.md` |
+| Telling the player something (speech bubbles, reactions, slips, rewards, tips, prompts with key caps, cards to read: letters, postcards, flyers); no toasts | `docs/notices.md` |
 | Post-processing, quality levels, looks, material helpers (wood, fabric, plaster), reflections | `docs/graphics.md` |
 | Materials, how parts meet, anything flat on a surface (z-fighting), hiding lamps | `docs/props.md` "Materials, joints and layers" |
 | What each check enforces (conventions, imports, docs paths, data, zfight, scene-lint, bundle, lint), its baseline and opt-out, adding a rule | `docs/checks.md` |

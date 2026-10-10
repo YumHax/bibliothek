@@ -92,15 +92,14 @@ export function doorVisit(k: number, i: number, moment: DoorMoment): DoorVisit |
     return moment.isHome() && h >= NEIGHBOUR_FLAT_PLAN.hours[0] && h < NEIGHBOUR_FLAT_PLAN.hours[1];
   };
   const canEnter = (): boolean => open() && friendship(key) >= host.inviteAt;
-  const knocked = (session: SessionActions): void => {
-    const counted = befriend(key, FRIENDSHIP_NUDGES.knock, 'knock', moment.day());
-    if (counted && friendship(key) < host.inviteAt) session.tip('Neighbours who get to know you ask you in: knock now and then, talk on the stairs, take them up on a swap.', { id: 'neighbour-knock' });
+  const knocked = (): void => {
+    befriend(key, FRIENDSHIP_NUDGES.knock, 'knock', moment.day());
   };
   return {
     label: () => (canEnter() ? `${host.who}, ${STAIRWELL_PLAN.floorNames[k]} floor · visit` : null),
     knock: (session) => {
       if (!open()) return false;
-      knocked(session);
+      knocked();
       if (friendship(key) < host.inviteAt) return false;
       enter(host, session);
       return true;

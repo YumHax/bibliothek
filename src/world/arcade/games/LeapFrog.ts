@@ -2,6 +2,15 @@ import { clamp } from '@/math/scalar';
 import { type ArcadeControls, NO_CONTROLS, SCREEN_H, SCREEN_W, drawText } from './ArcadeGame';
 import { BaseGame } from './BaseGame';
 import { random } from '@/random';
+import { Sprite } from './sprite';
+import { arcadeHint } from '../arcadeHint';
+
+/** The frog sitting and mid-leap (legs stretched), 13 px: spots, white eyes with their pupils. */
+export const FROG_SPRITE = new Sprite([
+  ['..xx.....xx..', '.xwkx...xwkx.', '.xxxx...xxxx.', '..xxxxxxxxx..', '.xxxxxxxxxxx.', 'xxxxdxxxdxxxx', 'xxxxxxxxxxxxx', '.xxxxxxxxxxx.', '..xxxxxxxxx..', '.xx.xxxxx.xx.', 'xx..xx.xx..xx', 'x...........x', '.............'],
+  ['..xx.....xx..', '.xwkx...xwkx.', '.xxxx...xxxx.', '..xxxxxxxxx..', '.xxxxxxxxxxx.', '.xxxdxxxdxxx.', '..xxxxxxxxx..', '..xxxxxxxxx..', '...xxxxxxx...', '...xx...xx...', '..xx.....xx..', '..x.......x..', '.xx.......xx.'],
+]);
+const FROG_INKS = { x: '#39ff9e', d: '#1f6f5a', w: '#ffffff', k: '#060a12' };
 
 const ROUND_SECONDS = 15;
 const CELL = 16;
@@ -74,7 +83,9 @@ const STEP: Record<Dir, [dx: number, dRow: number]> = { up: [0, 1], down: [0, -1
 export class LeapFrog extends BaseGame {
   readonly id = 'frog';
   readonly title = 'LEAP FROG';
-  readonly hint = 'WASD or arrows hop · cross the road, ride the logs';
+  get hint(): string {
+    return arcadeHint('{stick} or arrows hop · cross the road, ride the logs');
+  }
   readonly summary = '15 SEC · HOP ACROSS · EACH CROSSING +TIME';
 
   private lanes: Lane[] = [];
@@ -283,6 +294,7 @@ export class LeapFrog extends BaseGame {
     this.sound('miss');
     this.fx.shake(2.5, 0.2);
     this.fx.flash(water ? '#63b3ff' : '#ff5f5f', 0.1);
+    this.fx.burst(this.deadAt.x, this.rowY(this.frogRow) + CELL / 2, water ? '#9ad6ff' : '#39ff9e', 20, 100, 2);
     this.fx.pop(water ? 'SPLASH!' : 'SPLAT!', this.deadAt.x, this.rowY(this.frogRow) - 8, water ? '#9ad6ff' : '#ff5f5f', 10);
     this.addTime(-DEATH_SECONDS, SCREEN_W / 2, SCREEN_H / 2);
   }
@@ -334,18 +346,12 @@ export class LeapFrog extends BaseGame {
       y = this.rowY(this.hop.fromRow) + CELL / 2 + (this.rowY(this.frogRow) - this.rowY(this.hop.fromRow)) * k;
       lift = Math.sin(k * Math.PI) * 3;
     }
-    const s = FROG + lift * 0.5;
-    ctx.fillStyle = '#39ff9e';
-    ctx.fillRect(x - s, y - s, s * 2, s * 2);
-    ctx.fillStyle = '#1f6f5a';
-    ctx.fillRect(x - s - 1, y + 1, 2, s);
-    ctx.fillRect(x + s - 1, y + 1, 2, s);
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(x - 4, y - s + 1, 3, 3);
-    ctx.fillRect(x + 1, y - s + 1, 3, 3);
-    ctx.fillStyle = '#060a12';
-    ctx.fillRect(x - 3, y - s + 2, 1, 1);
-    ctx.fillRect(x + 2, y - s + 2, 1, 1);
+    // Its shadow stays on the ground while it leaps; the frog sits, or stretches its legs mid-hop.
+    if (lift > 0.5) {
+      ctx.fillStyle = 'rgba(0,0,0,0.35)';
+      ctx.fillRect(Math.round(x) - FROG + 1, Math.round(y) + FROG - 2, FROG * 2 - 2, 2);
+    }
+    FROG_SPRITE.drawCentred(ctx, x, y - lift, FROG_INKS, this.hop ? 1 : 0);
     // On the verge and the bank a faint cell outline shows where the next hop lands.
     if (!this.hop && (this.frogRow === 0 || this.frogRow === VERGE)) {
       ctx.strokeStyle = 'rgba(126,231,135,0.25)';

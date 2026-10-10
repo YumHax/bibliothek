@@ -55,6 +55,8 @@ export class Face {
     private readonly eyes: readonly [Eye, Eye],
     /** How far the upper lids rest below wide open: a relaxed look, never a stare. */
     private readonly lidRest: number,
+    /** The mouth's cut through the skin (`head.mouthPatch`), kept at the jaw's opening; null without one. */
+    private readonly mouth: { value: number } | null = null,
   ) {}
 
   /** Shows `expression` (0..1 each) for `seconds`, then lets it fade over `fade` seconds. A stronger feeling replaces a weaker one. */
@@ -140,5 +142,6 @@ export class Face {
   private set(index: number, value: number): void {
     if (index < 0 || !this.mesh?.morphTargetInfluences) return;
     this.mesh.morphTargetInfluences[index] = value;
+    if (index === this.morphs.jaw && this.mouth) this.mouth.value = value;
   }
 }

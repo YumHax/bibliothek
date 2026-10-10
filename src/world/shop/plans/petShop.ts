@@ -15,6 +15,7 @@ export const PET_SHOP: ShopPlan = {
   shop: 'pets',
   // PAWS & CLAWS' teal in the street (`SHOP_LOOKS.pets`).
   accent: 0x2f6a6a,
+  look: 'petShop',
   room: PETS_ROOM,
   arrival: arrival(PETS_ROOM.depth),
   exit: FRONT_EXIT,

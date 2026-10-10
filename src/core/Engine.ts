@@ -46,8 +46,8 @@ export interface LayerRenderer {
 function maxPixelRatio(): number {
   return Math.min(window.devicePixelRatio, QUALITY.maxPixelRatio);
 }
-/** Seconds a frame lasts at least (`QUALITY.maxFps`); 0 for every display refresh. */
-const MIN_FRAME = QUALITY.maxFps > 0 ? 1 / QUALITY.maxFps : 0;
+/** Seconds a frame lasts at least for a cap of `fps`; 0 for every display refresh. */
+const minFrameFor = (fps: number): number => (fps > 0 ? 1 / fps : 0);
 /** The camera's near plane (metres). */
 const NEAR = 0.1;
 /**
@@ -95,6 +95,10 @@ export class Engine {
   /** Whether the frame now due has waited for the GPU (tells `AdaptiveResolution` the pixels are late). */
   private waitedForGpu = false;
   private readonly resolution: AdaptiveResolution;
+  /** Seconds a frame lasts at least (`QUALITY.maxFps`, or Settings > Display > Frame rate); 0 for every display refresh. */
+  private minFrame = minFrameFor(QUALITY.maxFps);
+  /** Settings > Display > Resolution's fixed share of the ceiling ratio, or null for the adaptive one. */
+  private userScale: number | null = null;
   /** `?stats` only: milliseconds each updatable spent in `update` since the readout last cleared it. */
   profile: Map<Updatable, number> | null = null;
   /** Frames actually rendered (a tick waiting on the GPU renders none). */
@@ -127,7 +131,7 @@ export class Engine {
     this.camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, NEAR, FAR);
 
     const max = maxPixelRatio();
-    this.resolution = new AdaptiveResolution(Math.min(QUALITY.minPixelRatio, max), max, MIN_FRAME || 1 / 60, (ratio) => this.applyResolution(ratio));
+    this.resolution = new AdaptiveResolution(Math.min(QUALITY.minPixelRatio, max), max, this.minFrame || 1 / 60, (ratio) => this.applyResolution(ratio));
 
     window.addEventListener('resize', this.onResize);
     this.watchDevicePixelRatio();
@@ -170,10 +174,28 @@ export class Engine {
     pipeline?.setSize();
   }
 
+  /**
+   * Settings > Display > Resolution: null leaves it to `AdaptiveResolution`; a share (0..1] renders at that much of the
+   * ceiling ratio, fixed (the range closes on it).
+   */
+  setRenderScale(share: number | null): void {
+    if (share === this.userScale) return;
+    this.userScale = share;
+    this.updatePixelRatioRange();
+    if (!this.pipeline?.setRenderScale) this.applyResolution(this.resolution.pixelRatio);
+  }
+
+  /** Settings > Display > Frame rate: a cap in frames a second, 0 for every display refresh, null for the quality level's. */
+  setFrameCap(fps: number | null): void {
+    this.minFrame = minFrameFor(fps ?? QUALITY.maxFps);
+    this.resolution.setTarget(this.minFrame || 1 / 60);
+  }
+
   /** Re-reads the device's pixel ratio (capped by the quality level) as `AdaptiveResolution`'s range. */
   private updatePixelRatioRange(): void {
-    const max = maxPixelRatio();
-    this.resolution.setRange(Math.min(QUALITY.minPixelRatio, max), max);
+    const ceiling = maxPixelRatio();
+    const max = this.userScale === null ? ceiling : Math.max(0.25, ceiling * this.userScale);
+    this.resolution.setRange(this.userScale === null ? Math.min(QUALITY.minPixelRatio, max) : max, max);
     // A lowered ratio that stays within the new range is not re-applied by `setRange`, but the canvas
     // must follow the new ceiling and the pipeline's share be taken of it.
     if (this.pipeline?.setRenderScale) this.applyResolution(this.resolution.pixelRatio);
@@ -254,7 +276,7 @@ export class Engine {
     const interval = this.clock.getDelta();
     this.owed += interval;
     // Rendering now undershoots the cap by less than waiting one more callback would overshoot it.
-    if (this.owed < MIN_FRAME - interval / 2) return;
+    if (this.owed < this.minFrame - interval / 2) return;
     if (!this.gpuIdle()) {
       this.waitedForGpu = true;
       return;

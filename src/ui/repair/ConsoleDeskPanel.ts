@@ -49,7 +49,7 @@ export class ConsoleDeskPanel extends CardPanel {
     playCoins(3);
     const name = getPlatform(item.platform).shortName;
     this.message = `“A working ${name}? Lovely job. There you go.”`;
-    this.deps.notices.reward({ title: `Sold the ${name}`, detail: `Mended at home, bought for ${item.paid}.`, coins });
+    this.deps.notices.reward({ title: `Sold the ${name}`, detail: `Bought for ${item.paid}, mended at home.`, coins });
     this.refresh();
   }
 

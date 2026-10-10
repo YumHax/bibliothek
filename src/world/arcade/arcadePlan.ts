@@ -12,16 +12,19 @@ import type { HangoutSpot, NavNode } from './ArcadeCrowd';
  * z from -4 (back) to 4 (front, the way in). Walls as named from the arrival spot:
  *
  *   back   (-z)  six cabinets shoulder to shoulder under the ARCADE neon: LEXIPUNK (its game in
- *                the big frame), the four classics, PADDLE WARS (two players) at the right end
+ *                the big frame), the four classics, PADDLE WARS (two players) at the right end; the
+ *                airbrushed PLAYER ONE panel and the STAR RAID one-sheet at the left end (x -4.3)
  *   centre       an island of two cabinets back to back (x 0, z -0.8..0.8), a mirror pillar either
  *                side of it (x +-1.9, z -0.2), the mirror ball over it; NEON SHERIFF (light gun)
  *                at x -3.4 and STEP BEAT (dance pad in front) at x 3.4, both facing the way in
  *   left   (-x)  the pinball (backbox to the wall, z -2.6), HOOP FEVER along the wall (hoop at the
  *                back, played from z 0.9), the hall of fame (z 1.7), the change machine (z 2.9)
  *   right  (+x)  the ball alley along the wall (target end at the back, played from z -1.2), the
- *                prize counter (z 0.65..2.15) with the attendant behind it
+ *                prize counter (z 0.65..2.15) with the attendant and the prize pegboard behind it, the
+ *                LEAP FROG one-sheet (z 2.85)
  *   front  (+z)  the exit door (x 0), the challenge board (x -1.6), the weekly league (x -3.2), the
- *                jukebox (x -4.6), the claw machine (x 2), the ticket wheel (x 3.6)
+ *                jukebox (x -4.6), the claw machine (x 2), the ticket wheel (x 3.6), the COMET DASH
+ *                one-sheet (x 5)
  *
  * A nineties arcade: black neon-confetti carpet with a neon border, dark tiled dado, aubergine
  * walls, a black ceiling with neon tubes along the tops of the walls, ducts and banners under it,
@@ -166,7 +169,7 @@ export const ARCADE_PLAN = {
       kind: 'pinball',
       at: { wall: 'left', along: -2.6, y: 0, offset: 0.7 },
       options: { title: 'METEOR ALLEY', color: 0x3a1f5c, accent: 0xff8a2a, seed: 3 },
-      card: { at: [0.14, 0.79, 0.652], lines: ['HOLD SPACE · PLUNGER', 'A / D · FLIPPERS', 'LIGHT THE LANES'] },
+      card: { at: [0.14, 0.79, 0.652], lines: ['HOLD {fire} · PLUNGER', '{leftRight} · FLIPPERS', 'LIGHT THE LANES'] },
       medalsAt: [-0.15, 0.79, 0.652],
       table: true,
       regularAtStart: true,
@@ -175,14 +178,14 @@ export const ARCADE_PLAN = {
       kind: 'claw',
       at: { wall: 'front', along: 2.0, y: 0, offset: 0.42 },
       options: { color: 0xd23a6a, seed: 4 },
-      card: { at: [0.2, 0.62, 0.379], lines: ['WASD · STEER', 'SPACE · DROP', '15 SECONDS'], title: 'CLAW' },
+      card: { at: [0.2, 0.62, 0.379], lines: ['{stick} · STEER', '{fire} · DROP', '15 SECONDS'], title: 'CLAW' },
     },
     {
       kind: 'alley',
       at: { floor: [5.5, -2.5], rotationY: 0 },
       options: { title: 'ALLEY ROLL', color: 0xb8202a },
       watchAt: [4.6, -0.6],
-      card: { at: [-0.18, 0.5, 1.152], lines: ['A / D · AIM', 'HOLD SPACE · LET GO', 'NINE BALLS'] },
+      card: { at: [-0.18, 0.5, 1.152], lines: ['{leftRight} · AIM', 'HOLD {fire} · LET GO', 'NINE BALLS'] },
       medalsAt: [0, 1.5, -1.125],
       table: true,
     },
@@ -191,7 +194,7 @@ export const ARCADE_PLAN = {
       at: { floor: [-5.45, -0.4], rotationY: 0 },
       options: { title: 'HOOP FEVER', color: 0x1f4fa8 },
       watchAt: [-4.3, 1.4],
-      card: { at: [0.1, 0.62, 0.952], lines: ['LOOK TO AIM', 'HOLD SPACE · LET GO', '30 SECONDS'] },
+      card: { at: [0.1, 0.62, 0.952], lines: ['LOOK TO AIM', 'HOLD {fire} · LET GO', '30 SECONDS'] },
       medalsAt: [-0.25, 0.62, 0.952],
       table: true,
     },
@@ -200,7 +203,7 @@ export const ARCADE_PLAN = {
       at: { wall: 'front', along: 3.6, y: 0 },
       options: { title: 'TICKET WHEEL', color: 0x2a0f24 },
       watchAt: [2.6, 2.7],
-      card: { at: [0.12, 0.55, 0.752], lines: ['SPACE · SPIN', 'PAYS THE SLICE', 'JACKPOT GROWS'] },
+      card: { at: [0.12, 0.55, 0.752], lines: ['{fire} · SPIN', 'PAYS THE SLICE', 'JACKPOT GROWS'] },
       // The bulbs throw a warm pool on the carpet in front of it.
       pool: { color: 0xffd08a, width: 1.6, depth: 1.4, z: 1.1, level: 0.6 },
     },
@@ -335,6 +338,13 @@ export const ARCADE_PLAN = {
     { kind: 'flyer', at: { wall: 'front', along: -1.6, y: 2.3 }, options: { title: 'DAILY', lines: ['one challenge a day', 'see the board', 'beat it, bank it'], accent: 0x8a2f6f, seed: 21 } },
     { kind: 'flyer', at: { wall: 'back', along: -3.6, y: 1.6 }, options: { title: 'MEDALS', lines: ['bronze · silver · gold', 'on every machine', 'tickets for each'], accent: 0xe0995a, seed: 25 } },
     { kind: 'flyer', at: { wall: 'back', along: 3.2, y: 1.6 }, options: { title: 'LEAGUE', lines: ['most tickets this week', 'wins the pennant', 'see the board'], accent: 0x33e0ff, seed: 26 } },
+
+    // The hall's own games on its walls: one-sheets in black frames, and the airbrushed panel over the back-left corner
+    // (between the neon tube at 2.92 m and the MEDALS notice; clear of the cabinets, which end at x -2.58).
+    { kind: 'arcadeMural', at: { wall: 'back', along: -4.3, y: 2.42 }, options: { width: 2.6, height: 0.5, words: 'PLAYER ONE', seed: 3 } },
+    { kind: 'gamePoster', at: { wall: 'back', along: -4.75, y: 1.5 }, options: { game: 'invaders' } },
+    { kind: 'gamePoster', at: { wall: 'front', along: 5.0, y: 1.75 }, options: { game: 'comets' } },
+    { kind: 'gamePoster', at: { wall: 'right', along: 2.85, y: 1.75 }, options: { game: 'frog' } },
 
     // A tired plant in each front corner, the way every arcade has one.
     { kind: 'plant', at: { corner: 'front-left', inset: 0.45 }, options: { kind: 'yucca', pot: 'ceramic', seed: 31 } },

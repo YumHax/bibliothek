@@ -84,7 +84,7 @@ export function saleroomExtras(facts: SaleroomFacts): () => void {
           const result = facts.buyFrom(person);
           if (!result.ok) return { line: result.why };
           nudge(person, { trust: 2, reason: 'tradePrice', day, why: 'did you a favour' });
-          session?.reward({ title: `Bought ${won.title} from ${name}`, detail: 'It goes in the parcel: unpack it in the hallway at home.', coins: -won.price });
+          session?.slip({ title: `Bought ${won.title}`, detail: `From ${name}, trade price. In the parcel in the hall.`, coins: -won.price });
           return { line: 'There. Trade price, because it’s you. Don’t tell the room.' };
         },
       });

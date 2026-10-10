@@ -29,6 +29,7 @@ import { SHARED_SHADOW_LAYER } from './zone/Zone';
 import { playBoxClack } from '@/audio/boxClack';
 import { playPlasticClick } from '@/audio/furnitureSounds';
 import { damp } from '@/math/damp';
+import { fnv1a, unit01 } from '@/random';
 import { easeInOutQuad } from '@/math/easing';
 
 /** How far a hovered box slides out of its row, how long it takes (s), and the faint lift of its cover's print. */
@@ -230,6 +231,7 @@ export class GameBox extends THREE.Mesh<THREE.BoxGeometry, THREE.Material[]> imp
       this.faces[name].map?.dispose();
       this.faces[name].dispose();
     }
+    this.details?.front?.dispose();
     this.details?.back?.dispose();
     this.details?.cart?.dispose();
     this.details?.disc?.dispose();
@@ -696,10 +698,25 @@ export class GameBox extends THREE.Mesh<THREE.BoxGeometry, THREE.Material[]> imp
         flap: this.flapColour(accent),
         back: accent.clone().multiplyScalar(0.2), // the generated back's ground
         tint: this.worn ? new THREE.Color(WORN_TINT) : null,
+        wear: { amount: this.wearAmount(), cardboard: this.kind === 'cardboard', seed: fnv1a(this.game.id) },
+        dust: this.dustAmount(),
       },
       this.anisotropy,
     );
     this.painted = set;
+  }
+
+  /** How handled the box looks (`BoxAtlas.paintWear`): none sealed, a little complete, more without its manual, most worn. */
+  private wearAmount(): number {
+    if (this.game.variant === 'sealed') return 0;
+    if (this.worn) return 1;
+    return this.game.condition === 'noManual' ? 0.45 : 0.18;
+  }
+
+  /** A third of the boxes have stood a while: a film of dust on their tops, by the game (the same box, the same dust). */
+  private dustAmount(): number {
+    const r = unit01(`${this.game.id}|dust`);
+    return r < 0.33 ? 0.3 + 2 * r : 0;
   }
 
   private flapColour(accent: THREE.Color): THREE.Color {
@@ -711,6 +728,10 @@ export class GameBox extends THREE.Mesh<THREE.BoxGeometry, THREE.Material[]> imp
     const parts = this.parts;
     if (!parts) return;
     const accent = this.current?.accent ?? new THREE.Color(getPlatform(this.game.platform).accentColor);
+    // The sharper front for the box held up (`BoxDetails.front`); the shelf's atlas keeps its own.
+    const sharp = this.details?.front;
+    // `swap` frees the shelf's front from the GPU (it stays in `current`, uploaded again if it is ever drawn).
+    if (sharp) this.swap(this.faces.front, sharp);
     const cover = imageSourceOf(this.faces.front.map);
     this.swap(this.faces.back, this.details?.back ?? createBackTexture(this.game, accent, this.details?.screenshot ?? null, this.anisotropy));
     parts.media.setPrint(this.printFor(parts.media, accent));
@@ -729,13 +750,14 @@ export class GameBox extends THREE.Mesh<THREE.BoxGeometry, THREE.Material[]> imp
     this.detailsAsked = true;
     void this.art.details(this.game).then((details) => {
       if (this.disposed) {
+        details.front?.dispose();
         details.back?.dispose();
         details.cart?.dispose();
         details.disc?.dispose();
         return;
       }
       this.details = details;
-      if (!details.back && !details.screenshot && !details.cart && !details.disc) return;
+      if (!details.front && !details.back && !details.screenshot && !details.cart && !details.disc) return;
       this.detailsPainted = false;
       if (this.inHand) this.paintDetails();
     });

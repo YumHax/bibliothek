@@ -82,7 +82,7 @@ export async function buildStreetOutlook(camera: THREE.Camera, options: StreetOu
   buildStreetFronts(add, buildings.fronts, dayNight, upgrades ? { upgrades } : {});
   await between();
   const traffic = add(new StreetTraffic());
-  buildStreetFixtures(add, { dayNight, viewer: camera, traffic, lampLights: LAMP_LIGHTS[QUALITY.level], moreTrees: [COURTYARD_YARD.chestnut] });
+  buildStreetFixtures(add, { dayNight, viewer: camera, traffic, lampLights: LAMP_LIGHTS[QUALITY.level], moreTrees: [COURTYARD_YARD.chestnut], washed: [buildings], farShadow: lighting.far });
   await between();
   add(new Precipitation(dayNight));
   // RETRO GAMES' NEW IN banner on a fresh market day, seen from the flat (the street's own; the queue is people: not here).

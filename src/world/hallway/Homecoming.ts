@@ -12,6 +12,8 @@ interface HomecomingOptions {
   door?: THREE.Vector3;
   /** They are back (the session that let them out, for a word). */
   onHome: (session: SessionActions) => void;
+  /** A memory is being filmed (`MemoryProjector.filming`): the camera passing through is not the player coming home. */
+  filming?: () => boolean;
 }
 
 /** How close to the arrival spot counts as "set down there" (walking in from a room never gets that close). */
@@ -42,7 +44,7 @@ export class Homecoming extends Prop implements OccupancyAware {
 
   setOccupied(occupied: boolean): void {
     const session = this.away;
-    if (!occupied || !session) return;
+    if (!occupied || !session || this.options.filming?.()) return;
     const { listener, arrival, door } = this.options;
     listener.getWorldPosition(scratch);
     const setDown = Math.hypot(scratch.x - arrival.x, scratch.z - arrival.z) <= RADIUS;

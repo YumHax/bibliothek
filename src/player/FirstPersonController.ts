@@ -15,6 +15,9 @@ export const CROUCH_VIRTUAL = 'Crouch';
 /** Keys held to crouch (Shift); while Shift sprints (`sprint: 'hold'`) the crouch moves to `crouchAlt`. */
 const CROUCH_CODES = ACTIONS.crouch.codes;
 const CROUCH_ALT_CODES = ACTIONS.crouchAlt.codes;
+/** The stick's and the finger's look speed while the crosshair is on something clickable, and how fast it eases (1/s). */
+const AIM_FRICTION = 0.5;
+const AIM_FRICTION_RATE = 1 / 0.15;
 /** Physical key whose double tap starts a sprint. */
 const FORWARD_CODE = ACTIONS.forward.codes[0];
 
@@ -124,7 +127,7 @@ export class FirstPersonController implements Updatable {
   private sprintLatched = false;
   private lastForwardTap = -Infinity;
   /** Settings > Controls (`setFeel`). */
-  private feel: WalkFeel = { sprint: 'doubleTap', crouch: 'hold', headBob: true, fov: 70 };
+  private feel: WalkFeel = { sprint: 'hold', crouch: 'hold', headBob: true, fov: 70 };
   /** Crouch toggled on by a press (`feel.crouch === 'toggle'`). */
   private crouchToggled = false;
   /** 0 walking .. 1 sprinting, eased: the speed and the view widen together. */
@@ -262,6 +265,14 @@ export class FirstPersonController implements Updatable {
     return key || this.input.strength(SPRINT_CODE) > 0;
   }
 
+  /** The walk's speed factor where the player is (`setPace`): under 1 indoors, a browsing pace; the sprint keeps its multiplier over it. */
+  private pace = 1;
+
+  /** Sets the walk's pace for the zone the player is in (1 = the full walk). */
+  setPace(pace: number): void {
+    this.pace = pace;
+  }
+
   /** Settings > Controls and Display: the sprint and crouch keys, the head bob, the field of view. */
   setFeel(feel: WalkFeel): void {
     if (feel.crouch !== this.feel.crouch) this.crouchToggled = false;
@@ -385,7 +396,19 @@ export class FirstPersonController implements Updatable {
   applyLook(yawDelta: number, pitchDelta: number): void {
     if (!this.isLocked || !this.controls.enabled) return;
     this.lookEuler.setFromQuaternion(this.camera.quaternion);
-    this.setLook(this.lookEuler.y - yawDelta, this.lookEuler.x - pitchDelta);
+    this.setLook(this.lookEuler.y - yawDelta * this.aimFriction, this.lookEuler.x - pitchDelta * this.aimFriction);
+  }
+
+  /** The stick's and the finger's look over something clickable (`setAimFriction`), eased: 1 free, `AIM_FRICTION` on it. */
+  private aimFriction = 1;
+  private aimFrictionTarget = 1;
+
+  /**
+   * Aim friction for the stick and the finger (the mouse is exact enough): while the crosshair is on something that can
+   * be clicked, the look turns at about half speed, so a 25 mm box spine is not overshot. Eased in and out (~150 ms).
+   */
+  setAimFriction(on: boolean): void {
+    this.aimFrictionTarget = on ? AIM_FRICTION : 1;
   }
 
   /** Sets the absolute orientation (radians, YXZ). Pitch is clamped short of the poles, roll is zero. */
@@ -429,15 +452,45 @@ export class FirstPersonController implements Updatable {
     const doc = this.controls.domElement!.ownerDocument;
     if (typeof this.controls.domElement!.requestPointerLock !== 'function') return Promise.resolve(false);
     return new Promise((resolve) => {
-      const cleanup = () => {
-        this.controls.removeEventListener('lock', onLock);
-        doc.removeEventListener('pointerlockerror', onError);
-      };
       const onLock = () => { cleanup(); resolve(true); };
       const onError = () => { cleanup(); resolve(false); };
+      // The refused raw request's own `pointerlockerror` (queued after its promise's rejection) is not the plain one's.
+      const onDocError = () => {
+        if (this.rawErrorPending) this.rawErrorPending = false;
+        else onError();
+      };
+      const cleanup = () => {
+        this.controls.removeEventListener('lock', onLock);
+        doc.removeEventListener('pointerlockerror', onDocError);
+      };
+      this.rawErrorPending = false;
       this.controls.addEventListener('lock', onLock);
-      doc.addEventListener('pointerlockerror', onError);
-      this.controls.lock();
+      doc.addEventListener('pointerlockerror', onDocError);
+      this.requestRawLock(onError);
+    });
+  }
+
+  /** The browser refused raw mouse input once (`unadjustedMovement`): ask for a plain lock from then on. */
+  private rawRefused = false;
+  /** That refusal's `pointerlockerror` may still be on its way: it does not fail the plain lock asked for after it. */
+  private rawErrorPending = false;
+
+  /**
+   * Asks for the lock with raw mouse input (no OS acceleration, none of Chrome's movement spikes), falling back to a
+   * plain lock where that is not supported. Browsers without the promise form (Firefox ignores the option) lock plainly.
+   */
+  private requestRawLock(onError: () => void): void {
+    const el = this.controls.domElement as HTMLElement;
+    if (this.rawRefused) {
+      void Promise.resolve(el.requestPointerLock()).catch(onError);
+      return;
+    }
+    const raw = el.requestPointerLock({ unadjustedMovement: true }) as unknown as Promise<void> | undefined;
+    raw?.catch?.((err: unknown) => {
+      if ((err as { name?: string } | null)?.name !== 'NotSupportedError') return onError();
+      this.rawRefused = true;
+      this.rawErrorPending = true;
+      void Promise.resolve(el.requestPointerLock()).catch(onError);
     });
   }
 
@@ -488,6 +541,7 @@ export class FirstPersonController implements Updatable {
   // --- Movement ---------------------------------------------------------------------------------
 
   update(dt: number): void {
+    this.aimFriction = damp(this.aimFriction, this.aimFrictionTarget, AIM_FRICTION_RATE, dt);
     if (this.stepSeatMove(dt)) return;
     if (this.seated) return;
     if (!this.isLocked || !this._movementEnabled) {
@@ -518,7 +572,7 @@ export class FirstPersonController implements Updatable {
 
     // The sprint comes and goes over a moment (the speed and the wider view together).
     this.sprintAmount = damp(this.sprintAmount, sprint && (advance !== 0 || strafe !== 0) ? 1 : 0, SPRINT_EASE, dt);
-    const speed = this.walkSpeed * (crouch ? this.crouchMultiplier : 1 + (this.sprintMultiplier - 1) * this.sprintAmount);
+    const speed = this.walkSpeed * this.pace * (crouch ? this.crouchMultiplier : 1 + (this.sprintMultiplier - 1) * this.sprintAmount);
     this.target
       .set(0, 0, 0)
       .addScaledVector(this.forward, advance)
@@ -554,7 +608,7 @@ export class FirstPersonController implements Updatable {
     this.height = damp(this.height, targetHeight, 10, dt);
     this.camera.position.y = this.feet + this.height;
     // The wider view follows the speed really reached past a walk (none against a wall), off with reduced motion or no head bob.
-    const pastWalk = THREE.MathUtils.clamp((this.groundSpeed / this.walkSpeed - 1) / (this.sprintMultiplier - 1), 0, 1);
+    const pastWalk = THREE.MathUtils.clamp((this.groundSpeed / (this.walkSpeed * this.pace) - 1) / (this.sprintMultiplier - 1), 0, 1);
     const kickOn = this.feel.headBob && !reduceMotion();
     this.setSprintKick(kickOn ? Math.min(this.sprintAmount, pastWalk) * SPRINT_FOV : 0);
     this.applyBob(dt, crouch);

@@ -3,7 +3,7 @@
  * `social/people` for some game days, through the real rules (`conversation.perform`, the standing, the drift, the
  * perks). The store is module-level: the script bundles this module afresh for each run.
  */
-import { mulberry32 } from '@/random';
+import { fnv1a, hashInts, mulberry32 } from '@/random';
 import { optionsFor, perform, type TalkContext } from '@/social/conversation';
 import { FAVOURS } from '@/social/life/favoursPlan';
 import { everyone } from '@/social/people';
@@ -59,11 +59,13 @@ function likedGift(card: PersonCard): GiftKind {
 
 /** `days` game days of `profile`'s player; returns everyone's standing at the end. */
 export function simulate(profile: Profile, days: number, seed: number): SimRow[] {
-  const rand = rng(seed);
   const cast = everyone();
+  // A stream per person: someone joining the cast does not reshuffle everyone else's draws.
+  const streams = new Map(cast.map((card) => [card.id, rng(hashInts(seed, fnv1a(card.id)))]));
   for (let day = 1; day <= days; day++) {
     settleDay(day);
     for (const card of cast) {
+      const rand = streams.get(card.id)!;
       if (rand() >= profile.meet[card.group]) continue;
       const hour = 9 + rand() * 11;
       const ctx: TalkContext = { day, hour, place: PLACE[card.group], rand };

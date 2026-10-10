@@ -31,6 +31,8 @@ export interface BoxArt {
  * its disc's printed side (alpha kept round the disc, square, the print's top up).
  */
 export interface BoxDetails {
+  /** The front cover at twice the shelf's size (`?size=large` on the art proxy), for the box held up to the eye. */
+  front: THREE.Texture | null;
   back: THREE.Texture | null;
   screenshot: CanvasImageSource | null;
   cart: THREE.Texture | null;
@@ -71,7 +73,9 @@ const SPINES = 1e6;
 const SCAN_CONCURRENCY = 2;
 /** A front that failed (not missing) is asked again after these waits (ms): a busy server, a dropped connection. */
 const FRONT_RETRY_MS = [0, 8_000, 50_000];
-const NO_DETAILS: BoxDetails = { back: null, screenshot: null, cart: null, disc: null };
+const NO_DETAILS: BoxDetails = { front: null, back: null, screenshot: null, cart: null, disc: null };
+/** The art proxy keeps a front cover large on this query (`server/artCache`): only its own addresses take it. */
+const LARGE_FRONT = '?size=large';
 
 interface Entry {
   readonly game: Game;
@@ -215,7 +219,13 @@ export class BoxArtLoader {
     const [urls, scans] = await Promise.all([this.urlsOf(entry), this.scansOf(entry)]);
     const urgent = () => URGENT;
     const anisotropy = this.maxAnisotropy;
-    const [backSide, cart, disc] = await Promise.all([
+    const [front, backSide, cart, disc] = await Promise.all([
+      this.queue.run(async () => {
+        // Only through the proxy (straight from GitHub, or a baked cover, the shelf's is all there is).
+        if (!urls.front?.startsWith('/api/art/')) return null;
+        const large = await this.fetch.texture(urls.front + LARGE_FRONT, anisotropy);
+        return large && caseOf(entry.game).kind === 'jewel' ? jewelFront(large, anisotropy) : large;
+      }, urgent),
       this.queue.run(async () => {
         // One at a time: a scanned back makes the screenshots useless, a snap the title screen.
         const back = await this.fetch.texture(scans.back ?? urls.back, anisotropy);
@@ -231,7 +241,7 @@ export class BoxArtLoader {
         return image ? discFromScan(image, anisotropy) : null;
       }, urgent),
     ]);
-    return { ...backSide, cart, disc };
+    return { front, ...backSide, cart, disc };
   }
 
   private start(game: Game): Entry {

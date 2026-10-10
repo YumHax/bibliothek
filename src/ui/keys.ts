@@ -59,6 +59,11 @@ export function physicalKeyLabel(physical: string): string {
   return physical;
 }
 
+/** Whether the physical key `physical` (a raw `KeyboardEvent.code`, before the bindings) does what `id` does. */
+export function isActionKey(physical: string, id: ActionId): boolean {
+  return resolvePhysical(primaryCode(id)) === physical;
+}
+
 /** The name of the key that does what the game reads as `code`. */
 export function keyLabel(code: string): string {
   return physicalKeyLabel(resolvePhysical(code));

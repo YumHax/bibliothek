@@ -7,8 +7,8 @@ import { ReplayPlayer } from './replay/Replay';
 import type { ReplayShelf } from './replay/ReplayStore';
 import { lcg, random as liveRandom } from '@/random';
 
-/** What an idle cabinet shows: its title card, the game playing itself, or the player's best run. */
-type AttractMode = 'title' | 'autoplay' | 'replay';
+/** What an idle cabinet shows: its title card, its hall of fame, the game playing itself, or the player's best run. */
+type AttractMode = 'title' | 'scores' | 'autoplay' | 'replay';
 
 /** The title card redraws this often (INSERT COIN blinks), a dead tube's snow that often. */
 const ATTRACT_FPS = 6;
@@ -17,6 +17,8 @@ const STATIC_FPS = 12;
 const JINGLE_EVERY: [number, number] = [35, 90];
 /** The loop: the title card this long, then a demo (cut short at `DEMO_MAX`) or the best run, held at its end card `DEMO_HOLD`. */
 const TITLE_SECONDS = 7;
+/** The hall-of-fame page between the title card and the show. */
+const SCORES_SECONDS = 5;
 const DEMO_MAX = 32;
 const REPLAY_MAX = 150;
 const DEMO_HOLD = 1.6;
@@ -40,7 +42,7 @@ interface AttractParts {
 
 /**
  * An idle cabinet's attract sequence, round and round: its title card (with a jingle now and
- * then), then the game playing itself (DEMO, on its autopilot, silent) or, every other time round,
+ * then), its hall of fame (the top five), then the game playing itself (DEMO, on its autopilot, silent) or, every other time round,
  * the player's best run replayed step for step (a replay that no longer ends on its score was
  * recorded under older rules and is dropped). Only the title card when the camera is far or the
  * game cannot play itself; snow when the cabinet is out of order.
@@ -61,9 +63,9 @@ export class AttractLoop {
     this.jingleIn = JINGLE_EVERY[0] * lcg(parts.seed)() + 5;
   }
 
-  /** Whether the title card is up (not a demo or a replay). */
+  /** Whether the title card (or the hall of fame after it) is up, not a demo or a replay. */
   get showingTitle(): boolean {
-    return this.mode === 'title';
+    return this.mode === 'title' || this.mode === 'scores';
   }
 
   /** Back to the title card, from a play, a regular or a show. */
@@ -89,6 +91,19 @@ export class AttractLoop {
       return NO_CONTROLS;
     }
     this.modeClock += dt;
+    if (this.mode === 'scores') {
+      this.clock += dt;
+      if (this.clock >= 1 / ATTRACT_FPS) {
+        this.clock = 0;
+        this.phase += 1;
+        screens.drawScores(this.phase);
+      }
+      if (this.modeClock >= SCORES_SECONDS) {
+        if (game.demoable !== false && screens.near()) this.startShowing();
+        else this.enter();
+      }
+      return NO_CONTROLS;
+    }
     if (this.mode === 'title') {
       this.jingleIn -= dt;
       if (this.jingleIn <= 0 && this.parts.quiet) this.jingleIn = Infinity;
@@ -103,7 +118,11 @@ export class AttractLoop {
         this.phase += 1;
         screens.drawTitle(this.phase);
       }
-      if (this.modeClock >= TITLE_SECONDS && game.demoable !== false && screens.near()) this.startShowing();
+      if (this.modeClock >= TITLE_SECONDS && screens.near()) {
+        this.mode = 'scores';
+        this.modeClock = 0;
+        screens.drawScores(this.phase);
+      }
       return NO_CONTROLS;
     }
     // A demo or a replay: silent, the game drawn under a banner.
